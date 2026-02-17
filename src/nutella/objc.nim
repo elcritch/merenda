@@ -1329,12 +1329,16 @@ proc firstParamTypeName(def: NimNode): string =
     return ""
   identName(params[idx][^2])
 
-proc copyParamWithoutDefault(p: NimNode, protocolName, className: string): NimNode =
-  result = newNimNode(nnkIdentDefs)
-  for i in 0 ..< p.len - 2:
-    result.add(copyNimTree(p[i]))
-  result.add(normalizeObjcNodeType(p[^2], protocolName, className))
-  result.add(newEmptyNode())
+proc leafTypeName(typ: NimNode): string =
+  case typ.kind
+  of nnkVarTy, nnkRefTy, nnkDistinctTy, nnkPtrTy:
+    leafTypeName(typ[0])
+  else:
+    identName(typ)
+
+proc isBorrowedObjcParamType(typ: NimNode, protocolName, className: string): bool =
+  let t = leafTypeName(typ)
+  t == "NSObject" or t == "NSString" or t == className or t == protocolName
 
 proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNode =
   let methodName = identName(def.name)
@@ -1358,9 +1362,20 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
   wrapperParams.add(normalizeObjcNodeType(params[0], protocolName, className))
 
   let selfIdent = ident(selfName)
-  wrapperParams.add(newIdentDefs(selfIdent, bindSym"ID", newEmptyNode()))
+  let selfRaw = genSym(nskParam, selfName & "Raw")
+  wrapperParams.add(newIdentDefs(selfRaw, bindSym"ID", newEmptyNode()))
   let cmdSel = genSym(nskParam, "cmdSel")
   wrapperParams.add(newIdentDefs(cmdSel, bindSym"SEL", newEmptyNode()))
+
+  var wrapperBody = newStmtList()
+  let selfType = normalizeObjcNodeType(selfParam[^2], protocolName, className)
+  wrapperBody.add quote do:
+    var `selfIdent` = asType[`selfType`](`selfRaw`)
+  wrapperBody.add quote do:
+    discard `selfIdent`
+  wrapperBody.add quote do:
+    defer:
+      wasMoved(`selfIdent`)
 
   var sawSelf = false
   for i in 1 ..< params.len:
@@ -1370,11 +1385,24 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     if not sawSelf:
       sawSelf = true
       continue
-    wrapperParams.add(copyParamWithoutDefault(p, protocolName, className))
+    let typeNode = p[^2]
+    let normType = normalizeObjcNodeType(typeNode, protocolName, className)
+    let borrowed = isBorrowedObjcParamType(typeNode, protocolName, className)
+    for j in 0 ..< p.len - 2:
+      let argName = copyNimTree(p[j])
+      if borrowed:
+        let rawArg = genSym(nskParam, identName(argName) & "Raw")
+        wrapperParams.add(newIdentDefs(rawArg, bindSym"ID", newEmptyNode()))
+        wrapperBody.add quote do:
+          var `argName` = asType[`normType`](`rawArg`)
+        wrapperBody.add quote do:
+          discard `argName`
+        wrapperBody.add quote do:
+          defer:
+            wasMoved(`argName`)
+      else:
+        wrapperParams.add(newIdentDefs(argName, normType, newEmptyNode()))
 
-  var wrapperBody = newStmtList()
-  wrapperBody.add quote do:
-    discard `selfIdent`
   wrapperBody.add quote do:
     discard `cmdSel`
 
@@ -1388,7 +1416,7 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     name = genSym(nskProc, methodName & "_objcImpl"),
     params = wrapperParams,
     body = wrapperBody,
-    pragmas = nnkPragma.newTree(ident"cdecl", ident"gcsafe"),
+    pragmas = nnkPragma.newTree(ident"cdecl"),
   )
 
 proc collectImplementsProtocols(n: NimNode, protocols: var seq[string]) =
