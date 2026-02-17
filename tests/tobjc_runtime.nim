@@ -16,6 +16,9 @@ proc `=destroy`(o: var DestroyProbeObject) =
 proc passThroughMove(o: sink NSObject): NSObject =
   o
 
+proc isNilProtocol(p: Protocol): bool =
+  cast[pointer](p) == nil
+
 suite "objc runtime ownership fundamentals":
   test "typedesc new works for NSObject":
     var o = NSObject.new()
@@ -123,3 +126,29 @@ suite "objc runtime ownership fundamentals":
       var o = asType[NSObject](new(subCls))
       check(not o.isNil)
       check(getClassName(o) == SubClassName)
+
+  test "create runtime protocol and attach to runtime class":
+    const ProtoName = "NimRuntimeOwnedProtocolTest"
+    const ClassName = "NimRuntimeClassWithProtocolOwnedTest"
+
+    var proto = getProtocol(ProtoName)
+    if proto.isNilProtocol:
+      proto = allocateProtocol(ProtoName)
+      check(not proto.isNilProtocol)
+      addMethodDescription(proto, selector("nimPing"), "v@:", true, true)
+      registerProtocol(proto)
+      proto = getProtocol(ProtoName)
+
+    check(not proto.isNilProtocol)
+
+    var cls = getClass(ClassName)
+    if cls.isNil:
+      addClass(ClassName, "NSObject", cls):
+        addProtocol(ProtoName)
+
+    check(not cls.isNil)
+    check(conformsToProtocol(cls, proto))
+
+    var o = asType[NSObject](new(cls))
+    check(not o.isNil)
+    check(getClassName(o) == ClassName)
