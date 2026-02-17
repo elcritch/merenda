@@ -262,7 +262,7 @@ proc class_respondsToSelector(cls: ObjcClass, sel: SEL): bool {.cdecl, importc.}
 template respondsToSelector*(cls: ObjcClass, sel: SEL): untyped =
   class_respondsToSelector(cls, sel)
 
-proc class_addProtocol(cls: ObjcClass, protocol: Protocol): bool {.cdecl, importc.}
+proc class_addProtocol(cls: ID, protocol: Protocol): bool {.cdecl, importc.}
 template addProtocol*(cls: ObjcClass, protocol: Protocol): untyped =
   class_addProtocol(cls, protocol)
 
@@ -294,14 +294,14 @@ proc replaceProperty*(
   )
 
 proc class_conformsToProtocol(
-  cls: ObjcClass, protocol: Protocol
+  cls: ID, protocol: Protocol
 ): bool {.cdecl, importc.}
 
 template conformsToProtocol*(cls: ObjcClass, protocol: Protocol): bool =
   class_conformsToProtocol(cls, protocol) == YES
 
 proc class_copyProtocolList(
-  cls: ObjcClass, outCount: var cuint
+  cls: ID, outCount: var cuint
 ): ptr Protocol {.cdecl, importc.}
 
 proc protocolList*(cls: ObjcClass): seq[Protocol] =
