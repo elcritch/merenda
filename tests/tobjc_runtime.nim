@@ -159,7 +159,7 @@ suite "objc runtime ownership fundamentals":
 
     objcImpl:
       type NRProtocolTest = concept self
-        method nimPing(self: NROwnedProtocolTest)
+        method nimPing(self: NRProtocolTest)
 
       type NRClassWithProtocolTest = object of NRProtocolTest
 
