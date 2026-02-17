@@ -67,6 +67,32 @@ type
     OBJC_ASSOCIATION_RETAIN = 01401
     OBJC_ASSOCIATION_COPY = 01403
 
+proc retainAux(o: NSObject): NSObject {.objc: "retain".}
+proc releaseAux(o: NSObject) {.objc: "release".}
+
+template retain*[T: NSObject](o: T): T =
+  asType[T](retainAux(o))
+
+proc `=destroy`(o: var NSObject) =
+  if o.value != nil:
+    releaseAux(o)
+    o.value = nil
+
+proc `=copy`(dest: var NSObject, src: NSObject) =
+  if dest.value == src.value:
+    return
+  `=destroy`(dest)
+  dest.value = src.value
+  if dest.value != nil:
+    discard retainAux(dest)
+
+proc release*(o: var NSObject) {.inline.} =
+  `=destroy`(o)
+
+proc release*(o: NSObject) {.inline.} =
+  if o.value != nil:
+    releaseAux(o)
+
 proc isNil*(a: ObjcClass): bool =
   result = a.value == nil
 
@@ -995,11 +1021,6 @@ macro objc*(name: untyped, body: untyped = nil): untyped =
 
 proc NSLog*(str: NSString) {.importc, varargs.}
 
-proc retainAux(o: NSObject): NSObject {.objc: "retain".}
-template retain*[T: NSObject](o: T): T =
-  asType[T](retainAux(o))
-
-proc release*(o: NSObject) {.objc.}
 proc superclass*(o: NSObject): ObjcClass {.objc.}
 proc alloc*[T: NSObject](n: typedesc[T]): T {.objc: "alloc".}
 proc alloc*(cls: ObjcClass): ID {.inline.} =
