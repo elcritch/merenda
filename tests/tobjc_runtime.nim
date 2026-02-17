@@ -34,6 +34,8 @@ proc initWithUTF8String(
   o: NSString, str: cstring
 ): NSString {.objc: "initWithUTF8String:".}
 
+proc retainCount(o: NSObject): NSUInteger {.objc: "retainCount".}
+
 suite "objc runtime":
   test "NSNumber and NSString values":
     let a = NSString.alloc().initWithUTF8String("This is a test!")
@@ -65,6 +67,36 @@ suite "objc runtime":
 
     let newObj = cast[NSObject](new(nsObjectClass))
     check(newObj != nil)
+
+  test "retain increments and release restores count":
+    let o = cast[NSObject](new(getClass("NSObject")))
+    check(o != nil)
+
+    let baseCount = retainCount(o)
+    let extra = retain(o)
+    check(extra != nil)
+    check(extra == o)
+    check(retainCount(o).int == baseCount.int + 1)
+
+    extra.release()
+    check(retainCount(o) == baseCount)
+
+    o.release()
+
+  test "plain assignment does not retain; explicit retain does":
+    let o = cast[NSObject](new(getClass("NSObject")))
+    let baseCount = retainCount(o)
+
+    let alias = o
+    check(alias == o)
+    check(retainCount(o) == baseCount)
+
+    let retainedAlias = retain(alias)
+    check(retainCount(o).int == baseCount.int + 1)
+    retainedAlias.release()
+    check(retainCount(o) == baseCount)
+
+    o.release()
 
   test "addClass registers methods":
     const BaseClassName = "NimRuntimeAddClassBase"
