@@ -12,9 +12,6 @@ var destroyProbeTriggered = false
 
 proc `=destroy`(o: var DestroyProbeObject) =
   destroyProbeTriggered = true
-  var base = NSObject(value: o.value)
-  release(base)
-  o.value = base.value
 
 proc passThroughMove(o: sink NSObject): NSObject =
   o
@@ -41,7 +38,7 @@ suite "objc runtime ownership fundamentals":
     check(s.isNil)
 
   test "retain and release(var) are balanced":
-    var o = cast[NSObject](new(getClass("NSObject")))
+    var o = NSObject.new()
     check(not o.isNil)
 
     let baseCount = retainCount(o).int
@@ -58,7 +55,7 @@ suite "objc runtime ownership fundamentals":
     check(o.isNil)
 
   test "copy increments retain count":
-    var o = cast[NSObject](new(getClass("NSObject")))
+    var o = NSObject.new()
     let baseCount = retainCount(o).int
 
     var alias = o
@@ -73,7 +70,7 @@ suite "objc runtime ownership fundamentals":
     check(o.isNil)
 
   test "block scope destroys copied alias":
-    var o = cast[NSObject](new(getClass("NSObject")))
+    var o = NSObject.new()
     let baseCount = retainCount(o).int
 
     block:
@@ -86,7 +83,7 @@ suite "objc runtime ownership fundamentals":
     check(o.isNil)
 
   test "block scope destroys retained temporary":
-    var o = cast[NSObject](new(getClass("NSObject")))
+    var o = NSObject.new()
     var duringCount = 0
 
     block:
@@ -102,12 +99,12 @@ suite "objc runtime ownership fundamentals":
   test "subclass destroy hook runs in block scope":
     destroyProbeTriggered = false
     block:
-      var o = cast[DestroyProbeObject](new(getClass("NSObject")))
+      var o = asType[DestroyProbeObject](NSObject.new())
       check(not o.isNil)
     check(destroyProbeTriggered)
 
   test "explicit move avoids retain-copy":
-    var o = cast[NSObject](new(getClass("NSObject")))
+    var o = NSObject.new()
     let baseCount = retainCount(o).int
 
     block:
@@ -117,7 +114,7 @@ suite "objc runtime ownership fundamentals":
       check(retainCount(moved).int == baseCount)
 
   test "sink transfer avoids retain-copy":
-    var o = cast[NSObject](new(getClass("NSObject")))
+    var o = NSObject.new()
     let baseCount = retainCount(o).int
 
     block:
