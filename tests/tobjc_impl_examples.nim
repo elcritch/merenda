@@ -44,30 +44,31 @@ objcImpl:
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
 
-static:
-  doAssert not compiles(HiddenCtorClass.new())
-  doAssert not compiles(HiddenCtorClass.init())
-  doAssert not compiles(
-    block:
-      var o = HiddenCtorClass.alloc()
-      discard o.init()
-  )
-
-block fooBarTopLevelExample:
-  fooBarPingCount = 0
-
-  let proto = getProtocol(FooBarProtocol)
-  doAssert(cast[pointer](proto) != nil)
-
-  var o = FooBar.new()
-  doAssert(not o.isNil)
-  doAssert(getClassName(o) == "FooBar")
-
-  let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
-  sendPing(o, selector("ping"))
-  doAssert(fooBarPingCount == 1)
-
 suite "objcImpl examples":
+  test "test inits":
+    doAssert not compiles(HiddenCtorClass.new())
+    doAssert not compiles(HiddenCtorClass.init())
+    doAssert not compiles(
+      block:
+        var o = HiddenCtorClass.alloc()
+        discard o.init()
+    )
+
+  test "fooBarTopLevelExample":
+    block fooBarTopLevelExample:
+      fooBarPingCount = 0
+
+      let proto = getProtocol(FooBarProtocol)
+      doAssert(cast[pointer](proto) != nil)
+
+      var o = FooBar.new()
+      doAssert(not o.isNil)
+      doAssert(getClassName(o) == "FooBar")
+
+      let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
+      sendPing(o, selector("ping"))
+      doAssert(fooBarPingCount == 1)
+
   test "constructor-unavailable overloads inside objcImpl":
     hiddenPingCount = 0
     let proto = getProtocol(HiddenCtorProtocol)
