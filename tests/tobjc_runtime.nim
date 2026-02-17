@@ -1,18 +1,15 @@
 import std/unittest
 import nutella/objc
 
-proc UTF8String*(n: NSString): cstring {.objc: "UTF8String".}
-proc initWithUTF8String*(
-  o: NSString, str: cstring
-): NSString {.objc: "initWithUTF8String:".}
-
 type DestroyProbeObject = object of NSObject
+type RuntimeOwnedSubtype = object of NSObject
+type RuntimePayloadObject = object of NSObject
 
 var destroyProbeTriggered = false
 var objcImplPingCount = 0
 var objcImplAccum = 0.cint
-var objcImplLastString = ""
-var objcImplStringRetainInMethod = 0
+var objcImplPayloadClass = ""
+var objcImplPayloadRetainInMethod = 0
 
 proc `=destroy`(o: var DestroyProbeObject) =
   destroyProbeTriggered = true
@@ -23,20 +20,36 @@ proc passThroughMove(o: sink NSObject): NSObject =
 proc isNilProtocol(p: Protocol): bool =
   cast[pointer](p) == nil
 
+proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
+  result = getClass(className)
+  if result.isNil:
+    addClass(className, superName, result):
+      discard
+
 suite "objc runtime ownership fundamentals":
   test "typedesc new works for NSObject":
     var o = NSObject.new()
     check(not o.isNil)
     check(getClassName(o) == "NSObject")
 
-  test "typedesc new works for NSString subtype":
-    var s = NSString.new()
+  test "typedesc new works for runtime NSObject subtype":
+    let subClassName = $RuntimeOwnedSubtype
+    discard ensureRuntimeClass(subClassName)
+    var s = RuntimeOwnedSubtype.new()
     check(not s.isNil)
-    check(getClassName(s).len > 0)
+    check(getClassName(s) == subClassName)
 
-  test "alloc/init NSString roundtrip":
-    var s = NSString.alloc().initWithUTF8String("This is a test!")
-    check($s.UTF8String == "This is a test!")
+  test "alloc/init runtime NSObject subtype":
+    let subClassName = $RuntimeOwnedSubtype
+    discard ensureRuntimeClass(subClassName)
+    var allocated = RuntimeOwnedSubtype.alloc()
+    check(not allocated.isNil)
+    let retainBeforeInit = retainCount(allocated).int
+    var s = allocated.init()
+    check(allocated.isNil)
+    check(not s.isNil)
+    check(getClassName(s) == subClassName)
+    check(retainCount(s).int == retainBeforeInit)
 
   test "retain and release(var) are balanced":
     var o = NSObject.new()
@@ -159,40 +172,40 @@ suite "objc runtime ownership fundamentals":
 
   test "template to create protocol and class":
     const ClassName = "NRClassWithProtocolTest"
+    const PayloadClassName = $RuntimePayloadObject
 
     objcImplPingCount = 0
     objcImplAccum = 0
-    objcImplLastString = ""
-    objcImplStringRetainInMethod = 0
+    objcImplPayloadClass = ""
+    objcImplPayloadRetainInMethod = 0
+    discard ensureRuntimeClass(PayloadClassName)
 
     objcImpl:
       type NRProtocolTest =
         concept self
             method nimPing(self: NRProtocolTest)
             method nimAdd(self: NRProtocolTest, amount: cint): cint
-            method nimTakeString(self: NRProtocolTest, text: NSString)
+            method nimTakePayload(self: NRProtocolTest, payload: NSObject)
 
       type NRClassWithProtocolTest {.impl: NRProtocolTest.} = object of NSObject
 
       method nimPing(self: NRClassWithProtocolTest) =
-        echo "PING!"
         inc objcImplPingCount
 
       method nimAdd(self: NRClassWithProtocolTest, amount: cint): cint =
         objcImplAccum += amount
         result = objcImplAccum
 
-      method nimTakeString(self: NRClassWithProtocolTest, text: NSString) =
-        objcImplLastString = $text.UTF8String
-        echo "STRING: ", objcImplLastString
-        objcImplStringRetainInMethod = retainCount(text).int
+      method nimTakePayload(self: NRClassWithProtocolTest, payload: NSObject) =
+        objcImplPayloadClass = getClassName(payload)
+        objcImplPayloadRetainInMethod = retainCount(payload).int
 
     var proto = getProtocol(NRProtocolTest)
     check(not proto.isNilProtocol)
 
     var foundNimPing = false
     var foundNimAdd = false
-    var foundNimTakeString = false
+    var foundNimTakePayload = false
     for desc in methodDescriptionList(proto, true, true):
       if $desc.name == "nimPing":
         foundNimPing = true
@@ -200,19 +213,19 @@ suite "objc runtime ownership fundamentals":
       if $desc.name == "nimAdd:":
         foundNimAdd = true
         check(desc.types == "i@:i")
-      if $desc.name == "nimTakeString:":
-        foundNimTakeString = true
+      if $desc.name == "nimTakePayload:":
+        foundNimTakePayload = true
         check(desc.types == "v@:@")
     check(foundNimPing)
     check(foundNimAdd)
-    check(foundNimTakeString)
+    check(foundNimTakePayload)
 
     var cls = getClass(NRClassWithProtocolTest)
     check(not cls.isNil)
     check(conformsToProtocol(cls, proto))
     check(respondsToSelector(cls, selector("nimPing")))
     check(respondsToSelector(cls, selector("nimAdd:")))
-    check(respondsToSelector(cls, selector("nimTakeString:")))
+    check(respondsToSelector(cls, selector("nimTakePayload:")))
 
     var oNew = NRClassWithProtocolTest.new()
     check(not oNew.isNil)
@@ -239,7 +252,8 @@ suite "objc runtime ownership fundamentals":
     let sendVoid = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
     let sendAdd =
       cast[proc(self: ID, op: SEL, amount: cint): cint {.cdecl.}](objc_msgSend)
-    let sendTakeString = cast[proc(self: ID, op: SEL, text: ID) {.cdecl.}](objc_msgSend)
+    let sendTakePayload =
+      cast[proc(self: ID, op: SEL, payload: ID) {.cdecl.}](objc_msgSend)
 
     sendVoid(o, selector("nimPing"))
     check(objcImplPingCount == 1)
@@ -249,12 +263,14 @@ suite "objc runtime ownership fundamentals":
     check(sendAdd(o, selector("nimAdd:"), 3.cint) == 5.cint)
     check(retainCount(o).int == retainObjectBeforeCalls)
 
-    var text = NSString.alloc().initWithUTF8String("objcImpl-string-arg")
-    let retainBefore = retainCount(text).int
-    let retainObjectBeforeStringCall = retainCount(o).int
-    sendTakeString(o, selector("nimTakeString:"), text)
-    check(objcImplLastString == "objcImpl-string-arg")
+    var payload = RuntimePayloadObject.new()
+    check(not payload.isNil)
+    check(getClassName(payload) == PayloadClassName)
+    let retainBefore = retainCount(payload).int
+    let retainObjectBeforePayloadCall = retainCount(o).int
+    sendTakePayload(o, selector("nimTakePayload:"), payload)
+    check(objcImplPayloadClass == PayloadClassName)
     check(retainBefore > 0)
-    check(objcImplStringRetainInMethod == retainBefore)
-    check(retainCount(text).int == retainBefore)
-    check(retainCount(o).int == retainObjectBeforeStringCall)
+    check(objcImplPayloadRetainInMethod == retainBefore)
+    check(retainCount(payload).int == retainBefore)
+    check(retainCount(o).int == retainObjectBeforePayloadCall)
