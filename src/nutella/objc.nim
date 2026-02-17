@@ -138,35 +138,35 @@ template asType*[T: NSObject](o: NSObject): T =
 
 proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 
-proc class_getName(cls: ObjcClass): cstring {.cdecl, importc.}
+proc class_getName(cls: ID): cstring {.cdecl, importc.}
 proc getName*(cls: ObjcClass): string =
   result = $class_getName(cls)
 
 proc `$`*(cls: ObjcClass): string =
   getName(cls)
 
-proc class_getSuperclass(cls: ObjcClass): ObjcClass {.cdecl, importc.}
+proc class_getSuperclass(cls: ID): ObjcClass {.cdecl, importc.}
 template getSuperclass*(cls: ObjcClass): untyped =
   class_getSuperClass(cls)
 
-proc class_isMetaClass(cls: ObjcClass): bool {.cdecl, importc.}
+proc class_isMetaClass(cls: ID): bool {.cdecl, importc.}
 template isMetaClass*(cls: ObjcClass): untyped =
   class_isMetaClass(cls)
 
-proc class_getInstanceSize(cls: ObjcClass): csize_t {.cdecl, importc.}
+proc class_getInstanceSize(cls: ID): csize_t {.cdecl, importc.}
 proc getInstanceSize*(cls: ObjcClass): int =
   class_getInstanceSize(cls).int
 
-proc class_getInstanceVariable(cls: ObjcClass, name: cstring): Ivar {.cdecl, importc.}
+proc class_getInstanceVariable(cls: ID, name: cstring): Ivar {.cdecl, importc.}
 template getIvar*(cls: ObjcClass, name: string): untyped =
   class_getInstanceVariable(cls, name.cstring)
 
-proc class_getClassVariable(cls: ObjcClass, name: cstring): Ivar {.cdecl, importc.}
+proc class_getClassVariable(cls: ID, name: cstring): Ivar {.cdecl, importc.}
 template getClassVariable*(cls: ObjcClass, name: string): untyped =
   class_getClassVariable(cls, name.cstring)
 
 proc class_addIvar(
-  cls: ObjcClass, name: cstring, size: csize_t, alignment: uint8, types: cstring
+  cls: ID, name: cstring, size: csize_t, alignment: uint8, types: cstring
 ): bool {.cdecl, importc.}
 
 proc addIvar*(
@@ -174,9 +174,7 @@ proc addIvar*(
 ): bool =
   class_addIvar(cls, name.cstring, size.csize_t, alignment.uint8, types.cstring) == YES
 
-proc class_copyIvarList(
-  cls: ObjcClass, outCount: var cuint
-): ptr Ivar {.cdecl, importc.}
+proc class_copyIvarList(cls: ID, outCount: var cuint): ptr Ivar {.cdecl, importc.}
 
 proc ivarList*(cls: ObjcClass): seq[Ivar] =
   var
@@ -189,17 +187,17 @@ proc ivarList*(cls: ObjcClass): seq[Ivar] =
   copyMem(result[0].addr, ivars, sizeof(Ivar) * count.int)
   c_free(ivars)
 
-proc class_getIvarLayout*(cls: ObjcClass): ptr uint8 {.cdecl, importc.}
-proc class_getWeakIvarLayout*(cls: ObjcClass): ptr uint8 {.cdecl, importc.}
-proc class_setIvarLayout*(cls: ObjcClass, layout: ptr uint8) {.cdecl, importc.}
-proc class_setWeakIvarLayout*(cls: ObjcClass, layout: ptr uint8) {.cdecl, importc.}
+proc class_getIvarLayout*(cls: ID): ptr uint8 {.cdecl, importc.}
+proc class_getWeakIvarLayout*(cls: ID): ptr uint8 {.cdecl, importc.}
+proc class_setIvarLayout*(cls: ID, layout: ptr uint8) {.cdecl, importc.}
+proc class_setWeakIvarLayout*(cls: ID, layout: ptr uint8) {.cdecl, importc.}
 
-proc class_getProperty(cls: ObjcClass, name: cstring): Property {.cdecl, importc.}
+proc class_getProperty(cls: ID, name: cstring): Property {.cdecl, importc.}
 template getProperty*(cls: ObjcClass, name: string): untyped =
   class_getProperty(cls, name.cstring)
 
 proc class_copyPropertyList*(
-  cls: ObjcClass, outCount: var cuint
+  cls: ID, outCount: var cuint
 ): ptr Property {.cdecl, importc.}
 
 proc propertyList*(cls: ObjcClass): seq[Property] =
@@ -214,23 +212,21 @@ proc propertyList*(cls: ObjcClass): seq[Property] =
   c_free(props)
 
 proc class_addMethod(
-  cls: ObjcClass, name: SEL, imp: IMP, types: cstring
+  cls: ID, name: SEL, imp: IMP, types: cstring
 ): bool {.cdecl, importc.}
 
 template addMethod*(cls: ObjcClass, name: SEL, imp: IMP, types: string): bool =
   class_addMethod(cls, name, imp, types.cstring)
 
-proc class_getInstanceMethod(cls: ObjcClass, name: SEL): Method {.cdecl, importc.}
+proc class_getInstanceMethod(cls: ID, name: SEL): Method {.cdecl, importc.}
 template getInstanceMethod*(cls: ObjcClass, name: SEL): Method =
   class_getInstanceMethod(cls, name)
 
-proc class_getClassMethod(cls: ObjcClass, name: SEL): Method {.cdecl, importc.}
+proc class_getClassMethod(cls: ID, name: SEL): Method {.cdecl, importc.}
 template getClassMethod*(cls: ObjcClass, name: SEL): Method =
   class_getClassMethod(cls, name)
 
-proc class_copyMethodList(
-  cls: ObjcClass, outCount: var cuint
-): ptr Method {.cdecl, importc.}
+proc class_copyMethodList(cls: ID, outCount: var cuint): ptr Method {.cdecl, importc.}
 
 proc methodList*(cls: ObjcClass): seq[Method] =
   var
@@ -244,21 +240,19 @@ proc methodList*(cls: ObjcClass): seq[Method] =
   c_free(procs)
 
 proc class_replaceMethod(
-  cls: ObjcClass, name: SEL, imp: IMP, types: cstring
+  cls: ID, name: SEL, imp: IMP, types: cstring
 ): IMP {.cdecl, importc.}
 
 template replaceMethod*(cls: ObjcClass, name: SEL, imp: IMP, types: string): untyped =
   class_replaceMethod(cls, name, imp, types.cstring)
 
-proc class_getMethodImplementation(cls: ObjcClass, name: SEL): IMP {.cdecl, importc.}
+proc class_getMethodImplementation(cls: ID, name: SEL): IMP {.cdecl, importc.}
 template getMethodImplementation*(cls: ObjcClass, name: SEL): untyped =
   class_getMethodImplementation(cls, name)
 
-proc class_getMethodImplementation_stret*(
-  cls: ObjcClass, name: SEL
-): IMP {.cdecl, importc.}
+proc class_getMethodImplementation_stret*(cls: ID, name: SEL): IMP {.cdecl, importc.}
 
-proc class_respondsToSelector(cls: ObjcClass, sel: SEL): bool {.cdecl, importc.}
+proc class_respondsToSelector(cls: ID, sel: SEL): bool {.cdecl, importc.}
 template respondsToSelector*(cls: ObjcClass, sel: SEL): untyped =
   class_respondsToSelector(cls, sel)
 
@@ -267,7 +261,7 @@ template addProtocol*(cls: ObjcClass, protocol: Protocol): untyped =
   class_addProtocol(cls, protocol)
 
 proc class_addProperty(
-  cls: ObjcClass,
+  cls: ID,
   name: cstring,
   attributes: ptr objc_property_attribute_t,
   attributeCount: cuint,
@@ -280,7 +274,7 @@ proc addProperty*(
     YES
 
 proc class_replaceProperty(
-  cls: ObjcClass,
+  cls: ID,
   name: cstring,
   attributes: ptr objc_property_attribute_t,
   attributeCount: cuint,
@@ -313,11 +307,11 @@ proc protocolList*(cls: ObjcClass): seq[Protocol] =
   copyMem(result[0].addr, prots, sizeof(Protocol) * count.int)
   c_free(prots)
 
-proc class_getVersion(cls: ObjcClass): cint {.cdecl, importc.}
+proc class_getVersion(cls: ID): cint {.cdecl, importc.}
 template getVersion*(cls: ObjcClass): untyped =
   class_getVersion(cls).int
 
-proc class_setVersion(cls: ObjcClass, version: cint) {.cdecl, importc.}
+proc class_setVersion(cls: ID, version: cint) {.cdecl, importc.}
 template setVersion*(cls: ObjcClass, version: int) =
   class_setVersion(cls, version.cint)
 
@@ -349,11 +343,11 @@ proc objc_duplicateClass(
 template duplicateClass*(original: ObjcClass, name: string, extraBytes: int): untyped =
   objc_duplicateClass(original, name.cstring, extraBytes.csize_t)
 
-proc class_createInstance(cls: ObjcClass, extraBytes: csize_t): ID {.cdecl, importc.}
+proc class_createInstance(cls: ID, extraBytes: csize_t): ID {.cdecl, importc.}
 template createInstance*(cls: ObjcClass, extraBytes: csize_t): untyped =
   class_createInstance(cls, extraBytes.csize_t)
 
-proc objc_constructInstance(cls: ObjcClass, bytes: pointer): ID {.cdecl, importc.}
+proc objc_constructInstance(cls: ID, bytes: pointer): ID {.cdecl, importc.}
 template constructInstance*(cls: ObjcClass, bytes: pointer): untyped =
   objc_constructInstance(cls, bytes)
 
@@ -403,7 +397,7 @@ proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
 template getClass*(name: string): untyped =
   objc_getClass(name.cstring)
 
-proc object_setClass(obj: ID, cls: ObjcClass): ObjcClass {.cdecl, importc.}
+proc object_setClass(obj: ID, cls: ID): ObjcClass {.cdecl, importc.}
 template setClass*(obj: ID, cls: ObjcClass): untyped =
   object_setClass(obj, cls)
 
@@ -593,7 +587,7 @@ proc imageNames*(): seq[string] =
   for i in 0 ..< result.len:
     result[i] = $images[i]
 
-proc class_getImageName(cls: ObjcClass): cstring {.cdecl, importc.}
+proc class_getImageName(cls: ID): cstring {.cdecl, importc.}
 template getImageName*(cls: ObjcClass): untyped =
   $class_getImageName(cls)
 
@@ -1172,6 +1166,11 @@ type ObjcProtocolMethodSpec = object
   selector: string
   encoding: string
 
+type ObjcImplMethodInfo = object
+  spec: ObjcProtocolMethodSpec
+  wrapperProc: NimNode
+  sourceDef: NimNode
+
 proc identName(n: NimNode): string =
   case n.kind
   of nnkIdent, nnkSym:
@@ -1190,6 +1189,23 @@ proc identName(n: NimNode): string =
   else:
     ""
 
+proc normalizeObjcNodeType(typ: NimNode, protocolName, className: string): NimNode =
+  case typ.kind
+  of nnkEmpty:
+    result = newEmptyNode()
+  of nnkVarTy, nnkRefTy, nnkDistinctTy, nnkPtrTy:
+    result = newTree(typ.kind, normalizeObjcNodeType(typ[0], protocolName, className))
+  of nnkBracketExpr:
+    result = newNimNode(nnkBracketExpr)
+    for c in typ:
+      result.add(normalizeObjcNodeType(c, protocolName, className))
+  else:
+    let name = identName(typ)
+    if name == protocolName or name == className:
+      result = bindSym"NSObject"
+    else:
+      result = copyNimTree(typ)
+
 proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string =
   case typ.kind
   of nnkEmpty:
@@ -1206,18 +1222,14 @@ proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string
       "c"
     elif name == "uint8":
       "C"
-    elif name == "int":
+    elif name == "int" or name == "cint" or name == "int32":
       "i"
-    elif name == "uint":
+    elif name == "uint" or name == "cuint" or name == "uint32":
       "I"
     elif name == "cshort":
       "s"
     elif name == "cushort":
       "S"
-    elif name == "int32":
-      "l"
-    elif name == "uint32":
-      "L"
     elif name == "int64":
       "q"
     elif name == "uint64":
@@ -1272,6 +1284,81 @@ proc methodSpecFromDef(
   result.selector = methodName & ":".repeat(explicitArgCount)
   result.encoding = encoding
 
+proc firstParamIndex(params: NimNode): int =
+  for i in 1 ..< params.len:
+    if params[i].kind == nnkIdentDefs:
+      return i
+  -1
+
+proc firstParamTypeName(def: NimNode): string =
+  let params = def.params
+  let idx = firstParamIndex(params)
+  if idx < 0:
+    return ""
+  identName(params[idx][^2])
+
+proc copyParamWithoutDefault(p: NimNode, protocolName, className: string): NimNode =
+  result = newNimNode(nnkIdentDefs)
+  for i in 0 ..< p.len - 2:
+    result.add(copyNimTree(p[i]))
+  result.add(normalizeObjcNodeType(p[^2], protocolName, className))
+  result.add(newEmptyNode())
+
+proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNode =
+  let methodName = identName(def.name)
+  if methodName.len == 0:
+    error("objcImpl could not read implementation method name", def)
+
+  let params = def.params
+  let selfIdx = firstParamIndex(params)
+  if selfIdx < 0:
+    error("objcImpl method implementation must include `self` as first argument", def)
+  let selfParam = params[selfIdx]
+  if selfParam.len != 3:
+    error(
+      "objcImpl first parameter group must contain exactly one name for `self`", def
+    )
+  let selfName = identName(selfParam[0])
+  if selfName.len == 0:
+    error("objcImpl could not read implementation self parameter name", def)
+
+  var wrapperParams: seq[NimNode] = @[]
+  wrapperParams.add(normalizeObjcNodeType(params[0], protocolName, className))
+
+  let selfIdent = ident(selfName)
+  wrapperParams.add(newIdentDefs(selfIdent, bindSym"ID", newEmptyNode()))
+  let cmdSel = genSym(nskParam, "cmdSel")
+  wrapperParams.add(newIdentDefs(cmdSel, bindSym"SEL", newEmptyNode()))
+
+  var sawSelf = false
+  for i in 1 ..< params.len:
+    let p = params[i]
+    if p.kind != nnkIdentDefs:
+      continue
+    if not sawSelf:
+      sawSelf = true
+      continue
+    wrapperParams.add(copyParamWithoutDefault(p, protocolName, className))
+
+  var wrapperBody = newStmtList()
+  wrapperBody.add quote do:
+    discard `selfIdent`
+  wrapperBody.add quote do:
+    discard `cmdSel`
+
+  if def.body.kind == nnkStmtList:
+    for stmt in def.body:
+      wrapperBody.add(copyNimTree(stmt))
+  else:
+    wrapperBody.add(copyNimTree(def.body))
+
+  result = newProc(
+    name = genSym(nskProc, methodName & "_objcImpl"),
+    params = wrapperParams,
+    body = wrapperBody,
+    pragmas = nnkPragma.newTree(ident"cdecl", ident"gcsafe"),
+  )
+
 macro objcImpl*(x: untyped): untyped =
   let input =
     if x.kind == nnkStmtList:
@@ -1282,7 +1369,7 @@ macro objcImpl*(x: untyped): untyped =
   var protocolName = ""
   var className = ""
   var inheritedProtocolName = ""
-  var methodSpecs: seq[ObjcProtocolMethodSpec] = @[]
+  var conceptBody = newEmptyNode()
 
   for stmt in input:
     if stmt.kind != nnkTypeSection:
@@ -1297,11 +1384,7 @@ macro objcImpl*(x: untyped): untyped =
       case body.kind
       of nnkTypeClassTy:
         protocolName = name
-        let conceptBody = body[^1]
-        if conceptBody.kind != nnkStmtList:
-          continue
-        for conceptStmt in conceptBody:
-          methodSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
+        conceptBody = body[^1]
       of nnkObjectTy:
         className = name
         if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
@@ -1321,13 +1404,82 @@ macro objcImpl*(x: untyped): untyped =
         protocolName & "`",
       x,
     )
+  if conceptBody.kind != nnkStmtList:
+    error("objcImpl protocol concept body is missing method declarations", x)
+
+  var protocolSpecs: seq[ObjcProtocolMethodSpec] = @[]
+  for conceptStmt in conceptBody:
+    protocolSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
+
+  var passthrough = newStmtList()
+  var implDefs: seq[NimNode] = @[]
+  for stmt in input:
+    case stmt.kind
+    of nnkTypeSection:
+      var filtered = newNimNode(nnkTypeSection)
+      for def in stmt:
+        if def.kind != nnkTypeDef:
+          filtered.add(copyNimTree(def))
+          continue
+        let name = identName(def[0])
+        let body = def[2]
+        if (name == protocolName and body.kind == nnkTypeClassTy) or
+            (name == className and body.kind == nnkObjectTy):
+          continue
+        filtered.add(copyNimTree(def))
+      if filtered.len > 0:
+        passthrough.add(filtered)
+    of nnkMethodDef, nnkProcDef:
+      if firstParamTypeName(stmt) == className:
+        implDefs.add(stmt)
+      else:
+        passthrough.add(copyNimTree(stmt))
+    else:
+      passthrough.add(copyNimTree(stmt))
+
+  var implMethods: seq[ObjcImplMethodInfo] = @[]
+  for def in implDefs:
+    implMethods.add ObjcImplMethodInfo(
+      spec: methodSpecFromDef(def, protocolName, className),
+      wrapperProc: buildObjcWrapperProc(def, protocolName, className),
+      sourceDef: def,
+    )
+
+  for i in 0 ..< implMethods.len:
+    for j in i + 1 ..< implMethods.len:
+      if implMethods[i].spec.selector == implMethods[j].spec.selector:
+        error(
+          "objcImpl found duplicate implementation for selector `" &
+            implMethods[i].spec.selector & "`",
+          implMethods[j].sourceDef,
+        )
+
+  for pSpec in protocolSpecs:
+    var found = false
+    for impl in implMethods:
+      if impl.spec.selector != pSpec.selector:
+        continue
+      found = true
+      if impl.spec.encoding != pSpec.encoding:
+        error(
+          "objcImpl signature mismatch for `" & pSpec.selector & "`: protocol `" &
+            pSpec.encoding & "`, implementation `" & impl.spec.encoding & "`",
+          x,
+        )
+      break
+    if not found:
+      error(
+        "objcImpl missing implementation for required protocol method `" & pSpec.selector &
+          "`",
+        x,
+      )
 
   let protoVar = genSym(nskVar, "objcImplProto")
   let clsVar = genSym(nskVar, "objcImplClass")
   let protoNameLit = newLit(protocolName)
   let classNameLit = newLit(className)
   var addMethodDescs = newStmtList()
-  for spec in methodSpecs:
+  for spec in protocolSpecs:
     let selectorName = newLit(spec.selector)
     let typeEncoding = newLit(spec.encoding)
     addMethodDescs.add quote do:
@@ -1335,7 +1487,22 @@ macro objcImpl*(x: untyped): untyped =
         `protoVar`, selector(`selectorName`), `typeEncoding`, true, true
       )
 
-  result = quote:
+  var wrapperDefs = newStmtList()
+  var addClassMethods = newStmtList()
+  for impl in implMethods:
+    wrapperDefs.add(impl.wrapperProc)
+    let selectorName = newLit(impl.spec.selector)
+    let typeEncoding = newLit(impl.spec.encoding)
+    let wrapperSym = impl.wrapperProc.name
+    addClassMethods.add quote do:
+      discard addMethod(
+        `clsVar`, selector(`selectorName`), cast[IMP](`wrapperSym`), `typeEncoding`
+      )
+
+  result = newStmtList()
+  result.add(passthrough)
+  result.add(wrapperDefs)
+  result.add quote do:
     block:
       var `protoVar` = getProtocol(`protoNameLit`)
       if cast[pointer](`protoVar`) == nil:
@@ -1349,5 +1516,11 @@ macro objcImpl*(x: untyped): untyped =
       if `clsVar`.isNil:
         `clsVar` = allocateClassPair(getClass("NSObject"), `classNameLit`, 0)
         if not `clsVar`.isNil:
-          discard addProtocol(`clsVar`, `protoVar`)
+          if cast[pointer](`protoVar`) != nil:
+            discard addProtocol(`clsVar`, `protoVar`)
+          `addClassMethods`
           registerClassPair(`clsVar`)
+      else:
+        if cast[pointer](`protoVar`) != nil:
+          discard addProtocol(`clsVar`, `protoVar`)
+        `addClassMethods`

@@ -9,6 +9,8 @@ proc initWithUTF8String*(
 type DestroyProbeObject = object of NSObject
 
 var destroyProbeTriggered = false
+var objcImplPingCount = 0
+var objcImplAccum = 0.cint
 
 proc `=destroy`(o: var DestroyProbeObject) =
   destroyProbeTriggered = true
@@ -157,30 +159,55 @@ suite "objc runtime ownership fundamentals":
     const ProtoName = "NRProtocolTest"
     const ClassName = "NRClassWithProtocolTest"
 
+    objcImplPingCount = 0
+    objcImplAccum = 0
+
     objcImpl:
       type NRProtocolTest =
         concept self
           method nimPing(self: NRProtocolTest)
+          method nimAdd(self: NRProtocolTest, amount: cint): cint
 
       type NRClassWithProtocolTest = object of NRProtocolTest
 
       method nimPing(self: NRClassWithProtocolTest) =
-        echo "PING!"
+        inc objcImplPingCount
+
+      method nimAdd(self: NRClassWithProtocolTest, amount: cint): cint =
+        objcImplAccum += amount
+        result = objcImplAccum
 
     var proto = getProtocol(ProtoName)
     check(not proto.isNilProtocol)
 
     var foundNimPing = false
+    var foundNimAdd = false
     for desc in methodDescriptionList(proto, true, true):
       if $desc.name == "nimPing":
         foundNimPing = true
         check(desc.types == "v@:")
+      if $desc.name == "nimAdd:":
+        foundNimAdd = true
+        check(desc.types == "i@:i")
     check(foundNimPing)
+    check(foundNimAdd)
 
     var cls = getClass(ClassName)
     check(not cls.isNil)
     check(conformsToProtocol(cls, proto))
+    check(respondsToSelector(cls, selector("nimPing")))
+    check(respondsToSelector(cls, selector("nimAdd:")))
 
     var o = asType[NSObject](new(cls))
     check(not o.isNil)
     check(getClassName(o) == ClassName)
+
+    let sendVoid = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
+    let sendAdd =
+      cast[proc(self: ID, op: SEL, amount: cint): cint {.cdecl.}](objc_msgSend)
+
+    sendVoid(o, selector("nimPing"))
+    check(objcImplPingCount == 1)
+
+    check(sendAdd(o, selector("nimAdd:"), 2.cint) == 2.cint)
+    check(sendAdd(o, selector("nimAdd:"), 3.cint) == 5.cint)
