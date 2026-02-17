@@ -26,6 +26,12 @@ proc numberWithFloat(
 proc doubleValue(n: NSNumber): float {.objc: "doubleValue".}
 proc floatValue(n: NSNumber): cfloat {.objc: "floatValue".}
 
+proc UTF8String*(n: NSString): cstring {.objc: "UTF8String".}
+proc initWithUTF8String*(
+  o: NSString, str: cstring
+): NSString {.objc: "initWithUTF8String:".}
+
+
 suite "objc runtime":
   test "NSNumber and NSString values":
     let a = NSString.alloc().initWithUTF8String("This is a test!")
