@@ -1391,6 +1391,17 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     pragmas = nnkPragma.newTree(ident"cdecl", ident"gcsafe"),
   )
 
+proc collectImplementsProtocols(n: NimNode, protocols: var seq[string]) =
+  case n.kind
+  of nnkStmtList, nnkTupleConstr, nnkPar:
+    for c in n:
+      collectImplementsProtocols(c, protocols)
+  else:
+    let pName = identName(n)
+    if pName.len == 0:
+      error("objcImpl `implements` protocol name is invalid", n)
+    protocols.add(pName)
+
 macro objcImpl*(x: untyped): untyped =
   let input =
     if x.kind == nnkStmtList:
@@ -1430,7 +1441,7 @@ macro objcImpl*(x: untyped): untyped =
         continue
       if stmt.len < 3:
         error(
-          "objcImpl `implements` syntax is: `implements <ClassName>, <ProtocolName>...`",
+          "objcImpl `implements` syntax is: `implements <ClassName>: <ProtocolName>...`",
           stmt,
         )
       let implClass = identName(stmt[1])
@@ -1444,11 +1455,12 @@ macro objcImpl*(x: untyped): untyped =
             "` and `" & implClass & "`",
           stmt,
         )
+      var parsedProtocols: seq[string] = @[]
       for i in 2 ..< stmt.len:
-        let pName = identName(stmt[i])
-        if pName.len == 0:
-          error("objcImpl `implements` protocol name is invalid", stmt[i])
-        implementedProtocols.add(pName)
+        collectImplementsProtocols(stmt[i], parsedProtocols)
+      if parsedProtocols.len == 0:
+        error("objcImpl `implements` requires at least one protocol", stmt)
+      implementedProtocols.add(parsedProtocols)
     else:
       discard
 
@@ -1468,7 +1480,7 @@ macro objcImpl*(x: untyped): untyped =
 
   if implementedClassName.len == 0:
     error(
-      "objcImpl requires `implements <ClassName>, <ProtocolName>...` to declare protocol conformance",
+      "objcImpl requires `implements <ClassName>: <ProtocolName>...` to declare protocol conformance",
       x,
     )
   if implementedClassName != className:
