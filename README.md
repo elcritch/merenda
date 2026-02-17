@@ -84,3 +84,17 @@ objcImpl:
 
   method ping(self: MyClass) = discard
 ```
+
+### Super-call helpers
+
+`nutella/objc` also exports convenience helpers for calling superclass
+implementations from custom runtime methods:
+
+```nim
+method dealloc(self: MyClass) =
+  # custom cleanup...
+  superDealloc(self)
+
+method retainCountFromSuper(self: MyClass): cint =
+  callSuperAs[NSUInteger](self, selector("retainCount")).cint
+```

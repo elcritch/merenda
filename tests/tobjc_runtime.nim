@@ -10,6 +10,7 @@ var objcImplPingCount = 0
 var objcImplAccum = 0.cint
 var objcImplPayloadClass = ""
 var objcImplPayloadRetainInMethod = 0
+var objcImplSuperDeallocCount = 0
 
 proc `=destroy`(o: var DestroyProbeObject) =
   destroyProbeTriggered = true
@@ -274,3 +275,32 @@ suite "objc runtime ownership fundamentals":
     check(objcImplPayloadRetainInMethod == retainBefore)
     check(retainCount(payload).int == retainBefore)
     check(retainCount(o).int == retainObjectBeforePayloadCall)
+
+  test "callSuper helpers support typed dispatch and dealloc chaining":
+    objcImplSuperDeallocCount = 0
+
+    objcImpl:
+      type NRSuperCallProtocol =
+        concept self
+            method nimSuperRetainCount(self: NRSuperCallProtocol): cint
+
+      type NRSuperCallClass {.impl: NRSuperCallProtocol.} = object of NSObject
+
+      method nimSuperRetainCount(self: NRSuperCallClass): cint =
+        callSuperAs[NSUInteger](self, selector("retainCount")).cint
+
+      method dealloc(self: NRSuperCallClass) =
+        inc objcImplSuperDeallocCount
+        superDealloc(self)
+
+    let superProto = getProtocol(NRSuperCallProtocol)
+    check(not superProto.isNilProtocol)
+
+    let sendRetainCount = cast[proc(self: ID, op: SEL): cint {.cdecl.}](objc_msgSend)
+    var o = NRSuperCallClass.new()
+    check(not o.isNil)
+    check(sendRetainCount(o, selector("nimSuperRetainCount")) == retainCount(o).cint)
+
+    release(o)
+    check(o.isNil)
+    check(objcImplSuperDeallocCount == 1)
