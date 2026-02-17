@@ -56,3 +56,8 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
 - Implementation signatures must match protocol signatures.
 - Generated wrappers treat `self` as borrowed runtime object (`ID`) to avoid ARC
   ownership side effects in the wrapper boundary.
+- `objcImpl` emits Nim marker types:
+  - `<ProtocolName> = object of ProtocolPrototype`
+  - `<ClassName> = object of NSObject`
+  This enables typedesc lookup with `getProtocol(MyProtocolType)` and
+  `getClass(MyClassType)` with compile-time type constraints.
