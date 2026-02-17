@@ -1,6 +1,5 @@
 import std/unittest
-import darwin/objc/runtime
-import darwin/foundation/nsgeometry
+import nutella/objc
 
 type
   NSNumber = ptr object of NSObject
