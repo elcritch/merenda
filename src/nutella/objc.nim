@@ -391,6 +391,9 @@ template setIvar*(obj: ID, ivar: Ivar, value: ID) =
   object_setIvar(obj, ivar, value)
 
 proc object_getClassName(obj: ID): cstring {.cdecl, importc.}
+proc getRawClassName*(obj: ID): string =
+  $object_getClassName(obj)
+
 template getClassName*[T: NSObject](obj: T): string =
   $object_getClassName(obj.value)
 
