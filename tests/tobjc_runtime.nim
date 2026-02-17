@@ -44,3 +44,30 @@ suite "objc runtime ownership fundamentals":
 
     release(o)
     check(o == nil)
+
+  test "block scope destroys copied alias":
+    var o = cast[NSObject](new(getClass("NSObject")))
+    let baseCount = retainCount(o).int
+
+    block:
+      var alias = o
+      check(alias == o)
+      check(retainCount(o).int == baseCount + 1)
+
+    check(retainCount(o).int == baseCount)
+    release(o)
+    check(o == nil)
+
+  test "block scope destroys retained temporary":
+    var o = cast[NSObject](new(getClass("NSObject")))
+    var duringCount = 0
+
+    block:
+      var temp = retain(o)
+      check(temp == o)
+      duringCount = retainCount(o).int
+
+    let afterBlock = retainCount(o).int
+    check(afterBlock < duringCount)
+    release(o)
+    check(o == nil)
