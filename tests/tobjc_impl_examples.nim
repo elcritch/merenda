@@ -9,9 +9,7 @@ objcImpl:
     concept self
         method ping(self: FooBarProtocol)
 
-  type FooBar = object of NSObject
-  implements FooBar:
-    FooBarProtocol
+  type FooBar {.impl: FooBarProtocol.} = object of NSObject
 
   method ping(self: FooBar) =
     inc fooBarPingCount
@@ -21,9 +19,7 @@ objcImpl:
     concept self
         method ping(self: HiddenCtorProtocol)
 
-  type HiddenCtorClass = object of NSObject
-  implements HiddenCtorClass:
-    HiddenCtorProtocol
+  type HiddenCtorClass {.impl: HiddenCtorProtocol.} = object of NSObject
 
   proc new*(
     t: typedesc[HiddenCtorClass]
