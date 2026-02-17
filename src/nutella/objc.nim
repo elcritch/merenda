@@ -1164,3 +1164,8 @@ template addMethod*[T](cls: ObjcClass, name: SEL, imp: T): bool =
 
 template replaceMethod*[T](cls: ObjcClass, name: SEL, imp: T): IMP =
   class_replaceMethod(cls, name, cast[IMP](imp), getProcEncode(imp))
+
+macro objcImpl*(x: untyped) =
+  echo "X: ", x.treeRepr()
+  discard "TODO"
+
