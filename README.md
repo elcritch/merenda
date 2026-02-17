@@ -19,7 +19,8 @@ objcImpl:
       method ping(self: PingProtocol)
       method add(self: PingProtocol, amount: cint): cint
 
-  type PingClass = object of PingProtocol
+  type PingClass = object of NSObject
+  implements PingClass, PingProtocol
 
   method ping(self: PingClass) =
     inc pingCount
@@ -45,7 +46,7 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
 
 - Creates/registers protocol if missing (`allocateProtocol` + `registerProtocol`).
 - Adds required instance method descriptions to the protocol.
-- Creates/registers class if missing (currently subclassing `NSObject`).
+- Creates/registers class if missing (using the superclass declared in the DSL).
 - Attaches the class to the protocol.
 - Installs generated C-callable method wrappers via `class_addMethod`.
 
@@ -58,6 +59,6 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
   ownership side effects in the wrapper boundary.
 - `objcImpl` emits Nim marker types:
   - `<ProtocolName> = object of ProtocolPrototype`
-  - `<ClassName> = object of NSObject`
+  - `<ClassName> = object of <DeclaredSuperclass>`
   This enables typedesc lookup with `getProtocol(MyProtocolType)` and
   `getClass(MyClassType)` with compile-time type constraints.
