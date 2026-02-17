@@ -1,3 +1,25 @@
+# Modification of darwin/src/objc/runtime.nim
+#
+# Copyright (c) 2017 Yuriy Glukhov
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import macros, strutils
 
 {.passL: "-framework Foundation".}
@@ -1378,42 +1400,108 @@ macro objcImpl*(x: untyped): untyped =
 
   var protocolName = ""
   var className = ""
-  var inheritedProtocolName = ""
+  var classSuperName = ""
   var conceptBody = newEmptyNode()
+  var implementedClassName = ""
+  var implementedProtocols: seq[string] = @[]
 
   for stmt in input:
-    if stmt.kind != nnkTypeSection:
-      continue
-    for def in stmt:
-      if def.kind != nnkTypeDef:
+    case stmt.kind
+    of nnkTypeSection:
+      for def in stmt:
+        if def.kind != nnkTypeDef:
+          continue
+        let name = identName(def[0])
+        if name.len == 0:
+          continue
+        let body = def[2]
+        case body.kind
+        of nnkTypeClassTy:
+          protocolName = name
+          conceptBody = body[^1]
+        of nnkObjectTy:
+          className = name
+          if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
+            classSuperName = identName(body[1][0])
+        else:
+          discard
+    of nnkCommand, nnkCall:
+      if identName(stmt[0]) != "implements":
         continue
-      let name = identName(def[0])
-      if name.len == 0:
-        continue
-      let body = def[2]
-      case body.kind
-      of nnkTypeClassTy:
-        protocolName = name
-        conceptBody = body[^1]
-      of nnkObjectTy:
-        className = name
-        if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
-          inheritedProtocolName = identName(body[1][0])
-      else:
-        discard
+      if stmt.len < 3:
+        error(
+          "objcImpl `implements` syntax is: `implements <ClassName>, <ProtocolName>...`",
+          stmt,
+        )
+      let implClass = identName(stmt[1])
+      if implClass.len == 0:
+        error("objcImpl `implements` class name is invalid", stmt)
+      if implementedClassName.len == 0:
+        implementedClassName = implClass
+      elif implementedClassName != implClass:
+        error(
+          "objcImpl has conflicting `implements` class names: `" & implementedClassName &
+            "` and `" & implClass & "`",
+          stmt,
+        )
+      for i in 2 ..< stmt.len:
+        let pName = identName(stmt[i])
+        if pName.len == 0:
+          error("objcImpl `implements` protocol name is invalid", stmt[i])
+        implementedProtocols.add(pName)
+    else:
+      discard
 
   if protocolName.len == 0:
     error("objcImpl requires a `type <Protocol> = concept ...` declaration", x)
   if className.len == 0:
-    error("objcImpl requires a `type <Class> = object of <Protocol>` declaration", x)
-  if inheritedProtocolName.len == 0:
-    error("objcImpl class declaration must inherit from the protocol concept", x)
-  if inheritedProtocolName != protocolName:
+    error("objcImpl requires a `type <Class> = object of <Superclass>` declaration", x)
+  if classSuperName.len == 0:
+    error("objcImpl class declaration must include a superclass", x)
+
+  # Backward compatibility for the old DSL:
+  #   type MyClass = object of MyProtocol
+  if classSuperName == protocolName and implementedProtocols.len == 0:
+    classSuperName = "NSObject"
+    implementedClassName = className
+    implementedProtocols.add(protocolName)
+
+  if implementedClassName.len == 0:
     error(
-      "objcImpl class inherits from `" & inheritedProtocolName & "` but protocol is `" &
-        protocolName & "`",
+      "objcImpl requires `implements <ClassName>, <ProtocolName>...` to declare protocol conformance",
       x,
     )
+  if implementedClassName != className:
+    error(
+      "objcImpl `implements` targets class `" & implementedClassName &
+        "`, but declared class is `" & className & "`",
+      x,
+    )
+  if classSuperName == protocolName:
+    error(
+      "objcImpl class cannot inherit from protocol `" & protocolName &
+        "`; use `object of NSObject` (or another class) plus `implements`",
+      x,
+    )
+  var protocolImplemented = false
+  for p in implementedProtocols:
+    if p == protocolName:
+      protocolImplemented = true
+      break
+  if not protocolImplemented:
+    error(
+      "objcImpl protocol `" & protocolName &
+        "` must appear in `implements <ClassName>, ...`",
+      x,
+    )
+
+  # De-duplicate protocol list while preserving order.
+  var dedupProtocols: seq[string] = @[]
+  for p in implementedProtocols:
+    if p notin dedupProtocols:
+      dedupProtocols.add(p)
+  implementedProtocols = dedupProtocols
+
   if conceptBody.kind != nnkStmtList:
     error("objcImpl protocol concept body is missing method declarations", x)
 
@@ -1423,7 +1511,7 @@ macro objcImpl*(x: untyped): untyped =
 
   let generatedTypes = parseStmt(
     "type\n  " & protocolName & " = object of ProtocolPrototype\n  " & className &
-      " = object of NSObject"
+      " = object of " & classSuperName
   )
 
   var passthrough = newStmtList()
@@ -1444,6 +1532,9 @@ macro objcImpl*(x: untyped): untyped =
         filtered.add(copyNimTree(def))
       if filtered.len > 0:
         passthrough.add(filtered)
+    of nnkCommand, nnkCall:
+      if identName(stmt[0]) != "implements":
+        passthrough.add(copyNimTree(stmt))
     of nnkMethodDef, nnkProcDef:
       if firstParamTypeName(stmt) == className:
         implDefs.add(stmt)
@@ -1493,6 +1584,7 @@ macro objcImpl*(x: untyped): untyped =
   let clsVar = genSym(nskVar, "objcImplClass")
   let protoNameLit = newLit(protocolName)
   let classNameLit = newLit(className)
+  let superClassNameLit = newLit(classSuperName)
   var addMethodDescs = newStmtList()
   for spec in protocolSpecs:
     let selectorName = newLit(spec.selector)
@@ -1504,6 +1596,17 @@ macro objcImpl*(x: untyped): untyped =
 
   var wrapperDefs = newStmtList()
   var addClassMethods = newStmtList()
+  var addExtraProtocols = newStmtList()
+  for p in implementedProtocols:
+    if p == protocolName:
+      continue
+    let pLit = newLit(p)
+    addExtraProtocols.add quote do:
+      block:
+        let p = getProtocol(`pLit`)
+        if cast[pointer](p) != nil:
+          discard addProtocol(`clsVar`, p)
+
   for impl in implMethods:
     wrapperDefs.add(impl.wrapperProc)
     let selectorName = newLit(impl.spec.selector)
@@ -1530,13 +1633,15 @@ macro objcImpl*(x: untyped): untyped =
 
       var `clsVar` = getClass(`classNameLit`)
       if `clsVar`.isNil:
-        `clsVar` = allocateClassPair(getClass("NSObject"), `classNameLit`, 0)
+        `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
         if not `clsVar`.isNil:
           if cast[pointer](`protoVar`) != nil:
             discard addProtocol(`clsVar`, `protoVar`)
+          `addExtraProtocols`
           `addClassMethods`
           registerClassPair(`clsVar`)
       else:
         if cast[pointer](`protoVar`) != nil:
           discard addProtocol(`clsVar`, `protoVar`)
+        `addExtraProtocols`
         `addClassMethods`
