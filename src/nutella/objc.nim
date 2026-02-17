@@ -22,7 +22,7 @@
 
 import macros, strutils
 
-{.passL: "-framework Foundation".}
+{.passL: "-lobjc".}
 template impl*(x: untyped) {.pragma.}
 
 const
