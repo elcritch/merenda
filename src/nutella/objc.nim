@@ -1034,6 +1034,15 @@ proc initAux(v: NSObject): NSObject {.objc: "init".}
 proc init*[T: NSObject](v: T): T {.inline.} =
   asType[T](initAux(v))
 
+proc alloc*[T](o: typedesc[T]): T {.objc: "alloc".}
+
+proc UTF8String(n: NSString): cstring {.objc: "UTF8String".}
+proc initWithUTF8String(
+  o: NSString, str: cstring
+): NSString {.objc: "initWithUTF8String:".}
+
+proc retainCount(o: NSObject): NSUInteger {.objc: "retainCount".}
+
 proc isKindOfClass(o: NSObject, c: ObjcClass): bool {.objc: "isKindOfClass:".}
 proc isKindOfClass*(o: NSObject, c: typedesc): bool =
   o.isKindOfClass(c.objcClass())
