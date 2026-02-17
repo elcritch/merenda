@@ -7,8 +7,10 @@ const
   NO* = false
 
 type
+  ID* = pointer
+
   NSObject* {.pure, inheritable.} = object
-    value*: pointer
+    value*: ID
 
   ObjcClass* {.pure.} = object of NSObject
 
@@ -19,7 +21,6 @@ type
   Category* = distinct pointer
   IMP* = proc(id: ID, selector: SEL): ID {.cdecl, varargs.}
   Protocol* = distinct pointer
-  ID* = pointer
   SEL* = ptr object
   STR* = ptr char
   arith_t* = int
@@ -73,11 +74,11 @@ proc releaseAux(o: ID) {.raises: [].}
 proc retainCountAux(o: ID): NSUInteger {.raises: [].}
 
 template retain*[T: NSObject](o: T): T =
-  cast[T](retainAux(cast[ID](o.value)))
+  cast[T](retainAux(o.value))
 
 proc `=destroy`(o: var NSObject) =
   if o.value != nil:
-    releaseAux(cast[ID](o.value))
+    releaseAux(o.value)
     o.value = nil
 
 proc `=copy`(dest: var NSObject, src: NSObject) =
@@ -86,7 +87,7 @@ proc `=copy`(dest: var NSObject, src: NSObject) =
   `=destroy`(dest)
   dest.value = src.value
   if dest.value != nil:
-    retainRaw(cast[ID](dest.value))
+    retainRaw(dest.value)
 
 proc `=sink`(dest: var NSObject, src: NSObject) =
   `=destroy`(dest)
@@ -106,10 +107,10 @@ proc release*(o: var NSObject) {.inline.} =
 
 proc release*(o: NSObject) {.inline.} =
   if o.value != nil:
-    releaseAux(cast[ID](o.value))
+    releaseAux(o.value)
 
 template retainCount*(o: NSObject): NSUInteger =
-  retainCountAux(cast[ID](o.value))
+  retainCountAux(o.value)
 
 proc isNil*(a: NSObject): bool =
   result = a.value == nil
@@ -118,7 +119,7 @@ proc isNil*(a: ObjcClass): bool =
   result = a.value == nil
 
 converter toID*(o: NSObject): ID {.inline.} =
-  cast[ID](o.value)
+  o.value
 
 converter toNSObject*(id: ID): NSObject {.inline.} =
   NSObject(value: id)
