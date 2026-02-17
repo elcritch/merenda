@@ -156,7 +156,6 @@ suite "objc runtime ownership fundamentals":
     check(getClassName(o) == ClassName)
 
   test "template to create protocol and class":
-    const ProtoName = "NRProtocolTest"
     const ClassName = "NRClassWithProtocolTest"
 
     objcImplPingCount = 0
@@ -165,8 +164,8 @@ suite "objc runtime ownership fundamentals":
     objcImpl:
       type NRProtocolTest =
         concept self
-          method nimPing(self: NRProtocolTest)
-          method nimAdd(self: NRProtocolTest, amount: cint): cint
+            method nimPing(self: NRProtocolTest)
+            method nimAdd(self: NRProtocolTest, amount: cint): cint
 
       type NRClassWithProtocolTest = object of NRProtocolTest
 
@@ -177,7 +176,7 @@ suite "objc runtime ownership fundamentals":
         objcImplAccum += amount
         result = objcImplAccum
 
-    var proto = getProtocol(ProtoName)
+    var proto = getProtocol(NRProtocolTest)
     check(not proto.isNilProtocol)
 
     var foundNimPing = false
@@ -192,7 +191,7 @@ suite "objc runtime ownership fundamentals":
     check(foundNimPing)
     check(foundNimAdd)
 
-    var cls = getClass(ClassName)
+    var cls = getClass(NRClassWithProtocolTest)
     check(not cls.isNil)
     check(conformsToProtocol(cls, proto))
     check(respondsToSelector(cls, selector("nimPing")))
