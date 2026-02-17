@@ -15,6 +15,7 @@ type
   ObjcClass* {.pure.} = object of NSObject
 
   NSString* {.pure.} = object of NSObject
+  ProtocolPrototype* {.pure, inheritable.} = object
 
   Method* = distinct pointer
   Ivar* = distinct pointer
@@ -390,14 +391,14 @@ template setIvar*(obj: ID, ivar: Ivar, value: ID) =
   object_setIvar(obj, ivar, value)
 
 proc object_getClassName(obj: ID): cstring {.cdecl, importc.}
-proc getClassName*(obj: ID): string =
-  result = $object_getClassName(obj)
+template getClassName*[T: NSObject](obj: T): string =
+  $object_getClassName(obj.value)
 
 proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
 template getClass*(name: string): untyped =
   objc_getClass(name.cstring)
 
-template getClass*[T](t: typedesc[T]): untyped =
+template getClass*[T: NSObject](t: typedesc[T]): untyped =
   objc_getClass(($T).cstring)
 
 proc object_setClass(obj: ID, cls: ID): ObjcClass {.cdecl, importc.}
@@ -613,7 +614,7 @@ proc objc_getProtocol(name: cstring): Protocol {.cdecl, importc.}
 template getProtocol*(name: string): untyped =
   objc_getProtocol(name.cstring)
 
-template getProtocol*[T](t: typedesc[T]): untyped =
+template getProtocol*[T: ProtocolPrototype](t: typedesc[T]): untyped =
   objc_getProtocol(($T).cstring)
 
 proc objc_copyProtocolList(outCount: var cuint): ptr Protocol {.cdecl, importc.}
@@ -1418,7 +1419,8 @@ macro objcImpl*(x: untyped): untyped =
     protocolSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
 
   let generatedTypes = parseStmt(
-    "type\n  " & protocolName & " = object\n  " & className & " = object of NSObject"
+    "type\n  " & protocolName & " = object of ProtocolPrototype\n  " & className &
+      " = object of NSObject"
   )
 
   var passthrough = newStmtList()
