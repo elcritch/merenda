@@ -158,12 +158,29 @@ suite "objc runtime ownership fundamentals":
     const ClassName = "NRClassWithProtocolTest"
 
     objcImpl:
-      type NRProtocolTest = concept self
-        method nimPing(self: NRProtocolTest)
+      type NRProtocolTest =
+        concept self
+          method nimPing(self: NRProtocolTest)
 
       type NRClassWithProtocolTest = object of NRProtocolTest
 
       method nimPing(self: NRClassWithProtocolTest) =
         echo "PING!"
 
+    var proto = getProtocol(ProtoName)
+    check(not proto.isNilProtocol)
 
+    var foundNimPing = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "nimPing":
+        foundNimPing = true
+        check(desc.types == "v@:")
+    check(foundNimPing)
+
+    var cls = getClass(ClassName)
+    check(not cls.isNil)
+    check(conformsToProtocol(cls, proto))
+
+    var o = asType[NSObject](new(cls))
+    check(not o.isNil)
+    check(getClassName(o) == ClassName)

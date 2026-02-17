@@ -293,9 +293,7 @@ proc replaceProperty*(
     cls, name.cstring, attributes[0].unsafeAddr, attributes.len.cuint
   )
 
-proc class_conformsToProtocol(
-  cls: ID, protocol: Protocol
-): bool {.cdecl, importc.}
+proc class_conformsToProtocol(cls: ID, protocol: Protocol): bool {.cdecl, importc.}
 
 template conformsToProtocol*(cls: ObjcClass, protocol: Protocol): bool =
   class_conformsToProtocol(cls, protocol) == YES
@@ -695,18 +693,23 @@ proc protocol_copyMethodDescriptionList(
 proc methodDescriptionList*(
     p: Protocol, isRequiredMethod, isInstanceMethod: bool
 ): seq[MethodDescription] =
-  type DescT = array[0 .. 0, objc_method_description]
+  type DescT = UncheckedArray[objc_method_description]
   var
     count = 0.cuint
     raw =
       protocol_copyMethodDescriptionList(p, isRequiredMethod, isInstanceMethod, count)
-    descs = cast[DescT](raw)
-  if count == 0:
+  if count == 0 or raw.isNil:
     result = @[]
     return result
+  let descs = cast[ptr DescT](raw)
   result = newSeq[MethodDescription](count.int)
   for i in 0 ..< count.int:
-    result[i] = MethodDescription(name: descs[i].name, types: $descs[i].types)
+    let types =
+      if descs[i].types.isNil:
+        ""
+      else:
+        $descs[i].types
+    result[i] = MethodDescription(name: descs[i].name, types: types)
   c_free(raw)
 
 proc protocol_getMethodDescription(
@@ -1165,7 +1168,186 @@ template addMethod*[T](cls: ObjcClass, name: SEL, imp: T): bool =
 template replaceMethod*[T](cls: ObjcClass, name: SEL, imp: T): IMP =
   class_replaceMethod(cls, name, cast[IMP](imp), getProcEncode(imp))
 
-macro objcImpl*(x: untyped) =
-  echo "X: ", x.treeRepr()
-  discard "TODO"
+type ObjcProtocolMethodSpec = object
+  selector: string
+  encoding: string
 
+proc identName(n: NimNode): string =
+  case n.kind
+  of nnkIdent, nnkSym:
+    $n
+  of nnkPostfix:
+    identName(n[^1])
+  of nnkPragmaExpr:
+    identName(n[0])
+  of nnkAccQuoted:
+    if n.len > 0:
+      identName(n[0])
+    else:
+      ""
+  of nnkDotExpr:
+    identName(n[^1])
+  else:
+    ""
+
+proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string =
+  case typ.kind
+  of nnkEmpty:
+    "v"
+  of nnkVarTy, nnkRefTy, nnkDistinctTy:
+    objcTypeCodeFromNode(typ[0], protocolName, className)
+  of nnkBracketExpr:
+    if typ.len == 2 and identName(typ[0]) == "typedesc": "#" else: "@"
+  of nnkPtrTy:
+    "^" & objcTypeCodeFromNode(typ[0], protocolName, className)
+  else:
+    let name = identName(typ)
+    if name == "char":
+      "c"
+    elif name == "uint8":
+      "C"
+    elif name == "int":
+      "i"
+    elif name == "uint":
+      "I"
+    elif name == "cshort":
+      "s"
+    elif name == "cushort":
+      "S"
+    elif name == "int32":
+      "l"
+    elif name == "uint32":
+      "L"
+    elif name == "int64":
+      "q"
+    elif name == "uint64":
+      "Q"
+    elif name == "cfloat":
+      "f"
+    elif name == "cdouble":
+      "d"
+    elif name == "bool":
+      "B"
+    elif name == "cstring":
+      "*"
+    elif name == "ObjcClass":
+      "#"
+    elif name == "NSObject" or name == "ID" or name == protocolName or name == className:
+      "@"
+    elif name == "SEL":
+      ":"
+    elif name == "void":
+      "v"
+    else:
+      "@"
+
+proc methodSpecFromDef(
+    def: NimNode, protocolName, className: string
+): ObjcProtocolMethodSpec =
+  if def.kind notin {nnkMethodDef, nnkProcDef}:
+    error("objcImpl concept can only contain method/proc declarations", def)
+
+  let methodName = identName(def.name)
+  if methodName.len == 0:
+    error("objcImpl could not read method name from concept", def)
+
+  let params = def.params
+  var totalParams = 0
+  var explicitArgCount = 0
+  var encoding = objcTypeCodeFromNode(params[0], protocolName, className) & "@:"
+
+  for i in 1 ..< params.len:
+    let p = params[i]
+    if p.kind != nnkIdentDefs:
+      continue
+    let typeNode = p[^2]
+    let namedCount = p.len - 2
+    for _ in 0 ..< namedCount:
+      inc totalParams
+      if totalParams == 1:
+        continue # first arg is the explicit self in Nim surface syntax
+      inc explicitArgCount
+      encoding.add(objcTypeCodeFromNode(typeNode, protocolName, className))
+
+  result.selector = methodName & ":".repeat(explicitArgCount)
+  result.encoding = encoding
+
+macro objcImpl*(x: untyped): untyped =
+  let input =
+    if x.kind == nnkStmtList:
+      x
+    else:
+      newStmtList(x)
+
+  var protocolName = ""
+  var className = ""
+  var inheritedProtocolName = ""
+  var methodSpecs: seq[ObjcProtocolMethodSpec] = @[]
+
+  for stmt in input:
+    if stmt.kind != nnkTypeSection:
+      continue
+    for def in stmt:
+      if def.kind != nnkTypeDef:
+        continue
+      let name = identName(def[0])
+      if name.len == 0:
+        continue
+      let body = def[2]
+      case body.kind
+      of nnkTypeClassTy:
+        protocolName = name
+        let conceptBody = body[^1]
+        if conceptBody.kind != nnkStmtList:
+          continue
+        for conceptStmt in conceptBody:
+          methodSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
+      of nnkObjectTy:
+        className = name
+        if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
+          inheritedProtocolName = identName(body[1][0])
+      else:
+        discard
+
+  if protocolName.len == 0:
+    error("objcImpl requires a `type <Protocol> = concept ...` declaration", x)
+  if className.len == 0:
+    error("objcImpl requires a `type <Class> = object of <Protocol>` declaration", x)
+  if inheritedProtocolName.len == 0:
+    error("objcImpl class declaration must inherit from the protocol concept", x)
+  if inheritedProtocolName != protocolName:
+    error(
+      "objcImpl class inherits from `" & inheritedProtocolName & "` but protocol is `" &
+        protocolName & "`",
+      x,
+    )
+
+  let protoVar = genSym(nskVar, "objcImplProto")
+  let clsVar = genSym(nskVar, "objcImplClass")
+  let protoNameLit = newLit(protocolName)
+  let classNameLit = newLit(className)
+  var addMethodDescs = newStmtList()
+  for spec in methodSpecs:
+    let selectorName = newLit(spec.selector)
+    let typeEncoding = newLit(spec.encoding)
+    addMethodDescs.add quote do:
+      addMethodDescription(
+        `protoVar`, selector(`selectorName`), `typeEncoding`, true, true
+      )
+
+  result = quote:
+    block:
+      var `protoVar` = getProtocol(`protoNameLit`)
+      if cast[pointer](`protoVar`) == nil:
+        `protoVar` = allocateProtocol(`protoNameLit`)
+        if cast[pointer](`protoVar`) != nil:
+          `addMethodDescs`
+          registerProtocol(`protoVar`)
+          `protoVar` = getProtocol(`protoNameLit`)
+
+      var `clsVar` = getClass(`classNameLit`)
+      if `clsVar`.isNil:
+        `clsVar` = allocateClassPair(getClass("NSObject"), `classNameLit`, 0)
+        if not `clsVar`.isNil:
+          discard addProtocol(`clsVar`, `protoVar`)
+          registerClassPair(`clsVar`)
