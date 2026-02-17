@@ -397,6 +397,9 @@ proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
 template getClass*(name: string): untyped =
   objc_getClass(name.cstring)
 
+template getClass*[T](t: typedesc[T]): untyped =
+  objc_getClass(($T).cstring)
+
 proc object_setClass(obj: ID, cls: ID): ObjcClass {.cdecl, importc.}
 template setClass*(obj: ID, cls: ObjcClass): untyped =
   object_setClass(obj, cls)
@@ -609,6 +612,9 @@ proc classNamesForImage*(image: string): seq[string] =
 proc objc_getProtocol(name: cstring): Protocol {.cdecl, importc.}
 template getProtocol*(name: string): untyped =
   objc_getProtocol(name.cstring)
+
+template getProtocol*[T](t: typedesc[T]): untyped =
+  objc_getProtocol(($T).cstring)
 
 proc objc_copyProtocolList(outCount: var cuint): ptr Protocol {.cdecl, importc.}
 proc protocolList*(): seq[Protocol] =
@@ -1411,6 +1417,10 @@ macro objcImpl*(x: untyped): untyped =
   for conceptStmt in conceptBody:
     protocolSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
 
+  let generatedTypes = parseStmt(
+    "type\n  " & protocolName & " = object\n  " & className & " = object of NSObject"
+  )
+
   var passthrough = newStmtList()
   var implDefs: seq[NimNode] = @[]
   for stmt in input:
@@ -1500,6 +1510,7 @@ macro objcImpl*(x: untyped): untyped =
       )
 
   result = newStmtList()
+  result.add(generatedTypes)
   result.add(passthrough)
   result.add(wrapperDefs)
   result.add quote do:
