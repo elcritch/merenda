@@ -11,6 +11,8 @@ type DestroyProbeObject = object of NSObject
 var destroyProbeTriggered = false
 var objcImplPingCount = 0
 var objcImplAccum = 0.cint
+var objcImplLastString = ""
+var objcImplStringRetainInMethod = 0
 
 proc `=destroy`(o: var DestroyProbeObject) =
   destroyProbeTriggered = true
@@ -160,29 +162,39 @@ suite "objc runtime ownership fundamentals":
 
     objcImplPingCount = 0
     objcImplAccum = 0
+    objcImplLastString = ""
+    objcImplStringRetainInMethod = 0
 
     objcImpl:
       type NRProtocolTest =
         concept self
             method nimPing(self: NRProtocolTest)
             method nimAdd(self: NRProtocolTest, amount: cint): cint
+            method nimTakeString(self: NRProtocolTest, text: NSString)
 
       type NRClassWithProtocolTest = object of NSObject
       implements NRClassWithProtocolTest:
         NRProtocolTest
 
       method nimPing(self: NRClassWithProtocolTest) =
+        echo "PING!"
         inc objcImplPingCount
 
       method nimAdd(self: NRClassWithProtocolTest, amount: cint): cint =
         objcImplAccum += amount
         result = objcImplAccum
 
+      method nimTakeString(self: NRClassWithProtocolTest, text: NSString) =
+        objcImplLastString = $text.UTF8String
+        echo "STRING: ", objcImplLastString 
+        objcImplStringRetainInMethod = retainCount(text).int
+
     var proto = getProtocol(NRProtocolTest)
     check(not proto.isNilProtocol)
 
     var foundNimPing = false
     var foundNimAdd = false
+    var foundNimTakeString = false
     for desc in methodDescriptionList(proto, true, true):
       if $desc.name == "nimPing":
         foundNimPing = true
@@ -190,14 +202,19 @@ suite "objc runtime ownership fundamentals":
       if $desc.name == "nimAdd:":
         foundNimAdd = true
         check(desc.types == "i@:i")
+      if $desc.name == "nimTakeString:":
+        foundNimTakeString = true
+        check(desc.types == "v@:@")
     check(foundNimPing)
     check(foundNimAdd)
+    check(foundNimTakeString)
 
     var cls = getClass(NRClassWithProtocolTest)
     check(not cls.isNil)
     check(conformsToProtocol(cls, proto))
     check(respondsToSelector(cls, selector("nimPing")))
     check(respondsToSelector(cls, selector("nimAdd:")))
+    check(respondsToSelector(cls, selector("nimTakeString:")))
 
     var o = asType[NSObject](new(cls))
     check(not o.isNil)
@@ -206,9 +223,17 @@ suite "objc runtime ownership fundamentals":
     let sendVoid = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
     let sendAdd =
       cast[proc(self: ID, op: SEL, amount: cint): cint {.cdecl.}](objc_msgSend)
+    let sendTakeString = cast[proc(self: ID, op: SEL, text: ID) {.cdecl.}](objc_msgSend)
 
     sendVoid(o, selector("nimPing"))
     check(objcImplPingCount == 1)
 
     check(sendAdd(o, selector("nimAdd:"), 2.cint) == 2.cint)
     check(sendAdd(o, selector("nimAdd:"), 3.cint) == 5.cint)
+
+    var text = NSString.alloc().initWithUTF8String("objcImpl-string-arg")
+    let retainBefore = retainCount(text).int
+    sendTakeString(o, selector("nimTakeString:"), text)
+    check(objcImplLastString == "objcImpl-string-arg")
+    check(objcImplStringRetainInMethod == retainBefore)
+    check(retainCount(text).int == retainBefore)
