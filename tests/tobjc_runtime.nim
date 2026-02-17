@@ -21,21 +21,15 @@ suite "objc runtime ownership fundamentals":
     var o = NSObject.new()
     check(not o.isNil)
     check(getClassName(o) == "NSObject")
-    release(o)
-    check(o.isNil)
 
   test "typedesc new works for NSString subtype":
     var s = NSString.new()
     check(not s.isNil)
     check(getClassName(s).len > 0)
-    release(s)
-    check(s.isNil)
 
   test "alloc/init NSString roundtrip":
     var s = NSString.alloc().initWithUTF8String("This is a test!")
     check($s.UTF8String == "This is a test!")
-    release(s)
-    check(s.isNil)
 
   test "retain and release(var) are balanced":
     var o = NSObject.new()
@@ -66,9 +60,6 @@ suite "objc runtime ownership fundamentals":
     check(alias.isNil)
     check(retainCount(o).int == baseCount)
 
-    release(o)
-    check(o.isNil)
-
   test "block scope destroys copied alias":
     var o = NSObject.new()
     let baseCount = retainCount(o).int
@@ -79,8 +70,6 @@ suite "objc runtime ownership fundamentals":
       check(retainCount(o).int == baseCount + 1)
 
     check(retainCount(o).int == baseCount)
-    release(o)
-    check(o.isNil)
 
   test "block scope destroys retained temporary":
     var o = NSObject.new()
@@ -93,8 +82,6 @@ suite "objc runtime ownership fundamentals":
 
     let afterBlock = retainCount(o).int
     check(afterBlock < duringCount)
-    release(o)
-    check(o.isNil)
 
   test "subclass destroy hook runs in block scope":
     destroyProbeTriggered = false
@@ -122,3 +109,17 @@ suite "objc runtime ownership fundamentals":
       check(o.isNil)
       check(not moved.isNil)
       check(retainCount(moved).int == baseCount)
+
+  test "create actual Objective-C runtime subtype":
+    const SubClassName = "NimRuntimeActualSubtypeOwnedTest"
+
+    var subCls = getClass(SubClassName)
+    if subCls.isNil:
+      addClass(SubClassName, "NSObject", subCls):
+        discard
+    check(not subCls.isNil)
+
+    block:
+      var o = asType[NSObject](new(subCls))
+      check(not o.isNil)
+      check(getClassName(o) == SubClassName)

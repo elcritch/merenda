@@ -332,11 +332,11 @@ template allocateClassPair*(
 ): untyped =
   toObjcClass(objc_allocateClassPair(superclass, name.cstring, extrabytes.csize_t))
 
-proc objc_disposeClassPair(cls: ObjcClass) {.cdecl, importc.}
+proc objc_disposeClassPair(cls: ID) {.cdecl, importc.}
 template disposeClassPair*(cls: ObjcClass) =
   objc_disposeClassPair(cls)
 
-proc objc_registerClassPair(cls: ObjcClass) {.cdecl, importc.}
+proc objc_registerClassPair(cls: ID) {.cdecl, importc.}
 template registerClassPair*(cls: ObjcClass) =
   objc_registerClassPair(cls)
 
