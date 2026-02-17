@@ -862,8 +862,7 @@ template storeWeak*(location: var ID, obj: ID): untyped =
 # These procs should better be inlined, but there's a Nim bug #5945
 
 proc objcClass*(name: static[string]): ObjcClass =
-  var c {.global.} = objc_getClass(name)
-  return c
+  objc_getClass(name)
 
 proc objcClass*[T](t: typedesc[T]): ObjcClass {.inline.} =
   objcClass($T)
@@ -1097,9 +1096,16 @@ proc new*(cls: ObjcClass): ID {.inline.} =
   objc_msgSend(cls, sel_registerName("new"))
 
 proc autorelease*[T: NSObject](n: T): T {.objc: "autorelease", discardable.}
-proc initAux(v: NSObject): NSObject {.objc: "init".}
-proc init*[T: NSObject](v: T): T {.inline.} =
-  asType[T](initAux(v))
+proc initRaw(v: ID): ID {.inline.} =
+  objc_msgSend(v, sel_registerName("init"))
+
+proc init*[T: NSObject](v: var T): T {.inline.} =
+  result = asType[T](initRaw(v.value))
+  v.value = nil
+
+proc init*[T: NSObject](n: typedesc[T]): T {.inline.} =
+  var allocated = n.alloc()
+  allocated.init()
 
 proc alloc*[T](o: typedesc[T]): T {.objc: "alloc".}
 

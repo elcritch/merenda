@@ -216,6 +216,23 @@ suite "objc runtime ownership fundamentals":
     check(respondsToSelector(cls, selector("nimAdd:")))
     check(respondsToSelector(cls, selector("nimTakeString:")))
 
+    var oNew = NRClassWithProtocolTest.new()
+    check(not oNew.isNil)
+    check(getClassName(oNew) == ClassName)
+
+    var oAllocated = NRClassWithProtocolTest.alloc()
+    check(not oAllocated.isNil)
+    let retainAllocated = retainCount(oAllocated).int
+    var oFromAllocInit = oAllocated.init()
+    check(oAllocated.isNil)
+    check(not oFromAllocInit.isNil)
+    check(getClassName(oFromAllocInit) == ClassName)
+    check(retainCount(oFromAllocInit).int == retainAllocated)
+
+    var oInit = NRClassWithProtocolTest.init()
+    check(not oInit.isNil)
+    check(getClassName(oInit) == ClassName)
+
     var o = asType[NSObject](new(cls))
     check(not o.isNil)
     check(getClassName(o) == ClassName)
