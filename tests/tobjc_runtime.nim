@@ -1,9 +1,29 @@
 import std/unittest
 import nutella/objc
+import darwin/core_graphics/cggeometry
 
 type
-  NSNumber = ptr object of NSObject
-  NSValue = ptr object of NSObject
+  NSPoint = CGPoint
+  NSRect = CGRect
+  NSSize = CGSize
+
+proc NSMakePoint(x, y: CGFloat): NSPoint =
+  result.x = x
+  result.y = y
+
+proc NSMakeSize(w, h: CGFloat): NSSize =
+  result.width = w
+  result.height = h
+
+proc NSMakeRect(x, y, w, h: CGFloat): NSRect =
+  result.origin.x = x
+  result.origin.y = y
+  result.size.width = w
+  result.size.height = h
+
+type
+  NSNumber = object of NSObject
+  NSValue = object of NSObject
 
 proc valueWithRect(n: typedesc[NSValue], d: NSRect): NSValue {.objc: "valueWithRect:".}
 proc valueWithPoint(
@@ -29,7 +49,6 @@ proc UTF8String*(n: NSString): cstring {.objc: "UTF8String".}
 proc initWithUTF8String*(
   o: NSString, str: cstring
 ): NSString {.objc: "initWithUTF8String:".}
-
 
 suite "objc runtime":
   test "NSNumber and NSString values":
