@@ -67,3 +67,22 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
   - single protocol: `implements MyClass: MyProtocol`
   - multiple protocols: `implements MyClass: (Proto1, Proto2)` or one-per-line
     under the `implements` block.
+- Constructor policy procs are passed through as normal Nim declarations.
+  This is useful for disabling convenience constructors with `.error`:
+
+```nim
+objcImpl:
+  type MyProtocol =
+    concept self
+      method ping(self: MyProtocol)
+
+  type MyClass = object of NSObject
+  implements MyClass:
+    MyProtocol
+
+  proc new*(t: typedesc[MyClass]): MyClass {.error.}
+  proc init*(t: typedesc[MyClass]): MyClass {.error.}
+  proc init*(v: var MyClass): MyClass {.error.}
+
+  method ping(self: MyClass) = discard
+```

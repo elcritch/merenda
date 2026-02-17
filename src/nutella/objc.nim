@@ -1335,6 +1335,20 @@ proc firstParamTypeName(def: NimNode): string =
     return ""
   identName(params[idx][^2])
 
+proc hasErrorPragma(def: NimNode): bool =
+  let pragmas = def.pragma
+  if pragmas.kind != nnkPragma:
+    return false
+  for p in pragmas:
+    case p.kind
+    of nnkExprColonExpr:
+      if identName(p[0]) == "error":
+        return true
+    else:
+      if identName(p) == "error":
+        return true
+  false
+
 proc leafTypeName(typ: NimNode): string =
   case typ.kind
   of nnkVarTy, nnkRefTy, nnkDistinctTy, nnkPtrTy:
@@ -1582,7 +1596,7 @@ macro objcImpl*(x: untyped): untyped =
       if identName(stmt[0]) != "implements":
         passthrough.add(copyNimTree(stmt))
     of nnkMethodDef, nnkProcDef:
-      if firstParamTypeName(stmt) == className:
+      if firstParamTypeName(stmt) == className and not hasErrorPragma(stmt):
         implDefs.add(stmt)
       else:
         passthrough.add(copyNimTree(stmt))
