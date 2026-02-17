@@ -20,6 +20,20 @@ proc passThroughMove(o: sink NSObject): NSObject =
   o
 
 suite "objc runtime ownership fundamentals":
+  test "typedesc new works for NSObject":
+    var o = NSObject.new()
+    check(not o.isNil)
+    check(getClassName(o) == "NSObject")
+    release(o)
+    check(o.isNil)
+
+  test "typedesc new works for NSString subtype":
+    var s = NSString.new()
+    check(not s.isNil)
+    check(getClassName(s).len > 0)
+    release(s)
+    check(s.isNil)
+
   test "alloc/init NSString roundtrip":
     var s = NSString.alloc().initWithUTF8String("This is a test!")
     check($s.UTF8String == "This is a test!")
