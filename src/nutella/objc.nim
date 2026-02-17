@@ -67,17 +67,17 @@ type
     OBJC_ASSOCIATION_RETAIN = 01401
     OBJC_ASSOCIATION_COPY = 01403
 
-proc retainAux(o: NSObject): ID {.raises: [].}
-proc retainRaw(o: NSObject) {.raises: [].}
-proc releaseAux(o: NSObject) {.raises: [].}
-proc retainCountAux(o: NSObject): NSUInteger {.raises: [].}
+proc retainAux(o: ID): ID {.raises: [].}
+proc retainRaw(o: ID) {.raises: [].}
+proc releaseAux(o: ID) {.raises: [].}
+proc retainCountAux(o: ID): NSUInteger {.raises: [].}
 
 template retain*[T: NSObject](o: T): T =
-  cast[T](retainAux(o))
+  cast[T](retainAux(cast[ID](o.value)))
 
 proc `=destroy`(o: var NSObject) =
   if o.value != nil:
-    releaseAux(o)
+    releaseAux(cast[ID](o.value))
     o.value = nil
 
 proc `=copy`(dest: var NSObject, src: NSObject) =
@@ -86,7 +86,7 @@ proc `=copy`(dest: var NSObject, src: NSObject) =
   `=destroy`(dest)
   dest.value = src.value
   if dest.value != nil:
-    retainRaw(dest)
+    retainRaw(cast[ID](dest.value))
 
 proc `=sink`(dest: var NSObject, src: NSObject) =
   `=destroy`(dest)
@@ -106,10 +106,10 @@ proc release*(o: var NSObject) {.inline.} =
 
 proc release*(o: NSObject) {.inline.} =
   if o.value != nil:
-    releaseAux(o)
+    releaseAux(cast[ID](o.value))
 
 template retainCount*(o: NSObject): NSUInteger =
-  retainCountAux(o)
+  retainCountAux(cast[ID](o.value))
 
 proc isNil*(a: NSObject): bool =
   result = a.value == nil
@@ -129,7 +129,10 @@ converter toObjcClass*(id: ID): ObjcClass {.inline.} =
 converter toNSString*(id: ID): NSString {.inline.} =
   NSString(value: id)
 
-proc asType*[T: NSObject](o: NSObject): T {.inline.} =
+template asType*[T: NSObject](o: ID): T =
+  T(value: o)
+
+template asType*[T: NSObject](o: NSObject): T =
   T(value: o.value)
 
 proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
@@ -1042,16 +1045,16 @@ macro objc*(name: untyped, body: untyped = nil): untyped =
 
 proc NSLog*(str: NSString) {.importc, varargs.}
 
-proc retainAux(o: NSObject): ID {.raises: [].} =
+proc retainAux(o: ID): ID {.raises: [].} =
   objc_msgSend(o, sel_registerName("retain"))
 
-proc retainRaw(o: NSObject) {.raises: [].} =
+proc retainRaw(o: ID) {.raises: [].} =
   discard objc_msgSend(o, sel_registerName("retain"))
 
-proc releaseAux(o: NSObject) {.raises: [].} =
+proc releaseAux(o: ID) {.raises: [].} =
   discard objc_msgSend(o, sel_registerName("release"))
 
-proc retainCountAux(o: NSObject): NSUInteger {.raises: [].} =
+proc retainCountAux(o: ID): NSUInteger {.raises: [].} =
   cast[NSUInteger](objc_msgSend(o, sel_registerName("retainCount")))
 
 proc superclass*(o: NSObject): ObjcClass {.objc.}
