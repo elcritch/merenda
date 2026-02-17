@@ -16,16 +16,19 @@ proc `=destroy`(o: var DestroyProbeObject) =
   release(base)
   o.value = base.value
 
+proc passThroughMove(o: sink NSObject): NSObject =
+  o
+
 suite "objc runtime ownership fundamentals":
   test "alloc/init NSString roundtrip":
     var s = NSString.alloc().initWithUTF8String("This is a test!")
     check($s.UTF8String == "This is a test!")
     release(s)
-    check(s == nil)
+    check(s.isNil)
 
   test "retain and release(var) are balanced":
     var o = cast[NSObject](new(getClass("NSObject")))
-    check(o != nil)
+    check(not o.isNil)
 
     let baseCount = retainCount(o).int
     var extra = retain(o)
@@ -34,11 +37,11 @@ suite "objc runtime ownership fundamentals":
     check(afterRetain > baseCount)
 
     release(extra)
-    check(extra == nil)
+    check(extra.isNil)
     check(retainCount(o).int == afterRetain - 1)
 
     release(o)
-    check(o == nil)
+    check(o.isNil)
 
   test "copy increments retain count":
     var o = cast[NSObject](new(getClass("NSObject")))
@@ -49,11 +52,11 @@ suite "objc runtime ownership fundamentals":
     check(retainCount(o).int == baseCount + 1)
 
     release(alias)
-    check(alias == nil)
+    check(alias.isNil)
     check(retainCount(o).int == baseCount)
 
     release(o)
-    check(o == nil)
+    check(o.isNil)
 
   test "block scope destroys copied alias":
     var o = cast[NSObject](new(getClass("NSObject")))
@@ -66,7 +69,7 @@ suite "objc runtime ownership fundamentals":
 
     check(retainCount(o).int == baseCount)
     release(o)
-    check(o == nil)
+    check(o.isNil)
 
   test "block scope destroys retained temporary":
     var o = cast[NSObject](new(getClass("NSObject")))
@@ -80,11 +83,31 @@ suite "objc runtime ownership fundamentals":
     let afterBlock = retainCount(o).int
     check(afterBlock < duringCount)
     release(o)
-    check(o == nil)
+    check(o.isNil)
 
   test "subclass destroy hook runs in block scope":
     destroyProbeTriggered = false
     block:
       var o = cast[DestroyProbeObject](new(getClass("NSObject")))
-      check(o != nil)
+      check(not o.isNil)
     check(destroyProbeTriggered)
+
+  test "explicit move avoids retain-copy":
+    var o = cast[NSObject](new(getClass("NSObject")))
+    let baseCount = retainCount(o).int
+
+    block:
+      var moved = move(o)
+      check(o.isNil)
+      check(not moved.isNil)
+      check(retainCount(moved).int == baseCount)
+
+  test "sink transfer avoids retain-copy":
+    var o = cast[NSObject](new(getClass("NSObject")))
+    let baseCount = retainCount(o).int
+
+    block:
+      var moved = passThroughMove(move(o))
+      check(o.isNil)
+      check(not moved.isNil)
+      check(retainCount(moved).int == baseCount)
