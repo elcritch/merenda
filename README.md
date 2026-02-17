@@ -1,0 +1,58 @@
+# nutella
+
+`nutella` provides Nim bindings/helpers around the Objective-C runtime.
+
+## `objcImpl` runtime DSL
+
+`objcImpl` declares a runtime protocol + runtime class and wires Nim method
+implementations as Objective-C instance methods.
+
+```nim
+import nutella/objc
+
+var pingCount = 0
+var total = 0.cint
+
+objcImpl:
+  type PingProtocol =
+    concept self
+      method ping(self: PingProtocol)
+      method add(self: PingProtocol, amount: cint): cint
+
+  type PingClass = object of PingProtocol
+
+  method ping(self: PingClass) =
+    inc pingCount
+
+  method add(self: PingClass, amount: cint): cint =
+    total += amount
+    result = total
+
+let cls = getClass("PingClass")
+let obj = asType[NSObject](new(cls))
+
+let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
+let sendAdd =
+  cast[proc(self: ID, op: SEL, amount: cint): cint {.cdecl.}](objc_msgSend)
+
+sendPing(obj, selector("ping"))
+doAssert pingCount == 1
+doAssert sendAdd(obj, selector("add:"), 2.cint) == 2.cint
+doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
+```
+
+### Behavior
+
+- Creates/registers protocol if missing (`allocateProtocol` + `registerProtocol`).
+- Adds required instance method descriptions to the protocol.
+- Creates/registers class if missing (currently subclassing `NSObject`).
+- Attaches the class to the protocol.
+- Installs generated C-callable method wrappers via `class_addMethod`.
+
+### Current constraints
+
+- Protocol methods in the concept are treated as required instance methods.
+- Implementations must exist for every required protocol method.
+- Implementation signatures must match protocol signatures.
+- Generated wrappers treat `self` as borrowed runtime object (`ID`) to avoid ARC
+  ownership side effects in the wrapper boundary.
