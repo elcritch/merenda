@@ -158,17 +158,17 @@ suite "objc runtime ownership fundamentals":
     const ProtoName = "NRProtocolTest"
     const ClassName = "NRClassWithProtocolTest"
 
-    macro objcDeclare(x: untyped) =
+    macro objcImpl(x: untyped) =
       echo "X: ", x.treeRepr()
       discard "TODO"
 
     objcImpl:
-      type NRProtocolTest* = concept self
-        method nimPing*(self: NROwnedProtocolTest)
+      type NRProtocolTest = concept self
+        method nimPing(self: NROwnedProtocolTest)
 
-      type NRClassWithProtocolTest* = object of NRProtocolTest
+      type NRClassWithProtocolTest = object of NRProtocolTest
 
-      method nimPing*(self: NRClassWithProtocolTest) =
+      method nimPing(self: NRClassWithProtocolTest) =
         echo "PING!"
 
 
