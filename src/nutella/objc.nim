@@ -1059,6 +1059,7 @@ proc alloc*[T: NSObject](n: typedesc[T]): T {.objc: "alloc".}
 proc alloc*(cls: ObjcClass): ID {.inline.} =
   objc_msgSend(cls, sel_registerName("alloc"))
 
+proc new*[T: NSObject](n: typedesc[T]): T {.objc: "new".}
 proc new*(cls: ObjcClass): ID {.inline.} =
   objc_msgSend(cls, sel_registerName("new"))
 
