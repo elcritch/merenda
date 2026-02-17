@@ -1,5 +1,4 @@
 import std/unittest
-import std/macros
 import nutella/objc
 
 proc UTF8String*(n: NSString): cstring {.objc: "UTF8String".}
@@ -157,10 +156,6 @@ suite "objc runtime ownership fundamentals":
   test "template to create protocol and class":
     const ProtoName = "NRProtocolTest"
     const ClassName = "NRClassWithProtocolTest"
-
-    macro objcImpl(x: untyped) =
-      echo "X: ", x.treeRepr()
-      discard "TODO"
 
     objcImpl:
       type NRProtocolTest = concept self
