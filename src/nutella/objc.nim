@@ -67,13 +67,13 @@ type
     OBJC_ASSOCIATION_RETAIN = 01401
     OBJC_ASSOCIATION_COPY = 01403
 
-proc retainAux(o: NSObject): NSObject {.raises: [].}
+proc retainAux(o: NSObject): ID {.raises: [].}
 proc retainRaw(o: NSObject) {.raises: [].}
 proc releaseAux(o: NSObject) {.raises: [].}
 proc retainCountAux(o: NSObject): NSUInteger {.raises: [].}
 
 template retain*[T: NSObject](o: T): T =
-  asType[T](retainAux(o))
+  cast[T](retainAux(o))
 
 proc `=destroy`(o: var NSObject) =
   if o.value != nil:
@@ -91,7 +91,6 @@ proc `=copy`(dest: var NSObject, src: NSObject) =
 proc `=sink`(dest: var NSObject, src: NSObject) =
   `=destroy`(dest)
   dest.value = src.value
-  wasMoved(src)
 
 proc `=destroy`(o: var ObjcClass) =
   o.value = nil
@@ -101,7 +100,6 @@ proc `=copy`(dest: var ObjcClass, src: ObjcClass) =
 
 proc `=sink`(dest: var ObjcClass, src: ObjcClass) =
   dest.value = src.value
-  wasMoved(src)
 
 proc release*(o: var NSObject) {.inline.} =
   `=destroy`(o)
@@ -323,13 +321,13 @@ template getFutureClass*(name: string): untyped =
   objc_getFutureClass(name.cstring)
 
 proc objc_allocateClassPair(
-  superclass: ObjcClass, name: cstring, extraBytes: csize_t
-): ObjcClass {.cdecl, importc.}
+  superclass: ID, name: cstring, extraBytes: csize_t
+): ID {.cdecl, importc.}
 
 template allocateClassPair*(
     superclass: ObjcClass, name: string, extraBytes: int
 ): untyped =
-  objc_allocateClassPair(superclass, name.cstring, extrabytes.csize_t)
+  toObjcClass(objc_allocateClassPair(superclass, name.cstring, extrabytes.csize_t))
 
 proc objc_disposeClassPair(cls: ObjcClass) {.cdecl, importc.}
 template disposeClassPair*(cls: ObjcClass) =
@@ -1041,7 +1039,7 @@ macro objc*(name: untyped, body: untyped = nil): untyped =
 
 proc NSLog*(str: NSString) {.importc, varargs.}
 
-proc retainAux(o: NSObject): NSObject {.raises: [].} =
+proc retainAux(o: NSObject): ID {.raises: [].} =
   objc_msgSend(o, sel_registerName("retain"))
 
 proc retainRaw(o: NSObject) {.raises: [].} =
