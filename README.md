@@ -20,7 +20,8 @@ objcImpl:
       method add(self: PingProtocol, amount: cint): cint
 
   type PingClass = object of NSObject
-  implements PingClass, PingProtocol
+  implements PingClass:
+    PingProtocol
 
   method ping(self: PingClass) =
     inc pingCount
@@ -62,3 +63,7 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
   - `<ClassName> = object of <DeclaredSuperclass>`
   This enables typedesc lookup with `getProtocol(MyProtocolType)` and
   `getClass(MyClassType)` with compile-time type constraints.
+- Protocol conformance syntax:
+  - single protocol: `implements MyClass: MyProtocol`
+  - multiple protocols: `implements MyClass: (Proto1, Proto2)` or one-per-line
+    under the `implements` block.

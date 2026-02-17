@@ -164,11 +164,12 @@ suite "objc runtime ownership fundamentals":
     objcImpl:
       type NRProtocolTest =
         concept self
-          method nimPing(self: NRProtocolTest)
-          method nimAdd(self: NRProtocolTest, amount: cint): cint
+            method nimPing(self: NRProtocolTest)
+            method nimAdd(self: NRProtocolTest, amount: cint): cint
 
       type NRClassWithProtocolTest = object of NSObject
-      implements NRClassWithProtocolTest, NRProtocolTest
+      implements NRClassWithProtocolTest:
+        NRProtocolTest
 
       method nimPing(self: NRClassWithProtocolTest) =
         inc objcImplPingCount
