@@ -3,6 +3,7 @@ import nutella/objc
 
 var fooBarPingCount = 0
 var hiddenPingCount = 0
+var simpleCounter = 0.cint
 
 objcImpl:
   type FooBarProtocol =
@@ -13,6 +14,17 @@ objcImpl:
 
   method ping(self: FooBar) =
     inc fooBarPingCount
+
+objcImpl:
+  type SimpleCounterProtocol =
+    concept self
+        method bump(self: SimpleCounterProtocol): cint
+
+  type SimpleCounterClass {.impl: SimpleCounterProtocol.} = object of NSObject
+
+  method bump(self: SimpleCounterClass): cint =
+    inc simpleCounter
+    result = simpleCounter
 
 objcImpl:
   type HiddenCtorProtocol =
@@ -64,6 +76,20 @@ suite "objcImpl examples":
       let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
       sendPing(o, selector("ping"))
       doAssert(fooBarPingCount == 1)
+
+  test "simple counter example":
+    simpleCounter = 0
+
+    let proto = getProtocol(SimpleCounterProtocol)
+    check(cast[pointer](proto) != nil)
+
+    var o = SimpleCounterClass.new()
+    check(not o.isNil)
+    check(getClassName(o) == "SimpleCounterClass")
+
+    let sendBump = cast[proc(self: ID, op: SEL): cint {.cdecl.}](objc_msgSend)
+    check(sendBump(o, selector("bump")) == 1.cint)
+    check(sendBump(o, selector("bump")) == 2.cint)
 
   test "constructor-unavailable overloads inside objcImpl":
     hiddenPingCount = 0

@@ -1108,6 +1108,39 @@ proc init*[T: NSObject](n: typedesc[T]): T {.inline.} =
   var allocated = n.alloc()
   allocated.init()
 
+proc superObject*(obj: NSObject): ObjcSuper {.inline.} =
+  ObjcSuper(
+    receiver: obj.value, superClass: class_getSuperclass(object_getClass(obj.value))
+  )
+
+proc callSuperAs*[T](obj: NSObject, op: SEL): T {.inline.} =
+  var superObj = superObject(obj)
+  cast[proc(superObj: var ObjcSuper, selParam: SEL): T {.cdecl, varargs.}](objc_msgSendSuper)(
+    superObj, op
+  )
+
+proc callSuperAs*[T, A0](obj: NSObject, op: SEL, arg0: A0): T {.inline.} =
+  var superObj = superObject(obj)
+  cast[proc(superObj: var ObjcSuper, selParam: SEL, arg0: A0): T {.cdecl, varargs.}](objc_msgSendSuper)(
+    superObj, op, arg0
+  )
+
+proc callSuperId*(obj: NSObject, op: SEL): ID {.inline.} =
+  callSuperAs[ID](obj, op)
+
+proc callSuperId*[A0](obj: NSObject, op: SEL, arg0: A0): ID {.inline.} =
+  callSuperAs[ID, A0](obj, op, arg0)
+
+template callSuperVoid*(obj: NSObject, op: SEL): untyped =
+  discard callSuperAs[ID](obj, op)
+
+template callSuperVoid*[A0](obj: NSObject, op: SEL, arg0: A0): untyped =
+  discard callSuperAs[ID, A0](obj, op, arg0)
+
+proc superDealloc*(obj: NSObject) {.inline.} =
+  let deallocSel = sel_registerName("dealloc")
+  callSuperVoid(obj, deallocSel)
+
 proc alloc*[T](o: typedesc[T]): T {.objc: "alloc".}
 
 proc isKindOfClass(o: NSObject, c: ObjcClass): bool {.objc: "isKindOfClass:".}
