@@ -186,7 +186,7 @@ suite "objc runtime ownership fundamentals":
 
       method nimTakeString(self: NRClassWithProtocolTest, text: NSString) =
         objcImplLastString = $text.UTF8String
-        echo "STRING: ", objcImplLastString 
+        echo "STRING: ", objcImplLastString
         objcImplStringRetainInMethod = retainCount(text).int
 
     var proto = getProtocol(NRProtocolTest)
@@ -219,6 +219,7 @@ suite "objc runtime ownership fundamentals":
     var o = asType[NSObject](new(cls))
     check(not o.isNil)
     check(getClassName(o) == ClassName)
+    let retainObjectBeforeCalls = retainCount(o).int
 
     let sendVoid = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
     let sendAdd =
@@ -227,13 +228,18 @@ suite "objc runtime ownership fundamentals":
 
     sendVoid(o, selector("nimPing"))
     check(objcImplPingCount == 1)
+    check(retainCount(o).int == retainObjectBeforeCalls)
 
     check(sendAdd(o, selector("nimAdd:"), 2.cint) == 2.cint)
     check(sendAdd(o, selector("nimAdd:"), 3.cint) == 5.cint)
+    check(retainCount(o).int == retainObjectBeforeCalls)
 
     var text = NSString.alloc().initWithUTF8String("objcImpl-string-arg")
     let retainBefore = retainCount(text).int
+    let retainObjectBeforeStringCall = retainCount(o).int
     sendTakeString(o, selector("nimTakeString:"), text)
     check(objcImplLastString == "objcImpl-string-arg")
+    check(retainBefore > 0)
     check(objcImplStringRetainInMethod == retainBefore)
     check(retainCount(text).int == retainBefore)
+    check(retainCount(o).int == retainObjectBeforeStringCall)
