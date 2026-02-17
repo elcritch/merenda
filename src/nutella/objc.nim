@@ -111,6 +111,9 @@ proc release*(o: NSObject) {.inline.} =
 template retainCount*(o: NSObject): NSUInteger =
   retainCountAux(o)
 
+proc isNil*(a: NSObject): bool =
+  result = a.value == nil
+
 proc isNil*(a: ObjcClass): bool =
   result = a.value == nil
 
