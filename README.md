@@ -19,9 +19,7 @@ objcImpl:
       method ping(self: PingProtocol)
       method add(self: PingProtocol, amount: cint): cint
 
-  type PingClass = object of NSObject
-  implements PingClass:
-    PingProtocol
+  type PingClass {.impl: PingProtocol.} = object of NSObject
 
   method ping(self: PingClass) =
     inc pingCount
@@ -64,9 +62,11 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
   This enables typedesc lookup with `getProtocol(MyProtocolType)` and
   `getClass(MyClassType)` with compile-time type constraints.
 - Protocol conformance syntax:
-  - single protocol: `implements MyClass: MyProtocol`
-  - multiple protocols: `implements MyClass: (Proto1, Proto2)` or one-per-line
-    under the `implements` block.
+  - single protocol: `type MyClass {.impl: MyProtocol.} = object of NSObject`
+  - multiple protocols:
+    `type MyClass {.impl: (Proto1, Proto2).} = object of NSObject`
+  - repeated pragma form is also supported:
+    `type MyClass {.impl: Proto1, impl: Proto2.} = object of NSObject`
 - Constructor policy procs are passed through as normal Nim declarations.
   This is useful for disabling convenience constructors with `.error`:
 
@@ -76,9 +76,7 @@ objcImpl:
     concept self
       method ping(self: MyProtocol)
 
-  type MyClass = object of NSObject
-  implements MyClass:
-    MyProtocol
+  type MyClass {.impl: MyProtocol.} = object of NSObject
 
   proc new*(t: typedesc[MyClass]): MyClass {.error.}
   proc init*(t: typedesc[MyClass]): MyClass {.error.}

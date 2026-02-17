@@ -23,6 +23,7 @@
 import macros, strutils
 
 {.passL: "-framework Foundation".}
+template impl*(x: untyped) {.pragma.}
 
 const
   YES* = true
@@ -1439,16 +1440,35 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     pragmas = nnkPragma.newTree(ident"cdecl"),
   )
 
-proc collectImplementsProtocols(n: NimNode, protocols: var seq[string]) =
+proc collectImplProtocols(n: NimNode, protocols: var seq[string]) =
   case n.kind
   of nnkStmtList, nnkTupleConstr, nnkPar:
     for c in n:
-      collectImplementsProtocols(c, protocols)
+      collectImplProtocols(c, protocols)
   else:
     let pName = identName(n)
     if pName.len == 0:
-      error("objcImpl `implements` protocol name is invalid", n)
+      error("objcImpl `impl` protocol name is invalid", n)
     protocols.add(pName)
+
+proc collectImplPragmaProtocols(typeNameNode: NimNode, protocols: var seq[string]) =
+  case typeNameNode.kind
+  of nnkPragmaExpr:
+    let pragmas = typeNameNode[1]
+    if pragmas.kind == nnkPragma:
+      for p in pragmas:
+        if p.kind == nnkExprColonExpr and identName(p[0]) == "impl":
+          collectImplProtocols(p[1], protocols)
+        elif identName(p) == "impl":
+          error("objcImpl `.impl` pragma requires at least one protocol", p)
+    collectImplPragmaProtocols(typeNameNode[0], protocols)
+  of nnkPostfix:
+    collectImplPragmaProtocols(typeNameNode[^1], protocols)
+  of nnkAccQuoted:
+    if typeNameNode.len > 0:
+      collectImplPragmaProtocols(typeNameNode[0], protocols)
+  else:
+    discard
 
 macro objcImpl*(x: untyped): untyped =
   let input =
@@ -1460,8 +1480,8 @@ macro objcImpl*(x: untyped): untyped =
   var protocolName = ""
   var className = ""
   var classSuperName = ""
+  var classImplProtocols: seq[string] = @[]
   var conceptBody = newEmptyNode()
-  var implementedClassName = ""
   var implementedProtocols: seq[string] = @[]
 
   for stmt in input:
@@ -1482,33 +1502,16 @@ macro objcImpl*(x: untyped): untyped =
           className = name
           if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
             classSuperName = identName(body[1][0])
+          classImplProtocols = @[]
+          collectImplPragmaProtocols(def[0], classImplProtocols)
         else:
           discard
     of nnkCommand, nnkCall:
-      if identName(stmt[0]) != "implements":
-        continue
-      if stmt.len < 3:
+      if identName(stmt[0]) == "implements":
         error(
-          "objcImpl `implements` syntax is: `implements <ClassName>: <ProtocolName>...`",
+          "objcImpl no longer supports `implements`; use `type <Class> {.impl: <Protocol>... .} = object of <Superclass>`",
           stmt,
         )
-      let implClass = identName(stmt[1])
-      if implClass.len == 0:
-        error("objcImpl `implements` class name is invalid", stmt)
-      if implementedClassName.len == 0:
-        implementedClassName = implClass
-      elif implementedClassName != implClass:
-        error(
-          "objcImpl has conflicting `implements` class names: `" & implementedClassName &
-            "` and `" & implClass & "`",
-          stmt,
-        )
-      var parsedProtocols: seq[string] = @[]
-      for i in 2 ..< stmt.len:
-        collectImplementsProtocols(stmt[i], parsedProtocols)
-      if parsedProtocols.len == 0:
-        error("objcImpl `implements` requires at least one protocol", stmt)
-      implementedProtocols.add(parsedProtocols)
     else:
       discard
 
@@ -1518,29 +1521,18 @@ macro objcImpl*(x: untyped): untyped =
     error("objcImpl requires a `type <Class> = object of <Superclass>` declaration", x)
   if classSuperName.len == 0:
     error("objcImpl class declaration must include a superclass", x)
-
-  # Backward compatibility for the old DSL:
-  #   type MyClass = object of MyProtocol
-  if classSuperName == protocolName and implementedProtocols.len == 0:
-    classSuperName = "NSObject"
-    implementedClassName = className
-    implementedProtocols.add(protocolName)
-
-  if implementedClassName.len == 0:
+  if classImplProtocols.len == 0:
     error(
-      "objcImpl requires `implements <ClassName>: <ProtocolName>...` to declare protocol conformance",
+      "objcImpl requires class protocol conformance via pragma: `type <Class> {.impl: <Protocol>... .} = object of <Superclass>`",
       x,
     )
-  if implementedClassName != className:
-    error(
-      "objcImpl `implements` targets class `" & implementedClassName &
-        "`, but declared class is `" & className & "`",
-      x,
-    )
+
+  implementedProtocols = classImplProtocols
   if classSuperName == protocolName:
     error(
       "objcImpl class cannot inherit from protocol `" & protocolName &
-        "`; use `object of NSObject` (or another class) plus `implements`",
+        "`; use `object of NSObject` (or another class) plus `{.impl: " & protocolName &
+        ".}`",
       x,
     )
   var protocolImplemented = false
@@ -1551,7 +1543,7 @@ macro objcImpl*(x: untyped): untyped =
   if not protocolImplemented:
     error(
       "objcImpl protocol `" & protocolName &
-        "` must appear in `implements <ClassName>, ...`",
+        "` must appear in class pragma `{.impl: ... .}`",
       x,
     )
 
@@ -1593,8 +1585,7 @@ macro objcImpl*(x: untyped): untyped =
       if filtered.len > 0:
         passthrough.add(filtered)
     of nnkCommand, nnkCall:
-      if identName(stmt[0]) != "implements":
-        passthrough.add(copyNimTree(stmt))
+      passthrough.add(copyNimTree(stmt))
     of nnkMethodDef, nnkProcDef:
       if firstParamTypeName(stmt) == className and not hasErrorPragma(stmt):
         implDefs.add(stmt)

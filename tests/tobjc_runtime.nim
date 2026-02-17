@@ -172,9 +172,7 @@ suite "objc runtime ownership fundamentals":
             method nimAdd(self: NRProtocolTest, amount: cint): cint
             method nimTakeString(self: NRProtocolTest, text: NSString)
 
-      type NRClassWithProtocolTest = object of NSObject
-      implements NRClassWithProtocolTest:
-        NRProtocolTest
+      type NRClassWithProtocolTest {.impl: NRProtocolTest.} = object of NSObject
 
       method nimPing(self: NRClassWithProtocolTest) =
         echo "PING!"
