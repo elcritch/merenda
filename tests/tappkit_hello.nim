@@ -1,8 +1,29 @@
 import std/unittest
 
 import nutella/appkit
+import nutella/objc
 
 suite "nutella appkit hello world":
+  test "appkit controls report runtime class hierarchy":
+    var button = newButton(0, 0, 120, 32, "Press")
+    check(button.isKindOfClass(NSButton))
+    check(button.isKindOfClass(NSControl))
+    check(button.isKindOfClass(NSView))
+    check(button.isKindOfClass(NSResponder))
+    check(button.isKindOfClass(NSObject))
+    check(not button.isKindOfClass(NSTextField))
+
+    var field = newTextField(0, 0, 200, 32, "Hello")
+    check(field.isKindOfClass(NSTextField))
+    check(field.isKindOfClass(NSControl))
+    check(field.isKindOfClass(NSView))
+    check(field.isKindOfClass(NSResponder))
+    check(field.isKindOfClass(NSObject))
+    check(not field.isKindOfClass(NSButton))
+
+    button.value = nil
+    field.value = nil
+
   test "basic appkit api compiles":
     check compiles(
       block:

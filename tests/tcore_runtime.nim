@@ -20,6 +20,23 @@ proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
       discard
 
 suite "objc core runtime ownership fundamentals":
+  test "isKindOfClass works with typedesc and ObjcClass args":
+    var obj = NSObject.new()
+    check(obj.isKindOfClass(NSObject))
+    let nsObjectClass = getClass("NSObject")
+    check(not nsObjectClass.isNil)
+    check(obj.isKindOfClass(asType[ObjcClass](nsObjectClass)))
+
+    let subClassName = $RuntimeOwnedSubtype
+    discard ensureRuntimeClass(subClassName)
+    var sub = RuntimeOwnedSubtype.new()
+    check(sub.isKindOfClass(RuntimeOwnedSubtype))
+    check(sub.isKindOfClass(NSObject))
+    check(sub.isKindOfClass(asType[ObjcClass](getClass(subClassName))))
+
+    obj.value = nil
+    sub.value = nil
+
   test "typedesc new works for NSObject":
     var o = NSObject.new()
     check(not o.isNil)
