@@ -225,7 +225,7 @@ suite "objcImpl examples":
     check(c.current() == 5.cint)
 
     block:
-      let st = c.counter
+      let st = c.counter()
       check(st != nil)
       check(st.total == 5)
       check(st.lastAmount == 3)
