@@ -168,21 +168,21 @@ proc removeOwnedIdAt(ids: var seq[ID], idx: int) =
 proc runApplicationFrames(appObj: NSObject, maxFrames: int): int
 
 objcImpl:
-  type NUResponderObj = object of NSObject
+  type NXResponderObj = object of NSObject
 
 objcImpl:
-  type NUViewObj = object of NUResponderObj
+  type NXViewObj = object of NXResponderObj
     viewStateRef: NSViewStateRef
 
-  method init*(self: var NUViewObj): NUViewObj =
-    result = asType[NUViewObj](super(self, init))
+  method init*(self: var NXViewObj): NXViewObj =
+    result = asType[NXViewObj](super(self, init))
     self.value = nil
     if result.isNil:
       return
     if result.viewStateRef().isNil:
       result.viewStateRef = defaultViewState()
 
-  method initWithFrame*(self: var NUViewObj, x, y, width, height: cfloat): NUViewObj =
+  method initWithFrame*(self: var NXViewObj, x, y, width, height: cfloat): NXViewObj =
     result = self.init()
     if result.isNil:
       return
@@ -193,7 +193,7 @@ objcImpl:
     st.frame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
-  method setFrame*(self: NUViewObj, x, y, width, height: cfloat) =
+  method setFrame*(self: NXViewObj, x, y, width, height: cfloat) =
     var st = self.viewStateRef()
     if st.isNil:
       st = defaultViewState()
@@ -201,21 +201,21 @@ objcImpl:
     st.frame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
-  method setBackgroundColor*(self: NUViewObj, r, g, b, a: cfloat) =
+  method setBackgroundColor*(self: NXViewObj, r, g, b, a: cfloat) =
     var st = self.viewStateRef()
     if st.isNil:
       st = defaultViewState()
       self.viewStateRef = st
     st.backgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
-  method setHidden*(self: NUViewObj, hidden: bool) =
+  method setHidden*(self: NXViewObj, hidden: bool) =
     var st = self.viewStateRef()
     if st.isNil:
       st = defaultViewState()
       self.viewStateRef = st
     st.hidden = hidden
 
-  method dealloc(self: NUViewObj) {.used.} =
+  method dealloc(self: NXViewObj) {.used.} =
     let st = self.viewStateRef()
     if not st.isNil:
       clearOwnedIds(st.subviews)
@@ -223,18 +223,18 @@ objcImpl:
     superDealloc(self)
 
 objcImpl:
-  type NUControlObj = object of NUViewObj
+  type NXControlObj = object of NXViewObj
     controlStateRef: NSControlStateRef
 
-  method init*(self: var NUControlObj): NUControlObj =
-    result = asType[NUControlObj](super(self, init))
+  method init*(self: var NXControlObj): NXControlObj =
+    result = asType[NXControlObj](super(self, init))
     self.value = nil
     if result.isNil:
       return
     if result.controlStateRef().isNil:
       result.controlStateRef = defaultControlState()
 
-  method setEnabled*(self: NUControlObj, enabled: bool) =
+  method setEnabled*(self: NXControlObj, enabled: bool) =
     var st = self.controlStateRef()
     if st.isNil:
       st = defaultControlState()
@@ -242,18 +242,18 @@ objcImpl:
     st.enabled = enabled
 
 objcImpl:
-  type NUTextFieldObj = object of NUControlObj
+  type NXTextFieldObj = object of NXControlObj
     textFieldStateRef: NSTextFieldStateRef
 
-  method init*(self: var NUTextFieldObj): NUTextFieldObj =
-    result = asType[NUTextFieldObj](super(self, init))
+  method init*(self: var NXTextFieldObj): NXTextFieldObj =
+    result = asType[NXTextFieldObj](super(self, init))
     self.value = nil
     if result.isNil:
       return
     if result.textFieldStateRef().isNil:
       result.textFieldStateRef = defaultTextFieldState()
 
-  method setStringValue*(self: NUTextFieldObj, value: string) =
+  method setStringValue*(self: NXTextFieldObj, value: string) =
     var st = self.textFieldStateRef()
     if st.isNil:
       st = defaultTextFieldState()
@@ -261,25 +261,25 @@ objcImpl:
     st.stringValue = value
 
 objcImpl:
-  type NUButtonObj = object of NUControlObj
+  type NXButtonObj = object of NXControlObj
     buttonStateRef: NSButtonStateRef
 
-  method init*(self: var NUButtonObj): NUButtonObj =
-    result = asType[NUButtonObj](super(self, init))
+  method init*(self: var NXButtonObj): NXButtonObj =
+    result = asType[NXButtonObj](super(self, init))
     self.value = nil
     if result.isNil:
       return
     if result.buttonStateRef().isNil:
       result.buttonStateRef = defaultButtonState()
 
-  method setTitle*(self: NUButtonObj, value: string) =
+  method setTitle*(self: NXButtonObj, value: string) =
     var st = self.buttonStateRef()
     if st.isNil:
       st = defaultButtonState()
       self.buttonStateRef = st
     st.title = value
 
-  method performClick*(self: NUButtonObj, sender: NSObject) =
+  method performClick*(self: NXButtonObj, sender: NSObject) =
     discard sender
     let st = self.buttonStateRef()
     if st.isNil or st.onClick.isNil:
@@ -287,11 +287,11 @@ objcImpl:
     st.onClick(self.value)
 
 objcImpl:
-  type NUWindowObj = object of NUResponderObj
+  type NXWindowObj = object of NXResponderObj
     windowStateRef: NSWindowStateRef
 
-  method init*(self: var NUWindowObj): NUWindowObj =
-    result = asType[NUWindowObj](super(self, init))
+  method init*(self: var NXWindowObj): NXWindowObj =
+    result = asType[NXWindowObj](super(self, init))
     self.value = nil
     if result.isNil:
       return
@@ -299,8 +299,8 @@ objcImpl:
       result.windowStateRef = defaultWindowState()
 
   method initWithContentRect*(
-      self: var NUWindowObj, x, y, width, height: cfloat
-  ): NUWindowObj =
+      self: var NXWindowObj, x, y, width, height: cfloat
+  ): NXWindowObj =
     result = self.init()
     if result.isNil:
       return
@@ -308,7 +308,7 @@ objcImpl:
     st.frame =
       nsRect(x.float32, y.float32, max(width.float32, 1.0), max(height.float32, 1.0))
 
-  method setContentView*(self: NUWindowObj, view: NUViewObj) =
+  method setContentView*(self: NXWindowObj, view: NXViewObj) =
     if self.isNil:
       return
     var st = self.windowStateRef()
@@ -317,13 +317,13 @@ objcImpl:
       self.windowStateRef = st
     replaceOwnedId(st.contentView, view.value)
 
-  method contentView*(self: NUWindowObj): NUViewObj =
+  method contentView*(self: NXWindowObj): NXViewObj =
     let st = self.windowStateRef()
     if st.isNil or st.contentView.isNil:
-      return NUViewObj(value: nil)
-    result = ownFromId[NUViewObj](st.contentView)
+      return NXViewObj(value: nil)
+    result = ownFromId[NXViewObj](st.contentView)
 
-  method setTitle*(self: NUWindowObj, value: string) =
+  method setTitle*(self: NXWindowObj, value: string) =
     var st = self.windowStateRef()
     if st.isNil:
       st = defaultWindowState()
@@ -332,7 +332,7 @@ objcImpl:
     if st.nativeReady and not st.nativeWindow.isNil:
       st.nativeWindow.title = value
 
-  method makeKeyAndOrderFront*(self: NUWindowObj, sender: NSObject) =
+  method makeKeyAndOrderFront*(self: NXWindowObj, sender: NSObject) =
     discard sender
     if self.isNil:
       return
@@ -342,7 +342,7 @@ objcImpl:
       self.windowStateRef = st
     st.visibleRequested = true
 
-  method close*(self: NUWindowObj) =
+  method close*(self: NXWindowObj) =
     let st = self.windowStateRef()
     if st.isNil:
       return
@@ -350,7 +350,7 @@ objcImpl:
     if st.nativeReady and not st.nativeWindow.isNil:
       siwinshim.close(st.nativeWindow)
 
-  method dealloc(self: NUWindowObj) {.used.} =
+  method dealloc(self: NXWindowObj) {.used.} =
     let st = self.windowStateRef()
     if not st.isNil:
       if st.nativeReady and (not st.nativeWindow.isNil):
@@ -360,18 +360,18 @@ objcImpl:
     superDealloc(self)
 
 objcImpl:
-  type NUApplicationObj = object of NUResponderObj
+  type NXApplicationObj = object of NXResponderObj
     appStateRef: NSApplicationStateRef
 
-  method init*(self: var NUApplicationObj): NUApplicationObj =
-    result = asType[NUApplicationObj](super(self, init))
+  method init*(self: var NXApplicationObj): NXApplicationObj =
+    result = asType[NXApplicationObj](super(self, init))
     self.value = nil
     if result.isNil:
       return
     if result.appStateRef().isNil:
       result.appStateRef = defaultApplicationState()
 
-  method addWindow*(self: NUApplicationObj, window: NUWindowObj) =
+  method addWindow*(self: NXApplicationObj, window: NXWindowObj) =
     if self.isNil or window.isNil:
       return
     var st = self.appStateRef()
@@ -384,15 +384,15 @@ objcImpl:
     if not wst.isNil:
       wst.visibleRequested = true
 
-  method run*(self: NUApplicationObj) =
+  method run*(self: NXApplicationObj) =
     discard runApplicationFrames(self, -1)
 
-  method stop*(self: NUApplicationObj) =
+  method stop*(self: NXApplicationObj) =
     let st = self.appStateRef()
     if not st.isNil:
       st.running = false
 
-  method dealloc(self: NUApplicationObj) {.used.} =
+  method dealloc(self: NXApplicationObj) {.used.} =
     let st = self.appStateRef()
     if not st.isNil:
       clearOwnedIds(st.windows)
@@ -400,13 +400,16 @@ objcImpl:
     superDealloc(self)
 
 type
-  NSResponder* = NUResponderObj
-  NSView* = NUViewObj
-  NSControl* = NUControlObj
-  NSTextField* = NUTextFieldObj
-  NSButton* = NUButtonObj
-  NSWindow* = NUWindowObj
-  NSApplication* = NUApplicationObj
+  # The Objective-C runtime already provides NSResponder/NSView/NSButton/etc on macOS.
+  # We keep Nutella's runtime classes namespaced (NX*) and export Cocoa-style API names via
+  # aliases so objcImpl does not collide with host AppKit classes.
+  NSResponder* = NXResponderObj
+  NSView* = NXViewObj
+  NSControl* = NXControlObj
+  NSTextField* = NXTextFieldObj
+  NSButton* = NXButtonObj
+  NSWindow* = NXWindowObj
+  NSApplication* = NXApplicationObj
 
 proc viewState*(view: NSView): NSViewStateRef =
   var st = view.viewStateRef()
@@ -556,14 +559,14 @@ proc runesPrefix(layout: GlyphArrangement, maxRunes: int): string =
 
 proc dumpRenders(renders: Renders) =
   for z, list in renders.layers.pairs():
-    echo "[appkit] layer=", z.int, " roots=", list.rootIds.len, " nodes=", list.nodes.len
+    echo "[appkit] layer=",
+      z.int, " roots=", list.rootIds.len, " nodes=", list.nodes.len
     for i, node in list.nodes:
       let box = node.screenBox
       var line =
-        "[appkit]   node[" & $i & "] kind=" & $node.kind &
-        " parent=" & $node.parent.int &
-        " children=" & $node.childCount &
-        " box=(" & $box.x & "," & $box.y & " " & $box.w & "x" & $box.h & ")"
+        "[appkit]   node[" & $i & "] kind=" & $node.kind & " parent=" & $node.parent.int &
+        " children=" & $node.childCount & " box=(" & $box.x & "," & $box.y & " " & $box.w &
+        "x" & $box.h & ")"
       if node.kind == nkText:
         line.add(
           " runes=" & $node.textLayout.runes.len & " preview=\"" &
@@ -575,7 +578,9 @@ proc shouldDebugRenderDump(): bool =
   getEnv("NUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
-proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: GlyphArrangement] =
+proc textLayoutForView(
+    view: NSView, box: NSRect
+): tuple[ok: bool, layout: GlyphArrangement] =
   if box.size.width <= 2 or box.size.height <= 2:
     return (false, default(GlyphArrangement))
   if not ensureAppKitFont():
@@ -587,7 +592,8 @@ proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: Glyph
     textField.value = nil
     if tstate.stringValue.len == 0:
       return (false, default(GlyphArrangement))
-    let spans = [(fs(appkitFont(18.0), tstate.textColor.toFigColor()), tstate.stringValue)]
+    let spans =
+      [(fs(appkitFont(18.0), tstate.textColor.toFigColor()), tstate.stringValue)]
     let layout = typeset(
       rect(0, 0, box.size.width, box.size.height),
       spans,
@@ -597,11 +603,9 @@ proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: Glyph
       wrap = true,
     )
     if shouldDebugRenderDump():
-      echo "[appkit] textfield layout runes=", layout.runes.len, " text=\"", tstate.stringValue, "\""
-    return (
-      true,
-      layout,
-    )
+      echo "[appkit] textfield layout runes=",
+        layout.runes.len, " text=\"", tstate.stringValue, "\""
+    return (true, layout)
 
   if view.isKindOfClass(NSButton):
     var button = asType[NSButton](view.value)
@@ -609,7 +613,8 @@ proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: Glyph
     button.value = nil
     if bstate.title.len == 0:
       return (false, default(GlyphArrangement))
-    let spans = [(fs(appkitFont(16.0), nsColor(1.0, 1.0, 1.0, 1.0).toFigColor()), bstate.title)]
+    let spans =
+      [(fs(appkitFont(16.0), nsColor(1.0, 1.0, 1.0, 1.0).toFigColor()), bstate.title)]
     let layout = typeset(
       rect(0, 0, box.size.width, box.size.height),
       spans,
@@ -619,21 +624,19 @@ proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: Glyph
       wrap = false,
     )
     if shouldDebugRenderDump():
-      echo "[appkit] button layout runes=", layout.runes.len, " title=\"", bstate.title, "\""
-    return (
-      true,
-      layout,
-    )
+      echo "[appkit] button layout runes=",
+        layout.runes.len, " title=\"", bstate.title, "\""
+    return (true, layout)
 
   (false, default(GlyphArrangement))
 
 proc addViewTree(
-    renders: var Renders,
-    viewId: ID,
-    parentIdx: FigIdx,
-    hasParent: bool,
-    offsetX: float32,
-    offsetY: float32,
+  renders: var Renders,
+  viewId: ID,
+  parentIdx: FigIdx,
+  hasParent: bool,
+  offsetX: float32,
+  offsetY: float32,
 )
 
 proc buildWindowRenders(window: NSWindow, st: NSWindowStateRef): Renders =
@@ -694,10 +697,7 @@ proc addViewTree(
     else:
       0.0
   let textPaddingY =
-    if view.isKindOfClass(NSButton) or view.isKindOfClass(NSTextField):
-      4.0
-    else:
-      0.0
+    if view.isKindOfClass(NSButton) or view.isKindOfClass(NSTextField): 4.0 else: 0.0
 
   let textBox = nsRect(
     box.origin.x + textPaddingX,
