@@ -11,6 +11,10 @@ proc maxFramesFromEnv(defaultValue = -1): int =
   except ValueError:
     defaultValue
 
+proc debugRenderDumpEnabled(): bool =
+  getEnv("NUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+    ["1", "true", "yes", "on"]
+
 when isMainModule:
   var app = NSApp()
   var window = newWindow(120, 120, 720, 460, "Nutella AppKit Hello")
@@ -38,6 +42,8 @@ when isMainModule:
   window.setContentView(root)
   app.addWindow(window)
   window.makeKeyAndOrderFront(app)
+  if debugRenderDumpEnabled():
+    debugDumpWindowRenderTree(window)
 
   try:
     let maxFrames = maxFramesFromEnv()

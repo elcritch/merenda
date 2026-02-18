@@ -1,4 +1,4 @@
-import std/[math, os, strutils]
+import std/[math, os, strutils, unicode]
 import pkg/chroma
 import pkg/vmath
 
@@ -544,6 +544,37 @@ proc viewCornerRadius(view: NSView): float32 =
     return 6.0
   0.0
 
+proc runesPrefix(layout: GlyphArrangement, maxRunes: int): string =
+  var count = 0
+  for rune in layout.runes:
+    if count >= maxRunes:
+      break
+    result.add($rune)
+    inc count
+  if layout.runes.len > maxRunes:
+    result.add("...")
+
+proc dumpRenders(renders: Renders) =
+  for z, list in renders.layers.pairs():
+    echo "[appkit] layer=", z.int, " roots=", list.rootIds.len, " nodes=", list.nodes.len
+    for i, node in list.nodes:
+      let box = node.screenBox
+      var line =
+        "[appkit]   node[" & $i & "] kind=" & $node.kind &
+        " parent=" & $node.parent.int &
+        " children=" & $node.childCount &
+        " box=(" & $box.x & "," & $box.y & " " & $box.w & "x" & $box.h & ")"
+      if node.kind == nkText:
+        line.add(
+          " runes=" & $node.textLayout.runes.len & " preview=\"" &
+            runesPrefix(node.textLayout, 40) & "\""
+        )
+      echo line
+
+proc shouldDebugRenderDump(): bool =
+  getEnv("NUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+    ["1", "true", "yes", "on"]
+
 proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: GlyphArrangement] =
   if box.size.width <= 2 or box.size.height <= 2:
     return (false, default(GlyphArrangement))
@@ -551,40 +582,68 @@ proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: Glyph
     return (false, default(GlyphArrangement))
 
   if view.isKindOfClass(NSTextField):
-    let tstate = asType[NSTextField](view).textFieldState()
+    var textField = asType[NSTextField](view.value)
+    let tstate = textField.textFieldState()
+    textField.value = nil
     if tstate.stringValue.len == 0:
       return (false, default(GlyphArrangement))
     let spans = [(fs(appkitFont(18.0), tstate.textColor.toFigColor()), tstate.stringValue)]
+    let layout = typeset(
+      rect(0, 0, box.size.width, box.size.height),
+      spans,
+      hAlign = FontHorizontal.Left,
+      vAlign = FontVertical.Middle,
+      minContent = false,
+      wrap = true,
+    )
+    if shouldDebugRenderDump():
+      echo "[appkit] textfield layout runes=", layout.runes.len, " text=\"", tstate.stringValue, "\""
     return (
       true,
-      typeset(
-        rect(0, 0, box.size.width, box.size.height),
-        spans,
-        hAlign = FontHorizontal.Left,
-        vAlign = FontVertical.Middle,
-        minContent = false,
-        wrap = true,
-      ),
+      layout,
     )
 
   if view.isKindOfClass(NSButton):
-    let bstate = asType[NSButton](view).buttonState()
+    var button = asType[NSButton](view.value)
+    let bstate = button.buttonState()
+    button.value = nil
     if bstate.title.len == 0:
       return (false, default(GlyphArrangement))
     let spans = [(fs(appkitFont(16.0), nsColor(1.0, 1.0, 1.0, 1.0).toFigColor()), bstate.title)]
+    let layout = typeset(
+      rect(0, 0, box.size.width, box.size.height),
+      spans,
+      hAlign = FontHorizontal.Center,
+      vAlign = FontVertical.Middle,
+      minContent = false,
+      wrap = false,
+    )
+    if shouldDebugRenderDump():
+      echo "[appkit] button layout runes=", layout.runes.len, " title=\"", bstate.title, "\""
     return (
       true,
-      typeset(
-        rect(0, 0, box.size.width, box.size.height),
-        spans,
-        hAlign = FontHorizontal.Center,
-        vAlign = FontVertical.Middle,
-        minContent = false,
-        wrap = false,
-      ),
+      layout,
     )
 
   (false, default(GlyphArrangement))
+
+proc addViewTree(
+    renders: var Renders,
+    viewId: ID,
+    parentIdx: FigIdx,
+    hasParent: bool,
+    offsetX: float32,
+    offsetY: float32,
+)
+
+proc buildWindowRenders(window: NSWindow, st: NSWindowStateRef): Renders =
+  if st.isNil:
+    return nil
+  let root = ensureContentView(window, st)
+  if root.isNil:
+    return nil
+  result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
+  result.addViewTree(root.value, FigIdx(0), false, 0.0, 0.0)
 
 proc addViewTree(
     renders: var Renders,
@@ -700,18 +759,25 @@ proc renderWindow(window: NSWindow, st: NSWindowStateRef) =
 
   let logicalSize = st.nativeWindow.logicalSize()
   st.frame.size = nsSize(logicalSize.x.float32, logicalSize.y.float32)
-  let root = ensureContentView(window, st)
-  if root.isNil:
+  var renders = buildWindowRenders(window, st)
+  if renders.isNil:
     return
-  # Keep NSWindow.contentView pinned to drawable size from first frame onward.
+  let root = ensureContentView(window, st)
   root.setFrame(0.cfloat, 0.cfloat, logicalSize.x.cfloat, logicalSize.y.cfloat)
-
-  var renders = Renders(layers: initOrderedTable[ZLevel, RenderList]())
-  renders.addViewTree(root.value, FigIdx(0), false, 0.0, 0.0)
+  if shouldDebugRenderDump():
+    dumpRenders(renders)
 
   st.renderer.beginFrame()
   st.renderer.renderFrame(renders, logicalSize)
   st.renderer.endFrame()
+
+proc debugDumpWindowRenderTree*(window: NSWindow) =
+  let st = window.windowState()
+  let renders = buildWindowRenders(window, st)
+  if renders.isNil:
+    echo "[appkit] debug dump: no render tree"
+  else:
+    dumpRenders(renders)
 
 proc cleanupFailedWindowInit(st: NSWindowStateRef) =
   if st.isNil:
