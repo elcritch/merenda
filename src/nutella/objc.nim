@@ -490,37 +490,43 @@ macro objcImpl*(x: untyped): untyped =
     else:
       discard
 
-  if protocolName.len == 0:
-    error("objcImpl requires a `type <Protocol> = concept ...` declaration", x)
-  if className.len == 0:
-    error("objcImpl requires a `type <Class> = object of <Superclass>` declaration", x)
-  if classSuperName.len == 0:
-    error("objcImpl class declaration must include a superclass", x)
-  if classImplProtocols.len == 0:
+  let hasProtocol = protocolName.len > 0
+  let hasClass = className.len > 0
+  if not hasProtocol and not hasClass:
     error(
-      "objcImpl requires class protocol conformance via pragma: `type <Class> {.impl: <Protocol>... .} = object of <Superclass>`",
+      "objcImpl requires at least one declaration: protocol concept and/or class object",
       x,
     )
 
+  if hasClass and classSuperName.len == 0:
+    error("objcImpl class declaration must include a superclass", x)
+
   implementedProtocols = classImplProtocols
-  if classSuperName == protocolName:
-    error(
-      "objcImpl class cannot inherit from protocol `" & protocolName &
-        "`; use `object of NSObject` (or another class) plus `{.impl: " & protocolName &
-        ".}`",
-      x,
-    )
-  var protocolImplemented = false
-  for p in implementedProtocols:
-    if p == protocolName:
-      protocolImplemented = true
-      break
-  if not protocolImplemented:
-    error(
-      "objcImpl protocol `" & protocolName &
-        "` must appear in class pragma `{.impl: ... .}`",
-      x,
-    )
+  if hasProtocol and hasClass:
+    if classImplProtocols.len == 0:
+      error(
+        "objcImpl requires class protocol conformance via pragma: `type <Class> {.impl: <Protocol>... .} = object of <Superclass>`",
+        x,
+      )
+
+    if classSuperName == protocolName:
+      error(
+        "objcImpl class cannot inherit from protocol `" & protocolName &
+          "`; use `object of NSObject` (or another class) plus `{.impl: " & protocolName &
+          ".}`",
+        x,
+      )
+    var protocolImplemented = false
+    for p in implementedProtocols:
+      if p == protocolName:
+        protocolImplemented = true
+        break
+    if not protocolImplemented:
+      error(
+        "objcImpl protocol `" & protocolName &
+          "` must appear in class pragma `{.impl: ... .}`",
+        x,
+      )
 
   # De-duplicate protocol list while preserving order.
   var dedupProtocols: seq[string] = @[]
@@ -548,17 +554,22 @@ macro objcImpl*(x: untyped): untyped =
     dedupIvarFields.add(f)
   classIvarFields = dedupIvarFields
 
-  if conceptBody.kind != nnkStmtList:
+  if hasProtocol and conceptBody.kind != nnkStmtList:
     error("objcImpl protocol concept body is missing method declarations", x)
 
   var protocolSpecs: seq[ObjcProtocolMethodSpec] = @[]
-  for conceptStmt in conceptBody:
-    protocolSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
+  if hasProtocol:
+    for conceptStmt in conceptBody:
+      protocolSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
 
-  let generatedTypes = parseStmt(
-    "type\n  " & protocolName & " = object of ProtocolPrototype\n  " & className &
-      " = object of " & classSuperName
-  )
+  var generatedTypes = newStmtList()
+  var generatedTypeLines: seq[string] = @[]
+  if hasProtocol:
+    generatedTypeLines.add("  " & protocolName & " = object of ProtocolPrototype")
+  if hasClass:
+    generatedTypeLines.add("  " & className & " = object of " & classSuperName)
+  if generatedTypeLines.len > 0:
+    generatedTypes = parseStmt("type\n" & generatedTypeLines.join("\n"))
 
   var passthrough = newStmtList()
   var implDefs: seq[NimNode] = @[]
@@ -572,8 +583,8 @@ macro objcImpl*(x: untyped): untyped =
           continue
         let name = identName(def[0])
         let body = def[2]
-        if (name == protocolName and body.kind == nnkTypeClassTy) or
-            (name == className and body.kind == nnkObjectTy):
+        if (hasProtocol and name == protocolName and body.kind == nnkTypeClassTy) or
+            (hasClass and name == className and body.kind == nnkObjectTy):
           continue
         filtered.add(copyNimTree(def))
       if filtered.len > 0:
@@ -581,7 +592,7 @@ macro objcImpl*(x: untyped): untyped =
     of nnkCommand, nnkCall:
       passthrough.add(copyNimTree(stmt))
     of nnkMethodDef, nnkProcDef:
-      if firstParamTypeName(stmt) == className and not hasErrorPragma(stmt):
+      if hasClass and firstParamTypeName(stmt) == className and not hasErrorPragma(stmt):
         implDefs.add(stmt)
       else:
         passthrough.add(copyNimTree(stmt))
@@ -605,39 +616,61 @@ macro objcImpl*(x: untyped): untyped =
           implMethods[j].sourceDef,
         )
 
-  for pSpec in protocolSpecs:
-    var found = false
-    for impl in implMethods:
-      if impl.spec.selector != pSpec.selector:
-        continue
-      found = true
-      if impl.spec.encoding != pSpec.encoding:
+  if hasProtocol and hasClass:
+    for pSpec in protocolSpecs:
+      var found = false
+      for impl in implMethods:
+        if impl.spec.selector != pSpec.selector:
+          continue
+        found = true
+        if impl.spec.encoding != pSpec.encoding:
+          error(
+            "objcImpl signature mismatch for `" & pSpec.selector & "`: protocol `" &
+              pSpec.encoding & "`, implementation `" & impl.spec.encoding & "`",
+            x,
+          )
+        break
+      if not found:
         error(
-          "objcImpl signature mismatch for `" & pSpec.selector & "`: protocol `" &
-            pSpec.encoding & "`, implementation `" & impl.spec.encoding & "`",
+          "objcImpl missing implementation for required protocol method `" &
+            pSpec.selector & "`",
           x,
         )
-      break
-    if not found:
-      error(
-        "objcImpl missing implementation for required protocol method `" & pSpec.selector &
-          "`",
-        x,
-      )
 
-  let protoVar = genSym(nskVar, "objcImplProto")
-  let clsVar = genSym(nskVar, "objcImplClass")
-  let protoNameLit = newLit(protocolName)
-  let classNameLit = newLit(className)
-  let superClassNameLit = newLit(classSuperName)
+  let protoVar =
+    if hasProtocol:
+      genSym(nskVar, "objcImplProto")
+    else:
+      newEmptyNode()
+  let clsVar =
+    if hasClass:
+      genSym(nskVar, "objcImplClass")
+    else:
+      newEmptyNode()
+  let protoNameLit =
+    if hasProtocol:
+      newLit(protocolName)
+    else:
+      newEmptyNode()
+  let classNameLit =
+    if hasClass:
+      newLit(className)
+    else:
+      newEmptyNode()
+  let superClassNameLit =
+    if hasClass:
+      newLit(classSuperName)
+    else:
+      newEmptyNode()
   var addMethodDescs = newStmtList()
-  for spec in protocolSpecs:
-    let selectorName = newLit(spec.selector)
-    let typeEncoding = newLit(spec.encoding)
-    addMethodDescs.add quote do:
-      addMethodDescription(
-        `protoVar`, selector(`selectorName`), `typeEncoding`, true, true
-      )
+  if hasProtocol:
+    for spec in protocolSpecs:
+      let selectorName = newLit(spec.selector)
+      let typeEncoding = newLit(spec.encoding)
+      addMethodDescs.add quote do:
+        addMethodDescription(
+          `protoVar`, selector(`selectorName`), `typeEncoding`, true, true
+        )
 
   var wrapperDefs = newStmtList()
   var fieldAccessorDefs = newStmtList()
@@ -718,8 +751,9 @@ macro objcImpl*(x: untyped): untyped =
   result.add(passthrough)
   result.add(callHelperDefs)
   result.add(wrapperDefs)
-  result.add quote do:
-    block:
+  var runtimeSetup = newStmtList()
+  if hasProtocol:
+    runtimeSetup.add quote do:
       var `protoVar` = getProtocol(`protoNameLit`)
       if `protoVar`.isNil:
         `protoVar` = allocateProtocol(`protoNameLit`)
@@ -728,19 +762,30 @@ macro objcImpl*(x: untyped): untyped =
           registerProtocol(`protoVar`)
           `protoVar` = getProtocol(`protoNameLit`)
 
+  if hasClass:
+    var attachPrimaryProto = newStmtList()
+    if hasProtocol:
+      attachPrimaryProto.add quote do:
+        if not `protoVar`.isNil:
+          discard addProtocol(`clsVar`, `protoVar`)
+
+    runtimeSetup.add quote do:
       var `clsVar` = getClass(`classNameLit`)
       if `clsVar`.isNil:
         `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
         if not `clsVar`.isNil:
           `ensureClassIvars`
-          if not `protoVar`.isNil:
-            discard addProtocol(`clsVar`, `protoVar`)
+          `attachPrimaryProto`
           `addExtraProtocols`
           `addClassMethods`
           registerClassPair(`clsVar`)
       else:
         `ensureClassIvars`
-        if not `protoVar`.isNil:
-          discard addProtocol(`clsVar`, `protoVar`)
+        `attachPrimaryProto`
         `addExtraProtocols`
         `addClassMethods`
+
+  if runtimeSetup.len > 0:
+    result.add quote do:
+      block:
+        `runtimeSetup`

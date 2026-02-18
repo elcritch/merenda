@@ -90,15 +90,7 @@ proc `=destroy`(o: var IvarCounterStateObj) =
   inc ivarCounterStateDestroyedCount
 
 objcImpl:
-  type IvarCounterProtocol =
-    concept self
-        method bump(self: IvarCounterProtocol, amount: cint): cint
-        method current(self: IvarCounterProtocol): cint
-        method setMultiplier(self: IvarCounterProtocol, value: cint)
-        method multiplier(self: IvarCounterProtocol): cint
-        method lastAmount(self: IvarCounterProtocol): cint
-
-  type IvarCounterClass {.impl: IvarCounterProtocol.} = object of NSObject
+  type IvarCounterClass = object of NSObject
     counter: IvarCounterStateRef
 
   proc new*(
@@ -229,9 +221,6 @@ suite "objcImpl examples":
         var x = IvarCounterClass.alloc()
         discard x.init()
     )
-
-    let proto = getProtocol(IvarCounterProtocol)
-    check(not proto.isNil)
 
     var c = IvarCounterClass.alloc()
     check(not c.isNil)

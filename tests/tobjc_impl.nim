@@ -8,6 +8,7 @@ var objcImplAccum = 0.cint
 var objcImplPayloadClass = ""
 var objcImplPayloadRetainInMethod = 0
 var objcImplSuperDeallocCount = 0
+var objcImplClassOnlyPingCount = 0
 
 proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
   result = getClass(className)
@@ -139,3 +140,44 @@ suite "objcImpl runtime generation":
     release(o)
     check(o.isNil)
     check(objcImplSuperDeallocCount == 1)
+
+  test "protocol-only objcImpl creates runtime protocol":
+    objcImpl:
+      type NRProtoOnly =
+        concept self
+            method protoOnlyPing(self: NRProtoOnly)
+            method protoOnlyAdd(self: NRProtoOnly, amount: cint): cint
+
+    let proto = getProtocol(NRProtoOnly)
+    check(not proto.isNil)
+
+    var foundPing = false
+    var foundAdd = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "protoOnlyPing":
+        foundPing = true
+        check(desc.types == "v@:")
+      if $desc.name == "protoOnlyAdd:":
+        foundAdd = true
+        check(desc.types == "i@:i")
+    check(foundPing)
+    check(foundAdd)
+
+  test "class-only objcImpl creates class and methods":
+    objcImplClassOnlyPingCount = 0
+
+    objcImpl:
+      type NRClassOnly = object of NSObject
+
+      method classOnlyPing(self: NRClassOnly) =
+        discard self
+        inc objcImplClassOnlyPingCount
+
+    var cls = getClass(NRClassOnly)
+    check(not cls.isNil)
+    check(respondsToSelector(cls, selector("classOnlyPing")))
+
+    var o = NRClassOnly.new()
+    check(not o.isNil)
+    o.classOnlyPing()
+    check(objcImplClassOnlyPingCount == 1)
