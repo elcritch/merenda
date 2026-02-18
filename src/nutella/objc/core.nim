@@ -1203,7 +1203,12 @@ proc superDealloc*(obj: NSObject) {.inline.} =
 
 proc alloc*[T](o: typedesc[T]): T {.objc: "alloc".}
 
-proc isKindOfClass(o: NSObject, c: ObjcClass): bool {.objc: "isKindOfClass:".}
+proc isKindOfClassAux(o: NSObject, c: ID): bool {.objc: "isKindOfClass:".}
+proc isKindOfClass*(o: NSObject, c: ObjcClass): bool {.inline.} =
+  if c.isNil:
+    return false
+  isKindOfClassAux(o, c.value)
+
 proc isKindOfClass*(o: NSObject, c: typedesc): bool =
   o.isKindOfClass(c.objcClass())
 
