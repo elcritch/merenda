@@ -114,3 +114,31 @@ doAssert st.count == 1
 clearAssociatedRef[MyState](o)
 doAssert o.getAssociatedRef(MyState) == nil
 ```
+
+### Ivar-backed Nim `ref` storage (pure runtime classes)
+
+For classes you create at runtime, you can store Nim `ref` values in class ivars:
+
+```nim
+import nutella/objc
+import nutella/ivar
+
+type MyStateObj = object
+  count: int
+type MyState = ref MyStateObj
+
+proc myDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+  discard cmd
+  clearIvarRefs(self) # release all registered Nim ivar refs
+  var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))
+  discard cast[proc(superObj: var ObjcSuper, op: SEL): ID {.cdecl, varargs.}](
+    objc_msgSendSuper
+  )(superCall, selector("dealloc"))
+
+var cls: ObjcClass
+addClass("MyRuntimeClass", "NSObject", cls):
+  discard addRefIvar[MyState](cls) # must be done before registerClassPair
+  discard addMethod(cls, selector("dealloc"), cast[IMP](myDealloc), "v@:")
+```
+
+Then use `setIvarRef`, `getIvarRef`, and `clearIvarRef` on instances.
