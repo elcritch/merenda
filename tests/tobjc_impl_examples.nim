@@ -4,6 +4,8 @@ import nutella/objc
 var fooBarPingCount = 0
 var hiddenPingCount = 0
 var simpleCounter = 0.cint
+var crossPayloadClass = ""
+var crossPayloadRetainInMethod = 0
 
 objcImpl:
   type FooBarProtocol =
@@ -25,6 +27,28 @@ objcImpl:
   method bump(self: SimpleCounterClass): cint =
     inc simpleCounter
     result = simpleCounter
+
+objcImpl:
+  type SharedPayloadProtocol =
+    concept self
+        method payloadValue(self: SharedPayloadProtocol): cint
+
+  type SharedPayload {.impl: SharedPayloadProtocol.} = object of NSObject
+
+  method payloadValue(self: SharedPayload): cint =
+    7.cint
+
+objcImpl:
+  type PayloadReceiverProtocol =
+    concept self
+        method takePayload(self: PayloadReceiverProtocol, payload: SharedPayload): cint
+
+  type PayloadReceiver {.impl: PayloadReceiverProtocol.} = object of NSObject
+
+  method takePayload(self: PayloadReceiver, payload: SharedPayload): cint =
+    crossPayloadClass = getClassName(payload)
+    crossPayloadRetainInMethod = retainCount(payload).int
+    result = payload.payloadValue()
 
 objcImpl:
   type HiddenCtorProtocol =
@@ -88,6 +112,27 @@ suite "objcImpl examples":
 
     check(o.bump() == 1.cint)
     check(o.bump() == 2.cint)
+
+  test "pass typed objcImpl class arg to another objcImpl class":
+    crossPayloadClass = ""
+    crossPayloadRetainInMethod = 0
+
+    let payloadProto = getProtocol(SharedPayloadProtocol)
+    let receiverProto = getProtocol(PayloadReceiverProtocol)
+    check(cast[pointer](payloadProto) != nil)
+    check(cast[pointer](receiverProto) != nil)
+
+    var receiver = PayloadReceiver.new()
+    var payload = SharedPayload.new()
+    check(not receiver.isNil)
+    check(not payload.isNil)
+
+    let retainBefore = retainCount(payload).int
+    let value = receiver.takePayload(payload)
+    check(value == 7.cint)
+    check(crossPayloadClass == "SharedPayload")
+    check(crossPayloadRetainInMethod == retainBefore)
+    check(retainCount(payload).int == retainBefore)
 
   test "constructor-unavailable overloads inside objcImpl":
     hiddenPingCount = 0

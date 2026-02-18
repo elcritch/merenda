@@ -1391,8 +1391,7 @@ proc leafTypeName(typ: NimNode): string =
     identName(typ)
 
 proc isBorrowedObjcParamType(typ: NimNode, protocolName, className: string): bool =
-  let t = leafTypeName(typ)
-  t == "NSObject" or t == "NSString" or t == className or t == protocolName
+  objcTypeCodeFromNode(typ, protocolName, className) == "@"
 
 proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNode =
   let methodName = identName(def.name)
@@ -1491,9 +1490,7 @@ proc normalizeObjcHelperType(typ: NimNode, protocolName: string): NimNode =
       result = copyNimTree(typ)
 
 proc isObjcIdLikeTypeNode(typ: NimNode, protocolName, className: string): bool =
-  let t = leafTypeName(typ)
-  t == "NSObject" or t == "NSString" or t == "ObjcClass" or t == className or
-    t == protocolName
+  objcTypeCodeFromNode(typ, protocolName, className) == "@"
 
 proc buildObjcCallHelperProc(
     def: NimNode, spec: ObjcProtocolMethodSpec, protocolName, className: string
