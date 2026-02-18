@@ -10,14 +10,14 @@ var crossPayloadRetainInMethod = 0
 var ivarCounterStateDestroyedCount = 0
 
 objcImpl:
-  type FooBarProtocol =
+  type FooBarProtocol* =
     concept self
-        method ping(self: FooBarProtocol)
+        method ping*(self: FooBarProtocol)
 
 objcImpl:
-  type FooBar {.impl: FooBarProtocol.} = object of NSObject
+  type FooBar* {.impl: FooBarProtocol.} = object of NSObject
 
-  method ping(self: FooBar) =
+  method ping*(self: FooBar) =
     inc fooBarPingCount
 
 objcImpl:
