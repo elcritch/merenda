@@ -18,9 +18,6 @@ proc `=destroy`(o: var DestroyProbeObject) =
 proc passThroughMove(o: sink NSObject): NSObject =
   o
 
-proc isNilProtocol(p: Protocol): bool =
-  cast[pointer](p) == nil
-
 proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
   result = getClass(className)
   if result.isNil:
@@ -150,14 +147,14 @@ suite "objc runtime ownership fundamentals":
     const ClassName = "NimRuntimeClassWithProtocolOwnedTest"
 
     var proto = getProtocol(ProtoName)
-    if proto.isNilProtocol:
+    if proto.isNil:
       proto = allocateProtocol(ProtoName)
-      check(not proto.isNilProtocol)
+      check(not proto.isNil)
       addMethodDescription(proto, selector("nimPing"), "v@:", true, true)
       registerProtocol(proto)
       proto = getProtocol(ProtoName)
 
-    check(not proto.isNilProtocol)
+    check(not proto.isNil)
 
     var cls = getClass(ClassName)
     if cls.isNil:
@@ -202,7 +199,7 @@ suite "objc runtime ownership fundamentals":
         objcImplPayloadRetainInMethod = retainCount(payload).int
 
     var proto = getProtocol(NRProtocolTest)
-    check(not proto.isNilProtocol)
+    check(not proto.isNil)
 
     var foundNimPing = false
     var foundNimAdd = false
@@ -285,7 +282,7 @@ suite "objc runtime ownership fundamentals":
         superDealloc(self)
 
     let superProto = getProtocol(NRSuperCallProtocol)
-    check(not superProto.isNilProtocol)
+    check(not superProto.isNil)
 
     var o = NRSuperCallClass.new()
     check(not o.isNil)
