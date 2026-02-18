@@ -29,3 +29,17 @@ suite "nutella appkit hello world":
         window.close()
         app.stop()
     )
+
+  test "application keeps added window alive across frame loop":
+    var app = NSApp()
+
+    block:
+      var window = newWindow(100, 120, 320, 240, "Owned Window")
+      app.addWindow(window)
+      # Mark closed to avoid backend setup; run loop should still traverse safely.
+      window.close()
+      # Drop the local owner; app should still own the window entry safely.
+      window.value = nil
+
+    discard app.runForFrames(1)
+    app.value = nil
