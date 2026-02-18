@@ -4,6 +4,7 @@ import nutella/objc/assoc
 
 type AssociatedStateObj = object
   value: int
+
 type AssociatedStateRef = ref AssociatedStateObj
 
 var associatedStateDestroyedCount = 0
@@ -12,7 +13,6 @@ proc `=destroy`(o: var AssociatedStateObj) =
   inc associatedStateDestroyedCount
 
 suite "objc associated state Nim ref storage":
-
   test "associated Nim ref survives and clears cleanly":
     associatedStateDestroyedCount = 0
     var o = NSObject.new()
