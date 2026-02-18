@@ -73,8 +73,7 @@ suite "objcImpl examples":
       doAssert(not o.isNil)
       doAssert(getClassName(o) == "FooBar")
 
-      let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
-      sendPing(o, selector("ping"))
+      o.ping()
       doAssert(fooBarPingCount == 1)
 
   test "simple counter example":
@@ -87,9 +86,8 @@ suite "objcImpl examples":
     check(not o.isNil)
     check(getClassName(o) == "SimpleCounterClass")
 
-    let sendBump = cast[proc(self: ID, op: SEL): cint {.cdecl.}](objc_msgSend)
-    check(sendBump(o, selector("bump")) == 1.cint)
-    check(sendBump(o, selector("bump")) == 2.cint)
+    check(o.bump() == 1.cint)
+    check(o.bump() == 2.cint)
 
   test "constructor-unavailable overloads inside objcImpl":
     hiddenPingCount = 0
@@ -103,6 +101,5 @@ suite "objcImpl examples":
     check(not o.isNil)
     check(getClassName(o) == "HiddenCtorClass")
 
-    let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
-    sendPing(o, selector("ping"))
+    o.ping()
     check(hiddenPingCount == 1)

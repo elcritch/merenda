@@ -28,17 +28,11 @@ objcImpl:
     total += amount
     result = total
 
-let cls = getClass("PingClass")
-let obj = asType[NSObject](new(cls))
-
-let sendPing = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
-let sendAdd =
-  cast[proc(self: ID, op: SEL, amount: cint): cint {.cdecl.}](objc_msgSend)
-
-sendPing(obj, selector("ping"))
+let obj = PingClass.new()
+obj.ping()
 doAssert pingCount == 1
-doAssert sendAdd(obj, selector("add:"), 2.cint) == 2.cint
-doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
+doAssert obj.add(2.cint) == 2.cint
+doAssert obj.add(3.cint) == 5.cint
 ```
 
 ### Behavior
@@ -48,6 +42,8 @@ doAssert sendAdd(obj, selector("add:"), 3.cint) == 5.cint
 - Creates/registers class if missing (using the superclass declared in the DSL).
 - Attaches the class to the protocol.
 - Installs generated C-callable method wrappers via `class_addMethod`.
+- Emits Nim-callable helper procs for implemented methods, so `obj.ping()` and
+  `obj.add(...)` call through Objective-C message send.
 
 ### Current constraints
 
