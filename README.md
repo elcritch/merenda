@@ -41,7 +41,7 @@ doAssert obj.add(3.cint) == 5.cint
 - Adds required instance method descriptions to the protocol.
 - Creates/registers class if missing (using the superclass declared in the DSL).
 - Attaches the class to the protocol.
-- Installs generated C-callable method wrappers via `class_addMethod`.
+- Installs generated C-callable method wrappers on the runtime class.
 - Emits Nim-callable helper procs for implemented methods, so `obj.ping()` and
   `obj.add(...)` call through Objective-C message send.
 
@@ -87,12 +87,26 @@ objcImpl:
 implementations from custom runtime methods:
 
 ```nim
-method dealloc(self: MyClass) =
-  # custom cleanup...
-  superDealloc(self)
+import nutella/objc
 
-method retainCountFromSuper(self: MyClass): cint =
-  callSuperAs[NSUInteger](self, selector("retainCount")).cint
+var deallocCount = 0
+
+objcImpl:
+  type SuperCallProtocol =
+    concept self
+      method retainCountFromSuper(self: SuperCallProtocol): cint
+
+  type SuperCallClass {.impl: SuperCallProtocol.} = object of NSObject
+
+  method retainCountFromSuper(self: SuperCallClass): cint =
+    callSuperAs[NSUInteger](self, selector("retainCount")).cint
+
+  method dealloc(self: SuperCallClass) {.used.} =
+    inc deallocCount
+    superDealloc(self)
+
+let o = SuperCallClass.new()
+doAssert o.retainCountFromSuper() == retainCount(o).cint
 ```
 
 ### Associated Nim `ref` storage
@@ -100,11 +114,24 @@ method retainCountFromSuper(self: MyClass): cint =
 Attach typed Nim `ref` state to Objective-C objects using associated objects:
 
 ```nim
+import nutella/objc
+import nutella/objc/assoc
+
 type MyStateObj = object
   count: int
 type MyState = ref MyStateObj
 
-var o = NSObject.new()
+objcImpl:
+  type AssocProtocol =
+    concept self
+      method ping(self: AssocProtocol)
+
+  type AssocClass {.impl: AssocProtocol.} = object of NSObject
+
+  method ping(self: AssocClass) =
+    discard
+
+var o = AssocClass.new()
 setAssociatedRef(o, MyState(count: 1))
 
 let st = o.getAssociatedRef(MyState)
@@ -117,28 +144,29 @@ doAssert o.getAssociatedRef(MyState) == nil
 
 ### Ivar-backed Nim `ref` storage (pure runtime classes)
 
-For classes you create at runtime, you can store Nim `ref` values in class ivars:
+You can combine `objcImpl` classes with ivar-backed Nim `ref` cleanup in `dealloc`:
 
 ```nim
 import nutella/objc
-import nutella/ivar
+import nutella/objc/ivar
 
 type MyStateObj = object
   count: int
 type MyState = ref MyStateObj
 
-proc myDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].} =
-  discard cmd
-  clearIvarRefs(self) # release all registered Nim ivar refs
-  var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))
-  discard cast[proc(superObj: var ObjcSuper, op: SEL): ID {.cdecl, varargs.}](
-    objc_msgSendSuper
-  )(superCall, selector("dealloc"))
+objcImpl:
+  type IvarProtocol =
+    concept self
+      method dealloc(self: IvarProtocol)
 
-var cls: ObjcClass
-addClass("MyRuntimeClass", "NSObject", cls):
-  discard addRefIvar[MyState](cls) # must be done before registerClassPair
-  discard addMethod(cls, selector("dealloc"), cast[IMP](myDealloc), "v@:")
+  type IvarClass {.impl: IvarProtocol.} = object of NSObject
+
+  method dealloc(self: IvarClass) {.used.} =
+    clearIvarRefs(self)
+    superDealloc(self)
 ```
 
-Then use `setIvarRef`, `getIvarRef`, and `clearIvarRef` on instances.
+After ivars are registered for the class, use
+`setIvarRef/getIvarRef/clearIvarRef` for data access.
+`clearIvarRefs(self)` in `dealloc` ensures registered ivar-backed refs are
+released.
