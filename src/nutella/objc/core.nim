@@ -37,7 +37,7 @@ type
 
   ObjcClass* {.pure.} = object of NSObject
 
-  NSString* {.pure.} = object of NSObject
+  #NSString* {.pure.} = object of NSObject
   ProtocolPrototype* {.pure, inheritable.} = object
 
   Method* = distinct pointer
@@ -156,8 +156,8 @@ converter toNSObject*(id: ID): NSObject {.inline.} =
 converter toObjcClass*(id: ID): ObjcClass {.inline.} =
   ObjcClass(value: id)
 
-converter toNSString*(id: ID): NSString {.inline.} =
-  NSString(value: id)
+#converter toNSString*(id: ID): NSString {.inline.} =
+#  NSString(value: id)
 
 template asType*[T: NSObject](o: ID): T =
   T(value: o)
@@ -1133,7 +1133,7 @@ macro objc*(name: untyped, body: untyped = nil): untyped =
   )
   result.addPragma(ident"inline")
 
-proc NSLog*(str: NSString) {.importc, varargs.}
+#proc NSLog*(str: NSString) {.importc, varargs.}
 
 proc retainAux(o: ID): ID {.raises: [].} =
   objc_msgSend(o, sel_registerName("retain"))
