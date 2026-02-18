@@ -2,6 +2,41 @@
 
 `nutella` provides Nim bindings/helpers around the Objective-C runtime.
 
+## AppKit Prototype (`nutella/appkit`)
+
+There is now an initial Cocoa/NextSTEP-style UI core built as Objective-C
+runtime classes on top of `siwin` (window/event loop) and `figdraw` (drawing):
+
+- `NSApplication`
+- `NSWindow`
+- `NSView`
+- `NSControl`
+- `NSTextField`
+- `NSButton`
+
+Quick example:
+
+```nim
+import nutella/appkit
+
+let app = NSApplication.sharedApplication()
+let window = newWindow(100, 100, 640, 420, "Hello")
+let root = newView(0, 0, 640, 420)
+let field = newTextField(32, 32, 320, 44, "Hello world")
+let button = newButton(32, 96, 160, 44, "Click")
+
+button.setOnClick(proc(sender: NSButton) {.gcsafe.} =
+  discard sender
+  echo "clicked"
+)
+
+root.addSubview(field)
+root.addSubview(button)
+window.setContentView(root)
+window.makeKeyAndOrderFront(app)
+discard app.runForFrames(1) # use app.run() for full event loop
+```
+
 ## `objcImpl` runtime DSL
 
 `objcImpl` declares a runtime protocol and/or runtime class and wires Nim
