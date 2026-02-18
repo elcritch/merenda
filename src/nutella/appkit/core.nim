@@ -88,6 +88,45 @@ proc uniformCorners(radius: float32): array[DirectionCorners, float32] {.inline.
 proc clampWindowSize(v: float32): int32 {.inline.} =
   if v < 1.0: 1 else: v.round.int32
 
+proc ownFromId[T: NSObject](id: ID): T =
+  if id.isNil:
+    return T(value: nil)
+  var borrowed = asType[T](id)
+  result = retain(borrowed)
+  borrowed.value = nil
+
+proc retainId(id: ID): ID =
+  if id.isNil:
+    return nil
+  var borrowed = asType[NSObject](id)
+  var owned = retain(borrowed)
+  borrowed.value = nil
+  result = owned.value
+  owned.value = nil
+
+proc releaseId(id: ID) =
+  if id.isNil:
+    return
+  var owned = asType[NSObject](id)
+  discard owned
+
+proc replaceOwnedId(slot: var ID, next: ID) =
+  if slot == next:
+    return
+  let old = slot
+  slot = retainId(next)
+  releaseId(old)
+
+proc clearOwnedIds(ids: var seq[ID]) =
+  for id in ids:
+    releaseId(id)
+  ids.setLen(0)
+
+proc removeOwnedIdAt(ids: var seq[ID], idx: int) =
+  let old = ids[idx]
+  ids.del(idx)
+  releaseId(old)
+
 proc runApplicationFrames(appObj: NSObject, maxFrames: int): int
 
 objcImpl:
@@ -137,6 +176,13 @@ objcImpl:
       st = defaultViewState()
       self.viewStateRef = st
     st.hidden = hidden
+
+  method dealloc(self: NUViewObj) {.used.} =
+    let st = self.viewStateRef()
+    if not st.isNil:
+      clearOwnedIds(st.subviews)
+    clearIvarRefs(self)
+    superDealloc(self)
 
 objcImpl:
   type NUControlObj = object of NUViewObj
@@ -231,13 +277,13 @@ objcImpl:
     if st.isNil:
       st = defaultWindowState()
       self.windowStateRef = st
-    st.contentView = view.value
+    replaceOwnedId(st.contentView, view.value)
 
   method contentView*(self: NUWindowObj): NUViewObj =
     let st = self.windowStateRef()
     if st.isNil or st.contentView.isNil:
       return NUViewObj(value: nil)
-    result = asType[NUViewObj](st.contentView)
+    result = ownFromId[NUViewObj](st.contentView)
 
   method setTitle*(self: NUWindowObj, value: string) =
     var st = self.windowStateRef()
@@ -268,8 +314,10 @@ objcImpl:
 
   method dealloc(self: NUWindowObj) {.used.} =
     let st = self.windowStateRef()
-    if not st.isNil and st.nativeReady and (not st.nativeWindow.isNil):
-      siwinshim.close(st.nativeWindow)
+    if not st.isNil:
+      if st.nativeReady and (not st.nativeWindow.isNil):
+        siwinshim.close(st.nativeWindow)
+      replaceOwnedId(st.contentView, nil)
     clearIvarRefs(self)
     superDealloc(self)
 
@@ -293,7 +341,7 @@ objcImpl:
       st = defaultApplicationState()
       self.appStateRef = st
     if window.value notin st.windows:
-      st.windows.add(window.value)
+      st.windows.add(retainId(window.value))
     let wst = window.windowStateRef()
     if not wst.isNil:
       wst.visibleRequested = true
@@ -307,6 +355,9 @@ objcImpl:
       st.running = false
 
   method dealloc(self: NUApplicationObj) {.used.} =
+    let st = self.appStateRef()
+    if not st.isNil:
+      clearOwnedIds(st.windows)
     clearIvarRefs(self)
     superDealloc(self)
 
@@ -391,14 +442,14 @@ proc subviews*(view: NSView): seq[NSView] =
   let st = view.viewState()
   result = newSeq[NSView](st.subviews.len)
   for i, child in st.subviews:
-    result[i] = asType[NSView](child)
+    result[i] = ownFromId[NSView](child)
 
 proc addSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil:
     return
   let st = self.viewState()
   if view.value notin st.subviews:
-    st.subviews.add(view.value)
+    st.subviews.add(retainId(view.value))
 
 proc stringValue*(field: NSTextField): string =
   field.textFieldState().stringValue
@@ -415,7 +466,7 @@ proc setOnClick*(button: NSButton, cb: proc(sender: NSButton) {.gcsafe.}) =
     st.onClick = nil
   else:
     st.onClick = proc(sender: ID) {.gcsafe.} =
-      cb(asType[NSButton](sender))
+      cb(ownFromId[NSButton](sender))
 
 proc click*(button: NSButton) =
   let st = button.buttonState()
@@ -424,14 +475,14 @@ proc click*(button: NSButton) =
 
 proc ensureContentView(window: NSWindow, st: NSWindowStateRef): NSView =
   if not st.contentView.isNil:
-    return asType[NSView](st.contentView)
+    return ownFromId[NSView](st.contentView)
 
   var rootAlloc = NSView.alloc()
   var root = rootAlloc.initWithFrame(
     0.cfloat, 0.cfloat, st.frame.size.width.cfloat, st.frame.size.height.cfloat
   )
   rootAlloc.value = nil
-  st.contentView = root.value
+  replaceOwnedId(st.contentView, root.value)
   result = root
 
 proc viewFillColor(view: NSView, st: NSViewStateRef): Color =
@@ -465,7 +516,7 @@ proc addViewTree(
 ) =
   if viewId.isNil:
     return
-  let view = asType[NSView](viewId)
+  let view = ownFromId[NSView](viewId)
   if view.isNil:
     return
   let st = view.viewState()
@@ -504,7 +555,7 @@ proc hitTestButton(
 ): ID =
   if viewId.isNil:
     return nil
-  let view = asType[NSView](viewId)
+  let view = ownFromId[NSView](viewId)
   if view.isNil:
     return nil
   let st = view.viewState()
@@ -587,7 +638,7 @@ proc ensureNativeWindow(window: NSWindow, st: NSWindowStateRef) =
         let root = ensureContentView(window, st)
         let buttonId = hitTestButton(root.value, e.pos.x, e.pos.y, 0.0, 0.0)
         if not buttonId.isNil:
-          let button = asType[NSButton](buttonId)
+          let button = ownFromId[NSButton](buttonId)
           button.performClick(window)
         renderWindow(window, st),
       onRender: proc(e: siwinshim.RenderEvent) =
@@ -621,17 +672,17 @@ proc NSApp*(): NSApplication =
 proc addWindow*(app: NSApplication, window: NSWindow) =
   let st = app.applicationState()
   if window.value notin st.windows:
-    st.windows.add(window.value)
+    st.windows.add(retainId(window.value))
   window.windowState().visibleRequested = true
 
 proc setContentView*(window: NSWindow, view: NSView) =
-  window.windowState().contentView = view.value
+  replaceOwnedId(window.windowState().contentView, view.value)
 
 proc contentView*(window: NSWindow): NSView =
   let cv = window.windowState().contentView
   if cv.isNil:
     return NSView(value: nil)
-  asType[NSView](cv)
+  ownFromId[NSView](cv)
 
 proc makeKeyAndOrderFront*(window: NSWindow, sender: NSObject) =
   discard sender
@@ -650,7 +701,7 @@ proc stop*(app: NSApplication) =
   app.applicationState().running = false
 
 proc runApplicationFrames(appObj: NSObject, maxFrames: int): int =
-  let app = asType[NSApplication](appObj)
+  let app = ownFromId[NSApplication](appObj.value)
   let st = app.applicationState()
   st.running = true
 
@@ -658,20 +709,20 @@ proc runApplicationFrames(appObj: NSObject, maxFrames: int): int =
     var activeWindows = 0
     var i = 0
     while i < st.windows.len:
-      let window = asType[NSWindow](st.windows[i])
+      let window = ownFromId[NSWindow](st.windows[i])
       if window.isNil:
-        st.windows.del(i)
+        removeOwnedIdAt(st.windows, i)
         continue
 
       let wst = window.windowState()
       if wst.closed:
-        st.windows.del(i)
+        removeOwnedIdAt(st.windows, i)
         continue
 
       try:
         ensureNativeWindow(window, wst)
       except CatchableError:
-        st.windows.del(i)
+        removeOwnedIdAt(st.windows, i)
         raise
 
       if not wst.visibleRequested:
@@ -683,7 +734,7 @@ proc runApplicationFrames(appObj: NSObject, maxFrames: int): int =
         wst.nativeWindow.step()
       if (not wst.nativeWindow.isNil) and wst.nativeWindow.closed:
         wst.closed = true
-        st.windows.del(i)
+        removeOwnedIdAt(st.windows, i)
         continue
 
       inc activeWindows
