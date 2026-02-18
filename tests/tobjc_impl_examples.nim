@@ -9,15 +9,6 @@ var crossPayloadClass = ""
 var crossPayloadRetainInMethod = 0
 var ivarCounterStateDestroyedCount = 0
 
-type IvarCounterStateObj = object
-  total: int
-
-type IvarCounterStateRef = ref IvarCounterStateObj
-
-proc `=destroy`(o: var IvarCounterStateObj) =
-  discard o
-  inc ivarCounterStateDestroyedCount
-
 objcImpl:
   type FooBarProtocol =
     concept self
@@ -86,6 +77,15 @@ objcImpl:
 
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
+
+type IvarCounterStateObj = object
+  total: int
+
+type IvarCounterStateRef = ref IvarCounterStateObj
+
+proc `=destroy`(o: var IvarCounterStateObj) =
+  discard o
+  inc ivarCounterStateDestroyedCount
 
 objcImpl:
   type IvarCounterProtocol =
