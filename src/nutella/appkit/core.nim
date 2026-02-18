@@ -1,4 +1,4 @@
-import std/[math, os]
+import std/[math, os, strutils]
 import pkg/chroma
 import pkg/vmath
 
@@ -86,21 +86,36 @@ var appkitTypefaceId {.threadvar.}: TypefaceId
 var appkitFontReady {.threadvar.}: bool
 var appkitFontUnavailable {.threadvar.}: bool
 
+proc appkitFontCandidates(): seq[string] =
+  result = @["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+  let dir = figDataDir()
+  if not dirExists(dir):
+    return
+  for kind, path in walkDir(dir):
+    if kind != pcFile:
+      continue
+    let (_, name, ext) = splitFile(path)
+    let lowerExt = ext.toLowerAscii()
+    if lowerExt notin [".ttf", ".otf"]:
+      continue
+    let fileName = name & ext
+    if fileName notin result:
+      result.add(fileName)
+
 proc ensureAppKitFont(): bool =
   if appkitFontReady:
     return true
   if appkitFontUnavailable:
     return false
-  try:
-    appkitTypefaceId = loadTypeface(
-      "SF Pro Text",
-      @["Helvetica Neue", "Helvetica", "Arial", "Ubuntu.ttf", "DejaVuSans.ttf"],
-    )
-    appkitFontReady = true
-    true
-  except CatchableError:
-    appkitFontUnavailable = true
-    false
+  for candidate in appkitFontCandidates():
+    try:
+      appkitTypefaceId = loadTypeface(candidate)
+      appkitFontReady = true
+      return true
+    except Exception:
+      discard
+  appkitFontUnavailable = true
+  false
 
 proc appkitFont(size: float32): FigFont {.inline.} =
   appkitTypefaceId.fontWithSize(size)
