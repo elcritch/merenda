@@ -1,6 +1,6 @@
 import std/unittest
 import nutella/objc
-import nutella/ivar
+import nutella/objc/ivar
 
 type IvarStateObj = object
   value: int
