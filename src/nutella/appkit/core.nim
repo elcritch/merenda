@@ -543,50 +543,68 @@ proc renderWindow(window: NSWindow, st: NSWindowStateRef) =
   st.renderer.renderFrame(renders, st.nativeWindow.logicalSize())
   st.renderer.endFrame()
 
+proc cleanupFailedWindowInit(st: NSWindowStateRef) =
+  if st.isNil:
+    return
+  if not st.nativeWindow.isNil:
+    try:
+      siwinshim.close(st.nativeWindow)
+    except Exception:
+      discard
+  st.renderer = nil
+  st.nativeWindow = nil
+  st.nativeReady = false
+  st.visibleRequested = false
+  st.closed = true
+
 proc ensureNativeWindow(window: NSWindow, st: NSWindowStateRef) =
   if st.isNil or st.nativeReady:
     return
 
-  let size =
-    ivec2(clampWindowSize(st.frame.size.width), clampWindowSize(st.frame.size.height))
+  try:
+    let size =
+      ivec2(clampWindowSize(st.frame.size.width), clampWindowSize(st.frame.size.height))
 
-  st.nativeWindow =
-    siwinshim.newSiwinWindow(size = size, title = st.title, vsync = true)
-  st.autoScale = st.nativeWindow.configureUiScale()
-  st.renderer = figrender.newFigRenderer(
-    atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-  )
-  st.renderer.setupBackend(st.nativeWindow)
+    st.nativeWindow =
+      siwinshim.newSiwinWindow(size = size, title = st.title, vsync = true)
+    st.autoScale = st.nativeWindow.configureUiScale()
+    st.renderer = figrender.newFigRenderer(
+      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+    )
+    st.renderer.setupBackend(st.nativeWindow)
 
-  st.nativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
-    onClose: proc(e: siwinshim.CloseEvent) =
-      discard e
-      st.closed = true,
-    onResize: proc(e: siwinshim.ResizeEvent) =
-      st.frame.size = nsSize(e.size.x.float32, e.size.y.float32)
-      let root = ensureContentView(window, st)
-      root.setFrame(0.cfloat, 0.cfloat, e.size.x.cfloat, e.size.y.cfloat)
-      st.nativeWindow.refreshUiScale(st.autoScale)
-      renderWindow(window, st),
-    onClick: proc(e: siwinshim.ClickEvent) =
-      let root = ensureContentView(window, st)
-      let buttonId = hitTestButton(root.value, e.pos.x, e.pos.y, 0.0, 0.0)
-      if not buttonId.isNil:
-        let button = asType[NSButton](buttonId)
-        button.performClick(window)
-      renderWindow(window, st),
-    onRender: proc(e: siwinshim.RenderEvent) =
-      discard e
-      renderWindow(window, st),
-    onKey: proc(e: siwinshim.KeyEvent) =
-      if e.pressed and e.key == siwinshim.Key.escape:
-        window.close()
-    ,
-  )
+    st.nativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
+      onClose: proc(e: siwinshim.CloseEvent) =
+        discard e
+        st.closed = true,
+      onResize: proc(e: siwinshim.ResizeEvent) =
+        st.frame.size = nsSize(e.size.x.float32, e.size.y.float32)
+        let root = ensureContentView(window, st)
+        root.setFrame(0.cfloat, 0.cfloat, e.size.x.cfloat, e.size.y.cfloat)
+        st.nativeWindow.refreshUiScale(st.autoScale)
+        renderWindow(window, st),
+      onClick: proc(e: siwinshim.ClickEvent) =
+        let root = ensureContentView(window, st)
+        let buttonId = hitTestButton(root.value, e.pos.x, e.pos.y, 0.0, 0.0)
+        if not buttonId.isNil:
+          let button = asType[NSButton](buttonId)
+          button.performClick(window)
+        renderWindow(window, st),
+      onRender: proc(e: siwinshim.RenderEvent) =
+        discard e
+        renderWindow(window, st),
+      onKey: proc(e: siwinshim.KeyEvent) =
+        if e.pressed and e.key == siwinshim.Key.escape:
+          window.close()
+      ,
+    )
 
-  st.nativeWindow.firstStep()
-  st.nativeWindow.refreshUiScale(st.autoScale)
-  st.nativeReady = true
+    st.nativeWindow.firstStep()
+    st.nativeWindow.refreshUiScale(st.autoScale)
+    st.nativeReady = true
+  except Exception as exc:
+    cleanupFailedWindowInit(st)
+    raise newException(CatchableError, "window backend init failed: " & exc.msg)
 
 var sharedApplicationRef {.threadvar.}: NSApplication
 
