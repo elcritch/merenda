@@ -114,6 +114,8 @@ proc `=copy`(dest: var NSObject, src: NSObject) =
     retainRaw(dest.value)
 
 proc `=sink`(dest: var NSObject, src: NSObject) =
+  if dest.value == src.value:
+    return
   `=destroy`(dest)
   dest.value = src.value
 
@@ -171,7 +173,6 @@ proc objc_msgSend_fpret*(self: ID, op: SEL): cdouble {.cdecl, importc, varargs.}
 proc objc_msgSend_stret*(self: ID, op: SEL) {.cdecl, importc, varargs.}
 proc objc_msgSendSuper*(super: var ObjcSuper, op: SEL): ID {.cdecl, importc, varargs.}
 proc objc_msgSendSuper_stret*(super: var ObjcSuper, op: SEL) {.cdecl, importc, varargs.}
-
 
 proc class_getName(cls: ID): cstring {.cdecl, importc.}
 proc getName*(cls: ObjcClass): string =
@@ -986,6 +987,54 @@ proc buildCallSuper(retType, obj, op, args: NimNode): NimNode =
     else:
       `normalCall`
 
+proc identNameFromNode(n: NimNode): string =
+  case n.kind
+  of nnkIdent, nnkSym:
+    $n
+  of nnkPostfix:
+    identNameFromNode(n[^1])
+  of nnkAccQuoted:
+    if n.len > 0:
+      identNameFromNode(n[0])
+    else:
+      ""
+  else:
+    ""
+
+proc parseSuperMessage(msg: NimNode, selectorName: var string, args: var seq[NimNode]) =
+  case msg.kind
+  of nnkPar:
+    if msg.len == 1:
+      parseSuperMessage(msg[0], selectorName, args)
+    else:
+      error("super(...) message must be a method name or method call", msg)
+  of nnkIdent, nnkSym, nnkPostfix, nnkAccQuoted:
+    selectorName = identNameFromNode(msg)
+  of nnkCall, nnkCommand:
+    selectorName = identNameFromNode(msg[0])
+    if selectorName.len == 0:
+      error("super(...) method call must start with a method name", msg)
+    selectorName.add(":".repeat(msg.len - 1))
+    for i in 1 ..< msg.len:
+      args.add(copyNimTree(msg[i]))
+  else:
+    error("super(...) message must be a method name or method call", msg)
+
+proc buildSuperMacroCall(obj, msg, retType: NimNode): NimNode =
+  var selectorName = ""
+  var args: seq[NimNode] = @[]
+  parseSuperMessage(msg, selectorName, args)
+  if selectorName.len == 0:
+    error("super(...) could not resolve method name", msg)
+
+  let selExpr = newCall(bindSym"getSelector", newLit(selectorName))
+  if retType.kind == nnkEmpty:
+    result = newCall(ident"callSuper", obj, selExpr)
+  else:
+    result = newCall(ident"callSuper", retType, obj, selExpr)
+  for a in args:
+    result.add(a)
+
 macro callSuper*(obj: NSObject, op: SEL, args: varargs[typed]): untyped =
   result = buildCallSuper(bindSym"ID", obj, op, args, ObjCMsgSendFlavor.normal)
 
@@ -993,6 +1042,12 @@ macro callSuper*(
     retType: typedesc, obj: NSObject, op: SEL, args: varargs[typed]
 ): untyped =
   result = buildCallSuper(retType, obj, op, args)
+
+macro super*(obj: NSObject, msg: untyped): untyped =
+  result = buildSuperMacroCall(obj, msg, newEmptyNode())
+
+macro super*(retType: typedesc, obj: NSObject, msg: untyped): untyped =
+  result = buildSuperMacroCall(obj, msg, retType)
 
 macro objcAux(
     flavor: static[ObjCMsgSendFlavor],
@@ -1238,4 +1293,3 @@ template addMethod*[T](cls: ObjcClass, name: SEL, imp: T): bool =
 
 template replaceMethod*[T](cls: ObjcClass, name: SEL, imp: T): IMP =
   class_replaceMethod(cls, name, cast[IMP](imp), getProcEncode(imp))
-

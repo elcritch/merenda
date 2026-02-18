@@ -73,7 +73,7 @@ objcImpl:
   proc init*(v: var HiddenCtorClass): HiddenCtorClass {.error: "Use initAllowed()".}
 
   proc initAllowed*(v: var HiddenCtorClass): HiddenCtorClass =
-    result = asType[HiddenCtorClass](objc_msgSend(v.value, selector("init")))
+    result = asType[HiddenCtorClass](super(v, init))
     v.value = nil
 
   method ping(self: HiddenCtorClass) =
@@ -102,12 +102,9 @@ objcImpl:
     v: var IvarCounterClass
   ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
 
-  proc initWithMultiplier*(
-      v: var IvarCounterClass, lastAmount: cint
-  ): IvarCounterClass =
-    result = asType[IvarCounterClass](callSuperId(v, selector("init")))
-    v.value = nil
-    result.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
+  proc initWithMultiplier*(self: var IvarCounterClass, lastAmount: cint) =
+    self = super(IvarCounterClass, self, init)
+    self.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
 
   method bump(self: IvarCounterClass, amount: cint): cint =
     let st = self.counter
@@ -211,8 +208,8 @@ suite "objcImpl examples":
     )
 
     var c = IvarCounterClass.alloc()
+    c.initWithMultiplier(1.cint)
     check(not c.isNil)
-    c = c.initWithMultiplier(1.cint)
     check(getClassName(c) == "IvarCounterClass")
     check(c.current() == 0.cint)
     check(c.lastAmount() == 1.cint)
