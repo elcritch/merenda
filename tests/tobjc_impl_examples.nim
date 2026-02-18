@@ -14,6 +14,7 @@ objcImpl:
     concept self
         method ping(self: FooBarProtocol)
 
+objcImpl:
   type FooBar {.impl: FooBarProtocol.} = object of NSObject
 
   method ping(self: FooBar) =
