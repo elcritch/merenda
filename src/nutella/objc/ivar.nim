@@ -1,4 +1,4 @@
-import ./objc
+import ./core
 
 const NimIvarRefPrefix* = "nimIvarRef_"
 

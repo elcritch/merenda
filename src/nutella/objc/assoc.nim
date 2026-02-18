@@ -1,4 +1,4 @@
-import ./objc
+import ./core
 
 const NimAssociatedRefBoxClassName = "NimAssociatedRefBox"
 const NimAssociatedRefPayloadIvarName = "nimAssociatedRefPayload"
