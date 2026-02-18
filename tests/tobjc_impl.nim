@@ -1,23 +1,13 @@
 import std/unittest
 import nutella/objc
-import nutella/objc/assoc
 
-type DestroyProbeObject = object of NSObject
-type RuntimeOwnedSubtype = object of NSObject
 type RuntimePayloadObject = object of NSObject
 
-var destroyProbeTriggered = false
 var objcImplPingCount = 0
 var objcImplAccum = 0.cint
 var objcImplPayloadClass = ""
 var objcImplPayloadRetainInMethod = 0
 var objcImplSuperDeallocCount = 0
-
-proc `=destroy`(o: var DestroyProbeObject) =
-  destroyProbeTriggered = true
-
-proc passThroughMove(o: sink NSObject): NSObject =
-  o
 
 proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
   result = getClass(className)
@@ -25,150 +15,7 @@ proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
     addClass(className, superName, result):
       discard
 
-suite "objc runtime ownership fundamentals":
-  test "typedesc new works for NSObject":
-    var o = NSObject.new()
-    check(not o.isNil)
-    check(getClassName(o) == "NSObject")
-
-  test "typedesc new works for runtime NSObject subtype":
-    let subClassName = $RuntimeOwnedSubtype
-    discard ensureRuntimeClass(subClassName)
-    var s = RuntimeOwnedSubtype.new()
-    check(not s.isNil)
-    check(getClassName(s) == subClassName)
-
-  test "alloc/init runtime NSObject subtype":
-    let subClassName = $RuntimeOwnedSubtype
-    discard ensureRuntimeClass(subClassName)
-    var allocated = RuntimeOwnedSubtype.alloc()
-    check(not allocated.isNil)
-    let retainBeforeInit = retainCount(allocated).int
-    var s = allocated.init()
-    check(allocated.isNil)
-    check(not s.isNil)
-    check(getClassName(s) == subClassName)
-    check(retainCount(s).int == retainBeforeInit)
-
-  test "retain and release(var) are balanced":
-    var o = NSObject.new()
-    check(not o.isNil)
-
-    let baseCount = retainCount(o).int
-    var extra = retain(o)
-    check(extra == o)
-    let afterRetain = retainCount(o).int
-    check(afterRetain > baseCount)
-
-    release(extra)
-    check(extra.isNil)
-    check(retainCount(o).int == afterRetain - 1)
-
-    release(o)
-    check(o.isNil)
-
-  test "copy increments retain count":
-    var o = NSObject.new()
-    let baseCount = retainCount(o).int
-
-    var alias = o
-    check(alias == o)
-    check(retainCount(o).int == baseCount + 1)
-
-    release(alias)
-    check(alias.isNil)
-    check(retainCount(o).int == baseCount)
-
-  test "block scope destroys copied alias":
-    var o = NSObject.new()
-    let baseCount = retainCount(o).int
-
-    block:
-      var alias = o
-      check(alias == o)
-      check(retainCount(o).int == baseCount + 1)
-
-    check(retainCount(o).int == baseCount)
-
-  test "block scope destroys retained temporary":
-    var o = NSObject.new()
-    var duringCount = 0
-
-    block:
-      var temp = retain(o)
-      check(temp == o)
-      duringCount = retainCount(o).int
-
-    let afterBlock = retainCount(o).int
-    check(afterBlock < duringCount)
-
-  test "subclass destroy hook runs in block scope":
-    destroyProbeTriggered = false
-    block:
-      var o = asType[DestroyProbeObject](NSObject.new())
-      check(not o.isNil)
-    check(destroyProbeTriggered)
-
-  test "explicit move avoids retain-copy":
-    var o = NSObject.new()
-    let baseCount = retainCount(o).int
-
-    block:
-      var moved = move(o)
-      check(o.isNil)
-      check(not moved.isNil)
-      check(retainCount(moved).int == baseCount)
-
-  test "sink transfer avoids retain-copy":
-    var o = NSObject.new()
-    let baseCount = retainCount(o).int
-
-    block:
-      var moved = passThroughMove(move(o))
-      check(o.isNil)
-      check(not moved.isNil)
-      check(retainCount(moved).int == baseCount)
-
-  test "create actual Objective-C runtime subtype":
-    const SubClassName = "NimRuntimeActualSubtypeOwnedTest"
-
-    var subCls = getClass(SubClassName)
-    if subCls.isNil:
-      addClass(SubClassName, "NSObject", subCls):
-        discard
-    check(not subCls.isNil)
-
-    block:
-      var o = asType[NSObject](new(subCls))
-      check(not o.isNil)
-      check(getClassName(o) == SubClassName)
-
-  test "create runtime protocol and attach to runtime class":
-    const ProtoName = "NimRuntimeOwnedProtocolTest"
-    const ClassName = "NimRuntimeClassWithProtocolOwnedTest"
-
-    var proto = getProtocol(ProtoName)
-    if proto.isNil:
-      proto = allocateProtocol(ProtoName)
-      check(not proto.isNil)
-      addMethodDescription(proto, selector("nimPing"), "v@:", true, true)
-      registerProtocol(proto)
-      proto = getProtocol(ProtoName)
-
-    check(not proto.isNil)
-
-    var cls = getClass(ClassName)
-    if cls.isNil:
-      addClass(ClassName, "NSObject", cls):
-        addProtocol(ProtoName)
-
-    check(not cls.isNil)
-    check(conformsToProtocol(cls, proto))
-
-    var o = asType[NSObject](new(cls))
-    check(not o.isNil)
-    check(getClassName(o) == ClassName)
-
+suite "objcImpl runtime generation":
   test "template to create protocol and class":
     const ClassName = "NRClassWithProtocolTest"
     const PayloadClassName = $RuntimePayloadObject
@@ -292,4 +139,3 @@ suite "objc runtime ownership fundamentals":
     release(o)
     check(o.isNil)
     check(objcImplSuperDeallocCount == 1)
-
