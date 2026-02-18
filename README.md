@@ -94,3 +94,23 @@ method dealloc(self: MyClass) =
 method retainCountFromSuper(self: MyClass): cint =
   callSuperAs[NSUInteger](self, selector("retainCount")).cint
 ```
+
+### Associated Nim `ref` storage
+
+Attach typed Nim `ref` state to Objective-C objects using associated objects:
+
+```nim
+type MyStateObj = object
+  count: int
+type MyState = ref MyStateObj
+
+var o = NSObject.new()
+setAssociatedRef(o, MyState(count: 1))
+
+let st = o.getAssociatedRef(MyState)
+doAssert st != nil
+doAssert st.count == 1
+
+clearAssociatedRef[MyState](o)
+doAssert o.getAssociatedRef(MyState) == nil
+```
