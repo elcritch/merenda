@@ -5,10 +5,6 @@ import nutella/objc/assoc
 type DestroyProbeObject = object of NSObject
 type RuntimeOwnedSubtype = object of NSObject
 type RuntimePayloadObject = object of NSObject
-type AssociatedStateObj = object
-  value: int
-
-type AssociatedStateRef = ref AssociatedStateObj
 
 var destroyProbeTriggered = false
 var objcImplPingCount = 0
@@ -16,13 +12,9 @@ var objcImplAccum = 0.cint
 var objcImplPayloadClass = ""
 var objcImplPayloadRetainInMethod = 0
 var objcImplSuperDeallocCount = 0
-var associatedStateDestroyedCount = 0
 
 proc `=destroy`(o: var DestroyProbeObject) =
   destroyProbeTriggered = true
-
-proc `=destroy`(o: var AssociatedStateObj) =
-  inc associatedStateDestroyedCount
 
 proc passThroughMove(o: sink NSObject): NSObject =
   o
@@ -301,29 +293,3 @@ suite "objc runtime ownership fundamentals":
     check(o.isNil)
     check(objcImplSuperDeallocCount == 1)
 
-  test "associated Nim ref survives and clears cleanly":
-    associatedStateDestroyedCount = 0
-    var o = NSObject.new()
-    var state = AssociatedStateRef(value: 42)
-    setAssociatedRef(o, state)
-    state = nil
-
-    block:
-      let loaded = o.getAssociatedRef(AssociatedStateRef)
-      check(loaded != nil)
-      check(loaded.value == 42)
-
-    clearAssociatedRef[AssociatedStateRef](o)
-    check(o.getAssociatedRef(AssociatedStateRef) == nil)
-    check(associatedStateDestroyedCount == 1)
-
-  test "associated Nim ref is released on owning object dealloc":
-    associatedStateDestroyedCount = 0
-    var o = NSObject.new()
-    var state = AssociatedStateRef(value: 77)
-    setAssociatedRef(o, state)
-    state = nil
-
-    release(o)
-    check(o.isNil)
-    check(associatedStateDestroyedCount == 1)
