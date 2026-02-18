@@ -81,7 +81,6 @@ objcImpl:
 
 type IvarCounterStateRef = ref object
   total: int
-  multiplier: int
   lastAmount: int
 
 proc `=destroy`(o: var typeof(IvarCounterStateRef()[])) =
@@ -104,30 +103,22 @@ objcImpl:
   ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
 
   proc initWithMultiplier*(
-      v: var IvarCounterClass, multiplier: cint
+      v: var IvarCounterClass, lastAmount: cint
   ): IvarCounterClass =
     result = asType[IvarCounterClass](objc_msgSend(v.value, selector("init")))
     v.value = nil
     result.counter =
-      IvarCounterStateRef(total: 0, multiplier: multiplier.int, lastAmount: 0)
+      IvarCounterStateRef(total: 0, lastAmount: lastAmount)
 
   method bump(self: IvarCounterClass, amount: cint): cint =
     let st = self.counter
     st.total += amount.int
     st.lastAmount = amount.int
-    result = (st.total * st.multiplier).cint
+    result = (st.total).cint
 
   method current(self: IvarCounterClass): cint =
     let st = self.counter
-    (st.total * st.multiplier).cint
-
-  method setMultiplier(self: IvarCounterClass, value: cint) =
-    let st = self.counter
-    st.multiplier = value.int
-
-  method multiplier(self: IvarCounterClass): cint =
-    let st = self.counter
-    st.multiplier.cint
+    (st.total).cint
 
   method lastAmount(self: IvarCounterClass): cint =
     let st = self.counter
@@ -225,23 +216,18 @@ suite "objcImpl examples":
     c = c.initWithMultiplier(1.cint)
     check(getClassName(c) == "IvarCounterClass")
     check(c.current() == 0.cint)
-    check(c.multiplier() == 1.cint)
-    check(c.lastAmount() == 0.cint)
+    check(c.lastAmount() == 1.cint)
 
-    c.setMultiplier(2.cint)
-    check(c.multiplier() == 2.cint)
-
-    check(c.bump(2.cint) == 4.cint)
+    check(c.bump(2.cint) == 2.cint)
     check(c.lastAmount() == 2.cint)
-    check(c.bump(3.cint) == 10.cint)
+    check(c.bump(3.cint) == 5.cint)
     check(c.lastAmount() == 3.cint)
-    check(c.current() == 10.cint)
+    check(c.current() == 5.cint)
 
     block:
       let st = c.counter
       check(st != nil)
       check(st.total == 5)
-      check(st.multiplier == 2)
       check(st.lastAmount == 3)
     check(ivarCounterStateDestroyedCount == 0)
 
