@@ -4,8 +4,8 @@
 
 ## `objcImpl` runtime DSL
 
-`objcImpl` declares a runtime protocol + runtime class and wires Nim method
-implementations as Objective-C instance methods.
+`objcImpl` declares a runtime protocol and/or runtime class and wires Nim
+method implementations as Objective-C instance methods.
 
 ```nim
 import nutella/objc
@@ -37,10 +37,11 @@ doAssert obj.add(3.cint) == 5.cint
 
 ### Behavior
 
+- Can define protocol-only, class-only, or protocol+class in one block.
 - Creates/registers protocol if missing (`allocateProtocol` + `registerProtocol`).
 - Adds required instance method descriptions to the protocol.
 - Creates/registers class if missing (using the superclass declared in the DSL).
-- Attaches the class to the protocol.
+- Attaches the class to listed protocols when both are present.
 - Installs generated C-callable method wrappers on the runtime class.
 - Emits Nim-callable helper procs for implemented methods, so `obj.ping()` and
   `obj.add(...)` call through Objective-C message send.
@@ -48,8 +49,8 @@ doAssert obj.add(3.cint) == 5.cint
 ### Current constraints
 
 - Protocol methods in the concept are treated as required instance methods.
-- Implementations must exist for every required protocol method.
-- Implementation signatures must match protocol signatures.
+- When protocol and class are declared together, implementations must exist for
+  every required protocol method and signatures must match.
 - Generated wrappers treat `self` as borrowed runtime object (`ID`) to avoid ARC
   ownership side effects in the wrapper boundary.
 - `objcImpl` emits Nim marker types:
@@ -109,64 +110,45 @@ let o = SuperCallClass.new()
 doAssert o.retainCountFromSuper() == retainCount(o).cint
 ```
 
-### Associated Nim `ref` storage
+### Ivar Properties
 
-Attach typed Nim `ref` state to Objective-C objects using associated objects:
-
-```nim
-import nutella/objc
-import nutella/objc/assoc
-
-type MyStateObj = object
-  count: int
-type MyState = ref MyStateObj
-
-objcImpl:
-  type AssocProtocol =
-    concept self
-      method ping(self: AssocProtocol)
-
-  type AssocClass {.impl: AssocProtocol.} = object of NSObject
-
-  method ping(self: AssocClass) =
-    discard
-
-var o = AssocClass.new()
-setAssociatedRef(o, MyState(count: 1))
-
-let st = o.getAssociatedRef(MyState)
-doAssert st != nil
-doAssert st.count == 1
-
-clearAssociatedRef[MyState](o)
-doAssert o.getAssociatedRef(MyState) == nil
-```
-
-### Ivar-backed Nim `ref` storage (pure runtime classes)
-
-You can combine `objcImpl` classes with ivar-backed Nim `ref` cleanup in `dealloc`:
+`objcImpl` class fields become Objective-C ivars with generated Nim property
+accessors (`self.field` / `self.field = value`).
 
 ```nim
 import nutella/objc
 import nutella/objc/ivar
 
-type MyStateObj = object
-  count: int
-type MyState = ref MyStateObj
+type CounterStateObj = object
+  total: int
+  multiplier: int
+type CounterState = ref CounterStateObj
 
 objcImpl:
-  type IvarProtocol =
-    concept self
-      method dealloc(self: IvarProtocol)
+  type CounterClass = object of NSObject
+    counter: CounterState
 
-  type IvarClass {.impl: IvarProtocol, ivar: MyState.} = object of NSObject
+  proc new*(t: typedesc[CounterClass]): CounterClass {.error.}
+  proc init*(t: typedesc[CounterClass]): CounterClass {.error.}
+  proc init*(v: var CounterClass): CounterClass {.error.}
 
-  method dealloc(self: IvarClass) {.used.} =
+  proc initWithMultiplier*(v: var CounterClass, m: cint): CounterClass =
+    result = asType[CounterClass](objc_msgSend(v.value, selector("init")))
+    v.value = nil
+    result.counter = CounterState(total: 0, multiplier: m.int)
+
+  method bump(self: CounterClass, amount: cint): cint =
+    let st = self.counter
+    st.total += amount.int
+    result = (st.total * st.multiplier).cint
+
+  method dealloc(self: CounterClass) {.used.} =
     clearIvarRefs(self)
     superDealloc(self)
+
+var c = CounterClass.alloc()
+c = c.initWithMultiplier(2.cint)
+doAssert c.bump(3.cint) == 6.cint
 ```
 
-Declare ivars with `.ivar:` on the class type. Use
-`setIvarRef/getIvarRef/clearIvarRef` for data access.
-`clearIvarRefs(self)` in `dealloc` ensures registered ivar-backed refs are
-released.
+Use `clearIvarRefs(self)` in `dealloc` to release ivar-backed Nim refs.
