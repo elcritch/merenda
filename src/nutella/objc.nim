@@ -142,6 +142,9 @@ proc isNil*(a: NSObject): bool =
 proc isNil*(a: ObjcClass): bool =
   result = a.value == nil
 
+proc isNil*(a: Protocol): bool =
+  cast[pointer](a) == nil
+
 converter toID*(o: NSObject): ID {.inline.} =
   o.value
 
@@ -1799,7 +1802,7 @@ macro objcImpl*(x: untyped): untyped =
     addExtraProtocols.add quote do:
       block:
         let p = getProtocol(`pLit`)
-        if cast[pointer](p) != nil:
+        if not p.isNil:
           discard addProtocol(`clsVar`, p)
 
   for impl in implMethods:
@@ -1823,9 +1826,9 @@ macro objcImpl*(x: untyped): untyped =
   result.add quote do:
     block:
       var `protoVar` = getProtocol(`protoNameLit`)
-      if cast[pointer](`protoVar`) == nil:
+      if `protoVar`.isNil:
         `protoVar` = allocateProtocol(`protoNameLit`)
-        if cast[pointer](`protoVar`) != nil:
+        if not `protoVar`.isNil:
           `addMethodDescs`
           registerProtocol(`protoVar`)
           `protoVar` = getProtocol(`protoNameLit`)
@@ -1834,13 +1837,13 @@ macro objcImpl*(x: untyped): untyped =
       if `clsVar`.isNil:
         `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
         if not `clsVar`.isNil:
-          if cast[pointer](`protoVar`) != nil:
+          if not `protoVar`.isNil:
             discard addProtocol(`clsVar`, `protoVar`)
           `addExtraProtocols`
           `addClassMethods`
           registerClassPair(`clsVar`)
       else:
-        if cast[pointer](`protoVar`) != nil:
+        if not `protoVar`.isNil:
           discard addProtocol(`clsVar`, `protoVar`)
         `addExtraProtocols`
         `addClassMethods`

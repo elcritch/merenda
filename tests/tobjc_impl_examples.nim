@@ -91,7 +91,7 @@ suite "objcImpl examples":
       fooBarPingCount = 0
 
       let proto = getProtocol(FooBarProtocol)
-      doAssert(cast[pointer](proto) != nil)
+      doAssert(not proto.isNil)
 
       var o = FooBar.new()
       doAssert(not o.isNil)
@@ -104,7 +104,7 @@ suite "objcImpl examples":
     simpleCounter = 0
 
     let proto = getProtocol(SimpleCounterProtocol)
-    check(cast[pointer](proto) != nil)
+    check(not proto.isNil)
 
     var o = SimpleCounterClass.new()
     check(not o.isNil)
@@ -119,8 +119,8 @@ suite "objcImpl examples":
 
     let payloadProto = getProtocol(SharedPayloadProtocol)
     let receiverProto = getProtocol(PayloadReceiverProtocol)
-    check(cast[pointer](payloadProto) != nil)
-    check(cast[pointer](receiverProto) != nil)
+    check(not payloadProto.isNil)
+    check(not receiverProto.isNil)
 
     var receiver = PayloadReceiver.new()
     var payload = SharedPayload.new()
@@ -137,7 +137,7 @@ suite "objcImpl examples":
   test "constructor-unavailable overloads inside objcImpl":
     hiddenPingCount = 0
     let proto = getProtocol(HiddenCtorProtocol)
-    check(cast[pointer](proto) != nil)
+    check(not proto.isNil)
 
     var allocated = HiddenCtorClass.alloc()
     check(not allocated.isNil)
