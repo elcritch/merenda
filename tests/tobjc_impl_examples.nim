@@ -79,15 +79,12 @@ objcImpl:
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
 
-type IvarCounterStateObj = object
+type IvarCounterStateRef = ref object
   total: int
   multiplier: int
   lastAmount: int
 
-type IvarCounterStateRef = ref IvarCounterStateObj
-
-proc `=destroy`(o: var IvarCounterStateObj) =
-  discard o
+proc `=destroy`(o: var typeof(IvarCounterStateRef()[])) =
   inc ivarCounterStateDestroyedCount
 
 objcImpl:
