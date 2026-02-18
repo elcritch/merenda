@@ -2,11 +2,22 @@ import std/unittest
 import nutella/objc
 
 type RuntimePayloadObject = object of NSObject
+type RuntimeNimValuePayload = object
+  left: cint
+  right: cint
+
+type RuntimeNimRefPayload = ref object
+  label: string
+  count: int
 
 var objcImplPingCount = 0
 var objcImplAccum = 0.cint
 var objcImplPayloadClass = ""
 var objcImplPayloadRetainInMethod = 0
+var objcImplStringPayloadSeen = ""
+var objcImplValuePayloadTotalSeen = 0.cint
+var objcImplRefPayloadLabelSeen = ""
+var objcImplRefPayloadCountSeen = 0
 var objcImplSuperDeallocCount = 0
 var objcImplClassOnlyPingCount = 0
 
@@ -145,6 +156,86 @@ suite "objcImpl runtime generation":
     release(o)
     check(o.isNil)
     check(objcImplSuperDeallocCount == 1)
+
+  test "objcImpl passes Nim string, value object, and ref object params":
+    objcImplStringPayloadSeen = ""
+    objcImplValuePayloadTotalSeen = 0
+    objcImplRefPayloadLabelSeen = ""
+    objcImplRefPayloadCountSeen = 0
+
+    objcImpl:
+      type NRNimPayloadProtocol =
+        concept self
+            method nimTakeString(self: NRNimPayloadProtocol, payload: string): cint
+            method nimTakeValue(
+              self: NRNimPayloadProtocol, payload: RuntimeNimValuePayload
+            ): cint
+
+            method nimTakeRef(
+              self: NRNimPayloadProtocol, payload: RuntimeNimRefPayload
+            ): cint
+
+      type NRNimPayloadClass {.impl: NRNimPayloadProtocol.} = object of NSObject
+
+      method nimTakeString(self: NRNimPayloadClass, payload: string): cint =
+        discard self
+        objcImplStringPayloadSeen = payload
+        result = payload.len.cint
+
+      method nimTakeValue(
+          self: NRNimPayloadClass, payload: RuntimeNimValuePayload
+      ): cint =
+        discard self
+        objcImplValuePayloadTotalSeen = payload.left + payload.right
+        result = objcImplValuePayloadTotalSeen
+
+      method nimTakeRef(self: NRNimPayloadClass, payload: RuntimeNimRefPayload): cint =
+        discard self
+        if payload.isNil:
+          objcImplRefPayloadLabelSeen = ""
+          objcImplRefPayloadCountSeen = -1
+          return -1
+        objcImplRefPayloadLabelSeen = payload.label
+        objcImplRefPayloadCountSeen = payload.count
+        payload.count.inc
+        result = payload.count.cint
+
+    let proto = getProtocol(NRNimPayloadProtocol)
+    check(not proto.isNil)
+
+    var foundTakeString = false
+    var foundTakeValue = false
+    var foundTakeRef = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "nimTakeString:":
+        foundTakeString = true
+        check(desc.types == "i@:*")
+      if $desc.name == "nimTakeValue:":
+        foundTakeValue = true
+      if $desc.name == "nimTakeRef:":
+        foundTakeRef = true
+    check(foundTakeString)
+    check(foundTakeValue)
+    check(foundTakeRef)
+
+    var o = NRNimPayloadClass.new()
+    check(not o.isNil)
+
+    let stringPayload = "hello from Nim string"
+    check(o.nimTakeString(stringPayload) == stringPayload.len.cint)
+    check(objcImplStringPayloadSeen == stringPayload)
+
+    let valuePayload = RuntimeNimValuePayload(left: 2.cint, right: 5.cint)
+    check(o.nimTakeValue(valuePayload) == 7.cint)
+    check(objcImplValuePayloadTotalSeen == 7.cint)
+    check(valuePayload.left == 2.cint)
+    check(valuePayload.right == 5.cint)
+
+    let refPayload = RuntimeNimRefPayload(label: "ref payload", count: 3)
+    check(o.nimTakeRef(refPayload) == 4.cint)
+    check(objcImplRefPayloadLabelSeen == "ref payload")
+    check(objcImplRefPayloadCountSeen == 3)
+    check(refPayload.count == 4)
 
   test "protocol-only objcImpl creates runtime protocol":
     objcImpl:
