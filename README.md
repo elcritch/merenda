@@ -133,7 +133,7 @@ objcImpl:
   proc init*(v: var CounterClass): CounterClass {.error.}
 
   proc initWithMultiplier*(v: var CounterClass, m: cint): CounterClass =
-    result = asType[CounterClass](objc_msgSend(v.value, selector("init")))
+    result = asType[CounterClass](callSuperId(v, selector("init")))
     v.value = nil
     result.counter = CounterState(total: 0, multiplier: m.int)
 

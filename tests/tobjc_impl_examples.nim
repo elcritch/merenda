@@ -105,10 +105,9 @@ objcImpl:
   proc initWithMultiplier*(
       v: var IvarCounterClass, lastAmount: cint
   ): IvarCounterClass =
-    result = asType[IvarCounterClass](objc_msgSend(v.value, selector("init")))
+    result = asType[IvarCounterClass](callSuperId(v, selector("init")))
     v.value = nil
-    result.counter =
-      IvarCounterStateRef(total: 0, lastAmount: lastAmount)
+    result.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
 
   method bump(self: IvarCounterClass, amount: cint): cint =
     let st = self.counter
