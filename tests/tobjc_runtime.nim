@@ -1,6 +1,6 @@
 import std/unittest
 import nutella/objc
-import nutella/storage
+import nutella/assoc
 
 type DestroyProbeObject = object of NSObject
 type RuntimeOwnedSubtype = object of NSObject
