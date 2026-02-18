@@ -98,7 +98,8 @@ objcImpl:
         method multiplier(self: IvarCounterProtocol): cint
         method lastAmount(self: IvarCounterProtocol): cint
 
-  type IvarCounterClass {.impl: IvarCounterProtocol, ivar: IvarCounterStateRef.} = object of NSObject
+  type IvarCounterClass {.impl: IvarCounterProtocol.} = object of NSObject
+    counter: IvarCounterStateRef
 
   proc new*(
     t: typedesc[IvarCounterClass]
@@ -117,30 +118,29 @@ objcImpl:
   ): IvarCounterClass =
     result = asType[IvarCounterClass](objc_msgSend(v.value, selector("init")))
     v.value = nil
-    result.setIvarRef(
+    result.counter =
       IvarCounterStateRef(total: 0, multiplier: multiplier.int, lastAmount: 0)
-    )
 
   method bump(self: IvarCounterClass, amount: cint): cint =
-    let st = self.getIvarRef(IvarCounterStateRef)
+    let st = self.counter
     st.total += amount.int
     st.lastAmount = amount.int
     result = (st.total * st.multiplier).cint
 
   method current(self: IvarCounterClass): cint =
-    let st = self.getIvarRef(IvarCounterStateRef)
+    let st = self.counter
     (st.total * st.multiplier).cint
 
   method setMultiplier(self: IvarCounterClass, value: cint) =
-    let st = self.getIvarRef(IvarCounterStateRef)
+    let st = self.counter
     st.multiplier = value.int
 
   method multiplier(self: IvarCounterClass): cint =
-    let st = self.getIvarRef(IvarCounterStateRef)
+    let st = self.counter
     st.multiplier.cint
 
   method lastAmount(self: IvarCounterClass): cint =
-    let st = self.getIvarRef(IvarCounterStateRef)
+    let st = self.counter
     st.lastAmount.cint
 
   method dealloc(self: IvarCounterClass) {.used.} =
@@ -251,7 +251,7 @@ suite "objcImpl examples":
     check(c.current() == 10.cint)
 
     block:
-      let st = c.getIvarRef(IvarCounterStateRef)
+      let st = c.counter
       check(st != nil)
       check(st.total == 5)
       check(st.multiplier == 2)
