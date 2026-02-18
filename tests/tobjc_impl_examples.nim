@@ -123,29 +123,24 @@ objcImpl:
 
   method bump(self: IvarCounterClass, amount: cint): cint =
     let st = self.getIvarRef(IvarCounterStateRef)
-    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
     st.total += amount.int
     st.lastAmount = amount.int
     result = (st.total * st.multiplier).cint
 
   method current(self: IvarCounterClass): cint =
     let st = self.getIvarRef(IvarCounterStateRef)
-    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
     (st.total * st.multiplier).cint
 
   method setMultiplier(self: IvarCounterClass, value: cint) =
     let st = self.getIvarRef(IvarCounterStateRef)
-    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
     st.multiplier = value.int
 
   method multiplier(self: IvarCounterClass): cint =
     let st = self.getIvarRef(IvarCounterStateRef)
-    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
     st.multiplier.cint
 
   method lastAmount(self: IvarCounterClass): cint =
     let st = self.getIvarRef(IvarCounterStateRef)
-    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
     st.lastAmount.cint
 
   method dealloc(self: IvarCounterClass) {.used.} =
