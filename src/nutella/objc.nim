@@ -34,6 +34,9 @@ proc identName(n: NimNode): string =
   else:
     ""
 
+proc isExportedTypeName(n: NimNode): bool =
+  n.kind == nnkPostfix and n.len == 2 and $n[0] == "*"
+
 proc normalizeObjcNodeType(typ: NimNode, protocolName, className: string): NimNode =
   case typ.kind
   of nnkEmpty:
@@ -458,6 +461,8 @@ macro objcImpl*(x: untyped): untyped =
 
   var protocolName = ""
   var className = ""
+  var protocolExported = false
+  var classExported = false
   var classSuperName = ""
   var classImplProtocols: seq[string] = @[]
   var classIvarTypes: seq[NimNode] = @[]
@@ -478,9 +483,11 @@ macro objcImpl*(x: untyped): untyped =
         case body.kind
         of nnkTypeClassTy:
           protocolName = name
+          protocolExported = isExportedTypeName(def[0])
           conceptBody = body[^1]
         of nnkObjectTy:
           className = name
+          classExported = isExportedTypeName(def[0])
           if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
             classSuperName = identName(body[1][0])
           classImplProtocols = @[]
@@ -575,9 +582,15 @@ macro objcImpl*(x: untyped): untyped =
   var generatedTypes = newStmtList()
   var generatedTypeLines: seq[string] = @[]
   if hasProtocol:
-    generatedTypeLines.add("  " & protocolName & " = object of ProtocolPrototype")
+    generatedTypeLines.add(
+      "  " & protocolName & (if protocolExported: "*" else: "") &
+        " = object of ProtocolPrototype"
+    )
   if hasClass:
-    generatedTypeLines.add("  " & className & " = object of " & classSuperName)
+    generatedTypeLines.add(
+      "  " & className & (if classExported: "*" else: "") & " = object of " &
+        classSuperName
+    )
   if generatedTypeLines.len > 0:
     generatedTypes = parseStmt("type\n" & generatedTypeLines.join("\n"))
 
