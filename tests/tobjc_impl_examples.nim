@@ -1,11 +1,22 @@
 import std/unittest
 import nutella/objc
+import nutella/objc/ivar
 
 var fooBarPingCount = 0
 var hiddenPingCount = 0
 var simpleCounter = 0.cint
 var crossPayloadClass = ""
 var crossPayloadRetainInMethod = 0
+var ivarCounterStateDestroyedCount = 0
+
+type IvarCounterStateObj = object
+  total: int
+
+type IvarCounterStateRef = ref IvarCounterStateObj
+
+proc `=destroy`(o: var IvarCounterStateObj) =
+  discard o
+  inc ivarCounterStateDestroyedCount
 
 objcImpl:
   type FooBarProtocol =
@@ -75,6 +86,41 @@ objcImpl:
 
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
+
+proc ensureIvarCounterBackingClass() =
+  const ClassName = "IvarCounterClass"
+  var cls = getClass(ClassName)
+  if cls.isNil:
+    addClass(ClassName, "NSObject", cls):
+      doAssert addRefIvar[IvarCounterStateRef](cls)
+
+ensureIvarCounterBackingClass()
+
+objcImpl:
+  type IvarCounterProtocol =
+    concept self
+        method bump(self: IvarCounterProtocol, amount: cint): cint
+        method current(self: IvarCounterProtocol): cint
+
+  type IvarCounterClass {.impl: IvarCounterProtocol.} = object of NSObject
+
+  method bump(self: IvarCounterClass, amount: cint): cint =
+    var st = self.getIvarRef(IvarCounterStateRef)
+    if st == nil:
+      st = IvarCounterStateRef(total: 0)
+      self.setIvarRef(st)
+    st.total += amount.int
+    result = st.total.cint
+
+  method current(self: IvarCounterClass): cint =
+    let st = self.getIvarRef(IvarCounterStateRef)
+    if st == nil:
+      return 0.cint
+    st.total.cint
+
+  method dealloc(self: IvarCounterClass) {.used.} =
+    clearIvarRefs(self)
+    superDealloc(self)
 
 suite "objcImpl examples":
   test "test inits":
@@ -148,3 +194,24 @@ suite "objcImpl examples":
 
     o.ping()
     check(hiddenPingCount == 1)
+
+  test "objcImpl class using ivar-backed state":
+    ivarCounterStateDestroyedCount = 0
+
+    let proto = getProtocol(IvarCounterProtocol)
+    check(not proto.isNil)
+
+    var c = IvarCounterClass.new()
+    check(not c.isNil)
+    check(getClassName(c) == "IvarCounterClass")
+    check(c.current() == 0.cint)
+
+    check(c.bump(2.cint) == 2.cint)
+    check(c.bump(3.cint) == 5.cint)
+    check(c.current() == 5.cint)
+    check(c.getIvarRef(IvarCounterStateRef) != nil)
+    check(ivarCounterStateDestroyedCount == 0)
+
+    release(c)
+    check(c.isNil)
+    check(ivarCounterStateDestroyedCount == 1)
