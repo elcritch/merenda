@@ -583,15 +583,19 @@ proc renderWindow(window: NSWindow, st: NSWindowStateRef) =
   if st.isNil or st.renderer.isNil or st.nativeWindow.isNil:
     return
 
+  let logicalSize = st.nativeWindow.logicalSize()
+  st.frame.size = nsSize(logicalSize.x.float32, logicalSize.y.float32)
   let root = ensureContentView(window, st)
   if root.isNil:
     return
+  # Keep NSWindow.contentView pinned to drawable size from first frame onward.
+  root.setFrame(0.cfloat, 0.cfloat, logicalSize.x.cfloat, logicalSize.y.cfloat)
 
   var renders = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   renders.addViewTree(root.value, FigIdx(0), false, 0.0, 0.0)
 
   st.renderer.beginFrame()
-  st.renderer.renderFrame(renders, st.nativeWindow.logicalSize())
+  st.renderer.renderFrame(renders, logicalSize)
   st.renderer.endFrame()
 
 proc cleanupFailedWindowInit(st: NSWindowStateRef) =
