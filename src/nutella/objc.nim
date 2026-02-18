@@ -1473,6 +1473,119 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     pragmas = nnkPragma.newTree(ident"cdecl"),
   )
 
+proc normalizeObjcHelperType(typ: NimNode, protocolName: string): NimNode =
+  case typ.kind
+  of nnkEmpty:
+    result = newEmptyNode()
+  of nnkVarTy, nnkRefTy, nnkDistinctTy, nnkPtrTy:
+    result = newTree(typ.kind, normalizeObjcHelperType(typ[0], protocolName))
+  of nnkBracketExpr:
+    result = newNimNode(nnkBracketExpr)
+    for c in typ:
+      result.add(normalizeObjcHelperType(c, protocolName))
+  else:
+    let name = identName(typ)
+    if name == protocolName:
+      result = bindSym"NSObject"
+    else:
+      result = copyNimTree(typ)
+
+proc isObjcIdLikeTypeNode(typ: NimNode, protocolName, className: string): bool =
+  let t = leafTypeName(typ)
+  t == "NSObject" or t == "NSString" or t == "ObjcClass" or t == className or
+    t == protocolName
+
+proc buildObjcCallHelperProc(
+    def: NimNode, spec: ObjcProtocolMethodSpec, protocolName, className: string
+): NimNode =
+  let srcParams = def.params
+  let helperName = copyNimTree(def.name)
+  let selfIdx = firstParamIndex(srcParams)
+  if selfIdx < 0:
+    error("objcImpl helper generation requires a first `self` parameter", def)
+
+  var helperParams: seq[NimNode] = @[]
+  var retType = normalizeObjcHelperType(srcParams[0], protocolName)
+  helperParams.add(copyNimTree(retType))
+  for i in 1 ..< srcParams.len:
+    let p = srcParams[i]
+    if p.kind != nnkIdentDefs:
+      helperParams.add(copyNimTree(p))
+      continue
+    var hp = copyNimTree(p)
+    hp[^2] = normalizeObjcHelperType(p[^2], protocolName)
+    helperParams.add(hp)
+
+  let selfParam = srcParams[selfIdx]
+  if selfParam.len != 3:
+    error(
+      "objcImpl helper generation expects first parameter group to contain one name",
+      def,
+    )
+  let selfName = copyNimTree(selfParam[0])
+
+  let callSel = newCall(bindSym"getSelector", newLit(spec.selector))
+
+  let senderParams = newNimNode(nnkFormalParams)
+  let retAbiType =
+    if retType.kind == nnkEmpty:
+      ident"void"
+    elif isObjcIdLikeTypeNode(retType, protocolName, className):
+      bindSym"ID"
+    else:
+      copyNimTree(retType)
+  senderParams.add(retAbiType)
+  senderParams.add(newIdentDefs(ident"selfId", bindSym"ID"))
+  senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
+
+  var callArgs: seq[NimNode] = @[copyNimTree(selfName), callSel]
+  var seenSelf = false
+  for i in 1 ..< srcParams.len:
+    let p = srcParams[i]
+    if p.kind != nnkIdentDefs:
+      continue
+    if not seenSelf:
+      seenSelf = true
+      continue
+    let pType = normalizeObjcHelperType(p[^2], protocolName)
+    let abiType =
+      if isObjcIdLikeTypeNode(pType, protocolName, className):
+        bindSym"ID"
+      else:
+        copyNimTree(pType)
+    for j in 0 ..< p.len - 2:
+      let argName = copyNimTree(p[j])
+      senderParams.add(newIdentDefs(ident("arg" & $i & "_" & $j), abiType))
+      callArgs.add(argName)
+
+  let procTy = newTree(nnkProcTy, senderParams)
+  procTy.add(newTree(nnkPragma, ident"cdecl", ident"varargs", ident"gcsafe"))
+  let sendProcSym = genSym(nskLet, "performSend")
+  let sendProc = newTree(nnkCast, procTy, bindSym"objc_msgSend")
+  let castSendProc =
+    newTree(nnkLetSection, newIdentDefs(sendProcSym, newEmptyNode(), sendProc))
+  let callExpr = newCall(sendProcSym)
+  for a in callArgs:
+    callExpr.add(a)
+
+  var body = newStmtList()
+  body.add(castSendProc)
+  if retType.kind == nnkEmpty:
+    body.add(callExpr)
+  elif isObjcIdLikeTypeNode(retType, protocolName, className):
+    body.add quote do:
+      result = asType[`retType`](`callExpr`)
+  else:
+    body.add quote do:
+      result = `callExpr`
+
+  result = newProc(
+    name = helperName,
+    params = helperParams,
+    body = body,
+    pragmas = nnkPragma.newTree(ident"inline"),
+  )
+
 proc collectImplProtocols(n: NimNode, protocols: var seq[string]) =
   case n.kind
   of nnkStmtList, nnkTupleConstr, nnkPar:
@@ -1679,6 +1792,7 @@ macro objcImpl*(x: untyped): untyped =
       )
 
   var wrapperDefs = newStmtList()
+  var helperDefs = newStmtList()
   var addClassMethods = newStmtList()
   var addExtraProtocols = newStmtList()
   for p in implementedProtocols:
@@ -1693,6 +1807,9 @@ macro objcImpl*(x: untyped): untyped =
 
   for impl in implMethods:
     wrapperDefs.add(impl.wrapperProc)
+    helperDefs.add(
+      buildObjcCallHelperProc(impl.sourceDef, impl.spec, protocolName, className)
+    )
     let selectorName = newLit(impl.spec.selector)
     let typeEncoding = newLit(impl.spec.encoding)
     let wrapperSym = impl.wrapperProc.name
@@ -1704,6 +1821,7 @@ macro objcImpl*(x: untyped): untyped =
   result = newStmtList()
   result.add(generatedTypes)
   result.add(passthrough)
+  result.add(helperDefs)
   result.add(wrapperDefs)
   result.add quote do:
     block:

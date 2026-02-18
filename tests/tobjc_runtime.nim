@@ -245,36 +245,27 @@ suite "objc runtime ownership fundamentals":
     check(not oInit.isNil)
     check(getClassName(oInit) == ClassName)
 
-    var o = asType[NSObject](new(cls))
-    check(not o.isNil)
-    check(getClassName(o) == ClassName)
-    let retainObjectBeforeCalls = retainCount(o).int
+    let retainObjectBeforeCalls = retainCount(oNew).int
 
-    let sendVoid = cast[proc(self: ID, op: SEL) {.cdecl.}](objc_msgSend)
-    let sendAdd =
-      cast[proc(self: ID, op: SEL, amount: cint): cint {.cdecl.}](objc_msgSend)
-    let sendTakePayload =
-      cast[proc(self: ID, op: SEL, payload: ID) {.cdecl.}](objc_msgSend)
-
-    sendVoid(o, selector("nimPing"))
+    oNew.nimPing()
     check(objcImplPingCount == 1)
-    check(retainCount(o).int == retainObjectBeforeCalls)
+    check(retainCount(oNew).int == retainObjectBeforeCalls)
 
-    check(sendAdd(o, selector("nimAdd:"), 2.cint) == 2.cint)
-    check(sendAdd(o, selector("nimAdd:"), 3.cint) == 5.cint)
-    check(retainCount(o).int == retainObjectBeforeCalls)
+    check(oNew.nimAdd(2.cint) == 2.cint)
+    check(oNew.nimAdd(3.cint) == 5.cint)
+    check(retainCount(oNew).int == retainObjectBeforeCalls)
 
     var payload = RuntimePayloadObject.new()
     check(not payload.isNil)
     check(getClassName(payload) == PayloadClassName)
     let retainBefore = retainCount(payload).int
-    let retainObjectBeforePayloadCall = retainCount(o).int
-    sendTakePayload(o, selector("nimTakePayload:"), payload)
+    let retainObjectBeforePayloadCall = retainCount(oNew).int
+    oNew.nimTakePayload(payload)
     check(objcImplPayloadClass == PayloadClassName)
     check(retainBefore > 0)
     check(objcImplPayloadRetainInMethod == retainBefore)
     check(retainCount(payload).int == retainBefore)
-    check(retainCount(o).int == retainObjectBeforePayloadCall)
+    check(retainCount(oNew).int == retainObjectBeforePayloadCall)
 
   test "callSuper helpers support typed dispatch and dealloc chaining":
     objcImplSuperDeallocCount = 0
@@ -289,17 +280,16 @@ suite "objc runtime ownership fundamentals":
       method nimSuperRetainCount(self: NRSuperCallClass): cint =
         callSuperAs[NSUInteger](self, selector("retainCount")).cint
 
-      method dealloc(self: NRSuperCallClass) =
+      method dealloc(self: NRSuperCallClass) {.used.} =
         inc objcImplSuperDeallocCount
         superDealloc(self)
 
     let superProto = getProtocol(NRSuperCallProtocol)
     check(not superProto.isNilProtocol)
 
-    let sendRetainCount = cast[proc(self: ID, op: SEL): cint {.cdecl.}](objc_msgSend)
     var o = NRSuperCallClass.new()
     check(not o.isNil)
-    check(sendRetainCount(o, selector("nimSuperRetainCount")) == retainCount(o).cint)
+    check(o.nimSuperRetainCount() == retainCount(o).cint)
 
     release(o)
     check(o.isNil)
