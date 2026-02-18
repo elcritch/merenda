@@ -12,6 +12,10 @@ type ObjcImplMethodInfo = object
   wrapperProc: NimNode
   sourceDef: NimNode
 
+type ObjcImplIvarFieldSpec = object
+  name: string
+  typ: NimNode
+
 proc identName(n: NimNode): string =
   case n.kind
   of nnkIdent, nnkSym:
@@ -190,7 +194,7 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
   wrapperParams.add(newIdentDefs(cmdSel, bindSym"SEL", newEmptyNode()))
 
   var wrapperBody = newStmtList()
-  let selfType = normalizeObjcNodeType(selfParam[^2], protocolName, className)
+  let selfType = ident(className)
   wrapperBody.add quote do:
     var `selfIdent` = asType[`selfType`](`selfRaw`)
   wrapperBody.add quote do:
@@ -411,6 +415,30 @@ proc collectIvarPragmaTypes(typeNameNode: NimNode, ivarTypes: var seq[NimNode]) 
   else:
     discard
 
+proc collectObjectIvarFields(
+    objectTy: NimNode, fields: var seq[ObjcImplIvarFieldSpec]
+) =
+  if objectTy.kind != nnkObjectTy:
+    return
+  if objectTy.len < 3:
+    return
+
+  let recList = objectTy[2]
+  if recList.kind == nnkEmpty:
+    return
+  if recList.kind != nnkRecList:
+    error("objcImpl class ivar fields must be simple `name: RefType` entries", objectTy)
+
+  for rec in recList:
+    if rec.kind != nnkIdentDefs:
+      error("objcImpl class ivar fields must be simple `name: RefType` entries", rec)
+    let fieldType = copyNimTree(rec[^2])
+    for i in 0 ..< rec.len - 2:
+      let fName = identName(rec[i])
+      if fName.len == 0:
+        error("objcImpl class ivar field name is invalid", rec[i])
+      fields.add ObjcImplIvarFieldSpec(name: fName, typ: copyNimTree(fieldType))
+
 macro objcImpl*(x: untyped): untyped =
   let input =
     if x.kind == nnkStmtList:
@@ -423,6 +451,7 @@ macro objcImpl*(x: untyped): untyped =
   var classSuperName = ""
   var classImplProtocols: seq[string] = @[]
   var classIvarTypes: seq[NimNode] = @[]
+  var classIvarFields: seq[ObjcImplIvarFieldSpec] = @[]
   var conceptBody = newEmptyNode()
   var implementedProtocols: seq[string] = @[]
 
@@ -446,8 +475,10 @@ macro objcImpl*(x: untyped): untyped =
             classSuperName = identName(body[1][0])
           classImplProtocols = @[]
           classIvarTypes = @[]
+          classIvarFields = @[]
           collectImplPragmaProtocols(def[0], classImplProtocols)
           collectIvarPragmaTypes(def[0], classIvarTypes)
+          collectObjectIvarFields(body, classIvarFields)
         else:
           discard
     of nnkCommand, nnkCall:
@@ -507,6 +538,15 @@ macro objcImpl*(x: untyped): untyped =
       dedupIvarTypeKeys.add(key)
       dedupIvarTypes.add(t)
   classIvarTypes = dedupIvarTypes
+
+  var dedupFieldNames: seq[string] = @[]
+  var dedupIvarFields: seq[ObjcImplIvarFieldSpec] = @[]
+  for f in classIvarFields:
+    if f.name in dedupFieldNames:
+      error("objcImpl duplicate ivar field `" & f.name & "`", x)
+    dedupFieldNames.add(f.name)
+    dedupIvarFields.add(f)
+  classIvarFields = dedupIvarFields
 
   if conceptBody.kind != nnkStmtList:
     error("objcImpl protocol concept body is missing method declarations", x)
@@ -600,7 +640,8 @@ macro objcImpl*(x: untyped): untyped =
       )
 
   var wrapperDefs = newStmtList()
-  var helperDefs = newStmtList()
+  var fieldAccessorDefs = newStmtList()
+  var callHelperDefs = newStmtList()
   var addClassMethods = newStmtList()
   var ensureClassIvars = newStmtList()
   var addExtraProtocols = newStmtList()
@@ -609,6 +650,44 @@ macro objcImpl*(x: untyped): untyped =
     let ivarTypeNode = copyNimTree(ivarType)
     ensureClassIvars.add quote do:
       doAssert addRefIvar(`clsVar`, ivarRefName[`ivarTypeNode`]())
+
+  for field in classIvarFields:
+    let fieldNameLit = newLit(field.name)
+    let fieldTypeNode = copyNimTree(field.typ)
+    ensureClassIvars.add quote do:
+      doAssert addRefIvar(`clsVar`, `fieldNameLit`)
+
+    let getterName = ident(field.name)
+    let setterName = ident(field.name & "=")
+    let selfIdent = ident("self")
+    let valueIdent = ident("value")
+    let getterBody = quote:
+      result = getIvarRef[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
+    let setterBody = quote:
+      setIvarRef[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
+
+    fieldAccessorDefs.add newProc(
+      name = getterName,
+      params =
+        @[
+          copyNimTree(fieldTypeNode),
+          newIdentDefs(selfIdent, ident(className), newEmptyNode()),
+        ],
+      body = getterBody,
+      pragmas = nnkPragma.newTree(ident"inline"),
+    )
+
+    fieldAccessorDefs.add newProc(
+      name = setterName,
+      params =
+        @[
+          newEmptyNode(),
+          newIdentDefs(selfIdent, ident(className), newEmptyNode()),
+          newIdentDefs(valueIdent, copyNimTree(fieldTypeNode), newEmptyNode()),
+        ],
+      body = setterBody,
+      pragmas = nnkPragma.newTree(ident"inline"),
+    )
 
   for p in implementedProtocols:
     if p == protocolName:
@@ -622,7 +701,7 @@ macro objcImpl*(x: untyped): untyped =
 
   for impl in implMethods:
     wrapperDefs.add(impl.wrapperProc)
-    helperDefs.add(
+    callHelperDefs.add(
       buildObjcCallHelperProc(impl.sourceDef, impl.spec, protocolName, className)
     )
     let selectorName = newLit(impl.spec.selector)
@@ -635,8 +714,9 @@ macro objcImpl*(x: untyped): untyped =
 
   result = newStmtList()
   result.add(generatedTypes)
+  result.add(fieldAccessorDefs)
   result.add(passthrough)
-  result.add(helperDefs)
+  result.add(callHelperDefs)
   result.add(wrapperDefs)
   result.add quote do:
     block:
