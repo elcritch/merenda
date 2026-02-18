@@ -80,6 +80,8 @@ objcImpl:
 
 type IvarCounterStateObj = object
   total: int
+  multiplier: int
+  lastAmount: int
 
 type IvarCounterStateRef = ref IvarCounterStateObj
 
@@ -92,22 +94,59 @@ objcImpl:
     concept self
         method bump(self: IvarCounterProtocol, amount: cint): cint
         method current(self: IvarCounterProtocol): cint
+        method setMultiplier(self: IvarCounterProtocol, value: cint)
+        method multiplier(self: IvarCounterProtocol): cint
+        method lastAmount(self: IvarCounterProtocol): cint
 
   type IvarCounterClass {.impl: IvarCounterProtocol, ivar: IvarCounterStateRef.} = object of NSObject
 
+  proc new*(
+    t: typedesc[IvarCounterClass]
+  ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+
+  proc init*(
+    t: typedesc[IvarCounterClass]
+  ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+
+  proc init*(
+    v: var IvarCounterClass
+  ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
+
+  proc initWithMultiplier*(
+      v: var IvarCounterClass, multiplier: cint
+  ): IvarCounterClass =
+    result = asType[IvarCounterClass](objc_msgSend(v.value, selector("init")))
+    v.value = nil
+    result.setIvarRef(
+      IvarCounterStateRef(total: 0, multiplier: multiplier.int, lastAmount: 0)
+    )
+
   method bump(self: IvarCounterClass, amount: cint): cint =
-    var st = self.getIvarRef(IvarCounterStateRef)
-    if st == nil:
-      st = IvarCounterStateRef(total: 0)
-      self.setIvarRef(st)
+    let st = self.getIvarRef(IvarCounterStateRef)
+    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
     st.total += amount.int
-    result = st.total.cint
+    st.lastAmount = amount.int
+    result = (st.total * st.multiplier).cint
 
   method current(self: IvarCounterClass): cint =
     let st = self.getIvarRef(IvarCounterStateRef)
-    if st == nil:
-      return 0.cint
-    st.total.cint
+    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
+    (st.total * st.multiplier).cint
+
+  method setMultiplier(self: IvarCounterClass, value: cint) =
+    let st = self.getIvarRef(IvarCounterStateRef)
+    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
+    st.multiplier = value.int
+
+  method multiplier(self: IvarCounterClass): cint =
+    let st = self.getIvarRef(IvarCounterStateRef)
+    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
+    st.multiplier.cint
+
+  method lastAmount(self: IvarCounterClass): cint =
+    let st = self.getIvarRef(IvarCounterStateRef)
+    doAssert st != nil, "IvarCounterClass requires initWithMultiplier(...) before use"
+    st.lastAmount.cint
 
   method dealloc(self: IvarCounterClass) {.used.} =
     clearIvarRefs(self)
@@ -188,19 +227,40 @@ suite "objcImpl examples":
 
   test "objcImpl class using ivar-backed state":
     ivarCounterStateDestroyedCount = 0
+    doAssert not compiles(IvarCounterClass.new())
+    doAssert not compiles(IvarCounterClass.init())
+    doAssert not compiles(
+      block:
+        var x = IvarCounterClass.alloc()
+        discard x.init()
+    )
 
     let proto = getProtocol(IvarCounterProtocol)
     check(not proto.isNil)
 
-    var c = IvarCounterClass.new()
+    var c = IvarCounterClass.alloc()
     check(not c.isNil)
+    c = c.initWithMultiplier(1.cint)
     check(getClassName(c) == "IvarCounterClass")
     check(c.current() == 0.cint)
+    check(c.multiplier() == 1.cint)
+    check(c.lastAmount() == 0.cint)
 
-    check(c.bump(2.cint) == 2.cint)
-    check(c.bump(3.cint) == 5.cint)
-    check(c.current() == 5.cint)
-    check(c.getIvarRef(IvarCounterStateRef) != nil)
+    c.setMultiplier(2.cint)
+    check(c.multiplier() == 2.cint)
+
+    check(c.bump(2.cint) == 4.cint)
+    check(c.lastAmount() == 2.cint)
+    check(c.bump(3.cint) == 10.cint)
+    check(c.lastAmount() == 3.cint)
+    check(c.current() == 10.cint)
+
+    block:
+      let st = c.getIvarRef(IvarCounterStateRef)
+      check(st != nil)
+      check(st.total == 5)
+      check(st.multiplier == 2)
+      check(st.lastAmount == 3)
     check(ivarCounterStateDestroyedCount == 0)
 
     release(c)
