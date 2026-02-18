@@ -37,6 +37,12 @@ window.makeKeyAndOrderFront(app)
 discard app.runForFrames(1) # use app.run() for full event loop
 ```
 
+Runnable example:
+
+```sh
+NUTELLA_EXAMPLE_FRAMES=1 nim r examples/appkit_hello.nim
+```
+
 ## `objcImpl` runtime DSL
 
 `objcImpl` declares a runtime protocol and/or runtime class and wires Nim
