@@ -4,6 +4,28 @@ import nutella/appkit
 import nutella/objc
 
 suite "nutella appkit hello world":
+  test "appkit runtime classes stay namespaced to avoid NS* collisions":
+    var responder = NSResponder.new()
+    var view = newView(0, 0, 10, 10)
+    var button = newButton(0, 0, 120, 32, "Press")
+    var field = newTextField(0, 0, 200, 32, "Hello")
+    var window = newWindow(0, 0, 10, 10, "w")
+    var app = NSApplication.new()
+
+    check(getClassName(responder) == "NXResponderObj")
+    check(getClassName(view) == "NXViewObj")
+    check(getClassName(button) == "NXButtonObj")
+    check(getClassName(field) == "NXTextFieldObj")
+    check(getClassName(window) == "NXWindowObj")
+    check(getClassName(app) == "NXApplicationObj")
+
+    responder.value = nil
+    view.value = nil
+    button.value = nil
+    field.value = nil
+    window.value = nil
+    app.value = nil
+
   test "appkit controls report runtime class hierarchy":
     var button = newButton(0, 0, 120, 32, "Press")
     check(button.isKindOfClass(NSButton))
