@@ -120,11 +120,15 @@ suite "objcImpl runtime generation":
       type NRSuperCallProtocol =
         concept self
             method nimSuperRetainCount(self: NRSuperCallProtocol): cint
+            method nimSuperRespondsToRetainCount(self: NRSuperCallProtocol): bool
 
       type NRSuperCallClass {.impl: NRSuperCallProtocol.} = object of NSObject
 
       method nimSuperRetainCount(self: NRSuperCallClass): cint =
-        callSuperAs[NSUInteger](self, selector("retainCount")).cint
+        super(NSUInteger, self, retainCount).cint
+
+      method nimSuperRespondsToRetainCount(self: NRSuperCallClass): bool =
+        super(bool, self, respondsToSelector(selector("retainCount")))
 
       method dealloc(self: NRSuperCallClass) {.used.} =
         inc objcImplSuperDeallocCount
@@ -136,6 +140,7 @@ suite "objcImpl runtime generation":
     var o = NRSuperCallClass.new()
     check(not o.isNil)
     check(o.nimSuperRetainCount() == retainCount(o).cint)
+    check(o.nimSuperRespondsToRetainCount())
 
     release(o)
     check(o.isNil)

@@ -100,7 +100,7 @@ objcImpl:
   type SuperCallClass {.impl: SuperCallProtocol.} = object of NSObject
 
   method retainCountFromSuper(self: SuperCallClass): cint =
-    callSuperAs[NSUInteger](self, selector("retainCount")).cint
+    super(NSUInteger, self, retainCount).cint
 
   method dealloc(self: SuperCallClass) {.used.} =
     inc deallocCount
@@ -133,7 +133,7 @@ objcImpl:
   proc init*(v: var CounterClass): CounterClass {.error.}
 
   proc initWithMultiplier*(v: var CounterClass, m: cint): CounterClass =
-    result = asType[CounterClass](callSuperId(v, selector("init")))
+    result = asType[CounterClass](super(v, init))
     v.value = nil
     result.counter = CounterState(total: 0, multiplier: m.int)
 
