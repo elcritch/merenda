@@ -85,7 +85,7 @@ proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string
       "d"
     elif name == "bool":
       "B"
-    elif name == "cstring":
+    elif name == "cstring" or name == "string":
       "*"
     elif name == "ObjcClass":
       "#"
@@ -163,8 +163,32 @@ proc leafTypeName(typ: NimNode): string =
   else:
     identName(typ)
 
-proc isBorrowedObjcParamType(typ: NimNode, protocolName, className: string): bool =
-  objcTypeCodeFromNode(typ, protocolName, className) == "@"
+template objcAbiType(T: typedesc): untyped =
+  when T is string:
+    cstring
+  elif T is NSObject:
+    ID
+  else:
+    T
+
+template objcToAbiArg(T: typedesc, v: untyped): untyped =
+  when T is string:
+    cstring(v)
+  elif T is NSObject:
+    toID(v)
+  else:
+    v
+
+template objcFromAbiValue(T: typedesc, v: untyped): untyped =
+  when T is string:
+    if v.isNil:
+      ""
+    else:
+      $v
+  elif T is NSObject:
+    asType[T](v)
+  else:
+    v
 
 proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNode =
   let methodName = identName(def.name)
@@ -213,21 +237,19 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
       continue
     let typeNode = p[^2]
     let normType = normalizeObjcNodeType(typeNode, protocolName, className)
-    let borrowed = isBorrowedObjcParamType(typeNode, protocolName, className)
+    let abiType = newCall(bindSym"objcAbiType", normType)
     for j in 0 ..< p.len - 2:
       let argName = copyNimTree(p[j])
-      if borrowed:
-        let rawArg = genSym(nskParam, identName(argName) & "Raw")
-        wrapperParams.add(newIdentDefs(rawArg, bindSym"ID", newEmptyNode()))
-        wrapperBody.add quote do:
-          var `argName` = asType[`normType`](`rawArg`)
-        wrapperBody.add quote do:
+      let rawArg = genSym(nskParam, identName(argName) & "Raw")
+      wrapperParams.add(newIdentDefs(rawArg, abiType, newEmptyNode()))
+      wrapperBody.add quote do:
+        when `normType` is NSObject:
+          var `argName` = objcFromAbiValue(`normType`, `rawArg`)
           discard `argName`
-        wrapperBody.add quote do:
           defer:
             wasMoved(`argName`)
-      else:
-        wrapperParams.add(newIdentDefs(argName, normType, newEmptyNode()))
+        else:
+          let `argName` = objcFromAbiValue(`normType`, `rawArg`)
 
   wrapperBody.add quote do:
     discard `cmdSel`
@@ -261,9 +283,6 @@ proc normalizeObjcHelperType(typ: NimNode, protocolName: string): NimNode =
       result = bindSym"NSObject"
     else:
       result = copyNimTree(typ)
-
-proc isObjcIdLikeTypeNode(typ: NimNode, protocolName, className: string): bool =
-  objcTypeCodeFromNode(typ, protocolName, className) == "@"
 
 proc buildObjcCallHelperProc(
     def: NimNode, spec: ObjcProtocolMethodSpec, protocolName, className: string
@@ -300,10 +319,8 @@ proc buildObjcCallHelperProc(
   let retAbiType =
     if retType.kind == nnkEmpty:
       ident"void"
-    elif isObjcIdLikeTypeNode(retType, protocolName, className):
-      bindSym"ID"
     else:
-      copyNimTree(retType)
+      newCall(bindSym"objcAbiType", copyNimTree(retType))
   senderParams.add(retAbiType)
   senderParams.add(newIdentDefs(ident"selfId", bindSym"ID"))
   senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
@@ -318,15 +335,11 @@ proc buildObjcCallHelperProc(
       seenSelf = true
       continue
     let pType = normalizeObjcHelperType(p[^2], protocolName)
-    let abiType =
-      if isObjcIdLikeTypeNode(pType, protocolName, className):
-        bindSym"ID"
-      else:
-        copyNimTree(pType)
+    let abiType = newCall(bindSym"objcAbiType", copyNimTree(pType))
     for j in 0 ..< p.len - 2:
       let argName = copyNimTree(p[j])
       senderParams.add(newIdentDefs(ident("arg" & $i & "_" & $j), abiType))
-      callArgs.add(argName)
+      callArgs.add(newCall(bindSym"objcToAbiArg", copyNimTree(pType), argName))
 
   let procTy = newTree(nnkProcTy, senderParams)
   procTy.add(newTree(nnkPragma, ident"cdecl", ident"varargs", ident"gcsafe"))
@@ -342,12 +355,9 @@ proc buildObjcCallHelperProc(
   body.add(castSendProc)
   if retType.kind == nnkEmpty:
     body.add(callExpr)
-  elif isObjcIdLikeTypeNode(retType, protocolName, className):
-    body.add quote do:
-      result = asType[`retType`](`callExpr`)
   else:
     body.add quote do:
-      result = `callExpr`
+      result = objcFromAbiValue(`retType`, `callExpr`)
 
   result = newProc(
     name = helperName,
