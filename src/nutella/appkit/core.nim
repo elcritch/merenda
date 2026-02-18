@@ -82,6 +82,29 @@ proc defaultApplicationState(): NSApplicationStateRef =
 proc toFigColor(c: NSColor): Color {.inline.} =
   color(c.r, c.g, c.b, c.a)
 
+var appkitTypefaceId {.threadvar.}: TypefaceId
+var appkitFontReady {.threadvar.}: bool
+var appkitFontUnavailable {.threadvar.}: bool
+
+proc ensureAppKitFont(): bool =
+  if appkitFontReady:
+    return true
+  if appkitFontUnavailable:
+    return false
+  try:
+    appkitTypefaceId = loadTypeface(
+      "SF Pro Text",
+      @["Helvetica Neue", "Helvetica", "Arial", "Ubuntu.ttf", "DejaVuSans.ttf"],
+    )
+    appkitFontReady = true
+    true
+  except CatchableError:
+    appkitFontUnavailable = true
+    false
+
+proc appkitFont(size: float32): FigFont {.inline.} =
+  appkitTypefaceId.fontWithSize(size)
+
 proc uniformCorners(radius: float32): array[DirectionCorners, float32] {.inline.} =
   [radius, radius, radius, radius]
 
@@ -506,6 +529,48 @@ proc viewCornerRadius(view: NSView): float32 =
     return 6.0
   0.0
 
+proc textLayoutForView(view: NSView, box: NSRect): tuple[ok: bool, layout: GlyphArrangement] =
+  if box.size.width <= 2 or box.size.height <= 2:
+    return (false, default(GlyphArrangement))
+  if not ensureAppKitFont():
+    return (false, default(GlyphArrangement))
+
+  if view.isKindOfClass(NSTextField):
+    let tstate = asType[NSTextField](view).textFieldState()
+    if tstate.stringValue.len == 0:
+      return (false, default(GlyphArrangement))
+    let spans = [(fs(appkitFont(18.0), tstate.textColor.toFigColor()), tstate.stringValue)]
+    return (
+      true,
+      typeset(
+        rect(0, 0, box.size.width, box.size.height),
+        spans,
+        hAlign = FontHorizontal.Left,
+        vAlign = FontVertical.Middle,
+        minContent = false,
+        wrap = true,
+      ),
+    )
+
+  if view.isKindOfClass(NSButton):
+    let bstate = asType[NSButton](view).buttonState()
+    if bstate.title.len == 0:
+      return (false, default(GlyphArrangement))
+    let spans = [(fs(appkitFont(16.0), nsColor(1.0, 1.0, 1.0, 1.0).toFigColor()), bstate.title)]
+    return (
+      true,
+      typeset(
+        rect(0, 0, box.size.width, box.size.height),
+        spans,
+        hAlign = FontHorizontal.Center,
+        vAlign = FontVertical.Middle,
+        minContent = false,
+        wrap = false,
+      ),
+    )
+
+  (false, default(GlyphArrangement))
+
 proc addViewTree(
     renders: var Renders,
     viewId: ID,
@@ -546,6 +611,41 @@ proc addViewTree(
       renders.addChild(0.ZLevel, parentIdx, fig)
     else:
       renders.addRoot(0.ZLevel, fig)
+
+  let textPaddingX =
+    if view.isKindOfClass(NSButton):
+      8.0
+    elif view.isKindOfClass(NSTextField):
+      10.0
+    else:
+      0.0
+  let textPaddingY =
+    if view.isKindOfClass(NSButton) or view.isKindOfClass(NSTextField):
+      4.0
+    else:
+      0.0
+
+  let textBox = nsRect(
+    box.origin.x + textPaddingX,
+    box.origin.y + textPaddingY,
+    max(box.size.width - textPaddingX * 2, 0.0),
+    max(box.size.height - textPaddingY * 2, 0.0),
+  )
+  let textLayout = textLayoutForView(view, textBox)
+  if textLayout.ok:
+    discard renders.addChild(
+      0.ZLevel,
+      idx,
+      Fig(
+        kind: nkText,
+        childCount: 0,
+        screenBox: rect(
+          textBox.origin.x, textBox.origin.y, textBox.size.width, textBox.size.height
+        ),
+        fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
+        textLayout: textLayout.layout,
+      ),
+    )
 
   for child in st.subviews:
     renders.addViewTree(child, idx, true, box.origin.x, box.origin.y)
