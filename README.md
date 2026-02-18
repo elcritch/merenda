@@ -159,14 +159,14 @@ objcImpl:
     concept self
       method dealloc(self: IvarProtocol)
 
-  type IvarClass {.impl: IvarProtocol.} = object of NSObject
+  type IvarClass {.impl: IvarProtocol, ivar: MyState.} = object of NSObject
 
   method dealloc(self: IvarClass) {.used.} =
     clearIvarRefs(self)
     superDealloc(self)
 ```
 
-After ivars are registered for the class, use
+Declare ivars with `.ivar:` on the class type. Use
 `setIvarRef/getIvarRef/clearIvarRef` for data access.
 `clearIvarRefs(self)` in `dealloc` ensures registered ivar-backed refs are
 released.

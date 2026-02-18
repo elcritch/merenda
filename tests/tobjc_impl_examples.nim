@@ -87,22 +87,13 @@ objcImpl:
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
 
-proc ensureIvarCounterBackingClass() =
-  const ClassName = "IvarCounterClass"
-  var cls = getClass(ClassName)
-  if cls.isNil:
-    addClass(ClassName, "NSObject", cls):
-      doAssert addRefIvar[IvarCounterStateRef](cls)
-
-ensureIvarCounterBackingClass()
-
 objcImpl:
   type IvarCounterProtocol =
     concept self
         method bump(self: IvarCounterProtocol, amount: cint): cint
         method current(self: IvarCounterProtocol): cint
 
-  type IvarCounterClass {.impl: IvarCounterProtocol.} = object of NSObject
+  type IvarCounterClass {.impl: IvarCounterProtocol, ivar: IvarCounterStateRef.} = object of NSObject
 
   method bump(self: IvarCounterClass, amount: cint): cint =
     var st = self.getIvarRef(IvarCounterStateRef)

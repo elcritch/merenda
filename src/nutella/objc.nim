@@ -363,6 +363,16 @@ proc collectImplProtocols(n: NimNode, protocols: var seq[string]) =
       error("objcImpl `impl` protocol name is invalid", n)
     protocols.add(pName)
 
+proc collectIvarTypes(n: NimNode, ivarTypes: var seq[NimNode]) =
+  case n.kind
+  of nnkStmtList, nnkTupleConstr, nnkPar:
+    for c in n:
+      collectIvarTypes(c, ivarTypes)
+  of nnkEmpty:
+    discard
+  else:
+    ivarTypes.add(copyNimTree(n))
+
 proc collectImplPragmaProtocols(typeNameNode: NimNode, protocols: var seq[string]) =
   case typeNameNode.kind
   of nnkPragmaExpr:
@@ -382,6 +392,25 @@ proc collectImplPragmaProtocols(typeNameNode: NimNode, protocols: var seq[string
   else:
     discard
 
+proc collectIvarPragmaTypes(typeNameNode: NimNode, ivarTypes: var seq[NimNode]) =
+  case typeNameNode.kind
+  of nnkPragmaExpr:
+    let pragmas = typeNameNode[1]
+    if pragmas.kind == nnkPragma:
+      for p in pragmas:
+        if p.kind == nnkExprColonExpr and identName(p[0]) == "ivar":
+          collectIvarTypes(p[1], ivarTypes)
+        elif identName(p) == "ivar":
+          error("objcImpl `.ivar` pragma requires at least one type", p)
+    collectIvarPragmaTypes(typeNameNode[0], ivarTypes)
+  of nnkPostfix:
+    collectIvarPragmaTypes(typeNameNode[^1], ivarTypes)
+  of nnkAccQuoted:
+    if typeNameNode.len > 0:
+      collectIvarPragmaTypes(typeNameNode[0], ivarTypes)
+  else:
+    discard
+
 macro objcImpl*(x: untyped): untyped =
   let input =
     if x.kind == nnkStmtList:
@@ -393,6 +422,7 @@ macro objcImpl*(x: untyped): untyped =
   var className = ""
   var classSuperName = ""
   var classImplProtocols: seq[string] = @[]
+  var classIvarTypes: seq[NimNode] = @[]
   var conceptBody = newEmptyNode()
   var implementedProtocols: seq[string] = @[]
 
@@ -415,7 +445,9 @@ macro objcImpl*(x: untyped): untyped =
           if body.len >= 2 and body[1].kind == nnkOfInherit and body[1].len > 0:
             classSuperName = identName(body[1][0])
           classImplProtocols = @[]
+          classIvarTypes = @[]
           collectImplPragmaProtocols(def[0], classImplProtocols)
+          collectIvarPragmaTypes(def[0], classIvarTypes)
         else:
           discard
     of nnkCommand, nnkCall:
@@ -465,6 +497,16 @@ macro objcImpl*(x: untyped): untyped =
     if p notin dedupProtocols:
       dedupProtocols.add(p)
   implementedProtocols = dedupProtocols
+
+  # De-duplicate ivar types while preserving order.
+  var dedupIvarTypes: seq[NimNode] = @[]
+  var dedupIvarTypeKeys: seq[string] = @[]
+  for t in classIvarTypes:
+    let key = t.repr
+    if key notin dedupIvarTypeKeys:
+      dedupIvarTypeKeys.add(key)
+      dedupIvarTypes.add(t)
+  classIvarTypes = dedupIvarTypes
 
   if conceptBody.kind != nnkStmtList:
     error("objcImpl protocol concept body is missing method declarations", x)
@@ -560,7 +602,14 @@ macro objcImpl*(x: untyped): untyped =
   var wrapperDefs = newStmtList()
   var helperDefs = newStmtList()
   var addClassMethods = newStmtList()
+  var ensureClassIvars = newStmtList()
   var addExtraProtocols = newStmtList()
+
+  for ivarType in classIvarTypes:
+    let ivarTypeNode = copyNimTree(ivarType)
+    ensureClassIvars.add quote do:
+      doAssert addRefIvar(`clsVar`, ivarRefName[`ivarTypeNode`]())
+
   for p in implementedProtocols:
     if p == protocolName:
       continue
@@ -603,14 +652,15 @@ macro objcImpl*(x: untyped): untyped =
       if `clsVar`.isNil:
         `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
         if not `clsVar`.isNil:
+          `ensureClassIvars`
           if not `protoVar`.isNil:
             discard addProtocol(`clsVar`, `protoVar`)
           `addExtraProtocols`
           `addClassMethods`
           registerClassPair(`clsVar`)
       else:
+        `ensureClassIvars`
         if not `protoVar`.isNil:
           discard addProtocol(`clsVar`, `protoVar`)
         `addExtraProtocols`
         `addClassMethods`
-
