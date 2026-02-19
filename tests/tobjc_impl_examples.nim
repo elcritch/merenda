@@ -8,6 +8,7 @@ var simpleCounter = 0.cint
 var crossPayloadClass = ""
 var crossPayloadRetainInMethod = 0
 var ivarCounterStateDestroyedCount = 0
+var plainFieldPingCount = 0
 
 objcImpl:
   type FooBarProtocol* =
@@ -124,6 +125,29 @@ objcImpl:
     clearIvarRefs(self)
     superDealloc(self)
 
+objcImpl:
+  type PlainFieldClass = object of NSObject
+    counter: int
+    label: string
+    enabled: bool
+
+  proc initWithValues*(
+      self: var PlainFieldClass, start: cint, text: string, enabled: bool
+  ) =
+    self = super(PlainFieldClass, self, init)
+    self.counter = start.int
+    self.label = text
+    self.enabled = enabled
+
+  method bumpAndPing(self: PlainFieldClass, amount: cint): cint =
+    self.counter = self.counter + amount.int
+    inc plainFieldPingCount
+    self.counter.cint
+
+  method dealloc(self: PlainFieldClass) {.used.} =
+    self.label = ""
+    superDealloc(self)
+
 suite "objcImpl examples":
   test "test inits":
     doAssert not compiles(HiddenCtorClass.new())
@@ -230,3 +254,23 @@ suite "objcImpl examples":
     release(c)
     check(c.isNil)
     check(ivarCounterStateDestroyedCount == 1)
+
+  test "objcImpl class supports direct value ivar fields":
+    plainFieldPingCount = 0
+    var o = PlainFieldClass.alloc()
+    o.initWithValues(3.cint, "hello", true)
+    check(not o.isNil)
+    check(o.counter() == 3)
+    check(o.label() == "hello")
+    check(o.enabled())
+
+    o.counter = 10
+    o.label = "updated"
+    o.enabled = false
+    check(o.counter() == 10)
+    check(o.label() == "updated")
+    check(not o.enabled())
+
+    check(o.bumpAndPing(5.cint) == 15.cint)
+    check(o.counter() == 15)
+    check(plainFieldPingCount == 1)
