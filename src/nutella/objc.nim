@@ -34,8 +34,11 @@ proc identName(n: NimNode): string =
   else:
     ""
 
-proc isExportedTypeName(n: NimNode): bool =
+proc isExportedName(n: NimNode): bool =
   n.kind == nnkPostfix and n.len == 2 and $n[0] == "*"
+
+proc isExportedTypeName(n: NimNode): bool =
+  isExportedName(n)
 
 proc normalizeObjcNodeType(typ: NimNode, protocolName, className: string): NimNode =
   case typ.kind
@@ -291,7 +294,14 @@ proc buildObjcCallHelperProc(
     def: NimNode, spec: ObjcProtocolMethodSpec, protocolName, className: string
 ): NimNode =
   let srcParams = def.params
-  let helperName = copyNimTree(def.name)
+  let helperBaseName = identName(def.name)
+  if helperBaseName.len == 0:
+    error("objcImpl helper generation requires a valid method name", def)
+  let helperName =
+    if isExportedName(def.name):
+      postfix(ident(helperBaseName), "*")
+    else:
+      ident(helperBaseName)
   let selfIdx = firstParamIndex(srcParams)
   if selfIdx < 0:
     error("objcImpl helper generation requires a first `self` parameter", def)
@@ -713,8 +723,16 @@ macro objcImpl*(x: untyped): untyped =
     ensureClassIvars.add quote do:
       doAssert addFieldIvar[`fieldTypeNode`](`clsVar`, `fieldNameLit`)
 
-    let getterName = ident(field.name)
-    let setterName = ident(field.name & "=")
+    let getterName =
+      if classExported:
+        postfix(ident(field.name), "*")
+      else:
+        ident(field.name)
+    let setterName =
+      if classExported:
+        postfix(ident(field.name & "="), "*")
+      else:
+        ident(field.name & "=")
     let selfIdent = ident("self")
     let valueIdent = ident("value")
     let getterBody = quote:
