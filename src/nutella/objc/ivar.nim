@@ -77,6 +77,78 @@ proc addRefIvar*(cls: ObjcClass, ivarName: string): bool =
 proc addRefIvar*[T: ref](cls: ObjcClass): bool =
   addRefIvar(cls, ivarRefName[T]())
 
+template ivarValueAlignExp(T: typedesc): int =
+  when alignof(T) <= 1:
+    0
+  elif alignof(T) <= 2:
+    1
+  elif alignof(T) <= 4:
+    2
+  elif alignof(T) <= 8:
+    3
+  elif alignof(T) <= 16:
+    4
+  elif alignof(T) <= 32:
+    5
+  else:
+    0
+
+proc addValueIvar*[T](cls: ObjcClass, ivarName: string): bool =
+  if cls.isNil or ivarName.len == 0:
+    return false
+
+  if cast[pointer](getIvar(cls, ivarName)) != nil:
+    return true
+
+  if addIvar(cls, ivarName, sizeof(T), ivarValueAlignExp(T), "^v"):
+    return true
+
+  cast[pointer](getIvar(cls, ivarName)) != nil
+
+proc addFieldIvar*[T](cls: ObjcClass, ivarName: string): bool =
+  when T is ref:
+    addRefIvar(cls, ivarName)
+  else:
+    addValueIvar[T](cls, ivarName)
+
+proc getIvarValuePtr[T](obj: NSObject, ivarName: string): ptr T {.inline, raises: [].} =
+  if obj.isNil or ivarName.len == 0:
+    return nil
+  let cls = getClass(obj.value)
+  if cls.isNil:
+    return nil
+  let iv = getIvar(cls, ivarName)
+  if cast[pointer](iv) == nil:
+    return nil
+  let slotAddr = cast[uint](obj.value) + cast[uint](getOffset(iv))
+  cast[ptr T](slotAddr)
+
+proc getIvarValue*[T](obj: NSObject, ivarName: string): T {.raises: [].} =
+  let p = getIvarValuePtr[T](obj, ivarName)
+  if p.isNil:
+    return default(T)
+  p[]
+
+proc setIvarValue*[T](obj: NSObject, ivarName: string, value: T) {.raises: [].} =
+  let p = getIvarValuePtr[T](obj, ivarName)
+  if p.isNil:
+    return
+  p[] = value
+
+proc getIvarField*[T](obj: NSObject, ivarName: string): T {.inline, raises: [].} =
+  when T is ref:
+    getIvarRef[T](obj, ivarName)
+  else:
+    getIvarValue[T](obj, ivarName)
+
+proc setIvarField*[T](
+    obj: NSObject, ivarName: string, value: T
+) {.inline, raises: [].} =
+  when T is ref:
+    setIvarRef[T](obj, ivarName, value)
+  else:
+    setIvarValue[T](obj, ivarName, value)
+
 proc clearIvarRefRaw(obj: ID, ivarName: string) {.raises: [].} =
   if obj == nil or ivarName.len == 0:
     return

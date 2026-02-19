@@ -22,22 +22,6 @@ type
     tag: int
     subviews: seq[ID]
 
-  NSControlStateRef = ref object
-    enabled: bool
-    alignment: NSTextAlignment
-
-  NSTextFieldStateRef = ref object
-    stringValue: string
-    textColor: NSColor
-    backgroundColor: NSColor
-    drawsBackground: bool
-
-  NSButtonStateRef = ref object
-    title: string
-    state: int
-    allowsMixedState: bool
-    onClick: NSButtonCallbackProc
-
   NSWindowStateRef = ref object
     frame: NSRect
     title: string
@@ -61,22 +45,6 @@ proc defaultViewState(): NSViewStateRef =
     superview: nil,
     tag: 0,
     subviews: @[],
-  )
-
-proc defaultControlState(): NSControlStateRef =
-  NSControlStateRef(enabled: true, alignment: NSNaturalTextAlignment)
-
-proc defaultTextFieldState(): NSTextFieldStateRef =
-  NSTextFieldStateRef(
-    stringValue: "",
-    textColor: nsColor(0.08, 0.08, 0.08, 1.0),
-    backgroundColor: nsColor(0.98, 0.99, 1.0, 1.0),
-    drawsBackground: true,
-  )
-
-proc defaultButtonState(): NSButtonStateRef =
-  NSButtonStateRef(
-    title: "Button", state: NSOffState, allowsMixedState: false, onClick: nil
   )
 
 proc defaultWindowState(): NSWindowStateRef =
@@ -250,7 +218,8 @@ objcImpl:
 
 objcImpl:
   type NXControl = object of NXView
-    controlStateRef: NSControlStateRef
+    controlEnabled: bool
+    controlAlignment: NSTextAlignment
 
   method init*(self: var NXControl): NXControl =
     result = asType[NXControl](callSuperIdFrom(NXControl, self, getSelector("init")))
@@ -258,29 +227,31 @@ objcImpl:
     if result.isNil:
       return
     result.viewStateRef = defaultViewState()
-    result.controlStateRef = defaultControlState()
+    result.controlEnabled = true
+    result.controlAlignment = NSNaturalTextAlignment
 
   method setEnabled*(self: NXControl, enabled: bool) =
-    let st = self.controlStateRef()
-    st.enabled = enabled
+    self.controlEnabled = enabled
 
   method setAlignment*(self: NXControl, alignment: cint) =
-    let st = self.controlStateRef()
     case alignment.int
     of NSLeftTextAlignment.int:
-      st.alignment = NSLeftTextAlignment
+      self.controlAlignment = NSLeftTextAlignment
     of NSRightTextAlignment.int:
-      st.alignment = NSRightTextAlignment
+      self.controlAlignment = NSRightTextAlignment
     of NSCenterTextAlignment.int:
-      st.alignment = NSCenterTextAlignment
+      self.controlAlignment = NSCenterTextAlignment
     of NSJustifiedTextAlignment.int:
-      st.alignment = NSJustifiedTextAlignment
+      self.controlAlignment = NSJustifiedTextAlignment
     else:
-      st.alignment = NSNaturalTextAlignment
+      self.controlAlignment = NSNaturalTextAlignment
 
 objcImpl:
   type NXTextField = object of NXControl
-    textFieldStateRef: NSTextFieldStateRef
+    textFieldStringValue: string
+    textFieldColor: NSColor
+    textFieldBackgroundColor: NSColor
+    textFieldDrawsBackground: bool
 
   method init*(self: var NXTextField): NXTextField =
     result =
@@ -289,28 +260,35 @@ objcImpl:
     if result.isNil:
       return
     result.viewStateRef = defaultViewState()
-    result.controlStateRef = defaultControlState()
-    result.textFieldStateRef = defaultTextFieldState()
+    result.controlEnabled = true
+    result.controlAlignment = NSNaturalTextAlignment
+    result.textFieldStringValue = ""
+    result.textFieldColor = nsColor(0.08, 0.08, 0.08, 1.0)
+    result.textFieldBackgroundColor = nsColor(0.98, 0.99, 1.0, 1.0)
+    result.textFieldDrawsBackground = true
 
   method setStringValue(self: NXTextField, value: string) =
-    let st = self.textFieldStateRef()
-    st.stringValue = value
+    self.textFieldStringValue = value
 
   method setTextColor*(self: NXTextField, r, g, b, a: cfloat) =
-    let st = self.textFieldStateRef()
-    st.textColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+    self.textFieldColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setBackgroundColor*(self: NXTextField, r, g, b, a: cfloat) =
-    let st = self.textFieldStateRef()
-    st.backgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+    self.textFieldBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setDrawsBackground*(self: NXTextField, value: bool) =
-    let st = self.textFieldStateRef()
-    st.drawsBackground = value
+    self.textFieldDrawsBackground = value
+
+  method dealloc(self: NXTextField) {.used.} =
+    self.textFieldStringValue = ""
+    discard callSuperIdFrom(NXTextField, self, getSelector("dealloc"))
 
 objcImpl:
   type NXButton = object of NXControl
-    buttonStateRef: NSButtonStateRef
+    buttonTitle: string
+    buttonStateValue: int
+    buttonAllowsMixedState: bool
+    buttonOnClick: NSButtonCallbackProc
 
   method init*(self: var NXButton): NXButton =
     result = asType[NXButton](callSuperIdFrom(NXButton, self, getSelector("init")))
@@ -318,48 +296,52 @@ objcImpl:
     if result.isNil:
       return
     result.viewStateRef = defaultViewState()
-    result.controlStateRef = defaultControlState()
-    result.buttonStateRef = defaultButtonState()
+    result.controlEnabled = true
+    result.controlAlignment = NSNaturalTextAlignment
+    result.buttonTitle = "Button"
+    result.buttonStateValue = NSOffState
+    result.buttonAllowsMixedState = false
+    result.buttonOnClick = nil
 
   method setTitle*(self: NXButton, value: string) =
-    let st = self.buttonStateRef()
-    st.title = value
+    self.buttonTitle = value
 
   method setState*(self: NXButton, value: cint) =
-    let st = self.buttonStateRef()
-    st.state = normalizeButtonState(value.int, st.allowsMixedState)
+    self.buttonStateValue = normalizeButtonState(value.int, self.buttonAllowsMixedState)
 
   method setAllowsMixedState*(self: NXButton, value: bool) =
-    let st = self.buttonStateRef()
-    st.allowsMixedState = value
-    st.state = normalizeButtonState(st.state, st.allowsMixedState)
+    self.buttonAllowsMixedState = value
+    self.buttonStateValue = normalizeButtonState(self.buttonStateValue, value)
 
   method setNextState*(self: NXButton) =
-    let st = self.buttonStateRef()
-    if st.allowsMixedState:
-      case st.state
+    if self.buttonAllowsMixedState:
+      case self.buttonStateValue
       of NSOffState:
-        st.state = NSOnState
+        self.buttonStateValue = NSOnState
       of NSOnState:
-        st.state = NSMixedState
+        self.buttonStateValue = NSMixedState
       else:
-        st.state = NSOffState
+        self.buttonStateValue = NSOffState
     else:
-      if st.state == NSOnState:
-        st.state = NSOffState
+      if self.buttonStateValue == NSOnState:
+        self.buttonStateValue = NSOffState
       else:
-        st.state = NSOnState
+        self.buttonStateValue = NSOnState
 
   method performClick*(self: NXButton, sender: NSObject) =
     discard sender
-    let st = self.buttonStateRef()
-    let cst = self.controlStateRef()
-    if not cst.enabled:
+    if not self.controlEnabled:
       return
     self.setNextState()
-    if st.onClick.isNil:
+    let cb = self.buttonOnClick()
+    if cb.isNil:
       return
-    st.onClick(self.value)
+    cb(self.value)
+
+  method dealloc(self: NXButton) {.used.} =
+    self.buttonTitle = ""
+    self.buttonOnClick = nil
+    discard callSuperIdFrom(NXButton, self, getSelector("dealloc"))
 
 objcImpl:
   type NXWindow = object of NXResponder
@@ -512,7 +494,8 @@ proc new*(t: typedesc[NSControl]): NSControl =
   if result.isNil:
     return
   result.viewStateRef = defaultViewState()
-  result.controlStateRef = defaultControlState()
+  result.controlEnabled = true
+  result.controlAlignment = NSNaturalTextAlignment
 
 proc new*(t: typedesc[NSTextField]): NSTextField =
   when false:
@@ -523,8 +506,12 @@ proc new*(t: typedesc[NSTextField]): NSTextField =
   if result.isNil:
     return
   result.viewStateRef = defaultViewState()
-  result.controlStateRef = defaultControlState()
-  result.textFieldStateRef = defaultTextFieldState()
+  result.controlEnabled = true
+  result.controlAlignment = NSNaturalTextAlignment
+  result.textFieldStringValue = ""
+  result.textFieldColor = nsColor(0.08, 0.08, 0.08, 1.0)
+  result.textFieldBackgroundColor = nsColor(0.98, 0.99, 1.0, 1.0)
+  result.textFieldDrawsBackground = true
 
 proc new*(t: typedesc[NSButton]): NSButton =
   when false:
@@ -535,8 +522,12 @@ proc new*(t: typedesc[NSButton]): NSButton =
   if result.isNil:
     return
   result.viewStateRef = defaultViewState()
-  result.controlStateRef = defaultControlState()
-  result.buttonStateRef = defaultButtonState()
+  result.controlEnabled = true
+  result.controlAlignment = NSNaturalTextAlignment
+  result.buttonTitle = "Button"
+  result.buttonStateValue = NSOffState
+  result.buttonAllowsMixedState = false
+  result.buttonOnClick = nil
 
 proc new*(t: typedesc[NSWindow]): NSWindow =
   when false:
@@ -575,15 +566,6 @@ proc detachSubviews(st: NSViewStateRef) =
 
 proc viewState*(view: NSView): NSViewStateRef =
   view.viewStateRef()
-
-proc controlState*(control: NSControl): NSControlStateRef =
-  control.controlStateRef()
-
-proc textFieldState*(field: NSTextField): NSTextFieldStateRef =
-  field.textFieldStateRef()
-
-proc buttonState*(button: NSButton): NSButtonStateRef =
-  button.buttonStateRef()
 
 proc windowState*(window: NSWindow): NSWindowStateRef =
   window.windowStateRef()
@@ -744,111 +726,107 @@ proc viewWithTag*(view: NSView, wantedTag: int): NSView =
   NSView(value: nil)
 
 proc stringValue*(field: NSTextField): string =
-  field.textFieldState().stringValue
+  field.textFieldStringValue()
 
 proc setStringValue*(field: NSTextField, value: string) =
-  field.textFieldState().stringValue = value
+  field.textFieldStringValue = value
 
 proc textColor*(field: NSTextField): NSColor =
-  field.textFieldState().textColor
+  field.textFieldColor()
 
 proc setTextColor*(field: NSTextField, color: NSColor) =
-  field.textFieldState().textColor = color
+  field.textFieldColor = color
 
 proc setTextColor*(field: NSTextField, r, g, b: float32, a: float32 = 1.0'f32) =
   field.setTextColor(nsColor(r, g, b, a))
 
 proc backgroundColor*(field: NSTextField): NSColor =
-  field.textFieldState().backgroundColor
+  field.textFieldBackgroundColor()
 
 proc setBackgroundColor*(field: NSTextField, color: NSColor) =
-  field.textFieldState().backgroundColor = color
+  field.textFieldBackgroundColor = color
 
 proc setBackgroundColor*(field: NSTextField, r, g, b: float32, a: float32 = 1.0'f32) =
   field.setBackgroundColor(nsColor(r, g, b, a))
 
 proc drawsBackground*(field: NSTextField): bool =
-  field.textFieldState().drawsBackground
+  field.textFieldDrawsBackground()
 
 proc setDrawsBackground*(field: NSTextField, value: bool) =
-  field.textFieldState().drawsBackground = value
+  field.textFieldDrawsBackground = value
 
 proc setEnabled*(control: NSControl, enabled: bool) =
-  control.controlState().enabled = enabled
+  control.controlEnabled = enabled
 
 proc isEnabled*(control: NSControl): bool =
-  control.controlState().enabled
+  control.controlEnabled()
 
 proc alignment*(control: NSControl): NSTextAlignment =
-  control.controlState().alignment
+  control.controlAlignment()
 
 proc setAlignment*(control: NSControl, alignment: NSTextAlignment) =
-  control.controlState().alignment = alignment
+  control.controlAlignment = alignment
 
 proc title*(button: NSButton): string =
-  button.buttonState().title
+  button.buttonTitle()
 
 proc setTitle*(button: NSButton, value: string) =
-  button.buttonState().title = value
+  button.buttonTitle = value
 
 proc state*(button: NSButton): int =
-  button.buttonState().state
+  button.buttonStateValue()
 
 proc setState*(button: NSButton, value: int) =
-  let st = button.buttonState()
-  st.state = normalizeButtonState(value, st.allowsMixedState)
+  button.buttonStateValue = normalizeButtonState(value, button.buttonAllowsMixedState())
 
 proc allowsMixedState*(button: NSButton): bool =
-  button.buttonState().allowsMixedState
+  button.buttonAllowsMixedState()
 
 proc setAllowsMixedState*(button: NSButton, value: bool) =
-  let st = button.buttonState()
-  st.allowsMixedState = value
-  st.state = normalizeButtonState(st.state, value)
+  button.buttonAllowsMixedState = value
+  button.buttonStateValue = normalizeButtonState(button.buttonStateValue(), value)
 
 proc setNextState*(button: NSButton) =
-  let st = button.buttonState()
-  if st.allowsMixedState:
-    case st.state
+  if button.buttonAllowsMixedState():
+    case button.buttonStateValue()
     of NSOffState:
-      st.state = NSOnState
+      button.buttonStateValue = NSOnState
     of NSOnState:
-      st.state = NSMixedState
+      button.buttonStateValue = NSMixedState
     else:
-      st.state = NSOffState
+      button.buttonStateValue = NSOffState
   else:
-    if st.state == NSOnState:
-      st.state = NSOffState
+    if button.buttonStateValue() == NSOnState:
+      button.buttonStateValue = NSOffState
     else:
-      st.state = NSOnState
+      button.buttonStateValue = NSOnState
 
 proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
-  let st = button.buttonState()
   if cb.isNil:
-    st.onClick = nil
+    button.buttonOnClick = nil
   else:
-    st.onClick = proc(sender: ID) =
+    button.buttonOnClick = proc(sender: ID) =
       cb(ownFromId[NSButton](sender))
 
 proc click*(button: NSButton) =
-  let st = button.buttonState()
-  if not button.controlState().enabled:
+  if not button.controlEnabled():
     return
-  if st.allowsMixedState:
-    case st.state
+  if button.buttonAllowsMixedState():
+    case button.buttonStateValue()
     of NSOffState:
-      st.state = NSOnState
+      button.buttonStateValue = NSOnState
     of NSOnState:
-      st.state = NSMixedState
+      button.buttonStateValue = NSMixedState
     else:
-      st.state = NSOffState
+      button.buttonStateValue = NSOffState
   else:
-    if st.state == NSOnState:
-      st.state = NSOffState
+    if button.buttonStateValue() == NSOnState:
+      button.buttonStateValue = NSOffState
     else:
-      st.state = NSOnState
-  if not st.onClick.isNil:
-    st.onClick(button.value)
+      button.buttonStateValue = NSOnState
+  let cb = button.buttonOnClick()
+  if not cb.isNil:
+    cb(button.value)
 
 proc ensureContentView(window: NSWindow, st: NSWindowStateRef): NSView =
   if not st.contentView.isNil:
@@ -945,10 +923,11 @@ proc viewFillColor(view: NSView, st: NSViewStateRef): Color =
       return nsColor(0.30, 0.56, 0.93, 1.0).toFigColor()
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
-    let tstate = textField.textFieldState()
+    let drawsBackground = textField.textFieldDrawsBackground()
+    let backgroundColor = textField.textFieldBackgroundColor()
     textField.value = nil
-    if tstate.drawsBackground:
-      return tstate.backgroundColor.toFigColor()
+    if drawsBackground:
+      return backgroundColor.toFigColor()
     return nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()
   st.backgroundColor.toFigColor()
 
@@ -1060,13 +1039,13 @@ proc textLayoutForView(
 
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
-    let tstate = textField.textFieldState()
+    let textValue = textField.textFieldStringValue()
+    let textColor = textField.textFieldColor()
     let textAlign = toFontHorizontal(textField.alignment())
     textField.value = nil
-    if tstate.stringValue.len == 0:
+    if textValue.len == 0:
       return (false, default(GlyphArrangement))
-    let spans =
-      [(fs(appkitFont(18.0), tstate.textColor.toFigColor()), tstate.stringValue)]
+    let spans = [(fs(appkitFont(18.0), textColor.toFigColor()), textValue)]
     let layout = typeset(
       rect(0, 0, box.size.width, box.size.height),
       spans,
@@ -1077,18 +1056,18 @@ proc textLayoutForView(
     )
     if shouldDebugRenderDump():
       echo "[appkit] textfield layout runes=",
-        layout.runes.len, " text=\"", tstate.stringValue, "\""
+        layout.runes.len, " text=\"", textValue, "\""
     return (true, layout)
 
   if view.isKindOfClass(NSButton):
     var button = asType[NSButton](view.value)
-    let bstate = button.buttonState()
+    let title = button.buttonTitle()
     let textAlign = toFontHorizontal(button.alignment())
     button.value = nil
-    if bstate.title.len == 0:
+    if title.len == 0:
       return (false, default(GlyphArrangement))
     let spans =
-      [(fs(appkitFont(16.0), nsColor(0.98, 0.99, 1.0, 1.0).toFigColor()), bstate.title)]
+      [(fs(appkitFont(16.0), nsColor(0.98, 0.99, 1.0, 1.0).toFigColor()), title)]
     let layout = typeset(
       rect(0, 0, box.size.width, box.size.height),
       spans,
@@ -1098,8 +1077,7 @@ proc textLayoutForView(
       wrap = false,
     )
     if shouldDebugRenderDump():
-      echo "[appkit] button layout runes=",
-        layout.runes.len, " title=\"", bstate.title, "\""
+      echo "[appkit] button layout runes=", layout.runes.len, " title=\"", title, "\""
     return (true, layout)
 
   (false, default(GlyphArrangement))
@@ -1469,9 +1447,9 @@ proc newView*(x, y, width, height: float32): NSView =
 proc newTextField*(x, y, width, height: float32, value = ""): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.textFieldState().stringValue = value
+  result.textFieldStringValue = value
 
 proc newButton*(x, y, width, height: float32, title = "Button"): NSButton =
   result = NSButton.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.buttonState().title = title
+  result.buttonTitle = title

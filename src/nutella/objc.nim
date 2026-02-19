@@ -711,16 +711,16 @@ macro objcImpl*(x: untyped): untyped =
     let fieldNameLit = newLit(field.name)
     let fieldTypeNode = copyNimTree(field.typ)
     ensureClassIvars.add quote do:
-      doAssert addRefIvar(`clsVar`, `fieldNameLit`)
+      doAssert addFieldIvar[`fieldTypeNode`](`clsVar`, `fieldNameLit`)
 
     let getterName = ident(field.name)
     let setterName = ident(field.name & "=")
     let selfIdent = ident("self")
     let valueIdent = ident("value")
     let getterBody = quote:
-      result = getIvarRef[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
+      result = getIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
     let setterBody = quote:
-      setIvarRef[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
+      setIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
 
     fieldAccessorDefs.add newProc(
       name = getterName,
