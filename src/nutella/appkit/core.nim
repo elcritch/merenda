@@ -12,7 +12,7 @@ import ../objc/ivar
 import ./types
 
 type
-  NSButtonCallbackProc = proc(sender: ID) {.gcsafe.}
+  NSButtonCallbackProc = proc(sender: ID)
 
   NSViewStateRef = ref object
     frame: NSRect
@@ -386,7 +386,16 @@ objcImpl:
   method performClick*(self: NXButtonObj, sender: NSObject) =
     discard sender
     let st = self.buttonStateRef()
-    if st.isNil or st.onClick.isNil:
+    if st.isNil:
+      return
+    var cst = self.controlStateRef()
+    if cst.isNil:
+      cst = defaultControlState()
+      self.controlStateRef = cst
+    if not cst.enabled:
+      return
+    self.setNextState()
+    if st.onClick.isNil:
       return
     st.onClick(self.value)
 
@@ -810,6 +819,9 @@ proc setAlignment*(control: NSControl, alignment: NSTextAlignment) =
 proc title*(button: NSButton): string =
   button.buttonState().title
 
+proc setTitle*(button: NSButton, value: string) =
+  button.buttonState().title = value
+
 proc state*(button: NSButton): int =
   button.buttonState().state
 
@@ -841,16 +853,31 @@ proc setNextState*(button: NSButton) =
     else:
       st.state = NSOnState
 
-proc setOnClick*(button: NSButton, cb: proc(sender: NSButton) {.gcsafe.}) =
+proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
   let st = button.buttonState()
   if cb.isNil:
     st.onClick = nil
   else:
-    st.onClick = proc(sender: ID) {.gcsafe.} =
+    st.onClick = proc(sender: ID) =
       cb(ownFromId[NSButton](sender))
 
 proc click*(button: NSButton) =
   let st = button.buttonState()
+  if not button.controlState().enabled:
+    return
+  if st.allowsMixedState:
+    case st.state
+    of NSOffState:
+      st.state = NSOnState
+    of NSOnState:
+      st.state = NSMixedState
+    else:
+      st.state = NSOffState
+  else:
+    if st.state == NSOnState:
+      st.state = NSOffState
+    else:
+      st.state = NSOnState
   if not st.onClick.isNil:
     st.onClick(button.value)
 
@@ -1482,4 +1509,4 @@ proc newTextField*(x, y, width, height: float32, value = ""): NSTextField =
 proc newButton*(x, y, width, height: float32, title = "Button"): NSButton =
   result = NSButton.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.setTitle(title)
+  result.buttonState().title = title
