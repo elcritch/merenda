@@ -194,6 +194,14 @@ proc removeOwnedIdAt(ids: var seq[ID], idx: int) =
   ids.del(idx)
   releaseId(old)
 
+template callSuperIdFrom(currentType: typedesc, obj: NSObject, op: SEL): ID =
+  block:
+    var superObj =
+      ObjcSuper(receiver: obj.value, superClass: getClass(currentType).getSuperclass())
+    cast[proc(superObj: var ObjcSuper, selParam: SEL): ID {.cdecl, varargs.}](objc_msgSendSuper)(
+      superObj, op
+    )
+
 proc clearSuperviewRef(viewId: ID)
 proc detachSubviews(st: NSViewStateRef)
 
@@ -207,77 +215,57 @@ objcImpl:
     viewStateRef: NSViewStateRef
 
   method init*(self: var NXView): NXView =
-    result = asType[NXView](super(self, init))
+    result = asType[NXView](callSuperIdFrom(NXView, self, getSelector("init")))
     self.value = nil
     if result.isNil:
       return
-    if result.viewStateRef().isNil:
-      result.viewStateRef = defaultViewState()
+    result.viewStateRef = defaultViewState()
 
   method initWithFrame*(self: var NXView, x, y, width, height: cfloat): NXView =
     result = self.init()
     if result.isNil:
       return
-    var st = result.viewStateRef()
-    if st.isNil:
-      st = defaultViewState()
-      result.viewStateRef = st
+    let st = result.viewStateRef()
     st.frame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
   method setFrame*(self: NXView, x, y, width, height: cfloat) =
-    var st = self.viewStateRef()
-    if st.isNil:
-      st = defaultViewState()
-      self.viewStateRef = st
+    let st = self.viewStateRef()
     st.frame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
   method setBackgroundColor*(self: NXView, r, g, b, a: cfloat) =
-    var st = self.viewStateRef()
-    if st.isNil:
-      st = defaultViewState()
-      self.viewStateRef = st
+    let st = self.viewStateRef()
     st.backgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setHidden*(self: NXView, hidden: bool) =
-    var st = self.viewStateRef()
-    if st.isNil:
-      st = defaultViewState()
-      self.viewStateRef = st
+    let st = self.viewStateRef()
     st.hidden = hidden
 
   method dealloc(self: NXView) {.used.} =
     let st = self.viewStateRef()
-    if not st.isNil:
-      detachSubviews(st)
+    detachSubviews(st)
     clearIvarRefs(self)
-    superDealloc(self)
+    discard callSuperIdFrom(NXView, self, getSelector("dealloc"))
 
 objcImpl:
   type NXControl = object of NXView
     controlStateRef: NSControlStateRef
 
   method init*(self: var NXControl): NXControl =
-    result = asType[NXControl](super(self, init))
+    result = asType[NXControl](callSuperIdFrom(NXControl, self, getSelector("init")))
     self.value = nil
     if result.isNil:
       return
-    if result.controlStateRef().isNil:
-      result.controlStateRef = defaultControlState()
+    result.viewStateRef = defaultViewState()
+    result.controlStateRef = defaultControlState()
 
   method setEnabled*(self: NXControl, enabled: bool) =
-    var st = self.controlStateRef()
-    if st.isNil:
-      st = defaultControlState()
-      self.controlStateRef = st
+    let st = self.controlStateRef()
     st.enabled = enabled
 
   method setAlignment*(self: NXControl, alignment: cint) =
-    var st = self.controlStateRef()
-    if st.isNil:
-      st = defaultControlState()
-      self.controlStateRef = st
+    let st = self.controlStateRef()
     case alignment.int
     of NSLeftTextAlignment.int:
       st.alignment = NSLeftTextAlignment
@@ -295,39 +283,29 @@ objcImpl:
     textFieldStateRef: NSTextFieldStateRef
 
   method init*(self: var NXTextField): NXTextField =
-    result = asType[NXTextField](super(self, init))
+    result =
+      asType[NXTextField](callSuperIdFrom(NXTextField, self, getSelector("init")))
     self.value = nil
     if result.isNil:
       return
-    if result.textFieldStateRef().isNil:
-      result.textFieldStateRef = defaultTextFieldState()
+    result.viewStateRef = defaultViewState()
+    result.controlStateRef = defaultControlState()
+    result.textFieldStateRef = defaultTextFieldState()
 
   method setStringValue(self: NXTextField, value: string) =
-    var st = self.textFieldStateRef()
-    if st.isNil:
-      st = defaultTextFieldState()
-      self.textFieldStateRef = st
+    let st = self.textFieldStateRef()
     st.stringValue = value
 
   method setTextColor*(self: NXTextField, r, g, b, a: cfloat) =
-    var st = self.textFieldStateRef()
-    if st.isNil:
-      st = defaultTextFieldState()
-      self.textFieldStateRef = st
+    let st = self.textFieldStateRef()
     st.textColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setBackgroundColor*(self: NXTextField, r, g, b, a: cfloat) =
-    var st = self.textFieldStateRef()
-    if st.isNil:
-      st = defaultTextFieldState()
-      self.textFieldStateRef = st
+    let st = self.textFieldStateRef()
     st.backgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setDrawsBackground*(self: NXTextField, value: bool) =
-    var st = self.textFieldStateRef()
-    if st.isNil:
-      st = defaultTextFieldState()
-      self.textFieldStateRef = st
+    let st = self.textFieldStateRef()
     st.drawsBackground = value
 
 objcImpl:
@@ -335,40 +313,29 @@ objcImpl:
     buttonStateRef: NSButtonStateRef
 
   method init*(self: var NXButton): NXButton =
-    result = asType[NXButton](super(self, init))
+    result = asType[NXButton](callSuperIdFrom(NXButton, self, getSelector("init")))
     self.value = nil
     if result.isNil:
       return
-    if result.buttonStateRef().isNil:
-      result.buttonStateRef = defaultButtonState()
+    result.viewStateRef = defaultViewState()
+    result.controlStateRef = defaultControlState()
+    result.buttonStateRef = defaultButtonState()
 
   method setTitle*(self: NXButton, value: string) =
-    var st = self.buttonStateRef()
-    if st.isNil:
-      st = defaultButtonState()
-      self.buttonStateRef = st
+    let st = self.buttonStateRef()
     st.title = value
 
   method setState*(self: NXButton, value: cint) =
-    var st = self.buttonStateRef()
-    if st.isNil:
-      st = defaultButtonState()
-      self.buttonStateRef = st
+    let st = self.buttonStateRef()
     st.state = normalizeButtonState(value.int, st.allowsMixedState)
 
   method setAllowsMixedState*(self: NXButton, value: bool) =
-    var st = self.buttonStateRef()
-    if st.isNil:
-      st = defaultButtonState()
-      self.buttonStateRef = st
+    let st = self.buttonStateRef()
     st.allowsMixedState = value
     st.state = normalizeButtonState(st.state, st.allowsMixedState)
 
   method setNextState*(self: NXButton) =
-    var st = self.buttonStateRef()
-    if st.isNil:
-      st = defaultButtonState()
-      self.buttonStateRef = st
+    let st = self.buttonStateRef()
     if st.allowsMixedState:
       case st.state
       of NSOffState:
@@ -386,12 +353,7 @@ objcImpl:
   method performClick*(self: NXButton, sender: NSObject) =
     discard sender
     let st = self.buttonStateRef()
-    if st.isNil:
-      return
-    var cst = self.controlStateRef()
-    if cst.isNil:
-      cst = defaultControlState()
-      self.controlStateRef = cst
+    let cst = self.controlStateRef()
     if not cst.enabled:
       return
     self.setNextState()
@@ -404,12 +366,11 @@ objcImpl:
     windowStateRef: NSWindowStateRef
 
   method init*(self: var NXWindow): NXWindow =
-    result = asType[NXWindow](super(self, init))
+    result = asType[NXWindow](callSuperIdFrom(NXWindow, self, getSelector("init")))
     self.value = nil
     if result.isNil:
       return
-    if result.windowStateRef().isNil:
-      result.windowStateRef = defaultWindowState()
+    result.windowStateRef = defaultWindowState()
 
   method initWithContentRect*(
       self: var NXWindow, x, y, width, height: cfloat
@@ -424,24 +385,15 @@ objcImpl:
   method setContentView*(self: NXWindow, view: NXView) =
     if self.isNil:
       return
-    var st = self.windowStateRef()
-    if st.isNil:
-      st = defaultWindowState()
-      self.windowStateRef = st
+    let st = self.windowStateRef()
     if not st.contentView.isNil and st.contentView != view.value:
       clearSuperviewRef(st.contentView)
     if not view.isNil:
-      var vst = view.viewStateRef()
-      if vst.isNil:
-        vst = defaultViewState()
-        view.viewStateRef = vst
+      let vst = view.viewStateRef()
       if not vst.superview.isNil:
         var parent = ownFromId[NXView](vst.superview)
         if not parent.isNil:
-          var pst = parent.viewStateRef()
-          if pst.isNil:
-            pst = defaultViewState()
-            parent.viewStateRef = pst
+          let pst = parent.viewStateRef()
           for i, candidate in pst.subviews:
             if candidate == view.value:
               pst.subviews.del(i)
@@ -452,24 +404,18 @@ objcImpl:
 
   method contentView*(self: NXWindow): NXView =
     let st = self.windowStateRef()
-    if st.isNil or st.contentView.isNil:
+    if st.contentView.isNil:
       return NXView(value: nil)
     result = ownFromId[NXView](st.contentView)
 
   method setTitle*(self: NXWindow, value: string) =
-    var st = self.windowStateRef()
-    if st.isNil:
-      st = defaultWindowState()
-      self.windowStateRef = st
+    let st = self.windowStateRef()
     st.title = value
     if st.nativeReady and not st.nativeWindow.isNil:
       st.nativeWindow.title = value
 
   method setContentSize*(self: NXWindow, width, height: cfloat) =
-    var st = self.windowStateRef()
-    if st.isNil:
-      st = defaultWindowState()
-      self.windowStateRef = st
+    let st = self.windowStateRef()
     st.frame.size = nsSize(max(width.float32, 1.0), max(height.float32, 1.0))
     if st.nativeReady and not st.nativeWindow.isNil:
       st.nativeWindow.size = ivec2(
@@ -477,78 +423,63 @@ objcImpl:
       )
 
   method setFrameOrigin*(self: NXWindow, x, y: cfloat) =
-    var st = self.windowStateRef()
-    if st.isNil:
-      st = defaultWindowState()
-      self.windowStateRef = st
+    let st = self.windowStateRef()
     st.frame.origin = nsPoint(x.float32, y.float32)
 
   method makeKeyAndOrderFront*(self: NXWindow, sender: NSObject) =
     discard sender
     if self.isNil:
       return
-    var st = self.windowStateRef()
-    if st.isNil:
-      st = defaultWindowState()
-      self.windowStateRef = st
+    let st = self.windowStateRef()
     st.visibleRequested = true
 
   method close*(self: NXWindow) =
     let st = self.windowStateRef()
-    if st.isNil:
-      return
     st.closed = true
     if st.nativeReady and not st.nativeWindow.isNil:
       siwinshim.close(st.nativeWindow)
 
   method dealloc(self: NXWindow) {.used.} =
     let st = self.windowStateRef()
-    if not st.isNil:
-      if st.nativeReady and (not st.nativeWindow.isNil):
-        siwinshim.close(st.nativeWindow)
-      replaceOwnedId(st.contentView, nil)
+    if st.nativeReady and (not st.nativeWindow.isNil):
+      siwinshim.close(st.nativeWindow)
+    replaceOwnedId(st.contentView, nil)
     clearIvarRefs(self)
-    superDealloc(self)
+    discard callSuperIdFrom(NXWindow, self, getSelector("dealloc"))
 
 objcImpl:
   type NXApplication = object of NXResponder
     appStateRef: NSApplicationStateRef
 
   method init*(self: var NXApplication): NXApplication =
-    result = asType[NXApplication](super(self, init))
+    result =
+      asType[NXApplication](callSuperIdFrom(NXApplication, self, getSelector("init")))
     self.value = nil
     if result.isNil:
       return
-    if result.appStateRef().isNil:
-      result.appStateRef = defaultApplicationState()
+    result.appStateRef = defaultApplicationState()
 
   method addWindow*(self: NXApplication, window: NXWindow) =
     if self.isNil or window.isNil:
       return
-    var st = self.appStateRef()
-    if st.isNil:
-      st = defaultApplicationState()
-      self.appStateRef = st
+    let st = self.appStateRef()
     if window.value notin st.windows:
       st.windows.add(retainId(window.value))
     let wst = window.windowStateRef()
-    if not wst.isNil:
-      wst.visibleRequested = true
+    wst.visibleRequested = true
 
   method run*(self: NXApplication) =
     discard runApplicationFrames(self, -1)
 
   method stop*(self: NXApplication) =
     let st = self.appStateRef()
-    if not st.isNil:
-      st.running = false
+    st.running = false
 
   method dealloc(self: NXApplication) {.used.} =
     let st = self.appStateRef()
-    if not st.isNil:
-      clearOwnedIds(st.windows)
+    clearOwnedIds(st.windows)
     clearIvarRefs(self)
-    superDealloc(self)
+    discard callSuperIdFrom(NXApplication, self, getSelector("dealloc"))
 
 type
   # The Objective-C runtime already provides NSResponder/NSView/NSButton/etc on macOS.
@@ -562,6 +493,71 @@ type
   NSWindow* = NXWindow
   NSApplication* = NXApplication
 
+proc new*(t: typedesc[NSView]): NSView =
+  when false:
+    discard t
+  var allocated = NSView.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.viewStateRef = defaultViewState()
+
+proc new*(t: typedesc[NSControl]): NSControl =
+  when false:
+    discard t
+  var allocated = NSControl.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.viewStateRef = defaultViewState()
+  result.controlStateRef = defaultControlState()
+
+proc new*(t: typedesc[NSTextField]): NSTextField =
+  when false:
+    discard t
+  var allocated = NSTextField.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.viewStateRef = defaultViewState()
+  result.controlStateRef = defaultControlState()
+  result.textFieldStateRef = defaultTextFieldState()
+
+proc new*(t: typedesc[NSButton]): NSButton =
+  when false:
+    discard t
+  var allocated = NSButton.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.viewStateRef = defaultViewState()
+  result.controlStateRef = defaultControlState()
+  result.buttonStateRef = defaultButtonState()
+
+proc new*(t: typedesc[NSWindow]): NSWindow =
+  when false:
+    discard t
+  var allocated = NSWindow.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.windowStateRef = defaultWindowState()
+
+proc new*(t: typedesc[NSApplication]): NSApplication =
+  when false:
+    discard t
+  var allocated = NSApplication.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.appStateRef = defaultApplicationState()
+
 proc clearSuperviewRef(viewId: ID) =
   if viewId.isNil:
     return
@@ -569,58 +565,31 @@ proc clearSuperviewRef(viewId: ID) =
   if child.isNil:
     return
   let st = child.viewStateRef()
-  if not st.isNil:
-    st.superview = nil
+  st.superview = nil
 
 proc detachSubviews(st: NSViewStateRef) =
-  if st.isNil:
-    return
   for child in st.subviews:
     clearSuperviewRef(child)
     releaseId(child)
   st.subviews.setLen(0)
 
 proc viewState*(view: NSView): NSViewStateRef =
-  var st = view.viewStateRef()
-  if st.isNil:
-    st = defaultViewState()
-    view.viewStateRef = st
-  st
+  view.viewStateRef()
 
 proc controlState*(control: NSControl): NSControlStateRef =
-  var st = control.controlStateRef()
-  if st.isNil:
-    st = defaultControlState()
-    control.controlStateRef = st
-  st
+  control.controlStateRef()
 
 proc textFieldState*(field: NSTextField): NSTextFieldStateRef =
-  var st = field.textFieldStateRef()
-  if st.isNil:
-    st = defaultTextFieldState()
-    field.textFieldStateRef = st
-  st
+  field.textFieldStateRef()
 
 proc buttonState*(button: NSButton): NSButtonStateRef =
-  var st = button.buttonStateRef()
-  if st.isNil:
-    st = defaultButtonState()
-    button.buttonStateRef = st
-  st
+  button.buttonStateRef()
 
 proc windowState*(window: NSWindow): NSWindowStateRef =
-  var st = window.windowStateRef()
-  if st.isNil:
-    st = defaultWindowState()
-    window.windowStateRef = st
-  st
+  window.windowStateRef()
 
 proc applicationState*(app: NSApplication): NSApplicationStateRef =
-  var st = app.appStateRef()
-  if st.isNil:
-    st = defaultApplicationState()
-    app.appStateRef = st
-  st
+  app.appStateRef()
 
 proc frame*(view: NSView): NSRect =
   view.viewState().frame
@@ -1145,8 +1114,6 @@ proc addViewTree(
 )
 
 proc buildWindowRenders(window: NSWindow, st: NSWindowStateRef): Renders =
-  if st.isNil:
-    return nil
   let root = ensureContentView(window, st)
   if root.isNil:
     return nil
@@ -1167,7 +1134,7 @@ proc addViewTree(
   if view.isNil:
     return
   let st = view.viewState()
-  if st.isNil or st.hidden:
+  if st.hidden:
     return
 
   let box = nsRect(
@@ -1251,7 +1218,7 @@ proc hitTestButton(
   if view.isNil:
     return nil
   let st = view.viewState()
-  if st.isNil or st.hidden:
+  if st.hidden:
     return nil
 
   let frame = nsRect(
@@ -1289,7 +1256,7 @@ proc logicalInputPos(window: siwinshim.Window, rawPos: Vec2): Vec2 =
   rawInputToLogical(rawPos, window.backingSize(), window.logicalSize())
 
 proc renderWindow(window: NSWindow, st: NSWindowStateRef) =
-  if st.isNil or st.renderer.isNil or st.nativeWindow.isNil:
+  if st.renderer.isNil or st.nativeWindow.isNil:
     return
 
   let logicalSize = st.nativeWindow.logicalSize()
@@ -1315,8 +1282,6 @@ proc debugDumpWindowRenderTree*(window: NSWindow) =
     dumpRenders(renders)
 
 proc cleanupFailedWindowInit(st: NSWindowStateRef) =
-  if st.isNil:
-    return
   if not st.nativeWindow.isNil:
     try:
       siwinshim.close(st.nativeWindow)
@@ -1329,7 +1294,7 @@ proc cleanupFailedWindowInit(st: NSWindowStateRef) =
   st.closed = true
 
 proc ensureNativeWindow(window: NSWindow, st: NSWindowStateRef) =
-  if st.isNil or st.nativeReady:
+  if st.nativeReady:
     return
 
   try:
