@@ -20,6 +20,12 @@ const
   badgeTag = 1002
   statusTag = 1003
 
+proc stateName(state: int): string =
+  case state
+  of NSOnState: "On"
+  of NSMixedState: "Mixed"
+  else: "Off"
+
 when isMainModule:
   var app = NSApp()
   var window = newWindow(120, 120, 720, 460, "Nutella AppKit Hello")
@@ -67,14 +73,17 @@ when isMainModule:
   var button = newButton(28, 172, 220, 44, "Cycle State")
   button.setAllowsMixedState(true)
   button.setState(NSOffState)
-  button.setNextState()
-  button.setNextState()
   button.setAlignment(NSCenterTextAlignment)
   echo "initial button state: ", button.state()
+  let initialStateLabel = stateName(button.state())
+  status.setStringValue("Button state: " & initialStateLabel & " (click to cycle)")
+  button.setTitle("Cycle State (" & initialStateLabel & ")")
   button.setOnClick(
-    proc(sender: NSButton) {.gcsafe.} =
-      discard sender
-      echo "button clicked"
+    proc(sender: NSButton) =
+      let label = stateName(sender.state())
+      status.setStringValue("Button state: " & label & " (click to cycle)")
+      sender.setTitle("Cycle State (" & label & ")")
+      echo "button clicked, state=", label
   )
   root.addSubview(button)
 
