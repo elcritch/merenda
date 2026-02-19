@@ -114,10 +114,15 @@ proc addFieldIvar*[T](cls: ObjcClass, ivarName: string): bool =
 proc getIvarValuePtr[T](obj: NSObject, ivarName: string): ptr T {.inline, raises: [].} =
   if obj.isNil or ivarName.len == 0:
     return nil
-  let cls = getClass(obj.value)
+  var cls = getClass(obj.value)
   if cls.isNil:
     return nil
-  let iv = getIvar(cls, ivarName)
+  var iv = default(Ivar)
+  while not cls.isNil:
+    iv = getIvar(cls, ivarName)
+    if cast[pointer](iv) != nil:
+      break
+    cls = getSuperclass(cls)
   if cast[pointer](iv) == nil:
     return nil
   let slotAddr = cast[uint](obj.value) + cast[uint](getOffset(iv))

@@ -38,24 +38,24 @@ when isMainModule:
 
   var title = newTextField(28, 28, 520, 48, "Hello from Nutella/AppKit")
   title.setTag(titleTag)
-  title.setAlignment(NSCenterTextAlignment)
-  title.setTextColor(nsColor(0.13, 0.20, 0.34, 1.0))
-  title.setDrawsBackground(false)
+  title.controlAlignment = NSCenterTextAlignment
+  title.textFieldColor = nsColor(0.13, 0.20, 0.34, 1.0)
+  title.textFieldDrawsBackground = false
   root.addSubview(title)
 
   var subtitle = newTextField(
     28, 86, 620, 36,
     "Ported APIs: setTag/viewWithTag/removeFromSuperview/alignment/state/contentSize",
   )
-  subtitle.setAlignment(NSLeftTextAlignment)
-  subtitle.setTextColor(nsColor(0.20, 0.24, 0.31, 1.0))
-  subtitle.setBackgroundColor(nsColor(0.98, 0.98, 0.99, 1.0))
+  subtitle.controlAlignment = NSLeftTextAlignment
+  subtitle.textFieldColor = nsColor(0.20, 0.24, 0.31, 1.0)
+  subtitle.textFieldBackgroundColor = nsColor(0.98, 0.98, 0.99, 1.0)
   root.addSubview(subtitle)
 
   var badge = newTextField(560, 30, 132, 28, "Temporary Tag")
   badge.setTag(badgeTag)
-  badge.setAlignment(NSCenterTextAlignment)
-  badge.setBackgroundColor(nsColor(0.91, 0.95, 1.0, 1.0))
+  badge.controlAlignment = NSCenterTextAlignment
+  badge.textFieldBackgroundColor = nsColor(0.91, 0.95, 1.0, 1.0)
   root.addSubview(badge)
 
   var taggedBadge = root.viewWithTag(badgeTag)
@@ -66,23 +66,24 @@ when isMainModule:
 
   var status = newTextField(28, 132, 420, 30, "Button state cycle: Off -> On -> Mixed")
   status.setTag(statusTag)
-  status.setDrawsBackground(false)
-  status.setTextColor(nsColor(0.12, 0.28, 0.20, 1.0))
+  status.textFieldDrawsBackground = false
+  status.textFieldColor = nsColor(0.12, 0.28, 0.20, 1.0)
   root.addSubview(status)
 
   var button = newButton(28, 172, 220, 44, "Cycle State")
-  button.setAllowsMixedState(true)
-  button.setState(NSOffState)
-  button.setAlignment(NSCenterTextAlignment)
-  echo "initial button state: ", button.state()
-  let initialStateLabel = stateName(button.state())
-  status.setStringValue("Button state: " & initialStateLabel & " (click to cycle)")
-  button.setTitle("Cycle State (" & initialStateLabel & ")")
+  button.buttonAllowsMixedState = true
+  button.buttonStateValue = NSOffState
+  button.controlAlignment = NSCenterTextAlignment
+  echo "initial button state: ", button.buttonStateValue()
+  let initialStateLabel = stateName(button.buttonStateValue())
+  status.textFieldStringValue =
+    "Button state: " & initialStateLabel & " (click to cycle)"
+  button.buttonTitle = "Cycle State (" & initialStateLabel & ")"
   button.setOnClick(
     proc(sender: NSButton) =
-      let label = stateName(sender.state())
-      status.setStringValue("Button state: " & label & " (click to cycle)")
-      sender.setTitle("Cycle State (" & label & ")")
+      let label = stateName(sender.buttonStateValue())
+      status.textFieldStringValue = "Button state: " & label & " (click to cycle)"
+      sender.buttonTitle = "Cycle State (" & label & ")"
       echo "button clicked, state=", label
   )
   root.addSubview(button)
