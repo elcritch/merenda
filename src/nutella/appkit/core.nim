@@ -1244,6 +1244,23 @@ proc hitTestButton(
     return view.value
   nil
 
+proc rawInputToLogical*(rawPos: Vec2, backingSize: IVec2, logicalSize: Vec2): Vec2 =
+  ## Siwin mouse/click positions are reported in backing pixel coordinates.
+  ## AppKit layout/hit-testing here is done in logical coordinates.
+  if backingSize.x <= 0 or backingSize.y <= 0:
+    return rawPos
+  if logicalSize.x <= 0.0 or logicalSize.y <= 0.0:
+    return rawPos
+  vec2(
+    rawPos.x * logicalSize.x / backingSize.x.float32,
+    rawPos.y * logicalSize.y / backingSize.y.float32,
+  )
+
+proc logicalInputPos(window: siwinshim.Window, rawPos: Vec2): Vec2 =
+  if window.isNil:
+    return rawPos
+  rawInputToLogical(rawPos, window.backingSize(), window.logicalSize())
+
 proc renderWindow(window: NSWindow, st: NSWindowStateRef) =
   if st.isNil or st.renderer.isNil or st.nativeWindow.isNil:
     return
@@ -1312,7 +1329,8 @@ proc ensureNativeWindow(window: NSWindow, st: NSWindowStateRef) =
         renderWindow(window, st),
       onClick: proc(e: siwinshim.ClickEvent) =
         let root = ensureContentView(window, st)
-        let buttonId = hitTestButton(root.value, e.pos.x, e.pos.y, 0.0, 0.0)
+        let logicalPos = logicalInputPos(st.nativeWindow, e.pos)
+        let buttonId = hitTestButton(root.value, logicalPos.x, logicalPos.y, 0.0, 0.0)
         if not buttonId.isNil:
           let button = ownFromId[NSButton](buttonId)
           button.performClick(window)

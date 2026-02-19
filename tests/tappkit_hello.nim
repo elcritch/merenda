@@ -1,9 +1,22 @@
 import std/unittest
 
+import pkg/vmath
 import nutella/appkit
 import nutella/objc
 
 suite "nutella appkit hello world":
+  test "raw pixel input maps to logical coordinates":
+    let raw = vec2(300.0'f32, 200.0'f32)
+    let mapped =
+      rawInputToLogical(raw, ivec2(600'i32, 400'i32), vec2(300.0'f32, 200.0'f32))
+    check(mapped.x == 150.0'f32)
+    check(mapped.y == 100.0'f32)
+
+    let passthrough =
+      rawInputToLogical(raw, ivec2(0'i32, 0'i32), vec2(300.0'f32, 200.0'f32))
+    check(passthrough.x == raw.x)
+    check(passthrough.y == raw.y)
+
   test "appkit runtime classes stay namespaced to avoid NS* collisions":
     var responder = NSResponder.new()
     var view = newView(0, 0, 10, 10)
