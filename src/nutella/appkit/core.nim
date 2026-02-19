@@ -18,17 +18,24 @@ type
     frame: NSRect
     backgroundColor: NSColor
     hidden: bool
+    superview: ID
+    tag: int
     subviews: seq[ID]
 
   NSControlStateRef = ref object
     enabled: bool
+    alignment: NSTextAlignment
 
   NSTextFieldStateRef = ref object
     stringValue: string
     textColor: NSColor
+    backgroundColor: NSColor
+    drawsBackground: bool
 
   NSButtonStateRef = ref object
     title: string
+    state: int
+    allowsMixedState: bool
     onClick: NSButtonCallbackProc
 
   NSWindowStateRef = ref object
@@ -51,17 +58,26 @@ proc defaultViewState(): NSViewStateRef =
     frame: nsRect(0, 0, 100, 100),
     backgroundColor: nsColor(0.86, 0.90, 0.96, 1.0),
     hidden: false,
+    superview: nil,
+    tag: 0,
     subviews: @[],
   )
 
 proc defaultControlState(): NSControlStateRef =
-  NSControlStateRef(enabled: true)
+  NSControlStateRef(enabled: true, alignment: NSNaturalTextAlignment)
 
 proc defaultTextFieldState(): NSTextFieldStateRef =
-  NSTextFieldStateRef(stringValue: "", textColor: nsColor(0.08, 0.08, 0.08, 1.0))
+  NSTextFieldStateRef(
+    stringValue: "",
+    textColor: nsColor(0.08, 0.08, 0.08, 1.0),
+    backgroundColor: nsColor(0.98, 0.99, 1.0, 1.0),
+    drawsBackground: true,
+  )
 
 proc defaultButtonState(): NSButtonStateRef =
-  NSButtonStateRef(title: "Button", onClick: nil)
+  NSButtonStateRef(
+    title: "Button", state: NSOffState, allowsMixedState: false, onClick: nil
+  )
 
 proc defaultWindowState(): NSWindowStateRef =
   NSWindowStateRef(
@@ -126,6 +142,19 @@ proc uniformCorners(radius: float32): array[DirectionCorners, float32] {.inline.
 proc clampWindowSize(v: float32): int32 {.inline.} =
   if v < 1.0: 1 else: v.round.int32
 
+proc toFontHorizontal(alignment: NSTextAlignment): FontHorizontal {.inline.} =
+  case alignment
+  of NSRightTextAlignment: FontHorizontal.Right
+  of NSCenterTextAlignment: FontHorizontal.Center
+  else: FontHorizontal.Left
+
+proc normalizeButtonState(value: int, allowsMixedState: bool): int {.inline.} =
+  if value == NSMixedState and allowsMixedState:
+    return NSMixedState
+  if value == NSOnState:
+    return NSOnState
+  NSOffState
+
 proc ownFromId[T: NSObject](id: ID): T =
   if id.isNil:
     return T(value: nil)
@@ -164,6 +193,9 @@ proc removeOwnedIdAt(ids: var seq[ID], idx: int) =
   let old = ids[idx]
   ids.del(idx)
   releaseId(old)
+
+proc clearSuperviewRef(viewId: ID)
+proc detachSubviews(st: NSViewStateRef)
 
 proc runApplicationFrames(appObj: NSObject, maxFrames: int): int
 
@@ -218,7 +250,7 @@ objcImpl:
   method dealloc(self: NXViewObj) {.used.} =
     let st = self.viewStateRef()
     if not st.isNil:
-      clearOwnedIds(st.subviews)
+      detachSubviews(st)
     clearIvarRefs(self)
     superDealloc(self)
 
@@ -241,6 +273,23 @@ objcImpl:
       self.controlStateRef = st
     st.enabled = enabled
 
+  method setAlignment*(self: NXControlObj, alignment: cint) =
+    var st = self.controlStateRef()
+    if st.isNil:
+      st = defaultControlState()
+      self.controlStateRef = st
+    case alignment.int
+    of NSLeftTextAlignment.int:
+      st.alignment = NSLeftTextAlignment
+    of NSRightTextAlignment.int:
+      st.alignment = NSRightTextAlignment
+    of NSCenterTextAlignment.int:
+      st.alignment = NSCenterTextAlignment
+    of NSJustifiedTextAlignment.int:
+      st.alignment = NSJustifiedTextAlignment
+    else:
+      st.alignment = NSNaturalTextAlignment
+
 objcImpl:
   type NXTextFieldObj = object of NXControlObj
     textFieldStateRef: NSTextFieldStateRef
@@ -253,12 +302,33 @@ objcImpl:
     if result.textFieldStateRef().isNil:
       result.textFieldStateRef = defaultTextFieldState()
 
-  method setStringValue*(self: NXTextFieldObj, value: string) =
+  method setStringValue(self: NXTextFieldObj, value: string) =
     var st = self.textFieldStateRef()
     if st.isNil:
       st = defaultTextFieldState()
       self.textFieldStateRef = st
     st.stringValue = value
+
+  method setTextColor*(self: NXTextFieldObj, r, g, b, a: cfloat) =
+    var st = self.textFieldStateRef()
+    if st.isNil:
+      st = defaultTextFieldState()
+      self.textFieldStateRef = st
+    st.textColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+
+  method setBackgroundColor*(self: NXTextFieldObj, r, g, b, a: cfloat) =
+    var st = self.textFieldStateRef()
+    if st.isNil:
+      st = defaultTextFieldState()
+      self.textFieldStateRef = st
+    st.backgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+
+  method setDrawsBackground*(self: NXTextFieldObj, value: bool) =
+    var st = self.textFieldStateRef()
+    if st.isNil:
+      st = defaultTextFieldState()
+      self.textFieldStateRef = st
+    st.drawsBackground = value
 
 objcImpl:
   type NXButtonObj = object of NXControlObj
@@ -278,6 +348,40 @@ objcImpl:
       st = defaultButtonState()
       self.buttonStateRef = st
     st.title = value
+
+  method setState*(self: NXButtonObj, value: cint) =
+    var st = self.buttonStateRef()
+    if st.isNil:
+      st = defaultButtonState()
+      self.buttonStateRef = st
+    st.state = normalizeButtonState(value.int, st.allowsMixedState)
+
+  method setAllowsMixedState*(self: NXButtonObj, value: bool) =
+    var st = self.buttonStateRef()
+    if st.isNil:
+      st = defaultButtonState()
+      self.buttonStateRef = st
+    st.allowsMixedState = value
+    st.state = normalizeButtonState(st.state, st.allowsMixedState)
+
+  method setNextState*(self: NXButtonObj) =
+    var st = self.buttonStateRef()
+    if st.isNil:
+      st = defaultButtonState()
+      self.buttonStateRef = st
+    if st.allowsMixedState:
+      case st.state
+      of NSOffState:
+        st.state = NSOnState
+      of NSOnState:
+        st.state = NSMixedState
+      else:
+        st.state = NSOffState
+    else:
+      if st.state == NSOnState:
+        st.state = NSOffState
+      else:
+        st.state = NSOnState
 
   method performClick*(self: NXButtonObj, sender: NSObject) =
     discard sender
@@ -315,6 +419,26 @@ objcImpl:
     if st.isNil:
       st = defaultWindowState()
       self.windowStateRef = st
+    if not st.contentView.isNil and st.contentView != view.value:
+      clearSuperviewRef(st.contentView)
+    if not view.isNil:
+      var vst = view.viewStateRef()
+      if vst.isNil:
+        vst = defaultViewState()
+        view.viewStateRef = vst
+      if not vst.superview.isNil:
+        var parent = ownFromId[NXViewObj](vst.superview)
+        if not parent.isNil:
+          var pst = parent.viewStateRef()
+          if pst.isNil:
+            pst = defaultViewState()
+            parent.viewStateRef = pst
+          for i, candidate in pst.subviews:
+            if candidate == view.value:
+              pst.subviews.del(i)
+              releaseId(view.value)
+              break
+      vst.superview = nil
     replaceOwnedId(st.contentView, view.value)
 
   method contentView*(self: NXWindowObj): NXViewObj =
@@ -331,6 +455,24 @@ objcImpl:
     st.title = value
     if st.nativeReady and not st.nativeWindow.isNil:
       st.nativeWindow.title = value
+
+  method setContentSize*(self: NXWindowObj, width, height: cfloat) =
+    var st = self.windowStateRef()
+    if st.isNil:
+      st = defaultWindowState()
+      self.windowStateRef = st
+    st.frame.size = nsSize(max(width.float32, 1.0), max(height.float32, 1.0))
+    if st.nativeReady and not st.nativeWindow.isNil:
+      st.nativeWindow.size = ivec2(
+        clampWindowSize(st.frame.size.width), clampWindowSize(st.frame.size.height)
+      )
+
+  method setFrameOrigin*(self: NXWindowObj, x, y: cfloat) =
+    var st = self.windowStateRef()
+    if st.isNil:
+      st = defaultWindowState()
+      self.windowStateRef = st
+    st.frame.origin = nsPoint(x.float32, y.float32)
 
   method makeKeyAndOrderFront*(self: NXWindowObj, sender: NSObject) =
     discard sender
@@ -411,6 +553,24 @@ type
   NSWindow* = NXWindowObj
   NSApplication* = NXApplicationObj
 
+proc clearSuperviewRef(viewId: ID) =
+  if viewId.isNil:
+    return
+  let child = ownFromId[NSView](viewId)
+  if child.isNil:
+    return
+  let st = child.viewStateRef()
+  if not st.isNil:
+    st.superview = nil
+
+proc detachSubviews(st: NSViewStateRef) =
+  if st.isNil:
+    return
+  for child in st.subviews:
+    clearSuperviewRef(child)
+    releaseId(child)
+  st.subviews.setLen(0)
+
 proc viewState*(view: NSView): NSViewStateRef =
   var st = view.viewStateRef()
   if st.isNil:
@@ -459,6 +619,30 @@ proc frame*(view: NSView): NSRect =
 proc frame*(window: NSWindow): NSRect =
   window.windowState().frame
 
+proc frameOrigin*(view: NSView): NSPoint =
+  view.frame().origin
+
+proc frameOrigin*(window: NSWindow): NSPoint =
+  window.frame().origin
+
+proc frameSize*(view: NSView): NSSize =
+  view.frame().size
+
+proc frameSize*(window: NSWindow): NSSize =
+  window.frame().size
+
+proc title*(window: NSWindow): string =
+  window.windowState().title
+
+proc isHidden*(view: NSView): bool =
+  view.viewState().hidden
+
+proc tag*(view: NSView): int =
+  view.viewState().tag
+
+proc setTag*(view: NSView, value: int) =
+  view.viewState().tag = value
+
 proc setBackgroundColor*(view: NSView, r, g, b: float32, a: float32 = 1.0'f32) =
   let st = view.viewState()
   st.backgroundColor = nsColor(r, g, b, a)
@@ -472,12 +656,41 @@ proc setFrame*(view: NSView, frame: NSRect) =
     frame.size.height.cfloat,
   )
 
+proc setFrameOrigin*(view: NSView, origin: NSPoint) =
+  let f = view.frame()
+  view.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
+
+proc setFrameSize*(view: NSView, size: NSSize) =
+  let f = view.frame()
+  view.setFrame(
+    nsRect(f.origin.x, f.origin.y, max(size.width, 0.0), max(size.height, 0.0))
+  )
+
 proc setFrame*(window: NSWindow, frame: NSRect) =
   let st = window.windowState()
-  st.frame = frame
+  st.frame = nsRect(
+    frame.origin.x,
+    frame.origin.y,
+    max(frame.size.width, 1.0),
+    max(frame.size.height, 1.0),
+  )
   if st.nativeReady and not st.nativeWindow.isNil:
     st.nativeWindow.size =
-      ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
+      ivec2(clampWindowSize(st.frame.size.width), clampWindowSize(st.frame.size.height))
+
+proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
+  let f = window.frame()
+  window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
+
+proc setFrameSize*(window: NSWindow, size: NSSize) =
+  let f = window.frame()
+  window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
+
+proc setContentSize*(window: NSWindow, size: NSSize) =
+  window.setFrameSize(size)
+
+proc setContentSize*(window: NSWindow, width, height: float32) =
+  window.setContentSize(nsSize(width, height))
 
 proc subviews*(view: NSView): seq[NSView] =
   let st = view.viewState()
@@ -485,21 +698,148 @@ proc subviews*(view: NSView): seq[NSView] =
   for i, child in st.subviews:
     result[i] = ownFromId[NSView](child)
 
-proc addSubview*(self: NSView, view: NSView) =
-  if self.isNil or view.isNil:
+proc superview*(view: NSView): NSView =
+  let st = view.viewState()
+  if st.superview.isNil:
+    return NSView(value: nil)
+  ownFromId[NSView](st.superview)
+
+proc removeSubviewById(parent: NSView, childId: ID): bool =
+  if parent.isNil or childId.isNil:
+    return false
+  let st = parent.viewState()
+  for i, candidate in st.subviews:
+    if candidate == childId:
+      clearSuperviewRef(childId)
+      st.subviews.del(i)
+      releaseId(childId)
+      return true
+  false
+
+proc removeFromSuperview*(view: NSView) =
+  if view.isNil:
     return
+  let st = view.viewState()
+  if st.superview.isNil:
+    return
+  let parentId = st.superview
+  st.superview = nil
+  let parent = ownFromId[NSView](parentId)
+  if parent.isNil:
+    return
+  discard removeSubviewById(parent, view.value)
+
+proc addSubview*(self: NSView, view: NSView) =
+  if self.isNil or view.isNil or self.value == view.value:
+    return
+  let vst = view.viewState()
+  if vst.superview == self.value:
+    let st = self.viewState()
+    if view.value notin st.subviews:
+      st.subviews.add(retainId(view.value))
+    return
+  if not vst.superview.isNil:
+    view.removeFromSuperview()
   let st = self.viewState()
   if view.value notin st.subviews:
     st.subviews.add(retainId(view.value))
+  vst.superview = self.value
+
+proc removeSubview*(self: NSView, view: NSView) =
+  if self.isNil or view.isNil:
+    return
+  discard removeSubviewById(self, view.value)
+
+proc viewWithTag*(view: NSView, wantedTag: int): NSView =
+  if view.isNil:
+    return NSView(value: nil)
+  let st = view.viewState()
+  if st.tag == wantedTag:
+    return retain(view)
+  for childId in st.subviews:
+    let child = ownFromId[NSView](childId)
+    if child.isNil:
+      continue
+    let hit = child.viewWithTag(wantedTag)
+    if not hit.isNil:
+      return hit
+  NSView(value: nil)
 
 proc stringValue*(field: NSTextField): string =
   field.textFieldState().stringValue
 
+proc setStringValue*(field: NSTextField, value: string) =
+  field.textFieldState().stringValue = value
+
+proc textColor*(field: NSTextField): NSColor =
+  field.textFieldState().textColor
+
+proc setTextColor*(field: NSTextField, color: NSColor) =
+  field.textFieldState().textColor = color
+
+proc setTextColor*(field: NSTextField, r, g, b: float32, a: float32 = 1.0'f32) =
+  field.setTextColor(nsColor(r, g, b, a))
+
+proc backgroundColor*(field: NSTextField): NSColor =
+  field.textFieldState().backgroundColor
+
+proc setBackgroundColor*(field: NSTextField, color: NSColor) =
+  field.textFieldState().backgroundColor = color
+
+proc setBackgroundColor*(field: NSTextField, r, g, b: float32, a: float32 = 1.0'f32) =
+  field.setBackgroundColor(nsColor(r, g, b, a))
+
+proc drawsBackground*(field: NSTextField): bool =
+  field.textFieldState().drawsBackground
+
+proc setDrawsBackground*(field: NSTextField, value: bool) =
+  field.textFieldState().drawsBackground = value
+
 proc setEnabled*(control: NSControl, enabled: bool) =
   control.controlState().enabled = enabled
 
+proc isEnabled*(control: NSControl): bool =
+  control.controlState().enabled
+
+proc alignment*(control: NSControl): NSTextAlignment =
+  control.controlState().alignment
+
+proc setAlignment*(control: NSControl, alignment: NSTextAlignment) =
+  control.controlState().alignment = alignment
+
 proc title*(button: NSButton): string =
   button.buttonState().title
+
+proc state*(button: NSButton): int =
+  button.buttonState().state
+
+proc setState*(button: NSButton, value: int) =
+  let st = button.buttonState()
+  st.state = normalizeButtonState(value, st.allowsMixedState)
+
+proc allowsMixedState*(button: NSButton): bool =
+  button.buttonState().allowsMixedState
+
+proc setAllowsMixedState*(button: NSButton, value: bool) =
+  let st = button.buttonState()
+  st.allowsMixedState = value
+  st.state = normalizeButtonState(st.state, value)
+
+proc setNextState*(button: NSButton) =
+  let st = button.buttonState()
+  if st.allowsMixedState:
+    case st.state
+    of NSOffState:
+      st.state = NSOnState
+    of NSOnState:
+      st.state = NSMixedState
+    else:
+      st.state = NSOffState
+  else:
+    if st.state == NSOnState:
+      st.state = NSOffState
+    else:
+      st.state = NSOnState
 
 proc setOnClick*(button: NSButton, cb: proc(sender: NSButton) {.gcsafe.}) =
   let st = button.buttonState()
@@ -537,16 +877,38 @@ proc noRenderShadows(): array[ShadowCount, RenderShadow] =
       color: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
     )
 
+proc textFieldDrawsBackground(view: NSView): bool =
+  if not view.isKindOfClass(NSTextField):
+    return false
+  var textField = asType[NSTextField](view.value)
+  result = textField.drawsBackground()
+  textField.value = nil
+
+proc buttonVisualState(view: NSView): int =
+  if not view.isKindOfClass(NSButton):
+    return NSOffState
+  var button = asType[NSButton](view.value)
+  result = button.state()
+  button.value = nil
+
 proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
   result = noRenderShadows()
   if view.isKindOfClass(NSButton):
+    let state = buttonVisualState(view)
+    let dropAlpha =
+      if state == NSOnState:
+        0.38
+      elif state == NSMixedState:
+        0.18
+      else:
+        0.30
     result[0] = RenderShadow(
       style: DropShadow,
       blur: 4.0,
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      color: nsColor(0.10, 0.18, 0.35, 0.30).toFigColor(),
+      color: nsColor(0.10, 0.18, 0.35, dropAlpha).toFigColor(),
     )
     result[1] = RenderShadow(
       style: InnerShadow,
@@ -557,6 +919,8 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       color: nsColor(1.0, 1.0, 1.0, 0.32).toFigColor(),
     )
   elif view.isKindOfClass(NSTextField):
+    if not textFieldDrawsBackground(view):
+      return
     result[0] = RenderShadow(
       style: InnerShadow,
       blur: 1.0,
@@ -576,15 +940,34 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
 
 proc viewFillColor(view: NSView, st: NSViewStateRef): Color =
   if view.isKindOfClass(NSButton):
-    return nsColor(0.30, 0.56, 0.93, 1.0).toFigColor()
+    case buttonVisualState(view)
+    of NSOnState:
+      return nsColor(0.20, 0.45, 0.82, 1.0).toFigColor()
+    of NSMixedState:
+      return nsColor(0.58, 0.62, 0.70, 1.0).toFigColor()
+    else:
+      return nsColor(0.30, 0.56, 0.93, 1.0).toFigColor()
   if view.isKindOfClass(NSTextField):
-    return nsColor(0.98, 0.99, 1.0, 1.0).toFigColor()
+    var textField = asType[NSTextField](view.value)
+    let tstate = textField.textFieldState()
+    textField.value = nil
+    if tstate.drawsBackground:
+      return tstate.backgroundColor.toFigColor()
+    return nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()
   st.backgroundColor.toFigColor()
 
 proc viewStrokeColor(view: NSView): Color =
   if view.isKindOfClass(NSButton):
-    return nsColor(0.13, 0.29, 0.62, 1.0).toFigColor()
+    case buttonVisualState(view)
+    of NSOnState:
+      return nsColor(0.11, 0.25, 0.56, 1.0).toFigColor()
+    of NSMixedState:
+      return nsColor(0.44, 0.48, 0.56, 1.0).toFigColor()
+    else:
+      return nsColor(0.13, 0.29, 0.62, 1.0).toFigColor()
   if view.isKindOfClass(NSTextField):
+    if not textFieldDrawsBackground(view):
+      return nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()
     return nsColor(0.64, 0.70, 0.80, 1.0).toFigColor()
   nsColor(0.34, 0.42, 0.56, 0.28).toFigColor()
 
@@ -592,6 +975,8 @@ proc viewCornerRadius(view: NSView): float32 =
   if view.isKindOfClass(NSButton):
     return 10.0
   if view.isKindOfClass(NSTextField):
+    if not textFieldDrawsBackground(view):
+      return 0.0
     return 8.0
   0.0
 
@@ -607,6 +992,8 @@ proc addAquaGlossOverlay(
     glossAlpha = 0.36
     glossHeight = box.size.height * 0.56
   elif view.isKindOfClass(NSTextField):
+    if not textFieldDrawsBackground(view):
+      return
     glossAlpha = 0.24
     glossHeight = box.size.height * 0.46
   else:
@@ -678,6 +1065,7 @@ proc textLayoutForView(
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
     let tstate = textField.textFieldState()
+    let textAlign = toFontHorizontal(textField.alignment())
     textField.value = nil
     if tstate.stringValue.len == 0:
       return (false, default(GlyphArrangement))
@@ -686,7 +1074,7 @@ proc textLayoutForView(
     let layout = typeset(
       rect(0, 0, box.size.width, box.size.height),
       spans,
-      hAlign = FontHorizontal.Left,
+      hAlign = textAlign,
       vAlign = FontVertical.Middle,
       minContent = false,
       wrap = true,
@@ -699,6 +1087,7 @@ proc textLayoutForView(
   if view.isKindOfClass(NSButton):
     var button = asType[NSButton](view.value)
     let bstate = button.buttonState()
+    let textAlign = toFontHorizontal(button.alignment())
     button.value = nil
     if bstate.title.len == 0:
       return (false, default(GlyphArrangement))
@@ -707,7 +1096,7 @@ proc textLayoutForView(
     let layout = typeset(
       rect(0, 0, box.size.width, box.size.height),
       spans,
-      hAlign = FontHorizontal.Center,
+      hAlign = textAlign,
       vAlign = FontVertical.Middle,
       minContent = false,
       wrap = false,
@@ -781,15 +1170,25 @@ proc addViewTree(
 
   addAquaGlossOverlay(renders, idx, view, box)
 
+  let textFieldHasBackground =
+    if view.isKindOfClass(NSTextField):
+      textFieldDrawsBackground(view)
+    else:
+      false
   let textPaddingX =
     if view.isKindOfClass(NSButton):
       8.0
     elif view.isKindOfClass(NSTextField):
-      10.0
+      (if textFieldHasBackground: 10.0 else: 0.0)
     else:
       0.0
   let textPaddingY =
-    if view.isKindOfClass(NSButton) or view.isKindOfClass(NSTextField): 4.0 else: 0.0
+    if view.isKindOfClass(NSButton):
+      4.0
+    elif view.isKindOfClass(NSTextField):
+      (if textFieldHasBackground: 4.0 else: 0.0)
+    else:
+      0.0
 
   let textBox = nsRect(
     box.origin.x + textPaddingX,
@@ -952,8 +1351,22 @@ proc addWindow*(app: NSApplication, window: NSWindow) =
     st.windows.add(retainId(window.value))
   window.windowState().visibleRequested = true
 
+proc windows*(app: NSApplication): seq[NSWindow] =
+  let st = app.applicationState()
+  result = newSeq[NSWindow](st.windows.len)
+  for i, id in st.windows:
+    result[i] = ownFromId[NSWindow](id)
+
 proc setContentView*(window: NSWindow, view: NSView) =
-  replaceOwnedId(window.windowState().contentView, view.value)
+  let st = window.windowState()
+  if not st.contentView.isNil and st.contentView != view.value:
+    clearSuperviewRef(st.contentView)
+  if not view.isNil:
+    let vst = view.viewState()
+    if not vst.superview.isNil:
+      view.removeFromSuperview()
+    vst.superview = nil
+  replaceOwnedId(st.contentView, view.value)
 
 proc contentView*(window: NSWindow): NSView =
   let cv = window.windowState().contentView
@@ -976,6 +1389,9 @@ proc run*(app: NSApplication) =
 
 proc stop*(app: NSApplication) =
   app.applicationState().running = false
+
+proc isRunning*(app: NSApplication): bool =
+  app.applicationState().running
 
 proc runApplicationFrames(appObj: NSObject, maxFrames: int): int =
   let app = ownFromId[NSApplication](appObj.value)
@@ -1043,7 +1459,7 @@ proc newView*(x, y, width, height: float32): NSView =
 proc newTextField*(x, y, width, height: float32, value = ""): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.setStringValue(value)
+  result.textFieldState().stringValue = value
 
 proc newButton*(x, y, width, height: float32, title = "Button"): NSButton =
   result = NSButton.new()

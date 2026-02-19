@@ -1,4 +1,11 @@
 type
+  NSTextAlignment* {.size: sizeof(cint).} = enum
+    NSLeftTextAlignment = 0
+    NSRightTextAlignment = 1
+    NSCenterTextAlignment = 2
+    NSJustifiedTextAlignment = 3
+    NSNaturalTextAlignment = 4
+
   NSPoint* = object
     x*: float32
     y*: float32
@@ -16,6 +23,11 @@ type
     g*: float32
     b*: float32
     a*: float32
+
+const
+  NSMixedState* = -1
+  NSOffState* = 0
+  NSOnState* = 1
 
 proc nsPoint*(x, y: float32): NSPoint =
   NSPoint(x: x, y: y)
