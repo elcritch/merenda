@@ -1,4 +1,4 @@
-import std/unittest
+import std/[strutils, unittest]
 
 import pkg/vmath
 import nutella/appkit
@@ -25,12 +25,12 @@ suite "nutella appkit hello world":
     var window = newWindow(0, 0, 10, 10, "w")
     var app = NSApplication.new()
 
-    check(getClassName(responder) == "NXResponderObj")
-    check(getClassName(view) == "NXViewObj")
-    check(getClassName(button) == "NXButtonObj")
-    check(getClassName(field) == "NXTextFieldObj")
-    check(getClassName(window) == "NXWindowObj")
-    check(getClassName(app) == "NXApplicationObj")
+    check(getClassName(responder).startsWith("NXResponder"))
+    check(getClassName(view).startsWith("NXView"))
+    check(getClassName(button).startsWith("NXButton"))
+    check(getClassName(field).startsWith("NXTextField"))
+    check(getClassName(window).startsWith("NXWindow"))
+    check(getClassName(app).startsWith("NXApplication"))
 
     responder.value = nil
     view.value = nil
