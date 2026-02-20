@@ -764,7 +764,7 @@ proc noRenderShadows(): array[ShadowCount, RenderShadow] =
       spread: 0.0,
       x: 0.0,
       y: 0.0,
-      color: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
     )
 
 proc textFieldDrawsBackground(view: NSView): bool =
@@ -798,7 +798,7 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      color: nsColor(0.10, 0.18, 0.35, dropAlpha).toFigColor(),
+      fill: nsColor(0.10, 0.18, 0.35, dropAlpha).toFigColor(),
     )
     result[1] = RenderShadow(
       style: InnerShadow,
@@ -806,7 +806,7 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      color: nsColor(1.0, 1.0, 1.0, 0.32).toFigColor(),
+      fill: nsColor(1.0, 1.0, 1.0, 0.32).toFigColor(),
     )
   elif view.isKindOfClass(NSTextField):
     if not textFieldDrawsBackground(view):
@@ -817,7 +817,7 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      color: nsColor(1.0, 1.0, 1.0, 0.45).toFigColor(),
+      fill: nsColor(1.0, 1.0, 1.0, 0.45).toFigColor(),
     )
     result[1] = RenderShadow(
       style: DropShadow,
@@ -825,7 +825,7 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      color: nsColor(0.34, 0.40, 0.52, 0.20).toFigColor(),
+      fill: nsColor(0.34, 0.40, 0.52, 0.20).toFigColor(),
     )
 
 proc viewFillColor(view: NSView): Color =
@@ -910,7 +910,7 @@ proc addAquaGlossOverlay(
       screenBox: glossBox,
       fill: nsColor(1.0, 1.0, 1.0, glossAlpha).toFigColor(),
       corners: [radius, radius, max(radius - 5.0, 0.0), max(radius - 5.0, 0.0)],
-      stroke: RenderStroke(weight: 0.0, color: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()),
+      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()),
     ),
   )
 
@@ -1047,7 +1047,7 @@ proc addViewTree(
     fill: viewFillColor(view),
     corners: uniformCorners(viewCornerRadius(view)),
     shadows: viewShadows(view),
-    stroke: RenderStroke(weight: 1.0, color: viewStrokeColor(view)),
+    stroke: RenderStroke(weight: 1.0, fill: viewStrokeColor(view)),
   )
 
   let idx =
