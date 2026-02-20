@@ -16,6 +16,12 @@ type NSButtonCallbackProc = proc(sender: ID)
 proc toFigColor(c: NSColor): Color {.inline.} =
   color(c.r, c.g, c.b, c.a)
 
+proc toFigRgba(c: NSColor): ColorRGBA {.inline.} =
+  rgba(c.toFigColor())
+
+proc solidFill(c: NSColor): Fill {.inline.} =
+  fill(c.toFigRgba())
+
 var appkitTypefaceId {.threadvar.}: TypefaceId
 var appkitFontReady {.threadvar.}: bool
 var appkitFontUnavailable {.threadvar.}: bool
@@ -781,32 +787,95 @@ proc buttonVisualState(view: NSView): int =
   result = button.state()
   button.value = nil
 
+proc aquaButtonFill(state: int): Fill =
+  case state
+  of NSOnState:
+    linear(
+      nsColor(0.46, 0.64, 0.90, 1.0).toFigRgba(),
+      nsColor(0.31, 0.50, 0.81, 1.0).toFigRgba(),
+      nsColor(0.19, 0.34, 0.66, 1.0).toFigRgba(),
+      axis = fgaY,
+      midPos = 132'u8,
+    )
+  of NSMixedState:
+    linear(
+      nsColor(0.76, 0.79, 0.84, 1.0).toFigRgba(),
+      nsColor(0.65, 0.69, 0.76, 1.0).toFigRgba(),
+      nsColor(0.53, 0.58, 0.66, 1.0).toFigRgba(),
+      axis = fgaY,
+      midPos = 132'u8,
+    )
+  else:
+    linear(
+      nsColor(0.63, 0.78, 0.98, 1.0).toFigRgba(),
+      nsColor(0.42, 0.65, 0.95, 1.0).toFigRgba(),
+      nsColor(0.27, 0.50, 0.86, 1.0).toFigRgba(),
+      axis = fgaY,
+      midPos = 132'u8,
+    )
+
+proc aquaButtonStroke(state: int): Fill =
+  case state
+  of NSOnState:
+    linear(
+      nsColor(0.35, 0.50, 0.78, 1.0).toFigRgba(),
+      nsColor(0.11, 0.23, 0.49, 1.0).toFigRgba(),
+      axis = fgaY,
+    )
+  of NSMixedState:
+    linear(
+      nsColor(0.55, 0.60, 0.68, 1.0).toFigRgba(),
+      nsColor(0.36, 0.41, 0.50, 1.0).toFigRgba(),
+      axis = fgaY,
+    )
+  else:
+    linear(
+      nsColor(0.41, 0.60, 0.88, 1.0).toFigRgba(),
+      nsColor(0.15, 0.33, 0.64, 1.0).toFigRgba(),
+      axis = fgaY,
+    )
+
 proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
   result = noRenderShadows()
   if view.isKindOfClass(NSButton):
     let state = buttonVisualState(view)
     let dropAlpha =
       if state == NSOnState:
-        0.38
+        0.32
       elif state == NSMixedState:
-        0.18
+        0.17
       else:
-        0.30
+        0.27
+    let bottomInsetAlpha =
+      if state == NSOnState:
+        0.22
+      elif state == NSMixedState:
+        0.19
+      else:
+        0.25
     result[0] = RenderShadow(
       style: DropShadow,
-      blur: 4.0,
+      blur: 2.8,
       spread: 0.0,
       x: 0.0,
-      y: 1.0,
+      y: 1.2,
       fill: nsColor(0.10, 0.18, 0.35, dropAlpha).toFigColor(),
     )
     result[1] = RenderShadow(
       style: InnerShadow,
-      blur: 1.4,
+      blur: 1.2,
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      fill: nsColor(1.0, 1.0, 1.0, 0.32).toFigColor(),
+      fill: nsColor(1.0, 1.0, 1.0, 0.52).toFigColor(),
+    )
+    result[2] = RenderShadow(
+      style: InnerShadow,
+      blur: 1.5,
+      spread: 0.0,
+      x: 0.0,
+      y: -1.0,
+      fill: nsColor(0.03, 0.11, 0.28, bottomInsetAlpha).toFigColor(),
     )
   elif view.isKindOfClass(NSTextField):
     if not textFieldDrawsBackground(view):
@@ -828,39 +897,27 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       fill: nsColor(0.34, 0.40, 0.52, 0.20).toFigColor(),
     )
 
-proc viewFillColor(view: NSView): Color =
+proc viewFill(view: NSView): Fill =
   if view.isKindOfClass(NSButton):
-    case buttonVisualState(view)
-    of NSOnState:
-      return nsColor(0.20, 0.45, 0.82, 1.0).toFigColor()
-    of NSMixedState:
-      return nsColor(0.58, 0.62, 0.70, 1.0).toFigColor()
-    else:
-      return nsColor(0.30, 0.56, 0.93, 1.0).toFigColor()
+    return aquaButtonFill(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
     let drawsBackground = textField.textFieldDrawsBackground()
     let backgroundColor = textField.textFieldBackgroundColor()
     textField.value = nil
     if drawsBackground:
-      return backgroundColor.toFigColor()
-    return nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()
-  view.viewBackgroundColor().toFigColor()
+      return backgroundColor.solidFill()
+    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+  view.viewBackgroundColor().solidFill()
 
-proc viewStrokeColor(view: NSView): Color =
+proc viewStrokeFill(view: NSView): Fill =
   if view.isKindOfClass(NSButton):
-    case buttonVisualState(view)
-    of NSOnState:
-      return nsColor(0.11, 0.25, 0.56, 1.0).toFigColor()
-    of NSMixedState:
-      return nsColor(0.44, 0.48, 0.56, 1.0).toFigColor()
-    else:
-      return nsColor(0.13, 0.29, 0.62, 1.0).toFigColor()
+    return aquaButtonStroke(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     if not textFieldDrawsBackground(view):
-      return nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()
-    return nsColor(0.64, 0.70, 0.80, 1.0).toFigColor()
-  nsColor(0.34, 0.42, 0.56, 0.28).toFigColor()
+      return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+    return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
+  nsColor(0.34, 0.42, 0.56, 0.28).solidFill()
 
 proc viewCornerRadius(view: NSView): float32 =
   if view.isKindOfClass(NSButton):
@@ -877,15 +934,25 @@ proc addAquaGlossOverlay(
   if box.size.width <= 4 or box.size.height <= 4:
     return
 
-  var glossAlpha = 0.0
+  var glossFill = nsColor(1.0, 1.0, 1.0, 0.0).solidFill()
   var glossHeight = 0.0
   if view.isKindOfClass(NSButton):
-    glossAlpha = 0.36
+    glossFill = linear(
+      nsColor(1.0, 1.0, 1.0, 0.66).toFigRgba(),
+      nsColor(1.0, 1.0, 1.0, 0.40).toFigRgba(),
+      nsColor(1.0, 1.0, 1.0, 0.08).toFigRgba(),
+      axis = fgaY,
+      midPos = 150'u8,
+    )
     glossHeight = box.size.height * 0.56
   elif view.isKindOfClass(NSTextField):
     if not textFieldDrawsBackground(view):
       return
-    glossAlpha = 0.24
+    glossFill = linear(
+      nsColor(1.0, 1.0, 1.0, 0.38).toFigRgba(),
+      nsColor(1.0, 1.0, 1.0, 0.16).toFigRgba(),
+      axis = fgaY,
+    )
     glossHeight = box.size.height * 0.46
   else:
     return
@@ -908,7 +975,7 @@ proc addAquaGlossOverlay(
       kind: nkRectangle,
       childCount: 0,
       screenBox: glossBox,
-      fill: nsColor(1.0, 1.0, 1.0, glossAlpha).toFigColor(),
+      fill: glossFill,
       corners: [radius, radius, max(radius - 5.0, 0.0), max(radius - 5.0, 0.0)],
       stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()),
     ),
@@ -1044,10 +1111,10 @@ proc addViewTree(
     kind: nkRectangle,
     childCount: 0,
     screenBox: rect(box.origin.x, box.origin.y, box.size.width, box.size.height),
-    fill: viewFillColor(view),
+    fill: viewFill(view),
     corners: uniformCorners(viewCornerRadius(view)),
     shadows: viewShadows(view),
-    stroke: RenderStroke(weight: 1.0, fill: viewStrokeColor(view)),
+    stroke: RenderStroke(weight: 1.0, fill: viewStrokeFill(view)),
   )
 
   let idx =
