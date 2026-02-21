@@ -473,15 +473,13 @@ proc renderWindow(window: NSWindow) =
   if renderer.isNil or nativeWindow.isNil:
     return
 
-  let logicalSize = nativeWindow.logicalSize()
-  var frame = window.windowFrame()
-  frame.size = nsSize(logicalSize.x.float32, logicalSize.y.float32)
-  window.windowFrame = frame
+  let frame = window.windowFrame()
+  let logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
+  let root = ensureContentView(window)
+  root.setFrame(0.cfloat, 0.cfloat, logicalSize.x.cfloat, logicalSize.y.cfloat)
   var renders = buildWindowRenders(window)
   if renders.isNil:
     return
-  let root = ensureContentView(window)
-  root.setFrame(0.cfloat, 0.cfloat, logicalSize.x.cfloat, logicalSize.y.cfloat)
   if shouldDebugRenderDump():
     dumpRenders(renders)
 
