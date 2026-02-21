@@ -66,22 +66,25 @@ proc normalizeButtonState(value: int, allowsMixedState: bool): int {.inline.} =
     return NSOnState
   NSOffState
 
-proc stripMnemonicMarkers(value: string): string =
+proc stripMnemonicMarkers(value: NSString): NSString =
+  let src = string(value)
   var i = 0
-  while i < value.len:
-    if value[i] != '&':
-      result.add(value[i])
+  var dst = newStringOfCap(src.len)
+  while i < src.len:
+    if src[i] != '&':
+      dst.add(src[i])
       inc i
       continue
-    if i + 1 >= value.len:
+    if i + 1 >= src.len:
       inc i
       continue
-    if value[i + 1] == '&':
-      result.add('&')
+    if src[i + 1] == '&':
+      dst.add('&')
       i += 2
       continue
-    result.add(value[i + 1])
+    dst.add(src[i + 1])
     i += 2
+  result = nsString(dst)
 
 proc ownFromId[T: NSObject](id: ID): T =
   if id.isNil:
@@ -220,11 +223,11 @@ objcImpl:
     result.refusesFirstResponder = false
     result.align = NSNaturalTextAlignment
 
-  method stringValue*(self: NXControl): string =
+  method stringValue*(self: NXControl): NSString =
     discard self
-    ""
+    nsString("")
 
-  method setStringValue*(self: NXControl, value: string) =
+  method setStringValue*(self: NXControl, value: NSString) =
     discard self
     discard value
 
@@ -232,7 +235,7 @@ objcImpl:
     if self.isNil:
       return 0.cint
     try:
-      parseInt(self.stringValue()).cint
+      parseInt(string(self.stringValue())).cint
     except ValueError:
       0.cint
 
@@ -243,7 +246,7 @@ objcImpl:
     if self.isNil:
       return 0.0
     try:
-      parseFloat(self.stringValue()).cfloat
+      parseFloat(string(self.stringValue())).cfloat
     except ValueError:
       0.0
 
@@ -251,14 +254,14 @@ objcImpl:
     if self.isNil:
       return 0.0
     try:
-      parseFloat(self.stringValue()).cdouble
+      parseFloat(string(self.stringValue())).cdouble
     except ValueError:
       0.0
 
   method setIntValue*(self: NXControl, value: cint) =
     if self.isNil:
       return
-    self.setStringValue($value)
+    self.setStringValue(nsString($value))
 
   method setIntegerValue*(self: NXControl, value: int) =
     self.setIntValue(value.cint)
@@ -266,12 +269,12 @@ objcImpl:
   method setFloatValue*(self: NXControl, value: cfloat) =
     if self.isNil:
       return
-    self.setStringValue($value)
+    self.setStringValue(nsString($value))
 
   method setDoubleValue*(self: NXControl, value: cdouble) =
     if self.isNil:
       return
-    self.setStringValue($value)
+    self.setStringValue(nsString($value))
 
   method takeStringValueFrom*(self: NXControl, sender: NXControl) =
     if self.isNil or sender.isNil:
@@ -304,7 +307,7 @@ objcImpl:
 
 objcImpl:
   type NXTextField* = object of NXControl
-    strValue: string
+    strValue: NSString
     txtColor {.set: setTextColor, get: textColor.}: NSColor
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
@@ -323,7 +326,7 @@ objcImpl:
     result.bordered = true
     result.bezeled = true
     result.align = NSNaturalTextAlignment
-    result.strValue = ""
+    result.strValue = nsString("")
     result.txtColor = nsColor(0.08, 0.08, 0.08, 1.0)
     result.bgColor = nsColor(0.98, 0.99, 1.0, 1.0)
     result.drawsBg = true
@@ -336,10 +339,10 @@ objcImpl:
   method setBackgroundColor*(self: NXTextField, r, g, b, a: cfloat) =
     self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
-  method stringValue*(self: NXTextField): string =
+  method stringValue*(self: NXTextField): NSString =
     self.strValue
 
-  method setStringValue*(self: NXTextField, value: string) =
+  method setStringValue*(self: NXTextField, value: NSString) =
     self.strValue = value
 
   method previousText*(self: NXTextField): NXTextField =
@@ -362,26 +365,26 @@ objcImpl:
     discard self
     discard sender
 
-  method setTitleWithMnemonic*(self: NXTextField, value: string) =
+  method setTitleWithMnemonic*(self: NXTextField, value: NSString) =
     self.setStringValue(stripMnemonicMarkers(value))
 
   method dealloc(self: NXTextField) {.used.} =
     self.prevTxt = replacedOwnedId(self.prevTxt, nil)
     self.nextTxt = replacedOwnedId(self.nextTxt, nil)
-    self.strValue = ""
+    self.strValue = nsString("")
     discard callSuperIdFrom(NXTextField, self, getSelector("dealloc"))
 
 objcImpl:
   type NXButton* = object of NXControl
-    titleText {.set: setTitle, get: title.}: string
+    titleText {.set: setTitle, get: title.}: NSString
     stateValue {.get: state.}: int
     mixedAllowed {.get: allowsMixedState.}: bool
     transparent {.set: setTransparent, get: isTransparent.}: bool
-    keyEq {.set: setKeyEquivalent, get: keyEquivalent.}: string
+    keyEq {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
     keyEqMods {.set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask.}: int
     imagePos {.set: setImagePosition, get: imagePosition.}: int
     bezel {.set: setBezelStyle, get: bezelStyle.}: int
-    altTitle {.set: setAlternateTitle, get: alternateTitle.}: string
+    altTitle {.set: setAlternateTitle, get: alternateTitle.}: NSString
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
@@ -395,17 +398,17 @@ objcImpl:
       return
     result.enabled = true
     result.align = NSNaturalTextAlignment
-    result.titleText = "Button"
+    result.titleText = nsString("Button")
     result.stateValue = NSOffState
     result.mixedAllowed = false
     result.bordered = true
     result.bezeled = true
     result.transparent = false
-    result.keyEq = ""
+    result.keyEq = nsString("")
     result.keyEqMods = 0
     result.imagePos = 0
     result.bezel = 0
-    result.altTitle = ""
+    result.altTitle = nsString("")
     result.showBorderInside = false
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
@@ -433,10 +436,10 @@ objcImpl:
       else:
         self.stateValue = NSOnState
 
-  method stringValue*(self: NXButton): string =
+  method stringValue*(self: NXButton): NSString =
     self.titleText()
 
-  method setStringValue*(self: NXButton, value: string) =
+  method setStringValue*(self: NXButton, value: NSString) =
     self.setTitle(value)
 
   method intValue*(self: NXButton): cint =
@@ -487,20 +490,20 @@ objcImpl:
     discard self
     discard value
 
-  method setTitleWithMnemonic*(self: NXButton, value: string) =
+  method setTitleWithMnemonic*(self: NXButton, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
 
   method dealloc(self: NXButton) {.used.} =
-    self.titleText = ""
-    self.keyEq = ""
-    self.altTitle = ""
+    self.titleText = nsString("")
+    self.keyEq = nsString("")
+    self.altTitle = nsString("")
     self.onClick = nil
     discard callSuperIdFrom(NXButton, self, getSelector("dealloc"))
 
 objcImpl:
   type NXWindow* = object of NXResponder
     windowFrame: NSRect
-    windowTitle: string
+    windowTitle: NSString
     windowContentView: ID
     windowNativeWindow: siwinshim.Window
     windowRenderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
@@ -514,7 +517,7 @@ objcImpl:
     if result.isNil:
       return
     result.windowFrame = nsRect(100, 100, 640, 420)
-    result.windowTitle = "Nutella Window"
+    result.windowTitle = nsString("Nutella Window")
     result.windowContentView = nil
     result.windowNativeWindow = nil
     result.windowRenderer = nil
@@ -557,10 +560,10 @@ objcImpl:
       return NXView(value: nil)
     result = ownFromId[NXView](self.windowContentView)
 
-  method setTitle*(self: NXWindow, value: string) =
+  method setTitle*(self: NXWindow, value: NSString) =
     self.windowTitle = value
     if self.windowNativeReady and not self.windowNativeWindow.isNil:
-      self.windowNativeWindow.title = value
+      self.windowNativeWindow.title = string(value)
 
   method setContentSize*(self: NXWindow, width, height: cfloat) =
     var frame = self.windowFrame()

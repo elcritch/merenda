@@ -113,7 +113,9 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int =
 proc runForFrames*(app: NSApplication, maxFrames: int): int =
   runApplicationFrames(app, maxFrames)
 
-proc newWindow*(x, y, width, height: float32, title = "Nutella Window"): NSWindow =
+proc newWindow*(
+    x, y, width, height: float32, title: NSString = nsString("Nutella Window")
+): NSWindow =
   var wAlloc = NSWindow.alloc()
   result = wAlloc.initWithContentRect(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   wAlloc.value = nil
@@ -124,12 +126,16 @@ proc newView*(x, y, width, height: float32): NSView =
   result = vAlloc.initWithFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   vAlloc.value = nil
 
-proc newTextField*(x, y, width, height: float32, value = ""): NSTextField =
+proc newTextField*(
+    x, y, width, height: float32, value: NSString = nsString("")
+): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   result.setStringValue(value)
 
-proc newButton*(x, y, width, height: float32, title = "Button"): NSButton =
+proc newButton*(
+    x, y, width, height: float32, title: NSString = nsString("Button")
+): NSButton =
   result = NSButton.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   result.titleText = title

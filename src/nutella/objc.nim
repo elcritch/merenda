@@ -105,7 +105,7 @@ proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string
       "d"
     elif name == "bool":
       "B"
-    elif name == "cstring" or name == "string":
+    elif name == "cstring" or name == "string" or name == "NSString":
       "*"
     elif name == "ObjcClass":
       "#"
@@ -184,7 +184,7 @@ proc leafTypeName(typ: NimNode): string =
     identName(typ)
 
 template objcAbiType(T: typedesc): untyped =
-  when T is string:
+  when T is string or T is NSString:
     cstring
   elif T is NSObject:
     ID
@@ -194,6 +194,8 @@ template objcAbiType(T: typedesc): untyped =
 template objcToAbiArg(T: typedesc, v: untyped): untyped =
   when T is string:
     cstring(v)
+  elif T is NSString:
+    cstring(string(v))
   elif T is NSObject:
     toID(v)
   else:
@@ -205,6 +207,11 @@ template objcFromAbiValue(T: typedesc, v: untyped): untyped =
       ""
     else:
       $v
+  elif T is NSString:
+    if v.isNil:
+      nsString("")
+    else:
+      nsString($v)
   elif T is NSObject:
     asType[T](v)
   else:
