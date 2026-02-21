@@ -473,8 +473,13 @@ proc renderWindow(window: NSWindow) =
   if renderer.isNil or nativeWindow.isNil:
     return
 
-  let frame = window.windowFrame()
-  let logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
+  let nativeLogicalSize = nativeWindow.logicalSize()
+  let logicalSize = vec2(max(nativeLogicalSize.x, 1.0), max(nativeLogicalSize.y, 1.0))
+  var frame = window.windowFrame()
+  if abs(frame.size.width - logicalSize.x) > 0.01 or
+      abs(frame.size.height - logicalSize.y) > 0.01:
+    frame.size = nsSize(logicalSize.x, logicalSize.y)
+    window.windowFrame = frame
   let root = ensureContentView(window)
   root.setFrame(0.cfloat, 0.cfloat, logicalSize.x.cfloat, logicalSize.y.cfloat)
   var renders = buildWindowRenders(window)
@@ -531,11 +536,7 @@ proc ensureNativeWindow(window: NSWindow) =
         discard e
         window.windowClosed = true,
       onResize: proc(e: siwinshim.ResizeEvent) =
-        var resizedFrame = window.windowFrame()
-        resizedFrame.size = nsSize(e.size.x.float32, e.size.y.float32)
-        window.windowFrame = resizedFrame
-        let root = ensureContentView(window)
-        root.setFrame(0.cfloat, 0.cfloat, e.size.x.cfloat, e.size.y.cfloat)
+        discard e
         window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
         renderWindow(window),
       onClick: proc(e: siwinshim.ClickEvent) =
