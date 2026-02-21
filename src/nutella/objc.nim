@@ -209,6 +209,29 @@ template objcFromAbiValue(T: typedesc, v: untyped): untyped =
   else:
     v
 
+proc isNSObjectTypeNode(typ: NimNode): bool =
+  leafTypeName(typ) == "NSObject"
+
+proc objcAbiTypeNode(typ: NimNode): NimNode =
+  if isNSObjectTypeNode(typ):
+    bindSym"ID"
+  else:
+    newCall(bindSym"objcAbiType", copyNimTree(typ))
+
+proc objcToAbiArgNode(typ, arg: NimNode): NimNode =
+  if isNSObjectTypeNode(typ):
+    newCall(bindSym"toID", copyNimTree(arg))
+  else:
+    newCall(bindSym"objcToAbiArg", copyNimTree(typ), copyNimTree(arg))
+
+proc objcFromAbiValueNode(typ, value: NimNode): NimNode =
+  if isNSObjectTypeNode(typ):
+    newCall(
+      newTree(nnkBracketExpr, bindSym"asType", copyNimTree(typ)), copyNimTree(value)
+    )
+  else:
+    newCall(bindSym"objcFromAbiValue", copyNimTree(typ), copyNimTree(value))
+
 proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNode =
   let methodName = identName(def.name)
   if methodName.len == 0:
@@ -256,19 +279,21 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
       continue
     let typeNode = p[^2]
     let normType = normalizeObjcNodeType(typeNode, protocolName, className)
-    let abiType = newCall(bindSym"objcAbiType", normType)
+    let abiType = objcAbiTypeNode(normType)
     for j in 0 ..< p.len - 2:
       let argName = copyNimTree(p[j])
       let rawArg = genSym(nskParam, identName(argName) & "Raw")
+      let fromValueExprForVar = objcFromAbiValueNode(normType, rawArg)
+      let fromValueExprForLet = objcFromAbiValueNode(normType, rawArg)
       wrapperParams.add(newIdentDefs(rawArg, abiType, newEmptyNode()))
       wrapperBody.add quote do:
         when `normType` is NSObject:
-          var `argName` = objcFromAbiValue(`normType`, `rawArg`)
+          var `argName` = `fromValueExprForVar`
           discard `argName`
           defer:
             wasMoved(`argName`)
         else:
-          let `argName` = objcFromAbiValue(`normType`, `rawArg`)
+          let `argName` = `fromValueExprForLet`
 
   wrapperBody.add quote do:
     discard `cmdSel`
@@ -286,20 +311,23 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     pragmas = nnkPragma.newTree(ident"cdecl"),
   )
 
-proc normalizeObjcHelperType(typ: NimNode, protocolName: string): NimNode =
+proc normalizeObjcHelperType(typ: NimNode, protocolName, className: string): NimNode =
   case typ.kind
   of nnkEmpty:
     result = newEmptyNode()
   of nnkVarTy, nnkRefTy, nnkDistinctTy, nnkPtrTy:
-    result = newTree(typ.kind, normalizeObjcHelperType(typ[0], protocolName))
+    result = newTree(typ.kind, normalizeObjcHelperType(typ[0], protocolName, className))
   of nnkBracketExpr:
     result = newNimNode(nnkBracketExpr)
     for c in typ:
-      result.add(normalizeObjcHelperType(c, protocolName))
+      result.add(normalizeObjcHelperType(c, protocolName, className))
   else:
     let name = identName(typ)
     if name == protocolName:
-      result = bindSym"NSObject"
+      if className.len > 0:
+        result = ident(className)
+      else:
+        result = copyNimTree(typ)
     else:
       result = copyNimTree(typ)
 
@@ -325,7 +353,7 @@ proc buildObjcCallHelperProc(
     error("objcImpl helper generation requires a first `self` parameter", def)
 
   var helperParams: seq[NimNode] = @[]
-  var retType = normalizeObjcHelperType(srcParams[0], protocolName)
+  var retType = normalizeObjcHelperType(srcParams[0], protocolName, className)
   helperParams.add(copyNimTree(retType))
   for i in 1 ..< srcParams.len:
     let p = srcParams[i]
@@ -333,7 +361,7 @@ proc buildObjcCallHelperProc(
       helperParams.add(copyNimTree(p))
       continue
     var hp = copyNimTree(p)
-    hp[^2] = normalizeObjcHelperType(p[^2], protocolName)
+    hp[^2] = normalizeObjcHelperType(p[^2], protocolName, className)
     helperParams.add(hp)
 
   let selfParam = srcParams[selfIdx]
@@ -351,7 +379,7 @@ proc buildObjcCallHelperProc(
     if retType.kind == nnkEmpty:
       ident"void"
     else:
-      newCall(bindSym"objcAbiType", copyNimTree(retType))
+      objcAbiTypeNode(retType)
   senderParams.add(retAbiType)
   senderParams.add(newIdentDefs(ident"selfId", bindSym"ID"))
   senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
@@ -365,12 +393,12 @@ proc buildObjcCallHelperProc(
     if not seenSelf:
       seenSelf = true
       continue
-    let pType = normalizeObjcHelperType(p[^2], protocolName)
-    let abiType = newCall(bindSym"objcAbiType", copyNimTree(pType))
+    let pType = normalizeObjcHelperType(p[^2], protocolName, className)
+    let abiType = objcAbiTypeNode(pType)
     for j in 0 ..< p.len - 2:
       let argName = copyNimTree(p[j])
       senderParams.add(newIdentDefs(ident("arg" & $i & "_" & $j), abiType))
-      callArgs.add(newCall(bindSym"objcToAbiArg", copyNimTree(pType), argName))
+      callArgs.add(objcToAbiArgNode(pType, argName))
 
   let procTy = newTree(nnkProcTy, senderParams)
   procTy.add(newTree(nnkPragma, ident"cdecl", ident"varargs", ident"gcsafe"))
