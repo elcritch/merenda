@@ -15,6 +15,8 @@ type ObjcImplMethodInfo = object
 type ObjcImplIvarFieldSpec = object
   name: string
   typ: NimNode
+  getterName: string
+  setterName: string
 
 proc identName(n: NimNode): string =
   case n.kind
@@ -438,6 +440,39 @@ proc collectIvarPragmaTypes(typeNameNode: NimNode, ivarTypes: var seq[NimNode]) 
   else:
     discard
 
+proc collectFieldAccessorPragmas(
+    fieldNode: NimNode, getterName, setterName: var string
+) =
+  if fieldNode.kind != nnkPragmaExpr:
+    return
+  let pragmas = fieldNode[1]
+  if pragmas.kind != nnkPragma:
+    return
+
+  for p in pragmas:
+    if p.kind == nnkExprColonExpr:
+      let pragmaName = identName(p[0])
+      if pragmaName == "get":
+        let gName = identName(p[1])
+        if gName.len == 0:
+          error("objcImpl `.get` field pragma requires a getter name", p)
+        if getterName.len > 0:
+          error("objcImpl duplicate `.get` field pragma", p)
+        getterName = gName
+      elif pragmaName == "set":
+        let sName = identName(p[1])
+        if sName.len == 0:
+          error("objcImpl `.set` field pragma requires a setter name", p)
+        if setterName.len > 0:
+          error("objcImpl duplicate `.set` field pragma", p)
+        setterName = sName
+    else:
+      let pragmaName = identName(p)
+      if pragmaName == "get":
+        error("objcImpl `.get` field pragma requires a getter name", p)
+      elif pragmaName == "set":
+        error("objcImpl `.set` field pragma requires a setter name", p)
+
 proc collectObjectIvarFields(
     objectTy: NimNode, fields: var seq[ObjcImplIvarFieldSpec]
 ) =
@@ -460,7 +495,15 @@ proc collectObjectIvarFields(
       let fName = identName(rec[i])
       if fName.len == 0:
         error("objcImpl class ivar field name is invalid", rec[i])
-      fields.add ObjcImplIvarFieldSpec(name: fName, typ: copyNimTree(fieldType))
+      var getterName = ""
+      var setterName = ""
+      collectFieldAccessorPragmas(rec[i], getterName, setterName)
+      fields.add ObjcImplIvarFieldSpec(
+        name: fName,
+        typ: copyNimTree(fieldType),
+        getterName: getterName,
+        setterName: setterName,
+      )
 
 macro objcImpl*(x: untyped): untyped =
   let input =
@@ -723,45 +766,53 @@ macro objcImpl*(x: untyped): untyped =
     ensureClassIvars.add quote do:
       doAssert addFieldIvar[`fieldTypeNode`](`clsVar`, `fieldNameLit`)
 
-    let getterName =
-      if classExported:
-        postfix(ident(field.name), "*")
-      else:
-        ident(field.name)
-    let setterName =
-      if classExported:
-        postfix(ident(field.name & "="), "*")
-      else:
-        ident(field.name & "=")
     let selfIdent = ident("self")
     let valueIdent = ident("value")
-    let getterBody = quote:
-      result = getIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
-    let setterBody = quote:
-      setIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
 
-    fieldAccessorDefs.add newProc(
-      name = getterName,
-      params =
-        @[
-          copyNimTree(fieldTypeNode),
-          newIdentDefs(selfIdent, ident(className), newEmptyNode()),
-        ],
-      body = getterBody,
-      pragmas = nnkPragma.newTree(ident"inline"),
-    )
+    var getterNames: seq[string] = @[field.name]
+    if field.getterName.len > 0 and field.getterName notin getterNames:
+      getterNames.add(field.getterName)
+    for getterBaseName in getterNames:
+      let getterName =
+        if classExported:
+          postfix(ident(getterBaseName), "*")
+        else:
+          ident(getterBaseName)
+      let getterBody = quote:
+        result = getIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
+      fieldAccessorDefs.add newProc(
+        name = getterName,
+        params =
+          @[
+            copyNimTree(fieldTypeNode),
+            newIdentDefs(selfIdent, ident(className), newEmptyNode()),
+          ],
+        body = getterBody,
+        pragmas = nnkPragma.newTree(ident"inline"),
+      )
 
-    fieldAccessorDefs.add newProc(
-      name = setterName,
-      params =
-        @[
-          newEmptyNode(),
-          newIdentDefs(selfIdent, ident(className), newEmptyNode()),
-          newIdentDefs(valueIdent, copyNimTree(fieldTypeNode), newEmptyNode()),
-        ],
-      body = setterBody,
-      pragmas = nnkPragma.newTree(ident"inline"),
-    )
+    var setterNames: seq[string] = @[field.name & "="]
+    if field.setterName.len > 0 and field.setterName notin setterNames:
+      setterNames.add(field.setterName)
+    for setterBaseName in setterNames:
+      let setterName =
+        if classExported:
+          postfix(ident(setterBaseName), "*")
+        else:
+          ident(setterBaseName)
+      let setterBody = quote:
+        setIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
+      fieldAccessorDefs.add newProc(
+        name = setterName,
+        params =
+          @[
+            newEmptyNode(),
+            newIdentDefs(selfIdent, ident(className), newEmptyNode()),
+            newIdentDefs(valueIdent, copyNimTree(fieldTypeNode), newEmptyNode()),
+          ],
+        body = setterBody,
+        pragmas = nnkPragma.newTree(ident"inline"),
+      )
 
   for p in implementedProtocols:
     if p == protocolName:
