@@ -17,6 +17,8 @@
 ## Coding Style & Naming
 - Indentation: 2 spaces; no tabs.
 - Formatting: run `nph src/*.nim` and format any touched test files.
+- Make sure to use `objcImpl` methods instead of Nim procs unless copying a C function when implementing OpenSTEP or Cocoa APIs.
+- Prefer short names for fields and use `set` and `get` pragmas in the `objcImpl` to create simple getter / setters.
 
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.
