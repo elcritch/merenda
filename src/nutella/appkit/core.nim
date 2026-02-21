@@ -177,164 +177,98 @@ objcImpl:
 
 objcImpl:
   type NXControl* = object of NXView
-    controlEnabled: bool
-    controlAlignment: NSTextAlignment
+    enabled {.set: setEnabled, get: isEnabled.}: bool
+    align {.set: setAlignment, get: alignment.}: NSTextAlignment
 
   method init*(self: var NXControl): NXControl =
     result = asType[NXControl](callSuperIdFrom(NXControl, self, getSelector("init")))
     if result.isNil:
       return
-    result.controlEnabled = true
-    result.controlAlignment = NSNaturalTextAlignment
-
-  method setEnabled*(self: NXControl, enabled: bool) =
-    self.controlEnabled = enabled
-
-  method isEnabled*(self: NXControl): bool =
-    self.controlEnabled
-
-  method alignment*(self: NXControl): NSTextAlignment =
-    self.controlAlignment
-
-  method setAlignment*(self: NXControl, alignment: NSTextAlignment) =
-    self.controlAlignment = alignment
+    result.enabled = true
+    result.align = NSNaturalTextAlignment
 
 objcImpl:
   type NXTextField* = object of NXControl
-    textFieldStringValue {.set: setStringValue, get: stringValue.}: string
-    textFieldColor: NSColor
-    textFieldBackgroundColor: NSColor
-    textFieldDrawsBackground: bool
+    strValue {.set: setStringValue, get: stringValue.}: string
+    txtColor {.set: setTextColor, get: textColor.}: NSColor
+    bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
+    drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
 
   method init*(self: var NXTextField): NXTextField =
     result =
       asType[NXTextField](callSuperIdFrom(NXTextField, self, getSelector("init")))
     if result.isNil:
       return
-    result.controlEnabled = true
-    result.controlAlignment = NSNaturalTextAlignment
-    result.textFieldStringValue = ""
-    result.textFieldColor = nsColor(0.08, 0.08, 0.08, 1.0)
-    result.textFieldBackgroundColor = nsColor(0.98, 0.99, 1.0, 1.0)
-    result.textFieldDrawsBackground = true
-
-  method setEnabled*(self: NXTextField, enabled: bool) =
-    self.controlEnabled = enabled
-
-  method isEnabled*(self: NXTextField): bool =
-    self.controlEnabled
-
-  method alignment*(self: NXTextField): NSTextAlignment =
-    self.controlAlignment
-
-  method setAlignment*(self: NXTextField, alignment: NSTextAlignment) =
-    self.controlAlignment = alignment
-
-  method textColor*(self: NXTextField): NSColor =
-    self.textFieldColor
-
-  method backgroundColor*(self: NXTextField): NSColor =
-    self.textFieldBackgroundColor
-
-  method drawsBackground*(self: NXTextField): bool =
-    self.textFieldDrawsBackground
-
-  method setTextColor*(self: NXTextField, color: NSColor) =
-    self.textFieldColor = color
-
-  method setBackgroundColor*(self: NXTextField, color: NSColor) =
-    self.textFieldBackgroundColor = color
+    result.enabled = true
+    result.align = NSNaturalTextAlignment
+    result.strValue = ""
+    result.txtColor = nsColor(0.08, 0.08, 0.08, 1.0)
+    result.bgColor = nsColor(0.98, 0.99, 1.0, 1.0)
+    result.drawsBg = true
 
   method setTextColor*(self: NXTextField, r, g, b, a: cfloat) =
-    self.textFieldColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+    self.txtColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setBackgroundColor*(self: NXTextField, r, g, b, a: cfloat) =
-    self.textFieldBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
-
-  method setDrawsBackground*(self: NXTextField, value: bool) =
-    self.textFieldDrawsBackground = value
+    self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method dealloc(self: NXTextField) {.used.} =
-    self.textFieldStringValue = ""
+    self.strValue = ""
     discard callSuperIdFrom(NXTextField, self, getSelector("dealloc"))
 
 objcImpl:
   type NXButton* = object of NXControl
-    buttonTitle: string
-    buttonStateValue: int
-    buttonAllowsMixedState: bool
-    buttonOnClick: NSButtonCallbackProc
+    titleText {.set: setTitle, get: title.}: string
+    stateValue {.get: state.}: int
+    mixedAllowed {.get: allowsMixedState.}: bool
+    onClick: NSButtonCallbackProc
 
   method init*(self: var NXButton): NXButton =
     result = asType[NXButton](callSuperIdFrom(NXButton, self, getSelector("init")))
     if result.isNil:
       return
-    result.controlEnabled = true
-    result.controlAlignment = NSNaturalTextAlignment
-    result.buttonTitle = "Button"
-    result.buttonStateValue = NSOffState
-    result.buttonAllowsMixedState = false
-    result.buttonOnClick = nil
-
-  method setTitle*(self: NXButton, value: string) =
-    self.buttonTitle = value
-
-  method title*(self: NXButton): string =
-    self.buttonTitle
-
-  method setEnabled*(self: NXButton, enabled: bool) =
-    self.controlEnabled = enabled
-
-  method isEnabled*(self: NXButton): bool =
-    self.controlEnabled
-
-  method alignment*(self: NXButton): NSTextAlignment =
-    self.controlAlignment
-
-  method setAlignment*(self: NXButton, alignment: NSTextAlignment) =
-    self.controlAlignment = alignment
+    result.enabled = true
+    result.align = NSNaturalTextAlignment
+    result.titleText = "Button"
+    result.stateValue = NSOffState
+    result.mixedAllowed = false
+    result.onClick = nil
 
   method setState*(self: NXButton, value: cint) =
-    self.buttonStateValue = normalizeButtonState(value.int, self.buttonAllowsMixedState)
-
-  method state*(self: NXButton): int =
-    self.buttonStateValue
+    self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
 
   method setAllowsMixedState*(self: NXButton, value: bool) =
-    self.buttonAllowsMixedState = value
-    self.buttonStateValue = normalizeButtonState(self.buttonStateValue, value)
-
-  method allowsMixedState*(self: NXButton): bool =
-    self.buttonAllowsMixedState
+    self.mixedAllowed = value
+    self.stateValue = normalizeButtonState(self.stateValue, value)
 
   method setNextState*(self: NXButton) =
-    if self.buttonAllowsMixedState:
-      case self.buttonStateValue
+    if self.mixedAllowed:
+      case self.stateValue
       of NSOffState:
-        self.buttonStateValue = NSOnState
+        self.stateValue = NSOnState
       of NSOnState:
-        self.buttonStateValue = NSMixedState
+        self.stateValue = NSMixedState
       else:
-        self.buttonStateValue = NSOffState
+        self.stateValue = NSOffState
     else:
-      if self.buttonStateValue == NSOnState:
-        self.buttonStateValue = NSOffState
+      if self.stateValue == NSOnState:
+        self.stateValue = NSOffState
       else:
-        self.buttonStateValue = NSOnState
+        self.stateValue = NSOnState
 
   method performClick*(self: NXButton, sender: NSObject) =
     discard sender
-    if not self.controlEnabled:
+    if not self.enabled:
       return
     self.setNextState()
-    let cb = self.buttonOnClick()
+    let cb = self.onClick()
     if cb.isNil:
       return
     cb(self.value)
 
   method dealloc(self: NXButton) {.used.} =
-    self.buttonTitle = ""
-    self.buttonOnClick = nil
+    self.titleText = ""
+    self.onClick = nil
     discard callSuperIdFrom(NXButton, self, getSelector("dealloc"))
 
 objcImpl:
@@ -711,28 +645,28 @@ proc viewWithTag*(view: NSView, wantedTag: int): NSView =
 
 proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
   if cb.isNil:
-    button.buttonOnClick = nil
+    button.onClick = nil
   else:
-    button.buttonOnClick = proc(sender: ID) =
+    button.onClick = proc(sender: ID) =
       cb(ownFromId[NSButton](sender))
 
 proc click*(button: NSButton) =
-  if not button.controlEnabled():
+  if not button.enabled():
     return
-  if button.buttonAllowsMixedState():
-    case button.buttonStateValue()
+  if button.mixedAllowed():
+    case button.stateValue()
     of NSOffState:
-      button.buttonStateValue = NSOnState
+      button.stateValue = NSOnState
     of NSOnState:
-      button.buttonStateValue = NSMixedState
+      button.stateValue = NSMixedState
     else:
-      button.buttonStateValue = NSOffState
+      button.stateValue = NSOffState
   else:
-    if button.buttonStateValue() == NSOnState:
-      button.buttonStateValue = NSOffState
+    if button.stateValue() == NSOnState:
+      button.stateValue = NSOffState
     else:
-      button.buttonStateValue = NSOnState
-  let cb = button.buttonOnClick()
+      button.stateValue = NSOnState
+  let cb = button.onClick()
   if not cb.isNil:
     cb(button.value)
 
@@ -761,7 +695,7 @@ proc noRenderShadows(): array[ShadowCount, RenderShadow] =
       fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
     )
 
-proc textFieldDrawsBackground(view: NSView): bool =
+proc drawsBg(view: NSView): bool =
   if not view.isKindOfClass(NSTextField):
     return false
   var textField = asType[NSTextField](view.value)
@@ -866,7 +800,7 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
       fill: nsColor(0.03, 0.11, 0.28, bottomInsetAlpha).toFigColor(),
     )
   elif view.isKindOfClass(NSTextField):
-    if not textFieldDrawsBackground(view):
+    if not drawsBg(view):
       return
     result[0] = RenderShadow(
       style: InnerShadow,
@@ -890,8 +824,8 @@ proc viewFill(view: NSView): Fill =
     return aquaButtonFill(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
-    let drawsBackground = textField.textFieldDrawsBackground()
-    let backgroundColor = textField.textFieldBackgroundColor()
+    let drawsBackground = textField.drawsBg()
+    let backgroundColor = textField.bgColor()
     textField.value = nil
     if drawsBackground:
       return backgroundColor.solidFill()
@@ -902,7 +836,7 @@ proc viewStrokeFill(view: NSView): Fill =
   if view.isKindOfClass(NSButton):
     return aquaButtonStroke(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
-    if not textFieldDrawsBackground(view):
+    if not drawsBg(view):
       return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
     return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
   nsColor(0.34, 0.42, 0.56, 0.28).solidFill()
@@ -911,7 +845,7 @@ proc viewCornerRadius(view: NSView): float32 =
   if view.isKindOfClass(NSButton):
     return 10.0
   if view.isKindOfClass(NSTextField):
-    if not textFieldDrawsBackground(view):
+    if not drawsBg(view):
       return 0.0
     return 8.0
   0.0
@@ -934,7 +868,7 @@ proc addAquaGlossOverlay(
     )
     glossHeight = box.size.height * 0.56
   elif view.isKindOfClass(NSTextField):
-    if not textFieldDrawsBackground(view):
+    if not drawsBg(view):
       return
     glossFill = linear(
       nsColor(1.0, 1.0, 1.0, 0.38).toFigRgba(),
@@ -1011,7 +945,7 @@ proc textLayoutForView(
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
     let textValue = textField.stringValue()
-    let textColor = textField.textFieldColor()
+    let textColor = textField.txtColor()
     let textAlign = toFontHorizontal(textField.alignment())
     textField.value = nil
     if textValue.len == 0:
@@ -1032,7 +966,7 @@ proc textLayoutForView(
 
   if view.isKindOfClass(NSButton):
     var button = asType[NSButton](view.value)
-    let title = button.buttonTitle()
+    let title = button.titleText()
     let textAlign = toFontHorizontal(button.alignment())
     button.value = nil
     if title.len == 0:
@@ -1115,7 +1049,7 @@ proc addViewTree(
 
   let textFieldHasBackground =
     if view.isKindOfClass(NSTextField):
-      textFieldDrawsBackground(view)
+      drawsBg(view)
     else:
       false
   let textPaddingX =
@@ -1435,4 +1369,4 @@ proc newTextField*(x, y, width, height: float32, value = ""): NSTextField =
 proc newButton*(x, y, width, height: float32, title = "Button"): NSButton =
   result = NSButton.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.buttonTitle = title
+  result.titleText = title
