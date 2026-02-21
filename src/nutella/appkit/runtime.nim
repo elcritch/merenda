@@ -220,9 +220,91 @@ objcImpl:
     result.refusesFirstResponder = false
     result.align = NSNaturalTextAlignment
 
+  method stringValue*(self: NXControl): string =
+    discard self
+    ""
+
+  method setStringValue*(self: NXControl, value: string) =
+    discard self
+    discard value
+
+  method intValue*(self: NXControl): cint =
+    if self.isNil:
+      return 0.cint
+    try:
+      parseInt(self.stringValue()).cint
+    except ValueError:
+      0.cint
+
+  method integerValue*(self: NXControl): int =
+    self.intValue().int
+
+  method floatValue*(self: NXControl): cfloat =
+    if self.isNil:
+      return 0.0
+    try:
+      parseFloat(self.stringValue()).cfloat
+    except ValueError:
+      0.0
+
+  method doubleValue*(self: NXControl): cdouble =
+    if self.isNil:
+      return 0.0
+    try:
+      parseFloat(self.stringValue()).cdouble
+    except ValueError:
+      0.0
+
+  method setIntValue*(self: NXControl, value: cint) =
+    if self.isNil:
+      return
+    self.setStringValue($value)
+
+  method setIntegerValue*(self: NXControl, value: int) =
+    self.setIntValue(value.cint)
+
+  method setFloatValue*(self: NXControl, value: cfloat) =
+    if self.isNil:
+      return
+    self.setStringValue($value)
+
+  method setDoubleValue*(self: NXControl, value: cdouble) =
+    if self.isNil:
+      return
+    self.setStringValue($value)
+
+  method takeStringValueFrom*(self: NXControl, sender: NXControl) =
+    if self.isNil or sender.isNil:
+      return
+    self.setStringValue(sender.stringValue())
+
+  method takeIntValueFrom*(self: NXControl, sender: NXControl) =
+    if self.isNil or sender.isNil:
+      return
+    self.setIntValue(sender.intValue())
+
+  method takeIntegerValueFrom*(self: NXControl, sender: NXControl) =
+    if self.isNil or sender.isNil:
+      return
+    self.setIntegerValue(sender.integerValue())
+
+  method takeFloatValueFrom*(self: NXControl, sender: NXControl) =
+    if self.isNil or sender.isNil:
+      return
+    self.setFloatValue(sender.floatValue())
+
+  method takeDoubleValueFrom*(self: NXControl, sender: NXControl) =
+    if self.isNil or sender.isNil:
+      return
+    self.setDoubleValue(sender.doubleValue())
+
+  method performClick*(self: NXControl, sender: NXResponder) =
+    discard self
+    discard sender
+
 objcImpl:
   type NXTextField* = object of NXControl
-    strValue {.set: setStringValue, get: stringValue.}: string
+    strValue: string
     txtColor {.set: setTextColor, get: textColor.}: NSColor
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
@@ -253,6 +335,12 @@ objcImpl:
 
   method setBackgroundColor*(self: NXTextField, r, g, b, a: cfloat) =
     self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+
+  method stringValue*(self: NXTextField): string =
+    self.strValue
+
+  method setStringValue*(self: NXTextField, value: string) =
+    self.strValue = value
 
   method previousText*(self: NXTextField): NXTextField =
     if self.prevTxt.isNil:
@@ -345,7 +433,37 @@ objcImpl:
       else:
         self.stateValue = NSOnState
 
-  method performClick*(self: NXButton, sender: NSObject) =
+  method stringValue*(self: NXButton): string =
+    self.titleText()
+
+  method setStringValue*(self: NXButton, value: string) =
+    self.setTitle(value)
+
+  method intValue*(self: NXButton): cint =
+    self.state().cint
+
+  method integerValue*(self: NXButton): int =
+    self.state()
+
+  method floatValue*(self: NXButton): cfloat =
+    self.state().cfloat
+
+  method doubleValue*(self: NXButton): cdouble =
+    self.state().cdouble
+
+  method setIntValue*(self: NXButton, value: cint) =
+    self.setState(value)
+
+  method setIntegerValue*(self: NXButton, value: int) =
+    self.setState(value.cint)
+
+  method setFloatValue*(self: NXButton, value: cfloat) =
+    self.setState(value.int.cint)
+
+  method setDoubleValue*(self: NXButton, value: cdouble) =
+    self.setState(value.int.cint)
+
+  method performClick*(self: NXButton, sender: NXResponder) =
     discard sender
     if not self.enabled:
       return
