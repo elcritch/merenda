@@ -38,7 +38,7 @@ proc frameSize*(view: NSView): NSSize =
 proc frameSize*(window: NSWindow): NSSize =
   window.frame().size
 
-proc title*(window: NSWindow): string =
+proc title*(window: NSWindow): NSString =
   window.windowTitle()
 
 proc isHidden*(view: NSView): bool =

@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import std/[macros, strutils]
+import std/[hashes, macros, strutils, tables]
 
 {.passL: "-lobjc".}
 template impl*(x: untyped) {.pragma.}
@@ -37,7 +37,10 @@ type
 
   ObjcClass* {.pure.} = object of NSObject
 
-  #NSString* {.pure.} = object of NSObject
+  NSString* = distinct string
+  NSDictionary*[K, V] = object
+    storage: Table[K, V]
+
   ProtocolPrototype* {.pure, inheritable.} = object
 
   Method* = distinct pointer
@@ -156,8 +159,98 @@ converter toNSObject*(id: ID): NSObject {.inline.} =
 converter toObjcClass*(id: ID): ObjcClass {.inline.} =
   ObjcClass(value: id)
 
-#converter toNSString*(id: ID): NSString {.inline.} =
-#  NSString(value: id)
+converter toNSString*(value: string): NSString {.inline.} =
+  NSString(value)
+
+converter toString*(value: NSString): string {.inline.} =
+  string(value)
+
+proc nsString*(value: sink string): NSString {.inline.} =
+  NSString(value)
+
+proc stringValue*(value: NSString): string {.inline.} =
+  string(value)
+
+proc len*(value: NSString): int {.inline.} =
+  string(value).len
+
+proc isEmpty*(value: NSString): bool {.inline.} =
+  value.len == 0
+
+proc hash*(value: NSString): Hash {.inline.} =
+  hash(string(value))
+
+proc `==`*(a, b: NSString): bool {.inline.} =
+  string(a) == string(b)
+
+proc `&`*(a, b: NSString): NSString {.inline.} =
+  NSString(string(a) & string(b))
+
+proc `$`*(value: NSString): string {.inline.} =
+  string(value)
+
+proc nsDictionary*[K, V](): NSDictionary[K, V] =
+  result.storage = initTable[K, V]()
+
+proc nsDictionary*[K, V](pairs: openArray[(K, V)]): NSDictionary[K, V] =
+  result = nsDictionary[K, V]()
+  for (key, value) in pairs:
+    result.storage[key] = value
+
+proc len*[K, V](dict: NSDictionary[K, V]): int {.inline.} =
+  dict.storage.len
+
+proc isEmpty*[K, V](dict: NSDictionary[K, V]): bool {.inline.} =
+  dict.len == 0
+
+proc hasKey*[K, V](dict: NSDictionary[K, V], key: K): bool {.inline.} =
+  dict.storage.hasKey(key)
+
+proc containsKey*[K, V](dict: NSDictionary[K, V], key: K): bool {.inline.} =
+  dict.hasKey(key)
+
+proc `[]`*[K, V](dict: NSDictionary[K, V], key: K): V {.inline.} =
+  dict.storage[key]
+
+proc `[]=`*[K, V](dict: var NSDictionary[K, V], key: K, value: V) {.inline.} =
+  dict.storage[key] = value
+
+proc getOrDefault*[K, V](
+    dict: NSDictionary[K, V], key: K, defaultValue: V
+): V {.inline.} =
+  dict.storage.getOrDefault(key, defaultValue)
+
+proc del*[K, V](dict: var NSDictionary[K, V], key: K) {.inline.} =
+  if dict.storage.hasKey(key):
+    dict.storage.del(key)
+
+proc clear*[K, V](dict: var NSDictionary[K, V]) {.inline.} =
+  dict.storage.clear()
+
+proc toTable*[K, V](dict: NSDictionary[K, V]): Table[K, V] {.inline.} =
+  dict.storage
+
+iterator keys*[K, V](dict: NSDictionary[K, V]): K =
+  for key in dict.storage.keys:
+    yield key
+
+iterator values*[K, V](dict: NSDictionary[K, V]): V =
+  for value in dict.storage.values:
+    yield value
+
+iterator pairs*[K, V](dict: NSDictionary[K, V]): tuple[key: K, value: V] =
+  for key, value in dict.storage.pairs:
+    yield (key, value)
+
+proc `==`*[K, V](a, b: NSDictionary[K, V]): bool =
+  if a.storage.len != b.storage.len:
+    return false
+  for key, value in a.storage.pairs:
+    if not b.storage.hasKey(key):
+      return false
+    if b.storage[key] != value:
+      return false
+  true
 
 template asType*[T: NSObject](o: ID): T =
   T(value: o)
