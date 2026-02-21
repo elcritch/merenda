@@ -65,7 +65,7 @@ proc normalizeObjcNodeType(typ: NimNode, protocolName, className: string): NimNo
       result.add(normalizeObjcNodeType(c, protocolName, className))
   else:
     let name = identName(typ)
-    if name == protocolName or name == className:
+    if name == protocolName:
       result = bindSym"NSObject"
     else:
       result = copyNimTree(typ)
