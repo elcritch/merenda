@@ -37,7 +37,18 @@ proc identName(n: NimNode): string =
     ""
 
 proc isExportedName(n: NimNode): bool =
-  n.kind == nnkPostfix and n.len == 2 and $n[0] == "*"
+  case n.kind
+  of nnkPostfix:
+    n.len == 2 and $n[0] == "*"
+  of nnkPragmaExpr:
+    isExportedName(n[0])
+  of nnkAccQuoted:
+    if n.len > 0:
+      isExportedName(n[0])
+    else:
+      false
+  else:
+    false
 
 proc isExportedTypeName(n: NimNode): bool =
   isExportedName(n)
@@ -299,8 +310,13 @@ proc buildObjcCallHelperProc(
   let helperBaseName = identName(def.name)
   if helperBaseName.len == 0:
     error("objcImpl helper generation requires a valid method name", def)
+  let helperNameNode =
+    if def.len > 0:
+      def[0]
+    else:
+      def.name
   let helperName =
-    if isExportedName(def.name):
+    if isExportedName(helperNameNode):
       postfix(ident(helperBaseName), "*")
     else:
       ident(helperBaseName)
@@ -773,8 +789,11 @@ macro objcImpl*(x: untyped): untyped =
     if field.getterName.len > 0 and field.getterName notin getterNames:
       getterNames.add(field.getterName)
     for getterBaseName in getterNames:
+      let exportGetter =
+        classExported and
+        (field.getterName.len == 0 or getterBaseName == field.getterName)
       let getterName =
-        if classExported:
+        if exportGetter:
           postfix(ident(getterBaseName), "*")
         else:
           ident(getterBaseName)
@@ -795,8 +814,11 @@ macro objcImpl*(x: untyped): untyped =
     if field.setterName.len > 0 and field.setterName notin setterNames:
       setterNames.add(field.setterName)
     for setterBaseName in setterNames:
+      let exportSetter =
+        classExported and
+        (field.setterName.len == 0 or setterBaseName == field.setterName)
       let setterName =
-        if classExported:
+        if exportSetter:
           postfix(ident(setterBaseName), "*")
         else:
           ident(setterBaseName)

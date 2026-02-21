@@ -164,10 +164,10 @@ objcImpl:
     self.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
-  method setBackgroundColor*(self: NXView, r, g, b, a: cfloat) =
+  method setBackgroundColor(self: NXView, r, g, b, a: cfloat) =
     self.viewBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
-  method setHidden*(self: NXView, hidden: bool) =
+  method setHidden(self: NXView, hidden: bool) =
     self.viewHidden = hidden
 
   method dealloc(self: NXView) {.used.} =
@@ -306,7 +306,7 @@ objcImpl:
     result.windowFrame =
       nsRect(x.float32, y.float32, max(width.float32, 1.0), max(height.float32, 1.0))
 
-  method setContentView*(self: NXWindow, view: NXView) =
+  method setContentView(self: NXWindow, view: NXView) =
     if self.isNil:
       return
     if not self.windowContentView.isNil and self.windowContentView != view.value:
@@ -326,7 +326,7 @@ objcImpl:
       view.viewSuperview = nil
     self.windowContentView = replacedOwnedId(self.windowContentView(), view.value)
 
-  method contentView*(self: NXWindow): NXView =
+  method contentView(self: NXWindow): NXView =
     if self.windowContentView.isNil:
       return NXView(value: nil)
     result = ownFromId[NXView](self.windowContentView)
@@ -349,13 +349,13 @@ objcImpl:
     frame.origin = nsPoint(x.float32, y.float32)
     self.windowFrame = frame
 
-  method makeKeyAndOrderFront*(self: NXWindow, sender: NSObject) =
+  method makeKeyAndOrderFront(self: NXWindow, sender: NSObject) =
     discard sender
     if self.isNil:
       return
     self.windowVisibleRequested = true
 
-  method close*(self: NXWindow) =
+  method close(self: NXWindow) =
     self.windowClosed = true
     if self.windowNativeReady and not self.windowNativeWindow.isNil:
       siwinshim.close(self.windowNativeWindow)
@@ -380,7 +380,7 @@ objcImpl:
     result.appWindows = @[]
     result.appRunning = false
 
-  method addWindow*(self: NXApplication, window: NXWindow) =
+  method addWindow(self: NXApplication, window: NXWindow) =
     if self.isNil or window.isNil:
       return
     var windows = self.appWindows()
@@ -389,10 +389,10 @@ objcImpl:
       self.appWindows = windows
     window.windowVisibleRequested = true
 
-  method run*(self: NXApplication) =
+  method run(self: NXApplication) =
     discard runApplicationFrames(self, -1)
 
-  method stop*(self: NXApplication) =
+  method stop(self: NXApplication) =
     self.appRunning = false
 
   method dealloc(self: NXApplication) {.used.} =
