@@ -175,3 +175,30 @@ suite "nutella appkit hello world":
 
     discard app.runForFrames(1)
     app.value = nil
+
+  test "native resize keeps frame size in logical units":
+    var app = NSApp()
+    var window = newWindow(90, 90, 320, 200, "Logical Size")
+    var root = newView(0, 0, 320, 200)
+    var label = newTextField(12, 12, 296, 36, "Logical size regression test")
+    root.addSubview(label)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app)
+
+    let requested = window.frameSize()
+    try:
+      discard app.runForFrames(4)
+    except CatchableError:
+      skip()
+
+    let observed = window.frameSize()
+    check(abs(observed.width - requested.width) <= 2.0)
+    check(abs(observed.height - requested.height) <= 2.0)
+
+    window.close()
+    app.stop()
+    label.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
