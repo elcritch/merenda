@@ -203,7 +203,7 @@ objcImpl:
 
 objcImpl:
   type NXTextField* = object of NXControl
-    textFieldStringValue: string
+    textFieldStringValue {.set: setStringValue, get: stringValue.}: string
     textFieldColor: NSColor
     textFieldBackgroundColor: NSColor
     textFieldDrawsBackground: bool
@@ -220,12 +220,6 @@ objcImpl:
     result.textFieldColor = nsColor(0.08, 0.08, 0.08, 1.0)
     result.textFieldBackgroundColor = nsColor(0.98, 0.99, 1.0, 1.0)
     result.textFieldDrawsBackground = true
-
-  method setStringValue*(self: NXTextField, value: string) =
-    self.textFieldStringValue = value
-
-  method stringValue*(self: NXTextField): string =
-    self.textFieldStringValue
 
   method setEnabled*(self: NXTextField, enabled: bool) =
     self.controlEnabled = enabled
@@ -1022,7 +1016,7 @@ proc textLayoutForView(
 
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
-    let textValue = textField.textFieldStringValue()
+    let textValue = textField.stringValue()
     let textColor = textField.textFieldColor()
     let textAlign = toFontHorizontal(textField.alignment())
     textField.value = nil
@@ -1442,7 +1436,7 @@ proc newView*(x, y, width, height: float32): NSView =
 proc newTextField*(x, y, width, height: float32, value = ""): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.textFieldStringValue = value
+  result.setStringValue(value)
 
 proc newButton*(x, y, width, height: float32, title = "Button"): NSButton =
   result = NSButton.new()

@@ -148,6 +148,14 @@ objcImpl:
     self.label = ""
     superDealloc(self)
 
+objcImpl:
+  type CustomAccessorClass = object of NSObject
+    payload {.get: payloadValue, set: setPayloadValue.}: string
+
+  proc initWithPayload(self: var CustomAccessorClass, value: string) =
+    self = super(CustomAccessorClass, self, init)
+    self.payload = value
+
 suite "objcImpl examples":
   test "test inits":
     doAssert not compiles(HiddenCtorClass.new())
@@ -274,3 +282,16 @@ suite "objcImpl examples":
     check(o.bumpAndPing(5.cint) == 15.cint)
     check(o.counter() == 15)
     check(plainFieldPingCount == 1)
+
+  test "objcImpl field pragmas can add named getters/setters":
+    var o = CustomAccessorClass.alloc()
+    o.initWithPayload("hello")
+    check(not o.isNil)
+
+    check(o.payload() == "hello")
+    check(o.payloadValue() == "hello")
+
+    o.setPayloadValue("updated")
+    check(o.payload() == "updated")
+    o.payload = "final"
+    check(o.payloadValue() == "final")
