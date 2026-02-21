@@ -10,6 +10,7 @@ type ObjcProtocolMethodSpec = object
 type ObjcImplMethodInfo = object
   spec: ObjcProtocolMethodSpec
   wrapperProc: NimNode
+  implProc: NimNode
   sourceDef: NimNode
 
 type ObjcImplIvarFieldSpec = object
@@ -232,7 +233,9 @@ proc objcFromAbiValueNode(typ, value: NimNode): NimNode =
   else:
     newCall(bindSym"objcFromAbiValue", copyNimTree(typ), copyNimTree(value))
 
-proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNode =
+proc buildObjcWrapperProc(
+    def: NimNode, protocolName, className: string
+): tuple[implProc: NimNode, wrapperProc: NimNode] =
   let methodName = identName(def.name)
   if methodName.len == 0:
     error("objcImpl could not read implementation method name", def)
@@ -250,8 +253,18 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
   if selfName.len == 0:
     error("objcImpl could not read implementation self parameter name", def)
 
+  let implName = genSym(nskProc, methodName & "_impl")
+  var implProc = newNimNode(nnkProcDef)
+  for c in def:
+    implProc.add(copyNimTree(c))
+  implProc[0] = implName
+
   var wrapperParams: seq[NimNode] = @[]
-  wrapperParams.add(normalizeObjcNodeType(params[0], protocolName, className))
+  let retType = normalizeObjcNodeType(params[0], protocolName, className)
+  if retType.kind == nnkEmpty:
+    wrapperParams.add(newEmptyNode())
+  else:
+    wrapperParams.add(objcAbiTypeNode(retType))
 
   let selfIdent = ident(selfName)
   let selfRaw = genSym(nskParam, selfName & "Raw")
@@ -269,6 +282,7 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
     defer:
       wasMoved(`selfIdent`)
 
+  var callArgs: seq[NimNode] = @[copyNimTree(selfIdent)]
   var sawSelf = false
   for i in 1 ..< params.len:
     let p = params[i]
@@ -294,22 +308,28 @@ proc buildObjcWrapperProc(def: NimNode, protocolName, className: string): NimNod
             wasMoved(`argName`)
         else:
           let `argName` = `fromValueExprForLet`
+      callArgs.add(copyNimTree(argName))
 
   wrapperBody.add quote do:
     discard `cmdSel`
 
-  if def.body.kind == nnkStmtList:
-    for stmt in def.body:
-      wrapperBody.add(copyNimTree(stmt))
-  else:
-    wrapperBody.add(copyNimTree(def.body))
+  let implCall = newCall(implName)
+  for a in callArgs:
+    implCall.add(a)
 
-  result = newProc(
-    name = genSym(nskProc, methodName & "_objcImpl"),
+  if retType.kind == nnkEmpty:
+    wrapperBody.add(implCall)
+  else:
+    wrapperBody.add quote do:
+      result = objcToAbiArg(`retType`, `implCall`)
+
+  let wrapperProc = newProc(
+    name = genSym(nskProc, methodName & "_objcWrapper"),
     params = wrapperParams,
     body = wrapperBody,
     pragmas = nnkPragma.newTree(ident"cdecl"),
   )
+  result = (implProc: implProc, wrapperProc: wrapperProc)
 
 proc normalizeObjcHelperType(typ: NimNode, protocolName, className: string): NimNode =
   case typ.kind
@@ -721,9 +741,11 @@ macro objcImpl*(x: untyped): untyped =
 
   var implMethods: seq[ObjcImplMethodInfo] = @[]
   for def in implDefs:
+    let built = buildObjcWrapperProc(def, protocolName, className)
     implMethods.add ObjcImplMethodInfo(
       spec: methodSpecFromDef(def, protocolName, className),
-      wrapperProc: buildObjcWrapperProc(def, protocolName, className),
+      wrapperProc: built.wrapperProc,
+      implProc: built.implProc,
       sourceDef: def,
     )
 
@@ -875,6 +897,7 @@ macro objcImpl*(x: untyped): untyped =
           discard addProtocol(`clsVar`, p)
 
   for impl in implMethods:
+    wrapperDefs.add(impl.implProc)
     wrapperDefs.add(impl.wrapperProc)
     callHelperDefs.add(
       buildObjcCallHelperProc(impl.sourceDef, impl.spec, protocolName, className)
