@@ -71,15 +71,15 @@ suite "nutella appkit hello world":
         root.setFrameSize(nsSize(640, 420))
 
         let field = newTextField(32, 32, 360, 44, "Hello world from Nutella")
-        field.align = NSCenterTextAlignment
-        field.txtColor = nsColor(0.14, 0.19, 0.33, 1.0)
-        field.drawsBg = false
+        field.setAlignment(NSCenterTextAlignment)
+        field.setTextColor(nsColor(0.14, 0.19, 0.33, 1.0))
+        field.setDrawsBackground(false)
         root.addSubview(field)
         let found = root.viewWithTag(100)
         discard found
 
         let button = newButton(32, 96, 180, 44, "Click me")
-        button.mixedAllowed = true
+        button.setAllowsMixedState(true)
         button.setOnClick(
           proc(sender: NSButton) {.gcsafe.} =
             discard sender
@@ -119,35 +119,35 @@ suite "nutella appkit hello world":
     check(root.viewWithTag(102).isNil)
 
     var field = newTextField(0, 60, 200, 30, "Styled")
-    field.align = NSRightTextAlignment
-    field.txtColor = nsColor(0.2, 0.3, 0.4, 1.0)
-    field.bgColor = nsColor(0.9, 0.92, 0.97, 1.0)
-    field.drawsBg = false
-    check(field.align() == NSRightTextAlignment)
-    check(field.txtColor() == nsColor(0.2, 0.3, 0.4, 1.0))
-    check(field.bgColor() == nsColor(0.9, 0.92, 0.97, 1.0))
-    check(not field.drawsBg())
-    check(field.enabled())
-    field.enabled = false
-    check(not field.enabled())
+    field.setAlignment(NSRightTextAlignment)
+    field.setTextColor(nsColor(0.2, 0.3, 0.4, 1.0))
+    field.setBackgroundColor(nsColor(0.9, 0.92, 0.97, 1.0))
+    field.setDrawsBackground(false)
+    check(field.alignment() == NSRightTextAlignment)
+    check(field.textColor() == nsColor(0.2, 0.3, 0.4, 1.0))
+    check(field.backgroundColor() == nsColor(0.9, 0.92, 0.97, 1.0))
+    check(not field.drawsBackground())
+    check(field.isEnabled())
+    field.setEnabled(false)
+    check(not field.isEnabled())
 
     var button = newButton(0, 100, 160, 34, "Stateful")
-    check(button.stateValue() == NSOffState)
+    check(button.state() == NSOffState)
     button.click()
-    check(button.stateValue() == NSOnState)
-    button.mixedAllowed = true
+    check(button.state() == NSOnState)
+    button.setAllowsMixedState(true)
     button.click()
-    check(button.stateValue() == NSMixedState)
-    button.stateValue = NSOffState
-    check(button.stateValue() == NSOffState)
-    button.mixedAllowed = true
+    check(button.state() == NSMixedState)
+    button.setState(NSOffState.cint)
+    check(button.state() == NSOffState)
+    button.setAllowsMixedState(true)
     button.click()
-    check(button.stateValue() == NSOnState)
+    check(button.state() == NSOnState)
     button.click()
-    check(button.stateValue() == NSMixedState)
-    button.enabled = false
+    check(button.state() == NSMixedState)
+    button.setEnabled(false)
     button.click()
-    check(button.stateValue() == NSMixedState)
+    check(button.state() == NSMixedState)
 
     var win = newWindow(5, 6, 200, 120, "Resize")
     win.setFrameOrigin(nsPoint(10, 20))
