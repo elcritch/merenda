@@ -131,7 +131,7 @@ proc newTextField*(
 ): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.setStringValue(value)
+  result.strValue = value
 
 proc newButton*(
     x, y, width, height: float32, title: NSString = nsString("Button")

@@ -224,12 +224,27 @@ objcImpl:
     result.align = NSNaturalTextAlignment
 
   method stringValue*(self: NXControl): NSString =
-    discard self
+    if self.isNil:
+      return nsString("")
+    let className = getClassName(self)
+    if className.startsWith("NXTextField"):
+      result = getIvarValue[NSString](self, "strValue")
+      return
+    if className.startsWith("NXButton"):
+      result = getIvarValue[NSString](self, "titleText")
+      return
     nsString("")
 
   method setStringValue*(self: NXControl, value: NSString) =
-    discard self
-    discard value
+    if self.isNil:
+      return
+    let className = getClassName(self)
+    if className.startsWith("NXTextField"):
+      setIvarValue(self, "strValue", value)
+      return
+    if className.startsWith("NXButton"):
+      setIvarValue(self, "titleText", value)
+      return
 
   method intValue*(self: NXControl): cint =
     if self.isNil:
