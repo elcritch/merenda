@@ -144,7 +144,6 @@ objcImpl:
 
   method init*(self: var NXView): NXView =
     result = asType[NXView](callSuperIdFrom(NXView, self, getSelector("init")))
-    self.value = nil
     if result.isNil:
       return
     result.viewFrame = nsRect(0, 0, 100, 100)
@@ -183,7 +182,6 @@ objcImpl:
 
   method init*(self: var NXControl): NXControl =
     result = asType[NXControl](callSuperIdFrom(NXControl, self, getSelector("init")))
-    self.value = nil
     if result.isNil:
       return
     result.controlEnabled = true
@@ -211,7 +209,6 @@ objcImpl:
   method init*(self: var NXTextField): NXTextField =
     result =
       asType[NXTextField](callSuperIdFrom(NXTextField, self, getSelector("init")))
-    self.value = nil
     if result.isNil:
       return
     result.controlEnabled = true
@@ -270,7 +267,6 @@ objcImpl:
 
   method init*(self: var NXButton): NXButton =
     result = asType[NXButton](callSuperIdFrom(NXButton, self, getSelector("init")))
-    self.value = nil
     if result.isNil:
       return
     result.controlEnabled = true
@@ -355,7 +351,6 @@ objcImpl:
 
   method init*(self: var NXWindow): NXWindow =
     result = asType[NXWindow](callSuperIdFrom(NXWindow, self, getSelector("init")))
-    self.value = nil
     if result.isNil:
       return
     result.windowFrame = nsRect(100, 100, 640, 420)
@@ -446,7 +441,6 @@ objcImpl:
   method init*(self: var NXApplication): NXApplication =
     result =
       asType[NXApplication](callSuperIdFrom(NXApplication, self, getSelector("init")))
-    self.value = nil
     if result.isNil:
       return
     result.appWindows = @[]
