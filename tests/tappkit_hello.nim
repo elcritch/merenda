@@ -184,10 +184,10 @@ suite "nutella appkit hello world":
 
   test "control dispatch routes to subclass string and click behavior":
     var field = newTextField(0, 0, 240, 30, "Initial")
-    check(controlStringValue(field) == nsString("Initial"))
-    setControlStringValue(field, nsString("Updated"))
-    check(field.stringValue() == nsString("Updated"))
-    check(controlStringValue(field) == nsString("Updated"))
+    check(controlStringValue(field) == @ns"Initial")
+    setControlStringValue(field, @ns"Updated")
+    check(field.stringValue() == @ns"Updated")
+    check(controlStringValue(field) == @ns"Updated")
 
     var button = newButton(0, 0, 120, 30, "Push")
     var clicks = 0
@@ -197,9 +197,9 @@ suite "nutella appkit hello world":
         inc clicks
     )
     check(button.state() == NSOffState)
-    check(controlStringValue(button) == nsString("Push"))
-    setControlStringValue(button, nsString("Renamed"))
-    check(button.title() == nsString("Renamed"))
+    check(controlStringValue(button) == @ns"Push")
+    setControlStringValue(button, @ns"Renamed")
+    check(button.title() == @ns"Renamed")
     clickControl(button)
     check(button.state() == NSOnState)
     check(clicks == 1)
