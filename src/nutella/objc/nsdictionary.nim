@@ -41,25 +41,25 @@ proc storageForRead[K, V](dict: NSDictionary[K, V]): NXDictionaryStorage[K, V] =
     return NXDictionaryStorage[K, V](base)
   nil
 
-proc ensureStorage[K, V](dict: var NSDictionary[K, V]): NXDictionaryStorage[K, V] =
+proc storageForWrite[K, V](dict: NSDictionary[K, V]): NXDictionaryStorage[K, V] =
   if dict.value.isNil:
     return nil
   var obj = asType[NXDictionary](dict.value)
   let base = obj.backingStore()
+  obj.value = nil
   if base.isNil:
-    let created = NXDictionaryStorage[K, V](data: initTable[K, V]())
-    obj.backingStore = created
-    obj.countCache = 0
-    obj.value = nil
-    return created
+    return nil
   if base of NXDictionaryStorage[K, V]:
-    obj.value = nil
     return NXDictionaryStorage[K, V](base)
-  let created = NXDictionaryStorage[K, V](data: initTable[K, V]())
-  obj.backingStore = created
+  nil
+
+proc initStorage[K, V](dict: NSDictionary[K, V]) {.inline.} =
+  if dict.value.isNil:
+    return
+  var obj = asType[NXDictionary](dict.value)
+  obj.backingStore = NXDictionaryStorage[K, V](data: initTable[K, V]())
   obj.countCache = 0
   obj.value = nil
-  created
 
 proc syncCount[K, V](dict: NSDictionary[K, V], count: int) {.inline.} =
   if dict.value.isNil:
@@ -76,9 +76,17 @@ proc nsDictionary*[K, V](): NSDictionary[K, V] =
     return NSDictionary[K, V](value: nil)
   result = asType[NSDictionary[K, V]](created.value)
   created.value = nil
-  var mutableResult = result
-  discard ensureStorage(mutableResult)
-  result = mutableResult
+  initStorage(result)
+
+proc init*[K, V](n: typedesc[NSDictionary[K, V]]): NSDictionary[K, V] {.inline.} =
+  when false:
+    discard n
+  nsDictionary[K, V]()
+
+proc new*[K, V](n: typedesc[NSDictionary[K, V]]): NSDictionary[K, V] {.inline.} =
+  when false:
+    discard n
+  nsDictionary[K, V]()
 
 proc nsDictionary*[K, V](pairs: openArray[(K, V)]): NSDictionary[K, V] =
   result = nsDictionary[K, V]()
@@ -110,7 +118,7 @@ proc `[]`*[K, V](dict: NSDictionary[K, V], key: K): V =
   store.data[key]
 
 proc `[]=`*[K, V](dict: var NSDictionary[K, V], key: K, value: V) {.inline.} =
-  let store = ensureStorage(dict)
+  let store = storageForWrite(dict)
   if store.isNil:
     return
   store.data[key] = value
@@ -125,7 +133,7 @@ proc getOrDefault*[K, V](
   store.data.getOrDefault(key, defaultValue)
 
 proc del*[K, V](dict: var NSDictionary[K, V], key: K) {.inline.} =
-  let store = ensureStorage(dict)
+  let store = storageForWrite(dict)
   if store.isNil:
     return
   if store.data.hasKey(key):
@@ -133,7 +141,7 @@ proc del*[K, V](dict: var NSDictionary[K, V], key: K) {.inline.} =
   syncCount(dict, store.data.len)
 
 proc clear*[K, V](dict: var NSDictionary[K, V]) {.inline.} =
-  let store = ensureStorage(dict)
+  let store = storageForWrite(dict)
   if store.isNil:
     return
   store.data.clear()
