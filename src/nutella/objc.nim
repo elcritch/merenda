@@ -14,6 +14,14 @@ type ObjcProtocolMethodSpec = object
   selector: string
   encoding: string
   methodKind: ObjcImplMethodKind
+  isRequired: bool
+
+type ObjcProtocolPropertySpec = object
+  name: string
+  typeEncoding: string
+  methodKind: ObjcImplMethodKind
+  isRequired: bool
+  isReadOnly: bool
 
 type ObjcImplMethodInfo = object
   spec: ObjcProtocolMethodSpec
@@ -278,6 +286,124 @@ proc methodSpecFromDef(
   result.selector = methodName & ":".repeat(explicitArgCount)
   result.encoding = encoding
   result.methodKind = if firstParamTypedesc.len > 0: oimkClass else: oimkInstance
+  result.isRequired = true
+
+  let pragmas = def.pragma
+  if pragmas.kind == nnkPragma:
+    var hasOptional = false
+    var hasRequired = false
+    for p in pragmas:
+      let pragmaName =
+        case p.kind
+        of nnkExprColonExpr:
+          identName(p[0])
+        else:
+          identName(p)
+      if pragmaName == "optional":
+        hasOptional = true
+      elif pragmaName == "required":
+        hasRequired = true
+    if hasOptional and hasRequired:
+      error("objcImpl protocol method cannot be both `.optional` and `.required`", def)
+    if hasOptional:
+      result.isRequired = false
+
+proc propertySpecFromDef(
+    def: NimNode, protocolName, className: string
+): ObjcProtocolPropertySpec =
+  if def.kind notin {nnkMethodDef, nnkProcDef}:
+    error(
+      "objcImpl concept property declarations must be method/proc declarations", def
+    )
+
+  let methodName = identName(def.name)
+  if methodName.len == 0:
+    error("objcImpl could not read property declaration name", def)
+
+  let params = def.params
+  let selfIdx = firstParamIndex(params)
+  if selfIdx < 0:
+    error("objcImpl property declarations must include `self` as first argument", def)
+
+  var totalParams = 0
+  for i in 1 ..< params.len:
+    let p = params[i]
+    if p.kind != nnkIdentDefs:
+      continue
+    let namedCount = p.len - 2
+    for _ in 0 ..< namedCount:
+      inc totalParams
+  if totalParams != 1:
+    error(
+      "objcImpl `.property` declarations must be getter-style declarations with only `self` parameter",
+      def,
+    )
+
+  let retType = params[0]
+  if retType.kind == nnkEmpty:
+    error("objcImpl `.property` declarations must have a non-void return type", def)
+
+  let retEnc = objcTypeCodeFromNode(retType, protocolName, className)
+  if retEnc == "v":
+    error("objcImpl `.property` declarations must have a non-void return type", def)
+
+  result.name = methodName
+  result.typeEncoding = retEnc
+  result.methodKind =
+    if typedescElementTypeName(params[selfIdx][^2]).len > 0: oimkClass else: oimkInstance
+  result.isRequired = true
+  result.isReadOnly = false
+
+  let pragmas = def.pragma
+  if pragmas.kind == nnkPragma:
+    var hasOptional = false
+    var hasRequired = false
+    for p in pragmas:
+      case p.kind
+      of nnkExprColonExpr:
+        let pragmaName = identName(p[0])
+        if pragmaName == "property":
+          let n =
+            case p[1].kind
+            of nnkStrLit .. nnkTripleStrLit:
+              p[1].strVal
+            else:
+              identName(p[1])
+          if n.len == 0:
+            error("objcImpl `.property` pragma requires a valid property name", p)
+          result.name = n
+        elif pragmaName == "optional":
+          hasOptional = true
+        elif pragmaName == "required":
+          hasRequired = true
+      else:
+        let pragmaName = identName(p)
+        if pragmaName == "optional":
+          hasOptional = true
+        elif pragmaName == "required":
+          hasRequired = true
+        elif pragmaName == "readonly":
+          result.isReadOnly = true
+    if hasOptional and hasRequired:
+      error(
+        "objcImpl protocol property cannot be both `.optional` and `.required`", def
+      )
+    if hasOptional:
+      result.isRequired = false
+
+proc hasPropertyPragma(def: NimNode): bool =
+  let pragmas = def.pragma
+  if pragmas.kind != nnkPragma:
+    return false
+  for p in pragmas:
+    case p.kind
+    of nnkExprColonExpr:
+      if identName(p[0]) == "property":
+        return true
+    else:
+      if identName(p) == "property":
+        return true
+  false
 
 proc firstParamIndex(params: NimNode): int =
   for i in 1 ..< params.len:
@@ -863,9 +989,15 @@ macro objcImpl*(x: untyped): untyped =
     error("objcImpl protocol concept body is missing method declarations", x)
 
   var protocolSpecs: seq[ObjcProtocolMethodSpec] = @[]
+  var protocolPropertySpecs: seq[ObjcProtocolPropertySpec] = @[]
   if hasProtocol:
     for conceptStmt in conceptBody:
-      protocolSpecs.add(methodSpecFromDef(conceptStmt, protocolName, className))
+      let spec = methodSpecFromDef(conceptStmt, protocolName, className)
+      protocolSpecs.add(spec)
+      if hasPropertyPragma(conceptStmt):
+        protocolPropertySpecs.add(
+          propertySpecFromDef(conceptStmt, protocolName, className)
+        )
 
   var generatedTypes = newStmtList()
   var generatedTypeLines: seq[string] = @[]
@@ -935,6 +1067,8 @@ macro objcImpl*(x: untyped): untyped =
 
   if hasProtocol and hasClass:
     for pSpec in protocolSpecs:
+      if not pSpec.isRequired:
+        continue
       var found = false
       for impl in implMethods:
         if impl.spec.selector != pSpec.selector or
@@ -987,15 +1121,41 @@ macro objcImpl*(x: untyped): untyped =
     else:
       newEmptyNode()
   var addMethodDescs = newStmtList()
+  var addPropertyDescs = newStmtList()
   if hasProtocol:
     for spec in protocolSpecs:
       let selectorName = newLit(spec.selector)
       let typeEncoding = newLit(spec.encoding)
+      let isRequiredMethod = newLit(spec.isRequired)
       let isInstanceMethod = newLit(spec.methodKind == oimkInstance)
       addMethodDescs.add quote do:
         addMethodDescription(
-          `protoVar`, selector(`selectorName`), `typeEncoding`, true, `isInstanceMethod`
+          `protoVar`,
+          selector(`selectorName`),
+          `typeEncoding`,
+          `isRequiredMethod`,
+          `isInstanceMethod`,
         )
+    for spec in protocolPropertySpecs:
+      let propertyName = newLit(spec.name)
+      let propertyTypeEncoding = newLit(spec.typeEncoding)
+      let isRequiredProperty = newLit(spec.isRequired)
+      let isInstanceProperty = newLit(spec.methodKind == oimkInstance)
+      let isReadOnlyProperty = newLit(spec.isReadOnly)
+      addPropertyDescs.add quote do:
+        block:
+          var attrs =
+            @[
+              objc_property_attribute_t(
+                name: "T".cstring, value: `propertyTypeEncoding`.cstring
+              )
+            ]
+          if `isReadOnlyProperty`:
+            attrs.add(objc_property_attribute_t(name: "R".cstring, value: "".cstring))
+          addProperty(
+            `protoVar`, `propertyName`, attrs, `isRequiredProperty`,
+            `isInstanceProperty`,
+          )
 
   var wrapperDefs = newStmtList()
   var fieldAccessorDefs = newStmtList()
@@ -1117,6 +1277,7 @@ macro objcImpl*(x: untyped): untyped =
         `protoVar` = allocateProtocol(`protoNameLit`)
         if not `protoVar`.isNil:
           `addMethodDescs`
+          `addPropertyDescs`
           registerProtocol(`protoVar`)
           `protoVar` = getProtocol(`protoNameLit`)
 
