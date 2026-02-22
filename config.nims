@@ -15,6 +15,10 @@ proc nimExec(subcmd, file: string, extraFlags = "", platform = "") =
   cmd.add(" " & file)
   exec(cmd)
 
+proc nimFileStemHasPrefix(file, prefix: string): bool =
+  let (_, stem, ext) = splitFile(file)
+  ext == ".nim" and stem.startsWith(prefix)
+
 proc platforms(): seq[string] =
   when defined(linux) or defined(bsd):
     let
@@ -37,15 +41,15 @@ task test, "run unit test":
   for platformArg in platforms():
     if platformArg != "": echo "Running platform args: ", platformArg
     for file in listFiles("tests"):
-      if file.startsWith("tests/t") and file.endsWith(".nim"):
+      if nimFileStemHasPrefix(file, "t"):
         nimExec("r", file, platform = platformArg)
 
   for file in listFiles("examples"):
-    if file.startsWith("examples/windy_") and file.endsWith(".nim"):
+    if nimFileStemHasPrefix(file, "windy_"):
       nimExec("c", file)
-    elif file.startsWith("examples/appkit_") and file.endsWith(".nim"):
+    elif nimFileStemHasPrefix(file, "appkit_"):
       nimExec("c", file)
-    elif file.startsWith("examples/sdl2_") and file.endsWith(".nim"):
+    elif nimFileStemHasPrefix(file, "sdl2_"):
       if enableSdl2:
         nimExec("c", file, "-d:figdraw.metal=off -d:figdraw.vulkan=off")
       else:
@@ -53,10 +57,10 @@ task test, "run unit test":
 
 task test_compile, "compile unit tests without running":
   for file in listFiles("tests"):
-    if file.startsWith("tests/t") and file.endsWith(".nim"):
+    if nimFileStemHasPrefix(file, "t"):
       nimExec("c", file)
 
 task test_emscripten, "build emscripten examples":
   for file in listFiles("examples"):
-    if file.startsWith("examples/windy_") and file.endsWith(".nim"):
+    if nimFileStemHasPrefix(file, "windy_"):
       nimExec("c", file, "-d:emscripten")
