@@ -526,3 +526,12 @@ suite "Key-Value Coding":
     removeObserver(p, obs, "name")
     setValueForKey(p, boxNSObject("NoNotify"), "name")
     check(kvoEvents(obs).len == 0)
+
+  test "ObjC KVO selectors are present on NSObject":
+    var p = NXKVCTestPerson.init()
+    check(not p.isNil)
+    check(p.respondsToSelector("addObserver:forKeyPath:options:context:"))
+    check(p.respondsToSelector("removeObserver:forKeyPath:context:"))
+    check(p.respondsToSelector("removeObserver:forKeyPath:"))
+    check(p.respondsToSelector("willChangeValueForKey:"))
+    check(p.respondsToSelector("didChangeValueForKey:"))
