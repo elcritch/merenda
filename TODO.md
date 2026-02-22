@@ -35,16 +35,16 @@ Sorted by implementation priority (most useful first).
 - [ ] NSCollectionViewItem - Controller-like item object for collection entries.
 - [ ] NSColor - Color object supporting multiple color spaces.
 - [ ] NSColorSpace - Color space definition used by NSColor and rendering.
-- [ ] NSColorWell - Interactive control for choosing colors.
-- [ ] NSComboBox - Editable combo box with selectable list options.
+<!-- - [ ] NSColorWell - Interactive control for choosing colors. -->
+<!-- - [ ] NSComboBox - Editable combo box with selectable list options. -->
 <!-- - [ ] NSCursor - Mouse cursor image and behavior controller. -->
 - [ ] NSDatePicker - Date/time selection control.
 - [ ] NSDocument - Document-model object for document-based apps.
 - [ ] NSDocumentController - Manager for document lifecycle and windows.
 - [ ] NSEvent - Input event object for keyboard, mouse, and system actions.
-- [ ] NSFont - Font face and metrics object for text rendering.
-- [ ] NSFontDescriptor - Immutable descriptor of font attributes.
-- [ ] NSFontManager - Shared manager for font panel and conversions.
+- [ ] NSFont - Font face and metrics object for text rendering. (wrap FigDraw Fonts)
+- [ ] NSFontDescriptor - Immutable descriptor of font attributes. (wrap FigDraw Fonts)
+<!-- - [ ] NSFontManager - Shared manager for font panel and conversions. -->
 - [ ] NSImage - Image asset object for bitmap/vector representations.
 - [ ] NSImageRep - Abstract image representation backend.
 - [ ] NSImageView - View subclass responsible for drawing and interaction.
@@ -52,8 +52,8 @@ Sorted by implementation priority (most useful first).
 - [ ] NSMenu - Menu container for command hierarchies.
 - [ ] NSMenuItem - Single command item inside a menu.
 - [ ] NSMutableParagraphStyle - Mutable paragraph-level text style settings.
-- [ ] NSNib - Compiled Interface Builder nib loader and instantiator.
-- [ ] NSOpenPanel - Open-file dialog panel.
+<!-- - [ ] NSNib - Compiled Interface Builder nib loader and instantiator. -->
+<!-- - [ ] NSOpenPanel - Open-file dialog panel. -->
 - [ ] NSOutlineView - Hierarchical table/tree control.
 - [ ] NSPanel - Utility-style window subclass.
 - [ ] NSParagraphStyle - Immutable paragraph-level text style settings.
@@ -97,8 +97,8 @@ Sorted by implementation priority (most useful first).
 - [ ] NSAnimation - Time-based animation object.
 - [ ] NSAnimationContext - Transaction context for implicit view animations.
 - [ ] NSArrayController - Controller for array-backed model collections.
-- [ ] NSBezierPath - Vector path object for 2D drawing.
-- [ ] NSColorPanel - Shared panel for choosing colors.
+<!-- - [ ] NSBezierPath - Vector path object for 2D drawing. -->
+<!-- - [ ] NSColorPanel - Shared panel for choosing colors. -->
 - [ ] NSComboBoxCell - Cell used by combo box controls.
 - [ ] NSController - Abstract base class for controller objects.
 - [ ] NSDictionaryController - Controller for dictionary-backed models.
@@ -117,18 +117,18 @@ Sorted by implementation priority (most useful first).
 - [ ] NSLevelIndicatorCell - Cell used by level indicator controls.
 <!-- - [ ] NSMatrix - Legacy matrix/grid control of cells. -->
 - [ ] NSObjectController - Controller for a single model object.
-- [ ] NSOpenGLContext - OpenGL rendering context wrapper.
-- [ ] NSOpenGLPixelBuffer - Offscreen OpenGL pixel buffer object.
-- [ ] NSOpenGLPixelFormat - Pixel format descriptor for OpenGL surfaces.
-- [ ] NSOpenGLView - View that presents OpenGL-rendered content.
+<!-- - [ ] NSOpenGLContext - OpenGL rendering context wrapper. -->
+<!-- - [ ] NSOpenGLPixelBuffer - Offscreen OpenGL pixel buffer object. -->
+<!-- - [ ] NSOpenGLPixelFormat - Pixel format descriptor for OpenGL surfaces. -->
+<!-- - [ ] NSOpenGLView - View that presents OpenGL-rendered content. -->
 - [ ] NSPageLayout - Panel that edits page format and layout options.
 - [ ] NSPopUpButtonCell - Cell used by pop-up button controls.
 - [ ] NSPredicateEditor - UI for composing NSPredicate expressions.
 - [ ] NSPredicateEditorRowTemplate - Template describing a predicate editor row.
-- [ ] NSPrintInfo - Print settings and pagination options.
-- [ ] NSPrintOperation - Encapsulated print job execution.
-- [ ] NSPrintPanel - Panel that presents print options.
-- [ ] NSPrinter - Printer device description and capabilities.
+<!-- - [ ] NSPrintInfo - Print settings and pagination options. -->
+<!-- - [ ] NSPrintOperation - Encapsulated print job execution. -->
+<!-- - [ ] NSPrintPanel - Panel that presents print options. -->
+<!-- - [ ] NSPrinter - Printer device description and capabilities. -->
 - [ ] NSRuleEditor - UI for building rule-based logical expressions.
 - [ ] NSRuleEditorButtonCell - Button cell used by rule editor rows.
 - [ ] NSRuleEditorViewSliceRow - Internal row view used by NSRuleEditor.
@@ -159,7 +159,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSUserDefaultsController - Bindings bridge to user defaults values.
 - [ ] NSUserDefaultsControllerProxy - Proxy helper for defaults bindings access.
 <!-- - [ ] NSViewAnimation - Legacy keyframe animation for view/window changes. -->
-- [ ] NSViewBackingLayer - CALayer subclass used as view backing storage.
+<!-- - [ ] NSViewBackingLayer - CALayer subclass used as view backing storage. -->
 
 ## P3: Specialized, legacy, and ravynos-internal helpers (88)
 <!-- - [ ] NSAlertPanel - Legacy alert panel window variant. -->
