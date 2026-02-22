@@ -132,13 +132,33 @@ proc getIvarValue*[T](obj: NSObject, ivarName: string): T {.raises: [].} =
   let p = getIvarValuePtr[T](obj, ivarName)
   if p.isNil:
     return default(T)
-  p[]
+  when T is NSObject:
+    let slot = cast[ptr ID](p)
+    let id = slot[]
+    if id.isNil:
+      return T(value: nil)
+    discard objc_msgSend(id, sel_registerName("retain"))
+    asType[T](id)
+  else:
+    p[]
 
 proc setIvarValue*[T](obj: NSObject, ivarName: string, value: T) {.raises: [].} =
   let p = getIvarValuePtr[T](obj, ivarName)
   if p.isNil:
     return
-  p[] = value
+  when T is NSObject:
+    let slot = cast[ptr ID](p)
+    let next = value.value
+    let prev = slot[]
+    if prev == next:
+      return
+    if not next.isNil:
+      discard objc_msgSend(next, sel_registerName("retain"))
+    slot[] = next
+    if not prev.isNil:
+      discard objc_msgSend(prev, sel_registerName("release"))
+  else:
+    p[] = value
 
 proc getIvarField*[T](obj: NSObject, ivarName: string): T {.inline, raises: [].} =
   when T is ref:

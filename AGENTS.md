@@ -17,8 +17,13 @@
 ## Coding Style & Naming
 - Indentation: 2 spaces; no tabs.
 - Formatting: run `nph src/*.nim` and format any touched test files.
+
+## Nutella / Objective-C Implementations
 - Make sure to use `objcImpl` methods instead of Nim procs unless copying a C function when implementing OpenSTEP or Cocoa APIs.
+- Every `NS*` object or `NX*` object must be an Objective-C class or prototype unless there's a very good reason like `NSRect`.
 - Prefer short names for fields and use `set` and `get` pragmas in the `objcImpl` to create simple getter / setters.
+- Never try to use global storage as a shortcut for implementing something unless absolutely needed.
+- Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
 
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.

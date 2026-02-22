@@ -5,6 +5,17 @@ import nutella/appkit
 import nutella/objc
 
 suite "nutella appkit hello world":
+  proc controlStringValue(control: NSControl): NSString =
+    control.stringValue()
+
+  proc setControlStringValue(control: NSControl, value: NSString) =
+    control.setStringValue(value)
+
+  proc clickControl(control: NSControl) =
+    var sender = NSResponder.new()
+    control.performClick(sender)
+    sender.value = nil
+
   test "raw pixel input maps to logical coordinates":
     let raw = vec2(300.0'f32, 200.0'f32)
     let mapped =
@@ -161,6 +172,31 @@ suite "nutella appkit hello world":
     childA.value = nil
     root.value = nil
     win.value = nil
+
+  test "control dispatch routes to subclass string and click behavior":
+    var field = newTextField(0, 0, 240, 30, "Initial")
+    check(controlStringValue(field) == nsString("Initial"))
+    setControlStringValue(field, nsString("Updated"))
+    check(field.stringValue() == nsString("Updated"))
+    check(controlStringValue(field) == nsString("Updated"))
+
+    var button = newButton(0, 0, 120, 30, "Push")
+    var clicks = 0
+    button.setOnClick(
+      proc(sender: NSButton) {.gcsafe.} =
+        discard sender
+        inc clicks
+    )
+    check(button.state() == NSOffState)
+    check(controlStringValue(button) == nsString("Push"))
+    setControlStringValue(button, nsString("Renamed"))
+    check(button.title() == nsString("Renamed"))
+    clickControl(button)
+    check(button.state() == NSOnState)
+    check(clicks == 1)
+
+    field.value = nil
+    button.value = nil
 
   test "application keeps added window alive across frame loop":
     var app = NSApp()
