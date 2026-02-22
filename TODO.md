@@ -8,6 +8,13 @@ Remaining AppKit classes tracked: 222
 
 Sorted by implementation priority (most useful first).
 
+## Runtime Prereqs (Do First)
+- [ ] Struct ABI/type encoding correctness - Add robust struct type encodings and remove object fallback for value types.
+- [ ] `objcImpl` class methods/metaclass dispatch - Support defining/adding Objective-C class methods (`+`) in `objcImpl`.
+- [ ] Optional protocol methods/properties modeling - Represent required vs optional protocol API surface.
+- [ ] KVC/boxing type coverage - Expand beyond object/string/integer paths (floats, structs, etc.).
+- [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
+
 ## Done: Already Implemented (7)
 - [x] NSApplication - Application singleton and event loop coordinator.
 - [x] NSButton - Clickable control that triggers actions and toggles state.
@@ -57,7 +64,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSPopUpButton - Pop-up button that selects from a menu.
 - [ ] NSProgressIndicator - Progress spinner/bar control.
 - [ ] NSSavePanel - Save-file dialog panel.
-- [ ] NSScreen - Display device and geometry information.
+<!-- - [ ] NSScreen - Display device and geometry information. -->
 - [ ] NSScrollView - Scrollable container with clip and scrollers.
 - [ ] NSSearchField - Text field specialized for search input.
 - [ ] NSSecureTextField - Text field that masks entered characters.
