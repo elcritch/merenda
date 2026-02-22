@@ -21,10 +21,7 @@ proc kvcTypeCode(enc: string): string =
   $enc[i]
 
 proc kvcRetainedNSObject(id: ID): NSObject =
-  if id.isNil:
-    return NSObject(value: nil)
-  let retainSend = cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)
-  NSObject(value: retainSend(id, sel_registerName("retain")))
+  asRetainedType[NSObject](id)
 
 proc kvcTakeNSObject[T: NSObject](obj: T): NSObject {.inline.} =
   var tmp = obj

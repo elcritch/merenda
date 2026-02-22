@@ -165,6 +165,15 @@ template asType*[T: NSObject](o: ID): T =
 template asType*[T: NSObject](o: NSObject): T =
   T(value: o.value)
 
+template asRetainedType*[T: NSObject](o: ID): T =
+  if o == nil:
+    T(value: nil)
+  else:
+    T(value: retainAux(o))
+
+template asRetainedType*[T: NSObject](o: NSObject): T =
+  asRetainedType[T](o.value)
+
 proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 proc sel_registerName*(str: cstring): SEL {.cdecl, importc.}
 proc objc_msgSend*(self: ID, op: SEL): ID {.cdecl, importc, discardable, varargs.}

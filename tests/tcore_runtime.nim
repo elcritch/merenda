@@ -90,6 +90,31 @@ suite "objc core runtime ownership fundamentals":
     check(alias.isNil)
     check(retainCount(o).int == baseCount)
 
+  test "asRetainedType creates retained typed wrappers":
+    var o = NSObject.new()
+    let baseCount = retainCount(o).int
+
+    var retainedFromObj = asRetainedType[NSObject](o)
+    check(retainedFromObj == o)
+    check(retainCount(o).int == baseCount + 1)
+
+    release(retainedFromObj)
+    check(retainedFromObj.isNil)
+    check(retainCount(o).int == baseCount)
+
+    var retainedFromId = asRetainedType[NSObject](o.value)
+    check(retainedFromId == o)
+    check(retainCount(o).int == baseCount + 1)
+
+    release(retainedFromId)
+    check(retainedFromId.isNil)
+    check(retainCount(o).int == baseCount)
+
+    let nilFromObj = asRetainedType[NSObject](NSObject(value: nil))
+    let nilFromId = asRetainedType[NSObject](cast[ID](nil))
+    check(nilFromObj.isNil)
+    check(nilFromId.isNil)
+
   test "block scope destroys copied alias":
     var o = NSObject.new()
     let baseCount = retainCount(o).int
