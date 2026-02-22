@@ -22,7 +22,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSAlert - Modal/non-modal alert dialog API.
 - [ ] NSBox - Framed container view with title/border styles.
 - [ ] NSButtonCell - Cell used by NSButton-style controls.
-- [ ] NSCell - Legacy lightweight drawing/editing object for controls.
+<!-- - [ ] NSCell - Legacy lightweight drawing/editing object for controls. -->
 - [ ] NSClipView - Viewport that clips content inside a scroll view.
 - [ ] NSCollectionView - Grid/list collection control with reusable items.
 - [ ] NSCollectionViewItem - Controller-like item object for collection entries.
@@ -73,7 +73,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSTableHeaderCell - Cell used to draw table header titles.
 - [ ] NSTableHeaderView - Header view that displays table column headers.
 - [ ] NSTableView - Column/row table control for structured data.
-- [ ] NSText - Legacy text editing view superclass.
+<!-- - [ ] NSText - Legacy text editing view superclass. -->
 - [ ] NSTextContainer - Text layout region used by NSLayoutManager.
 - [ ] NSTextFieldCell - Cell used by text field controls.
 - [ ] NSTextStorage - Mutable attributed string backing text systems.
@@ -96,19 +96,19 @@ Sorted by implementation priority (most useful first).
 - [ ] NSController - Abstract base class for controller objects.
 - [ ] NSDictionaryController - Controller for dictionary-backed models.
 - [ ] NSDockTile - Dock tile badge/content representation.
-- [ ] NSDrawer - Legacy slide-out drawer panel attached to a window.
+<!-- - [ ] NSDrawer - Legacy slide-out drawer panel attached to a window. -->
 - [ ] NSDrawerWindow - Internal window used to host an NSDrawer.
 - [ ] NSFontFamily - Model object representing a font family.
 - [ ] NSFontPanel - Shared panel for choosing fonts.
 - [ ] NSFontPanelCell - Cell used by font panel controls.
-- [ ] NSForm - Legacy form control containing labeled fields.
+<!-- - [ ] NSForm - Legacy form control containing labeled fields. -->
 - [ ] NSFormCell - Cell used by NSForm rows.
 - [ ] NSGradient - Gradient fill object for drawing operations.
 - [ ] NSGraphicsContext - Drawing context wrapper for AppKit rendering.
 - [ ] NSHelpManager - Manager object coordinating related subsystem behavior.
 - [ ] NSLevelIndicator - Control that displays level/progress ratings.
 - [ ] NSLevelIndicatorCell - Cell used by level indicator controls.
-- [ ] NSMatrix - Legacy matrix/grid control of cells.
+<!-- - [ ] NSMatrix - Legacy matrix/grid control of cells. -->
 - [ ] NSObjectController - Controller for a single model object.
 - [ ] NSOpenGLContext - OpenGL rendering context wrapper.
 - [ ] NSOpenGLPixelBuffer - Offscreen OpenGL pixel buffer object.
@@ -127,7 +127,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSRuleEditorViewSliceRow - Internal row view used by NSRuleEditor.
 - [ ] NSRulerMarker - Marker item displayed within an NSRulerView.
 - [ ] NSRulerView - Ruler UI for text/layout editing views.
-- [ ] NSScroller - Legacy scrollbar control object.
+<!-- - [ ] NSScroller - Legacy scrollbar control object. -->
 - [ ] NSSearchFieldCell - Cell used by search field controls.
 - [ ] NSSegmentItem - Model item representing one segment.
 - [ ] NSSegmentedCell - Cell used by segmented controls.
@@ -151,13 +151,13 @@ Sorted by implementation priority (most useful first).
 - [ ] NSTypesetter_concrete - Concrete implementation of NSTypesetter internals.
 - [ ] NSUserDefaultsController - Bindings bridge to user defaults values.
 - [ ] NSUserDefaultsControllerProxy - Proxy helper for defaults bindings access.
-- [ ] NSViewAnimation - Legacy keyframe animation for view/window changes.
+<!-- - [ ] NSViewAnimation - Legacy keyframe animation for view/window changes. -->
 - [ ] NSViewBackingLayer - CALayer subclass used as view backing storage.
 
 ## P3: Specialized, legacy, and ravynos-internal helpers (88)
-- [ ] NSAlertPanel - Legacy alert panel window variant.
+<!-- - [ ] NSAlertPanel - Legacy alert panel window variant. -->
 - [ ] NSBitmapImageRep - Bitmap-backed image representation class.
-- [ ] NSBrowser - Legacy column-based browser control.
+<!-- - [ ] NSBrowser - Legacy column-based browser control. -->
 - [ ] NSBrowserCell - Cell used by NSBrowser columns.
 - [ ] NSBrowserCellColorList - Internal color-list browser cell subclass.
 - [ ] NSButtonImageSource - Internal provider for button imagery assets.
@@ -214,7 +214,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSOpenGLDrawable - Drawable surface abstraction for OpenGL.
 - [ ] NSPDFImageRep - PDF-backed image representation class.
 - [ ] NSPersistentDocument - Document subclass integrated with Core Data persistence.
-- [ ] NSPoofAnimation - Legacy visual poof/disappear animation effect.
+<!-- - [ ] NSPoofAnimation - Legacy visual poof/disappear animation effect. -->
 - [ ] NSPopUpView - Internal view used by pop-up button menus.
 - [ ] NSPopUpWindow - Internal window used by pop-up controls.
 - [ ] NSPrintProgressPanelController - Controller for print-progress panel UI.
@@ -228,8 +228,8 @@ Sorted by implementation priority (most useful first).
 - [ ] NSSpellChecker - Spell checking and correction service API.
 - [ ] NSSpellCheckerTagData - Internal spell-check session tag storage.
 - [ ] NSSpellingViewController - Controller for spelling UI interactions.
-- [ ] NSStringDrawer - Legacy helper for NSString text drawing APIs.
-- [ ] NSSystemInfoPanel - Legacy panel that displays system information.
+<!-- - [ ] NSStringDrawer - Legacy helper for NSString text drawing APIs. -->
+<!-- - [ ] NSSystemInfoPanel - Legacy panel that displays system information. -->
 - [ ] NSTableCornerView - Corner view between table headers and content.
 - [ ] NSTextViewSharedData - Shared internal storage for NSTextView instances.
 - [ ] NSThemeFrame - Internal themed frame view for window chrome.
