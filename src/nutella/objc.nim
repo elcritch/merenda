@@ -10,6 +10,8 @@ type ObjcImplMethodKind = enum
   oimkInstance
   oimkClass
 
+template kw*(name: static[string]) {.pragma.}
+
 type ObjcProtocolMethodSpec = object
   selector: string
   encoding: string
@@ -249,6 +251,26 @@ proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string
 
 proc firstParamIndex(params: NimNode): int
 
+proc paramNameNode(n: NimNode): NimNode =
+  case n.kind
+  of nnkPragmaExpr:
+    paramNameNode(n[0])
+  else:
+    n
+
+proc kwSelectorSegmentFromParamName(n: NimNode): string =
+  if n.kind != nnkPragmaExpr:
+    return ""
+  let pragmas = n[1]
+  if pragmas.kind != nnkPragma:
+    return ""
+  for p in pragmas:
+    if p.kind == nnkCall and identName(p[0]) == "kw":
+      if p.len != 2 or p[1].kind notin {nnkStrLit .. nnkTripleStrLit}:
+        error("objcImpl `.kw(...)` pragma requires one string literal", p)
+      return p[1].strVal
+  ""
+
 proc methodSpecFromDef(
     def: NimNode, protocolName, className: string
 ): ObjcProtocolMethodSpec =
@@ -269,6 +291,7 @@ proc methodSpecFromDef(
   var totalParams = 0
   var explicitArgCount = 0
   var encoding = objcTypeCodeFromNode(params[0], protocolName, className) & "@:"
+  var selectorName = methodName
 
   for i in 1 ..< params.len:
     let p = params[i]
@@ -276,14 +299,18 @@ proc methodSpecFromDef(
       continue
     let typeNode = p[^2]
     let namedCount = p.len - 2
-    for _ in 0 ..< namedCount:
+    for j in 0 ..< namedCount:
       inc totalParams
       if totalParams == 1:
         continue # first arg is the explicit self in Nim surface syntax
       inc explicitArgCount
+      let kwSegment = kwSelectorSegmentFromParamName(p[j])
+      if kwSegment.len > 0:
+        selectorName.add(kwSegment)
+      selectorName.add(':')
       encoding.add(objcTypeCodeFromNode(typeNode, protocolName, className))
 
-  result.selector = methodName & ":".repeat(explicitArgCount)
+  result.selector = selectorName
   result.encoding = encoding
   result.methodKind = if firstParamTypedesc.len > 0: oimkClass else: oimkInstance
   result.isRequired = true
@@ -533,7 +560,7 @@ proc buildObjcWrapperProc(
     error(
       "objcImpl first parameter group must contain exactly one name for `self`", def
     )
-  let selfName = identName(selfParam[0])
+  let selfName = identName(paramNameNode(selfParam[0]))
   if selfName.len == 0:
     error("objcImpl could not read implementation self parameter name", def)
   let isClassMethod = firstParamTypedescName(def) == className
@@ -587,8 +614,11 @@ proc buildObjcWrapperProc(
     let normType = normalizeObjcNodeType(typeNode, protocolName, className)
     let abiType = objcAbiTypeNode(normType)
     for j in 0 ..< p.len - 2:
-      let argName = copyNimTree(p[j])
-      let rawArg = genSym(nskParam, identName(argName) & "Raw")
+      let argIdent = identName(paramNameNode(p[j]))
+      if argIdent.len == 0:
+        error("objcImpl could not read parameter name", p[j])
+      let argName = ident(argIdent)
+      let rawArg = genSym(nskParam, argIdent & "Raw")
       let fromValueExprForVar = objcFromAbiValueNode(normType, rawArg)
       let fromValueExprForLet = objcFromAbiValueNode(normType, rawArg)
       wrapperParams.add(newIdentDefs(rawArg, abiType, newEmptyNode()))
@@ -682,7 +712,7 @@ proc buildObjcCallHelperProc(
       "objcImpl helper generation expects first parameter group to contain one name",
       def,
     )
-  let selfName = copyNimTree(selfParam[0])
+  let selfName = copyNimTree(paramNameNode(selfParam[0]))
 
   let callSel = newCall(bindSym"getSelector", newLit(spec.selector))
 
@@ -713,7 +743,10 @@ proc buildObjcCallHelperProc(
     let pType = normalizeObjcHelperType(p[^2], protocolName, className)
     let abiType = objcAbiTypeNode(pType)
     for j in 0 ..< p.len - 2:
-      let argName = copyNimTree(p[j])
+      let argIdent = identName(paramNameNode(p[j]))
+      if argIdent.len == 0:
+        error("objcImpl helper generation could not read parameter name", p[j])
+      let argName = ident(argIdent)
       senderParams.add(newIdentDefs(ident("arg" & $i & "_" & $j), abiType))
       callArgs.add(objcToAbiArgNode(pType, argName))
 
