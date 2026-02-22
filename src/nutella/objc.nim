@@ -1,7 +1,9 @@
 import std/[macros, strutils]
 import objc/core
+import objc/ivar
 
 export core
+export ivar
 
 type ObjcProtocolMethodSpec = object
   selector: string
@@ -105,7 +107,7 @@ proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string
       "d"
     elif name == "bool":
       "B"
-    elif name == "cstring" or name == "string" or name == "NSString":
+    elif name == "cstring" or name == "string":
       "*"
     elif name == "ObjcClass":
       "#"
@@ -184,18 +186,31 @@ proc leafTypeName(typ: NimNode): string =
     identName(typ)
 
 template objcAbiType(T: typedesc): untyped =
-  when T is string or T is NSString:
+  when T is string:
     cstring
   elif T is NSObject:
     ID
   else:
     T
 
+const ObjcCStringScratchSlots = 128
+
+var objcCStringScratch {.threadvar.}: seq[string]
+var objcCStringScratchIdx {.threadvar.}: int
+
+proc objcStableCString(value: string): cstring =
+  ## Keeps C-string pointers alive across objc_msgSend varargs boundaries.
+  if objcCStringScratch.len == 0:
+    objcCStringScratch.setLen(ObjcCStringScratchSlots)
+    objcCStringScratchIdx = 0
+  let idx = objcCStringScratchIdx
+  objcCStringScratch[idx] = value
+  objcCStringScratchIdx = (idx + 1) mod ObjcCStringScratchSlots
+  cstring(objcCStringScratch[idx])
+
 template objcToAbiArg(T: typedesc, v: untyped): untyped =
   when T is string:
-    cstring(v)
-  elif T is NSString:
-    cstring(string(v))
+    objcStableCString(v)
   elif T is NSObject:
     toID(v)
   else:
@@ -207,11 +222,6 @@ template objcFromAbiValue(T: typedesc, v: untyped): untyped =
       ""
     else:
       $v
-  elif T is NSString:
-    if v.isNil:
-      nsString("")
-    else:
-      nsString($v)
   elif T is NSObject:
     asType[T](v)
   else:
@@ -961,3 +971,6 @@ macro objcImpl*(x: untyped): untyped =
     result.add quote do:
       block:
         `runtimeSetup`
+
+include ./objc/nsstring
+include ./objc/nsdictionary

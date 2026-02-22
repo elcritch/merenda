@@ -121,6 +121,9 @@ proc newWindow*(
   wAlloc.value = nil
   result.setTitle(title)
 
+proc newWindow*(x, y, width, height: float32, title: string): NSWindow =
+  newWindow(x, y, width, height, nsString(title))
+
 proc newView*(x, y, width, height: float32): NSView =
   var vAlloc = NSView.alloc()
   result = vAlloc.initWithFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
@@ -131,11 +134,17 @@ proc newTextField*(
 ): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.strValue = value
+  result.setStringValue(value)
+
+proc newTextField*(x, y, width, height: float32, value: string): NSTextField =
+  newTextField(x, y, width, height, nsString(value))
 
 proc newButton*(
     x, y, width, height: float32, title: NSString = nsString("Button")
 ): NSButton =
   result = NSButton.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
-  result.titleText = title
+  result.setTitle(title)
+
+proc newButton*(x, y, width, height: float32, title: string): NSButton =
+  newButton(x, y, width, height, nsString(title))

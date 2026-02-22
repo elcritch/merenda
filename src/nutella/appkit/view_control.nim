@@ -41,6 +41,15 @@ proc frameSize*(window: NSWindow): NSSize =
 proc title*(window: NSWindow): NSString =
   window.windowTitle()
 
+proc setTitle*(window: NSWindow, value: string) =
+  window.setTitle(nsString(value))
+
+proc setTitle*(button: NSButton, value: string) =
+  button.setTitle(nsString(value))
+
+proc setStringValue*(control: NSControl, value: string) =
+  control.setStringValue(nsString(value))
+
 proc isHidden*(view: NSView): bool =
   view.viewHidden()
 

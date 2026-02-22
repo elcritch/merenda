@@ -272,7 +272,7 @@ proc textLayoutForView(
 
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
-    let textValue = string(textField.stringValue())
+    let textValue = $textField.stringValue()
     let textColor = textField.txtColor()
     let textAlign = toFontHorizontal(textField.alignment())
     textField.value = nil
@@ -294,7 +294,7 @@ proc textLayoutForView(
 
   if view.isKindOfClass(NSButton):
     var button = asType[NSButton](view.value)
-    let title = string(button.titleText())
+    let title = $button.title()
     let textAlign = toFontHorizontal(button.alignment())
     button.value = nil
     if title.len == 0:
@@ -520,9 +520,8 @@ proc ensureNativeWindow(window: NSWindow) =
     let size =
       ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
 
-    window.windowNativeWindow = siwinshim.newSiwinWindow(
-      size = size, title = string(window.windowTitle()), vsync = true
-    )
+    window.windowNativeWindow =
+      siwinshim.newSiwinWindow(size = size, title = $window.windowTitle(), vsync = true)
     window.windowAutoScale = window.windowNativeWindow().configureUiScale()
     window.windowRenderer = figrender.newFigRenderer(
       atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()

@@ -7,7 +7,7 @@ suite "foundation stdlib-backed core types":
     check(empty.isEmpty)
     check(empty.len == 0)
 
-    let hello: NSString = "Hello"
+    let hello = nsString("Hello")
     let world = nsString("World")
     let combined = hello & nsString(", ") & world
     check(not hello.isEmpty)

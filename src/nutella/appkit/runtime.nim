@@ -67,7 +67,7 @@ proc normalizeButtonState(value: int, allowsMixedState: bool): int {.inline.} =
   NSOffState
 
 proc stripMnemonicMarkers(value: NSString): NSString =
-  let src = string(value)
+  let src = $value
   var i = 0
   var dst = newStringOfCap(src.len)
   while i < src.len:
@@ -224,33 +224,18 @@ objcImpl:
     result.align = NSNaturalTextAlignment
 
   method stringValue*(self: NXControl): NSString =
-    if self.isNil:
-      return nsString("")
-    let className = getClassName(self)
-    if className.startsWith("NXTextField"):
-      result = getIvarValue[NSString](self, "strValue")
-      return
-    if className.startsWith("NXButton"):
-      result = getIvarValue[NSString](self, "titleText")
-      return
+    discard self
     nsString("")
 
   method setStringValue*(self: NXControl, value: NSString) =
-    if self.isNil:
-      return
-    let className = getClassName(self)
-    if className.startsWith("NXTextField"):
-      setIvarValue(self, "strValue", value)
-      return
-    if className.startsWith("NXButton"):
-      setIvarValue(self, "titleText", value)
-      return
+    discard self
+    discard value
 
   method intValue*(self: NXControl): cint =
     if self.isNil:
       return 0.cint
     try:
-      parseInt(string(self.stringValue())).cint
+      parseInt($self.stringValue()).cint
     except ValueError:
       0.cint
 
@@ -261,7 +246,7 @@ objcImpl:
     if self.isNil:
       return 0.0
     try:
-      parseFloat(string(self.stringValue())).cfloat
+      parseFloat($self.stringValue()).cfloat
     except ValueError:
       0.0
 
@@ -269,7 +254,7 @@ objcImpl:
     if self.isNil:
       return 0.0
     try:
-      parseFloat(string(self.stringValue())).cdouble
+      parseFloat($self.stringValue()).cdouble
     except ValueError:
       0.0
 
@@ -322,7 +307,7 @@ objcImpl:
 
 objcImpl:
   type NXTextField* = object of NXControl
-    strValue: NSString
+    strValueId: ID
     txtColor {.set: setTextColor, get: textColor.}: NSColor
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
@@ -341,7 +326,7 @@ objcImpl:
     result.bordered = true
     result.bezeled = true
     result.align = NSNaturalTextAlignment
-    result.strValue = nsString("")
+    result.strValueId = retainId(nsString("").value)
     result.txtColor = nsColor(0.08, 0.08, 0.08, 1.0)
     result.bgColor = nsColor(0.98, 0.99, 1.0, 1.0)
     result.drawsBg = true
@@ -355,10 +340,15 @@ objcImpl:
     self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method stringValue*(self: NXTextField): NSString =
-    self.strValue
+    if self.strValueId.isNil:
+      return nsString("")
+    ownFromId[NSString](self.strValueId)
 
   method setStringValue*(self: NXTextField, value: NSString) =
-    self.strValue = value
+    let next = value.value
+    if self.strValueId == next:
+      return
+    self.strValueId = replacedOwnedId(self.strValueId, next)
 
   method previousText*(self: NXTextField): NXTextField =
     if self.prevTxt.isNil:
@@ -386,20 +376,20 @@ objcImpl:
   method dealloc(self: NXTextField) {.used.} =
     self.prevTxt = replacedOwnedId(self.prevTxt, nil)
     self.nextTxt = replacedOwnedId(self.nextTxt, nil)
-    self.strValue = nsString("")
+    self.strValueId = replacedOwnedId(self.strValueId, nil)
     discard callSuperIdFrom(NXTextField, self, getSelector("dealloc"))
 
 objcImpl:
   type NXButton* = object of NXControl
-    titleText {.set: setTitle, get: title.}: NSString
+    titleId: ID
     stateValue {.get: state.}: int
     mixedAllowed {.get: allowsMixedState.}: bool
     transparent {.set: setTransparent, get: isTransparent.}: bool
-    keyEq {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
+    keyEqId: ID
     keyEqMods {.set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask.}: int
     imagePos {.set: setImagePosition, get: imagePosition.}: int
     bezel {.set: setBezelStyle, get: bezelStyle.}: int
-    altTitle {.set: setAlternateTitle, get: alternateTitle.}: NSString
+    altTitleId: ID
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
@@ -413,21 +403,45 @@ objcImpl:
       return
     result.enabled = true
     result.align = NSNaturalTextAlignment
-    result.titleText = nsString("Button")
+    result.titleId = retainId(nsString("Button").value)
     result.stateValue = NSOffState
     result.mixedAllowed = false
     result.bordered = true
     result.bezeled = true
     result.transparent = false
-    result.keyEq = nsString("")
+    result.keyEqId = retainId(nsString("").value)
     result.keyEqMods = 0
     result.imagePos = 0
     result.bezel = 0
-    result.altTitle = nsString("")
+    result.altTitleId = retainId(nsString("").value)
     result.showBorderInside = false
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
     result.onClick = nil
+
+  method title*(self: NXButton): NSString =
+    if self.titleId.isNil:
+      return nsString("")
+    ownFromId[NSString](self.titleId)
+
+  method setTitle*(self: NXButton, value: NSString) =
+    self.titleId = replacedOwnedId(self.titleId, value.value)
+
+  method keyEquivalent*(self: NXButton): NSString =
+    if self.keyEqId.isNil:
+      return nsString("")
+    ownFromId[NSString](self.keyEqId)
+
+  method setKeyEquivalent*(self: NXButton, value: NSString) =
+    self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
+
+  method alternateTitle*(self: NXButton): NSString =
+    if self.altTitleId.isNil:
+      return nsString("")
+    ownFromId[NSString](self.altTitleId)
+
+  method setAlternateTitle*(self: NXButton, value: NSString) =
+    self.altTitleId = replacedOwnedId(self.altTitleId, value.value)
 
   method setState*(self: NXButton, value: cint) =
     self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
@@ -452,7 +466,7 @@ objcImpl:
         self.stateValue = NSOnState
 
   method stringValue*(self: NXButton): NSString =
-    self.titleText()
+    self.title()
 
   method setStringValue*(self: NXButton, value: NSString) =
     self.setTitle(value)
@@ -509,16 +523,16 @@ objcImpl:
     self.setTitle(stripMnemonicMarkers(value))
 
   method dealloc(self: NXButton) {.used.} =
-    self.titleText = nsString("")
-    self.keyEq = nsString("")
-    self.altTitle = nsString("")
+    self.titleId = replacedOwnedId(self.titleId, nil)
+    self.keyEqId = replacedOwnedId(self.keyEqId, nil)
+    self.altTitleId = replacedOwnedId(self.altTitleId, nil)
     self.onClick = nil
     discard callSuperIdFrom(NXButton, self, getSelector("dealloc"))
 
 objcImpl:
   type NXWindow* = object of NXResponder
     windowFrame: NSRect
-    windowTitle: NSString
+    windowTitleId: ID
     windowContentView: ID
     windowNativeWindow: siwinshim.Window
     windowRenderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
@@ -532,7 +546,7 @@ objcImpl:
     if result.isNil:
       return
     result.windowFrame = nsRect(100, 100, 640, 420)
-    result.windowTitle = nsString("Nutella Window")
+    result.windowTitleId = retainId(nsString("Nutella Window").value)
     result.windowContentView = nil
     result.windowNativeWindow = nil
     result.windowRenderer = nil
@@ -575,10 +589,15 @@ objcImpl:
       return NXView(value: nil)
     result = ownFromId[NXView](self.windowContentView)
 
+  method windowTitle*(self: NXWindow): NSString =
+    if self.windowTitleId.isNil:
+      return nsString("")
+    ownFromId[NSString](self.windowTitleId)
+
   method setTitle*(self: NXWindow, value: NSString) =
-    self.windowTitle = value
+    self.windowTitleId = replacedOwnedId(self.windowTitleId, value.value)
     if self.windowNativeReady and not self.windowNativeWindow.isNil:
-      self.windowNativeWindow.title = string(value)
+      self.windowNativeWindow.title = $value
 
   method setContentSize*(self: NXWindow, width, height: cfloat) =
     var frame = self.windowFrame()
@@ -625,6 +644,7 @@ objcImpl:
   method dealloc(self: NXWindow) {.used.} =
     if self.windowNativeReady and (not self.windowNativeWindow.isNil):
       siwinshim.close(self.windowNativeWindow)
+    self.windowTitleId = replacedOwnedId(self.windowTitleId, nil)
     self.windowContentView = replacedOwnedId(self.windowContentView(), nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NXWindow, self, getSelector("dealloc"))
