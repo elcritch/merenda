@@ -30,7 +30,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSColorSpace - Color space definition used by NSColor and rendering.
 - [ ] NSColorWell - Interactive control for choosing colors.
 - [ ] NSComboBox - Editable combo box with selectable list options.
-- [ ] NSCursor - Mouse cursor image and behavior controller.
+<!-- - [ ] NSCursor - Mouse cursor image and behavior controller. -->
 - [ ] NSDatePicker - Date/time selection control.
 - [ ] NSDocument - Document-model object for document-based apps.
 - [ ] NSDocumentController - Manager for document lifecycle and windows.
