@@ -387,3 +387,69 @@ suite "objcImpl runtime generation":
         check(desc.types == "{NSRect={NSPoint=ff}{NSSize=ff}}@:")
     check(foundSetFrame)
     check(foundFrame)
+
+  test "objcImpl models optional protocol methods and properties":
+    objcImpl:
+      type NROptionalProto =
+        concept self
+            method requiredPing(self: NROptionalProto)
+            method optionalPing(self: NROptionalProto) {.optional.}
+            method requiredName(
+              self: NROptionalProto
+            ): NSObject {.property: "requiredName".}
+
+            method optionalTitle(
+              self: NROptionalProto
+            ): NSObject {.property: "optionalTitle", optional.}
+
+            method classCount(
+              self: typedesc[NROptionalProto]
+            ): cint {.property: "classCount".}
+
+            method classLabel(
+              self: typedesc[NROptionalProto]
+            ): NSObject {.property: "classLabel", optional, readonly.}
+
+      type NROptionalClass {.impl: NROptionalProto.} = object of NSObject
+
+      method requiredPing(self: NROptionalClass) =
+        discard self
+
+      method requiredName(self: NROptionalClass): NSObject =
+        discard self
+        result = NSObject(value: nil)
+
+      method classCount(self: typedesc[NROptionalClass]): cint =
+        1.cint
+
+    let proto = getProtocol(NROptionalProto)
+    check(not proto.isNil)
+
+    var foundRequiredPing = false
+    var foundOptionalPing = false
+    var foundRequiredNameGetter = false
+    var foundOptionalTitleGetter = false
+    var foundClassCountGetter = false
+    var foundClassLabelGetter = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "requiredPing":
+        foundRequiredPing = true
+      if $desc.name == "requiredName":
+        foundRequiredNameGetter = true
+    for desc in methodDescriptionList(proto, false, true):
+      if $desc.name == "optionalPing":
+        foundOptionalPing = true
+      if $desc.name == "optionalTitle":
+        foundOptionalTitleGetter = true
+    for desc in methodDescriptionList(proto, true, false):
+      if $desc.name == "classCount":
+        foundClassCountGetter = true
+    for desc in methodDescriptionList(proto, false, false):
+      if $desc.name == "classLabel":
+        foundClassLabelGetter = true
+    check(foundRequiredPing)
+    check(foundOptionalPing)
+    check(foundRequiredNameGetter)
+    check(foundOptionalTitleGetter)
+    check(foundClassCountGetter)
+    check(foundClassLabelGetter)
