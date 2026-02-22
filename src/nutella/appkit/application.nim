@@ -15,6 +15,7 @@ proc addWindow*(app: NSApplication, window: NSWindow) =
   if window.value notin windows:
     windows.add(retainId(window.value))
     app.appWindows = windows
+  window.setNextResponder(asType[NSResponder](app))
   window.windowVisibleRequested = true
 
 proc windows*(app: NSApplication): seq[NSWindow] =
@@ -26,12 +27,16 @@ proc windows*(app: NSApplication): seq[NSWindow] =
 proc setContentView*(window: NSWindow, view: NSView) =
   let currentContentView = window.windowContentView()
   if not currentContentView.isNil and currentContentView != view.value:
+    if window.windowFirstResponder() == currentContentView or
+        isViewDescendantOf(window.windowFirstResponder(), currentContentView):
+      window.windowFirstResponder = replacedOwnedId(window.windowFirstResponder(), nil)
     clearSuperviewRef(currentContentView)
   if not view.isNil:
     let parentId = view.viewSuperview()
     if not parentId.isNil:
       view.removeFromSuperview()
     view.viewSuperview = nil
+    view.setNextResponder(asType[NSResponder](window))
   window.windowContentView = replacedOwnedId(window.windowContentView(), view.value)
 
 proc contentView*(window: NSWindow): NSView =

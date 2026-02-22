@@ -137,8 +137,90 @@ proc detachSubviews(view: NSObject)
 
 proc runApplicationFrames(app: NSObject, maxFrames: int): int
 
+proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool
+
+proc performResponderSelector(target: NSObject, action: SEL, sender: NSObject): bool =
+  if target.isNil or cast[pointer](action).isNil:
+    return false
+  let cls = getClass(target.value)
+  if cls.isNil or not cls.respondsToSelector(action):
+    return false
+  let meth = cls.getInstanceMethod(action)
+  if cast[pointer](meth) == nil:
+    return false
+  case meth.getNumberOfArguments()
+  of 2:
+    discard cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)(
+      target.value, action
+    )
+    true
+  of 3:
+    discard cast[proc(self: ID, op: SEL, value: ID): ID {.cdecl, varargs.}](objc_msgSend)(
+      target.value, action, sender.value
+    )
+    true
+  else:
+    false
+
 objcImpl:
   type NXResponder* = object of NSObject
+    nextResp: ID
+
+  method init*(self: var NXResponder): NXResponder =
+    result =
+      asType[NXResponder](callSuperIdFrom(NXResponder, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.nextResp = nil
+
+  method nextResponder*(self: NXResponder): NXResponder =
+    if self.nextResp.isNil:
+      return NXResponder(value: nil)
+    ownFromId[NXResponder](self.nextResp)
+
+  method setNextResponder*(self: NXResponder, next: NXResponder) =
+    if self.isNil:
+      return
+    self.nextResp = replacedOwnedId(self.nextResp, next.value)
+
+  method acceptsFirstResponder*(self: NXResponder): bool =
+    discard self
+    false
+
+  method becomeFirstResponder*(self: NXResponder): bool =
+    discard self
+    true
+
+  method resignFirstResponder*(self: NXResponder): bool =
+    discard self
+    true
+
+  method tryToPerform*(self: NXResponder, action: SEL, sender: NSObject): bool =
+    if self.isNil:
+      return false
+    var current = self
+    var hopCount = 0
+    while not current.isNil and hopCount < 4096:
+      if performResponderSelector(current, action, sender):
+        return true
+      current = current.nextResponder()
+      inc hopCount
+    false
+
+  method doCommandBySelector*(self: NXResponder, action: SEL) =
+    let next = self.nextResponder()
+    if not next.isNil and next.tryToPerform(action, self):
+      return
+    self.noResponderFor(action)
+
+  method noResponderFor*(self: NXResponder, action: SEL) =
+    discard self
+    discard action
+
+  method dealloc(self: NXResponder) {.used.} =
+    self.nextResp = replacedOwnedId(self.nextResp, nil)
+    clearIvarRefs(self)
+    discard callSuperIdFrom(NXResponder, self, getSelector("dealloc"))
 
 objcImpl:
   type NXView* = object of NXResponder
@@ -196,6 +278,19 @@ objcImpl:
     clearIvarRefs(self)
     discard callSuperIdFrom(NXView, self, getSelector("dealloc"))
 
+proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool =
+  if viewId.isNil or ancestorId.isNil:
+    return false
+  var currentId = viewId
+  while not currentId.isNil:
+    if currentId == ancestorId:
+      return true
+    let current = ownFromId[NXView](currentId)
+    if current.isNil:
+      break
+    currentId = current.viewSuperview()
+  false
+
 objcImpl:
   type NXControl* = object of NXView
     enabled {.set: setEnabled, get: isEnabled.}: bool
@@ -222,6 +317,11 @@ objcImpl:
     result.continuous = false
     result.refusesFirstResponder = false
     result.align = NSNaturalTextAlignment
+
+  method acceptsFirstResponder*(self: NXControl): bool =
+    if self.isNil:
+      return false
+    self.isEnabled() and (not self.refusesFirstResponder())
 
   method stringValue*(self: NXControl): NSString =
     discard self
@@ -534,6 +634,7 @@ objcImpl:
     windowFrame: NSRect
     windowTitleId: ID
     windowContentView: ID
+    windowFirstResponder: ID
     windowNativeWindow: siwinshim.Window
     windowRenderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
     windowAutoScale: bool
@@ -548,6 +649,7 @@ objcImpl:
     result.windowFrame = nsRect(100, 100, 640, 420)
     result.windowTitleId = retainId(nsString("Nutella Window").value)
     result.windowContentView = nil
+    result.windowFirstResponder = nil
     result.windowNativeWindow = nil
     result.windowRenderer = nil
     result.windowAutoScale = true
@@ -568,6 +670,9 @@ objcImpl:
     if self.isNil:
       return
     if not self.windowContentView.isNil and self.windowContentView != view.value:
+      if self.windowFirstResponder == self.windowContentView or
+          isViewDescendantOf(self.windowFirstResponder, self.windowContentView):
+        self.windowFirstResponder = replacedOwnedId(self.windowFirstResponder, nil)
       clearSuperviewRef(self.windowContentView)
     if not view.isNil:
       let parentId = view.viewSuperview()
@@ -582,6 +687,7 @@ objcImpl:
               releaseId(view.value)
               break
       view.viewSuperview = nil
+      view.setNextResponder(asType[NXResponder](self))
     self.windowContentView = replacedOwnedId(self.windowContentView(), view.value)
 
   method contentView(self: NXWindow): NXView =
@@ -593,6 +699,39 @@ objcImpl:
     if self.windowTitleId.isNil:
       return nsString("")
     ownFromId[NSString](self.windowTitleId)
+
+  method firstResponder*(self: NXWindow): NXResponder =
+    if self.windowFirstResponder.isNil:
+      return NXResponder(value: nil)
+    ownFromId[NXResponder](self.windowFirstResponder)
+
+  method makeFirstResponder*(self: NXWindow, responder: NXResponder): bool =
+    if self.isNil:
+      return false
+    var requested = responder
+    if requested.isNil:
+      requested = asType[NXResponder](self)
+    if self.windowFirstResponder == requested.value:
+      return true
+
+    let currentId = self.windowFirstResponder()
+    var current = ownFromId[NXResponder](currentId)
+    if not current.isNil and not current.resignFirstResponder():
+      return false
+
+    if not requested.acceptsFirstResponder() or not requested.becomeFirstResponder():
+      if not current.isNil and current.acceptsFirstResponder() and
+          current.becomeFirstResponder():
+        self.windowFirstResponder =
+          replacedOwnedId(self.windowFirstResponder(), current.value)
+      return false
+
+    self.windowFirstResponder =
+      replacedOwnedId(self.windowFirstResponder(), requested.value)
+    true
+
+  method acceptsFirstResponder*(self: NXWindow): bool =
+    true
 
   method setTitle*(self: NXWindow, value: NSString) =
     self.windowTitleId = replacedOwnedId(self.windowTitleId, value.value)
@@ -644,6 +783,9 @@ objcImpl:
   method dealloc(self: NXWindow) {.used.} =
     if self.windowNativeReady and (not self.windowNativeWindow.isNil):
       siwinshim.close(self.windowNativeWindow)
+    self.windowFirstResponder = replacedOwnedId(self.windowFirstResponder(), nil)
+    if not self.windowContentView.isNil:
+      clearSuperviewRef(self.windowContentView)
     self.windowTitleId = replacedOwnedId(self.windowTitleId, nil)
     self.windowContentView = replacedOwnedId(self.windowContentView(), nil)
     clearIvarRefs(self)
@@ -669,6 +811,7 @@ objcImpl:
     if window.value notin windows:
       windows.add(retainId(window.value))
       self.appWindows = windows
+    window.setNextResponder(asType[NXResponder](self))
     window.windowVisibleRequested = true
 
   method run(self: NXApplication) =
