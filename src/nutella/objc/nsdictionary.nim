@@ -1,38 +1,4 @@
 import std/tables
-import ./assoc
-
-type
-  ObjcMarshalKind = enum
-    omkObjc
-    omkNim
-
-  ObjcMarshaledObjRef = ref object
-    value: NSObject
-
-  ObjcMarshaledNimBase = ref object of RootObj
-  ObjcMarshaledNimValue[T] = ref object of ObjcMarshaledNimBase
-    value: T
-
-  ObjcMarshaledEqProc = proc(a, b: ObjcMarshaledNimBase): bool {.nimcall.}
-
-  ObjcMarshaled* = object
-    hashCode: Hash
-    case kind: ObjcMarshalKind
-    of omkObjc:
-      obj: ObjcMarshaledObjRef
-    of omkNim:
-      nim: ObjcMarshaledNimBase
-      eqProc: ObjcMarshaledEqProc
-
-  NXDictionaryData = ref object
-    data: Table[ObjcMarshaled, ObjcMarshaled]
-
-proc objcHashValue(id: ID): Hash {.inline.} =
-  if id.isNil:
-    return 0
-  let hashSend =
-    cast[proc(self: ID, op: SEL): NSUInteger {.cdecl, varargs.}](objc_msgSend)
-  hashSend(id, sel_registerName("hash")).Hash
 
 proc objcIsEqualIds(lhs, rhs: ID): bool {.inline.} =
   if lhs == rhs:
@@ -43,97 +9,53 @@ proc objcIsEqualIds(lhs, rhs: ID): bool {.inline.} =
     cast[proc(self: ID, op: SEL, other: ID): bool {.cdecl, varargs.}](objc_msgSend)
   isEqualSend(lhs, sel_registerName("isEqual:"), rhs)
 
-proc hash*(value: NSObject): Hash {.inline.} =
-  objcHashValue(value.value)
+proc retainId(id: ID): ID {.inline.} =
+  if id.isNil:
+    return nil
+  let retainSend = cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)
+  retainSend(id, sel_registerName("retain"))
 
-proc `==`*(a, b: NSObject): bool {.inline.} =
-  objcIsEqualIds(a.value, b.value)
-
-proc sameEqProc(a, b: ObjcMarshaledEqProc): bool {.inline.} =
-  cast[pointer](a) == cast[pointer](b)
-
-proc hash*(value: ObjcMarshaled): Hash {.inline.} =
-  value.hashCode
-
-proc `==`*(a, b: ObjcMarshaled): bool =
-  if a.kind != b.kind:
-    return false
-  case a.kind
-  of omkObjc:
-    if a.obj.isNil or b.obj.isNil:
-      return a.obj.isNil and b.obj.isNil
-    objcIsEqualIds(a.obj.value.value, b.obj.value.value)
-  of omkNim:
-    if a.nim.isNil or b.nim.isNil:
-      return a.nim.isNil and b.nim.isNil
-    if not sameEqProc(a.eqProc, b.eqProc):
-      return false
-    if a.eqProc.isNil:
-      return false
-    a.eqProc(a.nim, b.nim)
-
-proc marshalObjcValue(value: NSObject): ObjcMarshaled {.inline.} =
-  var box: ObjcMarshaledObjRef
-  new(box)
-  box.value = retain(asType[NSObject](value))
-  ObjcMarshaled(kind: omkObjc, hashCode: objcHashValue(value.value), obj: box)
-
-proc nimBoxEq[T](a, b: ObjcMarshaledNimBase): bool =
-  ObjcMarshaledNimValue[T](a).value == ObjcMarshaledNimValue[T](b).value
-
-proc marshalKey[K](value: K): ObjcMarshaled =
-  when compiles(hash(value)) and compiles(value == value):
-    var box: ObjcMarshaledNimValue[K]
-    new(box)
-    box.value = value
-    ObjcMarshaled(kind: omkNim, hashCode: hash(value), nim: box, eqProc: nimBoxEq[K])
-  elif K is NSObject:
-    marshalObjcValue(asType[NSObject](value))
-  else:
-    {.fatal: "NSDictionary key type requires hash/== or NSObject compatibility".}
-
-proc marshalValue[V](value: V): ObjcMarshaled =
-  when compiles(value == value):
-    var box: ObjcMarshaledNimValue[V]
-    new(box)
-    box.value = value
-    ObjcMarshaled(kind: omkNim, hashCode: 0, nim: box, eqProc: nimBoxEq[V])
-  elif V is NSObject:
-    marshalObjcValue(asType[NSObject](value))
-  else:
-    {.fatal: "NSDictionary value type requires == or NSObject compatibility".}
+proc releaseId(id: ID) {.inline.} =
+  if id.isNil:
+    return
+  let releaseSend = cast[proc(self: ID, op: SEL): void {.cdecl, varargs.}](objc_msgSend)
+  releaseSend(id, sel_registerName("release"))
 
 proc retainedAs[T: NSObject](id: ID): T {.inline.} =
   if id.isNil:
     return T(value: nil)
-  let retainSend = cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)
-  asType[T](retainSend(id, sel_registerName("retain")))
+  asType[T](retainId(id))
 
-proc unmarshalValue[T](value: ObjcMarshaled): T =
-  when T is NSObject:
-    case value.kind
-    of omkObjc:
-      if value.obj.isNil:
-        return T(value: nil)
-      retainedAs[T](value.obj.value.value)
-    of omkNim:
-      retainedAs[T](ObjcMarshaledNimValue[T](value.nim).value.value)
-  else:
-    if value.kind != omkNim:
-      return default(T)
-    ObjcMarshaledNimValue[T](value.nim).value
+proc findEquivalentKey(data: Table[ID, ID], key: ID, matchedKey: var ID): bool =
+  for storedKey in data.keys:
+    if objcIsEqualIds(storedKey, key):
+      matchedKey = storedKey
+      return true
+  matchedKey = nil
+  false
+
+proc releaseTableEntries(data: var Table[ID, ID]) =
+  for key, value in data.pairs:
+    releaseId(key)
+    releaseId(value)
+  data.clear()
 
 objcImpl:
   type NXDictionary* = object of NSObject
     countCache: int
+    data: Table[ID, ID]
 
   method init*(self: var NXDictionary): NXDictionary =
     result = callSuperAs[NXDictionary](self, getSelector("init"))
     if result.isNil:
       return
     result.countCache = 0
+    result.data = initTable[ID, ID]()
 
   method dealloc*(self: NXDictionary) =
+    var data = self.data()
+    releaseTableEntries(data)
+    self.data = data
     clearIvarRefs(self)
     discard callSuperAs[ID](self, getSelector("dealloc"))
 
@@ -145,49 +67,12 @@ objcImpl:
   method removeAllObjects*(self: NXDictionary) =
     if self.isNil:
       return
-    let store = getAssociatedRef(self, NXDictionaryData)
-    if not store.isNil:
-      store.data.clear()
+    var data = self.data()
+    releaseTableEntries(data)
+    self.data = data
     self.countCache = 0
 
-proc storageForRead[K, V](dict: NSDictionary[K, V]): NXDictionaryData =
-  if dict.value.isNil:
-    return nil
-  var obj = asType[NXDictionary](dict.value)
-  let store = getAssociatedRef(obj, NXDictionaryData)
-  obj.value = nil
-  store
-
-proc storageForWrite[K, V](dict: NSDictionary[K, V]): NXDictionaryData =
-  if dict.value.isNil:
-    return nil
-  var obj = asType[NXDictionary](dict.value)
-  let store = getAssociatedRef(obj, NXDictionaryData)
-  obj.value = nil
-  store
-
-proc initStorage[K, V](dict: NSDictionary[K, V]) {.inline.} =
-  if dict.value.isNil:
-    return
-  var obj = asType[NXDictionary](dict.value)
-  var store = getAssociatedRef(obj, NXDictionaryData)
-  if store.isNil:
-    new(store)
-    store.data = initTable[ObjcMarshaled, ObjcMarshaled]()
-    setAssociatedRef(obj, store)
-  else:
-    store.data.clear()
-  obj.countCache = 0
-  obj.value = nil
-
-proc syncCount[K, V](dict: NSDictionary[K, V], count: int) {.inline.} =
-  if dict.value.isNil:
-    return
-  var obj = asType[NXDictionary](dict.value)
-  obj.countCache = count
-  obj.value = nil
-
-proc nsDictionary*[K, V](): NSDictionary[K, V] =
+proc nsDictionary*[K: NSObject, V: NSObject](): NSDictionary[K, V] =
   var allocated = NXDictionary.alloc()
   var created = allocated.init()
   allocated.value = nil
@@ -195,123 +80,144 @@ proc nsDictionary*[K, V](): NSDictionary[K, V] =
     return NSDictionary[K, V](value: nil)
   result = asType[NSDictionary[K, V]](created.value)
   created.value = nil
-  initStorage(result)
 
-proc init*[K, V](n: typedesc[NSDictionary[K, V]]): NSDictionary[K, V] {.inline.} =
+proc init*[K: NSObject, V: NSObject](
+    n: typedesc[NSDictionary[K, V]]
+): NSDictionary[K, V] {.inline.} =
   when false:
     discard n
   nsDictionary[K, V]()
 
-proc new*[K, V](n: typedesc[NSDictionary[K, V]]): NSDictionary[K, V] {.inline.} =
+proc new*[K: NSObject, V: NSObject](
+    n: typedesc[NSDictionary[K, V]]
+): NSDictionary[K, V] {.inline.} =
   when false:
     discard n
   nsDictionary[K, V]()
 
-proc nsDictionary*[K, V](pairs: openArray[(K, V)]): NSDictionary[K, V] =
-  result = nsDictionary[K, V]()
-  for (key, value) in pairs:
-    result[key] = value
-
-proc len*[K, V](dict: NSDictionary[K, V]): int {.inline.} =
-  let store = storageForRead(dict)
-  if store.isNil:
+proc len*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): int {.inline.} =
+  if dict.value.isNil:
     return 0
-  store.data.len
+  var obj = asType[NXDictionary](dict.value)
+  result = obj.data().len
+  obj.value = nil
 
-proc isEmpty*[K, V](dict: NSDictionary[K, V]): bool {.inline.} =
+proc isEmpty*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): bool {.inline.} =
   dict.len == 0
 
-proc hasKey*[K, V](dict: NSDictionary[K, V], key: K): bool {.inline.} =
-  let store = storageForRead(dict)
-  if store.isNil:
+proc hasKey*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): bool =
+  if dict.value.isNil or key.value.isNil:
     return false
-  let marshaledKey = marshalKey(key)
-  store.data.hasKey(marshaledKey)
+  var obj = asType[NXDictionary](dict.value)
+  let data = obj.data()
+  var storedKey: ID
+  result = findEquivalentKey(data, key.value, storedKey)
+  obj.value = nil
 
-proc containsKey*[K, V](dict: NSDictionary[K, V], key: K): bool {.inline.} =
-  dict.hasKey(key)
-
-proc `[]`*[K, V](dict: NSDictionary[K, V], key: K): V =
-  let store = storageForRead(dict)
-  let marshaledKey = marshalKey(key)
-  if store.isNil or not store.data.hasKey(marshaledKey):
+proc `[]`*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): V =
+  if dict.value.isNil or key.value.isNil:
     raise newException(KeyError, "key not found in NSDictionary")
-  unmarshalValue[V](store.data[marshaledKey])
+  var obj = asType[NXDictionary](dict.value)
+  let data = obj.data()
+  var storedKey: ID
+  if not findEquivalentKey(data, key.value, storedKey):
+    obj.value = nil
+    raise newException(KeyError, "key not found in NSDictionary")
+  let storedValue = data[storedKey]
+  obj.value = nil
+  retainedAs[V](storedValue)
 
-proc `[]=`*[K, V](dict: var NSDictionary[K, V], key: K, value: V) {.inline.} =
-  let store = storageForWrite(dict)
-  if store.isNil:
+proc `[]=`*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K, value: V) =
+  if dict.value.isNil:
     return
-  let marshaledKey = marshalKey(key)
-  let marshaledValue = marshalValue(value)
-  store.data[marshaledKey] = marshaledValue
-  syncCount(dict, store.data.len)
+  if key.value.isNil:
+    raise newException(ValueError, "NSDictionary key cannot be nil")
+  var obj = asType[NXDictionary](dict.value)
+  var data = obj.data()
+  var storedKey: ID
+  if findEquivalentKey(data, key.value, storedKey):
+    let oldValue = data[storedKey]
+    if oldValue != value.value:
+      releaseId(oldValue)
+      data[storedKey] = retainId(value.value)
+  else:
+    let retainedKey = retainId(key.value)
+    let retainedValue = retainId(value.value)
+    data[retainedKey] = retainedValue
+  obj.data = data
+  obj.countCache = data.len
+  obj.value = nil
 
-proc getOrDefault*[K, V](
-    dict: NSDictionary[K, V], key: K, defaultValue: V
-): V {.inline.} =
-  let store = storageForRead(dict)
-  if store.isNil:
-    return defaultValue
-  let marshaledKey = marshalKey(key)
-  if not store.data.hasKey(marshaledKey):
-    return defaultValue
-  unmarshalValue[V](store.data[marshaledKey])
-
-proc del*[K, V](dict: var NSDictionary[K, V], key: K) {.inline.} =
-  let store = storageForWrite(dict)
-  if store.isNil:
+proc del*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K) {.inline.} =
+  if dict.value.isNil or key.value.isNil:
     return
-  let marshaledKey = marshalKey(key)
-  if store.data.hasKey(marshaledKey):
-    store.data.del(marshaledKey)
-  syncCount(dict, store.data.len)
+  var obj = asType[NXDictionary](dict.value)
+  var data = obj.data()
+  var storedKey: ID
+  if findEquivalentKey(data, key.value, storedKey):
+    let storedValue = data[storedKey]
+    releaseId(storedKey)
+    releaseId(storedValue)
+    data.del(storedKey)
+  obj.data = data
+  obj.countCache = data.len
+  obj.value = nil
 
-proc clear*[K, V](dict: var NSDictionary[K, V]) {.inline.} =
-  let store = storageForWrite(dict)
-  if store.isNil:
+proc clear*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V]) {.inline.} =
+  if dict.value.isNil:
     return
-  store.data.clear()
-  syncCount(dict, 0)
+  var obj = asType[NXDictionary](dict.value)
+  var data = obj.data()
+  releaseTableEntries(data)
+  obj.data = data
+  obj.countCache = 0
+  obj.value = nil
 
-proc toTable*[K, V](dict: NSDictionary[K, V]): Table[K, V] {.inline.} =
-  let store = storageForRead(dict)
-  if store.isNil:
-    return initTable[K, V]()
-  result = initTable[K, V]()
-  for marshaledKey, marshaledValue in store.data.pairs:
-    result[unmarshalValue[K](marshaledKey)] = unmarshalValue[V](marshaledValue)
+iterator keys*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): K =
+  if not dict.value.isNil:
+    var obj = asType[NXDictionary](dict.value)
+    let data = obj.data()
+    obj.value = nil
+    for storedKey in data.keys:
+      yield retainedAs[K](storedKey)
 
-iterator keys*[K, V](dict: NSDictionary[K, V]): K =
-  let store = storageForRead(dict)
-  if not store.isNil:
-    for marshaledKey in store.data.keys:
-      yield unmarshalValue[K](marshaledKey)
+iterator values*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): V =
+  if not dict.value.isNil:
+    var obj = asType[NXDictionary](dict.value)
+    let data = obj.data()
+    obj.value = nil
+    for storedValue in data.values:
+      yield retainedAs[V](storedValue)
 
-iterator values*[K, V](dict: NSDictionary[K, V]): V =
-  let store = storageForRead(dict)
-  if not store.isNil:
-    for marshaledValue in store.data.values:
-      yield unmarshalValue[V](marshaledValue)
+iterator pairs*[K: NSObject, V: NSObject](
+    dict: NSDictionary[K, V]
+): tuple[key: K, value: V] =
+  if not dict.value.isNil:
+    var obj = asType[NXDictionary](dict.value)
+    let data = obj.data()
+    obj.value = nil
+    for storedKey, storedValue in data.pairs:
+      yield (retainedAs[K](storedKey), retainedAs[V](storedValue))
 
-iterator pairs*[K, V](dict: NSDictionary[K, V]): tuple[key: K, value: V] =
-  let store = storageForRead(dict)
-  if not store.isNil:
-    for marshaledKey, marshaledValue in store.data.pairs:
-      yield (unmarshalValue[K](marshaledKey), unmarshalValue[V](marshaledValue))
-
-proc `==`*[K, V](a, b: NSDictionary[K, V]): bool =
-  let aStore = storageForRead(a)
-  let bStore = storageForRead(b)
-  let aLen = if aStore.isNil: 0 else: aStore.data.len
-  let bLen = if bStore.isNil: 0 else: bStore.data.len
+proc `==`*[K: NSObject, V: NSObject](a, b: NSDictionary[K, V]): bool =
+  let aLen = a.len
+  let bLen = b.len
   if aLen != bLen:
     return false
   if aLen == 0:
     return true
-  for key, value in aStore.data.pairs:
-    if not bStore.data.hasKey(key):
+
+  var aObj = asType[NXDictionary](a.value)
+  var bObj = asType[NXDictionary](b.value)
+  let aData = aObj.data()
+  let bData = bObj.data()
+  aObj.value = nil
+  bObj.value = nil
+
+  for aKey, aValue in aData.pairs:
+    var bKey: ID
+    if not findEquivalentKey(bData, aKey, bKey):
       return false
-    if bStore.data[key] != value:
+    if not objcIsEqualIds(aValue, bData[bKey]):
       return false
   true
