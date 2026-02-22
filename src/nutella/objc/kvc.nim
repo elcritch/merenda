@@ -269,8 +269,6 @@ proc kvoNotifyObserver(
   var sel: SEL = nil
   if observer.respondsToSelector("observeValueForKeyPath:ofObject:change:context:"):
     sel = sel_registerName("observeValueForKeyPath:ofObject:change:context:")
-  elif observer.respondsToSelector("observeValueForKeyPath::::"):
-    sel = sel_registerName("observeValueForKeyPath::::")
   else:
     return
   let send = cast[proc(
