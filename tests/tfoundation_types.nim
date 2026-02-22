@@ -60,6 +60,5 @@ suite "foundation stdlib-backed core types":
 
     check(dict.len == 1)
     check(dict.hasKey(keyObj))
-
-    let fetched = asType[NSString](dict[keyObj])
-    check(fetched == nsString("object-value"))
+    let fetched = dict[keyObj]
+    check(fetched == valueObj)

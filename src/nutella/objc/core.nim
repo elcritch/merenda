@@ -175,7 +175,12 @@ proc objc_msgSendSuper_stret*(super: var ObjcSuper, op: SEL) {.cdecl, importc, v
 
 proc class_getName(cls: ID): cstring {.cdecl, importc.}
 proc getName*(cls: ObjcClass): string =
-  result = $class_getName(cls)
+  if cls.isNil:
+    return "<nil ObjcClass>"
+  let name = class_getName(cls)
+  if name.isNil:
+    return "<unknown ObjcClass>"
+  result = $name
 
 proc `$`*(cls: ObjcClass): string =
   getName(cls)

@@ -262,6 +262,133 @@ proc shouldDebugRenderDump(): bool =
   getEnv("NUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
+const textLayoutBoundsEpsilon = 0.75'f32
+
+type TextLayoutDebugMetrics* = object
+  hasLayout*: bool
+  fitsTextBox*: bool
+  controlBox*: NSRect
+  textBox*: NSRect
+  textBounds*: NSRect
+  glyphCount*: int
+
+proc textLayoutBounds(
+    layout: GlyphArrangement
+): tuple[ok: bool, minX: float32, minY: float32, maxX: float32, maxY: float32] =
+  var found = false
+  var minX = 0.0'f32
+  var minY = 0.0'f32
+  var maxX = 0.0'f32
+  var maxY = 0.0'f32
+  for r in layout.selectionRects:
+    if r.w <= 0 or r.h <= 0:
+      continue
+    if not found:
+      minX = r.x
+      minY = r.y
+      maxX = r.x + r.w
+      maxY = r.y + r.h
+      found = true
+      continue
+    minX = min(minX, r.x)
+    minY = min(minY, r.y)
+    maxX = max(maxX, r.x + r.w)
+    maxY = max(maxY, r.y + r.h)
+  if not found:
+    return (false, 0.0'f32, 0.0'f32, 0.0'f32, 0.0'f32)
+  (true, minX, minY, maxX, maxY)
+
+proc textBoundsForLayout(
+    layout: GlyphArrangement, box: NSRect
+): tuple[ok: bool, bounds: NSRect] =
+  let bounds = textLayoutBounds(layout)
+  if not bounds.ok:
+    return (false, nsRect(box.origin.x, box.origin.y, 0.0, 0.0))
+  (
+    true,
+    nsRect(
+      box.origin.x + bounds.minX,
+      box.origin.y + bounds.minY,
+      bounds.maxX - bounds.minX,
+      bounds.maxY - bounds.minY,
+    ),
+  )
+
+proc layoutFitsTextBox(
+    layout: GlyphArrangement, box: NSRect, epsilon = textLayoutBoundsEpsilon
+): bool =
+  let bounds = textLayoutBounds(layout)
+  if not bounds.ok:
+    return true
+  bounds.minX >= -epsilon and bounds.minY >= -epsilon and
+    bounds.maxX <= box.size.width + epsilon and bounds.maxY <= box.size.height + epsilon
+
+proc textPaddingForView(view: NSView): tuple[x: float32, y: float32] =
+  if view.isKindOfClass(NSButton):
+    return (8.0'f32, 4.0'f32)
+  if view.isKindOfClass(NSTextField):
+    if drawsBg(view):
+      return (10.0'f32, 4.0'f32)
+  (0.0'f32, 0.0'f32)
+
+proc textBoxForView(view: NSView, box: NSRect): NSRect =
+  let padding = textPaddingForView(view)
+  nsRect(
+    box.origin.x + padding.x,
+    box.origin.y + padding.y,
+    max(box.size.width - padding.x * 2, 0.0),
+    max(box.size.height - padding.y * 2, 0.0),
+  )
+
+proc singleLineLayout(
+    text: string, style: FontStyle, textAlign: FontHorizontal, box: NSRect
+): GlyphArrangement =
+  let spans = [(style, text)]
+  typeset(
+    rect(0, 0, box.size.width, box.size.height),
+    spans,
+    hAlign = textAlign,
+    vAlign = FontVertical.Middle,
+    minContent = false,
+    wrap = false,
+  )
+
+proc singleLineTextCandidate(runes: seq[Rune], keep: int): string =
+  result = newStringOfCap(keep + 3)
+  for i in 0 ..< keep:
+    result.add($runes[i])
+  if keep < runes.len:
+    result.add("...")
+
+proc fitSingleLineText(
+    text: string, style: FontStyle, textAlign: FontHorizontal, box: NSRect
+): tuple[text: string, layout: GlyphArrangement] =
+  let layout = singleLineLayout(text, style, textAlign, box)
+  if layoutFitsTextBox(layout, box):
+    return (text, layout)
+
+  var runes: seq[Rune] = @[]
+  for rune in text.runes:
+    runes.add(rune)
+  if runes.len == 0:
+    return ("", default(GlyphArrangement))
+
+  var low = 0
+  var high = runes.len
+  var bestText = ""
+  var bestLayout = default(GlyphArrangement)
+  while low <= high:
+    let keep = (low + high) div 2
+    let candidate = singleLineTextCandidate(runes, keep)
+    let candidateLayout = singleLineLayout(candidate, style, textAlign, box)
+    if layoutFitsTextBox(candidateLayout, box):
+      bestText = candidate
+      bestLayout = candidateLayout
+      low = keep + 1
+    else:
+      high = keep - 1
+  (bestText, bestLayout)
+
 proc textLayoutForView(
     view: NSView, box: NSRect
 ): tuple[ok: bool, layout: GlyphArrangement] =
@@ -278,19 +405,20 @@ proc textLayoutForView(
     textField.value = nil
     if textValue.len == 0:
       return (false, default(GlyphArrangement))
-    let spans = [(fs(appkitFont(18.0), textColor.toFigColor()), textValue)]
-    let layout = typeset(
-      rect(0, 0, box.size.width, box.size.height),
-      spans,
-      hAlign = textAlign,
-      vAlign = FontVertical.Middle,
-      minContent = false,
-      wrap = true,
+    let fitted = fitSingleLineText(
+      textValue, fs(appkitFont(18.0), textColor.toFigColor()), textAlign, box
     )
+    if fitted.text.len == 0:
+      return (false, default(GlyphArrangement))
     if shouldDebugRenderDump():
+      let suffix =
+        if fitted.text == textValue:
+          ""
+        else:
+          " (fitted: \"" & fitted.text & "\")"
       echo "[appkit] textfield layout runes=",
-        layout.runes.len, " text=\"", textValue, "\""
-    return (true, layout)
+        fitted.layout.runes.len, " text=\"", textValue, "\"", suffix
+    return (true, fitted.layout)
 
   if view.isKindOfClass(NSButton):
     var button = asType[NSButton](view.value)
@@ -299,21 +427,49 @@ proc textLayoutForView(
     button.value = nil
     if title.len == 0:
       return (false, default(GlyphArrangement))
-    let spans =
-      [(fs(appkitFont(16.0), nsColor(0.98, 0.99, 1.0, 1.0).toFigColor()), title)]
-    let layout = typeset(
-      rect(0, 0, box.size.width, box.size.height),
-      spans,
-      hAlign = textAlign,
-      vAlign = FontVertical.Middle,
-      minContent = false,
-      wrap = false,
+    let fitted = fitSingleLineText(
+      title,
+      fs(appkitFont(16.0), nsColor(0.98, 0.99, 1.0, 1.0).toFigColor()),
+      textAlign,
+      box,
     )
+    if fitted.text.len == 0:
+      return (false, default(GlyphArrangement))
     if shouldDebugRenderDump():
-      echo "[appkit] button layout runes=", layout.runes.len, " title=\"", title, "\""
-    return (true, layout)
+      let suffix =
+        if fitted.text == title:
+          ""
+        else:
+          " (fitted: \"" & fitted.text & "\")"
+      echo "[appkit] button layout runes=",
+        fitted.layout.runes.len, " title=\"", title, "\"", suffix
+    return (true, fitted.layout)
 
   (false, default(GlyphArrangement))
+
+proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
+  if view.isNil:
+    return
+  let frame = view.viewFrame()
+  result.controlBox = nsRect(
+    frame.origin.x,
+    frame.origin.y,
+    max(frame.size.width, 0.0),
+    max(frame.size.height, 0.0),
+  )
+  result.textBox = textBoxForView(view, result.controlBox)
+  let textLayout = textLayoutForView(view, result.textBox)
+  result.hasLayout = textLayout.ok
+  if not textLayout.ok:
+    return
+  result.glyphCount = textLayout.layout.runes.len
+  result.fitsTextBox = layoutFitsTextBox(textLayout.layout, result.textBox)
+  let bounds = textBoundsForLayout(textLayout.layout, result.textBox)
+  if bounds.ok:
+    result.textBounds = bounds.bounds
+  else:
+    result.textBounds =
+      nsRect(result.textBox.origin.x, result.textBox.origin.y, 0.0, 0.0)
 
 proc addViewTree(
   renders: var Renders,
@@ -375,32 +531,7 @@ proc addViewTree(
 
   addAquaGlossOverlay(renders, idx, view, box)
 
-  let textFieldHasBackground =
-    if view.isKindOfClass(NSTextField):
-      drawsBg(view)
-    else:
-      false
-  let textPaddingX =
-    if view.isKindOfClass(NSButton):
-      8.0
-    elif view.isKindOfClass(NSTextField):
-      (if textFieldHasBackground: 10.0 else: 0.0)
-    else:
-      0.0
-  let textPaddingY =
-    if view.isKindOfClass(NSButton):
-      4.0
-    elif view.isKindOfClass(NSTextField):
-      (if textFieldHasBackground: 4.0 else: 0.0)
-    else:
-      0.0
-
-  let textBox = nsRect(
-    box.origin.x + textPaddingX,
-    box.origin.y + textPaddingY,
-    max(box.size.width - textPaddingX * 2, 0.0),
-    max(box.size.height - textPaddingY * 2, 0.0),
-  )
+  let textBox = textBoxForView(view, box)
   let textLayout = textLayoutForView(view, textBox)
   if textLayout.ok:
     discard renders.addChild(

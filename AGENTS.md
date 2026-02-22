@@ -24,6 +24,8 @@
 - Prefer short names for fields and use `set` and `get` pragmas in the `objcImpl` to create simple getter / setters.
 - Never try to use global storage as a shortcut for implementing something unless absolutely needed.
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
+- Prefer NSString over Nim strings. 
+- Prefer Nim backed storage for tables, seq's etc for internal obj-c storage. Only use NSDictionary where AppKit API needs it.
 
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.

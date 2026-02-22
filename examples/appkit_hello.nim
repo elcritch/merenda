@@ -20,6 +20,10 @@ const
   titleTag = 1001
   badgeTag = 1002
   statusTag = 1003
+  leftInset = 28.0'f32
+  titleTop = 28.0'f32
+  titleHeight = 48.0'f32
+  rowGap = 10.0'f32
 
 proc stateName(state: int): string =
   case state
@@ -37,23 +41,26 @@ when isMainModule:
   root.setTag(1)
   root.setBackgroundColor(0.95, 0.96, 0.98, 1.0)
 
-  var title = newTextField(28, 28, 520, 48, "Hello from Nutella/AppKit")
+  var title =
+    newTextField(leftInset, titleTop, 520, titleHeight, "Hello from Nutella/AppKit")
   title.setTag(titleTag)
   title.setAlignment(NSCenterTextAlignment)
   title.setTextColor(nsColor(0.13, 0.20, 0.34, 1.0))
   title.setDrawsBackground(false)
   root.addSubview(title)
 
+  let subtitleTop = titleTop + titleHeight + rowGap
   var subtitle = newTextField(
-    28, 86, 620, 36,
+    leftInset, subtitleTop, 620, 36,
     "Ported APIs: setTag/viewWithTag/removeFromSuperview/alignment/state/contentSize",
   )
   subtitle.setAlignment(NSLeftTextAlignment)
   subtitle.setTextColor(nsColor(0.20, 0.24, 0.31, 1.0))
   subtitle.setBackgroundColor(nsColor(0.98, 0.98, 0.99, 1.0))
+  subtitle.setDrawsBackground(true)
   root.addSubview(subtitle)
 
-  var badge = newTextField(560, 30, 132, 28, "Temporary Tag")
+  var badge = newTextField(560, titleTop + 2, 132, 28, "Temporary Tag")
   badge.setTag(badgeTag)
   badge.setAlignment(NSCenterTextAlignment)
   badge.setBackgroundColor(nsColor(0.91, 0.95, 1.0, 1.0))
@@ -65,13 +72,16 @@ when isMainModule:
   taggedBadge.value = nil
   badge.value = nil
 
-  var status = newTextField(28, 132, 420, 30, "Button state cycle: Off -> On -> Mixed")
+  let statusTop = subtitleTop + 36 + rowGap
+  var status = newTextField(
+    leftInset, statusTop, 420, 30, "Button state cycle: Off -> On -> Mixed"
+  )
   status.setTag(statusTag)
   status.setDrawsBackground(false)
   status.setTextColor(nsColor(0.12, 0.28, 0.20, 1.0))
   root.addSubview(status)
 
-  var button = newButton(28, 172, 220, 44, "Cycle State")
+  var button = newButton(leftInset, statusTop + 40, 220, 44, "Cycle State")
   button.setAllowsMixedState(true)
   button.setState(NSOffState.cint)
   button.setAlignment(NSCenterTextAlignment)
@@ -90,7 +100,7 @@ when isMainModule:
 
   var lookedUpTitle = root.viewWithTag(titleTag)
   if not lookedUpTitle.isNil:
-    lookedUpTitle.setFrameOrigin(nsPoint(28, 20))
+    echo "title tag lookup: ", lookedUpTitle.tag()
   lookedUpTitle.value = nil
 
   var parent = button.superview()

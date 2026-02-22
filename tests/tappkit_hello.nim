@@ -16,6 +16,15 @@ suite "nutella appkit hello world":
     control.performClick(sender)
     sender.value = nil
 
+  proc rectContains(outer, inner: NSRect, epsilon = 0.75'f32): bool =
+    let outerRight = outer.origin.x + outer.size.width
+    let outerBottom = outer.origin.y + outer.size.height
+    let innerRight = inner.origin.x + inner.size.width
+    let innerBottom = inner.origin.y + inner.size.height
+    inner.origin.x >= outer.origin.x - epsilon and
+      inner.origin.y >= outer.origin.y - epsilon and innerRight <= outerRight + epsilon and
+      innerBottom <= outerBottom + epsilon
+
   test "raw pixel input maps to logical coordinates":
     let raw = vec2(300.0'f32, 200.0'f32)
     let mapped =
@@ -197,6 +206,39 @@ suite "nutella appkit hello world":
 
     field.value = nil
     button.value = nil
+
+  test "button text layout stays within the button text box":
+    var button = newButton(
+      0, 0, 170, 34,
+      "Cycle State (this title is intentionally too long for the control)",
+    )
+    button.setAlignment(NSCenterTextAlignment)
+
+    let metrics = debugTextLayoutMetricsForView(button)
+    check(metrics.hasLayout)
+    check(metrics.glyphCount > 0)
+    check(metrics.fitsTextBox)
+    check(rectContains(metrics.controlBox, metrics.textBox))
+    check(rectContains(metrics.textBox, metrics.textBounds))
+
+    button.value = nil
+
+  test "text field layout stays within the text box":
+    var field = newTextField(
+      0, 0, 240, 40,
+      "Ported APIs: setTag/viewWithTag/removeFromSuperview/alignment/state/contentSize",
+    )
+    field.setDrawsBackground(true)
+    field.setAlignment(NSLeftTextAlignment)
+
+    let metrics = debugTextLayoutMetricsForView(field)
+    check(metrics.hasLayout)
+    check(metrics.glyphCount > 0)
+    check(metrics.fitsTextBox)
+    check(rectContains(metrics.controlBox, metrics.textBox))
+    check(rectContains(metrics.textBox, metrics.textBounds))
+
+    field.value = nil
 
   test "application keeps added window alive across frame loop":
     var app = NSApp()
