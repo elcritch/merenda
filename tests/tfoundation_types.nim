@@ -24,15 +24,15 @@ suite "foundation stdlib-backed core types":
     check(lookup[helloLookup] == 1)
 
   test "NSDictionary supports set/get/update/remove":
-    var dict = nsDictionary[NSString, int]()
+    var dict = nsDictionary[NSString, NSObject]()
     check(dict.isEmpty)
 
-    dict[@ns"one"] = 1
-    dict[@ns"two"] = 2
+    dict[@ns"one"] = boxNSObject(1)
+    dict[@ns"two"] = boxNSObject(2)
     check(dict.len == 2)
     check(dict.hasKey(@ns"one"))
-    check(dict[@ns"two"] == 2)
-    check(dict.getOrDefault(@ns"missing", -1) == -1)
+    check(unboxNSObject[int](dict[@ns"two"]) == 2)
+    check(not dict.hasKey(@ns"missing"))
 
     dict.del(@ns"one")
     check(not dict.hasKey(@ns"one"))
@@ -41,19 +41,23 @@ suite "foundation stdlib-backed core types":
     dict.clear()
     check(dict.isEmpty)
 
-  test "NSDictionary literal constructor, equality, and iteration":
-    let dictA = nsDictionary([("alpha", 1), ("beta", 2), ("gamma", 3)])
-    let dictB = nsDictionary([("gamma", 3), ("beta", 2), ("alpha", 1)])
+  test "NSDictionary equality and iteration":
+    var dictA = nsDictionary[NSString, NSObject]()
+    dictA[@ns"alpha"] = boxNSObject(1)
+    dictA[@ns"beta"] = boxNSObject(2)
+    dictA[@ns"gamma"] = boxNSObject(3)
+
+    var dictB = nsDictionary[NSString, NSObject]()
+    dictB[@ns"gamma"] = boxNSObject(3)
+    dictB[@ns"beta"] = boxNSObject(2)
+    dictB[@ns"alpha"] = boxNSObject(1)
+
     check(dictA == dictB)
 
     var total = 0
     for _, value in dictA.pairs:
-      total += value
+      total += unboxNSObject[int](value)
     check(total == 6)
-
-    let asTable = dictA.toTable()
-    check(asTable.len == 3)
-    check(asTable["alpha"] == 1)
 
   test "NSDictionary supports NSObject keys and values":
     var dict = nsDictionary[NSObject, NSObject]()

@@ -25,3 +25,4 @@ nimbledeps
 /examples/emscripten/*.html
 !/examples/emscripten/emscripten.html
 .DS_Store
+.claude
