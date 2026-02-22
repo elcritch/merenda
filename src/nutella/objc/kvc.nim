@@ -83,6 +83,12 @@ proc kvcBoxValue(obj: ID, sel: SEL, enc: string): NSObject =
   of "Q":
     let send = cast[proc(self: ID, op: SEL): uint64 {.cdecl, varargs.}](objc_msgSend)
     kvcTakeNSObject(nsInteger(send(obj, sel).int))
+  of "f":
+    let send = cast[proc(self: ID, op: SEL): cfloat {.cdecl, varargs.}](objc_msgSend)
+    kvcTakeNSObject(nsFloat(send(obj, sel)))
+  of "d":
+    let send = cast[proc(self: ID, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
+    kvcTakeNSObject(nsFloat(send(obj, sel)))
   of "B", "c", "C":
     let send = cast[proc(self: ID, op: SEL): uint8 {.cdecl, varargs.}](objc_msgSend)
     kvcTakeNSObject(nsInteger(send(obj, sel).int))
@@ -125,6 +131,15 @@ proc kvcSendValue(obj: ID, sel: SEL, argEnc: string, value: NSObject) =
     let intVal = unboxNSObject[NSUInteger](value)
     let send = cast[proc(self: ID, op: SEL, a: uint64) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.uint64)
+  of "f":
+    let floatVal = unboxNSObject[cfloat](value)
+    let send = cast[proc(self: ID, op: SEL, a: cfloat) {.cdecl, varargs.}](objc_msgSend)
+    send(obj, sel, floatVal)
+  of "d":
+    let floatVal = unboxNSObject[cdouble](value)
+    let send =
+      cast[proc(self: ID, op: SEL, a: cdouble) {.cdecl, varargs.}](objc_msgSend)
+    send(obj, sel, floatVal)
   of "B":
     let intVal = unboxNSObject[NSInteger](value)
     let send = cast[proc(self: ID, op: SEL, a: bool) {.cdecl, varargs.}](objc_msgSend)

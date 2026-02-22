@@ -20,6 +20,15 @@ objcImpl:
   method integerValue*(self: NXInteger): NSInteger =
     self.num().NSInteger
 
+  method floatValue*(self: NXInteger): cfloat =
+    self.num().cfloat
+
+  method doubleValue*(self: NXInteger): cdouble =
+    self.num().cdouble
+
+  method boolValue*(self: NXInteger): bool =
+    self.num() != 0
+
   method setIntegerValue*(self: NXInteger, value: NSInteger) =
     self.num = value.int
 
@@ -35,6 +44,54 @@ objcImpl:
     let value = toInt(other.value, sel_registerName("integerValue"))
     self.integerValue() == value
 
+objcImpl:
+  type NXDouble* = object of NSObject
+    num: cdouble
+
+  method init*(self: var NXDouble): NXDouble =
+    result = callSuperAs[NXDouble](self, getSelector("init"))
+    if result.isNil:
+      return
+
+  method dealloc*(self: NXDouble) =
+    clearIvarRefs(self)
+    discard callSuperAs[ID](self, getSelector("dealloc"))
+
+  method doubleValue*(self: NXDouble): cdouble =
+    self.num()
+
+  method floatValue*(self: NXDouble): cfloat =
+    self.num().cfloat
+
+  method integerValue*(self: NXDouble): NSInteger =
+    self.num().int.NSInteger
+
+  method boolValue*(self: NXDouble): bool =
+    self.num() != 0.0
+
+  method setDoubleValue*(self: NXDouble, value: cdouble) =
+    self.num = value
+
+  method hash*(self: NXDouble): NSUInteger =
+    hash(self.num()).NSUInteger
+
+  method isEqual*(self: NXDouble, other: NSObject): bool =
+    if self.value == other.value:
+      return true
+    if other.isNil:
+      return false
+    if other.respondsToSelector("doubleValue"):
+      let toDouble =
+        cast[proc(obj: ID, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
+      let value = toDouble(other.value, sel_registerName("doubleValue"))
+      return self.doubleValue() == value
+    if other.respondsToSelector("integerValue"):
+      let toInt =
+        cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+      let value = toInt(other.value, sel_registerName("integerValue")).cdouble
+      return self.doubleValue() == value
+    false
+
 proc nsInteger*[T: SomeInteger](value: T): NXInteger =
   var allocated = NXInteger.alloc()
   var created = allocated.init()
@@ -43,6 +100,16 @@ proc nsInteger*[T: SomeInteger](value: T): NXInteger =
     return NXInteger(value: nil)
   created.setIntegerValue(value.NSInteger)
   result = asType[NXInteger](created.value)
+  created.value = nil
+
+proc nsFloat*[T: SomeFloat](value: T): NXDouble =
+  var allocated = NXDouble.alloc()
+  var created = allocated.init()
+  allocated.value = nil
+  if created.isNil:
+    return NXDouble(value: nil)
+  created.setDoubleValue(value.cdouble)
+  result = asType[NXDouble](created.value)
   created.value = nil
 
 type NSBoxingBuilder* = object
@@ -63,6 +130,12 @@ proc nsDispatch(value: cstring): NSString {.inline.} =
 
 proc nsDispatch[T: SomeInteger](value: T): NXInteger {.inline.} =
   nsInteger(value)
+
+proc nsDispatch[T: SomeFloat](value: T): NXDouble {.inline.} =
+  nsFloat(value)
+
+proc nsDispatch(value: bool): NXInteger {.inline.} =
+  nsInteger(if value: 1 else: 0)
 
 template ns*(value: untyped): untyped =
   nsDispatch(value)
@@ -141,8 +214,17 @@ proc boxNSObject*[T](value: T): NSObject {.inline.} =
   elif T is SomeInteger:
     let boxed = ns(value)
     retainNSObjectId(boxed.value)
+  elif T is SomeFloat:
+    let boxed = ns(value)
+    retainNSObjectId(boxed.value)
+  elif T is bool:
+    let boxed = ns(value)
+    retainNSObjectId(boxed.value)
   else:
-    {.fatal: "@ns boxing supports NSObject, string/cstring, and integer values".}
+    {.
+      fatal:
+        "@ns boxing supports NSObject, string/cstring, integer, float, and bool values"
+    .}
 
 proc unboxNSObject*[T](value: NSObject): T {.inline.} =
   when T is NSObject:
@@ -165,5 +247,34 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
       return T(0)
     let toInt = cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
     T(toInt(value.value, sel_registerName("integerValue")))
+  elif T is SomeFloat:
+    if value.isNil:
+      return T(0.0)
+    if value.respondsToSelector("doubleValue"):
+      let toDouble =
+        cast[proc(obj: ID, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
+      return T(toDouble(value.value, sel_registerName("doubleValue")))
+    if value.respondsToSelector("floatValue"):
+      let toFloat =
+        cast[proc(obj: ID, op: SEL): cfloat {.cdecl, varargs.}](objc_msgSend)
+      return T(toFloat(value.value, sel_registerName("floatValue")))
+    if value.respondsToSelector("integerValue"):
+      let toInt =
+        cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+      return T(toInt(value.value, sel_registerName("integerValue")).cdouble)
+    T(0.0)
+  elif T is bool:
+    if value.isNil:
+      return false
+    if value.respondsToSelector("boolValue"):
+      let toBool = cast[proc(obj: ID, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)
+      return toBool(value.value, sel_registerName("boolValue"))
+    if value.respondsToSelector("integerValue"):
+      let toInt =
+        cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+      return toInt(value.value, sel_registerName("integerValue")) != 0
+    false
   else:
-    {.fatal: "@ns unboxing supports NSObject, string, and integer values".}
+    {.
+      fatal: "@ns unboxing supports NSObject, string, integer, float, and bool values"
+    .}
