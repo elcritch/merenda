@@ -1,19 +1,17 @@
 import std/tables
+import ./assoc
 
-type NXDictionaryStorageBase = ref object of RootObj
-type NXDictionaryStorage[K, V] = ref object of NXDictionaryStorageBase
+type NXDictionaryData[K, V] = ref object
   data: Table[K, V]
 
 objcImpl:
   type NXDictionary* = object of NSObject
-    backingStore: NXDictionaryStorageBase
     countCache: int
 
   method init*(self: var NXDictionary): NXDictionary =
     result = callSuperAs[NXDictionary](self, getSelector("init"))
     if result.isNil:
       return
-    result.backingStore = nil
     result.countCache = 0
 
   method dealloc*(self: NXDictionary) =
@@ -26,38 +24,32 @@ objcImpl:
     self.countCache().NSUInteger
 
   method removeAllObjects*(self: NXDictionary) =
-    self.backingStore = nil
+    removeAssociatedObjects(self.value)
     self.countCache = 0
 
-proc storageForRead[K, V](dict: NSDictionary[K, V]): NXDictionaryStorage[K, V] =
+proc storageForRead[K, V](dict: NSDictionary[K, V]): NXDictionaryData[K, V] =
   if dict.value.isNil:
     return nil
   var obj = asType[NXDictionary](dict.value)
-  let base = obj.backingStore()
+  let store = getAssociatedRef(obj, NXDictionaryData[K, V])
   obj.value = nil
-  if base.isNil:
-    return nil
-  if base of NXDictionaryStorage[K, V]:
-    return NXDictionaryStorage[K, V](base)
-  nil
+  store
 
-proc storageForWrite[K, V](dict: NSDictionary[K, V]): NXDictionaryStorage[K, V] =
+proc storageForWrite[K, V](dict: NSDictionary[K, V]): NXDictionaryData[K, V] =
   if dict.value.isNil:
     return nil
   var obj = asType[NXDictionary](dict.value)
-  let base = obj.backingStore()
+  let store = getAssociatedRef(obj, NXDictionaryData[K, V])
   obj.value = nil
-  if base.isNil:
-    return nil
-  if base of NXDictionaryStorage[K, V]:
-    return NXDictionaryStorage[K, V](base)
-  nil
+  store
 
 proc initStorage[K, V](dict: NSDictionary[K, V]) {.inline.} =
   if dict.value.isNil:
     return
   var obj = asType[NXDictionary](dict.value)
-  obj.backingStore = NXDictionaryStorage[K, V](data: initTable[K, V]())
+  var store: NXDictionaryData[K, V]
+  new(store)
+  setAssociatedRef(obj, store)
   obj.countCache = 0
   obj.value = nil
 

@@ -1,33 +1,23 @@
 import std/hashes
 
-type NXStringStorage = ref object
-  value: string
-
 objcImpl:
   type NXString* = object of NSObject
-    backingStore: NXStringStorage
+    text: string
 
   method init*(self: var NXString): NXString =
     result = callSuperAs[NXString](self, getSelector("init"))
     if result.isNil:
       return
-    result.backingStore = NXStringStorage(value: "")
 
   method dealloc*(self: NXString) =
     clearIvarRefs(self)
     discard callSuperAs[ID](self, getSelector("dealloc"))
 
   method stringValue*(self: NXString): string =
-    let store = self.backingStore()
-    if store.isNil:
-      return ""
-    store.value
+    self.text()
 
   method setStringValue*(self: NXString, value: string) =
-    let store = self.backingStore()
-    if store.isNil:
-      return
-    store.value = value
+    self.text = value
 
   method UTF8String*(self: NXString): cstring =
     objcStableCString(self.stringValue())
@@ -41,9 +31,7 @@ proc nsString*(value: sink string): NSString =
   allocated.value = nil
   if created.isNil:
     return NSString(value: nil)
-  let store = created.backingStore()
-  if not store.isNil:
-    store.value = value
+  created.text = value
   result = asType[NSString](created.value)
   created.value = nil
 
