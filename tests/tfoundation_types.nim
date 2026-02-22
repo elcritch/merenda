@@ -51,3 +51,15 @@ suite "foundation stdlib-backed core types":
     let asTable = dictA.toTable()
     check(asTable.len == 3)
     check(asTable["alpha"] == 1)
+
+  test "NSDictionary supports NSObject keys and values":
+    var dict = nsDictionary[NSObject, NSObject]()
+    let keyObj = retain(asType[NSObject](nsString("object-key")))
+    let valueObj = retain(asType[NSObject](nsString("object-value")))
+    dict[keyObj] = valueObj
+
+    check(dict.len == 1)
+    check(dict.hasKey(keyObj))
+
+    let fetched = asType[NSString](dict[keyObj])
+    check(fetched == nsString("object-value"))
