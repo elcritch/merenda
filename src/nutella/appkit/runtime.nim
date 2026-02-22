@@ -195,7 +195,9 @@ objcImpl:
     discard self
     true
 
-  method tryToPerform*(self: NXResponder, action: SEL, sender: NSObject): bool =
+  method tryToPerform*(
+      self: NXResponder, action: SEL, sender {.kw("with").}: NSObject
+  ): bool =
     if self.isNil:
       return false
     var current = self
@@ -256,18 +258,36 @@ objcImpl:
     result.viewTag = 0
     result.viewSubviews = @[]
 
-  method initWithFrame*(self: var NXView, x, y, width, height: cfloat): NXView =
+  method initWithFrame*(
+      self: var NXView,
+      x: cfloat,
+      y {.kw("y").}: cfloat,
+      width {.kw("width").}: cfloat,
+      height {.kw("height").}: cfloat,
+  ): NXView =
     result = self.init()
     if result.isNil:
       return
     result.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
-  method setFrame*(self: NXView, x, y, width, height: cfloat) =
+  method setFrame*(
+      self: NXView,
+      x: cfloat,
+      y {.kw("y").}: cfloat,
+      width {.kw("width").}: cfloat,
+      height {.kw("height").}: cfloat,
+  ) =
     self.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
-  method setBackgroundColor(self: NXView, r, g, b, a: cfloat) =
+  method setBackgroundColor(
+      self: NXView,
+      r: cfloat,
+      g {.kw("green").}: cfloat,
+      b {.kw("blue").}: cfloat,
+      a {.kw("alpha").}: cfloat,
+  ) =
     self.viewBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setHidden(self: NXView, hidden: bool) =
@@ -433,10 +453,22 @@ objcImpl:
     result.prevTxt = nil
     result.nextTxt = nil
 
-  method setTextColor*(self: NXTextField, r, g, b, a: cfloat) =
+  method setTextColor*(
+      self: NXTextField,
+      r: cfloat,
+      g {.kw("green").}: cfloat,
+      b {.kw("blue").}: cfloat,
+      a {.kw("alpha").}: cfloat,
+  ) =
     self.txtColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
-  method setBackgroundColor*(self: NXTextField, r, g, b, a: cfloat) =
+  method setBackgroundColor*(
+      self: NXTextField,
+      r: cfloat,
+      g {.kw("green").}: cfloat,
+      b {.kw("blue").}: cfloat,
+      a {.kw("alpha").}: cfloat,
+  ) =
     self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method stringValue*(self: NXTextField): NSString =
@@ -605,7 +637,9 @@ objcImpl:
       return
     cb(self.value)
 
-  method setPeriodicDelay*(self: NXButton, delay, interval: cfloat) =
+  method setPeriodicDelay*(
+      self: NXButton, delay: cfloat, interval {.kw("interval").}: cfloat
+  ) =
     self.periodicDelaySec = max(delay, 0.0)
     self.periodicIntervalSec = max(interval, 0.0)
 
@@ -658,7 +692,11 @@ objcImpl:
     result.windowClosed = false
 
   method initWithContentRect*(
-      self: var NXWindow, x, y, width, height: cfloat
+      self: var NXWindow,
+      x: cfloat,
+      y {.kw("y").}: cfloat,
+      width {.kw("width").}: cfloat,
+      height {.kw("height").}: cfloat,
   ): NXWindow =
     result = self.init()
     if result.isNil:
@@ -738,7 +776,9 @@ objcImpl:
     if self.windowNativeReady and not self.windowNativeWindow.isNil:
       self.windowNativeWindow.title = $value
 
-  method setContentSize*(self: NXWindow, width, height: cfloat) =
+  method setContentSize*(
+      self: NXWindow, width: cfloat, height {.kw("height").}: cfloat
+  ) =
     var frame = self.windowFrame()
     frame.size = nsSize(max(width.float32, 1.0), max(height.float32, 1.0))
     self.windowFrame = frame
@@ -746,7 +786,7 @@ objcImpl:
       self.windowNativeWindow.size =
         ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
 
-  method setFrameOrigin*(self: NXWindow, x, y: cfloat) =
+  method setFrameOrigin*(self: NXWindow, x: cfloat, y {.kw("y").}: cfloat) =
     var frame = self.windowFrame()
     frame.origin = nsPoint(x.float32, y.float32)
     self.windowFrame = frame
