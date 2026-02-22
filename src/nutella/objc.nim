@@ -973,4 +973,5 @@ macro objcImpl*(x: untyped): untyped =
         `runtimeSetup`
 
 include ./objc/nsstring
+include ./objc/nsboxing
 include ./objc/nsdictionary

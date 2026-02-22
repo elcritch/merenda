@@ -4,21 +4,24 @@ import nutella/objc
 suite "foundation stdlib-backed core types":
   test "NSString supports Nim string semantics":
     let empty = nsString("")
+    let comma = nsString(", ")
+    let helloWorld = nsString("Hello, World")
+    let helloLookup = nsString("Hello")
     check(empty.isEmpty)
     check(empty.len == 0)
 
     let hello = nsString("Hello")
     let world = nsString("World")
-    let combined = hello & nsString(", ") & world
+    let combined = hello & comma & world
     check(not hello.isEmpty)
     check(hello.len == 5)
     check($hello == "Hello")
-    check(combined == nsString("Hello, World"))
+    check(combined == helloWorld)
 
     var lookup = initTable[NSString, int]()
     lookup[hello] = 1
-    check(lookup.hasKey(nsString("Hello")))
-    check(lookup[nsString("Hello")] == 1)
+    check(lookup.hasKey(helloLookup))
+    check(lookup[helloLookup] == 1)
 
   test "NSDictionary supports set/get/update/remove":
     var dict = nsDictionary[NSString, int]()
@@ -54,11 +57,21 @@ suite "foundation stdlib-backed core types":
 
   test "NSDictionary supports NSObject keys and values":
     var dict = nsDictionary[NSObject, NSObject]()
-    let keyObj = retain(asType[NSObject](nsString("object-key")))
-    let valueObj = retain(asType[NSObject](nsString("object-value")))
+    let keyString = nsString("object-key")
+    let valueString = nsString("object-value")
+    let keyObj = retain(asType[NSObject](keyString))
+    let valueObj = retain(asType[NSObject](valueString))
     dict[keyObj] = valueObj
 
     check(dict.len == 1)
     check(dict.hasKey(keyObj))
     let fetched = dict[keyObj]
     check(fetched == valueObj)
+
+  test "@ns boxes NSString and NSInteger":
+    let stringObj = @ns"boxed-string"
+    let expected = @ns"boxed-string"
+    check(stringObj == expected)
+
+    let intObj = ns(42)
+    check(intObj.integerValue() == 42)
