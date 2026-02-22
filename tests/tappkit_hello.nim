@@ -42,21 +42,33 @@ suite "nutella appkit hello world":
     var view = newView(0, 0, 10, 10)
     var button = newButton(0, 0, 120, 32, "Press")
     var field = newTextField(0, 0, 200, 32, "Hello")
+    var secure = NSSecureTextField.new()
+    var search = NSSearchField.new()
+    var box = NSBox.new()
     var window = newWindow(0, 0, 10, 10, "w")
+    var panel = NSPanel.new()
     var app = NSApplication.new()
 
     check(getClassName(responder).startsWith("NXResponder"))
     check(getClassName(view).startsWith("NXView"))
     check(getClassName(button).startsWith("NXButton"))
     check(getClassName(field).startsWith("NXTextField"))
+    check(getClassName(secure).startsWith("NXSecureTextField"))
+    check(getClassName(search).startsWith("NXSearchField"))
+    check(getClassName(box).startsWith("NXBox"))
     check(getClassName(window).startsWith("NXWindow"))
+    check(getClassName(panel).startsWith("NXPanel"))
     check(getClassName(app).startsWith("NXApplication"))
 
     responder.value = nil
     view.value = nil
     button.value = nil
     field.value = nil
+    secure.value = nil
+    search.value = nil
+    box.value = nil
     window.value = nil
+    panel.value = nil
     app.value = nil
 
   test "appkit controls report runtime class hierarchy":
@@ -206,6 +218,56 @@ suite "nutella appkit hello world":
 
     field.value = nil
     button.value = nil
+
+  test "ported basic element classes expose header-aligned APIs":
+    var secure = NSSecureTextField.new()
+    check(secure.isKindOfClass(NSSecureTextField))
+    check(secure.isKindOfClass(NSTextField))
+    check(secure.echosBullets())
+    secure.setEchosBullets(false)
+    check(not secure.echosBullets())
+
+    var search = NSSearchField.new()
+    check(search.isKindOfClass(NSSearchField))
+    check(search.recentsAutosaveName() == @ns"")
+    search.setRecentsAutosaveName(@ns"main-search")
+    check(search.recentsAutosaveName() == @ns"main-search")
+    search.setRecentSearches(NSArray[NSString](value: nil))
+    check(search.recentSearches().isNil)
+
+    var box = NSBox.new()
+    check(box.isKindOfClass(NSBox))
+    check(box.isKindOfClass(NSView))
+    check(box.title() == @ns"")
+    box.setTitleWithMnemonic(@ns"P&references")
+    check(box.title() == @ns"Preferences")
+    check(box.isTransparent())
+    box.setTransparent(false)
+    check(not box.isTransparent())
+    var boxContent = newView(0, 0, 120, 40)
+    box.setContentView(boxContent)
+    check(box.contentView().value == boxContent.value)
+    check(boxContent.superview().value == box.value)
+
+    var panel = NSPanel.new()
+    check(panel.isKindOfClass(NSPanel))
+    check(panel.isKindOfClass(NSWindow))
+    check(not panel.canBecomeMainWindow())
+    check(not panel.worksWhenModal())
+    check(not panel.becomesKeyOnlyIfNeeded())
+    check(not panel.isFloatingPanel())
+    panel.setWorksWhenModal(true)
+    panel.setBecomesKeyOnlyIfNeeded(true)
+    panel.setFloatingPanel(true)
+    check(panel.worksWhenModal())
+    check(panel.becomesKeyOnlyIfNeeded())
+    check(panel.isFloatingPanel())
+
+    panel.value = nil
+    boxContent.value = nil
+    box.value = nil
+    search.value = nil
+    secure.value = nil
 
   test "button text layout stays within the button text box":
     var button = newButton(
