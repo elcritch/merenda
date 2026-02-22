@@ -403,6 +403,115 @@ proc removeObserver*(
 ) {.inline.} =
   removeObserver(obj, observer, stringValue(keyPath), context)
 
+proc kvoOptionsFromMask(mask: NSUInteger): NSKeyValueObservingOptions {.inline.} =
+  result = {}
+  if (mask and 1.NSUInteger) != 0:
+    result.incl(nsKVOOptionNew)
+  if (mask and 2.NSUInteger) != 0:
+    result.incl(nsKVOOptionOld)
+  if (mask and 4.NSUInteger) != 0:
+    result.incl(nsKVOOptionInitial)
+  if (mask and 8.NSUInteger) != 0:
+    result.incl(nsKVOOptionPrior)
+
+proc kvoKeyPathFromId(keyPath: ID): string =
+  if keyPath.isNil:
+    return ""
+  let toUtf8 = cast[proc(self: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+  let utf8 = toUtf8(keyPath, sel_registerName("UTF8String"))
+  if utf8.isNil:
+    return ""
+  var converted = ""
+  {.cast(raises: []).}:
+    converted = $utf8
+  converted
+
+proc kvoObjcAddObserver(
+    self: ID, cmd: SEL, observer: ID, keyPath: ID, options: NSUInteger, context: pointer
+) {.cdecl.} =
+  when false:
+    discard cmd
+  if self.isNil:
+    return
+  let keyPathString = kvoKeyPathFromId(keyPath)
+  addObserver(
+    asType[NSObject](self),
+    asType[NSObject](observer),
+    keyPathString,
+    kvoOptionsFromMask(options),
+    context,
+  )
+
+proc kvoObjcRemoveObserverWithContext(
+    self: ID, cmd: SEL, observer: ID, keyPath: ID, context: pointer
+) {.cdecl.} =
+  when false:
+    discard cmd
+  if self.isNil:
+    return
+  let keyPathString = kvoKeyPathFromId(keyPath)
+  removeObserver(
+    asType[NSObject](self), asType[NSObject](observer), keyPathString, context
+  )
+
+proc kvoObjcRemoveObserver(self: ID, cmd: SEL, observer: ID, keyPath: ID) {.cdecl.} =
+  when false:
+    discard cmd
+  if self.isNil:
+    return
+  let keyPathString = kvoKeyPathFromId(keyPath)
+  removeObserver(asType[NSObject](self), asType[NSObject](observer), keyPathString)
+
+proc kvoObjcWillChange(self: ID, cmd: SEL, keyPath: ID) {.cdecl.} =
+  when false:
+    discard cmd
+  if self.isNil:
+    return
+  let keyPathString = kvoKeyPathFromId(keyPath)
+  willChangeValueForKey(asType[NSObject](self), keyPathString)
+
+proc kvoObjcDidChange(self: ID, cmd: SEL, keyPath: ID) {.cdecl.} =
+  when false:
+    discard cmd
+  if self.isNil:
+    return
+  let keyPathString = kvoKeyPathFromId(keyPath)
+  didChangeValueForKey(asType[NSObject](self), keyPathString)
+
+block:
+  let nsObjectClass = getClass("NSObject")
+  if not nsObjectClass.isNil:
+    discard addMethod(
+      nsObjectClass,
+      selector("addObserver:forKeyPath:options:context:"),
+      cast[IMP](kvoObjcAddObserver),
+      "v@:@@Q^v",
+    )
+    discard addMethod(
+      nsObjectClass,
+      selector("removeObserver:forKeyPath:context:"),
+      cast[IMP](kvoObjcRemoveObserverWithContext),
+      "v@:@@^v",
+    )
+    discard addMethod(
+      nsObjectClass,
+      selector("removeObserver:forKeyPath:"),
+      cast[IMP](kvoObjcRemoveObserver),
+      "v@:@@",
+    )
+    discard addMethod(
+      nsObjectClass,
+      selector("willChangeValueForKey:"),
+      cast[IMP](kvoObjcWillChange),
+      "v@:@",
+    )
+    discard addMethod(
+      nsObjectClass,
+      selector("didChangeValueForKey:"),
+      cast[IMP](kvoObjcDidChange),
+      "v@:@",
+    )
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
