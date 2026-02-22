@@ -282,9 +282,9 @@ proc kvoNotifyObserver(
 proc addObserver*(
     obj: NSObject,
     observer: NSObject,
-    keyPath: string,
-    options: NSKeyValueObservingOptions = {},
-    context: pointer = nil,
+    keyPath {.kw("forKeyPath").}: string,
+    options {.kw("options").}: NSKeyValueObservingOptions = {},
+    context {.kw("context").}: pointer = nil,
 ) =
   if obj.isNil or observer.isNil or keyPath.len == 0:
     return
@@ -307,7 +307,10 @@ proc addObserver*(
     kvoNotifyObserver(observer, keyPath, obj, change, context)
 
 proc removeObserver*(
-    obj: NSObject, observer: NSObject, keyPath: string, context: pointer = nil
+    obj: NSObject,
+    observer: NSObject,
+    keyPath {.kw("forKeyPath").}: string,
+    context {.kw("context").}: pointer = nil,
 ) =
   if obj.isNil or observer.isNil or keyPath.len == 0:
     return
@@ -318,7 +321,7 @@ proc removeObserver*(
   if idx >= 0:
     state.entries.del(idx)
 
-proc willChangeValueForKey*(obj: NSObject, keyPath: string) =
+proc willChangeValueForKey*(obj: NSObject, keyPath {.kw("key").}: string) =
   if obj.isNil or keyPath.len == 0:
     return
   let state = getAssociatedRef[KVOObservationRef](obj, KVOObservationRef)
@@ -351,7 +354,7 @@ proc willChangeValueForKey*(obj: NSObject, keyPath: string) =
     let pending = kvoPendingState(obj)
     pending.entries.add(KVOPendingChange(keyPath: keyPath, oldValue: oldValue))
 
-proc didChangeValueForKey*(obj: NSObject, keyPath: string) =
+proc didChangeValueForKey*(obj: NSObject, keyPath {.kw("key").}: string) =
   if obj.isNil or keyPath.len == 0:
     return
   let state = getAssociatedRef[KVOObservationRef](obj, KVOObservationRef)
@@ -383,23 +386,26 @@ proc didChangeValueForKey*(obj: NSObject, keyPath: string) =
     )
     kvoNotifyObserver(item.observer, keyPath, obj, change, item.context)
 
-proc willChangeValueForKey*(obj: NSObject, keyPath: NSString) {.inline.} =
+proc willChangeValueForKey*(obj: NSObject, keyPath {.kw("key").}: NSString) {.inline.} =
   willChangeValueForKey(obj, stringValue(keyPath))
 
-proc didChangeValueForKey*(obj: NSObject, keyPath: NSString) {.inline.} =
+proc didChangeValueForKey*(obj: NSObject, keyPath {.kw("key").}: NSString) {.inline.} =
   didChangeValueForKey(obj, stringValue(keyPath))
 
 proc addObserver*(
     obj: NSObject,
     observer: NSObject,
-    keyPath: NSString,
-    options: NSKeyValueObservingOptions = {},
-    context: pointer = nil,
+    keyPath {.kw("forKeyPath").}: NSString,
+    options {.kw("options").}: NSKeyValueObservingOptions = {},
+    context {.kw("context").}: pointer = nil,
 ) {.inline.} =
   addObserver(obj, observer, stringValue(keyPath), options, context)
 
 proc removeObserver*(
-    obj: NSObject, observer: NSObject, keyPath: NSString, context: pointer = nil
+    obj: NSObject,
+    observer: NSObject,
+    keyPath {.kw("forKeyPath").}: NSString,
+    context {.kw("context").}: pointer = nil,
 ) {.inline.} =
   removeObserver(obj, observer, stringValue(keyPath), context)
 
