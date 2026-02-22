@@ -24,10 +24,9 @@ objcImpl:
     store.value
 
   method setStringValue*(self: NXString, value: string) =
-    var store = self.backingStore()
+    let store = self.backingStore()
     if store.isNil:
-      store = NXStringStorage(value: "")
-      self.backingStore = store
+      return
     store.value = value
 
   method UTF8String*(self: NXString): cstring =
@@ -42,7 +41,9 @@ proc nsString*(value: sink string): NSString =
   allocated.value = nil
   if created.isNil:
     return NSString(value: nil)
-  created.setStringValue(value)
+  let store = created.backingStore()
+  if not store.isNil:
+    store.value = value
   result = asType[NSString](created.value)
   created.value = nil
 
