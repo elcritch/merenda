@@ -43,13 +43,13 @@ proc title*(window: NSWindow): NSString =
   window.windowTitle()
 
 proc setTitle*(window: NSWindow, value: string) =
-  window.setTitle(nsString(value))
+  window.setTitle(ns(value))
 
 proc setTitle*(button: NSButton, value: string) =
-  button.setTitle(nsString(value))
+  button.setTitle(ns(value))
 
 proc setStringValue*(control: NSControl, value: string) =
-  control.setStringValue(nsString(value))
+  control.setStringValue(ns(value))
 
 proc isHidden*(view: NSView): bool =
   view.viewHidden()

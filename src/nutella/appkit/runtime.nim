@@ -84,7 +84,7 @@ proc stripMnemonicMarkers(value: NSString): NSString =
       continue
     dst.add(src[i + 1])
     i += 2
-  result = nsString(dst)
+  result = ns(dst)
 
 proc ownFromId[T: NSObject](id: ID): T =
   if id.isNil:
@@ -325,7 +325,7 @@ objcImpl:
 
   method stringValue*(self: NXControl): NSString =
     discard self
-    nsString("")
+    @ns""
 
   method setStringValue*(self: NXControl, value: NSString) =
     discard self
@@ -361,7 +361,7 @@ objcImpl:
   method setIntValue*(self: NXControl, value: cint) =
     if self.isNil:
       return
-    self.setStringValue(nsString($value))
+    self.setStringValue(ns($value))
 
   method setIntegerValue*(self: NXControl, value: int) =
     self.setIntValue(value.cint)
@@ -369,12 +369,12 @@ objcImpl:
   method setFloatValue*(self: NXControl, value: cfloat) =
     if self.isNil:
       return
-    self.setStringValue(nsString($value))
+    self.setStringValue(ns($value))
 
   method setDoubleValue*(self: NXControl, value: cdouble) =
     if self.isNil:
       return
-    self.setStringValue(nsString($value))
+    self.setStringValue(ns($value))
 
   method takeStringValueFrom*(self: NXControl, sender: NXControl) =
     if self.isNil or sender.isNil:
@@ -426,7 +426,7 @@ objcImpl:
     result.bordered = true
     result.bezeled = true
     result.align = NSNaturalTextAlignment
-    result.strValueId = retainId(nsString("").value)
+    result.strValueId = retainId(@ns"".value)
     result.txtColor = nsColor(0.08, 0.08, 0.08, 1.0)
     result.bgColor = nsColor(0.98, 0.99, 1.0, 1.0)
     result.drawsBg = true
@@ -441,7 +441,7 @@ objcImpl:
 
   method stringValue*(self: NXTextField): NSString =
     if self.strValueId.isNil:
-      return nsString("")
+      return @ns""
     ownFromId[NSString](self.strValueId)
 
   method setStringValue*(self: NXTextField, value: NSString) =
@@ -503,17 +503,17 @@ objcImpl:
       return
     result.enabled = true
     result.align = NSNaturalTextAlignment
-    result.titleId = retainId(nsString("Button").value)
+    result.titleId = retainId(@ns"Button".value)
     result.stateValue = NSOffState
     result.mixedAllowed = false
     result.bordered = true
     result.bezeled = true
     result.transparent = false
-    result.keyEqId = retainId(nsString("").value)
+    result.keyEqId = retainId(@ns"".value)
     result.keyEqMods = 0
     result.imagePos = 0
     result.bezel = 0
-    result.altTitleId = retainId(nsString("").value)
+    result.altTitleId = retainId(@ns"".value)
     result.showBorderInside = false
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
@@ -521,7 +521,7 @@ objcImpl:
 
   method title*(self: NXButton): NSString =
     if self.titleId.isNil:
-      return nsString("")
+      return @ns""
     ownFromId[NSString](self.titleId)
 
   method setTitle*(self: NXButton, value: NSString) =
@@ -529,7 +529,7 @@ objcImpl:
 
   method keyEquivalent*(self: NXButton): NSString =
     if self.keyEqId.isNil:
-      return nsString("")
+      return @ns""
     ownFromId[NSString](self.keyEqId)
 
   method setKeyEquivalent*(self: NXButton, value: NSString) =
@@ -537,7 +537,7 @@ objcImpl:
 
   method alternateTitle*(self: NXButton): NSString =
     if self.altTitleId.isNil:
-      return nsString("")
+      return @ns""
     ownFromId[NSString](self.altTitleId)
 
   method setAlternateTitle*(self: NXButton, value: NSString) =
@@ -647,7 +647,7 @@ objcImpl:
     if result.isNil:
       return
     result.windowFrame = nsRect(100, 100, 640, 420)
-    result.windowTitleId = retainId(nsString("Nutella Window").value)
+    result.windowTitleId = retainId(@ns"Nutella Window".value)
     result.windowContentView = nil
     result.windowFirstResponder = nil
     result.windowNativeWindow = nil
@@ -697,7 +697,7 @@ objcImpl:
 
   method windowTitle*(self: NXWindow): NSString =
     if self.windowTitleId.isNil:
-      return nsString("")
+      return @ns""
     ownFromId[NSString](self.windowTitleId)
 
   method firstResponder*(self: NXWindow): NXResponder =

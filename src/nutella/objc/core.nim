@@ -38,6 +38,7 @@ type
   ObjcClass* {.pure.} = object of NSObject
 
   NSString* = object of NSObject
+  NSArray*[T] = object of NSObject
   NSDictionary*[K, V] = object of NSObject
 
   ProtocolPrototype* {.pure, inheritable.} = object

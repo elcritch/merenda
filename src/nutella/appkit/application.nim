@@ -119,7 +119,7 @@ proc runForFrames*(app: NSApplication, maxFrames: int): int =
   runApplicationFrames(app, maxFrames)
 
 proc newWindow*(
-    x, y, width, height: float32, title: NSString = nsString("Nutella Window")
+    x, y, width, height: float32, title: NSString = @ns"Nutella Window"
 ): NSWindow =
   var wAlloc = NSWindow.alloc()
   result = wAlloc.initWithContentRect(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
@@ -127,29 +127,25 @@ proc newWindow*(
   result.setTitle(title)
 
 proc newWindow*(x, y, width, height: float32, title: string): NSWindow =
-  newWindow(x, y, width, height, nsString(title))
+  newWindow(x, y, width, height, ns(title))
 
 proc newView*(x, y, width, height: float32): NSView =
   var vAlloc = NSView.alloc()
   result = vAlloc.initWithFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   vAlloc.value = nil
 
-proc newTextField*(
-    x, y, width, height: float32, value: NSString = nsString("")
-): NSTextField =
+proc newTextField*(x, y, width, height: float32, value: NSString = @ns""): NSTextField =
   result = NSTextField.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   result.setStringValue(value)
 
 proc newTextField*(x, y, width, height: float32, value: string): NSTextField =
-  newTextField(x, y, width, height, nsString(value))
+  newTextField(x, y, width, height, ns(value))
 
-proc newButton*(
-    x, y, width, height: float32, title: NSString = nsString("Button")
-): NSButton =
+proc newButton*(x, y, width, height: float32, title: NSString = @ns"Button"): NSButton =
   result = NSButton.new()
   result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
   result.setTitle(title)
 
 proc newButton*(x, y, width, height: float32, title: string): NSButton =
-  newButton(x, y, width, height, nsString(title))
+  newButton(x, y, width, height, ns(title))
