@@ -685,12 +685,12 @@ objcImpl:
       asType[NXSearchField](callSuperIdFrom(NXSearchField, self, getSelector("init")))
     if result.isNil:
       return
-    result.recentSearchesId = nil
+    result.recentSearchesId = retainId(nsArray[NSString]().value)
     result.recentsAutosaveNameId = retainId(@ns"".value)
 
   method recentSearches*(self: NXSearchField): NSArray[NSString] =
     if self.recentSearchesId.isNil:
-      return NSArray[NSString](value: nil)
+      return nsArray[NSString]()
     ownFromId[NSArray[NSString]](self.recentSearchesId)
 
   method setRecentSearches*(self: NXSearchField, searches: NSArray[NSString]) =
