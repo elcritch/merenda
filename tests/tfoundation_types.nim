@@ -80,6 +80,17 @@ suite "foundation stdlib-backed core types":
     let intObj = @ns(42)
     check(intObj.integerValue() == 42)
 
+  test "@ns boxes and unboxes float and bool":
+    let floatObj = @ns(3.25)
+    check(abs(unboxNSObject[cdouble](floatObj) - 3.25) < 0.0000001)
+    check(unboxNSObject[cfloat](floatObj) > 3.24'f32)
+
+    let trueObj = @ns(true)
+    let falseObj = @ns(false)
+    check(unboxNSObject[bool](trueObj) == true)
+    check(unboxNSObject[bool](falseObj) == false)
+    check(unboxNSObject[NSInteger](trueObj) == 1)
+
   test "NSArray supports stdlib-style operations":
     var values = nsArray([1, 2, 3])
     check(values.len == 3)

@@ -12,7 +12,7 @@ Sorted by implementation priority (most useful first).
 - [x] Struct ABI/type encoding correctness - Added struct encodings for common NS/CG structs (`NSPoint`, `NSSize`, `NSRect`, `CGPoint`, `CGSize`, `CGRect`, `NSRange`) and coverage tests.
 - [x] `objcImpl` class methods/metaclass dispatch - Added `typedesc[Class]` class method support, metaclass method installation, and protocol class-method metadata support.
 - [ ] Optional protocol methods/properties modeling - Represent required vs optional protocol API surface.
-- [ ] KVC/boxing type coverage - Expand beyond object/string/integer paths (floats, structs, etc.).
+- [x] KVC/boxing type coverage - Added float (`f`/`d`) and bool boxing/unboxing, plus KVC getter/setter support for float and double encodings.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
 ## Done: Already Implemented (7)

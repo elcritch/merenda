@@ -8,6 +8,8 @@ type
     name: string
     score: int
     active: bool
+    ratio: cfloat
+    distance: cdouble
 
   PersonStateRef = ref PersonState
 
@@ -22,6 +24,8 @@ type
 #     name     -> NSObject (NSString)    setName:  -> NSObject (NSString)
 #     score    -> NSInteger              setScore: -> NSInteger
 #     isActive -> bool (BOOL, enc "B")
+#     ratio    -> cfloat (enc "f")       setRatio: -> cfloat
+#     distance -> cdouble (enc "d")      setDistance: -> cdouble
 # ---------------------------------------------------------------------------
 
 objcImpl:
@@ -32,7 +36,10 @@ objcImpl:
     if self.isNil:
       return
     setAssociatedRef(
-      self, PersonStateRef(hasName: false, name: "", score: 0, active: false)
+      self,
+      PersonStateRef(
+        hasName: false, name: "", score: 0, active: false, ratio: 0.0'f32, distance: 0.0
+      ),
     )
     result = self
 
@@ -87,6 +94,32 @@ objcImpl:
     let state = getAssociatedRef[PersonStateRef](self, PersonStateRef)
     if not state.isNil:
       state.active = val
+
+  # KVC getter: "ratio" -> cfloat (encoded as "f")
+  method ratio(self: NXKVCTestPerson): cfloat =
+    let state = getAssociatedRef[PersonStateRef](self, PersonStateRef)
+    if state.isNil:
+      return 0.0'f32
+    state.ratio
+
+  # KVC setter: "setRatio:" <- cfloat
+  method setRatio(self: NXKVCTestPerson, val: cfloat) =
+    let state = getAssociatedRef[PersonStateRef](self, PersonStateRef)
+    if not state.isNil:
+      state.ratio = val
+
+  # KVC getter: "distance" -> cdouble (encoded as "d")
+  method distance(self: NXKVCTestPerson): cdouble =
+    let state = getAssociatedRef[PersonStateRef](self, PersonStateRef)
+    if state.isNil:
+      return 0.0
+    state.distance
+
+  # KVC setter: "setDistance:" <- cdouble
+  method setDistance(self: NXKVCTestPerson, val: cdouble) =
+    let state = getAssociatedRef[PersonStateRef](self, PersonStateRef)
+    if not state.isNil:
+      state.distance = val
 
 # ---------------------------------------------------------------------------
 # NXKVCTestContainer — holds a person for key-path tests
@@ -200,6 +233,40 @@ suite "Key-Value Coding":
     let trueBox = boxNSObject(1)
     setValueForKey(p, trueBox, "active")
     check(p.isActive() == true)
+
+  test "valueForKey on cfloat-returning getter (encoding f)":
+    var p = NXKVCTestPerson.init()
+    check(not p.isNil)
+    p.setRatio(1.5'f32)
+
+    let val = valueForKey(p, "ratio")
+    check(not val.isNil)
+    check(abs(unboxNSObject[cfloat](val) - 1.5'f32) < 0.0001'f32)
+
+  test "setValueForKey on cfloat-accepting setter (encoding f)":
+    var p = NXKVCTestPerson.init()
+    check(not p.isNil)
+
+    let ratioBox = boxNSObject(2.25'f32)
+    setValueForKey(p, ratioBox, "ratio")
+    check(abs(p.ratio() - 2.25'f32) < 0.0001'f32)
+
+  test "valueForKey on cdouble-returning getter (encoding d)":
+    var p = NXKVCTestPerson.init()
+    check(not p.isNil)
+    p.setDistance(123.75)
+
+    let val = valueForKey(p, "distance")
+    check(not val.isNil)
+    check(abs(unboxNSObject[cdouble](val) - 123.75) < 0.0000001)
+
+  test "setValueForKey on cdouble-accepting setter (encoding d)":
+    var p = NXKVCTestPerson.init()
+    check(not p.isNil)
+
+    let distanceBox = boxNSObject(456.5)
+    setValueForKey(p, distanceBox, "distance")
+    check(abs(p.distance() - 456.5) < 0.0000001)
 
   test "valueForKey on read-only NSObject getter":
     var t = NXKVCTestTag.init()
