@@ -453,3 +453,45 @@ suite "objcImpl runtime generation":
     check(foundOptionalTitleGetter)
     check(foundClassCountGetter)
     check(foundClassLabelGetter)
+
+  test "objcImpl kw parameter pragmas map selector segments":
+    objcImpl:
+      type NRKwProtocol =
+        concept self
+            method addObserver(
+              self: NRKwProtocol,
+              observer: NSObject,
+              keyPath {.kw("forKeyPath").}: NSString,
+              options {.kw("options").}: NSUInteger,
+              context {.kw("context").}: pointer,
+            )
+
+      type NRKwClass {.impl: NRKwProtocol.} = object of NSObject
+
+      method addObserver(
+          self: NRKwClass,
+          observer: NSObject,
+          keyPath {.kw("forKeyPath").}: NSString,
+          options {.kw("options").}: NSUInteger,
+          context {.kw("context").}: pointer,
+      ) =
+        discard self
+        discard observer
+        discard keyPath
+        discard options
+        discard context
+
+    let proto = getProtocol(NRKwProtocol)
+    check(not proto.isNil)
+
+    var foundNamedSelector = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "addObserver:forKeyPath:options:context:":
+        foundNamedSelector = true
+        check(desc.types.len > 0)
+        check(desc.types[0] == 'v')
+    check(foundNamedSelector)
+
+    let cls = getClass(NRKwClass)
+    check(not cls.isNil)
+    check(respondsToSelector(cls, selector("addObserver:forKeyPath:options:context:")))

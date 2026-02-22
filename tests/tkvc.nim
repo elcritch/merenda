@@ -208,9 +208,9 @@ objcImpl:
   method observeValueForKeyPath(
       self: NXKVCTestObserver,
       keyPath: NSString,
-      ofObject: NSObject,
-      change: NSDictionary[NSString, NSObject],
-      context: pointer,
+      ofObject {.kw("ofObject").}: NSObject,
+      change {.kw("change").}: NSDictionary[NSString, NSObject],
+      context {.kw("context").}: pointer,
   ) =
     let state = getAssociatedRef[KVOStateRef](self, KVOStateRef)
     if state.isNil:
