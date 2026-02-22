@@ -5,9 +5,14 @@ import objc/ivar
 export core
 export ivar
 
+type ObjcImplMethodKind = enum
+  oimkInstance
+  oimkClass
+
 type ObjcProtocolMethodSpec = object
   selector: string
   encoding: string
+  methodKind: ObjcImplMethodKind
 
 type ObjcImplMethodInfo = object
   spec: ObjcProtocolMethodSpec
@@ -56,6 +61,162 @@ proc isExportedName(n: NimNode): bool =
 proc isExportedTypeName(n: NimNode): bool =
   isExportedName(n)
 
+proc unwrapTypeNode(typ: NimNode): NimNode =
+  case typ.kind
+  of nnkPragmaExpr:
+    unwrapTypeNode(typ[0])
+  of nnkPostfix:
+    if typ.len > 1:
+      unwrapTypeNode(typ[^1])
+    else:
+      typ
+  of nnkPar:
+    if typ.len == 1:
+      unwrapTypeNode(typ[0])
+    else:
+      typ
+  else:
+    typ
+
+proc isTypedescTypeNode(typ: NimNode): bool =
+  let node = unwrapTypeNode(typ)
+  node.kind == nnkBracketExpr and node.len == 2 and identName(node[0]) == "typedesc"
+
+proc typedescElementTypeName(typ: NimNode): string =
+  let node = unwrapTypeNode(typ)
+  if node.kind == nnkBracketExpr and node.len == 2 and identName(node[0]) == "typedesc":
+    return identName(node[1])
+  ""
+
+proc objcTypeCodeFromTypeName(name, protocolName, className: string): string =
+  if name == "char":
+    return "c"
+  elif name == "uint8":
+    return "C"
+  elif name == "int" or name == "cint" or name == "int32":
+    return "i"
+  elif name == "uint" or name == "cuint" or name == "uint32":
+    return "I"
+  elif name == "cshort":
+    return "s"
+  elif name == "cushort":
+    return "S"
+  elif name == "int64":
+    return "q"
+  elif name == "uint64":
+    return "Q"
+  elif name == "float" or name == "float32" or name == "cfloat":
+    return "f"
+  elif name == "float64" or name == "cdouble":
+    return "d"
+  elif name == "bool":
+    return "B"
+  elif name == "cstring" or name == "string":
+    return "*"
+  elif name == "ObjcClass":
+    return "#"
+  elif name == "NSObject" or name == "ID" or name == protocolName or name == className:
+    return "@"
+  elif name == "SEL":
+    return ":"
+  elif name == "void":
+    return "v"
+  elif name == "NSPoint":
+    return "{NSPoint=ff}"
+  elif name == "NSSize":
+    return "{NSSize=ff}"
+  elif name == "NSRect":
+    return "{NSRect={NSPoint=ff}{NSSize=ff}}"
+  elif name == "CGPoint":
+    return "{CGPoint=dd}"
+  elif name == "CGSize":
+    return "{CGSize=dd}"
+  elif name == "CGRect":
+    return "{CGRect={CGPoint=dd}{CGSize=dd}}"
+  elif name == "NSRange":
+    return "{_NSRange=QQ}"
+  ""
+
+proc objcTypeCodeFromNodeInner(
+    typ: NimNode,
+    protocolName, className: string,
+    seen: var seq[string],
+    preferredStructName = "",
+): string =
+  let node = unwrapTypeNode(typ)
+  case node.kind
+  of nnkEmpty:
+    "v"
+  of nnkRefTy:
+    "@"
+  of nnkVarTy, nnkDistinctTy:
+    objcTypeCodeFromNodeInner(
+      node[0], protocolName, className, seen, preferredStructName
+    )
+  of nnkBracketExpr:
+    if node.len == 2 and identName(node[0]) == "typedesc": "#" else: "@"
+  of nnkPtrTy:
+    "^" & objcTypeCodeFromNodeInner(node[0], protocolName, className, seen)
+  of nnkObjectTy:
+    var payload = ""
+    if node.len >= 3 and node[2].kind == nnkRecList:
+      for rec in node[2]:
+        if rec.kind != nnkIdentDefs:
+          continue
+        let fieldType = rec[^2]
+        let fieldCount = max(rec.len - 2, 0)
+        for _ in 0 ..< fieldCount:
+          payload.add(
+            objcTypeCodeFromNodeInner(fieldType, protocolName, className, seen)
+          )
+    let structName = if preferredStructName.len > 0: preferredStructName else: "?"
+    "{" & structName & "=" & payload & "}"
+  of nnkTupleTy:
+    var payload = ""
+    for part in node:
+      if part.kind == nnkIdentDefs:
+        let fieldType = part[^2]
+        let fieldCount = max(part.len - 2, 0)
+        for _ in 0 ..< fieldCount:
+          payload.add(
+            objcTypeCodeFromNodeInner(fieldType, protocolName, className, seen)
+          )
+      elif part.kind != nnkEmpty:
+        payload.add(objcTypeCodeFromNodeInner(part, protocolName, className, seen))
+    let structName = if preferredStructName.len > 0: preferredStructName else: "?"
+    "{" & structName & "=" & payload & "}"
+  of nnkIdent:
+    let name = identName(node)
+    let prim = objcTypeCodeFromTypeName(name, protocolName, className)
+    if prim.len > 0:
+      return prim
+    "@"
+  of nnkSym:
+    let name = identName(node)
+    let prim = objcTypeCodeFromTypeName(name, protocolName, className)
+    if prim.len > 0:
+      return prim
+    if name.len == 0 or name in seen:
+      return "@"
+    seen.add(name)
+    let impl = node.getImpl()
+    if impl.kind == nnkTypeDef and impl.len >= 3:
+      let body = impl[2]
+      case body.kind
+      of nnkObjectTy, nnkTupleTy:
+        return objcTypeCodeFromNodeInner(body, protocolName, className, seen, name)
+      of nnkDistinctTy:
+        return objcTypeCodeFromNodeInner(body[0], protocolName, className, seen, name)
+      of nnkRefTy:
+        return "@"
+      else:
+        discard
+    "@"
+  else:
+    let name = identName(node)
+    let prim = objcTypeCodeFromTypeName(name, protocolName, className)
+    if prim.len > 0: prim else: "@"
+
 proc normalizeObjcNodeType(typ: NimNode, protocolName, className: string): NimNode =
   case typ.kind
   of nnkEmpty:
@@ -74,51 +235,10 @@ proc normalizeObjcNodeType(typ: NimNode, protocolName, className: string): NimNo
       result = copyNimTree(typ)
 
 proc objcTypeCodeFromNode(typ: NimNode, protocolName, className: string): string =
-  case typ.kind
-  of nnkEmpty:
-    "v"
-  of nnkVarTy, nnkRefTy, nnkDistinctTy:
-    objcTypeCodeFromNode(typ[0], protocolName, className)
-  of nnkBracketExpr:
-    if typ.len == 2 and identName(typ[0]) == "typedesc": "#" else: "@"
-  of nnkPtrTy:
-    "^" & objcTypeCodeFromNode(typ[0], protocolName, className)
-  else:
-    let name = identName(typ)
-    if name == "char":
-      "c"
-    elif name == "uint8":
-      "C"
-    elif name == "int" or name == "cint" or name == "int32":
-      "i"
-    elif name == "uint" or name == "cuint" or name == "uint32":
-      "I"
-    elif name == "cshort":
-      "s"
-    elif name == "cushort":
-      "S"
-    elif name == "int64":
-      "q"
-    elif name == "uint64":
-      "Q"
-    elif name == "cfloat":
-      "f"
-    elif name == "cdouble":
-      "d"
-    elif name == "bool":
-      "B"
-    elif name == "cstring" or name == "string":
-      "*"
-    elif name == "ObjcClass":
-      "#"
-    elif name == "NSObject" or name == "ID" or name == protocolName or name == className:
-      "@"
-    elif name == "SEL":
-      ":"
-    elif name == "void":
-      "v"
-    else:
-      "@"
+  var seen: seq[string] = @[]
+  objcTypeCodeFromNodeInner(typ, protocolName, className, seen)
+
+proc firstParamIndex(params: NimNode): int
 
 proc methodSpecFromDef(
     def: NimNode, protocolName, className: string
@@ -131,6 +251,12 @@ proc methodSpecFromDef(
     error("objcImpl could not read method name from concept", def)
 
   let params = def.params
+  let firstIdx = firstParamIndex(params)
+  if firstIdx < 0:
+    error(
+      "objcImpl method/proc declarations must include `self` as first argument", def
+    )
+  let firstParamTypedesc = typedescElementTypeName(params[firstIdx][^2])
   var totalParams = 0
   var explicitArgCount = 0
   var encoding = objcTypeCodeFromNode(params[0], protocolName, className) & "@:"
@@ -150,6 +276,7 @@ proc methodSpecFromDef(
 
   result.selector = methodName & ":".repeat(explicitArgCount)
   result.encoding = encoding
+  result.methodKind = if firstParamTypedesc.len > 0: oimkClass else: oimkInstance
 
 proc firstParamIndex(params: NimNode): int =
   for i in 1 ..< params.len:
@@ -162,7 +289,20 @@ proc firstParamTypeName(def: NimNode): string =
   let idx = firstParamIndex(params)
   if idx < 0:
     return ""
-  identName(params[idx][^2])
+  let typ = params[idx][^2]
+  if isTypedescTypeNode(typ):
+    return ""
+  identName(typ)
+
+proc firstParamTypedescName(def: NimNode): string =
+  let params = def.params
+  let idx = firstParamIndex(params)
+  if idx < 0:
+    return ""
+  typedescElementTypeName(params[idx][^2])
+
+proc methodKindLabel(kind: ObjcImplMethodKind): string =
+  if kind == oimkClass: "class" else: "instance"
 
 proc hasErrorPragma(def: NimNode): bool =
   let pragmas = def.pragma
@@ -269,6 +409,7 @@ proc buildObjcWrapperProc(
   let selfName = identName(selfParam[0])
   if selfName.len == 0:
     error("objcImpl could not read implementation self parameter name", def)
+  let isClassMethod = firstParamTypedescName(def) == className
 
   let implName = genSym(nskProc, methodName & "_impl")
   var implProc = newNimNode(nnkProcDef)
@@ -290,16 +431,23 @@ proc buildObjcWrapperProc(
   wrapperParams.add(newIdentDefs(cmdSel, bindSym"SEL", newEmptyNode()))
 
   var wrapperBody = newStmtList()
-  let selfType = ident(className)
-  wrapperBody.add quote do:
-    var `selfIdent` = asType[`selfType`](`selfRaw`)
-  wrapperBody.add quote do:
-    discard `selfIdent`
-  wrapperBody.add quote do:
-    defer:
-      wasMoved(`selfIdent`)
+  var callArgs: seq[NimNode] = @[]
+  if isClassMethod:
+    let classType = ident(className)
+    wrapperBody.add quote do:
+      discard `selfRaw`
+    callArgs.add(copyNimTree(classType))
+  else:
+    let selfType = ident(className)
+    wrapperBody.add quote do:
+      var `selfIdent` = asType[`selfType`](`selfRaw`)
+    wrapperBody.add quote do:
+      discard `selfIdent`
+    wrapperBody.add quote do:
+      defer:
+        wasMoved(`selfIdent`)
+    callArgs.add(copyNimTree(selfIdent))
 
-  var callArgs: seq[NimNode] = @[copyNimTree(selfIdent)]
   var sawSelf = false
   for i in 1 ..< params.len:
     let p = params[i]
@@ -421,7 +569,12 @@ proc buildObjcCallHelperProc(
   senderParams.add(newIdentDefs(ident"selfId", bindSym"ID"))
   senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
 
-  var callArgs: seq[NimNode] = @[copyNimTree(selfName), callSel]
+  let callTarget =
+    if spec.methodKind == oimkClass:
+      newCall(bindSym"objcClass", copyNimTree(selfName))
+    else:
+      copyNimTree(selfName)
+  var callArgs: seq[NimNode] = @[callTarget, callSel]
   var seenSelf = false
   for i in 1 ..< srcParams.len:
     let p = srcParams[i]
@@ -749,7 +902,10 @@ macro objcImpl*(x: untyped): untyped =
     of nnkCommand, nnkCall:
       passthrough.add(copyNimTree(stmt))
     of nnkMethodDef, nnkProcDef:
-      if hasClass and firstParamTypeName(stmt) == className and not hasErrorPragma(stmt):
+      if hasClass and not hasErrorPragma(stmt) and (
+        firstParamTypeName(stmt) == className or
+        firstParamTypedescName(stmt) == className
+      ):
         implDefs.add(stmt)
       else:
         passthrough.add(copyNimTree(stmt))
@@ -768,10 +924,11 @@ macro objcImpl*(x: untyped): untyped =
 
   for i in 0 ..< implMethods.len:
     for j in i + 1 ..< implMethods.len:
-      if implMethods[i].spec.selector == implMethods[j].spec.selector:
+      if implMethods[i].spec.selector == implMethods[j].spec.selector and
+          implMethods[i].spec.methodKind == implMethods[j].spec.methodKind:
         error(
-          "objcImpl found duplicate implementation for selector `" &
-            implMethods[i].spec.selector & "`",
+          "objcImpl found duplicate " & methodKindLabel(implMethods[i].spec.methodKind) &
+            " implementation for selector `" & implMethods[i].spec.selector & "`",
           implMethods[j].sourceDef,
         )
 
@@ -779,7 +936,8 @@ macro objcImpl*(x: untyped): untyped =
     for pSpec in protocolSpecs:
       var found = false
       for impl in implMethods:
-        if impl.spec.selector != pSpec.selector:
+        if impl.spec.selector != pSpec.selector or
+            impl.spec.methodKind != pSpec.methodKind:
           continue
         found = true
         if impl.spec.encoding != pSpec.encoding:
@@ -791,8 +949,9 @@ macro objcImpl*(x: untyped): untyped =
         break
       if not found:
         error(
-          "objcImpl missing implementation for required protocol method `" &
-            pSpec.selector & "`",
+          "objcImpl missing implementation for required " &
+            methodKindLabel(pSpec.methodKind) & " protocol method `" & pSpec.selector &
+            "`",
           x,
         )
 
@@ -821,20 +980,27 @@ macro objcImpl*(x: untyped): untyped =
       newLit(classSuperName)
     else:
       newEmptyNode()
+  let metaClsVar =
+    if hasClass:
+      genSym(nskLet, "objcImplMetaClass")
+    else:
+      newEmptyNode()
   var addMethodDescs = newStmtList()
   if hasProtocol:
     for spec in protocolSpecs:
       let selectorName = newLit(spec.selector)
       let typeEncoding = newLit(spec.encoding)
+      let isInstanceMethod = newLit(spec.methodKind == oimkInstance)
       addMethodDescs.add quote do:
         addMethodDescription(
-          `protoVar`, selector(`selectorName`), `typeEncoding`, true, true
+          `protoVar`, selector(`selectorName`), `typeEncoding`, true, `isInstanceMethod`
         )
 
   var wrapperDefs = newStmtList()
   var fieldAccessorDefs = newStmtList()
   var callHelperDefs = newStmtList()
   var addClassMethods = newStmtList()
+  var addMetaMethods = newStmtList()
   var ensureClassIvars = newStmtList()
   var addExtraProtocols = newStmtList()
 
@@ -922,10 +1088,19 @@ macro objcImpl*(x: untyped): untyped =
     let selectorName = newLit(impl.spec.selector)
     let typeEncoding = newLit(impl.spec.encoding)
     let wrapperSym = impl.wrapperProc.name
-    addClassMethods.add quote do:
-      discard addMethod(
-        `clsVar`, selector(`selectorName`), cast[IMP](`wrapperSym`), `typeEncoding`
-      )
+    if impl.spec.methodKind == oimkClass:
+      addMetaMethods.add quote do:
+        discard addMethod(
+          `metaClsVar`,
+          selector(`selectorName`),
+          cast[IMP](`wrapperSym`),
+          `typeEncoding`,
+        )
+    else:
+      addClassMethods.add quote do:
+        discard addMethod(
+          `clsVar`, selector(`selectorName`), cast[IMP](`wrapperSym`), `typeEncoding`
+        )
 
   result = newStmtList()
   result.add(generatedTypes)
@@ -956,16 +1131,22 @@ macro objcImpl*(x: untyped): untyped =
       if `clsVar`.isNil:
         `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
         if not `clsVar`.isNil:
+          let `metaClsVar` = getClass(`clsVar`.value)
           `ensureClassIvars`
           `attachPrimaryProto`
           `addExtraProtocols`
           `addClassMethods`
+          if not `metaClsVar`.isNil:
+            `addMetaMethods`
           registerClassPair(`clsVar`)
       else:
+        let `metaClsVar` = getClass(`clsVar`.value)
         `ensureClassIvars`
         `attachPrimaryProto`
         `addExtraProtocols`
         `addClassMethods`
+        if not `metaClsVar`.isNil:
+          `addMetaMethods`
 
   if runtimeSetup.len > 0:
     result.add quote do:

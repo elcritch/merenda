@@ -1,5 +1,6 @@
 import std/unittest
 import nutella/objc
+import nutella/appkit/types
 
 type RuntimePayloadObject = object of NSObject
 type RuntimeNimValuePayload = object
@@ -20,6 +21,7 @@ var objcImplRefPayloadLabelSeen = ""
 var objcImplRefPayloadCountSeen = 0
 var objcImplSuperDeallocCount = 0
 var objcImplClassOnlyPingCount = 0
+var objcImplClassMethodTotal = 0.cint
 
 proc ensureRuntimeClass(className: string, superName = "NSObject"): ObjcClass =
   result = getClass(className)
@@ -277,3 +279,111 @@ suite "objcImpl runtime generation":
     check(not o.isNil)
     o.classOnlyPing()
     check(objcImplClassOnlyPingCount == 1)
+
+  test "objcImpl supports class methods and protocol class-method metadata":
+    objcImplClassMethodTotal = 0
+
+    objcImpl:
+      type NRClassMethodProtocol =
+        concept self
+            method classTotal(self: typedesc[NRClassMethodProtocol]): cint
+            method addClassTotal(
+              self: typedesc[NRClassMethodProtocol], amount: cint
+            ): cint
+
+            method resetClassTotal(self: typedesc[NRClassMethodProtocol])
+            method instanceValue(self: NRClassMethodProtocol): cint
+
+      type NRClassMethodClass {.impl: NRClassMethodProtocol.} = object of NSObject
+
+      method classTotal(self: typedesc[NRClassMethodClass]): cint =
+        result = objcImplClassMethodTotal
+
+      method addClassTotal(self: typedesc[NRClassMethodClass], amount: cint): cint =
+        objcImplClassMethodTotal += amount
+        result = objcImplClassMethodTotal
+
+      method resetClassTotal(self: typedesc[NRClassMethodClass]) =
+        objcImplClassMethodTotal = 0
+
+      method instanceValue(self: NRClassMethodClass): cint =
+        discard self
+        result = 7.cint
+
+    let proto = getProtocol(NRClassMethodProtocol)
+    check(not proto.isNil)
+
+    var foundClassTotal = false
+    var foundAddClassTotal = false
+    var foundResetClassTotal = false
+    for desc in methodDescriptionList(proto, true, false):
+      if $desc.name == "classTotal":
+        foundClassTotal = true
+        check(desc.types == "i@:")
+      if $desc.name == "addClassTotal:":
+        foundAddClassTotal = true
+        check(desc.types == "i@:i")
+      if $desc.name == "resetClassTotal":
+        foundResetClassTotal = true
+        check(desc.types == "v@:")
+    check(foundClassTotal)
+    check(foundAddClassTotal)
+    check(foundResetClassTotal)
+
+    var foundInstanceValue = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "instanceValue":
+        foundInstanceValue = true
+        check(desc.types == "i@:")
+    check(foundInstanceValue)
+
+    var cls = getClass(NRClassMethodClass)
+    check(not cls.isNil)
+    let metaCls = getClass(cls.value)
+    check(not metaCls.isNil)
+    check(respondsToSelector(metaCls, selector("classTotal")))
+    check(respondsToSelector(metaCls, selector("addClassTotal:")))
+    check(respondsToSelector(metaCls, selector("resetClassTotal")))
+    check(respondsToSelector(cls, selector("instanceValue")))
+
+    check(NRClassMethodClass.classTotal() == 0.cint)
+    check(NRClassMethodClass.addClassTotal(2.cint) == 2.cint)
+    check(NRClassMethodClass.addClassTotal(5.cint) == 7.cint)
+    NRClassMethodClass.resetClassTotal()
+    check(NRClassMethodClass.classTotal() == 0.cint)
+
+    var o = NRClassMethodClass.new()
+    check(not o.isNil)
+    check(o.instanceValue() == 7.cint)
+
+  test "objcImpl encodes NS struct signatures":
+    objcImpl:
+      type NRStructProtocol =
+        concept self
+            method setFrame(self: NRStructProtocol, frame: NSRect)
+            method frame(self: NRStructProtocol): NSRect
+
+      type NRStructClass {.impl: NRStructProtocol.} = object of NSObject
+
+      method setFrame(self: NRStructClass, frame: NSRect) =
+        discard self
+        discard frame
+
+      method frame(self: NRStructClass): NSRect =
+        discard self
+        result = nsRect(1.0, 2.0, 3.0, 4.0)
+
+    let proto = getProtocol(NRStructProtocol)
+    check(not proto.isNil)
+
+    var foundSetFrame = false
+    var foundFrame = false
+    for desc in methodDescriptionList(proto, true, true):
+      if $desc.name == "setFrame:":
+        foundSetFrame = true
+        check(desc.types == "v@:{NSRect={NSPoint=ff}{NSSize=ff}}")
+      if $desc.name == "frame":
+        foundFrame = true
+        check(desc.types == "{NSRect={NSPoint=ff}{NSSize=ff}}@:")
+    check(foundSetFrame)
+    check(foundFrame)

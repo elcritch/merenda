@@ -1273,6 +1273,8 @@ proc encodeType*[T](t: typedesc[T]): string =
     return "B"
   elif t is cstring:
     return "*"
+  elif t is typedesc:
+    return "#"
   elif t is ObjcClass:
     return "#"
   elif t is typedesc[NSObject]:
@@ -1285,6 +1287,10 @@ proc encodeType*[T](t: typedesc[T]): string =
     return ":"
   elif t is void:
     return "v"
+  elif t is object | tuple:
+    return "{?=}"
+  else:
+    return "@"
 
 macro getProcEncode*(y: typed): untyped =
   y.expectKind {nnkSym, nnkCast}
