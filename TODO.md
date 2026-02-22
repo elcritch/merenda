@@ -2,9 +2,9 @@
 
 Generated from `deps/ravynos/Frameworks/AppKit` headers (`@interface NS* : ...`, categories excluded).
 
-Implemented in Nutella today (7): `NSApplication`, `NSButton`, `NSControl`, `NSResponder`, `NSTextField`, `NSView`, `NSWindow`.
+Implemented in Nutella today (11): `NSApplication`, `NSBox`, `NSButton`, `NSControl`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
 
-Remaining AppKit classes tracked: 222
+Remaining AppKit classes tracked: 218
 
 Sorted by implementation priority (most useful first).
 
@@ -16,19 +16,23 @@ Sorted by implementation priority (most useful first).
 - [x] KVC/boxing type coverage - Added float (`f`/`d`) and bool boxing/unboxing, plus KVC getter/setter support for float and double encodings.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
-## Done: Already Implemented (7)
+## Done: Already Implemented (11)
 - [x] NSApplication - Application singleton and event loop coordinator.
+- [x] NSBox - Framed container view with title/border styles.
 - [x] NSButton - Clickable control that triggers actions and toggles state.
 - [x] NSControl - Base class for interactive controls.
+- [x] NSPanel - Utility-style window subclass.
 - [x] NSResponder - Base class for responder chain event handling.
+- [x] NSSearchField - Text field specialized for search input.
+- [x] NSSecureTextField - Text field that masks entered characters.
 - [x] NSTextField - Single-line text input and display control.
 - [x] NSView - Base class for view hierarchy, drawing, and input.
 - [x] NSWindow - Top-level window container for views and events.
 
-## P1: Core UI and app-building essentials (68)
+## P1: Core UI and app-building essentials (64)
 - [ ] NSActionCell - Cell subclass that supports target/action behavior.
 - [ ] NSAlert - Modal/non-modal alert dialog API.
-- [ ] NSBox - Framed container view with title/border styles.
+- [x] NSBox - Framed container view with title/border styles.
 - [ ] NSButtonCell - Cell used by NSButton-style controls.
 <!-- - [ ] NSCell - Legacy lightweight drawing/editing object for controls. -->
 - [ ] NSClipView - Viewport that clips content inside a scroll view.
@@ -56,7 +60,7 @@ Sorted by implementation priority (most useful first).
 <!-- - [ ] NSNib - Compiled Interface Builder nib loader and instantiator. -->
 <!-- - [ ] NSOpenPanel - Open-file dialog panel. -->
 - [ ] NSOutlineView - Hierarchical table/tree control.
-- [ ] NSPanel - Utility-style window subclass.
+- [x] NSPanel - Utility-style window subclass.
 - [ ] NSParagraphStyle - Immutable paragraph-level text style settings.
 - [ ] NSPasteboard - System pasteboard/clipboard read-write API.
 - [ ] NSPathCell - Cell used by path controls and panels.
@@ -67,8 +71,8 @@ Sorted by implementation priority (most useful first).
 - [ ] NSSavePanel - Save-file dialog panel.
 <!-- - [ ] NSScreen - Display device and geometry information. -->
 - [ ] NSScrollView - Scrollable container with clip and scrollers.
-- [ ] NSSearchField - Text field specialized for search input.
-- [ ] NSSecureTextField - Text field that masks entered characters.
+- [x] NSSearchField - Text field specialized for search input.
+- [x] NSSecureTextField - Text field that masks entered characters.
 - [ ] NSSegmentedControl - Segmented multi-action button control.
 - [ ] NSSlider - Continuous or discrete slider control.
 - [ ] NSSplitView - Resizable multi-pane container view.
