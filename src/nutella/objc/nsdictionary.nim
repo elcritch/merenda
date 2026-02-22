@@ -6,6 +6,9 @@ type
     omkObjc
     omkNim
 
+  ObjcMarshaledObjRef = ref object
+    value: NSObject
+
   ObjcMarshaledNimBase = ref object of RootObj
   ObjcMarshaledNimValue[T] = ref object of ObjcMarshaledNimBase
     value: T
@@ -13,11 +16,13 @@ type
   ObjcMarshaledEqProc = proc(a, b: ObjcMarshaledNimBase): bool {.nimcall.}
 
   ObjcMarshaled* = object
-    kind: ObjcMarshalKind
     hashCode: Hash
-    objId: ID
-    nim: ObjcMarshaledNimBase
-    eqProc: ObjcMarshaledEqProc
+    case kind: ObjcMarshalKind
+    of omkObjc:
+      obj: ObjcMarshaledObjRef
+    of omkNim:
+      nim: ObjcMarshaledNimBase
+      eqProc: ObjcMarshaledEqProc
 
   NXDictionaryData = ref object
     data: Table[ObjcMarshaled, ObjcMarshaled]
@@ -28,16 +33,6 @@ proc objcHashValue(id: ID): Hash {.inline.} =
   let hashSend =
     cast[proc(self: ID, op: SEL): NSUInteger {.cdecl, varargs.}](objc_msgSend)
   hashSend(id, sel_registerName("hash")).Hash
-
-proc retainObjcId(id: ID): ID {.inline, raises: [].} =
-  if id.isNil:
-    return nil
-  objc_msgSend(id, sel_registerName("retain"))
-
-proc releaseObjcId(id: ID) {.inline, raises: [].} =
-  if id.isNil:
-    return
-  discard objc_msgSend(id, sel_registerName("release"))
 
 proc objcIsEqualIds(lhs, rhs: ID): bool {.inline.} =
   if lhs == rhs:
@@ -65,7 +60,9 @@ proc `==`*(a, b: ObjcMarshaled): bool =
     return false
   case a.kind
   of omkObjc:
-    objcIsEqualIds(a.objId, b.objId)
+    if a.obj.isNil or b.obj.isNil:
+      return a.obj.isNil and b.obj.isNil
+    objcIsEqualIds(a.obj.value.value, b.obj.value.value)
   of omkNim:
     if a.nim.isNil or b.nim.isNil:
       return a.nim.isNil and b.nim.isNil
@@ -75,39 +72,11 @@ proc `==`*(a, b: ObjcMarshaled): bool =
       return false
     a.eqProc(a.nim, b.nim)
 
-proc `=destroy`(value: var ObjcMarshaled) =
-  releaseObjcId(value.objId)
-  value.objId = nil
-  value.nim = nil
-  value.eqProc = nil
-  value.hashCode = 0
-
-proc `=copy`(dest: var ObjcMarshaled, src: ObjcMarshaled) =
-  if cast[pointer](addr dest) == cast[pointer](unsafeAddr(src)):
-    return
-  `=destroy`(dest)
-  dest.kind = src.kind
-  dest.hashCode = src.hashCode
-  dest.objId = retainObjcId(src.objId)
-  dest.nim = src.nim
-  dest.eqProc = src.eqProc
-
-proc `=sink`(dest: var ObjcMarshaled, src: ObjcMarshaled) =
-  `=destroy`(dest)
-  dest.kind = src.kind
-  dest.hashCode = src.hashCode
-  dest.objId = src.objId
-  dest.nim = src.nim
-  dest.eqProc = src.eqProc
-
 proc marshalObjcValue(value: NSObject): ObjcMarshaled {.inline.} =
-  ObjcMarshaled(
-    kind: omkObjc,
-    hashCode: objcHashValue(value.value),
-    objId: retainObjcId(value.value),
-    nim: nil,
-    eqProc: nil,
-  )
+  var box: ObjcMarshaledObjRef
+  new(box)
+  box.value = retain(asType[NSObject](value))
+  ObjcMarshaled(kind: omkObjc, hashCode: objcHashValue(value.value), obj: box)
 
 proc nimBoxEq[T](a, b: ObjcMarshaledNimBase): bool =
   ObjcMarshaledNimValue[T](a).value == ObjcMarshaledNimValue[T](b).value
@@ -117,9 +86,7 @@ proc marshalKey[K](value: K): ObjcMarshaled =
     var box: ObjcMarshaledNimValue[K]
     new(box)
     box.value = value
-    ObjcMarshaled(
-      kind: omkNim, hashCode: hash(value), objId: nil, nim: box, eqProc: nimBoxEq[K]
-    )
+    ObjcMarshaled(kind: omkNim, hashCode: hash(value), nim: box, eqProc: nimBoxEq[K])
   elif K is NSObject:
     marshalObjcValue(asType[NSObject](value))
   else:
@@ -130,7 +97,7 @@ proc marshalValue[V](value: V): ObjcMarshaled =
     var box: ObjcMarshaledNimValue[V]
     new(box)
     box.value = value
-    ObjcMarshaled(kind: omkNim, hashCode: 0, objId: nil, nim: box, eqProc: nimBoxEq[V])
+    ObjcMarshaled(kind: omkNim, hashCode: 0, nim: box, eqProc: nimBoxEq[V])
   elif V is NSObject:
     marshalObjcValue(asType[NSObject](value))
   else:
@@ -146,9 +113,11 @@ proc unmarshalValue[T](value: ObjcMarshaled): T =
   when T is NSObject:
     case value.kind
     of omkObjc:
-      retainedAs[T](value.objId)
+      if value.obj.isNil:
+        return T(value: nil)
+      retainedAs[T](value.obj.value.value)
     of omkNim:
-      ObjcMarshaledNimValue[T](value.nim).value
+      retainedAs[T](ObjcMarshaledNimValue[T](value.nim).value.value)
   else:
     if value.kind != omkNim:
       return default(T)

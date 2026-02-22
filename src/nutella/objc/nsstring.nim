@@ -25,6 +25,20 @@ objcImpl:
   method length*(self: NXString): NSUInteger =
     self.stringValue().len.NSUInteger
 
+  method hash*(self: NXString): NSUInteger =
+    hash(self.stringValue()).NSUInteger
+
+  method isEqual*(self: NXString, other: NSObject): bool =
+    if self.value == other.value:
+      return true
+    if other.isNil or not other.respondsToSelector("UTF8String"):
+      return false
+    let toUtf8 = cast[proc(obj: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let utf8 = toUtf8(other.value, sel_registerName("UTF8String"))
+    if utf8.isNil:
+      return false
+    self.stringValue() == $utf8
+
 proc nsString*(value: sink string): NSString =
   var allocated = NXString.alloc()
   var created = allocated.init()
