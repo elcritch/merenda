@@ -18,6 +18,18 @@ type
 
   ContainerStateRef = ref ContainerState
 
+  KVOEvent = object
+    keyPath: string
+    hasOld: bool
+    oldName: string
+    hasNew: bool
+    newName: string
+    prior: bool
+    context: pointer
+
+  KVOStateRef = ref object
+    events: seq[KVOEvent]
+
 # ---------------------------------------------------------------------------
 # NXKVCTestPerson
 #   KVC-compatible ObjC methods:
@@ -174,6 +186,75 @@ objcImpl:
     var boxed = boxNSObject("read-only-tag")
     result = boxed.value
     boxed.value = nil
+
+# ---------------------------------------------------------------------------
+# NXKVCTestObserver — receives KVO callbacks
+# ---------------------------------------------------------------------------
+
+objcImpl:
+  type NXKVCTestObserver = object of NSObject
+
+  method init(self: var NXKVCTestObserver): NXKVCTestObserver =
+    self = super(NXKVCTestObserver, self, init)
+    if self.isNil:
+      return
+    setAssociatedRef(self, KVOStateRef(events: @[]))
+    result = self
+
+  method dealloc(self: NXKVCTestObserver) =
+    clearAssociatedRef[KVOStateRef](self)
+    superDealloc(self)
+
+  method observeValueForKeyPath(
+      self: NXKVCTestObserver,
+      keyPath: NSString,
+      ofObject: NSObject,
+      change: NSDictionary[NSString, NSObject],
+      context: pointer,
+  ) =
+    let state = getAssociatedRef[KVOStateRef](self, KVOStateRef)
+    if state.isNil:
+      return
+    when false:
+      discard ofObject
+
+    var evt = KVOEvent(
+      keyPath: stringValue(keyPath),
+      hasOld: false,
+      oldName: "",
+      hasNew: false,
+      newName: "",
+      prior: false,
+      context: context,
+    )
+
+    if not change.isNil:
+      if change.hasKey(nsString("notificationIsPrior")):
+        evt.prior = unboxNSObject[bool](change[nsString("notificationIsPrior")])
+      if change.hasKey(nsString("old")):
+        let oldObj = change[nsString("old")]
+        evt.hasOld = not oldObj.isNil
+        if not oldObj.isNil:
+          evt.oldName = unboxNSObject[string](oldObj)
+      if change.hasKey(nsString("new")):
+        let newObj = change[nsString("new")]
+        evt.hasNew = not newObj.isNil
+        if not newObj.isNil:
+          evt.newName = unboxNSObject[string](newObj)
+
+    state.events.add(evt)
+
+proc kvoEvents(observer: NXKVCTestObserver): seq[KVOEvent] =
+  let state = getAssociatedRef[KVOStateRef](observer, KVOStateRef)
+  if state.isNil:
+    return @[]
+  state.events
+
+proc clearKvoEvents(observer: NXKVCTestObserver) =
+  let state = getAssociatedRef[KVOStateRef](observer, KVOStateRef)
+  if state.isNil:
+    return
+  state.events.setLen(0)
 
 # ===========================================================================
 # Tests
@@ -378,3 +459,70 @@ suite "Key-Value Coding":
 
     check(unboxNSObject[string](valueForKey(p, "name")) == "BulkSet")
     check(p.score() == 77.cint)
+
+  test "KVO notifies old/new values on setValueForKey":
+    var p = NXKVCTestPerson.init()
+    var obs = NXKVCTestObserver.init()
+    check(not p.isNil)
+    check(not obs.isNil)
+
+    p.setName(boxNSObject("Alice"))
+    addObserver(p, obs, "name", {nsKVOOptionOld, nsKVOOptionNew}, cast[pointer](0x1234))
+    clearKvoEvents(obs)
+
+    setValueForKey(p, boxNSObject("Bob"), "name")
+    let events = kvoEvents(obs)
+    check(events.len == 1)
+    check(events[0].keyPath == "name")
+    check(events[0].hasOld)
+    check(events[0].oldName == "Alice")
+    check(events[0].hasNew)
+    check(events[0].newName == "Bob")
+    check(events[0].context == cast[pointer](0x1234))
+
+  test "KVO initial option sends immediate callback":
+    var p = NXKVCTestPerson.init()
+    var obs = NXKVCTestObserver.init()
+    check(not p.isNil)
+    check(not obs.isNil)
+
+    p.setName(boxNSObject("InitialValue"))
+    addObserver(p, obs, "name", {nsKVOOptionInitial, nsKVOOptionNew})
+    let events = kvoEvents(obs)
+    check(events.len == 1)
+    check(events[0].keyPath == "name")
+    check(events[0].hasNew)
+    check(events[0].newName == "InitialValue")
+
+  test "KVO prior option sends prior then final":
+    var p = NXKVCTestPerson.init()
+    var obs = NXKVCTestObserver.init()
+    check(not p.isNil)
+    check(not obs.isNil)
+
+    p.setName(boxNSObject("Before"))
+    addObserver(p, obs, "name", {nsKVOOptionPrior, nsKVOOptionOld, nsKVOOptionNew})
+    clearKvoEvents(obs)
+
+    setValueForKey(p, boxNSObject("After"), "name")
+    let events = kvoEvents(obs)
+    check(events.len == 2)
+    check(events[0].prior == true)
+    check(events[0].hasOld)
+    check(events[0].oldName == "Before")
+    check(events[1].prior == false)
+    check(events[1].hasOld)
+    check(events[1].oldName == "Before")
+    check(events[1].hasNew)
+    check(events[1].newName == "After")
+
+  test "KVO removeObserver stops notifications":
+    var p = NXKVCTestPerson.init()
+    var obs = NXKVCTestObserver.init()
+    check(not p.isNil)
+    check(not obs.isNil)
+
+    addObserver(p, obs, "name", {nsKVOOptionNew})
+    removeObserver(p, obs, "name")
+    setValueForKey(p, boxNSObject("NoNotify"), "name")
+    check(kvoEvents(obs).len == 0)

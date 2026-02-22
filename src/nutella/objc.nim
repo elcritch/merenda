@@ -1,6 +1,7 @@
 import std/[macros, strutils]
 import objc/core
 import objc/ivar
+import objc/assoc
 
 export core
 export ivar

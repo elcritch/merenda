@@ -158,6 +158,252 @@ proc kvcSendValue(obj: ID, sel: SEL, argEnc: string, value: NSObject) =
     send(obj, sel, value.value)
 
 # ---------------------------------------------------------------------------
+# Key-Value Observing (KVO) baseline
+# ---------------------------------------------------------------------------
+
+type
+  NSKeyValueObservingOption* = enum
+    nsKVOOptionNew
+    nsKVOOptionOld
+    nsKVOOptionInitial
+    nsKVOOptionPrior
+
+  NSKeyValueObservingOptions* = set[NSKeyValueObservingOption]
+
+  KVOObservation = object
+    observer: NSObject
+    keyPath: string
+    options: NSKeyValueObservingOptions
+    context: pointer
+
+  KVOObservationRef = ref object
+    entries: seq[KVOObservation]
+
+  KVOPendingChange = object
+    keyPath: string
+    oldValue: NSObject
+
+  KVOPendingChangeRef = ref object
+    entries: seq[KVOPendingChange]
+
+proc kvoSettingKey(): NSString {.inline.} =
+  nsString("kind")
+
+proc kvoNewKey(): NSString {.inline.} =
+  nsString("new")
+
+proc kvoOldKey(): NSString {.inline.} =
+  nsString("old")
+
+proc kvoPriorKey(): NSString {.inline.} =
+  nsString("notificationIsPrior")
+
+proc valueForKey*(obj: NSObject, key: string): NSObject
+
+proc kvoCurrentValue(obj: NSObject, keyPath: string): NSObject {.inline.} =
+  valueForKey(obj, keyPath)
+
+proc kvoObservationState(obj: NSObject): KVOObservationRef =
+  if obj.isNil:
+    return nil
+  var state = getAssociatedRef[KVOObservationRef](obj, KVOObservationRef)
+  if state.isNil:
+    state = KVOObservationRef(entries: @[])
+    setAssociatedRef(obj, state)
+  state
+
+proc kvoPendingState(obj: NSObject): KVOPendingChangeRef =
+  if obj.isNil:
+    return nil
+  var state = getAssociatedRef[KVOPendingChangeRef](obj, KVOPendingChangeRef)
+  if state.isNil:
+    state = KVOPendingChangeRef(entries: @[])
+    setAssociatedRef(obj, state)
+  state
+
+proc kvoIndexOfObserver(
+    state: KVOObservationRef, observer: NSObject, keyPath: string, context: pointer
+): int =
+  if state.isNil:
+    return -1
+  for i, item in state.entries:
+    if item.observer.value == observer.value and item.keyPath == keyPath and
+        item.context == context:
+      return i
+  -1
+
+proc kvoFindPending(state: KVOPendingChangeRef, keyPath: string): int =
+  if state.isNil:
+    return -1
+  for i in countdown(state.entries.high, 0):
+    if state.entries[i].keyPath == keyPath:
+      return i
+  -1
+
+proc kvoMakeChangeDictionary(
+    options: NSKeyValueObservingOptions,
+    oldValue: NSObject,
+    hasOldValue: bool,
+    newValue: NSObject,
+    hasNewValue: bool,
+    prior: bool,
+): NSDictionary[NSString, NSObject] =
+  result = nsDictionary[NSString, NSObject]()
+  result[kvoSettingKey()] = boxNSObject("setting")
+  if prior:
+    result[kvoPriorKey()] = boxNSObject(true)
+  if nsKVOOptionOld in options and hasOldValue:
+    result[kvoOldKey()] = oldValue
+  if nsKVOOptionNew in options and hasNewValue:
+    result[kvoNewKey()] = newValue
+
+proc kvoNotifyObserver(
+    observer: NSObject,
+    keyPath: string,
+    obj: NSObject,
+    change: NSDictionary[NSString, NSObject],
+    context: pointer,
+) =
+  if observer.isNil:
+    return
+  var sel: SEL = nil
+  if observer.respondsToSelector("observeValueForKeyPath:ofObject:change:context:"):
+    sel = sel_registerName("observeValueForKeyPath:ofObject:change:context:")
+  elif observer.respondsToSelector("observeValueForKeyPath::::"):
+    sel = sel_registerName("observeValueForKeyPath::::")
+  else:
+    return
+  let send = cast[proc(
+    self: ID, op: SEL, keyPath: ID, observed: ID, change: ID, context: pointer
+  ) {.cdecl, varargs.}](objc_msgSend)
+  var keyPathObj = nsString(keyPath)
+  send(observer.value, sel, keyPathObj.value, obj.value, change.value, context)
+
+proc addObserver*(
+    obj: NSObject,
+    observer: NSObject,
+    keyPath: string,
+    options: NSKeyValueObservingOptions = {},
+    context: pointer = nil,
+) =
+  if obj.isNil or observer.isNil or keyPath.len == 0:
+    return
+  let state = kvoObservationState(obj)
+  let idx = kvoIndexOfObserver(state, observer, keyPath, context)
+  if idx >= 0:
+    state.entries[idx].options = options
+  else:
+    state.entries.add(
+      KVOObservation(
+        observer: observer, keyPath: keyPath, options: options, context: context
+      )
+    )
+
+  if nsKVOOptionInitial in options:
+    let current = kvoCurrentValue(obj, keyPath)
+    let change = kvoMakeChangeDictionary(
+      options, NSObject(value: nil), false, current, true, prior = false
+    )
+    kvoNotifyObserver(observer, keyPath, obj, change, context)
+
+proc removeObserver*(
+    obj: NSObject, observer: NSObject, keyPath: string, context: pointer = nil
+) =
+  if obj.isNil or observer.isNil or keyPath.len == 0:
+    return
+  let state = getAssociatedRef[KVOObservationRef](obj, KVOObservationRef)
+  if state.isNil:
+    return
+  let idx = kvoIndexOfObserver(state, observer, keyPath, context)
+  if idx >= 0:
+    state.entries.del(idx)
+
+proc willChangeValueForKey*(obj: NSObject, keyPath: string) =
+  if obj.isNil or keyPath.len == 0:
+    return
+  let state = getAssociatedRef[KVOObservationRef](obj, KVOObservationRef)
+  if state.isNil or state.entries.len == 0:
+    return
+
+  var oldValue = NSObject(value: nil)
+  var hasOldSnapshot = false
+
+  for item in state.entries:
+    if item.keyPath != keyPath:
+      continue
+    if (nsKVOOptionOld in item.options or nsKVOOptionPrior in item.options) and
+        not hasOldSnapshot:
+      oldValue = kvoCurrentValue(obj, keyPath)
+      hasOldSnapshot = true
+
+    if nsKVOOptionPrior in item.options:
+      let change = kvoMakeChangeDictionary(
+        item.options,
+        oldValue,
+        hasOldSnapshot,
+        NSObject(value: nil),
+        false,
+        prior = true,
+      )
+      kvoNotifyObserver(item.observer, keyPath, obj, change, item.context)
+
+  if hasOldSnapshot:
+    let pending = kvoPendingState(obj)
+    pending.entries.add(KVOPendingChange(keyPath: keyPath, oldValue: oldValue))
+
+proc didChangeValueForKey*(obj: NSObject, keyPath: string) =
+  if obj.isNil or keyPath.len == 0:
+    return
+  let state = getAssociatedRef[KVOObservationRef](obj, KVOObservationRef)
+  if state.isNil or state.entries.len == 0:
+    return
+
+  var oldValue = NSObject(value: nil)
+  var hasOldValue = false
+  let pending = getAssociatedRef[KVOPendingChangeRef](obj, KVOPendingChangeRef)
+  let pendingIdx = kvoFindPending(pending, keyPath)
+  if pendingIdx >= 0:
+    oldValue = pending.entries[pendingIdx].oldValue
+    hasOldValue = true
+    pending.entries.del(pendingIdx)
+
+  var newValue = NSObject(value: nil)
+  var hasNewValue = false
+
+  for item in state.entries:
+    if item.keyPath != keyPath:
+      continue
+
+    if nsKVOOptionNew in item.options and not hasNewValue:
+      newValue = kvoCurrentValue(obj, keyPath)
+      hasNewValue = true
+
+    let change = kvoMakeChangeDictionary(
+      item.options, oldValue, hasOldValue, newValue, hasNewValue, prior = false
+    )
+    kvoNotifyObserver(item.observer, keyPath, obj, change, item.context)
+
+proc willChangeValueForKey*(obj: NSObject, keyPath: NSString) {.inline.} =
+  willChangeValueForKey(obj, stringValue(keyPath))
+
+proc didChangeValueForKey*(obj: NSObject, keyPath: NSString) {.inline.} =
+  didChangeValueForKey(obj, stringValue(keyPath))
+
+proc addObserver*(
+    obj: NSObject,
+    observer: NSObject,
+    keyPath: NSString,
+    options: NSKeyValueObservingOptions = {},
+    context: pointer = nil,
+) {.inline.} =
+  addObserver(obj, observer, stringValue(keyPath), options, context)
+
+proc removeObserver*(
+    obj: NSObject, observer: NSObject, keyPath: NSString, context: pointer = nil
+) {.inline.} =
+  removeObserver(obj, observer, stringValue(keyPath), context)
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -202,9 +448,11 @@ proc setValueForKey*(obj: NSObject, value: NSObject, key: string) =
   let m = getInstanceMethod(cls, sel)
   if cast[pointer](m) == nil:
     return
+  willChangeValueForKey(obj, key)
   # Argument index 0 = self, 1 = selector, 2 = first explicit argument.
   let argEnc = getArgumentType(m, 2)
   kvcSendValue(obj.value, sel, argEnc, value)
+  didChangeValueForKey(obj, key)
 
 proc valueForKeyPath*(obj: NSObject, keyPath: string): NSObject =
   ## Traverse `keyPath` (dot-separated keys) starting from `obj`.
