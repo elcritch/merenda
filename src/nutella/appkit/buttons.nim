@@ -14,13 +14,15 @@ objcImpl:
 
     bordered {.get: isBordered.}: bool
     bezeled {.get: isBezeled.}: bool
+    bezelStyle: int # NSBezelStyle
 
     stateValue {.get: state.}: int
     mixedAllowed {.get: allowsMixedState.}: bool
     transparent {.set: setTransparent, get: isTransparent.}: bool
     keyEquivalentModifierMask: int # NSEventModifierFlags
+
     imagePos {.set: setImagePosition, get: imagePosition.}: int
-    bezel {.set: setBezelStyle, get: bezelStyle.}: int
+
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
