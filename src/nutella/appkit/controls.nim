@@ -1,32 +1,26 @@
+import std/strutils
 import ./runtime
+
+import ./views
+
+export views
 
 objcImpl:
 
   type NSControl* = object of NSView
-    enabled {.set: setEnabled, get: isEnabled.}: bool
-    editable {.set: setEditable, get: isEditable.}: bool
-    selectable {.set: setSelectable, get: isSelectable.}: bool
-    scrollable {.set: setScrollable, get: isScrollable.}: bool
-    bordered {.set: setBordered, get: isBordered.}: bool
-    bezeled {.set: setBezeled, get: isBezeled.}: bool
-    continuous {.set: setContinuous, get: isContinuous.}: bool
-    refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
-      bool
-    align {.set: setAlignment, get: alignment.}: NSTextAlignment
+    enabled {.get: isEnabled.}: bool
+    continuous {.get: isContinuous.}: bool
+    refusesFirstResponder: bool
+    alignment: NSTextAlignment
 
   method init*(self: var NSControl): NSControl =
     result = asType[NSControl](callSuperIdFrom(NSControl, self, getSelector("init")))
     if result.isNil:
       return
     result.enabled = true
-    result.editable = false
-    result.selectable = false
-    result.scrollable = false
-    result.bordered = false
-    result.bezeled = false
     result.continuous = false
     result.refusesFirstResponder = false
-    result.align = NSNaturalTextAlignment
+    result.alignment = NSNaturalTextAlignment
 
   method acceptsFirstResponder*(self: NSControl): bool =
     if self.isNil:

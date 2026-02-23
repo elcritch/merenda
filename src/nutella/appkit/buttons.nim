@@ -1,5 +1,9 @@
 import ./runtime
 
+import ./controls
+
+export controls
+
 type NSButtonCallbackProc = proc(sender: ID)
 
 objcImpl:

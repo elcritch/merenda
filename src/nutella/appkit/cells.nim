@@ -7,18 +7,22 @@ objcImpl:
     cellType {.set: setType, get: `type`.}: int
     stateValue {.get: state.}: int
     mixedAllowed: bool
-    cellEnabled {.set: setEnabled, get: isEnabled.}: bool
-    cellEditable {.set: setEditable, get: isEditable.}: bool
-    cellSelectable {.set: setSelectable, get: isSelectable.}: bool
-    cellScrollable {.set: setScrollable, get: isScrollable.}: bool
-    cellBordered {.set: setBordered, get: isBordered.}: bool
-    cellBezeled {.set: setBezeled, get: isBezeled.}: bool
-    cellContinuous {.set: setContinuous, get: isContinuous.}: bool
-    cellHighlighted {.set: setHighlighted, get: isHighlighted.}: bool
+
+    enabled {.set: setEnabled, get: isEnabled.}: bool
+    editable {.set: setEditable, get: isEditable.}: bool
+    selectable {.set: setSelectable, get: isSelectable.}: bool
+
+    bordered {.set: setBordered, get: isBordered.}: bool
+    bezeled {.set: setBezeled, get: isBezeled.}: bool
+
+    scrollable {.set: setScrollable, get: isScrollable.}: bool
+    continuous {.set: setContinuous, get: isContinuous.}: bool
+    highlighted {.set: setHighlighted, get: isHighlighted.}: bool
+
     cellRefusesFirstResponder {.
       set: setRefusesFirstResponder, get: refusesFirstResponder
     .}: bool
-    align {.set: setAlignment, get: alignment.}: NSTextAlignment
+    alignment: NSTextAlignment
     titleId: ID
     objectValueId: ID
     representedObjectId: ID
