@@ -1,6 +1,7 @@
 import std/[strutils, unittest]
 
 import pkg/vmath
+import figdraw/fignodes
 import nutella/appkit
 import nutella/objc
 
@@ -24,6 +25,9 @@ suite "nutella appkit hello world":
     inner.origin.x >= outer.origin.x - epsilon and
       inner.origin.y >= outer.origin.y - epsilon and innerRight <= outerRight + epsilon and
       innerBottom <= outerBottom + epsilon
+
+  proc approxEq(a, b: float32, epsilon = 0.01'f32): bool =
+    abs(a - b) <= epsilon
 
   test "raw pixel input maps to logical coordinates":
     let raw = vec2(300.0'f32, 200.0'f32)
@@ -392,6 +396,7 @@ suite "nutella appkit hello world":
     let visible = clip.documentVisibleRect()
     check(visible.origin == nsPoint(200, 160))
     check(visible.size == nsSize(100, 80))
+    check(doc.frameOrigin() == nsPoint(-200, -160))
 
     var cv = NSCollectionView.new()
     check(cv.isKindOfClass(NSCollectionView))
@@ -428,3 +433,42 @@ suite "nutella appkit hello world":
     buttonCell.value = nil
     actionCell.value = nil
     cell.value = nil
+
+  test "clip view applies figdraw clipping and scroll offset in render tree":
+    var window = newWindow(0, 0, 320, 240, "Clip Render")
+    var root = newView(0, 0, 320, 240)
+    var clip = NSClipView.new()
+    clip.setFrame(20.cfloat, 30.cfloat, 100.cfloat, 80.cfloat)
+    clip.setDrawsBackground(true)
+    clip.setBackgroundColor(nsColor(0.2, 0.3, 0.4, 1.0))
+    var doc = newView(0, 0, 300, 240)
+    clip.setDocumentView(doc)
+    clip.scrollToPoint(nsPoint(45, 25))
+    root.addSubview(clip)
+    window.setContentView(root)
+
+    let renders = debugBuildWindowRenders(window)
+    check(not renders.isNil)
+
+    var foundClipNode = false
+    var foundDocNode = false
+    if renders.contains(0.ZLevel):
+      let nodes = renders[0.ZLevel].nodes
+      for node in nodes:
+        if node.kind == nkRectangle and approxEq(node.screenBox.x, 20.0) and
+            approxEq(node.screenBox.y, 30.0) and approxEq(node.screenBox.w, 100.0) and
+            approxEq(node.screenBox.h, 80.0):
+          foundClipNode = true
+          check(NfClipContent in node.flags)
+        if node.kind == nkRectangle and approxEq(node.screenBox.x, -25.0) and
+            approxEq(node.screenBox.y, 5.0) and approxEq(node.screenBox.w, 300.0) and
+            approxEq(node.screenBox.h, 240.0):
+          foundDocNode = true
+    check(foundClipNode)
+    check(foundDocNode)
+    check(doc.frameOrigin() == nsPoint(-45, -25))
+
+    doc.value = nil
+    clip.value = nil
+    root.value = nil
+    window.value = nil
