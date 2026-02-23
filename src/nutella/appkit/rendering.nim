@@ -24,6 +24,11 @@ proc noRenderShadows(): array[ShadowCount, RenderShadow] =
     )
 
 proc drawsBg(view: NSView): bool =
+  if view.isKindOfClass(NSClipView):
+    var clip = asType[NSClipView](view.value)
+    result = clip.drawsBackground()
+    clip.value = nil
+    return
   if not view.isKindOfClass(NSTextField):
     return false
   var textField = asType[NSTextField](view.value)
@@ -148,6 +153,14 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
     )
 
 proc viewFill(view: NSView): Fill =
+  if view.isKindOfClass(NSClipView):
+    var clip = asType[NSClipView](view.value)
+    let color = clip.backgroundColor()
+    let shouldDraw = clip.drawsBackground()
+    clip.value = nil
+    if shouldDraw:
+      return color.solidFill()
+    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSButton):
     return aquaButtonFill(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
@@ -161,6 +174,8 @@ proc viewFill(view: NSView): Fill =
   view.viewBackgroundColor().solidFill()
 
 proc viewStrokeFill(view: NSView): Fill =
+  if view.isKindOfClass(NSClipView):
+    return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
   if view.isKindOfClass(NSButton):
     return aquaButtonStroke(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
@@ -516,6 +531,12 @@ proc addViewTree(
   let fig = Fig(
     kind: nkRectangle,
     childCount: 0,
+    flags: (
+      if view.isKindOfClass(NSClipView):
+        {NfClipContent}
+      else:
+        {}
+    ),
     screenBox: rect(box.origin.x, box.origin.y, box.size.width, box.size.height),
     fill: viewFill(view),
     corners: uniformCorners(viewCornerRadius(view)),
@@ -569,6 +590,8 @@ proc hitTestButton(
     frameSelf.size.width,
     frameSelf.size.height,
   )
+  if view.isKindOfClass(NSClipView) and not frame.contains(x, y):
+    return nil
 
   let children = view.viewSubviews()
   for i in countdown(children.high, 0):
@@ -629,6 +652,9 @@ proc debugDumpWindowRenderTree*(window: NSWindow) =
     echo "[appkit] debug dump: no render tree"
   else:
     dumpRenders(renders)
+
+proc debugBuildWindowRenders*(window: NSWindow): Renders =
+  buildWindowRenders(window)
 
 proc cleanupFailedWindowInit(window: NSWindow) =
   if not window.windowNativeWindow().isNil:
