@@ -92,6 +92,7 @@ suite "Objective-C and Nim exception bridge":
         try:
           self.innerCall(payloadOnStack)
         finally:
+          echo "FINALLY!"
           chainMiddleAliveInFinally = not payloadOnStack.isNil
           if not payloadOnStack.isNil:
             chainMiddleLabelInFinally = payloadOnStack.label
