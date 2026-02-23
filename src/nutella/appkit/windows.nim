@@ -7,6 +7,8 @@ import ./runtime
 import ./responders
 import ./views
 
+export responders, views
+
 objcImpl:
 
   type NSWindow* = object of NSResponder
