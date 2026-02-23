@@ -7,6 +7,7 @@ objcImpl:
     txtColor {.set: setTextColor, get: textColor.}: NSColor
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
+    scrollable {.get: isScrollable.}: bool
     prevTxt: ID
     nextTxt: ID
 
