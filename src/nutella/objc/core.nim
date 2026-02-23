@@ -1107,6 +1107,9 @@ proc getSelector*(name: static[string]): SEL =
     s = sel_registerName(name)
   return s
 
+proc `@selector`*(name: static[string]): SEL =
+  getSelector(name)
+
 proc respondsToSelector*(obj: NSObject, selector: static[string]): bool =
   class_respondsToSelector(object_getClass(obj), sel_registerName(selector))
 
