@@ -280,6 +280,30 @@ suite "objcImpl runtime generation":
     o.classOnlyPing()
     check(objcImplClassOnlyPingCount == 1)
 
+  when defined(macosx):
+    test "objcImpl remaps NS* protocol and class names to NX* runtime names":
+      objcImpl:
+        type NSRuntimeMappedProtocol =
+          concept self
+              method mappedPing(self: NSRuntimeMappedProtocol)
+
+        type NSRuntimeMappedClass {.impl: NSRuntimeMappedProtocol.} = object of NSObject
+
+        method mappedPing(self: NSRuntimeMappedClass) =
+          discard self
+
+      let proto = getProtocol(NSRuntimeMappedProtocol)
+      check(not proto.isNil)
+      check($proto == "NXRuntimeMappedProtocol")
+
+      let cls = getClass(NSRuntimeMappedClass)
+      check(not cls.isNil)
+      check(getName(cls) == "NXRuntimeMappedClass")
+
+      var o = NSRuntimeMappedClass.new()
+      check(not o.isNil)
+      check(getClassName(o) == "NXRuntimeMappedClass")
+
   test "objcImpl supports class methods and protocol class-method metadata":
     objcImplClassMethodTotal = 0
 

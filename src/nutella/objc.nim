@@ -899,6 +899,9 @@ proc collectObjectIvarFields(
         setterName: setterName,
       )
 
+proc objcImplRuntimeName(name: string): string =
+  nutellaNsToNxRuntimeName(name)
+
 macro objcImpl*(x: untyped): untyped =
   let input =
     if x.kind == nnkStmtList:
@@ -1135,17 +1138,17 @@ macro objcImpl*(x: untyped): untyped =
       newEmptyNode()
   let protoNameLit =
     if hasProtocol:
-      newLit(protocolName)
+      newLit(objcImplRuntimeName(protocolName))
     else:
       newEmptyNode()
   let classNameLit =
     if hasClass:
-      newLit(className)
+      newLit(objcImplRuntimeName(className))
     else:
       newEmptyNode()
   let superClassNameLit =
     if hasClass:
-      newLit(classSuperName)
+      newLit(objcImplRuntimeName(classSuperName))
     else:
       newEmptyNode()
   let metaClsVar =
@@ -1266,7 +1269,7 @@ macro objcImpl*(x: untyped): untyped =
   for p in implementedProtocols:
     if p == protocolName:
       continue
-    let pLit = newLit(p)
+    let pLit = newLit(objcImplRuntimeName(p))
     addExtraProtocols.add quote do:
       block:
         let p = getProtocol(`pLit`)
