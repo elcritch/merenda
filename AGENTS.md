@@ -21,7 +21,10 @@
 ## Nutella / Objective-C Implementations
 - Make sure to use `objcImpl` methods instead of Nim procs unless copying a C function when implementing OpenSTEP or Cocoa APIs.
 - Every `NS*` object or `NX*` object must be an Objective-C class or prototype unless there's a very good reason like `NSRect`.
-- Prefer short names for fields and use `set` and `get` pragmas in the `objcImpl` to create simple getter / setters.
+- Private ivars must use the `xx` prefix (for example `xxTitle`, `xxFrame`) instead of `_` or ad-hoc prefixes.
+- Use `{.get: ..., set: ....}` pragmas for Objective-C API surface so selectors match `vendor/AppKit/*.h` and behavior matches `vendor/AppKit/*.m`.
+- Prefer public API names from AppKit headers over `*Id`-style hacks (for example `title`/`setTitle` rather than `titleId`).
+- Prefer short field names for private storage, but keep exported selector names header-aligned via `get`/`set` pragmas.
 - Never try to use global storage as a shortcut for implementing something unless absolutely needed.
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
 - Prefer NSString over Nim strings. 

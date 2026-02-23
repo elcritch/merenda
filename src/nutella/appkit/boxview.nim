@@ -1,14 +1,15 @@
 import ./runtime
+import ./responders
+import ./views
 
 objcImpl:
-
   type NSBox* = object of NSView
     boxType {.set: setBoxType, get: boxType.}: int
     borderType {.set: setBorderType, get: borderType.}: int
     titlePosition {.set: setTitlePosition, get: titlePosition.}: int
     transparent {.set: setTransparent, get: isTransparent.}: bool
     contentMargins {.set: setContentViewMargins, get: contentViewMargins.}: NSSize
-    titleId: ID
+    title {.set: setTitle, get: title.}: NSString
     boxContentView: ID
 
   method init*(self: var NSBox): NSBox =
@@ -20,7 +21,7 @@ objcImpl:
     result.titlePosition = 1
     result.transparent = true
     result.contentMargins = nsSize(0, 0)
-    result.titleId = retainId(@ns"".value)
+    result.title = @ns""
     result.boxContentView = nil
 
     var contentAlloc = NSView.alloc()
@@ -39,14 +40,6 @@ objcImpl:
       content.setNextResponder(asType[NSResponder](result))
       result.boxContentView = replacedOwnedId(result.boxContentView, content.value)
     content.value = nil
-
-  method title*(self: NSBox): NSString =
-    if self.titleId.isNil:
-      return @ns""
-    ownFromId[NSString](self.titleId)
-
-  method setTitle*(self: NSBox, value: NSString) =
-    self.titleId = replacedOwnedId(self.titleId, value.value)
 
   method setTitleWithMnemonic*(self: NSBox, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
@@ -116,9 +109,9 @@ objcImpl:
       )
 
   method dealloc(self: NSBox) {.used.} =
-    self.titleId = replacedOwnedId(self.titleId, nil)
     self.boxContentView = replacedOwnedId(self.boxContentView, nil)
     discard callSuperIdFrom(NSBox, self, getSelector("dealloc"))
+
 proc new*(t: typedesc[NSBox]): NSBox =
   when false:
     discard t
@@ -127,4 +120,3 @@ proc new*(t: typedesc[NSBox]): NSBox =
   allocated.value = nil
   if result.isNil:
     return
-

@@ -1,3 +1,5 @@
+import std/[os, strutils, unicode]
+
 import figdraw/commons
 import figdraw/fignodes
 import figdraw/figrender as figrender
@@ -8,20 +10,20 @@ import ./views
 import ./windows
 import ./clipviews
 import ./buttons
+import ./textfields
 
 proc ensureContentView(window: NSWindow): NSView =
   let cv = window.contentView()
   if not cv.isNil:
     return ownFromId[NSView](cv)
 
-  let frame = window.frame()
+  let frame = window.windowFrame()
   var rootAlloc = NSView.alloc()
   var root = rootAlloc.initWithFrame(
     0.cfloat, 0.cfloat, frame.size.width.cfloat, frame.size.height.cfloat
   )
   rootAlloc.value = nil
-  #window.contentView = replacedOwnedId(window.contentView(), root.value)
-  window.wContentView = replacedOwnedId(window.contentView(), root.value)
+  window.setContentView(root)
   result = root
 
 proc noRenderShadows(): array[ShadowCount, RenderShadow] =
@@ -177,8 +179,8 @@ proc viewFill(view: NSView): Fill =
     return aquaButtonFill(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
-    let drawsBackground = textField.drawsBg()
-    let backgroundColor = textField.bgColor()
+    let drawsBackground = textField.drawsBackground()
+    let backgroundColor = textField.backgroundColor()
     textField.value = nil
     if drawsBackground:
       return backgroundColor.solidFill()
@@ -427,7 +429,7 @@ proc textLayoutForView(
   if view.isKindOfClass(NSTextField):
     var textField = asType[NSTextField](view.value)
     let textValue = $textField.stringValue()
-    let textColor = textField.txtColor()
+    let textColor = textField.textColor()
     let textAlign = toFontHorizontal(textField.alignment())
     textField.value = nil
     if textValue.len == 0:
@@ -680,7 +682,7 @@ proc cleanupFailedWindowInit(window: NSWindow) =
   window.windowVisibleRequested = false
   window.windowClosed = true
 
-proc ensureNativeWindow(window: NSWindow) =
+proc ensureNativeWindow*(window: NSWindow) =
   if window.windowNativeReady():
     return
 

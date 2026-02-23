@@ -1,7 +1,9 @@
 import ./runtime
+import ./views
+import ./buttons
+import ./windows
 
 objcImpl:
-
   type NSAlert* = object of NSObject
     delegateId: ID
     style {.set: setAlertStyle, get: alertStyle.}: int
@@ -204,4 +206,3 @@ proc new*(t: typedesc[NSAlert]): NSAlert =
   allocated.value = nil
   if result.isNil:
     return
-

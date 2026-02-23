@@ -6,24 +6,26 @@ import ./views
 export views
 
 objcImpl:
-
   type NSControl* = object of NSView
-    enabled {.get: isEnabled.}: bool
-    continuous {.get: isContinuous.}: bool
-    refusesFirstResponder: bool
-    alignment: NSTextAlignment
+    enabled {.set: setEnabled, get: isEnabled.}: bool
+    continuous {.set: setContinuous, get: isContinuous.}: bool
+    refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
+      bool
+    alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
 
   method init*(self: var NSControl): NSControl =
     result = asType[NSControl](callSuperIdFrom(NSControl, self, @selector("init")))
 
-    if result.isNil: return
+    if result.isNil:
+      return
     result.enabled = true
     result.continuous = false
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
 
   method acceptsFirstResponder*(self: NSControl): bool =
-    if self.isNil: return false
+    if self.isNil:
+      return false
     self.isEnabled() and (not self.refusesFirstResponder())
 
   method stringValue*(self: NSControl): NSString =
@@ -115,4 +117,3 @@ proc new*(t: typedesc[NSControl]): NSControl =
 
 proc setStringValue*(control: NSControl, value: string) =
   control.setStringValue(ns(value))
-

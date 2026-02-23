@@ -1,7 +1,8 @@
+import std/strutils
 import ./runtime
+import ./views
 
 objcImpl:
-
   type NSCell* = object of NSObject
     controlViewId: ID
     cellType {.set: setType, get: `type`.}: int
@@ -35,16 +36,16 @@ objcImpl:
     result.cellType = 1
     result.stateValue = NSOffState
     result.mixedAllowed = false
-    result.cellEnabled = true
-    result.cellEditable = false
-    result.cellSelectable = false
-    result.cellScrollable = false
-    result.cellBordered = false
-    result.cellBezeled = false
-    result.cellContinuous = false
-    result.cellHighlighted = false
+    result.enabled = true
+    result.editable = false
+    result.selectable = false
+    result.scrollable = false
+    result.bordered = false
+    result.bezeled = false
+    result.continuous = false
+    result.highlighted = false
     result.cellRefusesFirstResponder = false
-    result.align = NSNaturalTextAlignment
+    result.alignment = NSNaturalTextAlignment
     result.titleId = retainId(@ns"".value)
     result.objectValueId = retainId(@ns"".value)
     result.representedObjectId = nil
@@ -212,10 +213,7 @@ objcImpl:
     clearIvarRefs(self)
     discard callSuperIdFrom(NSCell, self, getSelector("dealloc"))
 
-
-
 objcImpl:
-
   type NSActionCell* = object of NSCell
     actionControlViewId: ID
     actionTargetId: ID
@@ -259,10 +257,7 @@ objcImpl:
     self.actionTargetId = replacedOwnedId(self.actionTargetId, nil)
     discard callSuperIdFrom(NSActionCell, self, getSelector("dealloc"))
 
-
-
 objcImpl:
-
   type NSButtonCell* = object of NSActionCell
     buttonTitleId: ID
     alternateTitleId: ID
@@ -431,4 +426,3 @@ proc new*(t: typedesc[NSButtonCell]): NSButtonCell =
   allocated.value = nil
   if result.isNil:
     return
-

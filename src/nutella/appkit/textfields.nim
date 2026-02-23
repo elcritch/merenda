@@ -1,13 +1,17 @@
-import ../runtime
+import ./runtime
+import ./controls
 
 objcImpl:
-
   type NSTextField* = object of NSControl
     strValueId: ID
+    editable {.set: setEditable, get: isEditable.}: bool
+    selectable {.set: setSelectable, get: isSelectable.}: bool
+    bordered {.set: setBordered, get: isBordered.}: bool
+    bezeled {.set: setBezeled, get: isBezeled.}: bool
     txtColor {.set: setTextColor, get: textColor.}: NSColor
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
-    scrollable {.get: isScrollable.}: bool
+    scrollable {.set: setScrollable, get: isScrollable.}: bool
     prevTxt: ID
     nextTxt: ID
 
@@ -16,13 +20,13 @@ objcImpl:
       asType[NSTextField](callSuperIdFrom(NSTextField, self, getSelector("init")))
     if result.isNil:
       return
-    result.enabled = true
-    result.editable = true
-    result.selectable = true
-    result.scrollable = true
-    result.bordered = true
-    result.bezeled = true
-    result.align = NSNaturalTextAlignment
+    result.setEnabled(true)
+    result.setEditable(true)
+    result.setSelectable(true)
+    result.setScrollable(true)
+    result.setBordered(true)
+    result.setBezeled(true)
+    result.setAlignment(NSNaturalTextAlignment)
     result.strValueId = retainId(@ns"".value)
     result.txtColor = nsColor(0.08, 0.08, 0.08, 1.0)
     result.bgColor = nsColor(0.98, 0.99, 1.0, 1.0)
@@ -87,7 +91,6 @@ objcImpl:
     self.nextTxt = replacedOwnedId(self.nextTxt, nil)
     self.strValueId = replacedOwnedId(self.strValueId, nil)
     discard callSuperIdFrom(NSTextField, self, getSelector("dealloc"))
-
 
 objcImpl:
   type NSSecureTextField* = object of NSTextField
@@ -155,4 +158,3 @@ proc new*(t: typedesc[NSSearchField]): NSSearchField =
   allocated.value = nil
   if result.isNil:
     return
-

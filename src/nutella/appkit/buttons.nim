@@ -7,19 +7,20 @@ export controls
 type NSButtonCallbackProc = proc(sender: ID)
 
 objcImpl:
-
   type NSButton* = object of NSControl
-    title: NSString
-    alternateTitle: NSString
+    title {.set: setTitle.}: NSString
+    alternateTitle {.set: setAlternateTitle.}: NSString
+    keyEquivalent {.set: setKeyEquivalent.}: NSString
 
     bordered {.get: isBordered.}: bool
     bezeled {.get: isBezeled.}: bool
-    bezelStyle: int # NSBezelStyle
+    bezelStyle {.set: setBezelStyle.}: int # NSBezelStyle
 
     stateValue {.get: state.}: int
     mixedAllowed {.get: allowsMixedState.}: bool
     transparent {.set: setTransparent, get: isTransparent.}: bool
-    keyEquivalentModifierMask: int # NSEventModifierFlags
+    keyEquivalentModifierMask {.set: setKeyEquivalentModifierMask.}: int
+      # NSEventModifierFlags
 
     imagePos {.set: setImagePosition, get: imagePosition.}: int
 
@@ -30,14 +31,12 @@ objcImpl:
     periodicIntervalSec: cfloat
     onClick: NSButtonCallbackProc
 
-    keyEqId: ID
-
   method init*(self: var NSButton): NSButton =
     result = asType[NSButton](callSuperIdFrom(NSButton, self, getSelector("init")))
     if result.isNil:
       return
-    result.enabled = true
-    result.alignment = NSNaturalTextAlignment
+    result.setEnabled(true)
+    result.setAlignment(NSNaturalTextAlignment)
     result.title = @ns"Button"
     result.stateValue = NSOffState
     result.mixedAllowed = false
@@ -45,38 +44,14 @@ objcImpl:
     result.bezeled = true
     result.transparent = false
     result.keyEquivalent = @ns""
-    result.keyEqMods = 0
+    result.keyEquivalentModifierMask = 0
     result.imagePos = 0
-    result.bezel = 0
-    result.alternateTitle = retainId(@ns"".value)
+    result.bezelStyle = 0
+    result.alternateTitle = @ns""
     result.showBorderInside = false
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
     result.onClick = nil
-
-  method title*(self: NSButton): NSString =
-    if self.title.isNil:
-      return @ns""
-    ownFromId[NSString](self.title)
-
-  method setTitle*(self: NSButton, value: NSString) =
-    self.title = replacedOwnedId(self.title, value.value)
-
-  method keyEquivalent*(self: NSButton): NSString =
-    if self.keyEqId.isNil:
-      return @ns""
-    ownFromId[NSString](self.keyEqId)
-
-  method setKeyEquivalent*(self: NSButton, value: NSString) =
-    self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
-
-  method alternateTitle*(self: NSButton): NSString =
-    if self.alternateTitle.isNil:
-      return @ns""
-    ownFromId[NSString](self.alternateTitle)
-
-  method setAlternateTitle*(self: NSButton, value: NSString) =
-    self.alternateTitle = replacedOwnedId(self.alternateTitle, value.value)
 
   method setState*(self: NSButton, value: cint) =
     self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
@@ -132,7 +107,7 @@ objcImpl:
 
   method performClick*(self: NSButton, sender: NSResponder) =
     discard sender
-    if not self.enabled:
+    if not self.isEnabled():
       return
     self.setNextState()
     let cb = self.onClick()
@@ -160,9 +135,6 @@ objcImpl:
     self.setTitle(stripMnemonicMarkers(value))
 
   method dealloc(self: NSButton) {.used.} =
-    self.title = replacedOwnedId(self.title, nil)
-    self.keyEqId = replacedOwnedId(self.keyEqId, nil)
-    self.alternateTitle = replacedOwnedId(self.alternateTitle, nil)
     self.onClick = nil
     discard callSuperIdFrom(NSButton, self, getSelector("dealloc"))
 
@@ -184,21 +156,21 @@ proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
       cb(ownFromId[NSButton](sender))
 
 proc click*(button: NSButton) =
-  if not button.enabled():
+  if not button.isEnabled():
     return
-  if button.mixedAllowed():
-    case button.stateValue()
+  if button.allowsMixedState():
+    case button.state()
     of NSOffState:
-      button.stateValue = NSOnState
+      button.setState(NSOnState)
     of NSOnState:
-      button.stateValue = NSMixedState
+      button.setState(NSMixedState)
     else:
-      button.stateValue = NSOffState
+      button.setState(NSOffState)
   else:
-    if button.stateValue() == NSOnState:
-      button.stateValue = NSOffState
+    if button.state() == NSOnState:
+      button.setState(NSOffState)
     else:
-      button.stateValue = NSOnState
+      button.setState(NSOnState)
   let cb = button.onClick()
   if not cb.isNil:
     cb(button.value)
@@ -210,4 +182,3 @@ proc getPeriodicDelay*(button: NSButton, delay: var cfloat, interval: var cfloat
     return
   delay = button.periodicDelay()
   interval = button.periodicInterval()
-
