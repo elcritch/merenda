@@ -1,3 +1,88 @@
+import ./runtime
+
+objcImpl:
+  type NXView* = object of NXResponder
+    viewFrame: NSRect
+    viewBackgroundColor: NSColor
+    viewHidden: bool
+    postsFrameChanged {.
+      set: setPostsFrameChangedNotifications, get: postsFrameChangedNotifications
+    .}: bool
+    postsBoundsChanged {.
+      set: setPostsBoundsChangedNotifications, get: postsBoundsChangedNotifications
+    .}: bool
+    autoResizeSubs {.set: setAutoresizesSubviews, get: autoresizesSubviews.}: bool
+    autoResizeMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
+    alpha {.set: setAlphaValue, get: alphaValue.}: cfloat
+    viewSuperview: ID
+    viewTag: int
+    viewSubviews: seq[ID]
+
+  method init*(self: var NXView): NXView =
+    result = asType[NXView](callSuperIdFrom(NXView, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.viewFrame = nsRect(0, 0, 100, 100)
+    result.viewBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
+    result.viewHidden = false
+    result.postsFrameChanged = false
+    result.postsBoundsChanged = false
+    result.autoResizeSubs = true
+    result.autoResizeMask = 0
+    result.alpha = 1.0
+    result.viewSuperview = nil
+    result.viewTag = 0
+    result.viewSubviews = @[]
+
+  method initWithFrame*(
+      self: var NXView,
+      x: cfloat,
+      y {.kw("y").}: cfloat,
+      width {.kw("width").}: cfloat,
+      height {.kw("height").}: cfloat,
+  ): NXView =
+    result = self.init()
+    if result.isNil:
+      return
+    result.viewFrame =
+      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+
+  method setFrame*(
+      self: NXView,
+      x: cfloat,
+      y {.kw("y").}: cfloat,
+      width {.kw("width").}: cfloat,
+      height {.kw("height").}: cfloat,
+  ) =
+    self.viewFrame =
+      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+
+  method setBackgroundColor(
+      self: NXView,
+      r: cfloat,
+      g {.kw("green").}: cfloat,
+      b {.kw("blue").}: cfloat,
+      a {.kw("alpha").}: cfloat,
+  ) =
+    self.viewBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+
+  method setHidden(self: NXView, hidden: bool) =
+    self.viewHidden = hidden
+
+  method dealloc(self: NXView) {.used.} =
+    detachSubviews(self)
+    clearIvarRefs(self)
+    discard callSuperIdFrom(NXView, self, getSelector("dealloc"))
+
+proc new*(t: typedesc[NSView]): NSView =
+  when false:
+    discard t
+  var allocated = NSView.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
 proc clearSuperviewRef(viewId: ID) =
   if viewId.isNil:
     return
@@ -262,3 +347,4 @@ proc getPeriodicDelay*(button: NSButton, delay: var cfloat, interval: var cfloat
     return
   delay = button.periodicDelay()
   interval = button.periodicInterval()
+

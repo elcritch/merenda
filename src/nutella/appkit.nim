@@ -13,7 +13,7 @@ import ./appkit/types
 
 export types
 
-include ./appkit/runtime
-include ./appkit/view_control
-include ./appkit/rendering
-include ./appkit/application
+import ./appkit/runtime
+import ./appkit/view_control
+import ./appkit/rendering
+import ./appkit/application
