@@ -1,5 +1,7 @@
 import ./runtime
 
+proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool
+
 objcImpl:
   type NSView* = object of NSResponder
     viewFrame: NSRect
@@ -161,6 +163,19 @@ proc isDescendantOf*(view: NSView, other: NSView): bool =
     if parentId.isNil:
       break
     current = ownFromId[NSView](parentId)
+  false
+
+proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool =
+  if viewId.isNil or ancestorId.isNil:
+    return false
+  var currentId = viewId
+  while not currentId.isNil:
+    if currentId == ancestorId:
+      return true
+    let current = ownFromId[NSView](currentId)
+    if current.isNil:
+      break
+    currentId = current.viewSuperview()
   false
 
 proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
