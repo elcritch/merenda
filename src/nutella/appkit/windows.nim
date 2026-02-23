@@ -223,12 +223,6 @@ proc setFrame*(window: NSWindow, frame: NSRect) =
       clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
     )
 
-proc frameOrigin*(window: NSWindow): NSPoint =
-  window.frame().origin
-
-proc frameSize*(window: NSWindow): NSSize =
-  window.frame().size
-
 proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
   let f = window.frame()
   window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
