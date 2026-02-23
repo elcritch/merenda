@@ -149,7 +149,7 @@ objcImpl:
     self.xxVisibleRequested = false
 
   method isVisible*(self: NSWindow): bool =
-    (not self.isNil) and self.windowVisibleRequested() and (not self.windowClosed())
+    (not self.isNil) and self.xxVisibleRequested and (not self.xxClosed)
 
   method isKeyWindow*(self: NSWindow): bool =
     self.isVisible()
@@ -206,38 +206,6 @@ proc new*(t: typedesc[NSPanel]): NSPanel =
   if result.isNil:
     return
 
-proc `windowFrame=`*(window: NSWindow, value: NSRect) =
-  window.xxFrame = value
-
-proc `windowTitle=`*(window: NSWindow, value: NSString) =
-  window.xxTitle = value
-
-proc `windowContentView=`*(window: NSWindow, value: ID) =
-  window.xxContentView = value
-
-proc `windowFirstResponder=`*(window: NSWindow, value: ID) =
-  window.xxFirstResponder = value
-
-proc `windowNativeWindow=`*(window: NSWindow, value: siwinshim.Window) =
-  window.xxNativeWindow = value
-
-proc `windowRenderer=`*(
-    window: NSWindow, value: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
-) =
-  window.xxRenderer = value
-
-proc `windowAutoScale=`*(window: NSWindow, value: bool) =
-  window.xxAutoScale = value
-
-proc `windowNativeReady=`*(window: NSWindow, value: bool) =
-  window.xxNativeReady = value
-
-proc `windowVisibleRequested=`*(window: NSWindow, value: bool) =
-  window.xxVisibleRequested = value
-
-proc `windowClosed=`*(window: NSWindow, value: bool) =
-  window.xxClosed = value
-
 proc setFrame*(window: NSWindow, frame: NSRect) =
   var nextFrame = nsRect(
     frame.origin.x,
@@ -246,26 +214,26 @@ proc setFrame*(window: NSWindow, frame: NSRect) =
     max(frame.size.height, 1.0),
   )
   window.xxFrame = nextFrame
-  if window.windowNativeReady() and not window.windowNativeWindow().isNil:
+  if window.xxNativeReady and not window.xxNativeWindow.isNil:
     window.xxNativeWindow.size = ivec2(
       clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
     )
 
 proc frame*(window: NSWindow): NSRect =
-  window.windowFrame()
+  window.xxFrame
 
 proc frameOrigin*(window: NSWindow): NSPoint =
-  window.windowFrame().origin
+  window.xxFrame.origin
 
 proc frameSize*(window: NSWindow): NSSize =
-  window.windowFrame().size
+  window.xxFrame.size
 
 proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
-  let f = window.windowFrame()
+  let f = window.xxFrame
   window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
 
 proc setFrameSize*(window: NSWindow, size: NSSize) =
-  let f = window.windowFrame()
+  let f = window.xxFrame
   window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
 
 proc setContentSize*(window: NSWindow, size: NSSize) =
@@ -275,7 +243,7 @@ proc setContentSize*(window: NSWindow, width, height: float32) =
   window.setContentSize(nsSize(width, height))
 
 proc title*(window: NSWindow): NSString =
-  window.windowTitle()
+  window.xxTitle
 
 proc setTitle*(window: NSWindow, value: string) =
   window.setTitle(ns(value))
