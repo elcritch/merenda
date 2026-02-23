@@ -2,7 +2,7 @@ import ./runtime
 
 objcImpl:
 
-  type NXClipView* = object of NXView
+  type NSClipView* = object of NSView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     clipDocumentCursorId: ID
     clipDocumentViewId: ID
@@ -11,8 +11,8 @@ objcImpl:
     clipCopiesOnScroll {.set: setCopiesOnScroll, get: copiesOnScroll.}: bool
     clipScrollOrigin: NSPoint
 
-  method init*(self: var NXClipView): NXClipView =
-    result = asType[NXClipView](callSuperIdFrom(NXClipView, self, getSelector("init")))
+  method init*(self: var NSClipView): NSClipView =
+    result = asType[NSClipView](callSuperIdFrom(NSClipView, self, getSelector("init")))
     if result.isNil:
       return
     result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
@@ -23,20 +23,20 @@ objcImpl:
     result.clipCopiesOnScroll = false
     result.clipScrollOrigin = nsPoint(0, 0)
 
-  method documentCursor*(self: NXClipView): NSObject =
+  method documentCursor*(self: NSClipView): NSObject =
     if self.clipDocumentCursorId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.clipDocumentCursorId)
 
-  method setDocumentCursor*(self: NXClipView, value: NSObject) =
+  method setDocumentCursor*(self: NSClipView, value: NSObject) =
     self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, value.value)
 
-  method documentView*(self: NXClipView): NXView =
+  method documentView*(self: NSClipView): NSView =
     if self.clipDocumentViewId.isNil:
-      return NXView(value: nil)
-    ownFromId[NXView](self.clipDocumentViewId)
+      return NSView(value: nil)
+    ownFromId[NSView](self.clipDocumentViewId)
 
-  method setDocumentView*(self: NXClipView, view: NXView) =
+  method setDocumentView*(self: NSClipView, view: NSView) =
     if self.isNil:
       return
     if self.clipDocumentViewId == view.value:
@@ -60,7 +60,7 @@ objcImpl:
 
     let parentId = view.viewSuperview()
     if not parentId.isNil:
-      var parent = ownFromId[NXView](parentId)
+      var parent = ownFromId[NSView](parentId)
       if not parent.isNil:
         var siblings = parent.viewSubviews()
         for i, candidate in siblings:
@@ -76,7 +76,7 @@ objcImpl:
       children.add(retainId(view.value))
       self.viewSubviews = children
     view.viewSuperview = self.value
-    view.setNextResponder(asType[NXResponder](self))
+    view.setNextResponder(asType[NSResponder](self))
     self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, view.value)
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
     let frame = view.viewFrame()
@@ -89,7 +89,7 @@ objcImpl:
       frame.size.height.cfloat,
     )
 
-  method documentRect*(self: NXClipView): NSRect =
+  method documentRect*(self: NSClipView): NSRect =
     if self.clipDocumentViewId.isNil:
       return nsRect(0, 0, 0, 0)
     let doc = self.documentView()
@@ -100,7 +100,7 @@ objcImpl:
       nsRect(0, 0, max(frame.size.width, 0.0), max(frame.size.height, 0.0))
     self.clipDocumentRect
 
-  method documentVisibleRect*(self: NXClipView): NSRect =
+  method documentVisibleRect*(self: NSClipView): NSRect =
     let constrained = self.constrainScrollPoint(self.clipScrollOrigin)
     let clipSize = self.viewFrame().size
     let docRect = self.documentRect()
@@ -111,27 +111,27 @@ objcImpl:
       min(clipSize.height, docRect.size.height),
     )
 
-  method constrainScrollPoint*(self: NXClipView, point: NSPoint): NSPoint =
+  method constrainScrollPoint*(self: NSClipView, point: NSPoint): NSPoint =
     let docRect = self.documentRect()
     let clipSize = self.viewFrame().size
     let maxX = max(docRect.size.width - clipSize.width, 0.0)
     let maxY = max(docRect.size.height - clipSize.height, 0.0)
     result = nsPoint(clamp(point.x, 0.0, maxX), clamp(point.y, 0.0, maxY))
 
-  method viewBoundsChanged*(self: NXClipView, note: NSObject) =
+  method viewBoundsChanged*(self: NSClipView, note: NSObject) =
     discard self
     discard note
 
-  method viewFrameChanged*(self: NXClipView, note: NSObject) =
+  method viewFrameChanged*(self: NSClipView, note: NSObject) =
     discard self
     discard note
 
-  method autoscroll*(self: NXClipView, event: NSObject): bool =
+  method autoscroll*(self: NSClipView, event: NSObject): bool =
     discard self
     discard event
     false
 
-  method scrollToPoint*(self: NXClipView, point: NSPoint) =
+  method scrollToPoint*(self: NSClipView, point: NSPoint) =
     self.clipScrollOrigin = self.constrainScrollPoint(point)
     let doc = self.documentView()
     if doc.isNil:
@@ -145,7 +145,7 @@ objcImpl:
     )
 
   method setFrame*(
-      self: NXClipView,
+      self: NSClipView,
       x: cfloat,
       y {.kw("y").}: cfloat,
       width {.kw("width").}: cfloat,
@@ -165,10 +165,10 @@ objcImpl:
       frame.size.height.cfloat,
     )
 
-  method dealloc(self: NXClipView) {.used.} =
+  method dealloc(self: NSClipView) {.used.} =
     self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, nil)
     self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
-    discard callSuperIdFrom(NXClipView, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSClipView, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSClipView]): NSClipView =
   var allocated = NSClipView.alloc()

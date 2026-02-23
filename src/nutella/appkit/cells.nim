@@ -2,7 +2,7 @@ import ./runtime
 
 objcImpl:
 
-  type NXCell* = object of NSObject
+  type NSCell* = object of NSObject
     controlViewId: ID
     cellType {.set: setType, get: `type`.}: int
     stateValue {.get: state.}: int
@@ -23,8 +23,8 @@ objcImpl:
     objectValueId: ID
     representedObjectId: ID
 
-  method init*(self: var NXCell): NXCell =
-    result = asType[NXCell](callSuperIdFrom(NXCell, self, getSelector("init")))
+  method init*(self: var NSCell): NSCell =
+    result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
     result.controlViewId = nil
@@ -45,49 +45,49 @@ objcImpl:
     result.objectValueId = retainId(@ns"".value)
     result.representedObjectId = nil
 
-  method initTextCell*(self: var NXCell, value: NSString): NXCell =
+  method initTextCell*(self: var NSCell, value: NSString): NSCell =
     result = self.init()
     if result.isNil:
       return
     result.titleId = replacedOwnedId(result.titleId, value.value)
     result.objectValueId = replacedOwnedId(result.objectValueId, value.value)
 
-  method controlView*(self: NXCell): NXView =
+  method controlView*(self: NSCell): NSView =
     if self.controlViewId.isNil:
-      return NXView(value: nil)
-    ownFromId[NXView](self.controlViewId)
+      return NSView(value: nil)
+    ownFromId[NSView](self.controlViewId)
 
-  method setControlView*(self: NXCell, view: NXView) =
+  method setControlView*(self: NSCell, view: NSView) =
     self.controlViewId = replacedOwnedId(self.controlViewId, view.value)
 
-  method target*(self: NXCell): NSObject =
+  method target*(self: NSCell): NSObject =
     discard self
     NSObject(value: nil)
 
-  method action*(self: NXCell): SEL =
+  method action*(self: NSCell): SEL =
     discard self
     nil
 
-  method tag*(self: NXCell): int =
+  method tag*(self: NSCell): int =
     discard self
     0
 
-  method setTarget*(self: NXCell, target: NSObject) =
+  method setTarget*(self: NSCell, target: NSObject) =
     discard self
     discard target
 
-  method setAction*(self: NXCell, action: SEL) =
+  method setAction*(self: NSCell, action: SEL) =
     discard self
     discard action
 
-  method setTag*(self: NXCell, tag: int) =
+  method setTag*(self: NSCell, tag: int) =
     discard self
     discard tag
 
-  method setState*(self: NXCell, value: int) =
+  method setState*(self: NSCell, value: int) =
     self.stateValue = normalizeButtonState(value, self.mixedAllowed)
 
-  method nextState*(self: NXCell): int =
+  method nextState*(self: NSCell): int =
     if self.mixedAllowed:
       case self.stateValue
       of NSOffState: NSOnState
@@ -96,31 +96,31 @@ objcImpl:
     else:
       if self.stateValue == NSOnState: NSOffState else: NSOnState
 
-  method setNextState*(self: NXCell) =
+  method setNextState*(self: NSCell) =
     self.stateValue = self.nextState()
 
-  method allowsMixedState*(self: NXCell): bool =
+  method allowsMixedState*(self: NSCell): bool =
     self.mixedAllowed
 
-  method setAllowsMixedState*(self: NXCell, allow: bool) =
+  method setAllowsMixedState*(self: NSCell, allow: bool) =
     self.mixedAllowed = allow
     self.stateValue = normalizeButtonState(self.stateValue, allow)
 
-  method title*(self: NXCell): NSString =
+  method title*(self: NSCell): NSString =
     if self.titleId.isNil:
       return @ns""
     ownFromId[NSString](self.titleId)
 
-  method setTitle*(self: NXCell, value: NSString) =
+  method setTitle*(self: NSCell, value: NSString) =
     self.titleId = replacedOwnedId(self.titleId, value.value)
     self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
 
-  method objectValue*(self: NXCell): NSObject =
+  method objectValue*(self: NSCell): NSObject =
     if self.objectValueId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.objectValueId)
 
-  method setObjectValue*(self: NXCell, value: NSObject) =
+  method setObjectValue*(self: NSCell, value: NSObject) =
     self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
     if value.value.isNil:
       self.titleId = replacedOwnedId(self.titleId, @ns"".value)
@@ -128,99 +128,99 @@ objcImpl:
       let asString = asType[NSString](value.value)
       self.titleId = replacedOwnedId(self.titleId, asString.value)
 
-  method stringValue*(self: NXCell): NSString =
+  method stringValue*(self: NSCell): NSString =
     self.title()
 
-  method setStringValue*(self: NXCell, value: NSString) =
+  method setStringValue*(self: NSCell, value: NSString) =
     self.setTitle(value)
 
-  method intValue*(self: NXCell): cint =
+  method intValue*(self: NSCell): cint =
     try:
       parseInt($self.stringValue()).cint
     except ValueError:
       0.cint
 
-  method integerValue*(self: NXCell): int =
+  method integerValue*(self: NSCell): int =
     self.intValue().int
 
-  method floatValue*(self: NXCell): cfloat =
+  method floatValue*(self: NSCell): cfloat =
     try:
       parseFloat($self.stringValue()).cfloat
     except ValueError:
       0.0
 
-  method doubleValue*(self: NXCell): cdouble =
+  method doubleValue*(self: NSCell): cdouble =
     try:
       parseFloat($self.stringValue()).cdouble
     except ValueError:
       0.0
 
-  method setIntValue*(self: NXCell, value: cint) =
+  method setIntValue*(self: NSCell, value: cint) =
     self.setStringValue(ns($value))
 
-  method setIntegerValue*(self: NXCell, value: int) =
+  method setIntegerValue*(self: NSCell, value: int) =
     self.setStringValue(ns($value))
 
-  method setFloatValue*(self: NXCell, value: cfloat) =
+  method setFloatValue*(self: NSCell, value: cfloat) =
     self.setStringValue(ns($value))
 
-  method setDoubleValue*(self: NXCell, value: cdouble) =
+  method setDoubleValue*(self: NSCell, value: cdouble) =
     self.setStringValue(ns($value))
 
-  method representedObject*(self: NXCell): NSObject =
+  method representedObject*(self: NSCell): NSObject =
     if self.representedObjectId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.representedObjectId)
 
-  method setRepresentedObject*(self: NXCell, value: NSObject) =
+  method setRepresentedObject*(self: NSCell, value: NSObject) =
     self.representedObjectId = replacedOwnedId(self.representedObjectId, value.value)
 
-  method takeStringValueFrom*(self: NXCell, sender: NXCell) =
+  method takeStringValueFrom*(self: NSCell, sender: NSCell) =
     if sender.isNil:
       return
     self.setStringValue(sender.stringValue())
 
-  method takeIntValueFrom*(self: NXCell, sender: NXCell) =
+  method takeIntValueFrom*(self: NSCell, sender: NSCell) =
     if sender.isNil:
       return
     self.setIntValue(sender.intValue())
 
-  method takeIntegerValueFrom*(self: NXCell, sender: NXCell) =
+  method takeIntegerValueFrom*(self: NSCell, sender: NSCell) =
     if sender.isNil:
       return
     self.setIntegerValue(sender.integerValue())
 
-  method takeFloatValueFrom*(self: NXCell, sender: NXCell) =
+  method takeFloatValueFrom*(self: NSCell, sender: NSCell) =
     if sender.isNil:
       return
     self.setFloatValue(sender.floatValue())
 
-  method takeDoubleValueFrom*(self: NXCell, sender: NXCell) =
+  method takeDoubleValueFrom*(self: NSCell, sender: NSCell) =
     if sender.isNil:
       return
     self.setDoubleValue(sender.doubleValue())
 
-  method dealloc(self: NXCell) {.used.} =
+  method dealloc(self: NSCell) {.used.} =
     self.controlViewId = replacedOwnedId(self.controlViewId, nil)
     self.titleId = replacedOwnedId(self.titleId, nil)
     self.objectValueId = replacedOwnedId(self.objectValueId, nil)
     self.representedObjectId = replacedOwnedId(self.representedObjectId, nil)
     clearIvarRefs(self)
-    discard callSuperIdFrom(NXCell, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSCell, self, getSelector("dealloc"))
 
 
 
 objcImpl:
 
-  type NXActionCell* = object of NXCell
+  type NSActionCell* = object of NSCell
     actionControlViewId: ID
     actionTargetId: ID
     actionSelector: SEL
     actionTagValue {.set: setTag, get: tag.}: int
 
-  method init*(self: var NXActionCell): NXActionCell =
+  method init*(self: var NSActionCell): NSActionCell =
     result =
-      asType[NXActionCell](callSuperIdFrom(NXActionCell, self, getSelector("init")))
+      asType[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
     if result.isNil:
       return
     result.actionControlViewId = nil
@@ -228,38 +228,38 @@ objcImpl:
     result.actionSelector = nil
     result.actionTagValue = 0
 
-  method controlView*(self: NXActionCell): NXView =
+  method controlView*(self: NSActionCell): NSView =
     if self.actionControlViewId.isNil:
-      return NXView(value: nil)
-    ownFromId[NXView](self.actionControlViewId)
+      return NSView(value: nil)
+    ownFromId[NSView](self.actionControlViewId)
 
-  method setControlView*(self: NXActionCell, view: NXView) =
+  method setControlView*(self: NSActionCell, view: NSView) =
     self.actionControlViewId = replacedOwnedId(self.actionControlViewId, view.value)
 
-  method target*(self: NXActionCell): NSObject =
+  method target*(self: NSActionCell): NSObject =
     if self.actionTargetId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.actionTargetId)
 
-  method action*(self: NXActionCell): SEL =
+  method action*(self: NSActionCell): SEL =
     self.actionSelector
 
-  method setTarget*(self: NXActionCell, target: NSObject) =
+  method setTarget*(self: NSActionCell, target: NSObject) =
     self.actionTargetId = replacedOwnedId(self.actionTargetId, target.value)
 
-  method setAction*(self: NXActionCell, action: SEL) =
+  method setAction*(self: NSActionCell, action: SEL) =
     self.actionSelector = action
 
-  method dealloc(self: NXActionCell) {.used.} =
+  method dealloc(self: NSActionCell) {.used.} =
     self.actionControlViewId = replacedOwnedId(self.actionControlViewId, nil)
     self.actionTargetId = replacedOwnedId(self.actionTargetId, nil)
-    discard callSuperIdFrom(NXActionCell, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSActionCell, self, getSelector("dealloc"))
 
 
 
 objcImpl:
 
-  type NXButtonCell* = object of NXActionCell
+  type NSButtonCell* = object of NSActionCell
     buttonTitleId: ID
     alternateTitleId: ID
     transparent {.set: setTransparent, get: isTransparent.}: bool
@@ -280,9 +280,9 @@ objcImpl:
     periodicDelaySec: cfloat
     periodicIntervalSec: cfloat
 
-  method init*(self: var NXButtonCell): NXButtonCell =
+  method init*(self: var NSButtonCell): NSButtonCell =
     result =
-      asType[NXButtonCell](callSuperIdFrom(NXButtonCell, self, getSelector("init")))
+      asType[NSButtonCell](callSuperIdFrom(NSButtonCell, self, getSelector("init")))
     if result.isNil:
       return
     result.buttonTitleId = retainId(@ns"Button".value)
@@ -302,83 +302,83 @@ objcImpl:
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
 
-  method title*(self: NXButtonCell): NSString =
+  method title*(self: NSButtonCell): NSString =
     if self.buttonTitleId.isNil:
       return @ns""
     ownFromId[NSString](self.buttonTitleId)
 
-  method setTitle*(self: NXButtonCell, value: NSString) =
+  method setTitle*(self: NSButtonCell, value: NSString) =
     self.buttonTitleId = replacedOwnedId(self.buttonTitleId, value.value)
     self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
 
-  method alternateTitle*(self: NXButtonCell): NSString =
+  method alternateTitle*(self: NSButtonCell): NSString =
     if self.alternateTitleId.isNil:
       return @ns""
     ownFromId[NSString](self.alternateTitleId)
 
-  method setAlternateTitle*(self: NXButtonCell, value: NSString) =
+  method setAlternateTitle*(self: NSButtonCell, value: NSString) =
     self.alternateTitleId = replacedOwnedId(self.alternateTitleId, value.value)
 
-  method keyEquivalent*(self: NXButtonCell): NSString =
+  method keyEquivalent*(self: NSButtonCell): NSString =
     if self.keyEqId.isNil:
       return @ns""
     ownFromId[NSString](self.keyEqId)
 
-  method setKeyEquivalent*(self: NXButtonCell, value: NSString) =
+  method setKeyEquivalent*(self: NSButtonCell, value: NSString) =
     self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
 
-  method setButtonType*(self: NXButtonCell, buttonType: cint) =
+  method setButtonType*(self: NSButtonCell, buttonType: cint) =
     discard self
     discard buttonType
 
   method setPeriodicDelay*(
-      self: NXButtonCell, delay: cfloat, interval {.kw("interval").}: cfloat
+      self: NSButtonCell, delay: cfloat, interval {.kw("interval").}: cfloat
   ) =
     self.periodicDelaySec = max(delay, 0.0)
     self.periodicIntervalSec = max(interval, 0.0)
 
   method getPeriodicDelay*(
-      self: NXButtonCell, delay: ptr cfloat, interval {.kw("interval").}: ptr cfloat
+      self: NSButtonCell, delay: ptr cfloat, interval {.kw("interval").}: ptr cfloat
   ) =
     if not delay.isNil:
       delay[] = self.periodicDelaySec
     if not interval.isNil:
       interval[] = self.periodicIntervalSec
 
-  method setState*(self: NXButtonCell, value: int) =
+  method setState*(self: NSButtonCell, value: int) =
     self.stateValue = normalizeButtonState(value, self.mixedAllowed)
 
-  method stringValue*(self: NXButtonCell): NSString =
+  method stringValue*(self: NSButtonCell): NSString =
     self.title()
 
-  method setStringValue*(self: NXButtonCell, value: NSString) =
+  method setStringValue*(self: NSButtonCell, value: NSString) =
     self.setTitle(value)
 
-  method intValue*(self: NXButtonCell): cint =
+  method intValue*(self: NSButtonCell): cint =
     self.state().cint
 
-  method integerValue*(self: NXButtonCell): int =
+  method integerValue*(self: NSButtonCell): int =
     self.state()
 
-  method floatValue*(self: NXButtonCell): cfloat =
+  method floatValue*(self: NSButtonCell): cfloat =
     self.state().cfloat
 
-  method doubleValue*(self: NXButtonCell): cdouble =
+  method doubleValue*(self: NSButtonCell): cdouble =
     self.state().cdouble
 
-  method setIntValue*(self: NXButtonCell, value: cint) =
+  method setIntValue*(self: NSButtonCell, value: cint) =
     self.setState(value.int)
 
-  method setIntegerValue*(self: NXButtonCell, value: int) =
+  method setIntegerValue*(self: NSButtonCell, value: int) =
     self.setState(value)
 
-  method setFloatValue*(self: NXButtonCell, value: cfloat) =
+  method setFloatValue*(self: NSButtonCell, value: cfloat) =
     self.setState(value.int)
 
-  method setDoubleValue*(self: NXButtonCell, value: cdouble) =
+  method setDoubleValue*(self: NSButtonCell, value: cdouble) =
     self.setState(value.int)
 
-  method performClick*(self: NXButtonCell, sender: NSObject) =
+  method performClick*(self: NSButtonCell, sender: NSObject) =
     discard sender
     if self.isNil or not self.isEnabled():
       return
@@ -401,11 +401,11 @@ objcImpl:
       return
     discard performResponderSelector(target, action, asType[NSObject](self.value))
 
-  method dealloc(self: NXButtonCell) {.used.} =
+  method dealloc(self: NSButtonCell) {.used.} =
     self.buttonTitleId = replacedOwnedId(self.buttonTitleId, nil)
     self.alternateTitleId = replacedOwnedId(self.alternateTitleId, nil)
     self.keyEqId = replacedOwnedId(self.keyEqId, nil)
-    discard callSuperIdFrom(NXButtonCell, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSButtonCell, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSCell]): NSCell =
   var allocated = NSCell.alloc()

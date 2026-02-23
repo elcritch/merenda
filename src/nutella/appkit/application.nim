@@ -56,40 +56,40 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int =
 
 objcImpl:
 
-  type NXApplication* = object of NXResponder
+  type NSApplication* = object of NSResponder
     appWindows: seq[ID]
     appRunning: bool
 
-  method init*(self: var NXApplication): NXApplication =
+  method init*(self: var NSApplication): NSApplication =
     result =
-      asType[NXApplication](callSuperIdFrom(NXApplication, self, getSelector("init")))
+      asType[NSApplication](callSuperIdFrom(NSApplication, self, getSelector("init")))
     if result.isNil:
       return
     result.appWindows = @[]
     result.appRunning = false
 
-  method addWindow(self: NXApplication, window: NXWindow) =
+  method addWindow(self: NSApplication, window: NSWindow) =
     if self.isNil or window.isNil:
       return
     var windows = self.appWindows()
     if window.value notin windows:
       windows.add(retainId(window.value))
       self.appWindows = windows
-    window.setNextResponder(asType[NXResponder](self))
+    window.setNextResponder(asType[NSResponder](self))
     window.windowVisibleRequested = true
 
-  method run(self: NXApplication) =
+  method run(self: NSApplication) =
     discard runApplicationFrames(self, -1)
 
-  method stop(self: NXApplication) =
+  method stop(self: NSApplication) =
     self.appRunning = false
 
-  method dealloc(self: NXApplication) {.used.} =
+  method dealloc(self: NSApplication) {.used.} =
     var windows = self.appWindows()
     clearOwnedIds(windows)
     self.appWindows = windows
     clearIvarRefs(self)
-    discard callSuperIdFrom(NXApplication, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSApplication, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSApplication]): NSApplication =
   when false:

@@ -2,7 +2,7 @@ import ./runtime
 
 objcImpl:
 
-  type NXBox* = object of NXView
+  type NSBox* = object of NSView
     boxType {.set: setBoxType, get: boxType.}: int
     borderType {.set: setBorderType, get: borderType.}: int
     titlePosition {.set: setTitlePosition, get: titlePosition.}: int
@@ -11,8 +11,8 @@ objcImpl:
     titleId: ID
     boxContentView: ID
 
-  method init*(self: var NXBox): NXBox =
-    result = asType[NXBox](callSuperIdFrom(NXBox, self, getSelector("init")))
+  method init*(self: var NSBox): NSBox =
+    result = asType[NSBox](callSuperIdFrom(NSBox, self, getSelector("init")))
     if result.isNil:
       return
     result.boxType = 0
@@ -23,7 +23,7 @@ objcImpl:
     result.titleId = retainId(@ns"".value)
     result.boxContentView = nil
 
-    var contentAlloc = NXView.alloc()
+    var contentAlloc = NSView.alloc()
     var content = contentAlloc.initWithFrame(
       0.cfloat,
       0.cfloat,
@@ -36,27 +36,27 @@ objcImpl:
       children.add(retainId(content.value))
       result.viewSubviews = children
       content.viewSuperview = result.value
-      content.setNextResponder(asType[NXResponder](result))
+      content.setNextResponder(asType[NSResponder](result))
       result.boxContentView = replacedOwnedId(result.boxContentView, content.value)
     content.value = nil
 
-  method title*(self: NXBox): NSString =
+  method title*(self: NSBox): NSString =
     if self.titleId.isNil:
       return @ns""
     ownFromId[NSString](self.titleId)
 
-  method setTitle*(self: NXBox, value: NSString) =
+  method setTitle*(self: NSBox, value: NSString) =
     self.titleId = replacedOwnedId(self.titleId, value.value)
 
-  method setTitleWithMnemonic*(self: NXBox, value: NSString) =
+  method setTitleWithMnemonic*(self: NSBox, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
 
-  method contentView*(self: NXBox): NXView =
+  method contentView*(self: NSBox): NSView =
     if self.boxContentView.isNil:
-      return NXView(value: nil)
-    ownFromId[NXView](self.boxContentView)
+      return NSView(value: nil)
+    ownFromId[NSView](self.boxContentView)
 
-  method setContentView*(self: NXBox, view: NXView) =
+  method setContentView*(self: NSBox, view: NSView) =
     if self.isNil:
       return
     if self.boxContentView == view.value:
@@ -78,7 +78,7 @@ objcImpl:
 
     let parentId = view.viewSuperview()
     if not parentId.isNil:
-      var parent = ownFromId[NXView](parentId)
+      var parent = ownFromId[NSView](parentId)
       if not parent.isNil:
         var siblings = parent.viewSubviews()
         for i, candidate in siblings:
@@ -94,11 +94,11 @@ objcImpl:
       children.add(retainId(view.value))
       self.viewSubviews = children
     view.viewSuperview = self.value
-    view.setNextResponder(asType[NXResponder](self))
+    view.setNextResponder(asType[NSResponder](self))
     self.boxContentView = replacedOwnedId(self.boxContentView, view.value)
 
   method setFrame*(
-      self: NXBox,
+      self: NSBox,
       x: cfloat,
       y {.kw("y").}: cfloat,
       width {.kw("width").}: cfloat,
@@ -115,10 +115,10 @@ objcImpl:
         self.viewFrame().size.height.cfloat,
       )
 
-  method dealloc(self: NXBox) {.used.} =
+  method dealloc(self: NSBox) {.used.} =
     self.titleId = replacedOwnedId(self.titleId, nil)
     self.boxContentView = replacedOwnedId(self.boxContentView, nil)
-    discard callSuperIdFrom(NXBox, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSBox, self, getSelector("dealloc"))
 proc new*(t: typedesc[NSBox]): NSBox =
   when false:
     discard t

@@ -2,7 +2,7 @@ import ./runtime
 
 objcImpl:
 
-  type NXAlert* = object of NSObject
+  type NSAlert* = object of NSObject
     delegateId: ID
     style {.set: setAlertStyle, get: alertStyle.}: int
     iconId: ID
@@ -19,8 +19,8 @@ objcImpl:
     sheetDelegateId: ID
     sheetDidEnd: SEL
 
-  method init*(self: var NXAlert): NXAlert =
-    result = asType[NXAlert](callSuperIdFrom(NXAlert, self, getSelector("init")))
+  method init*(self: var NSAlert): NSAlert =
+    result = asType[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
     result.delegateId = nil
@@ -32,17 +32,17 @@ objcImpl:
     result.showsHelpFlag = false
     result.showsSuppression = false
     result.helpAnchorId = retainId(@ns"".value)
-    result.alertButtonsId = retainId(nsArray[NXButton]().value)
+    result.alertButtonsId = retainId(nsArray[NSButton]().value)
     result.suppressionButtonId = nil
     result.alertWindowId = nil
     result.needsLayout = true
     result.sheetDelegateId = nil
     result.sheetDidEnd = nil
 
-  proc alertWithError*(t: typedesc[NXAlert], err {.kw("error").}: NSObject): NXAlert =
+  proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
     when false:
       discard t
-    result = NXAlert.new()
+    result = NSAlert.new()
     if result.isNil:
       return
     if err.isNil:
@@ -53,16 +53,16 @@ objcImpl:
       result.setInformativeText(ns($err))
 
   proc alertWithMessageText*(
-      t: typedesc[NXAlert],
+      t: typedesc[NSAlert],
       messageText: NSString,
       defaultButton {.kw("defaultButton").}: NSString,
       alternateButton {.kw("alternateButton").}: NSString,
       otherButton {.kw("otherButton").}: NSString,
       informativeText {.kw("informativeTextWithFormat").}: NSString,
-  ): NXAlert =
+  ): NSAlert =
     when false:
       discard t
-    result = NXAlert.new()
+    result = NSAlert.new()
     if result.isNil:
       return
     result.setMessageText(messageText)
@@ -74,79 +74,79 @@ objcImpl:
     if $otherButton != "":
       discard result.addButtonWithTitle(otherButton)
 
-  method delegate*(self: NXAlert): NSObject =
+  method delegate*(self: NSAlert): NSObject =
     if self.delegateId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.delegateId)
 
-  method setDelegate*(self: NXAlert, value: NSObject) =
+  method setDelegate*(self: NSAlert, value: NSObject) =
     self.delegateId = replacedOwnedId(self.delegateId, value.value)
 
-  method icon*(self: NXAlert): NSObject =
+  method icon*(self: NSAlert): NSObject =
     if self.iconId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.iconId)
 
-  method setIcon*(self: NXAlert, value: NSObject) =
+  method setIcon*(self: NSAlert, value: NSObject) =
     self.iconId = replacedOwnedId(self.iconId, value.value)
 
-  method messageText*(self: NXAlert): NSString =
+  method messageText*(self: NSAlert): NSString =
     if self.messageTextId.isNil:
       return @ns""
     ownFromId[NSString](self.messageTextId)
 
-  method setMessageText*(self: NXAlert, value: NSString) =
+  method setMessageText*(self: NSAlert, value: NSString) =
     self.messageTextId = replacedOwnedId(self.messageTextId, value.value)
     self.needsLayout = true
 
-  method informativeText*(self: NXAlert): NSString =
+  method informativeText*(self: NSAlert): NSString =
     if self.informativeTextId.isNil:
       return @ns""
     ownFromId[NSString](self.informativeTextId)
 
-  method setInformativeText*(self: NXAlert, value: NSString) =
+  method setInformativeText*(self: NSAlert, value: NSString) =
     self.informativeTextId = replacedOwnedId(self.informativeTextId, value.value)
     self.needsLayout = true
 
-  method accessoryView*(self: NXAlert): NXView =
+  method accessoryView*(self: NSAlert): NSView =
     if self.accessoryViewId.isNil:
-      return NXView(value: nil)
-    ownFromId[NXView](self.accessoryViewId)
+      return NSView(value: nil)
+    ownFromId[NSView](self.accessoryViewId)
 
-  method setAccessoryView*(self: NXAlert, value: NXView) =
+  method setAccessoryView*(self: NSAlert, value: NSView) =
     self.accessoryViewId = replacedOwnedId(self.accessoryViewId, value.value)
     self.needsLayout = true
 
-  method helpAnchor*(self: NXAlert): NSString =
+  method helpAnchor*(self: NSAlert): NSString =
     if self.helpAnchorId.isNil:
       return @ns""
     ownFromId[NSString](self.helpAnchorId)
 
-  method setHelpAnchor*(self: NXAlert, value: NSString) =
+  method setHelpAnchor*(self: NSAlert, value: NSString) =
     self.helpAnchorId = replacedOwnedId(self.helpAnchorId, value.value)
 
-  method suppressionButton*(self: NXAlert): NXButton =
+  method suppressionButton*(self: NSAlert): NSButton =
     if self.suppressionButtonId.isNil:
-      return NXButton(value: nil)
-    ownFromId[NXButton](self.suppressionButtonId)
+      return NSButton(value: nil)
+    ownFromId[NSButton](self.suppressionButtonId)
 
-  method showsSuppressionButton*(self: NXAlert): bool =
+  method showsSuppressionButton*(self: NSAlert): bool =
     self.showsSuppression
 
-  method setShowsSuppressionButton*(self: NXAlert, value: bool) =
+  method setShowsSuppressionButton*(self: NSAlert, value: bool) =
     self.showsSuppression = value
     if value and self.suppressionButtonId.isNil:
-      var button = NXButton.new()
+      var button = NSButton.new()
       button.setTitle(@ns"Do not show again")
       self.suppressionButtonId = replacedOwnedId(self.suppressionButtonId, button.value)
 
-  method buttons*(self: NXAlert): NSArray[NXButton] =
+  method buttons*(self: NSAlert): NSArray[NSButton] =
     if self.alertButtonsId.isNil:
-      return nsArray[NXButton]()
-    ownFromId[NSArray[NXButton]](self.alertButtonsId)
+      return nsArray[NSButton]()
+    ownFromId[NSArray[NSButton]](self.alertButtonsId)
 
-  method addButtonWithTitle*(self: NXAlert, title: NSString): NXButton =
-    result = NXButton.new()
+  method addButtonWithTitle*(self: NSAlert, title: NSString): NSButton =
+    result = NSButton.new()
     if result.isNil:
       return
     result.setTitle(title)
@@ -155,17 +155,17 @@ objcImpl:
     self.alertButtonsId = replacedOwnedId(self.alertButtonsId, buttons.value)
     self.needsLayout = true
 
-  method window*(self: NXAlert): NXWindow =
+  method window*(self: NSAlert): NSWindow =
     if self.alertWindowId.isNil:
-      return NXWindow(value: nil)
-    ownFromId[NXWindow](self.alertWindowId)
+      return NSWindow(value: nil)
+    ownFromId[NSWindow](self.alertWindowId)
 
-  method layout*(self: NXAlert) =
+  method layout*(self: NSAlert) =
     self.needsLayout = false
 
   method beginSheetModalForWindow*(
-      self: NXAlert,
-      window: NXWindow,
+      self: NSAlert,
+      window: NSWindow,
       modalDelegate {.kw("modalDelegate").}: NSObject,
       didEndSelector {.kw("didEndSelector").}: SEL,
       contextInfo {.kw("contextInfo").}: pointer,
@@ -175,7 +175,7 @@ objcImpl:
     self.sheetDelegateId = replacedOwnedId(self.sheetDelegateId, modalDelegate.value)
     self.sheetDidEnd = didEndSelector
 
-  method runModal*(self: NXAlert): int =
+  method runModal*(self: NSAlert): int =
     let count = self.buttons().len
     if count <= 1:
       return NSAlertFirstButtonReturn
@@ -183,7 +183,7 @@ objcImpl:
       return NSAlertSecondButtonReturn
     NSAlertThirdButtonReturn
 
-  method dealloc(self: NXAlert) {.used.} =
+  method dealloc(self: NSAlert) {.used.} =
     self.delegateId = replacedOwnedId(self.delegateId, nil)
     self.iconId = replacedOwnedId(self.iconId, nil)
     self.messageTextId = replacedOwnedId(self.messageTextId, nil)
@@ -194,7 +194,7 @@ objcImpl:
     self.alertButtonsId = replacedOwnedId(self.alertButtonsId, nil)
     self.alertWindowId = replacedOwnedId(self.alertWindowId, nil)
     self.sheetDelegateId = replacedOwnedId(self.sheetDelegateId, nil)
-    discard callSuperIdFrom(NXAlert, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =
   when false:
