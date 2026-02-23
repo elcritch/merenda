@@ -9,15 +9,18 @@ type NSButtonCallbackProc = proc(sender: ID)
 objcImpl:
 
   type NSButton* = object of NSControl
-    titleId: ID
+    title: NSString
+    alternateTitle: NSString
+
+    bordered {.get: isBordered.}: bool
+    bezeled {.get: isBezeled.}: bool
+
     stateValue {.get: state.}: int
     mixedAllowed {.get: allowsMixedState.}: bool
     transparent {.set: setTransparent, get: isTransparent.}: bool
-    keyEqId: ID
-    keyEqMods {.set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask.}: int
+    keyEquivalentModifierMask: int # NSEventModifierFlags
     imagePos {.set: setImagePosition, get: imagePosition.}: int
     bezel {.set: setBezelStyle, get: bezelStyle.}: int
-    altTitleId: ID
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
@@ -25,35 +28,37 @@ objcImpl:
     periodicIntervalSec: cfloat
     onClick: NSButtonCallbackProc
 
+    keyEqId: ID
+
   method init*(self: var NSButton): NSButton =
     result = asType[NSButton](callSuperIdFrom(NSButton, self, getSelector("init")))
     if result.isNil:
       return
     result.enabled = true
-    result.align = NSNaturalTextAlignment
-    result.titleId = retainId(@ns"Button".value)
+    result.alignment = NSNaturalTextAlignment
+    result.title = @ns"Button"
     result.stateValue = NSOffState
     result.mixedAllowed = false
     result.bordered = true
     result.bezeled = true
     result.transparent = false
-    result.keyEqId = retainId(@ns"".value)
+    result.keyEquivalent = @ns""
     result.keyEqMods = 0
     result.imagePos = 0
     result.bezel = 0
-    result.altTitleId = retainId(@ns"".value)
+    result.alternateTitle = retainId(@ns"".value)
     result.showBorderInside = false
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
     result.onClick = nil
 
   method title*(self: NSButton): NSString =
-    if self.titleId.isNil:
+    if self.title.isNil:
       return @ns""
-    ownFromId[NSString](self.titleId)
+    ownFromId[NSString](self.title)
 
   method setTitle*(self: NSButton, value: NSString) =
-    self.titleId = replacedOwnedId(self.titleId, value.value)
+    self.title = replacedOwnedId(self.title, value.value)
 
   method keyEquivalent*(self: NSButton): NSString =
     if self.keyEqId.isNil:
@@ -64,12 +69,12 @@ objcImpl:
     self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
 
   method alternateTitle*(self: NSButton): NSString =
-    if self.altTitleId.isNil:
+    if self.alternateTitle.isNil:
       return @ns""
-    ownFromId[NSString](self.altTitleId)
+    ownFromId[NSString](self.alternateTitle)
 
   method setAlternateTitle*(self: NSButton, value: NSString) =
-    self.altTitleId = replacedOwnedId(self.altTitleId, value.value)
+    self.alternateTitle = replacedOwnedId(self.alternateTitle, value.value)
 
   method setState*(self: NSButton, value: cint) =
     self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
@@ -153,9 +158,9 @@ objcImpl:
     self.setTitle(stripMnemonicMarkers(value))
 
   method dealloc(self: NSButton) {.used.} =
-    self.titleId = replacedOwnedId(self.titleId, nil)
+    self.title = replacedOwnedId(self.title, nil)
     self.keyEqId = replacedOwnedId(self.keyEqId, nil)
-    self.altTitleId = replacedOwnedId(self.altTitleId, nil)
+    self.alternateTitle = replacedOwnedId(self.alternateTitle, nil)
     self.onClick = nil
     discard callSuperIdFrom(NSButton, self, getSelector("dealloc"))
 
