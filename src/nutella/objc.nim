@@ -1422,6 +1422,7 @@ macro objcImpl*(x: untyped): untyped =
       block:
         `runtimeSetup`
 
+include ./objc/exceptions
 include ./objc/nsstring
 include ./objc/nsboxing
 include ./objc/nsdictionary
