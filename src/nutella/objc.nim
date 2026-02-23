@@ -1,3 +1,27 @@
+## MIT License
+## 
+## Copyright (c) 2026 Jaremy Creechley
+## Copyright (c) 2017 Yuriy Glukhov
+## 
+## Permission is hereby granted, free of charge, to any person obtaining a copy
+## of this software and associated documentation files (the "Software"), to deal
+## in the Software without restriction, including without limitation the rights
+## to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+## copies of the Software, and to permit persons to whom the Software is
+## furnished to do so, subject to the following conditions:
+## 
+## The above copyright notice and this permission notice shall be included in all
+## copies or substantial portions of the Software.
+## 
+## THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+## IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+## FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+## AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+## LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+## OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+## SOFTWARE.
+## 
+
 import std/[macros, strutils]
 import objc/core
 import objc/ivar
@@ -919,6 +943,7 @@ macro objcImpl*(x: untyped): untyped =
   var classIvarFields: seq[ObjcImplIvarFieldSpec] = @[]
   var conceptBody = newEmptyNode()
   var implementedProtocols: seq[string] = @[]
+  var inferredExtensionClassName = ""
 
   for stmt in input:
     case stmt.kind
@@ -958,18 +983,47 @@ macro objcImpl*(x: untyped): untyped =
       discard
 
   let hasProtocol = protocolName.len > 0
+  let hasClassDecl = className.len > 0
+
+  if not hasProtocol and not hasClassDecl:
+    var extensionClassTargets: seq[string] = @[]
+    for stmt in input:
+      if stmt.kind notin {nnkMethodDef, nnkProcDef} or hasErrorPragma(stmt):
+        continue
+      let classTarget = block:
+        let receiver = firstParamTypeName(stmt)
+        if receiver.len > 0:
+          receiver
+        else:
+          firstParamTypedescName(stmt)
+      if classTarget.len == 0:
+        continue
+      if classTarget notin extensionClassTargets:
+        extensionClassTargets.add(classTarget)
+
+    if extensionClassTargets.len == 1:
+      inferredExtensionClassName = extensionClassTargets[0]
+      className = inferredExtensionClassName
+    elif extensionClassTargets.len > 1:
+      error(
+        "objcImpl class extension block must target exactly one class; found `" &
+          extensionClassTargets.join("`, `") & "`",
+        x,
+      )
+
   let hasClass = className.len > 0
+  let isClassExtensionBlock = inferredExtensionClassName.len > 0
   if not hasProtocol and not hasClass:
     error(
       "objcImpl requires at least one declaration: protocol concept and/or class object",
       x,
     )
 
-  if hasClass and classSuperName.len == 0:
+  if hasClassDecl and classSuperName.len == 0:
     error("objcImpl class declaration must include a superclass", x)
 
   implementedProtocols = classImplProtocols
-  if hasProtocol and hasClass:
+  if hasProtocol and hasClassDecl:
     if classImplProtocols.len == 0:
       error(
         "objcImpl requires class protocol conformance via pragma: `type <Class> {.impl: <Protocol>... .} = object of <Superclass>`",
@@ -1042,7 +1096,7 @@ macro objcImpl*(x: untyped): untyped =
       "  " & protocolName & (if protocolExported: "*" else: "") &
         " = object of ProtocolPrototype"
     )
-  if hasClass:
+  if hasClassDecl:
     generatedTypeLines.add(
       "  " & className & (if classExported: "*" else: "") & " = object of " &
         classSuperName
@@ -1063,7 +1117,7 @@ macro objcImpl*(x: untyped): untyped =
         let name = identName(def[0])
         let body = def[2]
         if (hasProtocol and name == protocolName and body.kind == nnkTypeClassTy) or
-            (hasClass and name == className and body.kind == nnkObjectTy):
+            (hasClassDecl and name == className and body.kind == nnkObjectTy):
           continue
         filtered.add(copyNimTree(def))
       if filtered.len > 0:
@@ -1101,7 +1155,7 @@ macro objcImpl*(x: untyped): untyped =
           implMethods[j].sourceDef,
         )
 
-  if hasProtocol and hasClass:
+  if hasProtocol and hasClassDecl:
     for pSpec in protocolSpecs:
       if not pSpec.isRequired:
         continue
@@ -1328,11 +1382,33 @@ macro objcImpl*(x: untyped): untyped =
         if not `protoVar`.isNil:
           discard addProtocol(`clsVar`, `protoVar`)
 
-    runtimeSetup.add quote do:
-      var `clsVar` = getClass(`classNameLit`)
-      if `clsVar`.isNil:
-        `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
-        if not `clsVar`.isNil:
+    if isClassExtensionBlock:
+      let extensionMissingClassMsg = newLit(
+        "objcImpl class extension requires existing runtime class `" &
+          objcImplRuntimeName(className) & "`"
+      )
+      runtimeSetup.add quote do:
+        var `clsVar` = getClass(`classNameLit`)
+        doAssert(not `clsVar`.isNil, `extensionMissingClassMsg`)
+        let `metaClsVar` = getClass(`clsVar`.value)
+        `addClassMethods`
+        if not `metaClsVar`.isNil:
+          `addMetaMethods`
+    else:
+      runtimeSetup.add quote do:
+        var `clsVar` = getClass(`classNameLit`)
+        if `clsVar`.isNil:
+          `clsVar` = allocateClassPair(getClass(`superClassNameLit`), `classNameLit`, 0)
+          if not `clsVar`.isNil:
+            let `metaClsVar` = getClass(`clsVar`.value)
+            `ensureClassIvars`
+            `attachPrimaryProto`
+            `addExtraProtocols`
+            `addClassMethods`
+            if not `metaClsVar`.isNil:
+              `addMetaMethods`
+            registerClassPair(`clsVar`)
+        else:
           let `metaClsVar` = getClass(`clsVar`.value)
           `ensureClassIvars`
           `attachPrimaryProto`
@@ -1340,15 +1416,6 @@ macro objcImpl*(x: untyped): untyped =
           `addClassMethods`
           if not `metaClsVar`.isNil:
             `addMetaMethods`
-          registerClassPair(`clsVar`)
-      else:
-        let `metaClsVar` = getClass(`clsVar`.value)
-        `ensureClassIvars`
-        `attachPrimaryProto`
-        `addExtraProtocols`
-        `addClassMethods`
-        if not `metaClsVar`.isNil:
-          `addMetaMethods`
 
   if runtimeSetup.len > 0:
     result.add quote do:

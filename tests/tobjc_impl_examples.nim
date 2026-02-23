@@ -9,6 +9,9 @@ var crossPayloadClass = ""
 var crossPayloadRetainInMethod = 0
 var ivarCounterStateDestroyedCount = 0
 var plainFieldPingCount = 0
+var lateMethodBasePingCount = 0
+var lateMethodExtraPingCount = 0
+var lateMethodClassMethodTotal = 0.cint
 
 objcImpl:
   type FooBarProtocol* =
@@ -31,6 +34,22 @@ objcImpl:
   method bump(self: SimpleCounterClass): cint =
     inc simpleCounter
     result = simpleCounter
+
+objcImpl:
+  type LateMethodClass = object of NSObject
+
+  method basePing(self: LateMethodClass): cint =
+    inc lateMethodBasePingCount
+    lateMethodBasePingCount.cint
+
+objcImpl:
+  method extraPing(self: LateMethodClass): cint =
+    inc lateMethodExtraPingCount
+    lateMethodExtraPingCount.cint
+
+  method addToTotal(self: typedesc[LateMethodClass], amount: cint): cint =
+    lateMethodClassMethodTotal += amount
+    result = lateMethodClassMethodTotal
 
 objcImpl:
   type SharedPayloadProtocol =
@@ -192,6 +211,22 @@ suite "objcImpl examples":
 
     check(o.bump() == 1.cint)
     check(o.bump() == 2.cint)
+
+  test "objcImpl can extend a class in a later block":
+    lateMethodBasePingCount = 0
+    lateMethodExtraPingCount = 0
+    lateMethodClassMethodTotal = 0
+
+    var o = LateMethodClass.new()
+    check(not o.isNil)
+    check(getClassName(o) == "LateMethodClass")
+    check(respondsToSelector(getClass(LateMethodClass), selector("extraPing")))
+
+    check(o.basePing() == 1.cint)
+    check(o.extraPing() == 1.cint)
+    check(o.extraPing() == 2.cint)
+    check(LateMethodClass.addToTotal(2.cint) == 2.cint)
+    check(LateMethodClass.addToTotal(5.cint) == 7.cint)
 
   test "pass typed objcImpl class arg to another objcImpl class":
     crossPayloadClass = ""
