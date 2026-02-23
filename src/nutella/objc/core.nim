@@ -454,8 +454,7 @@ proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
   when NutellaNsToNxRemapEnabled:
     if name.len > 2 and name.startsWith("NS"):
       case name
-      of "NSObject", "NSProxy", "NSCopying", "NSMutableCopying", "NSCoding",
-          "NSSecureCoding":
+      of "NSProxy", "NSCopying", "NSMutableCopying", "NSCoding", "NSSecureCoding":
         discard
       else:
         result = "NX" & name[2 .. ^1]
@@ -468,6 +467,17 @@ proc getClassByName*(name: string): ObjcClass =
       let mapped = nutellaNsToNxRuntimeName(name)
       if mapped != name:
         result = objc_getClass(mapped.cstring)
+
+proc ensureNutellaRootClasses*() =
+  ## Bootstraps required NX* root classes when NS->NX remap is enabled.
+  when NutellaNsToNxRemapEnabled:
+    let nxObjectName = "NXObject"
+    var nxObject = objc_getClass(nxObjectName.cstring)
+    if nxObject.isNil:
+      nxObject =
+        objc_allocateClassPair(objc_getClass("NSObject"), nxObjectName.cstring, 0)
+      if not nxObject.isNil:
+        objc_registerClassPair(nxObject)
 
 template getClass*(name: string): untyped =
   getClassByName(name)

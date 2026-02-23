@@ -1306,6 +1306,10 @@ macro objcImpl*(x: untyped): untyped =
   result.add(callHelperDefs)
   result.add(wrapperDefs)
   var runtimeSetup = newStmtList()
+  if hasClass:
+    runtimeSetup.add quote do:
+      ensureNutellaRootClasses()
+
   if hasProtocol:
     runtimeSetup.add quote do:
       var `protoVar` = getProtocol(`protoNameLit`)

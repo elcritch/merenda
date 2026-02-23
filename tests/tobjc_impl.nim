@@ -299,6 +299,7 @@ suite "objcImpl runtime generation":
       let cls = getClass(NSRuntimeMappedClass)
       check(not cls.isNil)
       check(getName(cls) == "NXRuntimeMappedClass")
+      check(getName(getSuperclass(cls)) == "NXObject")
 
       var o = NSRuntimeMappedClass.new()
       check(not o.isNil)
