@@ -1,4 +1,4 @@
-import ../runtime
+import ./runtime
 
 objcImpl:
 

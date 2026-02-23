@@ -2,6 +2,7 @@ import ./runtime
 import ./responders
 
 proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool
+proc detachSubviews(view: NSObject)
 
 objcImpl:
   type NSView* = object of NSResponder
@@ -112,32 +113,11 @@ proc detachSubviews(view: NSObject) =
 proc frame*(view: NSView): NSRect =
   view.viewFrame()
 
-proc frame*(window: NSWindow): NSRect =
-  window.windowFrame()
-
 proc frameOrigin*(view: NSView): NSPoint =
   view.frame().origin
 
-proc frameOrigin*(window: NSWindow): NSPoint =
-  window.frame().origin
-
 proc frameSize*(view: NSView): NSSize =
   view.frame().size
-
-proc frameSize*(window: NSWindow): NSSize =
-  window.frame().size
-
-proc title*(window: NSWindow): NSString =
-  window.windowTitle()
-
-proc setTitle*(window: NSWindow, value: string) =
-  window.setTitle(ns(value))
-
-proc setTitle*(button: NSButton, value: string) =
-  button.setTitle(ns(value))
-
-proc setStringValue*(control: NSControl, value: string) =
-  control.setStringValue(ns(value))
 
 proc isHidden*(view: NSView): bool =
   view.viewHidden()
@@ -226,33 +206,6 @@ proc setFrameSize*(view: NSView, size: NSSize) =
     nsRect(f.origin.x, f.origin.y, max(size.width, 0.0), max(size.height, 0.0))
   )
 
-proc setFrame*(window: NSWindow, frame: NSRect) =
-  var nextFrame = nsRect(
-    frame.origin.x,
-    frame.origin.y,
-    max(frame.size.width, 1.0),
-    max(frame.size.height, 1.0),
-  )
-  window.windowFrame = nextFrame
-  if window.windowNativeReady() and not window.windowNativeWindow().isNil:
-    window.windowNativeWindow.size = ivec2(
-      clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
-    )
-
-proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
-  let f = window.frame()
-  window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
-
-proc setFrameSize*(window: NSWindow, size: NSSize) =
-  let f = window.frame()
-  window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
-
-proc setContentSize*(window: NSWindow, size: NSSize) =
-  window.setFrameSize(size)
-
-proc setContentSize*(window: NSWindow, width, height: float32) =
-  window.setContentSize(nsSize(width, height))
-
 proc subviews*(view: NSView): seq[NSView] =
   let childIds = view.viewSubviews()
   result = newSeq[NSView](childIds.len)
@@ -328,39 +281,4 @@ proc viewWithTag*(view: NSView, wantedTag: int): NSView =
     if not hit.isNil:
       return hit
   NSView(value: nil)
-
-proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
-  if cb.isNil:
-    button.onClick = nil
-  else:
-    button.onClick = proc(sender: ID) =
-      cb(ownFromId[NSButton](sender))
-
-proc click*(button: NSButton) =
-  if not button.enabled():
-    return
-  if button.mixedAllowed():
-    case button.stateValue()
-    of NSOffState:
-      button.stateValue = NSOnState
-    of NSOnState:
-      button.stateValue = NSMixedState
-    else:
-      button.stateValue = NSOffState
-  else:
-    if button.stateValue() == NSOnState:
-      button.stateValue = NSOffState
-    else:
-      button.stateValue = NSOnState
-  let cb = button.onClick()
-  if not cb.isNil:
-    cb(button.value)
-
-proc getPeriodicDelay*(button: NSButton, delay: var cfloat, interval: var cfloat) =
-  if button.isNil:
-    delay = 0.0
-    interval = 0.0
-    return
-  delay = button.periodicDelay()
-  interval = button.periodicInterval()
 

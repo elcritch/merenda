@@ -1,4 +1,11 @@
+import figdraw/commons
+import figdraw/fignodes
+import figdraw/figrender as figrender
+import figdraw/windowing/siwinshim as siwinshim
+
 import ./runtime
+import ./responders
+import ./views
 
 objcImpl:
 
@@ -190,8 +197,6 @@ objcImpl:
     false
 
 proc new*(t: typedesc[NSWindow]): NSWindow =
-  when false:
-    discard t
   var allocated = NSWindow.alloc()
   result = allocated.init()
   allocated.value = nil
@@ -199,11 +204,51 @@ proc new*(t: typedesc[NSWindow]): NSWindow =
     return
 
 proc new*(t: typedesc[NSPanel]): NSPanel =
-  when false:
-    discard t
   var allocated = NSPanel.alloc()
   result = allocated.init()
   allocated.value = nil
   if result.isNil:
     return
+
+proc setFrame*(window: NSWindow, frame: NSRect) =
+  var nextFrame = nsRect(
+    frame.origin.x,
+    frame.origin.y,
+    max(frame.size.width, 1.0),
+    max(frame.size.height, 1.0),
+  )
+  window.windowFrame = nextFrame
+  if window.windowNativeReady() and not window.windowNativeWindow().isNil:
+    window.windowNativeWindow.size = ivec2(
+      clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
+    )
+
+proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
+  let f = window.frame()
+  window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
+
+proc setFrameSize*(window: NSWindow, size: NSSize) =
+  let f = window.frame()
+  window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
+
+proc setContentSize*(window: NSWindow, size: NSSize) =
+  window.setFrameSize(size)
+
+proc setContentSize*(window: NSWindow, width, height: float32) =
+  window.setContentSize(nsSize(width, height))
+
+proc frame*(window: NSWindow): NSRect =
+  window.windowFrame()
+
+proc frameOrigin*(window: NSWindow): NSPoint =
+  window.frame().origin
+
+proc frameSize*(window: NSWindow): NSSize =
+  window.frame().size
+
+proc title*(window: NSWindow): NSString =
+  window.windowTitle()
+
+proc setTitle*(window: NSWindow, value: string) =
+  window.setTitle(ns(value))
 
