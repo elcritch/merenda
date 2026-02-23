@@ -1,4 +1,7 @@
+import ./runtime
+
 objcImpl:
+
   type NXClipView* = object of NXView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     clipDocumentCursorId: ID
@@ -166,3 +169,11 @@ objcImpl:
     self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, nil)
     self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
     discard callSuperIdFrom(NXClipView, self, getSelector("dealloc"))
+
+proc new*(t: typedesc[NSClipView]): NSClipView =
+  var allocated = NSClipView.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+

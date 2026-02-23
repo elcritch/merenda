@@ -1,4 +1,104 @@
+import ./runtime
+
 var sharedApplicationRef {.threadvar.}: NSApplication
+
+proc runApplicationFrames(app: NSObject, maxFrames: int): int =
+  let app = ownFromId[NSApplication](app.value)
+  app.appRunning = true
+  var windows = app.appWindows()
+  while app.appRunning():
+    var activeWindows = 0
+    var i = 0
+    while i < windows.len:
+      let window = ownFromId[NSWindow](windows[i])
+      if window.isNil:
+        removeOwnedIdAt(windows, i)
+        continue
+
+      if window.windowClosed():
+        removeOwnedIdAt(windows, i)
+        continue
+
+      try:
+        ensureNativeWindow(window)
+      except CatchableError:
+        removeOwnedIdAt(windows, i)
+        app.appWindows = windows
+        raise
+
+      if not window.windowVisibleRequested():
+        inc i
+        continue
+
+      let nativeWindow = window.windowNativeWindow()
+      if not nativeWindow.isNil and nativeWindow.opened:
+        nativeWindow.redraw()
+        nativeWindow.step()
+      if (not nativeWindow.isNil) and nativeWindow.closed:
+        window.windowClosed = true
+        removeOwnedIdAt(windows, i)
+        continue
+
+      inc activeWindows
+      inc i
+
+    app.appWindows = windows
+    inc result
+    if maxFrames >= 0 and result >= maxFrames:
+      break
+    if activeWindows == 0:
+      break
+    sleep(8)
+    windows = app.appWindows()
+
+  app.appRunning = false
+  app.appWindows = windows
+
+objcImpl:
+
+  type NXApplication* = object of NXResponder
+    appWindows: seq[ID]
+    appRunning: bool
+
+  method init*(self: var NXApplication): NXApplication =
+    result =
+      asType[NXApplication](callSuperIdFrom(NXApplication, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.appWindows = @[]
+    result.appRunning = false
+
+  method addWindow(self: NXApplication, window: NXWindow) =
+    if self.isNil or window.isNil:
+      return
+    var windows = self.appWindows()
+    if window.value notin windows:
+      windows.add(retainId(window.value))
+      self.appWindows = windows
+    window.setNextResponder(asType[NXResponder](self))
+    window.windowVisibleRequested = true
+
+  method run(self: NXApplication) =
+    discard runApplicationFrames(self, -1)
+
+  method stop(self: NXApplication) =
+    self.appRunning = false
+
+  method dealloc(self: NXApplication) {.used.} =
+    var windows = self.appWindows()
+    clearOwnedIds(windows)
+    self.appWindows = windows
+    clearIvarRefs(self)
+    discard callSuperIdFrom(NXApplication, self, getSelector("dealloc"))
+
+proc new*(t: typedesc[NSApplication]): NSApplication =
+  when false:
+    discard t
+  var allocated = NSApplication.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
 
 proc sharedApplication*(t: typedesc[NSApplication]): NSApplication =
   when false:
@@ -63,58 +163,6 @@ proc stop*(app: NSApplication) =
 proc isRunning*(app: NSApplication): bool =
   app.appRunning()
 
-proc runApplicationFrames(app: NSObject, maxFrames: int): int =
-  let app = ownFromId[NSApplication](app.value)
-  app.appRunning = true
-  var windows = app.appWindows()
-  while app.appRunning():
-    var activeWindows = 0
-    var i = 0
-    while i < windows.len:
-      let window = ownFromId[NSWindow](windows[i])
-      if window.isNil:
-        removeOwnedIdAt(windows, i)
-        continue
-
-      if window.windowClosed():
-        removeOwnedIdAt(windows, i)
-        continue
-
-      try:
-        ensureNativeWindow(window)
-      except CatchableError:
-        removeOwnedIdAt(windows, i)
-        app.appWindows = windows
-        raise
-
-      if not window.windowVisibleRequested():
-        inc i
-        continue
-
-      let nativeWindow = window.windowNativeWindow()
-      if not nativeWindow.isNil and nativeWindow.opened:
-        nativeWindow.redraw()
-        nativeWindow.step()
-      if (not nativeWindow.isNil) and nativeWindow.closed:
-        window.windowClosed = true
-        removeOwnedIdAt(windows, i)
-        continue
-
-      inc activeWindows
-      inc i
-
-    app.appWindows = windows
-    inc result
-    if maxFrames >= 0 and result >= maxFrames:
-      break
-    if activeWindows == 0:
-      break
-    sleep(8)
-    windows = app.appWindows()
-
-  app.appRunning = false
-  app.appWindows = windows
-
 proc runForFrames*(app: NSApplication, maxFrames: int): int =
   runApplicationFrames(app, maxFrames)
 
@@ -149,3 +197,4 @@ proc newButton*(x, y, width, height: float32, title: NSString = @ns"Button"): NS
 
 proc newButton*(x, y, width, height: float32, title: string): NSButton =
   newButton(x, y, width, height, ns(title))
+
