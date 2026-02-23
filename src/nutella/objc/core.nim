@@ -443,6 +443,8 @@ template setIvar*(obj: ID, ivar: Ivar, value: ID) =
   object_setIvar(obj, ivar, value)
 
 proc object_getClassName(obj: ID): cstring {.cdecl, importc.}
+proc object_getClass(obj: ID): ObjcClass {.cdecl, importc.}
+proc ivar_getOffset(v: Ivar): ptrdiff_t {.cdecl, importc.}
 proc getRawClassName*(obj: ID): string =
   $object_getClassName(obj)
 
@@ -460,24 +462,193 @@ proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
         result = "NX" & name[2 .. ^1]
 
 proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
-proc getClassByName*(name: string): ObjcClass =
-  result = objc_getClass(name.cstring)
-  when NutellaNsToNxRemapEnabled:
-    if result.isNil:
-      let mapped = nutellaNsToNxRuntimeName(name)
-      if mapped != name:
-        result = objc_getClass(mapped.cstring)
+proc ensureNutellaRootClasses*()
+
+var nxObjectRefCountOffset {.global.}: ptrdiff_t = -1
+
+proc nxObjectRefCountPtr(obj: ID): ptr NSUInteger {.inline, raises: [].} =
+  if obj == nil or nxObjectRefCountOffset < 0:
+    return nil
+  cast[ptr NSUInteger](cast[uint](obj) + cast[uint](nxObjectRefCountOffset))
+
+proc nxObjectReadRefCount(obj: ID): NSUInteger {.inline, raises: [].} =
+  let p = nxObjectRefCountPtr(obj)
+  if p == nil:
+    return 0.NSUInteger
+  p[]
+
+proc nxObjectWriteRefCount(obj: ID, value: NSUInteger) {.inline, raises: [].} =
+  let p = nxObjectRefCountPtr(obj)
+  if p != nil:
+    p[] = value
+
+proc nxObjectAlloc(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+  discard cmd
+  result = class_createInstance(self, 0)
+  if result != nil:
+    nxObjectWriteRefCount(result, 1.NSUInteger)
+
+proc nxObjectInit(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+  discard cmd
+  if nxObjectReadRefCount(self) == 0.NSUInteger:
+    nxObjectWriteRefCount(self, 1.NSUInteger)
+  result = self
+
+proc nxObjectRetain(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+  discard cmd
+  let rc = nxObjectReadRefCount(self)
+  nxObjectWriteRefCount(self, rc + 1.NSUInteger)
+  result = self
+
+proc nxObjectDealloc(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+  discard cmd
+  nxObjectWriteRefCount(self, 0.NSUInteger)
+  discard object_dispose(self)
+  result = nil
+
+proc nxObjectRelease(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+  discard cmd
+  let rc = nxObjectReadRefCount(self)
+  if rc <= 1.NSUInteger:
+    discard objc_msgSend(self, sel_registerName("dealloc"))
+  else:
+    nxObjectWriteRefCount(self, rc - 1.NSUInteger)
+
+proc nxObjectRetainCount(self: ID, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
+  discard cmd
+  result = nxObjectReadRefCount(self)
+
+proc nxObjectAutorelease(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+  discard cmd
+  result = self
+
+proc nxObjectIsEqual(self: ID, cmd: SEL, other: ID): bool {.cdecl, raises: [].} =
+  discard cmd
+  self == other
+
+proc nxObjectHash(self: ID, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
+  discard cmd
+  cast[NSUInteger](cast[uint](self) shr 4)
+
+proc nxObjectRespondsToSelector(
+    self: ID, cmd: SEL, selector: SEL
+): bool {.cdecl, raises: [].} =
+  discard cmd
+  class_respondsToSelector(object_getClass(self), selector)
+
+proc nxObjectIsKindOfClass(self: ID, cmd: SEL, cls: ID): bool {.cdecl, raises: [].} =
+  discard cmd
+  if cls == nil:
+    return false
+  var current = object_getClass(self)
+  while not current.isNil:
+    if current.value == cls:
+      return true
+    current = class_getSuperclass(current.value)
+  false
+
+proc nxObjectNew(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+  var allocated = nxObjectAlloc(self, cmd)
+  if allocated == nil:
+    return nil
+  result = objc_msgSend(allocated, sel_registerName("init"))
+
+proc nxObjectInitialize(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+  discard self
+  discard cmd
 
 proc ensureNutellaRootClasses*() =
-  ## Bootstraps required NX* root classes when NS->NX remap is enabled.
+  ## Bootstraps a standalone NXObject root class when NS->NX remap is enabled.
   when NutellaNsToNxRemapEnabled:
     let nxObjectName = "NXObject"
     var nxObject = objc_getClass(nxObjectName.cstring)
     if nxObject.isNil:
-      nxObject =
-        objc_allocateClassPair(objc_getClass("NSObject"), nxObjectName.cstring, 0)
-      if not nxObject.isNil:
-        objc_registerClassPair(nxObject)
+      nxObject = toObjcClass(objc_allocateClassPair(nil, nxObjectName.cstring, 0))
+      if nxObject.isNil:
+        return
+
+      const nxRefAlign =
+        when sizeof(NSUInteger) == 8:
+          3
+        elif sizeof(NSUInteger) == 4:
+          2
+        else:
+          1
+
+      discard
+        addIvar(nxObject, "__nutellaNxRefCount", sizeof(NSUInteger), nxRefAlign, "Q")
+
+      let nxMeta = object_getClass(nxObject.value)
+      discard class_addMethod(
+        nxMeta.value, sel_registerName("alloc"), cast[IMP](nxObjectAlloc), "@@:"
+      )
+      discard class_addMethod(
+        nxMeta.value, sel_registerName("new"), cast[IMP](nxObjectNew), "@@:"
+      )
+      discard class_addMethod(
+        nxMeta.value,
+        sel_registerName("initialize"),
+        cast[IMP](nxObjectInitialize),
+        "v@:",
+      )
+      discard class_addMethod(
+        nxObject.value, sel_registerName("init"), cast[IMP](nxObjectInit), "@@:"
+      )
+      discard class_addMethod(
+        nxObject.value, sel_registerName("retain"), cast[IMP](nxObjectRetain), "@@:"
+      )
+      discard class_addMethod(
+        nxObject.value, sel_registerName("release"), cast[IMP](nxObjectRelease), "v@:"
+      )
+      discard class_addMethod(
+        nxObject.value,
+        sel_registerName("retainCount"),
+        cast[IMP](nxObjectRetainCount),
+        "Q@:",
+      )
+      discard class_addMethod(
+        nxObject.value,
+        sel_registerName("autorelease"),
+        cast[IMP](nxObjectAutorelease),
+        "@@:",
+      )
+      discard class_addMethod(
+        nxObject.value, sel_registerName("isEqual:"), cast[IMP](nxObjectIsEqual), "B@:@"
+      )
+      discard class_addMethod(
+        nxObject.value, sel_registerName("hash"), cast[IMP](nxObjectHash), "Q@:"
+      )
+      discard class_addMethod(
+        nxObject.value,
+        sel_registerName("respondsToSelector:"),
+        cast[IMP](nxObjectRespondsToSelector),
+        "B@::",
+      )
+      discard class_addMethod(
+        nxObject.value,
+        sel_registerName("isKindOfClass:"),
+        cast[IMP](nxObjectIsKindOfClass),
+        "B@:#",
+      )
+      discard class_addMethod(
+        nxObject.value, sel_registerName("dealloc"), cast[IMP](nxObjectDealloc), "v@:"
+      )
+      objc_registerClassPair(nxObject.value)
+
+    if nxObjectRefCountOffset < 0:
+      let refIvar = getIvar(nxObject, "__nutellaNxRefCount")
+      if cast[pointer](refIvar) != nil:
+        nxObjectRefCountOffset = ivar_getOffset(refIvar)
+
+proc getClassByName*(name: string): ObjcClass =
+  when NutellaNsToNxRemapEnabled:
+    let mapped = nutellaNsToNxRuntimeName(name)
+    if mapped != name:
+      ensureNutellaRootClasses()
+      result = objc_getClass(mapped.cstring)
+      if not result.isNil:
+        return
+  result = objc_getClass(name.cstring)
 
 template getClass*(name: string): untyped =
   getClassByName(name)
@@ -518,7 +689,6 @@ proc objc_lookUpClass(name: cstring): ObjcClass {.cdecl, importc.}
 template lookUpClass*(name: cstring): untyped =
   objc_lookUpClass(name.cstring)
 
-proc object_getClass(obj: ID): ObjcClass {.cdecl, importc.}
 template getClass*(obj: ID): untyped =
   object_getClass(obj)
 
@@ -541,7 +711,6 @@ proc ivar_getTypeEncoding(v: Ivar): cstring {.cdecl, importc.}
 template getTypeEncoding*(v: Ivar): untyped =
   $ivar_getTypeEncoding(v)
 
-proc ivar_getOffset(v: Ivar): ptrdiff_t {.cdecl, importc.}
 template getOffset*(v: Ivar): untyped =
   ivar_getOffset(v)
 
