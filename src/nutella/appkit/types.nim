@@ -25,6 +25,56 @@ type
     a*: float32
 
 const
+  NSWarningAlertStyle* = 0
+  NSInformationalAlertStyle* = 1
+  NSCriticalAlertStyle* = 2
+  NSAlertFirstButtonReturn* = 1000
+  NSAlertSecondButtonReturn* = 1001
+  NSAlertThirdButtonReturn* = 1002
+
+  NSMomentaryLightButton* = 0
+  NSPushOnPushOffButton* = 1
+  NSToggleButton* = 2
+  NSSwitchButton* = 3
+  NSRadioButton* = 4
+  NSMomentaryChangeButton* = 5
+  NSOnOffButton* = 6
+  NSMomentaryPushInButton* = 7
+
+  NSRoundedBezelStyle* = 1
+  NSRegularSquareBezelStyle* = 2
+  NSThickSquareBezelStyle* = 3
+  NSThickerSquareBezelStyle* = 4
+  NSDisclosureBezelStyle* = 5
+  NSShadowlessSquareBezelStyle* = 6
+  NSCircularBezelStyle* = 7
+  NSTexturedSquareBezelStyle* = 8
+  NSHelpButtonBezelStyle* = 9
+  NSSmallSquareBezelStyle* = 10
+  NSTexturedRoundedBezelStyle* = 11
+  NSRoundRectBezelStyle* = 12
+  NSRecessedBezelStyle* = 13
+  NSRoundedDisclosureBezelStyle* = 14
+
+  NSGradientNone* = 0
+  NSGradientConcaveWeak* = 1
+  NSGradientConcaveStrong* = 2
+  NSGradientConvexWeak* = 3
+  NSGradientConvexStrong* = 4
+
+  NSNoImage* = 0
+  NSImageOnly* = 1
+  NSImageLeft* = 2
+  NSImageRight* = 3
+  NSImageBelow* = 4
+  NSImageAbove* = 5
+  NSImageOverlaps* = 6
+
+  NSImageScaleProportionallyDown* = 0
+  NSImageScaleAxesIndependently* = 1
+  NSImageScaleNone* = 2
+  NSImageScaleProportionallyUpOrDown* = 3
+
   NSMixedState* = -1
   NSOffState* = 0
   NSOnState* = 1

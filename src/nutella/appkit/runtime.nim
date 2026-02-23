@@ -426,6 +426,406 @@ objcImpl:
     discard sender
 
 objcImpl:
+  type NXCell* = object of NSObject
+    controlViewId: ID
+    cellType {.set: setType, get: `type`.}: int
+    stateValue {.get: state.}: int
+    mixedAllowed: bool
+    cellEnabled {.set: setEnabled, get: isEnabled.}: bool
+    cellEditable {.set: setEditable, get: isEditable.}: bool
+    cellSelectable {.set: setSelectable, get: isSelectable.}: bool
+    cellScrollable {.set: setScrollable, get: isScrollable.}: bool
+    cellBordered {.set: setBordered, get: isBordered.}: bool
+    cellBezeled {.set: setBezeled, get: isBezeled.}: bool
+    cellContinuous {.set: setContinuous, get: isContinuous.}: bool
+    cellHighlighted {.set: setHighlighted, get: isHighlighted.}: bool
+    cellRefusesFirstResponder {.
+      set: setRefusesFirstResponder, get: refusesFirstResponder
+    .}: bool
+    align {.set: setAlignment, get: alignment.}: NSTextAlignment
+    titleId: ID
+    objectValueId: ID
+    representedObjectId: ID
+
+  method init*(self: var NXCell): NXCell =
+    result = asType[NXCell](callSuperIdFrom(NXCell, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.controlViewId = nil
+    result.cellType = 1
+    result.stateValue = NSOffState
+    result.mixedAllowed = false
+    result.cellEnabled = true
+    result.cellEditable = false
+    result.cellSelectable = false
+    result.cellScrollable = false
+    result.cellBordered = false
+    result.cellBezeled = false
+    result.cellContinuous = false
+    result.cellHighlighted = false
+    result.cellRefusesFirstResponder = false
+    result.align = NSNaturalTextAlignment
+    result.titleId = retainId(@ns"".value)
+    result.objectValueId = retainId(@ns"".value)
+    result.representedObjectId = nil
+
+  method initTextCell*(self: var NXCell, value: NSString): NXCell =
+    result = self.init()
+    if result.isNil:
+      return
+    result.titleId = replacedOwnedId(result.titleId, value.value)
+    result.objectValueId = replacedOwnedId(result.objectValueId, value.value)
+
+  method controlView*(self: NXCell): NXView =
+    if self.controlViewId.isNil:
+      return NXView(value: nil)
+    ownFromId[NXView](self.controlViewId)
+
+  method setControlView*(self: NXCell, view: NXView) =
+    self.controlViewId = replacedOwnedId(self.controlViewId, view.value)
+
+  method target*(self: NXCell): NSObject =
+    discard self
+    NSObject(value: nil)
+
+  method action*(self: NXCell): SEL =
+    discard self
+    nil
+
+  method tag*(self: NXCell): int =
+    discard self
+    0
+
+  method setTarget*(self: NXCell, target: NSObject) =
+    discard self
+    discard target
+
+  method setAction*(self: NXCell, action: SEL) =
+    discard self
+    discard action
+
+  method setTag*(self: NXCell, tag: int) =
+    discard self
+    discard tag
+
+  method setState*(self: NXCell, value: int) =
+    self.stateValue = normalizeButtonState(value, self.mixedAllowed)
+
+  method nextState*(self: NXCell): int =
+    if self.mixedAllowed:
+      case self.stateValue
+      of NSOffState: NSOnState
+      of NSOnState: NSMixedState
+      else: NSOffState
+    else:
+      if self.stateValue == NSOnState: NSOffState else: NSOnState
+
+  method setNextState*(self: NXCell) =
+    self.stateValue = self.nextState()
+
+  method allowsMixedState*(self: NXCell): bool =
+    self.mixedAllowed
+
+  method setAllowsMixedState*(self: NXCell, allow: bool) =
+    self.mixedAllowed = allow
+    self.stateValue = normalizeButtonState(self.stateValue, allow)
+
+  method title*(self: NXCell): NSString =
+    if self.titleId.isNil:
+      return @ns""
+    ownFromId[NSString](self.titleId)
+
+  method setTitle*(self: NXCell, value: NSString) =
+    self.titleId = replacedOwnedId(self.titleId, value.value)
+    self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
+
+  method objectValue*(self: NXCell): NSObject =
+    if self.objectValueId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.objectValueId)
+
+  method setObjectValue*(self: NXCell, value: NSObject) =
+    self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
+    if value.value.isNil:
+      self.titleId = replacedOwnedId(self.titleId, @ns"".value)
+    else:
+      let asString = asType[NSString](value.value)
+      self.titleId = replacedOwnedId(self.titleId, asString.value)
+
+  method stringValue*(self: NXCell): NSString =
+    self.title()
+
+  method setStringValue*(self: NXCell, value: NSString) =
+    self.setTitle(value)
+
+  method intValue*(self: NXCell): cint =
+    try:
+      parseInt($self.stringValue()).cint
+    except ValueError:
+      0.cint
+
+  method integerValue*(self: NXCell): int =
+    self.intValue().int
+
+  method floatValue*(self: NXCell): cfloat =
+    try:
+      parseFloat($self.stringValue()).cfloat
+    except ValueError:
+      0.0
+
+  method doubleValue*(self: NXCell): cdouble =
+    try:
+      parseFloat($self.stringValue()).cdouble
+    except ValueError:
+      0.0
+
+  method setIntValue*(self: NXCell, value: cint) =
+    self.setStringValue(ns($value))
+
+  method setIntegerValue*(self: NXCell, value: int) =
+    self.setStringValue(ns($value))
+
+  method setFloatValue*(self: NXCell, value: cfloat) =
+    self.setStringValue(ns($value))
+
+  method setDoubleValue*(self: NXCell, value: cdouble) =
+    self.setStringValue(ns($value))
+
+  method representedObject*(self: NXCell): NSObject =
+    if self.representedObjectId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.representedObjectId)
+
+  method setRepresentedObject*(self: NXCell, value: NSObject) =
+    self.representedObjectId = replacedOwnedId(self.representedObjectId, value.value)
+
+  method takeStringValueFrom*(self: NXCell, sender: NXCell) =
+    if sender.isNil:
+      return
+    self.setStringValue(sender.stringValue())
+
+  method takeIntValueFrom*(self: NXCell, sender: NXCell) =
+    if sender.isNil:
+      return
+    self.setIntValue(sender.intValue())
+
+  method takeIntegerValueFrom*(self: NXCell, sender: NXCell) =
+    if sender.isNil:
+      return
+    self.setIntegerValue(sender.integerValue())
+
+  method takeFloatValueFrom*(self: NXCell, sender: NXCell) =
+    if sender.isNil:
+      return
+    self.setFloatValue(sender.floatValue())
+
+  method takeDoubleValueFrom*(self: NXCell, sender: NXCell) =
+    if sender.isNil:
+      return
+    self.setDoubleValue(sender.doubleValue())
+
+  method dealloc(self: NXCell) {.used.} =
+    self.controlViewId = replacedOwnedId(self.controlViewId, nil)
+    self.titleId = replacedOwnedId(self.titleId, nil)
+    self.objectValueId = replacedOwnedId(self.objectValueId, nil)
+    self.representedObjectId = replacedOwnedId(self.representedObjectId, nil)
+    clearIvarRefs(self)
+    discard callSuperIdFrom(NXCell, self, getSelector("dealloc"))
+
+objcImpl:
+  type NXActionCell* = object of NXCell
+    actionControlViewId: ID
+    actionTargetId: ID
+    actionSelector: SEL
+    actionTagValue {.set: setTag, get: tag.}: int
+
+  method init*(self: var NXActionCell): NXActionCell =
+    result =
+      asType[NXActionCell](callSuperIdFrom(NXActionCell, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.actionControlViewId = nil
+    result.actionTargetId = nil
+    result.actionSelector = nil
+    result.actionTagValue = 0
+
+  method controlView*(self: NXActionCell): NXView =
+    if self.actionControlViewId.isNil:
+      return NXView(value: nil)
+    ownFromId[NXView](self.actionControlViewId)
+
+  method setControlView*(self: NXActionCell, view: NXView) =
+    self.actionControlViewId = replacedOwnedId(self.actionControlViewId, view.value)
+
+  method target*(self: NXActionCell): NSObject =
+    if self.actionTargetId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.actionTargetId)
+
+  method action*(self: NXActionCell): SEL =
+    self.actionSelector
+
+  method setTarget*(self: NXActionCell, target: NSObject) =
+    self.actionTargetId = replacedOwnedId(self.actionTargetId, target.value)
+
+  method setAction*(self: NXActionCell, action: SEL) =
+    self.actionSelector = action
+
+  method dealloc(self: NXActionCell) {.used.} =
+    self.actionControlViewId = replacedOwnedId(self.actionControlViewId, nil)
+    self.actionTargetId = replacedOwnedId(self.actionTargetId, nil)
+    discard callSuperIdFrom(NXActionCell, self, getSelector("dealloc"))
+
+objcImpl:
+  type NXButtonCell* = object of NXActionCell
+    buttonTitleId: ID
+    alternateTitleId: ID
+    transparent {.set: setTransparent, get: isTransparent.}: bool
+    keyEqId: ID
+    imagePos {.set: setImagePosition, get: imagePosition.}: int
+    highlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: int
+    showsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
+    imageDimsDisabled {.set: setImageDimsWhenDisabled, get: imageDimsWhenDisabled.}:
+      bool
+    keyEqMods {.set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask.}: int
+    bezel {.set: setBezelStyle, get: bezelStyle.}: int
+    showBorderInside {.
+      set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
+    .}: bool
+    gradient {.set: setGradientType, get: gradientType.}: int
+    imageScale {.set: setImageScaling, get: imageScaling.}: int
+    bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
+    periodicDelaySec: cfloat
+    periodicIntervalSec: cfloat
+
+  method init*(self: var NXButtonCell): NXButtonCell =
+    result =
+      asType[NXButtonCell](callSuperIdFrom(NXButtonCell, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.buttonTitleId = retainId(@ns"Button".value)
+    result.alternateTitleId = retainId(@ns"".value)
+    result.transparent = false
+    result.keyEqId = retainId(@ns"".value)
+    result.imagePos = 0
+    result.highlightsByMask = 0
+    result.showsStateByMask = 0
+    result.imageDimsDisabled = true
+    result.keyEqMods = 0
+    result.bezel = 0
+    result.showBorderInside = false
+    result.gradient = 0
+    result.imageScale = 0
+    result.bgColor = nsColor(0.0, 0.0, 0.0, 0.0)
+    result.periodicDelaySec = 0.0
+    result.periodicIntervalSec = 0.0
+
+  method title*(self: NXButtonCell): NSString =
+    if self.buttonTitleId.isNil:
+      return @ns""
+    ownFromId[NSString](self.buttonTitleId)
+
+  method setTitle*(self: NXButtonCell, value: NSString) =
+    self.buttonTitleId = replacedOwnedId(self.buttonTitleId, value.value)
+    self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
+
+  method alternateTitle*(self: NXButtonCell): NSString =
+    if self.alternateTitleId.isNil:
+      return @ns""
+    ownFromId[NSString](self.alternateTitleId)
+
+  method setAlternateTitle*(self: NXButtonCell, value: NSString) =
+    self.alternateTitleId = replacedOwnedId(self.alternateTitleId, value.value)
+
+  method keyEquivalent*(self: NXButtonCell): NSString =
+    if self.keyEqId.isNil:
+      return @ns""
+    ownFromId[NSString](self.keyEqId)
+
+  method setKeyEquivalent*(self: NXButtonCell, value: NSString) =
+    self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
+
+  method setButtonType*(self: NXButtonCell, buttonType: cint) =
+    discard self
+    discard buttonType
+
+  method setPeriodicDelay*(
+      self: NXButtonCell, delay: cfloat, interval {.kw("interval").}: cfloat
+  ) =
+    self.periodicDelaySec = max(delay, 0.0)
+    self.periodicIntervalSec = max(interval, 0.0)
+
+  method getPeriodicDelay*(
+      self: NXButtonCell, delay: ptr cfloat, interval {.kw("interval").}: ptr cfloat
+  ) =
+    if not delay.isNil:
+      delay[] = self.periodicDelaySec
+    if not interval.isNil:
+      interval[] = self.periodicIntervalSec
+
+  method setState*(self: NXButtonCell, value: int) =
+    self.stateValue = normalizeButtonState(value, self.mixedAllowed)
+
+  method stringValue*(self: NXButtonCell): NSString =
+    self.title()
+
+  method setStringValue*(self: NXButtonCell, value: NSString) =
+    self.setTitle(value)
+
+  method intValue*(self: NXButtonCell): cint =
+    self.state().cint
+
+  method integerValue*(self: NXButtonCell): int =
+    self.state()
+
+  method floatValue*(self: NXButtonCell): cfloat =
+    self.state().cfloat
+
+  method doubleValue*(self: NXButtonCell): cdouble =
+    self.state().cdouble
+
+  method setIntValue*(self: NXButtonCell, value: cint) =
+    self.setState(value.int)
+
+  method setIntegerValue*(self: NXButtonCell, value: int) =
+    self.setState(value)
+
+  method setFloatValue*(self: NXButtonCell, value: cfloat) =
+    self.setState(value.int)
+
+  method setDoubleValue*(self: NXButtonCell, value: cdouble) =
+    self.setState(value.int)
+
+  method performClick*(self: NXButtonCell, sender: NSObject) =
+    discard sender
+    if self.isNil or not self.isEnabled():
+      return
+    if self.allowsMixedState():
+      case self.state()
+      of NSOffState:
+        self.setState(NSOnState)
+      of NSOnState:
+        self.setState(NSMixedState)
+      else:
+        self.setState(NSOffState)
+    else:
+      if self.state() == NSOnState:
+        self.setState(NSOffState)
+      else:
+        self.setState(NSOnState)
+    let target = self.target()
+    let action = self.action()
+    if target.isNil or cast[pointer](action).isNil:
+      return
+    discard performResponderSelector(target, action, asType[NSObject](self.value))
+
+  method dealloc(self: NXButtonCell) {.used.} =
+    self.buttonTitleId = replacedOwnedId(self.buttonTitleId, nil)
+    self.alternateTitleId = replacedOwnedId(self.alternateTitleId, nil)
+    self.keyEqId = replacedOwnedId(self.keyEqId, nil)
+    discard callSuperIdFrom(NXButtonCell, self, getSelector("dealloc"))
+
+objcImpl:
   type NXTextField* = object of NXControl
     strValueId: ID
     txtColor {.set: setTextColor, get: textColor.}: NSColor
@@ -708,6 +1108,216 @@ objcImpl:
     self.recentSearchesId = replacedOwnedId(self.recentSearchesId, nil)
     self.recentsAutosaveNameId = replacedOwnedId(self.recentsAutosaveNameId, nil)
     discard callSuperIdFrom(NXSearchField, self, getSelector("dealloc"))
+
+objcImpl:
+  type NXClipView* = object of NXView
+    clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
+    clipDocumentCursorId: ID
+    clipDocumentViewId: ID
+    clipDocumentRect: NSRect
+    clipDrawsBackground {.set: setDrawsBackground, get: drawsBackground.}: bool
+    clipCopiesOnScroll {.set: setCopiesOnScroll, get: copiesOnScroll.}: bool
+    clipScrollOrigin: NSPoint
+
+  method init*(self: var NXClipView): NXClipView =
+    result = asType[NXClipView](callSuperIdFrom(NXClipView, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
+    result.clipDocumentCursorId = nil
+    result.clipDocumentViewId = nil
+    result.clipDocumentRect = nsRect(0, 0, 0, 0)
+    result.clipDrawsBackground = true
+    result.clipCopiesOnScroll = false
+    result.clipScrollOrigin = nsPoint(0, 0)
+
+  method documentCursor*(self: NXClipView): NSObject =
+    if self.clipDocumentCursorId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.clipDocumentCursorId)
+
+  method setDocumentCursor*(self: NXClipView, value: NSObject) =
+    self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, value.value)
+
+  method documentView*(self: NXClipView): NXView =
+    if self.clipDocumentViewId.isNil:
+      return NXView(value: nil)
+    ownFromId[NXView](self.clipDocumentViewId)
+
+  method setDocumentView*(self: NXClipView, view: NXView) =
+    if self.isNil:
+      return
+    if self.clipDocumentViewId == view.value:
+      return
+
+    if not self.clipDocumentViewId.isNil:
+      clearSuperviewRef(self.clipDocumentViewId)
+      var children = self.viewSubviews()
+      for i, candidate in children:
+        if candidate == self.clipDocumentViewId:
+          children.del(i)
+          self.viewSubviews = children
+          releaseId(candidate)
+          break
+
+    if view.isNil:
+      self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
+      self.clipDocumentRect = nsRect(0, 0, 0, 0)
+      self.clipScrollOrigin = nsPoint(0, 0)
+      return
+
+    let parentId = view.viewSuperview()
+    if not parentId.isNil:
+      var parent = ownFromId[NXView](parentId)
+      if not parent.isNil:
+        var siblings = parent.viewSubviews()
+        for i, candidate in siblings:
+          if candidate == view.value:
+            siblings.del(i)
+            parent.viewSubviews = siblings
+            releaseId(candidate)
+            break
+      view.viewSuperview = nil
+
+    var children = self.viewSubviews()
+    if view.value notin children:
+      children.add(retainId(view.value))
+      self.viewSubviews = children
+    view.viewSuperview = self.value
+    view.setNextResponder(asType[NXResponder](self))
+    self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, view.value)
+    self.clipDocumentRect = view.viewFrame()
+    self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
+
+  method documentRect*(self: NXClipView): NSRect =
+    if self.clipDocumentViewId.isNil:
+      return nsRect(0, 0, 0, 0)
+    let doc = self.documentView()
+    if doc.isNil:
+      return nsRect(0, 0, 0, 0)
+    let frame = doc.viewFrame()
+    self.clipDocumentRect =
+      nsRect(0, 0, max(frame.size.width, 0.0), max(frame.size.height, 0.0))
+    self.clipDocumentRect
+
+  method documentVisibleRect*(self: NXClipView): NSRect =
+    let constrained = self.constrainScrollPoint(self.clipScrollOrigin)
+    let clipSize = self.viewFrame().size
+    let docRect = self.documentRect()
+    nsRect(
+      constrained.x,
+      constrained.y,
+      min(clipSize.width, docRect.size.width),
+      min(clipSize.height, docRect.size.height),
+    )
+
+  method constrainScrollPoint*(self: NXClipView, point: NSPoint): NSPoint =
+    let docRect = self.documentRect()
+    let clipSize = self.viewFrame().size
+    let maxX = max(docRect.size.width - clipSize.width, 0.0)
+    let maxY = max(docRect.size.height - clipSize.height, 0.0)
+    result = nsPoint(clamp(point.x, 0.0, maxX), clamp(point.y, 0.0, maxY))
+
+  method viewBoundsChanged*(self: NXClipView, note: NSObject) =
+    discard self
+    discard note
+
+  method viewFrameChanged*(self: NXClipView, note: NSObject) =
+    discard self
+    discard note
+
+  method autoscroll*(self: NXClipView, event: NSObject): bool =
+    discard self
+    discard event
+    false
+
+  method scrollToPoint*(self: NXClipView, point: NSPoint) =
+    self.clipScrollOrigin = self.constrainScrollPoint(point)
+
+  method dealloc(self: NXClipView) {.used.} =
+    self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, nil)
+    self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
+    discard callSuperIdFrom(NXClipView, self, getSelector("dealloc"))
+
+objcImpl:
+  type NXCollectionView* = object of NXView
+    contentId: ID
+    itemPrototypeId: ID
+    selectable {.set: setSelectable, get: isSelectable.}: bool
+    minItem {.set: setMinItemSize, get: minItemSize.}: NSSize
+    maxItem {.set: setMaxItemSize, get: maxItemSize.}: NSSize
+    maxRows {.set: setMaxNumberOfRows, get: maxNumberOfRows.}: int
+    maxCols {.set: setMaxNumberOfColumns, get: maxNumberOfColumns.}: int
+    backgroundColorsId: ID
+    allowsMulti {.set: setAllowsMultipleSelection, get: allowsMultipleSelection.}: bool
+    selectionIndexesId: ID
+
+  method init*(self: var NXCollectionView): NXCollectionView =
+    result = asType[NXCollectionView](
+      callSuperIdFrom(NXCollectionView, self, getSelector("init"))
+    )
+    if result.isNil:
+      return
+    result.contentId = retainId(nsArray[NSObject]().value)
+    result.itemPrototypeId = nil
+    result.selectable = true
+    result.minItem = nsSize(120, 120)
+    result.maxItem = nsSize(120, 120)
+    result.maxRows = 0
+    result.maxCols = 0
+    result.backgroundColorsId = retainId(nsArray[NSObject]().value)
+    result.allowsMulti = false
+    result.selectionIndexesId = nil
+
+  method content*(self: NXCollectionView): NSArray[NSObject] =
+    if self.contentId.isNil:
+      return nsArray[NSObject]()
+    ownFromId[NSArray[NSObject]](self.contentId)
+
+  method setContent*(self: NXCollectionView, value: NSArray[NSObject]) =
+    self.contentId = replacedOwnedId(self.contentId, value.value)
+
+  method itemPrototype*(self: NXCollectionView): NSObject =
+    if self.itemPrototypeId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.itemPrototypeId)
+
+  method setItemPrototype*(self: NXCollectionView, value: NSObject) =
+    self.itemPrototypeId = replacedOwnedId(self.itemPrototypeId, value.value)
+
+  method backgroundColors*(self: NXCollectionView): NSArray[NSObject] =
+    if self.backgroundColorsId.isNil:
+      return nsArray[NSObject]()
+    ownFromId[NSArray[NSObject]](self.backgroundColorsId)
+
+  method setBackgroundColors*(self: NXCollectionView, value: NSArray[NSObject]) =
+    self.backgroundColorsId = replacedOwnedId(self.backgroundColorsId, value.value)
+
+  method selectionIndexes*(self: NXCollectionView): NSObject =
+    if self.selectionIndexesId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.selectionIndexesId)
+
+  method setSelectionIndexes*(self: NXCollectionView, value: NSObject) =
+    self.selectionIndexesId = replacedOwnedId(self.selectionIndexesId, value.value)
+
+  method isFirstResponder*(self: NXCollectionView): bool =
+    false
+
+  method newItemForRepresentedObject*(
+      self: NXCollectionView, representedObject {.kw("object").}: NSObject
+  ): NSObject =
+    discard representedObject
+    if self.itemPrototypeId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.itemPrototypeId)
+
+  method dealloc(self: NXCollectionView) {.used.} =
+    self.contentId = replacedOwnedId(self.contentId, nil)
+    self.itemPrototypeId = replacedOwnedId(self.itemPrototypeId, nil)
+    self.backgroundColorsId = replacedOwnedId(self.backgroundColorsId, nil)
+    self.selectionIndexesId = replacedOwnedId(self.selectionIndexesId, nil)
+    discard callSuperIdFrom(NXCollectionView, self, getSelector("dealloc"))
 
 objcImpl:
   type NXBox* = object of NXView
@@ -1017,6 +1627,201 @@ objcImpl:
     false
 
 objcImpl:
+  type NXAlert* = object of NSObject
+    delegateId: ID
+    style {.set: setAlertStyle, get: alertStyle.}: int
+    iconId: ID
+    messageTextId: ID
+    informativeTextId: ID
+    accessoryViewId: ID
+    showsHelpFlag {.set: setShowsHelp, get: showsHelp.}: bool
+    showsSuppression: bool
+    helpAnchorId: ID
+    alertButtonsId: ID
+    suppressionButtonId: ID
+    alertWindowId: ID
+    needsLayout: bool
+    sheetDelegateId: ID
+    sheetDidEnd: SEL
+
+  method init*(self: var NXAlert): NXAlert =
+    result = asType[NXAlert](callSuperIdFrom(NXAlert, self, getSelector("init")))
+    if result.isNil:
+      return
+    result.delegateId = nil
+    result.style = NSWarningAlertStyle
+    result.iconId = nil
+    result.messageTextId = retainId(@ns"".value)
+    result.informativeTextId = retainId(@ns"".value)
+    result.accessoryViewId = nil
+    result.showsHelpFlag = false
+    result.showsSuppression = false
+    result.helpAnchorId = retainId(@ns"".value)
+    result.alertButtonsId = retainId(nsArray[NXButton]().value)
+    result.suppressionButtonId = nil
+    result.alertWindowId = nil
+    result.needsLayout = true
+    result.sheetDelegateId = nil
+    result.sheetDidEnd = nil
+
+  proc alertWithError*(t: typedesc[NXAlert], err {.kw("error").}: NSObject): NXAlert =
+    when false:
+      discard t
+    result = NXAlert.new()
+    if result.isNil:
+      return
+    if err.isNil:
+      result.setMessageText(@ns"Error")
+      result.setInformativeText(@ns"Unknown error")
+    else:
+      result.setMessageText(@ns"Error")
+      result.setInformativeText(ns($err))
+
+  proc alertWithMessageText*(
+      t: typedesc[NXAlert],
+      messageText: NSString,
+      defaultButton {.kw("defaultButton").}: NSString,
+      alternateButton {.kw("alternateButton").}: NSString,
+      otherButton {.kw("otherButton").}: NSString,
+      informativeText {.kw("informativeTextWithFormat").}: NSString,
+  ): NXAlert =
+    when false:
+      discard t
+    result = NXAlert.new()
+    if result.isNil:
+      return
+    result.setMessageText(messageText)
+    result.setInformativeText(informativeText)
+    if $defaultButton != "":
+      discard result.addButtonWithTitle(defaultButton)
+    if $alternateButton != "":
+      discard result.addButtonWithTitle(alternateButton)
+    if $otherButton != "":
+      discard result.addButtonWithTitle(otherButton)
+
+  method delegate*(self: NXAlert): NSObject =
+    if self.delegateId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.delegateId)
+
+  method setDelegate*(self: NXAlert, value: NSObject) =
+    self.delegateId = replacedOwnedId(self.delegateId, value.value)
+
+  method icon*(self: NXAlert): NSObject =
+    if self.iconId.isNil:
+      return NSObject(value: nil)
+    ownFromId[NSObject](self.iconId)
+
+  method setIcon*(self: NXAlert, value: NSObject) =
+    self.iconId = replacedOwnedId(self.iconId, value.value)
+
+  method messageText*(self: NXAlert): NSString =
+    if self.messageTextId.isNil:
+      return @ns""
+    ownFromId[NSString](self.messageTextId)
+
+  method setMessageText*(self: NXAlert, value: NSString) =
+    self.messageTextId = replacedOwnedId(self.messageTextId, value.value)
+    self.needsLayout = true
+
+  method informativeText*(self: NXAlert): NSString =
+    if self.informativeTextId.isNil:
+      return @ns""
+    ownFromId[NSString](self.informativeTextId)
+
+  method setInformativeText*(self: NXAlert, value: NSString) =
+    self.informativeTextId = replacedOwnedId(self.informativeTextId, value.value)
+    self.needsLayout = true
+
+  method accessoryView*(self: NXAlert): NXView =
+    if self.accessoryViewId.isNil:
+      return NXView(value: nil)
+    ownFromId[NXView](self.accessoryViewId)
+
+  method setAccessoryView*(self: NXAlert, value: NXView) =
+    self.accessoryViewId = replacedOwnedId(self.accessoryViewId, value.value)
+    self.needsLayout = true
+
+  method helpAnchor*(self: NXAlert): NSString =
+    if self.helpAnchorId.isNil:
+      return @ns""
+    ownFromId[NSString](self.helpAnchorId)
+
+  method setHelpAnchor*(self: NXAlert, value: NSString) =
+    self.helpAnchorId = replacedOwnedId(self.helpAnchorId, value.value)
+
+  method suppressionButton*(self: NXAlert): NXButton =
+    if self.suppressionButtonId.isNil:
+      return NXButton(value: nil)
+    ownFromId[NXButton](self.suppressionButtonId)
+
+  method showsSuppressionButton*(self: NXAlert): bool =
+    self.showsSuppression
+
+  method setShowsSuppressionButton*(self: NXAlert, value: bool) =
+    self.showsSuppression = value
+    if value and self.suppressionButtonId.isNil:
+      var button = NXButton.new()
+      button.setTitle(@ns"Do not show again")
+      self.suppressionButtonId = replacedOwnedId(self.suppressionButtonId, button.value)
+
+  method buttons*(self: NXAlert): NSArray[NXButton] =
+    if self.alertButtonsId.isNil:
+      return nsArray[NXButton]()
+    ownFromId[NSArray[NXButton]](self.alertButtonsId)
+
+  method addButtonWithTitle*(self: NXAlert, title: NSString): NXButton =
+    result = NXButton.new()
+    if result.isNil:
+      return
+    result.setTitle(title)
+    var buttons = self.buttons()
+    buttons.add(result)
+    self.alertButtonsId = replacedOwnedId(self.alertButtonsId, buttons.value)
+    self.needsLayout = true
+
+  method window*(self: NXAlert): NXWindow =
+    if self.alertWindowId.isNil:
+      return NXWindow(value: nil)
+    ownFromId[NXWindow](self.alertWindowId)
+
+  method layout*(self: NXAlert) =
+    self.needsLayout = false
+
+  method beginSheetModalForWindow*(
+      self: NXAlert,
+      window: NXWindow,
+      modalDelegate {.kw("modalDelegate").}: NSObject,
+      didEndSelector {.kw("didEndSelector").}: SEL,
+      contextInfo {.kw("contextInfo").}: pointer,
+  ) =
+    discard contextInfo
+    self.alertWindowId = replacedOwnedId(self.alertWindowId, window.value)
+    self.sheetDelegateId = replacedOwnedId(self.sheetDelegateId, modalDelegate.value)
+    self.sheetDidEnd = didEndSelector
+
+  method runModal*(self: NXAlert): int =
+    let count = self.buttons().len
+    if count <= 1:
+      return NSAlertFirstButtonReturn
+    if count == 2:
+      return NSAlertSecondButtonReturn
+    NSAlertThirdButtonReturn
+
+  method dealloc(self: NXAlert) {.used.} =
+    self.delegateId = replacedOwnedId(self.delegateId, nil)
+    self.iconId = replacedOwnedId(self.iconId, nil)
+    self.messageTextId = replacedOwnedId(self.messageTextId, nil)
+    self.informativeTextId = replacedOwnedId(self.informativeTextId, nil)
+    self.accessoryViewId = replacedOwnedId(self.accessoryViewId, nil)
+    self.helpAnchorId = replacedOwnedId(self.helpAnchorId, nil)
+    self.suppressionButtonId = replacedOwnedId(self.suppressionButtonId, nil)
+    self.alertButtonsId = replacedOwnedId(self.alertButtonsId, nil)
+    self.alertWindowId = replacedOwnedId(self.alertWindowId, nil)
+    self.sheetDelegateId = replacedOwnedId(self.sheetDelegateId, nil)
+    discard callSuperIdFrom(NXAlert, self, getSelector("dealloc"))
+
+objcImpl:
   type NXApplication* = object of NXResponder
     appWindows: seq[ID]
     appRunning: bool
@@ -1059,13 +1864,19 @@ type
   NSResponder* = NXResponder
   NSView* = NXView
   NSControl* = NXControl
+  NSCell* = NXCell
+  NSActionCell* = NXActionCell
+  NSButtonCell* = NXButtonCell
   NSTextField* = NXTextField
   NSSecureTextField* = NXSecureTextField
   NSSearchField* = NXSearchField
+  NSClipView* = NXClipView
+  NSCollectionView* = NXCollectionView
   NSButton* = NXButton
   NSBox* = NXBox
   NSWindow* = NXWindow
   NSPanel* = NXPanel
+  NSAlert* = NXAlert
   NSApplication* = NXApplication
 
 proc new*(t: typedesc[NSView]): NSView =
@@ -1081,6 +1892,33 @@ proc new*(t: typedesc[NSControl]): NSControl =
   when false:
     discard t
   var allocated = NSControl.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
+proc new*(t: typedesc[NSCell]): NSCell =
+  when false:
+    discard t
+  var allocated = NSCell.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
+proc new*(t: typedesc[NSActionCell]): NSActionCell =
+  when false:
+    discard t
+  var allocated = NSActionCell.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
+proc new*(t: typedesc[NSButtonCell]): NSButtonCell =
+  when false:
+    discard t
+  var allocated = NSButtonCell.alloc()
   result = allocated.init()
   allocated.value = nil
   if result.isNil:
@@ -1108,6 +1946,24 @@ proc new*(t: typedesc[NSSearchField]): NSSearchField =
   when false:
     discard t
   var allocated = NSSearchField.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
+proc new*(t: typedesc[NSClipView]): NSClipView =
+  when false:
+    discard t
+  var allocated = NSClipView.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
+proc new*(t: typedesc[NSCollectionView]): NSCollectionView =
+  when false:
+    discard t
+  var allocated = NSCollectionView.alloc()
   result = allocated.init()
   allocated.value = nil
   if result.isNil:
@@ -1144,6 +2000,15 @@ proc new*(t: typedesc[NSPanel]): NSPanel =
   when false:
     discard t
   var allocated = NSPanel.alloc()
+  result = allocated.init()
+  allocated.value = nil
+  if result.isNil:
+    return
+
+proc new*(t: typedesc[NSAlert]): NSAlert =
+  when false:
+    discard t
+  var allocated = NSAlert.alloc()
   result = allocated.init()
   allocated.value = nil
   if result.isNil:
