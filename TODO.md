@@ -30,13 +30,13 @@ Sorted by implementation priority (most useful first).
 - [x] NSWindow - Top-level window container for views and events.
 
 ## P1: Core UI and app-building essentials (64)
-- [ ] NSActionCell - Cell subclass that supports target/action behavior.
-- [ ] NSAlert - Modal/non-modal alert dialog API.
+- [x] NSActionCell - Cell subclass that supports target/action behavior.
+- [x] NSAlert - Modal/non-modal alert dialog API.
 - [x] NSBox - Framed container view with title/border styles.
-- [ ] NSButtonCell - Cell used by NSButton-style controls.
+- [x] NSButtonCell - Cell used by NSButton-style controls.
 <!-- - [ ] NSCell - Legacy lightweight drawing/editing object for controls. -->
-- [ ] NSClipView - Viewport that clips content inside a scroll view.
-- [ ] NSCollectionView - Grid/list collection control with reusable items.
+- [x] NSClipView - Viewport that clips content inside a scroll view.
+- [x] NSCollectionView - Grid/list collection control with reusable items.
 - [ ] NSCollectionViewItem - Controller-like item object for collection entries.
 - [ ] NSColor - Color object supporting multiple color spaces.
 - [ ] NSColorSpace - Color space definition used by NSColor and rendering.

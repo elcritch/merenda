@@ -346,3 +346,85 @@ suite "nutella appkit hello world":
     root.value = nil
     window.value = nil
     app.value = nil
+
+  test "next core ui classes provide aligned appkit api":
+    var cell = NSCell.new()
+    check(cell.isKindOfClass(NSCell))
+    check(getClassName(cell).startsWith("NXCell"))
+    check(cell.stringValue() == @ns"")
+    cell.setStringValue(@ns"42")
+    check(cell.intValue() == 42.cint)
+    check(cell.nextState() == NSOnState)
+    cell.setAllowsMixedState(true)
+    cell.setState(NSMixedState)
+    check(cell.state() == NSMixedState)
+
+    var actionCell = NSActionCell.new()
+    check(actionCell.isKindOfClass(NSActionCell))
+    check(actionCell.isKindOfClass(NSCell))
+    actionCell.setTag(17)
+    check(actionCell.tag() == 17)
+
+    var buttonCell = NSButtonCell.new()
+    check(buttonCell.isKindOfClass(NSButtonCell))
+    check(buttonCell.isKindOfClass(NSActionCell))
+    check(buttonCell.title() == @ns"Button")
+    buttonCell.setTitle(@ns"Cell Button")
+    check(buttonCell.title() == @ns"Cell Button")
+    buttonCell.setAllowsMixedState(true)
+    buttonCell.setState(NSOffState)
+    check(buttonCell.state() == NSOffState)
+    buttonCell.setState(NSOnState)
+    check(buttonCell.state() == NSOnState)
+    buttonCell.setState(NSMixedState)
+    check(buttonCell.state() == NSMixedState)
+
+    var clip = NSClipView.new()
+    check(clip.isKindOfClass(NSClipView))
+    check(clip.isKindOfClass(NSView))
+    clip.setFrame(0, 0, 100, 80)
+    var doc = newView(0, 0, 300, 240)
+    clip.setDocumentView(doc)
+    let docRect = clip.documentRect()
+    check(docRect.size.width == 300.0)
+    check(docRect.size.height == 240.0)
+    clip.scrollToPoint(nsPoint(999, 999))
+    let visible = clip.documentVisibleRect()
+    check(visible.origin == nsPoint(200, 160))
+    check(visible.size == nsSize(100, 80))
+
+    var cv = NSCollectionView.new()
+    check(cv.isKindOfClass(NSCollectionView))
+    check(cv.isKindOfClass(NSView))
+    cv.setSelectable(false)
+    cv.setMinItemSize(nsSize(64, 64))
+    cv.setMaxItemSize(nsSize(256, 256))
+    cv.setMaxNumberOfRows(5)
+    cv.setMaxNumberOfColumns(4)
+    check(not cv.isSelectable())
+    check(cv.minItemSize() == nsSize(64, 64))
+    check(cv.maxItemSize() == nsSize(256, 256))
+    check(cv.maxNumberOfRows() == 5)
+    check(cv.maxNumberOfColumns() == 4)
+
+    var alert = NSAlert.new()
+    check(alert.isKindOfClass(NSAlert))
+    check(getClassName(alert).startsWith("NXAlert"))
+    alert.setAlertStyle(NSCriticalAlertStyle)
+    alert.setMessageText(@ns"Danger")
+    alert.setInformativeText(@ns"Disk is full")
+    discard alert.addButtonWithTitle(@ns"OK")
+    discard alert.addButtonWithTitle(@ns"Cancel")
+    check(alert.alertStyle() == NSCriticalAlertStyle)
+    check(alert.messageText() == @ns"Danger")
+    check(alert.informativeText() == @ns"Disk is full")
+    check(alert.buttons().len == 2)
+    check(alert.runModal() == NSAlertSecondButtonReturn)
+
+    alert.value = nil
+    cv.value = nil
+    doc.value = nil
+    clip.value = nil
+    buttonCell.value = nil
+    actionCell.value = nil
+    cell.value = nil
