@@ -1,6 +1,8 @@
 import ./runtime
 import ./responders
 
+export responders
+
 proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool
 proc detachSubviews*(view: NSObject)
 
