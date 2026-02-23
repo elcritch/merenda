@@ -4,8 +4,6 @@ import pkg/vmath
 
 import figdraw/commons
 import figdraw/fignodes
-#import figdraw/figrender as figrender
-#import figdraw/windowing/siwinshim as siwinshim
 
 import ../objc
 import ./types

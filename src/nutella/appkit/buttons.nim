@@ -156,11 +156,47 @@ objcImpl:
     discard callSuperIdFrom(NSButton, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSButton]): NSButton =
-  when false:
-    discard t
   var allocated = NSButton.alloc()
   result = allocated.init()
   allocated.value = nil
   if result.isNil:
     return
+
+proc setTitle*(button: NSButton, value: string) =
+  button.setTitle(ns(value))
+
+proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
+  if cb.isNil:
+    button.onClick = nil
+  else:
+    button.onClick = proc(sender: ID) =
+      cb(ownFromId[NSButton](sender))
+
+proc click*(button: NSButton) =
+  if not button.enabled():
+    return
+  if button.mixedAllowed():
+    case button.stateValue()
+    of NSOffState:
+      button.stateValue = NSOnState
+    of NSOnState:
+      button.stateValue = NSMixedState
+    else:
+      button.stateValue = NSOffState
+  else:
+    if button.stateValue() == NSOnState:
+      button.stateValue = NSOffState
+    else:
+      button.stateValue = NSOnState
+  let cb = button.onClick()
+  if not cb.isNil:
+    cb(button.value)
+
+proc getPeriodicDelay*(button: NSButton, delay: var cfloat, interval: var cfloat) =
+  if button.isNil:
+    delay = 0.0
+    interval = 0.0
+    return
+  delay = button.periodicDelay()
+  interval = button.periodicInterval()
 

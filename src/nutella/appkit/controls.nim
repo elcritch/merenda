@@ -119,6 +119,7 @@ proc new*(t: typedesc[NSControl]): NSControl =
   var allocated = NSControl.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
+
+proc setStringValue*(control: NSControl, value: string) =
+  control.setStringValue(ns(value))
 
