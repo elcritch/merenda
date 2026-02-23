@@ -25,6 +25,9 @@ import std/[macros, strutils]
 {.passL: "-lobjc".}
 template impl*(x: untyped) {.pragma.}
 
+const NutellaNsToNxRemapEnabled* =
+  defined(macosx) and not defined(nutellaDisableNsToNxRemap)
+
 const
   YES* = true
   NO* = false
@@ -446,12 +449,31 @@ proc getRawClassName*(obj: ID): string =
 template getClassName*[T: NSObject](obj: T): string =
   $object_getClassName(obj.value)
 
+proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
+  result = name
+  when NutellaNsToNxRemapEnabled:
+    if name.len > 2 and name.startsWith("NS"):
+      case name
+      of "NSObject", "NSProxy", "NSCopying", "NSMutableCopying", "NSCoding",
+          "NSSecureCoding":
+        discard
+      else:
+        result = "NX" & name[2 .. ^1]
+
 proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
+proc getClassByName*(name: string): ObjcClass =
+  result = objc_getClass(name.cstring)
+  when NutellaNsToNxRemapEnabled:
+    if result.isNil:
+      let mapped = nutellaNsToNxRuntimeName(name)
+      if mapped != name:
+        result = objc_getClass(mapped.cstring)
+
 template getClass*(name: string): untyped =
-  objc_getClass(name.cstring)
+  getClassByName(name)
 
 template getClass*[T: NSObject](t: typedesc[T]): untyped =
-  objc_getClass(($T).cstring)
+  getClassByName($T)
 
 proc object_setClass(obj: ID, cls: ID): ObjcClass {.cdecl, importc.}
 template setClass*(obj: ID, cls: ObjcClass): untyped =
@@ -657,11 +679,19 @@ proc classNamesForImage*(image: string): seq[string] =
     result[i] = $classes[i]
 
 proc objc_getProtocol(name: cstring): Protocol {.cdecl, importc.}
+proc getProtocolByName*(name: string): Protocol =
+  result = objc_getProtocol(name.cstring)
+  when NutellaNsToNxRemapEnabled:
+    if result.isNil:
+      let mapped = nutellaNsToNxRuntimeName(name)
+      if mapped != name:
+        result = objc_getProtocol(mapped.cstring)
+
 template getProtocol*(name: string): untyped =
-  objc_getProtocol(name.cstring)
+  getProtocolByName(name)
 
 template getProtocol*[T: ProtocolPrototype](t: typedesc[T]): untyped =
-  objc_getProtocol(($T).cstring)
+  getProtocolByName($T)
 
 proc objc_copyProtocolList(outCount: var cuint): ptr Protocol {.cdecl, importc.}
 proc protocolList*(): seq[Protocol] =
@@ -883,7 +913,7 @@ template storeWeak*(location: var ID, obj: ID): untyped =
 # These procs should better be inlined, but there's a Nim bug #5945
 
 proc objcClass*(name: static[string]): ObjcClass =
-  objc_getClass(name)
+  getClassByName(name)
 
 proc objcClass*[T](t: typedesc[T]): ObjcClass {.inline.} =
   objcClass($T)
