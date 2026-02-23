@@ -49,7 +49,7 @@ objcImpl:
     result.frame =
       nsRect(x.float32, y.float32, max(width.float32, 1.0), max(height.float32, 1.0))
 
-  method setContentView(self: NSWindow, view: NSView) =
+  method setContentView*(self: NSWindow, view: NSView) =
     if self.isNil:
       return
     if not self.wContentView.isNil and self.wContentView != view.value:
@@ -73,7 +73,7 @@ objcImpl:
       view.setNextResponder(asType[NSResponder](self))
     self.wContentView = replacedOwnedId(self.wContentView(), view.value)
 
-  method contentView(self: NSWindow): NSView =
+  method contentView*(self: NSWindow): NSView =
     if self.wContentView.isNil:
       return NSView(value: nil)
     result = ownFromId[NSView](self.wContentView)

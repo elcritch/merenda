@@ -1,15 +1,27 @@
+import figdraw/commons
+import figdraw/fignodes
+import figdraw/figrender as figrender
+import figdraw/windowing/siwinshim as siwinshim
+
+import ./runtime
+import ./views
+import ./windows
+import ./clipviews
+import ./buttons
+
 proc ensureContentView(window: NSWindow): NSView =
-  let cv = window.windowContentView()
+  let cv = window.contentView()
   if not cv.isNil:
     return ownFromId[NSView](cv)
 
-  let frame = window.windowFrame()
+  let frame = window.frame()
   var rootAlloc = NSView.alloc()
   var root = rootAlloc.initWithFrame(
     0.cfloat, 0.cfloat, frame.size.width.cfloat, frame.size.height.cfloat
   )
   rootAlloc.value = nil
-  window.windowContentView = replacedOwnedId(window.windowContentView(), root.value)
+  #window.contentView = replacedOwnedId(window.contentView(), root.value)
+  window.wContentView = replacedOwnedId(window.contentView(), root.value)
   result = root
 
 proc noRenderShadows(): array[ShadowCount, RenderShadow] =
