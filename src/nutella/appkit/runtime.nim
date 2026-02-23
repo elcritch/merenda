@@ -1,3 +1,12 @@
+import std/[math, os, strutils, unicode]
+import pkg/chroma
+import pkg/vmath
+
+import figdraw/commons
+import figdraw/fignodes
+#import figdraw/figrender as figrender
+#import figdraw/windowing/siwinshim as siwinshim
+
 import ../objc
 import ./types
 
@@ -135,19 +144,6 @@ template callSuperIdFrom*(currentType: typedesc, obj: NSObject, op: SEL): ID =
       superObj, op
     )
 
-
-proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool =
-  if viewId.isNil or ancestorId.isNil:
-    return false
-  var currentId = viewId
-  while not currentId.isNil:
-    if currentId == ancestorId:
-      return true
-    let current = ownFromId[NSView](currentId)
-    if current.isNil:
-      break
-    currentId = current.viewSuperview()
-  false
 
 proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject): bool =
   if target.isNil or cast[pointer](action).isNil:
