@@ -27,6 +27,7 @@ template impl*(x: untyped) {.pragma.}
 
 const NutellaNsToNxRemapEnabled* =
   defined(macosx) and not defined(nutellaDisableNsToNxRemap)
+const NutellaUseCustomNxObjectRoot* = defined(nutellaCustomNxObjectRoot)
 
 const
   YES* = true
@@ -456,6 +457,9 @@ proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
   when NutellaNsToNxRemapEnabled:
     if name.len > 2 and name.startsWith("NS"):
       case name
+      of "NSObject":
+        when NutellaUseCustomNxObjectRoot:
+          result = "NXObject"
       of "NSProxy", "NSCopying", "NSMutableCopying", "NSCoding", "NSSecureCoding":
         discard
       else:
@@ -558,8 +562,8 @@ proc nxObjectInitialize(self: ID, cmd: SEL) {.cdecl, raises: [].} =
   discard cmd
 
 proc ensureNutellaRootClasses*() =
-  ## Bootstraps a standalone NXObject root class when NS->NX remap is enabled.
-  when NutellaNsToNxRemapEnabled:
+  ## Bootstraps a standalone NXObject root class when custom root mode is enabled.
+  when NutellaUseCustomNxObjectRoot:
     let nxObjectName = "NXObject"
     var nxObject = objc_getClass(nxObjectName.cstring)
     if nxObject.isNil:

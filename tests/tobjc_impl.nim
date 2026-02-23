@@ -299,7 +299,8 @@ suite "objcImpl runtime generation":
       let cls = getClass(NSRuntimeMappedClass)
       check(not cls.isNil)
       check(getName(cls) == "NXRuntimeMappedClass")
-      check(getName(getSuperclass(cls)) == "NXObject")
+      let expectedSuper = when NutellaUseCustomNxObjectRoot: "NXObject" else: "NSObject"
+      check(getName(getSuperclass(cls)) == expectedSuper)
 
       var o = NSRuntimeMappedClass.new()
       check(not o.isNil)

@@ -40,7 +40,8 @@ suite "objc core runtime ownership fundamentals":
   test "typedesc new works for NSObject":
     var o = NSObject.new()
     check(not o.isNil)
-    let expectedClassName = when NutellaNsToNxRemapEnabled: "NXObject" else: "NSObject"
+    let expectedClassName =
+      when NutellaUseCustomNxObjectRoot: "NXObject" else: "NSObject"
     check(getClassName(o) == expectedClassName)
 
   test "typedesc new works for runtime NSObject subtype":
