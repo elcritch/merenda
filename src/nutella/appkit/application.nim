@@ -33,7 +33,7 @@ objcImpl:
       windows.add(retainId(window.value))
       self.appWindows = windows
     window.setNextResponder(asType[NSResponder](self))
-    window.windowVisibleRequested = true
+    window.windowVisibleRequested true
 
   method run(self: NSApplication) =
     discard runApplicationFrames(self, -1)
@@ -83,7 +83,7 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int =
         nativeWindow.redraw()
         nativeWindow.step()
       if (not nativeWindow.isNil) and nativeWindow.closed():
-        window.windowClosed = true
+        window.windowClosed true
         removeOwnedIdAt(windows, i)
         continue
 
@@ -127,7 +127,7 @@ proc addWindow*(app: NSApplication, window: NSWindow) =
     windows.add(retainId(window.value))
     app.appWindows = windows
   window.setNextResponder(asType[NSResponder](app))
-  window.windowVisibleRequested = true
+  window.windowVisibleRequested true
 
 proc windows*(app: NSApplication): seq[NSWindow] =
   let appWindows = app.appWindows()

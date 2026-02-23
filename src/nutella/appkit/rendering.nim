@@ -647,7 +647,7 @@ proc renderWindow(window: NSWindow) =
   if abs(frame.size.width - logicalSize.x) > 0.01 or
       abs(frame.size.height - logicalSize.y) > 0.01:
     frame.size = nsSize(logicalSize.x, logicalSize.y)
-    window.windowFrame = frame
+    window.windowFrame frame
   let root = ensureContentView(window)
   root.setFrame(0.cfloat, 0.cfloat, logicalSize.x.cfloat, logicalSize.y.cfloat)
   var renders = buildWindowRenders(window)
@@ -676,11 +676,11 @@ proc cleanupFailedWindowInit(window: NSWindow) =
       siwinshim.close(window.windowNativeWindow())
     except Exception:
       discard
-  window.windowRenderer = nil
-  window.windowNativeWindow = nil
-  window.windowNativeReady = false
-  window.windowVisibleRequested = false
-  window.windowClosed = true
+  window.windowRenderer nil
+  window.windowNativeWindow nil
+  window.windowNativeReady false
+  window.windowVisibleRequested false
+  window.windowClosed true
 
 proc ensureNativeWindow*(window: NSWindow) =
   if window.windowNativeReady():
@@ -691,20 +691,23 @@ proc ensureNativeWindow*(window: NSWindow) =
     let size =
       ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
 
-    window.windowNativeWindow =
+    window.windowNativeWindow(
       siwinshim.newSiwinWindow(size = size, title = $window.windowTitle(), vsync = true)
-    window.windowAutoScale = window.windowNativeWindow().configureUiScale()
-    window.windowRenderer = figrender.newFigRenderer(
-      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+    )
+    window.windowAutoScale(window.windowNativeWindow().configureUiScale())
+    window.windowRenderer(
+      figrender.newFigRenderer(
+        atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+      )
     )
     var renderer = window.windowRenderer()
     renderer.setupBackend(window.windowNativeWindow())
-    window.windowRenderer = renderer
+    window.windowRenderer renderer
 
     window.windowNativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
       onClose: proc(e: siwinshim.CloseEvent) =
         discard e
-        window.windowClosed = true,
+        window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
         window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
@@ -728,7 +731,7 @@ proc ensureNativeWindow*(window: NSWindow) =
 
     window.windowNativeWindow().firstStep()
     window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
-    window.windowNativeReady = true
+    window.windowNativeReady true
   except Exception as exc:
     cleanupFailedWindowInit(window)
     raise newException(CatchableError, "window backend init failed: " & exc.msg)
