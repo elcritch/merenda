@@ -2,7 +2,7 @@ import ./runtime
 
 objcImpl:
 
-  type NXCollectionView* = object of NXView
+  type NSCollectionView* = object of NSView
     contentId: ID
     itemPrototypeId: ID
     selectable {.set: setSelectable, get: isSelectable.}: bool
@@ -14,9 +14,9 @@ objcImpl:
     allowsMulti {.set: setAllowsMultipleSelection, get: allowsMultipleSelection.}: bool
     selectionIndexesId: ID
 
-  method init*(self: var NXCollectionView): NXCollectionView =
-    result = asType[NXCollectionView](
-      callSuperIdFrom(NXCollectionView, self, getSelector("init"))
+  method init*(self: var NSCollectionView): NSCollectionView =
+    result = asType[NSCollectionView](
+      callSuperIdFrom(NSCollectionView, self, getSelector("init"))
     )
     if result.isNil:
       return
@@ -31,55 +31,55 @@ objcImpl:
     result.allowsMulti = false
     result.selectionIndexesId = nil
 
-  method content*(self: NXCollectionView): NSArray[NSObject] =
+  method content*(self: NSCollectionView): NSArray[NSObject] =
     if self.contentId.isNil:
       return nsArray[NSObject]()
     ownFromId[NSArray[NSObject]](self.contentId)
 
-  method setContent*(self: NXCollectionView, value: NSArray[NSObject]) =
+  method setContent*(self: NSCollectionView, value: NSArray[NSObject]) =
     self.contentId = replacedOwnedId(self.contentId, value.value)
 
-  method itemPrototype*(self: NXCollectionView): NSObject =
+  method itemPrototype*(self: NSCollectionView): NSObject =
     if self.itemPrototypeId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.itemPrototypeId)
 
-  method setItemPrototype*(self: NXCollectionView, value: NSObject) =
+  method setItemPrototype*(self: NSCollectionView, value: NSObject) =
     self.itemPrototypeId = replacedOwnedId(self.itemPrototypeId, value.value)
 
-  method backgroundColors*(self: NXCollectionView): NSArray[NSObject] =
+  method backgroundColors*(self: NSCollectionView): NSArray[NSObject] =
     if self.backgroundColorsId.isNil:
       return nsArray[NSObject]()
     ownFromId[NSArray[NSObject]](self.backgroundColorsId)
 
-  method setBackgroundColors*(self: NXCollectionView, value: NSArray[NSObject]) =
+  method setBackgroundColors*(self: NSCollectionView, value: NSArray[NSObject]) =
     self.backgroundColorsId = replacedOwnedId(self.backgroundColorsId, value.value)
 
-  method selectionIndexes*(self: NXCollectionView): NSObject =
+  method selectionIndexes*(self: NSCollectionView): NSObject =
     if self.selectionIndexesId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.selectionIndexesId)
 
-  method setSelectionIndexes*(self: NXCollectionView, value: NSObject) =
+  method setSelectionIndexes*(self: NSCollectionView, value: NSObject) =
     self.selectionIndexesId = replacedOwnedId(self.selectionIndexesId, value.value)
 
-  method isFirstResponder*(self: NXCollectionView): bool =
+  method isFirstResponder*(self: NSCollectionView): bool =
     false
 
   method newItemForRepresentedObject*(
-      self: NXCollectionView, representedObject {.kw("object").}: NSObject
+      self: NSCollectionView, representedObject {.kw("object").}: NSObject
   ): NSObject =
     discard representedObject
     if self.itemPrototypeId.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.itemPrototypeId)
 
-  method dealloc(self: NXCollectionView) {.used.} =
+  method dealloc(self: NSCollectionView) {.used.} =
     self.contentId = replacedOwnedId(self.contentId, nil)
     self.itemPrototypeId = replacedOwnedId(self.itemPrototypeId, nil)
     self.backgroundColorsId = replacedOwnedId(self.backgroundColorsId, nil)
     self.selectionIndexesId = replacedOwnedId(self.selectionIndexesId, nil)
-    discard callSuperIdFrom(NXCollectionView, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSCollectionView, self, getSelector("dealloc"))
 
 
 proc new*(t: typedesc[NSCollectionView]): NSCollectionView =

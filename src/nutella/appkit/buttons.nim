@@ -4,7 +4,7 @@ type NSButtonCallbackProc = proc(sender: ID)
 
 objcImpl:
 
-  type NXButton* = object of NXControl
+  type NSButton* = object of NSControl
     titleId: ID
     stateValue {.get: state.}: int
     mixedAllowed {.get: allowsMixedState.}: bool
@@ -21,8 +21,8 @@ objcImpl:
     periodicIntervalSec: cfloat
     onClick: NSButtonCallbackProc
 
-  method init*(self: var NXButton): NXButton =
-    result = asType[NXButton](callSuperIdFrom(NXButton, self, getSelector("init")))
+  method init*(self: var NSButton): NSButton =
+    result = asType[NSButton](callSuperIdFrom(NSButton, self, getSelector("init")))
     if result.isNil:
       return
     result.enabled = true
@@ -43,38 +43,38 @@ objcImpl:
     result.periodicIntervalSec = 0.0
     result.onClick = nil
 
-  method title*(self: NXButton): NSString =
+  method title*(self: NSButton): NSString =
     if self.titleId.isNil:
       return @ns""
     ownFromId[NSString](self.titleId)
 
-  method setTitle*(self: NXButton, value: NSString) =
+  method setTitle*(self: NSButton, value: NSString) =
     self.titleId = replacedOwnedId(self.titleId, value.value)
 
-  method keyEquivalent*(self: NXButton): NSString =
+  method keyEquivalent*(self: NSButton): NSString =
     if self.keyEqId.isNil:
       return @ns""
     ownFromId[NSString](self.keyEqId)
 
-  method setKeyEquivalent*(self: NXButton, value: NSString) =
+  method setKeyEquivalent*(self: NSButton, value: NSString) =
     self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
 
-  method alternateTitle*(self: NXButton): NSString =
+  method alternateTitle*(self: NSButton): NSString =
     if self.altTitleId.isNil:
       return @ns""
     ownFromId[NSString](self.altTitleId)
 
-  method setAlternateTitle*(self: NXButton, value: NSString) =
+  method setAlternateTitle*(self: NSButton, value: NSString) =
     self.altTitleId = replacedOwnedId(self.altTitleId, value.value)
 
-  method setState*(self: NXButton, value: cint) =
+  method setState*(self: NSButton, value: cint) =
     self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
 
-  method setAllowsMixedState*(self: NXButton, value: bool) =
+  method setAllowsMixedState*(self: NSButton, value: bool) =
     self.mixedAllowed = value
     self.stateValue = normalizeButtonState(self.stateValue, value)
 
-  method setNextState*(self: NXButton) =
+  method setNextState*(self: NSButton) =
     if self.mixedAllowed:
       case self.stateValue
       of NSOffState:
@@ -89,37 +89,37 @@ objcImpl:
       else:
         self.stateValue = NSOnState
 
-  method stringValue*(self: NXButton): NSString =
+  method stringValue*(self: NSButton): NSString =
     self.title()
 
-  method setStringValue*(self: NXButton, value: NSString) =
+  method setStringValue*(self: NSButton, value: NSString) =
     self.setTitle(value)
 
-  method intValue*(self: NXButton): cint =
+  method intValue*(self: NSButton): cint =
     self.state().cint
 
-  method integerValue*(self: NXButton): int =
+  method integerValue*(self: NSButton): int =
     self.state()
 
-  method floatValue*(self: NXButton): cfloat =
+  method floatValue*(self: NSButton): cfloat =
     self.state().cfloat
 
-  method doubleValue*(self: NXButton): cdouble =
+  method doubleValue*(self: NSButton): cdouble =
     self.state().cdouble
 
-  method setIntValue*(self: NXButton, value: cint) =
+  method setIntValue*(self: NSButton, value: cint) =
     self.setState(value)
 
-  method setIntegerValue*(self: NXButton, value: int) =
+  method setIntegerValue*(self: NSButton, value: int) =
     self.setState(value.cint)
 
-  method setFloatValue*(self: NXButton, value: cfloat) =
+  method setFloatValue*(self: NSButton, value: cfloat) =
     self.setState(value.int.cint)
 
-  method setDoubleValue*(self: NXButton, value: cdouble) =
+  method setDoubleValue*(self: NSButton, value: cdouble) =
     self.setState(value.int.cint)
 
-  method performClick*(self: NXButton, sender: NXResponder) =
+  method performClick*(self: NSButton, sender: NSResponder) =
     discard sender
     if not self.enabled:
       return
@@ -130,30 +130,30 @@ objcImpl:
     cb(self.value)
 
   method setPeriodicDelay*(
-      self: NXButton, delay: cfloat, interval {.kw("interval").}: cfloat
+      self: NSButton, delay: cfloat, interval {.kw("interval").}: cfloat
   ) =
     self.periodicDelaySec = max(delay, 0.0)
     self.periodicIntervalSec = max(interval, 0.0)
 
-  method periodicDelay*(self: NXButton): cfloat =
+  method periodicDelay*(self: NSButton): cfloat =
     self.periodicDelaySec
 
-  method periodicInterval*(self: NXButton): cfloat =
+  method periodicInterval*(self: NSButton): cfloat =
     self.periodicIntervalSec
 
-  method setButtonType*(self: NXButton, value: cint) =
+  method setButtonType*(self: NSButton, value: cint) =
     discard self
     discard value
 
-  method setTitleWithMnemonic*(self: NXButton, value: NSString) =
+  method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
 
-  method dealloc(self: NXButton) {.used.} =
+  method dealloc(self: NSButton) {.used.} =
     self.titleId = replacedOwnedId(self.titleId, nil)
     self.keyEqId = replacedOwnedId(self.keyEqId, nil)
     self.altTitleId = replacedOwnedId(self.altTitleId, nil)
     self.onClick = nil
-    discard callSuperIdFrom(NXButton, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSButton, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSButton]): NSButton =
   when false:

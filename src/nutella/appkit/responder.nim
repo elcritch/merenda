@@ -2,40 +2,40 @@ import ../runtime
 
 objcImpl:
 
-  type NXResponder* = object of NSObject
+  type NSResponder* = object of NSObject
     nextResp: ID
 
-  method init*(self: var NXResponder): NXResponder =
+  method init*(self: var NSResponder): NSResponder =
     result =
-      asType[NXResponder](callSuperIdFrom(NXResponder, self, getSelector("init")))
+      asType[NSResponder](callSuperIdFrom(NSResponder, self, getSelector("init")))
     if result.isNil:
       return
     result.nextResp = nil
 
-  method nextResponder*(self: NXResponder): NXResponder =
+  method nextResponder*(self: NSResponder): NSResponder =
     if self.nextResp.isNil:
-      return NXResponder(value: nil)
-    ownFromId[NXResponder](self.nextResp)
+      return NSResponder(value: nil)
+    ownFromId[NSResponder](self.nextResp)
 
-  method setNextResponder*(self: NXResponder, next: NXResponder) =
+  method setNextResponder*(self: NSResponder, next: NSResponder) =
     if self.isNil:
       return
     self.nextResp = replacedOwnedId(self.nextResp, next.value)
 
-  method acceptsFirstResponder*(self: NXResponder): bool =
+  method acceptsFirstResponder*(self: NSResponder): bool =
     discard self
     false
 
-  method becomeFirstResponder*(self: NXResponder): bool =
+  method becomeFirstResponder*(self: NSResponder): bool =
     discard self
     true
 
-  method resignFirstResponder*(self: NXResponder): bool =
+  method resignFirstResponder*(self: NSResponder): bool =
     discard self
     true
 
   method tryToPerform*(
-      self: NXResponder, action: SEL, sender {.kw("with").}: NSObject
+      self: NSResponder, action: SEL, sender {.kw("with").}: NSObject
   ): bool =
     if self.isNil:
       return false
@@ -48,17 +48,17 @@ objcImpl:
       inc hopCount
     false
 
-  method doCommandBySelector*(self: NXResponder, action: SEL) =
+  method doCommandBySelector*(self: NSResponder, action: SEL) =
     let next = self.nextResponder()
     if not next.isNil and next.tryToPerform(action, self):
       return
     self.noResponderFor(action)
 
-  method noResponderFor*(self: NXResponder, action: SEL) =
+  method noResponderFor*(self: NSResponder, action: SEL) =
     discard self
     discard action
 
-  method dealloc(self: NXResponder) {.used.} =
+  method dealloc(self: NSResponder) {.used.} =
     self.nextResp = replacedOwnedId(self.nextResp, nil)
     clearIvarRefs(self)
-    discard callSuperIdFrom(NXResponder, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSResponder, self, getSelector("dealloc"))

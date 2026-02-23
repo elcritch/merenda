@@ -1,3 +1,8 @@
+import ../objc
+import ./types
+
+export objc, types
+
 proc toFigColor*(c: NSColor): Color {.inline.} =
   color(c.r, c.g, c.b, c.a)
 
@@ -138,7 +143,7 @@ proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool =
   while not currentId.isNil:
     if currentId == ancestorId:
       return true
-    let current = ownFromId[NXView](currentId)
+    let current = ownFromId[NSView](currentId)
     if current.isNil:
       break
     currentId = current.viewSuperview()

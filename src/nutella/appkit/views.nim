@@ -1,7 +1,7 @@
 import ./runtime
 
 objcImpl:
-  type NXView* = object of NXResponder
+  type NSView* = object of NSResponder
     viewFrame: NSRect
     viewBackgroundColor: NSColor
     viewHidden: bool
@@ -18,8 +18,8 @@ objcImpl:
     viewTag: int
     viewSubviews: seq[ID]
 
-  method init*(self: var NXView): NXView =
-    result = asType[NXView](callSuperIdFrom(NXView, self, getSelector("init")))
+  method init*(self: var NSView): NSView =
+    result = asType[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
     if result.isNil:
       return
     result.viewFrame = nsRect(0, 0, 100, 100)
@@ -35,12 +35,12 @@ objcImpl:
     result.viewSubviews = @[]
 
   method initWithFrame*(
-      self: var NXView,
+      self: var NSView,
       x: cfloat,
       y {.kw("y").}: cfloat,
       width {.kw("width").}: cfloat,
       height {.kw("height").}: cfloat,
-  ): NXView =
+  ): NSView =
     result = self.init()
     if result.isNil:
       return
@@ -48,7 +48,7 @@ objcImpl:
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
   method setFrame*(
-      self: NXView,
+      self: NSView,
       x: cfloat,
       y {.kw("y").}: cfloat,
       width {.kw("width").}: cfloat,
@@ -58,7 +58,7 @@ objcImpl:
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
   method setBackgroundColor(
-      self: NXView,
+      self: NSView,
       r: cfloat,
       g {.kw("green").}: cfloat,
       b {.kw("blue").}: cfloat,
@@ -66,13 +66,13 @@ objcImpl:
   ) =
     self.viewBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
-  method setHidden(self: NXView, hidden: bool) =
+  method setHidden(self: NSView, hidden: bool) =
     self.viewHidden = hidden
 
-  method dealloc(self: NXView) {.used.} =
+  method dealloc(self: NSView) {.used.} =
     detachSubviews(self)
     clearIvarRefs(self)
-    discard callSuperIdFrom(NXView, self, getSelector("dealloc"))
+    discard callSuperIdFrom(NSView, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSView]): NSView =
   when false:
