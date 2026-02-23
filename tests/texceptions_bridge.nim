@@ -1,6 +1,17 @@
 import std/unittest
 import nutella/objc
 
+objcImpl:
+  type NXRaiseInObjcMethodProtocol =
+    concept self
+        method boom(self: NXRaiseInObjcMethodProtocol)
+
+  type NXRaiseInObjcMethodClass {.impl: NXRaiseInObjcMethodProtocol.} = object of NSObject
+
+  method boom(self: NXRaiseInObjcMethodClass) =
+    discard self
+    raise newException(ValueError, "raised from objc method")
+
 suite "Objective-C and Nim exception bridge":
   test "objcExceptionFromParts builds an Obj-C exception object with readable fields":
     let objcException = objcExceptionFromParts("ManualObjcName", "manual objc reason")
@@ -31,3 +42,15 @@ suite "Objective-C and Nim exception bridge":
     check(converted != nil)
     check(converted.objcName == "MarkerName")
     check(converted.objcReason == "MarkerReason")
+
+  test "Nim caller can catch Nim exception raised from objcImpl method":
+    var o = NXRaiseInObjcMethodClass.new()
+    var caught: ref ValueError
+
+    try:
+      o.boom()
+    except ValueError as e:
+      caught = e
+
+    check(caught != nil)
+    check(caught.msg == "raised from objc method")
