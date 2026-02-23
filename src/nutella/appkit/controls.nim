@@ -14,7 +14,8 @@ objcImpl:
     alignment: NSTextAlignment
 
   method init*(self: var NSControl): NSControl =
-    result = asType[NSControl](callSuperIdFrom(NSControl, self, getSelector("init")))
+    result = asType[NSControl](callSuperIdFrom(NSControl, self, @selector("init")))
+
     if result.isNil: return
     result.enabled = true
     result.continuous = false
