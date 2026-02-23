@@ -76,7 +76,7 @@ proc normalizeButtonState*(value: int, allowsMixedState: bool): int {.inline.} =
     return NSOnState
   NSOffState
 
-proc stripMnemonicMarkers(value: NSString): NSString =
+proc stripMnemonicMarkers*(value: NSString): NSString =
   let src = $value
   var i = 0
   var dst = newStringOfCap(src.len)
@@ -142,7 +142,6 @@ template callSuperIdFrom*(currentType: typedesc, obj: NSObject, op: SEL): ID =
       superObj, op
     )
 
-
 proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject): bool =
   if target.isNil or cast[pointer](action).isNil:
     return false
@@ -165,4 +164,3 @@ proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject):
     true
   else:
     false
-

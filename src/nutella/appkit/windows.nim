@@ -10,33 +10,35 @@ import ./views
 export responders, views
 
 objcImpl:
-
   type NSWindow* = object of NSResponder
-    frame: NSRect
-    wTitleId: ID
-    wContentView: ID
-    wFirstResponder: ID
-    wNativeWindow: siwinshim.Window
-    wRenderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
-    wAutoScale: bool
-    wNativeReady: bool
-    wVisibleRequested: bool
-    wClosed: bool
+    xxFrame {.set: windowFrame, get: windowFrame.}: NSRect
+    xxTitle {.set: windowTitle, get: windowTitle.}: NSString
+    xxContentView {.set: windowContentView, get: windowContentView.}: ID
+    xxFirstResponder {.set: windowFirstResponder, get: windowFirstResponder.}: ID
+    xxNativeWindow {.set: windowNativeWindow, get: windowNativeWindow.}:
+      siwinshim.Window
+    xxRenderer {.set: windowRenderer, get: windowRenderer.}:
+      figrender.FigRenderer[siwinshim.SiwinRenderBackend]
+    xxAutoScale {.set: windowAutoScale, get: windowAutoScale.}: bool
+    xxNativeReady {.set: windowNativeReady, get: windowNativeReady.}: bool
+    xxVisibleRequested {.set: windowVisibleRequested, get: windowVisibleRequested.}:
+      bool
+    xxClosed {.set: windowClosed, get: windowClosed.}: bool
 
   method init*(self: var NSWindow): NSWindow =
     result = asType[NSWindow](callSuperIdFrom(NSWindow, self, getSelector("init")))
     if result.isNil:
       return
-    result.frame = nsRect(100, 100, 640, 420)
-    result.wTitleId = retainId(@ns"Nutella Window".value)
-    result.wContentView = nil
-    result.wFirstResponder = nil
-    result.wNativeWindow = nil
-    result.wRenderer = nil
-    result.wAutoScale = true
-    result.wNativeReady = false
-    result.wVisibleRequested = false
-    result.wClosed = false
+    result.xxFrame = nsRect(100, 100, 640, 420)
+    result.xxTitle = @ns"Nutella Window"
+    result.xxContentView = nil
+    result.xxFirstResponder = nil
+    result.xxNativeWindow = nil
+    result.xxRenderer = nil
+    result.xxAutoScale = true
+    result.xxNativeReady = false
+    result.xxVisibleRequested = false
+    result.xxClosed = false
 
   method initWithContentRect*(
       self: var NSWindow,
@@ -48,17 +50,17 @@ objcImpl:
     result = self.init()
     if result.isNil:
       return
-    result.frame =
+    result.xxFrame =
       nsRect(x.float32, y.float32, max(width.float32, 1.0), max(height.float32, 1.0))
 
   method setContentView*(self: NSWindow, view: NSView) =
     if self.isNil:
       return
-    if not self.wContentView.isNil and self.wContentView != view.value:
-      if self.wFirstResponder == self.wContentView or
-          isViewDescendantOf(self.wFirstResponder, self.wContentView):
-        self.wFirstResponder = replacedOwnedId(self.wFirstResponder, nil)
-      clearSuperviewRef(self.wContentView)
+    if not self.xxContentView.isNil and self.xxContentView != view.value:
+      if self.xxFirstResponder == self.xxContentView or
+          isViewDescendantOf(self.xxFirstResponder, self.xxContentView):
+        self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, nil)
+      clearSuperviewRef(self.xxContentView)
     if not view.isNil:
       let parentId = view.viewSuperview()
       if not parentId.isNil:
@@ -73,22 +75,17 @@ objcImpl:
               break
       view.viewSuperview = nil
       view.setNextResponder(asType[NSResponder](self))
-    self.wContentView = replacedOwnedId(self.wContentView(), view.value)
+    self.xxContentView = replacedOwnedId(self.xxContentView, view.value)
 
   method contentView*(self: NSWindow): NSView =
-    if self.wContentView.isNil:
+    if self.xxContentView.isNil:
       return NSView(value: nil)
-    result = ownFromId[NSView](self.wContentView)
-
-  method wTitle*(self: NSWindow): NSString =
-    if self.wTitleId.isNil:
-      return @ns""
-    ownFromId[NSString](self.wTitleId)
+    result = ownFromId[NSView](self.xxContentView)
 
   method firstResponder*(self: NSWindow): NSResponder =
-    if self.wFirstResponder.isNil:
+    if self.xxFirstResponder.isNil:
       return NSResponder(value: nil)
-    ownFromId[NSResponder](self.wFirstResponder)
+    ownFromId[NSResponder](self.xxFirstResponder)
 
   method makeFirstResponder*(self: NSWindow, responder: NSResponder): bool =
     if self.isNil:
@@ -96,10 +93,10 @@ objcImpl:
     var requested = responder
     if requested.isNil:
       requested = asType[NSResponder](self)
-    if self.wFirstResponder == requested.value:
+    if self.xxFirstResponder == requested.value:
       return true
 
-    let currentId = self.wFirstResponder()
+    let currentId = self.xxFirstResponder
     var current = ownFromId[NSResponder](currentId)
     if not current.isNil and not current.resignFirstResponder():
       return false
@@ -107,42 +104,40 @@ objcImpl:
     if not requested.acceptsFirstResponder() or not requested.becomeFirstResponder():
       if not current.isNil and current.acceptsFirstResponder() and
           current.becomeFirstResponder():
-        self.wFirstResponder =
-          replacedOwnedId(self.wFirstResponder(), current.value)
+        self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, current.value)
       return false
 
-    self.wFirstResponder =
-      replacedOwnedId(self.wFirstResponder(), requested.value)
+    self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, requested.value)
     true
 
   method acceptsFirstResponder*(self: NSWindow): bool =
     true
 
   method setTitle*(self: NSWindow, value: NSString) =
-    self.wTitleId = replacedOwnedId(self.wTitleId, value.value)
-    if self.wNativeReady and not self.wNativeWindow.isNil:
-      self.wNativeWindow.title = $value
+    self.xxTitle = value
+    if self.xxNativeReady and not self.xxNativeWindow.isNil:
+      self.xxNativeWindow.title = $value
 
   method setContentSize*(
       self: NSWindow, width: cfloat, height {.kw("height").}: cfloat
   ) =
-    var frame = self.frame()
+    var frame = self.xxFrame
     frame.size = nsSize(max(width.float32, 1.0), max(height.float32, 1.0))
-    self.frame = frame
-    if self.wNativeReady and not self.wNativeWindow.isNil:
-      self.wNativeWindow.size =
+    self.xxFrame = frame
+    if self.xxNativeReady and not self.xxNativeWindow.isNil:
+      self.xxNativeWindow.size =
         ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
 
   method setFrameOrigin*(self: NSWindow, x: cfloat, y {.kw("y").}: cfloat) =
-    var frame = self.frame()
+    var frame = self.xxFrame
     frame.origin = nsPoint(x.float32, y.float32)
-    self.frame = frame
+    self.xxFrame = frame
 
-  method makeKeyAndOrderFront(self: NSWindow, sender: NSObject) =
+  method makeKeyAndOrderFront*(self: NSWindow, sender: NSObject) =
     discard sender
     if self.isNil:
       return
-    self.wVisibleRequested = true
+    self.xxVisibleRequested = true
 
   method orderFront*(self: NSWindow, sender: NSObject) =
     self.makeKeyAndOrderFront(sender)
@@ -151,10 +146,10 @@ objcImpl:
     discard sender
     if self.isNil:
       return
-    self.wVisibleRequested = false
+    self.xxVisibleRequested = false
 
   method isVisible*(self: NSWindow): bool =
-    (not self.isNil) and self.wVisibleRequested() and (not self.wClosed())
+    (not self.isNil) and self.windowVisibleRequested() and (not self.windowClosed())
 
   method isKeyWindow*(self: NSWindow): bool =
     self.isVisible()
@@ -162,19 +157,18 @@ objcImpl:
   method isMiniaturized*(self: NSWindow): bool =
     false
 
-  method close(self: NSWindow) =
-    self.wClosed = true
-    if self.wNativeReady and not self.wNativeWindow.isNil:
-      siwinshim.close(self.wNativeWindow)
+  method close*(self: NSWindow) =
+    self.xxClosed = true
+    if self.xxNativeReady and not self.xxNativeWindow.isNil:
+      siwinshim.close(self.xxNativeWindow)
 
   method dealloc(self: NSWindow) {.used.} =
-    if self.wNativeReady and (not self.wNativeWindow.isNil):
-      siwinshim.close(self.wNativeWindow)
-    self.wFirstResponder = replacedOwnedId(self.wFirstResponder(), nil)
-    if not self.wContentView.isNil:
-      clearSuperviewRef(self.wContentView)
-    self.wTitleId = replacedOwnedId(self.wTitleId, nil)
-    self.wContentView = replacedOwnedId(self.wContentView(), nil)
+    if self.xxNativeReady and (not self.xxNativeWindow.isNil):
+      siwinshim.close(self.xxNativeWindow)
+    self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, nil)
+    if not self.xxContentView.isNil:
+      clearSuperviewRef(self.xxContentView)
+    self.xxContentView = replacedOwnedId(self.xxContentView, nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSWindow, self, getSelector("dealloc"))
 
@@ -212,6 +206,38 @@ proc new*(t: typedesc[NSPanel]): NSPanel =
   if result.isNil:
     return
 
+proc `windowFrame=`*(window: NSWindow, value: NSRect) =
+  window.xxFrame = value
+
+proc `windowTitle=`*(window: NSWindow, value: NSString) =
+  window.xxTitle = value
+
+proc `windowContentView=`*(window: NSWindow, value: ID) =
+  window.xxContentView = value
+
+proc `windowFirstResponder=`*(window: NSWindow, value: ID) =
+  window.xxFirstResponder = value
+
+proc `windowNativeWindow=`*(window: NSWindow, value: siwinshim.Window) =
+  window.xxNativeWindow = value
+
+proc `windowRenderer=`*(
+    window: NSWindow, value: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
+) =
+  window.xxRenderer = value
+
+proc `windowAutoScale=`*(window: NSWindow, value: bool) =
+  window.xxAutoScale = value
+
+proc `windowNativeReady=`*(window: NSWindow, value: bool) =
+  window.xxNativeReady = value
+
+proc `windowVisibleRequested=`*(window: NSWindow, value: bool) =
+  window.xxVisibleRequested = value
+
+proc `windowClosed=`*(window: NSWindow, value: bool) =
+  window.xxClosed = value
+
 proc setFrame*(window: NSWindow, frame: NSRect) =
   var nextFrame = nsRect(
     frame.origin.x,
@@ -219,18 +245,27 @@ proc setFrame*(window: NSWindow, frame: NSRect) =
     max(frame.size.width, 1.0),
     max(frame.size.height, 1.0),
   )
-  window.frame = nextFrame
-  if window.wNativeReady() and not window.wNativeWindow().isNil:
-    window.wNativeWindow.size = ivec2(
+  window.xxFrame = nextFrame
+  if window.windowNativeReady() and not window.windowNativeWindow().isNil:
+    window.xxNativeWindow.size = ivec2(
       clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
     )
 
+proc frame*(window: NSWindow): NSRect =
+  window.windowFrame()
+
+proc frameOrigin*(window: NSWindow): NSPoint =
+  window.windowFrame().origin
+
+proc frameSize*(window: NSWindow): NSSize =
+  window.windowFrame().size
+
 proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
-  let f = window.frame()
+  let f = window.windowFrame()
   window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
 
 proc setFrameSize*(window: NSWindow, size: NSSize) =
-  let f = window.frame()
+  let f = window.windowFrame()
   window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
 
 proc setContentSize*(window: NSWindow, size: NSSize) =
@@ -240,8 +275,7 @@ proc setContentSize*(window: NSWindow, width, height: float32) =
   window.setContentSize(nsSize(width, height))
 
 proc title*(window: NSWindow): NSString =
-  window.wTitle()
+  window.windowTitle()
 
 proc setTitle*(window: NSWindow, value: string) =
   window.setTitle(ns(value))
-
