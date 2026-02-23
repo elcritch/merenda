@@ -15,16 +15,14 @@ objcImpl:
 
   method init*(self: var NSControl): NSControl =
     result = asType[NSControl](callSuperIdFrom(NSControl, self, getSelector("init")))
-    if result.isNil:
-      return
+    if result.isNil: return
     result.enabled = true
     result.continuous = false
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
 
   method acceptsFirstResponder*(self: NSControl): bool =
-    if self.isNil:
-      return false
+    if self.isNil: return false
     self.isEnabled() and (not self.refusesFirstResponder())
 
   method stringValue*(self: NSControl): NSString =
