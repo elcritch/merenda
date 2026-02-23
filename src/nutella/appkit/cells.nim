@@ -8,16 +8,16 @@ objcImpl:
     stateValue {.get: state.}: int
     mixedAllowed: bool
 
-    enabled {.set: setEnabled, get: isEnabled.}: bool
-    editable {.set: setEditable, get: isEditable.}: bool
-    selectable {.set: setSelectable, get: isSelectable.}: bool
+    enabled {.get: isEnabled.}: bool
+    editable {.get: isEditable.}: bool
+    selectable {.get: isSelectable.}: bool
 
-    bordered {.set: setBordered, get: isBordered.}: bool
-    bezeled {.set: setBezeled, get: isBezeled.}: bool
+    bordered {.get: isBordered.}: bool
+    bezeled {.get: isBezeled.}: bool
 
-    scrollable {.set: setScrollable, get: isScrollable.}: bool
-    continuous {.set: setContinuous, get: isContinuous.}: bool
-    highlighted {.set: setHighlighted, get: isHighlighted.}: bool
+    scrollable {.get: isScrollable.}: bool
+    continuous {.get: isContinuous.}: bool
+    highlighted {.get: isHighlighted.}: bool
 
     cellRefusesFirstResponder {.
       set: setRefusesFirstResponder, get: refusesFirstResponder
