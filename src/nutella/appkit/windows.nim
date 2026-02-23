@@ -223,20 +223,6 @@ proc setFrame*(window: NSWindow, frame: NSRect) =
       clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
     )
 
-proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
-  let f = window.frame()
-  window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
-
-proc setFrameSize*(window: NSWindow, size: NSSize) =
-  let f = window.frame()
-  window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
-
-proc setContentSize*(window: NSWindow, size: NSSize) =
-  window.setFrameSize(size)
-
-proc setContentSize*(window: NSWindow, width, height: float32) =
-  window.setContentSize(nsSize(width, height))
-
 proc frame*(window: NSWindow): NSRect =
   window.windowFrame()
 
@@ -245,6 +231,20 @@ proc frameOrigin*(window: NSWindow): NSPoint =
 
 proc frameSize*(window: NSWindow): NSSize =
   window.frame().size
+
+proc setFrameOrigin*(window: NSWindow, origin: NSPoint) =
+  let f = window.windowFrame()
+  window.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
+
+proc setFrameSize*(window: NSWindow, size: NSSize) =
+  let f = window.windowFrame()
+  window.setFrame(nsRect(f.origin.x, f.origin.y, size.width, size.height))
+
+proc setContentSize*(window: NSWindow, size: NSSize) =
+  window.setFrameSize(size)
+
+proc setContentSize*(window: NSWindow, width, height: float32) =
+  window.setContentSize(nsSize(width, height))
 
 proc title*(window: NSWindow): NSString =
   window.windowTitle()

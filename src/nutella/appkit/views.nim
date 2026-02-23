@@ -1,8 +1,8 @@
 import ./runtime
 import ./responders
 
-proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool
-proc detachSubviews(view: NSObject)
+proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool
+proc detachSubviews*(view: NSObject)
 
 objcImpl:
   type NSView* = object of NSResponder
@@ -87,7 +87,7 @@ proc new*(t: typedesc[NSView]): NSView =
   if result.isNil:
     return
 
-proc clearSuperviewRef(viewId: ID) =
+proc clearSuperviewRef*(viewId: ID) =
   if viewId.isNil:
     return
   let child = ownFromId[NSView](viewId)
@@ -96,7 +96,7 @@ proc clearSuperviewRef(viewId: ID) =
   child.viewSuperview = nil
   child.setNextResponder(NSResponder(value: nil))
 
-proc detachSubviews(view: NSObject) =
+proc detachSubviews*(view: NSObject) =
   if view.isNil:
     return
   var v = asType[NSView](view.value)
@@ -146,7 +146,7 @@ proc isDescendantOf*(view: NSView, other: NSView): bool =
     current = ownFromId[NSView](parentId)
   false
 
-proc isViewDescendantOf(viewId: ID, ancestorId: ID): bool =
+proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool =
   if viewId.isNil or ancestorId.isNil:
     return false
   var currentId = viewId
