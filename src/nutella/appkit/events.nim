@@ -480,6 +480,39 @@ objcImpl:
     clearIvarRefs(self)
     discard callSuperIdFrom(NSEvent, self, getSelector("dealloc"))
 
+objcImpl:
+  type NSEvent_keyboard* = object of NSEvent
+
+objcImpl:
+  type NSEvent_mouse* = object of NSEvent
+    xxSerialNumber {.get: serialNumber, set: setSerialNumber.}: NSInteger
+
+objcImpl:
+  type NSEvent_other* = object of NSEvent
+
+objcImpl:
+  type NSEvent_periodic* = object of NSEvent
+
+objcImpl:
+  type NSEvent_CoreGraphics* = object of NSEvent
+    xxCoreGraphicsEvent {.get: coreGraphicsEvent.}: pointer
+
+  method initWithDisplayEvent*(
+      self: var NSEvent_CoreGraphics, event: pointer
+  ): NSEvent_CoreGraphics =
+    var initialized = self.initWithType(
+      NSPlatformSpecificDisplayEvent,
+      nsPoint(0, 0),
+      0,
+      timeIntervalSinceReferenceDate(),
+      0,
+    )
+    result = asType[NSEvent_CoreGraphics](initialized.value)
+    initialized.value = nil
+    if result.isNil:
+      return
+    result.xxCoreGraphicsEvent = event
+
 proc newEvent*(
     eventType: NSEventType,
     location: NSPoint,
@@ -503,9 +536,11 @@ proc newKeyEvent*(
     isARepeat: bool,
     keyCode: cushort,
 ): NSEvent =
-  result = newEvent(
+  var allocated = NSEvent_keyboard.alloc()
+  result = allocated.initWithType(
     eventType, location, modifierFlags.NSUInteger, timestamp, windowNumber.NSInteger
   )
+  allocated.value = nil
   if result.isNil:
     return
   result.xxCharactersId = replacedOwnedId(result.xxCharactersId, characters.value)
@@ -525,7 +560,9 @@ proc newOtherEvent*(
     data1: NSInteger,
     data2: NSInteger,
 ): NSEvent =
-  result = newEvent(eventType, location, flags, timestamp, windowNum)
+  var allocated = NSEvent_other.alloc()
+  result = allocated.initWithType(eventType, location, flags, timestamp, windowNum)
+  allocated.value = nil
   if result.isNil:
     return
   result.xxSubtype = subtype
@@ -542,7 +579,9 @@ proc newEnterExitEvent*(
     trackingNumber: NSInteger,
     userData: pointer,
 ): NSEvent =
-  result = newEvent(eventType, location, flags, timestamp, windowNumber)
+  var allocated = NSEvent_mouse.alloc()
+  result = allocated.initWithType(eventType, location, flags, timestamp, windowNumber)
+  allocated.value = nil
   if result.isNil:
     return
   result.xxTrackingNumber = trackingNumber
@@ -557,10 +596,35 @@ proc newMouseEvent*(
     windowNumber: NSInteger,
     clickCount: NSInteger,
 ): NSEvent =
-  result = newEvent(eventType, location, flags, timestamp, windowNumber)
+  var allocated = NSEvent_mouse.alloc()
+  result = allocated.initWithType(eventType, location, flags, timestamp, windowNumber)
+  allocated.value = nil
   if result.isNil:
     return
   result.xxClickCount = clickCount.int
+
+proc newPeriodicEvent*(
+    timestamp: cdouble = timeIntervalSinceReferenceDate()
+): NSEvent_periodic =
+  var allocated = NSEvent_periodic.alloc()
+  var initialized = allocated.initWithType(NSPeriodic, nsPoint(0, 0), 0, timestamp, 0)
+  result = asType[NSEvent_periodic](initialized.value)
+  initialized.value = nil
+  allocated.value = nil
+
+proc newDisplayEvent*(
+    event: pointer, timestamp: cdouble = timeIntervalSinceReferenceDate()
+): NSEvent_CoreGraphics =
+  var allocated = NSEvent_CoreGraphics.alloc()
+  var initialized = allocated.initWithType(
+    NSPlatformSpecificDisplayEvent, nsPoint(0, 0), 0, timestamp, 0
+  )
+  result = asType[NSEvent_CoreGraphics](initialized.value)
+  initialized.value = nil
+  allocated.value = nil
+  if result.isNil:
+    return
+  result.xxCoreGraphicsEvent = event
 
 proc NSEventMaskFromType*(eventType: NSEventType): NSEventMask =
   {eventType}
@@ -635,6 +699,7 @@ proc mouseButtonEventFromSiwin*(
     event: siwin.MouseButtonEvent,
     modifiers: set[siwin.ModifierKey] = {},
 ): NSEvent =
+  let clickCount = (if event.pressed and not event.generated: 1 else: 0)
   result = newEvent(
     nsEventTypeFromSiwin(event),
     location,
@@ -644,7 +709,19 @@ proc mouseButtonEventFromSiwin*(
   )
   if result.isNil:
     return
-  result.xxClickCount = (if event.pressed and not event.generated: 1 else: 0)
+  if not result.isKindOfClass(NSEvent_mouse):
+    var allocated = NSEvent_mouse.alloc()
+    var initialized = allocated.initWithType(
+      result.`type`(),
+      result.locationInWindow(),
+      result.modifierFlags(),
+      result.timestamp(),
+      result.windowNumber(),
+    )
+    allocated.value = nil
+    if not initialized.isNil:
+      result = initialized
+  result.xxClickCount = clickCount
   result.xxSiwinMouseButton = event.button
   result.xxSiwinModifiers = modifiers
   result.xxSiwinGenerated = event.generated
