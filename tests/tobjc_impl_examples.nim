@@ -326,6 +326,85 @@ suite "objcImpl examples":
     check(c.isNil)
     check(ivarCounterStateDestroyedCount == 1)
 
+  test "objcImpl class using ivar-backed state":
+    type IvarCounterState = ref object
+      total: int
+      lastAmount: int
+
+    proc `=destroy`(o: var IvarCounterState) =
+      inc ivarCounterStateDestroyedCount
+
+    objcImpl:
+      type IvarCounterClass = object of NSObject
+        counter: IvarCounterState
+
+      proc new(
+        t: typedesc[IvarCounterClass]
+      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+
+      proc init(
+        t: typedesc[IvarCounterClass]
+      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+
+      proc init(
+        v: var IvarCounterClass
+      ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
+
+      proc initWithMultiplier(self: var IvarCounterClass, lastAmount: cint) =
+        self = super(IvarCounterClass, self, init)
+        self.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
+
+      method bump(self: IvarCounterClass, amount: cint): cint =
+        let st = self.counter
+        st.total += amount.int
+        st.lastAmount = amount.int
+        result = (st.total).cint
+
+      method current(self: IvarCounterClass): cint =
+        let st = self.counter
+        (st.total).cint
+
+      method lastAmount(self: IvarCounterClass): cint =
+        let st = self.counter
+        st.lastAmount.cint
+
+      method dealloc(self: IvarCounterClass) {.used.} =
+        clearIvarRefs(self)
+        superDealloc(self)
+
+    ivarCounterStateDestroyedCount = 0
+    doAssert not compiles(IvarCounterClass.new())
+    doAssert not compiles(IvarCounterClass.init())
+    doAssert not compiles(
+      block:
+        var x = IvarCounterClass.alloc()
+        discard x.init()
+    )
+
+    var c = IvarCounterClass.alloc()
+    c.initWithMultiplier(1.cint)
+    check(not c.isNil)
+    check(getClassName(c) == "IvarCounterClass")
+    check(c.current() == 0.cint)
+    check(c.lastAmount() == 1.cint)
+
+    check(c.bump(2.cint) == 2.cint)
+    check(c.lastAmount() == 2.cint)
+    check(c.bump(3.cint) == 5.cint)
+    check(c.lastAmount() == 3.cint)
+    check(c.current() == 5.cint)
+
+    block:
+      let st = c.counter()
+      check(st != nil)
+      check(st.total == 5)
+      check(st.lastAmount == 3)
+    check(ivarCounterStateDestroyedCount == 0)
+
+    release(c)
+    check(c.isNil)
+    check(ivarCounterStateDestroyedCount == 1)
+
   test "objcImpl class supports direct value ivar fields":
     plainFieldPingCount = 0
     var o = PlainFieldClass.alloc()
