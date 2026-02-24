@@ -923,6 +923,16 @@ proc collectObjectIvarFields(
         setterName: setterName,
       )
 
+proc buildConditionalTypeDecl(
+    typeLine: string, typeName: string, onlyIfMissing: bool
+): NimNode =
+  if not onlyIfMissing:
+    return parseStmt("type\n  " & typeLine)
+  parseStmt(
+    "when not compiles(block:\n" & "  var objcImplTypeCheck: " & typeName & "\n" &
+      "  discard objcImplTypeCheck):\n" & "  type\n    " & typeLine
+  )
+
 proc objcImplRuntimeName(name: string): string =
   nutellaNsToNxRuntimeName(name)
 
@@ -1090,19 +1100,15 @@ macro objcImpl*(x: untyped): untyped =
         )
 
   var generatedTypes = newStmtList()
-  var generatedTypeLines: seq[string] = @[]
   if hasProtocol:
-    generatedTypeLines.add(
-      "  " & protocolName & (if protocolExported: "*" else: "") &
-        " = object of ProtocolPrototype"
-    )
+    let protocolTypeLine =
+      protocolName & (if protocolExported: "*" else: "") &
+      " = object of ProtocolPrototype"
+    generatedTypes.add(buildConditionalTypeDecl(protocolTypeLine, protocolName, true))
   if hasClassDecl:
-    generatedTypeLines.add(
-      "  " & className & (if classExported: "*" else: "") & " = object of " &
-        classSuperName
-    )
-  if generatedTypeLines.len > 0:
-    generatedTypes = parseStmt("type\n" & generatedTypeLines.join("\n"))
+    let classTypeLine =
+      className & (if classExported: "*" else: "") & " = object of " & classSuperName
+    generatedTypes.add(buildConditionalTypeDecl(classTypeLine, className, true))
 
   var passthrough = newStmtList()
   var implDefs: seq[NimNode] = @[]

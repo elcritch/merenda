@@ -12,6 +12,9 @@ var plainFieldPingCount = 0
 var lateMethodBasePingCount = 0
 var lateMethodExtraPingCount = 0
 var lateMethodClassMethodTotal = 0.cint
+var predeclFooBarPingCount = 0
+
+type PredeclFooBar* = object of NSObject
 
 objcImpl:
   type FooBarProtocol* =
@@ -19,10 +22,21 @@ objcImpl:
         method ping*(self: FooBarProtocol)
 
 objcImpl:
+  type PredeclFooBarProtocol* =
+    concept self
+        method ping*(self: PredeclFooBarProtocol)
+
+objcImpl:
   type FooBar* {.impl: FooBarProtocol.} = object of NSObject
 
   method ping*(self: FooBar) =
     inc fooBarPingCount
+
+objcImpl:
+  type PredeclFooBar* {.impl: PredeclFooBarProtocol.} = object of NSObject
+
+  method ping*(self: PredeclFooBar) =
+    inc predeclFooBarPingCount
 
 objcImpl:
   type SimpleCounterProtocol =
@@ -198,6 +212,19 @@ suite "objcImpl examples":
 
       o.ping()
       doAssert(fooBarPingCount == 1)
+
+  test "objcImpl supports predeclared NSObject class":
+    predeclFooBarPingCount = 0
+
+    let proto = getProtocol(PredeclFooBarProtocol)
+    check(not proto.isNil)
+
+    var o = PredeclFooBar.new()
+    check(not o.isNil)
+    check(getClassName(o) == "PredeclFooBar")
+
+    o.ping()
+    check(predeclFooBarPingCount == 1)
 
   test "simple counter example":
     simpleCounter = 0
