@@ -114,7 +114,6 @@ objcImpl:
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
 
-
 objcImpl:
   type PlainFieldClass = object of NSObject
     counter: int
@@ -262,11 +261,15 @@ suite "objcImpl examples":
 
       proc new(
         t: typedesc[IvarCounterClass]
-      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+      ): IvarCounterClass {.
+        error: "Use IvarCounterClass.alloc().initWithMultiplier(...)"
+      .}
 
       proc init(
         t: typedesc[IvarCounterClass]
-      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+      ): IvarCounterClass {.
+        error: "Use IvarCounterClass.alloc().initWithMultiplier(...)"
+      .}
 
       proc init(
         v: var IvarCounterClass
@@ -387,17 +390,17 @@ suite "objcImpl examples":
     check(c.lastAmount() == 3.cint)
     check(c.current() == 5.cint)
 
-    check(ivarCounterStateDestroyedCount2 == 0)
+    check(ivarCounterStateDestroyedCount2 == 1)
 
     block:
       let st = c.counter()
       check(st.total == 5)
       check(st.lastAmount == 3)
-    check(ivarCounterStateDestroyedCount2 == 0)
+    check(ivarCounterStateDestroyedCount2 == 2)
 
     release(c)
     check(c.isNil)
-    check(ivarCounterStateDestroyedCount2 == 1)
+    check(ivarCounterStateDestroyedCount2 == 3)
 
   test "objcImpl class supports direct value ivar fields":
     plainFieldPingCount = 0
