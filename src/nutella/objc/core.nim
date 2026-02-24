@@ -176,7 +176,10 @@ template asRetainedType*[T: NSObject](o: ID): T =
     T(value: retainAux(o))
 
 template asRetainedType*[T: NSObject](o: NSObject): T =
-  asRetainedType[T](o.value)
+  if o.value == nil:
+    T(value: nil)
+  else:
+    T(value: retainAux(o.value))
 
 proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 proc sel_registerName*(str: cstring): SEL {.cdecl, importc.}
@@ -1107,7 +1110,7 @@ proc getSelector*(name: static[string]): SEL =
     s = sel_registerName(name)
   return s
 
-proc `@selector`*(name: static[string]): SEL =
+proc `@ selector`*(name: static[string]): SEL =
   getSelector(name)
 
 proc respondsToSelector*(obj: NSObject, selector: static[string]): bool =
@@ -1391,8 +1394,7 @@ proc initRaw(v: ID): ID {.inline.} =
   objc_msgSend(v, sel_registerName("init"))
 
 proc init*[T: NSObject](v: var T): T {.inline.} =
-  result = asType[T](initRaw(v.value))
-  v.value = nil
+  result = asType[T](initRaw(move(v.value)))
 
 proc init*[T: NSObject](n: typedesc[T]): T {.inline.} =
   var allocated = n.alloc()

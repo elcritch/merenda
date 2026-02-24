@@ -21,15 +21,7 @@ suite "appkit NSEvent":
   test "key and other event factories round-trip payload values":
     let keyFlags = {NSShiftKeyMask, NSCommandKeyMask}
     var keyEvent = newKeyEvent(
-      NSKeyDown,
-      nsPoint(12, 18),
-      keyFlags,
-      42.5,
-      77,
-      @ns"a",
-      @ns"A",
-      false,
-      12'u16,
+      NSKeyDown, nsPoint(12, 18), keyFlags, 42.5, 77, @ns"a", @ns"A", false, 12'u16
     )
     check(keyEvent.`type`() == NSKeyDown)
     check(keyEvent.locationInWindow() == nsPoint(12, 18))
@@ -59,15 +51,13 @@ suite "appkit NSEvent":
     otherEvent.value = nil
 
   test "subclass interfaces are wired for mouse, periodic, and coregraphics":
-    var mouseEvent = newMouseEvent(
-      NSLeftMouseDown, nsPoint(7, 11), {NSShiftKeyMask}, 11.0, 2, 3
-    )
+    var mouseEvent =
+      newMouseEvent(NSLeftMouseDown, nsPoint(7, 11), {NSShiftKeyMask}, 11.0, 2, 3)
     check(mouseEvent.isKindOfClass(NSEvent_mouse))
-    var mouseEventTyped = asType[NSEvent_mouse](mouseEvent.value)
+    let mouseEventTyped = asRetainedType[NSEvent_mouse](mouseEvent)
     check(mouseEventTyped.serialNumber() == 0)
     mouseEventTyped.setSerialNumber(99)
     check(mouseEventTyped.serialNumber() == 99)
-    mouseEventTyped.value = nil
 
     var periodic = newPeriodicEvent()
     check(periodic.isKindOfClass(NSEvent_periodic))
@@ -118,9 +108,7 @@ suite "appkit NSEvent":
     )
     var fromKey = keyEventFromSiwin(4, nsPoint(3, 4), keyInput, @ns"A", @ns"a")
     check(fromKey.`type`() == NSKeyDown)
-    check(
-      fromKey.modifierFlags() == {NSShiftKeyMask, NSControlKeyMask}
-    )
+    check(fromKey.modifierFlags() == {NSShiftKeyMask, NSControlKeyMask})
     check(fromKey.siwinKey() == siwin.Key.a)
     check(
       fromKey.siwinModifiers() == {siwin.ModifierKey.shift, siwin.ModifierKey.control}

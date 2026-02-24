@@ -99,7 +99,7 @@ proc clearSuperviewRef*(viewId: ID) =
 proc detachSubviews*(view: NSObject) =
   if view.isNil:
     return
-  var v = asType[NSView](view.value)
+  let v = asRetainedType[NSView](view)
   if v.isNil:
     return
   var children = v.viewSubviews()
@@ -108,7 +108,6 @@ proc detachSubviews*(view: NSObject) =
     releaseId(child)
   children.setLen(0)
   v.viewSubviews = children
-  v.value = nil
 
 proc frame*(view: NSView): NSRect =
   view.viewFrame()
@@ -281,4 +280,3 @@ proc viewWithTag*(view: NSView, wantedTag: int): NSView =
     if not hit.isNil:
       return hit
   NSView(value: nil)
-

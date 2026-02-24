@@ -78,8 +78,7 @@ proc nsDictionary*[K: NSObject, V: NSObject](): NSDictionary[K, V] =
   allocated.value = nil
   if created.isNil:
     return NSDictionary[K, V](value: nil)
-  result = asType[NSDictionary[K, V]](created.value)
-  created.value = nil
+  result = asType[NSDictionary[K, V]](move(created.value))
 
 proc init*[K: NSObject, V: NSObject](
     n: typedesc[NSDictionary[K, V]]
@@ -94,9 +93,8 @@ proc new*[K: NSObject, V: NSObject](
 proc len*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): int {.inline.} =
   if dict.value.isNil:
     return 0
-  var obj = asType[NXDictionary](dict.value)
+  let obj = asRetainedType[NXDictionary](dict)
   result = obj.data().len
-  obj.value = nil
 
 proc isEmpty*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): bool {.inline.} =
   dict.len == 0
@@ -104,23 +102,20 @@ proc isEmpty*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): bool {.inline
 proc hasKey*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): bool =
   if dict.value.isNil or key.value.isNil:
     return false
-  var obj = asType[NXDictionary](dict.value)
+  let obj = asRetainedType[NXDictionary](dict)
   let data = obj.data()
   var storedKey: ID
   result = findEquivalentKey(data, key.value, storedKey)
-  obj.value = nil
 
 proc `[]`*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): V =
   if dict.value.isNil or key.value.isNil:
     raise newException(KeyError, "key not found in NSDictionary")
-  var obj = asType[NXDictionary](dict.value)
+  let obj = asRetainedType[NXDictionary](dict)
   let data = obj.data()
   var storedKey: ID
   if not findEquivalentKey(data, key.value, storedKey):
-    obj.value = nil
     raise newException(KeyError, "key not found in NSDictionary")
   let storedValue = data[storedKey]
-  obj.value = nil
   retainedAs[V](storedValue)
 
 proc `[]=`*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K, value: V) =
@@ -128,7 +123,7 @@ proc `[]=`*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K, valu
     return
   if key.value.isNil:
     raise newException(ValueError, "NSDictionary key cannot be nil")
-  var obj = asType[NXDictionary](dict.value)
+  let obj = asRetainedType[NXDictionary](dict)
   var data = obj.data()
   var storedKey: ID
   if findEquivalentKey(data, key.value, storedKey):
@@ -142,12 +137,11 @@ proc `[]=`*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K, valu
     data[retainedKey] = retainedValue
   obj.data = data
   obj.countCache = data.len
-  obj.value = nil
 
 proc del*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K) {.inline.} =
   if dict.value.isNil or key.value.isNil:
     return
-  var obj = asType[NXDictionary](dict.value)
+  let obj = asRetainedType[NXDictionary](dict)
   var data = obj.data()
   var storedKey: ID
   if findEquivalentKey(data, key.value, storedKey):
@@ -157,31 +151,27 @@ proc del*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K) {.inli
     data.del(storedKey)
   obj.data = data
   obj.countCache = data.len
-  obj.value = nil
 
 proc clear*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V]) {.inline.} =
   if dict.value.isNil:
     return
-  var obj = asType[NXDictionary](dict.value)
+  let obj = asRetainedType[NXDictionary](dict)
   var data = obj.data()
   releaseTableEntries(data)
   obj.data = data
   obj.countCache = 0
-  obj.value = nil
 
 iterator keys*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): K =
   if not dict.value.isNil:
-    var obj = asType[NXDictionary](dict.value)
+    let obj = asRetainedType[NXDictionary](dict)
     let data = obj.data()
-    obj.value = nil
     for storedKey in data.keys:
       yield retainedAs[K](storedKey)
 
 iterator values*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): V =
   if not dict.value.isNil:
-    var obj = asType[NXDictionary](dict.value)
+    let obj = asRetainedType[NXDictionary](dict)
     let data = obj.data()
-    obj.value = nil
     for storedValue in data.values:
       yield retainedAs[V](storedValue)
 
@@ -189,9 +179,8 @@ iterator pairs*[K: NSObject, V: NSObject](
     dict: NSDictionary[K, V]
 ): tuple[key: K, value: V] =
   if not dict.value.isNil:
-    var obj = asType[NXDictionary](dict.value)
+    let obj = asRetainedType[NXDictionary](dict)
     let data = obj.data()
-    obj.value = nil
     for storedKey, storedValue in data.pairs:
       yield (retainedAs[K](storedKey), retainedAs[V](storedValue))
 
@@ -203,12 +192,10 @@ proc `==`*[K: NSObject, V: NSObject](a, b: NSDictionary[K, V]): bool =
   if aLen == 0:
     return true
 
-  var aObj = asType[NXDictionary](a.value)
-  var bObj = asType[NXDictionary](b.value)
+  let aObj = asRetainedType[NXDictionary](a)
+  let bObj = asRetainedType[NXDictionary](b)
   let aData = aObj.data()
   let bData = bObj.data()
-  aObj.value = nil
-  bObj.value = nil
 
   for aKey, aValue in aData.pairs:
     var bKey: ID
