@@ -2,19 +2,19 @@ import ./runtime
 import ../objc/assoc
 
 var controllerMarkersReady {.threadvar.}: bool
-var NSNoSelectionMarker* {.threadvar.}: ID
-var NSMultipleValuesMarker* {.threadvar.}: ID
-var NSNotApplicableMarker* {.threadvar.}: ID
+var NSNoSelectionMarker* {.threadvar.}: NSString
+var NSMultipleValuesMarker* {.threadvar.}: NSString
+var NSNotApplicableMarker* {.threadvar.}: NSString
 
 proc ensureControllerMarkers() =
   if controllerMarkersReady:
     return
-  NSNoSelectionMarker = retainId(ns("NSNoSelectionMarker").value)
-  NSMultipleValuesMarker = retainId(ns("NSMultipleValuesMarker").value)
-  NSNotApplicableMarker = retainId(ns("NSNotApplicableMarker").value)
+  NSNoSelectionMarker = ns("NSNoSelectionMarker")
+  NSMultipleValuesMarker = ns("NSMultipleValuesMarker")
+  NSNotApplicableMarker = ns("NSNotApplicableMarker")
   controllerMarkersReady = true
 
-proc NSIsControllerMarker*(obj: ID): bool =
+proc NSIsControllerMarker*(obj: NSString): bool =
   ensureControllerMarkers()
   obj == NSNoSelectionMarker or obj == NSMultipleValuesMarker or
     obj == NSNotApplicableMarker
