@@ -169,3 +169,19 @@ proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject):
     true
   else:
     false
+
+type
+
+  NSResponder* = object of NSObject
+
+  NSApplication* = object of NSResponder
+  NSWindow* = object of NSResponder
+  NSCell* = object of NSObject
+  NSEvent* = object of NSObject
+
+  NSView* = object of NSResponder
+
+  NSCollectionView* = object of NSView
+  NSControl* = object of NSView
+  NSTextField* = object of NSControl
+  
