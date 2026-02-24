@@ -31,8 +31,6 @@ template ivarRefName*[T: ref](): string =
   NimIvarRefPrefix & sanitizeIvarToken($T)
 
 template ivarRefName*[T: ref](t: typedesc[T]): string =
-  when false:
-    discard t
   ivarRefName[T]()
 
 proc registerIvarName(cls: ObjcClass, ivarName: string) =
@@ -234,8 +232,6 @@ proc getIvarRef*[T: ref](obj: NSObject, ivarName: string): T {.raises: [].} =
   cast[T](payload.value)
 
 proc getIvarRef*[T: ref](obj: NSObject, t: typedesc[T]): T {.inline, raises: [].} =
-  when false:
-    discard t
   getIvarRef[T](obj, ivarRefName[T]())
 
 proc clearIvarRefsRaw(obj: ID) {.raises: [].} =

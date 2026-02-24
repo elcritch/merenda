@@ -79,13 +79,9 @@ proc nsArray*[T](): NSArray[T] =
   initStorage(result)
 
 proc init*[T](n: typedesc[NSArray[T]]): NSArray[T] {.inline.} =
-  when false:
-    discard n
   nsArray[T]()
 
 proc new*[T](n: typedesc[NSArray[T]]): NSArray[T] {.inline.} =
-  when false:
-    discard n
   nsArray[T]()
 
 proc nsArray*[T](values: openArray[T]): NSArray[T] =

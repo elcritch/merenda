@@ -353,8 +353,6 @@ objcImpl:
       clickCount {.kw("clickCount").}: NSInteger,
       pressure {.kw("pressure").}: cfloat,
   ): NSEvent =
-    when false:
-      discard t
     discard context
     discard eventNumber
     discard pressure
@@ -379,8 +377,6 @@ objcImpl:
       isARepeat {.kw("isARepeat").}: bool,
       keyCode {.kw("keyCode").}: cushort,
   ): NSEvent =
-    when false:
-      discard t
     discard context
 
     var allocated = NSEvent.alloc()
@@ -409,8 +405,6 @@ objcImpl:
       data1 {.kw("data1").}: NSInteger,
       data2 {.kw("data2").}: NSInteger,
   ): NSEvent =
-    when false:
-      discard t
     discard context
 
     var allocated = NSEvent.alloc()
@@ -436,8 +430,6 @@ objcImpl:
   proc startPeriodicEventsAfterDelay*(
       t: typedesc[NSEvent], delay: float, period {.kw("withPeriod").}: float
   ) =
-    when false:
-      discard t
     if periodicEventsEnabledState:
       raise newException(ValueError, "periodic events already enabled")
     periodicEventsEnabledState = true
@@ -445,8 +437,6 @@ objcImpl:
     periodicEventsPeriodSeconds = period
 
   proc stopPeriodicEvents*(t: typedesc[NSEvent]) =
-    when false:
-      discard t
     periodicEventsEnabledState = false
     periodicEventsDelaySeconds = 0
     periodicEventsPeriodSeconds = 0

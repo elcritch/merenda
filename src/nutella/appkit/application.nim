@@ -117,8 +117,6 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int =
   app.appWindows = windows
 
 proc new*(t: typedesc[NSApplication]): NSApplication =
-  when false:
-    discard t
   var allocated = NSApplication.alloc()
   result = allocated.init()
   allocated.value = nil
@@ -126,8 +124,6 @@ proc new*(t: typedesc[NSApplication]): NSApplication =
     return
 
 proc sharedApplication*(t: typedesc[NSApplication]): NSApplication =
-  when false:
-    discard t
   if sharedApplicationRef.isNil:
     sharedApplicationRef = NSApplication.new()
   sharedApplicationRef

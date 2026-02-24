@@ -433,8 +433,6 @@ proc kvoKeyPathFromId(keyPath: ID): string =
 proc kvoObjcAddObserver(
     self: ID, cmd: SEL, observer: ID, keyPath: ID, options: NSUInteger, context: pointer
 ) {.cdecl.} =
-  when false:
-    discard cmd
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
@@ -449,8 +447,6 @@ proc kvoObjcAddObserver(
 proc kvoObjcRemoveObserverWithContext(
     self: ID, cmd: SEL, observer: ID, keyPath: ID, context: pointer
 ) {.cdecl.} =
-  when false:
-    discard cmd
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
@@ -459,24 +455,18 @@ proc kvoObjcRemoveObserverWithContext(
   )
 
 proc kvoObjcRemoveObserver(self: ID, cmd: SEL, observer: ID, keyPath: ID) {.cdecl.} =
-  when false:
-    discard cmd
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   removeObserver(asType[NSObject](self), asType[NSObject](observer), keyPathString)
 
 proc kvoObjcWillChange(self: ID, cmd: SEL, keyPath: ID) {.cdecl.} =
-  when false:
-    discard cmd
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   willChangeValueForKey(asType[NSObject](self), keyPathString)
 
 proc kvoObjcDidChange(self: ID, cmd: SEL, keyPath: ID) {.cdecl.} =
-  when false:
-    discard cmd
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)

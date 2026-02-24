@@ -81,8 +81,6 @@ objcImpl:
     discard callSuperIdFrom(NSView, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSView]): NSView =
-  when false:
-    discard t
   var allocated = NSView.alloc()
   result = allocated.init()
   allocated.value = nil

@@ -42,8 +42,6 @@ objcImpl:
     result.sheetDidEnd = nil
 
   proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
-    when false:
-      discard t
     result = NSAlert.new()
     if result.isNil:
       return
@@ -62,8 +60,6 @@ objcImpl:
       otherButton {.kw("otherButton").}: NSString,
       informativeText {.kw("informativeTextWithFormat").}: NSString,
   ): NSAlert =
-    when false:
-      discard t
     result = NSAlert.new()
     if result.isNil:
       return
@@ -199,8 +195,6 @@ objcImpl:
     discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =
-  when false:
-    discard t
   var allocated = NSAlert.alloc()
   result = allocated.init()
   allocated.value = nil

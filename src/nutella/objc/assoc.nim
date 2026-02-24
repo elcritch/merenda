@@ -42,8 +42,6 @@ template associatedRefKey*[T: ref](): pointer =
   cast[pointer](sel_registerName(("nim.assoc.ref." & $T).cstring))
 
 template associatedRefKey*[T: ref](t: typedesc[T]): pointer =
-  when false:
-    discard t
   associatedRefKey[T]()
 
 proc clearAssociatedRef*(obj: NSObject, key: pointer) {.inline, raises: [].} =
@@ -114,8 +112,6 @@ proc getAssociatedRef*[T: ref](obj: NSObject, key: pointer): T {.raises: [].} =
 proc getAssociatedRef*[T: ref](
     obj: NSObject, t: typedesc[T]
 ): T {.inline, raises: [].} =
-  when false:
-    discard t
   getAssociatedRef[T](obj, associatedRefKey[T]())
 
 proc nimAssociatedRefBoxDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].} =
