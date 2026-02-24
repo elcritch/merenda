@@ -7,27 +7,47 @@ import nutella/objc
 
 suite "appkit NSEvent":
   test "event masks and constants match header values":
-    check(NSEventMaskFromType(NSKeyDown) == NSKeyDownMask.cuint)
-    check(NSEventMaskFromType(NSScrollWheel) == NSScrollWheelMask.cuint)
-    check(NSDeviceIndependentModifierFlagsMask == 0xffff_0000'u)
-    check(NSF1FunctionKey == 0xF704'u16)
-    check(NSModeSwitchFunctionKey == 0xF747'u16)
+    check(NSKeyDown.ord == 10)
+    check(NSAppKitDefined.ord == 20)
+    check(NSEventMaskFromType(NSKeyDown) == NSKeyDownMask)
+    check(NSEventMaskFromType(NSScrollWheel) == NSScrollWheelMask)
+    check(NSAnyEventMask == {NSLeftMouseDown .. NSAppKitDefined})
+    check(
+      NSDeviceIndependentModifierFlagsMask == {NSAlphaShiftKeyMask .. NSFunctionKeyMask}
+    )
+    check(NSF1FunctionKey.ord == 0xF704)
+    check(NSModeSwitchFunctionKey.ord == 0xF747)
 
   test "key and other event factories round-trip payload values":
-    let keyFlags = (NSShiftKeyMask or NSCommandKeyMask).cuint
+    let keyFlags = {NSShiftKeyMask, NSCommandKeyMask}
     var keyEvent = newKeyEvent(
-      NSKeyDown, nsPoint(12, 18), keyFlags, 42.5, 77, @ns"a", @ns"A", false, 12'u16
+      NSKeyDown,
+      nsPoint(12, 18),
+      nsModifierFlagsMask(keyFlags).cuint,
+      42.5,
+      77,
+      @ns"a",
+      @ns"A",
+      false,
+      12'u16,
     )
     check(keyEvent.`type`() == NSKeyDown)
     check(keyEvent.locationInWindow() == nsPoint(12, 18))
-    check(keyEvent.modifierFlags() == (NSShiftKeyMask or NSCommandKeyMask))
+    check(keyEvent.modifierFlags() == nsModifierFlagsMask(keyFlags))
     check(keyEvent.windowNumber() == 77)
     check(keyEvent.characters() == @ns"a")
     check(keyEvent.charactersIgnoringModifiers() == @ns"A")
     check(keyEvent.keyCode() == 12'u16)
 
     var otherEvent = newOtherEvent(
-      NSApplicationDefined, nsPoint(1, 2), NSControlKeyMask, 21.0, 5, 9.cshort, 100, 200
+      NSApplicationDefined,
+      nsPoint(1, 2),
+      nsModifierFlagsMask({NSControlKeyMask}),
+      21.0,
+      5,
+      9.cshort,
+      100,
+      200,
     )
     check(otherEvent.subtype() == 9)
     check(otherEvent.data1() == 100)
@@ -72,7 +92,9 @@ suite "appkit NSEvent":
     )
     var fromKey = keyEventFromSiwin(4, nsPoint(3, 4), keyInput, @ns"A", @ns"a")
     check(fromKey.`type`() == NSKeyDown)
-    check(fromKey.modifierFlags() == (NSShiftKeyMask or NSControlKeyMask))
+    check(
+      fromKey.modifierFlags() == nsModifierFlagsMask({NSShiftKeyMask, NSControlKeyMask})
+    )
     check(fromKey.siwinKey() == siwin.Key.a)
     check(
       fromKey.siwinModifiers() == {siwin.ModifierKey.shift, siwin.ModifierKey.control}
@@ -88,7 +110,7 @@ suite "appkit NSEvent":
     check(fromMouse.`type`() == NSLeftMouseDown)
     check(fromMouse.clickCount() == 1)
     check(fromMouse.siwinMouseButton() == siwin.MouseButton.left)
-    check(fromMouse.modifierFlags() == NSAlternateKeyMask)
+    check(fromMouse.modifierFlags() == nsModifierFlagsMask({NSAlternateKeyMask}))
 
     let scrollInput = siwin.ScrollEvent(delta: -2.0, deltaX: 1.5)
     var fromScroll =
@@ -96,7 +118,7 @@ suite "appkit NSEvent":
     check(fromScroll.`type`() == NSScrollWheel)
     check(fromScroll.deltaX() == 1.5)
     check(fromScroll.deltaY() == -2.0)
-    check(fromScroll.modifierFlags() == NSCommandKeyMask)
+    check(fromScroll.modifierFlags() == nsModifierFlagsMask({NSCommandKeyMask}))
 
     fromKey.value = nil
     fromMouse.value = nil
