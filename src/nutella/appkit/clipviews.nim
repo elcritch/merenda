@@ -4,7 +4,7 @@ import ./views
 objcImpl:
   type NSClipView* = object of NSView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
-    clipDocumentCursorId: ID
+    xxDocumentCursor {.set: setDocumentCursor, get: documentCursor.}: ID
     clipDocumentViewId: ID
     clipDocumentRect: NSRect
     clipDrawsBackground {.set: setDrawsBackground, get: drawsBackground.}: bool
@@ -16,20 +16,12 @@ objcImpl:
     if result.isNil:
       return
     result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
-    result.clipDocumentCursorId = nil
+    result.xxDocumentCursor = nil
     result.clipDocumentViewId = nil
     result.clipDocumentRect = nsRect(0, 0, 0, 0)
     result.clipDrawsBackground = true
     result.clipCopiesOnScroll = false
     result.clipScrollOrigin = nsPoint(0, 0)
-
-  method documentCursor*(self: NSClipView): NSObject =
-    if self.clipDocumentCursorId.isNil:
-      return NSObject(value: nil)
-    ownFromId[NSObject](self.clipDocumentCursorId)
-
-  method setDocumentCursor*(self: NSClipView, value: NSObject) =
-    self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, value.value)
 
   method documentView*(self: NSClipView): NSView =
     if self.clipDocumentViewId.isNil:
@@ -166,7 +158,7 @@ objcImpl:
     )
 
   method dealloc(self: NSClipView) {.used.} =
-    self.clipDocumentCursorId = replacedOwnedId(self.clipDocumentCursorId, nil)
+    self.xxDocumentCursor = nil
     self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
     discard callSuperIdFrom(NSClipView, self, getSelector("dealloc"))
 
