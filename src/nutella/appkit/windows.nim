@@ -2,10 +2,12 @@ import figdraw/commons
 import figdraw/fignodes
 import figdraw/figrender as figrender
 import figdraw/windowing/siwinshim as siwinshim
+import siwin/window as siwin
 
 import ./runtime
 import ./responders
 import ./views
+import ./events
 
 export responders, views
 
@@ -112,6 +114,63 @@ objcImpl:
 
   method acceptsFirstResponder*(self: NSWindow): bool =
     true
+
+  method keyDown*(self: NSWindow, event: NSEvent) =
+    if (not event.isNil) and siwinPressed(event) and siwinKey(event) == siwin.Key.escape:
+      self.close()
+      return
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.keyDown(event)
+      return
+    self.noResponderFor(getSelector("keyDown:"))
+
+  method eventDispatchTarget(self: NSWindow): NSResponder =
+    if self.isNil:
+      return NSResponder(value: nil)
+    let first = self.firstResponder()
+    if not first.isNil:
+      return first
+    let content = self.contentView()
+    if not content.isNil:
+      return ownFromId[NSResponder](content.value)
+    ownFromId[NSResponder](self.value)
+
+  method sendEvent*(self: NSWindow, event: NSEvent) =
+    if self.isNil or event.isNil:
+      return
+    let target = self.eventDispatchTarget()
+    if target.isNil:
+      return
+    case event.`type`()
+    of NSLeftMouseDown:
+      target.mouseDown(event)
+    of NSLeftMouseUp:
+      target.mouseUp(event)
+    of NSRightMouseDown:
+      target.rightMouseDown(event)
+    of NSRightMouseUp:
+      target.rightMouseUp(event)
+    of NSMouseMoved:
+      target.mouseMoved(event)
+    of NSLeftMouseDragged:
+      target.mouseDragged(event)
+    of NSRightMouseDragged:
+      target.rightMouseDragged(event)
+    of NSMouseEntered:
+      target.mouseEntered(event)
+    of NSMouseExited:
+      target.mouseExited(event)
+    of NSKeyDown:
+      target.keyDown(event)
+    of NSKeyUp:
+      target.keyUp(event)
+    of NSFlagsChanged:
+      target.flagsChanged(event)
+    of NSScrollWheel:
+      target.scrollWheel(event)
+    else:
+      discard
 
   method setTitle*(self: NSWindow, value: NSString) =
     self.xxTitle = value

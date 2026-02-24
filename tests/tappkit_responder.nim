@@ -2,6 +2,36 @@ import std/unittest
 
 import nutella/appkit
 import nutella/objc
+import siwin/window as siwin
+
+var spyKeyDownCount = 0
+var spyMouseDownCount = 0
+var spyScrollCount = 0
+var spyLastEventType = NSApplicationDefined
+var spyLastMouseButton = siwin.MouseButton.left
+
+objcImpl:
+  type EventSpyView = object of NSView
+
+  method acceptsFirstResponder*(self: EventSpyView): bool =
+    discard self
+    true
+
+  method keyDown*(self: EventSpyView, event: NSEvent) =
+    discard self
+    inc spyKeyDownCount
+    spyLastEventType = event.`type`()
+
+  method mouseDown*(self: EventSpyView, event: NSEvent) =
+    discard self
+    inc spyMouseDownCount
+    spyLastEventType = event.`type`()
+    spyLastMouseButton = siwinMouseButton(event)
+
+  method scrollWheel*(self: EventSpyView, event: NSEvent) =
+    discard self
+    inc spyScrollCount
+    spyLastEventType = event.`type`()
 
 suite "appkit responder chain":
   test "nextResponder wiring follows view-window-application chain":
@@ -81,4 +111,62 @@ suite "appkit responder chain":
     plain.value = nil
     button.value = nil
     field.value = nil
+    window.value = nil
+
+  test "window sendEvent dispatches NSEvent through responder chain":
+    spyKeyDownCount = 0
+    spyMouseDownCount = 0
+    spyScrollCount = 0
+    spyLastEventType = NSApplicationDefined
+    spyLastMouseButton = siwin.MouseButton.left
+
+    var window = newWindow(0, 0, 240, 160, "Event Dispatch")
+    var root = newView(0, 0, 240, 160)
+    var spy = EventSpyView.new()
+    spy.setFrame(0.cfloat, 0.cfloat, 240.cfloat, 160.cfloat)
+    root.addSubview(spy)
+    window.setContentView(root)
+    check(window.makeFirstResponder(spy))
+
+    let keyEvent = keyEventFromSiwin(
+      0,
+      nsPoint(10, 12),
+      siwin.KeyEvent(key: siwin.Key.a, pressed: true, repeated: false, generated: false),
+    )
+    window.sendEvent(keyEvent)
+    check(spyKeyDownCount == 1)
+    check(spyLastEventType == NSKeyDown)
+
+    let mouseEvent = mouseButtonEventFromSiwin(
+      0,
+      nsPoint(10, 12),
+      siwin.MouseButtonEvent(
+        button: siwin.MouseButton.left, pressed: true, generated: false
+      ),
+    )
+    window.sendEvent(mouseEvent)
+    check(spyMouseDownCount == 1)
+    check(spyLastEventType == NSLeftMouseDown)
+    check(spyLastMouseButton == siwin.MouseButton.left)
+
+    let scrollEvent = scrollEventFromSiwin(
+      0, nsPoint(10, 12), siwin.ScrollEvent(delta: -1.0, deltaX: 0.25)
+    )
+    window.sendEvent(scrollEvent)
+    check(spyScrollCount == 1)
+    check(spyLastEventType == NSScrollWheel)
+
+    check(window.makeFirstResponder(NSResponder(value: nil)))
+    let escapeEvent = keyEventFromSiwin(
+      0,
+      nsPoint(0, 0),
+      siwin.KeyEvent(
+        key: siwin.Key.escape, pressed: true, repeated: false, generated: false
+      ),
+    )
+    window.sendEvent(escapeEvent)
+    check(window.windowClosed())
+
+    spy.value = nil
+    root.value = nil
     window.value = nil
