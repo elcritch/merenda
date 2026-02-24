@@ -4,7 +4,7 @@ import ./views
 
 objcImpl:
   type NSCell* = object of NSObject
-    controlViewId: ID
+    xxControlView {.set: setControlView, get: controlView.}: NSView
     cellType {.set: setType, get: `type`.}: int
     stateValue {.get: state.}: int
     mixedAllowed: bool
@@ -32,7 +32,7 @@ objcImpl:
     result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.controlViewId = nil
+    result.xxControlView = NSView(value: nil)
     result.cellType = 1
     result.stateValue = NSOffState
     result.mixedAllowed = false
@@ -57,17 +57,9 @@ objcImpl:
     result.titleId = replacedOwnedId(result.titleId, value.value)
     result.objectValueId = replacedOwnedId(result.objectValueId, value.value)
 
-  method controlView*(self: NSCell): NSView =
-    if self.controlViewId.isNil:
-      return NSView(value: nil)
-    ownFromId[NSView](self.controlViewId)
-
-  method setControlView*(self: NSCell, view: NSView) =
-    self.controlViewId = replacedOwnedId(self.controlViewId, view.value)
-
-  method target*(self: NSCell): NSObject =
+  method target*(self: NSCell): ID =
     discard self
-    NSObject(value: nil)
+    nil
 
   method action*(self: NSCell): SEL =
     discard self
@@ -77,7 +69,7 @@ objcImpl:
     discard self
     0
 
-  method setTarget*(self: NSCell, target: NSObject) =
+  method setTarget*(self: NSCell, target: ID) =
     discard self
     discard target
 
@@ -206,7 +198,7 @@ objcImpl:
     self.setDoubleValue(sender.doubleValue())
 
   method dealloc(self: NSCell) {.used.} =
-    self.controlViewId = replacedOwnedId(self.controlViewId, nil)
+    self.xxControlView = NSView(value: nil)
     self.titleId = replacedOwnedId(self.titleId, nil)
     self.objectValueId = replacedOwnedId(self.objectValueId, nil)
     self.representedObjectId = replacedOwnedId(self.representedObjectId, nil)
@@ -215,9 +207,9 @@ objcImpl:
 
 objcImpl:
   type NSActionCell* = object of NSCell
-    actionControlViewId: ID
-    actionTargetId: ID
-    actionSelector: SEL
+    xxActionControlView {.set: setControlView, get: controlView.}: NSView
+    xxActionTarget {.set: setTarget, get: target.}: ID
+    xxActionSelector {.set: setAction, get: action.}: SEL
     actionTagValue {.set: setTag, get: tag.}: int
 
   method init*(self: var NSActionCell): NSActionCell =
@@ -225,36 +217,14 @@ objcImpl:
       asType[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.actionControlViewId = nil
-    result.actionTargetId = nil
-    result.actionSelector = nil
+    result.xxActionControlView = NSView(value: nil)
+    result.xxActionTarget = nil
+    result.xxActionSelector = nil
     result.actionTagValue = 0
 
-  method controlView*(self: NSActionCell): NSView =
-    if self.actionControlViewId.isNil:
-      return NSView(value: nil)
-    ownFromId[NSView](self.actionControlViewId)
-
-  method setControlView*(self: NSActionCell, view: NSView) =
-    self.actionControlViewId = replacedOwnedId(self.actionControlViewId, view.value)
-
-  method target*(self: NSActionCell): NSObject =
-    if self.actionTargetId.isNil:
-      return NSObject(value: nil)
-    ownFromId[NSObject](self.actionTargetId)
-
-  method action*(self: NSActionCell): SEL =
-    self.actionSelector
-
-  method setTarget*(self: NSActionCell, target: NSObject) =
-    self.actionTargetId = replacedOwnedId(self.actionTargetId, target.value)
-
-  method setAction*(self: NSActionCell, action: SEL) =
-    self.actionSelector = action
-
   method dealloc(self: NSActionCell) {.used.} =
-    self.actionControlViewId = replacedOwnedId(self.actionControlViewId, nil)
-    self.actionTargetId = replacedOwnedId(self.actionTargetId, nil)
+    self.xxActionControlView = NSView(value: nil)
+    self.xxActionTarget = nil
     discard callSuperIdFrom(NSActionCell, self, getSelector("dealloc"))
 
 objcImpl:
@@ -394,10 +364,11 @@ objcImpl:
         self.setState(NSOffState)
       else:
         self.setState(NSOnState)
-    let target = self.target()
+    let targetId = self.target()
     let action = self.action()
-    if target.isNil or cast[pointer](action).isNil:
+    if targetId.isNil or cast[pointer](action).isNil:
       return
+    let target = asType[NSObject](targetId)
     discard performResponderSelector(target, action, asType[NSObject](self.value))
 
   method dealloc(self: NSButtonCell) {.used.} =
