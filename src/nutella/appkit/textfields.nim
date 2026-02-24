@@ -3,9 +3,9 @@ import ./controls
 
 objcImpl:
   type NSTextField* = object of NSControl
-    xxStringValue {.set: setStringValue, get: stringValue.}: NSString
-    xxDelegate {.set: setDelegate, get: delegate.}: ID
-    xxErrorAction: SEL
+    xStringValue {.set: setStringValue, get: stringValue.}: NSString
+    xDelegate {.set: setDelegate, get: delegate.}: ID
+    xErrorAction: SEL
     editable {.set: setEditable, get: isEditable.}: bool
     selectable {.set: setSelectable, get: isSelectable.}: bool
     bordered {.set: setBordered, get: isBordered.}: bool
@@ -14,8 +14,8 @@ objcImpl:
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
     scrollable {.set: setScrollable, get: isScrollable.}: bool
-    xxPreviousText {.set: setPreviousText, get: previousText.}: ID
-    xxNextText {.set: setNextText, get: nextText.}: ID
+    xPreviousText {.set: setPreviousText, get: previousText.}: ID
+    xNextText {.set: setNextText, get: nextText.}: ID
 
   method init*(self: var NSTextField): NSTextField =
     result =
@@ -29,14 +29,14 @@ objcImpl:
     result.bordered = true
     result.bezeled = true
     result.alignment = NSNaturalTextAlignment
-    result.xxStringValue = @ns""
-    result.xxDelegate = nil
-    result.xxErrorAction = nil
+    result.xStringValue = @ns""
+    result.xDelegate = nil
+    result.xErrorAction = nil
     result.txtColor = nsColor(0.08, 0.08, 0.08, 1.0)
     result.bgColor = nsColor(0.98, 0.99, 1.0, 1.0)
     result.drawsBg = true
-    result.xxPreviousText = nil
-    result.xxNextText = nil
+    result.xPreviousText = nil
+    result.xNextText = nil
 
   method setTextColor*(
       self: NSTextField,
@@ -64,10 +64,10 @@ objcImpl:
     self.setStringValue(stripMnemonicMarkers(value))
 
   method dealloc(self: NSTextField) {.used.} =
-    self.xxPreviousText = nil
-    self.xxNextText = nil
-    self.xxStringValue = NSString(value: nil)
-    self.xxDelegate = nil
+    self.xPreviousText = nil
+    self.xNextText = nil
+    self.xStringValue = NSString(value: nil)
+    self.xDelegate = nil
     discard callSuperIdFrom(NSTextField, self, getSelector("dealloc"))
 
 objcImpl:
@@ -84,8 +84,8 @@ objcImpl:
 
 objcImpl:
   type NSSearchField* = object of NSTextField
-    xxRecentSearches {.set: setRecentSearches, get: recentSearches.}: NSArray[NSString]
-    xxRecentsAutosaveName {.set: setRecentsAutosaveName, get: recentsAutosaveName.}:
+    xRecentSearches {.set: setRecentSearches, get: recentSearches.}: NSArray[NSString]
+    xRecentsAutosaveName {.set: setRecentsAutosaveName, get: recentsAutosaveName.}:
       NSString
 
   method init*(self: var NSSearchField): NSSearchField =
@@ -93,12 +93,12 @@ objcImpl:
       asType[NSSearchField](callSuperIdFrom(NSSearchField, self, getSelector("init")))
     if result.isNil:
       return
-    result.xxRecentSearches = nsArray[NSString]()
-    result.xxRecentsAutosaveName = @ns""
+    result.xRecentSearches = nsArray[NSString]()
+    result.xRecentsAutosaveName = @ns""
 
   method dealloc(self: NSSearchField) {.used.} =
-    self.xxRecentSearches = NSArray[NSString](value: nil)
-    self.xxRecentsAutosaveName = NSString(value: nil)
+    self.xRecentSearches = NSArray[NSString](value: nil)
+    self.xRecentsAutosaveName = NSString(value: nil)
     discard callSuperIdFrom(NSSearchField, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSTextField]): NSTextField =

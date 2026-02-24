@@ -5,41 +5,41 @@ import ./windows
 
 objcImpl:
   type NSAlert* = object of NSObject
-    xxDelegate {.set: setDelegate, get: delegate.}: ID
-    xxStyle {.set: setAlertStyle, get: alertStyle.}: int
-    xxIcon {.set: setIcon, get: icon.}: NSObject
-    xxMessageText {.get: messageText.}: NSString
-    xxInformativeText {.get: informativeText.}: NSString
-    xxAccessoryView {.get: accessoryView.}: NSView
-    xxShowsHelp {.set: setShowsHelp, get: showsHelp.}: bool
-    xxShowsSuppressionButton {.get: showsSuppressionButton.}: bool
-    xxHelpAnchor {.set: setHelpAnchor, get: helpAnchor.}: NSString
-    xxButtons {.get: buttons.}: NSArray[NSButton]
-    xxSuppressionButton {.get: suppressionButton.}: NSButton
-    xxWindow {.get: window.}: NSWindow
-    xxNeedsLayout: bool
-    xxSheetDelegate: ID
-    xxSheetDidEnd: SEL
+    xDelegate {.set: setDelegate, get: delegate.}: ID
+    xStyle {.set: setAlertStyle, get: alertStyle.}: int
+    xIcon {.set: setIcon, get: icon.}: NSObject
+    xMessageText {.get: messageText.}: NSString
+    xInformativeText {.get: informativeText.}: NSString
+    xAccessoryView {.get: accessoryView.}: NSView
+    xShowsHelp {.set: setShowsHelp, get: showsHelp.}: bool
+    xShowsSuppressionButton {.get: showsSuppressionButton.}: bool
+    xHelpAnchor {.set: setHelpAnchor, get: helpAnchor.}: NSString
+    xButtons {.get: buttons.}: NSArray[NSButton]
+    xSuppressionButton {.get: suppressionButton.}: NSButton
+    xWindow {.get: window.}: NSWindow
+    xNeedsLayout: bool
+    xSheetDelegate: ID
+    xSheetDidEnd: SEL
 
   method init*(self: var NSAlert): NSAlert =
     result = asType[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
-    result.xxDelegate = nil
-    result.xxStyle = NSWarningAlertStyle
-    result.xxIcon = NSObject(value: nil)
-    result.xxMessageText = @ns""
-    result.xxInformativeText = @ns""
-    result.xxAccessoryView = NSView(value: nil)
-    result.xxShowsHelp = false
-    result.xxShowsSuppressionButton = false
-    result.xxHelpAnchor = @ns""
-    result.xxButtons = nsArray[NSButton]()
-    result.xxSuppressionButton = NSButton(value: nil)
-    result.xxWindow = NSWindow(value: nil)
-    result.xxNeedsLayout = true
-    result.xxSheetDelegate = nil
-    result.xxSheetDidEnd = nil
+    result.xDelegate = nil
+    result.xStyle = NSWarningAlertStyle
+    result.xIcon = NSObject(value: nil)
+    result.xMessageText = @ns""
+    result.xInformativeText = @ns""
+    result.xAccessoryView = NSView(value: nil)
+    result.xShowsHelp = false
+    result.xShowsSuppressionButton = false
+    result.xHelpAnchor = @ns""
+    result.xButtons = nsArray[NSButton]()
+    result.xSuppressionButton = NSButton(value: nil)
+    result.xWindow = NSWindow(value: nil)
+    result.xNeedsLayout = true
+    result.xSheetDelegate = nil
+    result.xSheetDidEnd = nil
 
   proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
     result = NSAlert.new()
@@ -73,23 +73,23 @@ objcImpl:
       discard result.addButtonWithTitle(otherButton)
 
   method setMessageText*(self: NSAlert, value: NSString) =
-    self.xxMessageText = value
-    self.xxNeedsLayout = true
+    self.xMessageText = value
+    self.xNeedsLayout = true
 
   method setInformativeText*(self: NSAlert, value: NSString) =
-    self.xxInformativeText = value
-    self.xxNeedsLayout = true
+    self.xInformativeText = value
+    self.xNeedsLayout = true
 
   method setAccessoryView*(self: NSAlert, value: NSView) =
-    self.xxAccessoryView = value
-    self.xxNeedsLayout = true
+    self.xAccessoryView = value
+    self.xNeedsLayout = true
 
   method setShowsSuppressionButton*(self: NSAlert, value: bool) =
-    self.xxShowsSuppressionButton = value
-    if value and self.xxSuppressionButton.isNil:
+    self.xShowsSuppressionButton = value
+    if value and self.xSuppressionButton.isNil:
       var button = NSButton.new()
       button.setTitle(@ns"Do not show again")
-      self.xxSuppressionButton = button
+      self.xSuppressionButton = button
 
   method addButtonWithTitle*(self: NSAlert, title: NSString): NSButton =
     result = NSButton.new()
@@ -98,11 +98,11 @@ objcImpl:
     result.setTitle(title)
     var buttons = self.buttons()
     buttons.add(result)
-    self.xxButtons = buttons
-    self.xxNeedsLayout = true
+    self.xButtons = buttons
+    self.xNeedsLayout = true
 
   method layout*(self: NSAlert) =
-    self.xxNeedsLayout = false
+    self.xNeedsLayout = false
 
   method beginSheetModalForWindow*(
       self: NSAlert,
@@ -112,9 +112,9 @@ objcImpl:
       contextInfo {.kw("contextInfo").}: pointer,
   ) =
     discard contextInfo
-    self.xxWindow = window
-    self.xxSheetDelegate = modalDelegate
-    self.xxSheetDidEnd = didEndSelector
+    self.xWindow = window
+    self.xSheetDelegate = modalDelegate
+    self.xSheetDidEnd = didEndSelector
 
   method runModal*(self: NSAlert): int =
     let count = self.buttons().len
@@ -125,16 +125,16 @@ objcImpl:
     NSAlertThirdButtonReturn
 
   method dealloc(self: NSAlert) {.used.} =
-    self.xxDelegate = nil
-    self.xxIcon = NSObject(value: nil)
-    self.xxMessageText = @ns""
-    self.xxInformativeText = @ns""
-    self.xxAccessoryView = NSView(value: nil)
-    self.xxHelpAnchor = @ns""
-    self.xxSuppressionButton = NSButton(value: nil)
-    self.xxButtons = NSArray[NSButton](value: nil)
-    self.xxWindow = NSWindow(value: nil)
-    self.xxSheetDelegate = nil
+    self.xDelegate = nil
+    self.xIcon = NSObject(value: nil)
+    self.xMessageText = @ns""
+    self.xInformativeText = @ns""
+    self.xAccessoryView = NSView(value: nil)
+    self.xHelpAnchor = @ns""
+    self.xSuppressionButton = NSButton(value: nil)
+    self.xButtons = NSArray[NSButton](value: nil)
+    self.xWindow = NSWindow(value: nil)
+    self.xSheetDelegate = nil
     discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =

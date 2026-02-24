@@ -4,7 +4,7 @@ import ./views
 
 objcImpl:
   type NSCell* = object of NSObject
-    xxControlView {.set: setControlView, get: controlView.}: NSView
+    xControlView {.set: setControlView, get: controlView.}: NSView
     cellType {.set: setType, get: `type`.}: int
     stateValue {.get: state.}: int
     mixedAllowed: bool
@@ -32,7 +32,7 @@ objcImpl:
     result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.xxControlView = NSView(value: nil)
+    result.xControlView = NSView(value: nil)
     result.cellType = 1
     result.stateValue = NSOffState
     result.mixedAllowed = false
@@ -198,7 +198,7 @@ objcImpl:
     self.setDoubleValue(sender.doubleValue())
 
   method dealloc(self: NSCell) {.used.} =
-    self.xxControlView = NSView(value: nil)
+    self.xControlView = NSView(value: nil)
     self.titleId = replacedOwnedId(self.titleId, nil)
     self.objectValueId = replacedOwnedId(self.objectValueId, nil)
     self.representedObjectId = replacedOwnedId(self.representedObjectId, nil)
@@ -207,9 +207,9 @@ objcImpl:
 
 objcImpl:
   type NSActionCell* = object of NSCell
-    xxActionControlView {.set: setControlView, get: controlView.}: NSView
-    xxActionTarget {.set: setTarget, get: target.}: ID
-    xxActionSelector {.set: setAction, get: action.}: SEL
+    xActionControlView {.set: setControlView, get: controlView.}: NSView
+    xActionTarget {.set: setTarget, get: target.}: ID
+    xActionSelector {.set: setAction, get: action.}: SEL
     actionTagValue {.set: setTag, get: tag.}: int
 
   method init*(self: var NSActionCell): NSActionCell =
@@ -217,14 +217,14 @@ objcImpl:
       asType[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.xxActionControlView = NSView(value: nil)
-    result.xxActionTarget = nil
-    result.xxActionSelector = nil
+    result.xActionControlView = NSView(value: nil)
+    result.xActionTarget = nil
+    result.xActionSelector = nil
     result.actionTagValue = 0
 
   method dealloc(self: NSActionCell) {.used.} =
-    self.xxActionControlView = NSView(value: nil)
-    self.xxActionTarget = nil
+    self.xActionControlView = NSView(value: nil)
+    self.xActionTarget = nil
     discard callSuperIdFrom(NSActionCell, self, getSelector("dealloc"))
 
 objcImpl:
