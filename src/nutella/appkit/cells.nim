@@ -154,9 +154,9 @@ objcImpl:
     except ValueError:
       0.0
 
-  method doubleValue*(self: NSCell): float64 =
+  method doubleValue*(self: NSCell): float =
     try:
-      parseFloat($self.stringValue()).float64
+      parseFloat($self.stringValue()).float
     except ValueError:
       0.0
 
@@ -169,7 +169,7 @@ objcImpl:
   method setFloatValue*(self: NSCell, value: float32) =
     self.setStringValue(ns($value))
 
-  method setDoubleValue*(self: NSCell, value: float64) =
+  method setDoubleValue*(self: NSCell, value: float) =
     self.setStringValue(ns($value))
 
   method representedObject*(self: NSCell): NSObject =
@@ -362,8 +362,8 @@ objcImpl:
   method floatValue*(self: NSButtonCell): float32 =
     self.state().float32
 
-  method doubleValue*(self: NSButtonCell): float64 =
-    self.state().float64
+  method doubleValue*(self: NSButtonCell): float =
+    self.state().float
 
   method setIntValue*(self: NSButtonCell, value: cint) =
     self.setState(value.int)
@@ -374,7 +374,7 @@ objcImpl:
   method setFloatValue*(self: NSButtonCell, value: float32) =
     self.setState(value.int)
 
-  method setDoubleValue*(self: NSButtonCell, value: float64) =
+  method setDoubleValue*(self: NSButtonCell, value: float) =
     self.setState(value.int)
 
   method performClick*(self: NSButtonCell, sender: NSObject) =

@@ -55,11 +55,11 @@ objcImpl:
     except ValueError:
       0.0
 
-  method doubleValue*(self: NSControl): float64 =
+  method doubleValue*(self: NSControl): float =
     if self.isNil:
       return 0.0
     try:
-      parseFloat($self.stringValue()).float64
+      parseFloat($self.stringValue()).float
     except ValueError:
       0.0
 
@@ -76,7 +76,7 @@ objcImpl:
       return
     self.setStringValue(ns($value))
 
-  method setDoubleValue*(self: NSControl, value: float64) =
+  method setDoubleValue*(self: NSControl, value: float) =
     if self.isNil:
       return
     self.setStringValue(ns($value))

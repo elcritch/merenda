@@ -90,8 +90,8 @@ objcImpl:
   method floatValue*(self: NSButton): float32 =
     self.state().float32
 
-  method doubleValue*(self: NSButton): float64 =
-    self.state().float64
+  method doubleValue*(self: NSButton): float =
+    self.state().float
 
   method setIntValue*(self: NSButton, value: cint) =
     self.setState(value)
@@ -102,7 +102,7 @@ objcImpl:
   method setFloatValue*(self: NSButton, value: float32) =
     self.setState(value.int.cint)
 
-  method setDoubleValue*(self: NSButton, value: float64) =
+  method setDoubleValue*(self: NSButton, value: float) =
     self.setState(value.int.cint)
 
   method performClick*(self: NSButton, sender: NSResponder) =

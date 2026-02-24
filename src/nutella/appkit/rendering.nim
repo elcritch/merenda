@@ -21,7 +21,7 @@ proc ensureContentView(window: NSWindow): NSView =
   let frame = window.windowFrame()
   var rootAlloc = NSView.alloc()
   var root = rootAlloc.initWithFrame(
-    0.float32, 0.float32, frame.size.width.float32, frame.size.height.float32
+    0'f32, 0'f32, frame.size.width.float32, frame.size.height.float32
   )
   rootAlloc.value = nil
   window.setContentView(root)
@@ -643,7 +643,7 @@ proc renderWindow(window: NSWindow) =
     frame.size = nsSize(logicalSize.x, logicalSize.y)
     window.windowFrame frame
   let root = ensureContentView(window)
-  root.setFrame(0.float32, 0.float32, logicalSize.x.float32, logicalSize.y.float32)
+  root.setFrame(0'f32, 0'f32, logicalSize.x.float32, logicalSize.y.float32)
   var renders = buildWindowRenders(window)
   if renders.isNil:
     return
