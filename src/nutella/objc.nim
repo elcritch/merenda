@@ -1085,6 +1085,59 @@ macro objcImpl*(x: untyped): untyped =
     dedupIvarFields.add(f)
   classIvarFields = dedupIvarFields
 
+  var autoFieldImplDefs: seq[NimNode] = @[]
+  if hasClass:
+    let classTypeIdent = ident(className)
+    for field in classIvarFields:
+      let fieldTypeNode = copyNimTree(field.typ)
+      let selfIdent = ident("self")
+      let valueIdent = ident("value")
+
+      if field.getterName.len > 0 and field.getterName != field.name:
+        let getterProcName = ident(field.name)
+        let getterMethodName =
+          if classExported:
+            postfix(ident(field.getterName), "*")
+          else:
+            ident(field.getterName)
+        let getterBody = quote:
+          result = `getterProcName`(`selfIdent`)
+        autoFieldImplDefs.add(
+          newProc(
+            name = getterMethodName,
+            params =
+              @[
+                copyNimTree(fieldTypeNode),
+                newIdentDefs(selfIdent, copyNimTree(classTypeIdent), newEmptyNode()),
+              ],
+            body = getterBody,
+            pragmas = nnkPragma.newTree(ident"inline"),
+          )
+        )
+
+      if field.setterName.len > 0 and field.setterName != field.name & "=":
+        let setterProcName = ident(field.name & "=")
+        let setterMethodName =
+          if classExported:
+            postfix(ident(field.setterName), "*")
+          else:
+            ident(field.setterName)
+        let setterBody = quote:
+          `setterProcName`(`selfIdent`, `valueIdent`)
+        autoFieldImplDefs.add(
+          newProc(
+            name = setterMethodName,
+            params =
+              @[
+                newEmptyNode(),
+                newIdentDefs(selfIdent, copyNimTree(classTypeIdent), newEmptyNode()),
+                newIdentDefs(valueIdent, copyNimTree(fieldTypeNode), newEmptyNode()),
+              ],
+            body = setterBody,
+            pragmas = nnkPragma.newTree(ident"inline"),
+          )
+        )
+
   if hasProtocol and conceptBody.kind != nnkStmtList:
     error("objcImpl protocol concept body is missing method declarations", x)
 
@@ -1140,6 +1193,9 @@ macro objcImpl*(x: untyped): untyped =
         passthrough.add(copyNimTree(stmt))
     else:
       passthrough.add(copyNimTree(stmt))
+
+  for fieldDef in autoFieldImplDefs:
+    implDefs.add(fieldDef)
 
   var implMethods: seq[ObjcImplMethodInfo] = @[]
   for def in implDefs:
@@ -1275,56 +1331,42 @@ macro objcImpl*(x: untyped): untyped =
     let selfIdent = ident("self")
     let valueIdent = ident("value")
 
-    var getterNames: seq[string] = @[field.name]
-    if field.getterName.len > 0 and field.getterName notin getterNames:
-      getterNames.add(field.getterName)
-    for getterBaseName in getterNames:
-      let exportGetter =
-        classExported and
-        (field.getterName.len == 0 or getterBaseName == field.getterName)
-      let getterName =
-        if exportGetter:
-          postfix(ident(getterBaseName), "*")
-        else:
-          ident(getterBaseName)
-      let getterBody = quote:
-        result = getIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
-      fieldAccessorDefs.add newProc(
-        name = getterName,
-        params =
-          @[
-            copyNimTree(fieldTypeNode),
-            newIdentDefs(selfIdent, ident(className), newEmptyNode()),
-          ],
-        body = getterBody,
-        pragmas = nnkPragma.newTree(ident"inline"),
-      )
+    let getterName =
+      if classExported:
+        postfix(ident(field.name), "*")
+      else:
+        ident(field.name)
+    let getterBody = quote:
+      result = getIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
+    fieldAccessorDefs.add newProc(
+      name = getterName,
+      params =
+        @[
+          copyNimTree(fieldTypeNode),
+          newIdentDefs(selfIdent, ident(className), newEmptyNode()),
+        ],
+      body = getterBody,
+      pragmas = nnkPragma.newTree(ident"inline"),
+    )
 
-    var setterNames: seq[string] = @[field.name & "="]
-    if field.setterName.len > 0 and field.setterName notin setterNames:
-      setterNames.add(field.setterName)
-    for setterBaseName in setterNames:
-      let exportSetter =
-        classExported and
-        (field.setterName.len == 0 or setterBaseName == field.setterName)
-      let setterName =
-        if exportSetter:
-          postfix(ident(setterBaseName), "*")
-        else:
-          ident(setterBaseName)
-      let setterBody = quote:
-        setIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
-      fieldAccessorDefs.add newProc(
-        name = setterName,
-        params =
-          @[
-            newEmptyNode(),
-            newIdentDefs(selfIdent, ident(className), newEmptyNode()),
-            newIdentDefs(valueIdent, copyNimTree(fieldTypeNode), newEmptyNode()),
-          ],
-        body = setterBody,
-        pragmas = nnkPragma.newTree(ident"inline"),
-      )
+    let setterName =
+      if classExported:
+        postfix(ident(field.name & "="), "*")
+      else:
+        ident(field.name & "=")
+    let setterBody = quote:
+      setIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`, `valueIdent`)
+    fieldAccessorDefs.add newProc(
+      name = setterName,
+      params =
+        @[
+          newEmptyNode(),
+          newIdentDefs(selfIdent, ident(className), newEmptyNode()),
+          newIdentDefs(valueIdent, copyNimTree(fieldTypeNode), newEmptyNode()),
+        ],
+      body = setterBody,
+      pragmas = nnkPragma.newTree(ident"inline"),
+    )
 
   for p in implementedProtocols:
     if p == protocolName:
