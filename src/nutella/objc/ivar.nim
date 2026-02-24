@@ -3,13 +3,19 @@ import ./core
 const NimIvarRefPrefix* = "nimIvarRef_"
 
 type NimIvarRefCleanupProc = proc(value: pointer) {.cdecl, raises: [].}
+type NimIvarValueCleanupProc = proc(obj: ID, ivarName: string) {.raises: [].}
 type NimIvarRefPayload = object
   value: pointer
   cleanup: NimIvarRefCleanupProc
 
+type NimIvarRegistryIvar = object
+  ivarName: string
+  isRef: bool
+  valueCleanup: NimIvarValueCleanupProc
+
 type NimIvarRegistryEntry = object
   className: string
-  ivarNames: seq[string]
+  ivars: seq[NimIvarRegistryIvar]
 
 var nimIvarRegistry {.global.}: seq[NimIvarRegistryEntry]
 
@@ -17,6 +23,8 @@ proc nimIvarRefCleanup[T: ref](value: pointer) {.cdecl, raises: [].} =
   let r = cast[T](value)
   if r != nil:
     GC_unref(r)
+
+proc nimIvarValueCleanup[T](obj: ID, ivarName: string) {.raises: [].}
 
 proc sanitizeIvarToken(token: string): string =
   result = newStringOfCap(token.len)
@@ -33,25 +41,50 @@ template ivarRefName*[T: ref](): string =
 template ivarRefName*[T: ref](t: typedesc[T]): string =
   ivarRefName[T]()
 
-proc registerIvarName(cls: ObjcClass, ivarName: string) =
+proc registerIvar(
+    cls: ObjcClass,
+    ivarName: string,
+    isRef: bool,
+    valueCleanup: NimIvarValueCleanupProc = nil,
+) =
   let clsName = getName(cls)
   if clsName.len == 0 or ivarName.len == 0:
     return
 
   for i in 0 ..< nimIvarRegistry.len:
     if nimIvarRegistry[i].className == clsName:
-      if ivarName notin nimIvarRegistry[i].ivarNames:
-        nimIvarRegistry[i].ivarNames.add(ivarName)
+      for j in 0 ..< nimIvarRegistry[i].ivars.len:
+        if nimIvarRegistry[i].ivars[j].ivarName == ivarName:
+          if isRef:
+            nimIvarRegistry[i].ivars[j].isRef = true
+          if valueCleanup != nil:
+            nimIvarRegistry[i].ivars[j].valueCleanup = valueCleanup
+          return
+      nimIvarRegistry[i].ivars.add(
+        NimIvarRegistryIvar(
+          ivarName: ivarName, isRef: isRef, valueCleanup: valueCleanup
+        )
+      )
       return
 
-  nimIvarRegistry.add(NimIvarRegistryEntry(className: clsName, ivarNames: @[ivarName]))
+  nimIvarRegistry.add(
+    NimIvarRegistryEntry(
+      className: clsName,
+      ivars:
+        @[
+          NimIvarRegistryIvar(
+            ivarName: ivarName, isRef: isRef, valueCleanup: valueCleanup
+          )
+        ],
+    )
+  )
 
 proc addRefIvar*(cls: ObjcClass, ivarName: string): bool =
   if cls.isNil or ivarName.len == 0:
     return false
 
   if cast[pointer](getIvar(cls, ivarName)) != nil:
-    registerIvarName(cls, ivarName)
+    registerIvar(cls, ivarName, isRef = true)
     return true
 
   const ptrAlign =
@@ -63,11 +96,11 @@ proc addRefIvar*(cls: ObjcClass, ivarName: string): bool =
       1
 
   if addIvar(cls, ivarName, sizeof(pointer), ptrAlign, "^v"):
-    registerIvarName(cls, ivarName)
+    registerIvar(cls, ivarName, isRef = true)
     return true
 
   if cast[pointer](getIvar(cls, ivarName)) != nil:
-    registerIvarName(cls, ivarName)
+    registerIvar(cls, ivarName, isRef = true)
     return true
 
   false
@@ -95,13 +128,20 @@ proc addValueIvar*[T](cls: ObjcClass, ivarName: string): bool =
   if cls.isNil or ivarName.len == 0:
     return false
 
+  let valueCleanup = nimIvarValueCleanup[T]
   if cast[pointer](getIvar(cls, ivarName)) != nil:
+    registerIvar(cls, ivarName, isRef = false, valueCleanup = valueCleanup)
     return true
 
   if addIvar(cls, ivarName, sizeof(T), ivarValueAlignExp(T), "^v"):
+    registerIvar(cls, ivarName, isRef = false, valueCleanup = valueCleanup)
     return true
 
-  cast[pointer](getIvar(cls, ivarName)) != nil
+  if cast[pointer](getIvar(cls, ivarName)) != nil:
+    registerIvar(cls, ivarName, isRef = false, valueCleanup = valueCleanup)
+    return true
+
+  false
 
 proc addFieldIvar*[T](cls: ObjcClass, ivarName: string): bool =
   when T is ref:
@@ -125,6 +165,20 @@ proc getIvarValuePtr[T](obj: NSObject, ivarName: string): ptr T {.inline, raises
     return nil
   let slotAddr = cast[uint](obj.value) + cast[uint](getOffset(iv))
   cast[ptr T](slotAddr)
+
+proc nimIvarValueCleanup[T](obj: ID, ivarName: string) {.raises: [].} =
+  if obj == nil or ivarName.len == 0:
+    return
+
+  let p = getIvarValuePtr[T](NSObject(value: obj), ivarName)
+  if p.isNil:
+    return
+
+  try:
+    `=destroy`(p[])
+  except Exception:
+    discard
+  #zeroMem(cast[pointer](p), sizeof(T))
 
 proc getIvarValue*[T](obj: NSObject, ivarName: string): T {.raises: [].} =
   let p = getIvarValuePtr[T](obj, ivarName)
@@ -211,10 +265,6 @@ proc setIvarRef*[T: ref](obj: NSObject, ivarName: string, value: T) {.raises: []
   GC_ref(value)
 
   let iv = setInstanceVariable(obj.value, ivarName, cast[pointer](payload))
-  when defined(nutellaIvarDebug):
-    if ivarName == "counter":
-      echo "setIvarRef(", ivarName, ") obj=", cast[uint](obj.value), " payload=", cast[
-          uint](payload), " iv=", cast[uint](iv), " value=", cast[uint](cast[pointer](value))
   if cast[pointer](iv) == nil:
     if payload.cleanup != nil and payload.value != nil:
       payload.cleanup(payload.value)
@@ -241,10 +291,6 @@ proc getIvarRefPtr*[T: ref](obj: NSObject, ivarName: string): ptr T {.raises: []
 
   var rawPayload: pointer
   discard getInstanceVariable(obj.value, ivarName, rawPayload)
-  when defined(nutellaIvarDebug):
-    if ivarName == "counter":
-      echo "getIvarRefPtr(", ivarName, ") obj=", cast[uint](obj.value), " raw=", cast[
-          uint](rawPayload)
   if rawPayload == nil:
     return nil
 
@@ -273,8 +319,11 @@ proc clearIvarRefsRaw(obj: ID) {.raises: [].} =
     let clsName = getName(cls)
     for entry in nimIvarRegistry:
       if entry.className == clsName:
-        for ivarName in entry.ivarNames:
-          clearIvarRefRaw(obj, ivarName)
+        for ivar in entry.ivars:
+          if ivar.isRef:
+            clearIvarRefRaw(obj, ivar.ivarName)
+          elif ivar.valueCleanup != nil:
+            ivar.valueCleanup(obj, ivar.ivarName)
         break
     cls = getSuperclass(cls)
 
