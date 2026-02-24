@@ -113,8 +113,6 @@ objcImpl:
     discard callSuperIdFrom(NSBox, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSBox]): NSBox =
-  when false:
-    discard t
   var allocated = NSBox.alloc()
   result = allocated.init()
   allocated.value = nil

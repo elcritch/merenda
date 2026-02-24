@@ -84,15 +84,11 @@ proc nsDictionary*[K: NSObject, V: NSObject](): NSDictionary[K, V] =
 proc init*[K: NSObject, V: NSObject](
     n: typedesc[NSDictionary[K, V]]
 ): NSDictionary[K, V] {.inline.} =
-  when false:
-    discard n
   nsDictionary[K, V]()
 
 proc new*[K: NSObject, V: NSObject](
     n: typedesc[NSDictionary[K, V]]
 ): NSDictionary[K, V] {.inline.} =
-  when false:
-    discard n
   nsDictionary[K, V]()
 
 proc len*[K: NSObject, V: NSObject](dict: NSDictionary[K, V]): int {.inline.} =

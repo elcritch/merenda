@@ -144,8 +144,6 @@ template nsBuilder(): NSBoxingBuilder =
   NSBoxingBuilder()
 
 macro `[]`*(builder: NSBoxingBuilder, values: varargs[untyped]): untyped =
-  when false:
-    discard builder
   if values.len == 0:
     return quote:
       nsArray[NSObject]()

@@ -215,8 +215,6 @@ objcImpl:
     let state = getAssociatedRef[KVOStateRef](self, KVOStateRef)
     if state.isNil:
       return
-    when false:
-      discard ofObject
 
     var evt = KVOEvent(
       keyPath: stringValue(keyPath),
