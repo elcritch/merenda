@@ -22,7 +22,7 @@ objcImpl:
     alpha {.set: setAlphaValue, get: alphaValue.}: float32
     viewSuperview: NSView
     viewTag: int
-    viewSubviews: seq[ID]
+    viewSubviews: seq[NSView]
 
   method init*(self: var NSView): NSView =
     result = asType[NSView](
@@ -104,8 +104,7 @@ proc detachSubviews*(view: NSObject) =
     return
   var children = v.viewSubviews()
   for child in children:
-    clearSuperviewRef(child)
-    releaseId(child)
+    clearSuperviewRef(child.value)
   children.setLen(0)
   v.viewSubviews = children
 
@@ -206,10 +205,7 @@ proc setFrameSize*(view: NSView, size: NSSize) =
   )
 
 proc subviews*(view: NSView): seq[NSView] =
-  let childIds = view.viewSubviews()
-  result = newSeq[NSView](childIds.len)
-  for i, child in childIds:
-    result[i] = ownFromId[NSView](child)
+  result = view.viewSubviews()
 
 proc superview*(view: NSView): NSView =
   let parent = view.viewSuperview()
@@ -222,11 +218,10 @@ proc removeSubviewById(parent: NSView, childId: ID): bool =
     return false
   var children = parent.viewSubviews()
   for i, candidate in children:
-    if candidate == childId:
+    if candidate.value == childId:
       clearSuperviewRef(childId)
       children.del(i)
       parent.viewSubviews = children
-      releaseId(childId)
       return true
   false
 
@@ -245,16 +240,16 @@ proc addSubview*(self: NSView, view: NSView) =
   let parent = view.viewSuperview()
   if not parent.isNil and parent.value == self.value:
     var children = self.viewSubviews()
-    if view.value notin children:
-      children.add(retainId(view.value))
+    if view notin children:
+      children.add(view)
       self.viewSubviews = children
     view.setNextResponder(asType[NSResponder](self))
     return
   if not parent.isNil:
     view.removeFromSuperview()
   var children = self.viewSubviews()
-  if view.value notin children:
-    children.add(retainId(view.value))
+  if view notin children:
+    children.add(view)
     self.viewSubviews = children
   view.viewSuperview = retain(self)
   view.setNextResponder(asType[NSResponder](self))
@@ -269,8 +264,7 @@ proc viewWithTag*(view: NSView, wantedTag: int): NSView =
     return NSView(value: nil)
   if view.viewTag() == wantedTag:
     return retain(view)
-  for childId in view.viewSubviews():
-    let child = ownFromId[NSView](childId)
+  for child in view.viewSubviews():
     if child.isNil:
       continue
     let hit = child.viewWithTag(wantedTag)
