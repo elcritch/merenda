@@ -38,6 +38,7 @@ suite "appkit NSEvent":
     check(keyEvent.characters() == @ns"a")
     check(keyEvent.charactersIgnoringModifiers() == @ns"A")
     check(keyEvent.keyCode() == 12'u16)
+    check(keyEvent.isKindOfClass(NSEvent_keyboard))
 
     var otherEvent = newOtherEvent(
       NSApplicationDefined,
@@ -52,9 +53,34 @@ suite "appkit NSEvent":
     check(otherEvent.subtype() == 9)
     check(otherEvent.data1() == 100)
     check(otherEvent.data2() == 200)
+    check(otherEvent.isKindOfClass(NSEvent_other))
 
     keyEvent.value = nil
     otherEvent.value = nil
+
+  test "subclass interfaces are wired for mouse, periodic, and coregraphics":
+    var mouseEvent = newMouseEvent(
+      NSLeftMouseDown, nsPoint(7, 11), nsModifierFlagsMask({NSShiftKeyMask}), 11.0, 2, 3
+    )
+    check(mouseEvent.isKindOfClass(NSEvent_mouse))
+    var mouseEventTyped = asType[NSEvent_mouse](mouseEvent.value)
+    check(mouseEventTyped.serialNumber() == 0)
+    mouseEventTyped.setSerialNumber(99)
+    check(mouseEventTyped.serialNumber() == 99)
+    mouseEventTyped.value = nil
+
+    var periodic = newPeriodicEvent()
+    check(periodic.isKindOfClass(NSEvent_periodic))
+    check(periodic.`type`() == NSPeriodic)
+
+    var display = newDisplayEvent(cast[pointer](0x1234'u))
+    check(display.isKindOfClass(NSEvent_CoreGraphics))
+    check(display.`type`() == NSPlatformSpecificDisplayEvent)
+    check(display.coreGraphicsEvent() == cast[pointer](0x1234'u))
+
+    mouseEvent.value = nil
+    periodic.value = nil
+    display.value = nil
 
   test "subtype and tracking methods raise when event lacks payload":
     var e = NSEvent.new()
@@ -109,6 +135,7 @@ suite "appkit NSEvent":
       mouseButtonEventFromSiwin(6, nsPoint(9, 10), mouseInput, {siwin.ModifierKey.alt})
     check(fromMouse.`type`() == NSLeftMouseDown)
     check(fromMouse.clickCount() == 1)
+    check(fromMouse.isKindOfClass(NSEvent_mouse))
     check(fromMouse.siwinMouseButton() == siwin.MouseButton.left)
     check(fromMouse.modifierFlags() == nsModifierFlagsMask({NSAlternateKeyMask}))
 
