@@ -545,6 +545,19 @@ template objcFromAbiValue(T: typedesc, v: untyped): untyped =
   else:
     v
 
+template objcFromAbiReturnValue(T: typedesc, v: untyped): untyped =
+  block:
+    let objcRawReturnValue = v
+    when T is string:
+      if objcRawReturnValue.isNil:
+        ""
+      else:
+        $objcRawReturnValue
+    elif T is NSObject:
+      asRetainedType[T](objcRawReturnValue)
+    else:
+      objcRawReturnValue
+
 proc isNSObjectTypeNode(typ: NimNode): bool =
   leafTypeName(typ) == "NSObject"
 
@@ -790,7 +803,7 @@ proc buildObjcCallHelperProc(
     body.add(callExpr)
   else:
     body.add quote do:
-      result = objcFromAbiValue(`retType`, `callExpr`)
+      result = objcFromAbiReturnValue(`retType`, `callExpr`)
 
   result = newProc(
     name = helperName,
