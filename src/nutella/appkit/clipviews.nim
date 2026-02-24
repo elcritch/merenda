@@ -7,7 +7,7 @@ objcImpl:
 objcImpl:
   type NSClipView* = object of NSView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
-    xxDocumentCursor {.set: setDocumentCursor, get: documentCursor.}: NSCursor
+    xDocumentCursor {.set: setDocumentCursor, get: documentCursor.}: NSCursor
     clipDocumentViewId: NSView
     clipDocumentRect: NSRect
     clipDrawsBackground {.set: setDrawsBackground, get: drawsBackground.}: bool
@@ -19,7 +19,7 @@ objcImpl:
     if result.isNil:
       return
     result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
-    result.xxDocumentCursor = NSCursor(value: nil)
+    result.xDocumentCursor = NSCursor(value: nil)
     result.clipDocumentViewId = NSView(value: nil)
     result.clipDocumentRect = nsRect(0, 0, 0, 0)
     result.clipDrawsBackground = true
@@ -159,7 +159,7 @@ objcImpl:
     )
 
   method dealloc(self: NSClipView) {.used.} =
-    self.xxDocumentCursor = NSCursor(value: nil)
+    self.xDocumentCursor = NSCursor(value: nil)
     self.clipDocumentViewId = NSView(value: nil)
     discard callSuperIdFrom(NSClipView, self, getSelector("dealloc"))
 

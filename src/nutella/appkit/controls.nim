@@ -9,8 +9,8 @@ export views, controllers
 
 objcImpl:
   type NSControl* = object of NSView
-    xxCell: NSCell
-    xxCurrentEditor: NSText
+    xCell: NSCell
+    xCurrentEditor: NSText
     refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
       bool
     alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
@@ -52,12 +52,12 @@ objcImpl:
     )
     if result.isNil:
       return
-    result.xxCell = NSCell(value: nil)
-    result.xxCurrentEditor = NSText(value: nil)
+    result.xCell = NSCell(value: nil)
+    result.xCurrentEditor = NSText(value: nil)
     var defaultCell = NSCell.new()
-    result.xxCell = ownFromId[NSCell](defaultCell.value)
+    result.xCell = ownFromId[NSCell](defaultCell.value)
     defaultCell.value = nil
-    let cell = result.xxCell
+    let cell = result.xCell
     if not cell.isNil:
       cell.setControlView(asType[NSView](result))
       cell.setContinuous(false)
@@ -67,20 +67,20 @@ objcImpl:
   method cell*(self: NSControl): NSCell =
     if self.isNil:
       return NSCell(value: nil)
-    if self.xxCell.isNil:
+    if self.xCell.isNil:
       var defaultCell = NSCell.new()
-      self.xxCell = move(defaultCell)
-      if not self.xxCell.isNil:
-        let controlCell = self.xxCell
+      self.xCell = move(defaultCell)
+      if not self.xCell.isNil:
+        let controlCell = self.xCell
         controlCell.setControlView(asType[NSView](self))
         controlCell.setContinuous(false)
-    self.xxCell
+    self.xCell
 
   method setCell*(self: NSControl, cell: NSCell) =
     if self.isNil:
       return
-    self.xxCell = ownFromId[NSCell](cell.value)
-    let bound = self.xxCell
+    self.xCell = ownFromId[NSCell](cell.value)
+    let bound = self.xCell
     if not bound.isNil:
       bound.setControlView(asType[NSView](self))
 
@@ -119,7 +119,7 @@ objcImpl:
   method currentEditor*(self: NSControl): NSText =
     if self.isNil:
       return NSText(value: nil)
-    self.xxCurrentEditor
+    self.xCurrentEditor
 
   method acceptsFirstResponder*(self: NSControl): bool =
     if self.isNil:
@@ -209,8 +209,8 @@ objcImpl:
     discard sender
 
   method dealloc(self: NSControl) {.used.} =
-    self.xxCell = NSCell(value: nil)
-    self.xxCurrentEditor = NSText(value: nil)
+    self.xCell = NSCell(value: nil)
+    self.xCurrentEditor = NSText(value: nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 

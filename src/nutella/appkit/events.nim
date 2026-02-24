@@ -230,67 +230,67 @@ proc siwinKeyCode*(key: siwin.Key): cushort =
 
 objcImpl:
   type NSEvent* = object of NSObject
-    xxType {.get: `type`.}: NSEventType
-    xxTimestamp {.get: timestamp.}: float
-    xxLocationInWindow {.get: locationInWindow.}: NSPoint
-    xxModifierFlags {.get: modifierFlags.}: NSModifierFlags
-    xxWindowNumber {.get: windowNumber.}: NSInteger
+    xType {.get: `type`.}: NSEventType
+    xTimestamp {.get: timestamp.}: float
+    xLocationInWindow {.get: locationInWindow.}: NSPoint
+    xModifierFlags {.get: modifierFlags.}: NSModifierFlags
+    xWindowNumber {.get: windowNumber.}: NSInteger
 
-    xxClickCount {.get: clickCount.}: int
-    xxDeltaX {.get: deltaX.}: float32
-    xxDeltaY {.get: deltaY.}: float32
-    xxDeltaZ {.get: deltaZ.}: float32
-    xxKeyCode {.get: keyCode.}: cushort
+    xClickCount {.get: clickCount.}: int
+    xDeltaX {.get: deltaX.}: float32
+    xDeltaY {.get: deltaY.}: float32
+    xDeltaZ {.get: deltaZ.}: float32
+    xKeyCode {.get: keyCode.}: cushort
 
-    xxSubtype: cshort
-    xxData1: NSInteger
-    xxData2: NSInteger
-    xxTrackingNumber: NSInteger
-    xxUserData: pointer
-    xxHasOtherData: bool
-    xxHasTrackingData: bool
+    xSubtype: cshort
+    xData1: NSInteger
+    xData2: NSInteger
+    xTrackingNumber: NSInteger
+    xUserData: pointer
+    xHasOtherData: bool
+    xHasTrackingData: bool
 
-    xxCharactersId: NSString
-    xxCharactersIgnoringModifiersId: NSString
+    xCharactersId: NSString
+    xCharactersIgnoringModifiersId: NSString
 
-    xxSiwinKey: siwin.Key
-    xxSiwinModifiers: set[siwin.ModifierKey]
-    xxSiwinMouseButton: siwin.MouseButton
-    xxSiwinMouseButtons: set[siwin.MouseButton]
-    xxSiwinRepeated: bool
-    xxSiwinGenerated: bool
-    xxSiwinPressed: bool
+    xSiwinKey: siwin.Key
+    xSiwinModifiers: set[siwin.ModifierKey]
+    xSiwinMouseButton: siwin.MouseButton
+    xSiwinMouseButtons: set[siwin.MouseButton]
+    xSiwinRepeated: bool
+    xSiwinGenerated: bool
+    xSiwinPressed: bool
 
   method init*(self: var NSEvent): NSEvent =
     result = asType[NSEvent](callSuperIdFrom(NSEvent, self, getSelector("init")))
     if result.isNil:
       return
-    result.xxType = NSApplicationDefined
-    result.xxTimestamp = timeIntervalSinceReferenceDate()
-    result.xxLocationInWindow = nsPoint(0.0, 0.0)
-    result.xxModifierFlags = {}
-    result.xxWindowNumber = 0
-    result.xxClickCount = 0
-    result.xxDeltaX = 0
-    result.xxDeltaY = 0
-    result.xxDeltaZ = 0
-    result.xxKeyCode = 0xFFFF'u16
-    result.xxSubtype = 0
-    result.xxData1 = 0
-    result.xxData2 = 0
-    result.xxTrackingNumber = 0
-    result.xxUserData = nil
-    result.xxHasOtherData = false
-    result.xxHasTrackingData = false
-    result.xxCharactersId = NSString(value: nil)
-    result.xxCharactersIgnoringModifiersId = NSString(value: nil)
-    result.xxSiwinKey = siwin.Key.unknown
-    result.xxSiwinModifiers = {}
-    result.xxSiwinMouseButton = siwin.MouseButton.left
-    result.xxSiwinMouseButtons = {}
-    result.xxSiwinRepeated = false
-    result.xxSiwinGenerated = false
-    result.xxSiwinPressed = false
+    result.xType = NSApplicationDefined
+    result.xTimestamp = timeIntervalSinceReferenceDate()
+    result.xLocationInWindow = nsPoint(0.0, 0.0)
+    result.xModifierFlags = {}
+    result.xWindowNumber = 0
+    result.xClickCount = 0
+    result.xDeltaX = 0
+    result.xDeltaY = 0
+    result.xDeltaZ = 0
+    result.xKeyCode = 0xFFFF'u16
+    result.xSubtype = 0
+    result.xData1 = 0
+    result.xData2 = 0
+    result.xTrackingNumber = 0
+    result.xUserData = nil
+    result.xHasOtherData = false
+    result.xHasTrackingData = false
+    result.xCharactersId = NSString(value: nil)
+    result.xCharactersIgnoringModifiersId = NSString(value: nil)
+    result.xSiwinKey = siwin.Key.unknown
+    result.xSiwinModifiers = {}
+    result.xSiwinMouseButton = siwin.MouseButton.left
+    result.xSiwinMouseButtons = {}
+    result.xSiwinRepeated = false
+    result.xSiwinGenerated = false
+    result.xSiwinPressed = false
 
   method initWithType*(
       self: var NSEvent,
@@ -303,11 +303,11 @@ objcImpl:
     result = self.init()
     if result.isNil:
       return
-    result.xxType = eventType
-    result.xxLocationInWindow = location
-    result.xxModifierFlags = modifierFlags
-    result.xxTimestamp = timestamp
-    result.xxWindowNumber = windowNumber
+    result.xType = eventType
+    result.xLocationInWindow = location
+    result.xModifierFlags = modifierFlags
+    result.xTimestamp = timestamp
+    result.xWindowNumber = windowNumber
     currentMouseLocation = location
     currentModifierFlags = modifierFlags
 
@@ -337,9 +337,9 @@ objcImpl:
     allocated.value = nil
     if result.isNil:
       return
-    result.xxTrackingNumber = trackingNumber
-    result.xxUserData = userData
-    result.xxHasTrackingData = true
+    result.xTrackingNumber = trackingNumber
+    result.xUserData = userData
+    result.xHasTrackingData = true
 
   proc mouseEventWithType*(
       t: typedesc[NSEvent],
@@ -362,7 +362,7 @@ objcImpl:
     allocated.value = nil
     if result.isNil:
       return
-    result.xxClickCount = clickCount.int
+    result.xClickCount = clickCount.int
 
   proc keyEventWithType*(
       t: typedesc[NSEvent],
@@ -386,10 +386,10 @@ objcImpl:
     allocated.value = nil
     if result.isNil:
       return
-    result.xxCharactersId = retain(characters)
-    result.xxCharactersIgnoringModifiersId = retain(charactersIgnoringModifiers)
-    result.xxKeyCode = keyCode
-    result.xxSiwinRepeated = isARepeat
+    result.xCharactersId = retain(characters)
+    result.xCharactersIgnoringModifiersId = retain(charactersIgnoringModifiers)
+    result.xKeyCode = keyCode
+    result.xSiwinRepeated = isARepeat
 
   proc otherEventWithType*(
       t: typedesc[NSEvent],
@@ -410,20 +410,20 @@ objcImpl:
     allocated.value = nil
     if result.isNil:
       return
-    result.xxSubtype = subtype
-    result.xxData1 = data1
-    result.xxData2 = data2
-    result.xxHasOtherData = true
+    result.xSubtype = subtype
+    result.xData1 = data1
+    result.xData2 = data2
+    result.xHasOtherData = true
 
   method characters*(self: NSEvent): NSString =
-    if self.xxCharactersId.isNil:
+    if self.xCharactersId.isNil:
       return NSString(value: nil)
-    retain(self.xxCharactersId)
+    retain(self.xCharactersId)
 
   method charactersIgnoringModifiers*(self: NSEvent): NSString =
-    if self.xxCharactersIgnoringModifiersId.isNil:
+    if self.xCharactersIgnoringModifiersId.isNil:
       return NSString(value: nil)
-    retain(self.xxCharactersIgnoringModifiersId)
+    retain(self.xCharactersIgnoringModifiersId)
 
   proc startPeriodicEventsAfterDelay*(
       t: typedesc[NSEvent], delay: float, period {.kw("withPeriod").}: float
@@ -440,42 +440,42 @@ objcImpl:
     periodicEventsPeriodSeconds = 0
 
   method subtype*(self: NSEvent): cshort =
-    if not self.xxHasOtherData:
+    if not self.xHasOtherData:
       raise newException(ValueError, "No event subtype in NSEvent")
-    self.xxSubtype
+    self.xSubtype
 
   method data1*(self: NSEvent): NSInteger =
-    if not self.xxHasOtherData:
+    if not self.xHasOtherData:
       raise newException(ValueError, "No event data1 in NSEvent")
-    self.xxData1
+    self.xData1
 
   method data2*(self: NSEvent): NSInteger =
-    if not self.xxHasOtherData:
+    if not self.xHasOtherData:
       raise newException(ValueError, "No event data2 in NSEvent")
-    self.xxData2
+    self.xData2
 
   method trackingNumber*(self: NSEvent): NSInteger =
-    if not self.xxHasTrackingData:
+    if not self.xHasTrackingData:
       raise newException(ValueError, "No trackingNumber in NSEvent")
-    self.xxTrackingNumber
+    self.xTrackingNumber
 
   method trackingArea*(self: NSEvent): NSObject =
-    if not self.xxHasTrackingData:
+    if not self.xHasTrackingData:
       raise newException(ValueError, "No trackingArea in NSEvent")
-    NSObject(value: cast[ID](self.xxTrackingNumber.uint))
+    NSObject(value: cast[ID](self.xTrackingNumber.uint))
 
   method userData*(self: NSEvent): pointer =
-    if not self.xxHasTrackingData:
+    if not self.xHasTrackingData:
       raise newException(ValueError, "No userData in NSEvent")
-    if self.xxType notin [NSMouseEntered, NSMouseExited]:
+    if self.xType notin [NSMouseEntered, NSMouseExited]:
       raise newException(
         ValueError, "userData is only valid for NSMouseEntered/NSMouseExited"
       )
-    self.xxUserData
+    self.xUserData
 
   method dealloc(self: NSEvent) {.used.} =
-    self.xxCharactersId = NSString(value: nil)
-    self.xxCharactersIgnoringModifiersId = NSString(value: nil)
+    self.xCharactersId = NSString(value: nil)
+    self.xCharactersIgnoringModifiersId = NSString(value: nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSEvent, self, getSelector("dealloc"))
 
@@ -484,7 +484,7 @@ objcImpl:
 
 objcImpl:
   type NSEvent_mouse* = object of NSEvent
-    xxSerialNumber {.get: serialNumber, set: setSerialNumber.}: NSInteger
+    xSerialNumber {.get: serialNumber, set: setSerialNumber.}: NSInteger
 
 objcImpl:
   type NSEvent_other* = object of NSEvent
@@ -494,7 +494,7 @@ objcImpl:
 
 objcImpl:
   type NSEvent_CoreGraphics* = object of NSEvent
-    xxCoreGraphicsEvent {.get: coreGraphicsEvent.}: pointer
+    xCoreGraphicsEvent {.get: coreGraphicsEvent.}: pointer
 
   method initWithDisplayEvent*(
       self: var NSEvent_CoreGraphics, event: pointer
@@ -509,7 +509,7 @@ objcImpl:
     result = asType[NSEvent_CoreGraphics](move(initialized.value))
     if result.isNil:
       return
-    result.xxCoreGraphicsEvent = event
+    result.xCoreGraphicsEvent = event
 
 proc newEvent*(
     eventType: NSEventType,
@@ -541,10 +541,10 @@ proc newKeyEvent*(
   allocated.value = nil
   if result.isNil:
     return
-  result.xxCharactersId = retain(characters)
-  result.xxCharactersIgnoringModifiersId = retain(charactersIgnoringModifiers)
-  result.xxKeyCode = keyCode
-  result.xxSiwinRepeated = isARepeat
+  result.xCharactersId = retain(characters)
+  result.xCharactersIgnoringModifiersId = retain(charactersIgnoringModifiers)
+  result.xKeyCode = keyCode
+  result.xSiwinRepeated = isARepeat
 
 proc newOtherEvent*(
     eventType: NSEventType,
@@ -561,10 +561,10 @@ proc newOtherEvent*(
   allocated.value = nil
   if result.isNil:
     return
-  result.xxSubtype = subtype
-  result.xxData1 = data1
-  result.xxData2 = data2
-  result.xxHasOtherData = true
+  result.xSubtype = subtype
+  result.xData1 = data1
+  result.xData2 = data2
+  result.xHasOtherData = true
 
 proc newEnterExitEvent*(
     eventType: NSEventType,
@@ -580,9 +580,9 @@ proc newEnterExitEvent*(
   allocated.value = nil
   if result.isNil:
     return
-  result.xxTrackingNumber = trackingNumber
-  result.xxUserData = userData
-  result.xxHasTrackingData = true
+  result.xTrackingNumber = trackingNumber
+  result.xUserData = userData
+  result.xHasTrackingData = true
 
 proc newMouseEvent*(
     eventType: NSEventType,
@@ -597,7 +597,7 @@ proc newMouseEvent*(
   allocated.value = nil
   if result.isNil:
     return
-  result.xxClickCount = clickCount.int
+  result.xClickCount = clickCount.int
 
 proc newPeriodicEvent*(
     timestamp: float = timeIntervalSinceReferenceDate()
@@ -618,7 +618,7 @@ proc newDisplayEvent*(
   allocated.value = nil
   if result.isNil:
     return
-  result.xxCoreGraphicsEvent = event
+  result.xCoreGraphicsEvent = event
 
 proc NSEventMaskFromType*(eventType: NSEventType): NSEventMask =
   {eventType}
@@ -635,31 +635,31 @@ proc periodicEventsPeriod*(): float =
 proc siwinKey*(event: NSEvent): siwin.Key =
   if event.isNil:
     return siwin.Key.unknown
-  event.xxSiwinKey
+  event.xSiwinKey
 
 proc siwinModifiers*(event: NSEvent): set[siwin.ModifierKey] =
   if event.isNil:
     return {}
-  event.xxSiwinModifiers
+  event.xSiwinModifiers
 
 proc siwinMouseButton*(event: NSEvent): siwin.MouseButton =
   if event.isNil:
     return siwin.MouseButton.left
-  event.xxSiwinMouseButton
+  event.xSiwinMouseButton
 
 proc siwinMouseButtons*(event: NSEvent): set[siwin.MouseButton] =
   if event.isNil:
     return {}
-  event.xxSiwinMouseButtons
+  event.xSiwinMouseButtons
 
 proc siwinRepeated*(event: NSEvent): bool =
-  (not event.isNil) and event.xxSiwinRepeated
+  (not event.isNil) and event.xSiwinRepeated
 
 proc siwinGenerated*(event: NSEvent): bool =
-  (not event.isNil) and event.xxSiwinGenerated
+  (not event.isNil) and event.xSiwinGenerated
 
 proc siwinPressed*(event: NSEvent): bool =
-  (not event.isNil) and event.xxSiwinPressed
+  (not event.isNil) and event.xSiwinPressed
 
 proc keyEventFromSiwin*(
     windowNumber: NSInteger,
@@ -681,11 +681,11 @@ proc keyEventFromSiwin*(
   )
   if result.isNil:
     return
-  result.xxSiwinKey = event.key
-  result.xxSiwinModifiers = event.modifiers
-  result.xxSiwinRepeated = event.repeated
-  result.xxSiwinGenerated = event.generated
-  result.xxSiwinPressed = event.pressed
+  result.xSiwinKey = event.key
+  result.xSiwinModifiers = event.modifiers
+  result.xSiwinRepeated = event.repeated
+  result.xSiwinGenerated = event.generated
+  result.xSiwinPressed = event.pressed
 
 proc mouseButtonEventFromSiwin*(
     windowNumber: NSInteger,
@@ -704,14 +704,14 @@ proc mouseButtonEventFromSiwin*(
   )
   if result.isNil:
     return
-  result.xxSiwinMouseButton = event.button
-  result.xxSiwinModifiers = modifiers
-  result.xxSiwinGenerated = event.generated
-  result.xxSiwinPressed = event.pressed
+  result.xSiwinMouseButton = event.button
+  result.xSiwinModifiers = modifiers
+  result.xSiwinGenerated = event.generated
+  result.xSiwinPressed = event.pressed
   if event.pressed:
-    result.xxSiwinMouseButtons = {event.button}
+    result.xSiwinMouseButtons = {event.button}
   else:
-    result.xxSiwinMouseButtons = {}
+    result.xSiwinMouseButtons = {}
 
 proc scrollEventFromSiwin*(
     windowNumber: NSInteger,
@@ -728,9 +728,9 @@ proc scrollEventFromSiwin*(
   )
   if result.isNil:
     return
-  result.xxDeltaX = event.deltaX.float32
-  result.xxDeltaY = event.delta.float32
-  result.xxSiwinModifiers = modifiers
+  result.xDeltaX = event.deltaX.float32
+  result.xDeltaY = event.delta.float32
+  result.xSiwinModifiers = modifiers
 
 proc mouseMoveEventFromSiwin*(
     windowNumber: NSInteger,
@@ -749,6 +749,6 @@ proc mouseMoveEventFromSiwin*(
   )
   if result.isNil:
     return
-  result.xxSiwinModifiers = modifiers
-  result.xxSiwinMouseButtons = mouseButtons
-  result.xxSiwinPressed = mouseButtons.len > 0
+  result.xSiwinModifiers = modifiers
+  result.xSiwinMouseButtons = mouseButtons
+  result.xSiwinPressed = mouseButtons.len > 0
