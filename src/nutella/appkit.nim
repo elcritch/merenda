@@ -3,6 +3,7 @@ import ./appkit/rendering
 import ./appkit/application
 import ./appkit/views
 import ./appkit/windows
+import ./appkit/controllers
 import ./appkit/controls
 import ./appkit/buttons
 import ./appkit/textfields
@@ -18,6 +19,7 @@ export rendering
 export application
 export views
 export windows
+export controllers
 export controls
 export buttons
 export textfields

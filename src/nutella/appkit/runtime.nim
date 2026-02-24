@@ -172,7 +172,6 @@ proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject):
 
 type
   ## Pre-declare core types
-
   NSResponder* = object of NSObject
 
   NSApplication* = object of NSResponder
@@ -183,6 +182,6 @@ type
   NSView* = object of NSResponder
 
   NSCollectionView* = object of NSView
+  NSText* = object of NSView
   NSControl* = object of NSView
   NSTextField* = object of NSControl
-  
