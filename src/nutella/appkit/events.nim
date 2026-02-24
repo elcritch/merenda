@@ -146,11 +146,11 @@ const
 var currentMouseLocation {.threadvar.}: NSPoint
 var currentModifierFlags {.threadvar.}: NSUInteger
 var periodicEventsEnabledState {.threadvar.}: bool
-var periodicEventsDelaySeconds {.threadvar.}: cdouble
-var periodicEventsPeriodSeconds {.threadvar.}: cdouble
+var periodicEventsDelaySeconds {.threadvar.}: float
+var periodicEventsPeriodSeconds {.threadvar.}: float
 
-proc timeIntervalSinceReferenceDate(): cdouble =
-  (epochTime() - 978_307_200.0).cdouble
+proc timeIntervalSinceReferenceDate(): float =
+  (epochTime() - 978_307_200.0).float
 
 proc isModifierSiwinKey(key: siwin.Key): bool =
   key in {
@@ -213,7 +213,7 @@ proc siwinKeyCode*(key: siwin.Key): cushort =
 objcImpl:
   type NSEvent* = object of NSObject
     xxType {.get: `type`.}: NSEventType
-    xxTimestamp {.get: timestamp.}: cdouble
+    xxTimestamp {.get: timestamp.}: float
     xxLocationInWindow {.get: locationInWindow.}: NSPoint
     xxModifierFlags {.get: modifierFlags.}: NSUInteger
     xxWindowNumber {.get: windowNumber.}: NSInteger
@@ -279,7 +279,7 @@ objcImpl:
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
       modifierFlags {.kw("modifierFlags").}: NSUInteger,
-      timestamp {.kw("timestamp").}: cdouble,
+      timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: NSInteger,
   ): NSEvent =
     result = self.init()
@@ -308,7 +308,7 @@ objcImpl:
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
       flags {.kw("modifierFlags").}: NSUInteger,
-      timestamp {.kw("timestamp").}: cdouble,
+      timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: NSInteger,
       context {.kw("context").}: NSObject,
       eventNumber {.kw("eventNumber").}: NSInteger,
@@ -334,7 +334,7 @@ objcImpl:
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
       flags {.kw("modifierFlags").}: NSUInteger,
-      timestamp {.kw("timestamp").}: cdouble,
+      timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: NSInteger,
       context {.kw("context").}: NSObject,
       eventNumber {.kw("eventNumber").}: NSInteger,
@@ -359,7 +359,7 @@ objcImpl:
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
       modifierFlags {.kw("modifierFlags").}: cuint,
-      timestamp {.kw("timestamp").}: cdouble,
+      timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: cint,
       context {.kw("context").}: NSObject,
       characters {.kw("characters").}: NSString,
@@ -390,7 +390,7 @@ objcImpl:
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
       flags {.kw("modifierFlags").}: NSUInteger,
-      timestamp {.kw("timestamp").}: cdouble,
+      timestamp {.kw("timestamp").}: float,
       windowNum {.kw("windowNumber").}: NSInteger,
       context {.kw("context").}: NSObject,
       subtype {.kw("subtype").}: cshort,
@@ -422,7 +422,7 @@ objcImpl:
     ownFromId[NSString](self.xxCharactersIgnoringModifiersId)
 
   proc startPeriodicEventsAfterDelay*(
-      t: typedesc[NSEvent], delay: cdouble, period {.kw("withPeriod").}: cdouble
+      t: typedesc[NSEvent], delay: float, period {.kw("withPeriod").}: float
   ) =
     when false:
       discard t
@@ -517,7 +517,7 @@ proc newEvent*(
     eventType: NSEventType,
     location: NSPoint,
     modifierFlags: NSUInteger,
-    timestamp: cdouble = timeIntervalSinceReferenceDate(),
+    timestamp: float = timeIntervalSinceReferenceDate(),
     windowNumber: NSInteger = 0,
 ): NSEvent =
   var allocated = NSEvent.alloc()
@@ -529,7 +529,7 @@ proc newKeyEvent*(
     eventType: NSEventType,
     location: NSPoint,
     modifierFlags: cuint,
-    timestamp: cdouble,
+    timestamp: float,
     windowNumber: cint,
     characters: NSString,
     charactersIgnoringModifiers: NSString,
@@ -554,7 +554,7 @@ proc newOtherEvent*(
     eventType: NSEventType,
     location: NSPoint,
     flags: NSUInteger,
-    timestamp: cdouble,
+    timestamp: float,
     windowNum: NSInteger,
     subtype: cshort,
     data1: NSInteger,
@@ -574,7 +574,7 @@ proc newEnterExitEvent*(
     eventType: NSEventType,
     location: NSPoint,
     flags: NSUInteger,
-    timestamp: cdouble,
+    timestamp: float,
     windowNumber: NSInteger,
     trackingNumber: NSInteger,
     userData: pointer,
@@ -592,7 +592,7 @@ proc newMouseEvent*(
     eventType: NSEventType,
     location: NSPoint,
     flags: NSUInteger,
-    timestamp: cdouble,
+    timestamp: float,
     windowNumber: NSInteger,
     clickCount: NSInteger,
 ): NSEvent =
@@ -604,7 +604,7 @@ proc newMouseEvent*(
   result.xxClickCount = clickCount.int
 
 proc newPeriodicEvent*(
-    timestamp: cdouble = timeIntervalSinceReferenceDate()
+    timestamp: float = timeIntervalSinceReferenceDate()
 ): NSEvent_periodic =
   var allocated = NSEvent_periodic.alloc()
   var initialized = allocated.initWithType(NSPeriodic, nsPoint(0, 0), 0, timestamp, 0)
@@ -613,7 +613,7 @@ proc newPeriodicEvent*(
   allocated.value = nil
 
 proc newDisplayEvent*(
-    event: pointer, timestamp: cdouble = timeIntervalSinceReferenceDate()
+    event: pointer, timestamp: float = timeIntervalSinceReferenceDate()
 ): NSEvent_CoreGraphics =
   var allocated = NSEvent_CoreGraphics.alloc()
   var initialized = allocated.initWithType(
@@ -632,10 +632,10 @@ proc NSEventMaskFromType*(eventType: NSEventType): NSEventMask =
 proc periodicEventsEnabled*(): bool =
   periodicEventsEnabledState
 
-proc periodicEventsDelay*(): cdouble =
+proc periodicEventsDelay*(): float =
   periodicEventsDelaySeconds
 
-proc periodicEventsPeriod*(): cdouble =
+proc periodicEventsPeriod*(): float =
   periodicEventsPeriodSeconds
 
 proc siwinKey*(event: NSEvent): siwin.Key =

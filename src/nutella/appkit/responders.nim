@@ -1,4 +1,5 @@
 import ./runtime
+import ./events
 
 objcImpl:
 
@@ -57,6 +58,97 @@ objcImpl:
   method noResponderFor*(self: NSResponder, action: SEL) =
     discard self
     discard action
+
+  method mouseDown*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.mouseDown(event)
+      return
+    self.noResponderFor(getSelector("mouseDown:"))
+
+  method mouseUp*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.mouseUp(event)
+      return
+    self.noResponderFor(getSelector("mouseUp:"))
+
+  method rightMouseDown*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.rightMouseDown(event)
+      return
+    self.noResponderFor(getSelector("rightMouseDown:"))
+
+  method rightMouseUp*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.rightMouseUp(event)
+      return
+    self.noResponderFor(getSelector("rightMouseUp:"))
+
+  method mouseMoved*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.mouseMoved(event)
+      return
+    self.noResponderFor(getSelector("mouseMoved:"))
+
+  method mouseDragged*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.mouseDragged(event)
+      return
+    self.noResponderFor(getSelector("mouseDragged:"))
+
+  method rightMouseDragged*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.rightMouseDragged(event)
+      return
+    self.noResponderFor(getSelector("rightMouseDragged:"))
+
+  method mouseEntered*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.mouseEntered(event)
+      return
+    self.noResponderFor(getSelector("mouseEntered:"))
+
+  method mouseExited*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.mouseExited(event)
+      return
+    self.noResponderFor(getSelector("mouseExited:"))
+
+  method keyDown*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.keyDown(event)
+      return
+    self.noResponderFor(getSelector("keyDown:"))
+
+  method keyUp*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.keyUp(event)
+      return
+    self.noResponderFor(getSelector("keyUp:"))
+
+  method flagsChanged*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.flagsChanged(event)
+      return
+    self.noResponderFor(getSelector("flagsChanged:"))
+
+  method scrollWheel*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.scrollWheel(event)
+      return
+    self.noResponderFor(getSelector("scrollWheel:"))
 
   method dealloc(self: NSResponder) {.used.} =
     self.nextResp = replacedOwnedId(self.nextResp, nil)
