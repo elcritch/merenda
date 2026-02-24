@@ -29,10 +29,11 @@ objcImpl:
     self.isEnabled() and (not self.refusesFirstResponder())
 
   method stringValue*(self: NSControl): NSString =
-    discard self
+    echo "NSControl:stringValue:get "
     @ns""
 
   method setStringValue*(self: NSControl, value: NSString) =
+    echo "NSControl:stringValue:set "
     discard self
     discard value
 

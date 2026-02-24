@@ -200,10 +200,15 @@ suite "nutella appkit hello world":
 
   test "control dispatch routes to subclass string and click behavior":
     var field = newTextField(0, 0, 240, 30, "Initial")
+    echo "A1:"
     check(controlStringValue(field) == @ns"Initial")
+    echo "A2:"
     setControlStringValue(field, @ns"Updated")
+    echo "A3:"
     check(field.stringValue() == @ns"Updated")
+    echo "A4:"
     check(controlStringValue(field) == @ns"Updated")
+    echo "A5:"
 
     var button = newButton(0, 0, 120, 30, "Push")
     var clicks = 0
