@@ -50,24 +50,22 @@ objcImpl:
       self.clipScrollOrigin = nsPoint(0, 0)
       return
 
-    let parentId = view.viewSuperview()
-    if not parentId.isNil:
-      var parent = ownFromId[NSView](parentId)
-      if not parent.isNil:
-        var siblings = parent.viewSubviews()
-        for i, candidate in siblings:
-          if candidate == view.value:
-            siblings.del(i)
-            parent.viewSubviews = siblings
-            releaseId(candidate)
-            break
-      view.viewSuperview = nil
+    let parent = view.viewSuperview()
+    if not parent.isNil:
+      var siblings = parent.viewSubviews()
+      for i, candidate in siblings:
+        if candidate == view.value:
+          siblings.del(i)
+          parent.viewSubviews = siblings
+          releaseId(candidate)
+          break
+      view.viewSuperview = NSView(value: nil)
 
     var children = self.viewSubviews()
     if view.value notin children:
       children.add(retainId(view.value))
       self.viewSubviews = children
-    view.viewSuperview = self.value
+    view.viewSuperview = retain(asType[NSView](self))
     view.setNextResponder(asType[NSResponder](self))
     self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, view.value)
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)

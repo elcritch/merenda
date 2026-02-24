@@ -64,9 +64,9 @@ objcImpl:
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
 
-  method cell*(self: NSControl): ID =
+  method cell*(self: NSControl): NSCell =
     if self.isNil:
-      return nil
+      return NSCell(value: nil)
     if self.xxCell.isNil:
       var defaultCell = NSCell.new()
       self.xxCell = move(defaultCell)
@@ -74,7 +74,7 @@ objcImpl:
         let controlCell = self.xxCell
         controlCell.setControlView(asType[NSView](self))
         controlCell.setContinuous(false)
-    self.xxCell.value
+    self.xxCell
 
   method setCell*(self: NSControl, cell: NSCell) =
     if self.isNil:
@@ -87,7 +87,7 @@ objcImpl:
   method isEnabled*(self: NSControl): bool =
     if self.isNil:
       return true
-    let controlCell = ownFromId[NSCell](self.cell())
+    let controlCell = self.cell()
     if controlCell.isNil:
       return true
     controlCell.isEnabled()
@@ -95,7 +95,7 @@ objcImpl:
   method setEnabled*(self: NSControl, flag: bool) =
     if self.isNil:
       return
-    let controlCell = ownFromId[NSCell](self.cell())
+    let controlCell = self.cell()
     if controlCell.isNil:
       return
     controlCell.setEnabled(flag)
@@ -103,7 +103,7 @@ objcImpl:
   method isContinuous*(self: NSControl): bool =
     if self.isNil:
       return false
-    let controlCell = ownFromId[NSCell](self.cell())
+    let controlCell = self.cell()
     if controlCell.isNil:
       return false
     controlCell.isContinuous()
@@ -111,7 +111,7 @@ objcImpl:
   method setContinuous*(self: NSControl, flag: bool) =
     if self.isNil:
       return
-    let controlCell = ownFromId[NSCell](self.cell())
+    let controlCell = self.cell()
     if controlCell.isNil:
       return
     controlCell.setContinuous(flag)
