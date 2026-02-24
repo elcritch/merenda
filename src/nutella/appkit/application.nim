@@ -171,7 +171,7 @@ proc newWindow*(
     x, y, width, height: float32, title: NSString = @ns"Nutella Window"
 ): NSWindow =
   var wAlloc = NSWindow.alloc()
-  result = wAlloc.initWithContentRect(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
+  result = wAlloc.initWithContentRect(x.float32, y.float32, width.float32, height.float32)
   wAlloc.value = nil
   result.setTitle(title)
 
@@ -180,12 +180,12 @@ proc newWindow*(x, y, width, height: float32, title: string): NSWindow =
 
 proc newView*(x, y, width, height: float32): NSView =
   var vAlloc = NSView.alloc()
-  result = vAlloc.initWithFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
+  result = vAlloc.initWithFrame(x.float32, y.float32, width.float32, height.float32)
   vAlloc.value = nil
 
 proc newTextField*(x, y, width, height: float32, value: NSString = @ns""): NSTextField =
   result = NSTextField.new()
-  result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
+  result.setFrame(x.float32, y.float32, width.float32, height.float32)
   result.setStringValue(value)
 
 proc newTextField*(x, y, width, height: float32, value: string): NSTextField =
@@ -193,7 +193,7 @@ proc newTextField*(x, y, width, height: float32, value: string): NSTextField =
 
 proc newButton*(x, y, width, height: float32, title: NSString = @ns"Button"): NSButton =
   result = NSButton.new()
-  result.setFrame(x.cfloat, y.cfloat, width.cfloat, height.cfloat)
+  result.setFrame(x.float32, y.float32, width.float32, height.float32)
   result.setTitle(title)
 
 proc newButton*(x, y, width, height: float32, title: string): NSButton =

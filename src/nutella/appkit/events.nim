@@ -150,7 +150,7 @@ var periodicEventsDelaySeconds {.threadvar.}: float
 var periodicEventsPeriodSeconds {.threadvar.}: float
 
 proc timeIntervalSinceReferenceDate(): float =
-  (epochTime() - 978_307_200.0).float
+  (epochTime() - 978_307_200.0)
 
 proc isModifierSiwinKey(key: siwin.Key): bool =
   key in {
@@ -237,9 +237,9 @@ objcImpl:
     xxWindowNumber {.get: windowNumber.}: NSInteger
 
     xxClickCount {.get: clickCount.}: int
-    xxDeltaX {.get: deltaX.}: cfloat
-    xxDeltaY {.get: deltaY.}: cfloat
-    xxDeltaZ {.get: deltaZ.}: cfloat
+    xxDeltaX {.get: deltaX.}: float32
+    xxDeltaY {.get: deltaY.}: float32
+    xxDeltaZ {.get: deltaZ.}: float32
     xxKeyCode {.get: keyCode.}: cushort
 
     xxSubtype: cshort
@@ -351,7 +351,7 @@ objcImpl:
       context {.kw("context").}: NSObject,
       eventNumber {.kw("eventNumber").}: NSInteger,
       clickCount {.kw("clickCount").}: NSInteger,
-      pressure {.kw("pressure").}: cfloat,
+      pressure {.kw("pressure").}: float32,
   ): NSEvent =
     discard context
     discard eventNumber
@@ -733,8 +733,8 @@ proc scrollEventFromSiwin*(
   )
   if result.isNil:
     return
-  result.xxDeltaX = event.deltaX.cfloat
-  result.xxDeltaY = event.delta.cfloat
+  result.xxDeltaX = event.deltaX.float32
+  result.xxDeltaY = event.delta.float32
   result.xxSiwinModifiers = modifiers
 
 proc mouseMoveEventFromSiwin*(

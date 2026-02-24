@@ -44,10 +44,10 @@ objcImpl:
 
   method initWithContentRect*(
       self: var NSWindow,
-      x: cfloat,
-      y {.kw("y").}: cfloat,
-      width {.kw("width").}: cfloat,
-      height {.kw("height").}: cfloat,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
   ): NSWindow =
     result = self.init()
     if result.isNil:
@@ -178,7 +178,7 @@ objcImpl:
       self.xxNativeWindow.title = $value
 
   method setContentSize*(
-      self: NSWindow, width: cfloat, height {.kw("height").}: cfloat
+      self: NSWindow, width: float32, height {.kw("height").}: float32
   ) =
     var frame = self.xxFrame
     frame.size = nsSize(max(width.float32, 1.0), max(height.float32, 1.0))
@@ -187,7 +187,7 @@ objcImpl:
       self.xxNativeWindow.size =
         ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
 
-  method setFrameOrigin*(self: NSWindow, x: cfloat, y {.kw("y").}: cfloat) =
+  method setFrameOrigin*(self: NSWindow, x: float32, y {.kw("y").}: float32) =
     var frame = self.xxFrame
     frame.origin = nsPoint(x.float32, y.float32)
     self.xxFrame = frame
