@@ -5,41 +5,41 @@ import ./windows
 
 objcImpl:
   type NSAlert* = object of NSObject
-    delegateId: ID
-    style {.set: setAlertStyle, get: alertStyle.}: int
-    iconId: ID
-    messageTextId: ID
-    informativeTextId: ID
-    accessoryViewId: ID
-    showsHelpFlag {.set: setShowsHelp, get: showsHelp.}: bool
-    showsSuppression: bool
-    helpAnchorId: ID
-    alertButtonsId: ID
-    suppressionButtonId: ID
-    alertWindowId: ID
-    needsLayout: bool
-    sheetDelegateId: ID
-    sheetDidEnd: SEL
+    xxDelegate {.set: setDelegate, get: delegate.}: ID
+    xxStyle {.set: setAlertStyle, get: alertStyle.}: int
+    xxIcon {.set: setIcon, get: icon.}: NSObject
+    xxMessageText {.get: messageText.}: NSString
+    xxInformativeText {.get: informativeText.}: NSString
+    xxAccessoryView {.get: accessoryView.}: NSView
+    xxShowsHelp {.set: setShowsHelp, get: showsHelp.}: bool
+    xxShowsSuppressionButton {.get: showsSuppressionButton.}: bool
+    xxHelpAnchor {.set: setHelpAnchor, get: helpAnchor.}: NSString
+    xxButtons {.get: buttons.}: NSArray[NSButton]
+    xxSuppressionButton {.get: suppressionButton.}: NSButton
+    xxWindow {.get: window.}: NSWindow
+    xxNeedsLayout: bool
+    xxSheetDelegate: ID
+    xxSheetDidEnd: SEL
 
   method init*(self: var NSAlert): NSAlert =
     result = asType[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
-    result.delegateId = nil
-    result.style = NSWarningAlertStyle
-    result.iconId = nil
-    result.messageTextId = retainId(@ns"".value)
-    result.informativeTextId = retainId(@ns"".value)
-    result.accessoryViewId = nil
-    result.showsHelpFlag = false
-    result.showsSuppression = false
-    result.helpAnchorId = retainId(@ns"".value)
-    result.alertButtonsId = retainId(nsArray[NSButton]().value)
-    result.suppressionButtonId = nil
-    result.alertWindowId = nil
-    result.needsLayout = true
-    result.sheetDelegateId = nil
-    result.sheetDidEnd = nil
+    result.xxDelegate = nil
+    result.xxStyle = NSWarningAlertStyle
+    result.xxIcon = NSObject(value: nil)
+    result.xxMessageText = @ns""
+    result.xxInformativeText = @ns""
+    result.xxAccessoryView = NSView(value: nil)
+    result.xxShowsHelp = false
+    result.xxShowsSuppressionButton = false
+    result.xxHelpAnchor = @ns""
+    result.xxButtons = nsArray[NSButton]()
+    result.xxSuppressionButton = NSButton(value: nil)
+    result.xxWindow = NSWindow(value: nil)
+    result.xxNeedsLayout = true
+    result.xxSheetDelegate = nil
+    result.xxSheetDidEnd = nil
 
   proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
     result = NSAlert.new()
@@ -72,76 +72,24 @@ objcImpl:
     if $otherButton != "":
       discard result.addButtonWithTitle(otherButton)
 
-  method delegate*(self: NSAlert): NSObject =
-    if self.delegateId.isNil:
-      return NSObject(value: nil)
-    ownFromId[NSObject](self.delegateId)
-
-  method setDelegate*(self: NSAlert, value: NSObject) =
-    self.delegateId = replacedOwnedId(self.delegateId, value.value)
-
-  method icon*(self: NSAlert): NSObject =
-    if self.iconId.isNil:
-      return NSObject(value: nil)
-    ownFromId[NSObject](self.iconId)
-
-  method setIcon*(self: NSAlert, value: NSObject) =
-    self.iconId = replacedOwnedId(self.iconId, value.value)
-
-  method messageText*(self: NSAlert): NSString =
-    if self.messageTextId.isNil:
-      return @ns""
-    ownFromId[NSString](self.messageTextId)
-
   method setMessageText*(self: NSAlert, value: NSString) =
-    self.messageTextId = replacedOwnedId(self.messageTextId, value.value)
-    self.needsLayout = true
-
-  method informativeText*(self: NSAlert): NSString =
-    if self.informativeTextId.isNil:
-      return @ns""
-    ownFromId[NSString](self.informativeTextId)
+    self.xxMessageText = value
+    self.xxNeedsLayout = true
 
   method setInformativeText*(self: NSAlert, value: NSString) =
-    self.informativeTextId = replacedOwnedId(self.informativeTextId, value.value)
-    self.needsLayout = true
-
-  method accessoryView*(self: NSAlert): NSView =
-    if self.accessoryViewId.isNil:
-      return NSView(value: nil)
-    ownFromId[NSView](self.accessoryViewId)
+    self.xxInformativeText = value
+    self.xxNeedsLayout = true
 
   method setAccessoryView*(self: NSAlert, value: NSView) =
-    self.accessoryViewId = replacedOwnedId(self.accessoryViewId, value.value)
-    self.needsLayout = true
-
-  method helpAnchor*(self: NSAlert): NSString =
-    if self.helpAnchorId.isNil:
-      return @ns""
-    ownFromId[NSString](self.helpAnchorId)
-
-  method setHelpAnchor*(self: NSAlert, value: NSString) =
-    self.helpAnchorId = replacedOwnedId(self.helpAnchorId, value.value)
-
-  method suppressionButton*(self: NSAlert): NSButton =
-    if self.suppressionButtonId.isNil:
-      return NSButton(value: nil)
-    ownFromId[NSButton](self.suppressionButtonId)
-
-  method showsSuppressionButton*(self: NSAlert): bool =
-    self.showsSuppression
+    self.xxAccessoryView = value
+    self.xxNeedsLayout = true
 
   method setShowsSuppressionButton*(self: NSAlert, value: bool) =
-    self.showsSuppression = value
-    if value and self.suppressionButtonId.isNil:
+    self.xxShowsSuppressionButton = value
+    if value and self.xxSuppressionButton.isNil:
       var button = NSButton.new()
       button.setTitle(@ns"Do not show again")
-      self.suppressionButtonId = replacedOwnedId(self.suppressionButtonId, button.value)
-
-  method buttons*(self: NSAlert): NSArray[NSButton] =
-    if self.alertButtonsId.isNil:
-      return nsArray[NSButton]()
-    ownFromId[NSArray[NSButton]](self.alertButtonsId)
+      self.xxSuppressionButton = button
 
   method addButtonWithTitle*(self: NSAlert, title: NSString): NSButton =
     result = NSButton.new()
@@ -150,28 +98,23 @@ objcImpl:
     result.setTitle(title)
     var buttons = self.buttons()
     buttons.add(result)
-    self.alertButtonsId = replacedOwnedId(self.alertButtonsId, buttons.value)
-    self.needsLayout = true
-
-  method window*(self: NSAlert): NSWindow =
-    if self.alertWindowId.isNil:
-      return NSWindow(value: nil)
-    ownFromId[NSWindow](self.alertWindowId)
+    self.xxButtons = buttons
+    self.xxNeedsLayout = true
 
   method layout*(self: NSAlert) =
-    self.needsLayout = false
+    self.xxNeedsLayout = false
 
   method beginSheetModalForWindow*(
       self: NSAlert,
       window: NSWindow,
-      modalDelegate {.kw("modalDelegate").}: NSObject,
+      modalDelegate {.kw("modalDelegate").}: ID,
       didEndSelector {.kw("didEndSelector").}: SEL,
       contextInfo {.kw("contextInfo").}: pointer,
   ) =
     discard contextInfo
-    self.alertWindowId = replacedOwnedId(self.alertWindowId, window.value)
-    self.sheetDelegateId = replacedOwnedId(self.sheetDelegateId, modalDelegate.value)
-    self.sheetDidEnd = didEndSelector
+    self.xxWindow = window
+    self.xxSheetDelegate = modalDelegate
+    self.xxSheetDidEnd = didEndSelector
 
   method runModal*(self: NSAlert): int =
     let count = self.buttons().len
@@ -182,16 +125,16 @@ objcImpl:
     NSAlertThirdButtonReturn
 
   method dealloc(self: NSAlert) {.used.} =
-    self.delegateId = replacedOwnedId(self.delegateId, nil)
-    self.iconId = replacedOwnedId(self.iconId, nil)
-    self.messageTextId = replacedOwnedId(self.messageTextId, nil)
-    self.informativeTextId = replacedOwnedId(self.informativeTextId, nil)
-    self.accessoryViewId = replacedOwnedId(self.accessoryViewId, nil)
-    self.helpAnchorId = replacedOwnedId(self.helpAnchorId, nil)
-    self.suppressionButtonId = replacedOwnedId(self.suppressionButtonId, nil)
-    self.alertButtonsId = replacedOwnedId(self.alertButtonsId, nil)
-    self.alertWindowId = replacedOwnedId(self.alertWindowId, nil)
-    self.sheetDelegateId = replacedOwnedId(self.sheetDelegateId, nil)
+    self.xxDelegate = nil
+    self.xxIcon = NSObject(value: nil)
+    self.xxMessageText = @ns""
+    self.xxInformativeText = @ns""
+    self.xxAccessoryView = NSView(value: nil)
+    self.xxHelpAnchor = @ns""
+    self.xxSuppressionButton = NSButton(value: nil)
+    self.xxButtons = NSArray[NSButton](value: nil)
+    self.xxWindow = NSWindow(value: nil)
+    self.xxSheetDelegate = nil
     discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =

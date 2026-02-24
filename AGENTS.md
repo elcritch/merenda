@@ -24,6 +24,7 @@
 - Private ivars must use the `xx` prefix (for example `xxTitle`, `xxFrame`) instead of `_` or ad-hoc prefixes.
 - Use `{.get: ..., set: ....}` pragmas for Objective-C API surface so selectors match `vendor/AppKit/*.h` and behavior matches `vendor/AppKit/*.m`.
 - Prefer public API names from AppKit headers over `*Id`-style hacks (for example `title`/`setTitle` rather than `titleId`).
+- Use `ID` for delegate-typed fields/parameters when the Objective-C header uses untyped `id`; only use concrete object types when the header does.
 - Prefer short field names for private storage, but keep exported selector names header-aligned via `get`/`set` pragmas.
 - Never try to use global storage as a shortcut for implementing something unless absolutely needed.
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
