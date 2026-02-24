@@ -172,5 +172,4 @@ objcImpl:
 
 proc new*(t: typedesc[NSClipView]): NSClipView =
   var allocated = NSClipView.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))

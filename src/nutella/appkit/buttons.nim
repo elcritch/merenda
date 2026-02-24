@@ -140,8 +140,7 @@ objcImpl:
 
 proc new*(t: typedesc[NSButton]): NSButton =
   var allocated = NSButton.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc setTitle*(button: NSButton, value: string) =
   button.setTitle(ns(value))

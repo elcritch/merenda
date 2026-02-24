@@ -112,8 +112,7 @@ objcImpl:
 
 proc new*(t: typedesc[NSControl]): NSControl =
   var allocated = NSControl.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc setStringValue*(control: NSControl, value: string) =
   control.setStringValue(ns(value))

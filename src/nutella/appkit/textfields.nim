@@ -140,15 +140,12 @@ objcImpl:
 
 proc new*(t: typedesc[NSTextField]): NSTextField =
   var allocated = NSTextField.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc new*(t: typedesc[NSSecureTextField]): NSSecureTextField =
   var allocated = NSSecureTextField.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc new*(t: typedesc[NSSearchField]): NSSearchField =
   var allocated = NSSearchField.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))

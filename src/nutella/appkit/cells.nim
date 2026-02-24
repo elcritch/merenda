@@ -408,15 +408,12 @@ objcImpl:
 
 proc new*(t: typedesc[NSCell]): NSCell =
   var allocated = NSCell.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc new*(t: typedesc[NSActionCell]): NSActionCell =
   var allocated = NSActionCell.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc new*(t: typedesc[NSButtonCell]): NSButtonCell =
   var allocated = NSButtonCell.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
