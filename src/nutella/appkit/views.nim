@@ -20,7 +20,7 @@ objcImpl:
     autoResizeSubs {.set: setAutoresizesSubviews, get: autoresizesSubviews.}: bool
     autoResizeMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
     alpha {.set: setAlphaValue, get: alphaValue.}: float32
-    viewSuperview: ID
+    viewSuperview: NSView
     viewTag: int
     viewSubviews: seq[ID]
 
@@ -52,7 +52,7 @@ objcImpl:
     result.autoResizeSubs = true
     result.autoResizeMask = 0
     result.alpha = 1.0
-    result.viewSuperview = nil
+    result.viewSuperview = NSView(value: nil)
     result.viewTag = -1
     result.viewSubviews = @[]
 
@@ -93,7 +93,7 @@ proc clearSuperviewRef*(viewId: ID) =
   let child = ownFromId[NSView](viewId)
   if child.isNil:
     return
-  child.viewSuperview = nil
+  child.viewSuperview = NSView(value: nil)
   child.setNextResponder(NSResponder(value: nil))
 
 proc detachSubviews*(view: NSObject) =
@@ -126,10 +126,10 @@ proc isHiddenOrHasHiddenAncestor*(view: NSView): bool =
   while not current.isNil:
     if current.viewHidden():
       return true
-    let parentId = current.viewSuperview()
-    if parentId.isNil:
+    let parent = current.viewSuperview()
+    if parent.isNil:
       break
-    current = ownFromId[NSView](parentId)
+    current = parent
   false
 
 proc isDescendantOf*(view: NSView, other: NSView): bool =
@@ -139,10 +139,10 @@ proc isDescendantOf*(view: NSView, other: NSView): bool =
   while not current.isNil:
     if current.value == other.value:
       return true
-    let parentId = current.viewSuperview()
-    if parentId.isNil:
+    let parent = current.viewSuperview()
+    if parent.isNil:
       break
-    current = ownFromId[NSView](parentId)
+    current = parent
   false
 
 proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool =
@@ -155,7 +155,7 @@ proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool =
     let current = ownFromId[NSView](currentId)
     if current.isNil:
       break
-    currentId = current.viewSuperview()
+    currentId = current.viewSuperview().value
   false
 
 proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
@@ -167,14 +167,14 @@ proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
     while not rhs.isNil:
       if lhs.value == rhs.value:
         return retain(lhs)
-      let rhsParentId = rhs.viewSuperview()
-      if rhsParentId.isNil:
+      let rhsParent = rhs.viewSuperview()
+      if rhsParent.isNil:
         break
-      rhs = ownFromId[NSView](rhsParentId)
-    let lhsParentId = lhs.viewSuperview()
-    if lhsParentId.isNil:
+      rhs = rhsParent
+    let lhsParent = lhs.viewSuperview()
+    if lhsParent.isNil:
       break
-    lhs = ownFromId[NSView](lhsParentId)
+    lhs = lhsParent
   NSView(value: nil)
 
 proc tag*(view: NSView): int =
@@ -212,10 +212,10 @@ proc subviews*(view: NSView): seq[NSView] =
     result[i] = ownFromId[NSView](child)
 
 proc superview*(view: NSView): NSView =
-  let parentId = view.viewSuperview()
-  if parentId.isNil:
+  let parent = view.viewSuperview()
+  if parent.isNil:
     return NSView(value: nil)
-  ownFromId[NSView](parentId)
+  retain(parent)
 
 proc removeSubviewById(parent: NSView, childId: ID): bool =
   if parent.isNil or childId.isNil:
@@ -233,33 +233,30 @@ proc removeSubviewById(parent: NSView, childId: ID): bool =
 proc removeFromSuperview*(view: NSView) =
   if view.isNil:
     return
-  let parentId = view.viewSuperview()
-  if parentId.isNil:
-    return
-  view.viewSuperview = nil
-  let parent = ownFromId[NSView](parentId)
+  let parent = view.viewSuperview()
   if parent.isNil:
     return
+  view.viewSuperview = NSView(value: nil)
   discard removeSubviewById(parent, view.value)
 
 proc addSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil or self.value == view.value:
     return
-  let parentId = view.viewSuperview()
-  if parentId == self.value:
+  let parent = view.viewSuperview()
+  if not parent.isNil and parent.value == self.value:
     var children = self.viewSubviews()
     if view.value notin children:
       children.add(retainId(view.value))
       self.viewSubviews = children
     view.setNextResponder(asType[NSResponder](self))
     return
-  if not parentId.isNil:
+  if not parent.isNil:
     view.removeFromSuperview()
   var children = self.viewSubviews()
   if view.value notin children:
     children.add(retainId(view.value))
     self.viewSubviews = children
-  view.viewSuperview = self.value
+  view.viewSuperview = retain(self)
   view.setNextResponder(asType[NSResponder](self))
 
 proc removeSubview*(self: NSView, view: NSView) =

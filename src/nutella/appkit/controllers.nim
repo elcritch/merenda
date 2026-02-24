@@ -14,10 +14,16 @@ proc ensureControllerMarkers() =
   NSNotApplicableMarker = ns("NSNotApplicableMarker")
   controllerMarkersReady = true
 
-proc NSIsControllerMarker*(obj: NSString): bool =
+proc NSIsControllerMarker*(obj: ID): bool =
   ensureControllerMarkers()
-  obj == NSNoSelectionMarker or obj == NSMultipleValuesMarker or
-    obj == NSNotApplicableMarker
+  obj == NSNoSelectionMarker.value or obj == NSMultipleValuesMarker.value or
+    obj == NSNotApplicableMarker.value
+
+proc NSIsControllerMarker*(obj: NSObject): bool =
+  NSIsControllerMarker(obj.value)
+
+proc NSIsControllerMarker*(obj: NSString): bool =
+  NSIsControllerMarker(obj.value)
 
 type NSControllerStorage = ref object
   editors: seq[ID]

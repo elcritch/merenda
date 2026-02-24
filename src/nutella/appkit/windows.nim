@@ -64,18 +64,16 @@ objcImpl:
         self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, nil)
       clearSuperviewRef(self.xxContentView)
     if not view.isNil:
-      let parentId = view.viewSuperview()
-      if not parentId.isNil:
-        var parent = ownFromId[NSView](parentId)
-        if not parent.isNil:
-          var subviews = parent.viewSubviews()
-          for i, candidate in subviews:
-            if candidate == view.value:
-              subviews.del(i)
-              parent.viewSubviews = subviews
-              releaseId(view.value)
-              break
-      view.viewSuperview = nil
+      let parent = view.viewSuperview()
+      if not parent.isNil:
+        var subviews = parent.viewSubviews()
+        for i, candidate in subviews:
+          if candidate == view.value:
+            subviews.del(i)
+            parent.viewSubviews = subviews
+            releaseId(view.value)
+            break
+      view.viewSuperview = NSView(value: nil)
       view.setNextResponder(asType[NSResponder](self))
     self.xxContentView = replacedOwnedId(self.xxContentView, view.value)
 
