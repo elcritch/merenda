@@ -26,8 +26,8 @@ objcImpl:
 
     var contentAlloc = NSView.alloc()
     var content = contentAlloc.initWithFrame(
-      0.float32,
-      0.float32,
+      0'f32,
+      0'f32,
       result.viewFrame().size.width.float32,
       result.viewFrame().size.height.float32,
     )
@@ -102,8 +102,8 @@ objcImpl:
     let content = self.contentView()
     if not content.isNil:
       content.setFrame(
-        0.float32,
-        0.float32,
+        0'f32,
+        0'f32,
         self.viewFrame().size.width.float32,
         self.viewFrame().size.height.float32,
       )
