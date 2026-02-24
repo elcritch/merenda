@@ -25,8 +25,7 @@ proc kvcRetainedNSObject(id: ID): NSObject =
 
 proc kvcTakeNSObject[T: NSObject](obj: T): NSObject {.inline.} =
   var tmp = obj
-  result = asType[NSObject](tmp.value)
-  tmp.value = nil
+  result = asType[NSObject](move(tmp.value))
 
 proc kvcSetterSelName(key: string): string =
   result = "set"

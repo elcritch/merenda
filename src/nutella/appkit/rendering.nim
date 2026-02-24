@@ -40,22 +40,19 @@ proc noRenderShadows(): array[ShadowCount, RenderShadow] =
 
 proc drawsBg(view: NSView): bool =
   if view.isKindOfClass(NSClipView):
-    var clip = asType[NSClipView](view.value)
+    let clip = asRetainedType[NSClipView](view)
     result = clip.drawsBackground()
-    clip.value = nil
     return
   if not view.isKindOfClass(NSTextField):
     return false
-  var textField = asType[NSTextField](view.value)
+  let textField = asRetainedType[NSTextField](view)
   result = textField.drawsBackground()
-  textField.value = nil
 
 proc buttonVisualState(view: NSView): int =
   if not view.isKindOfClass(NSButton):
     return NSOffState
-  var button = asType[NSButton](view.value)
+  let button = asRetainedType[NSButton](view)
   result = button.state()
-  button.value = nil
 
 proc aquaButtonFill(state: int): Fill =
   case state
@@ -169,20 +166,18 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
 
 proc viewFill(view: NSView): Fill =
   if view.isKindOfClass(NSClipView):
-    var clip = asType[NSClipView](view.value)
+    let clip = asRetainedType[NSClipView](view)
     let color = clip.backgroundColor()
     let shouldDraw = clip.drawsBackground()
-    clip.value = nil
     if shouldDraw:
       return color.solidFill()
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSButton):
     return aquaButtonFill(buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
-    var textField = asType[NSTextField](view.value)
+    let textField = asRetainedType[NSTextField](view)
     let drawsBackground = textField.drawsBackground()
     let backgroundColor = textField.backgroundColor()
-    textField.value = nil
     if drawsBackground:
       return backgroundColor.solidFill()
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
@@ -428,11 +423,10 @@ proc textLayoutForView(
     return (false, default(GlyphArrangement))
 
   if view.isKindOfClass(NSTextField):
-    var textField = asType[NSTextField](view.value)
+    let textField = asRetainedType[NSTextField](view)
     let textValue = $textField.stringValue()
     let textColor = textField.textColor()
     let textAlign = toFontHorizontal(textField.alignment())
-    textField.value = nil
     if textValue.len == 0:
       return (false, default(GlyphArrangement))
     let fitted = fitSingleLineText(
@@ -451,10 +445,9 @@ proc textLayoutForView(
     return (true, fitted.layout)
 
   if view.isKindOfClass(NSButton):
-    var button = asType[NSButton](view.value)
+    let button = asRetainedType[NSButton](view)
     let title = $button.title()
     let textAlign = toFontHorizontal(button.alignment())
-    button.value = nil
     if title.len == 0:
       return (false, default(GlyphArrangement))
     let fitted = fitSingleLineText(

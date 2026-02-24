@@ -34,23 +34,21 @@ objcImpl:
 proc storageForRead[T](arr: NSArray[T]): NXArrayData =
   if arr.value.isNil:
     return nil
-  var obj = asType[NXArray](arr.value)
+  let obj = asRetainedType[NXArray](arr)
   let store = getAssociatedRef(obj, NXArrayData)
-  obj.value = nil
   store
 
 proc storageForWrite[T](arr: NSArray[T]): NXArrayData =
   if arr.value.isNil:
     return nil
-  var obj = asType[NXArray](arr.value)
+  let obj = asRetainedType[NXArray](arr)
   let store = getAssociatedRef(obj, NXArrayData)
-  obj.value = nil
   store
 
 proc initStorage[T](arr: NSArray[T]) {.inline.} =
   if arr.value.isNil:
     return
-  var obj = asType[NXArray](arr.value)
+  let obj = asRetainedType[NXArray](arr)
   var store = getAssociatedRef(obj, NXArrayData)
   if store.isNil:
     new(store)
@@ -59,14 +57,12 @@ proc initStorage[T](arr: NSArray[T]) {.inline.} =
   else:
     store.data.setLen(0)
   obj.countCache = 0
-  obj.value = nil
 
 proc syncCount[T](arr: NSArray[T], count: int) {.inline.} =
   if arr.value.isNil:
     return
-  var obj = asType[NXArray](arr.value)
+  let obj = asRetainedType[NXArray](arr)
   obj.countCache = count
-  obj.value = nil
 
 proc nsArray*[T](): NSArray[T] =
   var allocated = NXArray.alloc()
@@ -74,8 +70,7 @@ proc nsArray*[T](): NSArray[T] =
   allocated.value = nil
   if created.isNil:
     return NSArray[T](value: nil)
-  result = asType[NSArray[T]](created.value)
-  created.value = nil
+  result = asType[NSArray[T]](move(created.value))
   initStorage(result)
 
 proc init*[T](n: typedesc[NSArray[T]]): NSArray[T] {.inline.} =
