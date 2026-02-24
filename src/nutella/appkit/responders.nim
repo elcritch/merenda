@@ -2,26 +2,25 @@ import ./runtime
 import ./events
 
 objcImpl:
-
   type NSResponder* = object of NSObject
-    nextResp: ID
+    nextResp: NSResponder
 
   method init*(self: var NSResponder): NSResponder =
     result =
       asType[NSResponder](callSuperIdFrom(NSResponder, self, getSelector("init")))
     if result.isNil:
       return
-    result.nextResp = nil
+    result.nextResp = NSResponder(value: nil)
 
   method nextResponder*(self: NSResponder): NSResponder =
     if self.nextResp.isNil:
       return NSResponder(value: nil)
-    ownFromId[NSResponder](self.nextResp)
+    retain(self.nextResp)
 
   method setNextResponder*(self: NSResponder, next: NSResponder) =
     if self.isNil:
       return
-    self.nextResp = replacedOwnedId(self.nextResp, next.value)
+    self.nextResp = retain(next)
 
   method acceptsFirstResponder*(self: NSResponder): bool =
     discard self
@@ -151,6 +150,6 @@ objcImpl:
     self.noResponderFor(getSelector("scrollWheel:"))
 
   method dealloc(self: NSResponder) {.used.} =
-    self.nextResp = replacedOwnedId(self.nextResp, nil)
+    self.nextResp = NSResponder(value: nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSResponder, self, getSelector("dealloc"))

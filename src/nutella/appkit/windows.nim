@@ -15,8 +15,9 @@ objcImpl:
   type NSWindow* = object of NSResponder
     xxFrame {.set: windowFrame, get: windowFrame.}: NSRect
     xxTitle {.set: windowTitle, get: windowTitle.}: NSString
-    xxContentView {.set: windowContentView, get: windowContentView.}: ID
-    xxFirstResponder {.set: windowFirstResponder, get: windowFirstResponder.}: ID
+    xxContentView {.set: windowContentView, get: windowContentView.}: NSView
+    xxFirstResponder {.set: windowFirstResponder, get: windowFirstResponder.}:
+      NSResponder
     xxNativeWindow {.set: windowNativeWindow, get: windowNativeWindow.}:
       siwinshim.Window
     xxRenderer {.set: windowRenderer, get: windowRenderer.}:
@@ -33,8 +34,8 @@ objcImpl:
       return
     result.xxFrame = nsRect(100, 100, 640, 420)
     result.xxTitle = @ns"Nutella Window"
-    result.xxContentView = nil
-    result.xxFirstResponder = nil
+    result.xxContentView = NSView(value: nil)
+    result.xxFirstResponder = NSResponder(value: nil)
     result.xxNativeWindow = nil
     result.xxRenderer = nil
     result.xxAutoScale = true
@@ -58,11 +59,11 @@ objcImpl:
   method setContentView*(self: NSWindow, view: NSView) =
     if self.isNil:
       return
-    if not self.xxContentView.isNil and self.xxContentView != view.value:
-      if self.xxFirstResponder == self.xxContentView or
-          isViewDescendantOf(self.xxFirstResponder, self.xxContentView):
-        self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, nil)
-      clearSuperviewRef(self.xxContentView)
+    if not self.xxContentView.isNil and self.xxContentView.value != view.value:
+      if self.xxFirstResponder.value == self.xxContentView.value or
+          isViewDescendantOf(self.xxFirstResponder.value, self.xxContentView.value):
+        self.xxFirstResponder = NSResponder(value: nil)
+      clearSuperviewRef(self.xxContentView.value)
     if not view.isNil:
       let parent = view.viewSuperview()
       if not parent.isNil:
@@ -75,17 +76,17 @@ objcImpl:
             break
       view.viewSuperview = NSView(value: nil)
       view.setNextResponder(asType[NSResponder](self))
-    self.xxContentView = replacedOwnedId(self.xxContentView, view.value)
+    self.xxContentView = retain(view)
 
   method contentView*(self: NSWindow): NSView =
     if self.xxContentView.isNil:
       return NSView(value: nil)
-    result = ownFromId[NSView](self.xxContentView)
+    result = retain(self.xxContentView)
 
   method firstResponder*(self: NSWindow): NSResponder =
     if self.xxFirstResponder.isNil:
       return NSResponder(value: nil)
-    ownFromId[NSResponder](self.xxFirstResponder)
+    retain(self.xxFirstResponder)
 
   method makeFirstResponder*(self: NSWindow, responder: NSResponder): bool =
     if self.isNil:
@@ -93,21 +94,20 @@ objcImpl:
     var requested = responder
     if requested.isNil:
       requested = asType[NSResponder](self)
-    if self.xxFirstResponder == requested.value:
+    if self.xxFirstResponder.value == requested.value:
       return true
 
-    let currentId = self.xxFirstResponder
-    var current = ownFromId[NSResponder](currentId)
+    var current = self.xxFirstResponder
     if not current.isNil and not current.resignFirstResponder():
       return false
 
     if not requested.acceptsFirstResponder() or not requested.becomeFirstResponder():
       if not current.isNil and current.acceptsFirstResponder() and
           current.becomeFirstResponder():
-        self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, current.value)
+        self.xxFirstResponder = retain(current)
       return false
 
-    self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, requested.value)
+    self.xxFirstResponder = retain(requested)
     true
 
   method acceptsFirstResponder*(self: NSWindow): bool =
@@ -222,10 +222,10 @@ objcImpl:
   method dealloc(self: NSWindow) {.used.} =
     if self.xxNativeReady and (not self.xxNativeWindow.isNil):
       siwinshim.close(self.xxNativeWindow)
-    self.xxFirstResponder = replacedOwnedId(self.xxFirstResponder, nil)
+    self.xxFirstResponder = NSResponder(value: nil)
     if not self.xxContentView.isNil:
-      clearSuperviewRef(self.xxContentView)
-    self.xxContentView = replacedOwnedId(self.xxContentView, nil)
+      clearSuperviewRef(self.xxContentView.value)
+    self.xxContentView = NSView(value: nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSWindow, self, getSelector("dealloc"))
 
