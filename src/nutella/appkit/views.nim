@@ -25,20 +25,13 @@ objcImpl:
     viewSubviews: seq[ID]
 
   method init*(self: var NSView): NSView =
-    result = asType[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
-    if result.isNil:
-      return
-    result.viewFrame = nsRect(0, 0, 100, 100)
-    result.viewBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
-    result.viewHidden = false
-    result.postsFrameChanged = false
-    result.postsBoundsChanged = false
-    result.autoResizeSubs = true
-    result.autoResizeMask = 0
-    result.alpha = 1.0
-    result.viewSuperview = nil
-    result.viewTag = 0
-    result.viewSubviews = @[]
+    result = asType[NSView](
+      cast[proc(
+        self: ID, op: SEL, x: float32, y: float32, width: float32, height: float32
+      ): ID {.cdecl, varargs.}](objc_msgSend)(
+        self.value, getSelector("initWithFrame:y:width:height:"), 0.0, 0.0, 1.0, 1.0
+      )
+    )
 
   method initWithFrame*(
       self: var NSView,
@@ -47,11 +40,21 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ): NSView =
-    result = self.init()
+    result = asType[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
     if result.isNil:
       return
     result.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+    result.viewBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
+    result.viewHidden = false
+    result.postsFrameChanged = true
+    result.postsBoundsChanged = true
+    result.autoResizeSubs = true
+    result.autoResizeMask = 0
+    result.alpha = 1.0
+    result.viewSuperview = nil
+    result.viewTag = -1
+    result.viewSubviews = @[]
 
   method setFrame*(
       self: NSView,
