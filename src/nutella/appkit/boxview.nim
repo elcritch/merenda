@@ -10,7 +10,7 @@ objcImpl:
     transparent {.set: setTransparent, get: isTransparent.}: bool
     contentMargins {.set: setContentViewMargins, get: contentViewMargins.}: NSSize
     title {.set: setTitle, get: title.}: NSString
-    boxContentView: ID
+    boxContentView: NSView
 
   method init*(self: var NSBox): NSBox =
     result = asType[NSBox](callSuperIdFrom(NSBox, self, getSelector("init")))
@@ -22,7 +22,7 @@ objcImpl:
     result.transparent = true
     result.contentMargins = nsSize(0, 0)
     result.title = @ns""
-    result.boxContentView = nil
+    result.boxContentView = NSView(value: nil)
 
     var contentAlloc = NSView.alloc()
     var content = contentAlloc.initWithFrame(
@@ -38,7 +38,7 @@ objcImpl:
       result.viewSubviews = children
       content.viewSuperview = retain(asType[NSView](result))
       content.setNextResponder(asType[NSResponder](result))
-      result.boxContentView = replacedOwnedId(result.boxContentView, content.value)
+      result.boxContentView = retain(content)
     content.value = nil
 
   method setTitleWithMnemonic*(self: NSBox, value: NSString) =
@@ -47,26 +47,26 @@ objcImpl:
   method contentView*(self: NSBox): NSView =
     if self.boxContentView.isNil:
       return NSView(value: nil)
-    ownFromId[NSView](self.boxContentView)
+    retain(self.boxContentView)
 
   method setContentView*(self: NSBox, view: NSView) =
     if self.isNil:
       return
-    if self.boxContentView == view.value:
+    if self.boxContentView.value == view.value:
       return
 
     if not self.boxContentView.isNil:
-      clearSuperviewRef(self.boxContentView)
+      clearSuperviewRef(self.boxContentView.value)
       var children = self.viewSubviews()
       for i, candidate in children:
-        if candidate == self.boxContentView:
+        if candidate == self.boxContentView.value:
           children.del(i)
           self.viewSubviews = children
           releaseId(candidate)
           break
 
     if view.isNil:
-      self.boxContentView = replacedOwnedId(self.boxContentView, nil)
+      self.boxContentView = NSView(value: nil)
       return
 
     let parent = view.viewSuperview()
@@ -86,7 +86,7 @@ objcImpl:
       self.viewSubviews = children
     view.viewSuperview = retain(asType[NSView](self))
     view.setNextResponder(asType[NSResponder](self))
-    self.boxContentView = replacedOwnedId(self.boxContentView, view.value)
+    self.boxContentView = retain(view)
 
   method setFrame*(
       self: NSBox,
@@ -107,7 +107,7 @@ objcImpl:
       )
 
   method dealloc(self: NSBox) {.used.} =
-    self.boxContentView = replacedOwnedId(self.boxContentView, nil)
+    self.boxContentView = NSView(value: nil)
     discard callSuperIdFrom(NSBox, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSBox]): NSBox =

@@ -229,10 +229,10 @@ objcImpl:
 
 objcImpl:
   type NSButtonCell* = object of NSActionCell
-    buttonTitleId: ID
-    alternateTitleId: ID
+    buttonTitleId: NSString
+    alternateTitleId: NSString
     transparent {.set: setTransparent, get: isTransparent.}: bool
-    keyEqId: ID
+    keyEqId: NSString
     imagePos {.set: setImagePosition, get: imagePosition.}: int
     highlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: int
     showsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
@@ -254,10 +254,10 @@ objcImpl:
       asType[NSButtonCell](callSuperIdFrom(NSButtonCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.buttonTitleId = retainId(@ns"Button".value)
-    result.alternateTitleId = retainId(@ns"".value)
+    result.buttonTitleId = @ns"Button"
+    result.alternateTitleId = @ns""
     result.transparent = false
-    result.keyEqId = retainId(@ns"".value)
+    result.keyEqId = @ns""
     result.imagePos = 0
     result.highlightsByMask = 0
     result.showsStateByMask = 0
@@ -274,27 +274,27 @@ objcImpl:
   method title*(self: NSButtonCell): NSString =
     if self.buttonTitleId.isNil:
       return @ns""
-    ownFromId[NSString](self.buttonTitleId)
+    retain(self.buttonTitleId)
 
   method setTitle*(self: NSButtonCell, value: NSString) =
-    self.buttonTitleId = replacedOwnedId(self.buttonTitleId, value.value)
+    self.buttonTitleId = retain(value)
     self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
 
   method alternateTitle*(self: NSButtonCell): NSString =
     if self.alternateTitleId.isNil:
       return @ns""
-    ownFromId[NSString](self.alternateTitleId)
+    retain(self.alternateTitleId)
 
   method setAlternateTitle*(self: NSButtonCell, value: NSString) =
-    self.alternateTitleId = replacedOwnedId(self.alternateTitleId, value.value)
+    self.alternateTitleId = retain(value)
 
   method keyEquivalent*(self: NSButtonCell): NSString =
     if self.keyEqId.isNil:
       return @ns""
-    ownFromId[NSString](self.keyEqId)
+    retain(self.keyEqId)
 
   method setKeyEquivalent*(self: NSButtonCell, value: NSString) =
-    self.keyEqId = replacedOwnedId(self.keyEqId, value.value)
+    self.keyEqId = retain(value)
 
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
     discard self
@@ -372,9 +372,9 @@ objcImpl:
     discard performResponderSelector(target, action, asType[NSObject](self.value))
 
   method dealloc(self: NSButtonCell) {.used.} =
-    self.buttonTitleId = replacedOwnedId(self.buttonTitleId, nil)
-    self.alternateTitleId = replacedOwnedId(self.alternateTitleId, nil)
-    self.keyEqId = replacedOwnedId(self.keyEqId, nil)
+    self.buttonTitleId = NSString(value: nil)
+    self.alternateTitleId = NSString(value: nil)
+    self.keyEqId = NSString(value: nil)
     discard callSuperIdFrom(NSButtonCell, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSCell]): NSCell =

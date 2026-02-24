@@ -250,8 +250,8 @@ objcImpl:
     xxHasOtherData: bool
     xxHasTrackingData: bool
 
-    xxCharactersId: ID
-    xxCharactersIgnoringModifiersId: ID
+    xxCharactersId: NSString
+    xxCharactersIgnoringModifiersId: NSString
 
     xxSiwinKey: siwin.Key
     xxSiwinModifiers: set[siwin.ModifierKey]
@@ -282,8 +282,8 @@ objcImpl:
     result.xxUserData = nil
     result.xxHasOtherData = false
     result.xxHasTrackingData = false
-    result.xxCharactersId = nil
-    result.xxCharactersIgnoringModifiersId = nil
+    result.xxCharactersId = NSString(value: nil)
+    result.xxCharactersIgnoringModifiersId = NSString(value: nil)
     result.xxSiwinKey = siwin.Key.unknown
     result.xxSiwinModifiers = {}
     result.xxSiwinMouseButton = siwin.MouseButton.left
@@ -386,10 +386,8 @@ objcImpl:
     allocated.value = nil
     if result.isNil:
       return
-    result.xxCharactersId = replacedOwnedId(result.xxCharactersId, characters.value)
-    result.xxCharactersIgnoringModifiersId = replacedOwnedId(
-      result.xxCharactersIgnoringModifiersId, charactersIgnoringModifiers.value
-    )
+    result.xxCharactersId = retain(characters)
+    result.xxCharactersIgnoringModifiersId = retain(charactersIgnoringModifiers)
     result.xxKeyCode = keyCode
     result.xxSiwinRepeated = isARepeat
 
@@ -420,12 +418,12 @@ objcImpl:
   method characters*(self: NSEvent): NSString =
     if self.xxCharactersId.isNil:
       return NSString(value: nil)
-    ownFromId[NSString](self.xxCharactersId)
+    retain(self.xxCharactersId)
 
   method charactersIgnoringModifiers*(self: NSEvent): NSString =
     if self.xxCharactersIgnoringModifiersId.isNil:
       return NSString(value: nil)
-    ownFromId[NSString](self.xxCharactersIgnoringModifiersId)
+    retain(self.xxCharactersIgnoringModifiersId)
 
   proc startPeriodicEventsAfterDelay*(
       t: typedesc[NSEvent], delay: float, period {.kw("withPeriod").}: float
@@ -476,9 +474,8 @@ objcImpl:
     self.xxUserData
 
   method dealloc(self: NSEvent) {.used.} =
-    self.xxCharactersId = replacedOwnedId(self.xxCharactersId, nil)
-    self.xxCharactersIgnoringModifiersId =
-      replacedOwnedId(self.xxCharactersIgnoringModifiersId, nil)
+    self.xxCharactersId = NSString(value: nil)
+    self.xxCharactersIgnoringModifiersId = NSString(value: nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSEvent, self, getSelector("dealloc"))
 
@@ -544,10 +541,8 @@ proc newKeyEvent*(
   allocated.value = nil
   if result.isNil:
     return
-  result.xxCharactersId = replacedOwnedId(result.xxCharactersId, characters.value)
-  result.xxCharactersIgnoringModifiersId = replacedOwnedId(
-    result.xxCharactersIgnoringModifiersId, charactersIgnoringModifiers.value
-  )
+  result.xxCharactersId = retain(characters)
+  result.xxCharactersIgnoringModifiersId = retain(charactersIgnoringModifiers)
   result.xxKeyCode = keyCode
   result.xxSiwinRepeated = isARepeat
 

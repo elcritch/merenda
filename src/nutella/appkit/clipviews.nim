@@ -2,10 +2,13 @@ import ./runtime
 import ./views
 
 objcImpl:
+  type NSCursor* = object of NSObject
+
+objcImpl:
   type NSClipView* = object of NSView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
-    xxDocumentCursor {.set: setDocumentCursor, get: documentCursor.}: ID
-    clipDocumentViewId: ID
+    xxDocumentCursor {.set: setDocumentCursor, get: documentCursor.}: NSCursor
+    clipDocumentViewId: NSView
     clipDocumentRect: NSRect
     clipDrawsBackground {.set: setDrawsBackground, get: drawsBackground.}: bool
     clipCopiesOnScroll {.set: setCopiesOnScroll, get: copiesOnScroll.}: bool
@@ -16,8 +19,8 @@ objcImpl:
     if result.isNil:
       return
     result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
-    result.xxDocumentCursor = nil
-    result.clipDocumentViewId = nil
+    result.xxDocumentCursor = NSCursor(value: nil)
+    result.clipDocumentViewId = NSView(value: nil)
     result.clipDocumentRect = nsRect(0, 0, 0, 0)
     result.clipDrawsBackground = true
     result.clipCopiesOnScroll = false
@@ -26,26 +29,26 @@ objcImpl:
   method documentView*(self: NSClipView): NSView =
     if self.clipDocumentViewId.isNil:
       return NSView(value: nil)
-    ownFromId[NSView](self.clipDocumentViewId)
+    retain(self.clipDocumentViewId)
 
   method setDocumentView*(self: NSClipView, view: NSView) =
     if self.isNil:
       return
-    if self.clipDocumentViewId == view.value:
+    if self.clipDocumentViewId.value == view.value:
       return
 
     if not self.clipDocumentViewId.isNil:
-      clearSuperviewRef(self.clipDocumentViewId)
+      clearSuperviewRef(self.clipDocumentViewId.value)
       var children = self.viewSubviews()
       for i, candidate in children:
-        if candidate == self.clipDocumentViewId:
+        if candidate == self.clipDocumentViewId.value:
           children.del(i)
           self.viewSubviews = children
           releaseId(candidate)
           break
 
     if view.isNil:
-      self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
+      self.clipDocumentViewId = NSView(value: nil)
       self.clipDocumentRect = nsRect(0, 0, 0, 0)
       self.clipScrollOrigin = nsPoint(0, 0)
       return
@@ -67,7 +70,7 @@ objcImpl:
       self.viewSubviews = children
     view.viewSuperview = retain(asType[NSView](self))
     view.setNextResponder(asType[NSResponder](self))
-    self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, view.value)
+    self.clipDocumentViewId = retain(view)
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
     let frame = view.viewFrame()
     self.clipDocumentRect =
@@ -156,8 +159,8 @@ objcImpl:
     )
 
   method dealloc(self: NSClipView) {.used.} =
-    self.xxDocumentCursor = nil
-    self.clipDocumentViewId = replacedOwnedId(self.clipDocumentViewId, nil)
+    self.xxDocumentCursor = NSCursor(value: nil)
+    self.clipDocumentViewId = NSView(value: nil)
     discard callSuperIdFrom(NSClipView, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSClipView]): NSClipView =
