@@ -578,7 +578,7 @@ proc addViewTree(
     )
 
   for child in view.viewSubviews():
-    renders.addViewTree(child, idx, true, box.origin.x, box.origin.y)
+    renders.addViewTree(child.value, idx, true, box.origin.x, box.origin.y)
 
 proc hitTestButton(
     viewId: ID, x: float32, y: float32, offsetX: float32, offsetY: float32
@@ -604,7 +604,7 @@ proc hitTestButton(
   let children = view.viewSubviews()
   for i in countdown(children.high, 0):
     let child = children[i]
-    let hit = hitTestButton(child, x, y, frame.origin.x, frame.origin.y)
+    let hit = hitTestButton(child.value, x, y, frame.origin.x, frame.origin.y)
     if not hit.isNil:
       return hit
 

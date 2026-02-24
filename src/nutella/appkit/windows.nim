@@ -18,14 +18,12 @@ objcImpl:
     xContentView {.set: windowContentView, get: windowContentView.}: NSView
     xFirstResponder {.set: windowFirstResponder, get: windowFirstResponder.}:
       NSResponder
-    xNativeWindow {.set: windowNativeWindow, get: windowNativeWindow.}:
-      siwinshim.Window
+    xNativeWindow {.set: windowNativeWindow, get: windowNativeWindow.}: siwinshim.Window
     xRenderer {.set: windowRenderer, get: windowRenderer.}:
       figrender.FigRenderer[siwinshim.SiwinRenderBackend]
     xAutoScale {.set: windowAutoScale, get: windowAutoScale.}: bool
     xNativeReady {.set: windowNativeReady, get: windowNativeReady.}: bool
-    xVisibleRequested {.set: windowVisibleRequested, get: windowVisibleRequested.}:
-      bool
+    xVisibleRequested {.set: windowVisibleRequested, get: windowVisibleRequested.}: bool
     xClosed {.set: windowClosed, get: windowClosed.}: bool
 
   method init*(self: var NSWindow): NSWindow =
@@ -69,10 +67,9 @@ objcImpl:
       if not parent.isNil:
         var subviews = parent.viewSubviews()
         for i, candidate in subviews:
-          if candidate == view.value:
+          if candidate.value == view.value:
             subviews.del(i)
             parent.viewSubviews = subviews
-            releaseId(view.value)
             break
       view.viewSuperview = NSView(value: nil)
       view.setNextResponder(asType[NSResponder](self))

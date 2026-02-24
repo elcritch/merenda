@@ -34,7 +34,7 @@ objcImpl:
     contentAlloc.value = nil
     if not content.isNil:
       var children = result.viewSubviews()
-      children.add(retainId(content.value))
+      children.add(content)
       result.viewSubviews = children
       content.viewSuperview = retain(asType[NSView](result))
       content.setNextResponder(asType[NSResponder](result))
@@ -59,10 +59,9 @@ objcImpl:
       clearSuperviewRef(self.boxContentView.value)
       var children = self.viewSubviews()
       for i, candidate in children:
-        if candidate == self.boxContentView.value:
+        if candidate.value == self.boxContentView.value:
           children.del(i)
           self.viewSubviews = children
-          releaseId(candidate)
           break
 
     if view.isNil:
@@ -73,16 +72,15 @@ objcImpl:
     if not parent.isNil:
       var siblings = parent.viewSubviews()
       for i, candidate in siblings:
-        if candidate == view.value:
+        if candidate.value == view.value:
           siblings.del(i)
           parent.viewSubviews = siblings
-          releaseId(candidate)
           break
       view.viewSuperview = NSView(value: nil)
 
     var children = self.viewSubviews()
-    if view.value notin children:
-      children.add(retainId(view.value))
+    if view notin children:
+      children.add(view)
       self.viewSubviews = children
     view.viewSuperview = retain(asType[NSView](self))
     view.setNextResponder(asType[NSResponder](self))
