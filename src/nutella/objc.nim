@@ -1350,12 +1350,12 @@ macro objcImpl*(x: untyped): untyped =
       else:
         ident(field.name)
     let getterBody = quote:
-      result = getIvarField[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
+      result = getIvarFieldVar[`fieldTypeNode`](`selfIdent`, `fieldNameLit`)
     fieldAccessorDefs.add newProc(
       name = getterName,
       params =
         @[
-          copyNimTree(fieldTypeNode),
+          nnkVarTy.newTree(copyNimTree(fieldTypeNode)),
           newIdentDefs(selfIdent, ident(className), newEmptyNode()),
         ],
       body = getterBody,
