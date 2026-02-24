@@ -9,7 +9,7 @@ objcImpl:
     stateValue {.get: state.}: int
     mixedAllowed: bool
 
-    enabled {.get: isEnabled.}: bool
+    enabled {.set: setEnabled, get: isEnabled.}: bool
     editable {.get: isEditable.}: bool
     selectable {.get: isSelectable.}: bool
 
@@ -17,7 +17,7 @@ objcImpl:
     bezeled {.get: isBezeled.}: bool
 
     scrollable {.get: isScrollable.}: bool
-    continuous {.get: isContinuous.}: bool
+    continuous {.set: setContinuous, get: isContinuous.}: bool
     highlighted {.get: isHighlighted.}: bool
 
     cellRefusesFirstResponder {.

@@ -3,6 +3,7 @@ import ./runtime
 
 import ./views
 import ./controllers
+import ./cells
 
 export views, controllers
 
@@ -10,8 +11,6 @@ objcImpl:
   type NSControl* = object of NSView
     xxCell: ID
     xxCurrentEditor: NSText
-    enabled {.set: setEnabled, get: isEnabled.}: bool
-    continuous {.set: setContinuous, get: isContinuous.}: bool
     refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
       bool
     alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
@@ -21,12 +20,75 @@ objcImpl:
 
     if result.isNil:
       return
-    result.enabled = true
-    result.continuous = false
-    result.refusesFirstResponder = false
-    result.alignment = NSNaturalTextAlignment
     result.xxCell = nil
     result.xxCurrentEditor = NSText(value: nil)
+    var defaultCell = NSCell.new()
+    result.xxCell = replacedOwnedId(result.xxCell, defaultCell.value)
+    let cell = ownFromId[NSCell](result.xxCell)
+    if not cell.isNil:
+      cell.setControlView(asType[NSView](result))
+      cell.setContinuous(false)
+    defaultCell.value = nil
+    result.refusesFirstResponder = false
+    result.alignment = NSNaturalTextAlignment
+
+  method cell*(self: NSControl): ID =
+    if self.isNil:
+      return nil
+    if self.xxCell.isNil:
+      var defaultCell = NSCell.new()
+      self.xxCell = replacedOwnedId(self.xxCell, defaultCell.value)
+      if not self.xxCell.isNil:
+        let controlCell = ownFromId[NSCell](self.xxCell)
+        controlCell.setControlView(asType[NSView](self))
+        controlCell.setContinuous(false)
+      defaultCell.value = nil
+    self.xxCell
+
+  method setCell*(self: NSControl, cell: NSCell) =
+    if self.isNil:
+      return
+    self.xxCell = replacedOwnedId(self.xxCell, cell.value)
+    let bound = ownFromId[NSCell](self.xxCell)
+    if not bound.isNil:
+      bound.setControlView(asType[NSView](self))
+
+  method isEnabled*(self: NSControl): bool =
+    if self.isNil:
+      return true
+    let controlCell = ownFromId[NSCell](self.cell())
+    if controlCell.isNil:
+      return true
+    controlCell.isEnabled()
+
+  method setEnabled*(self: NSControl, flag: bool) =
+    if self.isNil:
+      return
+    let controlCell = ownFromId[NSCell](self.cell())
+    if controlCell.isNil:
+      return
+    controlCell.setEnabled(flag)
+
+  method isContinuous*(self: NSControl): bool =
+    if self.isNil:
+      return false
+    let controlCell = ownFromId[NSCell](self.cell())
+    if controlCell.isNil:
+      return false
+    controlCell.isContinuous()
+
+  method setContinuous*(self: NSControl, flag: bool) =
+    if self.isNil:
+      return
+    let controlCell = ownFromId[NSCell](self.cell())
+    if controlCell.isNil:
+      return
+    controlCell.setContinuous(flag)
+
+  method currentEditor*(self: NSControl): NSText =
+    if self.isNil:
+      return NSText(value: nil)
+    self.xxCurrentEditor
 
   method acceptsFirstResponder*(self: NSControl): bool =
     if self.isNil:
@@ -114,6 +176,12 @@ objcImpl:
   method performClick*(self: NSControl, sender: NSResponder) =
     discard self
     discard sender
+
+  method dealloc(self: NSControl) {.used.} =
+    self.xxCell = replacedOwnedId(self.xxCell, nil)
+    self.xxCurrentEditor = NSText(value: nil)
+    clearIvarRefs(self)
+    discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSControl]): NSControl =
   var allocated = NSControl.alloc()
