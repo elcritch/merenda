@@ -3,8 +3,7 @@ import ./controls
 
 objcImpl:
   type NSTextField* = object of NSControl
-    #xxStringValue {.set: setStringValue, get: stringValue.}: NSString
-    xxStringValue: NSString
+    xxStringValue {.set: setStringValue, get: stringValue.}: NSString
     xxDelegate {.set: setDelegate, get: delegate.}: ID
     xxErrorAction: SEL
     editable {.set: setEditable, get: isEditable.}: bool
@@ -38,14 +37,6 @@ objcImpl:
     result.drawsBg = true
     result.xxPreviousText = nil
     result.xxNextText = nil
-
-  #method stringValue*(self: NSTextField): NSString =
-  #  echo "NSTextField:stringValue:get "
-  #  return self.xxStringValue
-  #
-  #method setStringValue*(self: NSTextField, val: NSString) =
-  #  echo "NSTextField:stringValue:set "
-  #  self.xxStringValue = val
 
   method setTextColor*(
       self: NSTextField,
