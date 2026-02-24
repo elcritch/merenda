@@ -9,26 +9,58 @@ export views, controllers
 
 objcImpl:
   type NSControl* = object of NSView
-    xxCell: ID
+    xxCell: NSCell
     xxCurrentEditor: NSText
     refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
       bool
     alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
 
   method init*(self: var NSControl): NSControl =
-    result = asType[NSControl](callSuperIdFrom(NSControl, self, @selector("init")))
+    result = asType[NSControl](
+      cast[proc(
+        self: ID, op: SEL, x: float32, y: float32, width: float32, height: float32
+      ): ID {.cdecl, varargs.}](objc_msgSend)(
+        self.value, getSelector("initWithFrame:y:width:height:"), 0.0, 0.0, 1.0, 1.0
+      )
+    )
 
+  method initWithFrame*(
+      self: var NSControl,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
+  ): NSControl =
+    var superObj =
+      ObjcSuper(receiver: self.value, superClass: getClass(NSControl).getSuperclass())
+    result = asType[NSControl](
+      cast[proc(
+        superObj: var ObjcSuper,
+        op: SEL,
+        x: float32,
+        y: float32,
+        width: float32,
+        height: float32,
+      ): ID {.cdecl, varargs.}](objc_msgSendSuper)(
+        superObj,
+        getSelector("initWithFrame:y:width:height:"),
+        x.float32,
+        y.float32,
+        max(width.float32, 0.0),
+        max(height.float32, 0.0),
+      )
+    )
     if result.isNil:
       return
-    result.xxCell = nil
+    result.xxCell = NSCell(value: nil)
     result.xxCurrentEditor = NSText(value: nil)
     var defaultCell = NSCell.new()
-    result.xxCell = replacedOwnedId(result.xxCell, defaultCell.value)
-    let cell = ownFromId[NSCell](result.xxCell)
+    result.xxCell = ownFromId[NSCell](defaultCell.value)
+    defaultCell.value = nil
+    let cell = result.xxCell
     if not cell.isNil:
       cell.setControlView(asType[NSView](result))
       cell.setContinuous(false)
-    defaultCell.value = nil
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
 
@@ -37,19 +69,18 @@ objcImpl:
       return nil
     if self.xxCell.isNil:
       var defaultCell = NSCell.new()
-      self.xxCell = replacedOwnedId(self.xxCell, defaultCell.value)
+      self.xxCell = move(defaultCell)
       if not self.xxCell.isNil:
-        let controlCell = ownFromId[NSCell](self.xxCell)
+        let controlCell = self.xxCell
         controlCell.setControlView(asType[NSView](self))
         controlCell.setContinuous(false)
-      defaultCell.value = nil
-    self.xxCell
+    self.xxCell.value
 
   method setCell*(self: NSControl, cell: NSCell) =
     if self.isNil:
       return
-    self.xxCell = replacedOwnedId(self.xxCell, cell.value)
-    let bound = ownFromId[NSCell](self.xxCell)
+    self.xxCell = ownFromId[NSCell](cell.value)
+    let bound = self.xxCell
     if not bound.isNil:
       bound.setControlView(asType[NSView](self))
 
@@ -178,7 +209,7 @@ objcImpl:
     discard sender
 
   method dealloc(self: NSControl) {.used.} =
-    self.xxCell = replacedOwnedId(self.xxCell, nil)
+    self.xxCell = NSCell(value: nil)
     self.xxCurrentEditor = NSText(value: nil)
     clearIvarRefs(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
