@@ -116,5 +116,3 @@ proc new*(t: typedesc[NSBox]): NSBox =
   var allocated = NSBox.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return

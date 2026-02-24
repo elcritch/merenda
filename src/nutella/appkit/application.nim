@@ -120,8 +120,6 @@ proc new*(t: typedesc[NSApplication]): NSApplication =
   var allocated = NSApplication.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
 
 proc sharedApplication*(t: typedesc[NSApplication]): NSApplication =
   if sharedApplicationRef.isNil:

@@ -198,5 +198,3 @@ proc new*(t: typedesc[NSAlert]): NSAlert =
   var allocated = NSAlert.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return

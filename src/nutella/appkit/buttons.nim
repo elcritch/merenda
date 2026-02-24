@@ -142,8 +142,6 @@ proc new*(t: typedesc[NSButton]): NSButton =
   var allocated = NSButton.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
 
 proc setTitle*(button: NSButton, value: string) =
   button.setTitle(ns(value))

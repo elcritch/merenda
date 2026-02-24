@@ -84,8 +84,6 @@ proc new*(t: typedesc[NSView]): NSView =
   var allocated = NSView.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
 
 proc clearSuperviewRef*(viewId: ID) =
   if viewId.isNil:

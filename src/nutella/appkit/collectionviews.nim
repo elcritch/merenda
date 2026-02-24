@@ -2,7 +2,6 @@ import ./runtime
 import ./views
 
 objcImpl:
-
   type NSCollectionView* = object of NSView
     contentId: ID
     itemPrototypeId: ID
@@ -82,11 +81,7 @@ objcImpl:
     self.selectionIndexesId = replacedOwnedId(self.selectionIndexesId, nil)
     discard callSuperIdFrom(NSCollectionView, self, getSelector("dealloc"))
 
-
 proc new*(t: typedesc[NSCollectionView]): NSCollectionView =
   var allocated = NSCollectionView.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
-
