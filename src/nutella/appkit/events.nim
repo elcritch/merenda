@@ -4,135 +4,144 @@ import siwin/window as siwin
 
 import ./runtime
 
-type NSEventType* = cint
+type
+  NSEventType* = enum
+    NSLeftMouseDown = 1
+    NSLeftMouseUp = 2
+    NSRightMouseDown = 3
+    NSRightMouseUp = 4
+    NSMouseMoved = 5
+    NSLeftMouseDragged = 6
+    NSRightMouseDragged = 7
+    NSMouseEntered = 8
+    NSMouseExited = 9
+    NSKeyDown = 10
+    NSKeyUp = 11
+    NSFlagsChanged = 12
+    NSPeriodic = 13
+    NSCursorUpdate = 14
+    NSPlatformSpecific = 15
+    NSPlatformSpecificDisplayEvent = 16
+    NSAppKitSystem = 17
+    NSScrollWheel = 18
+    NSApplicationDefined = 19
+    NSAppKitDefined = 20
+
+  NSEventMask* = set[NSEventType]
+
+  NSModifierFlag* = enum
+    NSAlphaShiftKeyMask = 16
+    NSShiftKeyMask = 17
+    NSControlKeyMask = 18
+    NSAlternateKeyMask = 19
+    NSCommandKeyMask = 20
+    NSNumericPadKeyMask = 21
+    NSHelpKeyMask = 22
+    NSFunctionKeyMask = 23
+
+  NSModifierFlags* = set[NSModifierFlag]
+
+  NSFunctionKey* = enum
+    NSUpArrowFunctionKey = 0xF700
+    NSDownArrowFunctionKey = 0xF701
+    NSLeftArrowFunctionKey = 0xF702
+    NSRightArrowFunctionKey = 0xF703
+    NSF1FunctionKey = 0xF704
+    NSF2FunctionKey = 0xF705
+    NSF3FunctionKey = 0xF706
+    NSF4FunctionKey = 0xF707
+    NSF5FunctionKey = 0xF708
+    NSF6FunctionKey = 0xF709
+    NSF7FunctionKey = 0xF70A
+    NSF8FunctionKey = 0xF70B
+    NSF9FunctionKey = 0xF70C
+    NSF10FunctionKey = 0xF70D
+    NSF11FunctionKey = 0xF70E
+    NSF12FunctionKey = 0xF70F
+    NSF13FunctionKey = 0xF710
+    NSF14FunctionKey = 0xF711
+    NSF15FunctionKey = 0xF712
+    NSF16FunctionKey = 0xF713
+    NSF17FunctionKey = 0xF714
+    NSF18FunctionKey = 0xF715
+    NSF19FunctionKey = 0xF716
+    NSF20FunctionKey = 0xF717
+    NSF21FunctionKey = 0xF718
+    NSF22FunctionKey = 0xF719
+    NSF23FunctionKey = 0xF71A
+    NSF24FunctionKey = 0xF71B
+    NSF25FunctionKey = 0xF71C
+    NSF26FunctionKey = 0xF71D
+    NSF27FunctionKey = 0xF71E
+    NSF28FunctionKey = 0xF71F
+    NSF29FunctionKey = 0xF720
+    NSF30FunctionKey = 0xF721
+    NSF31FunctionKey = 0xF722
+    NSF32FunctionKey = 0xF723
+    NSF33FunctionKey = 0xF724
+    NSF34FunctionKey = 0xF725
+    NSF35FunctionKey = 0xF726
+    NSInsertFunctionKey = 0xF727
+    NSDeleteFunctionKey = 0xF728
+    NSHomeFunctionKey = 0xF729
+    NSBeginFunctionKey = 0xF72A
+    NSEndFunctionKey = 0xF72B
+    NSPageUpFunctionKey = 0xF72C
+    NSPageDownFunctionKey = 0xF72D
+    NSPrintScreenFunctionKey = 0xF72E
+    NSScrollLockFunctionKey = 0xF72F
+    NSPauseFunctionKey = 0xF730
+    NSSysReqFunctionKey = 0xF731
+    NSBreakFunctionKey = 0xF732
+    NSResetFunctionKey = 0xF733
+    NSStopFunctionKey = 0xF734
+    NSMenuFunctionKey = 0xF735
+    NSUserFunctionKey = 0xF736
+    NSSystemFunctionKey = 0xF737
+    NSPrintFunctionKey = 0xF738
+    NSClearLineFunctionKey = 0xF739
+    NSClearDisplayFunctionKey = 0xF73A
+    NSInsertLineFunctionKey = 0xF73B
+    NSDeleteLineFunctionKey = 0xF73C
+    NSInsertCharFunctionKey = 0xF73D
+    NSDeleteCharFunctionKey = 0xF73E
+    NSPrevFunctionKey = 0xF73F
+    NSNextFunctionKey = 0xF740
+    NSSelectFunctionKey = 0xF741
+    NSExecuteFunctionKey = 0xF742
+    NSUndoFunctionKey = 0xF743
+    NSRedoFunctionKey = 0xF744
+    NSFindFunctionKey = 0xF745
+    NSHelpFunctionKey = 0xF746
+    NSModeSwitchFunctionKey = 0xF747
+
+  NSApplicationActivationType* = enum
+    NSApplicationActivated = 0
+    NSApplicationDeactivated = 1
 
 const
-  NSLeftMouseDown* = 1.NSEventType
-  NSLeftMouseUp* = 2.NSEventType
-  NSRightMouseDown* = 3.NSEventType
-  NSRightMouseUp* = 4.NSEventType
-  NSMouseMoved* = 5.NSEventType
-  NSLeftMouseDragged* = 6.NSEventType
-  NSRightMouseDragged* = 7.NSEventType
-  NSMouseEntered* = 8.NSEventType
-  NSMouseExited* = 9.NSEventType
-  NSKeyDown* = 10.NSEventType
-  NSKeyUp* = 11.NSEventType
-  NSFlagsChanged* = 12.NSEventType
-  NSPeriodic* = 13.NSEventType
-  NSCursorUpdate* = 14.NSEventType
-  NSPlatformSpecific* = 15.NSEventType
-  NSPlatformSpecificDisplayEvent* = 16.NSEventType
-  NSAppKitSystem* = 17.NSEventType
-  NSScrollWheel* = 18.NSEventType
-  NSApplicationDefined* = 19.NSEventType
-  NSAppKitDefined* = 20.NSEventType
+  NSLeftMouseDownMask*: NSEventMask = {NSLeftMouseDown}
+  NSLeftMouseUpMask*: NSEventMask = {NSLeftMouseUp}
+  NSRightMouseDownMask*: NSEventMask = {NSRightMouseDown}
+  NSRightMouseUpMask*: NSEventMask = {NSRightMouseUp}
+  NSMouseMovedMask*: NSEventMask = {NSMouseMoved}
+  NSLeftMouseDraggedMask*: NSEventMask = {NSLeftMouseDragged}
+  NSRightMouseDraggedMask*: NSEventMask = {NSRightMouseDragged}
+  NSMouseEnteredMask*: NSEventMask = {NSMouseEntered}
+  NSMouseExitedMask*: NSEventMask = {NSMouseExited}
+  NSKeyDownMask*: NSEventMask = {NSKeyDown}
+  NSKeyUpMask*: NSEventMask = {NSKeyUp}
+  NSFlagsChangedMask*: NSEventMask = {NSFlagsChanged}
+  NSPeriodicMask*: NSEventMask = {NSPeriodic}
+  NSCursorUpdateMask*: NSEventMask = {NSCursorUpdate}
+  NSScrollWheelMask*: NSEventMask = {NSScrollWheel}
+  NSApplicationDefinedMask*: NSEventMask = {NSApplicationDefined}
+  NSAppKitDefinedMask*: NSEventMask = {NSAppKitDefined}
+  NSAnyEventMask*: NSEventMask = {NSLeftMouseDown .. NSAppKitDefined}
+  NSPlatformSpecificDisplayMask*: NSEventMask = {NSPlatformSpecificDisplayEvent}
 
-  NSLeftMouseDownMask* = 1'u shl NSLeftMouseDown.int
-  NSLeftMouseUpMask* = 1'u shl NSLeftMouseUp.int
-  NSRightMouseDownMask* = 1'u shl NSRightMouseDown.int
-  NSRightMouseUpMask* = 1'u shl NSRightMouseUp.int
-  NSMouseMovedMask* = 1'u shl NSMouseMoved.int
-  NSLeftMouseDraggedMask* = 1'u shl NSLeftMouseDragged.int
-  NSRightMouseDraggedMask* = 1'u shl NSRightMouseDragged.int
-  NSMouseEnteredMask* = 1'u shl NSMouseEntered.int
-  NSMouseExitedMask* = 1'u shl NSMouseExited.int
-  NSKeyDownMask* = 1'u shl NSKeyDown.int
-  NSKeyUpMask* = 1'u shl NSKeyUp.int
-  NSFlagsChangedMask* = 1'u shl NSFlagsChanged.int
-  NSPeriodicMask* = 1'u shl NSPeriodic.int
-  NSCursorUpdateMask* = 1'u shl NSCursorUpdate.int
-  NSScrollWheelMask* = 1'u shl NSScrollWheel.int
-  NSApplicationDefinedMask* = 1'u shl NSApplicationDefined.int
-  NSAppKitDefinedMask* = 1'u shl NSAppKitDefined.int
-  NSAnyEventMask* = 0xffff_ffff'u
-  NSPlatformSpecificDisplayMask* = 1'u shl NSPlatformSpecificDisplayEvent.int
-
-  NSAlphaShiftKeyMask* = 1'u shl 16
-  NSShiftKeyMask* = 1'u shl 17
-  NSControlKeyMask* = 1'u shl 18
-  NSAlternateKeyMask* = 1'u shl 19
-  NSCommandKeyMask* = 1'u shl 20
-  NSNumericPadKeyMask* = 1'u shl 21
-  NSHelpKeyMask* = 1'u shl 22
-  NSFunctionKeyMask* = 1'u shl 23
-  NSDeviceIndependentModifierFlagsMask* = 0xffff_0000'u
-
-  NSUpArrowFunctionKey* = 0xF700'u16
-  NSDownArrowFunctionKey* = 0xF701'u16
-  NSLeftArrowFunctionKey* = 0xF702'u16
-  NSRightArrowFunctionKey* = 0xF703'u16
-  NSF1FunctionKey* = 0xF704'u16
-  NSF2FunctionKey* = 0xF705'u16
-  NSF3FunctionKey* = 0xF706'u16
-  NSF4FunctionKey* = 0xF707'u16
-  NSF5FunctionKey* = 0xF708'u16
-  NSF6FunctionKey* = 0xF709'u16
-  NSF7FunctionKey* = 0xF70A'u16
-  NSF8FunctionKey* = 0xF70B'u16
-  NSF9FunctionKey* = 0xF70C'u16
-  NSF10FunctionKey* = 0xF70D'u16
-  NSF11FunctionKey* = 0xF70E'u16
-  NSF12FunctionKey* = 0xF70F'u16
-  NSF13FunctionKey* = 0xF710'u16
-  NSF14FunctionKey* = 0xF711'u16
-  NSF15FunctionKey* = 0xF712'u16
-  NSF16FunctionKey* = 0xF713'u16
-  NSF17FunctionKey* = 0xF714'u16
-  NSF18FunctionKey* = 0xF715'u16
-  NSF19FunctionKey* = 0xF716'u16
-  NSF20FunctionKey* = 0xF717'u16
-  NSF21FunctionKey* = 0xF718'u16
-  NSF22FunctionKey* = 0xF719'u16
-  NSF23FunctionKey* = 0xF71A'u16
-  NSF24FunctionKey* = 0xF71B'u16
-  NSF25FunctionKey* = 0xF71C'u16
-  NSF26FunctionKey* = 0xF71D'u16
-  NSF27FunctionKey* = 0xF71E'u16
-  NSF28FunctionKey* = 0xF71F'u16
-  NSF29FunctionKey* = 0xF720'u16
-  NSF30FunctionKey* = 0xF721'u16
-  NSF31FunctionKey* = 0xF722'u16
-  NSF32FunctionKey* = 0xF723'u16
-  NSF33FunctionKey* = 0xF724'u16
-  NSF34FunctionKey* = 0xF725'u16
-  NSF35FunctionKey* = 0xF726'u16
-  NSInsertFunctionKey* = 0xF727'u16
-  NSDeleteFunctionKey* = 0xF728'u16
-  NSHomeFunctionKey* = 0xF729'u16
-  NSBeginFunctionKey* = 0xF72A'u16
-  NSEndFunctionKey* = 0xF72B'u16
-  NSPageUpFunctionKey* = 0xF72C'u16
-  NSPageDownFunctionKey* = 0xF72D'u16
-  NSPrintScreenFunctionKey* = 0xF72E'u16
-  NSScrollLockFunctionKey* = 0xF72F'u16
-  NSPauseFunctionKey* = 0xF730'u16
-  NSSysReqFunctionKey* = 0xF731'u16
-  NSBreakFunctionKey* = 0xF732'u16
-  NSResetFunctionKey* = 0xF733'u16
-  NSStopFunctionKey* = 0xF734'u16
-  NSMenuFunctionKey* = 0xF735'u16
-  NSUserFunctionKey* = 0xF736'u16
-  NSSystemFunctionKey* = 0xF737'u16
-  NSPrintFunctionKey* = 0xF738'u16
-  NSClearLineFunctionKey* = 0xF739'u16
-  NSClearDisplayFunctionKey* = 0xF73A'u16
-  NSInsertLineFunctionKey* = 0xF73B'u16
-  NSDeleteLineFunctionKey* = 0xF73C'u16
-  NSInsertCharFunctionKey* = 0xF73D'u16
-  NSDeleteCharFunctionKey* = 0xF73E'u16
-  NSPrevFunctionKey* = 0xF73F'u16
-  NSNextFunctionKey* = 0xF740'u16
-  NSSelectFunctionKey* = 0xF741'u16
-  NSExecuteFunctionKey* = 0xF742'u16
-  NSUndoFunctionKey* = 0xF743'u16
-  NSRedoFunctionKey* = 0xF744'u16
-  NSFindFunctionKey* = 0xF745'u16
-  NSHelpFunctionKey* = 0xF746'u16
-  NSModeSwitchFunctionKey* = 0xF747'u16
-
-  NSApplicationActivated* = 0
-  NSApplicationDeactivated* = 1
+  NSDeviceIndependentModifierFlagsMask*: NSModifierFlags =
+    {NSAlphaShiftKeyMask .. NSFunctionKeyMask}
 
 var currentMouseLocation {.threadvar.}: NSPoint
 var currentModifierFlags {.threadvar.}: NSUInteger
@@ -150,20 +159,31 @@ proc isModifierSiwinKey(key: siwin.Key): bool =
     siwin.Key.capsLock, siwin.Key.numLock,
   }
 
-proc modifierFlagsFromSiwin*(modifiers: set[siwin.ModifierKey]): NSUInteger =
-  result = 0
+proc nsModifierFlagsMask*(flags: NSModifierFlags): NSUInteger =
+  result = 0.NSUInteger
+  for flag in flags:
+    result = result or ((1'u shl flag.ord).NSUInteger)
+
+proc nsModifierFlagsFromMask*(mask: NSUInteger): NSModifierFlags =
+  result = {}
+  for flag in low(NSModifierFlag) .. high(NSModifierFlag):
+    if (mask and ((1'u shl flag.ord).NSUInteger)) != 0:
+      result.incl(flag)
+
+proc modifierFlagsFromSiwin*(modifiers: set[siwin.ModifierKey]): NSModifierFlags =
+  result = {}
   if siwin.ModifierKey.shift in modifiers:
-    result = result or NSShiftKeyMask
+    result.incl(NSShiftKeyMask)
   if siwin.ModifierKey.control in modifiers:
-    result = result or NSControlKeyMask
+    result.incl(NSControlKeyMask)
   if siwin.ModifierKey.alt in modifiers:
-    result = result or NSAlternateKeyMask
+    result.incl(NSAlternateKeyMask)
   if siwin.ModifierKey.system in modifiers:
-    result = result or NSCommandKeyMask
+    result.incl(NSCommandKeyMask)
   if siwin.ModifierKey.capsLock in modifiers:
-    result = result or NSAlphaShiftKeyMask
+    result.incl(NSAlphaShiftKeyMask)
   if siwin.ModifierKey.numLock in modifiers:
-    result = result or NSNumericPadKeyMask
+    result.incl(NSNumericPadKeyMask)
 
 proc nsEventTypeFromSiwin*(event: siwin.KeyEvent): NSEventType =
   if isModifierSiwinKey(event.key):
@@ -542,8 +562,8 @@ proc newMouseEvent*(
     return
   result.xxClickCount = clickCount.int
 
-proc NSEventMaskFromType*(eventType: NSEventType): cuint =
-  (1'u shl eventType.int).cuint
+proc NSEventMaskFromType*(eventType: NSEventType): NSEventMask =
+  {eventType}
 
 proc periodicEventsEnabled*(): bool =
   periodicEventsEnabledState
@@ -593,7 +613,7 @@ proc keyEventFromSiwin*(
   result = newKeyEvent(
     nsEventTypeFromSiwin(event),
     location,
-    modifierFlagsFromSiwin(event.modifiers).cuint,
+    nsModifierFlagsMask(modifierFlagsFromSiwin(event.modifiers)).cuint,
     timeIntervalSinceReferenceDate(),
     windowNumber.cint,
     characters,
@@ -618,7 +638,7 @@ proc mouseButtonEventFromSiwin*(
   result = newEvent(
     nsEventTypeFromSiwin(event),
     location,
-    modifierFlagsFromSiwin(modifiers),
+    nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
     timeIntervalSinceReferenceDate(),
     windowNumber,
   )
@@ -643,7 +663,7 @@ proc scrollEventFromSiwin*(
   result = newEvent(
     NSScrollWheel,
     location,
-    modifierFlagsFromSiwin(modifiers),
+    nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
     timeIntervalSinceReferenceDate(),
     windowNumber,
   )
