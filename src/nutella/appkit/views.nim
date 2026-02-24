@@ -82,8 +82,7 @@ objcImpl:
 
 proc new*(t: typedesc[NSView]): NSView =
   var allocated = NSView.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc clearSuperviewRef*(viewId: ID) =
   if viewId.isNil:

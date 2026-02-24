@@ -96,6 +96,11 @@ proc stripMnemonicMarkers*(value: NSString): NSString =
     i += 2
   result = ns(dst)
 
+proc initOwned*[T: NSObject](allocated: sink T): T {.inline.} =
+  var obj = move(allocated)
+  result = obj.init()
+  obj.value = nil
+
 proc ownFromId*[T: NSObject](id: ID): T =
   if id.isNil:
     return T(value: nil)

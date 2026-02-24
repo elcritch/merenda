@@ -253,13 +253,11 @@ objcImpl:
 
 proc new*(t: typedesc[NSWindow]): NSWindow =
   var allocated = NSWindow.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc new*(t: typedesc[NSPanel]): NSPanel =
   var allocated = NSPanel.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc setFrame*(window: NSWindow, frame: NSRect) =
   var nextFrame = nsRect(

@@ -83,5 +83,4 @@ objcImpl:
 
 proc new*(t: typedesc[NSCollectionView]): NSCollectionView =
   var allocated = NSCollectionView.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))

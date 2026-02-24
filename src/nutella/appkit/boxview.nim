@@ -114,5 +114,4 @@ objcImpl:
 
 proc new*(t: typedesc[NSBox]): NSBox =
   var allocated = NSBox.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))

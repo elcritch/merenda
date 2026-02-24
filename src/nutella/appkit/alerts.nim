@@ -196,5 +196,4 @@ objcImpl:
 
 proc new*(t: typedesc[NSAlert]): NSAlert =
   var allocated = NSAlert.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))

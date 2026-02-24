@@ -118,8 +118,7 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int =
 
 proc new*(t: typedesc[NSApplication]): NSApplication =
   var allocated = NSApplication.alloc()
-  result = allocated.init()
-  allocated.value = nil
+  result = initOwned(move(allocated))
 
 proc sharedApplication*(t: typedesc[NSApplication]): NSApplication =
   if sharedApplicationRef.isNil:
