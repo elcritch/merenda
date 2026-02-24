@@ -357,3 +357,22 @@ suite "objcImpl examples":
     check(o.payload() == "updated")
     o.payload = "final"
     check(o.payloadValue() == "final")
+
+  test "objcImpl field pragma accessors are registered as ObjC methods":
+    var o = CustomAccessorClass.alloc()
+    o.initWithPayload("hello")
+    check(not o.isNil)
+
+    let cls = getClass(CustomAccessorClass)
+    let getterSel = selector("payloadValue")
+    let setterSel = selector("setPayloadValue:")
+    check(respondsToSelector(cls, getterSel))
+    check(respondsToSelector(cls, setterSel))
+
+    let sendGet =
+      cast[proc(self: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let sendSet = cast[proc(self: ID, op: SEL, value: cstring): void {.cdecl, varargs.}](objc_msgSend)
+
+    sendSet(o.value, setterSel, "fromObjc".cstring)
+    check(o.payload() == "fromObjc")
+    check($sendGet(o.value, getterSel) == "fromObjc")
