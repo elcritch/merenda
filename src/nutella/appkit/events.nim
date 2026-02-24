@@ -207,6 +207,24 @@ proc nsEventTypeFromSiwin*(event: siwin.MouseButtonEvent): NSEventType =
       return NSAppKitDefined
     NSApplicationDefined
 
+proc nsEventTypeFromSiwin*(
+    event: siwin.MouseMoveEvent, mouseButtons: set[siwin.MouseButton] = {}
+): NSEventType =
+  case event.kind
+  of siwin.MouseMoveKind.enter:
+    NSMouseEntered
+  of siwin.MouseMoveKind.leave:
+    NSMouseExited
+  of siwin.MouseMoveKind.moveWhileDragging:
+    if siwin.MouseButton.left in mouseButtons:
+      NSLeftMouseDragged
+    elif siwin.MouseButton.right in mouseButtons:
+      NSRightMouseDragged
+    else:
+      NSMouseMoved
+  else:
+    NSMouseMoved
+
 proc siwinKeyCode*(key: siwin.Key): cushort =
   key.ord.cushort
 
@@ -700,28 +718,16 @@ proc mouseButtonEventFromSiwin*(
     modifiers: set[siwin.ModifierKey] = {},
 ): NSEvent =
   let clickCount = (if event.pressed and not event.generated: 1 else: 0)
-  result = newEvent(
+  result = newMouseEvent(
     nsEventTypeFromSiwin(event),
     location,
     nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
     timeIntervalSinceReferenceDate(),
     windowNumber,
+    clickCount,
   )
   if result.isNil:
     return
-  if not result.isKindOfClass(NSEvent_mouse):
-    var allocated = NSEvent_mouse.alloc()
-    var initialized = allocated.initWithType(
-      result.`type`(),
-      result.locationInWindow(),
-      result.modifierFlags(),
-      result.timestamp(),
-      result.windowNumber(),
-    )
-    allocated.value = nil
-    if not initialized.isNil:
-      result = initialized
-  result.xxClickCount = clickCount
   result.xxSiwinMouseButton = event.button
   result.xxSiwinModifiers = modifiers
   result.xxSiwinGenerated = event.generated
@@ -749,3 +755,24 @@ proc scrollEventFromSiwin*(
   result.xxDeltaX = event.deltaX.cfloat
   result.xxDeltaY = event.delta.cfloat
   result.xxSiwinModifiers = modifiers
+
+proc mouseMoveEventFromSiwin*(
+    windowNumber: NSInteger,
+    location: NSPoint,
+    event: siwin.MouseMoveEvent,
+    modifiers: set[siwin.ModifierKey] = {},
+    mouseButtons: set[siwin.MouseButton] = {},
+): NSEvent =
+  result = newMouseEvent(
+    nsEventTypeFromSiwin(event, mouseButtons),
+    location,
+    nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
+    timeIntervalSinceReferenceDate(),
+    windowNumber,
+    0,
+  )
+  if result.isNil:
+    return
+  result.xxSiwinModifiers = modifiers
+  result.xxSiwinMouseButtons = mouseButtons
+  result.xxSiwinPressed = mouseButtons.len > 0

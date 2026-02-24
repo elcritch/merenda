@@ -11,6 +11,7 @@ import ./windows
 import ./clipviews
 import ./buttons
 import ./textfields
+import ./events
 
 proc ensureContentView(window: NSWindow): NSView =
   let cv = window.contentView()
@@ -720,12 +721,69 @@ proc ensureNativeWindow*(window: NSWindow) =
           let button = ownFromId[NSButton](buttonId)
           button.performClick(window)
         renderWindow(window),
+      onMouseMove: proc(e: siwinshim.MouseMoveEvent) =
+        let nativeWindow = window.windowNativeWindow()
+        if nativeWindow.isNil:
+          return
+        let logicalPos = logicalInputPos(nativeWindow, e.pos)
+        let appEvent = mouseMoveEventFromSiwin(
+          0,
+          nsPoint(logicalPos.x, logicalPos.y),
+          e,
+          nativeWindow.keyboard.modifiers,
+          nativeWindow.mouse.pressed,
+        )
+        if not appEvent.isNil:
+          window.sendEvent(appEvent)
+      ,
+      onMouseButton: proc(e: siwinshim.MouseButtonEvent) =
+        let nativeWindow =
+          if e.window.isNil:
+            window.windowNativeWindow()
+          else:
+            e.window
+        if nativeWindow.isNil:
+          return
+        let logicalPos = logicalInputPos(nativeWindow, nativeWindow.mouse.pos)
+        let appEvent = mouseButtonEventFromSiwin(
+          0, nsPoint(logicalPos.x, logicalPos.y), e, nativeWindow.keyboard.modifiers
+        )
+        if not appEvent.isNil:
+          window.sendEvent(appEvent)
+      ,
+      onScroll: proc(e: siwinshim.ScrollEvent) =
+        let nativeWindow =
+          if e.window.isNil:
+            window.windowNativeWindow()
+          else:
+            e.window
+        if nativeWindow.isNil:
+          return
+        let logicalPos = logicalInputPos(nativeWindow, nativeWindow.mouse.pos)
+        let appEvent = scrollEventFromSiwin(
+          0, nsPoint(logicalPos.x, logicalPos.y), e, nativeWindow.keyboard.modifiers
+        )
+        if not appEvent.isNil:
+          window.sendEvent(appEvent)
+      ,
       onRender: proc(e: siwinshim.RenderEvent) =
         discard e
         renderWindow(window),
       onKey: proc(e: siwinshim.KeyEvent) =
-        if e.pressed and e.key == siwinshim.Key.escape:
-          window.close()
+        let nativeWindow =
+          if e.window.isNil:
+            window.windowNativeWindow()
+          else:
+            e.window
+        let logicalPos =
+          if nativeWindow.isNil:
+            vec2(0.0, 0.0)
+          else:
+            logicalInputPos(nativeWindow, nativeWindow.mouse.pos)
+        let appEvent =
+          keyEventFromSiwin(0, nsPoint(logicalPos.x, logicalPos.y), e, @ns"", @ns"")
+        if not appEvent.isNil:
+          window.sendEvent(appEvent)
       ,
     )
 

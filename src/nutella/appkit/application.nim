@@ -9,6 +9,7 @@ import ./views
 import ./buttons
 import ./textfields
 import ./rendering
+import ./events
 
 proc runApplicationFrames(app: NSObject, maxFrames: int): int
 
@@ -37,6 +38,19 @@ objcImpl:
 
   method run(self: NSApplication) =
     discard runApplicationFrames(self, -1)
+
+  method sendEvent*(self: NSApplication, event: NSEvent) =
+    if self.isNil or event.isNil:
+      return
+    let windows = self.appWindows()
+    var i = windows.len - 1
+    while i >= 0:
+      let window = ownFromId[NSWindow](windows[i])
+      if (not window.isNil) and (not window.windowClosed()) and
+          window.windowVisibleRequested():
+        window.sendEvent(event)
+        return
+      dec i
 
   method stop(self: NSApplication) =
     self.appRunning = false
@@ -140,6 +154,19 @@ proc run*(app: NSApplication) =
 
 proc stop*(app: NSApplication) =
   app.appRunning = false
+
+proc sendEvent*(app: NSApplication, event: NSEvent) =
+  if app.isNil or event.isNil:
+    return
+  let windows = app.appWindows()
+  var i = windows.len - 1
+  while i >= 0:
+    let window = ownFromId[NSWindow](windows[i])
+    if (not window.isNil) and (not window.windowClosed()) and
+        window.windowVisibleRequested():
+      window.sendEvent(event)
+      return
+    dec i
 
 proc isRunning*(app: NSApplication): bool =
   app.appRunning()
