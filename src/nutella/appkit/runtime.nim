@@ -171,6 +171,7 @@ proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject):
     false
 
 type
+  ## Pre-declare core types
 
   NSResponder* = object of NSObject
 
