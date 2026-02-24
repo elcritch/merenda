@@ -2,11 +2,14 @@ import std/strutils
 import ./runtime
 
 import ./views
+import ./controllers
 
-export views
+export views, controllers
 
 objcImpl:
   type NSControl* = object of NSView
+    xxCell: ID
+    xxCurrentEditor: NSText
     enabled {.set: setEnabled, get: isEnabled.}: bool
     continuous {.set: setContinuous, get: isContinuous.}: bool
     refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
@@ -22,6 +25,8 @@ objcImpl:
     result.continuous = false
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
+    result.xxCell = nil
+    result.xxCurrentEditor = NSText(value: nil)
 
   method acceptsFirstResponder*(self: NSControl): bool =
     if self.isNil:
