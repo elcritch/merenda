@@ -11,6 +11,7 @@ import ./appkit/cells
 import ./appkit/clipviews
 import ./appkit/collectionviews
 import ./appkit/alerts
+import ./appkit/events
 
 export runtime
 export rendering
@@ -25,3 +26,4 @@ export cells
 export clipviews
 export collectionviews
 export alerts
+export events
