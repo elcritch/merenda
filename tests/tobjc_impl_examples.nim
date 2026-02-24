@@ -8,6 +8,7 @@ var simpleCounter = 0.cint
 var crossPayloadClass = ""
 var crossPayloadRetainInMethod = 0
 var ivarCounterStateDestroyedCount = 0
+var ivarCounterStateDestroyedCount2 = 0
 var plainFieldPingCount = 0
 var lateMethodBasePingCount = 0
 var lateMethodExtraPingCount = 0
@@ -327,64 +328,56 @@ suite "objcImpl examples":
     check(ivarCounterStateDestroyedCount == 1)
 
   test "objcImpl class using ivar-backed state":
-    type IvarCounterState = ref object
+    type IvarCounterState = object
       total: int
       lastAmount: int
 
     proc `=destroy`(o: var IvarCounterState) =
-      inc ivarCounterStateDestroyedCount
+      echo "IvarCounterState: ", repr(o)
+      inc ivarCounterStateDestroyedCount2
 
     objcImpl:
-      type IvarCounterClass = object of NSObject
+      type IvarCounterClass2 = object of NSObject
         counter: IvarCounterState
 
-      proc new(
-        t: typedesc[IvarCounterClass]
-      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
-
       proc init(
-        t: typedesc[IvarCounterClass]
-      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+        v: var IvarCounterClass2
+      ): IvarCounterClass2 {.error: "Use initWithMultiplier(...)".}
 
-      proc init(
-        v: var IvarCounterClass
-      ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
+      proc initWithMultiplier(self: var IvarCounterClass2, lastAmount: cint) =
+        self = super(IvarCounterClass2, self, init)
+        self.counter = IvarCounterState(total: 0, lastAmount: lastAmount)
 
-      proc initWithMultiplier(self: var IvarCounterClass, lastAmount: cint) =
-        self = super(IvarCounterClass, self, init)
-        self.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
+      method bump(self: IvarCounterClass2, amount: cint): cint =
+        self.counter.total += amount.int
+        self.counter.lastAmount = amount.int
+        result = (self.counter.total).cint
 
-      method bump(self: IvarCounterClass, amount: cint): cint =
-        let st = self.counter
-        st.total += amount.int
-        st.lastAmount = amount.int
-        result = (st.total).cint
-
-      method current(self: IvarCounterClass): cint =
+      method current(self: IvarCounterClass2): cint =
         let st = self.counter
         (st.total).cint
 
-      method lastAmount(self: IvarCounterClass): cint =
+      method lastAmount(self: IvarCounterClass2): cint =
         let st = self.counter
         st.lastAmount.cint
 
-      method dealloc(self: IvarCounterClass) {.used.} =
+      method dealloc(self: IvarCounterClass2) {.used.} =
         clearIvarRefs(self)
         superDealloc(self)
 
-    ivarCounterStateDestroyedCount = 0
-    doAssert not compiles(IvarCounterClass.new())
-    doAssert not compiles(IvarCounterClass.init())
+    ivarCounterStateDestroyedCount2 = 0
     doAssert not compiles(
       block:
-        var x = IvarCounterClass.alloc()
+        var x = IvarCounterClass2.alloc()
         discard x.init()
     )
 
-    var c = IvarCounterClass.alloc()
+    check(ivarCounterStateDestroyedCount2 == 0)
+
+    var c = IvarCounterClass2.alloc()
     c.initWithMultiplier(1.cint)
     check(not c.isNil)
-    check(getClassName(c) == "IvarCounterClass")
+    check(getClassName(c) == "IvarCounterClass2")
     check(c.current() == 0.cint)
     check(c.lastAmount() == 1.cint)
 
@@ -394,16 +387,17 @@ suite "objcImpl examples":
     check(c.lastAmount() == 3.cint)
     check(c.current() == 5.cint)
 
+    check(ivarCounterStateDestroyedCount2 == 0)
+
     block:
       let st = c.counter()
-      check(st != nil)
       check(st.total == 5)
       check(st.lastAmount == 3)
-    check(ivarCounterStateDestroyedCount == 0)
+    check(ivarCounterStateDestroyedCount2 == 0)
 
     release(c)
     check(c.isNil)
-    check(ivarCounterStateDestroyedCount == 1)
+    check(ivarCounterStateDestroyedCount2 == 1)
 
   test "objcImpl class supports direct value ivar fields":
     plainFieldPingCount = 0

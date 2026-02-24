@@ -211,6 +211,10 @@ proc setIvarRef*[T: ref](obj: NSObject, ivarName: string, value: T) {.raises: []
   GC_ref(value)
 
   let iv = setInstanceVariable(obj.value, ivarName, cast[pointer](payload))
+  when defined(nutellaIvarDebug):
+    if ivarName == "counter":
+      echo "setIvarRef(", ivarName, ") obj=", cast[uint](obj.value), " payload=", cast[
+          uint](payload), " iv=", cast[uint](iv), " value=", cast[uint](cast[pointer](value))
   if cast[pointer](iv) == nil:
     if payload.cleanup != nil and payload.value != nil:
       payload.cleanup(payload.value)
@@ -231,8 +235,34 @@ proc getIvarRef*[T: ref](obj: NSObject, ivarName: string): T {.raises: [].} =
   let payload = cast[ptr NimIvarRefPayload](rawPayload)
   cast[T](payload.value)
 
+proc getIvarRefPtr*[T: ref](obj: NSObject, ivarName: string): ptr T {.raises: [].} =
+  if obj.isNil or ivarName.len == 0:
+    return nil
+
+  var rawPayload: pointer
+  discard getInstanceVariable(obj.value, ivarName, rawPayload)
+  when defined(nutellaIvarDebug):
+    if ivarName == "counter":
+      echo "getIvarRefPtr(", ivarName, ") obj=", cast[uint](obj.value), " raw=", cast[
+          uint](rawPayload)
+  if rawPayload == nil:
+    return nil
+
+  let payload = cast[ptr NimIvarRefPayload](rawPayload)
+  cast[ptr T](payload.value.addr)
+
 proc getIvarRef*[T: ref](obj: NSObject, t: typedesc[T]): T {.inline, raises: [].} =
   getIvarRef[T](obj, ivarRefName[T]())
+
+proc getIvarFieldVar*[T](obj: NSObject, ivarName: string): var T {.inline.} =
+  when T is ref:
+    let p = getIvarRefPtr[T](obj, ivarName)
+    doAssert not p.isNil
+    p[]
+  else:
+    let p = getIvarValuePtr[T](obj, ivarName)
+    doAssert not p.isNil
+    p[]
 
 proc clearIvarRefsRaw(obj: ID) {.raises: [].} =
   if obj == nil:
