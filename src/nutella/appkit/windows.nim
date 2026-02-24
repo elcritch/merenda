@@ -255,15 +255,11 @@ proc new*(t: typedesc[NSWindow]): NSWindow =
   var allocated = NSWindow.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
 
 proc new*(t: typedesc[NSPanel]): NSPanel =
   var allocated = NSPanel.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
 
 proc setFrame*(window: NSWindow, frame: NSRect) =
   var nextFrame = nsRect(

@@ -2,7 +2,6 @@ import ./runtime
 import ./views
 
 objcImpl:
-
   type NSClipView* = object of NSView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     clipDocumentCursorId: ID
@@ -175,6 +174,3 @@ proc new*(t: typedesc[NSClipView]): NSClipView =
   var allocated = NSClipView.alloc()
   result = allocated.init()
   allocated.value = nil
-  if result.isNil:
-    return
-
