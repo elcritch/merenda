@@ -36,19 +36,19 @@ objcImpl:
 
   method setTextColor*(
       self: NSTextField,
-      r: cfloat,
-      g {.kw("green").}: cfloat,
-      b {.kw("blue").}: cfloat,
-      a {.kw("alpha").}: cfloat,
+      r: float32,
+      g {.kw("green").}: float32,
+      b {.kw("blue").}: float32,
+      a {.kw("alpha").}: float32,
   ) =
     self.txtColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setBackgroundColor*(
       self: NSTextField,
-      r: cfloat,
-      g {.kw("green").}: cfloat,
-      b {.kw("blue").}: cfloat,
-      a {.kw("alpha").}: cfloat,
+      r: float32,
+      g {.kw("green").}: float32,
+      b {.kw("blue").}: float32,
+      a {.kw("alpha").}: float32,
   ) =
     self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 

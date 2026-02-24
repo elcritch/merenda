@@ -47,11 +47,11 @@ objcImpl:
   method integerValue*(self: NSControl): int =
     self.intValue().int
 
-  method floatValue*(self: NSControl): cfloat =
+  method floatValue*(self: NSControl): float32 =
     if self.isNil:
       return 0.0
     try:
-      parseFloat($self.stringValue()).cfloat
+      parseFloat($self.stringValue()).float32
     except ValueError:
       0.0
 
@@ -71,7 +71,7 @@ objcImpl:
   method setIntegerValue*(self: NSControl, value: int) =
     self.setIntValue(value.cint)
 
-  method setFloatValue*(self: NSControl, value: cfloat) =
+  method setFloatValue*(self: NSControl, value: float32) =
     if self.isNil:
       return
     self.setStringValue(ns($value))

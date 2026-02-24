@@ -83,10 +83,10 @@ objcImpl:
     self.clipDocumentRect =
       nsRect(0, 0, max(frame.size.width, 0.0), max(frame.size.height, 0.0))
     view.setFrame(
-      (-self.clipScrollOrigin.x).cfloat,
-      (-self.clipScrollOrigin.y).cfloat,
-      frame.size.width.cfloat,
-      frame.size.height.cfloat,
+      (-self.clipScrollOrigin.x).float32,
+      (-self.clipScrollOrigin.y).float32,
+      frame.size.width.float32,
+      frame.size.height.float32,
     )
 
   method documentRect*(self: NSClipView): NSRect =
@@ -138,18 +138,18 @@ objcImpl:
       return
     let frame = doc.viewFrame()
     doc.setFrame(
-      (-self.clipScrollOrigin.x).cfloat,
-      (-self.clipScrollOrigin.y).cfloat,
-      frame.size.width.cfloat,
-      frame.size.height.cfloat,
+      (-self.clipScrollOrigin.x).float32,
+      (-self.clipScrollOrigin.y).float32,
+      frame.size.width.float32,
+      frame.size.height.float32,
     )
 
   method setFrame*(
       self: NSClipView,
-      x: cfloat,
-      y {.kw("y").}: cfloat,
-      width {.kw("width").}: cfloat,
-      height {.kw("height").}: cfloat,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
   ) =
     self.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
@@ -159,10 +159,10 @@ objcImpl:
       return
     let frame = doc.viewFrame()
     doc.setFrame(
-      (-self.clipScrollOrigin.x).cfloat,
-      (-self.clipScrollOrigin.y).cfloat,
-      frame.size.width.cfloat,
-      frame.size.height.cfloat,
+      (-self.clipScrollOrigin.x).float32,
+      (-self.clipScrollOrigin.y).float32,
+      frame.size.width.float32,
+      frame.size.height.float32,
     )
 
   method dealloc(self: NSClipView) {.used.} =

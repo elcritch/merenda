@@ -19,7 +19,7 @@ objcImpl:
     .}: bool
     autoResizeSubs {.set: setAutoresizesSubviews, get: autoresizesSubviews.}: bool
     autoResizeMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
-    alpha {.set: setAlphaValue, get: alphaValue.}: cfloat
+    alpha {.set: setAlphaValue, get: alphaValue.}: float32
     viewSuperview: ID
     viewTag: int
     viewSubviews: seq[ID]
@@ -42,10 +42,10 @@ objcImpl:
 
   method initWithFrame*(
       self: var NSView,
-      x: cfloat,
-      y {.kw("y").}: cfloat,
-      width {.kw("width").}: cfloat,
-      height {.kw("height").}: cfloat,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
   ): NSView =
     result = self.init()
     if result.isNil:
@@ -55,20 +55,20 @@ objcImpl:
 
   method setFrame*(
       self: NSView,
-      x: cfloat,
-      y {.kw("y").}: cfloat,
-      width {.kw("width").}: cfloat,
-      height {.kw("height").}: cfloat,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
   ) =
     self.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
 
   method setBackgroundColor(
       self: NSView,
-      r: cfloat,
-      g {.kw("green").}: cfloat,
-      b {.kw("blue").}: cfloat,
-      a {.kw("alpha").}: cfloat,
+      r: float32,
+      g {.kw("green").}: float32,
+      b {.kw("blue").}: float32,
+      a {.kw("alpha").}: float32,
   ) =
     self.viewBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
@@ -188,8 +188,8 @@ proc setHidden*(view: NSView, hidden: bool) =
 
 proc setFrame*(view: NSView, frame: NSRect) =
   view.setFrame(
-    frame.origin.x.cfloat, frame.origin.y.cfloat, frame.size.width.cfloat,
-    frame.size.height.cfloat,
+    frame.origin.x.float32, frame.origin.y.float32, frame.size.width.float32,
+    frame.size.height.float32,
   )
 
 proc setFrameOrigin*(view: NSView, origin: NSPoint) =

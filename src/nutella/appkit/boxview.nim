@@ -26,10 +26,10 @@ objcImpl:
 
     var contentAlloc = NSView.alloc()
     var content = contentAlloc.initWithFrame(
-      0.cfloat,
-      0.cfloat,
-      result.viewFrame().size.width.cfloat,
-      result.viewFrame().size.height.cfloat,
+      0.float32,
+      0.float32,
+      result.viewFrame().size.width.float32,
+      result.viewFrame().size.height.float32,
     )
     contentAlloc.value = nil
     if not content.isNil:
@@ -92,20 +92,20 @@ objcImpl:
 
   method setFrame*(
       self: NSBox,
-      x: cfloat,
-      y {.kw("y").}: cfloat,
-      width {.kw("width").}: cfloat,
-      height {.kw("height").}: cfloat,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
   ) =
     self.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
     let content = self.contentView()
     if not content.isNil:
       content.setFrame(
-        0.cfloat,
-        0.cfloat,
-        self.viewFrame().size.width.cfloat,
-        self.viewFrame().size.height.cfloat,
+        0.float32,
+        0.float32,
+        self.viewFrame().size.width.float32,
+        self.viewFrame().size.height.float32,
       )
 
   method dealloc(self: NSBox) {.used.} =

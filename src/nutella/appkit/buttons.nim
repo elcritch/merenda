@@ -27,8 +27,8 @@ objcImpl:
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
-    periodicDelaySec: cfloat
-    periodicIntervalSec: cfloat
+    periodicDelaySec: float32
+    periodicIntervalSec: float32
     onClick: NSButtonCallbackProc
 
   method init*(self: var NSButton): NSButton =
@@ -87,8 +87,8 @@ objcImpl:
   method integerValue*(self: NSButton): int =
     self.state()
 
-  method floatValue*(self: NSButton): cfloat =
-    self.state().cfloat
+  method floatValue*(self: NSButton): float32 =
+    self.state().float32
 
   method doubleValue*(self: NSButton): float64 =
     self.state().float64
@@ -99,7 +99,7 @@ objcImpl:
   method setIntegerValue*(self: NSButton, value: int) =
     self.setState(value.cint)
 
-  method setFloatValue*(self: NSButton, value: cfloat) =
+  method setFloatValue*(self: NSButton, value: float32) =
     self.setState(value.int.cint)
 
   method setDoubleValue*(self: NSButton, value: float64) =
@@ -116,15 +116,15 @@ objcImpl:
     cb(self.value)
 
   method setPeriodicDelay*(
-      self: NSButton, delay: cfloat, interval {.kw("interval").}: cfloat
+      self: NSButton, delay: float32, interval {.kw("interval").}: float32
   ) =
     self.periodicDelaySec = max(delay, 0.0)
     self.periodicIntervalSec = max(interval, 0.0)
 
-  method periodicDelay*(self: NSButton): cfloat =
+  method periodicDelay*(self: NSButton): float32 =
     self.periodicDelaySec
 
-  method periodicInterval*(self: NSButton): cfloat =
+  method periodicInterval*(self: NSButton): float32 =
     self.periodicIntervalSec
 
   method setButtonType*(self: NSButton, value: cint) =
@@ -172,7 +172,7 @@ proc click*(button: NSButton) =
   if not cb.isNil:
     cb(button.value)
 
-proc getPeriodicDelay*(button: NSButton, delay: var cfloat, interval: var cfloat) =
+proc getPeriodicDelay*(button: NSButton, delay: var float32, interval: var float32) =
   if button.isNil:
     delay = 0.0
     interval = 0.0

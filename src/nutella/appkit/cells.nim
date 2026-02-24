@@ -148,9 +148,9 @@ objcImpl:
   method integerValue*(self: NSCell): int =
     self.intValue().int
 
-  method floatValue*(self: NSCell): cfloat =
+  method floatValue*(self: NSCell): float32 =
     try:
-      parseFloat($self.stringValue()).cfloat
+      parseFloat($self.stringValue()).float32
     except ValueError:
       0.0
 
@@ -166,7 +166,7 @@ objcImpl:
   method setIntegerValue*(self: NSCell, value: int) =
     self.setStringValue(ns($value))
 
-  method setFloatValue*(self: NSCell, value: cfloat) =
+  method setFloatValue*(self: NSCell, value: float32) =
     self.setStringValue(ns($value))
 
   method setDoubleValue*(self: NSCell, value: float64) =
@@ -276,8 +276,8 @@ objcImpl:
     gradient {.set: setGradientType, get: gradientType.}: int
     imageScale {.set: setImageScaling, get: imageScaling.}: int
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
-    periodicDelaySec: cfloat
-    periodicIntervalSec: cfloat
+    periodicDelaySec: float32
+    periodicIntervalSec: float32
 
   method init*(self: var NSButtonCell): NSButtonCell =
     result =
@@ -331,13 +331,13 @@ objcImpl:
     discard buttonType
 
   method setPeriodicDelay*(
-      self: NSButtonCell, delay: cfloat, interval {.kw("interval").}: cfloat
+      self: NSButtonCell, delay: float32, interval {.kw("interval").}: float32
   ) =
     self.periodicDelaySec = max(delay, 0.0)
     self.periodicIntervalSec = max(interval, 0.0)
 
   method getPeriodicDelay*(
-      self: NSButtonCell, delay: ptr cfloat, interval {.kw("interval").}: ptr cfloat
+      self: NSButtonCell, delay: ptr float32, interval {.kw("interval").}: ptr float32
   ) =
     if not delay.isNil:
       delay[] = self.periodicDelaySec
@@ -359,8 +359,8 @@ objcImpl:
   method integerValue*(self: NSButtonCell): int =
     self.state()
 
-  method floatValue*(self: NSButtonCell): cfloat =
-    self.state().cfloat
+  method floatValue*(self: NSButtonCell): float32 =
+    self.state().float32
 
   method doubleValue*(self: NSButtonCell): float64 =
     self.state().float64
@@ -371,7 +371,7 @@ objcImpl:
   method setIntegerValue*(self: NSButtonCell, value: int) =
     self.setState(value)
 
-  method setFloatValue*(self: NSButtonCell, value: cfloat) =
+  method setFloatValue*(self: NSButtonCell, value: float32) =
     self.setState(value.int)
 
   method setDoubleValue*(self: NSButtonCell, value: float64) =
