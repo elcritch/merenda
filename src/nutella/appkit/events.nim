@@ -144,7 +144,7 @@ const
     {NSAlphaShiftKeyMask .. NSFunctionKeyMask}
 
 var currentMouseLocation {.threadvar.}: NSPoint
-var currentModifierFlags {.threadvar.}: NSUInteger
+var currentModifierFlags {.threadvar.}: NSModifierFlags
 var periodicEventsEnabledState {.threadvar.}: bool
 var periodicEventsDelaySeconds {.threadvar.}: float
 var periodicEventsPeriodSeconds {.threadvar.}: float
@@ -233,7 +233,7 @@ objcImpl:
     xxType {.get: `type`.}: NSEventType
     xxTimestamp {.get: timestamp.}: float
     xxLocationInWindow {.get: locationInWindow.}: NSPoint
-    xxModifierFlags {.get: modifierFlags.}: NSUInteger
+    xxModifierFlags {.get: modifierFlags.}: NSModifierFlags
     xxWindowNumber {.get: windowNumber.}: NSInteger
 
     xxClickCount {.get: clickCount.}: int
@@ -268,7 +268,7 @@ objcImpl:
     result.xxType = NSApplicationDefined
     result.xxTimestamp = timeIntervalSinceReferenceDate()
     result.xxLocationInWindow = nsPoint(0.0, 0.0)
-    result.xxModifierFlags = 0
+    result.xxModifierFlags = {}
     result.xxWindowNumber = 0
     result.xxClickCount = 0
     result.xxDeltaX = 0
@@ -296,7 +296,7 @@ objcImpl:
       self: var NSEvent,
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
-      modifierFlags {.kw("modifierFlags").}: NSUInteger,
+      modifierFlags {.kw("modifierFlags").}: NSModifierFlags,
       timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: NSInteger,
   ): NSEvent =
@@ -312,20 +312,16 @@ objcImpl:
     currentModifierFlags = modifierFlags
 
   proc mouseLocation*(t: typedesc[NSEvent]): NSPoint =
-    when false:
-      discard t
     currentMouseLocation
 
-  proc modifierFlags*(t: typedesc[NSEvent]): NSUInteger =
-    when false:
-      discard t
+  proc modifierFlags*(t: typedesc[NSEvent]): NSModifierFlags =
     currentModifierFlags
 
   proc enterExitEventWithType*(
       t: typedesc[NSEvent],
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
-      flags {.kw("modifierFlags").}: NSUInteger,
+      flags {.kw("modifierFlags").}: NSModifierFlags,
       timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: NSInteger,
       context {.kw("context").}: NSObject,
@@ -333,8 +329,6 @@ objcImpl:
       trackingNumber {.kw("trackingNumber").}: NSInteger,
       userData {.kw("userData").}: pointer,
   ): NSEvent =
-    when false:
-      discard t
     discard context
     discard eventNumber
 
@@ -351,7 +345,7 @@ objcImpl:
       t: typedesc[NSEvent],
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
-      flags {.kw("modifierFlags").}: NSUInteger,
+      flags {.kw("modifierFlags").}: NSModifierFlags,
       timestamp {.kw("timestamp").}: float,
       windowNumber {.kw("windowNumber").}: NSInteger,
       context {.kw("context").}: NSObject,
@@ -376,9 +370,9 @@ objcImpl:
       t: typedesc[NSEvent],
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
-      modifierFlags {.kw("modifierFlags").}: cuint,
+      modifierFlags {.kw("modifierFlags").}: NSModifierFlags,
       timestamp {.kw("timestamp").}: float,
-      windowNumber {.kw("windowNumber").}: cint,
+      windowNumber {.kw("windowNumber").}: int,
       context {.kw("context").}: NSObject,
       characters {.kw("characters").}: NSString,
       charactersIgnoringModifiers {.kw("charactersIgnoringModifiers").}: NSString,
@@ -391,7 +385,7 @@ objcImpl:
 
     var allocated = NSEvent.alloc()
     result = allocated.initWithType(
-      eventType, location, modifierFlags.NSUInteger, timestamp, windowNumber.NSInteger
+      eventType, location, modifierFlags, timestamp, windowNumber.NSInteger
     )
     allocated.value = nil
     if result.isNil:
@@ -407,7 +401,7 @@ objcImpl:
       t: typedesc[NSEvent],
       eventType: NSEventType,
       location {.kw("location").}: NSPoint,
-      flags {.kw("modifierFlags").}: NSUInteger,
+      flags {.kw("modifierFlags").}: NSModifierFlags,
       timestamp {.kw("timestamp").}: float,
       windowNum {.kw("windowNumber").}: NSInteger,
       context {.kw("context").}: NSObject,
@@ -521,7 +515,7 @@ objcImpl:
     var initialized = self.initWithType(
       NSPlatformSpecificDisplayEvent,
       nsPoint(0, 0),
-      0,
+      {},
       timeIntervalSinceReferenceDate(),
       0,
     )
@@ -534,7 +528,7 @@ objcImpl:
 proc newEvent*(
     eventType: NSEventType,
     location: NSPoint,
-    modifierFlags: NSUInteger,
+    modifierFlags: NSModifierFlags,
     timestamp: float = timeIntervalSinceReferenceDate(),
     windowNumber: NSInteger = 0,
 ): NSEvent =
@@ -546,9 +540,9 @@ proc newEvent*(
 proc newKeyEvent*(
     eventType: NSEventType,
     location: NSPoint,
-    modifierFlags: cuint,
+    modifierFlags: NSModifierFlags,
     timestamp: float,
-    windowNumber: cint,
+    windowNumber: int,
     characters: NSString,
     charactersIgnoringModifiers: NSString,
     isARepeat: bool,
@@ -556,7 +550,7 @@ proc newKeyEvent*(
 ): NSEvent =
   var allocated = NSEvent_keyboard.alloc()
   result = allocated.initWithType(
-    eventType, location, modifierFlags.NSUInteger, timestamp, windowNumber.NSInteger
+    eventType, location, modifierFlags, timestamp, windowNumber.NSInteger
   )
   allocated.value = nil
   if result.isNil:
@@ -571,7 +565,7 @@ proc newKeyEvent*(
 proc newOtherEvent*(
     eventType: NSEventType,
     location: NSPoint,
-    flags: NSUInteger,
+    flags: NSModifierFlags,
     timestamp: float,
     windowNum: NSInteger,
     subtype: cshort,
@@ -591,7 +585,7 @@ proc newOtherEvent*(
 proc newEnterExitEvent*(
     eventType: NSEventType,
     location: NSPoint,
-    flags: NSUInteger,
+    flags: NSModifierFlags,
     timestamp: float,
     windowNumber: NSInteger,
     trackingNumber: NSInteger,
@@ -609,7 +603,7 @@ proc newEnterExitEvent*(
 proc newMouseEvent*(
     eventType: NSEventType,
     location: NSPoint,
-    flags: NSUInteger,
+    flags: NSModifierFlags,
     timestamp: float,
     windowNumber: NSInteger,
     clickCount: NSInteger,
@@ -625,7 +619,7 @@ proc newPeriodicEvent*(
     timestamp: float = timeIntervalSinceReferenceDate()
 ): NSEvent_periodic =
   var allocated = NSEvent_periodic.alloc()
-  var initialized = allocated.initWithType(NSPeriodic, nsPoint(0, 0), 0, timestamp, 0)
+  var initialized = allocated.initWithType(NSPeriodic, nsPoint(0, 0), {}, timestamp, 0)
   result = asType[NSEvent_periodic](initialized.value)
   initialized.value = nil
   allocated.value = nil
@@ -635,7 +629,7 @@ proc newDisplayEvent*(
 ): NSEvent_CoreGraphics =
   var allocated = NSEvent_CoreGraphics.alloc()
   var initialized = allocated.initWithType(
-    NSPlatformSpecificDisplayEvent, nsPoint(0, 0), 0, timestamp, 0
+    NSPlatformSpecificDisplayEvent, nsPoint(0, 0), {}, timestamp, 0
   )
   result = asType[NSEvent_CoreGraphics](initialized.value)
   initialized.value = nil
@@ -695,9 +689,9 @@ proc keyEventFromSiwin*(
   result = newKeyEvent(
     nsEventTypeFromSiwin(event),
     location,
-    nsModifierFlagsMask(modifierFlagsFromSiwin(event.modifiers)).cuint,
+    modifierFlagsFromSiwin(event.modifiers),
     timeIntervalSinceReferenceDate(),
-    windowNumber.cint,
+    windowNumber.int,
     characters,
     charactersIgnoringModifiers,
     event.repeated,
@@ -721,7 +715,7 @@ proc mouseButtonEventFromSiwin*(
   result = newMouseEvent(
     nsEventTypeFromSiwin(event),
     location,
-    nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
+    modifierFlagsFromSiwin(modifiers),
     timeIntervalSinceReferenceDate(),
     windowNumber,
     clickCount,
@@ -746,7 +740,7 @@ proc scrollEventFromSiwin*(
   result = newEvent(
     NSScrollWheel,
     location,
-    nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
+    modifierFlagsFromSiwin(modifiers),
     timeIntervalSinceReferenceDate(),
     windowNumber,
   )
@@ -766,7 +760,7 @@ proc mouseMoveEventFromSiwin*(
   result = newMouseEvent(
     nsEventTypeFromSiwin(event, mouseButtons),
     location,
-    nsModifierFlagsMask(modifierFlagsFromSiwin(modifiers)),
+    modifierFlagsFromSiwin(modifiers),
     timeIntervalSinceReferenceDate(),
     windowNumber,
     0,

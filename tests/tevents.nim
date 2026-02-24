@@ -23,7 +23,7 @@ suite "appkit NSEvent":
     var keyEvent = newKeyEvent(
       NSKeyDown,
       nsPoint(12, 18),
-      nsModifierFlagsMask(keyFlags).cuint,
+      keyFlags,
       42.5,
       77,
       @ns"a",
@@ -33,7 +33,7 @@ suite "appkit NSEvent":
     )
     check(keyEvent.`type`() == NSKeyDown)
     check(keyEvent.locationInWindow() == nsPoint(12, 18))
-    check(keyEvent.modifierFlags() == nsModifierFlagsMask(keyFlags))
+    check(keyEvent.modifierFlags() == keyFlags)
     check(keyEvent.windowNumber() == 77)
     check(keyEvent.characters() == @ns"a")
     check(keyEvent.charactersIgnoringModifiers() == @ns"A")
@@ -43,7 +43,7 @@ suite "appkit NSEvent":
     var otherEvent = newOtherEvent(
       NSApplicationDefined,
       nsPoint(1, 2),
-      nsModifierFlagsMask({NSControlKeyMask}),
+      {NSControlKeyMask},
       21.0,
       5,
       9.cshort,
@@ -60,7 +60,7 @@ suite "appkit NSEvent":
 
   test "subclass interfaces are wired for mouse, periodic, and coregraphics":
     var mouseEvent = newMouseEvent(
-      NSLeftMouseDown, nsPoint(7, 11), nsModifierFlagsMask({NSShiftKeyMask}), 11.0, 2, 3
+      NSLeftMouseDown, nsPoint(7, 11), {NSShiftKeyMask}, 11.0, 2, 3
     )
     check(mouseEvent.isKindOfClass(NSEvent_mouse))
     var mouseEventTyped = asType[NSEvent_mouse](mouseEvent.value)
@@ -119,7 +119,7 @@ suite "appkit NSEvent":
     var fromKey = keyEventFromSiwin(4, nsPoint(3, 4), keyInput, @ns"A", @ns"a")
     check(fromKey.`type`() == NSKeyDown)
     check(
-      fromKey.modifierFlags() == nsModifierFlagsMask({NSShiftKeyMask, NSControlKeyMask})
+      fromKey.modifierFlags() == {NSShiftKeyMask, NSControlKeyMask}
     )
     check(fromKey.siwinKey() == siwin.Key.a)
     check(
@@ -137,7 +137,7 @@ suite "appkit NSEvent":
     check(fromMouse.clickCount() == 1)
     check(fromMouse.isKindOfClass(NSEvent_mouse))
     check(fromMouse.siwinMouseButton() == siwin.MouseButton.left)
-    check(fromMouse.modifierFlags() == nsModifierFlagsMask({NSAlternateKeyMask}))
+    check(fromMouse.modifierFlags() == {NSAlternateKeyMask})
 
     let scrollInput = siwin.ScrollEvent(delta: -2.0, deltaX: 1.5)
     var fromScroll =
@@ -145,7 +145,7 @@ suite "appkit NSEvent":
     check(fromScroll.`type`() == NSScrollWheel)
     check(fromScroll.deltaX() == 1.5)
     check(fromScroll.deltaY() == -2.0)
-    check(fromScroll.modifierFlags() == nsModifierFlagsMask({NSCommandKeyMask}))
+    check(fromScroll.modifierFlags() == {NSCommandKeyMask})
 
     fromKey.value = nil
     fromMouse.value = nil
