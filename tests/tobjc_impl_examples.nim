@@ -113,50 +113,6 @@ objcImpl:
   method ping(self: HiddenCtorClass) =
     inc hiddenPingCount
 
-type IvarCounterStateRef = ref object
-  total: int
-  lastAmount: int
-
-proc `=destroy`(o: var typeof(IvarCounterStateRef()[])) =
-  inc ivarCounterStateDestroyedCount
-
-objcImpl:
-  type IvarCounterClass = object of NSObject
-    counter: IvarCounterStateRef
-
-  proc new*(
-    t: typedesc[IvarCounterClass]
-  ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
-
-  proc init*(
-    t: typedesc[IvarCounterClass]
-  ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
-
-  proc init*(
-    v: var IvarCounterClass
-  ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
-
-  proc initWithMultiplier*(self: var IvarCounterClass, lastAmount: cint) =
-    self = super(IvarCounterClass, self, init)
-    self.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
-
-  method bump(self: IvarCounterClass, amount: cint): cint =
-    let st = self.counter
-    st.total += amount.int
-    st.lastAmount = amount.int
-    result = (st.total).cint
-
-  method current(self: IvarCounterClass): cint =
-    let st = self.counter
-    (st.total).cint
-
-  method lastAmount(self: IvarCounterClass): cint =
-    let st = self.counter
-    st.lastAmount.cint
-
-  method dealloc(self: IvarCounterClass) {.used.} =
-    clearIvarRefs(self)
-    superDealloc(self)
 
 objcImpl:
   type PlainFieldClass = object of NSObject
@@ -292,6 +248,51 @@ suite "objcImpl examples":
     check(hiddenPingCount == 1)
 
   test "objcImpl class using ivar-backed state":
+    type IvarCounterStateRef = ref object
+      total: int
+      lastAmount: int
+
+    proc `=destroy`(o: var typeof(IvarCounterStateRef()[])) =
+      inc ivarCounterStateDestroyedCount
+
+    objcImpl:
+      type IvarCounterClass = object of NSObject
+        counter: IvarCounterStateRef
+
+      proc new(
+        t: typedesc[IvarCounterClass]
+      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+
+      proc init(
+        t: typedesc[IvarCounterClass]
+      ): IvarCounterClass {.error: "Use IvarCounterClass.alloc().initWithMultiplier(...)".}
+
+      proc init(
+        v: var IvarCounterClass
+      ): IvarCounterClass {.error: "Use initWithMultiplier(...)".}
+
+      proc initWithMultiplier(self: var IvarCounterClass, lastAmount: cint) =
+        self = super(IvarCounterClass, self, init)
+        self.counter = IvarCounterStateRef(total: 0, lastAmount: lastAmount)
+
+      method bump(self: IvarCounterClass, amount: cint): cint =
+        let st = self.counter
+        st.total += amount.int
+        st.lastAmount = amount.int
+        result = (st.total).cint
+
+      method current(self: IvarCounterClass): cint =
+        let st = self.counter
+        (st.total).cint
+
+      method lastAmount(self: IvarCounterClass): cint =
+        let st = self.counter
+        st.lastAmount.cint
+
+      method dealloc(self: IvarCounterClass) {.used.} =
+        clearIvarRefs(self)
+        superDealloc(self)
+
     ivarCounterStateDestroyedCount = 0
     doAssert not compiles(IvarCounterClass.new())
     doAssert not compiles(IvarCounterClass.init())
