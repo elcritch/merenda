@@ -22,7 +22,7 @@ objcImpl:
       asType[NSTextField](callSuperIdFrom(NSTextField, self, getSelector("init")))
     if result.isNil:
       return
-    result.enabled = true
+    result.setEnabled(true)
     result.editable = true
     result.selectable = true
     result.scrollable = true
