@@ -363,6 +363,11 @@ suite "nutella appkit hello world":
     check(cell.stringValue() == @ns"")
     cell.setStringValue(@ns"42")
     check(cell.intValue() == 42.cint)
+    var sourceCell = NSCell.new()
+    sourceCell.setStringValue(@ns"17")
+    cell.takeStringValueFrom(sourceCell)
+    check(cell.stringValue() == @ns"17")
+    check(cell.intValue() == 17.cint)
     check(cell.nextState() == NSOnState)
     cell.setAllowsMixedState(true)
     cell.setState(NSMixedState)
@@ -437,6 +442,7 @@ suite "nutella appkit hello world":
     clip.value = nil
     buttonCell.value = nil
     actionCell.value = nil
+    sourceCell.value = nil
     cell.value = nil
 
   test "clip view applies figdraw clipping and scroll offset in render tree":

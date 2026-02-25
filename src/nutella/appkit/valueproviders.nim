@@ -1,26 +1,31 @@
 import ./runtime
 
-type
-  NSObjectValueProvider* =
-    concept sender
-        sender.objectValue() is NSObject
+objcImpl:
+  type NSObjectValueProvider* =
+    concept self
+        method objectValue*(self: NSObjectValueProvider): NSObject
 
-  NSStringValueProvider* =
-    concept sender
-        sender.stringValue() is NSString
+objcImpl:
+  type NSStringValueProvider* =
+    concept self
+        method stringValue*(self: NSStringValueProvider): NSString
 
-  NSIntValueProvider* =
-    concept sender
-        sender.intValue() is cint
+objcImpl:
+  type NSIntValueProvider* =
+    concept self
+        method intValue*(self: NSIntValueProvider): cint
 
-  NSIntegerValueProvider* =
-    concept sender
-        sender.integerValue() is int
+objcImpl:
+  type NSIntegerValueProvider* =
+    concept self
+        method integerValue*(self: NSIntegerValueProvider): int
 
-  NSFloatValueProvider* =
-    concept sender
-        sender.floatValue() is float32
+objcImpl:
+  type NSFloatValueProvider* =
+    concept self
+        method floatValue*(self: NSFloatValueProvider): float32
 
-  NSDoubleValueProvider* =
-    concept sender
-        sender.doubleValue() is float
+objcImpl:
+  type NSDoubleValueProvider* =
+    concept self
+        method doubleValue*(self: NSDoubleValueProvider): float

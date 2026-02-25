@@ -896,6 +896,17 @@ template getProtocol*[T: ProtocolPrototype](t: typedesc[T]): untyped =
 template getProtocol*[T: ObjcProtocolObject](t: typedesc[T]): untyped =
   getProtocolByName($T)
 
+proc ofProto*[T: ObjcProtocolObject](o: ID): bool =
+  if o.isNil:
+    return false
+  let proto = getProtocol(T)
+  if proto.isNil:
+    return false
+  let cls = getClass(o.value)
+  if cls.isNil:
+    return false
+  cls.conformsToProtocol(proto)
+
 proc asProto*[T: ObjcProtocolObject](o: IDPtr): T =
   if o == nil:
     return T(value: nil)

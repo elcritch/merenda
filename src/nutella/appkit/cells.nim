@@ -78,17 +78,22 @@ proc cellTypeName(cellType: NSCellType): string =
     "Unknown: " & $cellType.int
 
 objcImpl:
-  type NSCell* = object of NSObject
+  type NSCell* {.
+    impl: (
+      NSObjectValueProvider, NSStringValueProvider, NSIntValueProvider,
+      NSIntegerValueProvider, NSFloatValueProvider, NSDoubleValueProvider,
+    )
+  .} = object of NSObject
     xState: int
-    xFont {.get: font.}: NSFont
+    xFont {.set: setFont, get: font.}: NSFont
     xEntryType {.get: entryType.}: int
     xObjectValue: ID
     xImage {.get: image.}: NSImage
     xTextAlignment {.set: setAlignment, get: alignment.}: NSTextAlignment
     xWritingDirection {.set: setBaseWritingDirection, get: baseWritingDirection.}:
       NSWritingDirection
-    xCellType: NSCellType
-    xFormatter {.get: formatter.}: NSFormatter
+    xCellType {.get: `type`.}: NSCellType
+    xFormatter {.set: setFormatter, get: formatter.}: NSFormatter
     xTitleOrAttributedTitle: ID
     xRepresentedObject: ID
     xControlSize {.set: setControlSize, get: controlSize.}: NSControlSize
@@ -96,7 +101,7 @@ objcImpl:
     xLineBreakMode {.set: setLineBreakMode, get: lineBreakMode.}: NSLineBreakMode
     xBackgroundStyle {.set: setBackgroundStyle, get: backgroundStyle.}:
       NSBackgroundStyle
-    xControlView {.get: controlView.}: NSView
+    xControlView {.set: setControlView, get: controlView.}: NSView
 
     xEnabled {.set: setEnabled, get: isEnabled.}: bool
     xEditable {.set: setEditable, get: isEditable.}: bool
@@ -165,9 +170,6 @@ objcImpl:
   method encodeWithCoder*(self: NSCell, coder: ID) =
     return
 
-  method `type`*(self: NSCell): NSCellType =
-    self.xCellType
-
   method state*(self: NSCell): int =
     if self.xAllowsMixedState:
       if self.xState < 0:
@@ -227,13 +229,14 @@ objcImpl:
     retain(@ns"")
 
   method intValue*(self: NSCell): cint =
-    if self.xObjectValue.isNil:
-      return 0.cint
     let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString):
       return parseIntegerPrefix($self.stringValue()).cint
     if valueObj.isKindOfClass(NSString):
       return parseIntegerPrefix($ownFromId[NSString](self.xObjectValue)).cint
+    let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
+    if not intProvider.isNil:
+      return intProvider.intValue()
     if valueObj.respondsToSelector("intValue"):
       return sendInt(self.xObjectValue, getSelector("intValue")).cint
     0.cint
@@ -244,6 +247,9 @@ objcImpl:
     let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue()).float32
+    let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
+    if not floatProvider.isNil:
+      return floatProvider.floatValue()
     if valueObj.respondsToSelector("floatValue"):
       return sendFloat(self.xObjectValue, getSelector("floatValue"))
     0.0
@@ -254,16 +260,20 @@ objcImpl:
     let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue())
+    let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
+    if not doubleProvider.isNil:
+      return doubleProvider.doubleValue()
     if valueObj.respondsToSelector("doubleValue"):
       return sendDouble(self.xObjectValue, getSelector("doubleValue")).float
     0.0
 
   method integerValue*(self: NSCell): int =
-    if self.xObjectValue.isNil:
-      return 0
     let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseIntegerPrefix($self.stringValue())
+    let integerProvider = asProto[NSIntegerValueProvider](self.xObjectValue)
+    if not integerProvider.isNil:
+      return integerProvider.integerValue()
     if valueObj.respondsToSelector("integerValue"):
       return sendInt(self.xObjectValue, getSelector("integerValue"))
     0
@@ -280,9 +290,6 @@ objcImpl:
     if self.xRepresentedObject.isNil:
       return NSObject(value: nil)
     ownFromId[NSObject](self.xRepresentedObject)
-
-  method setControlView*(self: NSCell, view: NSView) =
-    self.xControlView = view
 
   method setType*(self: NSCell, cellType: NSCellType) =
     if self.xCellType != cellType:
@@ -323,12 +330,6 @@ objcImpl:
   method setEntryType*(self: NSCell, entryType: int) =
     self.xEntryType = entryType
     self.setType(NSTextCellType)
-
-  method setFormatter*(self: NSCell, formatter: NSFormatter) =
-    self.xFormatter = formatter
-
-  method setFont*(self: NSCell, font: NSFont) =
-    self.xFont = font
 
   method setImage*(self: NSCell, image: NSImage) =
     if not image.isNil:
@@ -414,36 +415,40 @@ objcImpl:
     replaceOwned(self.xRepresentedObject, representedObject)
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
-    if sender.isNil or not sender.respondsToSelector("objectValue"):
+    let provider = asProto[NSObjectValueProvider](sender)
+    if provider.isNil:
       return
-    let nextValue = sendId(sender, getSelector("objectValue"))
-    self.setObjectValue(ownFromId[NSObject](nextValue))
+    self.setObjectValue(provider.objectValue())
 
   method takeStringValueFrom*(self: NSCell, sender: NSObject) =
-    if sender.isNil or not sender.respondsToSelector("stringValue"):
+    let provider = asProto[NSStringValueProvider](sender)
+    if provider.isNil:
       return
-    let nextValue = sendId(sender, getSelector("stringValue"))
-    self.setStringValue(ownFromId[NSString](nextValue))
+    self.setStringValue(provider.stringValue())
 
   method takeIntValueFrom*(self: NSCell, sender: NSObject) =
-    if sender.isNil or not sender.respondsToSelector("intValue"):
+    let provider = asProto[NSIntValueProvider](sender)
+    if provider.isNil:
       return
-    self.setIntValue(sendInt(sender, getSelector("intValue")).cint)
+    self.setIntValue(provider.intValue())
 
   method takeFloatValueFrom*(self: NSCell, sender: NSObject) =
-    if sender.isNil or not sender.respondsToSelector("floatValue"):
+    let provider = asProto[NSFloatValueProvider](sender)
+    if provider.isNil:
       return
-    self.setFloatValue(sendFloat(sender, getSelector("floatValue")))
+    self.setFloatValue(provider.floatValue())
 
   method takeDoubleValueFrom*(self: NSCell, sender: NSObject) =
-    if sender.isNil or not sender.respondsToSelector("doubleValue"):
+    let provider = asProto[NSDoubleValueProvider](sender)
+    if provider.isNil:
       return
-    self.setDoubleValue(sendDouble(sender, getSelector("doubleValue")).float)
+    self.setDoubleValue(provider.doubleValue())
 
   method takeIntegerValueFrom*(self: NSCell, sender: NSObject) =
-    if sender.isNil or not sender.respondsToSelector("integerValue"):
+    let provider = asProto[NSIntegerValueProvider](sender)
+    if provider.isNil:
       return
-    self.setIntegerValue(sendInt(sender, getSelector("integerValue")))
+    self.setIntegerValue(provider.integerValue())
 
   method cellSize*(self: NSCell): NSSize =
     nsSize(10000, 10000)
@@ -587,10 +592,10 @@ objcImpl:
 
 objcImpl:
   type NSButtonCell* = object of NSActionCell
-    xButtonTitle: NSString
-    xAlternateTitle: NSString
+    xButtonTitle {.get: title.}: NSString
+    xAlternateTitle {.set: setAlternateTitle, get: alternateTitle.}: NSString
     xTransparent {.set: setTransparent, get: isTransparent.}: bool
-    xKeyEquivalent: NSString
+    xKeyEquivalent {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
     xImagePosition {.set: setImagePosition, get: imagePosition.}: int
     xHighlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: int
     xShowsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
@@ -624,41 +629,11 @@ objcImpl:
     result.xBackgroundColor = nsColor(0.0, 0.0, 0.0, 0.0)
     result.setObjectValue(asType[NSObject](result.xButtonTitle))
 
-  method title*(self: NSButtonCell): NSString =
-    self.xButtonTitle
-
   method setTitle*(self: NSButtonCell, value: NSString) =
-    let title =
-      if value.isNil:
-        @ns""
-      else:
-        value
-    self.xButtonTitle = title
-    replaceOwned(self.xObjectValue, asType[NSObject](title.value))
-    replaceOwned(self.xTitleOrAttributedTitle, asType[NSObject](title.value))
+    self.xButtonTitle = value
+    replaceOwned(self.xObjectValue, asType[NSObject](value.value))
+    replaceOwned(self.xTitleOrAttributedTitle, asType[NSObject](value.value))
     self.xHasValidObjectValue = true
-
-  method alternateTitle*(self: NSButtonCell): NSString =
-    self.xAlternateTitle
-
-  method setAlternateTitle*(self: NSButtonCell, value: NSString) =
-    self.xAlternateTitle = (
-      if value.isNil:
-        @ns""
-      else:
-        value
-    )
-
-  method keyEquivalent*(self: NSButtonCell): NSString =
-    self.xKeyEquivalent
-
-  method setKeyEquivalent*(self: NSButtonCell, value: NSString) =
-    self.xKeyEquivalent = (
-      if value.isNil:
-        @ns""
-      else:
-        value
-    )
 
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
     return
@@ -738,9 +713,6 @@ objcImpl:
     self.xAlternateTitle = NSString(value: nil)
     self.xKeyEquivalent = NSString(value: nil)
     discard callSuperIdFrom(NSButtonCell, self, getSelector("dealloc"))
-
-proc takeIntValueFrom*[T: NSIntValueProvider](self: NSCell, sender: T) =
-  self.setIntValue(sender.intValue())
 
 proc NSDrawThreePartImage*(
     frame: NSRect,
