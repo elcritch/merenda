@@ -7,6 +7,8 @@ import ./appkit/controllers
 import ./appkit/controls
 import ./appkit/buttons
 import ./appkit/textfields
+import ./appkit/formatters
+import ./appkit/attributedstrings
 import ./appkit/boxview
 import ./appkit/cells
 import ./appkit/clipviews
@@ -24,6 +26,8 @@ export controllers
 export controls
 export buttons
 export textfields
+export formatters
+export attributedstrings
 export boxview
 export cells
 export clipviews
