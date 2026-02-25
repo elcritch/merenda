@@ -78,7 +78,32 @@ suite "foundation stdlib-backed core types":
     check(stringObj == expected)
 
     let intObj = @ns(42)
+    check(intObj.intValue() == 42.cint)
     check(intObj.integerValue() == 42)
+
+  test "boxed numbers conform to NSCopying via NSValue":
+    let proto = getProtocol(NSCopying)
+    let protoFromPrototype = getProtocol(NSCopyingPrototype)
+    check(not proto.isNil)
+    check(not protoFromPrototype.isNil)
+    check(proto.isEqual(protoFromPrototype))
+    check(getClass(NXInteger).conformsToProtocol(proto))
+    check(getClass(NXDouble).conformsToProtocol(proto))
+
+    var intObj = @ns(42)
+    var protoObj = asProto[NSCopying](intObj)
+    check(not protoObj.isNil)
+    if not protoObj.isNil:
+      release(protoObj)
+
+    let retainBefore = retainCount(intObj).int
+    var copied = intObj.copyWithZone(nil)
+    check(not copied.isNil)
+    check(copied.value == intObj.value)
+    check(retainCount(intObj).int == retainBefore + 1)
+    check(unboxNSObject[int](copied) == 42)
+    if not copied.isNil:
+      release(copied)
 
   test "@ns boxes and unboxes float and bool":
     let floatObj = @ns(3.25)
