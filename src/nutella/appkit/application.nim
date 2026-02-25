@@ -59,7 +59,7 @@ objcImpl:
     var windows = self.appWindows()
     clearOwnedIds(windows)
     self.appWindows = windows
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSApplication, self, getSelector("dealloc"))
 
 var sharedApplicationRef {.threadvar.}: NSApplication

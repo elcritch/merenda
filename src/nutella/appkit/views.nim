@@ -80,7 +80,7 @@ objcImpl:
 
   method dealloc(self: NSView) {.used.} =
     detachSubviews(self)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSView, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSView]): NSView =

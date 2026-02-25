@@ -476,7 +476,7 @@ objcImpl:
   method dealloc(self: NSEvent) {.used.} =
     self.xCharactersId = NSString(value: nil)
     self.xCharactersIgnoringModifiersId = NSString(value: nil)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSEvent, self, getSelector("dealloc"))
 
 objcImpl:

@@ -15,7 +15,7 @@ objcImpl:
     result.countCache = 0
 
   method dealloc*(self: NXArray) =
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method count*(self: NXArray): NSUInteger =

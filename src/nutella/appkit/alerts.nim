@@ -25,21 +25,7 @@ objcImpl:
     result = asType[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
-    result.xDelegate = ID(value: nil)
-    result.xStyle = NSWarningAlertStyle
-    result.xIcon = NSObject(value: nil)
-    result.xMessageText = @ns""
-    result.xInformativeText = @ns""
-    result.xAccessoryView = NSView(value: nil)
-    result.xShowsHelp = false
-    result.xShowsSuppressionButton = false
-    result.xHelpAnchor = @ns""
     result.xButtons = nsArray[NSButton]()
-    result.xSuppressionButton = NSButton(value: nil)
-    result.xWindow = NSWindow(value: nil)
-    result.xNeedsLayout = true
-    result.xSheetDelegate = ID(value: nil)
-    result.xSheetDidEnd = nil
 
   proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
     result = NSAlert.new()
@@ -135,6 +121,7 @@ objcImpl:
     self.xButtons = NSArray[NSButton](value: nil)
     self.xWindow = NSWindow(value: nil)
     self.xSheetDelegate = ID(value: nil)
+
     discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =

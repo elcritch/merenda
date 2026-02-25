@@ -56,7 +56,7 @@ objcImpl:
     var data = self.data()
     releaseTableEntries(data)
     self.data = data
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method count*(self: NXDictionary): NSUInteger =

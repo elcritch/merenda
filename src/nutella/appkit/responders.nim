@@ -151,5 +151,5 @@ objcImpl:
 
   method dealloc(self: NSResponder) {.used.} =
     self.nextResp = NSResponder(value: nil)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSResponder, self, getSelector("dealloc"))

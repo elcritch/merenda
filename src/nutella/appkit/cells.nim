@@ -202,7 +202,7 @@ objcImpl:
     self.titleId = replacedOwnedId(self.titleId, nil)
     self.objectValueId = replacedOwnedId(self.objectValueId, nil)
     self.representedObjectId = replacedOwnedId(self.representedObjectId, nil)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSCell, self, getSelector("dealloc"))
 
 objcImpl:

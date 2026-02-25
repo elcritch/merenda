@@ -211,7 +211,7 @@ objcImpl:
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)
     self.xCurrentEditor = NSText(value: nil)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSControl]): NSControl =
