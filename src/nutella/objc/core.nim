@@ -135,6 +135,12 @@ proc `=copy`*(dest: var ObjcClass, src: ObjcClass) =
 proc `=sink`*(dest: var ObjcClass, src: ObjcClass) =
   dest.value = src.value
 
+proc GC_ref*[T: ID](o: T) =
+  retainAux(o.value)
+
+proc GC_unref*[T: ID](o: T) =
+  releaseAux(o.value)
+
 template retain*[T: ID](o: T): T =
   cast[T](retainAux(o.value))
 
