@@ -188,7 +188,6 @@ objcImpl:
     self.xFrame = frame
 
   method makeKeyAndOrderFront*(self: NSWindow, sender: NSObject) =
-    discard sender
     if self.isNil:
       return
     self.xVisibleRequested = true
@@ -197,7 +196,6 @@ objcImpl:
     self.makeKeyAndOrderFront(sender)
 
   method orderOut*(self: NSWindow, sender: NSObject) =
-    discard sender
     if self.isNil:
       return
     self.xVisibleRequested = false
@@ -243,7 +241,6 @@ objcImpl:
     result.floatingPanel = false
 
   method canBecomeMainWindow*(self: NSPanel): bool =
-    discard self
     false
 
 proc new*(t: typedesc[NSWindow]): NSWindow =

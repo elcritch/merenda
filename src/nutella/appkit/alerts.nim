@@ -96,7 +96,6 @@ objcImpl:
       didEndSelector {.kw("didEndSelector").}: SEL,
       contextInfo {.kw("contextInfo").}: pointer,
   ) =
-    discard contextInfo
     self.xWindow = window
     self.xSheetDelegate = modalDelegate
     self.xSheetDidEnd = didEndSelector

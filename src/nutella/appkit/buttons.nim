@@ -106,7 +106,6 @@ objcImpl:
     self.setState(value.int.cint)
 
   method performClick*(self: NSButton, sender: NSResponder) =
-    discard sender
     if not self.isEnabled():
       return
     self.setNextState()
@@ -128,8 +127,7 @@ objcImpl:
     self.periodicIntervalSec
 
   method setButtonType*(self: NSButton, value: cint) =
-    discard self
-    discard value
+    discard
 
   method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))

@@ -57,8 +57,7 @@ objcImpl:
     self.bgColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method selectText*(self: NSTextField, sender: NSResponder) =
-    discard self
-    discard sender
+    discard
 
   method setTitleWithMnemonic*(self: NSTextField, value: NSString) =
     self.setStringValue(stripMnemonicMarkers(value))

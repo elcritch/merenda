@@ -57,12 +57,10 @@ objcImpl:
     discard callSuperIdFrom(NSController, self, getSelector("dealloc"))
 
   method initWithCoder*(self: var NSController, coder: IDPtr): NSController =
-    discard coder
     result = self.init()
 
   method encodeWithCoder*(self: NSController, coder: IDPtr) =
-    discard self
-    discard coder
+    discard
 
   method commitEditing*(self: NSController): bool =
     if self.isNil:
