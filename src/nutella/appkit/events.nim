@@ -329,9 +329,6 @@ objcImpl:
       trackingNumber {.kw("trackingNumber").}: NSInteger,
       userData {.kw("userData").}: pointer,
   ): NSEvent =
-    discard context
-    discard eventNumber
-
     var allocated = NSEvent.alloc()
     result = allocated.initWithType(eventType, location, flags, timestamp, windowNumber)
     allocated.value = nil
@@ -353,10 +350,6 @@ objcImpl:
       clickCount {.kw("clickCount").}: NSInteger,
       pressure {.kw("pressure").}: float32,
   ): NSEvent =
-    discard context
-    discard eventNumber
-    discard pressure
-
     var allocated = NSEvent.alloc()
     result = allocated.initWithType(eventType, location, flags, timestamp, windowNumber)
     allocated.value = nil
@@ -377,8 +370,6 @@ objcImpl:
       isARepeat {.kw("isARepeat").}: bool,
       keyCode {.kw("keyCode").}: cushort,
   ): NSEvent =
-    discard context
-
     var allocated = NSEvent.alloc()
     result = allocated.initWithType(
       eventType, location, modifierFlags, timestamp, windowNumber.NSInteger
@@ -403,8 +394,6 @@ objcImpl:
       data1 {.kw("data1").}: NSInteger,
       data2 {.kw("data2").}: NSInteger,
   ): NSEvent =
-    discard context
-
     var allocated = NSEvent.alloc()
     result = allocated.initWithType(eventType, location, flags, timestamp, windowNum)
     allocated.value = nil

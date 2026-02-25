@@ -127,12 +127,10 @@ objcImpl:
     self.isEnabled() and (not self.refusesFirstResponder())
 
   method stringValue*(self: NSControl): NSString =
-    discard self
     @ns""
 
   method setStringValue*(self: NSControl, value: NSString) =
-    discard self
-    discard value
+    discard
 
   method intValue*(self: NSControl): cint =
     if self.isNil:
@@ -205,8 +203,7 @@ objcImpl:
     self.setDoubleValue(sender.doubleValue())
 
   method performClick*(self: NSControl, sender: NSResponder) =
-    discard self
-    discard sender
+    discard
 
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)

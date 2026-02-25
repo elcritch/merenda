@@ -23,15 +23,12 @@ objcImpl:
     self.nextResp = retain(next)
 
   method acceptsFirstResponder*(self: NSResponder): bool =
-    discard self
     false
 
   method becomeFirstResponder*(self: NSResponder): bool =
-    discard self
     true
 
   method resignFirstResponder*(self: NSResponder): bool =
-    discard self
     true
 
   method tryToPerform*(
@@ -55,8 +52,7 @@ objcImpl:
     self.noResponderFor(action)
 
   method noResponderFor*(self: NSResponder, action: SEL) =
-    discard self
-    discard action
+    discard
 
   method mouseDown*(self: NSResponder, event: NSEvent) =
     let next = self.nextResponder()

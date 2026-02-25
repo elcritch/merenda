@@ -110,16 +110,12 @@ objcImpl:
     result = nsPoint(clamp(point.x, 0.0, maxX), clamp(point.y, 0.0, maxY))
 
   method viewBoundsChanged*(self: NSClipView, note: NSObject) =
-    discard self
-    discard note
+    discard
 
   method viewFrameChanged*(self: NSClipView, note: NSObject) =
-    discard self
-    discard note
+    discard
 
   method autoscroll*(self: NSClipView, event: NSObject): bool =
-    discard self
-    discard event
     false
 
   method scrollToPoint*(self: NSClipView, point: NSPoint) =

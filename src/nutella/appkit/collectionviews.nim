@@ -38,7 +38,6 @@ objcImpl:
   method newItemForRepresentedObject*(
       self: NSCollectionView, representedObject {.kw("object").}: NSObject
   ): NSObject =
-    discard representedObject
     let prototype = self.itemPrototype()
     if prototype.isNil:
       return NSObject(value: nil)
