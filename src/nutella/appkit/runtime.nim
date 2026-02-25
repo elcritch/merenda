@@ -108,6 +108,9 @@ proc ownFromId*[T: NSObject](id: IDPtr): T =
   result = retain(borrowed)
   borrowed.value = nil
 
+proc ownFromId*[T: NSObject](id: ID): T =
+  ownFromId[T](id.value)
+
 proc retainId*(id: IDPtr): IDPtr =
   if id.isNil:
     return nil
@@ -117,17 +120,26 @@ proc retainId*(id: IDPtr): IDPtr =
   result = owned.value
   owned.value = nil
 
+proc retainId*(id: ID): ID =
+  ID(value: retainId(id.value))
+
 proc releaseId*(id: IDPtr) =
   if id.isNil:
     return
   var owned = asType[NSObject](id)
   discard owned
 
+proc releaseId*(id: ID) =
+  releaseId(id.value)
+
 proc replacedOwnedId*(slot: IDPtr, next: IDPtr): IDPtr =
   if slot == next:
     return slot
   result = retainId(next)
   releaseId(slot)
+
+proc replacedOwnedId*(slot: ID, next: ID): ID =
+  ID(value: replacedOwnedId(slot.value, next.value))
 
 proc clearOwnedIds*(ids: var seq[IDPtr]) =
   for id in ids:
@@ -185,3 +197,12 @@ type
   NSText* = object of NSView
   NSControl* = object of NSView
   NSTextField* = object of NSControl
+
+  NSFont* = object of NSObject
+  NSImage* = object of NSObject
+  NSMenu* = object of NSObject
+  NSFormatter* = object of NSObject
+  NSAttributedString* = object of NSObject
+
+  NSDefect* = ref object of Defect
+  NSException* = ref object of CatchableError

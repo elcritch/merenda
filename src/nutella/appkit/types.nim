@@ -6,6 +6,42 @@ type
     NSJustifiedTextAlignment = 3
     NSNaturalTextAlignment = 4
 
+  NSWritingDirection* {.size: sizeof(cint).} = enum
+    NSWritingDirectionNatural = -1
+    NSWritingDirectionLeftToRight = 0
+    NSWritingDirectionRightToLeft = 1
+
+  NSLineBreakMode* {.size: sizeof(cint).} = enum
+    NSLineBreakByWordWrapping = 0
+    NSLineBreakByCharWrapping = 1
+    NSLineBreakByClipping = 2
+    NSLineBreakByTruncatingHead = 3
+    NSLineBreakByTruncatingTail = 4
+    NSLineBreakByTruncatingMiddle = 5
+
+  NSCellType* {.size: sizeof(cint).} = enum
+    NSNullCellType = 0
+    NSTextCellType = 1
+    NSImageCellType = 2
+
+  NSControlSize* {.size: sizeof(cint).} = enum
+    NSRegularControlSize = 0
+    NSSmallControlSize = 1
+    NSMiniControlSize = 2
+
+  NSFocusRingType* {.size: sizeof(cint).} = enum
+    NSFocusRingTypeDefault = 0
+    NSFocusRingTypeNone = 1
+    NSFocusRingTypeExterior = 2
+
+  NSBackgroundStyle* {.size: sizeof(cint).} = enum
+    NSBackgroundStyleLight = 0
+    NSBackgroundStyleDark = 1
+    NSBackgroundStyleRaised = 2
+    NSBackgroundStyleLowered = 3
+
+  NSControlTint* = int
+
   NSPoint* = object
     x*: float32
     y*: float32
@@ -74,10 +110,26 @@ const
   NSImageScaleAxesIndependently* = 1
   NSImageScaleNone* = 2
   NSImageScaleProportionallyUpOrDown* = 3
+  NSScaleProportionally* = NSImageScaleProportionallyDown
+  NSScaleToFit* = NSImageScaleAxesIndependently
+  NSScaleNone* = NSImageScaleNone
 
   NSMixedState* = -1
   NSOffState* = 0
   NSOnState* = 1
+
+  NSAnyType* = 0
+  NSIntType* = 1
+  NSPositiveIntType* = 2
+  NSFloatType* = 3
+  NSPositiveFloatType* = 4
+  NSDoubleType* = 6
+  NSPositiveDoubleType* = 7
+
+  NSCellHitNone* = 0x00
+  NSCellHitContentArea* = 0x01
+  NSCellHitEditableTextArea* = 0x02
+  NSCellHitTrackableArea* = 0x04
 
 proc nsPoint*(x, y: float32): NSPoint =
   NSPoint(x: x, y: y)
