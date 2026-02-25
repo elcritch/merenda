@@ -169,6 +169,34 @@ suite "objcImpl examples":
       o.ping()
       doAssert(fooBarPingCount == 1)
 
+  test "fooBarTopLevelExample protocol":
+    block fooBarTopLevelExample:
+      fooBarPingCount = 0
+
+      let proto = getProtocol(FooBarProtocol)
+      let protoFromPrototype = getProtocol(FooBarProtocolPrototype)
+      doAssert(not proto.isNil)
+      doAssert(not protoFromPrototype.isNil)
+      doAssert(proto.isEqual(protoFromPrototype))
+
+      var o = FooBar.new()
+      let retainBefore = retainCount(o).int
+
+      let op: FooBarProtocol = asProto[FooBarProtocol](o)
+      doAssert(not op.isNil)
+      doAssert(retainCount(o).int == retainBefore + 1)
+      doAssert(getClassName(op) == "FooBar")
+
+      op.ping()
+      doAssert(fooBarPingCount == 1)
+
+      release(o)
+
+  test "asProto returns nil for non-conforming object":
+    var o = SimpleCounterClass.new()
+    let p = asProto[FooBarProtocol](o)
+    doAssert(p.isNil)
+
   test "objcImpl supports predeclared NSObject class":
     predeclFooBarPingCount = 0
 
@@ -448,7 +476,9 @@ suite "objcImpl examples":
 
     let sendGet =
       cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
-    let sendSet = cast[proc(self: IDPtr, op: SEL, value: cstring): void {.cdecl, varargs.}](objc_msgSend)
+    let sendSet = cast[proc(self: IDPtr, op: SEL, value: cstring): void {.
+      cdecl, varargs
+    .}](objc_msgSend)
 
     sendSet(o.value, setterSel, "fromObjc".cstring)
     check(o.payload() == "fromObjc")
