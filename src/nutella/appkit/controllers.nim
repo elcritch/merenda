@@ -14,7 +14,7 @@ proc ensureControllerMarkers() =
   NSNotApplicableMarker = ns("NSNotApplicableMarker")
   controllerMarkersReady = true
 
-proc NSIsControllerMarker*(obj: ID): bool =
+proc NSIsControllerMarker*(obj: IDPtr): bool =
   ensureControllerMarkers()
   obj == NSNoSelectionMarker.value or obj == NSMultipleValuesMarker.value or
     obj == NSNotApplicableMarker.value
@@ -26,7 +26,7 @@ proc NSIsControllerMarker*(obj: NSString): bool =
   NSIsControllerMarker(obj.value)
 
 type NSControllerStorage = ref object
-  editors: seq[ID]
+  editors: seq[IDPtr]
 
 proc editorStorage(self: NSObject): NSControllerStorage =
   if self.isNil:
@@ -56,11 +56,11 @@ objcImpl:
     clearIvarRefs(self)
     discard callSuperIdFrom(NSController, self, getSelector("dealloc"))
 
-  method initWithCoder*(self: var NSController, coder: ID): NSController =
+  method initWithCoder*(self: var NSController, coder: IDPtr): NSController =
     discard coder
     result = self.init()
 
-  method encodeWithCoder*(self: NSController, coder: ID) =
+  method encodeWithCoder*(self: NSController, coder: IDPtr) =
     discard self
     discard coder
 
@@ -72,7 +72,7 @@ objcImpl:
       return true
     let commitSel = getSelector("commitEditing")
     for editor in store.editors:
-      let committed = cast[proc(obj: ID, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)(
+      let committed = cast[proc(obj: IDPtr, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)(
         editor, commitSel
       )
       if not committed:
@@ -87,7 +87,7 @@ objcImpl:
       return
     let discardSel = getSelector("discardEditing")
     for editor in store.editors:
-      cast[proc(obj: ID, op: SEL): void {.cdecl, varargs.}](objc_msgSend)(
+      cast[proc(obj: IDPtr, op: SEL): void {.cdecl, varargs.}](objc_msgSend)(
         editor, discardSel
       )
 
@@ -99,7 +99,7 @@ objcImpl:
       return false
     store.editors.len > 0
 
-  method objectDidBeginEditing*(self: NSController, editor: ID) =
+  method objectDidBeginEditing*(self: NSController, editor: IDPtr) =
     if self.isNil or editor.isNil:
       return
     let store = editorStorage(self)
@@ -107,7 +107,7 @@ objcImpl:
       return
     store.editors.add(retainId(editor))
 
-  method objectDidEndEditing*(self: NSController, editor: ID) =
+  method objectDidEndEditing*(self: NSController, editor: IDPtr) =
     if self.isNil or editor.isNil:
       return
     let store = editorStorage(self)

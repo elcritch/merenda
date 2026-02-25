@@ -14,17 +14,17 @@ proc `=destroy`(o: var IvarStateObj) =
   discard o
   inc ivarStateDestroyedCount
 
-proc ivarOwnerPing(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+proc ivarOwnerPing(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard self
   discard cmd
   inc ivarPingCount
 
-proc ivarOwnerDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+proc ivarOwnerDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard cmd
   clearIvarRefs(self)
   {.cast(raises: []).}:
     var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))
-    discard cast[proc(superObj: var ObjcSuper, op: SEL): ID {.cdecl, varargs.}](objc_msgSendSuper)(
+    discard cast[proc(superObj: var ObjcSuper, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
       superCall, selector("dealloc")
     )
 

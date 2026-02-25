@@ -150,7 +150,7 @@ proc objcTypeCodeFromTypeName(name, protocolName, className: string): string =
     return "*"
   elif name == "ObjcClass":
     return "#"
-  elif name == "NSObject" or name == "ID" or name == protocolName or name == className:
+  elif name == "NSObject" or name == "IDPtr" or name == protocolName or name == className:
     return "@"
   elif name == "SEL":
     return ":"
@@ -507,7 +507,7 @@ template objcAbiType(T: typedesc): untyped =
   when T is string:
     cstring
   elif T is NSObject:
-    ID
+    IDPtr
   else:
     T
 
@@ -563,7 +563,7 @@ proc isNSObjectTypeNode(typ: NimNode): bool =
 
 proc objcAbiTypeNode(typ: NimNode): NimNode =
   if isNSObjectTypeNode(typ):
-    bindSym"ID"
+    bindSym"IDPtr"
   else:
     newCall(bindSym"objcAbiType", copyNimTree(typ))
 
@@ -617,7 +617,7 @@ proc buildObjcWrapperProc(
 
   let selfIdent = ident(selfName)
   let selfRaw = genSym(nskParam, selfName & "Raw")
-  wrapperParams.add(newIdentDefs(selfRaw, bindSym"ID", newEmptyNode()))
+  wrapperParams.add(newIdentDefs(selfRaw, bindSym"IDPtr", newEmptyNode()))
   let cmdSel = genSym(nskParam, "cmdSel")
   wrapperParams.add(newIdentDefs(cmdSel, bindSym"SEL", newEmptyNode()))
 
@@ -760,7 +760,7 @@ proc buildObjcCallHelperProc(
     else:
       objcAbiTypeNode(retType)
   senderParams.add(retAbiType)
-  senderParams.add(newIdentDefs(ident"selfId", bindSym"ID"))
+  senderParams.add(newIdentDefs(ident"selfId", bindSym"IDPtr"))
   senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
 
   let callTarget =

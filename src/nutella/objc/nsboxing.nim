@@ -1,7 +1,7 @@
-proc retainNSObjectId(value: ID): NSObject {.inline.} =
+proc retainNSObjectId(value: IDPtr): NSObject {.inline.} =
   if value.isNil:
     return NSObject(value: nil)
-  let retainSend = cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)
+  let retainSend = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
   NSObject(value: retainSend(value, sel_registerName("retain")))
 
 objcImpl:
@@ -15,7 +15,7 @@ objcImpl:
 
   method dealloc*(self: NXInteger) =
     clearIvarRefs(self)
-    discard callSuperAs[ID](self, getSelector("dealloc"))
+    discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method integerValue*(self: NXInteger): NSInteger =
     self.num().NSInteger
@@ -40,7 +40,7 @@ objcImpl:
       return true
     if other.isNil or not other.respondsToSelector("integerValue"):
       return false
-    let toInt = cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+    let toInt = cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
     let value = toInt(other.value, sel_registerName("integerValue"))
     self.integerValue() == value
 
@@ -55,7 +55,7 @@ objcImpl:
 
   method dealloc*(self: NXDouble) =
     clearIvarRefs(self)
-    discard callSuperAs[ID](self, getSelector("dealloc"))
+    discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method doubleValue*(self: NXDouble): cdouble =
     self.num()
@@ -82,12 +82,12 @@ objcImpl:
       return false
     if other.respondsToSelector("doubleValue"):
       let toDouble =
-        cast[proc(obj: ID, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
+        cast[proc(obj: IDPtr, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
       let value = toDouble(other.value, sel_registerName("doubleValue"))
       return self.doubleValue() == value
     if other.respondsToSelector("integerValue"):
       let toInt =
-        cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+        cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
       let value = toInt(other.value, sel_registerName("integerValue")).cdouble
       return self.doubleValue() == value
     false
@@ -226,12 +226,12 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
   when T is NSObject:
     if value.isNil:
       return T(value: nil)
-    let retainSend = cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)
+    let retainSend = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
     T(value: retainSend(value.value, sel_registerName("retain")))
   elif T is string:
     if value.isNil:
       return ""
-    let toUtf8 = cast[proc(self: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let toUtf8 = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
     let utf8 = toUtf8(value.value, sel_registerName("UTF8String"))
     if utf8.isNil:
       return ""
@@ -241,33 +241,33 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
       return T(0)
     if not value.respondsToSelector("integerValue"):
       return T(0)
-    let toInt = cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+    let toInt = cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
     T(toInt(value.value, sel_registerName("integerValue")))
   elif T is SomeFloat:
     if value.isNil:
       return T(0.0)
     if value.respondsToSelector("doubleValue"):
       let toDouble =
-        cast[proc(obj: ID, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
+        cast[proc(obj: IDPtr, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
       return T(toDouble(value.value, sel_registerName("doubleValue")))
     if value.respondsToSelector("floatValue"):
       let toFloat =
-        cast[proc(obj: ID, op: SEL): cfloat {.cdecl, varargs.}](objc_msgSend)
+        cast[proc(obj: IDPtr, op: SEL): cfloat {.cdecl, varargs.}](objc_msgSend)
       return T(toFloat(value.value, sel_registerName("floatValue")))
     if value.respondsToSelector("integerValue"):
       let toInt =
-        cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+        cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
       return T(toInt(value.value, sel_registerName("integerValue")).cdouble)
     T(0.0)
   elif T is bool:
     if value.isNil:
       return false
     if value.respondsToSelector("boolValue"):
-      let toBool = cast[proc(obj: ID, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)
+      let toBool = cast[proc(obj: IDPtr, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)
       return toBool(value.value, sel_registerName("boolValue"))
     if value.respondsToSelector("integerValue"):
       let toInt =
-        cast[proc(obj: ID, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+        cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
       return toInt(value.value, sel_registerName("integerValue")) != 0
     false
   else:

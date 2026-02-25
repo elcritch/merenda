@@ -101,14 +101,14 @@ proc initOwned*[T: NSObject](allocated: sink T): T {.inline.} =
   result = obj.init()
   obj.value = nil
 
-proc ownFromId*[T: NSObject](id: ID): T =
+proc ownFromId*[T: NSObject](id: IDPtr): T =
   if id.isNil:
     return T(value: nil)
   var borrowed = asType[T](id)
   result = retain(borrowed)
   borrowed.value = nil
 
-proc retainId*(id: ID): ID =
+proc retainId*(id: IDPtr): IDPtr =
   if id.isNil:
     return nil
   var borrowed = asType[NSObject](id)
@@ -117,33 +117,33 @@ proc retainId*(id: ID): ID =
   result = owned.value
   owned.value = nil
 
-proc releaseId*(id: ID) =
+proc releaseId*(id: IDPtr) =
   if id.isNil:
     return
   var owned = asType[NSObject](id)
   discard owned
 
-proc replacedOwnedId*(slot: ID, next: ID): ID =
+proc replacedOwnedId*(slot: IDPtr, next: IDPtr): IDPtr =
   if slot == next:
     return slot
   result = retainId(next)
   releaseId(slot)
 
-proc clearOwnedIds*(ids: var seq[ID]) =
+proc clearOwnedIds*(ids: var seq[IDPtr]) =
   for id in ids:
     releaseId(id)
   ids.setLen(0)
 
-proc removeOwnedIdAt*(ids: var seq[ID], idx: int) =
+proc removeOwnedIdAt*(ids: var seq[IDPtr], idx: int) =
   let old = ids[idx]
   ids.del(idx)
   releaseId(old)
 
-template callSuperIdFrom*(currentType: typedesc, obj: NSObject, op: SEL): ID =
+template callSuperIdFrom*(currentType: typedesc, obj: NSObject, op: SEL): IDPtr =
   block:
     var superObj =
       ObjcSuper(receiver: obj.value, superClass: getClass(currentType).getSuperclass())
-    cast[proc(superObj: var ObjcSuper, selParam: SEL): ID {.cdecl, varargs.}](objc_msgSendSuper)(
+    cast[proc(superObj: var ObjcSuper, selParam: SEL): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
       superObj, op
     )
 
@@ -158,12 +158,12 @@ proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject):
     return false
   case meth.getNumberOfArguments()
   of 2:
-    discard cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)(
+    discard cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
       target.value, action
     )
     true
   of 3:
-    discard cast[proc(self: ID, op: SEL, value: ID): ID {.cdecl, varargs.}](objc_msgSend)(
+    discard cast[proc(self: IDPtr, op: SEL, value: IDPtr): IDPtr {.cdecl, varargs.}](objc_msgSend)(
       target.value, action, sender.value
     )
     true

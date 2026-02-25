@@ -104,7 +104,7 @@ suite "objc core runtime ownership fundamentals":
     check(retainedFromObj.isNil)
     check(retainCount(o).int == baseCount)
 
-    let oId: ID = o
+    let oId: IDPtr = o
     var retainedFromId = asRetainedType[NSObject](oId)
     check(retainedFromId == o)
     check(retainCount(o).int == baseCount + 1)
@@ -114,7 +114,7 @@ suite "objc core runtime ownership fundamentals":
     check(retainCount(o).int == baseCount)
 
     let nilFromObj = asRetainedType[NSObject](NSObject(value: nil))
-    let nilFromId = asRetainedType[NSObject](cast[ID](nil))
+    let nilFromId = asRetainedType[NSObject](cast[IDPtr](nil))
     check(nilFromObj.isNil)
     check(nilFromId.isNil)
 

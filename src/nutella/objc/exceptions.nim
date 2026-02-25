@@ -9,48 +9,48 @@ const NimExceptionMarker = "nim.exc:"
 
 proc nutella_objc_build_exception(
   name, reason, fallbackPayload: cstring
-): ID {.cdecl, importc.}
+): IDPtr {.cdecl, importc.}
 
-proc objcRetainRaw(id: ID): ID {.inline, raises: [].} =
+proc objcRetainRaw(id: IDPtr): IDPtr {.inline, raises: [].} =
   if id == nil:
     return nil
   let retainSend =
-    cast[proc(self: ID, op: SEL): ID {.cdecl, varargs, raises: [].}](objc_msgSend)
+    cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs, raises: [].}](objc_msgSend)
   retainSend(id, sel_registerName("retain"))
 
-proc objcReleaseRaw(id: ID) {.inline, raises: [].} =
+proc objcReleaseRaw(id: IDPtr) {.inline, raises: [].} =
   if id == nil:
     return
   let releaseSend =
-    cast[proc(self: ID, op: SEL): void {.cdecl, varargs, raises: [].}](objc_msgSend)
+    cast[proc(self: IDPtr, op: SEL): void {.cdecl, varargs, raises: [].}](objc_msgSend)
   releaseSend(id, sel_registerName("release"))
 
 proc objcRespondsToSelectorRaw(
-    id: ID, selectorName: string
+    id: IDPtr, selectorName: string
 ): bool {.inline, raises: [].} =
   if id == nil:
     return false
-  let respondsSend = cast[proc(self: ID, op: SEL, selector: SEL): bool {.
+  let respondsSend = cast[proc(self: IDPtr, op: SEL, selector: SEL): bool {.
     cdecl, varargs, raises: []
   .}](objc_msgSend)
   respondsSend(
     id, sel_registerName("respondsToSelector:"), sel_registerName(selectorName)
   )
 
-proc objcSendIdRaw(id: ID, selectorName: string): ID {.inline, raises: [].} =
+proc objcSendIdRaw(id: IDPtr, selectorName: string): IDPtr {.inline, raises: [].} =
   if id == nil:
     return nil
   let sendId =
-    cast[proc(self: ID, op: SEL): ID {.cdecl, varargs, raises: [].}](objc_msgSend)
+    cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs, raises: [].}](objc_msgSend)
   sendId(id, sel_registerName(selectorName))
 
-proc objcUtf8StringRaw(id: ID): string {.inline, raises: [].} =
+proc objcUtf8StringRaw(id: IDPtr): string {.inline, raises: [].} =
   if id == nil:
     return ""
   if not objcRespondsToSelectorRaw(id, "UTF8String"):
     return ""
   let utf8Send =
-    cast[proc(self: ID, op: SEL): cstring {.cdecl, varargs, raises: [].}](objc_msgSend)
+    cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs, raises: [].}](objc_msgSend)
   let utf8 = utf8Send(id, sel_registerName("UTF8String"))
   if utf8.isNil:
     return ""
@@ -77,7 +77,7 @@ proc parseNimExceptionMarker(
 proc encodeNimExceptionMarker(name, reason: string): string {.inline, raises: [].} =
   NimExceptionMarker & name & "\n" & reason
 
-proc objcExceptionText(exception: ID): string {.raises: [].} =
+proc objcExceptionText(exception: IDPtr): string {.raises: [].} =
   if exception == nil:
     return ""
   result = objcUtf8StringRaw(exception)
@@ -89,7 +89,7 @@ proc objcExceptionText(exception: ID): string {.raises: [].} =
   if result.len == 0:
     result = getRawClassName(exception)
 
-proc objcExceptionName*(exception: ID): string {.raises: [].} =
+proc objcExceptionName*(exception: IDPtr): string {.raises: [].} =
   if exception == nil:
     return ""
   if objcRespondsToSelectorRaw(exception, "name"):
@@ -103,7 +103,7 @@ proc objcExceptionName*(exception: ID): string {.raises: [].} =
     return markerName
   result = getRawClassName(exception)
 
-proc objcExceptionReason*(exception: ID): string {.raises: [].} =
+proc objcExceptionReason*(exception: IDPtr): string {.raises: [].} =
   if exception == nil:
     return ""
   if objcRespondsToSelectorRaw(exception, "reason"):
@@ -117,7 +117,7 @@ proc objcExceptionReason*(exception: ID): string {.raises: [].} =
     return markerReason
   result = payload
 
-proc newObjcExceptionError(exception: ID): ref ObjcExceptionError {.raises: [].} =
+proc newObjcExceptionError(exception: IDPtr): ref ObjcExceptionError {.raises: [].} =
   let className =
     if exception == nil:
       "<nil>"
@@ -144,12 +144,12 @@ proc newObjcExceptionError(exception: ID): ref ObjcExceptionError {.raises: [].}
   result.objcReason = reason
   objcReleaseRaw(exception)
 
-proc objcExceptionFromParts*(name, reason: string): ID {.raises: [].} =
+proc objcExceptionFromParts*(name, reason: string): IDPtr {.raises: [].} =
   let fallbackPayload = encodeNimExceptionMarker(name, reason)
   result =
     nutella_objc_build_exception(name.cstring, reason.cstring, fallbackPayload.cstring)
 
-proc objcExceptionFromNim*(nimException: ref Exception): ID {.raises: [].} =
+proc objcExceptionFromNim*(nimException: ref Exception): IDPtr {.raises: [].} =
   let name =
     if nimException.isNil or nimException.name.len == 0:
       "NimException"
@@ -159,11 +159,11 @@ proc objcExceptionFromNim*(nimException: ref Exception): ID {.raises: [].} =
   objcExceptionFromParts(name, reason)
 
 proc nimExceptionFromObjcRetained*(
-    exception: ID
+    exception: IDPtr
 ): ref ObjcExceptionError {.raises: [].} =
   newObjcExceptionError(exception)
 
-proc nimExceptionFromObjc*(exception: ID): ref ObjcExceptionError {.raises: [].} =
+proc nimExceptionFromObjc*(exception: IDPtr): ref ObjcExceptionError {.raises: [].} =
   if exception == nil:
     return newObjcExceptionError(nil)
   nimExceptionFromObjcRetained(objcRetainRaw(exception))

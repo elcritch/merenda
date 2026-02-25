@@ -3,7 +3,7 @@ import ./responders
 
 export responders
 
-proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool
+proc isViewDescendantOf*(viewId: IDPtr, ancestorId: IDPtr): bool
 proc detachSubviews*(view: NSObject)
 
 objcImpl:
@@ -27,8 +27,8 @@ objcImpl:
   method init*(self: var NSView): NSView =
     result = asType[NSView](
       cast[proc(
-        self: ID, op: SEL, x: float32, y: float32, width: float32, height: float32
-      ): ID {.cdecl, varargs.}](objc_msgSend)(
+        self: IDPtr, op: SEL, x: float32, y: float32, width: float32, height: float32
+      ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
         self.value, getSelector("initWithFrame:y:width:height:"), 0.0, 0.0, 1.0, 1.0
       )
     )
@@ -87,7 +87,7 @@ proc new*(t: typedesc[NSView]): NSView =
   var allocated = NSView.alloc()
   result = initOwned(move(allocated))
 
-proc clearSuperviewRef*(viewId: ID) =
+proc clearSuperviewRef*(viewId: IDPtr) =
   if viewId.isNil:
     return
   let child = ownFromId[NSView](viewId)
@@ -144,7 +144,7 @@ proc isDescendantOf*(view: NSView, other: NSView): bool =
     current = parent
   false
 
-proc isViewDescendantOf*(viewId: ID, ancestorId: ID): bool =
+proc isViewDescendantOf*(viewId: IDPtr, ancestorId: IDPtr): bool =
   if viewId.isNil or ancestorId.isNil:
     return false
   var currentId = viewId
@@ -213,7 +213,7 @@ proc superview*(view: NSView): NSView =
     return NSView(value: nil)
   retain(parent)
 
-proc removeSubviewById(parent: NSView, childId: ID): bool =
+proc removeSubviewById(parent: NSView, childId: IDPtr): bool =
   if parent.isNil or childId.isNil:
     return false
   var children = parent.viewSubviews()

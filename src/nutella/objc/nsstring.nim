@@ -11,7 +11,7 @@ objcImpl:
 
   method dealloc*(self: NXString) =
     clearIvarRefs(self)
-    discard callSuperAs[ID](self, getSelector("dealloc"))
+    discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method stringValue*(self: NXString): string =
     self.text()
@@ -33,7 +33,7 @@ objcImpl:
       return true
     if other.isNil or not other.respondsToSelector("UTF8String"):
       return false
-    let toUtf8 = cast[proc(obj: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let toUtf8 = cast[proc(obj: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
     let utf8 = toUtf8(other.value, sel_registerName("UTF8String"))
     if utf8.isNil:
       return false
@@ -54,7 +54,7 @@ proc toNSString*(value: string): NSString {.inline.} =
 proc stringValue*(value: NSString): string =
   if value.isNil:
     return ""
-  let toUtf8 = cast[proc(self: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+  let toUtf8 = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
   let utf8 = toUtf8(value.value, sel_registerName("UTF8String"))
   if utf8.isNil:
     return ""

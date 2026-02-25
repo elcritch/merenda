@@ -34,10 +34,10 @@ const
   NO* = false
 
 type
-  ID* = pointer
+  IDPtr* = pointer
 
   NSObject* {.pure, inheritable.} = object
-    value*: ID
+    value*: IDPtr
 
   ObjcClass* {.pure.} = object of NSObject
 
@@ -50,7 +50,7 @@ type
   Method* = distinct pointer
   Ivar* = distinct pointer
   Category* = distinct pointer
-  IMP* = proc(id: ID, selector: SEL): ID {.cdecl, varargs.}
+  IMP* = proc(id: IDPtr, selector: SEL): IDPtr {.cdecl, varargs.}
   Protocol* = distinct pointer
   SEL* = ptr object
   STR* = ptr char
@@ -73,7 +73,7 @@ type
   Property* = distinct pointer
 
   ObjcSuper* = object
-    receiver*: ID
+    receiver*: IDPtr
     superClass*: ObjcClass
 
   objc_property_attribute_t* = object
@@ -86,11 +86,11 @@ type
 
   objc_exception_functions_t* = object
     version: cint
-    throw_exc: proc(id: ID) {.cdecl.}
+    throw_exc: proc(id: IDPtr) {.cdecl.}
     try_enter: proc(p: pointer) {.cdecl.}
     try_exit: proc(p: pointer) {.cdecl.}
-    extract: proc(p: pointer): ID {.cdecl.}
-    match: proc(class: ObjcClass, id: ID): cint {.cdecl.}
+    extract: proc(p: pointer): IDPtr {.cdecl.}
+    match: proc(class: ObjcClass, id: IDPtr): cint {.cdecl.}
 
   objc_AssociationPolicy* {.size: sizeof(cuint).} = enum
     OBJC_ASSOCIATION_ASSIGN = 0
@@ -99,10 +99,10 @@ type
     OBJC_ASSOCIATION_RETAIN = 01401
     OBJC_ASSOCIATION_COPY = 01403
 
-proc retainAux(o: ID): ID {.raises: [].}
-proc retainRaw(o: ID) {.raises: [].}
-proc releaseAux(o: ID) {.raises: [].}
-proc retainCountAux(o: ID): NSUInteger {.raises: [].}
+proc retainAux(o: IDPtr): IDPtr {.raises: [].}
+proc retainRaw(o: IDPtr) {.raises: [].}
+proc releaseAux(o: IDPtr) {.raises: [].}
+proc retainCountAux(o: IDPtr): NSUInteger {.raises: [].}
 
 template retain*[T: NSObject](o: T): T =
   cast[T](retainAux(o.value))
@@ -154,22 +154,22 @@ proc isNil*(a: ObjcClass): bool =
 proc isNil*(a: Protocol): bool =
   cast[pointer](a) == nil
 
-converter toID*(o: NSObject): ID {.inline.} =
+converter toID*(o: NSObject): IDPtr {.inline.} =
   o.value
 
-converter toNSObject*(id: ID): NSObject {.inline.} =
+converter toNSObject*(id: IDPtr): NSObject {.inline.} =
   NSObject(value: id)
 
-converter toObjcClass*(id: ID): ObjcClass {.inline.} =
+converter toObjcClass*(id: IDPtr): ObjcClass {.inline.} =
   ObjcClass(value: id)
 
-template asType*[T: NSObject](o: ID): T =
+template asType*[T: NSObject](o: IDPtr): T =
   T(value: o)
 
 template asType*[T: NSObject](o: NSObject): T =
   T(value: o.value)
 
-template asRetainedType*[T: NSObject](o: ID): T =
+template asRetainedType*[T: NSObject](o: IDPtr): T =
   if o == nil:
     T(value: nil)
   else:
@@ -183,14 +183,14 @@ template asRetainedType*[T: NSObject](o: NSObject): T =
 
 proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 proc sel_registerName*(str: cstring): SEL {.cdecl, importc.}
-proc objc_msgSend*(self: ID, op: SEL): ID {.cdecl, importc, discardable, varargs.}
+proc objc_msgSend*(self: IDPtr, op: SEL): IDPtr {.cdecl, importc, discardable, varargs.}
 
-proc objc_msgSend_fpret*(self: ID, op: SEL): cdouble {.cdecl, importc, varargs.}
-proc objc_msgSend_stret*(self: ID, op: SEL) {.cdecl, importc, varargs.}
-proc objc_msgSendSuper*(super: var ObjcSuper, op: SEL): ID {.cdecl, importc, varargs.}
+proc objc_msgSend_fpret*(self: IDPtr, op: SEL): cdouble {.cdecl, importc, varargs.}
+proc objc_msgSend_stret*(self: IDPtr, op: SEL) {.cdecl, importc, varargs.}
+proc objc_msgSendSuper*(super: var ObjcSuper, op: SEL): IDPtr {.cdecl, importc, varargs.}
 proc objc_msgSendSuper_stret*(super: var ObjcSuper, op: SEL) {.cdecl, importc, varargs.}
 
-proc class_getName(cls: ID): cstring {.cdecl, importc.}
+proc class_getName(cls: IDPtr): cstring {.cdecl, importc.}
 proc getName*(cls: ObjcClass): string =
   if cls.isNil:
     return "<nil ObjcClass>"
@@ -202,28 +202,28 @@ proc getName*(cls: ObjcClass): string =
 proc `$`*(cls: ObjcClass): string =
   getName(cls)
 
-proc class_getSuperclass(cls: ID): ObjcClass {.cdecl, importc.}
+proc class_getSuperclass(cls: IDPtr): ObjcClass {.cdecl, importc.}
 template getSuperclass*(cls: ObjcClass): untyped =
   class_getSuperClass(cls)
 
-proc class_isMetaClass(cls: ID): bool {.cdecl, importc.}
+proc class_isMetaClass(cls: IDPtr): bool {.cdecl, importc.}
 template isMetaClass*(cls: ObjcClass): untyped =
   class_isMetaClass(cls)
 
-proc class_getInstanceSize(cls: ID): csize_t {.cdecl, importc.}
+proc class_getInstanceSize(cls: IDPtr): csize_t {.cdecl, importc.}
 proc getInstanceSize*(cls: ObjcClass): int =
   class_getInstanceSize(cls).int
 
-proc class_getInstanceVariable(cls: ID, name: cstring): Ivar {.cdecl, importc.}
+proc class_getInstanceVariable(cls: IDPtr, name: cstring): Ivar {.cdecl, importc.}
 template getIvar*(cls: ObjcClass, name: string): untyped =
   class_getInstanceVariable(cls, name.cstring)
 
-proc class_getClassVariable(cls: ID, name: cstring): Ivar {.cdecl, importc.}
+proc class_getClassVariable(cls: IDPtr, name: cstring): Ivar {.cdecl, importc.}
 template getClassVariable*(cls: ObjcClass, name: string): untyped =
   class_getClassVariable(cls, name.cstring)
 
 proc class_addIvar(
-  cls: ID, name: cstring, size: csize_t, alignment: uint8, types: cstring
+  cls: IDPtr, name: cstring, size: csize_t, alignment: uint8, types: cstring
 ): bool {.cdecl, importc.}
 
 proc addIvar*(
@@ -231,7 +231,7 @@ proc addIvar*(
 ): bool =
   class_addIvar(cls, name.cstring, size.csize_t, alignment.uint8, types.cstring) == YES
 
-proc class_copyIvarList(cls: ID, outCount: var cuint): ptr Ivar {.cdecl, importc.}
+proc class_copyIvarList(cls: IDPtr, outCount: var cuint): ptr Ivar {.cdecl, importc.}
 
 proc ivarList*(cls: ObjcClass): seq[Ivar] =
   var
@@ -244,17 +244,17 @@ proc ivarList*(cls: ObjcClass): seq[Ivar] =
   copyMem(result[0].addr, ivars, sizeof(Ivar) * count.int)
   c_free(ivars)
 
-proc class_getIvarLayout*(cls: ID): ptr uint8 {.cdecl, importc.}
-proc class_getWeakIvarLayout*(cls: ID): ptr uint8 {.cdecl, importc.}
-proc class_setIvarLayout*(cls: ID, layout: ptr uint8) {.cdecl, importc.}
-proc class_setWeakIvarLayout*(cls: ID, layout: ptr uint8) {.cdecl, importc.}
+proc class_getIvarLayout*(cls: IDPtr): ptr uint8 {.cdecl, importc.}
+proc class_getWeakIvarLayout*(cls: IDPtr): ptr uint8 {.cdecl, importc.}
+proc class_setIvarLayout*(cls: IDPtr, layout: ptr uint8) {.cdecl, importc.}
+proc class_setWeakIvarLayout*(cls: IDPtr, layout: ptr uint8) {.cdecl, importc.}
 
-proc class_getProperty(cls: ID, name: cstring): Property {.cdecl, importc.}
+proc class_getProperty(cls: IDPtr, name: cstring): Property {.cdecl, importc.}
 template getProperty*(cls: ObjcClass, name: string): untyped =
   class_getProperty(cls, name.cstring)
 
 proc class_copyPropertyList*(
-  cls: ID, outCount: var cuint
+  cls: IDPtr, outCount: var cuint
 ): ptr Property {.cdecl, importc.}
 
 proc propertyList*(cls: ObjcClass): seq[Property] =
@@ -269,21 +269,21 @@ proc propertyList*(cls: ObjcClass): seq[Property] =
   c_free(props)
 
 proc class_addMethod(
-  cls: ID, name: SEL, imp: IMP, types: cstring
+  cls: IDPtr, name: SEL, imp: IMP, types: cstring
 ): bool {.cdecl, importc.}
 
 template addMethod*(cls: ObjcClass, name: SEL, imp: IMP, types: string): bool =
   class_addMethod(cls, name, imp, types.cstring)
 
-proc class_getInstanceMethod(cls: ID, name: SEL): Method {.cdecl, importc.}
+proc class_getInstanceMethod(cls: IDPtr, name: SEL): Method {.cdecl, importc.}
 template getInstanceMethod*(cls: ObjcClass, name: SEL): Method =
   class_getInstanceMethod(cls, name)
 
-proc class_getClassMethod(cls: ID, name: SEL): Method {.cdecl, importc.}
+proc class_getClassMethod(cls: IDPtr, name: SEL): Method {.cdecl, importc.}
 template getClassMethod*(cls: ObjcClass, name: SEL): Method =
   class_getClassMethod(cls, name)
 
-proc class_copyMethodList(cls: ID, outCount: var cuint): ptr Method {.cdecl, importc.}
+proc class_copyMethodList(cls: IDPtr, outCount: var cuint): ptr Method {.cdecl, importc.}
 
 proc methodList*(cls: ObjcClass): seq[Method] =
   var
@@ -297,28 +297,28 @@ proc methodList*(cls: ObjcClass): seq[Method] =
   c_free(procs)
 
 proc class_replaceMethod(
-  cls: ID, name: SEL, imp: IMP, types: cstring
+  cls: IDPtr, name: SEL, imp: IMP, types: cstring
 ): IMP {.cdecl, importc.}
 
 template replaceMethod*(cls: ObjcClass, name: SEL, imp: IMP, types: string): untyped =
   class_replaceMethod(cls, name, imp, types.cstring)
 
-proc class_getMethodImplementation(cls: ID, name: SEL): IMP {.cdecl, importc.}
+proc class_getMethodImplementation(cls: IDPtr, name: SEL): IMP {.cdecl, importc.}
 template getMethodImplementation*(cls: ObjcClass, name: SEL): untyped =
   class_getMethodImplementation(cls, name)
 
-proc class_getMethodImplementation_stret*(cls: ID, name: SEL): IMP {.cdecl, importc.}
+proc class_getMethodImplementation_stret*(cls: IDPtr, name: SEL): IMP {.cdecl, importc.}
 
-proc class_respondsToSelector(cls: ID, sel: SEL): bool {.cdecl, importc.}
+proc class_respondsToSelector(cls: IDPtr, sel: SEL): bool {.cdecl, importc.}
 template respondsToSelector*(cls: ObjcClass, sel: SEL): untyped =
   class_respondsToSelector(cls, sel)
 
-proc class_addProtocol(cls: ID, protocol: Protocol): bool {.cdecl, importc.}
+proc class_addProtocol(cls: IDPtr, protocol: Protocol): bool {.cdecl, importc.}
 template addProtocol*(cls: ObjcClass, protocol: Protocol): untyped =
   class_addProtocol(cls, protocol)
 
 proc class_addProperty(
-  cls: ID,
+  cls: IDPtr,
   name: cstring,
   attributes: ptr objc_property_attribute_t,
   attributeCount: cuint,
@@ -331,7 +331,7 @@ proc addProperty*(
     YES
 
 proc class_replaceProperty(
-  cls: ID,
+  cls: IDPtr,
   name: cstring,
   attributes: ptr objc_property_attribute_t,
   attributeCount: cuint,
@@ -344,13 +344,13 @@ proc replaceProperty*(
     cls, name.cstring, attributes[0].unsafeAddr, attributes.len.cuint
   )
 
-proc class_conformsToProtocol(cls: ID, protocol: Protocol): bool {.cdecl, importc.}
+proc class_conformsToProtocol(cls: IDPtr, protocol: Protocol): bool {.cdecl, importc.}
 
 template conformsToProtocol*(cls: ObjcClass, protocol: Protocol): bool =
   class_conformsToProtocol(cls, protocol) == YES
 
 proc class_copyProtocolList(
-  cls: ID, outCount: var cuint
+  cls: IDPtr, outCount: var cuint
 ): ptr Protocol {.cdecl, importc.}
 
 proc protocolList*(cls: ObjcClass): seq[Protocol] =
@@ -364,11 +364,11 @@ proc protocolList*(cls: ObjcClass): seq[Protocol] =
   copyMem(result[0].addr, prots, sizeof(Protocol) * count.int)
   c_free(prots)
 
-proc class_getVersion(cls: ID): cint {.cdecl, importc.}
+proc class_getVersion(cls: IDPtr): cint {.cdecl, importc.}
 template getVersion*(cls: ObjcClass): untyped =
   class_getVersion(cls).int
 
-proc class_setVersion(cls: ID, version: cint) {.cdecl, importc.}
+proc class_setVersion(cls: IDPtr, version: cint) {.cdecl, importc.}
 template setVersion*(cls: ObjcClass, version: int) =
   class_setVersion(cls, version.cint)
 
@@ -377,19 +377,19 @@ template getFutureClass*(name: string): untyped =
   objc_getFutureClass(name.cstring)
 
 proc objc_allocateClassPair(
-  superclass: ID, name: cstring, extraBytes: csize_t
-): ID {.cdecl, importc.}
+  superclass: IDPtr, name: cstring, extraBytes: csize_t
+): IDPtr {.cdecl, importc.}
 
 template allocateClassPair*(
     superclass: ObjcClass, name: string, extraBytes: int
 ): untyped =
   toObjcClass(objc_allocateClassPair(superclass, name.cstring, extrabytes.csize_t))
 
-proc objc_disposeClassPair(cls: ID) {.cdecl, importc.}
+proc objc_disposeClassPair(cls: IDPtr) {.cdecl, importc.}
 template disposeClassPair*(cls: ObjcClass) =
   objc_disposeClassPair(cls)
 
-proc objc_registerClassPair(cls: ID) {.cdecl, importc.}
+proc objc_registerClassPair(cls: IDPtr) {.cdecl, importc.}
 template registerClassPair*(cls: ObjcClass) =
   objc_registerClassPair(cls)
 
@@ -400,56 +400,56 @@ proc objc_duplicateClass(
 template duplicateClass*(original: ObjcClass, name: string, extraBytes: int): untyped =
   objc_duplicateClass(original, name.cstring, extraBytes.csize_t)
 
-proc class_createInstance(cls: ID, extraBytes: csize_t): ID {.cdecl, importc.}
+proc class_createInstance(cls: IDPtr, extraBytes: csize_t): IDPtr {.cdecl, importc.}
 template createInstance*(cls: ObjcClass, extraBytes: csize_t): untyped =
   class_createInstance(cls, extraBytes.csize_t)
 
-proc objc_constructInstance(cls: ID, bytes: pointer): ID {.cdecl, importc.}
+proc objc_constructInstance(cls: IDPtr, bytes: pointer): IDPtr {.cdecl, importc.}
 template constructInstance*(cls: ObjcClass, bytes: pointer): untyped =
   objc_constructInstance(cls, bytes)
 
-proc objc_destructInstance(obj: ID): pointer {.cdecl, importc.}
-template destructInstance*(obj: ID): untyped =
+proc objc_destructInstance(obj: IDPtr): pointer {.cdecl, importc.}
+template destructInstance*(obj: IDPtr): untyped =
   objc_destructInstance(obj)
 
-proc object_copy(obj: ID, size: csize_t): ID {.cdecl, importc.}
-template copy*(obj: ID, size: csize_t): untyped =
+proc object_copy(obj: IDPtr, size: csize_t): IDPtr {.cdecl, importc.}
+template copy*(obj: IDPtr, size: csize_t): untyped =
   object_copy(obj, size.csize_t)
 
-proc object_dispose(obj: ID): ID {.cdecl, importc.}
-template dispose*(obj: ID): untyped =
+proc object_dispose(obj: IDPtr): IDPtr {.cdecl, importc.}
+template dispose*(obj: IDPtr): untyped =
   object_dispose(obj)
 
 proc object_setInstanceVariable(
-  obj: ID, name: cstring, value: pointer
+  obj: IDPtr, name: cstring, value: pointer
 ): Ivar {.cdecl, importc.}
 
-template setInstanceVariable*(obj: ID, name: string, value: pointer): untyped =
+template setInstanceVariable*(obj: IDPtr, name: string, value: pointer): untyped =
   object_setInstanceVariable(obj, name.cstring, value)
 
 proc object_getInstanceVariable(
-  obj: ID, name: cstring, outValue: var pointer
+  obj: IDPtr, name: cstring, outValue: var pointer
 ): Ivar {.cdecl, importc.}
 
-template getInstanceVariable*(obj: ID, name: string, outValue: var pointer): untyped =
+template getInstanceVariable*(obj: IDPtr, name: string, outValue: var pointer): untyped =
   object_getInstanceVariable(obj, name.cstring, outValue)
 
-proc object_getIndexedIvars(obj: ID): pointer {.cdecl, importc.}
-template getIndexedIvars*(obj: ID): untyped =
+proc object_getIndexedIvars(obj: IDPtr): pointer {.cdecl, importc.}
+template getIndexedIvars*(obj: IDPtr): untyped =
   object_getIndexedIvars(obj)
 
-proc object_getIvar(obj: ID, ivar: Ivar): ID {.cdecl, importc.}
-template getIvar*(obj: ID, ivar: Ivar): untyped =
+proc object_getIvar(obj: IDPtr, ivar: Ivar): IDPtr {.cdecl, importc.}
+template getIvar*(obj: IDPtr, ivar: Ivar): untyped =
   object_getIvar(obj, ivar)
 
-proc object_setIvar(obj: ID, ivar: Ivar, value: ID) {.cdecl, importc.}
-template setIvar*(obj: ID, ivar: Ivar, value: ID) =
+proc object_setIvar(obj: IDPtr, ivar: Ivar, value: IDPtr) {.cdecl, importc.}
+template setIvar*(obj: IDPtr, ivar: Ivar, value: IDPtr) =
   object_setIvar(obj, ivar, value)
 
-proc object_getClassName(obj: ID): cstring {.cdecl, importc.}
-proc object_getClass(obj: ID): ObjcClass {.cdecl, importc.}
+proc object_getClassName(obj: IDPtr): cstring {.cdecl, importc.}
+proc object_getClass(obj: IDPtr): ObjcClass {.cdecl, importc.}
 proc ivar_getOffset(v: Ivar): ptrdiff_t {.cdecl, importc.}
-proc getRawClassName*(obj: ID): string =
+proc getRawClassName*(obj: IDPtr): string =
   $object_getClassName(obj)
 
 template getClassName*[T: NSObject](obj: T): string =
@@ -473,47 +473,47 @@ proc ensureNutellaRootClasses*()
 
 var nxObjectRefCountOffset {.global.}: ptrdiff_t = -1
 
-proc nxObjectRefCountPtr(obj: ID): ptr NSUInteger {.inline, raises: [].} =
+proc nxObjectRefCountPtr(obj: IDPtr): ptr NSUInteger {.inline, raises: [].} =
   if obj == nil or nxObjectRefCountOffset < 0:
     return nil
   cast[ptr NSUInteger](cast[uint](obj) + cast[uint](nxObjectRefCountOffset))
 
-proc nxObjectReadRefCount(obj: ID): NSUInteger {.inline, raises: [].} =
+proc nxObjectReadRefCount(obj: IDPtr): NSUInteger {.inline, raises: [].} =
   let p = nxObjectRefCountPtr(obj)
   if p == nil:
     return 0.NSUInteger
   p[]
 
-proc nxObjectWriteRefCount(obj: ID, value: NSUInteger) {.inline, raises: [].} =
+proc nxObjectWriteRefCount(obj: IDPtr, value: NSUInteger) {.inline, raises: [].} =
   let p = nxObjectRefCountPtr(obj)
   if p != nil:
     p[] = value
 
-proc nxObjectAlloc(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+proc nxObjectAlloc(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   discard cmd
   result = class_createInstance(self, 0)
   if result != nil:
     nxObjectWriteRefCount(result, 1.NSUInteger)
 
-proc nxObjectInit(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+proc nxObjectInit(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   discard cmd
   if nxObjectReadRefCount(self) == 0.NSUInteger:
     nxObjectWriteRefCount(self, 1.NSUInteger)
   result = self
 
-proc nxObjectRetain(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+proc nxObjectRetain(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   discard cmd
   let rc = nxObjectReadRefCount(self)
   nxObjectWriteRefCount(self, rc + 1.NSUInteger)
   result = self
 
-proc nxObjectDealloc(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+proc nxObjectDealloc(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   discard cmd
   nxObjectWriteRefCount(self, 0.NSUInteger)
   discard object_dispose(self)
   result = nil
 
-proc nxObjectRelease(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+proc nxObjectRelease(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard cmd
   let rc = nxObjectReadRefCount(self)
   if rc <= 1.NSUInteger:
@@ -521,29 +521,29 @@ proc nxObjectRelease(self: ID, cmd: SEL) {.cdecl, raises: [].} =
   else:
     nxObjectWriteRefCount(self, rc - 1.NSUInteger)
 
-proc nxObjectRetainCount(self: ID, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
+proc nxObjectRetainCount(self: IDPtr, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
   discard cmd
   result = nxObjectReadRefCount(self)
 
-proc nxObjectAutorelease(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+proc nxObjectAutorelease(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   discard cmd
   result = self
 
-proc nxObjectIsEqual(self: ID, cmd: SEL, other: ID): bool {.cdecl, raises: [].} =
+proc nxObjectIsEqual(self: IDPtr, cmd: SEL, other: IDPtr): bool {.cdecl, raises: [].} =
   discard cmd
   self == other
 
-proc nxObjectHash(self: ID, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
+proc nxObjectHash(self: IDPtr, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
   discard cmd
   cast[NSUInteger](cast[uint](self) shr 4)
 
 proc nxObjectRespondsToSelector(
-    self: ID, cmd: SEL, selector: SEL
+    self: IDPtr, cmd: SEL, selector: SEL
 ): bool {.cdecl, raises: [].} =
   discard cmd
   class_respondsToSelector(object_getClass(self), selector)
 
-proc nxObjectIsKindOfClass(self: ID, cmd: SEL, cls: ID): bool {.cdecl, raises: [].} =
+proc nxObjectIsKindOfClass(self: IDPtr, cmd: SEL, cls: IDPtr): bool {.cdecl, raises: [].} =
   discard cmd
   if cls == nil:
     return false
@@ -554,13 +554,13 @@ proc nxObjectIsKindOfClass(self: ID, cmd: SEL, cls: ID): bool {.cdecl, raises: [
     current = class_getSuperclass(current.value)
   false
 
-proc nxObjectNew(self: ID, cmd: SEL): ID {.cdecl, raises: [].} =
+proc nxObjectNew(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   var allocated = nxObjectAlloc(self, cmd)
   if allocated == nil:
     return nil
   result = objc_msgSend(allocated, sel_registerName("init"))
 
-proc nxObjectInitialize(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+proc nxObjectInitialize(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard self
   discard cmd
 
@@ -663,8 +663,8 @@ template getClass*(name: string): untyped =
 template getClass*[T: NSObject](t: typedesc[T]): untyped =
   getClassByName($T)
 
-proc object_setClass(obj: ID, cls: ID): ObjcClass {.cdecl, importc.}
-template setClass*(obj: ID, cls: ObjcClass): untyped =
+proc object_setClass(obj: IDPtr, cls: IDPtr): ObjcClass {.cdecl, importc.}
+template setClass*(obj: IDPtr, cls: ObjcClass): untyped =
   object_setClass(obj, cls)
 
 proc objc_getClassList(
@@ -696,7 +696,7 @@ proc objc_lookUpClass(name: cstring): ObjcClass {.cdecl, importc.}
 template lookUpClass*(name: cstring): untyped =
   objc_lookUpClass(name.cstring)
 
-template getClass*(obj: ID): untyped =
+template getClass*(obj: IDPtr): untyped =
   object_getClass(obj)
 
 proc objc_getRequiredClass(name: cstring): ObjcClass {.cdecl, importc.}
@@ -722,24 +722,24 @@ template getOffset*(v: Ivar): untyped =
   ivar_getOffset(v)
 
 proc objc_setAssociatedObject(
-  obj: ID, key: pointer, value: ID, policy: objc_AssociationPolicy
+  obj: IDPtr, key: pointer, value: IDPtr, policy: objc_AssociationPolicy
 ) {.cdecl, importc.}
 
 template setAssociatedObject*(
-    obj: ID, key: pointer, value: ID, policy: objc_AssociationPolicy
+    obj: IDPtr, key: pointer, value: IDPtr, policy: objc_AssociationPolicy
 ) =
   objc_setAssociatedObject(obj, key, value, policy)
 
-proc objc_getAssociatedObject(obj: ID, key: pointer): ID {.cdecl, importc.}
-template getAssociatedObject*(obj: ID, key: pointer): untyped =
+proc objc_getAssociatedObject(obj: IDPtr, key: pointer): IDPtr {.cdecl, importc.}
+template getAssociatedObject*(obj: IDPtr, key: pointer): untyped =
   objc_getAssociatedObject(obj, key)
 
-proc objc_removeAssociatedObjects(obj: ID) {.cdecl, importc.}
-template removeAssociatedObjects*(obj: ID) =
+proc objc_removeAssociatedObjects(obj: IDPtr) {.cdecl, importc.}
+template removeAssociatedObjects*(obj: IDPtr) =
   objc_removeAssociatedObjects(obj)
 
-proc method_invoke*(receiver: ID, m: Method): ID {.cdecl, importc, varargs.}
-proc method_invoke_stret*(receiver: ID, m: Method) {.cdecl, importc, varargs.}
+proc method_invoke*(receiver: IDPtr, m: Method): IDPtr {.cdecl, importc, varargs.}
+proc method_invoke_stret*(receiver: IDPtr, m: Method) {.cdecl, importc, varargs.}
 
 proc sel_getName*(sel: SEL): cstring {.cdecl, importc.}
 template getName*(sel: SEL): untyped =
@@ -845,7 +845,7 @@ proc imageNames*(): seq[string] =
   for i in 0 ..< result.len:
     result[i] = $images[i]
 
-proc class_getImageName(cls: ID): cstring {.cdecl, importc.}
+proc class_getImageName(cls: IDPtr): cstring {.cdecl, importc.}
 template getImageName*(cls: ObjcClass): untyped =
   $class_getImageName(cls)
 
@@ -1065,21 +1065,21 @@ proc attributeValue*(property: Property, attributeName: string): string =
   result = $res
   c_free(res)
 
-proc objc_enumerationMutation(obj: ID) {.cdecl, importc.}
-template enumerationMutation*(obj: ID) =
+proc objc_enumerationMutation(obj: IDPtr) {.cdecl, importc.}
+template enumerationMutation*(obj: IDPtr) =
   objc_enumerationMutation(obj)
 
-type EnumerationHandler = proc(a2: ID) {.cdecl.}
+type EnumerationHandler = proc(a2: IDPtr) {.cdecl.}
 
 proc objc_setEnumerationMutationHandler(handler: EnumerationHandler) {.cdecl, importc.}
 template setEnumerationMutationHandler*(handler: EnumerationHandler) =
   objc_setEnumerationMutationHandler(handler)
 
-proc imp_implementationWithBlock(blok: ID): IMP {.cdecl, importc.}
-template implementationWithBlock*(blok: ID): untyped =
+proc imp_implementationWithBlock(blok: IDPtr): IMP {.cdecl, importc.}
+template implementationWithBlock*(blok: IDPtr): untyped =
   imp_implementationWithBlock(blok)
 
-proc imp_getBlock(anImp: IMP): ID {.cdecl, importc.}
+proc imp_getBlock(anImp: IMP): IDPtr {.cdecl, importc.}
 template getBlock*(anImp: IMP): untyped =
   imp_getBlock(anImp)
 
@@ -1087,12 +1087,12 @@ proc imp_removeBlock(anImp: IMP): bool {.cdecl, importc.}
 template removeBlock*(anImp: IMP): untyped =
   imp_removeBlock(anImp)
 
-proc objc_loadWeak(location: var ID): ID {.cdecl, importc.}
-template loadWeak*(location: var ID): untyped =
+proc objc_loadWeak(location: var IDPtr): IDPtr {.cdecl, importc.}
+template loadWeak*(location: var IDPtr): untyped =
   objc_loadWeak(location)
 
-proc objc_storeWeak(location: var ID, obj: ID): ID {.cdecl, importc.}
-template storeWeak*(location: var ID, obj: ID): untyped =
+proc objc_storeWeak(location: var IDPtr, obj: IDPtr): IDPtr {.cdecl, importc.}
+template storeWeak*(location: var IDPtr, obj: IDPtr): untyped =
   objc_storeWeak(location, obj)
 
 {.push stackTrace: off.}
@@ -1269,7 +1269,7 @@ proc buildSuperMacroCall(obj, msg, retType: NimNode): NimNode =
     result.add(a)
 
 macro callSuper*(obj: NSObject, op: SEL, args: varargs[typed]): untyped =
-  result = buildCallSuper(bindSym"ID", obj, op, args, ObjCMsgSendFlavor.normal)
+  result = buildCallSuper(bindSym"IDPtr", obj, op, args, ObjCMsgSendFlavor.normal)
 
 macro callSuper*(
     retType: typedesc, obj: NSObject, op: SEL, args: varargs[typed]
@@ -1298,7 +1298,7 @@ macro objcAux(
     senderParams.add(newIdentDefs(ident"_", ident"pointer"))
   else:
     senderParams.add(copyNimTree(body.params[0]))
-  senderParams.add(newIdentDefs(ident"self", bindSym"ID"))
+  senderParams.add(newIdentDefs(ident"self", bindSym"IDPtr"))
   senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
 
   let procTy = newTree(nnkProcTy, senderParams)
@@ -1368,29 +1368,29 @@ macro objc*(name: untyped, body: untyped = nil): untyped =
 
 #proc NSLog*(str: NSString) {.importc, varargs.}
 
-proc retainAux(o: ID): ID {.raises: [].} =
+proc retainAux(o: IDPtr): IDPtr {.raises: [].} =
   objc_msgSend(o, sel_registerName("retain"))
 
-proc retainRaw(o: ID) {.raises: [].} =
+proc retainRaw(o: IDPtr) {.raises: [].} =
   discard objc_msgSend(o, sel_registerName("retain"))
 
-proc releaseAux(o: ID) {.raises: [].} =
+proc releaseAux(o: IDPtr) {.raises: [].} =
   discard objc_msgSend(o, sel_registerName("release"))
 
-proc retainCountAux(o: ID): NSUInteger {.raises: [].} =
+proc retainCountAux(o: IDPtr): NSUInteger {.raises: [].} =
   cast[NSUInteger](objc_msgSend(o, sel_registerName("retainCount")))
 
 proc superclass*(o: NSObject): ObjcClass {.objc.}
 proc alloc*[T: NSObject](n: typedesc[T]): T {.objc: "alloc".}
-proc alloc*(cls: ObjcClass): ID {.inline.} =
+proc alloc*(cls: ObjcClass): IDPtr {.inline.} =
   objc_msgSend(cls, sel_registerName("alloc"))
 
 proc new*[T: NSObject](n: typedesc[T]): T {.objc: "new".}
-proc new*(cls: ObjcClass): ID {.inline.} =
+proc new*(cls: ObjcClass): IDPtr {.inline.} =
   objc_msgSend(cls, sel_registerName("new"))
 
 proc autorelease*[T: NSObject](n: T): T {.objc: "autorelease", discardable.}
-proc initRaw(v: ID): ID {.inline.} =
+proc initRaw(v: IDPtr): IDPtr {.inline.} =
   objc_msgSend(v, sel_registerName("init"))
 
 proc init*[T: NSObject](v: var T): T {.inline.} =
@@ -1417,17 +1417,17 @@ proc callSuperAs*[T, A0](obj: NSObject, op: SEL, arg0: A0): T {.inline.} =
     superObj, op, arg0
   )
 
-proc callSuperId*(obj: NSObject, op: SEL): ID {.inline.} =
-  callSuperAs[ID](obj, op)
+proc callSuperId*(obj: NSObject, op: SEL): IDPtr {.inline.} =
+  callSuperAs[IDPtr](obj, op)
 
-proc callSuperId*[A0](obj: NSObject, op: SEL, arg0: A0): ID {.inline.} =
-  callSuperAs[ID, A0](obj, op, arg0)
+proc callSuperId*[A0](obj: NSObject, op: SEL, arg0: A0): IDPtr {.inline.} =
+  callSuperAs[IDPtr, A0](obj, op, arg0)
 
 template callSuperVoid*(obj: NSObject, op: SEL): untyped =
-  discard callSuperAs[ID](obj, op)
+  discard callSuperAs[IDPtr](obj, op)
 
 template callSuperVoid*[A0](obj: NSObject, op: SEL, arg0: A0): untyped =
-  discard callSuperAs[ID, A0](obj, op, arg0)
+  discard callSuperAs[IDPtr, A0](obj, op, arg0)
 
 proc superDealloc*(obj: NSObject) {.inline.} =
   let deallocSel = sel_registerName("dealloc")
@@ -1435,7 +1435,7 @@ proc superDealloc*(obj: NSObject) {.inline.} =
 
 proc alloc*[T](o: typedesc[T]): T {.objc: "alloc".}
 
-proc isKindOfClassAux(o: NSObject, c: ID): bool {.objc: "isKindOfClass:".}
+proc isKindOfClassAux(o: NSObject, c: IDPtr): bool {.objc: "isKindOfClass:".}
 proc isKindOfClass*(o: NSObject, c: ObjcClass): bool {.inline.} =
   if c.isNil:
     return false
@@ -1499,7 +1499,7 @@ proc encodeType*[T](t: typedesc[T]): string =
     return "#"
   elif t is NSObject:
     return "@"
-  elif t is ID:
+  elif t is IDPtr:
     return "@"
   elif t is SEL:
     return ":"

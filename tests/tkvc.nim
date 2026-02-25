@@ -59,8 +59,8 @@ objcImpl:
     clearAssociatedRef[PersonStateRef](self)
     superDealloc(self)
 
-  # KVC getter: "name" -> object ID (encoding @)
-  method name(self: NXKVCTestPerson): ID =
+  # KVC getter: "name" -> object IDPtr (encoding @)
+  method name(self: NXKVCTestPerson): IDPtr =
     let state = getAssociatedRef[PersonStateRef](self, PersonStateRef)
     if state.isNil or not state.hasName:
       return nil
@@ -153,7 +153,7 @@ objcImpl:
     clearAssociatedRef[ContainerStateRef](self)
     superDealloc(self)
 
-  method person(self: NXKVCTestContainer): ID =
+  method person(self: NXKVCTestContainer): IDPtr =
     let state = getAssociatedRef[ContainerStateRef](self, ContainerStateRef)
     if state.isNil:
       return nil
@@ -181,8 +181,8 @@ objcImpl:
   method dealloc(self: NXKVCTestTag) =
     superDealloc(self)
 
-  # Returns object ID — tests the "@"-encoding path
-  method tag(self: NXKVCTestTag): ID =
+  # Returns object IDPtr — tests the "@"-encoding path
+  method tag(self: NXKVCTestTag): IDPtr =
     var boxed = boxNSObject("read-only-tag")
     result = boxed.value
     boxed.value = nil

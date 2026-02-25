@@ -4,7 +4,7 @@ import ./controls
 objcImpl:
   type NSTextField* = object of NSControl
     xStringValue {.set: setStringValue, get: stringValue.}: NSString
-    xDelegate {.set: setDelegate, get: delegate.}: ID
+    xDelegate {.set: setDelegate, get: delegate.}: IDPtr
     xErrorAction: SEL
     editable {.set: setEditable, get: isEditable.}: bool
     selectable {.set: setSelectable, get: isSelectable.}: bool
@@ -14,8 +14,8 @@ objcImpl:
     bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     drawsBg {.set: setDrawsBackground, get: drawsBackground.}: bool
     scrollable {.set: setScrollable, get: isScrollable.}: bool
-    xPreviousText {.set: setPreviousText, get: previousText.}: ID
-    xNextText {.set: setNextText, get: nextText.}: ID
+    xPreviousText {.set: setPreviousText, get: previousText.}: IDPtr
+    xNextText {.set: setNextText, get: nextText.}: IDPtr
 
   method init*(self: var NSTextField): NSTextField =
     result =
