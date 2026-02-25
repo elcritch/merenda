@@ -1,216 +1,577 @@
-import std/strutils
+import std/[parseutils, strutils]
+
 import ./runtime
-import ./views
+
+type NSIntValueProvider* =
+  concept sender
+      sender.intValue() is cint
+
+proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
+  NSFocusRingTypeExterior
+
+proc defaultMenu*(t: typedesc[NSCell]): NSMenu =
+  NSMenu(value: nil)
+
+proc prefersTrackingUntilMouseUp*(t: typedesc[NSCell]): bool =
+  false
+
+proc sendId(obj: ID, op: SEL): ID {.inline.} =
+  ID(
+    value: cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
+      obj.value, op
+    )
+  )
+
+proc sendId(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
+  ID(
+    value: cast[proc(self: IDPtr, op: SEL, arg0: IDPtr): IDPtr {.cdecl, varargs.}](objc_msgSend)(
+      obj.value, op, arg0.value
+    )
+  )
+
+proc sendInt(obj: ID, op: SEL): int {.inline.} =
+  cast[proc(self: IDPtr, op: SEL): int {.cdecl, varargs.}](objc_msgSend)(obj.value, op)
+
+proc sendFloat(obj: ID, op: SEL): float32 {.inline.} =
+  cast[proc(self: IDPtr, op: SEL): float32 {.cdecl, varargs.}](objc_msgSend)(
+    obj.value, op
+  )
+
+proc sendDouble(obj: ID, op: SEL): cdouble {.inline.} =
+  cast[proc(self: IDPtr, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)(
+    obj.value, op
+  )
+
+proc replaceOwned(slot: var ID, next: ID) {.inline.} =
+  slot.value = replacedOwnedId(slot.value, next.value)
+
+proc replaceOwned(slot: var ID, next: NSObject) {.inline.} =
+  slot.value = replacedOwnedId(slot.value, next.value)
+
+proc clearOwned(slot: var ID) {.inline.} =
+  slot.value = replacedOwnedId(slot.value, nil)
+
+proc parseIntegerPrefix(text: string): int =
+  var offset = 0
+  while offset < text.len and text[offset].isSpaceAscii:
+    inc offset
+  var parsed = 0
+  if parseInt(text, parsed, offset) > 0:
+    return parsed
+  0
+
+proc parseFloatPrefix(text: string): float =
+  var offset = 0
+  while offset < text.len and text[offset].isSpaceAscii:
+    inc offset
+  var parsed = 0.0
+  if parseFloat(text, parsed, offset) > 0:
+    return parsed
+  0.0
+
+proc cellTypeName(cellType: NSCellType): string =
+  case cellType
+  of NSNullCellType:
+    "NSNullCellType"
+  of NSTextCellType:
+    "NSTextCellType"
+  of NSImageCellType:
+    "NSImageCellType"
+  else:
+    "Unknown: " & $cellType.int
 
 objcImpl:
   type NSCell* = object of NSObject
-    xControlView {.set: setControlView, get: controlView.}: NSView
-    cellType {.set: setType, get: `type`.}: int
-    stateValue {.get: state.}: int
-    mixedAllowed: bool
+    xState: int
+    xFont {.get: font.}: NSFont
+    xEntryType {.get: entryType.}: int
+    xObjectValue: ID
+    xImage {.get: image.}: NSImage
+    xTextAlignment {.set: setAlignment, get: alignment.}: NSTextAlignment
+    xWritingDirection {.set: setBaseWritingDirection, get: baseWritingDirection.}:
+      NSWritingDirection
+    xCellType: NSCellType
+    xFormatter {.get: formatter.}: NSFormatter
+    xTitleOrAttributedTitle: ID
+    xRepresentedObject: ID
+    xControlSize {.set: setControlSize, get: controlSize.}: NSControlSize
+    xFocusRingType {.set: setFocusRingType, get: focusRingType.}: NSFocusRingType
+    xLineBreakMode {.set: setLineBreakMode, get: lineBreakMode.}: NSLineBreakMode
+    xBackgroundStyle {.set: setBackgroundStyle, get: backgroundStyle.}:
+      NSBackgroundStyle
+    xControlView {.get: controlView.}: NSView
 
-    enabled {.set: setEnabled, get: isEnabled.}: bool
-    editable {.get: isEditable.}: bool
-    selectable {.get: isSelectable.}: bool
-
-    bordered {.get: isBordered.}: bool
-    bezeled {.get: isBezeled.}: bool
-
-    scrollable {.get: isScrollable.}: bool
-    continuous {.set: setContinuous, get: isContinuous.}: bool
-    highlighted {.get: isHighlighted.}: bool
-
-    cellRefusesFirstResponder {.
-      set: setRefusesFirstResponder, get: refusesFirstResponder
+    xEnabled {.set: setEnabled, get: isEnabled.}: bool
+    xEditable {.set: setEditable, get: isEditable.}: bool
+    xRichText: bool
+    xSelectable {.set: setSelectable, get: isSelectable.}: bool
+    xScrollable {.set: setScrollable, get: isScrollable.}: bool
+    xBordered {.get: isBordered.}: bool
+    xBezeled {.set: setBezeled, get: isBezeled.}: bool
+    xHighlighted {.set: setHighlighted, get: isHighlighted.}: bool
+    xShowsFirstResponder {.set: setShowsFirstResponder, get: showsFirstResponder.}: bool
+    xRefusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
+      bool
+    xContinuous {.set: setContinuous, get: isContinuous.}: bool
+    xAllowsMixedState {.set: setAllowsMixedState, get: allowsMixedState.}: bool
+    xSendsActionOnEndEditing {.
+      set: setSendsActionOnEndEditing, get: sendsActionOnEndEditing
     .}: bool
-    alignment: NSTextAlignment
-    titleId: IDPtr
-    objectValueId: IDPtr
-    representedObjectId: IDPtr
+    xHasValidObjectValue {.get: hasValidObjectValue.}: bool
 
-  method init*(self: var NSCell): NSCell =
+  method initTextCell*(self: var NSCell, string: NSString): NSCell =
     result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.xControlView = NSView(value: nil)
-    result.cellType = 1
-    result.stateValue = NSOffState
-    result.mixedAllowed = false
-    result.enabled = true
-    result.editable = false
-    result.selectable = false
-    result.scrollable = false
-    result.bordered = false
-    result.bezeled = false
-    result.continuous = false
-    result.highlighted = false
-    result.cellRefusesFirstResponder = false
-    result.alignment = NSNaturalTextAlignment
-    result.titleId = retainId(@ns"".value)
-    result.objectValueId = retainId(@ns"".value)
-    result.representedObjectId = nil
+    initIvarFields(result)
 
-  method initTextCell*(self: var NSCell, value: NSString): NSCell =
-    result = self.init()
+    result.xFocusRingType = NSCell.defaultFocusRingType()
+    result.xFont = NSFont(value: nil)
+    result.xObjectValue.value = nil
+    replaceOwned(result.xObjectValue, ID(value: string.value))
+    result.xImage = NSImage(value: nil)
+    result.xCellType = NSTextCellType
+    result.xFormatter = NSFormatter(value: nil)
+    result.xTitleOrAttributedTitle.value = nil
+    result.xRepresentedObject.value = nil
+    result.xControlView = NSView(value: nil)
+    result.xEnabled = true
+    result.xHasValidObjectValue = true
+    result.xWritingDirection = NSWritingDirectionNatural
+    result.xLineBreakMode = NSLineBreakByWordWrapping
+
+  method initImageCell*(self: var NSCell, image: NSImage): NSCell =
+    result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.titleId = replacedOwnedId(result.titleId, value.value)
-    result.objectValueId = replacedOwnedId(result.objectValueId, value.value)
+    initIvarFields(result)
 
-  method target*(self: NSCell): IDPtr =
-    discard self
-    nil
+    result.xFocusRingType = NSCell.defaultFocusRingType()
+    result.xFont = NSFont(value: nil)
+    result.xObjectValue.value = nil
+    result.xImage = image
+    result.xCellType = NSImageCellType
+    result.xFormatter = NSFormatter(value: nil)
+    result.xTitleOrAttributedTitle.value = nil
+    result.xRepresentedObject.value = nil
+    result.xControlView = NSView(value: nil)
+    result.xEnabled = true
+    result.xHasValidObjectValue = true
+    result.xLineBreakMode = NSLineBreakByWordWrapping
+
+  method init*(self: var NSCell): NSCell =
+    result = self.initImageCell(NSImage(value: nil))
+
+  method initWithCoder*(self: var NSCell, coder: ID): NSCell =
+    result = self.init()
+
+  method encodeWithCoder*(self: NSCell, coder: ID) =
+    return
+
+  method `type`*(self: NSCell): NSCellType =
+    self.xCellType
+
+  method state*(self: NSCell): int =
+    if self.xAllowsMixedState:
+      if self.xState < 0:
+        return NSMixedState
+      if self.xState > 0:
+        return NSOnState
+      return NSOffState
+    (abs(self.xState) > 0).int
+
+  method target*(self: NSCell): ID =
+    ID(value: nil)
 
   method action*(self: NSCell): SEL =
-    discard self
     nil
 
   method tag*(self: NSCell): int =
-    discard self
-    0
+    -1
 
-  method setTarget*(self: NSCell, target: IDPtr) =
-    discard self
-    discard target
-
-  method setAction*(self: NSCell, action: SEL) =
-    discard self
-    discard action
-
-  method setTag*(self: NSCell, tag: int) =
-    discard self
-    discard tag
-
-  method setState*(self: NSCell, value: int) =
-    self.stateValue = normalizeButtonState(value, self.mixedAllowed)
-
-  method nextState*(self: NSCell): int =
-    if self.mixedAllowed:
-      case self.stateValue
-      of NSOffState: NSOnState
-      of NSOnState: NSMixedState
-      else: NSOffState
-    else:
-      if self.stateValue == NSOnState: NSOffState else: NSOnState
-
-  method setNextState*(self: NSCell) =
-    self.stateValue = self.nextState()
-
-  method allowsMixedState*(self: NSCell): bool =
-    self.mixedAllowed
-
-  method setAllowsMixedState*(self: NSCell, allow: bool) =
-    self.mixedAllowed = allow
-    self.stateValue = normalizeButtonState(self.stateValue, allow)
+  method wraps*(self: NSCell): bool =
+    self.xLineBreakMode in {NSLineBreakByWordWrapping, NSLineBreakByCharWrapping}
 
   method title*(self: NSCell): NSString =
-    if self.titleId.isNil:
-      return @ns""
-    ownFromId[NSString](self.titleId)
-
-  method setTitle*(self: NSCell, value: NSString) =
-    self.titleId = replacedOwnedId(self.titleId, value.value)
-    self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
+    self.stringValue()
 
   method objectValue*(self: NSCell): NSObject =
-    if self.objectValueId.isNil:
+    if not self.xHasValidObjectValue or self.xObjectValue.isNil:
       return NSObject(value: nil)
-    ownFromId[NSObject](self.objectValueId)
-
-  method setObjectValue*(self: NSCell, value: NSObject) =
-    self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
-    if value.value.isNil:
-      self.titleId = replacedOwnedId(self.titleId, @ns"".value)
-    else:
-      let asString = asType[NSString](value.value)
-      self.titleId = replacedOwnedId(self.titleId, asString.value)
+    ownFromId[NSObject](self.xObjectValue)
 
   method stringValue*(self: NSCell): NSString =
-    self.title()
+    if not self.xFormatter.isNil:
+      let formatter = asType[NSObject](self.xFormatter.value)
+      if formatter.respondsToSelector("stringForObjectValue:"):
+        let formatted = sendId(
+          self.xFormatter, getSelector("stringForObjectValue:"), self.xObjectValue
+        )
+        if not formatted.isNil:
+          return ownFromId[NSString](formatted)
 
-  method setStringValue*(self: NSCell, value: NSString) =
-    self.setTitle(value)
+    if self.xObjectValue.isNil:
+      return retain(@ns"")
+
+    let valueObj = asType[NSObject](self.xObjectValue.value)
+    if valueObj.isKindOfClass(NSAttributedString):
+      let strValue = sendId(self.xObjectValue, getSelector("string"))
+      if not strValue.isNil:
+        return ownFromId[NSString](strValue)
+      return retain(@ns"")
+
+    if valueObj.isKindOfClass(NSString):
+      return ownFromId[NSString](self.xObjectValue)
+
+    if valueObj.respondsToSelector("description"):
+      let descriptionId = sendId(self.xObjectValue, getSelector("description"))
+      if not descriptionId.isNil:
+        return ownFromId[NSString](descriptionId)
+    retain(@ns"")
 
   method intValue*(self: NSCell): cint =
-    try:
-      parseInt($self.stringValue()).cint
-    except ValueError:
-      0.cint
-
-  method integerValue*(self: NSCell): int =
-    self.intValue().int
+    if self.xObjectValue.isNil:
+      return 0.cint
+    let valueObj = asType[NSObject](self.xObjectValue.value)
+    if valueObj.isKindOfClass(NSAttributedString):
+      return parseIntegerPrefix($self.stringValue()).cint
+    if valueObj.isKindOfClass(NSString):
+      return parseIntegerPrefix($ownFromId[NSString](self.xObjectValue)).cint
+    if valueObj.respondsToSelector("intValue"):
+      return sendInt(self.xObjectValue, getSelector("intValue")).cint
+    0.cint
 
   method floatValue*(self: NSCell): float32 =
-    try:
-      parseFloat($self.stringValue()).float32
-    except ValueError:
-      0.0
+    if self.xObjectValue.isNil:
+      return 0.0
+    let valueObj = asType[NSObject](self.xObjectValue.value)
+    if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
+      return parseFloatPrefix($self.stringValue()).float32
+    if valueObj.respondsToSelector("floatValue"):
+      return sendFloat(self.xObjectValue, getSelector("floatValue"))
+    0.0
 
   method doubleValue*(self: NSCell): float =
-    try:
-      parseFloat($self.stringValue()).float
-    except ValueError:
-      0.0
+    if self.xObjectValue.isNil:
+      return 0.0
+    let valueObj = asType[NSObject](self.xObjectValue.value)
+    if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
+      return parseFloatPrefix($self.stringValue())
+    if valueObj.respondsToSelector("doubleValue"):
+      return sendDouble(self.xObjectValue, getSelector("doubleValue")).float
+    0.0
 
-  method setIntValue*(self: NSCell, value: cint) =
-    self.setStringValue(ns($value))
+  method integerValue*(self: NSCell): int =
+    if self.xObjectValue.isNil:
+      return 0
+    let valueObj = asType[NSObject](self.xObjectValue.value)
+    if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
+      return parseIntegerPrefix($self.stringValue())
+    if valueObj.respondsToSelector("integerValue"):
+      return sendInt(self.xObjectValue, getSelector("integerValue"))
+    0
 
-  method setIntegerValue*(self: NSCell, value: int) =
-    self.setStringValue(ns($value))
-
-  method setFloatValue*(self: NSCell, value: float32) =
-    self.setStringValue(ns($value))
-
-  method setDoubleValue*(self: NSCell, value: float) =
-    self.setStringValue(ns($value))
+  method attributedStringValue*(self: NSCell): NSAttributedString =
+    if self.xObjectValue.isNil:
+      return NSAttributedString(value: nil)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
+    if valueObj.isKindOfClass(NSAttributedString):
+      return ownFromId[NSAttributedString](self.xObjectValue)
+    NSAttributedString(value: nil)
 
   method representedObject*(self: NSCell): NSObject =
-    if self.representedObjectId.isNil:
+    if self.xRepresentedObject.isNil:
       return NSObject(value: nil)
-    ownFromId[NSObject](self.representedObjectId)
+    ownFromId[NSObject](self.xRepresentedObject)
 
-  method setRepresentedObject*(self: NSCell, value: NSObject) =
-    self.representedObjectId = replacedOwnedId(self.representedObjectId, value.value)
+  method setControlView*(self: NSCell, view: NSView) =
+    self.xControlView = view
 
-  method takeStringValueFrom*(self: NSCell, sender: NSCell) =
-    if sender.isNil:
+  method setType*(self: NSCell, cellType: NSCellType) =
+    if self.xCellType != cellType:
+      self.xCellType = cellType
+      if cellType == NSTextCellType:
+        self.setTitle(@ns"Cell")
+        self.setFont(NSFont(value: nil))
+
+  method setState*(self: NSCell, value: int) =
+    if self.xAllowsMixedState:
+      if value < 0:
+        self.xState = NSMixedState
+      elif value > 0:
+        self.xState = NSOnState
+      else:
+        self.xState = NSOffState
+    else:
+      self.xState = (abs(value) > 0).int
+
+  method nextState*(self: NSCell): int =
+    if self.xAllowsMixedState:
+      let value = self.state()
+      return value - (if value == NSMixedState: -2 else: 1)
+    1 - self.state()
+
+  method setNextState*(self: NSCell) =
+    self.xState = self.nextState()
+
+  method setTarget*(self: NSCell, target: ID) =
+    raise newException(CatchableError, "-[NSCell setTarget:] is unimplemented")
+
+  method setAction*(self: NSCell, action: SEL) =
+    raise newException(CatchableError, "-[NSCell setAction:] is unimplemented")
+
+  method setTag*(self: NSCell, tag: int) =
+    raise newException(CatchableError, "-[NSCell setTag:] is unimplemented")
+
+  method setEntryType*(self: NSCell, entryType: int) =
+    self.xEntryType = entryType
+    self.setType(NSTextCellType)
+
+  method setFormatter*(self: NSCell, formatter: NSFormatter) =
+    self.xFormatter = formatter
+
+  method setFont*(self: NSCell, font: NSFont) =
+    self.xFont = font
+
+  method setImage*(self: NSCell, image: NSImage) =
+    if not image.isNil:
+      self.setType(NSImageCellType)
+    self.xImage = image
+
+  method setWraps*(self: NSCell, wraps: bool) =
+    self.xLineBreakMode =
+      if wraps: NSLineBreakByWordWrapping else: NSLineBreakByClipping
+
+  method setTitle*(self: NSCell, title: NSString) =
+    self.setStringValue(title)
+
+  method setBordered*(self: NSCell, flag: bool) =
+    self.xBordered = flag
+    self.xBezeled = false
+
+  method setFloatingPointFormat*(
+      self: NSCell, fpp: bool, left {.kw("left").}: uint, right {.kw("right").}: uint
+  ) =
+    return
+
+  method setObjectValue*(self: NSCell, value: NSObject) =
+    let controlView = self.controlView()
+    if not controlView.isNil:
+      willChangeValueForKey(asType[NSObject](controlView), "objectValue")
+    replaceOwned(self.xObjectValue, value)
+    replaceOwned(self.xTitleOrAttributedTitle, value)
+    self.xHasValidObjectValue = true
+    if not controlView.isNil:
+      didChangeValueForKey(asType[NSObject](controlView), "objectValue")
+
+  method setStringValue*(self: NSCell, value: NSString) =
+    if value.isNil:
+      raise newException(CatchableError, "-[NSCell setStringValue:] value==nil")
+
+    self.setType(NSTextCellType)
+
+    if not self.xFormatter.isNil:
+      let formatterObj = asType[NSObject](self.xFormatter.value)
+      if formatterObj.respondsToSelector("getObjectValue:forString:errorDescription:"):
+        var formatted: IDPtr = nil
+        var errorDesc: IDPtr = nil
+        let ok = cast[proc(
+          self: IDPtr,
+          op: SEL,
+          objectValue: ptr IDPtr,
+          stringValue: IDPtr,
+          errorDescription: ptr IDPtr,
+        ): bool {.cdecl, varargs.}](objc_msgSend)(
+          self.xFormatter.value,
+          getSelector("getObjectValue:forString:errorDescription:"),
+          addr formatted,
+          value.value,
+          addr errorDesc,
+        )
+        if not ok:
+          self.xHasValidObjectValue = false
+          return
+        self.setObjectValue(ownFromId[NSObject](formatted))
+        return
+
+    self.setObjectValue(value)
+
+  method setIntValue*(self: NSCell, value: cint) =
+    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+
+  method setFloatValue*(self: NSCell, value: float32) =
+    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+
+  method setDoubleValue*(self: NSCell, value: float) =
+    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+
+  method setIntegerValue*(self: NSCell, value: int) =
+    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+
+  method setAttributedStringValue*(self: NSCell, value: NSAttributedString) =
+    replaceOwned(self.xObjectValue, asType[NSObject](value.value))
+    replaceOwned(self.xTitleOrAttributedTitle, asType[NSObject](value.value))
+    self.xHasValidObjectValue = true
+
+  method setRepresentedObject*(self: NSCell, representedObject: NSObject) =
+    replaceOwned(self.xRepresentedObject, representedObject)
+
+  method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
+    if sender.isNil or not sender.respondsToSelector("objectValue"):
       return
-    self.setStringValue(sender.stringValue())
+    let nextValue = sendId(sender, getSelector("objectValue"))
+    self.setObjectValue(ownFromId[NSObject](nextValue))
 
-  method takeIntValueFrom*(self: NSCell, sender: NSCell) =
-    if sender.isNil:
+  method takeStringValueFrom*(self: NSCell, sender: NSObject) =
+    if sender.isNil or not sender.respondsToSelector("stringValue"):
       return
-    self.setIntValue(sender.intValue())
+    let nextValue = sendId(sender, getSelector("stringValue"))
+    self.setStringValue(ownFromId[NSString](nextValue))
 
-  method takeIntegerValueFrom*(self: NSCell, sender: NSCell) =
-    if sender.isNil:
+  method takeIntValueFrom*(self: NSCell, sender: NSObject) =
+    if sender.isNil or not sender.respondsToSelector("intValue"):
       return
-    self.setIntegerValue(sender.integerValue())
+    self.setIntValue(sendInt(sender, getSelector("intValue")).cint)
 
-  method takeFloatValueFrom*(self: NSCell, sender: NSCell) =
-    if sender.isNil:
+  method takeFloatValueFrom*(self: NSCell, sender: NSObject) =
+    if sender.isNil or not sender.respondsToSelector("floatValue"):
       return
-    self.setFloatValue(sender.floatValue())
+    self.setFloatValue(sendFloat(sender, getSelector("floatValue")))
 
-  method takeDoubleValueFrom*(self: NSCell, sender: NSCell) =
-    if sender.isNil:
+  method takeDoubleValueFrom*(self: NSCell, sender: NSObject) =
+    if sender.isNil or not sender.respondsToSelector("doubleValue"):
       return
-    self.setDoubleValue(sender.doubleValue())
+    self.setDoubleValue(sendDouble(sender, getSelector("doubleValue")).float)
+
+  method takeIntegerValueFrom*(self: NSCell, sender: NSObject) =
+    if sender.isNil or not sender.respondsToSelector("integerValue"):
+      return
+    self.setIntegerValue(sendInt(sender, getSelector("integerValue")))
+
+  method cellSize*(self: NSCell): NSSize =
+    nsSize(10000, 10000)
+
+  method cellSizeForBounds*(self: NSCell, rect: NSRect): NSSize =
+    let size = self.cellSize()
+    nsSize(min(rect.size.width, size.width), min(rect.size.height, size.height))
+
+  method imageRectForBounds*(self: NSCell, rect: NSRect): NSRect =
+    rect
+
+  method titleRectForBounds*(self: NSCell, rect: NSRect): NSRect =
+    rect
+
+  method drawingRectForBounds*(self: NSCell, rect: NSRect): NSRect =
+    rect
+
+  method drawInteriorWithFrame*(
+      self: NSCell, frame: NSRect, view {.kw("inView").}: NSView
+  ) =
+    return
+
+  method drawWithFrame*(self: NSCell, frame: NSRect, view {.kw("inView").}: NSView) =
+    self.drawInteriorWithFrame(self.drawingRectForBounds(frame), view)
+
+  method highlight*(
+      self: NSCell,
+      highlight: bool,
+      frame {.kw("withFrame").}: NSRect,
+      view {.kw("inView").}: NSView,
+  ) =
+    self.xHighlighted = highlight
+
+  method startTrackingAt*(
+      self: NSCell, startPoint: NSPoint, view {.kw("inView").}: NSView
+  ): bool =
+    true
+
+  method continueTracking*(
+      self: NSCell,
+      lastPoint: NSPoint,
+      currentPoint {.kw("at").}: NSPoint,
+      view {.kw("inView").}: NSView,
+  ): bool =
+    true
+
+  method stopTracking*(
+      self: NSCell,
+      lastPoint: NSPoint,
+      stopPoint {.kw("at").}: NSPoint,
+      view {.kw("inView").}: NSView,
+      mouseIsUp {.kw("mouseIsUp").}: bool,
+  ) =
+    return
+
+  method trackMouse*(
+      self: NSCell,
+      event: NSEvent,
+      frame {.kw("inRect").}: NSRect,
+      view {.kw("ofView").}: NSView,
+      untilMouseUp {.kw("untilMouseUp").}: bool,
+  ): bool =
+    if event.isNil or view.isNil:
+      return false
+    if not self.startTrackingAt(nsPoint(0, 0), view):
+      return false
+    self.stopTracking(nsPoint(0, 0), nsPoint(0, 0), view, true)
+    true
+
+  method setUpFieldEditorAttributes*(self: NSCell, editor: NSText): NSText =
+    editor
+
+  method editWithFrame*(
+      self: NSCell,
+      frame: NSRect,
+      view {.kw("inView").}: NSView,
+      editor {.kw("editor").}: NSText,
+      delegate {.kw("delegate").}: ID,
+      event {.kw("event").}: NSEvent,
+  ) =
+    return
+
+  method selectWithFrame*(
+      self: NSCell,
+      frame: NSRect,
+      view {.kw("inView").}: NSView,
+      editor {.kw("editor").}: NSText,
+      delegate {.kw("delegate").}: ID,
+      location {.kw("start").}: int,
+      length {.kw("length").}: int,
+  ) =
+    return
+
+  method endEditing*(self: NSCell, editor: NSText) =
+    if editor.isNil:
+      return
+    let editorObj = asType[NSObject](editor.value)
+    if editorObj.respondsToSelector("string"):
+      self.setStringValue(ownFromId[NSString](sendId(editor, getSelector("string"))))
+
+  method resetCursorRect*(self: NSCell, rect: NSRect, view {.kw("inView").}: NSView) =
+    return
+
+  method description*(self: NSCell): NSString =
+    let details =
+      "type: " & cellTypeName(self.xCellType) & ", objectValue: " & $self.stringValue()
+    ns(details)
 
   method dealloc(self: NSCell) {.used.} =
+    self.xFont = NSFont(value: nil)
+    clearOwned(self.xObjectValue)
+    self.xImage = NSImage(value: nil)
+    self.xFormatter = NSFormatter(value: nil)
+    clearOwned(self.xTitleOrAttributedTitle)
+    clearOwned(self.xRepresentedObject)
     self.xControlView = NSView(value: nil)
-    self.titleId = replacedOwnedId(self.titleId, nil)
-    self.objectValueId = replacedOwnedId(self.objectValueId, nil)
-    self.representedObjectId = replacedOwnedId(self.representedObjectId, nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSCell, self, getSelector("dealloc"))
 
 objcImpl:
   type NSActionCell* = object of NSCell
     xActionControlView {.set: setControlView, get: controlView.}: NSView
-    xActionTarget {.set: setTarget, get: target.}: IDPtr
+    xActionTarget {.set: setTarget, get: target.}: ID
     xActionSelector {.set: setAction, get: action.}: SEL
-    actionTagValue {.set: setTag, get: tag.}: int
+    xActionTag {.set: setTag, get: tag.}: int
 
   method init*(self: var NSActionCell): NSActionCell =
     result =
@@ -218,104 +579,109 @@ objcImpl:
     if result.isNil:
       return
     result.xActionControlView = NSView(value: nil)
-    result.xActionTarget = nil
+    result.xActionTarget.value = nil
     result.xActionSelector = nil
-    result.actionTagValue = 0
+    result.xActionTag = -1
 
   method dealloc(self: NSActionCell) {.used.} =
     self.xActionControlView = NSView(value: nil)
-    self.xActionTarget = nil
+    self.xActionTarget.value = nil
     discard callSuperIdFrom(NSActionCell, self, getSelector("dealloc"))
 
 objcImpl:
   type NSButtonCell* = object of NSActionCell
-    buttonTitleId: NSString
-    alternateTitleId: NSString
-    transparent {.set: setTransparent, get: isTransparent.}: bool
-    keyEqId: NSString
-    imagePos {.set: setImagePosition, get: imagePosition.}: int
-    highlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: int
-    showsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
-    imageDimsDisabled {.set: setImageDimsWhenDisabled, get: imageDimsWhenDisabled.}:
+    xButtonTitle: NSString
+    xAlternateTitle: NSString
+    xTransparent {.set: setTransparent, get: isTransparent.}: bool
+    xKeyEquivalent: NSString
+    xImagePosition {.set: setImagePosition, get: imagePosition.}: int
+    xHighlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: int
+    xShowsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
+    xImageDimsWhenDisabled {.set: setImageDimsWhenDisabled, get: imageDimsWhenDisabled.}:
       bool
-    keyEqMods {.set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask.}: int
-    bezel {.set: setBezelStyle, get: bezelStyle.}: int
-    showBorderInside {.
+    xKeyEquivalentModifierMask {.
+      set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask
+    .}: int
+    xBezelStyle {.set: setBezelStyle, get: bezelStyle.}: int
+    xShowsBorderOnlyWhileMouseInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
-    gradient {.set: setGradientType, get: gradientType.}: int
-    imageScale {.set: setImageScaling, get: imageScaling.}: int
-    bgColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
-    periodicDelaySec: float32
-    periodicIntervalSec: float32
+    xGradientType {.set: setGradientType, get: gradientType.}: int
+    xImageScaling {.set: setImageScaling, get: imageScaling.}: int
+    xBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
+    xPeriodicDelaySec: float32
+    xPeriodicIntervalSec: float32
 
   method init*(self: var NSButtonCell): NSButtonCell =
     result =
       asType[NSButtonCell](callSuperIdFrom(NSButtonCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.buttonTitleId = @ns"Button"
-    result.alternateTitleId = @ns""
-    result.transparent = false
-    result.keyEqId = @ns""
-    result.imagePos = 0
-    result.highlightsByMask = 0
-    result.showsStateByMask = 0
-    result.imageDimsDisabled = true
-    result.keyEqMods = 0
-    result.bezel = 0
-    result.showBorderInside = false
-    result.gradient = 0
-    result.imageScale = 0
-    result.bgColor = nsColor(0.0, 0.0, 0.0, 0.0)
-    result.periodicDelaySec = 0.0
-    result.periodicIntervalSec = 0.0
+    result.xButtonTitle = @ns"Button"
+    result.xAlternateTitle = @ns""
+    result.xKeyEquivalent = @ns""
+    result.xImagePosition = NSNoImage
+    result.xImageDimsWhenDisabled = true
+    result.xGradientType = NSGradientNone
+    result.xImageScaling = NSImageScaleProportionallyDown
+    result.xBackgroundColor = nsColor(0.0, 0.0, 0.0, 0.0)
+    result.setObjectValue(asType[NSObject](result.xButtonTitle))
 
   method title*(self: NSButtonCell): NSString =
-    if self.buttonTitleId.isNil:
-      return @ns""
-    retain(self.buttonTitleId)
+    self.xButtonTitle
 
   method setTitle*(self: NSButtonCell, value: NSString) =
-    self.buttonTitleId = retain(value)
-    self.objectValueId = replacedOwnedId(self.objectValueId, value.value)
+    let title =
+      if value.isNil:
+        @ns""
+      else:
+        value
+    self.xButtonTitle = title
+    replaceOwned(self.xObjectValue, asType[NSObject](title.value))
+    replaceOwned(self.xTitleOrAttributedTitle, asType[NSObject](title.value))
+    self.xHasValidObjectValue = true
 
   method alternateTitle*(self: NSButtonCell): NSString =
-    if self.alternateTitleId.isNil:
-      return @ns""
-    retain(self.alternateTitleId)
+    self.xAlternateTitle
 
   method setAlternateTitle*(self: NSButtonCell, value: NSString) =
-    self.alternateTitleId = retain(value)
+    self.xAlternateTitle = (
+      if value.isNil:
+        @ns""
+      else:
+        value
+    )
 
   method keyEquivalent*(self: NSButtonCell): NSString =
-    if self.keyEqId.isNil:
-      return @ns""
-    retain(self.keyEqId)
+    self.xKeyEquivalent
 
   method setKeyEquivalent*(self: NSButtonCell, value: NSString) =
-    self.keyEqId = retain(value)
+    self.xKeyEquivalent = (
+      if value.isNil:
+        @ns""
+      else:
+        value
+    )
 
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
-    discard self
-    discard buttonType
+    return
 
   method setPeriodicDelay*(
       self: NSButtonCell, delay: float32, interval {.kw("interval").}: float32
   ) =
-    self.periodicDelaySec = max(delay, 0.0)
-    self.periodicIntervalSec = max(interval, 0.0)
+    self.xPeriodicDelaySec = max(delay, 0.0)
+    self.xPeriodicIntervalSec = max(interval, 0.0)
 
   method getPeriodicDelay*(
       self: NSButtonCell, delay: ptr float32, interval {.kw("interval").}: ptr float32
   ) =
     if not delay.isNil:
-      delay[] = self.periodicDelaySec
+      delay[] = self.xPeriodicDelaySec
     if not interval.isNil:
-      interval[] = self.periodicIntervalSec
+      interval[] = self.xPeriodicIntervalSec
 
   method setState*(self: NSButtonCell, value: int) =
-    self.stateValue = normalizeButtonState(value, self.mixedAllowed)
+    self.xState = normalizeButtonState(value, self.allowsMixedState())
 
   method stringValue*(self: NSButtonCell): NSString =
     self.title()
@@ -348,7 +714,6 @@ objcImpl:
     self.setState(value.int)
 
   method performClick*(self: NSButtonCell, sender: NSObject) =
-    discard sender
     if self.isNil or not self.isEnabled():
       return
     if self.allowsMixedState():
@@ -368,14 +733,29 @@ objcImpl:
     let action = self.action()
     if targetId.isNil or cast[pointer](action).isNil:
       return
-    let target = asType[NSObject](targetId)
+    let target = asType[NSObject](targetId.value)
     discard performResponderSelector(target, action, asType[NSObject](self.value))
 
   method dealloc(self: NSButtonCell) {.used.} =
-    self.buttonTitleId = NSString(value: nil)
-    self.alternateTitleId = NSString(value: nil)
-    self.keyEqId = NSString(value: nil)
+    self.xButtonTitle = NSString(value: nil)
+    self.xAlternateTitle = NSString(value: nil)
+    self.xKeyEquivalent = NSString(value: nil)
     discard callSuperIdFrom(NSButtonCell, self, getSelector("dealloc"))
+
+proc takeIntValueFrom*[T: NSIntValueProvider](self: NSCell, sender: T) =
+  self.setIntValue(sender.intValue())
+
+proc NSDrawThreePartImage*(
+    frame: NSRect,
+    startCap: NSImage,
+    centerFill: NSImage,
+    endCap: NSImage,
+    vertical: bool,
+    operation: int,
+    alpha: float32,
+    flipped: bool,
+) =
+  return
 
 proc new*(t: typedesc[NSCell]): NSCell =
   var allocated = NSCell.alloc()
