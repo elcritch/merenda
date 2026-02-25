@@ -5,7 +5,7 @@ import ./windows
 
 objcImpl:
   type NSAlert* = object of NSObject
-    xDelegate {.set: setDelegate, get: delegate.}: IDPtr
+    xDelegate {.set: setDelegate, get: delegate.}: ID
     xStyle {.set: setAlertStyle, get: alertStyle.}: int
     xIcon {.set: setIcon, get: icon.}: NSObject
     xMessageText {.get: messageText.}: NSString
@@ -18,14 +18,14 @@ objcImpl:
     xSuppressionButton {.get: suppressionButton.}: NSButton
     xWindow {.get: window.}: NSWindow
     xNeedsLayout: bool
-    xSheetDelegate: IDPtr
+    xSheetDelegate: ID
     xSheetDidEnd: SEL
 
   method init*(self: var NSAlert): NSAlert =
     result = asType[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
-    result.xDelegate = nil
+    result.xDelegate = ID(value: nil)
     result.xStyle = NSWarningAlertStyle
     result.xIcon = NSObject(value: nil)
     result.xMessageText = @ns""
@@ -38,7 +38,7 @@ objcImpl:
     result.xSuppressionButton = NSButton(value: nil)
     result.xWindow = NSWindow(value: nil)
     result.xNeedsLayout = true
-    result.xSheetDelegate = nil
+    result.xSheetDelegate = ID(value: nil)
     result.xSheetDidEnd = nil
 
   proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
@@ -107,7 +107,7 @@ objcImpl:
   method beginSheetModalForWindow*(
       self: NSAlert,
       window: NSWindow,
-      modalDelegate {.kw("modalDelegate").}: IDPtr,
+      modalDelegate {.kw("modalDelegate").}: ID,
       didEndSelector {.kw("didEndSelector").}: SEL,
       contextInfo {.kw("contextInfo").}: pointer,
   ) =
@@ -125,7 +125,7 @@ objcImpl:
     NSAlertThirdButtonReturn
 
   method dealloc(self: NSAlert) {.used.} =
-    self.xDelegate = nil
+    self.xDelegate = ID(value: nil)
     self.xIcon = NSObject(value: nil)
     self.xMessageText = @ns""
     self.xInformativeText = @ns""
@@ -134,7 +134,7 @@ objcImpl:
     self.xSuppressionButton = NSButton(value: nil)
     self.xButtons = NSArray[NSButton](value: nil)
     self.xWindow = NSWindow(value: nil)
-    self.xSheetDelegate = nil
+    self.xSheetDelegate = ID(value: nil)
     discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =
