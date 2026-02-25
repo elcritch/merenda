@@ -58,7 +58,8 @@ proc kvcBoxValue(obj: IDPtr, sel: SEL, enc: string): NSObject =
   of "@", "#":
     kvcRetainedNSObject(objc_msgSend(obj, sel))
   of "*":
-    let send = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
     let s = send(obj, sel)
     if s.isNil:
       NSObject(value: nil)
@@ -86,7 +87,8 @@ proc kvcBoxValue(obj: IDPtr, sel: SEL, enc: string): NSObject =
     let send = cast[proc(self: IDPtr, op: SEL): cfloat {.cdecl, varargs.}](objc_msgSend)
     kvcTakeNSObject(nsFloat(send(obj, sel)))
   of "d":
-    let send = cast[proc(self: IDPtr, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)
     kvcTakeNSObject(nsFloat(send(obj, sel)))
   of "B", "c", "C":
     let send = cast[proc(self: IDPtr, op: SEL): uint8 {.cdecl, varargs.}](objc_msgSend)
@@ -99,40 +101,48 @@ proc kvcSendValue(obj: IDPtr, sel: SEL, argEnc: string, value: NSObject) =
   let t = kvcTypeCode(argEnc)
   case t
   of "@", "#":
-    let send = cast[proc(self: IDPtr, op: SEL, a: IDPtr) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: IDPtr) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, value.value)
   of "*":
-    let cstr = objcStableCString(stringValue(asType[NSString](value.value)))
+    let cstr = objcStableCString(stringValue(asRetainedType[NSString](value.value)))
     let send =
       cast[proc(self: IDPtr, op: SEL, a: cstring) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, cstr)
   of "i", "s":
     let intVal = unboxNSObject[NSInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: cint) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: cint) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.cint)
   of "l":
     let intVal = unboxNSObject[NSInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: clong) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: clong) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.clong)
   of "q":
     let intVal = unboxNSObject[NSInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: int64) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: int64) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.int64)
   of "I", "S":
     let intVal = unboxNSObject[NSUInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: cuint) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: cuint) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.cuint)
   of "L":
     let intVal = unboxNSObject[NSUInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: culong) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: culong) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.culong)
   of "Q":
     let intVal = unboxNSObject[NSUInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: uint64) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: uint64) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.uint64)
   of "f":
     let floatVal = unboxNSObject[cfloat](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: cfloat) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: cfloat) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, floatVal)
   of "d":
     let floatVal = unboxNSObject[cdouble](value)
@@ -141,19 +151,23 @@ proc kvcSendValue(obj: IDPtr, sel: SEL, argEnc: string, value: NSObject) =
     send(obj, sel, floatVal)
   of "B":
     let intVal = unboxNSObject[NSInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: bool) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: bool) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal != 0)
   of "c":
     let intVal = unboxNSObject[NSInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: int8) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: int8) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.int8)
   of "C":
     let intVal = unboxNSObject[NSUInteger](value)
-    let send = cast[proc(self: IDPtr, op: SEL, a: uint8) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: uint8) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, intVal.uint8)
   else:
     # Unknown type — fall back to treating the value as an object.
-    let send = cast[proc(self: IDPtr, op: SEL, a: IDPtr) {.cdecl, varargs.}](objc_msgSend)
+    let send =
+      cast[proc(self: IDPtr, op: SEL, a: IDPtr) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, value.value)
 
 # ---------------------------------------------------------------------------
@@ -271,7 +285,12 @@ proc kvoNotifyObserver(
   else:
     return
   let send = cast[proc(
-    self: IDPtr, op: SEL, keyPath: IDPtr, observed: IDPtr, change: IDPtr, context: pointer
+    self: IDPtr,
+    op: SEL,
+    keyPath: IDPtr,
+    observed: IDPtr,
+    change: IDPtr,
+    context: pointer,
   ) {.cdecl, varargs.}](objc_msgSend)
   var keyPathObj = nsString(keyPath)
   send(observer.value, sel, keyPathObj.value, obj.value, change.value, context)
@@ -420,7 +439,8 @@ proc kvoOptionsFromMask(mask: NSUInteger): NSKeyValueObservingOptions {.inline.}
 proc kvoKeyPathFromId(keyPath: IDPtr): string =
   if keyPath.isNil:
     return ""
-  let toUtf8 = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+  let toUtf8 =
+    cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
   let utf8 = toUtf8(keyPath, sel_registerName("UTF8String"))
   if utf8.isNil:
     return ""
@@ -430,14 +450,19 @@ proc kvoKeyPathFromId(keyPath: IDPtr): string =
   converted
 
 proc kvoObjcAddObserver(
-    self: IDPtr, cmd: SEL, observer: IDPtr, keyPath: IDPtr, options: NSUInteger, context: pointer
+    self: IDPtr,
+    cmd: SEL,
+    observer: IDPtr,
+    keyPath: IDPtr,
+    options: NSUInteger,
+    context: pointer,
 ) {.cdecl.} =
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   addObserver(
-    asType[NSObject](self),
-    asType[NSObject](observer),
+    asRetainedType[NSObject](self),
+    asRetainedType[NSObject](observer),
     keyPathString,
     kvoOptionsFromMask(options),
     context,
@@ -450,26 +475,33 @@ proc kvoObjcRemoveObserverWithContext(
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   removeObserver(
-    asType[NSObject](self), asType[NSObject](observer), keyPathString, context
+    asRetainedType[NSObject](self),
+    asRetainedType[NSObject](observer),
+    keyPathString,
+    context,
   )
 
-proc kvoObjcRemoveObserver(self: IDPtr, cmd: SEL, observer: IDPtr, keyPath: IDPtr) {.cdecl.} =
+proc kvoObjcRemoveObserver(
+    self: IDPtr, cmd: SEL, observer: IDPtr, keyPath: IDPtr
+) {.cdecl.} =
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  removeObserver(asType[NSObject](self), asType[NSObject](observer), keyPathString)
+  removeObserver(
+    asRetainedType[NSObject](self), asRetainedType[NSObject](observer), keyPathString
+  )
 
 proc kvoObjcWillChange(self: IDPtr, cmd: SEL, keyPath: IDPtr) {.cdecl.} =
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  willChangeValueForKey(asType[NSObject](self), keyPathString)
+  willChangeValueForKey(asRetainedType[NSObject](self), keyPathString)
 
 proc kvoObjcDidChange(self: IDPtr, cmd: SEL, keyPath: IDPtr) {.cdecl.} =
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  didChangeValueForKey(asType[NSObject](self), keyPathString)
+  didChangeValueForKey(asRetainedType[NSObject](self), keyPathString)
 
 block:
   let nsObjectClass = getClass("NSObject")

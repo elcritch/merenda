@@ -33,7 +33,7 @@ objcImpl:
     if window.value notin windows:
       windows.add(retainId(window.value))
       self.appWindows = windows
-    window.setNextResponder(asType[NSResponder](self))
+    window.setNextResponder(asRetainedType[NSResponder](self))
     window.windowVisibleRequested true
 
   method run(self: NSApplication) =
@@ -133,7 +133,7 @@ proc addWindow*(app: NSApplication, window: NSWindow) =
   if window.value notin windows:
     windows.add(retainId(window.value))
     app.appWindows = windows
-  window.setNextResponder(asType[NSResponder](app))
+  window.setNextResponder(asRetainedType[NSResponder](app))
   window.windowVisibleRequested true
 
 proc windows*(app: NSApplication): seq[NSWindow] =
@@ -171,7 +171,8 @@ proc newWindow*(
     x, y, width, height: float32, title: NSString = @ns"Nutella Window"
 ): NSWindow =
   var wAlloc = NSWindow.alloc()
-  result = wAlloc.initWithContentRect(x.float32, y.float32, width.float32, height.float32)
+  result =
+    wAlloc.initWithContentRect(x.float32, y.float32, width.float32, height.float32)
   wAlloc.value = nil
   result.setTitle(title)
 

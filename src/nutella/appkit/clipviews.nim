@@ -66,8 +66,8 @@ objcImpl:
     if view notin children:
       children.add(view)
       self.viewSubviews = children
-    view.viewSuperview = retain(asType[NSView](self))
-    view.setNextResponder(asType[NSResponder](self))
+    view.viewSuperview = retain(asRetainedType[NSView](self))
+    view.setNextResponder(asRetainedType[NSResponder](self))
     self.clipDocumentViewId = retain(view)
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
     let frame = view.viewFrame()
