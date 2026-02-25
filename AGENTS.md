@@ -26,7 +26,7 @@
 - Don't initialize "zero" value fields with `false`, `nil`, or `NSFoo(value: nil)` since these will be set by memory zeroing.
 - Prefer public API names from AppKit headers over `*Id`-style hacks (for example `title`/`setTitle` rather than `titleId`).
 - Convert `id` in Objective-C to concrete types where possible when porting Obj-C code, or failing that use `ID` not `IDPtr`.
-- Don't use `discard variable` or prefix `_` for unused proc/method arguments. Don't use `when false: discard t` to retain unused type. Nim doesn't need these. 
+- Don't use `discard variable` or prefix `_` for unused proc/method arguments. Don't use `when false: discard t` to retain unused type. Nim doesn't need these. Do use a lone `discard` for empty proc or method bodies.
 - Never try to use global storage as a shortcut for implementing something unless absolutely needed.
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
 - Prefer NSString over Nim strings. 
