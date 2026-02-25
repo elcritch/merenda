@@ -36,8 +36,10 @@ const
 type
   IDPtr* = pointer
 
-  NSObject* {.pure, inheritable.} = object
+  ID* {.pure, inheritable.} = object
     value*: IDPtr
+
+  NSObject* = object of ID
 
   ObjcClass* {.pure.} = object of NSObject
 
@@ -104,15 +106,12 @@ proc retainRaw(o: IDPtr) {.raises: [].}
 proc releaseAux(o: IDPtr) {.raises: [].}
 proc retainCountAux(o: IDPtr): NSUInteger {.raises: [].}
 
-template retain*[T: NSObject](o: T): T =
-  cast[T](retainAux(o.value))
-
-proc `=destroy`(o: var NSObject) =
+proc `=destroy`*(o: var ID) =
   if o.value != nil:
     releaseAux(o.value)
     o.value = nil
 
-proc `=copy`(dest: var NSObject, src: NSObject) =
+proc `=copy`*(dest: var ID, src: ID) =
   if dest.value == src.value:
     return
   `=destroy`(dest)
@@ -120,35 +119,35 @@ proc `=copy`(dest: var NSObject, src: NSObject) =
   if dest.value != nil:
     retainRaw(dest.value)
 
-proc `=sink`(dest: var NSObject, src: NSObject) =
+proc `=sink`*(dest: var ID, src: ID) =
   if dest.value == src.value:
     return
   `=destroy`(dest)
   dest.value = src.value
 
-proc `=destroy`(o: var ObjcClass) =
+proc `=destroy`*(o: var ObjcClass) =
   o.value = nil
 
-proc `=copy`(dest: var ObjcClass, src: ObjcClass) =
+proc `=copy`*(dest: var ObjcClass, src: ObjcClass) =
   dest.value = src.value
 
-proc `=sink`(dest: var ObjcClass, src: ObjcClass) =
+proc `=sink`*(dest: var ObjcClass, src: ObjcClass) =
   dest.value = src.value
 
-proc release*(o: var NSObject) {.inline.} =
+template retain*[T: ID](o: T): T =
+  cast[T](retainAux(o.value))
+
+proc release*(o: var ID) {.inline.} =
   `=destroy`(o)
 
-proc release*(o: NSObject) {.inline.} =
+proc release*(o: ID) {.inline.} =
   if o.value != nil:
     releaseAux(o.value)
 
-template retainCount*(o: NSObject): NSUInteger =
+template retainCount*(o: ID): NSUInteger =
   retainCountAux(o.value)
 
-proc isNil*(a: NSObject): bool =
-  result = a.value == nil
-
-proc isNil*(a: ObjcClass): bool =
+proc isNil*(a: ID): bool =
   result = a.value == nil
 
 proc isNil*(a: Protocol): bool =
