@@ -1477,6 +1477,7 @@ macro objcImpl*(x: untyped): untyped =
 
 include ./objc/exceptions
 include ./objc/nsstring
+include ./objc/protocols
 include ./objc/nsboxing
 include ./objc/nsdictionary
 include ./objc/nsarray

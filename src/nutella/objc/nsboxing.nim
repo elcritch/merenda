@@ -1,11 +1,23 @@
 proc retainNSObjectId(value: IDPtr): NSObject {.inline.} =
   if value.isNil:
     return NSObject(value: nil)
-  let retainSend = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
+  let retainSend =
+    cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
   NSObject(value: retainSend(value, sel_registerName("retain")))
 
 objcImpl:
-  type NXInteger* = object of NSObject
+  type NSValue* {.impl: NSCopying.} = object of NSObject
+
+  method isEqualToValue*(self: NSValue, other: NSValue): bool =
+    self.value == other.value
+
+  method copyWithZone*(self: NSValue, zone: pointer): NSObject =
+    if self.isNil:
+      return NSObject(value: nil)
+    retainNSObjectId(self.value)
+
+objcImpl:
+  type NXInteger* {.impl: NSCopying.} = object of NSValue
     num: int
 
   method init*(self: var NXInteger): NXInteger =
@@ -19,6 +31,9 @@ objcImpl:
 
   method integerValue*(self: NXInteger): NSInteger =
     self.num().NSInteger
+
+  method intValue*(self: NXInteger): cint =
+    self.num().cint
 
   method floatValue*(self: NXInteger): cfloat =
     self.num().cfloat
@@ -40,12 +55,13 @@ objcImpl:
       return true
     if other.isNil or not other.respondsToSelector("integerValue"):
       return false
-    let toInt = cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+    let toInt =
+      cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
     let value = toInt(other.value, sel_registerName("integerValue"))
     self.integerValue() == value
 
 objcImpl:
-  type NXDouble* = object of NSObject
+  type NXDouble* {.impl: NSCopying.} = object of NSValue
     num: cdouble
 
   method init*(self: var NXDouble): NXDouble =
@@ -59,6 +75,9 @@ objcImpl:
 
   method doubleValue*(self: NXDouble): cdouble =
     self.num()
+
+  method intValue*(self: NXDouble): cint =
+    self.num().cint
 
   method floatValue*(self: NXDouble): cfloat =
     self.num().cfloat
@@ -226,12 +245,14 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
   when T is NSObject:
     if value.isNil:
       return T(value: nil)
-    let retainSend = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
+    let retainSend =
+      cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
     T(value: retainSend(value.value, sel_registerName("retain")))
   elif T is string:
     if value.isNil:
       return ""
-    let toUtf8 = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let toUtf8 =
+      cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
     let utf8 = toUtf8(value.value, sel_registerName("UTF8String"))
     if utf8.isNil:
       return ""
@@ -241,7 +262,8 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
       return T(0)
     if not value.respondsToSelector("integerValue"):
       return T(0)
-    let toInt = cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
+    let toInt =
+      cast[proc(obj: IDPtr, op: SEL): NSInteger {.cdecl, varargs.}](objc_msgSend)
     T(toInt(value.value, sel_registerName("integerValue")))
   elif T is SomeFloat:
     if value.isNil:
@@ -263,7 +285,8 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
     if value.isNil:
       return false
     if value.respondsToSelector("boolValue"):
-      let toBool = cast[proc(obj: IDPtr, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)
+      let toBool =
+        cast[proc(obj: IDPtr, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)
       return toBool(value.value, sel_registerName("boolValue"))
     if value.respondsToSelector("integerValue"):
       let toInt =
