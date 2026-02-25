@@ -96,11 +96,12 @@ suite "foundation stdlib-backed core types":
     if not protoObj.isNil:
       release(protoObj)
 
-    let retainBefore = retainCount(intObj).int
+    let retainBefore = retainCount(intObj)
+    check(retainCount(intObj) == 1)
     var copied = intObj.copyWithZone(nil)
     check(not copied.isNil)
     check(copied.value == intObj.value)
-    check(retainCount(intObj).int == retainBefore + 1)
+    check(retainCount(intObj) == 2)
     check(unboxNSObject[int](copied) == 42)
     if not copied.isNil:
       release(copied)

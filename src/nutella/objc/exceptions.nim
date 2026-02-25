@@ -1,3 +1,6 @@
+import std/strutils
+import ./objcImpl
+
 {.compile: "private/objc_exceptions_bridge.m".}
 
 type ObjcExceptionError* = object of CatchableError

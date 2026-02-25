@@ -1,9 +1,5 @@
-proc retainNSObjectId(value: IDPtr): NSObject {.inline.} =
-  if value.isNil:
-    return NSObject(value: nil)
-  let retainSend =
-    cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
-  NSObject(value: retainSend(value, sel_registerName("retain")))
+import std/[macros, strutils]
+import ./objcImpl
 
 objcImpl:
   type NSValue* {.impl: NSCopying.} = object of NSObject
@@ -14,7 +10,7 @@ objcImpl:
   method copyWithZone*(self: NSValue, zone: pointer): NSObject =
     if self.isNil:
       return NSObject(value: nil)
-    retainNSObjectId(self.value)
+    return NSObject(value: self.value)
 
 objcImpl:
   type NXInteger* {.impl: NSCopying.} = object of NSValue
@@ -219,22 +215,22 @@ macro `@`*(value: untyped): untyped =
 
 proc boxNSObject*[T](value: T): NSObject {.inline.} =
   when T is NSObject:
-    retainNSObjectId(value.value)
+    retain(value.value)
   elif T is string:
     let boxed = ns(value)
-    retainNSObjectId(boxed.value)
+    retain(boxed.value)
   elif T is cstring:
     let boxed = ns(value)
-    retainNSObjectId(boxed.value)
+    retain(boxed.value)
   elif T is SomeInteger:
     let boxed = ns(value)
-    retainNSObjectId(boxed.value)
+    retain(boxed.value)
   elif T is SomeFloat:
     let boxed = ns(value)
-    retainNSObjectId(boxed.value)
+    retain(boxed.value)
   elif T is bool:
     let boxed = ns(value)
-    retainNSObjectId(boxed.value)
+    retain(boxed.value)
   else:
     {.
       fatal:
@@ -245,9 +241,7 @@ proc unboxNSObject*[T](value: NSObject): T {.inline.} =
   when T is NSObject:
     if value.isNil:
       return T(value: nil)
-    let retainSend =
-      cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
-    T(value: retainSend(value.value, sel_registerName("retain")))
+    retain(T(value: value.value))
   elif T is string:
     if value.isNil:
       return ""
