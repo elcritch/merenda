@@ -462,7 +462,7 @@ objcImpl:
   method trackingArea*(self: NSEvent): NSObject =
     if not self.xHasTrackingData:
       raise newException(ValueError, "No trackingArea in NSEvent")
-    NSObject(value: cast[ID](self.xTrackingNumber.uint))
+    NSObject(value: cast[IDPtr](self.xTrackingNumber.uint))
 
   method userData*(self: NSEvent): pointer =
     if not self.xHasTrackingData:

@@ -4,7 +4,7 @@ import ./controls
 
 export controls
 
-type NSButtonCallbackProc = proc(sender: ID)
+type NSButtonCallbackProc = proc(sender: IDPtr)
 
 objcImpl:
   type NSButton* = object of NSControl
@@ -149,7 +149,7 @@ proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
   if cb.isNil:
     button.onClick = nil
   else:
-    button.onClick = proc(sender: ID) =
+    button.onClick = proc(sender: IDPtr) =
       cb(ownFromId[NSButton](sender))
 
 proc click*(button: NSButton) =

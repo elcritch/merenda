@@ -496,7 +496,7 @@ proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
 
 proc addViewTree(
   renders: var Renders,
-  viewId: ID,
+  viewId: IDPtr,
   parentIdx: FigIdx,
   hasParent: bool,
   offsetX: float32,
@@ -512,7 +512,7 @@ proc buildWindowRenders(window: NSWindow): Renders =
 
 proc addViewTree(
     renders: var Renders,
-    viewId: ID,
+    viewId: IDPtr,
     parentIdx: FigIdx,
     hasParent: bool,
     offsetX: float32,
@@ -581,8 +581,8 @@ proc addViewTree(
     renders.addViewTree(child.value, idx, true, box.origin.x, box.origin.y)
 
 proc hitTestButton(
-    viewId: ID, x: float32, y: float32, offsetX: float32, offsetY: float32
-): ID =
+    viewId: IDPtr, x: float32, y: float32, offsetX: float32, offsetY: float32
+): IDPtr =
   if viewId.isNil:
     return nil
   let view = ownFromId[NSView](viewId)

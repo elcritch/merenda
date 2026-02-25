@@ -5,7 +5,7 @@ import ./windows
 
 objcImpl:
   type NSAlert* = object of NSObject
-    xDelegate {.set: setDelegate, get: delegate.}: ID
+    xDelegate {.set: setDelegate, get: delegate.}: IDPtr
     xStyle {.set: setAlertStyle, get: alertStyle.}: int
     xIcon {.set: setIcon, get: icon.}: NSObject
     xMessageText {.get: messageText.}: NSString
@@ -18,7 +18,7 @@ objcImpl:
     xSuppressionButton {.get: suppressionButton.}: NSButton
     xWindow {.get: window.}: NSWindow
     xNeedsLayout: bool
-    xSheetDelegate: ID
+    xSheetDelegate: IDPtr
     xSheetDidEnd: SEL
 
   method init*(self: var NSAlert): NSAlert =
@@ -107,7 +107,7 @@ objcImpl:
   method beginSheetModalForWindow*(
       self: NSAlert,
       window: NSWindow,
-      modalDelegate {.kw("modalDelegate").}: ID,
+      modalDelegate {.kw("modalDelegate").}: IDPtr,
       didEndSelector {.kw("didEndSelector").}: SEL,
       contextInfo {.kw("contextInfo").}: pointer,
   ) =

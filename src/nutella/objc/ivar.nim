@@ -3,7 +3,7 @@ import ./core
 const NimIvarRefPrefix* = "nimIvarRef_"
 
 type NimIvarRefCleanupProc = proc(value: pointer) {.cdecl, raises: [].}
-type NimIvarValueCleanupProc = proc(obj: ID, ivarName: string) {.raises: [].}
+type NimIvarValueCleanupProc = proc(obj: IDPtr, ivarName: string) {.raises: [].}
 type NimIvarRefPayload = object
   value: pointer
   cleanup: NimIvarRefCleanupProc
@@ -24,7 +24,7 @@ proc nimIvarRefCleanup[T: ref](value: pointer) {.cdecl, raises: [].} =
   if r != nil:
     GC_unref(r)
 
-proc nimIvarValueCleanup[T](obj: ID, ivarName: string) {.raises: [].}
+proc nimIvarValueCleanup[T](obj: IDPtr, ivarName: string) {.raises: [].}
 
 proc sanitizeIvarToken(token: string): string =
   result = newStringOfCap(token.len)
@@ -166,7 +166,7 @@ proc getIvarValuePtr[T](obj: NSObject, ivarName: string): ptr T {.inline, raises
   let slotAddr = cast[uint](obj.value) + cast[uint](getOffset(iv))
   cast[ptr T](slotAddr)
 
-proc nimIvarValueCleanup[T](obj: ID, ivarName: string) {.raises: [].} =
+proc nimIvarValueCleanup[T](obj: IDPtr, ivarName: string) {.raises: [].} =
   if obj == nil or ivarName.len == 0:
     return
 
@@ -185,7 +185,7 @@ proc getIvarValue*[T](obj: NSObject, ivarName: string): T {.raises: [].} =
   if p.isNil:
     return default(T)
   when T is NSObject:
-    let slot = cast[ptr ID](p)
+    let slot = cast[ptr IDPtr](p)
     let id = slot[]
     if id.isNil:
       return T(value: nil)
@@ -199,7 +199,7 @@ proc setIvarValue*[T](obj: NSObject, ivarName: string, value: T) {.raises: [].} 
   if p.isNil:
     return
   when T is NSObject:
-    let slot = cast[ptr ID](p)
+    let slot = cast[ptr IDPtr](p)
     let next = value.value
     let prev = slot[]
     if prev == next:
@@ -226,7 +226,7 @@ proc setIvarField*[T](
   else:
     setIvarValue[T](obj, ivarName, value)
 
-proc clearIvarRefRaw(obj: ID, ivarName: string) {.raises: [].} =
+proc clearIvarRefRaw(obj: IDPtr, ivarName: string) {.raises: [].} =
   if obj == nil or ivarName.len == 0:
     return
 
@@ -239,7 +239,7 @@ proc clearIvarRefRaw(obj: ID, ivarName: string) {.raises: [].} =
     deallocShared(payload)
     discard setInstanceVariable(obj, ivarName, nil)
 
-proc clearIvarRef*(obj: ID, ivarName: string) {.inline, raises: [].} =
+proc clearIvarRef*(obj: IDPtr, ivarName: string) {.inline, raises: [].} =
   clearIvarRefRaw(obj, ivarName)
 
 proc clearIvarRef*(obj: NSObject, ivarName: string) {.inline, raises: [].} =
@@ -310,7 +310,7 @@ proc getIvarFieldVar*[T](obj: NSObject, ivarName: string): var T {.inline.} =
     doAssert not p.isNil
     p[]
 
-proc clearIvarRefsRaw(obj: ID) {.raises: [].} =
+proc clearIvarRefsRaw(obj: IDPtr) {.raises: [].} =
   if obj == nil:
     return
 
@@ -327,7 +327,7 @@ proc clearIvarRefsRaw(obj: ID) {.raises: [].} =
         break
     cls = getSuperclass(cls)
 
-proc clearIvarRefs*(obj: ID) {.inline, raises: [].} =
+proc clearIvarRefs*(obj: IDPtr) {.inline, raises: [].} =
   clearIvarRefsRaw(obj)
 
 proc clearIvarRefs*(obj: NSObject) {.inline, raises: [].} =

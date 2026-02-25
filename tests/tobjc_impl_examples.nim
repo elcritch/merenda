@@ -447,8 +447,8 @@ suite "objcImpl examples":
     check(respondsToSelector(cls, setterSel))
 
     let sendGet =
-      cast[proc(self: ID, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
-    let sendSet = cast[proc(self: ID, op: SEL, value: cstring): void {.cdecl, varargs.}](objc_msgSend)
+      cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let sendSet = cast[proc(self: IDPtr, op: SEL, value: cstring): void {.cdecl, varargs.}](objc_msgSend)
 
     sendSet(o.value, setterSel, "fromObjc".cstring)
     check(o.payload() == "fromObjc")

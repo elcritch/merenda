@@ -13,7 +13,7 @@ proc nimAssociatedRefCleanup[T: ref](value: pointer) {.cdecl, raises: [].} =
   if r != nil:
     GC_unref(r)
 
-proc nimAssociatedRefBoxDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].}
+proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].}
 
 proc associatedRefBoxClass(): ObjcClass =
   var cls {.global.}: ObjcClass
@@ -114,7 +114,7 @@ proc getAssociatedRef*[T: ref](
 ): T {.inline, raises: [].} =
   getAssociatedRef[T](obj, associatedRefKey[T]())
 
-proc nimAssociatedRefBoxDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].} =
+proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard cmd
   var rawPayload: pointer
   discard getInstanceVariable(self, NimAssociatedRefPayloadIvarName, rawPayload)
@@ -127,6 +127,6 @@ proc nimAssociatedRefBoxDealloc(self: ID, cmd: SEL) {.cdecl, raises: [].} =
 
   var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))
   {.cast(raises: []).}:
-    discard cast[proc(superObj: var ObjcSuper, op: SEL): ID {.cdecl, varargs.}](objc_msgSendSuper)(
+    discard cast[proc(superObj: var ObjcSuper, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
       superCall, sel_registerName("dealloc")
     )

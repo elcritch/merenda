@@ -1,32 +1,32 @@
 import std/tables
 
-proc objcIsEqualIds(lhs, rhs: ID): bool {.inline.} =
+proc objcIsEqualIds(lhs, rhs: IDPtr): bool {.inline.} =
   if lhs == rhs:
     return true
   if lhs.isNil or rhs.isNil:
     return false
   let isEqualSend =
-    cast[proc(self: ID, op: SEL, other: ID): bool {.cdecl, varargs.}](objc_msgSend)
+    cast[proc(self: IDPtr, op: SEL, other: IDPtr): bool {.cdecl, varargs.}](objc_msgSend)
   isEqualSend(lhs, sel_registerName("isEqual:"), rhs)
 
-proc retainId(id: ID): ID {.inline.} =
+proc retainId(id: IDPtr): IDPtr {.inline.} =
   if id.isNil:
     return nil
-  let retainSend = cast[proc(self: ID, op: SEL): ID {.cdecl, varargs.}](objc_msgSend)
+  let retainSend = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
   retainSend(id, sel_registerName("retain"))
 
-proc releaseId(id: ID) {.inline.} =
+proc releaseId(id: IDPtr) {.inline.} =
   if id.isNil:
     return
-  let releaseSend = cast[proc(self: ID, op: SEL): void {.cdecl, varargs.}](objc_msgSend)
+  let releaseSend = cast[proc(self: IDPtr, op: SEL): void {.cdecl, varargs.}](objc_msgSend)
   releaseSend(id, sel_registerName("release"))
 
-proc retainedAs[T: NSObject](id: ID): T {.inline.} =
+proc retainedAs[T: NSObject](id: IDPtr): T {.inline.} =
   if id.isNil:
     return T(value: nil)
   asType[T](retainId(id))
 
-proc findEquivalentKey(data: Table[ID, ID], key: ID, matchedKey: var ID): bool =
+proc findEquivalentKey(data: Table[IDPtr, IDPtr], key: IDPtr, matchedKey: var IDPtr): bool =
   for storedKey in data.keys:
     if objcIsEqualIds(storedKey, key):
       matchedKey = storedKey
@@ -34,7 +34,7 @@ proc findEquivalentKey(data: Table[ID, ID], key: ID, matchedKey: var ID): bool =
   matchedKey = nil
   false
 
-proc releaseTableEntries(data: var Table[ID, ID]) =
+proc releaseTableEntries(data: var Table[IDPtr, IDPtr]) =
   for key, value in data.pairs:
     releaseId(key)
     releaseId(value)
@@ -43,21 +43,21 @@ proc releaseTableEntries(data: var Table[ID, ID]) =
 objcImpl:
   type NXDictionary* = object of NSObject
     countCache: int
-    data: Table[ID, ID]
+    data: Table[IDPtr, IDPtr]
 
   method init*(self: var NXDictionary): NXDictionary =
     result = callSuperAs[NXDictionary](self, getSelector("init"))
     if result.isNil:
       return
     result.countCache = 0
-    result.data = initTable[ID, ID]()
+    result.data = initTable[IDPtr, IDPtr]()
 
   method dealloc*(self: NXDictionary) =
     var data = self.data()
     releaseTableEntries(data)
     self.data = data
     clearIvarRefs(self)
-    discard callSuperAs[ID](self, getSelector("dealloc"))
+    discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method count*(self: NXDictionary): NSUInteger =
     if self.countCache() <= 0:
@@ -104,7 +104,7 @@ proc hasKey*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): bool =
     return false
   let obj = asRetainedType[NXDictionary](dict)
   let data = obj.data()
-  var storedKey: ID
+  var storedKey: IDPtr
   result = findEquivalentKey(data, key.value, storedKey)
 
 proc `[]`*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): V =
@@ -112,7 +112,7 @@ proc `[]`*[K: NSObject, V: NSObject](dict: NSDictionary[K, V], key: K): V =
     raise newException(KeyError, "key not found in NSDictionary")
   let obj = asRetainedType[NXDictionary](dict)
   let data = obj.data()
-  var storedKey: ID
+  var storedKey: IDPtr
   if not findEquivalentKey(data, key.value, storedKey):
     raise newException(KeyError, "key not found in NSDictionary")
   let storedValue = data[storedKey]
@@ -125,7 +125,7 @@ proc `[]=`*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K, valu
     raise newException(ValueError, "NSDictionary key cannot be nil")
   let obj = asRetainedType[NXDictionary](dict)
   var data = obj.data()
-  var storedKey: ID
+  var storedKey: IDPtr
   if findEquivalentKey(data, key.value, storedKey):
     let oldValue = data[storedKey]
     if oldValue != value.value:
@@ -143,7 +143,7 @@ proc del*[K: NSObject, V: NSObject](dict: var NSDictionary[K, V], key: K) {.inli
     return
   let obj = asRetainedType[NXDictionary](dict)
   var data = obj.data()
-  var storedKey: ID
+  var storedKey: IDPtr
   if findEquivalentKey(data, key.value, storedKey):
     let storedValue = data[storedKey]
     releaseId(storedKey)
@@ -198,7 +198,7 @@ proc `==`*[K: NSObject, V: NSObject](a, b: NSDictionary[K, V]): bool =
   let bData = bObj.data()
 
   for aKey, aValue in aData.pairs:
-    var bKey: ID
+    var bKey: IDPtr
     if not findEquivalentKey(bData, aKey, bKey):
       return false
     if not objcIsEqualIds(aValue, bData[bKey]):

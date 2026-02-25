@@ -24,9 +24,9 @@ objcImpl:
       set: setRefusesFirstResponder, get: refusesFirstResponder
     .}: bool
     alignment: NSTextAlignment
-    titleId: ID
-    objectValueId: ID
-    representedObjectId: ID
+    titleId: IDPtr
+    objectValueId: IDPtr
+    representedObjectId: IDPtr
 
   method init*(self: var NSCell): NSCell =
     result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
@@ -57,7 +57,7 @@ objcImpl:
     result.titleId = replacedOwnedId(result.titleId, value.value)
     result.objectValueId = replacedOwnedId(result.objectValueId, value.value)
 
-  method target*(self: NSCell): ID =
+  method target*(self: NSCell): IDPtr =
     discard self
     nil
 
@@ -69,7 +69,7 @@ objcImpl:
     discard self
     0
 
-  method setTarget*(self: NSCell, target: ID) =
+  method setTarget*(self: NSCell, target: IDPtr) =
     discard self
     discard target
 
@@ -208,7 +208,7 @@ objcImpl:
 objcImpl:
   type NSActionCell* = object of NSCell
     xActionControlView {.set: setControlView, get: controlView.}: NSView
-    xActionTarget {.set: setTarget, get: target.}: ID
+    xActionTarget {.set: setTarget, get: target.}: IDPtr
     xActionSelector {.set: setAction, get: action.}: SEL
     actionTagValue {.set: setTag, get: tag.}: int
 

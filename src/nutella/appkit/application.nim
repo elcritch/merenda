@@ -15,7 +15,7 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int
 
 objcImpl:
   type NSApplication* = object of NSResponder
-    appWindows: seq[ID]
+    appWindows: seq[IDPtr]
     appRunning: bool
 
   method init*(self: var NSApplication): NSApplication =

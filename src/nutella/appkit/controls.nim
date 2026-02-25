@@ -18,8 +18,8 @@ objcImpl:
   method init*(self: var NSControl): NSControl =
     result = asType[NSControl](
       cast[proc(
-        self: ID, op: SEL, x: float32, y: float32, width: float32, height: float32
-      ): ID {.cdecl, varargs.}](objc_msgSend)(
+        self: IDPtr, op: SEL, x: float32, y: float32, width: float32, height: float32
+      ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
         self.value, getSelector("initWithFrame:y:width:height:"), 0.0, 0.0, 1.0, 1.0
       )
     )
@@ -41,7 +41,7 @@ objcImpl:
         y: float32,
         width: float32,
         height: float32,
-      ): ID {.cdecl, varargs.}](objc_msgSendSuper)(
+      ): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
         superObj,
         getSelector("initWithFrame:y:width:height:"),
         x.float32,
