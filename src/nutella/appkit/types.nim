@@ -54,6 +54,10 @@ type
     origin*: NSPoint
     size*: NSSize
 
+  NSRange* = object
+    location*: uint
+    length*: uint
+
   NSColor* = object
     r*: float32
     g*: float32
@@ -130,6 +134,7 @@ const
   NSCellHitContentArea* = 0x01
   NSCellHitEditableTextArea* = 0x02
   NSCellHitTrackableArea* = 0x04
+  NSNotFound* = high(uint)
 
 proc nsPoint*(x, y: float32): NSPoint =
   NSPoint(x: x, y: y)
@@ -142,6 +147,15 @@ proc nsRect*(x, y, width, height: float32): NSRect =
 
 proc nsColor*(r, g, b: float32, a: float32 = 1.0'f32): NSColor =
   NSColor(r: r, g: g, b: b, a: a)
+
+proc NSMakeRange*(location, length: uint): NSRange {.inline.} =
+  NSRange(location: location, length: length)
+
+proc NSMaxRange*(r: NSRange): uint {.inline.} =
+  r.location + r.length
+
+proc NSLocationInRange*(location: uint, r: NSRange): bool {.inline.} =
+  location >= r.location and location < NSMaxRange(r)
 
 proc contains*(r: NSRect, x, y: float32): bool =
   x >= r.origin.x and y >= r.origin.y and x < (r.origin.x + r.size.width) and
