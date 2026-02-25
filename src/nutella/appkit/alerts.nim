@@ -5,7 +5,6 @@ import ./windows
 
 objcImpl:
   type NSAlert* = object of NSObject
-    xDelegate {.set: setDelegate, get: delegate.}: ID
     xStyle {.set: setAlertStyle, get: alertStyle.}: int
     xIcon {.set: setIcon, get: icon.}: NSObject
     xMessageText {.get: messageText.}: NSString
@@ -111,7 +110,6 @@ objcImpl:
     NSAlertThirdButtonReturn
 
   method dealloc(self: NSAlert) {.used.} =
-    self.xDelegate = ID(value: nil)
     self.xIcon = NSObject(value: nil)
     self.xMessageText = @ns""
     self.xInformativeText = @ns""
