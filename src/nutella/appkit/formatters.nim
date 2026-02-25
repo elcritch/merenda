@@ -14,10 +14,6 @@ objcImpl:
       editing {.kw("newEditingString").}: ptr IDPtr,
       errorDescription {.kw("errorDescription").}: ptr IDPtr,
   ): bool =
-    discard self
-    discard partial
-    discard editing
-    discard errorDescription
     raiseInvalidAbstract("isPartialStringValid:newEditingString:errorDescription:")
 
   method getObjectValue*(
@@ -26,22 +22,14 @@ objcImpl:
       stringValue {.kw("forString").}: NSString,
       errorDescription {.kw("errorDescription").}: ptr IDPtr,
   ): bool =
-    discard self
-    discard objectValue
-    discard stringValue
-    discard errorDescription
     raiseInvalidAbstract("getObjectValue:forString:errorDescription:")
 
   method stringForObjectValue*(self: NSFormatter, objectValue: NSObject): NSString =
-    discard self
-    discard objectValue
     raiseInvalidAbstract("stringForObjectValue:")
 
   method editingStringForObjectValue*(
       self: NSFormatter, objectValue: NSObject
   ): NSString =
-    discard self
-    discard objectValue
     raiseInvalidAbstract("editingStringForObjectValue:")
 
   method attributedStringForObjectValue*(
@@ -49,9 +37,6 @@ objcImpl:
       objectValue: NSObject,
       attributes {.kw("withDefaultAttributes").}: NSDictionary[NSObject, NSObject],
   ): NSAttributedString =
-    discard self
-    discard objectValue
-    discard attributes
     raiseInvalidAbstract("attributedStringForObjectValue:withDefaultAttributes:")
 
   method isPartialStringValid*(
@@ -62,23 +47,15 @@ objcImpl:
       originalRange {.kw("originalSelectedRange").}: NSRange,
       errorStringp {.kw("errorDescription").}: ptr IDPtr,
   ): bool =
-    discard self
-    discard partialStringp
-    discard proposedRangep
-    discard originalString
-    discard originalRange
-    discard errorStringp
     raiseInvalidAbstract(
       "isPartialStringValid:proposedSelectedRange:originalString:originalSelectedRange:errorDescription:"
     )
 
   method initWithCoder*(self: var NSFormatter, coder: ID): NSFormatter =
-    discard coder
     result = self
 
   method encodeWithCoder*(self: NSFormatter, coder: ID) =
-    discard self
-    discard coder
+    discard
 
 proc new*(t: typedesc[NSFormatter]): NSFormatter =
   var allocated = NSFormatter.alloc()

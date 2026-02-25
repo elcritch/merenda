@@ -199,13 +199,11 @@ objcImpl:
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method copyWithZone*(self: NSAttributedString, zone: pointer): NSAttributedString =
-    discard zone
     retain(self)
 
   method mutableCopyWithZone*(
       self: NSAttributedString, zone: pointer
   ): NSAttributedString =
-    discard zone
     var allocated = NSAttributedString.alloc()
     result = allocated.initWithAttributedString(self)
     allocated.value = nil
@@ -381,8 +379,6 @@ objcImpl:
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
       error {.kw("error").}: ptr IDPtr,
   ): NSAttributedString =
-    discard data
-    discard options
     if documentAttributes != nil:
       documentAttributes[] = nil
     if error != nil:
@@ -394,7 +390,6 @@ objcImpl:
       docFormat: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard docFormat
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -405,8 +400,6 @@ objcImpl:
       baseURL {.kw("baseURL").}: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard html
-    discard baseURL
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -416,7 +409,6 @@ objcImpl:
       html: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard html
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -427,8 +419,6 @@ objcImpl:
       options {.kw("options").}: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard html
-    discard options
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -466,7 +456,6 @@ objcImpl:
       rtfd: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard rtfd
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -476,7 +465,6 @@ objcImpl:
       wrapper: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard wrapper
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -486,7 +474,6 @@ objcImpl:
       url: NSObject,
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
   ): NSAttributedString =
-    discard url
     if documentAttributes != nil:
       documentAttributes[] = nil
     self.initWithString(@ns"")
@@ -498,8 +485,6 @@ objcImpl:
       documentAttributes {.kw("documentAttributes").}: ptr IDPtr,
       error {.kw("error").}: ptr IDPtr,
   ): NSAttributedString =
-    discard url
-    discard options
     if documentAttributes != nil:
       documentAttributes[] = nil
     if error != nil:
@@ -564,17 +549,11 @@ objcImpl:
   method lineBreakBeforeIndex*(
       self: NSAttributedString, index: uint, withinRange {.kw("withinRange").}: NSRange
   ): uint =
-    discard self
-    discard index
-    discard withinRange
     0'u
 
   method lineBreakByHyphenatingBeforeIndex*(
       self: NSAttributedString, index: uint, withinRange {.kw("withinRange").}: NSRange
   ): uint =
-    discard self
-    discard index
-    discard withinRange
     0'u
 
   method nextWordFromIndex*(
@@ -630,33 +609,21 @@ objcImpl:
   method itemNumberInTextList*(
       self: NSAttributedString, list: NSObject, atIndex {.kw("atIndex").}: uint
   ): int =
-    discard self
-    discard list
-    discard atIndex
     0
 
   method rangeOfTextBlock*(
       self: NSAttributedString, blockObj: NSObject, atIndex {.kw("atIndex").}: uint
   ): NSRange =
-    discard self
-    discard blockObj
-    discard atIndex
     NSMakeRange(0, 0)
 
   method rangeOfTextList*(
       self: NSAttributedString, list: NSObject, atIndex {.kw("atIndex").}: uint
   ): NSRange =
-    discard self
-    discard list
-    discard atIndex
     NSMakeRange(0, 0)
 
   method rangeOfTextTable*(
       self: NSAttributedString, table: NSObject, atIndex {.kw("atIndex").}: uint
   ): NSRange =
-    discard self
-    discard table
-    discard atIndex
     NSMakeRange(0, 0)
 
   method RTFDFileWrapperFromRange*(
@@ -664,9 +631,6 @@ objcImpl:
       range: NSRange,
       documentAttributes {.kw("documentAttributes").}: NSDictionary[NSObject, NSObject],
   ): NSObject =
-    discard self
-    discard range
-    discard documentAttributes
     NSObject(value: nil)
 
   method RTFDFromRange*(
@@ -674,9 +638,6 @@ objcImpl:
       range: NSRange,
       documentAttributes {.kw("documentAttributes").}: NSDictionary[NSObject, NSObject],
   ): NSObject =
-    discard self
-    discard range
-    discard documentAttributes
     NSObject(value: nil)
 
   method RTFFromRange*(
@@ -684,9 +645,6 @@ objcImpl:
       range: NSRange,
       documentAttributes {.kw("documentAttributes").}: NSDictionary[NSObject, NSObject],
   ): NSObject =
-    discard self
-    discard range
-    discard documentAttributes
     NSObject(value: nil)
 
   method dataFromRange*(
@@ -695,9 +653,6 @@ objcImpl:
       documentAttributes {.kw("documentAttributes").}: NSDictionary[NSObject, NSObject],
       error {.kw("error").}: ptr IDPtr,
   ): NSObject =
-    discard self
-    discard range
-    discard documentAttributes
     if error != nil:
       error[] = nil
     NSObject(value: nil)
@@ -707,9 +662,6 @@ objcImpl:
       range: NSRange,
       documentAttributes {.kw("documentAttributes").}: NSDictionary[NSObject, NSObject],
   ): NSObject =
-    discard self
-    discard range
-    discard documentAttributes
     NSObject(value: nil)
 
   method fileWrapperFromRange*(
@@ -718,27 +670,20 @@ objcImpl:
       documentAttributes {.kw("documentAttributes").}: NSDictionary[NSObject, NSObject],
       error {.kw("error").}: ptr IDPtr,
   ): NSObject =
-    discard self
-    discard range
-    discard documentAttributes
     if error != nil:
       error[] = nil
     NSObject(value: nil)
 
   method drawAtPoint*(self: NSAttributedString, point: NSPoint) =
-    discard self
-    discard point
+    discard
 
   method drawInRect*(self: NSAttributedString, rect: NSRect) =
-    discard self
-    discard rect
+    discard
 
   method drawWithRect*(
       self: NSAttributedString, rect: NSRect, options {.kw("options").}: int
   ) =
-    discard self
-    discard rect
-    discard options
+    discard
 
   method size*(self: NSAttributedString): NSSize =
     nsSize(self.length().float32, 1.0)
@@ -746,8 +691,6 @@ objcImpl:
   method boundingRectWithSize*(
       self: NSAttributedString, size: NSSize, options {.kw("options").}: int
   ): NSRect =
-    discard self
-    discard options
     nsRect(0, 0, size.width, size.height)
 
   method textTypes*(self: typedesc[NSAttributedString]): NSArray[NSObject] =
