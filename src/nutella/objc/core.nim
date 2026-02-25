@@ -1411,15 +1411,23 @@ macro objc*(name: untyped, body: untyped = nil): untyped =
 #proc NSLog*(str: NSString) {.importc, varargs.}
 
 proc retainAux(o: IDPtr): IDPtr {.raises: [].} =
+  if o == nil:
+    return nil
   objc_msgSend(o, sel_registerName("retain"))
 
 proc retainRaw(o: IDPtr) {.raises: [].} =
+  if o == nil:
+    return
   discard objc_msgSend(o, sel_registerName("retain"))
 
 proc releaseAux(o: IDPtr) {.raises: [].} =
+  if o == nil:
+    return
   discard objc_msgSend(o, sel_registerName("release"))
 
 proc retainCountAux(o: IDPtr): NSUInteger {.raises: [].} =
+  if o == nil:
+    return 0
   cast[NSUInteger](objc_msgSend(o, sel_registerName("retainCount")))
 
 proc superclass*(o: NSObject): ObjcClass {.objc.}

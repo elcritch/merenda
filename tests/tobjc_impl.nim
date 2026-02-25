@@ -521,3 +521,30 @@ suite "objcImpl runtime generation":
     let cls = getClass(NRKwClass)
     check(not cls.isNil)
     check(respondsToSelector(cls, selector("addObserver:forKeyPath:options:context:")))
+
+  test "objcImpl nils":
+    var nilPingCount = 0
+
+    objcImpl:
+      type NNilTest = object of NSObject
+
+      method ping(self: NNilTest) =
+        inc nilPingCount
+
+      method pong(self: NNilTest): NSString =
+        return @ns"pong"
+
+    let o = NNilTest.new()
+
+    check(not o.isNil)
+    o.ping()
+    check(o.pong() == @ns"pong")
+    check(nilPingCount == 1)
+
+    var n: NNilTest
+    check(n.isNil)
+    n.ping()
+    check(n.pong().isNil)
+
+    check(nilPingCount == 1)
+

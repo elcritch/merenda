@@ -659,7 +659,13 @@ proc buildObjcWrapperProc(
     wrapperBody.add(implCall)
   else:
     wrapperBody.add quote do:
-      result = objcToAbiArg(`retType`, `implCall`)
+      when `retType` is ID:
+        var objcImplReturnValue = `implCall`
+        let objcAbiReturnValue = objcToAbiArg(`retType`, objcImplReturnValue)
+        result = objcAbiReturnValue
+        wasMoved(objcImplReturnValue)
+      else:
+        result = objcToAbiArg(`retType`, `implCall`)
 
   let wrapperProc = newProc(
     name = genSym(nskProc, methodName & "_objcWrapper"),
