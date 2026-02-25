@@ -72,7 +72,7 @@ objcImpl:
             parent.viewSubviews = subviews
             break
       view.viewSuperview = NSView(value: nil)
-      view.setNextResponder(asType[NSResponder](self))
+      view.setNextResponder(asRetainedType[NSResponder](self))
     self.xContentView = retain(view)
 
   method contentView*(self: NSWindow): NSView =
@@ -90,7 +90,7 @@ objcImpl:
       return false
     var requested = responder
     if requested.isNil:
-      requested = asType[NSResponder](self)
+      requested = asRetainedType[NSResponder](self)
     if self.xFirstResponder.value == requested.value:
       return true
 

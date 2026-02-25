@@ -243,7 +243,7 @@ proc addSubview*(self: NSView, view: NSView) =
     if view notin children:
       children.add(view)
       self.viewSubviews = children
-    view.setNextResponder(asType[NSResponder](self))
+    view.setNextResponder(asRetainedType[NSResponder](self))
     return
   if not parent.isNil:
     view.removeFromSuperview()
@@ -252,7 +252,7 @@ proc addSubview*(self: NSView, view: NSView) =
     children.add(view)
     self.viewSubviews = children
   view.viewSuperview = retain(self)
-  view.setNextResponder(asType[NSResponder](self))
+  view.setNextResponder(asRetainedType[NSResponder](self))
 
 proc removeSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil:

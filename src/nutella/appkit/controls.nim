@@ -59,7 +59,7 @@ objcImpl:
     defaultCell.value = nil
     let cell = result.xCell
     if not cell.isNil:
-      cell.setControlView(asType[NSView](result))
+      cell.setControlView(asRetainedType[NSView](result))
       cell.setContinuous(false)
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
@@ -72,7 +72,7 @@ objcImpl:
       self.xCell = move(defaultCell)
       if not self.xCell.isNil:
         let controlCell = self.xCell
-        controlCell.setControlView(asType[NSView](self))
+        controlCell.setControlView(asRetainedType[NSView](self))
         controlCell.setContinuous(false)
     self.xCell
 
@@ -82,7 +82,7 @@ objcImpl:
     self.xCell = ownFromId[NSCell](cell.value)
     let bound = self.xCell
     if not bound.isNil:
-      bound.setControlView(asType[NSView](self))
+      bound.setControlView(asRetainedType[NSView](self))
 
   method isEnabled*(self: NSControl): bool =
     if self.isNil:
