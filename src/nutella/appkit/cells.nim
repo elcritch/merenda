@@ -1,10 +1,7 @@
 import std/[parseutils, strutils]
 
 import ./runtime
-
-type NSIntValueProvider* =
-  concept sender
-      sender.intValue() is cint
+import ./valueproviders
 
 proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
   NSFocusRingTypeExterior

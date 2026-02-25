@@ -13,6 +13,7 @@ import ./appkit/clipviews
 import ./appkit/collectionviews
 import ./appkit/alerts
 import ./appkit/events
+import ./appkit/valueproviders
 
 export runtime
 export rendering
@@ -29,3 +30,4 @@ export clipviews
 export collectionviews
 export alerts
 export events
+export valueproviders
