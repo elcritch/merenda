@@ -10,7 +10,7 @@ objcImpl:
       return
 
   method dealloc*(self: NXString) =
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method stringValue*(self: NXString): string =

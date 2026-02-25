@@ -21,7 +21,7 @@ proc ivarOwnerPing(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
 
 proc ivarOwnerDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard cmd
-  clearIvarRefs(self)
+  destroyIvarFields(self)
   {.cast(raises: []).}:
     var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))
     discard cast[proc(superObj: var ObjcSuper, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
@@ -32,12 +32,14 @@ proc ensureIvarOwnerClass(): ObjcClass =
   const
     ClassName = "NimIvarRefOwnerTest"
     NamedIvarName = "nimNamedStateRef"
+    ValueIvarName = "nimValueState"
 
   result = getClass(ClassName)
   if result.isNil:
     addClass(ClassName, "NSObject", result):
       doAssert addRefIvar(result, NamedIvarName)
       doAssert addRefIvar[IvarStateRef](result)
+      doAssert addValueIvar[int](result, ValueIvarName)
       discard addMethod(result, selector("ping"), cast[IMP](ivarOwnerPing), "v@:")
       discard addMethod(result, selector("dealloc"), cast[IMP](ivarOwnerDealloc), "v@:")
 
@@ -86,7 +88,7 @@ suite "objc ivar Nim ref storage":
     check(o.getIvarRef(IvarStateRef) == nil)
     check(ivarStateDestroyedCount == 1)
 
-  test "clearIvarRefs in dealloc releases all registered ivar refs":
+  test "destroyIvarFields in dealloc releases all registered ivar refs":
     ivarStateDestroyedCount = 0
     ivarPingCount = 0
 
@@ -107,3 +109,43 @@ suite "objc ivar Nim ref storage":
     release(o)
     check(o.isNil)
     check(ivarStateDestroyedCount == 2)
+
+  test "initIvarFields clears refs and resets value ivars":
+    ivarStateDestroyedCount = 0
+
+    let cls = ensureIvarOwnerClass()
+    var o = asType[NSObject](new(cls))
+    check(not o.isNil)
+
+    var namedState = IvarStateRef(value: 91)
+    setIvarRef[IvarStateRef](o, "nimNamedStateRef", namedState)
+    setIvarValue[int](o, "nimValueState", 123)
+    namedState = nil
+
+    check(getIvarRef[IvarStateRef](o, "nimNamedStateRef") != nil)
+    check(getIvarValue[int](o, "nimValueState") == 123)
+
+    initIvarFields(o)
+    check(getIvarRef[IvarStateRef](o, "nimNamedStateRef") == nil)
+    check(getIvarValue[int](o, "nimValueState") == 0)
+    check(ivarStateDestroyedCount == 1)
+
+  test "initIvarFields can skip Nim ref initialization":
+    ivarStateDestroyedCount = 0
+
+    let cls = ensureIvarOwnerClass()
+    var o = asType[NSObject](new(cls))
+    check(not o.isNil)
+
+    var namedState = IvarStateRef(value: 201)
+    setIvarRef[IvarStateRef](o, "nimNamedStateRef", namedState)
+    setIvarValue[int](o, "nimValueState", 456)
+    namedState = nil
+
+    initIvarFields(o, false)
+    check(getIvarRef[IvarStateRef](o, "nimNamedStateRef") != nil)
+    check(getIvarValue[int](o, "nimValueState") == 0)
+    check(ivarStateDestroyedCount == 0)
+
+    clearIvarRef(o, "nimNamedStateRef")
+    check(ivarStateDestroyedCount == 1)

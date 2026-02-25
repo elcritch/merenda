@@ -223,7 +223,7 @@ objcImpl:
     if not self.xContentView.isNil:
       clearSuperviewRef(self.xContentView.value)
     self.xContentView = NSView(value: nil)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSWindow, self, getSelector("dealloc"))
 
 objcImpl:

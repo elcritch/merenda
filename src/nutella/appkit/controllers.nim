@@ -53,7 +53,7 @@ objcImpl:
     if not store.isNil:
       clearOwnedIds(store.editors)
     clearAssociatedRef[NSControllerStorage](self)
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSController, self, getSelector("dealloc"))
 
   method initWithCoder*(self: var NSController, coder: IDPtr): NSController =

@@ -14,7 +14,7 @@ objcImpl:
       return
 
   method dealloc*(self: NXInteger) =
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method integerValue*(self: NXInteger): NSInteger =
@@ -54,7 +54,7 @@ objcImpl:
       return
 
   method dealloc*(self: NXDouble) =
-    clearIvarRefs(self)
+    destroyIvarFields(self)
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
 
   method doubleValue*(self: NXDouble): cdouble =

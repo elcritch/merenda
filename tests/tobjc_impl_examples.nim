@@ -294,7 +294,7 @@ suite "objcImpl examples":
         st.lastAmount.cint
 
       method dealloc(self: IvarCounterClass) {.used.} =
-        clearIvarRefs(self)
+        destroyIvarFields(self)
         superDealloc(self)
 
     ivarCounterStateDestroyedCount = 0
@@ -365,7 +365,7 @@ suite "objcImpl examples":
         st.lastAmount.cint
 
       method dealloc(self: IvarCounterClass2) {.used.} =
-        clearIvarRefs(self)
+        destroyIvarFields(self)
         superDealloc(self)
 
     ivarCounterStateDestroyedCount2 = 0
