@@ -18,14 +18,15 @@
 - Indentation: 2 spaces; no tabs.
 - Formatting: run `nph src/*.nim` and format any touched test files.
 
-## Nutella / Objective-C Implementations
+## Nutella / Objective-C Implentation Rules
 - Make sure to use `objcImpl` methods instead of Nim procs unless copying a C function when implementing OpenSTEP or Cocoa APIs.
 - Every `NS*` object or `NX*` object must be an Objective-C class or prototype unless there's a very good reason like `NSRect`.
 - ObjC fields (ivars) in `objcImpl` must use the `x` prefix (for example `xTitle`, `xFrame`) instead of `_` or ad-hoc prefixes.
-- Use `{.get: ..., set: ....}` pragmas for Objective-C API surface so selectors match `vendor/AppKit/*.h` and behavior matches `vendor/AppKit/*.m`.
+- Always `xField {.set: setField, get: field.}` pragmas to create plain method getters/setters unless complex logic is needed
+- Don't initialize "zero" value fields with `false`, `nil`, or `NSFoo(value: nil)` since these will be set by memory zeroing.
 - Prefer public API names from AppKit headers over `*Id`-style hacks (for example `title`/`setTitle` rather than `titleId`).
-- Convert `id` in Objective-C to concrete types where possible when porting Obj-C code
-- Prefer short field names for private storage, but keep exported selector names header-aligned via `get`/`set` pragmas.
+- Convert `id` in Objective-C to concrete types where possible when porting Obj-C code, or failing that use `ID` not `IDPtr`.
+- Don't use `discard variable` or prefix `_` for unused proc/method arguments. Don't use `when false: discard t` to retain unused type. Nim doesn't need these. 
 - Never try to use global storage as a shortcut for implementing something unless absolutely needed.
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
 - Prefer NSString over Nim strings. 
