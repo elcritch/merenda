@@ -40,6 +40,7 @@ type
     value*: IDPtr
 
   NSObject* = object of ID
+  ObjcProtocolObject* {.pure, inheritable.} = object of ID
 
   ObjcClass* {.pure.} = object of NSObject
 
@@ -153,7 +154,7 @@ proc isNil*(a: ID): bool =
 proc isNil*(a: Protocol): bool =
   cast[pointer](a) == nil
 
-converter toID*(o: NSObject): IDPtr {.inline.} =
+converter toID*(o: ID): IDPtr {.inline.} =
   o.value
 
 converter toNSObject*(id: IDPtr): NSObject {.inline.} =
@@ -162,19 +163,19 @@ converter toNSObject*(id: IDPtr): NSObject {.inline.} =
 converter toObjcClass*(id: IDPtr): ObjcClass {.inline.} =
   ObjcClass(value: id)
 
-template asType*[T: NSObject](o: IDPtr): T =
+template asType*[T: ID](o: IDPtr): T =
   T(value: o)
 
-template asType*[T: NSObject](o: NSObject): T =
+template asType*[T: ID](o: ID): T =
   T(value: o.value)
 
-template asRetainedType*[T: NSObject](o: IDPtr): T =
+template asRetainedType*[T: ID](o: IDPtr): T =
   if o == nil:
     T(value: nil)
   else:
     T(value: retainAux(o))
 
-template asRetainedType*[T: NSObject](o: NSObject): T =
+template asRetainedType*[T: ID](o: ID): T =
   if o.value == nil:
     T(value: nil)
   else:
@@ -186,7 +187,10 @@ proc objc_msgSend*(self: IDPtr, op: SEL): IDPtr {.cdecl, importc, discardable, v
 
 proc objc_msgSend_fpret*(self: IDPtr, op: SEL): cdouble {.cdecl, importc, varargs.}
 proc objc_msgSend_stret*(self: IDPtr, op: SEL) {.cdecl, importc, varargs.}
-proc objc_msgSendSuper*(super: var ObjcSuper, op: SEL): IDPtr {.cdecl, importc, varargs.}
+proc objc_msgSendSuper*(
+  super: var ObjcSuper, op: SEL
+): IDPtr {.cdecl, importc, varargs.}
+
 proc objc_msgSendSuper_stret*(super: var ObjcSuper, op: SEL) {.cdecl, importc, varargs.}
 
 proc class_getName(cls: IDPtr): cstring {.cdecl, importc.}
@@ -282,7 +286,9 @@ proc class_getClassMethod(cls: IDPtr, name: SEL): Method {.cdecl, importc.}
 template getClassMethod*(cls: ObjcClass, name: SEL): Method =
   class_getClassMethod(cls, name)
 
-proc class_copyMethodList(cls: IDPtr, outCount: var cuint): ptr Method {.cdecl, importc.}
+proc class_copyMethodList(
+  cls: IDPtr, outCount: var cuint
+): ptr Method {.cdecl, importc.}
 
 proc methodList*(cls: ObjcClass): seq[Method] =
   var
@@ -430,7 +436,9 @@ proc object_getInstanceVariable(
   obj: IDPtr, name: cstring, outValue: var pointer
 ): Ivar {.cdecl, importc.}
 
-template getInstanceVariable*(obj: IDPtr, name: string, outValue: var pointer): untyped =
+template getInstanceVariable*(
+    obj: IDPtr, name: string, outValue: var pointer
+): untyped =
   object_getInstanceVariable(obj, name.cstring, outValue)
 
 proc object_getIndexedIvars(obj: IDPtr): pointer {.cdecl, importc.}
@@ -451,7 +459,7 @@ proc ivar_getOffset(v: Ivar): ptrdiff_t {.cdecl, importc.}
 proc getRawClassName*(obj: IDPtr): string =
   $object_getClassName(obj)
 
-template getClassName*[T: NSObject](obj: T): string =
+template getClassName*[T: ID](obj: T): string =
   $object_getClassName(obj.value)
 
 proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
@@ -542,7 +550,9 @@ proc nxObjectRespondsToSelector(
   discard cmd
   class_respondsToSelector(object_getClass(self), selector)
 
-proc nxObjectIsKindOfClass(self: IDPtr, cmd: SEL, cls: IDPtr): bool {.cdecl, raises: [].} =
+proc nxObjectIsKindOfClass(
+    self: IDPtr, cmd: SEL, cls: IDPtr
+): bool {.cdecl, raises: [].} =
   discard cmd
   if cls == nil:
     return false
@@ -876,7 +886,29 @@ template getProtocol*(name: string): untyped =
   getProtocolByName(name)
 
 template getProtocol*[T: ProtocolPrototype](t: typedesc[T]): untyped =
+  block:
+    const typeName = $T
+    when typeName.endsWith("Prototype") and typeName.len > "Prototype".len:
+      getProtocolByName(typeName[0 ..< typeName.len - "Prototype".len])
+    else:
+      getProtocolByName(typeName)
+
+template getProtocol*[T: ObjcProtocolObject](t: typedesc[T]): untyped =
   getProtocolByName($T)
+
+proc asProto*[T: ObjcProtocolObject](o: IDPtr): T =
+  if o == nil:
+    return T(value: nil)
+  let proto = getProtocol(T)
+  if proto.isNil:
+    return T(value: nil)
+  let cls = getClass(o)
+  if cls.isNil or not cls.conformsToProtocol(proto):
+    return T(value: nil)
+  T(value: retainAux(o))
+
+template asProto*[T: ObjcProtocolObject](o: ID): T =
+  asProto[T](o.value)
 
 proc objc_copyProtocolList(outCount: var cuint): ptr Protocol {.cdecl, importc.}
 proc protocolList*(): seq[Protocol] =

@@ -496,17 +496,10 @@ proc hasErrorPragma(def: NimNode): bool =
         return true
   false
 
-proc leafTypeName(typ: NimNode): string =
-  case typ.kind
-  of nnkVarTy, nnkRefTy, nnkDistinctTy, nnkPtrTy:
-    leafTypeName(typ[0])
-  else:
-    identName(typ)
-
 template objcAbiType(T: typedesc): untyped =
   when T is string:
     cstring
-  elif T is NSObject:
+  elif T is ID:
     IDPtr
   else:
     T
@@ -529,7 +522,7 @@ proc objcStableCString(value: string): cstring =
 template objcToAbiArg(T: typedesc, v: untyped): untyped =
   when T is string:
     objcStableCString(v)
-  elif T is NSObject:
+  elif T is ID:
     toID(v)
   else:
     v
@@ -540,7 +533,7 @@ template objcFromAbiValue(T: typedesc, v: untyped): untyped =
       ""
     else:
       $v
-  elif T is NSObject:
+  elif T is ID:
     asType[T](v)
   else:
     v
@@ -553,33 +546,19 @@ template objcFromAbiReturnValue(T: typedesc, v: untyped): untyped =
         ""
       else:
         $objcRawReturnValue
-    elif T is NSObject:
+    elif T is ID:
       asRetainedType[T](objcRawReturnValue)
     else:
       objcRawReturnValue
 
-proc isNSObjectTypeNode(typ: NimNode): bool =
-  leafTypeName(typ) == "NSObject"
-
 proc objcAbiTypeNode(typ: NimNode): NimNode =
-  if isNSObjectTypeNode(typ):
-    bindSym"IDPtr"
-  else:
-    newCall(bindSym"objcAbiType", copyNimTree(typ))
+  newCall(bindSym"objcAbiType", copyNimTree(typ))
 
 proc objcToAbiArgNode(typ, arg: NimNode): NimNode =
-  if isNSObjectTypeNode(typ):
-    newCall(bindSym"toID", copyNimTree(arg))
-  else:
-    newCall(bindSym"objcToAbiArg", copyNimTree(typ), copyNimTree(arg))
+  newCall(bindSym"objcToAbiArg", copyNimTree(typ), copyNimTree(arg))
 
 proc objcFromAbiValueNode(typ, value: NimNode): NimNode =
-  if isNSObjectTypeNode(typ):
-    newCall(
-      newTree(nnkBracketExpr, bindSym"asType", copyNimTree(typ)), copyNimTree(value)
-    )
-  else:
-    newCall(bindSym"objcFromAbiValue", copyNimTree(typ), copyNimTree(value))
+  newCall(bindSym"objcFromAbiValue", copyNimTree(typ), copyNimTree(value))
 
 proc buildObjcWrapperProc(
     def: NimNode, protocolName, className: string
@@ -660,7 +639,7 @@ proc buildObjcWrapperProc(
       let fromValueExprForLet = objcFromAbiValueNode(normType, rawArg)
       wrapperParams.add(newIdentDefs(rawArg, abiType, newEmptyNode()))
       wrapperBody.add quote do:
-        when `normType` is NSObject:
+        when `normType` is ID:
           var `argName` = `fromValueExprForVar`
           discard `argName`
           defer:
@@ -1156,10 +1135,14 @@ macro objcImpl*(x: untyped): untyped =
 
   var protocolSpecs: seq[ObjcProtocolMethodSpec] = @[]
   var protocolPropertySpecs: seq[ObjcProtocolPropertySpec] = @[]
+  var protocolHelperDefs = newStmtList()
   if hasProtocol:
     for conceptStmt in conceptBody:
       let spec = methodSpecFromDef(conceptStmt, protocolName, className)
       protocolSpecs.add(spec)
+      protocolHelperDefs.add(
+        buildObjcCallHelperProc(conceptStmt, spec, protocolName, "")
+      )
       if hasPropertyPragma(conceptStmt):
         protocolPropertySpecs.add(
           propertySpecFromDef(conceptStmt, protocolName, className)
@@ -1169,8 +1152,16 @@ macro objcImpl*(x: untyped): untyped =
   if hasProtocol:
     let protocolTypeLine =
       protocolName & (if protocolExported: "*" else: "") &
+      " = object of ObjcProtocolObject"
+    let protocolPrototypeTypeLine =
+      protocolName & "Prototype" & (if protocolExported: "*" else: "") &
       " = object of ProtocolPrototype"
     generatedTypes.add(buildConditionalTypeDecl(protocolTypeLine, protocolName, true))
+    generatedTypes.add(
+      buildConditionalTypeDecl(
+        protocolPrototypeTypeLine, protocolName & "Prototype", true
+      )
+    )
   if hasClassDecl:
     let classTypeLine =
       className & (if classExported: "*" else: "") & " = object of " & classSuperName
@@ -1418,6 +1409,7 @@ macro objcImpl*(x: untyped): untyped =
   result.add(generatedTypes)
   result.add(fieldAccessorDefs)
   result.add(passthrough)
+  result.add(protocolHelperDefs)
   result.add(callHelperDefs)
   result.add(wrapperDefs)
   var runtimeSetup = newStmtList()
