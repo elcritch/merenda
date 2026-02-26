@@ -199,6 +199,7 @@ type
   NSTextField* = object of NSControl
 
   NSFont* = object of NSObject
+  NSFontDescriptor* = object of NSObject
   NSImage* = object of NSObject
   NSMenu* = object of NSObject
   NSFormatter* = object of NSObject

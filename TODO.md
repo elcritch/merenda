@@ -56,6 +56,7 @@ Sorted by implementation priority (most useful first).
 - [x] NSEvent - Input event object for keyboard, mouse, and system actions.
 - [ ] NSFont - Font face and metrics object for text rendering. (wrap FigDraw Fonts)
 - [ ] NSFontDescriptor - Immutable descriptor of font attributes. (wrap FigDraw Fonts)
+- [ ] NSFont/NSFontDescriptor lifetime debug - Use Nim ARC logging/expansion output (`--expandArc:systemFontOfSize --expandArc:fontWithName --expandArc:initWithName --expandArc:main`) to trace the second-font-construction crash and fix ownership.
 <!-- - [ ] NSFontManager - Shared manager for font panel and conversions. -->
 - [ ] NSImage - Image asset object for bitmap/vector representations.
 - [ ] NSImageRep - Abstract image representation backend.
