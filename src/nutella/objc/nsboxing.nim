@@ -114,7 +114,7 @@ proc nsInteger*[T: SomeInteger](value: T): NXInteger =
   if created.isNil:
     return NXInteger(value: nil)
   created.setIntegerValue(value.NSInteger)
-  result = asType[NXInteger](move(created.value))
+  result = asTypeRaw[NXInteger](move(created.value))
 
 proc nsFloat*[T: SomeFloat](value: T): NXDouble =
   var allocated = NXDouble.alloc()
@@ -123,7 +123,7 @@ proc nsFloat*[T: SomeFloat](value: T): NXDouble =
   if created.isNil:
     return NXDouble(value: nil)
   created.setDoubleValue(value.cdouble)
-  result = asType[NXDouble](move(created.value))
+  result = asTypeRaw[NXDouble](move(created.value))
 
 type NSBoxingBuilder* = object
 

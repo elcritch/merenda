@@ -20,7 +20,7 @@ objcImpl:
 
   method init*(self: var NSApplication): NSApplication =
     result =
-      asType[NSApplication](callSuperIdFrom(NSApplication, self, getSelector("init")))
+      asTypeRaw[NSApplication](callSuperIdFrom(NSApplication, self, getSelector("init")))
     if result.isNil:
       return
     result.appWindows = @[]

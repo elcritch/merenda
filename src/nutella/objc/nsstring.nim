@@ -46,7 +46,7 @@ proc nsString*(value: sink string): NSString =
   if created.isNil:
     return NSString(value: nil)
   created.text = value
-  result = asType[NSString](move(created.value))
+  result = asTypeRaw[NSString](move(created.value))
 
 proc toNSString*(value: string): NSString {.inline.} =
   nsString(value)

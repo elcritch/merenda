@@ -16,7 +16,7 @@ objcImpl:
     alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
 
   method init*(self: var NSControl): NSControl =
-    result = asType[NSControl](
+    result = asTypeRaw[NSControl](
       cast[proc(
         self: IDPtr, op: SEL, x: float32, y: float32, width: float32, height: float32
       ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
@@ -33,7 +33,7 @@ objcImpl:
   ): NSControl =
     var superObj =
       ObjcSuper(receiver: self.value, superClass: getClass(NSControl).getSuperclass())
-    result = asType[NSControl](
+    result = asTypeRaw[NSControl](
       cast[proc(
         superObj: var ObjcSuper,
         op: SEL,

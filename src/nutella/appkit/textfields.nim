@@ -19,7 +19,7 @@ objcImpl:
 
   method init*(self: var NSTextField): NSTextField =
     result =
-      asType[NSTextField](callSuperIdFrom(NSTextField, self, getSelector("init")))
+      asTypeRaw[NSTextField](callSuperIdFrom(NSTextField, self, getSelector("init")))
     if result.isNil:
       return
     result.setEnabled(true)
@@ -74,7 +74,7 @@ objcImpl:
     echosBullets {.set: setEchosBullets, get: echosBullets.}: bool
 
   method init*(self: var NSSecureTextField): NSSecureTextField =
-    result = asType[NSSecureTextField](
+    result = asTypeRaw[NSSecureTextField](
       callSuperIdFrom(NSSecureTextField, self, getSelector("init"))
     )
     if result.isNil:
@@ -89,7 +89,7 @@ objcImpl:
 
   method init*(self: var NSSearchField): NSSearchField =
     result =
-      asType[NSSearchField](callSuperIdFrom(NSSearchField, self, getSelector("init")))
+      asTypeRaw[NSSearchField](callSuperIdFrom(NSSearchField, self, getSelector("init")))
     if result.isNil:
       return
     result.xRecentSearches = nsArray[NSString]()

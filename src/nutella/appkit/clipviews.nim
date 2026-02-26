@@ -15,7 +15,7 @@ objcImpl:
     clipScrollOrigin: NSPoint
 
   method init*(self: var NSClipView): NSClipView =
-    result = asType[NSClipView](callSuperIdFrom(NSClipView, self, getSelector("init")))
+    result = asTypeRaw[NSClipView](callSuperIdFrom(NSClipView, self, getSelector("init")))
     if result.isNil:
       return
     result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)

@@ -108,7 +108,7 @@ objcImpl:
   proc init*(v: var HiddenCtorClass): HiddenCtorClass {.error: "Use initAllowed()".}
 
   proc initAllowed*(v: var HiddenCtorClass): HiddenCtorClass =
-    result = asType[HiddenCtorClass](super(v, init))
+    result = asTypeRaw[HiddenCtorClass](super(v, init))
     v.value = nil
 
   method ping(self: HiddenCtorClass) =

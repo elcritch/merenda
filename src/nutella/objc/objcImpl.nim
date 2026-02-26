@@ -511,7 +511,7 @@ template objcFromAbiValue(T: typedesc, v: untyped): untyped =
     else:
       $v
   elif T is ID:
-    asType[T](v)
+    asTypeRaw[T](v)
   else:
     v
 
@@ -587,7 +587,7 @@ proc buildObjcWrapperProc(
   else:
     let selfType = ident(className)
     wrapperBody.add quote do:
-      var `selfIdent` = asType[`selfType`](`selfRaw`)
+      var `selfIdent` = asTypeRaw[`selfType`](`selfRaw`)
     wrapperBody.add quote do:
       discard `selfIdent`
     wrapperBody.add quote do:

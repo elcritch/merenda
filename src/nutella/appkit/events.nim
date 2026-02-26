@@ -262,7 +262,7 @@ objcImpl:
     xSiwinPressed: bool
 
   method init*(self: var NSEvent): NSEvent =
-    result = asType[NSEvent](callSuperIdFrom(NSEvent, self, getSelector("init")))
+    result = asTypeRaw[NSEvent](callSuperIdFrom(NSEvent, self, getSelector("init")))
     if result.isNil:
       return
     result.xType = NSApplicationDefined
@@ -495,7 +495,7 @@ objcImpl:
       timeIntervalSinceReferenceDate(),
       0,
     )
-    result = asType[NSEvent_CoreGraphics](move(initialized.value))
+    result = asTypeRaw[NSEvent_CoreGraphics](move(initialized.value))
     if result.isNil:
       return
     result.xCoreGraphicsEvent = event
@@ -593,7 +593,7 @@ proc newPeriodicEvent*(
 ): NSEvent_periodic =
   var allocated = NSEvent_periodic.alloc()
   var initialized = allocated.initWithType(NSPeriodic, nsPoint(0, 0), {}, timestamp, 0)
-  result = asType[NSEvent_periodic](move(initialized.value))
+  result = asTypeRaw[NSEvent_periodic](move(initialized.value))
   allocated.value = nil
 
 proc newDisplayEvent*(
@@ -603,7 +603,7 @@ proc newDisplayEvent*(
   var initialized = allocated.initWithType(
     NSPlatformSpecificDisplayEvent, nsPoint(0, 0), {}, timestamp, 0
   )
-  result = asType[NSEvent_CoreGraphics](move(initialized.value))
+  result = asTypeRaw[NSEvent_CoreGraphics](move(initialized.value))
   allocated.value = nil
   if result.isNil:
     return

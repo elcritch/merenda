@@ -27,7 +27,7 @@ objcImpl:
     xClosed {.set: windowClosed, get: windowClosed.}: bool
 
   method init*(self: var NSWindow): NSWindow =
-    result = asType[NSWindow](callSuperIdFrom(NSWindow, self, getSelector("init")))
+    result = asTypeRaw[NSWindow](callSuperIdFrom(NSWindow, self, getSelector("init")))
     if result.isNil:
       return
     result.xFrame = nsRect(100, 100, 640, 420)
@@ -233,7 +233,7 @@ objcImpl:
     floatingPanel {.set: setFloatingPanel, get: isFloatingPanel.}: bool
 
   method init*(self: var NSPanel): NSPanel =
-    result = asType[NSPanel](callSuperIdFrom(NSPanel, self, getSelector("init")))
+    result = asTypeRaw[NSPanel](callSuperIdFrom(NSPanel, self, getSelector("init")))
     if result.isNil:
       return
     result.worksWhenModal = false

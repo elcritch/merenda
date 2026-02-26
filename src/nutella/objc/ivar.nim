@@ -218,7 +218,7 @@ proc getIvarValue*[T](obj: NSObject, ivarName: string): T {.raises: [].} =
     if id.isNil:
       return T(value: nil)
     discard objc_msgSend(id, sel_registerName("retain"))
-    asType[T](id)
+    asTypeRaw[T](id)
   else:
     p[]
 

@@ -13,7 +13,7 @@ objcImpl:
     boxContentView: NSView
 
   method init*(self: var NSBox): NSBox =
-    result = asType[NSBox](callSuperIdFrom(NSBox, self, getSelector("init")))
+    result = asTypeRaw[NSBox](callSuperIdFrom(NSBox, self, getSelector("init")))
     if result.isNil:
       return
     result.boxType = 0
