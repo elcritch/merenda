@@ -14,6 +14,7 @@ Sorted by implementation priority (most useful first).
 - [x] KVO baseline (runtime-backed) - Added observer registration/removal and `willChangeValueForKey`/`didChangeValueForKey` notifications with `New`/`Old`/`Initial`/`Prior` options via runtime-associated storage.
 - [x] Optional protocol methods/properties modeling - Added `.optional`/`.required` protocol method metadata and `.property`/`.readonly` protocol property modeling (instance/class), with required-only implementation enforcement.
 - [x] KVC/boxing type coverage - Added float (`f`/`d`) and bool boxing/unboxing, plus KVC getter/setter support for float and double encodings.
+- [x] Typed AppKit constant enums - Converted alert styles/returns, button types, and image alignment constants from raw ints to enums (`NSAlertStyle`, `NSAlertReturn`, `NSButtonType`, `NSImageAlignment`) with int converters for compatibility.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
 ## Done: Already Implemented (20)

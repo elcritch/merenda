@@ -64,23 +64,38 @@ type
     b*: float32
     a*: float32
 
+  NSAlertStyle* {.size: sizeof(cint).} = enum
+    NSWarningAlertStyle = 0
+    NSInformationalAlertStyle = 1
+    NSCriticalAlertStyle = 2
+
+  NSAlertReturn* {.size: sizeof(cint).} = enum
+    NSAlertFirstButtonReturn = 1000
+    NSAlertSecondButtonReturn = 1001
+    NSAlertThirdButtonReturn = 1002
+
+  NSButtonType* {.size: sizeof(cint).} = enum
+    NSMomentaryLightButton = 0
+    NSPushOnPushOffButton = 1
+    NSToggleButton = 2
+    NSSwitchButton = 3
+    NSRadioButton = 4
+    NSMomentaryChangeButton = 5
+    NSOnOffButton = 6
+    NSMomentaryPushInButton = 7
+
+  NSImageAlignment* {.size: sizeof(cint).} = enum
+    NSImageAlignCenter = 0
+    NSImageAlignTop = 1
+    NSImageAlignTopLeft = 2
+    NSImageAlignTopRight = 3
+    NSImageAlignLeft = 4
+    NSImageAlignBottom = 5
+    NSImageAlignBottomLeft = 6
+    NSImageAlignBottomRight = 7
+    NSImageAlignRight = 8
+
 const
-  NSWarningAlertStyle* = 0
-  NSInformationalAlertStyle* = 1
-  NSCriticalAlertStyle* = 2
-  NSAlertFirstButtonReturn* = 1000
-  NSAlertSecondButtonReturn* = 1001
-  NSAlertThirdButtonReturn* = 1002
-
-  NSMomentaryLightButton* = 0
-  NSPushOnPushOffButton* = 1
-  NSToggleButton* = 2
-  NSSwitchButton* = 3
-  NSRadioButton* = 4
-  NSMomentaryChangeButton* = 5
-  NSOnOffButton* = 6
-  NSMomentaryPushInButton* = 7
-
   NSRoundedBezelStyle* = 1
   NSRegularSquareBezelStyle* = 2
   NSThickSquareBezelStyle* = 3
@@ -118,6 +133,12 @@ const
   NSScaleToFit* = NSImageScaleAxesIndependently
   NSScaleNone* = NSImageScaleNone
 
+  NSImageFrameNone* = 0
+  NSImageFramePhoto* = 1
+  NSImageFrameGrayBezel* = 2
+  NSImageFrameGroove* = 3
+  NSImageFrameButton* = 4
+
   NSMixedState* = -1
   NSOffState* = 0
   NSOnState* = 1
@@ -147,6 +168,18 @@ proc nsRect*(x, y, width, height: float32): NSRect =
 
 proc nsColor*(r, g, b: float32, a: float32 = 1.0'f32): NSColor =
   NSColor(r: r, g: g, b: b, a: a)
+
+converter alertStyleToInt*(value: NSAlertStyle): int {.inline.} =
+  value.int
+
+converter alertReturnToInt*(value: NSAlertReturn): int {.inline.} =
+  value.int
+
+converter buttonTypeToInt*(value: NSButtonType): int {.inline.} =
+  value.int
+
+converter imageAlignmentToInt*(value: NSImageAlignment): int {.inline.} =
+  value.int
 
 proc NSMakeRange*(location, length: uint): NSRange {.inline.} =
   NSRange(location: location, length: length)
