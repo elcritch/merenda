@@ -41,3 +41,6 @@
 
 ## Security & Configuration Tips
 - GC: library requires ARC/ORC (`--mm:arc` or `--mm:orc` or `--mm:atomicArc`); enforced in `sigils.nim`.
+
+## Debugging Notes
+- NSFont/NSFontDescriptor lifetime bug tracking: use Nim ARC expansion logging (`--expandArc:systemFontOfSize --expandArc:fontWithName --expandArc:initWithName --expandArc:main`) to trace second-font-construction ownership issues.

@@ -2,9 +2,9 @@
 
 Generated from `deps/ravynos/Frameworks/AppKit` headers (`@interface NS* : ...`, categories excluded).
 
-Implemented in Nutella today (18): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
+Implemented in Nutella today (20): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSFont`, `NSFontDescriptor`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
 
-Remaining AppKit classes tracked: 176
+Remaining AppKit classes tracked: 174
 
 Sorted by implementation priority (most useful first).
 
@@ -16,7 +16,7 @@ Sorted by implementation priority (most useful first).
 - [x] KVC/boxing type coverage - Added float (`f`/`d`) and bool boxing/unboxing, plus KVC getter/setter support for float and double encodings.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
-## Done: Already Implemented (18)
+## Done: Already Implemented (20)
 - [x] NSActionCell - Cell subclass that supports target/action behavior.
 - [x] NSAlert - Modal/non-modal alert dialog API.
 - [x] NSApplication - Application singleton and event loop coordinator.
@@ -28,6 +28,8 @@ Sorted by implementation priority (most useful first).
 - [x] NSControl - Base class for interactive controls.
 - [x] NSController - Abstract base class for controller objects.
 - [x] NSEvent - Input event object for keyboard, mouse, and system actions.
+- [x] NSFont - Font face and metrics object for text rendering.
+- [x] NSFontDescriptor - Immutable descriptor of font attributes.
 - [x] NSPanel - Utility-style window subclass.
 - [x] NSResponder - Base class for responder chain event handling.
 - [x] NSSearchField - Text field specialized for search input.
@@ -54,9 +56,8 @@ Sorted by implementation priority (most useful first).
 - [ ] NSDocument - Document-model object for document-based apps.
 - [ ] NSDocumentController - Manager for document lifecycle and windows.
 - [x] NSEvent - Input event object for keyboard, mouse, and system actions.
-- [ ] NSFont - Font face and metrics object for text rendering. (wrap FigDraw Fonts)
-- [ ] NSFontDescriptor - Immutable descriptor of font attributes. (wrap FigDraw Fonts)
-- [ ] NSFont/NSFontDescriptor lifetime debug - Use Nim ARC logging/expansion output (`--expandArc:systemFontOfSize --expandArc:fontWithName --expandArc:initWithName --expandArc:main`) to trace the second-font-construction crash and fix ownership.
+- [x] NSFont - Font face and metrics object for text rendering.
+- [x] NSFontDescriptor - Immutable descriptor of font attributes.
 <!-- - [ ] NSFontManager - Shared manager for font panel and conversions. -->
 - [ ] NSImage - Image asset object for bitmap/vector representations.
 - [ ] NSImageRep - Abstract image representation backend.
