@@ -196,13 +196,18 @@ type
 
   NSCollectionView* = object of NSView
   NSText* = object of NSView
+  NSClipView* = object of NSView
+  NSScrollView* = object of NSView
+  NSRulerView* = object of NSView
   NSControl* = object of NSView
+  NSScroller* = object of NSControl
   NSImageView* = object of NSControl
   NSTextField* = object of NSControl
 
   NSFont* = object of NSObject
   NSFontDescriptor* = object of NSObject
   NSImage* = object of NSObject
+  NSCursor* = object of NSObject
   NSMenu* = object of NSObject
   NSFormatter* = object of NSObject
   NSAttributedString* = object of NSObject

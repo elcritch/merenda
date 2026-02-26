@@ -1,4 +1,10 @@
 type
+  NSBorderType* {.size: sizeof(cint).} = enum
+    NSNoBorder = 0
+    NSLineBorder = 1
+    NSBezelBorder = 2
+    NSGrooveBorder = 3
+
   NSTextAlignment* {.size: sizeof(cint).} = enum
     NSLeftTextAlignment = 0
     NSRightTextAlignment = 1
@@ -95,7 +101,39 @@ type
     NSImageAlignBottomRight = 7
     NSImageAlignRight = 8
 
+  NSScrollerPart* {.size: sizeof(cint).} = enum
+    NSScrollerNoPart = 0
+    NSScrollerIncrementLine = 1
+    NSScrollerDecrementLine = 2
+    NSScrollerIncrementPage = 3
+    NSScrollerDecrementPage = 4
+    NSScrollerKnob = 5
+    NSScrollerKnobSlot = 6
+
+  NSScrollerArrow* {.size: sizeof(cint).} = enum
+    NSScrollerIncrementArrow = 0
+    NSScrollerDecrementArrow = 1
+
+  NSScrollArrowPosition* {.size: sizeof(cint).} = enum
+    NSScrollerArrowsMaxEnd = 0
+    NSScrollerArrowsMinEnd = 1
+    NSScrollerArrowsNone = 2
+
+  NSRulerOrientation* {.size: sizeof(cint).} = enum
+    NSHorizontalRuler = 0
+    NSVerticalRuler = 1
+
+  NSUsableScrollerParts* = int
+
 const
+  NSViewNotSizable* = 0
+  NSViewMinXMargin* = 1
+  NSViewWidthSizable* = 2
+  NSViewMaxXMargin* = 4
+  NSViewMinYMargin* = 8
+  NSViewHeightSizable* = 16
+  NSViewMaxYMargin* = 32
+
   NSRoundedBezelStyle* = 1
   NSRegularSquareBezelStyle* = 2
   NSThickSquareBezelStyle* = 3
@@ -155,6 +193,10 @@ const
   NSCellHitContentArea* = 0x01
   NSCellHitEditableTextArea* = 0x02
   NSCellHitTrackableArea* = 0x04
+  NSNoScrollerParts* = 0
+  NSOnlyScrollerArrows* = 1
+  NSAllScrollerParts* = 2
+  NSScrollerArrowsDefaultSetting* = NSScrollerArrowsMaxEnd
   NSNotFound* = high(uint)
 
 proc nsPoint*(x, y: float32): NSPoint =
