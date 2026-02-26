@@ -10,6 +10,8 @@ import ./views
 import ./windows
 import ./clipviews
 import ./buttons
+import ./images
+import ./imageviews
 import ./textfields
 import ./events
 
@@ -297,6 +299,11 @@ type TextLayoutDebugMetrics* = object
   textBounds*: NSRect
   glyphCount*: int
 
+type ImageLayoutDebugMetrics* = object
+  hasImage*: bool
+  imageId*: ImageId
+  imageBox*: NSRect
+
 proc textLayoutBounds(
     layout: GlyphArrangement
 ): tuple[ok: bool, minX: float32, minY: float32, maxX: float32, maxY: float32] =
@@ -470,6 +477,31 @@ proc textLayoutForView(
 
   (false, default(GlyphArrangement))
 
+proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
+  if not view.isKindOfClass(NSImageView):
+    return
+  let imageView = asRetainedType[NSImageView](view)
+  if imageView.isNil:
+    return
+  let image = imageView.image()
+  if image.isNil:
+    return
+  let imageId = image.imageId()
+  if imageId.int == 0:
+    return
+  let localRect =
+    imageView.imageRectForBounds(nsRect(0.0, 0.0, box.size.width, box.size.height))
+  if localRect.size.width <= 0.0 or localRect.size.height <= 0.0:
+    return
+  result.hasImage = true
+  result.imageId = imageId
+  result.imageBox = nsRect(
+    box.origin.x + localRect.origin.x,
+    box.origin.y + localRect.origin.y,
+    localRect.size.width,
+    localRect.size.height,
+  )
+
 proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
   if view.isNil:
     return
@@ -574,6 +606,24 @@ proc addViewTree(
         ),
         fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
         textLayout: textLayout.layout,
+      ),
+    )
+
+  let imageLayout = imageLayoutForView(view, box)
+  if imageLayout.hasImage:
+    let imageFill = nsColor(1.0, 1.0, 1.0, 1.0).solidFill()
+    discard renders.addChild(
+      0.ZLevel,
+      idx,
+      Fig(
+        kind: nkImage,
+        childCount: 0,
+        screenBox: rect(
+          imageLayout.imageBox.origin.x, imageLayout.imageBox.origin.y,
+          imageLayout.imageBox.size.width, imageLayout.imageBox.size.height,
+        ),
+        fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+        image: ImageStyle(id: imageLayout.imageId, fill: imageFill),
       ),
     )
 
