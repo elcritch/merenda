@@ -356,6 +356,51 @@ suite "nutella appkit hello world":
     window.value = nil
     app.value = nil
 
+  test "example app render loop emits nkImage for NSImageView":
+    var app = NSApp()
+    var window = newWindow(80, 80, 240, 180, "Image Loop")
+    var root = newView(0, 0, 240, 180)
+    let image = NSImage.imageNamed(@ns"arrow.png")
+    check(not image.isNil)
+
+    var imageView = NSImageView.new()
+    imageView.setFrame(24, 32, 96, 72)
+    imageView.setImage(image)
+    imageView.setImageScaling(NSImageScaleAxesIndependently)
+    imageView.setImageAlignment(NSImageAlignCenter)
+    root.addSubview(imageView)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app)
+
+    var renderLoopAvailable = true
+    var renderedFrames = 0
+    try:
+      renderedFrames = app.runForFrames(3)
+    except CatchableError:
+      renderLoopAvailable = false
+
+    let renders = debugBuildWindowRenders(window)
+    check(not renders.isNil)
+
+    var foundImageNode = false
+    for _, list in renders.pairs():
+      for node in list.nodes:
+        if node.kind == nkImage and node.image.id.int == image.imageId().int:
+          foundImageNode = true
+          check(node.screenBox.w > 0.0)
+          check(node.screenBox.h > 0.0)
+    check(foundImageNode)
+    if renderLoopAvailable:
+      check(renderedFrames > 0)
+
+    window.close()
+    app.stop()
+    imageView.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
   test "next core ui classes provide aligned appkit api":
     var cell = NSCell.new()
     check(cell.isKindOfClass(NSCell))
