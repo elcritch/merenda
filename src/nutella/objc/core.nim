@@ -169,10 +169,10 @@ converter toNSObject*(id: IDPtr): NSObject {.inline.} =
 converter toObjcClass*(id: IDPtr): ObjcClass {.inline.} =
   ObjcClass(value: id)
 
-template asType*[T: ID](o: IDPtr): T =
+template asTypeRaw*[T: ID](o: IDPtr): T =
   T(value: o)
 
-template asType*[T: ID](o: ID): T =
+template asTypeRaw*[T: ID](o: ID): T =
   T(value: o.value)
 
 template asRetainedType*[T: ID](o: IDPtr): T =
@@ -1450,7 +1450,7 @@ proc initRaw(v: IDPtr): IDPtr {.inline.} =
   objc_msgSend(v, sel_registerName("init"))
 
 proc init*[T: NSObject](v: var T): T {.inline.} =
-  result = asType[T](initRaw(move(v.value)))
+  result = asTypeRaw[T](initRaw(move(v.value)))
 
 proc init*[T: NSObject](n: typedesc[T]): T {.inline.} =
   var allocated = n.alloc()

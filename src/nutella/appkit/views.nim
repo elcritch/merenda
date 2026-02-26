@@ -25,7 +25,7 @@ objcImpl:
     viewSubviews: seq[NSView]
 
   method init*(self: var NSView): NSView =
-    result = asType[NSView](
+    result = asTypeRaw[NSView](
       cast[proc(
         self: IDPtr, op: SEL, x: float32, y: float32, width: float32, height: float32
       ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
@@ -40,7 +40,7 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ): NSView =
-    result = asType[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
+    result = asTypeRaw[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
     if result.isNil:
       return
     result.viewFrame =

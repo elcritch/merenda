@@ -16,7 +16,7 @@ objcImpl:
     xSelectionIndexes {.set: setSelectionIndexes, get: selectionIndexes.}: NSObject
 
   method init*(self: var NSCollectionView): NSCollectionView =
-    result = asType[NSCollectionView](
+    result = asTypeRaw[NSCollectionView](
       callSuperIdFrom(NSCollectionView, self, getSelector("init"))
     )
     if result.isNil:

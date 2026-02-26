@@ -50,7 +50,7 @@ suite "objc ivar Nim ref storage":
     let cls = ensureIvarOwnerClass()
     check(not cls.isNil)
 
-    var o = asType[NSObject](new(cls))
+    var o = asTypeRaw[NSObject](new(cls))
     check(not o.isNil)
 
     var state = IvarStateRef(value: 123)
@@ -71,7 +71,7 @@ suite "objc ivar Nim ref storage":
     ivarStateDestroyedCount = 0
 
     let cls = ensureIvarOwnerClass()
-    var o = asType[NSObject](new(cls))
+    var o = asTypeRaw[NSObject](new(cls))
     check(not o.isNil)
 
     var state = IvarStateRef(value: 77)
@@ -93,7 +93,7 @@ suite "objc ivar Nim ref storage":
     ivarPingCount = 0
 
     let cls = ensureIvarOwnerClass()
-    var o = asType[NSObject](new(cls))
+    var o = asTypeRaw[NSObject](new(cls))
     check(not o.isNil)
 
     var namedState = IvarStateRef(value: 41)
@@ -114,7 +114,7 @@ suite "objc ivar Nim ref storage":
     ivarStateDestroyedCount = 0
 
     let cls = ensureIvarOwnerClass()
-    var o = asType[NSObject](new(cls))
+    var o = asTypeRaw[NSObject](new(cls))
     check(not o.isNil)
 
     var namedState = IvarStateRef(value: 91)
@@ -134,7 +134,7 @@ suite "objc ivar Nim ref storage":
     ivarStateDestroyedCount = 0
 
     let cls = ensureIvarOwnerClass()
-    var o = asType[NSObject](new(cls))
+    var o = asTypeRaw[NSObject](new(cls))
     check(not o.isNil)
 
     var namedState = IvarStateRef(value: 201)

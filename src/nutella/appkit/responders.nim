@@ -7,7 +7,7 @@ objcImpl:
 
   method init*(self: var NSResponder): NSResponder =
     result =
-      asType[NSResponder](callSuperIdFrom(NSResponder, self, getSelector("init")))
+      asTypeRaw[NSResponder](callSuperIdFrom(NSResponder, self, getSelector("init")))
     if result.isNil:
       return
     result.nextResp = NSResponder(value: nil)

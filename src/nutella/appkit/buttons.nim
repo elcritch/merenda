@@ -32,7 +32,7 @@ objcImpl:
     onClick: NSButtonCallbackProc
 
   method init*(self: var NSButton): NSButton =
-    result = asType[NSButton](callSuperIdFrom(NSButton, self, getSelector("init")))
+    result = asTypeRaw[NSButton](callSuperIdFrom(NSButton, self, getSelector("init")))
     if result.isNil:
       return
     result.setEnabled(true)

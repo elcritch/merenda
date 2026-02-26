@@ -63,8 +63,8 @@ suite "foundation stdlib-backed core types":
     var dict = nsDictionary[NSObject, NSObject]()
     let keyString = @ns"object-key"
     let valueString = @ns"object-value"
-    let keyObj = retain(asType[NSObject](keyString))
-    let valueObj = retain(asType[NSObject](valueString))
+    let keyObj = retain(asTypeRaw[NSObject](keyString))
+    let valueObj = retain(asTypeRaw[NSObject](valueString))
     dict[keyObj] = valueObj
 
     check(dict.len == 1)

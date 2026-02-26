@@ -104,7 +104,7 @@ proc initOwned*[T: NSObject](allocated: sink T): T {.inline.} =
 proc ownFromId*[T: NSObject](id: IDPtr): T =
   if id.isNil:
     return T(value: nil)
-  var borrowed = asType[T](id)
+  var borrowed = asTypeRaw[T](id)
   result = retain(borrowed)
   borrowed.value = nil
 
@@ -114,7 +114,7 @@ proc ownFromId*[T: NSObject](id: ID): T =
 proc retainId*(id: IDPtr): IDPtr =
   if id.isNil:
     return nil
-  var borrowed = asType[NSObject](id)
+  var borrowed = asTypeRaw[NSObject](id)
   var owned = retain(borrowed)
   borrowed.value = nil
   result = owned.value
@@ -126,7 +126,7 @@ proc retainId*(id: ID): ID =
 proc releaseId*(id: IDPtr) =
   if id.isNil:
     return
-  var owned = asType[NSObject](id)
+  var owned = asTypeRaw[NSObject](id)
   discard owned
 
 proc releaseId*(id: ID) =

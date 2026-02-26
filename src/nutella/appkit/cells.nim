@@ -122,7 +122,7 @@ objcImpl:
     xHasValidObjectValue {.get: hasValidObjectValue.}: bool
 
   method initTextCell*(self: var NSCell, string: NSString): NSCell =
-    result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
+    result = asTypeRaw[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
     initIvarFields(result)
@@ -143,7 +143,7 @@ objcImpl:
     result.xLineBreakMode = NSLineBreakByWordWrapping
 
   method initImageCell*(self: var NSCell, image: NSImage): NSCell =
-    result = asType[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
+    result = asTypeRaw[NSCell](callSuperIdFrom(NSCell, self, getSelector("init")))
     if result.isNil:
       return
     initIvarFields(result)
@@ -577,7 +577,7 @@ objcImpl:
 
   method init*(self: var NSActionCell): NSActionCell =
     result =
-      asType[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
+      asTypeRaw[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
     if result.isNil:
       return
     result.xActionControlView = NSView(value: nil)
@@ -616,7 +616,7 @@ objcImpl:
 
   method init*(self: var NSButtonCell): NSButtonCell =
     result =
-      asType[NSButtonCell](callSuperIdFrom(NSButtonCell, self, getSelector("init")))
+      asTypeRaw[NSButtonCell](callSuperIdFrom(NSButtonCell, self, getSelector("init")))
     if result.isNil:
       return
     result.xButtonTitle = @ns"Button"

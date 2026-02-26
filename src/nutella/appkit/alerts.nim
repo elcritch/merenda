@@ -21,7 +21,7 @@ objcImpl:
     xSheetDidEnd: SEL
 
   method init*(self: var NSAlert): NSAlert =
-    result = asType[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
+    result = asTypeRaw[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
     result.xButtons = nsArray[NSButton]()

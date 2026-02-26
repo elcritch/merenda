@@ -42,7 +42,7 @@ objcImpl:
 
   method init*(self: var NSController): NSController =
     result =
-      asType[NSController](callSuperIdFrom(NSController, self, @selector("init")))
+      asTypeRaw[NSController](callSuperIdFrom(NSController, self, @selector("init")))
     if result.isNil:
       return
     ensureControllerMarkers()

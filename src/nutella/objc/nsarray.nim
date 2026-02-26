@@ -70,7 +70,7 @@ proc nsArray*[T](): NSArray[T] =
   allocated.value = nil
   if created.isNil:
     return NSArray[T](value: nil)
-  result = asType[NSArray[T]](move(created.value))
+  result = asTypeRaw[NSArray[T]](move(created.value))
   initStorage(result)
 
 proc init*[T](n: typedesc[NSArray[T]]): NSArray[T] {.inline.} =

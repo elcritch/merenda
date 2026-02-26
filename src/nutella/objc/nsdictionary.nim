@@ -24,7 +24,7 @@ proc releaseId(id: IDPtr) {.inline.} =
 proc retainedAs[T: NSObject](id: IDPtr): T {.inline.} =
   if id.isNil:
     return T(value: nil)
-  asType[T](retainId(id))
+  asTypeRaw[T](retainId(id))
 
 proc findEquivalentKey(data: Table[IDPtr, IDPtr], key: IDPtr, matchedKey: var IDPtr): bool =
   for storedKey in data.keys:
@@ -78,7 +78,7 @@ proc nsDictionary*[K: NSObject, V: NSObject](): NSDictionary[K, V] =
   allocated.value = nil
   if created.isNil:
     return NSDictionary[K, V](value: nil)
-  result = asType[NSDictionary[K, V]](move(created.value))
+  result = asTypeRaw[NSDictionary[K, V]](move(created.value))
 
 proc init*[K: NSObject, V: NSObject](
     n: typedesc[NSDictionary[K, V]]

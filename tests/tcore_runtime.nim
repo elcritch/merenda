@@ -25,14 +25,14 @@ suite "objc core runtime ownership fundamentals":
     check(obj.isKindOfClass(NSObject))
     let nsObjectClass = getClass("NSObject")
     check(not nsObjectClass.isNil)
-    check(obj.isKindOfClass(asType[ObjcClass](nsObjectClass)))
+    check(obj.isKindOfClass(asTypeRaw[ObjcClass](nsObjectClass)))
 
     let subClassName = $RuntimeOwnedSubtype
     discard ensureRuntimeClass(subClassName)
     var sub = RuntimeOwnedSubtype.new()
     check(sub.isKindOfClass(RuntimeOwnedSubtype))
     check(sub.isKindOfClass(NSObject))
-    check(sub.isKindOfClass(asType[ObjcClass](getClass(subClassName))))
+    check(sub.isKindOfClass(asTypeRaw[ObjcClass](getClass(subClassName))))
 
     obj.value = nil
     sub.value = nil
@@ -144,7 +144,7 @@ suite "objc core runtime ownership fundamentals":
   test "subclass destroy hook runs in block scope":
     destroyProbeTriggered = false
     block:
-      var o = asType[DestroyProbeObject](NSObject.new())
+      var o = asTypeRaw[DestroyProbeObject](NSObject.new())
       check(not o.isNil)
     check(destroyProbeTriggered)
 
@@ -178,7 +178,7 @@ suite "objc core runtime ownership fundamentals":
     check(not subCls.isNil)
 
     block:
-      var o = asType[NSObject](new(subCls))
+      var o = asTypeRaw[NSObject](new(subCls))
       check(not o.isNil)
       check(getClassName(o) == SubClassName)
 
@@ -204,6 +204,6 @@ suite "objc core runtime ownership fundamentals":
     check(not cls.isNil)
     check(conformsToProtocol(cls, proto))
 
-    var o = asType[NSObject](new(cls))
+    var o = asTypeRaw[NSObject](new(cls))
     check(not o.isNil)
     check(getClassName(o) == ClassName)
