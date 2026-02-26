@@ -9,6 +9,8 @@ import ./appkit/buttons
 import ./appkit/textfields
 import ./appkit/formatters
 import ./appkit/attributedstrings
+import ./appkit/fontdescriptors
+import ./appkit/fonts
 import ./appkit/boxview
 import ./appkit/cells
 import ./appkit/clipviews
@@ -28,6 +30,8 @@ export buttons
 export textfields
 export formatters
 export attributedstrings
+export fontdescriptors
+export fonts
 export boxview
 export cells
 export clipviews
