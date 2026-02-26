@@ -2,9 +2,9 @@
 
 Generated from `deps/ravynos/Frameworks/AppKit` headers (`@interface NS* : ...`, categories excluded).
 
-Implemented in Nutella today (20): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSFont`, `NSFontDescriptor`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
+Implemented in Nutella today (23): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSFont`, `NSFontDescriptor`, `NSImage`, `NSImageCell`, `NSImageView`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
 
-Remaining AppKit classes tracked: 174
+Remaining AppKit classes tracked: 171
 
 Sorted by implementation priority (most useful first).
 
@@ -17,7 +17,7 @@ Sorted by implementation priority (most useful first).
 - [x] Typed AppKit constant enums - Converted alert styles/returns, button types, and image alignment constants from raw ints to enums (`NSAlertStyle`, `NSAlertReturn`, `NSButtonType`, `NSImageAlignment`) with int converters for compatibility.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
-## Done: Already Implemented (20)
+## Done: Already Implemented (23)
 - [x] NSActionCell - Cell subclass that supports target/action behavior.
 - [x] NSAlert - Modal/non-modal alert dialog API.
 - [x] NSApplication - Application singleton and event loop coordinator.
@@ -31,6 +31,9 @@ Sorted by implementation priority (most useful first).
 - [x] NSEvent - Input event object for keyboard, mouse, and system actions.
 - [x] NSFont - Font face and metrics object for text rendering.
 - [x] NSFontDescriptor - Immutable descriptor of font attributes.
+- [x] NSImage - Image asset object for bitmap/vector representations.
+- [x] NSImageCell - Cell used to display/edit images in controls.
+- [x] NSImageView - View subclass responsible for drawing and interaction.
 - [x] NSPanel - Utility-style window subclass.
 - [x] NSResponder - Base class for responder chain event handling.
 - [x] NSSearchField - Text field specialized for search input.
@@ -60,9 +63,9 @@ Sorted by implementation priority (most useful first).
 - [x] NSFont - Font face and metrics object for text rendering.
 - [x] NSFontDescriptor - Immutable descriptor of font attributes.
 <!-- - [ ] NSFontManager - Shared manager for font panel and conversions. -->
-- [ ] NSImage - Image asset object for bitmap/vector representations.
+- [x] NSImage - Image asset object for bitmap/vector representations.
 - [ ] NSImageRep - Abstract image representation backend.
-- [ ] NSImageView - View subclass responsible for drawing and interaction.
+- [x] NSImageView - View subclass responsible for drawing and interaction.
 - [ ] NSLayoutManager - Glyph layout engine between storage and containers.
 - [ ] NSMenu - Menu container for command hierarchies.
 - [ ] NSMenuItem - Single command item inside a menu.
@@ -218,7 +221,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSGlyphInfo - Metadata describing a specific glyph.
 - [ ] NSGraphicsStyle - Internal style bundle for themed drawing primitives.
 - [ ] NSIBObjectData - Archived nib object graph metadata container.
-- [ ] NSImageCell - Cell used to display/edit images in controls.
+- [x] NSImageCell - Cell used to display/edit images in controls.
 - [ ] NSInterfacePart - Internal themed interface part description.
 - [ ] NSInterfacePartAttributedString - Internal attributed string for interface parts.
 - [ ] NSInterfacePartDisabledAttributedString - Internal disabled-state interface part text.

@@ -6,6 +6,9 @@ import ./appkit/windows
 import ./appkit/controllers
 import ./appkit/controls
 import ./appkit/buttons
+import ./appkit/images
+import ./appkit/imagecells
+import ./appkit/imageviews
 import ./appkit/textfields
 import ./appkit/formatters
 import ./appkit/attributedstrings
@@ -27,6 +30,9 @@ export windows
 export controllers
 export controls
 export buttons
+export images
+export imagecells
+export imageviews
 export textfields
 export formatters
 export attributedstrings

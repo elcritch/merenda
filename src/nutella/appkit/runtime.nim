@@ -189,6 +189,7 @@ type
   NSApplication* = object of NSResponder
   NSWindow* = object of NSResponder
   NSCell* = object of NSObject
+  NSImageCell* = object of NSCell
   NSEvent* = object of NSObject
 
   NSView* = object of NSResponder
@@ -196,6 +197,7 @@ type
   NSCollectionView* = object of NSView
   NSText* = object of NSView
   NSControl* = object of NSView
+  NSImageView* = object of NSControl
   NSTextField* = object of NSControl
 
   NSFont* = object of NSObject
