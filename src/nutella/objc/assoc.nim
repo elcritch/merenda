@@ -115,7 +115,6 @@ proc getAssociatedRef*[T: ref](
   getAssociatedRef[T](obj, associatedRefKey[T]())
 
 proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
-  discard cmd
   var rawPayload: pointer
   discard getInstanceVariable(self, NimAssociatedRefPayloadIvarName, rawPayload)
   if rawPayload != nil:

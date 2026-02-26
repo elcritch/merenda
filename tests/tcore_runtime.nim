@@ -7,7 +7,6 @@ type RuntimeOwnedSubtype = object of NSObject
 var destroyProbeTriggered = false
 
 proc `=destroy`(o: var DestroyProbeObject) =
-  discard o
   destroyProbeTriggered = true
 
 proc passThroughMove(o: sink NSObject): NSObject =

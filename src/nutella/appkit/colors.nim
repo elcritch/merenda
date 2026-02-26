@@ -108,10 +108,7 @@ proc colorWithDeviceCyan*(
   let y = clamp01(yellow)
   let k = clamp01(black)
   nsColor(
-    (1.0 - c) * (1.0 - k),
-    (1.0 - m) * (1.0 - k),
-    (1.0 - y) * (1.0 - k),
-    clamp01(alpha),
+    (1.0 - c) * (1.0 - k), (1.0 - m) * (1.0 - k), (1.0 - y) * (1.0 - k), clamp01(alpha)
   )
 
 proc darkGrayColor*(t: typedesc[NSColor]): NSColor =
@@ -248,9 +245,7 @@ proc catalogColor(catalogName, colorName: string): NSColor =
     NSColor.blackColor()
 
 proc colorWithCatalogName*(
-    t: typedesc[NSColor],
-    catalogName: NSString,
-    colorName {.kw("colorName").}: NSString,
+    t: typedesc[NSColor], catalogName: NSString, colorName {.kw("colorName").}: NSString
 ): NSColor =
   catalogColor($catalogName, $colorName)
 
@@ -354,7 +349,6 @@ proc menuItemTextColor*(t: typedesc[NSColor]): NSColor =
   NSColor.colorWithCatalogName(@ns"System", @ns"menuItemTextColor")
 
 proc colorFromPasteboard*(t: typedesc[NSColor], pasteboard: NSObject): NSColor =
-  discard pasteboard
   NSColor.clearColor()
 
 proc colorWithPatternImage*(t: typedesc[NSColor], image: NSImage): NSColor =
@@ -385,8 +379,11 @@ proc getWhite*(self: NSColor, white: ptr float32, alpha {.kw("alpha").}: ptr flo
     alpha[] = clamp01(self.a)
 
 proc getRed*(
-    self: NSColor, red: ptr float32, green {.kw("green").}: ptr float32,
-    blue {.kw("blue").}: ptr float32, alpha {.kw("alpha").}: ptr float32
+    self: NSColor,
+    red: ptr float32,
+    green {.kw("green").}: ptr float32,
+    blue {.kw("blue").}: ptr float32,
+    alpha {.kw("alpha").}: ptr float32,
 ) =
   if not red.isNil:
     red[] = clamp01(self.r)
@@ -498,14 +495,13 @@ proc colorWithAlphaComponent*(self: NSColor, alpha: float32): NSColor =
   nsColor(self.r, self.g, self.b, clamp01(alpha))
 
 proc colorUsingColorSpaceName*(self: NSColor, colorSpace: NSString): NSColor =
-  discard colorSpace
   self
 
 proc colorUsingColorSpaceName*(
-    self: NSColor, colorSpace: NSString, device {.kw("device").}: NSDictionary[NSObject, NSObject]
+    self: NSColor,
+    colorSpace: NSString,
+    device {.kw("device").}: NSDictionary[NSObject, NSObject],
 ): NSColor =
-  discard colorSpace
-  discard device
   self
 
 proc blendedColorWithFraction*(
@@ -520,20 +516,18 @@ proc blendedColorWithFraction*(
   )
 
 proc `set`*(self: NSColor) =
-  discard self
+  discard
 
 proc setFill*(self: NSColor) =
-  discard self
+  discard
 
 proc setStroke*(self: NSColor) =
-  discard self
+  discard
 
 proc drawSwatchInRect*(self: NSColor, rect: NSRect) =
-  discard self
-  discard rect
+  discard
 
 proc writeToPasteboard*(self: NSColor, pasteboard: NSObject) =
-  discard self
-  discard pasteboard
+  discard
 
 ensureColorSpaceNames()

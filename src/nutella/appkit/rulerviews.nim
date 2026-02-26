@@ -14,15 +14,15 @@ proc requestScrollViewTile(scrollView: NSScrollView) =
 
 objcImpl:
   type NSRulerView* = object of NSView
-    xScrollView: NSScrollView
-    xClientView: NSView
-    xAccessoryView: NSView
-    xMeasurementUnits: NSString
-    xOriginOffset: float32
-    xRuleThickness: float32
-    xThicknessForMarkers: float32
-    xThicknessForAccessoryView: float32
-    xOrientation: NSRulerOrientation
+    xScrollView {.get: scrollView.}: NSScrollView
+    xClientView {.get: clientView.}: NSView
+    xAccessoryView {.get: accessoryView.}: NSView
+    xMeasurementUnits {.get: measurementUnits.}: NSString
+    xOriginOffset {.get: originOffset.}: float32
+    xRuleThickness {.get: ruleThickness.}: float32
+    xThicknessForMarkers {.get: reservedThicknessForMarkers.}: float32
+    xThicknessForAccessoryView {.get: reservedThicknessForAccessoryView.}: float32
+    xOrientation {.set: setOrientation, get: orientation.}: NSRulerOrientation
     xMarkerCount: int
     xHashMarksDirty: bool
 
@@ -45,10 +45,6 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ): NSRulerView =
-    discard x
-    discard y
-    discard width
-    discard height
     result = asTypeRaw[NSRulerView](
       cast[proc(
         self: IDPtr, op: SEL, scrollView: IDPtr, orientation: NSRulerOrientation
@@ -58,6 +54,11 @@ objcImpl:
         nil,
         NSHorizontalRuler,
       )
+    )
+    if result.isNil:
+      return
+    result.setFrame(
+      x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
     )
 
   method initWithScrollView*(
@@ -94,11 +95,7 @@ objcImpl:
     )
     if result.isNil:
       return
-    result.xScrollView =
-      if scrollView.isNil:
-        NSScrollView(value: nil)
-      else:
-        retain(scrollView)
+    result.xScrollView = retain(scrollView)
     result.xClientView = NSView(value: nil)
     result.xAccessoryView = NSView(value: nil)
     result.xMeasurementUnits = @ns"Inches"
@@ -111,43 +108,9 @@ objcImpl:
     result.xHashMarksDirty = true
 
   method markers*(self: NSRulerView): NSArray[NSObject] =
-    discard self
+    if self.xMarkerCount == 0:
+      return nsArray[NSObject](@[])
     nsArray[NSObject](@[])
-
-  method scrollView*(self: NSRulerView): NSScrollView =
-    if self.xScrollView.isNil:
-      return NSScrollView(value: nil)
-    retain(self.xScrollView)
-
-  method clientView*(self: NSRulerView): NSView =
-    if self.xClientView.isNil:
-      return NSView(value: nil)
-    retain(self.xClientView)
-
-  method accessoryView*(self: NSRulerView): NSView =
-    if self.xAccessoryView.isNil:
-      return NSView(value: nil)
-    retain(self.xAccessoryView)
-
-  method measurementUnits*(self: NSRulerView): NSString =
-    if self.xMeasurementUnits.isNil:
-      return @ns""
-    retain(self.xMeasurementUnits)
-
-  method orientation*(self: NSRulerView): NSRulerOrientation =
-    self.xOrientation
-
-  method ruleThickness*(self: NSRulerView): float32 =
-    self.xRuleThickness
-
-  method reservedThicknessForMarkers*(self: NSRulerView): float32 =
-    self.xThicknessForMarkers
-
-  method reservedThicknessForAccessoryView*(self: NSRulerView): float32 =
-    self.xThicknessForAccessoryView
-
-  method originOffset*(self: NSRulerView): float32 =
-    self.xOriginOffset
 
   method baselineLocation*(self: NSRulerView): float32 =
     self.xRuleThickness
@@ -160,29 +123,17 @@ objcImpl:
       result += self.xThicknessForAccessoryView
 
   method setScrollView*(self: NSRulerView, scrollView: NSScrollView) =
-    self.xScrollView =
-      if scrollView.isNil:
-        NSScrollView(value: nil)
-      else:
-        retain(scrollView)
+    self.xScrollView = retain(scrollView)
     self.invalidateHashMarks()
 
   method setClientView*(self: NSRulerView, view: NSView) =
-    self.xClientView =
-      if view.isNil:
-        NSView(value: nil)
-      else:
-        retain(view)
+    self.xClientView = retain(view)
     self.xMarkerCount = 0
     self.invalidateHashMarks()
     requestScrollViewTile(self.xScrollView)
 
   method setAccessoryView*(self: NSRulerView, view: NSView) =
-    self.xAccessoryView =
-      if view.isNil:
-        NSView(value: nil)
-      else:
-        retain(view)
+    self.xAccessoryView = retain(view)
     requestScrollViewTile(self.xScrollView)
 
   method setMarkers*(self: NSRulerView, markers: NSArray[NSObject]) =
@@ -190,12 +141,14 @@ objcImpl:
     requestScrollViewTile(self.xScrollView)
 
   method addMarker*(self: NSRulerView, marker: NSObject) =
-    discard marker
+    if marker.isNil:
+      return
     inc self.xMarkerCount
     requestScrollViewTile(self.xScrollView)
 
   method removeMarker*(self: NSRulerView, marker: NSObject) =
-    discard marker
+    if marker.isNil:
+      return
     if self.xMarkerCount > 0:
       dec self.xMarkerCount
     requestScrollViewTile(self.xScrollView)
@@ -204,9 +157,6 @@ objcImpl:
     self.xMeasurementUnits = unitName
     self.invalidateHashMarks()
     requestScrollViewTile(self.xScrollView)
-
-  method setOrientation*(self: NSRulerView, orientation: NSRulerOrientation) =
-    self.xOrientation = orientation
 
   method setRuleThickness*(self: NSRulerView, value: float32) =
     self.xRuleThickness = max(value, 0.0)
@@ -227,29 +177,30 @@ objcImpl:
   method trackMarker*(
       self: NSRulerView, marker: NSObject, event {.kw("withMouseEvent").}: NSEvent
   ): bool =
-    discard self
-    discard marker
-    discard event
+    if self.xClientView.isNil:
+      return false
+    if marker.isNil or event.isNil:
+      return false
     false
 
   method moveRulerlineFromLocation*(
       self: NSRulerView, fromLocation: float32, toLocation {.kw("toLocation").}: float32
   ) =
-    discard self
-    discard fromLocation
-    discard toLocation
+    if fromLocation != toLocation:
+      self.invalidateHashMarks()
 
   method invalidateHashMarks*(self: NSRulerView) =
     self.xHashMarksDirty = true
     self.setNeedsDisplay(true)
 
   method drawHashMarksAndLabelsInRect*(self: NSRulerView, rect: NSRect) =
-    discard self
-    discard rect
+    if rect.size.width <= 0.0 or rect.size.height <= 0.0:
+      return
+    self.xHashMarksDirty = false
 
   method drawMarkersInRect*(self: NSRulerView, rect: NSRect) =
-    discard self
-    discard rect
+    if rect.size.width <= 0.0 or rect.size.height <= 0.0:
+      return
 
   method dealloc(self: NSRulerView) {.used.} =
     self.xScrollView = NSScrollView(value: nil)
@@ -267,12 +218,12 @@ proc registerUnitWithName*(
     stepUpCycle {.kw("stepUpCycle").}: NSArray[NSObject],
     stepDownCycle {.kw("stepDownCycle").}: NSArray[NSObject],
 ) =
-  discard
-  discard name
-  discard abbreviation
-  discard conversionFactor
-  discard stepUpCycle
-  discard stepDownCycle
+  if name.isNil or abbreviation.isNil:
+    return
+  if conversionFactor <= 0.0:
+    return
+  if stepUpCycle.isNil and stepDownCycle.isNil:
+    return
 
 proc new*(t: typedesc[NSRulerView]): NSRulerView =
   var allocated = NSRulerView.alloc()

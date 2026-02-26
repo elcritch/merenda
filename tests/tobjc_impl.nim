@@ -180,19 +180,16 @@ suite "objcImpl runtime generation":
       type NRNimPayloadClass {.impl: NRNimPayloadProtocol.} = object of NSObject
 
       method nimTakeString(self: NRNimPayloadClass, payload: string): cint =
-        discard self
         objcImplStringPayloadSeen = payload
         result = payload.len.cint
 
       method nimTakeValue(
           self: NRNimPayloadClass, payload: RuntimeNimValuePayload
       ): cint =
-        discard self
         objcImplValuePayloadTotalSeen = payload.left + payload.right
         result = objcImplValuePayloadTotalSeen
 
       method nimTakeRef(self: NRNimPayloadClass, payload: RuntimeNimRefPayload): cint =
-        discard self
         if payload.isNil:
           objcImplRefPayloadLabelSeen = ""
           objcImplRefPayloadCountSeen = -1
@@ -268,7 +265,6 @@ suite "objcImpl runtime generation":
       type NRClassOnly = object of NSObject
 
       method classOnlyPing(self: NRClassOnly) =
-        discard self
         inc objcImplClassOnlyPingCount
 
     var cls = getClass(NRClassOnly)
@@ -290,7 +286,7 @@ suite "objcImpl runtime generation":
         type NSRuntimeMappedClass {.impl: NSRuntimeMappedProtocol.} = object of NSObject
 
         method mappedPing(self: NSRuntimeMappedClass) =
-          discard self
+          discard
 
       let proto = getProtocol(NSRuntimeMappedProtocol)
       check(not proto.isNil)
@@ -333,7 +329,6 @@ suite "objcImpl runtime generation":
         objcImplClassMethodTotal = 0
 
       method instanceValue(self: NRClassMethodClass): cint =
-        discard self
         result = 7.cint
 
     let proto = getProtocol(NRClassMethodProtocol)
@@ -392,11 +387,9 @@ suite "objcImpl runtime generation":
       type NRStructClass {.impl: NRStructProtocol.} = object of NSObject
 
       method setFrame(self: NRStructClass, frame: NSRect) =
-        discard self
-        discard frame
+        discard
 
       method frame(self: NRStructClass): NSRect =
-        discard self
         result = nsRect(1.0, 2.0, 3.0, 4.0)
 
     let proto = getProtocol(NRStructProtocol)
@@ -439,10 +432,9 @@ suite "objcImpl runtime generation":
       type NROptionalClass {.impl: NROptionalProto.} = object of NSObject
 
       method requiredPing(self: NROptionalClass) =
-        discard self
+        discard
 
       method requiredName(self: NROptionalClass): NSObject =
-        discard self
         result = NSObject(value: nil)
 
       method classCount(self: typedesc[NROptionalClass]): cint =
@@ -501,11 +493,7 @@ suite "objcImpl runtime generation":
           options {.kw("options").}: NSUInteger,
           context {.kw("context").}: pointer,
       ) =
-        discard self
-        discard observer
-        discard keyPath
-        discard options
-        discard context
+        discard
 
     let proto = getProtocol(NRKwProtocol)
     check(not proto.isNil)
@@ -547,4 +535,3 @@ suite "objcImpl runtime generation":
     check(n.pong().isNil)
 
     check(nilPingCount == 1)
-

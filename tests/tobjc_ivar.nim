@@ -11,16 +11,12 @@ var ivarStateDestroyedCount = 0
 var ivarPingCount = 0
 
 proc `=destroy`(o: var IvarStateObj) =
-  discard o
   inc ivarStateDestroyedCount
 
 proc ivarOwnerPing(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
-  discard self
-  discard cmd
   inc ivarPingCount
 
 proc ivarOwnerDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
-  discard cmd
   destroyIvarFields(self)
   {.cast(raises: []).}:
     var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))

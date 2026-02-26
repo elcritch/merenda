@@ -14,22 +14,18 @@ objcImpl:
   type EventSpyView = object of NSView
 
   method acceptsFirstResponder*(self: EventSpyView): bool =
-    discard self
     true
 
   method keyDown*(self: EventSpyView, event: NSEvent) =
-    discard self
     inc spyKeyDownCount
     spyLastEventType = event.`type`()
 
   method mouseDown*(self: EventSpyView, event: NSEvent) =
-    discard self
     inc spyMouseDownCount
     spyLastEventType = event.`type`()
     spyLastMouseButton = siwinMouseButton(event)
 
   method scrollWheel*(self: EventSpyView, event: NSEvent) =
-    discard self
     inc spyScrollCount
     spyLastEventType = event.`type`()
 

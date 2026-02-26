@@ -112,13 +112,13 @@ suite "nutella appkit hello world":
         field.setDrawsBackground(false)
         root.addSubview(field)
         let found = root.viewWithTag(100)
-        discard found
+        check(found.value == root.value)
 
         let button = newButton(32, 96, 180, 44, "Click me")
         button.setAllowsMixedState(true)
         button.setOnClick(
           proc(sender: NSButton) {.gcsafe.} =
-            discard sender
+            discard
         )
         button.click()
         button.click()
@@ -214,7 +214,6 @@ suite "nutella appkit hello world":
     var clicks = 0
     button.setOnClick(
       proc(sender: NSButton) {.gcsafe.} =
-        discard sender
         inc clicks
     )
     check(button.state() == NSOffState)
