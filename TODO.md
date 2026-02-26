@@ -2,9 +2,9 @@
 
 Generated from `deps/ravynos/Frameworks/AppKit` headers (`@interface NS* : ...`, categories excluded).
 
-Implemented in Nutella today (11): `NSApplication`, `NSBox`, `NSButton`, `NSControl`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
+Implemented in Nutella today (18): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
 
-Remaining AppKit classes tracked: 218
+Remaining AppKit classes tracked: 176
 
 Sorted by implementation priority (most useful first).
 
@@ -16,11 +16,18 @@ Sorted by implementation priority (most useful first).
 - [x] KVC/boxing type coverage - Added float (`f`/`d`) and bool boxing/unboxing, plus KVC getter/setter support for float and double encodings.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
-## Done: Already Implemented (11)
+## Done: Already Implemented (18)
+- [x] NSActionCell - Cell subclass that supports target/action behavior.
+- [x] NSAlert - Modal/non-modal alert dialog API.
 - [x] NSApplication - Application singleton and event loop coordinator.
 - [x] NSBox - Framed container view with title/border styles.
 - [x] NSButton - Clickable control that triggers actions and toggles state.
+- [x] NSButtonCell - Cell used by NSButton-style controls.
+- [x] NSClipView - Viewport that clips content inside a scroll view.
+- [x] NSCollectionView - Grid/list collection control with reusable items.
 - [x] NSControl - Base class for interactive controls.
+- [x] NSController - Abstract base class for controller objects.
+- [x] NSEvent - Input event object for keyboard, mouse, and system actions.
 - [x] NSPanel - Utility-style window subclass.
 - [x] NSResponder - Base class for responder chain event handling.
 - [x] NSSearchField - Text field specialized for search input.
@@ -46,7 +53,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSDatePicker - Date/time selection control.
 - [ ] NSDocument - Document-model object for document-based apps.
 - [ ] NSDocumentController - Manager for document lifecycle and windows.
-- [ ] NSEvent - Input event object for keyboard, mouse, and system actions.
+- [x] NSEvent - Input event object for keyboard, mouse, and system actions.
 - [ ] NSFont - Font face and metrics object for text rendering. (wrap FigDraw Fonts)
 - [ ] NSFontDescriptor - Immutable descriptor of font attributes. (wrap FigDraw Fonts)
 <!-- - [ ] NSFontManager - Shared manager for font panel and conversions. -->
@@ -105,7 +112,7 @@ Sorted by implementation priority (most useful first).
 <!-- - [ ] NSBezierPath - Vector path object for 2D drawing. -->
 <!-- - [ ] NSColorPanel - Shared panel for choosing colors. -->
 - [ ] NSComboBoxCell - Cell used by combo box controls.
-- [ ] NSController - Abstract base class for controller objects.
+- [x] NSController - Abstract base class for controller objects.
 - [ ] NSDictionaryController - Controller for dictionary-backed models.
 - [ ] NSDockTile - Dock tile badge/content representation.
 <!-- - [ ] NSDrawer - Legacy slide-out drawer panel attached to a window. -->
@@ -196,11 +203,11 @@ Sorted by implementation priority (most useful first).
 - [ ] NSDisplay - Display subsystem helper/internal abstraction.
 - [ ] NSDraggingManager - Internal manager for drag-and-drop sessions.
 - [ ] NSEPSImageRep - Encapsulated PostScript image representation.
-- [ ] NSEvent_CoreGraphics - Internal NSEvent subclass/adapter for CoreGraphics events.
-- [ ] NSEvent_keyboard - Internal NSEvent specialization for keyboard events.
-- [ ] NSEvent_mouse - Internal NSEvent specialization for mouse events.
-- [ ] NSEvent_other - Internal NSEvent specialization for other event types.
-- [ ] NSEvent_periodic - Internal NSEvent specialization for periodic events.
+- [x] NSEvent_CoreGraphics - Internal NSEvent subclass/adapter for CoreGraphics events.
+- [x] NSEvent_keyboard - Internal NSEvent specialization for keyboard events.
+- [x] NSEvent_mouse - Internal NSEvent specialization for mouse events.
+- [x] NSEvent_other - Internal NSEvent specialization for other event types.
+- [x] NSEvent_periodic - Internal NSEvent specialization for periodic events.
 - [ ] NSFileWrapper - Filesystem wrapper object for file packages and attachments.
 - [ ] NSFontMetric - Font metric helper values for layout calculations.
 - [ ] NSFontTypeface - Model object for a specific typeface face/style.
