@@ -17,6 +17,9 @@ import ./appkit/fonts
 import ./appkit/boxview
 import ./appkit/cells
 import ./appkit/clipviews
+import ./appkit/scrollers
+import ./appkit/rulerviews
+import ./appkit/scrollviews
 import ./appkit/collectionviews
 import ./appkit/alerts
 import ./appkit/events
@@ -41,6 +44,9 @@ export fonts
 export boxview
 export cells
 export clipviews
+export scrollers
+export rulerviews
+export scrollviews
 export collectionviews
 export alerts
 export events

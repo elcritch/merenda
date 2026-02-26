@@ -9,6 +9,7 @@ proc detachSubviews*(view: NSObject)
 objcImpl:
   type NSView* = object of NSResponder
     viewFrame: NSRect
+    viewBounds {.set: setBounds, get: bounds.}: NSRect
     viewBackgroundColor: NSColor
     viewHidden: bool
     postsFrameChanged {.
@@ -23,6 +24,7 @@ objcImpl:
     viewSuperview: NSView
     viewTag: int
     viewSubviews: seq[NSView]
+    viewNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
 
   method init*(self: var NSView): NSView =
     result = asTypeRaw[NSView](
@@ -45,6 +47,8 @@ objcImpl:
       return
     result.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+    result.viewBounds =
+      nsRect(0.0, 0.0, max(width.float32, 0.0), max(height.float32, 0.0))
     result.viewBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
     result.viewHidden = false
     result.postsFrameChanged = true
@@ -55,6 +59,7 @@ objcImpl:
     result.viewSuperview = NSView(value: nil)
     result.viewTag = -1
     result.viewSubviews = @[]
+    result.viewNeedsDisplay = true
 
   method setFrame*(
       self: NSView,
@@ -63,8 +68,58 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ) =
+    let priorBounds = self.viewBounds()
     self.viewFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+    self.viewBounds = nsRect(
+      priorBounds.origin.x,
+      priorBounds.origin.y,
+      max(width.float32, 0.0),
+      max(height.float32, 0.0),
+    )
+    self.viewNeedsDisplay = true
+
+  method setBounds*(
+      self: NSView,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
+  ) =
+    self.viewBounds =
+      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+    self.viewNeedsDisplay = true
+
+  method setBoundsOrigin*(self: NSView, point: NSPoint) =
+    let oldBounds = self.viewBounds()
+    self.viewBounds = nsRect(
+      point.x, point.y, max(oldBounds.size.width, 0.0), max(oldBounds.size.height, 0.0)
+    )
+    self.viewNeedsDisplay = true
+
+  method setBoundsSize*(self: NSView, size: NSSize) =
+    let oldBounds = self.viewBounds()
+    self.viewBounds = nsRect(
+      oldBounds.origin.x,
+      oldBounds.origin.y,
+      max(size.width, 0.0),
+      max(size.height, 0.0),
+    )
+    self.viewNeedsDisplay = true
+
+  method isFlipped*(self: NSView): bool =
+    false
+
+  method setNeedsDisplayInRect*(self: NSView, rect: NSRect) =
+    discard rect
+    self.viewNeedsDisplay = true
+
+  method displayIfNeeded*(self: NSView) =
+    if self.viewNeedsDisplay():
+      self.display()
+
+  method display*(self: NSView) =
+    self.viewNeedsDisplay = false
 
   method setBackgroundColor(
       self: NSView,
@@ -116,6 +171,12 @@ proc frameOrigin*(view: NSView): NSPoint =
 
 proc frameSize*(view: NSView): NSSize =
   view.frame().size
+
+proc boundsOrigin*(view: NSView): NSPoint =
+  view.bounds().origin
+
+proc boundsSize*(view: NSView): NSSize =
+  view.bounds().size
 
 proc isHidden*(view: NSView): bool =
   view.viewHidden()
@@ -203,6 +264,22 @@ proc setFrameSize*(view: NSView, size: NSSize) =
   view.setFrame(
     nsRect(f.origin.x, f.origin.y, max(size.width, 0.0), max(size.height, 0.0))
   )
+
+proc setBounds*(view: NSView, bounds: NSRect) =
+  view.setBounds(
+    bounds.origin.x.float32, bounds.origin.y.float32, bounds.size.width.float32,
+    bounds.size.height.float32,
+  )
+
+proc enclosingScrollView*(view: NSView): NSScrollView =
+  if view.isNil:
+    return NSScrollView(value: nil)
+  var current = view.viewSuperview()
+  while not current.isNil:
+    if current.isKindOfClass(NSScrollView):
+      return ownFromId[NSScrollView](current.value)
+    current = current.viewSuperview()
+  NSScrollView(value: nil)
 
 proc subviews*(view: NSView): seq[NSView] =
   result = view.viewSubviews()

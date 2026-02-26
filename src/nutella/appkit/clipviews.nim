@@ -2,9 +2,6 @@ import ./runtime
 import ./views
 
 objcImpl:
-  type NSCursor* = object of NSObject
-
-objcImpl:
   type NSClipView* = object of NSView
     clipBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     xDocumentCursor {.set: setDocumentCursor, get: documentCursor.}: NSCursor
@@ -15,7 +12,8 @@ objcImpl:
     clipScrollOrigin: NSPoint
 
   method init*(self: var NSClipView): NSClipView =
-    result = asTypeRaw[NSClipView](callSuperIdFrom(NSClipView, self, getSelector("init")))
+    result =
+      asTypeRaw[NSClipView](callSuperIdFrom(NSClipView, self, getSelector("init")))
     if result.isNil:
       return
     result.clipBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
@@ -25,6 +23,7 @@ objcImpl:
     result.clipDrawsBackground = true
     result.clipCopiesOnScroll = false
     result.clipScrollOrigin = nsPoint(0, 0)
+    result.setBoundsOrigin(result.clipScrollOrigin)
 
   method documentView*(self: NSClipView): NSView =
     if self.clipDocumentViewId.isNil:
@@ -50,6 +49,7 @@ objcImpl:
       self.clipDocumentViewId = NSView(value: nil)
       self.clipDocumentRect = nsRect(0, 0, 0, 0)
       self.clipScrollOrigin = nsPoint(0, 0)
+      self.setBoundsOrigin(self.clipScrollOrigin)
       return
 
     let parent = view.viewSuperview()
@@ -70,6 +70,7 @@ objcImpl:
     view.setNextResponder(asRetainedType[NSResponder](self))
     self.clipDocumentViewId = retain(view)
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
+    self.setBoundsOrigin(self.clipScrollOrigin)
     let frame = view.viewFrame()
     self.clipDocumentRect =
       nsRect(0, 0, max(frame.size.width, 0.0), max(frame.size.height, 0.0))
@@ -93,7 +94,7 @@ objcImpl:
 
   method documentVisibleRect*(self: NSClipView): NSRect =
     let constrained = self.constrainScrollPoint(self.clipScrollOrigin)
-    let clipSize = self.viewFrame().size
+    let clipSize = self.bounds().size
     let docRect = self.documentRect()
     nsRect(
       constrained.x,
@@ -104,7 +105,7 @@ objcImpl:
 
   method constrainScrollPoint*(self: NSClipView, point: NSPoint): NSPoint =
     let docRect = self.documentRect()
-    let clipSize = self.viewFrame().size
+    let clipSize = self.bounds().size
     let maxX = max(docRect.size.width - clipSize.width, 0.0)
     let maxY = max(docRect.size.height - clipSize.height, 0.0)
     result = nsPoint(clamp(point.x, 0.0, maxX), clamp(point.y, 0.0, maxY))
@@ -120,6 +121,7 @@ objcImpl:
 
   method scrollToPoint*(self: NSClipView, point: NSPoint) =
     self.clipScrollOrigin = self.constrainScrollPoint(point)
+    self.setBoundsOrigin(self.clipScrollOrigin)
     let doc = self.documentView()
     if doc.isNil:
       return
@@ -138,9 +140,25 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ) =
-    self.viewFrame =
-      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
+    var superObj =
+      ObjcSuper(receiver: self.value, superClass: getClass(NSClipView).getSuperclass())
+    cast[proc(
+      superObj: var ObjcSuper,
+      op: SEL,
+      x: float32,
+      y: float32,
+      width: float32,
+      height: float32,
+    ) {.cdecl, varargs.}](objc_msgSendSuper)(
+      superObj,
+      getSelector("setFrame:y:width:height:"),
+      x.float32,
+      y.float32,
+      max(width.float32, 0.0),
+      max(height.float32, 0.0),
+    )
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
+    self.setBoundsOrigin(self.clipScrollOrigin)
     let doc = self.documentView()
     if doc.isNil:
       return
