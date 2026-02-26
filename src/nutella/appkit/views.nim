@@ -111,7 +111,6 @@ objcImpl:
     false
 
   method setNeedsDisplayInRect*(self: NSView, rect: NSRect) =
-    discard rect
     self.viewNeedsDisplay = true
 
   method displayIfNeeded*(self: NSView) =

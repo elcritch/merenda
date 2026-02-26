@@ -244,9 +244,7 @@ objcImpl:
   method drawKnobSlotInRect*(
       self: NSScroller, rect: NSRect, flag {.kw("highlight").}: bool
   ) =
-    discard self
-    discard rect
-    discard flag
+    discard
 
   method drawParts*(self: NSScroller) =
     discard
@@ -254,9 +252,7 @@ objcImpl:
   method drawArrow*(
       self: NSScroller, arrow: NSScrollerArrow, flag {.kw("highlight").}: bool
   ) =
-    discard self
-    discard arrow
-    discard flag
+    discard
 
   method drawKnob*(self: NSScroller) =
     discard
@@ -271,12 +267,10 @@ objcImpl:
     NSScrollerNoPart
 
   method trackKnob*(self: NSScroller, event: NSEvent) =
-    discard self
-    discard event
+    discard
 
   method trackScrollButtons*(self: NSScroller, event: NSEvent) =
-    discard self
-    discard event
+    discard
 
   method dealloc(self: NSScroller) {.used.} =
     self.xTarget.value = nil

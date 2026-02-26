@@ -10,12 +10,10 @@ objcImpl:
   type CommitPassEditor = object of NSObject
 
   method commitEditing*(self: CommitPassEditor): bool =
-    discard self
     inc commitCallCount
     true
 
   method discardEditing*(self: CommitPassEditor) =
-    discard self
     inc discardCallCount
 
 suite "appkit nscontroller":

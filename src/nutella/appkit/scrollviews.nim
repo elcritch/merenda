@@ -59,28 +59,28 @@ proc newRulerView(
 
 objcImpl:
   type NSScrollView* = object of NSView
-    xClipView: NSClipView
+    xClipView {.get: contentView.}: NSClipView
     xHeaderClipView: NSClipView
     xCornerView: NSView
-    xVerticalScroller: NSScroller
-    xHorizontalScroller: NSScroller
-    xHorizontalRuler: NSRulerView
-    xVerticalRuler: NSRulerView
-    xBackgroundColor: NSColor
-    xVerticalLineScroll: float32
-    xVerticalPageScroll: float32
-    xHorizontalLineScroll: float32
-    xHorizontalPageScroll: float32
-    xBorderType: NSBorderType
-    xDrawsBackground: bool
-    xHasVerticalScroller: bool
-    xHasHorizontalScroller: bool
-    xHasHorizontalRuler: bool
-    xHasVerticalRuler: bool
-    xRulersVisible: bool
-    xScrollsDynamically: bool
-    xAutohidesScrollers: bool
-    xDocumentCursor: NSCursor
+    xVerticalScroller {.get: verticalScroller.}: NSScroller
+    xHorizontalScroller {.get: horizontalScroller.}: NSScroller
+    xHorizontalRuler {.get: horizontalRulerView.}: NSRulerView
+    xVerticalRuler {.get: verticalRulerView.}: NSRulerView
+    xBackgroundColor {.get: backgroundColor.}: NSColor
+    xVerticalLineScroll {.get: verticalLineScroll.}: float32
+    xVerticalPageScroll {.get: verticalPageScroll.}: float32
+    xHorizontalLineScroll {.get: horizontalLineScroll.}: float32
+    xHorizontalPageScroll {.get: horizontalPageScroll.}: float32
+    xBorderType {.get: borderType.}: NSBorderType
+    xDrawsBackground {.get: drawsBackground.}: bool
+    xHasVerticalScroller {.get: hasVerticalScroller.}: bool
+    xHasHorizontalScroller {.get: hasHorizontalScroller.}: bool
+    xHasHorizontalRuler {.get: hasHorizontalRuler.}: bool
+    xHasVerticalRuler {.get: hasVerticalRuler.}: bool
+    xRulersVisible {.get: rulersVisible.}: bool
+    xScrollsDynamically {.set: setScrollsDynamically, get: scrollsDynamically.}: bool
+    xAutohidesScrollers {.set: setAutohidesScrollers, get: autohidesScrollers.}: bool
+    xDocumentCursor {.get: documentCursor.}: NSCursor
 
   method insetBounds*(self: NSScrollView): NSRect =
     insetByBorder(self.bounds(), self.xBorderType)
@@ -304,48 +304,13 @@ objcImpl:
     true
 
   method contentSize*(self: NSScrollView): NSSize =
-    if self.xClipView.isNil:
-      return nsSize(0.0, 0.0)
     self.xClipView.frame().size
 
   method documentView*(self: NSScrollView): NSView =
-    if self.xClipView.isNil:
-      return NSView(value: nil)
     self.xClipView.documentView()
 
-  method contentView*(self: NSScrollView): NSClipView =
-    if self.xClipView.isNil:
-      return NSClipView(value: nil)
-    retain(self.xClipView)
-
   method documentVisibleRect*(self: NSScrollView): NSRect =
-    if self.xClipView.isNil:
-      return nsRect(0.0, 0.0, 0.0, 0.0)
     self.xClipView.documentVisibleRect()
-
-  method drawsBackground*(self: NSScrollView): bool =
-    self.xDrawsBackground
-
-  method backgroundColor*(self: NSScrollView): NSColor =
-    self.xBackgroundColor
-
-  method borderType*(self: NSScrollView): NSBorderType =
-    self.xBorderType
-
-  method verticalScroller*(self: NSScrollView): NSScroller =
-    if self.xVerticalScroller.isNil:
-      return NSScroller(value: nil)
-    retain(self.xVerticalScroller)
-
-  method horizontalScroller*(self: NSScrollView): NSScroller =
-    if self.xHorizontalScroller.isNil:
-      return NSScroller(value: nil)
-    retain(self.xHorizontalScroller)
-
-  method verticalRulerView*(self: NSScrollView): NSRulerView =
-    if self.xVerticalRuler.isNil:
-      return NSRulerView(value: nil)
-    retain(self.xVerticalRuler)
 
   method setVerticalRulerView*(self: NSScrollView, ruler: NSRulerView) =
     if not self.xVerticalRuler.isNil:
@@ -377,58 +342,13 @@ objcImpl:
     self.xHasHorizontalRuler = not self.xHorizontalRuler.isNil
     self.tile()
 
-  method horizontalRulerView*(self: NSScrollView): NSRulerView =
-    if self.xHorizontalRuler.isNil:
-      return NSRulerView(value: nil)
-    retain(self.xHorizontalRuler)
-
-  method hasVerticalScroller*(self: NSScrollView): bool =
-    self.xHasVerticalScroller
-
-  method hasHorizontalScroller*(self: NSScrollView): bool =
-    self.xHasHorizontalScroller
-
-  method hasVerticalRuler*(self: NSScrollView): bool =
-    self.xHasVerticalRuler
-
-  method hasHorizontalRuler*(self: NSScrollView): bool =
-    self.xHasHorizontalRuler
-
-  method rulersVisible*(self: NSScrollView): bool =
-    self.xRulersVisible
-
-  method verticalLineScroll*(self: NSScrollView): float32 =
-    self.xVerticalLineScroll
-
-  method horizontalLineScroll*(self: NSScrollView): float32 =
-    self.xHorizontalLineScroll
-
-  method verticalPageScroll*(self: NSScrollView): float32 =
-    self.xVerticalPageScroll
-
-  method horizontalPageScroll*(self: NSScrollView): float32 =
-    self.xHorizontalPageScroll
-
   method lineScroll*(self: NSScrollView): float32 =
     self.xVerticalLineScroll
 
   method pageScroll*(self: NSScrollView): float32 =
     self.xVerticalPageScroll
 
-  method scrollsDynamically*(self: NSScrollView): bool =
-    self.xScrollsDynamically
-
-  method autohidesScrollers*(self: NSScrollView): bool =
-    self.xAutohidesScrollers
-
-  method documentCursor*(self: NSScrollView): NSCursor =
-    if self.xDocumentCursor.isNil:
-      return NSCursor(value: nil)
-    retain(self.xDocumentCursor)
-
   method setDocumentView*(self: NSScrollView, view: NSView) =
-    if self.xClipView.isNil:
-      return
     self.xClipView.setDocumentView(view)
     self.reflectScrolledClipView(self.xClipView)
 
@@ -451,16 +371,13 @@ objcImpl:
 
   method setDrawsBackground*(self: NSScrollView, value: bool) =
     self.xDrawsBackground = value
-    if self.xClipView.isNil:
-      return
     self.xClipView.setDrawsBackground(value)
     if not value:
       self.xClipView.setCopiesOnScroll(false)
 
   method setBackgroundColor*(self: NSScrollView, color: NSColor) =
     self.xBackgroundColor = color
-    if not self.xClipView.isNil:
-      self.xClipView.setBackgroundColor(color)
+    self.xClipView.setBackgroundColor(color)
 
   method setBorderType*(self: NSScrollView, borderType: NSBorderType) =
     if self.xBorderType == borderType:
@@ -578,20 +495,13 @@ objcImpl:
     self.setHorizontalPageScroll(value)
     self.setVerticalPageScroll(value)
 
-  method setScrollsDynamically*(self: NSScrollView, flag: bool) =
-    self.xScrollsDynamically = flag
-
   method setDocumentCursor*(self: NSScrollView, cursor: NSCursor) =
     self.xDocumentCursor =
       if cursor.isNil:
         NSCursor(value: nil)
       else:
         retain(cursor)
-    if not self.xClipView.isNil:
-      self.xClipView.setDocumentCursor(self.xDocumentCursor)
-
-  method setAutohidesScrollers*(self: NSScrollView, value: bool) =
-    self.xAutohidesScrollers = value
+    self.xClipView.setDocumentCursor(self.xDocumentCursor)
 
   method createHeaderAndCornerViewsIfNeeded*(self: NSScrollView) =
     let headerView = self.headerViewInternal()
@@ -798,7 +708,6 @@ objcImpl:
       parent.setNeedsDisplay(true)
 
   method resizeSubviewsWithOldSize*(self: NSScrollView, oldSize: NSSize) =
-    discard oldSize
     self.tile()
     if self.hasVerticalScroller() and (not self.xVerticalScroller.isNil):
       self.verticalScroll(self.xVerticalScroller)

@@ -9,7 +9,6 @@ objcImpl:
   type NXRaiseInObjcMethodClass {.impl: NXRaiseInObjcMethodProtocol.} = object of NSObject
 
   method boom(self: NXRaiseInObjcMethodClass) =
-    discard self
     raise newException(ValueError, "raised from objc method")
 
 suite "Objective-C and Nim exception bridge":
@@ -70,7 +69,6 @@ suite "Objective-C and Nim exception bridge":
     var chainMiddleLabelInFinally = ""
 
     proc `=destroy`(o: var ChainPayloadObj) =
-      discard o
       inc chainPayloadDestroyedCount
 
     objcImpl:
@@ -98,7 +96,6 @@ suite "Objective-C and Nim exception bridge":
             chainMiddleLabelInFinally = payloadOnStack.label
 
       method innerCall(self: NXExceptionChainClass, payload: ChainPayloadRef) =
-        discard self
         chainInnerPtr = cast[pointer](payload)
         raise newException(ValueError, "exception from innerCall")
 

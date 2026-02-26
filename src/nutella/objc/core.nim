@@ -503,31 +503,26 @@ proc nxObjectWriteRefCount(obj: IDPtr, value: NSUInteger) {.inline, raises: [].}
     p[] = value
 
 proc nxObjectAlloc(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
-  discard cmd
   result = class_createInstance(self, 0)
   if result != nil:
     nxObjectWriteRefCount(result, 1.NSUInteger)
 
 proc nxObjectInit(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
-  discard cmd
   if nxObjectReadRefCount(self) == 0.NSUInteger:
     nxObjectWriteRefCount(self, 1.NSUInteger)
   result = self
 
 proc nxObjectRetain(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
-  discard cmd
   let rc = nxObjectReadRefCount(self)
   nxObjectWriteRefCount(self, rc + 1.NSUInteger)
   result = self
 
 proc nxObjectDealloc(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
-  discard cmd
   nxObjectWriteRefCount(self, 0.NSUInteger)
   discard object_dispose(self)
   result = nil
 
 proc nxObjectRelease(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
-  discard cmd
   let rc = nxObjectReadRefCount(self)
   if rc <= 1.NSUInteger:
     discard objc_msgSend(self, sel_registerName("dealloc"))
@@ -535,31 +530,25 @@ proc nxObjectRelease(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
     nxObjectWriteRefCount(self, rc - 1.NSUInteger)
 
 proc nxObjectRetainCount(self: IDPtr, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
-  discard cmd
   result = nxObjectReadRefCount(self)
 
 proc nxObjectAutorelease(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
-  discard cmd
   result = self
 
 proc nxObjectIsEqual(self: IDPtr, cmd: SEL, other: IDPtr): bool {.cdecl, raises: [].} =
-  discard cmd
   self == other
 
 proc nxObjectHash(self: IDPtr, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
-  discard cmd
   cast[NSUInteger](cast[uint](self) shr 4)
 
 proc nxObjectRespondsToSelector(
     self: IDPtr, cmd: SEL, selector: SEL
 ): bool {.cdecl, raises: [].} =
-  discard cmd
   class_respondsToSelector(object_getClass(self), selector)
 
 proc nxObjectIsKindOfClass(
     self: IDPtr, cmd: SEL, cls: IDPtr
 ): bool {.cdecl, raises: [].} =
-  discard cmd
   if cls == nil:
     return false
   var current = object_getClass(self)
@@ -576,8 +565,7 @@ proc nxObjectNew(self: IDPtr, cmd: SEL): IDPtr {.cdecl, raises: [].} =
   result = objc_msgSend(allocated, sel_registerName("init"))
 
 proc nxObjectInitialize(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
-  discard self
-  discard cmd
+  discard
 
 proc ensureNutellaRootClasses*() =
   ## Bootstraps a standalone NXObject root class when custom root mode is enabled.
