@@ -99,14 +99,14 @@ suite "knutella appkit hello world":
     check compiles(
       block:
         let app = NSApp()
-        let window = newWindow(100, 120, 640, 420, "Nutella Hello World")
+        let window = newWindow(100, 120, 640, 420, "KNutella Hello World")
         let root = newView(0, 0, 640, 420)
         root.setTag(100)
         root.setBackgroundColor(0.96, 0.96, 0.98, 1.0)
         root.setFrameOrigin(nsPoint(0, 0))
         root.setFrameSize(nsSize(640, 420))
 
-        let field = newTextField(32, 32, 360, 44, "Hello world from Nutella")
+        let field = newTextField(32, 32, 360, 44, "Hello world from KNutella")
         field.setAlignment(NSCenterTextAlignment)
         field.setTextColor(nsColor(0.14, 0.19, 0.33, 1.0))
         field.setDrawsBackground(false)

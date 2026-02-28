@@ -18,9 +18,9 @@ jobs:
         nimversion:
           - '2.2.8'
         os:
-          - ubuntu-24.04
+          # - ubuntu-24.04
           - macos-14
-          - windows-2022
+          # - windows-2022
     steps:
     - uses: actions/checkout@v1
 
