@@ -1,8 +1,8 @@
-# nutella
+# knutella
 
-`nutella` provides Nim bindings/helpers around the Objective-C runtime.
+`knutella` provides Nim bindings/helpers around the Objective-C runtime.
 
-## AppKit Prototype (`nutella/appkit`)
+## AppKit Prototype (`knutella/appkit`)
 
 There is now an initial Cocoa/NextSTEP-style UI core built as Objective-C
 runtime classes on top of `siwin` (window/event loop) and `figdraw` (drawing):
@@ -17,7 +17,7 @@ runtime classes on top of `siwin` (window/event loop) and `figdraw` (drawing):
 Quick example:
 
 ```nim
-import nutella/appkit
+import knutella/appkit
 
 let app = NSApplication.sharedApplication()
 let window = newWindow(100, 100, 640, 420, "Hello")
@@ -40,7 +40,7 @@ discard app.runForFrames(1) # use app.run() for full event loop
 Runnable example:
 
 ```sh
-NUTELLA_EXAMPLE_FRAMES=1 nim r examples/appkit_hello.nim
+KNUTELLA_EXAMPLE_FRAMES=1 nim r examples/appkit_hello.nim
 ```
 
 ## `objcImpl` runtime DSL
@@ -49,7 +49,7 @@ NUTELLA_EXAMPLE_FRAMES=1 nim r examples/appkit_hello.nim
 method implementations as Objective-C instance methods.
 
 ```nim
-import nutella/objc
+import knutella/objc
 
 var pingCount = 0
 var total = 0.cint
@@ -125,11 +125,11 @@ objcImpl:
 
 ### Super-call helpers
 
-`nutella/objc` also exports convenience helpers for calling superclass
+`knutella/objc` also exports convenience helpers for calling superclass
 implementations from custom runtime methods:
 
 ```nim
-import nutella/objc
+import knutella/objc
 
 var deallocCount = 0
 
@@ -157,8 +157,8 @@ doAssert o.retainCountFromSuper() == retainCount(o).cint
 accessors (`self.field` / `self.field = value`).
 
 ```nim
-import nutella/objc
-import nutella/objc/ivar
+import knutella/objc
+import knutella/objc/ivar
 
 type CounterStateObj = object
   total: int
