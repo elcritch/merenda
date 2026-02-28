@@ -126,6 +126,17 @@ type
   NSUsableScrollerParts* = int
 
 const
+  NSBorderlessWindowMask* = 0x00
+  NSTitledWindowMask* = 0x01
+  NSClosableWindowMask* = 0x02
+  NSMiniaturizableWindowMask* = 0x04
+  NSResizableWindowMask* = 0x08
+  NSTexturedBackgroundWindowMask* = 0x100
+
+  NSBackingStoreRetained* = 0
+  NSBackingStoreNonretained* = 1
+  NSBackingStoreBuffered* = 2
+
   NSNoCellMask* = 0x00
   NSContentsCellMask* = 0x01
   NSPushInCellMask* = 0x02

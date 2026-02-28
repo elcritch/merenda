@@ -39,7 +39,7 @@ objcImpl:
     if result.isNil:
       return
     result.setEnabled(true)
-    result.setAlignment(NSNaturalTextAlignment)
+    result.setAlignment(NSCenterTextAlignment)
     result.title = @ns"Button"
     result.stateValue = NSOffState
     result.mixedAllowed = false
@@ -58,6 +58,20 @@ objcImpl:
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
     result.onClick = nil
+
+  method initWithFrame*(
+      self: var NSButton,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
+  ): NSButton =
+    result = self.init()
+    if result.isNil:
+      return
+    asRetainedType[NSView](result).setFrame(
+      x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
+    )
 
   method setState*(self: NSButton, value: cint) =
     self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
@@ -115,6 +129,8 @@ objcImpl:
     if not self.isEnabled():
       return
     self.setNextState()
+    let control = asRetainedType[NSControl](self)
+    discard control.sendAction(control.action(), control.target())
     let cb = self.onClick()
     if cb.isNil:
       return
@@ -187,6 +203,8 @@ proc click*(button: NSButton) =
   if not button.isEnabled():
     return
   button.setNextState()
+  let control = asRetainedType[NSControl](button)
+  discard control.sendAction(control.action(), control.target())
   let cb = button.onClick()
   if not cb.isNil:
     cb(button.value)

@@ -11,11 +11,41 @@ import ./events
 
 export responders, views
 
+const WindowTitlebarHeight = 28.0'f32
+
+proc titlebarHeightForStyleMask(styleMask: int): float32 =
+  if (styleMask and NSTitledWindowMask) != 0:
+    return WindowTitlebarHeight
+  0.0
+
+proc frameRectForContentRectWithStyle(contentRect: NSRect, styleMask: int): NSRect =
+  let titlebarHeight = titlebarHeightForStyleMask(styleMask)
+  nsRect(
+    contentRect.origin.x,
+    contentRect.origin.y,
+    max(contentRect.size.width, 1.0),
+    max(contentRect.size.height + titlebarHeight, 1.0),
+  )
+
+proc contentRectForFrameRectWithStyle(frameRect: NSRect, styleMask: int): NSRect =
+  let titlebarHeight = titlebarHeightForStyleMask(styleMask)
+  nsRect(
+    frameRect.origin.x,
+    frameRect.origin.y,
+    max(frameRect.size.width, 1.0),
+    max(frameRect.size.height - titlebarHeight, 1.0),
+  )
+
 objcImpl:
   type NSWindow* = object of NSResponder
     xFrame {.set: windowFrame, get: windowFrame.}: NSRect
     xTitle {.set: windowTitle, get: windowTitle.}: NSString
+    xStyleMask {.set: windowStyleMask, get: windowStyleMask.}: int
+    xBackingType {.set: windowBackingType, get: windowBackingType.}: int
+    xDeferred {.set: windowDeferred, get: windowDeferred.}: bool
+    xReleasedWhenClosed {.set: setReleasedWhenClosed, get: isReleasedWhenClosed.}: bool
     xContentView {.set: windowContentView, get: windowContentView.}: NSView
+    xDelegate {.set: setDelegate, get: delegate.}: ID
     xFirstResponder {.set: windowFirstResponder, get: windowFirstResponder.}:
       NSResponder
     xNativeWindow {.set: windowNativeWindow, get: windowNativeWindow.}: siwinshim.Window
@@ -32,7 +62,13 @@ objcImpl:
       return
     result.xFrame = nsRect(100, 100, 640, 420)
     result.xTitle = @ns"Nutella Window"
+    result.xStyleMask =
+      NSTitledWindowMask or NSClosableWindowMask or NSResizableWindowMask
+    result.xBackingType = NSBackingStoreBuffered
+    result.xDeferred = false
+    result.xReleasedWhenClosed = true
     result.xContentView = NSView(value: nil)
+    result.xDelegate.value = nil
     result.xFirstResponder = NSResponder(value: nil)
     result.xNativeWindow = nil
     result.xRenderer = nil
@@ -53,6 +89,23 @@ objcImpl:
       return
     result.xFrame =
       nsRect(x.float32, y.float32, max(width.float32, 1.0), max(height.float32, 1.0))
+
+  method initWithContentRect*(
+      self: var NSWindow,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
+      styleMask {.kw("styleMask").}: int,
+      backing {.kw("backing").}: int,
+      deferFlag {.kw("defer").}: bool,
+  ): NSWindow =
+    result = self.initWithContentRect(x, y, width, height)
+    if result.isNil:
+      return
+    result.xStyleMask = styleMask
+    result.xBackingType = backing
+    result.xDeferred = deferFlag
 
   method setContentView*(self: NSWindow, view: NSView) =
     if self.isNil:
@@ -79,6 +132,12 @@ objcImpl:
     if self.xContentView.isNil:
       return NSView(value: nil)
     result = retain(self.xContentView)
+
+  method frameRectForContentRect*(self: NSWindow, rect: NSRect): NSRect =
+    frameRectForContentRectWithStyle(rect, self.windowStyleMask())
+
+  method contentRectForFrameRect*(self: NSWindow, rect: NSRect): NSRect =
+    contentRectForFrameRectWithStyle(rect, self.windowStyleMask())
 
   method firstResponder*(self: NSWindow): NSResponder =
     if self.xFirstResponder.isNil:
@@ -112,13 +171,23 @@ objcImpl:
 
   method keyDown*(self: NSWindow, event: NSEvent) =
     if (not event.isNil) and siwinPressed(event) and siwinKey(event) == siwin.Key.escape:
-      self.close()
+      self.performClose(asRetainedType[NSObject](self))
       return
     let next = self.nextResponder()
     if not next.isNil:
       next.keyDown(event)
       return
     self.noResponderFor(getSelector("keyDown:"))
+
+  method windowShouldClose*(self: NSWindow, sender: NSObject): bool =
+    true
+
+  method performClose*(self: NSWindow, sender: NSObject) =
+    if self.isNil:
+      return
+    if not self.windowShouldClose(sender):
+      return
+    self.close()
 
   method eventDispatchTarget(self: NSWindow): NSResponder =
     if self.isNil:
@@ -203,6 +272,14 @@ objcImpl:
   method isVisible*(self: NSWindow): bool =
     (not self.isNil) and self.xVisibleRequested and (not self.xClosed)
 
+  method setIsVisible*(self: NSWindow, value: bool) =
+    if self.isNil:
+      return
+    if value:
+      self.makeKeyAndOrderFront(asRetainedType[NSObject](self))
+    else:
+      self.orderOut(asRetainedType[NSObject](self))
+
   method isKeyWindow*(self: NSWindow): bool =
     self.isVisible()
 
@@ -221,6 +298,7 @@ objcImpl:
     if not self.xContentView.isNil:
       clearSuperviewRef(self.xContentView.value)
     self.xContentView = NSView(value: nil)
+    self.xDelegate.value = nil
     destroyIvarFields(self)
     discard callSuperIdFrom(NSWindow, self, getSelector("dealloc"))
 

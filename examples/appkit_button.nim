@@ -1,6 +1,6 @@
 import std/[os, strutils]
 
-import nutella/appkit/[application, buttons, textfields, types, views, windows]
+import nutella/appkit
 import nutella/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
@@ -12,58 +12,118 @@ proc maxFramesFromEnv(defaultValue = -1): int =
   except ValueError:
     defaultValue
 
+objcImpl:
+  type ButtonWindow = object of NSWindow
+    xButton1: NSButton
+    xButton2: NSButton
+    xLabel1: NSTextField
+    xLabel2: NSTextField
+    xButton1Clicked: int
+    xButton2Clicked: int
+
+  method init*(self: var ButtonWindow): ButtonWindow =
+    var base = self.initWithContentRect(
+      100.0,
+      100.0,
+      300.0,
+      300.0,
+      NSTitledWindowMask or NSClosableWindowMask or NSResizableWindowMask,
+      NSBackingStoreBuffered,
+      false,
+    )
+    result = asTypeRaw[ButtonWindow](base.value)
+    base.value = nil
+    if result.isNil:
+      return
+
+    result.xButton1Clicked = 0
+    result.xButton2Clicked = 0
+
+    var contentAlloc = NSView.alloc()
+    var contentView = contentAlloc.initWithFrame(0.0, 0.0, 300.0, 300.0)
+    contentAlloc.value = nil
+    result.setContentView(contentView)
+
+    var button1Alloc = NSButton.alloc()
+    result.xButton1 = button1Alloc.initWithFrame(50.0, 225.0, 90.0, 25.0)
+    button1Alloc.value = nil
+    result.xButton1.setTitle(@ns"button1")
+    result.xButton1.setBezelStyle(NSRoundedBezelStyle)
+    result.xButton1.setTarget(ID(value: result.value))
+    result.xButton1.setAction(getSelector("OnButton1Click:"))
+    result.xButton1.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+
+    var button2Alloc = NSButton.alloc()
+    result.xButton2 = button2Alloc.initWithFrame(50.0, 125.0, 200.0, 75.0)
+    button2Alloc.value = nil
+    result.xButton2.setTitle(@ns"button2")
+    result.xButton2.setBezelStyle(NSRegularSquareBezelStyle)
+    result.xButton2.setTarget(ID(value: result.value))
+    result.xButton2.setAction(getSelector("OnButton2Click:"))
+    result.xButton2.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+
+    var label1Alloc = NSTextField.alloc()
+    result.xLabel1 = label1Alloc.initWithFrame(50.0, 80.0, 200.0, 20.0)
+    label1Alloc.value = nil
+    result.xLabel1.setStringValue(@ns"button1 clicked 0 times")
+    result.xLabel1.setBezeled(false)
+    result.xLabel1.setDrawsBackground(false)
+    result.xLabel1.setEditable(false)
+
+    var label2Alloc = NSTextField.alloc()
+    result.xLabel2 = label2Alloc.initWithFrame(50.0, 50.0, 200.0, 20.0)
+    label2Alloc.value = nil
+    result.xLabel2.setStringValue(@ns"button2 clicked 0 times")
+    result.xLabel2.setBezeled(false)
+    result.xLabel2.setDrawsBackground(false)
+    result.xLabel2.setEditable(false)
+
+    contentView.addSubview(result.xButton1)
+    contentView.addSubview(result.xButton2)
+    contentView.addSubview(result.xLabel1)
+    contentView.addSubview(result.xLabel2)
+    result.setTitle(@ns"Button example")
+    result.setIsVisible(true)
+    contentView.value = nil
+
+  method windowShouldClose*(self: ButtonWindow, sender: NSObject): bool =
+    if sender.isNil:
+      NSApp().stop()
+      return true
+    NSApp().stop()
+    true
+
+  method OnButton1Click*(self: ButtonWindow, sender: NSObject) =
+    if sender.isNil:
+      return
+    inc self.xButton1Clicked
+    self.xLabel1.setStringValue(
+      @ns("button1 clicked " & $self.xButton1Clicked & " times")
+    )
+
+  method OnButton2Click*(self: ButtonWindow, sender: NSObject) =
+    if sender.isNil:
+      return
+    inc self.xButton2Clicked
+    self.xLabel2.setStringValue(
+      @ns("button2 clicked " & $self.xButton2Clicked & " times")
+    )
+
+  method dealloc(self: ButtonWindow) {.used.} =
+    self.xButton1 = NSButton(value: nil)
+    self.xButton2 = NSButton(value: nil)
+    self.xLabel1 = NSTextField(value: nil)
+    self.xLabel2 = NSTextField(value: nil)
+    destroyIvarFields(self)
+    discard callSuperIdFrom(ButtonWindow, self, getSelector("dealloc"))
+
 when isMainModule:
-  var button1Clicked = 0
-  var button2Clicked = 0
-
   var app = NSApp()
-  var window = newWindow(100, 100, 300, 300, "Button example")
-  var root = newView(0, 0, 300, 300)
+  var windowAlloc = ButtonWindow.alloc()
+  var window = initOwned(move(windowAlloc))
 
-  var button1 = newButton(50, 225, 90, 25, @ns"button1")
-  button1.setBezelStyle(NSRoundedBezelStyle)
-  button1.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
-
-  var button2 = newButton(50, 125, 200, 75, @ns"button2")
-  button2.setBezelStyle(NSRegularSquareBezelStyle)
-  button2.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
-
-  var label1 = newTextField(50, 80, 200, 20, @ns"button1 clicked 0 times")
-  label1.setBezeled(false)
-  label1.setDrawsBackground(false)
-  label1.setEditable(false)
-  label1.setStringValue(@ns"button1 clicked 0 times")
-
-  var label2 = newTextField(50, 50, 200, 20, @ns"button2 clicked 0 times")
-  label2.setBezeled(false)
-  label2.setDrawsBackground(false)
-  label2.setEditable(false)
-  label2.setStringValue(@ns"button2 clicked 0 times")
-
-  button1.setOnClick(
-    proc(sender: NSButton) =
-      if sender.isNil:
-        return
-      inc button1Clicked
-      label1.setStringValue(@ns("button1 clicked " & $button1Clicked & " times"))
-  )
-
-  button2.setOnClick(
-    proc(sender: NSButton) =
-      if sender.isNil:
-        return
-      inc button2Clicked
-      label2.setStringValue(@ns("button2 clicked " & $button2Clicked & " times"))
-  )
-
-  root.addSubview(button1)
-  root.addSubview(button2)
-  root.addSubview(label1)
-  root.addSubview(label2)
-
-  window.setContentView(root)
-  app.addWindow(window)
-  window.makeKeyAndOrderFront(app)
+  app.addWindow(asRetainedType[NSWindow](window))
+  window.makeKeyAndOrderFront(asRetainedType[NSObject](app))
 
   try:
     let maxFrames = maxFramesFromEnv()
@@ -74,10 +134,5 @@ when isMainModule:
   except CatchableError as exc:
     echo "Unable to run button example: ", exc.msg
 
-  label2.value = nil
-  label1.value = nil
-  button2.value = nil
-  button1.value = nil
-  root.value = nil
   window.value = nil
   app.value = nil

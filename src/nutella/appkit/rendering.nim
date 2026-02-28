@@ -58,6 +58,21 @@ proc drawsBg(view: NSView): bool =
   let textField = asRetainedType[NSTextField](view)
   result = textField.drawsBackground()
 
+const
+  DefaultButtonFontSize = 13.0'f32
+  DefaultLabelFontSize = 13.0'f32
+
+type ButtonBezelVisualKind = enum
+  roundedButtonBezel
+  regularSquareButtonBezel
+
+proc buttonBezelVisualKind(button: NSButton): ButtonBezelVisualKind =
+  if button.isNil:
+    return roundedButtonBezel
+  case button.bezelStyle()
+  of NSRegularSquareBezelStyle: regularSquareButtonBezel
+  else: roundedButtonBezel
+
 proc buttonVisualState(view: NSView): int =
   if not view.isKindOfClass(NSButton):
     return NSOffState
@@ -71,95 +86,125 @@ proc buttonVisualState(view: NSView): int =
     return button.state()
   NSOffState
 
-proc aquaButtonFill(state: int): Fill =
-  case state
-  of NSOnState:
-    linear(
-      nsColor(0.46, 0.64, 0.90, 1.0).toFigRgba(),
-      nsColor(0.31, 0.50, 0.81, 1.0).toFigRgba(),
-      nsColor(0.19, 0.34, 0.66, 1.0).toFigRgba(),
-      axis = fgaY,
-      midPos = 132'u8,
-    )
-  of NSMixedState:
-    linear(
-      nsColor(0.76, 0.79, 0.84, 1.0).toFigRgba(),
-      nsColor(0.65, 0.69, 0.76, 1.0).toFigRgba(),
-      nsColor(0.53, 0.58, 0.66, 1.0).toFigRgba(),
-      axis = fgaY,
-      midPos = 132'u8,
-    )
-  else:
-    linear(
-      nsColor(0.63, 0.78, 0.98, 1.0).toFigRgba(),
-      nsColor(0.42, 0.65, 0.95, 1.0).toFigRgba(),
-      nsColor(0.27, 0.50, 0.86, 1.0).toFigRgba(),
-      axis = fgaY,
-      midPos = 132'u8,
-    )
+proc aquaButtonFill(kind: ButtonBezelVisualKind, state: int): Fill =
+  case kind
+  of regularSquareButtonBezel:
+    case state
+    of NSOnState:
+      linear(
+        nsColor(0.80, 0.80, 0.80, 1.0).toFigRgba(),
+        nsColor(0.70, 0.70, 0.70, 1.0).toFigRgba(),
+        axis = fgaY,
+      )
+    of NSMixedState:
+      linear(
+        nsColor(0.84, 0.84, 0.84, 1.0).toFigRgba(),
+        nsColor(0.74, 0.74, 0.74, 1.0).toFigRgba(),
+        axis = fgaY,
+      )
+    else:
+      linear(
+        nsColor(0.90, 0.90, 0.90, 1.0).toFigRgba(),
+        nsColor(0.80, 0.80, 0.80, 1.0).toFigRgba(),
+        axis = fgaY,
+      )
+  of roundedButtonBezel:
+    case state
+    of NSOnState:
+      linear(
+        nsColor(0.84, 0.84, 0.84, 1.0).toFigRgba(),
+        nsColor(0.72, 0.72, 0.72, 1.0).toFigRgba(),
+        nsColor(0.62, 0.62, 0.62, 1.0).toFigRgba(),
+        axis = fgaY,
+        midPos = 132'u8,
+      )
+    of NSMixedState:
+      linear(
+        nsColor(0.90, 0.90, 0.90, 1.0).toFigRgba(),
+        nsColor(0.80, 0.80, 0.80, 1.0).toFigRgba(),
+        nsColor(0.72, 0.72, 0.72, 1.0).toFigRgba(),
+        axis = fgaY,
+        midPos = 132'u8,
+      )
+    else:
+      linear(
+        nsColor(0.97, 0.97, 0.97, 1.0).toFigRgba(),
+        nsColor(0.86, 0.86, 0.86, 1.0).toFigRgba(),
+        nsColor(0.76, 0.76, 0.76, 1.0).toFigRgba(),
+        axis = fgaY,
+        midPos = 132'u8,
+      )
 
-proc aquaButtonStroke(state: int): Fill =
-  case state
-  of NSOnState:
-    linear(
-      nsColor(0.35, 0.50, 0.78, 1.0).toFigRgba(),
-      nsColor(0.11, 0.23, 0.49, 1.0).toFigRgba(),
-      axis = fgaY,
-    )
-  of NSMixedState:
-    linear(
-      nsColor(0.55, 0.60, 0.68, 1.0).toFigRgba(),
-      nsColor(0.36, 0.41, 0.50, 1.0).toFigRgba(),
-      axis = fgaY,
-    )
-  else:
-    linear(
-      nsColor(0.41, 0.60, 0.88, 1.0).toFigRgba(),
-      nsColor(0.15, 0.33, 0.64, 1.0).toFigRgba(),
-      axis = fgaY,
-    )
+proc aquaButtonStroke(kind: ButtonBezelVisualKind, state: int): Fill =
+  case kind
+  of regularSquareButtonBezel:
+    nsColor(0.83, 0.83, 0.83, 1.0).solidFill()
+  of roundedButtonBezel:
+    case state
+    of NSOnState:
+      linear(
+        nsColor(0.58, 0.58, 0.58, 1.0).toFigRgba(),
+        nsColor(0.47, 0.47, 0.47, 1.0).toFigRgba(),
+        axis = fgaY,
+      )
+    of NSMixedState:
+      linear(
+        nsColor(0.62, 0.62, 0.62, 1.0).toFigRgba(),
+        nsColor(0.52, 0.52, 0.52, 1.0).toFigRgba(),
+        axis = fgaY,
+      )
+    else:
+      linear(
+        nsColor(0.68, 0.68, 0.68, 1.0).toFigRgba(),
+        nsColor(0.55, 0.55, 0.55, 1.0).toFigRgba(),
+        axis = fgaY,
+      )
 
 proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
   result = noRenderShadows()
   if view.isKindOfClass(NSButton):
+    let button = asRetainedType[NSButton](view)
+    let kind = buttonBezelVisualKind(button)
+    if kind == regularSquareButtonBezel:
+      return
     let state = buttonVisualState(view)
     let dropAlpha =
       if state == NSOnState:
-        0.32
-      elif state == NSMixedState:
         0.17
+      elif state == NSMixedState:
+        0.15
       else:
-        0.27
+        0.22
     let bottomInsetAlpha =
       if state == NSOnState:
-        0.22
+        0.12
       elif state == NSMixedState:
-        0.19
+        0.10
       else:
-        0.25
+        0.14
     result[0] = RenderShadow(
       style: DropShadow,
-      blur: 2.8,
-      spread: 0.0,
-      x: 0.0,
-      y: 1.2,
-      fill: nsColor(0.10, 0.18, 0.35, dropAlpha).toFigColor(),
-    )
-    result[1] = RenderShadow(
-      style: InnerShadow,
-      blur: 1.2,
+      blur: 2.0,
       spread: 0.0,
       x: 0.0,
       y: 1.0,
-      fill: nsColor(1.0, 1.0, 1.0, 0.52).toFigColor(),
+      fill: nsColor(0.0, 0.0, 0.0, dropAlpha).toFigColor(),
+    )
+    result[1] = RenderShadow(
+      style: InnerShadow,
+      blur: 1.0,
+      spread: 0.0,
+      x: 0.0,
+      y: 1.0,
+      fill: nsColor(1.0, 1.0, 1.0, 0.44).toFigColor(),
     )
     result[2] = RenderShadow(
       style: InnerShadow,
-      blur: 1.5,
+      blur: 1.0,
       spread: 0.0,
       x: 0.0,
       y: -1.0,
-      fill: nsColor(0.03, 0.11, 0.28, bottomInsetAlpha).toFigColor(),
+      fill: nsColor(0.0, 0.0, 0.0, bottomInsetAlpha).toFigColor(),
     )
   elif view.isKindOfClass(NSTextField):
     if not drawsBg(view):
@@ -190,7 +235,8 @@ proc viewFill(view: NSView): Fill =
       return color.solidFill()
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSButton):
-    return aquaButtonFill(buttonVisualState(view))
+    let button = asRetainedType[NSButton](view)
+    return aquaButtonFill(buttonBezelVisualKind(button), buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     let textField = asRetainedType[NSTextField](view)
     let drawsBackground = textField.drawsBackground()
@@ -204,7 +250,8 @@ proc viewStrokeFill(view: NSView): Fill =
   if view.isKindOfClass(NSClipView):
     return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
   if view.isKindOfClass(NSButton):
-    return aquaButtonStroke(buttonVisualState(view))
+    let button = asRetainedType[NSButton](view)
+    return aquaButtonStroke(buttonBezelVisualKind(button), buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     if not drawsBg(view):
       return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
@@ -213,7 +260,11 @@ proc viewStrokeFill(view: NSView): Fill =
 
 proc viewCornerRadius(view: NSView): float32 =
   if view.isKindOfClass(NSButton):
-    return 10.0
+    let button = asRetainedType[NSButton](view)
+    if buttonBezelVisualKind(button) == regularSquareButtonBezel:
+      return 0.0
+    let buttonHeight = max(view.viewFrame().size.height, 0.0)
+    return min(buttonHeight * 0.5, 12.0)
   if view.isKindOfClass(NSTextField):
     if not drawsBg(view):
       return 0.0
@@ -229,14 +280,17 @@ proc addAquaGlossOverlay(
   var glossFill = nsColor(1.0, 1.0, 1.0, 0.0).solidFill()
   var glossHeight = 0.0
   if view.isKindOfClass(NSButton):
+    let button = asRetainedType[NSButton](view)
+    if buttonBezelVisualKind(button) == regularSquareButtonBezel:
+      return
     glossFill = linear(
-      nsColor(1.0, 1.0, 1.0, 0.66).toFigRgba(),
-      nsColor(1.0, 1.0, 1.0, 0.40).toFigRgba(),
-      nsColor(1.0, 1.0, 1.0, 0.08).toFigRgba(),
+      nsColor(1.0, 1.0, 1.0, 0.30).toFigRgba(),
+      nsColor(1.0, 1.0, 1.0, 0.18).toFigRgba(),
+      nsColor(1.0, 1.0, 1.0, 0.04).toFigRgba(),
       axis = fgaY,
       midPos = 150'u8,
     )
-    glossHeight = box.size.height * 0.56
+    glossHeight = box.size.height * 0.48
   elif view.isKindOfClass(NSTextField):
     if not drawsBg(view):
       return
@@ -372,7 +426,10 @@ proc layoutFitsTextBox(
 
 proc textPaddingForView(view: NSView): tuple[x: float32, y: float32] =
   if view.isKindOfClass(NSButton):
-    return (8.0'f32, 4.0'f32)
+    let button = asRetainedType[NSButton](view)
+    if buttonBezelVisualKind(button) == regularSquareButtonBezel:
+      return (4.0'f32, 3.0'f32)
+    return (6.0'f32, 3.0'f32)
   if view.isKindOfClass(NSTextField):
     if drawsBg(view):
       return (10.0'f32, 4.0'f32)
@@ -434,6 +491,8 @@ proc fitSingleLineText(
       low = keep + 1
     else:
       high = keep - 1
+  if bestText.len == 0:
+    return (text, layout)
   (bestText, bestLayout)
 
 proc textLayoutForView(
@@ -452,7 +511,10 @@ proc textLayoutForView(
     if textValue.len == 0:
       return (false, default(GlyphArrangement))
     let fitted = fitSingleLineText(
-      textValue, fs(appkitFont(18.0), textColor.toFigColor()), textAlign, box
+      textValue,
+      fs(appkitFont(DefaultLabelFontSize), textColor.toFigColor()),
+      textAlign,
+      box,
     )
     if fitted.text.len == 0:
       return (false, default(GlyphArrangement))
@@ -474,7 +536,15 @@ proc textLayoutForView(
       return (false, default(GlyphArrangement))
     let fitted = fitSingleLineText(
       title,
-      fs(appkitFont(16.0), nsColor(0.98, 0.99, 1.0, 1.0).toFigColor()),
+      fs(
+        appkitFont(DefaultButtonFontSize),
+        (
+          if button.isEnabled():
+            nsColor(0.08, 0.08, 0.08, 1.0)
+          else:
+            nsColor(0.45, 0.45, 0.45, 1.0)
+        ).toFigColor(),
+      ),
       textAlign,
       box,
     )
@@ -723,12 +793,14 @@ proc renderWindow(window: NSWindow) =
     return
 
   let nativeLogicalSize = nativeWindow.logicalSize()
-  let logicalSize = vec2(max(nativeLogicalSize.x, 1.0), max(nativeLogicalSize.y, 1.0))
+  var logicalSize = vec2(max(nativeLogicalSize.x, 1.0), max(nativeLogicalSize.y, 1.0))
   var frame = window.windowFrame()
-  if abs(frame.size.width - logicalSize.x) > 0.01 or
-      abs(frame.size.height - logicalSize.y) > 0.01:
+  if abs(frame.size.width - logicalSize.x) > 1.01 or
+      abs(frame.size.height - logicalSize.y) > 1.01:
     frame.size = nsSize(logicalSize.x, logicalSize.y)
     window.windowFrame frame
+  else:
+    logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
   let root = ensureContentView(window)
   root.setFrame(0'f32, 0'f32, logicalSize.x.float32, logicalSize.y.float32)
   var renders = buildWindowRenders(window)
@@ -789,6 +861,7 @@ proc ensureNativeWindow*(window: NSWindow) =
       onClose: proc(e: siwinshim.CloseEvent) =
         discard e
         clearTrackedMouseDownButton()
+        discard window.windowShouldClose(asRetainedType[NSObject](window))
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e

@@ -38,6 +38,20 @@ objcImpl:
     result.xPreviousText = nil
     result.xNextText = nil
 
+  method initWithFrame*(
+      self: var NSTextField,
+      x: float32,
+      y {.kw("y").}: float32,
+      width {.kw("width").}: float32,
+      height {.kw("height").}: float32,
+  ): NSTextField =
+    result = self.init()
+    if result.isNil:
+      return
+    asRetainedType[NSView](result).setFrame(
+      x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
+    )
+
   method setTextColor*(
       self: NSTextField,
       r: float32,
@@ -88,8 +102,9 @@ objcImpl:
       NSString
 
   method init*(self: var NSSearchField): NSSearchField =
-    result =
-      asTypeRaw[NSSearchField](callSuperIdFrom(NSSearchField, self, getSelector("init")))
+    result = asTypeRaw[NSSearchField](
+      callSuperIdFrom(NSSearchField, self, getSelector("init"))
+    )
     if result.isNil:
       return
     result.xRecentSearches = nsArray[NSString]()

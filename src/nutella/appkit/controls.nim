@@ -11,6 +11,8 @@ objcImpl:
   type NSControl* = object of NSView
     xCell: NSCell
     xCurrentEditor: NSText
+    xTarget {.set: setTarget, get: target.}: ID
+    xAction {.set: setAction, get: action.}: SEL
     refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
       bool
     alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
@@ -61,6 +63,8 @@ objcImpl:
     if not cell.isNil:
       cell.setControlView(asRetainedType[NSView](result))
       cell.setContinuous(false)
+    result.xTarget.value = nil
+    result.xAction = nil
     result.refusesFirstResponder = false
     result.alignment = NSNaturalTextAlignment
 
@@ -205,9 +209,21 @@ objcImpl:
   method performClick*(self: NSControl, sender: NSResponder) =
     discard
 
+  method sendAction*(self: NSControl, action: SEL, target {.kw("to").}: ID): bool =
+    if self.isNil or cast[pointer](action).isNil:
+      return false
+    let senderObj = asRetainedType[NSObject](self)
+    if not target.isNil:
+      let targetObj = asRetainedType[NSObject](target.value)
+      return performResponderSelector(targetObj, action, senderObj)
+    let responder = asRetainedType[NSResponder](self)
+    responder.tryToPerform(action, senderObj)
+
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)
     self.xCurrentEditor = NSText(value: nil)
+    self.xTarget.value = nil
+    self.xAction = nil
     destroyIvarFields(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 
