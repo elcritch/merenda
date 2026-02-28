@@ -4,7 +4,7 @@ import knutella/appkit
 import knutella/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("NUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -13,7 +13,7 @@ proc maxFramesFromEnv(defaultValue = -1): int =
     defaultValue
 
 proc debugRenderDumpEnabled(): bool =
-  getEnv("NUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+  getEnv("KNUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
 proc format1(value: float32): string =

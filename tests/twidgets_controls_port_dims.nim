@@ -131,7 +131,7 @@ when defined(macosx):
         "/tmp/knutella_checkbox_objc_dims.out",
       )
       let nimOutput = runAndReadOutput(
-        "NUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/checkbox",
+        "KNUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/checkbox",
         "/tmp/knutella_checkbox_nim_dims.out",
       )
       let objcDump = parseLayoutDump(objcOutput)
@@ -154,7 +154,7 @@ when defined(macosx):
         "/tmp/knutella_label_objc_dims.out",
       )
       let nimOutput = runAndReadOutput(
-        "NUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/label",
+        "KNUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/label",
         "/tmp/knutella_label_nim_dims.out",
       )
       let objcDump = parseLayoutDump(objcOutput)
@@ -173,7 +173,7 @@ when defined(macosx):
         "/tmp/knutella_textbox_objc_dims.out",
       )
       let nimOutput = runAndReadOutput(
-        "NUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/textbox",
+        "KNUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/textbox",
         "/tmp/knutella_textbox_nim_dims.out",
       )
       let objcDump = parseLayoutDump(objcOutput)
