@@ -179,7 +179,7 @@ objcImpl:
     result.xCheckBox4.setBezelStyle(NSRoundedBezelStyle)
     result.xCheckBox4.setTarget(ID(value: result.value))
     result.xCheckBox4.setAction(getSelector("OnCheckBox4Click:"))
-    result.xCheckBox4.setAlignment(NSRightTextAlignment)
+    result.xCheckBox4.setAlignment(NSCenterTextAlignment)
     result.xCheckBox4.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
     result.xCheckBox4.setState(NSOnState.cint)
 
@@ -191,7 +191,7 @@ objcImpl:
     result.xCheckBox5.setBezelStyle(NSRoundedBezelStyle)
     result.xCheckBox5.setTarget(ID(value: result.value))
     result.xCheckBox5.setAction(getSelector("OnCheckBox5Click:"))
-    result.xCheckBox5.setAlignment(NSRightTextAlignment)
+    result.xCheckBox5.setAlignment(NSCenterTextAlignment)
     result.xCheckBox5.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
     result.xCheckBox5.setState(NSOffState.cint)
 
