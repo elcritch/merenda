@@ -616,24 +616,38 @@ proc addViewTree(
   viewId: IDPtr,
   parentIdx: FigIdx,
   hasParent: bool,
-  offsetX: float32,
-  offsetY: float32,
+  parentOriginX: float32,
+  parentOriginY: float32,
+  parentHeight: float32,
+  parentFlipped: bool,
 )
+
+proc childScreenOriginY(
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
+    childFrame: NSRect,
+): float32 =
+  if parentFlipped:
+    return parentOriginY + childFrame.origin.y
+  parentOriginY + parentHeight - childFrame.origin.y - childFrame.size.height
 
 proc buildWindowRenders(window: NSWindow): Renders =
   let root = ensureContentView(window)
   if root.isNil:
     return nil
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
-  result.addViewTree(root.value, FigIdx(0), false, 0.0, 0.0)
+  result.addViewTree(root.value, FigIdx(0), false, 0.0, 0.0, 0.0, false)
 
 proc addViewTree(
     renders: var Renders,
     viewId: IDPtr,
     parentIdx: FigIdx,
     hasParent: bool,
-    offsetX: float32,
-    offsetY: float32,
+    parentOriginX: float32,
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
 ) =
   if viewId.isNil:
     return
@@ -644,9 +658,14 @@ proc addViewTree(
     return
   let frame = view.viewFrame()
 
+  let boxOriginY =
+    if hasParent:
+      childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frame)
+    else:
+      frame.origin.y
   let box = nsRect(
-    offsetX + frame.origin.x,
-    offsetY + frame.origin.y,
+    parentOriginX + frame.origin.x,
+    boxOriginY,
     max(frame.size.width, 0.0),
     max(frame.size.height, 0.0),
   )
@@ -713,10 +732,25 @@ proc addViewTree(
     )
 
   for child in view.viewSubviews():
-    renders.addViewTree(child.value, idx, true, box.origin.x, box.origin.y)
+    renders.addViewTree(
+      child.value,
+      idx,
+      true,
+      box.origin.x,
+      box.origin.y,
+      box.size.height,
+      view.isFlipped(),
+    )
 
 proc hitTestButton(
-    viewId: IDPtr, x: float32, y: float32, offsetX: float32, offsetY: float32
+    viewId: IDPtr,
+    x: float32,
+    y: float32,
+    hasParent: bool,
+    parentOriginX: float32,
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
 ): IDPtr =
   if viewId.isNil:
     return nil
@@ -727,9 +761,14 @@ proc hitTestButton(
     return nil
   let frameSelf = view.viewFrame()
 
+  let frameOriginY =
+    if hasParent:
+      childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
+    else:
+      frameSelf.origin.y
   let frame = nsRect(
-    offsetX + frameSelf.origin.x,
-    offsetY + frameSelf.origin.y,
+    parentOriginX + frameSelf.origin.x,
+    frameOriginY,
     frameSelf.size.width,
     frameSelf.size.height,
   )
@@ -739,7 +778,16 @@ proc hitTestButton(
   let children = view.viewSubviews()
   for i in countdown(children.high, 0):
     let child = children[i]
-    let hit = hitTestButton(child.value, x, y, frame.origin.x, frame.origin.y)
+    let hit = hitTestButton(
+      child.value,
+      x,
+      y,
+      true,
+      frame.origin.x,
+      frame.origin.y,
+      frame.size.height,
+      view.isFlipped(),
+    )
     if not hit.isNil:
       return hit
 
@@ -753,7 +801,7 @@ proc buttonShouldBeHighlighted(window: NSWindow, x: float32, y: float32): bool =
   let root = ensureContentView(window)
   if root.isNil:
     return false
-  let hit = hitTestButton(root.value, x, y, 0.0, 0.0)
+  let hit = hitTestButton(root.value, x, y, false, 0.0, 0.0, 0.0, false)
   (not hit.isNil) and hit == trackedMouseDownButtonId
 
 proc updateTrackedButtonHighlight(window: NSWindow, x: float32, y: float32): bool =
@@ -908,7 +956,9 @@ proc ensureNativeWindow*(window: NSWindow) =
           if root.isNil:
             clearTrackedMouseDownButton()
             return
-          let hit = hitTestButton(root.value, logicalPos.x, logicalPos.y, 0.0, 0.0)
+          let hit = hitTestButton(
+            root.value, logicalPos.x, logicalPos.y, false, 0.0, 0.0, 0.0, false
+          )
           setTrackedMouseDownButton(hit)
           if trackedMouseDownButtonId.isNil:
             return

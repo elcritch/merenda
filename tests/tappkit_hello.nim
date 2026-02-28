@@ -520,12 +520,12 @@ suite "nutella appkit hello world":
       let nodes = renders[0.ZLevel].nodes
       for node in nodes:
         if node.kind == nkRectangle and approxEq(node.screenBox.x, 20.0) and
-            approxEq(node.screenBox.y, 30.0) and approxEq(node.screenBox.w, 100.0) and
+            approxEq(node.screenBox.y, 130.0) and approxEq(node.screenBox.w, 100.0) and
             approxEq(node.screenBox.h, 80.0):
           foundClipNode = true
           check(NfClipContent in node.flags)
         if node.kind == nkRectangle and approxEq(node.screenBox.x, -25.0) and
-            approxEq(node.screenBox.y, 5.0) and approxEq(node.screenBox.w, 300.0) and
+            approxEq(node.screenBox.y, -5.0) and approxEq(node.screenBox.w, 300.0) and
             approxEq(node.screenBox.h, 240.0):
           foundDocNode = true
     check(foundClipNode)
