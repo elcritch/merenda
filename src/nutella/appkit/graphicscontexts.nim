@@ -501,6 +501,7 @@ proc addTextLayoutToCurrentRenderContext*(
     Fig(
       kind: nkText,
       childCount: 0,
+      flags: {NfInvertY},
       screenBox: rect(
         drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
       ),
