@@ -11,6 +11,7 @@ import ./views
 import ./windows
 import ./clipviews
 import ./buttons
+import ./cells
 import ./images
 import ./imageviews
 import ./textfields
@@ -188,51 +189,7 @@ proc aquaButtonStroke(kind: ButtonBezelVisualKind, state: int): Fill =
 proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
   result = noRenderShadows()
   if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      return
-    let kind = buttonBezelVisualKind(button)
-    if kind == regularSquareButtonBezel:
-      return
-    let state = buttonVisualState(view)
-    let dropAlpha =
-      if state == NSOnState:
-        0.17
-      elif state == NSMixedState:
-        0.15
-      else:
-        0.22
-    let bottomInsetAlpha =
-      if state == NSOnState:
-        0.12
-      elif state == NSMixedState:
-        0.10
-      else:
-        0.14
-    result[0] = RenderShadow(
-      style: DropShadow,
-      blur: 2.0,
-      spread: 0.0,
-      x: 0.0,
-      y: 1.0,
-      fill: nsColor(0.0, 0.0, 0.0, dropAlpha).toFigColor(),
-    )
-    result[1] = RenderShadow(
-      style: InnerShadow,
-      blur: 1.0,
-      spread: 0.0,
-      x: 0.0,
-      y: 1.0,
-      fill: nsColor(1.0, 1.0, 1.0, 0.44).toFigColor(),
-    )
-    result[2] = RenderShadow(
-      style: InnerShadow,
-      blur: 1.0,
-      spread: 0.0,
-      x: 0.0,
-      y: -1.0,
-      fill: nsColor(0.0, 0.0, 0.0, bottomInsetAlpha).toFigColor(),
-    )
+    return
   elif view.isKindOfClass(NSTextField):
     if not drawsBg(view):
       return
@@ -262,10 +219,7 @@ proc viewFill(view: NSView): Fill =
       return color.solidFill()
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-    return aquaButtonFill(buttonBezelVisualKind(button), buttonVisualState(view))
+    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSTextField):
     let textField = asRetainedType[NSTextField](view)
     let drawsBackground = textField.drawsBackground()
@@ -279,10 +233,7 @@ proc viewStrokeFill(view: NSView): Fill =
   if view.isKindOfClass(NSClipView):
     return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
   if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-    return aquaButtonStroke(buttonBezelVisualKind(button), buttonVisualState(view))
+    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSTextField):
     if not drawsBg(view):
       return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
@@ -291,13 +242,7 @@ proc viewStrokeFill(view: NSView): Fill =
 
 proc viewCornerRadius(view: NSView): float32 =
   if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      return 0.0
-    if buttonBezelVisualKind(button) == regularSquareButtonBezel:
-      return 0.0
-    let buttonHeight = max(view.viewFrame().size.height, 0.0)
-    return min(buttonHeight * 0.5, 12.0)
+    return 0.0
   if view.isKindOfClass(NSTextField):
     if not drawsBg(view):
       return 0.0
@@ -550,37 +495,27 @@ proc comboBoxPopupItemIndexAtPoint(
 proc textBoxForView(view: NSView, box: NSRect): NSRect =
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      let indicator = switchIndicatorRect(box)
-      let leftInset =
-        max((indicator.origin.x - box.origin.x) + indicator.size.width + 6.0, 0.0)
-      let titleHeight = min(max(box.size.height - 4.0, 0.0), 16.0)
-      let yInset = max((box.size.height - titleHeight) * 0.5, 0.0)
+    let control = asRetainedType[NSControl](button)
+    let cell = control.cell()
+    if not cell.isNil:
+      let localTitleRect = cell.titleRectForBounds(button.bounds())
+      if isSwitchButton(button):
+        let indicator = switchIndicatorRect(box)
+        let switchLeftInset =
+          max((indicator.origin.x - box.origin.x) + indicator.size.width + 6.0, 0.0)
+        return nsRect(
+          box.origin.x + switchLeftInset,
+          box.origin.y + localTitleRect.origin.y,
+          max(box.size.width - switchLeftInset, 0.0),
+          localTitleRect.size.height,
+        )
       return nsRect(
-        box.origin.x + leftInset,
-        box.origin.y + yInset,
-        max(box.size.width - leftInset, 0.0),
-        titleHeight,
+        box.origin.x + localTitleRect.origin.x,
+        box.origin.y + localTitleRect.origin.y,
+        localTitleRect.size.width,
+        localTitleRect.size.height,
       )
-    if buttonBezelVisualKind(button) == regularSquareButtonBezel:
-      let horizontalInset = 4.0'f32
-      let titleHeight = min(max(box.size.height - 6.0, 0.0), 16.0)
-      let yInset = max((box.size.height - titleHeight) * 0.5, 0.0)
-      return nsRect(
-        box.origin.x + horizontalInset,
-        box.origin.y + yInset,
-        max(box.size.width - horizontalInset * 2.0, 0.0),
-        titleHeight,
-      )
-    let horizontalInset = min(max(box.size.height * 0.6, 6.0), 15.0)
-    let titleHeight = min(max(box.size.height - 8.0, 0.0), 16.0)
-    let yInset = max((box.size.height - titleHeight) * 0.5, 0.0)
-    return nsRect(
-      box.origin.x + horizontalInset,
-      box.origin.y + yInset,
-      max(box.size.width - horizontalInset * 2.0, 0.0),
-      titleHeight,
-    )
+    return box
 
   if view.isKindOfClass(NSComboBox):
     let arrowZone = comboBoxArrowZoneRect(box)
@@ -1014,102 +949,6 @@ proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
 proc hasActiveRenderContext(): bool =
   activeRenderContextActive and (not activeRenders.isNil)
 
-proc localDrawRectToScreenRect(localRect: NSRect, flipped: bool): NSRect =
-  let width = max(localRect.size.width, 0.0)
-  let height = max(localRect.size.height, 0.0)
-  let x = activeRenderBox.origin.x + localRect.origin.x
-  let y =
-    if flipped:
-      activeRenderBox.origin.y + localRect.origin.y
-    else:
-      activeRenderBox.origin.y + activeRenderBox.size.height - localRect.origin.y -
-        height
-  nsRect(x, y, width, height)
-
-proc hasActiveGraphicsContextForDrawing*(): bool =
-  hasActiveRenderContext()
-
-proc addRectFillToCurrentRenderContext*(
-    localRect: NSRect,
-    color: NSColor,
-    operation: NSCompositingOperation = NSCompositeSourceOver,
-): bool =
-  if not hasActiveRenderContext():
-    return false
-  let context = NSGraphicsContext.currentContext()
-  let flipped =
-    if context.isNil:
-      false
-    else:
-      context.isFlipped()
-  let screenRect = localDrawRectToScreenRect(localRect, flipped)
-  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
-    return false
-  let drawColor =
-    if operation == NSCompositeClear:
-      nsColor(0.0, 0.0, 0.0, 0.0)
-    else:
-      color
-  discard activeRenders[].addChild(
-    0.ZLevel,
-    activeRenderParentIdx,
-    Fig(
-      kind: nkRectangle,
-      childCount: 0,
-      screenBox: rect(
-        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
-        screenRect.size.height,
-      ),
-      fill: drawColor.solidFill(),
-      corners: uniformCorners(0.0),
-      shadows: noRenderShadows(),
-      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
-    ),
-  )
-  true
-
-proc addRectFrameToCurrentRenderContext*(
-    localRect: NSRect,
-    color: NSColor,
-    width: float32 = 1.0,
-    operation: NSCompositingOperation = NSCompositeSourceOver,
-): bool =
-  if not hasActiveRenderContext():
-    return false
-  if width <= 0.0:
-    return false
-  let context = NSGraphicsContext.currentContext()
-  let flipped =
-    if context.isNil:
-      false
-    else:
-      context.isFlipped()
-  let screenRect = localDrawRectToScreenRect(localRect, flipped)
-  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
-    return false
-  let drawColor =
-    if operation == NSCompositeClear:
-      nsColor(0.0, 0.0, 0.0, 0.0)
-    else:
-      color
-  discard activeRenders[].addChild(
-    0.ZLevel,
-    activeRenderParentIdx,
-    Fig(
-      kind: nkRectangle,
-      childCount: 0,
-      screenBox: rect(
-        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
-        screenRect.size.height,
-      ),
-      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
-      corners: uniformCorners(0.0),
-      shadows: noRenderShadows(),
-      stroke: RenderStroke(weight: width, fill: drawColor.solidFill()),
-    ),
-  )
-  true
-
 proc addTextLayoutForActiveView(view: NSView) =
   if not hasActiveRenderContext():
     return
@@ -1163,9 +1002,6 @@ proc drawButtonDecorationsForActiveView(button: NSButton) =
     activeRenders[].addSwitchButtonIndicator(
       activeRenderParentIdx, button, activeRenderBox
     )
-  addAquaGlossOverlay(
-    activeRenders[], activeRenderParentIdx, buttonView, activeRenderBox
-  )
   addTextLayoutForActiveView(buttonView)
 
 proc drawTextFieldDecorationsForActiveView(textField: NSTextField) =
@@ -1317,8 +1153,11 @@ proc addViewTree(
   activeRenderParentIdx = idx
   activeRenderBox = box
   activeRenderContextActive = true
+  var renderPort = RenderGraphicsPort(
+    renders: addr renders, parentIdx: idx, drawBox: box
+  )
   let renderGraphicsContext = NSGraphicsContext.graphicsContextWithGraphicsPort(
-    cast[pointer](addr renders), view.isFlipped()
+    cast[pointer](addr renderPort), view.isFlipped()
   )
   NSGraphicsContext.saveGraphicsState()
   NSGraphicsContext.setCurrentContext(renderGraphicsContext)

@@ -3,7 +3,6 @@ import std/[math, strutils]
 import ./runtime
 import ./graphicscontexts
 import ./colors
-import ./rendering
 
 const
   NSBlack* = 0.0'f32

@@ -1,4 +1,6 @@
 import ./runtime
+import figdraw/commons
+import figdraw/fignodes
 
 const
   NSDeviceIsScreenName* = "NSDeviceIsScreen"
@@ -21,6 +23,14 @@ var graphicsContextStack {.threadvar.}: seq[IDPtr]
 var quartzDebuggingEnabled = false
 var quartzDebugModeEnabled = false
 
+proc currentGraphicsContext(): NSGraphicsContext
+proc sendPtr(obj: IDPtr, op: SEL): pointer {.inline.}
+
+type RenderGraphicsPort* = object
+  renders*: ptr Renders
+  parentIdx*: FigIdx
+  drawBox*: NSRect
+
 type NSGraphicsStateSnapshot = object
   shouldAntialias: bool
   imageInterpolation: NSImageInterpolation
@@ -29,6 +39,39 @@ type NSGraphicsStateSnapshot = object
   compositingOperation: NSCompositingOperation
   fillColor: NSColor
   strokeColor: NSColor
+
+proc noRenderShadows(): array[ShadowCount, RenderShadow] =
+  for i in result.low .. result.high:
+    result[i] = RenderShadow(
+      style: NoShadow,
+      blur: 0.0,
+      spread: 0.0,
+      x: 0.0,
+      y: 0.0,
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
+    )
+
+proc currentRenderGraphicsPort(): ptr RenderGraphicsPort =
+  let context = currentGraphicsContext()
+  if context.isNil:
+    return nil
+  let port = sendPtr(context.value, getSelector("graphicsPort"))
+  if port.isNil:
+    return nil
+  cast[ptr RenderGraphicsPort](port)
+
+proc localDrawRectToScreenRect(
+    localRect: NSRect, box: NSRect, flipped: bool
+): NSRect =
+  let width = max(localRect.size.width, 0.0)
+  let height = max(localRect.size.height, 0.0)
+  let x = box.origin.x + localRect.origin.x
+  let y =
+    if flipped:
+      box.origin.y + localRect.origin.y
+    else:
+      box.origin.y + box.size.height - localRect.origin.y - height
+  nsRect(x, y, width, height)
 
 proc sendId(obj: IDPtr, op: SEL): IDPtr {.inline.} =
   if obj.isNil or cast[pointer](op).isNil:
@@ -373,6 +416,95 @@ proc popCurrentFocusView*(): NSView =
   if current.isNil:
     return NSView(value: nil)
   current.popFocusView()
+
+proc hasActiveGraphicsContextForDrawing*(): bool =
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil:
+    return false
+  (not renderPort.renders.isNil)
+
+proc addRectFillToCurrentRenderContext*(
+    localRect: NSRect,
+    color: NSColor,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil or renderPort.renders.isNil:
+    return false
+  let context = currentGraphicsContext()
+  let flipped =
+    if context.isNil:
+      false
+    else:
+      context.isFlipped()
+  let screenRect = localDrawRectToScreenRect(localRect, renderPort.drawBox, flipped)
+  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
+    return false
+  let drawColor =
+    if operation == NSCompositeClear:
+      nsColor(0.0, 0.0, 0.0, 0.0)
+    else:
+      color
+  discard renderPort.renders[].addChild(
+    0.ZLevel,
+    renderPort.parentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
+        screenRect.size.height,
+      ),
+      fill: drawColor.solidFill(),
+      corners: uniformCorners(0.0),
+      shadows: noRenderShadows(),
+      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+    ),
+  )
+  true
+
+proc addRectFrameToCurrentRenderContext*(
+    localRect: NSRect,
+    color: NSColor,
+    width: float32 = 1.0,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  if width <= 0.0:
+    return false
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil or renderPort.renders.isNil:
+    return false
+  let context = currentGraphicsContext()
+  let flipped =
+    if context.isNil:
+      false
+    else:
+      context.isFlipped()
+  let screenRect = localDrawRectToScreenRect(localRect, renderPort.drawBox, flipped)
+  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
+    return false
+  let drawColor =
+    if operation == NSCompositeClear:
+      nsColor(0.0, 0.0, 0.0, 0.0)
+    else:
+      color
+  discard renderPort.renders[].addChild(
+    0.ZLevel,
+    renderPort.parentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
+        screenRect.size.height,
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+      corners: uniformCorners(0.0),
+      shadows: noRenderShadows(),
+      stroke: RenderStroke(weight: width, fill: drawColor.solidFill()),
+    ),
+  )
+  true
 
 proc new*(t: typedesc[NSGraphicsContext]): NSGraphicsContext =
   var allocated = NSGraphicsContext.alloc()

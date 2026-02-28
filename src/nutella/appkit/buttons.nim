@@ -1,6 +1,7 @@
 import ./runtime
 
 import ./controls
+import ./cells
 
 export controls
 
@@ -35,6 +36,40 @@ objcImpl:
     periodicIntervalSec: float32
     onClick: NSButtonCallbackProc
 
+  template syncButtonCellFromView(self: NSButton) =
+    if self.isNil:
+      return
+    let control = asRetainedType[NSControl](self)
+    var selected = control.cell()
+    if selected.isNil or (not selected.isKindOfClass(NSButtonCell)):
+      var created = NSButtonCell.new()
+      control.setCell(ownFromId[NSCell](created.value))
+      selected = ownFromId[NSCell](created.value)
+      created.value = nil
+    if selected.isNil:
+      return
+    let cell = asRetainedType[NSButtonCell](selected)
+    if cell.isNil:
+      return
+    cell.setControlView(asRetainedType[NSView](self))
+    cell.setTitle(self.title)
+    cell.setAlternateTitle(self.alternateTitle)
+    cell.setKeyEquivalent(self.keyEquivalent)
+    cell.setButtonType(self.xButtonType)
+    cell.setBordered(self.bordered)
+    cell.setBezeled(self.bezeled)
+    cell.setBezelStyle(self.bezelStyle)
+    cell.setImagePosition(self.imagePos)
+    cell.setTransparent(self.transparent)
+    cell.setKeyEquivalentModifierMask(self.keyEquivalentModifierMask)
+    cell.setShowsBorderOnlyWhileMouseInside(self.showBorderInside)
+    cell.setHighlightsBy(self.xHighlightsBy)
+    cell.setShowsStateBy(self.xShowsStateBy)
+    cell.setAllowsMixedState(self.mixedAllowed)
+    cell.setState(self.stateValue)
+    cell.setHighlighted(self.xHighlighted)
+    cell.setPeriodicDelay(self.periodicDelaySec, interval = self.periodicIntervalSec)
+
   method init*(self: var NSButton): NSButton =
     result = asTypeRaw[NSButton](callSuperIdFrom(NSButton, self, getSelector("init")))
     if result.isNil:
@@ -60,6 +95,10 @@ objcImpl:
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
     result.onClick = nil
+    var buttonCell = NSButtonCell.new()
+    asRetainedType[NSControl](result).setCell(ownFromId[NSCell](buttonCell.value))
+    buttonCell.value = nil
+    result.syncButtonCellFromView()
 
   method initWithFrame*(
       self: var NSButton,
@@ -77,10 +116,14 @@ objcImpl:
 
   method setState*(self: NSButton, value: cint) =
     self.stateValue = normalizeButtonState(value.int, self.mixedAllowed)
+    self.syncButtonCellFromView()
+    self.setNeedsDisplay(true)
 
   method setAllowsMixedState*(self: NSButton, value: bool) =
     self.mixedAllowed = value
     self.stateValue = normalizeButtonState(self.stateValue, value)
+    self.syncButtonCellFromView()
+    self.setNeedsDisplay(true)
 
   method setNextState*(self: NSButton) =
     if self.mixedAllowed:
@@ -96,6 +139,8 @@ objcImpl:
         self.stateValue = NSOffState
       else:
         self.stateValue = NSOnState
+    self.syncButtonCellFromView()
+    self.setNeedsDisplay(true)
 
   method stringValue*(self: NSButton): NSString =
     self.title()
@@ -174,15 +219,33 @@ objcImpl:
     of NSSwitchButton, NSRadioButton:
       self.xHighlightsBy = NSContentsCellMask
       self.xShowsStateBy = NSContentsCellMask
+      self.imagePos = NSImageLeft
+      self.bordered = false
+      self.bezeled = false
+      self.setAlignment(NSLeftTextAlignment)
     else:
       discard
+    self.syncButtonCellFromView()
+    self.setNeedsDisplay(true)
 
   method buttonType*(self: NSButton): cint =
     self.xButtonType
 
   method highlight*(self: NSButton, value: bool) =
     self.xHighlighted = value
+    self.syncButtonCellFromView()
     self.setNeedsDisplay(true)
+
+  method drawRect*(self: NSButton, rect: NSRect) =
+    discard rect
+    if self.isNil:
+      return
+    self.syncButtonCellFromView()
+    let selected = asRetainedType[NSControl](self).cell()
+    if selected.isNil:
+      return
+    selected.setControlView(asRetainedType[NSView](self))
+    selected.drawWithFrame(self.bounds(), asRetainedType[NSView](self))
 
   method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
