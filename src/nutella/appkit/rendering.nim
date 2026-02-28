@@ -9,14 +9,8 @@ import ./runtime
 import ./graphicscontexts
 import ./views
 import ./windows
-import ./clipviews
 import ./buttons
-import ./cells
-import ./images
-import ./imageviews
-import ./textfields
 import ./comboboxes
-import ./boxview
 import ./events
 
 var trackedMouseDownButtonId {.threadvar.}: IDPtr
@@ -62,256 +56,7 @@ proc noRenderShadows(): array[ShadowCount, RenderShadow] =
       fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
     )
 
-proc drawsBg(view: NSView): bool =
-  if view.isKindOfClass(NSClipView):
-    let clip = asRetainedType[NSClipView](view)
-    result = clip.drawsBackground()
-    return
-  if not view.isKindOfClass(NSTextField):
-    return false
-  let textField = asRetainedType[NSTextField](view)
-  result = textField.drawsBackground()
-
-const
-  DefaultButtonFontSize = 13.0'f32
-  DefaultLabelFontSize = 13.0'f32
-  ComboBoxPopupZLevel = 8.ZLevel
-  ComboBoxArrowZoneMinWidth = 16.0'f32
-  ComboBoxArrowZoneMaxWidth = 22.0'f32
-
-var activeRenders {.threadvar.}: ptr Renders
-var activeRenderParentIdx {.threadvar.}: FigIdx
-var activeRenderLocalBox {.threadvar.}: NSRect
-var activeRenderScreenBox {.threadvar.}: NSRect
-var activeRenderContextActive {.threadvar.}: bool
-
-type ButtonBezelVisualKind = enum
-  roundedButtonBezel
-  regularSquareButtonBezel
-
-proc isSwitchButton(button: NSButton): bool =
-  if button.isNil:
-    return false
-  button.buttonType().int == NSSwitchButton
-
-proc buttonBezelVisualKind(button: NSButton): ButtonBezelVisualKind =
-  if button.isNil:
-    return roundedButtonBezel
-  case button.bezelStyle()
-  of NSRegularSquareBezelStyle: regularSquareButtonBezel
-  else: roundedButtonBezel
-
-proc buttonVisualState(view: NSView): int =
-  if not view.isKindOfClass(NSButton):
-    return NSOffState
-  let button = asRetainedType[NSButton](view)
-  if button.isHighlighted() and button.highlightsBy() != NSNoCellMask:
-    return NSOnState
-  if (
-    button.showsStateBy() and
-    (NSContentsCellMask or NSChangeGrayCellMask or NSChangeBackgroundCellMask)
-  ) != 0:
-    return button.state()
-  NSOffState
-
-proc aquaButtonFill(kind: ButtonBezelVisualKind, state: int): Fill =
-  case kind
-  of regularSquareButtonBezel:
-    case state
-    of NSOnState:
-      linear(
-        nsColor(0.80, 0.80, 0.80, 1.0).toFigRgba(),
-        nsColor(0.70, 0.70, 0.70, 1.0).toFigRgba(),
-        axis = fgaY,
-      )
-    of NSMixedState:
-      linear(
-        nsColor(0.84, 0.84, 0.84, 1.0).toFigRgba(),
-        nsColor(0.74, 0.74, 0.74, 1.0).toFigRgba(),
-        axis = fgaY,
-      )
-    else:
-      linear(
-        nsColor(0.90, 0.90, 0.90, 1.0).toFigRgba(),
-        nsColor(0.80, 0.80, 0.80, 1.0).toFigRgba(),
-        axis = fgaY,
-      )
-  of roundedButtonBezel:
-    case state
-    of NSOnState:
-      linear(
-        nsColor(0.84, 0.84, 0.84, 1.0).toFigRgba(),
-        nsColor(0.72, 0.72, 0.72, 1.0).toFigRgba(),
-        nsColor(0.62, 0.62, 0.62, 1.0).toFigRgba(),
-        axis = fgaY,
-        midPos = 132'u8,
-      )
-    of NSMixedState:
-      linear(
-        nsColor(0.90, 0.90, 0.90, 1.0).toFigRgba(),
-        nsColor(0.80, 0.80, 0.80, 1.0).toFigRgba(),
-        nsColor(0.72, 0.72, 0.72, 1.0).toFigRgba(),
-        axis = fgaY,
-        midPos = 132'u8,
-      )
-    else:
-      linear(
-        nsColor(0.97, 0.97, 0.97, 1.0).toFigRgba(),
-        nsColor(0.86, 0.86, 0.86, 1.0).toFigRgba(),
-        nsColor(0.76, 0.76, 0.76, 1.0).toFigRgba(),
-        axis = fgaY,
-        midPos = 132'u8,
-      )
-
-proc aquaButtonStroke(kind: ButtonBezelVisualKind, state: int): Fill =
-  case kind
-  of regularSquareButtonBezel:
-    nsColor(0.83, 0.83, 0.83, 1.0).solidFill()
-  of roundedButtonBezel:
-    case state
-    of NSOnState:
-      linear(
-        nsColor(0.58, 0.58, 0.58, 1.0).toFigRgba(),
-        nsColor(0.47, 0.47, 0.47, 1.0).toFigRgba(),
-        axis = fgaY,
-      )
-    of NSMixedState:
-      linear(
-        nsColor(0.62, 0.62, 0.62, 1.0).toFigRgba(),
-        nsColor(0.52, 0.52, 0.52, 1.0).toFigRgba(),
-        axis = fgaY,
-      )
-    else:
-      linear(
-        nsColor(0.68, 0.68, 0.68, 1.0).toFigRgba(),
-        nsColor(0.55, 0.55, 0.55, 1.0).toFigRgba(),
-        axis = fgaY,
-      )
-
-proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
-  result = noRenderShadows()
-  if view.isKindOfClass(NSButton):
-    return
-  elif view.isKindOfClass(NSTextField):
-    if not drawsBg(view):
-      return
-    result[0] = RenderShadow(
-      style: InnerShadow,
-      blur: 1.0,
-      spread: 0.0,
-      x: 0.0,
-      y: 1.0,
-      fill: nsColor(1.0, 1.0, 1.0, 0.45).toFigColor(),
-    )
-    result[1] = RenderShadow(
-      style: DropShadow,
-      blur: 1.0,
-      spread: 0.0,
-      x: 0.0,
-      y: 1.0,
-      fill: nsColor(0.34, 0.40, 0.52, 0.20).toFigColor(),
-    )
-
-proc viewFill(view: NSView): Fill =
-  if view.isKindOfClass(NSClipView):
-    let clip = asRetainedType[NSClipView](view)
-    let color = clip.backgroundColor()
-    let shouldDraw = clip.drawsBackground()
-    if shouldDraw:
-      return color.solidFill()
-    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-  if view.isKindOfClass(NSButton):
-    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-  if view.isKindOfClass(NSBox):
-    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-  if view.isKindOfClass(NSTextField):
-    let textField = asRetainedType[NSTextField](view)
-    let drawsBackground = textField.drawsBackground()
-    let backgroundColor = textField.backgroundColor()
-    if drawsBackground:
-      return backgroundColor.solidFill()
-    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-  view.viewBackgroundColor().solidFill()
-
-proc viewStrokeFill(view: NSView): Fill =
-  if view.isKindOfClass(NSClipView):
-    return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
-  if view.isKindOfClass(NSButton):
-    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-  if view.isKindOfClass(NSBox):
-    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-  if view.isKindOfClass(NSTextField):
-    if not drawsBg(view):
-      return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
-    return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
-  nsColor(0.34, 0.42, 0.56, 0.28).solidFill()
-
-proc viewCornerRadius(view: NSView): float32 =
-  if view.isKindOfClass(NSButton):
-    return 0.0
-  if view.isKindOfClass(NSTextField):
-    if not drawsBg(view):
-      return 0.0
-    return 8.0
-  0.0
-
-proc addAquaGlossOverlay(
-    renders: var Renders, parentIdx: FigIdx, view: NSView, box: NSRect
-) =
-  if box.size.width <= 4 or box.size.height <= 4:
-    return
-
-  var glossFill = nsColor(1.0, 1.0, 1.0, 0.0).solidFill()
-  var glossHeight = 0.0
-  if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      return
-    if buttonBezelVisualKind(button) == regularSquareButtonBezel:
-      return
-    glossFill = linear(
-      nsColor(1.0, 1.0, 1.0, 0.30).toFigRgba(),
-      nsColor(1.0, 1.0, 1.0, 0.18).toFigRgba(),
-      nsColor(1.0, 1.0, 1.0, 0.04).toFigRgba(),
-      axis = fgaY,
-      midPos = 150'u8,
-    )
-    glossHeight = box.size.height * 0.48
-  elif view.isKindOfClass(NSTextField):
-    if not drawsBg(view):
-      return
-    glossFill = linear(
-      nsColor(1.0, 1.0, 1.0, 0.38).toFigRgba(),
-      nsColor(1.0, 1.0, 1.0, 0.16).toFigRgba(),
-      axis = fgaY,
-    )
-    glossHeight = box.size.height * 0.46
-  else:
-    return
-
-  glossHeight = min(max(glossHeight, 6.0), box.size.height)
-  let radius = viewCornerRadius(view)
-  let glossBox = rect(
-    box.origin.x + 1.0,
-    box.origin.y + 1.0,
-    max(box.size.width - 2.0, 0.0),
-    max(glossHeight - 1.0, 0.0),
-  )
-  if glossBox.w <= 0 or glossBox.h <= 0:
-    return
-
-  discard renders.addChild(
-    0.ZLevel,
-    parentIdx,
-    Fig(
-      kind: nkRectangle,
-      childCount: 0,
-      screenBox: glossBox,
-      fill: glossFill,
-      corners: [radius, radius, max(radius - 5.0, 0.0), max(radius - 5.0, 0.0)],
-      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor()),
-    ),
-  )
+const DefaultLabelFontSize = 13.0'f32
 
 proc runesPrefix(layout: GlyphArrangement, maxRunes: int): string =
   var count = 0
@@ -353,13 +98,6 @@ type TextLayoutDebugMetrics* = object
   textBox*: NSRect
   textBounds*: NSRect
   glyphCount*: int
-
-type ImageLayoutDebugMetrics* = object
-  hasImage*: bool
-  imageId*: ImageId
-  imageBox*: NSRect
-
-proc switchIndicatorRect(controlBox: NSRect): NSRect
 
 proc textLayoutBounds(
     layout: GlyphArrangement
@@ -412,148 +150,6 @@ proc layoutFitsTextBox(
   bounds.minX >= -epsilon and bounds.minY >= -epsilon and
     bounds.maxX <= box.size.width + epsilon and bounds.maxY <= box.size.height + epsilon
 
-proc comboBoxArrowZoneRect(controlBox: NSRect): NSRect =
-  let arrowWidth = clamp(
-    controlBox.size.height * 0.8, ComboBoxArrowZoneMinWidth, ComboBoxArrowZoneMaxWidth
-  )
-  let zoneWidth = min(arrowWidth, max(controlBox.size.width, 0.0))
-  nsRect(
-    controlBox.origin.x + controlBox.size.width - zoneWidth,
-    controlBox.origin.y,
-    zoneWidth,
-    controlBox.size.height,
-  )
-
-proc comboBoxPopupItemHeight(comboBox: NSComboBox): float32 =
-  max(comboBox.itemHeight() + 6.0, 18.0)
-
-proc comboBoxVisiblePopupItems(comboBox: NSComboBox): int =
-  let count = comboBox.numberOfItems()
-  if count <= 0:
-    return 0
-  let requested = comboBox.numberOfVisibleItems()
-  if requested <= 0:
-    return count
-  min(count, requested)
-
-proc comboBoxPopupFrame(comboBox: NSComboBox, controlBox: NSRect): NSRect =
-  let itemCount = comboBoxVisiblePopupItems(comboBox)
-  if itemCount <= 0:
-    return nsRect(controlBox.origin.x, controlBox.origin.y, 0.0, 0.0)
-  let popupHeight = comboBoxPopupItemHeight(comboBox) * itemCount.float32 + 2.0
-  nsRect(
-    controlBox.origin.x,
-    controlBox.origin.y + controlBox.size.height,
-    max(controlBox.size.width, 0.0),
-    popupHeight,
-  )
-
-proc comboBoxPopupFirstItemIndex(comboBox: NSComboBox): int =
-  let total = comboBox.numberOfItems()
-  let visible = comboBoxVisiblePopupItems(comboBox)
-  if total <= 0 or visible <= 0:
-    return 0
-  if total <= visible:
-    return 0
-  let selected = comboBox.indexOfSelectedItem()
-  if selected < 0:
-    return 0
-  clamp(selected - visible + 1, 0, total - visible)
-
-proc comboBoxPopupItemRect(
-    comboBox: NSComboBox, controlBox: NSRect, itemIndex: int
-): NSRect =
-  let firstIndex = comboBoxPopupFirstItemIndex(comboBox)
-  let visibleIndex = itemIndex - firstIndex
-  if visibleIndex < 0 or visibleIndex >= comboBoxVisiblePopupItems(comboBox):
-    return nsRect(controlBox.origin.x, controlBox.origin.y, 0.0, 0.0)
-  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
-  let itemHeight = comboBoxPopupItemHeight(comboBox)
-  let yTop =
-    popupBox.origin.y + popupBox.size.height - 1.0 - visibleIndex.float32 * itemHeight
-  nsRect(
-    popupBox.origin.x + 1.0,
-    yTop - itemHeight,
-    max(popupBox.size.width - 2.0, 0.0),
-    max(itemHeight, 0.0),
-  )
-
-proc comboBoxPopupItemIndexAtPoint(
-    comboBox: NSComboBox, controlBox: NSRect, x: float32, y: float32
-): int =
-  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
-  if popupBox.size.width <= 0.0 or popupBox.size.height <= 0.0:
-    return -1
-  if not popupBox.contains(x, y):
-    return -1
-  let itemHeight = comboBoxPopupItemHeight(comboBox)
-  if itemHeight <= 0.0:
-    return -1
-  let fromTop = (popupBox.origin.y + popupBox.size.height - y - 1.0)
-  let visibleIndex = int(fromTop / itemHeight)
-  if visibleIndex < 0 or visibleIndex >= comboBoxVisiblePopupItems(comboBox):
-    return -1
-  let itemIndex = comboBoxPopupFirstItemIndex(comboBox) + visibleIndex
-  if itemIndex < 0 or itemIndex >= comboBox.numberOfItems():
-    return -1
-  itemIndex
-
-proc textBoxForView(view: NSView, box: NSRect): NSRect =
-  if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    let control = asRetainedType[NSControl](button)
-    let cell = control.cell()
-    if not cell.isNil:
-      let localTitleRect = cell.titleRectForBounds(button.bounds())
-      if isSwitchButton(button):
-        let indicator = switchIndicatorRect(box)
-        let switchLeftInset =
-          max((indicator.origin.x - box.origin.x) + indicator.size.width + 6.0, 0.0)
-        return nsRect(
-          box.origin.x + switchLeftInset,
-          box.origin.y + localTitleRect.origin.y,
-          max(box.size.width - switchLeftInset, 0.0),
-          localTitleRect.size.height,
-        )
-      return nsRect(
-        box.origin.x + localTitleRect.origin.x,
-        box.origin.y + localTitleRect.origin.y,
-        localTitleRect.size.width,
-        localTitleRect.size.height,
-      )
-    return box
-
-  if view.isKindOfClass(NSComboBox):
-    let arrowZone = comboBoxArrowZoneRect(box)
-    let leftInset = 10.0'f32
-    let rightInset = max((arrowZone.origin.x - box.origin.x) + 4.0, leftInset + 4.0)
-    return nsRect(
-      box.origin.x + leftInset,
-      box.origin.y + 4.0,
-      max(box.size.width - rightInset - leftInset, 0.0),
-      max(box.size.height - 8.0, 0.0),
-    )
-
-  if view.isKindOfClass(NSTextField) and drawsBg(view):
-    return nsRect(
-      box.origin.x + 10.0,
-      box.origin.y + 4.0,
-      max(box.size.width - 20.0, 0.0),
-      max(box.size.height - 8.0, 0.0),
-    )
-  if view.isKindOfClass(NSBox):
-    let boxView = asRetainedType[NSBox](view)
-    if boxView.isNil:
-      return box
-    var titleRect = boxView.titleRect()
-    if titleRect.size.width <= 0.0 or titleRect.size.height <= 0.0:
-      return nsRect(box.origin.x, box.origin.y, 0.0, 0.0)
-    titleRect.origin.x += 4.0
-    titleRect.size.width = max(titleRect.size.width - 4.0, 0.0)
-    return titleRect
-
-  box
-
 proc singleLineLayout(
     text: string, style: FontStyle, textAlign: FontHorizontal, box: NSRect
 ): GlyphArrangement =
@@ -605,477 +201,15 @@ proc fitSingleLineText(
     return (text, layout)
   (bestText, bestLayout)
 
-proc textLayoutForView(
-    view: NSView, box: NSRect
-): tuple[ok: bool, layout: GlyphArrangement] =
-  if box.size.width <= 2 or box.size.height <= 2:
-    return (false, default(GlyphArrangement))
-  if not ensureAppKitFont():
-    return (false, default(GlyphArrangement))
+proc sendInt(obj: IDPtr, op: SEL): int {.inline.} =
+  if obj.isNil or cast[pointer](op).isNil:
+    return 0
+  cast[proc(self: IDPtr, op: SEL): int {.cdecl, varargs.}](objc_msgSend)(obj, op)
 
-  if view.isKindOfClass(NSTextField):
-    let textField = asRetainedType[NSTextField](view)
-    let textValue = $textField.stringValue()
-    let textColor = textField.textColor()
-    let textAlign = toFontHorizontal(textField.alignment())
-    if textValue.len == 0:
-      return (false, default(GlyphArrangement))
-    let fitted = fitSingleLineText(
-      textValue,
-      fs(appkitFont(DefaultLabelFontSize), textColor.toFigColor()),
-      textAlign,
-      box,
-    )
-    if fitted.text.len == 0:
-      return (false, default(GlyphArrangement))
-    if shouldDebugRenderDump():
-      let suffix =
-        if fitted.text == textValue:
-          ""
-        else:
-          " (fitted: \"" & fitted.text & "\")"
-      echo "[appkit] textfield layout runes=",
-        fitted.layout.runes.len, " text=\"", textValue, "\"", suffix
-    return (true, fitted.layout)
-
-  if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    let title = $button.title()
-    let textAlign = toFontHorizontal(button.alignment())
-    if title.len == 0:
-      return (false, default(GlyphArrangement))
-    let fitted = fitSingleLineText(
-      title,
-      fs(
-        appkitFont(DefaultButtonFontSize),
-        (
-          if button.isEnabled():
-            nsColor(0.08, 0.08, 0.08, 1.0)
-          else:
-            nsColor(0.45, 0.45, 0.45, 1.0)
-        ).toFigColor(),
-      ),
-      textAlign,
-      box,
-    )
-    if fitted.text.len == 0:
-      return (false, default(GlyphArrangement))
-    if shouldDebugRenderDump():
-      let suffix =
-        if fitted.text == title:
-          ""
-        else:
-          " (fitted: \"" & fitted.text & "\")"
-      echo "[appkit] button layout runes=",
-        fitted.layout.runes.len, " title=\"", title, "\"", suffix
-
-    return (true, fitted.layout)
-
-  if view.isKindOfClass(NSBox):
-    let boxView = asRetainedType[NSBox](view)
-    let title = $boxView.title()
-    if title.len == 0:
-      return (false, default(GlyphArrangement))
-    let fitted = fitSingleLineText(
-      title,
-      fs(appkitFont(DefaultLabelFontSize), nsColor(0.07, 0.07, 0.07, 1.0).toFigColor()),
-      FontHorizontal.Left,
-      box,
-    )
-    if fitted.text.len == 0:
-      return (false, default(GlyphArrangement))
-    return (true, fitted.layout)
-
-  (false, default(GlyphArrangement))
-
-proc switchIndicatorRect(controlBox: NSRect): NSRect =
-  let side = clamp(controlBox.size.height - 6.0, 10.0, 13.0)
-  nsRect(
-    controlBox.origin.x + 3.0,
-    controlBox.origin.y + (controlBox.size.height - side) * 0.5,
-    side,
-    side,
-  )
-
-proc addSwitchButtonIndicator(
-    renders: var Renders, parentIdx: FigIdx, button: NSButton, controlBox: NSRect
-) =
-  if button.isNil:
-    return
-  let indicatorBox = switchIndicatorRect(controlBox)
-  if indicatorBox.size.width <= 0.0 or indicatorBox.size.height <= 0.0:
-    return
-
-  let state = buttonVisualState(asRetainedType[NSView](button))
-  let enabled = button.isEnabled()
-  let strokeColor =
-    if enabled:
-      nsColor(0.43, 0.47, 0.55, 1.0)
-    else:
-      nsColor(0.58, 0.58, 0.58, 1.0)
-  var fillColor =
-    if state == NSOnState:
-      nsColor(0.90, 0.94, 0.99, 1.0)
-    elif state == NSMixedState:
-      nsColor(0.94, 0.94, 0.96, 1.0)
-    else:
-      nsColor(1.0, 1.0, 1.0, 1.0)
-  if button.isHighlighted():
-    fillColor = nsColor(0.82, 0.86, 0.92, 1.0)
-
-  let indicatorFig = Fig(
-    kind: nkRectangle,
-    childCount: 0,
-    screenBox: rect(
-      indicatorBox.origin.x, indicatorBox.origin.y, indicatorBox.size.width,
-      indicatorBox.size.height,
-    ),
-    fill: fillColor.solidFill(),
-    corners: uniformCorners(2.8),
-    stroke: RenderStroke(weight: 1.0, fill: strokeColor.solidFill()),
-  )
-  let indicatorIdx = renders.addChild(0.ZLevel, parentIdx, indicatorFig)
-
-  if state == NSOnState:
-    let markSide = max(indicatorBox.size.width - 6.0, 2.0)
-    let markBox = rect(
-      indicatorBox.origin.x + (indicatorBox.size.width - markSide) * 0.5,
-      indicatorBox.origin.y + (indicatorBox.size.height - markSide) * 0.5,
-      markSide,
-      markSide,
-    )
-    discard renders.addChild(
-      0.ZLevel,
-      indicatorIdx,
-      Fig(
-        kind: nkRectangle,
-        childCount: 0,
-        screenBox: markBox,
-        fill: (
-          if enabled:
-            nsColor(0.23, 0.27, 0.34, 1.0)
-          else:
-            nsColor(0.58, 0.58, 0.58, 1.0)
-        ).solidFill(),
-        corners: uniformCorners(1.5),
-        stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
-      ),
-    )
-  elif state == NSMixedState:
-    let barHeight = max(indicatorBox.size.height * 0.16, 2.0)
-    let barWidth = max(indicatorBox.size.width - 4.0, 2.0)
-    let barBox = rect(
-      indicatorBox.origin.x + (indicatorBox.size.width - barWidth) * 0.5,
-      indicatorBox.origin.y + (indicatorBox.size.height - barHeight) * 0.5,
-      barWidth,
-      barHeight,
-    )
-    discard renders.addChild(
-      0.ZLevel,
-      indicatorIdx,
-      Fig(
-        kind: nkRectangle,
-        childCount: 0,
-        screenBox: barBox,
-        fill: nsColor(0.23, 0.26, 0.33, 1.0).solidFill(),
-        corners: uniformCorners(1.0),
-        stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
-      ),
-    )
-
-proc addComboBoxAffordance(
-    renders: var Renders, parentIdx: FigIdx, comboBox: NSComboBox, controlBox: NSRect
-) =
-  if comboBox.isNil:
-    return
-  let arrowZone = comboBoxArrowZoneRect(controlBox)
-  if arrowZone.size.width <= 0.0 or arrowZone.size.height <= 0.0:
-    return
-
-  discard renders.addChild(
-    0.ZLevel,
-    parentIdx,
-    Fig(
-      kind: nkRectangle,
-      childCount: 0,
-      screenBox: rect(
-        arrowZone.origin.x, arrowZone.origin.y, arrowZone.size.width,
-        arrowZone.size.height,
-      ),
-      fill: linear(
-        nsColor(0.95, 0.95, 0.97, 1.0).toFigRgba(),
-        nsColor(0.86, 0.88, 0.92, 1.0).toFigRgba(),
-        axis = fgaY,
-      ),
-      corners: uniformCorners(0.0),
-      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
-    ),
-  )
-
-  discard renders.addChild(
-    0.ZLevel,
-    parentIdx,
-    Fig(
-      kind: nkRectangle,
-      childCount: 0,
-      screenBox: rect(
-        arrowZone.origin.x, arrowZone.origin.y + 1.0, 1.0, arrowZone.size.height - 2.0
-      ),
-      fill: nsColor(0.66, 0.71, 0.80, 1.0).solidFill(),
-      corners: uniformCorners(0.0),
-      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
-    ),
-  )
-
-  if ensureAppKitFont():
-    let arrowBox = nsRect(
-      arrowZone.origin.x,
-      arrowZone.origin.y + 2.0,
-      arrowZone.size.width,
-      max(arrowZone.size.height - 4.0, 0.0),
-    )
-    let arrowLayout = singleLineLayout(
-      "v",
-      fs(appkitFont(11.0), nsColor(0.25, 0.30, 0.38, 1.0).toFigColor()),
-      FontHorizontal.Center,
-      arrowBox,
-    )
-    discard renders.addChild(
-      0.ZLevel,
-      parentIdx,
-      Fig(
-        kind: nkText,
-        childCount: 0,
-        screenBox: rect(
-          arrowBox.origin.x, arrowBox.origin.y, arrowBox.size.width,
-          arrowBox.size.height,
-        ),
-        fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
-        textLayout: arrowLayout,
-      ),
-    )
-
-proc addComboBoxPopup(renders: var Renders, comboBox: NSComboBox, controlBox: NSRect) =
-  if comboBox.isNil or (not comboBox.popupOpen()):
-    return
-  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
-  if popupBox.size.width <= 0.0 or popupBox.size.height <= 0.0:
-    return
-  var popupShadows = noRenderShadows()
-  popupShadows[0] = RenderShadow(
-    style: DropShadow,
-    blur: 4.0,
-    spread: 0.0,
-    x: 0.0,
-    y: 2.0,
-    fill: nsColor(0.0, 0.0, 0.0, 0.20).toFigColor(),
-  )
-
-  let popupIdx = renders.addRoot(
-    ComboBoxPopupZLevel,
-    Fig(
-      kind: nkRectangle,
-      childCount: 0,
-      screenBox: rect(
-        popupBox.origin.x, popupBox.origin.y, popupBox.size.width, popupBox.size.height
-      ),
-      fill: nsColor(0.99, 0.99, 1.0, 1.0).solidFill(),
-      corners: uniformCorners(4.0),
-      shadows: popupShadows,
-      stroke:
-        RenderStroke(weight: 1.0, fill: nsColor(0.60, 0.67, 0.78, 1.0).solidFill()),
-    ),
-  )
-
-  let firstItem = comboBoxPopupFirstItemIndex(comboBox)
-  let lastItem = firstItem + comboBoxVisiblePopupItems(comboBox)
-  let selectedItem = comboBox.indexOfSelectedItem()
-  let hoveredItem = comboBox.popupHoveredIndex()
-  for itemIndex in firstItem ..< lastItem:
-    let itemBox = comboBoxPopupItemRect(comboBox, controlBox, itemIndex)
-    if itemBox.size.width <= 0.0 or itemBox.size.height <= 0.0:
-      continue
-    let isSelected = itemIndex == selectedItem
-    let isHovered = itemIndex == hoveredItem
-    if isSelected or isHovered:
-      discard renders.addChild(
-        ComboBoxPopupZLevel,
-        popupIdx,
-        Fig(
-          kind: nkRectangle,
-          childCount: 0,
-          screenBox: rect(
-            itemBox.origin.x, itemBox.origin.y, itemBox.size.width, itemBox.size.height
-          ),
-          fill: (
-            if isHovered:
-              nsColor(0.78, 0.87, 1.0, 1.0)
-            else:
-              nsColor(0.88, 0.93, 1.0, 1.0)
-          ).solidFill(),
-          corners: uniformCorners(2.0),
-          stroke:
-            RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
-        ),
-      )
-
-    if not ensureAppKitFont():
-      continue
-    let textValue = $comboBox.itemObjectValueAtIndex(itemIndex)
-    if textValue.len == 0:
-      continue
-    let textBox = nsRect(
-      itemBox.origin.x + 6.0,
-      itemBox.origin.y + 2.0,
-      max(itemBox.size.width - 12.0, 0.0),
-      max(itemBox.size.height - 4.0, 0.0),
-    )
-    let fitted = fitSingleLineText(
-      textValue,
-      fs(appkitFont(DefaultLabelFontSize), nsColor(0.08, 0.08, 0.08, 1.0).toFigColor()),
-      FontHorizontal.Left,
-      textBox,
-    )
-    if fitted.text.len == 0:
-      continue
-    discard renders.addChild(
-      ComboBoxPopupZLevel,
-      popupIdx,
-      Fig(
-        kind: nkText,
-        childCount: 0,
-        screenBox: rect(
-          textBox.origin.x, textBox.origin.y, textBox.size.width, textBox.size.height
-        ),
-        fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
-        textLayout: fitted.layout,
-      ),
-    )
-
-proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
-  if not view.isKindOfClass(NSImageView):
-    return
-  let imageView = asRetainedType[NSImageView](view)
-  if imageView.isNil:
-    return
-  let image = imageView.image()
-  if image.isNil:
-    return
-  let imageId = image.imageId()
-  if imageId.int == 0:
-    return
-  let localRect =
-    imageView.imageRectForBounds(nsRect(0.0, 0.0, box.size.width, box.size.height))
-  if localRect.size.width <= 0.0 or localRect.size.height <= 0.0:
-    return
-  result.hasImage = true
-  result.imageId = imageId
-  result.imageBox = nsRect(
-    box.origin.x + localRect.origin.x,
-    box.origin.y + localRect.origin.y,
-    localRect.size.width,
-    localRect.size.height,
-  )
-
-proc hasActiveRenderContext(): bool =
-  activeRenderContextActive and (not activeRenders.isNil)
-
-proc addTextLayoutForActiveView(view: NSView) =
-  if not hasActiveRenderContext():
-    return
-  let textBox = textBoxForView(view, activeRenderLocalBox)
-  let textLayout = textLayoutForView(view, textBox)
-  if not textLayout.ok:
-    return
-  discard activeRenders[].addChild(
-    0.ZLevel,
-    activeRenderParentIdx,
-    Fig(
-      kind: nkText,
-      childCount: 0,
-      screenBox: rect(
-        textBox.origin.x, textBox.origin.y, textBox.size.width, textBox.size.height
-      ),
-      fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
-      textLayout: textLayout.layout,
-    ),
-  )
-
-proc addImageLayoutForActiveView(view: NSView) =
-  if not hasActiveRenderContext():
-    return
-  let imageLayout = imageLayoutForView(view, activeRenderLocalBox)
-  if not imageLayout.hasImage:
-    return
-  let imageFill = nsColor(1.0, 1.0, 1.0, 1.0).solidFill()
-  discard activeRenders[].addChild(
-    0.ZLevel,
-    activeRenderParentIdx,
-    Fig(
-      kind: nkImage,
-      childCount: 0,
-      screenBox: rect(
-        imageLayout.imageBox.origin.x, imageLayout.imageBox.origin.y,
-        imageLayout.imageBox.size.width, imageLayout.imageBox.size.height,
-      ),
-      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
-      image: ImageStyle(id: imageLayout.imageId, fill: imageFill),
-    ),
-  )
-
-proc drawButtonDecorationsForActiveView(button: NSButton) =
-  if not hasActiveRenderContext() or button.isNil:
-    return
-  let buttonView = ownFromId[NSView](button.value)
-  if buttonView.isNil:
-    return
-  if isSwitchButton(button):
-    activeRenders[].addSwitchButtonIndicator(
-      activeRenderParentIdx, button, activeRenderLocalBox
-    )
-  addTextLayoutForActiveView(buttonView)
-
-proc drawTextFieldDecorationsForActiveView(textField: NSTextField) =
-  if not hasActiveRenderContext() or textField.isNil:
-    return
-  let textFieldView = ownFromId[NSView](textField.value)
-  if textFieldView.isNil:
-    return
-  addAquaGlossOverlay(
-    activeRenders[], activeRenderParentIdx, textFieldView, activeRenderLocalBox
-  )
-  addTextLayoutForActiveView(textFieldView)
-
-proc drawComboBoxDecorationsForActiveView(comboBox: NSComboBox) =
-  if not hasActiveRenderContext() or comboBox.isNil:
-    return
-  let comboView = ownFromId[NSView](comboBox.value)
-  if comboView.isNil:
-    return
-  activeRenders[].addComboBoxAffordance(
-    activeRenderParentIdx, comboBox, activeRenderLocalBox
-  )
-  addAquaGlossOverlay(
-    activeRenders[], activeRenderParentIdx, comboView, activeRenderLocalBox
-  )
-  addTextLayoutForActiveView(comboView)
-  activeRenders[].addComboBoxPopup(comboBox, activeRenderScreenBox)
-
-proc drawImageDecorationsForActiveView(imageView: NSImageView) =
-  if imageView.isNil:
-    return
-  let imageViewAsView = ownFromId[NSView](imageView.value)
-  if imageViewAsView.isNil:
-    return
-  addImageLayoutForActiveView(imageViewAsView)
-
-proc drawBoxDecorationsForActiveView(boxView: NSBox) =
-  if boxView.isNil:
-    return
-  let boxAsView = ownFromId[NSView](boxView.value)
-  if boxAsView.isNil:
-    return
-  addTextLayoutForActiveView(boxAsView)
+proc sendId(obj: IDPtr, op: SEL): IDPtr {.inline.} =
+  if obj.isNil or cast[pointer](op).isNil:
+    return nil
+  cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(obj, op)
 
 proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
   if view.isNil:
@@ -1087,14 +221,37 @@ proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
     max(frame.size.width, 0.0),
     max(frame.size.height, 0.0),
   )
-  result.textBox = textBoxForView(view, result.controlBox)
-  let textLayout = textLayoutForView(view, result.textBox)
-  result.hasLayout = textLayout.ok
-  if not textLayout.ok:
+  result.textBox = result.controlBox
+  if result.textBox.size.width <= 2.0 or result.textBox.size.height <= 2.0:
     return
-  result.glyphCount = textLayout.layout.runes.len
-  result.fitsTextBox = layoutFitsTextBox(textLayout.layout, result.textBox)
-  let bounds = textBoundsForLayout(textLayout.layout, result.textBox)
+  if not ensureAppKitFont():
+    return
+
+  var textValue = ""
+  if view.respondsToSelector("stringValue"):
+    let stringId = sendId(view.value, getSelector("stringValue"))
+    if not stringId.isNil:
+      textValue = $ownFromId[NSString](stringId)
+  if textValue.len == 0:
+    return
+
+  var textAlign = FontHorizontal.Left
+  if view.respondsToSelector("alignment"):
+    textAlign =
+      toFontHorizontal(NSTextAlignment(sendInt(view.value, getSelector("alignment"))))
+
+  let fitted = fitSingleLineText(
+    textValue,
+    fs(appkitFont(DefaultLabelFontSize), nsColor(0.08, 0.08, 0.08, 1.0).toFigColor()),
+    textAlign,
+    result.textBox,
+  )
+  if fitted.text.len == 0:
+    return
+  result.hasLayout = true
+  result.glyphCount = fitted.layout.runes.len
+  result.fitsTextBox = layoutFitsTextBox(fitted.layout, result.textBox)
+  let bounds = textBoundsForLayout(fitted.layout, result.textBox)
   if bounds.ok:
     result.textBounds = bounds.bounds
   else:
@@ -1193,16 +350,16 @@ proc addViewTree(
     kind: nkRectangle,
     childCount: 0,
     flags: (
-      if view.isKindOfClass(NSClipView):
+      if view.wantsClipToBounds():
         {NfClipContent}
       else:
         {}
     ),
     screenBox: rect(box.origin.x, box.origin.y, box.size.width, box.size.height),
-    fill: viewFill(view),
-    corners: uniformCorners(viewCornerRadius(view)),
-    shadows: viewShadows(view),
-    stroke: RenderStroke(weight: 1.0, fill: viewStrokeFill(view)),
+    fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+    corners: uniformCorners(0.0),
+    shadows: noRenderShadows(),
+    stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
   )
 
   let idx =
@@ -1220,16 +377,6 @@ proc addViewTree(
     ),
   )
 
-  let previousRenders = activeRenders
-  let previousParentIdx = activeRenderParentIdx
-  let previousLocalBox = activeRenderLocalBox
-  let previousScreenBox = activeRenderScreenBox
-  let previousContextActive = activeRenderContextActive
-  activeRenders = addr renders
-  activeRenderParentIdx = drawTransformIdx
-  activeRenderLocalBox = localBox
-  activeRenderScreenBox = box
-  activeRenderContextActive = true
   var renderPort = RenderGraphicsPort(
     renders: addr renders, parentIdx: drawTransformIdx, drawBox: localBox
   )
@@ -1241,24 +388,9 @@ proc addViewTree(
   pushCurrentFocusView(view)
   try:
     view.drawRect(view.bounds())
-    if view.isKindOfClass(NSComboBox):
-      drawComboBoxDecorationsForActiveView(asRetainedType[NSComboBox](view))
-    elif view.isKindOfClass(NSTextField):
-      drawTextFieldDecorationsForActiveView(asRetainedType[NSTextField](view))
-    elif view.isKindOfClass(NSButton):
-      drawButtonDecorationsForActiveView(asRetainedType[NSButton](view))
-    elif view.isKindOfClass(NSBox):
-      drawBoxDecorationsForActiveView(asRetainedType[NSBox](view))
-    if view.isKindOfClass(NSImageView):
-      drawImageDecorationsForActiveView(asRetainedType[NSImageView](view))
   finally:
     discard popCurrentFocusView()
     NSGraphicsContext.restoreGraphicsState()
-  activeRenders = previousRenders
-  activeRenderParentIdx = previousParentIdx
-  activeRenderLocalBox = previousLocalBox
-  activeRenderScreenBox = previousScreenBox
-  activeRenderContextActive = previousContextActive
 
   for child in view.viewSubviews():
     renders.addViewTree(
@@ -1301,7 +433,7 @@ proc hitTestButton(
     frameSelf.size.width,
     frameSelf.size.height,
   )
-  if view.isKindOfClass(NSClipView) and not frame.contains(x, y):
+  if view.wantsClipToBounds() and not frame.contains(x, y):
     return nil
 
   let children = view.viewSubviews()
@@ -1351,7 +483,7 @@ proc hitTestComboBox(
     frameSelf.size.width,
     frameSelf.size.height,
   )
-  if view.isKindOfClass(NSClipView) and not frame.contains(x, y):
+  if view.wantsClipToBounds() and not frame.contains(x, y):
     return nil
 
   let children = view.viewSubviews()

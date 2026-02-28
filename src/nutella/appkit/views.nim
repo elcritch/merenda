@@ -1,5 +1,7 @@
 import ./runtime
 import ./responders
+import ./graphics
+import ./colors
 
 export responders
 
@@ -367,9 +369,19 @@ objcImpl:
     false
 
   method drawRect*(self: NSView, rect: NSRect) =
-    discard self
-    discard rect
-    discard
+    if self.isNil:
+      return
+    let color = self.viewBackgroundColor()
+    if color.a <= 0.0:
+      return
+    color.setFill()
+    if rect.size.width > 0.0 and rect.size.height > 0.0:
+      NSRectFill(rect)
+    else:
+      NSRectFill(self.bounds())
+
+  method wantsClipToBounds*(self: NSView): bool =
+    false
 
   method drawSheetBorderWithSize*(self: NSView, size: NSSize) =
     discard self

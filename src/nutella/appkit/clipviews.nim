@@ -1,5 +1,7 @@
 import ./runtime
 import ./views
+import ./graphics
+import ./colors
 
 objcImpl:
   type NSClipView* = object of NSView
@@ -174,6 +176,19 @@ objcImpl:
     self.xDocumentCursor = NSCursor(value: nil)
     self.clipDocumentViewId = NSView(value: nil)
     discard callSuperIdFrom(NSClipView, self, getSelector("dealloc"))
+
+  method drawRect*(self: NSClipView, rect: NSRect) =
+    if self.isNil or (not self.drawsBackground()):
+      return
+    let bg = self.backgroundColor()
+    bg.setFill()
+    if rect.size.width > 0.0 and rect.size.height > 0.0:
+      NSRectFill(rect)
+    else:
+      NSRectFill(self.bounds())
+
+  method wantsClipToBounds*(self: NSClipView): bool =
+    true
 
 proc new*(t: typedesc[NSClipView]): NSClipView =
   var allocated = NSClipView.alloc()

@@ -6,6 +6,7 @@ import ./views
 import ./colors
 import ./graphics
 import ./fonts
+import ./attributedstrings
 
 const
   NSNoTitle* = 0
@@ -142,8 +143,14 @@ proc boxDrawTitleWithFrame(self: NSBox, frame: NSRect, view: NSView) =
   discard view
   if not boxHasVisibleTitle(self):
     return
-  discard frame
-  # Title text is currently rendered by the FigDraw text pass in rendering.nim.
+  if frame.size.width <= 0.0 or frame.size.height <= 0.0:
+    return
+  var titleAlloc = NSAttributedString.alloc()
+  let titleString = titleAlloc.initWithString(self.title())
+  titleAlloc.value = nil
+  if titleString.isNil:
+    return
+  titleString.drawInRect(frame)
 
 proc boxDrawBorderAndTitle(self: NSBox, rect: NSRect, view: NSView) =
   if self.isNil or self.isTransparent():

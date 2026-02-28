@@ -484,6 +484,77 @@ proc addRectFrameToCurrentRenderContext*(
   )
   true
 
+proc addTextLayoutToCurrentRenderContext*(
+    localRect: NSRect, layout: GlyphArrangement
+): bool =
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil or renderPort.renders.isNil:
+    return false
+  let drawRect = normalizeLocalDrawRect(localRect)
+  if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
+    return false
+  if layout.runes.len == 0:
+    return false
+  discard renderPort.renders[].addChild(
+    0.ZLevel,
+    renderPort.parentIdx,
+    Fig(
+      kind: nkText,
+      childCount: 0,
+      screenBox: rect(
+        drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+      textLayout: layout,
+    ),
+  )
+  true
+
+proc addImageToCurrentRenderContext*(
+    localRect: NSRect,
+    imageId: ImageId,
+    fraction: float32 = 1.0,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  if imageId.int == 0:
+    return false
+  if fraction <= 0.0:
+    return false
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil or renderPort.renders.isNil:
+    return false
+  let drawRect = normalizeLocalDrawRect(localRect)
+  if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
+    return false
+
+  if operation == NSCompositeClear:
+    return addRectFillToCurrentRenderContext(
+      drawRect, nsColor(0.0, 0.0, 0.0, 0.0), operation
+    )
+
+  let clampedFraction =
+    if fraction < 0.0:
+      0.0'f32
+    elif fraction > 1.0:
+      1.0'f32
+    else:
+      fraction
+  let imageFill = nsColor(1.0, 1.0, 1.0, clampedFraction).solidFill()
+  discard renderPort.renders[].addChild(
+    0.ZLevel,
+    renderPort.parentIdx,
+    Fig(
+      kind: nkImage,
+      childCount: 0,
+      screenBox: rect(
+        drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+      image: ImageStyle(id: imageId, fill: imageFill),
+    ),
+  )
+  true
+
 proc new*(t: typedesc[NSGraphicsContext]): NSGraphicsContext =
   var allocated = NSGraphicsContext.alloc()
   result = initOwned(move(allocated))

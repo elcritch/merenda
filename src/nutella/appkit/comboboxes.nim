@@ -2,6 +2,79 @@ import ./runtime
 import ./views
 import ./controls
 import ./textfields
+import ./graphics
+import ./colors
+import ./attributedstrings
+
+const
+  ComboBoxArrowZoneMinWidth = 16.0'f32
+  ComboBoxArrowZoneMaxWidth = 22.0'f32
+
+proc comboBoxArrowZoneRect*(controlBox: NSRect): NSRect =
+  let arrowWidth = clamp(
+    controlBox.size.height * 0.8, ComboBoxArrowZoneMinWidth, ComboBoxArrowZoneMaxWidth
+  )
+  let zoneWidth = min(arrowWidth, max(controlBox.size.width, 0.0))
+  nsRect(
+    controlBox.origin.x + controlBox.size.width - zoneWidth,
+    controlBox.origin.y,
+    zoneWidth,
+    controlBox.size.height,
+  )
+
+proc comboBoxPopupItemHeight*[T](comboBox: T): float32 =
+  max(comboBox.itemHeight() + 6.0, 18.0)
+
+proc comboBoxVisiblePopupItems*[T](comboBox: T): int =
+  let count = comboBox.numberOfItems()
+  if count <= 0:
+    return 0
+  let requested = comboBox.numberOfVisibleItems()
+  if requested <= 0:
+    return count
+  min(count, requested)
+
+proc comboBoxPopupFirstItemIndex*[T](comboBox: T): int =
+  let total = comboBox.numberOfItems()
+  let visible = comboBoxVisiblePopupItems(comboBox)
+  if total <= 0 or visible <= 0:
+    return 0
+  if total <= visible:
+    return 0
+  let selected = comboBox.indexOfSelectedItem()
+  if selected < 0:
+    return 0
+  clamp(selected - visible + 1, 0, total - visible)
+
+proc comboBoxPopupFrame*[T](comboBox: T, controlBox: NSRect): NSRect =
+  let itemCount = comboBoxVisiblePopupItems(comboBox)
+  if itemCount <= 0:
+    return nsRect(controlBox.origin.x, controlBox.origin.y, 0.0, 0.0)
+  let popupHeight = comboBoxPopupItemHeight(comboBox) * itemCount.float32 + 2.0
+  nsRect(
+    controlBox.origin.x,
+    controlBox.origin.y + controlBox.size.height,
+    max(controlBox.size.width, 0.0),
+    popupHeight,
+  )
+
+proc comboBoxPopupItemRect*(
+    comboBox: auto, controlBox: NSRect, itemIndex: int
+): NSRect =
+  let firstIndex = comboBoxPopupFirstItemIndex(comboBox)
+  let visibleIndex = itemIndex - firstIndex
+  if visibleIndex < 0 or visibleIndex >= comboBoxVisiblePopupItems(comboBox):
+    return nsRect(controlBox.origin.x, controlBox.origin.y, 0.0, 0.0)
+  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
+  let itemHeight = comboBoxPopupItemHeight(comboBox)
+  let yTop =
+    popupBox.origin.y + popupBox.size.height - 1.0 - visibleIndex.float32 * itemHeight
+  nsRect(
+    popupBox.origin.x + 1.0,
+    yTop - itemHeight,
+    max(popupBox.size.width - 2.0, 0.0),
+    max(itemHeight, 0.0),
+  )
 
 objcImpl:
   type NSComboBox* = object of NSTextField
@@ -51,6 +124,123 @@ objcImpl:
     asRetainedType[NSView](result).setFrame(
       x.float32, y.float32, max(width.float32, 0.0'f32), max(height.float32, 0.0'f32)
     )
+
+  method drawRect*(self: NSComboBox, rect: NSRect) =
+    discard rect
+    if self.isNil:
+      return
+
+    let bounds = self.bounds()
+    var valueRect = nsRect(
+      bounds.origin.x + 3.0,
+      bounds.origin.y + 3.0,
+      max(bounds.size.width - 6.0, 0.0),
+      max(bounds.size.height - 6.0, 0.0),
+    )
+    if self.isBezeled():
+      NSDrawWhiteBezel(bounds, bounds)
+      valueRect = nsRect(
+        valueRect.origin.x - 1.0,
+        valueRect.origin.y - 1.0,
+        valueRect.size.width + 2.0,
+        valueRect.size.height + 2.0,
+      )
+    elif self.isBordered():
+      NSFrameRect(bounds)
+      valueRect = nsRect(
+        valueRect.origin.x - 1.0,
+        valueRect.origin.y - 1.0,
+        valueRect.size.width + 2.0,
+        valueRect.size.height + 2.0,
+      )
+    if self.drawsBackground():
+      self.backgroundColor().setFill()
+      NSRectFill(valueRect)
+
+    let arrowZone = comboBoxArrowZoneRect(bounds)
+    let leftInset = 10.0'f32
+    let rightInset = max((arrowZone.origin.x - bounds.origin.x) + 4.0, leftInset + 4.0)
+    let textRect = nsRect(
+      bounds.origin.x + leftInset,
+      bounds.origin.y + 4.0,
+      max(bounds.size.width - rightInset - leftInset, 0.0),
+      max(bounds.size.height - 8.0, 0.0),
+    )
+    var currentValueAlloc = NSAttributedString.alloc()
+    let currentValue = currentValueAlloc.initWithString(self.stringValue())
+    currentValueAlloc.value = nil
+    if not currentValue.isNil:
+      currentValue.drawInRect(textRect)
+
+    if arrowZone.size.width > 0.0 and arrowZone.size.height > 0.0:
+      NSColor.colorWithCalibratedWhite(0.95, 1.0).setFill()
+      NSRectFill(arrowZone)
+      NSColor.colorWithCalibratedWhite(0.66, 1.0).setFill()
+      NSRectFill(
+        nsRect(
+          arrowZone.origin.x,
+          arrowZone.origin.y + 1.0,
+          1.0,
+          max(arrowZone.size.height - 2.0, 0.0),
+        )
+      )
+
+      let triangleWidth = max(min(arrowZone.size.width * 0.28, 6.0), 4.0)
+      let centerX = arrowZone.origin.x + arrowZone.size.width * 0.5
+      let centerY = arrowZone.origin.y + arrowZone.size.height * 0.5
+      NSColor.colorWithCalibratedWhite(0.26, 1.0).setFill()
+      NSRectFill(
+        nsRect(centerX - triangleWidth * 0.5, centerY + 1.0, triangleWidth, 1.0)
+      )
+      NSRectFill(
+        nsRect(centerX - triangleWidth * 0.35, centerY, triangleWidth * 0.7, 1.0)
+      )
+      NSRectFill(
+        nsRect(centerX - triangleWidth * 0.2, centerY - 1.0, triangleWidth * 0.4, 1.0)
+      )
+
+    if self.popupOpen():
+      let popupBox = comboBoxPopupFrame(self, bounds)
+      if popupBox.size.width <= 0.0 or popupBox.size.height <= 0.0:
+        return
+      NSColor.colorWithCalibratedWhite(0.99, 1.0).setFill()
+      NSRectFill(popupBox)
+      NSColor.colorWithCalibratedWhite(0.60, 1.0).setStroke()
+      NSFrameRect(popupBox)
+
+      let firstItem = comboBoxPopupFirstItemIndex(self)
+      let lastItem = firstItem + comboBoxVisiblePopupItems(self)
+      let selectedItem = self.indexOfSelectedItem()
+      let hoveredItem = self.popupHoveredIndex()
+      for itemIndex in firstItem ..< lastItem:
+        let itemBox = comboBoxPopupItemRect(self, bounds, itemIndex)
+        if itemBox.size.width <= 0.0 or itemBox.size.height <= 0.0:
+          continue
+        if itemIndex == selectedItem:
+          NSColor.colorWithCalibratedRed(0.88, 0.93, 1.0, 1.0).setFill()
+          NSRectFill(itemBox)
+        elif itemIndex == hoveredItem:
+          NSColor.colorWithCalibratedRed(0.78, 0.87, 1.0, 1.0).setFill()
+          NSRectFill(itemBox)
+
+        let itemValue = self.itemObjectValueAtIndex(itemIndex)
+        if itemValue.isNil:
+          continue
+        let itemText = $itemValue
+        if itemText.len == 0:
+          continue
+        let textBox = nsRect(
+          itemBox.origin.x + 6.0,
+          itemBox.origin.y + 2.0,
+          max(itemBox.size.width - 12.0, 0.0),
+          max(itemBox.size.height - 4.0, 0.0),
+        )
+        var itemAlloc = NSAttributedString.alloc()
+        let itemString = itemAlloc.initWithString(itemValue)
+        itemAlloc.value = nil
+        if itemString.isNil:
+          continue
+        itemString.drawInRect(textBox)
 
   method dataSource*(self: NSComboBox): ID =
     retainId(self.xDataSource)
@@ -226,3 +416,23 @@ objcImpl:
 proc new*(t: typedesc[NSComboBox]): NSComboBox =
   var allocated = NSComboBox.alloc()
   result = initOwned(move(allocated))
+
+proc comboBoxPopupItemIndexAtPoint*(
+    comboBox: auto, controlBox: NSRect, x: float32, y: float32
+): int =
+  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
+  if popupBox.size.width <= 0.0 or popupBox.size.height <= 0.0:
+    return -1
+  if not popupBox.contains(x, y):
+    return -1
+  let itemHeight = comboBoxPopupItemHeight(comboBox)
+  if itemHeight <= 0.0:
+    return -1
+  let fromTop = popupBox.origin.y + popupBox.size.height - y - 1.0
+  let visibleIndex = int(fromTop / itemHeight)
+  if visibleIndex < 0 or visibleIndex >= comboBoxVisiblePopupItems(comboBox):
+    return -1
+  let itemIndex = comboBoxPopupFirstItemIndex(comboBox) + visibleIndex
+  if itemIndex < 0 or itemIndex >= comboBox.numberOfItems():
+    return -1
+  itemIndex
