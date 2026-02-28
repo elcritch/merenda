@@ -1,7 +1,7 @@
 import std/[strutils, unittest]
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 var parseCallCount = 0
 var formatCallCount = 0

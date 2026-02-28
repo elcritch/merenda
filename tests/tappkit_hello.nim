@@ -2,10 +2,10 @@ import std/[strutils, unittest]
 
 import pkg/vmath
 import figdraw/fignodes
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
-suite "nutella appkit hello world":
+suite "knutella appkit hello world":
   proc controlStringValue(control: NSControl): NSString =
     control.stringValue()
 
@@ -249,11 +249,11 @@ suite "nutella appkit hello world":
     check(search.recentsAutosaveName() == @ns"")
     search.setRecentsAutosaveName(@ns"main-search")
     check(search.recentsAutosaveName() == @ns"main-search")
-    let searches = nsArray[NSString]([@ns"nutella", @ns"ravynos"])
+    let searches = nsArray[NSString]([@ns"knutella", @ns"ravynos"])
     search.setRecentSearches(searches)
     let loadedSearches = search.recentSearches()
     check(loadedSearches.len == 2)
-    check(loadedSearches[0] == @ns"nutella")
+    check(loadedSearches[0] == @ns"knutella")
     check(loadedSearches[1] == @ns"ravynos")
 
     var box = NSBox.new()

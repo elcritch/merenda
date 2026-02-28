@@ -1,5 +1,5 @@
 import std/[tables, unittest]
-import nutella/objc
+import knutella/objc
 
 suite "foundation stdlib-backed core types":
   test "NSString supports Nim string semantics":

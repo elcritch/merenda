@@ -2,7 +2,7 @@ import std/unittest
 
 import figdraw/fignodes
 
-import nutella/appkit
+import knutella/appkit
 
 proc approxEq(a, b: float32, epsilon = 0.01'f32): bool =
   abs(a - b) <= epsilon
