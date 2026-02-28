@@ -23,21 +23,52 @@ var appkitTypefaceId* {.threadvar.}: TypefaceId
 var appkitFontReady* {.threadvar.}: bool
 var appkitFontUnavailable* {.threadvar.}: bool
 
-proc appkitFontCandidates*(): seq[string] =
-  result = @["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
-  let dir = figDataDir()
-  if not dirExists(dir):
+proc addUniqueDir(dirs: var seq[string], dir: string) =
+  if dir.len == 0 or not dirExists(dir):
     return
-  for kind, path in walkDir(dir):
-    if kind != pcFile:
-      continue
-    let (_, name, ext) = splitFile(path)
-    let lowerExt = ext.toLowerAscii()
-    if lowerExt notin [".ttf", ".otf"]:
-      continue
-    let fileName = name & ext
-    if fileName notin result:
-      result.add(fileName)
+  if dir notin dirs:
+    dirs.add(dir)
+
+proc addUniquePath(paths: var seq[string], path: string) =
+  if path.len == 0:
+    return
+  if path notin paths:
+    paths.add(path)
+
+proc appkitFontSearchDirs(): seq[string] =
+  result = @[]
+  result.addUniqueDir(figDataDir())
+  let exePath = getAppFilename()
+  if exePath.len == 0:
+    return
+  var dir = parentDir(exePath)
+  for _ in 0 .. 6:
+    result.addUniqueDir(dir / "data")
+    let nextDir = parentDir(dir)
+    if nextDir.len == 0 or nextDir == dir:
+      break
+    dir = nextDir
+
+proc appkitFontCandidates*(): seq[string] =
+  const preferred = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+  result = @[]
+  for dir in appkitFontSearchDirs():
+    for fileName in preferred:
+      let path = dir / fileName
+      if fileExists(path):
+        result.addUniquePath(path)
+
+    for kind, path in walkDir(dir):
+      if kind != pcFile:
+        continue
+      let lowerExt = splitFile(path).ext.toLowerAscii()
+      if lowerExt notin [".ttf", ".otf"]:
+        continue
+      result.addUniquePath(path)
+
+  # Keep file-name candidates for environments where figDataDir is already correct.
+  for fileName in preferred:
+    result.addUniquePath(fileName)
 
 proc ensureAppKitFont*(): bool =
   if appkitFontReady:

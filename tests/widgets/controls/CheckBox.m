@@ -17,6 +17,7 @@ static const char* nsstr(NSString* s) { return s ? [s UTF8String] : ""; }
 - (IBAction) OnCheckBox4Click:(id)sender;
 - (IBAction) OnCheckBox5Click:(id)sender;
 - (NSString*) stateToString:(NSControlStateValue)state;
+- (void)dumpButtonTextLayout:(NSButton*)button name:(NSString*)name;
 - (void)dumpLayout:(NSString*)stage;
 @end
 
@@ -34,6 +35,37 @@ static const char* nsstr(NSString* s) { return s ? [s UTF8String] : ""; }
       frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
       bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height,
       (unsigned long)[view autoresizingMask]);
+}
+
+- (void)dumpButtonTextLayout:(NSButton*)button name:(NSString*)name {
+  if (button == nil) { return; }
+  NSRect bounds = [button bounds];
+  NSRect titleRect = [[button cell] titleRectForBounds:bounds];
+  NSSize titleSize = NSZeroSize;
+  NSAttributedString* attributedTitle = [button attributedTitle];
+  if (attributedTitle != nil && [attributedTitle length] > 0) {
+    titleSize = [attributedTitle size];
+  } else {
+    NSString* title = [button title];
+    if (title != nil && [title length] > 0) {
+      titleSize = [title sizeWithAttributes:nil];
+    }
+  }
+
+  NSLog(
+      @"[%@ text] bounds=(%.1f,%.1f %.1fx%.1f) titleRect=(%.1f,%.1f %.1fx%.1f) titleSize=(%.1fx%.1f) title='%@'",
+      name,
+      bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height,
+      titleRect.origin.x, titleRect.origin.y, titleRect.size.width, titleRect.size.height,
+      titleSize.width, titleSize.height,
+      [button title]);
+  printf(
+      "[%s text] bounds=(%.1f,%.1f %.1fx%.1f) titleRect=(%.1f,%.1f %.1fx%.1f) titleSize=(%.1fx%.1f) title='%s'\n",
+      nsstr(name),
+      bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height,
+      titleRect.origin.x, titleRect.origin.y, titleRect.size.width, titleRect.size.height,
+      titleSize.width, titleSize.height,
+      nsstr([button title]));
 }
 
 - (void)dumpLayout:(NSString*)stage {
@@ -63,6 +95,11 @@ static const char* nsstr(NSString* s) { return s ? [s UTF8String] : ""; }
       (long)[checkBox4 state], [checkBox4 allowsMixedState], (long)[checkBox4 bezelStyle], (long)[checkBox4 alignment], [checkBox4 title]);
   NSLog(@"[checkBox5] state=%ld mixed=%d bezel=%ld alignment=%ld title='%@'",
       (long)[checkBox5 state], [checkBox5 allowsMixedState], (long)[checkBox5 bezelStyle], (long)[checkBox5 alignment], [checkBox5 title]);
+  [self dumpButtonTextLayout:checkBox1 name:@"checkBox1"];
+  [self dumpButtonTextLayout:checkBox2 name:@"checkBox2"];
+  [self dumpButtonTextLayout:checkBox3 name:@"checkBox3"];
+  [self dumpButtonTextLayout:checkBox4 name:@"checkBox4"];
+  [self dumpButtonTextLayout:checkBox5 name:@"checkBox5"];
 }
 
 - (instancetype)init {
