@@ -27,6 +27,7 @@ objcImpl:
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
+    xButtonType: cint
     xHighlighted {.set: setHighlighted, get: isHighlighted.}: bool
     xHighlightsBy {.set: setHighlightsBy, get: highlightsBy.}: int
     xShowsStateBy {.set: setShowsStateBy, get: showsStateBy.}: int
@@ -52,6 +53,7 @@ objcImpl:
     result.bezelStyle = 0
     result.alternateTitle = @ns""
     result.showBorderInside = false
+    result.xButtonType = NSMomentaryPushInButton.cint
     result.xHighlighted = false
     result.xHighlightsBy = NSPushInCellMask
     result.xShowsStateBy = NSNoCellMask
@@ -149,6 +151,7 @@ objcImpl:
     self.periodicIntervalSec
 
   method setButtonType*(self: NSButton, value: cint) =
+    self.xButtonType = value
     case value.int
     of NSMomentaryLightButton:
       self.xHighlightsBy = NSChangeBackgroundCellMask
@@ -173,6 +176,9 @@ objcImpl:
       self.xShowsStateBy = NSContentsCellMask
     else:
       discard
+
+  method buttonType*(self: NSButton): cint =
+    self.xButtonType
 
   method highlight*(self: NSButton, value: bool) =
     self.xHighlighted = value

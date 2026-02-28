@@ -66,6 +66,11 @@ type ButtonBezelVisualKind = enum
   roundedButtonBezel
   regularSquareButtonBezel
 
+proc isSwitchButton(button: NSButton): bool =
+  if button.isNil:
+    return false
+  button.buttonType().int == NSSwitchButton
+
 proc buttonBezelVisualKind(button: NSButton): ButtonBezelVisualKind =
   if button.isNil:
     return roundedButtonBezel
@@ -164,6 +169,8 @@ proc viewShadows(view: NSView): array[ShadowCount, RenderShadow] =
   result = noRenderShadows()
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      return
     let kind = buttonBezelVisualKind(button)
     if kind == regularSquareButtonBezel:
       return
@@ -236,6 +243,8 @@ proc viewFill(view: NSView): Fill =
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
     return aquaButtonFill(buttonBezelVisualKind(button), buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     let textField = asRetainedType[NSTextField](view)
@@ -251,6 +260,8 @@ proc viewStrokeFill(view: NSView): Fill =
     return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
     return aquaButtonStroke(buttonBezelVisualKind(button), buttonVisualState(view))
   if view.isKindOfClass(NSTextField):
     if not drawsBg(view):
@@ -261,6 +272,8 @@ proc viewStrokeFill(view: NSView): Fill =
 proc viewCornerRadius(view: NSView): float32 =
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      return 0.0
     if buttonBezelVisualKind(button) == regularSquareButtonBezel:
       return 0.0
     let buttonHeight = max(view.viewFrame().size.height, 0.0)
@@ -281,6 +294,8 @@ proc addAquaGlossOverlay(
   var glossHeight = 0.0
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      return
     if buttonBezelVisualKind(button) == regularSquareButtonBezel:
       return
     glossFill = linear(
@@ -427,6 +442,8 @@ proc layoutFitsTextBox(
 proc textPaddingForView(view: NSView): tuple[x: float32, y: float32] =
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      return (20.0'f32, 0.0'f32)
     if buttonBezelVisualKind(button) == regularSquareButtonBezel:
       return (4.0'f32, 3.0'f32)
     return (6.0'f32, 3.0'f32)
@@ -578,6 +595,9 @@ proc textLayoutForView(
       echo "[appkit] button layout runes=",
         fitted.layout.runes.len, " title=\"", title, "\"", suffix
 
+    if isSwitchButton(button):
+      return (true, fitted.layout)
+
     var adjustedLayout = fitted.layout
     adjustedLayout.offsetLayoutY(buttonLowercaseCenterShiftY())
     if layoutFitsTextBox(adjustedLayout, box):
@@ -585,6 +605,101 @@ proc textLayoutForView(
     return (true, fitted.layout)
 
   (false, default(GlyphArrangement))
+
+proc switchIndicatorRect(controlBox: NSRect): NSRect =
+  let side = clamp(controlBox.size.height - 6.0, 10.0, 13.0)
+  nsRect(
+    controlBox.origin.x + 3.0,
+    controlBox.origin.y + (controlBox.size.height - side) * 0.5,
+    side,
+    side,
+  )
+
+proc addSwitchButtonIndicator(
+    renders: var Renders, parentIdx: FigIdx, button: NSButton, controlBox: NSRect
+) =
+  if button.isNil:
+    return
+  let indicatorBox = switchIndicatorRect(controlBox)
+  if indicatorBox.size.width <= 0.0 or indicatorBox.size.height <= 0.0:
+    return
+
+  let state = buttonVisualState(asRetainedType[NSView](button))
+  let enabled = button.isEnabled()
+  let strokeColor =
+    if enabled:
+      nsColor(0.43, 0.47, 0.55, 1.0)
+    else:
+      nsColor(0.58, 0.58, 0.58, 1.0)
+  var fillColor =
+    if state == NSOnState:
+      nsColor(0.90, 0.94, 0.99, 1.0)
+    elif state == NSMixedState:
+      nsColor(0.94, 0.94, 0.96, 1.0)
+    else:
+      nsColor(1.0, 1.0, 1.0, 1.0)
+  if button.isHighlighted():
+    fillColor = nsColor(0.82, 0.86, 0.92, 1.0)
+
+  let indicatorFig = Fig(
+    kind: nkRectangle,
+    childCount: 0,
+    screenBox: rect(
+      indicatorBox.origin.x, indicatorBox.origin.y, indicatorBox.size.width,
+      indicatorBox.size.height,
+    ),
+    fill: fillColor.solidFill(),
+    corners: uniformCorners(2.8),
+    stroke: RenderStroke(weight: 1.0, fill: strokeColor.solidFill()),
+  )
+  let indicatorIdx = renders.addChild(0.ZLevel, parentIdx, indicatorFig)
+
+  if state == NSOnState:
+    let markSide = max(indicatorBox.size.width - 6.0, 2.0)
+    let markBox = rect(
+      indicatorBox.origin.x + (indicatorBox.size.width - markSide) * 0.5,
+      indicatorBox.origin.y + (indicatorBox.size.height - markSide) * 0.5,
+      markSide,
+      markSide,
+    )
+    discard renders.addChild(
+      0.ZLevel,
+      indicatorIdx,
+      Fig(
+        kind: nkRectangle,
+        childCount: 0,
+        screenBox: markBox,
+        fill: (
+          if enabled:
+            nsColor(0.23, 0.27, 0.34, 1.0)
+          else:
+            nsColor(0.58, 0.58, 0.58, 1.0)
+        ).solidFill(),
+        corners: uniformCorners(1.5),
+        stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+      ),
+    )
+  elif state == NSMixedState:
+    let barHeight = max(indicatorBox.size.height * 0.16, 2.0)
+    let barWidth = max(indicatorBox.size.width - 4.0, 2.0)
+    let barBox = rect(
+      indicatorBox.origin.x + (indicatorBox.size.width - barWidth) * 0.5,
+      indicatorBox.origin.y + (indicatorBox.size.height - barHeight) * 0.5,
+      barWidth,
+      barHeight,
+    )
+    discard renders.addChild(
+      0.ZLevel,
+      indicatorIdx,
+      Fig(
+        kind: nkRectangle,
+        childCount: 0,
+        screenBox: barBox,
+        fill: nsColor(0.23, 0.26, 0.33, 1.0).solidFill(),
+        corners: uniformCorners(1.0),
+        stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+      ),
+    )
 
 proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
   if not view.isKindOfClass(NSImageView):
@@ -717,6 +832,11 @@ proc addViewTree(
       renders.addChild(0.ZLevel, parentIdx, fig)
     else:
       renders.addRoot(0.ZLevel, fig)
+
+  if view.isKindOfClass(NSButton):
+    let button = asRetainedType[NSButton](view)
+    if isSwitchButton(button):
+      renders.addSwitchButtonIndicator(idx, button, box)
 
   addAquaGlossOverlay(renders, idx, view, box)
 
