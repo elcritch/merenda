@@ -26,8 +26,15 @@
 }
 @end
 
-int main(int argc, char* argv[]) {
-  [NSApplication sharedApplication];
-  [[[[Window alloc] init] autorelease] makeMainWindow];
-  [NSApp run];
+int main(int argc, char *argv[]) {
+    [NSApplication sharedApplication];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+
+    Window *window = [[Window alloc] init];
+    [window makeKeyAndOrderFront:nil];
+
+    [NSApp activateIgnoringOtherApps:YES];
+    [NSApp run];
+    return 0;
 }
+
