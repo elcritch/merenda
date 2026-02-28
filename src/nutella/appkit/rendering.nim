@@ -15,6 +15,14 @@ import ./imageviews
 import ./textfields
 import ./events
 
+var trackedMouseDownButtonId {.threadvar.}: IDPtr
+
+proc setTrackedMouseDownButton(buttonId: IDPtr) =
+  trackedMouseDownButtonId = replacedOwnedId(trackedMouseDownButtonId, buttonId)
+
+proc clearTrackedMouseDownButton() =
+  trackedMouseDownButtonId = replacedOwnedId(trackedMouseDownButtonId, nil)
+
 proc ensureContentView(window: NSWindow): NSView =
   let cv = window.contentView()
   if not cv.isNil:
@@ -54,7 +62,14 @@ proc buttonVisualState(view: NSView): int =
   if not view.isKindOfClass(NSButton):
     return NSOffState
   let button = asRetainedType[NSButton](view)
-  result = button.state()
+  if button.isHighlighted() and button.highlightsBy() != NSNoCellMask:
+    return NSOnState
+  if (
+    button.showsStateBy() and
+    (NSContentsCellMask or NSChangeGrayCellMask or NSChangeBackgroundCellMask)
+  ) != 0:
+    return button.state()
+  NSOffState
 
 proc aquaButtonFill(state: int): Fill =
   case state
@@ -662,6 +677,28 @@ proc hitTestButton(
     return view.value
   nil
 
+proc buttonShouldBeHighlighted(window: NSWindow, x: float32, y: float32): bool =
+  if trackedMouseDownButtonId.isNil:
+    return false
+  let root = ensureContentView(window)
+  if root.isNil:
+    return false
+  let hit = hitTestButton(root.value, x, y, 0.0, 0.0)
+  (not hit.isNil) and hit == trackedMouseDownButtonId
+
+proc updateTrackedButtonHighlight(window: NSWindow, x: float32, y: float32): bool =
+  if trackedMouseDownButtonId.isNil:
+    return false
+  let button = ownFromId[NSButton](trackedMouseDownButtonId)
+  if button.isNil:
+    clearTrackedMouseDownButton()
+    return false
+  let shouldHighlight = buttonShouldBeHighlighted(window, x, y)
+  if button.isHighlighted() == shouldHighlight:
+    return false
+  button.setHighlighted(shouldHighlight)
+  true
+
 proc rawInputToLogical*(rawPos: Vec2, backingSize: IVec2, logicalSize: Vec2): Vec2 =
   ## Siwin mouse/click positions are reported in backing pixel coordinates.
   ## AppKit layout/hit-testing here is done in logical coordinates.
@@ -751,19 +788,14 @@ proc ensureNativeWindow*(window: NSWindow) =
     window.windowNativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
       onClose: proc(e: siwinshim.CloseEvent) =
         discard e
+        clearTrackedMouseDownButton()
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
         window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
         renderWindow(window),
       onClick: proc(e: siwinshim.ClickEvent) =
-        let root = ensureContentView(window)
-        let logicalPos = logicalInputPos(window.windowNativeWindow(), e.pos)
-        let buttonId = hitTestButton(root.value, logicalPos.x, logicalPos.y, 0.0, 0.0)
-        if not buttonId.isNil:
-          let button = ownFromId[NSButton](buttonId)
-          button.performClick(window)
-        renderWindow(window),
+        discard e,
       onMouseMove: proc(e: siwinshim.MouseMoveEvent) =
         let nativeWindow = window.windowNativeWindow()
         if nativeWindow.isNil:
@@ -778,6 +810,9 @@ proc ensureNativeWindow*(window: NSWindow) =
         )
         if not appEvent.isNil:
           window.sendEvent(appEvent)
+        if siwinshim.MouseButton.left in nativeWindow.mouse.pressed:
+          if updateTrackedButtonHighlight(window, logicalPos.x, logicalPos.y):
+            renderWindow(window)
       ,
       onMouseButton: proc(e: siwinshim.MouseButtonEvent) =
         let nativeWindow =
@@ -793,7 +828,35 @@ proc ensureNativeWindow*(window: NSWindow) =
         )
         if not appEvent.isNil:
           window.sendEvent(appEvent)
-      ,
+        if e.button != siwinshim.MouseButton.left:
+          return
+        if e.pressed:
+          let root = ensureContentView(window)
+          if root.isNil:
+            clearTrackedMouseDownButton()
+            return
+          let hit = hitTestButton(root.value, logicalPos.x, logicalPos.y, 0.0, 0.0)
+          setTrackedMouseDownButton(hit)
+          if trackedMouseDownButtonId.isNil:
+            return
+          let button = ownFromId[NSButton](trackedMouseDownButtonId)
+          if button.isNil or not button.isEnabled():
+            clearTrackedMouseDownButton()
+            return
+          button.setHighlighted(true)
+          renderWindow(window)
+          return
+
+        if trackedMouseDownButtonId.isNil:
+          return
+        let button = ownFromId[NSButton](trackedMouseDownButtonId)
+        if not button.isNil:
+          button.setHighlighted(false)
+          if not e.generated and
+              buttonShouldBeHighlighted(window, logicalPos.x, logicalPos.y):
+            button.performClick(window)
+        clearTrackedMouseDownButton()
+        renderWindow(window),
       onScroll: proc(e: siwinshim.ScrollEvent) =
         let nativeWindow =
           if e.window.isNil:

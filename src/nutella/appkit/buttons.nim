@@ -27,6 +27,9 @@ objcImpl:
     showBorderInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
+    xHighlighted {.set: setHighlighted, get: isHighlighted.}: bool
+    xHighlightsBy {.set: setHighlightsBy, get: highlightsBy.}: int
+    xShowsStateBy {.set: setShowsStateBy, get: showsStateBy.}: int
     periodicDelaySec: float32
     periodicIntervalSec: float32
     onClick: NSButtonCallbackProc
@@ -49,6 +52,9 @@ objcImpl:
     result.bezelStyle = 0
     result.alternateTitle = @ns""
     result.showBorderInside = false
+    result.xHighlighted = false
+    result.xHighlightsBy = NSPushInCellMask
+    result.xShowsStateBy = NSNoCellMask
     result.periodicDelaySec = 0.0
     result.periodicIntervalSec = 0.0
     result.onClick = nil
@@ -127,7 +133,34 @@ objcImpl:
     self.periodicIntervalSec
 
   method setButtonType*(self: NSButton, value: cint) =
-    discard
+    case value.int
+    of NSMomentaryLightButton:
+      self.xHighlightsBy = NSChangeBackgroundCellMask
+      self.xShowsStateBy = NSNoCellMask
+    of NSMomentaryPushInButton:
+      self.xHighlightsBy = NSPushInCellMask or NSChangeGrayCellMask
+      self.xShowsStateBy = NSNoCellMask
+    of NSMomentaryChangeButton:
+      self.xHighlightsBy = NSContentsCellMask
+      self.xShowsStateBy = NSNoCellMask
+    of NSPushOnPushOffButton:
+      self.xHighlightsBy = NSPushInCellMask or NSChangeGrayCellMask
+      self.xShowsStateBy = NSChangeBackgroundCellMask
+    of NSOnOffButton:
+      self.xHighlightsBy = NSChangeBackgroundCellMask or NSChangeGrayCellMask
+      self.xShowsStateBy = NSChangeBackgroundCellMask or NSChangeGrayCellMask
+    of NSToggleButton:
+      self.xHighlightsBy = NSPushInCellMask or NSContentsCellMask
+      self.xShowsStateBy = NSContentsCellMask
+    of NSSwitchButton, NSRadioButton:
+      self.xHighlightsBy = NSContentsCellMask
+      self.xShowsStateBy = NSContentsCellMask
+    else:
+      discard
+
+  method highlight*(self: NSButton, value: bool) =
+    self.xHighlighted = value
+    self.setNeedsDisplay(true)
 
   method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
@@ -153,19 +186,7 @@ proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
 proc click*(button: NSButton) =
   if not button.isEnabled():
     return
-  if button.allowsMixedState():
-    case button.state()
-    of NSOffState:
-      button.setState(NSOnState)
-    of NSOnState:
-      button.setState(NSMixedState)
-    else:
-      button.setState(NSOffState)
-  else:
-    if button.state() == NSOnState:
-      button.setState(NSOffState)
-    else:
-      button.setState(NSOnState)
+  button.setNextState()
   let cb = button.onClick()
   if not cb.isNil:
     cb(button.value)
