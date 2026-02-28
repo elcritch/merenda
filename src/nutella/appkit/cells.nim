@@ -1,7 +1,11 @@
-import std/[parseutils, strutils]
+import std/[math, parseutils, strutils]
 
 import ./runtime
 import ./valueproviders
+import ./graphics
+import ./graphicscontexts
+import ./images
+import ./attributedstrings
 
 proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
   NSFocusRingTypeExterior
@@ -76,6 +80,51 @@ proc cellTypeName(cellType: NSCellType): string =
     "NSImageCellType"
   else:
     "Unknown: " & $cellType.int
+
+proc insetRect(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
+  nsRect(
+    rect.origin.x + dx,
+    rect.origin.y + dy,
+    max(rect.size.width - dx * 2.0, 0.0),
+    max(rect.size.height - dy * 2.0, 0.0),
+  )
+
+proc boolState(value: int): bool {.inline.} =
+  value != NSOffState
+
+proc hasMask(value: int, mask: int): bool {.inline.} =
+  (value and mask) != 0
+
+proc scaledImageSizeInFrameSize(
+    imageSize: NSSize, frameSize: NSSize, scaling: int
+): NSSize {.inline.} =
+  if imageSize.width <= 0.0 or imageSize.height <= 0.0:
+    return nsSize(0.0, 0.0)
+  case scaling
+  of NSImageScaleProportionallyDown:
+    let xscale = frameSize.width / imageSize.width
+    let yscale = frameSize.height / imageSize.height
+    let scale = min(1.0'f32, min(xscale, yscale))
+    nsSize(imageSize.width * scale, imageSize.height * scale)
+  of NSImageScaleAxesIndependently:
+    frameSize
+  of NSImageScaleProportionallyUpOrDown:
+    let xscale = frameSize.width / imageSize.width
+    let yscale = frameSize.height / imageSize.height
+    let scale = min(xscale, yscale)
+    nsSize(imageSize.width * scale, imageSize.height * scale)
+  else:
+    imageSize
+
+proc makeAttributedString(text: NSString): NSAttributedString =
+  var allocated = NSAttributedString.alloc()
+  result = allocated.initWithString(
+    if text.isNil:
+      @ns""
+    else:
+      text
+  )
+  allocated.value = nil
 
 objcImpl:
   type NSCell* {.
@@ -472,6 +521,8 @@ objcImpl:
     return
 
   method drawWithFrame*(self: NSCell, frame: NSRect, view {.kw("inView").}: NSView) =
+    if self.`type`() == NSTextCellType and self.isBezeled():
+      NSDrawWhiteBezel(frame, frame)
     self.drawInteriorWithFrame(self.drawingRectForBounds(frame), view)
 
   method highlight*(
@@ -580,6 +631,7 @@ objcImpl:
       asTypeRaw[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
     if result.isNil:
       return
+    result.setEnabled(true)
     result.xActionControlView = NSView(value: nil)
     result.xActionTarget.value = nil
     result.xActionSelector = nil
@@ -594,6 +646,7 @@ objcImpl:
   type NSButtonCell* = object of NSActionCell
     xButtonTitle {.get: title.}: NSString
     xAlternateTitle {.set: setAlternateTitle, get: alternateTitle.}: NSString
+    xAlternateImage {.set: setAlternateImage, get: alternateImage.}: NSImage
     xTransparent {.set: setTransparent, get: isTransparent.}: bool
     xKeyEquivalent {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
     xImagePosition {.set: setImagePosition, get: imagePosition.}: int
@@ -619,14 +672,23 @@ objcImpl:
       asTypeRaw[NSButtonCell](callSuperIdFrom(NSButtonCell, self, getSelector("init")))
     if result.isNil:
       return
+    result.setEnabled(true)
+    result.setAllowsMixedState(false)
     result.xButtonTitle = @ns"Button"
     result.xAlternateTitle = @ns""
+    result.xAlternateImage = NSImage(value: nil)
     result.xKeyEquivalent = @ns""
     result.xImagePosition = NSNoImage
+    result.xHighlightsByMask = NSPushInCellMask
+    result.xShowsStateByMask = NSNoCellMask
     result.xImageDimsWhenDisabled = true
     result.xGradientType = NSGradientNone
     result.xImageScaling = NSImageScaleProportionallyDown
+    result.xBezelStyle = NSRoundedBezelStyle.int
     result.xBackgroundColor = nsColor(0.0, 0.0, 0.0, 0.0)
+    result.setBordered(true)
+    result.setBezeled(true)
+    result.setAlignment(NSCenterTextAlignment)
     result.setObjectValue(asRetainedType[NSObject](result.xButtonTitle))
 
   method setTitle*(self: NSButtonCell, value: NSString) =
@@ -636,7 +698,41 @@ objcImpl:
     self.xHasValidObjectValue = true
 
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
-    return
+    case buttonType.int
+    of NSMomentaryLightButton:
+      self.xHighlightsByMask = NSChangeBackgroundCellMask
+      self.xShowsStateByMask = NSNoCellMask
+      self.xImageDimsWhenDisabled = true
+    of NSMomentaryPushInButton:
+      self.xHighlightsByMask = NSPushInCellMask or NSChangeGrayCellMask
+      self.xShowsStateByMask = NSNoCellMask
+      self.xImageDimsWhenDisabled = true
+    of NSMomentaryChangeButton:
+      self.xHighlightsByMask = NSContentsCellMask
+      self.xShowsStateByMask = NSNoCellMask
+      self.xImageDimsWhenDisabled = true
+    of NSPushOnPushOffButton:
+      self.xHighlightsByMask = NSPushInCellMask or NSChangeGrayCellMask
+      self.xShowsStateByMask = NSChangeBackgroundCellMask
+      self.xImageDimsWhenDisabled = true
+    of NSOnOffButton:
+      self.xHighlightsByMask = NSChangeBackgroundCellMask or NSChangeGrayCellMask
+      self.xShowsStateByMask = NSChangeBackgroundCellMask or NSChangeGrayCellMask
+      self.xImageDimsWhenDisabled = true
+    of NSToggleButton:
+      self.xHighlightsByMask = NSPushInCellMask or NSContentsCellMask
+      self.xShowsStateByMask = NSContentsCellMask
+      self.xImageDimsWhenDisabled = true
+    of NSSwitchButton, NSRadioButton:
+      self.xHighlightsByMask = NSContentsCellMask
+      self.xShowsStateByMask = NSContentsCellMask
+      self.xImagePosition = NSImageLeft
+      self.xImageDimsWhenDisabled = false
+      self.setBordered(false)
+      self.setBezeled(false)
+      self.setAlignment(NSLeftTextAlignment)
+    else:
+      discard
 
   method setPeriodicDelay*(
       self: NSButtonCell, delay: float32, interval {.kw("interval").}: float32
@@ -654,6 +750,285 @@ objcImpl:
 
   method setState*(self: NSButtonCell, value: int) =
     self.xState = normalizeButtonState(value, self.allowsMixedState())
+
+  method attributedTitle*(self: NSButtonCell): NSAttributedString =
+    makeAttributedString(self.title())
+
+  method attributedAlternateTitle*(self: NSButtonCell): NSAttributedString =
+    makeAttributedString(self.alternateTitle())
+
+  method titleForHighlight*(self: NSButtonCell): NSAttributedString =
+    if (
+      (hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted()) or
+      (hasMask(self.showsStateBy(), NSContentsCellMask) and boolState(self.state()))
+    ):
+      let alternate = self.attributedAlternateTitle()
+      if not alternate.isNil and self.alternateTitle().len > 0:
+        return alternate
+    self.attributedTitle()
+
+  method imageForHighlight*(self: NSButtonCell): NSImage =
+    if (
+      (hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted()) or
+      (hasMask(self.showsStateBy(), NSContentsCellMask) and boolState(self.state()))
+    ):
+      let alternate = self.alternateImage()
+      if not alternate.isNil:
+        return alternate
+    self.image()
+
+  method imageRectForBounds*(self: NSButtonCell, rect: NSRect): NSRect =
+    let image = self.imageForHighlight()
+    if image.isNil:
+      return nsRect(rect.origin.x, rect.origin.y, 0.0, 0.0)
+    let imageSize = image.size()
+    nsRect(rect.origin.x, rect.origin.y, imageSize.width, imageSize.height)
+
+  method isVisuallyHighlighted*(self: NSButtonCell): bool =
+    (hasMask(self.highlightsBy(), NSChangeGrayCellMask) and self.isHighlighted()) or
+      (hasMask(self.showsStateBy(), NSChangeGrayCellMask) and boolState(self.state()))
+
+  method getControlSizeAdjustment*(self: NSButtonCell, flipped: bool): NSRect =
+    discard self
+    discard flipped
+    nsRect(0.0, 0.0, 0.0, 0.0)
+
+  method titleRectForBounds*(self: NSButtonCell, rect: NSRect): NSRect =
+    if self.isBordered() or self.isBezeled():
+      return insetRect(rect, 4.0, 2.0)
+    nsRect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
+
+  method drawBezelWithFrame*(
+      self: NSButtonCell, frame: NSRect, controlView {.kw("inView").}: NSView
+  ) =
+    if controlView.isNil:
+      return
+    let adjustment = self.getControlSizeAdjustment(false)
+    var drawFrame = frame
+    drawFrame.size.width = max(drawFrame.size.width - adjustment.size.width, 0.0)
+    drawFrame.size.height = max(drawFrame.size.height - adjustment.size.height, 0.0)
+    drawFrame.origin.x += adjustment.origin.x
+    drawFrame.origin.y += adjustment.origin.y
+    if self.isTransparent() or not self.isBordered():
+      return
+    if self.bezelStyle() == NSRegularSquareBezelStyle.int:
+      var top = drawFrame
+      var bottom = drawFrame
+      top.size.height = floor(drawFrame.size.height * 0.5)
+      bottom.size.height = drawFrame.size.height - top.size.height
+      let flipped =
+        if NSGraphicsContext.currentContext().isNil:
+          false
+        else:
+          NSGraphicsContext.currentContext().isFlipped()
+      if not flipped:
+        top.origin.y += bottom.size.height
+      else:
+        bottom.origin.y += top.size.height
+      let highlighted =
+        hasMask(self.highlightsBy(), NSPushInCellMask) and self.isHighlighted()
+      let topGray = if highlighted: 0.80 else: 0.90
+      let bottomGray = if highlighted: 0.70 else: 0.80
+      setCurrentFillColor(nsColor(topGray, topGray, topGray, 1.0))
+      NSRectFill(top)
+      setCurrentFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
+      NSRectFill(bottom)
+      setCurrentStrokeColor(nsColor(0.83, 0.83, 0.83, 1.0))
+      NSFrameRectWithWidth(drawFrame, 1.0)
+      return
+
+    if self.isVisuallyHighlighted():
+      NSDrawGrayBezel(drawFrame, drawFrame)
+    else:
+      NSDrawButton(drawFrame, drawFrame)
+
+  method drawImage*(
+      self: NSButtonCell,
+      image: NSImage,
+      frame {.kw("withFrame").}: NSRect,
+      controlView {.kw("inView").}: NSView,
+  ) =
+    discard self
+    discard controlView
+    if image.isNil:
+      return
+    image.drawInRect(frame, nsRect(0.0, 0.0, 0.0, 0.0), NSCompositeSourceOver.int, 1.0)
+
+  method drawTitle*(
+      self: NSButtonCell,
+      title: NSAttributedString,
+      titleRect {.kw("withFrame").}: NSRect,
+      controlView {.kw("inView").}: NSView,
+  ): NSRect =
+    discard self
+    discard controlView
+    if not title.isNil:
+      title.drawInRect(titleRect)
+    titleRect
+
+  method drawInteriorWithFrame*(
+      self: NSButtonCell, frame: NSRect, controlView {.kw("inView").}: NSView
+  ) =
+    if controlView.isNil:
+      return
+    if self.isTransparent():
+      return
+    var contentFrame = frame
+    let adjustment = self.getControlSizeAdjustment(false)
+    contentFrame.size.width = max(contentFrame.size.width - adjustment.size.width, 0.0)
+    contentFrame.size.height =
+      max(contentFrame.size.height - adjustment.size.height, 0.0)
+    contentFrame.origin.x += adjustment.origin.x
+    contentFrame.origin.y += adjustment.origin.y
+    if self.isBordered():
+      contentFrame = insetRect(contentFrame, 2.0, 2.0)
+
+    let image = self.imageForHighlight()
+    let title = self.titleForHighlight()
+    let imagePosition = self.imagePosition()
+    var imageRect = self.imageRectForBounds(contentFrame)
+    var titleRect = self.titleRectForBounds(contentFrame)
+
+    var drawImage = not image.isNil
+    var drawTitle = (not title.isNil) and self.title().len > 0
+
+    let imageSize =
+      if drawImage:
+        scaledImageSizeInFrameSize(
+          imageRect.size, contentFrame.size, self.imageScaling()
+        )
+      else:
+        nsSize(0.0, 0.0)
+    imageRect.size = imageSize
+    imageRect.origin.x += floor((contentFrame.size.width - imageRect.size.width) * 0.5)
+    imageRect.origin.y += floor(
+      (contentFrame.size.height - imageRect.size.height) * 0.5
+    )
+    let titleSize =
+      if drawTitle:
+        title.size()
+      else:
+        nsSize(0.0, 0.0)
+    titleRect.origin.y += floor((titleRect.size.height - titleSize.height) * 0.5)
+    titleRect.size.height = titleSize.height
+
+    case imagePosition
+    of NSNoImage:
+      drawImage = false
+    of NSImageOnly:
+      drawTitle = false
+      imageRect.origin.x =
+        contentFrame.origin.x + (contentFrame.size.width - imageRect.size.width) * 0.5
+      imageRect.origin.y =
+        contentFrame.origin.y + (contentFrame.size.height - imageRect.size.height) * 0.5
+    of NSImageLeft:
+      imageRect.origin.x = contentFrame.origin.x + 2.0
+      imageRect.origin.y =
+        contentFrame.origin.y + (contentFrame.size.height - imageRect.size.height) * 0.5
+      titleRect.origin.x = imageRect.origin.x + imageRect.size.width + 4.0
+      titleRect.size.width =
+        max(contentFrame.origin.x + contentFrame.size.width - titleRect.origin.x, 0.0)
+    of NSImageRight:
+      imageRect.origin.x =
+        contentFrame.origin.x + contentFrame.size.width - imageRect.size.width - 2.0
+      imageRect.origin.y =
+        contentFrame.origin.y + (contentFrame.size.height - imageRect.size.height) * 0.5
+      titleRect.size.width = max(imageRect.origin.x - titleRect.origin.x - 4.0, 0.0)
+    of NSImageBelow:
+      imageRect.origin.y = contentFrame.origin.y
+      titleRect.origin.y += imageRect.size.height
+      imageRect.origin.y = max(contentFrame.origin.y, imageRect.origin.y)
+      titleRect.origin.y = min(
+        contentFrame.origin.y + contentFrame.size.height - titleRect.size.height,
+        titleRect.origin.y,
+      )
+    of NSImageAbove:
+      imageRect.origin.y =
+        contentFrame.origin.y + contentFrame.size.height - imageRect.size.height
+      titleRect.origin.y -= imageRect.size.height
+      imageRect.origin.y = min(
+        contentFrame.origin.y + contentFrame.size.height - imageRect.size.height,
+        imageRect.origin.y,
+      )
+      titleRect.origin.y = max(contentFrame.origin.y, titleRect.origin.y)
+    of NSImageOverlaps:
+      discard
+    else:
+      discard
+
+    if not self.isBordered():
+      if self.isVisuallyHighlighted():
+        setCurrentFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
+        NSRectFill(contentFrame)
+
+    if self.isBordered() and hasMask(self.highlightsBy(), NSPushInCellMask) and
+        self.isHighlighted():
+      imageRect.origin.x += 1.0
+      titleRect.origin.x += 1.0
+      let flipped =
+        if NSGraphicsContext.currentContext().isNil:
+          false
+        else:
+          NSGraphicsContext.currentContext().isFlipped()
+      if not flipped:
+        imageRect.origin.y -= 1.0
+        titleRect.origin.y -= 1.0
+      else:
+        imageRect.origin.y += 1.0
+        titleRect.origin.y += 1.0
+
+    if drawImage:
+      self.drawImage(image, imageRect, controlView)
+    if drawTitle:
+      discard self.drawTitle(title, titleRect, controlView)
+
+  method drawWithFrame*(
+      self: NSButtonCell, frame: NSRect, control {.kw("inView").}: NSView
+  ) =
+    if self.isTransparent():
+      return
+    self.setControlView(control)
+    self.drawBezelWithFrame(frame, control)
+    self.drawInteriorWithFrame(frame, control)
+
+  method cellSize*(self: NSButtonCell): NSSize =
+    let title = self.attributedTitle()
+    let image = self.image()
+    let enabled = self.isEnabled() or (not self.imageDimsWhenDisabled())
+    let mixed = self.state() == NSMixedState
+    discard enabled
+    discard mixed
+    var imageSize = nsSize(0.0, 0.0)
+    var titleSize = nsSize(0.0, 0.0)
+    if not image.isNil:
+      imageSize = image.size()
+    if not title.isNil:
+      titleSize = title.size()
+    var resultSize = nsSize(0.0, 0.0)
+    case self.imagePosition()
+    of NSNoImage:
+      resultSize = titleSize
+    of NSImageOnly:
+      resultSize = imageSize
+    of NSImageLeft, NSImageRight:
+      resultSize.width = imageSize.width + 4.0 + titleSize.width
+      resultSize.height = max(imageSize.height, titleSize.height)
+    of NSImageBelow, NSImageAbove:
+      resultSize.width = max(imageSize.width, titleSize.width)
+      resultSize.height = imageSize.height + 4.0 + titleSize.height
+    of NSImageOverlaps:
+      resultSize.width = max(imageSize.width, titleSize.width)
+      resultSize.height = max(imageSize.height, titleSize.height)
+    else:
+      discard
+    resultSize.width += 4.0
+    if self.isBordered() or self.isBezeled():
+      resultSize.width += 4.0
+      resultSize.height += 4.0
+    let adjustment = self.getControlSizeAdjustment(false)
+    resultSize.width += adjustment.size.width
+    resultSize.height += adjustment.size.height
+    resultSize
 
   method stringValue*(self: NSButtonCell): NSString =
     self.title()
@@ -712,6 +1087,7 @@ objcImpl:
   method dealloc(self: NSButtonCell) {.used.} =
     self.xButtonTitle = NSString(value: nil)
     self.xAlternateTitle = NSString(value: nil)
+    self.xAlternateImage = NSImage(value: nil)
     self.xKeyEquivalent = NSString(value: nil)
     discard callSuperIdFrom(NSButtonCell, self, getSelector("dealloc"))
 
