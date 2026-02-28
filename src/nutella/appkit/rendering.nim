@@ -457,6 +457,25 @@ proc singleLineLayout(
     wrap = false,
   )
 
+proc offsetLayoutY(layout: var GlyphArrangement, dy: float32) =
+  if abs(dy) <= 0.001'f32:
+    return
+  for i in 0 ..< layout.positions.len:
+    layout.positions[i].y += dy
+  for i in 0 ..< layout.selectionRects.len:
+    layout.selectionRects[i].y += dy
+  layout.bounding.y += dy
+
+proc buttonLowercaseCenterShiftY(): float32 =
+  let lineHeight = max(DefaultButtonFontSize, 1.0'f32)
+  # Matches NSFont.makeMetrics defaults used by AppKit font shim.
+  let xHeight = lineHeight * 0.5'f32
+  let ascender = lineHeight * 0.8'f32
+  let lineCenterFromTop = lineHeight * 0.5'f32
+  let lowerCenterFromTop = ascender - xHeight * 0.5'f32
+  # Cocoa-style button text looks centered on lowercase body, not full line box.
+  result = clamp(lineCenterFromTop - lowerCenterFromTop, -2.0'f32, 2.0'f32)
+
 proc singleLineTextCandidate(runes: seq[Rune], keep: int): string =
   result = newStringOfCap(keep + 3)
   for i in 0 ..< keep:
@@ -558,6 +577,11 @@ proc textLayoutForView(
           " (fitted: \"" & fitted.text & "\")"
       echo "[appkit] button layout runes=",
         fitted.layout.runes.len, " title=\"", title, "\"", suffix
+
+    var adjustedLayout = fitted.layout
+    adjustedLayout.offsetLayoutY(buttonLowercaseCenterShiftY())
+    if layoutFitsTextBox(adjustedLayout, box):
+      return (true, adjustedLayout)
     return (true, fitted.layout)
 
   (false, default(GlyphArrangement))
