@@ -20,6 +20,7 @@ import ./appkit/clipviews
 import ./appkit/scrollers
 import ./appkit/rulerviews
 import ./appkit/scrollviews
+import ./appkit/tableviews
 import ./appkit/collectionviews
 import ./appkit/alerts
 import ./appkit/events
@@ -47,6 +48,7 @@ export clipviews
 export scrollers
 export rulerviews
 export scrollviews
+export tableviews
 export collectionviews
 export alerts
 export events

@@ -232,7 +232,7 @@ objcImpl:
   type NSEvent* = object of NSObject
     xType {.get: `type`.}: NSEventType
     xTimestamp {.get: timestamp.}: float
-    xLocationInWindow {.get: locationInWindow.}: NSPoint
+    xLocationInWindow: NSPoint
     xModifierFlags {.get: modifierFlags.}: NSModifierFlags
     xWindowNumber {.get: windowNumber.}: NSInteger
 
@@ -310,6 +310,9 @@ objcImpl:
     result.xWindowNumber = windowNumber
     currentMouseLocation = location
     currentModifierFlags = modifierFlags
+
+  method locationInWindow*(self: NSEvent): NSPoint =
+    self.xLocationInWindow
 
   proc mouseLocation*(t: typedesc[NSEvent]): NSPoint =
     currentMouseLocation

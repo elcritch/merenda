@@ -198,8 +198,10 @@ type
   NSText* = object of NSView
   NSClipView* = object of NSView
   NSScrollView* = object of NSView
+  NSTableHeaderView* = object of NSView
   NSRulerView* = object of NSView
   NSControl* = object of NSView
+  NSTableView* = object of NSControl
   NSScroller* = object of NSControl
   NSImageView* = object of NSControl
   NSTextField* = object of NSControl
@@ -207,6 +209,8 @@ type
   NSFont* = object of NSObject
   NSFontDescriptor* = object of NSObject
   NSImage* = object of NSObject
+  NSTableColumn* = object of NSObject
+  NSTableHeaderCell* = object of NSCell
   NSCursor* = object of NSObject
   NSMenu* = object of NSObject
   NSFormatter* = object of NSObject
