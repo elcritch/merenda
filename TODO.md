@@ -2,9 +2,9 @@
 
 Generated from `deps/ravynos/Frameworks/AppKit` headers (`@interface NS* : ...`, categories excluded).
 
-Implemented in Nutella today (23): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSFont`, `NSFontDescriptor`, `NSImage`, `NSImageCell`, `NSImageView`, `NSPanel`, `NSResponder`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
+Implemented in Nutella today (27): `NSActionCell`, `NSAlert`, `NSApplication`, `NSBox`, `NSButton`, `NSButtonCell`, `NSCell`, `NSClipView`, `NSCollectionView`, `NSControl`, `NSController`, `NSEvent`, `NSFont`, `NSFontDescriptor`, `NSImage`, `NSImageCell`, `NSImageView`, `NSPanel`, `NSResponder`, `NSRulerView`, `NSScroller`, `NSScrollView`, `NSSearchField`, `NSSecureTextField`, `NSTextField`, `NSView`, `NSWindow`.
 
-Remaining AppKit classes tracked: 171
+Remaining AppKit classes tracked: 169
 
 Sorted by implementation priority (most useful first).
 
@@ -17,13 +17,14 @@ Sorted by implementation priority (most useful first).
 - [x] Typed AppKit constant enums - Converted alert styles/returns, button types, and image alignment constants from raw ints to enums (`NSAlertStyle`, `NSAlertReturn`, `NSButtonType`, `NSImageAlignment`) with int converters for compatibility.
 - [ ] Block bridging ergonomics - Add high-level Nim closure to Objective-C block bridge.
 
-## Done: Already Implemented (23)
+## Done: Already Implemented (27)
 - [x] NSActionCell - Cell subclass that supports target/action behavior.
 - [x] NSAlert - Modal/non-modal alert dialog API.
 - [x] NSApplication - Application singleton and event loop coordinator.
 - [x] NSBox - Framed container view with title/border styles.
 - [x] NSButton - Clickable control that triggers actions and toggles state.
 - [x] NSButtonCell - Cell used by NSButton-style controls.
+- [x] NSCell - Legacy lightweight drawing/editing object for controls.
 - [x] NSClipView - Viewport that clips content inside a scroll view.
 - [x] NSCollectionView - Grid/list collection control with reusable items.
 - [x] NSControl - Base class for interactive controls.
@@ -36,6 +37,9 @@ Sorted by implementation priority (most useful first).
 - [x] NSImageView - View subclass responsible for drawing and interaction.
 - [x] NSPanel - Utility-style window subclass.
 - [x] NSResponder - Base class for responder chain event handling.
+- [x] NSRulerView - Ruler UI for text/layout editing views.
+- [x] NSScroller - Legacy scrollbar control object.
+- [x] NSScrollView - Scrollable container with clip and scrollers.
 - [x] NSSearchField - Text field specialized for search input.
 - [x] NSSecureTextField - Text field that masks entered characters.
 - [x] NSTextField - Single-line text input and display control.
@@ -47,7 +51,7 @@ Sorted by implementation priority (most useful first).
 - [x] NSAlert - Modal/non-modal alert dialog API.
 - [x] NSBox - Framed container view with title/border styles.
 - [x] NSButtonCell - Cell used by NSButton-style controls.
-<!-- - [ ] NSCell - Legacy lightweight drawing/editing object for controls. -->
+- [x] NSCell - Legacy lightweight drawing/editing object for controls.
 - [x] NSClipView - Viewport that clips content inside a scroll view.
 - [x] NSCollectionView - Grid/list collection control with reusable items.
 - [ ] NSCollectionViewItem - Controller-like item object for collection entries.
@@ -83,7 +87,7 @@ Sorted by implementation priority (most useful first).
 - [ ] NSProgressIndicator - Progress spinner/bar control.
 - [ ] NSSavePanel - Save-file dialog panel.
 <!-- - [ ] NSScreen - Display device and geometry information. -->
-- [ ] NSScrollView - Scrollable container with clip and scrollers.
+- [x] NSScrollView - Scrollable container with clip and scrollers.
 - [x] NSSearchField - Text field specialized for search input.
 - [x] NSSecureTextField - Text field that masks entered characters.
 - [ ] NSSegmentedControl - Segmented multi-action button control.
@@ -151,8 +155,8 @@ Sorted by implementation priority (most useful first).
 - [ ] NSRuleEditorButtonCell - Button cell used by rule editor rows.
 - [ ] NSRuleEditorViewSliceRow - Internal row view used by NSRuleEditor.
 - [ ] NSRulerMarker - Marker item displayed within an NSRulerView.
-- [ ] NSRulerView - Ruler UI for text/layout editing views.
-<!-- - [ ] NSScroller - Legacy scrollbar control object. -->
+- [x] NSRulerView - Ruler UI for text/layout editing views.
+- [x] NSScroller - Legacy scrollbar control object.
 - [ ] NSSearchFieldCell - Cell used by search field controls.
 - [ ] NSSegmentItem - Model item representing one segment.
 - [ ] NSSegmentedCell - Cell used by segmented controls.
