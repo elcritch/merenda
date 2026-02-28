@@ -1,10 +1,10 @@
 import std/[os, strutils]
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("NUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -171,7 +171,7 @@ objcImpl:
 
 when isMainModule:
   var app = NSApp()
-  var window = newWindow(120, 120, 480, 360, "Cocoa Table View (Nutella Port)")
+  var window = newWindow(120, 120, 480, 360, "Cocoa Table View (KNutella Port)")
   var root = newView(0, 0, 480, 360)
   root.setBackgroundColor(0.95, 0.95, 0.95, 1.0)
 

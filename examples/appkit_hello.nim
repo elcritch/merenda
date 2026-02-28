@@ -1,10 +1,10 @@
 import std/[os, strutils]
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("NUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -13,7 +13,7 @@ proc maxFramesFromEnv(defaultValue = -1): int =
     defaultValue
 
 proc debugRenderDumpEnabled(): bool =
-  getEnv("NUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+  getEnv("KNUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
 const
@@ -38,7 +38,7 @@ proc stateName(state: int): string =
 
 when isMainModule:
   var app = NSApp()
-  var window = newWindow(120, 120, 720, 560, "Nutella AppKit Hello")
+  var window = newWindow(120, 120, 720, 560, "KNutella AppKit Hello")
   var panel = NSPanel.new()
   window.setFrameOrigin(nsPoint(120, 120))
   window.setContentSize(nsSize(720, 560))
@@ -53,7 +53,7 @@ when isMainModule:
   root.setBackgroundColor(0.95, 0.96, 0.98, 1.0)
 
   var title =
-    newTextField(leftInset, titleTop, 520, titleHeight, "Hello from Nutella/AppKit")
+    newTextField(leftInset, titleTop, 520, titleHeight, "Hello from KNutella/AppKit")
   title.setTag(titleTag)
   title.setAlignment(NSCenterTextAlignment)
   title.setTextColor(nsColor(0.13, 0.20, 0.34, 1.0))
@@ -121,9 +121,9 @@ when isMainModule:
   searchField.setTag(searchTag)
   searchField.setFrame(12.cfloat, 14.cfloat, 390.cfloat, 32.cfloat)
   searchField.setStringValue(@ns"ravynos AppKit")
-  searchField.setRecentsAutosaveName(@ns"nutella-example-search")
+  searchField.setRecentsAutosaveName(@ns"knutella-example-search")
   searchField.setRecentSearches(
-    nsArray[NSString]([@ns"ravynos", @ns"Nutella", @ns"AppKit"])
+    nsArray[NSString]([@ns"ravynos", @ns"KNutella", @ns"AppKit"])
   )
   authBox.contentView().addSubview(searchField)
 
