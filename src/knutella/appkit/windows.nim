@@ -61,7 +61,7 @@ objcImpl:
     if result.isNil:
       return
     result.xFrame = nsRect(100, 100, 640, 420)
-    result.xTitle = @ns"Nutella Window"
+    result.xTitle = @ns"KNutella Window"
     result.xStyleMask =
       NSTitledWindowMask or NSClosableWindowMask or NSResizableWindowMask
     result.xBackingType = NSBackingStoreBuffered

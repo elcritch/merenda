@@ -25,9 +25,9 @@ import std/[macros, strutils]
 {.passL: "-lobjc".}
 template impl*(x: untyped) {.pragma.}
 
-const NutellaNsToNxRemapEnabled* =
+const KNutellaNsToNxRemapEnabled* =
   defined(macosx) and not defined(nutellaDisableNsToNxRemap)
-const NutellaUseCustomNxObjectRoot* = defined(nutellaCustomNxObjectRoot)
+const KNutellaUseCustomNxObjectRoot* = defined(nutellaCustomNxObjectRoot)
 
 const
   YES* = true
@@ -470,11 +470,11 @@ template getClassName*[T: ID](obj: T): string =
 
 proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
   result = name
-  when NutellaNsToNxRemapEnabled:
+  when KNutellaNsToNxRemapEnabled:
     if name.len > 2 and name.startsWith("NS"):
       case name
       of "NSObject":
-        when NutellaUseCustomNxObjectRoot:
+        when KNutellaUseCustomNxObjectRoot:
           result = "NXObject"
       of "NSProxy", "NSCopying", "NSMutableCopying", "NSCoding", "NSSecureCoding":
         discard
@@ -569,7 +569,7 @@ proc nxObjectInitialize(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
 
 proc ensureNutellaRootClasses*() =
   ## Bootstraps a standalone NXObject root class when custom root mode is enabled.
-  when NutellaUseCustomNxObjectRoot:
+  when KNutellaUseCustomNxObjectRoot:
     let nxObjectName = "NXObject"
     var nxObject = objc_getClass(nxObjectName.cstring)
     if nxObject.isNil:
@@ -651,7 +651,7 @@ proc ensureNutellaRootClasses*() =
         nxObjectRefCountOffset = ivar_getOffset(refIvar)
 
 proc getClassByName*(name: string): ObjcClass =
-  when NutellaNsToNxRemapEnabled:
+  when KNutellaNsToNxRemapEnabled:
     let mapped = nutellaNsToNxRuntimeName(name)
     if mapped != name:
       ensureNutellaRootClasses()
@@ -870,7 +870,7 @@ proc classNamesForImage*(image: string): seq[string] =
 proc objc_getProtocol(name: cstring): Protocol {.cdecl, importc.}
 proc getProtocolByName*(name: string): Protocol =
   result = objc_getProtocol(name.cstring)
-  when NutellaNsToNxRemapEnabled:
+  when KNutellaNsToNxRemapEnabled:
     if result.isNil:
       let mapped = nutellaNsToNxRuntimeName(name)
       if mapped != name:

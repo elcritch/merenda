@@ -168,7 +168,7 @@ proc runForFrames*(app: NSApplication, maxFrames: int): int =
   runApplicationFrames(app, maxFrames)
 
 proc newWindow*(
-    x, y, width, height: float32, title: NSString = @ns"Nutella Window"
+    x, y, width, height: float32, title: NSString = @ns"KNutella Window"
 ): NSWindow =
   var wAlloc = NSWindow.alloc()
   result =
