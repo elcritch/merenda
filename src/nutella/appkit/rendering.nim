@@ -16,6 +16,7 @@ import ./images
 import ./imageviews
 import ./textfields
 import ./comboboxes
+import ./boxview
 import ./events
 
 var trackedMouseDownButtonId {.threadvar.}: IDPtr
@@ -221,6 +222,8 @@ proc viewFill(view: NSView): Fill =
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSButton):
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+  if view.isKindOfClass(NSBox):
+    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSTextField):
     let textField = asRetainedType[NSTextField](view)
     let drawsBackground = textField.drawsBackground()
@@ -234,6 +237,8 @@ proc viewStrokeFill(view: NSView): Fill =
   if view.isKindOfClass(NSClipView):
     return nsColor(0.64, 0.70, 0.80, 1.0).solidFill()
   if view.isKindOfClass(NSButton):
+    return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+  if view.isKindOfClass(NSBox):
     return nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
   if view.isKindOfClass(NSTextField):
     if not drawsBg(view):
@@ -536,6 +541,16 @@ proc textBoxForView(view: NSView, box: NSRect): NSRect =
       max(box.size.width - 20.0, 0.0),
       max(box.size.height - 8.0, 0.0),
     )
+  if view.isKindOfClass(NSBox):
+    let boxView = asRetainedType[NSBox](view)
+    if boxView.isNil:
+      return box
+    var titleRect = boxView.titleRect()
+    if titleRect.size.width <= 0.0 or titleRect.size.height <= 0.0:
+      return nsRect(box.origin.x, box.origin.y, 0.0, 0.0)
+    titleRect.origin.x += 4.0
+    titleRect.size.width = max(titleRect.size.width - 4.0, 0.0)
+    return titleRect
 
   box
 
@@ -654,6 +669,21 @@ proc textLayoutForView(
       echo "[appkit] button layout runes=",
         fitted.layout.runes.len, " title=\"", title, "\"", suffix
 
+    return (true, fitted.layout)
+
+  if view.isKindOfClass(NSBox):
+    let boxView = asRetainedType[NSBox](view)
+    let title = $boxView.title()
+    if title.len == 0:
+      return (false, default(GlyphArrangement))
+    let fitted = fitSingleLineText(
+      title,
+      fs(appkitFont(DefaultLabelFontSize), nsColor(0.07, 0.07, 0.07, 1.0).toFigColor()),
+      FontHorizontal.Left,
+      box,
+    )
+    if fitted.text.len == 0:
+      return (false, default(GlyphArrangement))
     return (true, fitted.layout)
 
   (false, default(GlyphArrangement))
@@ -1039,6 +1069,14 @@ proc drawImageDecorationsForActiveView(imageView: NSImageView) =
     return
   addImageLayoutForActiveView(imageViewAsView)
 
+proc drawBoxDecorationsForActiveView(boxView: NSBox) =
+  if boxView.isNil:
+    return
+  let boxAsView = ownFromId[NSView](boxView.value)
+  if boxAsView.isNil:
+    return
+  addTextLayoutForActiveView(boxAsView)
+
 proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
   if view.isNil:
     return
@@ -1209,6 +1247,8 @@ proc addViewTree(
       drawTextFieldDecorationsForActiveView(asRetainedType[NSTextField](view))
     elif view.isKindOfClass(NSButton):
       drawButtonDecorationsForActiveView(asRetainedType[NSButton](view))
+    elif view.isKindOfClass(NSBox):
+      drawBoxDecorationsForActiveView(asRetainedType[NSBox](view))
     if view.isKindOfClass(NSImageView):
       drawImageDecorationsForActiveView(asRetainedType[NSImageView](view))
   finally:
