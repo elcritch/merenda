@@ -329,7 +329,7 @@ objcImpl:
     self.xRectsBeingRedrawn.setLen(0)
 
   method displayRectIgnoringOpacity*(
-      self: NSView, rect: NSRect, context {.kw("inContext").}: NSObject
+      self: NSView, rect: NSRect, context {.kw("inContext").}: NSGraphicsContext
   ) =
     discard context
     self.displayRectIgnoringOpacity(rect)

@@ -240,6 +240,8 @@ type
   NSFont* = object of NSObject
   NSFontDescriptor* = object of NSObject
   NSImage* = object of NSObject
+  NSBitmapImageRep* = object of NSObject
+  NSGraphicsContext* = object of NSObject
   NSTableColumn* = object of NSObject
   NSTableHeaderCell* = object of NSCell
   NSCursor* = object of NSObject
