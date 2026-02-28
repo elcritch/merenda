@@ -32,26 +32,28 @@ when isMainModule:
   label1.setBezeled(false)
   label1.setDrawsBackground(false)
   label1.setEditable(false)
+  label1.setStringValue(@ns"button1 clicked 0 times")
 
   var label2 = newTextField(50, 50, 200, 20, @ns"button2 clicked 0 times")
   label2.setBezeled(false)
   label2.setDrawsBackground(false)
   label2.setEditable(false)
+  label2.setStringValue(@ns"button2 clicked 0 times")
 
   button1.setOnClick(
     proc(sender: NSButton) =
+      if sender.isNil:
+        return
       inc button1Clicked
-      label1.setStringValue(
-        @ns($sender.title() & " clicked " & $button1Clicked & " times")
-      )
+      label1.setStringValue(@ns("button1 clicked " & $button1Clicked & " times"))
   )
 
   button2.setOnClick(
     proc(sender: NSButton) =
+      if sender.isNil:
+        return
       inc button2Clicked
-      label2.setStringValue(
-        @ns($sender.title() & " clicked " & $button2Clicked & " times")
-      )
+      label2.setStringValue(@ns("button2 clicked " & $button2Clicked & " times"))
   )
 
   root.addSubview(button1)

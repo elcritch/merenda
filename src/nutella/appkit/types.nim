@@ -126,6 +126,12 @@ type
   NSUsableScrollerParts* = int
 
 const
+  NSNoCellMask* = 0x00
+  NSContentsCellMask* = 0x01
+  NSPushInCellMask* = 0x02
+  NSChangeGrayCellMask* = 0x04
+  NSChangeBackgroundCellMask* = 0x08
+
   NSViewNotSizable* = 0
   NSViewMinXMargin* = 1
   NSViewWidthSizable* = 2
