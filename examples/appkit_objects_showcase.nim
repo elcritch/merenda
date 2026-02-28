@@ -1,10 +1,10 @@
 import std/[os, strutils]
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("NUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -40,7 +40,7 @@ when isMainModule:
     NSScrollView.frameSizeForContentSize(contentSize, true, true, NSLineBorder)
 
   var app = NSApp()
-  var window = newWindow(120, 100, 900, 620, "Nutella AppKit Object Showcase")
+  var window = newWindow(120, 100, 900, 620, "KNutella AppKit Object Showcase")
   var panel = NSPanel.new()
   panel.setTitle(@ns"Showcase Panel")
   panel.setFrameOrigin(1040.cfloat, 130.cfloat)
@@ -71,7 +71,7 @@ when isMainModule:
   var query = NSSearchField.new()
   query.setFrame(24.cfloat, 96.cfloat, 330.cfloat, 30.cfloat)
   query.setStringValue(@ns"appkit showcase")
-  query.setRecentsAutosaveName(@ns"nutella-showcase-recent-search")
+  query.setRecentsAutosaveName(@ns"knutella-showcase-recent-search")
   query.setRecentSearches(nsArray[NSString]([@ns"scroll view", @ns"cells", @ns"events"]))
   root.addSubview(query)
 
