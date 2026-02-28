@@ -26,8 +26,8 @@ For each control demo in `tests/widgets/controls/*.m`:
 Command pattern:
 
 ```sh
-clang -framework Cocoa tests/widgets/controls/<Control>.m -o /tmp/<control>_objc
-<ENV_TO_EXIT_QUICKLY>=1 /tmp/<control>_objc
+clang -framework Cocoa tests/widgets/controls/<Control>.m -o tests/widgets/controls/<Control>
+<ENV_TO_EXIT_QUICKLY>=1 tests/widgets/controls/<control>
 ```
 
 ### 2. Port demo structure 1:1
