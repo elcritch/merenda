@@ -1,6 +1,6 @@
 import std/unittest
-import nutella/objc
-import nutella/objc/ivar
+import knutella/objc
+import knutella/objc/ivar
 
 var fooBarPingCount = 0
 var hiddenPingCount = 0

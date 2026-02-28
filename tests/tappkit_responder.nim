@@ -1,7 +1,7 @@
 import std/unittest
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 import siwin/window as siwin
 
 var spyKeyDownCount = 0

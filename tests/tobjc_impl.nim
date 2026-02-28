@@ -1,6 +1,6 @@
 import std/unittest
-import nutella/objc
-import nutella/appkit/types
+import knutella/objc
+import knutella/appkit/types
 
 type RuntimePayloadObject = object of NSObject
 type RuntimeNimValuePayload = object

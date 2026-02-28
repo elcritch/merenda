@@ -1,7 +1,7 @@
 import std/unittest
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 var commitCallCount = 0
 var discardCallCount = 0

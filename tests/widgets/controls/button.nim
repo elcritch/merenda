@@ -1,7 +1,7 @@
 import std/[os, strutils]
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
   let raw = getEnv("NUTELLA_EXAMPLE_FRAMES").strip()

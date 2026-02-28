@@ -1,6 +1,6 @@
 import std/[math, unittest]
 
-import nutella/appkit
+import knutella/appkit
 
 proc asNSObject(value: NSString): NSObject =
   if value.isNil:

@@ -2,8 +2,8 @@ import std/unittest
 
 import siwin/window as siwin
 
-import nutella/appkit
-import nutella/objc
+import knutella/appkit
+import knutella/objc
 
 suite "appkit NSEvent":
   test "event masks and constants match header values":

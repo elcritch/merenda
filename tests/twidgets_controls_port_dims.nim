@@ -121,18 +121,18 @@ when defined(macosx):
   suite "widgets controls geometry parity":
     test "checkbox example roughly matches Cocoa dimensions":
       runCommandOrFail(
-        "clang -framework Cocoa tests/widgets/controls/CheckBox.m -o /tmp/nutella_checkbox_objc"
+        "clang -framework Cocoa tests/widgets/controls/CheckBox.m -o /tmp/knutella_checkbox_objc"
       )
       runCommandOrFail(
         "nim c --nimcache:/tmp/nimcache_test_checkbox tests/widgets/controls/checkbox.nim"
       )
       let objcOutput = runAndReadOutput(
-        "CHECKBOX_DUMP_LAYOUT_ONCE=1 /tmp/nutella_checkbox_objc",
-        "/tmp/nutella_checkbox_objc_dims.out",
+        "CHECKBOX_DUMP_LAYOUT_ONCE=1 /tmp/knutella_checkbox_objc",
+        "/tmp/knutella_checkbox_objc_dims.out",
       )
       let nimOutput = runAndReadOutput(
         "NUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/checkbox",
-        "/tmp/nutella_checkbox_nim_dims.out",
+        "/tmp/knutella_checkbox_nim_dims.out",
       )
       let objcDump = parseLayoutDump(objcOutput)
       let nimDump = parseLayoutDump(nimOutput)
@@ -144,18 +144,18 @@ when defined(macosx):
 
     test "label example roughly matches Cocoa dimensions":
       runCommandOrFail(
-        "clang -framework Cocoa tests/widgets/controls/Label.m -o /tmp/nutella_label_objc"
+        "clang -framework Cocoa tests/widgets/controls/Label.m -o /tmp/knutella_label_objc"
       )
       runCommandOrFail(
         "nim c --nimcache:/tmp/nimcache_test_label tests/widgets/controls/label.nim"
       )
       let objcOutput = runAndReadOutput(
-        "LABEL_DUMP_LAYOUT_ONCE=1 /tmp/nutella_label_objc",
-        "/tmp/nutella_label_objc_dims.out",
+        "LABEL_DUMP_LAYOUT_ONCE=1 /tmp/knutella_label_objc",
+        "/tmp/knutella_label_objc_dims.out",
       )
       let nimOutput = runAndReadOutput(
         "NUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/label",
-        "/tmp/nutella_label_nim_dims.out",
+        "/tmp/knutella_label_nim_dims.out",
       )
       let objcDump = parseLayoutDump(objcOutput)
       let nimDump = parseLayoutDump(nimOutput)
@@ -163,18 +163,18 @@ when defined(macosx):
 
     test "textbox example roughly matches Cocoa dimensions":
       runCommandOrFail(
-        "clang -framework Cocoa tests/widgets/controls/TextBox.m -o /tmp/nutella_textbox_objc"
+        "clang -framework Cocoa tests/widgets/controls/TextBox.m -o /tmp/knutella_textbox_objc"
       )
       runCommandOrFail(
         "nim c --nimcache:/tmp/nimcache_test_textbox tests/widgets/controls/textbox.nim"
       )
       let objcOutput = runAndReadOutput(
-        "TEXTBOX_DUMP_LAYOUT_ONCE=1 /tmp/nutella_textbox_objc",
-        "/tmp/nutella_textbox_objc_dims.out",
+        "TEXTBOX_DUMP_LAYOUT_ONCE=1 /tmp/knutella_textbox_objc",
+        "/tmp/knutella_textbox_objc_dims.out",
       )
       let nimOutput = runAndReadOutput(
         "NUTELLA_EXAMPLE_FRAMES=1 ./tests/widgets/controls/textbox",
-        "/tmp/nutella_textbox_nim_dims.out",
+        "/tmp/knutella_textbox_nim_dims.out",
       )
       let objcDump = parseLayoutDump(objcOutput)
       let nimDump = parseLayoutDump(nimOutput)
