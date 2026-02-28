@@ -6,7 +6,7 @@ This document captures the process used to port the Cocoa `Button` control demo 
 
 For each control demo in `tests/widgets/controls/*.m`:
 
-1. Port demo structure to Nim (`examples/` or test harness).
+1. Port demo structure to Nim (`tests/widgets/controls/` or test harness).
 2. Port missing AppKit APIs from `vendor/` into `src/nutella/appkit/*.nim`.
 3. Match Cocoa behavior and layout as closely as possible.
 4. Keep regression tests passing.
@@ -93,8 +93,8 @@ Use all three checks each iteration:
 Command pattern:
 
 ```sh
-nim c examples/<example>.nim
-NUTELLA_EXAMPLE_FRAMES=1 NUTELLA_APPKIT_DEBUG_RENDER=1 ./examples/<example>
+nim c tests/widgets/controls/<example>.nim
+NUTELLA_EXAMPLE_FRAMES=1 NUTELLA_APPKIT_DEBUG_RENDER=1 ./tests/widgets/controls//<example>
 nim c -r tests/tappkit_hello.nim
 ```
 
