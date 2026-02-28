@@ -245,20 +245,15 @@ proc fontWithDescriptor*(
     t: typedesc[NSFont], descriptor: NSFontDescriptor, size {.kw("size").}: float32
 ): NSFont =
   var pointSize = size
-  var requestedName = "System"
   if not descriptor.isNil:
     if pointSize <= 0.0:
       pointSize = descriptor.pointSize()
-    let descriptorNameObj = descriptor.objectForKey(NSFontNameAttribute)
-    if not descriptorNameObj.isNil and descriptorNameObj.isKindOfClass(NSString):
-      let descriptorName = ownFromId[NSString](descriptorNameObj.value)
-      if descriptorName.len > 0:
-        requestedName = $descriptorName
   if pointSize <= 0.0:
     pointSize = DefaultSystemFontSize
 
   var allocated = NSFont.alloc()
-  result = allocated.initWithName(ns(requestedName), pointSize)
+  # Keep descriptor-backed size semantics without relying on descriptor key object lifetime.
+  result = allocated.initWithName(ns("System"), pointSize)
   allocated.value = nil
 
 proc buildFontDescriptor(font: NSFont): NSFontDescriptor =

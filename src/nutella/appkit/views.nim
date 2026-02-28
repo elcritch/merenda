@@ -6,6 +6,43 @@ export responders
 proc isViewDescendantOf*(viewId: IDPtr, ancestorId: IDPtr): bool
 proc detachSubviews*(view: NSObject)
 
+proc rectMaxX(rect: NSRect): float32 {.inline.} =
+  rect.origin.x + rect.size.width
+
+proc rectMaxY(rect: NSRect): float32 {.inline.} =
+  rect.origin.y + rect.size.height
+
+proc rectIsEmpty(rect: NSRect): bool {.inline.} =
+  rect.size.width <= 0.0 or rect.size.height <= 0.0
+
+proc nsIntersectionRect(a: NSRect, b: NSRect): NSRect =
+  let x0 = max(a.origin.x, b.origin.x)
+  let y0 = max(a.origin.y, b.origin.y)
+  let x1 = min(rectMaxX(a), rectMaxX(b))
+  let y1 = min(rectMaxY(a), rectMaxY(b))
+  if x1 <= x0 or y1 <= y0:
+    return nsRect(0.0, 0.0, 0.0, 0.0)
+  nsRect(x0, y0, x1 - x0, y1 - y0)
+
+proc nsUnionRect(a: NSRect, b: NSRect): NSRect =
+  if rectIsEmpty(a):
+    return b
+  if rectIsEmpty(b):
+    return a
+  let x0 = min(a.origin.x, b.origin.x)
+  let y0 = min(a.origin.y, b.origin.y)
+  let x1 = max(rectMaxX(a), rectMaxX(b))
+  let y1 = max(rectMaxY(a), rectMaxY(b))
+  nsRect(x0, y0, x1 - x0, y1 - y0)
+
+proc nsContainsRect(outer: NSRect, inner: NSRect): bool {.inline.} =
+  not rectIsEmpty(inner) and inner.origin.x >= outer.origin.x and
+    inner.origin.y >= outer.origin.y and rectMaxX(inner) <= rectMaxX(outer) and
+    rectMaxY(inner) <= rectMaxY(outer)
+
+proc nsIntersectsRect(a: NSRect, b: NSRect): bool {.inline.} =
+  not rectIsEmpty(nsIntersectionRect(a, b))
+
 objcImpl:
   type NSView* = object of NSResponder
     viewFrame: NSRect
@@ -25,6 +62,8 @@ objcImpl:
     viewTag: int
     viewSubviews: seq[NSView]
     viewNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
+    xInvalidRects: seq[NSRect]
+    xRectsBeingRedrawn: seq[NSRect]
 
   method init*(self: var NSView): NSView =
     result = asTypeRaw[NSView](
@@ -60,6 +99,8 @@ objcImpl:
     result.viewTag = -1
     result.viewSubviews = @[]
     result.viewNeedsDisplay = true
+    result.xInvalidRects = @[]
+    result.xRectsBeingRedrawn = @[]
 
   method setFrame*(
       self: NSView,
@@ -78,6 +119,8 @@ objcImpl:
       max(height.float32, 0.0),
     )
     self.viewNeedsDisplay = true
+    self.xInvalidRects.setLen(0)
+    self.xRectsBeingRedrawn.setLen(0)
 
   method setBounds*(
       self: NSView,
@@ -89,6 +132,8 @@ objcImpl:
     self.viewBounds =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
     self.viewNeedsDisplay = true
+    self.xInvalidRects.setLen(0)
+    self.xRectsBeingRedrawn.setLen(0)
 
   method setBoundsOrigin*(self: NSView, point: NSPoint) =
     let oldBounds = self.viewBounds()
@@ -96,6 +141,8 @@ objcImpl:
       point.x, point.y, max(oldBounds.size.width, 0.0), max(oldBounds.size.height, 0.0)
     )
     self.viewNeedsDisplay = true
+    self.xInvalidRects.setLen(0)
+    self.xRectsBeingRedrawn.setLen(0)
 
   method setBoundsSize*(self: NSView, size: NSSize) =
     let oldBounds = self.viewBounds()
@@ -106,19 +153,233 @@ objcImpl:
       max(size.height, 0.0),
     )
     self.viewNeedsDisplay = true
+    self.xInvalidRects.setLen(0)
+    self.xRectsBeingRedrawn.setLen(0)
 
   method isFlipped*(self: NSView): bool =
     false
 
+  method isOpaque*(self: NSView): bool =
+    false
+
+  method visibleRect*(self: NSView): NSRect =
+    if self.isNil or self.viewHidden():
+      return nsRect(0.0, 0.0, 0.0, 0.0)
+    self.viewBounds()
+
+  method canDraw*(self: NSView): bool =
+    (not self.isNil) and (not self.viewHidden())
+
+  method viewWillDraw*(self: NSView) =
+    for child in self.viewSubviews():
+      if child.isNil:
+        continue
+      child.viewWillDraw()
+
+  method opaqueAncestor*(self: NSView): NSView =
+    if self.isNil:
+      return NSView(value: nil)
+    if self.isOpaque():
+      return retain(self)
+    let parent = self.viewSuperview()
+    if parent.isNil:
+      return retain(self)
+    parent.opaqueAncestor()
+
   method setNeedsDisplayInRect*(self: NSView, rect: NSRect) =
+    let visible = self.visibleRect()
+    let clipped = nsIntersectionRect(visible, rect)
+    if rectIsEmpty(clipped):
+      return
+    if nsContainsRect(clipped, visible):
+      self.xInvalidRects.setLen(0)
+    else:
+      self.xInvalidRects.add(clipped)
+    self.xRectsBeingRedrawn.setLen(0)
     self.viewNeedsDisplay = true
 
-  method displayIfNeeded*(self: NSView) =
-    if self.viewNeedsDisplay():
-      self.display()
-
   method display*(self: NSView) =
-    self.viewNeedsDisplay = false
+    self.displayRect(self.visibleRect())
+
+  method displayIfNeeded*(self: NSView) =
+    self.viewWillDraw()
+    if self.viewNeedsDisplay():
+      if self.xInvalidRects.len == 0:
+        self.displayRect(self.visibleRect())
+      else:
+        var dirty = self.xInvalidRects[0]
+        for i in 1 ..< self.xInvalidRects.len:
+          dirty = nsUnionRect(dirty, self.xInvalidRects[i])
+        self.displayRect(dirty)
+    for child in self.viewSubviews():
+      if child.isNil:
+        continue
+      child.displayIfNeeded()
+
+  method displayIfNeededInRect*(self: NSView, rect: NSRect) =
+    let clipped = nsIntersectionRect(rect, self.visibleRect())
+    if rectIsEmpty(clipped):
+      return
+    if self.viewNeedsDisplay():
+      self.displayRect(clipped)
+    for child in self.viewSubviews():
+      if child.isNil:
+        continue
+      let childFrame = child.viewFrame()
+      let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
+      if rectIsEmpty(childDirtyInParent):
+        continue
+      let childBounds = child.bounds()
+      let childDirty = nsRect(
+        childBounds.origin.x + (childDirtyInParent.origin.x - childFrame.origin.x),
+        childBounds.origin.y + (childDirtyInParent.origin.y - childFrame.origin.y),
+        childDirtyInParent.size.width,
+        childDirtyInParent.size.height,
+      )
+      child.displayIfNeededInRect(childDirty)
+
+  method displayIfNeededIgnoringOpacity*(self: NSView) =
+    if self.viewNeedsDisplay():
+      if self.xInvalidRects.len == 0:
+        self.displayRectIgnoringOpacity(self.visibleRect())
+      else:
+        var dirty = self.xInvalidRects[0]
+        for i in 1 ..< self.xInvalidRects.len:
+          dirty = nsUnionRect(dirty, self.xInvalidRects[i])
+        self.displayRectIgnoringOpacity(dirty)
+    for child in self.viewSubviews():
+      if child.isNil:
+        continue
+      child.displayIfNeededIgnoringOpacity()
+
+  method displayIfNeededInRectIgnoringOpacity*(self: NSView, rect: NSRect) =
+    let clipped = nsIntersectionRect(rect, self.visibleRect())
+    if rectIsEmpty(clipped):
+      return
+    if self.viewNeedsDisplay():
+      self.displayRectIgnoringOpacity(clipped)
+    for child in self.viewSubviews():
+      if child.isNil:
+        continue
+      let childFrame = child.viewFrame()
+      let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
+      if rectIsEmpty(childDirtyInParent):
+        continue
+      let childBounds = child.bounds()
+      let childDirty = nsRect(
+        childBounds.origin.x + (childDirtyInParent.origin.x - childFrame.origin.x),
+        childBounds.origin.y + (childDirtyInParent.origin.y - childFrame.origin.y),
+        childDirtyInParent.size.width,
+        childDirtyInParent.size.height,
+      )
+      child.displayIfNeededInRectIgnoringOpacity(childDirty)
+
+  method displayRect*(self: NSView, rect: NSRect) =
+    let opaque = self.opaqueAncestor()
+    if opaque.isNil or opaque.value == self.value:
+      self.displayRectIgnoringOpacity(rect)
+      return
+    opaque.displayRectIgnoringOpacity(opaque.visibleRect())
+
+  method displayRectIgnoringOpacity*(self: NSView, rect: NSRect) =
+    let visibleRect = self.visibleRect()
+    let clipped = nsIntersectionRect(rect, visibleRect)
+    if rectIsEmpty(clipped) or not self.canDraw():
+      return
+
+    self.xRectsBeingRedrawn.setLen(0)
+    if self.xInvalidRects.len == 0:
+      self.xRectsBeingRedrawn.add(clipped)
+    else:
+      for r in self.xInvalidRects:
+        let drawRect = nsIntersectionRect(r, visibleRect)
+        if rectIsEmpty(drawRect):
+          continue
+        self.xRectsBeingRedrawn.add(drawRect)
+      if self.xRectsBeingRedrawn.len == 0:
+        self.xRectsBeingRedrawn.add(clipped)
+
+    self.drawRect(clipped)
+
+    for child in self.viewSubviews():
+      if child.isNil or child.viewHidden():
+        continue
+      let childFrame = child.viewFrame()
+      let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
+      if rectIsEmpty(childDirtyInParent):
+        continue
+      let childBounds = child.bounds()
+      let childDirty = nsRect(
+        childBounds.origin.x + (childDirtyInParent.origin.x - childFrame.origin.x),
+        childBounds.origin.y + (childDirtyInParent.origin.y - childFrame.origin.y),
+        childDirtyInParent.size.width,
+        childDirtyInParent.size.height,
+      )
+      child.displayRectIgnoringOpacity(childDirty)
+
+    if self.xInvalidRects.len == 0:
+      self.viewNeedsDisplay = false
+    else:
+      var i = self.xInvalidRects.high
+      while i >= 0:
+        if nsContainsRect(clipped, self.xInvalidRects[i]):
+          self.xInvalidRects.del(i)
+        dec i
+      self.viewNeedsDisplay = self.xInvalidRects.len > 0
+    self.xRectsBeingRedrawn.setLen(0)
+
+  method displayRectIgnoringOpacity*(
+      self: NSView, rect: NSRect, context {.kw("inContext").}: NSObject
+  ) =
+    discard context
+    self.displayRectIgnoringOpacity(rect)
+
+  method getRectsBeingDrawn*(
+      self: NSView, rects: ptr ptr NSRect, count {.kw("count").}: ptr int
+  ) =
+    if rects.isNil or count.isNil:
+      return
+    if self.xRectsBeingRedrawn.len == 0:
+      if self.xInvalidRects.len == 0:
+        if self.viewNeedsDisplay():
+          self.xRectsBeingRedrawn = @[self.visibleRect()]
+      else:
+        self.xRectsBeingRedrawn = self.xInvalidRects
+    if self.xRectsBeingRedrawn.len == 0:
+      rects[] = nil
+      count[] = 0
+      return
+    rects[] = cast[ptr NSRect](unsafeAddr self.xRectsBeingRedrawn[0])
+    count[] = self.xRectsBeingRedrawn.len
+
+  method needsToDrawRect*(self: NSView, rect: NSRect): bool =
+    if not nsIntersectsRect(rect, self.visibleRect()):
+      return false
+    var rectsPtr: ptr NSRect = nil
+    var rectCount = 0
+    self.getRectsBeingDrawn(addr rectsPtr, addr rectCount)
+    if rectCount <= 0 or rectsPtr.isNil:
+      return false
+    let rects = cast[ptr UncheckedArray[NSRect]](rectsPtr)
+    for i in 0 ..< rectCount:
+      if nsIntersectsRect(rect, rects[i]):
+        return true
+    false
+
+  method drawRect*(self: NSView, rect: NSRect) =
+    discard self
+    discard rect
+    discard
+
+  method drawSheetBorderWithSize*(self: NSView, size: NSSize) =
+    discard self
+    discard size
+    discard
+
+  method drawPageBorderWithSize*(self: NSView, size: NSSize) =
+    discard self
+    discard size
+    discard
 
   method setBackgroundColor(
       self: NSView,
@@ -134,6 +395,8 @@ objcImpl:
 
   method dealloc(self: NSView) {.used.} =
     detachSubviews(self)
+    self.xInvalidRects.setLen(0)
+    self.xRectsBeingRedrawn.setLen(0)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSView, self, getSelector("dealloc"))
 

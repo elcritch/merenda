@@ -206,6 +206,44 @@ objcImpl:
       return
     self.setDoubleValue(sender.doubleValue())
 
+  method drawCell*(self: NSControl, cell: NSCell) =
+    if self.isNil or cell.isNil:
+      return
+    let selected = self.cell()
+    if selected.isNil or selected.value != cell.value:
+      return
+    selected.setControlView(asRetainedType[NSView](self))
+    selected.drawWithFrame(self.bounds(), asRetainedType[NSView](self))
+
+  method drawCellInside*(self: NSControl, cell: NSCell) =
+    if self.isNil or cell.isNil:
+      return
+    let selected = self.cell()
+    if selected.isNil or selected.value != cell.value:
+      return
+    selected.drawInteriorWithFrame(self.bounds(), asRetainedType[NSView](self))
+
+  method updateCell*(self: NSControl, cell: NSCell) =
+    if self.isNil or cell.isNil:
+      return
+    let selected = self.cell()
+    if selected.isNil or selected.value != cell.value:
+      return
+    self.setNeedsDisplay(true)
+
+  method updateCellInside*(self: NSControl, cell: NSCell) =
+    self.updateCell(cell)
+
+  method drawRect*(self: NSControl, rect: NSRect) =
+    discard rect
+    if self.isNil:
+      return
+    let selected = self.cell()
+    if selected.isNil:
+      return
+    selected.setControlView(asRetainedType[NSView](self))
+    selected.drawWithFrame(self.bounds(), asRetainedType[NSView](self))
+
   method performClick*(self: NSControl, sender: NSResponder) =
     discard
 
