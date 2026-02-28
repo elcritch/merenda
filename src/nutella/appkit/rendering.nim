@@ -80,7 +80,8 @@ const
 
 var activeRenders {.threadvar.}: ptr Renders
 var activeRenderParentIdx {.threadvar.}: FigIdx
-var activeRenderBox {.threadvar.}: NSRect
+var activeRenderLocalBox {.threadvar.}: NSRect
+var activeRenderScreenBox {.threadvar.}: NSRect
 var activeRenderContextActive {.threadvar.}: bool
 
 type ButtonBezelVisualKind = enum
@@ -952,7 +953,7 @@ proc hasActiveRenderContext(): bool =
 proc addTextLayoutForActiveView(view: NSView) =
   if not hasActiveRenderContext():
     return
-  let textBox = textBoxForView(view, activeRenderBox)
+  let textBox = textBoxForView(view, activeRenderLocalBox)
   let textLayout = textLayoutForView(view, textBox)
   if not textLayout.ok:
     return
@@ -973,7 +974,7 @@ proc addTextLayoutForActiveView(view: NSView) =
 proc addImageLayoutForActiveView(view: NSView) =
   if not hasActiveRenderContext():
     return
-  let imageLayout = imageLayoutForView(view, activeRenderBox)
+  let imageLayout = imageLayoutForView(view, activeRenderLocalBox)
   if not imageLayout.hasImage:
     return
   let imageFill = nsColor(1.0, 1.0, 1.0, 1.0).solidFill()
@@ -1000,7 +1001,7 @@ proc drawButtonDecorationsForActiveView(button: NSButton) =
     return
   if isSwitchButton(button):
     activeRenders[].addSwitchButtonIndicator(
-      activeRenderParentIdx, button, activeRenderBox
+      activeRenderParentIdx, button, activeRenderLocalBox
     )
   addTextLayoutForActiveView(buttonView)
 
@@ -1011,7 +1012,7 @@ proc drawTextFieldDecorationsForActiveView(textField: NSTextField) =
   if textFieldView.isNil:
     return
   addAquaGlossOverlay(
-    activeRenders[], activeRenderParentIdx, textFieldView, activeRenderBox
+    activeRenders[], activeRenderParentIdx, textFieldView, activeRenderLocalBox
   )
   addTextLayoutForActiveView(textFieldView)
 
@@ -1022,13 +1023,13 @@ proc drawComboBoxDecorationsForActiveView(comboBox: NSComboBox) =
   if comboView.isNil:
     return
   activeRenders[].addComboBoxAffordance(
-    activeRenderParentIdx, comboBox, activeRenderBox
+    activeRenderParentIdx, comboBox, activeRenderLocalBox
   )
   addAquaGlossOverlay(
-    activeRenders[], activeRenderParentIdx, comboView, activeRenderBox
+    activeRenders[], activeRenderParentIdx, comboView, activeRenderLocalBox
   )
   addTextLayoutForActiveView(comboView)
-  activeRenders[].addComboBoxPopup(comboBox, activeRenderBox)
+  activeRenders[].addComboBoxPopup(comboBox, activeRenderScreenBox)
 
 proc drawImageDecorationsForActiveView(imageView: NSImageView) =
   if imageView.isNil:
@@ -1061,6 +1062,26 @@ proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
   else:
     result.textBounds =
       nsRect(result.textBox.origin.x, result.textBox.origin.y, 0.0, 0.0)
+
+proc viewLocalToScreenTransform(
+    view: NSView, screenBox: NSRect, localBounds: NSRect
+): TransformStyle =
+  if view.isFlipped():
+    return TransformStyle(
+      translation: vec2(
+        screenBox.origin.x - localBounds.origin.x,
+        screenBox.origin.y - localBounds.origin.y,
+      ),
+      useMatrix: false,
+    )
+  TransformStyle(
+    translation: vec2(
+      screenBox.origin.x - localBounds.origin.x,
+      screenBox.origin.y + screenBox.size.height + localBounds.origin.y,
+    ),
+    matrix: scale(vec3(1.0'f32, -1.0'f32, 1.0'f32)),
+    useMatrix: true,
+  )
 
 proc addViewTree(
   renders: var Renders,
@@ -1122,6 +1143,13 @@ proc addViewTree(
   )
   if box.size.width <= 0 or box.size.height <= 0:
     return
+  var localBox = view.bounds()
+  localBox.size.width = max(localBox.size.width, 0.0)
+  localBox.size.height = max(localBox.size.height, 0.0)
+  if localBox.size.width <= 0.0:
+    localBox.size.width = box.size.width
+  if localBox.size.height <= 0.0:
+    localBox.size.height = box.size.height
 
   let fig = Fig(
     kind: nkRectangle,
@@ -1144,17 +1172,28 @@ proc addViewTree(
       renders.addChild(0.ZLevel, parentIdx, fig)
     else:
       renders.addRoot(0.ZLevel, fig)
+  let drawTransformIdx = renders.addChild(
+    0.ZLevel,
+    idx,
+    Fig(
+      kind: nkTransform,
+      childCount: 0,
+      transform: viewLocalToScreenTransform(view, box, localBox),
+    ),
+  )
 
   let previousRenders = activeRenders
   let previousParentIdx = activeRenderParentIdx
-  let previousBox = activeRenderBox
+  let previousLocalBox = activeRenderLocalBox
+  let previousScreenBox = activeRenderScreenBox
   let previousContextActive = activeRenderContextActive
   activeRenders = addr renders
-  activeRenderParentIdx = idx
-  activeRenderBox = box
+  activeRenderParentIdx = drawTransformIdx
+  activeRenderLocalBox = localBox
+  activeRenderScreenBox = box
   activeRenderContextActive = true
   var renderPort = RenderGraphicsPort(
-    renders: addr renders, parentIdx: idx, drawBox: box
+    renders: addr renders, parentIdx: drawTransformIdx, drawBox: localBox
   )
   let renderGraphicsContext = NSGraphicsContext.graphicsContextWithGraphicsPort(
     cast[pointer](addr renderPort), view.isFlipped()
@@ -1177,7 +1216,8 @@ proc addViewTree(
     NSGraphicsContext.restoreGraphicsState()
   activeRenders = previousRenders
   activeRenderParentIdx = previousParentIdx
-  activeRenderBox = previousBox
+  activeRenderLocalBox = previousLocalBox
+  activeRenderScreenBox = previousScreenBox
   activeRenderContextActive = previousContextActive
 
   for child in view.viewSubviews():

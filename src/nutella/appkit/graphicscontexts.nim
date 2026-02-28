@@ -60,18 +60,10 @@ proc currentRenderGraphicsPort(): ptr RenderGraphicsPort =
     return nil
   cast[ptr RenderGraphicsPort](port)
 
-proc localDrawRectToScreenRect(
-    localRect: NSRect, box: NSRect, flipped: bool
-): NSRect =
+proc normalizeLocalDrawRect(localRect: NSRect): NSRect =
   let width = max(localRect.size.width, 0.0)
   let height = max(localRect.size.height, 0.0)
-  let x = box.origin.x + localRect.origin.x
-  let y =
-    if flipped:
-      box.origin.y + localRect.origin.y
-    else:
-      box.origin.y + box.size.height - localRect.origin.y - height
-  nsRect(x, y, width, height)
+  nsRect(localRect.origin.x, localRect.origin.y, width, height)
 
 proc sendId(obj: IDPtr, op: SEL): IDPtr {.inline.} =
   if obj.isNil or cast[pointer](op).isNil:
@@ -431,14 +423,8 @@ proc addRectFillToCurrentRenderContext*(
   let renderPort = currentRenderGraphicsPort()
   if renderPort.isNil or renderPort.renders.isNil:
     return false
-  let context = currentGraphicsContext()
-  let flipped =
-    if context.isNil:
-      false
-    else:
-      context.isFlipped()
-  let screenRect = localDrawRectToScreenRect(localRect, renderPort.drawBox, flipped)
-  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
+  let drawRect = normalizeLocalDrawRect(localRect)
+  if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
     return false
   let drawColor =
     if operation == NSCompositeClear:
@@ -452,8 +438,7 @@ proc addRectFillToCurrentRenderContext*(
       kind: nkRectangle,
       childCount: 0,
       screenBox: rect(
-        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
-        screenRect.size.height,
+        drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
       ),
       fill: drawColor.solidFill(),
       corners: uniformCorners(0.0),
@@ -474,14 +459,8 @@ proc addRectFrameToCurrentRenderContext*(
   let renderPort = currentRenderGraphicsPort()
   if renderPort.isNil or renderPort.renders.isNil:
     return false
-  let context = currentGraphicsContext()
-  let flipped =
-    if context.isNil:
-      false
-    else:
-      context.isFlipped()
-  let screenRect = localDrawRectToScreenRect(localRect, renderPort.drawBox, flipped)
-  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
+  let drawRect = normalizeLocalDrawRect(localRect)
+  if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
     return false
   let drawColor =
     if operation == NSCompositeClear:
@@ -495,8 +474,7 @@ proc addRectFrameToCurrentRenderContext*(
       kind: nkRectangle,
       childCount: 0,
       screenBox: rect(
-        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
-        screenRect.size.height,
+        drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
       ),
       fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
       corners: uniformCorners(0.0),
