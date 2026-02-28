@@ -5,6 +5,7 @@ import pkg/pixie
 import figdraw/commons
 
 import ./runtime
+import ./graphicscontexts
 
 type PixieImage = pixie.Image
 
@@ -117,7 +118,17 @@ objcImpl:
       operation {.kw("operation").}: int,
       fraction {.kw("fraction").}: float32,
   ) =
-    discard
+    if self.isNil:
+      return
+    let drawSize = self.size()
+    if drawSize.width <= 0.0 or drawSize.height <= 0.0:
+      return
+    self.drawInRect(
+      nsRect(point.x, point.y, drawSize.width, drawSize.height),
+      source,
+      operation,
+      fraction,
+    )
 
   method drawInRect*(
       self: NSImage,
@@ -126,7 +137,19 @@ objcImpl:
       operation {.kw("operation").}: int,
       fraction {.kw("fraction").}: float32,
   ) =
-    discard
+    discard source
+    if self.isNil or not self.isValid():
+      return
+    if rect.size.width <= 0.0 or rect.size.height <= 0.0:
+      return
+    if self.imageId().int == 0:
+      return
+    discard addImageToCurrentRenderContext(
+      rect,
+      self.imageId(),
+      fraction = fraction,
+      operation = NSCompositingOperation(operation),
+    )
 
   method dealloc(self: NSImage) {.used.} =
     self.xName = NSString(value: nil)

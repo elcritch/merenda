@@ -768,6 +768,13 @@ objcImpl:
     self.attributedTitle()
 
   method imageForHighlight*(self: NSButtonCell): NSImage =
+    if self.bezelStyle() == NSDisclosureBezelStyle.int:
+      if hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted():
+        return NSImage.imageNamed(@ns"NSButtonCell_disclosure_highlighted")
+      elif boolState(self.state()):
+        return NSImage.imageNamed(@ns"NSButtonCell_disclosure_selected")
+      return NSImage.imageNamed(@ns"NSButtonCell_disclosure_normal")
+
     if (
       (hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted()) or
       (hasMask(self.showsStateBy(), NSContentsCellMask) and boolState(self.state()))
@@ -789,9 +796,24 @@ objcImpl:
       (hasMask(self.showsStateBy(), NSChangeGrayCellMask) and boolState(self.state()))
 
   method getControlSizeAdjustment*(self: NSButtonCell, flipped: bool): NSRect =
-    discard self
-    discard flipped
-    nsRect(0.0, 0.0, 0.0, 0.0)
+    result = nsRect(0.0, 0.0, 0.0, 0.0)
+    if (
+      self.bezelStyle() == NSRoundedBezelStyle.int and
+      hasMask(self.highlightsBy(), NSPushInCellMask) and
+      hasMask(self.highlightsBy(), NSChangeGrayCellMask) and
+      self.showsStateBy() == NSNoCellMask
+    ):
+      let controlSize = self.controlSize().int
+      if self.controlSize() != NSMiniControlSize:
+        result.size.width = (10 - controlSize * 2).float32
+        result.size.height = (10 - controlSize * 2).float32
+        result.origin.x = (5 - controlSize).float32
+        result.origin.y = (
+          if flipped:
+            controlSize * 2 - 3
+          else:
+            7 - controlSize * 2
+        ).float32
 
   method titleRectForBounds*(self: NSButtonCell, rect: NSRect): NSRect =
     if self.isBordered() or self.isBezeled():
@@ -803,15 +825,27 @@ objcImpl:
   ) =
     if controlView.isNil:
       return
-    let adjustment = self.getControlSizeAdjustment(false)
+    let contextFlipped =
+      if NSGraphicsContext.currentContext().isNil:
+        false
+      else:
+        NSGraphicsContext.currentContext().isFlipped()
+    let adjustment = self.getControlSizeAdjustment(contextFlipped)
     var drawFrame = frame
     drawFrame.size.width = max(drawFrame.size.width - adjustment.size.width, 0.0)
     drawFrame.size.height = max(drawFrame.size.height - adjustment.size.height, 0.0)
     drawFrame.origin.x += adjustment.origin.x
     drawFrame.origin.y += adjustment.origin.y
-    if self.isTransparent() or not self.isBordered():
+
+    if self.isTransparent():
       return
-    if self.bezelStyle() == NSRegularSquareBezelStyle.int:
+
+    case self.bezelStyle()
+    of NSDisclosureBezelStyle.int:
+      discard
+    of NSRegularSquareBezelStyle.int:
+      if not self.isBordered():
+        return
       var top = drawFrame
       var bottom = drawFrame
       top.size.height = floor(drawFrame.size.height * 0.5)
@@ -835,12 +869,59 @@ objcImpl:
       NSRectFill(bottom)
       setCurrentStrokeColor(nsColor(0.83, 0.83, 0.83, 1.0))
       NSFrameRectWithWidth(drawFrame, 1.0)
-      return
-
-    if self.isVisuallyHighlighted():
-      NSDrawGrayBezel(drawFrame, drawFrame)
+    of NSTexturedSquareBezelStyle.int, NSTexturedRoundedBezelStyle.int,
+        NSShadowlessSquareBezelStyle.int:
+      if not self.isBordered():
+        return
+      let highlighted = self.isHighlighted()
+      let pressed =
+        boolState(self.state()) and
+        hasMask(self.showsStateBy(), NSChangeBackgroundCellMask)
+      let topGray = if pressed: 0.40 else: 0.98
+      let bottomGray = if pressed: 0.30 else: 0.76
+      var topHalf = drawFrame
+      var bottomHalf = drawFrame
+      topHalf.size.height = floor(drawFrame.size.height * 0.5)
+      bottomHalf.size.height = drawFrame.size.height - topHalf.size.height
+      if contextFlipped:
+        bottomHalf.origin.y += topHalf.size.height
+      else:
+        topHalf.origin.y += bottomHalf.size.height
+      setCurrentFillColor(nsColor(topGray, topGray, topGray, 1.0))
+      NSRectFill(topHalf)
+      setCurrentFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
+      NSRectFill(bottomHalf)
+      setCurrentStrokeColor(nsColor(0.4, 0.4, 0.4, 1.0))
+      NSFrameRectWithWidth(drawFrame, 1.0)
+      if highlighted:
+        setCurrentFillColor(nsColor(0.0, 0.0, 0.0, 0.15))
+        NSRectFill(insetRect(drawFrame, 1.0, 1.0))
+    of NSRecessedBezelStyle.int:
+      if self.isBordered() and self.isVisuallyHighlighted():
+        var recessed = drawFrame
+        recessed.size.height = max(recessed.size.height - 1.0, 0.0)
+        if contextFlipped:
+          recessed.origin.y += 1.0
+        setCurrentFillColor(nsColor(0.83, 0.83, 0.83, 1.0))
+        NSDrawWhiteBezel(recessed, recessed)
+        if contextFlipped:
+          recessed.origin.y -= 1.0
+        else:
+          recessed.origin.y += 1.0
+        setCurrentFillColor(nsColor(0.33, 0.33, 0.33, 1.0))
+        NSDrawGrayBezel(recessed, recessed)
     else:
-      NSDrawButton(drawFrame, drawFrame)
+      if not self.isBordered():
+        if self.isVisuallyHighlighted():
+          setCurrentFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
+          NSRectFill(drawFrame)
+      else:
+        if hasMask(self.highlightsBy(), NSPushInCellMask) and self.isHighlighted():
+          NSDrawGrayBezel(drawFrame, drawFrame)
+        elif self.isVisuallyHighlighted():
+          NSDrawGrayBezel(drawFrame, drawFrame)
+        else:
+          NSDrawButton(drawFrame, drawFrame)
 
   method drawImage*(
       self: NSButtonCell,
@@ -885,7 +966,9 @@ objcImpl:
 
     let image = self.imageForHighlight()
     let title = self.titleForHighlight()
-    let imagePosition = self.imagePosition()
+    var imagePosition = self.imagePosition()
+    if self.bezelStyle() == NSDisclosureBezelStyle.int:
+      imagePosition = NSImageOnly
     var imageRect = self.imageRectForBounds(contentFrame)
     var titleRect = self.titleRectForBounds(contentFrame)
 
@@ -961,8 +1044,11 @@ objcImpl:
         setCurrentFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
         NSRectFill(contentFrame)
 
-    if self.isBordered() and hasMask(self.highlightsBy(), NSPushInCellMask) and
-        self.isHighlighted():
+    let isTextured =
+      self.bezelStyle() in
+      [NSTexturedSquareBezelStyle.int, NSTexturedRoundedBezelStyle.int]
+    if self.isBordered() and (not isTextured) and
+        hasMask(self.highlightsBy(), NSPushInCellMask) and self.isHighlighted():
       imageRect.origin.x += 1.0
       titleRect.origin.x += 1.0
       let flipped =
@@ -985,9 +1071,9 @@ objcImpl:
   method drawWithFrame*(
       self: NSButtonCell, frame: NSRect, control {.kw("inView").}: NSView
   ) =
+    self.setControlView(control)
     if self.isTransparent():
       return
-    self.setControlView(control)
     self.drawBezelWithFrame(frame, control)
     self.drawInteriorWithFrame(frame, control)
 

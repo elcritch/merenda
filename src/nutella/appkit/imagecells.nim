@@ -1,6 +1,8 @@
 import ./runtime
 import ./cells
 import ./images
+import ./graphics
+import ./colors
 
 proc scaledImageSizeInFrameSize(
     imageSize: NSSize, frameSize: NSSize, scaling: int
@@ -87,14 +89,59 @@ objcImpl:
   method drawInteriorWithFrame*(
       self: NSImageCell, controlFrame: NSRect, control {.kw("inView").}: NSView
   ) =
-    discard
+    discard control
+    let image = imageValue(self)
+    if image.isNil:
+      return
+    let drawInRect = self.imageRectForBounds(controlFrame)
+    if drawInRect.size.width <= 0.0 or drawInRect.size.height <= 0.0:
+      return
+    image.drawInRect(
+      drawInRect, nsRect(0.0, 0.0, 0.0, 0.0), NSCompositeSourceOver.int, 1.0
+    )
 
   method drawWithFrame*(
       self: NSImageCell, frame: NSRect, control {.kw("inView").}: NSView
   ) =
     var inner = frame
     case self.xFrameStyle
-    of NSImageFramePhoto, NSImageFrameGrayBezel, NSImageFrameGroove, NSImageFrameButton:
+    of NSImageFramePhoto:
+      var shadow = frame
+      shadow.size.height = max(shadow.size.height - 1.0, 0.0)
+      shadow.size.width = max(shadow.size.width - 1.0, 0.0)
+      shadow.origin.x += 1.0
+      NSColor.darkGrayColor().setFill()
+      NSRectFillUsingOperation(shadow, NSCompositeSourceOver)
+
+      shadow.origin.x -= 1.0
+      shadow.origin.y += 1.0
+      NSColor.whiteColor().setFill()
+      NSRectFillUsingOperation(shadow, NSCompositeCopy)
+
+      inner = nsRect(
+        frame.origin.x + 2.0,
+        frame.origin.y + 2.0,
+        max(frame.size.width - 4.0, 0.0),
+        max(frame.size.height - 4.0, 0.0),
+      )
+    of NSImageFrameGrayBezel:
+      NSDrawGrayBezel(frame, frame)
+      inner = nsRect(
+        frame.origin.x + 2.0,
+        frame.origin.y + 2.0,
+        max(frame.size.width - 4.0, 0.0),
+        max(frame.size.height - 4.0, 0.0),
+      )
+    of NSImageFrameGroove:
+      NSDrawGroove(frame, frame)
+      inner = nsRect(
+        frame.origin.x + 2.0,
+        frame.origin.y + 2.0,
+        max(frame.size.width - 4.0, 0.0),
+        max(frame.size.height - 4.0, 0.0),
+      )
+    of NSImageFrameButton:
+      NSDrawButton(frame, frame)
       inner = nsRect(
         frame.origin.x + 2.0,
         frame.origin.y + 2.0,

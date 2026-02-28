@@ -1,5 +1,16 @@
 import ./runtime
 import ./controls
+import ./graphics
+import ./colors
+import ./attributedstrings
+
+proc insetRect(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
+  nsRect(
+    rect.origin.x + dx,
+    rect.origin.y + dy,
+    max(rect.size.width - dx * 2.0, 0.0),
+    max(rect.size.height - dy * 2.0, 0.0),
+  )
 
 objcImpl:
   type NSTextField* = object of NSControl
@@ -75,6 +86,38 @@ objcImpl:
 
   method setTitleWithMnemonic*(self: NSTextField, value: NSString) =
     self.setStringValue(stripMnemonicMarkers(value))
+
+  method drawRect*(self: NSTextField, rect: NSRect) =
+    discard rect
+    if self.isNil:
+      return
+    let bounds = self.bounds()
+    var textRect =
+      if self.isBezeled():
+        insetRect(bounds, 3.0, 3.0)
+      elif self.isBordered():
+        insetRect(bounds, 2.0, 2.0)
+      else:
+        insetRect(bounds, 2.0, 0.0)
+    var valueRect = textRect
+
+    if self.isBezeled():
+      NSDrawWhiteBezel(bounds, bounds)
+      valueRect = insetRect(valueRect, -1.0, -1.0)
+    elif self.isBordered():
+      NSFrameRect(bounds)
+      valueRect = insetRect(valueRect, -1.0, -1.0)
+
+    if self.drawsBackground():
+      self.backgroundColor().setFill()
+      NSRectFill(valueRect)
+
+    var drawValueAlloc = NSAttributedString.alloc()
+    let drawValue = drawValueAlloc.initWithString(self.stringValue())
+    drawValueAlloc.value = nil
+    if drawValue.isNil:
+      return
+    drawValue.drawInRect(textRect)
 
   method dealloc(self: NSTextField) {.used.} =
     self.xPreviousText = nil

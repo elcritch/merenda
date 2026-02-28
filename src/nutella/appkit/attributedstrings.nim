@@ -1,6 +1,11 @@
 import std/[hashes, strutils, unicode]
 
+import figdraw/commons
+import figdraw/common/fonttypes
+
 import ./runtime
+import ./graphicscontexts
+import ./fonts
 
 type NSAttributeRun = object
   location: int
@@ -128,6 +133,147 @@ proc attachmentMarkerString(): NSString =
 
 proc isAlnumAscii(ch: char): bool {.inline.} =
   (ch >= '0' and ch <= '9') or (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z')
+
+proc NSFontAttributeInDictionary*(
+  dictionary: NSDictionary[NSObject, NSObject]
+): NSObject
+
+proc NSForegroundColorAttributeInDictionary*(
+  dictionary: NSDictionary[NSObject, NSObject]
+): NSObject
+
+proc sendInt(obj: IDPtr, op: SEL): int {.inline.} =
+  if obj.isNil or cast[pointer](op).isNil:
+    return 0
+  cast[proc(self: IDPtr, op: SEL): int {.cdecl, varargs.}](objc_msgSend)(obj, op)
+
+proc sendBool(obj: IDPtr, op: SEL): bool {.inline.} =
+  if obj.isNil or cast[pointer](op).isNil:
+    return false
+  cast[proc(self: IDPtr, op: SEL): bool {.cdecl, varargs.}](objc_msgSend)(obj, op)
+
+proc sendId(obj: IDPtr, op: SEL): IDPtr {.inline.} =
+  if obj.isNil or cast[pointer](op).isNil:
+    return nil
+  cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(obj, op)
+
+proc textLayoutBounds(
+    layout: GlyphArrangement
+): tuple[ok: bool, minX: float32, minY: float32, maxX: float32, maxY: float32] =
+  var found = false
+  var minX = 0.0'f32
+  var minY = 0.0'f32
+  var maxX = 0.0'f32
+  var maxY = 0.0'f32
+  for r in layout.selectionRects:
+    if r.w <= 0 or r.h <= 0:
+      continue
+    if not found:
+      minX = r.x
+      minY = r.y
+      maxX = r.x + r.w
+      maxY = r.y + r.h
+      found = true
+      continue
+    minX = min(minX, r.x)
+    minY = min(minY, r.y)
+    maxX = max(maxX, r.x + r.w)
+    maxY = max(maxY, r.y + r.h)
+  if not found:
+    return (false, 0.0'f32, 0.0'f32, 0.0'f32, 0.0'f32)
+  (true, minX, minY, maxX, maxY)
+
+proc layoutFitsTextBox(
+    layout: GlyphArrangement, box: NSRect, epsilon = 0.75'f32
+): bool =
+  let bounds = textLayoutBounds(layout)
+  if not bounds.ok:
+    return true
+  bounds.minX >= -epsilon and bounds.minY >= -epsilon and
+    bounds.maxX <= box.size.width + epsilon and bounds.maxY <= box.size.height + epsilon
+
+proc singleLineLayout(
+    text: string, style: FontStyle, textAlign: FontHorizontal, box: NSRect
+): GlyphArrangement =
+  let spans = [(style, text)]
+  typeset(
+    rect(0, 0, max(box.size.width, 1.0), max(box.size.height, 1.0)),
+    spans,
+    hAlign = textAlign,
+    vAlign = FontVertical.Middle,
+    minContent = false,
+    wrap = false,
+  )
+
+proc singleLineTextCandidate(runes: seq[Rune], keep: int): string =
+  result = newStringOfCap(keep + 3)
+  for i in 0 ..< keep:
+    result.add($runes[i])
+  if keep < runes.len:
+    result.add("...")
+
+proc fitSingleLineText(
+    text: string, style: FontStyle, textAlign: FontHorizontal, box: NSRect
+): tuple[text: string, layout: GlyphArrangement] =
+  let layout = singleLineLayout(text, style, textAlign, box)
+  if layoutFitsTextBox(layout, box):
+    return (text, layout)
+
+  var runes: seq[Rune] = @[]
+  for rune in text.runes:
+    runes.add(rune)
+  if runes.len == 0:
+    return ("", default(GlyphArrangement))
+
+  var low = 0
+  var high = runes.len
+  var bestText = ""
+  var bestLayout = default(GlyphArrangement)
+  while low <= high:
+    let keep = (low + high) div 2
+    let candidate = singleLineTextCandidate(runes, keep)
+    let candidateLayout = singleLineLayout(candidate, style, textAlign, box)
+    if layoutFitsTextBox(candidateLayout, box):
+      bestText = candidate
+      bestLayout = candidateLayout
+      low = keep + 1
+    else:
+      high = keep - 1
+  if bestText.len == 0:
+    return (text, layout)
+  (bestText, bestLayout)
+
+proc currentFocusObject(): NSObject =
+  let stack = NSCurrentFocusStack()
+  if stack.isNil or stack.len <= 0:
+    return NSObject(value: nil)
+  let focusObj = stack[stack.len - 1]
+  if focusObj.isNil:
+    return NSObject(value: nil)
+  focusObj
+
+proc focusAlignment(): FontHorizontal =
+  let focusObj = currentFocusObject()
+  if focusObj.isNil:
+    return FontHorizontal.Left
+  let alignmentSelector = getSelector("alignment")
+  if cast[pointer](alignmentSelector).isNil:
+    return FontHorizontal.Left
+  if not focusObj.respondsToSelector("alignment"):
+    return FontHorizontal.Left
+  toFontHorizontal(NSTextAlignment(sendInt(focusObj.value, alignmentSelector)))
+
+proc fontAndColorForAttributes(
+    attributes: NSDictionary[NSObject, NSObject]
+): tuple[fontSize: float32, color: NSColor] =
+  discard attributes
+  (13.0'f32, nsColor(0.08, 0.08, 0.08, 1.0))
+
+proc textStyleForAttributes(attributes: NSDictionary[NSObject, NSObject]): FontStyle =
+  if not ensureAppKitFont():
+    return default(FontStyle)
+  let visual = fontAndColorForAttributes(attributes)
+  fs(appkitFont(visual.fontSize), visual.color.toFigColor())
 
 objcImpl:
   type NSAttributedString* = object of NSObject
@@ -675,23 +821,112 @@ objcImpl:
     NSObject(value: nil)
 
   method drawAtPoint*(self: NSAttributedString, point: NSPoint) =
-    discard
+    if self.isNil:
+      return
+    let drawSize = self.size()
+    if drawSize.width <= 0.0 or drawSize.height <= 0.0:
+      return
+    self.drawInRect(nsRect(point.x, point.y, drawSize.width, drawSize.height))
 
   method drawInRect*(self: NSAttributedString, rect: NSRect) =
-    discard
+    if self.isNil:
+      return
+    let text = $self.string()
+    if text.len == 0:
+      return
+    var drawRect = rect
+    if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
+      let naturalSize = self.size()
+      drawRect.size.width = max(naturalSize.width, 0.0)
+      drawRect.size.height = max(naturalSize.height, 0.0)
+      if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
+        return
+    let attrs =
+      if self.length() > 0:
+        self.attributesAtIndex(0, nil)
+      else:
+        emptyAttributesDict()
+    let style = textStyleForAttributes(attrs)
+    if style.font.typefaceId.int == 0:
+      return
+    let fitted = fitSingleLineText(text, style, focusAlignment(), drawRect)
+    if fitted.text.len == 0:
+      return
+    discard addTextLayoutToCurrentRenderContext(drawRect, fitted.layout)
 
   method drawWithRect*(
       self: NSAttributedString, rect: NSRect, options {.kw("options").}: int
   ) =
-    discard
+    discard options
+    self.drawInRect(rect)
 
   method size*(self: NSAttributedString): NSSize =
-    nsSize(self.length().float32, 1.0)
+    if self.isNil:
+      return nsSize(0.0, 0.0)
+    let text = $self.string()
+    if text.len == 0:
+      return nsSize(0.0, 0.0)
+    if not ensureAppKitFont():
+      return nsSize(text.runeLen.float32, 1.0)
+    let attrs =
+      if self.length() > 0:
+        self.attributesAtIndex(0, nil)
+      else:
+        emptyAttributesDict()
+    let style = textStyleForAttributes(attrs)
+    if style.font.typefaceId.int == 0:
+      return nsSize(text.runeLen.float32, 1.0)
+    let spans = [(style, text)]
+    let layout = typeset(
+      rect(0.0, 0.0, 1_000_000.0, 1_000_000.0),
+      spans,
+      hAlign = FontHorizontal.Left,
+      vAlign = FontVertical.Top,
+      minContent = false,
+      wrap = false,
+    )
+    let bounds = textLayoutBounds(layout)
+    if not bounds.ok:
+      return nsSize(0.0, max(style.font.size, 1.0))
+    nsSize(max(bounds.maxX - bounds.minX, 0.0), max(bounds.maxY - bounds.minY, 0.0))
 
   method boundingRectWithSize*(
       self: NSAttributedString, size: NSSize, options {.kw("options").}: int
   ): NSRect =
-    nsRect(0, 0, size.width, size.height)
+    discard options
+    if self.isNil:
+      return nsRect(0.0, 0.0, 0.0, 0.0)
+    let text = $self.string()
+    if text.len == 0:
+      return nsRect(0.0, 0.0, 0.0, 0.0)
+    if not ensureAppKitFont():
+      return nsRect(0.0, 0.0, size.width, size.height)
+    let attrs =
+      if self.length() > 0:
+        self.attributesAtIndex(0, nil)
+      else:
+        emptyAttributesDict()
+    let style = textStyleForAttributes(attrs)
+    if style.font.typefaceId.int == 0:
+      return nsRect(0.0, 0.0, size.width, size.height)
+    let spans = [(style, text)]
+    let layout = typeset(
+      rect(0.0, 0.0, max(size.width, 1.0), max(size.height, 1.0)),
+      spans,
+      hAlign = FontHorizontal.Left,
+      vAlign = FontVertical.Top,
+      minContent = false,
+      wrap = false,
+    )
+    let bounds = textLayoutBounds(layout)
+    if not bounds.ok:
+      return nsRect(0.0, 0.0, 0.0, 0.0)
+    nsRect(
+      0.0,
+      0.0,
+      min(max(bounds.maxX - bounds.minX, 0.0), max(size.width, 0.0)),
+      min(max(bounds.maxY - bounds.minY, 0.0), max(size.height, 0.0)),
+    )
 
   method textTypes*(self: typedesc[NSAttributedString]): NSArray[NSObject] =
     nsArray[NSObject]()
