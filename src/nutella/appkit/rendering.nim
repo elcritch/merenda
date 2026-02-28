@@ -6,6 +6,7 @@ import figdraw/figrender as figrender
 import figdraw/windowing/siwinshim as siwinshim
 
 import ./runtime
+import ./graphicscontexts
 import ./views
 import ./windows
 import ./clipviews
@@ -1013,6 +1014,102 @@ proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
 proc hasActiveRenderContext(): bool =
   activeRenderContextActive and (not activeRenders.isNil)
 
+proc localDrawRectToScreenRect(localRect: NSRect, flipped: bool): NSRect =
+  let width = max(localRect.size.width, 0.0)
+  let height = max(localRect.size.height, 0.0)
+  let x = activeRenderBox.origin.x + localRect.origin.x
+  let y =
+    if flipped:
+      activeRenderBox.origin.y + localRect.origin.y
+    else:
+      activeRenderBox.origin.y + activeRenderBox.size.height - localRect.origin.y -
+        height
+  nsRect(x, y, width, height)
+
+proc hasActiveGraphicsContextForDrawing*(): bool =
+  hasActiveRenderContext()
+
+proc addRectFillToCurrentRenderContext*(
+    localRect: NSRect,
+    color: NSColor,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  if not hasActiveRenderContext():
+    return false
+  let context = NSGraphicsContext.currentContext()
+  let flipped =
+    if context.isNil:
+      false
+    else:
+      context.isFlipped()
+  let screenRect = localDrawRectToScreenRect(localRect, flipped)
+  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
+    return false
+  let drawColor =
+    if operation == NSCompositeClear:
+      nsColor(0.0, 0.0, 0.0, 0.0)
+    else:
+      color
+  discard activeRenders[].addChild(
+    0.ZLevel,
+    activeRenderParentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
+        screenRect.size.height,
+      ),
+      fill: drawColor.solidFill(),
+      corners: uniformCorners(0.0),
+      shadows: noRenderShadows(),
+      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+    ),
+  )
+  true
+
+proc addRectFrameToCurrentRenderContext*(
+    localRect: NSRect,
+    color: NSColor,
+    width: float32 = 1.0,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  if not hasActiveRenderContext():
+    return false
+  if width <= 0.0:
+    return false
+  let context = NSGraphicsContext.currentContext()
+  let flipped =
+    if context.isNil:
+      false
+    else:
+      context.isFlipped()
+  let screenRect = localDrawRectToScreenRect(localRect, flipped)
+  if screenRect.size.width <= 0.0 or screenRect.size.height <= 0.0:
+    return false
+  let drawColor =
+    if operation == NSCompositeClear:
+      nsColor(0.0, 0.0, 0.0, 0.0)
+    else:
+      color
+  discard activeRenders[].addChild(
+    0.ZLevel,
+    activeRenderParentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        screenRect.origin.x, screenRect.origin.y, screenRect.size.width,
+        screenRect.size.height,
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+      corners: uniformCorners(0.0),
+      shadows: noRenderShadows(),
+      stroke: RenderStroke(weight: width, fill: drawColor.solidFill()),
+    ),
+  )
+  true
+
 proc addTextLayoutForActiveView(view: NSView) =
   if not hasActiveRenderContext():
     return
@@ -1220,15 +1317,25 @@ proc addViewTree(
   activeRenderParentIdx = idx
   activeRenderBox = box
   activeRenderContextActive = true
-  view.drawRect(view.bounds())
-  if view.isKindOfClass(NSComboBox):
-    drawComboBoxDecorationsForActiveView(asRetainedType[NSComboBox](view))
-  elif view.isKindOfClass(NSTextField):
-    drawTextFieldDecorationsForActiveView(asRetainedType[NSTextField](view))
-  elif view.isKindOfClass(NSButton):
-    drawButtonDecorationsForActiveView(asRetainedType[NSButton](view))
-  if view.isKindOfClass(NSImageView):
-    drawImageDecorationsForActiveView(asRetainedType[NSImageView](view))
+  let renderGraphicsContext = NSGraphicsContext.graphicsContextWithGraphicsPort(
+    cast[pointer](addr renders), view.isFlipped()
+  )
+  NSGraphicsContext.saveGraphicsState()
+  NSGraphicsContext.setCurrentContext(renderGraphicsContext)
+  pushCurrentFocusView(view)
+  try:
+    view.drawRect(view.bounds())
+    if view.isKindOfClass(NSComboBox):
+      drawComboBoxDecorationsForActiveView(asRetainedType[NSComboBox](view))
+    elif view.isKindOfClass(NSTextField):
+      drawTextFieldDecorationsForActiveView(asRetainedType[NSTextField](view))
+    elif view.isKindOfClass(NSButton):
+      drawButtonDecorationsForActiveView(asRetainedType[NSButton](view))
+    if view.isKindOfClass(NSImageView):
+      drawImageDecorationsForActiveView(asRetainedType[NSImageView](view))
+  finally:
+    discard popCurrentFocusView()
+    NSGraphicsContext.restoreGraphicsState()
   activeRenders = previousRenders
   activeRenderParentIdx = previousParentIdx
   activeRenderBox = previousBox

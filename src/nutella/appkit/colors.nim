@@ -3,6 +3,7 @@ import std/strutils
 import pkg/chroma
 
 import ./runtime
+import ./graphicscontexts
 
 const
   NSCalibratedRGBColorSpaceName = "NSCalibratedRGBColorSpace"
@@ -366,10 +367,11 @@ proc numberOfComponents*(self: NSColor): int =
 proc getComponents*(self: NSColor, components: ptr float32) =
   if components.isNil:
     return
-  components[0] = self.r
-  components[1] = self.g
-  components[2] = self.b
-  components[3] = self.a
+  let items = cast[ptr UncheckedArray[float32]](components)
+  items[0] = self.r
+  items[1] = self.g
+  items[2] = self.b
+  items[3] = self.a
 
 proc getWhite*(self: NSColor, white: ptr float32, alpha {.kw("alpha").}: ptr float32) =
   let value = clamp01(0.299 * self.r + 0.587 * self.g + 0.114 * self.b)
@@ -515,14 +517,20 @@ proc blendedColorWithFraction*(
     color.a * f + self.a * (1.0 - f),
   )
 
-proc `set`*(self: NSColor) =
-  discard
-
 proc setFill*(self: NSColor) =
-  discard
+  setCurrentFillColor(self)
 
 proc setStroke*(self: NSColor) =
-  discard
+  setCurrentStrokeColor(self)
+
+proc `set`*(self: NSColor) =
+  if self.a <= 0.0:
+    let clear = NSColor.clearColor()
+    setFill(clear)
+    setStroke(clear)
+    return
+  setFill(self)
+  setStroke(self)
 
 proc drawSwatchInRect*(self: NSColor, rect: NSRect) =
   discard

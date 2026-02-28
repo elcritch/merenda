@@ -46,11 +46,67 @@ type
     NSBackgroundStyleRaised = 2
     NSBackgroundStyleLowered = 3
 
+  NSCompositingOperation* {.size: sizeof(cint).} = enum
+    NSCompositeClear = 0
+    NSCompositeCopy = 1
+    NSCompositeSourceOver = 2
+    NSCompositeSourceIn = 3
+    NSCompositeSourceOut = 4
+    NSCompositeSourceAtop = 5
+    NSCompositeDestinationOver = 6
+    NSCompositeDestinationIn = 7
+    NSCompositeDestinationOut = 8
+    NSCompositeDestinationAtop = 9
+    NSCompositeXOR = 10
+    NSCompositePlusDarker = 11
+    NSCompositeHighlight = 12
+    NSCompositePlusLighter = 13
+
+  NSWindowOrderingMode* {.size: sizeof(cint).} = enum
+    NSWindowBelow = -1
+    NSWindowOut = 0
+    NSWindowAbove = 1
+
+  NSFocusRingPlacement* {.size: sizeof(cint).} = enum
+    NSFocusRingOnly = 0
+    NSFocusRingBelow = 1
+    NSFocusRingAbove = 2
+
+  NSDisplayGamut* {.size: sizeof(cint).} = enum
+    NSDisplayGamutSRGB = 1
+    NSDisplayGamutP3 = 2
+
+  NSWindowDepth* {.size: sizeof(int32).} = enum
+    NSWindowDepthOnehundredtwentyeightBitRGB = 544
+    NSWindowDepthSixtyfourBitRGB = 528
+    NSWindowDepthTwentyfourBitRGB = 520
+
+  NSAnimationEffect* = uint
+
+  NSImageInterpolation* {.size: sizeof(cint).} = enum
+    NSImageInterpolationDefault = 0
+    NSImageInterpolationNone = 1
+    NSImageInterpolationLow = 2
+    NSImageInterpolationHigh = 3
+
+  NSColorRenderingIntent* {.size: sizeof(cint).} = enum
+    NSColorRenderingIntentDefault = 0
+    NSColorRenderingIntentAbsoluteColorimetric = 1
+    NSColorRenderingIntentRelativeColorimetric = 2
+    NSColorRenderingIntentPerceptual = 3
+    NSColorRenderingIntentSaturation = 4
+
   NSControlTint* = int
 
   NSPoint* = object
     x*: float32
     y*: float32
+
+  NSRectEdge* {.size: sizeof(cint).} = enum
+    NSMinXEdge = 0
+    NSMinYEdge = 1
+    NSMaxXEdge = 2
+    NSMaxYEdge = 3
 
   NSSize* = object
     width*: float32
@@ -197,6 +253,24 @@ const
   NSMixedState* = -1
   NSOffState* = 0
   NSOnState* = 1
+
+  NSAnimationEffectDisappearingItemDefault* = 0
+  NSAnimationEffectPoof* = 10
+
+  NSCompositingOperationClear* = NSCompositeClear
+  NSCompositingOperationCopy* = NSCompositeCopy
+  NSCompositingOperationSourceOver* = NSCompositeSourceOver
+  NSCompositingOperationSourceIn* = NSCompositeSourceIn
+  NSCompositingOperationSourceOut* = NSCompositeSourceOut
+  NSCompositingOperationSourceAtop* = NSCompositeSourceAtop
+  NSCompositingOperationDestinationOver* = NSCompositeDestinationOver
+  NSCompositingOperationDestinationIn* = NSCompositeDestinationIn
+  NSCompositingOperationDestinationOut* = NSCompositeDestinationOut
+  NSCompositingOperationDestinationAtop* = NSCompositeDestinationAtop
+  NSCompositingOperationXOR* = NSCompositeXOR
+  NSCompositingOperationPlusDarker* = NSCompositePlusDarker
+  NSCompositingOperationHighlight* = NSCompositeHighlight
+  NSCompositingOperationPlusLighter* = NSCompositePlusLighter
 
   NSAnyType* = 0
   NSIntType* = 1

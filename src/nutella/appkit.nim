@@ -1,8 +1,11 @@
 import ./appkit/runtime
+import ./appkit/graphicscontexts
+import ./appkit/graphics
 import ./appkit/rendering
 import ./appkit/application
 import ./appkit/views
 import ./appkit/windows
+import ./appkit/colors
 import ./appkit/controllers
 import ./appkit/controls
 import ./appkit/buttons
@@ -28,10 +31,13 @@ import ./appkit/events
 import ./appkit/valueproviders
 
 export runtime
+export graphicscontexts
+export graphics
 export rendering
 export application
 export views
 export windows
+export colors
 export controllers
 export controls
 export buttons
