@@ -13,15 +13,26 @@ import ./buttons
 import ./images
 import ./imageviews
 import ./textfields
+import ./comboboxes
 import ./events
 
 var trackedMouseDownButtonId {.threadvar.}: IDPtr
+var trackedMouseDownComboBoxId {.threadvar.}: IDPtr
+var trackedMouseDownComboPopupItemIndex {.threadvar.}: int
 
 proc setTrackedMouseDownButton(buttonId: IDPtr) =
   trackedMouseDownButtonId = replacedOwnedId(trackedMouseDownButtonId, buttonId)
 
 proc clearTrackedMouseDownButton() =
   trackedMouseDownButtonId = replacedOwnedId(trackedMouseDownButtonId, nil)
+
+proc setTrackedMouseDownComboBox(comboBoxId: IDPtr, popupItemIndex: int) =
+  trackedMouseDownComboBoxId = replacedOwnedId(trackedMouseDownComboBoxId, comboBoxId)
+  trackedMouseDownComboPopupItemIndex = popupItemIndex
+
+proc clearTrackedMouseDownComboBox() =
+  trackedMouseDownComboBoxId = replacedOwnedId(trackedMouseDownComboBoxId, nil)
+  trackedMouseDownComboPopupItemIndex = -1
 
 proc ensureContentView(window: NSWindow): NSView =
   let cv = window.contentView()
@@ -61,6 +72,9 @@ proc drawsBg(view: NSView): bool =
 const
   DefaultButtonFontSize = 13.0'f32
   DefaultLabelFontSize = 13.0'f32
+  ComboBoxPopupZLevel = 8.ZLevel
+  ComboBoxArrowZoneMinWidth = 16.0'f32
+  ComboBoxArrowZoneMaxWidth = 22.0'f32
 
 type ButtonBezelVisualKind = enum
   roundedButtonBezel
@@ -441,6 +455,92 @@ proc layoutFitsTextBox(
   bounds.minX >= -epsilon and bounds.minY >= -epsilon and
     bounds.maxX <= box.size.width + epsilon and bounds.maxY <= box.size.height + epsilon
 
+proc comboBoxArrowZoneRect(controlBox: NSRect): NSRect =
+  let arrowWidth = clamp(
+    controlBox.size.height * 0.8, ComboBoxArrowZoneMinWidth, ComboBoxArrowZoneMaxWidth
+  )
+  let zoneWidth = min(arrowWidth, max(controlBox.size.width, 0.0))
+  nsRect(
+    controlBox.origin.x + controlBox.size.width - zoneWidth,
+    controlBox.origin.y,
+    zoneWidth,
+    controlBox.size.height,
+  )
+
+proc comboBoxPopupItemHeight(comboBox: NSComboBox): float32 =
+  max(comboBox.itemHeight() + 6.0, 18.0)
+
+proc comboBoxVisiblePopupItems(comboBox: NSComboBox): int =
+  let count = comboBox.numberOfItems()
+  if count <= 0:
+    return 0
+  let requested = comboBox.numberOfVisibleItems()
+  if requested <= 0:
+    return count
+  min(count, requested)
+
+proc comboBoxPopupFrame(comboBox: NSComboBox, controlBox: NSRect): NSRect =
+  let itemCount = comboBoxVisiblePopupItems(comboBox)
+  if itemCount <= 0:
+    return nsRect(controlBox.origin.x, controlBox.origin.y, 0.0, 0.0)
+  let popupHeight = comboBoxPopupItemHeight(comboBox) * itemCount.float32 + 2.0
+  nsRect(
+    controlBox.origin.x,
+    controlBox.origin.y + controlBox.size.height,
+    max(controlBox.size.width, 0.0),
+    popupHeight,
+  )
+
+proc comboBoxPopupFirstItemIndex(comboBox: NSComboBox): int =
+  let total = comboBox.numberOfItems()
+  let visible = comboBoxVisiblePopupItems(comboBox)
+  if total <= 0 or visible <= 0:
+    return 0
+  if total <= visible:
+    return 0
+  let selected = comboBox.indexOfSelectedItem()
+  if selected < 0:
+    return 0
+  clamp(selected - visible + 1, 0, total - visible)
+
+proc comboBoxPopupItemRect(
+    comboBox: NSComboBox, controlBox: NSRect, itemIndex: int
+): NSRect =
+  let firstIndex = comboBoxPopupFirstItemIndex(comboBox)
+  let visibleIndex = itemIndex - firstIndex
+  if visibleIndex < 0 or visibleIndex >= comboBoxVisiblePopupItems(comboBox):
+    return nsRect(controlBox.origin.x, controlBox.origin.y, 0.0, 0.0)
+  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
+  let itemHeight = comboBoxPopupItemHeight(comboBox)
+  let yTop =
+    popupBox.origin.y + popupBox.size.height - 1.0 - visibleIndex.float32 * itemHeight
+  nsRect(
+    popupBox.origin.x + 1.0,
+    yTop - itemHeight,
+    max(popupBox.size.width - 2.0, 0.0),
+    max(itemHeight, 0.0),
+  )
+
+proc comboBoxPopupItemIndexAtPoint(
+    comboBox: NSComboBox, controlBox: NSRect, x: float32, y: float32
+): int =
+  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
+  if popupBox.size.width <= 0.0 or popupBox.size.height <= 0.0:
+    return -1
+  if not popupBox.contains(x, y):
+    return -1
+  let itemHeight = comboBoxPopupItemHeight(comboBox)
+  if itemHeight <= 0.0:
+    return -1
+  let fromTop = (popupBox.origin.y + popupBox.size.height - y - 1.0)
+  let visibleIndex = int(fromTop / itemHeight)
+  if visibleIndex < 0 or visibleIndex >= comboBoxVisiblePopupItems(comboBox):
+    return -1
+  let itemIndex = comboBoxPopupFirstItemIndex(comboBox) + visibleIndex
+  if itemIndex < 0 or itemIndex >= comboBox.numberOfItems():
+    return -1
+  itemIndex
+
 proc textBoxForView(view: NSView, box: NSRect): NSRect =
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
@@ -474,6 +574,17 @@ proc textBoxForView(view: NSView, box: NSRect): NSRect =
       box.origin.y + yInset,
       max(box.size.width - horizontalInset * 2.0, 0.0),
       titleHeight,
+    )
+
+  if view.isKindOfClass(NSComboBox):
+    let arrowZone = comboBoxArrowZoneRect(box)
+    let leftInset = 10.0'f32
+    let rightInset = max((arrowZone.origin.x - box.origin.x) + 4.0, leftInset + 4.0)
+    return nsRect(
+      box.origin.x + leftInset,
+      box.origin.y + 4.0,
+      max(box.size.width - rightInset - leftInset, 0.0),
+      max(box.size.height - 8.0, 0.0),
     )
 
   if view.isKindOfClass(NSTextField) and drawsBg(view):
@@ -700,6 +811,175 @@ proc addSwitchButtonIndicator(
       ),
     )
 
+proc addComboBoxAffordance(
+    renders: var Renders, parentIdx: FigIdx, comboBox: NSComboBox, controlBox: NSRect
+) =
+  if comboBox.isNil:
+    return
+  let arrowZone = comboBoxArrowZoneRect(controlBox)
+  if arrowZone.size.width <= 0.0 or arrowZone.size.height <= 0.0:
+    return
+
+  discard renders.addChild(
+    0.ZLevel,
+    parentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        arrowZone.origin.x, arrowZone.origin.y, arrowZone.size.width,
+        arrowZone.size.height,
+      ),
+      fill: linear(
+        nsColor(0.95, 0.95, 0.97, 1.0).toFigRgba(),
+        nsColor(0.86, 0.88, 0.92, 1.0).toFigRgba(),
+        axis = fgaY,
+      ),
+      corners: uniformCorners(0.0),
+      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+    ),
+  )
+
+  discard renders.addChild(
+    0.ZLevel,
+    parentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        arrowZone.origin.x, arrowZone.origin.y + 1.0, 1.0, arrowZone.size.height - 2.0
+      ),
+      fill: nsColor(0.66, 0.71, 0.80, 1.0).solidFill(),
+      corners: uniformCorners(0.0),
+      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+    ),
+  )
+
+  if ensureAppKitFont():
+    let arrowBox = nsRect(
+      arrowZone.origin.x,
+      arrowZone.origin.y + 2.0,
+      arrowZone.size.width,
+      max(arrowZone.size.height - 4.0, 0.0),
+    )
+    let arrowLayout = singleLineLayout(
+      "v",
+      fs(appkitFont(11.0), nsColor(0.25, 0.30, 0.38, 1.0).toFigColor()),
+      FontHorizontal.Center,
+      arrowBox,
+    )
+    discard renders.addChild(
+      0.ZLevel,
+      parentIdx,
+      Fig(
+        kind: nkText,
+        childCount: 0,
+        screenBox: rect(
+          arrowBox.origin.x, arrowBox.origin.y, arrowBox.size.width,
+          arrowBox.size.height,
+        ),
+        fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
+        textLayout: arrowLayout,
+      ),
+    )
+
+proc addComboBoxPopup(renders: var Renders, comboBox: NSComboBox, controlBox: NSRect) =
+  if comboBox.isNil or (not comboBox.popupOpen()):
+    return
+  let popupBox = comboBoxPopupFrame(comboBox, controlBox)
+  if popupBox.size.width <= 0.0 or popupBox.size.height <= 0.0:
+    return
+  var popupShadows = noRenderShadows()
+  popupShadows[0] = RenderShadow(
+    style: DropShadow,
+    blur: 4.0,
+    spread: 0.0,
+    x: 0.0,
+    y: 2.0,
+    fill: nsColor(0.0, 0.0, 0.0, 0.20).toFigColor(),
+  )
+
+  let popupIdx = renders.addRoot(
+    ComboBoxPopupZLevel,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        popupBox.origin.x, popupBox.origin.y, popupBox.size.width, popupBox.size.height
+      ),
+      fill: nsColor(0.99, 0.99, 1.0, 1.0).solidFill(),
+      corners: uniformCorners(4.0),
+      shadows: popupShadows,
+      stroke:
+        RenderStroke(weight: 1.0, fill: nsColor(0.60, 0.67, 0.78, 1.0).solidFill()),
+    ),
+  )
+
+  let firstItem = comboBoxPopupFirstItemIndex(comboBox)
+  let lastItem = firstItem + comboBoxVisiblePopupItems(comboBox)
+  let selectedItem = comboBox.indexOfSelectedItem()
+  let hoveredItem = comboBox.popupHoveredIndex()
+  for itemIndex in firstItem ..< lastItem:
+    let itemBox = comboBoxPopupItemRect(comboBox, controlBox, itemIndex)
+    if itemBox.size.width <= 0.0 or itemBox.size.height <= 0.0:
+      continue
+    let isSelected = itemIndex == selectedItem
+    let isHovered = itemIndex == hoveredItem
+    if isSelected or isHovered:
+      discard renders.addChild(
+        ComboBoxPopupZLevel,
+        popupIdx,
+        Fig(
+          kind: nkRectangle,
+          childCount: 0,
+          screenBox: rect(
+            itemBox.origin.x, itemBox.origin.y, itemBox.size.width, itemBox.size.height
+          ),
+          fill: (
+            if isHovered:
+              nsColor(0.78, 0.87, 1.0, 1.0)
+            else:
+              nsColor(0.88, 0.93, 1.0, 1.0)
+          ).solidFill(),
+          corners: uniformCorners(2.0),
+          stroke:
+            RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+        ),
+      )
+
+    if not ensureAppKitFont():
+      continue
+    let textValue = $comboBox.itemObjectValueAtIndex(itemIndex)
+    if textValue.len == 0:
+      continue
+    let textBox = nsRect(
+      itemBox.origin.x + 6.0,
+      itemBox.origin.y + 2.0,
+      max(itemBox.size.width - 12.0, 0.0),
+      max(itemBox.size.height - 4.0, 0.0),
+    )
+    let fitted = fitSingleLineText(
+      textValue,
+      fs(appkitFont(DefaultLabelFontSize), nsColor(0.08, 0.08, 0.08, 1.0).toFigColor()),
+      FontHorizontal.Left,
+      textBox,
+    )
+    if fitted.text.len == 0:
+      continue
+    discard renders.addChild(
+      ComboBoxPopupZLevel,
+      popupIdx,
+      Fig(
+        kind: nkText,
+        childCount: 0,
+        screenBox: rect(
+          textBox.origin.x, textBox.origin.y, textBox.size.width, textBox.size.height
+        ),
+        fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
+        textLayout: fitted.layout,
+      ),
+    )
+
 proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
   if not view.isKindOfClass(NSImageView):
     return
@@ -836,6 +1116,9 @@ proc addViewTree(
     let button = asRetainedType[NSButton](view)
     if isSwitchButton(button):
       renders.addSwitchButtonIndicator(idx, button, box)
+  elif view.isKindOfClass(NSComboBox):
+    let comboBox = asRetainedType[NSComboBox](view)
+    renders.addComboBoxAffordance(idx, comboBox, box)
 
   addAquaGlossOverlay(renders, idx, view, box)
 
@@ -873,6 +1156,10 @@ proc addViewTree(
         image: ImageStyle(id: imageLayout.imageId, fill: imageFill),
       ),
     )
+
+  if view.isKindOfClass(NSComboBox):
+    let comboBox = asRetainedType[NSComboBox](view)
+    renders.addComboBoxPopup(comboBox, box)
 
   for child in view.viewSubviews():
     renders.addViewTree(
@@ -937,6 +1224,316 @@ proc hitTestButton(
   if view.isKindOfClass(NSButton) and frame.contains(x, y):
     return view.value
   nil
+
+proc hitTestComboBox(
+    viewId: IDPtr,
+    x: float32,
+    y: float32,
+    hasParent: bool,
+    parentOriginX: float32,
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
+): IDPtr =
+  if viewId.isNil:
+    return nil
+  let view = ownFromId[NSView](viewId)
+  if view.isNil or view.viewHidden():
+    return nil
+  let frameSelf = view.viewFrame()
+  let frameOriginY =
+    if hasParent:
+      childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
+    else:
+      frameSelf.origin.y
+  let frame = nsRect(
+    parentOriginX + frameSelf.origin.x,
+    frameOriginY,
+    frameSelf.size.width,
+    frameSelf.size.height,
+  )
+  if view.isKindOfClass(NSClipView) and not frame.contains(x, y):
+    return nil
+
+  let children = view.viewSubviews()
+  for i in countdown(children.high, 0):
+    let hit = hitTestComboBox(
+      children[i].value,
+      x,
+      y,
+      true,
+      frame.origin.x,
+      frame.origin.y,
+      frame.size.height,
+      view.isFlipped(),
+    )
+    if not hit.isNil:
+      return hit
+  if view.isKindOfClass(NSComboBox) and frame.contains(x, y):
+    return view.value
+  nil
+
+proc findViewScreenFrame(
+    viewId: IDPtr,
+    targetId: IDPtr,
+    hasParent: bool,
+    parentOriginX: float32,
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
+    resultFrame: var NSRect,
+): bool =
+  if viewId.isNil or targetId.isNil:
+    return false
+  let view = ownFromId[NSView](viewId)
+  if view.isNil or view.viewHidden():
+    return false
+  let frameSelf = view.viewFrame()
+  let frameOriginY =
+    if hasParent:
+      childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
+    else:
+      frameSelf.origin.y
+  let frame = nsRect(
+    parentOriginX + frameSelf.origin.x,
+    frameOriginY,
+    frameSelf.size.width,
+    frameSelf.size.height,
+  )
+  if view.value == targetId:
+    resultFrame = frame
+    return true
+  for child in view.viewSubviews():
+    if findViewScreenFrame(
+      child.value,
+      targetId,
+      true,
+      frame.origin.x,
+      frame.origin.y,
+      frame.size.height,
+      view.isFlipped(),
+      resultFrame,
+    ):
+      return true
+  false
+
+type ComboPopupHit = object
+  comboId: IDPtr
+  itemIndex: int
+  inPopup: bool
+
+proc hitTestOpenComboPopup(
+    viewId: IDPtr,
+    x: float32,
+    y: float32,
+    hasParent: bool,
+    parentOriginX: float32,
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
+): ComboPopupHit =
+  if viewId.isNil:
+    return
+  let view = ownFromId[NSView](viewId)
+  if view.isNil or view.viewHidden():
+    return
+  let frameSelf = view.viewFrame()
+  let frameOriginY =
+    if hasParent:
+      childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
+    else:
+      frameSelf.origin.y
+  let frame = nsRect(
+    parentOriginX + frameSelf.origin.x,
+    frameOriginY,
+    frameSelf.size.width,
+    frameSelf.size.height,
+  )
+
+  let children = view.viewSubviews()
+  for i in countdown(children.high, 0):
+    let childHit = hitTestOpenComboPopup(
+      children[i].value,
+      x,
+      y,
+      true,
+      frame.origin.x,
+      frame.origin.y,
+      frame.size.height,
+      view.isFlipped(),
+    )
+    if childHit.inPopup:
+      return childHit
+
+  if not view.isKindOfClass(NSComboBox):
+    return
+  let comboBox = asRetainedType[NSComboBox](view)
+  if comboBox.isNil or (not comboBox.popupOpen()):
+    return
+  let popupBox = comboBoxPopupFrame(comboBox, frame)
+  if not popupBox.contains(x, y):
+    return
+  result.comboId = view.value
+  result.itemIndex = comboBoxPopupItemIndexAtPoint(comboBox, frame, x, y)
+  result.inPopup = true
+
+proc closeOpenComboPopupsInTree(
+    viewId: IDPtr, exceptComboId: IDPtr, changed: var bool
+) =
+  if viewId.isNil:
+    return
+  let view = ownFromId[NSView](viewId)
+  if view.isNil or view.viewHidden():
+    return
+  if view.isKindOfClass(NSComboBox):
+    let comboBox = asRetainedType[NSComboBox](view)
+    if (not comboBox.isNil) and comboBox.popupOpen() and
+        (exceptComboId.isNil or view.value != exceptComboId):
+      comboBox.closePopup()
+      changed = true
+  for child in view.viewSubviews():
+    closeOpenComboPopupsInTree(child.value, exceptComboId, changed)
+
+proc closeOpenComboPopups(rootViewId: IDPtr, exceptComboId: IDPtr): bool =
+  var changed = false
+  closeOpenComboPopupsInTree(rootViewId, exceptComboId, changed)
+  changed
+
+proc updateOpenComboPopupHoverInTree(
+    viewId: IDPtr,
+    x: float32,
+    y: float32,
+    hasParent: bool,
+    parentOriginX: float32,
+    parentOriginY: float32,
+    parentHeight: float32,
+    parentFlipped: bool,
+    changed: var bool,
+) =
+  if viewId.isNil:
+    return
+  let view = ownFromId[NSView](viewId)
+  if view.isNil or view.viewHidden():
+    return
+  let frameSelf = view.viewFrame()
+  let frameOriginY =
+    if hasParent:
+      childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
+    else:
+      frameSelf.origin.y
+  let frame = nsRect(
+    parentOriginX + frameSelf.origin.x,
+    frameOriginY,
+    frameSelf.size.width,
+    frameSelf.size.height,
+  )
+  if view.isKindOfClass(NSComboBox):
+    let comboBox = asRetainedType[NSComboBox](view)
+    if (not comboBox.isNil) and comboBox.popupOpen():
+      let hoverItem = comboBoxPopupItemIndexAtPoint(comboBox, frame, x, y)
+      if comboBox.popupHoveredIndex() != hoverItem:
+        comboBox.setPopupHoveredIndex(hoverItem)
+        changed = true
+  for child in view.viewSubviews():
+    updateOpenComboPopupHoverInTree(
+      child.value,
+      x,
+      y,
+      true,
+      frame.origin.x,
+      frame.origin.y,
+      frame.size.height,
+      view.isFlipped(),
+      changed,
+    )
+
+proc updateOpenComboPopupHover(window: NSWindow, x: float32, y: float32): bool =
+  let root = ensureContentView(window)
+  if root.isNil:
+    return false
+  var changed = false
+  updateOpenComboPopupHoverInTree(
+    root.value, x, y, false, 0.0, 0.0, 0.0, false, changed
+  )
+  changed
+
+proc handleComboBoxMouseDown(
+    window: NSWindow, x: float32, y: float32
+): tuple[consumed: bool, needsRender: bool] =
+  let root = ensureContentView(window)
+  if root.isNil:
+    return
+
+  let popupHit = hitTestOpenComboPopup(root.value, x, y, false, 0.0, 0.0, 0.0, false)
+  if popupHit.inPopup:
+    clearTrackedMouseDownButton()
+    setTrackedMouseDownComboBox(popupHit.comboId, popupHit.itemIndex)
+    let comboBox = ownFromId[NSComboBox](popupHit.comboId)
+    if (not comboBox.isNil) and comboBox.popupHoveredIndex() != popupHit.itemIndex:
+      comboBox.setPopupHoveredIndex(popupHit.itemIndex)
+      result.needsRender = true
+    result.consumed = true
+    return
+
+  let hit = hitTestComboBox(root.value, x, y, false, 0.0, 0.0, 0.0, false)
+  if not hit.isNil:
+    clearTrackedMouseDownButton()
+    clearTrackedMouseDownComboBox()
+    let comboBox = ownFromId[NSComboBox](hit)
+    if comboBox.isNil:
+      result.consumed = true
+      return
+    let control = asRetainedType[NSControl](comboBox)
+    if not control.isEnabled():
+      result.consumed = true
+      return
+
+    var changed = closeOpenComboPopups(root.value, hit)
+    if comboBox.popupOpen():
+      comboBox.closePopup()
+      changed = true
+    else:
+      comboBox.openPopup()
+      if comboBox.popupOpen():
+        comboBox.setPopupHoveredIndex(comboBox.indexOfSelectedItem())
+        changed = true
+    result.consumed = true
+    result.needsRender = changed
+    return
+
+  if closeOpenComboPopups(root.value, nil):
+    clearTrackedMouseDownComboBox()
+    result.needsRender = true
+
+proc handleComboBoxMouseUp(
+    window: NSWindow, x: float32, y: float32, generated: bool
+): tuple[consumed: bool, needsRender: bool] =
+  if trackedMouseDownComboBoxId.isNil:
+    return
+  let comboBox = ownFromId[NSComboBox](trackedMouseDownComboBoxId)
+  let trackedItemIndex = trackedMouseDownComboPopupItemIndex
+  clearTrackedMouseDownComboBox()
+  result.consumed = true
+  if comboBox.isNil or (not comboBox.popupOpen()):
+    return
+
+  let root = ensureContentView(window)
+  if root.isNil:
+    comboBox.closePopup()
+    result.needsRender = true
+    return
+
+  var comboFrame = nsRect(0.0, 0.0, 0.0, 0.0)
+  let found = findViewScreenFrame(
+    root.value, comboBox.value, false, 0.0, 0.0, 0.0, false, comboFrame
+  )
+  if found:
+    let itemIndex = comboBoxPopupItemIndexAtPoint(comboBox, comboFrame, x, y)
+    if (not generated) and trackedItemIndex >= 0 and itemIndex == trackedItemIndex:
+      comboBox.activateItemAtIndex(itemIndex)
+
+  comboBox.closePopup()
+  result.needsRender = true
 
 proc buttonShouldBeHighlighted(window: NSWindow, x: float32, y: float32): bool =
   if trackedMouseDownButtonId.isNil:
@@ -1052,6 +1649,7 @@ proc ensureNativeWindow*(window: NSWindow) =
       onClose: proc(e: siwinshim.CloseEvent) =
         discard e
         clearTrackedMouseDownButton()
+        clearTrackedMouseDownComboBox()
         discard window.windowShouldClose(asRetainedType[NSObject](window))
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
@@ -1074,9 +1672,14 @@ proc ensureNativeWindow*(window: NSWindow) =
         )
         if not appEvent.isNil:
           window.sendEvent(appEvent)
+        var needsRender = false
+        if updateOpenComboPopupHover(window, logicalPos.x, logicalPos.y):
+          needsRender = true
         if siwinshim.MouseButton.left in nativeWindow.mouse.pressed:
           if updateTrackedButtonHighlight(window, logicalPos.x, logicalPos.y):
-            renderWindow(window)
+            needsRender = true
+        if needsRender:
+          renderWindow(window)
       ,
       onMouseButton: proc(e: siwinshim.MouseButtonEvent) =
         let nativeWindow =
@@ -1095,10 +1698,16 @@ proc ensureNativeWindow*(window: NSWindow) =
         if e.button != siwinshim.MouseButton.left:
           return
         if e.pressed:
+          let comboResult = handleComboBoxMouseDown(window, logicalPos.x, logicalPos.y)
+          if comboResult.needsRender:
+            renderWindow(window)
+          if comboResult.consumed:
+            return
           let root = ensureContentView(window)
           if root.isNil:
             clearTrackedMouseDownButton()
             return
+          clearTrackedMouseDownComboBox()
           let hit = hitTestButton(
             root.value, logicalPos.x, logicalPos.y, false, 0.0, 0.0, 0.0, false
           )
@@ -1113,6 +1722,12 @@ proc ensureNativeWindow*(window: NSWindow) =
           renderWindow(window)
           return
 
+        let comboResult =
+          handleComboBoxMouseUp(window, logicalPos.x, logicalPos.y, e.generated)
+        if comboResult.needsRender:
+          renderWindow(window)
+        if comboResult.consumed:
+          return
         if trackedMouseDownButtonId.isNil:
           return
         let button = ownFromId[NSButton](trackedMouseDownButtonId)
