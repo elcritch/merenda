@@ -290,6 +290,35 @@ suite "nutella appkit hello world":
     search.value = nil
     secure.value = nil
 
+  test "NSBox draw layout updates title and content geometry":
+    var box = NSBox.new()
+    box.setFrame(0.0, 0.0, 240.0, 120.0)
+    box.setTransparent(false)
+    box.setTitle(@ns"Display")
+    box.setTitlePosition(NSAboveTop)
+    box.setBorderType(NSLineBorder.int)
+    box.setContentViewMargins(nsSize(6.0, 4.0))
+
+    let titleRect = box.titleRect()
+    check(titleRect.size.height > 0.0)
+    check(titleRect.origin.y >= 0.0)
+
+    let borderRect = box.borderRect()
+    check(borderRect.size.width > 0.0)
+    check(borderRect.size.height > 0.0)
+    check(borderRect.size.height < box.bounds().size.height)
+
+    var content = box.contentView()
+    check(not content.isNil)
+    let contentFrame = content.frame()
+    check(contentFrame.size.width > 0.0)
+    check(contentFrame.size.height > 0.0)
+    check(contentFrame.origin.x >= borderRect.origin.x)
+    check(contentFrame.origin.y >= borderRect.origin.y)
+
+    content.value = nil
+    box.value = nil
+
   test "button text layout stays within the button text box":
     var button = newButton(
       0, 0, 170, 34,
