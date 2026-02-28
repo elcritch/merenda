@@ -46,24 +46,29 @@ suite "appkit nsgraphics":
 
     var foundFillRect = false
     var foundStrokeRect = false
+    var foundTransform = false
 
     if renders.contains(0.ZLevel):
       for node in renders[0.ZLevel].nodes:
+        if node.kind == nkTransform:
+          foundTransform = true
+          continue
         if node.kind != nkRectangle:
           continue
 
-        if approxEq(node.screenBox.x, 10.0) and approxEq(node.screenBox.y, 67.0) and
+        if approxEq(node.screenBox.x, 10.0) and approxEq(node.screenBox.y, 5.0) and
             approxEq(node.screenBox.w, 20.0) and approxEq(node.screenBox.h, 8.0):
           let fillColor = node.fill.centerColor()
           if isMostlyRed(fillColor):
             foundFillRect = true
 
-        if approxEq(node.screenBox.x, 2.0) and approxEq(node.screenBox.y, 68.0) and
+        if approxEq(node.screenBox.x, 2.0) and approxEq(node.screenBox.y, 2.0) and
             approxEq(node.screenBox.w, 12.0) and approxEq(node.screenBox.h, 10.0):
           if approxEq(node.stroke.weight, 2.0):
             let strokeColor = node.stroke.fill.centerColor()
             if isMostlyGreen(strokeColor):
               foundStrokeRect = true
 
+    check(foundTransform)
     check(foundFillRect)
     check(foundStrokeRect)
