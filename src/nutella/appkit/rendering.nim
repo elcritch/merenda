@@ -76,6 +76,11 @@ const
   ComboBoxArrowZoneMinWidth = 16.0'f32
   ComboBoxArrowZoneMaxWidth = 22.0'f32
 
+var activeRenders {.threadvar.}: ptr Renders
+var activeRenderParentIdx {.threadvar.}: FigIdx
+var activeRenderBox {.threadvar.}: NSRect
+var activeRenderContextActive {.threadvar.}: bool
+
 type ButtonBezelVisualKind = enum
   roundedButtonBezel
   regularSquareButtonBezel
@@ -1005,6 +1010,101 @@ proc imageLayoutForView(view: NSView, box: NSRect): ImageLayoutDebugMetrics =
     localRect.size.height,
   )
 
+proc hasActiveRenderContext(): bool =
+  activeRenderContextActive and (not activeRenders.isNil)
+
+proc addTextLayoutForActiveView(view: NSView) =
+  if not hasActiveRenderContext():
+    return
+  let textBox = textBoxForView(view, activeRenderBox)
+  let textLayout = textLayoutForView(view, textBox)
+  if not textLayout.ok:
+    return
+  discard activeRenders[].addChild(
+    0.ZLevel,
+    activeRenderParentIdx,
+    Fig(
+      kind: nkText,
+      childCount: 0,
+      screenBox: rect(
+        textBox.origin.x, textBox.origin.y, textBox.size.width, textBox.size.height
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
+      textLayout: textLayout.layout,
+    ),
+  )
+
+proc addImageLayoutForActiveView(view: NSView) =
+  if not hasActiveRenderContext():
+    return
+  let imageLayout = imageLayoutForView(view, activeRenderBox)
+  if not imageLayout.hasImage:
+    return
+  let imageFill = nsColor(1.0, 1.0, 1.0, 1.0).solidFill()
+  discard activeRenders[].addChild(
+    0.ZLevel,
+    activeRenderParentIdx,
+    Fig(
+      kind: nkImage,
+      childCount: 0,
+      screenBox: rect(
+        imageLayout.imageBox.origin.x, imageLayout.imageBox.origin.y,
+        imageLayout.imageBox.size.width, imageLayout.imageBox.size.height,
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+      image: ImageStyle(id: imageLayout.imageId, fill: imageFill),
+    ),
+  )
+
+proc drawButtonDecorationsForActiveView(button: NSButton) =
+  if not hasActiveRenderContext() or button.isNil:
+    return
+  let buttonView = ownFromId[NSView](button.value)
+  if buttonView.isNil:
+    return
+  if isSwitchButton(button):
+    activeRenders[].addSwitchButtonIndicator(
+      activeRenderParentIdx, button, activeRenderBox
+    )
+  addAquaGlossOverlay(
+    activeRenders[], activeRenderParentIdx, buttonView, activeRenderBox
+  )
+  addTextLayoutForActiveView(buttonView)
+
+proc drawTextFieldDecorationsForActiveView(textField: NSTextField) =
+  if not hasActiveRenderContext() or textField.isNil:
+    return
+  let textFieldView = ownFromId[NSView](textField.value)
+  if textFieldView.isNil:
+    return
+  addAquaGlossOverlay(
+    activeRenders[], activeRenderParentIdx, textFieldView, activeRenderBox
+  )
+  addTextLayoutForActiveView(textFieldView)
+
+proc drawComboBoxDecorationsForActiveView(comboBox: NSComboBox) =
+  if not hasActiveRenderContext() or comboBox.isNil:
+    return
+  let comboView = ownFromId[NSView](comboBox.value)
+  if comboView.isNil:
+    return
+  activeRenders[].addComboBoxAffordance(
+    activeRenderParentIdx, comboBox, activeRenderBox
+  )
+  addAquaGlossOverlay(
+    activeRenders[], activeRenderParentIdx, comboView, activeRenderBox
+  )
+  addTextLayoutForActiveView(comboView)
+  activeRenders[].addComboBoxPopup(comboBox, activeRenderBox)
+
+proc drawImageDecorationsForActiveView(imageView: NSImageView) =
+  if imageView.isNil:
+    return
+  let imageViewAsView = ownFromId[NSView](imageView.value)
+  if imageViewAsView.isNil:
+    return
+  addImageLayoutForActiveView(imageViewAsView)
+
 proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
   if view.isNil:
     return
@@ -1112,54 +1212,27 @@ proc addViewTree(
     else:
       renders.addRoot(0.ZLevel, fig)
 
-  if view.isKindOfClass(NSButton):
-    let button = asRetainedType[NSButton](view)
-    if isSwitchButton(button):
-      renders.addSwitchButtonIndicator(idx, button, box)
-  elif view.isKindOfClass(NSComboBox):
-    let comboBox = asRetainedType[NSComboBox](view)
-    renders.addComboBoxAffordance(idx, comboBox, box)
-
-  addAquaGlossOverlay(renders, idx, view, box)
-
-  let textBox = textBoxForView(view, box)
-  let textLayout = textLayoutForView(view, textBox)
-  if textLayout.ok:
-    discard renders.addChild(
-      0.ZLevel,
-      idx,
-      Fig(
-        kind: nkText,
-        childCount: 0,
-        screenBox: rect(
-          textBox.origin.x, textBox.origin.y, textBox.size.width, textBox.size.height
-        ),
-        fill: nsColor(0.0, 0.0, 0.0, 0.0).toFigColor(),
-        textLayout: textLayout.layout,
-      ),
-    )
-
-  let imageLayout = imageLayoutForView(view, box)
-  if imageLayout.hasImage:
-    let imageFill = nsColor(1.0, 1.0, 1.0, 1.0).solidFill()
-    discard renders.addChild(
-      0.ZLevel,
-      idx,
-      Fig(
-        kind: nkImage,
-        childCount: 0,
-        screenBox: rect(
-          imageLayout.imageBox.origin.x, imageLayout.imageBox.origin.y,
-          imageLayout.imageBox.size.width, imageLayout.imageBox.size.height,
-        ),
-        fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
-        image: ImageStyle(id: imageLayout.imageId, fill: imageFill),
-      ),
-    )
-
+  let previousRenders = activeRenders
+  let previousParentIdx = activeRenderParentIdx
+  let previousBox = activeRenderBox
+  let previousContextActive = activeRenderContextActive
+  activeRenders = addr renders
+  activeRenderParentIdx = idx
+  activeRenderBox = box
+  activeRenderContextActive = true
+  view.drawRect(view.bounds())
   if view.isKindOfClass(NSComboBox):
-    let comboBox = asRetainedType[NSComboBox](view)
-    renders.addComboBoxPopup(comboBox, box)
+    drawComboBoxDecorationsForActiveView(asRetainedType[NSComboBox](view))
+  elif view.isKindOfClass(NSTextField):
+    drawTextFieldDecorationsForActiveView(asRetainedType[NSTextField](view))
+  elif view.isKindOfClass(NSButton):
+    drawButtonDecorationsForActiveView(asRetainedType[NSButton](view))
+  if view.isKindOfClass(NSImageView):
+    drawImageDecorationsForActiveView(asRetainedType[NSImageView](view))
+  activeRenders = previousRenders
+  activeRenderParentIdx = previousParentIdx
+  activeRenderBox = previousBox
+  activeRenderContextActive = previousContextActive
 
   for child in view.viewSubviews():
     renders.addViewTree(
