@@ -388,6 +388,8 @@ type ImageLayoutDebugMetrics* = object
   imageId*: ImageId
   imageBox*: NSRect
 
+proc switchIndicatorRect(controlBox: NSRect): NSRect
+
 proc textLayoutBounds(
     layout: GlyphArrangement
 ): tuple[ok: bool, minX: float32, minY: float32, maxX: float32, maxY: float32] =
@@ -439,27 +441,50 @@ proc layoutFitsTextBox(
   bounds.minX >= -epsilon and bounds.minY >= -epsilon and
     bounds.maxX <= box.size.width + epsilon and bounds.maxY <= box.size.height + epsilon
 
-proc textPaddingForView(view: NSView): tuple[x: float32, y: float32] =
+proc textBoxForView(view: NSView, box: NSRect): NSRect =
   if view.isKindOfClass(NSButton):
     let button = asRetainedType[NSButton](view)
     if isSwitchButton(button):
-      return (20.0'f32, 0.0'f32)
+      let indicator = switchIndicatorRect(box)
+      let leftInset =
+        max((indicator.origin.x - box.origin.x) + indicator.size.width + 6.0, 0.0)
+      let titleHeight = min(max(box.size.height - 4.0, 0.0), 16.0)
+      let yInset = max((box.size.height - titleHeight) * 0.5, 0.0)
+      return nsRect(
+        box.origin.x + leftInset,
+        box.origin.y + yInset,
+        max(box.size.width - leftInset, 0.0),
+        titleHeight,
+      )
     if buttonBezelVisualKind(button) == regularSquareButtonBezel:
-      return (4.0'f32, 3.0'f32)
-    return (6.0'f32, 3.0'f32)
-  if view.isKindOfClass(NSTextField):
-    if drawsBg(view):
-      return (10.0'f32, 4.0'f32)
-  (0.0'f32, 0.0'f32)
+      let horizontalInset = 4.0'f32
+      let titleHeight = min(max(box.size.height - 6.0, 0.0), 16.0)
+      let yInset = max((box.size.height - titleHeight) * 0.5, 0.0)
+      return nsRect(
+        box.origin.x + horizontalInset,
+        box.origin.y + yInset,
+        max(box.size.width - horizontalInset * 2.0, 0.0),
+        titleHeight,
+      )
+    let horizontalInset = min(max(box.size.height * 0.6, 6.0), 15.0)
+    let titleHeight = min(max(box.size.height - 8.0, 0.0), 16.0)
+    let yInset = max((box.size.height - titleHeight) * 0.5, 0.0)
+    return nsRect(
+      box.origin.x + horizontalInset,
+      box.origin.y + yInset,
+      max(box.size.width - horizontalInset * 2.0, 0.0),
+      titleHeight,
+    )
 
-proc textBoxForView(view: NSView, box: NSRect): NSRect =
-  let padding = textPaddingForView(view)
-  nsRect(
-    box.origin.x + padding.x,
-    box.origin.y + padding.y,
-    max(box.size.width - padding.x * 2, 0.0),
-    max(box.size.height - padding.y * 2, 0.0),
-  )
+  if view.isKindOfClass(NSTextField) and drawsBg(view):
+    return nsRect(
+      box.origin.x + 10.0,
+      box.origin.y + 4.0,
+      max(box.size.width - 20.0, 0.0),
+      max(box.size.height - 8.0, 0.0),
+    )
+
+  box
 
 proc singleLineLayout(
     text: string, style: FontStyle, textAlign: FontHorizontal, box: NSRect
@@ -473,25 +498,6 @@ proc singleLineLayout(
     minContent = false,
     wrap = false,
   )
-
-proc offsetLayoutY(layout: var GlyphArrangement, dy: float32) =
-  if abs(dy) <= 0.001'f32:
-    return
-  for i in 0 ..< layout.positions.len:
-    layout.positions[i].y += dy
-  for i in 0 ..< layout.selectionRects.len:
-    layout.selectionRects[i].y += dy
-  layout.bounding.y += dy
-
-proc buttonLowercaseCenterShiftY(): float32 =
-  let lineHeight = max(DefaultButtonFontSize, 1.0'f32)
-  # Matches NSFont.makeMetrics defaults used by AppKit font shim.
-  let xHeight = lineHeight * 0.5'f32
-  let ascender = lineHeight * 0.8'f32
-  let lineCenterFromTop = lineHeight * 0.5'f32
-  let lowerCenterFromTop = ascender - xHeight * 0.5'f32
-  # Cocoa-style button text looks centered on lowercase body, not full line box.
-  result = clamp(lineCenterFromTop - lowerCenterFromTop, -2.0'f32, 2.0'f32)
 
 proc singleLineTextCandidate(runes: seq[Rune], keep: int): string =
   result = newStringOfCap(keep + 3)
@@ -595,13 +601,6 @@ proc textLayoutForView(
       echo "[appkit] button layout runes=",
         fitted.layout.runes.len, " title=\"", title, "\"", suffix
 
-    if isSwitchButton(button):
-      return (true, fitted.layout)
-
-    var adjustedLayout = fitted.layout
-    adjustedLayout.offsetLayoutY(buttonLowercaseCenterShiftY())
-    if layoutFitsTextBox(adjustedLayout, box):
-      return (true, adjustedLayout)
     return (true, fitted.layout)
 
   (false, default(GlyphArrangement))
