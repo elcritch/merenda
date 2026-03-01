@@ -338,7 +338,7 @@ objcImpl:
       return
     let rowStride = max(self.xRowHeight + self.xIntercellSpacing.height, 1.0)
     let location = event.locationInWindow()
-    let origin = viewOriginInWindow(asType[NSView](self))
+    let origin = viewOriginInWindow(self.NSView)
     let localY = location.y - origin.y
     let row = floor(localY / rowStride).int
     let rows = self.numberOfRows()
@@ -362,7 +362,7 @@ proc numberOfRowsFromDataSource(tableView: NSTableView): int =
   let source = tableView.xDataSource
   if source.isNil:
     return 0
-  let sourceObj = asType[NSObject](source.value)
+  let sourceObj = source.value.NSObject
   if not sourceObj.respondsToSelector("numberOfRowsInTableView:"):
     return 0
   max(
@@ -378,7 +378,7 @@ proc objectValueFromDataSource(
   let source = tableView.xDataSource
   if source.isNil:
     return NSObject(value: nil)
-  let sourceObj = asType[NSObject](source.value)
+  let sourceObj = source.value.NSObject
   if not sourceObj.respondsToSelector("tableView:objectValueForTableColumn:row:"):
     return NSObject(value: nil)
   let raw = cast[proc(
@@ -398,7 +398,7 @@ proc setObjectValueOnDataSource(
   let source = tableView.xDataSource
   if source.isNil:
     return
-  let sourceObj = asType[NSObject](source.value)
+  let sourceObj = source.value.NSObject
   if not sourceObj.respondsToSelector("tableView:setObjectValue:forTableColumn:row:"):
     return
   discard cast[proc(

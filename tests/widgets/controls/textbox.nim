@@ -50,8 +50,8 @@ proc dumpTextBoxLayout(
   echo "[Window ",
     stage, "] frame=", formatRect(windowFrame), " contentRect=", formatRect(contentRect)
   dumpViewLine(contentView, "contentView")
-  dumpViewLine(asType[NSView](textBox1), "textBox1")
-  dumpViewLine(asType[NSView](textBox2), "textBox2")
+  dumpViewLine(textBox1), "textBox1" as NSView
+  dumpViewLine(textBox2), "textBox2" as NSView
   echo "[textBox1] string='",
     textBox1.stringValue(),
     "' editable=",
@@ -117,11 +117,11 @@ objcImpl:
 
     contentView.addSubview(result.xTextBox1)
     contentView.addSubview(result.xTextBox2)
-    discard result.makeFirstResponder(asType[NSResponder](result.xTextBox2))
+    discard result.makeFirstResponder(result.xTextBox2) as NSResponder
     result.setTitle(@ns"TextBox Example")
     result.setIsVisible(true)
     dumpTextBoxLayout(
-      "init", asType[NSWindow](result), result.xTextBox1, result.xTextBox2
+      "init", result as NSWindow, result.xTextBox1, result.xTextBox2
     )
     contentView.value = nil
 
@@ -143,8 +143,8 @@ when isMainModule:
   var windowAlloc = TextBoxWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(asType[NSWindow](window))
-  window.makeKeyAndOrderFront(asType[NSObject](app))
+  app.addWindow(window) as NSWindow
+  window.makeKeyAndOrderFront(app) as NSObject
 
   try:
     let maxFrames = maxFramesFromEnv()

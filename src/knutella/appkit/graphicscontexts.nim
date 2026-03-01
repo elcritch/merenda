@@ -98,7 +98,7 @@ proc ensureGraphicsContextConstants() =
 proc defaultDeviceDescription(isScreen: bool): NSDictionary[NSString, NSObject] =
   ensureGraphicsContextConstants()
   result = nsDictionary[NSString, NSObject]()
-  result[NSDeviceIsScreen] = asType[NSObject](ns(isScreen))
+  result[NSDeviceIsScreen] = ns(isScreen).NSObject
 
 proc currentGraphicsContext(): NSGraphicsContext =
   ownFromId[NSGraphicsContext](currentGraphicsContextId)
@@ -152,7 +152,8 @@ objcImpl:
     if window.isNil:
       replaceOwned(result.xDeviceDescriptionId, defaultDeviceDescription(true))
       return
-    let windowObj = asType[NSObject](window.value)
+    #let windowObj = window.NSObject
+    let windowObj = window.NSObject
     if windowObj.respondsToSelector("cgContext"):
       result.xGraphicsPort = sendPtr(window.value, getSelector("cgContext"))
     if windowObj.respondsToSelector("deviceDescription"):
@@ -276,7 +277,7 @@ objcImpl:
     var stack = self.xFocusStack
     if stack.isNil:
       stack = nsArray[NSObject]()
-    stack.addObject(asType[NSObject](view.value))
+    stack.addObject(view.NSObject)
     self.xFocusStack = stack
 
   method popFocusView*(self: NSGraphicsContext): NSView =

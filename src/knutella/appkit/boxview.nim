@@ -212,7 +212,7 @@ objcImpl:
     boxUpdateContentViewFrame(self)
 
   method init*(self: var NSBox): NSBox =
-    result = asTypeRaw[NSBox](callSuperIdFrom(NSBox, self, getSelector("init")))
+    result = callSuperIdFrom(NSBox, self, getSelector("init")) as NSBox
     if result.isNil:
       return
     result.xBoxType = NSBoxPrimary
@@ -237,8 +237,8 @@ objcImpl:
       var children = result.viewSubviews()
       children.add(content)
       result.viewSubviews = children
-      content.viewSuperview = retain(asType[NSView](result))
-      content.setNextResponder(asType[NSResponder](result))
+      content.viewSuperview = retain(result.NSView)
+      content.setNextResponder(result.NSResponder)
       result.xContentView = retain(content)
       boxUpdateContentViewFrame(result)
     content.value = nil
@@ -362,8 +362,8 @@ objcImpl:
     if view notin children:
       children.add(view)
       self.viewSubviews = children
-    view.viewSuperview = retain(asType[NSView](self))
-    view.setNextResponder(asType[NSResponder](self))
+    view.viewSuperview = retain(self.NSView)
+    view.setNextResponder(self.NSResponder)
     self.xContentView = retain(view)
     boxUpdateContentViewFrame(self)
     self.setNeedsDisplay(true)
