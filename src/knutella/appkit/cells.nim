@@ -6,6 +6,7 @@ import ./graphics
 import ./graphicscontexts
 import ./images
 import ./attributedstrings
+import ./formatters
 
 proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
   NSFocusRingTypeExterior
@@ -177,15 +178,8 @@ objcImpl:
     initIvarFields(result)
 
     result.xFocusRingType = NSCell.defaultFocusRingType()
-    result.xFont = NSFont(value: nil)
-    result.xObjectValue.value = nil
-    replaceOwned(result.xObjectValue, ID(value: string.value))
-    result.xImage = NSImage(value: nil)
+    result.xObjectValue = string
     result.xCellType = NSTextCellType
-    result.xFormatter = NSFormatter(value: nil)
-    result.xTitleOrAttributedTitle.value = nil
-    result.xRepresentedObject.value = nil
-    result.xControlView = NSView(value: nil)
     result.xEnabled = true
     result.xHasValidObjectValue = true
     result.xWritingDirection = NSWritingDirectionNatural
@@ -198,14 +192,8 @@ objcImpl:
     initIvarFields(result)
 
     result.xFocusRingType = NSCell.defaultFocusRingType()
-    result.xFont = NSFont(value: nil)
-    result.xObjectValue.value = nil
     result.xImage = image
     result.xCellType = NSImageCellType
-    result.xFormatter = NSFormatter(value: nil)
-    result.xTitleOrAttributedTitle.value = nil
-    result.xRepresentedObject.value = nil
-    result.xControlView = NSView(value: nil)
     result.xEnabled = true
     result.xHasValidObjectValue = true
     result.xLineBreakMode = NSLineBreakByWordWrapping
@@ -249,14 +237,11 @@ objcImpl:
     ownFromId[NSObject](self.xObjectValue)
 
   method stringValue*(self: NSCell): NSString =
+    echo "NSCell:stringValue:"
     if not self.xFormatter.isNil:
-      let formatter = asRetainedType[NSObject](self.xFormatter.value)
-      if formatter.respondsToSelector("stringForObjectValue:"):
-        let formatted = sendId(
-          self.xFormatter, getSelector("stringForObjectValue:"), self.xObjectValue
-        )
-        if not formatted.isNil:
-          return ownFromId[NSString](formatted)
+      let formatted = self.xFormatter.stringForObjectValue(asRetainedType[NSObject](self.xObjectValue))
+      if not formatted.isNil:
+        return formatted
 
     if self.xObjectValue.isNil:
       return retain(@ns"")
