@@ -12,6 +12,7 @@ type ObjcImplMethodKind = enum
   oimkClass
 
 template kw*(name: static[string]) {.pragma.}
+template structural*() {.pragma.}
 
 type ObjcProtocolMethodSpec = object
   selector: string
@@ -833,6 +834,25 @@ proc collectIvarPragmaTypes(typeNameNode: NimNode, ivarTypes: var seq[NimNode]) 
   else:
     discard
 
+proc hasStructuralPragma(typeNameNode: NimNode): bool =
+  case typeNameNode.kind
+  of nnkPragmaExpr:
+    let pragmas = typeNameNode[1]
+    if pragmas.kind == nnkPragma:
+      for p in pragmas:
+        if identName(p) == "structural":
+          return true
+    hasStructuralPragma(typeNameNode[0])
+  of nnkPostfix:
+    hasStructuralPragma(typeNameNode[^1])
+  of nnkAccQuoted:
+    if typeNameNode.len > 0:
+      hasStructuralPragma(typeNameNode[0])
+    else:
+      false
+  else:
+    false
+
 proc collectFieldAccessorPragmas(
     fieldNode: NimNode, getterName, setterName: var string
 ) =
@@ -911,6 +931,75 @@ proc buildConditionalTypeDecl(
 proc objcImplRuntimeName(name: string): string =
   nutellaNsToNxRuntimeName(name)
 
+proc buildRespondsLikeProc(
+    protocolName: string,
+    protocolExported: bool,
+    protocolSpecs: seq[ObjcProtocolMethodSpec],
+): NimNode =
+  let respondsLikeName =
+    if protocolExported:
+      postfix(ident("respondsLike"), "*")
+    else:
+      ident("respondsLike")
+  let protocolType = ident(protocolName)
+  let objName = ident("o")
+
+  let nilRetExpr = newTree(
+    nnkObjConstr,
+    copyNimTree(protocolType),
+    newTree(nnkExprColonExpr, ident("value"), newNilLit()),
+  )
+
+  var ifStmt = newNimNode(nnkIfStmt)
+  ifStmt.add(
+    newTree(
+      nnkElifBranch,
+      newCall(newDotExpr(copyNimTree(objName), ident("isNil"))),
+      newStmtList(newNimNode(nnkReturnStmt).add(copyNimTree(nilRetExpr))),
+    )
+  )
+
+  for spec in protocolSpecs:
+    if not spec.isRequired or spec.methodKind != oimkInstance:
+      continue
+    let selectorLit = newLit(spec.selector)
+    let hasSelectorExpr = newCall(
+      bindSym"respondsToSelector",
+      newCall(bindSym"getClass", newDotExpr(copyNimTree(objName), ident("value"))),
+      newCall(bindSym"selector", selectorLit),
+    )
+    ifStmt.add(
+      newTree(
+        nnkElifBranch,
+        newCall(bindSym"not", hasSelectorExpr),
+        newStmtList(newNimNode(nnkReturnStmt).add(copyNimTree(nilRetExpr))),
+      )
+    )
+
+  let body = newStmtList()
+  body.add(ifStmt)
+  body.add(
+    newNimNode(nnkReturnStmt).add(
+      newCall(bindSym"to", copyNimTree(objName), copyNimTree(protocolType))
+    )
+  )
+
+  result = newProc(
+    name = respondsLikeName,
+    params =
+      @[
+        copyNimTree(protocolType),
+        newIdentDefs(copyNimTree(objName), bindSym"ID", newEmptyNode()),
+        newIdentDefs(
+          ident("expected"),
+          nnkBracketExpr.newTree(ident("typedesc"), copyNimTree(protocolType)),
+          newEmptyNode(),
+        ),
+      ],
+    body = body,
+    pragmas = nnkPragma.newTree(ident"inline"),
+  )
+
 macro objcImpl*(x: untyped): untyped =
   let input =
     if x.kind == nnkStmtList:
@@ -921,6 +1010,7 @@ macro objcImpl*(x: untyped): untyped =
   var protocolName = ""
   var className = ""
   var protocolExported = false
+  var protocolStructural = false
   var classExported = false
   var classSuperName = ""
   var classImplProtocols: seq[string] = @[]
@@ -944,6 +1034,7 @@ macro objcImpl*(x: untyped): untyped =
         of nnkTypeClassTy:
           protocolName = name
           protocolExported = isExportedTypeName(def[0])
+          protocolStructural = hasStructuralPragma(def[0])
           conceptBody = body[^1]
         of nnkObjectTy:
           className = name
@@ -1119,6 +1210,7 @@ macro objcImpl*(x: untyped): untyped =
   var protocolSpecs: seq[ObjcProtocolMethodSpec] = @[]
   var protocolPropertySpecs: seq[ObjcProtocolPropertySpec] = @[]
   var protocolHelperDefs = newStmtList()
+  var protocolStructuralDefs = newStmtList()
   if hasProtocol:
     for conceptStmt in conceptBody:
       let spec = methodSpecFromDef(conceptStmt, protocolName, className)
@@ -1130,6 +1222,10 @@ macro objcImpl*(x: untyped): untyped =
         protocolPropertySpecs.add(
           propertySpecFromDef(conceptStmt, protocolName, className)
         )
+    if protocolStructural:
+      protocolStructuralDefs.add(
+        buildRespondsLikeProc(protocolName, protocolExported, protocolSpecs)
+      )
 
   var generatedTypes = newStmtList()
   if hasProtocol:
@@ -1393,6 +1489,7 @@ macro objcImpl*(x: untyped): untyped =
   result.add(fieldAccessorDefs)
   result.add(passthrough)
   result.add(protocolHelperDefs)
+  result.add(protocolStructuralDefs)
   result.add(callHelperDefs)
   result.add(wrapperDefs)
   var runtimeSetup = newStmtList()
@@ -1400,7 +1497,7 @@ macro objcImpl*(x: untyped): untyped =
     runtimeSetup.add quote do:
       ensureNutellaRootClasses()
 
-  if hasProtocol:
+  if hasProtocol and not protocolStructural:
     runtimeSetup.add quote do:
       var `protoVar` = getProtocol(`protoNameLit`)
       if `protoVar`.isNil:
@@ -1413,7 +1510,7 @@ macro objcImpl*(x: untyped): untyped =
 
   if hasClass:
     var attachPrimaryProto = newStmtList()
-    if hasProtocol:
+    if hasProtocol and not protocolStructural:
       attachPrimaryProto.add quote do:
         if not `protoVar`.isNil:
           discard addProtocol(`clsVar`, `protoVar`)
@@ -1457,4 +1554,3 @@ macro objcImpl*(x: untyped): untyped =
     result.add quote do:
       block:
         `runtimeSetup`
-

@@ -106,6 +106,17 @@ suite "foundation stdlib-backed core types":
     if not copied.isNil:
       release(copied)
 
+  test "structural protocols support respondsLike":
+    let boxedInt = @ns(42)
+    let intLike = boxedInt.respondsLike(IntValue)
+    check(not intLike.isNil)
+    if not intLike.isNil:
+      check(intLike.intValue() == 42)
+
+    let plainObject = NSObject.new()
+    let notIntLike = plainObject.respondsLike(IntValue)
+    check(notIntLike.isNil)
+
   test "@ns boxes and unboxes float and bool":
     let floatObj = @ns(3.25)
     check(abs(unboxNSObject[cdouble](floatObj) - 3.25) < 0.0000001)
