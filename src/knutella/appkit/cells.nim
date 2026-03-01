@@ -308,8 +308,8 @@ objcImpl:
     let integerProvider = asProto[NSIntegerValueProvider](self.xObjectValue)
     if not integerProvider.isNil:
       return integerProvider.integerValue()
-    if valueObj.respondsToSelector("integerValue"):
-      return sendInt(self.xObjectValue, getSelector("integerValue"))
+    if (let vo = valueObj.respondsLike(IntegerValue); not vo.isNil):
+      return vo.integerValue()
     0
 
   method attributedStringValue*(self: NSCell): NSAttributedString =
