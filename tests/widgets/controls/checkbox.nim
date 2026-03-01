@@ -55,11 +55,11 @@ proc dumpCheckBoxLayout(
   echo "[Window ",
     stage, "] frame=", formatRect(windowFrame), " contentRect=", formatRect(contentRect)
   dumpViewLine(contentView, "contentView")
-  dumpViewLine(checkBox1), "checkBox1" as NSView
-  dumpViewLine(checkBox2), "checkBox2" as NSView
-  dumpViewLine(checkBox3), "checkBox3" as NSView
-  dumpViewLine(checkBox4), "checkBox4" as NSView
-  dumpViewLine(checkBox5), "checkBox5" as NSView
+  dumpViewLine(checkBox1.NSView, "checkBox1")
+  dumpViewLine(checkBox2.NSView, "checkBox2")
+  dumpViewLine(checkBox3.NSView, "checkBox3")
+  dumpViewLine(checkBox4.NSView, "checkBox4")
+  dumpViewLine(checkBox5.NSView, "checkBox5")
   echo "[checkBox1] state=",
     checkBox1.state(),
     " mixed=",
@@ -318,8 +318,8 @@ when isMainModule:
   var windowAlloc = CheckBoxWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(window) as NSWindow
-  window.makeKeyAndOrderFront(app) as NSObject
+  app.addWindow(window.NSWindow)
+  window.makeKeyAndOrderFront(app.NSObject)
 
   try:
     let maxFrames = maxFramesFromEnv()
