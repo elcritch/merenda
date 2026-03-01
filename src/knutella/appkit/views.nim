@@ -369,13 +369,9 @@ objcImpl:
     false
 
   method drawSheetBorderWithSize*(self: NSView, size: NSSize) =
-    discard self
-    discard size
     discard
 
   method drawPageBorderWithSize*(self: NSView, size: NSSize) =
-    discard self
-    discard size
     discard
 
   method setBackgroundColor(
