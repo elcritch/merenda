@@ -23,3 +23,13 @@ objcImpl:
     concept self
         method doubleValue*(self: DoubleValue): float64
 
+#objcImpl:
+#  type StringValue* {.structural.} =
+#    concept self
+#        method `string`*(self: StringValue): NSString
+
+objcImpl:
+  type DescriptionValue* {.structural.} =
+    concept self
+        method description*(self: DescriptionValue): NSString
+

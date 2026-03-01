@@ -160,6 +160,12 @@ proc isNil*(a: ID): bool =
 proc isNil*(a: Protocol): bool =
   cast[pointer](a) == nil
 
+proc notNil*(a: ID): bool =
+  result = a.value != nil
+
+proc notNil*(a: Protocol): bool =
+  cast[pointer](a) != nil
+
 converter toID*(o: ID): IDPtr {.inline.} =
   o.value
 

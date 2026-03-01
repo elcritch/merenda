@@ -235,18 +235,14 @@ objcImpl:
 
     let valueObj = self.xObjectValue.value.NSObject
     if valueObj.isKindOfClass(NSAttributedString):
-      let strValue = sendId(self.xObjectValue, getSelector("string"))
-      if not strValue.isNil:
-        return ownFromId[NSString](strValue)
-      return retain(@ns"")
+      return valueObj.to(NSAttributedString).string()
 
     if valueObj.isKindOfClass(NSString):
-      return ownFromId[NSString](self.xObjectValue)
+      return valueObj.to(NSString)
 
-    if valueObj.respondsToSelector("description"):
-      let descriptionId = sendId(self.xObjectValue, getSelector("description"))
-      if not descriptionId.isNil:
-        return ownFromId[NSString](descriptionId)
+    if (let vo = valueObj.respondsLike(DescriptionValue); vo.notNil):
+      return vo.description()
+
     retain(@ns"")
 
   method intValue*(self: NSCell): cint =
@@ -258,7 +254,7 @@ objcImpl:
     let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
     if not intProvider.isNil:
       return intProvider.intValue()
-    if (let intLike = valueObj.respondsLike(IntValue); not intLike.isNil):
+    if (let intLike = valueObj.respondsLike(IntValue); intLike.notNil):
       return intLike.intValue().cint
     0.cint
 
