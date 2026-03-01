@@ -125,7 +125,7 @@ objcImpl:
             parent.viewSubviews = subviews
             break
       view.viewSuperview = NSView(value: nil)
-      view.setNextResponder(asRetainedType[NSResponder](self))
+      view.setNextResponder(asType[NSResponder](self))
     self.xContentView = retain(view)
 
   method contentView*(self: NSWindow): NSView =
@@ -149,7 +149,7 @@ objcImpl:
       return false
     var requested = responder
     if requested.isNil:
-      requested = asRetainedType[NSResponder](self)
+      requested = asType[NSResponder](self)
     if self.xFirstResponder.value == requested.value:
       return true
 
@@ -171,7 +171,7 @@ objcImpl:
 
   method keyDown*(self: NSWindow, event: NSEvent) =
     if (not event.isNil) and siwinPressed(event) and siwinKey(event) == siwin.Key.escape:
-      self.performClose(asRetainedType[NSObject](self))
+      self.performClose(asType[NSObject](self))
       return
     let next = self.nextResponder()
     if not next.isNil:
@@ -276,9 +276,9 @@ objcImpl:
     if self.isNil:
       return
     if value:
-      self.makeKeyAndOrderFront(asRetainedType[NSObject](self))
+      self.makeKeyAndOrderFront(asType[NSObject](self))
     else:
-      self.orderOut(asRetainedType[NSObject](self))
+      self.orderOut(asType[NSObject](self))
 
   method isKeyWindow*(self: NSWindow): bool =
     self.isVisible()

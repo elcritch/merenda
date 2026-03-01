@@ -122,8 +122,8 @@ when isMainModule:
   var windowAlloc = ButtonWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(asRetainedType[NSWindow](window))
-  window.makeKeyAndOrderFront(asRetainedType[NSObject](app))
+  app.addWindow(asType[NSWindow](window))
+  window.makeKeyAndOrderFront(asType[NSObject](app))
 
   try:
     let maxFrames = maxFramesFromEnv()

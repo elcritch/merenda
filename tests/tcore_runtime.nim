@@ -91,11 +91,11 @@ suite "objc core runtime ownership fundamentals":
     check(alias.isNil)
     check(retainCount(o).int == baseCount)
 
-  test "asRetainedType creates retained typed wrappers":
+  test "asType creates retained typed wrappers":
     var o = NSObject.new()
     let baseCount = retainCount(o).int
 
-    var retainedFromObj = asRetainedType[NSObject](o)
+    var retainedFromObj = asType[NSObject](o)
     check(retainedFromObj == o)
     check(retainCount(o).int == baseCount + 1)
 
@@ -104,7 +104,7 @@ suite "objc core runtime ownership fundamentals":
     check(retainCount(o).int == baseCount)
 
     let oId: IDPtr = o
-    var retainedFromId = asRetainedType[NSObject](oId)
+    var retainedFromId = asType[NSObject](oId)
     check(retainedFromId == o)
     check(retainCount(o).int == baseCount + 1)
 
@@ -112,8 +112,8 @@ suite "objc core runtime ownership fundamentals":
     check(retainedFromId.isNil)
     check(retainCount(o).int == baseCount)
 
-    let nilFromObj = asRetainedType[NSObject](NSObject(value: nil))
-    let nilFromId = asRetainedType[NSObject](cast[IDPtr](nil))
+    let nilFromObj = asType[NSObject](NSObject(value: nil))
+    let nilFromId = asType[NSObject](cast[IDPtr](nil))
     check(nilFromObj.isNil)
     check(nilFromId.isNil)
 
