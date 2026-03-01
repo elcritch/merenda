@@ -8,3 +8,8 @@ objcImpl:
     concept self
         method intValue*(self: IntValue): int
 
+objcImpl:
+  type FloatValue* {.structural.} =
+    concept self
+        method floatValue*(self: FloatValue): float
+
