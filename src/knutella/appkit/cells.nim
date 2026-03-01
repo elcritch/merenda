@@ -271,8 +271,7 @@ objcImpl:
     let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
     if not intProvider.isNil:
       return intProvider.intValue()
-    let intLike = valueObj.respondsLike(IntValue)
-    if not intLike.isNil:
+    if (let intLike = valueObj.respondsLike(IntValue); not intLike.isNil):
       return intLike.intValue().cint
     0.cint
 
@@ -285,6 +284,8 @@ objcImpl:
     let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
     if not floatProvider.isNil:
       return floatProvider.floatValue()
+    if (let fv = self.xObjectValue.respondsLike(FloatValue); not fv.isNil):
+      return fv.floatValue().float32
     if valueObj.respondsToSelector("floatValue"):
       return sendFloat(self.xObjectValue, getSelector("floatValue"))
     0.0
