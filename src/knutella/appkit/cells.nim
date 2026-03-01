@@ -271,8 +271,9 @@ objcImpl:
     let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
     if not intProvider.isNil:
       return intProvider.intValue()
-    if valueObj.respondsToSelector("intValue"):
-      return sendInt(self.xObjectValue, getSelector("intValue")).cint
+    let intLike = valueObj.respondsLike(IntValue)
+    if not intLike.isNil:
+      return intLike.intValue().cint
     0.cint
 
   method floatValue*(self: NSCell): float32 =
