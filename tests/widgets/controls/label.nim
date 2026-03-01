@@ -47,7 +47,7 @@ proc dumpLabelLayout(stage: string, window: NSWindow, label1: NSTextField) =
   echo "[Window ",
     stage, "] frame=", formatRect(windowFrame), " contentRect=", formatRect(contentRect)
   dumpViewLine(contentView, "contentView")
-  dumpViewLine(label1), "label1" as NSView
+  dumpViewLine(label1.NSView, "label1")
   echo "[label1] string='",
     label1.stringValue(),
     "' bezeled=",
@@ -102,7 +102,7 @@ objcImpl:
     contentView.addSubview(result.xLabel1)
     result.setTitle(@ns"Label Example")
     result.setIsVisible(true)
-    dumpLabelLayout("init", result), result.xLabel1 as NSWindow
+    dumpLabelLayout("init", result.NSWindow, result.xLabel1)
     contentView.value = nil
 
   method windowShouldClose*(self: LabelWindow, sender: NSObject): bool =
@@ -122,8 +122,8 @@ when isMainModule:
   var windowAlloc = LabelWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(window) as NSWindow
-  window.makeKeyAndOrderFront(app) as NSObject
+  app.addWindow(window.NSWindow)
+  window.makeKeyAndOrderFront(app.NSObject)
 
   try:
     let maxFrames = maxFramesFromEnv()
