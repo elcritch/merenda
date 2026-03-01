@@ -1008,6 +1008,6 @@ proc ensureNativeWindow*(window: NSWindow) =
     window.windowNativeWindow().firstStep()
     window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
     window.windowNativeReady true
-  except Exception.exc:
+  except Exception as exc:
     cleanupFailedWindowInit(window)
     raise newException(CatchableError, "window backend init failed: " & exc.msg)
