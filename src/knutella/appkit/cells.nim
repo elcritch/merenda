@@ -286,8 +286,6 @@ objcImpl:
       return floatProvider.floatValue()
     if (let fv = self.xObjectValue.respondsLike(FloatValue); not fv.isNil):
       return fv.floatValue().float32
-    if valueObj.respondsToSelector("floatValue"):
-      return sendFloat(self.xObjectValue, getSelector("floatValue"))
     0.0
 
   method doubleValue*(self: NSCell): float =
