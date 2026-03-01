@@ -9,6 +9,11 @@ objcImpl:
         method intValue*(self: IntValue): int
 
 objcImpl:
+  type IntegerValue* {.structural.} =
+    concept self
+        method integerValue*(self: IntegerValue): int
+
+objcImpl:
   type FloatValue* {.structural.} =
     concept self
         method floatValue*(self: FloatValue): float
