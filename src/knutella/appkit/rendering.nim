@@ -617,7 +617,7 @@ proc closeOpenComboPopupsInTree(
   if view.isNil or view.viewHidden():
     return
   if view.isKindOfClass(NSComboBox):
-    let comboBox = view as NSComboBox
+    let comboBox = view.NSComboBox
     if (not comboBox.isNil) and comboBox.popupOpen() and
         (exceptComboId.isNil or view.value != exceptComboId):
       comboBox.closePopup()
@@ -659,7 +659,7 @@ proc updateOpenComboPopupHoverInTree(
     frameSelf.size.height,
   )
   if view.isKindOfClass(NSComboBox):
-    let comboBox = view as NSComboBox
+    let comboBox = view.NSComboBox
     if (not comboBox.isNil) and comboBox.popupOpen():
       let hoverItem = comboBoxPopupItemIndexAtPoint(comboBox, frame, x, y)
       if comboBox.popupHoveredIndex() != hoverItem:
@@ -714,7 +714,7 @@ proc handleComboBoxMouseDown(
     if comboBox.isNil:
       result.consumed = true
       return
-    let control = comboBox as NSControl
+    let control = comboBox.NSControl
     if not control.isEnabled():
       result.consumed = true
       return
@@ -881,7 +881,7 @@ proc ensureNativeWindow*(window: NSWindow) =
         discard e
         clearTrackedMouseDownButton()
         clearTrackedMouseDownComboBox()
-        discard window.windowShouldClose(window as NSObject)
+        discard window.windowShouldClose(window.NSObject)
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
@@ -1008,6 +1008,6 @@ proc ensureNativeWindow*(window: NSWindow) =
     window.windowNativeWindow().firstStep()
     window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
     window.windowNativeReady true
-  except Exception as exc:
+  except Exception.exc:
     cleanupFailedWindowInit(window)
     raise newException(CatchableError, "window backend init failed: " & exc.msg)
