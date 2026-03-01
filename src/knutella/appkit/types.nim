@@ -326,3 +326,44 @@ proc NSLocationInRange*(location: uint, r: NSRange): bool {.inline.} =
 proc contains*(r: NSRect, x, y: float32): bool =
   x >= r.origin.x and y >= r.origin.y and x < (r.origin.x + r.size.width) and
     y < (r.origin.y + r.size.height)
+
+proc NSEqualSizes*(size0, size1: NSSize): bool =
+   return (size0.width==size1.width) and (size0.height==size1.height)
+
+proc maxX*(rect: NSRect): float32 {.inline.} =
+  rect.origin.x + rect.size.width
+
+proc maxY*(rect: NSRect): float32 {.inline.} =
+  rect.origin.y + rect.size.height
+
+proc isEmpty*(rect: NSRect): bool {.inline.} =
+  rect.size.width <= 0.0 or rect.size.height <= 0.0
+
+proc nsIntersectionRect*(a: NSRect, b: NSRect): NSRect =
+  let x0 = max(a.origin.x, b.origin.x)
+  let y0 = max(a.origin.y, b.origin.y)
+  let x1 = min(maxX(a), maxX(b))
+  let y1 = min(maxY(a), maxY(b))
+  if x1 <= x0 or y1 <= y0:
+    return nsRect(0.0, 0.0, 0.0, 0.0)
+  nsRect(x0, y0, x1 - x0, y1 - y0)
+
+proc nsUnionRect*(a: NSRect, b: NSRect): NSRect =
+  if isEmpty(a):
+    return b
+  if isEmpty(b):
+    return a
+  let x0 = min(a.origin.x, b.origin.x)
+  let y0 = min(a.origin.y, b.origin.y)
+  let x1 = max(maxX(a), maxX(b))
+  let y1 = max(maxY(a), maxY(b))
+  nsRect(x0, y0, x1 - x0, y1 - y0)
+
+proc nsContainsRect*(outer: NSRect, inner: NSRect): bool {.inline.} =
+  not isEmpty(inner) and inner.origin.x >= outer.origin.x and
+    inner.origin.y >= outer.origin.y and maxX(inner) <= maxX(outer) and
+    maxY(inner) <= maxY(outer)
+
+proc nsIntersectsRect*(a: NSRect, b: NSRect): bool {.inline.} =
+  not isEmpty(nsIntersectionRect(a, b))
+
