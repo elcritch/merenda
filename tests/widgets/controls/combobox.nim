@@ -41,7 +41,7 @@ proc dumpViewLine(view: NSView, name: string) =
 proc dumpComboBoxLine(comboBox: NSComboBox, name: string) =
   if comboBox.isNil:
     return
-  dumpViewLine(comboBox), name as NSView
+  dumpViewLine(comboBox.NSView, name)
   echo "[",
     name,
     "] editable=",
@@ -165,14 +165,14 @@ when isMainModule:
   var windowAlloc = ComboBoxWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(window) as NSWindow
-  window.makeKeyAndOrderFront(app) as NSObject
+  app.addWindow(window.NSWindow)
+  window.makeKeyAndOrderFront(app.NSObject)
 
   if getEnv("KNUTELLA_COMBOBOX_OPEN_POPUP").strip().len > 0:
     window.xComboBox1.openPopup()
     dumpComboBoxLayout(
       "popup-open",
-      window as NSWindow,
+      window.NSWindow,
       window.xComboBox1,
       window.xComboBox2,
     )
@@ -180,11 +180,11 @@ when isMainModule:
   if getEnv("KNUTELLA_COMBOBOX_TRIGGER_CALLBACK").strip().len > 0:
     dumpComboBoxLayout(
       "post-front",
-      window as NSWindow,
+      window.NSWindow,
       window.xComboBox1,
       window.xComboBox2,
     )
-    window.OnComboBox1SelectedItemChange(window) as NSObject
+    window.OnComboBox1SelectedItemChange(window.NSObject)
 
   try:
     let maxFrames = maxFramesFromEnv()
