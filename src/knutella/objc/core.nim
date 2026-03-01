@@ -175,13 +175,13 @@ template asTypeRaw*[T: ID](o: IDPtr): T =
 template asTypeRaw*[T: ID](o: ID): T =
   T(value: o.value)
 
-template asRetainedType*[T: ID](o: IDPtr): T =
+template asType*[T: ID](o: IDPtr): T =
   if o == nil:
     T(value: nil)
   else:
     T(value: retainAux(o))
 
-template asRetainedType*[T: ID](o: ID): T =
+template asType*[T: ID](o: ID): T =
   if o.value == nil:
     T(value: nil)
   else:

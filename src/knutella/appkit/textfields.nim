@@ -59,7 +59,7 @@ objcImpl:
     result = self.init()
     if result.isNil:
       return
-    asRetainedType[NSView](result).setFrame(
+    asType[NSView](result).setFrame(
       x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
     )
 

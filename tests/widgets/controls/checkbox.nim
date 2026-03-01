@@ -55,11 +55,11 @@ proc dumpCheckBoxLayout(
   echo "[Window ",
     stage, "] frame=", formatRect(windowFrame), " contentRect=", formatRect(contentRect)
   dumpViewLine(contentView, "contentView")
-  dumpViewLine(asRetainedType[NSView](checkBox1), "checkBox1")
-  dumpViewLine(asRetainedType[NSView](checkBox2), "checkBox2")
-  dumpViewLine(asRetainedType[NSView](checkBox3), "checkBox3")
-  dumpViewLine(asRetainedType[NSView](checkBox4), "checkBox4")
-  dumpViewLine(asRetainedType[NSView](checkBox5), "checkBox5")
+  dumpViewLine(asType[NSView](checkBox1), "checkBox1")
+  dumpViewLine(asType[NSView](checkBox2), "checkBox2")
+  dumpViewLine(asType[NSView](checkBox3), "checkBox3")
+  dumpViewLine(asType[NSView](checkBox4), "checkBox4")
+  dumpViewLine(asType[NSView](checkBox5), "checkBox5")
   echo "[checkBox1] state=",
     checkBox1.state(),
     " mixed=",
@@ -205,7 +205,7 @@ objcImpl:
     result.setIsVisible(true)
     dumpCheckBoxLayout(
       "init",
-      asRetainedType[NSWindow](result),
+      asType[NSWindow](result),
       result.xCheckBox1,
       result.xCheckBox2,
       result.xCheckBox3,
@@ -239,7 +239,7 @@ objcImpl:
     self.xCheckBox1.setTitle(self.stateToString(self.xCheckBox1.state()))
     dumpCheckBoxLayout(
       "checkBox1-click",
-      asRetainedType[NSWindow](self),
+      asType[NSWindow](self),
       self.xCheckBox1,
       self.xCheckBox2,
       self.xCheckBox3,
@@ -253,7 +253,7 @@ objcImpl:
     self.xCheckBox2.setTitle(self.stateToString(self.xCheckBox2.state()))
     dumpCheckBoxLayout(
       "checkBox2-click",
-      asRetainedType[NSWindow](self),
+      asType[NSWindow](self),
       self.xCheckBox1,
       self.xCheckBox2,
       self.xCheckBox3,
@@ -267,7 +267,7 @@ objcImpl:
     self.xCheckBox3.setTitle(self.stateToString(self.xCheckBox3.state()))
     dumpCheckBoxLayout(
       "checkBox3-click",
-      asRetainedType[NSWindow](self),
+      asType[NSWindow](self),
       self.xCheckBox1,
       self.xCheckBox2,
       self.xCheckBox3,
@@ -281,7 +281,7 @@ objcImpl:
     self.xCheckBox4.setTitle(self.stateToString(self.xCheckBox4.state()))
     dumpCheckBoxLayout(
       "checkBox4-click",
-      asRetainedType[NSWindow](self),
+      asType[NSWindow](self),
       self.xCheckBox1,
       self.xCheckBox2,
       self.xCheckBox3,
@@ -296,7 +296,7 @@ objcImpl:
     self.xCheckBox5.setTitle(self.stateToString(self.xCheckBox5.state()))
     dumpCheckBoxLayout(
       "checkBox5-click",
-      asRetainedType[NSWindow](self),
+      asType[NSWindow](self),
       self.xCheckBox1,
       self.xCheckBox2,
       self.xCheckBox3,
@@ -318,8 +318,8 @@ when isMainModule:
   var windowAlloc = CheckBoxWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(asRetainedType[NSWindow](window))
-  window.makeKeyAndOrderFront(asRetainedType[NSObject](app))
+  app.addWindow(asType[NSWindow](window))
+  window.makeKeyAndOrderFront(asType[NSObject](app))
 
   try:
     let maxFrames = maxFramesFromEnv()

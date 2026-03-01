@@ -239,14 +239,14 @@ objcImpl:
   method stringValue*(self: NSCell): NSString =
     echo "NSCell:stringValue:"
     if not self.xFormatter.isNil:
-      let formatted = self.xFormatter.stringForObjectValue(asRetainedType[NSObject](self.xObjectValue))
+      let formatted = self.xFormatter.stringForObjectValue(asType[NSObject](self.xObjectValue))
       if not formatted.isNil:
         return formatted
 
     if self.xObjectValue.isNil:
       return retain(@ns"")
 
-    let valueObj = asRetainedType[NSObject](self.xObjectValue.value)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString):
       let strValue = sendId(self.xObjectValue, getSelector("string"))
       if not strValue.isNil:
@@ -263,7 +263,7 @@ objcImpl:
     retain(@ns"")
 
   method intValue*(self: NSCell): cint =
-    let valueObj = asRetainedType[NSObject](self.xObjectValue.value)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString):
       return parseIntegerPrefix($self.stringValue()).cint
     if valueObj.isKindOfClass(NSString):
@@ -278,7 +278,7 @@ objcImpl:
   method floatValue*(self: NSCell): float32 =
     if self.xObjectValue.isNil:
       return 0.0
-    let valueObj = asRetainedType[NSObject](self.xObjectValue.value)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue()).float32
     let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
@@ -291,7 +291,7 @@ objcImpl:
   method doubleValue*(self: NSCell): float =
     if self.xObjectValue.isNil:
       return 0.0
-    let valueObj = asRetainedType[NSObject](self.xObjectValue.value)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue())
     let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
@@ -302,7 +302,7 @@ objcImpl:
     0.0
 
   method integerValue*(self: NSCell): int =
-    let valueObj = asRetainedType[NSObject](self.xObjectValue.value)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseIntegerPrefix($self.stringValue())
     let integerProvider = asProto[NSIntegerValueProvider](self.xObjectValue)
@@ -315,7 +315,7 @@ objcImpl:
   method attributedStringValue*(self: NSCell): NSAttributedString =
     if self.xObjectValue.isNil:
       return NSAttributedString(value: nil)
-    let valueObj = asRetainedType[NSObject](self.xObjectValue.value)
+    let valueObj = asType[NSObject](self.xObjectValue.value)
     if valueObj.isKindOfClass(NSAttributedString):
       return ownFromId[NSAttributedString](self.xObjectValue)
     NSAttributedString(value: nil)
@@ -389,12 +389,12 @@ objcImpl:
   method setObjectValue*(self: NSCell, value: NSObject) =
     let controlView = self.controlView()
     if not controlView.isNil:
-      willChangeValueForKey(asRetainedType[NSObject](controlView), "objectValue")
+      willChangeValueForKey(asType[NSObject](controlView), "objectValue")
     replaceOwned(self.xObjectValue, value)
     replaceOwned(self.xTitleOrAttributedTitle, value)
     self.xHasValidObjectValue = true
     if not controlView.isNil:
-      didChangeValueForKey(asRetainedType[NSObject](controlView), "objectValue")
+      didChangeValueForKey(asType[NSObject](controlView), "objectValue")
 
   method setStringValue*(self: NSCell, value: NSString) =
     if value.isNil:
@@ -403,7 +403,7 @@ objcImpl:
     self.setType(NSTextCellType)
 
     if not self.xFormatter.isNil:
-      let formatterObj = asRetainedType[NSObject](self.xFormatter.value)
+      let formatterObj = asType[NSObject](self.xFormatter.value)
       if formatterObj.respondsToSelector("getObjectValue:forString:errorDescription:"):
         var formatted: IDPtr = nil
         var errorDesc: IDPtr = nil
@@ -441,8 +441,8 @@ objcImpl:
     self.setObjectValue(ownFromId[NSObject](ns(value).value))
 
   method setAttributedStringValue*(self: NSCell, value: NSAttributedString) =
-    replaceOwned(self.xObjectValue, asRetainedType[NSObject](value.value))
-    replaceOwned(self.xTitleOrAttributedTitle, asRetainedType[NSObject](value.value))
+    replaceOwned(self.xObjectValue, asType[NSObject](value.value))
+    replaceOwned(self.xTitleOrAttributedTitle, asType[NSObject](value.value))
     self.xHasValidObjectValue = true
 
   method setRepresentedObject*(self: NSCell, representedObject: NSObject) =
@@ -581,7 +581,7 @@ objcImpl:
   method endEditing*(self: NSCell, editor: NSText) =
     if editor.isNil:
       return
-    let editorObj = asRetainedType[NSObject](editor.value)
+    let editorObj = asType[NSObject](editor.value)
     if editorObj.respondsToSelector("string"):
       self.setStringValue(ownFromId[NSString](sendId(editor, getSelector("string"))))
 
@@ -674,12 +674,12 @@ objcImpl:
     result.setBordered(true)
     result.setBezeled(true)
     result.setAlignment(NSCenterTextAlignment)
-    result.setObjectValue(asRetainedType[NSObject](result.xButtonTitle))
+    result.setObjectValue(asType[NSObject](result.xButtonTitle))
 
   method setTitle*(self: NSButtonCell, value: NSString) =
     self.xButtonTitle = value
-    replaceOwned(self.xObjectValue, asRetainedType[NSObject](value.value))
-    replaceOwned(self.xTitleOrAttributedTitle, asRetainedType[NSObject](value.value))
+    replaceOwned(self.xObjectValue, asType[NSObject](value.value))
+    replaceOwned(self.xTitleOrAttributedTitle, asType[NSObject](value.value))
     self.xHasValidObjectValue = true
 
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
@@ -1151,9 +1151,9 @@ objcImpl:
     let action = self.action()
     if targetId.isNil or cast[pointer](action).isNil:
       return
-    let target = asRetainedType[NSObject](targetId.value)
+    let target = asType[NSObject](targetId.value)
     discard
-      performResponderSelector(target, action, asRetainedType[NSObject](self.value))
+      performResponderSelector(target, action, asType[NSObject](self.value))
 
   method dealloc(self: NSButtonCell) {.used.} =
     self.xButtonTitle = NSString(value: nil)

@@ -61,7 +61,7 @@ objcImpl:
     defaultCell.value = nil
     let cell = result.xCell
     if not cell.isNil:
-      cell.setControlView(asRetainedType[NSView](result))
+      cell.setControlView(asType[NSView](result))
       cell.setContinuous(false)
     result.xTarget.value = nil
     result.xAction = nil
@@ -76,7 +76,7 @@ objcImpl:
       self.xCell = move(defaultCell)
       if not self.xCell.isNil:
         let controlCell = self.xCell
-        controlCell.setControlView(asRetainedType[NSView](self))
+        controlCell.setControlView(asType[NSView](self))
         controlCell.setContinuous(false)
     self.xCell
 
@@ -86,7 +86,7 @@ objcImpl:
     self.xCell = ownFromId[NSCell](cell.value)
     let bound = self.xCell
     if not bound.isNil:
-      bound.setControlView(asRetainedType[NSView](self))
+      bound.setControlView(asType[NSView](self))
 
   method isEnabled*(self: NSControl): bool =
     if self.isNil:
@@ -212,8 +212,8 @@ objcImpl:
     let selected = self.cell()
     if selected.isNil or selected.value != cell.value:
       return
-    selected.setControlView(asRetainedType[NSView](self))
-    selected.drawWithFrame(self.bounds(), asRetainedType[NSView](self))
+    selected.setControlView(asType[NSView](self))
+    selected.drawWithFrame(self.bounds(), asType[NSView](self))
 
   method drawCellInside*(self: NSControl, cell: NSCell) =
     if self.isNil or cell.isNil:
@@ -221,7 +221,7 @@ objcImpl:
     let selected = self.cell()
     if selected.isNil or selected.value != cell.value:
       return
-    selected.drawInteriorWithFrame(self.bounds(), asRetainedType[NSView](self))
+    selected.drawInteriorWithFrame(self.bounds(), asType[NSView](self))
 
   method updateCell*(self: NSControl, cell: NSCell) =
     if self.isNil or cell.isNil:
@@ -241,8 +241,8 @@ objcImpl:
     let selected = self.cell()
     if selected.isNil:
       return
-    selected.setControlView(asRetainedType[NSView](self))
-    selected.drawWithFrame(self.bounds(), asRetainedType[NSView](self))
+    selected.setControlView(asType[NSView](self))
+    selected.drawWithFrame(self.bounds(), asType[NSView](self))
 
   method performClick*(self: NSControl, sender: NSResponder) =
     discard
@@ -250,11 +250,11 @@ objcImpl:
   method sendAction*(self: NSControl, action: SEL, target {.kw("to").}: ID): bool =
     if self.isNil or cast[pointer](action).isNil:
       return false
-    let senderObj = asRetainedType[NSObject](self)
+    let senderObj = asType[NSObject](self)
     if not target.isNil:
-      let targetObj = asRetainedType[NSObject](target.value)
+      let targetObj = asType[NSObject](target.value)
       return performResponderSelector(targetObj, action, senderObj)
-    let responder = asRetainedType[NSResponder](self)
+    let responder = asType[NSResponder](self)
     responder.tryToPerform(action, senderObj)
 
   method dealloc(self: NSControl) {.used.} =

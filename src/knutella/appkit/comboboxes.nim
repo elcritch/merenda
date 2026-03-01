@@ -121,7 +121,7 @@ objcImpl:
     result = self.init()
     if result.isNil:
       return
-    asRetainedType[NSView](result).setFrame(
+    asType[NSView](result).setFrame(
       x.float32, y.float32, max(width.float32, 0.0'f32), max(height.float32, 0.0'f32)
     )
 
@@ -272,7 +272,7 @@ objcImpl:
     if value.isNil:
       return
     if value.isKindOfClass(NSString):
-      self.xObjectValues.add(asRetainedType[NSString](value))
+      self.xObjectValues.add(asType[NSString](value))
     else:
       self.xObjectValues.add(ns($value))
     self.noteNumberOfItemsChanged()
@@ -324,7 +324,7 @@ objcImpl:
         index
     var objectValue = NSString(value: nil)
     if value.isKindOfClass(NSString):
-      objectValue = asRetainedType[NSString](value)
+      objectValue = asType[NSString](value)
     else:
       objectValue = ns($value)
     self.xObjectValues.insert(objectValue, boundedIndex)
@@ -387,7 +387,7 @@ objcImpl:
     if index < 0 or index >= self.numberOfItems():
       return
     self.selectItemAtIndex(index)
-    let control = asRetainedType[NSControl](self)
+    let control = asType[NSControl](self)
     discard control.sendAction(control.action(), control.target())
 
   method scrollItemAtIndexToTop*(self: NSComboBox, index: int) =

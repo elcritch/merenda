@@ -428,7 +428,7 @@ proc clearSuperviewRef*(viewId: IDPtr) =
 proc detachSubviews*(view: NSObject) =
   if view.isNil:
     return
-  let v = asRetainedType[NSView](view)
+  let v = asType[NSView](view)
   if v.isNil:
     return
   var children = v.viewSubviews()
@@ -594,7 +594,7 @@ proc addSubview*(self: NSView, view: NSView) =
     if view notin children:
       children.add(view)
       self.viewSubviews = children
-    view.setNextResponder(asRetainedType[NSResponder](self))
+    view.setNextResponder(asType[NSResponder](self))
     return
   if not parent.isNil:
     view.removeFromSuperview()
@@ -603,7 +603,7 @@ proc addSubview*(self: NSView, view: NSView) =
     children.add(view)
     self.viewSubviews = children
   view.viewSuperview = retain(self)
-  view.setNextResponder(asRetainedType[NSResponder](self))
+  view.setNextResponder(asType[NSResponder](self))
 
 proc removeSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil:

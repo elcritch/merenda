@@ -598,7 +598,7 @@ proc hitTestOpenComboPopup(
 
   if not view.isKindOfClass(NSComboBox):
     return
-  let comboBox = asRetainedType[NSComboBox](view)
+  let comboBox = asType[NSComboBox](view)
   if comboBox.isNil or (not comboBox.popupOpen()):
     return
   let popupBox = comboBoxPopupFrame(comboBox, frame)
@@ -617,7 +617,7 @@ proc closeOpenComboPopupsInTree(
   if view.isNil or view.viewHidden():
     return
   if view.isKindOfClass(NSComboBox):
-    let comboBox = asRetainedType[NSComboBox](view)
+    let comboBox = asType[NSComboBox](view)
     if (not comboBox.isNil) and comboBox.popupOpen() and
         (exceptComboId.isNil or view.value != exceptComboId):
       comboBox.closePopup()
@@ -659,7 +659,7 @@ proc updateOpenComboPopupHoverInTree(
     frameSelf.size.height,
   )
   if view.isKindOfClass(NSComboBox):
-    let comboBox = asRetainedType[NSComboBox](view)
+    let comboBox = asType[NSComboBox](view)
     if (not comboBox.isNil) and comboBox.popupOpen():
       let hoverItem = comboBoxPopupItemIndexAtPoint(comboBox, frame, x, y)
       if comboBox.popupHoveredIndex() != hoverItem:
@@ -714,7 +714,7 @@ proc handleComboBoxMouseDown(
     if comboBox.isNil:
       result.consumed = true
       return
-    let control = asRetainedType[NSControl](comboBox)
+    let control = asType[NSControl](comboBox)
     if not control.isEnabled():
       result.consumed = true
       return
@@ -881,7 +881,7 @@ proc ensureNativeWindow*(window: NSWindow) =
         discard e
         clearTrackedMouseDownButton()
         clearTrackedMouseDownComboBox()
-        discard window.windowShouldClose(asRetainedType[NSObject](window))
+        discard window.windowShouldClose(asType[NSObject](window))
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e

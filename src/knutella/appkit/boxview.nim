@@ -237,8 +237,8 @@ objcImpl:
       var children = result.viewSubviews()
       children.add(content)
       result.viewSubviews = children
-      content.viewSuperview = retain(asRetainedType[NSView](result))
-      content.setNextResponder(asRetainedType[NSResponder](result))
+      content.viewSuperview = retain(asType[NSView](result))
+      content.setNextResponder(asType[NSResponder](result))
       result.xContentView = retain(content)
       boxUpdateContentViewFrame(result)
     content.value = nil
@@ -362,8 +362,8 @@ objcImpl:
     if view notin children:
       children.add(view)
       self.viewSubviews = children
-    view.viewSuperview = retain(asRetainedType[NSView](self))
-    view.setNextResponder(asRetainedType[NSResponder](self))
+    view.viewSuperview = retain(asType[NSView](self))
+    view.setNextResponder(asType[NSResponder](self))
     self.xContentView = retain(view)
     boxUpdateContentViewFrame(self)
     self.setNeedsDisplay(true)
