@@ -41,7 +41,7 @@ proc dumpViewLine(view: NSView, name: string) =
 proc dumpComboBoxLine(comboBox: NSComboBox, name: string) =
   if comboBox.isNil:
     return
-  dumpViewLine(asType[NSView](comboBox), name)
+  dumpViewLine(comboBox), name as NSView
   echo "[",
     name,
     "] editable=",
@@ -121,7 +121,7 @@ objcImpl:
     result.setTitle(@ns"ComboBox Example")
     result.setIsVisible(true)
     dumpComboBoxLayout(
-      "init", asType[NSWindow](result), result.xComboBox1, result.xComboBox2
+      "init", result as NSWindow, result.xComboBox1, result.xComboBox2
     )
     contentView.value = nil
 
@@ -138,7 +138,7 @@ objcImpl:
     self.xComboBox2.selectItemAtIndex(self.xComboBox1.indexOfSelectedItem())
     dumpComboBoxLayout(
       "comboBox1-change",
-      asType[NSWindow](self),
+      self as NSWindow,
       self.xComboBox1,
       self.xComboBox2,
     )
@@ -149,7 +149,7 @@ objcImpl:
     self.xComboBox1.selectItemAtIndex(self.xComboBox2.indexOfSelectedItem())
     dumpComboBoxLayout(
       "comboBox2-change",
-      asType[NSWindow](self),
+      self as NSWindow,
       self.xComboBox1,
       self.xComboBox2,
     )
@@ -165,14 +165,14 @@ when isMainModule:
   var windowAlloc = ComboBoxWindow.alloc()
   var window = initOwned(move(windowAlloc))
 
-  app.addWindow(asType[NSWindow](window))
-  window.makeKeyAndOrderFront(asType[NSObject](app))
+  app.addWindow(window) as NSWindow
+  window.makeKeyAndOrderFront(app) as NSObject
 
   if getEnv("KNUTELLA_COMBOBOX_OPEN_POPUP").strip().len > 0:
     window.xComboBox1.openPopup()
     dumpComboBoxLayout(
       "popup-open",
-      asType[NSWindow](window),
+      window as NSWindow,
       window.xComboBox1,
       window.xComboBox2,
     )
@@ -180,11 +180,11 @@ when isMainModule:
   if getEnv("KNUTELLA_COMBOBOX_TRIGGER_CALLBACK").strip().len > 0:
     dumpComboBoxLayout(
       "post-front",
-      asType[NSWindow](window),
+      window as NSWindow,
       window.xComboBox1,
       window.xComboBox2,
     )
-    window.OnComboBox1SelectedItemChange(asType[NSObject](window))
+    window.OnComboBox1SelectedItemChange(window) as NSObject
 
   try:
     let maxFrames = maxFramesFromEnv()

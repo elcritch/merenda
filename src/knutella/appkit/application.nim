@@ -33,7 +33,7 @@ objcImpl:
     if window.value notin windows:
       windows.add(retainId(window.value))
       self.appWindows = windows
-    window.setNextResponder(asType[NSResponder](self))
+    window.setNextResponder(self.NSResponder)
     window.windowVisibleRequested true
 
   method run(self: NSApplication) =
@@ -133,7 +133,7 @@ proc addWindow*(app: NSApplication, window: NSWindow) =
   if window.value notin windows:
     windows.add(retainId(window.value))
     app.appWindows = windows
-  window.setNextResponder(asType[NSResponder](app))
+  window.setNextResponder(app as NSResponder)
   window.windowVisibleRequested true
 
 proc windows*(app: NSApplication): seq[NSWindow] =

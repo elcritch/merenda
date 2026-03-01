@@ -39,7 +39,7 @@ objcImpl:
   template syncButtonCellFromView(self: NSButton) =
     if self.isNil:
       return
-    let control = asType[NSControl](self)
+    let control = self.NSControl
     var selected = control.cell()
     if selected.isNil or (not selected.isKindOfClass(NSButtonCell)):
       var created = NSButtonCell.new()
@@ -48,10 +48,10 @@ objcImpl:
       created.value = nil
     if selected.isNil:
       return
-    let cell = asType[NSButtonCell](selected)
+    let cell = selected.NSButtonCell
     if cell.isNil:
       return
-    cell.setControlView(asType[NSView](self))
+    cell.setControlView(self.NSView)
     cell.setTitle(self.title)
     cell.setAlternateTitle(self.alternateTitle)
     cell.setKeyEquivalent(self.keyEquivalent)
@@ -96,7 +96,8 @@ objcImpl:
     result.periodicIntervalSec = 0.0
     result.onClick = nil
     var buttonCell = NSButtonCell.new()
-    asType[NSControl](result).setCell(ownFromId[NSCell](buttonCell.value))
+    #asType[NSControl](result).setCell(ownFromId[NSCell](buttonCell.value))
+    result.NSControl.setCell(ownFromId[NSCell](buttonCell.value))
     buttonCell.value = nil
     result.syncButtonCellFromView()
 
@@ -110,7 +111,7 @@ objcImpl:
     result = self.init()
     if result.isNil:
       return
-    asType[NSView](result).setFrame(
+    result.to(NSView).setFrame(
       x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
     )
 
@@ -176,7 +177,7 @@ objcImpl:
     if not self.isEnabled():
       return
     self.setNextState()
-    let control = asType[NSControl](self)
+    let control = self.NSControl
     discard control.sendAction(control.action(), control.target())
     let cb = self.onClick()
     if cb.isNil:
@@ -241,11 +242,11 @@ objcImpl:
     if self.isNil:
       return
     self.syncButtonCellFromView()
-    let selected = asType[NSControl](self).cell()
+    let selected = (self.NSControl).cell()
     if selected.isNil:
       return
-    selected.setControlView(asType[NSView](self))
-    selected.drawWithFrame(self.bounds(), asType[NSView](self))
+    selected.setControlView(self.NSView)
+    selected.drawWithFrame(self.bounds(), self.NSView)
 
   method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(stripMnemonicMarkers(value))
@@ -272,7 +273,7 @@ proc click*(button: NSButton) =
   if not button.isEnabled():
     return
   button.setNextState()
-  let control = asType[NSControl](button)
+  let control = button.NSControl
   discard control.sendAction(control.action(), control.target())
   let cb = button.onClick()
   if not cb.isNil:

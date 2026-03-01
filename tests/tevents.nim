@@ -54,7 +54,7 @@ suite "appkit NSEvent":
     var mouseEvent =
       newMouseEvent(NSLeftMouseDown, nsPoint(7, 11), {NSShiftKeyMask}, 11.0, 2, 3)
     check(mouseEvent.isKindOfClass(NSEvent_mouse))
-    let mouseEventTyped = asType[NSEvent_mouse](mouseEvent)
+    let mouseEventTyped = mouseEvent as NSEvent_mouse
     check(mouseEventTyped.serialNumber() == 0)
     mouseEventTyped.setSerialNumber(99)
     check(mouseEventTyped.serialNumber() == 99)

@@ -32,7 +32,7 @@ template sendViewNoArg(receiver: NSView, selectorName: static[string]): NSView =
     if receiver.isNil:
       NSView(value: nil)
     else:
-      let receiverObj = asType[NSObject](receiver.value)
+      let receiverObj = receiver.value.NSObject
       if not receiverObj.respondsToSelector(selectorName):
         NSView(value: nil)
       else:
@@ -323,7 +323,7 @@ objcImpl:
     if not self.xVerticalRuler.isNil:
       self.xVerticalRuler.setScrollView(self)
       self.xVerticalRuler.setOrientation(NSVerticalRuler)
-      self.addSubview(asType[NSView](self.xVerticalRuler))
+      self.addSubview(self.xVerticalRuler.NSView)
     self.xHasVerticalRuler = not self.xVerticalRuler.isNil
     self.tile()
 
@@ -338,7 +338,7 @@ objcImpl:
     if not self.xHorizontalRuler.isNil:
       self.xHorizontalRuler.setScrollView(self)
       self.xHorizontalRuler.setOrientation(NSHorizontalRuler)
-      self.addSubview(asType[NSView](self.xHorizontalRuler))
+      self.addSubview(self.xHorizontalRuler.NSView)
     self.xHasHorizontalRuler = not self.xHorizontalRuler.isNil
     self.tile()
 
@@ -364,7 +364,7 @@ objcImpl:
       )
     else:
       self.xClipView = retain(clipView)
-    self.addSubview(asType[NSView](self.xClipView))
+    self.addSubview(self.xClipView.NSView)
     self.xClipView.setAutoresizingMask(NSViewWidthSizable or NSViewHeightSizable)
     self.xClipView.setAutoresizesSubviews(true)
     self.tile()
@@ -397,7 +397,7 @@ objcImpl:
       self.xVerticalScroller.setTarget(ID(value: self.value))
       self.xVerticalScroller.setAction(getSelector("verticalScroll:"))
       if self.xHasVerticalScroller:
-        self.addSubview(asType[NSView](self.xVerticalScroller))
+        self.addSubview(self.xVerticalScroller.NSView)
     self.tile()
 
   method setHorizontalScroller*(self: NSScrollView, scroller: NSScroller) =
@@ -412,7 +412,7 @@ objcImpl:
       self.xHorizontalScroller.setTarget(ID(value: self.value))
       self.xHorizontalScroller.setAction(getSelector("horizontalScroll:"))
       if self.xHasHorizontalScroller:
-        self.addSubview(asType[NSView](self.xHorizontalScroller))
+        self.addSubview(self.xHorizontalScroller.NSView)
     self.tile()
 
   method setHasVerticalScroller*(self: NSScrollView, flag: bool) =
@@ -422,7 +422,7 @@ objcImpl:
       self.xHasVerticalScroller = true
       self.createVerticalScrollerIfNeeded()
       if not self.xVerticalScroller.isNil:
-        self.addSubview(asType[NSView](self.xVerticalScroller))
+        self.addSubview(self.xVerticalScroller.NSView)
       self.tile()
     else:
       if not self.xHasVerticalScroller:
@@ -439,7 +439,7 @@ objcImpl:
       self.xHasHorizontalScroller = true
       self.createHorizontalScrollerIfNeeded()
       if not self.xHorizontalScroller.isNil:
-        self.addSubview(asType[NSView](self.xHorizontalScroller))
+        self.addSubview(self.xHorizontalScroller.NSView)
       self.tile()
     else:
       if not self.xHasHorizontalScroller:
@@ -517,7 +517,7 @@ objcImpl:
         frame.size.height.float32,
       )
       headerClip.setDocumentView(headerView)
-      self.addSubview(asType[NSView](headerClip))
+      self.addSubview(headerClip.NSView)
       headerClip.setAutoresizingMask(NSViewWidthSizable or NSViewHeightSizable)
       headerClip.setAutoresizesSubviews(true)
       self.xHeaderClipView = headerClip
@@ -544,12 +544,12 @@ objcImpl:
       if self.xHorizontalRuler.isNil:
         self.xHorizontalRuler = newRulerView(self, NSHorizontalRuler)
       if not self.xHorizontalRuler.isNil:
-        self.addSubview(asType[NSView](self.xHorizontalRuler))
+        self.addSubview(self.xHorizontalRuler.NSView)
     if self.xHasVerticalRuler:
       if self.xVerticalRuler.isNil:
         self.xVerticalRuler = newRulerView(self, NSVerticalRuler)
       if not self.xVerticalRuler.isNil:
-        self.addSubview(asType[NSView](self.xVerticalRuler))
+        self.addSubview(self.xVerticalRuler.NSView)
 
   method tile*(self: NSScrollView) =
     self.createHeaderAndCornerViewsIfNeeded()

@@ -175,17 +175,26 @@ template asTypeRaw*[T: ID](o: IDPtr): T =
 template asTypeRaw*[T: ID](o: ID): T =
   T(value: o.value)
 
-template asType*[T: ID](o: IDPtr): T =
+template asType[T: ID](o: IDPtr): T =
   if o == nil:
     T(value: nil)
   else:
     T(value: retainAux(o))
 
-template asType*[T: ID](o: ID): T =
+template asType[T: ID](o: ID): T =
   if o.value == nil:
     T(value: nil)
   else:
     T(value: retainAux(o.value))
+
+proc `as`*[T](o: IDPtr, v: typedesc[T]): T =
+  asType[T](o)
+
+proc `as`*[T](o: ID, v: typedesc[T]): T =
+  asType[T](o)
+
+proc `to`*[T](o: ID, v: typedesc[T]): T =
+  asType[T](o)
 
 proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 proc sel_registerName*(str: cstring): SEL {.cdecl, importc.}

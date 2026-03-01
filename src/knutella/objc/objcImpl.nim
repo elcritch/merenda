@@ -524,7 +524,7 @@ template objcFromAbiReturnValue(T: typedesc, v: untyped): untyped =
       else:
         $objcRawReturnValue
     elif T is ID:
-      asType[T](objcRawReturnValue)
+      objcRawReturnValue as T
     else:
       objcRawReturnValue
 

@@ -34,21 +34,21 @@ objcImpl:
 proc storageForRead[T](arr: NSArray[T]): NXArrayData =
   if arr.value.isNil:
     return nil
-  let obj = asType[NXArray](arr)
+  let obj = arr as NXArray
   let store = getAssociatedRef(obj, NXArrayData)
   store
 
 proc storageForWrite[T](arr: NSArray[T]): NXArrayData =
   if arr.value.isNil:
     return nil
-  let obj = asType[NXArray](arr)
+  let obj = arr as NXArray
   let store = getAssociatedRef(obj, NXArrayData)
   store
 
 proc initStorage[T](arr: NSArray[T]) {.inline.} =
   if arr.value.isNil:
     return
-  let obj = asType[NXArray](arr)
+  let obj = arr as NXArray
   var store = getAssociatedRef(obj, NXArrayData)
   if store.isNil:
     new(store)
@@ -61,7 +61,7 @@ proc initStorage[T](arr: NSArray[T]) {.inline.} =
 proc syncCount[T](arr: NSArray[T], count: int) {.inline.} =
   if arr.value.isNil:
     return
-  let obj = asType[NXArray](arr)
+  let obj = arr as NXArray
   obj.countCache = count
 
 proc nsArray*[T](): NSArray[T] =

@@ -197,7 +197,7 @@ when isMainModule:
 
   clubsTable.addTableColumn(nameColumn)
   clubsTable.addTableColumn(foundationYearColumn)
-  scrollView.setDocumentView(asType[NSView](clubsTable))
+  scrollView.setDocumentView(clubsTable.NSView)
   root.addSubview(scrollView)
 
   var status = newTextField(
@@ -220,21 +220,21 @@ when isMainModule:
   var addButton = newButton(411.0, 321.0, 59.0, 19.0, "Add")
   addButton.setOnClick(
     proc(sender: NSButton) =
-      controller.addClub(asType[NSObject](sender))
+      controller.addClub(sender.NSObject)
   )
   root.addSubview(addButton)
 
   var removeButton = newButton(411.0, 295.0, 59.0, 19.0, "Remove")
   removeButton.setOnClick(
     proc(sender: NSButton) =
-      controller.removeClub(asType[NSObject](sender))
+      controller.removeClub(sender.NSObject)
   )
   root.addSubview(removeButton)
 
   window.setContentView(root)
   app.addWindow(window)
   window.makeKeyAndOrderFront(app)
-  discard window.makeFirstResponder(asType[NSResponder](clubsTable))
+  discard window.makeFirstResponder(clubsTable.NSResponder)
 
   echo "table rows: ", clubsTable.numberOfRows()
   echo "columns: ", clubsTable.numberOfColumns()

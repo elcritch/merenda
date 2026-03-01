@@ -21,7 +21,7 @@ proc kvcTypeCode(enc: string): string =
   $enc[i]
 
 proc kvcRetainedNSObject(id: IDPtr): NSObject =
-  asType[NSObject](id)
+  id as NSObject
 
 proc kvcTakeNSObject[T: NSObject](obj: T): NSObject {.inline.} =
   var tmp = obj
@@ -105,7 +105,7 @@ proc kvcSendValue(obj: IDPtr, sel: SEL, argEnc: string, value: NSObject) =
       cast[proc(self: IDPtr, op: SEL, a: IDPtr) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, value.value)
   of "*":
-    let cstr = objcStableCString(stringValue(asType[NSString](value.value)))
+    let cstr = objcStableCString(stringValue(value as NSString))
     let send =
       cast[proc(self: IDPtr, op: SEL, a: cstring) {.cdecl, varargs.}](objc_msgSend)
     send(obj, sel, cstr)
@@ -461,8 +461,8 @@ proc kvoObjcAddObserver(
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   addObserver(
-    asType[NSObject](self),
-    asType[NSObject](observer),
+    self as NSObject,
+    observer as NSObject,
     keyPathString,
     kvoOptionsFromMask(options),
     context,
@@ -475,8 +475,8 @@ proc kvoObjcRemoveObserverWithContext(
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   removeObserver(
-    asType[NSObject](self),
-    asType[NSObject](observer),
+    self as NSObject,
+    observer as NSObject,
     keyPathString,
     context,
   )
@@ -488,20 +488,22 @@ proc kvoObjcRemoveObserver(
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
   removeObserver(
-    asType[NSObject](self), asType[NSObject](observer), keyPathString
+    self as NSObject,
+    observer as NSObject,
+    keyPathString
   )
 
 proc kvoObjcWillChange(self: IDPtr, cmd: SEL, keyPath: IDPtr) {.cdecl.} =
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  willChangeValueForKey(asType[NSObject](self), keyPathString)
+  willChangeValueForKey(self as NSObject, keyPathString)
 
 proc kvoObjcDidChange(self: IDPtr, cmd: SEL, keyPath: IDPtr) {.cdecl.} =
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  didChangeValueForKey(asType[NSObject](self), keyPathString)
+  didChangeValueForKey(self as NSObject, keyPathString)
 
 block:
   let nsObjectClass = getClass("NSObject")

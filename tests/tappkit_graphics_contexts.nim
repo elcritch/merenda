@@ -39,7 +39,7 @@ suite "appkit nsgraphicscontext":
     )
     NSGraphicsContext.setCurrentContext(context)
     let scroller = NSScroller.new()
-    pushCurrentFocusView(asType[NSView](scroller.value))
+    pushCurrentFocusView(scroller.NSView)
     let stack = NSCurrentFocusStack()
     check stack.len == 1
     check context.isFlipped()
