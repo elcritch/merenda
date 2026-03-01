@@ -31,19 +31,6 @@ proc sendId(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
     )
   )
 
-proc sendInt(obj: ID, op: SEL): int {.inline.} =
-  cast[proc(self: IDPtr, op: SEL): int {.cdecl, varargs.}](objc_msgSend)(obj.value, op)
-
-proc sendFloat(obj: ID, op: SEL): float32 {.inline.} =
-  cast[proc(self: IDPtr, op: SEL): float32 {.cdecl, varargs.}](objc_msgSend)(
-    obj.value, op
-  )
-
-proc sendDouble(obj: ID, op: SEL): cdouble {.inline.} =
-  cast[proc(self: IDPtr, op: SEL): cdouble {.cdecl, varargs.}](objc_msgSend)(
-    obj.value, op
-  )
-
 proc replaceOwned(slot: var ID, next: ID) {.inline.} =
   slot.value = replacedOwnedId(slot.value, next.value)
 
@@ -297,8 +284,8 @@ objcImpl:
     let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
     if not doubleProvider.isNil:
       return doubleProvider.doubleValue()
-    if valueObj.respondsToSelector("doubleValue"):
-      return sendDouble(self.xObjectValue, getSelector("doubleValue")).float
+    if (let vo = self.xObjectValue.respondsLike(DoubleValue); not vo.isNil):
+      return vo.doubleValue()
     0.0
 
   method integerValue*(self: NSCell): int =

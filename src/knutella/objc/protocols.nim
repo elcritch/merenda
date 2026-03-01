@@ -16,5 +16,10 @@ objcImpl:
 objcImpl:
   type FloatValue* {.structural.} =
     concept self
-        method floatValue*(self: FloatValue): float
+        method floatValue*(self: FloatValue): float32
+
+objcImpl:
+  type DoubleValue* {.structural.} =
+    concept self
+        method doubleValue*(self: DoubleValue): float64
 
