@@ -252,7 +252,7 @@ objcImpl:
     if valueObj.isKindOfClass(NSString):
       return parseIntegerPrefix($ownFromId[NSString](self.xObjectValue)).cint
     let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
-    if not intProvider.isNil:
+    if intProvider.notNil:
       return intProvider.intValue()
     if (let intLike = valueObj.respondsLike(IntValue); intLike.notNil):
       return intLike.intValue().cint
