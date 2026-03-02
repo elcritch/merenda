@@ -237,6 +237,7 @@ type
   NSImageView* = object of NSControl
   NSTextField* = object of NSControl
 
+  NSTrackingArea* = object of NSObject
   NSFont* = object of NSObject
   NSFontDescriptor* = object of NSObject
   NSShadow* = object of NSObject

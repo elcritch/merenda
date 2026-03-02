@@ -318,6 +318,20 @@ type
     NSOnlyScrollerArrows = 1
     NSAllScrollerParts = 2
 
+  NSTrackingAreaOptions* {.size: sizeof(cint).} = enum
+    NSTrackingMouseEnteredAndExited = 0
+    NSTrackingMouseMoved = 1
+    NSTrackingCursorUpdate = 2
+
+    NSTrackingActiveWhenFirstResponder = 4
+    NSTrackingActiveInKeyWindow = 5
+    NSTrackingActiveInActiveApp = 6
+    NSTrackingActiveAlways = 7
+
+    NSTrackingAssumeInside = 8
+    NSTrackingInVisibleRect = 9
+    NSTrackingEnabledDuringMouseDrag = 10
+
 const
   NSScrollerArrowsDefaultSetting* = NSScrollerArrowsMaxEnd
 

@@ -118,15 +118,15 @@ objcImpl:
         self.xFirstResponder = NSResponder(value: nil)
       clearSuperviewRef(self.xContentView.value)
     if not view.isNil:
-      let parent = view.viewSuperview()
+      let parent = view.superview()
       if not parent.isNil:
-        var subviews = parent.viewSubviews()
+        var subviews = parent.subviews()
         for i, candidate in subviews:
           if candidate.value == view.value:
             subviews.del(i)
-            parent.viewSubviews = subviews
+            parent.xSubviews = subviews
             break
-      view.viewSuperview = NSView(value: nil)
+      view.xSetSuperView(NSView(value: nil))
       view.setNextResponder(self as NSResponder)
     self.xContentView = retain(view)
 
@@ -288,16 +288,13 @@ objcImpl:
   method isMiniaturized*(self: NSWindow): bool =
     false
 
--(void)invalidateCursorRectsForView:(NSView *)view {
-   [view discardCursorRects];
-   [self _resetCursorRectsInView:view];
-   [self _invalidateTrackingAreas];
-}
+  method xInvalidateTrackingAreas*(self: NSWindow) =
+    self.xTrackingAreas = NSWindow(value: nil)
 
   method invalidateCursorRectsForView*(self: NSWindow, view: NSView) =
     view.discardCursorRects()
     self.xResetCursorRectsInView(view)
-    self.xInvalidateTrackingArea()
+    self.xInvalidateTrackingAreas()
 
   method close*(self: NSWindow) =
     self.xClosed = true
