@@ -106,15 +106,15 @@ suite "foundation stdlib-backed core types":
     if not copied.isNil:
       release(copied)
 
-  test "structural protocols support respondsLike":
+  test "structural protocols support asWrapper":
     let boxedInt = @ns(42)
-    let intLike = boxedInt.respondsLike(IntValue)
+    let intLike = boxedInt.asWrapper(IntValue)
     check(not intLike.isNil)
     if not intLike.isNil:
       check(intLike.intValue() == 42)
 
     let plainObject = NSObject.new()
-    let notIntLike = plainObject.respondsLike(IntValue)
+    let notIntLike = plainObject.asWrapper(IntValue)
     check(notIntLike.isNil)
 
   test "@ns boxes and unboxes float and bool":
