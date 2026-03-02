@@ -52,6 +52,19 @@ objcImpl:
         return
       dec i
 
+  method sendAction*(
+      self: NSApplication,
+      action: SEL,
+      target {.kw("to").}: ID,
+      sender {.kw("from").}: ID
+  ): bool =
+    let senderObj = self.NSObject
+    if not target.isNil:
+      let targetObj = target.value.NSObject
+      return performResponderSelector(targetObj, action, senderObj)
+    let responder = self.NSResponder
+    responder.tryToPerform(action, senderObj)
+
   method stop(self: NSApplication) =
     self.appRunning = false
 

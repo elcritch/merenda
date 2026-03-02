@@ -207,55 +207,31 @@ objcImpl:
     self.setDoubleValue(sender.doubleValue())
 
   method drawCell*(self: NSControl, cell: NSCell) =
-    if self.isNil or cell.isNil:
-      return
-    let selected = self.cell()
-    if selected.isNil or selected.value != cell.value:
-      return
-    selected.setControlView(self.NSView)
-    selected.drawWithFrame(self.bounds(), self.NSView)
+    if self.xCell == cell:
+      self.xCell.setControlView(self.NSView)
+      self.xCell.drawWithFrame(self.bounds(), inView = self.NSView)
 
   method drawCellInside*(self: NSControl, cell: NSCell) =
-    if self.isNil or cell.isNil:
-      return
-    let selected = self.cell()
-    if selected.isNil or selected.value != cell.value:
-      return
-    selected.drawInteriorWithFrame(self.bounds(), self.NSView)
+    if self.xCell == cell:
+      self.xCell.drawInteriorWithFrame(self.bounds(), self.NSView)
 
   method updateCell*(self: NSControl, cell: NSCell) =
-    if self.isNil or cell.isNil:
-      return
-    let selected = self.cell()
-    if selected.isNil or selected.value != cell.value:
-      return
-    self.setNeedsDisplay(true)
+    if self.xCell == cell:
+      self.setNeedsDisplay(true)
 
   method updateCellInside*(self: NSControl, cell: NSCell) =
-    self.updateCell(cell)
+    if self.xCell == cell:
+      self.updateCell(cell)
 
   method drawRect*(self: NSControl, rect: NSRect) =
-    discard rect
-    if self.isNil:
-      return
-    let selected = self.cell()
-    if selected.isNil:
-      return
-    selected.setControlView(self.NSView)
-    selected.drawWithFrame(self.bounds(), self.NSView)
+    self.xCell.setControlView(self.NSView)
+    self.xCell.drawWithFrame(self.xBounds, self.NSView)
 
   method performClick*(self: NSControl, sender: NSResponder) =
     discard
 
   method sendAction*(self: NSControl, action: SEL, target {.kw("to").}: ID): bool =
-    if self.isNil or cast[pointer](action).isNil:
-      return false
-    let senderObj = self.NSObject
-    if not target.isNil:
-      let targetObj = target.value.NSObject
-      return performResponderSelector(targetObj, action, senderObj)
-    let responder = self.NSResponder
-    responder.tryToPerform(action, senderObj)
+    return NSApp().sendAction(action, to=target, from=self)
 
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)
