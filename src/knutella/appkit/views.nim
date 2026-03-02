@@ -8,6 +8,10 @@ export responders
 proc isViewDescendantOf*(viewId: IDPtr, ancestorId: IDPtr): bool
 proc detachSubviews*(view: NSObject)
 
+objcImpl:
+  type WindowsWrapper* {.structural.} =
+    concept self
+        method invalidateCursorRectsForView*(self: WindowsWrapper, view: NSView)
 
 template unionOfInvalidRects*(self: NSView): NSRect =
   ##
@@ -132,7 +136,7 @@ objcImpl:
       self.xBounds.size = frame.size # TODO: implement the affine transforms...
 
     self.xFrame = frame
-    self.xWindow.invalidateCursorRectsForView(self) #this also invalidates tracking areas
+    self.xWindow.asWrapper(WindowsWrapper).invalidateCursorRectsForView(self) #this also invalidates tracking areas
 
 
   method setBounds*(
@@ -508,55 +512,52 @@ proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
 proc enclosingScrollView*(view: NSView): NSScrollView =
   if view.isNil:
     return NSScrollView(value: nil)
-  var current = view.viewSuperview()
+  var current = view.superview()
   while not current.isNil:
     if current.isKindOfClass(NSScrollView):
       return ownFromId[NSScrollView](current.value)
-    current = current.viewSuperview()
+    current = current.superview()
   NSScrollView(value: nil)
-
-proc subviews*(view: NSView): seq[NSView] =
-  result = view.viewSubviews()
 
 proc removeSubviewById(parent: NSView, childId: IDPtr): bool =
   if parent.isNil or childId.isNil:
     return false
-  var children = parent.viewSubviews()
+  var children = parent.subviews()
   for i, candidate in children:
     if candidate.value == childId:
       clearSuperviewRef(childId)
       children.del(i)
-      parent.viewSubviews = children
+      parent.setSubviews(children)
       return true
   false
 
 proc removeFromSuperview*(view: NSView) =
   if view.isNil:
     return
-  let parent = view.viewSuperview()
+  let parent = view.superview()
   if parent.isNil:
     return
-  view.viewSuperview = NSView(value: nil)
+  view.xSuperview = NSView(value: nil)
   discard removeSubviewById(parent, view.value)
 
 proc addSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil or self.value == view.value:
     return
-  let parent = view.viewSuperview()
+  let parent = view.superview()
   if not parent.isNil and parent.value == self.value:
-    var children = self.viewSubviews()
+    var children = self.xSubviews
     if view notin children:
       children.add(view)
-      self.viewSubviews = children
+      self.xSubviews = children
     view.setNextResponder(self.NSResponder)
     return
   if not parent.isNil:
     view.removeFromSuperview()
-  var children = self.viewSubviews()
+  var children = self.xSubviews
   if view notin children:
     children.add(view)
-    self.viewSubviews = children
-  view.viewSuperview = retain(self)
+    self.xSubviews = children
+  view.xSetSuperview(retain(self))
   view.setNextResponder(self.NSResponder)
 
 proc removeSubview*(self: NSView, view: NSView) =
@@ -567,9 +568,9 @@ proc removeSubview*(self: NSView, view: NSView) =
 proc viewWithTag*(view: NSView, wantedTag: int): NSView =
   if view.isNil:
     return NSView(value: nil)
-  if view.viewTag() == wantedTag:
+  if view.xTag == wantedTag:
     return retain(view)
-  for child in view.viewSubviews():
+  for child in view.subviews():
     if child.isNil:
       continue
     let hit = child.viewWithTag(wantedTag)
