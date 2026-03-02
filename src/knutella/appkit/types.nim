@@ -199,12 +199,16 @@ type
     NSBackingStoreNonretained = 1
     NSBackingStoreBuffered = 2
 
+  NSCellMask* {.size: sizeof(cint).} = enum
+    NSContentsCell = 1
+    NSPushInCell = 2
+    NSChangeGrayCell = 3
+    NSChangeBackgroundCell = 4
+
 const
-  NSNoCellMask* = 0x00
-  NSContentsCellMask* = 0x01
-  NSPushInCellMask* = 0x02
-  NSChangeGrayCellMask* = 0x04
-  NSChangeBackgroundCellMask* = 0x08
+  NSNoCellMask*: set[NSCellMask] = {}
+
+const
 
   NSViewNotSizable* = 0
   NSViewMinXMargin* = 1
