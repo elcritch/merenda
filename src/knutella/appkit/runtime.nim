@@ -239,6 +239,7 @@ type
 
   NSFont* = object of NSObject
   NSFontDescriptor* = object of NSObject
+  NSShadow* = object of NSObject
   NSImage* = object of NSObject
   NSBitmapImageRep* = object of NSObject
   NSGraphicsContext* = object of NSObject
