@@ -288,6 +288,17 @@ objcImpl:
   method isMiniaturized*(self: NSWindow): bool =
     false
 
+-(void)invalidateCursorRectsForView:(NSView *)view {
+   [view discardCursorRects];
+   [self _resetCursorRectsInView:view];
+   [self _invalidateTrackingAreas];
+}
+
+  method invalidateCursorRectsForView*(self: NSWindow, view: NSView) =
+    view.discardCursorRects()
+    self.xResetCursorRectsInView(view)
+    self.xInvalidateTrackingArea()
+
   method close*(self: NSWindow) =
     self.xClosed = true
     if self.xNativeReady and not self.xNativeWindow.isNil:
