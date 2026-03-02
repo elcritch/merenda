@@ -53,8 +53,8 @@ objcImpl:
     xAutoresizingMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
 
     xTag: int
-    xDraggedTypes: NSArray
-    xTrackingAreas: NSMutableArray 
+    xDraggedTypes: seq[ID]
+    xTrackingAreas: seq[ID] 
     xNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
     xInvalidRects: seq[NSRect]
     xRectsBeingRedrawn: seq[NSRect]
