@@ -547,10 +547,10 @@ objcImpl:
 
 objcImpl:
   type NSActionCell* = object of NSCell
-    xActionControlView {.set: setControlView, get: controlView.}: NSView
-    xActionTarget {.set: setTarget, get: target.}: ID
-    xActionSelector {.set: setAction, get: action.}: SEL
-    xActionTag {.set: setTag, get: tag.}: int
+    xControlView {.set: setControlView, get: controlView.}: NSView
+    xTarget {.set: setTarget, get: target.}: ID
+    xSelector {.set: setAction, get: action.}: SEL
+    xTag {.set: setTag, get: tag.}: int
 
   method init*(self: var NSActionCell): NSActionCell =
     result =

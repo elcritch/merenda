@@ -18,19 +18,19 @@ objcImpl:
     xTransparent {.set: setTransparent, get: isTransparent.}: bool
     xKeyEquivalent {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
     xImagePosition {.set: setImagePosition, get: imagePosition.}: NSCellImagePosition
-    xHighlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: NsCellImagePosition
-    xShowsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
+    xHighlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: set[NSCellMask]
+    xShowsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: set[NSCellMask]
     xImageDimsWhenDisabled {.set: setImageDimsWhenDisabled, get: imageDimsWhenDisabled.}:
       bool
     xKeyEquivalentModifierMask {.
       set: setKeyEquivalentModifierMask, get: keyEquivalentModifierMask
     .}: int
-    xBezelStyle {.set: setBezelStyle, get: bezelStyle.}: int
+    xBezelStyle {.set: setBezelStyle, get: bezelStyle.}: NSBezelStyle
     xShowsBorderOnlyWhileMouseInside {.
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
-    xGradientType {.set: setGradientType, get: gradientType.}: int
-    xImageScaling {.set: setImageScaling, get: imageScaling.}: NSCellImagePosition
+    xGradientType {.set: setGradientType, get: gradientType.}: set[NSGradientType]
+    xImageScaling {.set: setImageScaling, get: imageScaling.}: NSImageScaling
     xBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     xPeriodicDelaySec: float32
     xPeriodicIntervalSec: float32
@@ -47,12 +47,12 @@ objcImpl:
     result.xAlternateImage = NSImage(value: nil)
     result.xKeyEquivalent = @ns""
     result.xImagePosition = NSNoImage
-    result.xHighlightsByMask = NSPushInCellMask
-    result.xShowsStateByMask = NSNoCellMask
+    result.xHighlightsByMask = {NSPushInCell}
+    result.xShowsStateByMask = {}
     result.xImageDimsWhenDisabled = true
-    result.xGradientType = NSGradientNone
+    result.xGradientType = {}
     result.xImageScaling = NSImageScaleProportionallyDown
-    result.xBezelStyle = NSRoundedBezelStyle.int
+    result.xBezelStyle = NSRoundedBezelStyle
     result.xBackgroundColor = nsColor(0.0, 0.0, 0.0, 0.0)
     result.setBordered(true)
     result.setBezeled(true)
@@ -68,32 +68,32 @@ objcImpl:
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
     case buttonType.int
     of NSMomentaryLightButton:
-      self.xHighlightsByMask = NSChangeBackgroundCellMask
-      self.xShowsStateByMask = NSNoCellMask
+      self.xHighlightsByMask = {NSChangeBackgroundCell}
+      self.xShowsStateByMask = {}
       self.xImageDimsWhenDisabled = true
     of NSMomentaryPushInButton:
-      self.xHighlightsByMask = NSPushInCellMask or NSChangeGrayCellMask
-      self.xShowsStateByMask = NSNoCellMask
+      self.xHighlightsByMask = {NSPushInCell, NSChangeGrayCell}
+      self.xShowsStateByMask = {}
       self.xImageDimsWhenDisabled = true
     of NSMomentaryChangeButton:
-      self.xHighlightsByMask = NSContentsCellMask
+      self.xHighlightsByMask = {NSContentsCell}
       self.xShowsStateByMask = NSNoCellMask
       self.xImageDimsWhenDisabled = true
     of NSPushOnPushOffButton:
-      self.xHighlightsByMask = NSPushInCellMask or NSChangeGrayCellMask
-      self.xShowsStateByMask = NSChangeBackgroundCellMask
+      self.xHighlightsByMask = {NSPushInCell, NSChangeGrayCell}
+      self.xShowsStateByMask = {NSChangeBackgroundCell}
       self.xImageDimsWhenDisabled = true
     of NSOnOffButton:
-      self.xHighlightsByMask = NSChangeBackgroundCellMask or NSChangeGrayCellMask
-      self.xShowsStateByMask = NSChangeBackgroundCellMask or NSChangeGrayCellMask
+      self.xHighlightsByMask = {NSChangeBackgroundCell, NSChangeGrayCell}
+      self.xShowsStateByMask = {NSChangeBackgroundCell, NSChangeGrayCell}
       self.xImageDimsWhenDisabled = true
     of NSToggleButton:
-      self.xHighlightsByMask = NSPushInCellMask or NSContentsCellMask
-      self.xShowsStateByMask = NSContentsCellMask
+      self.xHighlightsByMask = {NSPushInCell, NSContentsCell}
+      self.xShowsStateByMask = {NSContentsCell}
       self.xImageDimsWhenDisabled = true
     of NSSwitchButton, NSRadioButton:
-      self.xHighlightsByMask = NSContentsCellMask
-      self.xShowsStateByMask = NSContentsCellMask
+      self.xHighlightsByMask = {NSContentsCell}
+      self.xShowsStateByMask = {NSContentsCell}
       self.xImagePosition = NSImageLeft
       self.xImageDimsWhenDisabled = false
       self.setBordered(false)
@@ -116,7 +116,7 @@ objcImpl:
     if not interval.isNil:
       interval[] = self.xPeriodicIntervalSec
 
-  method setState*(self: NSButtonCell, value: int) =
+  method setState*(self: NSButtonCell, value: NSCellState) =
     self.xState = normalizeButtonState(value, self.allowsMixedState())
 
   method attributedTitle*(self: NSButtonCell): NSAttributedString =
@@ -126,27 +126,23 @@ objcImpl:
     makeAttributedString(self.alternateTitle())
 
   method titleForHighlight*(self: NSButtonCell): NSAttributedString =
-    if (
-      (hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted()) or
-      (hasMask(self.showsStateBy(), NSContentsCellMask) and boolState(self.state()))
-    ):
+    if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
+       (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
       let alternate = self.attributedAlternateTitle()
       if not alternate.isNil and self.alternateTitle().len > 0:
         return alternate
     self.attributedTitle()
 
   method imageForHighlight*(self: NSButtonCell): NSImage =
-    if self.bezelStyle() == NSDisclosureBezelStyle.int:
-      if hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted():
+    if self.bezelStyle() == NSDisclosureBezelStyle:
+      if self.highlightsBy().contains(NSContentsCell) and self.isHighlighted():
         return NSImage.imageNamed(@ns"NSButtonCell_disclosure_highlighted")
       elif boolState(self.state()):
         return NSImage.imageNamed(@ns"NSButtonCell_disclosure_selected")
       return NSImage.imageNamed(@ns"NSButtonCell_disclosure_normal")
 
-    if (
-      (hasMask(self.highlightsBy(), NSContentsCellMask) and self.isHighlighted()) or
-      (hasMask(self.showsStateBy(), NSContentsCellMask) and boolState(self.state()))
-    ):
+    if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
+       (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
       let alternate = self.alternateImage()
       if not alternate.isNil:
         return alternate
@@ -160,16 +156,16 @@ objcImpl:
     nsRect(rect.origin.x, rect.origin.y, imageSize.width, imageSize.height)
 
   method isVisuallyHighlighted*(self: NSButtonCell): bool =
-    (hasMask(self.highlightsBy(), NSChangeGrayCellMask) and self.isHighlighted()) or
-      (hasMask(self.showsStateBy(), NSChangeGrayCellMask) and boolState(self.state()))
+    (self.highlightsBy().contains(NSChangeGrayCell) and self.isHighlighted()) or
+      (self.showsStateBy().contains(NSChangeGrayCell)) and boolState(self.state())
 
   method getControlSizeAdjustment*(self: NSButtonCell, flipped: bool): NSRect =
     result = nsRect(0.0, 0.0, 0.0, 0.0)
     if (
-      self.bezelStyle() == NSRoundedBezelStyle.int and
-      hasMask(self.highlightsBy(), NSPushInCellMask) and
-      hasMask(self.highlightsBy(), NSChangeGrayCellMask) and
-      self.showsStateBy() == NSNoCellMask
+      self.bezelStyle() == NSRoundedBezelStyle and
+      self.highlightsBy().contains(NSPushInCell) and
+      self.highlightsBy().contains(NSChangeGrayCell) and
+      self.showsStateBy() == {}
     ):
       let controlSize = self.controlSize().int
       if self.controlSize() != NSMiniControlSize:
@@ -209,9 +205,9 @@ objcImpl:
       return
 
     case self.bezelStyle()
-    of NSDisclosureBezelStyle.int:
+    of NSDisclosureBezelStyle:
       discard
-    of NSRegularSquareBezelStyle.int:
+    of NSRegularSquareBezelStyle:
       if not self.isBordered():
         return
       var top = drawFrame
@@ -228,7 +224,7 @@ objcImpl:
       else:
         bottom.origin.y += top.size.height
       let highlighted =
-        hasMask(self.highlightsBy(), NSPushInCellMask) and self.isHighlighted()
+        self.highlightsBy().contains(NSPushInCell) and self.isHighlighted()
       let topGray = if highlighted: 0.80 else: 0.90
       let bottomGray = if highlighted: 0.70 else: 0.80
       setCurrentFillColor(nsColor(topGray, topGray, topGray, 1.0))
@@ -237,14 +233,14 @@ objcImpl:
       NSRectFill(bottom)
       setCurrentStrokeColor(nsColor(0.83, 0.83, 0.83, 1.0))
       NSFrameRectWithWidth(drawFrame, 1.0)
-    of NSTexturedSquareBezelStyle.int, NSTexturedRoundedBezelStyle.int,
-        NSShadowlessSquareBezelStyle.int:
+    of NSTexturedSquareBezelStyle, NSTexturedRoundedBezelStyle,
+        NSShadowlessSquareBezelStyle:
       if not self.isBordered():
         return
       let highlighted = self.isHighlighted()
       let pressed =
         boolState(self.state()) and
-        hasMask(self.showsStateBy(), NSChangeBackgroundCellMask)
+        self.showsStateBy().contains(NSChangeBackgroundCell)
       let topGray = if pressed: 0.40 else: 0.98
       let bottomGray = if pressed: 0.30 else: 0.76
       var topHalf = drawFrame
@@ -264,7 +260,7 @@ objcImpl:
       if highlighted:
         setCurrentFillColor(nsColor(0.0, 0.0, 0.0, 0.15))
         NSRectFill(insetRect(drawFrame, 1.0, 1.0))
-    of NSRecessedBezelStyle.int:
+    of NSRecessedBezelStyle:
       if self.isBordered() and self.isVisuallyHighlighted():
         var recessed = drawFrame
         recessed.size.height = max(recessed.size.height - 1.0, 0.0)
@@ -284,7 +280,7 @@ objcImpl:
           setCurrentFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
           NSRectFill(drawFrame)
       else:
-        if hasMask(self.highlightsBy(), NSPushInCellMask) and self.isHighlighted():
+        if self.highlightsBy().contains(NSPushInCell) and self.isHighlighted():
           NSDrawGrayBezel(drawFrame, drawFrame)
         elif self.isVisuallyHighlighted():
           NSDrawGrayBezel(drawFrame, drawFrame)
@@ -335,7 +331,7 @@ objcImpl:
     let image = self.imageForHighlight()
     let title = self.titleForHighlight()
     var imagePosition = self.imagePosition()
-    if self.bezelStyle() == NSDisclosureBezelStyle.int:
+    if self.bezelStyle() == NSDisclosureBezelStyle:
       imagePosition = NSImageOnly
     var imageRect = self.imageRectForBounds(contentFrame)
     var titleRect = self.titleRectForBounds(contentFrame)
@@ -413,10 +409,11 @@ objcImpl:
         NSRectFill(contentFrame)
 
     let isTextured =
-      self.bezelStyle() in
-      [NSTexturedSquareBezelStyle.int, NSTexturedRoundedBezelStyle.int]
-    if self.isBordered() and (not isTextured) and
-        hasMask(self.highlightsBy(), NSPushInCellMask) and self.isHighlighted():
+      self.bezelStyle() in {NSTexturedSquareBezelStyle, NSTexturedRoundedBezelStyle}
+    if self.isBordered() and
+        not isTextured and
+        self.highlightsBy().contains(NSPushInCell) and
+        self.isHighlighted():
       imageRect.origin.x += 1.0
       titleRect.origin.x += 1.0
       let flipped =
@@ -492,7 +489,7 @@ objcImpl:
     self.state().cint
 
   method integerValue*(self: NSButtonCell): int =
-    self.state()
+    self.state().int
 
   method floatValue*(self: NSButtonCell): float32 =
     self.state().float32
@@ -501,10 +498,12 @@ objcImpl:
     self.state().float
 
   method setIntValue*(self: NSButtonCell, value: cint) =
-    self.setState(value.int)
+    let val = min(value, 1).max(-1)
+    self.setState(val.NSCellState)
 
   method setIntegerValue*(self: NSButtonCell, value: int) =
-    self.setState(value)
+    let val = min(value, 1).max(-1)
+    self.setState(value.NSCellState)
 
   method setFloatValue*(self: NSButtonCell, value: float32) =
     self.setState(value.int)
