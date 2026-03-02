@@ -181,18 +181,25 @@ type
 
   NSUsableScrollerParts* = int
 
+type
+  NSWindowDecorations* {.size: sizeof(cint).} = enum
+    NSTitledWindow = 1
+    NSClosableWindow = 2
+    NSMiniaturizableWindow = 3
+    NSResizableWindow = 4
+    NSTexturedBackgroundWindow = 8
+    NSAppKitPrivateWindow = 28
+
 const
-  NSBorderlessWindowMask* = 0x00
-  NSTitledWindowMask* = 0x01
-  NSClosableWindowMask* = 0x02
-  NSMiniaturizableWindowMask* = 0x04
-  NSResizableWindowMask* = 0x08
-  NSTexturedBackgroundWindowMask* = 0x100
+  NSBorderlessWindowMask*: set[NSWindowDecorations] = {}
 
-  NSBackingStoreRetained* = 0
-  NSBackingStoreNonretained* = 1
-  NSBackingStoreBuffered* = 2
+type
+  NSBackingStoreType* {.size: sizeof(cint).} = enum
+    NSBackingStoreRetained = 0
+    NSBackingStoreNonretained = 1
+    NSBackingStoreBuffered = 2
 
+const
   NSNoCellMask* = 0x00
   NSContentsCellMask* = 0x01
   NSPushInCellMask* = 0x02
