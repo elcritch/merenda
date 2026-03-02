@@ -7,6 +7,12 @@ import ./graphicscontexts
 import ./images
 import ./attributedstrings
 import ./formatters
+import ./fonts
+
+objcImpl:
+  type UpdateCell* {.structural.} =
+    concept self
+        method updateCell*(self: UpdateCell, cell: NSCell)
 
 proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
   NSFocusRingTypeExterior
@@ -109,7 +115,7 @@ objcImpl:
     xFormatter {.set: setFormatter, get: formatter.}: NSFormatter
     xTitleOrAttributedTitle: ID
     xRepresentedObject: ID
-    xControlSize {.set: setControlSize, get: controlSize.}: NSControlSize
+    xControlSize {.get: controlSize.}: NSControlSize
     xFocusRingType {.set: setFocusRingType, get: focusRingType.}: NSFocusRingType
     xLineBreakMode {.set: setLineBreakMode, get: lineBreakMode.}: NSLineBreakMode
     xBackgroundStyle {.set: setBackgroundStyle, get: backgroundStyle.}:
@@ -171,6 +177,9 @@ objcImpl:
 
   method controlView*(self: NSCell): NSView =
     return NSView(value: nil)
+
+  method setControlView*(self: NSCell, view: NSView) =
+    discard # noop
 
   method state*(self: NSCell): NSCellState =
     if self.xAllowsMixedState:
@@ -390,6 +399,11 @@ objcImpl:
 
   method setRepresentedObject*(self: NSCell, representedObject: NSObject) =
     self.xRepresentedObject = representedObject
+
+  method setControlSize*(self: NSCell, size: NSControlSize) =
+    self.xControlSize = size
+    self.xFont = NSFont.userFontOfSize(16'f32 - self.xControlSize.float*2'f32)
+    self.controlView.asWrapper(UpdateCell).updateCell(self)
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
     let provider = asProto[NSObjectValueProvider](sender)

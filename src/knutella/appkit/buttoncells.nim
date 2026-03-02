@@ -479,23 +479,17 @@ objcImpl:
     resultSize.height += adjustment.size.height
     resultSize
 
+  method setObjectValue*(self: NSButtonCell, value: ID) =
+    let val =
+      if value.isWrapper(IntValue): value.asWrapper(IntValue).intValue()
+      else: 0
+    discard callSuperAs[ID](self, @selector("setState:"), val)
+
   method stringValue*(self: NSButtonCell): NSString =
     self.title()
 
   method setStringValue*(self: NSButtonCell, value: NSString) =
     self.setTitle(value)
-
-  method intValue*(self: NSButtonCell): cint =
-    self.state().cint
-
-  method integerValue*(self: NSButtonCell): int =
-    self.state().int
-
-  method floatValue*(self: NSButtonCell): float32 =
-    self.state().float32
-
-  method doubleValue*(self: NSButtonCell): float =
-    self.state().float
 
   method setIntValue*(self: NSButtonCell, value: cint) =
     let val = min(value, 1).max(-1)
