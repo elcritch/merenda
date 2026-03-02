@@ -938,9 +938,9 @@ proc buildRespondsLikeProc(
 ): NimNode =
   let respondsLikeName =
     if protocolExported:
-      postfix(ident("respondsLike"), "*")
+      postfix(ident("asWrapper"), "*")
     else:
-      ident("respondsLike")
+      ident("asWrapper")
   let protocolType = ident(protocolName)
   let objName = ident("o")
 

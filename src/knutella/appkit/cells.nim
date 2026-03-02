@@ -231,7 +231,7 @@ objcImpl:
     if valueObj.isKindOfClass(NSString):
       return valueObj.to(NSString)
 
-    if (let vo = valueObj.respondsLike(DescriptionValue); vo.notNil):
+    if (let vo = valueObj.asWrapper(DescriptionValue); vo.notNil):
       return vo.description()
 
     retain(@ns"")
@@ -245,7 +245,7 @@ objcImpl:
     let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
     if intProvider.notNil:
       return intProvider.intValue()
-    if (let intLike = valueObj.respondsLike(IntValue); intLike.notNil):
+    if (let intLike = valueObj.asWrapper(IntValue); intLike.notNil):
       return intLike.intValue().cint
     0.cint
 
@@ -258,7 +258,7 @@ objcImpl:
     let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
     if not floatProvider.isNil:
       return floatProvider.floatValue()
-    if (let fv = self.xObjectValue.respondsLike(FloatValue); not fv.isNil):
+    if (let fv = self.xObjectValue.asWrapper(FloatValue); not fv.isNil):
       return fv.floatValue().float32
     0.0
 
@@ -271,7 +271,7 @@ objcImpl:
     let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
     if not doubleProvider.isNil:
       return doubleProvider.doubleValue()
-    if (let vo = self.xObjectValue.respondsLike(DoubleValue); not vo.isNil):
+    if (let vo = self.xObjectValue.asWrapper(DoubleValue); not vo.isNil):
       return vo.doubleValue()
     0.0
 
@@ -282,7 +282,7 @@ objcImpl:
     let integerProvider = asProto[NSIntegerValueProvider](self.xObjectValue)
     if not integerProvider.isNil:
       return integerProvider.integerValue()
-    if (let vo = valueObj.respondsLike(IntegerValue); not vo.isNil):
+    if (let vo = valueObj.asWrapper(IntegerValue); not vo.isNil):
       return vo.integerValue()
     0
 
