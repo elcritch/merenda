@@ -254,9 +254,6 @@ objcImpl:
     let vobj = self.xObjectValue.NSObject
     if vobj.isKindOfClass(NSAttributedString) or vobj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue()).float32
-    let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
-    if not floatProvider.isNil:
-      return floatProvider.floatValue()
     if self.xObjectValue.isWrapper(FloatValue):
       return self.xObjectValue.castWrapper(FloatValue).floatValue().float32
     0.0
@@ -264,25 +261,19 @@ objcImpl:
   method doubleValue*(self: NSCell): float =
     if self.xObjectValue.isNil:
       return 0.0
-    let valueObj = self.xObjectValue.NSObject
-    if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
+    let vobj = self.xObjectValue.NSObject
+    if vobj.isKindOfClass(NSAttributedString) or vobj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue())
-    let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
-    if not doubleProvider.isNil:
-      return doubleProvider.doubleValue()
     if self.xObjectValue.isWrapper(DoubleValue):
-      return self.xObjectValue.castWrapper(DoubleValue).doubleValue().float
+      return self.xObjectValue.castWrapper(DoubleValue).doubleValue()
     0.0
 
   method integerValue*(self: NSCell): int =
-    let valueObj = self.xObjectValue.NSObject
-    if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
+    let vobj = self.xObjectValue.NSObject
+    if vobj.isKindOfClass(NSAttributedString) or vobj.isKindOfClass(NSString):
       return parseIntegerPrefix($self.stringValue())
-    let integerProvider = asProto[NSIntegerValueProvider](self.xObjectValue)
-    if not integerProvider.isNil:
-      return integerProvider.integerValue()
-    if (let vo = valueObj.asWrapper(IntegerValue); not vo.isNil):
-      return vo.integerValue()
+    if vobj.isWrapper(IntegerValue):
+      return vobj.castWrapper(IntegerValue).integerValue()
     0
 
   method attributedStringValue*(self: NSCell): NSAttributedString =
