@@ -17,8 +17,8 @@ objcImpl:
     xAlternateImage {.set: setAlternateImage, get: alternateImage.}: NSImage
     xTransparent {.set: setTransparent, get: isTransparent.}: bool
     xKeyEquivalent {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
-    xImagePosition {.set: setImagePosition, get: imagePosition.}: int
-    xHighlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: int
+    xImagePosition {.set: setImagePosition, get: imagePosition.}: NSCellImagePosition
+    xHighlightsByMask {.set: setHighlightsBy, get: highlightsBy.}: NsCellImagePosition
     xShowsStateByMask {.set: setShowsStateBy, get: showsStateBy.}: int
     xImageDimsWhenDisabled {.set: setImageDimsWhenDisabled, get: imageDimsWhenDisabled.}:
       bool
@@ -30,7 +30,7 @@ objcImpl:
       set: setShowsBorderOnlyWhileMouseInside, get: showsBorderOnlyWhileMouseInside
     .}: bool
     xGradientType {.set: setGradientType, get: gradientType.}: int
-    xImageScaling {.set: setImageScaling, get: imageScaling.}: int
+    xImageScaling {.set: setImageScaling, get: imageScaling.}: NSCellImagePosition
     xBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     xPeriodicDelaySec: float32
     xPeriodicIntervalSec: float32
