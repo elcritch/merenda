@@ -209,11 +209,11 @@ objcImpl:
   method drawCell*(self: NSControl, cell: NSCell) =
     if self.xCell == cell:
       self.xCell.setControlView(self.NSView)
-      self.xCell.drawWithFrame(self.bounds(), inView = self.NSView)
+      self.xCell.drawWithFrame(self.xBounds, inView = self.NSView)
 
   method drawCellInside*(self: NSControl, cell: NSCell) =
     if self.xCell == cell:
-      self.xCell.drawInteriorWithFrame(self.bounds(), self.NSView)
+      self.xCell.drawInteriorWithFrame(self.xBounds, self.NSView)
 
   method updateCell*(self: NSControl, cell: NSCell) =
     if self.xCell == cell:
@@ -231,7 +231,7 @@ objcImpl:
     discard
 
   method sendAction*(self: NSControl, action: SEL, target {.kw("to").}: ID): bool =
-    return NSApp().sendAction(action, to=target, from=self)
+    return NSApp().sendAction(action, to=target, sender=self)
 
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)

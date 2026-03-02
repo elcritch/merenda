@@ -75,16 +75,19 @@ APPKIT_EXPORT NSString *const NSViewFocusDidChangeNotification;
     NSMutableArray *_subviews;
     NSView *_nextKeyView;
     NSView *_previousKeyView;
+
     BOOL _isHidden;
     BOOL _postsNotificationOnFrameChange;
     BOOL _postsNotificationOnBoundsChange;
     BOOL _autoresizesSubviews;
     BOOL _inLiveResize;
     unsigned _autoresizingMask;
+
     int _tag;
     NSArray *_draggedTypes;
     NSMutableArray *_trackingAreas;
     BOOL _needsDisplay;
+
     NSUInteger _invalidRectCount;
     NSRect *_invalidRects;
     NSRect *_rectsBeingRedrawn;

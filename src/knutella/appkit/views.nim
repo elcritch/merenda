@@ -30,25 +30,59 @@ template unionOfInvalidRects*(self: NSView): NSRect =
 
 objcImpl:
   type NSView* = object of NSResponder
-    viewFrame: NSRect
-    viewBounds {.set: setBounds, get: bounds.}: NSRect
-    viewBackgroundColor: NSColor
-    viewHidden: bool
-    postsFrameChanged {.
+    xFrame: NSRect
+    xBounds {.set: setBounds, get: bounds.}: NSRect
+    xWindow: NSWindow
+    xMenu: NSMenu
+    xSuperview: NSView
+    xSubviews: seq[NSView]
+    xNextKeyView: NSView
+    xPreviousKeyView: NSView
+
+    xHidden: bool
+    xBackgroundColor: NSColor
+
+    xPostsNotificationOnFrameChange {.
       set: setPostsFrameChangedNotifications, get: postsFrameChangedNotifications
     .}: bool
-    postsBoundsChanged {.
+    xPostsNotificationOnBoundsChange {.
       set: setPostsBoundsChangedNotifications, get: postsBoundsChangedNotifications
     .}: bool
-    autoResizeSubs {.set: setAutoresizesSubviews, get: autoresizesSubviews.}: bool
-    autoResizeMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
-    alpha {.set: setAlphaValue, get: alphaValue.}: float32
-    viewSuperview: NSView
-    viewTag: int
-    viewSubviews: seq[NSView]
-    viewNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
+
+    xAutoresizesSubviews {.set: setAutoresizesSubviews, get: autoresizesSubviews.}: bool
+    xAutoresizingMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
+
+    xTag: int
+    xDraggedTypes: NSArray
+    xTrackingAreas: NSMutableArray 
+    xNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
     xInvalidRects: seq[NSRect]
     xRectsBeingRedrawn: seq[NSRect]
+
+    xFrameRotation: float32
+    xBoundsRotation: float32
+
+    xValidTrackingAreas: bool
+    xValidTransforms: bool
+
+    xTransformFromWindow: AffineTransformation
+    xTransformToWindow: AffineTransformation
+    xTransformToLayer: AffineTransformation
+
+    xVisibleRect: NSRect
+    xFocusRingType: NSFocusRingType
+
+    xWantsLayer: bool
+    # xLayer: CALayer
+    # xCompositingFilter: CIFilter 
+    xContentFilters: NSArray
+
+    xShadow: NSShadow
+    xAnimations: NSDictionary
+
+    xAlpha {.set: setAlphaValue, get: alphaValue.}: float32
+
+    #xLayerContext: CALayerContext 
 
   method init*(self: var NSView): NSView =
     result = asTypeRaw[NSView](
