@@ -34,7 +34,7 @@ objcImpl:
     xBounds {.get: bounds, set: setBounds.}: NSRect
     xWindow {.get: window, set: setWindow.}: NSWindow
     xMenu {.get: menu, set: setMenu.}: NSMenu
-    xSuperview {get: superview, set: xSetSuperview.}: NSView
+    xSuperview {.get: superview, set: xSetSuperview.}: NSView
     xSubviews: seq[NSView]
     xNextKeyView: NSView
     xPreviousKeyView: NSView
@@ -84,29 +84,15 @@ objcImpl:
 
     #xLayerContext: CALayerContext 
 
-  method init*(self: var NSView): NSView =
-    result = asTypeRaw[NSView](
-      cast[proc(
-        self: IDPtr, op: SEL, x: float32, y: float32, width: float32, height: float32
-      ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-        self.value, getSelector("initWithFrame:y:width:height:"), 0.0, 0.0, 1.0, 1.0
-      )
-    )
-
   method initWithFrame*(
       self: var NSView,
-      x: float32,
-      y {.kw("y").}: float32,
-      width {.kw("width").}: float32,
-      height {.kw("height").}: float32,
+      rect: NSRect,
   ): NSView =
     result = asTypeRaw[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
     if result.isNil:
       return
-    result.xFrame =
-      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
-    result.xBounds =
-      nsRect(0.0, 0.0, max(width.float32, 0.0), max(height.float32, 0.0))
+    result.xFrame = rect
+    result.xBounds = nsRect(0.0, 0.0, max(rect.size.width, 0.0), max(rect.size.height, 0.0))
     result.xBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
     result.xHidden = false
     result.xPostsNotificationOnFrameChange = true
@@ -120,6 +106,9 @@ objcImpl:
     result.xNeedsDisplay = true
     result.xInvalidRects = @[]
     result.xRectsBeingRedrawn = @[]
+
+  method init*(self: var NSView): NSView =
+    self.initWithFrame(nsRect(0, 0, 1, 1))
 
   method setFrame*(
       self: NSView,
@@ -264,10 +253,10 @@ objcImpl:
       child.displayIfNeededInRect(childDirty)
 
   method displayIfNeededIgnoringOpacity*(self: NSView) =
-    if self.viewNeedsDisplay():
+    if self.xNeedsDisplay:
       self.displayRectIgnoringOpacity(unionOfInvalidRects(self))
 
-    for child in self.viewSubviews():
+    for child in self.xSubviews:
       if child.isNil:
         continue
       child.displayIfNeededIgnoringOpacity()
@@ -276,12 +265,12 @@ objcImpl:
     let clipped = nsIntersectionRect(rect, self.visibleRect())
     if isEmpty(clipped):
       return
-    if self.viewNeedsDisplay():
+    if self.xNeedsDisplay:
       self.displayRectIgnoringOpacity(clipped)
-    for child in self.viewSubviews():
+    for child in self.xSubviews:
       if child.isNil:
         continue
-      let childFrame = child.viewFrame()
+      let childFrame = child.xFrame
       let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
       if isEmpty(childDirtyInParent):
         continue
@@ -322,10 +311,10 @@ objcImpl:
 
     self.drawRect(clipped)
 
-    for child in self.viewSubviews():
+    for child in self.xSubviews:
       if child.isNil or child.xHidden:
         continue
-      let childFrame = child.viewFrame()
+      let childFrame = child.frame()
       let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
       if isEmpty(childDirtyInParent):
         continue
@@ -339,14 +328,14 @@ objcImpl:
       child.displayRectIgnoringOpacity(childDirty)
 
     if self.xInvalidRects.len == 0:
-      self.viewNeedsDisplay = false
+      self.xNeedsDisplay = false
     else:
       var i = self.xInvalidRects.high
       while i >= 0:
         if nsContainsRect(clipped, self.xInvalidRects[i]):
           self.xInvalidRects.del(i)
         dec i
-      self.viewNeedsDisplay = self.xInvalidRects.len > 0
+      self.xNeedsDisplay = self.xInvalidRects.len > 0
     self.xRectsBeingRedrawn.setLen(0)
 
   method displayRectIgnoringOpacity*(
@@ -362,7 +351,7 @@ objcImpl:
       return
     if self.xRectsBeingRedrawn.len == 0:
       if self.xInvalidRects.len == 0:
-        if self.viewNeedsDisplay():
+        if self.xNeedsDisplay:
           self.xRectsBeingRedrawn = @[self.visibleRect()]
       else:
         self.xRectsBeingRedrawn = self.xInvalidRects
@@ -390,7 +379,7 @@ objcImpl:
   method drawRect*(self: NSView, rect: NSRect) =
     if self.isNil:
       return
-    let color = self.viewBackgroundColor()
+    let color = self.xBackgroundColor
     if color.a <= 0.0:
       return
     color.setFill()
@@ -415,10 +404,10 @@ objcImpl:
       b {.kw("blue").}: float32,
       a {.kw("alpha").}: float32,
   ) =
-    self.viewBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
+    self.xBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setHidden(self: NSView, hidden: bool) =
-    self.viewHidden = hidden
+    self.xHidden = hidden
 
   method dealloc(self: NSView) {.used.} =
     detachSubviews(self)
