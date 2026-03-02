@@ -103,21 +103,21 @@ objcImpl:
     result = asTypeRaw[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
     if result.isNil:
       return
-    result.viewFrame =
+    result.xFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
-    result.viewBounds =
+    result.xBounds =
       nsRect(0.0, 0.0, max(width.float32, 0.0), max(height.float32, 0.0))
-    result.viewBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
-    result.viewHidden = false
-    result.postsFrameChanged = true
-    result.postsBoundsChanged = true
-    result.autoResizeSubs = true
-    result.autoResizeMask = 0
-    result.alpha = 1.0
-    result.viewSuperview = NSView(value: nil)
-    result.viewTag = -1
-    result.viewSubviews = @[]
-    result.viewNeedsDisplay = true
+    result.xBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
+    result.xHidden = false
+    result.xPostsNotificationOnFrameChange = true
+    result.xPostsNotificationOnBoundsChange = true
+    result.xAutoresizesSubviews  = true
+    result.xAutoresizingMask  = 0
+    result.xAlpha = 1.0
+    result.xSuperview = NSView(value: nil)
+    result.xTag = -1
+    result.xSubviews = @[]
+    result.xNeedsDisplay = true
     result.xInvalidRects = @[]
     result.xRectsBeingRedrawn = @[]
 
@@ -128,16 +128,16 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ) =
-    let priorBounds = self.viewBounds()
-    self.viewFrame =
+    let priorBounds = self.xBounds()
+    self.xFrame =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
-    self.viewBounds = nsRect(
+    self.xBounds = nsRect(
       priorBounds.origin.x,
       priorBounds.origin.y,
       max(width.float32, 0.0),
       max(height.float32, 0.0),
     )
-    self.viewNeedsDisplay = true
+    self.xNeedsDisplay = true
     self.xInvalidRects.setLen(0)
     self.xRectsBeingRedrawn.setLen(0)
 
