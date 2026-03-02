@@ -30,11 +30,11 @@ template unionOfInvalidRects*(self: NSView): NSRect =
 
 objcImpl:
   type NSView* = object of NSResponder
-    xFrame: NSRect
-    xBounds {.set: setBounds, get: bounds.}: NSRect
-    xWindow: NSWindow
-    xMenu: NSMenu
-    xSuperview: NSView
+    xFrame {.get: frame, set: setFrame.}: NSRect
+    xBounds {.get: bounds, set: setBounds.}: NSRect
+    xWindow {.get: window, set: setWindow.}: NSWindow
+    xMenu {.get: menu, set: setMenu.}: NSMenu
+    xSuperview {get: superview, set: xSetSuperview.}: NSView
     xSubviews: seq[NSView]
     xNextKeyView: NSView
     xPreviousKeyView: NSView
@@ -148,30 +148,30 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ) =
-    self.viewBounds =
+    self.xBounds =
       nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
-    self.viewNeedsDisplay = true
+    self.xNeedsDisplay = true
     self.xInvalidRects.setLen(0)
     self.xRectsBeingRedrawn.setLen(0)
 
   method setBoundsOrigin*(self: NSView, point: NSPoint) =
-    let oldBounds = self.viewBounds()
-    self.viewBounds = nsRect(
+    let oldBounds = self.xBounds
+    self.xBounds = nsRect(
       point.x, point.y, max(oldBounds.size.width, 0.0), max(oldBounds.size.height, 0.0)
     )
-    self.viewNeedsDisplay = true
+    self.xNeedsDisplay = true
     self.xInvalidRects.setLen(0)
     self.xRectsBeingRedrawn.setLen(0)
 
   method setBoundsSize*(self: NSView, size: NSSize) =
-    let oldBounds = self.viewBounds()
-    self.viewBounds = nsRect(
+    let oldBounds = self.xBounds
+    self.xBounds = nsRect(
       oldBounds.origin.x,
       oldBounds.origin.y,
       max(size.width, 0.0),
       max(size.height, 0.0),
     )
-    self.viewNeedsDisplay = true
+    self.xNeedsDisplay = true
     self.xInvalidRects.setLen(0)
     self.xRectsBeingRedrawn.setLen(0)
 
@@ -182,15 +182,15 @@ objcImpl:
     false
 
   method visibleRect*(self: NSView): NSRect =
-    if self.isNil or self.viewHidden():
+    if self.isNil or self.xHidden:
       return nsRect(0.0, 0.0, 0.0, 0.0)
-    self.viewBounds()
+    self.xBounds
 
   method canDraw*(self: NSView): bool =
-    (not self.isNil) and (not self.viewHidden())
+    (not self.isNil) and (not self.xHidden)
 
   method viewWillDraw*(self: NSView) =
-    for child in self.viewSubviews():
+    for child in self.xSubviews:
       if child.isNil:
         continue
       child.viewWillDraw()
@@ -200,7 +200,7 @@ objcImpl:
       return NSView(value: nil)
     if self.isOpaque():
       return retain(self)
-    let parent = self.viewSuperview()
+    let parent = self.xSuperview
     if parent.isNil:
       return retain(self)
     parent.opaqueAncestor()
@@ -215,13 +215,13 @@ objcImpl:
     else:
       self.xInvalidRects.add(clipped)
     self.xRectsBeingRedrawn.setLen(0)
-    self.viewNeedsDisplay = true
+    self.xNeedsDisplay = true
 
   method display*(self: NSView) =
     self.displayRect(self.visibleRect())
 
   method xDisplayIfNeededWithoutViewWillDraw*(self: NSView) =
-    if self.viewNeedsDisplay():
+    if self.xNeedsDisplay:
       self.displayRect(unionOfInvalidRects(self))
       self.xInvalidRects.setLen(0)
       #if self.xInvalidRects.len == 0:
@@ -232,7 +232,7 @@ objcImpl:
       #    dirty = nsUnionRect(dirty, self.xInvalidRects[i])
       #  self.displayRect(dirty)
 
-    for child in self.viewSubviews():
+    for child in self.xSubviews:
       if child.isNil: continue
       child.xDisplayIfNeededWithoutViewWillDraw()
 
@@ -245,12 +245,12 @@ objcImpl:
     let clipped = nsIntersectionRect(rect, self.visibleRect())
     if isEmpty(clipped):
       return
-    if self.viewNeedsDisplay():
+    if self.xNeedsDisplay:
       self.displayRect(clipped)
-    for child in self.viewSubviews():
+    for child in self.xSubviews:
       if child.isNil:
         continue
-      let childFrame = child.viewFrame()
+      let childFrame = child.frame()
       let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
       if isEmpty(childDirtyInParent):
         continue
@@ -323,7 +323,7 @@ objcImpl:
     self.drawRect(clipped)
 
     for child in self.viewSubviews():
-      if child.isNil or child.viewHidden():
+      if child.isNil or child.xHidden:
         continue
       let childFrame = child.viewFrame()
       let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
@@ -452,30 +452,12 @@ proc detachSubviews*(view: NSObject) =
   children.setLen(0)
   v.viewSubviews = children
 
-proc frame*(view: NSView): NSRect =
-  view.viewFrame()
-
-proc frameOrigin*(view: NSView): NSPoint =
-  view.frame().origin
-
-proc frameSize*(view: NSView): NSSize =
-  view.frame().size
-
-proc boundsOrigin*(view: NSView): NSPoint =
-  view.bounds().origin
-
-proc boundsSize*(view: NSView): NSSize =
-  view.bounds().size
-
-proc isHidden*(view: NSView): bool =
-  view.viewHidden()
-
 proc isHiddenOrHasHiddenAncestor*(view: NSView): bool =
   var current = view
   while not current.isNil:
-    if current.viewHidden():
+    if current.xHidden:
       return true
-    let parent = current.viewSuperview()
+    let parent = current.xSuperview()
     if parent.isNil:
       break
     current = parent
