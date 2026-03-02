@@ -285,11 +285,17 @@ objcImpl:
         self.setTitle(@ns"Cell")
         self.setFont(NSFont(value: nil))
 
-  method setState*(self: NSCell, value: NSCellState) =
+  method setState*(self: NSCell, value: int) =
+    let ival = value.int
     if self.xAllowsMixedState:
-      self.xState = value
+      if ival < 0:
+        self.xState = NSMixedState
+      elif ival > 0:
+        self.xState = NSOnState
+      else:
+        self.xState = NSOffState
     else:
-      self.xState = if value == NSMixedState: NSOnState else: value
+      self.xState = ival.clamp(-1, 1).NSCellState
 
   method nextState*(self: NSCell): NSCellState =
     case self.state():
@@ -592,4 +598,7 @@ proc new*(t: typedesc[NSCell]): NSCell =
 proc new*(t: typedesc[NSActionCell]): NSActionCell =
   var allocated = NSActionCell.alloc()
   result = initOwned(move(allocated))
+
+proc setState*(self: NSCell, value: NSCellState) =
+  self.setState(value.int)
 

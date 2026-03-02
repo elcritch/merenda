@@ -480,30 +480,14 @@ objcImpl:
     resultSize
 
   method setObjectValue*(self: NSButtonCell, value: ID) =
-    let val =
+    let val: int =
       if value.isWrapper(IntValue): value.asWrapper(IntValue).intValue()
       else: 0
-    discard callSuperAs[ID](self, @selector("setState:"), val)
+    discard callSuperAs[ID, int](self, @selector"setState:", val)
 
-  method stringValue*(self: NSButtonCell): NSString =
-    self.title()
-
-  method setStringValue*(self: NSButtonCell, value: NSString) =
-    self.setTitle(value)
-
-  method setIntValue*(self: NSButtonCell, value: cint) =
-    let val = min(value, 1).max(-1)
-    self.setState(val.NSCellState)
-
-  method setIntegerValue*(self: NSButtonCell, value: int) =
-    let val = min(value, 1).max(-1)
-    self.setState(value.NSCellState)
-
-  method setFloatValue*(self: NSButtonCell, value: float32) =
-    self.setState(value.int)
-
-  method setDoubleValue*(self: NSButtonCell, value: float) =
-    self.setState(value.int)
+    self.controlView().willChangeValueForKey(@ns"objectValue")
+    self.xObjectValue = @ns( callSuperAs[int](self, @selector"state").int )
+    self.controlView().didChangeValueForKey(@ns"objectValue")
 
   method performClick*(self: NSButtonCell, sender: NSObject) =
     if self.isNil or not self.isEnabled():

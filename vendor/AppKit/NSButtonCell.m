@@ -426,12 +426,12 @@ static const float kImageMargin = 2.;
 }
 
 -(void)setObjectValue:(id <NSCopying>)value {
-    if ([(id)value respondsToSelector:@selector(intValue)])
+   if ([(id)value respondsToSelector:@selector(intValue)])
       [super setState:[(NSNumber *)value intValue]];
    else
       [super setState:0];
 
-    [[self controlView] willChangeValueForKey:@"objectValue"];
+   [[self controlView] willChangeValueForKey:@"objectValue"];
    [_objectValue release];
    _objectValue = [[NSNumber numberWithInt:[super state]] retain];
    [[self controlView] didChangeValueForKey:@"objectValue"];
