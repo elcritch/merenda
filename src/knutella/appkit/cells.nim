@@ -564,14 +564,10 @@ objcImpl:
     if result.isNil:
       return
     result.setEnabled(true)
-    result.xActionControlView = NSView(value: nil)
-    result.xActionTarget.value = nil
-    result.xActionSelector = nil
     result.xActionTag = -1
 
   method dealloc(self: NSActionCell) {.used.} =
-    self.xActionControlView = NSView(value: nil)
-    self.xActionTarget.value = nil
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSActionCell, self, getSelector("dealloc"))
 
 objcImpl:
@@ -1100,10 +1096,7 @@ objcImpl:
     discard performResponderSelector(target, action, self.NSObject)
 
   method dealloc(self: NSButtonCell) {.used.} =
-    self.xButtonTitle = NSString(value: nil)
-    self.xAlternateTitle = NSString(value: nil)
-    self.xAlternateImage = NSImage(value: nil)
-    self.xKeyEquivalent = NSString(value: nil)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSButtonCell, self, getSelector("dealloc"))
 
 proc NSDrawThreePartImage*(
