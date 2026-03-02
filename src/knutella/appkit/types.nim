@@ -324,7 +324,7 @@ const
 type
   AffineTransformation* = object
     a, b, c, d: float32
-    tx, tx: float32
+    tx, ty: float32
 
 proc nsPoint*(x, y: float32): NSPoint =
   NSPoint(x: x, y: y)
