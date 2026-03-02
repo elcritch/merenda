@@ -41,7 +41,7 @@ objcImpl:
     xFrame {.set: windowFrame, get: windowFrame.}: NSRect
     xTitle {.set: windowTitle, get: windowTitle.}: NSString
     xStyleMask {.set: windowStyleMask, get: windowStyleMask.}: int
-    xBackingType {.set: windowBackingType, get: windowBackingType.}: int
+    xBackingType {.set: setBackingType, get: backingType.}: NSBackingStoreType
     xDeferred {.set: windowDeferred, get: windowDeferred.}: bool
     xReleasedWhenClosed {.set: setReleasedWhenClosed, get: isReleasedWhenClosed.}: bool
     xContentView {.set: windowContentView, get: windowContentView.}: NSView
@@ -97,7 +97,7 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
       styleMask {.kw("styleMask").}: int,
-      backing {.kw("backing").}: int,
+      backing {.kw("backing").}: NSBackingStoreType,
       deferFlag {.kw("defer").}: bool,
   ): NSWindow =
     result = self.initWithContentRect(x, y, width, height)
