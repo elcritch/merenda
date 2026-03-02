@@ -33,17 +33,3 @@ objcImpl:
     concept self
         method description*(self: DescriptionValue): NSString
 
-proc sendId*(obj: ID, op: SEL): ID {.inline.} =
-  ID(
-    value: cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-      obj.value, op
-    )
-  )
-
-proc sendId*(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
-  ID(
-    value: cast[proc(self: IDPtr, op: SEL, arg0: IDPtr): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-      obj.value, op, arg0.value
-    )
-  )
-
