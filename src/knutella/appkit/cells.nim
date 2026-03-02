@@ -544,7 +544,7 @@ objcImpl:
       return
     let editorObj = editor.NSObject
     if editorObj.respondsToSelector("string"):
-      self.setStringValue(ownFromId[NSString](sendId(editor, getSelector("string"))))
+      self.setStringValue(NSString(sendId(editor, getSelector("string"))))
 
   method resetCursorRect*(self: NSCell, rect: NSRect, view {.kw("inView").}: NSView) =
     return
