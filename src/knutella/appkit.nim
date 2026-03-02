@@ -20,6 +20,7 @@ import ./appkit/fontdescriptors
 import ./appkit/fonts
 import ./appkit/boxview
 import ./appkit/cells
+import ./appkit/buttoncells
 import ./appkit/clipviews
 import ./appkit/scrollers
 import ./appkit/rulerviews
@@ -52,6 +53,7 @@ export fontdescriptors
 export fonts
 export boxview
 export cells
+export buttoncells
 export clipviews
 export scrollers
 export rulerviews
