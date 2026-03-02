@@ -13,12 +13,13 @@ export responders, views
 
 const WindowTitlebarHeight = 28.0'f32
 
-proc titlebarHeightForStyleMask(styleMask: int): float32 =
-  if (styleMask and NSTitledWindowMask) != 0:
+proc titlebarHeightForStyleMask(styleMask: set[NSWindowDecorations]): float32 =
+  if NSTitledWindow in styleMask:
     return WindowTitlebarHeight
   0.0
 
-proc frameRectForContentRectWithStyle(contentRect: NSRect, styleMask: int): NSRect =
+proc frameRectForContentRectWithStyle(contentRect: NSRect,
+                                      styleMask: set[NSWindowDecorations]): NSRect =
   let titlebarHeight = titlebarHeightForStyleMask(styleMask)
   nsRect(
     contentRect.origin.x,
@@ -27,7 +28,8 @@ proc frameRectForContentRectWithStyle(contentRect: NSRect, styleMask: int): NSRe
     max(contentRect.size.height + titlebarHeight, 1.0),
   )
 
-proc contentRectForFrameRectWithStyle(frameRect: NSRect, styleMask: int): NSRect =
+proc contentRectForFrameRectWithStyle(frameRect: NSRect,
+                                      styleMask: set[NSWindowDecorations]): NSRect =
   let titlebarHeight = titlebarHeightForStyleMask(styleMask)
   nsRect(
     frameRect.origin.x,
@@ -40,7 +42,7 @@ objcImpl:
   type NSWindow* = object of NSResponder
     xFrame {.set: windowFrame, get: windowFrame.}: NSRect
     xTitle {.set: windowTitle, get: windowTitle.}: NSString
-    xStyleMask {.set: windowStyleMask, get: windowStyleMask.}: int
+    xStyleMask {.set: setStyleMask, get: styleMask.}: set[NSWindowDecorations]
     xBackingType {.set: setBackingType, get: backingType.}: NSBackingStoreType
     xDeferred {.set: windowDeferred, get: windowDeferred.}: bool
     xReleasedWhenClosed {.set: setReleasedWhenClosed, get: isReleasedWhenClosed.}: bool
@@ -63,7 +65,7 @@ objcImpl:
     result.xFrame = nsRect(100, 100, 640, 420)
     result.xTitle = @ns"KNutella Window"
     result.xStyleMask =
-      NSTitledWindowMask or NSClosableWindowMask or NSResizableWindowMask
+      {NSTitledWindow, NSClosableWindow, NSResizableWindow}
     result.xBackingType = NSBackingStoreBuffered
     result.xDeferred = false
     result.xReleasedWhenClosed = true
@@ -96,7 +98,7 @@ objcImpl:
       y {.kw("y").}: float32,
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
-      styleMask {.kw("styleMask").}: int,
+      styleMask {.kw("styleMask").}: set[NSWindowDecorations],
       backing {.kw("backing").}: NSBackingStoreType,
       deferFlag {.kw("defer").}: bool,
   ): NSWindow =
@@ -134,10 +136,10 @@ objcImpl:
     result = retain(self.xContentView)
 
   method frameRectForContentRect*(self: NSWindow, rect: NSRect): NSRect =
-    frameRectForContentRectWithStyle(rect, self.windowStyleMask())
+    frameRectForContentRectWithStyle(rect, self.styleMask())
 
   method contentRectForFrameRect*(self: NSWindow, rect: NSRect): NSRect =
-    contentRectForFrameRectWithStyle(rect, self.windowStyleMask())
+    contentRectForFrameRectWithStyle(rect, self.styleMask())
 
   method firstResponder*(self: NSWindow): NSResponder =
     if self.xFirstResponder.isNil:

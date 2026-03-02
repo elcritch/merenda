@@ -19,7 +19,7 @@ proc resolveImagePath(path: string): string =
     return dataPath
   path
 
-proc scaledImageSizeInRect(imageSize: NSSize, frameSize: NSSize, scaling: int): NSSize =
+proc scaledImageSizeInRect(imageSize: NSSize, frameSize: NSSize, scaling: NSImageScaling): NSSize =
   if imageSize.width <= 0 or imageSize.height <= 0:
     return nsSize(0, 0)
   case scaling
@@ -53,13 +53,11 @@ objcImpl:
   method init*(self: var NSImage): NSImage =
     result = asTypeRaw[NSImage](callSuperIdFrom(NSImage, self, getSelector("init")))
 
-  method initWithSize*(
-      self: var NSImage, width: float32, height {.kw("height").}: float32
-  ): NSImage =
+  method initWithSize*(self: var NSImage, size: NSSize): NSImage =
     result = self.init()
     if result.isNil:
       return
-    result.xSize = nsSize(max(width, 0.0), max(height, 0.0))
+    result.xSize = nsSize(max(size.width, 0.0), max(size.height, 0.0))
 
   method initWithContentsOfFile*(self: var NSImage, path: NSString): NSImage =
     let resolved = resolveImagePath($path)
@@ -72,7 +70,8 @@ objcImpl:
     except PixieError:
       return NSImage(value: nil)
 
-    result = self.initWithSize(pixels.width.float32, pixels.height.float32)
+    let size = NSSize(width: pixels.width.float32, height: pixels.height.float32)
+    result = self.initWithSize(size)
     if result.isNil:
       return
     result.xSourcePath = ns(resolved)
@@ -198,9 +197,6 @@ proc imageNamed*(t: typedesc[NSImage], name: NSString): NSImage =
 proc new*(t: typedesc[NSImage]): NSImage =
   var allocated = NSImage.alloc()
   result = initOwned(move(allocated))
-
-proc initWithSize*(self: var NSImage, size: NSSize): NSImage =
-  self.initWithSize(size.width, size.height)
 
 proc setSize*(self: NSImage, size: NSSize) =
   self.setSize(size.width, size.height)

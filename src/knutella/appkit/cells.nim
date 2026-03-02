@@ -54,14 +54,14 @@ proc insetRect*(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
     max(rect.size.height - dy * 2.0, 0.0),
   )
 
-proc boolState*(value: int): bool {.inline.} =
+proc boolState*(value: NSCellState): bool {.inline.} =
   value != NSOffState
 
 proc hasMask*(value: int, mask: int): bool {.inline.} =
   (value and mask) != 0
 
 proc scaledImageSizeInFrameSize*(
-    imageSize: NSSize, frameSize: NSSize, scaling: int
+    imageSize: NSSize, frameSize: NSSize, scaling: NSImageScaling
 ): NSSize {.inline.} =
   if imageSize.width <= 0.0 or imageSize.height <= 0.0:
     return nsSize(0.0, 0.0)
@@ -97,7 +97,7 @@ objcImpl:
       NSIntegerValueProvider, NSFloatValueProvider, NSDoubleValueProvider,
     )
   .} = object of NSObject
-    xState: int
+    xState: NSCellState
     xFont {.set: setFont, get: font.}: NSFont
     xEntryType {.get: entryType.}: int
     xObjectValue: ID
@@ -170,14 +170,10 @@ objcImpl:
   method encodeWithCoder*(self: NSCell, coder: ID) =
     return
 
-  method state*(self: NSCell): int =
+  method state*(self: NSCell): NSCellState =
     if self.xAllowsMixedState:
-      if self.xState < 0:
-        return NSMixedState
-      if self.xState > 0:
-        return NSOnState
-      return NSOffState
-    (abs(self.xState) > 0).int
+      return self.xState
+    (abs(self.xState.cint)).NSCellState
 
   method target*(self: NSCell): ID =
     ID(value: nil)
@@ -278,22 +274,21 @@ objcImpl:
         self.setTitle(@ns"Cell")
         self.setFont(NSFont(value: nil))
 
-  method setState*(self: NSCell, value: int) =
+  method setState*(self: NSCell, value: NSCellState) =
     if self.xAllowsMixedState:
-      if value < 0:
-        self.xState = NSMixedState
-      elif value > 0:
-        self.xState = NSOnState
-      else:
-        self.xState = NSOffState
+      self.xState = value
     else:
-      self.xState = (abs(value) > 0).int
+      self.xState = if value == NSMixedState: NSOnState else: value
 
-  method nextState*(self: NSCell): int =
-    if self.xAllowsMixedState:
-      let value = self.state()
-      return value - (if value == NSMixedState: -2 else: 1)
-    1 - self.state()
+  method nextState*(self: NSCell): NSCellState =
+    case self.state():
+    of NSMixedState:
+      if self.xAllowsMixedState:
+        return NSOnState
+      else:
+        return NSOffState
+    else:
+      return self.state()
 
   method setNextState*(self: NSCell) =
     self.xState = self.nextState()
