@@ -81,8 +81,6 @@ type
     NSWindowDepthSixtyfourBitRGB = 528
     NSWindowDepthTwentyfourBitRGB = 520
 
-  NSAnimationEffect* = uint
-
   NSImageInterpolation* {.size: sizeof(cint).} = enum
     NSImageInterpolationDefault = 0
     NSImageInterpolationNone = 1
@@ -179,8 +177,6 @@ type
     NSHorizontalRuler = 0
     NSVerticalRuler = 1
 
-  NSUsableScrollerParts* = int
-
 type
   NSWindowDecorations* {.size: sizeof(cint).} = enum
     NSTitledWindow = 1
@@ -208,66 +204,80 @@ type
 const
   NSNoCellMask*: set[NSCellMask] = {}
 
+type
+  NSAutoResizingMask* {.size: sizeof(cint).} = enum
+    NSViewMinXMargin = 0
+    NSViewWidthSizable = 1
+    NSViewMaxXMargin = 2
+    NSViewMinYMargin = 3
+    NSViewHeightSizable = 4
+    NSViewMaxYMargin = 5
+
 const
+  NSViewNotSizable*: set[NSAutoResizingMask] = {}
 
-  NSViewNotSizable* = 0
-  NSViewMinXMargin* = 1
-  NSViewWidthSizable* = 2
-  NSViewMaxXMargin* = 4
-  NSViewMinYMargin* = 8
-  NSViewHeightSizable* = 16
-  NSViewMaxYMargin* = 32
+type
+  NSBezelStyle* {.size: sizeof(cint).} = enum
+    NSRoundedBezelStyle = 1
+    NSRegularSquareBezelStyle = 2
+    NSThickSquareBezelStyle = 3
+    NSThickerSquareBezelStyle = 4
+    NSDisclosureBezelStyle = 5
+    NSShadowlessSquareBezelStyle = 6
+    NSCircularBezelStyle = 7
+    NSTexturedSquareBezelStyle = 8
+    NSHelpButtonBezelStyle = 9
+    NSSmallSquareBezelStyle = 10
+    NSTexturedRoundedBezelStyle = 11
+    NSRoundRectBezelStyle = 12
+    NSRecessedBezelStyle = 13
+    NSRoundedDisclosureBezelStyle = 14
 
-  NSRoundedBezelStyle* = 1
-  NSRegularSquareBezelStyle* = 2
-  NSThickSquareBezelStyle* = 3
-  NSThickerSquareBezelStyle* = 4
-  NSDisclosureBezelStyle* = 5
-  NSShadowlessSquareBezelStyle* = 6
-  NSCircularBezelStyle* = 7
-  NSTexturedSquareBezelStyle* = 8
-  NSHelpButtonBezelStyle* = 9
-  NSSmallSquareBezelStyle* = 10
-  NSTexturedRoundedBezelStyle* = 11
-  NSRoundRectBezelStyle* = 12
-  NSRecessedBezelStyle* = 13
-  NSRoundedDisclosureBezelStyle* = 14
+  NSGradientType* {.size: sizeof(cint).} = enum
+    NSGradientNone = 0
+    NSGradientConcaveWeak = 1
+    NSGradientConcaveStrong = 2
+    NSGradientConvexWeak = 3
+    NSGradientConvexStrong = 4
 
-  NSGradientNone* = 0
-  NSGradientConcaveWeak* = 1
-  NSGradientConcaveStrong* = 2
-  NSGradientConvexWeak* = 3
-  NSGradientConvexStrong* = 4
+  NSCellImagePosition* {.size: sizeof(cint).} = enum
+    NSNoImage = 0
+    NSImageOnly = 1
+    NSImageLeft = 2
+    NSImageRight = 3
+    NSImageBelow = 4
+    NSImageAbove = 5
+    NSImageOverlaps = 6
 
-  NSNoImage* = 0
-  NSImageOnly* = 1
-  NSImageLeft* = 2
-  NSImageRight* = 3
-  NSImageBelow* = 4
-  NSImageAbove* = 5
-  NSImageOverlaps* = 6
+  NSImageScaling* {.size: sizeof(cint).} = enum
+    NSImageScaleProportionallyDown = 0
+    NSImageScaleAxesIndependently = 1
+    NSImageScaleNone = 2
+    NSImageScaleProportionallyUpOrDown = 3
 
-  NSImageScaleProportionallyDown* = 0
-  NSImageScaleAxesIndependently* = 1
-  NSImageScaleNone* = 2
-  NSImageScaleProportionallyUpOrDown* = 3
+const
   NSScaleProportionally* = NSImageScaleProportionallyDown
   NSScaleToFit* = NSImageScaleAxesIndependently
   NSScaleNone* = NSImageScaleNone
 
-  NSImageFrameNone* = 0
-  NSImageFramePhoto* = 1
-  NSImageFrameGrayBezel* = 2
-  NSImageFrameGroove* = 3
-  NSImageFrameButton* = 4
+type
+  NSImageFrameStyle* {.size: sizeof(cint).} = enum
+    NSImageFrameNone = 0
+    NSImageFramePhoto = 1
+    NSImageFrameGrayBezel = 2
+    NSImageFrameGroove = 3
+    NSImageFrameButton = 4
 
-  NSMixedState* = -1
-  NSOffState* = 0
-  NSOnState* = 1
+  NSCellState* {.size: sizeof(cint).} = enum
+    NSMixedState = -1
+    NSOffState = 0
+    NSOnState = 1
 
-  NSAnimationEffectDisappearingItemDefault* = 0
-  NSAnimationEffectPoof* = 10
+  NSAnimationEffect* {.size: sizeof(cint).} = enum
+    NSAnimationEffectDisappearingItemDefault = 0
+    NSAnimationEffectPoof = 10
 
+const
   NSCompositingOperationClear* = NSCompositeClear
   NSCompositingOperationCopy* = NSCompositeCopy
   NSCompositingOperationSourceOver* = NSCompositeSourceOver
@@ -283,23 +293,34 @@ const
   NSCompositingOperationHighlight* = NSCompositeHighlight
   NSCompositingOperationPlusLighter* = NSCompositePlusLighter
 
-  NSAnyType* = 0
-  NSIntType* = 1
-  NSPositiveIntType* = 2
-  NSFloatType* = 3
-  NSPositiveFloatType* = 4
-  NSDoubleType* = 6
-  NSPositiveDoubleType* = 7
+type
+  NSValueType* {.size: sizeof(cint).} = enum
+    NSAnyType = 0
+    NSIntType = 1
+    NSPositiveIntType = 2
+    NSFloatType = 3
+    NSPositiveFloatType = 4
+    NSDoubleType = 6
+    NSPositiveDoubleType = 7
 
-  NSCellHitNone* = 0x00
-  NSCellHitContentArea* = 0x01
-  NSCellHitEditableTextArea* = 0x02
-  NSCellHitTrackableArea* = 0x04
-  NSNoScrollerParts* = 0
-  NSOnlyScrollerArrows* = 1
-  NSAllScrollerParts* = 2
-  NSScrollerArrowsDefaultSetting* = NSScrollerArrowsMaxEnd
+  NSCellHit* {.size: sizeof(cint).} = enum
+    NSCellHitContentArea = 0
+    NSCellHitEditableTextArea = 1
+    NSCellHitTrackableArea = 2
+
+const
+  NSCellHitNone*: set[NSCellHit] = {}
   NSNotFound* = high(uint)
+
+type
+  NSUsableScrollerParts* {.size: sizeof(cint).} = enum
+    NSNoScrollerParts = 0
+    NSOnlyScrollerArrows = 1
+    NSAllScrollerParts = 2
+
+const
+  NSScrollerArrowsDefaultSetting* = NSScrollerArrowsMaxEnd
+
 
 proc nsPoint*(x, y: float32): NSPoint =
   NSPoint(x: x, y: y)
