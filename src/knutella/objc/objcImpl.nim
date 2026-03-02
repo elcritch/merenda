@@ -936,11 +936,21 @@ proc buildRespondsLikeProc(
     protocolExported: bool,
     protocolSpecs: seq[ObjcProtocolMethodSpec],
 ): NimNode =
-  let respondsLikeName =
+  let asWrapperName =
     if protocolExported:
       postfix(ident("asWrapper"), "*")
     else:
       ident("asWrapper")
+  let respondsLikeName =
+    if protocolExported:
+      postfix(ident("respondsLike"), "*")
+    else:
+      ident("respondsLike")
+  let castWrapperName =
+    if protocolExported:
+      postfix(ident("castWrapper"), "*")
+    else:
+      ident("castWrapper")
   let protocolType = ident(protocolName)
   let objName = ident("o")
 
@@ -950,15 +960,17 @@ proc buildRespondsLikeProc(
     newTree(nnkExprColonExpr, ident("value"), newNilLit()),
   )
 
-  var ifStmt = newNimNode(nnkIfStmt)
-  ifStmt.add(
+  let boolBody = newStmtList()
+  boolBody.add(
     newTree(
-      nnkElifBranch,
-      newCall(newDotExpr(copyNimTree(objName), ident("isNil"))),
-      newStmtList(newNimNode(nnkReturnStmt).add(copyNimTree(nilRetExpr))),
+      nnkIfStmt,
+      newTree(
+        nnkElifBranch,
+        newCall(newDotExpr(copyNimTree(objName), ident("isNil"))),
+        newStmtList(newNimNode(nnkReturnStmt).add(newLit(false))),
+      ),
     )
   )
-
   for spec in protocolSpecs:
     if not spec.isRequired or spec.methodKind != oimkInstance:
       continue
@@ -968,24 +980,43 @@ proc buildRespondsLikeProc(
       newCall(bindSym"getClass", newDotExpr(copyNimTree(objName), ident("value"))),
       newCall(bindSym"selector", selectorLit),
     )
-    ifStmt.add(
+    boolBody.add(
       newTree(
-        nnkElifBranch,
-        newCall(bindSym"not", hasSelectorExpr),
-        newStmtList(newNimNode(nnkReturnStmt).add(copyNimTree(nilRetExpr))),
+        nnkIfStmt,
+        newTree(
+          nnkElifBranch,
+          newCall(bindSym"not", hasSelectorExpr),
+          newStmtList(newNimNode(nnkReturnStmt).add(newLit(false))),
+        ),
       )
     )
+  boolBody.add(newNimNode(nnkReturnStmt).add(newLit(true)))
 
-  let body = newStmtList()
-  body.add(ifStmt)
-  body.add(
+  let respondsLikeProc = newProc(
+    name = respondsLikeName,
+    params =
+      @[
+        ident("bool"),
+        newIdentDefs(copyNimTree(objName), bindSym"ID", newEmptyNode()),
+        newIdentDefs(
+          ident("expected"),
+          nnkBracketExpr.newTree(ident("typedesc"), copyNimTree(protocolType)),
+          newEmptyNode(),
+        ),
+      ],
+    body = boolBody,
+    pragmas = nnkPragma.newTree(ident"inline"),
+  )
+
+  let castWrapperBody = newStmtList()
+  castWrapperBody.add(
     newNimNode(nnkReturnStmt).add(
       newCall(bindSym"to", copyNimTree(objName), copyNimTree(protocolType))
     )
   )
 
-  result = newProc(
-    name = respondsLikeName,
+  let castWrapperProc = newProc(
+    name = castWrapperName,
     params =
       @[
         copyNimTree(protocolType),
@@ -996,9 +1027,49 @@ proc buildRespondsLikeProc(
           newEmptyNode(),
         ),
       ],
-    body = body,
+    body = castWrapperBody,
     pragmas = nnkPragma.newTree(ident"inline"),
   )
+
+  let wrapperBody = newStmtList()
+  wrapperBody.add(
+    newTree(
+      nnkIfStmt,
+      newTree(
+        nnkElifBranch,
+        newCall(
+          bindSym"not",
+          newCall(
+            ident("respondsLike"), copyNimTree(objName), copyNimTree(protocolType)
+          ),
+        ),
+        newStmtList(newNimNode(nnkReturnStmt).add(copyNimTree(nilRetExpr))),
+      ),
+    )
+  )
+  wrapperBody.add(
+    newNimNode(nnkReturnStmt).add(
+      newCall(ident("castWrapper"), copyNimTree(objName), copyNimTree(protocolType))
+    )
+  )
+
+  let asWrapperProc = newProc(
+    name = asWrapperName,
+    params =
+      @[
+        copyNimTree(protocolType),
+        newIdentDefs(copyNimTree(objName), bindSym"ID", newEmptyNode()),
+        newIdentDefs(
+          ident("expected"),
+          nnkBracketExpr.newTree(ident("typedesc"), copyNimTree(protocolType)),
+          newEmptyNode(),
+        ),
+      ],
+    body = wrapperBody,
+    pragmas = nnkPragma.newTree(ident"inline"),
+  )
+
+  result = newStmtList(respondsLikeProc, castWrapperProc, asWrapperProc)
 
 macro objcImpl*(x: untyped): untyped =
   let input =

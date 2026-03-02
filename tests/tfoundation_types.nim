@@ -108,12 +108,16 @@ suite "foundation stdlib-backed core types":
 
   test "structural protocols support asWrapper":
     let boxedInt = @ns(42)
+    check(boxedInt.respondsLike(IntValue))
     let intLike = boxedInt.asWrapper(IntValue)
     check(not intLike.isNil)
     if not intLike.isNil:
       check(intLike.intValue() == 42)
 
     let plainObject = NSObject.new()
+    check(not plainObject.respondsLike(IntValue))
+    let forcedIntLike = plainObject.castWrapper(IntValue)
+    check(not forcedIntLike.isNil)
     let notIntLike = plainObject.asWrapper(IntValue)
     check(notIntLike.isNil)
 

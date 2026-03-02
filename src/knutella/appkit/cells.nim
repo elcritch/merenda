@@ -231,8 +231,8 @@ objcImpl:
     if valueObj.isKindOfClass(NSString):
       return valueObj.to(NSString)
 
-    if (let vo = valueObj.asWrapper(DescriptionValue); vo.notNil):
-      return vo.description()
+    if valueObj.respondsLike(DescriptionValue):
+      return valueObj.castWrapper(DescriptionValue).descripton()
 
     retain(@ns"")
 
