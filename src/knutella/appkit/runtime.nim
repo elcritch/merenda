@@ -243,6 +243,7 @@ type
   NSImage* = object of NSObject
   NSBitmapImageRep* = object of NSObject
   NSGraphicsContext* = object of NSObject
+  NSAnimation* = object of NSObject
   NSTableColumn* = object of NSObject
   NSTableHeaderCell* = object of NSCell
   NSCursor* = object of NSObject

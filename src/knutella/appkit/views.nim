@@ -78,7 +78,7 @@ objcImpl:
     xContentFilters: NSArray
 
     xShadow: NSShadow
-    xAnimations: NSDictionary
+    xAnimations: NSDictionary[NSString, NSAnimation]
 
     xAlpha {.set: setAlphaValue, get: alphaValue.}: float32
 
