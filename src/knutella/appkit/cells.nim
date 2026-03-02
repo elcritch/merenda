@@ -31,15 +31,6 @@ proc sendId(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
     )
   )
 
-proc replaceOwned(slot: var ID, next: ID) {.inline.} =
-  slot.value = replacedOwnedId(slot.value, next.value)
-
-proc replaceOwned(slot: var ID, next: NSObject) {.inline.} =
-  slot.value = replacedOwnedId(slot.value, next.value)
-
-proc clearOwned(slot: var ID) {.inline.} =
-  slot.value = replacedOwnedId(slot.value, nil)
-
 proc parseIntegerPrefix(text: string): int =
   var offset = 0
   while offset < text.len and text[offset].isSpaceAscii:
@@ -233,7 +224,7 @@ objcImpl:
     if self.xObjectValue.isNil:
       return retain(@ns"")
 
-    let valueObj = self.xObjectValue.value.NSObject
+    let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString):
       return valueObj.to(NSAttributedString).string()
 
@@ -246,7 +237,7 @@ objcImpl:
     retain(@ns"")
 
   method intValue*(self: NSCell): cint =
-    let valueObj = self.xObjectValue.value.NSObject
+    let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString):
       return parseIntegerPrefix($self.stringValue()).cint
     if valueObj.isKindOfClass(NSString):
@@ -261,7 +252,7 @@ objcImpl:
   method floatValue*(self: NSCell): float32 =
     if self.xObjectValue.isNil:
       return 0.0
-    let valueObj = self.xObjectValue.value.NSObject
+    let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue()).float32
     let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
@@ -274,7 +265,7 @@ objcImpl:
   method doubleValue*(self: NSCell): float =
     if self.xObjectValue.isNil:
       return 0.0
-    let valueObj = self.xObjectValue.value.NSObject
+    let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue())
     let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
@@ -285,7 +276,7 @@ objcImpl:
     0.0
 
   method integerValue*(self: NSCell): int =
-    let valueObj = self.xObjectValue.value.NSObject
+    let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
       return parseIntegerPrefix($self.stringValue())
     let integerProvider = asProto[NSIntegerValueProvider](self.xObjectValue)
@@ -298,7 +289,7 @@ objcImpl:
   method attributedStringValue*(self: NSCell): NSAttributedString =
     if self.xObjectValue.isNil:
       return NSAttributedString(value: nil)
-    let valueObj = self.xObjectValue.value.NSObject
+    let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString):
       return ownFromId[NSAttributedString](self.xObjectValue)
     NSAttributedString(value: nil)
@@ -373,8 +364,8 @@ objcImpl:
     let controlView = self.controlView()
     if not controlView.isNil:
       willChangeValueForKey(controlView.NSObject, "objectValue")
-    replaceOwned(self.xObjectValue, value)
-    replaceOwned(self.xTitleOrAttributedTitle, value)
+    self.xObjectValue = value
+    self.xTitleOrAttributedTitle = value
     self.xHasValidObjectValue = true
     if not controlView.isNil:
       didChangeValueForKey(controlView.NSObject, "objectValue")
@@ -386,7 +377,7 @@ objcImpl:
     self.setType(NSTextCellType)
 
     if not self.xFormatter.isNil:
-      let formatterObj = self.xFormatter.value.NSObject
+      let formatterObj = self.xFormatter.NSObject
       if formatterObj.respondsToSelector("getObjectValue:forString:errorDescription:"):
         var formatted: IDPtr = nil
         var errorDesc: IDPtr = nil
@@ -424,12 +415,12 @@ objcImpl:
     self.setObjectValue(ownFromId[NSObject](ns(value).value))
 
   method setAttributedStringValue*(self: NSCell, value: NSAttributedString) =
-    replaceOwned(self.xObjectValue, value.value.NSObject)
-    replaceOwned(self.xTitleOrAttributedTitle, value.value.NSObject)
+    self.xObjectValue = value.NSObject
+    self.xTitleOrAttributedTitle = value.NSObject
     self.xHasValidObjectValue = true
 
   method setRepresentedObject*(self: NSCell, representedObject: NSObject) =
-    replaceOwned(self.xRepresentedObject, representedObject)
+    self.xRepresentedObject = representedObject
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
     let provider = asProto[NSObjectValueProvider](sender)
@@ -564,7 +555,7 @@ objcImpl:
   method endEditing*(self: NSCell, editor: NSText) =
     if editor.isNil:
       return
-    let editorObj = editor.value.NSObject
+    let editorObj = editor.NSObject
     if editorObj.respondsToSelector("string"):
       self.setStringValue(ownFromId[NSString](sendId(editor, getSelector("string"))))
 
@@ -578,11 +569,11 @@ objcImpl:
 
   method dealloc(self: NSCell) {.used.} =
     self.xFont = NSFont(value: nil)
-    clearOwned(self.xObjectValue)
+    self.xObjectValue = NSObject(value: nil)
     self.xImage = NSImage(value: nil)
     self.xFormatter = NSFormatter(value: nil)
-    clearOwned(self.xTitleOrAttributedTitle)
-    clearOwned(self.xRepresentedObject)
+    self.xTitleOrAttributedTitle = NSObject(value: nil)
+    self.xRepresentedObject = NSObject(value: nil)
     self.xControlView = NSView(value: nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSCell, self, getSelector("dealloc"))
@@ -661,8 +652,8 @@ objcImpl:
 
   method setTitle*(self: NSButtonCell, value: NSString) =
     self.xButtonTitle = value
-    replaceOwned(self.xObjectValue, value.NSObject)
-    replaceOwned(self.xTitleOrAttributedTitle, value.NSObject)
+    self.xObjectValue = value.NSObject
+    self.xTitleOrAttributedTitle = value.NSObject
     self.xHasValidObjectValue = true
 
   method setButtonType*(self: NSButtonCell, buttonType: cint) =
@@ -1050,8 +1041,6 @@ objcImpl:
     let image = self.image()
     let enabled = self.isEnabled() or (not self.imageDimsWhenDisabled())
     let mixed = self.state() == NSMixedState
-    discard enabled
-    discard mixed
     var imageSize = nsSize(0.0, 0.0)
     var titleSize = nsSize(0.0, 0.0)
     if not image.isNil:
