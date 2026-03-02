@@ -130,8 +130,8 @@ objcImpl:
 
   method xSetFontFamilyName*(self: NSButton, familyName: NSString) =
     if familyName.isNil or
-        familyName == NSNoSelectionMarker
-        familyName == NSMultipleValuesMarker
+        familyName == NSNoSelectionMarker or
+        familyName == NSMultipleValuesMarker or
         familyName == NSNotApplicableMarker:
       return
     
