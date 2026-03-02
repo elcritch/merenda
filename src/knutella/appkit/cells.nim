@@ -449,7 +449,7 @@ objcImpl:
     return
 
   method drawWithFrame*(self: NSCell, frame: NSRect, view {.kw("inView").}: NSView) =
-    if self.`type`() == NSTextCellType and self.isBezeled():
+    if self.cellType() == NSTextCellType and self.isBezeled():
       NSDrawWhiteBezel(frame, frame)
     self.drawInteriorWithFrame(self.drawingRectForBounds(frame), view)
 
@@ -537,13 +537,6 @@ objcImpl:
     ns(details)
 
   method dealloc(self: NSCell) {.used.} =
-    self.xFont = NSFont(value: nil)
-    self.xObjectValue = NSObject(value: nil)
-    self.xImage = NSImage(value: nil)
-    self.xFormatter = NSFormatter(value: nil)
-    self.xTitleOrAttributedTitle = NSObject(value: nil)
-    self.xRepresentedObject = NSObject(value: nil)
-    self.xControlView = NSView(value: nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSCell, self, getSelector("dealloc"))
 
@@ -560,7 +553,7 @@ objcImpl:
     if result.isNil:
       return
     result.setEnabled(true)
-    result.xActionTag = -1
+    result.xTag = -1
 
   method dealloc(self: NSActionCell) {.used.} =
     destroyIvarFields(self)
