@@ -12,6 +12,7 @@ type ObjcImplMethodKind = enum
   oimkClass
 
 template kw*(name: static[string]) {.pragma.}
+template name*(name: static[string]) {.pragma.}
 template structural*() {.pragma.}
 
 type ObjcProtocolMethodSpec = object
@@ -273,6 +274,20 @@ proc kwSelectorSegmentFromParamName(n: NimNode): string =
       return p[1].strVal
   ""
 
+proc selectorBaseNameFromDef(def: NimNode, fallbackMethodName: string): string =
+  result = fallbackMethodName
+  let pragmas = def.pragma
+  if pragmas.kind != nnkPragma:
+    return result
+  for p in pragmas:
+    if p.kind == nnkExprColonExpr and identName(p[0]) == "name":
+      if p[1].kind notin {nnkStrLit .. nnkTripleStrLit}:
+        error("objcImpl `.name: ...` pragma requires one string literal", p)
+      let overridden = p[1].strVal
+      if overridden.len == 0:
+        error("objcImpl `.name: ...` pragma must not be empty", p)
+      return overridden
+
 proc methodSpecFromDef(
     def: NimNode, protocolName, className: string
 ): ObjcProtocolMethodSpec =
@@ -293,7 +308,7 @@ proc methodSpecFromDef(
   var totalParams = 0
   var explicitArgCount = 0
   var encoding = objcTypeCodeFromNode(params[0], protocolName, className) & "@:"
-  var selectorName = methodName
+  var selectorName = selectorBaseNameFromDef(def, methodName)
 
   for i in 1 ..< params.len:
     let p = params[i]
