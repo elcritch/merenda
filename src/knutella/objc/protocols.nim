@@ -23,13 +23,27 @@ objcImpl:
     concept self
         method doubleValue*(self: DoubleValue): float64
 
-#objcImpl:
-#  type StringValue* {.structural.} =
-#    concept self
-#        method `string`*(self: StringValue): NSString
+objcImpl:
+  type StringValue* {.structural.} =
+    concept self
+        method strings*(self: StringValue): NSString {.name: "string".}
 
 objcImpl:
   type DescriptionValue* {.structural.} =
     concept self
         method description*(self: DescriptionValue): NSString
+
+proc sendId*(obj: ID, op: SEL): ID {.inline.} =
+  ID(
+    value: cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
+      obj.value, op
+    )
+  )
+
+proc sendId*(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
+  ID(
+    value: cast[proc(self: IDPtr, op: SEL, arg0: IDPtr): IDPtr {.cdecl, varargs.}](objc_msgSend)(
+      obj.value, op, arg0.value
+    )
+  )
 

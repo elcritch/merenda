@@ -17,20 +17,6 @@ proc defaultMenu*(t: typedesc[NSCell]): NSMenu =
 proc prefersTrackingUntilMouseUp*(t: typedesc[NSCell]): bool =
   false
 
-proc sendId(obj: ID, op: SEL): ID {.inline.} =
-  ID(
-    value: cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-      obj.value, op
-    )
-  )
-
-proc sendId(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
-  ID(
-    value: cast[proc(self: IDPtr, op: SEL, arg0: IDPtr): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-      obj.value, op, arg0.value
-    )
-  )
-
 proc parseIntegerPrefix(text: string): int =
   var offset = 0
   while offset < text.len and text[offset].isSpaceAscii:

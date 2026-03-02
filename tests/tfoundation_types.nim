@@ -1,6 +1,17 @@
 import std/[tables, unittest]
 import knutella/objc
 
+objcImpl:
+  type NamePragmaStringValue {.structural.} =
+    concept self
+        method strings(self: NamePragmaStringValue): NSString {.name: "string".}
+
+objcImpl:
+  type NamePragmaStringBox = object of NSObject
+
+  method asString(self: NamePragmaStringBox): NSString {.name: "string".} =
+    @ns"name pragma"
+
 suite "foundation stdlib-backed core types":
   test "NSString supports Nim string semantics":
     let empty = @ns""
@@ -120,6 +131,14 @@ suite "foundation stdlib-backed core types":
     check(not forcedIntLike.isNil)
     let notIntLike = plainObject.asWrapper(IntValue)
     check(notIntLike.isNil)
+
+  test "structural name pragma remaps base selector":
+    let box = NamePragmaStringBox.new()
+    check(box.isWrapper(NamePragmaStringValue))
+    let wrapped = box.asWrapper(NamePragmaStringValue)
+    check(not wrapped.isNil)
+    if not wrapped.isNil:
+      check($wrapped.strings() == "name pragma")
 
   test "@ns boxes and unboxes float and bool":
     let floatObj = @ns(3.25)
