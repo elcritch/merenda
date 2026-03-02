@@ -1,7 +1,11 @@
+import std/algorithm
+import std/sequtils
+
 import ./runtime
 import ./responders
 import ./graphics
 import ./colors
+import ./trackingareas
 
 export responders
 
@@ -12,6 +16,7 @@ objcImpl:
   type WindowsWrapper* {.structural.} =
     concept self
         method invalidateCursorRectsForView*(self: WindowsWrapper, view: NSView)
+        method xInvalidateTrackingAreas*(self: WindowsWrapper)
 
 template unionOfInvalidRects*(self: NSView): NSRect =
   ##
@@ -58,7 +63,7 @@ objcImpl:
 
     xTag: int
     xDraggedTypes: seq[ID]
-    xTrackingAreas: seq[ID] 
+    xTrackingAreas: seq[NSTrackingArea]
     xNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
     xInvalidRects: seq[NSRect]
     xRectsBeingRedrawn: seq[NSRect]
@@ -195,6 +200,25 @@ objcImpl:
       if child.isNil:
         continue
       child.viewWillDraw()
+
+  method xTrackingAreasChanged*(self: NSView) =
+    self.window().asWrapper(WindowsWrapper).xInvalidateTrackingAreas()
+
+  method addTrackingArea*(self: NSView, trackingArea: NSTrackingArea) =
+    self.xTrackingAreas.add(trackingArea)
+    self.xTrackingAreasChanged()
+
+  method updateTrackingAreas *(self: NSView) =
+    self.xTrackingAreasChanged()
+
+  method discardCursorRects*(self: NSView) =
+    var areas = self.xTrackingAreas
+    areas.keepItIf(
+      not (it.isLegacy() and it.options().contains(NSTrackingCursorUpdate))
+    )
+
+    self.subviews().makeObjectsPerformSelector(@ns"discardCursorRects")
+    self.xTrackingAreasChanged()
 
   method opaqueAncestor*(self: NSView): NSView =
     if self.isNil:
@@ -353,7 +377,6 @@ objcImpl:
   method displayRectIgnoringOpacity*(
       self: NSView, rect: NSRect, context {.kw("inContext").}: NSGraphicsContext
   ) =
-    discard context
     self.displayRectIgnoringOpacity(rect)
 
   method getRectsBeingDrawn*(
