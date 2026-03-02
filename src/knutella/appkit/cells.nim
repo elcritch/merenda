@@ -105,7 +105,7 @@ objcImpl:
     xTextAlignment {.set: setAlignment, get: alignment.}: NSTextAlignment
     xWritingDirection {.set: setBaseWritingDirection, get: baseWritingDirection.}:
       NSWritingDirection
-    xCellType {.get: `type`.}: NSCellType
+    xCellType {.get: cellType.}: NSCellType
     xFormatter {.set: setFormatter, get: formatter.}: NSFormatter
     xTitleOrAttributedTitle: ID
     xRepresentedObject: ID
@@ -114,7 +114,6 @@ objcImpl:
     xLineBreakMode {.set: setLineBreakMode, get: lineBreakMode.}: NSLineBreakMode
     xBackgroundStyle {.set: setBackgroundStyle, get: backgroundStyle.}:
       NSBackgroundStyle
-    xControlView {.set: setControlView, get: controlView.}: NSView
 
     xEnabled {.set: setEnabled, get: isEnabled.}: bool
     xEditable {.set: setEditable, get: isEditable.}: bool
@@ -169,6 +168,9 @@ objcImpl:
 
   method encodeWithCoder*(self: NSCell, coder: ID) =
     return
+
+  method controlView*(self: NSCell): NSView =
+    return NSView(value: nil)
 
   method state*(self: NSCell): NSCellState =
     if self.xAllowsMixedState:
