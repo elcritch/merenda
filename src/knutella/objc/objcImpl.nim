@@ -941,16 +941,18 @@ proc buildRespondsLikeProc(
       postfix(ident("asWrapper"), "*")
     else:
       ident("asWrapper")
-  let respondsLikeName =
+  let isWrapperName =
     if protocolExported:
-      postfix(ident("respondsLike"), "*")
+      postfix(ident("isWrapper"), "*")
     else:
-      ident("respondsLike")
+      ident("isWrapper")
+  let isWrapperCallName = ident("isWrapper")
   let castWrapperName =
     if protocolExported:
       postfix(ident("castWrapper"), "*")
     else:
       ident("castWrapper")
+  let castWrapperCallName = ident("castWrapper")
   let protocolType = ident(protocolName)
   let objName = ident("o")
 
@@ -992,8 +994,8 @@ proc buildRespondsLikeProc(
     )
   boolBody.add(newNimNode(nnkReturnStmt).add(newLit(true)))
 
-  let respondsLikeProc = newProc(
-    name = respondsLikeName,
+  let isWrapperProc = newProc(
+    name = isWrapperName,
     params =
       @[
         ident("bool"),
@@ -1040,7 +1042,9 @@ proc buildRespondsLikeProc(
         newCall(
           bindSym"not",
           newCall(
-            ident("respondsLike"), copyNimTree(objName), copyNimTree(protocolType)
+            copyNimTree(isWrapperCallName),
+            copyNimTree(objName),
+            copyNimTree(protocolType),
           ),
         ),
         newStmtList(newNimNode(nnkReturnStmt).add(copyNimTree(nilRetExpr))),
@@ -1049,7 +1053,11 @@ proc buildRespondsLikeProc(
   )
   wrapperBody.add(
     newNimNode(nnkReturnStmt).add(
-      newCall(ident("castWrapper"), copyNimTree(objName), copyNimTree(protocolType))
+      newCall(
+        copyNimTree(castWrapperCallName),
+        copyNimTree(objName),
+        copyNimTree(protocolType),
+      )
     )
   )
 
@@ -1069,7 +1077,7 @@ proc buildRespondsLikeProc(
     pragmas = nnkPragma.newTree(ident"inline"),
   )
 
-  result = newStmtList(respondsLikeProc, castWrapperProc, asWrapperProc)
+  result = newStmtList(isWrapperProc, castWrapperProc, asWrapperProc)
 
 macro objcImpl*(x: untyped): untyped =
   let input =
