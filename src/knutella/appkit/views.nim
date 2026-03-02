@@ -30,12 +30,12 @@ template unionOfInvalidRects*(self: NSView): NSRect =
 
 objcImpl:
   type NSView* = object of NSResponder
-    xFrame {.get: frame, set: setFrame.}: NSRect
+    xFrame {.get: frame.}: NSRect
     xBounds {.get: bounds, set: setBounds.}: NSRect
     xWindow {.get: window, set: setWindow.}: NSWindow
     xMenu {.get: menu, set: setMenu.}: NSMenu
     xSuperview {.get: superview, set: xSetSuperview.}: NSView
-    xSubviews: seq[NSView]
+    xSubviews {.get: subviews, set: setSubviews.}: seq[NSView]
     xNextKeyView: NSView
     xPreviousKeyView: NSView
 
@@ -75,10 +75,10 @@ objcImpl:
     xWantsLayer: bool
     # xLayer: CALayer
     # xCompositingFilter: CIFilter 
-    xContentFilters: NSArray
+    # xContentFilters: NSArray
 
     xShadow: NSShadow
-    xAnimations: NSDictionary[NSString, NSAnimation]
+    # xAnimations: NSDictionary[NSString, NSAnimation]
 
     xAlpha {.set: setAlphaValue, get: alphaValue.}: float32
 
@@ -112,23 +112,28 @@ objcImpl:
 
   method setFrame*(
       self: NSView,
-      x: float32,
-      y {.kw("y").}: float32,
-      width {.kw("width").}: float32,
-      height {.kw("height").}: float32,
+      frame: NSRect
   ) =
-    let priorBounds = self.xBounds()
-    self.xFrame =
-      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
-    self.xBounds = nsRect(
-      priorBounds.origin.x,
-      priorBounds.origin.y,
-      max(width.float32, 0.0),
-      max(height.float32, 0.0),
-    )
-    self.xNeedsDisplay = true
-    self.xInvalidRects.setLen(0)
-    self.xRectsBeingRedrawn.setLen(0)
+    if self.xFrame == frame:
+      return
+
+    let priorSize = self.xBounds.size
+
+    if self.xBounds.size.width == 0 or self.xBounds.size.height == 0:
+      #// No valid current bounds value - just update it to use the frame size
+      self.xBounds.size = frame.size
+    else:
+      #// Get the bounds->frame transform
+      # CGAffineTransform transform=concatViewTransform(CGAffineTransformIdentity,self,nil,YES,NO);
+      #// ... and invert it so we can get the new bounds size from the new frame size
+      # self.xTransform = CGAffineTransformInvert(transform);
+      # self.xBounds.size = CGSizeApplyAffineTransform(frame.size, transform);
+
+      self.xBounds.size = frame.size # TODO: implement the affine transforms...
+
+    self.xFrame = frame
+    self.xWindow.invalidateCursorRectsForView(self) #this also invalidates tracking areas
+
 
   method setBounds*(
       self: NSView,
@@ -169,6 +174,9 @@ objcImpl:
 
   method isOpaque*(self: NSView): bool =
     false
+
+  method adjustScroll*(self: NSView, toRect: NSRect): NSRect =
+    return nsRect(0,0,0,0)
 
   method visibleRect*(self: NSView): NSRect =
     if self.isNil or self.xHidden:
@@ -426,7 +434,7 @@ proc clearSuperviewRef*(viewId: IDPtr) =
   let child = ownFromId[NSView](viewId)
   if child.isNil:
     return
-  child.viewSuperview = NSView(value: nil)
+  child.xSuperview = NSView(value: nil)
   child.setNextResponder(NSResponder(value: nil))
 
 proc detachSubviews*(view: NSObject) =
@@ -435,11 +443,11 @@ proc detachSubviews*(view: NSObject) =
   let v = view.NSView
   if v.isNil:
     return
-  var children = v.viewSubviews()
+  var children = v.subviews()
   for child in children:
     clearSuperviewRef(child.value)
   children.setLen(0)
-  v.viewSubviews = children
+  v.setSubviews(children)
 
 proc isHiddenOrHasHiddenAncestor*(view: NSView): bool =
   var current = view
@@ -459,7 +467,7 @@ proc isDescendantOf*(view: NSView, other: NSView): bool =
   while not current.isNil:
     if current.value == other.value:
       return true
-    let parent = current.viewSuperview()
+    let parent = current.superview()
     if parent.isNil:
       break
     current = parent
@@ -475,7 +483,7 @@ proc isViewDescendantOf*(viewId: IDPtr, ancestorId: IDPtr): bool =
     let current = ownFromId[NSView](currentId)
     if current.isNil:
       break
-    currentId = current.viewSuperview().value
+    currentId = current.superview().value
   false
 
 proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
@@ -487,49 +495,15 @@ proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
     while not rhs.isNil:
       if lhs.value == rhs.value:
         return retain(lhs)
-      let rhsParent = rhs.viewSuperview()
+      let rhsParent = rhs.superview()
       if rhsParent.isNil:
         break
       rhs = rhsParent
-    let lhsParent = lhs.viewSuperview()
+    let lhsParent = lhs.superview()
     if lhsParent.isNil:
       break
     lhs = lhsParent
   NSView(value: nil)
-
-proc tag*(view: NSView): int =
-  view.viewTag()
-
-proc setTag*(view: NSView, value: int) =
-  view.viewTag = value
-
-proc setBackgroundColor*(view: NSView, r, g, b: float32, a: float32 = 1.0'f32) =
-  view.viewBackgroundColor = nsColor(r, g, b, a)
-
-proc setHidden*(view: NSView, hidden: bool) =
-  view.viewHidden = hidden
-
-proc setFrame*(view: NSView, frame: NSRect) =
-  view.setFrame(
-    frame.origin.x.float32, frame.origin.y.float32, frame.size.width.float32,
-    frame.size.height.float32,
-  )
-
-proc setFrameOrigin*(view: NSView, origin: NSPoint) =
-  let f = view.frame()
-  view.setFrame(nsRect(origin.x, origin.y, f.size.width, f.size.height))
-
-proc setFrameSize*(view: NSView, size: NSSize) =
-  let f = view.frame()
-  view.setFrame(
-    nsRect(f.origin.x, f.origin.y, max(size.width, 0.0), max(size.height, 0.0))
-  )
-
-proc setBounds*(view: NSView, bounds: NSRect) =
-  view.setBounds(
-    bounds.origin.x.float32, bounds.origin.y.float32, bounds.size.width.float32,
-    bounds.size.height.float32,
-  )
 
 proc enclosingScrollView*(view: NSView): NSScrollView =
   if view.isNil:
@@ -543,12 +517,6 @@ proc enclosingScrollView*(view: NSView): NSScrollView =
 
 proc subviews*(view: NSView): seq[NSView] =
   result = view.viewSubviews()
-
-proc superview*(view: NSView): NSView =
-  let parent = view.viewSuperview()
-  if parent.isNil:
-    return NSView(value: nil)
-  retain(parent)
 
 proc removeSubviewById(parent: NSView, childId: IDPtr): bool =
   if parent.isNil or childId.isNil:
