@@ -212,7 +212,7 @@ objcImpl:
   method objectValue*(self: NSCell): NSObject =
     if not self.xHasValidObjectValue or self.xObjectValue.isNil:
       return NSObject(value: nil)
-    ownFromId[NSObject](self.xObjectValue)
+    self.xObjectValue.NSObject
 
   method stringValue*(self: NSCell): NSString =
     if not self.xFormatter.isNil:
@@ -240,12 +240,9 @@ objcImpl:
     if vobj.isKindOfClass(NSAttributedString):
       return parseIntegerPrefix($self.stringValue()).cint
     if vobj.isKindOfClass(NSString):
-      return parseIntegerPrefix($ownFromId[NSString](self.xObjectValue)).cint
-    let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
-    if intProvider.notNil:
-      return intProvider.intValue()
-    if (let intLike = vobj.asWrapper(IntValue); intLike.notNil):
-      return intLike.intValue().cint
+      return parseIntegerPrefix($NSString(self.xObjectValue)).cint
+    if vobj.isWrapper(IntValue):
+      return vobj.castWrapper(IntValue).intValue().cint
     0.cint
 
   method floatValue*(self: NSCell): float32 =
@@ -254,8 +251,8 @@ objcImpl:
     let vobj = self.xObjectValue.NSObject
     if vobj.isKindOfClass(NSAttributedString) or vobj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue()).float32
-    if self.xObjectValue.isWrapper(FloatValue):
-      return self.xObjectValue.castWrapper(FloatValue).floatValue().float32
+    if vobj.isWrapper(FloatValue):
+      return vobj.castWrapper(FloatValue).floatValue().float32
     0.0
 
   method doubleValue*(self: NSCell): float =
@@ -264,8 +261,8 @@ objcImpl:
     let vobj = self.xObjectValue.NSObject
     if vobj.isKindOfClass(NSAttributedString) or vobj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue())
-    if self.xObjectValue.isWrapper(DoubleValue):
-      return self.xObjectValue.castWrapper(DoubleValue).doubleValue()
+    if vobj.isWrapper(DoubleValue):
+      return vobj.castWrapper(DoubleValue).doubleValue()
     0.0
 
   method integerValue*(self: NSCell): int =
@@ -281,13 +278,13 @@ objcImpl:
       return NSAttributedString(value: nil)
     let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString):
-      return ownFromId[NSAttributedString](self.xObjectValue)
+      return self.xObjectValue.to(NSAttributedString)
     NSAttributedString(value: nil)
 
   method representedObject*(self: NSCell): NSObject =
     if self.xRepresentedObject.isNil:
       return NSObject(value: nil)
-    ownFromId[NSObject](self.xRepresentedObject)
+    return self.xRepresentedObject.NSObject
 
   method setType*(self: NSCell, cellType: NSCellType) =
     if self.xCellType != cellType:
@@ -387,22 +384,22 @@ objcImpl:
         if not ok:
           self.xHasValidObjectValue = false
           return
-        self.setObjectValue(ownFromId[NSObject](formatted))
+        self.setObjectValue(formatted.NSObject)
         return
 
     self.setObjectValue(value)
 
   method setIntValue*(self: NSCell, value: cint) =
-    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+    self.setObjectValue(ns(value).NSObject)
 
   method setFloatValue*(self: NSCell, value: float32) =
-    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+    self.setObjectValue(ns(value).NSObject)
 
   method setDoubleValue*(self: NSCell, value: float) =
-    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+    self.setObjectValue(ns(value).NSObject)
 
   method setIntegerValue*(self: NSCell, value: int) =
-    self.setObjectValue(ownFromId[NSObject](ns(value).value))
+    self.setObjectValue(ns(value).NSObject)
 
   method setAttributedStringValue*(self: NSCell, value: NSAttributedString) =
     self.xObjectValue = value.NSObject
