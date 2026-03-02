@@ -215,7 +215,6 @@ objcImpl:
     ownFromId[NSObject](self.xObjectValue)
 
   method stringValue*(self: NSCell): NSString =
-    echo "NSCell:stringValue:"
     if not self.xFormatter.isNil:
       let formatted = self.xFormatter.stringForObjectValue(self.xObjectValue.NSObject)
       if not formatted.isNil:
@@ -224,42 +223,42 @@ objcImpl:
     if self.xObjectValue.isNil:
       return retain(@ns"")
 
-    let valueObj = self.xObjectValue.NSObject
-    if valueObj.isKindOfClass(NSAttributedString):
-      return valueObj.to(NSAttributedString).string()
+    let vobj = self.xObjectValue.NSObject
+    if vobj.isKindOfClass(NSAttributedString):
+      return vobj.to(NSAttributedString).string()
 
-    if valueObj.isKindOfClass(NSString):
-      return valueObj.to(NSString)
+    if vobj.isKindOfClass(NSString):
+      return vobj.to(NSString)
 
-    if valueObj.respondsLike(DescriptionValue):
-      return valueObj.castWrapper(DescriptionValue).descripton()
+    if vobj.isWrapper(DescriptionValue):
+      return vobj.castWrapper(DescriptionValue).description()
 
     retain(@ns"")
 
   method intValue*(self: NSCell): cint =
-    let valueObj = self.xObjectValue.NSObject
-    if valueObj.isKindOfClass(NSAttributedString):
+    let vobj = self.xObjectValue.NSObject
+    if vobj.isKindOfClass(NSAttributedString):
       return parseIntegerPrefix($self.stringValue()).cint
-    if valueObj.isKindOfClass(NSString):
+    if vobj.isKindOfClass(NSString):
       return parseIntegerPrefix($ownFromId[NSString](self.xObjectValue)).cint
     let intProvider = asProto[NSIntValueProvider](self.xObjectValue)
     if intProvider.notNil:
       return intProvider.intValue()
-    if (let intLike = valueObj.asWrapper(IntValue); intLike.notNil):
+    if (let intLike = vobj.asWrapper(IntValue); intLike.notNil):
       return intLike.intValue().cint
     0.cint
 
   method floatValue*(self: NSCell): float32 =
     if self.xObjectValue.isNil:
       return 0.0
-    let valueObj = self.xObjectValue.NSObject
-    if valueObj.isKindOfClass(NSAttributedString) or valueObj.isKindOfClass(NSString):
+    let vobj = self.xObjectValue.NSObject
+    if vobj.isKindOfClass(NSAttributedString) or vobj.isKindOfClass(NSString):
       return parseFloatPrefix($self.stringValue()).float32
     let floatProvider = asProto[NSFloatValueProvider](self.xObjectValue)
     if not floatProvider.isNil:
       return floatProvider.floatValue()
-    if (let fv = self.xObjectValue.asWrapper(FloatValue); not fv.isNil):
-      return fv.floatValue().float32
+    if self.xObjectValue.isWrapper(FloatValue):
+      return self.xObjectValue.castWrapper(FloatValue).floatValue().float32
     0.0
 
   method doubleValue*(self: NSCell): float =
@@ -271,8 +270,8 @@ objcImpl:
     let doubleProvider = asProto[NSDoubleValueProvider](self.xObjectValue)
     if not doubleProvider.isNil:
       return doubleProvider.doubleValue()
-    if (let vo = self.xObjectValue.asWrapper(DoubleValue); not vo.isNil):
-      return vo.doubleValue()
+    if self.xObjectValue.isWrapper(DoubleValue):
+      return self.xObjectValue.castWrapper(DoubleValue).doubleValue().float
     0.0
 
   method integerValue*(self: NSCell): int =
@@ -1124,8 +1123,7 @@ objcImpl:
     if targetId.isNil or cast[pointer](action).isNil:
       return
     let target = targetId.NSObject
-    discard
-      performResponderSelector(target, action, self.NSObject)
+    discard performResponderSelector(target, action, self.NSObject)
 
   method dealloc(self: NSButtonCell) {.used.} =
     self.xButtonTitle = NSString(value: nil)
