@@ -4,6 +4,14 @@ when not declared(getAssociatedRef):
 type NXArrayData = ref object
   data: seq[NSObject]
 
+proc selectorFromNSString(selectorName: NSString): SEL =
+  if selectorName.isNil:
+    return nil
+  let selectorText = $selectorName
+  if selectorText.len == 0:
+    return nil
+  sel_registerName(selectorText.cstring)
+
 objcImpl:
   type NXArray* = object of NSObject
     countCache: int
@@ -30,6 +38,22 @@ objcImpl:
     if not store.isNil:
       store.data.setLen(0)
     self.countCache = 0
+
+  method makeObjectsPerformSelector*(self: NXArray, selector: SEL) =
+    if self.isNil or cast[pointer](selector).isNil:
+      return
+    let store = getAssociatedRef(self, NXArrayData)
+    if store.isNil:
+      return
+    let sendNoArg =
+      cast[proc(obj: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
+    for value in store.data.items:
+      if value.isNil:
+        continue
+      let valueClass = getClass(value.value)
+      if valueClass.isNil or not valueClass.respondsToSelector(selector):
+        continue
+      discard sendNoArg(value.value, selector)
 
 proc storageForRead[T](arr: NSArray[T]): NXArrayData =
   if arr.value.isNil:
@@ -91,6 +115,15 @@ proc nsArray*[T](values: openArray[T]): NSArray[T] =
 
 proc nsArrayObjects*(values: openArray[NSObject]): NSArray[NSObject] {.inline.} =
   nsArray(values)
+
+proc makeObjectsPerformSelector*[T](arr: NSArray[T], selector: SEL) =
+  if arr.value.isNil or cast[pointer](selector).isNil:
+    return
+  let obj = arr as NXArray
+  obj.makeObjectsPerformSelector(selector)
+
+proc makeObjectsPerformSelector*[T](arr: NSArray[T], selectorName: NSString) =
+  arr.makeObjectsPerformSelector(selectorFromNSString(selectorName))
 
 proc len*[T](arr: NSArray[T]): int {.inline.} =
   let store = storageForRead(arr)
