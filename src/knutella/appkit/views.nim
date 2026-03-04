@@ -26,7 +26,7 @@ template unionOfInvalidRects*(self: NSView): NSRect =
   ##   bounds should redraw the new bounds, but changing the bounds should not alter the
   ##   invalidated rects.
   ##
- 
+
   block:
     var result: NSRect
     if self.xInvalidRects.len == 0:
@@ -85,29 +85,25 @@ objcImpl:
     # xLayer: CALayer
     # xCompositingFilter: CIFilter 
     # xContentFilters: NSArray
-
     xShadow: NSShadow
     # xAnimations: NSDictionary[NSString, NSAnimation]
-
     xAlpha {.set: setAlphaValue, get: alphaValue.}: float32
 
     #xLayerContext: CALayerContext 
 
-  method initWithFrame*(
-      self: var NSView,
-      rect: NSRect,
-  ): NSView =
+  method initWithFrame*(self: var NSView, rect: NSRect): NSView =
     result = asTypeRaw[NSView](callSuperIdFrom(NSView, self, getSelector("init")))
     if result.isNil:
       return
     result.xFrame = rect
-    result.xBounds = nsRect(0.0, 0.0, max(rect.size.width, 0.0), max(rect.size.height, 0.0))
+    result.xBounds =
+      nsRect(0.0, 0.0, max(rect.size.width, 0.0), max(rect.size.height, 0.0))
     result.xBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
     result.xHidden = false
     result.xPostsNotificationOnFrameChange = true
     result.xPostsNotificationOnBoundsChange = true
-    result.xAutoresizesSubviews  = true
-    result.xAutoresizingMask  = 0
+    result.xAutoresizesSubviews = true
+    result.xAutoresizingMask = 0
     result.xAlpha = 1.0
     result.xSuperview = NSView(value: nil)
     result.xTag = -1
@@ -119,10 +115,7 @@ objcImpl:
   method init*(self: var NSView): NSView =
     self.initWithFrame(nsRect(0, 0, 1, 1))
 
-  method setFrame*(
-      self: NSView,
-      frame: NSRect
-  ) =
+  method setFrame*(self: NSView, frame: NSRect) =
     if self.xFrame == frame:
       return
 
@@ -141,8 +134,8 @@ objcImpl:
       self.xBounds.size = frame.size # TODO: implement the affine transforms...
 
     self.xFrame = frame
-    self.xWindow.asWrapper(WindowsWrapper).invalidateCursorRectsForView(self) #this also invalidates tracking areas
-
+    self.xWindow.asWrapper(WindowsWrapper).invalidateCursorRectsForView(self)
+      #this also invalidates tracking areas
 
   method setBounds*(
       self: NSView,
@@ -185,7 +178,7 @@ objcImpl:
     false
 
   method adjustScroll*(self: NSView, toRect: NSRect): NSRect =
-    return nsRect(0,0,0,0)
+    return nsRect(0, 0, 0, 0)
 
   method visibleRect*(self: NSView): NSRect =
     if self.isNil or self.xHidden:
@@ -208,7 +201,7 @@ objcImpl:
     self.xTrackingAreas.add(trackingArea)
     self.xTrackingAreasChanged()
 
-  method updateTrackingAreas *(self: NSView) =
+  method updateTrackingAreas*(self: NSView) =
     self.xTrackingAreasChanged()
 
   method discardCursorRects*(self: NSView) =
@@ -217,7 +210,7 @@ objcImpl:
       not (it.isLegacy() and it.options().contains(NSTrackingCursorUpdate))
     )
 
-    self.subviews().makeObjectsPerformSelector(@ns"discardCursorRects")
+    nsArray(self.subviews()).makeObjectsPerformSelector(@ns"discardCursorRects")
     self.xTrackingAreasChanged()
 
   method opaqueAncestor*(self: NSView): NSView =
@@ -258,15 +251,14 @@ objcImpl:
       #  self.displayRect(dirty)
 
     for child in self.xSubviews:
-      if child.isNil: continue
+      if child.isNil:
+        continue
       child.xDisplayIfNeededWithoutViewWillDraw()
 
   method displayIfNeeded*(self: NSView) =
     self.viewWillDraw()
 
-
   method displayIfNeededInRect*(self: NSView, rect: NSRect) =
-
     let clipped = nsIntersectionRect(rect, self.visibleRect())
     if isEmpty(clipped):
       return

@@ -169,6 +169,11 @@ suite "foundation stdlib-backed core types":
     values.clear()
     check(values.isEmpty)
 
+  test "NSArray supports makeObjectsPerformSelector":
+    let words = nsArray([@ns"one", @ns"two"])
+    words.makeObjectsPerformSelector(@ns"description")
+    check(words.len == 2)
+
   test "@ns[] boxes NSArray literals":
     let empty = @ns[]
     check(empty.isEmpty)
