@@ -54,6 +54,30 @@ proc rebuildHeader(tableView: NSTableView)
 proc rebuildRows(tableView: NSTableView)
 
 objcImpl:
+  type TableRowsDataSource {.structural.} =
+    concept self
+        method numberOfRowsInTableView*(self: TableRowsDataSource, tableView: NSTableView): int
+
+objcImpl:
+  type TableObjectValueDataSource {.structural.} =
+    concept self
+        method tableView*(self: TableObjectValueDataSource,
+            tableView: NSTableView,
+            tableColumn {.kw("objectValueForTableColumn").}: NSTableColumn,
+            row {.kw("row").}: int): NSObject
+
+objcImpl:
+  type TableSetObjectValueDataSource {.structural.} =
+    concept self
+        method tableView*(
+            self: TableSetObjectValueDataSource,
+            tableView: NSTableView,
+            value {.kw("setObjectValue").}: NSObject,
+            tableColumn {.kw("forTableColumn").}: NSTableColumn,
+            row {.kw("row").}: int,
+        )
+
+objcImpl:
   type NSTableHeaderCell* = object of NSCell
     xTitle {.set: setTitle, get: title.}: NSString
 
@@ -362,15 +386,10 @@ proc numberOfRowsFromDataSource(tableView: NSTableView): int =
   let source = tableView.xDataSource
   if source.isNil:
     return 0
-  let sourceObj = source.value.NSObject
-  if not sourceObj.respondsToSelector("numberOfRowsInTableView:"):
+  let dataSource = source.asWrapper(TableRowsDataSource)
+  if dataSource.isNil:
     return 0
-  max(
-    cast[proc(self: IDPtr, op: SEL, tableView: IDPtr): int {.cdecl, varargs.}](objc_msgSend)(
-      source.value, getSelector("numberOfRowsInTableView:"), tableView.value
-    ),
-    0,
-  )
+  max(dataSource.numberOfRowsInTableView(tableView), 0)
 
 proc objectValueFromDataSource(
     tableView: NSTableView, column: NSTableColumn, row: int
@@ -378,19 +397,10 @@ proc objectValueFromDataSource(
   let source = tableView.xDataSource
   if source.isNil:
     return NSObject(value: nil)
-  let sourceObj = source.value.NSObject
-  if not sourceObj.respondsToSelector("tableView:objectValueForTableColumn:row:"):
+  let dataSource = source.asWrapper(TableObjectValueDataSource)
+  if dataSource.isNil:
     return NSObject(value: nil)
-  let raw = cast[proc(
-    self: IDPtr, op: SEL, tableView: IDPtr, tableColumn: IDPtr, row: int
-  ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-    source.value,
-    getSelector("tableView:objectValueForTableColumn:row:"),
-    tableView.value,
-    column.value,
-    row,
-  )
-  ownFromId[NSObject](raw)
+  dataSource.tableView(tableView, column, row)
 
 proc setObjectValueOnDataSource(
     tableView: NSTableView, value: NSObject, column: NSTableColumn, row: int
@@ -398,19 +408,10 @@ proc setObjectValueOnDataSource(
   let source = tableView.xDataSource
   if source.isNil:
     return
-  let sourceObj = source.value.NSObject
-  if not sourceObj.respondsToSelector("tableView:setObjectValue:forTableColumn:row:"):
+  let dataSource = source.asWrapper(TableSetObjectValueDataSource)
+  if dataSource.isNil:
     return
-  discard cast[proc(
-    self: IDPtr, op: SEL, tableView: IDPtr, value: IDPtr, tableColumn: IDPtr, row: int
-  ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
-    source.value,
-    getSelector("tableView:setObjectValue:forTableColumn:row:"),
-    tableView.value,
-    value.value,
-    column.value,
-    row,
-  )
+  dataSource.tableView(tableView, value, column, row)
 
 proc rebuildHeader(tableView: NSTableView) =
   let header = tableView.headerView()
