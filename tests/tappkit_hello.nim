@@ -470,6 +470,13 @@ suite "knutella appkit hello world":
     cell.setAllowsMixedState(true)
     cell.setState(NSMixedState)
     check(cell.state() == NSMixedState)
+    cell.setFloatingPointFormat(false, left = 2, right = 3)
+    cell.setDoubleValue(12.5)
+    check($cell.stringValue() == "12.500")
+    cell.setStringValue(@ns"7.25")
+    check(abs(cell.doubleValue() - 7.25) < 1e-6)
+    cell.setFloatingPointFormat(true, left = 2, right = 3)
+    check($cell.stringValue() == "7.25")
 
     var actionCell = NSActionCell.new()
     check(actionCell.isKindOfClass(NSActionCell))

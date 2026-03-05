@@ -1,4 +1,17 @@
+import std/strutils
+
 import ./runtime
+import ./valueproviders
+
+proc trimTrailingFraction(text: string): string =
+  result = text
+  if result.contains('.'):
+    while result.len > 0 and result[^1] == '0':
+      result.setLen(result.len - 1)
+    if result.len > 0 and result[^1] == '.':
+      result.setLen(result.len - 1)
+  if result == "-0":
+    result = "0"
 
 proc raiseInvalidAbstract(selectorName: string) {.noreturn.} =
   raise newException(
@@ -59,4 +72,53 @@ objcImpl:
 
 proc new*(t: typedesc[NSFormatter]): NSFormatter =
   var allocated = NSFormatter.alloc()
+  result = initOwned(move(allocated))
+
+objcImpl:
+  type NSNumberFormatter* = object of NSFormatter
+    xFormat {.set: setFormat, get: format.}: NSString
+
+  method stringForObjectValue*(
+      self: NSNumberFormatter, objectValue: NSObject
+  ): NSString =
+    if objectValue.isNil:
+      return @ns""
+
+    let formatText =
+      if self.xFormat.isNil:
+        ""
+      else:
+        $self.xFormat
+    let decimalPos = formatText.find('.')
+    let rawValue = objectFloatValue(objectValue).float
+    if decimalPos < 0:
+      return @ns(trimTrailingFraction(formatFloat(rawValue, ffDecimal, 15)))
+
+    let fractionDigits = max(formatText.len - decimalPos - 1, 0)
+    @ns(formatFloat(rawValue, ffDecimal, fractionDigits))
+
+  method getObjectValue*(
+      self: NSNumberFormatter,
+      objectValue: ptr IDPtr,
+      stringValue {.kw("forString").}: NSString,
+      errorDescription {.kw("errorDescription").}: ptr IDPtr,
+  ): bool =
+    if objectValue != nil:
+      objectValue[] = nil
+    if errorDescription != nil:
+      errorDescription[] = nil
+    if stringValue.isNil:
+      return false
+    try:
+      let parsed = parseFloat(($stringValue).strip())
+      if objectValue != nil:
+        var boxed = boxNSObject(parsed)
+        objectValue[] = boxed.value
+        boxed.value = nil
+      true
+    except ValueError:
+      false
+
+proc new*(t: typedesc[NSNumberFormatter]): NSNumberFormatter =
+  var allocated = NSNumberFormatter.alloc()
   result = initOwned(move(allocated))

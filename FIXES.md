@@ -48,12 +48,6 @@ Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/A
 
 ## Low Priority / Consistency
 
-- `setFloatingPointFormat:left:right:` is unimplemented in Nim.
-  - Cocotron installs/configures an `NSNumberFormatter`.
-  - Nim: `cells.nim:399`
-  - Cocotron: `NSCell.m:882`
-  - Implement NSNumberFormatter objc class in Nim using Nim's stdlib
-
 - `take*ValueFrom:` mismatch in failure mode.
   - Nim silently no-ops when sender lacks the provider concept.
   - Cocotron sends selectors directly (runtime exception if missing).
