@@ -399,7 +399,24 @@ objcImpl:
   method setFloatingPointFormat*(
       self: NSCell, fpp: bool, left {.kw("left").}: uint, right {.kw("right").}: uint
   ) =
-    discard
+    self.setFormatter(NSNumberFormatter.new())
+    var format = newStringOfCap((left + right + 1).int)
+    if fpp:
+      var fieldWidth = left + right
+      while fieldWidth > 0:
+        format.add('#')
+        dec fieldWidth
+    else:
+      var leftDigits = left
+      while leftDigits > 0:
+        format.add('#')
+        dec leftDigits
+      format.add('.')
+      var rightDigits = right
+      while rightDigits > 0:
+        format.add('0')
+        dec rightDigits
+    self.formatter().to(NSNumberFormatter).setFormat(@ns(format))
 
   method setObjectValue*(self: NSCell, value: NSObject) =
     let controlView = self.controlView()

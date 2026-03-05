@@ -149,3 +149,21 @@ suite "appkit nsattributedstring and nsformatter":
       boxNSObject(5), NSDictionary[NSObject, NSObject](value: nil)
     )
     check($styled.string() == "fmt:5")
+
+  test "NSNumberFormatter formats and parses numeric values":
+    let formatter = NSNumberFormatter.new()
+    formatter.setFormat(@ns"##.000")
+    check($formatter.stringForObjectValue(boxNSObject(12.5)) == "12.500")
+    check($formatter.stringForObjectValue(boxNSObject(12.0)) == "12.000")
+
+    formatter.setFormat(@ns"#####")
+    check($formatter.stringForObjectValue(boxNSObject(12.5)) == "12.5")
+    check($formatter.stringForObjectValue(boxNSObject(12.0)) == "12")
+
+    var parsedValue: IDPtr = nil
+    var parseError: IDPtr = nil
+    check(formatter.getObjectValue(addr parsedValue, @ns"7.25", addr parseError))
+    check(abs(unboxNSObject[float](ownFromId[NSObject](parsedValue)) - 7.25) < 1e-6)
+    check(
+      not formatter.getObjectValue(addr parsedValue, @ns"not-a-number", addr parseError)
+    )
