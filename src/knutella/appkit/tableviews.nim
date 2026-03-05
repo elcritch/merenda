@@ -40,13 +40,13 @@ proc objectDisplayString(value: NSObject): NSString =
   if value.isNil:
     return @ns""
   if value.isKindOfClass(NSString):
-    return ownFromId[NSString](value.value)
+    return NSString(value)
   let raw = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
     value.value, getSelector("description")
   )
   if raw.isNil:
     return @ns""
-  ownFromId[NSString](raw)
+  NSString(value: raw)
 
 proc viewOriginInWindow(view: NSView): NSPoint =
   var current = retain(view)

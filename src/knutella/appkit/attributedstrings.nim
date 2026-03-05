@@ -380,7 +380,7 @@ objcImpl:
       return true
     if other.isNil or not other.isKindOfClass(NSAttributedString):
       return false
-    let otherAttributed = ownFromId[NSAttributedString](other.value)
+    let otherAttributed = NSAttributedString(other)
     self.isEqualToAttributedString(otherAttributed)
 
   method hash*(self: NSAttributedString): NSUInteger =
@@ -394,7 +394,7 @@ objcImpl:
   method string*(self: NSAttributedString): NSString =
     if self.xString.isNil:
       return @ns""
-    ownFromId[NSString](self.xString.value)
+    self.xString
 
   method attributesAtIndex*(
       self: NSAttributedString,
@@ -419,7 +419,7 @@ objcImpl:
 
     if run.attributes.isNil:
       return emptyAttributesDict()
-    ownFromId[NSDictionary[NSObject, NSObject]](run.attributes.value)
+    run.attributes
 
   method attributesAtIndex*(
       self: NSAttributedString,
@@ -449,10 +449,10 @@ objcImpl:
     if name.isNil:
       return NSObject(value: nil)
     let attrs = self.attributesAtIndex(location, effectiveRange)
-    let key = ownFromId[NSObject](name.value)
+    let key = NSObject(name)
     if attrs.hasKey(key):
       let value = attrs[key]
-      return ownFromId[NSObject](value.value)
+      return value
     NSObject(value: nil)
 
   method attribute*(
@@ -465,10 +465,10 @@ objcImpl:
     if name.isNil:
       return NSObject(value: nil)
     let attrs = self.attributesAtIndex(location, longestEffectiveRange, inRange)
-    let key = ownFromId[NSObject](name.value)
+    let key = NSObject(name)
     if attrs.hasKey(key):
       let value = attrs[key]
-      return ownFromId[NSObject](value.value)
+      return value
     NSObject(value: nil)
 
   method attributedSubstringFromRange*(
@@ -512,7 +512,7 @@ objcImpl:
   ): NSAttributedString =
     ensureAttributedStringConstants()
     var attrs = nsDictionary[NSObject, NSObject]()
-    let key = ownFromId[NSObject](NSAttachmentAttributeName.value)
+    let key = NSObject(NSAttachmentAttributeName)
     attrs[key] = attachment
     var allocated = self.alloc()
     result = allocated.initWithString(attachmentMarkerString(), attrs)
@@ -593,7 +593,7 @@ objcImpl:
     if rtf.isNil:
       return NSAttributedString(value: nil)
     if rtf.isKindOfClass(NSString):
-      let text = ownFromId[NSString](rtf.value)
+      let text = NSString(rtf)
       return self.initWithString(text)
     self.initWithString(@ns"")
 
@@ -956,7 +956,7 @@ proc NSFontAttributeInDictionary*(
   ensureAttributedStringConstants()
   if dictionary.isNil or NSFontAttributeName.isNil:
     return NSObject(value: nil)
-  let key = ownFromId[NSObject](NSFontAttributeName.value)
+  let key = NSObject(NSFontAttributeName)
   if dictionary.hasKey(key):
     return dictionary[key]
   NSObject(value: nil)
@@ -967,7 +967,7 @@ proc NSForegroundColorAttributeInDictionary*(
   ensureAttributedStringConstants()
   if dictionary.isNil or NSForegroundColorAttributeName.isNil:
     return NSObject(value: nil)
-  let key = ownFromId[NSObject](NSForegroundColorAttributeName.value)
+  let key = NSObject(NSForegroundColorAttributeName)
   if dictionary.hasKey(key):
     return dictionary[key]
   NSObject(value: nil)
@@ -978,7 +978,7 @@ proc NSParagraphStyleAttributeInDictionary*(
   ensureAttributedStringConstants()
   if dictionary.isNil or NSParagraphStyleAttributeName.isNil:
     return NSObject(value: nil)
-  let key = ownFromId[NSObject](NSParagraphStyleAttributeName.value)
+  let key = NSObject(NSParagraphStyleAttributeName)
   if dictionary.hasKey(key):
     return dictionary[key]
   NSObject(value: nil)

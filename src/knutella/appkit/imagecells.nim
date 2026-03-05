@@ -33,7 +33,7 @@ proc imageValue(self: NSImageCell): NSImage =
   if objectValue.isNil:
     return NSImage(value: nil)
   if objectValue.isKindOfClass(NSImage):
-    return ownFromId[NSImage](objectValue.value)
+    return NSImage(objectValue)
   NSImage(value: nil)
 
 objcImpl:

@@ -16,13 +16,13 @@ proc objectDisplayString(value: NSObject): NSString =
   if value.isNil:
     return @ns""
   if value.isKindOfClass(NSString):
-    return ownFromId[NSString](value.value)
+    return NSString(value)
   let raw = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
     value.value, getSelector("description")
   )
   if raw.isNil:
     return @ns""
-  ownFromId[NSString](raw)
+  NSString(value: raw)
 
 objcImpl:
   type FootballClub = object of NSObject
@@ -104,9 +104,9 @@ objcImpl:
     let club = self.xFootballClubs[row]
     let identifier = tableColumn.identifier()
     if identifier == @ns"name":
-      return ownFromId[NSObject](club.name().value)
+      return NSObject(club.name())
     if identifier == @ns"foundationYear":
-      return ownFromId[NSObject](club.foundationYear().value)
+      return NSObject(club.foundationYear())
     NSObject(value: nil)
 
   method tableView*(

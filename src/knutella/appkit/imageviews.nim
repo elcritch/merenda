@@ -8,9 +8,9 @@ proc imageCell(self: NSImageView): NSImageCell =
   let controlCell = self.cell()
   if controlCell.isNil or not controlCell.isKindOfClass(NSImageCell):
     var created = NSImageCell.new()
-    self.setCell(ownFromId[NSCell](created.value))
+    self.setCell(NSCell(created))
     return created
-  ownFromId[NSImageCell](controlCell.value)
+  NSImageCell(controlCell)
 
 objcImpl:
   type NSImageView* = object of NSControl
@@ -25,7 +25,7 @@ objcImpl:
     if result.isNil:
       return
     var cell = NSImageCell.new()
-    result.setCell(ownFromId[NSCell](cell.value))
+    result.setCell(NSCell(cell))
 
   method refusesFirstResponder*(self: NSImageView): bool =
     true

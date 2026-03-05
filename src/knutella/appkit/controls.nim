@@ -74,7 +74,7 @@ objcImpl:
   method setCell*(self: NSControl, cell: NSCell) =
     if self.isNil:
       return
-    self.xCell = ownFromId[NSCell](cell.value)
+    self.xCell = cell
     let bound = self.xCell
     if not bound.isNil:
       bound.setControlView(self.NSView)

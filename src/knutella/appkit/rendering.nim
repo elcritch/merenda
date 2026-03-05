@@ -390,6 +390,7 @@ proc addViewTree(
     view.drawRect(view.bounds())
   finally:
     discard popCurrentFocusView()
+    discard NSGraphicsContext.currentContext().popFocusView()
     NSGraphicsContext.restoreGraphicsState()
 
   for child in view.subviews():

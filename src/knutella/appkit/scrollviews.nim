@@ -40,7 +40,7 @@ template sendViewNoArg(receiver: NSView, selectorName: static[string]): NSView =
         let raw = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
           receiver.value, selector
         )
-        ownFromId[NSView](raw)
+        NSView(value: raw)
 
 proc currentRulerClass(): ObjcClass =
   if rulerViewImplClass.isNil:

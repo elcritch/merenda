@@ -2,16 +2,11 @@ import std/[math, unittest]
 
 import knutella/appkit
 
-proc asNSObject(value: NSString): NSObject =
-  if value.isNil:
-    return NSObject(value: nil)
-  ownFromId[NSObject](value.value)
-
 proc objectString(obj: NSObject): NSString =
   if obj.isNil:
     return @ns""
   if obj.isKindOfClass(NSString):
-    return ownFromId[NSString](obj.value)
+    return NSString(obj)
   if obj.respondsToSelector("stringValue"):
     let value = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)(
       obj.value, getSelector("stringValue")
@@ -34,8 +29,8 @@ suite "appkit nsfont and nsfontdescriptor":
 
   test "NSFontDescriptor mutation helpers keep and override attributes":
     var attrs = nsDictionary[NSObject, NSObject]()
-    attrs[asNSObject(NSFontNameAttribute)] = asNSObject(@ns"HackNerdFont-Regular.ttf")
-    attrs[asNSObject(NSFontSizeAttribute)] = boxNSObject(13.0'f32)
+    attrs[NSObject(NSFontNameAttribute)] = NSObject(@ns"HackNerdFont-Regular.ttf")
+    attrs[NSObject(NSFontSizeAttribute)] = boxNSObject(13.0'f32)
 
     let base = NSFontDescriptor.fontDescriptorWithFontAttributes(attrs)
     let resized = base.fontDescriptorWithSize(22.0)

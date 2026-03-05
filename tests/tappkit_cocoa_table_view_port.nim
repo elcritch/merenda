@@ -19,7 +19,7 @@ proc tableValueAsString(
   let value = controller.tableView(table, tableColumn = column, row = row)
   if value.isNil:
     return @ns""
-  ownFromId[NSString](value.value)
+  NSString(value)
 
 suite "appkit cocoa table view port":
   test "add and remove buttons update table model through click events":

@@ -45,11 +45,6 @@ proc cloneAttributes(
   for key, value in attributes.pairs:
     result[key] = value
 
-proc asNSObject(value: NSString): NSObject =
-  if value.isNil:
-    return NSObject(value: nil)
-  ownFromId[NSObject](value.value)
-
 proc objectUIntValue(obj: NSObject): NSUInteger =
   if obj.isNil:
     return 0
@@ -102,7 +97,7 @@ objcImpl:
     let attributes = self.xAttributes
     if attributes.isNil:
       return NSObject(value: nil)
-    let key = asNSObject(attributeKey)
+    let key = NSObject(attributeKey)
     if not attributes.hasKey(key):
       return NSObject(value: nil)
     attributes[key]
@@ -117,10 +112,10 @@ objcImpl:
     let traitsObj = self.objectForKey(NSFontTraitsAttribute)
     if traitsObj.isNil:
       return 0
-    let traits = ownFromId[NSDictionary[NSObject, NSObject]](traitsObj.value)
+    let traits = NSDictionary[NSObject, NSObject](traitsObj)
     if traits.isNil:
       return 0
-    let symbolicKey = asNSObject(NSFontSymbolicTrait)
+    let symbolicKey = NSObject(NSFontSymbolicTrait)
     if not traits.hasKey(symbolicKey):
       return 0
     objectUIntValue(traits[symbolicKey])
@@ -138,28 +133,28 @@ objcImpl:
       self: NSFontDescriptor, face: NSString
   ): NSFontDescriptor =
     var merged = cloneAttributes(self.xAttributes)
-    merged[asNSObject(NSFontFaceAttribute)] = asNSObject(face)
+    merged[NSObject(NSFontFaceAttribute)] = NSObject(face)
     NSFontDescriptor.fontDescriptorWithFontAttributes(merged)
 
   method fontDescriptorWithFamily*(
       self: NSFontDescriptor, family: NSString
   ): NSFontDescriptor =
     var merged = cloneAttributes(self.xAttributes)
-    merged[asNSObject(NSFontFamilyAttribute)] = asNSObject(family)
+    merged[NSObject(NSFontFamilyAttribute)] = NSObject(family)
     NSFontDescriptor.fontDescriptorWithFontAttributes(merged)
 
   method fontDescriptorWithMatrix*(
       self: NSFontDescriptor, matrix: NSObject
   ): NSFontDescriptor =
     var merged = cloneAttributes(self.xAttributes)
-    merged[asNSObject(NSFontMatrixAttribute)] = matrix
+    merged[NSObject(NSFontMatrixAttribute)] = matrix
     NSFontDescriptor.fontDescriptorWithFontAttributes(merged)
 
   method fontDescriptorWithSize*(
       self: NSFontDescriptor, pointSize: float32
   ): NSFontDescriptor =
     var merged = cloneAttributes(self.xAttributes)
-    merged[asNSObject(NSFontSizeAttribute)] = boxNSObject(pointSize)
+    merged[NSObject(NSFontSizeAttribute)] = boxNSObject(pointSize)
     NSFontDescriptor.fontDescriptorWithFontAttributes(merged)
 
   method fontDescriptorWithSymbolicTraits*(
@@ -169,11 +164,11 @@ objcImpl:
     var traitsDict = nsDictionary[NSObject, NSObject]()
     let traitsObj = self.objectForKey(NSFontTraitsAttribute)
     if not traitsObj.isNil:
-      let existingTraits = ownFromId[NSDictionary[NSObject, NSObject]](traitsObj.value)
+      let existingTraits = NSDictionary[NSObject, NSObject](traitsObj)
       for key, value in existingTraits.pairs:
         traitsDict[key] = value
-    traitsDict[asNSObject(NSFontSymbolicTrait)] = boxNSObject(traits)
-    merged[asNSObject(NSFontTraitsAttribute)] = ownFromId[NSObject](traitsDict.value)
+    traitsDict[NSObject(NSFontSymbolicTrait)] = boxNSObject(traits)
+    merged[NSObject(NSFontTraitsAttribute)] = NSObject(traitsDict)
     NSFontDescriptor.fontDescriptorWithFontAttributes(merged)
 
   method dealloc(self: NSFontDescriptor) {.used.} =
@@ -193,8 +188,8 @@ proc fontDescriptorWithName*(
 ): NSFontDescriptor =
   ensureFontDescriptorConstants()
   var attributes = nsDictionary[NSObject, NSObject]()
-  attributes[asNSObject(NSFontNameAttribute)] = asNSObject(name)
-  attributes[asNSObject(NSFontMatrixAttribute)] = matrix
+  attributes[NSObject(NSFontNameAttribute)] = NSObject(name)
+  attributes[NSObject(NSFontMatrixAttribute)] = matrix
   t.fontDescriptorWithFontAttributes(attributes)
 
 proc fontDescriptorWithName*(
@@ -202,8 +197,8 @@ proc fontDescriptorWithName*(
 ): NSFontDescriptor =
   ensureFontDescriptorConstants()
   var attributes = nsDictionary[NSObject, NSObject]()
-  attributes[asNSObject(NSFontNameAttribute)] = asNSObject(name)
-  attributes[asNSObject(NSFontSizeAttribute)] = boxNSObject(pointSize)
+  attributes[NSObject(NSFontNameAttribute)] = NSObject(name)
+  attributes[NSObject(NSFontSizeAttribute)] = boxNSObject(pointSize)
   t.fontDescriptorWithFontAttributes(attributes)
 
 proc new*(t: typedesc[NSFontDescriptor]): NSFontDescriptor =

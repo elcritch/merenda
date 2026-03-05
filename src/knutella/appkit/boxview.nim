@@ -406,7 +406,7 @@ objcImpl:
     boxDrawBorderAndTitle(self, frame, view)
 
   method drawRect*(self: NSBox, rect: NSRect) =
-    let boxView = ownFromId[NSView](self.value)
+    let boxView = NSView(self)
     boxDrawBorderAndTitle(self, rect, boxView)
 
   method setFrame*(
