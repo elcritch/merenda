@@ -330,6 +330,27 @@ suite "knutella appkit hello world":
 
     button.value = nil
 
+  test "button render tree includes nkText for plain string titles":
+    var window = newWindow(0, 0, 240, 180, "")
+    var root = newView(0, 0, 240, 180)
+    var button = newButton(24, 36, 140, 28, "Primary")
+    root.addSubview(button)
+    window.setContentView(root)
+
+    let renders = debugBuildWindowRenders(window)
+    check(not renders.isNil)
+
+    var foundTextNode = false
+    for _, list in renders.pairs():
+      for node in list.nodes:
+        if node.kind == nkText and node.textLayout.runes.len > 0:
+          foundTextNode = true
+    check(foundTextNode)
+
+    button.value = nil
+    root.value = nil
+    window.value = nil
+
   test "text field layout stays within the text box":
     var field = newTextField(
       0, 0, 240, 40,
