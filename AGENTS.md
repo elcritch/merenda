@@ -18,20 +18,21 @@
 - Indentation: 2 spaces; no tabs.
 - Formatting: run `nph src/*.nim` and format any touched test files.
 
-## Nutella / Objective-C Implentation Rules
+## Nutella / Objective-C Coding Rules (!IMPORTANT!)
 - Make sure to use `objcImpl` methods instead of Nim procs unless copying a C function when implementing OpenSTEP or Cocoa APIs.
-- Every `NS*` object or `NX*` object must be an Objective-C class or prototype unless there's a very good reason like `NSRect`.
+- Every `NS*` object must be an Objective-C class or prototype unless the Cocoatron / Cocoa APIs use a C struct.
 - ObjC fields (ivars) in `objcImpl` must use the `x` prefix (for example `xTitle`, `xFrame`) instead of `_` or ad-hoc prefixes.
-- Always `xField {.set: setField, get: field.}` pragmas to create plain method getters/setters unless complex logic is needed
+- *Always* `xField {.set: setField, get: field.}` pragmas to create simple getters/setters methods.
+- *DO NOT* use `ID(value: obj.value)` unless required to match Cocoatron's implementation.
+- Base implmentation on `vendor/darling-cocotron/AppKit/` and match Cocoatrons implementation logic, but match our Nim style in existing modules (no extra nil checks, use `asWrapper`, etc)
+    - Skip `retain` as it's a no-op in Nim
 - Don't initialize "zero" value fields with `false`, `nil`, or `NSFoo(value: nil)` since these will be set by memory zeroing.
 - Prefer public API names from AppKit headers over `*Id`-style hacks (for example `title`/`setTitle` rather than `titleId`).
 - Convert `id` in Objective-C to concrete types where possible when porting Obj-C code, or failing that use `ID` not `IDPtr`.
-- *Don't* use `discard argument` or prefix `_` for unused proc or method arguments
-- *Don't* use `when false: discard t` to retain unused type. Nim doesn't need these.
+- *Do not* use `discard argument` or prefix `_` for unused proc or method arguments
 - *Do* use a lone `discard` for empty proc or method bodies.
 - Never try to use global storage as a shortcut for implementing something unless absolutely needed.
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
-- Prefer NSString over Nim strings. 
 - Prefer Nim backed storage for tables, seq's etc for internal obj-c storage. Only use NSDictionary where AppKit API needs it.
 
 ## Testing Guidelines

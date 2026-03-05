@@ -308,7 +308,7 @@ objcImpl:
       self.xCellType = cellType
       if cellType == NSTextCellType:
         self.setTitle(@ns"Cell")
-        self.setFont(NSFont.systemFontOfSize(15.0))
+        self.setFont(NSFont.systemFontOfSize(12.0))
       let controlView = self.controlView()
 
       controlView
@@ -465,7 +465,7 @@ objcImpl:
 
   method setControlSize*(self: NSCell, size: NSControlSize) =
     self.xControlSize = size
-    self.xFont = NSFont.userFontOfSize(16'f32 - self.xControlSize.float * 2'f32)
+    self.xFont = NSFont.userFontOfSize(13'f32 - self.xControlSize.float * 2'f32)
     ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
