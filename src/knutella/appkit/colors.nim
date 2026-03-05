@@ -518,10 +518,10 @@ proc blendedColorWithFraction*(
   )
 
 proc setFill*(self: NSColor) =
-  setCurrentFillColor(self)
+  NSGraphicsContext.currentContext().setFillColor(self)
 
 proc setStroke*(self: NSColor) =
-  setCurrentStrokeColor(self)
+  NSGraphicsContext.currentContext().setStrokeColor(self)
 
 proc `set`*(self: NSColor) =
   if self.a <= 0.0:

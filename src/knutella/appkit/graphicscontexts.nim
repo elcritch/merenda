@@ -362,54 +362,6 @@ proc inQuartzDebugMode*(t: typedesc[NSGraphicsContext]): bool =
 proc setQuartzDebugMode*(t: typedesc[NSGraphicsContext], mode: bool) =
   quartzDebugModeEnabled = mode
 
-proc NSCurrentGraphicsPort*(): pointer =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return nil
-  current.graphicsPort()
-
-proc NSCurrentFocusStack*(): NSArray[NSObject] =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return NSArray[NSObject](value: nil)
-  current.focusStack()
-
-proc currentFillColor*(): NSColor =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return nsColor(0.0, 0.0, 0.0, 1.0)
-  current.fillColor()
-
-proc currentStrokeColor*(): NSColor =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return nsColor(0.0, 0.0, 0.0, 1.0)
-  current.strokeColor()
-
-proc setCurrentFillColor*(color: NSColor) =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return
-  current.setFillColor(color)
-
-proc setCurrentStrokeColor*(color: NSColor) =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return
-  current.setStrokeColor(color)
-
-proc pushCurrentFocusView*(view: NSView) =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return
-  current.pushFocusView(view)
-
-proc popCurrentFocusView*(): NSView =
-  let current = NSGraphicsContext.currentContext()
-  if current.isNil:
-    return NSView(value: nil)
-  current.popFocusView()
-
 proc hasActiveGraphicsContextForDrawing*(): bool =
   let renderPort = currentRenderGraphicsPort()
   if renderPort.isNil:

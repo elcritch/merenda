@@ -260,11 +260,11 @@ objcImpl:
         self.highlightsBy().contains(NSPushInCell) and self.isHighlighted()
       let topGray = if highlighted: 0.80 else: 0.90
       let bottomGray = if highlighted: 0.70 else: 0.80
-      setCurrentFillColor(nsColor(topGray, topGray, topGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(nsColor(topGray, topGray, topGray, 1.0))
       NSRectFill(top)
-      setCurrentFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
       NSRectFill(bottom)
-      setCurrentStrokeColor(nsColor(0.83, 0.83, 0.83, 1.0))
+      NSGraphicsContext.currentContext().setStrokeColor(nsColor(0.83, 0.83, 0.83, 1.0))
       NSFrameRectWithWidth(drawFrame, 1.0)
     of NSTexturedSquareBezelStyle, NSTexturedRoundedBezelStyle,
         NSShadowlessSquareBezelStyle:
@@ -283,14 +283,14 @@ objcImpl:
         bottomHalf.origin.y += topHalf.size.height
       else:
         topHalf.origin.y += bottomHalf.size.height
-      setCurrentFillColor(nsColor(topGray, topGray, topGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(nsColor(topGray, topGray, topGray, 1.0))
       NSRectFill(topHalf)
-      setCurrentFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
       NSRectFill(bottomHalf)
-      setCurrentStrokeColor(nsColor(0.4, 0.4, 0.4, 1.0))
+      NSGraphicsContext.currentContext().setStrokeColor(nsColor(0.4, 0.4, 0.4, 1.0))
       NSFrameRectWithWidth(drawFrame, 1.0)
       if highlighted:
-        setCurrentFillColor(nsColor(0.0, 0.0, 0.0, 0.15))
+        NSGraphicsContext.currentContext().setFillColor(nsColor(0.0, 0.0, 0.0, 0.15))
         NSRectFill(insetRect(drawFrame, 1.0, 1.0))
     of NSRecessedBezelStyle:
       if self.isBordered() and self.isVisuallyHighlighted():
@@ -298,18 +298,18 @@ objcImpl:
         recessed.size.height = max(recessed.size.height - 1.0, 0.0)
         if contextFlipped:
           recessed.origin.y += 1.0
-        setCurrentFillColor(nsColor(0.83, 0.83, 0.83, 1.0))
+        NSGraphicsContext.currentContext().setFillColor(nsColor(0.83, 0.83, 0.83, 1.0))
         NSDrawWhiteBezel(recessed, recessed)
         if contextFlipped:
           recessed.origin.y -= 1.0
         else:
           recessed.origin.y += 1.0
-        setCurrentFillColor(nsColor(0.33, 0.33, 0.33, 1.0))
+        NSGraphicsContext.currentContext().setFillColor(nsColor(0.33, 0.33, 0.33, 1.0))
         NSDrawGrayBezel(recessed, recessed)
     else:
       if not self.isBordered():
         if self.isVisuallyHighlighted():
-          setCurrentFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
+          NSGraphicsContext.currentContext().setFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
           NSRectFill(drawFrame)
       else:
         if self.highlightsBy().contains(NSPushInCell) and self.isHighlighted():
@@ -437,7 +437,7 @@ objcImpl:
 
     if not self.isBordered():
       if self.isVisuallyHighlighted():
-        setCurrentFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
+        NSGraphicsContext.currentContext().setFillColor(nsColor(1.0, 1.0, 1.0, 1.0))
         NSRectFill(contentFrame)
 
     let isTextured =
