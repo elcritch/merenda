@@ -48,12 +48,10 @@ Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/A
 
 ## Low Priority / Consistency
 
-- Font sizes differ from Cocotron defaults.
-  - `setType(NSTextCellType)` uses `systemFontOfSize(15.0)` in Nim vs `12.0` in Cocotron.
-  - `setControlSize` uses `16 - controlSize*2` in Nim vs `13 - controlSize*2` in Cocotron.
-  - Impact: visual/metric mismatches.
-  - Nim: `cells.nim:306`, `cells.nim:466`
-  - Cocotron: `NSCell.m:699`, `NSCell.m:971`
+- Font sizes now match Cocotron defaults.
+  - `setType(NSTextCellType)` uses `systemFontOfSize(12.0)`.
+  - `setControlSize` uses `13 - controlSize*2`.
+  - Aligned with Cocotron: `NSCell.m:699`, `NSCell.m:971`.
 
 - `setFloatingPointFormat:left:right:` is unimplemented in Nim.
   - Cocotron installs/configures an `NSNumberFormatter`.
