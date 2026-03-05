@@ -16,6 +16,7 @@ import ./appkit/textfields
 import ./appkit/comboboxes
 import ./appkit/formatters
 import ./appkit/attributedstrings
+import ./appkit/paragraphstyles
 import ./appkit/fontdescriptors
 import ./appkit/fonts
 import ./appkit/boxview
@@ -49,6 +50,7 @@ export textfields
 export comboboxes
 export formatters
 export attributedstrings
+export paragraphstyles
 export fontdescriptors
 export fonts
 export boxview

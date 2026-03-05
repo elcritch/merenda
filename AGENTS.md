@@ -23,7 +23,8 @@
 - Every `NS*` object must be an Objective-C class or prototype unless the Cocoatron / Cocoa APIs use a C struct.
 - ObjC fields (ivars) in `objcImpl` must use the `x` prefix (for example `xTitle`, `xFrame`) instead of `_` or ad-hoc prefixes.
 - *Always* `xField {.set: setField, get: field.}` pragmas to create simple getters/setters methods.
-- *DO NOT* use `ID(value: obj.value)` unless required to match Cocoatron's implementation.
+- *DO NOT* use `ID(value: obj.value)` or `NSObject(value: obj.value)`! Use Nim conversions instead, like `obj.NSObject.doSomething()`.
+- Use Nim "casting" style of `NSObject(obj)` instead of `ownFromId`.
 - Base implmentation on `vendor/darling-cocotron/AppKit/` and match Cocoatrons implementation logic, but match our Nim style in existing modules (no extra nil checks, use `asWrapper`, etc)
     - Skip `retain` as it's a no-op in Nim
 - Don't initialize "zero" value fields with `false`, `nil`, or `NSFoo(value: nil)` since these will be set by memory zeroing.
