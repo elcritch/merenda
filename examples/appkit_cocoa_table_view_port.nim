@@ -169,7 +169,7 @@ objcImpl:
     destroyIvarFields(self)
     discard callSuperIdFrom(TableViewController, self, getSelector("dealloc"))
 
-when isMainModule:
+when isMainModule and not defined(knutellaNoExampleMain):
   var app = NSApp()
   var window = newWindow(120, 120, 480, 360, "Cocoa Table View (KNutella Port)")
   var root = newView(0, 0, 480, 360)

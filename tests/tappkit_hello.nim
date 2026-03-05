@@ -224,9 +224,9 @@ suite "knutella appkit hello world":
     check(button.title() == @ns"Push")
     clickControl(button)
     check(button.state() == NSOnState)
-    check(clicks == 0)
-    button.click()
     check(clicks == 1)
+    button.click()
+    check(clicks == 2)
 
     field.value = nil
     button.value = nil

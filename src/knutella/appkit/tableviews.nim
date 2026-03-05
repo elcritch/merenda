@@ -20,6 +20,22 @@ proc clearSubviews(view: NSView) =
   for child in children:
     child.removeFromSuperview()
 
+proc adjustedDataCellFrame(frame: NSRect, spacing: NSSize): NSRect =
+  result = frame
+  result.origin.x += spacing.width - 1.0
+  result.origin.y += spacing.height
+  result.size.width -= spacing.width
+  result.size.height -= spacing.height
+  result.size.height -= 1.0
+  if result.origin.x < 0.0:
+    result.origin.x = 0.0
+  if result.origin.y < 0.0:
+    result.origin.y = 0.0
+  if result.size.width < 0.0:
+    result.size.width = 0.0
+  if result.size.height < 0.0:
+    result.size.height = 0.0
+
 proc objectDisplayString(value: NSObject): NSString =
   if value.isNil:
     return @ns""
@@ -56,25 +72,29 @@ proc rebuildRows(tableView: NSTableView)
 objcImpl:
   type TableRowsDataSource {.structural.} =
     concept self
-        method numberOfRowsInTableView*(self: TableRowsDataSource, tableView: NSTableView): int
+        method numberOfRowsInTableView*(
+          self: TableRowsDataSource, tableView: NSTableView
+        ): int
 
 objcImpl:
   type TableObjectValueDataSource {.structural.} =
     concept self
-        method tableView*(self: TableObjectValueDataSource,
-            tableView: NSTableView,
-            tableColumn {.kw("objectValueForTableColumn").}: NSTableColumn,
-            row {.kw("row").}: int): NSObject
+        method tableView*(
+          self: TableObjectValueDataSource,
+          tableView: NSTableView,
+          tableColumn {.kw("objectValueForTableColumn").}: NSTableColumn,
+          row {.kw("row").}: int,
+        ): NSObject
 
 objcImpl:
   type TableSetObjectValueDataSource {.structural.} =
     concept self
         method tableView*(
-            self: TableSetObjectValueDataSource,
-            tableView: NSTableView,
-            value {.kw("setObjectValue").}: NSObject,
-            tableColumn {.kw("forTableColumn").}: NSTableColumn,
-            row {.kw("row").}: int,
+          self: TableSetObjectValueDataSource,
+          tableView: NSTableView,
+          value {.kw("setObjectValue").}: NSObject,
+          tableColumn {.kw("forTableColumn").}: NSTableColumn,
+          row {.kw("row").}: int,
         )
 
 objcImpl:
@@ -473,9 +493,12 @@ proc rebuildRows(tableView: NSTableView) =
       let value = tableView.objectValueForTableColumn(column, row)
       let text = objectDisplayString(value)
       var field = NSTextField.new()
-      field.setFrame(
-        x + 1.0, y + 1.0, max(width - 2.0, 8.0), max(tableView.xRowHeight - 2.0, 8.0)
+      let spacing = tableView.xIntercellSpacing()
+      let cellFrame = adjustedDataCellFrame(
+        nsRect(x, y, width + spacing.width, tableView.xRowHeight + spacing.height),
+        spacing,
       )
+      field.setFrame(cellFrame)
       field.setStringValue(text)
       field.setEditable(false)
       field.setSelectable(false)
