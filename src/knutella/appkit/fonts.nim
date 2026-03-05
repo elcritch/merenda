@@ -108,7 +108,7 @@ proc makeMetrics(state: FontState, figFont: FigFont) =
   state.xHeight = size * 0.5
 
 objcImpl:
-  type NSFont* = object of NSObject
+  type NSFont* {.impl: NSCopying.} = object of NSObject
     xState: FontState
 
   method initWithName*(
@@ -221,6 +221,9 @@ objcImpl:
 
   method description*(self: NSFont): NSString =
     ns("<NSFont " & $self.fontName() & " " & $self.pointSize() & ">")
+
+  method copyWithZone*(self: NSFont, zone: pointer): NSFont =
+    retain(self)
 
   method dealloc(self: NSFont) {.used.} =
     self.xState = nil

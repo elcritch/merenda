@@ -70,7 +70,7 @@ proc fontDescriptorWithFontAttributes*(
 ): NSFontDescriptor
 
 objcImpl:
-  type NSFontDescriptor* = object of NSObject
+  type NSFontDescriptor* {.impl: NSCopying.} = object of NSObject
     xAttributes {.set: setStorageAttributes, get: storageAttributes.}:
       NSDictionary[NSObject, NSObject]
 
@@ -170,6 +170,9 @@ objcImpl:
     traitsDict[NSObject(NSFontSymbolicTrait)] = boxNSObject(traits)
     merged[NSObject(NSFontTraitsAttribute)] = NSObject(traitsDict)
     NSFontDescriptor.fontDescriptorWithFontAttributes(merged)
+
+  method copyWithZone*(self: NSFontDescriptor, zone: pointer): NSFontDescriptor =
+    retain(self)
 
   method dealloc(self: NSFontDescriptor) {.used.} =
     self.xAttributes = NSDictionary[NSObject, NSObject](value: nil)

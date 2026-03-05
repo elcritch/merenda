@@ -276,7 +276,7 @@ proc textStyleForAttributes(attributes: NSDictionary[NSObject, NSObject]): FontS
   fs(appkitFont(visual.fontSize), visual.color.toFigColor())
 
 objcImpl:
-  type NSAttributedString* = object of NSObject
+  type NSAttributedString* {.impl: NSCopying.} = object of NSObject
     xString {.set: setStorageString, get: storageString.}: NSString
     xRuns {.set: setStorageRuns, get: storageRuns.}: seq[NSAttributeRun]
 

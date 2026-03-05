@@ -4,7 +4,7 @@ Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/A
 
 ## Medium Priority
 
-- `setObjectValue` and `setAttributedStringValue` semantics differ.
+- [x] `setObjectValue` and `setAttributedStringValue` semantics differ.
   - Cocotron copies assigned object (`copyWithZone:`) and routes attributed values through `setObjectValue`.
   - Nim directly assigns and `setAttributedStringValue` bypasses the `setObjectValue` path.
   - Impact: mutability/KVO/update consistency differences.

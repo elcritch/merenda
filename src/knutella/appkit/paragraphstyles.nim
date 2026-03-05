@@ -1,7 +1,7 @@
 import ./runtime
 
 objcImpl:
-  type NSParagraphStyle* = object of NSObject
+  type NSParagraphStyle* {.impl: NSCopying.} = object of NSObject
     xLineBreakMode {.set: setLineBreakMode, get: lineBreakMode.}: NSLineBreakMode
     xAlignment {.set: setAlignment, get: alignment.}: NSTextAlignment
 
