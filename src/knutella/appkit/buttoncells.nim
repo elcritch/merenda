@@ -361,15 +361,7 @@ objcImpl:
       contentFrame = insetRect(contentFrame, 2.0, 2.0)
 
     let image = self.imageForHighlight()
-    var title = self.xAttributedTitle
-    if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
-        (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
-      let alternateTitle = self.alternateTitle()
-      if alternateTitle.len > 0:
-        if not self.xAttributedAlternateTitle.isNil:
-          title = self.xAttributedAlternateTitle
-    if title.isNil:
-      discard
+    let title = self.titleForHighlight()
     var imagePosition = self.imagePosition()
     if self.bezelStyle() == NSDisclosureBezelStyle:
       imagePosition = NSImageOnly
@@ -377,7 +369,7 @@ objcImpl:
     var titleRect = self.titleRectForBounds(contentFrame)
 
     var drawImage = not image.isNil
-    var drawTitle = (not title.isNil) and self.title().len > 0
+    var drawTitle = not title.isNil
 
     let imageSize =
       if drawImage:

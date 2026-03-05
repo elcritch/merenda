@@ -25,7 +25,7 @@ objcImpl:
   type CursorWindowInvalidator* {.structural.} =
     concept self
         method invalidateCursorRectsForView*(
-            self: CursorWindowInvalidator, view: NSView
+          self: CursorWindowInvalidator, view: NSView
         )
 
 proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
@@ -109,6 +109,7 @@ proc makeAttributedString*(text: NSString): NSAttributedString =
     else:
       text
   )
+  allocated.value = nil
 
 objcImpl:
   type NSCell* {.
@@ -309,11 +310,12 @@ objcImpl:
         self.setTitle(@ns"Cell")
         self.setFont(NSFont.systemFontOfSize(15.0))
       let controlView = self.controlView()
-      let window =
-        ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
-      ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
-        controlView
-      )
+
+      controlView
+      .asWrapper(ControlViewWindowProvider)
+      .window()
+      .asWrapper(CursorWindowInvalidator)
+      .invalidateCursorRectsForView(controlView)
 
   method setState*(self: NSCell, value: int) =
     let ival = value
@@ -352,33 +354,36 @@ objcImpl:
       return
     self.xEnabled = flag
     let controlView = self.controlView()
-    let window =
-      ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
-    ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
-      controlView
-    )
+
+    controlView
+    .asWrapper(ControlViewWindowProvider)
+    .window()
+    .asWrapper(CursorWindowInvalidator)
+    .invalidateCursorRectsForView(controlView)
 
   method setEditable*(self: NSCell, flag: bool) =
     if self.xEditable == flag:
       return
     self.xEditable = flag
     let controlView = self.controlView()
-    let window =
-      ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
-    ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
-      controlView
-    )
+
+    controlView
+    .asWrapper(ControlViewWindowProvider)
+    .window()
+    .asWrapper(CursorWindowInvalidator)
+    .invalidateCursorRectsForView(controlView)
 
   method setSelectable*(self: NSCell, flag: bool) =
     if self.xSelectable == flag:
       return
     self.xSelectable = flag
     let controlView = self.controlView()
-    let window =
-      ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
-    ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
-      controlView
-    )
+
+    controlView
+    .asWrapper(ControlViewWindowProvider)
+    .window()
+    .asWrapper(CursorWindowInvalidator)
+    .invalidateCursorRectsForView(controlView)
 
   method setWraps*(self: NSCell, wraps: bool) =
     self.xLineBreakMode =
@@ -460,7 +465,7 @@ objcImpl:
 
   method setControlSize*(self: NSCell, size: NSControlSize) =
     self.xControlSize = size
-    self.xFont = NSFont.userFontOfSize(16'f32 - self.xControlSize.float*2'f32)
+    self.xFont = NSFont.userFontOfSize(16'f32 - self.xControlSize.float * 2'f32)
     ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
@@ -591,8 +596,8 @@ objcImpl:
       delegate {.kw("delegate").}: ID,
       event {.kw("event").}: NSEvent,
   ) =
-    if (not self.isEditable() and not self.isSelectable()) or view.isNil or
-        editor.isNil or self.font().isNil or self.cellType() != NSTextCellType:
+    if (not self.isEditable() and not self.isSelectable()) or view.isNil or editor.isNil or
+        self.font().isNil or self.cellType() != NSTextCellType:
       return
     discard self.setUpFieldEditorAttributes(editor)
 
@@ -605,8 +610,8 @@ objcImpl:
       location {.kw("start").}: int,
       length {.kw("length").}: int,
   ) =
-    if (not self.isEditable() and not self.isSelectable()) or view.isNil or
-        editor.isNil or self.font().isNil or self.cellType() != NSTextCellType:
+    if (not self.isEditable() and not self.isSelectable()) or view.isNil or editor.isNil or
+        self.font().isNil or self.cellType() != NSTextCellType:
       return
     discard self.setUpFieldEditorAttributes(editor)
 
