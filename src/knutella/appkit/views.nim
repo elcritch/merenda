@@ -1,4 +1,3 @@
-import std/algorithm
 import std/sequtils
 
 import ./runtime
@@ -11,12 +10,27 @@ export responders
 
 proc isViewDescendantOf*(viewId: IDPtr, ancestorId: IDPtr): bool
 proc detachSubviews*(view: NSObject)
+proc isHiddenOrHasHiddenAncestor*(view: NSView): bool
+proc convertPoint*(self: NSView, point: NSPoint, fromView: NSView): NSPoint
+proc convertPointToView*(self: NSView, point: NSPoint, toView: NSView): NSPoint
+proc convertRect*(self: NSView, rect: NSRect, fromView: NSView): NSRect
+proc convertRectToView*(self: NSView, rect: NSRect, toView: NSView): NSRect
+proc addSubview*(self: NSView, view: NSView)
+proc removeFromSuperviewWithoutNeedingDisplay*(view: NSView)
+proc removeFromSuperview*(view: NSView)
+method xInvalidateTrackingAreas*(self: NSWindow) {.base.} =
+  discard
+method invalidateCursorRectsForView*(self: NSWindow, view: NSView) {.base.} =
+  discard
+
+proc markTransformsDirty(view: NSView)
 
 objcImpl:
-  type WindowsWrapper* {.structural.} =
+  type ClipViewWrapper* {.structural.} =
     concept self
-        method invalidateCursorRectsForView*(self: WindowsWrapper, view: NSView)
-        method xInvalidateTrackingAreas*(self: WindowsWrapper)
+        method documentView*(self: ClipViewWrapper): NSView
+        method documentVisibleRect*(self: ClipViewWrapper): NSRect
+        method scrollToPoint*(self: ClipViewWrapper, point: NSPoint)
 
 template unionOfInvalidRects*(self: NSView): NSRect =
   ##
@@ -40,15 +54,15 @@ template unionOfInvalidRects*(self: NSView): NSRect =
 objcImpl:
   type NSView* = object of NSResponder
     xFrame {.get: frame.}: NSRect
-    xBounds {.get: bounds, set: setBounds.}: NSRect
-    xWindow {.get: window, set: setWindow.}: NSWindow
+    xBounds {.get: bounds.}: NSRect
+    xWindow {.get: window.}: NSWindow
     xMenu {.get: menu, set: setMenu.}: NSMenu
-    xSuperview {.get: superview, set: xSetSuperview.}: NSView
-    xSubviews {.get: subviews, set: setSubviews.}: seq[NSView]
-    xNextKeyView: NSView
-    xPreviousKeyView: NSView
+    xSuperview {.get: superview.}: NSView
+    xSubviews {.get: subviews.}: seq[NSView]
+    xNextKeyView {.get: nextKeyView.}: NSView
+    xPreviousKeyView {.get: previousKeyView.}: NSView
 
-    xHidden: bool
+    xHidden {.get: isHidden.}: bool
     xBackgroundColor: NSColor
 
     xPostsNotificationOnFrameChange {.
@@ -61,10 +75,10 @@ objcImpl:
     xAutoresizesSubviews {.set: setAutoresizesSubviews, get: autoresizesSubviews.}: bool
     xAutoresizingMask {.set: setAutoresizingMask, get: autoresizingMask.}: int
 
-    xTag: int
+    xTag {.set: setTag, get: tag.}: int
     xDraggedTypes: seq[ID]
     xTrackingAreas: seq[NSTrackingArea]
-    xNeedsDisplay {.set: setNeedsDisplay, get: needsDisplay.}: bool
+    xNeedsDisplay {.get: needsDisplay.}: bool
     xInvalidRects: seq[NSRect]
     xRectsBeingRedrawn: seq[NSRect]
 
@@ -99,18 +113,12 @@ objcImpl:
     result.xBounds =
       nsRect(0.0, 0.0, max(rect.size.width, 0.0), max(rect.size.height, 0.0))
     result.xBackgroundColor = nsColor(0.86, 0.90, 0.96, 1.0)
-    result.xHidden = false
     result.xPostsNotificationOnFrameChange = true
     result.xPostsNotificationOnBoundsChange = true
     result.xAutoresizesSubviews = true
-    result.xAutoresizingMask = 0
     result.xAlpha = 1.0
-    result.xSuperview = NSView(value: nil)
     result.xTag = -1
-    result.xSubviews = @[]
     result.xNeedsDisplay = true
-    result.xInvalidRects = @[]
-    result.xRectsBeingRedrawn = @[]
 
   method init*(self: var NSView): NSView =
     self.initWithFrame(nsRect(0, 0, 1, 1))
@@ -119,23 +127,43 @@ objcImpl:
     if self.xFrame == frame:
       return
 
-    let priorSize = self.xBounds.size
+    let oldSize = self.xBounds.size
 
     if self.xBounds.size.width == 0 or self.xBounds.size.height == 0:
-      #// No valid current bounds value - just update it to use the frame size
       self.xBounds.size = frame.size
     else:
-      #// Get the bounds->frame transform
-      # CGAffineTransform transform=concatViewTransform(CGAffineTransformIdentity,self,nil,YES,NO);
-      #// ... and invert it so we can get the new bounds size from the new frame size
-      # self.xTransform = CGAffineTransformInvert(transform);
-      # self.xBounds.size = CGSizeApplyAffineTransform(frame.size, transform);
-
-      self.xBounds.size = frame.size # TODO: implement the affine transforms...
+      self.xBounds.size = frame.size
 
     self.xFrame = frame
-    self.xWindow.asWrapper(WindowsWrapper).invalidateCursorRectsForView(self)
-      #this also invalidates tracking areas
+    if self.xAutoresizesSubviews:
+      self.resizeSubviewsWithOldSize(oldSize)
+    markTransformsDirty(self)
+    self.window().invalidateCursorRectsForView(self)
+
+  method setFrameSize*(self: NSView, size: NSSize) =
+    var frame = self.xFrame
+    frame.size = nsSize(max(size.width, 0.0), max(size.height, 0.0))
+    self.setFrame(frame)
+
+  method setFrameOrigin*(self: NSView, origin: NSPoint) =
+    var frame = self.xFrame
+    frame.origin = origin
+    self.setFrame(frame)
+
+  method setBounds*(self: NSView, bounds: NSRect) =
+    let nextBounds = nsRect(
+      bounds.origin.x,
+      bounds.origin.y,
+      max(bounds.size.width, 0.0),
+      max(bounds.size.height, 0.0),
+    )
+    if self.xBounds == nextBounds:
+      return
+    self.xBounds = nextBounds
+    markTransformsDirty(self)
+    self.window().invalidateCursorRectsForView(self)
+    if self.xPostsNotificationOnBoundsChange:
+      self.xNeedsDisplay = true
 
   method setBounds*(
       self: NSView,
@@ -144,32 +172,21 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ) =
-    self.xBounds =
-      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
-    self.xNeedsDisplay = true
-    self.xInvalidRects.setLen(0)
-    self.xRectsBeingRedrawn.setLen(0)
+    self.setBounds(
+      nsRect(
+        x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
+      )
+    )
 
   method setBoundsOrigin*(self: NSView, point: NSPoint) =
-    let oldBounds = self.xBounds
-    self.xBounds = nsRect(
-      point.x, point.y, max(oldBounds.size.width, 0.0), max(oldBounds.size.height, 0.0)
-    )
-    self.xNeedsDisplay = true
-    self.xInvalidRects.setLen(0)
-    self.xRectsBeingRedrawn.setLen(0)
+    var bounds = self.xBounds
+    bounds.origin = point
+    self.setBounds(bounds)
 
   method setBoundsSize*(self: NSView, size: NSSize) =
-    let oldBounds = self.xBounds
-    self.xBounds = nsRect(
-      oldBounds.origin.x,
-      oldBounds.origin.y,
-      max(size.width, 0.0),
-      max(size.height, 0.0),
-    )
-    self.xNeedsDisplay = true
-    self.xInvalidRects.setLen(0)
-    self.xRectsBeingRedrawn.setLen(0)
+    var bounds = self.xBounds
+    bounds.size = nsSize(max(size.width, 0.0), max(size.height, 0.0))
+    self.setBounds(bounds)
 
   method isFlipped*(self: NSView): bool =
     false
@@ -178,31 +195,55 @@ objcImpl:
     false
 
   method adjustScroll*(self: NSView, toRect: NSRect): NSRect =
-    return nsRect(0, 0, 0, 0)
+    nsRect(0, 0, 0, 0)
 
   method visibleRect*(self: NSView): NSRect =
-    if self.isNil or self.xHidden:
+    if self.isHiddenOrHasHiddenAncestor():
       return nsRect(0.0, 0.0, 0.0, 0.0)
-    self.xBounds
+    let parent = self.xSuperview
+    if parent.isNil:
+      return self.xBounds
+    let parentVisible = parent.visibleRect()
+    let converted = self.convertRect(parentVisible, parent)
+    nsIntersectionRect(converted, self.xBounds)
 
   method canDraw*(self: NSView): bool =
-    (not self.isNil) and (not self.xHidden)
+    (not self.xWindow.isNil) and (not self.isHiddenOrHasHiddenAncestor())
 
   method viewWillDraw*(self: NSView) =
     for child in self.xSubviews:
-      if child.isNil:
-        continue
       child.viewWillDraw()
 
   method xTrackingAreasChanged*(self: NSView) =
-    self.window().asWrapper(WindowsWrapper).xInvalidateTrackingAreas()
+    self.window().xInvalidateTrackingAreas()
 
   method addTrackingArea*(self: NSView, trackingArea: NSTrackingArea) =
     self.xTrackingAreas.add(trackingArea)
     self.xTrackingAreasChanged()
 
-  method updateTrackingAreas*(self: NSView) =
+  method removeTrackingArea*(self: NSView, trackingArea: NSTrackingArea) =
+    var i = self.xTrackingAreas.high
+    while i >= 0:
+      if self.xTrackingAreas[i].value == trackingArea.value:
+        self.xTrackingAreas.del(i)
+      dec i
     self.xTrackingAreasChanged()
+
+  method trackingAreas*(self: NSView): seq[NSTrackingArea] =
+    self.xTrackingAreas
+
+  method updateTrackingAreas*(self: NSView) =
+    self.xValidTrackingAreas = false
+    self.xTrackingAreasChanged()
+
+  method registerForDraggedTypes*(self: NSView, types: seq[ID]) =
+    self.xDraggedTypes = types
+
+  method unregisterDraggedTypes*(self: NSView) =
+    self.xDraggedTypes.setLen(0)
+
+  method registeredDraggedTypes*(self: NSView): seq[ID] =
+    self.xDraggedTypes
 
   method discardCursorRects*(self: NSView) =
     var areas = self.xTrackingAreas
@@ -214,26 +255,36 @@ objcImpl:
     self.xTrackingAreasChanged()
 
   method opaqueAncestor*(self: NSView): NSView =
-    if self.isNil:
-      return NSView(value: nil)
     if self.isOpaque():
-      return retain(self)
+      return self
     let parent = self.xSuperview
     if parent.isNil:
-      return retain(self)
+      return self
     parent.opaqueAncestor()
 
   method setNeedsDisplayInRect*(self: NSView, rect: NSRect) =
-    let visible = self.visibleRect()
-    let clipped = nsIntersectionRect(visible, rect)
-    if isEmpty(clipped):
-      return
-    if nsContainsRect(clipped, visible):
-      self.xInvalidRects.setLen(0)
-    else:
-      self.xInvalidRects.add(clipped)
-    self.xRectsBeingRedrawn.setLen(0)
+    if not self.xNeedsDisplay or self.xInvalidRects.len > 0:
+      let visible = self.visibleRect()
+      let clipped = nsIntersectionRect(visible, rect)
+      if isEmpty(clipped):
+        return
+      if nsContainsRect(clipped, visible):
+        self.xInvalidRects.setLen(0)
+      else:
+        self.xInvalidRects.add(clipped)
+      self.xRectsBeingRedrawn.setLen(0)
+
+      let opaque = self.opaqueAncestor()
+      if not opaque.isNil and opaque.value != self.value:
+        let dirtyRect = self.convertRectToView(clipped, opaque)
+        opaque.setNeedsDisplayInRect(dirtyRect)
+
     self.xNeedsDisplay = true
+
+  method setNeedsDisplay*(self: NSView, flag: bool) =
+    self.xNeedsDisplay = flag
+    self.xInvalidRects.setLen(0)
+    self.xRectsBeingRedrawn.setLen(0)
 
   method display*(self: NSView) =
     self.displayRect(self.visibleRect())
@@ -241,82 +292,55 @@ objcImpl:
   method xDisplayIfNeededWithoutViewWillDraw*(self: NSView) =
     if self.xNeedsDisplay:
       self.displayRect(unionOfInvalidRects(self))
-      self.xInvalidRects.setLen(0)
-      #if self.xInvalidRects.len == 0:
-      #  self.displayRect(self.visibleRect())
-      #else:
-      #  var dirty = self.xInvalidRects[0]
-      #  for i in 1 ..< self.xInvalidRects.len:
-      #    dirty = nsUnionRect(dirty, self.xInvalidRects[i])
-      #  self.displayRect(dirty)
+      self.setNeedsDisplay(false)
 
     for child in self.xSubviews:
-      if child.isNil:
-        continue
       child.xDisplayIfNeededWithoutViewWillDraw()
 
   method displayIfNeeded*(self: NSView) =
     self.viewWillDraw()
+    self.xDisplayIfNeededWithoutViewWillDraw()
 
   method displayIfNeededInRect*(self: NSView, rect: NSRect) =
-    let clipped = nsIntersectionRect(rect, self.visibleRect())
-    if isEmpty(clipped):
+    let dirty = nsIntersectionRect(unionOfInvalidRects(self), rect)
+    if isEmpty(dirty):
       return
     if self.xNeedsDisplay:
-      self.displayRect(clipped)
+      self.displayRect(dirty)
     for child in self.xSubviews:
-      if child.isNil:
-        continue
-      let childFrame = child.frame()
-      let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
+      let childDirty = self.convertRectToView(dirty, child)
+      let childDirtyInParent = nsIntersectionRect(childDirty, child.bounds())
       if isEmpty(childDirtyInParent):
         continue
-      let childBounds = child.bounds()
-      let childDirty = nsRect(
-        childBounds.origin.x + (childDirtyInParent.origin.x - childFrame.origin.x),
-        childBounds.origin.y + (childDirtyInParent.origin.y - childFrame.origin.y),
-        childDirtyInParent.size.width,
-        childDirtyInParent.size.height,
-      )
-      child.displayIfNeededInRect(childDirty)
+      child.displayIfNeededInRect(childDirtyInParent)
 
   method displayIfNeededIgnoringOpacity*(self: NSView) =
     if self.xNeedsDisplay:
       self.displayRectIgnoringOpacity(unionOfInvalidRects(self))
 
     for child in self.xSubviews:
-      if child.isNil:
-        continue
       child.displayIfNeededIgnoringOpacity()
 
   method displayIfNeededInRectIgnoringOpacity*(self: NSView, rect: NSRect) =
-    let clipped = nsIntersectionRect(rect, self.visibleRect())
-    if isEmpty(clipped):
+    let dirty = nsIntersectionRect(unionOfInvalidRects(self), rect)
+    if isEmpty(dirty):
       return
     if self.xNeedsDisplay:
-      self.displayRectIgnoringOpacity(clipped)
+      self.displayRectIgnoringOpacity(dirty)
     for child in self.xSubviews:
-      if child.isNil:
-        continue
-      let childFrame = child.xFrame
-      let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
+      let childDirty = self.convertRectToView(dirty, child)
+      let childDirtyInParent = nsIntersectionRect(childDirty, child.bounds())
       if isEmpty(childDirtyInParent):
         continue
-      let childBounds = child.bounds()
-      let childDirty = nsRect(
-        childBounds.origin.x + (childDirtyInParent.origin.x - childFrame.origin.x),
-        childBounds.origin.y + (childDirtyInParent.origin.y - childFrame.origin.y),
-        childDirtyInParent.size.width,
-        childDirtyInParent.size.height,
-      )
-      child.displayIfNeededInRectIgnoringOpacity(childDirty)
+      child.displayIfNeededInRectIgnoringOpacity(childDirtyInParent)
 
   method displayRect*(self: NSView, rect: NSRect) =
     let opaque = self.opaqueAncestor()
     if opaque.isNil or opaque.value == self.value:
       self.displayRectIgnoringOpacity(rect)
       return
-    opaque.displayRectIgnoringOpacity(opaque.visibleRect())
+    let converted = self.convertRectToView(rect, opaque)
+    opaque.displayRectIgnoringOpacity(converted)
 
   method displayRectIgnoringOpacity*(self: NSView, rect: NSRect) =
     let visibleRect = self.visibleRect()
@@ -340,7 +364,7 @@ objcImpl:
     self.drawRect(clipped)
 
     for child in self.xSubviews:
-      if child.isNil or child.xHidden:
+      if child.xHidden:
         continue
       let childFrame = child.frame()
       let childDirtyInParent = nsIntersectionRect(clipped, childFrame)
@@ -404,8 +428,6 @@ objcImpl:
     false
 
   method drawRect*(self: NSView, rect: NSRect) =
-    if self.isNil:
-      return
     let color = self.xBackgroundColor
     if color.a <= 0.0:
       return
@@ -424,6 +446,52 @@ objcImpl:
   method drawPageBorderWithSize*(self: NSView, size: NSSize) =
     discard
 
+  method didAddSubview*(self: NSView, subview: NSView) =
+    discard
+
+  method willRemoveSubview*(self: NSView, subview: NSView) =
+    discard
+
+  method viewWillMoveToSuperview*(self: NSView, view: NSView) =
+    discard
+
+  method viewDidMoveToSuperview*(self: NSView) =
+    discard
+
+  method viewWillMoveToWindow*(self: NSView, window: NSWindow) =
+    discard
+
+  method viewDidMoveToWindow*(self: NSView) =
+    discard
+
+  method setWindow*(self: NSView, window: NSWindow) =
+    if self.xWindow.value == window.value:
+      return
+    self.viewWillMoveToWindow(window)
+    self.xWindow = window
+    for child in self.xSubviews:
+      child.setWindow(window)
+    self.xValidTrackingAreas = false
+    self.window().invalidateCursorRectsForView(self)
+    self.viewDidMoveToWindow()
+
+  method xSetSuperview*(self: NSView, superview: NSView) =
+    self.xSuperview = superview
+    if superview.isNil:
+      self.setNextResponder(NSResponder(value: nil))
+    else:
+      self.setNextResponder(superview.NSResponder)
+    self.window().invalidateCursorRectsForView(self)
+
+  method setSubviews*(self: NSView, array: seq[NSView]) =
+    while self.xSubviews.len > 0:
+      let child = self.xSubviews[self.xSubviews.high]
+      child.removeFromSuperview()
+    for view in array:
+      self.addSubview(view)
+      if not view.isNil:
+        view.setNeedsDisplay(true)
+
   method setBackgroundColor(
       self: NSView,
       r: float32,
@@ -433,8 +501,124 @@ objcImpl:
   ) =
     self.xBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
-  method setHidden(self: NSView, hidden: bool) =
+  method setHidden*(self: NSView, hidden: bool) =
+    if self.xHidden == hidden:
+      return
     self.xHidden = hidden
+    if hidden:
+      self.viewDidHide()
+    else:
+      self.viewDidUnhide()
+      self.setNeedsDisplay(true)
+    self.window().invalidateCursorRectsForView(self)
+
+  method viewDidHide*(self: NSView) =
+    discard
+
+  method viewDidUnhide*(self: NSView) =
+    discard
+
+  method setNextKeyView*(self: NSView, next: NSView) =
+    if not next.isNil:
+      next.xPreviousKeyView = self
+    elif not self.xNextKeyView.isNil:
+      self.xNextKeyView.xPreviousKeyView = NSView(value: nil)
+    self.xNextKeyView = next
+
+  method canBecomeKeyView*(self: NSView): bool =
+    not self.isHiddenOrHasHiddenAncestor()
+
+  method needsPanelToBecomeKey*(self: NSView): bool =
+    false
+
+  method acceptsFirstMouse*(self: NSView, event: NSEvent): bool =
+    false
+
+  method mouse*(self: NSView, point: NSPoint, inRect: NSRect): bool =
+    if self.isFlipped():
+      point.x >= inRect.origin.x and point.x < inRect.origin.x + inRect.size.width and
+        point.y >= inRect.origin.y and point.y < inRect.origin.y + inRect.size.height
+    else:
+      point.x >= inRect.origin.x and point.x < inRect.origin.x + inRect.size.width and
+        point.y >= inRect.origin.y and point.y < inRect.origin.y + inRect.size.height
+
+  method hitTest*(self: NSView, point: NSPoint): NSView =
+    if self.isHiddenOrHasHiddenAncestor():
+      return NSView(value: nil)
+    if not self.mouse(point, inRect = self.bounds()):
+      return NSView(value: nil)
+    var i = self.xSubviews.high
+    while i >= 0:
+      let child = self.xSubviews[i]
+      if not child.isHidden():
+        let childPoint = self.convertPointToView(point, child)
+        let hit = child.hitTest(childPoint)
+        if hit.notNil:
+          return hit
+      dec i
+    self
+
+  method xEnclosingClipView*(self: NSView): NSView =
+    var current = self.superview()
+    while not current.isNil:
+      if current.isKindOfClass(NSClipView):
+        return current
+      current = current.superview()
+    NSView(value: nil)
+
+  method scrollPoint*(self: NSView, point: NSPoint) =
+    let clipView = self.xEnclosingClipView()
+    if clipView.isNil:
+      return
+    let origin = self.convertPointToView(point, clipView)
+    ID(value: clipView.value).asWrapper(ClipViewWrapper).scrollToPoint(origin)
+
+  method scrollRectToVisible*(self: NSView, rect: NSRect): bool =
+    let clipView = self.xEnclosingClipView()
+    if clipView.isNil:
+      return false
+    let clipWrapper = ID(value: clipView.value).asWrapper(ClipViewWrapper)
+    let documentView = clipWrapper.documentView()
+    if documentView.isNil:
+      return false
+
+    let visible = clipWrapper.documentVisibleRect()
+    let target = documentView.convertRect(rect, self)
+
+    let missingLeft = visible.origin.x - target.origin.x
+    let missingRight = maxX(target) - maxX(visible)
+    let missingTop = visible.origin.y - target.origin.y
+    let missingBottom = maxY(target) - maxY(visible)
+
+    var dx = 0.0'f32
+    var dy = 0.0'f32
+    if missingLeft * missingRight < 0.0:
+      if abs(missingLeft) < abs(missingRight):
+        dx = -missingLeft
+      else:
+        dx = missingRight
+    if missingTop * missingBottom < 0.0:
+      if abs(missingTop) < abs(missingBottom):
+        dy = -missingTop
+      else:
+        dy = missingBottom
+
+    if dx == 0.0 and dy == 0.0:
+      return false
+
+    var point = visible.origin
+    point.x += dx
+    point.y += dy
+    let clipPoint = documentView.convertPointToView(point, clipView)
+    clipWrapper.scrollToPoint(clipPoint)
+    true
+
+  method resizeSubviewsWithOldSize*(self: NSView, oldSize: NSSize) =
+    for child in self.xSubviews:
+      child.resizeWithOldSuperviewSize(oldSize)
+
+  method resizeWithOldSuperviewSize*(self: NSView, oldSize: NSSize) =
+    discard
 
   method dealloc(self: NSView) {.used.} =
     detachSubviews(self)
@@ -442,6 +626,52 @@ objcImpl:
     self.xRectsBeingRedrawn.setLen(0)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSView, self, getSelector("dealloc"))
+
+proc convertPoint*(self: NSView, point: NSPoint, fromView: NSView): NSPoint =
+  if fromView.isNil:
+    var current = self
+    var resultPoint = point
+    while not current.isNil:
+      let frame = current.frame()
+      let bounds = current.bounds()
+      resultPoint.x += bounds.origin.x - frame.origin.x
+      resultPoint.y += bounds.origin.y - frame.origin.y
+      current = current.superview()
+    return resultPoint
+  if fromView.value == self.value:
+    return point
+  let windowPoint = fromView.convertPointToView(point, NSView(value: nil))
+  self.convertPoint(windowPoint, NSView(value: nil))
+
+proc convertPointToView*(self: NSView, point: NSPoint, toView: NSView): NSPoint =
+  if toView.isNil:
+    var current = self
+    var resultPoint = point
+    while not current.isNil:
+      let frame = current.frame()
+      let bounds = current.bounds()
+      resultPoint.x += frame.origin.x - bounds.origin.x
+      resultPoint.y += frame.origin.y - bounds.origin.y
+      current = current.superview()
+    return resultPoint
+  if toView.value == self.value:
+    return point
+  let windowPoint = self.convertPointToView(point, NSView(value: nil))
+  toView.convertPoint(windowPoint, NSView(value: nil))
+
+proc convertRect*(self: NSView, rect: NSRect, fromView: NSView): NSRect =
+  let origin = self.convertPoint(rect.origin, fromView)
+  nsRect(origin.x, origin.y, rect.size.width, rect.size.height)
+
+proc convertRectToView*(self: NSView, rect: NSRect, toView: NSView): NSRect =
+  let origin = self.convertPointToView(rect.origin, toView)
+  nsRect(origin.x, origin.y, rect.size.width, rect.size.height)
+
+proc markTransformsDirty(view: NSView) =
+  view.xValidTransforms = false
+  view.xValidTrackingAreas = false
+  for child in view.xSubviews:
+    markTransformsDirty(child)
 
 proc new*(t: typedesc[NSView]): NSView =
   var allocated = NSView.alloc()
@@ -453,8 +683,7 @@ proc clearSuperviewRef*(viewId: IDPtr) =
   let child = ownFromId[NSView](viewId)
   if child.isNil:
     return
-  child.xSuperview = NSView(value: nil)
-  child.setNextResponder(NSResponder(value: nil))
+  child.xSetSuperview(NSView(value: nil))
 
 proc detachSubviews*(view: NSObject) =
   if view.isNil:
@@ -513,7 +742,7 @@ proc ancestorSharedWithView*(view: NSView, other: NSView): NSView =
     var rhs = other
     while not rhs.isNil:
       if lhs.value == rhs.value:
-        return retain(lhs)
+        return lhs
       let rhsParent = rhs.superview()
       if rhsParent.isNil:
         break
@@ -540,11 +769,25 @@ proc removeSubviewById(parent: NSView, childId: IDPtr): bool =
   var children = parent.subviews()
   for i, candidate in children:
     if candidate.value == childId:
+      parent.willRemoveSubview(candidate)
       clearSuperviewRef(childId)
       children.del(i)
-      parent.setSubviews(children)
+      parent.xSubviews = children
       return true
   false
+
+proc removeFromSuperviewWithoutNeedingDisplay*(view: NSView) =
+  if view.isNil:
+    return
+  let parent = view.superview()
+  if parent.isNil:
+    return
+  view.viewWillMoveToSuperview(NSView(value: nil))
+  view.viewWillMoveToWindow(NSWindow(value: nil))
+  discard removeSubviewById(parent, view.value)
+  view.setWindow(NSWindow(value: nil))
+  view.viewDidMoveToSuperview()
+  view.viewDidMoveToWindow()
 
 proc removeFromSuperview*(view: NSView) =
   if view.isNil:
@@ -552,39 +795,44 @@ proc removeFromSuperview*(view: NSView) =
   let parent = view.superview()
   if parent.isNil:
     return
-  view.xSuperview = NSView(value: nil)
-  discard removeSubviewById(parent, view.value)
+  parent.setNeedsDisplayInRect(view.frame())
+  view.removeFromSuperviewWithoutNeedingDisplay()
 
 proc addSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil or self.value == view.value:
     return
+
+  view.viewWillMoveToSuperview(self)
   let parent = view.superview()
-  if not parent.isNil and parent.value == self.value:
-    var children = self.xSubviews
-    if view notin children:
-      children.add(view)
-      self.xSubviews = children
-    view.setNextResponder(self.NSResponder)
-    return
-  if not parent.isNil:
-    view.removeFromSuperview()
+  if not parent.isNil and parent.value != self.value:
+    view.removeFromSuperviewWithoutNeedingDisplay()
+
   var children = self.xSubviews
-  if view notin children:
-    children.add(view)
-    self.xSubviews = children
-  view.xSetSuperview(retain(self))
-  view.setNextResponder(self.NSResponder)
+  for i, existing in children:
+    if existing.value == view.value:
+      children.del(i)
+      break
+  children.add(view)
+  self.xSubviews = children
+
+  view.xSetSuperview(self)
+  view.setWindow(self.window())
+  markTransformsDirty(view)
+  self.setNeedsDisplayInRect(view.frame())
+
+  self.didAddSubview(view)
+  view.viewDidMoveToSuperview()
 
 proc removeSubview*(self: NSView, view: NSView) =
   if self.isNil or view.isNil:
     return
-  discard removeSubviewById(self, view.value)
+  view.removeFromSuperview()
 
 proc viewWithTag*(view: NSView, wantedTag: int): NSView =
   if view.isNil:
     return NSView(value: nil)
   if view.xTag == wantedTag:
-    return retain(view)
+    return view
   for child in view.subviews():
     if child.isNil:
       continue

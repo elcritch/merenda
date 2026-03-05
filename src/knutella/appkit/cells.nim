@@ -8,11 +8,25 @@ import ./images
 import ./attributedstrings
 import ./formatters
 import ./fonts
+import ./events
+import ./views
 
 objcImpl:
   type UpdateCell* {.structural.} =
     concept self
         method updateCell*(self: UpdateCell, cell: NSCell)
+
+objcImpl:
+  type ControlViewWindowProvider* {.structural.} =
+    concept self
+        method window*(self: ControlViewWindowProvider): NSWindow
+
+objcImpl:
+  type CursorWindowInvalidator* {.structural.} =
+    concept self
+        method invalidateCursorRectsForView*(
+            self: CursorWindowInvalidator, view: NSView
+        )
 
 proc defaultFocusRingType*(t: typedesc[NSCell]): NSFocusRingType =
   NSFocusRingTypeExterior
@@ -121,10 +135,10 @@ objcImpl:
     xBackgroundStyle {.set: setBackgroundStyle, get: backgroundStyle.}:
       NSBackgroundStyle
 
-    xEnabled {.set: setEnabled, get: isEnabled.}: bool
-    xEditable {.set: setEditable, get: isEditable.}: bool
+    xEnabled {.get: isEnabled.}: bool
+    xEditable {.get: isEditable.}: bool
     xRichText: bool
-    xSelectable {.set: setSelectable, get: isSelectable.}: bool
+    xSelectable {.get: isSelectable.}: bool
     xScrollable {.set: setScrollable, get: isScrollable.}: bool
     xBordered {.get: isBordered.}: bool
     xBezeled {.set: setBezeled, get: isBezeled.}: bool
@@ -146,6 +160,7 @@ objcImpl:
     initIvarFields(result)
 
     result.xFocusRingType = NSCell.defaultFocusRingType()
+    result.xFont = NSFont.userFontOfSize(0.0)
     result.xObjectValue = string
     result.xCellType = NSTextCellType
     result.xEnabled = true
@@ -175,25 +190,10 @@ objcImpl:
   method encodeWithCoder*(self: NSCell, coder: ID) =
     return
 
-  method controlView*(self: NSCell): NSView =
-    return NSView(value: nil)
-
-  method setControlView*(self: NSCell, view: NSView) =
-    discard # noop
-
   method state*(self: NSCell): NSCellState =
     if self.xAllowsMixedState:
       return self.xState
     (abs(self.xState.cint)).NSCellState
-
-  method target*(self: NSCell): ID =
-    ID(value: nil)
-
-  method action*(self: NSCell): SEL =
-    nil
-
-  method tag*(self: NSCell): int =
-    -1
 
   method wraps*(self: NSCell): bool =
     self.xLineBreakMode in {NSLineBreakByWordWrapping, NSLineBreakByCharWrapping}
@@ -213,7 +213,7 @@ objcImpl:
         return formatted
 
     if self.xObjectValue.isNil:
-      return retain(@ns"")
+      return @ns""
 
     let vobj = self.xObjectValue.NSObject
     if vobj.isKindOfClass(NSAttributedString):
@@ -225,7 +225,7 @@ objcImpl:
     if vobj.isWrapper(DescriptionValue):
       return vobj.castWrapper(DescriptionValue).description()
 
-    retain(@ns"")
+    @ns""
 
   method intValue*(self: NSCell): cint =
     let vobj = self.xObjectValue.NSObject
@@ -278,15 +278,45 @@ objcImpl:
       return NSObject(value: nil)
     return self.xRepresentedObject.NSObject
 
+  method controlView*(self: NSCell): NSView =
+    NSView(value: nil)
+
+  method target*(self: NSCell): ID =
+    ID(value: nil)
+
+  method action*(self: NSCell): SEL =
+    nil
+
+  method tag*(self: NSCell): int =
+    -1
+
+  method setControlView*(self: NSCell, view: NSView) =
+    discard
+
+  method setTarget*(self: NSCell, target: ID) =
+    raise newException(CatchableError, "-[NSCell setTarget:] Unimplemented")
+
+  method setAction*(self: NSCell, action: SEL) =
+    raise newException(CatchableError, "-[NSCell setAction:] Unimplemented")
+
+  method setTag*(self: NSCell, tag: int) =
+    raise newException(CatchableError, "-[NSCell setTag:] Unimplemented")
+
   method setType*(self: NSCell, cellType: NSCellType) =
     if self.xCellType != cellType:
       self.xCellType = cellType
       if cellType == NSTextCellType:
         self.setTitle(@ns"Cell")
-        self.setFont(NSFont(value: nil))
+        self.setFont(NSFont.systemFontOfSize(15.0))
+      let controlView = self.controlView()
+      let window =
+        ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
+      ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
+        controlView
+      )
 
   method setState*(self: NSCell, value: int) =
-    let ival = value.int
+    let ival = value
     if self.xAllowsMixedState:
       if ival < 0:
         self.xState = NSMixedState
@@ -295,29 +325,17 @@ objcImpl:
       else:
         self.xState = NSOffState
     else:
-      self.xState = ival.clamp(-1, 1).NSCellState
+      self.xState = (if abs(ival) > 0: NSOnState else: NSOffState)
 
   method nextState*(self: NSCell): NSCellState =
-    case self.state():
-    of NSMixedState:
-      if self.xAllowsMixedState:
-        return NSOnState
-      else:
-        return NSOffState
+    if self.xAllowsMixedState:
+      let value = self.state().int
+      (value - (if value == NSMixedState.int: -2 else: 1)).NSCellState
     else:
-      return self.state()
+      (1 - self.state().int).NSCellState
 
   method setNextState*(self: NSCell) =
     self.xState = self.nextState()
-
-  method setTarget*(self: NSCell, target: ID) =
-    raise newException(CatchableError, "-[NSCell setTarget:] is unimplemented")
-
-  method setAction*(self: NSCell, action: SEL) =
-    raise newException(CatchableError, "-[NSCell setAction:] is unimplemented")
-
-  method setTag*(self: NSCell, tag: int) =
-    raise newException(CatchableError, "-[NSCell setTag:] is unimplemented")
 
   method setEntryType*(self: NSCell, entryType: int) =
     self.xEntryType = entryType
@@ -327,6 +345,40 @@ objcImpl:
     if not image.isNil:
       self.setType(NSImageCellType)
     self.xImage = image
+    ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
+
+  method setEnabled*(self: NSCell, flag: bool) =
+    if self.xEnabled == flag:
+      return
+    self.xEnabled = flag
+    let controlView = self.controlView()
+    let window =
+      ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
+    ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
+      controlView
+    )
+
+  method setEditable*(self: NSCell, flag: bool) =
+    if self.xEditable == flag:
+      return
+    self.xEditable = flag
+    let controlView = self.controlView()
+    let window =
+      ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
+    ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
+      controlView
+    )
+
+  method setSelectable*(self: NSCell, flag: bool) =
+    if self.xSelectable == flag:
+      return
+    self.xSelectable = flag
+    let controlView = self.controlView()
+    let window =
+      ID(value: controlView.value).asWrapper(ControlViewWindowProvider).window()
+    ID(value: window.value).asWrapper(CursorWindowInvalidator).invalidateCursorRectsForView(
+      controlView
+    )
 
   method setWraps*(self: NSCell, wraps: bool) =
     self.xLineBreakMode =
@@ -342,17 +394,16 @@ objcImpl:
   method setFloatingPointFormat*(
       self: NSCell, fpp: bool, left {.kw("left").}: uint, right {.kw("right").}: uint
   ) =
-    return
+    discard
 
   method setObjectValue*(self: NSCell, value: NSObject) =
     let controlView = self.controlView()
-    if not controlView.isNil:
-      willChangeValueForKey(controlView.NSObject, "objectValue")
+    willChangeValueForKey(controlView.NSObject, "objectValue")
     self.xObjectValue = value
     self.xTitleOrAttributedTitle = value
     self.xHasValidObjectValue = true
-    if not controlView.isNil:
-      didChangeValueForKey(controlView.NSObject, "objectValue")
+    didChangeValueForKey(controlView.NSObject, "objectValue")
+    ID(value: controlView.value).asWrapper(UpdateCell).updateCell(self)
 
   method setStringValue*(self: NSCell, value: NSString) =
     if value.isNil:
@@ -402,6 +453,7 @@ objcImpl:
     self.xObjectValue = value.NSObject
     self.xTitleOrAttributedTitle = value.NSObject
     self.xHasValidObjectValue = true
+    ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
 
   method setRepresentedObject*(self: NSCell, representedObject: NSObject) =
     self.xRepresentedObject = representedObject
@@ -409,7 +461,7 @@ objcImpl:
   method setControlSize*(self: NSCell, size: NSControlSize) =
     self.xControlSize = size
     self.xFont = NSFont.userFontOfSize(16'f32 - self.xControlSize.float*2'f32)
-    self.controlView.asWrapper(UpdateCell).updateCell(self)
+    ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
     let provider = asProto[NSObjectValueProvider](sender)
@@ -501,7 +553,7 @@ objcImpl:
       view {.kw("inView").}: NSView,
       mouseIsUp {.kw("mouseIsUp").}: bool,
   ) =
-    return
+    discard
 
   method trackMouse*(
       self: NSCell,
@@ -510,12 +562,23 @@ objcImpl:
       view {.kw("ofView").}: NSView,
       untilMouseUp {.kw("untilMouseUp").}: bool,
   ): bool =
-    if event.isNil or view.isNil:
+    let lastPoint = event.locationInWindow()
+    if not self.startTrackingAt(lastPoint, view):
       return false
-    if not self.startTrackingAt(nsPoint(0, 0), view):
+    let localPoint = view.convertPoint(lastPoint, NSView(value: nil))
+    let isWithinCellFrame = view.mouse(localPoint, inRect = frame)
+
+    if not untilMouseUp and not isWithinCellFrame:
+      self.stopTracking(lastPoint, lastPoint, view, false)
       return false
-    self.stopTracking(nsPoint(0, 0), nsPoint(0, 0), view, true)
-    true
+
+    if not self.continueTracking(lastPoint, lastPoint, view):
+      self.stopTracking(lastPoint, lastPoint, view, false)
+      return false
+
+    let finished = event.`type`() == NSLeftMouseUp
+    self.stopTracking(lastPoint, lastPoint, view, finished)
+    finished or isWithinCellFrame
 
   method setUpFieldEditorAttributes*(self: NSCell, editor: NSText): NSText =
     editor
@@ -528,7 +591,10 @@ objcImpl:
       delegate {.kw("delegate").}: ID,
       event {.kw("event").}: NSEvent,
   ) =
-    return
+    if (not self.isEditable() and not self.isSelectable()) or view.isNil or
+        editor.isNil or self.font().isNil or self.cellType() != NSTextCellType:
+      return
+    discard self.setUpFieldEditorAttributes(editor)
 
   method selectWithFrame*(
       self: NSCell,
@@ -539,7 +605,10 @@ objcImpl:
       location {.kw("start").}: int,
       length {.kw("length").}: int,
   ) =
-    return
+    if (not self.isEditable() and not self.isSelectable()) or view.isNil or
+        editor.isNil or self.font().isNil or self.cellType() != NSTextCellType:
+      return
+    discard self.setUpFieldEditorAttributes(editor)
 
   method endEditing*(self: NSCell, editor: NSText) =
     if editor.isNil:
@@ -549,7 +618,7 @@ objcImpl:
       self.setStringValue(NSString(sendId(editor, getSelector("string"))))
 
   method resetCursorRect*(self: NSCell, rect: NSRect, view {.kw("inView").}: NSView) =
-    return
+    discard
 
   method description*(self: NSCell): NSString =
     let details =
@@ -572,8 +641,7 @@ objcImpl:
       asTypeRaw[NSActionCell](callSuperIdFrom(NSActionCell, self, getSelector("init")))
     if result.isNil:
       return
-    result.setEnabled(true)
-    result.xTag = -1
+    initIvarFields(result)
 
   method dealloc(self: NSActionCell) {.used.} =
     destroyIvarFields(self)
@@ -601,4 +669,3 @@ proc new*(t: typedesc[NSActionCell]): NSActionCell =
 
 proc setState*(self: NSCell, value: NSCellState) =
   self.setState(value.int)
-
