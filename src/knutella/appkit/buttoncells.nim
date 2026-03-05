@@ -158,10 +158,14 @@ objcImpl:
   method titleForHighlight*(self: NSButtonCell): NSAttributedString =
     if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
         (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
-      let alternate = self.attributedAlternateTitle()
-      if not alternate.isNil and self.alternateTitle().len > 0:
-        return alternate
-    self.attributedTitle()
+      let alternateTitle = self.alternateTitle()
+      if alternateTitle.len > 0:
+        if not self.xAttributedAlternateTitle.isNil:
+          return self.xAttributedAlternateTitle
+        return makeAttributedString(alternateTitle)
+    if not self.xAttributedTitle.isNil:
+      return self.xAttributedTitle
+    makeAttributedString(self.title())
 
   method imageForHighlight*(self: NSButtonCell): NSImage =
     if self.bezelStyle() == NSDisclosureBezelStyle:
@@ -357,7 +361,15 @@ objcImpl:
       contentFrame = insetRect(contentFrame, 2.0, 2.0)
 
     let image = self.imageForHighlight()
-    let title = self.titleForHighlight()
+    var title = self.xAttributedTitle
+    if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
+        (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
+      let alternateTitle = self.alternateTitle()
+      if alternateTitle.len > 0:
+        if not self.xAttributedAlternateTitle.isNil:
+          title = self.xAttributedAlternateTitle
+    if title.isNil:
+      discard
     var imagePosition = self.imagePosition()
     if self.bezelStyle() == NSDisclosureBezelStyle:
       imagePosition = NSImageOnly
@@ -507,15 +519,26 @@ objcImpl:
 
   method setObjectValue*(self: NSButtonCell, value: NSObject) =
     let val: int =
-      if ID(value: value.value).isWrapper(IntValue):
-        ID(value: value.value).asWrapper(IntValue).intValue()
+      if value.isWrapper(IntValue):
+        value.asWrapper(IntValue).intValue()
       else:
         0
+    # let valueId = cast[ID](value)
+    # let val: int =
+    #   if value.respondsToSelector("intValue"):
+    #     cast[proc(self: IDPtr, op: SEL): cint {.cdecl, varargs.}](objc_msgSend)(
+    #       valueId.value, getSelector("intValue")
+    #     ).int
+    #   else:
+    #     0
     discard callSuperAs[ID, int](self, @selector"setState:", val)
 
-    self.controlView().willChangeValueForKey(@ns"objectValue")
+    let controlView = self.controlView()
+    controlView.willChangeValueForKey(@ns"objectValue")
     self.xObjectValue = @ns(callSuperAs[int](self, @selector"state").int)
-    self.controlView().didChangeValueForKey(@ns"objectValue")
+    controlView.didChangeValueForKey(@ns"objectValue")
+    if controlView.respondsToSelector("updateCell:"):
+      controlView.asWrapper(UpdateCell).updateCell(self)
 
   method performClick*(self: NSButtonCell, sender: NSObject) =
     if self.isNil or not self.isEnabled():

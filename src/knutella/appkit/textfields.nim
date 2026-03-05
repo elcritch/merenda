@@ -39,7 +39,7 @@ objcImpl:
     result.scrollable = true
     result.bordered = true
     result.bezeled = true
-    result.alignment = NSNaturalTextAlignment
+    result.setAlignment(NSNaturalTextAlignment)
     result.xStringValue = @ns""
     result.xDelegate = nil
     result.xErrorAction = nil
@@ -60,7 +60,9 @@ objcImpl:
     if result.isNil:
       return
     result.to(NSView).setFrame(
-      nsRect(x.float32, y.float32, max(width.float32, 0.0'f32), max(height.float32, 0.0'f32))
+      nsRect(
+        x.float32, y.float32, max(width.float32, 0.0'f32), max(height.float32, 0.0'f32)
+      )
     )
 
   method setTextColor*(
