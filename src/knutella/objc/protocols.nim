@@ -29,7 +29,13 @@ objcImpl:
         method strings*(self: StringValue): NSString {.name: "string".}
 
 objcImpl:
+  type DescriptionWithLocaleValue* {.structural.} =
+    concept self
+        method descriptionWithLocale*(
+          self: DescriptionWithLocaleValue, locale: NSObject
+        ): NSString
+
+objcImpl:
   type DescriptionValue* {.structural.} =
     concept self
         method description*(self: DescriptionValue): NSString
-

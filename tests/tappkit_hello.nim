@@ -23,6 +23,26 @@ objcImpl:
   method setObjectValue*(self: TSetObjectRoutingCell, value: NSObject) =
     self.xSetObjectValueSeen = true
 
+objcImpl:
+  type TLocaleDescriptionProbe {.impl: NSCopying.} = object of NSObject
+
+  method descriptionWithLocale*(
+      self: TLocaleDescriptionProbe, locale: NSObject
+  ): NSString =
+    @ns"with-locale"
+
+  method copyWithZone*(self: TLocaleDescriptionProbe, zone: pointer): NSObject =
+    retain(self).NSObject
+
+objcImpl:
+  type TDescriptionProbe {.impl: NSCopying.} = object of NSObject
+
+  method description*(self: TDescriptionProbe): NSString =
+    @ns"plain-description"
+
+  method copyWithZone*(self: TDescriptionProbe, zone: pointer): NSObject =
+    retain(self).NSObject
+
 suite "knutella appkit hello world":
   proc controlStringValue(control: NSControl): NSString =
     control.stringValue()
@@ -669,6 +689,21 @@ suite "knutella appkit hello world":
     paragraph.value = nil
     descriptor.value = nil
     font.value = nil
+
+  test "cell stringValue falls back through description selectors":
+    var cell = NSCell.new()
+    var localeProbe = TLocaleDescriptionProbe.new()
+    var descriptionProbe = TDescriptionProbe.new()
+
+    cell.setObjectValue(localeProbe.NSObject)
+    check(cell.stringValue() == @ns"with-locale")
+
+    cell.setObjectValue(descriptionProbe.NSObject)
+    check(cell.stringValue() == @ns"plain-description")
+
+    descriptionProbe.value = nil
+    localeProbe.value = nil
+    cell.value = nil
 
   test "clip view applies figdraw clipping and scroll offset in render tree":
     var window = newWindow(0, 0, 320, 240, "Clip Render")

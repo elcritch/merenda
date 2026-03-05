@@ -238,8 +238,15 @@ objcImpl:
     if vobj.isKindOfClass(NSString):
       return vobj.to(NSString)
 
+    if vobj.isWrapper(DescriptionWithLocaleValue):
+      let localized = vobj.asWrapper(DescriptionWithLocaleValue)
+      if not localized.isNil:
+        return localized.descriptionWithLocale(NSObject(value: nil))
+
     if vobj.isWrapper(DescriptionValue):
-      return vobj.castWrapper(DescriptionValue).description()
+      let described = vobj.asWrapper(DescriptionValue)
+      if not described.isNil:
+        return described.description()
 
     @ns""
 
@@ -477,7 +484,7 @@ objcImpl:
 
   method setObjectValue*(self: NSCell, value: NSObject) =
     var valueCopy = asProto[NSCopying](value)
-    if valueCopy .isNil:
+    if valueCopy.isNil:
       raise newException(Defect, "nscopying expected")
 
     let copiedValue = valueCopy.copyWithZone(nil)
