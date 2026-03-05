@@ -385,7 +385,8 @@ proc addViewTree(
   )
   NSGraphicsContext.saveGraphicsState()
   NSGraphicsContext.setCurrentContext(renderGraphicsContext)
-  pushCurrentFocusView(view)
+  NSGraphicsContext.currentContext().pushFocusView(view)
+
   try:
     view.drawRect(view.bounds())
   finally:

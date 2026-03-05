@@ -25,12 +25,12 @@ suite "appkit nsgraphicscontext":
       cast[pointer](0x2), flipped = true
     )
     NSGraphicsContext.setCurrentContext(contextA)
-    check NSCurrentGraphicsPort() == cast[pointer](0x1)
+    check NSGraphicsContext.currentContext().graphicsPort() == cast[pointer](0x1)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.setCurrentContext(contextB)
-    check NSCurrentGraphicsPort() == cast[pointer](0x2)
+    check NSGraphicsContext.currentContext().graphicsPort() == cast[pointer](0x2)
     NSGraphicsContext.restoreGraphicsState()
-    check NSCurrentGraphicsPort() == cast[pointer](0x1)
+    check NSGraphicsContext.currentContext().graphicsPort() == cast[pointer](0x1)
 
   test "focus stack drives flipped lookup":
     NSGraphicsContext.setCurrentContext(NSGraphicsContext(value: nil))
@@ -39,11 +39,11 @@ suite "appkit nsgraphicscontext":
     )
     NSGraphicsContext.setCurrentContext(context)
     let scroller = NSScroller.new()
-    pushCurrentFocusView(scroller.NSView)
-    let stack = NSCurrentFocusStack()
+    NSGraphicsContext.currentContext().pushFocusView(scroller.NSView)
+    let stack = NSGraphicsContext.currentContext().focusStack()
     check stack.len == 1
     check context.isFlipped()
-    discard popCurrentFocusView()
+    discard NSGraphicsContext.currentContext().popFocusView()
     check not context.isFlipped()
 
   test "quartz debug toggles":
@@ -66,8 +66,8 @@ suite "appkit nsgraphicscontext":
     NSColor.blueColor().setFill()
     NSColor.greenColor().setStroke()
 
-    let beforeFill = currentFillColor()
-    let beforeStroke = currentStrokeColor()
+    let beforeFill = NSGraphicsContext.currentContext().fillColor()
+    let beforeStroke = NSGraphicsContext.currentContext().strokeColor()
     check approxEq(beforeFill.r, NSColor.blueColor().r)
     check approxEq(beforeFill.g, NSColor.blueColor().g)
     check approxEq(beforeFill.b, NSColor.blueColor().b)
@@ -80,8 +80,8 @@ suite "appkit nsgraphicscontext":
     NSColor.whiteColor().setStroke()
     NSGraphicsContext.restoreGraphicsState()
 
-    let restoredFill = currentFillColor()
-    let restoredStroke = currentStrokeColor()
+    let restoredFill = NSGraphicsContext.currentContext().fillColor()
+    let restoredStroke = NSGraphicsContext.currentContext().strokeColor()
     check approxEq(restoredFill.r, beforeFill.r)
     check approxEq(restoredFill.g, beforeFill.g)
     check approxEq(restoredFill.b, beforeFill.b)

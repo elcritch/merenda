@@ -244,7 +244,7 @@ proc fitSingleLineText(
   (bestText, bestLayout)
 
 proc currentFocusObject(): NSObject =
-  let stack = NSCurrentFocusStack()
+  let stack = NSGraphicsContext.currentContext().focusStack()
   if stack.isNil or stack.len <= 0:
     return NSObject(value: nil)
   let focusObj = stack[stack.len - 1]
