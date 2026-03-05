@@ -289,7 +289,10 @@ objcImpl:
     false
 
   method xInvalidateTrackingAreas*(self: NSWindow) =
-    self.xTrackingAreas = NSWindow(value: nil)
+    discard
+
+  method xResetCursorRectsInView*(self: NSWindow, view: NSView) =
+    discard
 
   method invalidateCursorRectsForView*(self: NSWindow, view: NSView) =
     view.discardCursorRects()
