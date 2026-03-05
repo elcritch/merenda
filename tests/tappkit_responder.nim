@@ -119,7 +119,7 @@ suite "appkit responder chain":
     var window = newWindow(0, 0, 240, 160, "Event Dispatch")
     var root = newView(0, 0, 240, 160)
     var spy = EventSpyView.new()
-    spy.setFrame(0.cfloat, 0.cfloat, 240.cfloat, 160.cfloat)
+    spy.setFrame(nsRect(0.cfloat, 0.cfloat, 240.cfloat, 160.cfloat))
     root.addSubview(spy)
     window.setContentView(root)
     check(window.makeFirstResponder(spy))

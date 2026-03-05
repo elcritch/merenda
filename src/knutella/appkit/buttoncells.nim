@@ -10,10 +10,11 @@ import ./formatters
 import ./cells
 
 objcImpl:
-
   type NSButtonCell* = object of NSActionCell
     xButtonTitle {.get: title.}: NSString
+    xAttributedTitle: NSAttributedString
     xAlternateTitle {.set: setAlternateTitle, get: alternateTitle.}: NSString
+    xAttributedAlternateTitle: NSAttributedString
     xAlternateImage {.set: setAlternateImage, get: alternateImage.}: NSImage
     xTransparent {.set: setTransparent, get: isTransparent.}: bool
     xKeyEquivalent {.set: setKeyEquivalent, get: keyEquivalent.}: NSString
@@ -44,7 +45,6 @@ objcImpl:
     result.setAllowsMixedState(false)
     result.xButtonTitle = @ns"Button"
     result.xAlternateTitle = @ns""
-    result.xAlternateImage = NSImage(value: nil)
     result.xKeyEquivalent = @ns""
     result.xImagePosition = NSNoImage
     result.xHighlightsByMask = {NSPushInCell}
@@ -57,16 +57,29 @@ objcImpl:
     result.setBordered(true)
     result.setBezeled(true)
     result.setAlignment(NSCenterTextAlignment)
-    result.setObjectValue(result.xButtonTitle.NSObject)
+    result.setState(NSOffState)
+    result.xObjectValue = @ns(0)
 
   method setTitle*(self: NSButtonCell, value: NSString) =
     self.xButtonTitle = value
-    self.xObjectValue = value.NSObject
-    self.xTitleOrAttributedTitle = value.NSObject
-    self.xHasValidObjectValue = true
+    self.xAttributedTitle = NSAttributedString(value: nil)
 
-  method setButtonType*(self: NSButtonCell, buttonType: cint) =
-    case buttonType.int
+  method setAttributedTitle*(self: NSButtonCell, value: NSAttributedString) =
+    self.xAttributedTitle = value
+    if value.isNil:
+      self.xButtonTitle = @ns""
+    else:
+      self.xButtonTitle = value.string()
+
+  method setAttributedAlternateTitle*(self: NSButtonCell, value: NSAttributedString) =
+    self.xAttributedAlternateTitle = value
+    if value.isNil:
+      self.xAlternateTitle = @ns""
+    else:
+      self.xAlternateTitle = value.string()
+
+  method setButtonType*(self: NSButtonCell, buttonType: NSButtonType) =
+    case buttonType
     of NSMomentaryLightButton:
       self.xHighlightsByMask = {NSChangeBackgroundCell}
       self.xShowsStateByMask = {}
@@ -120,14 +133,31 @@ objcImpl:
     self.xState = normalizeButtonState(value, self.allowsMixedState())
 
   method attributedTitle*(self: NSButtonCell): NSAttributedString =
+    if not self.xAttributedTitle.isNil:
+      return self.xAttributedTitle
     makeAttributedString(self.title())
 
   method attributedAlternateTitle*(self: NSButtonCell): NSAttributedString =
+    if not self.xAttributedAlternateTitle.isNil:
+      return self.xAttributedAlternateTitle
     makeAttributedString(self.alternateTitle())
+
+  method isOpaque*(self: NSButtonCell): bool =
+    if self.bezelStyle() == NSDisclosureBezelStyle:
+      return false
+    if self.bezelStyle() == NSTexturedSquareBezelStyle:
+      return false
+    if self.bezelStyle() == NSTexturedRoundedBezelStyle:
+      return false
+    if self.bezelStyle() == NSShadowlessSquareBezelStyle:
+      return false
+    if self.bezelStyle() == NSRecessedBezelStyle:
+      return false
+    (not self.isTransparent()) and self.isBordered()
 
   method titleForHighlight*(self: NSButtonCell): NSAttributedString =
     if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
-       (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
+        (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
       let alternate = self.attributedAlternateTitle()
       if not alternate.isNil and self.alternateTitle().len > 0:
         return alternate
@@ -142,7 +172,7 @@ objcImpl:
       return NSImage.imageNamed(@ns"NSButtonCell_disclosure_normal")
 
     if (self.highlightsBy().contains(NSContentsCell) and self.isHighlighted()) or
-       (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
+        (self.showsStateBy().contains(NSContentsCell) and boolState(self.state())):
       let alternate = self.alternateImage()
       if not alternate.isNil:
         return alternate
@@ -164,8 +194,7 @@ objcImpl:
     if (
       self.bezelStyle() == NSRoundedBezelStyle and
       self.highlightsBy().contains(NSPushInCell) and
-      self.highlightsBy().contains(NSChangeGrayCell) and
-      self.showsStateBy() == {}
+      self.highlightsBy().contains(NSChangeGrayCell) and self.showsStateBy() == {}
     ):
       let controlSize = self.controlSize().int
       if self.controlSize() != NSMiniControlSize:
@@ -239,8 +268,7 @@ objcImpl:
         return
       let highlighted = self.isHighlighted()
       let pressed =
-        boolState(self.state()) and
-        self.showsStateBy().contains(NSChangeBackgroundCell)
+        boolState(self.state()) and self.showsStateBy().contains(NSChangeBackgroundCell)
       let topGray = if pressed: 0.40 else: 0.98
       let bottomGray = if pressed: 0.30 else: 0.76
       var topHalf = drawFrame
@@ -410,10 +438,8 @@ objcImpl:
 
     let isTextured =
       self.bezelStyle() in {NSTexturedSquareBezelStyle, NSTexturedRoundedBezelStyle}
-    if self.isBordered() and
-        not isTextured and
-        self.highlightsBy().contains(NSPushInCell) and
-        self.isHighlighted():
+    if self.isBordered() and not isTextured and
+        self.highlightsBy().contains(NSPushInCell) and self.isHighlighted():
       imageRect.origin.x += 1.0
       titleRect.origin.x += 1.0
       let flipped =
@@ -479,14 +505,16 @@ objcImpl:
     resultSize.height += adjustment.size.height
     resultSize
 
-  method setObjectValue*(self: NSButtonCell, value: ID) =
+  method setObjectValue*(self: NSButtonCell, value: NSObject) =
     let val: int =
-      if value.isWrapper(IntValue): value.asWrapper(IntValue).intValue()
-      else: 0
+      if ID(value: value.value).isWrapper(IntValue):
+        ID(value: value.value).asWrapper(IntValue).intValue()
+      else:
+        0
     discard callSuperAs[ID, int](self, @selector"setState:", val)
 
     self.controlView().willChangeValueForKey(@ns"objectValue")
-    self.xObjectValue = @ns( callSuperAs[int](self, @selector"state").int )
+    self.xObjectValue = @ns(callSuperAs[int](self, @selector"state").int)
     self.controlView().didChangeValueForKey(@ns"objectValue")
 
   method performClick*(self: NSButtonCell, sender: NSObject) =

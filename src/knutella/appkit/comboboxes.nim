@@ -122,7 +122,9 @@ objcImpl:
     if result.isNil:
       return
     result.to(NSView).setFrame(
-      x.float32, y.float32, max(width.float32, 0.0'f32), max(height.float32, 0.0'f32)
+      nsRect(
+        x.float32, y.float32, max(width.float32, 0.0'f32), max(height.float32, 0.0'f32)
+      )
     )
 
   method drawRect*(self: NSComboBox, rect: NSRect) =

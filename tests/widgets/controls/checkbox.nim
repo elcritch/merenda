@@ -133,15 +133,15 @@ objcImpl:
       return
 
     var contentAlloc = NSView.alloc()
-    var contentView = contentAlloc.initWithFrame(0.0, 0.0, 300.0, 300.0)
+    var contentView = contentAlloc.initWithFrame(nsRect(0.0, 0.0, 300.0, 300.0))
     contentAlloc.value = nil
     result.setContentView(contentView)
 
     var checkBox1Alloc = NSButton.alloc()
-    result.xCheckBox1 = checkBox1Alloc.initWithFrame(30.0, 250.0, 105.0, 20.0)
+    result.xCheckBox1 = checkBox1Alloc.initWithFrame(nsRect(30.0, 250.0, 105.0, 20.0))
     checkBox1Alloc.value = nil
     result.xCheckBox1.setTitle(@ns"Unchecked")
-    result.xCheckBox1.setButtonType(NSSwitchButton.cint)
+    result.xCheckBox1.setButtonType(NSSwitchButton)
     result.xCheckBox1.setTarget(ID(value: result.value))
     result.xCheckBox1.setAction(getSelector("OnCheckBox1Click:"))
     result.xCheckBox1.setAlignment(NSNaturalTextAlignment)
@@ -149,10 +149,10 @@ objcImpl:
     result.xCheckBox1.setState(NSOffState.cint)
 
     var checkBox2Alloc = NSButton.alloc()
-    result.xCheckBox2 = checkBox2Alloc.initWithFrame(30.0, 220.0, 105.0, 20.0)
+    result.xCheckBox2 = checkBox2Alloc.initWithFrame(nsRect(30.0, 220.0, 105.0, 20.0))
     checkBox2Alloc.value = nil
     result.xCheckBox2.setTitle(@ns"Checked")
-    result.xCheckBox2.setButtonType(NSSwitchButton.cint)
+    result.xCheckBox2.setButtonType(NSSwitchButton)
     result.xCheckBox2.setTarget(ID(value: result.value))
     result.xCheckBox2.setAction(getSelector("OnCheckBox2Click:"))
     result.xCheckBox2.setAlignment(NSNaturalTextAlignment)
@@ -160,11 +160,11 @@ objcImpl:
     result.xCheckBox2.setState(NSOnState.cint)
 
     var checkBox3Alloc = NSButton.alloc()
-    result.xCheckBox3 = checkBox3Alloc.initWithFrame(30.0, 190.0, 105.0, 20.0)
+    result.xCheckBox3 = checkBox3Alloc.initWithFrame(nsRect(30.0, 190.0, 105.0, 20.0))
     checkBox3Alloc.value = nil
     result.xCheckBox3.setTitle(@ns"Mixed")
     result.xCheckBox3.setAllowsMixedState(true)
-    result.xCheckBox3.setButtonType(NSSwitchButton.cint)
+    result.xCheckBox3.setButtonType(NSSwitchButton)
     result.xCheckBox3.setTarget(ID(value: result.value))
     result.xCheckBox3.setAction(getSelector("OnCheckBox3Click:"))
     result.xCheckBox3.setAlignment(NSNaturalTextAlignment)
@@ -172,10 +172,10 @@ objcImpl:
     result.xCheckBox3.setState(NSMixedState.cint)
 
     var checkBox4Alloc = NSButton.alloc()
-    result.xCheckBox4 = checkBox4Alloc.initWithFrame(30.0, 160.0, 105.0, 25.0)
+    result.xCheckBox4 = checkBox4Alloc.initWithFrame(nsRect(30.0, 160.0, 105.0, 25.0))
     checkBox4Alloc.value = nil
     result.xCheckBox4.setTitle(@ns"Checked")
-    result.xCheckBox4.setButtonType(NSOnOffButton.cint)
+    result.xCheckBox4.setButtonType(NSOnOffButton)
     result.xCheckBox4.setBezelStyle(NSRoundedBezelStyle)
     result.xCheckBox4.setTarget(ID(value: result.value))
     result.xCheckBox4.setAction(getSelector("OnCheckBox4Click:"))
@@ -184,10 +184,10 @@ objcImpl:
     result.xCheckBox4.setState(NSOnState.cint)
 
     var checkBox5Alloc = NSButton.alloc()
-    result.xCheckBox5 = checkBox5Alloc.initWithFrame(30.0, 130.0, 105.0, 25.0)
+    result.xCheckBox5 = checkBox5Alloc.initWithFrame(nsRect(30.0, 130.0, 105.0, 25.0))
     checkBox5Alloc.value = nil
     result.xCheckBox5.setTitle(@ns"Unchecked")
-    result.xCheckBox5.setButtonType(NSOnOffButton.cint)
+    result.xCheckBox5.setButtonType(NSOnOffButton)
     result.xCheckBox5.setBezelStyle(NSRoundedBezelStyle)
     result.xCheckBox5.setTarget(ID(value: result.value))
     result.xCheckBox5.setAction(getSelector("OnCheckBox5Click:"))

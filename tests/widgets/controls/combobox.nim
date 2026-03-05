@@ -92,12 +92,12 @@ objcImpl:
       return
 
     var contentAlloc = NSView.alloc()
-    var contentView = contentAlloc.initWithFrame(0.0, 0.0, 300.0, 300.0)
+    var contentView = contentAlloc.initWithFrame(nsRect(0.0, 0.0, 300.0, 300.0))
     contentAlloc.value = nil
     result.setContentView(contentView)
 
     var comboBox1Alloc = NSComboBox.alloc()
-    result.xComboBox1 = comboBox1Alloc.initWithFrame(10.0, 260.0, 121.0, 26.0)
+    result.xComboBox1 = comboBox1Alloc.initWithFrame(nsRect(10.0, 260.0, 121.0, 26.0))
     comboBox1Alloc.value = nil
     result.xComboBox1.addItemWithObjectValue(@ns"item1")
     result.xComboBox1.addItemWithObjectValue(@ns"item2")
@@ -107,7 +107,7 @@ objcImpl:
     result.xComboBox1.selectItemAtIndex(1)
 
     var comboBox2Alloc = NSComboBox.alloc()
-    result.xComboBox2 = comboBox2Alloc.initWithFrame(10.0, 220.0, 121.0, 26.0)
+    result.xComboBox2 = comboBox2Alloc.initWithFrame(nsRect(10.0, 220.0, 121.0, 26.0))
     comboBox2Alloc.value = nil
     result.xComboBox2.setEditable(false)
     result.xComboBox2.addItemWithObjectValue(@ns"item1")
@@ -120,9 +120,7 @@ objcImpl:
     contentView.addSubview(result.xComboBox2)
     result.setTitle(@ns"ComboBox Example")
     result.setIsVisible(true)
-    dumpComboBoxLayout(
-      "init", result as NSWindow, result.xComboBox1, result.xComboBox2
-    )
+    dumpComboBoxLayout("init", result as NSWindow, result.xComboBox1, result.xComboBox2)
     contentView.value = nil
 
   method windowShouldClose*(self: ComboBoxWindow, sender: NSObject): bool =
@@ -137,10 +135,7 @@ objcImpl:
       return
     self.xComboBox2.selectItemAtIndex(self.xComboBox1.indexOfSelectedItem())
     dumpComboBoxLayout(
-      "comboBox1-change",
-      self as NSWindow,
-      self.xComboBox1,
-      self.xComboBox2,
+      "comboBox1-change", self as NSWindow, self.xComboBox1, self.xComboBox2
     )
 
   method OnComboBox2SelectedItemChange*(self: ComboBoxWindow, sender: NSObject) =
@@ -148,10 +143,7 @@ objcImpl:
       return
     self.xComboBox1.selectItemAtIndex(self.xComboBox2.indexOfSelectedItem())
     dumpComboBoxLayout(
-      "comboBox2-change",
-      self as NSWindow,
-      self.xComboBox1,
-      self.xComboBox2,
+      "comboBox2-change", self as NSWindow, self.xComboBox1, self.xComboBox2
     )
 
   method dealloc(self: ComboBoxWindow) {.used.} =
@@ -171,18 +163,12 @@ when isMainModule:
   if getEnv("KNUTELLA_COMBOBOX_OPEN_POPUP").strip().len > 0:
     window.xComboBox1.openPopup()
     dumpComboBoxLayout(
-      "popup-open",
-      window.NSWindow,
-      window.xComboBox1,
-      window.xComboBox2,
+      "popup-open", window.NSWindow, window.xComboBox1, window.xComboBox2
     )
 
   if getEnv("KNUTELLA_COMBOBOX_TRIGGER_CALLBACK").strip().len > 0:
     dumpComboBoxLayout(
-      "post-front",
-      window.NSWindow,
-      window.xComboBox1,
-      window.xComboBox2,
+      "post-front", window.NSWindow, window.xComboBox1, window.xComboBox2
     )
     window.OnComboBox1SelectedItemChange(window.NSObject)
 

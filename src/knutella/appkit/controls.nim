@@ -247,5 +247,8 @@ proc new*(t: typedesc[NSControl]): NSControl =
   var allocated = NSControl.alloc()
   result = initOwned(move(allocated))
 
+proc setFrame*[T: SomeNumber](self: NSControl, x, y, width, height: T) =
+  self.NSView.setFrame(nsRect(x.float32, y.float32, width.float32, height.float32))
+
 proc setStringValue*(control: NSControl, value: string) =
   control.setStringValue(ns(value))

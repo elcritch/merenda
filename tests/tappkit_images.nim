@@ -49,7 +49,7 @@ suite "appkit nsimage, nsimagecell, nsimageview":
     check(not image.isNil)
 
     var view = NSImageView.new()
-    view.setFrame(4.0, 8.0, 96.0, 64.0)
+    view.setFrame(nsRect(4.0, 8.0, 96.0, 64.0))
     view.setImage(image)
     view.setImageScaling(NSImageScaleProportionallyUpOrDown)
     view.setImageAlignment(NSImageAlignTopLeft)
@@ -71,7 +71,7 @@ suite "appkit nsimage, nsimagecell, nsimageview":
     var window = newWindow(0.0, 0.0, 220.0, 160.0, "image-render")
     var root = newView(0.0, 0.0, 220.0, 160.0)
     var imageView = NSImageView.new()
-    imageView.setFrame(20.0, 30.0, 80.0, 60.0)
+    imageView.setFrame(nsRect(20.0, 30.0, 80.0, 60.0))
     imageView.setImage(image)
     imageView.setImageScaling(NSImageScaleAxesIndependently)
     imageView.setImageAlignment(NSImageAlignCenter)

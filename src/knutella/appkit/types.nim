@@ -203,6 +203,10 @@ type
 
 const
   NSNoCellMask*: set[NSCellMask] = {}
+  NSContentsCellMask*: set[NSCellMask] = {NSContentsCell}
+  NSPushInCellMask*: set[NSCellMask] = {NSPushInCell}
+  NSChangeGrayCellMask*: set[NSCellMask] = {NSChangeGrayCell}
+  NSChangeBackgroundCellMask*: set[NSCellMask] = {NSChangeBackgroundCell}
 
 type
   NSAutoResizingMask* {.size: sizeof(cint).} = enum
@@ -416,4 +420,3 @@ proc nsContainsRect*(outer: NSRect, inner: NSRect): bool {.inline.} =
 
 proc nsIntersectsRect*(a: NSRect, b: NSRect): bool {.inline.} =
   not isEmpty(nsIntersectionRect(a, b))
-

@@ -136,8 +136,8 @@ objcImpl:
     if result.isNil:
       return
     result.xTableView = NSTableView(value: nil)
-    result.setFrame(0.0, 0.0, 1.0, defaultHeaderHeight)
-    result.setBackgroundColor(0.90, 0.90, 0.90, 1.0)
+    result.setFrame(nsRect(0.0, 0.0, 1.0, defaultHeaderHeight))
+    result.setBackgroundColor(nsColor(0.90, 0.90, 0.90, 1.0))
 
   method isFlipped*(self: NSTableHeaderView): bool =
     true
@@ -175,7 +175,7 @@ objcImpl:
       asTypeRaw[NSTableView](callSuperIdFrom(NSTableView, self, getSelector("init")))
     if result.isNil:
       return
-    result.setFrame(0.0, 0.0, 320.0, 180.0)
+    result.setFrame(nsRect(0.0, 0.0, 320.0, 180.0))
     result.xColumns = @[]
     result.xDataSource.value = nil
     result.xDelegate.value = nil
@@ -190,7 +190,7 @@ objcImpl:
     if not result.xHeaderViewObj.isNil:
       result.xHeaderViewObj.setTableView(result)
       result.xHeaderViewObj.setFrame(
-        0.0, 0.0, max(result.frame().size.width, 1.0), defaultHeaderHeight
+        nsRect(0.0, 0.0, max(result.frame().size.width, 1.0), defaultHeaderHeight)
       )
 
   method initWithFrame*(
@@ -203,7 +203,7 @@ objcImpl:
     result = self.init()
     if result.isNil:
       return
-    result.setFrame(x.float32, y.float32, max(width, 1.0), max(height, 1.0))
+    result.setFrame(nsRect(x.float32, y.float32, max(width, 1.0), max(height, 1.0)))
 
   method isFlipped*(self: NSTableView): bool =
     true
@@ -429,7 +429,7 @@ proc rebuildHeader(tableView: NSTableView) =
       else:
         column.identifier()
     var label = NSTextField.new()
-    label.setFrame(x, 0.0, width, defaultHeaderHeight)
+    label.setFrame(nsRect(x, 0.0, width, defaultHeaderHeight))
     label.setStringValue(title)
     label.setEditable(false)
     label.setSelectable(false)
@@ -440,7 +440,9 @@ proc rebuildHeader(tableView: NSTableView) =
     label.setBackgroundColor(nsColor(0.92, 0.92, 0.92, 1.0))
     header.addSubview(label)
     x += width
-  header.setFrame(0.0, 0.0, max(x, tableView.frame().size.width), defaultHeaderHeight)
+  header.setFrame(
+    nsRect(0.0, 0.0, max(x, tableView.frame().size.width), defaultHeaderHeight)
+  )
   header.setNeedsDisplay(true)
 
 proc rebuildRows(tableView: NSTableView) =

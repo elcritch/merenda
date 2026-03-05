@@ -19,8 +19,9 @@ objcImpl:
     appRunning: bool
 
   method init*(self: var NSApplication): NSApplication =
-    result =
-      asTypeRaw[NSApplication](callSuperIdFrom(NSApplication, self, getSelector("init")))
+    result = asTypeRaw[NSApplication](
+      callSuperIdFrom(NSApplication, self, getSelector("init"))
+    )
     if result.isNil:
       return
     result.appWindows = @[]
@@ -56,7 +57,7 @@ objcImpl:
       self: NSApplication,
       action: SEL,
       target {.kw("to").}: ID,
-      sender {.kw("from").}: ID
+      sender {.kw("from").}: ID,
   ): bool =
     let senderObj = self.NSObject
     if not target.isNil:
@@ -194,12 +195,13 @@ proc newWindow*(x, y, width, height: float32, title: string): NSWindow =
 
 proc newView*(x, y, width, height: float32): NSView =
   var vAlloc = NSView.alloc()
-  result = vAlloc.initWithFrame(x.float32, y.float32, width.float32, height.float32)
+  result =
+    vAlloc.initWithFrame(nsRect(x.float32, y.float32, width.float32, height.float32))
   vAlloc.value = nil
 
 proc newTextField*(x, y, width, height: float32, value: NSString = @ns""): NSTextField =
   result = NSTextField.new()
-  result.setFrame(x.float32, y.float32, width.float32, height.float32)
+  result.setFrame(nsRect(x.float32, y.float32, width.float32, height.float32))
   result.setStringValue(value)
 
 proc newTextField*(x, y, width, height: float32, value: string): NSTextField =
@@ -207,7 +209,7 @@ proc newTextField*(x, y, width, height: float32, value: string): NSTextField =
 
 proc newButton*(x, y, width, height: float32, title: NSString = @ns"Button"): NSButton =
   result = NSButton.new()
-  result.setFrame(x.float32, y.float32, width.float32, height.float32)
+  result.setFrame(nsRect(x.float32, y.float32, width.float32, height.float32))
   result.setTitle(title)
 
 proc newButton*(x, y, width, height: float32, title: string): NSButton =

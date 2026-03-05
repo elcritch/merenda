@@ -102,7 +102,7 @@ suite "knutella appkit hello world":
         let window = newWindow(100, 120, 640, 420, "KNutella Hello World")
         let root = newView(0, 0, 640, 420)
         root.setTag(100)
-        root.setBackgroundColor(0.96, 0.96, 0.98, 1.0)
+        root.setBackgroundColor(nsColor(0.96, 0.96, 0.98, 1.0))
         root.setFrameOrigin(nsPoint(0, 0))
         root.setFrameSize(nsSize(640, 420))
 
@@ -175,24 +175,24 @@ suite "knutella appkit hello world":
     check(button.isHighlighted())
     button.highlight(false)
     check(not button.isHighlighted())
-    button.setButtonType(NSPushOnPushOffButton.cint)
-    check(button.highlightsBy() == (NSPushInCellMask or NSChangeGrayCellMask))
+    button.setButtonType(NSPushOnPushOffButton)
+    check(button.highlightsBy() == (NSPushInCellMask + NSChangeGrayCellMask))
     check(button.showsStateBy() == NSChangeBackgroundCellMask)
     button.click()
     check(button.state() == NSOnState)
     button.setAllowsMixedState(true)
     button.click()
-    check(button.state() == NSMixedState)
+    check(button.state() == NSOffState)
     button.setState(NSOffState.cint)
     check(button.state() == NSOffState)
     button.setAllowsMixedState(true)
     button.click()
-    check(button.state() == NSOnState)
-    button.click()
     check(button.state() == NSMixedState)
+    button.click()
+    check(button.state() == NSOnState)
     button.setEnabled(false)
     button.click()
-    check(button.state() == NSMixedState)
+    check(button.state() == NSOnState)
 
     var win = newWindow(5, 6, 200, 120, "Resize")
     win.setFrameOrigin(nsPoint(10, 20))
@@ -209,15 +209,10 @@ suite "knutella appkit hello world":
 
   test "control dispatch routes to subclass string and click behavior":
     var field = newTextField(0, 0, 240, 30, "Initial")
-    echo "A1:"
     check(controlStringValue(field) == @ns"Initial")
-    echo "A2:"
     setControlStringValue(field, @ns"Updated")
-    echo "A3:"
     check(field.stringValue() == @ns"Updated")
-    echo "A4:"
     check(controlStringValue(field) == @ns"Updated")
-    echo "A5:"
 
     var button = newButton(0, 0, 120, 30, "Push")
     var clicks = 0
@@ -226,11 +221,14 @@ suite "knutella appkit hello world":
         inc clicks
     )
     check(button.state() == NSOffState)
-    check(controlStringValue(button) == @ns"Push")
+    check(controlStringValue(button) == @ns"")
     setControlStringValue(button, @ns"Renamed")
-    check(button.title() == @ns"Renamed")
+    check(controlStringValue(button) == @ns"")
+    check(button.title() == @ns"Push")
     clickControl(button)
     check(button.state() == NSOnState)
+    check(clicks == 0)
+    button.click()
     check(clicks == 1)
 
     field.value = nil
@@ -292,7 +290,7 @@ suite "knutella appkit hello world":
 
   test "NSBox draw layout updates title and content geometry":
     var box = NSBox.new()
-    box.setFrame(0.0, 0.0, 240.0, 120.0)
+    box.setFrame(nsRect(0.0, 0.0, 240.0, 120.0))
     box.setTransparent(false)
     box.setTitle(@ns"Display")
     box.setTitlePosition(NSAboveTop)
@@ -401,7 +399,7 @@ suite "knutella appkit hello world":
     check(not image.isNil)
 
     var imageView = NSImageView.new()
-    imageView.setFrame(24, 32, 96, 72)
+    imageView.setFrame(nsRect(24, 32, 96, 72))
     imageView.setImage(image)
     imageView.setImageScaling(NSImageScaleAxesIndependently)
     imageView.setImageAlignment(NSImageAlignCenter)
@@ -478,7 +476,7 @@ suite "knutella appkit hello world":
     var clip = NSClipView.new()
     check(clip.isKindOfClass(NSClipView))
     check(clip.isKindOfClass(NSView))
-    clip.setFrame(0, 0, 100, 80)
+    clip.setFrame(nsRect(0, 0, 100, 80))
     var doc = newView(0, 0, 300, 240)
     clip.setDocumentView(doc)
     let docRect = clip.documentRect()
@@ -531,7 +529,7 @@ suite "knutella appkit hello world":
     var window = newWindow(0, 0, 320, 240, "Clip Render")
     var root = newView(0, 0, 320, 240)
     var clip = NSClipView.new()
-    clip.setFrame(20.cfloat, 30.cfloat, 100.cfloat, 80.cfloat)
+    clip.setFrame(nsRect(20.cfloat, 30.cfloat, 100.cfloat, 80.cfloat))
     clip.setDrawsBackground(true)
     clip.setBackgroundColor(nsColor(0.2, 0.3, 0.4, 1.0))
     var doc = newView(0, 0, 300, 240)

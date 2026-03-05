@@ -40,11 +40,11 @@ objcImpl:
 
     if not self.clipDocumentViewId.isNil:
       clearSuperviewRef(self.clipDocumentViewId.value)
-      var children = self.viewSubviews()
+      var children = self.subviews()
       for i, candidate in children:
         if candidate.value == self.clipDocumentViewId.value:
           children.del(i)
-          self.viewSubviews = children
+          self.setSubviews(children)
           break
 
     if view.isNil:
@@ -54,33 +54,34 @@ objcImpl:
       self.setBoundsOrigin(self.clipScrollOrigin)
       return
 
-    let parent = view.viewSuperview()
+    let parent = view.superview()
     if not parent.isNil:
-      var siblings = parent.viewSubviews()
+      var siblings = parent.subviews()
       for i, candidate in siblings:
         if candidate.value == view.value:
           siblings.del(i)
-          parent.viewSubviews = siblings
+          parent.setSubviews(siblings)
           break
-      view.viewSuperview = NSView(value: nil)
-
-    var children = self.viewSubviews()
+      view.xSetSuperview(NSView(value: nil))
+    var children = self.subviews()
     if view notin children:
       children.add(view)
-      self.viewSubviews = children
-    view.viewSuperview = retain(self).NSView
+      self.setSubviews(children)
+    view.xSetSuperview(retain(self).NSView)
     view.setNextResponder(self.NSResponder)
     self.clipDocumentViewId = retain(view)
     self.clipScrollOrigin = self.constrainScrollPoint(self.clipScrollOrigin)
     self.setBoundsOrigin(self.clipScrollOrigin)
-    let frame = view.viewFrame()
+    let frame = view.frame()
     self.clipDocumentRect =
       nsRect(0, 0, max(frame.size.width, 0.0), max(frame.size.height, 0.0))
     view.setFrame(
-      (-self.clipScrollOrigin.x).float32,
-      (-self.clipScrollOrigin.y).float32,
-      frame.size.width.float32,
-      frame.size.height.float32,
+      nsRect(
+        (-self.clipScrollOrigin.x).float32,
+        (-self.clipScrollOrigin.y).float32,
+        frame.size.width.float32,
+        frame.size.height.float32,
+      )
     )
 
   method documentRect*(self: NSClipView): NSRect =
@@ -89,7 +90,7 @@ objcImpl:
     let doc = self.documentView()
     if doc.isNil:
       return nsRect(0, 0, 0, 0)
-    let frame = doc.viewFrame()
+    let frame = doc.frame()
     self.clipDocumentRect =
       nsRect(0, 0, max(frame.size.width, 0.0), max(frame.size.height, 0.0))
     self.clipDocumentRect
@@ -127,12 +128,14 @@ objcImpl:
     let doc = self.documentView()
     if doc.isNil:
       return
-    let frame = doc.viewFrame()
+    let frame = doc.frame()
     doc.setFrame(
-      (-self.clipScrollOrigin.x).float32,
-      (-self.clipScrollOrigin.y).float32,
-      frame.size.width.float32,
-      frame.size.height.float32,
+      nsRect(
+        (-self.clipScrollOrigin.x).float32,
+        (-self.clipScrollOrigin.y).float32,
+        frame.size.width.float32,
+        frame.size.height.float32,
+      )
     )
 
   method setFrame*(
@@ -164,12 +167,14 @@ objcImpl:
     let doc = self.documentView()
     if doc.isNil:
       return
-    let frame = doc.viewFrame()
+    let frame = doc.frame()
     doc.setFrame(
-      (-self.clipScrollOrigin.x).float32,
-      (-self.clipScrollOrigin.y).float32,
-      frame.size.width.float32,
-      frame.size.height.float32,
+      nsRect(
+        (-self.clipScrollOrigin.x).float32,
+        (-self.clipScrollOrigin.y).float32,
+        frame.size.width.float32,
+        frame.size.height.float32,
+      )
     )
 
   method dealloc(self: NSClipView) {.used.} =

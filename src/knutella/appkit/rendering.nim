@@ -39,7 +39,7 @@ proc ensureContentView(window: NSWindow): NSView =
   let frame = window.windowFrame()
   var rootAlloc = NSView.alloc()
   var root = rootAlloc.initWithFrame(
-    0'f32, 0'f32, frame.size.width.float32, frame.size.height.float32
+    nsRect(0'f32, 0'f32, frame.size.width.float32, frame.size.height.float32)
   )
   rootAlloc.value = nil
   window.setContentView(root)
@@ -214,7 +214,7 @@ proc sendId(obj: IDPtr, op: SEL): IDPtr {.inline.} =
 proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
   if view.isNil:
     return
-  let frame = view.viewFrame()
+  let frame = view.frame()
   result.controlBox = nsRect(
     frame.origin.x,
     frame.origin.y,
@@ -321,9 +321,9 @@ proc addViewTree(
   let view = ownFromId[NSView](viewId)
   if view.isNil:
     return
-  if view.viewHidden():
+  if view.isHidden():
     return
-  let frame = view.viewFrame()
+  let frame = view.frame()
 
   let boxOriginY =
     if hasParent:
@@ -392,7 +392,7 @@ proc addViewTree(
     discard popCurrentFocusView()
     NSGraphicsContext.restoreGraphicsState()
 
-  for child in view.viewSubviews():
+  for child in view.subviews():
     renders.addViewTree(
       child.value,
       idx,
@@ -418,9 +418,9 @@ proc hitTestButton(
   let view = ownFromId[NSView](viewId)
   if view.isNil:
     return nil
-  if view.viewHidden():
+  if view.isHidden():
     return nil
-  let frameSelf = view.viewFrame()
+  let frameSelf = view.frame()
 
   let frameOriginY =
     if hasParent:
@@ -436,7 +436,7 @@ proc hitTestButton(
   if view.wantsClipToBounds() and not frame.contains(x, y):
     return nil
 
-  let children = view.viewSubviews()
+  let children = view.subviews()
   for i in countdown(children.high, 0):
     let child = children[i]
     let hit = hitTestButton(
@@ -469,9 +469,9 @@ proc hitTestComboBox(
   if viewId.isNil:
     return nil
   let view = ownFromId[NSView](viewId)
-  if view.isNil or view.viewHidden():
+  if view.isNil or view.isHidden():
     return nil
-  let frameSelf = view.viewFrame()
+  let frameSelf = view.frame()
   let frameOriginY =
     if hasParent:
       childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
@@ -486,7 +486,7 @@ proc hitTestComboBox(
   if view.wantsClipToBounds() and not frame.contains(x, y):
     return nil
 
-  let children = view.viewSubviews()
+  let children = view.subviews()
   for i in countdown(children.high, 0):
     let hit = hitTestComboBox(
       children[i].value,
@@ -517,9 +517,9 @@ proc findViewScreenFrame(
   if viewId.isNil or targetId.isNil:
     return false
   let view = ownFromId[NSView](viewId)
-  if view.isNil or view.viewHidden():
+  if view.isNil or view.isHidden():
     return false
-  let frameSelf = view.viewFrame()
+  let frameSelf = view.frame()
   let frameOriginY =
     if hasParent:
       childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
@@ -534,7 +534,7 @@ proc findViewScreenFrame(
   if view.value == targetId:
     resultFrame = frame
     return true
-  for child in view.viewSubviews():
+  for child in view.subviews():
     if findViewScreenFrame(
       child.value,
       targetId,
@@ -566,9 +566,9 @@ proc hitTestOpenComboPopup(
   if viewId.isNil:
     return
   let view = ownFromId[NSView](viewId)
-  if view.isNil or view.viewHidden():
+  if view.isNil or view.isHidden():
     return
-  let frameSelf = view.viewFrame()
+  let frameSelf = view.frame()
   let frameOriginY =
     if hasParent:
       childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
@@ -581,7 +581,7 @@ proc hitTestOpenComboPopup(
     frameSelf.size.height,
   )
 
-  let children = view.viewSubviews()
+  let children = view.subviews()
   for i in countdown(children.high, 0):
     let childHit = hitTestOpenComboPopup(
       children[i].value,
@@ -614,7 +614,7 @@ proc closeOpenComboPopupsInTree(
   if viewId.isNil:
     return
   let view = ownFromId[NSView](viewId)
-  if view.isNil or view.viewHidden():
+  if view.isNil or view.isHidden():
     return
   if view.isKindOfClass(NSComboBox):
     let comboBox = view.NSComboBox
@@ -622,7 +622,7 @@ proc closeOpenComboPopupsInTree(
         (exceptComboId.isNil or view.value != exceptComboId):
       comboBox.closePopup()
       changed = true
-  for child in view.viewSubviews():
+  for child in view.subviews():
     closeOpenComboPopupsInTree(child.value, exceptComboId, changed)
 
 proc closeOpenComboPopups(rootViewId: IDPtr, exceptComboId: IDPtr): bool =
@@ -644,9 +644,9 @@ proc updateOpenComboPopupHoverInTree(
   if viewId.isNil:
     return
   let view = ownFromId[NSView](viewId)
-  if view.isNil or view.viewHidden():
+  if view.isNil or view.isHidden():
     return
-  let frameSelf = view.viewFrame()
+  let frameSelf = view.frame()
   let frameOriginY =
     if hasParent:
       childScreenOriginY(parentOriginY, parentHeight, parentFlipped, frameSelf)
@@ -665,7 +665,7 @@ proc updateOpenComboPopupHoverInTree(
       if comboBox.popupHoveredIndex() != hoverItem:
         comboBox.setPopupHoveredIndex(hoverItem)
         changed = true
-  for child in view.viewSubviews():
+  for child in view.subviews():
     updateOpenComboPopupHoverInTree(
       child.value,
       x,
@@ -821,7 +821,7 @@ proc renderWindow(window: NSWindow) =
   else:
     logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
   let root = ensureContentView(window)
-  root.setFrame(0'f32, 0'f32, logicalSize.x.float32, logicalSize.y.float32)
+  root.setFrame(nsRect(0'f32, 0'f32, logicalSize.x.float32, logicalSize.y.float32))
   var renders = buildWindowRenders(window)
   if renders.isNil:
     return
