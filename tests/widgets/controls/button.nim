@@ -27,7 +27,7 @@ objcImpl:
       100.0,
       300.0,
       300.0,
-      NSTitledWindowMask or NSClosableWindowMask or NSResizableWindowMask,
+      {NSTitledWindow, NSClosableWindow, NSResizableWindow},
       NSBackingStoreBuffered,
       false,
     )
@@ -45,34 +45,38 @@ objcImpl:
     result.setContentView(contentView)
 
     var button1Alloc = NSButton.alloc()
-    result.xButton1 = button1Alloc.initWithFrame(nsRect(50.0, 225.0, 90.0, 25.0))
+    result.xButton1 = button1Alloc.init()
     button1Alloc.value = nil
+    result.xButton1.setFrame(nsRect(50.0, 225.0, 90.0, 25.0))
     result.xButton1.setTitle(@ns"button1")
     result.xButton1.setBezelStyle(NSRoundedBezelStyle)
     result.xButton1.setTarget(ID(value: result.value))
     result.xButton1.setAction(getSelector("OnButton1Click:"))
-    result.xButton1.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xButton1.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
 
     var button2Alloc = NSButton.alloc()
-    result.xButton2 = button2Alloc.initWithFrame(nsRect(50.0, 125.0, 200.0, 75.0))
+    result.xButton2 = button2Alloc.init()
     button2Alloc.value = nil
+    result.xButton2.setFrame(nsRect(50.0, 125.0, 200.0, 75.0))
     result.xButton2.setTitle(@ns"button2")
     result.xButton2.setBezelStyle(NSRegularSquareBezelStyle)
     result.xButton2.setTarget(ID(value: result.value))
     result.xButton2.setAction(getSelector("OnButton2Click:"))
-    result.xButton2.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xButton2.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
 
     var label1Alloc = NSTextField.alloc()
-    result.xLabel1 = label1Alloc.initWithFrame(nsRect(50.0, 80.0, 200.0, 20.0))
+    result.xLabel1 = label1Alloc.init()
     label1Alloc.value = nil
+    result.xLabel1.setFrame(nsRect(50.0, 80.0, 200.0, 20.0))
     result.xLabel1.setStringValue(@ns"button1 clicked 0 times")
     result.xLabel1.setBezeled(false)
     result.xLabel1.setDrawsBackground(false)
     result.xLabel1.setEditable(false)
 
     var label2Alloc = NSTextField.alloc()
-    result.xLabel2 = label2Alloc.initWithFrame(nsRect(50.0, 50.0, 200.0, 20.0))
+    result.xLabel2 = label2Alloc.init()
     label2Alloc.value = nil
+    result.xLabel2.setFrame(nsRect(50.0, 50.0, 200.0, 20.0))
     result.xLabel2.setStringValue(@ns"button2 clicked 0 times")
     result.xLabel2.setBezeled(false)
     result.xLabel2.setDrawsBackground(false)
