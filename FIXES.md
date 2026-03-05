@@ -2,21 +2,6 @@
 
 Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/AppKit/NSCell.m`.
 
-## High Priority
-
-- `trackMouse:inRect:ofView:untilMouseUp:` is heavily simplified in Nim.
-  - Missing event loop, drag/up polling, continuous action dispatch, and window flushing.
-  - Impact: incorrect mouse tracking behavior for controls/cells.
-  - Nim: `cells.nim:563`
-  - Cocotron: `NSCell.m:1079`
-
-- Field editor setup/edit/select flow is mostly stubbed in Nim.
-  - `setUpFieldEditorAttributes` returns editor unchanged.
-  - `editWithFrame`/`selectWithFrame` do not perform setup, delegate wiring, selection range, or mouse-down.
-  - Impact: text editing behavior diverges significantly.
-  - Nim: `cells.nim:588`, `cells.nim:591`, `cells.nim:604`
-  - Cocotron: `NSCell.m:1148`, `NSCell.m:1222`, `NSCell.m:1243`
-
 ## Medium Priority
 
 - `attributedStringValue` only returns non-nil when object value is already attributed.
@@ -39,17 +24,3 @@ Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/A
   - Nim: `cells.nim:210`
   - Cocotron: `NSCell.m:561`
 
-- Update/display fallback is missing in Nim.
-  - Cocotron calls `setNeedsDisplay:YES` if controlView does not respond to `updateCell:`.
-  - Nim always assumes `updateCell` wrapper availability.
-  - Impact: stale UI when control view lacks `updateCell`.
-  - Nim: `cells.nim:346`, `cells.nim:404`, `cells.nim:466`
-  - Cocotron: `NSCell.m:787`, `NSCell.m:903`, `NSCell.m:971`
-
-## Low Priority / Consistency
-
-- `take*ValueFrom:` mismatch in failure mode.
-  - Nim silently no-ops when sender lacks the provider concept.
-  - Cocotron sends selectors directly (runtime exception if missing).
-  - Nim: `cells.nim:471`-`cells.nim:505`
-  - Cocotron: `NSCell.m:991`-`NSCell.m:1012`

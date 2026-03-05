@@ -111,6 +111,13 @@ proc makeAttributedString*(text: NSString): NSAttributedString =
   )
   allocated.value = nil
 
+proc requestControlViewRefresh(controlView: NSView, cell: NSCell) =
+  if controlView.isNil: return
+  if controlView.isWrapper(UpdateCell):
+    controlView.asWrapper(UpdateCell).updateCell(cell)
+  else:
+    controlView.setNeedsDisplay(true)
+
 objcImpl:
   type NSCell* {.
     impl: (
@@ -347,7 +354,8 @@ objcImpl:
     if not image.isNil:
       self.setType(NSImageCellType)
     self.xImage = image
-    ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
+    let controlView = self.controlView()
+    requestControlViewRefresh(controlView, self)
 
   method setEnabled*(self: NSCell, flag: bool) =
     if self.xEnabled == flag:
@@ -420,12 +428,12 @@ objcImpl:
 
   method setObjectValue*(self: NSCell, value: NSObject) =
     let controlView = self.controlView()
-    willChangeValueForKey(controlView.NSObject, "objectValue")
+    controlView.willChangeValueForKey("objectValue")
     self.xObjectValue = value
     self.xTitleOrAttributedTitle = value
     self.xHasValidObjectValue = true
-    didChangeValueForKey(controlView.NSObject, "objectValue")
-    ID(value: controlView.value).asWrapper(UpdateCell).updateCell(self)
+    controlView.didChangeValueForKey("objectValue")
+    requestControlViewRefresh(controlView, self)
 
   method setStringValue*(self: NSCell, value: NSString) =
     if value.isNil:
@@ -483,7 +491,8 @@ objcImpl:
   method setControlSize*(self: NSCell, size: NSControlSize) =
     self.xControlSize = size
     self.xFont = NSFont.userFontOfSize(13'f32 - self.xControlSize.float * 2'f32)
-    ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
+    let controlView = self.controlView()
+    requestControlViewRefresh(controlView, self)
 
   method takeObjectValueFrom*(self: NSCell, sender: NSObject) =
     let provider = asProto[NSObjectValueProvider](sender)
