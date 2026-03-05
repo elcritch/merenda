@@ -79,7 +79,7 @@ objcImpl:
 var sharedApplicationRef {.threadvar.}: NSApplication
 
 proc runApplicationFrames(app: NSObject, maxFrames: int): int =
-  let app = ownFromId[NSApplication](app.value)
+  let app = NSApplication(app)
   app.appRunning = true
   var windows = app.appWindows()
   while app.appRunning():

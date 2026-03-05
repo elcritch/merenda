@@ -27,11 +27,6 @@ type FontState = ref object
 
 var typefaceCache {.threadvar.}: Table[string, TypefaceId]
 
-proc asNSObject(value: NSString): NSObject =
-  if value.isNil:
-    return NSObject(value: nil)
-  ownFromId[NSObject](value.value)
-
 proc inferFamilyName(name: string): string =
   var stem = splitFile(name).name
   if stem.len == 0:
@@ -259,16 +254,16 @@ proc fontWithDescriptor*(
 proc buildFontDescriptor(font: NSFont): NSFontDescriptor =
   ensureFontDescriptorConstants()
   var attributes = nsDictionary[NSObject, NSObject]()
-  attributes[asNSObject(NSFontNameAttribute)] = asNSObject(font.fontName())
-  attributes[asNSObject(NSFontFamilyAttribute)] = asNSObject(font.familyName())
-  attributes[asNSObject(NSFontVisibleNameAttribute)] = asNSObject(font.displayName())
-  attributes[asNSObject(NSFontSizeAttribute)] = boxNSObject(font.pointSize())
+  attributes[NSObject(NSFontNameAttribute)] = NSObject(font.fontName())
+  attributes[NSObject(NSFontFamilyAttribute)] = NSObject(font.familyName())
+  attributes[NSObject(NSFontVisibleNameAttribute)] = NSObject(font.displayName())
+  attributes[NSObject(NSFontSizeAttribute)] = boxNSObject(font.pointSize())
 
   var traits = nsDictionary[NSObject, NSObject]()
-  traits[asNSObject(NSFontSymbolicTrait)] = boxNSObject(0.NSUInteger)
-  traits[asNSObject(NSFontWeightTrait)] = boxNSObject(0)
-  traits[asNSObject(NSFontSlantTrait)] = boxNSObject(font.italicAngle())
-  attributes[asNSObject(NSFontTraitsAttribute)] = ownFromId[NSObject](traits.value)
+  traits[NSObject(NSFontSymbolicTrait)] = boxNSObject(0.NSUInteger)
+  traits[NSObject(NSFontWeightTrait)] = boxNSObject(0)
+  traits[NSObject(NSFontSlantTrait)] = boxNSObject(font.italicAngle())
+  attributes[NSObject(NSFontTraitsAttribute)] = NSObject(traits)
 
   NSFontDescriptor.fontDescriptorWithFontAttributes(attributes)
 

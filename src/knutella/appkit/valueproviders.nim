@@ -65,7 +65,7 @@ proc objectFloatValue*(obj: NSObject): float32 =
     )
     if not text.isNil:
       try:
-        return parseFloat($ownFromId[NSString](text)).float32
+        return parseFloat($NSString(value: text)).float32
       except ValueError:
         return 0.0
   0.0

@@ -11,7 +11,7 @@ export controls
 type NSButtonCallbackProc = proc(sender: IDPtr)
 
 template buttonCell(self: untyped): NSButtonCell =
-  ownFromId[NSButtonCell](self.cell().value)
+  NSButtonCell(self.cell())
 
 objcImpl:
   type NSButton* = object of NSControl
@@ -23,7 +23,7 @@ objcImpl:
     if result.isNil:
       return
     let cell = NSButtonCell.new()
-    result.setCell(ownFromId[NSCell](cell.value))
+    result.setCell(NSCell(cell))
     result.xButtonType = NSMomentaryLightButton
 
   method resignFirstResponder*(self: NSButton): bool =
@@ -245,7 +245,7 @@ proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
     button.setAction(nil)
   else:
     button.xOnClick = proc(sender: IDPtr) =
-      cb(ownFromId[NSButton](sender))
+      cb(NSButton(value: sender))
     button.setTarget(ID(value: button.value))
     button.setAction(getSelector("onClick:"))
 

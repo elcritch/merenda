@@ -288,7 +288,7 @@ objcImpl:
     let view = stack[idx]
     stack.del(idx)
     self.xFocusStack = stack
-    ownFromId[NSView](view.value)
+    return NSView(view)
 
   method dealloc(self: NSGraphicsContext) {.used.} =
     if not self.xFocusStack.isNil:

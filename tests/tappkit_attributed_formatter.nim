@@ -57,7 +57,7 @@ suite "appkit nsattributedstring and nsformatter":
     check($NSAttachmentAttributeName == "NSAttachmentAttributeName")
 
     var attributes = nsDictionary[NSObject, NSObject]()
-    let foregroundKey = ownFromId[NSObject](NSForegroundColorAttributeName.value)
+    let foregroundKey = NSObject(NSForegroundColorAttributeName)
     attributes[foregroundKey] = boxNSObject(99)
 
     var allocated = NSAttributedString.alloc()
@@ -132,7 +132,7 @@ suite "appkit nsattributedstring and nsformatter":
     var parseError: IDPtr = nil
     check(formatter.getObjectValue(addr parsedObject, @ns"27", addr parseError))
     check(parseCallCount == 1)
-    check(unboxNSObject[int](ownFromId[NSObject](parsedObject)) == 27)
+    check(unboxNSObject[int](NSObject(value: parsedObject)) == 27)
 
     check(
       not formatter.getObjectValue(
@@ -163,7 +163,7 @@ suite "appkit nsattributedstring and nsformatter":
     var parsedValue: IDPtr = nil
     var parseError: IDPtr = nil
     check(formatter.getObjectValue(addr parsedValue, @ns"7.25", addr parseError))
-    check(abs(unboxNSObject[float](ownFromId[NSObject](parsedValue)) - 7.25) < 1e-6)
+    check(abs(unboxNSObject[float](NSObject(value: parsedValue)) - 7.25) < 1e-6)
     check(
       not formatter.getObjectValue(addr parsedValue, @ns"not-a-number", addr parseError)
     )

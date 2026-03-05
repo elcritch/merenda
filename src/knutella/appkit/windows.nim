@@ -18,8 +18,9 @@ proc titlebarHeightForStyleMask(styleMask: set[NSWindowDecorations]): float32 =
     return WindowTitlebarHeight
   0.0
 
-proc frameRectForContentRectWithStyle(contentRect: NSRect,
-                                      styleMask: set[NSWindowDecorations]): NSRect =
+proc frameRectForContentRectWithStyle(
+    contentRect: NSRect, styleMask: set[NSWindowDecorations]
+): NSRect =
   let titlebarHeight = titlebarHeightForStyleMask(styleMask)
   nsRect(
     contentRect.origin.x,
@@ -28,8 +29,9 @@ proc frameRectForContentRectWithStyle(contentRect: NSRect,
     max(contentRect.size.height + titlebarHeight, 1.0),
   )
 
-proc contentRectForFrameRectWithStyle(frameRect: NSRect,
-                                      styleMask: set[NSWindowDecorations]): NSRect =
+proc contentRectForFrameRectWithStyle(
+    frameRect: NSRect, styleMask: set[NSWindowDecorations]
+): NSRect =
   let titlebarHeight = titlebarHeightForStyleMask(styleMask)
   nsRect(
     frameRect.origin.x,
@@ -64,8 +66,7 @@ objcImpl:
       return
     result.xFrame = nsRect(100, 100, 640, 420)
     result.xTitle = @ns"KNutella Window"
-    result.xStyleMask =
-      {NSTitledWindow, NSClosableWindow, NSResizableWindow}
+    result.xStyleMask = {NSTitledWindow, NSClosableWindow, NSResizableWindow}
     result.xBackingType = NSBackingStoreBuffered
     result.xDeferred = false
     result.xReleasedWhenClosed = true
@@ -199,8 +200,8 @@ objcImpl:
       return first
     let content = self.contentView()
     if not content.isNil:
-      return ownFromId[NSResponder](content.value)
-    ownFromId[NSResponder](self.value)
+      return NSResponder(content)
+    NSResponder(self)
 
   method sendEvent*(self: NSWindow, event: NSEvent) =
     if self.isNil or event.isNil:

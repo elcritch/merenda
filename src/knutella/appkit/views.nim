@@ -767,7 +767,7 @@ proc enclosingScrollView*(view: NSView): NSScrollView =
   var current = view.superview()
   while not current.isNil:
     if current.isKindOfClass(NSScrollView):
-      return ownFromId[NSScrollView](current.value)
+      return NSScrollView(current)
     current = current.superview()
   NSScrollView(value: nil)
 

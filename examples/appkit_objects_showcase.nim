@@ -174,7 +174,7 @@ when isMainModule:
   let imageCellRect = imageCell.imageRectForBounds(nsRect(0.0, 0.0, 220.0, 140.0))
 
   var attrs = nsDictionary[NSObject, NSObject]()
-  let fgKey = ownFromId[NSObject](NSForegroundColorAttributeName.value)
+  let fgKey = NSObject(NSForegroundColorAttributeName)
   attrs[fgKey] = boxNSObject(42)
   var attributedAlloc = NSAttributedString.alloc()
   var attributed = attributedAlloc.initWithString(@ns"alpha beta gamma", attrs)
