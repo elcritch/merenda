@@ -570,6 +570,30 @@ suite "knutella appkit hello world":
     actionCell.value = nil
     hostView.value = nil
 
+  test "cell attributedStringValue synthesizes attributes for plain values":
+    var emptyCell = NSCell.new()
+    let emptyAttributed = emptyCell.attributedStringValue()
+    check(not emptyAttributed.isNil)
+    check(emptyAttributed.string() == @ns"")
+
+    var cell = NSCell.new()
+    cell.setStringValue(@ns"styled")
+    cell.setLineBreakMode(NSLineBreakByTruncatingTail)
+    cell.setAlignment(NSCenterTextAlignment)
+    cell.setEnabled(false)
+
+    let attributed = cell.attributedStringValue()
+    check(not attributed.isNil)
+    check(attributed.string() == @ns"styled")
+
+    let attrs = attributed.attributesAtIndex(0.NSUInteger, nil)
+    check(not NSFontAttributeInDictionary(attrs).isNil)
+    check(not NSForegroundColorAttributeInDictionary(attrs).isNil)
+    check(not NSParagraphStyleAttributeInDictionary(attrs).isNil)
+
+    cell.value = nil
+    emptyCell.value = nil
+
   test "clip view applies figdraw clipping and scroll offset in render tree":
     var window = newWindow(0, 0, 320, 240, "Clip Render")
     var root = newView(0, 0, 320, 240)

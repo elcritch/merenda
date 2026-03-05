@@ -4,12 +4,6 @@ Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/A
 
 ## Medium Priority
 
-- `attributedStringValue` only returns non-nil when object value is already attributed.
-  - Cocotron synthesizes attributes (font/color/paragraph style) for plain values.
-  - Impact: callers expecting attributed output get `nil` in Nim.
-  - Nim: `cells.nim:269`
-  - Cocotron: `NSCell.m:644`
-
 - `setObjectValue` and `setAttributedStringValue` semantics differ.
   - Cocotron copies assigned object (`copyWithZone:`) and routes attributed values through `setObjectValue`.
   - Nim directly assigns and `setAttributedStringValue` bypasses the `setObjectValue` path.
@@ -23,4 +17,3 @@ Comparison target: `src/knutella/appkit/cells.nim` vs `vendor/darling-cocotron/A
   - Impact: non-string object values stringify differently (often empty in Nim).
   - Nim: `cells.nim:210`
   - Cocotron: `NSCell.m:561`
-

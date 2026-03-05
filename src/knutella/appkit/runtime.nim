@@ -251,6 +251,8 @@ type
   NSMenu* = object of NSObject
   NSFormatter* = object of NSObject
   NSAttributedString* = object of NSObject
+  NSParagraphStyle* = object of NSObject
+  NSMutableParagraphStyle* = object of NSParagraphStyle
 
   NSDefect* = ref object of Defect
   NSException* = ref object of CatchableError

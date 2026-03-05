@@ -8,6 +8,7 @@ import ./images
 import ./attributedstrings
 import ./formatters
 import ./fonts
+import ./paragraphstyles
 import ./events
 import ./views
 
@@ -111,8 +112,15 @@ proc makeAttributedString*(text: NSString): NSAttributedString =
   )
   allocated.value = nil
 
+proc packedForegroundStyle(foreground: NSColor): int {.inline.} =
+  (((foreground.r * 255.0'f32).int and 0xFF) shl 24) or
+    (((foreground.g * 255.0'f32).int and 0xFF) shl 16) or
+    (((foreground.b * 255.0'f32).int and 0xFF) shl 8) or
+    ((foreground.a * 255.0'f32).int and 0xFF)
+
 proc requestControlViewRefresh(controlView: NSView, cell: NSCell) =
-  if controlView.isNil: return
+  if controlView.isNil:
+    return
   if controlView.isWrapper(UpdateCell):
     controlView.asWrapper(UpdateCell).updateCell(cell)
   else:
@@ -274,12 +282,53 @@ objcImpl:
     0
 
   method attributedStringValue*(self: NSCell): NSAttributedString =
-    if self.xObjectValue.isNil:
-      return NSAttributedString(value: nil)
     let valueObj = self.xObjectValue.NSObject
     if valueObj.isKindOfClass(NSAttributedString):
       return self.xObjectValue.to(NSAttributedString)
-    NSAttributedString(value: nil)
+
+    let fontKey =
+      if NSFontAttributeName.isNil:
+        @ns"NSFontAttributeName"
+      else:
+        NSFontAttributeName
+    let colorKey =
+      if NSForegroundColorAttributeName.isNil:
+        @ns"NSForegroundColorAttributeName"
+      else:
+        NSForegroundColorAttributeName
+    let paragraphKey =
+      if NSParagraphStyleAttributeName.isNil:
+        @ns"NSParagraphStyleAttributeName"
+      else:
+        NSParagraphStyleAttributeName
+
+    var attributes = nsDictionary[NSObject, NSObject]()
+    let font = self.font()
+    if not font.isNil:
+      attributes[NSObject(fontKey)] = NSObject(font)
+
+    let foreground =
+      if self.isEnabled():
+        if self.isHighlighted() or self.state() != NSOffState:
+          nsColor(1.0, 1.0, 1.0, 1.0)
+        else:
+          nsColor(0.11, 0.11, 0.11, 1.0)
+      else:
+        nsColor(0.56, 0.56, 0.56, 1.0)
+    let packedForeground = packedForegroundStyle(foreground)
+    attributes[NSObject(colorKey.value)] = boxNSObject(packedForeground)
+
+    var paragraphStyleObj = NSMutableParagraphStyle.new()
+    if not paragraphStyleObj.isNil:
+      paragraphStyleObj.setLineBreakMode(self.xLineBreakMode)
+      paragraphStyleObj.setAlignment(self.xTextAlignment)
+    let paragraphStyle = paragraphStyleObj.NSObject
+    if not paragraphStyle.isNil:
+      attributes[NSObject(paragraphKey.value)] = paragraphStyle
+
+    var allocated = NSAttributedString.alloc()
+    result = allocated.initWithString(self.stringValue(), attributes = attributes)
+    allocated.value = nil
 
   method representedObject*(self: NSCell): NSObject =
     if self.xRepresentedObject.isNil:
