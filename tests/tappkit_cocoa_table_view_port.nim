@@ -1,0 +1,124 @@
+{.define: knutellaNoExampleMain.}
+
+import std/[algorithm, unittest]
+
+import figdraw/fignodes
+import knutella/appkit
+import knutella/objc
+
+include ../examples/appkit_cocoa_table_view_port
+
+proc clickControl(control: NSControl) =
+  var sender = NSResponder.new()
+  control.performClick(sender)
+  sender.value = nil
+
+proc tableValueAsString(
+    controller: TableViewController, table: NSTableView, column: NSTableColumn, row: int
+): NSString =
+  let value = controller.tableView(table, tableColumn = column, row = row)
+  if value.isNil:
+    return @ns""
+  ownFromId[NSString](value.value)
+
+suite "appkit cocoa table view port":
+  test "add and remove buttons update table model through click events":
+    var table = NSTableView.new()
+    var nameColumn = NSTableColumn.new(@ns"name")
+    var foundationYearColumn = NSTableColumn.new(@ns"foundationYear")
+    table.addTableColumn(nameColumn)
+    table.addTableColumn(foundationYearColumn)
+
+    var status = newTextField(0.0, 0.0, 320.0, 24.0, "")
+    var controller = TableViewController.new()
+    controller.setTableView(table)
+    controller.setStatusLabel(status)
+    controller.fillTestData()
+    table.setDataSource(ID(value: controller.value))
+    table.setDelegate(ID(value: controller.value))
+    table.reloadData()
+    table.selectRow(0)
+
+    var addButton = newButton(0.0, 0.0, 80.0, 24.0, "Add")
+    addButton.setOnClick(
+      proc(sender: NSButton) =
+        controller.addClub(sender.NSObject)
+    )
+    var removeButton = newButton(0.0, 0.0, 80.0, 24.0, "Remove")
+    removeButton.setOnClick(
+      proc(sender: NSButton) =
+        controller.removeClub(sender.NSObject)
+    )
+
+    check(table.numberOfRows() == 4)
+    check(controller.numberOfRowsInTableView(table) == 4)
+    check(tableValueAsString(controller, table, nameColumn, 3) == @ns"Barcelona")
+
+    clickControl(addButton)
+
+    check(table.numberOfRows() == 5)
+    check(controller.numberOfRowsInTableView(table) == 5)
+    check(table.selectedRow() == 4)
+    check(tableValueAsString(controller, table, nameColumn, 4) == @ns"FC Generic 5")
+    check(tableValueAsString(controller, table, foundationYearColumn, 4) == @ns"2025")
+
+    clickControl(removeButton)
+
+    check(table.numberOfRows() == 4)
+    check(controller.numberOfRowsInTableView(table) == 4)
+    check(table.selectedRow() == 3)
+    check(tableValueAsString(controller, table, nameColumn, 3) == @ns"Barcelona")
+
+    removeButton.value = nil
+    addButton.value = nil
+    controller.value = nil
+    status.value = nil
+    foundationYearColumn.value = nil
+    nameColumn.value = nil
+    table.value = nil
+
+  test "row render node positions follow table geometry without vertical offset drift":
+    var window = newWindow(0.0, 0.0, 320.0, 200.0, "table highlight geometry")
+    var root = newView(0.0, 0.0, 320.0, 200.0)
+
+    var table = NSTableView.new()
+    table.setFrame(nsRect(20.0, 20.0, 220.0, 120.0))
+    table.setRowHeight(24.0)
+    table.setIntercellSpacing(nsSize(3.0, 2.0))
+
+    var nameColumn = NSTableColumn.new(@ns"name")
+    nameColumn.setWidth(120.0)
+    table.addTableColumn(nameColumn)
+
+    var controller = TableViewController.new()
+    controller.setTableView(table)
+    controller.fillTestData()
+    table.setDataSource(ID(value: controller.value))
+    table.reloadData()
+    table.selectRow(1)
+
+    root.addSubview(table)
+    window.setContentView(root)
+
+    let renders = debugBuildWindowRenders(window)
+    check(not renders.isNil)
+
+    var rowY: seq[float32] = @[]
+    if renders.contains(0.ZLevel):
+      for node in renders[0.ZLevel].nodes:
+        if node.kind == nkRectangle and node.screenBox.x == 22.0 and
+            node.screenBox.w == 120.0 and node.screenBox.h == 23.0:
+          rowY.add(node.screenBox.y)
+
+    rowY.sort()
+    check(rowY.len == 4)
+    check(rowY[0] == 62.0)
+    check(rowY[1] == 88.0)
+    check(rowY[2] == 114.0)
+    check(rowY[3] == 140.0)
+
+    controller.value = nil
+    nameColumn.value = nil
+    table.value = nil
+    root.value = nil
+    window.value = nil

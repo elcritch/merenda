@@ -182,6 +182,12 @@ objcImpl:
     else:
       discard callSuperAs[IDPtr, NSEvent](self, getSelector("keyDown:"), event)
 
+  method onClick*(self: NSButton, sender: NSObject) =
+    discard sender
+    let cb = self.xOnClick
+    if not cb.isNil:
+      cb(self.value)
+
   method setPeriodicDelay*(
       self: NSButton, delay: float32, interval {.kw("interval").}: float32
   ) =
@@ -235,19 +241,18 @@ proc setTitle*(button: NSButton, value: string) =
 proc setOnClick*(button: NSButton, cb: proc(sender: NSButton)) =
   if cb.isNil:
     button.xOnClick = nil
+    button.setTarget(ID(value: nil))
+    button.setAction(nil)
   else:
     button.xOnClick = proc(sender: IDPtr) =
       cb(ownFromId[NSButton](sender))
+    button.setTarget(ID(value: button.value))
+    button.setAction(getSelector("onClick:"))
 
 proc click*(button: NSButton) =
   if not button.isEnabled():
     return
-  button.setNextState()
-  let control = button.NSControl
-  discard control.sendAction(control.action(), control.target())
-  let cb = button.xOnClick
-  if not cb.isNil:
-    cb(button.value)
+  button.performClick(NSResponder(value: nil))
 
 proc getPeriodicDelay*(button: NSButton, delay: var float32, interval: var float32) =
   if button.isNil:
