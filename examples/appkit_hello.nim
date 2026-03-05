@@ -30,7 +30,7 @@ const
   titleHeight = 48.0'f32
   rowGap = 10.0'f32
 
-proc stateName(state: int): string =
+proc stateName(state: NSCellState): string =
   case state
   of NSOnState: "On"
   of NSMixedState: "Mixed"
@@ -50,7 +50,7 @@ when isMainModule:
 
   var root = newView(0, 0, 720, 560)
   root.setTag(1)
-  root.setBackgroundColor(0.95, 0.96, 0.98, 1.0)
+  root.setBackgroundColor(nsColor(0.95, 0.96, 0.98, 1.0))
 
   var title =
     newTextField(leftInset, titleTop, 520, titleHeight, "Hello from KNutella/AppKit")
@@ -111,7 +111,7 @@ when isMainModule:
 
   let boxTop = statusTop + 100
   var authBox = NSBox.new()
-  authBox.setFrame(leftInset.cfloat, boxTop.cfloat, 660.cfloat, 132.cfloat)
+  authBox.setFrame(nsRect(leftInset.cfloat, boxTop.cfloat, 660.cfloat, 132.cfloat))
   authBox.setTitle(@ns"Search + Secure Input (newly ported)")
   authBox.setTransparent(false)
   authBox.setContentViewMargins(nsSize(10, 10))
@@ -119,7 +119,7 @@ when isMainModule:
 
   var searchField = NSSearchField.new()
   searchField.setTag(searchTag)
-  searchField.setFrame(12.cfloat, 14.cfloat, 390.cfloat, 32.cfloat)
+  searchField.setFrame(nsRect(12.cfloat, 14.cfloat, 390.cfloat, 32.cfloat))
   searchField.setStringValue(@ns"ravynos AppKit")
   searchField.setRecentsAutosaveName(@ns"knutella-example-search")
   searchField.setRecentSearches(
@@ -129,7 +129,7 @@ when isMainModule:
 
   var secureField = NSSecureTextField.new()
   secureField.setTag(secureTag)
-  secureField.setFrame(420.cfloat, 14.cfloat, 220.cfloat, 32.cfloat)
+  secureField.setFrame(nsRect(420.cfloat, 14.cfloat, 220.cfloat, 32.cfloat))
   secureField.setStringValue(@ns"supersafe")
   secureField.setEchosBullets(true)
   authBox.contentView().addSubview(secureField)
@@ -140,7 +140,7 @@ when isMainModule:
 
   let modernTop = boxTop + 132 + rowGap
   var modernBox = NSBox.new()
-  modernBox.setFrame(leftInset.cfloat, modernTop.cfloat, 660.cfloat, 152.cfloat)
+  modernBox.setFrame(nsRect(leftInset.cfloat, modernTop.cfloat, 660.cfloat, 152.cfloat))
   modernBox.setTitle(
     @ns"Latest classes: NSClipView, NSCollectionView, NSActionCell, NSButtonCell, NSAlert"
   )
@@ -150,12 +150,12 @@ when isMainModule:
 
   var clipView = NSClipView.new()
   clipView.setTag(clipTag)
-  clipView.setFrame(12.cfloat, 12.cfloat, 310.cfloat, 94.cfloat)
+  clipView.setFrame(nsRect(12.cfloat, 12.cfloat, 310.cfloat, 94.cfloat))
   clipView.setDrawsBackground(true)
   clipView.setBackgroundColor(nsColor(0.95, 0.97, 1.0, 1.0))
 
   var clipDoc = newView(0, 0, 520, 220)
-  clipDoc.setBackgroundColor(0.88, 0.92, 0.99, 1.0)
+  clipDoc.setBackgroundColor(nsColor(0.88, 0.92, 0.99, 1.0))
   var clipDocLabel = newTextField(
     10, 10, 470, 24, "Clip doc view is larger than the clip (scroll origin is clamped)"
   )
@@ -168,8 +168,8 @@ when isMainModule:
 
   var collectionView = NSCollectionView.new()
   collectionView.setTag(collectionTag)
-  collectionView.setFrame(332.cfloat, 12.cfloat, 316.cfloat, 94.cfloat)
-  collectionView.setBackgroundColor(0.93, 0.96, 0.93, 1.0)
+  collectionView.setFrame(nsRect(332.cfloat, 12.cfloat, 316.cfloat, 94.cfloat))
+  collectionView.setBackgroundColor(nsColor(0.93, 0.96, 0.93, 1.0))
   collectionView.setSelectable(false)
   collectionView.setMinItemSize(nsSize(72, 40))
   collectionView.setMaxItemSize(nsSize(160, 80))

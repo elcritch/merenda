@@ -48,7 +48,7 @@ when isMainModule:
   panel.setFloatingPanel(true)
 
   var root = newView(0, 0, 900, 620)
-  root.setBackgroundColor(0.95, 0.96, 0.98, 1.0)
+  root.setBackgroundColor(nsColor(0.95, 0.96, 0.98, 1.0))
 
   var header = newTextField(24, 20, 840, 32, "Implemented NS* objects showcase")
   header.setDrawsBackground(false)
@@ -69,19 +69,23 @@ when isMainModule:
   root.addSubview(intro)
 
   var query = NSSearchField.new()
-  query.setFrame(24.cfloat, 96.cfloat, 330.cfloat, 30.cfloat)
+  query.setFrame(nsRect(24.cfloat, 96.cfloat, 330.cfloat, 30.cfloat))
   query.setStringValue(@ns"appkit showcase")
   query.setRecentsAutosaveName(@ns"knutella-showcase-recent-search")
-  query.setRecentSearches(nsArray[NSString]([@ns"scroll view", @ns"cells", @ns"events"]))
+  query.setRecentSearches(
+    nsArray[NSString]([@ns"scroll view", @ns"cells", @ns"events"])
+  )
   root.addSubview(query)
 
   var password = NSSecureTextField.new()
-  password.setFrame(364.cfloat, 96.cfloat, 220.cfloat, 30.cfloat)
+  password.setFrame(nsRect(364.cfloat, 96.cfloat, 220.cfloat, 30.cfloat))
   password.setStringValue(@ns"secret")
   password.setEchosBullets(true)
   root.addSubview(password)
 
-  var status = newTextField(24, 132, 840, 28, "Click the button to cycle NSButton + NSButtonCell state.")
+  var status = newTextField(
+    24, 132, 840, 28, "Click the button to cycle NSButton + NSButtonCell state."
+  )
   status.setDrawsBackground(false)
   status.setTextColor(nsColor(0.10, 0.30, 0.22, 1.0))
   root.addSubview(status)
@@ -93,12 +97,9 @@ when isMainModule:
     proc(sender: NSButton) =
       let stateText =
         case sender.state()
-        of NSOnState:
-          "On"
-        of NSMixedState:
-          "Mixed"
-        else:
-          "Off"
+        of NSOnState: "On"
+        of NSMixedState: "Mixed"
+        else: "Off"
       status.setStringValue("Button state is now " & stateText)
   )
   root.addSubview(button)
@@ -110,7 +111,10 @@ when isMainModule:
       clickAlert.setAlertStyle(NSInformationalAlertStyle)
       clickAlert.setMessageText(@ns"Showcase Ready")
       clickAlert.setInformativeText(
-        @ns("NSScroller width=" & $NSScroller.scrollerWidth() & ", clickState=" & $button.state())
+        @ns(
+          "NSScroller width=" & $NSScroller.scrollerWidth() & ", clickState=" &
+            $button.state()
+        )
       )
       discard clickAlert.addButtonWithTitle(@ns"OK")
       let clickResult = clickAlert.runModal()
@@ -120,7 +124,9 @@ when isMainModule:
   root.addSubview(alertButton)
 
   var scroll = NSScrollView.new()
-  scroll.setFrame(24.cfloat, 220.cfloat, frameSize.width.cfloat, frameSize.height.cfloat)
+  scroll.setFrame(
+    nsRect(24.cfloat, 220.cfloat, frameSize.width.cfloat, frameSize.height.cfloat)
+  )
   scroll.setBorderType(NSLineBorder)
   scroll.setDrawsBackground(true)
   scroll.setBackgroundColor(nsColor(1.0, 1.0, 1.0, 1.0))
@@ -129,18 +135,18 @@ when isMainModule:
   scroll.setAutohidesScrollers(false)
 
   var doc = newView(0, 0, 860, 520)
-  doc.setBackgroundColor(0.89, 0.93, 0.99, 1.0)
+  doc.setBackgroundColor(nsColor(0.89, 0.93, 0.99, 1.0))
 
   let image = NSImage.imageNamed(@ns"arrow.png")
   var imageView = NSImageView.new()
-  imageView.setFrame(40.cfloat, 40.cfloat, 120.cfloat, 90.cfloat)
+  imageView.setFrame(nsRect(40.cfloat, 40.cfloat, 120.cfloat, 90.cfloat))
   imageView.setImage(image)
   imageView.setImageScaling(NSImageScaleAxesIndependently)
   imageView.setImageAlignment(NSImageAlignCenter)
   doc.addSubview(imageView)
 
   var collection = NSCollectionView.new()
-  collection.setFrame(200.cfloat, 34.cfloat, 260.cfloat, 130.cfloat)
+  collection.setFrame(nsRect(200.cfloat, 34.cfloat, 260.cfloat, 130.cfloat))
   collection.setSelectable(false)
   collection.setMaxNumberOfRows(2)
   collection.setMaxNumberOfColumns(3)
@@ -197,7 +203,8 @@ when isMainModule:
   controller.discardEditing()
   controller.objectDidEndEditing(editor.value)
 
-  let event = newMouseEvent(NSLeftMouseDown, nsPoint(20.0, 30.0), {NSShiftKeyMask}, 0.25, 1, 1)
+  let event =
+    newMouseEvent(NSLeftMouseDown, nsPoint(20.0, 30.0), {NSShiftKeyMask}, 0.25, 1, 1)
 
   window.setContentView(root)
   app.addWindow(window)
@@ -210,7 +217,10 @@ when isMainModule:
   echo "formatted cell value: ", formattedPreview
   echo "buttonCell state after performClick: ", buttonCell.state()
   echo "imageCell rect: ", imageCellRect
-  echo "attributed substring(6,4): ", attributed.attributedSubstringFromRange(NSMakeRange(6.NSUInteger, 4.NSUInteger)).string()
+  echo "attributed substring(6,4): ",
+    attributed
+    .attributedSubstringFromRange(NSMakeRange(6.NSUInteger, 4.NSUInteger))
+    .string()
   echo "controller commit/discard calls: ", commitEditingCalls, "/", discardEditingCalls
   echo "vertical scroller enabled: ", scroll.verticalScroller().isEnabled()
   echo "event type example: ", event.`type`()
