@@ -5,6 +5,24 @@ import figdraw/fignodes
 import knutella/appkit
 import knutella/objc
 
+objcImpl:
+  type TCopyProbe {.impl: NSCopying.} = object of NSObject
+    xVersion {.set: setVersion, get: version.}: int
+
+  method copyWithZone*(self: TCopyProbe, zone: pointer): NSObject =
+    var allocated = TCopyProbe.alloc()
+    var copied = allocated.init()
+    allocated.value = nil
+    copied.setVersion(self.version() + 1)
+    copied.NSObject
+
+objcImpl:
+  type TSetObjectRoutingCell = object of NSCell
+    xSetObjectValueSeen {.get: setObjectValueSeen.}: bool
+
+  method setObjectValue*(self: TSetObjectRoutingCell, value: NSObject) =
+    self.xSetObjectValueSeen = true
+
 suite "knutella appkit hello world":
   proc controlStringValue(control: NSControl): NSString =
     control.stringValue()
@@ -593,6 +611,64 @@ suite "knutella appkit hello world":
 
     cell.value = nil
     emptyCell.value = nil
+
+  test "cell object setters copy values and attributed setter follows objectValue path":
+    var cell = NSCell.new()
+
+    var source = TCopyProbe.new()
+    source.setVersion(41)
+    cell.setObjectValue(source.NSObject)
+    var copiedObj = cell.objectValue().to(TCopyProbe)
+    doAssert(not copiedObj.isNil)
+    doAssert(copiedObj.version() == 42)
+    doAssert(copiedObj.value != source.value)
+
+    var routingCell = TSetObjectRoutingCell.new()
+    var attributed = NSAttributedString.new()
+    routingCell.setAttributedStringValue(attributed)
+    doAssert(routingCell.setObjectValueSeen())
+
+    routingCell.value = nil
+    attributed.value = nil
+    copiedObj.value = nil
+    source.value = nil
+    cell.value = nil
+
+  test "appkit value objects expose NSCopying where cocotron does":
+    var font = NSFont.systemFontOfSize(13.0)
+    var fontCopying = asProto[NSCopying](font)
+    doAssert(not fontCopying.isNil)
+    if not fontCopying.isNil:
+      release(fontCopying)
+    var fontCopy = font.copyWithZone(nil)
+    doAssert(fontCopy.value == font.value)
+    fontCopy.value = nil
+
+    var descriptor = font.fontDescriptor()
+    var descriptorCopying = asProto[NSCopying](descriptor)
+    doAssert(not descriptorCopying.isNil)
+    if not descriptorCopying.isNil:
+      release(descriptorCopying)
+    var descriptorCopy = descriptor.copyWithZone(nil)
+    doAssert(descriptorCopy.value == descriptor.value)
+    descriptorCopy.value = nil
+
+    var paragraph = NSParagraphStyle.defaultParagraphStyle()
+    var paragraphCopying = asProto[NSCopying](paragraph)
+    doAssert(not paragraphCopying.isNil)
+    if not paragraphCopying.isNil:
+      release(paragraphCopying)
+
+    var attributed = NSAttributedString.new()
+    var attributedCopying = asProto[NSCopying](attributed)
+    doAssert(not attributedCopying.isNil)
+    if not attributedCopying.isNil:
+      release(attributedCopying)
+
+    attributed.value = nil
+    paragraph.value = nil
+    descriptor.value = nil
+    font.value = nil
 
   test "clip view applies figdraw clipping and scroll offset in render tree":
     var window = newWindow(0, 0, 320, 240, "Clip Render")

@@ -1,7 +1,7 @@
 import std/hashes
 
 objcImpl:
-  type NXString* = object of NSObject
+  type NXString* {.impl: NSCopying.} = object of NSObject
     text: string
 
   method init*(self: var NXString): NXString =
@@ -33,11 +33,15 @@ objcImpl:
       return true
     if other.isNil or not other.respondsToSelector("UTF8String"):
       return false
-    let toUtf8 = cast[proc(obj: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+    let toUtf8 =
+      cast[proc(obj: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
     let utf8 = toUtf8(other.value, sel_registerName("UTF8String"))
     if utf8.isNil:
       return false
     self.stringValue() == $utf8
+
+  method copyWithZone*(self: NXString, zone: pointer): NSObject =
+    retain(self).NSObject
 
 proc nsString*(value: sink string): NSString =
   var allocated = NXString.alloc()
@@ -54,7 +58,8 @@ proc toNSString*(value: string): NSString {.inline.} =
 proc stringValue*(value: NSString): string =
   if value.isNil:
     return ""
-  let toUtf8 = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
+  let toUtf8 =
+    cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs.}](objc_msgSend)
   let utf8 = toUtf8(value.value, sel_registerName("UTF8String"))
   if utf8.isNil:
     return ""

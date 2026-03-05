@@ -476,10 +476,15 @@ objcImpl:
     self.formatter().to(NSNumberFormatter).setFormat(@ns(format))
 
   method setObjectValue*(self: NSCell, value: NSObject) =
+    var valueCopy = asProto[NSCopying](value)
+    if valueCopy .isNil:
+      raise newException(Defect, "nscopying expected")
+
+    let copiedValue = valueCopy.copyWithZone(nil)
     let controlView = self.controlView()
     controlView.willChangeValueForKey("objectValue")
-    self.xObjectValue = value
-    self.xTitleOrAttributedTitle = value
+    self.xObjectValue = copiedValue
+    self.xTitleOrAttributedTitle = copiedValue
     self.xHasValidObjectValue = true
     controlView.didChangeValueForKey("objectValue")
     requestControlViewRefresh(controlView, self)
@@ -529,10 +534,7 @@ objcImpl:
     self.setObjectValue(ns(value).NSObject)
 
   method setAttributedStringValue*(self: NSCell, value: NSAttributedString) =
-    self.xObjectValue = value.NSObject
-    self.xTitleOrAttributedTitle = value.NSObject
-    self.xHasValidObjectValue = true
-    ID(value: self.controlView().value).asWrapper(UpdateCell).updateCell(self)
+    self.setObjectValue(value.NSObject)
 
   method setRepresentedObject*(self: NSCell, representedObject: NSObject) =
     self.xRepresentedObject = representedObject
