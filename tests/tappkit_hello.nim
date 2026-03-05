@@ -221,9 +221,6 @@ suite "knutella appkit hello world":
         inc clicks
     )
     check(button.state() == NSOffState)
-    check(controlStringValue(button) == @ns"")
-    setControlStringValue(button, @ns"Renamed")
-    check(controlStringValue(button) == @ns"")
     check(button.title() == @ns"Push")
     clickControl(button)
     check(button.state() == NSOnState)

@@ -343,7 +343,7 @@ objcImpl:
       for i, candidate in children:
         if candidate.value == self.xContentView.value:
           children.del(i)
-          self.setSubviews(children)
+          self.xSubviews = children
           break
 
     if view.isNil:
@@ -360,7 +360,12 @@ objcImpl:
           break
       view.xSetSuperview(NSView(value: nil))
     var children = self.subviews()
-    if view notin children:
+    var found = false
+    for candidate in children:
+      if candidate.value == view.value:
+        found = true
+        break
+    if not found:
       children.add(view)
       self.setSubviews(children)
     view.xSetSuperview(retain(self).NSView)

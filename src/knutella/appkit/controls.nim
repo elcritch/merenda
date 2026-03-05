@@ -1,4 +1,3 @@
-import std/strutils
 import ./runtime
 
 import ./views
@@ -11,11 +10,7 @@ objcImpl:
   type NSControl* = object of NSView
     xCell: NSCell
     xCurrentEditor: NSText
-    xTarget {.set: setTarget, get: target.}: ID
-    xAction {.set: setAction, get: action.}: SEL
-    refusesFirstResponder {.set: setRefusesFirstResponder, get: refusesFirstResponder.}:
-      bool
-    alignment {.set: setAlignment, get: alignment.}: NSTextAlignment
+    xTag {.set: setTag, get: tag.}: int
 
   method init*(self: var NSControl): NSControl =
     result = asTypeRaw[NSControl](
@@ -63,10 +58,6 @@ objcImpl:
     if not cell.isNil:
       cell.setControlView(result.NSView)
       cell.setContinuous(false)
-    result.xTarget.value = nil
-    result.xAction = nil
-    result.refusesFirstResponder = false
-    result.alignment = NSNaturalTextAlignment
 
   method cell*(self: NSControl): NSCell =
     if self.isNil:
@@ -87,38 +78,108 @@ objcImpl:
     let bound = self.xCell
     if not bound.isNil:
       bound.setControlView(self.NSView)
+      bound.setContinuous(false)
+
+  method selectedCell*(self: NSControl): NSCell =
+    self.cell()
+
+  method target*(self: NSControl): ID =
+    self.cell().target()
+
+  method action*(self: NSControl): SEL =
+    self.cell().action()
+
+  method setTarget*(self: NSControl, target: ID) =
+    self.cell().setTarget(target)
+
+  method setAction*(self: NSControl, action: SEL) =
+    self.cell().setAction(action)
+
+  method font*(self: NSControl): NSFont =
+    self.cell().font()
+
+  method setFont*(self: NSControl, font: NSFont) =
+    self.cell().setFont(font)
+    self.setNeedsDisplay(true)
+
+  method image*(self: NSControl): NSImage =
+    self.cell().image()
+
+  method setImage*(self: NSControl, image: NSImage) =
+    self.cell().setImage(image)
+    self.setNeedsDisplay(true)
+
+  method alignment*(self: NSControl): NSTextAlignment =
+    self.cell().alignment()
+
+  method setAlignment*(self: NSControl, alignment: NSTextAlignment) =
+    self.cell().setAlignment(alignment)
+    self.setNeedsDisplay(true)
 
   method isEnabled*(self: NSControl): bool =
-    if self.isNil:
-      return true
-    let controlCell = self.cell()
-    if controlCell.isNil:
-      return true
-    controlCell.isEnabled()
+    self.cell().isEnabled()
+
+  method isEditable*(self: NSControl): bool =
+    self.cell().isEditable()
+
+  method isSelectable*(self: NSControl): bool =
+    self.cell().isSelectable()
+
+  method isScrollable*(self: NSControl): bool =
+    self.cell().isScrollable()
+
+  method isBordered*(self: NSControl): bool =
+    self.cell().isBordered()
+
+  method isBezeled*(self: NSControl): bool =
+    self.cell().isBezeled()
 
   method setEnabled*(self: NSControl, flag: bool) =
-    if self.isNil:
-      return
-    let controlCell = self.cell()
-    if controlCell.isNil:
-      return
-    controlCell.setEnabled(flag)
+    self.cell().setEnabled(flag)
+    self.setNeedsDisplay(true)
+
+  method setEditable*(self: NSControl, flag: bool) =
+    self.cell().setEditable(flag)
+
+  method setSelectable*(self: NSControl, flag: bool) =
+    self.cell().setSelectable(flag)
+
+  method setScrollable*(self: NSControl, flag: bool) =
+    self.cell().setScrollable(flag)
+
+  method setBordered*(self: NSControl, flag: bool) =
+    self.cell().setBordered(flag)
+    self.setNeedsDisplay(true)
+
+  method setBezeled*(self: NSControl, flag: bool) =
+    self.cell().setBezeled(flag)
+    self.setNeedsDisplay(true)
 
   method isContinuous*(self: NSControl): bool =
-    if self.isNil:
-      return false
-    let controlCell = self.cell()
-    if controlCell.isNil:
-      return false
-    controlCell.isContinuous()
+    self.cell().isContinuous()
 
   method setContinuous*(self: NSControl, flag: bool) =
-    if self.isNil:
-      return
-    let controlCell = self.cell()
-    if controlCell.isNil:
-      return
-    controlCell.setContinuous(flag)
+    self.cell().setContinuous(flag)
+
+  method refusesFirstResponder*(self: NSControl): bool =
+    self.cell().refusesFirstResponder()
+
+  method setRefusesFirstResponder*(self: NSControl, flag: bool) =
+    self.cell().setRefusesFirstResponder(flag)
+
+  method formatter*(self: NSControl): NSFormatter =
+    self.cell().formatter()
+
+  method setFormatter*(self: NSControl, formatter: NSFormatter) =
+    self.cell().setFormatter(formatter)
+    self.setNeedsDisplay(true)
+
+  method objectValue*(self: NSControl): NSObject =
+    self.selectedCell().objectValue()
+
+  method setObjectValue*(self: NSControl, value: NSObject) =
+    self.selectedCell().setObjectValue(value)
+    self.setNeedsDisplay(true)
 
   method currentEditor*(self: NSControl): NSText =
     if self.isNil:
@@ -126,85 +187,87 @@ objcImpl:
     self.xCurrentEditor
 
   method acceptsFirstResponder*(self: NSControl): bool =
-    if self.isNil:
-      return false
-    self.isEnabled() and (not self.refusesFirstResponder())
+    not self.refusesFirstResponder()
 
   method stringValue*(self: NSControl): NSString =
-    @ns""
+    self.selectedCell().stringValue()
 
   method setStringValue*(self: NSControl, value: NSString) =
-    discard
+    let selected = self.selectedCell()
+    if selected.respondsToSelector("setTitle:"):
+      cast[proc(self: IDPtr, op: SEL, title: IDPtr) {.cdecl, varargs.}](objc_msgSend)(
+        selected.value, getSelector("setTitle:"), value.value
+      )
+    else:
+      selected.setStringValue(value)
+    self.setNeedsDisplay(true)
 
   method intValue*(self: NSControl): cint =
-    if self.isNil:
-      return 0.cint
-    try:
-      parseInt($self.stringValue()).cint
-    except ValueError:
-      0.cint
+    self.selectedCell().intValue()
 
   method integerValue*(self: NSControl): int =
-    self.intValue().int
+    self.selectedCell().integerValue()
 
   method floatValue*(self: NSControl): float32 =
-    if self.isNil:
-      return 0.0
-    try:
-      parseFloat($self.stringValue()).float32
-    except ValueError:
-      0.0
+    self.selectedCell().floatValue()
 
   method doubleValue*(self: NSControl): float =
-    if self.isNil:
-      return 0.0
-    try:
-      parseFloat($self.stringValue()).float
-    except ValueError:
-      0.0
+    self.selectedCell().doubleValue()
+
+  method attributedStringValue*(self: NSControl): NSAttributedString =
+    self.selectedCell().attributedStringValue()
 
   method setIntValue*(self: NSControl, value: cint) =
-    if self.isNil:
-      return
-    self.setStringValue(ns($value))
+    self.selectedCell().setIntValue(value)
+    self.setNeedsDisplay(true)
 
   method setIntegerValue*(self: NSControl, value: int) =
-    self.setIntValue(value.cint)
+    self.selectedCell().setIntegerValue(value)
+    self.setNeedsDisplay(true)
 
   method setFloatValue*(self: NSControl, value: float32) =
-    if self.isNil:
-      return
-    self.setStringValue(ns($value))
+    self.selectedCell().setFloatValue(value)
+    self.setNeedsDisplay(true)
 
   method setDoubleValue*(self: NSControl, value: float) =
-    if self.isNil:
-      return
-    self.setStringValue(ns($value))
+    self.selectedCell().setDoubleValue(value)
+    self.setNeedsDisplay(true)
+
+  method setAttributedStringValue*(self: NSControl, value: NSAttributedString) =
+    self.selectedCell().setAttributedStringValue(value)
+    self.setNeedsDisplay(true)
+
+  method selectedTag*(self: NSControl): int =
+    self.selectedCell().tag()
+
+  method setFloatingPointFormat*(
+      self: NSControl, fpp: bool, left {.kw("left").}: uint, right {.kw("right").}: uint
+  ) =
+    self.cell().setFloatingPointFormat(fpp, left = left, right = right)
+
+  method takeObjectValueFrom*(self: NSControl, sender: NSControl) =
+    self.selectedCell().takeObjectValueFrom(sender.cell())
+    self.setNeedsDisplay(true)
 
   method takeStringValueFrom*(self: NSControl, sender: NSControl) =
-    if self.isNil or sender.isNil:
-      return
-    self.setStringValue(sender.stringValue())
+    self.selectedCell().takeStringValueFrom(sender.cell())
+    self.setNeedsDisplay(true)
 
   method takeIntValueFrom*(self: NSControl, sender: NSControl) =
-    if self.isNil or sender.isNil:
-      return
-    self.setIntValue(sender.intValue())
+    self.selectedCell().takeIntValueFrom(sender.cell())
+    self.setNeedsDisplay(true)
 
   method takeIntegerValueFrom*(self: NSControl, sender: NSControl) =
-    if self.isNil or sender.isNil:
-      return
-    self.setIntegerValue(sender.integerValue())
+    self.selectedCell().takeIntegerValueFrom(sender.cell())
+    self.setNeedsDisplay(true)
 
   method takeFloatValueFrom*(self: NSControl, sender: NSControl) =
-    if self.isNil or sender.isNil:
-      return
-    self.setFloatValue(sender.floatValue())
+    self.selectedCell().takeFloatValueFrom(sender.cell())
+    self.setNeedsDisplay(true)
 
   method takeDoubleValueFrom*(self: NSControl, sender: NSControl) =
-    if self.isNil or sender.isNil:
-      return
-    self.setDoubleValue(sender.doubleValue())
+    self.selectedCell().takeDoubleValueFrom(sender.cell())
+    self.setNeedsDisplay(true)
 
   method drawCell*(self: NSControl, cell: NSCell) =
     if self.xCell == cell:
@@ -238,8 +301,6 @@ objcImpl:
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)
     self.xCurrentEditor = NSText(value: nil)
-    self.xTarget.value = nil
-    self.xAction = nil
     destroyIvarFields(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 
