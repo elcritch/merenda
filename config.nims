@@ -46,19 +46,17 @@ task test, "run unit test":
         nimExec("r", file, platform = platformArg)
 
   for file in listFiles("examples"):
-    if nimFileStemHasPrefix(file, "windy_"):
+    if file.endsWith(".nim"):
       nimExec("c", file)
-    elif nimFileStemHasPrefix(file, "appkit_"):
-      nimExec("c", file)
-    elif nimFileStemHasPrefix(file, "sdl2_"):
-      if enableSdl2:
-        nimExec("c", file, "-d:figdraw.metal=off -d:figdraw.vulkan=off")
-      else:
-        echo "Skipping SDL2 example (set FIGDRAW_TEST_SDL2=1 to enable): ", file
 
 task test_compile, "compile unit tests without running":
   for file in listFiles("tests"):
     if nimFileStemHasPrefix(file, "t"):
+      nimExec("c", file)
+
+task test_compile_examples, "compile unit tests without running":
+  for file in listFiles("examples"):
+    if nimFileStemHasPrefix(file, ""):
       nimExec("c", file)
 
 task test_emscripten, "build emscripten examples":
