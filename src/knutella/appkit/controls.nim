@@ -187,7 +187,7 @@ objcImpl:
     self.xCurrentEditor
 
   method acceptsFirstResponder*(self: NSControl): bool =
-    not self.refusesFirstResponder()
+    self.isEnabled() and (not self.refusesFirstResponder())
 
   method stringValue*(self: NSControl): NSString =
     self.selectedCell().stringValue()
