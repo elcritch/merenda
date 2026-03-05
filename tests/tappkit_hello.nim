@@ -550,6 +550,26 @@ suite "knutella appkit hello world":
     sourceCell.value = nil
     cell.value = nil
 
+  test "cell falls back to display invalidation when control view lacks updateCell":
+    var hostView = newView(0, 0, 80, 24)
+    hostView.setNeedsDisplay(false)
+    var actionCell = NSActionCell.new()
+    actionCell.setControlView(hostView)
+
+    actionCell.setObjectValue(@ns"obj")
+    check(hostView.needsDisplay())
+    hostView.setNeedsDisplay(false)
+
+    actionCell.setImage(NSImage(value: nil))
+    check(hostView.needsDisplay())
+    hostView.setNeedsDisplay(false)
+
+    actionCell.setControlSize(NSMiniControlSize)
+    check(hostView.needsDisplay())
+
+    actionCell.value = nil
+    hostView.value = nil
+
   test "clip view applies figdraw clipping and scroll offset in render tree":
     var window = newWindow(0, 0, 320, 240, "Clip Render")
     var root = newView(0, 0, 320, 240)
