@@ -497,7 +497,13 @@ objcImpl:
   method setSubviews*(self: NSView, array: seq[NSView]) =
     while self.xSubviews.len > 0:
       let child = self.xSubviews[self.xSubviews.high]
-      child.removeFromSuperview()
+      let parent = child.superview()
+      if not parent.isNil and parent.value == self.value:
+        child.removeFromSuperview()
+      else:
+        var children = self.xSubviews
+        children.setLen(children.len - 1)
+        self.xSubviews = children
     for view in array:
       self.addSubview(view)
       if not view.isNil:
