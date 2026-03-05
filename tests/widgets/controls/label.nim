@@ -73,8 +73,7 @@ objcImpl:
       100.0,
       300.0,
       328.0,
-      NSTitledWindowMask or NSClosableWindowMask or NSMiniaturizableWindowMask or
-        NSResizableWindowMask,
+      {NSTitledWindow, NSClosableWindow, NSMiniaturizableWindow, NSResizableWindow},
       NSBackingStoreBuffered,
       false,
     )
@@ -89,8 +88,9 @@ objcImpl:
     result.setContentView(contentView)
 
     var label1Alloc = NSTextField.alloc()
-    result.xLabel1 = label1Alloc.initWithFrame(nsRect(10.0, 270.0, 100.0, 20.0))
+    result.xLabel1 = label1Alloc.init()
     label1Alloc.value = nil
+    result.xLabel1.setFrame(nsRect(10.0, 270.0, 100.0, 20.0))
     result.xLabel1.setStringValue(@ns"label1")
     result.xLabel1.setBezeled(false)
     result.xLabel1.setDrawsBackground(false)

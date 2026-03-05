@@ -81,8 +81,7 @@ objcImpl:
       100.0,
       300.0,
       328.0,
-      NSTitledWindowMask or NSClosableWindowMask or NSMiniaturizableWindowMask or
-        NSResizableWindowMask,
+      {NSTitledWindow, NSClosableWindow, NSMiniaturizableWindow, NSResizableWindow},
       NSBackingStoreBuffered,
       false,
     )
@@ -97,8 +96,9 @@ objcImpl:
     result.setContentView(contentView)
 
     var comboBox1Alloc = NSComboBox.alloc()
-    result.xComboBox1 = comboBox1Alloc.initWithFrame(nsRect(10.0, 260.0, 121.0, 26.0))
+    result.xComboBox1 = comboBox1Alloc.init()
     comboBox1Alloc.value = nil
+    result.xComboBox1.setFrame(nsRect(10.0, 260.0, 121.0, 26.0))
     result.xComboBox1.addItemWithObjectValue(@ns"item1")
     result.xComboBox1.addItemWithObjectValue(@ns"item2")
     result.xComboBox1.addItemWithObjectValue(@ns"item3")
@@ -107,8 +107,9 @@ objcImpl:
     result.xComboBox1.selectItemAtIndex(1)
 
     var comboBox2Alloc = NSComboBox.alloc()
-    result.xComboBox2 = comboBox2Alloc.initWithFrame(nsRect(10.0, 220.0, 121.0, 26.0))
+    result.xComboBox2 = comboBox2Alloc.init()
     comboBox2Alloc.value = nil
+    result.xComboBox2.setFrame(nsRect(10.0, 220.0, 121.0, 26.0))
     result.xComboBox2.setEditable(false)
     result.xComboBox2.addItemWithObjectValue(@ns"item1")
     result.xComboBox2.addItemWithObjectValue(@ns"item2")

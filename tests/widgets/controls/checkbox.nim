@@ -122,8 +122,7 @@ objcImpl:
       100.0,
       300.0,
       328.0,
-      NSTitledWindowMask or NSClosableWindowMask or NSMiniaturizableWindowMask or
-        NSResizableWindowMask,
+      {NSTitledWindow, NSClosableWindow, NSMiniaturizableWindow, NSResizableWindow},
       NSBackingStoreBuffered,
       false,
     )
@@ -138,61 +137,66 @@ objcImpl:
     result.setContentView(contentView)
 
     var checkBox1Alloc = NSButton.alloc()
-    result.xCheckBox1 = checkBox1Alloc.initWithFrame(nsRect(30.0, 250.0, 105.0, 20.0))
+    result.xCheckBox1 = checkBox1Alloc.init()
     checkBox1Alloc.value = nil
+    result.xCheckBox1.setFrame(nsRect(30.0, 250.0, 105.0, 20.0))
     result.xCheckBox1.setTitle(@ns"Unchecked")
     result.xCheckBox1.setButtonType(NSSwitchButton)
     result.xCheckBox1.setTarget(ID(value: result.value))
     result.xCheckBox1.setAction(getSelector("OnCheckBox1Click:"))
     result.xCheckBox1.setAlignment(NSNaturalTextAlignment)
-    result.xCheckBox1.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xCheckBox1.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
     result.xCheckBox1.setState(NSOffState.cint)
 
     var checkBox2Alloc = NSButton.alloc()
-    result.xCheckBox2 = checkBox2Alloc.initWithFrame(nsRect(30.0, 220.0, 105.0, 20.0))
+    result.xCheckBox2 = checkBox2Alloc.init()
     checkBox2Alloc.value = nil
+    result.xCheckBox2.setFrame(nsRect(30.0, 220.0, 105.0, 20.0))
     result.xCheckBox2.setTitle(@ns"Checked")
     result.xCheckBox2.setButtonType(NSSwitchButton)
     result.xCheckBox2.setTarget(ID(value: result.value))
     result.xCheckBox2.setAction(getSelector("OnCheckBox2Click:"))
     result.xCheckBox2.setAlignment(NSNaturalTextAlignment)
-    result.xCheckBox2.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xCheckBox2.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
     result.xCheckBox2.setState(NSOnState.cint)
 
     var checkBox3Alloc = NSButton.alloc()
-    result.xCheckBox3 = checkBox3Alloc.initWithFrame(nsRect(30.0, 190.0, 105.0, 20.0))
+    result.xCheckBox3 = checkBox3Alloc.init()
     checkBox3Alloc.value = nil
+    result.xCheckBox3.setFrame(nsRect(30.0, 190.0, 105.0, 20.0))
     result.xCheckBox3.setTitle(@ns"Mixed")
     result.xCheckBox3.setAllowsMixedState(true)
     result.xCheckBox3.setButtonType(NSSwitchButton)
     result.xCheckBox3.setTarget(ID(value: result.value))
     result.xCheckBox3.setAction(getSelector("OnCheckBox3Click:"))
     result.xCheckBox3.setAlignment(NSNaturalTextAlignment)
-    result.xCheckBox3.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xCheckBox3.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
     result.xCheckBox3.setState(NSMixedState.cint)
 
     var checkBox4Alloc = NSButton.alloc()
-    result.xCheckBox4 = checkBox4Alloc.initWithFrame(nsRect(30.0, 160.0, 105.0, 25.0))
+    result.xCheckBox4 = checkBox4Alloc.init()
     checkBox4Alloc.value = nil
+    result.xCheckBox4.setFrame(nsRect(30.0, 160.0, 105.0, 25.0))
     result.xCheckBox4.setTitle(@ns"Checked")
     result.xCheckBox4.setButtonType(NSOnOffButton)
     result.xCheckBox4.setBezelStyle(NSRoundedBezelStyle)
     result.xCheckBox4.setTarget(ID(value: result.value))
     result.xCheckBox4.setAction(getSelector("OnCheckBox4Click:"))
     result.xCheckBox4.setAlignment(NSCenterTextAlignment)
-    result.xCheckBox4.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xCheckBox4.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
     result.xCheckBox4.setState(NSOnState.cint)
 
     var checkBox5Alloc = NSButton.alloc()
-    result.xCheckBox5 = checkBox5Alloc.initWithFrame(nsRect(30.0, 130.0, 105.0, 25.0))
+    result.xCheckBox5 = checkBox5Alloc.init()
     checkBox5Alloc.value = nil
+    result.xCheckBox5.setFrame(nsRect(30.0, 130.0, 105.0, 25.0))
     result.xCheckBox5.setTitle(@ns"Unchecked")
     result.xCheckBox5.setButtonType(NSOnOffButton)
     result.xCheckBox5.setBezelStyle(NSRoundedBezelStyle)
     result.xCheckBox5.setTarget(ID(value: result.value))
     result.xCheckBox5.setAction(getSelector("OnCheckBox5Click:"))
     result.xCheckBox5.setAlignment(NSCenterTextAlignment)
-    result.xCheckBox5.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
+    result.xCheckBox5.setAutoresizingMask(NSViewMaxXMargin.int or NSViewMinYMargin.int)
     result.xCheckBox5.setState(NSOffState.cint)
 
     contentView.addSubview(result.xCheckBox1)
@@ -221,7 +225,7 @@ objcImpl:
     NSApp().stop()
     true
 
-  method stateToString*(self: CheckBoxWindow, state: int): NSString =
+  method stateToString*(self: CheckBoxWindow, state: NSCellState): NSString =
     if self.isNil:
       return @ns"Unchecked"
     case state
