@@ -112,8 +112,10 @@ proc boxUpdateContentViewFrame(self: NSBox) =
     return
   let contentRect = boxContentRect(self)
   self.xContentView.setFrame(
-    contentRect.origin.x, contentRect.origin.y, contentRect.size.width,
-    contentRect.size.height,
+    nsRect(
+      contentRect.origin.x, contentRect.origin.y, contentRect.size.width,
+      contentRect.size.height,
+    )
   )
 
 proc boxTitleRect(self: NSBox): NSRect =
@@ -230,14 +232,14 @@ objcImpl:
 
     var contentAlloc = NSView.alloc()
     var content = contentAlloc.initWithFrame(
-      0.0'f32, 0.0'f32, result.bounds().size.width, result.bounds().size.height
+      nsRect(0.0'f32, 0.0'f32, result.bounds().size.width, result.bounds().size.height)
     )
     contentAlloc.value = nil
     if not content.isNil:
-      var children = result.viewSubviews()
+      var children = result.subviews()
       children.add(content)
-      result.viewSubviews = children
-      content.viewSuperview = retain(result.NSView)
+      result.setSubviews(children)
+      content.xSetSuperview(retain(result).NSView)
       content.setNextResponder(result.NSResponder)
       result.xContentView = retain(content)
       boxUpdateContentViewFrame(result)
@@ -337,32 +339,31 @@ objcImpl:
 
     if not self.xContentView.isNil:
       clearSuperviewRef(self.xContentView.value)
-      var children = self.viewSubviews()
+      var children = self.subviews()
       for i, candidate in children:
         if candidate.value == self.xContentView.value:
           children.del(i)
-          self.viewSubviews = children
+          self.setSubviews(children)
           break
 
     if view.isNil:
       self.xContentView = NSView(value: nil)
       return
 
-    let parent = view.viewSuperview()
+    let parent = view.superview()
     if not parent.isNil:
-      var siblings = parent.viewSubviews()
+      var siblings = parent.subviews()
       for i, candidate in siblings:
         if candidate.value == view.value:
           siblings.del(i)
-          parent.viewSubviews = siblings
+          parent.setSubviews(siblings)
           break
-      view.viewSuperview = NSView(value: nil)
-
-    var children = self.viewSubviews()
+      view.xSetSuperview(NSView(value: nil))
+    var children = self.subviews()
     if view notin children:
       children.add(view)
-      self.viewSubviews = children
-    view.viewSuperview = retain(self.NSView)
+      self.setSubviews(children)
+    view.xSetSuperview(retain(self).NSView)
     view.setNextResponder(self.NSResponder)
     self.xContentView = retain(view)
     boxUpdateContentViewFrame(self)
@@ -413,8 +414,8 @@ objcImpl:
     let boundsOrigin = self.bounds().origin
     let nextWidth = max(width.float32, 0.0)
     let nextHeight = max(height.float32, 0.0)
-    self.viewFrame = nsRect(x.float32, y.float32, nextWidth, nextHeight)
-    self.viewBounds = nsRect(boundsOrigin.x, boundsOrigin.y, nextWidth, nextHeight)
+    self.setFrame(nsRect(x.float32, y.float32, nextWidth, nextHeight))
+    self.setBounds(nsRect(boundsOrigin.x, boundsOrigin.y, nextWidth, nextHeight))
     boxUpdateContentViewFrame(self)
     self.setNeedsDisplay(true)
 

@@ -51,7 +51,7 @@ objcImpl:
     if result.isNil:
       return
     result.setFrame(
-      x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
+      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
     )
     result.xTarget.value = nil
     result.xAction = nil

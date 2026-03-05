@@ -24,7 +24,7 @@ suite "appkit nsscrollview integration":
 
   test "tile computes clip and scroller frames":
     var scroll = NSScrollView.new()
-    scroll.setFrame(0.0, 0.0, 220.0, 160.0)
+    scroll.setFrame(nsRect(0.0, 0.0, 220.0, 160.0))
     scroll.setBorderType(NSNoBorder)
     scroll.setHasVerticalScroller(true)
     scroll.setHasHorizontalScroller(true)
@@ -45,7 +45,7 @@ suite "appkit nsscrollview integration":
 
   test "reflect scrolled clip view updates scroller state":
     var scroll = NSScrollView.new()
-    scroll.setFrame(0.0, 0.0, 240.0, 180.0)
+    scroll.setFrame(nsRect(0.0, 0.0, 240.0, 180.0))
     scroll.setHasVerticalScroller(true)
     scroll.setHasHorizontalScroller(true)
 
@@ -82,13 +82,13 @@ suite "appkit nsscrollview integration":
     var window = newWindow(0.0, 0.0, 320.0, 220.0, "scroll-image-loop")
     var root = newView(0.0, 0.0, 320.0, 220.0)
     var scroll = NSScrollView.new()
-    scroll.setFrame(20.0, 20.0, 260.0, 160.0)
+    scroll.setFrame(nsRect(20.0, 20.0, 260.0, 160.0))
     scroll.setHasVerticalScroller(true)
     scroll.setHasHorizontalScroller(true)
 
     var doc = newView(0.0, 0.0, 520.0, 360.0)
     var imageView = NSImageView.new()
-    imageView.setFrame(180.0, 120.0, 96.0, 72.0)
+    imageView.setFrame(nsRect(180.0, 120.0, 96.0, 72.0))
     imageView.setImage(image)
     imageView.setImageScaling(NSImageScaleAxesIndependently)
     doc.addSubview(imageView)

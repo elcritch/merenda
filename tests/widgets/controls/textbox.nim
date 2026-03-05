@@ -99,18 +99,18 @@ objcImpl:
       return
 
     var contentAlloc = NSView.alloc()
-    var contentView = contentAlloc.initWithFrame(0.0, 0.0, 300.0, 300.0)
+    var contentView = contentAlloc.initWithFrame(nsRect(0.0, 0.0, 300.0, 300.0))
     contentAlloc.value = nil
     result.setContentView(contentView)
 
     var textBox1Alloc = NSTextField.alloc()
-    result.xTextBox1 = textBox1Alloc.initWithFrame(10.0, 270.0, 100.0, 20.0)
+    result.xTextBox1 = textBox1Alloc.initWithFrame(nsRect(10.0, 270.0, 100.0, 20.0))
     textBox1Alloc.value = nil
     result.xTextBox1.setStringValue(@ns"textBox1")
     result.xTextBox1.setAlignment(NSLeftTextAlignment)
 
     var textBox2Alloc = NSTextField.alloc()
-    result.xTextBox2 = textBox2Alloc.initWithFrame(10.0, 230.0, 100.0, 20.0)
+    result.xTextBox2 = textBox2Alloc.initWithFrame(nsRect(10.0, 230.0, 100.0, 20.0))
     textBox2Alloc.value = nil
     result.xTextBox2.setStringValue(@ns"textBox2")
     result.xTextBox2.setAlignment(NSLeftTextAlignment)
@@ -120,9 +120,7 @@ objcImpl:
     discard result.makeFirstResponder(result.xTextBox2.NSResponder)
     result.setTitle(@ns"TextBox Example")
     result.setIsVisible(true)
-    dumpTextBoxLayout(
-      "init", result as NSWindow, result.xTextBox1, result.xTextBox2
-    )
+    dumpTextBoxLayout("init", result as NSWindow, result.xTextBox1, result.xTextBox2)
     contentView.value = nil
 
   method windowShouldClose*(self: TextBoxWindow, sender: NSObject): bool =

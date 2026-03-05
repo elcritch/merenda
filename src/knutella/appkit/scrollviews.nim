@@ -212,7 +212,7 @@ objcImpl:
       frame.size.height.float32,
     )
     allocated.value = nil
-    scroller.setAutoresizingMask(NSViewMinXMargin or NSViewHeightSizable)
+    scroller.setAutoresizingMask(NSViewMinXMargin.int or NSViewHeightSizable.int)
     scroller.setTarget(ID(value: self.value))
     scroller.setAction(getSelector("verticalScroll:"))
     self.xVerticalScroller = scroller
@@ -227,7 +227,7 @@ objcImpl:
       frame.size.height.float32,
     )
     allocated.value = nil
-    scroller.setAutoresizingMask(NSViewMaxYMargin or NSViewWidthSizable)
+    scroller.setAutoresizingMask(NSViewMaxYMargin.int or NSViewWidthSizable.int)
     scroller.setTarget(ID(value: self.value))
     scroller.setAction(getSelector("horizontalScroll:"))
     self.xHorizontalScroller = scroller
@@ -244,7 +244,7 @@ objcImpl:
     if result.isNil:
       return
     result.setFrame(
-      x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
+      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
     )
     result.xClipView = NSClipView(value: nil)
     result.xHeaderClipView = NSClipView(value: nil)
@@ -272,11 +272,8 @@ objcImpl:
 
     let clipFrame = nsRect(0.0, 0.0, max(width.float32, 0.0), max(height.float32, 0.0))
     var clipView = NSClipView.new()
-    clipView.setFrame(
-      clipFrame.origin.x.float32, clipFrame.origin.y.float32,
-      clipFrame.size.width.float32, clipFrame.size.height.float32,
-    )
-    clipView.setAutoresizingMask(NSViewWidthSizable or NSViewHeightSizable)
+    clipView.setFrame(clipFrame)
+    clipView.setAutoresizingMask(NSViewWidthSizable.int or NSViewHeightSizable.int)
     clipView.setAutoresizesSubviews(true)
     result.xClipView = clipView
     result.addSubview(clipView)
@@ -359,13 +356,17 @@ objcImpl:
       let frame = self.clipViewFrame()
       self.xClipView = NSClipView.new()
       self.xClipView.setFrame(
-        frame.origin.x.float32, frame.origin.y.float32, frame.size.width.float32,
-        frame.size.height.float32,
+        nsRect(
+          frame.origin.x.float32, frame.origin.y.float32, frame.size.width.float32,
+          frame.size.height.float32,
+        )
       )
     else:
       self.xClipView = retain(clipView)
     self.addSubview(self.xClipView.NSView)
-    self.xClipView.setAutoresizingMask(NSViewWidthSizable or NSViewHeightSizable)
+    self.xClipView.setAutoresizingMask(
+      NSViewWidthSizable.int or NSViewHeightSizable.int
+    )
     self.xClipView.setAutoresizesSubviews(true)
     self.tile()
 
@@ -513,12 +514,14 @@ objcImpl:
       let frame = self.headerClipViewFrame()
       var headerClip = NSClipView.new()
       headerClip.setFrame(
-        frame.origin.x.float32, frame.origin.y.float32, frame.size.width.float32,
-        frame.size.height.float32,
+        nsRect(
+          frame.origin.x.float32, frame.origin.y.float32, frame.size.width.float32,
+          frame.size.height.float32,
+        )
       )
       headerClip.setDocumentView(headerView)
       self.addSubview(headerClip.NSView)
-      headerClip.setAutoresizingMask(NSViewWidthSizable or NSViewHeightSizable)
+      headerClip.setAutoresizingMask(NSViewWidthSizable.int or NSViewHeightSizable.int)
       headerClip.setAutoresizesSubviews(true)
       self.xHeaderClipView = headerClip
 

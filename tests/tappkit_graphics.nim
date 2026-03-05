@@ -37,7 +37,7 @@ suite "appkit nsgraphics":
   test "NSRectFill and NSFrameRectWithWidth emit figdraw nodes":
     var window = newWindow(0.0, 0.0, 100.0, 80.0, "graphics-probe")
     var viewAlloc = GraphicsProbeView.alloc()
-    var root = viewAlloc.initWithFrame(0.0, 0.0, 100.0, 80.0)
+    var root = viewAlloc.initWithFrame(nsRect(0.0, 0.0, 100.0, 80.0))
     viewAlloc.value = nil
     window.setContentView(root)
 

@@ -5,7 +5,7 @@ import ./graphics
 import ./colors
 
 proc scaledImageSizeInFrameSize(
-    imageSize: NSSize, frameSize: NSSize, scaling: int
+    imageSize: NSSize, frameSize: NSSize, scaling: NSImageScaling
 ): NSSize =
   if imageSize.width <= 0 or imageSize.height <= 0:
     return nsSize(0, 0)
@@ -40,8 +40,8 @@ objcImpl:
   type NSImageCell* = object of NSCell
     xAnimates {.set: setAnimates, get: animates.}: bool
     xImageAlignment {.set: setImageAlignment, get: imageAlignment.}: NSImageAlignment
-    xImageScaling {.set: setImageScaling, get: imageScaling.}: int
-    xFrameStyle {.set: setImageFrameStyle, get: imageFrameStyle.}: int
+    xImageScaling {.set: setImageScaling, get: imageScaling.}: NSImageScaling
+    xFrameStyle {.set: setImageFrameStyle, get: imageFrameStyle.}: NSImageFrameStyle
 
   method init*(self: var NSImageCell): NSImageCell =
     result =

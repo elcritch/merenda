@@ -40,12 +40,12 @@ objcImpl:
     result.xButton2Clicked = 0
 
     var contentAlloc = NSView.alloc()
-    var contentView = contentAlloc.initWithFrame(0.0, 0.0, 300.0, 300.0)
+    var contentView = contentAlloc.initWithFrame(nsRect(0.0, 0.0, 300.0, 300.0))
     contentAlloc.value = nil
     result.setContentView(contentView)
 
     var button1Alloc = NSButton.alloc()
-    result.xButton1 = button1Alloc.initWithFrame(50.0, 225.0, 90.0, 25.0)
+    result.xButton1 = button1Alloc.initWithFrame(nsRect(50.0, 225.0, 90.0, 25.0))
     button1Alloc.value = nil
     result.xButton1.setTitle(@ns"button1")
     result.xButton1.setBezelStyle(NSRoundedBezelStyle)
@@ -54,7 +54,7 @@ objcImpl:
     result.xButton1.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
 
     var button2Alloc = NSButton.alloc()
-    result.xButton2 = button2Alloc.initWithFrame(50.0, 125.0, 200.0, 75.0)
+    result.xButton2 = button2Alloc.initWithFrame(nsRect(50.0, 125.0, 200.0, 75.0))
     button2Alloc.value = nil
     result.xButton2.setTitle(@ns"button2")
     result.xButton2.setBezelStyle(NSRegularSquareBezelStyle)
@@ -63,7 +63,7 @@ objcImpl:
     result.xButton2.setAutoresizingMask(NSViewMaxXMargin or NSViewMinYMargin)
 
     var label1Alloc = NSTextField.alloc()
-    result.xLabel1 = label1Alloc.initWithFrame(50.0, 80.0, 200.0, 20.0)
+    result.xLabel1 = label1Alloc.initWithFrame(nsRect(50.0, 80.0, 200.0, 20.0))
     label1Alloc.value = nil
     result.xLabel1.setStringValue(@ns"button1 clicked 0 times")
     result.xLabel1.setBezeled(false)
@@ -71,7 +71,7 @@ objcImpl:
     result.xLabel1.setEditable(false)
 
     var label2Alloc = NSTextField.alloc()
-    result.xLabel2 = label2Alloc.initWithFrame(50.0, 50.0, 200.0, 20.0)
+    result.xLabel2 = label2Alloc.initWithFrame(nsRect(50.0, 50.0, 200.0, 20.0))
     label2Alloc.value = nil
     result.xLabel2.setStringValue(@ns"button2 clicked 0 times")
     result.xLabel2.setBezeled(false)

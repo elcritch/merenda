@@ -20,6 +20,7 @@ proc removeFromSuperviewWithoutNeedingDisplay*(view: NSView)
 proc removeFromSuperview*(view: NSView)
 method xInvalidateTrackingAreas*(self: NSWindow) {.base.} =
   discard
+
 method invalidateCursorRectsForView*(self: NSWindow, view: NSView) {.base.} =
   discard
 
@@ -63,7 +64,7 @@ objcImpl:
     xPreviousKeyView {.get: previousKeyView.}: NSView
 
     xHidden {.get: isHidden.}: bool
-    xBackgroundColor: NSColor
+    xBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
 
     xPostsNotificationOnFrameChange {.
       set: setPostsFrameChangedNotifications, get: postsFrameChangedNotifications
@@ -140,6 +141,12 @@ objcImpl:
     markTransformsDirty(self)
     self.window().invalidateCursorRectsForView(self)
 
+  method frameOrigin*(self: NSView): NSPoint =
+    self.xFrame.origin
+
+  method frameSize*(self: NSView): NSSize =
+    self.xFrame.size
+
   method setFrameSize*(self: NSView, size: NSSize) =
     var frame = self.xFrame
     frame.size = nsSize(max(size.width, 0.0), max(size.height, 0.0))
@@ -173,10 +180,14 @@ objcImpl:
       height {.kw("height").}: float32,
   ) =
     self.setBounds(
-      nsRect(
-        x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0)
-      )
+      nsRect(x.float32, y.float32, max(width.float32, 0.0), max(height.float32, 0.0))
     )
+
+  method boundsOrigin*(self: NSView): NSPoint =
+    self.xBounds.origin
+
+  method boundsSize*(self: NSView): NSSize =
+    self.xBounds.size
 
   method setBoundsOrigin*(self: NSView, point: NSPoint) =
     var bounds = self.xBounds
@@ -491,15 +502,6 @@ objcImpl:
       self.addSubview(view)
       if not view.isNil:
         view.setNeedsDisplay(true)
-
-  method setBackgroundColor(
-      self: NSView,
-      r: float32,
-      g {.kw("green").}: float32,
-      b {.kw("blue").}: float32,
-      a {.kw("alpha").}: float32,
-  ) =
-    self.xBackgroundColor = nsColor(r.float32, g.float32, b.float32, a.float32)
 
   method setHidden*(self: NSView, hidden: bool) =
     if self.xHidden == hidden:

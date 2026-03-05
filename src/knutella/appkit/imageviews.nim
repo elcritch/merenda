@@ -36,10 +36,10 @@ objcImpl:
   method imageAlignment*(self: NSImageView): NSImageAlignment =
     imageCell(self).imageAlignment()
 
-  method imageFrameStyle*(self: NSImageView): int =
+  method imageFrameStyle*(self: NSImageView): NSImageFrameStyle =
     imageCell(self).imageFrameStyle()
 
-  method imageScaling*(self: NSImageView): int =
+  method imageScaling*(self: NSImageView): NSImageScaling =
     imageCell(self).imageScaling()
 
   method isEditable*(self: NSImageView): bool =
@@ -66,10 +66,10 @@ objcImpl:
   method setImageAlignment*(self: NSImageView, alignment: NSImageAlignment) =
     imageCell(self).setImageAlignment(alignment)
 
-  method setImageFrameStyle*(self: NSImageView, frameStyle: int) =
+  method setImageFrameStyle*(self: NSImageView, frameStyle: NSImageFrameStyle) =
     imageCell(self).setImageFrameStyle(frameStyle)
 
-  method setImageScaling*(self: NSImageView, scaling: int) =
+  method setImageScaling*(self: NSImageView, scaling: NSImageScaling) =
     imageCell(self).setImageScaling(scaling)
 
   method dealloc(self: NSImageView) {.used.} =
@@ -82,6 +82,9 @@ proc cellClass*(t: typedesc[NSImageView]): ObjcClass =
 
 proc imageRectForBounds*(self: NSImageView, rect: NSRect): NSRect =
   imageCell(self).imageRectForBounds(rect)
+
+proc setFrame*[T: SomeNumber](self: NSImageView, x, y, width, height: T) =
+  self.NSView.setFrame(nsRect(x.float32, y.float32, width.float32, height.float32))
 
 proc new*(t: typedesc[NSImageView]): NSImageView =
   var allocated = NSImageView.alloc()
