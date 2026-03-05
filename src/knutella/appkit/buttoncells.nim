@@ -523,21 +523,13 @@ objcImpl:
         value.asWrapper(IntValue).intValue()
       else:
         0
-    # let valueId = cast[ID](value)
-    # let val: int =
-    #   if value.respondsToSelector("intValue"):
-    #     cast[proc(self: IDPtr, op: SEL): cint {.cdecl, varargs.}](objc_msgSend)(
-    #       valueId.value, getSelector("intValue")
-    #     ).int
-    #   else:
-    #     0
     discard callSuperAs[ID, int](self, @selector"setState:", val)
 
     let controlView = self.controlView()
     controlView.willChangeValueForKey(@ns"objectValue")
     self.xObjectValue = @ns(callSuperAs[int](self, @selector"state").int)
     controlView.didChangeValueForKey(@ns"objectValue")
-    if controlView.respondsToSelector("updateCell:"):
+    if controlView.isWrapper(UpdateCell):
       controlView.asWrapper(UpdateCell).updateCell(self)
 
   method performClick*(self: NSButtonCell, sender: NSObject) =
