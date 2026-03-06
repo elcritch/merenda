@@ -1,5 +1,3 @@
-import std/math
-
 import ./runtime
 import ./controls
 import ./events
@@ -202,6 +200,8 @@ objcImpl:
       get: usesAlternatingRowBackgroundColors
     .}: bool
     xSelectedRow {.get: selectedRow.}: int
+    xClickedRow {.get: clickedRow.}: int
+    xClickedColumn {.get: clickedColumn.}: int
     xBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
     xGridColor {.set: setGridColor, get: gridColor.}: NSColor
 
@@ -220,6 +220,8 @@ objcImpl:
     result.xIntercellSpacing = nsSize(3.0, 1.0)
     result.xUsesAlternatingRows = true
     result.xSelectedRow = -1
+    result.xClickedRow = -1
+    result.xClickedColumn = -1
     result.xBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
     result.xGridColor = nsColor(0.85, 0.85, 0.85, 1.0)
     if not result.xHeaderViewObj.isNil:
@@ -352,41 +354,82 @@ objcImpl:
   method noteNumberOfRowsChanged*(self: NSTableView) =
     self.reloadData()
 
-  method clickedRow*(self: NSTableView): int =
-    self.xSelectedRow()
+  method selectedRowIndexes*(self: NSTableView): NSIndexSet =
+    if self.xSelectedRow() < 0:
+      return nsIndexSet()
+    nsIndexSet([self.xSelectedRow().NSUInteger])
 
-  method selectRow*(self: NSTableView, row: int) =
+  method isRowSelected*(self: NSTableView, row: int): bool =
+    row == self.xSelectedRow()
+
+  method selectRowIndexes*(
+      self: NSTableView,
+      indexes: NSIndexSet,
+      byExtendingSelection {.kw("byExtendingSelection").}: bool,
+  ) =
     let rows = self.numberOfRows()
-    if rows <= 0:
+    if rows <= 0 or indexes.isNil or indexes.isEmpty():
       self.xSelectedRow = -1
       self.reloadData()
       return
-    self.xSelectedRow = clamp(row, 0, rows - 1)
+    let first = indexes.firstIndex()
+    if first == NSIndexNotFound:
+      self.xSelectedRow = -1
+    else:
+      self.xSelectedRow = clamp(first.int, 0, rows - 1)
     self.reloadData()
 
+  method selectRow*(self: NSTableView, row: int) =
+    if row < 0:
+      self.selectRowIndexes(nsIndexSet(), false)
+      return
+    self.selectRowIndexes(NSIndexSet.indexSetWithIndex(row.NSUInteger), false)
+
   method deselectAll*(self: NSTableView, sender: NSObject) =
-    self.xSelectedRow = -1
-    self.reloadData()
+    self.selectRowIndexes(nsIndexSet(), false)
+
+  method rowAtPoint*(self: NSTableView, point: NSPoint): int =
+    if point.y < 0.0:
+      return -1
+    let rows = self.numberOfRows()
+    if rows <= 0:
+      return -1
+    let rowStride = max(self.xRowHeight + self.xIntercellSpacing.height, 1.0)
+    var height = 0.0
+    for row in 0 ..< rows:
+      if height + rowStride > point.y:
+        return row
+      height += rowStride
+    -1
+
+  method columnAtPoint*(self: NSTableView, point: NSPoint): int =
+    if point.x < 0.0:
+      return -1
+    var width = 0.0'f32
+    for i, column in self.xColumns:
+      if column.isNil:
+        continue
+      width += clampColumnWidth(column.width()) + self.xIntercellSpacing.width
+      if width > point.x:
+        return i
+    -1
 
   method mouseDown*(self: NSTableView, event: NSEvent) =
     if event.isNil:
       return
     let location =
       self.NSView.convertPoint(event.locationInWindow(), NSView(value: nil))
-    let rows = self.numberOfRows()
-    if location.y < 0.0 or rows <= 0:
-      self.xSelectedRow = -1
-    else:
-      let rowStride = max(self.xRowHeight + self.xIntercellSpacing.height, 1.0)
-      var row = -1
-      var y = 0.0
-      for i in 0 ..< rows:
-        if y + rowStride > location.y:
-          row = i
-          break
-        y += rowStride
-      self.xSelectedRow = row
-    self.reloadData()
+    self.xClickedColumn = self.columnAtPoint(location)
+    self.xClickedRow = self.rowAtPoint(location)
+
+    if self.xClickedRow() < 0:
+      self.selectRowIndexes(nsIndexSet(), false)
+      return
+
+    if event.clickCount() < 2:
+      self.selectRowIndexes(
+        NSIndexSet.indexSetWithIndex(self.xClickedRow().NSUInteger), false
+      )
 
   method dealloc(self: NSTableView) {.used.} =
     clearSubviews(self)
