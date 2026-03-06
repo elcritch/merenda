@@ -204,17 +204,35 @@ suite "foundation stdlib-backed core types":
     check(indexes.firstIndex() == 0.NSUInteger)
     check(indexes.lastIndex() == 3.NSUInteger)
     check(indexes.toSeq() == @[0.NSUInteger, 1.NSUInteger, 3.NSUInteger])
+    var iterated: seq[NSUInteger] = @[]
+    for value in indexes.items:
+      iterated.add(value)
+    check(iterated == @[0.NSUInteger, 1.NSUInteger, 3.NSUInteger])
+    check(indexes.indexGreaterThanIndex(0.NSUInteger) == 1.NSUInteger)
+    check(indexes.indexGreaterThanOrEqualToIndex(1.NSUInteger) == 1.NSUInteger)
+    check(indexes.indexLessThanIndex(1.NSUInteger) == 0.NSUInteger)
+    check(indexes.indexLessThanOrEqualToIndex(1.NSUInteger) == 1.NSUInteger)
 
     indexes.incl(2.NSUInteger)
     check(indexes.toSeq() == @[0.NSUInteger, 1.NSUInteger, 2.NSUInteger, 3.NSUInteger])
+    check(indexes.indexGreaterThanIndex(2.NSUInteger) == 3.NSUInteger)
+    check(indexes.indexGreaterThanOrEqualToIndex(2.NSUInteger) == 2.NSUInteger)
+    check(indexes.indexLessThanIndex(2.NSUInteger) == 1.NSUInteger)
+    check(indexes.indexLessThanOrEqualToIndex(2.NSUInteger) == 2.NSUInteger)
 
     indexes.excl(0.NSUInteger)
     check(indexes.toSeq() == @[1.NSUInteger, 2.NSUInteger, 3.NSUInteger])
     check(indexes == nsIndexSet([3.NSUInteger, 2.NSUInteger, 1.NSUInteger]))
+    check(indexes.containsIndexes(nsIndexSet([1.NSUInteger, 3.NSUInteger])))
+    check(not indexes.containsIndexes(nsIndexSet([0.NSUInteger, 3.NSUInteger])))
 
     let single = NSIndexSet.indexSetWithIndex(42.NSUInteger)
     check(single.len == 1)
     check(single.contains(42.NSUInteger))
+
+    let copied = NSIndexSet.indexSetWithIndexSet(indexes)
+    check(copied == indexes)
+    check(copied.toSeq() == @[1.NSUInteger, 2.NSUInteger, 3.NSUInteger])
 
     indexes.clear()
     check(indexes.isEmpty)
