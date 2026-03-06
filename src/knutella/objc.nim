@@ -32,4 +32,5 @@ include ./objc/nsstring
 include ./objc/nsboxing
 include ./objc/nsdictionary
 include ./objc/nsarray
+include ./objc/nsset
 include ./objc/kvc

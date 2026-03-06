@@ -128,39 +128,19 @@ objcImpl:
 
   method addClub*(self: TableViewController, sender: NSObject) =
     var club = FootballClub.new()
-    let nextIndex = self.xFootballClubs.len + 1
-    club.setName(@ns("FC Generic " & $nextIndex))
-    club.setFoundationYear(@ns("20" & $(20 + (nextIndex mod 50))))
+    club.setName(@ns"FC Generic")
+    club.setFoundationYear(@ns"2020")
     self.xFootballClubs.add(club)
-    if not self.xTableView.isNil:
-      self.xTableView.selectRow(self.xFootballClubs.len - 1)
-      self.xTableView.reloadData()
-    if not self.xStatus.isNil:
-      self.xStatus.setStringValue(
-        @ns("Added club. Total rows: " & $self.xFootballClubs.len)
-      )
+    self.xTableView.reloadData()
 
   method removeClub*(self: TableViewController, sender: NSObject) =
     if self.xFootballClubs.len == 0:
-      if not self.xStatus.isNil:
-        self.xStatus.setStringValue(@ns"No rows to remove.")
       return
-    var row = -1
-    if not self.xTableView.isNil:
-      row = self.xTableView.selectedRow()
+    let row = self.xTableView.selectedRow()
     if row < 0 or row >= self.xFootballClubs.len:
-      row = self.xFootballClubs.len - 1
-    self.xFootballClubs.del(row)
-    if not self.xTableView.isNil:
-      if self.xFootballClubs.len > 0:
-        self.xTableView.selectRow(min(row, self.xFootballClubs.len - 1))
-      else:
-        self.xTableView.deselectAll(NSObject(value: nil))
-      self.xTableView.reloadData()
-    if not self.xStatus.isNil:
-      self.xStatus.setStringValue(
-        @ns("Removed row " & $row & ". Total rows: " & $self.xFootballClubs.len)
-      )
+      return
+    self.xFootballClubs.delete(row)
+    self.xTableView.reloadData()
 
   method dealloc(self: TableViewController) {.used.} =
     self.xFootballClubs = @[]

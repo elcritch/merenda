@@ -47,6 +47,8 @@ type
   NSString* = object of NSObject
   NSArray*[T] = object of NSObject
   NSDictionary*[K, V] = object of NSObject
+  NSSet*[T] = object of NSObject
+  NSIndexSet* = object of NSObject
 
   ProtocolPrototype* {.pure, inheritable.} = object
 
@@ -206,7 +208,6 @@ proc c_free(p: pointer) {.importc: "free", header: "<stdlib.h>".}
 proc sel_registerName*(str: cstring): SEL {.cdecl, importc.}
 proc objc_msgSend*(self: IDPtr, op: SEL): IDPtr {.cdecl, importc, discardable, varargs.}
 
-
 proc objc_msgSend_fpret*(self: IDPtr, op: SEL): cdouble {.cdecl, importc, varargs.}
 proc objc_msgSend_stret*(self: IDPtr, op: SEL) {.cdecl, importc, varargs.}
 proc objc_msgSendSuper*(
@@ -222,7 +223,6 @@ proc sendId*(obj: ID, op: SEL): ID {.inline.} =
 proc sendId*(obj: ID, op: SEL, arg0: ID): ID {.inline.} =
   let fn = cast[proc(self: IDPtr, op: SEL, arg0: IDPtr): IDPtr {.cdecl, varargs.}](objc_msgSend)
   ID(value: fn(obj.value, op, arg0.value))
-
 
 proc class_getName(cls: IDPtr): cstring {.cdecl, importc.}
 proc getName*(cls: ObjcClass): string =
