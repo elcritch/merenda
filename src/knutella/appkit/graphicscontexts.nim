@@ -65,6 +65,9 @@ proc normalizeLocalDrawRect(localRect: NSRect): NSRect =
   let height = max(localRect.size.height, 0.0)
   nsRect(localRect.origin.x, localRect.origin.y, width, height)
 
+proc clampedCornerRadius(rect: NSRect, radius: float32): float32 {.inline.} =
+  max(0.0'f32, min(radius, min(rect.size.width, rect.size.height) * 0.5'f32))
+
 proc sendId(obj: IDPtr, op: SEL): IDPtr {.inline.} =
   if obj.isNil or cast[pointer](op).isNil:
     return nil
@@ -401,6 +404,41 @@ proc addRectFillToCurrentRenderContext*(
   )
   true
 
+proc addRoundedRectFillToCurrentRenderContext*(
+    localRect: NSRect,
+    color: NSColor,
+    radius: float32,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil or renderPort.renders.isNil:
+    return false
+  let drawRect = normalizeLocalDrawRect(localRect)
+  if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
+    return false
+  let drawColor =
+    if operation == NSCompositeClear:
+      nsColor(0.0, 0.0, 0.0, 0.0)
+    else:
+      color
+  let corner = clampedCornerRadius(drawRect, radius)
+  discard renderPort.renders[].addChild(
+    0.ZLevel,
+    renderPort.parentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
+      ),
+      fill: drawColor.solidFill(),
+      corners: uniformCorners(corner),
+      shadows: noRenderShadows(),
+      stroke: RenderStroke(weight: 0.0, fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill()),
+    ),
+  )
+  true
+
 proc addRectFrameToCurrentRenderContext*(
     localRect: NSRect,
     color: NSColor,
@@ -431,6 +469,44 @@ proc addRectFrameToCurrentRenderContext*(
       ),
       fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
       corners: uniformCorners(0.0),
+      shadows: noRenderShadows(),
+      stroke: RenderStroke(weight: width, fill: drawColor.solidFill()),
+    ),
+  )
+  true
+
+proc addRoundedRectFrameToCurrentRenderContext*(
+    localRect: NSRect,
+    color: NSColor,
+    radius: float32,
+    width: float32 = 1.0,
+    operation: NSCompositingOperation = NSCompositeSourceOver,
+): bool =
+  if width <= 0.0:
+    return false
+  let renderPort = currentRenderGraphicsPort()
+  if renderPort.isNil or renderPort.renders.isNil:
+    return false
+  let drawRect = normalizeLocalDrawRect(localRect)
+  if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
+    return false
+  let drawColor =
+    if operation == NSCompositeClear:
+      nsColor(0.0, 0.0, 0.0, 0.0)
+    else:
+      color
+  let corner = clampedCornerRadius(drawRect, radius)
+  discard renderPort.renders[].addChild(
+    0.ZLevel,
+    renderPort.parentIdx,
+    Fig(
+      kind: nkRectangle,
+      childCount: 0,
+      screenBox: rect(
+        drawRect.origin.x, drawRect.origin.y, drawRect.size.width, drawRect.size.height
+      ),
+      fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+      corners: uniformCorners(corner),
       shadows: noRenderShadows(),
       stroke: RenderStroke(weight: width, fill: drawColor.solidFill()),
     ),

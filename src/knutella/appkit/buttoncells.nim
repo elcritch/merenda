@@ -512,31 +512,86 @@ objcImpl:
 
     if drawImage:
       self.drawImage(image, imageRect, controlView)
-    if drawsUnicodeSwitchIndicator and self.state() != NSOffState:
-      let fontKey =
-        if NSFontAttributeName.isNil:
-          @ns"NSFontAttributeName"
-        else:
-          NSFontAttributeName
-      var checkmarkAttributes = nsDictionary[NSObject, NSObject]()
-      if not self.font().isNil:
-        checkmarkAttributes[NSObject(fontKey)] = NSObject(self.font())
-      var checkmarkAllocated = NSAttributedString.alloc()
-      let checkmark =
-        checkmarkAllocated.initWithString(@ns"", attributes = checkmarkAttributes)
-      checkmarkAllocated.value = nil
-      let checkmarkSize = checkmark.size()
-      let indicatorX =
-        contentFrame.origin.x + 2.0 +
-        floor((indicatorSlotWidth - checkmarkSize.width) * 0.5)
-      let indicatorY =
-        contentFrame.origin.y +
-        floor((contentFrame.size.height - checkmarkSize.height) * 0.5)
-      discard self.drawTitle(
-        checkmark,
-        nsRect(indicatorX, indicatorY, checkmarkSize.width, checkmarkSize.height),
-        controlView,
+    if drawsUnicodeSwitchIndicator:
+      let pressed = self.state() != NSOffState
+      let cornerRadius = 2.5'f32
+      let indicatorSide =
+        min(indicatorSlotWidth, max(contentFrame.size.height - 2.0, 0.0))
+      var indicatorRect = nsRect(
+        contentFrame.origin.x + 2.0,
+        contentFrame.origin.y + floor((contentFrame.size.height - indicatorSide) * 0.5),
+        indicatorSlotWidth,
+        indicatorSide,
       )
+      let contextFlipped =
+        if NSGraphicsContext.currentContext().isNil:
+          false
+        else:
+          NSGraphicsContext.currentContext().isFlipped()
+      var topHalf = indicatorRect
+      var bottomHalf = indicatorRect
+      topHalf.size.height = floor(indicatorRect.size.height * 0.5)
+      bottomHalf.size.height = indicatorRect.size.height - topHalf.size.height
+      if contextFlipped:
+        bottomHalf.origin.y += topHalf.size.height
+      else:
+        topHalf.origin.y += bottomHalf.size.height
+      let topColor =
+        if pressed:
+          nsColor(0.83, 0.89, 0.97, 1.0)
+        else:
+          nsColor(0.98, 0.98, 0.98, 1.0)
+      let bottomColor =
+        if pressed:
+          nsColor(0.67, 0.75, 0.90, 1.0)
+        else:
+          nsColor(0.86, 0.86, 0.86, 1.0)
+      let borderColor =
+        if pressed:
+          nsColor(0.33, 0.42, 0.58, 1.0)
+        else:
+          nsColor(0.57, 0.57, 0.57, 1.0)
+      discard addRoundedRectFillToCurrentRenderContext(topHalf, topColor, cornerRadius)
+      discard
+        addRoundedRectFillToCurrentRenderContext(bottomHalf, bottomColor, cornerRadius)
+      discard addRoundedRectFrameToCurrentRenderContext(
+        indicatorRect, borderColor, cornerRadius, 1.0
+      )
+      let innerRect = insetRect(indicatorRect, 1.0, 1.0)
+      let innerColor =
+        if pressed:
+          nsColor(1.0, 1.0, 1.0, 0.25)
+        else:
+          nsColor(1.0, 1.0, 1.0, 0.45)
+      discard addRoundedRectFrameToCurrentRenderContext(
+        innerRect, innerColor, max(cornerRadius - 1.0, 0.0), 1.0
+      )
+
+      if self.state() != NSOffState:
+        let fontKey =
+          if NSFontAttributeName.isNil:
+            @ns"NSFontAttributeName"
+          else:
+            NSFontAttributeName
+        var checkmarkAttributes = nsDictionary[NSObject, NSObject]()
+        if not self.font().isNil:
+          checkmarkAttributes[NSObject(fontKey)] = NSObject(self.font())
+        var checkmarkAllocated = NSAttributedString.alloc()
+        let checkmark =
+          checkmarkAllocated.initWithString(@ns"", attributes = checkmarkAttributes)
+        checkmarkAllocated.value = nil
+        let checkmarkSize = checkmark.size()
+        let indicatorX =
+          indicatorRect.origin.x +
+          floor((indicatorRect.size.width - checkmarkSize.width) * 0.5)
+        let indicatorY =
+          indicatorRect.origin.y +
+          floor((indicatorRect.size.height - checkmarkSize.height) * 0.5)
+        discard self.drawTitle(
+          checkmark,
+          nsRect(indicatorX, indicatorY, checkmarkSize.width, checkmarkSize.height),
+          controlView,
+        )
     if drawTitle:
       discard self.drawTitle(title, titleRect, controlView)
 
