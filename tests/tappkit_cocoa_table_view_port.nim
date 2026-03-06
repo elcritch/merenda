@@ -21,6 +21,13 @@ proc clickTableRow(table: NSTableView, row: int) =
   table.mouseDown(event)
   event.value = nil
 
+proc clickOutsideTableBounds(table: NSTableView, y: float32) =
+  let localPoint = nsPoint(table.bounds().size.width + 20.0, y)
+  let windowPoint = table.NSView.convertPointToView(localPoint, NSView(value: nil))
+  var event = newMouseEvent(NSLeftMouseDown, windowPoint, {}, 0.0, 0, 1)
+  table.mouseDown(event)
+  event.value = nil
+
 proc tableValueAsString(
     controller: TableViewController, table: NSTableView, column: NSTableColumn, row: int
 ): NSString =
@@ -30,6 +37,44 @@ proc tableValueAsString(
   NSString(value)
 
 suite "appkit cocoa table view port":
+  test "table selection uses NSIndexSet semantics":
+    var table = NSTableView.new()
+    var nameColumn = NSTableColumn.new(@ns"name")
+    table.addTableColumn(nameColumn)
+
+    var controller = TableViewController.new()
+    controller.setTableView(table)
+    controller.fillTestData()
+    table.setDataSource(ID(value: controller.value))
+    table.setDelegate(ID(value: controller.value))
+    table.reloadData()
+
+    table.selectRowIndexes(nsIndexSet([1.NSUInteger]), false)
+    check(table.selectedRow() == 1)
+    check(table.isRowSelected(1))
+    check(table.selectedRowIndexes().toSeq() == @[1.NSUInteger])
+
+    table.selectRowIndexes(nsIndexSet([3.NSUInteger]), true)
+    check(table.selectedRow() == 1)
+    check(table.isRowSelected(1))
+    check(table.isRowSelected(3))
+    check(table.selectedRowIndexes().toSeq() == @[1.NSUInteger, 3.NSUInteger])
+
+    table.selectRowIndexes(nsIndexSet([99.NSUInteger]), false)
+    check(table.selectedRowIndexes().toSeq() == @[1.NSUInteger, 3.NSUInteger])
+
+    var selected = table.selectedRowIndexes()
+    selected.incl(2.NSUInteger)
+    check(not table.isRowSelected(2))
+
+    table.selectRowIndexes(nsIndexSet(), false)
+    check(table.selectedRow() == -1)
+    check(table.selectedRowIndexes().isEmpty)
+
+    controller.value = nil
+    nameColumn.value = nil
+    table.value = nil
+
   test "add and remove buttons preserve and use selected row":
     var table = NSTableView.new()
     var nameColumn = NSTableColumn.new(@ns"name")
@@ -81,6 +126,9 @@ suite "appkit cocoa table view port":
     check(tableValueAsString(controller, table, nameColumn, 1) == @ns"Liverpool")
     check(tableValueAsString(controller, table, nameColumn, 5) == @ns"FC Generic")
     check(tableValueAsString(controller, table, foundationYearColumn, 5) == @ns"2020")
+
+    clickOutsideTableBounds(table, 12.0)
+    check(table.selectedRow() == 1)
 
     clickControl(removeButton)
 

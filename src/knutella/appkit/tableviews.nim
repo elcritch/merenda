@@ -58,6 +58,15 @@ proc setObjectValueOnDataSource(
 proc rebuildHeader(tableView: NSTableView)
 proc rebuildRows(tableView: NSTableView)
 
+proc normalizedRowSelection(indexes: NSIndexSet, rows: int): NSIndexSet =
+  if rows <= 0 or indexes.isNil or indexes.isEmpty():
+    return nsIndexSet()
+  var selected = nsIndexSet()
+  for index in indexes.items:
+    if index < rows.NSUInteger:
+      selected.incl(index)
+  selected
+
 objcImpl:
   type TableRowsDataSource {.structural.} =
     concept self
@@ -199,7 +208,7 @@ objcImpl:
       set: setUsesAlternatingRowBackgroundColors,
       get: usesAlternatingRowBackgroundColors
     .}: bool
-    xSelectedRow {.get: selectedRow.}: int
+    xSelectedRowIndexes: NSIndexSet
     xClickedRow {.get: clickedRow.}: int
     xClickedColumn {.get: clickedColumn.}: int
     xBackgroundColor {.set: setBackgroundColor, get: backgroundColor.}: NSColor
@@ -219,7 +228,7 @@ objcImpl:
     result.xRowHeight = defaultRowHeight
     result.xIntercellSpacing = nsSize(3.0, 1.0)
     result.xUsesAlternatingRows = true
-    result.xSelectedRow = -1
+    result.xSelectedRowIndexes = nsIndexSet()
     result.xClickedRow = -1
     result.xClickedColumn = -1
     result.xBackgroundColor = nsColor(1.0, 1.0, 1.0, 1.0)
@@ -354,13 +363,23 @@ objcImpl:
   method noteNumberOfRowsChanged*(self: NSTableView) =
     self.reloadData()
 
+  method selectedRow*(self: NSTableView): int =
+    if self.xSelectedRowIndexes.isNil:
+      return -1
+    let row = self.xSelectedRowIndexes.firstIndex()
+    if row == NSIndexNotFound:
+      return -1
+    row.int
+
   method selectedRowIndexes*(self: NSTableView): NSIndexSet =
-    if self.xSelectedRow() < 0:
+    if self.xSelectedRowIndexes.isNil:
       return nsIndexSet()
-    nsIndexSet([self.xSelectedRow().NSUInteger])
+    NSIndexSet.indexSetWithIndexSet(self.xSelectedRowIndexes)
 
   method isRowSelected*(self: NSTableView, row: int): bool =
-    row == self.xSelectedRow()
+    if row < 0 or self.xSelectedRowIndexes.isNil:
+      return false
+    self.xSelectedRowIndexes.contains(row.NSUInteger)
 
   method selectRowIndexes*(
       self: NSTableView,
@@ -368,15 +387,41 @@ objcImpl:
       byExtendingSelection {.kw("byExtendingSelection").}: bool,
   ) =
     let rows = self.numberOfRows()
-    if rows <= 0 or indexes.isNil or indexes.isEmpty():
-      self.xSelectedRow = -1
+    let current =
+      if self.xSelectedRowIndexes.isNil:
+        nsIndexSet()
+      else:
+        self.xSelectedRowIndexes
+
+    if rows <= 0:
+      if current.isEmpty():
+        return
+      self.xSelectedRowIndexes = nsIndexSet()
       self.reloadData()
       return
-    let first = indexes.firstIndex()
-    if first == NSIndexNotFound:
-      self.xSelectedRow = -1
+
+    if indexes.isNil:
+      if current.isEmpty():
+        return
+      self.xSelectedRowIndexes = nsIndexSet()
+      self.reloadData()
+      return
+
+    if indexes.firstIndex() != NSIndexNotFound and indexes.lastIndex() >= rows.NSUInteger:
+      return
+
+    var nextSelection: NSIndexSet
+    if byExtendingSelection:
+      nextSelection = NSIndexSet.indexSetWithIndexSet(current)
+      for index in indexes.items:
+        nextSelection.incl(index)
     else:
-      self.xSelectedRow = clamp(first.int, 0, rows - 1)
+      nextSelection = NSIndexSet.indexSetWithIndexSet(indexes)
+
+    nextSelection = normalizedRowSelection(nextSelection, rows)
+    if current == nextSelection:
+      return
+    self.xSelectedRowIndexes = nextSelection
     self.reloadData()
 
   method selectRow*(self: NSTableView, row: int) =
@@ -419,6 +464,11 @@ objcImpl:
       return
     let location =
       self.NSView.convertPoint(event.locationInWindow(), NSView(value: nil))
+    let bounds = self.bounds()
+    if location.x < bounds.origin.x or location.y < bounds.origin.y or
+        location.x >= bounds.origin.x + bounds.size.width or
+        location.y >= bounds.origin.y + bounds.size.height:
+      return
     self.xClickedColumn = self.columnAtPoint(location)
     self.xClickedRow = self.rowAtPoint(location)
 
@@ -438,6 +488,7 @@ objcImpl:
     self.xDelegate.value = replacedOwnedId(self.xDelegate.value, nil)
     self.xHeaderViewObj = NSTableHeaderView(value: nil)
     self.xCornerView = NSView(value: nil)
+    self.xSelectedRowIndexes = NSIndexSet(value: nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSTableView, self, getSelector("dealloc"))
 
@@ -513,12 +564,12 @@ proc rebuildRows(tableView: NSTableView) =
 
   let rows = tableView.numberOfRows()
   if rows <= 0:
-    tableView.xSelectedRow = -1
+    tableView.xSelectedRowIndexes = nsIndexSet()
     tableView.setNeedsDisplay(true)
     return
 
-  if tableView.xSelectedRow() >= rows:
-    tableView.xSelectedRow = rows - 1
+  tableView.xSelectedRowIndexes =
+    normalizedRowSelection(tableView.xSelectedRowIndexes, rows)
 
   var y = 0.0'f32
   let rowStride = max(tableView.xRowHeight + tableView.xIntercellSpacing.height, 1.0)
@@ -544,7 +595,7 @@ proc rebuildRows(tableView: NSTableView) =
       field.setBezeled(false)
       field.setBordered(false)
       field.setDrawsBackground(true)
-      if row == tableView.xSelectedRow():
+      if tableView.isRowSelected(row):
         field.setTextColor(nsColor(1.0, 1.0, 1.0, 1.0))
         field.setBackgroundColor(nsColor(0.22, 0.49, 0.86, 1.0))
       elif tableView.xUsesAlternatingRows and (row mod 2 == 1):

@@ -1,4 +1,4 @@
-import std/[algorithm, hashes, sets, tables]
+import std/[hashes, tables]
 
 const NSIndexNotFound* = high(NSUInteger)
 
@@ -94,6 +94,79 @@ proc nxSetRemoveSetValue(data: var Table[Hash, seq[IDPtr]], value: IDPtr): bool 
         data[hashed] = bucket
       return true
   false
+
+proc nxIndexSetLowerBound(data: openArray[NSUInteger], index: NSUInteger): int =
+  var lo = 0
+  var hi = data.len
+  while lo < hi:
+    let mid = lo + (hi - lo) div 2
+    if data[mid] < index:
+      lo = mid + 1
+    else:
+      hi = mid
+  lo
+
+proc nxIndexSetContains(data: openArray[NSUInteger], index: NSUInteger): bool =
+  let position = nxIndexSetLowerBound(data, index)
+  position < data.len and data[position] == index
+
+proc nxIndexSetInsert(data: var seq[NSUInteger], index: NSUInteger): bool =
+  let position = nxIndexSetLowerBound(data, index)
+  if position < data.len and data[position] == index:
+    return false
+  data.insert(index, position)
+  true
+
+proc nxIndexSetRemove(data: var seq[NSUInteger], index: NSUInteger): bool =
+  let position = nxIndexSetLowerBound(data, index)
+  if position >= data.len or data[position] != index:
+    return false
+  data.delete(position)
+  true
+
+proc nxIndexSetGreaterThan(data: openArray[NSUInteger], index: NSUInteger): NSUInteger =
+  let position = nxIndexSetLowerBound(data, index)
+  if position >= data.len:
+    return NSIndexNotFound
+  if data[position] > index:
+    return data[position]
+  if position + 1 < data.len:
+    return data[position + 1]
+  NSIndexNotFound
+
+proc nxIndexSetGreaterThanOrEqual(
+    data: openArray[NSUInteger], index: NSUInteger
+): NSUInteger =
+  let position = nxIndexSetLowerBound(data, index)
+  if position >= data.len:
+    return NSIndexNotFound
+  data[position]
+
+proc nxIndexSetLessThan(data: openArray[NSUInteger], index: NSUInteger): NSUInteger =
+  if index == 0 or data.len == 0:
+    return NSIndexNotFound
+  let position = nxIndexSetLowerBound(data, index)
+  if position >= data.len:
+    return data[^1]
+  if data[position] == index:
+    if position == 0:
+      return NSIndexNotFound
+    return data[position - 1]
+  if position == 0:
+    return NSIndexNotFound
+  data[position - 1]
+
+proc nxIndexSetLessThanOrEqual(
+    data: openArray[NSUInteger], index: NSUInteger
+): NSUInteger =
+  if data.len == 0:
+    return NSIndexNotFound
+  let position = nxIndexSetLowerBound(data, index)
+  if position < data.len and data[position] == index:
+    return data[position]
+  if position == 0:
+    return NSIndexNotFound
+  data[position - 1]
 
 objcImpl:
   type NXSet* {.impl: NSCopying.} = object of NSObject
@@ -194,29 +267,56 @@ objcImpl:
 
 objcImpl:
   type NXIndexSet* {.impl: NSCopying.} = object of NSObject
-    xData: HashSet[NSUInteger]
+    xData: seq[NSUInteger]
     xCountCache: int
 
   method init*(self: var NXIndexSet): NXIndexSet =
     result = callSuperAs[NXIndexSet](self, getSelector("init"))
     if result.isNil:
       return
-    result.xData = initHashSet[NSUInteger]()
+    result.xData = @[]
     result.xCountCache = 0
 
   method initWithIndex*(self: var NXIndexSet, index: NSUInteger): NXIndexSet =
     result = self.init()
     if result.isNil:
       return
-    var data = result.xData()
-    data.incl(index)
-    result.xData = data
-    result.xCountCache = data.len
+    result.xData = @[index]
+    result.xCountCache = 1
+
+  method initWithIndexSet*(self: var NXIndexSet, other: NSIndexSet): NXIndexSet =
+    result = self.init()
+    if result.isNil:
+      return
+    if other.isNil:
+      return
+
+    if other.isKindOfClass(NXIndexSet):
+      let otherObj = other as NXIndexSet
+      result.xData = otherObj.xData()
+      result.xCountCache = result.xData().len
+      return
+
+    if not other.respondsToSelector("firstIndex") or
+        not other.respondsToSelector("indexGreaterThanIndex:"):
+      return
+
+    let firstSend =
+      cast[proc(obj: IDPtr, op: SEL): NSUInteger {.cdecl, varargs.}](objc_msgSend)
+    let nextSend = cast[proc(obj: IDPtr, op: SEL, index: NSUInteger): NSUInteger {.
+      cdecl, varargs
+    .}](objc_msgSend)
+
+    var copied: seq[NSUInteger] = @[]
+    var value = firstSend(other.value, sel_registerName("firstIndex"))
+    while value != NSIndexNotFound:
+      discard nxIndexSetInsert(copied, value)
+      value = nextSend(other.value, sel_registerName("indexGreaterThanIndex:"), value)
+    result.xData = copied
+    result.xCountCache = copied.len
 
   method dealloc*(self: NXIndexSet) =
-    var data = self.xData()
-    data.clear()
-    self.xData = data
+    self.xData = @[]
     self.xCountCache = 0
     destroyIvarFields(self)
     discard callSuperAs[IDPtr](self, getSelector("dealloc"))
@@ -227,14 +327,47 @@ objcImpl:
     NSObject(value: self.value)
 
   method count*(self: NXIndexSet): NSUInteger =
-    if self.xCountCache() <= 0:
-      return 0
-    self.xCountCache().NSUInteger
+    self.xData().len.NSUInteger
 
   method containsIndex*(self: NXIndexSet, index: NSUInteger): bool =
     if self.isNil:
       return false
-    index in self.xData()
+    nxIndexSetContains(self.xData(), index)
+
+  method containsIndexes*(self: NXIndexSet, other: NSIndexSet): bool =
+    if self.isNil or other.isNil:
+      return false
+    if not other.respondsToSelector("count"):
+      return false
+
+    let countSend =
+      cast[proc(obj: IDPtr, op: SEL): NSUInteger {.cdecl, varargs.}](objc_msgSend)
+    if countSend(other.value, sel_registerName("count")) == 0:
+      return true
+
+    if other.isKindOfClass(NXIndexSet):
+      let otherObj = other as NXIndexSet
+      for value in otherObj.xData():
+        if not nxIndexSetContains(self.xData(), value):
+          return false
+      return true
+
+    if not other.respondsToSelector("firstIndex") or
+        not other.respondsToSelector("indexGreaterThanIndex:"):
+      return false
+
+    let firstSend =
+      cast[proc(obj: IDPtr, op: SEL): NSUInteger {.cdecl, varargs.}](objc_msgSend)
+    let nextSend = cast[proc(obj: IDPtr, op: SEL, index: NSUInteger): NSUInteger {.
+      cdecl, varargs
+    .}](objc_msgSend)
+
+    var value = firstSend(other.value, sel_registerName("firstIndex"))
+    while value != NSIndexNotFound:
+      if not nxIndexSetContains(self.xData(), value):
+        return false
+      value = nextSend(other.value, sel_registerName("indexGreaterThanIndex:"), value)
+    true
 
   method firstIndex*(self: NXIndexSet): NSUInteger =
     if self.isNil:
@@ -242,11 +375,7 @@ objcImpl:
     let data = self.xData()
     if data.len == 0:
       return NSIndexNotFound
-    var first = high(NSUInteger)
-    for value in data:
-      if value < first:
-        first = value
-    first
+    data[0]
 
   method lastIndex*(self: NXIndexSet): NSUInteger =
     if self.isNil:
@@ -254,36 +383,50 @@ objcImpl:
     let data = self.xData()
     if data.len == 0:
       return NSIndexNotFound
-    var last = 0.NSUInteger
-    var found = false
-    for value in data:
-      if not found or value > last:
-        last = value
-        found = true
-    if found: last else: NSIndexNotFound
+    data[^1]
+
+  method indexGreaterThanIndex*(self: NXIndexSet, index: NSUInteger): NSUInteger =
+    if self.isNil:
+      return NSIndexNotFound
+    nxIndexSetGreaterThan(self.xData(), index)
+
+  method indexGreaterThanOrEqualToIndex*(
+      self: NXIndexSet, index: NSUInteger
+  ): NSUInteger =
+    if self.isNil:
+      return NSIndexNotFound
+    nxIndexSetGreaterThanOrEqual(self.xData(), index)
+
+  method indexLessThanIndex*(self: NXIndexSet, index: NSUInteger): NSUInteger =
+    if self.isNil:
+      return NSIndexNotFound
+    nxIndexSetLessThan(self.xData(), index)
+
+  method indexLessThanOrEqualToIndex*(self: NXIndexSet, index: NSUInteger): NSUInteger =
+    if self.isNil:
+      return NSIndexNotFound
+    nxIndexSetLessThanOrEqual(self.xData(), index)
 
   method addIndex*(self: NXIndexSet, index: NSUInteger) =
     if self.isNil:
       return
     var data = self.xData()
-    data.incl(index)
-    self.xData = data
-    self.xCountCache = data.len
+    if nxIndexSetInsert(data, index):
+      self.xData = data
+      self.xCountCache = data.len
 
   method removeIndex*(self: NXIndexSet, index: NSUInteger) =
     if self.isNil:
       return
     var data = self.xData()
-    data.excl(index)
-    self.xData = data
-    self.xCountCache = data.len
+    if nxIndexSetRemove(data, index):
+      self.xData = data
+      self.xCountCache = data.len
 
   method removeAllIndexes*(self: NXIndexSet) =
     if self.isNil:
       return
-    var data = self.xData()
-    data.clear()
-    self.xData = data
+    self.xData = @[]
     self.xCountCache = 0
 
   method isEqual*(self: NXIndexSet, other: NSObject): bool =
@@ -294,6 +437,9 @@ objcImpl:
     if not other.respondsToSelector("count") or
         not other.respondsToSelector("containsIndex:"):
       return false
+    if other.isKindOfClass(NXIndexSet):
+      let otherObj = NSIndexSet(other) as NXIndexSet
+      return self.xData() == otherObj.xData()
     let countSend =
       cast[proc(obj: IDPtr, op: SEL): NSUInteger {.cdecl, varargs.}](objc_msgSend)
     let containsSend = cast[proc(obj: IDPtr, op: SEL, index: NSUInteger): bool {.
@@ -414,6 +560,9 @@ proc init*(t: typedesc[NSIndexSet]): NSIndexSet {.inline.} =
 proc new*(t: typedesc[NSIndexSet]): NSIndexSet {.inline.} =
   nsIndexSet()
 
+proc indexSet*(t: typedesc[NSIndexSet]): NSIndexSet {.inline.} =
+  nsIndexSet()
+
 proc nsIndexSet*(values: openArray[NSUInteger]): NSIndexSet =
   var created = nsIndexSet()
   let obj = created as NXIndexSet
@@ -424,6 +573,14 @@ proc nsIndexSet*(values: openArray[NSUInteger]): NSIndexSet =
 proc indexSetWithIndex*(t: typedesc[NSIndexSet], index: NSUInteger): NSIndexSet =
   var allocated = NXIndexSet.alloc()
   var created = allocated.initWithIndex(index)
+  allocated.value = nil
+  if created.isNil:
+    return NSIndexSet(value: nil)
+  asTypeRaw[NSIndexSet](move(created.value))
+
+proc indexSetWithIndexSet*(t: typedesc[NSIndexSet], other: NSIndexSet): NSIndexSet =
+  var allocated = NXIndexSet.alloc()
+  var created = allocated.initWithIndexSet(other)
   allocated.value = nil
   if created.isNil:
     return NSIndexSet(value: nil)
@@ -444,6 +601,12 @@ proc contains*(indexSet: NSIndexSet, index: NSUInteger): bool =
   let obj = indexSet as NXIndexSet
   obj.containsIndex(index)
 
+proc containsIndexes*(indexSet: NSIndexSet, other: NSIndexSet): bool =
+  if indexSet.value.isNil:
+    return false
+  let obj = indexSet as NXIndexSet
+  obj.containsIndexes(other)
+
 proc firstIndex*(indexSet: NSIndexSet): NSUInteger =
   if indexSet.value.isNil:
     return NSIndexNotFound
@@ -455,6 +618,32 @@ proc lastIndex*(indexSet: NSIndexSet): NSUInteger =
     return NSIndexNotFound
   let obj = indexSet as NXIndexSet
   obj.lastIndex()
+
+proc indexGreaterThanIndex*(indexSet: NSIndexSet, index: NSUInteger): NSUInteger =
+  if indexSet.value.isNil:
+    return NSIndexNotFound
+  let obj = indexSet as NXIndexSet
+  obj.indexGreaterThanIndex(index)
+
+proc indexGreaterThanOrEqualToIndex*(
+    indexSet: NSIndexSet, index: NSUInteger
+): NSUInteger =
+  if indexSet.value.isNil:
+    return NSIndexNotFound
+  let obj = indexSet as NXIndexSet
+  obj.indexGreaterThanOrEqualToIndex(index)
+
+proc indexLessThanIndex*(indexSet: NSIndexSet, index: NSUInteger): NSUInteger =
+  if indexSet.value.isNil:
+    return NSIndexNotFound
+  let obj = indexSet as NXIndexSet
+  obj.indexLessThanIndex(index)
+
+proc indexLessThanOrEqualToIndex*(indexSet: NSIndexSet, index: NSUInteger): NSUInteger =
+  if indexSet.value.isNil:
+    return NSIndexNotFound
+  let obj = indexSet as NXIndexSet
+  obj.indexLessThanOrEqualToIndex(index)
 
 proc incl*(indexSet: var NSIndexSet, index: NSUInteger) =
   if indexSet.value.isNil:
@@ -478,19 +667,7 @@ proc toSeq*(indexSet: NSIndexSet): seq[NSUInteger] =
   if indexSet.value.isNil:
     return @[]
   let obj = indexSet as NXIndexSet
-  let data = obj.xData()
-  result = @[]
-  for value in data:
-    result.add(value)
-  result.sort(
-    proc(a, b: NSUInteger): int =
-      if a < b:
-        -1
-      elif a > b:
-        1
-      else:
-        0
-  )
+  obj.xData()
 
 iterator items*(indexSet: NSIndexSet): NSUInteger =
   let values = indexSet.toSeq()

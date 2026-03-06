@@ -1,4 +1,4 @@
-import std/[os, strutils]
+import std/[algorithm, os, strutils]
 
 import knutella/appkit
 import knutella/objc
@@ -136,10 +136,15 @@ objcImpl:
   method removeClub*(self: TableViewController, sender: NSObject) =
     if self.xFootballClubs.len == 0:
       return
-    let row = self.xTableView.selectedRow()
-    if row < 0 or row >= self.xFootballClubs.len:
+    let rows = self.xTableView.selectedRowIndexes()
+    if rows.isNil or rows.isEmpty():
       return
-    self.xFootballClubs.delete(row)
+    var indexes = rows.toSeq()
+    indexes.sort(system.cmp[NSUInteger], Descending)
+    for index in indexes:
+      let row = index.int
+      if row >= 0 and row < self.xFootballClubs.len:
+        self.xFootballClubs.delete(row)
     self.xTableView.reloadData()
 
   method dealloc(self: TableViewController) {.used.} =
