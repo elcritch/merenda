@@ -13,6 +13,14 @@ proc clickControl(control: NSControl) =
   control.performClick(sender)
   sender.value = nil
 
+proc clickTableRow(table: NSTableView, row: int) =
+  let rowStride = table.rowHeight() + table.intercellSpacing().height
+  let localPoint = nsPoint(4.0, row.float32 * rowStride + rowStride / 2.0)
+  let windowPoint = table.NSView.convertPointToView(localPoint, NSView(value: nil))
+  var event = newMouseEvent(NSLeftMouseDown, windowPoint, {}, 0.0, 0, 1)
+  table.mouseDown(event)
+  event.value = nil
+
 proc tableValueAsString(
     controller: TableViewController, table: NSTableView, column: NSTableColumn, row: int
 ): NSString =
@@ -37,7 +45,7 @@ suite "appkit cocoa table view port":
     table.setDataSource(ID(value: controller.value))
     table.setDelegate(ID(value: controller.value))
     table.reloadData()
-    table.selectRow(1)
+    clickTableRow(table, 1)
 
     var addButton = newButton(0.0, 0.0, 80.0, 24.0, "Add")
     addButton.setOnClick(
