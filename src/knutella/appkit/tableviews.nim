@@ -48,15 +48,6 @@ proc objectDisplayString(value: NSObject): NSString =
     return @ns""
   NSString(value: raw)
 
-proc viewOriginInWindow(view: NSView): NSPoint =
-  var current = retain(view)
-  while not current.isNil:
-    let frame = current.frame()
-    let bounds = current.bounds()
-    result.x += frame.origin.x - bounds.origin.x
-    result.y += frame.origin.y - bounds.origin.y
-    current = current.superview()
-
 proc numberOfRowsFromDataSource(tableView: NSTableView): int
 proc objectValueFromDataSource(
   tableView: NSTableView, column: NSTableColumn, row: int
@@ -380,16 +371,21 @@ objcImpl:
   method mouseDown*(self: NSTableView, event: NSEvent) =
     if event.isNil:
       return
-    let rowStride = max(self.xRowHeight + self.xIntercellSpacing.height, 1.0)
-    let location = event.locationInWindow()
-    let origin = viewOriginInWindow(self.NSView)
-    let localY = location.y - origin.y
-    let row = floor(localY / rowStride).int
+    let location =
+      self.NSView.convertPoint(event.locationInWindow(), NSView(value: nil))
     let rows = self.numberOfRows()
-    if row >= 0 and row < rows:
-      self.xSelectedRow = row
-    else:
+    if location.y < 0.0 or rows <= 0:
       self.xSelectedRow = -1
+    else:
+      let rowStride = max(self.xRowHeight + self.xIntercellSpacing.height, 1.0)
+      var row = -1
+      var y = 0.0
+      for i in 0 ..< rows:
+        if y + rowStride > location.y:
+          row = i
+          break
+        y += rowStride
+      self.xSelectedRow = row
     self.reloadData()
 
   method dealloc(self: NSTableView) {.used.} =

@@ -22,7 +22,7 @@ proc tableValueAsString(
   NSString(value)
 
 suite "appkit cocoa table view port":
-  test "add and remove buttons update table model through click events":
+  test "add and remove buttons preserve and use selected row":
     var table = NSTableView.new()
     var nameColumn = NSTableColumn.new(@ns"name")
     var foundationYearColumn = NSTableColumn.new(@ns"foundationYear")
@@ -37,7 +37,7 @@ suite "appkit cocoa table view port":
     table.setDataSource(ID(value: controller.value))
     table.setDelegate(ID(value: controller.value))
     table.reloadData()
-    table.selectRow(0)
+    table.selectRow(1)
 
     var addButton = newButton(0.0, 0.0, 80.0, 24.0, "Add")
     addButton.setOnClick(
@@ -53,21 +53,35 @@ suite "appkit cocoa table view port":
     check(table.numberOfRows() == 4)
     check(controller.numberOfRowsInTableView(table) == 4)
     check(tableValueAsString(controller, table, nameColumn, 3) == @ns"Barcelona")
+    check(table.selectedRow() == 1)
+    check(tableValueAsString(controller, table, nameColumn, 1) == @ns"Liverpool")
 
     clickControl(addButton)
 
     check(table.numberOfRows() == 5)
     check(controller.numberOfRowsInTableView(table) == 5)
-    check(table.selectedRow() == 4)
-    check(tableValueAsString(controller, table, nameColumn, 4) == @ns"FC Generic 5")
-    check(tableValueAsString(controller, table, foundationYearColumn, 4) == @ns"2025")
+    check(table.selectedRow() == 1)
+    check(tableValueAsString(controller, table, nameColumn, 1) == @ns"Liverpool")
+    check(tableValueAsString(controller, table, nameColumn, 4) == @ns"FC Generic")
+    check(tableValueAsString(controller, table, foundationYearColumn, 4) == @ns"2020")
+
+    clickControl(addButton)
+
+    check(table.numberOfRows() == 6)
+    check(controller.numberOfRowsInTableView(table) == 6)
+    check(table.selectedRow() == 1)
+    check(tableValueAsString(controller, table, nameColumn, 1) == @ns"Liverpool")
+    check(tableValueAsString(controller, table, nameColumn, 5) == @ns"FC Generic")
+    check(tableValueAsString(controller, table, foundationYearColumn, 5) == @ns"2020")
 
     clickControl(removeButton)
 
-    check(table.numberOfRows() == 4)
-    check(controller.numberOfRowsInTableView(table) == 4)
-    check(table.selectedRow() == 3)
-    check(tableValueAsString(controller, table, nameColumn, 3) == @ns"Barcelona")
+    check(table.numberOfRows() == 5)
+    check(controller.numberOfRowsInTableView(table) == 5)
+    check(table.selectedRow() == 1)
+    check(tableValueAsString(controller, table, nameColumn, 1) == @ns"Real Madrid")
+    check(tableValueAsString(controller, table, nameColumn, 2) == @ns"Barcelona")
+    check(tableValueAsString(controller, table, nameColumn, 4) == @ns"FC Generic")
 
     removeButton.value = nil
     addButton.value = nil

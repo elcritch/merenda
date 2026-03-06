@@ -174,6 +174,51 @@ suite "foundation stdlib-backed core types":
     words.makeObjectsPerformSelector(@ns"description")
     check(words.len == 2)
 
+  test "NSSet supports stdlib-style operations":
+    var values = nsSet([@ns"a", @ns"b", @ns"a"])
+    check(values.len == 2)
+    check(values.contains(@ns"a"))
+    check(values.contains(@ns"b"))
+
+    values.incl(@ns"c")
+    check(values.len == 3)
+    check(values.contains(@ns"c"))
+
+    values.excl(@ns"b")
+    check(values.len == 2)
+    check(not values.contains(@ns"b"))
+
+    var asSeq = values.toSeq()
+    check(asSeq.len == 2)
+    check(values == nsSet([@ns"c", @ns"a"]))
+
+    values.clear()
+    check(values.isEmpty)
+
+  test "NSIndexSet supports stdlib-style operations":
+    var indexes = nsIndexSet([3.NSUInteger, 1.NSUInteger, 3.NSUInteger, 0.NSUInteger])
+    check(indexes.len == 3)
+    check(indexes.contains(0.NSUInteger))
+    check(indexes.contains(1.NSUInteger))
+    check(indexes.contains(3.NSUInteger))
+    check(indexes.firstIndex() == 0.NSUInteger)
+    check(indexes.lastIndex() == 3.NSUInteger)
+    check(indexes.toSeq() == @[0.NSUInteger, 1.NSUInteger, 3.NSUInteger])
+
+    indexes.incl(2.NSUInteger)
+    check(indexes.toSeq() == @[0.NSUInteger, 1.NSUInteger, 2.NSUInteger, 3.NSUInteger])
+
+    indexes.excl(0.NSUInteger)
+    check(indexes.toSeq() == @[1.NSUInteger, 2.NSUInteger, 3.NSUInteger])
+    check(indexes == nsIndexSet([3.NSUInteger, 2.NSUInteger, 1.NSUInteger]))
+
+    let single = NSIndexSet.indexSetWithIndex(42.NSUInteger)
+    check(single.len == 1)
+    check(single.contains(42.NSUInteger))
+
+    indexes.clear()
+    check(indexes.isEmpty)
+
   test "@ns[] boxes NSArray literals":
     let empty = @ns[]
     check(empty.isEmpty)
