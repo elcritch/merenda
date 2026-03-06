@@ -104,16 +104,32 @@ objcImpl:
       self.xHighlightsByMask = {NSPushInCell, NSContentsCell}
       self.xShowsStateByMask = {NSContentsCell}
       self.xImageDimsWhenDisabled = true
-    of NSSwitchButton, NSRadioButton:
+    of NSSwitchButton:
       self.xHighlightsByMask = {NSContentsCell}
       self.xShowsStateByMask = {NSContentsCell}
       self.xImagePosition = NSImageLeft
       self.xImageDimsWhenDisabled = false
+      self.setImage(NSImage.imageNamed(@ns"NSSwitch"))
+      self.setAlternateImage(NSImage.imageNamed(@ns"NSHighlightedSwitch"))
+      self.setAlignment(NSLeftTextAlignment)
+      self.setBordered(false)
+      self.setBezeled(false)
+    of NSRadioButton:
+      self.xHighlightsByMask = {NSContentsCell}
+      self.xShowsStateByMask = {NSContentsCell}
+      self.xImagePosition = NSImageLeft
+      self.xImageDimsWhenDisabled = false
+      self.setImage(NSImage.imageNamed(@ns"NSRadioButton"))
+      self.setAlternateImage(NSImage.imageNamed(@ns"NSHighlightedRadioButton"))
       self.setBordered(false)
       self.setBezeled(false)
       self.setAlignment(NSLeftTextAlignment)
     else:
       discard
+
+    let controlView = self.controlView()
+    if controlView.isWrapper(UpdateCell):
+      controlView.asWrapper(UpdateCell).updateCell(self)
 
   method setPeriodicDelay*(
       self: NSButtonCell, delay: float32, interval {.kw("interval").}: float32
@@ -260,9 +276,13 @@ objcImpl:
         self.highlightsBy().contains(NSPushInCell) and self.isHighlighted()
       let topGray = if highlighted: 0.80 else: 0.90
       let bottomGray = if highlighted: 0.70 else: 0.80
-      NSGraphicsContext.currentContext().setFillColor(nsColor(topGray, topGray, topGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(
+        nsColor(topGray, topGray, topGray, 1.0)
+      )
       NSRectFill(top)
-      NSGraphicsContext.currentContext().setFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(
+        nsColor(bottomGray, bottomGray, bottomGray, 1.0)
+      )
       NSRectFill(bottom)
       NSGraphicsContext.currentContext().setStrokeColor(nsColor(0.83, 0.83, 0.83, 1.0))
       NSFrameRectWithWidth(drawFrame, 1.0)
@@ -283,9 +303,13 @@ objcImpl:
         bottomHalf.origin.y += topHalf.size.height
       else:
         topHalf.origin.y += bottomHalf.size.height
-      NSGraphicsContext.currentContext().setFillColor(nsColor(topGray, topGray, topGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(
+        nsColor(topGray, topGray, topGray, 1.0)
+      )
       NSRectFill(topHalf)
-      NSGraphicsContext.currentContext().setFillColor(nsColor(bottomGray, bottomGray, bottomGray, 1.0))
+      NSGraphicsContext.currentContext().setFillColor(
+        nsColor(bottomGray, bottomGray, bottomGray, 1.0)
+      )
       NSRectFill(bottomHalf)
       NSGraphicsContext.currentContext().setStrokeColor(nsColor(0.4, 0.4, 0.4, 1.0))
       NSFrameRectWithWidth(drawFrame, 1.0)
