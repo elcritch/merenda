@@ -332,3 +332,12 @@ proc preferredFontNames*(t: typedesc[NSFont]): NSArray[NSString] =
 proc new*(t: typedesc[NSFont]): NSFont =
   var allocated = NSFont.alloc()
   result = initOwned(move(allocated))
+
+proc figFont*(font: NSFont): FigFont =
+  if font.isNil:
+    let loaded = loadFigFont("", DefaultSystemFontSize)
+    return loaded.font
+  let name = $font.fontName()
+  let pointSize = max(font.pointSize(), 1.0'f32)
+  let loaded = loadFigFont(name, pointSize)
+  loaded.font

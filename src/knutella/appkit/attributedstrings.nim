@@ -265,15 +265,21 @@ proc focusAlignment(): FontHorizontal =
 
 proc fontAndColorForAttributes(
     attributes: NSDictionary[NSObject, NSObject]
-): tuple[fontSize: float32, color: NSColor] =
-  discard attributes
-  (13.0'f32, nsColor(0.08, 0.08, 0.08, 1.0))
+): tuple[font: NSFont, color: NSColor] =
+  result = (NSFont(value: nil), nsColor(0.08, 0.08, 0.08, 1.0))
+  let fontObj = NSFontAttributeInDictionary(attributes)
+  if not fontObj.isNil and fontObj.isKindOfClass(NSFont):
+    result.font = asTypeRaw[NSFont](fontObj)
 
 proc textStyleForAttributes(attributes: NSDictionary[NSObject, NSObject]): FontStyle =
+  let visual = fontAndColorForAttributes(attributes)
+  if not visual.font.isNil:
+    let fig = visual.font.figFont()
+    if fig.typefaceId.int != 0:
+      return fs(fig, visual.color.toFigColor())
   if not ensureAppKitFont():
     return default(FontStyle)
-  let visual = fontAndColorForAttributes(attributes)
-  fs(appkitFont(visual.fontSize), visual.color.toFigColor())
+  fs(appkitFont(13.0'f32), visual.color.toFigColor())
 
 objcImpl:
   type NSAttributedString* {.impl: NSCopying.} = object of NSObject

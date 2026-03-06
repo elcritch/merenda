@@ -7,10 +7,12 @@ import ./graphicscontexts
 import ./images
 import ./attributedstrings
 import ./formatters
+import ./fonts
 import ./cells
 
 objcImpl:
   type NSButtonCell* = object of NSActionCell
+    xButtonType {.get: buttonType.}: NSButtonType
     xButtonTitle {.get: title.}: NSString
     xAttributedTitle: NSAttributedString
     xAlternateTitle {.set: setAlternateTitle, get: alternateTitle.}: NSString
@@ -43,6 +45,7 @@ objcImpl:
       return
     result.setEnabled(true)
     result.setAllowsMixedState(false)
+    result.xButtonType = NSMomentaryLightButton
     result.xButtonTitle = @ns"Button"
     result.xAlternateTitle = @ns""
     result.xKeyEquivalent = @ns""
@@ -79,6 +82,7 @@ objcImpl:
       self.xAlternateTitle = value.string()
 
   method setButtonType*(self: NSButtonCell, buttonType: NSButtonType) =
+    self.xButtonType = buttonType
     case buttonType
     of NSMomentaryLightButton:
       self.xHighlightsByMask = {NSChangeBackgroundCell}
@@ -109,8 +113,19 @@ objcImpl:
       self.xShowsStateByMask = {NSContentsCell}
       self.xImagePosition = NSImageLeft
       self.xImageDimsWhenDisabled = false
-      self.setImage(NSImage.imageNamed(@ns"NSSwitch"))
-      self.setAlternateImage(NSImage.imageNamed(@ns"NSHighlightedSwitch"))
+      # Deviation from Cocotron: Cocotron uses NSSwitch/NSHighlightedSwitch images.
+      # We intentionally render a Unicode checkmark glyph for switch indicators.
+      self.setImage(NSImage(value: nil))
+      self.setAlternateImage(NSImage(value: nil))
+      let switchFontSize =
+        if self.font().isNil:
+          12.0'f32
+        else:
+          max(self.font().pointSize(), 1.0'f32)
+      let switchFont =
+        NSFont.fontWithName(@ns"HackNerdFont-Regular.ttf", size = switchFontSize)
+      if not switchFont.isNil:
+        self.setFont(switchFont)
       self.setAlignment(NSLeftTextAlignment)
       self.setBordered(false)
       self.setBezeled(false)
@@ -394,6 +409,19 @@ objcImpl:
 
     var drawImage = not image.isNil
     var drawTitle = not title.isNil
+    let drawsUnicodeSwitchIndicator =
+      self.buttonType() == NSSwitchButton and self.image().isNil and
+      self.alternateImage().isNil
+    let indicatorSlotWidth = 13.0'f32
+    let indicatorGapWidth = 4.0'f32
+
+    if drawsUnicodeSwitchIndicator:
+      drawImage = false
+      imagePosition = NSNoImage
+      titleRect.origin.x =
+        contentFrame.origin.x + 2.0 + indicatorSlotWidth + indicatorGapWidth
+      titleRect.size.width =
+        max(contentFrame.origin.x + contentFrame.size.width - titleRect.origin.x, 0.0)
 
     let imageSize =
       if drawImage:
@@ -484,6 +512,31 @@ objcImpl:
 
     if drawImage:
       self.drawImage(image, imageRect, controlView)
+    if drawsUnicodeSwitchIndicator and self.state() != NSOffState:
+      let fontKey =
+        if NSFontAttributeName.isNil:
+          @ns"NSFontAttributeName"
+        else:
+          NSFontAttributeName
+      var checkmarkAttributes = nsDictionary[NSObject, NSObject]()
+      if not self.font().isNil:
+        checkmarkAttributes[NSObject(fontKey)] = NSObject(self.font())
+      var checkmarkAllocated = NSAttributedString.alloc()
+      let checkmark =
+        checkmarkAllocated.initWithString(@ns"", attributes = checkmarkAttributes)
+      checkmarkAllocated.value = nil
+      let checkmarkSize = checkmark.size()
+      let indicatorX =
+        contentFrame.origin.x + 2.0 +
+        floor((indicatorSlotWidth - checkmarkSize.width) * 0.5)
+      let indicatorY =
+        contentFrame.origin.y +
+        floor((contentFrame.size.height - checkmarkSize.height) * 0.5)
+      discard self.drawTitle(
+        checkmark,
+        nsRect(indicatorX, indicatorY, checkmarkSize.width, checkmarkSize.height),
+        controlView,
+      )
     if drawTitle:
       discard self.drawTitle(title, titleRect, controlView)
 
@@ -524,6 +577,9 @@ objcImpl:
       resultSize.height = max(imageSize.height, titleSize.height)
     else:
       discard
+    if self.buttonType() == NSSwitchButton:
+      resultSize.width = max(resultSize.width, titleSize.width + 17.0)
+      resultSize.height = max(resultSize.height, max(titleSize.height, 13.0))
     resultSize.width += 4.0
     if self.isBordered() or self.isBezeled():
       resultSize.width += 4.0
