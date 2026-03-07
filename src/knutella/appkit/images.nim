@@ -19,7 +19,9 @@ proc resolveImagePath(path: string): string =
     return dataPath
   path
 
-proc scaledImageSizeInRect(imageSize: NSSize, frameSize: NSSize, scaling: NSImageScaling): NSSize =
+proc scaledImageSizeInRect(
+    imageSize: NSSize, frameSize: NSSize, scaling: NSImageScaling
+): NSSize =
   if imageSize.width <= 0 or imageSize.height <= 0:
     return nsSize(0, 0)
   case scaling
@@ -143,12 +145,12 @@ objcImpl:
       return
     if self.imageId().int == 0:
       return
-    discard addImageToCurrentRenderContext(
-      rect,
-      self.imageId(),
-      fraction = fraction,
-      operation = NSCompositingOperation(operation),
-    )
+    discard NSGraphicsContext.currentContext().drawImage(
+        rect,
+        self.imageId(),
+        fraction = fraction,
+        operation = NSCompositingOperation(operation),
+      )
 
   method dealloc(self: NSImage) {.used.} =
     self.xName = NSString(value: nil)

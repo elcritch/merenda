@@ -858,7 +858,7 @@ objcImpl:
     let fitted = fitSingleLineText(text, style, focusAlignment(), drawRect)
     if fitted.text.len == 0:
       return
-    discard addTextLayoutToCurrentRenderContext(drawRect, fitted.layout)
+    discard NSGraphicsContext.currentContext().drawTextLayout(drawRect, fitted.layout)
 
   method drawWithRect*(
       self: NSAttributedString, rect: NSRect, options {.kw("options").}: int
