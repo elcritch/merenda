@@ -11,7 +11,11 @@ suite "appkit NSEvent":
     check(NSAppKitDefined.ord == 20)
     check(NSEventMaskFromType(NSKeyDown) == NSKeyDownMask)
     check(NSEventMaskFromType(NSScrollWheel) == NSScrollWheelMask)
-    check(NSAnyEventMask == {NSLeftMouseDown .. NSAppKitDefined})
+    check(NSLeftMouseDown in NSAnyEventMask)
+    check(NSAppKitDefined in NSAnyEventMask)
+    check(NSOtherMouseDown in NSAnyEventMask)
+    check(NSOtherMouseUp in NSAnyEventMask)
+    check(NSOtherMouseDragged in NSAnyEventMask)
     check(
       NSDeviceIndependentModifierFlagsMask == {NSAlphaShiftKeyMask .. NSFunctionKeyMask}
     )
@@ -127,6 +131,15 @@ suite "appkit NSEvent":
     check(fromMouse.siwinMouseButton() == siwin.MouseButton.left)
     check(fromMouse.modifierFlags() == {NSAlternateKeyMask})
 
+    let otherMouseInput = siwin.MouseButtonEvent(
+      button: siwin.MouseButton.middle, pressed: true, generated: false
+    )
+    var fromOtherMouse = mouseButtonEventFromSiwin(
+      6, nsPoint(9, 10), otherMouseInput, {siwin.ModifierKey.alt}
+    )
+    check(fromOtherMouse.`type`() == NSOtherMouseDown)
+    check(fromOtherMouse.siwinMouseButton() == siwin.MouseButton.middle)
+
     let scrollInput = siwin.ScrollEvent(delta: -2.0, deltaX: 1.5)
     var fromScroll =
       scrollEventFromSiwin(8, nsPoint(2, 7), scrollInput, {siwin.ModifierKey.system})
@@ -135,6 +148,16 @@ suite "appkit NSEvent":
     check(fromScroll.deltaY() == -2.0)
     check(fromScroll.modifierFlags() == {NSCommandKeyMask})
 
+    let textInput = siwin.TextInputEvent(text: "Hello", repeated: false)
+    var fromText =
+      textInputEventFromSiwin(12, nsPoint(3, 2), textInput, {siwin.ModifierKey.shift})
+    check(fromText.`type`() == NSApplicationDefined)
+    check(isTextInputEvent(fromText))
+    check(fromText.characters() == @ns"Hello")
+    check(fromText.modifierFlags() == {NSShiftKeyMask})
+
     fromKey.value = nil
     fromMouse.value = nil
+    fromOtherMouse.value = nil
     fromScroll.value = nil
+    fromText.value = nil

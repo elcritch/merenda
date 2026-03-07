@@ -18,6 +18,7 @@ proc convertRectToView*(self: NSView, rect: NSRect, toView: NSView): NSRect
 proc addSubview*(self: NSView, view: NSView)
 proc removeFromSuperviewWithoutNeedingDisplay*(view: NSView)
 proc removeFromSuperview*(view: NSView)
+proc enclosingScrollView*(view: NSView): NSScrollView
 method xInvalidateTrackingAreas*(self: NSWindow) {.base.} =
   discard
 
@@ -541,6 +542,42 @@ objcImpl:
 
   method acceptsFirstMouse*(self: NSView, event: NSEvent): bool =
     false
+
+  method performKeyEquivalent*(self: NSView, event: NSEvent): bool =
+    if self.isNil or self.isHiddenOrHasHiddenAncestor():
+      return false
+    var i = self.xSubviews.high
+    while i >= 0:
+      let child = self.xSubviews[i]
+      if (not child.isNil) and child.performKeyEquivalent(event):
+        return true
+      dec i
+    false
+
+  method menuForEvent*(self: NSView, event: NSEvent): NSMenu =
+    discard event
+    self.menu()
+
+  method rightMouseDown*(self: NSView, event: NSEvent) =
+    let contextMenu = self.menuForEvent(event)
+    if not contextMenu.isNil:
+      return
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.rightMouseDown(event)
+      return
+    self.noResponderFor(getSelector("rightMouseDown:"))
+
+  method scrollWheel*(self: NSView, event: NSEvent) =
+    let scroll = enclosingScrollView(self)
+    if (not scroll.isNil) and scroll.value != self.value:
+      scroll.scrollWheel(event)
+      return
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.scrollWheel(event)
+      return
+    self.noResponderFor(getSelector("scrollWheel:"))
 
   method mouse*(self: NSView, point: NSPoint, inRect: NSRect): bool =
     if self.isFlipped():

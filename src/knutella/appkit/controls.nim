@@ -290,8 +290,33 @@ objcImpl:
     self.xCell.setControlView(self.NSView)
     self.xCell.drawWithFrame(self.xBounds, self.NSView)
 
+  method mouseDown*(self: NSControl, event: NSEvent) =
+    if self.isNil or event.isNil or not self.isEnabled():
+      return
+    let controlCell = self.cell()
+    if controlCell.isNil:
+      return
+    let frame = self.bounds()
+    controlCell.highlight(true, frame, self.NSView)
+    self.setNeedsDisplay(true)
+
+    let tracked = controlCell.trackMouse(event, frame, self.NSView, untilMouseUp = true)
+
+    controlCell.highlight(false, frame, self.NSView)
+    self.setNeedsDisplay(true)
+    if not tracked:
+      return
+
+    if controlCell.respondsToSelector("performClick:"):
+      cast[proc(self: IDPtr, op: SEL, sender: IDPtr) {.cdecl, varargs.}](objc_msgSend)(
+        controlCell.value, getSelector("performClick:"), self.value
+      )
+    else:
+      discard self.sendAction(self.action(), self.target())
+
   method performClick*(self: NSControl, sender: NSResponder) =
-    discard
+    discard sender
+    discard self.sendAction(self.action(), self.target())
 
   method sendAction*(self: NSControl, action: SEL, target {.kw("to").}: ID): bool =
     if not target.isNil:

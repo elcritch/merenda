@@ -16,6 +16,7 @@ import ./events
 var trackedMouseDownButtonId {.threadvar.}: IDPtr
 var trackedMouseDownComboBoxId {.threadvar.}: IDPtr
 var trackedMouseDownComboPopupItemIndex {.threadvar.}: int
+var windowFlushHookInstalled {.threadvar.}: bool
 
 proc setTrackedMouseDownButton(buttonId: IDPtr) =
   trackedMouseDownButtonId = replacedOwnedId(trackedMouseDownButtonId, buttonId)
@@ -806,6 +807,18 @@ proc logicalInputPos(window: siwinshim.Window, rawPos: Vec2): Vec2 =
     return rawPos
   rawInputToLogical(rawPos, window.backingSize(), window.logicalSize())
 
+proc appKitInputPos(
+    window: NSWindow, nativeWindow: siwinshim.Window, rawPos: Vec2
+): Vec2 =
+  ## Siwin reports input with a top-left origin. AppKit event dispatch here uses
+  ## a bottom-left window coordinate system, so convert before queuing events.
+  let logicalPos = logicalInputPos(nativeWindow, rawPos)
+  let logicalSize = nativeWindow.logicalSize()
+  let height = max(logicalSize.y, 0.0)
+  if height <= 0.0:
+    return logicalPos
+  vec2(logicalPos.x, height - logicalPos.y)
+
 proc renderWindow(window: NSWindow) =
   let nativeWindow = window.windowNativeWindow()
   let renderer = window.windowRenderer()
@@ -833,6 +846,20 @@ proc renderWindow(window: NSWindow) =
   renderer.renderFrame(renders, logicalSize)
   renderer.endFrame()
 
+proc installWindowFlushHook() =
+  if windowFlushHookInstalled:
+    return
+  setWindowFlushHook(
+    proc(windowId: IDPtr) =
+      if windowId.isNil:
+        return
+      let window = ownFromId[NSWindow](windowId)
+      if window.isNil:
+        return
+      renderWindow(window)
+  )
+  windowFlushHookInstalled = true
+
 proc debugDumpWindowRenderTree*(window: NSWindow) =
   let renders = buildWindowRenders(window)
   if renders.isNil:
@@ -856,6 +883,7 @@ proc cleanupFailedWindowInit(window: NSWindow) =
   window.windowClosed true
 
 proc ensureNativeWindow*(window: NSWindow) =
+  installWindowFlushHook()
   if window.windowNativeReady():
     return
 
@@ -894,24 +922,16 @@ proc ensureNativeWindow*(window: NSWindow) =
         let nativeWindow = window.windowNativeWindow()
         if nativeWindow.isNil:
           return
-        let logicalPos = logicalInputPos(nativeWindow, e.pos)
+        let logicalPos = appKitInputPos(window, nativeWindow, e.pos)
         let appEvent = mouseMoveEventFromSiwin(
-          0,
+          window.windowNumber(),
           nsPoint(logicalPos.x, logicalPos.y),
           e,
           nativeWindow.keyboard.modifiers,
           nativeWindow.mouse.pressed,
         )
         if not appEvent.isNil:
-          window.sendEvent(appEvent)
-        var needsRender = false
-        if updateOpenComboPopupHover(window, logicalPos.x, logicalPos.y):
-          needsRender = true
-        if siwinshim.MouseButton.left in nativeWindow.mouse.pressed:
-          if updateTrackedButtonHighlight(window, logicalPos.x, logicalPos.y):
-            needsRender = true
-        if needsRender:
-          renderWindow(window)
+          window.postEvent(appEvent, false)
       ,
       onMouseButton: proc(e: siwinshim.MouseButtonEvent) =
         let nativeWindow =
@@ -921,55 +941,16 @@ proc ensureNativeWindow*(window: NSWindow) =
             e.window
         if nativeWindow.isNil:
           return
-        let logicalPos = logicalInputPos(nativeWindow, nativeWindow.mouse.pos)
+        let logicalPos = appKitInputPos(window, nativeWindow, nativeWindow.mouse.pos)
         let appEvent = mouseButtonEventFromSiwin(
-          0, nsPoint(logicalPos.x, logicalPos.y), e, nativeWindow.keyboard.modifiers
+          window.windowNumber(),
+          nsPoint(logicalPos.x, logicalPos.y),
+          e,
+          nativeWindow.keyboard.modifiers,
         )
         if not appEvent.isNil:
-          window.sendEvent(appEvent)
-        if e.button != siwinshim.MouseButton.left:
-          return
-        if e.pressed:
-          let comboResult = handleComboBoxMouseDown(window, logicalPos.x, logicalPos.y)
-          if comboResult.needsRender:
-            renderWindow(window)
-          if comboResult.consumed:
-            return
-          let root = ensureContentView(window)
-          if root.isNil:
-            clearTrackedMouseDownButton()
-            return
-          clearTrackedMouseDownComboBox()
-          let hit = hitTestButton(
-            root.value, logicalPos.x, logicalPos.y, false, 0.0, 0.0, 0.0, false
-          )
-          setTrackedMouseDownButton(hit)
-          if trackedMouseDownButtonId.isNil:
-            return
-          let button = ownFromId[NSButton](trackedMouseDownButtonId)
-          if button.isNil or not button.isEnabled():
-            clearTrackedMouseDownButton()
-            return
-          button.setHighlighted(true)
-          renderWindow(window)
-          return
-
-        let comboResult =
-          handleComboBoxMouseUp(window, logicalPos.x, logicalPos.y, e.generated)
-        if comboResult.needsRender:
-          renderWindow(window)
-        if comboResult.consumed:
-          return
-        if trackedMouseDownButtonId.isNil:
-          return
-        let button = ownFromId[NSButton](trackedMouseDownButtonId)
-        if not button.isNil:
-          button.setHighlighted(false)
-          if not e.generated and
-              buttonShouldBeHighlighted(window, logicalPos.x, logicalPos.y):
-            button.performClick(window)
-        clearTrackedMouseDownButton()
-        renderWindow(window),
+          window.postEvent(appEvent, false)
+      ,
       onScroll: proc(e: siwinshim.ScrollEvent) =
         let nativeWindow =
           if e.window.isNil:
@@ -978,12 +959,15 @@ proc ensureNativeWindow*(window: NSWindow) =
             e.window
         if nativeWindow.isNil:
           return
-        let logicalPos = logicalInputPos(nativeWindow, nativeWindow.mouse.pos)
+        let logicalPos = appKitInputPos(window, nativeWindow, nativeWindow.mouse.pos)
         let appEvent = scrollEventFromSiwin(
-          0, nsPoint(logicalPos.x, logicalPos.y), e, nativeWindow.keyboard.modifiers
+          window.windowNumber(),
+          nsPoint(logicalPos.x, logicalPos.y),
+          e,
+          nativeWindow.keyboard.modifiers,
         )
         if not appEvent.isNil:
-          window.sendEvent(appEvent)
+          window.postEvent(appEvent, false)
       ,
       onRender: proc(e: siwinshim.RenderEvent) =
         discard e
@@ -998,11 +982,30 @@ proc ensureNativeWindow*(window: NSWindow) =
           if nativeWindow.isNil:
             vec2(0.0, 0.0)
           else:
-            logicalInputPos(nativeWindow, nativeWindow.mouse.pos)
-        let appEvent =
-          keyEventFromSiwin(0, nsPoint(logicalPos.x, logicalPos.y), e, @ns"", @ns"")
+            appKitInputPos(window, nativeWindow, nativeWindow.mouse.pos)
+        let appEvent = keyEventFromSiwin(
+          window.windowNumber(), nsPoint(logicalPos.x, logicalPos.y), e, @ns"", @ns""
+        )
         if not appEvent.isNil:
-          window.sendEvent(appEvent)
+          window.postEvent(appEvent, false)
+      ,
+      onTextInput: proc(e: siwinshim.TextInputEvent) =
+        let nativeWindow =
+          if e.window.isNil:
+            window.windowNativeWindow()
+          else:
+            e.window
+        if nativeWindow.isNil:
+          return
+        let logicalPos = appKitInputPos(window, nativeWindow, nativeWindow.mouse.pos)
+        let appEvent = textInputEventFromSiwin(
+          window.windowNumber(),
+          nsPoint(logicalPos.x, logicalPos.y),
+          e,
+          nativeWindow.keyboard.modifiers,
+        )
+        if not appEvent.isNil:
+          window.postEvent(appEvent, false)
       ,
     )
 

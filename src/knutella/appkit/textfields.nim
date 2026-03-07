@@ -89,6 +89,19 @@ objcImpl:
   method setTitleWithMnemonic*(self: NSTextField, value: NSString) =
     self.setStringValue(stripMnemonicMarkers(value))
 
+  method insertText*(self: NSTextField, text: NSObject) =
+    if self.isNil or not self.isEditable() or text.isNil:
+      return
+    let insertValue =
+      if text.isKindOfClass(NSString):
+        NSString(text)
+      elif text.isKindOfClass(NSAttributedString):
+        NSAttributedString(text).string()
+      else:
+        ns($text)
+    self.xStringValue = ns($self.xStringValue & $insertValue)
+    self.setNeedsDisplay(true)
+
   method drawRect*(self: NSTextField, rect: NSRect) =
     discard rect
     if self.isNil:
