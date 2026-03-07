@@ -155,6 +155,7 @@ objcImpl:
       if self.xFirstResponder.value == self.xContentView.value or
           isViewDescendantOf(self.xFirstResponder.value, self.xContentView.value):
         self.xFirstResponder = NSResponder(value: nil)
+      self.xContentView.setWindow(NSWindow(value: nil))
       clearSuperviewRef(self.xContentView.value)
     if not view.isNil:
       let parent = view.superview()
@@ -168,6 +169,8 @@ objcImpl:
       view.xSetSuperView(NSView(value: nil))
       view.setNextResponder(self as NSResponder)
     self.xContentView = retain(view)
+    if not self.xContentView.isNil:
+      self.xContentView.setWindow(self)
 
   method contentView*(self: NSWindow): NSView =
     if self.xContentView.isNil:
