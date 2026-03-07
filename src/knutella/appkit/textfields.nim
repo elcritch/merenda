@@ -89,6 +89,19 @@ objcImpl:
   method setTitleWithMnemonic*(self: NSTextField, value: NSString) =
     self.setStringValue(stripMnemonicMarkers(value))
 
+  method insertText*(self: NSTextField, text: NSObject) =
+    if self.isNil or not self.isEditable() or text.isNil:
+      return
+    let insertValue =
+      if text.isKindOfClass(NSString):
+        NSString(text)
+      elif text.isKindOfClass(NSAttributedString):
+        NSAttributedString(text).string()
+      else:
+        ns($text)
+    self.xStringValue = ns($self.xStringValue & $insertValue)
+    self.setNeedsDisplay(true)
+
   method drawRect*(self: NSTextField, rect: NSRect) =
     discard rect
     if self.isNil:
@@ -120,6 +133,16 @@ objcImpl:
     if drawValue.isNil:
       return
     drawValue.drawInRect(textRect)
+
+  method hitTest*(self: NSTextField, point: NSPoint): NSView =
+    if self.isHiddenOrHasHiddenAncestor():
+      return NSView(value: nil)
+    if not self.mouse(point, inRect = self.bounds()):
+      return NSView(value: nil)
+    if (not self.isEditable()) and (not self.isSelectable()) and
+        cast[pointer](self.action()).isNil and self.target().isNil:
+      return NSView(value: nil)
+    self.NSView
 
   method dealloc(self: NSTextField) {.used.} =
     self.xPreviousText = nil

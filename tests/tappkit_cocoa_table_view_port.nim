@@ -37,6 +37,43 @@ proc tableValueAsString(
   NSString(value)
 
 suite "appkit cocoa table view port":
+  test "window event dispatch selects rows instead of row text fields":
+    var window = newWindow(0.0, 0.0, 320.0, 200.0, "table hit test")
+    var root = newView(0.0, 0.0, 320.0, 200.0)
+
+    var table = NSTableView.new()
+    table.setFrame(nsRect(20.0, 20.0, 220.0, 120.0))
+    table.setRowHeight(24.0)
+    table.setIntercellSpacing(nsSize(3.0, 2.0))
+
+    var nameColumn = NSTableColumn.new(@ns"name")
+    nameColumn.setWidth(120.0)
+    table.addTableColumn(nameColumn)
+
+    var controller = TableViewController.new()
+    controller.setTableView(table)
+    controller.fillTestData()
+    table.setDataSource(ID(value: controller.value))
+    table.reloadData()
+
+    root.addSubview(table)
+    window.setContentView(root)
+
+    let rowStride = table.rowHeight() + table.intercellSpacing().height
+    let localPoint = nsPoint(4.0, rowStride + rowStride / 2.0)
+    let windowPoint = table.NSView.convertPointToView(localPoint, NSView(value: nil))
+    var event = newMouseEvent(NSLeftMouseDown, windowPoint, {}, 0.0, 0, 1)
+    window.sendEvent(event)
+
+    check(table.selectedRow() == 1)
+
+    event.value = nil
+    controller.value = nil
+    nameColumn.value = nil
+    table.value = nil
+    root.value = nil
+    window.value = nil
+
   test "table selection uses NSIndexSet semantics":
     var table = NSTableView.new()
     var nameColumn = NSTableColumn.new(@ns"name")

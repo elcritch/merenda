@@ -10,6 +10,8 @@ objcImpl:
   type NSControl* = object of NSView
     xCell: NSCell
     xCurrentEditor: NSText
+    xTargetRef: ID
+    xActionRef: SEL
     xTag {.set: setTag, get: tag.}: int
 
   method init*(self: var NSControl): NSControl =
@@ -51,6 +53,8 @@ objcImpl:
       return
     result.xCell = NSCell(value: nil)
     result.xCurrentEditor = NSText(value: nil)
+    result.xTargetRef = ID(value: nil)
+    result.xActionRef = nil
     #var defaultCell = NSCell.new()
     result.xCell = NSCell.new()
     #defaultCell.value = nil
@@ -79,21 +83,39 @@ objcImpl:
     if not bound.isNil:
       bound.setControlView(self.NSView)
       bound.setContinuous(false)
+      if bound.isKindOfClass(NSActionCell):
+        let actionCell = NSActionCell(bound)
+        actionCell.setTarget(self.xTargetRef)
+        actionCell.setAction(self.xActionRef)
 
   method selectedCell*(self: NSControl): NSCell =
     self.cell()
 
   method target*(self: NSControl): ID =
-    self.cell().target()
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      return NSActionCell(controlCell).target()
+    self.xTargetRef
 
   method action*(self: NSControl): SEL =
-    self.cell().action()
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      return NSActionCell(controlCell).action()
+    self.xActionRef
 
   method setTarget*(self: NSControl, target: ID) =
-    self.cell().setTarget(target)
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      NSActionCell(controlCell).setTarget(target)
+      return
+    self.xTargetRef = target
 
   method setAction*(self: NSControl, action: SEL) =
-    self.cell().setAction(action)
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      NSActionCell(controlCell).setAction(action)
+      return
+    self.xActionRef = action
 
   method font*(self: NSControl): NSFont =
     self.cell().font()
@@ -290,8 +312,33 @@ objcImpl:
     self.xCell.setControlView(self.NSView)
     self.xCell.drawWithFrame(self.xBounds, self.NSView)
 
+  method mouseDown*(self: NSControl, event: NSEvent) =
+    if self.isNil or event.isNil or not self.isEnabled():
+      return
+    let controlCell = self.cell()
+    if controlCell.isNil:
+      return
+    let frame = self.bounds()
+    controlCell.highlight(true, frame, self.NSView)
+    self.setNeedsDisplay(true)
+
+    let tracked = controlCell.trackMouse(event, frame, self.NSView, untilMouseUp = true)
+
+    controlCell.highlight(false, frame, self.NSView)
+    self.setNeedsDisplay(true)
+    if not tracked:
+      return
+
+    if controlCell.respondsToSelector("performClick:"):
+      cast[proc(self: IDPtr, op: SEL, sender: IDPtr) {.cdecl, varargs.}](objc_msgSend)(
+        controlCell.value, getSelector("performClick:"), self.value
+      )
+    else:
+      discard self.sendAction(self.action(), self.target())
+
   method performClick*(self: NSControl, sender: NSResponder) =
-    discard
+    discard sender
+    discard self.sendAction(self.action(), self.target())
 
   method sendAction*(self: NSControl, action: SEL, target {.kw("to").}: ID): bool =
     if not target.isNil:
@@ -301,6 +348,8 @@ objcImpl:
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)
     self.xCurrentEditor = NSText(value: nil)
+    self.xTargetRef = ID(value: nil)
+    self.xActionRef = nil
     destroyIvarFields(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 

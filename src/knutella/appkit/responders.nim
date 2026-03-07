@@ -1,5 +1,37 @@
 import ./runtime
 import ./events
+import siwin/window as siwin
+
+proc responderBeep() =
+  stdout.write('\a')
+  stdout.flushFile()
+
+proc keyCommandSelector(event: NSEvent): SEL =
+  if event.isNil:
+    return nil
+  case siwinKey(event)
+  of siwin.Key.left:
+    getSelector("moveLeft:")
+  of siwin.Key.right:
+    getSelector("moveRight:")
+  of siwin.Key.up:
+    getSelector("moveUp:")
+  of siwin.Key.down:
+    getSelector("moveDown:")
+  of siwin.Key.home:
+    getSelector("moveToBeginningOfLine:")
+  of siwin.Key.End:
+    getSelector("moveToEndOfLine:")
+  of siwin.Key.backspace:
+    getSelector("deleteBackward:")
+  of siwin.Key.del:
+    getSelector("deleteForward:")
+  of siwin.Key.enter:
+    getSelector("insertNewline:")
+  of siwin.Key.tab:
+    getSelector("insertTab:")
+  else:
+    nil
 
 objcImpl:
   type NSResponder* = object of NSObject
@@ -46,13 +78,44 @@ objcImpl:
     false
 
   method doCommandBySelector*(self: NSResponder, action: SEL) =
+    if performResponderSelector(self.NSObject, action, self.NSObject):
+      return
     let next = self.nextResponder()
     if not next.isNil and next.tryToPerform(action, self):
       return
     self.noResponderFor(action)
 
   method noResponderFor*(self: NSResponder, action: SEL) =
-    discard
+    if cast[pointer](action) == cast[pointer](getSelector("keyDown:")):
+      responderBeep()
+
+  method performKeyEquivalent*(self: NSResponder, event: NSEvent): bool =
+    false
+
+  method insertText*(self: NSResponder, text: NSObject) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.insertText(text)
+      return
+    self.noResponderFor(getSelector("insertText:"))
+
+  method interpretKeyEvents*(self: NSResponder, events: seq[NSEvent]) =
+    for event in events:
+      if event.isNil:
+        continue
+      let command = keyCommandSelector(event)
+      if cast[pointer](command) != nil:
+        self.doCommandBySelector(command)
+        continue
+      let characters = event.characters()
+      if not characters.isNil and ($characters).len > 0:
+        self.insertText(characters.NSObject)
+        continue
+      let next = self.nextResponder()
+      if not next.isNil:
+        next.keyDown(event)
+      else:
+        self.noResponderFor(getSelector("keyDown:"))
 
   method mouseDown*(self: NSResponder, event: NSEvent) =
     let next = self.nextResponder()
@@ -82,6 +145,20 @@ objcImpl:
       return
     self.noResponderFor(getSelector("rightMouseUp:"))
 
+  method otherMouseDown*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.otherMouseDown(event)
+      return
+    self.noResponderFor(getSelector("otherMouseDown:"))
+
+  method otherMouseUp*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.otherMouseUp(event)
+      return
+    self.noResponderFor(getSelector("otherMouseUp:"))
+
   method mouseMoved*(self: NSResponder, event: NSEvent) =
     let next = self.nextResponder()
     if not next.isNil:
@@ -103,6 +180,13 @@ objcImpl:
       return
     self.noResponderFor(getSelector("rightMouseDragged:"))
 
+  method otherMouseDragged*(self: NSResponder, event: NSEvent) =
+    let next = self.nextResponder()
+    if not next.isNil:
+      next.otherMouseDragged(event)
+      return
+    self.noResponderFor(getSelector("otherMouseDragged:"))
+
   method mouseEntered*(self: NSResponder, event: NSEvent) =
     let next = self.nextResponder()
     if not next.isNil:
@@ -117,12 +201,18 @@ objcImpl:
       return
     self.noResponderFor(getSelector("mouseExited:"))
 
-  method keyDown*(self: NSResponder, event: NSEvent) =
+  method cursorUpdate*(self: NSResponder, event: NSEvent) =
     let next = self.nextResponder()
     if not next.isNil:
-      next.keyDown(event)
+      next.cursorUpdate(event)
       return
-    self.noResponderFor(getSelector("keyDown:"))
+    self.noResponderFor(getSelector("cursorUpdate:"))
+
+  method keyDown*(self: NSResponder, event: NSEvent) =
+    if event.isNil:
+      self.noResponderFor(getSelector("keyDown:"))
+      return
+    self.interpretKeyEvents(@[event])
 
   method keyUp*(self: NSResponder, event: NSEvent) =
     let next = self.nextResponder()
