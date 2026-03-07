@@ -857,6 +857,12 @@ proc installWindowFlushHook() =
       if window.isNil:
         return
       renderWindow(window)
+      let nativeWindow = window.windowNativeWindow()
+      if nativeWindow.isNil or (not nativeWindow.opened()):
+        return
+      # Cocotron flushes drawing immediately during tracking loops.
+      # In the siwin OpenGL path, immediate flush also requires buffer present.
+      siwinshim.presentNow(nativeWindow)
   )
   windowFlushHookInstalled = true
 

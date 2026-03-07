@@ -7,6 +7,7 @@ import ./cells
 import ./buttoncells
 import ./events
 import ./fonts
+import ./windows
 
 export controls
 
@@ -168,16 +169,6 @@ objcImpl:
     discard self.sendAction(self.action, self.target())
     self.highlight(false)
 
-    #if not self.isEnabled():
-    #  return
-    #self.setNextState()
-    #let control = self.NSControl
-    #discard control.sendAction(control.action(), control.target())
-    #let cb = self.onClick()
-    #if cb.isNil:
-    #  return
-    #cb(self.value)
-
   method keyDown*(self: NSButton, event: NSEvent) =
     if event.charactersIgnoringModifiers() == @ns" ":
       self.performClick(NSResponder(value: nil))
@@ -234,6 +225,7 @@ objcImpl:
   method highlight*(self: NSButton, value: bool) =
     self.buttonCell().highlight(value, self.bounds(), self.NSView)
     self.setNeedsDisplay(true)
+    self.window().flushWindow()
 
   method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(value)

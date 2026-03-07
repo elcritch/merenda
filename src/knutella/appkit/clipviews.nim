@@ -195,6 +195,10 @@ objcImpl:
   method wantsClipToBounds*(self: NSClipView): bool =
     true
 
+  method isFlipped*(self: NSClipView): bool =
+    let doc = self.documentView()
+    (not doc.isNil) and doc.isFlipped()
+
 proc new*(t: typedesc[NSClipView]): NSClipView =
   var allocated = NSClipView.alloc()
   result = initOwned(move(allocated))
