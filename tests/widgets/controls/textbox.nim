@@ -104,14 +104,12 @@ objcImpl:
 
     var textBox1Alloc = NSTextField.alloc()
     result.xTextBox1 = textBox1Alloc.init()
-    textBox1Alloc.value = nil
     result.xTextBox1.setFrame(nsRect(10.0, 270.0, 100.0, 20.0))
     result.xTextBox1.setStringValue(@ns"textBox1")
     result.xTextBox1.setAlignment(NSLeftTextAlignment)
 
     var textBox2Alloc = NSTextField.alloc()
     result.xTextBox2 = textBox2Alloc.init()
-    textBox2Alloc.value = nil
     result.xTextBox2.setFrame(nsRect(10.0, 230.0, 100.0, 20.0))
     result.xTextBox2.setStringValue(@ns"textBox2")
     result.xTextBox2.setAlignment(NSLeftTextAlignment)

@@ -173,7 +173,7 @@ objcImpl:
       if idx >= 0:
         let eventId = queue[idx]
         if dequeue:
-          queue.del(idx)
+          queue.delete(idx)
           self.appEventQueue = queue
         result = ownFromId[NSEvent](eventId)
         self.appCurrentEvent = retain(result)
