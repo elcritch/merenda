@@ -673,15 +673,69 @@ objcImpl:
     discard callSuperIdFrom(NSView, self, getSelector("dealloc"))
 
 proc convertPoint*(self: NSView, point: NSPoint, fromView: NSView): NSPoint =
+  proc pointToSuperview(view: NSView, inputPoint: NSPoint): NSPoint =
+    let frame = view.frame()
+    let bounds = view.bounds()
+    let sx =
+      if abs(bounds.size.width) <= 0.0001:
+        1.0
+      else:
+        frame.size.width / bounds.size.width
+    let sy =
+      if abs(bounds.size.height) <= 0.0001:
+        1.0
+      else:
+        frame.size.height / bounds.size.height
+    var x = (inputPoint.x - bounds.origin.x) * sx
+    var y = (inputPoint.y - bounds.origin.y) * sy
+    let parent = view.superview()
+    let parentFlipped = (not parent.isNil) and parent.isFlipped()
+    if view.isFlipped() != parentFlipped:
+      y = frame.size.height - y
+    nsPoint(frame.origin.x + x, frame.origin.y + y)
+
+  proc pointFromSuperview(view: NSView, inputPoint: NSPoint): NSPoint =
+    let frame = view.frame()
+    let bounds = view.bounds()
+    let sx =
+      if abs(bounds.size.width) <= 0.0001:
+        1.0
+      else:
+        frame.size.width / bounds.size.width
+    let sy =
+      if abs(bounds.size.height) <= 0.0001:
+        1.0
+      else:
+        frame.size.height / bounds.size.height
+    var x = inputPoint.x - frame.origin.x
+    var y = inputPoint.y - frame.origin.y
+    let parent = view.superview()
+    let parentFlipped = (not parent.isNil) and parent.isFlipped()
+    if view.isFlipped() != parentFlipped:
+      y = frame.size.height - y
+    let localX =
+      if abs(sx) <= 0.0001:
+        bounds.origin.x
+      else:
+        x / sx + bounds.origin.x
+    let localY =
+      if abs(sy) <= 0.0001:
+        bounds.origin.y
+      else:
+        y / sy + bounds.origin.y
+    nsPoint(localX, localY)
+
   if fromView.isNil:
+    var chain: seq[NSView] = @[]
     var current = self
-    var resultPoint = point
     while not current.isNil:
-      let frame = current.frame()
-      let bounds = current.bounds()
-      resultPoint.x += bounds.origin.x - frame.origin.x
-      resultPoint.y += bounds.origin.y - frame.origin.y
+      chain.add(current)
       current = current.superview()
+    var resultPoint = point
+    var i = chain.high
+    while i >= 0:
+      resultPoint = pointFromSuperview(chain[i], resultPoint)
+      dec i
     return resultPoint
   if fromView.value == self.value:
     return point
@@ -689,14 +743,32 @@ proc convertPoint*(self: NSView, point: NSPoint, fromView: NSView): NSPoint =
   self.convertPoint(windowPoint, NSView(value: nil))
 
 proc convertPointToView*(self: NSView, point: NSPoint, toView: NSView): NSPoint =
+  proc pointToSuperview(view: NSView, inputPoint: NSPoint): NSPoint =
+    let frame = view.frame()
+    let bounds = view.bounds()
+    let sx =
+      if abs(bounds.size.width) <= 0.0001:
+        1.0
+      else:
+        frame.size.width / bounds.size.width
+    let sy =
+      if abs(bounds.size.height) <= 0.0001:
+        1.0
+      else:
+        frame.size.height / bounds.size.height
+    var x = (inputPoint.x - bounds.origin.x) * sx
+    var y = (inputPoint.y - bounds.origin.y) * sy
+    let parent = view.superview()
+    let parentFlipped = (not parent.isNil) and parent.isFlipped()
+    if view.isFlipped() != parentFlipped:
+      y = frame.size.height - y
+    nsPoint(frame.origin.x + x, frame.origin.y + y)
+
   if toView.isNil:
     var current = self
     var resultPoint = point
     while not current.isNil:
-      let frame = current.frame()
-      let bounds = current.bounds()
-      resultPoint.x += frame.origin.x - bounds.origin.x
-      resultPoint.y += frame.origin.y - bounds.origin.y
+      resultPoint = pointToSuperview(current, resultPoint)
       current = current.superview()
     return resultPoint
   if toView.value == self.value:
@@ -705,12 +777,18 @@ proc convertPointToView*(self: NSView, point: NSPoint, toView: NSView): NSPoint 
   toView.convertPoint(windowPoint, NSView(value: nil))
 
 proc convertRect*(self: NSView, rect: NSRect, fromView: NSView): NSRect =
-  let origin = self.convertPoint(rect.origin, fromView)
-  nsRect(origin.x, origin.y, rect.size.width, rect.size.height)
+  let p0 = self.convertPoint(rect.origin, fromView)
+  let p1 = self.convertPoint(
+    nsPoint(rect.origin.x + rect.size.width, rect.origin.y + rect.size.height), fromView
+  )
+  nsRect(min(p0.x, p1.x), min(p0.y, p1.y), abs(p1.x - p0.x), abs(p1.y - p0.y))
 
 proc convertRectToView*(self: NSView, rect: NSRect, toView: NSView): NSRect =
-  let origin = self.convertPointToView(rect.origin, toView)
-  nsRect(origin.x, origin.y, rect.size.width, rect.size.height)
+  let p0 = self.convertPointToView(rect.origin, toView)
+  let p1 = self.convertPointToView(
+    nsPoint(rect.origin.x + rect.size.width, rect.origin.y + rect.size.height), toView
+  )
+  nsRect(min(p0.x, p1.x), min(p0.y, p1.y), abs(p1.x - p0.x), abs(p1.y - p0.y))
 
 proc markTransformsDirty(view: NSView) =
   view.xValidTransforms = false

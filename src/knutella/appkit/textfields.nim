@@ -134,6 +134,16 @@ objcImpl:
       return
     drawValue.drawInRect(textRect)
 
+  method hitTest*(self: NSTextField, point: NSPoint): NSView =
+    if self.isHiddenOrHasHiddenAncestor():
+      return NSView(value: nil)
+    if not self.mouse(point, inRect = self.bounds()):
+      return NSView(value: nil)
+    if (not self.isEditable()) and (not self.isSelectable()) and
+        cast[pointer](self.action()).isNil and self.target().isNil:
+      return NSView(value: nil)
+    self.NSView
+
   method dealloc(self: NSTextField) {.used.} =
     self.xPreviousText = nil
     self.xNextText = nil
