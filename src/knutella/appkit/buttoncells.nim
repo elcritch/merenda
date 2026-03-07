@@ -667,27 +667,14 @@ objcImpl:
       controlView.asWrapper(UpdateCell).updateCell(self)
 
   method performClick*(self: NSButtonCell, sender: NSObject) =
-    if self.isNil or not self.isEnabled():
+    if self.isNil:
       return
-    if self.allowsMixedState():
-      case self.state()
-      of NSOffState:
-        self.setState(NSOnState)
-      of NSOnState:
-        self.setState(NSMixedState)
-      else:
-        self.setState(NSOffState)
-    else:
-      if self.state() == NSOnState:
-        self.setState(NSOffState)
-      else:
-        self.setState(NSOnState)
-    let targetId = self.target()
-    let action = self.action()
-    if targetId.isNil or cast[pointer](action).isNil:
+    let controlView = self.controlView()
+    if controlView.isNil or (not controlView.respondsToSelector("performClick:")):
       return
-    let target = targetId.NSObject
-    discard performResponderSelector(target, action, self.NSObject)
+    cast[proc(self: IDPtr, op: SEL, sender: IDPtr) {.cdecl, varargs.}](objc_msgSend)(
+      controlView.value, getSelector("performClick:"), sender.value
+    )
 
   method dealloc(self: NSButtonCell) {.used.} =
     destroyIvarFields(self)

@@ -1,4 +1,4 @@
-import std/[math, parseutils, strutils]
+import std/[math, parseutils, strutils, times]
 
 import ./runtime
 import ./valueproviders
@@ -11,6 +11,7 @@ import ./fonts
 import ./paragraphstyles
 import ./events
 import ./views
+import ./windows
 
 objcImpl:
   type UpdateCell* {.structural.} =
@@ -651,23 +652,62 @@ objcImpl:
       view {.kw("ofView").}: NSView,
       untilMouseUp {.kw("untilMouseUp").}: bool,
   ): bool =
-    let lastPoint = event.locationInWindow()
-    if not self.startTrackingAt(lastPoint, view):
+    if event.isNil or view.isNil:
       return false
-    let localPoint = view.convertPoint(lastPoint, NSView(value: nil))
-    let isWithinCellFrame = view.mouse(localPoint, inRect = frame)
 
-    if not untilMouseUp and not isWithinCellFrame:
-      self.stopTracking(lastPoint, lastPoint, view, false)
+    let window = view.window()
+    var lastPoint = event.locationInWindow()
+    var stopPoint = lastPoint
+    var localPoint = view.convertPoint(lastPoint, NSView(value: nil))
+    var isWithinCellFrame = view.mouse(localPoint, inRect = frame)
+
+    if not self.startTrackingAt(lastPoint, view):
       return false
 
     if not self.continueTracking(lastPoint, lastPoint, view):
-      self.stopTracking(lastPoint, lastPoint, view, false)
+      self.stopTracking(lastPoint, stopPoint, view, false)
       return false
 
-    let finished = event.`type`() == NSLeftMouseUp
-    self.stopTracking(lastPoint, lastPoint, view, finished)
-    finished or isWithinCellFrame
+    if (not untilMouseUp) or window.isNil:
+      self.stopTracking(lastPoint, stopPoint, view, false)
+      return isWithinCellFrame
+
+    let trackMask =
+      case event.`type`()
+      of NSRightMouseDown:
+        NSRightMouseUpMask + NSRightMouseDraggedMask
+      of NSOtherMouseDown:
+        NSOtherMouseUpMask + NSOtherMouseDraggedMask
+      else:
+        NSLeftMouseUpMask + NSLeftMouseDraggedMask
+
+    var mouseIsUp = false
+    while true:
+      # Cocotron flushes drawing before waiting for the next tracking event.
+      window.flushWindow()
+      let nextEvent = window.nextEventMatchingMask(
+        trackMask, (epochTime() - 978_307_200.0) + 1.0, @ns"NSDefaultRunLoopMode", true
+      )
+      if nextEvent.isNil:
+        break
+
+      stopPoint = nextEvent.locationInWindow()
+      localPoint = view.convertPoint(stopPoint, NSView(value: nil))
+      isWithinCellFrame = view.mouse(localPoint, inRect = frame)
+
+      if nextEvent.`type`() in {NSLeftMouseUp, NSRightMouseUp, NSOtherMouseUp}:
+        mouseIsUp = true
+        lastPoint = stopPoint
+        break
+
+      if not self.continueTracking(lastPoint, stopPoint, view):
+        lastPoint = stopPoint
+        break
+
+      lastPoint = stopPoint
+
+    self.stopTracking(lastPoint, stopPoint, view, mouseIsUp)
+    mouseIsUp and isWithinCellFrame
 
   method setUpFieldEditorAttributes*(self: NSCell, editor: NSText): NSText =
     editor

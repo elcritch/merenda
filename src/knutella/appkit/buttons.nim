@@ -1,3 +1,5 @@
+import std/strutils
+
 import ./runtime
 
 import ./controls
@@ -5,6 +7,7 @@ import ./cells
 import ./buttoncells
 import ./events
 import ./fonts
+import ./windows
 
 export controls
 
@@ -166,21 +169,32 @@ objcImpl:
     discard self.sendAction(self.action, self.target())
     self.highlight(false)
 
-    #if not self.isEnabled():
-    #  return
-    #self.setNextState()
-    #let control = self.NSControl
-    #discard control.sendAction(control.action(), control.target())
-    #let cb = self.onClick()
-    #if cb.isNil:
-    #  return
-    #cb(self.value)
-
   method keyDown*(self: NSButton, event: NSEvent) =
     if event.charactersIgnoringModifiers() == @ns" ":
       self.performClick(NSResponder(value: nil))
     else:
       discard callSuperAs[IDPtr, NSEvent](self, getSelector("keyDown:"), event)
+
+  method performKeyEquivalent*(self: NSButton, event: NSEvent): bool =
+    if self.isNil or event.isNil or not self.isEnabled() or event.`type`() != NSKeyDown:
+      return false
+    let keyEquivalent = self.keyEquivalent()
+    if keyEquivalent.isNil:
+      return false
+    let wanted = $keyEquivalent
+    if wanted.len == 0:
+      return false
+    let actual = $event.charactersIgnoringModifiers()
+    if actual.len == 0:
+      return false
+    if wanted.toLowerAscii() != actual.toLowerAscii():
+      return false
+    let wantedMask = self.keyEquivalentModifierMask()
+    let actualMask = nsModifierFlagsMask(event.modifierFlags()).int
+    if wantedMask != actualMask:
+      return false
+    self.performClick(NSResponder(value: nil))
+    true
 
   method onClick*(self: NSButton, sender: NSObject) =
     discard sender
@@ -211,6 +225,7 @@ objcImpl:
   method highlight*(self: NSButton, value: bool) =
     self.buttonCell().highlight(value, self.bounds(), self.NSView)
     self.setNeedsDisplay(true)
+    self.window().flushWindow()
 
   method setTitleWithMnemonic*(self: NSButton, value: NSString) =
     self.setTitle(value)
