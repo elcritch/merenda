@@ -45,14 +45,14 @@ proc drawRectWithColor(
 ): bool =
   if rectIsEmpty(rect):
     return false
-  addRectFillToCurrentRenderContext(rect, color, operation)
+  NSGraphicsContext.currentContext().fillRect(rect, color, operation)
 
 proc drawFrameWithColor(
     rect: NSRect, color: NSColor, width: float32, operation: NSCompositingOperation
 ): bool =
   if rectIsEmpty(rect):
     return false
-  addRectFrameToCurrentRenderContext(rect, color, width, operation)
+  NSGraphicsContext.currentContext().strokeRect(rect, color, width, operation)
 
 proc drawColorRects(
     boundsRect: NSRect,
@@ -182,18 +182,25 @@ proc NSRectFillListUsingOperation*(
     discard drawRectWithColor(rectItems[i], color, operation)
 
 proc NSRectFillUsingOperation*(rect: NSRect, operation: NSCompositingOperation) =
-  discard drawRectWithColor(rect, NSGraphicsContext.currentContext().fillColor(), operation)
+  discard
+    drawRectWithColor(rect, NSGraphicsContext.currentContext().fillColor(), operation)
 
 proc NSFrameRectWithWidth*(rect: NSRect, width: float32) =
-  discard drawFrameWithColor(rect, NSGraphicsContext.currentContext().strokeColor(), width, NSCompositeCopy)
+  discard drawFrameWithColor(
+    rect, NSGraphicsContext.currentContext().strokeColor(), width, NSCompositeCopy
+  )
 
 proc NSFrameRectWithWidthUsingOperation*(
     rect: NSRect, width: float32, operation: NSCompositingOperation
 ) =
-  discard drawFrameWithColor(rect, NSGraphicsContext.currentContext().strokeColor(), width, operation)
+  discard drawFrameWithColor(
+    rect, NSGraphicsContext.currentContext().strokeColor(), width, operation
+  )
 
 proc NSFrameRect*(rect: NSRect) =
-  discard drawFrameWithColor(rect, NSGraphicsContext.currentContext().strokeColor(), 1.0, NSCompositeSourceOver)
+  discard drawFrameWithColor(
+    rect, NSGraphicsContext.currentContext().strokeColor(), 1.0, NSCompositeSourceOver
+  )
 
 proc NSDottedFrameRect*(rect: NSRect) =
   if rectIsEmpty(rect):

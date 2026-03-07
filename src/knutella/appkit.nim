@@ -4,6 +4,7 @@ import ./appkit/graphics
 import ./appkit/rendering
 import ./appkit/application
 import ./appkit/views
+import ./appkit/graphicsstyles
 import ./appkit/windows
 import ./appkit/colors
 import ./appkit/controllers
@@ -38,6 +39,7 @@ export graphics
 export rendering
 export application
 export views
+export graphicsstyles
 export windows
 export colors
 export controllers

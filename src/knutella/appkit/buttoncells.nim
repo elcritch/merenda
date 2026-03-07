@@ -4,6 +4,7 @@ import ./runtime
 import ./valueproviders
 import ./graphics
 import ./graphicscontexts
+import ./graphicsstyles
 import ./images
 import ./attributedstrings
 import ./formatters
@@ -513,6 +514,7 @@ objcImpl:
     if drawImage:
       self.drawImage(image, imageRect, controlView)
     if drawsUnicodeSwitchIndicator:
+      let graphicsStyle = controlView.graphicsStyle()
       let pressed = self.state() != NSOffState
       let cornerRadius = 2.5'f32
       let indicatorSide =
@@ -551,10 +553,9 @@ objcImpl:
           nsColor(0.33, 0.42, 0.58, 1.0)
         else:
           nsColor(0.57, 0.57, 0.57, 1.0)
-      discard addRoundedRectFillToCurrentRenderContext(topHalf, topColor, cornerRadius)
-      discard
-        addRoundedRectFillToCurrentRenderContext(bottomHalf, bottomColor, cornerRadius)
-      discard addRoundedRectFrameToCurrentRenderContext(
+      discard graphicsStyle.drawRoundedRectFill(topHalf, topColor, cornerRadius)
+      discard graphicsStyle.drawRoundedRectFill(bottomHalf, bottomColor, cornerRadius)
+      discard graphicsStyle.drawRoundedRectFrame(
         indicatorRect, borderColor, cornerRadius, 1.0
       )
       let innerRect = insetRect(indicatorRect, 1.0, 1.0)
@@ -563,7 +564,7 @@ objcImpl:
           nsColor(1.0, 1.0, 1.0, 0.25)
         else:
           nsColor(1.0, 1.0, 1.0, 0.45)
-      discard addRoundedRectFrameToCurrentRenderContext(
+      discard graphicsStyle.drawRoundedRectFrame(
         innerRect, innerColor, max(cornerRadius - 1.0, 0.0), 1.0
       )
 
