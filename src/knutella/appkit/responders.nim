@@ -1,3 +1,5 @@
+import std/unicode
+
 import ./runtime
 import ./events
 import siwin/window as siwin
@@ -6,30 +8,73 @@ proc responderBeep() =
   stdout.write('\a')
   stdout.flushFile()
 
+proc firstRuneCode(text: NSString): int =
+  if text.isNil:
+    return -1
+  let value = $text
+  if value.len == 0:
+    return -1
+  for rune in value.runes:
+    return rune.int
+  -1
+
 proc keyCommandSelector(event: NSEvent): SEL =
   if event.isNil:
     return nil
-  case siwinKey(event)
+  let key = siwinKey(event)
+  case key
   of siwin.Key.left:
-    getSelector("moveLeft:")
+    return getSelector("moveLeft:")
   of siwin.Key.right:
-    getSelector("moveRight:")
+    return getSelector("moveRight:")
   of siwin.Key.up:
-    getSelector("moveUp:")
+    return getSelector("moveUp:")
   of siwin.Key.down:
-    getSelector("moveDown:")
+    return getSelector("moveDown:")
   of siwin.Key.home:
-    getSelector("moveToBeginningOfLine:")
+    return getSelector("moveToBeginningOfLine:")
   of siwin.Key.End:
-    getSelector("moveToEndOfLine:")
+    return getSelector("moveToEndOfLine:")
   of siwin.Key.backspace:
-    getSelector("deleteBackward:")
+    return getSelector("deleteBackward:")
   of siwin.Key.del:
-    getSelector("deleteForward:")
+    return getSelector("deleteForward:")
   of siwin.Key.enter:
-    getSelector("insertNewline:")
+    return getSelector("insertNewline:")
   of siwin.Key.tab:
+    return getSelector("insertTab:")
+  else:
+    discard
+
+  # Fallback for key events that arrive with function-key characters but
+  # without a stable siwin key mapping (for example some repeat paths).
+  let runeCode = block:
+    let ignoringModifiers = firstRuneCode(event.charactersIgnoringModifiers())
+    if ignoringModifiers >= 0:
+      ignoringModifiers
+    else:
+      firstRuneCode(event.characters())
+  case runeCode
+  of 0xF700:
+    getSelector("moveUp:")
+  of 0xF701:
+    getSelector("moveDown:")
+  of 0xF702:
+    getSelector("moveLeft:")
+  of 0xF703:
+    getSelector("moveRight:")
+  of 0xF729:
+    getSelector("moveToBeginningOfLine:")
+  of 0xF72B:
+    getSelector("moveToEndOfLine:")
+  of 0x08, 0x7F:
+    getSelector("deleteBackward:")
+  of 0x09:
     getSelector("insertTab:")
+  of 0x0A, 0x0D:
+    getSelector("insertNewline:")
+  of 0xF728:
+    getSelector("deleteForward:")
   else:
     nil
 
