@@ -2,6 +2,7 @@ import std/unittest
 import std/unicode
 
 import knutella/appkit
+import figdraw/fignodes
 import siwin/window as siwin
 
 proc sendKey(
@@ -401,3 +402,23 @@ suite "appkit text fields":
     root.value = nil
     window.value = nil
     app.value = nil
+
+  test "text field selection uses figdraw text selection flags and range":
+    var (window, root, field) = newTextHarness("abcdef")
+    field.setSelectedRange(NSMakeRange(2, 3))
+
+    let renders = debugBuildWindowRenders(window)
+    check(not renders.isNil)
+
+    var sawSelectedText = false
+    for _, list in renders.layers.pairs:
+      for node in list.nodes:
+        if node.kind != nkText or node.textLayout.runes.len <= 0:
+          continue
+        sawSelectedText = true
+        check(NfSelectText in node.flags)
+        check(node.selectionRange.a.int == 2)
+        check(node.selectionRange.b.int == 4)
+    check(sawSelectedText)
+
+    disposeTextHarness(window, root, field)

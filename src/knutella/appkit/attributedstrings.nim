@@ -834,19 +834,24 @@ objcImpl:
       return
     self.drawInRect(nsRect(point.x, point.y, drawSize.width, drawSize.height))
 
-  method drawInRect*(self: NSAttributedString, rect: NSRect) =
+  method drawInRectWithSelection*(
+      self: NSAttributedString,
+      rect: NSRect,
+      selectedRange {.kw("selectedRange").}: NSRange,
+      selectionColor {.kw("selectionColor").}: NSColor = default(NSColor),
+  ): bool =
     if self.isNil:
-      return
+      return false
     let text = $self.string()
     if text.len == 0:
-      return
+      return false
     var drawRect = rect
     if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
       let naturalSize = self.size()
       drawRect.size.width = max(naturalSize.width, 0.0)
       drawRect.size.height = max(naturalSize.height, 0.0)
       if drawRect.size.width <= 0.0 or drawRect.size.height <= 0.0:
-        return
+        return false
     let attrs =
       if self.length() > 0:
         self.attributesAtIndex(0, nil)
@@ -854,11 +859,30 @@ objcImpl:
         emptyAttributesDict()
     let style = textStyleForAttributes(attrs)
     if style.font.typefaceId.int == 0:
-      return
+      return false
     let fitted = fitSingleLineText(text, style, focusAlignment(), drawRect)
     if fitted.text.len == 0:
-      return
-    discard NSGraphicsContext.currentContext().drawTextLayout(drawRect, fitted.layout)
+      return false
+
+    let runeCount = fitted.layout.runes.len
+    let start = clamp(selectedRange.location.int, 0, runeCount)
+    let maxLength = max(runeCount - start, 0)
+    let selectedLength = clamp(selectedRange.length.int, 0, maxLength)
+    let stop = start + selectedLength
+    let hasSelection = selectedLength > 0
+
+    if hasSelection:
+      return NSGraphicsContext.currentContext().drawTextLayout(
+          drawRect,
+          fitted.layout,
+          selectionStart = start.NSInteger,
+          selectionEnd = (stop - 1).NSInteger,
+          selectionColor = selectionColor,
+        )
+    NSGraphicsContext.currentContext().drawTextLayout(drawRect, fitted.layout)
+
+  method drawInRect*(self: NSAttributedString, rect: NSRect) =
+    discard self.drawInRectWithSelection(rect, NSMakeRange(0, 0), default(NSColor))
 
   method drawWithRect*(
       self: NSAttributedString, rect: NSRect, options {.kw("options").}: int

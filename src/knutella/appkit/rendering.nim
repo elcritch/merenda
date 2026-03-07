@@ -159,7 +159,7 @@ proc singleLineLayout(
     rect(0, 0, box.size.width, box.size.height),
     spans,
     hAlign = textAlign,
-    vAlign = FontVertical.Middle,
+    vAlign = FontVertical.Top,
     minContent = false,
     wrap = false,
   )

@@ -426,6 +426,9 @@ objcImpl:
       self: NSGraphicsContext,
       localRect: NSRect,
       layout {.kw("layout").}: GlyphArrangement,
+      selectionStart {.kw("selectionStart").}: NSInteger = (-1).NSInteger,
+      selectionEnd {.kw("selectionEnd").}: NSInteger = (-1).NSInteger,
+      selectionColor {.kw("selectionColor").}: NSColor = default(NSColor),
   ): bool =
     let renderPort = renderGraphicsPortForContext(self)
     if renderPort.isNil or renderPort.renders.isNil:
@@ -435,18 +438,45 @@ objcImpl:
       return false
     if layout.runes.len == 0:
       return false
+    let layoutLen = layout.runes.len
+    let start = clamp(selectionStart.int, 0, max(layoutLen - 1, 0))
+    let stop = clamp(selectionEnd.int, 0, max(layoutLen - 1, 0))
+    let clampedStart = min(start, high(int16))
+    let clampedStop = min(stop, high(int16))
+    let hasSelection =
+      layoutLen > 0 and selectionStart.int >= 0 and selectionEnd.int >= 0 and
+      start <= stop
+    let selectionFill =
+      if hasSelection:
+        if selectionColor.a <= 0.0:
+          nsColor(0.35, 0.55, 1.0, 0.65).solidFill()
+        else:
+          selectionColor.solidFill()
+      else:
+        nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+    let textFlags =
+      if hasSelection:
+        {NfInvertY, NfSelectText}
+      else:
+        {NfInvertY}
+
     discard renderPort.renders[].addChild(
       0.ZLevel,
       renderPort.parentIdx,
       Fig(
         kind: nkText,
         childCount: 0,
-        flags: {NfInvertY},
+        flags: textFlags,
         screenBox: rect(
           drawRect.origin.x, drawRect.origin.y, drawRect.size.width,
           drawRect.size.height,
         ),
-        fill: nsColor(0.0, 0.0, 0.0, 0.0).solidFill(),
+        fill: selectionFill,
+        selectionRange:
+          if hasSelection:
+            clampedStart.int16 .. clampedStop.int16
+          else:
+            0'i16 .. -1'i16,
         textLayout: layout,
       ),
     )
