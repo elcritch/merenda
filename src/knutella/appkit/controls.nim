@@ -10,6 +10,8 @@ objcImpl:
   type NSControl* = object of NSView
     xCell: NSCell
     xCurrentEditor: NSText
+    xTargetRef: ID
+    xActionRef: SEL
     xTag {.set: setTag, get: tag.}: int
 
   method init*(self: var NSControl): NSControl =
@@ -51,6 +53,8 @@ objcImpl:
       return
     result.xCell = NSCell(value: nil)
     result.xCurrentEditor = NSText(value: nil)
+    result.xTargetRef = ID(value: nil)
+    result.xActionRef = nil
     #var defaultCell = NSCell.new()
     result.xCell = NSCell.new()
     #defaultCell.value = nil
@@ -79,21 +83,39 @@ objcImpl:
     if not bound.isNil:
       bound.setControlView(self.NSView)
       bound.setContinuous(false)
+      if bound.isKindOfClass(NSActionCell):
+        let actionCell = NSActionCell(bound)
+        actionCell.setTarget(self.xTargetRef)
+        actionCell.setAction(self.xActionRef)
 
   method selectedCell*(self: NSControl): NSCell =
     self.cell()
 
   method target*(self: NSControl): ID =
-    self.cell().target()
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      return NSActionCell(controlCell).target()
+    self.xTargetRef
 
   method action*(self: NSControl): SEL =
-    self.cell().action()
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      return NSActionCell(controlCell).action()
+    self.xActionRef
 
   method setTarget*(self: NSControl, target: ID) =
-    self.cell().setTarget(target)
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      NSActionCell(controlCell).setTarget(target)
+      return
+    self.xTargetRef = target
 
   method setAction*(self: NSControl, action: SEL) =
-    self.cell().setAction(action)
+    let controlCell = self.cell()
+    if (not controlCell.isNil) and controlCell.isKindOfClass(NSActionCell):
+      NSActionCell(controlCell).setAction(action)
+      return
+    self.xActionRef = action
 
   method font*(self: NSControl): NSFont =
     self.cell().font()
@@ -326,6 +348,8 @@ objcImpl:
   method dealloc(self: NSControl) {.used.} =
     self.xCell = NSCell(value: nil)
     self.xCurrentEditor = NSText(value: nil)
+    self.xTargetRef = ID(value: nil)
+    self.xActionRef = nil
     destroyIvarFields(self)
     discard callSuperIdFrom(NSControl, self, getSelector("dealloc"))
 
