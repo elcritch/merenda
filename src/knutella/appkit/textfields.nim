@@ -18,6 +18,17 @@ proc insetRect(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
 proc clampInsertionIndex(text: string, index: int): int {.inline.} =
   max(0, min(index, text.runeLen))
 
+proc clampIndex(total: int, index: int): int {.inline.} =
+  max(0, min(index, total))
+
+proc selectionBounds(
+    total: int, anchor: int, cursor: int
+): tuple[start: int, stop: int] =
+  let clampedAnchor = clampIndex(total, anchor)
+  let clampedCursor = clampIndex(total, cursor)
+  result.start = min(clampedAnchor, clampedCursor)
+  result.stop = max(clampedAnchor, clampedCursor)
+
 proc insertionPrefixWidth(text: string, insertionIndex: int): float32 =
   let clamped = clampInsertionIndex(text, insertionIndex)
   if clamped <= 0:
@@ -45,6 +56,7 @@ objcImpl:
     xPreviousText {.set: setPreviousText, get: previousText.}: IDPtr
     xNextText {.set: setNextText, get: nextText.}: IDPtr
     xInsertionPoint {.set: setInsertionPoint, get: insertionPoint.}: NSInteger
+    xSelectionAnchor {.set: setSelectionAnchor, get: selectionAnchor.}: NSInteger
 
   method init*(self: var NSTextField): NSTextField =
     result =
@@ -67,6 +79,7 @@ objcImpl:
     result.xPreviousText = nil
     result.xNextText = nil
     result.xInsertionPoint = 0
+    result.xSelectionAnchor = 0
 
   method initWithFrame*(
       self: var NSTextField,
@@ -129,13 +142,36 @@ objcImpl:
     let window = self.window()
     if not window.isNil:
       discard window.makeFirstResponder(self.NSResponder)
-    self.xInsertionPoint = ($self.stringValue()).runeLen.NSInteger
+    let cursor = ($self.stringValue()).runeLen
+    self.xInsertionPoint = cursor.NSInteger
+    self.xSelectionAnchor = cursor.NSInteger
     self.setNeedsDisplay(true)
 
   method selectText*(self: NSTextField, sender: NSResponder) =
     if self.isNil:
       return
-    self.xInsertionPoint = ($self.stringValue()).runeLen.NSInteger
+    let total = ($self.stringValue()).runeLen
+    self.xSelectionAnchor = 0
+    self.xInsertionPoint = total.NSInteger
+    self.setNeedsDisplay(true)
+
+  method selectedRange*(self: NSTextField): NSRange =
+    if self.isNil:
+      return NSMakeRange(0, 0)
+    let value = $self.stringValue()
+    let total = value.runeLen
+    let cursor = clampIndex(total, self.insertionPoint().int)
+    let selected = selectionBounds(total, self.selectionAnchor().int, cursor)
+    NSMakeRange(selected.start.uint, (selected.stop - selected.start).uint)
+
+  method setSelectedRange*(self: NSTextField, value: NSRange) =
+    if self.isNil:
+      return
+    let total = ($self.stringValue()).runeLen
+    let start = clampIndex(total, value.location.int)
+    let length = clampIndex(total - start, value.length.int)
+    self.xSelectionAnchor = start.NSInteger
+    self.xInsertionPoint = (start + length).NSInteger
     self.setNeedsDisplay(true)
 
   method setTitleWithMnemonic*(self: NSTextField, value: NSString) =
@@ -155,69 +191,172 @@ objcImpl:
     if insertion.len == 0:
       return
     let current = $self.stringValue()
-    let cursor = clampInsertionIndex(current, self.insertionPoint().int)
-    self.xStringValue =
-      ns(current.runeSubStr(0, cursor) & insertion & current.runeSubStr(cursor))
-    self.xInsertionPoint = (cursor + insertion.runeLen).NSInteger
-    self.setNeedsDisplay(true)
-
-  method deleteBackward*(self: NSTextField, sender: NSObject) =
-    if self.isNil or not self.isEditable():
-      return
-    let current = $self.stringValue()
-    let cursor = clampInsertionIndex(current, self.insertionPoint().int)
-    if cursor <= 0:
-      return
-    self.xStringValue =
-      ns(current.runeSubStr(0, cursor - 1) & current.runeSubStr(cursor))
-    self.xInsertionPoint = (cursor - 1).NSInteger
-    self.setNeedsDisplay(true)
-
-  method deleteForward*(self: NSTextField, sender: NSObject) =
-    if self.isNil or not self.isEditable():
-      return
-    let current = $self.stringValue()
-    let cursor = clampInsertionIndex(current, self.insertionPoint().int)
     let total = current.runeLen
-    if cursor >= total:
-      return
-    self.xStringValue =
-      ns(current.runeSubStr(0, cursor) & current.runeSubStr(cursor + 1))
-    self.xInsertionPoint = cursor.NSInteger
+    let cursor = clampIndex(total, self.insertionPoint().int)
+    let selected = selectionBounds(total, self.selectionAnchor().int, cursor)
+    let replaceStart = selected.start
+    let replaceStop = selected.stop
+    self.xStringValue = ns(
+      current.runeSubStr(0, replaceStart) & insertion & current.runeSubStr(replaceStop)
+    )
+    let nextCursor = replaceStart + insertion.runeLen
+    self.xInsertionPoint = nextCursor.NSInteger
+    self.xSelectionAnchor = nextCursor.NSInteger
     self.setNeedsDisplay(true)
 
-  method moveLeft*(self: NSTextField, sender: NSObject) =
-    if self.isNil or (not self.isEditable() and not self.isSelectable()):
+  method doCommandBySelector*(self: NSTextField, action: SEL) =
+    if self.isNil:
       return
-    let current = $self.stringValue()
-    let cursor = clampInsertionIndex(current, self.insertionPoint().int)
-    if cursor <= 0:
-      return
-    self.xInsertionPoint = (cursor - 1).NSInteger
-    self.setNeedsDisplay(true)
+    let deleteBackwardSel = getSelector("deleteBackward:")
+    let deleteForwardSel = getSelector("deleteForward:")
+    let moveLeftSel = getSelector("moveLeft:")
+    let moveRightSel = getSelector("moveRight:")
+    let moveBeginningSel = getSelector("moveToBeginningOfLine:")
+    let moveEndSel = getSelector("moveToEndOfLine:")
+    let moveLeftModifySel = getSelector("moveLeftAndModifySelection:")
+    let moveRightModifySel = getSelector("moveRightAndModifySelection:")
+    let moveBeginningModifySel = getSelector("moveToBeginningOfLineAndModifySelection:")
+    let moveEndModifySel = getSelector("moveToEndOfLineAndModifySelection:")
 
-  method moveRight*(self: NSTextField, sender: NSObject) =
-    if self.isNil or (not self.isEditable() and not self.isSelectable()):
+    if action == deleteBackwardSel:
+      if not self.isEditable():
+        return
+      let current = $self.stringValue()
+      let total = current.runeLen
+      let cursor = clampIndex(total, self.insertionPoint().int)
+      let selected = selectionBounds(total, self.selectionAnchor().int, cursor)
+      if selected.stop > selected.start:
+        self.xStringValue =
+          ns(current.runeSubStr(0, selected.start) & current.runeSubStr(selected.stop))
+        self.xInsertionPoint = selected.start.NSInteger
+        self.xSelectionAnchor = selected.start.NSInteger
+        self.setNeedsDisplay(true)
+        return
+      if cursor <= 0:
+        return
+      self.xStringValue =
+        ns(current.runeSubStr(0, cursor - 1) & current.runeSubStr(cursor))
+      self.xInsertionPoint = (cursor - 1).NSInteger
+      self.xSelectionAnchor = (cursor - 1).NSInteger
+      self.setNeedsDisplay(true)
       return
-    let current = $self.stringValue()
-    let cursor = clampInsertionIndex(current, self.insertionPoint().int)
-    let total = current.runeLen
-    if cursor >= total:
+    if action == deleteForwardSel:
+      if not self.isEditable():
+        return
+      let current = $self.stringValue()
+      let total = current.runeLen
+      let cursor = clampIndex(total, self.insertionPoint().int)
+      let selected = selectionBounds(total, self.selectionAnchor().int, cursor)
+      if selected.stop > selected.start:
+        self.xStringValue =
+          ns(current.runeSubStr(0, selected.start) & current.runeSubStr(selected.stop))
+        self.xInsertionPoint = selected.start.NSInteger
+        self.xSelectionAnchor = selected.start.NSInteger
+        self.setNeedsDisplay(true)
+        return
+      if cursor >= total:
+        return
+      self.xStringValue =
+        ns(current.runeSubStr(0, cursor) & current.runeSubStr(cursor + 1))
+      self.xInsertionPoint = cursor.NSInteger
+      self.xSelectionAnchor = cursor.NSInteger
+      self.setNeedsDisplay(true)
       return
-    self.xInsertionPoint = (cursor + 1).NSInteger
-    self.setNeedsDisplay(true)
+    if action == moveLeftSel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let current = $self.stringValue()
+      let total = current.runeLen
+      let cursor = clampIndex(total, self.insertionPoint().int)
+      let selected = selectionBounds(total, self.selectionAnchor().int, cursor)
+      var nextCursor = cursor
+      if selected.stop > selected.start:
+        nextCursor = selected.start
+      elif cursor > 0:
+        nextCursor = cursor - 1
+      self.xInsertionPoint = nextCursor.NSInteger
+      self.xSelectionAnchor = nextCursor.NSInteger
+      self.setNeedsDisplay(true)
+      return
+    if action == moveRightSel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let current = $self.stringValue()
+      let total = current.runeLen
+      let cursor = clampIndex(total, self.insertionPoint().int)
+      let selected = selectionBounds(total, self.selectionAnchor().int, cursor)
+      var nextCursor = cursor
+      if selected.stop > selected.start:
+        nextCursor = selected.stop
+      elif cursor < total:
+        nextCursor = cursor + 1
+      self.xInsertionPoint = nextCursor.NSInteger
+      self.xSelectionAnchor = nextCursor.NSInteger
+      self.setNeedsDisplay(true)
+      return
+    if action == moveBeginningSel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      self.xInsertionPoint = 0
+      self.xSelectionAnchor = 0
+      self.setNeedsDisplay(true)
+      return
+    if action == moveEndSel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let total = ($self.stringValue()).runeLen
+      self.xInsertionPoint = total.NSInteger
+      self.xSelectionAnchor = total.NSInteger
+      self.setNeedsDisplay(true)
+      return
+    if action == moveLeftModifySel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let value = $self.stringValue()
+      let total = value.runeLen
+      let cursor = clampIndex(total, self.insertionPoint().int)
+      let anchor = clampIndex(total, self.selectionAnchor().int)
+      if cursor <= 0:
+        return
+      self.xSelectionAnchor = anchor.NSInteger
+      self.xInsertionPoint = (cursor - 1).NSInteger
+      self.setNeedsDisplay(true)
+      return
+    if action == moveRightModifySel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let value = $self.stringValue()
+      let total = value.runeLen
+      let cursor = clampIndex(total, self.insertionPoint().int)
+      let anchor = clampIndex(total, self.selectionAnchor().int)
+      if cursor >= total:
+        return
+      self.xSelectionAnchor = anchor.NSInteger
+      self.xInsertionPoint = (cursor + 1).NSInteger
+      self.setNeedsDisplay(true)
+      return
+    if action == moveBeginningModifySel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let value = $self.stringValue()
+      let total = value.runeLen
+      let anchor = clampIndex(total, self.selectionAnchor().int)
+      self.xSelectionAnchor = anchor.NSInteger
+      self.xInsertionPoint = 0
+      self.setNeedsDisplay(true)
+      return
+    if action == moveEndModifySel:
+      if not self.isEditable() and not self.isSelectable():
+        return
+      let value = $self.stringValue()
+      let total = value.runeLen
+      let anchor = clampIndex(total, self.selectionAnchor().int)
+      self.xSelectionAnchor = anchor.NSInteger
+      self.xInsertionPoint = total.NSInteger
+      self.setNeedsDisplay(true)
+      return
 
-  method moveToBeginningOfLine*(self: NSTextField, sender: NSObject) =
-    if self.isNil or (not self.isEditable() and not self.isSelectable()):
-      return
-    self.xInsertionPoint = 0
-    self.setNeedsDisplay(true)
-
-  method moveToEndOfLine*(self: NSTextField, sender: NSObject) =
-    if self.isNil or (not self.isEditable() and not self.isSelectable()):
-      return
-    self.xInsertionPoint = ($self.stringValue()).runeLen.NSInteger
-    self.setNeedsDisplay(true)
+    callSuperVoid(self, getSelector("doCommandBySelector:"), action)
 
   method drawRect*(self: NSTextField, rect: NSRect) =
     discard rect
@@ -249,16 +388,40 @@ objcImpl:
     drawValueAlloc.value = nil
     if drawValue.isNil:
       return
+    let window = self.window()
+    var isFocused = false
+    var cursor = 0
+    var selected = (start: 0, stop: 0)
+    var value = ""
+    if not window.isNil:
+      let firstResponder = window.firstResponder()
+      isFocused = (not firstResponder.isNil) and firstResponder.value == self.value
+    value = $self.stringValue()
+    cursor = clampInsertionIndex(value, self.insertionPoint().int)
+    selected = selectionBounds(value.runeLen, self.selectionAnchor().int, cursor)
+    if isFocused and selected.stop > selected.start and
+        (self.isEditable() or self.isSelectable()):
+      var left = textRect.origin.x + insertionPrefixWidth(value, selected.start)
+      var right = textRect.origin.x + insertionPrefixWidth(value, selected.stop)
+      if right < left:
+        swap(left, right)
+      let minCaretX = textRect.origin.x
+      let maxCaretX = textRect.origin.x + max(textRect.size.width - 1.0, 0.0)
+      left = min(max(left, minCaretX), maxCaretX)
+      right = min(max(right, minCaretX), maxCaretX + 1.0)
+      let drawSize = drawValue.size()
+      let selectionHeight =
+        max(1.0, min(drawSize.height, max(textRect.size.height - 2.0, 1.0)))
+      let selectionY =
+        textRect.origin.y + max((textRect.size.height - selectionHeight) * 0.5, 0.0)
+      NSColor.selectedTextBackgroundColor().setFill()
+      NSRectFill(nsRect(left, selectionY, max(right - left, 1.0), selectionHeight))
+
     drawValue.drawInRect(textRect)
 
-    let window = self.window()
-    if self.isEditable() and not window.isNil:
-      let firstResponder = window.firstResponder()
-      if firstResponder.isNil or firstResponder.value != self.value:
-        return
-      let value = $self.stringValue()
-      let cursor = clampInsertionIndex(value, self.insertionPoint().int)
+    if self.isEditable() and isFocused and selected.stop == selected.start:
       self.xInsertionPoint = cursor.NSInteger
+      self.xSelectionAnchor = cursor.NSInteger
       var caretX = textRect.origin.x + insertionPrefixWidth(value, cursor)
       let minCaretX = textRect.origin.x
       let maxCaretX = textRect.origin.x + max(textRect.size.width - 1.0, 0.0)
@@ -287,6 +450,7 @@ objcImpl:
     self.xStringValue = NSString(value: nil)
     self.xDelegate = nil
     self.xInsertionPoint = 0
+    self.xSelectionAnchor = 0
     discard callSuperIdFrom(NSTextField, self, getSelector("dealloc"))
 
 objcImpl:
