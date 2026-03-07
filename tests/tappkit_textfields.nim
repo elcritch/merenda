@@ -10,11 +10,18 @@ proc sendKey(
     repeated = false,
     pressed = true,
     generated = false,
+    modifiers: set[siwin.ModifierKey] = {},
 ) =
   let event = keyEventFromSiwin(
     window.windowNumber(),
     nsPoint(12, 12),
-    siwin.KeyEvent(key: key, pressed: pressed, repeated: repeated, generated: generated),
+    siwin.KeyEvent(
+      key: key,
+      pressed: pressed,
+      repeated: repeated,
+      generated: generated,
+      modifiers: modifiers,
+    ),
   )
   window.sendEvent(event)
 
@@ -37,11 +44,18 @@ proc sendAppKey(
     key: siwin.Key,
     repeated = false,
     pressed = true,
+    modifiers: set[siwin.ModifierKey] = {},
 ) =
   let event = keyEventFromSiwin(
     window.windowNumber(),
     nsPoint(12, 12),
-    siwin.KeyEvent(key: key, pressed: pressed, repeated: repeated, generated: false),
+    siwin.KeyEvent(
+      key: key,
+      pressed: pressed,
+      repeated: repeated,
+      generated: false,
+      modifiers: modifiers,
+    ),
   )
   app.sendEvent(event)
 
@@ -62,6 +76,7 @@ proc newTextHarness(
   result.root.addSubview(result.field)
   result.window.setContentView(result.root)
   doAssert result.window.makeFirstResponder(result.field)
+  result.field.setSelectedRange(NSMakeRange(initial.runeLen.uint, 0))
 
 proc disposeTextHarness(
     window: var NSWindow, root: var NSView, field: var NSTextField
@@ -70,7 +85,26 @@ proc disposeTextHarness(
   root.value = nil
   window.value = nil
 
+proc checkSelection(field: NSTextField, location: int, length: int) =
+  let selected = field.selectedRange()
+  check selected.location.int == location
+  check selected.length.int == length
+
 suite "appkit text fields":
+  test "becoming first responder selects all text":
+    var window = newWindow(0, 0, 240, 100, "Text Harness")
+    var root = newView(0, 0, 240, 100)
+    var field = newTextField(10, 10, 180, 24, "abcdef")
+    root.addSubview(field)
+    window.setContentView(root)
+
+    doAssert window.makeFirstResponder(field)
+    checkSelection(field, 0, 6)
+
+    field.value = nil
+    root.value = nil
+    window.value = nil
+
   test "left and right arrows move insertion point for single key presses":
     var (window, root, field) = newTextHarness("abcd")
 
@@ -194,6 +228,62 @@ suite "appkit text fields":
 
     disposeTextHarness(window, root, field)
 
+  test "shift arrows create selection and insertion replaces selected text":
+    var (window, root, field) = newTextHarness("abcdef")
+
+    sendKey(window, siwin.Key.left, modifiers = {siwin.ModifierKey.shift})
+    checkSelection(field, 5, 1)
+    sendKey(window, siwin.Key.left, modifiers = {siwin.ModifierKey.shift})
+    checkSelection(field, 4, 2)
+
+    sendText(window, "!")
+    check(field.stringValue() == @ns"abcd!")
+    checkSelection(field, 5, 0)
+
+    disposeTextHarness(window, root, field)
+
+  test "selection delete then cursor move then delete again":
+    var (window, root, field) = newTextHarness("abcdef")
+
+    sendKey(window, siwin.Key.left, modifiers = {siwin.ModifierKey.shift})
+    sendKey(window, siwin.Key.left, modifiers = {siwin.ModifierKey.shift})
+    checkSelection(field, 4, 2)
+    sendKey(window, siwin.Key.backspace)
+    check(field.stringValue() == @ns"abcd")
+    checkSelection(field, 4, 0)
+
+    sendKey(window, siwin.Key.left)
+    checkSelection(field, 3, 0)
+    sendKey(window, siwin.Key.backspace)
+    check(field.stringValue() == @ns"abd")
+    checkSelection(field, 2, 0)
+
+    sendKey(window, siwin.Key.del)
+    check(field.stringValue() == @ns"ab")
+    checkSelection(field, 2, 0)
+
+    disposeTextHarness(window, root, field)
+
+  test "programmatic selectedRange replacement works at various positions":
+    var (window, root, field) = newTextHarness("abcdef")
+
+    field.setSelectedRange(NSMakeRange(0, 2))
+    sendText(window, "XY")
+    check(field.stringValue() == @ns"XYcdef")
+    checkSelection(field, 2, 0)
+
+    field.setSelectedRange(NSMakeRange(2, 2))
+    sendText(window, "M")
+    check(field.stringValue() == @ns"XYMef")
+    checkSelection(field, 3, 0)
+
+    field.setSelectedRange(NSMakeRange(4, 1))
+    sendText(window, "ZQ")
+    check(field.stringValue() == @ns"XYMeZQ")
+    checkSelection(field, 6, 0)
+
+    disposeTextHarness(window, root, field)
+
   test "function-key character fallback routes move commands when siwin key is unknown":
     var (window, root, field) = newTextHarness("abcd")
     let leftFn = functionKeyString(NSLeftArrowFunctionKey.int)
@@ -212,6 +302,28 @@ suite "appkit text fields":
     window.sendEvent(leftFunctionEvent)
     sendText(window, "Z")
     check(field.stringValue() == @ns"abcZd")
+
+    disposeTextHarness(window, root, field)
+
+  test "function-key fallback with shift extends selection":
+    var (window, root, field) = newTextHarness("abcd")
+    let leftFn = functionKeyString(NSLeftArrowFunctionKey.int)
+
+    let shiftedLeftFunctionEvent = newKeyEvent(
+      NSKeyDown,
+      nsPoint(12, 12),
+      {NSShiftKeyMask},
+      0.0,
+      window.windowNumber().int,
+      leftFn,
+      leftFn,
+      false,
+      0'u16,
+    )
+    window.sendEvent(shiftedLeftFunctionEvent)
+    checkSelection(field, 3, 1)
+    sendText(window, "Z")
+    check(field.stringValue() == @ns"abcZ")
 
     disposeTextHarness(window, root, field)
 

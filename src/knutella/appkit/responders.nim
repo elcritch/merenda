@@ -21,19 +21,29 @@ proc firstRuneCode(text: NSString): int =
 proc keyCommandSelector(event: NSEvent): SEL =
   if event.isNil:
     return nil
+  let flags = event.modifierFlags()
+  let extendsSelection = NSShiftKeyMask in flags
   let key = siwinKey(event)
   case key
   of siwin.Key.left:
+    if extendsSelection:
+      return getSelector("moveLeftAndModifySelection:")
     return getSelector("moveLeft:")
   of siwin.Key.right:
+    if extendsSelection:
+      return getSelector("moveRightAndModifySelection:")
     return getSelector("moveRight:")
   of siwin.Key.up:
     return getSelector("moveUp:")
   of siwin.Key.down:
     return getSelector("moveDown:")
   of siwin.Key.home:
+    if extendsSelection:
+      return getSelector("moveToBeginningOfLineAndModifySelection:")
     return getSelector("moveToBeginningOfLine:")
   of siwin.Key.End:
+    if extendsSelection:
+      return getSelector("moveToEndOfLineAndModifySelection:")
     return getSelector("moveToEndOfLine:")
   of siwin.Key.backspace:
     return getSelector("deleteBackward:")
@@ -60,13 +70,25 @@ proc keyCommandSelector(event: NSEvent): SEL =
   of 0xF701:
     getSelector("moveDown:")
   of 0xF702:
-    getSelector("moveLeft:")
+    if extendsSelection:
+      getSelector("moveLeftAndModifySelection:")
+    else:
+      getSelector("moveLeft:")
   of 0xF703:
-    getSelector("moveRight:")
+    if extendsSelection:
+      getSelector("moveRightAndModifySelection:")
+    else:
+      getSelector("moveRight:")
   of 0xF729:
-    getSelector("moveToBeginningOfLine:")
+    if extendsSelection:
+      getSelector("moveToBeginningOfLineAndModifySelection:")
+    else:
+      getSelector("moveToBeginningOfLine:")
   of 0xF72B:
-    getSelector("moveToEndOfLine:")
+    if extendsSelection:
+      getSelector("moveToEndOfLineAndModifySelection:")
+    else:
+      getSelector("moveToEndOfLine:")
   of 0x08, 0x7F:
     getSelector("deleteBackward:")
   of 0x09:
