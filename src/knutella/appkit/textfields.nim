@@ -388,6 +388,10 @@ objcImpl:
     drawValueAlloc.value = nil
     if drawValue.isNil:
       return
+    let drawSize = drawValue.size()
+    let textHeight = max(1.0, min(drawSize.height, textRect.size.height))
+    let textY = textRect.origin.y + max((textRect.size.height - textHeight) * 0.5, 0.0)
+    let textDrawRect = nsRect(textRect.origin.x, textY, textRect.size.width, textHeight)
     let window = self.window()
     var isFocused = false
     var cursor = 0
@@ -401,23 +405,13 @@ objcImpl:
     selected = selectionBounds(value.runeLen, self.selectionAnchor().int, cursor)
     if isFocused and selected.stop > selected.start and
         (self.isEditable() or self.isSelectable()):
-      var left = textRect.origin.x + insertionPrefixWidth(value, selected.start)
-      var right = textRect.origin.x + insertionPrefixWidth(value, selected.stop)
-      if right < left:
-        swap(left, right)
-      let minCaretX = textRect.origin.x
-      let maxCaretX = textRect.origin.x + max(textRect.size.width - 1.0, 0.0)
-      left = min(max(left, minCaretX), maxCaretX)
-      right = min(max(right, minCaretX), maxCaretX + 1.0)
-      let drawSize = drawValue.size()
-      let selectionHeight =
-        max(1.0, min(drawSize.height, max(textRect.size.height - 2.0, 1.0)))
-      let selectionY =
-        textRect.origin.y + max((textRect.size.height - selectionHeight) * 0.5, 0.0)
-      NSColor.selectedTextBackgroundColor().setFill()
-      NSRectFill(nsRect(left, selectionY, max(right - left, 1.0), selectionHeight))
-
-    drawValue.drawInRect(textRect)
+      discard drawValue.drawInRectWithSelection(
+        textDrawRect,
+        NSMakeRange(selected.start.uint, (selected.stop - selected.start).uint),
+        NSColor.selectedTextBackgroundColor(),
+      )
+    else:
+      drawValue.drawInRect(textDrawRect)
 
     if self.isEditable() and isFocused and selected.stop == selected.start:
       self.xInsertionPoint = cursor.NSInteger
@@ -426,13 +420,8 @@ objcImpl:
       let minCaretX = textRect.origin.x
       let maxCaretX = textRect.origin.x + max(textRect.size.width - 1.0, 0.0)
       caretX = min(max(caretX, minCaretX), maxCaretX)
-      let drawSize = drawValue.size()
-      let caretHeight =
-        max(1.0, min(drawSize.height, max(textRect.size.height - 2.0, 1.0)))
-      let caretY =
-        textRect.origin.y + max((textRect.size.height - caretHeight) * 0.5, 0.0)
       self.textColor().setFill()
-      NSRectFill(nsRect(caretX, caretY, 1.0, caretHeight))
+      NSRectFill(nsRect(caretX, textY, 1.0, textHeight))
 
   method hitTest*(self: NSTextField, point: NSPoint): NSView =
     if self.isHiddenOrHasHiddenAncestor():
