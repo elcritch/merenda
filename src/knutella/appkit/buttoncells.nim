@@ -569,6 +569,11 @@ objcImpl:
       )
 
       if self.state() != NSOffState:
+        let indicatorGlyph =
+          if self.state() == NSMixedState:
+            @ns"—"
+          else:
+            @ns""
         let fontKey =
           if NSFontAttributeName.isNil:
             @ns"NSFontAttributeName"
@@ -578,8 +583,9 @@ objcImpl:
         if not self.font().isNil:
           checkmarkAttributes[NSObject(fontKey)] = NSObject(self.font())
         var checkmarkAllocated = NSAttributedString.alloc()
-        let checkmark =
-          checkmarkAllocated.initWithString(@ns"", attributes = checkmarkAttributes)
+        let checkmark = checkmarkAllocated.initWithString(
+          indicatorGlyph, attributes = checkmarkAttributes
+        )
         checkmarkAllocated.value = nil
         let checkmarkSize = checkmark.size()
         let indicatorX =
