@@ -26,6 +26,9 @@ type
     NSScrollWheel = 18
     NSApplicationDefined = 19
     NSAppKitDefined = 20
+    NSOtherMouseDown = 21
+    NSOtherMouseUp = 22
+    NSOtherMouseDragged = 23
 
   NSEventMask* = set[NSEventType]
 
@@ -120,10 +123,15 @@ type
     NSApplicationDeactivated = 1
 
 const
+  NSTextInputEventSubtype*: cshort = 1
+
   NSLeftMouseDownMask*: NSEventMask = {NSLeftMouseDown}
   NSLeftMouseUpMask*: NSEventMask = {NSLeftMouseUp}
   NSRightMouseDownMask*: NSEventMask = {NSRightMouseDown}
   NSRightMouseUpMask*: NSEventMask = {NSRightMouseUp}
+  NSOtherMouseDownMask*: NSEventMask = {NSOtherMouseDown}
+  NSOtherMouseUpMask*: NSEventMask = {NSOtherMouseUp}
+  NSOtherMouseDraggedMask*: NSEventMask = {NSOtherMouseDragged}
   NSMouseMovedMask*: NSEventMask = {NSMouseMoved}
   NSLeftMouseDraggedMask*: NSEventMask = {NSLeftMouseDragged}
   NSRightMouseDraggedMask*: NSEventMask = {NSRightMouseDragged}
@@ -137,7 +145,9 @@ const
   NSScrollWheelMask*: NSEventMask = {NSScrollWheel}
   NSApplicationDefinedMask*: NSEventMask = {NSApplicationDefined}
   NSAppKitDefinedMask*: NSEventMask = {NSAppKitDefined}
-  NSAnyEventMask*: NSEventMask = {NSLeftMouseDown .. NSAppKitDefined}
+  NSAnyEventMask*: NSEventMask =
+    {NSLeftMouseDown .. NSAppKitDefined} +
+    {NSOtherMouseDown, NSOtherMouseUp, NSOtherMouseDragged}
   NSPlatformSpecificDisplayMask*: NSEventMask = {NSPlatformSpecificDisplayEvent}
 
   NSDeviceIndependentModifierFlagsMask*: NSModifierFlags =
@@ -204,12 +214,17 @@ proc nsEventTypeFromSiwin*(event: siwin.MouseButtonEvent): NSEventType =
     NSRightMouseUp
   else:
     if event.pressed:
-      return NSAppKitDefined
-    NSApplicationDefined
+      return NSOtherMouseDown
+    NSOtherMouseUp
 
 proc nsEventTypeFromSiwin*(
     event: siwin.MouseMoveEvent, mouseButtons: set[siwin.MouseButton] = {}
 ): NSEventType =
+  var hasOtherMouseDown = false
+  for button in mouseButtons:
+    if button notin {siwin.MouseButton.left, siwin.MouseButton.right}:
+      hasOtherMouseDown = true
+      break
   case event.kind
   of siwin.MouseMoveKind.enter:
     NSMouseEntered
@@ -220,6 +235,8 @@ proc nsEventTypeFromSiwin*(
       NSLeftMouseDragged
     elif siwin.MouseButton.right in mouseButtons:
       NSRightMouseDragged
+    elif hasOtherMouseDown:
+      NSOtherMouseDragged
     else:
       NSMouseMoved
   else:
@@ -744,3 +761,35 @@ proc mouseMoveEventFromSiwin*(
   result.xSiwinModifiers = modifiers
   result.xSiwinMouseButtons = mouseButtons
   result.xSiwinPressed = mouseButtons.len > 0
+
+proc textInputEventFromSiwin*(
+    windowNumber: NSInteger,
+    location: NSPoint,
+    event: siwin.TextInputEvent,
+    modifiers: set[siwin.ModifierKey] = {},
+): NSEvent =
+  result = newOtherEvent(
+    NSApplicationDefined,
+    location,
+    modifierFlagsFromSiwin(modifiers),
+    timeIntervalSinceReferenceDate(),
+    windowNumber,
+    NSTextInputEventSubtype,
+    0,
+    0,
+  )
+  if result.isNil:
+    return
+  let textValue = ns(event.text)
+  result.xCharactersId = retain(textValue)
+  result.xCharactersIgnoringModifiersId = retain(textValue)
+  result.xSiwinModifiers = modifiers
+  result.xSiwinRepeated = event.repeated
+
+proc isTextInputEvent*(event: NSEvent): bool =
+  if event.isNil or event.`type`() != NSApplicationDefined:
+    return false
+  try:
+    event.subtype() == NSTextInputEventSubtype
+  except ValueError:
+    false

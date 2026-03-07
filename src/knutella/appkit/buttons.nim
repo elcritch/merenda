@@ -1,3 +1,5 @@
+import std/strutils
+
 import ./runtime
 
 import ./controls
@@ -181,6 +183,27 @@ objcImpl:
       self.performClick(NSResponder(value: nil))
     else:
       discard callSuperAs[IDPtr, NSEvent](self, getSelector("keyDown:"), event)
+
+  method performKeyEquivalent*(self: NSButton, event: NSEvent): bool =
+    if self.isNil or event.isNil or not self.isEnabled() or event.`type`() != NSKeyDown:
+      return false
+    let keyEquivalent = self.keyEquivalent()
+    if keyEquivalent.isNil:
+      return false
+    let wanted = $keyEquivalent
+    if wanted.len == 0:
+      return false
+    let actual = $event.charactersIgnoringModifiers()
+    if actual.len == 0:
+      return false
+    if wanted.toLowerAscii() != actual.toLowerAscii():
+      return false
+    let wantedMask = self.keyEquivalentModifierMask()
+    let actualMask = nsModifierFlagsMask(event.modifierFlags()).int
+    if wantedMask != actualMask:
+      return false
+    self.performClick(NSResponder(value: nil))
+    true
 
   method onClick*(self: NSButton, sender: NSObject) =
     discard sender

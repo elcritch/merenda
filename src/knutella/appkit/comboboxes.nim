@@ -5,6 +5,7 @@ import ./textfields
 import ./graphics
 import ./colors
 import ./attributedstrings
+import ./events
 
 const
   ComboBoxArrowZoneMinWidth = 16.0'f32
@@ -57,6 +58,10 @@ proc comboBoxPopupFrame*[T](comboBox: T, controlBox: NSRect): NSRect =
     max(controlBox.size.width, 0.0),
     popupHeight,
   )
+
+proc comboBoxPopupItemIndexAtPoint*(
+  comboBox: auto, controlBox: NSRect, x: float32, y: float32
+): int
 
 proc comboBoxPopupItemRect*(
     comboBox: auto, controlBox: NSRect, itemIndex: int
@@ -339,6 +344,17 @@ objcImpl:
       return -1
     self.xSelectedIndex
 
+  method hitTest*(self: NSComboBox, point: NSPoint): NSView =
+    if self.isHiddenOrHasHiddenAncestor():
+      return NSView(value: nil)
+    if self.popupOpen():
+      let popupBox = comboBoxPopupFrame(self, self.bounds())
+      if popupBox.contains(point.x, point.y):
+        return self.NSView
+    if self.mouse(point, inRect = self.bounds()):
+      return self.NSView
+    NSView(value: nil)
+
   method objectValueOfSelectedItem*(self: NSComboBox): NSString =
     let idx = self.indexOfSelectedItem()
     if idx < 0:
@@ -384,6 +400,50 @@ objcImpl:
       self.closePopup()
       return
     self.openPopup()
+
+  method mouseDown*(self: NSComboBox, event: NSEvent) =
+    if self.isNil or event.isNil or not self.isEnabled():
+      return
+    let localPoint =
+      self.NSView.convertPoint(event.locationInWindow(), NSView(value: nil))
+    if self.popupOpen():
+      let itemIndex =
+        comboBoxPopupItemIndexAtPoint(self, self.bounds(), localPoint.x, localPoint.y)
+      self.setPopupHoveredIndex(itemIndex)
+      if itemIndex < 0 and not self.bounds().contains(localPoint.x, localPoint.y):
+        self.closePopup()
+      self.setNeedsDisplay(true)
+      return
+    self.openPopup()
+    self.setPopupHoveredIndex(self.indexOfSelectedItem())
+    self.setNeedsDisplay(true)
+
+  method mouseMoved*(self: NSComboBox, event: NSEvent) =
+    if self.isNil or event.isNil or not self.popupOpen():
+      return
+    let localPoint =
+      self.NSView.convertPoint(event.locationInWindow(), NSView(value: nil))
+    let itemIndex =
+      comboBoxPopupItemIndexAtPoint(self, self.bounds(), localPoint.x, localPoint.y)
+    if self.popupHoveredIndex() == itemIndex:
+      return
+    self.setPopupHoveredIndex(itemIndex)
+    self.setNeedsDisplay(true)
+
+  method mouseDragged*(self: NSComboBox, event: NSEvent) =
+    self.mouseMoved(event)
+
+  method mouseUp*(self: NSComboBox, event: NSEvent) =
+    if self.isNil or event.isNil or not self.popupOpen():
+      return
+    let localPoint =
+      self.NSView.convertPoint(event.locationInWindow(), NSView(value: nil))
+    let itemIndex =
+      comboBoxPopupItemIndexAtPoint(self, self.bounds(), localPoint.x, localPoint.y)
+    if itemIndex >= 0 and not siwinGenerated(event):
+      self.activateItemAtIndex(itemIndex)
+    self.closePopup()
+    self.setNeedsDisplay(true)
 
   method activateItemAtIndex*(self: NSComboBox, index: int) =
     if index < 0 or index >= self.numberOfItems():

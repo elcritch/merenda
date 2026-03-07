@@ -13,6 +13,22 @@ export responders, views
 
 const WindowTitlebarHeight = 28.0'f32
 
+type WindowFlushHook* = proc(windowId: IDPtr)
+
+var nextWindowNumberCounter {.threadvar.}: NSInteger
+var windowFlushHook {.threadvar.}: WindowFlushHook
+
+proc nextWindowNumber(): NSInteger =
+  if nextWindowNumberCounter <= 0:
+    nextWindowNumberCounter = 1
+  result = nextWindowNumberCounter
+  inc nextWindowNumberCounter
+
+proc setWindowFlushHook*(hook: WindowFlushHook) =
+  windowFlushHook = hook
+
+proc flushWindowImpl(window: NSWindow)
+
 proc titlebarHeightForStyleMask(styleMask: set[NSWindowDecorations]): float32 =
   if NSTitledWindow in styleMask:
     return WindowTitlebarHeight
@@ -40,8 +56,23 @@ proc contentRectForFrameRectWithStyle(
     max(frameRect.size.height - titlebarHeight, 1.0),
   )
 
+proc eventQueueResponder(window: NSWindow): NSResponder =
+  if window.isNil:
+    return NSResponder(value: nil)
+  var current = window.nextResponder()
+  while not current.isNil:
+    if current.respondsToSelector("postEvent:atStart:") and
+        current.respondsToSelector("nextEventMatchingMask:untilDate:inMode:dequeue:"):
+      return current
+    current = current.nextResponder()
+  NSResponder(value: nil)
+
+proc viewForWindowPoint(window: NSWindow, locationInWindow: NSPoint): NSView
+proc mousePinnedDispatchTarget(window: NSWindow): NSResponder
+
 objcImpl:
   type NSWindow* = object of NSResponder
+    xWindowNumber {.get: windowNumber.}: NSInteger
     xFrame {.set: windowFrame, get: windowFrame.}: NSRect
     xTitle {.set: windowTitle, get: windowTitle.}: NSString
     xStyleMask {.set: setStyleMask, get: styleMask.}: set[NSWindowDecorations]
@@ -59,11 +90,15 @@ objcImpl:
     xNativeReady {.set: windowNativeReady, get: windowNativeReady.}: bool
     xVisibleRequested {.set: windowVisibleRequested, get: windowVisibleRequested.}: bool
     xClosed {.set: windowClosed, get: windowClosed.}: bool
+    xMouseDownLocationInWindow: NSPoint
+    xMouseDownView: NSView
+    xHasMouseDownLocation: bool
 
   method init*(self: var NSWindow): NSWindow =
     result = asTypeRaw[NSWindow](callSuperIdFrom(NSWindow, self, getSelector("init")))
     if result.isNil:
       return
+    result.xWindowNumber = nextWindowNumber()
     result.xFrame = nsRect(100, 100, 640, 420)
     result.xTitle = @ns"KNutella Window"
     result.xStyleMask = {NSTitledWindow, NSClosableWindow, NSResizableWindow}
@@ -79,6 +114,9 @@ objcImpl:
     result.xNativeReady = false
     result.xVisibleRequested = false
     result.xClosed = false
+    result.xMouseDownLocationInWindow = nsPoint(0.0, 0.0)
+    result.xMouseDownView = NSView(value: nil)
+    result.xHasMouseDownLocation = false
 
   method initWithContentRect*(
       self: var NSWindow,
@@ -192,50 +230,165 @@ objcImpl:
       return
     self.close()
 
-  method eventDispatchTarget(self: NSWindow): NSResponder =
+  method performKeyEquivalent*(self: NSWindow, event: NSEvent): bool =
+    if self.isNil or event.isNil:
+      return false
+    let first = self.firstResponder()
+    if not first.isNil and first.performKeyEquivalent(event):
+      return true
+    let content = self.contentView()
+    if not content.isNil and content.performKeyEquivalent(event):
+      return true
+    false
+
+  method postEvent*(self: NSWindow, event: NSEvent, atStart {.kw("atStart").}: bool) =
+    if self.isNil or event.isNil:
+      return
+    let responder = eventQueueResponder(self)
+    if responder.isNil:
+      self.sendEvent(event)
+      return
+    cast[proc(self: IDPtr, op: SEL, event: IDPtr, atStart: bool) {.cdecl, varargs.}](objc_msgSend)(
+      responder.value, getSelector("postEvent:atStart:"), event.value, atStart
+    )
+
+  method nextEventMatchingMask*(
+      self: NSWindow,
+      mask: NSEventMask,
+      untilDate {.kw("untilDate").}: float,
+      inMode {.kw("inMode").}: NSString,
+      dequeue {.kw("dequeue").}: bool,
+  ): NSEvent =
+    if self.isNil:
+      return NSEvent(value: nil)
+    let responder = eventQueueResponder(self)
+    if responder.isNil:
+      return NSEvent(value: nil)
+    let eventId = cast[proc(
+      self: IDPtr,
+      op: SEL,
+      mask: NSEventMask,
+      untilDate: float,
+      inMode: IDPtr,
+      dequeue: bool,
+    ): IDPtr {.cdecl, varargs.}](objc_msgSend)(
+      responder.value,
+      getSelector("nextEventMatchingMask:untilDate:inMode:dequeue:"),
+      mask,
+      untilDate,
+      inMode.value,
+      dequeue,
+    )
+    ownFromId[NSEvent](eventId)
+
+  method keyDispatchTarget(self: NSWindow): NSResponder =
     if self.isNil:
       return NSResponder(value: nil)
     let first = self.firstResponder()
     if not first.isNil:
       return first
-    let content = self.contentView()
-    if not content.isNil:
-      return NSResponder(content)
     NSResponder(self)
 
   method sendEvent*(self: NSWindow, event: NSEvent) =
     if self.isNil or event.isNil:
       return
-    let target = self.eventDispatchTarget()
-    if target.isNil:
-      return
     case event.`type`()
     of NSLeftMouseDown:
-      target.mouseDown(event)
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        discard self.makeFirstResponder(NSResponder(hit))
+        self.xMouseDownView = retain(hit)
+        self.xMouseDownLocationInWindow = event.locationInWindow()
+        self.xHasMouseDownLocation = true
+        hit.mouseDown(event)
+      else:
+        self.xHasMouseDownLocation = false
+        self.mouseDown(event)
     of NSLeftMouseUp:
+      let target = mousePinnedDispatchTarget(self)
       target.mouseUp(event)
+      self.xMouseDownView = NSView(value: nil)
+      self.xHasMouseDownLocation = false
     of NSRightMouseDown:
-      target.rightMouseDown(event)
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        self.xMouseDownView = retain(hit)
+        self.xMouseDownLocationInWindow = event.locationInWindow()
+        self.xHasMouseDownLocation = true
+        hit.rightMouseDown(event)
+      else:
+        self.xHasMouseDownLocation = false
+        self.rightMouseDown(event)
     of NSRightMouseUp:
+      let target = mousePinnedDispatchTarget(self)
       target.rightMouseUp(event)
+      self.xMouseDownView = NSView(value: nil)
+      self.xHasMouseDownLocation = false
+    of NSOtherMouseDown:
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        self.xMouseDownView = retain(hit)
+        self.xMouseDownLocationInWindow = event.locationInWindow()
+        self.xHasMouseDownLocation = true
+        hit.otherMouseDown(event)
+      else:
+        self.xHasMouseDownLocation = false
+        self.otherMouseDown(event)
+    of NSOtherMouseUp:
+      let target = mousePinnedDispatchTarget(self)
+      target.otherMouseUp(event)
+      self.xMouseDownView = NSView(value: nil)
+      self.xHasMouseDownLocation = false
     of NSMouseMoved:
-      target.mouseMoved(event)
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        hit.mouseMoved(event)
+      else:
+        self.mouseMoved(event)
+    of NSScrollWheel:
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        hit.scrollWheel(event)
+      else:
+        self.scrollWheel(event)
+    of NSMouseEntered:
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        hit.mouseEntered(event)
+      else:
+        self.mouseEntered(event)
+    of NSMouseExited:
+      let hit = viewForWindowPoint(self, event.locationInWindow())
+      if not hit.isNil:
+        hit.mouseExited(event)
+      else:
+        self.mouseExited(event)
     of NSLeftMouseDragged:
+      let target = mousePinnedDispatchTarget(self)
       target.mouseDragged(event)
     of NSRightMouseDragged:
+      let target = mousePinnedDispatchTarget(self)
       target.rightMouseDragged(event)
-    of NSMouseEntered:
-      target.mouseEntered(event)
-    of NSMouseExited:
-      target.mouseExited(event)
+    of NSOtherMouseDragged:
+      let target = mousePinnedDispatchTarget(self)
+      target.otherMouseDragged(event)
     of NSKeyDown:
+      let target = self.keyDispatchTarget()
       target.keyDown(event)
     of NSKeyUp:
+      let target = self.keyDispatchTarget()
       target.keyUp(event)
     of NSFlagsChanged:
+      let target = self.keyDispatchTarget()
       target.flagsChanged(event)
-    of NSScrollWheel:
-      target.scrollWheel(event)
+    of NSApplicationDefined:
+      if isTextInputEvent(event):
+        let target = self.keyDispatchTarget()
+        let text = event.characters()
+        if not text.isNil:
+          target.insertText(text.NSObject)
+      else:
+        discard
     else:
       discard
 
@@ -300,6 +453,9 @@ objcImpl:
     self.xResetCursorRectsInView(view)
     self.xInvalidateTrackingAreas()
 
+  method flushWindow*(self: NSWindow) =
+    flushWindowImpl(self)
+
   method close*(self: NSWindow) =
     self.xClosed = true
     if self.xNativeReady and not self.xNativeWindow.isNil:
@@ -309,12 +465,40 @@ objcImpl:
     if self.xNativeReady and (not self.xNativeWindow.isNil):
       siwinshim.close(self.xNativeWindow)
     self.xFirstResponder = NSResponder(value: nil)
+    self.xMouseDownView = NSView(value: nil)
+    self.xHasMouseDownLocation = false
     if not self.xContentView.isNil:
       clearSuperviewRef(self.xContentView.value)
     self.xContentView = NSView(value: nil)
     self.xDelegate.value = nil
     destroyIvarFields(self)
     discard callSuperIdFrom(NSWindow, self, getSelector("dealloc"))
+
+proc viewForWindowPoint(window: NSWindow, locationInWindow: NSPoint): NSView =
+  if window.isNil:
+    return NSView(value: nil)
+  let content = window.contentView()
+  if content.isNil:
+    return NSView(value: nil)
+  let localPoint = content.convertPoint(locationInWindow, NSView(value: nil))
+  let hit = content.hitTest(localPoint)
+  if not hit.isNil:
+    return hit
+  content
+
+proc mousePinnedDispatchTarget(window: NSWindow): NSResponder =
+  if window.isNil:
+    return NSResponder(value: nil)
+  if window.xHasMouseDownLocation:
+    let hit = viewForWindowPoint(window, window.xMouseDownLocationInWindow)
+    if not hit.isNil:
+      return NSResponder(hit)
+    if not window.xMouseDownView.isNil:
+      return NSResponder(window.xMouseDownView)
+  let first = window.firstResponder()
+  if not first.isNil:
+    return first
+  NSResponder(window)
 
 objcImpl:
   type NSPanel* = object of NSWindow
@@ -378,6 +562,24 @@ proc setContentSize*(window: NSWindow, size: NSSize) =
 
 proc setContentSize*(window: NSWindow, width, height: float32) =
   window.setContentSize(nsSize(width, height))
+
+proc pumpNativeWindowFrame*(window: NSWindow) =
+  if window.isNil:
+    return
+  let nativeWindow = window.windowNativeWindow()
+  if nativeWindow.isNil or not nativeWindow.opened():
+    return
+  nativeWindow.redraw()
+  nativeWindow.step()
+
+proc flushWindowImpl(window: NSWindow) =
+  if window.isNil:
+    return
+  let hook = windowFlushHook
+  if not hook.isNil:
+    hook(window.value)
+    return
+  pumpNativeWindowFrame(window)
 
 proc title*(window: NSWindow): NSString =
   window.xTitle
