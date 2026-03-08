@@ -108,6 +108,9 @@ objcImpl:
       )
     )
 
+  method isFlipped*(self: NSTextField): bool =
+    true
+
   method setTextColor*(
       self: NSTextField,
       r: float32,
@@ -416,12 +419,7 @@ objcImpl:
     if drawValue.isNil:
       return
     let drawSize = drawValue.size()
-    let fontLineHeight =
-      if not fieldFont.isNil:
-        max(fieldFont.ascender() - fieldFont.descender(), 1.0)
-      else:
-        max(drawSize.height, 1.0)
-    let textHeight = max(1.0, min(fontLineHeight, textRect.size.height))
+    let textHeight = max(1.0, min(drawSize.height, textRect.size.height))
     let textY = textRect.origin.y + max((textRect.size.height - textHeight) * 0.5, 0.0)
     let textDrawRect = nsRect(textRect.origin.x, textY, textRect.size.width, textHeight)
     let window = self.window()

@@ -915,8 +915,7 @@ proc ensureNativeWindow*(window: NSWindow) =
         frameless = nativeFrameless,
       )
     )
-    window.windowNativeWindow().pos =
-      ivec2(frame.origin.x.int32, frame.origin.y.int32)
+    window.windowNativeWindow().pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
     window.windowAutoScale(window.windowNativeWindow().configureUiScale())
     window.windowRenderer(
       figrender.newFigRenderer(

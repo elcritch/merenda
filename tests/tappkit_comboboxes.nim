@@ -5,6 +5,31 @@ import knutella/appkit
 import knutella/objc
 import siwin/window as siwin
 
+proc textNodeVerticalMargins(
+    renders: Renders
+): tuple[found: bool, topMargin: float32, bottomMargin: float32] =
+  for _, list in renders.layers.pairs:
+    for node in list.nodes:
+      if node.kind != nkText or node.textLayout.runes.len <= 0:
+        continue
+      var foundRect = false
+      var minY = 0.0'f32
+      var maxY = 0.0'f32
+      for rect in node.textLayout.selectionRects:
+        if rect.h <= 0.0:
+          continue
+        if not foundRect:
+          minY = rect.y
+          maxY = rect.y + rect.h
+          foundRect = true
+          continue
+        minY = min(minY, rect.y)
+        maxY = max(maxY, rect.y + rect.h)
+      if not foundRect:
+        continue
+      return (true, minY, max(node.screenBox.h - maxY, 0.0))
+  (false, 0.0, 0.0)
+
 objcImpl:
   type TestComboBox = object of NSComboBox
     xCapturedPopup {.get: capturedPopup.}: NSComboBoxWindow
@@ -205,6 +230,9 @@ suite "appkit combobox":
 
     check(foundTransform)
     check(foundText)
+    let margins = textNodeVerticalMargins(renders)
+    check(margins.found)
+    check(abs(margins.topMargin - margins.bottomMargin) <= 2.0)
 
     combo.closePopup()
     check(combo.popupWindow().isNil)

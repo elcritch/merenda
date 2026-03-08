@@ -454,11 +454,22 @@ objcImpl:
           selectionColor.solidFill()
       else:
         nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+    let invertText = not self.isFlipped()
     let textFlags =
       if hasSelection:
-        {NfInvertY, NfSelectText}
+        (
+          if invertText:
+            {NfInvertY, NfSelectText}
+          else:
+            {NfSelectText}
+        )
       else:
-        {NfInvertY}
+        (
+          if invertText:
+            {NfInvertY}
+          else:
+            {}
+        )
 
     discard renderPort.renders[].addChild(
       0.ZLevel,
