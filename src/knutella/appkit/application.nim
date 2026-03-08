@@ -88,6 +88,18 @@ objcImpl:
         return window
     NSWindow(value: nil)
 
+  method windowWithWindowNumber*(self: NSApplication, number: NSInteger): NSWindow =
+    if self.isNil or number <= 0:
+      return NSWindow(value: nil)
+    let windows = self.appWindows()
+    for id in windows:
+      let window = ownFromId[NSWindow](id)
+      if window.isNil or window.windowClosed():
+        continue
+      if window.windowNumber() == number:
+        return window
+    NSWindow(value: nil)
+
   method currentEvent*(self: NSApplication): NSEvent =
     if self.isNil or self.appCurrentEvent.isNil:
       return NSEvent(value: nil)
@@ -145,7 +157,7 @@ objcImpl:
         removeOwnedIdAt(windows, i)
         self.appWindows = windows
         raise
-      let nativeWindow = window.windowNativeWindow()
+      let nativeWindow = window.windowNativeWindowOrNil()
       if (not nativeWindow.isNil) and nativeWindow.opened():
         nativeWindow.step()
         result = true
@@ -279,7 +291,7 @@ proc runApplicationFrames(app: NSObject, maxFrames: int): int =
         inc i
         continue
 
-      let nativeWindow = window.windowNativeWindow()
+      let nativeWindow = window.windowNativeWindowOrNil()
       if not nativeWindow.isNil and nativeWindow.opened():
         nativeWindow.redraw()
         nativeWindow.step()

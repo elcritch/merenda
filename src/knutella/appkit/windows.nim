@@ -183,6 +183,40 @@ objcImpl:
   method contentRectForFrameRect*(self: NSWindow, rect: NSRect): NSRect =
     contentRectForFrameRectWithStyle(rect, self.styleMask())
 
+  method convertBaseToScreen*(self: NSWindow, point: NSPoint): NSPoint =
+    if self.isNil:
+      return point
+    let origin =
+      if self.xNativeReady and not self.xNativeWindow.isNil and
+          self.xNativeWindow.opened():
+        let pos = self.xNativeWindow.pos
+        nsPoint(pos.x.float32, pos.y.float32)
+      else:
+        self.xFrame.origin
+    let baseHeight =
+      if not self.xContentView.isNil:
+        max(self.xContentView.bounds().size.height, 0.0)
+      else:
+        max(self.xFrame.size.height, 0.0)
+    nsPoint(origin.x + point.x, origin.y + baseHeight - point.y)
+
+  method convertScreenToBase*(self: NSWindow, point: NSPoint): NSPoint =
+    if self.isNil:
+      return point
+    let origin =
+      if self.xNativeReady and not self.xNativeWindow.isNil and
+          self.xNativeWindow.opened():
+        let pos = self.xNativeWindow.pos
+        nsPoint(pos.x.float32, pos.y.float32)
+      else:
+        self.xFrame.origin
+    let baseHeight =
+      if not self.xContentView.isNil:
+        max(self.xContentView.bounds().size.height, 0.0)
+      else:
+        max(self.xFrame.size.height, 0.0)
+    nsPoint(point.x - origin.x, baseHeight - (point.y - origin.y))
+
   method firstResponder*(self: NSWindow): NSResponder =
     if self.xFirstResponder.isNil:
       return NSResponder(value: nil)
@@ -414,11 +448,15 @@ objcImpl:
     var frame = self.xFrame
     frame.origin = nsPoint(x.float32, y.float32)
     self.xFrame = frame
+    if self.xNativeReady and not self.xNativeWindow.isNil:
+      self.xNativeWindow.pos = ivec2(x.int32, y.int32)
 
   method makeKeyAndOrderFront*(self: NSWindow, sender: NSObject) =
     if self.isNil:
       return
     self.xVisibleRequested = true
+    if self.xNativeReady and not self.xNativeWindow.isNil:
+      self.xNativeWindow.visible = true
 
   method orderFront*(self: NSWindow, sender: NSObject) =
     self.makeKeyAndOrderFront(sender)
@@ -427,6 +465,8 @@ objcImpl:
     if self.isNil:
       return
     self.xVisibleRequested = false
+    if self.xNativeReady and not self.xNativeWindow.isNil:
+      self.xNativeWindow.visible = false
 
   method isVisible*(self: NSWindow): bool =
     (not self.isNil) and self.xVisibleRequested and (not self.xClosed)
@@ -538,7 +578,13 @@ proc setFrame*(window: NSWindow, frame: NSRect) =
     max(frame.size.height, 1.0),
   )
   window.xFrame = nextFrame
+  if not window.xContentView.isNil:
+    let contentRect = window.contentRectForFrameRect(nextFrame)
+    window.xContentView.setFrame(
+      nsRect(0.0, 0.0, contentRect.size.width, contentRect.size.height)
+    )
   if window.xNativeReady and not window.xNativeWindow.isNil:
+    window.xNativeWindow.pos = ivec2(nextFrame.origin.x.int32, nextFrame.origin.y.int32)
     window.xNativeWindow.size = ivec2(
       clampWindowSize(nextFrame.size.width), clampWindowSize(nextFrame.size.height)
     )
@@ -566,10 +612,24 @@ proc setContentSize*(window: NSWindow, size: NSSize) =
 proc setContentSize*(window: NSWindow, width, height: float32) =
   window.setContentSize(nsSize(width, height))
 
+proc windowNativeWindowOrNil*(window: NSWindow): siwinshim.Window =
+  if window.isNil:
+    return nil
+  window.xNativeWindow
+
+proc windowRendererOrNil*(
+    window: NSWindow
+): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
+  if window.isNil:
+    return nil
+  window.xRenderer
+
 proc pumpNativeWindowFrame*(window: NSWindow) =
   if window.isNil:
     return
-  let nativeWindow = window.windowNativeWindow()
+  if not window.windowNativeReady():
+    return
+  let nativeWindow = window.windowNativeWindowOrNil()
   if nativeWindow.isNil or not nativeWindow.opened():
     return
   nativeWindow.redraw()
