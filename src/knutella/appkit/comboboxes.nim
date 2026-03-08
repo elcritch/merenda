@@ -195,14 +195,6 @@ objcImpl:
     else:
       self.xFontSize = max(font.pointSize(), 1.0)
 
-  method itemAttributes*(self: NSComboBoxView): NSDictionary[NSObject, NSObject] =
-    nsDictionary[NSObject, NSObject]()
-
-  method selectedItemAttributes*(
-      self: NSComboBoxView
-  ): NSDictionary[NSObject, NSObject] =
-    self.itemAttributes()
-
   method sizeForContents*(self: NSComboBoxView): NSSize =
     let count = self.xObjects.len
     var result = nsSize(max(self.bounds().size.width, 1.0), 0.0)
@@ -229,11 +221,6 @@ objcImpl:
     if index < 0 or index >= self.xObjects.len:
       return
     let item = self.xObjects[index]
-    let attributes =
-      if index == self.xSelectedIndex:
-        self.selectedItemAttributes()
-      else:
-        self.itemAttributes()
     var itemRect = self.rectForItemAtIndex(index)
     if index == self.xSelectedIndex:
       NSColor.selectedTextBackgroundColor().setFill()
@@ -245,12 +232,8 @@ objcImpl:
     itemRect = insetRect(itemRect, 1.0, 1.0)
     let text = ns(item)
     var attributedAlloc = NSAttributedString.alloc()
-    var attributed = attributedAlloc.initWithString(text, attributes = attributes)
+    let attributed = attributedAlloc.initWithString(text)
     attributedAlloc.value = nil
-    if attributed.isNil:
-      var fallbackAlloc = NSAttributedString.alloc()
-      attributed = fallbackAlloc.initWithString(text)
-      fallbackAlloc.value = nil
     if attributed.isNil:
       return
     let stringSize = attributed.size()

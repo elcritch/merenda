@@ -1,5 +1,6 @@
-import std/unittest
+import std/[unittest, tables]
 
+import figdraw/fignodes
 import knutella/appkit
 import knutella/objc
 import siwin/window as siwin
@@ -146,6 +147,67 @@ suite "appkit combobox":
     check(combo.popupWindow().isNil)
     check(not combo.popupOpen())
     check(NSTitledWindow in window.styleMask())
+
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
+  test "popup render tree uses transform and inverted text nodes":
+    var app = NSApplication.new()
+    var window = newWindow(0, 0, 240, 120, "Combo Popup Render")
+    var root = newView(0, 0, 240, 120)
+
+    var comboAlloc = TestComboBox.alloc()
+    var combo = comboAlloc.init()
+    comboAlloc.value = nil
+    combo.setFrame(nsRect(10.0, 10.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+    app.addWindow(window)
+
+    combo.openPopup()
+
+    let popup = combo.popupWindow()
+    check(not popup.isNil)
+    check(not popup.contentView().isNil)
+
+    let popupSubviews = popup.contentView().subviews()
+    check(popupSubviews.len > 0)
+    let popupScrollView =
+      if popupSubviews.len > 0:
+        NSScrollView(popupSubviews[0])
+      else:
+        NSScrollView(value: nil)
+    let popupDocView =
+      if popupScrollView.isNil:
+        NSView(value: nil)
+      else:
+        popupScrollView.documentView()
+    check(not popupDocView.isNil)
+    check(not popupDocView.isFlipped())
+
+    let renders = debugBuildWindowRenders(popup.NSWindow)
+    check(not renders.isNil)
+
+    var foundTransform = false
+    var foundText = false
+    for _, list in pairs(renders.layers):
+      for node in list.nodes:
+        if node.kind == nkTransform:
+          foundTransform = true
+        elif node.kind == nkText and node.textLayout.runes.len > 0:
+          foundText = true
+          check(NfInvertY in node.flags)
+
+    check(foundTransform)
+    check(foundText)
+
+    combo.closePopup()
+    check(combo.popupWindow().isNil)
 
     combo.value = nil
     root.value = nil
