@@ -59,20 +59,17 @@ objcImpl:
     self.xData()[index]
 
 objcImpl:
-  method initWithArray*(self: var NXArray, other: NSArray[NSObject]): NXArray =
+  method initWithArray*(self: var NXArray, other: NXArray): NXArray =
     result = self.init()
-    if result.isNil:
-      return
+    if result.isNil: return
     var data: seq[NSObject] = @[]
-    # nxArrayAppendObjectsFromArray(data, other)
-    for i in 0 ..< count(other.NXArray):
+    for i in 0 ..< other.NXArray.count():
       data.add(other.objectAtIndex(i.NSUInteger))
     result.xData = data
 
   method initWithCapacity*(self: var NXArray, capacity: NSUInteger): NXArray =
     result = self.init()
-    if result.isNil:
-      return
+    if result.isNil: return
     result.xData = newSeqOfCap[NSObject](capacity.int)
 
   method firstObject*(self: NXArray): NSObject =
@@ -103,7 +100,7 @@ objcImpl:
     var created = allocated.init()
     allocated.value = nil
     if created.isNil:
-      return NXArray(value: nil)
+      return
     var data =
       if self.isNil:
         @[]
@@ -157,22 +154,16 @@ objcImpl:
   method replaceObjectAtIndex*(
       self: NXArray, index: NSUInteger, value {.kw("withObject").}: NSObject
   ) =
-    if self.isNil:
-      return
+    if self.isNil: return
     var data = self.xData()
     let idx = index.int
-    if idx < 0 or idx >= data.len:
-      raise newException(IndexDefect, "index out of bounds in NSMutableArray")
     data[idx] = boxNSObject(value)
     self.xData = data
 
   method removeObjectAtIndex*(self: NXArray, index: NSUInteger) =
-    if self.isNil:
-      return
+    if self.isNil: return
     var data = self.xData()
     let idx = index.int
-    if idx < 0 or idx >= data.len:
-      raise newException(IndexDefect, "index out of bounds in NSMutableArray")
     data.delete(idx)
     self.xData = data
 
@@ -210,13 +201,11 @@ objcImpl:
       discard performer.performSelector(selector)
 
   method copyWithZone*(self: NXArray, zone: pointer): NSObject =
-    if self.isNil:
-      return NSObject(value: nil)
+    if self.isNil: return
     var allocated = NXArray.alloc()
-    var copied = allocated.init()
+    var copied = init(allocated)
     allocated.value = nil
-    if copied.isNil:
-      return NSObject(value: nil)
+    if copied.isNil: return
     copied.xData = self.xData()
     asTypeRaw[NSObject](move(copied.value))
 

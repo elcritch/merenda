@@ -180,9 +180,8 @@ suite "foundation stdlib-backed core types":
 
     var addedMany = values.arrayByAddingObjectsFromArray(nsArray([5, 6]))
     check(addedMany.toSeq() == @[1, 2, 3, 5, 6])
-    values = NSArray[int](value: nil)
-    addedOne = NSArray[int](value: nil)
-    addedMany = NSArray[int](value: nil)
+    let copied = asTypeRaw[NSArray[int]](addedMany.copyWithZone(nil)).retain()
+    check(copied.toSeq() == @[1, 2, 3, 5, 6])
 
   test "NSMutableArray supports Cocoa and Nim-style mutating operations":
     var values = nsMutableArray([1, 2, 3])
