@@ -30,12 +30,6 @@ proc nxArrayObjectsEqual(lhs, rhs: NSObject): bool {.inline.} =
 proc nxArrayNotFound(): NSUInteger {.inline.} =
   high(NSUInteger)
 
-proc nxArrayRetainedObjectAt(data: openArray[NSObject], index: NSUInteger): NSObject =
-  let idx = index.int
-  if idx < 0 or idx >= data.len:
-    raise newException(IndexDefect, "index out of bounds in NSArray")
-  retain(data[idx])
-
 proc nxArrayAppendObjectsFromArray(
     target: var seq[NSObject], source: NSArray[NSObject]
 ) =
@@ -94,7 +88,7 @@ objcImpl:
   method objectAtIndex*(self: NXArray, index: NSUInteger): NSObject =
     if self.isNil:
       raise newException(IndexDefect, "index out of bounds in NSArray")
-    nxArrayRetainedObjectAt(self.xData(), index)
+    self.xData()[index]
 
   method firstObject*(self: NXArray): NSObject =
     if self.isNil:
@@ -102,15 +96,13 @@ objcImpl:
     let data = self.xData()
     if data.len == 0:
       return NSObject(value: nil)
-    nxArrayRetainedObjectAt(data, 0.NSUInteger)
+    self.xData()[0]
 
   method lastObject*(self: NXArray): NSObject =
-    if self.isNil:
-      return NSObject(value: nil)
+    if self.isNil: return
     let data = self.xData()
-    if data.len == 0:
-      return NSObject(value: nil)
-    nxArrayRetainedObjectAt(data, (data.len - 1).NSUInteger)
+    if data.len == 0: return
+    self.xData()[^1]
 
   method containsObject*(self: NXArray, value: NSObject): bool =
     self.indexOfObject(value) != nxArrayNotFound()
