@@ -349,8 +349,7 @@ proc mutableCopy*[T](arr: NSArray[T]): NSMutableArray[T] =
     return NSMutableArray[T](value: nil)
   let obj = NXArray(arr.NSObject)
   var copied = obj.mutableCopyWithZone(nil)
-  if copied.isNil:
-    return NSMutableArray[T](value: nil)
+  if copied.isNil: return
   NSMutableArray[T](copied)
 
 proc copy*[T](arr: NSMutableArray[T]): NSArray[T] =
@@ -360,8 +359,7 @@ proc mutableCopy*[T](arr: NSMutableArray[T]): NSMutableArray[T] =
   mutableCopy(NSArray[T](arr))
 
 proc makeObjectsPerformSelector*[T](arr: NSArray[T], selector: SEL) =
-  if arr.isNil or selector.isNil:
-    return
+  if arr.isNil or selector.isNil: return
   let obj = NXArray(arr.NSObject)
   obj.makeObjectsPerformSelector(selector)
 
