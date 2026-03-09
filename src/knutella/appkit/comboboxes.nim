@@ -41,6 +41,34 @@ proc insetRect(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
 proc pointsEqual(a: NSPoint, b: NSPoint): bool {.inline.} =
   a.x == b.x and a.y == b.y
 
+proc packedForegroundStyle(foreground: NSColor): int {.inline.} =
+  (((foreground.r * 255.0'f32).int and 0xFF) shl 24) or
+    (((foreground.g * 255.0'f32).int and 0xFF) shl 16) or
+    (((foreground.b * 255.0'f32).int and 0xFF) shl 8) or
+    ((foreground.a * 255.0'f32).int and 0xFF)
+
+proc foregroundColorAttributeKey(): NSString {.inline.} =
+  if NSForegroundColorAttributeName.isNil:
+    @ns"NSForegroundColorAttributeName"
+  else:
+    NSForegroundColorAttributeName
+
+proc comboBoxItemAttributes(selected: bool): NSDictionary[NSObject, NSObject] =
+  result = nsDictionary[NSObject, NSObject]()
+  if selected:
+    result[NSObject(foregroundColorAttributeKey())] =
+      boxNSObject(packedForegroundStyle(NSColor.selectedTextColor()))
+
+proc refreshPopupItemAttributes(self: auto) =
+  if self.isNil:
+    return
+  let itemAttributes = comboBoxItemAttributes(false)
+  let selectedItemAttributes = comboBoxItemAttributes(true)
+  self.xItemAttributesId.value =
+    replacedOwnedId(self.xItemAttributesId.value, itemAttributes.value)
+  self.xSelectedItemAttributesId.value =
+    replacedOwnedId(self.xSelectedItemAttributesId.value, selectedItemAttributes.value)
+
 proc addAuxiliaryWindow(owner: NSWindow, auxiliary: NSWindow) =
   if owner.isNil or auxiliary.isNil:
     return
@@ -142,6 +170,8 @@ objcImpl:
     xSelectedIndex {.get: selectedIndex.}: int
     xCellSize {.get: cellSize.}: NSSize
     xFontSize: float32
+    xItemAttributesId: ID
+    xSelectedItemAttributesId: ID
     xKeyboardUIState: ComboBoxKeyboardUIState
 
   method init*(self: var NSComboBoxView): NSComboBoxView =
@@ -157,6 +187,7 @@ objcImpl:
     result.xCellSize = nsSize(120.0, 22.0)
     result.xFontSize = 12.0
     result.xKeyboardUIState = ComboKeyboardInactive
+    refreshPopupItemAttributes(result)
 
   method initWithFrame*(self: var NSComboBoxView, rect: NSRect): NSComboBoxView =
     result = NSComboBoxView(value: nil)
@@ -189,11 +220,27 @@ objcImpl:
       return
     self.xSelectedIndex = min(index, self.xObjects.len - 1)
 
+  method font*(self: NSComboBoxView): NSFont =
+    NSFont.messageFontOfSize(max(self.xFontSize, 1.0))
+
   method setFont*(self: NSComboBoxView, font: NSFont) =
     if font.isNil:
       self.xFontSize = 12.0
     else:
       self.xFontSize = max(font.pointSize(), 1.0)
+    refreshPopupItemAttributes(self)
+
+  method itemAttributes*(self: NSComboBoxView): NSDictionary[NSObject, NSObject] =
+    if self.xItemAttributesId.value.isNil:
+      refreshPopupItemAttributes(self)
+    ownFromId[NSDictionary[NSObject, NSObject]](self.xItemAttributesId)
+
+  method selectedItemAttributes*(
+      self: NSComboBoxView
+  ): NSDictionary[NSObject, NSObject] =
+    if self.xSelectedItemAttributesId.value.isNil:
+      refreshPopupItemAttributes(self)
+    ownFromId[NSDictionary[NSObject, NSObject]](self.xSelectedItemAttributesId)
 
   method sizeForContents*(self: NSComboBoxView): NSSize =
     let count = self.xObjects.len
@@ -221,6 +268,11 @@ objcImpl:
     if index < 0 or index >= self.xObjects.len:
       return
     let item = self.xObjects[index]
+    let attributes =
+      if index == self.xSelectedIndex:
+        self.selectedItemAttributes()
+      else:
+        self.itemAttributes()
     var itemRect = self.rectForItemAtIndex(index)
     if index == self.xSelectedIndex:
       NSColor.selectedTextBackgroundColor().setFill()
@@ -232,7 +284,7 @@ objcImpl:
     itemRect = insetRect(itemRect, 1.0, 1.0)
     let text = ns(item)
     var attributedAlloc = NSAttributedString.alloc()
-    let attributed = attributedAlloc.initWithString(text)
+    let attributed = attributedAlloc.initWithString(text, attributes = attributes)
     attributedAlloc.value = nil
     if attributed.isNil:
       return
@@ -382,6 +434,7 @@ objcImpl:
 
 objcImpl:
   type NSComboBoxWindow* = object of NSPanel
+    xComboBox: ID
     xScrollView: NSScrollView
     xView: NSComboBoxView
 
@@ -474,6 +527,7 @@ objcImpl:
     self.xView.runTrackingWithEvent(event)
 
   method dealloc(self: NSComboBoxWindow) {.used.} =
+    self.xComboBox.value = nil
     self.xView = NSComboBoxView(value: nil)
     self.xScrollView = NSScrollView(value: nil)
     destroyIvarFields(self)
@@ -537,6 +591,16 @@ objcImpl:
       )
     )
 
+  method comboBox*(self: NSComboBoxWindow): NSComboBox =
+    if self.isNil or self.xComboBox.isNil:
+      return NSComboBox(value: nil)
+    self.xComboBox.value.NSObject.NSComboBox
+
+  method setComboBox*(self: NSComboBoxWindow, comboBox: NSComboBox) =
+    if self.isNil:
+      return
+    self.xComboBox.value = comboBox.value
+
   method popupWindowFrame*(self: NSComboBox): NSRect =
     let ownerWindow = self.window()
     if ownerWindow.isNil:
@@ -571,6 +635,7 @@ objcImpl:
   method configurePopupWindow*(self: NSComboBox, popup: NSComboBoxWindow) =
     if self.isNil or popup.isNil:
       return
+    popup.setComboBox(self)
     popup.setFrame(self.popupWindowFrame())
     popup.setObjectArray(self.objectValues())
     popup.setSelectedIndex(self.indexOfSelectedItem())
@@ -858,6 +923,24 @@ objcImpl:
 
     self.xButtonPressed = true
     self.setNeedsDisplay(true)
+    let firstFollowup = self.window().nextEventMatchingMask(
+        NSLeftMouseUpMask + NSLeftMouseDraggedMask,
+        referenceTimestampNow() + ComboBoxTrackingMaxWaitSeconds,
+        @ns"NSDefaultRunLoopMode",
+        true,
+      )
+    if not firstFollowup.isNil:
+      let followupPoint =
+        self.NSView.convertPoint(firstFollowup.locationInWindow(), NSView(value: nil))
+      if firstFollowup.`type`() == NSLeftMouseUp and
+          comboBoxArrowZoneRect(self.bounds()).contains(
+            followupPoint.x, followupPoint.y
+          ):
+        self.xButtonPressed = false
+        self.setNeedsDisplay(true)
+        self.togglePopup()
+        return
+      self.window().postEvent(firstFollowup, true)
     let selectedIndex = self.trackPopupWithEvent(event)
     self.xButtonPressed = false
     self.setNeedsDisplay(true)
@@ -902,6 +985,57 @@ objcImpl:
     self.xDataSource.value = replacedOwnedId(self.xDataSource.value, nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSComboBox, self, getSelector("dealloc"))
+
+objcImpl:
+  method updateSelectionForEvent*(self: NSComboBoxWindow, event: NSEvent): int =
+    if self.isNil or self.xView.isNil:
+      return -1
+    let index = self.xView.itemIndexForPoint(self.xView.pointInSelfForEvent(event))
+    self.xView.setSelectedIndex(index)
+    let comboBox = self.comboBox()
+    if not comboBox.isNil:
+      comboBox.setPopupHoveredIndex(index)
+    self.xView.setNeedsDisplay(true)
+    index
+
+objcImpl:
+  method mouseDown*(self: NSComboBoxView, event: NSEvent) =
+    if self.isNil or event.isNil:
+      return
+    let popup = self.window().NSComboBoxWindow
+    if popup.isNil:
+      return
+    discard popup.updateSelectionForEvent(event)
+
+  method mouseDragged*(self: NSComboBoxView, event: NSEvent) =
+    if self.isNil or event.isNil:
+      return
+    let popup = self.window().NSComboBoxWindow
+    if popup.isNil:
+      return
+    discard popup.updateSelectionForEvent(event)
+
+  method mouseMoved*(self: NSComboBoxView, event: NSEvent) =
+    if self.isNil or event.isNil:
+      return
+    let popup = self.window().NSComboBoxWindow
+    if popup.isNil:
+      return
+    discard popup.updateSelectionForEvent(event)
+
+  method mouseUp*(self: NSComboBoxView, event: NSEvent) =
+    if self.isNil or event.isNil:
+      return
+    let popup = self.window().NSComboBoxWindow
+    if popup.isNil:
+      return
+    let index = popup.updateSelectionForEvent(event)
+    let comboBox = popup.comboBox()
+    if comboBox.isNil:
+      return
+    if index >= 0:
+      comboBox.activateItemAtIndex(index)
+    comboBox.closePopup()
 
 proc new*(t: typedesc[NSComboBox]): NSComboBox =
   var allocated = NSComboBox.alloc()

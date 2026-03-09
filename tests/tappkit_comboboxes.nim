@@ -30,6 +30,83 @@ proc textNodeVerticalMargins(
       return (true, minY, max(node.screenBox.h - maxY, 0.0))
   (false, 0.0, 0.0)
 
+proc popupItemScreenPoint(window: NSWindow, combo: NSComboBox, index: int): NSPoint =
+  discard window
+  var popupFrame = combo.popupWindowFrame()
+  popupFrame.size.height =
+    comboBoxPopupItemHeight(combo) * comboBoxVisiblePopupItems(combo).float32 + 2.0
+  let itemHeight = comboBoxPopupItemHeight(combo)
+  nsPoint(
+    popupFrame.origin.x + popupFrame.size.width * 0.5,
+    popupFrame.origin.y + popupFrame.size.height - 1.0 - index.float32 * itemHeight -
+      itemHeight * 0.5,
+  )
+
+proc popupWindowItemScreenPoint(popup: NSComboBoxWindow, index: int): NSPoint =
+  if popup.isNil or popup.contentView().isNil:
+    return nsPoint(0.0, 0.0)
+  let popupSubviews = popup.contentView().subviews()
+  if popupSubviews.len == 0:
+    return nsPoint(0.0, 0.0)
+  let popupScrollView = popupSubviews[0].NSScrollView
+  if popupScrollView.isNil:
+    return nsPoint(0.0, 0.0)
+  let popupView = popupScrollView.documentView().NSComboBoxView
+  if popupView.isNil:
+    return nsPoint(0.0, 0.0)
+  let itemRect = popupView.rectForItemAtIndex(index)
+  let itemPoint = nsPoint(
+    itemRect.origin.x + itemRect.size.width * 0.5,
+    itemRect.origin.y + itemRect.size.height * 0.5,
+  )
+  let popupPoint = popupView.convertPointToView(itemPoint, NSView(value: nil))
+  popup.convertBaseToScreen(popupPoint)
+
+proc clickComboBoxArrow(app: NSApplication, window: NSWindow, combo: NSComboBox) =
+  if app.isNil or window.isNil or combo.isNil:
+    return
+  let frame = combo.frame()
+  let point = nsPoint(
+    frame.origin.x + frame.size.width - 5.0, frame.origin.y + frame.size.height * 0.5
+  )
+  let down = mouseButtonEventFromSiwin(
+    window.windowNumber(),
+    point,
+    siwin.MouseButtonEvent(
+      button: siwin.MouseButton.left, pressed: true, generated: false
+    ),
+  )
+  let up = mouseButtonEventFromSiwin(
+    window.windowNumber(),
+    point,
+    siwin.MouseButtonEvent(
+      button: siwin.MouseButton.left, pressed: false, generated: false
+    ),
+  )
+  app.postEvent(down, false)
+  app.postEvent(up, false)
+
+proc clickPopupItem(app: NSApplication, popup: NSWindow, screenPoint: NSPoint) =
+  if app.isNil or popup.isNil:
+    return
+  let point = popup.convertScreenToBase(screenPoint)
+  let down = mouseButtonEventFromSiwin(
+    popup.windowNumber(),
+    point,
+    siwin.MouseButtonEvent(
+      button: siwin.MouseButton.left, pressed: true, generated: false
+    ),
+  )
+  let up = mouseButtonEventFromSiwin(
+    popup.windowNumber(),
+    point,
+    siwin.MouseButtonEvent(
+      button: siwin.MouseButton.left, pressed: false, generated: false
+    ),
+  )
+  app.postEvent(down, false)
+  app.postEvent(up, false)
+
 objcImpl:
   type TestComboBox = object of NSComboBox
     xCapturedPopup {.get: capturedPopup.}: NSComboBoxWindow
@@ -172,6 +249,132 @@ suite "appkit combobox":
     check(combo.popupWindow().isNil)
     check(not combo.popupOpen())
     check(NSTitledWindow in window.styleMask())
+
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
+  test "mouse selection through popup chooses item and closes safely":
+    var app = NSApplication.new()
+    var window = newWindow(0, 0, 240, 120, "Combo Popup Select")
+    var root = newView(0, 0, 240, 120)
+
+    var comboAlloc = TestComboBox.alloc()
+    var combo = comboAlloc.init()
+    comboAlloc.value = nil
+    combo.setFrame(nsRect(10.0, 10.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app.NSObject)
+
+    let arrowPoint = nsPoint(126.0, 20.0)
+    let popupTarget = window.convertScreenToBase(popupItemScreenPoint(window, combo, 1))
+    let down = mouseButtonEventFromSiwin(
+      window.windowNumber(),
+      arrowPoint,
+      siwin.MouseButtonEvent(
+        button: siwin.MouseButton.left, pressed: true, generated: false
+      ),
+    )
+    let drag = mouseMoveEventFromSiwin(
+      window.windowNumber(),
+      popupTarget,
+      siwin.MouseMoveEvent(kind: siwin.MouseMoveKind.moveWhileDragging),
+      {},
+      {siwin.MouseButton.left},
+    )
+    let up = mouseButtonEventFromSiwin(
+      window.windowNumber(),
+      popupTarget,
+      siwin.MouseButtonEvent(
+        button: siwin.MouseButton.left, pressed: false, generated: false
+      ),
+    )
+
+    app.postEvent(down, false)
+    app.postEvent(drag, false)
+    app.postEvent(up, false)
+    discard app.runForFrames(20)
+
+    check(combo.indexOfSelectedItem() == 1)
+    check(combo.stringValue() == @ns"item2")
+    check(combo.closePopupCallCount() == 1)
+    check(combo.popupWindow().isNil)
+    check(not combo.popupOpen())
+
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
+  test "plain mouse click opens persistent popup without blocking":
+    var app = NSApplication.new()
+    var window = newWindow(0, 0, 240, 120, "Combo Popup Persistent")
+    var root = newView(0, 0, 240, 120)
+
+    var comboAlloc = TestComboBox.alloc()
+    var combo = comboAlloc.init()
+    comboAlloc.value = nil
+    combo.setFrame(nsRect(10.0, 10.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app.NSObject)
+
+    clickComboBoxArrow(app, window, combo)
+    discard app.runForFrames(5)
+
+    check(combo.popupOpen())
+    check(not combo.popupWindow().isNil)
+    check(combo.closePopupCallCount() == 0)
+
+    combo.closePopup()
+    check(combo.popupWindow().isNil)
+    check(not combo.popupOpen())
+
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
+  test "persistent popup click selects item and closes":
+    var app = NSApplication.new()
+    var window = newWindow(0, 0, 240, 120, "Combo Popup Persistent Select")
+    var root = newView(0, 0, 240, 120)
+
+    var comboAlloc = TestComboBox.alloc()
+    var combo = comboAlloc.init()
+    comboAlloc.value = nil
+    combo.setFrame(nsRect(10.0, 10.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app.NSObject)
+
+    clickComboBoxArrow(app, window, combo)
+    discard app.runForFrames(5)
+
+    let popup = combo.popupWindow()
+    check(not popup.isNil)
+    clickPopupItem(app, popup.NSWindow, popupWindowItemScreenPoint(popup, 2))
+    discard app.runForFrames(5)
+
+    check(combo.indexOfSelectedItem() == 2)
+    check(combo.stringValue() == @ns"item3")
+    check(combo.closePopupCallCount() == 1)
+    check(combo.popupWindow().isNil)
+    check(not combo.popupOpen())
 
     combo.value = nil
     root.value = nil

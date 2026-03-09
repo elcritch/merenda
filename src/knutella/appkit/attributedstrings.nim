@@ -263,13 +263,30 @@ proc focusAlignment(): FontHorizontal =
     return FontHorizontal.Left
   toFontHorizontal(NSTextAlignment(sendInt(focusObj.value, alignmentSelector)))
 
+proc unpackForegroundColor(value: int): NSColor =
+  nsColor(
+    ((value shr 24) and 0xFF).float32 / 255.0,
+    ((value shr 16) and 0xFF).float32 / 255.0,
+    ((value shr 8) and 0xFF).float32 / 255.0,
+    (value and 0xFF).float32 / 255.0,
+  )
+
 proc fontAndColorForAttributes(
     attributes: NSDictionary[NSObject, NSObject]
 ): tuple[font: NSFont, color: NSColor] =
   result = (NSFont(value: nil), nsColor(0.08, 0.08, 0.08, 1.0))
   let fontObj = NSFontAttributeInDictionary(attributes)
-  if not fontObj.isNil and fontObj.isKindOfClass(NSFont):
-    result.font = asTypeRaw[NSFont](fontObj)
+  if not fontObj.isNil:
+    if fontObj.isKindOfClass(NSFont):
+      result.font = asTypeRaw[NSFont](fontObj)
+    elif fontObj.respondsToSelector("doubleValue") or
+        fontObj.respondsToSelector("floatValue") or
+        fontObj.respondsToSelector("integerValue"):
+      let pointSize = max(unboxNSObject[float32](fontObj), 1.0'f32)
+      result.font = NSFont.messageFontOfSize(pointSize)
+  let colorObj = NSForegroundColorAttributeInDictionary(attributes)
+  if not colorObj.isNil and colorObj.respondsToSelector("integerValue"):
+    result.color = unpackForegroundColor(unboxNSObject[int](colorObj))
 
 proc textStyleForAttributes(attributes: NSDictionary[NSObject, NSObject]): FontStyle =
   let visual = fontAndColorForAttributes(attributes)
