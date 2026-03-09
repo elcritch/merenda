@@ -151,23 +151,64 @@ suite "foundation stdlib-backed core types":
     check(unboxNSObject[bool](falseObj) == false)
     check(unboxNSObject[NSInteger](trueObj) == 1)
 
-  test "NSArray supports stdlib-style operations":
+  test "NSArray supports Cocoa-style lookup and copy operations":
     var values = nsArray([1, 2, 3])
+    check(values.count() == 3.NSUInteger)
     check(values.len == 3)
-    check(values[0] == 1)
+    check(values.objectAtIndex(0.NSUInteger) == 1)
     check(values[2] == 3)
+    check(values.firstObject() == 1)
+    check(values.lastObject() == 3)
+    check(values.containsObject(2))
+    check(values.indexOfObject(2) == 1.NSUInteger)
 
-    values.add(4)
-    values.insert(1, 99)
+    var addedOne = values.arrayByAddingObject(4)
+    check(values.toSeq() == @[1, 2, 3])
+    check(addedOne.toSeq() == @[1, 2, 3, 4])
+
+    var addedMany = values.arrayByAddingObjectsFromArray(nsArray([5, 6]))
+    check(addedMany.toSeq() == @[1, 2, 3, 5, 6])
+    values = NSArray[int](value: nil)
+    addedOne = NSArray[int](value: nil)
+    addedMany = NSArray[int](value: nil)
+
+  test "NSMutableArray supports Cocoa and Nim-style mutating operations":
+    var values = nsMutableArray([1, 2, 3])
+    check(values.len == 3)
+    values.addObject(4)
+    values.insertObject(99, 1.NSUInteger)
     check(values.toSeq() == @[1, 99, 2, 3, 4])
 
-    values[1] = 10
-    values.del(0)
+    values.replaceObjectAtIndex(1.NSUInteger, 10)
+    values.removeObjectAtIndex(0.NSUInteger)
     check(values.toSeq() == @[10, 2, 3, 4])
-    check(not values.isEmpty)
+
+    values.removeLastObject()
+    check(values.toSeq() == @[10, 2, 3])
+
+    values.add(11)
+    values.insert(0, 8)
+    values[1] = 9
+    values.del(2)
+    check(values.toSeq() == @[8, 9, 3, 11])
+
+    values.setArray(nsArray([42, 43]))
+    check(values.toSeq() == @[42, 43])
 
     values.clear()
     check(values.isEmpty)
+    values = NSMutableArray[int](value: nil)
+
+  test "NSArray var wrappers delegate mutation via NSMutableArray":
+    var values = nsArray([1, 2, 3])
+    values.add(4)
+    values.insert(1, 99)
+    values[1] = 10
+    values.del(0)
+    check(values.toSeq() == @[10, 2, 3, 4])
+    values.clear()
+    check(values.isEmpty)
+    values = NSArray[int](value: nil)
 
   test "NSArray supports makeObjectsPerformSelector":
     let words = nsArray([@ns"one", @ns"two"])
