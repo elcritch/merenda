@@ -18,17 +18,11 @@ objcImpl:
         method performSelector(self: NXArraySelectorPerformer, selector: SEL): NSObject
 
 proc nxArrayObjectsEqual(lhs, rhs: NSObject): bool {.inline.} =
-  if lhs.value == rhs.value:
-    return true
-  if lhs.isNil or rhs.isNil:
-    return false
+  if lhs.value == rhs.value: return true
+  if lhs.isNil or rhs.isNil: return false
   let lhsWrapper = lhs.asWrapper(NXArrayEquality)
-  if lhsWrapper.isNil:
-    return false
+  if lhsWrapper.isNil: return false
   lhsWrapper.isEqual(rhs)
-
-proc nxArrayNotFound(): NSUInteger {.inline.} =
-  high(NSUInteger)
 
 proc nxArrayAppendObjectsFromArray(
     target: var seq[NSObject], source: NSArray[NSObject]
@@ -105,16 +99,15 @@ objcImpl:
     self.xData()[^1]
 
   method containsObject*(self: NXArray, value: NSObject): bool =
-    self.indexOfObject(value) != nxArrayNotFound()
+    self.indexOfObject(value) != high(NSUInteger)
 
   method indexOfObject*(self: NXArray, value: NSObject): NSUInteger =
-    if self.isNil:
-      return nxArrayNotFound()
+    if self.isNil: return high(NSUInteger)
     let data = self.xData()
     for i, candidate in data.pairs:
       if nxArrayObjectsEqual(candidate, value):
         return i.NSUInteger
-    nxArrayNotFound()
+    high(NSUInteger)
 
   method arrayByAddingObject*(self: NXArray, value: NSObject): NXArray =
     var allocated = NXArray.alloc()
@@ -448,7 +441,7 @@ proc contains*[T](arr: NSArray[T], value: T): bool {.inline.} =
 
 proc indexOfObject*[T](arr: NSArray[T], value: T): NSUInteger =
   if arr.value.isNil:
-    return nxArrayNotFound()
+    return high(NSUInteger)
   let obj = NXArray(arr.NSObject)
   obj.indexOfObject(boxNSObject(value))
 

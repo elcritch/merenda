@@ -151,6 +151,18 @@ suite "foundation stdlib-backed core types":
     check(unboxNSObject[bool](falseObj) == false)
     check(unboxNSObject[NSInteger](trueObj) == 1)
 
+  test "NSObject isEqual sends isEqual:":
+    let lhsString = NSObject(@ns"same")
+    let rhsString = NSObject(@ns"same")
+    let otherString = NSObject(@ns"different")
+    let nilString = NSObject(value: nil)
+    check(lhsString.isEqual(rhsString))
+    check(not lhsString.isEqual(otherString))
+    check(lhsString.isEqual(lhsString))
+    check(not nilString.isEqual(lhsString))
+    check(not lhsString.isEqual(nilString))
+    check(not nilString.isEqual(nilString))
+
   test "NSArray supports Cocoa-style lookup and copy operations":
     var values = nsArray([1, 2, 3])
     check(values.count() == 3.NSUInteger)
