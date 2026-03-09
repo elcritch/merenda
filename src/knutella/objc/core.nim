@@ -46,6 +46,8 @@ type
 
   NSString* = object of NSObject
   NSArray*[T] = object of NSObject
+  NSMutableArray*[T] = object of NSArray[T]
+  NSEnumerator*[T] = object of NSObject
   NSDictionary*[K, V] = object of NSObject
   NSSet*[T] = object of NSObject
   NSIndexSet* = object of NSObject
@@ -66,6 +68,10 @@ type
 
   NSInteger* = int
   NSUInteger* = uint
+
+  NSRange* = object
+    location*: uint
+    length*: uint
 
   objc_method_description = object
     name: SEL
@@ -145,6 +151,15 @@ proc GC_unref*[T: ID](o: T) =
 
 template retain*[T: ID](o: T): T =
   cast[T](retainAux(o.value))
+
+proc NSMakeRange*(location, length: uint): NSRange {.inline.} =
+  NSRange(location: location, length: length)
+
+proc NSMaxRange*(r: NSRange): uint {.inline.} =
+  r.location + r.length
+
+proc NSLocationInRange*(location: uint, r: NSRange): bool {.inline.} =
+  location >= r.location and location < NSMaxRange(r)
 
 proc release*(o: var ID) {.inline.} =
   `=destroy`(o)
