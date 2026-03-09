@@ -270,14 +270,14 @@ proc arrayWithObject*[T](n: typedesc[NSArray[T]], value: T): NSArray[T] =
   result = nsArray[T]()
   if result.value.isNil:
     return
-  let obj = NXArray(result.NSObject)
+  let obj = NXArray(result)
   obj.addObject(boxNSObject(value))
 
 proc arrayWithArray*[T](n: typedesc[NSArray[T]], other: NSArray[T]): NSArray[T] =
   result = nsArray[T]()
   if result.value.isNil:
     return
-  let obj = NXArray(result.NSObject)
+  let obj = NXArray(result)
   obj.setArray(NSArray[NSObject](other.NSObject))
 
 proc init*[T](n: typedesc[NSMutableArray[T]]): NSMutableArray[T] {.inline.} =
@@ -444,7 +444,7 @@ proc arrayByAddingObjectsFromArray*[T](arr: NSArray[T], other: NSArray[T]): NSAr
 proc addObject*[T](arr: var NSMutableArray[T], value: T) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.addObject(boxNSObject(value))
 
 proc add*[T](arr: var NSMutableArray[T], value: T) {.inline.} =
@@ -453,13 +453,13 @@ proc add*[T](arr: var NSMutableArray[T], value: T) {.inline.} =
 proc addObjectsFromArray*[T](arr: var NSMutableArray[T], other: NSArray[T]) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.addObjectsFromArray(NSArray[NSObject](other.NSObject))
 
 proc insertObject*[T](arr: var NSMutableArray[T], value: T, index: NSUInteger) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.insertObject(boxNSObject(value), index)
 
 proc insert*[T](arr: var NSMutableArray[T], index: int, value: T) {.inline.} =
@@ -470,7 +470,7 @@ proc insert*[T](arr: var NSMutableArray[T], index: int, value: T) {.inline.} =
 proc replaceObjectAtIndex*[T](arr: var NSMutableArray[T], index: NSUInteger, value: T) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.replaceObjectAtIndex(index, boxNSObject(value))
 
 proc `[]=`*[T](arr: var NSMutableArray[T], index: int, value: T) {.inline.} =
@@ -492,13 +492,13 @@ proc del*[T](arr: var NSMutableArray[T], index: int) {.inline.} =
 proc removeLastObject*[T](arr: var NSMutableArray[T]) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.removeLastObject()
 
 proc removeAllObjects*[T](arr: var NSMutableArray[T]) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.removeAllObjects()
 
 proc clear*[T](arr: var NSMutableArray[T]) {.inline.} =
@@ -507,12 +507,12 @@ proc clear*[T](arr: var NSMutableArray[T]) {.inline.} =
 proc setArray*[T](arr: var NSMutableArray[T], other: NSArray[T]) =
   if arr.value.isNil:
     return
-  let obj = NXArray(arr.NSObject)
+  let obj = NXArray(arr)
   obj.setArray(NSArray[NSObject](other.NSObject))
 
 proc ensureMutableArrayForWrite[T](arr: var NSArray[T]): NSMutableArray[T] =
   if arr.value.isNil:
-    return NSMutableArray[T](value: nil)
+    return
   NSMutableArray[T](arr)
 
 proc `[]=`*[T](arr: var NSArray[T], index: int, value: T) {.inline.} =
