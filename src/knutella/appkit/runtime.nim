@@ -172,6 +172,9 @@ proc replacedOwnedId*(slot: IDPtr, next: IDPtr): IDPtr =
 proc replacedOwnedId*(slot: ID, next: ID): ID =
   ID(value: replacedOwnedId(slot.value, next.value))
 
+proc clearOwnedId*(slot: var ID) {.inline.} =
+  slot.value = replacedOwnedId(slot.value, nil)
+
 proc clearOwnedIds*(ids: var seq[IDPtr]) =
   for id in ids:
     releaseId(id)
