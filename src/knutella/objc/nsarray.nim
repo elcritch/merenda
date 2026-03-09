@@ -15,7 +15,7 @@ objcImpl:
 proc nxArrayAppendObjectsFromArray(
     target: var seq[NSObject], source: NSArray[NSObject]
 ) =
-  if source.value.isNil:
+  if source.isNil:
     return
   let sourceWrapper = source.NSObject.asWrapper(NXArrayIndexedReading)
   if sourceWrapper.isNil:
@@ -281,14 +281,14 @@ proc array*[T](n: typedesc[NSArray[T]]): NSArray[T] {.inline.} =
 
 proc arrayWithObject*[T](n: typedesc[NSArray[T]], value: T): NSArray[T] =
   result = nsArray[T]()
-  if result.value.isNil:
+  if result.isNil:
     return
   let obj = NXArray(result)
   obj.addObject(boxNSObject(value))
 
 proc arrayWithArray*[T](n: typedesc[NSArray[T]], other: NSArray[T]): NSArray[T] =
   result = nsArray[T]()
-  if result.value.isNil:
+  if result.isNil:
     return
   let obj = NXArray(result)
   obj.setArray(NSArray[NSObject](other.NSObject))
@@ -319,14 +319,14 @@ proc arrayWithArray*[T](
     n: typedesc[NSMutableArray[T]], other: NSArray[T]
 ): NSMutableArray[T] =
   result = nsMutableArray[T]()
-  if result.value.isNil:
+  if result.isNil:
     return
   let obj = NXArray(result.NSObject)
   obj.setArray(NSArray[NSObject](other.NSObject))
 
 proc nsMutableArray*[T](values: openArray[T]): NSMutableArray[T] =
   result = nsMutableArray[T]()
-  if result.value.isNil:
+  if result.isNil:
     return
   let obj = NXArray(result.NSObject)
   for value in values:
@@ -382,7 +382,7 @@ proc makeObjectsPerformSelector*[T](arr: NSArray[T], selectorName: NSString) =
   arr.makeObjectsPerformSelector(selectorFromNSString(selectorName))
 
 proc count*[T](arr: NSArray[T]): NSUInteger {.inline.} =
-  if arr.value.isNil:
+  if arr.isNil:
     return 0
   let obj = NXArray(arr.NSObject)
   obj.count()
@@ -394,7 +394,7 @@ proc isEmpty*[T](arr: NSArray[T]): bool {.inline.} =
   arr.len == 0
 
 proc objectAtIndex*[T](arr: NSArray[T], index: NSUInteger): T =
-  if arr.value.isNil:
+  if arr.isNil:
     raise newException(IndexDefect, "index out of bounds in NSArray")
   let obj = NXArray(arr.NSObject)
   unboxNSObject[T](obj.objectAtIndex(index))
@@ -408,13 +408,13 @@ proc `[]`*[T](arr: NSArray[T], index: int): T {.inline.} =
   arr.objectAtIndex(index)
 
 proc firstObject*[T](arr: NSArray[T]): T =
-  if arr.value.isNil:
+  if arr.isNil:
     return unboxNSObject[T](NSObject(value: nil))
   let obj = NXArray(arr.NSObject)
   unboxNSObject[T](obj.firstObject())
 
 proc lastObject*[T](arr: NSArray[T]): T =
-  if arr.value.isNil:
+  if arr.isNil:
     return unboxNSObject[T](NSObject(value: nil))
   let obj = NXArray(arr.NSObject)
   unboxNSObject[T](obj.lastObject())
@@ -467,7 +467,7 @@ proc addObjectsFromArray*[T](arr: NSMutableArray[T], other: NSArray[T]) =
   obj.addObjectsFromArray(NSArray[NSObject](other.NSObject))
 
 proc insertObject*[T](arr: NSMutableArray[T], value: T, index: NSUInteger) =
-  if arr.value.isNil:
+  if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.insertObject(boxNSObject(value), index)
@@ -478,7 +478,7 @@ proc insert*[T](arr: NSMutableArray[T], index: int, value: T) {.inline.} =
   arr.insertObject(value, index.NSUInteger)
 
 proc replaceObjectAtIndex*[T](arr: NSMutableArray[T], index: NSUInteger, value: T) =
-  if arr.value.isNil:
+  if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.replaceObjectAtIndex(index, boxNSObject(value))
@@ -489,7 +489,7 @@ proc `[]=`*[T](arr: NSMutableArray[T], index: int, value: T) {.inline.} =
   arr.replaceObjectAtIndex(index.NSUInteger, value)
 
 proc removeObjectAtIndex*[T](arr: var NSMutableArray[T], index: NSUInteger) =
-  if arr.value.isNil:
+  if arr.isNil:
     return
   let obj = NXArray(arr.NSObject)
   obj.removeObjectAtIndex(index)
@@ -500,13 +500,13 @@ proc del*[T](arr: NSMutableArray[T], index: int) {.inline.} =
   arr.removeObjectAtIndex(index.NSUInteger)
 
 proc removeLastObject*[T](arr: NSMutableArray[T]) =
-  if arr.value.isNil:
+  if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.removeLastObject()
 
 proc removeAllObjects*[T](arr: NSMutableArray[T]) =
-  if arr.value.isNil:
+  if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.removeAllObjects()
@@ -515,7 +515,7 @@ proc clear*[T](arr: var NSMutableArray[T]) {.inline.} =
   arr.removeAllObjects()
 
 proc setArray*[T](arr: var NSMutableArray[T], other: NSArray[T]) =
-  if arr.value.isNil:
+  if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.setArray(NSArray[NSObject](other.NSObject))
@@ -524,7 +524,7 @@ proc add*[T](arr: NSMutableArray[T], value: T) {.inline.} =
   arr.addObject(value)
 
 proc toSeq*[T](arr: NSArray[T]): seq[T] =
-  if arr.value.isNil:
+  if arr.isNil:
     return @[]
   let total = arr.len
   result = newSeqOfCap[T](total)
@@ -544,7 +544,7 @@ iterator pairs*[T](arr: NSArray[T]): tuple[index: int, value: T] =
 proc `==`*[T](a, b: NSArray[T]): bool =
   if a.value == b.value:
     return true
-  if a.value.isNil or b.value.isNil:
+  if a.isNil or b.isNil:
     return false
   if a.len != b.len:
     return false
