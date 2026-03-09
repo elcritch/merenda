@@ -2,11 +2,6 @@ when not declared(getAssociatedRef):
   import ./assoc
 
 objcImpl:
-  type NXArrayEquality {.structural.} =
-    concept self
-        method isEqual(self: NXArrayEquality, other: NSObject): bool
-
-objcImpl:
   type NXArrayIndexedReading {.structural.} =
     concept self
         method count(self: NXArrayIndexedReading): NSUInteger
@@ -16,13 +11,6 @@ objcImpl:
   type NXArraySelectorPerformer {.structural.} =
     concept self
         method performSelector(self: NXArraySelectorPerformer, selector: SEL): NSObject
-
-proc nxArrayObjectsEqual(lhs, rhs: NSObject): bool {.inline.} =
-  if lhs.value == rhs.value: return true
-  if lhs.isNil or rhs.isNil: return false
-  let lhsWrapper = lhs.asWrapper(NXArrayEquality)
-  if lhsWrapper.isNil: return false
-  lhsWrapper.isEqual(rhs)
 
 proc nxArrayAppendObjectsFromArray(
     target: var seq[NSObject], source: NSArray[NSObject]
@@ -105,7 +93,7 @@ objcImpl:
     if self.isNil: return high(NSUInteger)
     let data = self.xData()
     for i, candidate in data.pairs:
-      if nxArrayObjectsEqual(candidate, value):
+      if candidate.isEqual(value):
         return i.NSUInteger
     high(NSUInteger)
 
@@ -261,7 +249,7 @@ objcImpl:
     for i in 0 ..< selfCount:
       let lhs = selfData[i]
       let rhs = otherArray.objectAtIndex(i.NSUInteger)
-      if not nxArrayObjectsEqual(lhs, rhs):
+      if not lhs.isEqual(rhs):
         return false
     true
 
