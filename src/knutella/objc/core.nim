@@ -45,7 +45,9 @@ type
   ObjcClass* {.pure.} = object of NSObject
 
   NSString* = object of NSObject
-  NSArray*[T] = object of NSObject
+
+  NXArray* = object of NSObject
+  NSArray*[T] = object of NXArray
   NSMutableArray*[T] = object of NSArray[T]
   NSEnumerator*[T] = object of NSObject
   NSDictionary*[K, V] = object of NSObject
