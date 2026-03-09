@@ -321,7 +321,7 @@ proc nsMutableArray*[T](values: openArray[T]): NSMutableArray[T] =
 
 proc nsArray*[T](values: openArray[T]): NSArray[T] =
   result = nsArray[T]()
-  if result.value.isNil:
+  if result.isNil:
     return
   let obj = NXArray(result.NSObject)
   for value in values:
@@ -336,7 +336,7 @@ proc nsMutableArrayObjects*(
   nsMutableArray(values)
 
 proc copy*[T](arr: NSArray[T]): NSArray[T] =
-  if arr.value.isNil:
+  if arr.isNil:
     return NSArray[T](value: nil)
   let obj = NXArray(arr.NSObject)
   var copied = obj.copyWithZone(nil)
@@ -345,7 +345,7 @@ proc copy*[T](arr: NSArray[T]): NSArray[T] =
   NSArray[T](copied)
 
 proc mutableCopy*[T](arr: NSArray[T]): NSMutableArray[T] =
-  if arr.value.isNil:
+  if arr.isNil:
     return NSMutableArray[T](value: nil)
   let obj = NXArray(arr.NSObject)
   var copied = obj.mutableCopyWithZone(nil)
@@ -360,7 +360,7 @@ proc mutableCopy*[T](arr: NSMutableArray[T]): NSMutableArray[T] =
   mutableCopy(NSArray[T](arr))
 
 proc makeObjectsPerformSelector*[T](arr: NSArray[T], selector: SEL) =
-  if arr.value.isNil or cast[pointer](selector).isNil:
+  if arr.isNil or selector.isNil:
     return
   let obj = NXArray(arr.NSObject)
   obj.makeObjectsPerformSelector(selector)
@@ -407,7 +407,7 @@ proc lastObject*[T](arr: NSArray[T]): T =
   unboxNSObject[T](obj.lastObject())
 
 proc containsObject*[T](arr: NSArray[T], value: T): bool =
-  if arr.value.isNil:
+  if arr.isNil:
     return false
   let obj = NXArray(arr.NSObject)
   obj.containsObject(boxNSObject(value))
@@ -416,34 +416,31 @@ proc contains*[T](arr: NSArray[T], value: T): bool {.inline.} =
   arr.containsObject(value)
 
 proc indexOfObject*[T](arr: NSArray[T], value: T): NSUInteger =
-  if arr.value.isNil:
+  if arr.isNil:
     return high(NSUInteger)
   let obj = NXArray(arr.NSObject)
   obj.indexOfObject(boxNSObject(value))
 
 proc arrayByAddingObject*[T](arr: NSArray[T], value: T): NSArray[T] =
   var source = arr
-  if source.value.isNil:
+  if source.isNil:
     source = nsArray[T]()
   let obj = NXArray(source.NSObject)
   var added = obj.arrayByAddingObject(boxNSObject(value))
-  if added.isNil:
-    return NSArray[T](value: nil)
+  if added.isNil: return
   NSArray[T](added.NSObject)
 
 proc arrayByAddingObjectsFromArray*[T](arr: NSArray[T], other: NSArray[T]): NSArray[T] =
   var source = arr
-  if source.value.isNil:
+  if source.isNil:
     source = nsArray[T]()
   let obj = NXArray(source.NSObject)
   var added = obj.arrayByAddingObjectsFromArray(NSArray[NSObject](other.NSObject))
-  if added.isNil:
-    return NSArray[T](value: nil)
+  if added.isNil: return
   NSArray[T](added.NSObject)
 
 proc addObject*[T](arr: var NSMutableArray[T], value: T) =
-  if arr.value.isNil:
-    return
+  if arr.isNil: return
   let obj = NXArray(arr)
   obj.addObject(boxNSObject(value))
 
@@ -451,8 +448,7 @@ proc add*[T](arr: var NSMutableArray[T], value: T) {.inline.} =
   arr.addObject(value)
 
 proc addObjectsFromArray*[T](arr: var NSMutableArray[T], other: NSArray[T]) =
-  if arr.value.isNil:
-    return
+  if arr.isNil: return
   let obj = NXArray(arr)
   obj.addObjectsFromArray(NSArray[NSObject](other.NSObject))
 
