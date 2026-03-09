@@ -336,7 +336,7 @@ proc nsArray*[T](values: openArray[T]): NSArray[T] =
   result = nsArray[T]()
   if result.isNil:
     return
-  let obj = NXArray(result.NSObject)
+  let obj = NXArray(result)
   for value in values:
     obj.addObject(boxNSObject(value))
 
@@ -350,16 +350,16 @@ proc nsMutableArrayObjects*(
 
 proc copy*[T](arr: NSArray[T]): NSArray[T] =
   if arr.isNil:
-    return NSArray[T](value: nil)
+    return
   let obj = NXArray(arr.NSObject)
   var copied = obj.copyWithZone(nil)
   if copied.isNil:
-    return NSArray[T](value: nil)
+    return
   NSArray[T](copied)
 
 proc mutableCopy*[T](arr: NSArray[T]): NSMutableArray[T] =
   if arr.isNil:
-    return NSMutableArray[T](value: nil)
+    return
   let obj = NXArray(arr.NSObject)
   var copied = obj.mutableCopyWithZone(nil)
   if copied.isNil:
