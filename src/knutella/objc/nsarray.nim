@@ -454,39 +454,36 @@ proc arrayByAddingObjectsFromArray*[T](arr: NSArray[T], other: NSArray[T]): NSAr
     return
   NSArray[T](added.NSObject)
 
-proc addObject*[T](arr: var NSMutableArray[T], value: T) =
+proc addObject*[T](arr: NSMutableArray[T], value: T) =
   if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.addObject(boxNSObject(value))
 
-proc add*[T](arr: var NSMutableArray[T], value: T) {.inline.} =
-  arr.addObject(value)
-
-proc addObjectsFromArray*[T](arr: var NSMutableArray[T], other: NSArray[T]) =
+proc addObjectsFromArray*[T](arr: NSMutableArray[T], other: NSArray[T]) =
   if arr.isNil:
     return
   let obj = NXArray(arr)
   obj.addObjectsFromArray(NSArray[NSObject](other.NSObject))
 
-proc insertObject*[T](arr: var NSMutableArray[T], value: T, index: NSUInteger) =
+proc insertObject*[T](arr: NSMutableArray[T], value: T, index: NSUInteger) =
   if arr.value.isNil:
     return
   let obj = NXArray(arr)
   obj.insertObject(boxNSObject(value), index)
 
-proc insert*[T](arr: var NSMutableArray[T], index: int, value: T) {.inline.} =
+proc insert*[T](arr: NSMutableArray[T], index: int, value: T) {.inline.} =
   if index < 0:
     raise newException(IndexDefect, "index out of bounds in NSMutableArray")
   arr.insertObject(value, index.NSUInteger)
 
-proc replaceObjectAtIndex*[T](arr: var NSMutableArray[T], index: NSUInteger, value: T) =
+proc replaceObjectAtIndex*[T](arr: NSMutableArray[T], index: NSUInteger, value: T) =
   if arr.value.isNil:
     return
   let obj = NXArray(arr)
   obj.replaceObjectAtIndex(index, boxNSObject(value))
 
-proc `[]=`*[T](arr: var NSMutableArray[T], index: int, value: T) {.inline.} =
+proc `[]=`*[T](arr: NSMutableArray[T], index: int, value: T) {.inline.} =
   if index < 0:
     raise newException(IndexDefect, "index out of bounds in NSMutableArray")
   arr.replaceObjectAtIndex(index.NSUInteger, value)
@@ -497,18 +494,18 @@ proc removeObjectAtIndex*[T](arr: var NSMutableArray[T], index: NSUInteger) =
   let obj = NXArray(arr.NSObject)
   obj.removeObjectAtIndex(index)
 
-proc del*[T](arr: var NSMutableArray[T], index: int) {.inline.} =
+proc del*[T](arr: NSMutableArray[T], index: int) {.inline.} =
   if index < 0:
     raise newException(IndexDefect, "index out of bounds in NSMutableArray")
   arr.removeObjectAtIndex(index.NSUInteger)
 
-proc removeLastObject*[T](arr: var NSMutableArray[T]) =
+proc removeLastObject*[T](arr: NSMutableArray[T]) =
   if arr.value.isNil:
     return
   let obj = NXArray(arr)
   obj.removeLastObject()
 
-proc removeAllObjects*[T](arr: var NSMutableArray[T]) =
+proc removeAllObjects*[T](arr: NSMutableArray[T]) =
   if arr.value.isNil:
     return
   let obj = NXArray(arr)
@@ -523,43 +520,8 @@ proc setArray*[T](arr: var NSMutableArray[T], other: NSArray[T]) =
   let obj = NXArray(arr)
   obj.setArray(NSArray[NSObject](other.NSObject))
 
-proc ensureMutableArrayForWrite[T](arr: var NSArray[T]): NSMutableArray[T] =
-  if arr.value.isNil:
-    return
-  NSMutableArray[T](arr)
-
-proc `[]=`*[T](arr: var NSArray[T], index: int, value: T) {.inline.} =
-  var mutable = ensureMutableArrayForWrite(arr)
-  if mutable.isNil:
-    return
-  mutable[index] = value
-
-proc add*[T](arr: var NSArray[T], value: T) {.inline.} =
-  var mutable = ensureMutableArrayForWrite(arr)
-  if mutable.isNil:
-    return
-  mutable.add(value)
-
-proc addObject*[T](arr: var NSArray[T], value: T) {.inline.} =
-  arr.add(value)
-
-proc insert*[T](arr: var NSArray[T], index: int, value: T) {.inline.} =
-  var mutable = ensureMutableArrayForWrite(arr)
-  if mutable.isNil:
-    return
-  mutable.insert(index, value)
-
-proc del*[T](arr: var NSArray[T], index: int) {.inline.} =
-  var mutable = ensureMutableArrayForWrite(arr)
-  if mutable.isNil:
-    return
-  mutable.del(index)
-
-proc clear*[T](arr: var NSArray[T]) {.inline.} =
-  var mutable = ensureMutableArrayForWrite(arr)
-  if mutable.isNil:
-    return
-  mutable.clear()
+proc add*[T](arr: NSMutableArray[T], value: T) {.inline.} =
+  arr.addObject(value)
 
 proc toSeq*[T](arr: NSArray[T]): seq[T] =
   if arr.value.isNil:

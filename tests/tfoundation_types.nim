@@ -210,16 +210,16 @@ suite "foundation stdlib-backed core types":
     check(values.isEmpty)
     values = NSMutableArray[int](value: nil)
 
-  test "NSArray var wrappers delegate mutation via NSMutableArray":
-    var values = nsArray([1, 2, 3])
-    values.add(4)
-    values.insert(1, 99)
-    values[1] = 10
-    values.del(0)
-    check(values.toSeq() == @[10, 2, 3, 4])
-    values.clear()
-    check(values.isEmpty)
-    values = NSArray[int](value: nil)
+  # test "NSArray var wrappers delegate mutation via NSMutableArray":
+  #   var values = nsArray([1, 2, 3])
+  #   values.add(4)
+  #   values.insert(1, 99)
+  #   values[1] = 10
+  #   values.del(0)
+  #   check(values.toSeq() == @[10, 2, 3, 4])
+  #   values.clear()
+  #   check(values.isEmpty)
+  #   values = NSArray[int](value: nil)
 
   test "NSArray supports makeObjectsPerformSelector":
     let words = nsArray([@ns"one", @ns"two"])
