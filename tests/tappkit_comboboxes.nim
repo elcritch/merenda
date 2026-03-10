@@ -1,4 +1,4 @@
-import std/[unittest, tables]
+import std/[unittest, tables, unicode]
 
 import figdraw/fignodes
 import knutella/appkit
@@ -29,6 +29,18 @@ proc textNodeVerticalMargins(
         continue
       return (true, minY, max(node.screenBox.h - maxY, 0.0))
   (false, 0.0, 0.0)
+
+proc renderContainsText(renders: Renders, expected: string): bool =
+  for _, list in renders.layers.pairs:
+    for node in list.nodes:
+      if node.kind != nkText or node.textLayout.runes.len <= 0:
+        continue
+      var text = ""
+      for rune in node.textLayout.runes:
+        text.add(rune)
+      if text == expected:
+        return true
+  false
 
 proc popupItemScreenPoint(window: NSWindow, combo: NSComboBox, index: int): NSPoint =
   discard window
@@ -133,6 +145,59 @@ objcImpl:
     discard callSuperIdFrom(TestComboBox, self, getSelector("dealloc"))
 
 suite "appkit combobox":
+  test "selection APIs keep displayed item in sync with selected item":
+    var combo = NSComboBox.new()
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+
+    combo.selectItemAtIndex(1)
+    check(combo.indexOfSelectedItem() == 1)
+    check(combo.stringValue() == @ns"item2")
+
+    combo.selectItemAtIndex(-1)
+    check(combo.indexOfSelectedItem() == 1)
+    check(combo.stringValue() == @ns"item2")
+
+    combo.selectItemAtIndex(99)
+    check(combo.indexOfSelectedItem() == 1)
+    check(combo.stringValue() == @ns"item2")
+
+    combo.selectItemWithObjectValue(@ns"item3")
+    check(combo.indexOfSelectedItem() == 2)
+    check(combo.stringValue() == @ns"item3")
+
+    combo.selectItemWithObjectValue(@ns"missing")
+    check(combo.indexOfSelectedItem() == 2)
+    check(combo.stringValue() == @ns"item3")
+
+    combo.setObjectValue(@ns"item1".NSObject)
+    check(combo.indexOfSelectedItem() == 0)
+    check(combo.stringValue() == @ns"item1")
+
+    combo.value = nil
+
+  test "selected item renders in combo control text":
+    var window = newWindow(0.0, 0.0, 260.0, 140.0, "combo render probe")
+    var root = newView(0.0, 0.0, 260.0, 140.0)
+    var combo = NSComboBox.new()
+    combo.setFrame(nsRect(10.0, 10.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    combo.selectItemAtIndex(1)
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+
+    let renders = debugBuildWindowRenders(window)
+    check(not renders.isNil)
+    check(renderContainsText(renders, "item2"))
+    check(combo.stringValue() == @ns"item2")
+
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+
   test "mouse click opens a borderless popup window":
     var app = NSApplication.new()
     var window = newWindow(0, 0, 240, 120, "Combo Popup")
@@ -345,7 +410,7 @@ suite "appkit combobox":
     window.value = nil
     app.value = nil
 
-  test "persistent popup click selects item and closes":
+  test "persistent popup click selects item, closes, and shows chosen item":
     var app = NSApplication.new()
     var window = newWindow(0, 0, 240, 120, "Combo Popup Persistent Select")
     var root = newView(0, 0, 240, 120)
@@ -372,6 +437,9 @@ suite "appkit combobox":
 
     check(combo.indexOfSelectedItem() == 2)
     check(combo.stringValue() == @ns"item3")
+    let windowRenders = debugBuildWindowRenders(window)
+    check(not windowRenders.isNil)
+    check(renderContainsText(windowRenders, "item3"))
     check(combo.closePopupCallCount() == 1)
     check(combo.popupWindow().isNil)
     check(not combo.popupOpen())

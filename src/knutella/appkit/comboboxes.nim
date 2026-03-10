@@ -146,6 +146,15 @@ proc comboBoxPopupItemIndexAtPoint*(
   comboBox: auto, controlBox: NSRect, x: float32, y: float32
 ): int
 
+proc comboBoxDisplayString(value: NSObject): NSString =
+  if value.isNil:
+    return @ns""
+  if value.isKindOfClass(NSString):
+    return value.NSString
+  if value.isKindOfClass(NSAttributedString):
+    return value.NSAttributedString.string()
+  ns($value)
+
 proc comboBoxPopupItemRect*(
     comboBox: auto, controlBox: NSRect, itemIndex: int
 ): NSRect =
@@ -704,11 +713,16 @@ objcImpl:
 
     let arrowZone = comboBoxArrowZoneRect(bounds)
     let leftInset = 10.0'f32
-    let rightInset = max((arrowZone.origin.x - bounds.origin.x) + 4.0, leftInset + 4.0)
+    # Reserve only the trailing arrow button width plus a small gap.
+    let rightInset =
+      if arrowZone.size.width > 0.0:
+        arrowZone.size.width + 4.0
+      else:
+        4.0
     let textRect = nsRect(
       bounds.origin.x + leftInset,
       bounds.origin.y + 4.0,
-      max(bounds.size.width - rightInset - leftInset, 0.0),
+      max(bounds.size.width - leftInset - rightInset, 0.0),
       max(bounds.size.height - 8.0, 0.0),
     )
     let fontKey =
@@ -750,17 +764,37 @@ objcImpl:
       let centerY = arrowZone.origin.y + arrowZone.size.height * 0.5
       NSColor.colorWithCalibratedWhite(0.26, 1.0).setFill()
       NSRectFill(
-        nsRect(centerX - triangleWidth * 0.5, centerY + 1.0, triangleWidth, 1.0)
+        nsRect(centerX - triangleWidth * 0.2, centerY + 1.0, triangleWidth * 0.4, 1.0)
       )
       NSRectFill(
         nsRect(centerX - triangleWidth * 0.35, centerY, triangleWidth * 0.7, 1.0)
       )
       NSRectFill(
-        nsRect(centerX - triangleWidth * 0.2, centerY - 1.0, triangleWidth * 0.4, 1.0)
+        nsRect(centerX - triangleWidth * 0.5, centerY - 1.0, triangleWidth, 1.0)
       )
 
   method dataSource*(self: NSComboBox): ID =
     retainId(self.xDataSource)
+
+  method setStringValue*(self: NSComboBox, value: NSString) =
+    if value.isNil:
+      self.xStringValue = @ns""
+    else:
+      self.xStringValue = value
+    self.setNeedsDisplay(true)
+    self.xSelectedIndex = -1
+    let currentValue = self.stringValue()
+    if not currentValue.isNil:
+      let needle = $currentValue
+      for idx, candidate in self.xObjectValues:
+        if $candidate == needle:
+          self.xSelectedIndex = idx
+          break
+    if self.xPopupOpen:
+      self.xPopupHoveredIndex = self.xSelectedIndex
+
+  method setObjectValue*(self: NSComboBox, value: NSObject) =
+    self.setStringValue(comboBoxDisplayString(value))
 
   method setDataSource*(self: NSComboBox, value: ID) =
     self.xDataSource.value = replacedOwnedId(self.xDataSource.value, value.value)
@@ -779,7 +813,13 @@ objcImpl:
   method indexOfItemWithObjectValue*(self: NSComboBox, value: NSObject): int =
     if value.isNil:
       return -1
-    let needle = $value
+    let needle =
+      if value.isKindOfClass(NSString):
+        $value.NSString
+      elif value.isKindOfClass(NSAttributedString):
+        $value.NSAttributedString.string()
+      else:
+        return -1
     for idx, candidate in self.xObjectValues:
       if $candidate == needle:
         return idx
@@ -848,9 +888,16 @@ objcImpl:
     self.noteNumberOfItemsChanged()
 
   method indexOfSelectedItem*(self: NSComboBox): int =
-    if self.xSelectedIndex < 0 or self.xSelectedIndex >= self.xObjectValues.len:
+    self.xSelectedIndex = -1
+    let currentValue = self.stringValue()
+    if currentValue.isNil:
       return -1
-    self.xSelectedIndex
+    let needle = $currentValue
+    for idx, candidate in self.xObjectValues:
+      if $candidate == needle:
+        self.xSelectedIndex = idx
+        return idx
+    -1
 
   method hitTest*(self: NSComboBox, point: NSPoint): NSView =
     if self.isHiddenOrHasHiddenAncestor():
@@ -867,12 +914,7 @@ objcImpl:
 
   method selectItemAtIndex*(self: NSComboBox, index: int) =
     if index < 0 or index >= self.xObjectValues.len:
-      self.xSelectedIndex = -1
-      self.xPopupHoveredIndex = -1
-      self.setStringValue(@ns"")
       return
-    self.xSelectedIndex = index
-    self.xPopupHoveredIndex = index
     self.setStringValue(self.xObjectValues[index])
 
   method selectItemWithObjectValue*(self: NSComboBox, value: NSObject) =
