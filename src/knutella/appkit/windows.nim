@@ -454,8 +454,13 @@ objcImpl:
   method makeKeyAndOrderFront*(self: NSWindow, sender: NSObject) =
     if self.isNil:
       return
+    discard sender
     self.xVisibleRequested = true
     if self.xNativeReady and not self.xNativeWindow.isNil:
+      # siwin's `visible = true` is a no-op when already visible, so force a
+      # visibility transition to trigger native makeKeyAndOrderFront when needed.
+      if self.xNativeWindow.visible() and not self.xNativeWindow.focused():
+        self.xNativeWindow.visible = false
       self.xNativeWindow.visible = true
 
   method orderFront*(self: NSWindow, sender: NSObject) =
