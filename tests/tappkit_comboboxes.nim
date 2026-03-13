@@ -371,6 +371,10 @@ suite "appkit combobox":
     check(combo.closePopupCallCount() == 1)
     check(combo.popupWindow().isNil)
     check(not combo.popupOpen())
+    let keyWindow = app.keyWindow()
+    check(not keyWindow.isNil)
+    if not keyWindow.isNil:
+      check(keyWindow.value == window.value)
 
     combo.value = nil
     root.value = nil
@@ -443,6 +447,10 @@ suite "appkit combobox":
     check(combo.closePopupCallCount() == 1)
     check(combo.popupWindow().isNil)
     check(not combo.popupOpen())
+    let keyWindow = app.keyWindow()
+    check(not keyWindow.isNil)
+    if not keyWindow.isNil:
+      check(keyWindow.value == window.value)
 
     combo.value = nil
     root.value = nil

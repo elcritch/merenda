@@ -656,12 +656,20 @@ objcImpl:
     self.xPopupOpen = true
     self.xPopupHoveredIndex = self.indexOfSelectedItem()
 
+  method reactivateOwnerWindow*(self: NSComboBox) =
+    let ownerWindow = self.window()
+    if ownerWindow.isNil:
+      return
+    ownerWindow.makeKeyAndOrderFront(self.NSObject)
+    discard ownerWindow.makeFirstResponder(self.NSResponder)
+
   method closePopupWindow*(self: NSComboBox) =
     if self.xPopupWindow.isNil:
       return
     if not self.xPopupWindow.windowClosed():
       self.xPopupWindow.close()
     self.xPopupWindow = NSComboBoxWindow(value: nil)
+    self.reactivateOwnerWindow()
 
   method trackPopupWithEvent*(self: NSComboBox, event: NSEvent): int =
     result = -1
