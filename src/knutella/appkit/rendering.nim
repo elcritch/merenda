@@ -819,6 +819,35 @@ proc appKitInputPos(
     return logicalPos
   vec2(logicalPos.x, height - logicalPos.y)
 
+proc syncWindowGeometryFromNative(
+    window: NSWindow, nativeWindow: siwinshim.Window
+): Vec2 =
+  if window.isNil or nativeWindow.isNil:
+    return vec2(1.0, 1.0)
+  let nativeLogicalSize = nativeWindow.logicalSize()
+  let logicalSize = vec2(max(nativeLogicalSize.x, 1.0), max(nativeLogicalSize.y, 1.0))
+
+  var frame = window.windowFrame()
+  let frameChanged =
+    abs(frame.size.width - logicalSize.x) > 0.01 or
+    abs(frame.size.height - logicalSize.y) > 0.01
+  if frameChanged:
+    frame.size = nsSize(logicalSize.x, logicalSize.y)
+    window.windowFrame frame
+
+  let content = window.windowContentView()
+  if not content.isNil:
+    let contentFrame = content.frame()
+    let contentChanged =
+      abs(contentFrame.origin.x) > 0.01 or abs(contentFrame.origin.y) > 0.01 or
+      abs(contentFrame.size.width - logicalSize.x) > 0.01 or
+      abs(contentFrame.size.height - logicalSize.y) > 0.01
+    if contentChanged:
+      content.setFrame(nsRect(0.0, 0.0, logicalSize.x, logicalSize.y))
+      content.setNeedsDisplay(true)
+
+  logicalSize
+
 proc renderWindow(window: NSWindow) =
   if window.isNil or not window.windowNativeReady():
     return
@@ -827,8 +856,7 @@ proc renderWindow(window: NSWindow) =
   if renderer.isNil or nativeWindow.isNil:
     return
 
-  let frame = window.windowFrame()
-  let logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
+  let logicalSize = syncWindowGeometryFromNative(window, nativeWindow)
   let root = ensureContentView(window)
   root.setFrame(nsRect(0'f32, 0'f32, logicalSize.x.float32, logicalSize.y.float32))
   var renders = buildWindowRenders(window)
@@ -935,8 +963,17 @@ proc ensureNativeWindow*(window: NSWindow) =
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
-        window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
-        renderWindow(window),
+        let nativeWindow =
+          if e.window.isNil:
+            window.windowNativeWindow()
+          else:
+            e.window
+        if nativeWindow.isNil:
+          return
+        nativeWindow.refreshUiScale(window.windowAutoScale())
+        discard syncWindowGeometryFromNative(window, nativeWindow)
+        renderWindow(window)
+        siwinshim.presentNow(nativeWindow),
       onWindowMove: proc(e: siwinshim.WindowMoveEvent) =
         var currentFrame = window.windowFrame()
         currentFrame.origin = nsPoint(e.pos.x.float32, e.pos.y.float32)

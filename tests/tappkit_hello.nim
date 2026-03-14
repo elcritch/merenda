@@ -2,6 +2,7 @@ import std/[strutils, unittest]
 
 import pkg/vmath
 import figdraw/fignodes
+import figdraw/windowing/siwinshim as siwinshim
 import knutella/appkit
 import knutella/objc
 
@@ -443,6 +444,50 @@ suite "knutella appkit hello world":
     window.close()
     app.stop()
     label.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
+  test "native resize updates window and content logical size":
+    var app = NSApp()
+    var window = newWindow(100, 100, 280, 180, "Resize Sync")
+    var root = newView(0, 0, 280, 180)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app)
+
+    var nativeReady = true
+    try:
+      discard app.runForFrames(4)
+    except CatchableError:
+      nativeReady = false
+
+    if nativeReady:
+      let nativeWindow = window.windowNativeWindowOrNil()
+      if nativeWindow.isNil:
+        skip()
+      else:
+        let before = siwinshim.logicalSize(nativeWindow)
+        let target = ivec2((before.x + 96.0).int32, (before.y + 64.0).int32)
+        nativeWindow.size = target
+        var resizeRendered = true
+        try:
+          discard app.runForFrames(6)
+        except CatchableError:
+          resizeRendered = false
+        if resizeRendered:
+          let expected = siwinshim.logicalSize(nativeWindow)
+          let frame = window.frameSize()
+          let contentSize = root.frameSize()
+          check(abs(frame.width - expected.x) <= 2.0)
+          check(abs(frame.height - expected.y) <= 2.0)
+          check(abs(contentSize.width - expected.x) <= 2.0)
+          check(abs(contentSize.height - expected.y) <= 2.0)
+        else:
+          skip()
+
+    window.close()
+    app.stop()
     root.value = nil
     window.value = nil
     app.value = nil
