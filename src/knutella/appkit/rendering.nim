@@ -820,20 +820,15 @@ proc appKitInputPos(
   vec2(logicalPos.x, height - logicalPos.y)
 
 proc renderWindow(window: NSWindow) =
-  let nativeWindow = window.windowNativeWindow()
-  let renderer = window.windowRenderer()
+  if window.isNil or not window.windowNativeReady():
+    return
+  let nativeWindow = window.windowNativeWindowOrNil()
+  let renderer = window.windowRendererOrNil()
   if renderer.isNil or nativeWindow.isNil:
     return
 
-  let nativeLogicalSize = nativeWindow.logicalSize()
-  var logicalSize = vec2(max(nativeLogicalSize.x, 1.0), max(nativeLogicalSize.y, 1.0))
-  var frame = window.windowFrame()
-  if abs(frame.size.width - logicalSize.x) > 1.01 or
-      abs(frame.size.height - logicalSize.y) > 1.01:
-    frame.size = nsSize(logicalSize.x, logicalSize.y)
-    window.windowFrame frame
-  else:
-    logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
+  let frame = window.windowFrame()
+  let logicalSize = vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
   let root = ensureContentView(window)
   root.setFrame(nsRect(0'f32, 0'f32, logicalSize.x.float32, logicalSize.y.float32))
   var renders = buildWindowRenders(window)
@@ -854,10 +849,10 @@ proc installWindowFlushHook() =
       if windowId.isNil:
         return
       let window = ownFromId[NSWindow](windowId)
-      if window.isNil:
+      if window.isNil or not window.windowNativeReady():
         return
       renderWindow(window)
-      let nativeWindow = window.windowNativeWindow()
+      let nativeWindow = window.windowNativeWindowOrNil()
       if nativeWindow.isNil or (not nativeWindow.opened()):
         return
       # Cocotron flushes drawing immediately during tracking loops.
@@ -877,9 +872,10 @@ proc debugBuildWindowRenders*(window: NSWindow): Renders =
   buildWindowRenders(window)
 
 proc cleanupFailedWindowInit(window: NSWindow) =
-  if not window.windowNativeWindow().isNil:
+  let nativeWindow = window.windowNativeWindowOrNil()
+  if not nativeWindow.isNil:
     try:
-      siwinshim.close(window.windowNativeWindow())
+      siwinshim.close(nativeWindow)
     except Exception:
       discard
   window.windowRenderer nil
@@ -888,19 +884,38 @@ proc cleanupFailedWindowInit(window: NSWindow) =
   window.windowVisibleRequested false
   window.windowClosed true
 
+proc nativeFramelessForStyleMask(styleMask: set[NSWindowDecorations]): bool =
+  # Borderless/AppKit-private windows (like combo popups) should stay undecorated.
+  NSTitledWindow notin styleMask
+
+proc nativeResizableForStyleMask(styleMask: set[NSWindowDecorations]): bool =
+  NSResizableWindow in styleMask
+
 proc ensureNativeWindow*(window: NSWindow) =
   installWindowFlushHook()
   if window.windowNativeReady():
-    return
+    if not window.windowNativeWindowOrNil().isNil:
+      return
+    window.windowNativeReady false
 
   try:
     let frame = window.windowFrame()
     let size =
       ivec2(clampWindowSize(frame.size.width), clampWindowSize(frame.size.height))
+    let styleMask = window.styleMask()
+    let nativeFrameless = nativeFramelessForStyleMask(styleMask)
+    let nativeResizable = nativeResizableForStyleMask(styleMask)
 
     window.windowNativeWindow(
-      siwinshim.newSiwinWindow(size = size, title = $window.windowTitle(), vsync = true)
+      siwinshim.newSiwinWindow(
+        size = size,
+        title = $window.windowTitle(),
+        vsync = true,
+        resizable = nativeResizable,
+        frameless = nativeFrameless,
+      )
     )
+    window.windowNativeWindow().pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
     window.windowAutoScale(window.windowNativeWindow().configureUiScale())
     window.windowRenderer(
       figrender.newFigRenderer(
@@ -922,6 +937,11 @@ proc ensureNativeWindow*(window: NSWindow) =
         discard e
         window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
         renderWindow(window),
+      onWindowMove: proc(e: siwinshim.WindowMoveEvent) =
+        var currentFrame = window.windowFrame()
+        currentFrame.origin = nsPoint(e.pos.x.float32, e.pos.y.float32)
+        window.windowFrame currentFrame
+      ,
       onClick: proc(e: siwinshim.ClickEvent) =
         discard e,
       onMouseMove: proc(e: siwinshim.MouseMoveEvent) =

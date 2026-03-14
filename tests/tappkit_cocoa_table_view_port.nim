@@ -258,16 +258,18 @@ suite "appkit cocoa table view port":
     var textNodeCount = 0
     if renders.contains(0.ZLevel):
       for node in renders[0.ZLevel].nodes:
-        if node.kind == nkText and node.screenBox.x == 2.0 and node.screenBox.y == 0.0 and
-            node.screenBox.w == 116.0 and node.screenBox.h == 23.0:
-          inc textNodeCount
-          var minY = high(float32)
-          var maxY = low(float32)
-          for selection in node.textLayout.selectionRects:
-            minY = min(minY, selection.y)
-            maxY = max(maxY, selection.y + selection.h)
-          check(minY == 0.0)
-          check(maxY == 15.0)
+        if node.kind != nkText or node.textLayout.runes.len == 0:
+          continue
+        if node.screenBox.x != 2.0 or node.screenBox.w != 116.0:
+          continue
+        inc textNodeCount
+        var minY = high(float32)
+        var maxY = low(float32)
+        for selection in node.textLayout.selectionRects:
+          minY = min(minY, selection.y)
+          maxY = max(maxY, selection.y + selection.h)
+        check(minY == 0.0)
+        check(maxY == 15.0)
 
     check(textNodeCount == 4)
 

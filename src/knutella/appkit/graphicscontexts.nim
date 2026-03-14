@@ -111,7 +111,7 @@ proc currentGraphicsContext(): NSGraphicsContext =
 objcImpl:
   type NSGraphicsContext* = object of NSObject
     xGraphicsPort {.get: graphicsPort.}: pointer
-    xFocusStack {.get: focusStack.}: NSArray[NSObject]
+    xFocusStack {.get: focusStack.}: NSMutableArray[NSObject]
     xIsDrawingToScreen {.get: isDrawingToScreen.}: bool
     xIsFlipped: bool
     xDeviceDescriptionId: ID
@@ -134,7 +134,7 @@ objcImpl:
     if result.isNil:
       return
     initIvarFields(result)
-    result.xFocusStack = nsArray[NSObject]()
+    result.xFocusStack = nsMutableArray[NSObject]()
     result.xDeviceDescriptionId.value = nil
     replaceOwned(result.xDeviceDescriptionId, defaultDeviceDescription(false))
     result.xShouldAntialias = true
@@ -454,11 +454,22 @@ objcImpl:
           selectionColor.solidFill()
       else:
         nsColor(0.0, 0.0, 0.0, 0.0).solidFill()
+    let invertText = not self.isFlipped()
     let textFlags =
       if hasSelection:
-        {NfInvertY, NfSelectText}
+        (
+          if invertText:
+            {NfInvertY, NfSelectText}
+          else:
+            {NfSelectText}
+        )
       else:
-        {NfInvertY}
+        (
+          if invertText:
+            {NfInvertY}
+          else:
+            {}
+        )
 
     discard renderPort.renders[].addChild(
       0.ZLevel,
@@ -534,11 +545,10 @@ objcImpl:
   method pushFocusView*(self: NSGraphicsContext, view: NSView) =
     if self.isNil or view.isNil:
       return
+    if self.xFocusStack.isNil:
+      self.xFocusStack = nsMutableArray[NSObject]()
     var stack = self.xFocusStack
-    if stack.isNil:
-      stack = nsArray[NSObject]()
-    stack.addObject(view.NSObject)
-    self.xFocusStack = stack
+    self.xFocusStack .addObject(view.NSObject)
 
   method popFocusView*(self: NSGraphicsContext): NSView =
     if self.isNil or self.xFocusStack.isNil or self.xFocusStack.len == 0:
@@ -551,11 +561,6 @@ objcImpl:
     return NSView(view)
 
   method dealloc(self: NSGraphicsContext) {.used.} =
-    if not self.xFocusStack.isNil:
-      var stack = self.xFocusStack
-      stack.clear()
-    self.xFocusStack = NSArray[NSObject](value: nil)
-    self.xSavedGraphicsStates.setLen(0)
     clearOwned(self.xDeviceDescriptionId)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSGraphicsContext, self, getSelector("dealloc"))
