@@ -391,7 +391,9 @@ objcImpl:
     if self.isTransparent():
       return
     var contentFrame = frame
-    let adjustment = self.getControlSizeAdjustment(false)
+    let contextFlipped =
+        NSGraphicsContext.currentContext().isFlipped()
+    let adjustment = self.getControlSizeAdjustment(contextFlipped)
     contentFrame.size.width = max(contentFrame.size.width - adjustment.size.width, 0.0)
     contentFrame.size.height =
       max(contentFrame.size.height - adjustment.size.height, 0.0)
@@ -442,6 +444,8 @@ objcImpl:
       else:
         nsSize(0.0, 0.0)
     titleRect.origin.y += floor((titleRect.size.height - titleSize.height) * 0.5)
+    if not contextFlipped:
+      titleRect.origin.y += 1.0
     titleRect.size.height = titleSize.height
 
     case imagePosition
