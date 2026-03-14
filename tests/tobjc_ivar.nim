@@ -19,7 +19,7 @@ proc ivarOwnerPing(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
 proc ivarOwnerDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   destroyIvarFields(self)
   {.cast(raises: []).}:
-    callSuperVoid(asTypeRaw[NSObject](self), selector("dealloc"))
+    callSuperVoid(self, selector("dealloc"))
 
 proc ensureIvarOwnerClass(): ObjcClass =
   const

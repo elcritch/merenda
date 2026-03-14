@@ -125,4 +125,4 @@ proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
     discard setInstanceVariable(self, NimAssociatedRefPayloadIvarName, nil)
 
   {.cast(raises: []).}:
-    callSuperVoid(asTypeRaw[NSObject](self), sel_registerName("dealloc"))
+    callSuperVoid(self, sel_registerName("dealloc"))
