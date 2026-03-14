@@ -824,6 +824,9 @@ proc syncWindowGeometryFromNative(
 ): Vec2 =
   if window.isNil or nativeWindow.isNil:
     return vec2(1.0, 1.0)
+  if window.isKindOfClass(NSComboBoxWindow):
+    let frame = window.windowFrame()
+    return vec2(max(frame.size.width, 1.0), max(frame.size.height, 1.0))
   let nativeLogicalSize = nativeWindow.logicalSize()
   let logicalSize = vec2(max(nativeLogicalSize.x, 1.0), max(nativeLogicalSize.y, 1.0))
 

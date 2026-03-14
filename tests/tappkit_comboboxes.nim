@@ -44,9 +44,11 @@ proc renderContainsText(renders: Renders, expected: string): bool =
 
 proc popupItemScreenPoint(window: NSWindow, combo: NSComboBox, index: int): NSPoint =
   discard window
+  let contentHeight =
+    comboBoxPopupItemHeight(combo) * comboBoxVisiblePopupItems(combo).float32
   var popupFrame = combo.popupWindowFrame()
-  popupFrame.size.height =
-    comboBoxPopupItemHeight(combo) * comboBoxVisiblePopupItems(combo).float32 + 2.0
+  popupFrame.origin.y -= contentHeight
+  popupFrame.size.height = contentHeight + 2.0
   let itemHeight = comboBoxPopupItemHeight(combo)
   nsPoint(
     popupFrame.origin.x + popupFrame.size.width * 0.5,
@@ -516,6 +518,68 @@ suite "appkit combobox":
     combo.closePopup()
     check(combo.popupWindow().isNil)
 
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
+  test "popup stays aligned and sized after native owner resize":
+    var app = NSApplication.new()
+    var window = newWindow(0, 0, 320, 220, "Combo Popup Resize Align")
+    var root = newView(0, 0, 320, 220)
+
+    var comboAlloc = TestComboBox.alloc()
+    var combo = comboAlloc.init()
+    comboAlloc.value = nil
+    combo.setFrame(nsRect(12.0, 12.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+    app.addWindow(window)
+    window.makeKeyAndOrderFront(app.NSObject)
+
+    discard app.runForFrames(4)
+    let nativeWindow = window.windowNativeWindowOrNil()
+    if nativeWindow.isNil:
+      skip()
+    else:
+      let sz = nativeWindow.size
+      nativeWindow.size = ivec2(sz.x + 120'i32, sz.y + 80'i32)
+      discard app.runForFrames(6)
+
+      clickComboBoxArrow(app, window, combo)
+      discard app.runForFrames(4)
+
+      let popup = combo.popupWindow()
+      check(not popup.isNil)
+      if not popup.isNil:
+        let expectedControlFrame = combo.popupWindowFrame()
+        let expectedContentHeight =
+          comboBoxPopupItemHeight(combo) * comboBoxVisiblePopupItems(combo).float32
+        check(abs(popup.frame().origin.x - expectedControlFrame.origin.x) <= 2.0)
+        check(
+          abs(
+            popup.frame().origin.y -
+              (expectedControlFrame.origin.y - expectedContentHeight)
+          ) <= 2.0
+        )
+
+        let popupSubviews = popup.contentView().subviews()
+        check(popupSubviews.len > 0)
+        if popupSubviews.len > 0:
+          let popupScrollView = popupSubviews[0].NSScrollView
+          check(not popupScrollView.isNil)
+          if not popupScrollView.isNil:
+            check(
+              abs(popupScrollView.frame().size.width - popup.frame().size.width) <= 1.0
+            )
+            check(
+              abs(popupScrollView.frame().size.height - popup.frame().size.height) <= 1.0
+            )
+
+    combo.closePopup()
     combo.value = nil
     root.value = nil
     window.value = nil
