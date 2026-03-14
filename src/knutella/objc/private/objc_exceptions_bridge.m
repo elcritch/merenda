@@ -68,9 +68,12 @@ id nutella_objc_build_exception(
     }
   }
 
-  Class nxStringClass = objc_getClass("NXString");
-  if (nxStringClass != Nil) {
-    id payload = ((id (*)(id, SEL))objc_msgSend)(nxStringClass, sel_registerName("alloc"));
+  Class stringPayloadClass = objc_getClass("NSString");
+  if (stringPayloadClass == Nil) {
+    stringPayloadClass = objc_getClass("NXString");
+  }
+  if (stringPayloadClass != Nil) {
+    id payload = ((id (*)(id, SEL))objc_msgSend)(stringPayloadClass, sel_registerName("alloc"));
     if (payload != nil) {
       payload = ((id (*)(id, SEL))objc_msgSend)(payload, sel_registerName("init"));
       if (payload != nil &&

@@ -32,6 +32,7 @@ template impl*(x: untyped) {.pragma.}
 const KNutellaNsToNxRemapEnabled* =
   defined(macosx) and not defined(nutellaDisableNsToNxRemap)
 const KNutellaUseCustomNxObjectRoot* = defined(nutellaCustomNxObjectRoot)
+const KNutellaRuntimePrefix* = when KNutellaNsToNxRemapEnabled: "NX" else: "NS"
 
 const
   YES* = true

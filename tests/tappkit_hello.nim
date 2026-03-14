@@ -91,16 +91,16 @@ suite "knutella appkit hello world":
     var panel = NSPanel.new()
     var app = NSApplication.new()
 
-    check(getClassName(responder).startsWith("NXResponder"))
-    check(getClassName(view).startsWith("NXView"))
-    check(getClassName(button).startsWith("NXButton"))
-    check(getClassName(field).startsWith("NXTextField"))
-    check(getClassName(secure).startsWith("NXSecureTextField"))
-    check(getClassName(search).startsWith("NXSearchField"))
-    check(getClassName(box).startsWith("NXBox"))
-    check(getClassName(window).startsWith("NXWindow"))
-    check(getClassName(panel).startsWith("NXPanel"))
-    check(getClassName(app).startsWith("NXApplication"))
+    check(getClassName(responder).startsWith(KNutellaRuntimePrefix & "Responder"))
+    check(getClassName(view).startsWith(KNutellaRuntimePrefix & "View"))
+    check(getClassName(button).startsWith(KNutellaRuntimePrefix & "Button"))
+    check(getClassName(field).startsWith(KNutellaRuntimePrefix & "TextField"))
+    check(getClassName(secure).startsWith(KNutellaRuntimePrefix & "SecureTextField"))
+    check(getClassName(search).startsWith(KNutellaRuntimePrefix & "SearchField"))
+    check(getClassName(box).startsWith(KNutellaRuntimePrefix & "Box"))
+    check(getClassName(window).startsWith(KNutellaRuntimePrefix & "Window"))
+    check(getClassName(panel).startsWith(KNutellaRuntimePrefix & "Panel"))
+    check(getClassName(app).startsWith(KNutellaRuntimePrefix & "Application"))
 
     responder.value = nil
     view.value = nil
@@ -495,7 +495,7 @@ suite "knutella appkit hello world":
   test "next core ui classes provide aligned appkit api":
     var cell = NSCell.new()
     check(cell.isKindOfClass(NSCell))
-    check(getClassName(cell).startsWith("NXCell"))
+    check(getClassName(cell).startsWith(KNutellaRuntimePrefix & "Cell"))
     check(cell.stringValue() == @ns"")
     cell.setStringValue(@ns"42")
     check(cell.intValue() == 42.cint)
@@ -567,7 +567,7 @@ suite "knutella appkit hello world":
 
     var alert = NSAlert.new()
     check(alert.isKindOfClass(NSAlert))
-    check(getClassName(alert).startsWith("NXAlert"))
+    check(getClassName(alert).startsWith(KNutellaRuntimePrefix & "Alert"))
     alert.setAlertStyle(NSCriticalAlertStyle)
     alert.setMessageText(@ns"Danger")
     alert.setInformativeText(@ns"Disk is full")
