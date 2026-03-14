@@ -522,6 +522,7 @@ objcImpl:
     )
     var frame = self.frame()
     frame.size = scrollViewSize
+    frame.origin.y -= size.height
     self.setFrame(frame)
 
     self.xScrollView.setFrameSize(scrollViewSize)
