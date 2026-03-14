@@ -100,7 +100,9 @@ proc toFontHorizontal*(alignment: NSTextAlignment): FontHorizontal {.inline.} =
   of NSCenterTextAlignment: FontHorizontal.Center
   else: FontHorizontal.Left
 
-proc normalizeButtonState*(value: NSCellState, allowsMixedState: bool): NSCellState {.inline.} =
+proc normalizeButtonState*(
+    value: NSCellState, allowsMixedState: bool
+): NSCellState {.inline.} =
   if value == NSMixedState and allowsMixedState:
     return NSMixedState
   if value == NSOnState:
@@ -187,11 +189,7 @@ proc removeOwnedIdAt*(ids: var seq[IDPtr], idx: int) =
 
 template callSuperIdFrom*(currentType: typedesc, obj: NSObject, op: SEL): IDPtr =
   block:
-    var superObj =
-      ObjcSuper(receiver: obj.value, superClass: getClass(currentType).getSuperclass())
-    cast[proc(superObj: var ObjcSuper, selParam: SEL): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
-      superObj, op
-    )
+    callSuperFrom(currentType, obj, op)
 
 proc performResponderSelector*(target: NSObject, action: SEL, sender: NSObject): bool =
   if target.isNil or cast[pointer](action).isNil:

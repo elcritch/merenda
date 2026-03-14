@@ -124,8 +124,5 @@ proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
     deallocShared(payload)
     discard setInstanceVariable(self, NimAssociatedRefPayloadIvarName, nil)
 
-  var superCall = ObjcSuper(receiver: self, superClass: getSuperclass(getClass(self)))
   {.cast(raises: []).}:
-    discard cast[proc(superObj: var ObjcSuper, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
-      superCall, sel_registerName("dealloc")
-    )
+    callSuperVoid(asTypeRaw[NSObject](self), sel_registerName("dealloc"))

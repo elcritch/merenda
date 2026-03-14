@@ -22,7 +22,11 @@
 
 import std/[macros, strutils]
 
-{.passL: "-lobjc".}
+when defined(bsd):
+  {.passL: "-L/usr/local/lib -lobjc -lobjc".}
+else:
+  {.passL: "-lobjc".}
+
 template impl*(x: untyped) {.pragma.}
 
 const KNutellaNsToNxRemapEnabled* =
@@ -227,11 +231,17 @@ proc objc_msgSend*(self: IDPtr, op: SEL): IDPtr {.cdecl, importc, discardable, v
 
 proc objc_msgSend_fpret*(self: IDPtr, op: SEL): cdouble {.cdecl, importc, varargs.}
 proc objc_msgSend_stret*(self: IDPtr, op: SEL) {.cdecl, importc, varargs.}
-proc objc_msgSendSuper*(
-  super: var ObjcSuper, op: SEL
-): IDPtr {.cdecl, importc, varargs.}
+when defined(macosx):
+  proc objc_msgSendSuper*(
+    super: var ObjcSuper, op: SEL
+  ): IDPtr {.cdecl, importc, varargs.}
 
-proc objc_msgSendSuper_stret*(super: var ObjcSuper, op: SEL) {.cdecl, importc, varargs.}
+  proc objc_msgSendSuper_stret*(
+    super: var ObjcSuper, op: SEL
+  ) {.cdecl, importc, varargs.}
+
+else:
+  proc objc_msg_lookup_super*(super: var ObjcSuper, op: SEL): IMP {.cdecl, importc.}
 
 proc isEqual*(lhs, rhs: NSObject): bool =
   if lhs.value == nil or rhs.value == nil:
@@ -1244,69 +1254,102 @@ template msgSendFlavorForRetType(retType: typedesc): ObjCMsgSendFlavor =
     ObjCMsgSendFlavor.normal
 
 proc buildCallSuper(
-    retType, obj, op, args: NimNode, flavor: ObjCMsgSendFlavor
+    retType, obj, superClassExpr, op, args: NimNode, flavor: ObjCMsgSendFlavor
 ): NimNode =
   let superCall = genSym(nskVar, "superCall")
   let performSend = genSym(nskLet, "performSend")
-
-  let senderParams = newNimNode(nnkFormalParams)
-  if flavor == stret:
-    senderParams.add(bindSym"void")
-    senderParams.add(newIdentDefs(ident"retObj", newTree(nnkPtrTy, retType)))
-  else:
-    senderParams.add(retType)
-  senderParams.add(newIdentDefs(ident"superObj", newTree(nnkVarTy, bindSym"ObjcSuper")))
-  senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
-  for i, a in args:
-    senderParams.add(newIdentDefs(ident("arg" & $i), a.getTypeInst))
-
-  let procTy = newTree(nnkProcTy, senderParams)
-  procTy.add(newTree(nnkPragma, ident"cdecl", ident"varargs", ident"gcsafe"))
-
-  let sendProc = newTree(
-    nnkCast,
-    procTy,
-    if flavor == stret:
-      bindSym"objc_msgSendSuper_stret"
-    else:
-      bindSym"objc_msgSendSuper",
-  )
-  let castSendProc =
-    newTree(nnkLetSection, newIdentDefs(performSend, newEmptyNode(), sendProc))
-
-  let call =
-    if flavor == stret:
-      let ret = genSym(nskVar, "ret")
-      var c = newCall(performSend, newCall(ident"addr", ret), superCall, op)
-      for a in args:
-        c.add(a)
-      let setupSuper = quote:
-        var `superCall` = ObjcSuper(
-          receiver: `obj`, superClass: class_getSuperclass(object_getClass(`obj`))
-        )
-        var `ret`: `retType`
-      return newStmtList(setupSuper, castSendProc, c, ret)
-    else:
-      newCall(performSend, superCall, op)
-
-  for a in args:
-    call.add(a)
-
   let setupSuper = quote:
-    var `superCall` = ObjcSuper(
-      receiver: `obj`, superClass: class_getSuperclass(object_getClass(`obj`))
-    )
+    var `superCall` = ObjcSuper(receiver: `obj`, superClass: `superClassExpr`)
 
-  result = newStmtList(setupSuper, castSendProc, call)
-
-proc buildCallSuper(retType, obj, op, args: NimNode): NimNode =
-  let normalCall = buildCallSuper(retType, obj, op, args, ObjCMsgSendFlavor.normal)
-  let stretCall = buildCallSuper(retType, obj, op, args, ObjCMsgSendFlavor.stret)
-  result = quote:
-    when msgSendFlavorForRetType(`retType`) == ObjCMsgSendFlavor.stret:
-      `stretCall`
+  when defined(macosx):
+    let senderParams = newNimNode(nnkFormalParams)
+    if flavor == stret:
+      senderParams.add(bindSym"void")
+      senderParams.add(newIdentDefs(ident"retObj", newTree(nnkPtrTy, retType)))
     else:
-      `normalCall`
+      senderParams.add(retType)
+    senderParams.add(
+      newIdentDefs(ident"superObj", newTree(nnkVarTy, bindSym"ObjcSuper"))
+    )
+    senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
+    for i, a in args:
+      senderParams.add(newIdentDefs(ident("arg" & $i), a.getTypeInst))
+
+    let procTy = newTree(nnkProcTy, senderParams)
+    procTy.add(newTree(nnkPragma, ident"cdecl", ident"varargs", ident"gcsafe"))
+
+    let sendProc = newTree(
+      nnkCast,
+      procTy,
+      if flavor == stret:
+        bindSym"objc_msgSendSuper_stret"
+      else:
+        bindSym"objc_msgSendSuper",
+    )
+    let castSendProc =
+      newTree(nnkLetSection, newIdentDefs(performSend, newEmptyNode(), sendProc))
+
+    let call =
+      if flavor == stret:
+        let ret = genSym(nskVar, "ret")
+        var c = newCall(performSend, newCall(ident"addr", ret), superCall, op)
+        for a in args:
+          c.add(a)
+        let setupSuperAndRet = quote:
+          var `superCall` = ObjcSuper(receiver: `obj`, superClass: `superClassExpr`)
+          var `ret`: `retType`
+        return newStmtList(setupSuperAndRet, castSendProc, c, ret)
+      else:
+        newCall(performSend, superCall, op)
+
+    for a in args:
+      call.add(a)
+
+    result = newStmtList(setupSuper, castSendProc, call)
+  else:
+    let senderParams = newNimNode(nnkFormalParams)
+    senderParams.add(retType)
+    senderParams.add(newIdentDefs(ident"self", bindSym"IDPtr"))
+    senderParams.add(newIdentDefs(ident"selector", bindSym"SEL"))
+    for i, a in args:
+      senderParams.add(newIdentDefs(ident("arg" & $i), a.getTypeInst))
+
+    let procTy = newTree(nnkProcTy, senderParams)
+    procTy.add(newTree(nnkPragma, ident"cdecl", ident"gcsafe"))
+
+    let sendProc =
+      newTree(nnkCast, procTy, newCall(bindSym"objc_msg_lookup_super", superCall, op))
+    let castSendProc =
+      newTree(nnkLetSection, newIdentDefs(performSend, newEmptyNode(), sendProc))
+
+    let call = newCall(performSend, obj, op)
+    for a in args:
+      call.add(a)
+
+    result = newStmtList(setupSuper, castSendProc, call)
+
+proc buildCallSuper(retType, obj, superClassExpr, op, args: NimNode): NimNode =
+  when defined(macosx):
+    let normalCall =
+      buildCallSuper(retType, obj, superClassExpr, op, args, ObjCMsgSendFlavor.normal)
+    let stretCall =
+      buildCallSuper(retType, obj, superClassExpr, op, args, ObjCMsgSendFlavor.stret)
+    result = quote:
+      when msgSendFlavorForRetType(`retType`) == ObjCMsgSendFlavor.stret:
+        `stretCall`
+      else:
+        `normalCall`
+  else:
+    result =
+      buildCallSuper(retType, obj, superClassExpr, op, args, ObjCMsgSendFlavor.normal)
+
+proc buildStaticSuperClassExpr(currentType: NimNode): NimNode =
+  newCall(
+    bindSym"class_getSuperclass", newCall(bindSym"getClassByName", newLit($currentType))
+  )
+
+proc buildDynamicSuperClassExpr(obj: NimNode): NimNode =
+  newCall(bindSym"class_getSuperclass", newCall(bindSym"object_getClass", obj))
 
 proc identNameFromNode(n: NimNode): string =
   case n.kind
@@ -1349,20 +1392,45 @@ proc buildSuperMacroCall(obj, msg, retType: NimNode): NimNode =
     error("super(...) could not resolve method name", msg)
 
   let selExpr = newCall(bindSym"getSelector", newLit(selectorName))
+  let currentType = obj.getTypeInst
   if retType.kind == nnkEmpty:
-    result = newCall(ident"callSuper", obj, selExpr)
+    result = newCall(ident"callSuperFrom", currentType, obj, selExpr)
   else:
-    result = newCall(ident"callSuper", retType, obj, selExpr)
+    result = newCall(ident"callSuperFromAs", retType, currentType, obj, selExpr)
   for a in args:
     result.add(a)
 
 macro callSuper*(obj: NSObject, op: SEL, args: varargs[typed]): untyped =
-  result = buildCallSuper(bindSym"IDPtr", obj, op, args, ObjCMsgSendFlavor.normal)
+  result = buildCallSuper(
+    bindSym"IDPtr",
+    obj,
+    buildDynamicSuperClassExpr(obj),
+    op,
+    args,
+    ObjCMsgSendFlavor.normal,
+  )
 
 macro callSuper*(
     retType: typedesc, obj: NSObject, op: SEL, args: varargs[typed]
 ): untyped =
-  result = buildCallSuper(retType, obj, op, args)
+  result = buildCallSuper(retType, obj, buildDynamicSuperClassExpr(obj), op, args)
+
+macro callSuperFrom*(
+    currentType: untyped, obj: NSObject, op: SEL, args: varargs[typed]
+): untyped =
+  result = buildCallSuper(
+    bindSym"IDPtr", obj, buildStaticSuperClassExpr(currentType), op, args
+  )
+
+macro callSuperFromAs*(
+    retType: typedesc,
+    currentType: untyped,
+    obj: NSObject,
+    op: SEL,
+    args: varargs[typed],
+): untyped =
+  result =
+    buildCallSuper(retType, obj, buildStaticSuperClassExpr(currentType), op, args)
 
 macro super*(obj: NSObject, msg: untyped): untyped =
   result = buildSuperMacroCall(obj, msg, newEmptyNode())
@@ -1503,15 +1571,25 @@ proc superObject*(obj: NSObject): ObjcSuper {.inline.} =
 
 proc callSuperAs*[T](obj: NSObject, op: SEL): T {.inline.} =
   var superObj = superObject(obj)
-  cast[proc(superObj: var ObjcSuper, selParam: SEL): T {.cdecl, varargs.}](objc_msgSendSuper)(
-    superObj, op
-  )
+  when defined(macosx):
+    cast[proc(superObj: var ObjcSuper, selParam: SEL): T {.cdecl, varargs.}](objc_msgSendSuper)(
+      superObj, op
+    )
+  else:
+    cast[proc(self: IDPtr, selParam: SEL): T {.cdecl.}](objc_msg_lookup_super(
+      superObj, op
+    ))(obj.value, op)
 
 proc callSuperAs*[T, A0](obj: NSObject, op: SEL, arg0: A0): T {.inline.} =
   var superObj = superObject(obj)
-  cast[proc(superObj: var ObjcSuper, selParam: SEL, arg0: A0): T {.cdecl, varargs.}](objc_msgSendSuper)(
-    superObj, op, arg0
-  )
+  when defined(macosx):
+    cast[proc(superObj: var ObjcSuper, selParam: SEL, arg0: A0): T {.cdecl, varargs.}](objc_msgSendSuper)(
+      superObj, op, arg0
+    )
+  else:
+    cast[proc(self: IDPtr, selParam: SEL, arg0: A0): T {.cdecl.}](objc_msg_lookup_super(
+      superObj, op
+    ))(obj.value, op, arg0)
 
 proc callSuperId*(obj: NSObject, op: SEL): IDPtr {.inline.} =
   callSuperAs[IDPtr](obj, op)

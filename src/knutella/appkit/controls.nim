@@ -30,18 +30,10 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ): NSControl =
-    var superObj =
-      ObjcSuper(receiver: self.value, superClass: getClass(NSControl).getSuperclass())
     result = asTypeRaw[NSControl](
-      cast[proc(
-        superObj: var ObjcSuper,
-        op: SEL,
-        x: float32,
-        y: float32,
-        width: float32,
-        height: float32,
-      ): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
-        superObj,
+      callSuperFrom(
+        NSControl,
+        self,
         getSelector("initWithFrame:y:width:height:"),
         x.float32,
         y.float32,

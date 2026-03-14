@@ -145,17 +145,9 @@ objcImpl:
       width {.kw("width").}: float32,
       height {.kw("height").}: float32,
   ) =
-    var superObj =
-      ObjcSuper(receiver: self.value, superClass: getClass(NSClipView).getSuperclass())
-    cast[proc(
-      superObj: var ObjcSuper,
-      op: SEL,
-      x: float32,
-      y: float32,
-      width: float32,
-      height: float32,
-    ) {.cdecl, varargs.}](objc_msgSendSuper)(
-      superObj,
+    discard callSuperFrom(
+      NSClipView,
+      self,
       getSelector("setFrame:y:width:height:"),
       x.float32,
       y.float32,

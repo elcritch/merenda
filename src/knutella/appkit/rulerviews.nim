@@ -74,18 +74,10 @@ objcImpl:
     else:
       frame.size.width = defaultRuleThickness
 
-    var superObj =
-      ObjcSuper(receiver: self.value, superClass: getClass(NSRulerView).getSuperclass())
     result = asTypeRaw[NSRulerView](
-      cast[proc(
-        superObj: var ObjcSuper,
-        op: SEL,
-        x: float32,
-        y: float32,
-        width: float32,
-        height: float32,
-      ): IDPtr {.cdecl, varargs.}](objc_msgSendSuper)(
-        superObj,
+      callSuperFrom(
+        NSRulerView,
+        self,
         getSelector("initWithFrame:y:width:height:"),
         frame.origin.x.float32,
         frame.origin.y.float32,

@@ -45,11 +45,7 @@ proc insertionPrefixWidth(
   prefixValue.size().width
 
 proc callSuperBoolFrom(currentType: typedesc, obj: NSObject, op: SEL): bool {.inline.} =
-  var superObj =
-    ObjcSuper(receiver: obj.value, superClass: getClass(currentType).getSuperclass())
-  cast[proc(superObj: var ObjcSuper, selParam: SEL): bool {.cdecl, varargs.}](objc_msgSendSuper)(
-    superObj, op
-  )
+  callSuperFromAs(bool, currentType, obj, op)
 
 objcImpl:
   type NSTextField* = object of NSControl
