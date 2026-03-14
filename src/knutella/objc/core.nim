@@ -45,7 +45,11 @@ type
   ObjcClass* {.pure.} = object of NSObject
 
   NSString* = object of NSObject
-  NSArray*[T] = object of NSObject
+
+  NXArray* = object of NSObject
+  NSArray*[T] = object of NXArray
+  NSMutableArray*[T] = object of NSArray[T]
+  NSEnumerator*[T] = object of NSObject
   NSDictionary*[K, V] = object of NSObject
   NSSet*[T] = object of NSObject
   NSIndexSet* = object of NSObject
@@ -66,6 +70,10 @@ type
 
   NSInteger* = int
   NSUInteger* = uint
+
+  NSRange* = object
+    location*: uint
+    length*: uint
 
   objc_method_description = object
     name: SEL
@@ -146,6 +154,15 @@ proc GC_unref*[T: ID](o: T) =
 template retain*[T: ID](o: T): T =
   cast[T](retainAux(o.value))
 
+proc NSMakeRange*(location, length: uint): NSRange {.inline.} =
+  NSRange(location: location, length: length)
+
+proc NSMaxRange*(r: NSRange): uint {.inline.} =
+  r.location + r.length
+
+proc NSLocationInRange*(location: uint, r: NSRange): bool {.inline.} =
+  location >= r.location and location < NSMaxRange(r)
+
 proc release*(o: var ID) {.inline.} =
   `=destroy`(o)
 
@@ -215,6 +232,16 @@ proc objc_msgSendSuper*(
 ): IDPtr {.cdecl, importc, varargs.}
 
 proc objc_msgSendSuper_stret*(super: var ObjcSuper, op: SEL) {.cdecl, importc, varargs.}
+
+proc isEqual*(lhs, rhs: NSObject): bool =
+  if lhs.value == nil or rhs.value == nil:
+    return false
+  if lhs.value == rhs.value:
+    return true
+  let isEqualSend = cast[proc(self: IDPtr, op: SEL, other: IDPtr): bool {.
+    cdecl, varargs
+  .}](objc_msgSend)
+  isEqualSend(lhs.value, sel_registerName("isEqual:"), rhs.value)
 
 proc sendId*(obj: ID, op: SEL): ID {.inline.} =
   let fn = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)

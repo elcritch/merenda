@@ -2,6 +2,7 @@ import std/[os, strutils]
 
 import knutella/appkit
 import knutella/objc
+import siwin/window as siwin
 
 proc maxFramesFromEnv(defaultValue = -1): int =
   let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
@@ -25,6 +26,30 @@ proc formatRect(rect: NSRect): string =
 
 proc intBool(flag: bool): int =
   if flag: 1 else: 0
+
+proc clickComboBoxArrow(app: NSApplication, window: NSWindow, comboBox: NSComboBox) =
+  if app.isNil or window.isNil or comboBox.isNil:
+    return
+  let frame = comboBox.frame()
+  let point = nsPoint(
+    frame.origin.x + frame.size.width - 5.0, frame.origin.y + frame.size.height * 0.5
+  )
+  let down = mouseButtonEventFromSiwin(
+    window.windowNumber(),
+    point,
+    siwin.MouseButtonEvent(
+      button: siwin.MouseButton.left, pressed: true, generated: false
+    ),
+  )
+  let up = mouseButtonEventFromSiwin(
+    window.windowNumber(),
+    point,
+    siwin.MouseButtonEvent(
+      button: siwin.MouseButton.left, pressed: false, generated: false
+    ),
+  )
+  app.postEvent(down, false)
+  app.postEvent(up, false)
 
 proc dumpViewLine(view: NSView, name: string) =
   if view.isNil:
@@ -162,7 +187,7 @@ when isMainModule:
   window.makeKeyAndOrderFront(app.NSObject)
 
   if getEnv("KNUTELLA_COMBOBOX_OPEN_POPUP").strip().len > 0:
-    window.xComboBox1.openPopup()
+    clickComboBoxArrow(app, window.NSWindow, window.xComboBox1)
     dumpComboBoxLayout(
       "popup-open", window.NSWindow, window.xComboBox1, window.xComboBox2
     )

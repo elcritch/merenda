@@ -13,7 +13,7 @@ objcImpl:
     xShowsHelp {.set: setShowsHelp, get: showsHelp.}: bool
     xShowsSuppressionButton {.get: showsSuppressionButton.}: bool
     xHelpAnchor {.set: setHelpAnchor, get: helpAnchor.}: NSString
-    xButtons {.get: buttons.}: NSArray[NSButton]
+    xButtons {.get: buttons.}: NSMutableArray[NSButton]
     xSuppressionButton {.get: suppressionButton.}: NSButton
     xWindow {.get: window.}: NSWindow
     xNeedsLayout: bool
@@ -24,7 +24,7 @@ objcImpl:
     result = asTypeRaw[NSAlert](callSuperIdFrom(NSAlert, self, getSelector("init")))
     if result.isNil:
       return
-    result.xButtons = nsArray[NSButton]()
+    result.xButtons = nsMutableArray[NSButton]()
 
   proc alertWithError*(t: typedesc[NSAlert], err {.kw("error").}: NSObject): NSAlert =
     result = NSAlert.new()
@@ -109,16 +109,8 @@ objcImpl:
     NSAlertThirdButtonReturn
 
   method dealloc(self: NSAlert) {.used.} =
-    self.xIcon = NSObject(value: nil)
-    self.xMessageText = @ns""
-    self.xInformativeText = @ns""
-    self.xAccessoryView = NSView(value: nil)
-    self.xHelpAnchor = @ns""
-    self.xSuppressionButton = NSButton(value: nil)
-    self.xButtons = NSArray[NSButton](value: nil)
-    self.xWindow = NSWindow(value: nil)
-    self.xSheetDelegate = ID(value: nil)
-
+    clearOwnedId(self.xSheetDelegate)
+    destroyIvarFields(self)
     discard callSuperIdFrom(NSAlert, self, getSelector("dealloc"))
 
 proc new*(t: typedesc[NSAlert]): NSAlert =

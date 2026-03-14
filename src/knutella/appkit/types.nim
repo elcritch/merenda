@@ -114,10 +114,6 @@ type
     origin*: NSPoint
     size*: NSSize
 
-  NSRange* = object
-    location*: uint
-    length*: uint
-
   NSColor* = object
     r*: float32
     g*: float32
@@ -367,15 +363,6 @@ converter buttonTypeToInt*(value: NSButtonType): int {.inline.} =
 
 converter imageAlignmentToInt*(value: NSImageAlignment): int {.inline.} =
   value.int
-
-proc NSMakeRange*(location, length: uint): NSRange {.inline.} =
-  NSRange(location: location, length: length)
-
-proc NSMaxRange*(r: NSRange): uint {.inline.} =
-  r.location + r.length
-
-proc NSLocationInRange*(location: uint, r: NSRange): bool {.inline.} =
-  location >= r.location and location < NSMaxRange(r)
 
 proc contains*(r: NSRect, x, y: float32): bool =
   x >= r.origin.x and y >= r.origin.y and x < (r.origin.x + r.size.width) and

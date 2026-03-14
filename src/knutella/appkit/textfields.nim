@@ -5,6 +5,7 @@ import ./controls
 import ./windows
 import ./graphics
 import ./colors
+import ./fonts
 import ./attributedstrings
 
 proc insetRect(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
@@ -29,16 +30,26 @@ proc selectionBounds(
   result.start = min(clampedAnchor, clampedCursor)
   result.stop = max(clampedAnchor, clampedCursor)
 
-proc insertionPrefixWidth(text: string, insertionIndex: int): float32 =
+proc insertionPrefixWidth(
+    text: string, insertionIndex: int, attributes: NSDictionary[NSObject, NSObject]
+): float32 =
   let clamped = clampInsertionIndex(text, insertionIndex)
   if clamped <= 0:
     return 0.0
   var prefixAlloc = NSAttributedString.alloc()
-  let prefixValue = prefixAlloc.initWithString(ns(text.runeSubStr(0, clamped)))
+  let prefixValue =
+    prefixAlloc.initWithString(ns(text.runeSubStr(0, clamped)), attributes = attributes)
   prefixAlloc.value = nil
   if prefixValue.isNil:
     return 0.0
   prefixValue.size().width
+
+proc callSuperBoolFrom(currentType: typedesc, obj: NSObject, op: SEL): bool {.inline.} =
+  var superObj =
+    ObjcSuper(receiver: obj.value, superClass: getClass(currentType).getSuperclass())
+  cast[proc(superObj: var ObjcSuper, selParam: SEL): bool {.cdecl, varargs.}](objc_msgSendSuper)(
+    superObj, op
+  )
 
 objcImpl:
   type NSTextField* = object of NSControl
@@ -97,6 +108,9 @@ objcImpl:
       )
     )
 
+  method isFlipped*(self: NSTextField): bool =
+    true
+
   method setTextColor*(
       self: NSTextField,
       r: float32,
@@ -123,7 +137,7 @@ objcImpl:
   method becomeFirstResponder*(self: NSTextField): bool =
     if self.isNil:
       return false
-    if not callSuperAs[bool](self, getSelector("becomeFirstResponder")):
+    if not callSuperBoolFrom(NSTextField, self, getSelector("becomeFirstResponder")):
       return false
     self.selectText(NSResponder(value: nil))
     true
@@ -131,7 +145,8 @@ objcImpl:
   method resignFirstResponder*(self: NSTextField): bool =
     if self.isNil:
       return false
-    let resigned = callSuperAs[bool](self, getSelector("resignFirstResponder"))
+    let resigned =
+      callSuperBoolFrom(NSTextField, self, getSelector("resignFirstResponder"))
     if resigned:
       self.setNeedsDisplay(true)
     resigned
@@ -383,9 +398,24 @@ objcImpl:
       self.backgroundColor().setFill()
       NSRectFill(valueRect)
 
+    let fontKey =
+      if NSFontAttributeName.isNil:
+        @ns"NSFontAttributeName"
+      else:
+        NSFontAttributeName
+    var drawAttributes = nsDictionary[NSObject, NSObject]()
+    var fieldFont = self.font()
+    if not fieldFont.isNil:
+      drawAttributes[NSObject(fontKey)] = NSObject(fieldFont)
+
     var drawValueAlloc = NSAttributedString.alloc()
-    let drawValue = drawValueAlloc.initWithString(self.stringValue())
+    var drawValue =
+      drawValueAlloc.initWithString(self.stringValue(), attributes = drawAttributes)
     drawValueAlloc.value = nil
+    if drawValue.isNil:
+      var fallbackAlloc = NSAttributedString.alloc()
+      drawValue = fallbackAlloc.initWithString(self.stringValue())
+      fallbackAlloc.value = nil
     if drawValue.isNil:
       return
     let drawSize = drawValue.size()
@@ -416,7 +446,8 @@ objcImpl:
     if self.isEditable() and isFocused and selected.stop == selected.start:
       self.xInsertionPoint = cursor.NSInteger
       self.xSelectionAnchor = cursor.NSInteger
-      var caretX = textRect.origin.x + insertionPrefixWidth(value, cursor)
+      var caretX =
+        textRect.origin.x + insertionPrefixWidth(value, cursor, drawAttributes)
       let minCaretX = textRect.origin.x
       let maxCaretX = textRect.origin.x + max(textRect.size.width - 1.0, 0.0)
       caretX = min(max(caretX, minCaretX), maxCaretX)
