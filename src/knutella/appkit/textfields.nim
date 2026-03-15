@@ -44,9 +44,6 @@ proc insertionPrefixWidth(
     return 0.0
   prefixValue.size().width
 
-proc callSuperBoolFrom(currentType: typedesc, obj: NSObject, op: SEL): bool {.inline.} =
-  callSuperFromAs(bool, currentType, obj, op)
-
 objcImpl:
   type NSTextField* = object of NSControl
     xStringValue {.set: setStringValue, get: stringValue.}: NSString
@@ -133,7 +130,7 @@ objcImpl:
   method becomeFirstResponder*(self: NSTextField): bool =
     if self.isNil:
       return false
-    if not callSuperBoolFrom(NSTextField, self, getSelector("becomeFirstResponder")):
+    if not callSuperFromAs(bool, NSTextField, self, getSelector("becomeFirstResponder")):
       return false
     self.selectText(NSResponder(value: nil))
     true
@@ -142,7 +139,7 @@ objcImpl:
     if self.isNil:
       return false
     let resigned =
-      callSuperBoolFrom(NSTextField, self, getSelector("resignFirstResponder"))
+      callSuperFromAs(bool, NSTextField, self, getSelector("resignFirstResponder"))
     if resigned:
       self.setNeedsDisplay(true)
     resigned

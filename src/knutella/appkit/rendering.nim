@@ -233,6 +233,10 @@ proc debugTextLayoutMetricsForView*(view: NSView): TextLayoutDebugMetrics =
     let stringId = sendId(view.value, getSelector("stringValue"))
     if not stringId.isNil:
       textValue = $ownFromId[NSString](stringId)
+  if textValue.len == 0 and view.respondsToSelector("title"):
+    let titleId = sendId(view.value, getSelector("title"))
+    if not titleId.isNil:
+      textValue = $ownFromId[NSString](titleId)
   if textValue.len == 0:
     return
 
@@ -906,8 +910,12 @@ proc ensureNativeWindow*(window: NSWindow) =
     let nativeFrameless = nativeFramelessForStyleMask(styleMask)
     let nativeResizable = nativeResizableForStyleMask(styleMask)
 
+    var renderer = figrender.newFigRenderer(
+      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+    )
     window.windowNativeWindow(
       siwinshim.newSiwinWindow(
+        renderer,
         size = size,
         title = $window.windowTitle(),
         vsync = true,
@@ -917,12 +925,6 @@ proc ensureNativeWindow*(window: NSWindow) =
     )
     window.windowNativeWindow().pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
     window.windowAutoScale(window.windowNativeWindow().configureUiScale())
-    window.windowRenderer(
-      figrender.newFigRenderer(
-        atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-      )
-    )
-    var renderer = window.windowRenderer()
     renderer.setupBackend(window.windowNativeWindow())
     window.windowRenderer renderer
 

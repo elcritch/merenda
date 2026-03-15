@@ -550,6 +550,23 @@ proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
       else:
         result = "NX" & name[2 .. ^1]
 
+proc knutellaConcreteRuntimeAlias(name: string): string {.inline.} =
+  result = name
+  when not defined(macosx):
+    case name
+    of "NSString":
+      result = "NXString"
+    of "NSArray":
+      result = "NXArray"
+    of "NSDictionary":
+      result = "NXDictionary"
+    of "NSSet":
+      result = "NXSet"
+    of "NSIndexSet":
+      result = "NXIndexSet"
+    else:
+      discard
+
 proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
 proc ensureNutellaRootClasses*()
 
@@ -745,6 +762,10 @@ proc getClassByName*(name: string): ObjcClass =
       if not result.isNil:
         return
   result = objc_getClass(name.cstring)
+  if result.isNil:
+    let concrete = knutellaConcreteRuntimeAlias(name)
+    if concrete != name:
+      result = objc_getClass(concrete.cstring)
 
 template getClass*(name: string): untyped =
   getClassByName(name)
