@@ -1118,3 +1118,23 @@ proc comboBoxPopupItemIndexAtPoint*(
   if itemIndex < 0 or itemIndex >= comboBox.numberOfItems():
     return -1
   itemIndex
+
+proc refreshOpenComboBoxPopupsInView(view: NSView) =
+  if view.isNil or view.isHidden():
+    return
+  if view.isKindOfClass(NSComboBox):
+    let comboBox = view.NSComboBox
+    if (not comboBox.isNil) and comboBox.popupOpen():
+      let popup = comboBox.popupWindow()
+      if not popup.isNil and not popup.windowClosed():
+        comboBox.configurePopupWindow(popup)
+  for child in view.subviews():
+    refreshOpenComboBoxPopupsInView(child)
+
+proc refreshOpenComboBoxPopups*(window: NSWindow) =
+  if window.isNil:
+    return
+  let content = window.contentView()
+  if content.isNil:
+    return
+  refreshOpenComboBoxPopupsInView(content)

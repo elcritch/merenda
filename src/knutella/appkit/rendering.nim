@@ -854,6 +854,19 @@ proc renderWindow(window: NSWindow) =
   renderer.renderFrame(renders, logicalSize)
   renderer.endFrame()
 
+proc syncWindowFrameToNative(window: NSWindow, nativeWindow: siwinshim.Window) =
+  if window.isNil or nativeWindow.isNil:
+    return
+  let logicalSize = nativeWindow.logicalSize()
+  if logicalSize.x <= 0.0 or logicalSize.y <= 0.0:
+    return
+  var currentFrame = window.windowFrame()
+  let nextSize = nsSize(logicalSize.x, logicalSize.y)
+  if currentFrame.size == nextSize:
+    return
+  currentFrame.size = nextSize
+  window.windowFrame currentFrame
+
 proc installWindowFlushHook() =
   if windowFlushHookInstalled:
     return
@@ -946,13 +959,18 @@ proc ensureNativeWindow*(window: NSWindow) =
         window.windowClosed(true),
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
-        window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
+        let nativeWindow = window.windowNativeWindow()
+        if nativeWindow.isNil:
+          return
+        nativeWindow.refreshUiScale(window.windowAutoScale())
+        syncWindowFrameToNative(window, nativeWindow)
+        refreshOpenComboBoxPopups(window)
         renderWindow(window),
       onWindowMove: proc(e: siwinshim.WindowMoveEvent) =
         var currentFrame = window.windowFrame()
         currentFrame.origin = nsPoint(e.pos.x.float32, e.pos.y.float32)
         window.windowFrame currentFrame
-      ,
+        refreshOpenComboBoxPopups(window),
       onClick: proc(e: siwinshim.ClickEvent) =
         discard e,
       onMouseMove: proc(e: siwinshim.MouseMoveEvent) =

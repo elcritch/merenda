@@ -414,6 +414,41 @@ suite "appkit combobox":
     window.value = nil
     app.value = nil
 
+  test "moving owner window refreshes open popup position":
+    var app = NSApplication.new()
+    var window = newWindow(10, 20, 240, 120, "Combo Popup Move")
+    var root = newView(0, 0, 240, 120)
+
+    var comboAlloc = TestComboBox.alloc()
+    var combo = comboAlloc.init()
+    comboAlloc.value = nil
+    combo.setFrame(nsRect(10.0, 10.0, 121.0, 26.0))
+    combo.addItemWithObjectValue(@ns"item1")
+    combo.addItemWithObjectValue(@ns"item2")
+    combo.addItemWithObjectValue(@ns"item3")
+    root.addSubview(combo.NSView)
+    window.setContentView(root)
+    app.addWindow(window)
+
+    combo.openPopup()
+    let popup = combo.popupWindow()
+    check(not popup.isNil)
+
+    let originalOrigin = popup.frameOrigin()
+    window.setFrameOrigin(nsPoint(90.0, 80.0))
+    refreshOpenComboBoxPopups(window)
+    let movedOrigin = popup.frameOrigin()
+
+    check(movedOrigin.x != originalOrigin.x or movedOrigin.y != originalOrigin.y)
+    check(movedOrigin.x > originalOrigin.x)
+    check(movedOrigin.y > originalOrigin.y)
+
+    combo.closePopup()
+    combo.value = nil
+    root.value = nil
+    window.value = nil
+    app.value = nil
+
   test "persistent popup click selects item, closes, and shows chosen item":
     var app = NSApplication.new()
     var window = newWindow(0, 0, 240, 120, "Combo Popup Persistent Select")
