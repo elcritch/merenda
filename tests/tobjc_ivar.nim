@@ -1,5 +1,5 @@
 import std/unittest
-import knutella/objc
+import knutella/objc/core
 import knutella/objc/ivar
 
 type IvarStateObj = object

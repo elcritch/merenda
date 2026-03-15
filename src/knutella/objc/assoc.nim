@@ -15,6 +15,23 @@ proc nimAssociatedRefCleanup[T: ref](value: pointer) {.cdecl, raises: [].} =
 
 proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].}
 
+proc associatedRefPayloadSlot(obj: IDPtr): ptr pointer {.raises: [].} =
+  if obj == nil:
+    return nil
+
+  var
+    cls = getClass(obj)
+    iv: Ivar
+  while not cls.isNil:
+    iv = getIvar(cls, NimAssociatedRefPayloadIvarName)
+    if cast[pointer](iv) != nil:
+      break
+    cls = getSuperclass(cls)
+  if cast[pointer](iv) == nil:
+    return nil
+  let slotAddr = cast[uint](obj) + cast[uint](getOffset(iv))
+  cast[ptr pointer](slotAddr)
+
 proc associatedRefBoxClass(): ObjcClass =
   var cls {.global.}: ObjcClass
   if cls.isNil:
@@ -84,8 +101,13 @@ proc setAssociatedRef*[T: ref](
     deallocShared(payload)
     return
 
-  discard
-    setInstanceVariable(box, NimAssociatedRefPayloadIvarName, cast[pointer](payload))
+  let payloadSlot = associatedRefPayloadSlot(box)
+  if payloadSlot.isNil:
+    payload.cleanup(payload.value)
+    deallocShared(payload)
+    discard objc_msgSend(box, sel_registerName("release"))
+    return
+  payloadSlot[] = cast[pointer](payload)
   setAssociatedObject(obj.value, key, box, policy)
   discard objc_msgSend(box, sel_registerName("release"))
 
@@ -102,8 +124,10 @@ proc getAssociatedRef*[T: ref](obj: NSObject, key: pointer): T {.raises: [].} =
   let box = getAssociatedObject(obj.value, key)
   if box == nil:
     return nil
-  var rawPayload: pointer
-  discard getInstanceVariable(box, NimAssociatedRefPayloadIvarName, rawPayload)
+  let payloadSlot = associatedRefPayloadSlot(box)
+  if payloadSlot.isNil:
+    return nil
+  let rawPayload = payloadSlot[]
   if rawPayload == nil:
     return nil
   let payload = cast[ptr NimAssociatedRefPayload](rawPayload)
@@ -115,14 +139,19 @@ proc getAssociatedRef*[T: ref](
   getAssociatedRef[T](obj, associatedRefKey[T]())
 
 proc nimAssociatedRefBoxDealloc(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
-  var rawPayload: pointer
-  discard getInstanceVariable(self, NimAssociatedRefPayloadIvarName, rawPayload)
+  let payloadSlot = associatedRefPayloadSlot(self)
+  if payloadSlot.isNil:
+    {.cast(raises: []).}:
+      callSuperVoid(self, sel_registerName("dealloc"))
+    return
+
+  let rawPayload = payloadSlot[]
   if rawPayload != nil:
     let payload = cast[ptr NimAssociatedRefPayload](rawPayload)
     if payload.cleanup != nil and payload.value != nil:
       payload.cleanup(payload.value)
     deallocShared(payload)
-    discard setInstanceVariable(self, NimAssociatedRefPayloadIvarName, nil)
+    payloadSlot[] = nil
 
   {.cast(raises: []).}:
     callSuperVoid(self, sel_registerName("dealloc"))

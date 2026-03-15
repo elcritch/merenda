@@ -383,9 +383,15 @@ template getMethodImplementation*(cls: ObjcClass, name: SEL): untyped =
 
 proc class_getMethodImplementation_stret*(cls: IDPtr, name: SEL): IMP {.cdecl, importc.}
 
-proc class_respondsToSelector(cls: IDPtr, sel: SEL): bool {.cdecl, importc.}
-template respondsToSelector*(cls: ObjcClass, sel: SEL): untyped =
-  class_respondsToSelector(cls, sel)
+proc respondsToSelector*(cls: ObjcClass, sel: SEL): bool =
+  if cls.isNil:
+    return false
+  var current = cls
+  while not current.isNil:
+    if cast[pointer](class_getInstanceMethod(current.value, sel)) != nil:
+      return true
+    current = class_getSuperclass(current.value)
+  false
 
 proc class_addProtocol(cls: IDPtr, protocol: Protocol): bool {.cdecl, importc.}
 template addProtocol*(cls: ObjcClass, protocol: Protocol): untyped =
@@ -547,12 +553,20 @@ proc nutellaNsToNxRuntimeName*(name: string): string {.inline.} =
 proc objc_getClass(name: cstring): ObjcClass {.cdecl, importc.}
 proc ensureNutellaRootClasses*()
 
-var nxObjectRefCountOffset {.global.}: ptrdiff_t = -1
+const KNutellaBootstrapRootClassName =
+  when defined(macosx):
+    when KNutellaUseCustomNxObjectRoot: "NXObject" else: ""
+  else:
+    "NSObject"
+
+const KNutellaBootstrapRootRefCountIvarName = "__nutellaRootRefCount"
+
+var nutellaRootRefCountOffset {.global.}: ptrdiff_t = -1
 
 proc nxObjectRefCountPtr(obj: IDPtr): ptr NSUInteger {.inline, raises: [].} =
-  if obj == nil or nxObjectRefCountOffset < 0:
+  if obj == nil or nutellaRootRefCountOffset < 0:
     return nil
-  cast[ptr NSUInteger](cast[uint](obj) + cast[uint](nxObjectRefCountOffset))
+  cast[ptr NSUInteger](cast[uint](obj) + cast[uint](nutellaRootRefCountOffset))
 
 proc nxObjectReadRefCount(obj: IDPtr): NSUInteger {.inline, raises: [].} =
   let p = nxObjectRefCountPtr(obj)
@@ -607,7 +621,7 @@ proc nxObjectHash(self: IDPtr, cmd: SEL): NSUInteger {.cdecl, raises: [].} =
 proc nxObjectRespondsToSelector(
     self: IDPtr, cmd: SEL, selector: SEL
 ): bool {.cdecl, raises: [].} =
-  class_respondsToSelector(object_getClass(self), selector)
+  respondsToSelector(object_getClass(self), selector)
 
 proc nxObjectIsKindOfClass(
     self: IDPtr, cmd: SEL, cls: IDPtr
@@ -631,16 +645,16 @@ proc nxObjectInitialize(self: IDPtr, cmd: SEL) {.cdecl, raises: [].} =
   discard
 
 proc ensureNutellaRootClasses*() =
-  ## Bootstraps a standalone NXObject root class when custom root mode is enabled.
-  when KNutellaUseCustomNxObjectRoot:
-    let nxObjectName = "NXObject"
-    var nxObject = objc_getClass(nxObjectName.cstring)
-    if nxObject.isNil:
-      nxObject = toObjcClass(objc_allocateClassPair(nil, nxObjectName.cstring, 0))
-      if nxObject.isNil:
+  ## Bootstraps a standalone root class when Foundation is not available.
+  when KNutellaBootstrapRootClassName.len > 0:
+    let rootClassName = KNutellaBootstrapRootClassName
+    var rootClass = objc_getClass(rootClassName.cstring)
+    if rootClass.isNil:
+      rootClass = toObjcClass(objc_allocateClassPair(nil, rootClassName.cstring, 0))
+      if rootClass.isNil:
         return
 
-      const nxRefAlign =
+      const rootRefAlign =
         when sizeof(NSUInteger) == 8:
           3
         elif sizeof(NSUInteger) == 4:
@@ -648,76 +662,85 @@ proc ensureNutellaRootClasses*() =
         else:
           1
 
-      discard
-        addIvar(nxObject, "__nutellaNxRefCount", sizeof(NSUInteger), nxRefAlign, "Q")
+      discard addIvar(
+        rootClass,
+        KNutellaBootstrapRootRefCountIvarName,
+        sizeof(NSUInteger),
+        rootRefAlign,
+        "Q",
+      )
 
-      let nxMeta = object_getClass(nxObject.value)
+      let rootMeta = object_getClass(rootClass.value)
       discard class_addMethod(
-        nxMeta.value, sel_registerName("alloc"), cast[IMP](nxObjectAlloc), "@@:"
+        rootMeta.value, sel_registerName("alloc"), cast[IMP](nxObjectAlloc), "@@:"
       )
       discard class_addMethod(
-        nxMeta.value, sel_registerName("new"), cast[IMP](nxObjectNew), "@@:"
+        rootMeta.value, sel_registerName("new"), cast[IMP](nxObjectNew), "@@:"
       )
       discard class_addMethod(
-        nxMeta.value,
+        rootMeta.value,
         sel_registerName("initialize"),
         cast[IMP](nxObjectInitialize),
         "v@:",
       )
       discard class_addMethod(
-        nxObject.value, sel_registerName("init"), cast[IMP](nxObjectInit), "@@:"
+        rootClass.value, sel_registerName("init"), cast[IMP](nxObjectInit), "@@:"
       )
       discard class_addMethod(
-        nxObject.value, sel_registerName("retain"), cast[IMP](nxObjectRetain), "@@:"
+        rootClass.value, sel_registerName("retain"), cast[IMP](nxObjectRetain), "@@:"
       )
       discard class_addMethod(
-        nxObject.value, sel_registerName("release"), cast[IMP](nxObjectRelease), "v@:"
+        rootClass.value, sel_registerName("release"), cast[IMP](nxObjectRelease), "v@:"
       )
       discard class_addMethod(
-        nxObject.value,
+        rootClass.value,
         sel_registerName("retainCount"),
         cast[IMP](nxObjectRetainCount),
         "Q@:",
       )
       discard class_addMethod(
-        nxObject.value,
+        rootClass.value,
         sel_registerName("autorelease"),
         cast[IMP](nxObjectAutorelease),
         "@@:",
       )
       discard class_addMethod(
-        nxObject.value, sel_registerName("isEqual:"), cast[IMP](nxObjectIsEqual), "B@:@"
+        rootClass.value,
+        sel_registerName("isEqual:"),
+        cast[IMP](nxObjectIsEqual),
+        "B@:@",
       )
       discard class_addMethod(
-        nxObject.value, sel_registerName("hash"), cast[IMP](nxObjectHash), "Q@:"
+        rootClass.value, sel_registerName("hash"), cast[IMP](nxObjectHash), "Q@:"
       )
       discard class_addMethod(
-        nxObject.value,
+        rootClass.value,
         sel_registerName("respondsToSelector:"),
         cast[IMP](nxObjectRespondsToSelector),
         "B@::",
       )
       discard class_addMethod(
-        nxObject.value,
+        rootClass.value,
         sel_registerName("isKindOfClass:"),
         cast[IMP](nxObjectIsKindOfClass),
         "B@:#",
       )
       discard class_addMethod(
-        nxObject.value, sel_registerName("dealloc"), cast[IMP](nxObjectDealloc), "v@:"
+        rootClass.value, sel_registerName("dealloc"), cast[IMP](nxObjectDealloc), "v@:"
       )
-      objc_registerClassPair(nxObject.value)
+      objc_registerClassPair(rootClass.value)
 
-    if nxObjectRefCountOffset < 0:
-      let refIvar = getIvar(nxObject, "__nutellaNxRefCount")
+    if nutellaRootRefCountOffset < 0:
+      let refIvar = getIvar(rootClass, KNutellaBootstrapRootRefCountIvarName)
       if cast[pointer](refIvar) != nil:
-        nxObjectRefCountOffset = ivar_getOffset(refIvar)
+        nutellaRootRefCountOffset = ivar_getOffset(refIvar)
 
 proc getClassByName*(name: string): ObjcClass =
+  when KNutellaBootstrapRootClassName.len > 0:
+    ensureNutellaRootClasses()
   when KNutellaNsToNxRemapEnabled:
     let mapped = nutellaNsToNxRuntimeName(name)
     if mapped != name:
-      ensureNutellaRootClasses()
       result = objc_getClass(mapped.cstring)
       if not result.isNil:
         return
@@ -1213,7 +1236,7 @@ proc `@ selector`*(name: static[string]): SEL =
   getSelector(name)
 
 proc respondsToSelector*(obj: NSObject, selector: static[string]): bool =
-  class_respondsToSelector(object_getClass(obj), sel_registerName(selector))
+  respondsToSelector(object_getClass(obj), sel_registerName(selector))
 
 {.pop.}
 
@@ -1570,6 +1593,9 @@ proc superObject*(obj: NSObject): ObjcSuper {.inline.} =
     receiver: obj.value, superClass: class_getSuperclass(object_getClass(obj.value))
   )
 
+proc superObject*(obj: IDPtr): ObjcSuper {.inline.} =
+  ObjcSuper(receiver: obj, superClass: class_getSuperclass(object_getClass(obj)))
+
 proc callSuperAs*[T](obj: NSObject, op: SEL): T {.inline.} =
   var superObj = superObject(obj)
   when defined(macosx):
@@ -1592,10 +1618,38 @@ proc callSuperAs*[T, A0](obj: NSObject, op: SEL, arg0: A0): T {.inline.} =
       superObj, op
     ))(obj.value, op, arg0)
 
+proc callSuperAs*[T](obj: IDPtr, op: SEL): T {.inline.} =
+  var superObj = superObject(obj)
+  when defined(macosx):
+    cast[proc(superObj: var ObjcSuper, selParam: SEL): T {.cdecl, varargs.}](objc_msgSendSuper)(
+      superObj, op
+    )
+  else:
+    cast[proc(self: IDPtr, selParam: SEL): T {.cdecl.}](objc_msg_lookup_super(
+      superObj, op
+    ))(obj, op)
+
+proc callSuperAs*[T, A0](obj: IDPtr, op: SEL, arg0: A0): T {.inline.} =
+  var superObj = superObject(obj)
+  when defined(macosx):
+    cast[proc(superObj: var ObjcSuper, selParam: SEL, arg0: A0): T {.cdecl, varargs.}](objc_msgSendSuper)(
+      superObj, op, arg0
+    )
+  else:
+    cast[proc(self: IDPtr, selParam: SEL, arg0: A0): T {.cdecl.}](objc_msg_lookup_super(
+      superObj, op
+    ))(obj, op, arg0)
+
 proc callSuperId*(obj: NSObject, op: SEL): IDPtr {.inline.} =
   callSuperAs[IDPtr](obj, op)
 
 proc callSuperId*[A0](obj: NSObject, op: SEL, arg0: A0): IDPtr {.inline.} =
+  callSuperAs[IDPtr, A0](obj, op, arg0)
+
+proc callSuperId*(obj: IDPtr, op: SEL): IDPtr {.inline.} =
+  callSuperAs[IDPtr](obj, op)
+
+proc callSuperId*[A0](obj: IDPtr, op: SEL, arg0: A0): IDPtr {.inline.} =
   callSuperAs[IDPtr, A0](obj, op, arg0)
 
 template callSuperVoid*(obj: NSObject, op: SEL): untyped =
@@ -1604,7 +1658,17 @@ template callSuperVoid*(obj: NSObject, op: SEL): untyped =
 template callSuperVoid*[A0](obj: NSObject, op: SEL, arg0: A0): untyped =
   discard callSuperAs[IDPtr, A0](obj, op, arg0)
 
+template callSuperVoid*(obj: IDPtr, op: SEL): untyped =
+  discard callSuperAs[IDPtr](obj, op)
+
+template callSuperVoid*[A0](obj: IDPtr, op: SEL, arg0: A0): untyped =
+  discard callSuperAs[IDPtr, A0](obj, op, arg0)
+
 proc superDealloc*(obj: NSObject) {.inline.} =
+  let deallocSel = sel_registerName("dealloc")
+  callSuperVoid(obj, deallocSel)
+
+proc superDealloc*(obj: IDPtr) {.inline.} =
   let deallocSel = sel_registerName("dealloc")
   callSuperVoid(obj, deallocSel)
 

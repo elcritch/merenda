@@ -257,18 +257,26 @@ proc setIvarField*[T](
   else:
     setIvarValue[T](obj, ivarName, value)
 
+proc getIvarRefPayloadSlot(
+    obj: IDPtr, ivarName: string
+): ptr pointer {.inline, raises: [].} =
+  getIvarValuePtrRaw[pointer](obj, ivarName)
+
 proc clearIvarRefRaw(obj: IDPtr, ivarName: string) {.raises: [].} =
   if obj == nil or ivarName.len == 0:
     return
 
-  var rawPayload: pointer
-  discard getInstanceVariable(obj, ivarName, rawPayload)
+  let slot = getIvarRefPayloadSlot(obj, ivarName)
+  if slot.isNil:
+    return
+
+  let rawPayload = slot[]
   if rawPayload != nil:
     let payload = cast[ptr NimIvarRefPayload](rawPayload)
     if payload.cleanup != nil and payload.value != nil:
       payload.cleanup(payload.value)
     deallocShared(payload)
-    discard setInstanceVariable(obj, ivarName, nil)
+    slot[] = nil
 
 proc clearIvarRef*(obj: IDPtr, ivarName: string) {.inline, raises: [].} =
   clearIvarRefRaw(obj, ivarName)
@@ -295,11 +303,13 @@ proc setIvarRef*[T: ref](obj: NSObject, ivarName: string, value: T) {.raises: []
   payload.cleanup = nimIvarRefCleanup[T]
   GC_ref(value)
 
-  let iv = setInstanceVariable(obj.value, ivarName, cast[pointer](payload))
-  if cast[pointer](iv) == nil:
+  let slot = getIvarRefPayloadSlot(obj.value, ivarName)
+  if slot.isNil:
     if payload.cleanup != nil and payload.value != nil:
       payload.cleanup(payload.value)
     deallocShared(payload)
+    return
+  slot[] = cast[pointer](payload)
 
 proc setIvarRef*[T: ref](obj: NSObject, value: T) {.inline, raises: [].} =
   setIvarRef(obj, ivarRefName[T](), value)
@@ -308,8 +318,11 @@ proc getIvarRef*[T: ref](obj: NSObject, ivarName: string): T {.raises: [].} =
   if obj.isNil or ivarName.len == 0:
     return nil
 
-  var rawPayload: pointer
-  discard getInstanceVariable(obj.value, ivarName, rawPayload)
+  let slot = getIvarRefPayloadSlot(obj.value, ivarName)
+  if slot.isNil:
+    return nil
+
+  let rawPayload = slot[]
   if rawPayload == nil:
     return nil
 
@@ -320,8 +333,11 @@ proc getIvarRefPtr*[T: ref](obj: NSObject, ivarName: string): ptr T {.raises: []
   if obj.isNil or ivarName.len == 0:
     return nil
 
-  var rawPayload: pointer
-  discard getInstanceVariable(obj.value, ivarName, rawPayload)
+  let slot = getIvarRefPayloadSlot(obj.value, ivarName)
+  if slot.isNil:
+    return nil
+
+  let rawPayload = slot[]
   if rawPayload == nil:
     return nil
 
