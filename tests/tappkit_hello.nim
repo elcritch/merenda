@@ -1,9 +1,14 @@
 import std/[strutils, unittest]
 
 import pkg/vmath
+import figdraw/commons
 import figdraw/fignodes
+import figdraw/windowing/siwinshim
 import knutella/appkit
 import knutella/objc
+
+when defined(linux) or defined(bsd):
+  import siwin/platforms/wayland/window as siWaylandWindow
 
 objcImpl:
   type TCopyProbe {.impl: NSCopying.} = object of NSObject
@@ -43,6 +48,23 @@ objcImpl:
   method copyWithZone*(self: TDescriptionProbe, zone: pointer): NSObject =
     retain(self).NSObject
 
+type TLogicalInputWindow = ref object of siwinshim.Window
+  xReportedSize: IVec2
+
+method reportedSize*(window: TLogicalInputWindow): IVec2 =
+  window.xReportedSize
+
+when defined(linux) or defined(bsd):
+  type TBackingInputWindow = ref object of siWaylandWindow.WindowWayland
+    xReportedSize: IVec2
+    xScale: float32
+
+  method reportedSize*(window: TBackingInputWindow): IVec2 =
+    window.xReportedSize
+
+  method uiScale*(window: TBackingInputWindow): float32 =
+    window.xScale
+
 suite "knutella appkit hello world":
   proc controlStringValue(control: NSControl): NSString =
     control.stringValue()
@@ -78,6 +100,30 @@ suite "knutella appkit hello world":
       rawInputToLogical(raw, ivec2(0'i32, 0'i32), vec2(300.0'f32, 200.0'f32))
     check(passthrough.x == raw.x)
     check(passthrough.y == raw.y)
+
+  test "logical-size input windows do not desync hit testing under UI scale":
+    let window = TLogicalInputWindow(xReportedSize: ivec2(600'i32, 400'i32))
+    check(not siwinshim.inputUsesBackingPixels(window))
+    let logicalSize = siwinshim.logicalSize(window)
+    check(logicalSize.x == 600.0'f32)
+    check(logicalSize.y == 400.0'f32)
+    let raw = vec2(300.0'f32, 200.0'f32)
+    let mapped = rawInputToLogical(raw, window.backingSize(), logicalSize)
+    check(mapped.x == raw.x)
+    check(mapped.y == raw.y)
+
+  when defined(linux) or defined(bsd):
+    test "backing-pixel logical size follows backend scale not fig ui scale":
+      let previousScale = figUiScale()
+      setFigUiScale(3.0'f32)
+      defer:
+        setFigUiScale(previousScale)
+      let window =
+        TBackingInputWindow(xReportedSize: ivec2(600'i32, 450'i32), xScale: 1.5'f32)
+      check(siwinshim.inputUsesBackingPixels(window))
+      let logicalSize = siwinshim.logicalSize(window)
+      check(approxEq(logicalSize.x, 400.0'f32))
+      check(approxEq(logicalSize.y, 300.0'f32))
 
   test "appkit runtime classes stay namespaced to avoid NS* collisions":
     var responder = NSResponder.new()

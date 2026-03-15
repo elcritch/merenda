@@ -806,18 +806,27 @@ proc rawInputToLogical*(rawPos: Vec2, backingSize: IVec2, logicalSize: Vec2): Ve
     rawPos.y * logicalSize.y / backingSize.y.float32,
   )
 
-proc logicalInputPos(window: siwinshim.Window, rawPos: Vec2): Vec2 =
-  if window.isNil:
-    return rawPos
-  rawInputToLogical(rawPos, window.backingSize(), window.logicalSize())
+proc contentLogicalSize(window: NSWindow, nativeWindow: siwinshim.Window): Vec2 =
+  if not window.isNil:
+    let content = window.contentView()
+    if not content.isNil:
+      let bounds = content.bounds()
+      if bounds.size.width > 0.0 and bounds.size.height > 0.0:
+        return vec2(bounds.size.width, bounds.size.height)
+    let frame = window.windowFrame()
+    if frame.size.width > 0.0 and frame.size.height > 0.0:
+      return vec2(frame.size.width, frame.size.height)
+  if not nativeWindow.isNil:
+    return nativeWindow.logicalSize()
+  vec2(0.0'f32, 0.0'f32)
 
 proc appKitInputPos(
     window: NSWindow, nativeWindow: siwinshim.Window, rawPos: Vec2
 ): Vec2 =
   ## Siwin reports input with a top-left origin. AppKit event dispatch here uses
   ## a bottom-left window coordinate system, so convert before queuing events.
-  let logicalPos = logicalInputPos(nativeWindow, rawPos)
-  let logicalSize = nativeWindow.logicalSize()
+  let logicalSize = contentLogicalSize(window, nativeWindow)
+  let logicalPos = rawInputToLogical(rawPos, nativeWindow.backingSize(), logicalSize)
   let height = max(logicalSize.y, 0.0)
   if height <= 0.0:
     return logicalPos
