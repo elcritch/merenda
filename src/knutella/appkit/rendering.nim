@@ -18,6 +18,8 @@ var trackedMouseDownComboBoxId {.threadvar.}: IDPtr
 var trackedMouseDownComboPopupItemIndex {.threadvar.}: int
 var windowFlushHookInstalled {.threadvar.}: bool
 
+proc ensureNativeWindow*(window: NSWindow)
+
 proc setTrackedMouseDownButton(buttonId: IDPtr) =
   trackedMouseDownButtonId = replacedOwnedId(trackedMouseDownButtonId, buttonId)
 
@@ -880,7 +882,16 @@ proc installWindowFlushHook() =
       if windowId.isNil:
         return
       let window = ownFromId[NSWindow](windowId)
-      if window.isNil or not window.windowNativeReady():
+      if window.isNil:
+        return
+      if not window.windowNativeReady():
+        if not window.windowVisibleRequested():
+          return
+        try:
+          ensureNativeWindow(window)
+        except CatchableError:
+          return
+      if not window.windowNativeReady():
         return
       renderWindow(window)
       let nativeWindow = window.windowNativeWindowOrNil()
@@ -937,16 +948,41 @@ proc ensureNativeWindow*(window: NSWindow) =
     let nativeFrameless = nativeFramelessForStyleMask(styleMask)
     let nativeResizable = nativeResizableForStyleMask(styleMask)
 
-    window.windowNativeWindow(
-      siwinshim.newSiwinWindow(
-        size = size,
-        title = $window.windowTitle(),
-        vsync = true,
-        resizable = nativeResizable,
-        frameless = nativeFrameless,
+    if window.isKindOfClass(NSComboBoxWindow):
+      let popupWindow = window.NSComboBoxWindow
+      let comboBox = popupWindow.comboBox()
+      let ownerWindow =
+        if comboBox.isNil:
+          NSWindow(value: nil)
+        else:
+          comboBox.window()
+      if ownerWindow.isNil:
+        raise
+          newException(CatchableError, "combo popup backend init requires owner window")
+      ensureNativeWindow(ownerWindow)
+      let ownerNative = ownerWindow.windowNativeWindowOrNil()
+      if ownerNative.isNil:
+        raise newException(
+          CatchableError, "combo popup backend init requires owner native window"
+        )
+      window.windowNativeWindow(
+        siwinshim.sharedSiwinGlobals().newPopupWindow(
+          ownerNative, popupWindow.nativePopupPlacement(), grab = true
+        )
       )
-    )
-    window.windowNativeWindow().pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
+    else:
+      window.windowNativeWindow(
+        siwinshim.newSiwinWindow(
+          size = size,
+          title = $window.windowTitle(),
+          vsync = true,
+          resizable = nativeResizable,
+          frameless = nativeFrameless,
+        )
+      )
+    if not window.isKindOfClass(NSComboBoxWindow):
+      window.windowNativeWindow().pos =
+        ivec2(frame.origin.x.int32, frame.origin.y.int32)
     window.windowAutoScale(window.windowNativeWindow().configureUiScale())
     window.windowRenderer(
       figrender.newFigRenderer(
@@ -964,6 +1000,17 @@ proc ensureNativeWindow*(window: NSWindow) =
         clearTrackedMouseDownComboBox()
         discard window.windowShouldClose(window.NSObject)
         window.windowClosed(true),
+      onPopupDone: proc(e: siwinshim.PopupEvent) =
+        discard e
+        if not window.isKindOfClass(NSComboBoxWindow):
+          return
+        let popupWindow = window.NSComboBoxWindow
+        let comboBox = popupWindow.comboBox()
+        if comboBox.isNil:
+          return
+        if comboBox.popupWindow().value == popupWindow.value:
+          comboBox.closePopup()
+      ,
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
         let nativeWindow =
@@ -1077,6 +1124,10 @@ proc ensureNativeWindow*(window: NSWindow) =
 
     window.windowNativeWindow().firstStep()
     window.windowNativeWindow().refreshUiScale(window.windowAutoScale())
+    if window.isKindOfClass(NSComboBoxWindow):
+      window.windowNativeWindow().reposition(
+        window.NSComboBoxWindow.nativePopupPlacement()
+      )
     window.windowNativeReady true
   except Exception as exc:
     cleanupFailedWindowInit(window)
