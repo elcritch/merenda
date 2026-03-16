@@ -339,34 +339,15 @@ suite "appkit combobox":
     app.addWindow(window)
     window.makeKeyAndOrderFront(app.NSObject)
 
-    let arrowPoint = nsPoint(126.0, 20.0)
-    let popupTarget = window.convertScreenToBase(popupItemScreenPoint(window, combo, 1))
-    let down = mouseButtonEventFromSiwin(
-      window.windowNumber(),
-      arrowPoint,
-      siwin.MouseButtonEvent(
-        button: siwin.MouseButton.left, pressed: true, generated: false
-      ),
-    )
-    let drag = mouseMoveEventFromSiwin(
-      window.windowNumber(),
-      popupTarget,
-      siwin.MouseMoveEvent(kind: siwin.MouseMoveKind.moveWhileDragging),
-      {},
-      {siwin.MouseButton.left},
-    )
-    let up = mouseButtonEventFromSiwin(
-      window.windowNumber(),
-      popupTarget,
-      siwin.MouseButtonEvent(
-        button: siwin.MouseButton.left, pressed: false, generated: false
-      ),
-    )
+    clickComboBoxArrow(app, window, combo)
+    discard app.runForFrames(5)
 
-    app.postEvent(down, false)
-    app.postEvent(drag, false)
-    app.postEvent(up, false)
-    discard app.runForFrames(20)
+    let popup = combo.popupWindow()
+    check(not popup.isNil)
+    if not popup.isNil:
+      let itemPoint = popupWindowItemScreenPoint(popup, 1)
+      clickPopupItem(app, popup.NSWindow, itemPoint)
+      discard app.runForFrames(8)
 
     check(combo.indexOfSelectedItem() == 1)
     check(combo.stringValue() == @ns"item2")
@@ -406,6 +387,10 @@ suite "appkit combobox":
     check(combo.popupOpen())
     check(not combo.popupWindow().isNil)
     check(combo.closePopupCallCount() == 0)
+    let popupNativeWindow = combo.popupWindow().windowNativeWindowOrNil()
+    check(not popupNativeWindow.isNil)
+    if not popupNativeWindow.isNil:
+      check(popupNativeWindow.isPopup())
 
     combo.closePopup()
     check(combo.popupWindow().isNil)
@@ -555,15 +540,21 @@ suite "appkit combobox":
       let popup = combo.popupWindow()
       check(not popup.isNil)
       if not popup.isNil:
-        let expectedControlFrame = combo.popupWindowFrame()
         let expectedContentHeight =
           comboBoxPopupItemHeight(combo) * comboBoxVisiblePopupItems(combo).float32
-        check(abs(popup.frame().origin.x - expectedControlFrame.origin.x) <= 2.0)
+        let bounds = combo.bounds()
+        let anchorY =
+          if combo.isFlipped():
+            bounds.origin.y
+          else:
+            bounds.origin.y + bounds.size.height
+        var anchorPoint = nsPoint(bounds.origin.x, anchorY)
+        anchorPoint = combo.NSView.convertPointToView(anchorPoint, NSView(value: nil))
+        anchorPoint = window.convertBaseToScreen(anchorPoint)
+
+        check(abs(popup.frame().origin.x - anchorPoint.x) <= 2.0)
         check(
-          abs(
-            popup.frame().origin.y -
-              (expectedControlFrame.origin.y - expectedContentHeight)
-          ) <= 2.0
+          abs(popup.frame().origin.y - (anchorPoint.y - expectedContentHeight)) <= 2.0
         )
 
         let popupSubviews = popup.contentView().subviews()

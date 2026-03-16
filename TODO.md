@@ -8,6 +8,12 @@ Remaining AppKit classes tracked: 169
 
 Sorted by implementation priority (most useful first).
 
+NEXT:
+Okay, use NfClipContent to match how Cocotron clips, and add the horizontal scrolling
+  support. Implement NSClipView following Cocotron method chains, but modify if with
+  NfClipContent as needed. Read AGENTS.md and make sure to follow it.
+
+
 ## Runtime Prereqs (Do First)
 - [x] Struct ABI/type encoding correctness - Added struct encodings for common NS/CG structs (`NSPoint`, `NSSize`, `NSRect`, `CGPoint`, `CGSize`, `CGRect`, `NSRange`) and coverage tests.
 - [x] `objcImpl` class methods/metaclass dispatch - Added `typedesc[Class]` class method support, metaclass method installation, and protocol class-method metadata support.

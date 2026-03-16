@@ -1,5 +1,7 @@
 import std/[math, times]
 
+import figdraw/windowing/siwinshim as siwinshim
+
 import ./runtime
 import ./views
 import ./controls
@@ -40,6 +42,9 @@ proc insetRect(rect: NSRect, dx: float32, dy: float32): NSRect {.inline.} =
 
 proc pointsEqual(a: NSPoint, b: NSPoint): bool {.inline.} =
   a.x == b.x and a.y == b.y
+
+proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
+  max(round(value.float64 * max(scale, 1.0'f32).float64).int32, minimum)
 
 proc packedForegroundStyle(foreground: NSColor): int {.inline.} =
   (((foreground.r * 255.0'f32).int and 0xFF) shl 24) or
@@ -382,6 +387,7 @@ objcImpl:
           discard
 
       point = self.pointInSelfForEvent(nextEvent)
+      let eventIndex = self.itemIndexForPoint(point)
 
       case state
       of ComboTrackFirstMouseDown:
@@ -389,17 +395,23 @@ objcImpl:
           if nextEvent.`type`() == NSLeftMouseUp:
             state = ComboTrackMouseUp
         else:
-          state = ComboTrackMouseDown
+          if nextEvent.`type`() == NSLeftMouseUp:
+            accepted = eventIndex >= 0
+            if not accepted:
+              self.xSelectedIndex = initialSelectedIndex
+            state = ComboTrackExit
+          else:
+            state = ComboTrackMouseDown
       of ComboTrackMouseUp:
         if nextEvent.`type`() == NSLeftMouseDown:
-          if index >= 0:
+          if eventIndex >= 0:
             state = ComboTrackMouseDown
           else:
             self.xSelectedIndex = initialSelectedIndex
             state = ComboTrackExit
       else:
         if nextEvent.`type`() == NSLeftMouseUp:
-          accepted = index >= 0
+          accepted = eventIndex >= 0
           if not accepted:
             self.xSelectedIndex = initialSelectedIndex
           state = ComboTrackExit
@@ -611,12 +623,65 @@ objcImpl:
       return
     self.xComboBox.value = comboBox.value
 
+  method nativePopupPlacement*(self: NSComboBoxWindow): siwinshim.PopupPlacement =
+    result = siwinshim.PopupPlacement(
+      anchorRectPos: siwinshim.ivec2(0, 0),
+      anchorRectSize: siwinshim.ivec2(1, 1),
+      size: siwinshim.ivec2(1, 1),
+      anchor: siwinshim.Edge.bottomLeft,
+      gravity: siwinshim.Edge.topLeft,
+      offset: siwinshim.ivec2(0, 0),
+      constraintAdjustment: {},
+      reactive: true,
+    )
+    if self.isNil:
+      return
+    let comboBox = self.comboBox()
+    if comboBox.isNil:
+      return
+    let ownerWindow = comboBox.window()
+    if ownerWindow.isNil:
+      return
+    let ownerContent = ownerWindow.contentView()
+    let comboBounds = comboBox.bounds()
+    let comboOrigin =
+      comboBox.NSView.convertPointToView(comboBounds.origin, NSView(value: nil))
+    let popupFrame = self.frame()
+    let nativeWindow = ownerWindow.windowNativeWindowOrNil()
+    let scale =
+      if nativeWindow.isNil:
+        1.0'f32
+      else:
+        max(nativeWindow.contentScale(), 1.0'f32)
+    let ownerHeight =
+      if ownerContent.isNil:
+        max(comboOrigin.y + comboBounds.size.height, popupFrame.size.height)
+      else:
+        max(ownerContent.bounds().size.height, 1.0)
+    let comboTop = max(ownerHeight - (comboOrigin.y + comboBounds.size.height), 0.0)
+    result.anchorRectPos = siwinshim.ivec2(
+      popupPixels(comboOrigin.x, scale, 0), popupPixels(comboTop, scale, 0)
+    )
+    result.anchorRectSize = siwinshim.ivec2(
+      popupPixels(comboBounds.size.width, scale, 1),
+      popupPixels(comboBounds.size.height, scale, 1),
+    )
+    result.size = siwinshim.ivec2(
+      popupPixels(popupFrame.size.width, scale, 1),
+      popupPixels(popupFrame.size.height, scale, 1),
+    )
+
   method popupWindowFrame*(self: NSComboBox): NSRect =
     let ownerWindow = self.window()
     if ownerWindow.isNil:
       return nsRect(0.0, 0.0, 1.0, 1.0)
     let bounds = self.bounds()
-    var origin = nsPoint(bounds.origin.x, bounds.origin.y + bounds.size.height)
+    let anchorY =
+      if self.isFlipped():
+        bounds.origin.y
+      else:
+        bounds.origin.y + bounds.size.height
+    var origin = nsPoint(bounds.origin.x, anchorY)
     origin = self.NSView.convertPointToView(origin, NSView(value: nil))
     origin = ownerWindow.convertBaseToScreen(origin)
     nsRect(
