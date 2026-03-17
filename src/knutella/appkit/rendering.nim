@@ -833,7 +833,7 @@ proc appKitInputPos(
   vec2(logicalPos.x, height - logicalPos.y)
 
 proc renderWindow(window: NSWindow) =
-  if window.isNil or not window.windowNativeReady():
+  if window.isNil or not window.windowNativeReady() or window.usesNativePopup():
     return
   let nativeWindow = window.windowNativeWindowOrNil()
   let renderer = window.windowRendererOrNil()
@@ -932,31 +932,52 @@ proc ensureNativeWindow*(window: NSWindow) =
     let nativeFrameless = nativeFramelessForStyleMask(styleMask)
     let nativeResizable = nativeResizableForStyleMask(styleMask)
 
-    var renderer = figrender.newFigRenderer(
-      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-    )
-    window.windowNativeWindow(
-      siwinshim.newSiwinWindow(
-        renderer,
-        size = size,
-        title = $window.windowTitle(),
-        vsync = true,
-        resizable = nativeResizable,
-        frameless = nativeFrameless,
+    if window.usesNativePopup():
+      let parent = window.nativePopupParent()
+      if parent.isNil:
+        raise ValueError.newException("Native popup windows require a parent window")
+      ensureNativeWindow(parent)
+      let parentNativeWindow = parent.windowNativeWindowOrNil()
+      if parentNativeWindow.isNil:
+        raise ValueError.newException("Native popup window parent has no native window")
+      window.windowNativeWindow(
+        siwinshim.newSiwinPopupWindow(
+          parentNativeWindow,
+          window.nativePopupPlacement(),
+          grab = window.nativePopupGrab(),
+        )
       )
-    )
-    window.windowNativeWindow().pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
-    window.windowAutoScale(window.windowNativeWindow().configureUiScale())
-    renderer.setupBackend(window.windowNativeWindow())
-    window.windowRenderer renderer
+      window.windowRenderer nil
+    else:
+      var renderer = figrender.newFigRenderer(
+        atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+      )
+      window.windowNativeWindow(
+        siwinshim.newSiwinWindow(
+          renderer,
+          size = size,
+          title = $window.windowTitle(),
+          vsync = true,
+          resizable = nativeResizable,
+          frameless = nativeFrameless,
+        )
+      )
+      window.windowNativeWindow().pos =
+        ivec2(frame.origin.x.int32, frame.origin.y.int32)
+      window.windowAutoScale(window.windowNativeWindow().configureUiScale())
+      renderer.setupBackend(window.windowNativeWindow())
+      window.windowRenderer renderer
+    if window.usesNativePopup():
+      window.windowAutoScale(window.windowNativeWindow().configureUiScale())
 
     window.windowNativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
       onClose: proc(e: siwinshim.CloseEvent) =
         discard e
         clearTrackedMouseDownButton()
         clearTrackedMouseDownComboBox()
-        discard window.windowShouldClose(window.NSObject)
-        window.windowClosed(true),
+        if window.windowShouldClose(window.NSObject):
+          window.close()
+      ,
       onResize: proc(e: siwinshim.ResizeEvent) =
         discard e
         let nativeWindow = window.windowNativeWindow()
@@ -1062,6 +1083,9 @@ proc ensureNativeWindow*(window: NSWindow) =
         if not appEvent.isNil:
           window.postEvent(appEvent, false)
       ,
+      onPopupDone: proc(e: siwinshim.PopupEvent) =
+        discard e
+        window.close(),
     )
 
     window.windowNativeWindow().firstStep()

@@ -54,7 +54,7 @@ proc popupItemScreenPoint(window: NSWindow, combo: NSComboBox, index: int): NSPo
       itemHeight * 0.5,
   )
 
-proc popupWindowItemScreenPoint(popup: NSComboBoxWindow, index: int): NSPoint =
+proc popupWindowItemScreenPoint(popup: NSWindow, index: int): NSPoint =
   if popup.isNil or popup.contentView().isNil:
     return nsPoint(0.0, 0.0)
   let popupSubviews = popup.contentView().subviews()
@@ -121,7 +121,7 @@ proc clickPopupItem(app: NSApplication, popup: NSWindow, screenPoint: NSPoint) =
 
 objcImpl:
   type TestComboBox = object of NSComboBox
-    xCapturedPopup {.get: capturedPopup.}: NSComboBoxWindow
+    xCapturedPopup {.get: capturedPopup.}: NSWindow
     xClosePopupCallCount {.get: closePopupCallCount.}: int
 
   method init*(self: var TestComboBox): TestComboBox =
@@ -130,7 +130,7 @@ objcImpl:
     if result.isNil:
       return
     initIvarFields(result)
-    result.xCapturedPopup = NSComboBoxWindow(value: nil)
+    result.xCapturedPopup = NSWindow(value: nil)
     result.xClosePopupCallCount = 0
 
   method closePopupWindow*(self: TestComboBox) =
@@ -140,7 +140,7 @@ objcImpl:
     callSuperVoid(self, getSelector("closePopupWindow"))
 
   method dealloc(self: TestComboBox) {.used.} =
-    self.xCapturedPopup = NSComboBoxWindow(value: nil)
+    self.xCapturedPopup = NSWindow(value: nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(TestComboBox, self, getSelector("dealloc"))
 

@@ -90,6 +90,10 @@ objcImpl:
     xNativeReady {.set: windowNativeReady, get: windowNativeReady.}: bool
     xVisibleRequested {.set: windowVisibleRequested, get: windowVisibleRequested.}: bool
     xClosed {.set: windowClosed, get: windowClosed.}: bool
+    xNativePopupParent: NSWindow
+    xNativePopupPlacement: siwin.PopupPlacement
+    xNativePopupGrab: bool
+    xUsesNativePopup {.set: setUsesNativePopup, get: usesNativePopup.}: bool
     xMouseDownLocationInWindow: NSPoint
     xMouseDownView: NSView
     xHasMouseDownLocation: bool
@@ -114,6 +118,10 @@ objcImpl:
     result.xNativeReady = false
     result.xVisibleRequested = false
     result.xClosed = false
+    result.xNativePopupParent = NSWindow(value: nil)
+    result.xNativePopupPlacement = siwin.PopupPlacement()
+    result.xNativePopupGrab = true
+    result.xUsesNativePopup = false
     result.xMouseDownLocationInWindow = nsPoint(0.0, 0.0)
     result.xMouseDownView = NSView(value: nil)
     result.xHasMouseDownLocation = false
@@ -504,10 +512,25 @@ objcImpl:
   method flushWindow*(self: NSWindow) =
     flushWindowImpl(self)
 
+  method xNotifyDelegateWindowDidClose(self: NSWindow) =
+    if self.isNil:
+      return
+    let delegate = self.delegate()
+    if delegate.isNil or
+        not delegate.value.NSObject.respondsToSelector("windowDidClose:"):
+      return
+    cast[proc(self: IDPtr, op: SEL, windowId: IDPtr) {.cdecl, varargs.}](objc_msgSend)(
+      delegate.value, getSelector("windowDidClose:"), self.value
+    )
+
   method close*(self: NSWindow) =
+    if self.isNil or self.xClosed:
+      return
     self.xClosed = true
-    if self.xNativeReady and not self.xNativeWindow.isNil:
+    self.xVisibleRequested = false
+    if self.xNativeReady and not self.xNativeWindow.isNil and self.xNativeWindow.opened():
       siwinshim.close(self.xNativeWindow)
+    self.xNotifyDelegateWindowDidClose()
 
   method dealloc(self: NSWindow) {.used.} =
     if self.xNativeReady and (not self.xNativeWindow.isNil):
@@ -519,8 +542,37 @@ objcImpl:
       clearSuperviewRef(self.xContentView.value)
     self.xContentView = NSView(value: nil)
     self.xDelegate.value = nil
+    self.xNativePopupParent = NSWindow(value: nil)
     destroyIvarFields(self)
     discard callSuperIdFrom(NSWindow, self, getSelector("dealloc"))
+
+proc setNativePopupParent*(self: NSWindow, parent: NSWindow) =
+  if self.isNil:
+    return
+  self.xNativePopupParent = parent
+
+proc nativePopupParent*(self: NSWindow): NSWindow =
+  if self.isNil or self.xNativePopupParent.isNil:
+    return NSWindow(value: nil)
+  retain(self.xNativePopupParent)
+
+proc setNativePopupPlacement*(self: NSWindow, placement: siwin.PopupPlacement) =
+  if self.isNil:
+    return
+  self.xNativePopupPlacement = placement
+
+proc nativePopupPlacement*(self: NSWindow): siwin.PopupPlacement =
+  if self.isNil:
+    return siwin.PopupPlacement()
+  self.xNativePopupPlacement
+
+proc setNativePopupGrab*(self: NSWindow, value: bool) =
+  if self.isNil:
+    return
+  self.xNativePopupGrab = value
+
+proc nativePopupGrab*(self: NSWindow): bool =
+  (not self.isNil) and self.xNativePopupGrab
 
 proc viewForWindowPoint(window: NSWindow, locationInWindow: NSPoint): NSView =
   if window.isNil:

@@ -1,4 +1,6 @@
 import std/[math, times]
+import pkg/vmath
+import siwin/window as siwin
 
 import ./runtime
 import ./views
@@ -173,8 +175,59 @@ proc comboBoxPopupItemRect*(
     max(itemHeight, 0.0),
   )
 
+proc comboBoxPopupPlacement(self: auto): siwin.PopupPlacement =
+  let ownerWindow = self.window()
+  let ownerContent =
+    if ownerWindow.isNil:
+      NSView(value: nil)
+    else:
+      ownerWindow.contentView()
+  let ownerHeight =
+    if ownerContent.isNil:
+      max(self.frame().origin.y + self.frame().size.height, 0.0)
+    else:
+      max(ownerContent.bounds().size.height, 0.0)
+  let controlFrame = self.frame()
+  let popupBox = comboBoxPopupFrame(self, controlFrame)
+  let topLeftY =
+    max(ownerHeight - (controlFrame.origin.y + controlFrame.size.height), 0.0)
+  siwin.PopupPlacement(
+    anchorRectPos: ivec2(controlFrame.origin.x.int32, topLeftY.int32),
+    anchorRectSize: ivec2(
+      max(controlFrame.size.width, 1.0).int32, max(controlFrame.size.height, 1.0).int32
+    ),
+    size:
+      ivec2(max(popupBox.size.width, 1.0).int32, max(popupBox.size.height, 1.0).int32),
+    anchor: siwin.Edge.bottomLeft,
+    gravity: siwin.Edge.topLeft,
+    constraintAdjustment: {
+      siwin.PopupConstraintAdjustment.pcaSlideX,
+      siwin.PopupConstraintAdjustment.pcaFlipY,
+      siwin.PopupConstraintAdjustment.pcaResizeY,
+    },
+    reactive: true,
+  )
+
+proc comboBoxPopupScrollView(window: NSWindow): NSScrollView =
+  if window.isNil:
+    return NSScrollView(value: nil)
+  let content = window.contentView()
+  if content.isNil:
+    return NSScrollView(value: nil)
+  let subviews = content.subviews()
+  if subviews.len <= 0:
+    return NSScrollView(value: nil)
+  subviews[0].NSScrollView
+
+proc comboBoxPopupView(window: NSWindow): NSView =
+  let scrollView = comboBoxPopupScrollView(window)
+  if scrollView.isNil:
+    return NSView(value: nil)
+  scrollView.documentView()
+
 objcImpl:
   type NSComboBoxView* = object of NSView
+    xComboBox: ID
     xObjects: seq[string]
     xSelectedIndex {.get: selectedIndex.}: int
     xCellSize {.get: cellSize.}: NSSize
@@ -191,6 +244,7 @@ objcImpl:
     if result.isNil:
       return
     initIvarFields(result)
+    result.xComboBox.value = nil
     result.xObjects = @[]
     result.xSelectedIndex = -1
     result.xCellSize = nsSize(120.0, 22.0)
@@ -437,110 +491,10 @@ objcImpl:
     self.xKeyboardUIState = ComboKeyboardOk
 
   method dealloc(self: NSComboBoxView) {.used.} =
+    self.xComboBox.value = nil
     self.xObjects = @[]
     destroyIvarFields(self)
     discard callSuperIdFrom(NSComboBoxView, self, getSelector("dealloc"))
-
-objcImpl:
-  type NSComboBoxWindow* = object of NSPanel
-    xComboBox: ID
-    xScrollView: NSScrollView
-    xView: NSComboBoxView
-
-  method initWithFrame*(self: var NSComboBoxWindow, frame: NSRect): NSComboBoxWindow =
-    var base = self.initWithContentRect(
-      frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
-      NSBorderlessWindowMask, NSBackingStoreBuffered, false,
-    )
-    result = asTypeRaw[NSComboBoxWindow](base.value)
-    base.value = nil
-    if result.isNil:
-      return
-    initIvarFields(result)
-    result.setReleasedWhenClosed(true)
-
-    var contentAlloc = NSView.alloc()
-    var contentView = contentAlloc.initWithFrame(
-      nsRect(0.0, 0.0, max(frame.size.width, 1.0), max(frame.size.height, 1.0))
-    )
-    contentAlloc.value = nil
-    result.setContentView(contentView)
-
-    var scrollAlloc = NSScrollView.alloc()
-    result.xScrollView = scrollAlloc.initWithFrame(
-      0.0, 0.0, max(frame.size.width, 1.0), max(frame.size.height, 1.0)
-    )
-    scrollAlloc.value = nil
-    result.xScrollView.setHasVerticalScroller(false)
-    result.xScrollView.setHasHorizontalScroller(false)
-    result.xScrollView.setBorderType(NSLineBorder)
-    contentView.addSubview(result.xScrollView)
-
-    let clipSize = result.xScrollView.contentSize()
-    var viewAlloc = NSComboBoxView.alloc()
-    result.xView = viewAlloc.initWithFrame(
-      nsRect(0.0, 0.0, max(clipSize.width, 1.0), max(clipSize.height, 1.0))
-    )
-    viewAlloc.value = nil
-    result.xScrollView.setDocumentView(result.xView)
-    contentView.value = nil
-
-  method init*(self: var NSComboBoxWindow): NSComboBoxWindow =
-    self.initWithFrame(nsRect(0.0, 0.0, 1.0, 1.0))
-
-  method setObjectArray*(self: NSComboBoxWindow, objects: NSArray[NSString]) =
-    if self.xView.isNil:
-      return
-    self.xView.setObjectArray(objects)
-
-  method setFont*(self: NSComboBoxWindow, font: NSFont) =
-    if self.xView.isNil:
-      return
-    self.xView.setFont(font)
-
-  method setSelectedIndex*(self: NSComboBoxWindow, index: int) =
-    if self.xView.isNil:
-      return
-    self.xView.setSelectedIndex(index)
-
-  method setCellHeight*(self: NSComboBoxWindow, height: float32) =
-    if self.xView.isNil:
-      return
-    let current = self.xView.cellSize()
-    self.xView.setCellSize(nsSize(current.width, max(height, 1.0)))
-
-  method sizeToContents*(self: NSComboBoxWindow) =
-    if self.isNil or self.xView.isNil or self.xScrollView.isNil:
-      return
-
-    let size = self.xView.sizeForContents()
-    let scrollViewSize = NSScrollView.frameSizeForContentSize(
-      size,
-      self.xScrollView.hasHorizontalScroller(),
-      self.xScrollView.hasVerticalScroller(),
-      NSLineBorder,
-    )
-    var frame = self.frame()
-    frame.size = scrollViewSize
-    self.setFrame(frame)
-
-    self.xScrollView.setFrameSize(scrollViewSize)
-    self.xScrollView.setFrameOrigin(nsPoint(0.0, 0.0))
-    self.xView.setFrameSize(size)
-    self.xView.setFrameOrigin(nsPoint(0.0, 0.0))
-
-  method runTrackingWithEvent*(self: NSComboBoxWindow, event: NSEvent): int =
-    if self.isNil or self.xView.isNil or self.xScrollView.isNil:
-      return -1
-    self.sizeToContents()
-    self.xView.runTrackingWithEvent(event)
-
-  method dealloc(self: NSComboBoxWindow) {.used.} =
-    self.xComboBox.value = nil
-    self.xView = NSComboBoxView(value: nil)
-    self.xScrollView = NSScrollView(value: nil)
-    destroyIvarFields(self)
-    discard callSuperIdFrom(NSComboBoxWindow, self, getSelector("dealloc"))
 
 objcImpl:
   type NSComboBox* = object of NSTextField
@@ -557,7 +511,7 @@ objcImpl:
       int
     xPopupOpen {.set: setPopupOpen, get: popupOpen.}: bool
     xPopupHoveredIndex {.set: setPopupHoveredIndex, get: popupHoveredIndex.}: int
-    xPopupWindow {.set: setPopupWindow, get: popupWindow.}: NSComboBoxWindow
+    xPopupWindow {.set: setPopupWindow, get: popupWindow.}: NSWindow
     xPopupTracking {.set: setPopupTracking, get: popupTracking.}: bool
     xButtonPressed {.set: setButtonPressed, get: buttonPressed.}: bool
 
@@ -579,7 +533,7 @@ objcImpl:
     result.xNumberOfVisibleItems = 5
     result.xPopupOpen = false
     result.xPopupHoveredIndex = -1
-    result.xPopupWindow = NSComboBoxWindow(value: nil)
+    result.xPopupWindow = NSWindow(value: nil)
     result.xPopupTracking = false
     result.xButtonPressed = false
     result.setEditable(true)
@@ -600,12 +554,12 @@ objcImpl:
       )
     )
 
-  method comboBox*(self: NSComboBoxWindow): NSComboBox =
+  method comboBox*(self: NSComboBoxView): NSComboBox =
     if self.isNil or self.xComboBox.isNil:
       return NSComboBox(value: nil)
     self.xComboBox.value.NSObject.NSComboBox
 
-  method setComboBox*(self: NSComboBoxWindow, comboBox: NSComboBox) =
+  method setComboBox*(self: NSComboBoxView, comboBox: NSComboBox) =
     if self.isNil:
       return
     self.xComboBox.value = comboBox.value
@@ -625,34 +579,106 @@ objcImpl:
       max(bounds.size.height, 1.0),
     )
 
-  method ensurePopupWindow*(self: NSComboBox): NSComboBoxWindow =
+  method ensurePopupWindow*(self: NSComboBox): NSWindow =
     if not self.xPopupWindow.isNil and not self.xPopupWindow.windowClosed():
       self.xPopupWindow.setFrame(self.popupWindowFrame())
       return self.xPopupWindow
 
-    var popupAlloc = NSComboBoxWindow.alloc()
-    let popup = popupAlloc.initWithFrame(self.popupWindowFrame())
+    var popupAlloc = NSWindow.alloc()
+    let popup = popupAlloc.initWithContentRect(
+      self.popupWindowFrame().origin.x,
+      self.popupWindowFrame().origin.y,
+      self.popupWindowFrame().size.width,
+      self.popupWindowFrame().size.height,
+    )
     popupAlloc.value = nil
     if popup.isNil:
-      return NSComboBoxWindow(value: nil)
+      return NSWindow(value: nil)
+    popup.setStyleMask(NSBorderlessWindowMask)
+    popup.setBackingType(NSBackingStoreBuffered)
+    popup.setReleasedWhenClosed(true)
+    popup.setDelegate(self.NSObject)
+
+    var contentAlloc = NSView.alloc()
+    let contentView = contentAlloc.initWithFrame(
+      nsRect(
+        0.0,
+        0.0,
+        max(self.popupWindowFrame().size.width, 1.0),
+        max(self.popupWindowFrame().size.height, 1.0),
+      )
+    )
+    contentAlloc.value = nil
+    popup.setContentView(contentView)
+
+    var scrollAlloc = NSScrollView.alloc()
+    let scrollView = scrollAlloc.initWithFrame(
+      0.0,
+      0.0,
+      max(self.popupWindowFrame().size.width, 1.0),
+      max(self.popupWindowFrame().size.height, 1.0),
+    )
+    scrollAlloc.value = nil
+    scrollView.setHasVerticalScroller(false)
+    scrollView.setHasHorizontalScroller(false)
+    scrollView.setBorderType(NSLineBorder)
+    contentView.addSubview(scrollView)
+
+    let clipSize = scrollView.contentSize()
+    var viewAlloc = NSComboBoxView.alloc()
+    let popupView = viewAlloc.initWithFrame(
+      nsRect(0.0, 0.0, max(clipSize.width, 1.0), max(clipSize.height, 1.0))
+    )
+    viewAlloc.value = nil
+    popupView.setComboBox(self)
+    scrollView.setDocumentView(popupView)
+    popup.setNativePopupParent(self.window())
+    popup.setNativePopupGrab(false)
+    popup.setUsesNativePopup(true)
     let owner = self.window()
     if not owner.isNil:
-      addAuxiliaryWindow(owner, popup.NSWindow)
+      addAuxiliaryWindow(owner, popup)
     self.xPopupWindow = popup
     popup
 
-  method configurePopupWindow*(self: NSComboBox, popup: NSComboBoxWindow) =
+  method configurePopupWindow*(self: NSComboBox, popup: NSWindow) =
     if self.isNil or popup.isNil:
       return
-    popup.setComboBox(self)
     popup.setFrame(self.popupWindowFrame())
-    popup.setObjectArray(self.objectValues())
-    popup.setSelectedIndex(self.indexOfSelectedItem())
-    popup.setCellHeight(comboBoxPopupItemHeight(self))
+    popup.setNativePopupParent(self.window())
+    popup.setNativePopupPlacement(self.comboBoxPopupPlacement())
+    let popupView = comboBoxPopupView(popup).NSComboBoxView
+    let popupScrollView = comboBoxPopupScrollView(popup)
+    if popupView.isNil or popupScrollView.isNil:
+      return
+    popupView.setComboBox(self)
+    popupView.setObjectArray(self.objectValues())
+    popupView.setSelectedIndex(self.indexOfSelectedItem())
+    let current = popupView.cellSize()
+    popupView.setCellSize(
+      nsSize(current.width, max(comboBoxPopupItemHeight(self), 1.0))
+    )
     let comboFont = self.font()
     if not comboFont.isNil:
-      popup.setFont(comboFont)
-    popup.sizeToContents()
+      popupView.setFont(comboFont)
+    let size = popupView.sizeForContents()
+    let scrollViewSize = NSScrollView.frameSizeForContentSize(
+      size,
+      popupScrollView.hasHorizontalScroller(),
+      popupScrollView.hasVerticalScroller(),
+      NSLineBorder,
+    )
+    var frame = popup.frame()
+    frame.size = scrollViewSize
+    popup.setFrame(frame)
+    let contentView = popup.contentView()
+    if not contentView.isNil:
+      contentView.setFrameSize(scrollViewSize)
+    popupScrollView.setFrameSize(scrollViewSize)
+    popupScrollView.setFrameOrigin(nsPoint(0.0, 0.0))
+    popupView.setFrameSize(size)
+    popupView.setFrameOrigin(nsPoint(0.0, 0.0))
+    popup.setNativePopupPlacement(self.comboBoxPopupPlacement())
     self.xPopupOpen = true
     self.xPopupHoveredIndex = self.indexOfSelectedItem()
 
@@ -668,8 +694,18 @@ objcImpl:
       return
     if not self.xPopupWindow.windowClosed():
       self.xPopupWindow.close()
-    self.xPopupWindow = NSComboBoxWindow(value: nil)
+
+  method windowDidClose*(self: NSComboBox, window: NSWindow) =
+    if self.isNil or window.isNil or self.xPopupWindow.isNil:
+      return
+    if self.xPopupWindow.value != window.value:
+      return
+    self.xPopupWindow = NSWindow(value: nil)
+    self.xPopupOpen = false
+    self.xPopupHoveredIndex = -1
+    self.xPopupTracking = false
     self.reactivateOwnerWindow()
+    self.setNeedsDisplay(true)
 
   method trackPopupWithEvent*(self: NSComboBox, event: NSEvent): int =
     result = -1
@@ -681,7 +717,9 @@ objcImpl:
     self.configurePopupWindow(popup)
     self.xPopupTracking = true
     popup.makeKeyAndOrderFront(self.NSObject)
-    result = popup.runTrackingWithEvent(event)
+    let popupView = comboBoxPopupView(popup).NSComboBoxView
+    if not popupView.isNil:
+      result = popupView.runTrackingWithEvent(event)
     self.xPopupTracking = false
     self.closePopupWindow()
     self.xPopupOpen = false
@@ -998,13 +1036,13 @@ objcImpl:
       self.activateItemAtIndex(selectedIndex)
 
   method mouseMoved*(self: NSComboBox, event: NSEvent) =
-    discard
+    discard event
 
   method mouseDragged*(self: NSComboBox, event: NSEvent) =
-    discard
+    discard event
 
   method mouseUp*(self: NSComboBox, event: NSEvent) =
-    discard
+    discard event
 
   method activateItemAtIndex*(self: NSComboBox, index: int) =
     if index < 0 or index >= self.numberOfItems():
@@ -1037,50 +1075,37 @@ objcImpl:
     discard callSuperIdFrom(NSComboBox, self, getSelector("dealloc"))
 
 objcImpl:
-  method updateSelectionForEvent*(self: NSComboBoxWindow, event: NSEvent): int =
-    if self.isNil or self.xView.isNil:
+  method updateSelectionForEvent*(self: NSComboBoxView, event: NSEvent): int =
+    if self.isNil or event.isNil:
       return -1
-    let index = self.xView.itemIndexForPoint(self.xView.pointInSelfForEvent(event))
-    self.xView.setSelectedIndex(index)
+    let index = self.itemIndexForPoint(self.pointInSelfForEvent(event))
+    self.setSelectedIndex(index)
     let comboBox = self.comboBox()
     if not comboBox.isNil:
       comboBox.setPopupHoveredIndex(index)
-    self.xView.setNeedsDisplay(true)
+    self.setNeedsDisplay(true)
     index
 
-objcImpl:
   method mouseDown*(self: NSComboBoxView, event: NSEvent) =
     if self.isNil or event.isNil:
       return
-    let popup = self.window().NSComboBoxWindow
-    if popup.isNil:
-      return
-    discard popup.updateSelectionForEvent(event)
+    discard self.updateSelectionForEvent(event)
 
   method mouseDragged*(self: NSComboBoxView, event: NSEvent) =
     if self.isNil or event.isNil:
       return
-    let popup = self.window().NSComboBoxWindow
-    if popup.isNil:
-      return
-    discard popup.updateSelectionForEvent(event)
+    discard self.updateSelectionForEvent(event)
 
   method mouseMoved*(self: NSComboBoxView, event: NSEvent) =
     if self.isNil or event.isNil:
       return
-    let popup = self.window().NSComboBoxWindow
-    if popup.isNil:
-      return
-    discard popup.updateSelectionForEvent(event)
+    discard self.updateSelectionForEvent(event)
 
   method mouseUp*(self: NSComboBoxView, event: NSEvent) =
     if self.isNil or event.isNil:
       return
-    let popup = self.window().NSComboBoxWindow
-    if popup.isNil:
-      return
-    let index = popup.updateSelectionForEvent(event)
-    let comboBox = popup.comboBox()
+    let index = self.updateSelectionForEvent(event)
+    let comboBox = self.comboBox()
     if comboBox.isNil:
       return
     if index >= 0:
@@ -1093,10 +1118,6 @@ proc new*(t: typedesc[NSComboBox]): NSComboBox =
 
 proc new*(t: typedesc[NSComboBoxView]): NSComboBoxView =
   var allocated = NSComboBoxView.alloc()
-  result = initOwned(move(allocated))
-
-proc new*(t: typedesc[NSComboBoxWindow]): NSComboBoxWindow =
-  var allocated = NSComboBoxWindow.alloc()
   result = initOwned(move(allocated))
 
 proc comboBoxPopupItemIndexAtPoint*(
