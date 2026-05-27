@@ -1,8 +1,20 @@
 import std/unittest
 
+import figdraw/windowing/siwinshim
+
 import knutella/nimkit
 
 suite "nimkit application":
+  test "raw mouse input converts from reported input size to logical size":
+    let logicalSize = vec2(360.0'f32, 220.0'f32)
+
+    check rawInputToLogical(
+      vec2(72.0'f32, 108.0'f32), ivec2(360'i32, 220'i32), logicalSize
+    ) == vec2(72.0'f32, 108.0'f32)
+    check rawInputToLogical(
+      vec2(108.0'f32, 162.0'f32), ivec2(540'i32, 330'i32), logicalSize
+    ) == vec2(72.0'f32, 108.0'f32)
+
   test "runForFrames opens and pumps a visible native window":
     block nativeRun:
       let

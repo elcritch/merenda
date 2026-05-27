@@ -213,19 +213,20 @@ proc keyText(key: siwinshim.Key): string =
   of siwinshim.Key.tab: "\t"
   else: ""
 
-proc rawInputToLogical(rawPos: Vec2, backingSize: IVec2, logicalSize: Vec2): Vec2 =
-  if backingSize.x <= 0 or backingSize.y <= 0:
+proc rawInputToLogical*(rawPos: Vec2, inputSize: IVec2, logicalSize: Vec2): Vec2 =
+  if inputSize.x <= 0 or inputSize.y <= 0:
     return rawPos
   if logicalSize.x <= 0.0 or logicalSize.y <= 0.0:
     return rawPos
   vec2(
-    rawPos.x * logicalSize.x / backingSize.x.float32,
-    rawPos.y * logicalSize.y / backingSize.y.float32,
+    rawPos.x * logicalSize.x / inputSize.x.float32,
+    rawPos.y * logicalSize.y / inputSize.y.float32,
   )
 
 proc nativeMousePoint(window: siwinshim.Window): Point =
-  let pos =
-    rawInputToLogical(window.mouse.pos, window.backingSize(), window.logicalSize())
+  # siwin mouse.pos is reported in window.size coordinates, which may lag
+  # backingSize on Cocoa until resize/backing notifications are delivered.
+  let pos = rawInputToLogical(window.mouse.pos, window.size(), window.logicalSize())
   initPoint(pos.x.float32, pos.y.float32)
 
 proc dispatchNativeMouseButton(window: Window, event: siwinshim.MouseButtonEvent) =
