@@ -23,6 +23,5 @@ root.addSubview(button)
 window.setContentView(root)
 app.addWindow(window)
 
-discard buildRenders(window)
-discard window.clickAt(initPoint(32, 84))
-discard buildRenders(window)
+window.makeKeyAndOrderFront()
+app.run()
