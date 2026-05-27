@@ -10,8 +10,10 @@ requires "nim >= 2.2.6"
 requires "msgpack4nim"
 requires "chronicles"
 requires "https://github.com/elcritch/figdraw[siwin] >= 0.22.5"
-requires "sigils"
+requires "sigils >= 0.20"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
+
+requires "https://github.com/elcritch/figuro"
 
