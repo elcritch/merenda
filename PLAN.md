@@ -120,6 +120,8 @@ Acceptance:
 - The demo opens a window.
 - Clicking the button changes the visible label text.
 - The click path exercises selector dispatch rather than a direct callback only.
+- A screenshot test captures the initial demo state and the post-click state from
+  the start, using the same render-once pattern as figdraw.
 - `nim c examples/nimkit_button_demo.nim` succeeds.
 
 ## Stage 2: Responder And Event Core
@@ -196,6 +198,13 @@ Acceptance:
 
 ## Test Plan
 
+- Add screenshot testing from the first visible stage, modeled on figdraw's
+  `deps/figdraw/tests/siwin_test_utils.nim` and
+  `deps/figdraw/tests/opengl_test_utils.nim`: create a test output directory,
+  render one frame, call `figdraw/figrender.takeScreenshot`, write PNGs under
+  `tests/output`, and compare against `tests/expected` images or stable sampled
+  pixels. Tests may skip only when the selected graphics backend/window system is
+  unavailable.
 - Add `tests/tnimkit_types.nim` for value constructors and invariants.
 - Add `tests/tnimkit_selectors.nim` for typed selector dispatch and protocol
   conformance.
@@ -204,6 +213,9 @@ Acceptance:
 - Add `tests/tnimkit_views.nim` for subview ordering, hit testing, hidden state,
   frame/bounds conversion, and invalidation.
 - Add `tests/tnimkit_rendering.nim` for figdraw render-tree inspection.
+- Add `tests/tnimkit_screenshot.nim` for end-to-end screenshots of the button demo
+  before and after a synthetic click, including `.diff.png` output when image
+  comparison exceeds the threshold.
 - Add `tests/tnimkit_controls.nim` for button and text field behavior.
 - Compile examples through the existing `nim test` task.
 - Run focused tests during development with `nim c -r tests/<file>.nim`.
