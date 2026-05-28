@@ -76,9 +76,13 @@ NimKit already has the first useful vertical slice:
   `TextField`, string value, alignment, text color, editable/selectable flags.
 - `src/knutella/nimkit/rendering.nim`:
   figdraw node creation, text layout helpers, and render-tree construction.
+- `src/knutella/nimkit/backend.nim`:
+  Internal host backend for siwin native windows, FigDraw renderer setup,
+  native event translation, input coordinate conversion, native stepping, and
+  presentation.
 - `src/knutella/nimkit/windows.nim`:
-  `Window`, native siwin window ownership, event translation, render flushing,
-  and input coordinate conversion.
+  `Window` title/frame/content/first-responder state, visibility lifecycle,
+  render flushing, and NimKit event dispatch.
 - `src/knutella/nimkit/application.nim`:
   App singleton/lifetime, window list, run loop helpers, and frame-limited test
   execution.
@@ -236,8 +240,8 @@ its implementation.
 
 ### Priority Order
 
-- Short term: backend/display-server boundary, dirty-rect invariants,
-  coordinate invalidation tests, and view lifecycle hooks.
+- Short term: dirty-rect invariants, coordinate invalidation tests, and view
+  lifecycle hooks.
 - Medium term: theme/metrics object, cleaner cell invalidation/default-cell
   construction, richer key command dispatch, and explicit tracking loops.
 - Later: constraint layout, panels/services integration, loadable themes, and
@@ -252,13 +256,6 @@ Current comparison source:
 NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
 still points to the next correctness boundaries:
 
-- Extract a NimKit backend/display-server boundary. `windows.nim` currently owns
-  siwin window creation, native event handler registration, renderer creation,
-  native-window owner lookup, input coordinate conversion, stepping, and
-  presentation. GNUstep keeps those concerns behind `GSDisplayServer`, while
-  `NSApplication`/`NSWindow` handle policy. A small NimKit backend should own
-  native windows, event polling, renderer setup, and logical input conversion so
-  `Window` can focus on window state and dispatch.
 - Add a real display invalidation pipeline before adding complex views. NimKit
   has a boolean `needsDisplay` and redraws by rebuilding the whole render tree.
   GNUstep tracks invalid rects, clips them to bounds/visible rects, marks
@@ -302,62 +299,56 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- First: backend/display-server extraction, coordinate conversion helpers, and
-  mouse tracking/capture. These will affect most future widgets and should be
-  settled before adding scroll views or editable text.
+- First: coordinate conversion helpers and mouse tracking/capture. These will
+  affect most future widgets and should be settled before adding scroll views
+  or editable text.
 - Second: invalid rects/visible rects and lifecycle hooks, with tests around
   reparenting, hidden views, and child invalidation.
 - Third: theme/metrics and command/key-binding layers, then expand controls.
 
 Concrete task list:
 
-1. Extract a NimKit host backend boundary, while continuing to render with
-   FigDraw. Move siwin window creation, event callback registration, renderer
-   setup, native-owner lookup, native stepping, presentation, and input-scale
-   conversion out of `windows.nim` behind a small internal backend API. Keep
-   `Window` responsible for title/frame/content/first-responder state and
-   NimKit event dispatch.
-2. Add coordinate conversion helpers and tests. Start with unrotated/unscaled
+1. Add coordinate conversion helpers and tests. Start with unrotated/unscaled
    AppKit-shaped helpers:
    `convertPointFromView`, `convertPointToView`, `convertRectFromView`,
    `convertRectToView`, `convertPointFromWindow`, `convertPointToWindow`,
    `convertRectFromWindow`, and `convertRectToWindow`. Cover root-to-child,
    child-to-root, sibling-to-sibling, nested views, non-zero bounds origins,
    reparenting, and window/content coordinates.
-3. Route hit testing and mouse event dispatch through the coordinate conversion
+2. Route hit testing and mouse event dispatch through the coordinate conversion
    helpers. Current hit testing works by subtracting child frame origins; that
    should become a caller of the shared conversion layer so dirty rects,
    drawing, text selection, scrolling, and future drag behavior use the same
    math.
-4. Add window-level mouse tracking/capture. Track the view that receives
+3. Add window-level mouse tracking/capture. Track the view that receives
    mouse-down and send drag/move/up continuation events to that tracking view
    until mouse-up, rather than hit-testing every mouse-up independently. Use
    this before implementing drag, scroll, hover, continuous controls, or
    outside-button cancellation behavior.
-5. Add a real display invalidation pipeline. Replace the single boolean model
+4. Add a real display invalidation pipeline. Replace the single boolean model
    with `setNeedsDisplayInRect`, invalid-rect union, clipping to bounds and
    visible rects, ancestor propagation, and render-pass clearing. Keep
    whole-window redraw as the renderer strategy until dirty rendering is
    needed, but preserve dirty metadata and tests now.
-6. Add visible-rect and clipping behavior. Hidden ancestors should produce an
+5. Add visible-rect and clipping behavior. Hidden ancestors should produce an
    empty visible rect; parent bounds should clip child visible rects; future
    scroll views should be able to narrow visible rects without special render
    hacks.
-7. Add selector-backed view lifecycle hooks. Provide
+6. Add selector-backed view lifecycle hooks. Provide
    `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
    `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and a remove
    hook. Route `addSubview`, `removeFromSuperview`, and `setContentView`
    through those hooks while keeping direct field mutation private.
-8. Introduce a small theme/metrics object. Do not build a loadable theme system
+7. Introduce a small theme/metrics object. Do not build a loadable theme system
    yet; start with colors, border widths, corner radius, focus-ring metrics,
    control padding, and text insets used by buttons and text fields. Rendering
    should ask the theme for these values instead of hard-coding them in
    widget/render helpers.
-9. Add a command/key-binding layer before real text editing expands. Map
+8. Add a command/key-binding layer before real text editing expands. Map
    key/modifier combinations to command selectors, then dispatch through the
    responder chain. This should share the same path for text editing commands,
    button key equivalents, and future menu shortcuts.
-10. Expand controls after the above contracts stabilize. Prioritize checkbox,
+9. Expand controls after the above contracts stabilize. Prioritize checkbox,
     radio, toggle variants, combo box, and basic text editing. Keep policy
     hooks selector-based where behavior is overridable.
 
