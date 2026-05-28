@@ -21,30 +21,26 @@ protocol ControlProtocolInternal:
     method setEnabled(enabled: bool)
     method sendAction(): bool
 
-method controlIsEnabled(self: Control): bool {.selector.} =
-  self.xEnabled
+protocol DefaultControl of ControlProtocolInternal:
+  method isEnabled(self: Control): bool =
+    self.xEnabled
 
-method controlSetEnabled(self: Control, enabled: bool): EmptyArgs {.selector.} =
-  if self.xEnabled == enabled:
-    return
-  self.xEnabled = enabled
-  self.setNeedsDisplay(true)
+  method setEnabled(self: Control, enabled: bool) =
+    if self.xEnabled == enabled:
+      return
+    self.xEnabled = enabled
+    self.setNeedsDisplay(true)
 
-method controlSendAction(self: Control): bool {.selector.} =
-  if self.xTarget.isNil:
-    return false
-  var value: EmptyArgs
-  self.xTarget.perform(self.xAction, ActionArgs(sender: DynamicAgent(self)), value)
-
-proc installControlMethods(control: Control) =
-  discard control.replaceMethod(isEnabled, controlIsEnabled)
-  discard control.replaceMethod(setEnabled, controlSetEnabled)
-  discard control.replaceMethod(sendAction, controlSendAction)
+  method sendAction(self: Control): bool =
+    if self.xTarget.isNil:
+      return false
+    var value: EmptyArgs
+    self.xTarget.perform(self.xAction, ActionArgs(sender: DynamicAgent(self)), value)
 
 proc initControlFields*(control: Control, frame: Rect) =
   initViewFields(control, frame)
   control.xEnabled = true
-  control.installControlMethods()
+  discard control.replaceMethods(DefaultControl.init())
 
 proc isEnabled*(control: Control): bool =
   control.send(isEnabled, ())

@@ -32,111 +32,94 @@ protocol ViewProtocolInternal:
     method pointInside(point: Point): bool
     method hitTest(point: Point): View
 
-method viewFrame(self: View): Rect {.selector.} =
-  self.xFrame
+protocol DefaultView of ViewProtocolInternal:
+  method frame(self: View): Rect =
+    self.xFrame
 
-method viewBounds(self: View): Rect {.selector.} =
-  self.xBounds
+  method bounds(self: View): Rect =
+    self.xBounds
 
-method viewIsHidden(self: View): bool {.selector.} =
-  self.xHidden
+  method isHidden(self: View): bool =
+    self.xHidden
 
-method viewNeedsDisplay(self: View): bool {.selector.} =
-  self.xNeedsDisplay
+  method needsDisplay(self: View): bool =
+    self.xNeedsDisplay
 
-method viewBackgroundColor(self: View): Color {.selector.} =
-  self.xBackgroundColor
+  method backgroundColor(self: View): Color =
+    self.xBackgroundColor
 
-method viewSuperview(self: View): View {.selector.} =
-  self.xSuperview
+  method superview(self: View): View =
+    self.xSuperview
 
-method viewSubviews(self: View): seq[View] {.selector.} =
-  self.xSubviews
+  method subviews(self: View): seq[View] =
+    self.xSubviews
 
-method viewSetNeedsDisplay(self: View, value: bool): EmptyArgs {.selector.} =
-  self.xNeedsDisplay = value
-  if value and not self.xSuperview.isNil:
-    self.xSuperview.setNeedsDisplay(true)
+  method setNeedsDisplay(self: View, value: bool) =
+    self.xNeedsDisplay = value
+    if value and not self.xSuperview.isNil:
+      self.xSuperview.setNeedsDisplay(true)
 
-method viewSetFrame(self: View, frame: Rect): EmptyArgs {.selector.} =
-  if self.xFrame == frame:
-    return
-  self.xFrame = frame
-  self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
-  self.setNeedsDisplay(true)
+  method setFrame(self: View, frame: Rect) =
+    if self.xFrame == frame:
+      return
+    self.xFrame = frame
+    self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+    self.setNeedsDisplay(true)
 
-method viewSetBounds(self: View, bounds: Rect): EmptyArgs {.selector.} =
-  if self.xBounds == bounds:
-    return
-  self.xBounds = initRect(bounds.origin, bounds.size)
-  self.setNeedsDisplay(true)
+  method setBounds(self: View, bounds: Rect) =
+    if self.xBounds == bounds:
+      return
+    self.xBounds = initRect(bounds.origin, bounds.size)
+    self.setNeedsDisplay(true)
 
-method viewSetHidden(self: View, hidden: bool): EmptyArgs {.selector.} =
-  if self.xHidden == hidden:
-    return
-  self.xHidden = hidden
-  self.setNeedsDisplay(true)
+  method setHidden(self: View, hidden: bool) =
+    if self.xHidden == hidden:
+      return
+    self.xHidden = hidden
+    self.setNeedsDisplay(true)
 
-method viewSetBackgroundColor(self: View, color: Color): EmptyArgs {.selector.} =
-  if self.xBackgroundColor == color:
-    return
-  self.xBackgroundColor = color
-  self.setNeedsDisplay(true)
+  method setBackgroundColor(self: View, color: Color) =
+    if self.xBackgroundColor == color:
+      return
+    self.xBackgroundColor = color
+    self.setNeedsDisplay(true)
 
-method viewRemoveFromSuperview(self: View): EmptyArgs {.selector.} =
-  let parent = self.xSuperview
-  if parent.isNil:
-    return
-  let idx = parent.xSubviews.find(self)
-  if idx >= 0:
-    parent.xSubviews.delete(idx)
-    parent.setNeedsDisplay(true)
-  self.xSuperview = nil
-  self.clearNextResponder()
+  method removeFromSuperview(self: View) =
+    let parent = self.xSuperview
+    if parent.isNil:
+      return
+    let idx = parent.xSubviews.find(self)
+    if idx >= 0:
+      parent.xSubviews.delete(idx)
+      parent.setNeedsDisplay(true)
+    self.xSuperview = nil
+    self.clearNextResponder()
 
-method viewAddSubview(self: View, child: View): EmptyArgs {.selector.} =
-  if child.isNil:
-    return
-  if not child.xSuperview.isNil:
-    child.removeFromSuperview()
-  child.xSuperview = self
-  self.xSubviews.add child
-  child.setNextResponder(self)
-  self.setNeedsDisplay(true)
+  method addSubview(self: View, child: View) =
+    if child.isNil:
+      return
+    if not child.xSuperview.isNil:
+      child.removeFromSuperview()
+    child.xSuperview = self
+    self.xSubviews.add child
+    child.setNextResponder(self)
+    self.setNeedsDisplay(true)
 
-method viewPointInside(self: View, point: Point): bool {.selector.} =
-  self.xBounds.contains(point)
+  method pointInside(self: View, point: Point): bool =
+    self.xBounds.contains(point)
 
-method viewHitTest(self: View, point: Point): View {.selector.} =
-  if self.xHidden or not self.pointInside(point):
-    return nil
+  method hitTest(self: View, point: Point): View =
+    if self.xHidden or not self.pointInside(point):
+      return nil
 
-  for idx in countdown(self.xSubviews.high, 0):
-    let child = self.xSubviews[idx]
-    let local = point.localPoint(child.frame)
-    let hit = child.hitTest(local)
-    if not hit.isNil:
-      return hit
+    for idx in countdown(self.xSubviews.high, 0):
+      let child = self.xSubviews[idx]
+      let local = point.localPoint(child.frame)
+      let hit = child.hitTest(local)
+      if not hit.isNil:
+        return hit
 
-  self
-
-proc installViewMethods(view: View) =
-  discard view.replaceMethod(frame, viewFrame)
-  discard view.replaceMethod(bounds, viewBounds)
-  discard view.replaceMethod(isHidden, viewIsHidden)
-  discard view.replaceMethod(needsDisplay, viewNeedsDisplay)
-  discard view.replaceMethod(backgroundColor, viewBackgroundColor)
-  discard view.replaceMethod(superview, viewSuperview)
-  discard view.replaceMethod(subviews, viewSubviews)
-  discard view.replaceMethod(setNeedsDisplay, viewSetNeedsDisplay)
-  discard view.replaceMethod(setFrame, viewSetFrame)
-  discard view.replaceMethod(setBounds, viewSetBounds)
-  discard view.replaceMethod(setHidden, viewSetHidden)
-  discard view.replaceMethod(setBackgroundColor, viewSetBackgroundColor)
-  discard view.replaceMethod(removeFromSuperview, viewRemoveFromSuperview)
-  discard view.replaceMethod(addSubview, viewAddSubview)
-  discard view.replaceMethod(pointInside, viewPointInside)
-  discard view.replaceMethod(hitTest, viewHitTest)
+    self
 
 proc initViewFields*(view: View, frame: Rect) =
   initResponder(view)
@@ -144,7 +127,7 @@ proc initViewFields*(view: View, frame: Rect) =
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
   view.xNeedsDisplay = true
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
-  view.installViewMethods()
+  discard view.replaceMethods(DefaultView.init())
 
 proc newView*(frame: Rect): View =
   result = View()

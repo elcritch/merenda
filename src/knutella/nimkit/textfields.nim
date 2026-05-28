@@ -24,75 +24,54 @@ protocol TextFieldProtocolInternal:
     method isSelectable(): bool
     method setSelectable(selectable: bool)
 
-method textFieldStringValue(textField: TextField): string {.selector.} =
-  textField.xStringValue
+protocol DefaultTextField of TextFieldProtocolInternal:
+  method stringValue(textField: TextField): string =
+    textField.xStringValue
 
-method textFieldSetStringValue(
-    textField: TextField, value: string
-): EmptyArgs {.selector.} =
-  if textField.xStringValue == value:
-    return
-  textField.xStringValue = value
-  textField.setNeedsDisplay(true)
+  method setStringValue(textField: TextField, value: string) =
+    if textField.xStringValue == value:
+      return
+    textField.xStringValue = value
+    textField.setNeedsDisplay(true)
 
-method textFieldAlignment(textField: TextField): TextAlignment {.selector.} =
-  textField.xAlignment
+  method alignment(textField: TextField): TextAlignment =
+    textField.xAlignment
 
-method textFieldSetAlignment(
-    textField: TextField, alignment: TextAlignment
-): EmptyArgs {.selector.} =
-  if textField.xAlignment == alignment:
-    return
-  textField.xAlignment = alignment
-  textField.setNeedsDisplay(true)
+  method setAlignment(textField: TextField, alignment: TextAlignment) =
+    if textField.xAlignment == alignment:
+      return
+    textField.xAlignment = alignment
+    textField.setNeedsDisplay(true)
 
-method textFieldTextColor(textField: TextField): Color {.selector.} =
-  textField.xTextColor
+  method textColor(textField: TextField): Color =
+    textField.xTextColor
 
-method textFieldSetTextColor(
-    textField: TextField, color: Color
-): EmptyArgs {.selector.} =
-  if textField.xTextColor == color:
-    return
-  textField.xTextColor = color
-  textField.setNeedsDisplay(true)
+  method setTextColor(textField: TextField, color: Color) =
+    if textField.xTextColor == color:
+      return
+    textField.xTextColor = color
+    textField.setNeedsDisplay(true)
 
-method textFieldIsEditable(textField: TextField): bool {.selector.} =
-  textField.xEditable
+  method isEditable(textField: TextField): bool =
+    textField.xEditable
 
-method textFieldSetEditable(
-    textField: TextField, editable: bool
-): EmptyArgs {.selector.} =
-  textField.xEditable = editable
-  textField.setAcceptsFirstResponder(editable or textField.xSelectable)
+  method setEditable(textField: TextField, editable: bool) =
+    textField.xEditable = editable
+    textField.setAcceptsFirstResponder(editable or textField.xSelectable)
 
-method textFieldIsSelectable(textField: TextField): bool {.selector.} =
-  textField.xSelectable
+  method isSelectable(textField: TextField): bool =
+    textField.xSelectable
 
-method textFieldSetSelectable(
-    textField: TextField, selectable: bool
-): EmptyArgs {.selector.} =
-  textField.xSelectable = selectable
-  textField.setAcceptsFirstResponder(selectable or textField.isEditable)
-
-proc installTextFieldMethods(textField: TextField) =
-  discard textField.replaceMethod(stringValue, textFieldStringValue)
-  discard textField.replaceMethod(setStringValue, textFieldSetStringValue)
-  discard textField.replaceMethod(alignment, textFieldAlignment)
-  discard textField.replaceMethod(setAlignment, textFieldSetAlignment)
-  discard textField.replaceMethod(textColor, textFieldTextColor)
-  discard textField.replaceMethod(setTextColor, textFieldSetTextColor)
-  discard textField.replaceMethod(isEditable, textFieldIsEditable)
-  discard textField.replaceMethod(setEditable, textFieldSetEditable)
-  discard textField.replaceMethod(isSelectable, textFieldIsSelectable)
-  discard textField.replaceMethod(setSelectable, textFieldSetSelectable)
+  method setSelectable(textField: TextField, selectable: bool) =
+    textField.xSelectable = selectable
+    textField.setAcceptsFirstResponder(selectable or textField.isEditable)
 
 proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   initControlFields(textField, frame)
   textField.xStringValue = value
   textField.xAlignment = taLeft
   textField.xTextColor = initColor(0.08, 0.09, 0.11)
-  textField.installTextFieldMethods()
+  discard textField.replaceMethods(DefaultTextField.init())
 
 proc newTextField*(frame: Rect, value: string): TextField =
   result = TextField()

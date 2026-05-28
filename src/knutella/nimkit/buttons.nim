@@ -33,100 +33,93 @@ proc nextButtonState(button: Button): ButtonState =
   of bsMixed:
     bsOff
 
-method buttonMouseDown(button: Button, event: MouseEvent): EmptyArgs {.selector.} =
-  if button.isEnabled and event.button == mbPrimary:
-    button.xHighlighted = true
+let
+  mouseDown = mouseDownSelector()
+  mouseUp = mouseUpSelector()
+  keyDown = keyDownSelector()
+  performClick = performClickSelector()
+
+protocol DefaultButtonEvents of ResponderEventProtocol:
+  method mouseDown(button: Button, event: MouseEvent) =
+    if button.isEnabled and event.button == mbPrimary:
+      button.xHighlighted = true
+      button.setNeedsDisplay(true)
+
+  method mouseUp(button: Button, event: MouseEvent) =
+    if button.isEnabled and event.button == mbPrimary:
+      button.xHighlighted = false
+      button.setNeedsDisplay(true)
+      discard button.send(performClickSelector(), ActionArgs(sender: button))
+
+  method keyDown(button: Button, event: KeyEvent) =
+    if button.isEnabled and event.text == " ":
+      discard button.send(performClickSelector(), ActionArgs(sender: button))
+
+protocol DefaultButtonAction of ButtonActionProtocol:
+  method performClick(button: Button, args: ActionArgs) =
+    if not button.isEnabled or args.sender.isNil:
+      return
+    case button.xButtonType
+    of btMomentary:
+      discard
+    of btToggle:
+      button.xState = button.nextButtonState()
+    button.setNeedsDisplay(true)
+    discard button.sendAction()
+
+protocol DefaultButton of ButtonProtocolInternal:
+  method title(button: Button): string =
+    button.xTitle
+
+  method setTitle(button: Button, title: string) =
+    if button.xTitle == title:
+      return
+    button.xTitle = title
     button.setNeedsDisplay(true)
 
-method buttonMouseUp(button: Button, event: MouseEvent): EmptyArgs {.selector.} =
-  if button.isEnabled and event.button == mbPrimary:
-    button.xHighlighted = false
+  method isHighlighted(button: Button): bool =
+    button.xHighlighted
+
+  method setHighlighted(button: Button, highlighted: bool) =
+    if button.xHighlighted == highlighted:
+      return
+    button.xHighlighted = highlighted
     button.setNeedsDisplay(true)
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
 
-method buttonPerformClick(button: Button, args: ActionArgs): EmptyArgs {.selector.} =
-  if not button.isEnabled or args.sender.isNil:
-    return
-  case button.xButtonType
-  of btMomentary:
-    discard
-  of btToggle:
-    button.xState = button.nextButtonState()
-  button.setNeedsDisplay(true)
-  discard button.sendAction()
+  method state(button: Button): ButtonState =
+    button.xState
 
-method buttonKeyDown(button: Button, event: KeyEvent): EmptyArgs {.selector.} =
-  if button.isEnabled and event.text == " ":
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
+  method setState(button: Button, state: ButtonState) =
+    if button.xState == state:
+      return
+    button.xState = state
+    button.setNeedsDisplay(true)
 
-method buttonTitle(button: Button): string {.selector.} =
-  button.xTitle
+  method buttonType(button: Button): ButtonType =
+    button.xButtonType
 
-method buttonSetTitle(button: Button, title: string): EmptyArgs {.selector.} =
-  if button.xTitle == title:
-    return
-  button.xTitle = title
-  button.setNeedsDisplay(true)
+  method setButtonType(button: Button, buttonType: ButtonType) =
+    if button.xButtonType == buttonType:
+      return
+    button.xButtonType = buttonType
+    button.setNeedsDisplay(true)
 
-method buttonIsHighlighted(button: Button): bool {.selector.} =
-  button.xHighlighted
+  method allowsMixedState(button: Button): bool =
+    button.xAllowsMixedState
 
-method buttonSetHighlighted(button: Button, highlighted: bool): EmptyArgs {.selector.} =
-  if button.xHighlighted == highlighted:
-    return
-  button.xHighlighted = highlighted
-  button.setNeedsDisplay(true)
-
-method buttonState(button: Button): ButtonState {.selector.} =
-  button.xState
-
-method buttonSetState(button: Button, state: ButtonState): EmptyArgs {.selector.} =
-  if button.xState == state:
-    return
-  button.xState = state
-  button.setNeedsDisplay(true)
-
-method buttonButtonType(button: Button): ButtonType {.selector.} =
-  button.xButtonType
-
-method buttonSetButtonType(
-    button: Button, buttonType: ButtonType
-): EmptyArgs {.selector.} =
-  if button.xButtonType == buttonType:
-    return
-  button.xButtonType = buttonType
-  button.setNeedsDisplay(true)
-
-method buttonAllowsMixedState(button: Button): bool {.selector.} =
-  button.xAllowsMixedState
-
-method buttonSetAllowsMixedState(button: Button, value: bool): EmptyArgs {.selector.} =
-  button.xAllowsMixedState = value
-  if not value and button.state == bsMixed:
-    button.setState(bsOff)
-
-proc installButtonMethods(button: Button) =
-  discard button.replaceMethod(mouseDownSelector(), buttonMouseDown)
-  discard button.replaceMethod(mouseUpSelector(), buttonMouseUp)
-  discard button.replaceMethod(keyDownSelector(), buttonKeyDown)
-  discard button.replaceMethod(performClickSelector(), buttonPerformClick)
-  discard button.replaceMethod(title, buttonTitle)
-  discard button.replaceMethod(setTitle, buttonSetTitle)
-  discard button.replaceMethod(isHighlighted, buttonIsHighlighted)
-  discard button.replaceMethod(setHighlighted, buttonSetHighlighted)
-  discard button.replaceMethod(state, buttonState)
-  discard button.replaceMethod(setState, buttonSetState)
-  discard button.replaceMethod(buttonType, buttonButtonType)
-  discard button.replaceMethod(setButtonType, buttonSetButtonType)
-  discard button.replaceMethod(allowsMixedState, buttonAllowsMixedState)
-  discard button.replaceMethod(setAllowsMixedState, buttonSetAllowsMixedState)
+  method setAllowsMixedState(button: Button, value: bool) =
+    button.xAllowsMixedState = value
+    if not value and button.state == bsMixed:
+      button.setState(bsOff)
 
 proc initButtonFields*(button: Button, frame: Rect, title: string) =
   initControlFields(button, frame)
   button.xTitle = title
   button.xButtonType = btMomentary
   button.setAcceptsFirstResponder(true)
-  button.installButtonMethods()
+  discard button.replaceMethods(DefaultButtonEvents.init())
+  discard button.replaceMethods(DefaultButtonAction.init())
+  discard button.replaceMethods(DefaultButton.init())
 
 proc newButton*(frame: Rect, title: string): Button =
   result = Button()

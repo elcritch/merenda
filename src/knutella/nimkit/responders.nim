@@ -18,66 +18,52 @@ protocol ResponderProtocolInternal:
     method doCommandBySelector(selector: CommandSelector)
     method noResponderFor(selector: CommandSelector)
 
-method responderAcceptsFirstResponder(self: Responder): bool {.selector.} =
-  self.xAcceptsFirstResponder
+let
+  mouseDown = mouseDownSelector()
+  mouseUp = mouseUpSelector()
+  keyDown = keyDownSelector()
 
-method responderSetAcceptsFirstResponder(
-    self: Responder, value: bool
-): EmptyArgs {.selector.} =
-  self.xAcceptsFirstResponder = value
+protocol DefaultResponder of ResponderProtocolInternal:
+  method acceptsFirstResponder(self: Responder): bool =
+    self.xAcceptsFirstResponder
 
-method responderBecomeFirstResponder(self: Responder): bool {.selector.} =
-  true
+  method setAcceptsFirstResponder(self: Responder, value: bool) =
+    self.xAcceptsFirstResponder = value
 
-method responderResignFirstResponder(self: Responder): bool {.selector.} =
-  true
+  method becomeFirstResponder(self: Responder): bool =
+    true
 
-method responderTryToPerform(
-    self: Responder, args: TryToPerformArgs
-): bool {.selector.} =
-  var value: EmptyArgs
-  self.perform(args.selector, ActionArgs(sender: args.sender), value)
+  method resignFirstResponder(self: Responder): bool =
+    true
 
-method responderDoCommandBySelector(
-    self: Responder, selector: CommandSelector
-): EmptyArgs {.selector.} =
-  var value: EmptyArgs
-  if not self.perform(selector, ActionArgs(sender: DynamicAgent(self)), value):
-    self.noResponderFor(selector)
+  method tryToPerform(self: Responder, args: TryToPerformArgs): bool =
+    var value: EmptyArgs
+    self.perform(args.selector, ActionArgs(sender: args.sender), value)
 
-method responderNoResponderFor(
-    self: Responder, selector: CommandSelector
-): EmptyArgs {.selector.} =
-  let owner = if self.isNil: "nil" else: "responder"
-  raise newException(
-    UnhandledSelectorError, owner & " did not handle selector: " & $selector.name
-  )
+  method doCommandBySelector(self: Responder, selector: CommandSelector) =
+    var value: EmptyArgs
+    if not self.perform(selector, ActionArgs(sender: DynamicAgent(self)), value):
+      self.noResponderFor(selector)
 
-method responderMouseDown(self: Responder, event: MouseEvent): EmptyArgs {.selector.} =
-  discard
+  method noResponderFor(self: Responder, selector: CommandSelector) =
+    let owner = if self.isNil: "nil" else: "responder"
+    raise newException(
+      UnhandledSelectorError, owner & " did not handle selector: " & $selector.name
+    )
 
-method responderMouseUp(self: Responder, event: MouseEvent): EmptyArgs {.selector.} =
-  discard
+protocol DefaultResponderEvents of ResponderEventProtocol:
+  method mouseDown(self: Responder, event: MouseEvent) =
+    discard
 
-method responderKeyDown(self: Responder, event: KeyEvent): EmptyArgs {.selector.} =
-  discard
+  method mouseUp(self: Responder, event: MouseEvent) =
+    discard
 
-proc installResponderMethods(responder: Responder) =
-  discard responder.replaceMethod(acceptsFirstResponder, responderAcceptsFirstResponder)
-  discard
-    responder.replaceMethod(setAcceptsFirstResponder, responderSetAcceptsFirstResponder)
-  discard responder.replaceMethod(becomeFirstResponder, responderBecomeFirstResponder)
-  discard responder.replaceMethod(resignFirstResponder, responderResignFirstResponder)
-  discard responder.replaceMethod(tryToPerform, responderTryToPerform)
-  discard responder.replaceMethod(doCommandBySelector, responderDoCommandBySelector)
-  discard responder.replaceMethod(noResponderFor, responderNoResponderFor)
-  discard responder.replaceMethod(mouseDownSelector(), responderMouseDown)
-  discard responder.replaceMethod(mouseUpSelector(), responderMouseUp)
-  discard responder.replaceMethod(keyDownSelector(), responderKeyDown)
+  method keyDown(self: Responder, event: KeyEvent) =
+    discard
 
 proc initResponder*(responder: Responder) =
-  responder.xAcceptsFirstResponder = false
-  responder.installResponderMethods()
+  discard responder.replaceMethods(DefaultResponder.init())
+  discard responder.replaceMethods(DefaultResponderEvents.init())
 
 proc newResponder*(): Responder =
   result = Responder()
