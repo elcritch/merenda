@@ -309,6 +309,58 @@ Recommended NimKit order:
   reparenting, hidden views, and child invalidation.
 - Third: theme/metrics and command/key-binding layers, then expand controls.
 
+Concrete task list:
+
+1. Extract a NimKit host backend boundary, while continuing to render with
+   FigDraw. Move siwin window creation, event callback registration, renderer
+   setup, native-owner lookup, native stepping, presentation, and input-scale
+   conversion out of `windows.nim` behind a small internal backend API. Keep
+   `Window` responsible for title/frame/content/first-responder state and
+   NimKit event dispatch.
+2. Add coordinate conversion helpers and tests. Start with unrotated/unscaled
+   AppKit-shaped helpers:
+   `convertPointFromView`, `convertPointToView`, `convertRectFromView`,
+   `convertRectToView`, `convertPointFromWindow`, `convertPointToWindow`,
+   `convertRectFromWindow`, and `convertRectToWindow`. Cover root-to-child,
+   child-to-root, sibling-to-sibling, nested views, non-zero bounds origins,
+   reparenting, and window/content coordinates.
+3. Route hit testing and mouse event dispatch through the coordinate conversion
+   helpers. Current hit testing works by subtracting child frame origins; that
+   should become a caller of the shared conversion layer so dirty rects,
+   drawing, text selection, scrolling, and future drag behavior use the same
+   math.
+4. Add window-level mouse tracking/capture. Track the view that receives
+   mouse-down and send drag/move/up continuation events to that tracking view
+   until mouse-up, rather than hit-testing every mouse-up independently. Use
+   this before implementing drag, scroll, hover, continuous controls, or
+   outside-button cancellation behavior.
+5. Add a real display invalidation pipeline. Replace the single boolean model
+   with `setNeedsDisplayInRect`, invalid-rect union, clipping to bounds and
+   visible rects, ancestor propagation, and render-pass clearing. Keep
+   whole-window redraw as the renderer strategy until dirty rendering is
+   needed, but preserve dirty metadata and tests now.
+6. Add visible-rect and clipping behavior. Hidden ancestors should produce an
+   empty visible rect; parent bounds should clip child visible rects; future
+   scroll views should be able to narrow visible rects without special render
+   hacks.
+7. Add selector-backed view lifecycle hooks. Provide
+   `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
+   `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and a remove
+   hook. Route `addSubview`, `removeFromSuperview`, and `setContentView`
+   through those hooks while keeping direct field mutation private.
+8. Introduce a small theme/metrics object. Do not build a loadable theme system
+   yet; start with colors, border widths, corner radius, focus-ring metrics,
+   control padding, and text insets used by buttons and text fields. Rendering
+   should ask the theme for these values instead of hard-coding them in
+   widget/render helpers.
+9. Add a command/key-binding layer before real text editing expands. Map
+   key/modifier combinations to command selectors, then dispatch through the
+   responder chain. This should share the same path for text editing commands,
+   button key equivalents, and future menu shortcuts.
+10. Expand controls after the above contracts stabilize. Prioritize checkbox,
+    radio, toggle variants, combo box, and basic text editing. Keep policy
+    hooks selector-based where behavior is overridable.
+
 ## Test Plan
 
 - Run focused tests during development with:
