@@ -25,13 +25,13 @@ proc nimFileStemHasPrefix(file, prefix: string): bool =
   ext == ".nim" and stem.startsWith(prefix)
 
 proc isDefaultTest(file: string): bool =
-  file.nimFileStemHasPrefix("t") and not file.nimFileStemHasPrefix("tappkit_")
+  file.nimFileStemHasPrefix("tnimkit_")
 
 proc isAppKitTest(file: string): bool =
   file.nimFileStemHasPrefix("tappkit_")
 
 proc isDefaultExample(file: string): bool =
-  file.nimFileStemHasPrefix("") and not file.nimFileStemHasPrefix("appkit_")
+  file.nimFileStemHasPrefix("nimkit_")
 
 proc isAppKitExample(file: string): bool =
   file.nimFileStemHasPrefix("appkit_")
