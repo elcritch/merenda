@@ -11,7 +11,7 @@ requires "msgpack4nim"
 requires "chronicles"
 requires "siwin >= 1.0.1"
 requires "figdraw[siwin] >= 0.22.9"
-requires "sigils >= 0.20"
+requires "sigils >= 0.20.1"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
