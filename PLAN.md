@@ -243,6 +243,72 @@ its implementation.
 - Later: constraint layout, panels/services integration, loadable themes, and
   broader GNUstep-style resource organization.
 
+### NimKit Follow-Up Against GNUstep
+
+Current comparison source:
+`deps/libs-gui/Source/NSApplication.m`, `NSWindow.m`, `NSView.m`,
+`NSControl.m`, `NSCell.m`, `GSDisplayServer.m`, and `GSTheme.m`.
+
+NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
+still points to the next correctness boundaries:
+
+- Extract a NimKit backend/display-server boundary. `windows.nim` currently owns
+  siwin window creation, native event handler registration, renderer creation,
+  native-window owner lookup, input coordinate conversion, stepping, and
+  presentation. GNUstep keeps those concerns behind `GSDisplayServer`, while
+  `NSApplication`/`NSWindow` handle policy. A small NimKit backend should own
+  native windows, event polling, renderer setup, and logical input conversion so
+  `Window` can focus on window state and dispatch.
+- Add a real display invalidation pipeline before adding complex views. NimKit
+  has a boolean `needsDisplay` and redraws by rebuilding the whole render tree.
+  GNUstep tracks invalid rects, clips them to bounds/visible rects, marks
+  ancestors, redirects through opaque ancestors, and clears dirty state only
+  after display. NimKit should add `setNeedsDisplayInRect`, invalid-rect union,
+  visible-rect clipping, and tests that child invalidation survives until a
+  render pass clears it.
+- Add explicit coordinate conversion APIs and tests. NimKit hit testing does
+  local frame subtraction, but there is no public `convertPoint`/`convertRect`
+  path between views, windows, and screen, and no cached transform lifecycle.
+  GNUstep routes hit testing, drawing, cell tracking, and dirty rects through
+  conversion helpers. Start with unrotated/unscaled conversions covering nested
+  views, non-zero bounds origins, reparenting, hidden ancestors, and window
+  coordinates.
+- Add selector-backed view lifecycle hooks. GNUstep calls will/did move hooks,
+  resets cursor rects, marks subviews dirty, updates responder/window ownership,
+  and calls `didAddSubview` when views are inserted. NimKit currently mutates
+  `xSuperview`, `xSubviews`, and next responder directly. Add hook methods for
+  `viewWillMoveToSuperview`, `viewDidMoveToSuperview`, `viewWillMoveToWindow`,
+  `viewDidMoveToWindow`, and `didAddSubview`, then route add/remove/content-view
+  changes through them.
+- Make mouse tracking explicit. GNUstep controls and cells enter a tracking
+  loop after mouse down, continue receiving drag/move/up events, and send the
+  final up to the original tracking control. NimKit currently dispatches each
+  mouse event to the current hit-tested view, so a mouse-up outside the original
+  button may not complete the same interaction once drag/outside behavior is
+  added. Add a window-level captured/tracking view before implementing drag,
+  scroll, hover, or continuous controls.
+- Keep the control model simple, but introduce a theme/metrics boundary before
+  adding more widgets. GNUstep pushes borders, focus rings, control state colors,
+  tile drawing, and cell metrics through `GSTheme`. NimKit should not copy the
+  full theme system yet, but button/text-field rendering should ask a small
+  theme object for colors, border widths, padding, focus-ring metrics, and text
+  insets instead of baking them into render helpers.
+- Add a command/key-binding layer before text editing grows. GNUstep routes key
+  equivalents through the application/window path and text commands through key
+  binding tables and responder selectors. NimKit currently has only `keyDown`
+  dispatch plus space activation. Add a small command table mapping key/modifier
+  combinations to command selectors so text editing, buttons, and future menus
+  share one responder path.
+
+Recommended NimKit order:
+
+- First: backend/display-server extraction, coordinate conversion helpers, and
+  mouse tracking/capture. These will affect most future widgets and should be
+  settled before adding scroll views or editable text.
+- Second: invalid rects/visible rects and lifecycle hooks, with tests around
+  reparenting, hidden views, and child invalidation.
+- Third: theme/metrics and command/key-binding layers, then expand controls.
+
 ## Test Plan
 
 - Run focused tests during development with:
