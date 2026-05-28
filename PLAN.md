@@ -131,8 +131,6 @@ NimKit already has the first useful vertical slice:
 
 ### View Geometry And Rendering
 
-- Add explicit coordinate conversion helpers between view, window, and screen
-  spaces.
 - Add clipping/visible-rect behavior and tests.
 - Decide whether rendering should call selector-backed custom draw handlers or
   stay with type-specific render traversal for now.
@@ -141,7 +139,7 @@ NimKit already has the first useful vertical slice:
 
 ### Responder/Event Coverage
 
-- Add mouse move, drag, scroll, entered/exited, and click-count handling.
+- Add scroll, entered/exited, and click-count handling.
 - Add richer key command dispatch and unhandled-selector tests.
 - Decide how much of AppKit's responder fallback model NimKit should mirror.
 
@@ -240,10 +238,9 @@ its implementation.
 
 ### Priority Order
 
-- Short term: mouse tracking/capture, dirty-rect invariants, and view lifecycle
-  hooks.
+- Short term: dirty-rect invariants, visible rects, and view lifecycle hooks.
 - Medium term: theme/metrics object, cleaner cell invalidation/default-cell
-  construction, richer key command dispatch, and explicit tracking loops.
+  construction, and richer key command dispatch.
 - Later: constraint layout, panels/services integration, loadable themes, and
   broader GNUstep-style resource organization.
 
@@ -270,13 +267,6 @@ still points to the next correctness boundaries:
   `viewWillMoveToSuperview`, `viewDidMoveToSuperview`, `viewWillMoveToWindow`,
   `viewDidMoveToWindow`, and `didAddSubview`, then route add/remove/content-view
   changes through them.
-- Make mouse tracking explicit. GNUstep controls and cells enter a tracking
-  loop after mouse down, continue receiving drag/move/up events, and send the
-  final up to the original tracking control. NimKit currently dispatches each
-  mouse event to the current hit-tested view, so a mouse-up outside the original
-  button may not complete the same interaction once drag/outside behavior is
-  added. Add a window-level captured/tracking view before implementing drag,
-  scroll, hover, or continuous controls.
 - Keep the control model simple, but introduce a theme/metrics boundary before
   adding more widgets. GNUstep pushes borders, focus rings, control state colors,
   tile drawing, and cell metrics through `GSTheme`. NimKit should not copy the
@@ -292,43 +282,36 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- First: mouse tracking/capture. This affects most future widgets and should be
-  settled before adding scroll views or editable text.
-- Second: invalid rects/visible rects and lifecycle hooks, with tests around
+- First: invalid rects/visible rects and lifecycle hooks, with tests around
   reparenting, hidden views, and child invalidation.
-- Third: theme/metrics and command/key-binding layers, then expand controls.
+- Second: theme/metrics and command/key-binding layers, then expand controls.
 
 Concrete task list:
 
-1. Add window-level mouse tracking/capture. Track the view that receives
-   mouse-down and send drag/move/up continuation events to that tracking view
-   until mouse-up, rather than hit-testing every mouse-up independently. Use
-   this before implementing drag, scroll, hover, continuous controls, or
-   outside-button cancellation behavior.
-2. Add a real display invalidation pipeline. Replace the single boolean model
+1. Add a real display invalidation pipeline. Replace the single boolean model
    with `setNeedsDisplayInRect`, invalid-rect union, clipping to bounds and
    visible rects, ancestor propagation, and render-pass clearing. Keep
    whole-window redraw as the renderer strategy until dirty rendering is
    needed, but preserve dirty metadata and tests now.
-3. Add visible-rect and clipping behavior. Hidden ancestors should produce an
+2. Add visible-rect and clipping behavior. Hidden ancestors should produce an
    empty visible rect; parent bounds should clip child visible rects; future
    scroll views should be able to narrow visible rects without special render
    hacks.
-4. Add selector-backed view lifecycle hooks. Provide
+3. Add selector-backed view lifecycle hooks. Provide
    `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
    `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and a remove
    hook. Route `addSubview`, `removeFromSuperview`, and `setContentView`
    through those hooks while keeping direct field mutation private.
-5. Introduce a small theme/metrics object. Do not build a loadable theme system
+4. Introduce a small theme/metrics object. Do not build a loadable theme system
    yet; start with colors, border widths, corner radius, focus-ring metrics,
    control padding, and text insets used by buttons and text fields. Rendering
    should ask the theme for these values instead of hard-coding them in
    widget/render helpers.
-6. Add a command/key-binding layer before real text editing expands. Map
+5. Add a command/key-binding layer before real text editing expands. Map
    key/modifier combinations to command selectors, then dispatch through the
    responder chain. This should share the same path for text editing commands,
    button key equivalents, and future menu shortcuts.
-7. Expand controls after the above contracts stabilize. Prioritize checkbox,
+6. Expand controls after the above contracts stabilize. Prioritize checkbox,
     radio, toggle variants, combo box, and basic text editing. Keep policy
     hooks selector-based where behavior is overridable.
 

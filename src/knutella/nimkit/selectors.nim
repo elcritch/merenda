@@ -35,6 +35,8 @@ type
 protocol ResponderEventProtocolInternal:
   method mouseDown*(event: MouseEvent) {.optional.}
   method mouseUp*(event: MouseEvent) {.optional.}
+  method mouseMoved*(event: MouseEvent) {.optional.}
+  method mouseDragged*(event: MouseEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
 
 protocol UserInterfaceValidationsInternal:

@@ -43,6 +43,12 @@ protocol DefaultResponderEvents of ResponderEventProtocol:
   method mouseUp(self: Responder, event: MouseEvent) =
     discard
 
+  method mouseMoved(self: Responder, event: MouseEvent) =
+    discard
+
+  method mouseDragged(self: Responder, event: MouseEvent) =
+    discard
+
   method keyDown(self: Responder, event: KeyEvent) =
     discard
 

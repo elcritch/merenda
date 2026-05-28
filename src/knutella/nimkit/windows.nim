@@ -14,6 +14,7 @@ type Window* = ref object
   xContentView: View
   xFirstResponder: Responder
   xHostWindow: HostWindow
+  xMouseTrackingView: View
   xVisibleRequested: bool
   xClosed: bool
 
@@ -34,6 +35,7 @@ proc contentView*(window: Window): View =
 
 proc setContentView*(window: Window, view: View) =
   window.xContentView = view
+  window.xMouseTrackingView = nil
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title
@@ -101,10 +103,16 @@ proc close*(window: Window) =
   window.xHostWindow.close()
   window.xHostWindow = nil
 
+proc mouseDownAt*(
+  window: Window, point: Point, button = mbPrimary, clickCount = 1
+): bool
+
+proc mouseUpAt*(window: Window, point: Point, button = mbPrimary, clickCount = 1): bool
+
 proc clickAt*(window: Window, point: Point): bool =
-  if window.xContentView.isNil:
+  if not window.mouseDownAt(point):
     return false
-  window.xContentView.clickAt(window.xContentView.pointFromWindow(point))
+  window.mouseUpAt(point)
 
 proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
   if not window.xFirstResponder.isNil:
@@ -128,24 +136,93 @@ proc renderNativeWindow*(window: Window) =
   var renders = window.buildRenders()
   window.xHostWindow.render(renders, logicalSize)
 
-proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
-  if window.xContentView.isNil:
-    return
-  let contentPoint = window.xContentView.pointFromWindow(event.location)
-  let hit = window.xContentView.hitTest(contentPoint)
-  if hit.isNil:
-    return
-  if hit.acceptsFirstResponder():
-    discard window.makeFirstResponder(hit)
-  let localEvent = MouseEvent(
-    location: hit.pointFromView(contentPoint, window.xContentView),
+proc contentPoint(window: Window, windowPoint: Point): Point =
+  window.xContentView.pointFromWindow(windowPoint)
+
+proc localMouseEvent(
+    target, contentView: View, contentPoint: Point, event: MouseEvent
+): MouseEvent =
+  MouseEvent(
+    location: target.pointFromView(contentPoint, contentView),
     button: event.button,
     clickCount: event.clickCount,
   )
+
+proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  var target: View
   if pressed:
-    discard hit.dispatchMouseDown(localEvent)
+    target = window.xContentView.hitTest(contentPoint)
+    window.xMouseTrackingView = target
+    if target.isNil:
+      return false
+    if target.acceptsFirstResponder():
+      discard window.makeFirstResponder(target)
   else:
-    discard hit.dispatchMouseUp(localEvent)
+    target = window.xMouseTrackingView
+    if target.isNil:
+      target = window.xContentView.hitTest(contentPoint)
+    window.xMouseTrackingView = nil
+    if target.isNil:
+      return false
+
+  let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
+  if pressed:
+    result = target.dispatchMouseDown(localEvent)
+  else:
+    result = target.dispatchMouseUp(localEvent)
+
+proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  var target: View
+  if dragging:
+    target = window.xMouseTrackingView
+    if target.isNil:
+      target = window.xContentView.hitTest(contentPoint)
+  else:
+    target = window.xContentView.hitTest(contentPoint)
+  if target.isNil:
+    return false
+
+  let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
+  if dragging:
+    result = target.dispatchMouseDragged(localEvent)
+  else:
+    result = target.dispatchMouseMoved(localEvent)
+
+proc mouseDownAt*(
+    window: Window, point: Point, button = mbPrimary, clickCount = 1
+): bool =
+  window.dispatchMouseButton(
+    MouseEvent(location: point, button: button, clickCount: clickCount), true
+  )
+
+proc mouseUpAt*(
+    window: Window, point: Point, button = mbPrimary, clickCount = 1
+): bool =
+  window.dispatchMouseButton(
+    MouseEvent(location: point, button: button, clickCount: clickCount), false
+  )
+
+proc mouseMovedAt*(window: Window, point: Point): bool =
+  window.dispatchMouseMove(
+    MouseEvent(location: point, button: mbPrimary, clickCount: 0), dragging = false
+  )
+
+proc mouseDraggedAt*(window: Window, point: Point, button = mbPrimary): bool =
+  window.dispatchMouseMove(
+    MouseEvent(location: point, button: button, clickCount: 0), dragging = true
+  )
+
+proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
+  discard window.dispatchMouseButton(event, pressed)
+
+proc dispatchHostMouseMove(window: Window, event: MouseEvent, dragging: bool) =
+  discard window.dispatchMouseMove(event, dragging)
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   if event.pressed and event.isEscape:
@@ -182,6 +259,8 @@ proc ensureNativeWindow*(window: Window) =
         window.xFrame.origin = pos,
       onMouseButton: proc(event: MouseEvent, pressed: bool) =
         window.dispatchHostMouseButton(event, pressed),
+      onMouseMove: proc(event: MouseEvent, dragging: bool) =
+        window.dispatchHostMouseMove(event, dragging),
       onKey: proc(event: HostKeyEvent) =
         window.dispatchHostKey(event),
       onTextInput: proc(text: string) =
