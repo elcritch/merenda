@@ -13,6 +13,15 @@ type View* = ref object of Responder
   xSuperview: View
   xSubviews: seq[View]
 
+proc pointFromView*(view: View, point: Point, fromView: View): Point
+proc pointToView*(view: View, point: Point, toView: View): Point
+proc rectFromView*(view: View, rect: Rect, fromView: View): Rect
+proc rectToView*(view: View, rect: Rect, toView: View): Rect
+proc pointFromWindow*(view: View, point: Point): Point
+proc pointToWindow*(view: View, point: Point): Point
+proc rectFromWindow*(view: View, rect: Rect): Rect
+proc rectToWindow*(view: View, rect: Rect): Rect
+
 protocol ViewProtocolInternal from View:
   property frame -> Rect
   property bounds -> Rect
@@ -100,7 +109,7 @@ protocol ViewProtocolInternal from View:
 
     for idx in countdown(self.xSubviews.high, 0):
       let child = self.xSubviews[idx]
-      let local = point.localPoint(child.frame)
+      let local = child.pointFromView(point, self)
       let hit = child.hitTest(local)
       if not hit.isNil:
         return hit
@@ -122,6 +131,98 @@ proc newView*(frame: Rect): View =
 proc newView*(x, y, width, height: float32): View =
   newView(initRect(x, y, width, height))
 
+proc pointToSuperview(view: View, point: Point): Point =
+  let
+    frame = view.frame
+    bounds = view.bounds
+  initPoint(
+    frame.origin.x + point.x - bounds.origin.x,
+    frame.origin.y + point.y - bounds.origin.y,
+  )
+
+proc pointFromSuperview(view: View, point: Point): Point =
+  let
+    frame = view.frame
+    bounds = view.bounds
+  initPoint(
+    bounds.origin.x + point.x - frame.origin.x,
+    bounds.origin.y + point.y - frame.origin.y,
+  )
+
+proc pointToWindow*(view: View, point: Point): Point =
+  if view.isNil:
+    return point
+  var resultPoint = point
+  var current = view
+  while not current.isNil:
+    resultPoint = current.pointToSuperview(resultPoint)
+    current = current.superview
+  resultPoint
+
+proc pointFromWindow*(view: View, point: Point): Point =
+  if view.isNil:
+    return point
+  var chain: seq[View] = @[]
+  var current = view
+  while not current.isNil:
+    chain.add(current)
+    current = current.superview
+  var resultPoint = point
+  for idx in countdown(chain.high, 0):
+    resultPoint = chain[idx].pointFromSuperview(resultPoint)
+  resultPoint
+
+proc pointToView*(view: View, point: Point, toView: View): Point =
+  if view.isNil:
+    if toView.isNil:
+      return point
+    return toView.pointFromWindow(point)
+  if view == toView:
+    return point
+  let windowPoint = view.pointToWindow(point)
+  if toView.isNil:
+    windowPoint
+  else:
+    toView.pointFromWindow(windowPoint)
+
+proc pointFromView*(view: View, point: Point, fromView: View): Point =
+  if view.isNil:
+    if fromView.isNil:
+      return point
+    return fromView.pointToWindow(point)
+  if view == fromView:
+    return point
+  if fromView.isNil:
+    return view.pointFromWindow(point)
+  view.pointFromWindow(fromView.pointToWindow(point))
+
+proc rectFromCorners(p0, p1: Point): Rect =
+  initRect(min(p0.x, p1.x), min(p0.y, p1.y), abs(p1.x - p0.x), abs(p1.y - p0.y))
+
+proc rectToWindow*(view: View, rect: Rect): Rect =
+  let
+    p0 = view.pointToWindow(rect.origin)
+    p1 = view.pointToWindow(initPoint(rect.maxX, rect.maxY))
+  rectFromCorners(p0, p1)
+
+proc rectFromWindow*(view: View, rect: Rect): Rect =
+  let
+    p0 = view.pointFromWindow(rect.origin)
+    p1 = view.pointFromWindow(initPoint(rect.maxX, rect.maxY))
+  rectFromCorners(p0, p1)
+
+proc rectToView*(view: View, rect: Rect, toView: View): Rect =
+  let
+    p0 = view.pointToView(rect.origin, toView)
+    p1 = view.pointToView(initPoint(rect.maxX, rect.maxY), toView)
+  rectFromCorners(p0, p1)
+
+proc rectFromView*(view: View, rect: Rect, fromView: View): Rect =
+  let
+    p0 = view.pointFromView(rect.origin, fromView)
+    p1 = view.pointFromView(initPoint(rect.maxX, rect.maxY), fromView)
+  rectFromCorners(p0, p1)
+
 proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
   view.sendIfHandled(mouseDown(), event)
 
@@ -136,7 +237,9 @@ proc clickAt*(view: View, point: Point): bool =
   if hit.isNil:
     return false
 
-  let event = MouseEvent(location: point, button: mbPrimary, clickCount: 1)
+  let event = MouseEvent(
+    location: hit.pointFromView(point, view), button: mbPrimary, clickCount: 1
+  )
   discard hit.dispatchMouseDown(event)
   result = hit.dispatchMouseUp(event)
 
