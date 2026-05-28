@@ -1,7 +1,11 @@
---nimcache:".nimcache/"
---passc:"-Wno-incompatible-function-pointer-types"
---define:useMalloc
---mm:arc
+--nimcache:
+  ".nimcache/"
+--passc:
+  "-Wno-incompatible-function-pointer-types"
+--define:
+  useMalloc
+--mm:
+  arc
 
 import std/strutils
 import std/os
@@ -20,6 +24,18 @@ proc nimFileStemHasPrefix(file, prefix: string): bool =
   let (_, stem, ext) = splitFile(file)
   ext == ".nim" and stem.startsWith(prefix)
 
+proc isDefaultTest(file: string): bool =
+  file.nimFileStemHasPrefix("t") and not file.nimFileStemHasPrefix("tappkit_")
+
+proc isAppKitTest(file: string): bool =
+  file.nimFileStemHasPrefix("tappkit_")
+
+proc isDefaultExample(file: string): bool =
+  file.nimFileStemHasPrefix("") and not file.nimFileStemHasPrefix("appkit_")
+
+proc isAppKitExample(file: string): bool =
+  file.nimFileStemHasPrefix("appkit_")
+
 proc platforms(): seq[string] =
   when defined(linux) or defined(bsd):
     let
@@ -36,17 +52,27 @@ proc platforms(): seq[string] =
     @[""]
 
 task test, "run unit test":
-  let enableSdl2 =
-    getEnv("FIGDRAW_TEST_SDL2").strip().toLowerAscii() in ["1", "true", "yes", "on"]
-
   for platformArg in platforms():
-    if platformArg != "": echo "Running platform args: ", platformArg
+    if platformArg != "":
+      echo "Running platform args: ", platformArg
     for file in listFiles("tests"):
-      if nimFileStemHasPrefix(file, "t"):
+      if isDefaultTest(file):
         nimExec("r", file, platform = platformArg)
 
   for file in listFiles("examples"):
-    if file.endsWith(".nim"):
+    if isDefaultExample(file):
+      nimExec("c", file)
+
+task testAppKit, "run AppKit tests":
+  for platformArg in platforms():
+    if platformArg != "":
+      echo "Running platform args: ", platformArg
+    for file in listFiles("tests"):
+      if isAppKitTest(file):
+        nimExec("r", file, platform = platformArg)
+
+  for file in listFiles("examples"):
+    if isAppKitExample(file):
       nimExec("c", file)
 
 task test_compile, "compile unit tests without running":
