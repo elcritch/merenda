@@ -1,0 +1,114 @@
+import std/tables
+
+import pkg/chroma
+import pkg/bumpy
+
+import figdraw/commons
+import figdraw/common/typefaces
+import figdraw/fignodes
+
+import ./buttons
+import ./textfields
+import ./types
+import ./views
+
+var defaultTypefaceId {.threadvar.}: TypefaceId
+var defaultTypefaceReady {.threadvar.}: bool
+
+proc toFigRect(rect: types.Rect): bumpy.Rect =
+  bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
+
+proc toFigColor(color: types.Color): chroma.Color =
+  chroma.color(color.r, color.g, color.b, color.a)
+
+proc noRenderShadows(): array[ShadowCount, RenderShadow] =
+  for idx in result.low .. result.high:
+    result[idx] = RenderShadow(style: NoShadow, fill: fill(rgba(0, 0, 0, 0)))
+
+proc defaultFont(size: float32): FigFont =
+  if not defaultTypefaceReady:
+    defaultTypefaceId = loadTypeface("Ubuntu.ttf", ["HackNerdFont-Regular.ttf"])
+    defaultTypefaceReady = true
+  defaultTypefaceId.fontWithSize(size)
+
+proc rectangleNode(rect: types.Rect, color: types.Color): Fig =
+  Fig(
+    kind: nkRectangle,
+    screenBox: rect.toFigRect,
+    fill: fill(color.toFigColor.rgba),
+    shadows: noRenderShadows(),
+    stroke: RenderStroke(weight: 0.0, fill: fill(rgba(0, 0, 0, 0))),
+  )
+
+proc toFontHorizontal(alignment: TextAlignment): FontHorizontal =
+  case alignment
+  of taLeft: Left
+  of taCenter: Center
+  of taRight: Right
+
+proc textNode(
+    rect: types.Rect, text: string, color: types.Color, alignment = taLeft
+): Fig =
+  let
+    font = defaultFont(13.0'f32)
+    style = fs(font, fill(color.toFigColor.rgba))
+    layout = typeset(
+      rect.toFigRect,
+      [(style, text)],
+      hAlign = alignment.toFontHorizontal,
+      vAlign = Middle,
+      minContent = false,
+      wrap = false,
+    )
+  Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
+
+proc childFrameInParent(parentOffset: Point, child: View): types.Rect =
+  let frame = child.frame
+  initRect(
+    parentOffset.x + frame.origin.x,
+    parentOffset.y + frame.origin.y,
+    frame.size.width,
+    frame.size.height,
+  )
+
+proc renderViewInto(list: var RenderList, view: View, absoluteFrame: types.Rect) =
+  if view.isHidden:
+    return
+
+  let rootIdx = list.addRoot(rectangleNode(absoluteFrame, view.backgroundColor))
+
+  if view of Button:
+    let button = Button(view)
+    var fillColor = initColor(0.20, 0.48, 0.86, 1.0)
+    if not button.isEnabled:
+      fillColor = initColor(0.58, 0.62, 0.68, 1.0)
+    elif button.isHighlighted:
+      fillColor = initColor(0.12, 0.34, 0.68, 1.0)
+    discard list.addChild(rootIdx, rectangleNode(absoluteFrame, fillColor))
+    let textRect = initRect(
+      absoluteFrame.origin.x + 8.0'f32,
+      absoluteFrame.origin.y,
+      max(absoluteFrame.size.width - 16.0'f32, 0.0'f32),
+      absoluteFrame.size.height,
+    )
+    discard list.addChild(rootIdx, textNode(textRect, button.title, initColor(1, 1, 1)))
+  elif view of TextField:
+    let textField = TextField(view)
+    discard list.addChild(
+      rootIdx,
+      textNode(
+        absoluteFrame, textField.stringValue, textField.textColor, textField.alignment
+      ),
+    )
+
+  for child in view.subviews:
+    let childFrame = childFrameInParent(absoluteFrame.origin, child)
+    renderViewInto(list, child, childFrame)
+
+proc buildRenders*(root: View): Renders =
+  result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
+  if root.isNil:
+    return
+  var list = RenderList()
+  renderViewInto(list, root, root.frame)
+  result.layers[0.ZLevel] = list
