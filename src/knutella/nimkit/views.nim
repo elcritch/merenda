@@ -14,44 +14,49 @@ type View* = ref object of Responder
   xSubviews: seq[View]
 
 protocol ViewProtocolInternal from View:
-  method frame*(self: View): Rect =
+  property frame -> Rect
+  property bounds -> Rect
+  property needsDisplay -> bool
+  property backgroundColor -> Color
+
+  method frame(self: View): Rect =
     self.xFrame
 
-  method bounds*(self: View): Rect =
-    self.xBounds
-
-  method isHidden*(self: View): bool =
-    self.xHidden
-
-  method needsDisplay*(self: View): bool =
-    self.xNeedsDisplay
-
-  method backgroundColor*(self: View): Color =
-    self.xBackgroundColor
-
-  method superview*(self: View): View =
-    self.xSuperview
-
-  method subviews*(self: View): seq[View] =
-    self.xSubviews
-
-  method setNeedsDisplay*(self: View, value: bool) =
-    self.xNeedsDisplay = value
-    if value and not self.xSuperview.isNil:
-      self.xSuperview.setNeedsDisplay(true)
-
-  method setFrame*(self: View, frame: Rect) =
+  method setFrame(self: View, frame: Rect) =
     if self.xFrame == frame:
       return
     self.xFrame = frame
     self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
     self.setNeedsDisplay(true)
 
-  method setBounds*(self: View, bounds: Rect) =
+  method bounds(self: View): Rect =
+    self.xBounds
+
+  method setBounds(self: View, bounds: Rect) =
     if self.xBounds == bounds:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
     self.setNeedsDisplay(true)
+
+  method needsDisplay(self: View): bool =
+    self.xNeedsDisplay
+
+  method setNeedsDisplay(self: View, value: bool) =
+    self.xNeedsDisplay = value
+    if value and not self.xSuperview.isNil:
+      self.xSuperview.setNeedsDisplay(true)
+
+  method backgroundColor(self: View): Color =
+    self.xBackgroundColor
+
+  method setBackgroundColor(self: View, color: Color) =
+    if self.xBackgroundColor == color:
+      return
+    self.xBackgroundColor = color
+    self.setNeedsDisplay(true)
+
+  method isHidden*(self: View): bool =
+    self.xHidden
 
   method setHidden*(self: View, hidden: bool) =
     if self.xHidden == hidden:
@@ -59,11 +64,11 @@ protocol ViewProtocolInternal from View:
     self.xHidden = hidden
     self.setNeedsDisplay(true)
 
-  method setBackgroundColor*(self: View, color: Color) =
-    if self.xBackgroundColor == color:
-      return
-    self.xBackgroundColor = color
-    self.setNeedsDisplay(true)
+  method superview*(self: View): View =
+    self.xSuperview
+
+  method subviews*(self: View): seq[View] =
+    self.xSubviews
 
   method removeFromSuperview*(self: View) =
     let parent = self.xSuperview
@@ -118,16 +123,13 @@ proc newView*(x, y, width, height: float32): View =
   newView(initRect(x, y, width, height))
 
 proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
-  var value: EmptyArgs
-  view.perform(mouseDownSelector(), event, value)
+  view.sendIfHandled(mouseDown(), event)
 
 proc dispatchMouseUp*(view: View, event: MouseEvent): bool =
-  var value: EmptyArgs
-  view.perform(mouseUpSelector(), event, value)
+  view.sendIfHandled(mouseUp(), event)
 
 proc dispatchKeyDown*(view: View, event: KeyEvent): bool =
-  var value: EmptyArgs
-  view.perform(keyDownSelector(), event, value)
+  view.sendIfHandled(keyDown(), event)
 
 proc clickAt*(view: View, point: Point): bool =
   let hit = view.hitTest(point)

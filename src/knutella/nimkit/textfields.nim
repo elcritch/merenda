@@ -12,28 +12,32 @@ type TextField* = ref object of Control
   xSelectable: bool
 
 protocol TextFieldProtocolInternal from TextField:
-  method stringValue*(textField: TextField): string =
+  property stringValue -> string
+  property alignment -> TextAlignment
+  property textColor -> Color
+
+  method stringValue(textField: TextField): string =
     textField.xStringValue
 
-  method setStringValue*(textField: TextField, value: string) =
+  method setStringValue(textField: TextField, value: string) =
     if textField.xStringValue == value:
       return
     textField.xStringValue = value
     textField.setNeedsDisplay(true)
 
-  method alignment*(textField: TextField): TextAlignment =
+  method alignment(textField: TextField): TextAlignment =
     textField.xAlignment
 
-  method setAlignment*(textField: TextField, alignment: TextAlignment) =
+  method setAlignment(textField: TextField, alignment: TextAlignment) =
     if textField.xAlignment == alignment:
       return
     textField.xAlignment = alignment
     textField.setNeedsDisplay(true)
 
-  method textColor*(textField: TextField): Color =
+  method textColor(textField: TextField): Color =
     textField.xTextColor
 
-  method setTextColor*(textField: TextField, color: Color) =
+  method setTextColor(textField: TextField, color: Color) =
     if textField.xTextColor == color:
       return
     textField.xTextColor = color
