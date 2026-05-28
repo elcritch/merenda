@@ -10,18 +10,13 @@ type Responder* = ref object of DynamicAgent
 
 protocol ResponderProtocolInternal:
   required:
-    method acceptsFirstResponder(): bool
-    method setAcceptsFirstResponder(value: bool)
-    method becomeFirstResponder(): bool
-    method resignFirstResponder(): bool
-    method tryToPerform(args: TryToPerformArgs): bool
-    method doCommandBySelector(selector: CommandSelector)
-    method noResponderFor(selector: CommandSelector)
-
-let
-  mouseDown = mouseDownSelector()
-  mouseUp = mouseUpSelector()
-  keyDown = keyDownSelector()
+    method acceptsFirstResponder*(): bool
+    method setAcceptsFirstResponder*(value: bool)
+    method becomeFirstResponder*(): bool
+    method resignFirstResponder*(): bool
+    method tryToPerform*(args: TryToPerformArgs): bool
+    method doCommandBySelector*(selector: CommandSelector)
+    method noResponderFor*(selector: CommandSelector)
 
 protocol DefaultResponder of ResponderProtocolInternal:
   method acceptsFirstResponder(self: Responder): bool =
@@ -77,29 +72,6 @@ proc setNextResponder*(responder, next: Responder) =
 
 proc clearNextResponder*(responder: Responder) =
   dynamicSelectors.clearNextResponder(responder)
-
-proc acceptsFirstResponder*(responder: Responder): bool =
-  responder.send(acceptsFirstResponder, ())
-
-proc setAcceptsFirstResponder*(responder: Responder, value: bool) =
-  discard responder.send(setAcceptsFirstResponder, value)
-
-proc becomeFirstResponder*(responder: Responder): bool =
-  responder.send(becomeFirstResponder, ())
-
-proc resignFirstResponder*(responder: Responder): bool =
-  responder.send(resignFirstResponder, ())
-
-proc tryToPerform*(
-    responder: Responder, selector: CommandSelector, sender: DynamicAgent
-): bool =
-  responder.send(tryToPerform, TryToPerformArgs(selector: selector, sender: sender))
-
-proc doCommandBySelector*(responder: Responder, selector: CommandSelector) =
-  discard responder.send(doCommandBySelector, selector)
-
-proc noResponderFor*(responder: Responder, selector: CommandSelector) =
-  discard responder.send(noResponderFor, selector)
 
 proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A

@@ -13,16 +13,16 @@ type TextField* = ref object of Control
 
 protocol TextFieldProtocolInternal:
   required:
-    method stringValue(): string
-    method setStringValue(value: string)
-    method alignment(): TextAlignment
-    method setAlignment(alignment: TextAlignment)
-    method textColor(): Color
-    method setTextColor(color: Color)
-    method isEditable(): bool
-    method setEditable(editable: bool)
-    method isSelectable(): bool
-    method setSelectable(selectable: bool)
+    method stringValue*(): string
+    method setStringValue*(value: string)
+    method alignment*(): TextAlignment
+    method setAlignment*(alignment: TextAlignment)
+    method textColor*(): Color
+    method setTextColor*(color: Color)
+    method isEditable*(): bool
+    method setEditable*(editable: bool)
+    method isSelectable*(): bool
+    method setSelectable*(selectable: bool)
 
 protocol DefaultTextField of TextFieldProtocolInternal:
   method stringValue(textField: TextField): string =
@@ -79,35 +79,5 @@ proc newTextField*(frame: Rect, value: string): TextField =
 
 proc newTextField*(x, y, width, height: float32, value: string): TextField =
   newTextField(initRect(x, y, width, height), value)
-
-proc stringValue*(textField: TextField): string =
-  textField.send(stringValue, ())
-
-proc setStringValue*(textField: TextField, value: string) =
-  discard textField.send(setStringValue, value)
-
-proc alignment*(textField: TextField): TextAlignment =
-  textField.send(alignment, ())
-
-proc setAlignment*(textField: TextField, alignment: TextAlignment) =
-  discard textField.send(setAlignment, alignment)
-
-proc textColor*(textField: TextField): Color =
-  textField.send(textColor, ())
-
-proc setTextColor*(textField: TextField, color: Color) =
-  discard textField.send(setTextColor, color)
-
-proc isEditable*(textField: TextField): bool =
-  textField.send(isEditable, ())
-
-proc setEditable*(textField: TextField, editable: bool) =
-  discard textField.send(setEditable, editable)
-
-proc isSelectable*(textField: TextField): bool =
-  textField.send(isSelectable, ())
-
-proc setSelectable*(textField: TextField, selectable: bool) =
-  discard textField.send(setSelectable, selectable)
 
 let TextFieldProtocol* = TextFieldProtocolInternal

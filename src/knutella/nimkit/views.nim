@@ -15,22 +15,22 @@ type View* = ref object of Responder
 
 protocol ViewProtocolInternal:
   required:
-    method frame(): Rect
-    method bounds(): Rect
-    method isHidden(): bool
-    method needsDisplay(): bool
-    method backgroundColor(): Color
-    method superview(): View
-    method subviews(): seq[View]
-    method setNeedsDisplay(value: bool)
-    method setFrame(frame: Rect)
-    method setBounds(bounds: Rect)
-    method setHidden(hidden: bool)
-    method setBackgroundColor(color: Color)
-    method removeFromSuperview()
-    method addSubview(child: View)
-    method pointInside(point: Point): bool
-    method hitTest(point: Point): View
+    method frame*(): Rect
+    method bounds*(): Rect
+    method isHidden*(): bool
+    method needsDisplay*(): bool
+    method backgroundColor*(): Color
+    method superview*(): View
+    method subviews*(): seq[View]
+    method setNeedsDisplay*(value: bool)
+    method setFrame*(frame: Rect)
+    method setBounds*(bounds: Rect)
+    method setHidden*(hidden: bool)
+    method setBackgroundColor*(color: Color)
+    method removeFromSuperview*()
+    method addSubview*(child: View)
+    method pointInside*(point: Point): bool
+    method hitTest*(point: Point): View
 
 protocol DefaultView of ViewProtocolInternal:
   method frame(self: View): Rect =
@@ -135,54 +135,6 @@ proc newView*(frame: Rect): View =
 
 proc newView*(x, y, width, height: float32): View =
   newView(initRect(x, y, width, height))
-
-proc frame*(view: View): Rect =
-  view.send(frame, ())
-
-proc bounds*(view: View): Rect =
-  view.send(bounds, ())
-
-proc isHidden*(view: View): bool =
-  view.send(isHidden, ())
-
-proc needsDisplay*(view: View): bool =
-  view.send(needsDisplay, ())
-
-proc backgroundColor*(view: View): Color =
-  view.send(backgroundColor, ())
-
-proc superview*(view: View): View =
-  view.xSuperview
-
-proc subviews*(view: View): seq[View] =
-  view.xSubviews
-
-proc setNeedsDisplay*(view: View, value: bool) =
-  discard view.send(setNeedsDisplay, value)
-
-proc setFrame*(view: View, frame: Rect) =
-  discard view.send(setFrame, frame)
-
-proc setBounds*(view: View, bounds: Rect) =
-  discard view.send(setBounds, bounds)
-
-proc setHidden*(view: View, hidden: bool) =
-  discard view.send(setHidden, hidden)
-
-proc setBackgroundColor*(view: View, color: Color) =
-  discard view.send(setBackgroundColor, color)
-
-proc removeFromSuperview*(view: View) =
-  discard view.send(removeFromSuperview, ())
-
-proc addSubview*(view, child: View) =
-  discard view.send(addSubview, child)
-
-proc pointInside*(view: View, point: Point): bool =
-  view.send(pointInside, point)
-
-proc hitTest*(view: View, point: Point): View =
-  view.send(hitTest, point)
 
 proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
   var value: EmptyArgs

@@ -34,17 +34,17 @@ type
 
 protocol ResponderEventProtocolInternal:
   optional:
-    method mouseDown(event: MouseEvent)
-    method mouseUp(event: MouseEvent)
-    method keyDown(event: KeyEvent)
+    method mouseDown*(event: MouseEvent)
+    method mouseUp*(event: MouseEvent)
+    method keyDown*(event: KeyEvent)
 
 protocol UserInterfaceValidationsInternal:
   required:
-    method validateUserInterfaceItem(args: ValidationArgs): bool
+    method validateUserInterfaceItem*(args: ValidationArgs): bool
 
 protocol ButtonActionProtocolInternal:
   optional:
-    method performClick(args: ActionArgs)
+    method performClick*(args: ActionArgs)
 
 proc mouseDownSelector*(): MouseEventSelector =
   mouseDown()

@@ -17,9 +17,9 @@ type
 
 protocol ControlProtocolInternal:
   required:
-    method isEnabled(): bool
-    method setEnabled(enabled: bool)
-    method sendAction(): bool
+    method isEnabled*(): bool
+    method setEnabled*(enabled: bool)
+    method sendAction*(): bool
 
 protocol DefaultControl of ControlProtocolInternal:
   method isEnabled(self: Control): bool =
@@ -42,12 +42,6 @@ proc initControlFields*(control: Control, frame: Rect) =
   control.xEnabled = true
   discard control.replaceMethods(DefaultControl.init())
 
-proc isEnabled*(control: Control): bool =
-  control.send(isEnabled, ())
-
-proc setEnabled*(control: Control, enabled: bool) =
-  discard control.send(setEnabled, enabled)
-
 proc target*(control: Control): DynamicAgent =
   control.xTarget
 
@@ -62,9 +56,6 @@ proc action*(control: Control): ActionSelector =
 
 proc setAction*(control: Control, action: ActionSelector) =
   control.xAction = action
-
-proc sendAction*(control: Control): bool =
-  control.send(sendAction, ())
 
 proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarget =
   result = ClosureTarget()

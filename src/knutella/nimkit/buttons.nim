@@ -13,16 +13,16 @@ type Button* = ref object of Control
 
 protocol ButtonProtocolInternal:
   required:
-    method title(): string
-    method setTitle(title: string)
-    method isHighlighted(): bool
-    method setHighlighted(highlighted: bool)
-    method state(): ButtonState
-    method setState(state: ButtonState)
-    method buttonType(): ButtonType
-    method setButtonType(buttonType: ButtonType)
-    method allowsMixedState(): bool
-    method setAllowsMixedState(value: bool)
+    method title*(): string
+    method setTitle*(title: string)
+    method isHighlighted*(): bool
+    method setHighlighted*(highlighted: bool)
+    method state*(): ButtonState
+    method setState*(state: ButtonState)
+    method buttonType*(): ButtonType
+    method setButtonType*(buttonType: ButtonType)
+    method allowsMixedState*(): bool
+    method setAllowsMixedState*(value: bool)
 
 proc nextButtonState(button: Button): ButtonState =
   case button.xState
@@ -33,39 +33,34 @@ proc nextButtonState(button: Button): ButtonState =
   of bsMixed:
     bsOff
 
-let
-  mouseDown = mouseDownSelector()
-  mouseUp = mouseUpSelector()
-  keyDown = keyDownSelector()
-  performClick = performClickSelector()
+proc buttonPerformClick(button: Button, args: ActionArgs) =
+  if not button.isEnabled or args.sender.isNil:
+    return
+  case button.xButtonType
+  of btMomentary:
+    discard
+  of btToggle:
+    button.xState = button.nextButtonState()
+  button.setNeedsDisplay(true)
+  discard button.sendAction()
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseDown(button: Button, event: MouseEvent) =
     if button.isEnabled and event.button == mbPrimary:
-      button.xHighlighted = true
-      button.setNeedsDisplay(true)
+      button.setHighlighted(true)
 
   method mouseUp(button: Button, event: MouseEvent) =
     if button.isEnabled and event.button == mbPrimary:
-      button.xHighlighted = false
-      button.setNeedsDisplay(true)
-      discard button.send(performClickSelector(), ActionArgs(sender: button))
+      button.setHighlighted(false)
+      button.buttonPerformClick(ActionArgs(sender: button))
 
   method keyDown(button: Button, event: KeyEvent) =
     if button.isEnabled and event.text == " ":
-      discard button.send(performClickSelector(), ActionArgs(sender: button))
+      button.buttonPerformClick(ActionArgs(sender: button))
 
 protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
-    if not button.isEnabled or args.sender.isNil:
-      return
-    case button.xButtonType
-    of btMomentary:
-      discard
-    of btToggle:
-      button.xState = button.nextButtonState()
-    button.setNeedsDisplay(true)
-    discard button.sendAction()
+    button.buttonPerformClick(args)
 
 protocol DefaultButton of ButtonProtocolInternal:
   method title(button: Button): string =
@@ -127,35 +122,5 @@ proc newButton*(frame: Rect, title: string): Button =
 
 proc newButton*(x, y, width, height: float32, title: string): Button =
   newButton(initRect(x, y, width, height), title)
-
-proc title*(button: Button): string =
-  button.send(title, ())
-
-proc setTitle*(button: Button, title: string) =
-  discard button.send(setTitle, title)
-
-proc isHighlighted*(button: Button): bool =
-  button.send(isHighlighted, ())
-
-proc setHighlighted*(button: Button, highlighted: bool) =
-  discard button.send(setHighlighted, highlighted)
-
-proc state*(button: Button): ButtonState =
-  button.send(state, ())
-
-proc setState*(button: Button, state: ButtonState) =
-  discard button.send(setState, state)
-
-proc buttonType*(button: Button): ButtonType =
-  button.send(buttonType, ())
-
-proc setButtonType*(button: Button, buttonType: ButtonType) =
-  discard button.send(setButtonType, buttonType)
-
-proc allowsMixedState*(button: Button): bool =
-  button.send(allowsMixedState, ())
-
-proc setAllowsMixedState*(button: Button, value: bool) =
-  discard button.send(setAllowsMixedState, value)
 
 let ButtonProtocol* = ButtonProtocolInternal
