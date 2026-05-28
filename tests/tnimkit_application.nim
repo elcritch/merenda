@@ -39,3 +39,28 @@ suite "nimkit application":
         break nativeRun
       finally:
         window.close()
+
+  test "native close marks window closed without releasing during callback":
+    block nativeClose:
+      let
+        app = newApplication()
+        window = newWindow(80, 80, 240, 140, "Nimkit Native Close")
+
+      window.setContentView(newView(0, 0, 240, 140))
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      try:
+        check app.runForFrames(1) == 1
+        let nativeWindow = window.nativeWindowOrNil()
+        check not nativeWindow.isNil
+        if nativeWindow.isNil:
+          break nativeClose
+        siwinshim.close(nativeWindow)
+        check window.isClosed
+        check not window.nativeReady
+      except CatchableError:
+        skip()
+        break nativeClose
+      finally:
+        window.close()
