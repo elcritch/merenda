@@ -1,4 +1,3 @@
-import sigils/reactive
 import sigils/selectors
 
 import ./controls
@@ -8,40 +7,40 @@ import ./types
 export controls
 
 type Button* = ref object of Control
-  xTitle: Sigil[string]
-  xHighlighted: Sigil[bool]
-  xState: Sigil[ButtonState]
-  xButtonType: Sigil[ButtonType]
-  xAllowsMixedState: Sigil[bool]
+  xTitle: string
+  xHighlighted: bool
+  xState: ButtonState
+  xButtonType: ButtonType
+  xAllowsMixedState: bool
 
 proc nextButtonState(button: Button): ButtonState =
-  case button.xState{}
+  case button.xState
   of bsOff:
     bsOn
   of bsOn:
-    if button.xAllowsMixedState{}: bsMixed else: bsOff
+    if button.xAllowsMixedState: bsMixed else: bsOff
   of bsMixed:
     bsOff
 
 proc buttonMouseDown(button: Button, args: MouseEventArgs): EmptyArgs =
   if button.isEnabled and args.event.button == mbPrimary:
-    button.xHighlighted <- true
+    button.xHighlighted = true
     button.setNeedsDisplay(true)
 
 proc buttonMouseUp(button: Button, args: MouseEventArgs): EmptyArgs =
   if button.isEnabled and args.event.button == mbPrimary:
-    button.xHighlighted <- false
+    button.xHighlighted = false
     button.setNeedsDisplay(true)
     discard button.send(performClickSelector(), ActionArgs(sender: button))
 
 proc buttonPerformClick(button: Button, args: ActionArgs): EmptyArgs =
   if not button.isEnabled or args.sender.isNil:
     return
-  case button.xButtonType{}
+  case button.xButtonType
   of btMomentary:
     discard
   of btToggle:
-    button.xState <- button.nextButtonState()
+    button.xState = button.nextButtonState()
   button.setNeedsDisplay(true)
   discard button.sendAction()
 
@@ -51,11 +50,8 @@ proc buttonKeyDown(button: Button, args: KeyEventArgs): EmptyArgs =
 
 proc initButtonFields*(button: Button, frame: Rect, title: string) =
   initControlFields(button, frame)
-  button.xTitle = newSigil(title)
-  button.xHighlighted = newSigil(false)
-  button.xState = newSigil(bsOff)
-  button.xButtonType = newSigil(btMomentary)
-  button.xAllowsMixedState = newSigil(false)
+  button.xTitle = title
+  button.xButtonType = btMomentary
   button.setAcceptsFirstResponder(true)
   discard button.addMethod(mouseDownSelector(), toDynamicMethod(buttonMouseDown))
   discard button.addMethod(mouseUpSelector(), toDynamicMethod(buttonMouseUp))
@@ -70,45 +66,45 @@ proc newButton*(x, y, width, height: float32, title: string): Button =
   newButton(initRect(x, y, width, height), title)
 
 proc title*(button: Button): string =
-  button.xTitle{}
+  button.xTitle
 
 proc setTitle*(button: Button, title: string) =
   if button.title == title:
     return
-  button.xTitle <- title
+  button.xTitle = title
   button.setNeedsDisplay(true)
 
 proc isHighlighted*(button: Button): bool =
-  button.xHighlighted{}
+  button.xHighlighted
 
 proc setHighlighted*(button: Button, highlighted: bool) =
   if button.isHighlighted == highlighted:
     return
-  button.xHighlighted <- highlighted
+  button.xHighlighted = highlighted
   button.setNeedsDisplay(true)
 
 proc state*(button: Button): ButtonState =
-  button.xState{}
+  button.xState
 
 proc setState*(button: Button, state: ButtonState) =
   if button.state == state:
     return
-  button.xState <- state
+  button.xState = state
   button.setNeedsDisplay(true)
 
 proc buttonType*(button: Button): ButtonType =
-  button.xButtonType{}
+  button.xButtonType
 
 proc setButtonType*(button: Button, buttonType: ButtonType) =
   if button.buttonType == buttonType:
     return
-  button.xButtonType <- buttonType
+  button.xButtonType = buttonType
   button.setNeedsDisplay(true)
 
 proc allowsMixedState*(button: Button): bool =
-  button.xAllowsMixedState{}
+  button.xAllowsMixedState
 
 proc setAllowsMixedState*(button: Button, value: bool) =
-  button.xAllowsMixedState <- value
+  button.xAllowsMixedState = value
   if not value and button.state == bsMixed:
     button.setState(bsOff)

@@ -14,7 +14,7 @@ let
   root = newView(0, 0, 720, 360)
   title = newTextField(28, 28, 520, 48, "Hello from KNutella/nimkit")
   subtitle = newTextField(
-    28, 86, 620, 36, "Pure Nim responder/action dispatch with sigil-backed widget state"
+    28, 86, 620, 36, "Pure Nim responder/action dispatch with plain widget state"
   )
   status = newTextField(28, 132, 420, 30, "Button state: Off (click to cycle)")
   button = newButton(28, 172, 220, 44, "Cycle State (Off)")

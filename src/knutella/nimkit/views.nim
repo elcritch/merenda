@@ -1,4 +1,3 @@
-import sigils/reactive
 import sigils/selectors
 
 import ./responders
@@ -8,21 +7,20 @@ import ./types
 export responders
 
 type View* = ref object of Responder
-  xFrame: Sigil[Rect]
-  xBounds: Sigil[Rect]
-  xHidden: Sigil[bool]
-  xNeedsDisplay: Sigil[bool]
-  xBackgroundColor: Sigil[Color]
+  xFrame: Rect
+  xBounds: Rect
+  xHidden: bool
+  xNeedsDisplay: bool
+  xBackgroundColor: Color
   xSuperview: View
   xSubviews: seq[View]
 
 proc initViewFields*(view: View, frame: Rect) =
   initResponder(view)
-  view.xFrame = newSigil(frame)
-  view.xBounds = newSigil(initRect(0.0, 0.0, frame.size.width, frame.size.height))
-  view.xHidden = newSigil(false)
-  view.xNeedsDisplay = newSigil(true)
-  view.xBackgroundColor = newSigil(initColor(0.94, 0.95, 0.97, 1.0))
+  view.xFrame = frame
+  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  view.xNeedsDisplay = true
+  view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
 
 proc newView*(frame: Rect): View =
   result = View()
@@ -32,19 +30,19 @@ proc newView*(x, y, width, height: float32): View =
   newView(initRect(x, y, width, height))
 
 proc frame*(view: View): Rect =
-  view.xFrame{}
+  view.xFrame
 
 proc bounds*(view: View): Rect =
-  view.xBounds{}
+  view.xBounds
 
 proc isHidden*(view: View): bool =
-  view.xHidden{}
+  view.xHidden
 
 proc needsDisplay*(view: View): bool =
-  view.xNeedsDisplay{}
+  view.xNeedsDisplay
 
 proc backgroundColor*(view: View): Color =
-  view.xBackgroundColor{}
+  view.xBackgroundColor
 
 proc superview*(view: View): View =
   view.xSuperview
@@ -53,33 +51,33 @@ proc subviews*(view: View): lent seq[View] =
   view.xSubviews
 
 proc setNeedsDisplay*(view: View, value: bool) =
-  view.xNeedsDisplay <- value
+  view.xNeedsDisplay = value
   if value and not view.xSuperview.isNil:
     view.xSuperview.setNeedsDisplay(true)
 
 proc setFrame*(view: View, frame: Rect) =
   if view.frame == frame:
     return
-  view.xFrame <- frame
-  view.xBounds <- initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  view.xFrame = frame
+  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
   view.setNeedsDisplay(true)
 
 proc setBounds*(view: View, bounds: Rect) =
   if view.bounds == bounds:
     return
-  view.xBounds <- initRect(bounds.origin, bounds.size)
+  view.xBounds = initRect(bounds.origin, bounds.size)
   view.setNeedsDisplay(true)
 
 proc setHidden*(view: View, hidden: bool) =
   if view.isHidden == hidden:
     return
-  view.xHidden <- hidden
+  view.xHidden = hidden
   view.setNeedsDisplay(true)
 
 proc setBackgroundColor*(view: View, color: Color) =
   if view.backgroundColor == color:
     return
-  view.xBackgroundColor <- color
+  view.xBackgroundColor = color
   view.setNeedsDisplay(true)
 
 proc removeFromSuperview*(view: View) =

@@ -36,6 +36,13 @@
 - Don't use `ensure*` style crap for POJ's, instead make sure `init`, `new` configure storage properly.
 - Prefer Nim backed storage for tables, seq's etc for internal obj-c storage. Only use NSDictionary where AppKit API needs it.
 
+## NimKit Coding Rules
+- Keep geometry, color, event, and option data as plain Nim value types (`object`, enums, sets). Do not wrap NSRect-like data or scalar widget state in `ref object`, Objective-C wrappers, or `Sigil`.
+- Use `ref object` for identity-bearing GUI objects only: applications, windows, views, controls, widgets, responders, native handles, and target/action objects.
+- Use plain fields for internal widget state such as frame, bounds, title, enabled, highlighted, state, text, colors, and flags. Only use `Sigil` when a property is actually observed, bound, or participates in a reactive graph.
+- Keep mutation procs when setting a field has side effects such as display invalidation, responder updates, native window updates, or parent/child bookkeeping.
+- Keep proc-based getter/setter boundaries for properties that may need swizzling, overriding, validation, layout hooks, or instrumentation to modify core GUI behavior. Use plain backing storage behind those procs; do not bypass the proc boundary just to expose fields. Do not add getter/setter pairs only for compatibility when direct Nim access is clearer and no future hook point is expected.
+
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.
 - Location: add new tests under `tests/`, mirroring module names (e.g., `tslots.nim` for `slots.nim`).

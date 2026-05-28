@@ -1,4 +1,3 @@
-import sigils/reactive
 import sigils/selectors
 
 import ./selectors
@@ -9,7 +8,7 @@ export views
 
 type
   Control* = ref object of View
-    xEnabled: Sigil[bool]
+    xEnabled: bool
     xTarget: DynamicAgent
     xAction: ActionSelector
 
@@ -20,15 +19,15 @@ type
 
 proc initControlFields*(control: Control, frame: Rect) =
   initViewFields(control, frame)
-  control.xEnabled = newSigil(true)
+  control.xEnabled = true
 
 proc isEnabled*(control: Control): bool =
-  control.xEnabled{}
+  control.xEnabled
 
 proc setEnabled*(control: Control, enabled: bool) =
   if control.isEnabled == enabled:
     return
-  control.xEnabled <- enabled
+  control.xEnabled = enabled
   control.setNeedsDisplay(true)
 
 proc target*(control: Control): DynamicAgent =
