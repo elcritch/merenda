@@ -229,6 +229,12 @@ proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
 proc dispatchMouseUp*(view: View, event: MouseEvent): bool =
   view.sendIfHandled(mouseUp(), event)
 
+proc dispatchMouseMoved*(view: View, event: MouseEvent): bool =
+  view.sendIfHandled(mouseMoved(), event)
+
+proc dispatchMouseDragged*(view: View, event: MouseEvent): bool =
+  view.sendIfHandled(mouseDragged(), event)
+
 proc dispatchKeyDown*(view: View, event: KeyEvent): bool =
   view.sendIfHandled(keyDown(), event)
 

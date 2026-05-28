@@ -17,6 +17,7 @@ type
     onResize*: proc() {.closure.}
     onMove*: proc(pos: Point) {.closure.}
     onMouseButton*: proc(event: types.MouseEvent, pressed: bool) {.closure.}
+    onMouseMove*: proc(event: types.MouseEvent, dragging: bool) {.closure.}
     onKey*: proc(event: HostKeyEvent) {.closure.}
     onTextInput*: proc(text: string) {.closure.}
     onRender*: proc() {.closure.}
@@ -103,6 +104,10 @@ proc nativeMousePoint(window: siwinshim.Window): Point =
   let pos = rawInputToLogical(window.mouse.pos, window.size(), window.logicalSize())
   initPoint(pos.x.float32, pos.y.float32)
 
+proc nativeMousePoint(window: siwinshim.Window, rawPos: Vec2): Point =
+  let pos = rawInputToLogical(rawPos, window.size(), window.logicalSize())
+  initPoint(pos.x.float32, pos.y.float32)
+
 proc isReady*(host: HostWindow): bool =
   (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
 
@@ -177,6 +182,22 @@ proc dispatchMouseButton(host: HostWindow, event: siwinshim.MouseButtonEvent) =
     event.pressed,
   )
 
+proc dispatchMouseMove(host: HostWindow, event: siwinshim.MouseMoveEvent) =
+  let nativeWindow = if event.window.isNil: host.xNativeWindow else: event.window
+  if nativeWindow.isNil or host.xCallbacks.onMouseMove.isNil:
+    return
+  let dragging =
+    event.kind == siwinshim.MouseMoveKind.moveWhileDragging or
+    nativeWindow.mouse.pressed != {}
+  host.xCallbacks.onMouseMove(
+    types.MouseEvent(
+      location: nativeMousePoint(nativeWindow, event.pos),
+      button: mbPrimary,
+      clickCount: 0,
+    ),
+    dragging,
+  )
+
 proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
   if host.xCallbacks.onKey.isNil:
     return
@@ -241,6 +262,11 @@ proc createHostWindow*(
       let host = hostForNativeWindow(event.window, ownerKey)
       if not host.isNil:
         host.dispatchMouseButton(event)
+    ,
+    onMouseMove: proc(event: siwinshim.MouseMoveEvent) =
+      let host = hostForNativeWindow(event.window, ownerKey)
+      if not host.isNil:
+        host.dispatchMouseMove(event)
     ,
     onRender: proc(event: siwinshim.RenderEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)

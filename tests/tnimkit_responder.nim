@@ -4,6 +4,35 @@ import sigils/selectors
 
 import knutella/nimkit
 
+type TrackingSpyView = ref object of View
+  xName: string
+
+var
+  trackingEvents: seq[string]
+  trackingPoints: seq[Point]
+
+proc recordTrackingEvent(spy: TrackingSpyView, name: string, event: MouseEvent) =
+  trackingEvents.add(spy.xName & "." & name)
+  trackingPoints.add(event.location)
+
+protocol TrackingSpyEvents of ResponderEventProtocol:
+  method mouseDown(spy: TrackingSpyView, event: MouseEvent) =
+    spy.recordTrackingEvent("down", event)
+
+  method mouseUp(spy: TrackingSpyView, event: MouseEvent) =
+    spy.recordTrackingEvent("up", event)
+
+  method mouseMoved(spy: TrackingSpyView, event: MouseEvent) =
+    spy.recordTrackingEvent("moved", event)
+
+  method mouseDragged(spy: TrackingSpyView, event: MouseEvent) =
+    spy.recordTrackingEvent("dragged", event)
+
+proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
+  result = TrackingSpyView(xName: name)
+  initViewFields(result, frame)
+  discard result.withProtocol(TrackingSpyEvents)
+
 suite "nimkit responder":
   test "next responder is observable and forwards selector dispatch":
     let
@@ -56,3 +85,45 @@ suite "nimkit responder":
     check window.makeFirstResponder(button)
     check window.dispatchKeyDown(KeyEvent(text: " ", keyCode: 32))
     check actionCount == 1
+
+  test "window mouse tracking sends drag and up to mouse-down view":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse tracking")
+      root = newView(0, 0, 240, 160)
+      left = newTrackingSpyView("left", initRect(10, 10, 60, 40))
+      right = newTrackingSpyView("right", initRect(120, 10, 60, 40))
+
+    root.addSubview(left)
+    root.addSubview(right)
+    window.setContentView(root)
+
+    trackingEvents.setLen(0)
+    trackingPoints.setLen(0)
+
+    check window.mouseDownAt(initPoint(20, 20))
+    check window.mouseDraggedAt(initPoint(130, 20))
+    check window.mouseUpAt(initPoint(130, 20))
+
+    check trackingEvents == @["left.down", "left.dragged", "left.up"]
+    check trackingPoints == @[initPoint(10, 10), initPoint(120, 10), initPoint(120, 10)]
+
+  test "window mouse move hit-tests normally after tracking clears":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse move")
+      root = newView(0, 0, 240, 160)
+      left = newTrackingSpyView("left", initRect(10, 10, 60, 40))
+      right = newTrackingSpyView("right", initRect(120, 10, 60, 40))
+
+    root.addSubview(left)
+    root.addSubview(right)
+    window.setContentView(root)
+
+    trackingEvents.setLen(0)
+    trackingPoints.setLen(0)
+
+    check window.mouseDownAt(initPoint(20, 20))
+    check window.mouseUpAt(initPoint(130, 20))
+    check window.mouseMovedAt(initPoint(130, 20))
+
+    check trackingEvents == @["left.down", "left.up", "right.moved"]
+    check trackingPoints == @[initPoint(10, 10), initPoint(120, 10), initPoint(10, 10)]
