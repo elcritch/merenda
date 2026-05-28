@@ -15,23 +15,17 @@ type
   ClosureTarget* = ref object of Responder
     xCallback: ActionProc
 
-protocol ControlProtocolInternal:
-  required:
-    method isEnabled*(): bool
-    method setEnabled*(enabled: bool)
-    method sendAction*(): bool
-
-protocol DefaultControl of ControlProtocolInternal:
-  method isEnabled(self: Control): bool =
+protocol ControlProtocolInternal from Control:
+  method isEnabled*(self: Control): bool =
     self.xEnabled
 
-  method setEnabled(self: Control, enabled: bool) =
+  method setEnabled*(self: Control, enabled: bool) =
     if self.xEnabled == enabled:
       return
     self.xEnabled = enabled
     self.setNeedsDisplay(true)
 
-  method sendAction(self: Control): bool =
+  method sendAction*(self: Control): bool =
     if self.xTarget.isNil:
       return false
     var value: EmptyArgs
@@ -40,7 +34,7 @@ protocol DefaultControl of ControlProtocolInternal:
 proc initControlFields*(control: Control, frame: Rect) =
   initViewFields(control, frame)
   control.xEnabled = true
-  discard control.replaceMethods(DefaultControl.init())
+  discard control.withProto()
 
 proc target*(control: Control): DynamicAgent =
   control.xTarget

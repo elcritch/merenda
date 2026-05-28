@@ -11,19 +11,6 @@ type Button* = ref object of Control
   xButtonType: ButtonType
   xAllowsMixedState: bool
 
-protocol ButtonProtocolInternal:
-  required:
-    method title*(): string
-    method setTitle*(title: string)
-    method isHighlighted*(): bool
-    method setHighlighted*(highlighted: bool)
-    method state*(): ButtonState
-    method setState*(state: ButtonState)
-    method buttonType*(): ButtonType
-    method setButtonType*(buttonType: ButtonType)
-    method allowsMixedState*(): bool
-    method setAllowsMixedState*(value: bool)
-
 proc nextButtonState(button: Button): ButtonState =
   case button.xState
   of bsOff:
@@ -62,47 +49,47 @@ protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args)
 
-protocol DefaultButton of ButtonProtocolInternal:
-  method title(button: Button): string =
+protocol ButtonProtocolInternal from Button:
+  method title*(button: Button): string =
     button.xTitle
 
-  method setTitle(button: Button, title: string) =
+  method setTitle*(button: Button, title: string) =
     if button.xTitle == title:
       return
     button.xTitle = title
     button.setNeedsDisplay(true)
 
-  method isHighlighted(button: Button): bool =
+  method isHighlighted*(button: Button): bool =
     button.xHighlighted
 
-  method setHighlighted(button: Button, highlighted: bool) =
+  method setHighlighted*(button: Button, highlighted: bool) =
     if button.xHighlighted == highlighted:
       return
     button.xHighlighted = highlighted
     button.setNeedsDisplay(true)
 
-  method state(button: Button): ButtonState =
+  method state*(button: Button): ButtonState =
     button.xState
 
-  method setState(button: Button, state: ButtonState) =
+  method setState*(button: Button, state: ButtonState) =
     if button.xState == state:
       return
     button.xState = state
     button.setNeedsDisplay(true)
 
-  method buttonType(button: Button): ButtonType =
+  method buttonType*(button: Button): ButtonType =
     button.xButtonType
 
-  method setButtonType(button: Button, buttonType: ButtonType) =
+  method setButtonType*(button: Button, buttonType: ButtonType) =
     if button.xButtonType == buttonType:
       return
     button.xButtonType = buttonType
     button.setNeedsDisplay(true)
 
-  method allowsMixedState(button: Button): bool =
+  method allowsMixedState*(button: Button): bool =
     button.xAllowsMixedState
 
-  method setAllowsMixedState(button: Button, value: bool) =
+  method setAllowsMixedState*(button: Button, value: bool) =
     button.xAllowsMixedState = value
     if not value and button.state == bsMixed:
       button.setState(bsOff)
@@ -114,7 +101,7 @@ proc initButtonFields*(button: Button, frame: Rect, title: string) =
   button.setAcceptsFirstResponder(true)
   discard button.replaceMethods(DefaultButtonEvents.init())
   discard button.replaceMethods(DefaultButtonAction.init())
-  discard button.replaceMethods(DefaultButton.init())
+  discard button.withProto()
 
 proc newButton*(frame: Rect, title: string): Button =
   result = Button()

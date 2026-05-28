@@ -33,18 +33,15 @@ type
     sender*: DynamicAgent
 
 protocol ResponderEventProtocolInternal:
-  optional:
-    method mouseDown*(event: MouseEvent)
-    method mouseUp*(event: MouseEvent)
-    method keyDown*(event: KeyEvent)
+  method mouseDown*(event: MouseEvent) {.optional.}
+  method mouseUp*(event: MouseEvent) {.optional.}
+  method keyDown*(event: KeyEvent) {.optional.}
 
 protocol UserInterfaceValidationsInternal:
-  required:
-    method validateUserInterfaceItem*(args: ValidationArgs): bool
+  method validateUserInterfaceItem*(args: ValidationArgs): bool
 
 protocol ButtonActionProtocolInternal:
-  optional:
-    method performClick*(args: ActionArgs)
+  method performClick*(args: ActionArgs) {.optional.}
 
 proc mouseDownSelector*(): MouseEventSelector =
   mouseDown()
