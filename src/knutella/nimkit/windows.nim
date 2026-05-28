@@ -104,7 +104,7 @@ proc close*(window: Window) =
 proc clickAt*(window: Window, point: Point): bool =
   if window.xContentView.isNil:
     return false
-  window.xContentView.clickAt(point)
+  window.xContentView.clickAt(window.xContentView.pointFromWindow(point))
 
 proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
   if not window.xFirstResponder.isNil:
@@ -131,15 +131,21 @@ proc renderNativeWindow*(window: Window) =
 proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
   if window.xContentView.isNil:
     return
-  let hit = window.xContentView.hitTest(event.location)
+  let contentPoint = window.xContentView.pointFromWindow(event.location)
+  let hit = window.xContentView.hitTest(contentPoint)
   if hit.isNil:
     return
   if hit.acceptsFirstResponder():
     discard window.makeFirstResponder(hit)
+  let localEvent = MouseEvent(
+    location: hit.pointFromView(contentPoint, window.xContentView),
+    button: event.button,
+    clickCount: event.clickCount,
+  )
   if pressed:
-    discard hit.dispatchMouseDown(event)
+    discard hit.dispatchMouseDown(localEvent)
   else:
-    discard hit.dispatchMouseUp(event)
+    discard hit.dispatchMouseUp(localEvent)
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   if event.pressed and event.isEscape:

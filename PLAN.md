@@ -240,8 +240,8 @@ its implementation.
 
 ### Priority Order
 
-- Short term: dirty-rect invariants, coordinate invalidation tests, and view
-  lifecycle hooks.
+- Short term: mouse tracking/capture, dirty-rect invariants, and view lifecycle
+  hooks.
 - Medium term: theme/metrics object, cleaner cell invalidation/default-cell
   construction, richer key command dispatch, and explicit tracking loops.
 - Later: constraint layout, panels/services integration, loadable themes, and
@@ -263,13 +263,6 @@ still points to the next correctness boundaries:
   after display. NimKit should add `setNeedsDisplayInRect`, invalid-rect union,
   visible-rect clipping, and tests that child invalidation survives until a
   render pass clears it.
-- Add explicit coordinate conversion APIs and tests. NimKit hit testing does
-  local frame subtraction, but there is no public `convertPoint`/`convertRect`
-  path between views, windows, and screen, and no cached transform lifecycle.
-  GNUstep routes hit testing, drawing, cell tracking, and dirty rects through
-  conversion helpers. Start with unrotated/unscaled conversions covering nested
-  views, non-zero bounds origins, reparenting, hidden ancestors, and window
-  coordinates.
 - Add selector-backed view lifecycle hooks. GNUstep calls will/did move hooks,
   resets cursor rects, marks subviews dirty, updates responder/window ownership,
   and calls `didAddSubview` when views are inserted. NimKit currently mutates
@@ -299,56 +292,43 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- First: coordinate conversion helpers and mouse tracking/capture. These will
-  affect most future widgets and should be settled before adding scroll views
-  or editable text.
+- First: mouse tracking/capture. This affects most future widgets and should be
+  settled before adding scroll views or editable text.
 - Second: invalid rects/visible rects and lifecycle hooks, with tests around
   reparenting, hidden views, and child invalidation.
 - Third: theme/metrics and command/key-binding layers, then expand controls.
 
 Concrete task list:
 
-1. Add coordinate conversion helpers and tests. Start with unrotated/unscaled
-   AppKit-shaped helpers:
-   `convertPointFromView`, `convertPointToView`, `convertRectFromView`,
-   `convertRectToView`, `convertPointFromWindow`, `convertPointToWindow`,
-   `convertRectFromWindow`, and `convertRectToWindow`. Cover root-to-child,
-   child-to-root, sibling-to-sibling, nested views, non-zero bounds origins,
-   reparenting, and window/content coordinates.
-2. Route hit testing and mouse event dispatch through the coordinate conversion
-   helpers. Current hit testing works by subtracting child frame origins; that
-   should become a caller of the shared conversion layer so dirty rects,
-   drawing, text selection, scrolling, and future drag behavior use the same
-   math.
-3. Add window-level mouse tracking/capture. Track the view that receives
+1. Add window-level mouse tracking/capture. Track the view that receives
    mouse-down and send drag/move/up continuation events to that tracking view
    until mouse-up, rather than hit-testing every mouse-up independently. Use
    this before implementing drag, scroll, hover, continuous controls, or
    outside-button cancellation behavior.
-4. Add a real display invalidation pipeline. Replace the single boolean model
+2. Add a real display invalidation pipeline. Replace the single boolean model
    with `setNeedsDisplayInRect`, invalid-rect union, clipping to bounds and
    visible rects, ancestor propagation, and render-pass clearing. Keep
    whole-window redraw as the renderer strategy until dirty rendering is
    needed, but preserve dirty metadata and tests now.
-5. Add visible-rect and clipping behavior. Hidden ancestors should produce an
+3. Add visible-rect and clipping behavior. Hidden ancestors should produce an
    empty visible rect; parent bounds should clip child visible rects; future
    scroll views should be able to narrow visible rects without special render
    hacks.
-6. Add selector-backed view lifecycle hooks. Provide
+4. Add selector-backed view lifecycle hooks. Provide
    `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
    `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and a remove
    hook. Route `addSubview`, `removeFromSuperview`, and `setContentView`
    through those hooks while keeping direct field mutation private.
-7. Introduce a small theme/metrics object. Do not build a loadable theme system
+5. Introduce a small theme/metrics object. Do not build a loadable theme system
    yet; start with colors, border widths, corner radius, focus-ring metrics,
    control padding, and text insets used by buttons and text fields. Rendering
    should ask the theme for these values instead of hard-coding them in
    widget/render helpers.
-8. Add a command/key-binding layer before real text editing expands. Map
+6. Add a command/key-binding layer before real text editing expands. Map
    key/modifier combinations to command selectors, then dispatch through the
    responder chain. This should share the same path for text editing commands,
    button key equivalents, and future menu shortcuts.
-9. Expand controls after the above contracts stabilize. Prioritize checkbox,
+7. Expand controls after the above contracts stabilize. Prioritize checkbox,
     radio, toggle variants, combo box, and basic text editing. Keep policy
     hooks selector-based where behavior is overridable.
 
