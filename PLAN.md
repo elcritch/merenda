@@ -165,6 +165,84 @@ NimKit already has the first useful vertical slice:
 - Keep the ObjC/AppKit implementation buildable and useful as the behavioral
   reference.
 
+## Cocoa Core Architecture Notes
+
+Architecture review source: `deps/libs-gui/Headers/AppKit` and
+`deps/libs-gui/Source`, especially `NSApplication`, `NSWindow`, `NSView`,
+`NSControl`, `NSCell`, `GSDisplayServer`, `GSTheme`, key bindings, and the auto
+layout engine. Use GNUstep/libs-gui as architectural reference only. Do not copy
+its implementation.
+
+### Already Aligned
+
+- Our ObjC/AppKit core already follows the main Cocoa split better than NimKit:
+  `NSApplication` owns the event queue, `NSWindow` dispatches to hit-tested or
+  first-responder views, `NSView` owns frame/bounds/hierarchy/invalidation, and
+  `NSControl` delegates most persistent control state to `NSCell`.
+- Our `NSView` has the right broad shape: frame, bounds, superview/subviews,
+  window ownership, tracking areas, invalid rects, visible rects, transform
+  state, and proc/method boundaries where behavior may need to be swizzled.
+- NimKit should keep its simpler Nim-native model, but it should treat the
+  ObjC/AppKit core as the behavioral reference for event order, coordinate
+  conversion, invalidation, and control semantics.
+
+### Improvements To Consider
+
+- Add a formal display-server/backend boundary to the ObjC/AppKit core. GNUstep
+  routes window creation, event polling, server/window lookup, and backend
+  operations through `GSDisplayServer`; ours still mixes siwin stepping,
+  renderer ownership, and AppKit object logic inside `NSApplication`/`NSWindow`.
+  A small Nim `DisplayServer`/`AppKitBackend` layer would make siwin replaceable,
+  improve headless tests, and keep native-window quirks out of Cocoa objects.
+- Tighten the view display pipeline around dirty rects. GNUstep keeps the
+  invariant that dirty children mark ancestors dirty, clips invalidation to
+  visible rects, redirects drawing to an opaque ancestor, and clears dirty state
+  only after display. Our core has the pieces, but the traversal should be made
+  explicit and covered by tests before adding more complex views.
+- Make coordinate caching and invalidation a first-class view subsystem.
+  GNUstep recursively invalidates cached window/view transforms and visible
+  rects on frame, bounds, superview, hidden-state, and flip changes. Our
+  `markTransformsDirty` path should grow into the same clear lifecycle, with
+  tests for nested conversion, flipped views, bounds origins, and reparenting.
+- Fill in view lifecycle hooks where Cocoa behavior depends on them:
+  `viewWillMoveToSuperview`, `viewWillMoveToWindow`, `viewDidMoveToSuperview`,
+  `viewDidMoveToWindow`, `didAddSubview`, and removal hooks. These should remain
+  methods, not direct field writes, because subclasses and future swizzles need
+  stable interception points.
+- Introduce a theme/metrics drawing boundary. GNUstep's `GSTheme` centralizes
+  borders, focus rings, control metrics, tile/nine-patch drawing, menu/window
+  chrome, and state-specific colors. Our drawing is still spread across controls
+  and rendering helpers. Start with a small theme object for colors, borders,
+  focus rings, control margins, and cell metrics; defer loadable themes.
+- Keep strengthening the `NSControl`/`NSCell` split. GNUstep uses default cell
+  classes and cell-owned state heavily. Our core already has cells; next cleanup
+  should centralize cell invalidation, value conversion, target/action storage,
+  highlight/tracking behavior, and default cell construction so controls stay
+  thin.
+- Stage layout work conservatively. GNUstep has autoresizing masks plus an auto
+  layout engine. For us, finish autoresizing masks, intrinsic content sizes, and
+  layout invalidation first; defer a constraint solver until there are enough
+  controls to justify it.
+- Centralize the application/window event path. GNUstep separates event queue
+  lookup, `NSApplication.sendEvent`, window dispatch, tracking loops, modal
+  loops, and key equivalent handling. Our path works, but modal sessions,
+  tracking loops, key equivalents, mouse capture, and closed/invisible-window
+  filtering should be made explicit before more widgets depend on edge-case
+  event ordering.
+- Add a command/key-binding layer before text editing grows. GNUstep has key
+  binding tables and command actions; our text fields currently handle command
+  selectors directly. A small command table would keep text editing, menu key
+  equivalents, and responder fallback from diverging.
+
+### Priority Order
+
+- Short term: backend/display-server boundary, dirty-rect invariants,
+  coordinate invalidation tests, and view lifecycle hooks.
+- Medium term: theme/metrics object, cleaner cell invalidation/default-cell
+  construction, richer key command dispatch, and explicit tracking loops.
+- Later: constraint layout, panels/services integration, loadable themes, and
+  broader GNUstep-style resource organization.
+
 ## Test Plan
 
 - Run focused tests during development with:
