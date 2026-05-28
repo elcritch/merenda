@@ -12,7 +12,7 @@ suite "nimkit controls":
     let button = newButton(0, 0, 120, 36, "Original")
 
     check button.conformsTo(ButtonProtocol)
-    discard button.replaceMethod(selector[tuple[], string]("title"), overrideTitle)
+    discard button.replaceMethod(title(), overrideTitle)
     check button.title == "Swizzled"
 
   test "button click sends selector action to closure target":
@@ -53,9 +53,9 @@ suite "nimkit controls":
     button.setTarget(target)
     button.setAction(action)
 
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
+    discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOn
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
+    discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOff
     check actionCount == 2
 
@@ -64,9 +64,9 @@ suite "nimkit controls":
     button.setButtonType(btToggle)
     button.setAllowsMixedState(true)
 
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
+    discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOn
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
+    discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsMixed
-    discard button.send(performClickSelector(), ActionArgs(sender: button))
+    discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOff

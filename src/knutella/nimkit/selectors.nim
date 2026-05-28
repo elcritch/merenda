@@ -43,21 +43,6 @@ protocol UserInterfaceValidationsInternal:
 protocol ButtonActionProtocolInternal:
   method performClick*(args: ActionArgs) {.optional.}
 
-proc mouseDownSelector*(): MouseEventSelector =
-  mouseDown()
-
-proc mouseUpSelector*(): MouseEventSelector =
-  mouseUp()
-
-proc keyDownSelector*(): KeyEventSelector =
-  keyDown()
-
-proc performClickSelector*(): ActionSelector =
-  performClick()
-
-proc validateUserInterfaceItemSelector*(): ValidationSelector =
-  validateUserInterfaceItem()
-
 proc actionSelector*(name: string): ActionSelector =
   selector[ActionArgs, EmptyArgs](name)
 

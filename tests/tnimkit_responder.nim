@@ -19,9 +19,8 @@ suite "nimkit responder":
     let parent = newActionTarget(action, onForwarded)
     child.setNextResponder(parent)
 
-    var value: EmptyArgs
     check child.nextResponder == parent
-    check child.perform(action, ActionArgs(sender: child), value)
+    check child.sendIfHandled(action, ActionArgs(sender: child))
     check callCount == 1
 
   test "window first responder requires acceptance":

@@ -155,8 +155,7 @@ proc clickAt*(window: Window, point: Point): bool =
 
 proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
   if not window.xFirstResponder.isNil:
-    var value: EmptyArgs
-    if window.xFirstResponder.perform(keyDownSelector(), event, value):
+    if window.xFirstResponder.sendIfHandled(keyDown(), event):
       return true
   if window.xContentView.isNil:
     return false

@@ -9,10 +9,12 @@ type Responder* = ref object of DynamicAgent
   xAcceptsFirstResponder: bool
 
 protocol ResponderProtocolInternal from Responder:
-  method acceptsFirstResponder*(self: Responder): bool =
+  property acceptsFirstResponder -> bool
+
+  method acceptsFirstResponder(self: Responder): bool =
     self.xAcceptsFirstResponder
 
-  method setAcceptsFirstResponder*(self: Responder, value: bool) =
+  method setAcceptsFirstResponder(self: Responder, value: bool) =
     self.xAcceptsFirstResponder = value
 
   method becomeFirstResponder*(self: Responder): bool =
@@ -22,12 +24,10 @@ protocol ResponderProtocolInternal from Responder:
     true
 
   method tryToPerform*(self: Responder, args: TryToPerformArgs): bool =
-    var value: EmptyArgs
-    self.perform(args.selector, ActionArgs(sender: args.sender), value)
+    self.sendIfHandled(args.selector, ActionArgs(sender: args.sender))
 
   method doCommandBySelector*(self: Responder, selector: CommandSelector) =
-    var value: EmptyArgs
-    if not self.perform(selector, ActionArgs(sender: DynamicAgent(self)), value):
+    if not self.sendIfHandled(selector, ActionArgs(sender: DynamicAgent(self))):
       self.noResponderFor(selector)
 
   method noResponderFor*(self: Responder, selector: CommandSelector) =
@@ -48,7 +48,7 @@ protocol DefaultResponderEvents of ResponderEventProtocol:
 
 proc initResponder*(responder: Responder) =
   discard responder.withProto()
-  discard responder.replaceMethods(DefaultResponderEvents.init())
+  discard responder.withProtocol(DefaultResponderEvents)
 
 proc newResponder*(): Responder =
   result = Responder()
@@ -66,6 +66,6 @@ proc clearNextResponder*(responder: Responder) =
 proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A
 ): Option[R] =
-  responder.perform(selector, ensureMove args)
+  responder.trySend(selector, ensureMove args)
 
 let ResponderProtocol* = ResponderProtocolInternal

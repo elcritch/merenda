@@ -28,8 +28,7 @@ protocol ControlProtocolInternal from Control:
   method sendAction*(self: Control): bool =
     if self.xTarget.isNil:
       return false
-    var value: EmptyArgs
-    self.xTarget.perform(self.xAction, ActionArgs(sender: DynamicAgent(self)), value)
+    self.xTarget.sendIfHandled(self.xAction, ActionArgs(sender: DynamicAgent(self)))
 
 proc initControlFields*(control: Control, frame: Rect) =
   initViewFields(control, frame)
