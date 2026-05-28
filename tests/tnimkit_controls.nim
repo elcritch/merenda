@@ -4,13 +4,23 @@ import sigils/selectors
 
 import knutella/nimkit
 
+method overrideTitle(self: Button): string {.selector.} =
+  "Swizzled"
+
 suite "nimkit controls":
+  test "button core methods are selector-backed and protocol visible":
+    let button = newButton(0, 0, 120, 36, "Original")
+
+    check button.conformsTo(ButtonProtocol)
+    discard button.replaceMethod(selector[tuple[], string]("title"), overrideTitle)
+    check button.title == "Swizzled"
+
   test "button click sends selector action to closure target":
     let
       root = newView(0, 0, 240, 180)
       label = newTextField(16, 16, 180, 32, "Ready")
       button = newButton(16, 64, 120, 36, "Click")
-      action = actionSelector("buttonClicked")
+      action = actionSelector("clickedAction")
 
     proc onClicked(sender: DynamicAgent) =
       check sender == DynamicAgent(button)
@@ -23,6 +33,7 @@ suite "nimkit controls":
     root.addSubview(label)
     root.addSubview(button)
 
+    check root.hitTest(initPoint(24, 72)) == button
     check root.clickAt(initPoint(24, 72))
     check label.stringValue == "Clicked"
 

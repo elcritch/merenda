@@ -22,38 +22,49 @@ type
   ValidationArgs* = object
     item*: DynamicAgent
 
-  MouseEventSelector* = Selector[MouseEventArgs, EmptyArgs]
-  KeyEventSelector* = Selector[KeyEventArgs, EmptyArgs]
+  MouseEventSelector* = Selector[MouseEvent, EmptyArgs]
+  KeyEventSelector* = Selector[KeyEvent, EmptyArgs]
   ActionSelector* = Selector[ActionArgs, EmptyArgs]
-  CommandSelector* = Selector[CommandArgs, EmptyArgs]
+  CommandSelector* = ActionSelector
   ValidationSelector* = Selector[ValidationArgs, bool]
 
+  TryToPerformArgs* = object
+    selector*: CommandSelector
+    sender*: DynamicAgent
+
+protocol ResponderEventProtocolInternal:
+  optional:
+    method mouseDown(event: MouseEvent)
+    method mouseUp(event: MouseEvent)
+    method keyDown(event: KeyEvent)
+
+protocol UserInterfaceValidationsInternal:
+  required:
+    method validateUserInterfaceItem(args: ValidationArgs): bool
+
+protocol ButtonActionProtocolInternal:
+  optional:
+    method performClick(args: ActionArgs)
+
 proc mouseDownSelector*(): MouseEventSelector =
-  selector[MouseEventArgs, EmptyArgs]("mouseDown")
+  mouseDown()
 
 proc mouseUpSelector*(): MouseEventSelector =
-  selector[MouseEventArgs, EmptyArgs]("mouseUp")
+  mouseUp()
 
 proc keyDownSelector*(): KeyEventSelector =
-  selector[KeyEventArgs, EmptyArgs]("keyDown")
+  keyDown()
 
 proc performClickSelector*(): ActionSelector =
-  selector[ActionArgs, EmptyArgs]("performClick")
-
-proc sendActionSelector*(): ActionSelector =
-  selector[ActionArgs, EmptyArgs]("sendAction")
-
-proc tryToPerformSelector*(): CommandSelector =
-  selector[CommandArgs, EmptyArgs]("tryToPerform")
-
-proc doCommandBySelectorSelector*(): CommandSelector =
-  selector[CommandArgs, EmptyArgs]("doCommandBySelector")
-
-proc noResponderForSelector*(): CommandSelector =
-  selector[CommandArgs, EmptyArgs]("noResponderFor")
+  performClick()
 
 proc validateUserInterfaceItemSelector*(): ValidationSelector =
-  selector[ValidationArgs, bool]("validateUserInterfaceItem")
+  validateUserInterfaceItem()
 
 proc actionSelector*(name: string): ActionSelector =
   selector[ActionArgs, EmptyArgs](name)
+
+let
+  ResponderEventProtocol* = ResponderEventProtocolInternal
+  UserInterfaceValidations* = UserInterfaceValidationsInternal
+  ButtonActionProtocol* = ButtonActionProtocolInternal
