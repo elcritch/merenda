@@ -572,29 +572,29 @@ proc rectFromView*(view: View, rect: Rect, fromView: View): Rect =
     p1 = view.pointFromView(initPoint(rect.maxX, rect.maxY), fromView)
   rectFromCorners(p0, p1)
 
-proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
+proc handleMouseDown*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseDown(), event)
 
-proc dispatchMouseUp*(view: View, event: MouseEvent): bool =
+proc handleMouseUp*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseUp(), event)
 
-proc dispatchMouseEntered*(view: View, event: MouseEvent): bool =
+proc handleMouseEntered*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseEntered(), event)
 
-proc dispatchMouseExited*(view: View, event: MouseEvent): bool =
+proc handleMouseExited*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseExited(), event)
 
-proc dispatchMouseMoved*(view: View, event: MouseEvent): bool =
+proc handleMouseMoved*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseMoved(), event)
 
-proc dispatchMouseDragged*(view: View, event: MouseEvent): bool =
+proc handleMouseDragged*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseDragged(), event)
 
-proc dispatchScrollWheel*(view: View, event: ScrollEvent): bool =
+proc handleScrollWheel*(view: View, event: ScrollEvent): bool =
   view.sendLocalIfHandled(scrollWheel(), event)
 
-proc dispatchKeyDown*(view: View, event: KeyEvent): bool =
-  view.sendIfHandled(keyDown(), event)
+proc handleKeyDown*(view: View, event: KeyEvent): bool =
+  view.sendLocalIfHandled(keyDown(), event)
 
 proc clearNeedsDisplayTree*(view: View) =
   view.finishDisplaySubtree()
@@ -607,8 +607,8 @@ proc clickAt*(view: View, point: Point): bool =
   let event = MouseEvent(
     location: hit.pointFromView(point, view), button: mbPrimary, clickCount: 1
   )
-  discard hit.dispatchMouseDown(event)
-  result = hit.dispatchMouseUp(event)
+  discard hit.handleMouseDown(event)
+  result = hit.handleMouseUp(event)
 
 let
   ViewProtocol* = ViewProtocolInternal
