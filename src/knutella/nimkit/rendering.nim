@@ -90,45 +90,47 @@ proc addText*(
   context.addFig(textNode(context.localRectToWindow(rect), text, color, alignment))
 
 proc renderBuiltInView(
-    context: DrawContext, view: View, rootIdx: FigIdx, theme: Theme
+    context: DrawContext, view: View, rootIdx: FigIdx, appearance: Appearance
 ) =
   let absoluteFrame = view.rectToWindow(view.bounds)
 
   if view of Button:
     let button = Button(view)
+    let style = appearance.resolveButtonStyle(
+      initControlStyleContext(
+        srButton, enabled = button.isEnabled, highlighted = button.isHighlighted
+      )
+    )
     discard context.addFig(
       rootIdx,
       rectangleNode(
-        absoluteFrame,
-        theme.buttonFillColor(button.isEnabled, button.isHighlighted),
-        theme.buttonBorderColor(button.isEnabled, button.isHighlighted),
-        theme.button.borderWidth,
-        theme.button.cornerRadius,
+        absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+        style.box.cornerRadius,
       ),
     )
-    context.addText(
-      theme.buttonTextRect(view.bounds),
-      button.title,
-      theme.buttonTextColor(button.isEnabled, button.isHighlighted),
-    )
+    context.addText(style.buttonTextRect(view.bounds), button.title, style.text.color)
   elif view of TextField:
     let textField = TextField(view)
+    let style = appearance.resolveTextFieldStyle(
+      initControlStyleContext(srTextField, enabled = textField.isEnabled),
+      textField.textColor,
+    )
     discard context.addFig(
       rootIdx,
       rectangleNode(
-        absoluteFrame, theme.textField.fill, theme.textField.borderColor,
-        theme.textField.borderWidth, theme.textField.cornerRadius,
+        absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+        style.box.cornerRadius,
       ),
     )
     context.addText(
-      theme.textFieldTextRect(view.bounds),
+      style.textFieldTextRect(view.bounds),
       textField.stringValue,
-      textField.textColor,
+      style.text.color,
       textField.alignment,
     )
 
 proc renderViewInto(
-    context: DrawContext, view: View, theme: Theme, parent = (-1).FigIdx
+    context: DrawContext, view: View, appearance: Appearance, parent = (-1).FigIdx
 ) =
   if view.visibleRect.isEmpty:
     return
@@ -139,19 +141,22 @@ proc renderViewInto(
   context.beginDraw(view, rootIdx)
 
   if not view.sendIfHandled(draw(), context):
-    renderBuiltInView(context, view, rootIdx, theme)
+    renderBuiltInView(context, view, rootIdx, appearance)
 
   for child in view.subviews:
-    renderViewInto(context, child, theme, rootIdx)
+    renderViewInto(context, child, appearance, rootIdx)
 
-proc buildRenders*(root: View, theme: Theme): Renders =
+proc buildRenders*(root: View, appearance: Appearance): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   if root.isNil:
     return
   let context = initDrawContext()
-  renderViewInto(context, root, theme)
+  renderViewInto(context, root, appearance)
   result.layers[0.ZLevel] = context.renderList
   root.clearNeedsDisplayTree()
 
+proc buildRenders*(root: View, theme: Theme): Renders =
+  buildRenders(root, initAppearance(theme))
+
 proc buildRenders*(root: View): Renders =
-  buildRenders(root, initTheme())
+  buildRenders(root, initAppearance())

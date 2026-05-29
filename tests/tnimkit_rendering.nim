@@ -69,7 +69,7 @@ suite "nimkit rendering":
     root.addSubview(field)
     root.addSubview(button)
 
-    let renders = buildRenders(root, theme)
+    let renders = buildRenders(root, initAppearance(theme))
     let list = renders[0.ZLevel]
 
     var

@@ -83,6 +83,9 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
 proc buildRenders*(window: Window): Renders =
   nimkitRendering.buildRenders(window.xContentView)
 
+proc buildRenders*(window: Window, appearance: Appearance): Renders =
+  nimkitRendering.buildRenders(window.xContentView, appearance)
+
 proc buildRenders*(window: Window, theme: Theme): Renders =
   nimkitRendering.buildRenders(window.xContentView, theme)
 
