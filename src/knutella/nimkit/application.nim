@@ -1,9 +1,12 @@
 import std/os
 
+import ./theme
 import ./windows
 
 type Application* = ref object
   xWindows: seq[Window]
+  xAppearance: Appearance
+  xHasAppearance: bool
   xRunning: bool
 
 var sharedApplicationInstance: Application
@@ -16,9 +19,44 @@ proc sharedApplication*(): Application =
     sharedApplicationInstance = newApplication()
   sharedApplicationInstance
 
+proc hasAppearance*(app: Application): bool =
+  (not app.isNil) and app.xHasAppearance
+
+proc appearance*(app: Application): Appearance =
+  if app.isNil or not app.xHasAppearance:
+    return initAppearance()
+  app.xAppearance
+
+proc effectiveAppearance*(app: Application): Appearance =
+  if app.isNil or not app.xHasAppearance:
+    return initAppearance()
+  app.xAppearance
+
+proc propagateAppearance(app: Application) =
+  if app.isNil:
+    return
+  let inherited = app.effectiveAppearance()
+  for window in app.xWindows:
+    window.setInheritedAppearance(inherited)
+
+proc setAppearance*(app: Application, appearance: Appearance) =
+  if app.isNil:
+    return
+  app.xAppearance = appearance
+  app.xHasAppearance = true
+  app.propagateAppearance()
+
+proc clearAppearance*(app: Application) =
+  if app.isNil or not app.xHasAppearance:
+    return
+  app.xAppearance = Appearance()
+  app.xHasAppearance = false
+  app.propagateAppearance()
+
 proc addWindow*(app: Application, window: Window) =
   if window notin app.xWindows:
     app.xWindows.add window
+    window.setInheritedAppearance(app.effectiveAppearance())
 
 proc windows*(app: Application): lent seq[Window] =
   app.xWindows

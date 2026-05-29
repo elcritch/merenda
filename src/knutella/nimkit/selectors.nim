@@ -37,6 +37,8 @@ type
 protocol ResponderEventProtocolInternal:
   method mouseDown*(event: MouseEvent) {.optional.}
   method mouseUp*(event: MouseEvent) {.optional.}
+  method mouseEntered*(event: MouseEvent) {.optional.}
+  method mouseExited*(event: MouseEvent) {.optional.}
   method mouseMoved*(event: MouseEvent) {.optional.}
   method mouseDragged*(event: MouseEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
@@ -50,6 +52,10 @@ protocol ButtonActionProtocolInternal:
 protocol ViewDrawingProtocolInternal:
   method draw*(context: DrawContext) {.optional.}
 
+protocol ViewLayoutProtocolInternal:
+  method layoutSubviews*() {.optional.}
+  method layout*() {.optional.}
+
 proc actionSelector*(name: string): ActionSelector =
   selector[ActionArgs, EmptyArgs](name)
 
@@ -58,3 +64,4 @@ let
   UserInterfaceValidations* = UserInterfaceValidationsInternal
   ButtonActionProtocol* = ButtonActionProtocolInternal
   ViewDrawingProtocol* = ViewDrawingProtocolInternal
+  ViewLayoutProtocol* = ViewLayoutProtocolInternal

@@ -1,5 +1,6 @@
 import ./responders
 import ./selectors
+import ./theme
 import ./types
 
 export responders
@@ -11,6 +12,15 @@ type View* = ref object of Responder
   xNeedsDisplay: bool
   xInvalidRects: seq[Rect]
   xBackgroundColor: Color
+  xAppearance: Appearance
+  xHasAppearance: bool
+  xInheritedAppearance: Appearance
+  xHasInheritedAppearance: bool
+  xStyleId: string
+  xStyleClasses: seq[string]
+  xHovered: bool
+  xActive: bool
+  xNeedsLayout: bool
   xSuperview: View
   xWindow: Responder
   xSubviews: seq[View]
@@ -30,6 +40,11 @@ proc notifyDidMoveToWindow(view: View)
 proc notifyDidAddSubview(view, subview: View)
 proc notifyWillRemoveSubview(view, subview: View)
 proc setWindowOwner(view: View, window: Responder)
+proc setNeedsLayout*(view: View, value: bool)
+proc setNeedsDisplaySubtree(view: View)
+proc effectiveAppearance*(view: View): Appearance
+proc setInheritedAppearance*(view: View, appearance: Appearance)
+proc clearInheritedAppearance*(view: View)
 
 protocol ViewProtocolInternal from View:
   property frame -> Rect
@@ -45,6 +60,7 @@ protocol ViewProtocolInternal from View:
       return
     self.xFrame = frame
     self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+    self.setNeedsLayout(true)
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
@@ -54,6 +70,7 @@ protocol ViewProtocolInternal from View:
     if self.xBounds == bounds:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
+    self.setNeedsLayout(true)
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -119,6 +136,7 @@ protocol ViewProtocolInternal from View:
     if self.xHidden == hidden:
       return
     self.xHidden = hidden
+    self.setNeedsLayout(true)
     self.setNeedsDisplay(true)
 
   method isHiddenOrHasHiddenAncestor*(self: View): bool =
@@ -160,10 +178,12 @@ protocol ViewProtocolInternal from View:
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
+      parent.setNeedsLayout(true)
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.clearNextResponder()
     self.setWindowOwner(nil)
+    self.clearInheritedAppearance()
     self.notifyDidMoveToSuperview()
     if oldWindow != nil:
       self.notifyDidMoveToWindow()
@@ -181,10 +201,13 @@ protocol ViewProtocolInternal from View:
     self.xSubviews.add child
     child.setNextResponder(self)
     child.setWindowOwner(self.xWindow)
+    child.setInheritedAppearance(self.effectiveAppearance())
     self.notifyDidAddSubview(child)
     child.notifyDidMoveToSuperview()
     if oldWindow != self.xWindow:
       child.notifyDidMoveToWindow()
+    self.setNeedsLayout(true)
+    child.setNeedsLayout(true)
     self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
@@ -210,6 +233,186 @@ protocol ViewLifecycleProtocolInternal:
   method viewDidMoveToWindow*() {.optional.}
   method didAddSubview*(subview: View) {.optional.}
   method willRemoveSubview*(subview: View) {.optional.}
+
+proc setNeedsDisplaySubtree(view: View) =
+  if view.isNil:
+    return
+  view.setNeedsDisplay(true)
+  for child in view.xSubviews:
+    child.setNeedsDisplaySubtree()
+
+proc hasAppearance*(view: View): bool =
+  (not view.isNil) and view.xHasAppearance
+
+proc appearance*(view: View): Appearance =
+  if view.isNil or not view.xHasAppearance:
+    return initAppearance()
+  view.xAppearance
+
+proc effectiveAppearance*(view: View): Appearance =
+  if view.isNil:
+    return initAppearance()
+  if view.xHasAppearance:
+    return view.xAppearance
+  if not view.xSuperview.isNil:
+    return view.xSuperview.effectiveAppearance()
+  if view.xHasInheritedAppearance:
+    return view.xInheritedAppearance
+  initAppearance()
+
+proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
+  if view.isNil:
+    return inherited
+  if view.xHasAppearance:
+    return view.xAppearance
+  if view.xHasInheritedAppearance and view.xSuperview.isNil:
+    return view.xInheritedAppearance
+  inherited
+
+proc setAppearance*(view: View, appearance: Appearance) =
+  if view.isNil:
+    return
+  view.xAppearance = appearance
+  view.xHasAppearance = true
+  view.setNeedsDisplaySubtree()
+
+proc clearAppearance*(view: View) =
+  if view.isNil or not view.xHasAppearance:
+    return
+  view.xAppearance = Appearance()
+  view.xHasAppearance = false
+  view.setNeedsDisplaySubtree()
+
+proc assignInheritedAppearance(view: View, appearance: Appearance) =
+  view.xInheritedAppearance = appearance
+  view.xHasInheritedAppearance = true
+  for child in view.xSubviews:
+    child.assignInheritedAppearance(appearance)
+
+proc setInheritedAppearance*(view: View, appearance: Appearance) =
+  if view.isNil:
+    return
+  view.assignInheritedAppearance(appearance)
+  view.setNeedsDisplaySubtree()
+
+proc clearInheritedAppearance*(view: View) =
+  if view.isNil:
+    return
+  view.xInheritedAppearance = Appearance()
+  view.xHasInheritedAppearance = false
+  for child in view.xSubviews:
+    child.clearInheritedAppearance()
+  view.setNeedsDisplay(true)
+
+proc styleId*(view: View): string =
+  if view.isNil: "" else: view.xStyleId
+
+proc setStyleId*(view: View, id: string) =
+  if view.isNil or view.xStyleId == id:
+    return
+  view.xStyleId = id
+  view.setNeedsDisplay(true)
+
+proc styleClasses*(view: View): seq[string] =
+  if view.isNil:
+    @[]
+  else:
+    view.xStyleClasses
+
+proc setStyleClasses*(view: View, classes: openArray[string]) =
+  if view.isNil:
+    return
+  let nextClasses = @classes
+  if view.xStyleClasses == nextClasses:
+    return
+  view.xStyleClasses = nextClasses
+  view.setNeedsDisplay(true)
+
+proc hasStyleClass*(view: View, className: string): bool =
+  (not view.isNil) and view.xStyleClasses.find(className) >= 0
+
+proc addStyleClass*(view: View, className: string) =
+  if view.isNil or view.hasStyleClass(className):
+    return
+  view.xStyleClasses.add className
+  view.setNeedsDisplay(true)
+
+proc removeStyleClass*(view: View, className: string) =
+  if view.isNil:
+    return
+  let idx = view.xStyleClasses.find(className)
+  if idx < 0:
+    return
+  view.xStyleClasses.delete(idx)
+  view.setNeedsDisplay(true)
+
+proc isHovered*(view: View): bool =
+  (not view.isNil) and view.xHovered
+
+proc setHovered*(view: View, hovered: bool) =
+  if view.isNil or view.xHovered == hovered:
+    return
+  view.xHovered = hovered
+  view.setNeedsDisplay(true)
+
+proc isActive*(view: View): bool =
+  (not view.isNil) and view.xActive
+
+proc setActive*(view: View, active: bool) =
+  if view.isNil or view.xActive == active:
+    return
+  view.xActive = active
+  view.setNeedsDisplay(true)
+
+proc needsLayout*(view: View): bool =
+  (not view.isNil) and view.xNeedsLayout
+
+proc setNeedsLayout*(view: View, value: bool) =
+  if view.isNil:
+    return
+  view.xNeedsLayout = value
+
+proc setNeedsLayout*(view: View) =
+  view.setNeedsLayout(true)
+
+proc layoutSubtreeIfNeeded*(view: View) =
+  if view.isNil:
+    return
+  if view.xNeedsLayout:
+    view.xNeedsLayout = false
+    discard view.sendIfHandled(layoutSubviews())
+    discard view.sendIfHandled(layout())
+  for child in view.xSubviews:
+    child.layoutSubtreeIfNeeded()
+
+proc dirtyRects*(view: View): seq[Rect] =
+  if view.isNil:
+    @[]
+  else:
+    view.invalidRects()
+
+proc needsDisplayInSubtree*(view: View): bool =
+  if view.isNil:
+    return false
+  if view.needsDisplay:
+    return true
+  for child in view.xSubviews:
+    if child.needsDisplayInSubtree():
+      return true
+  false
+
+proc prepareDisplaySubtree*(view: View): bool =
+  if view.isNil:
+    return false
+  view.layoutSubtreeIfNeeded()
+  view.needsDisplayInSubtree()
+
+proc finishDisplaySubtree*(view: View) =
+  if view.isNil:
+    return
+  view.setNeedsDisplay(false)
+  for child in view.xSubviews:
+    child.finishDisplaySubtree()
 
 proc notifyWillMoveToSuperview(view, superview: View) =
   discard view.sendIfHandled(viewWillMoveToSuperview(), superview)
@@ -266,6 +469,7 @@ proc initViewFields*(view: View, frame: Rect) =
   view.xFrame = frame
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
   view.xNeedsDisplay = true
+  view.xNeedsLayout = true
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
 
@@ -374,6 +578,12 @@ proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
 proc dispatchMouseUp*(view: View, event: MouseEvent): bool =
   view.sendIfHandled(mouseUp(), event)
 
+proc dispatchMouseEntered*(view: View, event: MouseEvent): bool =
+  view.sendIfHandled(mouseEntered(), event)
+
+proc dispatchMouseExited*(view: View, event: MouseEvent): bool =
+  view.sendIfHandled(mouseExited(), event)
+
 proc dispatchMouseMoved*(view: View, event: MouseEvent): bool =
   view.sendIfHandled(mouseMoved(), event)
 
@@ -384,11 +594,7 @@ proc dispatchKeyDown*(view: View, event: KeyEvent): bool =
   view.sendIfHandled(keyDown(), event)
 
 proc clearNeedsDisplayTree*(view: View) =
-  if view.isNil:
-    return
-  view.setNeedsDisplay(false)
-  for child in view.subviews:
-    child.clearNeedsDisplayTree()
+  view.finishDisplaySubtree()
 
 proc clickAt*(view: View, point: Point): bool =
   let hit = view.hitTest(point)

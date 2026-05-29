@@ -13,9 +13,14 @@ type Window* = ref object of Responder
   xFrame: Rect
   xTitle: string
   xContentView: View
+  xAppearance: Appearance
+  xHasAppearance: bool
+  xInheritedAppearance: Appearance
+  xHasInheritedAppearance: bool
   xFirstResponder: Responder
   xHostWindow: HostWindow
   xMouseTrackingView: View
+  xMouseHoverView: View
   xVisibleRequested: bool
   xClosed: bool
 
@@ -36,14 +41,76 @@ proc contentView*(window: Window): View =
   window.xContentView
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool
+proc effectiveAppearance*(window: Window): Appearance
+
+proc propagateAppearance(window: Window) =
+  if window.isNil or window.xContentView.isNil:
+    return
+  window.xContentView.setInheritedAppearance(window.effectiveAppearance())
+
+proc hasAppearance*(window: Window): bool =
+  (not window.isNil) and window.xHasAppearance
+
+proc appearance*(window: Window): Appearance =
+  if window.isNil or not window.xHasAppearance:
+    return initAppearance()
+  window.xAppearance
+
+proc effectiveAppearance*(window: Window): Appearance =
+  if window.isNil:
+    return initAppearance()
+  if window.xHasAppearance:
+    return window.xAppearance
+  if window.xHasInheritedAppearance:
+    return window.xInheritedAppearance
+  initAppearance()
+
+proc setAppearance*(window: Window, appearance: Appearance) =
+  if window.isNil:
+    return
+  window.xAppearance = appearance
+  window.xHasAppearance = true
+  window.propagateAppearance()
+
+proc clearAppearance*(window: Window) =
+  if window.isNil or not window.xHasAppearance:
+    return
+  window.xAppearance = Appearance()
+  window.xHasAppearance = false
+  window.propagateAppearance()
+
+proc setInheritedAppearance*(window: Window, appearance: Appearance) =
+  if window.isNil:
+    return
+  window.xInheritedAppearance = appearance
+  window.xHasInheritedAppearance = true
+  if not window.xHasAppearance:
+    window.propagateAppearance()
+
+proc clearInheritedAppearance*(window: Window) =
+  if window.isNil:
+    return
+  window.xInheritedAppearance = Appearance()
+  window.xHasInheritedAppearance = false
+  if not window.xHasAppearance:
+    window.propagateAppearance()
+
+proc clearMouseState(window: Window) =
+  if not window.xMouseTrackingView.isNil:
+    window.xMouseTrackingView.setActive(false)
+  if not window.xMouseHoverView.isNil:
+    window.xMouseHoverView.setHovered(false)
+  window.xMouseTrackingView = nil
+  window.xMouseHoverView = nil
 
 proc setContentView*(window: Window, view: View) =
   if window.xContentView == view:
-    window.xMouseTrackingView = nil
+    window.clearMouseState()
     return
 
   let oldContent = window.xContentView
   if not oldContent.isNil:
+    window.clearMouseState()
     if not window.xFirstResponder.isNil and window.xFirstResponder of View:
       let firstResponderView = View(window.xFirstResponder)
       if oldContent.containsView(firstResponderView):
@@ -51,6 +118,7 @@ proc setContentView*(window: Window, view: View) =
           window.xFirstResponder = nil
     oldContent.moveToWindowOwner(nil)
     oldContent.clearSuperviewForWindowOwner()
+    oldContent.clearInheritedAppearance()
 
   if not view.isNil:
     if not view.superview.isNil:
@@ -58,9 +126,10 @@ proc setContentView*(window: Window, view: View) =
     view.clearSuperviewForWindowOwner()
     view.setNextResponder(window)
     view.moveToWindowOwner(window)
+    view.setInheritedAppearance(window.effectiveAppearance())
 
   window.xContentView = view
-  window.xMouseTrackingView = nil
+  window.clearMouseState()
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title
@@ -81,7 +150,7 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
   true
 
 proc buildRenders*(window: Window): Renders =
-  nimkitRendering.buildRenders(window.xContentView)
+  nimkitRendering.buildRenders(window.xContentView, window.effectiveAppearance())
 
 proc buildRenders*(window: Window, appearance: Appearance): Renders =
   nimkitRendering.buildRenders(window.xContentView, appearance)
@@ -179,24 +248,47 @@ proc localMouseEvent(
     clickCount: event.clickCount,
   )
 
+proc updateHoverView(
+    window: Window, target: View, contentPoint: Point, event: MouseEvent
+): bool =
+  if window.xMouseHoverView == target:
+    return false
+
+  let previous = window.xMouseHoverView
+  if not previous.isNil:
+    previous.setHovered(false)
+    let localEvent = previous.localMouseEvent(window.xContentView, contentPoint, event)
+    result = previous.dispatchMouseExited(localEvent)
+
+  window.xMouseHoverView = target
+  if not target.isNil:
+    target.setHovered(true)
+    let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
+    result = target.dispatchMouseEntered(localEvent) or result
+
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
   if window.xContentView.isNil:
     return false
   let contentPoint = window.contentPoint(event.location)
   var target: View
+  var activeView: View
   if pressed:
     target = window.xContentView.hitTest(contentPoint)
     window.xMouseTrackingView = target
     if target.isNil:
       return false
+    target.setActive(true)
     if target.acceptsFirstResponder():
       discard window.makeFirstResponder(target)
   else:
     target = window.xMouseTrackingView
+    activeView = target
     if target.isNil:
       target = window.xContentView.hitTest(contentPoint)
     window.xMouseTrackingView = nil
     if target.isNil:
+      if not activeView.isNil:
+        activeView.setActive(false)
       return false
 
   let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
@@ -204,6 +296,8 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     result = target.dispatchMouseDown(localEvent)
   else:
     result = target.dispatchMouseUp(localEvent)
+    if not activeView.isNil:
+      activeView.setActive(false)
 
 proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool =
   if window.xContentView.isNil:
@@ -216,14 +310,18 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
       target = window.xContentView.hitTest(contentPoint)
   else:
     target = window.xContentView.hitTest(contentPoint)
+
+  if not dragging:
+    result = window.updateHoverView(target, contentPoint, event)
+
   if target.isNil:
-    return false
+    return result
 
   let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
   if dragging:
     result = target.dispatchMouseDragged(localEvent)
   else:
-    result = target.dispatchMouseMoved(localEvent)
+    result = target.dispatchMouseMoved(localEvent) or result
 
 proc mouseDownAt*(
     window: Window, point: Point, button = mbPrimary, clickCount = 1

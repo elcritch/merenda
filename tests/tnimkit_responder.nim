@@ -22,6 +22,12 @@ protocol TrackingSpyEvents of ResponderEventProtocol:
   method mouseUp(spy: TrackingSpyView, event: MouseEvent) =
     spy.recordTrackingEvent("up", event)
 
+  method mouseEntered(spy: TrackingSpyView, event: MouseEvent) =
+    spy.recordTrackingEvent("entered", event)
+
+  method mouseExited(spy: TrackingSpyView, event: MouseEvent) =
+    spy.recordTrackingEvent("exited", event)
+
   method mouseMoved(spy: TrackingSpyView, event: MouseEvent) =
     spy.recordTrackingEvent("moved", event)
 
@@ -102,7 +108,9 @@ suite "nimkit responder":
 
     check window.mouseDownAt(initPoint(20, 20))
     check window.mouseDraggedAt(initPoint(130, 20))
+    check left.isActive
     check window.mouseUpAt(initPoint(130, 20))
+    check not left.isActive
 
     check trackingEvents == @["left.down", "left.dragged", "left.up"]
     check trackingPoints == @[initPoint(10, 10), initPoint(120, 10), initPoint(120, 10)]
@@ -125,5 +133,47 @@ suite "nimkit responder":
     check window.mouseUpAt(initPoint(130, 20))
     check window.mouseMovedAt(initPoint(130, 20))
 
-    check trackingEvents == @["left.down", "left.up", "right.moved"]
-    check trackingPoints == @[initPoint(10, 10), initPoint(120, 10), initPoint(10, 10)]
+    check trackingEvents == @["left.down", "left.up", "right.entered", "right.moved"]
+    check trackingPoints ==
+      @[initPoint(10, 10), initPoint(120, 10), initPoint(10, 10), initPoint(10, 10)]
+
+  test "window mouse move drives hover entered and exited state":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse hover")
+      root = newView(0, 0, 240, 160)
+      left = newTrackingSpyView("left", initRect(10, 10, 60, 40))
+      right = newTrackingSpyView("right", initRect(120, 10, 60, 40))
+
+    root.addSubview(left)
+    root.addSubview(right)
+    window.setContentView(root)
+
+    trackingEvents.setLen(0)
+    trackingPoints.setLen(0)
+
+    check window.mouseMovedAt(initPoint(20, 20))
+    check left.isHovered
+    check not right.isHovered
+
+    check window.mouseMovedAt(initPoint(130, 20))
+    check not left.isHovered
+    check right.isHovered
+
+    check window.mouseMovedAt(initPoint(5, 5))
+    check not left.isHovered
+    check not right.isHovered
+
+    check trackingEvents ==
+      @[
+        "left.entered", "left.moved", "left.exited", "right.entered", "right.moved",
+        "right.exited",
+      ]
+    check trackingPoints ==
+      @[
+        initPoint(10, 10),
+        initPoint(10, 10),
+        initPoint(120, 10),
+        initPoint(10, 10),
+        initPoint(10, 10),
+        initPoint(-115, -5),
+      ]

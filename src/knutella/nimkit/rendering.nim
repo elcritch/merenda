@@ -98,7 +98,13 @@ proc renderBuiltInView(
     let button = Button(view)
     let style = appearance.resolveButtonStyle(
       initControlStyleContext(
-        srButton, enabled = button.isEnabled, highlighted = button.isHighlighted
+        srButton,
+        enabled = button.isEnabled,
+        highlighted = button.isHighlighted,
+        hovered = button.isHovered,
+        active = button.isActive,
+        id = button.styleId,
+        classes = button.styleClasses,
       )
     )
     discard context.addFig(
@@ -112,7 +118,14 @@ proc renderBuiltInView(
   elif view of TextField:
     let textField = TextField(view)
     let style = appearance.resolveTextFieldStyle(
-      initControlStyleContext(srTextField, enabled = textField.isEnabled),
+      initControlStyleContext(
+        srTextField,
+        enabled = textField.isEnabled,
+        hovered = textField.isHovered,
+        active = textField.isActive,
+        id = textField.styleId,
+        classes = textField.styleClasses,
+      ),
       textField.textColor,
     )
     discard context.addFig(
@@ -130,11 +143,15 @@ proc renderBuiltInView(
     )
 
 proc renderViewInto(
-    context: DrawContext, view: View, appearance: Appearance, parent = (-1).FigIdx
+    context: DrawContext,
+    view: View,
+    inheritedAppearance: Appearance,
+    parent = (-1).FigIdx,
 ) =
   if view.visibleRect.isEmpty:
     return
 
+  let appearance = view.resolvedAppearance(inheritedAppearance)
   let absoluteFrame = view.rectToWindow(view.bounds)
   let rootIdx =
     context.addFig(parent, rectangleNode(absoluteFrame, view.backgroundColor))
@@ -150,13 +167,17 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   if root.isNil:
     return
+  discard root.prepareDisplaySubtree()
   let context = initDrawContext()
   renderViewInto(context, root, appearance)
   result.layers[0.ZLevel] = context.renderList
-  root.clearNeedsDisplayTree()
+  root.finishDisplaySubtree()
 
 proc buildRenders*(root: View, theme: Theme): Renders =
   buildRenders(root, initAppearance(theme))
 
 proc buildRenders*(root: View): Renders =
-  buildRenders(root, initAppearance())
+  if root.isNil:
+    buildRenders(root, initAppearance())
+  else:
+    buildRenders(root, root.effectiveAppearance())
