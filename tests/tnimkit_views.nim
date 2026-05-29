@@ -12,6 +12,9 @@ type
     addedSubviews: seq[View]
     removedSubviews: seq[View]
 
+  LayoutSpyView = ref object of View
+    events: seq[string]
+
 var
   spyMouseDownPoint: Point
   spyMouseUpPoint: Point
@@ -50,6 +53,13 @@ protocol LifecycleSpyHooks of ViewLifecycleProtocol:
     spy.events.add "willRemoveSubview"
     spy.removedSubviews.add subview
 
+protocol LayoutSpyHooks of ViewLayoutProtocol:
+  method layoutSubviews(spy: LayoutSpyView) =
+    spy.events.add "layoutSubviews"
+
+  method layout(spy: LayoutSpyView) =
+    spy.events.add "layout"
+
 proc newMouseSpyView(frame: Rect): MouseSpyView =
   result = MouseSpyView()
   initViewFields(result, frame)
@@ -59,6 +69,11 @@ proc newLifecycleSpyView(frame: Rect): LifecycleSpyView =
   result = LifecycleSpyView()
   initViewFields(result, frame)
   discard result.withProtocol(LifecycleSpyHooks)
+
+proc newLayoutSpyView(frame: Rect): LayoutSpyView =
+  result = LayoutSpyView()
+  initViewFields(result, frame)
+  discard result.withProtocol(LayoutSpyHooks)
 
 suite "nimkit views":
   test "subviews participate in hit testing from front to back":
@@ -92,6 +107,107 @@ suite "nimkit views":
 
     check child.needsDisplay
     check root.needsDisplay
+
+  test "appearance inherits from application window and view":
+    let
+      app = newApplication()
+      window = newWindow(0, 0, 240, 160, "Appearance")
+      root = newView(0, 0, 240, 160)
+      child = newView(10, 10, 80, 40)
+
+    root.addSubview(child)
+    window.setContentView(root)
+    app.addWindow(window)
+
+    var appAppearance = initAppearance()
+    let appFill = initColor(0.1, 0.2, 0.3, 1.0)
+    appAppearance[srButton, StyleFill] = appFill
+    app.setAppearance(appAppearance)
+
+    let appStyle =
+      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+    check appStyle.box.fill == appFill
+
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+
+    var windowAppearance = initAppearance()
+    let windowFill = initColor(0.4, 0.5, 0.6, 1.0)
+    windowAppearance[srButton, StyleFill] = windowFill
+    window.setAppearance(windowAppearance)
+
+    let inheritedStyle =
+      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+    check inheritedStyle.box.fill == windowFill
+    check root.needsDisplay
+    check child.needsDisplay
+
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+
+    var rootAppearance = initAppearance()
+    let rootFill = initColor(0.7, 0.2, 0.1, 1.0)
+    rootAppearance[srButton, StyleFill] = rootFill
+    root.setAppearance(rootAppearance)
+
+    let rootStyle =
+      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+    check rootStyle.box.fill == rootFill
+    check root.needsDisplay
+    check child.needsDisplay
+
+    root.clearAppearance()
+    let clearedStyle =
+      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+    check clearedStyle.box.fill == windowFill
+
+  test "style identity is stored on views and invalidates display":
+    let view = newView(0, 0, 100, 80)
+    view.setNeedsDisplay(false)
+
+    view.setStyleId("primary")
+    check view.styleId == "primary"
+    check view.needsDisplay
+
+    view.setNeedsDisplay(false)
+    view.setStyleClasses(["toolbar", "primary"])
+    check view.styleClasses == @["toolbar", "primary"]
+    check view.hasStyleClass("toolbar")
+    check view.needsDisplay
+
+    view.setNeedsDisplay(false)
+    view.addStyleClass("danger")
+    check view.styleClasses == @["toolbar", "primary", "danger"]
+    check view.needsDisplay
+
+    view.setNeedsDisplay(false)
+    view.removeStyleClass("primary")
+    check view.styleClasses == @["toolbar", "danger"]
+    check not view.hasStyleClass("primary")
+    check view.needsDisplay
+
+  test "layout lifecycle runs selector hooks before display cleanup":
+    let
+      root = newLayoutSpyView(initRect(0, 0, 200, 160))
+      child = newLayoutSpyView(initRect(20, 30, 80, 40))
+
+    root.addSubview(child)
+    root.events.setLen(0)
+    child.events.setLen(0)
+
+    check root.needsLayout
+    check child.needsLayout
+
+    check root.prepareDisplaySubtree()
+    check root.events == @["layoutSubviews", "layout"]
+    check child.events == @["layoutSubviews", "layout"]
+    check not root.needsLayout
+    check not child.needsLayout
+
+    root.setFrame(initRect(0, 0, 220, 180))
+    check root.needsLayout
+    root.finishDisplaySubtree()
+    check not root.needsDisplay
 
   test "setNeedsDisplayInRect clips and unions dirty rects":
     let view = newView(0, 0, 100, 80)

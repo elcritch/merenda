@@ -108,6 +108,60 @@ suite "nimkit rendering":
     check buttonTextBoxFound
     check fieldTextBoxFound
 
+  test "buildRenders uses active view state for control styling":
+    let
+      root = newView(0, 0, 140, 80)
+      button = newButton(10, 20, 80, 24, "Button")
+
+    var theme = initTheme()
+    theme.button.fill[tcsNormal] = initColor(0.1, 0.1, 0.1, 1.0)
+    theme.button.fill[tcsHighlighted] = initColor(0.8, 0.2, 0.1, 1.0)
+
+    root.addSubview(button)
+    button.setActive(true)
+
+    let list = buildRenders(root, initAppearance(theme))[0.ZLevel]
+
+    var activeFillFound = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == theme.button.fill[tcsHighlighted].rgba:
+        activeFillFound = true
+
+    check activeFillFound
+
+  test "buildRenders uses effective appearance from view hierarchy":
+    let
+      root = newView(0, 0, 140, 80)
+      button = newButton(10, 20, 80, 24, "Button")
+      rootFill = initColor(0.2, 0.3, 0.4, 1.0)
+      buttonFill = initColor(0.7, 0.1, 0.2, 1.0)
+
+    var rootAppearance = initAppearance()
+    rootAppearance[srButton, StyleFill] = rootFill
+    root.setAppearance(rootAppearance)
+    root.addSubview(button)
+
+    var buttonAppearance = initAppearance()
+    buttonAppearance[srButton, StyleFill] = buttonFill
+    button.setAppearance(buttonAppearance)
+
+    let list = buildRenders(root)[0.ZLevel]
+
+    var
+      buttonFillFound = false
+      rootFillFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor:
+        if node.fill.color == buttonFill.rgba:
+          buttonFillFound = true
+        if node.fill.color == rootFill.rgba:
+          rootFillFound = true
+
+    check buttonFillFound
+    check not rootFillFound
+
   test "buildRenders uses FigDraw hierarchy and clears invalid state":
     let
       root = newView(0, 0, 200, 160)

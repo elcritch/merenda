@@ -21,6 +21,11 @@ NimKit already has the first useful vertical slice:
 - Responder/action dispatch through `sigils/selectors`.
 - View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
   first-responder dispatch.
+- Application/window/view appearance inheritance through `effectiveAppearance`,
+  plus stable view `styleId`/`styleClasses` for future query-like theme
+  matching.
+- Mouse entered/exited tracking, hover/active view state, and a basic
+  `needsLayout` lifecycle with selector-backed `layoutSubviews`/`layout` hooks.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
   rectangles, single-line text, and style-resolved button/text-field metrics.
 - siwin native windows, mouse button dispatch, key/text input dispatch, and
@@ -64,7 +69,8 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit/types.nim`:
   Geometry, colors, button/control enums, and event value objects.
 - `src/knutella/nimkit/selectors.nim`:
-  Typed selector declarations and action/event argument objects.
+  Typed selector declarations, action/event argument objects, drawing hooks,
+  mouse enter/exit hooks, and layout hooks.
 - `src/knutella/nimkit/responders.nim`:
   `Responder`, next-responder links, selector forwarding, first-responder hooks,
   and command fallback behavior.
@@ -73,7 +79,8 @@ NimKit already has the first useful vertical slice:
   helpers used by selector-backed custom drawing.
 - `src/knutella/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
-  invalidation, and event dispatch into selector methods.
+  appearance/style identity, layout/display invalidation, hover/active state,
+  and event dispatch into selector methods.
 - `src/knutella/nimkit/controls.nim`:
   `Control`, enabled state, target/action, and closure-backed action targets.
 - `src/knutella/nimkit/buttons.nim`:
@@ -95,10 +102,11 @@ NimKit already has the first useful vertical slice:
   presentation.
 - `src/knutella/nimkit/windows.nim`:
   `Window` title/frame/content/first-responder state, visibility lifecycle,
-  render flushing, and NimKit event dispatch.
+  effective appearance propagation, render flushing, hover/mouse tracking, and
+  NimKit event dispatch.
 - `src/knutella/nimkit/application.nim`:
-  App singleton/lifetime, window list, run loop helpers, and frame-limited test
-  execution.
+  App singleton/lifetime, window list, app-level appearance, run loop helpers,
+  and frame-limited test execution.
 
 ## Completed Milestones
 
@@ -175,16 +183,35 @@ NimKit already has the first useful vertical slice:
 - `buildRenders(root, theme)` and `buildRenders(window, theme)` allow focused
   render-tree tests and callers to supply a theme without native-window setup.
 
+### Appearance, State, Layout, And Display
+
+- `Application`, `Window`, and `View` can carry local `Appearance` values.
+  `effectiveAppearance` inherits from view parent, window, then app, with local
+  view appearances overriding inherited values for the subtree.
+- Appearance changes on app/window/view invalidate the affected content subtree.
+- Views store stable `styleId` and `styleClasses`, and built-in rendering passes
+  those through `StyleContext` for future query-like theme resolvers.
+- Window mouse dispatch now drives `mouseEntered`/`mouseExited`, `isHovered`,
+  and `isActive`; built-in control rendering feeds hover/active state into
+  style resolution.
+- Views expose `needsLayout`, `setNeedsLayout`, `layoutSubtreeIfNeeded`,
+  `prepareDisplaySubtree`, and `finishDisplaySubtree`. Rendering explicitly
+  runs layout/display preparation before building FigDraw nodes and clears dirty
+  state only after render construction succeeds.
+
 ## Next Work
 
 ### View Geometry And Rendering
 
-- Keep whole-window redraw until it becomes a measurable problem; preserve dirty
-  metadata so a later renderer can narrow the work without changing view APIs.
+- Keep whole-window FigDraw rebuilds until they become measurable; preserve
+  dirty rect metadata and the explicit display traversal so a later backend can
+  narrow rendering without changing view APIs.
+- Add clipped dirty-rect rendering when the FigDraw/backend boundary has a
+  concrete partial-present path.
 
 ### Responder/Event Coverage
 
-- Add scroll, entered/exited, and click-count handling.
+- Add scroll and click-count handling.
 - Add richer key command dispatch and unhandled-selector tests.
 - Decide how much of AppKit's responder fallback model NimKit should mirror.
 
