@@ -11,22 +11,40 @@ var
   trackingEvents: seq[string]
   trackingPoints: seq[Point]
   trackingClickCounts: seq[int]
+  trackingModifiers: seq[set[KeyModifier]]
+  trackingTimestamps: seq[float]
   trackingScrollDeltas: seq[Point]
 
 proc recordTrackingEvent(spy: TrackingSpyView, name: string, event: MouseEvent) =
+  let
+    location = event.location
+    clickCount = event.clickCount
+    modifiers = event.modifiers
+    timestamp = event.timestamp
   trackingEvents.add(spy.xName & "." & name)
-  trackingPoints.add(event.location)
-  trackingClickCounts.add(event.clickCount)
+  trackingPoints.add(location)
+  trackingClickCounts.add(clickCount)
+  trackingModifiers.add(modifiers)
+  trackingTimestamps.add(timestamp)
 
 proc recordScrollEvent(spy: TrackingSpyView, event: ScrollEvent) =
+  let
+    location = event.location
+    delta = initPoint(event.deltaX, event.deltaY)
+    modifiers = event.modifiers
+    timestamp = event.timestamp
   trackingEvents.add(spy.xName & ".scroll")
-  trackingPoints.add(event.location)
-  trackingScrollDeltas.add(initPoint(event.deltaX, event.deltaY))
+  trackingPoints.add(location)
+  trackingModifiers.add(modifiers)
+  trackingTimestamps.add(timestamp)
+  trackingScrollDeltas.add(delta)
 
 proc resetTracking() =
   trackingEvents.setLen(0)
   trackingPoints.setLen(0)
   trackingClickCounts.setLen(0)
+  trackingModifiers.setLen(0)
+  trackingTimestamps.setLen(0)
   trackingScrollDeltas.setLen(0)
 
 protocol TrackingSpyEvents of ResponderEventProtocol:
@@ -214,6 +232,55 @@ suite "nimkit responder":
       @["left.down", "left.up", "left.down", "left.up", "left.down", "left.up"]
     check trackingClickCounts == @[1, 1, 2, 2, 1, 1]
 
+  test "window mouse dispatch keeps click counts target-local":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse click targets")
+      root = newView(0, 0, 240, 160)
+      left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
+      right = newTrackingSpyView("right", initRect(10, 10, 80, 40))
+
+    root.addSubview(left)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.mouseDownAt(initPoint(20, 20), timestamp = 100.0)
+    check window.mouseUpAt(initPoint(20, 20), timestamp = 100.1)
+
+    left.removeFromSuperview()
+    root.addSubview(right)
+
+    check window.mouseDownAt(initPoint(20, 20), timestamp = 100.2)
+    check window.mouseUpAt(initPoint(20, 20), timestamp = 100.3)
+
+    check trackingEvents == @["left.down", "left.up", "right.down", "right.up"]
+    check trackingClickCounts == @[1, 1, 1, 1]
+
+  test "window mouse dispatch bubbles unhandled child events in parent coordinates":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse bubbling")
+      root = newView(0, 0, 240, 160)
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(20, 15, 30, 20)
+
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.mouseDownAt(
+      initPoint(35, 30), modifiers = {kmShift, kmCommand}, timestamp = 20.0
+    )
+    check window.mouseUpAt(
+      initPoint(35, 30), modifiers = {kmShift, kmCommand}, timestamp = 20.1
+    )
+
+    check trackingEvents == @["parent.down", "parent.up"]
+    check trackingPoints == @[initPoint(25, 20), initPoint(25, 20)]
+    check trackingModifiers == @[{kmShift, kmCommand}, {kmShift, kmCommand}]
+    check trackingTimestamps == @[20.0, 20.1]
+
   test "window scroll dispatch hit-tests and converts local coordinates":
     let
       window = newWindow(0, 0, 240, 160, "Mouse scroll")
@@ -225,8 +292,43 @@ suite "nimkit responder":
 
     resetTracking()
 
-    check window.scrollWheelAt(initPoint(20, 20), deltaX = 1.5'f32, deltaY = -2.0'f32)
+    check window.scrollWheelAt(
+      initPoint(20, 20),
+      deltaX = 1.5'f32,
+      deltaY = -2.0'f32,
+      modifiers = {kmOption},
+      timestamp = 42.0,
+    )
 
     check trackingEvents == @["left.scroll"]
     check trackingPoints == @[initPoint(10, 10)]
     check trackingScrollDeltas == @[initPoint(1.5, -2.0)]
+    check trackingModifiers == @[{kmOption}]
+    check trackingTimestamps == @[42.0]
+
+  test "window scroll dispatch bubbles unhandled child scrolls":
+    let
+      window = newWindow(0, 0, 240, 160, "Scroll bubbling")
+      root = newView(0, 0, 240, 160)
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(20, 15, 30, 20)
+
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.scrollWheelAt(
+      initPoint(35, 30),
+      deltaX = -0.5'f32,
+      deltaY = 3.0'f32,
+      modifiers = {kmControl},
+      timestamp = 43.0,
+    )
+
+    check trackingEvents == @["parent.scroll"]
+    check trackingPoints == @[initPoint(25, 20)]
+    check trackingScrollDeltas == @[initPoint(-0.5, 3.0)]
+    check trackingModifiers == @[{kmControl}]
+    check trackingTimestamps == @[43.0]

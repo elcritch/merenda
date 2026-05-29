@@ -3,7 +3,6 @@ import std/options
 import sigils/selectors as dynamicSelectors
 
 import ./selectors
-import ./types
 
 type Responder* = ref object of DynamicAgent
   xAcceptsFirstResponder: bool
@@ -36,28 +35,8 @@ protocol ResponderProtocolInternal from Responder:
       UnhandledSelectorError, owner & " did not handle selector: " & $selector.name
     )
 
-protocol DefaultResponderEvents of ResponderEventProtocol:
-  method mouseDown(self: Responder, event: MouseEvent) =
-    discard
-
-  method mouseUp(self: Responder, event: MouseEvent) =
-    discard
-
-  method mouseMoved(self: Responder, event: MouseEvent) =
-    discard
-
-  method mouseDragged(self: Responder, event: MouseEvent) =
-    discard
-
-  method scrollWheel(self: Responder, event: ScrollEvent) =
-    discard
-
-  method keyDown(self: Responder, event: KeyEvent) =
-    discard
-
 proc initResponder*(responder: Responder) =
   discard responder.withProto()
-  discard responder.withProtocol(DefaultResponderEvents)
 
 proc newResponder*(): Responder =
   result = Responder()
@@ -76,5 +55,12 @@ proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A
 ): Option[R] =
   responder.trySend(selector, ensureMove args)
+
+proc sendLocalIfHandled*[A, R](
+    responder: Responder, selector: Selector[A, R], args: A
+): bool =
+  if responder.localMethod(selector).isNil:
+    return false
+  responder.sendIfHandled(selector, args)
 
 let ResponderProtocol* = ResponderProtocolInternal

@@ -20,21 +20,25 @@ type
     mbSecondary
     mbOther
 
-  MouseEvent* = object
-    location*: Point
-    button*: MouseButton
-    clickCount*: int
-
-  ScrollEvent* = object
-    location*: Point
-    deltaX*: float32
-    deltaY*: float32
-
   KeyModifier* = enum
     kmShift
     kmControl
     kmOption
     kmCommand
+
+  MouseEvent* = object
+    location*: Point
+    button*: MouseButton
+    clickCount*: int
+    modifiers*: set[KeyModifier]
+    timestamp*: float
+
+  ScrollEvent* = object
+    location*: Point
+    deltaX*: float32
+    deltaY*: float32
+    modifiers*: set[KeyModifier]
+    timestamp*: float
 
   KeyEvent* = object
     text*: string
