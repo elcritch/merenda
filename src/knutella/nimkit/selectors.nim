@@ -12,6 +12,9 @@ type
   MouseEventArgs* = object
     event*: MouseEvent
 
+  ScrollEventArgs* = object
+    event*: ScrollEvent
+
   KeyEventArgs* = object
     event*: KeyEvent
 
@@ -25,6 +28,7 @@ type
     item*: DynamicAgent
 
   MouseEventSelector* = Selector[MouseEvent, EmptyArgs]
+  ScrollEventSelector* = Selector[ScrollEvent, EmptyArgs]
   KeyEventSelector* = Selector[KeyEvent, EmptyArgs]
   ActionSelector* = Selector[ActionArgs, EmptyArgs]
   CommandSelector* = ActionSelector
@@ -41,6 +45,7 @@ protocol ResponderEventProtocolInternal:
   method mouseExited*(event: MouseEvent) {.optional.}
   method mouseMoved*(event: MouseEvent) {.optional.}
   method mouseDragged*(event: MouseEvent) {.optional.}
+  method scrollWheel*(event: ScrollEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
 
 protocol UserInterfaceValidationsInternal:

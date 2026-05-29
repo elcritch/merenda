@@ -18,6 +18,7 @@ type
     onMove*: proc(pos: Point) {.closure.}
     onMouseButton*: proc(event: types.MouseEvent, pressed: bool) {.closure.}
     onMouseMove*: proc(event: types.MouseEvent, dragging: bool) {.closure.}
+    onScroll*: proc(event: types.ScrollEvent) {.closure.}
     onKey*: proc(event: HostKeyEvent) {.closure.}
     onTextInput*: proc(text: string) {.closure.}
     onRender*: proc() {.closure.}
@@ -177,7 +178,7 @@ proc dispatchMouseButton(host: HostWindow, event: siwinshim.MouseButtonEvent) =
     types.MouseEvent(
       location: nativeMousePoint(nativeWindow),
       button: event.button.toNimkitMouseButton,
-      clickCount: 1,
+      clickCount: 0,
     ),
     event.pressed,
   )
@@ -196,6 +197,18 @@ proc dispatchMouseMove(host: HostWindow, event: siwinshim.MouseMoveEvent) =
       clickCount: 0,
     ),
     dragging,
+  )
+
+proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
+  let nativeWindow = if event.window.isNil: host.xNativeWindow else: event.window
+  if nativeWindow.isNil or host.xCallbacks.onScroll.isNil:
+    return
+  host.xCallbacks.onScroll(
+    types.ScrollEvent(
+      location: nativeMousePoint(nativeWindow),
+      deltaX: event.deltaX.float32,
+      deltaY: event.delta.float32,
+    )
   )
 
 proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
@@ -267,6 +280,11 @@ proc createHostWindow*(
       let host = hostForNativeWindow(event.window, ownerKey)
       if not host.isNil:
         host.dispatchMouseMove(event)
+    ,
+    onScroll: proc(event: siwinshim.ScrollEvent) =
+      let host = hostForNativeWindow(event.window, ownerKey)
+      if not host.isNil:
+        host.dispatchScroll(event)
     ,
     onRender: proc(event: siwinshim.RenderEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)

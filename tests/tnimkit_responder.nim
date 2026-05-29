@@ -10,10 +10,24 @@ type TrackingSpyView = ref object of View
 var
   trackingEvents: seq[string]
   trackingPoints: seq[Point]
+  trackingClickCounts: seq[int]
+  trackingScrollDeltas: seq[Point]
 
 proc recordTrackingEvent(spy: TrackingSpyView, name: string, event: MouseEvent) =
   trackingEvents.add(spy.xName & "." & name)
   trackingPoints.add(event.location)
+  trackingClickCounts.add(event.clickCount)
+
+proc recordScrollEvent(spy: TrackingSpyView, event: ScrollEvent) =
+  trackingEvents.add(spy.xName & ".scroll")
+  trackingPoints.add(event.location)
+  trackingScrollDeltas.add(initPoint(event.deltaX, event.deltaY))
+
+proc resetTracking() =
+  trackingEvents.setLen(0)
+  trackingPoints.setLen(0)
+  trackingClickCounts.setLen(0)
+  trackingScrollDeltas.setLen(0)
 
 protocol TrackingSpyEvents of ResponderEventProtocol:
   method mouseDown(spy: TrackingSpyView, event: MouseEvent) =
@@ -33,6 +47,9 @@ protocol TrackingSpyEvents of ResponderEventProtocol:
 
   method mouseDragged(spy: TrackingSpyView, event: MouseEvent) =
     spy.recordTrackingEvent("dragged", event)
+
+  method scrollWheel(spy: TrackingSpyView, event: ScrollEvent) =
+    spy.recordScrollEvent(event)
 
 proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
   result = TrackingSpyView(xName: name)
@@ -103,8 +120,7 @@ suite "nimkit responder":
     root.addSubview(right)
     window.setContentView(root)
 
-    trackingEvents.setLen(0)
-    trackingPoints.setLen(0)
+    resetTracking()
 
     check window.mouseDownAt(initPoint(20, 20))
     check window.mouseDraggedAt(initPoint(130, 20))
@@ -126,8 +142,7 @@ suite "nimkit responder":
     root.addSubview(right)
     window.setContentView(root)
 
-    trackingEvents.setLen(0)
-    trackingPoints.setLen(0)
+    resetTracking()
 
     check window.mouseDownAt(initPoint(20, 20))
     check window.mouseUpAt(initPoint(130, 20))
@@ -148,8 +163,7 @@ suite "nimkit responder":
     root.addSubview(right)
     window.setContentView(root)
 
-    trackingEvents.setLen(0)
-    trackingPoints.setLen(0)
+    resetTracking()
 
     check window.mouseMovedAt(initPoint(20, 20))
     check left.isHovered
@@ -177,3 +191,42 @@ suite "nimkit responder":
         initPoint(10, 10),
         initPoint(-115, -5),
       ]
+
+  test "window mouse dispatch computes repeated click counts":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse clicks")
+      root = newView(0, 0, 240, 160)
+      left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
+
+    root.addSubview(left)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.mouseDownAt(initPoint(20, 20))
+    check window.mouseUpAt(initPoint(20, 20))
+    check window.mouseDownAt(initPoint(22, 21))
+    check window.mouseUpAt(initPoint(22, 21))
+    check window.mouseDownAt(initPoint(60, 20))
+    check window.mouseUpAt(initPoint(60, 20))
+
+    check trackingEvents ==
+      @["left.down", "left.up", "left.down", "left.up", "left.down", "left.up"]
+    check trackingClickCounts == @[1, 1, 2, 2, 1, 1]
+
+  test "window scroll dispatch hit-tests and converts local coordinates":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse scroll")
+      root = newView(0, 0, 240, 160)
+      left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
+
+    root.addSubview(left)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.scrollWheelAt(initPoint(20, 20), deltaX = 1.5'f32, deltaY = -2.0'f32)
+
+    check trackingEvents == @["left.scroll"]
+    check trackingPoints == @[initPoint(10, 10)]
+    check trackingScrollDeltas == @[initPoint(1.5, -2.0)]

@@ -1,3 +1,5 @@
+import std/times
+
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
@@ -21,8 +23,17 @@ type Window* = ref object of Responder
   xHostWindow: HostWindow
   xMouseTrackingView: View
   xMouseHoverView: View
+  xMouseTrackingClickCount: int
+  xLastClickPoint: Point
+  xLastClickButton: types.MouseButton
+  xLastClickCount: int
+  xLastClickTime: float
+  xHasLastClick: bool
   xVisibleRequested: bool
   xClosed: bool
+
+const ClickSlop = 4.0'f32
+const ClickInterval = 0.5
 
 proc newWindow*(frame: Rect, title: string): Window =
   result = Window(xFrame: frame, xTitle: title)
@@ -102,6 +113,7 @@ proc clearMouseState(window: Window) =
     window.xMouseHoverView.setHovered(false)
   window.xMouseTrackingView = nil
   window.xMouseHoverView = nil
+  window.xMouseTrackingClickCount = 0
 
 proc setContentView*(window: Window, view: View) =
   if window.xContentView == view:
@@ -204,10 +216,10 @@ proc close*(window: Window) =
   window.xHostWindow = nil
 
 proc mouseDownAt*(
-  window: Window, point: Point, button = mbPrimary, clickCount = 1
+  window: Window, point: Point, button = mbPrimary, clickCount = 0
 ): bool
 
-proc mouseUpAt*(window: Window, point: Point, button = mbPrimary, clickCount = 1): bool
+proc mouseUpAt*(window: Window, point: Point, button = mbPrimary, clickCount = 0): bool
 
 proc clickAt*(window: Window, point: Point): bool =
   if not window.mouseDownAt(point):
@@ -248,6 +260,39 @@ proc localMouseEvent(
     clickCount: event.clickCount,
   )
 
+proc localScrollEvent(
+    target, contentView: View, contentPoint: Point, event: types.ScrollEvent
+): types.ScrollEvent =
+  types.ScrollEvent(
+    location: target.pointFromView(contentPoint, contentView),
+    deltaX: event.deltaX,
+    deltaY: event.deltaY,
+  )
+
+proc isRepeatClick(window: Window, event: MouseEvent, now: float): bool =
+  if not window.xHasLastClick or window.xLastClickButton != event.button:
+    return false
+  if now - window.xLastClickTime > ClickInterval:
+    return false
+  abs(window.xLastClickPoint.x - event.location.x) <= ClickSlop and
+    abs(window.xLastClickPoint.y - event.location.y) <= ClickSlop
+
+proc nextClickCount(window: Window, event: MouseEvent): int =
+  let now = epochTime()
+  if event.clickCount > 0:
+    result = event.clickCount
+  elif window.isRepeatClick(event, now):
+    result = window.xLastClickCount + 1
+  else:
+    result = 1
+
+  window.xLastClickPoint = event.location
+  window.xLastClickButton = event.button
+  window.xLastClickCount = result
+  window.xLastClickTime = now
+  window.xHasLastClick = true
+  window.xMouseTrackingClickCount = result
+
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
 ): bool =
@@ -270,6 +315,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
   if window.xContentView.isNil:
     return false
   let contentPoint = window.contentPoint(event.location)
+  var dispatchEvent = event
   var target: View
   var activeView: View
   if pressed:
@@ -277,6 +323,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     window.xMouseTrackingView = target
     if target.isNil:
       return false
+    dispatchEvent.clickCount = window.nextClickCount(event)
     target.setActive(true)
     if target.acceptsFirstResponder():
       discard window.makeFirstResponder(target)
@@ -290,14 +337,18 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
       if not activeView.isNil:
         activeView.setActive(false)
       return false
+    if dispatchEvent.clickCount <= 0:
+      dispatchEvent.clickCount = max(window.xMouseTrackingClickCount, 1)
 
-  let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
+  let localEvent =
+    target.localMouseEvent(window.xContentView, contentPoint, dispatchEvent)
   if pressed:
     result = target.dispatchMouseDown(localEvent)
   else:
     result = target.dispatchMouseUp(localEvent)
     if not activeView.isNil:
       activeView.setActive(false)
+    window.xMouseTrackingClickCount = 0
 
 proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool =
   if window.xContentView.isNil:
@@ -323,18 +374,35 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
   else:
     result = target.dispatchMouseMoved(localEvent) or result
 
+proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.xContentView.hitTest(contentPoint)
+  if target.isNil:
+    return false
+  let localEvent = target.localScrollEvent(window.xContentView, contentPoint, event)
+  target.dispatchScrollWheel(localEvent)
+
 proc mouseDownAt*(
-    window: Window, point: Point, button = mbPrimary, clickCount = 1
+    window: Window, point: Point, button = mbPrimary, clickCount = 0
 ): bool =
   window.dispatchMouseButton(
     MouseEvent(location: point, button: button, clickCount: clickCount), true
   )
 
 proc mouseUpAt*(
-    window: Window, point: Point, button = mbPrimary, clickCount = 1
+    window: Window, point: Point, button = mbPrimary, clickCount = 0
 ): bool =
   window.dispatchMouseButton(
     MouseEvent(location: point, button: button, clickCount: clickCount), false
+  )
+
+proc scrollWheelAt*(
+    window: Window, point: Point, deltaX = 0.0'f32, deltaY = 0.0'f32
+): bool =
+  window.dispatchScrollWheel(
+    types.ScrollEvent(location: point, deltaX: deltaX, deltaY: deltaY)
   )
 
 proc mouseMovedAt*(window: Window, point: Point): bool =
@@ -352,6 +420,9 @@ proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
 
 proc dispatchHostMouseMove(window: Window, event: MouseEvent, dragging: bool) =
   discard window.dispatchMouseMove(event, dragging)
+
+proc dispatchHostScroll(window: Window, event: types.ScrollEvent) =
+  discard window.dispatchScrollWheel(event)
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   if event.pressed and event.isEscape:
@@ -390,6 +461,8 @@ proc ensureNativeWindow*(window: Window) =
         window.dispatchHostMouseButton(event, pressed),
       onMouseMove: proc(event: MouseEvent, dragging: bool) =
         window.dispatchHostMouseMove(event, dragging),
+      onScroll: proc(event: types.ScrollEvent) =
+        window.dispatchHostScroll(event),
       onKey: proc(event: HostKeyEvent) =
         window.dispatchHostKey(event),
       onTextInput: proc(text: string) =

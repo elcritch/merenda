@@ -49,6 +49,9 @@ protocol DefaultResponderEvents of ResponderEventProtocol:
   method mouseDragged(self: Responder, event: MouseEvent) =
     discard
 
+  method scrollWheel(self: Responder, event: ScrollEvent) =
+    discard
+
   method keyDown(self: Responder, event: KeyEvent) =
     discard
 
