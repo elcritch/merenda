@@ -64,7 +64,7 @@ protocol ViewProtocolInternal from View:
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
 
   method setNeedsDisplayInRect*(self: View, rect: Rect) =
-    let clipped = rect.intersection(self.xBounds)
+    let clipped = rect.intersection(self.visibleRect())
     if clipped.isEmpty:
       return
 
@@ -83,7 +83,7 @@ protocol ViewProtocolInternal from View:
     if not self.xNeedsDisplay:
       return initRect(0.0, 0.0, 0.0, 0.0)
     if self.xInvalidRects.len == 0:
-      return self.xBounds
+      return self.visibleRect()
     result = self.xInvalidRects[0]
     for idx in 1 ..< self.xInvalidRects.len:
       result = result.union(self.xInvalidRects[idx])
@@ -92,7 +92,7 @@ protocol ViewProtocolInternal from View:
     if not self.xNeedsDisplay:
       return @[]
     if self.xInvalidRects.len == 0:
-      return @[self.xBounds]
+      return @[self.visibleRect()]
     self.xInvalidRects
 
   method backgroundColor(self: View): Color =
@@ -112,6 +112,24 @@ protocol ViewProtocolInternal from View:
       return
     self.xHidden = hidden
     self.setNeedsDisplay(true)
+
+  method isHiddenOrHasHiddenAncestor*(self: View): bool =
+    var current = self
+    while not current.isNil:
+      if current.xHidden:
+        return true
+      current = current.xSuperview
+    false
+
+  method visibleRect*(self: View): Rect =
+    if self.isHiddenOrHasHiddenAncestor():
+      return initRect(0.0, 0.0, 0.0, 0.0)
+    let parent = self.xSuperview
+    if parent.isNil:
+      return self.xBounds
+    let parentVisible = parent.visibleRect()
+    let converted = self.rectFromView(parentVisible, parent)
+    converted.intersection(self.xBounds)
 
   method superview*(self: View): View =
     self.xSuperview
