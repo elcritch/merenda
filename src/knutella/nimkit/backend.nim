@@ -1,4 +1,4 @@
-import std/tables
+import std/[tables, times]
 
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
@@ -109,6 +109,22 @@ proc nativeMousePoint(window: siwinshim.Window, rawPos: Vec2): Point =
   let pos = rawInputToLogical(rawPos, window.size(), window.logicalSize())
   initPoint(pos.x.float32, pos.y.float32)
 
+proc nativeModifiers(window: siwinshim.Window): set[KeyModifier] =
+  if window.isNil:
+    return {}
+  window.keyboard.modifiers.toNimkitModifiers
+
+proc activeMouseButton(window: siwinshim.Window): types.MouseButton =
+  if window.isNil:
+    return mbPrimary
+  if siwinshim.MouseButton.left in window.mouse.pressed:
+    return mbPrimary
+  if siwinshim.MouseButton.right in window.mouse.pressed:
+    return mbSecondary
+  if window.mouse.pressed.len > 0:
+    return mbOther
+  mbPrimary
+
 proc isReady*(host: HostWindow): bool =
   (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
 
@@ -179,6 +195,8 @@ proc dispatchMouseButton(host: HostWindow, event: siwinshim.MouseButtonEvent) =
       location: nativeMousePoint(nativeWindow),
       button: event.button.toNimkitMouseButton,
       clickCount: 0,
+      modifiers: nativeWindow.nativeModifiers,
+      timestamp: epochTime(),
     ),
     event.pressed,
   )
@@ -193,8 +211,10 @@ proc dispatchMouseMove(host: HostWindow, event: siwinshim.MouseMoveEvent) =
   host.xCallbacks.onMouseMove(
     types.MouseEvent(
       location: nativeMousePoint(nativeWindow, event.pos),
-      button: mbPrimary,
+      button: nativeWindow.activeMouseButton,
       clickCount: 0,
+      modifiers: nativeWindow.nativeModifiers,
+      timestamp: epochTime(),
     ),
     dragging,
   )
@@ -208,6 +228,8 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
       location: nativeMousePoint(nativeWindow),
       deltaX: event.deltaX.float32,
       deltaY: event.delta.float32,
+      modifiers: nativeWindow.nativeModifiers,
+      timestamp: epochTime(),
     )
   )
 

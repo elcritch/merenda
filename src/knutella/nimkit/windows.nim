@@ -26,6 +26,7 @@ type Window* = ref object of Responder
   xMouseTrackingClickCount: int
   xLastClickPoint: Point
   xLastClickButton: types.MouseButton
+  xLastClickView: View
   xLastClickCount: int
   xLastClickTime: float
   xHasLastClick: bool
@@ -114,6 +115,9 @@ proc clearMouseState(window: Window) =
   window.xMouseTrackingView = nil
   window.xMouseHoverView = nil
   window.xMouseTrackingClickCount = 0
+  window.xLastClickView = nil
+  window.xHasLastClick = false
+  window.xLastClickCount = 0
 
 proc setContentView*(window: Window, view: View) =
   if window.xContentView == view:
@@ -216,10 +220,22 @@ proc close*(window: Window) =
   window.xHostWindow = nil
 
 proc mouseDownAt*(
-  window: Window, point: Point, button = mbPrimary, clickCount = 0
+  window: Window,
+  point: Point,
+  button = mbPrimary,
+  clickCount = 0,
+  modifiers: set[KeyModifier] = {},
+  timestamp = 0.0,
 ): bool
 
-proc mouseUpAt*(window: Window, point: Point, button = mbPrimary, clickCount = 0): bool
+proc mouseUpAt*(
+  window: Window,
+  point: Point,
+  button = mbPrimary,
+  clickCount = 0,
+  modifiers: set[KeyModifier] = {},
+  timestamp = 0.0,
+): bool
 
 proc clickAt*(window: Window, point: Point): bool =
   if not window.mouseDownAt(point):
@@ -254,44 +270,86 @@ proc contentPoint(window: Window, windowPoint: Point): Point =
 proc localMouseEvent(
     target, contentView: View, contentPoint: Point, event: MouseEvent
 ): MouseEvent =
-  MouseEvent(
+  result = MouseEvent(
     location: target.pointFromView(contentPoint, contentView),
     button: event.button,
     clickCount: event.clickCount,
+    modifiers: event.modifiers,
+    timestamp: event.timestamp,
   )
 
 proc localScrollEvent(
     target, contentView: View, contentPoint: Point, event: types.ScrollEvent
 ): types.ScrollEvent =
-  types.ScrollEvent(
+  result = types.ScrollEvent(
     location: target.pointFromView(contentPoint, contentView),
     deltaX: event.deltaX,
     deltaY: event.deltaY,
+    modifiers: event.modifiers,
+    timestamp: event.timestamp,
   )
 
-proc isRepeatClick(window: Window, event: MouseEvent, now: float): bool =
-  if not window.xHasLastClick or window.xLastClickButton != event.button:
+proc eventTimestamp(timestamp: float): float =
+  if timestamp > 0.0:
+    timestamp
+  else:
+    epochTime()
+
+proc isRepeatClick(window: Window, target: View, event: MouseEvent, now: float): bool =
+  if not window.xHasLastClick or window.xLastClickView != target or
+      window.xLastClickButton != event.button:
     return false
   if now - window.xLastClickTime > ClickInterval:
     return false
   abs(window.xLastClickPoint.x - event.location.x) <= ClickSlop and
     abs(window.xLastClickPoint.y - event.location.y) <= ClickSlop
 
-proc nextClickCount(window: Window, event: MouseEvent): int =
-  let now = epochTime()
+proc nextClickCount(window: Window, target: View, event: MouseEvent): int =
+  let now = eventTimestamp(event.timestamp)
   if event.clickCount > 0:
     result = event.clickCount
-  elif window.isRepeatClick(event, now):
+  elif window.isRepeatClick(target, event, now):
     result = window.xLastClickCount + 1
   else:
     result = 1
 
   window.xLastClickPoint = event.location
   window.xLastClickButton = event.button
+  window.xLastClickView = target
   window.xLastClickCount = result
   window.xLastClickTime = now
   window.xHasLastClick = true
   window.xMouseTrackingClickCount = result
+
+proc dispatchMouseEventInChain(
+    window: Window,
+    target: View,
+    contentPoint: Point,
+    event: MouseEvent,
+    selector: MouseEventSelector,
+): bool =
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        View(responder).localMouseEvent(window.xContentView, contentPoint, event)
+    if responder.sendLocalIfHandled(selector, localEvent):
+      return true
+    responder = responder.nextResponder()
+
+proc dispatchScrollEventInChain(
+    window: Window, target: View, contentPoint: Point, event: types.ScrollEvent
+): bool =
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        View(responder).localScrollEvent(window.xContentView, contentPoint, event)
+    if responder.sendLocalIfHandled(scrollWheel(), localEvent):
+      return true
+    responder = responder.nextResponder()
 
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
@@ -323,7 +381,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     window.xMouseTrackingView = target
     if target.isNil:
       return false
-    dispatchEvent.clickCount = window.nextClickCount(event)
+    dispatchEvent.clickCount = window.nextClickCount(target, event)
     target.setActive(true)
     if target.acceptsFirstResponder():
       discard window.makeFirstResponder(target)
@@ -340,12 +398,12 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     if dispatchEvent.clickCount <= 0:
       dispatchEvent.clickCount = max(window.xMouseTrackingClickCount, 1)
 
-  let localEvent =
-    target.localMouseEvent(window.xContentView, contentPoint, dispatchEvent)
   if pressed:
-    result = target.dispatchMouseDown(localEvent)
+    result =
+      window.dispatchMouseEventInChain(target, contentPoint, dispatchEvent, mouseDown())
   else:
-    result = target.dispatchMouseUp(localEvent)
+    result =
+      window.dispatchMouseEventInChain(target, contentPoint, dispatchEvent, mouseUp())
     if not activeView.isNil:
       activeView.setActive(false)
     window.xMouseTrackingClickCount = 0
@@ -368,11 +426,13 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
   if target.isNil:
     return result
 
-  let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
   if dragging:
-    result = target.dispatchMouseDragged(localEvent)
+    result =
+      window.dispatchMouseEventInChain(target, contentPoint, event, mouseDragged())
   else:
-    result = target.dispatchMouseMoved(localEvent) or result
+    result =
+      window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()) or
+      result
 
 proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
   if window.xContentView.isNil:
@@ -381,38 +441,94 @@ proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
   let target = window.xContentView.hitTest(contentPoint)
   if target.isNil:
     return false
-  let localEvent = target.localScrollEvent(window.xContentView, contentPoint, event)
-  target.dispatchScrollWheel(localEvent)
+  window.dispatchScrollEventInChain(target, contentPoint, event)
 
 proc mouseDownAt*(
-    window: Window, point: Point, button = mbPrimary, clickCount = 0
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
 ): bool =
   window.dispatchMouseButton(
-    MouseEvent(location: point, button: button, clickCount: clickCount), true
+    MouseEvent(
+      location: point,
+      button: button,
+      clickCount: clickCount,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    true,
   )
 
 proc mouseUpAt*(
-    window: Window, point: Point, button = mbPrimary, clickCount = 0
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
 ): bool =
   window.dispatchMouseButton(
-    MouseEvent(location: point, button: button, clickCount: clickCount), false
+    MouseEvent(
+      location: point,
+      button: button,
+      clickCount: clickCount,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    false,
   )
 
 proc scrollWheelAt*(
-    window: Window, point: Point, deltaX = 0.0'f32, deltaY = 0.0'f32
+    window: Window,
+    point: Point,
+    deltaX = 0.0'f32,
+    deltaY = 0.0'f32,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
 ): bool =
   window.dispatchScrollWheel(
-    types.ScrollEvent(location: point, deltaX: deltaX, deltaY: deltaY)
+    types.ScrollEvent(
+      location: point,
+      deltaX: deltaX,
+      deltaY: deltaY,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    )
   )
 
-proc mouseMovedAt*(window: Window, point: Point): bool =
+proc mouseMovedAt*(
+    window: Window, point: Point, modifiers: set[KeyModifier] = {}, timestamp = 0.0
+): bool =
   window.dispatchMouseMove(
-    MouseEvent(location: point, button: mbPrimary, clickCount: 0), dragging = false
+    MouseEvent(
+      location: point,
+      button: mbPrimary,
+      clickCount: 0,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    dragging = false,
   )
 
-proc mouseDraggedAt*(window: Window, point: Point, button = mbPrimary): bool =
+proc mouseDraggedAt*(
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
   window.dispatchMouseMove(
-    MouseEvent(location: point, button: button, clickCount: 0), dragging = true
+    MouseEvent(
+      location: point,
+      button: button,
+      clickCount: 0,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    dragging = true,
   )
 
 proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =

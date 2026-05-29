@@ -573,25 +573,25 @@ proc rectFromView*(view: View, rect: Rect, fromView: View): Rect =
   rectFromCorners(p0, p1)
 
 proc dispatchMouseDown*(view: View, event: MouseEvent): bool =
-  view.sendIfHandled(mouseDown(), event)
+  view.sendLocalIfHandled(mouseDown(), event)
 
 proc dispatchMouseUp*(view: View, event: MouseEvent): bool =
-  view.sendIfHandled(mouseUp(), event)
+  view.sendLocalIfHandled(mouseUp(), event)
 
 proc dispatchMouseEntered*(view: View, event: MouseEvent): bool =
-  view.sendIfHandled(mouseEntered(), event)
+  view.sendLocalIfHandled(mouseEntered(), event)
 
 proc dispatchMouseExited*(view: View, event: MouseEvent): bool =
-  view.sendIfHandled(mouseExited(), event)
+  view.sendLocalIfHandled(mouseExited(), event)
 
 proc dispatchMouseMoved*(view: View, event: MouseEvent): bool =
-  view.sendIfHandled(mouseMoved(), event)
+  view.sendLocalIfHandled(mouseMoved(), event)
 
 proc dispatchMouseDragged*(view: View, event: MouseEvent): bool =
-  view.sendIfHandled(mouseDragged(), event)
+  view.sendLocalIfHandled(mouseDragged(), event)
 
 proc dispatchScrollWheel*(view: View, event: ScrollEvent): bool =
-  view.sendIfHandled(scrollWheel(), event)
+  view.sendLocalIfHandled(scrollWheel(), event)
 
 proc dispatchKeyDown*(view: View, event: KeyEvent): bool =
   view.sendIfHandled(keyDown(), event)
