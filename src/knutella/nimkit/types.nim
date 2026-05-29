@@ -1,3 +1,5 @@
+import pkg/chroma
+
 type
   Point* = object
     x*: float32
@@ -11,11 +13,7 @@ type
     origin*: Point
     size*: Size
 
-  Color* = object
-    r*: float32
-    g*: float32
-    b*: float32
-    a*: float32
+  Color* = chroma.Color
 
   MouseButton* = enum
     mbPrimary
@@ -65,7 +63,7 @@ proc initRect*(origin: Point, size: Size): Rect =
   Rect(origin: origin, size: initSize(size.width, size.height))
 
 proc initColor*(r, g, b: float32, a = 1.0'f32): Color =
-  Color(r: r, g: g, b: b, a: a)
+  chroma.color(r, g, b, a)
 
 proc minX*(rect: Rect): float32 =
   rect.origin.x
