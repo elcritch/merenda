@@ -19,7 +19,8 @@ NimKit already has the first useful vertical slice:
 - Plain Nim value types for geometry, events, and control options, with
   `chroma.Color` used directly for color state.
 - Responder/action dispatch through `sigils/selectors`.
-- View hierarchy, invalidation, hit testing, and basic first-responder dispatch.
+- View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
+  first-responder dispatch.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
   rectangles, and single-line text.
 - siwin native windows, mouse button dispatch, key/text input dispatch, and
@@ -71,8 +72,8 @@ NimKit already has the first useful vertical slice:
   `DrawContext`, FigDraw node insertion, and local-to-window drawing geometry
   helpers used by selector-backed custom drawing.
 - `src/knutella/nimkit/views.nim`:
-  `View`, frame/bounds state, subviews, hit testing, invalidation, and event
-  dispatch into selector methods.
+  `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
+  invalidation, and event dispatch into selector methods.
 - `src/knutella/nimkit/controls.nim`:
   `Control`, enabled state, target/action, and closure-backed action targets.
 - `src/knutella/nimkit/buttons.nim`:
@@ -116,6 +117,19 @@ NimKit already has the first useful vertical slice:
   through selectors, perform target/action, mutate state, invalidate, and redraw.
 - Screenshot coverage captures the button demo before and after a synthetic
   click.
+
+### View Geometry And Lifecycle
+
+- Visible rects account for hidden ancestors, parent clipping, bounds origins,
+  and child invalidation propagation.
+- `addSubview`, `removeFromSuperview`, and `setContentView` route through
+  selector-backed view lifecycle hooks:
+  `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
+  `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and
+  `willRemoveSubview`.
+- Content views track window ownership through descendants, content roots use
+  the window as next responder, and replacing content clears a first responder
+  from the removed subtree.
 
 ### Responder And Event Core
 
@@ -210,11 +224,6 @@ its implementation.
   rects on frame, bounds, superview, hidden-state, and flip changes. Our
   `markTransformsDirty` path should grow into the same clear lifecycle, with
   tests for nested conversion, flipped views, bounds origins, and reparenting.
-- Fill in view lifecycle hooks where Cocoa behavior depends on them:
-  `viewWillMoveToSuperview`, `viewWillMoveToWindow`, `viewDidMoveToSuperview`,
-  `viewDidMoveToWindow`, `didAddSubview`, and removal hooks. These should remain
-  methods, not direct field writes, because subclasses and future swizzles need
-  stable interception points.
 - Introduce a theme/metrics drawing boundary. GNUstep's `GSTheme` centralizes
   borders, focus rings, control metrics, tile/nine-patch drawing, menu/window
   chrome, and state-specific colors. Our drawing is still spread across controls
@@ -242,9 +251,9 @@ its implementation.
 
 ### Priority Order
 
-- Short term: dirty-rect invariants, visible rects, and view lifecycle hooks.
-- Medium term: theme/metrics object, cleaner cell invalidation/default-cell
+- Short term: theme/metrics object, cleaner cell invalidation/default-cell
   construction, and richer key command dispatch.
+- Medium term: constraint layout groundwork and broader control coverage.
 - Later: constraint layout, panels/services integration, loadable themes, and
   broader GNUstep-style resource organization.
 
@@ -257,13 +266,6 @@ Current comparison source:
 NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
 still points to the next correctness boundaries:
 
-- Add selector-backed view lifecycle hooks. GNUstep calls will/did move hooks,
-  resets cursor rects, marks subviews dirty, updates responder/window ownership,
-  and calls `didAddSubview` when views are inserted. NimKit currently mutates
-  `xSuperview`, `xSubviews`, and next responder directly. Add hook methods for
-  `viewWillMoveToSuperview`, `viewDidMoveToSuperview`, `viewWillMoveToWindow`,
-  `viewDidMoveToWindow`, and `didAddSubview`, then route add/remove/content-view
-  changes through them.
 - Keep the control model simple, but introduce a theme/metrics boundary before
   adding more widgets. GNUstep pushes borders, focus rings, control state colors,
   tile drawing, and cell metrics through `GSTheme`. NimKit should not copy the
@@ -279,33 +281,23 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- First: invalid rects/visible rects and lifecycle hooks, with tests around
-  reparenting, hidden views, and child invalidation.
-- Second: theme/metrics and command/key-binding layers, then expand controls.
+- First: theme/metrics and command/key-binding layers.
+- Second: expand controls once those boundaries stabilize.
 
 Concrete task list:
 
-1. Add visible-rect and clipping behavior. Hidden ancestors should produce an
-   empty visible rect; parent bounds should clip child visible rects; future
-   scroll views should be able to narrow visible rects without special render
-   hacks.
-2. Add selector-backed view lifecycle hooks. Provide
-   `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
-   `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and a remove
-   hook. Route `addSubview`, `removeFromSuperview`, and `setContentView`
-   through those hooks while keeping direct field mutation private.
-3. Introduce a small theme/metrics object. Do not build a loadable theme system
+1. Introduce a small theme/metrics object. Do not build a loadable theme system
    yet; start with colors, border widths, corner radius, focus-ring metrics,
    control padding, and text insets used by buttons and text fields. Rendering
    should ask the theme for these values instead of hard-coding them in
    widget/render helpers.
-4. Add a command/key-binding layer before real text editing expands. Map
+2. Add a command/key-binding layer before real text editing expands. Map
    key/modifier combinations to command selectors, then dispatch through the
    responder chain. This should share the same path for text editing commands,
    button key equivalents, and future menu shortcuts.
-5. Expand controls after the above contracts stabilize. Prioritize checkbox,
-    radio, toggle variants, combo box, and basic text editing. Keep policy
-    hooks selector-based where behavior is overridable.
+3. Expand controls after the above contracts stabilize. Prioritize checkbox,
+   radio, toggle variants, combo box, and basic text editing. Keep policy hooks
+   selector-based where behavior is overridable.
 
 ## Test Plan
 

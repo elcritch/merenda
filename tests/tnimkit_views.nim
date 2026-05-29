@@ -2,7 +2,15 @@ import std/unittest
 
 import knutella/nimkit
 
-type MouseSpyView = ref object of View
+type
+  MouseSpyView = ref object of View
+
+  LifecycleSpyView = ref object of View
+    events: seq[string]
+    superviews: seq[View]
+    windows: seq[Responder]
+    addedSubviews: seq[View]
+    removedSubviews: seq[View]
 
 var
   spyMouseDownPoint: Point
@@ -19,10 +27,38 @@ protocol MouseSpyEvents of ResponderEventProtocol:
     spyMouseUpPoint = event.location
     inc spyMouseUpCount
 
+protocol LifecycleSpyHooks of ViewLifecycleProtocol:
+  method viewWillMoveToSuperview(spy: LifecycleSpyView, superview: View) =
+    spy.events.add "willSuperview"
+    spy.superviews.add superview
+
+  method viewDidMoveToSuperview(spy: LifecycleSpyView) =
+    spy.events.add "didSuperview"
+
+  method viewWillMoveToWindow(spy: LifecycleSpyView, window: Responder) =
+    spy.events.add "willWindow"
+    spy.windows.add window
+
+  method viewDidMoveToWindow(spy: LifecycleSpyView) =
+    spy.events.add "didWindow"
+
+  method didAddSubview(spy: LifecycleSpyView, subview: View) =
+    spy.events.add "didAddSubview"
+    spy.addedSubviews.add subview
+
+  method willRemoveSubview(spy: LifecycleSpyView, subview: View) =
+    spy.events.add "willRemoveSubview"
+    spy.removedSubviews.add subview
+
 proc newMouseSpyView(frame: Rect): MouseSpyView =
   result = MouseSpyView()
   initViewFields(result, frame)
   discard result.withProtocol(MouseSpyEvents)
+
+proc newLifecycleSpyView(frame: Rect): LifecycleSpyView =
+  result = LifecycleSpyView()
+  initViewFields(result, frame)
+  discard result.withProtocol(LifecycleSpyHooks)
 
 suite "nimkit views":
   test "subviews participate in hit testing from front to back":
@@ -179,6 +215,83 @@ suite "nimkit views":
     secondRoot.addSubview(child)
     check child.superview == secondRoot
     check child.pointToWindow(initPoint(0, 0)) == initPoint(30, 45)
+
+  test "add and remove subview route selector-backed lifecycle hooks":
+    let
+      parent = newLifecycleSpyView(initRect(0, 0, 200, 160))
+      child = newLifecycleSpyView(initRect(20, 30, 80, 40))
+
+    parent.addSubview(child)
+
+    check child.superview == parent
+    check child.nextResponder == parent
+    check parent.addedSubviews == @[View(child)]
+    check child.superviews == @[View(parent)]
+    check child.events == @["willSuperview", "didSuperview"]
+    check parent.events == @["didAddSubview"]
+
+    child.removeFromSuperview()
+
+    check child.superview.isNil
+    check child.nextResponder.isNil
+    check parent.removedSubviews == @[View(child)]
+    check child.superviews.len == 2
+    check child.superviews[1].isNil
+    check child.events ==
+      @["willSuperview", "didSuperview", "willSuperview", "didSuperview"]
+    check parent.events == @["didAddSubview", "willRemoveSubview"]
+
+  test "content view changes route window lifecycle through descendants":
+    let
+      window = newWindow(0, 0, 240, 160, "Lifecycle")
+      root = newLifecycleSpyView(initRect(0, 0, 240, 160))
+      child = newLifecycleSpyView(initRect(20, 30, 80, 40))
+      replacement = newLifecycleSpyView(initRect(0, 0, 240, 160))
+
+    root.addSubview(child)
+    root.events.setLen(0)
+    child.events.setLen(0)
+
+    window.setContentView(root)
+
+    check window.contentView == root
+    check root.window == Responder(window)
+    check child.window == Responder(window)
+    check root.nextResponder == Responder(window)
+    check child.nextResponder == root
+    check root.windows == @[Responder(window)]
+    check child.windows == @[Responder(window)]
+    check root.events == @["willWindow", "didWindow"]
+    check child.events == @["willWindow", "didWindow"]
+
+    window.setContentView(replacement)
+
+    check window.contentView == replacement
+    check root.window.isNil
+    check child.window.isNil
+    check root.nextResponder.isNil
+    check root.windows.len == 2
+    check root.windows[1].isNil
+    check child.windows.len == 2
+    check child.windows[1].isNil
+    check replacement.window == Responder(window)
+    check replacement.nextResponder == Responder(window)
+
+  test "content view replacement clears first responder from removed subtree":
+    let
+      window = newWindow(0, 0, 240, 160, "First responder cleanup")
+      root = newView(0, 0, 240, 160)
+      button = newButton(20, 30, 80, 30, "Action")
+
+    root.addSubview(button)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(button)
+    check window.firstResponder == button
+
+    window.setContentView(newView(0, 0, 240, 160))
+
+    check window.firstResponder.isNil
 
   test "window coordinate helpers convert through content view frames and bounds":
     let content = newView(10, 15, 240, 180)

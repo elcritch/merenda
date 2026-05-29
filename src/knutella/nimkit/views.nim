@@ -12,6 +12,7 @@ type View* = ref object of Responder
   xInvalidRects: seq[Rect]
   xBackgroundColor: Color
   xSuperview: View
+  xWindow: Responder
   xSubviews: seq[View]
 
 proc pointFromView*(view: View, point: Point, fromView: View): Point
@@ -22,6 +23,13 @@ proc pointFromWindow*(view: View, point: Point): Point
 proc pointToWindow*(view: View, point: Point): Point
 proc rectFromWindow*(view: View, rect: Rect): Rect
 proc rectToWindow*(view: View, rect: Rect): Rect
+proc notifyWillMoveToSuperview(view, superview: View)
+proc notifyDidMoveToSuperview(view: View)
+proc notifyWillMoveToWindow(view: View, window: Responder)
+proc notifyDidMoveToWindow(view: View)
+proc notifyDidAddSubview(view, subview: View)
+proc notifyWillRemoveSubview(view, subview: View)
+proc setWindowOwner(view: View, window: Responder)
 
 protocol ViewProtocolInternal from View:
   property frame -> Rect
@@ -134,6 +142,9 @@ protocol ViewProtocolInternal from View:
   method superview*(self: View): View =
     self.xSuperview
 
+  method window*(self: View): Responder =
+    self.xWindow
+
   method subviews*(self: View): seq[View] =
     self.xSubviews
 
@@ -141,21 +152,39 @@ protocol ViewProtocolInternal from View:
     let parent = self.xSuperview
     if parent.isNil:
       return
+    let oldWindow = self.xWindow
+    parent.notifyWillRemoveSubview(self)
+    self.notifyWillMoveToSuperview(nil)
+    if oldWindow != nil:
+      self.notifyWillMoveToWindow(nil)
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.clearNextResponder()
+    self.setWindowOwner(nil)
+    self.notifyDidMoveToSuperview()
+    if oldWindow != nil:
+      self.notifyDidMoveToWindow()
 
   method addSubview*(self: View, child: View) =
     if child.isNil:
       return
     if not child.xSuperview.isNil:
       child.removeFromSuperview()
+    let oldWindow = child.xWindow
+    child.notifyWillMoveToSuperview(self)
+    if oldWindow != self.xWindow:
+      child.notifyWillMoveToWindow(self.xWindow)
     child.xSuperview = self
     self.xSubviews.add child
     child.setNextResponder(self)
+    child.setWindowOwner(self.xWindow)
+    self.notifyDidAddSubview(child)
+    child.notifyDidMoveToSuperview()
+    if oldWindow != self.xWindow:
+      child.notifyDidMoveToWindow()
     self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
@@ -173,6 +202,64 @@ protocol ViewProtocolInternal from View:
         return hit
 
     self
+
+protocol ViewLifecycleProtocolInternal:
+  method viewWillMoveToSuperview*(superview: View) {.optional.}
+  method viewDidMoveToSuperview*() {.optional.}
+  method viewWillMoveToWindow*(window: Responder) {.optional.}
+  method viewDidMoveToWindow*() {.optional.}
+  method didAddSubview*(subview: View) {.optional.}
+  method willRemoveSubview*(subview: View) {.optional.}
+
+proc notifyWillMoveToSuperview(view, superview: View) =
+  discard view.sendIfHandled(viewWillMoveToSuperview(), superview)
+
+proc notifyDidMoveToSuperview(view: View) =
+  discard view.sendIfHandled(viewDidMoveToSuperview())
+
+proc notifyWillMoveToWindow(view: View, window: Responder) =
+  discard view.sendIfHandled(viewWillMoveToWindow(), window)
+  for child in view.xSubviews:
+    child.notifyWillMoveToWindow(window)
+
+proc notifyDidMoveToWindow(view: View) =
+  discard view.sendIfHandled(viewDidMoveToWindow())
+  for child in view.xSubviews:
+    child.notifyDidMoveToWindow()
+
+proc notifyDidAddSubview(view, subview: View) =
+  discard view.sendIfHandled(didAddSubview(), subview)
+
+proc notifyWillRemoveSubview(view, subview: View) =
+  discard view.sendIfHandled(willRemoveSubview(), subview)
+
+proc setWindowOwner(view: View, window: Responder) =
+  view.xWindow = window
+  for child in view.xSubviews:
+    child.setWindowOwner(window)
+
+proc moveToWindowOwner*(view: View, window: Responder) =
+  if view.isNil or view.xWindow == window:
+    return
+  view.notifyWillMoveToWindow(window)
+  view.setWindowOwner(window)
+  view.notifyDidMoveToWindow()
+
+proc clearSuperviewForWindowOwner*(view: View) =
+  if view.isNil:
+    return
+  view.xSuperview = nil
+  view.clearNextResponder()
+
+proc containsView*(view, candidate: View): bool =
+  if view.isNil or candidate.isNil:
+    return false
+  if view == candidate:
+    return true
+  for child in view.xSubviews:
+    if child.containsView(candidate):
+      return true
+  false
 
 proc initViewFields*(view: View, frame: Rect) =
   initResponder(view)
@@ -314,4 +401,6 @@ proc clickAt*(view: View, point: Point): bool =
   discard hit.dispatchMouseDown(event)
   result = hit.dispatchMouseUp(event)
 
-let ViewProtocol* = ViewProtocolInternal
+let
+  ViewProtocol* = ViewProtocolInternal
+  ViewLifecycleProtocol* = ViewLifecycleProtocolInternal

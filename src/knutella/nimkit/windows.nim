@@ -8,7 +8,7 @@ import ./selectors
 import ./types
 import ./views
 
-type Window* = ref object
+type Window* = ref object of Responder
   xFrame: Rect
   xTitle: string
   xContentView: View
@@ -19,7 +19,8 @@ type Window* = ref object
   xClosed: bool
 
 proc newWindow*(frame: Rect, title: string): Window =
-  Window(xFrame: frame, xTitle: title)
+  result = Window(xFrame: frame, xTitle: title)
+  initResponder(result)
 
 proc newWindow*(x, y, width, height: float32, title: string): Window =
   newWindow(initRect(x, y, width, height), title)
@@ -33,7 +34,30 @@ proc title*(window: Window): string =
 proc contentView*(window: Window): View =
   window.xContentView
 
+proc makeFirstResponder*(window: Window, responder: Responder): bool
+
 proc setContentView*(window: Window, view: View) =
+  if window.xContentView == view:
+    window.xMouseTrackingView = nil
+    return
+
+  let oldContent = window.xContentView
+  if not oldContent.isNil:
+    if not window.xFirstResponder.isNil and window.xFirstResponder of View:
+      let firstResponderView = View(window.xFirstResponder)
+      if oldContent.containsView(firstResponderView):
+        if not window.makeFirstResponder(nil):
+          window.xFirstResponder = nil
+    oldContent.moveToWindowOwner(nil)
+    oldContent.clearSuperviewForWindowOwner()
+
+  if not view.isNil:
+    if not view.superview.isNil:
+      view.removeFromSuperview()
+    view.clearSuperviewForWindowOwner()
+    view.setNextResponder(window)
+    view.moveToWindowOwner(window)
+
   window.xContentView = view
   window.xMouseTrackingView = nil
 
