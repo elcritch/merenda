@@ -58,6 +58,11 @@ type
     parent*: StyleTokenStore
     values*: Table[string, StyleValue]
 
+  StyleKey*[T] = distinct string
+
+  StylePatch* = ref object
+    values*: Table[string, StyleValue]
+
   ThemeControlState* = enum
     tcsNormal
     tcsHighlighted
@@ -82,26 +87,6 @@ type
   TextFieldStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
-
-  ControlBoxStyleOverride* = object
-    fill*: StyleValue
-    borderColor*: StyleValue
-    borderWidth*: StyleValue
-    cornerRadius*: StyleValue
-    focusRingWidth*: StyleValue
-    focusRingInset*: StyleValue
-
-  TextStyleOverride* = object
-    color*: StyleValue
-    insets*: StyleValue
-
-  ButtonStyleOverride* = object
-    box*: ControlBoxStyleOverride
-    text*: TextStyleOverride
-
-  TextFieldStyleOverride* = object
-    box*: ControlBoxStyleOverride
-    text*: TextStyleOverride
 
   ButtonTheme* = object
     fill*: array[ThemeControlState, Color]
@@ -129,10 +114,18 @@ type
   Appearance* = object
     theme*: Theme
     tokens*: StyleTokenStore
-    button*: ButtonStyleOverride
-    textField*: TextFieldStyleOverride
+    patches*: array[StyleRole, StylePatch]
 
 const
+  StyleFill* = StyleKey[Color]("fill")
+  StyleBorderColor* = StyleKey[Color]("border.color")
+  StyleBorderWidth* = StyleKey[float32]("border.width")
+  StyleCornerRadius* = StyleKey[float32]("corner.radius")
+  StyleFocusRingWidth* = StyleKey[float32]("focus.ring.width")
+  StyleFocusRingInset* = StyleKey[float32]("focus.ring.inset")
+  StyleTextColor* = StyleKey[Color]("text.color")
+  StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
+
   ButtonFillTokens*: array[ThemeControlState, string] = [
     tcsNormal: "button.fill",
     tcsHighlighted: "button.fill.highlighted",
@@ -189,8 +182,17 @@ func styleToken*(name: string): StyleValue =
 func styleKeyword*(keyword: string): StyleValue =
   StyleValue(kind: svKeyword, keyword: keyword)
 
+func styleKey*[T](name: string): StyleKey[T] =
+  StyleKey[T](name)
+
+func keyName*[T](key: StyleKey[T]): string =
+  string(key)
+
 proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
   StyleTokenStore(parent: parent, values: initTable[string, StyleValue]())
+
+proc newStylePatch*(): StylePatch =
+  StylePatch(values: initTable[string, StyleValue]())
 
 proc setToken*(tokens: StyleTokenStore, name: string, value: StyleValue) =
   if tokens.isNil:
@@ -236,6 +238,104 @@ proc resolveValue*(
   else:
     value = input
     true
+
+proc setStyle*(patch: StylePatch, key: string, value: StyleValue) =
+  if patch.isNil:
+    return
+  patch.values[key] = value
+
+proc setStyle*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
+  patch.setStyle(key.keyName, value)
+
+proc setStyle*(patch: StylePatch, key: StyleKey[Color], value: Color) =
+  patch.setStyle(key, styleColor(value))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float32) =
+  patch.setStyle(key, styleLength(value))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float) =
+  patch.setStyle(key, styleLength(value.float32))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
+  patch.setStyle(key, styleInsets(value))
+
+proc getStyle*(patch: StylePatch, key: string, value: var StyleValue): bool =
+  if patch.isNil:
+    return false
+  if patch.values.hasKey(key):
+    value = patch.values[key]
+    return true
+
+proc getStyle*[T](patch: StylePatch, key: StyleKey[T], value: var StyleValue): bool =
+  patch.getStyle(key.keyName, value)
+
+proc stylePatch*(appearance: Appearance, role: StyleRole): StylePatch =
+  appearance.patches[role]
+
+proc stylePatch*(appearance: var Appearance, role: StyleRole): StylePatch =
+  if appearance.patches[role].isNil:
+    appearance.patches[role] = newStylePatch()
+  appearance.patches[role]
+
+proc setStyle*[T](
+    appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
+) =
+  appearance.stylePatch(role).setStyle(key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Color], value: Color
+) =
+  appearance.stylePatch(role).setStyle(key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  appearance.stylePatch(role).setStyle(key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  appearance.stylePatch(role).setStyle(key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.stylePatch(role).setStyle(key, value)
+
+proc `[]=`*[T](
+    appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Color], value: Color
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]`*[T](appearance: Appearance, role: StyleRole, key: StyleKey[T]): StyleValue =
+  if not appearance.stylePatch(role).getStyle(key, result):
+    result = missingStyleValue()
 
 func initStyleContext*(
     role: StyleRole, states: set[StyleState] = {}, id = "", classes: seq[string] = @[]
@@ -351,59 +451,35 @@ proc insetsToken*(
   let value = appearance.styleValue(name, styleInsets(fallback))
   if value.kind == svInsets: value.insets else: fallback
 
-proc colorValue(appearance: Appearance, value: StyleValue, fallback: Color): Color =
-  var resolved: StyleValue
-  if not appearance.tokens.resolveValue(value, resolved):
+proc patchValue(
+    appearance: Appearance, role: StyleRole, key: string, fallback: StyleValue
+): StyleValue =
+  var value: StyleValue
+  if not appearance.stylePatch(role).getStyle(key, value):
     return fallback
-  if resolved.kind == svColor: resolved.color else: fallback
+  if not appearance.tokens.resolveValue(value, result):
+    result = fallback
 
-proc lengthValue(
-    appearance: Appearance, value: StyleValue, fallback: float32
+proc colorPatch*(
+    appearance: Appearance, role: StyleRole, key: StyleKey[Color], fallback: Color
+): Color =
+  let value = appearance.patchValue(role, key.keyName, styleColor(fallback))
+  if value.kind == svColor: value.color else: fallback
+
+proc lengthPatch*(
+    appearance: Appearance, role: StyleRole, key: StyleKey[float32], fallback: float32
 ): float32 =
-  var resolved: StyleValue
-  if not appearance.tokens.resolveValue(value, resolved):
-    return fallback
-  if resolved.kind == svLength: resolved.length else: fallback
+  let value = appearance.patchValue(role, key.keyName, styleLength(fallback))
+  if value.kind == svLength: value.length else: fallback
 
-proc insetsValue(
-    appearance: Appearance, value: StyleValue, fallback: EdgeInsets
-): EdgeInsets =
-  var resolved: StyleValue
-  if not appearance.tokens.resolveValue(value, resolved):
-    return fallback
-  if resolved.kind == svInsets: resolved.insets else: fallback
-
-proc applyOverride(
-    style: var ControlBoxStyle,
-    override: ControlBoxStyleOverride,
+proc insetsPatch*(
     appearance: Appearance,
-) =
-  style.fill = appearance.colorValue(override.fill, style.fill)
-  style.borderColor = appearance.colorValue(override.borderColor, style.borderColor)
-  style.borderWidth = appearance.lengthValue(override.borderWidth, style.borderWidth)
-  style.cornerRadius = appearance.lengthValue(override.cornerRadius, style.cornerRadius)
-  style.focusRingWidth =
-    appearance.lengthValue(override.focusRingWidth, style.focusRingWidth)
-  style.focusRingInset =
-    appearance.lengthValue(override.focusRingInset, style.focusRingInset)
-
-proc applyOverride(
-    style: var TextStyle, override: TextStyleOverride, appearance: Appearance
-) =
-  style.color = appearance.colorValue(override.color, style.color)
-  style.insets = appearance.insetsValue(override.insets, style.insets)
-
-proc applyOverride*(
-    style: var ButtonStyle, override: ButtonStyleOverride, appearance: Appearance
-) =
-  style.box.applyOverride(override.box, appearance)
-  style.text.applyOverride(override.text, appearance)
-
-proc applyOverride*(
-    style: var TextFieldStyle, override: TextFieldStyleOverride, appearance: Appearance
-) =
-  style.box.applyOverride(override.box, appearance)
-  style.text.applyOverride(override.text, appearance)
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    fallback: EdgeInsets,
+): EdgeInsets =
+  let value = appearance.patchValue(role, key.keyName, styleInsets(fallback))
+  if value.kind == svInsets: value.insets else: fallback
 
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
   let state = buttonThemeState(context)
@@ -423,7 +499,21 @@ proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonS
     appearance.colorToken(ButtonTextColorTokens[state], result.text.color)
   result.text.insets =
     appearance.insetsToken(ButtonContentInsetsToken, result.text.insets)
-  result.applyOverride(appearance.button, appearance)
+  result.box.fill = appearance.colorPatch(context.role, StyleFill, result.box.fill)
+  result.box.borderColor =
+    appearance.colorPatch(context.role, StyleBorderColor, result.box.borderColor)
+  result.box.borderWidth =
+    appearance.lengthPatch(context.role, StyleBorderWidth, result.box.borderWidth)
+  result.box.cornerRadius =
+    appearance.lengthPatch(context.role, StyleCornerRadius, result.box.cornerRadius)
+  result.box.focusRingWidth =
+    appearance.lengthPatch(context.role, StyleFocusRingWidth, result.box.focusRingWidth)
+  result.box.focusRingInset =
+    appearance.lengthPatch(context.role, StyleFocusRingInset, result.box.focusRingInset)
+  result.text.color =
+    appearance.colorPatch(context.role, StyleTextColor, result.text.color)
+  result.text.insets =
+    appearance.insetsPatch(context.role, StyleTextInsets, result.text.insets)
 
 proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext, textColor: Color
@@ -443,7 +533,21 @@ proc resolveTextFieldStyle*(
   result.text.color = appearance.colorToken(TextFieldTextColorToken, result.text.color)
   result.text.insets =
     appearance.insetsToken(TextFieldTextInsetsToken, result.text.insets)
-  result.applyOverride(appearance.textField, appearance)
+  result.box.fill = appearance.colorPatch(context.role, StyleFill, result.box.fill)
+  result.box.borderColor =
+    appearance.colorPatch(context.role, StyleBorderColor, result.box.borderColor)
+  result.box.borderWidth =
+    appearance.lengthPatch(context.role, StyleBorderWidth, result.box.borderWidth)
+  result.box.cornerRadius =
+    appearance.lengthPatch(context.role, StyleCornerRadius, result.box.cornerRadius)
+  result.box.focusRingWidth =
+    appearance.lengthPatch(context.role, StyleFocusRingWidth, result.box.focusRingWidth)
+  result.box.focusRingInset =
+    appearance.lengthPatch(context.role, StyleFocusRingInset, result.box.focusRingInset)
+  result.text.color =
+    appearance.colorPatch(context.role, StyleTextColor, result.text.color)
+  result.text.insets =
+    appearance.insetsPatch(context.role, StyleTextInsets, result.text.insets)
 
 proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext
