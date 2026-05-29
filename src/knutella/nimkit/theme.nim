@@ -7,10 +7,45 @@ type
     bottom*: float32
     right*: float32
 
+  StyleRole* = enum
+    srView
+    srButton
+    srTextField
+
+  StyleState* = enum
+    ssDisabled
+    ssHighlighted
+    ssFocused
+    ssSelected
+
+  StyleContext* = object
+    role*: StyleRole
+    states*: set[StyleState]
+
   ThemeControlState* = enum
     tcsNormal
     tcsHighlighted
     tcsDisabled
+
+  ControlBoxStyle* = object
+    fill*: Color
+    borderColor*: Color
+    borderWidth*: float32
+    cornerRadius*: float32
+    focusRingWidth*: float32
+    focusRingInset*: float32
+
+  TextStyle* = object
+    color*: Color
+    insets*: EdgeInsets
+
+  ButtonStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+
+  TextFieldStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
 
   ButtonTheme* = object
     fill*: array[ThemeControlState, Color]
@@ -35,6 +70,9 @@ type
     button*: ButtonTheme
     textField*: TextFieldTheme
 
+  Appearance* = object
+    theme*: Theme
+
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
 
@@ -44,6 +82,26 @@ func initEdgeInsets*(vertical, horizontal: float32): EdgeInsets =
 func initEdgeInsets*(all: float32): EdgeInsets =
   initEdgeInsets(all, all, all, all)
 
+func initStyleContext*(role: StyleRole, states: set[StyleState] = {}): StyleContext =
+  StyleContext(role: role, states: states)
+
+func initControlStyleContext*(
+    role: StyleRole,
+    enabled = true,
+    highlighted = false,
+    focused = false,
+    selected = false,
+): StyleContext =
+  result = initStyleContext(role)
+  if not enabled:
+    result.states.incl ssDisabled
+  if highlighted:
+    result.states.incl ssHighlighted
+  if focused:
+    result.states.incl ssFocused
+  if selected:
+    result.states.incl ssSelected
+
 func inset*(rect: Rect, insets: EdgeInsets): Rect =
   initRect(
     rect.origin.x + insets.left,
@@ -52,28 +110,86 @@ func inset*(rect: Rect, insets: EdgeInsets): Rect =
     rect.size.height - insets.top - insets.bottom,
   )
 
-func buttonThemeState*(enabled, highlighted: bool): ThemeControlState =
-  if not enabled:
+func buttonThemeState*(context: StyleContext): ThemeControlState =
+  if ssDisabled in context.states:
     tcsDisabled
-  elif highlighted:
+  elif ssHighlighted in context.states:
     tcsHighlighted
   else:
     tcsNormal
 
+func buttonThemeState*(enabled, highlighted: bool): ThemeControlState =
+  buttonThemeState(initControlStyleContext(srButton, enabled, highlighted))
+
+func resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
+  let state = buttonThemeState(context)
+  ButtonStyle(
+    box: ControlBoxStyle(
+      fill: theme.button.fill[state],
+      borderColor: theme.button.borderColor[state],
+      borderWidth: theme.button.borderWidth,
+      cornerRadius: theme.button.cornerRadius,
+      focusRingWidth: theme.button.focusRingWidth,
+      focusRingInset: theme.button.focusRingInset,
+    ),
+    text: TextStyle(
+      color: theme.button.textColor[state], insets: theme.button.contentInsets
+    ),
+  )
+
+func resolveTextFieldStyle*(
+    theme: Theme, context: StyleContext, textColor: Color
+): TextFieldStyle =
+  TextFieldStyle(
+    box: ControlBoxStyle(
+      fill: theme.textField.fill,
+      borderColor: theme.textField.borderColor,
+      borderWidth: theme.textField.borderWidth,
+      cornerRadius: theme.textField.cornerRadius,
+      focusRingWidth: theme.textField.focusRingWidth,
+      focusRingInset: theme.textField.focusRingInset,
+    ),
+    text: TextStyle(color: textColor, insets: theme.textField.textInsets),
+  )
+
+func resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
+  resolveTextFieldStyle(theme, context, initColor(0.08, 0.09, 0.11))
+
+func resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
+  appearance.theme.resolveButtonStyle(context)
+
+func resolveTextFieldStyle*(
+    appearance: Appearance, context: StyleContext, textColor: Color
+): TextFieldStyle =
+  appearance.theme.resolveTextFieldStyle(context, textColor)
+
+func resolveTextFieldStyle*(
+    appearance: Appearance, context: StyleContext
+): TextFieldStyle =
+  appearance.theme.resolveTextFieldStyle(context)
+
 func buttonFillColor*(theme: Theme, enabled, highlighted: bool): Color =
-  theme.button.fill[buttonThemeState(enabled, highlighted)]
+  theme.resolveButtonStyle(initControlStyleContext(srButton, enabled, highlighted)).box.fill
 
 func buttonTextColor*(theme: Theme, enabled, highlighted: bool): Color =
-  theme.button.textColor[buttonThemeState(enabled, highlighted)]
+  theme.resolveButtonStyle(initControlStyleContext(srButton, enabled, highlighted)).text.color
 
 func buttonBorderColor*(theme: Theme, enabled, highlighted: bool): Color =
-  theme.button.borderColor[buttonThemeState(enabled, highlighted)]
+  theme.resolveButtonStyle(initControlStyleContext(srButton, enabled, highlighted)).box.borderColor
+
+func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
+  bounds.inset(style.text.insets)
 
 func buttonTextRect*(theme: Theme, bounds: Rect): Rect =
-  bounds.inset(theme.button.contentInsets)
+  theme.resolveButtonStyle(initControlStyleContext(srButton)).buttonTextRect(bounds)
+
+func textFieldTextRect*(style: TextFieldStyle, bounds: Rect): Rect =
+  bounds.inset(style.text.insets)
 
 func textFieldTextRect*(theme: Theme, bounds: Rect): Rect =
-  bounds.inset(theme.textField.textInsets)
+  theme.resolveTextFieldStyle(initControlStyleContext(srTextField)).textFieldTextRect(
+    bounds
+  )
 
 func initTheme*(): Theme =
   Theme(
@@ -109,3 +225,9 @@ func initTheme*(): Theme =
       focusRingInset: 2.0,
     ),
   )
+
+func initAppearance*(theme: Theme): Appearance =
+  Appearance(theme: theme)
+
+func initAppearance*(): Appearance =
+  initAppearance(initTheme())

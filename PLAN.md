@@ -22,7 +22,7 @@ NimKit already has the first useful vertical slice:
 - View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
   first-responder dispatch.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
-  rectangles, single-line text, and theme-backed button/text-field metrics.
+  rectangles, single-line text, and style-resolved button/text-field metrics.
 - siwin native windows, mouse button dispatch, key/text input dispatch, and
   framebuffer/UI-scale-aware mouse coordinate conversion.
 - Runnable examples:
@@ -82,7 +82,8 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit/textfields.nim`:
   `TextField`, string value, alignment, text color, editable/selectable flags.
 - `src/knutella/nimkit/theme.nim`:
-  `Theme`, `EdgeInsets`, control-state colors, borders, corner radius,
+  `Theme`, `Appearance`, `StyleContext`, resolved button/text-field style
+  objects, `EdgeInsets`, control-state colors, borders, corner radius,
   focus-ring metrics, and button/text-field text insets.
 - `src/knutella/nimkit/rendering.nim`:
   figdraw node creation, text layout helpers, theme-backed built-in control
@@ -156,9 +157,14 @@ NimKit already has the first useful vertical slice:
 
 - `Theme` is a plain Nim value object with button/text-field colors, borders,
   corner radius, focus-ring metrics, and text/control insets.
-- Built-in button and text-field rendering asks the theme for fills, strokes,
-  corner radii, and text rectangles instead of baking those values into render
-  helpers.
+- `Appearance` is the resolver boundary between theme tokens, control state,
+  and concrete draw styles.
+- `StyleContext` carries role and control-state facts that an appearance or
+  future query-like style resolver can match without changing render code.
+- Built-in button and text-field rendering resolves `ButtonStyle` and
+  `TextFieldStyle` values before drawing, so render helpers consume concrete
+  fills, strokes, corner radii, text colors, and text rectangles instead of
+  reaching through raw theme slots.
 - `buildRenders(root, theme)` and `buildRenders(window, theme)` allow focused
   render-tree tests and callers to supply a theme without native-window setup.
 
