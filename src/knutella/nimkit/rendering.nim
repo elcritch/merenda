@@ -63,27 +63,17 @@ proc textNode(
     )
   Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
 
-proc childFrameInParent(parentOffset: Point, child: View): types.Rect =
-  let frame = child.frame
-  initRect(
-    parentOffset.x + frame.origin.x,
-    parentOffset.y + frame.origin.y,
-    frame.size.width,
-    frame.size.height,
-  )
-
 proc addNode(list: var RenderList, parent: FigIdx, node: Fig): FigIdx =
   if parent == (-1).FigIdx:
     list.addRoot(node)
   else:
     list.addChild(parent, node)
 
-proc renderViewInto(
-    list: var RenderList, view: View, absoluteFrame: types.Rect, parent = (-1).FigIdx
-) =
-  if view.isHidden:
+proc renderViewInto(list: var RenderList, view: View, parent = (-1).FigIdx) =
+  if view.visibleRect.isEmpty:
     return
 
+  let absoluteFrame = view.rectToWindow(view.bounds)
   let rootIdx = list.addNode(parent, rectangleNode(absoluteFrame, view.backgroundColor))
 
   if view of Button:
@@ -111,14 +101,13 @@ proc renderViewInto(
     )
 
   for child in view.subviews:
-    let childFrame = childFrameInParent(absoluteFrame.origin, child)
-    renderViewInto(list, child, childFrame, rootIdx)
+    renderViewInto(list, child, rootIdx)
 
 proc buildRenders*(root: View): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   if root.isNil:
     return
   var list = RenderList()
-  renderViewInto(list, root, root.frame)
+  renderViewInto(list, root)
   result.layers[0.ZLevel] = list
   root.clearNeedsDisplayTree()

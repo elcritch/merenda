@@ -131,7 +131,6 @@ NimKit already has the first useful vertical slice:
 
 ### View Geometry And Rendering
 
-- Add clipping/visible-rect behavior and tests.
 - Decide whether rendering should call selector-backed custom draw handlers or
   stay with type-specific render traversal for now.
 - Keep whole-window redraw until it becomes a measurable problem; preserve dirty

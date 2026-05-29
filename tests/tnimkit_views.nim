@@ -73,6 +73,38 @@ suite "nimkit views":
     view.setNeedsDisplayInRect(initRect(-10, -10, 20, 20))
     check view.invalidRects == @[initRect(0, 0, 75, 55)]
 
+  test "visibleRect clips through ancestors":
+    let
+      root = newView(0, 0, 100, 80)
+      child = newView(80, 60, 50, 40)
+      grandchild = newView(10, 10, 30, 30)
+
+    root.addSubview(child)
+    child.addSubview(grandchild)
+
+    check root.visibleRect == initRect(0, 0, 100, 80)
+    check child.visibleRect == initRect(0, 0, 20, 20)
+    check grandchild.visibleRect == initRect(0, 0, 10, 10)
+
+    root.setHidden(true)
+    check root.visibleRect.isEmpty
+    check child.visibleRect.isEmpty
+    check grandchild.visibleRect.isEmpty
+
+  test "setNeedsDisplayInRect clips to visibleRect":
+    let
+      root = newView(0, 0, 100, 80)
+      child = newView(80, 60, 50, 40)
+
+    root.addSubview(child)
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+
+    child.setNeedsDisplayInRect(initRect(0, 0, 50, 40))
+
+    check child.invalidRects == @[initRect(0, 0, 20, 20)]
+    check root.invalidRects == @[initRect(80, 60, 20, 20)]
+
   test "child invalid rect propagates to parent coordinates":
     let
       root = newView(0, 0, 200, 160)

@@ -57,3 +57,33 @@ suite "nimkit rendering":
     check root.invalidRects.len == 0
     check not child.needsDisplay
     check child.invalidRects.len == 0
+
+  test "buildRenders leaves child overflow to FigDraw clipping":
+    let
+      root = newView(0, 0, 100, 80)
+      child = newView(90, 90, 50, 40)
+
+    root.setBounds(initRect(10, 20, 100, 80))
+    root.addSubview(child)
+
+    let renders = buildRenders(root)
+    let list = renders[0.ZLevel]
+    let rootIdx = list.rootIds[0]
+
+    check list.nodes[int(rootIdx)].screenBox.x == 0.0
+    check list.nodes[int(rootIdx)].screenBox.y == 0.0
+    check list.nodes[int(rootIdx)].screenBox.w == 100.0
+    check list.nodes[int(rootIdx)].screenBox.h == 80.0
+    check NfClipContent in list.nodes[int(rootIdx)].flags
+
+    var childIdx = (-1).FigIdx
+    for idx in childIndex(list.nodes, rootIdx):
+      childIdx = idx
+
+    check childIdx != (-1).FigIdx
+    check list.nodes[int(childIdx)].parent == rootIdx
+    check list.nodes[int(childIdx)].screenBox.x == 80.0
+    check list.nodes[int(childIdx)].screenBox.y == 70.0
+    check list.nodes[int(childIdx)].screenBox.w == 50.0
+    check list.nodes[int(childIdx)].screenBox.h == 40.0
+    check NfClipContent in list.nodes[int(childIdx)].flags
