@@ -15,12 +15,77 @@ suite "nimkit theme":
 
   test "style context stores role and control states":
     let context = initControlStyleContext(
-      srButton, enabled = false, highlighted = true, focused = true
+      srButton,
+      enabled = false,
+      highlighted = true,
+      hovered = true,
+      active = true,
+      focused = true,
+      focusVisible = true,
+      focusWithin = true,
+      selected = true,
+      opened = true,
+      id = "primary",
+      classes = @["default", "toolbar"],
     )
 
     check context.role == srButton
-    check context.states == {ssDisabled, ssHighlighted, ssFocused}
+    check context.id == "primary"
+    check context.classes == @["default", "toolbar"]
+    check context.states == {
+      ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
+      ssFocusWithin, ssSelected, ssOpen,
+    }
     check buttonThemeState(context) == tcsDisabled
+
+  test "style token store resolves typed values and nested references":
+    let
+      parent = newStyleTokenStore()
+      child = newStyleTokenStore(parent)
+      accent = initColor(0.7, 0.2, 0.3, 1.0)
+      padding = initEdgeInsets(1, 2, 3, 4)
+
+    parent.setToken("accent", styleColor(accent))
+    parent.setToken("space", styleLength(6.0))
+    parent.setToken("padding", styleInsets(padding))
+    child.setToken("nested.accent", styleToken("accent"))
+
+    var value: StyleValue
+    check child.resolveToken("nested.accent", value)
+    check value.kind == svColor
+    check value.color == accent
+
+    let appearance = Appearance(theme: initTheme(), tokens: child)
+    check appearance.colorToken("nested.accent", initColor(0, 0, 0, 1)) == accent
+    check appearance.lengthToken("space", 0.0) == 6.0
+    check appearance.insetsToken("padding", initEdgeInsets(0)) == padding
+    check appearance.colorToken("missing", accent) == accent
+
+  test "appearance tokens and overrides resolve into concrete styles":
+    var appearance = initAppearance()
+    let
+      buttonFill = initColor(0.11, 0.22, 0.33, 1.0)
+      fieldText = initColor(0.44, 0.55, 0.66, 1.0)
+      buttonInsets = initEdgeInsets(2.0, 10.0)
+
+    appearance.tokens.setToken(ButtonFillTokens[tcsNormal], styleColor(buttonFill))
+    appearance.tokens.setToken("field.text.override", styleColor(fieldText))
+    appearance.button.box.cornerRadius = styleLength(9.0)
+    appearance.button.text.insets = styleInsets(buttonInsets)
+    appearance.textField.text.color = styleToken("field.text.override")
+    appearance.textField.box.borderWidth = styleLength(4.0)
+
+    let
+      buttonStyle = appearance.resolveButtonStyle(initControlStyleContext(srButton))
+      textFieldStyle = appearance.resolveTextFieldStyle(
+        initControlStyleContext(srTextField), initColor(0.1, 0.1, 0.1, 1.0)
+      )
+
+    check buttonStyle.box.fill == buttonFill
+    check buttonStyle.box.cornerRadius == 9.0
+    check buttonStyle.text.insets == buttonInsets
+    check textFieldStyle.text.color == fieldText
+    check textFieldStyle.box.borderWidth == 4.0
 
   test "default theme exposes resolved button and text field styles":
     let theme = initTheme()

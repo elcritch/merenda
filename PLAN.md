@@ -83,8 +83,9 @@ NimKit already has the first useful vertical slice:
   `TextField`, string value, alignment, text color, editable/selectable flags.
 - `src/knutella/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field style
-  objects, `EdgeInsets`, control-state colors, borders, corner radius,
-  focus-ring metrics, and button/text-field text insets.
+  objects, typed style tokens, style overrides, `EdgeInsets`, control-state
+  colors, borders, corner radius, focus-ring metrics, and button/text-field text
+  insets.
 - `src/knutella/nimkit/rendering.nim`:
   figdraw node creation, text layout helpers, theme-backed built-in control
   drawing, and render-tree construction.
@@ -161,6 +162,12 @@ NimKit already has the first useful vertical slice:
   and concrete draw styles.
 - `StyleContext` carries role and control-state facts that an appearance or
   future query-like style resolver can match without changing render code.
+- `StyleTokenStore` provides named color/length/inset token lookup, parent
+  fallback, nested token references, and typed accessors without adding CSS
+  parsing.
+- Explicit `ButtonStyleOverride` and `TextFieldStyleOverride` objects let callers
+  layer targeted appearance overrides onto the default theme before FigDraw sees
+  concrete styles.
 - Built-in button and text-field rendering resolves `ButtonStyle` and
   `TextFieldStyle` values before drawing, so render helpers consume concrete
   fills, strokes, corner radii, text colors, and text rectangles instead of
