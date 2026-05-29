@@ -56,11 +56,4 @@ proc performOptional*[A, R](
 ): Option[R] =
   responder.trySend(selector, ensureMove args)
 
-proc sendLocalIfHandled*[A, R](
-    responder: Responder, selector: Selector[A, R], args: A
-): bool =
-  if responder.localMethod(selector).isNil:
-    return false
-  responder.sendIfHandled(selector, args)
-
 let ResponderProtocol* = ResponderProtocolInternal

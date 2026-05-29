@@ -21,9 +21,10 @@ type Window* = ref object of Responder
   xHasInheritedAppearance: bool
   xFirstResponder: Responder
   xHostWindow: HostWindow
-  xMouseTrackingView: View
+  xMouseCaptureView: View
+  xMouseActiveView: View
   xMouseHoverView: View
-  xMouseTrackingClickCount: int
+  xMouseClickCount: int
   xLastClickPoint: Point
   xLastClickButton: types.MouseButton
   xLastClickView: View
@@ -32,6 +33,10 @@ type Window* = ref object of Responder
   xHasLastClick: bool
   xVisibleRequested: bool
   xClosed: bool
+
+type EventDispatchResult = object
+  handled: bool
+  responder: Responder
 
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
@@ -54,6 +59,9 @@ proc contentView*(window: Window): View =
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool
 proc effectiveAppearance*(window: Window): Appearance
+proc dispatchKeyEventInChain(
+  window: Window, target: Responder, event: types.KeyEvent
+): EventDispatchResult
 
 proc propagateAppearance(window: Window) =
   if window.isNil or window.xContentView.isNil:
@@ -108,16 +116,26 @@ proc clearInheritedAppearance*(window: Window) =
     window.propagateAppearance()
 
 proc clearMouseState(window: Window) =
-  if not window.xMouseTrackingView.isNil:
-    window.xMouseTrackingView.setActive(false)
+  if not window.xMouseActiveView.isNil:
+    window.xMouseActiveView.setActive(false)
   if not window.xMouseHoverView.isNil:
     window.xMouseHoverView.setHovered(false)
-  window.xMouseTrackingView = nil
+  window.xMouseCaptureView = nil
+  window.xMouseActiveView = nil
   window.xMouseHoverView = nil
-  window.xMouseTrackingClickCount = 0
+  window.xMouseClickCount = 0
   window.xLastClickView = nil
   window.xHasLastClick = false
   window.xLastClickCount = 0
+
+proc setMouseActiveView(window: Window, view: View) =
+  if window.xMouseActiveView == view:
+    return
+  if not window.xMouseActiveView.isNil:
+    window.xMouseActiveView.setActive(false)
+  window.xMouseActiveView = view
+  if not view.isNil:
+    view.setActive(true)
 
 proc setContentView*(window: Window, view: View) =
   if window.xContentView == view:
@@ -244,11 +262,10 @@ proc clickAt*(window: Window, point: Point): bool =
 
 proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
   if not window.xFirstResponder.isNil:
-    if window.xFirstResponder.sendIfHandled(keyDown(), event):
-      return true
+    return window.dispatchKeyEventInChain(window.xFirstResponder, event).handled
   if window.xContentView.isNil:
     return false
-  window.xContentView.dispatchKeyDown(event)
+  window.dispatchKeyEventInChain(Responder(window.xContentView), event).handled
 
 proc syncNativeGeometry(window: Window): Size =
   result = window.xHostWindow.logicalSize(window.xFrame.size)
@@ -289,6 +306,11 @@ proc localScrollEvent(
     timestamp: event.timestamp,
   )
 
+proc localKeyEvent(
+    target, contentView: View, contentPoint: Point, event: types.KeyEvent
+): types.KeyEvent =
+  event
+
 proc eventTimestamp(timestamp: float): float =
   if timestamp > 0.0:
     timestamp
@@ -319,7 +341,26 @@ proc nextClickCount(window: Window, target: View, event: MouseEvent): int =
   window.xLastClickCount = result
   window.xLastClickTime = now
   window.xHasLastClick = true
-  window.xMouseTrackingClickCount = result
+  window.xMouseClickCount = result
+
+proc dispatchEventInChain[A, R](
+    window: Window,
+    target: Responder,
+    contentPoint: Point,
+    event: A,
+    selector: Selector[A, R],
+    localize: proc(target, contentView: View, contentPoint: Point, event: A): A,
+): EventDispatchResult =
+  var responder = target
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent = localize(View(responder), window.xContentView, contentPoint, event)
+    if responder.sendLocalIfHandled(selector, localEvent):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
 
 proc dispatchMouseEventInChain(
     window: Window,
@@ -327,29 +368,24 @@ proc dispatchMouseEventInChain(
     contentPoint: Point,
     event: MouseEvent,
     selector: MouseEventSelector,
-): bool =
-  var responder = Responder(target)
-  while not responder.isNil:
-    var localEvent = event
-    if responder of View:
-      localEvent =
-        View(responder).localMouseEvent(window.xContentView, contentPoint, event)
-    if responder.sendLocalIfHandled(selector, localEvent):
-      return true
-    responder = responder.nextResponder()
+): EventDispatchResult =
+  window.dispatchEventInChain(
+    Responder(target), contentPoint, event, selector, localMouseEvent
+  )
 
 proc dispatchScrollEventInChain(
     window: Window, target: View, contentPoint: Point, event: types.ScrollEvent
-): bool =
-  var responder = Responder(target)
-  while not responder.isNil:
-    var localEvent = event
-    if responder of View:
-      localEvent =
-        View(responder).localScrollEvent(window.xContentView, contentPoint, event)
-    if responder.sendLocalIfHandled(scrollWheel(), localEvent):
-      return true
-    responder = responder.nextResponder()
+): EventDispatchResult =
+  window.dispatchEventInChain(
+    Responder(target), contentPoint, event, scrollWheel(), localScrollEvent
+  )
+
+proc dispatchKeyEventInChain(
+    window: Window, target: Responder, event: types.KeyEvent
+): EventDispatchResult =
+  window.dispatchEventInChain(
+    target, initPoint(0.0, 0.0), event, keyDown(), localKeyEvent
+  )
 
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
@@ -361,13 +397,13 @@ proc updateHoverView(
   if not previous.isNil:
     previous.setHovered(false)
     let localEvent = previous.localMouseEvent(window.xContentView, contentPoint, event)
-    result = previous.dispatchMouseExited(localEvent)
+    result = previous.handleMouseExited(localEvent)
 
   window.xMouseHoverView = target
   if not target.isNil:
     target.setHovered(true)
     let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
-    result = target.dispatchMouseEntered(localEvent) or result
+    result = target.handleMouseEntered(localEvent) or result
 
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
   if window.xContentView.isNil:
@@ -375,38 +411,39 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
   let contentPoint = window.contentPoint(event.location)
   var dispatchEvent = event
   var target: View
-  var activeView: View
   if pressed:
     target = window.xContentView.hitTest(contentPoint)
-    window.xMouseTrackingView = target
+    window.xMouseCaptureView = target
     if target.isNil:
       return false
     dispatchEvent.clickCount = window.nextClickCount(target, event)
-    target.setActive(true)
     if target.acceptsFirstResponder():
       discard window.makeFirstResponder(target)
   else:
-    target = window.xMouseTrackingView
-    activeView = target
+    target = window.xMouseCaptureView
     if target.isNil:
       target = window.xContentView.hitTest(contentPoint)
-    window.xMouseTrackingView = nil
+    window.xMouseCaptureView = nil
     if target.isNil:
-      if not activeView.isNil:
-        activeView.setActive(false)
+      window.setMouseActiveView(nil)
       return false
     if dispatchEvent.clickCount <= 0:
-      dispatchEvent.clickCount = max(window.xMouseTrackingClickCount, 1)
+      dispatchEvent.clickCount = max(window.xMouseClickCount, 1)
 
   if pressed:
-    result =
+    let dispatch =
       window.dispatchMouseEventInChain(target, contentPoint, dispatchEvent, mouseDown())
+    result = dispatch.handled
+    if dispatch.handled and dispatch.responder of View:
+      window.setMouseActiveView(View(dispatch.responder))
+    else:
+      window.setMouseActiveView(nil)
   else:
-    result =
+    let dispatch =
       window.dispatchMouseEventInChain(target, contentPoint, dispatchEvent, mouseUp())
-    if not activeView.isNil:
-      activeView.setActive(false)
-    window.xMouseTrackingClickCount = 0
+    result = dispatch.handled
+    window.setMouseActiveView(nil)
+    window.xMouseClickCount = 0
 
 proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool =
   if window.xContentView.isNil:
@@ -414,7 +451,7 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
   let contentPoint = window.contentPoint(event.location)
   var target: View
   if dragging:
-    target = window.xMouseTrackingView
+    target = window.xMouseCaptureView
     if target.isNil:
       target = window.xContentView.hitTest(contentPoint)
   else:
@@ -427,11 +464,12 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
     return result
 
   if dragging:
-    result =
-      window.dispatchMouseEventInChain(target, contentPoint, event, mouseDragged())
+    result = window.dispatchMouseEventInChain(
+      target, contentPoint, event, mouseDragged()
+    ).handled
   else:
     result =
-      window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()) or
+      window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()).handled or
       result
 
 proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
@@ -441,7 +479,7 @@ proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
   let target = window.xContentView.hitTest(contentPoint)
   if target.isNil:
     return false
-  window.dispatchScrollEventInChain(target, contentPoint, event)
+  window.dispatchScrollEventInChain(target, contentPoint, event).handled
 
 proc mouseDownAt*(
     window: Window,

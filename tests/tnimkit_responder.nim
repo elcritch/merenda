@@ -69,6 +69,10 @@ protocol TrackingSpyEvents of ResponderEventProtocol:
   method scrollWheel(spy: TrackingSpyView, event: ScrollEvent) =
     spy.recordScrollEvent(event)
 
+  method keyDown(spy: TrackingSpyView, event: KeyEvent) =
+    trackingEvents.add(spy.xName & ".key:" & event.text)
+    trackingModifiers.add(event.modifiers)
+
 proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
   result = TrackingSpyView(xName: name)
   initViewFields(result, frame)
@@ -272,14 +276,39 @@ suite "nimkit responder":
     check window.mouseDownAt(
       initPoint(35, 30), modifiers = {kmShift, kmCommand}, timestamp = 20.0
     )
+    check not child.isActive
+    check parent.isActive
     check window.mouseUpAt(
       initPoint(35, 30), modifiers = {kmShift, kmCommand}, timestamp = 20.1
     )
+    check not parent.isActive
 
     check trackingEvents == @["parent.down", "parent.up"]
     check trackingPoints == @[initPoint(25, 20), initPoint(25, 20)]
     check trackingModifiers == @[{kmShift, kmCommand}, {kmShift, kmCommand}]
     check trackingTimestamps == @[20.0, 20.1]
+
+  test "window key dispatch bubbles first responder key events":
+    let
+      window = newWindow(0, 0, 240, 160, "Key bubbling")
+      root = newView(0, 0, 240, 160)
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(20, 15, 30, 20)
+
+    child.setAcceptsFirstResponder(true)
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(text: "x", keyCode: 88, modifiers: {kmControl})
+    )
+
+    check trackingEvents == @["parent.key:x"]
+    check trackingModifiers == @[{kmControl}]
 
   test "window scroll dispatch hit-tests and converts local coordinates":
     let
