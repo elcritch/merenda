@@ -18,13 +18,6 @@ var defaultTypefaceReady {.threadvar.}: bool
 proc toFigRect(rect: types.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
-proc toFigColor(color: types.Color): chroma.Color =
-  chroma.color(color.r, color.g, color.b, color.a)
-
-proc noRenderShadows(): array[ShadowCount, RenderShadow] =
-  for idx in result.low .. result.high:
-    result[idx] = RenderShadow(style: NoShadow, fill: fill(rgba(0, 0, 0, 0)))
-
 proc defaultFont(size: float32): FigFont =
   if not defaultTypefaceReady:
     defaultTypefaceId = loadTypeface("Ubuntu.ttf", ["HackNerdFont-Regular.ttf"])
@@ -36,8 +29,7 @@ proc rectangleNode(rect: types.Rect, color: types.Color): Fig =
     kind: nkRectangle,
     screenBox: rect.toFigRect,
     flags: {NfClipContent},
-    fill: fill(color.toFigColor.rgba),
-    shadows: noRenderShadows(),
+    fill: fill(color.rgba),
     stroke: RenderStroke(weight: 0.0, fill: fill(rgba(0, 0, 0, 0))),
   )
 
@@ -52,7 +44,7 @@ proc textNode(
 ): Fig =
   let
     font = defaultFont(13.0'f32)
-    style = fs(font, fill(color.toFigColor.rgba))
+    style = fs(font, fill(color.rgba))
     layout = typeset(
       rect.toFigRect,
       [(style, text)],
