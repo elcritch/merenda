@@ -165,8 +165,8 @@ NimKit already has the first useful vertical slice:
 - `StyleTokenStore` provides named color/length/inset token lookup, parent
   fallback, nested token references, and typed accessors without adding CSS
   parsing.
-- Explicit `ButtonStyleOverride` and `TextFieldStyleOverride` objects let callers
-  layer targeted appearance overrides onto the default theme before FigDraw sees
+- Generic `StyleKey[T]` and role-scoped `StylePatch` values let callers layer
+  targeted appearance overrides onto the default theme before FigDraw sees
   concrete styles.
 - Built-in button and text-field rendering resolves `ButtonStyle` and
   `TextFieldStyle` values before drawing, so render helpers consume concrete

@@ -61,19 +61,19 @@ suite "nimkit theme":
     check appearance.insetsToken("padding", initEdgeInsets(0)) == padding
     check appearance.colorToken("missing", accent) == accent
 
-  test "appearance tokens and overrides resolve into concrete styles":
+  test "appearance tokens and style patches resolve into concrete styles":
     var appearance = initAppearance()
     let
       buttonFill = initColor(0.11, 0.22, 0.33, 1.0)
       fieldText = initColor(0.44, 0.55, 0.66, 1.0)
       buttonInsets = initEdgeInsets(2.0, 10.0)
 
-    appearance.tokens.setToken(ButtonFillTokens[tcsNormal], styleColor(buttonFill))
     appearance.tokens.setToken("field.text.override", styleColor(fieldText))
-    appearance.button.box.cornerRadius = styleLength(9.0)
-    appearance.button.text.insets = styleInsets(buttonInsets)
-    appearance.textField.text.color = styleToken("field.text.override")
-    appearance.textField.box.borderWidth = styleLength(4.0)
+    appearance[srButton, StyleFill] = buttonFill
+    appearance[srButton, StyleCornerRadius] = 9.0
+    appearance[srButton, StyleTextInsets] = buttonInsets
+    appearance[srTextField, StyleTextColor] = styleToken("field.text.override")
+    appearance[srTextField, StyleBorderWidth] = 4.0
 
     let
       buttonStyle = appearance.resolveButtonStyle(initControlStyleContext(srButton))
@@ -86,6 +86,9 @@ suite "nimkit theme":
     check buttonStyle.text.insets == buttonInsets
     check textFieldStyle.text.color == fieldText
     check textFieldStyle.box.borderWidth == 4.0
+    let textPatch = appearance[srTextField, StyleTextColor]
+    check textPatch.kind == svToken
+    check textPatch.token == "field.text.override"
 
   test "default theme exposes resolved button and text field styles":
     let theme = initTheme()
