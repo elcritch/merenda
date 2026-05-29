@@ -25,6 +25,11 @@ type
     button*: MouseButton
     clickCount*: int
 
+  ScrollEvent* = object
+    location*: Point
+    deltaX*: float32
+    deltaY*: float32
+
   KeyModifier* = enum
     kmShift
     kmControl

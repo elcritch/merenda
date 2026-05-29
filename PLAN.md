@@ -26,6 +26,8 @@ NimKit already has the first useful vertical slice:
   matching.
 - Mouse entered/exited tracking, hover/active view state, and a basic
   `needsLayout` lifecycle with selector-backed `layoutSubviews`/`layout` hooks.
+- Scroll-wheel dispatch and repeated mouse click counts are routed through the
+  same hit-tested responder path as mouse button events.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
   rectangles, single-line text, and style-resolved button/text-field metrics.
 - siwin native windows, mouse button dispatch, key/text input dispatch, and
@@ -67,10 +69,11 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit.nim`:
   Aggregating import for the public API.
 - `src/knutella/nimkit/types.nim`:
-  Geometry, colors, button/control enums, and event value objects.
+  Geometry, colors, button/control enums, and mouse/scroll/key event value
+  objects.
 - `src/knutella/nimkit/selectors.nim`:
   Typed selector declarations, action/event argument objects, drawing hooks,
-  mouse enter/exit hooks, and layout hooks.
+  mouse enter/exit hooks, scroll hooks, and layout hooks.
 - `src/knutella/nimkit/responders.nim`:
   `Responder`, next-responder links, selector forwarding, first-responder hooks,
   and command fallback behavior.
@@ -194,6 +197,9 @@ NimKit already has the first useful vertical slice:
 - Window mouse dispatch now drives `mouseEntered`/`mouseExited`, `isHovered`,
   and `isActive`; built-in control rendering feeds hover/active state into
   style resolution.
+- Window dispatch computes repeated click counts for close successive mouse
+  presses, preserves the count through mouse-up, and routes scroll-wheel events
+  to the hit-tested view through the `scrollWheel` selector.
 - Views expose `needsLayout`, `setNeedsLayout`, `layoutSubtreeIfNeeded`,
   `prepareDisplaySubtree`, and `finishDisplaySubtree`. Rendering explicitly
   runs layout/display preparation before building FigDraw nodes and clears dirty
@@ -211,8 +217,8 @@ NimKit already has the first useful vertical slice:
 
 ### Responder/Event Coverage
 
-- Add scroll and click-count handling.
 - Add richer key command dispatch and unhandled-selector tests.
+- Add modifier-aware mouse/scroll events if examples need them.
 - Decide how much of AppKit's responder fallback model NimKit should mirror.
 
 ### Controls
