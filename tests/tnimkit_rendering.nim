@@ -3,6 +3,22 @@ import std/unittest
 import figdraw/fignodes
 
 import knutella/nimkit
+import knutella/nimkit/types as nimkitTypes
+
+type CustomDrawView = ref object of View
+
+var customDrawCount: int
+
+protocol CustomDrawing of ViewDrawingProtocol:
+  method draw(view: CustomDrawView, context: DrawContext) =
+    inc customDrawCount
+    context.addRectangle(initRect(4, 5, 20, 10), initColor(0.8, 0.1, 0.1))
+    context.addText(initRect(4, 5, 20, 10), "C", initColor(1, 1, 1))
+
+proc newCustomDrawView(frame: nimkitTypes.Rect): CustomDrawView =
+  result = CustomDrawView()
+  initViewFields(result, frame)
+  discard result.withProtocol(CustomDrawing)
 
 suite "nimkit rendering":
   test "buildRenders emits root, text field, and button nodes":
@@ -87,3 +103,39 @@ suite "nimkit rendering":
     check list.nodes[int(childIdx)].screenBox.w == 50.0
     check list.nodes[int(childIdx)].screenBox.h == 40.0
     check NfClipContent in list.nodes[int(childIdx)].flags
+
+  test "buildRenders calls selector-backed custom drawing":
+    let
+      root = newView(0, 0, 100, 80)
+      custom = newCustomDrawView(initRect(10, 20, 50, 40))
+
+    customDrawCount = 0
+    root.addSubview(custom)
+
+    let renders = buildRenders(root)
+    let list = renders[0.ZLevel]
+
+    check customDrawCount == 1
+
+    var customRoot = (-1).FigIdx
+    for idx in childIndex(list.nodes, list.rootIds[0]):
+      if list.nodes[int(idx)].screenBox.x == 10.0 and
+          list.nodes[int(idx)].screenBox.y == 20.0:
+        customRoot = idx
+
+    check customRoot != (-1).FigIdx
+
+    var customRectFound = false
+    var customTextFound = false
+    for idx in childIndex(list.nodes, customRoot):
+      let node = list.nodes[int(idx)]
+      if node.kind == nkRectangle and node.screenBox.x == 14.0 and
+          node.screenBox.y == 25.0 and node.screenBox.w == 20.0 and
+          node.screenBox.h == 10.0:
+        customRectFound = true
+      if node.kind == nkText and node.screenBox.x == 14.0 and node.screenBox.y == 25.0 and
+          node.screenBox.w == 20.0 and node.screenBox.h == 10.0:
+        customTextFound = true
+
+    check customRectFound
+    check customTextFound

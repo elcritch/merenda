@@ -16,11 +16,12 @@ NimKit already has the first useful vertical slice:
 
 - `Application`, `Window`, `Responder`, `View`, `Control`, `Button`, and
   `TextField`.
-- Plain Nim value types for geometry, colors, events, and control options.
+- Plain Nim value types for geometry, events, and control options, with
+  `chroma.Color` used directly for color state.
 - Responder/action dispatch through `sigils/selectors`.
 - View hierarchy, invalidation, hit testing, and basic first-responder dispatch.
-- figdraw rendering for view backgrounds, button rectangles, and single-line
-  text.
+- figdraw rendering for view backgrounds, selector-backed custom drawing, button
+  rectangles, and single-line text.
 - siwin native windows, mouse button dispatch, key/text input dispatch, and
   framebuffer/UI-scale-aware mouse coordinate conversion.
 - Runnable examples:
@@ -32,9 +33,11 @@ NimKit already has the first useful vertical slice:
 
 ## Coding Style
 
-- Keep geometry, color, event, and option data as plain Nim value types:
-  `object`, enums, sets. Do not wrap NSRect-like data or scalar widget state in
-  `ref object`, Objective-C wrappers, or `Sigil`.
+- Keep geometry, event, and option data as plain Nim value types: `object`,
+  enums, sets. Use established library value types where they are already the
+  rendering/data interchange type, such as `chroma.Color` for color. Do not wrap
+  NSRect-like data or scalar widget state in `ref object`, Objective-C wrappers,
+  or `Sigil`.
 - Use `ref object` for identity-bearing GUI objects only: applications,
   windows, responders, views, controls, widgets, native handles, and
   target/action objects.
@@ -64,6 +67,9 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit/responders.nim`:
   `Responder`, next-responder links, selector forwarding, first-responder hooks,
   and command fallback behavior.
+- `src/knutella/nimkit/drawing.nim`:
+  `DrawContext`, FigDraw node insertion, and local-to-window drawing geometry
+  helpers used by selector-backed custom drawing.
 - `src/knutella/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, hit testing, invalidation, and event
   dispatch into selector methods.
@@ -104,7 +110,8 @@ NimKit already has the first useful vertical slice:
 
 - Native windows can be opened and pumped through `Application.run` and
   `runForFrames`.
-- Views, text fields, and buttons render through figdraw.
+- Views, selector-backed custom drawing, text fields, and buttons render through
+  figdraw.
 - Button clicks hit-test through the view hierarchy, dispatch mouse events
   through selectors, perform target/action, mutate state, invalidate, and redraw.
 - Screenshot coverage captures the button demo before and after a synthetic
@@ -131,8 +138,6 @@ NimKit already has the first useful vertical slice:
 
 ### View Geometry And Rendering
 
-- Decide whether rendering should call selector-backed custom draw handlers or
-  stay with type-specific render traversal for now.
 - Keep whole-window redraw until it becomes a measurable problem; preserve dirty
   metadata so a later renderer can narrow the work without changing view APIs.
 
