@@ -11,6 +11,7 @@ import ./buttons
 import ./drawing
 import ./selectors
 import ./textfields
+import ./theme
 import ./types
 import ./views
 
@@ -26,13 +27,25 @@ proc defaultFont(size: float32): FigFont =
     defaultTypefaceReady = true
   defaultTypefaceId.fontWithSize(size)
 
-proc rectangleNode(rect: types.Rect, color: types.Color): Fig =
+proc cornerRadii(radius: float32): array[DirectionCorners, uint16] =
+  let clamped = max(radius, 0.0'f32)
+  for corner in DirectionCorners:
+    result[corner] = clamped.round().uint16
+
+proc rectangleNode(
+    rect: types.Rect,
+    color: types.Color,
+    strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
+    strokeWidth = 0.0'f32,
+    cornerRadius = 0.0'f32,
+): Fig =
   Fig(
     kind: nkRectangle,
     screenBox: rect.toFigRect,
     flags: {NfClipContent},
     fill: fill(color.rgba),
-    stroke: RenderStroke(weight: 0.0, fill: fill(rgba(0, 0, 0, 0))),
+    corners: cornerRadii(cornerRadius),
+    stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
 
 proc toFontHorizontal(alignment: TextAlignment): FontHorizontal =
@@ -76,31 +89,47 @@ proc addText*(
 ): FigIdx {.discardable.} =
   context.addFig(textNode(context.localRectToWindow(rect), text, color, alignment))
 
-proc renderBuiltInView(context: DrawContext, view: View, rootIdx: FigIdx) =
+proc renderBuiltInView(
+    context: DrawContext, view: View, rootIdx: FigIdx, theme: Theme
+) =
   let absoluteFrame = view.rectToWindow(view.bounds)
 
   if view of Button:
     let button = Button(view)
-    var fillColor = initColor(0.20, 0.48, 0.86, 1.0)
-    if not button.isEnabled:
-      fillColor = initColor(0.58, 0.62, 0.68, 1.0)
-    elif button.isHighlighted:
-      fillColor = initColor(0.12, 0.34, 0.68, 1.0)
-    discard context.addFig(rootIdx, rectangleNode(absoluteFrame, fillColor))
-    let textRect = initRect(
-      view.bounds.origin.x + 8.0'f32,
-      view.bounds.origin.y,
-      max(view.bounds.size.width - 16.0'f32, 0.0'f32),
-      view.bounds.size.height,
+    discard context.addFig(
+      rootIdx,
+      rectangleNode(
+        absoluteFrame,
+        theme.buttonFillColor(button.isEnabled, button.isHighlighted),
+        theme.buttonBorderColor(button.isEnabled, button.isHighlighted),
+        theme.button.borderWidth,
+        theme.button.cornerRadius,
+      ),
     )
-    context.addText(textRect, button.title, initColor(1, 1, 1))
+    context.addText(
+      theme.buttonTextRect(view.bounds),
+      button.title,
+      theme.buttonTextColor(button.isEnabled, button.isHighlighted),
+    )
   elif view of TextField:
     let textField = TextField(view)
+    discard context.addFig(
+      rootIdx,
+      rectangleNode(
+        absoluteFrame, theme.textField.fill, theme.textField.borderColor,
+        theme.textField.borderWidth, theme.textField.cornerRadius,
+      ),
+    )
     context.addText(
-      view.bounds, textField.stringValue, textField.textColor, textField.alignment
+      theme.textFieldTextRect(view.bounds),
+      textField.stringValue,
+      textField.textColor,
+      textField.alignment,
     )
 
-proc renderViewInto(context: DrawContext, view: View, parent = (-1).FigIdx) =
+proc renderViewInto(
+    context: DrawContext, view: View, theme: Theme, parent = (-1).FigIdx
+) =
   if view.visibleRect.isEmpty:
     return
 
@@ -110,16 +139,19 @@ proc renderViewInto(context: DrawContext, view: View, parent = (-1).FigIdx) =
   context.beginDraw(view, rootIdx)
 
   if not view.sendIfHandled(draw(), context):
-    renderBuiltInView(context, view, rootIdx)
+    renderBuiltInView(context, view, rootIdx, theme)
 
   for child in view.subviews:
-    renderViewInto(context, child, rootIdx)
+    renderViewInto(context, child, theme, rootIdx)
 
-proc buildRenders*(root: View): Renders =
+proc buildRenders*(root: View, theme: Theme): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   if root.isNil:
     return
   let context = initDrawContext()
-  renderViewInto(context, root)
+  renderViewInto(context, root, theme)
   result.layers[0.ZLevel] = context.renderList
   root.clearNeedsDisplayTree()
+
+proc buildRenders*(root: View): Renders =
+  buildRenders(root, initTheme())

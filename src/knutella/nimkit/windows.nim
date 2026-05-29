@@ -5,6 +5,7 @@ import figdraw/windowing/siwinshim as siwinshim
 import ./backend as nimkitBackend
 import ./rendering as nimkitRendering
 import ./selectors
+import ./theme
 import ./types
 import ./views
 
@@ -81,6 +82,9 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
 
 proc buildRenders*(window: Window): Renders =
   nimkitRendering.buildRenders(window.xContentView)
+
+proc buildRenders*(window: Window, theme: Theme): Renders =
+  nimkitRendering.buildRenders(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
   if window.isNil:

@@ -48,6 +48,66 @@ suite "nimkit rendering":
     check textNodeCount >= 2
     check rectangleNodeCount >= 3
 
+  test "buildRenders uses theme colors and metrics for built-in controls":
+    let
+      root = newView(0, 0, 180, 120)
+      field = newTextField(10, 20, 100, 30, "Field")
+      button = newButton(10, 60, 80, 24, "Button")
+
+    var theme = initTheme()
+    theme.button.fill[tcsNormal] = initColor(0.31, 0.42, 0.53, 1.0)
+    theme.button.borderColor[tcsNormal] = initColor(0.11, 0.12, 0.13, 1.0)
+    theme.button.borderWidth = 3.0
+    theme.button.cornerRadius = 6.0
+    theme.button.contentInsets = initEdgeInsets(1.0, 9.0)
+    theme.textField.fill = initColor(0.91, 0.92, 0.93, 1.0)
+    theme.textField.borderColor = initColor(0.21, 0.22, 0.23, 1.0)
+    theme.textField.borderWidth = 2.0
+    theme.textField.cornerRadius = 5.0
+    theme.textField.textInsets = initEdgeInsets(2.0, 7.0)
+
+    root.addSubview(field)
+    root.addSubview(button)
+
+    let renders = buildRenders(root, theme)
+    let list = renders[0.ZLevel]
+
+    var
+      themedButtonFound = false
+      themedTextFieldFound = false
+      buttonTextBoxFound = false
+      fieldTextBoxFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == theme.button.fill[tcsNormal].rgba:
+        themedButtonFound = true
+        check node.stroke.weight == theme.button.borderWidth
+        check node.stroke.fill.kind == flColor
+        check node.stroke.fill.color == theme.button.borderColor[tcsNormal].rgba
+        check node.corners[dcTopLeft] == 6'u16
+
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == theme.textField.fill.rgba:
+        themedTextFieldFound = true
+        check node.stroke.weight == theme.textField.borderWidth
+        check node.stroke.fill.kind == flColor
+        check node.stroke.fill.color == theme.textField.borderColor.rgba
+        check node.corners[dcTopLeft] == 5'u16
+
+      if node.kind == nkText and node.screenBox.x == 19.0 and node.screenBox.y == 61.0 and
+          node.screenBox.w == 62.0 and node.screenBox.h == 22.0:
+        buttonTextBoxFound = true
+
+      if node.kind == nkText and node.screenBox.x == 17.0 and node.screenBox.y == 22.0 and
+          node.screenBox.w == 86.0 and node.screenBox.h == 26.0:
+        fieldTextBoxFound = true
+
+    check themedButtonFound
+    check themedTextFieldFound
+    check buttonTextBoxFound
+    check fieldTextBoxFound
+
   test "buildRenders uses FigDraw hierarchy and clears invalid state":
     let
       root = newView(0, 0, 200, 160)

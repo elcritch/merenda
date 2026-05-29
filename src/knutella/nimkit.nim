@@ -6,6 +6,7 @@ import knutella/nimkit/rendering
 import knutella/nimkit/responders
 import knutella/nimkit/selectors
 import knutella/nimkit/textfields
+import knutella/nimkit/theme
 import knutella/nimkit/types
 import knutella/nimkit/views
 import knutella/nimkit/windows
@@ -18,6 +19,7 @@ export rendering
 export responders
 export selectors
 export textfields
+export theme
 export types
 export views
 export windows

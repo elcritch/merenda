@@ -22,7 +22,7 @@ NimKit already has the first useful vertical slice:
 - View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
   first-responder dispatch.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
-  rectangles, and single-line text.
+  rectangles, single-line text, and theme-backed button/text-field metrics.
 - siwin native windows, mouse button dispatch, key/text input dispatch, and
   framebuffer/UI-scale-aware mouse coordinate conversion.
 - Runnable examples:
@@ -81,8 +81,12 @@ NimKit already has the first useful vertical slice:
   keyboard activation.
 - `src/knutella/nimkit/textfields.nim`:
   `TextField`, string value, alignment, text color, editable/selectable flags.
+- `src/knutella/nimkit/theme.nim`:
+  `Theme`, `EdgeInsets`, control-state colors, borders, corner radius,
+  focus-ring metrics, and button/text-field text insets.
 - `src/knutella/nimkit/rendering.nim`:
-  figdraw node creation, text layout helpers, and render-tree construction.
+  figdraw node creation, text layout helpers, theme-backed built-in control
+  drawing, and render-tree construction.
 - `src/knutella/nimkit/backend.nim`:
   Internal host backend for siwin native windows, FigDraw renderer setup,
   native event translation, input coordinate conversion, native stepping, and
@@ -147,6 +151,16 @@ NimKit already has the first useful vertical slice:
   disabled rendering, mouse activation, and key activation.
 - `TextField` supports displayed string value, alignment, text color, editable,
   and selectable state.
+
+### Theme And Metrics
+
+- `Theme` is a plain Nim value object with button/text-field colors, borders,
+  corner radius, focus-ring metrics, and text/control insets.
+- Built-in button and text-field rendering asks the theme for fills, strokes,
+  corner radii, and text rectangles instead of baking those values into render
+  helpers.
+- `buildRenders(root, theme)` and `buildRenders(window, theme)` allow focused
+  render-tree tests and callers to supply a theme without native-window setup.
 
 ## Next Work
 
@@ -224,11 +238,11 @@ its implementation.
   rects on frame, bounds, superview, hidden-state, and flip changes. Our
   `markTransformsDirty` path should grow into the same clear lifecycle, with
   tests for nested conversion, flipped views, bounds origins, and reparenting.
-- Introduce a theme/metrics drawing boundary. GNUstep's `GSTheme` centralizes
-  borders, focus rings, control metrics, tile/nine-patch drawing, menu/window
-  chrome, and state-specific colors. Our drawing is still spread across controls
-  and rendering helpers. Start with a small theme object for colors, borders,
-  focus rings, control margins, and cell metrics; defer loadable themes.
+- Keep growing the theme/metrics drawing boundary. GNUstep's `GSTheme`
+  centralizes borders, focus rings, control metrics, tile/nine-patch drawing,
+  menu/window chrome, and state-specific colors. NimKit now has a small value
+  theme for button/text-field colors and metrics; defer loadable themes and
+  richer chrome until more controls exist.
 - Keep strengthening the `NSControl`/`NSCell` split. GNUstep uses default cell
   classes and cell-owned state heavily. Our core already has cells; next cleanup
   should centralize cell invalidation, value conversion, target/action storage,
@@ -251,8 +265,8 @@ its implementation.
 
 ### Priority Order
 
-- Short term: theme/metrics object, cleaner cell invalidation/default-cell
-  construction, and richer key command dispatch.
+- Short term: command/key-binding layer, cleaner cell invalidation/default-cell
+  construction, and more controls using the theme metrics.
 - Medium term: constraint layout groundwork and broader control coverage.
 - Later: constraint layout, panels/services integration, loadable themes, and
   broader GNUstep-style resource organization.
@@ -266,12 +280,6 @@ Current comparison source:
 NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
 still points to the next correctness boundaries:
 
-- Keep the control model simple, but introduce a theme/metrics boundary before
-  adding more widgets. GNUstep pushes borders, focus rings, control state colors,
-  tile drawing, and cell metrics through `GSTheme`. NimKit should not copy the
-  full theme system yet, but button/text-field rendering should ask a small
-  theme object for colors, border widths, padding, focus-ring metrics, and text
-  insets instead of baking them into render helpers.
 - Add a command/key-binding layer before text editing grows. GNUstep routes key
   equivalents through the application/window path and text commands through key
   binding tables and responder selectors. NimKit currently has only `keyDown`
@@ -281,21 +289,16 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- First: theme/metrics and command/key-binding layers.
-- Second: expand controls once those boundaries stabilize.
+- First: command/key-binding layer.
+- Second: expand controls while keeping rendering routed through theme metrics.
 
 Concrete task list:
 
-1. Introduce a small theme/metrics object. Do not build a loadable theme system
-   yet; start with colors, border widths, corner radius, focus-ring metrics,
-   control padding, and text insets used by buttons and text fields. Rendering
-   should ask the theme for these values instead of hard-coding them in
-   widget/render helpers.
-2. Add a command/key-binding layer before real text editing expands. Map
+1. Add a command/key-binding layer before real text editing expands. Map
    key/modifier combinations to command selectors, then dispatch through the
    responder chain. This should share the same path for text editing commands,
    button key equivalents, and future menu shortcuts.
-3. Expand controls after the above contracts stabilize. Prioritize checkbox,
+2. Expand controls after the above contracts stabilize. Prioritize checkbox,
    radio, toggle variants, combo box, and basic text editing. Keep policy hooks
    selector-based where behavior is overridable.
 
@@ -309,6 +312,7 @@ Concrete task list:
   `tests/tnimkit_types.nim`,
   `tests/tnimkit_views.nim`,
   `tests/tnimkit_rendering.nim`,
+  `tests/tnimkit_theme.nim`,
   `tests/tnimkit_controls.nim`,
   `tests/tnimkit_responder.nim`,
   `tests/tnimkit_application.nim`,
