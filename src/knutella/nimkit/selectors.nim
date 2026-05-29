@@ -1,7 +1,9 @@
 import sigils/selectors
 
+import ./drawing
 import ./types
 
+export drawing
 export selectors
 
 type
@@ -45,6 +47,9 @@ protocol UserInterfaceValidationsInternal:
 protocol ButtonActionProtocolInternal:
   method performClick*(args: ActionArgs) {.optional.}
 
+protocol ViewDrawingProtocolInternal:
+  method draw*(context: DrawContext) {.optional.}
+
 proc actionSelector*(name: string): ActionSelector =
   selector[ActionArgs, EmptyArgs](name)
 
@@ -52,3 +57,4 @@ let
   ResponderEventProtocol* = ResponderEventProtocolInternal
   UserInterfaceValidations* = UserInterfaceValidationsInternal
   ButtonActionProtocol* = ButtonActionProtocolInternal
+  ViewDrawingProtocol* = ViewDrawingProtocolInternal

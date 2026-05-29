@@ -8,6 +8,8 @@ import figdraw/common/typefaces
 import figdraw/fignodes
 
 import ./buttons
+import ./drawing
+import ./selectors
 import ./textfields
 import ./types
 import ./views
@@ -55,18 +57,27 @@ proc textNode(
     )
   Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
 
-proc addNode(list: var RenderList, parent: FigIdx, node: Fig): FigIdx =
-  if parent == (-1).FigIdx:
-    list.addRoot(node)
-  else:
-    list.addChild(parent, node)
+proc beginDraw(context: DrawContext, view: View, parent: FigIdx) =
+  context.beginDraw(
+    parent, view.pointToWindow(initPoint(0.0, 0.0)), view.bounds, view.visibleRect
+  )
 
-proc renderViewInto(list: var RenderList, view: View, parent = (-1).FigIdx) =
-  if view.visibleRect.isEmpty:
-    return
+proc addRectangle*(
+    context: DrawContext, rect: types.Rect, color: types.Color
+): FigIdx {.discardable.} =
+  context.addFig(rectangleNode(context.localRectToWindow(rect), color))
 
+proc addText*(
+    context: DrawContext,
+    rect: types.Rect,
+    text: string,
+    color: types.Color,
+    alignment = taLeft,
+): FigIdx {.discardable.} =
+  context.addFig(textNode(context.localRectToWindow(rect), text, color, alignment))
+
+proc renderBuiltInView(context: DrawContext, view: View, rootIdx: FigIdx) =
   let absoluteFrame = view.rectToWindow(view.bounds)
-  let rootIdx = list.addNode(parent, rectangleNode(absoluteFrame, view.backgroundColor))
 
   if view of Button:
     let button = Button(view)
@@ -75,31 +86,40 @@ proc renderViewInto(list: var RenderList, view: View, parent = (-1).FigIdx) =
       fillColor = initColor(0.58, 0.62, 0.68, 1.0)
     elif button.isHighlighted:
       fillColor = initColor(0.12, 0.34, 0.68, 1.0)
-    discard list.addChild(rootIdx, rectangleNode(absoluteFrame, fillColor))
+    discard context.addFig(rootIdx, rectangleNode(absoluteFrame, fillColor))
     let textRect = initRect(
-      absoluteFrame.origin.x + 8.0'f32,
-      absoluteFrame.origin.y,
-      max(absoluteFrame.size.width - 16.0'f32, 0.0'f32),
-      absoluteFrame.size.height,
+      view.bounds.origin.x + 8.0'f32,
+      view.bounds.origin.y,
+      max(view.bounds.size.width - 16.0'f32, 0.0'f32),
+      view.bounds.size.height,
     )
-    discard list.addChild(rootIdx, textNode(textRect, button.title, initColor(1, 1, 1)))
+    context.addText(textRect, button.title, initColor(1, 1, 1))
   elif view of TextField:
     let textField = TextField(view)
-    discard list.addChild(
-      rootIdx,
-      textNode(
-        absoluteFrame, textField.stringValue, textField.textColor, textField.alignment
-      ),
+    context.addText(
+      view.bounds, textField.stringValue, textField.textColor, textField.alignment
     )
 
+proc renderViewInto(context: DrawContext, view: View, parent = (-1).FigIdx) =
+  if view.visibleRect.isEmpty:
+    return
+
+  let absoluteFrame = view.rectToWindow(view.bounds)
+  let rootIdx =
+    context.addFig(parent, rectangleNode(absoluteFrame, view.backgroundColor))
+  context.beginDraw(view, rootIdx)
+
+  if not view.sendIfHandled(draw(), context):
+    renderBuiltInView(context, view, rootIdx)
+
   for child in view.subviews:
-    renderViewInto(list, child, rootIdx)
+    renderViewInto(context, child, rootIdx)
 
 proc buildRenders*(root: View): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   if root.isNil:
     return
-  var list = RenderList()
-  renderViewInto(list, root)
-  result.layers[0.ZLevel] = list
+  let context = initDrawContext()
+  renderViewInto(context, root)
+  result.layers[0.ZLevel] = context.renderList
   root.clearNeedsDisplayTree()
