@@ -35,6 +35,7 @@ proc rectangleNode(rect: types.Rect, color: types.Color): Fig =
   Fig(
     kind: nkRectangle,
     screenBox: rect.toFigRect,
+    flags: {NfClipContent},
     fill: fill(color.toFigColor.rgba),
     shadows: noRenderShadows(),
     stroke: RenderStroke(weight: 0.0, fill: fill(rgba(0, 0, 0, 0))),
@@ -71,11 +72,19 @@ proc childFrameInParent(parentOffset: Point, child: View): types.Rect =
     frame.size.height,
   )
 
-proc renderViewInto(list: var RenderList, view: View, absoluteFrame: types.Rect) =
+proc addNode(list: var RenderList, parent: FigIdx, node: Fig): FigIdx =
+  if parent == (-1).FigIdx:
+    list.addRoot(node)
+  else:
+    list.addChild(parent, node)
+
+proc renderViewInto(
+    list: var RenderList, view: View, absoluteFrame: types.Rect, parent = (-1).FigIdx
+) =
   if view.isHidden:
     return
 
-  let rootIdx = list.addRoot(rectangleNode(absoluteFrame, view.backgroundColor))
+  let rootIdx = list.addNode(parent, rectangleNode(absoluteFrame, view.backgroundColor))
 
   if view of Button:
     let button = Button(view)
@@ -103,7 +112,7 @@ proc renderViewInto(list: var RenderList, view: View, absoluteFrame: types.Rect)
 
   for child in view.subviews:
     let childFrame = childFrameInParent(absoluteFrame.origin, child)
-    renderViewInto(list, child, childFrame)
+    renderViewInto(list, child, childFrame, rootIdx)
 
 proc buildRenders*(root: View): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
@@ -112,3 +121,4 @@ proc buildRenders*(root: View): Renders =
   var list = RenderList()
   renderViewInto(list, root, root.frame)
   result.layers[0.ZLevel] = list
+  root.clearNeedsDisplayTree()

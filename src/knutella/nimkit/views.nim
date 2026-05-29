@@ -9,6 +9,7 @@ type View* = ref object of Responder
   xBounds: Rect
   xHidden: bool
   xNeedsDisplay: bool
+  xInvalidRects: seq[Rect]
   xBackgroundColor: Color
   xSuperview: View
   xSubviews: seq[View]
@@ -51,9 +52,48 @@ protocol ViewProtocolInternal from View:
     self.xNeedsDisplay
 
   method setNeedsDisplay(self: View, value: bool) =
-    self.xNeedsDisplay = value
-    if value and not self.xSuperview.isNil:
-      self.xSuperview.setNeedsDisplay(true)
+    if not value:
+      self.xNeedsDisplay = false
+      self.xInvalidRects.setLen(0)
+      return
+
+    self.xNeedsDisplay = true
+    self.xInvalidRects.setLen(0)
+    let parent = self.xSuperview
+    if not parent.isNil:
+      parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
+
+  method setNeedsDisplayInRect*(self: View, rect: Rect) =
+    let clipped = rect.intersection(self.xBounds)
+    if clipped.isEmpty:
+      return
+
+    if not self.xNeedsDisplay:
+      self.xNeedsDisplay = true
+      self.xInvalidRects = @[clipped]
+    elif self.xInvalidRects.len > 0:
+      self.xInvalidRects[0] = self.xInvalidRects[0].union(clipped)
+      self.xInvalidRects.setLen(1)
+
+    let parent = self.xSuperview
+    if not parent.isNil:
+      parent.setNeedsDisplayInRect(self.rectToView(clipped, parent))
+
+  method invalidRect*(self: View): Rect =
+    if not self.xNeedsDisplay:
+      return initRect(0.0, 0.0, 0.0, 0.0)
+    if self.xInvalidRects.len == 0:
+      return self.xBounds
+    result = self.xInvalidRects[0]
+    for idx in 1 ..< self.xInvalidRects.len:
+      result = result.union(self.xInvalidRects[idx])
+
+  method invalidRects*(self: View): seq[Rect] =
+    if not self.xNeedsDisplay:
+      return @[]
+    if self.xInvalidRects.len == 0:
+      return @[self.xBounds]
+    self.xInvalidRects
 
   method backgroundColor(self: View): Color =
     self.xBackgroundColor
@@ -86,7 +126,7 @@ protocol ViewProtocolInternal from View:
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
-      parent.setNeedsDisplay(true)
+      parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.clearNextResponder()
 
@@ -98,7 +138,7 @@ protocol ViewProtocolInternal from View:
     child.xSuperview = self
     self.xSubviews.add child
     child.setNextResponder(self)
-    self.setNeedsDisplay(true)
+    self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
     self.xBounds.contains(point)
@@ -237,6 +277,13 @@ proc dispatchMouseDragged*(view: View, event: MouseEvent): bool =
 
 proc dispatchKeyDown*(view: View, event: KeyEvent): bool =
   view.sendIfHandled(keyDown(), event)
+
+proc clearNeedsDisplayTree*(view: View) =
+  if view.isNil:
+    return
+  view.setNeedsDisplay(false)
+  for child in view.subviews:
+    child.clearNeedsDisplayTree()
 
 proc clickAt*(view: View, point: Point): bool =
   let hit = view.hitTest(point)
