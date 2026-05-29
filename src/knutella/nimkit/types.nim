@@ -101,3 +101,15 @@ proc intersection*(a, b: Rect): Rect =
   if x2 <= x1 or y2 <= y1:
     return initRect(x1, y1, 0.0, 0.0)
   initRect(x1, y1, x2 - x1, y2 - y1)
+
+proc union*(a, b: Rect): Rect =
+  if a.isEmpty:
+    return b
+  if b.isEmpty:
+    return a
+  let
+    x1 = min(a.minX, b.minX)
+    y1 = min(a.minY, b.minY)
+    x2 = max(a.maxX, b.maxX)
+    y2 = max(a.maxY, b.maxY)
+  initRect(x1, y1, x2 - x1, y2 - y1)

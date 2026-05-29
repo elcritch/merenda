@@ -20,3 +20,9 @@ suite "nimkit value types":
       a = initRect(0, 0, 20, 20)
       b = initRect(30, 30, 20, 20)
     check a.intersection(b).isEmpty
+
+  test "union covers both non-empty rects":
+    let
+      a = initRect(10, 20, 20, 10)
+      b = initRect(25, 15, 30, 20)
+    check a.union(b) == initRect(10, 15, 45, 20)

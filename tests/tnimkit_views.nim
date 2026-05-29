@@ -57,6 +57,50 @@ suite "nimkit views":
     check child.needsDisplay
     check root.needsDisplay
 
+  test "setNeedsDisplayInRect clips and unions dirty rects":
+    let view = newView(0, 0, 100, 80)
+    view.setNeedsDisplay(false)
+
+    view.setNeedsDisplayInRect(initRect(10, 10, 20, 20))
+    check view.needsDisplay
+    check view.invalidRects == @[initRect(10, 10, 20, 20)]
+    check view.invalidRect == initRect(10, 10, 20, 20)
+
+    view.setNeedsDisplayInRect(initRect(25, 25, 50, 30))
+    check view.invalidRects == @[initRect(10, 10, 65, 45)]
+    check view.invalidRect == initRect(10, 10, 65, 45)
+
+    view.setNeedsDisplayInRect(initRect(-10, -10, 20, 20))
+    check view.invalidRects == @[initRect(0, 0, 75, 55)]
+
+  test "child invalid rect propagates to parent coordinates":
+    let
+      root = newView(0, 0, 200, 160)
+      child = newView(20, 30, 80, 50)
+
+    root.addSubview(child)
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+
+    child.setNeedsDisplayInRect(initRect(5, 6, 10, 11))
+
+    check child.invalidRects == @[initRect(5, 6, 10, 11)]
+    check root.invalidRects == @[initRect(25, 36, 10, 11)]
+
+  test "whole-view invalidation propagates as child frame":
+    let
+      root = newView(0, 0, 200, 160)
+      child = newView(20, 30, 80, 50)
+
+    root.addSubview(child)
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+
+    child.setNeedsDisplay(true)
+
+    check child.invalidRects == @[initRect(0, 0, 80, 50)]
+    check root.invalidRects == @[initRect(20, 30, 80, 50)]
+
   test "coordinate conversion covers hierarchy, siblings, and rectangles":
     let
       root = newView(0, 0, 300, 240)

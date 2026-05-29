@@ -31,3 +31,29 @@ suite "nimkit rendering":
 
     check textNodeCount >= 2
     check rectangleNodeCount >= 3
+
+  test "buildRenders uses FigDraw hierarchy and clears invalid state":
+    let
+      root = newView(0, 0, 200, 160)
+      child = newView(20, 30, 80, 50)
+
+    root.addSubview(child)
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+    child.setNeedsDisplayInRect(initRect(5, 6, 10, 11))
+
+    let renders = buildRenders(root)
+    let list = renders[0.ZLevel]
+
+    check list.rootIds.len == 1
+    check NfClipContent in list.nodes[int(list.rootIds[0])].flags
+
+    var childNodeCount = 0
+    for node in list.nodes:
+      if node.parent != (-1).FigIdx:
+        inc childNodeCount
+    check childNodeCount > 0
+    check not root.needsDisplay
+    check root.invalidRects.len == 0
+    check not child.needsDisplay
+    check child.invalidRects.len == 0

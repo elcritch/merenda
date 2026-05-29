@@ -134,8 +134,8 @@ NimKit already has the first useful vertical slice:
 - Add clipping/visible-rect behavior and tests.
 - Decide whether rendering should call selector-backed custom draw handlers or
   stay with type-specific render traversal for now.
-- Add dirty-region tracking only after whole-window redraw becomes a measurable
-  problem.
+- Keep whole-window redraw until it becomes a measurable problem; preserve dirty
+  metadata so a later renderer can narrow the work without changing view APIs.
 
 ### Responder/Event Coverage
 
@@ -253,13 +253,6 @@ Current comparison source:
 NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
 still points to the next correctness boundaries:
 
-- Add a real display invalidation pipeline before adding complex views. NimKit
-  has a boolean `needsDisplay` and redraws by rebuilding the whole render tree.
-  GNUstep tracks invalid rects, clips them to bounds/visible rects, marks
-  ancestors, redirects through opaque ancestors, and clears dirty state only
-  after display. NimKit should add `setNeedsDisplayInRect`, invalid-rect union,
-  visible-rect clipping, and tests that child invalidation survives until a
-  render pass clears it.
 - Add selector-backed view lifecycle hooks. GNUstep calls will/did move hooks,
   resets cursor rects, marks subviews dirty, updates responder/window ownership,
   and calls `didAddSubview` when views are inserted. NimKit currently mutates
@@ -288,30 +281,25 @@ Recommended NimKit order:
 
 Concrete task list:
 
-1. Add a real display invalidation pipeline. Replace the single boolean model
-   with `setNeedsDisplayInRect`, invalid-rect union, clipping to bounds and
-   visible rects, ancestor propagation, and render-pass clearing. Keep
-   whole-window redraw as the renderer strategy until dirty rendering is
-   needed, but preserve dirty metadata and tests now.
-2. Add visible-rect and clipping behavior. Hidden ancestors should produce an
+1. Add visible-rect and clipping behavior. Hidden ancestors should produce an
    empty visible rect; parent bounds should clip child visible rects; future
    scroll views should be able to narrow visible rects without special render
    hacks.
-3. Add selector-backed view lifecycle hooks. Provide
+2. Add selector-backed view lifecycle hooks. Provide
    `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
    `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and a remove
    hook. Route `addSubview`, `removeFromSuperview`, and `setContentView`
    through those hooks while keeping direct field mutation private.
-4. Introduce a small theme/metrics object. Do not build a loadable theme system
+3. Introduce a small theme/metrics object. Do not build a loadable theme system
    yet; start with colors, border widths, corner radius, focus-ring metrics,
    control padding, and text insets used by buttons and text fields. Rendering
    should ask the theme for these values instead of hard-coding them in
    widget/render helpers.
-5. Add a command/key-binding layer before real text editing expands. Map
+4. Add a command/key-binding layer before real text editing expands. Map
    key/modifier combinations to command selectors, then dispatch through the
    responder chain. This should share the same path for text editing commands,
    button key equivalents, and future menu shortcuts.
-6. Expand controls after the above contracts stabilize. Prioritize checkbox,
+5. Expand controls after the above contracts stabilize. Prioritize checkbox,
     radio, toggle variants, combo box, and basic text editing. Keep policy
     hooks selector-based where behavior is overridable.
 
