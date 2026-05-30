@@ -15,7 +15,7 @@ proved the core model.
 NimKit already has the first useful vertical slice:
 
 - `Application`, `Window`, `Responder`, `View`, `Control`, `Button`,
-  checkbox/radio button variants, and `TextField`.
+  checkbox/radio button variants, `TextField`, and `ComboBox`.
 - Plain Nim value types for geometry, events, and control options, with
   `chroma.Color` used directly for color state.
 - Responder/action and key-command dispatch through `sigils/selectors`.
@@ -39,7 +39,9 @@ NimKit already has the first useful vertical slice:
   `keyDown`, and fall through cleanly when no responder handles the command.
 - Text fields are editable/selectable first-responder controls with selected
   ranges, insertion points, click focus, text insertion, select-all, arrow
-  movement, shift-selection movement, and forward/backward deletion.
+  movement, shift-selection movement, and forward/backward deletion. Combo boxes
+  provide local items, selector-backed data source/delegate hooks, popup
+  tracking, keyboard navigation, and action dispatch on selection.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
   rectangles, single-line text, text-field selection/caret affordances, and
   style-resolved button/text-field metrics.
@@ -51,7 +53,8 @@ NimKit already has the first useful vertical slice:
   `examples/nimkit_button_counter.nim`,
   `examples/nimkit_checkbox_demo.nim`,
   `examples/nimkit_radio_demo.nim`,
-  `examples/nimkit_textfield_demo.nim`.
+  `examples/nimkit_textfield_demo.nim`,
+  `examples/nimkit_combobox_demo.nim`.
 - Focused tests for values, views, controls, responders, rendering,
   screenshots, and native application pumping.
 
@@ -118,14 +121,18 @@ NimKit already has the first useful vertical slice:
   `TextField`, string value, alignment, text color, editable/selectable flags,
   selected range/insertion state, delegate storage, explicit text-field delegate
   selector hooks, and default text editing command handlers.
+- `src/knutella/nimkit/comboboxes.nim`:
+  `ComboBox`, local item storage through `ComboBoxCell`, selector-backed data
+  source/delegate hooks, popup open/highlight/selection state, mouse tracking,
+  keyboard navigation, and text selector compatibility.
 - `src/knutella/nimkit/theme.nim`:
-  `Theme`, `Appearance`, `StyleContext`, resolved button/text-field style
-  objects, typed style tokens, style overrides, `EdgeInsets`, control-state
-  colors, borders, corner radius, focus-ring metrics, and button/text-field text
-  insets.
+  `Theme`, `Appearance`, `StyleContext`, resolved button/text-field/combo-box
+  style objects, typed style tokens, style overrides, `EdgeInsets`,
+  control-state colors, borders, corner radius, focus-ring metrics, and control
+  text insets.
 - `src/knutella/nimkit/rendering.nim`:
   figdraw node creation, text layout helpers, theme-backed built-in control
-  drawing, and render-tree construction.
+  drawing, combo-box popup rendering, and render-tree construction.
 - `src/knutella/nimkit/backend.nim`:
   Internal host backend for siwin native windows, FigDraw renderer setup,
   native event translation, input coordinate conversion, native stepping, and
@@ -145,7 +152,7 @@ NimKit already has the first useful vertical slice:
 - `import knutella/nimkit` compiles without exposing ObjC runtime types.
 - Constructors exist for the core object and value types:
   `newApplication`, `newWindow`, `newView`, `newButton`, `newTextField`,
-  `initPoint`, `initSize`, `initRect`, `initColor`.
+  `newComboBox`, `initPoint`, `initSize`, `initRect`, `initColor`.
 - Core event/action selectors exist:
   `mouseDown`, `mouseUp`, `keyDown`, `performClick`, `sendAction`,
   `tryToPerform`, `doCommandBySelector`, `noResponderFor`,
@@ -208,6 +215,10 @@ NimKit already has the first useful vertical slice:
   text insertion, select-all, arrow movement, shift-selection movement,
   forward/backward deletion, delegate storage, and an explicit `textDidChange`
   delegate hook without treating the delegate as a generic forwarding target.
+- `ComboBox` supports local item lists, selector-backed data sources, explicit
+  delegate change notifications, editable string value selectors, popup
+  open/close/highlight state, mouse selection, keyboard navigation, and
+  target/action dispatch when an item is activated.
 
 ### Theme And Metrics
 
@@ -224,11 +235,11 @@ NimKit already has the first useful vertical slice:
 - Generic `StyleKey[T]` and role-scoped `StylePatch` values let callers layer
   targeted appearance overrides onto the default theme before FigDraw sees
   concrete styles.
-- Built-in button and text-field rendering resolves `ButtonStyle` and
-  `TextFieldStyle` values before drawing, and checkbox/radio rendering resolves
-  `ChoiceButtonStyle` before drawing. Render helpers consume concrete fills,
-  strokes, corner radii, text colors, indicator metrics, and text rectangles
-  instead of reaching through raw theme slots.
+- Built-in button, text-field, and combo-box rendering resolves `ButtonStyle`,
+  `TextFieldStyle`, and `ComboBoxStyle` values before drawing, and
+  checkbox/radio rendering resolves `ChoiceButtonStyle` before drawing. Render
+  helpers consume concrete fills, strokes, corner radii, text colors, indicator
+  metrics, and text rectangles instead of reaching through raw theme slots.
 - `buildRenders(root, theme)` and `buildRenders(window, theme)` allow focused
   render-tree tests and callers to supply a theme without native-window setup.
 
@@ -271,9 +282,9 @@ NimKit already has the first useful vertical slice:
 
 - Add controls only after the current `Control`/`Button`/`TextField` contracts
   stay stable under more examples.
-- Prioritize combo box next because existing AppKit examples can act as
-  references. Checkbox/radio/toggle variants and basic text editing now have
-  first NimKit implementations.
+- Combo box now has a first local-data/data-source implementation. Next control
+  work should focus on popup/list foundations, scrollable popup content, and any
+  missing examples that expose event-ordering gaps.
 - Keep delegate/custom policy hooks selector-based and explicit where they
   affect behavior. Use generic forwarding for control-to-cell delegation, not
   for arbitrary view or delegate dispatch.
@@ -387,14 +398,15 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- Next: continue expanding controls while keeping rendering routed through theme
-  metrics, with combo box and basic text editing as the next candidates.
+- Next: stabilize the first ComboBox slice under more examples, then extract the
+  reusable popup/list/scroll foundations needed by popup buttons, menus, and
+  larger data-backed controls.
 
 Concrete task list:
 
-1. Continue expanding controls after the above contracts stabilize. Prioritize
-   combo box and basic text editing. Keep policy hooks selector-based where
-   behavior is overridable.
+1. Expand ComboBox coverage around popup dismissal, sibling z-ordering, and
+   scrollable popup content. Keep policy hooks selector-based where behavior is
+   overridable, and keep control-to-cell forwarding generic.
 
 ## Test Plan
 
@@ -407,6 +419,7 @@ Concrete task list:
   `tests/tnimkit_views.nim`,
   `tests/tnimkit_rendering.nim`,
   `tests/tnimkit_theme.nim`,
+  `tests/tnimkit_comboboxes.nim`,
   `tests/tnimkit_controls.nim`,
   `tests/tnimkit_responder.nim`,
   `tests/tnimkit_application.nim`,
@@ -416,7 +429,9 @@ Concrete task list:
   `examples/nimkit_button_demo.nim`,
   `examples/nimkit_button_counter.nim`,
   `examples/nimkit_checkbox_demo.nim`,
-  `examples/nimkit_radio_demo.nim`.
+  `examples/nimkit_radio_demo.nim`,
+  `examples/nimkit_textfield_demo.nim`,
+  `examples/nimkit_combobox_demo.nim`.
 - Run the full suite with `nim test` before considering a larger stage complete.
 
 ## Risks

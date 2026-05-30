@@ -27,6 +27,8 @@ type
     srCheckBox
     srRadioButton
     srTextField
+    srComboBox
+    srComboBoxItem
 
   StyleState* = enum
     ssDisabled
@@ -126,6 +128,12 @@ type
     box*: ControlBoxStyle
     text*: TextStyle
 
+  ComboBoxStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    arrowWidth*: float32
+    arrowColor*: Color
+
 const
   StyleFill* = StyleKey[Color]("fill")
   StyleBorderColor* = StyleKey[Color]("border.color")
@@ -179,6 +187,18 @@ const
   TextFieldFillToken* = "textField.fill"
   TextFieldBorderColorToken* = "textField.border.color"
   TextFieldTextColorToken* = "textField.text.color"
+
+  ComboBoxFillToken* = "comboBox.fill"
+  ComboBoxBorderColorToken* = "comboBox.border.color"
+  ComboBoxOpenBorderColorToken* = "comboBox.border.color.open"
+  ComboBoxTextColorToken* = "comboBox.text.color"
+  ComboBoxArrowColorToken* = "comboBox.arrow.color"
+  ComboBoxItemFillToken* = "comboBox.item.fill"
+  ComboBoxItemHighlightedFillToken* = "comboBox.item.fill.highlighted"
+  ComboBoxItemSelectedFillToken* = "comboBox.item.fill.selected"
+  ComboBoxItemSelectedHighlightedFillToken* = "comboBox.item.fill.selected.highlighted"
+  ComboBoxItemTextColorToken* = "comboBox.item.text.color"
+  ComboBoxItemSelectedTextColorToken* = "comboBox.item.text.color.selected"
 
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -937,6 +957,29 @@ proc resolveTextFieldStyle*(
 proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
   theme.resolveTextFieldStyle(context, initColor(0.08, 0.09, 0.11, 1.0))
 
+proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
+  ComboBoxStyle(
+    box: ControlBoxStyle(
+      fill: theme.colorRule(context, StyleFill, initColor(1.0, 1.0, 1.0, 1.0)),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 3.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    ),
+    arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
+    arrowColor:
+      theme.colorRule(context, StyleMarkColor, initColor(0.20, 0.22, 0.26, 1.0)),
+  )
+
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
   appearance.theme.resolveButtonStyle(context)
 
@@ -954,6 +997,11 @@ proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext
 ): TextFieldStyle =
   appearance.theme.resolveTextFieldStyle(context)
+
+proc resolveComboBoxStyle*(
+    appearance: Appearance, context: StyleContext
+): ComboBoxStyle =
+  appearance.theme.resolveComboBoxStyle(context)
 
 func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
@@ -977,6 +1025,21 @@ func choiceTextRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
 
 func textFieldTextRect*(style: TextFieldStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
+
+func comboBoxArrowRect*(style: ComboBoxStyle, bounds: Rect): Rect =
+  let arrowWidth = min(max(style.arrowWidth, 0.0'f32), bounds.size.width)
+  initRect(bounds.maxX - arrowWidth, bounds.origin.y, arrowWidth, bounds.size.height)
+
+func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
+  let
+    arrow = style.comboBoxArrowRect(bounds)
+    insets = style.text.insets
+  initRect(
+    bounds.origin.x + insets.left,
+    bounds.origin.y + insets.top,
+    max(bounds.size.width - insets.left - insets.right - arrow.size.width, 0.0'f32),
+    max(bounds.size.height - insets.top - insets.bottom, 0.0'f32),
+  )
 
 proc addRoleRule(
     theme: var Theme,
@@ -1106,6 +1169,36 @@ proc initTheme*(): Theme =
   result.setDefaultToken(
     TextFieldTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
   )
+  result.setDefaultToken(ComboBoxFillToken, styleToken(TextFieldFillToken))
+  result.setDefaultToken(
+    ComboBoxBorderColorToken, styleToken(TextFieldBorderColorToken)
+  )
+  result.setDefaultToken(
+    ComboBoxOpenBorderColorToken, styleColor(initColor(0.30, 0.50, 0.84, 1.0))
+  )
+  result.setDefaultToken(ComboBoxTextColorToken, styleToken(TextFieldTextColorToken))
+  result.setDefaultToken(
+    ComboBoxArrowColorToken, styleColor(initColor(0.20, 0.22, 0.26, 1.0))
+  )
+  result.setDefaultToken(
+    ComboBoxItemFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  )
+  result.setDefaultToken(
+    ComboBoxItemHighlightedFillToken, styleColor(initColor(0.88, 0.93, 1.0, 1.0))
+  )
+  result.setDefaultToken(
+    ComboBoxItemSelectedFillToken, styleColor(initColor(0.20, 0.48, 0.86, 1.0))
+  )
+  result.setDefaultToken(
+    ComboBoxItemSelectedHighlightedFillToken,
+    styleColor(initColor(0.12, 0.34, 0.68, 1.0)),
+  )
+  result.setDefaultToken(
+    ComboBoxItemTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  )
+  result.setDefaultToken(
+    ComboBoxItemSelectedTextColorToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  )
 
   result.addRoleRule(
     srButton,
@@ -1222,6 +1315,68 @@ proc initTheme*(): Theme =
   result.setStyle(srTextField, StyleFocusRingWidth, 3.0)
   result.setStyle(srTextField, StyleFocusRingInset, 2.0)
   result.setStyle(srTextField, StyleFocusRingColor, styleToken(FocusRingColorToken))
+
+  result.addRoleRule(
+    srComboBox,
+    {},
+    styleToken(ComboBoxFillToken),
+    styleToken(ComboBoxBorderColorToken),
+    styleToken(ComboBoxTextColorToken),
+  )
+  result.addRoleRule(
+    srComboBox,
+    {ssOpen},
+    styleToken(ComboBoxFillToken),
+    styleToken(ComboBoxOpenBorderColorToken),
+    styleToken(ComboBoxTextColorToken),
+  )
+  result.addRoleRule(
+    srComboBox,
+    {ssDisabled},
+    styleToken(TextFieldFillToken),
+    styleToken(TextFieldBorderColorToken),
+    styleToken(DisabledTextColorToken),
+  )
+  result.setStyle(srComboBox, StyleBorderWidth, 1.0)
+  result.setStyle(srComboBox, StyleCornerRadius, 3.0)
+  result.setStyle(srComboBox, StyleTextInsets, initEdgeInsets(0.0, 8.0))
+  result.setStyle(srComboBox, StyleFocusRingWidth, 3.0)
+  result.setStyle(srComboBox, StyleFocusRingInset, 2.0)
+  result.setStyle(srComboBox, StyleFocusRingColor, styleToken(FocusRingColorToken))
+  result.setStyle(srComboBox, StyleIndicatorSize, 24.0)
+  result.setStyle(srComboBox, StyleMarkColor, styleToken(ComboBoxArrowColorToken))
+
+  result.addRoleRule(
+    srComboBoxItem,
+    {},
+    styleToken(ComboBoxItemFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ComboBoxItemTextColorToken),
+  )
+  result.addRoleRule(
+    srComboBoxItem,
+    {ssHovered},
+    styleToken(ComboBoxItemHighlightedFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ComboBoxItemTextColorToken),
+  )
+  result.addRoleRule(
+    srComboBoxItem,
+    {ssSelected},
+    styleToken(ComboBoxItemSelectedFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ComboBoxItemSelectedTextColorToken),
+  )
+  result.addRoleRule(
+    srComboBoxItem,
+    {ssSelected, ssHovered},
+    styleToken(ComboBoxItemSelectedHighlightedFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ComboBoxItemSelectedTextColorToken),
+  )
+  result.setStyle(srComboBoxItem, StyleBorderWidth, 0.0)
+  result.setStyle(srComboBoxItem, StyleCornerRadius, 0.0)
+  result.setStyle(srComboBoxItem, StyleTextInsets, initEdgeInsets(0.0, 6.0))
 
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)

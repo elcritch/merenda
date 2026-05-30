@@ -1,6 +1,7 @@
 import knutella/nimkit/application
 import knutella/nimkit/buttons
 import knutella/nimkit/cells
+import knutella/nimkit/comboboxes
 import knutella/nimkit/controls
 import knutella/nimkit/drawing
 import knutella/nimkit/keybindings
@@ -16,6 +17,7 @@ import knutella/nimkit/windows
 export application
 export buttons
 export cells
+export comboboxes
 export controls
 export drawing
 export keybindings
