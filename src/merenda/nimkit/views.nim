@@ -5,35 +5,49 @@ import ./types
 
 export responders
 
-type View* = ref object of Responder
-  xFrame: Rect
-  xBounds: Rect
-  xHidden: bool
-  xNeedsDisplay: bool
-  xInvalidRects: seq[Rect]
-  xBackgroundColor: Color
-  xClipsToBounds: bool
-  xAppearance: Appearance
-  xHasAppearance: bool
-  xInheritedAppearance: Appearance
-  xHasInheritedAppearance: bool
-  xStyleId: string
-  xStyleClasses: seq[string]
-  xHovered: bool
-  xActive: bool
-  xHasFocus: bool
-  xFocusVisible: bool
-  xNeedsUpdateConstraints: bool
-  xNeedsLayout: bool
-  xHorizontalContentHuggingPriority: LayoutPriority
-  xVerticalContentHuggingPriority: LayoutPriority
-  xHorizontalContentCompressionResistancePriority: LayoutPriority
-  xVerticalContentCompressionResistancePriority: LayoutPriority
-  xNextKeyView: View
-  xPreviousKeyView: View
-  xSuperview: View
-  xWindow: Responder
-  xSubviews: seq[View]
+type
+  LayoutConstraint* = ref object
+    xFirstItem: View
+    xFirstAttribute: LayoutAttribute
+    xRelation: LayoutRelation
+    xSecondItem: View
+    xSecondAttribute: LayoutAttribute
+    xMultiplier: float32
+    xConstant: float32
+    xPriority: LayoutPriority
+    xActive: bool
+    xOwningView: View
+
+  View* = ref object of Responder
+    xFrame: Rect
+    xBounds: Rect
+    xHidden: bool
+    xNeedsDisplay: bool
+    xInvalidRects: seq[Rect]
+    xBackgroundColor: Color
+    xClipsToBounds: bool
+    xAppearance: Appearance
+    xHasAppearance: bool
+    xInheritedAppearance: Appearance
+    xHasInheritedAppearance: bool
+    xStyleId: string
+    xStyleClasses: seq[string]
+    xHovered: bool
+    xActive: bool
+    xHasFocus: bool
+    xFocusVisible: bool
+    xNeedsUpdateConstraints: bool
+    xNeedsLayout: bool
+    xHorizontalContentHuggingPriority: LayoutPriority
+    xVerticalContentHuggingPriority: LayoutPriority
+    xHorizontalContentCompressionResistancePriority: LayoutPriority
+    xVerticalContentCompressionResistancePriority: LayoutPriority
+    xConstraints: seq[LayoutConstraint]
+    xNextKeyView: View
+    xPreviousKeyView: View
+    xSuperview: View
+    xWindow: Responder
+    xSubviews: seq[View]
 
 proc pointFromView*(view: View, point: Point, fromView: View): Point
 proc pointToView*(view: View, point: Point, toView: View): Point
@@ -339,6 +353,174 @@ protocol ViewLifecycleProtocolInternal:
   method viewDidMoveToWindow*() {.optional.}
   method didAddSubview*(subview: View) {.optional.}
   method willRemoveSubview*(subview: View) {.optional.}
+
+proc newLayoutConstraint*(
+    firstItem: View,
+    firstAttribute: LayoutAttribute,
+    relation = lrEqual,
+    secondItem: View = nil,
+    secondAttribute = latNotAnAttribute,
+    multiplier = 1.0'f32,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  result = LayoutConstraint(
+    xFirstItem: firstItem,
+    xFirstAttribute: firstAttribute,
+    xRelation: relation,
+    xSecondItem: secondItem,
+    xSecondAttribute: if secondItem.isNil: latNotAnAttribute else: secondAttribute,
+    xMultiplier: multiplier,
+    xConstant: constant,
+    xPriority: priority,
+  )
+
+proc firstItem*(constraint: LayoutConstraint): View =
+  if constraint.isNil: nil else: constraint.xFirstItem
+
+proc firstAttribute*(constraint: LayoutConstraint): LayoutAttribute =
+  if constraint.isNil: latNotAnAttribute else: constraint.xFirstAttribute
+
+proc relation*(constraint: LayoutConstraint): LayoutRelation =
+  if constraint.isNil: lrEqual else: constraint.xRelation
+
+proc secondItem*(constraint: LayoutConstraint): View =
+  if constraint.isNil: nil else: constraint.xSecondItem
+
+proc secondAttribute*(constraint: LayoutConstraint): LayoutAttribute =
+  if constraint.isNil: latNotAnAttribute else: constraint.xSecondAttribute
+
+proc multiplier*(constraint: LayoutConstraint): float32 =
+  if constraint.isNil: 1.0'f32 else: constraint.xMultiplier
+
+proc constant*(constraint: LayoutConstraint): float32 =
+  if constraint.isNil: 0.0'f32 else: constraint.xConstant
+
+proc priority*(constraint: LayoutConstraint): LayoutPriority =
+  if constraint.isNil: LayoutPriorityRequired else: constraint.xPriority
+
+proc isActive*(constraint: LayoutConstraint): bool =
+  (not constraint.isNil) and constraint.xActive
+
+proc owningView*(constraint: LayoutConstraint): View =
+  if constraint.isNil: nil else: constraint.xOwningView
+
+proc markConstraintStorageChanged(view: View) =
+  if view.isNil:
+    return
+  view.setNeedsUpdateConstraints(true)
+  view.setNeedsLayout(true)
+
+proc invalidateActiveConstraint(constraint: LayoutConstraint) =
+  if constraint.isNil or not constraint.xActive:
+    return
+  constraint.xOwningView.markConstraintStorageChanged()
+
+proc setConstant*(constraint: LayoutConstraint, constant: float32) =
+  if constraint.isNil or constraint.xConstant == constant:
+    return
+  constraint.xConstant = constant
+  constraint.invalidateActiveConstraint()
+
+proc setPriority*(constraint: LayoutConstraint, priority: LayoutPriority) =
+  if constraint.isNil or constraint.xPriority == priority:
+    return
+  constraint.xPriority = priority
+  constraint.invalidateActiveConstraint()
+
+proc indexOfConstraint(view: View, constraint: LayoutConstraint): int =
+  if view.isNil or constraint.isNil:
+    return -1
+  for index, stored in view.xConstraints:
+    if stored == constraint:
+      return index
+  -1
+
+proc removeStoredConstraint(view: View, constraint: LayoutConstraint) =
+  if view.isNil or constraint.isNil:
+    return
+  let index = view.indexOfConstraint(constraint)
+  if index < 0:
+    return
+  view.xConstraints.delete(index)
+  if constraint.xOwningView == view:
+    constraint.xOwningView = nil
+    constraint.xActive = false
+  view.markConstraintStorageChanged()
+
+proc constraints*(view: View): seq[LayoutConstraint] =
+  if view.isNil:
+    @[]
+  else:
+    view.xConstraints
+
+proc addConstraint*(view: View, constraint: LayoutConstraint) =
+  if view.isNil or constraint.isNil:
+    return
+  if constraint.xOwningView == view and view.indexOfConstraint(constraint) >= 0:
+    if not constraint.xActive:
+      constraint.xActive = true
+      view.markConstraintStorageChanged()
+    return
+
+  let oldOwner = constraint.xOwningView
+  if not oldOwner.isNil:
+    oldOwner.removeStoredConstraint(constraint)
+
+  view.xConstraints.add constraint
+  constraint.xOwningView = view
+  constraint.xActive = true
+  view.markConstraintStorageChanged()
+
+proc addConstraints*(view: View, constraints: openArray[LayoutConstraint]) =
+  for constraint in constraints:
+    view.addConstraint(constraint)
+
+proc removeConstraint*(view: View, constraint: LayoutConstraint) =
+  view.removeStoredConstraint(constraint)
+
+proc removeConstraints*(view: View, constraints: openArray[LayoutConstraint]) =
+  for constraint in constraints:
+    view.removeConstraint(constraint)
+
+proc nearestCommonSuperview(first, second: View): View =
+  var candidate = first
+  while not candidate.isNil:
+    var other = second
+    while not other.isNil:
+      if candidate == other:
+        return candidate
+      other = other.xSuperview
+    candidate = candidate.xSuperview
+
+proc activationOwner(constraint: LayoutConstraint): View =
+  if constraint.isNil or constraint.xFirstItem.isNil:
+    return nil
+  if constraint.xSecondItem.isNil:
+    return constraint.xFirstItem
+  let common = constraint.xFirstItem.nearestCommonSuperview(constraint.xSecondItem)
+  if common.isNil: constraint.xFirstItem else: common
+
+proc setActive*(constraint: LayoutConstraint, active: bool) =
+  if constraint.isNil or constraint.xActive == active:
+    return
+  if active:
+    let owner = constraint.activationOwner()
+    if owner.isNil:
+      return
+    owner.addConstraint(constraint)
+  elif not constraint.xOwningView.isNil:
+    constraint.xOwningView.removeConstraint(constraint)
+  else:
+    constraint.xActive = false
+
+proc activateConstraints*(constraints: openArray[LayoutConstraint]) =
+  for constraint in constraints:
+    constraint.setActive(true)
+
+proc deactivateConstraints*(constraints: openArray[LayoutConstraint]) =
+  for constraint in constraints:
+    constraint.setActive(false)
 
 proc setNeedsDisplaySubtree(view: View) =
   if view.isNil:

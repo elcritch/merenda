@@ -27,6 +27,26 @@ type
     laHorizontal
     laVertical
 
+  LayoutAttribute* = enum
+    latNotAnAttribute = 0
+    latLeft = 1
+    latRight
+    latTop
+    latBottom
+    latLeading
+    latTrailing
+    latWidth
+    latHeight
+    latCenterX
+    latCenterY
+    latLastBaseline
+    latFirstBaseline
+
+  LayoutRelation* = enum
+    lrLessThanOrEqual = -1
+    lrEqual = 0
+    lrGreaterThanOrEqual = 1
+
   LayoutPriority* = distinct float32
 
   MouseButton* = enum
@@ -193,6 +213,7 @@ type
     ppInline ## Draw the popup inline in the owner window.
 
 const
+  LayoutAttributeBaseline* = latLastBaseline
   NoIntrinsicMetric* = -1.0'f32
   NoIntrinsicContentSize* =
     IntrinsicSize(width: NoIntrinsicMetric, height: NoIntrinsicMetric)
