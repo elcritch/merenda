@@ -38,6 +38,9 @@ type
     xFocusVisible: bool
     xNeedsUpdateConstraints: bool
     xNeedsLayout: bool
+    xAlignmentRectInsets: EdgeInsets
+    xBaselineOffsetFromBottom: float32
+    xFirstBaselineOffsetFromTop: float32
     xHorizontalContentHuggingPriority: LayoutPriority
     xVerticalContentHuggingPriority: LayoutPriority
     xHorizontalContentCompressionResistancePriority: LayoutPriority
@@ -64,8 +67,10 @@ proc notifyDidMoveToWindow(view: View)
 proc notifyDidAddSubview(view, subview: View)
 proc notifyWillRemoveSubview(view, subview: View)
 proc setWindowOwner(view: View, window: Responder)
+proc markConstraintStorageChanged(view: View)
 proc setNeedsUpdateConstraints*(view: View, value: bool)
 proc setNeedsLayout*(view: View, value: bool)
+proc invalidateLayoutItemGeometry*(view: View)
 proc invalidateIntrinsicContentSize*(view: View)
 proc setNeedsDisplaySubtree(view: View)
 proc viewCanBecomeKeyView*(view: View): bool
@@ -90,7 +95,7 @@ protocol ViewProtocolInternal from View:
       return
     self.xFrame = frame
     self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
-    self.setNeedsLayout(true)
+    self.invalidateLayoutItemGeometry()
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
@@ -100,7 +105,7 @@ protocol ViewProtocolInternal from View:
     if self.xBounds == bounds:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
-    self.setNeedsLayout(true)
+    self.markConstraintStorageChanged()
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -237,7 +242,7 @@ protocol ViewProtocolInternal from View:
     if self.xHidden == hidden:
       return
     self.xHidden = hidden
-    self.setNeedsLayout(true)
+    self.invalidateLayoutItemGeometry()
     self.setNeedsDisplay(true)
 
   method isHiddenOrHasHiddenAncestor*(self: View): bool =
@@ -281,7 +286,7 @@ protocol ViewProtocolInternal from View:
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
-      parent.setNeedsLayout(true)
+      self.invalidateLayoutItemGeometry()
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.clearNextResponder()
@@ -292,6 +297,7 @@ protocol ViewProtocolInternal from View:
     self.notifyDidMoveToSuperview()
     if oldWindow != nil:
       self.notifyDidMoveToWindow()
+    self.markConstraintStorageChanged()
 
   method addSubview*(self: View, child: View) =
     if child.isNil:
@@ -311,8 +317,7 @@ protocol ViewProtocolInternal from View:
     child.notifyDidMoveToSuperview()
     if oldWindow != self.xWindow:
       child.notifyDidMoveToWindow()
-    self.setNeedsLayout(true)
-    child.setNeedsLayout(true)
+    child.invalidateLayoutItemGeometry()
     self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
@@ -410,6 +415,113 @@ proc markConstraintStorageChanged(view: View) =
     return
   view.setNeedsUpdateConstraints(true)
   view.setNeedsLayout(true)
+
+proc referencesLayoutItem(constraint: LayoutConstraint, view: View): bool =
+  (not constraint.isNil) and
+    (constraint.xFirstItem == view or constraint.xSecondItem == view)
+
+proc markAncestorConstraintsForLayoutItem(view: View) =
+  var current = view
+  while not current.isNil:
+    for constraint in current.xConstraints:
+      if constraint.referencesLayoutItem(view):
+        current.markConstraintStorageChanged()
+        break
+    current = current.xSuperview
+
+proc invalidateLayoutItemGeometry*(view: View) =
+  if view.isNil:
+    return
+  view.markConstraintStorageChanged()
+  let parent = view.xSuperview
+  if not parent.isNil:
+    parent.markConstraintStorageChanged()
+  view.markAncestorConstraintsForLayoutItem()
+
+proc alignmentRectInsets*(view: View): EdgeInsets =
+  if view.isNil:
+    return initEdgeInsets(0.0)
+  view.xAlignmentRectInsets
+
+proc setAlignmentRectInsets*(view: View, insets: EdgeInsets) =
+  if view.isNil or view.xAlignmentRectInsets == insets:
+    return
+  view.xAlignmentRectInsets = insets
+  view.invalidateLayoutItemGeometry()
+
+proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
+  if view.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  frame.inset(view.alignmentRectInsets())
+
+proc frameForAlignmentRect*(view: View, alignmentRect: Rect): Rect =
+  if view.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let insets = view.alignmentRectInsets()
+  initRect(
+    alignmentRect.origin.x - insets.left,
+    alignmentRect.origin.y - insets.top,
+    alignmentRect.size.width + insets.horizontal,
+    alignmentRect.size.height + insets.vertical,
+  )
+
+proc alignmentRect*(view: View): Rect =
+  if view.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  view.alignmentRectForFrame(view.xFrame)
+
+proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
+  if view.isNil:
+    return
+  view.setFrame(view.frameForAlignmentRect(alignmentRect))
+
+proc baselineOffsetFromBottom*(view: View): float32 =
+  if view.isNil: 0.0'f32 else: view.xBaselineOffsetFromBottom
+
+proc setBaselineOffsetFromBottom*(view: View, offset: float32) =
+  let normalized = max(offset, 0.0'f32)
+  if view.isNil or view.xBaselineOffsetFromBottom == normalized:
+    return
+  view.xBaselineOffsetFromBottom = normalized
+  view.invalidateLayoutItemGeometry()
+
+proc firstBaselineOffsetFromTop*(view: View): float32 =
+  if view.isNil: 0.0'f32 else: view.xFirstBaselineOffsetFromTop
+
+proc setFirstBaselineOffsetFromTop*(view: View, offset: float32) =
+  let normalized = max(offset, 0.0'f32)
+  if view.isNil or view.xFirstBaselineOffsetFromTop == normalized:
+    return
+  view.xFirstBaselineOffsetFromTop = normalized
+  view.invalidateLayoutItemGeometry()
+
+proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
+  if view.isNil:
+    return 0.0'f32
+  let rect = view.alignmentRect()
+  case attribute
+  of latLeft, latLeading:
+    rect.minX
+  of latRight, latTrailing:
+    rect.maxX
+  of latTop:
+    rect.minY
+  of latBottom:
+    rect.maxY
+  of latWidth:
+    rect.size.width
+  of latHeight:
+    rect.size.height
+  of latCenterX:
+    rect.minX + rect.size.width / 2.0'f32
+  of latCenterY:
+    rect.minY + rect.size.height / 2.0'f32
+  of latLastBaseline:
+    rect.maxY - view.baselineOffsetFromBottom()
+  of latFirstBaseline:
+    rect.minY + view.firstBaselineOffsetFromTop()
+  of latNotAnAttribute:
+    0.0'f32
 
 proc invalidateActiveConstraint(constraint: LayoutConstraint) =
   if constraint.isNil or not constraint.xActive:
@@ -569,10 +681,7 @@ proc sizeToFit*(view: View) =
 proc invalidateIntrinsicContentSize*(view: View) =
   if view.isNil:
     return
-  view.setNeedsLayout(true)
-  let parent = view.xSuperview
-  if not parent.isNil:
-    parent.setNeedsLayout(true)
+  view.invalidateLayoutItemGeometry()
 
 proc contentHuggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
   if view.isNil:
