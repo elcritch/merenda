@@ -72,8 +72,10 @@ suite "nimkit application":
         window = newWindow(80, 80, 260, 160, "Nimkit Native Combo Popup")
         root = newView(0, 0, 260, 160)
         combo = newComboBox(16, 16, 140, 24, ["Low", "Medium", "High"])
+        other = newComboBox(16, 58, 140, 24, ["Red", "Green", "Blue"])
 
       root.addSubview(combo)
+      root.addSubview(other)
       window.setContentView(root)
       app.addWindow(window)
       window.makeKeyAndOrderFront()
@@ -85,6 +87,26 @@ suite "nimkit application":
         check combo.popupOpen
         let renders = window.buildRenders()
         check PopupDrawLevel notin renders.layers
+        combo.activateItemAtIndex(1)
+        combo.closePopup()
+        check combo.indexOfSelectedItem() == 1
+        check combo.stringValue == "Medium"
+        check window.firstResponder == combo
+        let nativeWindow = window.nativeWindowOrNil()
+        if not nativeWindow.isNil:
+          check nativeWindow.focused()
+
+        check window.mouseDownAt(initPoint(24, 24))
+        check combo.popupOpen
+        check window.mouseDownAt(initPoint(24, 68))
+        check window.mouseUpAt(initPoint(24, 68))
+        check not combo.popupOpen
+        check not other.popupOpen
+        check combo.indexOfSelectedItem() == 1
+        check other.indexOfSelectedItem() == -1
+        check window.firstResponder == combo
+        if not nativeWindow.isNil:
+          check nativeWindow.focused()
       except CatchableError:
         skip()
         break nativeComboPopup

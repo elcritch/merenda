@@ -54,6 +54,7 @@ proc shouldUseWindowPopup(comboBox: ComboBox): bool
 proc usesInlinePopup(comboBox: ComboBox): bool
 proc openPopupWindow(comboBox: ComboBox)
 proc closePopupWindow(comboBox: ComboBox)
+proc reactivateOwnerWindow(comboBox: ComboBox)
 proc updatePopupPresentation(comboBox: ComboBox)
 proc drawPopupContents(
   comboBox: ComboBox,
@@ -863,6 +864,16 @@ proc closePopupWindow(comboBox: ComboBox) =
   comboBox.xPopupWindow = nil
   if not popupWindow.isNil and not popupWindow.isClosed:
     popupWindow.close()
+  if not popupWindow.isNil:
+    comboBox.reactivateOwnerWindow()
+
+proc reactivateOwnerWindow(comboBox: ComboBox) =
+  let owner = comboBox.ownerWindow()
+  if owner.isNil or owner.isClosed:
+    return
+  if owner.isVisible:
+    owner.makeKeyAndOrderFront()
+  discard owner.makeFirstResponder(comboBox)
 
 proc updatePopupPresentation(comboBox: ComboBox) =
   if comboBox.isNil:

@@ -583,6 +583,14 @@ proc detachAuxiliaryWindow(owner, auxiliary: Window) =
   if idx >= 0:
     owner.xAuxiliaryWindows.delete(idx)
 
+proc hasOpenAuxiliaryWindows(window: Window): bool =
+  if window.isNil:
+    return false
+  for auxiliary in window.xAuxiliaryWindows:
+    if not auxiliary.isNil and not auxiliary.isClosed:
+      return true
+  false
+
 proc closeAuxiliaryWindows(window: Window) =
   if window.isNil:
     return
@@ -598,9 +606,9 @@ proc close*(window: Window) =
     return
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
-  window.closeAuxiliaryWindows()
   window.xClosed = true
   window.xVisibleRequested = false
+  window.closeAuxiliaryWindows()
   if not window.xOwnerWindow.isNil:
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
@@ -834,6 +842,9 @@ proc updateHoverView(
     result = target.handleMouseEntered(localEvent) or result
 
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
+  if pressed and window.hasOpenAuxiliaryWindows():
+    window.closeAuxiliaryWindows()
+    return true
   if window.xContentView.isNil:
     return false
   let contentPoint = window.contentPoint(event.location)
