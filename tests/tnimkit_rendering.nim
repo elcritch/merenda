@@ -54,17 +54,23 @@ suite "nimkit rendering":
       field = newTextField(10, 20, 100, 30, "Field")
       button = newButton(10, 60, 80, 24, "Button")
 
+    let
+      buttonFill = initColor(0.31, 0.42, 0.53, 1.0)
+      buttonBorder = initColor(0.11, 0.12, 0.13, 1.0)
+      fieldFill = initColor(0.91, 0.92, 0.93, 1.0)
+      fieldBorder = initColor(0.21, 0.22, 0.23, 1.0)
+
     var theme = initTheme()
-    theme.button.fill[tcsNormal] = initColor(0.31, 0.42, 0.53, 1.0)
-    theme.button.borderColor[tcsNormal] = initColor(0.11, 0.12, 0.13, 1.0)
-    theme.button.borderWidth = 3.0
-    theme.button.cornerRadius = 6.0
-    theme.button.contentInsets = initEdgeInsets(1.0, 9.0)
-    theme.textField.fill = initColor(0.91, 0.92, 0.93, 1.0)
-    theme.textField.borderColor = initColor(0.21, 0.22, 0.23, 1.0)
-    theme.textField.borderWidth = 2.0
-    theme.textField.cornerRadius = 5.0
-    theme.textField.textInsets = initEdgeInsets(2.0, 7.0)
+    theme.setStyle(srButton, StyleFill, buttonFill)
+    theme.setStyle(srButton, StyleBorderColor, buttonBorder)
+    theme.setStyle(srButton, StyleBorderWidth, 3.0)
+    theme.setStyle(srButton, StyleCornerRadius, 6.0)
+    theme.setStyle(srButton, StyleTextInsets, initEdgeInsets(1.0, 9.0))
+    theme.setStyle(srTextField, StyleFill, fieldFill)
+    theme.setStyle(srTextField, StyleBorderColor, fieldBorder)
+    theme.setStyle(srTextField, StyleBorderWidth, 2.0)
+    theme.setStyle(srTextField, StyleCornerRadius, 5.0)
+    theme.setStyle(srTextField, StyleTextInsets, initEdgeInsets(2.0, 7.0))
 
     root.addSubview(field)
     root.addSubview(button)
@@ -80,19 +86,19 @@ suite "nimkit rendering":
 
     for node in list.nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == theme.button.fill[tcsNormal].rgba:
+          node.fill.color == buttonFill.rgba:
         themedButtonFound = true
-        check node.stroke.weight == theme.button.borderWidth
+        check node.stroke.weight == 3.0
         check node.stroke.fill.kind == flColor
-        check node.stroke.fill.color == theme.button.borderColor[tcsNormal].rgba
+        check node.stroke.fill.color == buttonBorder.rgba
         check node.corners[dcTopLeft] == 6'u16
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == theme.textField.fill.rgba:
+          node.fill.color == fieldFill.rgba:
         themedTextFieldFound = true
-        check node.stroke.weight == theme.textField.borderWidth
+        check node.stroke.weight == 2.0
         check node.stroke.fill.kind == flColor
-        check node.stroke.fill.color == theme.textField.borderColor.rgba
+        check node.stroke.fill.color == fieldBorder.rgba
         check node.corners[dcTopLeft] == 5'u16
 
       if node.kind == nkText and node.screenBox.x == 19.0 and node.screenBox.y == 61.0 and
@@ -141,9 +147,10 @@ suite "nimkit rendering":
       root = newView(0, 0, 140, 80)
       button = newButton(10, 20, 80, 24, "Button")
 
+    let activeFill = initColor(0.8, 0.2, 0.1, 1.0)
     var theme = initTheme()
-    theme.button.fill[tcsNormal] = initColor(0.1, 0.1, 0.1, 1.0)
-    theme.button.fill[tcsHighlighted] = initColor(0.8, 0.2, 0.1, 1.0)
+    theme.setStyle(srButton, StyleFill, initColor(0.1, 0.1, 0.1, 1.0))
+    theme.setStyle(srButton, {ssActive}, StyleFill, activeFill)
 
     root.addSubview(button)
     button.setActive(true)
@@ -153,7 +160,7 @@ suite "nimkit rendering":
     var activeFillFound = false
     for node in list.nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == theme.button.fill[tcsHighlighted].rgba:
+          node.fill.color == activeFill.rgba:
         activeFillFound = true
 
     check activeFillFound
@@ -165,10 +172,10 @@ suite "nimkit rendering":
       focusColor = initColor(0.24, 0.48, 0.92, 0.58)
 
     var theme = initTheme()
-    theme.button.focusRingWidth = 4.0
-    theme.button.focusRingInset = 1.0
-    theme.button.focusRingColor = focusColor
-    theme.button.cornerRadius = 5.0
+    theme.setStyle(srButton, StyleFocusRingWidth, 4.0)
+    theme.setStyle(srButton, StyleFocusRingInset, 1.0)
+    theme.setStyle(srButton, StyleFocusRingColor, focusColor)
+    theme.setStyle(srButton, StyleCornerRadius, 5.0)
 
     root.addSubview(button)
     button.setFocused(true)
@@ -181,7 +188,7 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
           node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
-        check node.stroke.weight == theme.button.focusRingWidth
+        check node.stroke.weight == 4.0
         check node.screenBox.x == 11.0
         check node.screenBox.y == 21.0
         check node.screenBox.w == 78.0
@@ -196,13 +203,17 @@ suite "nimkit rendering":
       checkbox = newCheckBox(10, 20, 120, 24, "Check")
       radio = newRadioButton(10, 56, 120, 24, "Radio")
 
+    let
+      selectedFill = initColor(0.23, 0.45, 0.67, 1.0)
+      markFill = initColor(0.91, 0.82, 0.13, 1.0)
+
     var theme = initTheme()
-    theme.choiceButton.indicatorSelectedFill[tcsNormal] =
-      initColor(0.23, 0.45, 0.67, 1.0)
-    theme.choiceButton.markColor[tcsNormal] = initColor(0.91, 0.82, 0.13, 1.0)
-    theme.choiceButton.indicatorSize = 12.0
-    theme.choiceButton.indicatorSpacing = 5.0
-    theme.choiceButton.contentInsets = initEdgeInsets(0.0, 3.0)
+    for role in [srCheckBox, srRadioButton]:
+      theme.setStyle(role, {ssSelected}, StyleFill, selectedFill)
+      theme.setStyle(role, {ssSelected}, StyleMarkColor, markFill)
+      theme.setStyle(role, StyleIndicatorSize, 12.0)
+      theme.setStyle(role, StyleIndicatorSpacing, 5.0)
+      theme.setStyle(role, StyleTextInsets, initEdgeInsets(0.0, 3.0))
 
     checkbox.setState(bsOn)
     radio.setState(bsOn)
@@ -218,9 +229,9 @@ suite "nimkit rendering":
 
     for node in list.nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor:
-        if node.fill.color == theme.choiceButton.indicatorSelectedFill[tcsNormal].rgba:
+        if node.fill.color == selectedFill.rgba:
           inc selectedIndicatorCount
-        if node.fill.color == theme.choiceButton.markColor[tcsNormal].rgba:
+        if node.fill.color == markFill.rgba:
           inc markCount
         if node.screenBox.x == 13.0 and node.screenBox.y == 62.0 and
             node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
