@@ -12,6 +12,8 @@ type
     location*: Natural
     length*: Natural
 
+  TextFieldCell* = ref object of ActionCell
+
   TextField* = ref object of Control
     xStringValue: string
     xAlignment: TextAlignment
@@ -24,6 +26,7 @@ type
     xDelegate: DynamicAgent
 
 proc notifyTextDidChange(textField: TextField)
+proc textFieldCell*(textField: TextField): TextFieldCell
 
 proc initTextRange*(location, length: int): TextRange =
   TextRange(location: max(location, 0).Natural, length: max(length, 0).Natural)
@@ -102,6 +105,8 @@ proc setEditedString(
   let total = textField.runeCount
   textField.xInsertionPoint = clampIndex(total, cursor)
   textField.xSelectionAnchor = clampIndex(total, anchor)
+  if changed:
+    textField.invalidateIntrinsicContentSize()
   textField.setNeedsDisplay(true)
   if changed and notify:
     textField.notifyTextDidChange()
@@ -245,15 +250,21 @@ protocol TextFieldProtocolInternal from TextField:
     textField.xEditable
 
   method setEditable*(textField: TextField, editable: bool) =
+    if textField.xEditable == editable:
+      return
     textField.xEditable = editable
     textField.setAcceptsFirstResponder(editable or textField.xSelectable)
+    textField.invalidateIntrinsicContentSize()
 
   method isSelectable*(textField: TextField): bool =
     textField.xSelectable
 
   method setSelectable*(textField: TextField, selectable: bool) =
+    if textField.xSelectable == selectable:
+      return
     textField.xSelectable = selectable
     textField.setAcceptsFirstResponder(selectable or textField.isEditable)
+    textField.invalidateIntrinsicContentSize()
 
   method isEditing*(textField: TextField): bool =
     textField.xFocused
@@ -460,8 +471,61 @@ proc notifyTextDidChange(textField: TextField) =
     textDidChange(), ActionArgs(sender: DynamicAgent(textField))
   )
 
+proc textFieldStyleContext(textField: TextField): StyleContext =
+  initControlStyleContext(
+    srTextField,
+    enabled = textField.isEnabled,
+    hovered = textField.isHovered,
+    active = textField.isActive,
+    focused = textField.isEditing or textField.isFocused,
+    focusVisible = textField.isEditing or textField.isFocusVisible,
+    id = textField.styleId,
+    classes = textField.styleClasses,
+  )
+
+protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
+  method cellSize(cell: TextFieldCell): IntrinsicSize =
+    let view = cell.controlView()
+    if view of TextField:
+      let
+        textField = TextField(view)
+        style = textField.effectiveAppearance().resolveTextFieldStyle(
+            textField.textFieldStyleContext(), textField.textColor()
+          )
+      return initIntrinsicSize(
+        style.textFieldControlSize(textNaturalSize(textField.stringValue()))
+      )
+
+    let style =
+      initAppearance().resolveTextFieldStyle(initControlStyleContext(srTextField))
+    initIntrinsicSize(style.textFieldControlSize(textNaturalSize("")))
+
+  method cellSizeForBounds(cell: TextFieldCell, bounds: Rect): Size =
+    cell.cellSize().resolveIntrinsicSize(bounds.size).constrainSize(
+      initFittingSize(bounds.size)
+    )
+
+proc initTextFieldCellFields*(cell: TextFieldCell) =
+  initActionCellFields(cell)
+  discard cell.withProtocol(DefaultTextFieldCellMeasurement)
+
+proc newTextFieldCell*(): TextFieldCell =
+  result = TextFieldCell()
+  initTextFieldCellFields(result)
+
+proc textFieldCell*(textField: TextField): TextFieldCell =
+  if textField.isNil:
+    return nil
+  let controlCell = textField.cell()
+  if controlCell of TextFieldCell:
+    return TextFieldCell(controlCell)
+  let replacement = newTextFieldCell()
+  textField.setCell(replacement)
+  replacement
+
 proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   initControlFields(textField, frame)
+  textField.setCell(newTextFieldCell())
   textField.setClipsToBounds(true)
   textField.xStringValue = value
   textField.xAlignment = taLeft

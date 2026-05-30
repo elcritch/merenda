@@ -9,11 +9,25 @@ type
     width*: float32
     height*: float32
 
+  IntrinsicSize* = object
+    width*: float32
+    height*: float32
+
+  FittingSize* = object
+    width*: float32
+    height*: float32
+
   Rect* = object
     origin*: Point
     size*: Size
 
   Color* = chroma.Color
+
+  LayoutAxis* = enum
+    laHorizontal
+    laVertical
+
+  LayoutPriority* = distinct float32
 
   MouseButton* = enum
     mbPrimary
@@ -178,11 +192,85 @@ type
     ppWindow ## Use a separate popup window only.
     ppInline ## Draw the popup inline in the owner window.
 
+const
+  NoIntrinsicMetric* = -1.0'f32
+  NoIntrinsicContentSize* =
+    IntrinsicSize(width: NoIntrinsicMetric, height: NoIntrinsicMetric)
+  UnconstrainedFittingSize* =
+    FittingSize(width: NoIntrinsicMetric, height: NoIntrinsicMetric)
+  LayoutPriorityFittingSizeLevel* = LayoutPriority(50.0'f32)
+  LayoutPriorityDefaultLow* = LayoutPriority(250.0'f32)
+  LayoutPriorityDefaultHigh* = LayoutPriority(750.0'f32)
+  LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
+
+func `==`*(a, b: LayoutPriority): bool {.borrow.}
+func `<`*(a, b: LayoutPriority): bool {.borrow.}
+func `<=`*(a, b: LayoutPriority): bool {.borrow.}
+
+func normalizeOptionalMetric(value: float32): float32 =
+  if value < 0.0'f32: NoIntrinsicMetric else: value
+
 proc initPoint*(x, y: float32): Point =
   Point(x: x, y: y)
 
 proc initSize*(width, height: float32): Size =
   Size(width: max(width, 0.0'f32), height: max(height, 0.0'f32))
+
+func initIntrinsicSize*(
+    width = NoIntrinsicMetric, height = NoIntrinsicMetric
+): IntrinsicSize =
+  IntrinsicSize(
+    width: width.normalizeOptionalMetric, height: height.normalizeOptionalMetric
+  )
+
+func initIntrinsicSize*(size: Size): IntrinsicSize =
+  initIntrinsicSize(size.width, size.height)
+
+func initFittingSize*(
+    width = NoIntrinsicMetric, height = NoIntrinsicMetric
+): FittingSize =
+  FittingSize(
+    width: width.normalizeOptionalMetric, height: height.normalizeOptionalMetric
+  )
+
+func initFittingSize*(size: Size): FittingSize =
+  initFittingSize(size.width, size.height)
+
+func hasWidth*(size: IntrinsicSize): bool =
+  size.width >= 0.0'f32
+
+func hasHeight*(size: IntrinsicSize): bool =
+  size.height >= 0.0'f32
+
+func hasWidth*(size: FittingSize): bool =
+  size.width >= 0.0'f32
+
+func hasHeight*(size: FittingSize): bool =
+  size.height >= 0.0'f32
+
+func resolveIntrinsicSize*(size: IntrinsicSize, fallback: Size): Size =
+  initSize(
+    if size.hasWidth: size.width else: fallback.width,
+    if size.hasHeight: size.height else: fallback.height,
+  )
+
+func constrainSize*(size: Size, fittingSize: FittingSize): Size =
+  initSize(
+    if fittingSize.hasWidth:
+      min(size.width, fittingSize.width)
+    else:
+      size.width,
+    if fittingSize.hasHeight:
+      min(size.height, fittingSize.height)
+    else:
+      size.height,
+  )
+
+func initLayoutPriority*(value: float32): LayoutPriority =
+  LayoutPriority(max(value, 0.0'f32))
+
+func priorityValue*(priority: LayoutPriority): float32 =
+  float32(priority)
 
 proc initRect*(x, y, width, height: float32): Rect =
   Rect(origin: initPoint(x, y), size: initSize(width, height))

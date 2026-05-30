@@ -25,13 +25,26 @@ proc normalizeState(value: ButtonState, allowsMixedState: bool): ButtonState =
 
 proc controlView*(cell: Cell): View
 
+protocol CellMeasurementProtocolInternal:
+  method cellSize*(): IntrinsicSize
+  method cellSizeForBounds*(bounds: Rect): Size
+
+protocol DefaultCellMeasurement of CellMeasurementProtocolInternal:
+  method cellSize(cell: Cell): IntrinsicSize =
+    NoIntrinsicContentSize
+
+  method cellSizeForBounds(cell: Cell, bounds: Rect): Size =
+    cell.cellSize().resolveIntrinsicSize(bounds.size)
+
 proc updateControlView*(cell: Cell) =
   let view = cell.controlView()
   if not view.isNil:
+    view.invalidateIntrinsicContentSize()
     view.setNeedsDisplay(true)
 
 proc initCellFields*(cell: Cell) =
   cell.xEnabled = true
+  discard cell.withProtocol(DefaultCellMeasurement)
 
 proc initActionCellFields*(cell: ActionCell) =
   initCellFields(cell)
@@ -57,6 +70,7 @@ proc setControlView*(cell: Cell, view: View) =
       WeakRef[View]()
     else:
       view.unsafeWeakRef()
+  cell.updateControlView()
 
 proc isEnabled*(cell: Cell): bool =
   (not cell.isNil) and cell.xEnabled
@@ -96,9 +110,13 @@ proc allowsMixedState*(cell: Cell): bool =
 proc setAllowsMixedState*(cell: Cell, value: bool) =
   if cell.isNil:
     return
+  if cell.xAllowsMixedState == value:
+    return
   cell.xAllowsMixedState = value
   if not value and cell.xState == bsMixed:
     cell.setState(bsOff)
+  else:
+    cell.updateControlView()
 
 proc nextState*(cell: Cell): ButtonState =
   if cell.isNil:
@@ -135,3 +153,5 @@ proc setAction*(cell: ActionCell, action: ActionSelector) =
   if cell.isNil:
     return
   cell.xAction = action
+
+let CellMeasurementProtocol* = CellMeasurementProtocolInternal

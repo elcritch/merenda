@@ -24,6 +24,10 @@ type View* = ref object of Responder
   xHasFocus: bool
   xFocusVisible: bool
   xNeedsLayout: bool
+  xHorizontalContentHuggingPriority: LayoutPriority
+  xVerticalContentHuggingPriority: LayoutPriority
+  xHorizontalContentCompressionResistancePriority: LayoutPriority
+  xVerticalContentCompressionResistancePriority: LayoutPriority
   xNextKeyView: View
   xPreviousKeyView: View
   xSuperview: View
@@ -46,6 +50,7 @@ proc notifyDidAddSubview(view, subview: View)
 proc notifyWillRemoveSubview(view, subview: View)
 proc setWindowOwner(view: View, window: Responder)
 proc setNeedsLayout*(view: View, value: bool)
+proc invalidateIntrinsicContentSize*(view: View)
 proc setNeedsDisplaySubtree(view: View)
 proc viewCanBecomeKeyView*(view: View): bool
 proc effectiveAppearance*(view: View): Appearance
@@ -340,6 +345,99 @@ proc setNeedsDisplaySubtree(view: View) =
   for child in view.xSubviews:
     child.setNeedsDisplaySubtree()
 
+proc invalidateIntrinsicContentSizeSubtree(view: View) =
+  if view.isNil:
+    return
+  view.invalidateIntrinsicContentSize()
+  for child in view.xSubviews:
+    child.invalidateIntrinsicContentSizeSubtree()
+
+proc intrinsicContentSize*(view: View): IntrinsicSize =
+  NoIntrinsicContentSize
+
+proc sizeThatFits*(view: View, proposedSize: FittingSize): Size =
+  if view.isNil:
+    return initSize(0.0, 0.0)
+  let
+    intrinsicSize = view.intrinsicContentSize()
+    fallbackSize = initSize(
+      if proposedSize.hasWidth: proposedSize.width else: view.xBounds.size.width,
+      if proposedSize.hasHeight: proposedSize.height else: view.xBounds.size.height,
+    )
+  intrinsicSize.resolveIntrinsicSize(fallbackSize).constrainSize(proposedSize)
+
+proc sizeThatFits*(view: View): Size =
+  if view.isNil:
+    return initSize(0.0, 0.0)
+  view.sizeThatFits(UnconstrainedFittingSize)
+
+proc sizeThatFits*(view: View, proposedSize: Size): Size =
+  if view.isNil:
+    return initSize(0.0, 0.0)
+  view.sizeThatFits(initFittingSize(proposedSize))
+
+proc sizeToFit*(view: View) =
+  if view.isNil:
+    return
+  let frame = view.frame()
+  view.setFrame(initRect(frame.origin, view.sizeThatFits(UnconstrainedFittingSize)))
+
+proc invalidateIntrinsicContentSize*(view: View) =
+  if view.isNil:
+    return
+  view.setNeedsLayout(true)
+  let parent = view.xSuperview
+  if not parent.isNil:
+    parent.setNeedsLayout(true)
+
+proc contentHuggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
+  if view.isNil:
+    return LayoutPriorityDefaultLow
+  case axis
+  of laHorizontal: view.xHorizontalContentHuggingPriority
+  of laVertical: view.xVerticalContentHuggingPriority
+
+proc setContentHuggingPriority*(
+    view: View, priority: LayoutPriority, axis: LayoutAxis
+) =
+  if view.isNil:
+    return
+  case axis
+  of laHorizontal:
+    if view.xHorizontalContentHuggingPriority == priority:
+      return
+    view.xHorizontalContentHuggingPriority = priority
+  of laVertical:
+    if view.xVerticalContentHuggingPriority == priority:
+      return
+    view.xVerticalContentHuggingPriority = priority
+  view.invalidateIntrinsicContentSize()
+
+proc contentCompressionResistancePriority*(
+    view: View, axis: LayoutAxis
+): LayoutPriority =
+  if view.isNil:
+    return LayoutPriorityDefaultHigh
+  case axis
+  of laHorizontal: view.xHorizontalContentCompressionResistancePriority
+  of laVertical: view.xVerticalContentCompressionResistancePriority
+
+proc setContentCompressionResistancePriority*(
+    view: View, priority: LayoutPriority, axis: LayoutAxis
+) =
+  if view.isNil:
+    return
+  case axis
+  of laHorizontal:
+    if view.xHorizontalContentCompressionResistancePriority == priority:
+      return
+    view.xHorizontalContentCompressionResistancePriority = priority
+  of laVertical:
+    if view.xVerticalContentCompressionResistancePriority == priority:
+      return
+    view.xVerticalContentCompressionResistancePriority = priority
+  view.invalidateIntrinsicContentSize()
+
 proc viewCanBecomeKeyView*(view: View): bool =
   (not view.isNil) and view.acceptsFirstResponder() and
     not view.isHiddenOrHasHiddenAncestor()
@@ -377,6 +475,7 @@ proc setAppearance*(view: View, appearance: Appearance) =
     return
   view.xAppearance = appearance
   view.xHasAppearance = true
+  view.invalidateIntrinsicContentSizeSubtree()
   view.setNeedsDisplaySubtree()
 
 proc clearAppearance*(view: View) =
@@ -384,11 +483,13 @@ proc clearAppearance*(view: View) =
     return
   view.xAppearance = Appearance()
   view.xHasAppearance = false
+  view.invalidateIntrinsicContentSizeSubtree()
   view.setNeedsDisplaySubtree()
 
 proc assignInheritedAppearance(view: View, appearance: Appearance) =
   view.xInheritedAppearance = appearance
   view.xHasInheritedAppearance = true
+  view.invalidateIntrinsicContentSize()
   for child in view.xSubviews:
     child.assignInheritedAppearance(appearance)
 
@@ -403,6 +504,7 @@ proc clearInheritedAppearance*(view: View) =
     return
   view.xInheritedAppearance = Appearance()
   view.xHasInheritedAppearance = false
+  view.invalidateIntrinsicContentSize()
   for child in view.xSubviews:
     child.clearInheritedAppearance()
   view.setNeedsDisplay(true)
@@ -414,6 +516,7 @@ proc setStyleId*(view: View, id: string) =
   if view.isNil or view.xStyleId == id:
     return
   view.xStyleId = id
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc styleClasses*(view: View): seq[string] =
@@ -429,6 +532,7 @@ proc setStyleClasses*(view: View, classes: openArray[string]) =
   if view.xStyleClasses == nextClasses:
     return
   view.xStyleClasses = nextClasses
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc hasStyleClass*(view: View, className: string): bool =
@@ -438,6 +542,7 @@ proc addStyleClass*(view: View, className: string) =
   if view.isNil or view.hasStyleClass(className):
     return
   view.xStyleClasses.add className
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc removeStyleClass*(view: View, className: string) =
@@ -447,6 +552,7 @@ proc removeStyleClass*(view: View, className: string) =
   if idx < 0:
     return
   view.xStyleClasses.delete(idx)
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc isHovered*(view: View): bool =
@@ -456,6 +562,7 @@ proc setHovered*(view: View, hovered: bool) =
   if view.isNil or view.xHovered == hovered:
     return
   view.xHovered = hovered
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc isActive*(view: View): bool =
@@ -465,6 +572,7 @@ proc setActive*(view: View, active: bool) =
   if view.isNil or view.xActive == active:
     return
   view.xActive = active
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc isFocused*(view: View): bool =
@@ -474,6 +582,7 @@ proc setFocused*(view: View, focused: bool) =
   if view.isNil or view.xHasFocus == focused:
     return
   view.xHasFocus = focused
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc isFocusVisible*(view: View): bool =
@@ -483,6 +592,7 @@ proc setFocusVisible*(view: View, focusVisible: bool) =
   if view.isNil or view.xFocusVisible == focusVisible:
     return
   view.xFocusVisible = focusVisible
+  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc needsLayout*(view: View): bool =
@@ -591,6 +701,10 @@ proc initViewFields*(view: View, frame: Rect) =
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
   view.xNeedsDisplay = true
   view.xNeedsLayout = true
+  view.xHorizontalContentHuggingPriority = LayoutPriorityDefaultLow
+  view.xVerticalContentHuggingPriority = LayoutPriorityDefaultLow
+  view.xHorizontalContentCompressionResistancePriority = LayoutPriorityDefaultHigh
+  view.xVerticalContentCompressionResistancePriority = LayoutPriorityDefaultHigh
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
 

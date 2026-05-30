@@ -253,6 +253,7 @@ protocol ComboBoxProtocolInternal from ComboBox:
       cell.xSelectedIndex = comboBox.indexOfItem(cell.xStringValue)
       if cell.xSelectedIndex < 0 and cell.xStringValue.len > 0:
         cell.xStringValue = ""
+    comboBox.invalidateIntrinsicContentSize()
     comboBox.setNeedsDisplay(true)
 
 protocol DefaultComboBoxView of ComboBoxViewProtocolInternal:
@@ -561,6 +562,59 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.xSelectedIndex = -1
   cell.updateControlView()
 
+proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
+  initControlStyleContext(
+    srComboBox,
+    enabled = comboBox.isEnabled,
+    highlighted = comboBox.xButtonPressed,
+    hovered = comboBox.isHovered,
+    active = comboBox.isActive,
+    focused = comboBox.isFocused,
+    focusVisible = comboBox.isFocusVisible,
+    opened = comboBox.popupOpen,
+    id = comboBox.styleId,
+    classes = comboBox.styleClasses,
+  )
+
+proc comboBoxMeasuredTextSize(cell: ComboBoxCell): Size =
+  let view = cell.controlView()
+  if view of ComboBox:
+    let comboBox = ComboBox(view)
+    result = textNaturalSize(comboBox.stringValue())
+    for idx in 0 ..< comboBox.numberOfItems():
+      let itemSize = textNaturalSize(comboBox.itemAtIndex(idx))
+      result.width = max(result.width, itemSize.width)
+      result.height = max(result.height, itemSize.height)
+    return
+
+  result = textNaturalSize(cell.cellStringValue())
+  for item in cell.xItems:
+    let itemSize = textNaturalSize(item)
+    result.width = max(result.width, itemSize.width)
+    result.height = max(result.height, itemSize.height)
+
+protocol DefaultComboBoxCellMeasurement of CellMeasurementProtocol:
+  method cellSize(cell: ComboBoxCell): IntrinsicSize =
+    let
+      view = cell.controlView()
+      appearance =
+        if view.isNil:
+          initAppearance()
+        else:
+          view.effectiveAppearance()
+      context =
+        if view of ComboBox:
+          ComboBox(view).comboBoxStyleContext()
+        else:
+          initControlStyleContext(srComboBox)
+      style = appearance.resolveComboBoxStyle(context)
+    initIntrinsicSize(style.comboBoxControlSize(cell.comboBoxMeasuredTextSize()))
+
+  method cellSizeForBounds(cell: ComboBoxCell, bounds: Rect): Size =
+    cell.cellSize().resolveIntrinsicSize(bounds.size).constrainSize(
+      initFittingSize(bounds.size)
+    )
+
 proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
   if comboBox.isNil:
     return
@@ -599,6 +653,7 @@ proc initComboBoxCellFields*(cell: ComboBoxCell) =
   cell.xEditable = true
   cell.xNumberOfVisibleItems = 5
   cell.xItemHeight = 22.0
+  discard cell.withProtocol(DefaultComboBoxCellMeasurement)
 
 proc newComboBoxCell*(): ComboBoxCell =
   result = ComboBoxCell()

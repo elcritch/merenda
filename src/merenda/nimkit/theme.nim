@@ -116,6 +116,8 @@ type
   ButtonStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
+    minimumWidth*: float32
+    minimumHeight*: float32
 
   ChoiceButtonStyle* = object
     indicator*: ControlBoxStyle
@@ -123,16 +125,22 @@ type
     text*: TextStyle
     indicatorSize*: float32
     indicatorSpacing*: float32
+    minimumWidth*: float32
+    minimumHeight*: float32
 
   TextFieldStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
+    minimumWidth*: float32
+    minimumHeight*: float32
 
   ComboBoxStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
     arrowWidth*: float32
     arrowColor*: Color
+    minimumWidth*: float32
+    minimumHeight*: float32
 
 const
   StyleFill* = StyleKey[Color]("fill")
@@ -148,6 +156,8 @@ const
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
   StyleMarkColor* = StyleKey[Color]("mark.color")
+  StyleMinimumWidth* = StyleKey[float32]("minimum.width")
+  StyleMinimumHeight* = StyleKey[float32]("minimum.height")
 
   AccentToken* = "accent"
   AccentPressedToken* = "accent.pressed"
@@ -208,6 +218,12 @@ func initEdgeInsets*(vertical, horizontal: float32): EdgeInsets =
 
 func initEdgeInsets*(all: float32): EdgeInsets =
   initEdgeInsets(all, all, all, all)
+
+func horizontal*(insets: EdgeInsets): float32 =
+  insets.left + insets.right
+
+func vertical*(insets: EdgeInsets): float32 =
+  insets.top + insets.bottom
 
 func initBoxShadow*(
     kind: BoxShadowKind,
@@ -907,6 +923,8 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
     ),
+    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 0.0),
+    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 24.0),
   )
 
 proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
@@ -930,6 +948,8 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
     ),
     indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
     indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
+    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 0.0),
+    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 18.0),
   )
 
 proc resolveTextFieldStyle*(
@@ -952,6 +972,8 @@ proc resolveTextFieldStyle*(
       color: theme.colorRule(context, StyleTextColor, textColor),
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
     ),
+    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 80.0),
+    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 24.0),
   )
 
 proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
@@ -978,6 +1000,8 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
     arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
     arrowColor:
       theme.colorRule(context, StyleMarkColor, initColor(0.20, 0.22, 0.26, 1.0)),
+    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 90.0),
+    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 24.0),
   )
 
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
@@ -1039,6 +1063,57 @@ func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
     bounds.origin.y + insets.top,
     max(bounds.size.width - insets.left - insets.right - arrow.size.width, 0.0'f32),
     max(bounds.size.height - insets.top - insets.bottom, 0.0'f32),
+  )
+
+func controlChromeOutset*(box: ControlBoxStyle): float32 =
+  max(-box.focusRingInset, 0.0'f32)
+
+func controlChromeWidth*(box: ControlBoxStyle): float32 =
+  box.borderWidth * 2.0'f32 + box.controlChromeOutset() * 2.0'f32
+
+func controlChromeHeight*(box: ControlBoxStyle): float32 =
+  box.controlChromeWidth()
+
+func controlSizeWithChrome*(
+    contentSize: Size,
+    insets: EdgeInsets,
+    box: ControlBoxStyle,
+    minimumWidth, minimumHeight: float32,
+): Size =
+  initSize(
+    max(minimumWidth, contentSize.width + insets.horizontal + box.controlChromeWidth()),
+    max(minimumHeight, contentSize.height + insets.vertical + box.controlChromeHeight()),
+  )
+
+func buttonControlSize*(style: ButtonStyle, titleSize: Size): Size =
+  controlSizeWithChrome(
+    titleSize, style.text.insets, style.box, style.minimumWidth, style.minimumHeight
+  )
+
+func choiceControlSize*(style: ChoiceButtonStyle, titleSize: Size): Size =
+  let
+    indicatorChrome = style.indicator.controlChromeWidth()
+    indicatorWidth = style.indicatorSize + indicatorChrome
+    indicatorHeight = style.indicatorSize + style.indicator.controlChromeHeight()
+    contentWidth = indicatorWidth + style.indicatorSpacing + titleSize.width
+    contentHeight = max(indicatorHeight, titleSize.height)
+  controlSizeWithChrome(
+    initSize(contentWidth, contentHeight),
+    style.text.insets,
+    style.indicator,
+    style.minimumWidth,
+    style.minimumHeight,
+  )
+
+func textFieldControlSize*(style: TextFieldStyle, textSize: Size): Size =
+  controlSizeWithChrome(
+    textSize, style.text.insets, style.box, style.minimumWidth, style.minimumHeight
+  )
+
+func comboBoxControlSize*(style: ComboBoxStyle, textSize: Size): Size =
+  let contentSize = initSize(textSize.width + style.arrowWidth, textSize.height)
+  controlSizeWithChrome(
+    contentSize, style.text.insets, style.box, style.minimumWidth, style.minimumHeight
   )
 
 proc addRoleRule(
@@ -1231,6 +1306,8 @@ proc initTheme*(): Theme =
   result.setStyle(srButton, StyleBorderWidth, 1.0)
   result.setStyle(srButton, StyleCornerRadius, 8.0)
   result.setStyle(srButton, StyleTextInsets, initEdgeInsets(0.0, 8.0))
+  result.setStyle(srButton, StyleMinimumWidth, 0.0)
+  result.setStyle(srButton, StyleMinimumHeight, 24.0)
   result.setStyle(srButton, StyleFocusRingWidth, 3.0)
   result.setStyle(srButton, StyleFocusRingInset, -2.0)
   result.setStyle(srButton, StyleFocusRingColor, styleToken(ButtonFocusRingColorToken))
@@ -1303,6 +1380,8 @@ proc initTheme*(): Theme =
     result.setStyle(role, StyleCornerRadius, radius)
     result.setStyle(role, StyleIndicatorSpacing, 7.0)
     result.setStyle(role, StyleTextInsets, initEdgeInsets(0.0, 2.0))
+    result.setStyle(role, StyleMinimumWidth, 0.0)
+    result.setStyle(role, StyleMinimumHeight, 18.0)
     result.setStyle(role, StyleFocusRingWidth, 3.0)
     result.setStyle(role, StyleFocusRingInset, 2.0)
     result.setStyle(role, StyleFocusRingColor, styleToken(FocusRingColorToken))
@@ -1312,6 +1391,8 @@ proc initTheme*(): Theme =
   result.setStyle(srTextField, StyleBorderWidth, 1.0)
   result.setStyle(srTextField, StyleCornerRadius, 6.0)
   result.setStyle(srTextField, StyleTextInsets, initEdgeInsets(0.0, 6.0))
+  result.setStyle(srTextField, StyleMinimumWidth, 80.0)
+  result.setStyle(srTextField, StyleMinimumHeight, 24.0)
   result.setStyle(srTextField, StyleFocusRingWidth, 3.0)
   result.setStyle(srTextField, StyleFocusRingInset, 2.0)
   result.setStyle(srTextField, StyleFocusRingColor, styleToken(FocusRingColorToken))
@@ -1344,6 +1425,8 @@ proc initTheme*(): Theme =
   result.setStyle(srComboBox, StyleFocusRingInset, 2.0)
   result.setStyle(srComboBox, StyleFocusRingColor, styleToken(FocusRingColorToken))
   result.setStyle(srComboBox, StyleIndicatorSize, 24.0)
+  result.setStyle(srComboBox, StyleMinimumWidth, 90.0)
+  result.setStyle(srComboBox, StyleMinimumHeight, 24.0)
   result.setStyle(srComboBox, StyleMarkColor, styleToken(ComboBoxArrowColorToken))
 
   result.addRoleRule(
@@ -1377,6 +1460,7 @@ proc initTheme*(): Theme =
   result.setStyle(srComboBoxItem, StyleBorderWidth, 0.0)
   result.setStyle(srComboBoxItem, StyleCornerRadius, 0.0)
   result.setStyle(srComboBoxItem, StyleTextInsets, initEdgeInsets(0.0, 6.0))
+  result.setStyle(srComboBoxItem, StyleMinimumHeight, 22.0)
 
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)

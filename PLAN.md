@@ -49,6 +49,10 @@ NimKit currently includes the core desktop-control slice:
   editable/selectable single-line text fields, and combo boxes with local items,
   data source/delegate hooks, inline or window-backed popups, keyboard
   navigation, and action dispatch on selection.
+- Intrinsic sizing for the built-in control set: sizing value types,
+  `intrinsicContentSize`, `sizeThatFits`, `sizeToFit`, cell measurement hooks,
+  theme-backed minimum/chrome metrics, lazy parent layout invalidation, and
+  content hugging/compression priority storage.
 - Runnable NimKit examples:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
@@ -237,28 +241,31 @@ How the current theme engine fits:
   without changing control measurement. Controls should ask for resolved styles,
   not inspect token names or hardcode class-specific layout constants.
 
-Concrete task order:
+Concrete task order and status:
 
-1. Add sizing value types: an intrinsic no-metric sentinel, layout priorities,
-   optional fitting constraints, and tests for default `View` sizing.
-2. Add cell measurement APIs: `cellSize`, `cellSizeForBounds` or Nim-style
-   equivalents, plus theme-backed content/chrome metric helpers that consume
-   resolved `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and
+1. Done: Add sizing value types: an intrinsic no-metric sentinel, layout
+   priorities, optional fitting constraints, and tests for default `View`
+   sizing.
+2. Done: Add cell measurement APIs: `cellSize`, `cellSizeForBounds` or
+   Nim-style equivalents, plus theme-backed content/chrome metric helpers that
+   consume resolved `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and
    `ComboBoxStyle` values.
-3. Implement button/checkbox/radio intrinsic sizing from title, indicator,
-   control insets, focus-ring allowance, and minimum control heights.
-4. Implement text-field and combo-box intrinsic sizing from text metrics,
+3. Done: Implement button/checkbox/radio intrinsic sizing from title,
+   indicator, control insets, focus-ring allowance, and minimum control heights.
+4. Done: Implement text-field and combo-box intrinsic sizing from text metrics,
    text/editor insets, arrow/indicator metrics, and minimum control heights.
-5. Add `Control.sizeThatFits`, `Control.intrinsicContentSize`, `sizeToFit`, and
-   intrinsic-size invalidation from cell/style changes.
-6. Wire intrinsic invalidation into `setNeedsLayout` on parents and add tests
-   that property changes update layout lazily rather than mutating frames
-   unexpectedly.
-7. Add tests that theme token/rule changes affecting metrics invalidate
-   intrinsic size and cause measurement/rendering to agree on text and chrome
-   rectangles.
-8. Add examples showing `sizeToFit` and intrinsic-size-driven layout for common
-   controls, then broaden to simple stack/container layout if the API holds.
+5. Done: Add `Control.sizeThatFits`, `Control.intrinsicContentSize`,
+   `sizeToFit`, and intrinsic-size invalidation from cell/style changes.
+6. Mostly done: Wire intrinsic invalidation into `setNeedsLayout` on parents and
+   add tests that property changes update layout lazily rather than mutating
+   frames unexpectedly. Continue broadening this once container layout exists.
+7. Partly done: Add tests that theme token/rule changes affecting metrics
+   invalidate intrinsic size and cause measurement/rendering to agree on text
+   and chrome rectangles. Current coverage checks style metric changes against
+   text rects; broader render-tree agreement can be added with container tests.
+8. Not started: Add examples showing `sizeToFit` and intrinsic-size-driven
+   layout for common controls, then broaden to simple stack/container layout if
+   the API holds.
 
 ### Controls
 
@@ -343,6 +350,7 @@ Concrete task order:
   `tests/tnimkit_views.nim`,
   `tests/tnimkit_rendering.nim`,
   `tests/tnimkit_theme.nim`,
+  `tests/tnimkit_sizing.nim`,
   `tests/tnimkit_keybindings.nim`,
   `tests/tnimkit_textfields.nim`,
   `tests/tnimkit_comboboxes.nim`,
