@@ -45,6 +45,26 @@ proc currentSelection(textField: TextField): tuple[start, stop: int] =
     textField.runeCount, textField.xSelectionAnchor, textField.xInsertionPoint
   )
 
+proc runesOf(text: string): seq[Rune] =
+  for rune in text.runes:
+    result.add rune
+
+proc previousWordBoundary(text: string, index: int): int =
+  let runes = text.runesOf()
+  result = clampIndex(runes.len, index)
+  while result > 0 and runes[result - 1].isWhiteSpace:
+    dec result
+  while result > 0 and not runes[result - 1].isWhiteSpace:
+    dec result
+
+proc nextWordBoundary(text: string, index: int): int =
+  let runes = text.runesOf()
+  result = clampIndex(runes.len, index)
+  while result < runes.len and runes[result].isWhiteSpace:
+    inc result
+  while result < runes.len and not runes[result].isWhiteSpace:
+    inc result
+
 proc setCursor(textField: TextField, index: int, extending = false) =
   if textField.isNil:
     return
@@ -136,12 +156,52 @@ proc deleteForwardText(textField: TextField) =
     current.runeSubStr(0, selected.start) & current.runeSubStr(selected.start + 1)
   textField.setEditedString(value, selected.start, selected.start)
 
+proc deleteWordBackwardText(textField: TextField) =
+  if textField.isNil or not textField.xEditable:
+    return
+  let
+    current = textField.xStringValue
+    selected = textField.currentSelection()
+  if selected.stop > selected.start:
+    textField.replaceSelectedText("")
+    return
+  let cursor = current.previousWordBoundary(selected.start)
+  if cursor == selected.start:
+    return
+  let value = current.runeSubStr(0, cursor) & current.runeSubStr(selected.start)
+  textField.setEditedString(value, cursor, cursor)
+
+proc deleteWordForwardText(textField: TextField) =
+  if textField.isNil or not textField.xEditable:
+    return
+  let
+    current = textField.xStringValue
+    selected = textField.currentSelection()
+  if selected.stop > selected.start:
+    textField.replaceSelectedText("")
+    return
+  let cursor = current.nextWordBoundary(selected.start)
+  if cursor == selected.start:
+    return
+  let value = current.runeSubStr(0, selected.start) & current.runeSubStr(cursor)
+  textField.setEditedString(value, selected.start, selected.start)
+
+proc isControlInput(rune: Rune): bool =
+  let code = rune.int
+  code < 32 or (code >= 127 and code <= 159)
+
+proc isInsertableText(text: string): bool =
+  if text.len == 0:
+    return false
+  for rune in text.runes:
+    if rune.isControlInput:
+      return false
+  true
+
 proc shouldInsertText(event: KeyEvent): bool =
-  if event.text.len == 0:
+  if event.modifiers - {kmShift} != {}:
     return false
-  if event.text in ["\n", "\r", "\t"]:
-    return false
-  event.modifiers - {kmShift} == {}
+  event.text.isInsertableText()
 
 protocol TextFieldDelegateProtocolInternal:
   method textDidChange*(args: ActionArgs) {.optional.}
@@ -225,7 +285,8 @@ protocol TextFieldProtocolInternal from TextField:
 
 protocol DefaultTextFieldInput of TextInputProtocol:
   method insertText(textField: TextField, text: string) =
-    textField.replaceSelectedText(text)
+    if text.isInsertableText:
+      textField.replaceSelectedText(text)
 
 protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
   method selectText(textField: TextField, args: ActionArgs) =
@@ -239,6 +300,12 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
 
   method deleteForward(textField: TextField, args: ActionArgs) =
     textField.deleteForwardText()
+
+  method deleteWordBackward(textField: TextField, args: ActionArgs) =
+    textField.deleteWordBackwardText()
+
+  method deleteWordForward(textField: TextField, args: ActionArgs) =
+    textField.deleteWordForwardText()
 
   method moveLeft(textField: TextField, args: ActionArgs) =
     if not textField.xEditable and not textField.xSelectable:
@@ -258,6 +325,24 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
     else:
       textField.setCursor(selected.stop + 1)
 
+  method moveWordLeft(textField: TextField, args: ActionArgs) =
+    if not textField.xEditable and not textField.xSelectable:
+      return
+    let selected = textField.currentSelection()
+    if selected.stop > selected.start:
+      textField.setCursor(selected.start)
+    else:
+      textField.setCursor(textField.xStringValue.previousWordBoundary(selected.start))
+
+  method moveWordRight(textField: TextField, args: ActionArgs) =
+    if not textField.xEditable and not textField.xSelectable:
+      return
+    let selected = textField.currentSelection()
+    if selected.stop > selected.start:
+      textField.setCursor(selected.stop)
+    else:
+      textField.setCursor(textField.xStringValue.nextWordBoundary(selected.stop))
+
   method moveToBeginningOfLine(textField: TextField, args: ActionArgs) =
     if textField.xEditable or textField.xSelectable:
       textField.setCursor(0)
@@ -273,6 +358,20 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
   method moveRightAndModifySelection(textField: TextField, args: ActionArgs) =
     if textField.xEditable or textField.xSelectable:
       textField.setCursor(textField.xInsertionPoint + 1, extending = true)
+
+  method moveWordLeftAndModifySelection(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(
+        textField.xStringValue.previousWordBoundary(textField.xInsertionPoint),
+        extending = true,
+      )
+
+  method moveWordRightAndModifySelection(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(
+        textField.xStringValue.nextWordBoundary(textField.xInsertionPoint),
+        extending = true,
+      )
 
   method moveToBeginningOfLineAndModifySelection(
       textField: TextField, args: ActionArgs

@@ -62,12 +62,18 @@ protocol TextEditingCommandProtocolInternal:
   method selectAll*(args: ActionArgs) {.optional.}
   method deleteBackward*(args: ActionArgs) {.optional.}
   method deleteForward*(args: ActionArgs) {.optional.}
+  method deleteWordBackward*(args: ActionArgs) {.optional.}
+  method deleteWordForward*(args: ActionArgs) {.optional.}
   method moveLeft*(args: ActionArgs) {.optional.}
   method moveRight*(args: ActionArgs) {.optional.}
+  method moveWordLeft*(args: ActionArgs) {.optional.}
+  method moveWordRight*(args: ActionArgs) {.optional.}
   method moveToBeginningOfLine*(args: ActionArgs) {.optional.}
   method moveToEndOfLine*(args: ActionArgs) {.optional.}
   method moveLeftAndModifySelection*(args: ActionArgs) {.optional.}
   method moveRightAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveWordLeftAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveWordRightAndModifySelection*(args: ActionArgs) {.optional.}
   method moveToBeginningOfLineAndModifySelection*(args: ActionArgs) {.optional.}
   method moveToEndOfLineAndModifySelection*(args: ActionArgs) {.optional.}
 

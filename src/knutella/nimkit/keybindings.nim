@@ -11,6 +11,11 @@ type
     smCommand
     smShortcut
 
+  KeyBindingProfile* = enum
+    kbpMacOS
+    kbpWindows
+    kbpLinuxBsd
+
   KeyStroke* = object
     text*: string
     key*: Key
@@ -220,16 +225,96 @@ proc commandFor*(table: KeyBindingTable, event: KeyEvent): Option[CommandSelecto
       return some(binding.selector)
   none(CommandSelector)
 
+proc defaultKeyBindingProfile*(): KeyBindingProfile =
+  when defined(macosx) or defined(macos):
+    kbpMacOS
+  elif defined(windows):
+    kbpWindows
+  else:
+    kbpLinuxBsd
+
+proc bindCoreEditing(table: var KeyBindingTable) =
+  table.bindKey(" ", {}, performClick())
+  table.bindKey(keyBackspace, {}, deleteBackward())
+  table.bindKey(keyDelete, {}, deleteForward())
+  table.bindKey(keyArrowLeft, {}, moveLeft())
+  table.bindKey(keyArrowRight, {}, moveRight())
+  table.bindKey(keyHome, {}, moveToBeginningOfLine())
+  table.bindKey(keyEnd, {}, moveToEndOfLine())
+  table.bindKey(keyArrowLeft, {kmShift}, moveLeftAndModifySelection())
+  table.bindKey(keyArrowRight, {kmShift}, moveRightAndModifySelection())
+  table.bindKey(keyHome, {kmShift}, moveToBeginningOfLineAndModifySelection())
+  table.bindKey(keyEnd, {kmShift}, moveToEndOfLineAndModifySelection())
+
+proc bindWordEditing(table: var KeyBindingTable, modifiers: set[KeyModifier]) =
+  table.bindKey(keyArrowLeft, modifiers, moveWordLeft())
+  table.bindKey(keyArrowRight, modifiers, moveWordRight())
+  table.bindKey(keyArrowLeft, modifiers + {kmShift}, moveWordLeftAndModifySelection())
+  table.bindKey(keyArrowRight, modifiers + {kmShift}, moveWordRightAndModifySelection())
+
+proc bindLineEditing(table: var KeyBindingTable, modifiers: set[KeyModifier]) =
+  table.bindKey(keyArrowLeft, modifiers, moveToBeginningOfLine())
+  table.bindKey(keyArrowRight, modifiers, moveToEndOfLine())
+  table.bindKey(
+    keyArrowLeft, modifiers + {kmShift}, moveToBeginningOfLineAndModifySelection()
+  )
+  table.bindKey(
+    keyArrowRight, modifiers + {kmShift}, moveToEndOfLineAndModifySelection()
+  )
+
+proc bindMacOSEditing(table: var KeyBindingTable) =
+  table.bindKey(keyA, {kmControl}, moveToBeginningOfLine())
+  table.bindKey(keyE, {kmControl}, moveToEndOfLine())
+  table.bindKey(keyB, {kmControl}, moveLeft())
+  table.bindKey(keyF, {kmControl}, moveRight())
+  table.bindKey(keyH, {kmControl}, deleteBackward())
+  table.bindKey(keyD, {kmControl}, deleteForward())
+  table.bindWordEditing({kmOption})
+  table.bindLineEditing({kmCommand})
+  table.bindKey(keyBackspace, {kmOption}, deleteWordBackward())
+  table.bindKey(keyDelete, {kmOption}, deleteWordForward())
+  table.bindKey(keyA, {kmCommand}, selectAll())
+
+proc bindWindowsEditing(table: var KeyBindingTable) =
+  table.bindWordEditing({kmControl})
+  table.bindKey(keyHome, {kmControl}, moveToBeginningOfLine())
+  table.bindKey(keyEnd, {kmControl}, moveToEndOfLine())
+  table.bindKey(
+    keyHome, {kmShift, kmControl}, moveToBeginningOfLineAndModifySelection()
+  )
+  table.bindKey(keyEnd, {kmShift, kmControl}, moveToEndOfLineAndModifySelection())
+  table.bindKey(keyBackspace, {kmControl}, deleteWordBackward())
+  table.bindKey(keyDelete, {kmControl}, deleteWordForward())
+  table.bindKey(keyA, {kmControl}, selectAll())
+
+proc bindLinuxBsdEditing(table: var KeyBindingTable) =
+  table.bindWordEditing({kmControl})
+  table.bindWordEditing({kmOption})
+  table.bindKey(keyE, {kmControl}, moveToEndOfLine())
+  table.bindKey(keyBackspace, {kmControl}, deleteWordBackward())
+  table.bindKey(keyDelete, {kmControl}, deleteWordForward())
+  table.bindKey(keyA, {kmControl}, selectAll())
+
+proc initMacOSKeyBindings*(): KeyBindingTable =
+  result.bindCoreEditing()
+  result.bindMacOSEditing()
+
+proc initWindowsKeyBindings*(): KeyBindingTable =
+  result.bindCoreEditing()
+  result.bindWindowsEditing()
+
+proc initLinuxBsdKeyBindings*(): KeyBindingTable =
+  result.bindCoreEditing()
+  result.bindLinuxBsdEditing()
+
+proc initDefaultKeyBindings*(profile: KeyBindingProfile): KeyBindingTable =
+  case profile
+  of kbpMacOS:
+    initMacOSKeyBindings()
+  of kbpWindows:
+    initWindowsKeyBindings()
+  of kbpLinuxBsd:
+    initLinuxBsdKeyBindings()
+
 proc initDefaultKeyBindings*(): KeyBindingTable =
-  result.bindKey(" ", {}, performClick())
-  result.bindKey(keyBackspace, {}, deleteBackward())
-  result.bindKey(keyDelete, {}, deleteForward())
-  result.bindKey(keyArrowLeft, {}, moveLeft())
-  result.bindKey(keyArrowRight, {}, moveRight())
-  result.bindKey(keyHome, {}, moveToBeginningOfLine())
-  result.bindKey(keyEnd, {}, moveToEndOfLine())
-  result.bindKey(keyArrowLeft, {kmShift}, moveLeftAndModifySelection())
-  result.bindKey(keyArrowRight, {kmShift}, moveRightAndModifySelection())
-  result.bindKey(keyHome, {kmShift}, moveToBeginningOfLineAndModifySelection())
-  result.bindKey(keyEnd, {kmShift}, moveToEndOfLineAndModifySelection())
-  result.bindShortcut(keyA, {smShortcut}, selectAll())
+  initDefaultKeyBindings(defaultKeyBindingProfile())

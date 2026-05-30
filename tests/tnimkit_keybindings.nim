@@ -44,3 +44,97 @@ suite "nimkit key bindings":
     check bindings
     .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: shortcutModifiers()))
     .get() == selectAll()
+
+  test "macOS key binding profile includes Cocoa text shortcuts":
+    let bindings = initMacOSKeyBindings()
+
+    check bindings
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
+    .get() == moveToBeginningOfLine()
+    check bindings
+    .commandFor(KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmControl}))
+    .get() == moveToEndOfLine()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmOption})
+    )
+    .get() == moveWordLeft()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmOption})
+    )
+    .get() == moveWordRight()
+    check bindings
+    .commandFor(
+      KeyEvent(
+        key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmShift, kmOption}
+      )
+    )
+    .get() == moveWordRightAndModifySelection()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmOption})
+    )
+    .get() == deleteWordBackward()
+    check bindings
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmCommand}))
+    .get() == selectAll()
+
+  test "windows key binding profile includes platform text shortcuts":
+    let bindings = initWindowsKeyBindings()
+
+    check bindings
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
+    .get() == selectAll()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmControl})
+    )
+    .get() == moveWordLeft()
+    check bindings
+    .commandFor(
+      KeyEvent(
+        key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmShift, kmControl}
+      )
+    )
+    .get() == moveWordLeftAndModifySelection()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmControl})
+    )
+    .get() == deleteWordBackward()
+
+  test "linux and bsd key binding profile includes platform text shortcuts":
+    let bindings = initLinuxBsdKeyBindings()
+
+    check bindings
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
+    .get() == selectAll()
+    check bindings
+    .commandFor(KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmControl}))
+    .get() == moveToEndOfLine()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmControl})
+    )
+    .get() == moveWordRight()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmOption})
+    )
+    .get() == moveWordLeft()
+
+  test "windows can switch key binding profiles at runtime":
+    let window = newWindow(0, 0, 120, 80, "Key profile")
+
+    window.setKeyBindingProfile(kbpMacOS)
+    check window
+    .keyBindings()
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
+    .get() == moveToBeginningOfLine()
+
+    window.setKeyBindingProfile(kbpWindows)
+    check window
+    .keyBindings()
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
+    .get() == selectAll()
