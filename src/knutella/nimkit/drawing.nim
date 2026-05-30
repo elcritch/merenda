@@ -28,7 +28,9 @@ proc toFigRect(rect: nimkitTypes.Rect): bumpy.Rect =
 
 proc defaultFont(size: float32): FigFont =
   if not defaultTypefaceReady:
-    defaultTypefaceId = loadTypeface("Ubuntu.ttf", ["HackNerdFont-Regular.ttf"])
+    defaultTypefaceId = loadTypeface(
+      "IBMPlexSans-Regular.ttf", ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+    )
     defaultTypefaceReady = true
   defaultTypefaceId.fontWithSize(size)
 

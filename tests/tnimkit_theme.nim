@@ -192,13 +192,14 @@ suite "nimkit theme":
     check buttonStyle.box.shadows[1].blur >= 12.0
     check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
     check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
+    check buttonStyle.box.cornerRadius == 8.0
     check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
 
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
     check checkBoxStyle.indicator.fill == initColor(0.20, 0.48, 0.86, 1.0)
-    check checkBoxStyle.indicator.cornerRadius == 3.0
+    check checkBoxStyle.indicator.cornerRadius == 6.0
     check checkBoxStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
     check radioStyle.indicator.cornerRadius == 7.0
     check radioStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
@@ -208,7 +209,7 @@ suite "nimkit theme":
       initRect(23, 0, 75, 24)
 
     check textFieldStyle.box.borderWidth > 0.0
-    check textFieldStyle.box.cornerRadius > 0.0
+    check textFieldStyle.box.cornerRadius == 6.0
     check textFieldStyle.box.focusRingWidth > 0.0
     check textFieldStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
     check textFieldStyle.box.borderColor == initColor(0.72, 0.75, 0.80, 1.0)
@@ -219,6 +220,7 @@ suite "nimkit theme":
 
     check comboBoxStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
     check comboBoxStyle.box.borderColor == initColor(0.30, 0.50, 0.84, 1.0)
+    check comboBoxStyle.box.cornerRadius == 6.0
     check comboBoxStyle.arrowWidth == 24.0
     check comboBoxStyle.arrowColor == initColor(0.20, 0.22, 0.26, 1.0)
     check comboBoxStyle.comboBoxArrowRect(initRect(0, 0, 100, 28)) ==

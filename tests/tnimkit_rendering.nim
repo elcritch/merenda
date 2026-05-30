@@ -1,4 +1,4 @@
-import std/unittest
+import std/[unicode, unittest]
 
 import figdraw/fignodes
 
@@ -345,6 +345,7 @@ suite "nimkit rendering":
     var
       selectedIndicatorCount = 0
       markCount = 0
+      checkmarkTextFound = false
       radioIndicatorFound = false
 
     for node in list.nodes:
@@ -357,9 +358,22 @@ suite "nimkit rendering":
             node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
           radioIndicatorFound = true
           check node.corners[dcTopLeft] == 7'u16
+      elif node.kind == nkText and node.textLayout.runes.len > 0:
+        var text = ""
+        for rune in node.textLayout.runes:
+          text.add(rune)
+        if text == "✓":
+          checkmarkTextFound = true
+          check node.textLayout.selectionRects.len == 1
+          check node.textLayout.selectionRects[0].w > 0.0
+          check node.textLayout.selectionRects[0].h > 0.0
+          check node.textLayout.spanColors.len == 1
+          check node.textLayout.spanColors[0].kind == flColor
+          check node.textLayout.spanColors[0].color == markFill.rgba
 
     check selectedIndicatorCount == 2
-    check markCount == 2
+    check markCount == 1
+    check checkmarkTextFound
     check radioIndicatorFound
 
   test "buildRenders uses effective appearance from view hierarchy":
