@@ -15,11 +15,15 @@ type
   LayoutSpyView = ref object of View
     events: seq[string]
 
+  ConstraintSpyView = ref object of View
+    name: string
+
 var
   spyMouseDownPoint: Point
   spyMouseUpPoint: Point
   spyMouseDownCount: int
   spyMouseUpCount: int
+  constraintEvents: seq[string]
 
 protocol MouseSpyEvents of ResponderEventProtocol:
   method mouseDown(spy: MouseSpyView, event: MouseEvent) =
@@ -60,6 +64,16 @@ protocol LayoutSpyHooks of ViewLayoutProtocol:
   method layout(spy: LayoutSpyView) =
     spy.events.add "layout"
 
+protocol ConstraintSpyHooks of ViewLayoutProtocol:
+  method updateConstraints(spy: ConstraintSpyView) =
+    constraintEvents.add spy.name & ".updateConstraints"
+
+  method layoutSubviews(spy: ConstraintSpyView) =
+    constraintEvents.add spy.name & ".layoutSubviews"
+
+  method layout(spy: ConstraintSpyView) =
+    constraintEvents.add spy.name & ".layout"
+
 proc newMouseSpyView(frame: Rect): MouseSpyView =
   result = MouseSpyView()
   initViewFields(result, frame)
@@ -74,6 +88,11 @@ proc newLayoutSpyView(frame: Rect): LayoutSpyView =
   result = LayoutSpyView()
   initViewFields(result, frame)
   discard result.withProtocol(LayoutSpyHooks)
+
+proc newConstraintSpyView(name: string, frame: Rect): ConstraintSpyView =
+  result = ConstraintSpyView(name: name)
+  initViewFields(result, frame)
+  discard result.withProtocol(ConstraintSpyHooks)
 
 suite "nimkit views":
   test "subviews participate in hit testing from front to back":
@@ -237,6 +256,57 @@ suite "nimkit views":
     check root.needsLayout
     root.finishDisplaySubtree()
     check not root.needsDisplay
+
+  test "constraint update lifecycle runs before layout":
+    let
+      root = newConstraintSpyView("root", initRect(0, 0, 200, 160))
+      child = newConstraintSpyView("child", initRect(20, 30, 80, 40))
+
+    root.addSubview(child)
+    root.setNeedsLayout(false)
+    child.setNeedsLayout(false)
+    constraintEvents.setLen(0)
+
+    root.setNeedsUpdateConstraints()
+    child.setNeedsUpdateConstraints()
+    check root.needsUpdateConstraints
+    check child.needsUpdateConstraints
+
+    root.updateConstraintsForSubtreeIfNeeded()
+
+    check constraintEvents == @["child.updateConstraints", "root.updateConstraints"]
+    check not root.needsUpdateConstraints
+    check not child.needsUpdateConstraints
+    check not root.needsLayout
+    check not child.needsLayout
+
+    constraintEvents.setLen(0)
+    root.setNeedsLayout(true)
+    child.setNeedsLayout(true)
+    root.setNeedsUpdateConstraints()
+    child.setNeedsUpdateConstraints()
+
+    root.layoutSubtreeIfNeeded()
+
+    check constraintEvents ==
+      @[
+        "child.updateConstraints", "root.updateConstraints", "root.layoutSubviews",
+        "root.layout", "child.layoutSubviews", "child.layout",
+      ]
+    check not root.needsUpdateConstraints
+    check not child.needsUpdateConstraints
+    check not root.needsLayout
+    check not child.needsLayout
+
+  test "setNeedsUpdateConstraints ignores false like AppKit":
+    let view = newView(0, 0, 100, 80)
+
+    check not view.needsUpdateConstraints
+    view.setNeedsUpdateConstraints(false)
+    check not view.needsUpdateConstraints
+    view.setNeedsUpdateConstraints()
+    view.setNeedsUpdateConstraints(false)
+    check view.needsUpdateConstraints
 
   test "setNeedsDisplayInRect clips and unions dirty rects":
     let view = newView(0, 0, 100, 80)
