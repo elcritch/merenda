@@ -97,6 +97,12 @@ suite "nimkit theme":
       buttonStyle = appearance.resolveButtonStyle(
         initControlStyleContext(srButton, highlighted = true)
       )
+      checkBoxStyle = appearance.resolveChoiceButtonStyle(
+        initControlStyleContext(srCheckBox, selected = true)
+      )
+      radioStyle = appearance.resolveChoiceButtonStyle(
+        initControlStyleContext(srRadioButton, selected = true)
+      )
       textFieldStyle = theme.resolveTextFieldStyle(
         initControlStyleContext(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
       )
@@ -110,6 +116,17 @@ suite "nimkit theme":
     check buttonStyle.text.color == theme.button.textColor[tcsHighlighted]
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
     check theme.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
+
+    check theme.choiceButton.indicatorSize > 0.0
+    check theme.choiceButton.indicatorSpacing > 0.0
+    check checkBoxStyle.indicator.fill ==
+      theme.choiceButton.indicatorSelectedFill[tcsNormal]
+    check checkBoxStyle.indicator.cornerRadius == theme.choiceButton.checkBoxCornerRadius
+    check radioStyle.indicator.cornerRadius == theme.choiceButton.radioCornerRadius
+    check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
+      initRect(2, 5, 14, 14)
+    check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
+      initRect(23, 0, 75, 24)
 
     check theme.textField.borderWidth > 0.0
     check theme.textField.cornerRadius > 0.0

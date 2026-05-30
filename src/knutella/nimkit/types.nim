@@ -170,6 +170,8 @@ type
   ButtonType* = enum
     btMomentary
     btToggle
+    btCheckBox
+    btRadio
 
 proc initPoint*(x, y: float32): Point =
   Point(x: x, y: y)

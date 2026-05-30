@@ -130,6 +130,47 @@ suite "nimkit rendering":
 
     check activeFillFound
 
+  test "buildRenders uses theme metrics for checkbox and radio buttons":
+    let
+      root = newView(0, 0, 220, 110)
+      checkbox = newCheckBox(10, 20, 120, 24, "Check")
+      radio = newRadioButton(10, 56, 120, 24, "Radio")
+
+    var theme = initTheme()
+    theme.choiceButton.indicatorSelectedFill[tcsNormal] =
+      initColor(0.23, 0.45, 0.67, 1.0)
+    theme.choiceButton.markColor[tcsNormal] = initColor(0.91, 0.82, 0.13, 1.0)
+    theme.choiceButton.indicatorSize = 12.0
+    theme.choiceButton.indicatorSpacing = 5.0
+    theme.choiceButton.contentInsets = initEdgeInsets(0.0, 3.0)
+
+    checkbox.setState(bsOn)
+    radio.setState(bsOn)
+    root.addSubview(checkbox)
+    root.addSubview(radio)
+
+    let list = buildRenders(root, initAppearance(theme))[0.ZLevel]
+
+    var
+      selectedIndicatorCount = 0
+      markCount = 0
+      radioIndicatorFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor:
+        if node.fill.color == theme.choiceButton.indicatorSelectedFill[tcsNormal].rgba:
+          inc selectedIndicatorCount
+        if node.fill.color == theme.choiceButton.markColor[tcsNormal].rgba:
+          inc markCount
+        if node.screenBox.x == 13.0 and node.screenBox.y == 62.0 and
+            node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
+          radioIndicatorFound = true
+          check node.corners[dcTopLeft] == 7'u16
+
+    check selectedIndicatorCount == 2
+    check markCount == 2
+    check radioIndicatorFound
+
   test "buildRenders uses effective appearance from view hierarchy":
     let
       root = newView(0, 0, 140, 80)

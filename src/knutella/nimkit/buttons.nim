@@ -20,14 +20,28 @@ proc nextButtonState(button: Button): ButtonState =
   of bsMixed:
     bsOff
 
+proc clearRadioSiblings(button: Button) =
+  let parent = button.superview
+  if parent.isNil:
+    return
+  for sibling in parent.subviews:
+    if sibling != button and sibling of Button:
+      let siblingButton = Button(sibling)
+      if siblingButton.xButtonType == btRadio and siblingButton.xState != bsOff:
+        siblingButton.xState = bsOff
+        siblingButton.setNeedsDisplay(true)
+
 proc buttonPerformClick(button: Button, args: ActionArgs) =
   if not button.isEnabled or args.sender.isNil:
     return
   case button.xButtonType
   of btMomentary:
     discard
-  of btToggle:
+  of btToggle, btCheckBox:
     button.xState = button.nextButtonState()
+  of btRadio:
+    button.xState = bsOn
+    button.clearRadioSiblings()
   button.setNeedsDisplay(true)
   discard button.sendAction()
 
@@ -82,12 +96,18 @@ protocol ButtonProtocolInternal from Button:
     if button.xButtonType == buttonType:
       return
     button.xButtonType = buttonType
+    if buttonType == btRadio:
+      button.xAllowsMixedState = false
+      if button.xState == bsMixed:
+        button.xState = bsOff
     button.setNeedsDisplay(true)
 
   method allowsMixedState(button: Button): bool =
     button.xAllowsMixedState
 
   method setAllowsMixedState(button: Button, value: bool) =
+    if value and button.xButtonType == btRadio:
+      return
     button.xAllowsMixedState = value
     if not value and button.state == bsMixed:
       button.setState(bsOff)
@@ -116,5 +136,19 @@ proc newButton*(frame: Rect, title: string): Button =
 
 proc newButton*(x, y, width, height: float32, title: string): Button =
   newButton(initRect(x, y, width, height), title)
+
+proc newCheckBox*(frame: Rect, title: string): Button =
+  result = newButton(frame, title)
+  result.setButtonType(btCheckBox)
+
+proc newCheckBox*(x, y, width, height: float32, title: string): Button =
+  newCheckBox(initRect(x, y, width, height), title)
+
+proc newRadioButton*(frame: Rect, title: string): Button =
+  result = newButton(frame, title)
+  result.setButtonType(btRadio)
+
+proc newRadioButton*(x, y, width, height: float32, title: string): Button =
+  newRadioButton(initRect(x, y, width, height), title)
 
 let ButtonProtocol* = ButtonProtocolInternal

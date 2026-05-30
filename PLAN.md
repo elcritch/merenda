@@ -14,8 +14,8 @@ proved the core model.
 
 NimKit already has the first useful vertical slice:
 
-- `Application`, `Window`, `Responder`, `View`, `Control`, `Button`, and
-  `TextField`.
+- `Application`, `Window`, `Responder`, `View`, `Control`, `Button`,
+  checkbox/radio button variants, and `TextField`.
 - Plain Nim value types for geometry, events, and control options, with
   `chroma.Color` used directly for color state.
 - Responder/action and key-command dispatch through `sigils/selectors`.
@@ -40,7 +40,9 @@ NimKit already has the first useful vertical slice:
 - Runnable examples:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
-  `examples/nimkit_button_counter.nim`.
+  `examples/nimkit_button_counter.nim`,
+  `examples/nimkit_checkbox_demo.nim`,
+  `examples/nimkit_radio_demo.nim`.
 - Focused tests for values, views, controls, responders, rendering,
   screenshots, and native application pumping.
 
@@ -96,8 +98,8 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit/controls.nim`:
   `Control`, enabled state, target/action, and closure-backed action targets.
 - `src/knutella/nimkit/buttons.nim`:
-  `Button`, title, state cycling, mixed-state support, highlight behavior, and
-  keyboard activation.
+  `Button`, title, state cycling, mixed-state support, checkbox/radio variants,
+  highlight/tracking behavior, and keyboard activation.
 - `src/knutella/nimkit/textfields.nim`:
   `TextField`, string value, alignment, text color, editable/selectable flags.
 - `src/knutella/nimkit/theme.nim`:
@@ -176,14 +178,20 @@ NimKit already has the first useful vertical slice:
 
 - `Control` supports enabled state and target/action.
 - `Button` supports momentary and toggle modes, mixed-state cycling, highlight,
-  disabled rendering, mouse activation, and key activation.
+  disabled rendering, mouse activation, key activation, Cocoa-style
+  release-outside cancellation, and checkbox/radio variants.
+- Checkbox buttons reuse button target/action and mixed-state cycling while
+  rendering through choice-control theme metrics.
+- Radio buttons reuse button target/action, select without toggling off, and
+  clear sibling radio buttons in the same superview.
 - `TextField` supports displayed string value, alignment, text color, editable,
   and selectable state.
 
 ### Theme And Metrics
 
 - `Theme` is a plain Nim value object with button/text-field colors, borders,
-  corner radius, focus-ring metrics, and text/control insets.
+  corner radius, focus-ring metrics, checkbox/radio indicator metrics, and
+  text/control insets.
 - `Appearance` is the resolver boundary between theme tokens, control state,
   and concrete draw styles.
 - `StyleContext` carries role and control-state facts that an appearance or
@@ -195,9 +203,10 @@ NimKit already has the first useful vertical slice:
   targeted appearance overrides onto the default theme before FigDraw sees
   concrete styles.
 - Built-in button and text-field rendering resolves `ButtonStyle` and
-  `TextFieldStyle` values before drawing, so render helpers consume concrete
-  fills, strokes, corner radii, text colors, and text rectangles instead of
-  reaching through raw theme slots.
+  `TextFieldStyle` values before drawing, and checkbox/radio rendering resolves
+  `ChoiceButtonStyle` before drawing. Render helpers consume concrete fills,
+  strokes, corner radii, text colors, indicator metrics, and text rectangles
+  instead of reaching through raw theme slots.
 - `buildRenders(root, theme)` and `buildRenders(window, theme)` allow focused
   render-tree tests and callers to supply a theme without native-window setup.
 
@@ -240,8 +249,9 @@ NimKit already has the first useful vertical slice:
 
 - Add controls only after the current `Control`/`Button`/`TextField` contracts
   stay stable under more examples.
-- Prioritize checkbox/radio/toggle variants, combo box, and basic text editing
-  because existing AppKit examples can act as references.
+- Prioritize combo box and basic text editing next because existing AppKit
+  examples can act as references. Checkbox/radio/toggle variants now have the
+  first NimKit implementation.
 - Keep delegate/custom policy hooks selector-based where they affect behavior.
 
 ### Native Integration
@@ -349,13 +359,14 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- Next: expand controls while keeping rendering routed through theme metrics.
+- Next: continue expanding controls while keeping rendering routed through theme
+  metrics, with combo box and basic text editing as the next candidates.
 
 Concrete task list:
 
-1. Expand controls after the above contracts stabilize. Prioritize checkbox,
-   radio, toggle variants, combo box, and basic text editing. Keep policy hooks
-   selector-based where behavior is overridable.
+1. Continue expanding controls after the above contracts stabilize. Prioritize
+   combo box and basic text editing. Keep policy hooks selector-based where
+   behavior is overridable.
 
 ## Test Plan
 
@@ -375,7 +386,9 @@ Concrete task list:
 - Compile NimKit examples when changing public API or widget behavior:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
-  `examples/nimkit_button_counter.nim`.
+  `examples/nimkit_button_counter.nim`,
+  `examples/nimkit_checkbox_demo.nim`,
+  `examples/nimkit_radio_demo.nim`.
 - Run the full suite with `nim test` before considering a larger stage complete.
 
 ## Risks
