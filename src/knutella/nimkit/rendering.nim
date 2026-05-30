@@ -176,9 +176,7 @@ proc addComboBoxArrow(
     topY = centerY - 1.0'f32
   discard context.addFig(
     parent,
-    rectangleNode(
-      initRect(centerX - width * 0.20'f32, topY, width * 0.40'f32, 1.0'f32), color
-    ),
+    rectangleNode(initRect(centerX - width * 0.50'f32, topY, width, 1.0'f32), color),
   )
   discard context.addFig(
     parent,
@@ -190,7 +188,8 @@ proc addComboBoxArrow(
   discard context.addFig(
     parent,
     rectangleNode(
-      initRect(centerX - width * 0.50'f32, topY + 2.0'f32, width, 1.0'f32), color
+      initRect(centerX - width * 0.20'f32, topY + 2.0'f32, width * 0.40'f32, 1.0'f32),
+      color,
     ),
   )
 
@@ -234,6 +233,19 @@ proc addText*(
     alignment = taLeft,
 ): FigIdx {.discardable.} =
   context.addFig(textNode(context.localRectToWindow(rect), text, color, alignment))
+
+proc addText(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: types.Rect,
+    text: string,
+    color: types.Color,
+    alignment = taLeft,
+): FigIdx {.discardable.} =
+  context.addFig(
+    layer, parent, textNode(context.localRectToWindow(rect), text, color, alignment)
+  )
 
 proc renderBuiltInView(
     context: DrawContext,
@@ -394,16 +406,18 @@ proc renderBuiltInView(
       let
         popupRect = comboBox.popupRect(view.bounds)
         popupFrame = view.rectToWindow(popupRect)
-      discard context.addFig(
-        rootIdx,
-        rectangleNode(
-          popupFrame,
-          initColor(1.0, 1.0, 1.0, 1.0),
-          style.box.borderColor,
-          style.box.borderWidth,
-          2.0'f32,
-        ),
-      )
+        popupLayer = PopupDrawLevel
+        popupRoot = context.addFig(
+          popupLayer,
+          (-1).FigIdx,
+          rectangleNode(
+            popupFrame,
+            initColor(1.0, 1.0, 1.0, 1.0),
+            style.box.borderColor,
+            style.box.borderWidth,
+            2.0'f32,
+          ),
+        )
       let first = comboBox.popupFirstItemIndex()
       for visibleIndex in 0 ..< comboBox.visibleItemCount():
         let
@@ -422,7 +436,8 @@ proc renderBuiltInView(
           )
           itemRect = comboBox.popupItemRect(view.bounds, itemIndex)
         discard context.addFig(
-          rootIdx,
+          popupLayer,
+          popupRoot,
           rectangleNode(
             view.rectToWindow(itemRect),
             itemStyle.box.fill,
@@ -432,6 +447,8 @@ proc renderBuiltInView(
           ),
         )
         context.addText(
+          popupLayer,
+          popupRoot,
           itemStyle.textFieldTextRect(itemRect),
           comboBox.itemAtIndex(itemIndex),
           itemStyle.text.color,
@@ -514,7 +531,7 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
   discard root.prepareDisplaySubtree()
   let context = initDrawContext()
   renderViewInto(context, root, appearance)
-  result.layers[0.ZLevel] = context.renderList
+  result = context.renders
   root.finishDisplaySubtree()
 
 proc buildRenders*(root: View, theme: Theme): Renders =

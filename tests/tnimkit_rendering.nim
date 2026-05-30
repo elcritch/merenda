@@ -29,8 +29,8 @@ suite "nimkit rendering":
 
     let renders = buildRenders(root)
 
-    check 0.ZLevel in renders
-    let list = renders[0.ZLevel]
+    check DefaultDrawLevel in renders
+    let list = renders[DefaultDrawLevel]
     check list.rootIds.len >= 1
     check list.nodes.len >= 5
 
@@ -82,7 +82,7 @@ suite "nimkit rendering":
     root.addSubview(button)
 
     let renders = buildRenders(root, initAppearance(theme))
-    let list = renders[0.ZLevel]
+    let list = renders[DefaultDrawLevel]
 
     var
       themedButtonFound = false
@@ -138,7 +138,7 @@ suite "nimkit rendering":
 
     let renders = buildRenders(root)
     var buttonTextFound = false
-    for node in renders[0.ZLevel].nodes:
+    for node in renders[DefaultDrawLevel].nodes:
       if node.kind == nkText:
         buttonTextFound = true
 
@@ -174,12 +174,21 @@ suite "nimkit rendering":
     combo.openPopup()
     root.addSubview(combo)
 
-    let list = buildRenders(root)[0.ZLevel]
+    let renders = buildRenders(root)
+    check DefaultDrawLevel in renders
+    check PopupDrawLevel in renders
+
+    let
+      list = renders[DefaultDrawLevel]
+      popupList = renders[PopupDrawLevel]
     var
       comboBoxFound = false
+      popupInBaseLayer = false
       popupFound = false
       selectedItemFound = false
       textNodeCount = 0
+      arrowTopWidth = 0.0'f32
+      arrowBottomWidth = 0.0'f32
 
     for node in list.nodes:
       if node.kind == nkText:
@@ -193,6 +202,23 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.screenBox.x == 10.0 and
           node.screenBox.y == 46.0 and node.screenBox.w == 120.0 and
           node.screenBox.h == 68.0:
+        popupInBaseLayer = true
+
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == initColor(0.20, 0.22, 0.26, 1.0).rgba and
+          node.screenBox.h == 1.0:
+        if node.screenBox.y == 32.0:
+          arrowTopWidth = node.screenBox.w
+        elif node.screenBox.y == 34.0:
+          arrowBottomWidth = node.screenBox.w
+
+    for node in popupList.nodes:
+      if node.kind == nkText:
+        inc textNodeCount
+
+      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
+          node.screenBox.y == 46.0 and node.screenBox.w == 120.0 and
+          node.screenBox.h == 68.0:
         popupFound = true
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
@@ -202,8 +228,10 @@ suite "nimkit rendering":
         selectedItemFound = true
 
     check comboBoxFound
+    check not popupInBaseLayer
     check popupFound
     check selectedItemFound
+    check arrowTopWidth > arrowBottomWidth
     check textNodeCount >= 4
 
   test "buildRenders draws focused text field selection and caret":
@@ -217,7 +245,7 @@ suite "nimkit rendering":
 
     let selectionRenders = buildRenders(root)
     var selectionFound = false
-    for node in selectionRenders[0.ZLevel].nodes:
+    for node in selectionRenders[DefaultDrawLevel].nodes:
       if node.kind == nkText and NfSelectText in node.flags and node.fill.kind == flColor and
           node.fill.color == initColor(0.22, 0.46, 0.84, 0.32).rgba and
           node.selectionRange.a == 1'i16 and node.selectionRange.b == 2'i16:
@@ -226,7 +254,7 @@ suite "nimkit rendering":
     field.setSelectedRange(initTextRange(3, 0))
     let caretRenders = buildRenders(root)
     var caretFound = false
-    for node in caretRenders[0.ZLevel].nodes:
+    for node in caretRenders[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == field.textColor.rgba and node.screenBox.w == 1.0:
         caretFound = true
@@ -247,7 +275,7 @@ suite "nimkit rendering":
     root.addSubview(button)
     button.setActive(true)
 
-    let list = buildRenders(root, initAppearance(theme))[0.ZLevel]
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
     var activeFillFound = false
     for node in list.nodes:
@@ -273,7 +301,7 @@ suite "nimkit rendering":
     button.setFocused(true)
     button.setFocusVisible(true)
 
-    let list = buildRenders(root, initAppearance(theme))[0.ZLevel]
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
     var focusRingFound = false
     for node in list.nodes:
@@ -312,7 +340,7 @@ suite "nimkit rendering":
     root.addSubview(checkbox)
     root.addSubview(radio)
 
-    let list = buildRenders(root, initAppearance(theme))[0.ZLevel]
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
     var
       selectedIndicatorCount = 0
@@ -350,7 +378,7 @@ suite "nimkit rendering":
     buttonAppearance[srButton, StyleFill] = buttonFill
     button.setAppearance(buttonAppearance)
 
-    let list = buildRenders(root)[0.ZLevel]
+    let list = buildRenders(root)[DefaultDrawLevel]
 
     var
       buttonFillFound = false
@@ -377,7 +405,7 @@ suite "nimkit rendering":
     child.setNeedsDisplayInRect(initRect(5, 6, 10, 11))
 
     let renders = buildRenders(root)
-    let list = renders[0.ZLevel]
+    let list = renders[DefaultDrawLevel]
 
     check list.rootIds.len == 1
     check NfClipContent notin list.nodes[int(list.rootIds[0])].flags
@@ -401,7 +429,7 @@ suite "nimkit rendering":
     root.addSubview(child)
 
     let renders = buildRenders(root)
-    let list = renders[0.ZLevel]
+    let list = renders[DefaultDrawLevel]
     let rootIdx = list.rootIds[0]
 
     check list.nodes[int(rootIdx)].screenBox.x == 0.0
@@ -433,7 +461,7 @@ suite "nimkit rendering":
     root.addSubview(child)
 
     let renders = buildRenders(root)
-    let list = renders[0.ZLevel]
+    let list = renders[DefaultDrawLevel]
     let rootIdx = list.rootIds[0]
 
     check NfClipContent in list.nodes[int(rootIdx)].flags
@@ -454,7 +482,7 @@ suite "nimkit rendering":
     root.addSubview(custom)
 
     let renders = buildRenders(root)
-    let list = renders[0.ZLevel]
+    let list = renders[DefaultDrawLevel]
 
     check customDrawCount == 1
 
