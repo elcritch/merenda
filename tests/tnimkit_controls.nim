@@ -60,7 +60,7 @@ suite "nimkit controls":
     button.setButtonType(btCheckBox)
     check cell.buttonType == btCheckBox
 
-  test "text fields can forward optional selectors to delegates":
+  test "text fields do not forward arbitrary selectors to delegates":
     let
       field = newTextField(0, 0, 120, 24, "Value")
       delegate = newResponder()
@@ -70,7 +70,44 @@ suite "nimkit controls":
     )
     field.setDelegate(delegate)
 
-    check field.placeholderText() == "Forwarded placeholder"
+    check delegate.placeholderText() == "Forwarded placeholder"
+    check not field.respondsTo(placeholderText())
+
+  test "text fields notify delegates through explicit hooks":
+    let
+      field = newTextField(0, 0, 120, 24, "Value")
+      delegate = newResponder()
+
+    var
+      changeCount = 0
+      lastSender: DynamicAgent
+
+    let onTextDidChange: DynamicMethod = proc(
+        self: DynamicAgent, invocation: var Invocation
+    ) =
+      check self == DynamicAgent(delegate)
+      let args = invocation.argsAs(ActionArgs)
+      inc changeCount
+      lastSender = args.sender
+      invocation.setResult(())
+
+    discard
+      delegate.replaceMethods(TextFieldDelegate, [textDidChange => onTextDidChange])
+    field.setDelegate(delegate)
+
+    field.setStringValue("Changed")
+    check changeCount == 1
+    check lastSender == DynamicAgent(field)
+
+    field.setStringValue("Changed")
+    check changeCount == 1
+
+    let chainedDelegate = newResponder()
+    chainedDelegate.setNextResponder(delegate)
+    field.setDelegate(chainedDelegate)
+
+    field.setStringValue("Changed again")
+    check changeCount == 1
 
   test "button mouse tracking cancels click when released outside":
     let
