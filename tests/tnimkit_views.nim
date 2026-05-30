@@ -96,6 +96,20 @@ suite "nimkit views":
 
     check root.hitTest(initPoint(25, 25)) == root
 
+  test "unclipped subviews can hit test outside parent bounds":
+    let
+      root = newView(0, 0, 200, 160)
+      parent = newView(20, 20, 40, 40)
+      child = newView(50, 0, 40, 40)
+
+    root.addSubview(parent)
+    parent.addSubview(child)
+
+    check root.hitTest(initPoint(85, 30)) == child
+
+    parent.setClipsToBounds(true)
+    check root.hitTest(initPoint(85, 30)) == root
+
   test "child invalidation propagates to parent":
     let root = newView(0, 0, 200, 160)
     let child = newView(20, 20, 80, 50)
@@ -186,6 +200,21 @@ suite "nimkit views":
     check not view.hasStyleClass("primary")
     check view.needsDisplay
 
+  test "clipsToBounds defaults off and invalidates display":
+    let view = newView(0, 0, 100, 80)
+
+    check not view.clipsToBounds
+
+    view.setNeedsDisplay(false)
+    view.setClipsToBounds(true)
+    check view.clipsToBounds
+    check view.needsDisplay
+
+    view.setNeedsDisplay(false)
+    view.setClipsToBounds(false)
+    check not view.clipsToBounds
+    check view.needsDisplay
+
   test "layout lifecycle runs selector hooks before display cleanup":
     let
       root = newLayoutSpyView(initRect(0, 0, 200, 160))
@@ -225,7 +254,7 @@ suite "nimkit views":
     view.setNeedsDisplayInRect(initRect(-10, -10, 20, 20))
     check view.invalidRects == @[initRect(0, 0, 75, 55)]
 
-  test "visibleRect clips through ancestors":
+  test "visibleRect only clips through clipping ancestors":
     let
       root = newView(0, 0, 100, 80)
       child = newView(80, 60, 50, 40)
@@ -235,6 +264,10 @@ suite "nimkit views":
     child.addSubview(grandchild)
 
     check root.visibleRect == initRect(0, 0, 100, 80)
+    check child.visibleRect == initRect(0, 0, 50, 40)
+    check grandchild.visibleRect == initRect(0, 0, 30, 30)
+
+    root.setClipsToBounds(true)
     check child.visibleRect == initRect(0, 0, 20, 20)
     check grandchild.visibleRect == initRect(0, 0, 10, 10)
 
@@ -243,12 +276,21 @@ suite "nimkit views":
     check child.visibleRect.isEmpty
     check grandchild.visibleRect.isEmpty
 
-  test "setNeedsDisplayInRect clips to visibleRect":
+  test "setNeedsDisplayInRect clips to effective visibleRect":
     let
       root = newView(0, 0, 100, 80)
       child = newView(80, 60, 50, 40)
 
     root.addSubview(child)
+    root.setNeedsDisplay(false)
+    child.setNeedsDisplay(false)
+
+    child.setNeedsDisplayInRect(initRect(0, 0, 50, 40))
+
+    check child.invalidRects == @[initRect(0, 0, 50, 40)]
+    check root.invalidRects == @[initRect(80, 60, 20, 20)]
+
+    root.setClipsToBounds(true)
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
 

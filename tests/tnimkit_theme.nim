@@ -54,10 +54,12 @@ suite "nimkit theme":
       child = newStyleTokenStore(parent)
       accent = initColor(0.7, 0.2, 0.3, 1.0)
       padding = initEdgeInsets(1, 2, 3, 4)
+      shadows = @[dropShadow(initColor(0, 0, 0, 0.25), y = 2.0, blur = 4.0)]
 
     parent.setToken("accent", accent)
     parent.setToken("space", 6.0)
     parent.setToken("padding", padding)
+    parent.setToken("shadow", shadows)
     child.setToken("nested.accent", styleToken("accent"))
 
     var value: StyleValue
@@ -69,6 +71,7 @@ suite "nimkit theme":
     check appearance.colorToken("nested.accent", initColor(0, 0, 0, 1)) == accent
     check appearance.lengthToken("space", 0.0) == 6.0
     check appearance.insetsToken("padding", initEdgeInsets(0)) == padding
+    check appearance.shadowsToken("shadow", @[]) == shadows
     check appearance.colorToken("missing", accent) == accent
 
   test "appearance tokens and style patches resolve into concrete styles":
@@ -78,12 +81,18 @@ suite "nimkit theme":
       focusRing = initColor(0.24, 0.42, 0.90, 0.75)
       fieldText = initColor(0.44, 0.55, 0.66, 1.0)
       buttonInsets = initEdgeInsets(2.0, 10.0)
+      buttonShadows =
+        @[
+          dropShadow(initColor(0, 0, 0, 0.35), y = 2.0, blur = 5.0),
+          insetShadow(initColor(1, 1, 1, 0.18), y = -1.0, blur = 1.0),
+        ]
 
     appearance.setToken("field.text.override", fieldText)
     appearance[srButton, StyleFill] = buttonFill
     appearance[srButton, StyleCornerRadius] = 9.0
     appearance[srButton, StyleFocusRingColor] = focusRing
     appearance[srButton, StyleTextInsets] = buttonInsets
+    appearance[srButton, StyleBoxShadows] = buttonShadows
     appearance[srTextField, StyleTextColor] = styleToken("field.text.override")
     appearance[srTextField, StyleBorderWidth] = 4.0
 
@@ -96,6 +105,7 @@ suite "nimkit theme":
     check buttonStyle.box.fill == buttonFill
     check buttonStyle.box.cornerRadius == 9.0
     check buttonStyle.box.focusRingColor == focusRing
+    check buttonStyle.box.shadows == buttonShadows
     check buttonStyle.text.insets == buttonInsets
     check textFieldStyle.text.color == fieldText
     check textFieldStyle.box.borderWidth == 4.0
@@ -133,6 +143,8 @@ suite "nimkit theme":
     let theme = initTheme()
     let
       appearance = initAppearance(theme)
+      defaultButtonStyle =
+        appearance.resolveButtonStyle(initControlStyleContext(srButton))
       buttonStyle = appearance.resolveButtonStyle(
         initControlStyleContext(srButton, highlighted = true)
       )
@@ -155,6 +167,23 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingInset < 0.0
     check buttonStyle.box.focusRingColor.a > 0.0
     check buttonStyle.box.focusRingColor != buttonStyle.box.fill
+    check defaultButtonStyle.box.shadows.len == 2
+    check defaultButtonStyle.box.shadows[0].kind == bskInset
+    check defaultButtonStyle.box.shadows[1].kind == bskInset
+    check defaultButtonStyle.box.shadows[0].x > 0.0
+    check defaultButtonStyle.box.shadows[0].y > 0.0
+    check defaultButtonStyle.box.shadows[1].x < 0.0
+    check defaultButtonStyle.box.shadows[1].y < 0.0
+    check defaultButtonStyle.box.shadows[1].color.a > 0.20
+    check defaultButtonStyle.box.shadows[1].blur >= 9.0
+    check buttonStyle.box.shadows.len == 2
+    check buttonStyle.box.shadows[0].kind == bskInset
+    check buttonStyle.box.shadows[0].x > 0.0
+    check buttonStyle.box.shadows[0].y > 0.0
+    check buttonStyle.box.shadows[1].kind == bskInset
+    check buttonStyle.box.shadows[1].x < 0.0
+    check buttonStyle.box.shadows[1].y < 0.0
+    check buttonStyle.box.shadows[1].blur >= 12.0
     check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
     check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
     check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)

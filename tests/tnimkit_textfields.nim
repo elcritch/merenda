@@ -9,6 +9,7 @@ suite "nimkit text fields":
     check field.isEditable
     check field.isSelectable
     check field.acceptsFirstResponder
+    check field.clipsToBounds
     check field.selectedRange == initTextRange(3, 0)
     check field.insertionPoint == 3
 

@@ -518,6 +518,22 @@ suite "nimkit responder":
     check trackingModifiers == @[{kmOption}]
     check trackingTimestamps == @[42.0]
 
+  test "window mouse and scroll dispatch stop at content bounds":
+    let
+      window = newWindow(0, 0, 100, 80, "Content bounds")
+      root = newView(0, 0, 100, 80)
+      child = newTrackingSpyView("child", initRect(120, 10, 40, 30))
+
+    root.addSubview(child)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check root.hitTest(initPoint(125, 20)) == child
+    check not window.mouseDownAt(initPoint(125, 20))
+    check not window.scrollWheelAt(initPoint(125, 20), deltaY = 1.0)
+    check trackingEvents.len == 0
+
   test "window scroll dispatch bubbles unhandled child scrolls":
     let
       window = newWindow(0, 0, 240, 160, "Scroll bubbling")

@@ -32,21 +32,36 @@ proc cornerRadii(radius: float32): array[DirectionCorners, uint16] =
   for corner in DirectionCorners:
     result[corner] = clamped.round().uint16
 
+proc toFigShadow(shadow: BoxShadow): RenderShadow =
+  RenderShadow(
+    style: if shadow.kind == bskInset: InnerShadow else: DropShadow,
+    fill: fill(shadow.color.rgba),
+    blur: shadow.blur,
+    spread: shadow.spread,
+    x: shadow.x,
+    y: shadow.y,
+  )
+
 proc rectangleNode(
     rect: types.Rect,
     color: types.Color,
     strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
+    shadows: openArray[BoxShadow] = [],
+    clips = false,
 ): Fig =
-  Fig(
+  result = Fig(
     kind: nkRectangle,
     screenBox: rect.toFigRect,
-    flags: {NfClipContent},
     fill: fill(color.rgba),
     corners: cornerRadii(cornerRadius),
     stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
+  if clips:
+    result.flags.incl NfClipContent
+  for idx in 0 ..< min(shadows.len, result.shadows.len):
+    result.shadows[idx] = shadows[idx].toFigShadow()
 
 proc toFontHorizontal(alignment: TextAlignment): FontHorizontal =
   case alignment
@@ -228,6 +243,7 @@ proc renderBuiltInView(
           style.indicator.borderColor,
           style.indicator.borderWidth,
           style.indicator.cornerRadius,
+          style.indicator.shadows,
         ),
       )
       if selected:
@@ -274,7 +290,7 @@ proc renderBuiltInView(
         rootIdx,
         rectangleNode(
           absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
-          style.box.cornerRadius,
+          style.box.cornerRadius, style.box.shadows,
         ),
       )
       if button.isFocusVisible:
@@ -304,7 +320,7 @@ proc renderBuiltInView(
       rootIdx,
       rectangleNode(
         absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
-        style.box.cornerRadius,
+        style.box.cornerRadius, style.box.shadows,
       ),
     )
     if focusVisible:
@@ -341,8 +357,10 @@ proc renderViewInto(
 
   let appearance = view.resolvedAppearance(inheritedAppearance)
   let absoluteFrame = view.rectToWindow(view.bounds)
-  let rootIdx =
-    context.addFig(parent, rectangleNode(absoluteFrame, view.backgroundColor))
+  let rootIdx = context.addFig(
+    parent,
+    rectangleNode(absoluteFrame, view.backgroundColor, clips = view.clipsToBounds),
+  )
   context.beginDraw(view, rootIdx)
 
   if not view.sendIfHandled(draw(), context):
