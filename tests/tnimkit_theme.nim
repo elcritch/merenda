@@ -176,19 +176,23 @@ suite "nimkit theme":
     check defaultButtonStyle.box.shadows.len == 2
     check defaultButtonStyle.box.shadows[0].kind == bskInset
     check defaultButtonStyle.box.shadows[1].kind == bskInset
-    check defaultButtonStyle.box.shadows[0].x > 0.0
-    check defaultButtonStyle.box.shadows[0].y > 0.0
-    check defaultButtonStyle.box.shadows[1].x < 0.0
-    check defaultButtonStyle.box.shadows[1].y < 0.0
+    check defaultButtonStyle.box.shadows[0].color == initColor(1.0, 1.0, 1.0, 0.30)
+    check defaultButtonStyle.box.shadows[0].x == -2.0
+    check defaultButtonStyle.box.shadows[0].y == -2.0
+    check defaultButtonStyle.box.shadows[1].color == initColor(0.0, 0.0, 0.0, 0.24)
+    check defaultButtonStyle.box.shadows[1].x == 2.0
+    check defaultButtonStyle.box.shadows[1].y == 2.0
     check defaultButtonStyle.box.shadows[1].color.a > 0.20
     check defaultButtonStyle.box.shadows[1].blur >= 9.0
     check buttonStyle.box.shadows.len == 2
     check buttonStyle.box.shadows[0].kind == bskInset
-    check buttonStyle.box.shadows[0].x > 0.0
-    check buttonStyle.box.shadows[0].y > 0.0
+    check buttonStyle.box.shadows[0].color == initColor(1.0, 1.0, 1.0, 0.12)
+    check buttonStyle.box.shadows[0].x == -2.0
+    check buttonStyle.box.shadows[0].y == -2.0
     check buttonStyle.box.shadows[1].kind == bskInset
-    check buttonStyle.box.shadows[1].x < 0.0
-    check buttonStyle.box.shadows[1].y < 0.0
+    check buttonStyle.box.shadows[1].color == initColor(0.0, 0.0, 0.0, 0.38)
+    check buttonStyle.box.shadows[1].x == 2.0
+    check buttonStyle.box.shadows[1].y == 2.0
     check buttonStyle.box.shadows[1].blur >= 12.0
     check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
     check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)

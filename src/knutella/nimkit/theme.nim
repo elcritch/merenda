@@ -1071,14 +1071,14 @@ proc addChoiceRule(
 
 func defaultButtonShadows(): seq[BoxShadow] =
   @[
-    insetShadow(initColor(1.0, 1.0, 1.0, 0.30), x = 1.0, y = 1.0, blur = 9.0),
-    insetShadow(initColor(0.0, 0.0, 0.0, 0.24), x = -1.0, y = -1.0, blur = 9.0),
+    insetShadow(initColor(1.0, 1.0, 1.0, 0.30), x = 2.0, y = 1.0, blur = 5.0),
+    insetShadow(initColor(0.0, 0.0, 0.0, 0.24), x = -1.0, y = -2.0, blur = 5.0),
   ]
 
 func highlightedButtonShadows(): seq[BoxShadow] =
   @[
-    insetShadow(initColor(1.0, 1.0, 1.0, 0.12), x = 1.0, y = 1.0, blur = 3.0),
-    insetShadow(initColor(0.0, 0.0, 0.0, 0.38), x = -1.0, y = -1.0, blur = 12.0),
+    insetShadow(initColor(1.0, 1.0, 1.0, 0.12), x = 2.0, y = 1.0, blur = 3.0),
+    insetShadow(initColor(0.0, 0.0, 0.0, 0.38), x = -1.0, y = -2.0, blur = 9.0),
   ]
 
 proc initTheme*(): Theme =
