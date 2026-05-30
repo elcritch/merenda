@@ -558,9 +558,5 @@ Concrete task list:
 
 ## Non-Goals For Now
 
-- Full Auto Layout compatibility or a constraint solver.
-- Menus.
-- Scroll views.
-- Full text editing.
 - Full AppKit `NS*` source compatibility.
 - ObjC runtime interop from NimKit.
