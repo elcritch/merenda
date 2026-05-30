@@ -24,26 +24,26 @@ proc showcaseAppearance(): Appearance =
     headerStyle = initStyleSelector(srTextField, classes = @["showcase-header"])
     statusStyle = initStyleSelector(srTextField, classes = @["showcase-status"])
 
-  result.setStyle(titleStyle, StyleFill, initColor(0.88, 0.92, 0.98))
-  result.setStyle(titleStyle, StyleBorderColor, initColor(0.62, 0.70, 0.84))
-  result.setStyle(titleStyle, StyleBorderWidth, 1.0)
-  result.setStyle(titleStyle, StyleCornerRadius, 6.0)
-  result.setStyle(titleStyle, StyleTextColor, initColor(0.09, 0.14, 0.26))
-  result.setStyle(titleStyle, StyleTextInsets, initEdgeInsets(0.0, 12.0))
+  result[titleStyle, StyleFill] = initColor(0.88, 0.92, 0.98)
+  result[titleStyle, StyleBorderColor] = initColor(0.62, 0.70, 0.84)
+  result[titleStyle, StyleBorderWidth] = 1.0
+  result[titleStyle, StyleCornerRadius] = 6.0
+  result[titleStyle, StyleTextColor] = initColor(0.09, 0.14, 0.26)
+  result[titleStyle, StyleTextInsets] = initEdgeInsets(0.0, 12.0)
 
-  result.setStyle(headerStyle, StyleFill, initColor(0.82, 0.88, 0.96))
-  result.setStyle(headerStyle, StyleBorderColor, initColor(0.82, 0.88, 0.96))
-  result.setStyle(headerStyle, StyleBorderWidth, 0.0)
-  result.setStyle(headerStyle, StyleCornerRadius, 5.0)
-  result.setStyle(headerStyle, StyleTextColor, initColor(0.10, 0.18, 0.32))
-  result.setStyle(headerStyle, StyleTextInsets, initEdgeInsets(0.0, 10.0))
+  result[headerStyle, StyleFill] = initColor(0.82, 0.88, 0.96)
+  result[headerStyle, StyleBorderColor] = initColor(0.82, 0.88, 0.96)
+  result[headerStyle, StyleBorderWidth] = 0.0
+  result[headerStyle, StyleCornerRadius] = 5.0
+  result[headerStyle, StyleTextColor] = initColor(0.10, 0.18, 0.32)
+  result[headerStyle, StyleTextInsets] = initEdgeInsets(0.0, 10.0)
 
-  result.setStyle(statusStyle, StyleFill, initColor(0.90, 0.96, 0.92))
-  result.setStyle(statusStyle, StyleBorderColor, initColor(0.68, 0.82, 0.72))
-  result.setStyle(statusStyle, StyleBorderWidth, 1.0)
-  result.setStyle(statusStyle, StyleCornerRadius, 6.0)
-  result.setStyle(statusStyle, StyleTextColor, initColor(0.09, 0.27, 0.18))
-  result.setStyle(statusStyle, StyleTextInsets, initEdgeInsets(0.0, 10.0))
+  result[statusStyle, StyleFill] = initColor(0.90, 0.96, 0.92)
+  result[statusStyle, StyleBorderColor] = initColor(0.68, 0.82, 0.72)
+  result[statusStyle, StyleBorderWidth] = 1.0
+  result[statusStyle, StyleCornerRadius] = 6.0
+  result[statusStyle, StyleTextColor] = initColor(0.09, 0.27, 0.18)
+  result[statusStyle, StyleTextInsets] = initEdgeInsets(0.0, 10.0)
 
 let
   app = sharedApplication()
