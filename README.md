@@ -1,196 +1,189 @@
 # Merenda
 
-`merenda` provides Nim UI toolkit experiments, including NimKit and
-bindings/helpers around the Objective-C runtime.
+Merenda is a Nim-native UI toolkit built on FigDraw for drawing and `siwin` for
+native windows and events.
 
-## AppKit Prototype (`merenda/appkit`)
+The main public module is `merenda/nimkit`. NimKit is designed around plain Nim
+objects, Cocoa-style responder/action patterns, and a small theme system that can
+grow toward richer query-based styling later.
 
-There is now an initial Cocoa/NextSTEP-style UI core built as Objective-C
-runtime classes on top of `siwin` (window/event loop) and `figdraw` (drawing):
+## Why Try It?
 
-- `NSApplication`
-- `NSWindow`
-- `NSView`
-- `NSControl`
-- `NSTextField`
-- `NSButton`
+- **Native Nim API**: windows, views, controls, geometry, colors, events, and
+  theme data are plain Nim types.
+- **FigDraw rendering**: controls render into a FigDraw tree, making drawing
+  testable and portable across supported FigDraw backends.
+- **Cocoa-inspired interaction model**: target/action, responders, first
+  responder, key-view tabbing, focus rings, and platform key bindings are built
+  in.
+- **Useful controls already work**: buttons, toggle buttons, checkboxes, radio
+  buttons, text fields, and combo boxes.
+- **Custom drawing is direct**: views can provide their own draw hook and render
+  into a `DrawContext`.
 
-Quick example:
+## Install
+
+Add Merenda to your package:
 
 ```nim
-import merenda/appkit
-
-let app = NSApplication.sharedApplication()
-let window = newWindow(100, 100, 640, 420, "Hello")
-let root = newView(0, 0, 640, 420)
-let field = newTextField(32, 32, 320, 44, "Hello world")
-let button = newButton(32, 96, 160, 44, "Click")
-
-button.setOnClick(proc(sender: NSButton) {.gcsafe.} =
-  discard sender
-  echo "clicked"
-)
-
-root.addSubview(field)
-root.addSubview(button)
-window.setContentView(root)
-window.makeKeyAndOrderFront(app)
-discard app.runForFrames(1) # use app.run() for full event loop
+requires "https://github.com/elcritch/merenda"
 ```
 
-Runnable example:
+Then resolve dependencies with Atlas:
 
 ```sh
-MERENDA_EXAMPLE_FRAMES=1 nim r examples/appkit_hello.nim
+atlas install
 ```
 
-## `objcImpl` runtime DSL
-
-`objcImpl` declares a runtime protocol and/or runtime class and wires Nim
-method implementations as Objective-C instance methods.
+## Quick Start
 
 ```nim
-import merenda/objc
+import merenda/nimkit
+import sigils/selectors
 
-var pingCount = 0
-var total = 0.cint
+let
+  app = sharedApplication()
+  window = newWindow(100, 100, 320, 220, "Counter")
+  root = newView(0, 0, 320, 220)
+  label = newTextField(36, 46, 240, 28, "Clicked 0 times")
+  button = newButton(36, 98, 140, 34, "Click")
+  clickAction = actionSelector("counterClicked")
 
-objcImpl:
-  type PingProtocol =
-    concept self
-      method ping(self: PingProtocol)
-      method add(self: PingProtocol, amount: cint): cint
+var clicks = 0
 
-  type PingClass {.impl: PingProtocol.} = object of NSObject
+proc onClick(sender: DynamicAgent) =
+  if not sender.isNil:
+    inc clicks
+    label.setStringValue("Clicked " & $clicks & " times")
 
-  method ping(self: PingClass) =
-    inc pingCount
+label.setEditable(false)
+label.setSelectable(false)
+button.setTarget(newActionTarget(clickAction, onClick))
+button.setAction(clickAction)
 
-  method add(self: PingClass, amount: cint): cint =
-    total += amount
-    result = total
+root.addSubview(label)
+root.addSubview(button)
+window.setContentView(root)
+discard window.selectNextKeyView()
+app.addWindow(window)
 
-let obj = PingClass.new()
-obj.ping()
-doAssert pingCount == 1
-doAssert obj.add(2.cint) == 2.cint
-doAssert obj.add(3.cint) == 5.cint
+window.makeKeyAndOrderFront()
+app.run()
 ```
 
-### Behavior
+Save that as a Nim file and run it with:
 
-- Can define protocol-only, class-only, or protocol+class in one block.
-- Creates/registers protocol if missing (`allocateProtocol` + `registerProtocol`).
-- Adds required instance method descriptions to the protocol.
-- Creates/registers class if missing (using the superclass declared in the DSL).
-- Attaches the class to listed protocols when both are present.
-- Installs generated C-callable method wrappers on the runtime class.
-- Emits Nim-callable helper procs for implemented methods, so `obj.ping()` and
-  `obj.add(...)` call through Objective-C message send.
+```sh
+nim r counter.nim
+```
 
-### Current constraints
+## Controls
 
-- Protocol methods in the concept are treated as required instance methods.
-- When protocol and class are declared together, implementations must exist for
-  every required protocol method and signatures must match.
-- Generated wrappers treat `self` as borrowed runtime object (`ID`) to avoid ARC
-  ownership side effects in the wrapper boundary.
-- `objcImpl` emits Nim marker types:
-  - `<ProtocolName> = object of ProtocolPrototype`
-  - `<ClassName> = object of <DeclaredSuperclass>`
-  This enables typedesc lookup with `getProtocol(MyProtocolType)` and
-  `getClass(MyClassType)` with compile-time type constraints.
-- Protocol conformance syntax:
-  - single protocol: `type MyClass {.impl: MyProtocol.} = object of NSObject`
-  - multiple protocols:
-    `type MyClass {.impl: (Proto1, Proto2).} = object of NSObject`
-  - repeated pragma form is also supported:
-    `type MyClass {.impl: Proto1, impl: Proto2.} = object of NSObject`
-- Constructor policy procs are passed through as normal Nim declarations.
-  This is useful for disabling convenience constructors with `.error`:
+NimKit currently includes:
+
+- `newWindow`, `newView`
+- `newTextField`
+- `newButton`
+- `newCheckBox`
+- `newRadioButton`
+- `newComboBox`
+
+Controls use target/action for user commands:
 
 ```nim
-objcImpl:
-  type MyProtocol =
-    concept self
-      method ping(self: MyProtocol)
+let action = actionSelector("saveClicked")
 
-  type MyClass {.impl: MyProtocol.} = object of NSObject
+proc save(sender: DynamicAgent) =
+  if not sender.isNil:
+    echo "save"
 
-  proc new*(t: typedesc[MyClass]): MyClass {.error.}
-  proc init*(t: typedesc[MyClass]): MyClass {.error.}
-  proc init*(v: var MyClass): MyClass {.error.}
-
-  method ping(self: MyClass) = discard
+button.setTarget(newActionTarget(action, save))
+button.setAction(action)
 ```
 
-### Super-call helpers
-
-`merenda/objc` also exports convenience helpers for calling superclass
-implementations from custom runtime methods:
+Buttons can behave as push, toggle, checkbox, or radio controls:
 
 ```nim
-import merenda/objc
-
-var deallocCount = 0
-
-objcImpl:
-  type SuperCallProtocol =
-    concept self
-      method retainCountFromSuper(self: SuperCallProtocol): cint
-
-  type SuperCallClass {.impl: SuperCallProtocol.} = object of NSObject
-
-  method retainCountFromSuper(self: SuperCallClass): cint =
-    super(NSUInteger, self, retainCount).cint
-
-  method dealloc(self: SuperCallClass) {.used.} =
-    inc deallocCount
-    superDealloc(self)
-
-let o = SuperCallClass.new()
-doAssert o.retainCountFromSuper() == retainCount(o).cint
+button.setButtonType(btToggle)
+button.setAllowsMixedState(true)
 ```
 
-### Ivar Properties
+## Keyboard And Focus
 
-`objcImpl` class fields become Objective-C ivars with generated Nim property
-accessors (`self.field` / `self.field = value`).
+NimKit supports first responder focus, tab navigation, and platform-aware text
+editing shortcuts. macOS defaults to Cocoa-style bindings such as control-A,
+control-E, option-left, and option-right. Windows and Linux/BSD use their own
+default binding profiles.
 
 ```nim
-import merenda/objc
-import merenda/objc/ivar
-
-type CounterStateObj = object
-  total: int
-  multiplier: int
-type CounterState = ref CounterStateObj
-
-objcImpl:
-  type CounterClass = object of NSObject
-    counter: CounterState
-
-  proc new*(t: typedesc[CounterClass]): CounterClass {.error.}
-  proc init*(t: typedesc[CounterClass]): CounterClass {.error.}
-  proc init*(v: var CounterClass): CounterClass {.error.}
-
-  proc initWithMultiplier*(v: var CounterClass, m: cint): CounterClass =
-    result = asType[CounterClass](super(v, init))
-    v.value = nil
-    result.counter = CounterState(total: 0, multiplier: m.int)
-
-  method bump(self: CounterClass, amount: cint): cint =
-    let st = self.counter
-    st.total += amount.int
-    result = (st.total * st.multiplier).cint
-
-  method dealloc(self: CounterClass) {.used.} =
-    clearIvarRefs(self)
-    superDealloc(self)
-
-var c = CounterClass.alloc()
-c = c.initWithMultiplier(2.cint)
-doAssert c.bump(3.cint) == 6.cint
+discard window.selectNextKeyView()
+discard window.makeFirstResponder(textField)
 ```
 
-Use `clearIvarRefs(self)` in `dealloc` to release ivar-backed Nim refs.
+Buttons can be tab-selected and activated from the keyboard.
+
+## Styling
+
+Use an `Appearance` to override theme tokens or style selectors. Views can carry
+style classes, giving the theme system stable targets without requiring CSS.
+
+```nim
+let titleStyle = initStyleSelector(srTextField, classes = @["title"])
+var appearance = initAppearance()
+
+appearance.setStyle(titleStyle, StyleFill, initColor(0.88, 0.92, 0.98))
+appearance.setStyle(titleStyle, StyleTextColor, initColor(0.09, 0.14, 0.26))
+appearance.setStyle(titleStyle, StyleCornerRadius, 6.0)
+
+title.setStyleClasses(["title"])
+root.setAppearance(appearance)
+```
+
+Appearance inherits through the app, window, and view hierarchy, so local
+overrides can be scoped to a whole window or a single subtree.
+
+## Drawing
+
+Custom views draw through a `DrawContext`, which wraps the active FigDraw render
+list, local bounds, visible rect, and coordinate conversion helpers.
+
+```nim
+proc drawBadge(context: DrawContext) =
+  context.addRectangle(
+    initRect(0, 0, 120, 32),
+    initColor(0.18, 0.32, 0.55),
+  )
+  context.addText(
+    initRect(12, 0, 96, 32),
+    "Ready",
+    initColor(1, 1, 1),
+    taCenter,
+  )
+```
+
+## Examples
+
+Run the combined controls demo:
+
+```sh
+nim r examples/nimkit_controls_showcase.nim
+```
+
+Other focused examples:
+
+```sh
+nim r examples/nimkit_hello.nim
+nim r examples/nimkit_button_counter.nim
+nim r examples/nimkit_textfield_demo.nim
+nim r examples/nimkit_checkbox_demo.nim
+nim r examples/nimkit_radio_demo.nim
+nim r examples/nimkit_combobox_demo.nim
+```
+
+## Tests
+
+Run the NimKit test suite and compile the NimKit examples:
+
+```sh
+nim test
+```
