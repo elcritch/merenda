@@ -1,7 +1,7 @@
 version       = "0.1.2"
 author        = "Jaremy Creechley"
 description   = "Neovim backend in Nim and FigDraw"
-license       = "MPL2"
+license       = "MPL-2.0"
 srcDir        = "src"
 
 # Dependencies
