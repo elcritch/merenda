@@ -92,11 +92,57 @@ proc bindKey*(
   window.xKeyBindings.bindKey(text, modifiers, selector)
 
 proc bindKey*(
+    window: Window,
+    key: types.Key,
+    modifiers: set[KeyModifier],
+    selector: CommandSelector,
+) =
+  if window.isNil:
+    return
+  window.xKeyBindings.bindKey(key, modifiers, selector)
+
+proc bindKey*(
     window: Window, keyCode: int, modifiers: set[KeyModifier], selector: CommandSelector
 ) =
   if window.isNil:
     return
   window.xKeyBindings.bindKey(keyCode, modifiers, selector)
+
+proc bindShortcut*(
+    window: Window,
+    text: string,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  if window.isNil:
+    return
+  window.xKeyBindings.bindShortcut(text, modifiers, selector)
+
+proc bindShortcut*(
+    window: Window,
+    key: types.Key,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  if window.isNil:
+    return
+  window.xKeyBindings.bindShortcut(key, modifiers, selector)
+
+proc bindShortcuts*(
+    window: Window,
+    text: string,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  window.bindShortcut(text, modifiers, selector)
+
+proc bindShortcuts*(
+    window: Window,
+    key: types.Key,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  window.bindShortcut(key, modifiers, selector)
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool
 proc effectiveAppearance*(window: Window): Appearance

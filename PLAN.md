@@ -30,9 +30,9 @@ NimKit already has the first useful vertical slice:
   mouse/scroll dispatch walks the responder chain with view-local coordinate
   conversion at each step, and repeated click counts stay scoped to the clicked
   target.
-- Window key bindings map text/key-code plus modifier combinations to command
-  selectors, dispatch them through the responder chain before raw `keyDown`, and
-  fall through cleanly when no responder handles the command.
+- Window key bindings map text/typed-key/key-code plus modifier combinations to
+  command selectors, dispatch them through the responder chain before raw
+  `keyDown`, and fall through cleanly when no responder handles the command.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
   rectangles, single-line text, and style-resolved button/text-field metrics.
 - siwin native windows, modifier-aware mouse/scroll dispatch, key/text input
@@ -87,7 +87,8 @@ NimKit already has the first useful vertical slice:
   helpers used by selector-backed custom drawing.
 - `src/knutella/nimkit/keybindings.nim`:
   Plain `KeyStroke`, `KeyBinding`, and `KeyBindingTable` values for mapping
-  key/modifier combinations to command selectors.
+  key/modifier combinations to command selectors, including platform-primary
+  shortcut modifiers.
 - `src/knutella/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
   appearance/style identity, layout/display invalidation, hover/active state,
@@ -161,10 +162,11 @@ NimKit already has the first useful vertical slice:
 - Responder chains forward selector dispatch through `sigils/selectors`.
 - `Window` tracks first responder and dispatches key events to it before falling
   back to the content view.
-- `KeyBindingTable` maps text/key-code plus modifier combinations to command
-  selectors. `Window` resolves key commands before raw `keyDown`, dispatches
-  them through the same responder command path as `doCommandBySelector`, and
-  falls through to raw key dispatch when the command is unhandled.
+- `KeyBindingTable` maps text/typed-key/key-code plus modifier combinations to
+  command selectors. `Window` resolves key commands before raw `keyDown`,
+  dispatches them through the same responder command path as
+  `doCommandBySelector`, and falls through to raw key dispatch when the command
+  is unhandled.
 - Space key activation of buttons is now the default key binding for
   `performClick`, covered by responder tests.
 - siwin mouse positions are converted from the native input coordinate extent to
@@ -342,7 +344,8 @@ still points to the next correctness boundaries:
 - The first command/key-binding layer is in place. GNUstep routes key
   equivalents through the application/window path and text commands through key
   binding tables and responder selectors; NimKit now has the same core shape
-  with a small table that maps key/modifier combinations to command selectors.
+  with a small table that maps text/typed-key/key-code plus modifier
+  combinations to command selectors.
 
 Recommended NimKit order:
 
