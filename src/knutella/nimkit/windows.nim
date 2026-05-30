@@ -1,4 +1,4 @@
-import std/[options, times]
+import std/[math, options, times]
 
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
@@ -25,6 +25,11 @@ type Window* = ref object of Responder
   xAutorecalculatesKeyViewLoop: bool
   xKeyBindings: KeyBindingTable
   xHostWindow: HostWindow
+  xOwnerWindow: Window
+  xAuxiliaryWindows: seq[Window]
+  xIsPopup: bool
+  xPopupPlacement: siwinshim.PopupPlacement
+  xOnPopupDone: proc() {.closure.}
   xMouseCaptureView: View
   xMouseActiveView: View
   xMouseHoverView: View
@@ -54,6 +59,13 @@ proc recalculateKeyViewLoop*(window: Window)
 proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.}
 proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.}
 proc effectiveAppearance*(window: Window): Appearance
+proc close*(window: Window)
+proc nativeContentScale*(window: Window): float32
+proc newPopupWindow*(
+  owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
+): Window
+
+proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc dispatchKeyEventInChain(
   window: Window, target: Responder, event: types.KeyEvent
 ): EventDispatchResult
@@ -89,6 +101,35 @@ proc newWindow*(frame: Rect, title: string): Window =
 
 proc newWindow*(x, y, width, height: float32, title: string): Window =
   newWindow(initRect(x, y, width, height), title)
+
+proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
+  max((value * scale).round().int32, minimum)
+
+proc popupPlacement(
+    anchorFrame: Rect, popupSize: Size, scale: float32
+): siwinshim.PopupPlacement =
+  siwinshim.PopupPlacement(
+    anchorRectPos: siwinshim.ivec2(
+      popupPixels(anchorFrame.origin.x, scale, 0),
+      popupPixels(anchorFrame.origin.y, scale, 0),
+    ),
+    anchorRectSize: siwinshim.ivec2(
+      popupPixels(anchorFrame.size.width, scale, 1),
+      popupPixels(anchorFrame.size.height, scale, 1),
+    ),
+    size: siwinshim.ivec2(
+      popupPixels(popupSize.width, scale, 1), popupPixels(popupSize.height, scale, 1)
+    ),
+    anchor: siwinshim.Edge.bottomLeft,
+    gravity: siwinshim.Edge.topLeft,
+    offset: siwinshim.ivec2(0, 0),
+    constraintAdjustment: {
+      siwinshim.PopupConstraintAdjustment.pcaFlipY,
+      siwinshim.PopupConstraintAdjustment.pcaSlideX,
+      siwinshim.PopupConstraintAdjustment.pcaResizeY,
+    },
+    reactive: true,
+  )
 
 proc frame*(window: Window): Rect =
   window.xFrame
@@ -471,6 +512,11 @@ proc rendererOrNil*(
 proc nativeReady*(window: Window): bool =
   (not window.isNil) and window.xHostWindow.isReady
 
+proc nativeContentScale*(window: Window): float32 =
+  if window.isNil:
+    return 1.0'f32
+  window.xHostWindow.contentScale()
+
 proc isClosed*(window: Window): bool =
   window.isNil or window.xClosed
 
@@ -493,13 +539,61 @@ proc orderOut*(window: Window) =
   window.xVisibleRequested = false
   window.xHostWindow.setVisible(false)
 
+proc detachAuxiliaryWindow(owner, auxiliary: Window) =
+  if owner.isNil or auxiliary.isNil:
+    return
+  let idx = owner.xAuxiliaryWindows.find(auxiliary)
+  if idx >= 0:
+    owner.xAuxiliaryWindows.delete(idx)
+
+proc closeAuxiliaryWindows(window: Window) =
+  if window.isNil:
+    return
+  let auxiliaries = window.xAuxiliaryWindows
+  window.xAuxiliaryWindows.setLen(0)
+  for auxiliary in auxiliaries:
+    if not auxiliary.isNil:
+      auxiliary.xOwnerWindow = nil
+      auxiliary.close()
+
 proc close*(window: Window) =
   if window.isNil:
     return
+  let notifyPopupDone =
+    window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
+  window.closeAuxiliaryWindows()
   window.xClosed = true
   window.xVisibleRequested = false
+  if not window.xOwnerWindow.isNil:
+    window.xOwnerWindow.detachAuxiliaryWindow(window)
+    window.xOwnerWindow = nil
   window.xHostWindow.close()
   window.xHostWindow = nil
+  if notifyPopupDone:
+    window.xOnPopupDone()
+
+proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
+  if window.isNil:
+    return
+  window.xOnPopupDone = handler
+
+proc newPopupWindow*(
+    owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
+): Window =
+  let frame = initRect(
+    anchorFrame.origin.x,
+    anchorFrame.origin.y + anchorFrame.size.height,
+    max(popupSize.width, 1.0'f32),
+    max(popupSize.height, 1.0'f32),
+  )
+  result = newWindow(frame, title)
+  result.xOwnerWindow = owner
+  result.xIsPopup = true
+  result.xPopupPlacement =
+    popupPlacement(anchorFrame, popupSize, owner.nativeContentScale())
+  if not owner.isNil and result notin owner.xAuxiliaryWindows:
+    owner.xAuxiliaryWindows.add result
+    result.setInheritedAppearance(owner.effectiveAppearance())
 
 proc mouseDownAt*(
   window: Window,
@@ -888,8 +982,12 @@ proc dispatchHostTextInput(window: Window, text: string) =
 proc markHostClosed(window: Window) =
   if window.isNil:
     return
+  window.closeAuxiliaryWindows()
   window.xClosed = true
   window.xVisibleRequested = false
+  if not window.xOwnerWindow.isNil:
+    window.xOwnerWindow.detachAuxiliaryWindow(window)
+    window.xOwnerWindow = nil
 
 proc ensureNativeWindow*(window: Window) =
   if window.isNil:
@@ -897,30 +995,42 @@ proc ensureNativeWindow*(window: Window) =
   if window.xHostWindow.isReady:
     return
 
-  window.xHostWindow = createHostWindow(
-    window.xFrame,
-    window.xTitle,
-    HostWindowCallbacks(
-      onClose: proc() =
-        window.markHostClosed(),
-      onResize: proc() =
-        discard window.syncNativeGeometry(),
-      onMove: proc(pos: Point) =
-        window.xFrame.origin = pos,
-      onMouseButton: proc(event: MouseEvent, pressed: bool) =
-        window.dispatchHostMouseButton(event, pressed),
-      onMouseMove: proc(event: MouseEvent, dragging: bool) =
-        window.dispatchHostMouseMove(event, dragging),
-      onScroll: proc(event: types.ScrollEvent) =
-        window.dispatchHostScroll(event),
-      onKey: proc(event: HostKeyEvent) =
-        window.dispatchHostKey(event),
-      onTextInput: proc(text: string) =
-        window.dispatchHostTextInput(text),
-      onRender: proc() =
-        window.renderNativeWindow(),
-    ),
+  let callbacks = HostWindowCallbacks(
+    onClose: proc() =
+      window.markHostClosed(),
+    onResize: proc() =
+      discard window.syncNativeGeometry(),
+    onMove: proc(pos: Point) =
+      window.xFrame.origin = pos,
+    onMouseButton: proc(event: MouseEvent, pressed: bool) =
+      window.dispatchHostMouseButton(event, pressed),
+    onMouseMove: proc(event: MouseEvent, dragging: bool) =
+      window.dispatchHostMouseMove(event, dragging),
+    onScroll: proc(event: types.ScrollEvent) =
+      window.dispatchHostScroll(event),
+    onKey: proc(event: HostKeyEvent) =
+      window.dispatchHostKey(event),
+    onTextInput: proc(text: string) =
+      window.dispatchHostTextInput(text),
+    onRender: proc() =
+      window.renderNativeWindow(),
+    onPopupDone: proc() =
+      window.markHostClosed()
+      if not window.xOnPopupDone.isNil:
+        window.xOnPopupDone()
+    ,
   )
+  if window.xIsPopup:
+    if window.xOwnerWindow.isNil:
+      return
+    window.xOwnerWindow.ensureNativeWindow()
+    if not window.xOwnerWindow.nativeReady:
+      return
+    window.xHostWindow = createPopupHostWindow(
+      window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
+    )
+  else:
+    window.xHostWindow = createHostWindow(window.xFrame, window.xTitle, callbacks)
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)
 
@@ -930,6 +1040,15 @@ proc pumpNativeWindowFrame*(window: Window) =
   window.ensureNativeWindow()
   if window.xHostWindow.isReady:
     window.xHostWindow.pump()
+  var idx = 0
+  while idx < window.xAuxiliaryWindows.len:
+    let auxiliary = window.xAuxiliaryWindows[idx]
+    if auxiliary.isNil or auxiliary.isClosed:
+      window.xAuxiliaryWindows.delete(idx)
+      continue
+    if auxiliary.isVisible:
+      auxiliary.pumpNativeWindowFrame()
+    inc idx
 
 proc rawInputToLogical*(
     rawPos: siwinshim.Vec2, inputSize: siwinshim.IVec2, logicalSize: siwinshim.Vec2
