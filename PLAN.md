@@ -284,11 +284,11 @@ Concrete task order and status:
    and `updateConstraintsForSubtreeIfNeeded`. `layoutSubtreeIfNeeded` should run
    constraint updates before layout, matching the modern AppKit ordering without
    porting GNUstep code.
-10. Not started: Add constraint data shapes before solving: `LayoutAttribute`,
+10. Done: Add constraint data shapes before solving: `LayoutAttribute`,
    `LayoutRelation`, `LayoutConstraint`, activation/deactivation, and per-view
-   constraint storage. Keep these as Nim-native types, but align the concepts
-   with modern Cocoa so future anchors, guides, and solver integration have a
-   stable target.
+   constraint storage. These are Nim-native shapes aligned with modern Cocoa,
+   with activation only managing storage and invalidation for now. No solver or
+   frame mutation is included yet.
 11. Not started: Add layout item geometry hooks needed by constraints and
    containers: baseline offsets, alignment rects, and invalidation when
    intrinsic size, hugging, compression resistance, frame, or hierarchy changes.
