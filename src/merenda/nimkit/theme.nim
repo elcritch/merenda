@@ -57,6 +57,7 @@ type
     svMissing
     svColor
     svLength
+    svSize
     svInsets
     svShadows
     svToken
@@ -70,6 +71,8 @@ type
       color*: Color
     of svLength:
       length*: float32
+    of svSize:
+      size*: Size
     of svInsets:
       insets*: EdgeInsets
     of svShadows:
@@ -116,8 +119,7 @@ type
   ButtonStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
-    minimumWidth*: float32
-    minimumHeight*: float32
+    minSize*: Size
 
   ChoiceButtonStyle* = object
     indicator*: ControlBoxStyle
@@ -125,22 +127,19 @@ type
     text*: TextStyle
     indicatorSize*: float32
     indicatorSpacing*: float32
-    minimumWidth*: float32
-    minimumHeight*: float32
+    minSize*: Size
 
   TextFieldStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
-    minimumWidth*: float32
-    minimumHeight*: float32
+    minSize*: Size
 
   ComboBoxStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
     arrowWidth*: float32
     arrowColor*: Color
-    minimumWidth*: float32
-    minimumHeight*: float32
+    minSize*: Size
 
 const
   StyleFill* = StyleKey[Color]("fill")
@@ -156,8 +155,7 @@ const
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
   StyleMarkColor* = StyleKey[Color]("mark.color")
-  StyleMinimumWidth* = StyleKey[float32]("minimum.width")
-  StyleMinimumHeight* = StyleKey[float32]("minimum.height")
+  StyleMinimumSize* = StyleKey[Size]("minimum.size")
 
   AccentToken* = "accent"
   AccentPressedToken* = "accent.pressed"
@@ -253,6 +251,12 @@ func styleColor*(color: Color): StyleValue =
 
 func styleLength*(length: float32): StyleValue =
   StyleValue(kind: svLength, length: length)
+
+func styleSize*(size: Size): StyleValue =
+  StyleValue(
+    kind: svSize,
+    size: Size(width: max(size.width, 0.0'f32), height: max(size.height, 0.0'f32)),
+  )
 
 func styleInsets*(insets: EdgeInsets): StyleValue =
   StyleValue(kind: svInsets, insets: insets)
@@ -366,6 +370,9 @@ proc setToken*(tokens: StyleTokenStore, name: string, value: float32) =
 proc setToken*(tokens: StyleTokenStore, name: string, value: float) =
   tokens.setToken(name, styleLength(value.float32))
 
+proc setToken*(tokens: StyleTokenStore, name: string, value: Size) =
+  tokens.setToken(name, styleSize(value))
+
 proc setToken*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
   tokens.setToken(name, styleInsets(value))
 
@@ -382,6 +389,9 @@ proc setToken*(theme: var Theme, name: string, value: float32) =
   theme.ensureTokens().setToken(name, value)
 
 proc setToken*(theme: var Theme, name: string, value: float) =
+  theme.ensureTokens().setToken(name, value)
+
+proc setToken*(theme: var Theme, name: string, value: Size) =
   theme.ensureTokens().setToken(name, value)
 
 proc setToken*(theme: var Theme, name: string, value: EdgeInsets) =
@@ -405,6 +415,9 @@ proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: float32) =
 proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: float) =
   tokens.setDefaultToken(name, styleLength(value.float32))
 
+proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: Size) =
+  tokens.setDefaultToken(name, styleSize(value))
+
 proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
   tokens.setDefaultToken(name, styleInsets(value))
 
@@ -423,6 +436,9 @@ proc setDefaultToken*(theme: var Theme, name: string, value: float32) =
   theme.ensureTokens().setDefaultToken(name, value)
 
 proc setDefaultToken*(theme: var Theme, name: string, value: float) =
+  theme.ensureTokens().setDefaultToken(name, value)
+
+proc setDefaultToken*(theme: var Theme, name: string, value: Size) =
   theme.ensureTokens().setDefaultToken(name, value)
 
 proc setDefaultToken*(theme: var Theme, name: string, value: EdgeInsets) =
@@ -481,6 +497,9 @@ proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float32) =
 
 proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float) =
   patch.setStyle(key, styleLength(value.float32))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[Size], value: Size) =
+  patch.setStyle(key, styleSize(value))
 
 proc setStyle*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
   patch.setStyle(key, styleInsets(value))
@@ -548,6 +567,11 @@ proc setStyle*(
   theme.stylePatch(selector).setStyle(key, value)
 
 proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
     theme: var Theme,
     selector: StyleSelector,
     key: StyleKey[EdgeInsets],
@@ -579,6 +603,9 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float
 ) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Size], value: Size) =
   theme.setStyle(initStyleSelector(role), key, value)
 
 proc setStyle*(
@@ -625,6 +652,15 @@ proc setStyle*(
     theme: var Theme,
     role: StyleRole,
     states: set[StyleState],
+    key: StyleKey[Size],
+    value: Size,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
     key: StyleKey[float32],
     value: float,
 ) =
@@ -658,6 +694,9 @@ proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: fl
   theme.setStyle(role, key, value)
 
 proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Size], value: Size) =
   theme.setStyle(role, key, value)
 
 proc `[]=`*(
@@ -704,6 +743,12 @@ proc lengthRule(
   let value = theme.ruleValue(context, key.keyName, styleLength(fallback))
   if value.kind == svLength: value.length else: fallback
 
+proc sizeRule(
+    theme: Theme, context: StyleContext, key: StyleKey[Size], fallback: Size
+): Size =
+  let value = theme.ruleValue(context, key.keyName, styleSize(fallback))
+  if value.kind == svSize: value.size else: fallback
+
 proc insetsRule(
     theme: Theme, context: StyleContext, key: StyleKey[EdgeInsets], fallback: EdgeInsets
 ): EdgeInsets =
@@ -733,6 +778,10 @@ proc lengthToken*(theme: Theme, name: string, fallback: float32): float32 =
   let value = theme.styleValue(name, styleLength(fallback))
   if value.kind == svLength: value.length else: fallback
 
+proc sizeToken*(theme: Theme, name: string, fallback: Size): Size =
+  let value = theme.styleValue(name, styleSize(fallback))
+  if value.kind == svSize: value.size else: fallback
+
 proc insetsToken*(theme: Theme, name: string, fallback: EdgeInsets): EdgeInsets =
   let value = theme.styleValue(name, styleInsets(fallback))
   if value.kind == svInsets: value.insets else: fallback
@@ -754,6 +803,9 @@ proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
 proc lengthToken*(appearance: Appearance, name: string, fallback: float32): float32 =
   appearance.theme.lengthToken(name, fallback)
 
+proc sizeToken*(appearance: Appearance, name: string, fallback: Size): Size =
+  appearance.theme.sizeToken(name, fallback)
+
 proc insetsToken*(
     appearance: Appearance, name: string, fallback: EdgeInsets
 ): EdgeInsets =
@@ -774,6 +826,9 @@ proc setToken*(appearance: var Appearance, name: string, value: float32) =
   appearance.theme.setToken(name, value)
 
 proc setToken*(appearance: var Appearance, name: string, value: float) =
+  appearance.theme.setToken(name, value)
+
+proc setToken*(appearance: var Appearance, name: string, value: Size) =
   appearance.theme.setToken(name, value)
 
 proc setToken*(appearance: var Appearance, name: string, value: EdgeInsets) =
@@ -803,6 +858,14 @@ proc setStyle*(
     selector: StyleSelector,
     key: StyleKey[float32],
     value: float32,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Size],
+    value: Size,
 ) =
   appearance.theme.setStyle(selector, key, value)
 
@@ -851,6 +914,11 @@ proc setStyle*(
   appearance.theme.setStyle(role, key, value)
 
 proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Size], value: Size
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
     appearance: var Appearance,
     role: StyleRole,
     key: StyleKey[EdgeInsets],
@@ -883,6 +951,11 @@ proc `[]=`*(
 
 proc `[]=`*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Size], value: Size
 ) =
   appearance.setStyle(role, key, value)
 
@@ -923,8 +996,7 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
     ),
-    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 0.0),
-    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 24.0),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 24.0)),
   )
 
 proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
@@ -948,8 +1020,7 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
     ),
     indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
     indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
-    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 0.0),
-    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 18.0),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 18.0)),
   )
 
 proc resolveTextFieldStyle*(
@@ -972,8 +1043,7 @@ proc resolveTextFieldStyle*(
       color: theme.colorRule(context, StyleTextColor, textColor),
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
     ),
-    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 80.0),
-    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 24.0),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
   )
 
 proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
@@ -1000,8 +1070,7 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
     arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
     arrowColor:
       theme.colorRule(context, StyleMarkColor, initColor(0.20, 0.22, 0.26, 1.0)),
-    minimumWidth: theme.lengthRule(context, StyleMinimumWidth, 90.0),
-    minimumHeight: theme.lengthRule(context, StyleMinimumHeight, 24.0),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(90.0, 24.0)),
   )
 
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
@@ -1075,20 +1144,17 @@ func controlChromeHeight*(box: ControlBoxStyle): float32 =
   box.controlChromeWidth()
 
 func controlSizeWithChrome*(
-    contentSize: Size,
-    insets: EdgeInsets,
-    box: ControlBoxStyle,
-    minimumWidth, minimumHeight: float32,
+    contentSize: Size, insets: EdgeInsets, box: ControlBoxStyle, minSize: Size
 ): Size =
   initSize(
-    max(minimumWidth, contentSize.width + insets.horizontal + box.controlChromeWidth()),
-    max(minimumHeight, contentSize.height + insets.vertical + box.controlChromeHeight()),
+    max(minSize.width, contentSize.width + insets.horizontal + box.controlChromeWidth()),
+    max(
+      minSize.height, contentSize.height + insets.vertical + box.controlChromeHeight()
+    ),
   )
 
 func buttonControlSize*(style: ButtonStyle, titleSize: Size): Size =
-  controlSizeWithChrome(
-    titleSize, style.text.insets, style.box, style.minimumWidth, style.minimumHeight
-  )
+  controlSizeWithChrome(titleSize, style.text.insets, style.box, style.minSize)
 
 func choiceControlSize*(style: ChoiceButtonStyle, titleSize: Size): Size =
   let
@@ -1101,20 +1167,15 @@ func choiceControlSize*(style: ChoiceButtonStyle, titleSize: Size): Size =
     initSize(contentWidth, contentHeight),
     style.text.insets,
     style.indicator,
-    style.minimumWidth,
-    style.minimumHeight,
+    style.minSize,
   )
 
 func textFieldControlSize*(style: TextFieldStyle, textSize: Size): Size =
-  controlSizeWithChrome(
-    textSize, style.text.insets, style.box, style.minimumWidth, style.minimumHeight
-  )
+  controlSizeWithChrome(textSize, style.text.insets, style.box, style.minSize)
 
 func comboBoxControlSize*(style: ComboBoxStyle, textSize: Size): Size =
   let contentSize = initSize(textSize.width + style.arrowWidth, textSize.height)
-  controlSizeWithChrome(
-    contentSize, style.text.insets, style.box, style.minimumWidth, style.minimumHeight
-  )
+  controlSizeWithChrome(contentSize, style.text.insets, style.box, style.minSize)
 
 proc addRoleRule(
     theme: var Theme,
@@ -1306,8 +1367,7 @@ proc initTheme*(): Theme =
   result.setStyle(srButton, StyleBorderWidth, 1.0)
   result.setStyle(srButton, StyleCornerRadius, 8.0)
   result.setStyle(srButton, StyleTextInsets, initEdgeInsets(0.0, 8.0))
-  result.setStyle(srButton, StyleMinimumWidth, 0.0)
-  result.setStyle(srButton, StyleMinimumHeight, 24.0)
+  result.setStyle(srButton, StyleMinimumSize, initSize(0.0, 24.0))
   result.setStyle(srButton, StyleFocusRingWidth, 3.0)
   result.setStyle(srButton, StyleFocusRingInset, -2.0)
   result.setStyle(srButton, StyleFocusRingColor, styleToken(ButtonFocusRingColorToken))
@@ -1380,8 +1440,7 @@ proc initTheme*(): Theme =
     result.setStyle(role, StyleCornerRadius, radius)
     result.setStyle(role, StyleIndicatorSpacing, 7.0)
     result.setStyle(role, StyleTextInsets, initEdgeInsets(0.0, 2.0))
-    result.setStyle(role, StyleMinimumWidth, 0.0)
-    result.setStyle(role, StyleMinimumHeight, 18.0)
+    result.setStyle(role, StyleMinimumSize, initSize(0.0, 18.0))
     result.setStyle(role, StyleFocusRingWidth, 3.0)
     result.setStyle(role, StyleFocusRingInset, 2.0)
     result.setStyle(role, StyleFocusRingColor, styleToken(FocusRingColorToken))
@@ -1391,8 +1450,7 @@ proc initTheme*(): Theme =
   result.setStyle(srTextField, StyleBorderWidth, 1.0)
   result.setStyle(srTextField, StyleCornerRadius, 6.0)
   result.setStyle(srTextField, StyleTextInsets, initEdgeInsets(0.0, 6.0))
-  result.setStyle(srTextField, StyleMinimumWidth, 80.0)
-  result.setStyle(srTextField, StyleMinimumHeight, 24.0)
+  result.setStyle(srTextField, StyleMinimumSize, initSize(80.0, 24.0))
   result.setStyle(srTextField, StyleFocusRingWidth, 3.0)
   result.setStyle(srTextField, StyleFocusRingInset, 2.0)
   result.setStyle(srTextField, StyleFocusRingColor, styleToken(FocusRingColorToken))
@@ -1425,8 +1483,7 @@ proc initTheme*(): Theme =
   result.setStyle(srComboBox, StyleFocusRingInset, 2.0)
   result.setStyle(srComboBox, StyleFocusRingColor, styleToken(FocusRingColorToken))
   result.setStyle(srComboBox, StyleIndicatorSize, 24.0)
-  result.setStyle(srComboBox, StyleMinimumWidth, 90.0)
-  result.setStyle(srComboBox, StyleMinimumHeight, 24.0)
+  result.setStyle(srComboBox, StyleMinimumSize, initSize(90.0, 24.0))
   result.setStyle(srComboBox, StyleMarkColor, styleToken(ComboBoxArrowColorToken))
 
   result.addRoleRule(
@@ -1460,7 +1517,7 @@ proc initTheme*(): Theme =
   result.setStyle(srComboBoxItem, StyleBorderWidth, 0.0)
   result.setStyle(srComboBoxItem, StyleCornerRadius, 0.0)
   result.setStyle(srComboBoxItem, StyleTextInsets, initEdgeInsets(0.0, 6.0))
-  result.setStyle(srComboBoxItem, StyleMinimumHeight, 22.0)
+  result.setStyle(srComboBoxItem, StyleMinimumSize, initSize(0.0, 22.0))
 
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)
