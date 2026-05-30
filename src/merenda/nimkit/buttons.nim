@@ -14,6 +14,38 @@ type
 
 const CheckboxCheckmark = "✓"
 
+proc updateButtonLayoutPriorities(cell: ButtonCell) =
+  let view = cell.controlView()
+  if view of Button:
+    let button = Button(view)
+    if cell.xButtonType in {btCheckBox, btRadio}:
+      button.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
+    else:
+      button.setContentHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
+
+proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
+  let view = cell.controlView()
+  if view of Button:
+    let button = Button(view)
+    return initControlStyleContext(
+      role,
+      enabled = button.isEnabled,
+      highlighted = cell.isHighlighted,
+      hovered = button.isHovered,
+      active = button.isActive,
+      focused = button.isFocused,
+      focusVisible = button.isFocusVisible,
+      selected = Cell(cell).state() in {bsOn, bsMixed},
+      id = button.styleId,
+      classes = button.styleClasses,
+    )
+  initControlStyleContext(
+    role,
+    enabled = cell.isEnabled,
+    highlighted = cell.isHighlighted,
+    selected = cell.state in {bsOn, bsMixed},
+  )
+
 protocol ButtonProtocolInternal:
   property title -> string
   property state -> ButtonState
@@ -48,6 +80,7 @@ protocol DefaultButtonCell of ButtonProtocolInternal:
     cell.xButtonType = buttonType
     if buttonType == btRadio:
       cell.setAllowsMixedState(false)
+    cell.updateButtonLayoutPriorities()
     cell.updateControlView()
 
   method allowsMixedState(cell: ButtonCell): bool =
@@ -64,11 +97,38 @@ protocol DefaultButtonCell of ButtonProtocolInternal:
   method setHighlighted(cell: ButtonCell, highlighted: bool) =
     Cell(cell).setHighlighted(highlighted)
 
+protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
+  method cellSize(cell: ButtonCell): IntrinsicSize =
+    let
+      textSize = textNaturalSize(cell.title())
+      view = cell.controlView()
+      appearance =
+        if view.isNil:
+          initAppearance()
+        else:
+          view.effectiveAppearance()
+    if cell.buttonType() in {btCheckBox, btRadio}:
+      let style = appearance.resolveChoiceButtonStyle(
+        cell.buttonStyleContext(
+          if cell.buttonType() == btRadio: srRadioButton else: srCheckBox
+        )
+      )
+      return initIntrinsicSize(style.choiceControlSize(textSize))
+
+    let style = appearance.resolveButtonStyle(cell.buttonStyleContext(srButton))
+    initIntrinsicSize(style.buttonControlSize(textSize))
+
+  method cellSizeForBounds(cell: ButtonCell, bounds: Rect): Size =
+    cell.cellSize().resolveIntrinsicSize(bounds.size).constrainSize(
+      initFittingSize(bounds.size)
+    )
+
 proc initButtonCellFields*(cell: ButtonCell, title: string) =
   initActionCellFields(cell)
   cell.xTitle = title
   cell.xButtonType = btMomentary
   discard cell.withProtocol(DefaultButtonCell)
+  discard cell.withProtocol(DefaultButtonCellMeasurement)
 
 proc newButtonCell*(title = "Button"): ButtonCell =
   result = ButtonCell()
@@ -230,6 +290,7 @@ protocol DefaultButtonAction of ButtonActionProtocol:
 proc initButtonFields*(button: Button, frame: Rect, title: string) =
   initControlFields(button, frame)
   button.setCell(newButtonCell(title))
+  button.buttonCell().updateButtonLayoutPriorities()
   button.setAcceptsFirstResponder(true)
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)

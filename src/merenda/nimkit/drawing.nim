@@ -91,6 +91,21 @@ proc textLayout*(
     wrap = false,
   )
 
+proc textNaturalSize*(text: string): nimkitTypes.Size =
+  let
+    font = defaultFont(13.0'f32)
+    style = fs(font, fill(initColor(0.0, 0.0, 0.0, 1.0).rgba))
+    lineHeight = max(13.0'f32, getLineHeightImpl(font))
+    layout = typeset(
+      bumpy.rect(0.0, 0.0, 10000.0, max(lineHeight, 100.0'f32)),
+      [(style, text)],
+      hAlign = Left,
+      vAlign = Top,
+      minContent = false,
+      wrap = false,
+    )
+  initSize(max(layout.bounding.w, layout.maxSize.x), lineHeight)
+
 proc textNode(
     rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
 ): Fig =

@@ -52,8 +52,49 @@ proc installCellForwarding(control: Control) =
       cellForwardingTarget(Control(self), selector)
   )
 
+proc intrinsicContentSize*(control: Control): IntrinsicSize =
+  let controlCell = control.cell()
+  if controlCell.isNil:
+    NoIntrinsicContentSize
+  else:
+    controlCell.cellSize()
+
+proc sizeThatFits*(control: Control, proposedSize: FittingSize): Size =
+  if control.isNil:
+    return initSize(0.0, 0.0)
+  let controlCell = control.cell()
+  if controlCell.isNil:
+    return control.bounds().size.constrainSize(proposedSize)
+
+  let naturalSize = controlCell.cellSize().resolveIntrinsicSize(control.bounds().size)
+  if not proposedSize.hasWidth and not proposedSize.hasHeight:
+    return naturalSize
+
+  let fittingBounds = initRect(
+    0.0,
+    0.0,
+    if proposedSize.hasWidth: proposedSize.width else: naturalSize.width,
+    if proposedSize.hasHeight: proposedSize.height else: naturalSize.height,
+  )
+  controlCell.cellSizeForBounds(fittingBounds)
+
+proc sizeThatFits*(control: Control): Size =
+  control.sizeThatFits(UnconstrainedFittingSize)
+
+proc sizeThatFits*(control: Control, proposedSize: Size): Size =
+  control.sizeThatFits(initFittingSize(proposedSize))
+
+proc sizeToFit*(control: Control) =
+  if control.isNil:
+    return
+  let frame = control.frame()
+  control.setFrame(
+    initRect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize))
+  )
+
 proc initControlFields*(control: Control, frame: Rect) =
   initViewFields(control, frame)
+  control.setContentHuggingPriority(LayoutPriorityDefaultHigh, laVertical)
   control.installCellForwarding()
   control.setCell(newActionCell())
   discard control.withProto()
@@ -76,6 +117,7 @@ proc setCell*(control: Control, cell: Cell) =
       let actionCell = ActionCell(bound)
       actionCell.setTarget(control.xTarget)
       actionCell.setAction(control.xAction)
+  control.invalidateIntrinsicContentSize()
   control.setNeedsDisplay(true)
 
 proc selectedCell*(control: Control): Cell =
