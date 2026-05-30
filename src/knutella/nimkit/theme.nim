@@ -77,6 +77,7 @@ type
     cornerRadius*: float32
     focusRingWidth*: float32
     focusRingInset*: float32
+    focusRingColor*: Color
 
   TextStyle* = object
     color*: Color
@@ -106,6 +107,7 @@ type
     contentInsets*: EdgeInsets
     focusRingWidth*: float32
     focusRingInset*: float32
+    focusRingColor*: Color
 
   ChoiceButtonTheme* = object
     indicatorFill*: array[ThemeControlState, Color]
@@ -121,6 +123,7 @@ type
     contentInsets*: EdgeInsets
     focusRingWidth*: float32
     focusRingInset*: float32
+    focusRingColor*: Color
 
   TextFieldTheme* = object
     fill*: Color
@@ -130,6 +133,7 @@ type
     textInsets*: EdgeInsets
     focusRingWidth*: float32
     focusRingInset*: float32
+    focusRingColor*: Color
 
   Theme* = object
     button*: ButtonTheme
@@ -148,6 +152,7 @@ const
   StyleCornerRadius* = StyleKey[float32]("corner.radius")
   StyleFocusRingWidth* = StyleKey[float32]("focus.ring.width")
   StyleFocusRingInset* = StyleKey[float32]("focus.ring.inset")
+  StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
@@ -174,6 +179,7 @@ const
   ButtonContentInsetsToken* = "button.content.insets"
   ButtonFocusRingWidthToken* = "button.focus.ring.width"
   ButtonFocusRingInsetToken* = "button.focus.ring.inset"
+  ButtonFocusRingColorToken* = "button.focus.ring.color"
   CheckBoxIndicatorFillTokens*: array[ThemeControlState, string] = [
     tcsNormal: "checkBox.indicator.fill",
     tcsHighlighted: "checkBox.indicator.fill.highlighted",
@@ -206,6 +212,7 @@ const
   CheckBoxContentInsetsToken* = "checkBox.content.insets"
   CheckBoxFocusRingWidthToken* = "checkBox.focus.ring.width"
   CheckBoxFocusRingInsetToken* = "checkBox.focus.ring.inset"
+  CheckBoxFocusRingColorToken* = "checkBox.focus.ring.color"
   RadioButtonIndicatorFillTokens*: array[ThemeControlState, string] = [
     tcsNormal: "radioButton.indicator.fill",
     tcsHighlighted: "radioButton.indicator.fill.highlighted",
@@ -238,6 +245,7 @@ const
   RadioButtonContentInsetsToken* = "radioButton.content.insets"
   RadioButtonFocusRingWidthToken* = "radioButton.focus.ring.width"
   RadioButtonFocusRingInsetToken* = "radioButton.focus.ring.inset"
+  RadioButtonFocusRingColorToken* = "radioButton.focus.ring.color"
   TextFieldFillToken* = "textField.fill"
   TextFieldBorderColorToken* = "textField.border.color"
   TextFieldBorderWidthToken* = "textField.border.width"
@@ -246,6 +254,7 @@ const
   TextFieldTextColorToken* = "textField.text.color"
   TextFieldFocusRingWidthToken* = "textField.focus.ring.width"
   TextFieldFocusRingInsetToken* = "textField.focus.ring.inset"
+  TextFieldFocusRingColorToken* = "textField.focus.ring.color"
 
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -497,6 +506,7 @@ func resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       cornerRadius: theme.button.cornerRadius,
       focusRingWidth: theme.button.focusRingWidth,
       focusRingInset: theme.button.focusRingInset,
+      focusRingColor: theme.button.focusRingColor,
     ),
     text: TextStyle(
       color: theme.button.textColor[state], insets: theme.button.contentInsets
@@ -523,6 +533,7 @@ func resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
       cornerRadius: theme.choiceButton.choiceButtonCornerRadius(context.role),
       focusRingWidth: theme.choiceButton.focusRingWidth,
       focusRingInset: theme.choiceButton.focusRingInset,
+      focusRingColor: theme.choiceButton.focusRingColor,
     ),
     markColor: theme.choiceButton.markColor[state],
     text: TextStyle(
@@ -544,6 +555,7 @@ func resolveTextFieldStyle*(
       cornerRadius: theme.textField.cornerRadius,
       focusRingWidth: theme.textField.focusRingWidth,
       focusRingInset: theme.textField.focusRingInset,
+      focusRingColor: theme.textField.focusRingColor,
     ),
     text: TextStyle(color: textColor, insets: theme.textField.textInsets),
   )
@@ -617,6 +629,8 @@ proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonS
     appearance.lengthToken(ButtonFocusRingWidthToken, result.box.focusRingWidth)
   result.box.focusRingInset =
     appearance.lengthToken(ButtonFocusRingInsetToken, result.box.focusRingInset)
+  result.box.focusRingColor =
+    appearance.colorToken(ButtonFocusRingColorToken, result.box.focusRingColor)
   result.text.color =
     appearance.colorToken(ButtonTextColorTokens[state], result.text.color)
   result.text.insets =
@@ -632,6 +646,8 @@ proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonS
     appearance.lengthPatch(context.role, StyleFocusRingWidth, result.box.focusRingWidth)
   result.box.focusRingInset =
     appearance.lengthPatch(context.role, StyleFocusRingInset, result.box.focusRingInset)
+  result.box.focusRingColor =
+    appearance.colorPatch(context.role, StyleFocusRingColor, result.box.focusRingColor)
   result.text.color =
     appearance.colorPatch(context.role, StyleTextColor, result.text.color)
   result.text.insets =
@@ -713,6 +729,12 @@ func choiceFocusRingInsetToken(role: StyleRole): string =
   else:
     CheckBoxFocusRingInsetToken
 
+func choiceFocusRingColorToken(role: StyleRole): string =
+  if role == srRadioButton:
+    RadioButtonFocusRingColorToken
+  else:
+    CheckBoxFocusRingColorToken
+
 proc resolveChoiceButtonStyle*(
     appearance: Appearance, context: StyleContext
 ): ChoiceButtonStyle =
@@ -742,6 +764,9 @@ proc resolveChoiceButtonStyle*(
   result.indicator.focusRingInset = appearance.lengthToken(
     choiceFocusRingInsetToken(context.role), result.indicator.focusRingInset
   )
+  result.indicator.focusRingColor = appearance.colorToken(
+    choiceFocusRingColorToken(context.role), result.indicator.focusRingColor
+  )
   result.markColor =
     appearance.colorToken(choiceMarkColorToken(context.role, state), result.markColor)
   result.text.color =
@@ -767,6 +792,9 @@ proc resolveChoiceButtonStyle*(
   )
   result.indicator.focusRingInset = appearance.lengthPatch(
     context.role, StyleFocusRingInset, result.indicator.focusRingInset
+  )
+  result.indicator.focusRingColor = appearance.colorPatch(
+    context.role, StyleFocusRingColor, result.indicator.focusRingColor
   )
   result.markColor =
     appearance.colorPatch(context.role, StyleMarkColor, result.markColor)
@@ -794,6 +822,8 @@ proc resolveTextFieldStyle*(
     appearance.lengthToken(TextFieldFocusRingWidthToken, result.box.focusRingWidth)
   result.box.focusRingInset =
     appearance.lengthToken(TextFieldFocusRingInsetToken, result.box.focusRingInset)
+  result.box.focusRingColor =
+    appearance.colorToken(TextFieldFocusRingColorToken, result.box.focusRingColor)
   result.text.color = appearance.colorToken(TextFieldTextColorToken, result.text.color)
   result.text.insets =
     appearance.insetsToken(TextFieldTextInsetsToken, result.text.insets)
@@ -808,6 +838,8 @@ proc resolveTextFieldStyle*(
     appearance.lengthPatch(context.role, StyleFocusRingWidth, result.box.focusRingWidth)
   result.box.focusRingInset =
     appearance.lengthPatch(context.role, StyleFocusRingInset, result.box.focusRingInset)
+  result.box.focusRingColor =
+    appearance.colorPatch(context.role, StyleFocusRingColor, result.box.focusRingColor)
   result.text.color =
     appearance.colorPatch(context.role, StyleTextColor, result.text.color)
   result.text.insets =
@@ -881,6 +913,7 @@ func initTheme*(): Theme =
       contentInsets: initEdgeInsets(0.0, 8.0),
       focusRingWidth: 3.0,
       focusRingInset: 2.0,
+      focusRingColor: initColor(0.24, 0.48, 0.92, 0.58),
     ),
     choiceButton: ChoiceButtonTheme(
       indicatorFill: [
@@ -916,6 +949,7 @@ func initTheme*(): Theme =
       contentInsets: initEdgeInsets(0.0, 2.0),
       focusRingWidth: 3.0,
       focusRingInset: 2.0,
+      focusRingColor: initColor(0.24, 0.48, 0.92, 0.58),
     ),
     textField: TextFieldTheme(
       fill: initColor(1.0, 1.0, 1.0, 1.0),
@@ -925,6 +959,7 @@ func initTheme*(): Theme =
       textInsets: initEdgeInsets(0.0, 6.0),
       focusRingWidth: 3.0,
       focusRingInset: 2.0,
+      focusRingColor: initColor(0.24, 0.48, 0.92, 0.58),
     ),
   )
 
@@ -952,6 +987,9 @@ proc newStyleTokenStore*(theme: Theme): StyleTokenStore =
   )
   result.setDefaultToken(
     ButtonFocusRingInsetToken, styleLength(theme.button.focusRingInset)
+  )
+  result.setDefaultToken(
+    ButtonFocusRingColorToken, styleColor(theme.button.focusRingColor)
   )
   for state in ThemeControlState:
     result.setDefaultToken(
@@ -1014,6 +1052,9 @@ proc newStyleTokenStore*(theme: Theme): StyleTokenStore =
     CheckBoxFocusRingInsetToken, styleLength(theme.choiceButton.focusRingInset)
   )
   result.setDefaultToken(
+    CheckBoxFocusRingColorToken, styleColor(theme.choiceButton.focusRingColor)
+  )
+  result.setDefaultToken(
     RadioButtonIndicatorSizeToken, styleLength(theme.choiceButton.indicatorSize)
   )
   result.setDefaultToken(
@@ -1036,6 +1077,9 @@ proc newStyleTokenStore*(theme: Theme): StyleTokenStore =
   result.setDefaultToken(
     RadioButtonFocusRingInsetToken, styleLength(theme.choiceButton.focusRingInset)
   )
+  result.setDefaultToken(
+    RadioButtonFocusRingColorToken, styleColor(theme.choiceButton.focusRingColor)
+  )
   result.setDefaultToken(TextFieldFillToken, styleColor(theme.textField.fill))
   result.setDefaultToken(
     TextFieldBorderColorToken, styleColor(theme.textField.borderColor)
@@ -1054,6 +1098,9 @@ proc newStyleTokenStore*(theme: Theme): StyleTokenStore =
   )
   result.setDefaultToken(
     TextFieldFocusRingInsetToken, styleLength(theme.textField.focusRingInset)
+  )
+  result.setDefaultToken(
+    TextFieldFocusRingColorToken, styleColor(theme.textField.focusRingColor)
   )
 
 proc initAppearance*(theme: Theme): Appearance =

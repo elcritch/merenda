@@ -300,8 +300,14 @@ proc setTitle*(window: Window, title: string) =
 proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
-proc makeFirstResponder*(window: Window, responder: Responder): bool =
+proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool): bool =
+  if window.isNil:
+    return false
   if window.xFirstResponder == responder:
+    if not responder.isNil and responder of View:
+      let view = View(responder)
+      view.setFocused(true)
+      view.setFocusVisible(focusVisible)
     return true
 
   if not responder.isNil:
@@ -323,9 +329,12 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
   if not responder.isNil and responder of View:
     let next = View(responder)
     next.setFocused(true)
-    next.setFocusVisible(true)
+    next.setFocusVisible(focusVisible)
   window.xFirstResponder = responder
   true
+
+proc makeFirstResponder*(window: Window, responder: Responder): bool =
+  window.setFirstResponder(responder, focusVisible = true)
 
 proc initialFirstResponder*(window: Window): View =
   if window.isNil:
@@ -700,7 +709,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
       return false
     dispatchEvent.clickCount = window.nextClickCount(target, event)
     if target.acceptsFirstResponder():
-      discard window.makeFirstResponder(target)
+      discard window.setFirstResponder(target, focusVisible = false)
   else:
     target = window.xMouseCaptureView
     if target.isNil:

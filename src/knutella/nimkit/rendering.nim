@@ -18,8 +18,6 @@ import ./views
 var defaultTypefaceId {.threadvar.}: TypefaceId
 var defaultTypefaceReady {.threadvar.}: bool
 
-let focusRingColor = initColor(0.24, 0.48, 0.92, 0.58)
-
 proc toFigRect(rect: types.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
@@ -163,7 +161,7 @@ proc addFocusRing(
     rectangleNode(
       ringRect,
       initColor(0.0, 0.0, 0.0, 0.0),
-      focusRingColor,
+      box.focusRingColor,
       box.focusRingWidth,
       box.cornerRadius,
     ),

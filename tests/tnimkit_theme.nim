@@ -65,12 +65,14 @@ suite "nimkit theme":
     var appearance = initAppearance()
     let
       buttonFill = initColor(0.11, 0.22, 0.33, 1.0)
+      focusRing = initColor(0.24, 0.42, 0.90, 0.75)
       fieldText = initColor(0.44, 0.55, 0.66, 1.0)
       buttonInsets = initEdgeInsets(2.0, 10.0)
 
     appearance.tokens.setToken("field.text.override", styleColor(fieldText))
     appearance[srButton, StyleFill] = buttonFill
     appearance[srButton, StyleCornerRadius] = 9.0
+    appearance[srButton, StyleFocusRingColor] = focusRing
     appearance[srButton, StyleTextInsets] = buttonInsets
     appearance[srTextField, StyleTextColor] = styleToken("field.text.override")
     appearance[srTextField, StyleBorderWidth] = 4.0
@@ -83,6 +85,7 @@ suite "nimkit theme":
 
     check buttonStyle.box.fill == buttonFill
     check buttonStyle.box.cornerRadius == 9.0
+    check buttonStyle.box.focusRingColor == focusRing
     check buttonStyle.text.insets == buttonInsets
     check textFieldStyle.text.color == fieldText
     check textFieldStyle.box.borderWidth == 4.0
@@ -111,8 +114,10 @@ suite "nimkit theme":
     check theme.button.borderWidth > 0.0
     check theme.button.cornerRadius > 0.0
     check theme.button.focusRingWidth > 0.0
+    check theme.button.focusRingColor.a > 0.0
     check buttonStyle.box.fill == theme.button.fill[tcsHighlighted]
     check buttonStyle.box.borderColor == theme.button.borderColor[tcsHighlighted]
+    check buttonStyle.box.focusRingColor == theme.button.focusRingColor
     check buttonStyle.text.color == theme.button.textColor[tcsHighlighted]
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
     check theme.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
@@ -122,7 +127,9 @@ suite "nimkit theme":
     check checkBoxStyle.indicator.fill ==
       theme.choiceButton.indicatorSelectedFill[tcsNormal]
     check checkBoxStyle.indicator.cornerRadius == theme.choiceButton.checkBoxCornerRadius
+    check checkBoxStyle.indicator.focusRingColor == theme.choiceButton.focusRingColor
     check radioStyle.indicator.cornerRadius == theme.choiceButton.radioCornerRadius
+    check radioStyle.indicator.focusRingColor == theme.choiceButton.focusRingColor
     check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
       initRect(2, 5, 14, 14)
     check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
@@ -133,6 +140,7 @@ suite "nimkit theme":
     check theme.textField.focusRingWidth > 0.0
     check textFieldStyle.box.fill == theme.textField.fill
     check textFieldStyle.box.borderColor == theme.textField.borderColor
+    check textFieldStyle.box.focusRingColor == theme.textField.focusRingColor
     check textFieldStyle.text.color == initColor(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
