@@ -12,6 +12,7 @@ type View* = ref object of Responder
   xNeedsDisplay: bool
   xInvalidRects: seq[Rect]
   xBackgroundColor: Color
+  xClipsToBounds: bool
   xAppearance: Appearance
   xHasAppearance: bool
   xInheritedAppearance: Appearance
@@ -56,6 +57,7 @@ protocol ViewProtocolInternal from View:
   property bounds -> Rect
   property needsDisplay -> bool
   property backgroundColor -> Color
+  property clipsToBounds -> bool
   property nextKeyView -> View
   property previousKeyView -> View
 
@@ -135,6 +137,15 @@ protocol ViewProtocolInternal from View:
       return
     self.xBackgroundColor = color
     self.setNeedsDisplay(true)
+
+  method clipsToBounds(self: View): bool =
+    self.xClipsToBounds
+
+  method setClipsToBounds(self: View, clipsToBounds: bool) =
+    if self.xClipsToBounds == clipsToBounds:
+      return
+    self.xClipsToBounds = clipsToBounds
+    self.setNeedsDisplaySubtree()
 
   method nextKeyView(self: View): View =
     self.xNextKeyView
@@ -219,12 +230,14 @@ protocol ViewProtocolInternal from View:
   method visibleRect*(self: View): Rect =
     if self.isHiddenOrHasHiddenAncestor():
       return initRect(0.0, 0.0, 0.0, 0.0)
-    let parent = self.xSuperview
-    if parent.isNil:
-      return self.xBounds
-    let parentVisible = parent.visibleRect()
-    let converted = self.rectFromView(parentVisible, parent)
-    converted.intersection(self.xBounds)
+    result = self.xBounds
+    var ancestor = self.xSuperview
+    while not ancestor.isNil:
+      if ancestor.xClipsToBounds:
+        result = result.intersection(self.rectFromView(ancestor.xBounds, ancestor))
+        if result.isEmpty:
+          return
+      ancestor = ancestor.xSuperview
 
   method superview*(self: View): View =
     self.xSuperview
@@ -285,17 +298,19 @@ protocol ViewProtocolInternal from View:
     self.xBounds.contains(point)
 
   method hitTest*(self: View, point: Point): View =
-    if self.xHidden or not self.pointInside(point):
+    if self.xHidden:
       return nil
 
-    for idx in countdown(self.xSubviews.high, 0):
-      let child = self.xSubviews[idx]
-      let local = child.pointFromView(point, self)
-      let hit = child.hitTest(local)
-      if not hit.isNil:
-        return hit
+    let inside = self.pointInside(point)
+    if inside or not self.xClipsToBounds:
+      for idx in countdown(self.xSubviews.high, 0):
+        let child = self.xSubviews[idx]
+        let local = child.pointFromView(point, self)
+        let hit = child.hitTest(local)
+        if not hit.isNil:
+          return hit
 
-    self
+    if inside: self else: nil
 
 protocol ViewLifecycleProtocolInternal:
   method viewWillMoveToSuperview*(superview: View) {.optional.}

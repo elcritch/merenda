@@ -414,6 +414,7 @@ proc notifyTextDidChange(textField: TextField) =
 
 proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   initControlFields(textField, frame)
+  textField.setClipsToBounds(true)
   textField.xStringValue = value
   textField.xAlignment = taLeft
   textField.xTextColor = initColor(0.08, 0.09, 0.11)

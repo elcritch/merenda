@@ -59,6 +59,11 @@ suite "nimkit rendering":
       buttonBorder = initColor(0.11, 0.12, 0.13, 1.0)
       fieldFill = initColor(0.91, 0.92, 0.93, 1.0)
       fieldBorder = initColor(0.21, 0.22, 0.23, 1.0)
+      buttonShadows =
+        @[
+          dropShadow(initColor(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
+          insetShadow(initColor(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
+        ]
 
     var theme = initTheme()
     theme.setStyle(srButton, StyleFill, buttonFill)
@@ -66,6 +71,7 @@ suite "nimkit rendering":
     theme.setStyle(srButton, StyleBorderWidth, 3.0)
     theme.setStyle(srButton, StyleCornerRadius, 6.0)
     theme.setStyle(srButton, StyleTextInsets, initEdgeInsets(1.0, 9.0))
+    theme.setStyle(srButton, StyleBoxShadows, buttonShadows)
     theme.setStyle(srTextField, StyleFill, fieldFill)
     theme.setStyle(srTextField, StyleBorderColor, fieldBorder)
     theme.setStyle(srTextField, StyleBorderWidth, 2.0)
@@ -92,6 +98,15 @@ suite "nimkit rendering":
         check node.stroke.fill.kind == flColor
         check node.stroke.fill.color == buttonBorder.rgba
         check node.corners[dcTopLeft] == 6'u16
+        check node.shadows[0].style == DropShadow
+        check node.shadows[0].fill.kind == flColor
+        check node.shadows[0].fill.color == initColor(0, 0, 0, 0.40).rgba
+        check node.shadows[0].y == 2.0
+        check node.shadows[0].blur == 5.0
+        check node.shadows[1].style == InnerShadow
+        check node.shadows[1].fill.kind == flColor
+        check node.shadows[1].fill.color == initColor(1, 1, 1, 0.20).rgba
+        check node.shadows[1].y == -1.0
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == fieldFill.rgba:
@@ -288,7 +303,7 @@ suite "nimkit rendering":
     let list = renders[0.ZLevel]
 
     check list.rootIds.len == 1
-    check NfClipContent in list.nodes[int(list.rootIds[0])].flags
+    check NfClipContent notin list.nodes[int(list.rootIds[0])].flags
 
     var childNodeCount = 0
     for node in list.nodes:
@@ -300,7 +315,7 @@ suite "nimkit rendering":
     check not child.needsDisplay
     check child.invalidRects.len == 0
 
-  test "buildRenders leaves child overflow to FigDraw clipping":
+  test "buildRenders does not clip view subtrees by default":
     let
       root = newView(0, 0, 100, 80)
       child = newView(90, 90, 50, 40)
@@ -316,7 +331,7 @@ suite "nimkit rendering":
     check list.nodes[int(rootIdx)].screenBox.y == 0.0
     check list.nodes[int(rootIdx)].screenBox.w == 100.0
     check list.nodes[int(rootIdx)].screenBox.h == 80.0
-    check NfClipContent in list.nodes[int(rootIdx)].flags
+    check NfClipContent notin list.nodes[int(rootIdx)].flags
 
     var childIdx = (-1).FigIdx
     for idx in childIndex(list.nodes, rootIdx):
@@ -328,6 +343,29 @@ suite "nimkit rendering":
     check list.nodes[int(childIdx)].screenBox.y == 70.0
     check list.nodes[int(childIdx)].screenBox.w == 50.0
     check list.nodes[int(childIdx)].screenBox.h == 40.0
+    check NfClipContent notin list.nodes[int(childIdx)].flags
+
+  test "buildRenders adds FigDraw clipping when views clip to bounds":
+    let
+      root = newView(0, 0, 100, 80)
+      child = newView(90, 90, 50, 40)
+
+    root.setBounds(initRect(10, 20, 100, 80))
+    root.setClipsToBounds(true)
+    child.setClipsToBounds(true)
+    root.addSubview(child)
+
+    let renders = buildRenders(root)
+    let list = renders[0.ZLevel]
+    let rootIdx = list.rootIds[0]
+
+    check NfClipContent in list.nodes[int(rootIdx)].flags
+
+    var childIdx = (-1).FigIdx
+    for idx in childIndex(list.nodes, rootIdx):
+      childIdx = idx
+
+    check childIdx != (-1).FigIdx
     check NfClipContent in list.nodes[int(childIdx)].flags
 
   test "buildRenders calls selector-backed custom drawing":

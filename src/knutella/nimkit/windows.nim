@@ -575,6 +575,11 @@ proc renderNativeWindow*(window: Window) =
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)
 
+proc contentHitTest(window: Window, contentPoint: Point): View =
+  if window.xContentView.isNil or not window.xContentView.pointInside(contentPoint):
+    return nil
+  window.xContentView.hitTest(contentPoint)
+
 proc localMouseEvent(
     target, contentView: View, contentPoint: Point, event: MouseEvent
 ): MouseEvent =
@@ -703,7 +708,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
   var dispatchEvent = event
   var target: View
   if pressed:
-    target = window.xContentView.hitTest(contentPoint)
+    target = window.contentHitTest(contentPoint)
     window.xMouseCaptureView = target
     if target.isNil:
       return false
@@ -713,7 +718,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
   else:
     target = window.xMouseCaptureView
     if target.isNil:
-      target = window.xContentView.hitTest(contentPoint)
+      target = window.contentHitTest(contentPoint)
     window.xMouseCaptureView = nil
     if target.isNil:
       window.setMouseActiveView(nil)
@@ -744,9 +749,9 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
   if dragging:
     target = window.xMouseCaptureView
     if target.isNil:
-      target = window.xContentView.hitTest(contentPoint)
+      target = window.contentHitTest(contentPoint)
   else:
-    target = window.xContentView.hitTest(contentPoint)
+    target = window.contentHitTest(contentPoint)
 
   if not dragging:
     result = window.updateHoverView(target, contentPoint, event)
@@ -767,7 +772,7 @@ proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
   if window.xContentView.isNil:
     return false
   let contentPoint = window.contentPoint(event.location)
-  let target = window.xContentView.hitTest(contentPoint)
+  let target = window.contentHitTest(contentPoint)
   if target.isNil:
     return false
   window.dispatchScrollEventInChain(target, contentPoint, event).handled
