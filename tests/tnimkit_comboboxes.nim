@@ -127,6 +127,36 @@ suite "nimkit comboboxes":
     check combo.indexOfSelectedItem() == 1
     check combo.stringValue == "Medium"
 
+  test "open popup wins hit testing over overlapping sibling controls":
+    let
+      window = newWindow(0, 0, 240, 180, "Combo popup")
+      root = newView(0, 0, 240, 180)
+      priority = newComboBox(10, 10, 140, 24, ["Low", "Medium", "High"])
+      color = newComboBox(10, 48, 140, 24, ["Red", "Green", "Blue"])
+
+    priority.setItemHeight(20.0)
+    color.setItemHeight(20.0)
+    root.addSubview(priority)
+    root.addSubview(color)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(20, 20))
+    check priority.popupOpen
+    check window.mouseUpAt(initPoint(20, 20))
+    check priority.popupOpen
+
+    let mediumPoint = initPoint(20, 10 + 24 + 1 + 20 + 10)
+    check color.bounds().contains(color.pointFromView(mediumPoint, root))
+    check root.hitTest(mediumPoint) == priority
+    check window.mouseDownAt(mediumPoint)
+    check priority.popupHighlightedIndex == 1
+    check window.mouseUpAt(mediumPoint)
+    check priority.indexOfSelectedItem() == 1
+    check priority.stringValue == "Medium"
+    check not priority.popupOpen
+    check not color.popupOpen
+    check color.indexOfSelectedItem() == -1
+
   test "keyboard opens navigates confirms and cancels popup":
     let
       window = newWindow(0, 0, 240, 160, "Combo keys")
