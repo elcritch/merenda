@@ -2,6 +2,7 @@ import std/unicode
 
 import ./controls
 import ./selectors
+import ./theme
 import ./types
 
 export controls
@@ -383,6 +384,53 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
     if textField.xEditable or textField.xSelectable:
       textField.setCursor(textField.runeCount, extending = true)
 
+protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
+  method draw(textField: TextField, context: DrawContext) =
+    let
+      absoluteFrame = textField.rectToWindow(textField.bounds)
+      focused = textField.isEditing or textField.isFocused
+      focusVisible = textField.isEditing or textField.isFocusVisible
+      style = context.appearance.resolveTextFieldStyle(
+        initControlStyleContext(
+          srTextField,
+          enabled = textField.isEnabled,
+          hovered = textField.isHovered,
+          active = textField.isActive,
+          focused = focused,
+          focusVisible = focusVisible,
+          id = textField.styleId,
+          classes = textField.styleClasses,
+        ),
+        textField.textColor,
+      )
+
+    discard context.addWindowRectangle(
+      absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+      style.box.cornerRadius, style.box.shadows,
+    )
+    if focusVisible:
+      context.addFocusRing(absoluteFrame, style.box)
+
+    let
+      textRect = style.textFieldTextRect(textField.bounds)
+      layout = textLayout(
+        textRect, textField.stringValue, style.text.color, textField.alignment
+      )
+      selectedRange = textField.selectedRange
+      selectionColor = initColor(0.22, 0.46, 0.84, 0.32)
+    if textField.isEditing and selectedRange.length > 0:
+      discard context.addSelectedText(
+        textRect, layout, selectedRange.location.int, selectedRange.length.int,
+        selectionColor,
+      )
+    else:
+      discard context.addText(textRect, layout)
+
+    if textField.isEditing and textField.isEditable and selectedRange.length == 0:
+      context.addRectangle(
+        textRect.caretRect(layout, textField.insertionPoint), style.text.color
+      )
+
 protocol DefaultTextFieldEvents of ResponderEventProtocol:
   method mouseDown(textField: TextField, event: MouseEvent) =
     if event.button == mbPrimary and (textField.xEditable or textField.xSelectable):
@@ -426,6 +474,7 @@ proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   discard textField.withProto()
   discard textField.withProtocol(DefaultTextFieldInput)
   discard textField.withProtocol(DefaultTextFieldCommands)
+  discard textField.withProtocol(DefaultTextFieldDrawing)
   discard textField.withProtocol(DefaultTextFieldEvents)
 
 proc newTextField*(frame: Rect, value: string): TextField =

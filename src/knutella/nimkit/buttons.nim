@@ -1,5 +1,6 @@
 import ./controls
 import ./selectors
+import ./theme
 import ./types
 
 export controls
@@ -102,6 +103,103 @@ proc buttonPerformClick(button: Button, args: ActionArgs) =
     button.clearRadioSiblings()
   discard button.sendAction()
 
+proc choiceRole(button: Button): StyleRole =
+  if button.buttonType == btRadio: srRadioButton else: srCheckBox
+
+proc selectedMarkRect(rect: Rect): Rect =
+  let inset = max(rect.size.width * 0.28'f32, 3.0'f32)
+  rect.inset(initEdgeInsets(inset))
+
+proc mixedMarkRect(rect: Rect): Rect =
+  let
+    height = max(rect.size.height * 0.16'f32, 2.0'f32)
+    inset = max(rect.size.width * 0.24'f32, 3.0'f32)
+  initRect(
+    rect.origin.x + inset,
+    rect.origin.y + (rect.size.height - height) / 2.0'f32,
+    rect.size.width - inset * 2.0'f32,
+    height,
+  )
+
+protocol DefaultButtonDrawing of ViewDrawingProtocol:
+  method draw(button: Button, context: DrawContext) =
+    let absoluteFrame = button.rectToWindow(button.bounds)
+    if button.buttonType in {btCheckBox, btRadio}:
+      let
+        role = button.choiceRole()
+        selected = button.state in {bsOn, bsMixed}
+        style = context.appearance.resolveChoiceButtonStyle(
+          initControlStyleContext(
+            role,
+            enabled = button.isEnabled,
+            highlighted = button.isHighlighted,
+            hovered = button.isHovered,
+            active = button.isActive,
+            focused = button.isFocused,
+            focusVisible = button.isFocusVisible,
+            selected = selected,
+            id = button.styleId,
+            classes = button.styleClasses,
+          )
+        )
+        indicatorRect = style.choiceIndicatorRect(button.bounds)
+
+      discard context.addWindowRectangle(
+        button.rectToWindow(indicatorRect),
+        style.indicator.fill,
+        style.indicator.borderColor,
+        style.indicator.borderWidth,
+        style.indicator.cornerRadius,
+        style.indicator.shadows,
+      )
+      if selected:
+        let markRect =
+          if button.state == bsMixed and button.buttonType == btCheckBox:
+            indicatorRect.mixedMarkRect()
+          else:
+            indicatorRect.selectedMarkRect()
+        discard context.addWindowRectangle(
+          button.rectToWindow(markRect),
+          style.markColor,
+          style.markColor,
+          0.0'f32,
+          if button.buttonType == btRadio:
+            markRect.size.width / 2.0'f32
+          else:
+            1.0'f32,
+        )
+      if button.isFocusVisible:
+        context.addFocusRing(button.rectToWindow(indicatorRect), style.indicator)
+      context.addText(
+        style.choiceTextRect(button.bounds), button.title, style.text.color
+      )
+    else:
+      let style = context.appearance.resolveButtonStyle(
+        initControlStyleContext(
+          srButton,
+          enabled = button.isEnabled,
+          highlighted = button.isHighlighted,
+          hovered = button.isHovered,
+          active = button.isActive,
+          focused = button.isFocused,
+          focusVisible = button.isFocusVisible,
+          id = button.styleId,
+          classes = button.styleClasses,
+        )
+      )
+      discard context.addWindowRectangle(
+        absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+        style.box.cornerRadius, style.box.shadows,
+      )
+      if button.isFocusVisible:
+        context.addFocusRing(absoluteFrame, style.box)
+      context.addText(
+        style.buttonTextRect(button.bounds),
+        button.title,
+        style.text.color,
+        alignment = taCenter,
+      )
+
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseDown(button: Button, event: MouseEvent) =
     if button.isEnabled and event.button == mbPrimary:
@@ -126,6 +224,7 @@ proc initButtonFields*(button: Button, frame: Rect, title: string) =
   initControlFields(button, frame)
   button.setCell(newButtonCell(title))
   button.setAcceptsFirstResponder(true)
+  discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)
   discard button.withProtocol(DefaultButtonAction)
 
