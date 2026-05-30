@@ -331,11 +331,6 @@ func inset*(rect: Rect, insets: EdgeInsets): Rect =
 proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
   StyleTokenStore(parent: parent, values: initTable[string, StyleValue]())
 
-proc ensureTokens(theme: var Theme): StyleTokenStore =
-  if theme.tokens.isNil:
-    theme.tokens = newStyleTokenStore()
-  theme.tokens
-
 proc newStylePatch*(): StylePatch =
   StylePatch(values: initTable[string, StyleValue]())
 
@@ -356,96 +351,47 @@ proc clone*(theme: Theme): Theme =
   for rule in theme.rules:
     result.rules.add StyleRule(selector: rule.selector, patch: rule.patch.clone)
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: StyleValue) =
-  if tokens.isNil:
-    return
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: StyleValue) =
   tokens.values[name] = value
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: Color) =
-  tokens.setToken(name, styleColor(value))
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: Color) =
+  tokens[name] = styleColor(value)
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: float32) =
-  tokens.setToken(name, styleLength(value))
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: float32) =
+  tokens[name] = styleLength(value)
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: float) =
-  tokens.setToken(name, styleLength(value.float32))
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: float) =
+  tokens[name] = styleLength(value.float32)
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: Size) =
-  tokens.setToken(name, styleSize(value))
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: Size) =
+  tokens[name] = styleSize(value)
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
-  tokens.setToken(name, styleInsets(value))
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
+  tokens[name] = styleInsets(value)
 
-proc setToken*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) =
-  tokens.setToken(name, styleShadows(value))
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) =
+  tokens[name] = styleShadows(value)
 
-proc setToken*(theme: var Theme, name: string, value: StyleValue) =
-  theme.ensureTokens().setToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: StyleValue) =
+  theme.tokens[name] = value
 
-proc setToken*(theme: var Theme, name: string, value: Color) =
-  theme.ensureTokens().setToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: Color) =
+  theme.tokens[name] = value
 
-proc setToken*(theme: var Theme, name: string, value: float32) =
-  theme.ensureTokens().setToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: float32) =
+  theme.tokens[name] = value
 
-proc setToken*(theme: var Theme, name: string, value: float) =
-  theme.ensureTokens().setToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: float) =
+  theme.tokens[name] = value
 
-proc setToken*(theme: var Theme, name: string, value: Size) =
-  theme.ensureTokens().setToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: Size) =
+  theme.tokens[name] = value
 
-proc setToken*(theme: var Theme, name: string, value: EdgeInsets) =
-  theme.ensureTokens().setToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: EdgeInsets) =
+  theme.tokens[name] = value
 
-proc setToken*(theme: var Theme, name: string, value: openArray[BoxShadow]) =
-  theme.ensureTokens().setToken(name, value)
-
-proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: StyleValue) =
-  if tokens.isNil:
-    return
-  if not tokens.values.hasKey(name):
-    tokens.setToken(name, value)
-
-proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: Color) =
-  tokens.setDefaultToken(name, styleColor(value))
-
-proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: float32) =
-  tokens.setDefaultToken(name, styleLength(value))
-
-proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: float) =
-  tokens.setDefaultToken(name, styleLength(value.float32))
-
-proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: Size) =
-  tokens.setDefaultToken(name, styleSize(value))
-
-proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
-  tokens.setDefaultToken(name, styleInsets(value))
-
-proc setDefaultToken*(
-    tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]
-) =
-  tokens.setDefaultToken(name, styleShadows(value))
-
-proc setDefaultToken*(theme: var Theme, name: string, value: StyleValue) =
-  theme.ensureTokens().setDefaultToken(name, value)
-
-proc setDefaultToken*(theme: var Theme, name: string, value: Color) =
-  theme.ensureTokens().setDefaultToken(name, value)
-
-proc setDefaultToken*(theme: var Theme, name: string, value: float32) =
-  theme.ensureTokens().setDefaultToken(name, value)
-
-proc setDefaultToken*(theme: var Theme, name: string, value: float) =
-  theme.ensureTokens().setDefaultToken(name, value)
-
-proc setDefaultToken*(theme: var Theme, name: string, value: Size) =
-  theme.ensureTokens().setDefaultToken(name, value)
-
-proc setDefaultToken*(theme: var Theme, name: string, value: EdgeInsets) =
-  theme.ensureTokens().setDefaultToken(name, value)
-
-proc setDefaultToken*(theme: var Theme, name: string, value: openArray[BoxShadow]) =
-  theme.ensureTokens().setDefaultToken(name, value)
+proc `[]=`*(theme: var Theme, name: string, value: openArray[BoxShadow]) =
+  theme.tokens[name] = value
 
 proc lookupToken(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
   var current = tokens
@@ -508,6 +454,32 @@ proc setStyle*(
     patch: StylePatch, key: StyleKey[seq[BoxShadow]], value: openArray[BoxShadow]
 ) =
   patch.setStyle(key, styleShadows(value))
+
+proc `[]=`*(patch: StylePatch, key: string, value: StyleValue) =
+  patch.setStyle(key, value)
+
+proc `[]=`*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[Color], value: Color) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[float32], value: float32) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[float32], value: float) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[Size], value: Size) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(
+    patch: StylePatch, key: StyleKey[seq[BoxShadow]], value: openArray[BoxShadow]
+) =
+  patch.setStyle(key, value)
 
 proc getStyle*(patch: StylePatch, key: string, value: var StyleValue): bool =
   if patch.isNil:
@@ -684,6 +656,47 @@ proc setStyle*(
 ) =
   theme.setStyle(initStyleSelector(role, states), key, value)
 
+proc `[]=`*[T](
+    theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(selector, key, value)
+
 proc `[]=`*[T](theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue) =
   theme.setStyle(role, key, value)
 
@@ -711,6 +724,69 @@ proc `[]=`*(
     value: openArray[BoxShadow],
 ) =
   theme.setStyle(role, key, value)
+
+proc `[]=`*[T](
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[Color],
+    value: Color,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[float32],
+    value: float32,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[float32],
+    value: float,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[Size],
+    value: Size,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(role, states, key, value)
 
 proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
   let patch = theme.stylePatch(initStyleSelector(role))
@@ -816,27 +892,6 @@ proc shadowsToken*(
 ): seq[BoxShadow] =
   appearance.theme.shadowsToken(name, fallback)
 
-proc setToken*(appearance: var Appearance, name: string, value: StyleValue) =
-  appearance.theme.setToken(name, value)
-
-proc setToken*(appearance: var Appearance, name: string, value: Color) =
-  appearance.theme.setToken(name, value)
-
-proc setToken*(appearance: var Appearance, name: string, value: float32) =
-  appearance.theme.setToken(name, value)
-
-proc setToken*(appearance: var Appearance, name: string, value: float) =
-  appearance.theme.setToken(name, value)
-
-proc setToken*(appearance: var Appearance, name: string, value: Size) =
-  appearance.theme.setToken(name, value)
-
-proc setToken*(appearance: var Appearance, name: string, value: EdgeInsets) =
-  appearance.theme.setToken(name, value)
-
-proc setToken*(appearance: var Appearance, name: string, value: openArray[BoxShadow]) =
-  appearance.theme.setToken(name, value)
-
 proc setStyle*[T](
     appearance: var Appearance,
     selector: StyleSelector,
@@ -935,6 +990,62 @@ proc setStyle*(
   appearance.theme.setStyle(role, key, value)
 
 proc `[]=`*[T](
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Color],
+    value: Color,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float32,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Size],
+    value: Size,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*[T](
     appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
 ) =
   appearance.setStyle(role, key, value)
@@ -974,6 +1085,69 @@ proc `[]=`*(
     value: openArray[BoxShadow],
 ) =
   appearance.setStyle(role, key, value)
+
+proc `[]=`*[T](
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[Color],
+    value: Color,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[float32],
+    value: float32,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[float32],
+    value: float,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[Size],
+    value: Size,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.theme[role, states, key] = value
 
 proc `[]`*[T](appearance: Appearance, role: StyleRole, key: StyleKey[T]): StyleValue =
   appearance.theme[role, key]
@@ -1186,9 +1360,9 @@ proc addRoleRule(
     textColor: StyleValue,
 ) =
   let selector = initStyleSelector(role, states)
-  theme.setStyle(selector, StyleFill, fill)
-  theme.setStyle(selector, StyleBorderColor, borderColor)
-  theme.setStyle(selector, StyleTextColor, textColor)
+  theme[selector, StyleFill] = fill
+  theme[selector, StyleBorderColor] = borderColor
+  theme[selector, StyleTextColor] = textColor
 
 proc addChoiceRule(
     theme: var Theme,
@@ -1200,10 +1374,10 @@ proc addChoiceRule(
     textColor: StyleValue,
 ) =
   let selector = initStyleSelector(role, states)
-  theme.setStyle(selector, StyleFill, fill)
-  theme.setStyle(selector, StyleBorderColor, borderColor)
-  theme.setStyle(selector, StyleMarkColor, markColor)
-  theme.setStyle(selector, StyleTextColor, textColor)
+  theme[selector, StyleFill] = fill
+  theme[selector, StyleBorderColor] = borderColor
+  theme[selector, StyleMarkColor] = markColor
+  theme[selector, StyleTextColor] = textColor
 
 func defaultButtonShadows(): seq[BoxShadow] =
   @[
@@ -1219,122 +1393,59 @@ func highlightedButtonShadows(): seq[BoxShadow] =
 
 proc initTheme*(): Theme =
   result.tokens = newStyleTokenStore()
-  result.setDefaultToken(AccentToken, styleColor(initColor(0.20, 0.48, 0.86, 1.0)))
-  result.setDefaultToken(
-    AccentPressedToken, styleColor(initColor(0.12, 0.34, 0.68, 1.0))
-  )
-  result.setDefaultToken(
-    DisabledFillToken, styleColor(initColor(0.58, 0.62, 0.68, 1.0))
-  )
-  result.setDefaultToken(
-    DisabledTextColorToken, styleColor(initColor(0.92, 0.94, 0.96, 1.0))
-  )
-  result.setDefaultToken(
-    FocusRingColorToken, styleColor(initColor(0.24, 0.48, 0.92, 0.58))
-  )
+  result[AccentToken] = styleColor(initColor(0.20, 0.48, 0.86, 1.0))
+  result[AccentPressedToken] = styleColor(initColor(0.12, 0.34, 0.68, 1.0))
+  result[DisabledFillToken] = styleColor(initColor(0.58, 0.62, 0.68, 1.0))
+  result[DisabledTextColorToken] = styleColor(initColor(0.92, 0.94, 0.96, 1.0))
+  result[FocusRingColorToken] = styleColor(initColor(0.24, 0.48, 0.92, 0.58))
 
-  result.setDefaultToken(ButtonFillToken, styleToken(AccentToken))
-  result.setDefaultToken(ButtonHighlightedFillToken, styleToken(AccentPressedToken))
-  result.setDefaultToken(ButtonDisabledFillToken, styleToken(DisabledFillToken))
-  result.setDefaultToken(
-    ButtonTextColorToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
-  )
-  result.setDefaultToken(
-    ButtonDisabledTextColorToken, styleToken(DisabledTextColorToken)
-  )
-  result.setDefaultToken(
-    ButtonBorderColorToken, styleColor(initColor(0.10, 0.25, 0.46, 1.0))
-  )
-  result.setDefaultToken(
-    ButtonHighlightedBorderColorToken, styleColor(initColor(0.06, 0.18, 0.36, 1.0))
-  )
-  result.setDefaultToken(
-    ButtonDisabledBorderColorToken, styleColor(initColor(0.46, 0.50, 0.56, 1.0))
-  )
-  result.setDefaultToken(
-    ButtonFocusRingColorToken, styleColor(initColor(1.0, 1.0, 1.0, 0.90))
-  )
-  result.setDefaultToken(ButtonShadowsToken, defaultButtonShadows())
-  result.setDefaultToken(ButtonHighlightedShadowsToken, highlightedButtonShadows())
-  result.setDefaultToken(ButtonDisabledShadowsToken, newSeq[BoxShadow]())
+  result[ButtonFillToken] = styleToken(AccentToken)
+  result[ButtonHighlightedFillToken] = styleToken(AccentPressedToken)
+  result[ButtonDisabledFillToken] = styleToken(DisabledFillToken)
+  result[ButtonTextColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ButtonDisabledTextColorToken] = styleToken(DisabledTextColorToken)
+  result[ButtonBorderColorToken] = styleColor(initColor(0.10, 0.25, 0.46, 1.0))
+  result[ButtonHighlightedBorderColorToken] =
+    styleColor(initColor(0.06, 0.18, 0.36, 1.0))
+  result[ButtonDisabledBorderColorToken] = styleColor(initColor(0.46, 0.50, 0.56, 1.0))
+  result[ButtonFocusRingColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 0.90))
+  result[ButtonShadowsToken] = defaultButtonShadows()
+  result[ButtonHighlightedShadowsToken] = highlightedButtonShadows()
+  result[ButtonDisabledShadowsToken] = newSeq[BoxShadow]()
 
-  result.setDefaultToken(
-    ChoiceIndicatorFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
-  )
-  result.setDefaultToken(
-    ChoiceIndicatorHighlightedFillToken, styleColor(initColor(0.90, 0.94, 1.0, 1.0))
-  )
-  result.setDefaultToken(
-    ChoiceIndicatorDisabledFillToken, styleColor(initColor(0.90, 0.92, 0.95, 1.0))
-  )
-  result.setDefaultToken(ChoiceIndicatorSelectedFillToken, styleToken(AccentToken))
-  result.setDefaultToken(
-    ChoiceIndicatorSelectedHighlightedFillToken, styleToken(AccentPressedToken)
-  )
-  result.setDefaultToken(
-    ChoiceIndicatorSelectedDisabledFillToken, styleToken(DisabledFillToken)
-  )
-  result.setDefaultToken(
-    ChoiceIndicatorBorderColorToken, styleColor(initColor(0.50, 0.55, 0.62, 1.0))
-  )
-  result.setDefaultToken(
-    ChoiceIndicatorHighlightedBorderColorToken,
-    styleColor(initColor(0.24, 0.38, 0.58, 1.0)),
-  )
-  result.setDefaultToken(
-    ChoiceIndicatorDisabledBorderColorToken,
-    styleColor(initColor(0.68, 0.72, 0.78, 1.0)),
-  )
-  result.setDefaultToken(
-    ChoiceMarkColorToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
-  )
-  result.setDefaultToken(
-    ChoiceDisabledMarkColorToken, styleToken(DisabledTextColorToken)
-  )
-  result.setDefaultToken(
-    ChoiceTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
-  )
-  result.setDefaultToken(
-    ChoiceDisabledTextColorToken, styleColor(initColor(0.52, 0.56, 0.62, 1.0))
-  )
+  result[ChoiceIndicatorFillToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ChoiceIndicatorHighlightedFillToken] =
+    styleColor(initColor(0.90, 0.94, 1.0, 1.0))
+  result[ChoiceIndicatorDisabledFillToken] =
+    styleColor(initColor(0.90, 0.92, 0.95, 1.0))
+  result[ChoiceIndicatorSelectedFillToken] = styleToken(AccentToken)
+  result[ChoiceIndicatorSelectedHighlightedFillToken] = styleToken(AccentPressedToken)
+  result[ChoiceIndicatorSelectedDisabledFillToken] = styleToken(DisabledFillToken)
+  result[ChoiceIndicatorBorderColorToken] = styleColor(initColor(0.50, 0.55, 0.62, 1.0))
+  result[ChoiceIndicatorHighlightedBorderColorToken] =
+    styleColor(initColor(0.24, 0.38, 0.58, 1.0))
+  result[ChoiceIndicatorDisabledBorderColorToken] =
+    styleColor(initColor(0.68, 0.72, 0.78, 1.0))
+  result[ChoiceMarkColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ChoiceDisabledMarkColorToken] = styleToken(DisabledTextColorToken)
+  result[ChoiceTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  result[ChoiceDisabledTextColorToken] = styleColor(initColor(0.52, 0.56, 0.62, 1.0))
 
-  result.setDefaultToken(TextFieldFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0)))
-  result.setDefaultToken(
-    TextFieldBorderColorToken, styleColor(initColor(0.72, 0.75, 0.80, 1.0))
-  )
-  result.setDefaultToken(
-    TextFieldTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
-  )
-  result.setDefaultToken(ComboBoxFillToken, styleToken(TextFieldFillToken))
-  result.setDefaultToken(
-    ComboBoxBorderColorToken, styleToken(TextFieldBorderColorToken)
-  )
-  result.setDefaultToken(
-    ComboBoxOpenBorderColorToken, styleColor(initColor(0.30, 0.50, 0.84, 1.0))
-  )
-  result.setDefaultToken(ComboBoxTextColorToken, styleToken(TextFieldTextColorToken))
-  result.setDefaultToken(
-    ComboBoxArrowColorToken, styleColor(initColor(0.20, 0.22, 0.26, 1.0))
-  )
-  result.setDefaultToken(
-    ComboBoxItemFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
-  )
-  result.setDefaultToken(
-    ComboBoxItemHighlightedFillToken, styleColor(initColor(0.88, 0.93, 1.0, 1.0))
-  )
-  result.setDefaultToken(
-    ComboBoxItemSelectedFillToken, styleColor(initColor(0.20, 0.48, 0.86, 1.0))
-  )
-  result.setDefaultToken(
-    ComboBoxItemSelectedHighlightedFillToken,
-    styleColor(initColor(0.12, 0.34, 0.68, 1.0)),
-  )
-  result.setDefaultToken(
-    ComboBoxItemTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
-  )
-  result.setDefaultToken(
-    ComboBoxItemSelectedTextColorToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
-  )
+  result[TextFieldFillToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[TextFieldBorderColorToken] = styleColor(initColor(0.72, 0.75, 0.80, 1.0))
+  result[TextFieldTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  result[ComboBoxFillToken] = styleToken(TextFieldFillToken)
+  result[ComboBoxBorderColorToken] = styleToken(TextFieldBorderColorToken)
+  result[ComboBoxOpenBorderColorToken] = styleColor(initColor(0.30, 0.50, 0.84, 1.0))
+  result[ComboBoxTextColorToken] = styleToken(TextFieldTextColorToken)
+  result[ComboBoxArrowColorToken] = styleColor(initColor(0.20, 0.22, 0.26, 1.0))
+  result[ComboBoxItemFillToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ComboBoxItemHighlightedFillToken] = styleColor(initColor(0.88, 0.93, 1.0, 1.0))
+  result[ComboBoxItemSelectedFillToken] = styleColor(initColor(0.20, 0.48, 0.86, 1.0))
+  result[ComboBoxItemSelectedHighlightedFillToken] =
+    styleColor(initColor(0.12, 0.34, 0.68, 1.0))
+  result[ComboBoxItemTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  result[ComboBoxItemSelectedTextColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
 
   result.addRoleRule(
     srButton,
@@ -1364,26 +1475,20 @@ proc initTheme*(): Theme =
     styleToken(ButtonDisabledBorderColorToken),
     styleToken(ButtonDisabledTextColorToken),
   )
-  result.setStyle(srButton, StyleBorderWidth, 1.0)
-  result.setStyle(srButton, StyleCornerRadius, 8.0)
-  result.setStyle(srButton, StyleTextInsets, initEdgeInsets(0.0, 8.0))
-  result.setStyle(srButton, StyleMinimumSize, initSize(0.0, 24.0))
-  result.setStyle(srButton, StyleFocusRingWidth, 3.0)
-  result.setStyle(srButton, StyleFocusRingInset, -2.0)
-  result.setStyle(srButton, StyleFocusRingColor, styleToken(ButtonFocusRingColorToken))
-  result.setStyle(srButton, StyleBoxShadows, styleToken(ButtonShadowsToken))
-  result.setStyle(
-    srButton,
-    {ssHighlighted},
-    StyleBoxShadows,
-    styleToken(ButtonHighlightedShadowsToken),
-  )
-  result.setStyle(
-    srButton, {ssActive}, StyleBoxShadows, styleToken(ButtonHighlightedShadowsToken)
-  )
-  result.setStyle(
-    srButton, {ssDisabled}, StyleBoxShadows, styleToken(ButtonDisabledShadowsToken)
-  )
+  result[srButton, StyleBorderWidth] = 1.0
+  result[srButton, StyleCornerRadius] = 8.0
+  result[srButton, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
+  result[srButton, StyleMinimumSize] = initSize(0.0, 24.0)
+  result[srButton, StyleFocusRingWidth] = 3.0
+  result[srButton, StyleFocusRingInset] = -2.0
+  result[srButton, StyleFocusRingColor] = styleToken(ButtonFocusRingColorToken)
+  result[srButton, StyleBoxShadows] = styleToken(ButtonShadowsToken)
+  result[srButton, {ssHighlighted}, StyleBoxShadows] =
+    styleToken(ButtonHighlightedShadowsToken)
+  result[srButton, {ssActive}, StyleBoxShadows] =
+    styleToken(ButtonHighlightedShadowsToken)
+  result[srButton, {ssDisabled}, StyleBoxShadows] =
+    styleToken(ButtonDisabledShadowsToken)
 
   for role in [srCheckBox, srRadioButton]:
     let radius = if role == srCheckBox: 6.0'f32 else: 7.0'f32
@@ -1435,25 +1540,25 @@ proc initTheme*(): Theme =
       styleToken(ChoiceDisabledMarkColorToken),
       styleToken(ChoiceDisabledTextColorToken),
     )
-    result.setStyle(role, StyleIndicatorSize, 14.0)
-    result.setStyle(role, StyleBorderWidth, 1.0)
-    result.setStyle(role, StyleCornerRadius, radius)
-    result.setStyle(role, StyleIndicatorSpacing, 7.0)
-    result.setStyle(role, StyleTextInsets, initEdgeInsets(0.0, 2.0))
-    result.setStyle(role, StyleMinimumSize, initSize(0.0, 18.0))
-    result.setStyle(role, StyleFocusRingWidth, 3.0)
-    result.setStyle(role, StyleFocusRingInset, 2.0)
-    result.setStyle(role, StyleFocusRingColor, styleToken(FocusRingColorToken))
+    result[role, StyleIndicatorSize] = 14.0
+    result[role, StyleBorderWidth] = 1.0
+    result[role, StyleCornerRadius] = radius
+    result[role, StyleIndicatorSpacing] = 7.0
+    result[role, StyleTextInsets] = initEdgeInsets(0.0, 2.0)
+    result[role, StyleMinimumSize] = initSize(0.0, 18.0)
+    result[role, StyleFocusRingWidth] = 3.0
+    result[role, StyleFocusRingInset] = 2.0
+    result[role, StyleFocusRingColor] = styleToken(FocusRingColorToken)
 
-  result.setStyle(srTextField, StyleFill, styleToken(TextFieldFillToken))
-  result.setStyle(srTextField, StyleBorderColor, styleToken(TextFieldBorderColorToken))
-  result.setStyle(srTextField, StyleBorderWidth, 1.0)
-  result.setStyle(srTextField, StyleCornerRadius, 6.0)
-  result.setStyle(srTextField, StyleTextInsets, initEdgeInsets(0.0, 6.0))
-  result.setStyle(srTextField, StyleMinimumSize, initSize(80.0, 24.0))
-  result.setStyle(srTextField, StyleFocusRingWidth, 3.0)
-  result.setStyle(srTextField, StyleFocusRingInset, 2.0)
-  result.setStyle(srTextField, StyleFocusRingColor, styleToken(FocusRingColorToken))
+  result[srTextField, StyleFill] = styleToken(TextFieldFillToken)
+  result[srTextField, StyleBorderColor] = styleToken(TextFieldBorderColorToken)
+  result[srTextField, StyleBorderWidth] = 1.0
+  result[srTextField, StyleCornerRadius] = 6.0
+  result[srTextField, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srTextField, StyleMinimumSize] = initSize(80.0, 24.0)
+  result[srTextField, StyleFocusRingWidth] = 3.0
+  result[srTextField, StyleFocusRingInset] = 2.0
+  result[srTextField, StyleFocusRingColor] = styleToken(FocusRingColorToken)
 
   result.addRoleRule(
     srComboBox,
@@ -1476,15 +1581,15 @@ proc initTheme*(): Theme =
     styleToken(TextFieldBorderColorToken),
     styleToken(DisabledTextColorToken),
   )
-  result.setStyle(srComboBox, StyleBorderWidth, 1.0)
-  result.setStyle(srComboBox, StyleCornerRadius, 6.0)
-  result.setStyle(srComboBox, StyleTextInsets, initEdgeInsets(0.0, 8.0))
-  result.setStyle(srComboBox, StyleFocusRingWidth, 3.0)
-  result.setStyle(srComboBox, StyleFocusRingInset, 2.0)
-  result.setStyle(srComboBox, StyleFocusRingColor, styleToken(FocusRingColorToken))
-  result.setStyle(srComboBox, StyleIndicatorSize, 24.0)
-  result.setStyle(srComboBox, StyleMinimumSize, initSize(90.0, 24.0))
-  result.setStyle(srComboBox, StyleMarkColor, styleToken(ComboBoxArrowColorToken))
+  result[srComboBox, StyleBorderWidth] = 1.0
+  result[srComboBox, StyleCornerRadius] = 6.0
+  result[srComboBox, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
+  result[srComboBox, StyleFocusRingWidth] = 3.0
+  result[srComboBox, StyleFocusRingInset] = 2.0
+  result[srComboBox, StyleFocusRingColor] = styleToken(FocusRingColorToken)
+  result[srComboBox, StyleIndicatorSize] = 24.0
+  result[srComboBox, StyleMinimumSize] = initSize(90.0, 24.0)
+  result[srComboBox, StyleMarkColor] = styleToken(ComboBoxArrowColorToken)
 
   result.addRoleRule(
     srComboBoxItem,
@@ -1514,10 +1619,10 @@ proc initTheme*(): Theme =
     styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
     styleToken(ComboBoxItemSelectedTextColorToken),
   )
-  result.setStyle(srComboBoxItem, StyleBorderWidth, 0.0)
-  result.setStyle(srComboBoxItem, StyleCornerRadius, 0.0)
-  result.setStyle(srComboBoxItem, StyleTextInsets, initEdgeInsets(0.0, 6.0))
-  result.setStyle(srComboBoxItem, StyleMinimumSize, initSize(0.0, 22.0))
+  result[srComboBoxItem, StyleBorderWidth] = 0.0
+  result[srComboBoxItem, StyleCornerRadius] = 0.0
+  result[srComboBoxItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srComboBoxItem, StyleMinimumSize] = initSize(0.0, 22.0)
 
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)

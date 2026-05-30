@@ -35,7 +35,9 @@ NimKit currently includes the core desktop-control slice:
   selectors before raw `keyDown` dispatch.
 - A theme system built around `Theme`, inherited `Appearance`, `StyleContext`,
   typed style keys, token stores, selector-like style rules, shadows, focus
-  metrics, and concrete resolved styles for the built-in controls.
+  metrics, stdlib-style token and style assignment through
+  `theme[tokenName] = value` and `theme[role, styleKey] = value`, and concrete
+  resolved styles for the built-in controls.
 - FigDraw rendering via `DrawContext`, per-widget `draw` selector methods,
   default and popup draw levels, text layout helpers, focus-ring helpers,
   style-resolved control drawing, and `buildRenders` entry points that do not

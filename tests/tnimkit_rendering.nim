@@ -66,17 +66,17 @@ suite "nimkit rendering":
         ]
 
     var theme = initTheme()
-    theme.setStyle(srButton, StyleFill, buttonFill)
-    theme.setStyle(srButton, StyleBorderColor, buttonBorder)
-    theme.setStyle(srButton, StyleBorderWidth, 3.0)
-    theme.setStyle(srButton, StyleCornerRadius, 6.0)
-    theme.setStyle(srButton, StyleTextInsets, initEdgeInsets(1.0, 9.0))
-    theme.setStyle(srButton, StyleBoxShadows, buttonShadows)
-    theme.setStyle(srTextField, StyleFill, fieldFill)
-    theme.setStyle(srTextField, StyleBorderColor, fieldBorder)
-    theme.setStyle(srTextField, StyleBorderWidth, 2.0)
-    theme.setStyle(srTextField, StyleCornerRadius, 5.0)
-    theme.setStyle(srTextField, StyleTextInsets, initEdgeInsets(2.0, 7.0))
+    theme[srButton, StyleFill] = buttonFill
+    theme[srButton, StyleBorderColor] = buttonBorder
+    theme[srButton, StyleBorderWidth] = 3.0
+    theme[srButton, StyleCornerRadius] = 6.0
+    theme[srButton, StyleTextInsets] = initEdgeInsets(1.0, 9.0)
+    theme[srButton, StyleBoxShadows] = buttonShadows
+    theme[srTextField, StyleFill] = fieldFill
+    theme[srTextField, StyleBorderColor] = fieldBorder
+    theme[srTextField, StyleBorderWidth] = 2.0
+    theme[srTextField, StyleCornerRadius] = 5.0
+    theme[srTextField, StyleTextInsets] = initEdgeInsets(2.0, 7.0)
 
     root.addSubview(field)
     root.addSubview(button)
@@ -269,8 +269,8 @@ suite "nimkit rendering":
 
     let activeFill = initColor(0.8, 0.2, 0.1, 1.0)
     var theme = initTheme()
-    theme.setStyle(srButton, StyleFill, initColor(0.1, 0.1, 0.1, 1.0))
-    theme.setStyle(srButton, {ssActive}, StyleFill, activeFill)
+    theme[srButton, StyleFill] = initColor(0.1, 0.1, 0.1, 1.0)
+    theme[srButton, {ssActive}, StyleFill] = activeFill
 
     root.addSubview(button)
     button.setActive(true)
@@ -292,10 +292,10 @@ suite "nimkit rendering":
       focusColor = initColor(0.24, 0.48, 0.92, 0.58)
 
     var theme = initTheme()
-    theme.setStyle(srButton, StyleFocusRingWidth, 4.0)
-    theme.setStyle(srButton, StyleFocusRingInset, -2.0)
-    theme.setStyle(srButton, StyleFocusRingColor, focusColor)
-    theme.setStyle(srButton, StyleCornerRadius, 5.0)
+    theme[srButton, StyleFocusRingWidth] = 4.0
+    theme[srButton, StyleFocusRingInset] = -2.0
+    theme[srButton, StyleFocusRingColor] = focusColor
+    theme[srButton, StyleCornerRadius] = 5.0
 
     root.addSubview(button)
     button.setFocused(true)
@@ -329,11 +329,11 @@ suite "nimkit rendering":
 
     var theme = initTheme()
     for role in [srCheckBox, srRadioButton]:
-      theme.setStyle(role, {ssSelected}, StyleFill, selectedFill)
-      theme.setStyle(role, {ssSelected}, StyleMarkColor, markFill)
-      theme.setStyle(role, StyleIndicatorSize, 12.0)
-      theme.setStyle(role, StyleIndicatorSpacing, 5.0)
-      theme.setStyle(role, StyleTextInsets, initEdgeInsets(0.0, 3.0))
+      theme[role, {ssSelected}, StyleFill] = selectedFill
+      theme[role, {ssSelected}, StyleMarkColor] = markFill
+      theme[role, StyleIndicatorSize] = 12.0
+      theme[role, StyleIndicatorSpacing] = 5.0
+      theme[role, StyleTextInsets] = initEdgeInsets(0.0, 3.0)
 
     checkbox.setState(bsOn)
     radio.setState(bsOn)

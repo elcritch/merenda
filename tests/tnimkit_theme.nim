@@ -84,12 +84,12 @@ suite "nimkit theme":
       padding = initEdgeInsets(1, 2, 3, 4)
       shadows = @[dropShadow(initColor(0, 0, 0, 0.25), y = 2.0, blur = 4.0)]
 
-    parent.setToken("accent", accent)
-    parent.setToken("space", 6.0)
-    parent.setToken("minimum.size", minSize)
-    parent.setToken("padding", padding)
-    parent.setToken("shadow", shadows)
-    child.setToken("nested.accent", styleToken("accent"))
+    parent["accent"] = accent
+    parent["space"] = 6.0
+    parent["minimum.size"] = minSize
+    parent["padding"] = padding
+    parent["shadow"] = shadows
+    child["nested.accent"] = styleToken("accent")
 
     var value: StyleValue
     check child.resolveToken("nested.accent", value)
@@ -118,7 +118,7 @@ suite "nimkit theme":
           insetShadow(initColor(1, 1, 1, 0.18), y = -1.0, blur = 1.0),
         ]
 
-    appearance.setToken("field.text.override", fieldText)
+    appearance.theme["field.text.override"] = fieldText
     appearance[srButton, StyleFill] = buttonFill
     appearance[srButton, StyleCornerRadius] = 9.0
     appearance[srButton, StyleFocusRingColor] = focusRing
@@ -156,7 +156,7 @@ suite "nimkit theme":
       baseStyle = theme.resolveButtonStyle(initControlStyleContext(srButton))
       overrideFill = initColor(0.67, 0.18, 0.22, 1.0)
 
-    firstAppearance.setToken(ButtonFillToken, overrideFill)
+    firstAppearance.theme[ButtonFillToken] = overrideFill
     firstAppearance[srButton, StyleCornerRadius] = 11.0
 
     check firstAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
