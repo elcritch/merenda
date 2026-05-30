@@ -11,46 +11,45 @@ useful, and backend/runtime details kept behind NimKit boundaries.
 
 ## Current State
 
-NimKit currently includes:
+NimKit currently includes the core desktop-control slice:
 
-- `Application`, `Window`, `Responder`, `View`, `Control`, `Button`,
-  checkbox/radio button variants, `TextField`, and `ComboBox`.
-- Plain Nim value types for geometry, events, and control options, with
-  `chroma.Color` used directly for color state.
-- Responder/action and key-command dispatch through `sigils/selectors`.
-- Desktop UI object boundaries: views own hierarchy, geometry, drawing,
-  tracking, layout, and appearance directly; controls are the cell-backed
-  branch; delegates/data sources are explicit selector hooks rather than
-  generic forwarding targets.
-- View hierarchy, lifecycle hooks, optional clipping, dirty-rect invalidation,
-  hit testing, and first-responder dispatch.
-- Application/window/view appearance inheritance through `effectiveAppearance`,
-  plus stable view `styleId`/`styleClasses` for future query-like theme
-  matching.
-- Mouse entered/exited tracking, hover/active view state, and a basic
-  `needsLayout` lifecycle with selector-backed `layoutSubviews`/`layout` hooks.
-- Mouse and scroll events carry modifier and timestamp metadata. Hit-tested
-  mouse/scroll dispatch walks the responder chain with view-local coordinate
-  conversion at each step, and repeated click counts stay scoped to the clicked
-  target.
-- Window key bindings map text/typed-key/key-code plus modifier combinations to
-  command selectors, dispatch them through the responder chain before raw
-  `keyDown`, and fall through cleanly when no responder handles the command.
-  macOS/Windows/Linux/BSD profiles are switchable at runtime.
-- Text fields are editable/selectable first-responder controls with selected
-  ranges, insertion points, click focus, text insertion, select-all, arrow
-  movement, shift-selection movement, and forward/backward deletion. Combo boxes
-  provide local items, selector-backed data source/delegate hooks, inline or
-  window-backed popups, popup tracking, keyboard navigation, and action dispatch
-  on selection.
-- Tab and backtab traverse automatic or manual key-view loops, and focus-visible
-  rings are driven by keyboard focus rather than mouse focus.
-- figdraw rendering for view backgrounds, per-widget selector-backed drawing,
-  button rectangles, single-line text, text-field selection/caret affordances,
-  combo-box popups, and style-resolved control metrics.
-- siwin native windows, modifier-aware mouse/scroll dispatch, key/text input
-  dispatch, and framebuffer/UI-scale-aware mouse coordinate conversion.
-- Runnable examples:
+- Core objects: `Application`, `Window`, `Responder`, `View`, `Control`,
+  `Cell`/`ActionCell`, `Button`, checkbox/radio variants, `TextField`, and
+  `ComboBox`.
+- Plain Nim value types for geometry, events, key identifiers, modifiers,
+  popup options, and control state. `chroma.Color` is used directly for color
+  state.
+- Selector-backed responder/action dispatch through `sigils/selectors`, with
+  explicit selector hooks for event handling, drawing, layout, control actions,
+  text editing commands, delegates, and data sources.
+- A view system with frame/bounds geometry, hierarchy/lifecycle hooks,
+  optional clipping, coordinate conversion, hit testing, dirty-rect
+  invalidation, `needsLayout`, display preparation/cleanup, style identity, and
+  inherited appearance.
+- A window event path with first responder tracking, automatic and manual
+  key-view loops, tab/backtab traversal, mouse capture during drag/up tracking,
+  hover/active/focus-visible state, repeated click counts, scroll bubbling, and
+  view-local coordinate conversion for responder fallback.
+- Runtime-switchable key binding profiles for macOS, Windows, Linux, and BSD.
+  Bindings map text, typed keys, key codes, and shortcut modifiers to command
+  selectors before raw `keyDown` dispatch.
+- A theme system built around `Theme`, inherited `Appearance`, `StyleContext`,
+  typed style keys, token stores, selector-like style rules, shadows, focus
+  metrics, and concrete resolved styles for the built-in controls.
+- FigDraw rendering via `DrawContext`, per-widget `draw` selector methods,
+  default and popup draw levels, text layout helpers, focus-ring helpers,
+  style-resolved control drawing, and `buildRenders` entry points that do not
+  require a native window.
+- siwin-backed native windows, popup windows, configurable popup presentation
+  (`ppAutomatic`, `ppWindow`, `ppInline`), native scale-aware input conversion,
+  frame pumping, rendering, and test/diagnostic escape hatches for native
+  handles.
+- Controls with useful behavior: cell-backed buttons, release-outside
+  cancellation, keyboard activation, toggle/mixed/check/radio state cycling,
+  editable/selectable single-line text fields, and combo boxes with local items,
+  data source/delegate hooks, inline or window-backed popups, keyboard
+  navigation, and action dispatch on selection.
+- Runnable NimKit examples:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
   `examples/nimkit_button_counter.nim`,
@@ -59,8 +58,9 @@ NimKit currently includes:
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
   `examples/nimkit_controls_showcase.nim`.
-- Focused tests for values, views, controls, responders, rendering,
-  screenshots, and native application pumping.
+- Focused tests cover value types, views, controls, text fields, combo boxes,
+  responders, key bindings, rendering, screenshots, and native application
+  pumping.
 
 ## Coding Style
 
@@ -86,32 +86,41 @@ NimKit currently includes:
 - Keep backend/runtime handles out of NimKit's public surface. Public NimKit
   APIs should expose Nim values and NimKit objects, not native-window,
   renderer, or foreign-runtime implementation details.
+- Keep built-in widget drawing on the widget/cell side through `draw`
+  selectors and `DrawContext`. Rendering traversal should stay generic rather
+  than growing control-specific branches.
+- Resolve visual metrics through `Appearance`/`StyleContext` and concrete style
+  objects. Controls should not inspect token names or carry hardcoded style
+  special cases when a generic style key can express the same thing.
 
 ## Module Layout
 
 - `src/merenda/nimkit.nim`:
   Aggregating import for the public API.
 - `src/merenda/nimkit/types.nim`:
-  Geometry, colors, button/control enums, and mouse/scroll/key event value
-  objects.
+  `Point`, `Size`, `Rect`, chroma-backed `Color`, key/modifier enums,
+  button/control enums, popup presentation options, and mouse/scroll/key event
+  value objects.
 - `src/merenda/nimkit/selectors.nim`:
   Typed selector declarations, action/event argument objects, drawing hooks,
-  mouse enter/exit hooks, scroll hooks, text input/editing command hooks, and
-  layout hooks.
+  mouse/scroll hooks, text input/editing command hooks, key-view commands,
+  combo-box hooks, and layout hooks.
 - `src/merenda/nimkit/responders.nim`:
   `Responder`, next-responder links, selector forwarding, first-responder hooks,
   and command fallback behavior.
 - `src/merenda/nimkit/drawing.nim`:
-  `DrawContext`, FigDraw node insertion, and local-to-window drawing geometry
-  helpers used by selector-backed custom drawing.
+  `DrawContext`, default/popup draw levels, FigDraw node insertion, text layout,
+  local-to-window drawing geometry helpers, focus rings, shadows, and small
+  control drawing helpers used by selector-backed custom drawing.
 - `src/merenda/nimkit/keybindings.nim`:
   Plain `KeyStroke`, `KeyBinding`, and `KeyBindingTable` values for mapping
-  key/modifier combinations to command selectors, including platform-primary
-  shortcut modifiers and default text-editing command bindings.
+  key/modifier combinations to command selectors, platform-primary shortcut
+  modifiers, and macOS/Windows/Linux/BSD default text-editing profiles.
 - `src/merenda/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
-  appearance/style identity, layout/display invalidation, hover/active state,
-  and event dispatch into selector methods.
+  coordinate conversion, optional clipping, appearance/style identity,
+  layout/display invalidation, key-view links, hover/active/focus state, and
+  event dispatch into selector methods.
 - `src/merenda/nimkit/cells.nim`:
   `Cell` and `ActionCell`, control-view back references, enabled/highlighted
   state, button state cycling, and target/action storage used by controls.
@@ -124,27 +133,30 @@ NimKit currently includes:
 - `src/merenda/nimkit/textfields.nim`:
   `TextField`, string value, alignment, text color, editable/selectable flags,
   selected range/insertion state, delegate storage, explicit text-field delegate
-  selector hooks, and default text editing command handlers.
+  selector hooks, first-responder editing state, and default text editing
+  command handlers.
 - `src/merenda/nimkit/comboboxes.nim`:
   `ComboBox`, local item storage through `ComboBoxCell`, selector-backed data
-  source/delegate hooks, popup open/highlight/selection state, mouse tracking,
-  keyboard navigation, and text selector compatibility.
+  source/delegate hooks, popup presentation preference, inline popup drawing,
+  window-backed popup views, popup open/highlight/selection state, mouse
+  tracking, keyboard navigation, and text selector compatibility.
 - `src/merenda/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field/combo-box
   style objects, typed style tokens, style overrides, `EdgeInsets`,
-  control-state colors, borders, corner radius, focus-ring metrics, and control
-  text insets.
+  `BoxShadow`, control-state colors, borders, corner radius, focus-ring
+  metrics, indicator metrics, arrow metrics, and control text insets.
 - `src/merenda/nimkit/rendering.nim`:
-  figdraw node creation, text layout helpers, theme-backed built-in control
-  drawing, combo-box popup rendering, and render-tree construction.
+  Generic view traversal, display preparation/cleanup, per-widget draw selector
+  dispatch, appearance propagation, and render-tree construction.
 - `src/merenda/nimkit/backend.nim`:
   Internal host backend for siwin native windows, FigDraw renderer setup,
   native event translation, input coordinate conversion, native stepping, and
   presentation.
 - `src/merenda/nimkit/windows.nim`:
   `Window` title/frame/content/first-responder state, visibility lifecycle,
-  effective appearance propagation, render flushing, hover/mouse tracking, and
-  NimKit event dispatch.
+  effective appearance propagation, key bindings, key-view loops, popup
+  presentation, popup window creation, render flushing, hover/mouse tracking,
+  scale-aware coordinate conversion, and NimKit event dispatch.
 - `src/merenda/nimkit/application.nim`:
   App singleton/lifetime, window list, app-level appearance, run loop helpers,
   and frame-limited test execution.
@@ -159,22 +171,22 @@ exposing a modern intrinsic measurement model where it fits NimKit:
 - Keep controls thin and cell-driven. `Control.sizeToFit` should ask the
   installed cell for its measured size.
 - Put content measurement in cells, not views. Button cells should measure
-  title/image/check/radio content; text-field cells should measure text and
-  editor affordances; combo-box cells should measure selected text plus arrow
-  and popup/list requirements.
+  title/check/radio content; text-field cells should measure text and editor
+  affordances; combo-box cells should measure selected text plus arrow and
+  popup/list requirements.
 - Put chrome metrics in `Appearance`/theme, not hardcoded controls. Borders,
-  focus rings, control insets, image-title gaps, minimum heights, and
-  state/style-specific margins should be resolved through style tokens and
-  concrete style objects before drawing or measuring.
+  focus rings, shadows, control insets, minimum heights, indicator metrics,
+  arrow metrics, and state/style-specific margins should be resolved through
+  style tokens and concrete style objects before drawing or measuring.
 - Add modern measurement procs on NimKit objects: `intrinsicContentSize`,
   `invalidateIntrinsicContentSize`, `sizeThatFits`, and `sizeToFit`. Plain
-  `View` should default to no intrinsic metric; labels/buttons/checks/radios/
-  text fields/combo boxes should return useful content sizes.
+  `View` should default to no intrinsic metric; buttons/checks/radios/text
+  fields/combo boxes should return useful content sizes.
 - Keep `sizeThatFits(proposedSize)` distinct from `intrinsicContentSize`.
   Intrinsic size is the view's natural content size independent of parent
   layout where possible; fitting size may account for a proposed width/height,
   wrapping, popup constraints, or future layout-managed children.
-- Invalidate intrinsic size when content or metrics change: title/text, image or
+- Invalidate intrinsic size when content or metrics change: title/text,
   indicator state, font, control size, style classes/id, appearance, cell
   replacement, editable/selectable decorations, and combo-box item sources.
 - Feed intrinsic sizes into `needsLayout` rather than resizing immediately.
@@ -183,9 +195,8 @@ exposing a modern intrinsic measurement model where it fits NimKit:
   frames.
 - Add content hugging and compression resistance as value-style layout
   priorities once intrinsic sizes exist. Start with practical desktop-control
-  defaults: controls prefer stretching over clipping, labels/checks/radios hug
-  more strongly than text fields, and required priorities are avoided by
-  default.
+  defaults: controls prefer stretching over clipping, checks/radios hug more
+  strongly than text fields, and required priorities are avoided by default.
 - Add autoresizing/layout containers before a constraint solver. A first useful
   layer can support manual `layoutSubviews`, `sizeToFit`, stack-like examples,
   and intrinsic-size-aware helper layout. Defer full Auto Layout constraints
@@ -208,10 +219,10 @@ How the current theme engine fits:
   `indicatorSpacing`; combo boxes should use `ComboBoxStyle.arrowWidth` and text
   insets.
 - Add missing metric tokens only when measurement needs them:
-  minimum control width/height, image-title gap, content baseline offsets,
-  popup row height, and any control-size-specific insets. Keep them as generic
-  `StyleKey[T]` values so future query/CSS-style matching can override them by
-  role, state, id, or class.
+  minimum control width/height, content baseline offsets, popup row height,
+  and any control-size-specific insets. Keep them as generic `StyleKey[T]`
+  values so future query/CSS-style matching can override them by role, state,
+  id, or class.
 - Resolve style from the same `StyleContext` for layout and rendering. That
   keeps hover/active/focused/disabled/selected state changes from producing
   different measured and drawn geometry.
@@ -235,8 +246,7 @@ Concrete task order:
    resolved `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and
    `ComboBoxStyle` values.
 3. Implement button/checkbox/radio intrinsic sizing from title, indicator,
-   image-title gap, control insets, focus-ring allowance, and minimum control
-   heights.
+   control insets, focus-ring allowance, and minimum control heights.
 4. Implement text-field and combo-box intrinsic sizing from text metrics,
    text/editor insets, arrow/indicator metrics, and minimum control heights.
 5. Add `Control.sizeThatFits`, `Control.intrinsicContentSize`, `sizeToFit`, and
@@ -257,6 +267,8 @@ Concrete task order:
   measurement path from the start.
 - Extend combo-box/list infrastructure with scrollable popup content and shared
   list-row behavior rather than adding one-off popup logic per control.
+- Keep text editing scoped to single-line control behavior for now. Grow command
+  selectors and key bindings before adding multiline editor features.
 - Keep delegate/custom policy hooks selector-based and explicit where they
   affect behavior. Use generic forwarding for control-to-cell delegation, not
   for arbitrary view or delegate dispatch.
@@ -276,7 +288,8 @@ Concrete task order:
 
 ### Native Integration
 
-- Continue testing scaled input against rendering on macOS, X11, and Wayland.
+- Continue testing scaled input against rendering on macOS, X11, Wayland, and
+  inline-windowless targets.
 - Keep render construction unit-testable without a live native window.
 - Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style
   escape hatches for tests and diagnostics.
@@ -289,12 +302,15 @@ Concrete task order:
   lookup, renderer ownership, and backend operations should sit behind a small
   NimKit backend interface so siwin-specific details stay out of `Application`
   and `Window`.
+- Keep popup presentation policy on `Window`/control instances. Do not add
+  global popup state; platforms without native popup windows should keep using
+  the same inline FigDraw path.
 - Add coordinate caching only after profiling shows the current uncached
   conversion helpers are a measurable cost. Keep frame/bounds/superview/clipping
   invalidation explicit if caching lands.
 - Keep growing the theme/metrics drawing boundary. `Theme` and `Appearance`
-  should centralize borders, focus rings, control metrics, menu/window chrome,
-  and state-specific colors as those features are added.
+  should centralize borders, shadows, focus rings, control metrics,
+  popup/list metrics, and state-specific colors as those features are added.
 - Keep strengthening the control/cell split. Centralize cell invalidation,
   value conversion, target/action storage, highlight/tracking behavior, and
   default cell construction so controls stay thin.
@@ -304,15 +320,17 @@ Concrete task order:
   to justify it.
 - Add modal/tracking loop infrastructure before menus, popovers, or drag
   sessions depend on edge-case event ordering.
+- Keep expanding command/key-binding behavior through the responder command path
+  rather than adding raw key special cases in individual controls.
 
 ### Priority Order
 
 - Short term: intrinsic sizing, cleaner cell invalidation/default-cell
-  construction, and more controls using theme metrics.
-- Medium term: simple intrinsic-aware layout containers and broader control
-  coverage.
-- Later: constraint layout, richer popup/list infrastructure, loadable themes,
-  and broader resource organization.
+  construction, and measurement tests that prove theme/rendering agreement.
+- Medium term: simple intrinsic-aware layout containers, scrollable list/popup
+  infrastructure, and broader control coverage.
+- Later: constraint layout, loadable/query-like themes, menus/popovers, and
+  broader resource organization.
 
 ## Test Plan
 
@@ -354,6 +372,9 @@ Concrete task order:
   ownership; avoid hidden globals as ownership shortcuts.
 - figdraw text layout and native window flushing are easy to couple. Keep render
   tree construction pure enough to test without siwin.
+- Inline and window-backed popup paths can diverge. Keep behavior tests at the
+  combo-box/window level so both presentation modes follow the same selection,
+  cancellation, and focus semantics.
 - NimKit can drift from expected desktop UI behavior. Cover user-visible event,
   layout, and drawing semantics with tests as each area becomes more complete.
 
@@ -362,6 +383,6 @@ Concrete task order:
 - Full Auto Layout compatibility or a constraint solver.
 - Menus.
 - Scroll views.
-- Full text editing.
-- Source compatibility with another UI toolkit.
+- Multiline or rich text editing.
+- Drop-in source compatibility with another UI toolkit.
 - Foreign runtime interop from NimKit's public API.
