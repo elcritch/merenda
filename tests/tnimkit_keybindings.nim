@@ -1,5 +1,7 @@
 import std/unittest
 
+import std/options
+
 import knutella/nimkit
 
 suite "nimkit key bindings":
@@ -22,3 +24,23 @@ suite "nimkit key bindings":
     check not stroke.matches(
       KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmControl})
     )
+
+  test "default key bindings include basic text editing commands":
+    let bindings = initDefaultKeyBindings()
+
+    check bindings
+    .commandFor(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
+    .get() == deleteBackward()
+    check bindings.commandFor(KeyEvent(key: keyDelete, keyCode: keyDelete.ord)).get() ==
+      deleteForward()
+    check bindings
+    .commandFor(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    .get() == moveLeft()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmShift})
+    )
+    .get() == moveRightAndModifySelection()
+    check bindings
+    .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: shortcutModifiers()))
+    .get() == selectAll()

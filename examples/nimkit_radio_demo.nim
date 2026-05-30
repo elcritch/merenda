@@ -37,6 +37,10 @@ title.setTextColor(initColor(0.13, 0.20, 0.34))
 status.setTextColor(initColor(0.12, 0.28, 0.20))
 medium.setState(bsOn)
 
+for label in [title, status]:
+  label.setEditable(false)
+  label.setSelectable(false)
+
 for radio in [small, medium, large]:
   radio.setTarget(target)
   radio.setAction(changedAction)

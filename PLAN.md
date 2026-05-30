@@ -37,8 +37,12 @@ NimKit already has the first useful vertical slice:
 - Window key bindings map text/typed-key/key-code plus modifier combinations to
   command selectors, dispatch them through the responder chain before raw
   `keyDown`, and fall through cleanly when no responder handles the command.
+- Text fields are editable/selectable first-responder controls with selected
+  ranges, insertion points, click focus, text insertion, select-all, arrow
+  movement, shift-selection movement, and forward/backward deletion.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
-  rectangles, single-line text, and style-resolved button/text-field metrics.
+  rectangles, single-line text, text-field selection/caret affordances, and
+  style-resolved button/text-field metrics.
 - siwin native windows, modifier-aware mouse/scroll dispatch, key/text input
   dispatch, and framebuffer/UI-scale-aware mouse coordinate conversion.
 - Runnable examples:
@@ -46,7 +50,8 @@ NimKit already has the first useful vertical slice:
   `examples/nimkit_button_demo.nim`,
   `examples/nimkit_button_counter.nim`,
   `examples/nimkit_checkbox_demo.nim`,
-  `examples/nimkit_radio_demo.nim`.
+  `examples/nimkit_radio_demo.nim`,
+  `examples/nimkit_textfield_demo.nim`.
 - Focused tests for values, views, controls, responders, rendering,
   screenshots, and native application pumping.
 
@@ -84,7 +89,8 @@ NimKit already has the first useful vertical slice:
   objects.
 - `src/knutella/nimkit/selectors.nim`:
   Typed selector declarations, action/event argument objects, drawing hooks,
-  mouse enter/exit hooks, scroll hooks, and layout hooks.
+  mouse enter/exit hooks, scroll hooks, text input/editing command hooks, and
+  layout hooks.
 - `src/knutella/nimkit/responders.nim`:
   `Responder`, next-responder links, selector forwarding, first-responder hooks,
   and command fallback behavior.
@@ -94,7 +100,7 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit/keybindings.nim`:
   Plain `KeyStroke`, `KeyBinding`, and `KeyBindingTable` values for mapping
   key/modifier combinations to command selectors, including platform-primary
-  shortcut modifiers.
+  shortcut modifiers and default text-editing command bindings.
 - `src/knutella/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
   appearance/style identity, layout/display invalidation, hover/active state,
@@ -110,7 +116,8 @@ NimKit already has the first useful vertical slice:
   highlight/tracking behavior, and keyboard activation.
 - `src/knutella/nimkit/textfields.nim`:
   `TextField`, string value, alignment, text color, editable/selectable flags,
-  delegate storage, and explicit text-field delegate selector hooks.
+  selected range/insertion state, delegate storage, explicit text-field delegate
+  selector hooks, and default text editing command handlers.
 - `src/knutella/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field style
   objects, typed style tokens, style overrides, `EdgeInsets`, control-state
@@ -197,8 +204,10 @@ NimKit already has the first useful vertical slice:
 - Radio buttons reuse button target/action, select without toggling off, and
   clear sibling radio buttons in the same superview.
 - `TextField` supports displayed string value, alignment, text color, editable,
-  selectable state, delegate storage, and an explicit `textDidChange` delegate
-  hook without treating the delegate as a generic forwarding target.
+  selectable state, selected range/insertion state, first-responder editing,
+  text insertion, select-all, arrow movement, shift-selection movement,
+  forward/backward deletion, delegate storage, and an explicit `textDidChange`
+  delegate hook without treating the delegate as a generic forwarding target.
 
 ### Theme And Metrics
 
@@ -262,9 +271,9 @@ NimKit already has the first useful vertical slice:
 
 - Add controls only after the current `Control`/`Button`/`TextField` contracts
   stay stable under more examples.
-- Prioritize combo box and basic text editing next because existing AppKit
-  examples can act as references. Checkbox/radio/toggle variants now have the
-  first NimKit implementation.
+- Prioritize combo box next because existing AppKit examples can act as
+  references. Checkbox/radio/toggle variants and basic text editing now have
+  first NimKit implementations.
 - Keep delegate/custom policy hooks selector-based and explicit where they
   affect behavior. Use generic forwarding for control-to-cell delegation, not
   for arbitrary view or delegate dispatch.

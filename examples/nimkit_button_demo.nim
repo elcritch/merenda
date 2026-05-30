@@ -16,6 +16,8 @@ proc onClicked(sender: DynamicAgent) =
 
 let target = newActionTarget(action, onClicked)
 
+label.setEditable(false)
+label.setSelectable(false)
 button.setTarget(target)
 button.setAction(action)
 root.addSubview(label)

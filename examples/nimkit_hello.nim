@@ -34,6 +34,11 @@ title.setAlignment(taCenter)
 title.setTextColor(initColor(0.13, 0.20, 0.34))
 subtitle.setTextColor(initColor(0.20, 0.24, 0.31))
 status.setTextColor(initColor(0.12, 0.28, 0.20))
+
+for label in [title, subtitle, status]:
+  label.setEditable(false)
+  label.setSelectable(false)
+
 button.setButtonType(btToggle)
 button.setAllowsMixedState(true)
 button.setTarget(newActionTarget(action, onCycle))

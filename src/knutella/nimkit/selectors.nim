@@ -54,6 +54,23 @@ protocol UserInterfaceValidationsInternal:
 protocol ButtonActionProtocolInternal:
   method performClick*(args: ActionArgs) {.optional.}
 
+protocol TextInputProtocolInternal:
+  method insertText*(text: string) {.optional.}
+
+protocol TextEditingCommandProtocolInternal:
+  method selectText*(args: ActionArgs) {.optional.}
+  method selectAll*(args: ActionArgs) {.optional.}
+  method deleteBackward*(args: ActionArgs) {.optional.}
+  method deleteForward*(args: ActionArgs) {.optional.}
+  method moveLeft*(args: ActionArgs) {.optional.}
+  method moveRight*(args: ActionArgs) {.optional.}
+  method moveToBeginningOfLine*(args: ActionArgs) {.optional.}
+  method moveToEndOfLine*(args: ActionArgs) {.optional.}
+  method moveLeftAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveRightAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveToBeginningOfLineAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveToEndOfLineAndModifySelection*(args: ActionArgs) {.optional.}
+
 protocol ViewDrawingProtocolInternal:
   method draw*(context: DrawContext) {.optional.}
 
@@ -68,5 +85,7 @@ let
   ResponderEventProtocol* = ResponderEventProtocolInternal
   UserInterfaceValidations* = UserInterfaceValidationsInternal
   ButtonActionProtocol* = ButtonActionProtocolInternal
+  TextInputProtocol* = TextInputProtocolInternal
+  TextEditingCommandProtocol* = TextEditingCommandProtocolInternal
   ViewDrawingProtocol* = ViewDrawingProtocolInternal
   ViewLayoutProtocol* = ViewLayoutProtocolInternal

@@ -32,6 +32,10 @@ button1.setAction(button1Action)
 button2.setTarget(newActionTarget(button2Action, onButton2))
 button2.setAction(button2Action)
 
+for label in [label1, label2]:
+  label.setEditable(false)
+  label.setSelectable(false)
+
 root.addSubview(button1)
 root.addSubview(button2)
 root.addSubview(label1)

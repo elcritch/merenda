@@ -1,18 +1,147 @@
+import std/unicode
+
 import ./controls
 import ./selectors
 import ./types
 
 export controls
 
-type TextField* = ref object of Control
-  xStringValue: string
-  xAlignment: TextAlignment
-  xTextColor: Color
-  xEditable: bool
-  xSelectable: bool
-  xDelegate: DynamicAgent
+type
+  TextRange* = object
+    location*: Natural
+    length*: Natural
+
+  TextField* = ref object of Control
+    xStringValue: string
+    xAlignment: TextAlignment
+    xTextColor: Color
+    xEditable: bool
+    xSelectable: bool
+    xFocused: bool
+    xInsertionPoint: int
+    xSelectionAnchor: int
+    xDelegate: DynamicAgent
 
 proc notifyTextDidChange(textField: TextField)
+
+proc initTextRange*(location, length: int): TextRange =
+  TextRange(location: max(location, 0).Natural, length: max(length, 0).Natural)
+
+proc clampIndex(total, index: int): int {.inline.} =
+  max(0, min(index, total))
+
+proc runeCount(textField: TextField): int {.inline.} =
+  textField.xStringValue.runeLen
+
+proc selectionBounds(total, anchor, cursor: int): tuple[start, stop: int] =
+  let
+    clampedAnchor = clampIndex(total, anchor)
+    clampedCursor = clampIndex(total, cursor)
+  result.start = min(clampedAnchor, clampedCursor)
+  result.stop = max(clampedAnchor, clampedCursor)
+
+proc currentSelection(textField: TextField): tuple[start, stop: int] =
+  selectionBounds(
+    textField.runeCount, textField.xSelectionAnchor, textField.xInsertionPoint
+  )
+
+proc setCursor(textField: TextField, index: int, extending = false) =
+  if textField.isNil:
+    return
+  let cursor = clampIndex(textField.runeCount, index)
+  textField.xInsertionPoint = cursor
+  if not extending:
+    textField.xSelectionAnchor = cursor
+  textField.setNeedsDisplay(true)
+
+proc setSelectedTextRange(textField: TextField, value: TextRange) =
+  if textField.isNil:
+    return
+  let
+    total = textField.runeCount
+    start = clampIndex(total, value.location.int)
+    length = clampIndex(total - start, value.length.int)
+  textField.xSelectionAnchor = start
+  textField.xInsertionPoint = start + length
+  textField.setNeedsDisplay(true)
+
+proc selectedTextRange(textField: TextField): TextRange =
+  if textField.isNil:
+    return initTextRange(0, 0)
+  let selected = textField.currentSelection()
+  initTextRange(selected.start, selected.stop - selected.start)
+
+proc setEditedString(
+    textField: TextField, value: string, cursor: int, anchor: int, notify = true
+) =
+  if textField.isNil:
+    return
+  let changed = textField.xStringValue != value
+  textField.xStringValue = value
+  let total = textField.runeCount
+  textField.xInsertionPoint = clampIndex(total, cursor)
+  textField.xSelectionAnchor = clampIndex(total, anchor)
+  textField.setNeedsDisplay(true)
+  if changed and notify:
+    textField.notifyTextDidChange()
+
+proc selectAllText(textField: TextField) =
+  if textField.isNil:
+    return
+  textField.xSelectionAnchor = 0
+  textField.xInsertionPoint = textField.runeCount
+  textField.setNeedsDisplay(true)
+
+proc replaceSelectedText(textField: TextField, insertion: string) =
+  if textField.isNil or not textField.xEditable:
+    return
+  let
+    current = textField.xStringValue
+    selected = textField.currentSelection()
+    value =
+      current.runeSubStr(0, selected.start) & insertion &
+      current.runeSubStr(selected.stop)
+    cursor = selected.start + insertion.runeLen
+  textField.setEditedString(value, cursor, cursor)
+
+proc deleteBackwardText(textField: TextField) =
+  if textField.isNil or not textField.xEditable:
+    return
+  let
+    current = textField.xStringValue
+    selected = textField.currentSelection()
+  if selected.stop > selected.start:
+    textField.replaceSelectedText("")
+    return
+  if selected.start <= 0:
+    return
+  let
+    cursor = selected.start - 1
+    value = current.runeSubStr(0, cursor) & current.runeSubStr(selected.start)
+  textField.setEditedString(value, cursor, cursor)
+
+proc deleteForwardText(textField: TextField) =
+  if textField.isNil or not textField.xEditable:
+    return
+  let
+    current = textField.xStringValue
+    total = textField.runeCount
+    selected = textField.currentSelection()
+  if selected.stop > selected.start:
+    textField.replaceSelectedText("")
+    return
+  if selected.start >= total:
+    return
+  let value =
+    current.runeSubStr(0, selected.start) & current.runeSubStr(selected.start + 1)
+  textField.setEditedString(value, selected.start, selected.start)
+
+proc shouldInsertText(event: KeyEvent): bool =
+  if event.text.len == 0:
+    return false
+  if event.text in ["\n", "\r", "\t"]:
+    return false
+  event.modifiers - {kmShift} == {}
 
 protocol TextFieldDelegateProtocolInternal:
   method textDidChange*(args: ActionArgs) {.optional.}
@@ -21,6 +150,7 @@ protocol TextFieldProtocolInternal from TextField:
   property stringValue -> string
   property alignment -> TextAlignment
   property textColor -> Color
+  property selectedRange -> TextRange
 
   method stringValue(textField: TextField): string =
     textField.xStringValue
@@ -28,9 +158,9 @@ protocol TextFieldProtocolInternal from TextField:
   method setStringValue(textField: TextField, value: string) =
     if textField.xStringValue == value:
       return
-    textField.xStringValue = value
-    textField.setNeedsDisplay(true)
-    textField.notifyTextDidChange()
+    let cursor = min(textField.xInsertionPoint, value.runeLen)
+    let anchor = min(textField.xSelectionAnchor, value.runeLen)
+    textField.setEditedString(value, cursor, anchor)
 
   method alignment(textField: TextField): TextAlignment =
     textField.xAlignment
@@ -64,6 +194,105 @@ protocol TextFieldProtocolInternal from TextField:
     textField.xSelectable = selectable
     textField.setAcceptsFirstResponder(selectable or textField.isEditable)
 
+  method isEditing*(textField: TextField): bool =
+    textField.xFocused
+
+  method selectedRange(textField: TextField): TextRange =
+    textField.selectedTextRange()
+
+  method setSelectedRange(textField: TextField, value: TextRange) =
+    textField.setSelectedTextRange(value)
+
+  method insertionPoint*(textField: TextField): int =
+    textField.xInsertionPoint
+
+  method selectionAnchor*(textField: TextField): int =
+    textField.xSelectionAnchor
+
+  method becomeFirstResponder(textField: TextField): bool =
+    if not textField.isEnabled or (
+      not textField.xEditable and not textField.xSelectable
+    ):
+      return false
+    textField.xFocused = true
+    textField.selectAllText()
+    true
+
+  method resignFirstResponder(textField: TextField): bool =
+    textField.xFocused = false
+    textField.setNeedsDisplay(true)
+    true
+
+protocol DefaultTextFieldInput of TextInputProtocol:
+  method insertText(textField: TextField, text: string) =
+    textField.replaceSelectedText(text)
+
+protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
+  method selectText(textField: TextField, args: ActionArgs) =
+    textField.selectAllText()
+
+  method selectAll(textField: TextField, args: ActionArgs) =
+    textField.selectAllText()
+
+  method deleteBackward(textField: TextField, args: ActionArgs) =
+    textField.deleteBackwardText()
+
+  method deleteForward(textField: TextField, args: ActionArgs) =
+    textField.deleteForwardText()
+
+  method moveLeft(textField: TextField, args: ActionArgs) =
+    if not textField.xEditable and not textField.xSelectable:
+      return
+    let selected = textField.currentSelection()
+    if selected.stop > selected.start:
+      textField.setCursor(selected.start)
+    else:
+      textField.setCursor(selected.start - 1)
+
+  method moveRight(textField: TextField, args: ActionArgs) =
+    if not textField.xEditable and not textField.xSelectable:
+      return
+    let selected = textField.currentSelection()
+    if selected.stop > selected.start:
+      textField.setCursor(selected.stop)
+    else:
+      textField.setCursor(selected.stop + 1)
+
+  method moveToBeginningOfLine(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(0)
+
+  method moveToEndOfLine(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(textField.runeCount)
+
+  method moveLeftAndModifySelection(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(textField.xInsertionPoint - 1, extending = true)
+
+  method moveRightAndModifySelection(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(textField.xInsertionPoint + 1, extending = true)
+
+  method moveToBeginningOfLineAndModifySelection(
+      textField: TextField, args: ActionArgs
+  ) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(0, extending = true)
+
+  method moveToEndOfLineAndModifySelection(textField: TextField, args: ActionArgs) =
+    if textField.xEditable or textField.xSelectable:
+      textField.setCursor(textField.runeCount, extending = true)
+
+protocol DefaultTextFieldEvents of ResponderEventProtocol:
+  method mouseDown(textField: TextField, event: MouseEvent) =
+    if event.button == mbPrimary and (textField.xEditable or textField.xSelectable):
+      textField.setCursor(textField.runeCount)
+
+  method keyDown(textField: TextField, event: KeyEvent) =
+    if textField.xEditable and event.shouldInsertText():
+      textField.replaceSelectedText(event.text)
+
 proc delegate*(textField: TextField): DynamicAgent =
   if textField.isNil:
     return nil
@@ -89,7 +318,15 @@ proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   textField.xStringValue = value
   textField.xAlignment = taLeft
   textField.xTextColor = initColor(0.08, 0.09, 0.11)
+  textField.xEditable = true
+  textField.xSelectable = true
+  textField.xInsertionPoint = value.runeLen
+  textField.xSelectionAnchor = textField.xInsertionPoint
+  textField.setAcceptsFirstResponder(true)
   discard textField.withProto()
+  discard textField.withProtocol(DefaultTextFieldInput)
+  discard textField.withProtocol(DefaultTextFieldCommands)
+  discard textField.withProtocol(DefaultTextFieldEvents)
 
 proc newTextField*(frame: Rect, value: string): TextField =
   result = TextField()
