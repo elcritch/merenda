@@ -214,6 +214,12 @@ protocol DefaultComboBoxView of ComboBoxViewProtocolInternal:
     comboBox.bounds().contains(point) or
       (comboBox.popupOpen() and comboBox.popupRect(comboBox.bounds()).contains(point))
 
+  method hitTestLevel(comboBox: ComboBox, point: Point): int =
+    if comboBox.popupOpen() and comboBox.popupRect(comboBox.bounds()).contains(point):
+      PopupDrawLevel.int
+    else:
+      DefaultDrawLevel.int
+
 protocol DefaultComboBoxAction of ButtonActionProtocol:
   method performClick(comboBox: ComboBox, args: ActionArgs) =
     if comboBox.isEnabled:

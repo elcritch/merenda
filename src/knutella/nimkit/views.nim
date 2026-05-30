@@ -297,18 +297,31 @@ protocol ViewProtocolInternal from View:
   method pointInside*(self: View, point: Point): bool =
     self.xBounds.contains(point)
 
+  method hitTestLevel*(self: View, point: Point): int =
+    DefaultDrawLevel.int
+
   method hitTest*(self: View, point: Point): View =
     if self.xHidden:
       return nil
 
     let inside = self.pointInside(point)
     if inside or not self.xClipsToBounds:
+      var
+        bestHit: View
+        bestLevel = low(int)
       for idx in countdown(self.xSubviews.high, 0):
         let child = self.xSubviews[idx]
         let local = child.pointFromView(point, self)
         let hit = child.hitTest(local)
         if not hit.isNil:
-          return hit
+          let
+            hitLocal = hit.pointFromView(point, self)
+            level = max(child.hitTestLevel(local), hit.hitTestLevel(hitLocal))
+          if bestHit.isNil or level > bestLevel:
+            bestHit = hit
+            bestLevel = level
+      if not bestHit.isNil:
+        return bestHit
 
     if inside: self else: nil
 
