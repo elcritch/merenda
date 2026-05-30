@@ -265,6 +265,107 @@ NimKit already has the first useful vertical slice:
 
 ## Next Work
 
+### Intrinsic Sizing And Layout
+
+Use GNUstep's AppKit shape as the first implementation basis, but expose the
+modern Cocoa measurement model where it fits NimKit:
+
+- Keep controls thin and cell-driven. `Control.sizeToFit` should ask the
+  installed cell for its measured size, mirroring GNUstep/Cocoa's
+  `NSControl` -> `NSCell.cellSize` path.
+- Put content measurement in cells, not views. Button cells should measure
+  title/image/check/radio content; text-field cells should measure text and
+  editor affordances; combo-box cells should measure selected text plus arrow
+  and popup/list requirements.
+- Put chrome metrics in `Appearance`/theme, not hardcoded controls. The
+  GNUstep `GSTheme` model is the right direction: borders, focus rings, control
+  insets, image-title gaps, minimum heights, and state/style-specific margins
+  should be resolved through style tokens and concrete style objects before
+  drawing or measuring.
+- Add modern Cocoa measurement procs on NimKit objects:
+  `intrinsicContentSize`, `invalidateIntrinsicContentSize`,
+  `sizeThatFits`, and `sizeToFit`. Plain `View` should default to no intrinsic
+  metric; labels/buttons/checks/radios/text fields/combo boxes should return
+  useful content sizes.
+- Keep `sizeThatFits(proposedSize)` distinct from `intrinsicContentSize`.
+  Intrinsic size is the view's natural content size independent of parent
+  layout where possible; fitting size may account for a proposed width/height,
+  wrapping, popup constraints, or future layout-managed children.
+- Invalidate intrinsic size when content or metrics change: title/text, image or
+  indicator state, font, control size, style classes/id, appearance, cell
+  replacement, editable/selectable decorations, and combo-box item sources.
+- Feed intrinsic sizes into `needsLayout` rather than resizing immediately.
+  `sizeToFit` is an explicit frame mutation convenience; ordinary property
+  changes should invalidate size and layout, then the layout pass decides
+  frames.
+- Add content hugging and compression resistance as value-style layout
+  priorities once intrinsic sizes exist. Start with Cocoa-like defaults:
+  controls prefer stretching over clipping, labels/checks/radios hug more
+  strongly than text fields, and required priorities are avoided by default.
+- Add autoresizing/layout containers before a constraint solver. A first useful
+  layer can support manual `layoutSubviews`, `sizeToFit`, stack-like examples,
+  and intrinsic-size-aware helper layout. Defer full Auto Layout constraints
+  until controls and examples prove the simpler path insufficient.
+
+How the current theme engine fits:
+
+- Treat the existing theme engine as the single metrics resolver for both
+  drawing and measurement. Do not add separate `ButtonTheme`,
+  `TextFieldTheme`, or layout-only theme objects.
+- The current shape is already close to GNUstep's `GSTheme` boundary:
+  `Theme` owns tokens/rules, `Appearance` is the inherited resolver context,
+  `StyleContext` carries role/state/id/classes, and concrete style values such
+  as `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and `ComboBoxStyle`
+  are what render code consumes.
+- Measurement should consume those same resolved style values. For example,
+  button sizing should use `ButtonStyle.text.insets`,
+  `ControlBoxStyle.borderWidth`, focus-ring metrics, and future button minimum
+  metrics; choice controls should use `ChoiceButtonStyle.indicatorSize` and
+  `indicatorSpacing`; combo boxes should use `ComboBoxStyle.arrowWidth` and text
+  insets.
+- Add missing metric tokens only when measurement needs them:
+  minimum control width/height, image-title gap, content baseline offsets,
+  popup row height, and any control-size-specific insets. Keep them as generic
+  `StyleKey[T]` values so future query/CSS-style matching can override them by
+  role, state, id, or class.
+- Resolve style from the same `StyleContext` for layout and rendering. That
+  keeps hover/active/focused/disabled/selected state changes from producing
+  different measured and drawn geometry.
+- Appearance, style id/class, token, and rule changes should invalidate display,
+  intrinsic size, and parent layout for the affected subtree. The current
+  `effectiveAppearance` inheritance already gives the right propagation point;
+  sizing should hook into it rather than adding a second inheritance system.
+- Shadows are primarily drawing overflow and should not change intrinsic size by
+  default. Focus rings, borders, and intentional chrome overhangs can affect
+  fitting size only through explicit metrics.
+- Future CSS/query styling should be able to replace or extend the rule matcher
+  without changing control measurement. Controls should ask for resolved styles,
+  not inspect token names or hardcode class-specific layout constants.
+
+Concrete task order:
+
+1. Add sizing value types: an intrinsic no-metric sentinel, layout priorities,
+   optional fitting constraints, and tests for default `View` sizing.
+2. Add cell measurement APIs: `cellSize`, `cellSizeForBounds` or Nim-style
+   equivalents, plus theme-backed content/chrome metric helpers that consume
+   resolved `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and
+   `ComboBoxStyle` values.
+3. Implement button/checkbox/radio intrinsic sizing from title, indicator,
+   image-title gap, control insets, focus-ring allowance, and minimum control
+   heights.
+4. Implement text-field and combo-box intrinsic sizing from text metrics,
+   text/editor insets, arrow/indicator metrics, and minimum control heights.
+5. Add `Control.sizeThatFits`, `Control.intrinsicContentSize`, `sizeToFit`, and
+   intrinsic-size invalidation from cell/style changes.
+6. Wire intrinsic invalidation into `setNeedsLayout` on parents and add tests
+   that property changes update layout lazily rather than mutating frames
+   unexpectedly.
+7. Add tests that theme token/rule changes affecting metrics invalidate
+   intrinsic size and cause measurement/rendering to agree on text and chrome
+   rectangles.
+8. Add examples showing `sizeToFit` and intrinsic-size-driven layout for common
+   controls, then broaden to simple stack/container layout if the API holds.
+
 ### View Geometry And Rendering
 
 - Keep whole-window FigDraw rebuilds until they become measurable; preserve
@@ -358,10 +459,13 @@ its implementation.
   should centralize cell invalidation, value conversion, target/action storage,
   highlight/tracking behavior, and default cell construction so controls stay
   thin.
-- Stage layout work conservatively. GNUstep has autoresizing masks plus an auto
-  layout engine. For us, finish autoresizing masks, intrinsic content sizes, and
-  layout invalidation first; defer a constraint solver until there are enough
-  controls to justify it.
+- Stage layout work conservatively. GNUstep gives us the practical
+  control/cell/theme measurement split; modern Cocoa gives us
+  `intrinsicContentSize`, `sizeThatFits`, intrinsic invalidation, content
+  hugging, compression resistance, and fitting size. For us, finish intrinsic
+  content sizes, size-to-fit, layout invalidation, and simple intrinsic-aware
+  containers first; defer a full constraint solver until there are enough
+  controls and examples to justify it.
 - Centralize the application/window event path. GNUstep separates event queue
   lookup, `NSApplication.sendEvent`, window dispatch, tracking loops, modal
   loops, and key equivalent handling. Our path works, but modal sessions,
@@ -398,13 +502,17 @@ still points to the next correctness boundaries:
 
 Recommended NimKit order:
 
-- Next: stabilize the first ComboBox slice under more examples, then extract the
+- Next: add intrinsic sizing from the GNUstep-style control/cell/theme split,
+  while exposing modern Cocoa-style measurement and invalidation hooks. After
+  that, stabilize the first ComboBox slice under more examples, then extract the
   reusable popup/list/scroll foundations needed by popup buttons, menus, and
   larger data-backed controls.
 
 Concrete task list:
 
-1. Expand ComboBox coverage around popup dismissal, sibling z-ordering, and
+1. Add intrinsic sizing and `sizeToFit` for the existing controls, with theme
+   metrics as the source of chrome/inset/minimum-size data.
+2. Expand ComboBox coverage around popup dismissal, sibling z-ordering, and
    scrollable popup content. Keep policy hooks selector-based where behavior is
    overridable, and keep control-to-cell forwarding generic.
 
@@ -450,7 +558,7 @@ Concrete task list:
 
 ## Non-Goals For Now
 
-- Auto layout.
+- Full Auto Layout compatibility or a constraint solver.
 - Menus.
 - Scroll views.
 - Full text editing.
