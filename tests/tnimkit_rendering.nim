@@ -165,6 +165,47 @@ suite "nimkit rendering":
 
     check buttonTextFound
 
+  test "buildRenders draws combo box and open popup items":
+    let
+      root = newView(0, 0, 220, 150)
+      combo = newComboBox(10, 20, 120, 26, ["One", "Two", "Three"])
+
+    combo.selectItemAtIndex(1)
+    combo.openPopup()
+    root.addSubview(combo)
+
+    let list = buildRenders(root)[0.ZLevel]
+    var
+      comboBoxFound = false
+      popupFound = false
+      selectedItemFound = false
+      textNodeCount = 0
+
+    for node in list.nodes:
+      if node.kind == nkText:
+        inc textNodeCount
+
+      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
+          node.screenBox.y == 20.0 and node.screenBox.w == 120.0 and
+          node.screenBox.h == 26.0:
+        comboBoxFound = true
+
+      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
+          node.screenBox.y == 46.0 and node.screenBox.w == 120.0 and
+          node.screenBox.h == 68.0:
+        popupFound = true
+
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == initColor(0.12, 0.34, 0.68, 1.0).rgba and
+          node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and
+          node.screenBox.w == 118.0 and node.screenBox.h == 22.0:
+        selectedItemFound = true
+
+    check comboBoxFound
+    check popupFound
+    check selectedItemFound
+    check textNodeCount >= 4
+
   test "buildRenders draws focused text field selection and caret":
     let
       root = newView(0, 0, 180, 80)

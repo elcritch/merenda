@@ -8,6 +8,7 @@ import figdraw/common/typefaces
 import figdraw/fignodes
 
 import ./buttons
+import ./comboboxes
 import ./drawing
 import ./selectors
 import ./textfields
@@ -163,6 +164,36 @@ proc mixedMarkRect(rect: types.Rect): types.Rect =
     height,
   )
 
+proc addComboBoxArrow(
+    context: DrawContext, parent: FigIdx, rect: types.Rect, color: types.Color
+) =
+  if rect.size.width <= 0.0'f32 or rect.size.height <= 0.0'f32:
+    return
+  let
+    width = max(min(rect.size.width * 0.32'f32, 7.0'f32), 4.0'f32)
+    centerX = rect.origin.x + rect.size.width * 0.5'f32
+    centerY = rect.origin.y + rect.size.height * 0.5'f32
+    topY = centerY - 1.0'f32
+  discard context.addFig(
+    parent,
+    rectangleNode(
+      initRect(centerX - width * 0.20'f32, topY, width * 0.40'f32, 1.0'f32), color
+    ),
+  )
+  discard context.addFig(
+    parent,
+    rectangleNode(
+      initRect(centerX - width * 0.35'f32, topY + 1.0'f32, width * 0.70'f32, 1.0'f32),
+      color,
+    ),
+  )
+  discard context.addFig(
+    parent,
+    rectangleNode(
+      initRect(centerX - width * 0.50'f32, topY + 2.0'f32, width, 1.0'f32), color
+    ),
+  )
+
 proc addFocusRing(
     context: DrawContext, parent: FigIdx, rect: types.Rect, box: ControlBoxStyle
 ) =
@@ -303,6 +334,108 @@ proc renderBuiltInView(
         style.text.color,
         alignment = taCenter,
       )
+  elif view of ComboBox:
+    let comboBox = ComboBox(view)
+    let style = appearance.resolveComboBoxStyle(
+      initControlStyleContext(
+        srComboBox,
+        enabled = comboBox.isEnabled,
+        highlighted = comboBox.isButtonPressed,
+        hovered = comboBox.isHovered,
+        active = comboBox.isActive,
+        focused = comboBox.isFocused,
+        focusVisible = comboBox.isFocusVisible,
+        opened = comboBox.popupOpen,
+        id = comboBox.styleId,
+        classes = comboBox.styleClasses,
+      )
+    )
+    discard context.addFig(
+      rootIdx,
+      rectangleNode(
+        absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+        style.box.cornerRadius, style.box.shadows,
+      ),
+    )
+    if comboBox.isFocusVisible:
+      context.addFocusRing(
+        focusRingParent(rootIdx, viewParent, style.box), absoluteFrame, style.box
+      )
+
+    let
+      arrowRect = style.comboBoxArrowRect(view.bounds)
+      arrowFrame = view.rectToWindow(arrowRect)
+      arrowFill =
+        if comboBox.isButtonPressed or comboBox.popupOpen:
+          initColor(0.88, 0.90, 0.94, 1.0)
+        else:
+          initColor(0.94, 0.95, 0.97, 1.0)
+      separatorRect = initRect(
+        arrowRect.origin.x,
+        arrowRect.origin.y + 2.0'f32,
+        1.0'f32,
+        max(arrowRect.size.height - 4.0'f32, 0.0'f32),
+      )
+    discard context.addFig(
+      rootIdx, rectangleNode(arrowFrame, arrowFill, style.box.borderColor, 0.0'f32)
+    )
+    discard context.addFig(
+      rootIdx,
+      rectangleNode(
+        view.rectToWindow(separatorRect), style.box.borderColor, style.box.borderColor
+      ),
+    )
+    context.addComboBoxArrow(rootIdx, arrowFrame, style.arrowColor)
+    context.addText(
+      style.comboBoxTextRect(view.bounds), comboBox.stringValue, style.text.color
+    )
+
+    if comboBox.popupOpen:
+      let
+        popupRect = comboBox.popupRect(view.bounds)
+        popupFrame = view.rectToWindow(popupRect)
+      discard context.addFig(
+        rootIdx,
+        rectangleNode(
+          popupFrame,
+          initColor(1.0, 1.0, 1.0, 1.0),
+          style.box.borderColor,
+          style.box.borderWidth,
+          2.0'f32,
+        ),
+      )
+      let first = comboBox.popupFirstItemIndex()
+      for visibleIndex in 0 ..< comboBox.visibleItemCount():
+        let
+          itemIndex = first + visibleIndex
+          selected = itemIndex == comboBox.indexOfSelectedItem()
+          hovered = itemIndex == comboBox.popupHighlightedIndex()
+          itemStyle = appearance.resolveTextFieldStyle(
+            initControlStyleContext(
+              srComboBoxItem,
+              enabled = comboBox.isEnabled,
+              hovered = hovered,
+              selected = selected,
+              id = comboBox.styleId,
+              classes = comboBox.styleClasses,
+            )
+          )
+          itemRect = comboBox.popupItemRect(view.bounds, itemIndex)
+        discard context.addFig(
+          rootIdx,
+          rectangleNode(
+            view.rectToWindow(itemRect),
+            itemStyle.box.fill,
+            itemStyle.box.borderColor,
+            itemStyle.box.borderWidth,
+            itemStyle.box.cornerRadius,
+          ),
+        )
+        context.addText(
+          itemStyle.textFieldTextRect(itemRect),
+          comboBox.itemAtIndex(itemIndex),
+          itemStyle.text.color,
+        )
   elif view of TextField:
     let textField = TextField(view)
     let

@@ -157,6 +157,12 @@ suite "nimkit theme":
       textFieldStyle = theme.resolveTextFieldStyle(
         initControlStyleContext(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
       )
+      comboBoxStyle = appearance.resolveComboBoxStyle(
+        initControlStyleContext(srComboBox, opened = true)
+      )
+      comboBoxItemStyle = appearance.resolveTextFieldStyle(
+        initControlStyleContext(srComboBoxItem, selected = true)
+      )
 
     check appearance.theme.rules.len == theme.rules.len
     check theme.tokens != nil
@@ -210,3 +216,14 @@ suite "nimkit theme":
     check textFieldStyle.text.color == initColor(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
+
+    check comboBoxStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
+    check comboBoxStyle.box.borderColor == initColor(0.30, 0.50, 0.84, 1.0)
+    check comboBoxStyle.arrowWidth == 24.0
+    check comboBoxStyle.arrowColor == initColor(0.20, 0.22, 0.26, 1.0)
+    check comboBoxStyle.comboBoxArrowRect(initRect(0, 0, 100, 28)) ==
+      initRect(76, 0, 24, 28)
+    check comboBoxStyle.comboBoxTextRect(initRect(0, 0, 100, 28)) ==
+      initRect(8, 0, 60, 28)
+    check comboBoxItemStyle.box.fill == initColor(0.20, 0.48, 0.86, 1.0)
+    check comboBoxItemStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
