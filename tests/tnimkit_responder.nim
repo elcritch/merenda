@@ -231,17 +231,25 @@ suite "nimkit responder":
 
     check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
     check window.firstResponder == field
+    check field.isFocused
+    check field.isFocusVisible
+    check not first.isFocused
     check field.selectedRange == initTextRange(0, 5)
 
     check window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
     )
     check window.firstResponder == first
+    check first.isFocused
+    check first.isFocusVisible
+    check not field.isFocused
 
     check window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
     )
     check window.firstResponder == last
+    check last.isFocused
+    check not first.isFocused
 
   test "tab skips views that cannot become key views":
     let

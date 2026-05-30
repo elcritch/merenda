@@ -20,6 +20,8 @@ type View* = ref object of Responder
   xStyleClasses: seq[string]
   xHovered: bool
   xActive: bool
+  xHasFocus: bool
+  xFocusVisible: bool
   xNeedsLayout: bool
   xNextKeyView: View
   xPreviousKeyView: View
@@ -435,6 +437,24 @@ proc setActive*(view: View, active: bool) =
   if view.isNil or view.xActive == active:
     return
   view.xActive = active
+  view.setNeedsDisplay(true)
+
+proc isFocused*(view: View): bool =
+  (not view.isNil) and view.xHasFocus
+
+proc setFocused*(view: View, focused: bool) =
+  if view.isNil or view.xHasFocus == focused:
+    return
+  view.xHasFocus = focused
+  view.setNeedsDisplay(true)
+
+proc isFocusVisible*(view: View): bool =
+  (not view.isNil) and view.xFocusVisible
+
+proc setFocusVisible*(view: View, focusVisible: bool) =
+  if view.isNil or view.xFocusVisible == focusVisible:
+    return
+  view.xFocusVisible = focusVisible
   view.setNeedsDisplay(true)
 
 proc needsLayout*(view: View): bool =

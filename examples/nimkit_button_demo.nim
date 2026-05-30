@@ -23,6 +23,7 @@ button.setAction(action)
 root.addSubview(label)
 root.addSubview(button)
 window.setContentView(root)
+discard window.selectNextKeyView()
 app.addWindow(window)
 
 window.makeKeyAndOrderFront()

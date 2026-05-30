@@ -18,6 +18,8 @@ import ./views
 var defaultTypefaceId {.threadvar.}: TypefaceId
 var defaultTypefaceReady {.threadvar.}: bool
 
+let focusRingColor = initColor(0.24, 0.48, 0.92, 0.58)
+
 proc toFigRect(rect: types.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
@@ -148,6 +150,25 @@ proc mixedMarkRect(rect: types.Rect): types.Rect =
     height,
   )
 
+proc addFocusRing(
+    context: DrawContext, parent: FigIdx, rect: types.Rect, box: ControlBoxStyle
+) =
+  if box.focusRingWidth <= 0.0'f32:
+    return
+  let ringRect = rect.inset(initEdgeInsets(box.focusRingInset))
+  if ringRect.isEmpty:
+    return
+  discard context.addFig(
+    parent,
+    rectangleNode(
+      ringRect,
+      initColor(0.0, 0.0, 0.0, 0.0),
+      focusRingColor,
+      box.focusRingWidth,
+      box.cornerRadius,
+    ),
+  )
+
 proc beginDraw(context: DrawContext, view: View, parent: FigIdx) =
   context.beginDraw(
     parent, view.pointToWindow(initPoint(0.0, 0.0)), view.bounds, view.visibleRect
@@ -185,6 +206,8 @@ proc renderBuiltInView(
             highlighted = button.isHighlighted,
             hovered = button.isHovered,
             active = button.isActive,
+            focused = button.isFocused,
+            focusVisible = button.isFocusVisible,
             selected = selected,
             id = button.styleId,
             classes = button.styleClasses,
@@ -221,6 +244,8 @@ proc renderBuiltInView(
               1.0'f32,
           ),
         )
+      if button.isFocusVisible:
+        context.addFocusRing(rootIdx, view.rectToWindow(indicatorRect), style.indicator)
       context.addText(style.choiceTextRect(view.bounds), button.title, style.text.color)
     else:
       let style = appearance.resolveButtonStyle(
@@ -230,6 +255,8 @@ proc renderBuiltInView(
           highlighted = button.isHighlighted,
           hovered = button.isHovered,
           active = button.isActive,
+          focused = button.isFocused,
+          focusVisible = button.isFocusVisible,
           id = button.styleId,
           classes = button.styleClasses,
         )
@@ -241,15 +268,22 @@ proc renderBuiltInView(
           style.box.cornerRadius,
         ),
       )
+      if button.isFocusVisible:
+        context.addFocusRing(rootIdx, absoluteFrame, style.box)
       context.addText(style.buttonTextRect(view.bounds), button.title, style.text.color)
   elif view of TextField:
     let textField = TextField(view)
+    let
+      focused = textField.isEditing or textField.isFocused
+      focusVisible = textField.isEditing or textField.isFocusVisible
     let style = appearance.resolveTextFieldStyle(
       initControlStyleContext(
         srTextField,
         enabled = textField.isEnabled,
         hovered = textField.isHovered,
         active = textField.isActive,
+        focused = focused,
+        focusVisible = focusVisible,
         id = textField.styleId,
         classes = textField.styleClasses,
       ),
@@ -262,6 +296,8 @@ proc renderBuiltInView(
         style.box.cornerRadius,
       ),
     )
+    if focusVisible:
+      context.addFocusRing(rootIdx, absoluteFrame, style.box)
     let
       textRect = style.textFieldTextRect(view.bounds)
       layout = textLayout(

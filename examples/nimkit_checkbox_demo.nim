@@ -50,6 +50,7 @@ root.addSubview(title)
 root.addSubview(status)
 updateStatus()
 window.setContentView(root)
+discard window.selectNextKeyView()
 app.addWindow(window)
 
 window.makeKeyAndOrderFront()
