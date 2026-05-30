@@ -13,6 +13,38 @@ proc configureLabel(label: TextField, color: Color) =
   label.setSelectable(false)
   label.setTextColor(color)
 
+proc configureHeader(label: TextField) =
+  label.configureLabel(initColor(0.10, 0.18, 0.32))
+  label.setStyleClasses(["showcase-header"])
+
+proc showcaseAppearance(): Appearance =
+  result = initAppearance()
+  let
+    titleStyle = initStyleSelector(srTextField, classes = @["showcase-title"])
+    headerStyle = initStyleSelector(srTextField, classes = @["showcase-header"])
+    statusStyle = initStyleSelector(srTextField, classes = @["showcase-status"])
+
+  result.setStyle(titleStyle, StyleFill, initColor(0.88, 0.92, 0.98))
+  result.setStyle(titleStyle, StyleBorderColor, initColor(0.62, 0.70, 0.84))
+  result.setStyle(titleStyle, StyleBorderWidth, 1.0)
+  result.setStyle(titleStyle, StyleCornerRadius, 6.0)
+  result.setStyle(titleStyle, StyleTextColor, initColor(0.09, 0.14, 0.26))
+  result.setStyle(titleStyle, StyleTextInsets, initEdgeInsets(0.0, 12.0))
+
+  result.setStyle(headerStyle, StyleFill, initColor(0.82, 0.88, 0.96))
+  result.setStyle(headerStyle, StyleBorderColor, initColor(0.82, 0.88, 0.96))
+  result.setStyle(headerStyle, StyleBorderWidth, 0.0)
+  result.setStyle(headerStyle, StyleCornerRadius, 5.0)
+  result.setStyle(headerStyle, StyleTextColor, initColor(0.10, 0.18, 0.32))
+  result.setStyle(headerStyle, StyleTextInsets, initEdgeInsets(0.0, 10.0))
+
+  result.setStyle(statusStyle, StyleFill, initColor(0.90, 0.96, 0.92))
+  result.setStyle(statusStyle, StyleBorderColor, initColor(0.68, 0.82, 0.72))
+  result.setStyle(statusStyle, StyleBorderWidth, 1.0)
+  result.setStyle(statusStyle, StyleCornerRadius, 6.0)
+  result.setStyle(statusStyle, StyleTextColor, initColor(0.09, 0.27, 0.18))
+  result.setStyle(statusStyle, StyleTextInsets, initEdgeInsets(0.0, 10.0))
+
 let
   app = sharedApplication()
   window = newWindow(140, 140, 760, 500, "Nimkit Controls Showcase")
@@ -94,13 +126,17 @@ proc onChoiceChanged(sender: DynamicAgent) =
 
 root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
 title.setAlignment(taCenter)
+title.setStyleClasses(["showcase-title"])
+root.setAppearance(showcaseAppearance())
 
-for label in [
-  title, summary, inputTitle, actionTitle, actionCountLabel, choiceTitle, sizeTitle,
-  popupTitle,
-]:
+title.configureLabel(initColor(0.09, 0.14, 0.26))
+for label in [inputTitle, actionTitle, choiceTitle, sizeTitle, popupTitle]:
+  label.configureHeader()
+
+for label in [summary, actionCountLabel]:
   label.configureLabel(initColor(0.14, 0.18, 0.28))
 
+summary.setStyleClasses(["showcase-status"])
 summary.setTextColor(initColor(0.10, 0.28, 0.20))
 actionCountLabel.setTextColor(initColor(0.10, 0.28, 0.20))
 
