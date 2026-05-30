@@ -265,9 +265,10 @@ Concrete task order and status:
    text/editor insets, arrow/indicator metrics, and minimum control sizes.
 5. Done: Add `Control.sizeThatFits`, `Control.intrinsicContentSize`,
    `sizeToFit`, and intrinsic-size invalidation from cell/style changes.
-6. Mostly done: Wire intrinsic invalidation into `setNeedsLayout` on parents and
-   add tests that property changes update layout lazily rather than mutating
-   frames unexpectedly. Continue broadening this once container layout exists.
+6. Done for the current core: Wire intrinsic invalidation into
+   `setNeedsLayout` on parents and add tests that property changes update
+   layout lazily rather than mutating frames unexpectedly. Continue broadening
+   this once container layout exists.
 7. Partly done: Add tests that theme token/rule changes affecting metrics
    invalidate intrinsic size and cause measurement/rendering to agree on text
    and chrome rectangles. Current coverage checks style metric changes against
@@ -294,6 +295,10 @@ Concrete task order and status:
    attribute values, and invalidation when intrinsic size, hugging, compression
    resistance, frame, or hierarchy changes. Baseline/alignment behavior remains
    conservative by default until controls need richer text alignment.
+   This completes the conservative layout-core stage: intrinsic content sizes,
+   size-to-fit, layout invalidation, and a Cocoa-like constraint
+   lifecycle/model are now in place before autoresizing masks, containers, or
+   any solver work.
 12. Not started: Add autoresizing mask and
    `translatesAutoresizingMaskIntoConstraints` semantics. The first pass may
    apply masks directly or generate simple internal layout inputs; preserve the
