@@ -2,6 +2,7 @@ import knutella/nimkit/application
 import knutella/nimkit/buttons
 import knutella/nimkit/controls
 import knutella/nimkit/drawing
+import knutella/nimkit/keybindings
 import knutella/nimkit/rendering
 import knutella/nimkit/responders
 import knutella/nimkit/selectors
@@ -15,6 +16,7 @@ export application
 export buttons
 export controls
 export drawing
+export keybindings
 export rendering
 export responders
 export selectors

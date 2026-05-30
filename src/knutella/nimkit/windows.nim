@@ -1,10 +1,11 @@
-import std/times
+import std/[options, times]
 
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
 
 import ./backend as nimkitBackend
+import ./keybindings
 import ./rendering as nimkitRendering
 import ./selectors
 import ./theme
@@ -20,6 +21,7 @@ type Window* = ref object of Responder
   xInheritedAppearance: Appearance
   xHasInheritedAppearance: bool
   xFirstResponder: Responder
+  xKeyBindings: KeyBindingTable
   xHostWindow: HostWindow
   xMouseCaptureView: View
   xMouseActiveView: View
@@ -42,7 +44,7 @@ const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
 
 proc newWindow*(frame: Rect, title: string): Window =
-  result = Window(xFrame: frame, xTitle: title)
+  result = Window(xFrame: frame, xTitle: title, xKeyBindings: initDefaultKeyBindings())
   initResponder(result)
 
 proc newWindow*(x, y, width, height: float32, title: string): Window =
@@ -56,6 +58,45 @@ proc title*(window: Window): string =
 
 proc contentView*(window: Window): View =
   window.xContentView
+
+proc keyBindings*(window: Window): KeyBindingTable =
+  if window.isNil:
+    return KeyBindingTable()
+  window.xKeyBindings
+
+proc setKeyBindings*(window: Window, bindings: KeyBindingTable) =
+  if window.isNil:
+    return
+  window.xKeyBindings = bindings
+
+proc addKeyBinding*(window: Window, stroke: KeyStroke, selector: CommandSelector) =
+  if window.isNil:
+    return
+  window.xKeyBindings.add(stroke, selector)
+
+proc removeKeyBinding*(window: Window, stroke: KeyStroke): bool {.discardable.} =
+  if window.isNil:
+    return false
+  window.xKeyBindings.remove(stroke)
+
+proc clearKeyBindings*(window: Window) =
+  if window.isNil:
+    return
+  window.xKeyBindings.clear()
+
+proc bindKey*(
+    window: Window, text: string, modifiers: set[KeyModifier], selector: CommandSelector
+) =
+  if window.isNil:
+    return
+  window.xKeyBindings.bindKey(text, modifiers, selector)
+
+proc bindKey*(
+    window: Window, keyCode: int, modifiers: set[KeyModifier], selector: CommandSelector
+) =
+  if window.isNil:
+    return
+  window.xKeyBindings.bindKey(keyCode, modifiers, selector)
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool
 proc effectiveAppearance*(window: Window): Appearance
@@ -260,12 +301,39 @@ proc clickAt*(window: Window, point: Point): bool =
     return false
   window.mouseUpAt(point)
 
-proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
+proc keyDispatchTarget(window: Window): Responder =
   if not window.xFirstResponder.isNil:
-    return window.dispatchKeyEventInChain(window.xFirstResponder, event).handled
+    return window.xFirstResponder
   if window.xContentView.isNil:
+    return nil
+  Responder(window.xContentView)
+
+proc dispatchCommandInChain(
+    target: Responder, selector: CommandSelector
+): EventDispatchResult =
+  if target.isNil:
+    return
+  let args = TryToPerformArgs(selector: selector, sender: DynamicAgent(target))
+  if target.tryToPerform(args):
+    result.handled = true
+    result.responder = target
+
+proc dispatchKeyCommand(
+    window: Window, target: Responder, event: types.KeyEvent
+): EventDispatchResult =
+  let command = window.xKeyBindings.commandFor(event)
+  if command.isNone:
+    return
+  dispatchCommandInChain(target, command.get())
+
+proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
+  let target = window.keyDispatchTarget()
+  if target.isNil:
     return false
-  window.dispatchKeyEventInChain(Responder(window.xContentView), event).handled
+  let commandDispatch = window.dispatchKeyCommand(target, event)
+  if commandDispatch.handled:
+    return true
+  window.dispatchKeyEventInChain(target, event).handled
 
 proc syncNativeGeometry(window: Window): Size =
   result = window.xHostWindow.logicalSize(window.xFrame.size)

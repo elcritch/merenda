@@ -41,10 +41,6 @@ protocol DefaultButtonEvents of ResponderEventProtocol:
       button.setHighlighted(false)
       button.buttonPerformClick(ActionArgs(sender: button))
 
-  method keyDown(button: Button, event: KeyEvent) =
-    if button.isEnabled and event.text == " ":
-      button.buttonPerformClick(ActionArgs(sender: button))
-
 protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args)
