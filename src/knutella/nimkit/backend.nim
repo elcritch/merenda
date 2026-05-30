@@ -22,6 +22,7 @@ type
     onKey*: proc(event: HostKeyEvent) {.closure.}
     onTextInput*: proc(text: string) {.closure.}
     onRender*: proc() {.closure.}
+    onPopupDone*: proc() {.closure.}
 
   HostWindow* = ref object
     xNativeWindow: siwinshim.Window
@@ -145,6 +146,11 @@ proc rendererOrNil*(
     return nil
   host.xRenderer
 
+proc contentScale*(host: HostWindow): float32 =
+  if not host.isReady:
+    return 1.0'f32
+  max(host.xNativeWindow.contentScale(), 1.0'f32)
+
 proc markClosed(host: HostWindow, notify: bool) =
   if host.isNil:
     return
@@ -258,28 +264,23 @@ proc dispatchTextInput(host: HostWindow, event: siwinshim.TextInputEvent) =
   if event.text.len > 0 and not host.xCallbacks.onTextInput.isNil:
     host.xCallbacks.onTextInput(event.text)
 
-proc createHostWindow*(
-    frame: Rect, title: string, callbacks: HostWindowCallbacks
-): HostWindow =
-  let size =
-    ivec2(max(frame.size.width, 1.0'f32).int32, max(frame.size.height, 1.0'f32).int32)
-  result = HostWindow(xCallbacks: callbacks)
-  result.xNativeWindow =
-    siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
-  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
-  result.xAutoScale = result.xNativeWindow.configureUiScale()
-  result.xRenderer = figrender.newFigRenderer(
-    atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-  )
-  result.xRenderer.setupBackend(result.xNativeWindow)
-  result.registerHost()
-
-  let ownerKey = result.xOwnerKey
-  result.xNativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
+proc installEventHandlers(host: HostWindow) =
+  if host.isNil or host.xNativeWindow.isNil:
+    return
+  let ownerKey = host.xOwnerKey
+  host.xNativeWindow.eventsHandler = siwinshim.WindowEventsHandler(
     onClose: proc(event: siwinshim.CloseEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
       if not host.isNil:
         host.markClosed(notify = true)
+    ,
+    onPopupDone: proc(event: siwinshim.PopupEvent) =
+      let host = hostForNativeWindow(event.window, ownerKey)
+      if host.isNil:
+        return
+      host.markClosed(notify = false)
+      if not host.xCallbacks.onPopupDone.isNil:
+        host.xCallbacks.onPopupDone()
     ,
     onResize: proc(event: siwinshim.ResizeEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
@@ -331,7 +332,48 @@ proc createHostWindow*(
     ,
   )
 
+proc createHostWindow*(
+    frame: Rect, title: string, callbacks: HostWindowCallbacks
+): HostWindow =
+  let size =
+    ivec2(max(frame.size.width, 1.0'f32).int32, max(frame.size.height, 1.0'f32).int32)
+  result = HostWindow(xCallbacks: callbacks)
+  result.xNativeWindow =
+    siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
+  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
+  result.xAutoScale = result.xNativeWindow.configureUiScale()
+  result.xRenderer = figrender.newFigRenderer(
+    atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+  )
+  result.xRenderer.setupBackend(result.xNativeWindow)
+  result.registerHost()
+  result.installEventHandlers()
+
   result.xNativeWindow.firstStep()
+  result.xNativeWindow.refreshUiScale(result.xAutoScale)
+  result.xReady = true
+
+proc createPopupHostWindow*(
+    owner: HostWindow,
+    placement: siwinshim.PopupPlacement,
+    callbacks: HostWindowCallbacks,
+): HostWindow =
+  if not owner.isReady:
+    return nil
+
+  result = HostWindow(xCallbacks: callbacks)
+  result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
+      owner.xNativeWindow, placement, grab = true
+    )
+  result.xAutoScale = result.xNativeWindow.configureUiScale()
+  result.xRenderer = figrender.newFigRenderer(
+    atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+  )
+  result.xRenderer.setupBackend(result.xNativeWindow)
+  result.registerHost()
+  result.installEventHandlers()
+  result.xNativeWindow.firstStep(makeVisible = true)
+  result.xNativeWindow.reposition(placement)
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
 

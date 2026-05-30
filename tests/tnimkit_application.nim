@@ -1,4 +1,4 @@
-import std/unittest
+import std/[tables, unittest]
 
 import figdraw/windowing/siwinshim
 
@@ -63,4 +63,31 @@ suite "nimkit application":
         skip()
         break nativeClose
       finally:
+        window.close()
+
+  test "native combo boxes use popup windows instead of owner-window popup drawing":
+    block nativeComboPopup:
+      let
+        app = newApplication()
+        window = newWindow(80, 80, 260, 160, "Nimkit Native Combo Popup")
+        root = newView(0, 0, 260, 160)
+        combo = newComboBox(16, 16, 140, 24, ["Low", "Medium", "High"])
+
+      root.addSubview(combo)
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      try:
+        check app.runForFrames(1) == 1
+        check window.nativeReady
+        check window.mouseDownAt(initPoint(24, 24))
+        check combo.popupOpen
+        let renders = window.buildRenders()
+        check PopupDrawLevel notin renders.layers
+      except CatchableError:
+        skip()
+        break nativeComboPopup
+      finally:
+        combo.closePopup()
         window.close()
