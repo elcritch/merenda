@@ -1028,6 +1028,12 @@ proc dispatchHostTextInput(window: Window, text: string) =
   if text.len > 0:
     discard window.dispatchKeyDown(types.KeyEvent(text: text, keyCode: 0))
 
+proc dispatchHostFocusChanged(window: Window, focused: bool) =
+  if window.isNil:
+    return
+  if focused and not window.xIsPopup and window.hasOpenAuxiliaryWindows():
+    window.closeAuxiliaryWindows()
+
 proc markHostClosed(window: Window) =
   if window.isNil:
     return
@@ -1063,6 +1069,8 @@ proc ensureNativeWindow*(window: Window) =
       window.dispatchHostTextInput(text),
     onRender: proc() =
       window.renderNativeWindow(),
+    onFocusChanged: proc(focused: bool) =
+      window.dispatchHostFocusChanged(focused),
     onPopupDone: proc() =
       window.markHostClosed()
       if not window.xOnPopupDone.isNil:
