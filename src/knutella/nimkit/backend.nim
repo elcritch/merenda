@@ -82,6 +82,11 @@ proc toNimkitModifiers(modifiers: set[siwinshim.ModifierKey]): set[KeyModifier] 
   if siwinshim.ModifierKey.system in modifiers:
     result.incl kmCommand
 
+proc toNimkitKey(key: siwinshim.Key): types.Key =
+  if key.ord < ord(low(types.Key)) or key.ord > ord(high(types.Key)):
+    return keyUnknown
+  types.Key(key.ord)
+
 proc keyText(key: siwinshim.Key): string =
   case key
   of siwinshim.Key.space: " "
@@ -240,6 +245,7 @@ proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
     HostKeyEvent(
       event: types.KeyEvent(
         text: event.key.keyText,
+        key: event.key.toNimkitKey,
         keyCode: event.key.ord,
         modifiers: event.modifiers.toNimkitModifiers,
       ),

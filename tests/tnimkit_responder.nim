@@ -139,7 +139,9 @@ suite "nimkit responder":
     window.setContentView(root)
 
     check window.makeFirstResponder(button)
-    check window.dispatchKeyDown(KeyEvent(text: " ", keyCode: 32))
+    check window.dispatchKeyDown(
+      KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
+    )
     check actionCount == 1
 
   test "window key bindings dispatch commands through responder chain":
@@ -159,7 +161,30 @@ suite "nimkit responder":
 
     check window.makeFirstResponder(child)
     check window.dispatchKeyDown(
-      KeyEvent(keyCode: keyCodeForText("k"), modifiers: {kmCommand})
+      KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmCommand})
+    )
+
+    check trackingEvents == @["parent.command"]
+    check trackingCommandSenders == @[DynamicAgent(child)]
+
+  test "window shortcut bindings resolve primary platform modifier":
+    let
+      window = newWindow(0, 0, 240, 160, "Shortcuts")
+      root = newView(0, 0, 240, 160)
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(20, 15, 30, 20)
+
+    child.setAcceptsFirstResponder(true)
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+    window.bindShortcuts(keyK, {smShortcut}, trackingCommand())
+
+    resetTracking()
+
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: shortcutModifiers())
     )
 
     check trackingEvents == @["parent.command"]
@@ -182,7 +207,7 @@ suite "nimkit responder":
 
     check window.makeFirstResponder(child)
     check window.dispatchKeyDown(
-      KeyEvent(text: "x", keyCode: 88, modifiers: {kmCommand})
+      KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmCommand})
     )
 
     check trackingEvents == @["parent.key:x"]
@@ -367,7 +392,7 @@ suite "nimkit responder":
 
     check window.makeFirstResponder(child)
     check window.dispatchKeyDown(
-      KeyEvent(text: "x", keyCode: 88, modifiers: {kmControl})
+      KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmControl})
     )
 
     check trackingEvents == @["parent.key:x"]
