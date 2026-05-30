@@ -289,11 +289,11 @@ Concrete task order and status:
    constraint storage. These are Nim-native shapes aligned with modern Cocoa,
    with activation only managing storage and invalidation for now. No solver or
    frame mutation is included yet.
-11. Not started: Add layout item geometry hooks needed by constraints and
-   containers: baseline offsets, alignment rects, and invalidation when
-   intrinsic size, hugging, compression resistance, frame, or hierarchy changes.
-   Stub baseline/alignment behavior conservatively until controls need richer
-   text alignment.
+11. Done: Add layout item geometry hooks needed by constraints and containers:
+   baseline offsets, alignment rects, frame/alignment conversion, layout
+   attribute values, and invalidation when intrinsic size, hugging, compression
+   resistance, frame, or hierarchy changes. Baseline/alignment behavior remains
+   conservative by default until controls need richer text alignment.
 12. Not started: Add autoresizing mask and
    `translatesAutoresizingMaskIntoConstraints` semantics. The first pass may
    apply masks directly or generate simple internal layout inputs; preserve the
