@@ -7,6 +7,12 @@ import knutella/nimkit
 method overrideTitle(self: Button): string {.selector.} =
   "Swizzled"
 
+protocol PlaceholderDelegate:
+  method placeholderText(): string
+
+method delegatePlaceholder(self: Responder): string {.selector.} =
+  "Forwarded placeholder"
+
 suite "nimkit controls":
   test "button core methods are selector-backed and protocol visible":
     let button = newButton(0, 0, 120, 36, "Original")
@@ -36,6 +42,35 @@ suite "nimkit controls":
     check root.hitTest(initPoint(24, 72)) == button
     check root.clickAt(initPoint(24, 72))
     check label.stringValue == "Clicked"
+
+  test "button properties are forwarded through its button cell":
+    let button = newButton(0, 0, 120, 36, "Original")
+    let cell = button.buttonCell()
+
+    check not cell.isNil
+    check button.cell() == Cell(cell)
+    check cell.title == "Original"
+
+    button.setTitle("Forwarded")
+    check cell.title == "Forwarded"
+
+    cell.setState(bsOn)
+    check button.state == bsOn
+
+    button.setButtonType(btCheckBox)
+    check cell.buttonType == btCheckBox
+
+  test "text fields can forward optional selectors to delegates":
+    let
+      field = newTextField(0, 0, 120, 24, "Value")
+      delegate = newResponder()
+
+    discard delegate.replaceMethods(
+      PlaceholderDelegate, [placeholderText => delegatePlaceholder]
+    )
+    field.setDelegate(delegate)
+
+    check field.placeholderText() == "Forwarded placeholder"
 
   test "button mouse tracking cancels click when released outside":
     let
@@ -133,10 +168,13 @@ suite "nimkit controls":
       root = newView(0, 0, 220, 100)
       first = newRadioButton(10, 10, 160, 24, "First")
       second = newRadioButton(10, 42, 160, 24, "Second")
+      other = newRadioButton(10, 74, 160, 24, "Other")
       action = actionSelector("radioAction")
+      otherAction = actionSelector("otherRadioAction")
 
     proc onSelect(sender: DynamicAgent) =
-      check sender == DynamicAgent(first) or sender == DynamicAgent(second)
+      check sender == DynamicAgent(first) or sender == DynamicAgent(second) or
+        sender == DynamicAgent(other)
       inc actionCount
 
     let target = newActionTarget(action, onSelect)
@@ -144,16 +182,22 @@ suite "nimkit controls":
     first.setAction(action)
     second.setTarget(target)
     second.setAction(action)
+    other.setTarget(target)
+    other.setAction(otherAction)
+    other.setState(bsOn)
     root.addSubview(first)
     root.addSubview(second)
+    root.addSubview(other)
 
     discard first.send(performClick(), ActionArgs(sender: first))
     check first.state == bsOn
     check second.state == bsOff
+    check other.state == bsOn
 
     discard second.send(performClick(), ActionArgs(sender: second))
     check first.state == bsOff
     check second.state == bsOn
+    check other.state == bsOn
 
     discard second.send(performClick(), ActionArgs(sender: second))
     check second.state == bsOn
