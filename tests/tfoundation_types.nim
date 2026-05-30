@@ -1,5 +1,5 @@
 import std/[tables, unittest]
-import knutella/objc
+import merenda/objc
 
 objcImpl:
   type NamePragmaStringValue {.structural.} =

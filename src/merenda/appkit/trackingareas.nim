@@ -2,18 +2,18 @@ import ./runtime
 
 objcImpl:
   type NSTrackingArea* = object of NSObject
-    xRect: NSRect 
+    xRect: NSRect
     xOptions {.get: options.}: set[NSTrackingAreaOptions]
-    xOwner: ID 
+    xOwner: ID
     xUserData: pointer
-    xRetainUserData: bool 
+    xRetainUserData: bool
 
     #// NSWindow needs this. It's maintained when areas are collected for the window.
     xView: NSView
     #// NSWindow needs this. It's maintained when areas are collected for the window.
-    xRectInWindow: NSRect 
+    xRectInWindow: NSRect
     #// _mouseInside is a marker handled by NSWindow.
-    xMouseInside: bool 
+    xMouseInside: bool
     #// Instead of sending events, show the NSToolTipWindow.
     #// The text for the tooltip is fetched from owner.
     xIsToolTip: bool

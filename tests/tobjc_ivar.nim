@@ -1,6 +1,6 @@
 import std/unittest
-import knutella/objc
-import knutella/objc/ivar
+import merenda/objc
+import merenda/objc/ivar
 
 type IvarStateObj = object
   value: int

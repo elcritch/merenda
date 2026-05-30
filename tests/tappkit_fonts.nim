@@ -1,6 +1,6 @@
 import std/[math, unittest]
 
-import knutella/appkit
+import merenda/appkit
 
 proc objectString(obj: NSObject): NSString =
   if obj.isNil:

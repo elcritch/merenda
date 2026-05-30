@@ -1,6 +1,6 @@
 import std/unittest
 
-import knutella/nimkit
+import merenda/nimkit
 
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":

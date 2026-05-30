@@ -2,7 +2,7 @@ import std/unittest
 
 import sigils/selectors
 
-import knutella/nimkit
+import merenda/nimkit
 
 type TrackingSpyView = ref object of View
   xName: string

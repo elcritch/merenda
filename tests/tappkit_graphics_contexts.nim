@@ -1,6 +1,6 @@
 import std/unittest
 
-import knutella/appkit
+import merenda/appkit
 
 proc approxEq(a, b: float32, epsilon = 0.001'f32): bool =
   abs(a - b) <= epsilon

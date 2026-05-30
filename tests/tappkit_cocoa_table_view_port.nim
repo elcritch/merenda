@@ -1,10 +1,10 @@
-{.define: knutellaNoExampleMain.}
+{.define: merendaNoExampleMain.}
 
 import std/[algorithm, unittest]
 
 import figdraw/fignodes
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 include ../examples/appkit_cocoa_table_view_port
 

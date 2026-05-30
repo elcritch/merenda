@@ -52,8 +52,7 @@ proc objcUtf8StringRaw(id: IDPtr): string {.inline, raises: [].} =
     return ""
   if not objcRespondsToSelectorRaw(id, "UTF8String"):
     return ""
-  let utf8Send =
-    cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs, raises: [].}](objc_msgSend)
+  let utf8Send = cast[proc(self: IDPtr, op: SEL): cstring {.cdecl, varargs, raises: [].}](objc_msgSend)
   let utf8 = utf8Send(id, sel_registerName("UTF8String"))
   if utf8.isNil:
     return ""

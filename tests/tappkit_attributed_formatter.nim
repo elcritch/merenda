@@ -1,7 +1,7 @@
 import std/[strutils, unittest]
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 var parseCallCount = 0
 var formatCallCount = 0

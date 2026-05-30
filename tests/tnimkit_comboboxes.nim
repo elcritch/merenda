@@ -1,6 +1,6 @@
 import std/[tables, unittest]
 
-import knutella/nimkit
+import merenda/nimkit
 
 type
   ComboDataSource = ref object of Responder

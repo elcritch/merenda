@@ -1,7 +1,7 @@
 import std/unittest
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 var commitCallCount = 0
 var discardCallCount = 0

@@ -474,12 +474,7 @@ proc kvoObjcRemoveObserverWithContext(
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  removeObserver(
-    self as NSObject,
-    observer as NSObject,
-    keyPathString,
-    context,
-  )
+  removeObserver(self as NSObject, observer as NSObject, keyPathString, context)
 
 proc kvoObjcRemoveObserver(
     self: IDPtr, cmd: SEL, observer: IDPtr, keyPath: IDPtr
@@ -487,11 +482,7 @@ proc kvoObjcRemoveObserver(
   if self.isNil:
     return
   let keyPathString = kvoKeyPathFromId(keyPath)
-  removeObserver(
-    self as NSObject,
-    observer as NSObject,
-    keyPathString
-  )
+  removeObserver(self as NSObject, observer as NSObject, keyPathString)
 
 proc kvoObjcWillChange(self: IDPtr, cmd: SEL, keyPath: IDPtr) {.cdecl.} =
   if self.isNil:

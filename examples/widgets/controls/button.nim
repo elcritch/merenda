@@ -1,10 +1,10 @@
 import std/[os, strutils]
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("MERENDA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:

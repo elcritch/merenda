@@ -7,7 +7,7 @@ import figdraw/figrender as glrenderer
 import figdraw/fignodes
 import figdraw/windowing/siwinshim
 
-import knutella/nimkit
+import merenda/nimkit
 
 when UseVulkanBackend:
   import pkg/vulkan/wrapper
@@ -25,7 +25,7 @@ proc renderAndScreenshotOnce(
     windowW = 360,
     windowH = 220,
     atlasSize = 2048,
-    title = "knutella nimkit screenshot",
+    title = "merenda nimkit screenshot",
 ): Image =
   when UseMetalBackend:
     try:
@@ -122,7 +122,7 @@ suite "nimkit screenshot":
             root.setFrame(initRect(0, 0, w, h))
             buildRenders(root),
           outputPath = initialPath,
-          title = "knutella nimkit screenshot initial",
+          title = "merenda nimkit screenshot initial",
         )
         check initial.width > 0
         check initial.height > 0
@@ -137,7 +137,7 @@ suite "nimkit screenshot":
             root.setFrame(initRect(0, 0, w, h))
             buildRenders(root),
           outputPath = clickedPath,
-          title = "knutella nimkit screenshot clicked",
+          title = "merenda nimkit screenshot clicked",
         )
         check clicked.width > 0
         check clicked.height > 0

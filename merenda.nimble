@@ -1,6 +1,6 @@
 version       = "0.1.2"
 author        = "Jaremy Creechley"
-description   = "Neovim backend in Nim and FigDraw"
+description   = "Nim-native UI toolkit and Objective-C AppKit experiments"
 license       = "MPL-2.0"
 srcDir        = "src"
 
@@ -16,4 +16,3 @@ requires "sigils >= 0.20.1"
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
   requires "https://github.com/elcritch/figuro"
-

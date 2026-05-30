@@ -1,11 +1,11 @@
 import std/[os, strutils]
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 import siwin/window as siwin
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("MERENDA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -14,7 +14,7 @@ proc maxFramesFromEnv(defaultValue = -1): int =
     defaultValue
 
 proc debugRenderDumpEnabled(): bool =
-  getEnv("KNUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+  getEnv("MERENDA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
 proc format1(value: float32): string =
@@ -186,13 +186,13 @@ when isMainModule:
   app.addWindow(window.NSWindow)
   window.makeKeyAndOrderFront(app.NSObject)
 
-  if getEnv("KNUTELLA_COMBOBOX_OPEN_POPUP").strip().len > 0:
+  if getEnv("MERENDA_COMBOBOX_OPEN_POPUP").strip().len > 0:
     clickComboBoxArrow(app, window.NSWindow, window.xComboBox1)
     dumpComboBoxLayout(
       "popup-open", window.NSWindow, window.xComboBox1, window.xComboBox2
     )
 
-  if getEnv("KNUTELLA_COMBOBOX_TRIGGER_CALLBACK").strip().len > 0:
+  if getEnv("MERENDA_COMBOBOX_TRIGGER_CALLBACK").strip().len > 0:
     dumpComboBoxLayout(
       "post-front", window.NSWindow, window.xComboBox1, window.xComboBox2
     )

@@ -2,7 +2,7 @@ import std/[tables, unittest]
 
 import figdraw/windowing/siwinshim
 
-import knutella/nimkit
+import merenda/nimkit
 
 suite "nimkit application":
   test "raw mouse input converts from reported input size to logical size":

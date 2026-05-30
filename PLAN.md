@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build and evolve a side-by-side pure Nim UI layer at `src/knutella/nimkit`
+Build and evolve a side-by-side pure Nim UI layer at `src/merenda/nimkit`
 while keeping the existing ObjC/AppKit implementation intact as the behavioral
 reference.
 
@@ -85,63 +85,63 @@ NimKit already has the first useful vertical slice:
 
 ## Module Layout
 
-- `src/knutella/nimkit.nim`:
+- `src/merenda/nimkit.nim`:
   Aggregating import for the public API.
-- `src/knutella/nimkit/types.nim`:
+- `src/merenda/nimkit/types.nim`:
   Geometry, colors, button/control enums, and mouse/scroll/key event value
   objects.
-- `src/knutella/nimkit/selectors.nim`:
+- `src/merenda/nimkit/selectors.nim`:
   Typed selector declarations, action/event argument objects, drawing hooks,
   mouse enter/exit hooks, scroll hooks, text input/editing command hooks, and
   layout hooks.
-- `src/knutella/nimkit/responders.nim`:
+- `src/merenda/nimkit/responders.nim`:
   `Responder`, next-responder links, selector forwarding, first-responder hooks,
   and command fallback behavior.
-- `src/knutella/nimkit/drawing.nim`:
+- `src/merenda/nimkit/drawing.nim`:
   `DrawContext`, FigDraw node insertion, and local-to-window drawing geometry
   helpers used by selector-backed custom drawing.
-- `src/knutella/nimkit/keybindings.nim`:
+- `src/merenda/nimkit/keybindings.nim`:
   Plain `KeyStroke`, `KeyBinding`, and `KeyBindingTable` values for mapping
   key/modifier combinations to command selectors, including platform-primary
   shortcut modifiers and default text-editing command bindings.
-- `src/knutella/nimkit/views.nim`:
+- `src/merenda/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
   appearance/style identity, layout/display invalidation, hover/active state,
   and event dispatch into selector methods.
-- `src/knutella/nimkit/cells.nim`:
+- `src/merenda/nimkit/cells.nim`:
   `Cell` and `ActionCell`, control-view back references, enabled/highlighted
   state, button state cycling, and target/action storage used by controls.
-- `src/knutella/nimkit/controls.nim`:
+- `src/merenda/nimkit/controls.nim`:
   `Control`, cell ownership, cell selector forwarding, enabled state,
   target/action, and closure-backed action targets.
-- `src/knutella/nimkit/buttons.nim`:
+- `src/merenda/nimkit/buttons.nim`:
   `Button`, title, state cycling, mixed-state support, checkbox/radio variants,
   highlight/tracking behavior, and keyboard activation.
-- `src/knutella/nimkit/textfields.nim`:
+- `src/merenda/nimkit/textfields.nim`:
   `TextField`, string value, alignment, text color, editable/selectable flags,
   selected range/insertion state, delegate storage, explicit text-field delegate
   selector hooks, and default text editing command handlers.
-- `src/knutella/nimkit/comboboxes.nim`:
+- `src/merenda/nimkit/comboboxes.nim`:
   `ComboBox`, local item storage through `ComboBoxCell`, selector-backed data
   source/delegate hooks, popup open/highlight/selection state, mouse tracking,
   keyboard navigation, and text selector compatibility.
-- `src/knutella/nimkit/theme.nim`:
+- `src/merenda/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field/combo-box
   style objects, typed style tokens, style overrides, `EdgeInsets`,
   control-state colors, borders, corner radius, focus-ring metrics, and control
   text insets.
-- `src/knutella/nimkit/rendering.nim`:
+- `src/merenda/nimkit/rendering.nim`:
   figdraw node creation, text layout helpers, theme-backed built-in control
   drawing, combo-box popup rendering, and render-tree construction.
-- `src/knutella/nimkit/backend.nim`:
+- `src/merenda/nimkit/backend.nim`:
   Internal host backend for siwin native windows, FigDraw renderer setup,
   native event translation, input coordinate conversion, native stepping, and
   presentation.
-- `src/knutella/nimkit/windows.nim`:
+- `src/merenda/nimkit/windows.nim`:
   `Window` title/frame/content/first-responder state, visibility lifecycle,
   effective appearance propagation, render flushing, hover/mouse tracking, and
   NimKit event dispatch.
-- `src/knutella/nimkit/application.nim`:
+- `src/merenda/nimkit/application.nim`:
   App singleton/lifetime, window list, app-level appearance, run loop helpers,
   and frame-limited test execution.
 
@@ -149,7 +149,7 @@ NimKit already has the first useful vertical slice:
 
 ### Foundations
 
-- `import knutella/nimkit` compiles without exposing ObjC runtime types.
+- `import merenda/nimkit` compiles without exposing ObjC runtime types.
 - Constructors exist for the core object and value types:
   `newApplication`, `newWindow`, `newView`, `newButton`, `newTextField`,
   `newComboBox`, `initPoint`, `initSize`, `initRect`, `initColor`.
