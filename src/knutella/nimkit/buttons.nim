@@ -99,8 +99,8 @@ proc buttonPerformClick(button: Button, args: ActionArgs) =
     button.buttonCell().setNextState()
   of btRadio:
     button.setState(bsOn)
-  if button.sendAction() and button.buttonType == btRadio:
     button.clearRadioSiblings()
+  discard button.sendAction()
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseDown(button: Button, event: MouseEvent) =
