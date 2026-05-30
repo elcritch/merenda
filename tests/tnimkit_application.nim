@@ -98,6 +98,20 @@ suite "nimkit application":
 
         check window.mouseDownAt(initPoint(24, 24))
         check combo.popupOpen
+        if not nativeWindow.isNil:
+          nativeWindow.eventsHandler.onStateBoolChanged(
+            siwinshim.StateBoolChangedEvent(
+              window: nativeWindow,
+              value: true,
+              kind: siwinshim.StateBoolChangedEventKind.focus,
+            )
+          )
+        check not combo.popupOpen
+        check combo.indexOfSelectedItem() == 1
+        check other.indexOfSelectedItem() == -1
+
+        check window.mouseDownAt(initPoint(24, 24))
+        check combo.popupOpen
         check window.mouseDownAt(initPoint(24, 68))
         check window.mouseUpAt(initPoint(24, 68))
         check not combo.popupOpen

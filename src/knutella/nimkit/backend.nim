@@ -22,6 +22,7 @@ type
     onKey*: proc(event: HostKeyEvent) {.closure.}
     onTextInput*: proc(text: string) {.closure.}
     onRender*: proc() {.closure.}
+    onFocusChanged*: proc(focused: bool) {.closure.}
     onPopupDone*: proc() {.closure.}
 
   HostWindow* = ref object
@@ -329,6 +330,14 @@ proc installEventHandlers(host: HostWindow) =
       let host = hostForNativeWindow(event.window, ownerKey)
       if not host.isNil:
         host.dispatchTextInput(event)
+    ,
+    onStateBoolChanged: proc(event: siwinshim.StateBoolChangedEvent) =
+      let host = hostForNativeWindow(event.window, ownerKey)
+      if host.isNil:
+        return
+      if event.kind == siwinshim.StateBoolChangedEventKind.focus and
+          not host.xCallbacks.onFocusChanged.isNil:
+        host.xCallbacks.onFocusChanged(event.value)
     ,
   )
 
