@@ -49,6 +49,7 @@ root.addSubview(subtitle)
 root.addSubview(status)
 root.addSubview(button)
 window.setContentView(root)
+discard window.selectNextKeyView()
 app.addWindow(window)
 
 window.makeKeyAndOrderFront()

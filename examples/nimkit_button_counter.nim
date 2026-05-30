@@ -41,6 +41,7 @@ root.addSubview(button2)
 root.addSubview(label1)
 root.addSubview(label2)
 window.setContentView(root)
+discard window.selectNextKeyView()
 app.addWindow(window)
 
 window.makeKeyAndOrderFront()

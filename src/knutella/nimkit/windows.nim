@@ -301,6 +301,9 @@ proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool =
+  if window.xFirstResponder == responder:
+    return true
+
   if not responder.isNil:
     if responder of View:
       if not View(responder).canBecomeKeyView():
@@ -312,6 +315,15 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
       return false
   if not responder.isNil and not responder.becomeFirstResponder():
     return false
+
+  if not window.xFirstResponder.isNil and window.xFirstResponder of View:
+    let previous = View(window.xFirstResponder)
+    previous.setFocused(false)
+    previous.setFocusVisible(false)
+  if not responder.isNil and responder of View:
+    let next = View(responder)
+    next.setFocused(true)
+    next.setFocusVisible(true)
   window.xFirstResponder = responder
   true
 

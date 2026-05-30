@@ -158,6 +158,37 @@ suite "nimkit rendering":
 
     check activeFillFound
 
+  test "buildRenders draws focus visible control rings":
+    let
+      root = newView(0, 0, 140, 80)
+      button = newButton(10, 20, 80, 24, "Button")
+      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+
+    var theme = initTheme()
+    theme.button.focusRingWidth = 4.0
+    theme.button.focusRingInset = 1.0
+    theme.button.cornerRadius = 5.0
+
+    root.addSubview(button)
+    button.setFocused(true)
+    button.setFocusVisible(true)
+
+    let list = buildRenders(root, initAppearance(theme))[0.ZLevel]
+
+    var focusRingFound = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
+          node.stroke.fill.color == focusColor.rgba:
+        focusRingFound = true
+        check node.stroke.weight == theme.button.focusRingWidth
+        check node.screenBox.x == 11.0
+        check node.screenBox.y == 21.0
+        check node.screenBox.w == 78.0
+        check node.screenBox.h == 22.0
+        check node.corners[dcTopLeft] == 5'u16
+
+    check focusRingFound
+
   test "buildRenders uses theme metrics for checkbox and radio buttons":
     let
       root = newView(0, 0, 220, 110)
