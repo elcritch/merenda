@@ -129,6 +129,42 @@ suite "nimkit rendering":
     check buttonTextBoxFound
     check fieldTextBoxFound
 
+  test "buildRenders centers push button text by default":
+    let
+      root = newView(0, 0, 160, 80)
+      button = newButton(10, 20, 120, 30, "OK")
+
+    root.addSubview(button)
+
+    let renders = buildRenders(root)
+    var buttonTextFound = false
+    for node in renders[0.ZLevel].nodes:
+      if node.kind == nkText:
+        buttonTextFound = true
+
+        var
+          minX = float32.high
+          minY = float32.high
+          maxX = -float32.high
+          maxY = -float32.high
+        for rect in node.textLayout.selectionRects:
+          minX = min(minX, rect.x)
+          minY = min(minY, rect.y)
+          maxX = max(maxX, rect.x + rect.w)
+          maxY = max(maxY, rect.y + rect.h)
+
+        let
+          contentCenterX = (minX + maxX) / 2.0'f32
+          contentCenterY = (minY + maxY) / 2.0'f32
+          textBoxCenterX = node.screenBox.w / 2.0'f32
+          textBoxCenterY = node.screenBox.h / 2.0'f32
+
+        check abs(contentCenterX - textBoxCenterX) <= 1.0'f32
+        check abs(contentCenterY - textBoxCenterY) <= 1.0'f32
+        check minX > 0.0'f32
+
+    check buttonTextFound
+
   test "buildRenders draws focused text field selection and caret":
     let
       root = newView(0, 0, 180, 80)

@@ -297,7 +297,12 @@ proc renderBuiltInView(
         context.addFocusRing(
           focusRingParent(rootIdx, viewParent, style.box), absoluteFrame, style.box
         )
-      context.addText(style.buttonTextRect(view.bounds), button.title, style.text.color)
+      context.addText(
+        style.buttonTextRect(view.bounds),
+        button.title,
+        style.text.color,
+        alignment = taCenter,
+      )
   elif view of TextField:
     let textField = TextField(view)
     let
