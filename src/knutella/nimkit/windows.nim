@@ -20,6 +20,7 @@ type Window* = ref object of Responder
   xHasAppearance: bool
   xInheritedAppearance: Appearance
   xHasInheritedAppearance: bool
+  xPopupPresentation: PopupPresentation
   xFirstResponder: Responder
   xInitialFirstResponder: View
   xAutorecalculatesKeyViewLoop: bool
@@ -50,6 +51,20 @@ type EventDispatchResult = object
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
 
+func nativePopupWindowsSupported*(): bool =
+  when defined(android) or defined(emscripten) or defined(js) or defined(wasm):
+    false
+  else:
+    true
+
+func platformDefaultPopupPresentation*(): PopupPresentation =
+  when defined(nimkitInlinePopups) or defined(emscripten) or defined(js) or defined(
+    wasm
+  ):
+    result = ppInline
+  else:
+    result = ppAutomatic
+
 proc makeFirstResponder*(window: Window, responder: Responder): bool
 proc initialFirstResponder*(window: Window): View
 proc setInitialFirstResponder*(window: Window, view: View)
@@ -59,7 +74,9 @@ proc recalculateKeyViewLoop*(window: Window)
 proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.}
 proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.}
 proc effectiveAppearance*(window: Window): Appearance
+proc effectivePopupPresentation*(window: Window): PopupPresentation
 proc close*(window: Window)
+proc closeAuxiliaryWindows(window: Window)
 proc nativeContentScale*(window: Window): float32
 proc newPopupWindow*(
   owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
@@ -251,6 +268,26 @@ proc effectiveAppearance*(window: Window): Appearance =
   if window.xHasInheritedAppearance:
     return window.xInheritedAppearance
   initAppearance()
+
+proc popupPresentation*(window: Window): PopupPresentation =
+  if window.isNil:
+    return ppAutomatic
+  window.xPopupPresentation
+
+proc effectivePopupPresentation*(window: Window): PopupPresentation =
+  if window.isNil:
+    return platformDefaultPopupPresentation()
+  if window.xPopupPresentation == ppAutomatic:
+    return platformDefaultPopupPresentation()
+  window.xPopupPresentation
+
+proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
+  if window.isNil or window.xPopupPresentation == presentation:
+    return
+  window.xPopupPresentation = presentation
+  window.closeAuxiliaryWindows()
+  if not window.xContentView.isNil:
+    window.xContentView.setNeedsDisplay(true)
 
 proc setAppearance*(window: Window, appearance: Appearance) =
   if window.isNil:
@@ -593,6 +630,7 @@ proc newPopupWindow*(
     popupPlacement(anchorFrame, popupSize, owner.nativeContentScale())
   if not owner.isNil and result notin owner.xAuxiliaryWindows:
     owner.xAuxiliaryWindows.add result
+    result.xPopupPresentation = owner.popupPresentation()
     result.setInheritedAppearance(owner.effectiveAppearance())
 
 proc mouseDownAt*(

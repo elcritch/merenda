@@ -1,4 +1,4 @@
-import std/unittest
+import std/[tables, unittest]
 
 import knutella/nimkit
 
@@ -126,6 +126,37 @@ suite "nimkit comboboxes":
     check not combo.popupOpen
     check combo.indexOfSelectedItem() == 1
     check combo.stringValue == "Medium"
+
+  test "popup presentation can force inline or window rendering":
+    let
+      window = newWindow(0, 0, 220, 150, "Combo popup presentation")
+      root = newView(0, 0, 220, 150)
+      combo = newComboBox(10, 20, 120, 26, ["Low", "Medium", "High"])
+
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check combo.popupPresentation == ppAutomatic
+    check window.popupPresentation == ppAutomatic
+
+    combo.setPopupPresentation(ppWindow)
+    combo.openPopup()
+    check combo.popupOpen
+    check PopupDrawLevel notin window.buildRenders().layers
+
+    combo.closePopup()
+    combo.setPopupPresentation(ppInline)
+    combo.openPopup()
+    check combo.popupOpen
+    check PopupDrawLevel in window.buildRenders().layers
+
+    combo.closePopup()
+    combo.setPopupPresentation(ppAutomatic)
+    window.setPopupPresentation(ppInline)
+    combo.openPopup()
+    check combo.popupPresentation == ppAutomatic
+    check window.effectivePopupPresentation == ppInline
+    check PopupDrawLevel in window.buildRenders().layers
 
   test "open popup wins hit testing over overlapping sibling controls":
     let

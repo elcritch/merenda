@@ -21,6 +21,7 @@ type
     xButtonPressed: bool
     xTrackingPopup: bool
     xPopupWindow: Window
+    xPopupPresentation: PopupPresentation
 
   ComboBoxCell* = ref object of ActionCell
     xItems: seq[string]
@@ -48,9 +49,12 @@ proc popupItemIndexAtPopupPoint(comboBox: ComboBox, point: Point): int
 proc movePopupHighlight*(comboBox: ComboBox, delta: int)
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox)
 proc notifyComboBoxSelectionDidChange(comboBox: ComboBox)
+proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation
+proc shouldUseWindowPopup(comboBox: ComboBox): bool
 proc usesInlinePopup(comboBox: ComboBox): bool
 proc openPopupWindow(comboBox: ComboBox)
 proc closePopupWindow(comboBox: ComboBox)
+proc updatePopupPresentation(comboBox: ComboBox)
 proc drawPopupContents(
   comboBox: ComboBox,
   context: DrawContext,
@@ -93,6 +97,7 @@ protocol ComboBoxProtocolInternal from ComboBox:
   property popupOpen -> bool
   property numberOfVisibleItems -> int
   property itemHeight -> float32
+  property popupPresentation -> PopupPresentation
 
   method selectedIndex(comboBox: ComboBox): int =
     comboBox.indexOfSelectedItem()
@@ -112,14 +117,14 @@ protocol ComboBoxProtocolInternal from ComboBox:
     let shouldOpen = open and comboBox.isEnabled and comboBox.numberOfItems() > 0
     if comboBox.xPopupOpen == shouldOpen:
       if shouldOpen:
-        comboBox.openPopupWindow()
+        comboBox.updatePopupPresentation()
       return
 
     comboBox.xPopupOpen = shouldOpen
     if comboBox.xPopupOpen:
       let selected = comboBox.indexOfSelectedItem()
       comboBox.xPopupHighlightedIndex = if selected >= 0: selected else: 0
-      comboBox.openPopupWindow()
+      comboBox.updatePopupPresentation()
     else:
       comboBox.closePopupWindow()
       comboBox.xPopupHighlightedIndex = -1
@@ -138,6 +143,18 @@ protocol ComboBoxProtocolInternal from ComboBox:
 
   method setItemHeight(comboBox: ComboBox, value: float32) =
     comboBox.comboBoxCell().setCellItemHeight(value)
+
+  method popupPresentation(comboBox: ComboBox): PopupPresentation =
+    if comboBox.isNil:
+      return ppAutomatic
+    comboBox.xPopupPresentation
+
+  method setPopupPresentation(comboBox: ComboBox, presentation: PopupPresentation) =
+    if comboBox.isNil or comboBox.xPopupPresentation == presentation:
+      return
+    comboBox.xPopupPresentation = presentation
+    comboBox.updatePopupPresentation()
+    comboBox.setNeedsDisplay(true)
 
   method numberOfItems*(comboBox: ComboBox): int =
     let source = comboBox.dataSource()
@@ -758,8 +775,44 @@ proc popupWindowActive(comboBox: ComboBox): bool =
   not comboBox.isNil and not comboBox.xPopupWindow.isNil and
     not comboBox.xPopupWindow.isClosed and comboBox.xPopupWindow.nativeReady
 
+proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation =
+  if comboBox.isNil:
+    return ppAutomatic
+  if comboBox.xPopupPresentation == ppAutomatic:
+    let owner = comboBox.ownerWindow()
+    if owner.isNil:
+      return platformDefaultPopupPresentation()
+    return owner.effectivePopupPresentation()
+  comboBox.xPopupPresentation
+
+proc canUseWindowPopup(comboBox: ComboBox): bool =
+  if comboBox.isNil or not nativePopupWindowsSupported():
+    return false
+  let owner = comboBox.ownerWindow()
+  not owner.isNil and owner.nativeReady
+
+proc wantsWindowPopup(comboBox: ComboBox): bool =
+  case comboBox.popupPresentationPreference()
+  of ppAutomatic:
+    nativePopupWindowsSupported()
+  of ppWindow:
+    true
+  of ppInline:
+    false
+
+proc shouldUseWindowPopup(comboBox: ComboBox): bool =
+  comboBox.wantsWindowPopup() and comboBox.canUseWindowPopup()
+
 proc usesInlinePopup(comboBox: ComboBox): bool =
-  not comboBox.isNil and comboBox.popupOpen() and not comboBox.popupWindowActive()
+  if comboBox.isNil or not comboBox.popupOpen():
+    return false
+  case comboBox.popupPresentationPreference()
+  of ppInline:
+    true
+  of ppAutomatic:
+    not comboBox.popupWindowActive()
+  of ppWindow:
+    false
 
 proc newComboBoxPopupView(comboBox: ComboBox, size: Size): ComboBoxPopupView =
   result = ComboBoxPopupView(xComboBox: comboBox)
@@ -774,6 +827,10 @@ proc openPopupWindow(comboBox: ComboBox) =
     return
   if comboBox.popupWindowActive():
     return
+  if not comboBox.shouldUseWindowPopup():
+    return
+  if not comboBox.xPopupWindow.isNil:
+    comboBox.closePopupWindow()
   let owner = comboBox.ownerWindow()
   if owner.isNil or not owner.nativeReady:
     return
@@ -793,7 +850,11 @@ proc openPopupWindow(comboBox: ComboBox) =
   comboBox.xPopupWindow = popupWindow
   popupWindow.makeKeyAndOrderFront()
   popupWindow.ensureNativeWindow()
-  discard popupWindow.makeFirstResponder(popupView)
+  if popupWindow.nativeReady:
+    discard popupWindow.makeFirstResponder(popupView)
+  else:
+    comboBox.xPopupWindow = nil
+    popupWindow.close()
 
 proc closePopupWindow(comboBox: ComboBox) =
   if comboBox.isNil:
@@ -802,6 +863,17 @@ proc closePopupWindow(comboBox: ComboBox) =
   comboBox.xPopupWindow = nil
   if not popupWindow.isNil and not popupWindow.isClosed:
     popupWindow.close()
+
+proc updatePopupPresentation(comboBox: ComboBox) =
+  if comboBox.isNil:
+    return
+  if not comboBox.popupOpen():
+    comboBox.closePopupWindow()
+    return
+  if comboBox.shouldUseWindowPopup():
+    comboBox.openPopupWindow()
+  elif not comboBox.xPopupWindow.isNil:
+    comboBox.closePopupWindow()
 
 proc drawPopupContents(
     comboBox: ComboBox,
