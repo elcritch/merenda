@@ -2,13 +2,12 @@
 
 ## Goal
 
-Build and evolve a side-by-side pure Nim UI layer at `src/merenda/nimkit`
-while keeping the existing ObjC/AppKit implementation intact as the behavioral
-reference.
+Build and evolve Merenda's pure Nim UI layer at `src/merenda/nimkit` as the
+project's primary UI toolkit.
 
-NimKit is not an ObjC compatibility layer. The public API should stay Nim-native
-and AppKit-shaped, with ObjC/AppKit adapters deferred until the native layer has
-proved the core model.
+The public API should stay Nim-native: plain value types for data, ref objects
+for identity-bearing UI objects, selector-backed hooks where dynamic dispatch is
+useful, and backend/runtime details kept behind NimKit boundaries.
 
 ## Current State
 
@@ -19,10 +18,10 @@ NimKit already has the first useful vertical slice:
 - Plain Nim value types for geometry, events, and control options, with
   `chroma.Color` used directly for color state.
 - Responder/action and key-command dispatch through `sigils/selectors`.
-- Cocoa/AppKit-shaped object boundaries: views own hierarchy, geometry,
-  drawing, tracking, layout, and appearance directly; controls are the
-  cell-backed branch; delegates/data sources are explicit selector hooks rather
-  than generic forwarding targets.
+- Desktop UI object boundaries: views own hierarchy, geometry, drawing,
+  tracking, layout, and appearance directly; controls are the cell-backed
+  branch; delegates/data sources are explicit selector hooks rather than
+  generic forwarding targets.
 - View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
   first-responder dispatch.
 - Application/window/view appearance inheritance through `effectiveAppearance`,
@@ -63,7 +62,7 @@ NimKit already has the first useful vertical slice:
 - Keep geometry, event, and option data as plain Nim value types: `object`,
   enums, sets. Use established library value types where they are already the
   rendering/data interchange type, such as `chroma.Color` for color. Do not wrap
-  NSRect-like data or scalar widget state in `ref object`, Objective-C wrappers,
+  geometry-like data or scalar widget state in `ref object`, backend wrappers,
   or `Sigil`.
 - Use `ref object` for identity-bearing GUI objects only: applications,
   windows, responders, views, controls, widgets, native handles, and
@@ -79,9 +78,9 @@ NimKit already has the first useful vertical slice:
   updates, invalidation, or responder side effects.
 - Do not add getter/setter pairs only for compatibility when direct Nim access
   is clearer and no future hook point is expected.
-- Keep ObjC runtime types out of NimKit's public surface: no `NSObject`, `ID`,
-  `IDPtr`, `SEL`, `objc_msgSend`, retain/release helpers, or ObjC ivar/accessor
-  macros.
+- Keep backend/runtime handles out of NimKit's public surface. Public NimKit
+  APIs should expose Nim values and NimKit objects, not native-window,
+  renderer, or foreign-runtime implementation details.
 
 ## Module Layout
 
@@ -149,7 +148,7 @@ NimKit already has the first useful vertical slice:
 
 ### Foundations
 
-- `import merenda/nimkit` compiles without exposing ObjC runtime types.
+- `import merenda/nimkit` compiles without exposing backend runtime types.
 - Constructors exist for the core object and value types:
   `newApplication`, `newWindow`, `newView`, `newButton`, `newTextField`,
   `newComboBox`, `initPoint`, `initSize`, `initRect`, `initColor`.
@@ -204,8 +203,8 @@ NimKit already has the first useful vertical slice:
   `ActionCell`, and control property selectors can forward to the installed
   cell.
 - `Button` supports momentary and toggle modes, mixed-state cycling, highlight,
-  disabled rendering, mouse activation, key activation, Cocoa-style
-  release-outside cancellation, and checkbox/radio variants.
+  disabled rendering, mouse activation, key activation, release-outside
+  cancellation, and checkbox/radio variants.
 - Checkbox buttons reuse button target/action and mixed-state cycling while
   rendering through choice-control theme metrics.
 - Radio buttons reuse button target/action, select without toggling off, and
@@ -256,8 +255,8 @@ NimKit already has the first useful vertical slice:
   style resolution.
 - Window dispatch computes repeated click counts for close successive mouse
   presses on the same target, preserves the count through mouse-up, and routes
-  mouse/scroll events through a Cocoa-style responder fallback while converting
-  event locations into each responder view's local coordinates.
+  mouse/scroll events through responder fallback while converting event
+  locations into each responder view's local coordinates.
 - Views expose `needsLayout`, `setNeedsLayout`, `layoutSubtreeIfNeeded`,
   `prepareDisplaySubtree`, and `finishDisplaySubtree`. Rendering explicitly
   runs layout/display preparation before building FigDraw nodes and clears dirty
@@ -267,26 +266,23 @@ NimKit already has the first useful vertical slice:
 
 ### Intrinsic Sizing And Layout
 
-Use GNUstep's AppKit shape as the first implementation basis, but expose the
-modern Cocoa measurement model where it fits NimKit:
+Use the existing control/cell/theme split as the implementation basis, while
+exposing a modern intrinsic measurement model where it fits NimKit:
 
 - Keep controls thin and cell-driven. `Control.sizeToFit` should ask the
-  installed cell for its measured size, mirroring GNUstep/Cocoa's
-  `NSControl` -> `NSCell.cellSize` path.
+  installed cell for its measured size.
 - Put content measurement in cells, not views. Button cells should measure
   title/image/check/radio content; text-field cells should measure text and
   editor affordances; combo-box cells should measure selected text plus arrow
   and popup/list requirements.
-- Put chrome metrics in `Appearance`/theme, not hardcoded controls. The
-  GNUstep `GSTheme` model is the right direction: borders, focus rings, control
-  insets, image-title gaps, minimum heights, and state/style-specific margins
-  should be resolved through style tokens and concrete style objects before
-  drawing or measuring.
-- Add modern Cocoa measurement procs on NimKit objects:
-  `intrinsicContentSize`, `invalidateIntrinsicContentSize`,
-  `sizeThatFits`, and `sizeToFit`. Plain `View` should default to no intrinsic
-  metric; labels/buttons/checks/radios/text fields/combo boxes should return
-  useful content sizes.
+- Put chrome metrics in `Appearance`/theme, not hardcoded controls. Borders,
+  focus rings, control insets, image-title gaps, minimum heights, and
+  state/style-specific margins should be resolved through style tokens and
+  concrete style objects before drawing or measuring.
+- Add modern measurement procs on NimKit objects: `intrinsicContentSize`,
+  `invalidateIntrinsicContentSize`, `sizeThatFits`, and `sizeToFit`. Plain
+  `View` should default to no intrinsic metric; labels/buttons/checks/radios/
+  text fields/combo boxes should return useful content sizes.
 - Keep `sizeThatFits(proposedSize)` distinct from `intrinsicContentSize`.
   Intrinsic size is the view's natural content size independent of parent
   layout where possible; fitting size may account for a proposed width/height,
@@ -299,9 +295,10 @@ modern Cocoa measurement model where it fits NimKit:
   changes should invalidate size and layout, then the layout pass decides
   frames.
 - Add content hugging and compression resistance as value-style layout
-  priorities once intrinsic sizes exist. Start with Cocoa-like defaults:
-  controls prefer stretching over clipping, labels/checks/radios hug more
-  strongly than text fields, and required priorities are avoided by default.
+  priorities once intrinsic sizes exist. Start with practical desktop-control
+  defaults: controls prefer stretching over clipping, labels/checks/radios hug
+  more strongly than text fields, and required priorities are avoided by
+  default.
 - Add autoresizing/layout containers before a constraint solver. A first useful
   layer can support manual `layoutSubviews`, `sizeToFit`, stack-like examples,
   and intrinsic-size-aware helper layout. Defer full Auto Layout constraints
@@ -312,11 +309,11 @@ How the current theme engine fits:
 - Treat the existing theme engine as the single metrics resolver for both
   drawing and measurement. Do not add separate `ButtonTheme`,
   `TextFieldTheme`, or layout-only theme objects.
-- The current shape is already close to GNUstep's `GSTheme` boundary:
-  `Theme` owns tokens/rules, `Appearance` is the inherited resolver context,
-  `StyleContext` carries role/state/id/classes, and concrete style values such
-  as `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and `ComboBoxStyle`
-  are what render code consumes.
+- The current shape already has the right resolver boundary: `Theme` owns
+  tokens/rules, `Appearance` is the inherited resolver context, `StyleContext`
+  carries role/state/id/classes, and concrete style values such as
+  `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and `ComboBoxStyle` are
+  what render code consumes.
 - Measurement should consume those same resolved style values. For example,
   button sizing should use `ButtonStyle.text.insets`,
   `ControlBoxStyle.borderWidth`, focus-ring metrics, and future button minimum
@@ -389,10 +386,9 @@ Concrete task order:
 - Keep delegate/custom policy hooks selector-based and explicit where they
   affect behavior. Use generic forwarding for control-to-cell delegation, not
   for arbitrary view or delegate dispatch.
-- For future complex widgets, follow the AppKit split: cells for reusable
-  control display/interaction state, delegates for policy decisions, data
-  sources for externally owned data, and containment for scroll/window
-  structure.
+- For future complex widgets, keep the same split: cells for reusable control
+  display/interaction state, delegates for policy decisions, data sources for
+  externally owned data, and containment for scroll/window structure.
 
 ### Native Integration
 
@@ -401,120 +397,46 @@ Concrete task order:
 - Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style
   escape hatches for tests and diagnostics.
 
-### Migration Layer
-
-- Defer `NS*` aliases and compatibility adapters until the Nim-native API is
-  stable.
-- When migration starts, keep adapters thin: construction, event/action routing,
-  and geometry conversion only.
-- Keep the ObjC/AppKit implementation buildable and useful as the behavioral
-  reference.
-
-## Cocoa Core Architecture Notes
-
-Architecture review source: `deps/libs-gui/Headers/AppKit` and
-`deps/libs-gui/Source`, especially `NSApplication`, `NSWindow`, `NSView`,
-`NSControl`, `NSCell`, `GSDisplayServer`, `GSTheme`, key bindings, and the auto
-layout engine. Use GNUstep/libs-gui as architectural reference only. Do not copy
-its implementation.
-
-### Already Aligned
-
-- Our ObjC/AppKit core already follows the main Cocoa split better than NimKit:
-  `NSApplication` owns the event queue, `NSWindow` dispatches to hit-tested or
-  first-responder views, `NSView` owns frame/bounds/hierarchy/invalidation, and
-  `NSControl` delegates most persistent control state to `NSCell`.
-- Our `NSView` has the right broad shape: frame, bounds, superview/subviews,
-  window ownership, tracking areas, invalid rects, visible rects, transform
-  state, and proc/method boundaries where behavior may need to be swizzled.
-- NimKit should keep its simpler Nim-native model, but it should treat the
-  ObjC/AppKit core as the behavioral reference for event order, coordinate
-  conversion, invalidation, and control semantics.
+## Core Architecture Notes
 
 ### Improvements To Consider
 
-- Add a formal display-server/backend boundary to the ObjC/AppKit core. GNUstep
-  routes window creation, event polling, server/window lookup, and backend
-  operations through `GSDisplayServer`; ours still mixes siwin stepping,
-  renderer ownership, and AppKit object logic inside `NSApplication`/`NSWindow`.
-  A small Nim `DisplayServer`/`AppKitBackend` layer would make siwin replaceable,
-  improve headless tests, and keep native-window quirks out of Cocoa objects.
-- Tighten the view display pipeline around dirty rects. GNUstep keeps the
-  invariant that dirty children mark ancestors dirty, clips invalidation to
-  visible rects, redirects drawing to an opaque ancestor, and clears dirty state
-  only after display. Our core has the pieces, but the traversal should be made
-  explicit and covered by tests before adding more complex views.
+- Add a formal backend boundary. Window creation, event polling, native window
+  lookup, renderer ownership, and backend operations should sit behind a small
+  NimKit backend interface so siwin-specific details stay out of `Application`
+  and `Window`.
+- Tighten the view display pipeline around dirty rects. Dirty children should
+  mark ancestors dirty, invalidation should clip to visible rects where needed,
+  and dirty state should clear only after display construction succeeds.
 - Make coordinate caching and invalidation a first-class view subsystem.
-  GNUstep recursively invalidates cached window/view transforms and visible
-  rects on frame, bounds, superview, hidden-state, and flip changes. Our
-  `markTransformsDirty` path should grow into the same clear lifecycle, with
-  tests for nested conversion, flipped views, bounds origins, and reparenting.
-- Keep growing the theme/metrics drawing boundary. GNUstep's `GSTheme`
-  centralizes borders, focus rings, control metrics, tile/nine-patch drawing,
-  menu/window chrome, and state-specific colors. NimKit now has a small value
-  theme for button/text-field colors and metrics; defer loadable themes and
-  richer chrome until more controls exist.
-- Keep strengthening the `NSControl`/`NSCell` split. GNUstep uses default cell
-  classes and cell-owned state heavily. Our core already has cells; next cleanup
-  should centralize cell invalidation, value conversion, target/action storage,
-  highlight/tracking behavior, and default cell construction so controls stay
-  thin.
-- Stage layout work conservatively. GNUstep gives us the practical
-  control/cell/theme measurement split; modern Cocoa gives us
-  `intrinsicContentSize`, `sizeThatFits`, intrinsic invalidation, content
-  hugging, compression resistance, and fitting size. For us, finish intrinsic
-  content sizes, size-to-fit, layout invalidation, and simple intrinsic-aware
-  containers first; defer a full constraint solver until there are enough
-  controls and examples to justify it.
-- Centralize the application/window event path. GNUstep separates event queue
-  lookup, `NSApplication.sendEvent`, window dispatch, tracking loops, modal
-  loops, and key equivalent handling. Our path works, but modal sessions,
-  tracking loops, key equivalents, mouse capture, and closed/invisible-window
-  filtering should be made explicit before more widgets depend on edge-case
-  event ordering.
-- Extend the command/key-binding layer as text editing grows. GNUstep has key
-  binding tables and command actions; NimKit now has the command-table core, but
-  text editing, menu key equivalents, and responder fallback will need more
-  default bindings.
+  Frame, bounds, superview, hidden-state, and clipping changes should invalidate
+  cached transforms and visible rects through one clear lifecycle, with tests
+  for nested conversion, bounds origins, and reparenting.
+- Keep growing the theme/metrics drawing boundary. `Theme` and `Appearance`
+  should centralize borders, focus rings, control metrics, menu/window chrome,
+  and state-specific colors as those features are added.
+- Keep strengthening the control/cell split. Centralize cell invalidation,
+  value conversion, target/action storage, highlight/tracking behavior, and
+  default cell construction so controls stay thin.
+- Stage layout work conservatively. Finish intrinsic content sizes,
+  size-to-fit, layout invalidation, and simple intrinsic-aware containers first;
+  defer a full constraint solver until there are enough controls and examples
+  to justify it.
+- Centralize the application/window event path. Event queueing, window dispatch,
+  tracking loops, modal loops, key equivalents, mouse capture, and invisible or
+  closed-window filtering should be explicit before more widgets depend on
+  edge-case event ordering.
+- Extend the command/key-binding layer as text editing grows. Text editing,
+  menu key equivalents, and responder fallback will need more default bindings.
 
 ### Priority Order
 
-- Short term: cleaner cell invalidation/default-cell construction, and more
-  controls using the theme metrics.
-- Medium term: constraint layout groundwork and broader control coverage.
-- Later: constraint layout, panels/services integration, loadable themes, and
-  broader GNUstep-style resource organization.
-
-### NimKit Follow-Up Against GNUstep
-
-Current comparison source:
-`deps/libs-gui/Source/NSApplication.m`, `NSWindow.m`, `NSView.m`,
-`NSControl.m`, `NSCell.m`, `GSDisplayServer.m`, and `GSTheme.m`.
-
-NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
-still points to the next correctness boundaries:
-
-- The first command/key-binding layer is in place. GNUstep routes key
-  equivalents through the application/window path and text commands through key
-  binding tables and responder selectors; NimKit now has the same core shape
-  with a small table that maps text/typed-key/key-code plus modifier
-  combinations to command selectors.
-
-Recommended NimKit order:
-
-- Next: add intrinsic sizing from the GNUstep-style control/cell/theme split,
-  while exposing modern Cocoa-style measurement and invalidation hooks. After
-  that, stabilize the first ComboBox slice under more examples, then extract the
-  reusable popup/list/scroll foundations needed by popup buttons, menus, and
-  larger data-backed controls.
-
-Concrete task list:
-
-1. Add intrinsic sizing and `sizeToFit` for the existing controls, with theme
-   metrics as the source of chrome/inset/minimum-size data.
-2. Expand ComboBox coverage around popup dismissal, sibling z-ordering, and
-   scrollable popup content. Keep policy hooks selector-based where behavior is
-   overridable, and keep control-to-cell forwarding generic.
+- Short term: intrinsic sizing, cleaner cell invalidation/default-cell
+  construction, and more controls using theme metrics.
+- Medium term: simple intrinsic-aware layout containers and broader control
+  coverage.
+- Later: constraint layout, richer popup/list infrastructure, loadable themes,
+  and broader resource organization.
 
 ## Test Plan
 
@@ -553,10 +475,14 @@ Concrete task list:
   ownership; avoid hidden globals as ownership shortcuts.
 - figdraw text layout and native window flushing are easy to couple. Keep render
   tree construction pure enough to test without siwin.
-- NimKit can drift from AppKit behavior. For each ported area, name the current
-  AppKit module used as the reference in implementation notes or tests.
+- NimKit can drift from expected desktop UI behavior. Cover user-visible event,
+  layout, and drawing semantics with tests as each area becomes more complete.
 
 ## Non-Goals For Now
 
-- Full AppKit `NS*` source compatibility.
-- ObjC runtime interop from NimKit.
+- Full Auto Layout compatibility or a constraint solver.
+- Menus.
+- Scroll views.
+- Full text editing.
+- Source compatibility with another UI toolkit.
+- Foreign runtime interop from NimKit's public API.
