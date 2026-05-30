@@ -420,23 +420,22 @@ proc referencesLayoutItem(constraint: LayoutConstraint, view: View): bool =
   (not constraint.isNil) and
     (constraint.xFirstItem == view or constraint.xSecondItem == view)
 
-proc markAncestorConstraintsForLayoutItem(view: View) =
-  var current = view
-  while not current.isNil:
-    for constraint in current.xConstraints:
-      if constraint.referencesLayoutItem(view):
-        current.markConstraintStorageChanged()
-        break
-    current = current.xSuperview
+proc hasConstraintReferencing(view, item: View): bool =
+  if view.isNil or item.isNil:
+    return false
+  for constraint in view.xConstraints:
+    if constraint.referencesLayoutItem(item):
+      return true
 
 proc invalidateLayoutItemGeometry*(view: View) =
   if view.isNil:
     return
-  view.markConstraintStorageChanged()
   let parent = view.xSuperview
-  if not parent.isNil:
-    parent.markConstraintStorageChanged()
-  view.markAncestorConstraintsForLayoutItem()
+  var current = view
+  while not current.isNil:
+    if current == view or current == parent or current.hasConstraintReferencing(view):
+      current.markConstraintStorageChanged()
+    current = current.xSuperview
 
 proc alignmentRectInsets*(view: View): EdgeInsets =
   if view.isNil:
