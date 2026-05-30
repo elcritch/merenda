@@ -1,8 +1,11 @@
 import std/options
 
+from figdraw/fignodes import FigIdx
+
 import ./controls
 import ./selectors
 import ./textfields
+import ./theme
 import ./types
 
 export controls
@@ -215,6 +218,103 @@ protocol DefaultComboBoxAction of ButtonActionProtocol:
   method performClick(comboBox: ComboBox, args: ActionArgs) =
     if comboBox.isEnabled:
       comboBox.togglePopup()
+
+protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
+  method draw(comboBox: ComboBox, context: DrawContext) =
+    let
+      absoluteFrame = comboBox.rectToWindow(comboBox.bounds)
+      style = context.appearance.resolveComboBoxStyle(
+        initControlStyleContext(
+          srComboBox,
+          enabled = comboBox.isEnabled,
+          highlighted = comboBox.isButtonPressed,
+          hovered = comboBox.isHovered,
+          active = comboBox.isActive,
+          focused = comboBox.isFocused,
+          focusVisible = comboBox.isFocusVisible,
+          opened = comboBox.popupOpen,
+          id = comboBox.styleId,
+          classes = comboBox.styleClasses,
+        )
+      )
+
+    discard context.addWindowRectangle(
+      absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+      style.box.cornerRadius, style.box.shadows,
+    )
+    if comboBox.isFocusVisible:
+      context.addFocusRing(absoluteFrame, style.box)
+
+    let
+      arrowRect = style.comboBoxArrowRect(comboBox.bounds)
+      arrowFrame = comboBox.rectToWindow(arrowRect)
+      arrowFill =
+        if comboBox.isButtonPressed or comboBox.popupOpen:
+          initColor(0.88, 0.90, 0.94, 1.0)
+        else:
+          initColor(0.94, 0.95, 0.97, 1.0)
+      separatorRect = initRect(
+        arrowRect.origin.x,
+        arrowRect.origin.y + 2.0'f32,
+        1.0'f32,
+        max(arrowRect.size.height - 4.0'f32, 0.0'f32),
+      )
+    discard
+      context.addWindowRectangle(arrowFrame, arrowFill, style.box.borderColor, 0.0'f32)
+    discard context.addWindowRectangle(
+      comboBox.rectToWindow(separatorRect), style.box.borderColor, style.box.borderColor
+    )
+    context.addComboBoxArrow(arrowFrame, style.arrowColor)
+    context.addText(
+      style.comboBoxTextRect(comboBox.bounds), comboBox.stringValue, style.text.color
+    )
+
+    if comboBox.popupOpen:
+      let
+        popupRect = comboBox.popupRect(comboBox.bounds)
+        popupFrame = comboBox.rectToWindow(popupRect)
+        popupRoot = context.addWindowRectangle(
+          PopupDrawLevel,
+          (-1).FigIdx,
+          popupFrame,
+          initColor(1.0, 1.0, 1.0, 1.0),
+          style.box.borderColor,
+          style.box.borderWidth,
+          2.0'f32,
+        )
+        first = comboBox.popupFirstItemIndex()
+      for visibleIndex in 0 ..< comboBox.visibleItemCount():
+        let
+          itemIndex = first + visibleIndex
+          selected = itemIndex == comboBox.indexOfSelectedItem()
+          hovered = itemIndex == comboBox.popupHighlightedIndex()
+          itemStyle = context.appearance.resolveTextFieldStyle(
+            initControlStyleContext(
+              srComboBoxItem,
+              enabled = comboBox.isEnabled,
+              hovered = hovered,
+              selected = selected,
+              id = comboBox.styleId,
+              classes = comboBox.styleClasses,
+            )
+          )
+          itemRect = comboBox.popupItemRect(comboBox.bounds, itemIndex)
+        discard context.addWindowRectangle(
+          PopupDrawLevel,
+          popupRoot,
+          comboBox.rectToWindow(itemRect),
+          itemStyle.box.fill,
+          itemStyle.box.borderColor,
+          itemStyle.box.borderWidth,
+          itemStyle.box.cornerRadius,
+        )
+        context.addText(
+          PopupDrawLevel,
+          popupRoot,
+          itemStyle.textFieldTextRect(itemRect),
+          comboBox.itemAtIndex(itemIndex),
+          itemStyle.text.color,
+        )
 
 protocol DefaultComboBoxEvents of ResponderEventProtocol:
   method mouseDown(comboBox: ComboBox, event: MouseEvent) =
@@ -598,6 +698,7 @@ proc initComboBoxFields*(comboBox: ComboBox, frame: Rect, items: openArray[strin
   comboBox.installComboBoxTextSelectors()
   discard comboBox.withProtocol(DefaultComboBoxView)
   discard comboBox.withProtocol(DefaultComboBoxAction)
+  discard comboBox.withProtocol(DefaultComboBoxDrawing)
   discard comboBox.withProtocol(DefaultComboBoxEvents)
   comboBox.addItems(items)
 
