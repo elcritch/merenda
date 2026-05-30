@@ -173,7 +173,7 @@ suite "nimkit rendering":
 
     var theme = initTheme()
     theme.setStyle(srButton, StyleFocusRingWidth, 4.0)
-    theme.setStyle(srButton, StyleFocusRingInset, 1.0)
+    theme.setStyle(srButton, StyleFocusRingInset, -2.0)
     theme.setStyle(srButton, StyleFocusRingColor, focusColor)
     theme.setStyle(srButton, StyleCornerRadius, 5.0)
 
@@ -189,11 +189,11 @@ suite "nimkit rendering":
           node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.stroke.weight == 4.0
-        check node.screenBox.x == 11.0
-        check node.screenBox.y == 21.0
-        check node.screenBox.w == 78.0
-        check node.screenBox.h == 22.0
-        check node.corners[dcTopLeft] == 5'u16
+        check node.screenBox.x == 8.0
+        check node.screenBox.y == 18.0
+        check node.screenBox.w == 84.0
+        check node.screenBox.h == 28.0
+        check node.corners[dcTopLeft] == 7'u16
 
     check focusRingFound
 

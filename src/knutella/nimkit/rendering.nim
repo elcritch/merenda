@@ -163,9 +163,12 @@ proc addFocusRing(
       initColor(0.0, 0.0, 0.0, 0.0),
       box.focusRingColor,
       box.focusRingWidth,
-      box.cornerRadius,
+      max(box.cornerRadius - box.focusRingInset, 0.0'f32),
     ),
   )
+
+proc focusRingParent(rootIdx, viewParent: FigIdx, box: ControlBoxStyle): FigIdx =
+  if box.focusRingInset < 0.0'f32: viewParent else: rootIdx
 
 proc beginDraw(context: DrawContext, view: View, parent: FigIdx) =
   context.beginDraw(
@@ -187,7 +190,11 @@ proc addText*(
   context.addFig(textNode(context.localRectToWindow(rect), text, color, alignment))
 
 proc renderBuiltInView(
-    context: DrawContext, view: View, rootIdx: FigIdx, appearance: Appearance
+    context: DrawContext,
+    view: View,
+    rootIdx: FigIdx,
+    viewParent: FigIdx,
+    appearance: Appearance,
 ) =
   let absoluteFrame = view.rectToWindow(view.bounds)
 
@@ -243,7 +250,11 @@ proc renderBuiltInView(
           ),
         )
       if button.isFocusVisible:
-        context.addFocusRing(rootIdx, view.rectToWindow(indicatorRect), style.indicator)
+        context.addFocusRing(
+          focusRingParent(rootIdx, viewParent, style.indicator),
+          view.rectToWindow(indicatorRect),
+          style.indicator,
+        )
       context.addText(style.choiceTextRect(view.bounds), button.title, style.text.color)
     else:
       let style = appearance.resolveButtonStyle(
@@ -267,7 +278,9 @@ proc renderBuiltInView(
         ),
       )
       if button.isFocusVisible:
-        context.addFocusRing(rootIdx, absoluteFrame, style.box)
+        context.addFocusRing(
+          focusRingParent(rootIdx, viewParent, style.box), absoluteFrame, style.box
+        )
       context.addText(style.buttonTextRect(view.bounds), button.title, style.text.color)
   elif view of TextField:
     let textField = TextField(view)
@@ -295,7 +308,9 @@ proc renderBuiltInView(
       ),
     )
     if focusVisible:
-      context.addFocusRing(rootIdx, absoluteFrame, style.box)
+      context.addFocusRing(
+        focusRingParent(rootIdx, viewParent, style.box), absoluteFrame, style.box
+      )
     let
       textRect = style.textFieldTextRect(view.bounds)
       layout = textLayout(
@@ -331,7 +346,7 @@ proc renderViewInto(
   context.beginDraw(view, rootIdx)
 
   if not view.sendIfHandled(draw(), context):
-    renderBuiltInView(context, view, rootIdx, appearance)
+    renderBuiltInView(context, view, rootIdx, parent, appearance)
 
   for child in view.subviews:
     renderViewInto(context, child, appearance, rootIdx)
