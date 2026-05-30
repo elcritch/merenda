@@ -611,9 +611,7 @@ protocol DefaultComboBoxCellMeasurement of CellMeasurementProtocol:
     initIntrinsicSize(style.comboBoxControlSize(cell.comboBoxMeasuredTextSize()))
 
   method cellSizeForBounds(cell: ComboBoxCell, bounds: Rect): Size =
-    cell.cellSize().resolveIntrinsicSize(bounds.size).constrainSize(
-      initFittingSize(bounds.size)
-    )
+    cell.cellSize().resolveIntrinsicSize(bounds.size)
 
 proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
   if comboBox.isNil:

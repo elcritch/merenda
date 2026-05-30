@@ -119,9 +119,7 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
     initIntrinsicSize(style.buttonControlSize(textSize))
 
   method cellSizeForBounds(cell: ButtonCell, bounds: Rect): Size =
-    cell.cellSize().resolveIntrinsicSize(bounds.size).constrainSize(
-      initFittingSize(bounds.size)
-    )
+    cell.cellSize().resolveIntrinsicSize(bounds.size)
 
 proc initButtonCellFields*(cell: ButtonCell, title: string) =
   initActionCellFields(cell)
