@@ -167,6 +167,7 @@ suite "nimkit rendering":
     var theme = initTheme()
     theme.button.focusRingWidth = 4.0
     theme.button.focusRingInset = 1.0
+    theme.button.focusRingColor = focusColor
     theme.button.cornerRadius = 5.0
 
     root.addSubview(button)

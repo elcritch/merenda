@@ -181,5 +181,7 @@ suite "nimkit text fields":
 
     check window.mouseDownAt(initPoint(20, 20))
     check window.firstResponder == field
+    check field.isFocused
+    check not field.isFocusVisible
     check field.isEditing
     check field.selectedRange == initTextRange(6, 0)

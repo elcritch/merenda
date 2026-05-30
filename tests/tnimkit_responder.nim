@@ -118,6 +118,22 @@ suite "nimkit responder":
     check window.firstResponder.isNil
     check window.makeFirstResponder(button)
     check window.firstResponder == button
+    check button.isFocused
+    check button.isFocusVisible
+
+  test "mouse focus does not force visible focus rings":
+    let
+      window = newWindow(0, 0, 240, 160, "Mouse focus")
+      root = newView(0, 0, 240, 160)
+      button = newButton(20, 20, 120, 36, "Default")
+
+    root.addSubview(button)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(30, 30))
+    check window.firstResponder == button
+    check button.isFocused
+    check not button.isFocusVisible
 
   test "space key activates button through default command binding":
     let
