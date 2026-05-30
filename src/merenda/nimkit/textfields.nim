@@ -501,9 +501,7 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
     initIntrinsicSize(style.textFieldControlSize(textNaturalSize("")))
 
   method cellSizeForBounds(cell: TextFieldCell, bounds: Rect): Size =
-    cell.cellSize().resolveIntrinsicSize(bounds.size).constrainSize(
-      initFittingSize(bounds.size)
-    )
+    cell.cellSize().resolveIntrinsicSize(bounds.size)
 
 proc initTextFieldCellFields*(cell: TextFieldCell) =
   initActionCellFields(cell)

@@ -77,6 +77,17 @@ suite "nimkit sizing":
     check comboSize.width > textNaturalSize("Much longer item").width
     check comboSize.height >= 24.0
 
+  test "undersized fitting proposals preserve natural control sizes":
+    let
+      button = newButton(0, 0, 10, 10, "Long button title")
+      field = newTextField(0, 0, 10, 10, "Long field value")
+      combo = newComboBox(0, 0, 10, 10, ["Long combo item"])
+      proposed = initFittingSize(4.0, 4.0)
+
+    check button.sizeThatFits(proposed) == button.sizeThatFits()
+    check field.sizeThatFits(proposed) == field.sizeThatFits()
+    check combo.sizeThatFits(proposed) == combo.sizeThatFits()
+
   test "theme metrics affect measurement and agree with text rects":
     let button = newButton(0, 0, 10, 10, "Pad")
     let base = button.intrinsicContentSize()

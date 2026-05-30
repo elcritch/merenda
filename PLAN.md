@@ -263,7 +263,14 @@ Concrete task order and status:
    invalidate intrinsic size and cause measurement/rendering to agree on text
    and chrome rectangles. Current coverage checks style metric changes against
    text rects; broader render-tree agreement can be added with container tests.
-8. Not started: Add examples showing `sizeToFit` and intrinsic-size-driven
+8. Done: Compare the first NimKit sizing pass with local GNUstep
+   `deps/libs-gui`. GNUstep's `NSControl.sizeToFit` delegates directly to cell
+   natural size, plain `NSView` has no intrinsic metric, orientation-specific
+   hugging/compression priorities are stored on the view, and
+   `NSCell.cellSizeForBounds:` currently returns natural `cellSize`. NimKit now
+   follows that default for built-in control cells instead of clamping to an
+   undersized proposal before wrapping-specific measurement exists.
+9. Not started: Add examples showing `sizeToFit` and intrinsic-size-driven
    layout for common controls, then broaden to simple stack/container layout if
    the API holds.
 
