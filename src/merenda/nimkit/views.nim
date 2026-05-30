@@ -23,6 +23,7 @@ type View* = ref object of Responder
   xActive: bool
   xHasFocus: bool
   xFocusVisible: bool
+  xNeedsUpdateConstraints: bool
   xNeedsLayout: bool
   xHorizontalContentHuggingPriority: LayoutPriority
   xVerticalContentHuggingPriority: LayoutPriority
@@ -49,6 +50,7 @@ proc notifyDidMoveToWindow(view: View)
 proc notifyDidAddSubview(view, subview: View)
 proc notifyWillRemoveSubview(view, subview: View)
 proc setWindowOwner(view: View, window: Responder)
+proc setNeedsUpdateConstraints*(view: View, value: bool)
 proc setNeedsLayout*(view: View, value: bool)
 proc invalidateIntrinsicContentSize*(view: View)
 proc setNeedsDisplaySubtree(view: View)
@@ -595,6 +597,31 @@ proc setFocusVisible*(view: View, focusVisible: bool) =
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
+proc needsUpdateConstraints*(view: View): bool =
+  (not view.isNil) and view.xNeedsUpdateConstraints
+
+proc setNeedsUpdateConstraints*(view: View, value: bool) =
+  if view.isNil or not value:
+    return
+  view.xNeedsUpdateConstraints = true
+
+proc setNeedsUpdateConstraints*(view: View) =
+  view.setNeedsUpdateConstraints(true)
+
+proc runUpdateConstraints(view: View) =
+  if view.isNil:
+    return
+  view.xNeedsUpdateConstraints = false
+  discard view.sendIfHandled(updateConstraints())
+
+proc updateConstraintsForSubtreeIfNeeded*(view: View) =
+  if view.isNil:
+    return
+  for child in view.xSubviews:
+    child.updateConstraintsForSubtreeIfNeeded()
+  if view.xNeedsUpdateConstraints:
+    view.runUpdateConstraints()
+
 proc needsLayout*(view: View): bool =
   (not view.isNil) and view.xNeedsLayout
 
@@ -606,7 +633,7 @@ proc setNeedsLayout*(view: View, value: bool) =
 proc setNeedsLayout*(view: View) =
   view.setNeedsLayout(true)
 
-proc layoutSubtreeIfNeeded*(view: View) =
+proc layoutSubtree(view: View) =
   if view.isNil:
     return
   if view.xNeedsLayout:
@@ -614,7 +641,13 @@ proc layoutSubtreeIfNeeded*(view: View) =
     discard view.sendIfHandled(layoutSubviews())
     discard view.sendIfHandled(layout())
   for child in view.xSubviews:
-    child.layoutSubtreeIfNeeded()
+    child.layoutSubtree()
+
+proc layoutSubtreeIfNeeded*(view: View) =
+  if view.isNil:
+    return
+  view.updateConstraintsForSubtreeIfNeeded()
+  view.layoutSubtree()
 
 proc dirtyRects*(view: View): seq[Rect] =
   if view.isNil:

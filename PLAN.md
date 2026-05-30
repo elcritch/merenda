@@ -24,8 +24,8 @@ NimKit currently includes the core desktop-control slice:
   text editing commands, delegates, and data sources.
 - A view system with frame/bounds geometry, hierarchy/lifecycle hooks,
   optional clipping, coordinate conversion, hit testing, dirty-rect
-  invalidation, `needsLayout`, display preparation/cleanup, style identity, and
-  inherited appearance.
+  invalidation, `needsLayout`, Cocoa-like constraint-update lifecycle hooks,
+  display preparation/cleanup, style identity, and inherited appearance.
 - A window event path with first responder tracking, automatic and manual
   key-view loops, tab/backtab traversal, mouse capture during drag/up tracking,
   hover/active/focus-visible state, repeated click counts, scroll bubbling, and
@@ -203,10 +203,17 @@ exposing a modern intrinsic measurement model where it fits NimKit:
   priorities once intrinsic sizes exist. Start with practical desktop-control
   defaults: controls prefer stretching over clipping, checks/radios hug more
   strongly than text fields, and required priorities are avoided by default.
-- Add autoresizing/layout containers before a constraint solver. A first useful
-  layer can support manual `layoutSubviews`, `sizeToFit`, stack-like examples,
-  and intrinsic-size-aware helper layout. Defer full Auto Layout constraints
-  until controls and examples prove the simpler path insufficient.
+- Build the Cocoa-like layout core before adding higher-level containers.
+  `deps/libs-gui`/GNUstep is a useful architecture reference here, but do not
+  port its code. Use its layering as guidance: view lifecycle and constraint
+  storage live on `View`; intrinsic size contributes priority-like constraints;
+  autoresizing masks can translate into layout inputs; stack/grid containers sit
+  above the same lifecycle.
+- Add layout containers only after the core shapes exist. A first useful
+  container layer can support manual `layoutSubviews`, `sizeToFit`, stack-like
+  examples, and intrinsic-size-aware helper layout. Defer a full Auto Layout
+  solver until the Cocoa-like public model and container examples prove the
+  simpler path insufficient.
 
 How the current theme engine fits:
 
@@ -272,9 +279,35 @@ Concrete task order and status:
    `NSCell.cellSizeForBounds:` currently returns natural `cellSize`. NimKit now
    follows that default for built-in control cells instead of clamping to an
    undersized proposal before wrapping-specific measurement exists.
-9. Not started: Add examples showing `sizeToFit` and intrinsic-size-driven
-   layout for common controls, then broaden to simple stack/container layout if
-   the API holds.
+9. Done: Add the Cocoa-like constraint update lifecycle on `View`:
+   `needsUpdateConstraints`, `setNeedsUpdateConstraints`, `updateConstraints`,
+   and `updateConstraintsForSubtreeIfNeeded`. `layoutSubtreeIfNeeded` should run
+   constraint updates before layout, matching the modern AppKit ordering without
+   porting GNUstep code.
+10. Not started: Add constraint data shapes before solving: `LayoutAttribute`,
+   `LayoutRelation`, `LayoutConstraint`, activation/deactivation, and per-view
+   constraint storage. Keep these as Nim-native types, but align the concepts
+   with modern Cocoa so future anchors, guides, and solver integration have a
+   stable target.
+11. Not started: Add layout item geometry hooks needed by constraints and
+   containers: baseline offsets, alignment rects, and invalidation when
+   intrinsic size, hugging, compression resistance, frame, or hierarchy changes.
+   Stub baseline/alignment behavior conservatively until controls need richer
+   text alignment.
+12. Not started: Add autoresizing mask and
+   `translatesAutoresizingMaskIntoConstraints` semantics. The first pass may
+   apply masks directly or generate simple internal layout inputs; preserve the
+   Cocoa shape while keeping the implementation small.
+13. Not started: Add a small deterministic constraint application subset:
+   width/height constants, edge pins to superview, centers, and intrinsic
+   min/max behavior from hugging and compression resistance. Avoid a full
+   Cassowary-style solver until real examples require it.
+14. Not started: Add intrinsic-aware containers on top of that core, starting
+   with `StackView` and then a simple grid/form layout. Containers should
+   participate in the same update/layout/invalidation lifecycle instead of
+   growing a parallel layout system.
+15. Not started: Add examples showing `sizeToFit`, intrinsic-size-driven
+   layout, stack layout, and the minimal constraint subset for common controls.
 
 ### Controls
 
@@ -330,10 +363,10 @@ Concrete task order and status:
 - Keep strengthening the control/cell split. Centralize cell invalidation,
   value conversion, target/action storage, highlight/tracking behavior, and
   default cell construction so controls stay thin.
-- Stage layout work conservatively. Finish intrinsic content sizes,
-  size-to-fit, layout invalidation, and simple intrinsic-aware containers first;
-  defer a full constraint solver until there are enough controls and examples
-  to justify it.
+- Stage layout work conservatively. Finish intrinsic content sizes, size-to-fit,
+  layout invalidation, and a Cocoa-like constraint lifecycle/model first; then
+  build intrinsic-aware containers on that core. Defer a full constraint solver
+  until the public layout shapes, controls, and examples justify it.
 - Add modal/tracking loop infrastructure before menus, popovers, or drag
   sessions depend on edge-case event ordering.
 - Keep expanding command/key-binding behavior through the responder command path
@@ -341,12 +374,14 @@ Concrete task order and status:
 
 ### Priority Order
 
-- Short term: intrinsic sizing, cleaner cell invalidation/default-cell
-  construction, and measurement tests that prove theme/rendering agreement.
-- Medium term: simple intrinsic-aware layout containers, scrollable list/popup
-  infrastructure, and broader control coverage.
-- Later: constraint layout, loadable/query-like themes, menus/popovers, and
-  broader resource organization.
+- Short term: Cocoa-like layout lifecycle, constraint data shapes, autoresizing
+  mask semantics, cleaner cell invalidation/default-cell construction, and
+  measurement tests that prove theme/rendering/layout agreement.
+- Medium term: simple intrinsic-aware `StackView`/grid containers built on the
+  layout core, scrollable list/popup infrastructure, and broader control
+  coverage.
+- Later: fuller constraint solving, loadable/query-like themes, menus/popovers,
+  and broader resource organization.
 
 ## Test Plan
 
@@ -397,7 +432,9 @@ Concrete task order and status:
 
 ## Non-Goals For Now
 
-- Full Auto Layout compatibility or a constraint solver.
+- Full Auto Layout compatibility or a complete constraint solver. The near-term
+  goal is the Cocoa-like lifecycle and public model, not source compatibility
+  with AppKit or a port of GNUstep internals.
 - Menus.
 - Scroll views.
 - Multiline or rich text editing.
