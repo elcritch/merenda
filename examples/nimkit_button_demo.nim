@@ -1,4 +1,4 @@
-import knutella/nimkit
+import merenda/nimkit
 
 import sigils/selectors
 

@@ -2,7 +2,7 @@ import std/unittest
 
 import std/options
 
-import knutella/nimkit
+import merenda/nimkit
 
 suite "nimkit key bindings":
   test "text helpers normalize printable keys":

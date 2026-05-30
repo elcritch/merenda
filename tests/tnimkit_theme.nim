@@ -1,6 +1,6 @@
 import std/unittest
 
-import knutella/nimkit
+import merenda/nimkit
 
 func brightness(color: Color): float32 =
   color.r + color.g + color.b

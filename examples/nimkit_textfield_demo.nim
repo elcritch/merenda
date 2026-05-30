@@ -1,4 +1,4 @@
-import knutella/nimkit
+import merenda/nimkit
 
 let
   app = sharedApplication()

@@ -1,10 +1,10 @@
 import std/[algorithm, os, strutils]
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("MERENDA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -154,7 +154,7 @@ objcImpl:
     destroyIvarFields(self)
     discard callSuperIdFrom(TableViewController, self, getSelector("dealloc"))
 
-when isMainModule and not defined(knutellaNoExampleMain):
+when isMainModule and not defined(merendaNoExampleMain):
   var app = NSApp()
   var window = newWindow(120, 120, 480, 360, "Cocoa Table View (KNutella Port)")
   var root = newView(0, 0, 480, 360)

@@ -1,6 +1,6 @@
 import std/unittest
-import knutella/objc
-import knutella/appkit/types
+import merenda/objc
+import merenda/appkit/types
 
 type RuntimePayloadObject = object of NSObject
 type RuntimeNimValuePayload = object
@@ -295,7 +295,8 @@ suite "objcImpl runtime generation":
       let cls = getClass(NSRuntimeMappedClass)
       check(not cls.isNil)
       check(getName(cls) == "NXRuntimeMappedClass")
-      let expectedSuper = when KNutellaUseCustomNxObjectRoot: "NXObject" else: "NSObject"
+      let expectedSuper =
+        when KNutellaUseCustomNxObjectRoot: "NXObject" else: "NSObject"
       check(getName(getSuperclass(cls)) == expectedSuper)
 
       var o = NSRuntimeMappedClass.new()

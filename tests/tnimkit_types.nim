@@ -1,6 +1,6 @@
 import std/unittest
 
-import knutella/nimkit
+import merenda/nimkit
 
 suite "nimkit value types":
   test "rect clamps negative size":

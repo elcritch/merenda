@@ -1,6 +1,6 @@
 import std/unittest
-import knutella/objc
-import knutella/objc/assoc
+import merenda/objc
+import merenda/objc/assoc
 
 type AssociatedStateObj = object
   value: int

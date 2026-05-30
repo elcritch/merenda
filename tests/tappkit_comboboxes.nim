@@ -1,8 +1,8 @@
 import std/[unittest, tables, unicode]
 
 import figdraw/fignodes
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 import siwin/window as siwin
 
 proc textNodeVerticalMargins(

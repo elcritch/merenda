@@ -1,7 +1,7 @@
 import std/unittest
 import std/unicode
 
-import knutella/appkit
+import merenda/appkit
 import figdraw/fignodes
 import siwin/window as siwin
 

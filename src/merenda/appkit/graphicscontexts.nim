@@ -548,7 +548,7 @@ objcImpl:
     if self.xFocusStack.isNil:
       self.xFocusStack = nsMutableArray[NSObject]()
     var stack = self.xFocusStack
-    self.xFocusStack .addObject(view.NSObject)
+    self.xFocusStack.addObject(view.NSObject)
 
   method popFocusView*(self: NSGraphicsContext): NSView =
     if self.isNil or self.xFocusStack.isNil or self.xFocusStack.len == 0:

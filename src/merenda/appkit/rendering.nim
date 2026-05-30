@@ -89,7 +89,7 @@ proc dumpRenders(renders: Renders) =
       echo line
 
 proc shouldDebugRenderDump(): bool =
-  getEnv("KNUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+  getEnv("MERENDA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
 const textLayoutBoundsEpsilon = 0.75'f32

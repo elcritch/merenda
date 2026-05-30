@@ -1,5 +1,5 @@
 import std/unittest
-import knutella/objc
+import merenda/objc
 
 objcImpl:
   type NXRaiseInObjcMethodProtocol =

@@ -1,6 +1,6 @@
 import std/unittest
 
-import knutella/nimkit
+import merenda/nimkit
 
 type
   MouseSpyView = ref object of View

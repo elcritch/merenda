@@ -100,7 +100,9 @@ proc toFontHorizontal*(alignment: NSTextAlignment): FontHorizontal {.inline.} =
   of NSCenterTextAlignment: FontHorizontal.Center
   else: FontHorizontal.Left
 
-proc normalizeButtonState*(value: NSCellState, allowsMixedState: bool): NSCellState {.inline.} =
+proc normalizeButtonState*(
+    value: NSCellState, allowsMixedState: bool
+): NSCellState {.inline.} =
   if value == NSMixedState and allowsMixedState:
     return NSMixedState
   if value == NSOnState:

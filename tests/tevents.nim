@@ -2,8 +2,8 @@ import std/unittest
 
 import siwin/window as siwin
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 suite "appkit NSEvent":
   test "event masks and constants match header values":

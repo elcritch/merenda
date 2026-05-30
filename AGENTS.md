@@ -3,7 +3,7 @@
 ## Project Structure & Modules
 - `src/`: Core library modules for the project.
 - `tests/`: Unit tests using Nim's `unittest` plus a `config.nims` that enables ARC/threads and debug flags.
-- Root files: `neonim.nimble` (package manifest), `README.md` (usage), `CHANGES.md` (history).
+- Root files: `merenda.nimble` (package manifest), `README.md` (usage), `CHANGES.md` (history).
 
 ## Build, Test, and Development
 - Install deps (atlas workspace): `atlas install` (ensure `atlas` is installed and configured for your environment). *Never* use Nimble - it's horrible. *Always* use Atlas and it's `deps/` folder and `nim.cfg` file to see paths.
@@ -18,7 +18,7 @@
 - Indentation: 2 spaces; no tabs.
 - Formatting: run `nph src/*.nim` and format any touched test files.
 
-## Nutella / Objective-C Coding Rules (!IMPORTANT!)
+## Merenda / Objective-C Coding Rules (!IMPORTANT!)
 - Make sure to use `objcImpl` methods instead of Nim procs unless copying a C function when implementing OpenSTEP or Cocoa APIs.
 - Every `NS*` object must be an Objective-C class or prototype unless the Cocoatron / Cocoa APIs use a C struct.
 - ObjC fields (ivars) in `objcImpl` must use the `x` prefix (for example `xTitle`, `xFrame`) instead of `_` or ad-hoc prefixes.

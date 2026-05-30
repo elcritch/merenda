@@ -5,20 +5,23 @@ proc objcIsEqualIds(lhs, rhs: IDPtr): bool {.inline.} =
     return true
   if lhs.isNil or rhs.isNil:
     return false
-  let isEqualSend =
-    cast[proc(self: IDPtr, op: SEL, other: IDPtr): bool {.cdecl, varargs.}](objc_msgSend)
+  let isEqualSend = cast[proc(self: IDPtr, op: SEL, other: IDPtr): bool {.
+    cdecl, varargs
+  .}](objc_msgSend)
   isEqualSend(lhs, sel_registerName("isEqual:"), rhs)
 
 proc retainId(id: IDPtr): IDPtr {.inline.} =
   if id.isNil:
     return nil
-  let retainSend = cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
+  let retainSend =
+    cast[proc(self: IDPtr, op: SEL): IDPtr {.cdecl, varargs.}](objc_msgSend)
   retainSend(id, sel_registerName("retain"))
 
 proc releaseId(id: IDPtr) {.inline.} =
   if id.isNil:
     return
-  let releaseSend = cast[proc(self: IDPtr, op: SEL): void {.cdecl, varargs.}](objc_msgSend)
+  let releaseSend =
+    cast[proc(self: IDPtr, op: SEL): void {.cdecl, varargs.}](objc_msgSend)
   releaseSend(id, sel_registerName("release"))
 
 proc retainedAs[T: NSObject](id: IDPtr): T {.inline.} =
@@ -26,7 +29,9 @@ proc retainedAs[T: NSObject](id: IDPtr): T {.inline.} =
     return T(value: nil)
   asTypeRaw[T](retainId(id))
 
-proc findEquivalentKey(data: Table[IDPtr, IDPtr], key: IDPtr, matchedKey: var IDPtr): bool =
+proc findEquivalentKey(
+    data: Table[IDPtr, IDPtr], key: IDPtr, matchedKey: var IDPtr
+): bool =
   for storedKey in data.keys:
     if objcIsEqualIds(storedKey, key):
       matchedKey = storedKey

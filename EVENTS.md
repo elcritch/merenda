@@ -1,6 +1,6 @@
 # Event Handling Plan (Cocotron Model, FigDraw + Siwin Backend)
 
-This document is a detailed implementation guide for bringing Knutella event behavior in line with Cocotron-style AppKit semantics while still using:
+This document is a detailed implementation guide for bringing Merenda event behavior in line with Cocotron-style AppKit semantics while still using:
 
 - Siwin as the native input source
 - FigDraw as the renderer
@@ -88,14 +88,14 @@ This depends on queue-driven `nextEventMatchingMask`.
 
 based on mouse location transitions and tracking options.
 
-## 2. Current Knutella State (Important Gaps)
+## 2. Current Merenda State (Important Gaps)
 
 Current implementation pieces:
 
-- Siwin -> `NSEvent` conversion exists in `src/knutella/appkit/events.nim`
-- direct callback dispatch exists in `src/knutella/appkit/rendering.nim`
-- responder chain forwarding exists in `src/knutella/appkit/responders.nim`
-- basic window dispatch exists in `src/knutella/appkit/windows.nim`
+- Siwin -> `NSEvent` conversion exists in `src/merenda/appkit/events.nim`
+- direct callback dispatch exists in `src/merenda/appkit/rendering.nim`
+- responder chain forwarding exists in `src/merenda/appkit/responders.nim`
+- basic window dispatch exists in `src/merenda/appkit/windows.nim`
 
 Main behavior gaps vs Cocotron:
 
@@ -109,14 +109,14 @@ Main behavior gaps vs Cocotron:
 - Siwin `onTextInput` is not integrated into AppKit keyboard text flow
 - rendering currently includes manual button/combo mouse handling in backend callbacks
 
-## 3. Target Architecture for Knutella
+## 3. Target Architecture for Merenda
 
 Goal: keep Siwin + FigDraw, but move to Cocotron-like event semantics.
 
 ### 3.1 Event Queue Layer
 
 Implement a queue layer in AppKit runtime (either:
-- new `src/knutella/appkit/display.nim` mirroring `NSDisplay`, or
+- new `src/merenda/appkit/display.nim` mirroring `NSDisplay`, or
 - queue fields on `NSApplication`).
 
 Required APIs:
@@ -292,7 +292,7 @@ Decide and execute one compatibility direction:
 
 - Preferred: align event type numeric values and mask semantics with Cocotron/AppKit headers.
 
-Current Knutella diverges in event enum values and uses `set[NSEventType]` masks.  
+Current Merenda diverges in event enum values and uses `set[NSEventType]` masks.  
 For Cocotron parity and future API compatibility, migrate to bitmask-style `NSEventMask` (integer flags), while keeping helper constructors to minimize breakage.
 
 ## 9. Migration Plan (Phased)

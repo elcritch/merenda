@@ -1,10 +1,10 @@
 import std/[os, strutils]
 
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 proc maxFramesFromEnv(defaultValue = -1): int =
-  let raw = getEnv("KNUTELLA_EXAMPLE_FRAMES").strip()
+  let raw = getEnv("MERENDA_EXAMPLE_FRAMES").strip()
   if raw.len == 0:
     return defaultValue
   try:
@@ -13,7 +13,7 @@ proc maxFramesFromEnv(defaultValue = -1): int =
     defaultValue
 
 proc debugRenderDumpEnabled(): bool =
-  getEnv("KNUTELLA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
+  getEnv("MERENDA_APPKIT_DEBUG_RENDER").strip().toLowerAscii() in
     ["1", "true", "yes", "on"]
 
 const
@@ -121,7 +121,7 @@ when isMainModule:
   searchField.setTag(searchTag)
   searchField.setFrame(nsRect(12.cfloat, 14.cfloat, 390.cfloat, 32.cfloat))
   searchField.setStringValue(@ns"ravynos AppKit")
-  searchField.setRecentsAutosaveName(@ns"knutella-example-search")
+  searchField.setRecentsAutosaveName(@ns"merenda-example-search")
   searchField.setRecentSearches(
     nsArray[NSString]([@ns"ravynos", @ns"KNutella", @ns"AppKit"])
   )

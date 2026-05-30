@@ -1,5 +1,5 @@
 import std/unittest
-import knutella/objc
+import merenda/objc
 
 type DestroyProbeObject = object of NSObject
 type RuntimeOwnedSubtype = object of NSObject

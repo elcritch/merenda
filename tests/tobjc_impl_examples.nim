@@ -1,6 +1,6 @@
 import std/unittest
-import knutella/objc
-import knutella/objc/ivar
+import merenda/objc
+import merenda/objc/ivar
 
 var fooBarPingCount = 0
 var hiddenPingCount = 0

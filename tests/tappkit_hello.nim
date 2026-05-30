@@ -3,8 +3,8 @@ import std/[strutils, unittest]
 import pkg/vmath
 import figdraw/fignodes
 import figdraw/windowing/siwinshim as siwinshim
-import knutella/appkit
-import knutella/objc
+import merenda/appkit
+import merenda/objc
 
 objcImpl:
   type TCopyProbe {.impl: NSCopying.} = object of NSObject
@@ -44,7 +44,7 @@ objcImpl:
   method copyWithZone*(self: TDescriptionProbe, zone: pointer): NSObject =
     retain(self).NSObject
 
-suite "knutella appkit hello world":
+suite "merenda appkit hello world":
   proc controlStringValue(control: NSControl): NSString =
     control.stringValue()
 
@@ -283,11 +283,11 @@ suite "knutella appkit hello world":
     check(search.recentsAutosaveName() == @ns"")
     search.setRecentsAutosaveName(@ns"main-search")
     check(search.recentsAutosaveName() == @ns"main-search")
-    let searches = nsArray[NSString]([@ns"knutella", @ns"ravynos"])
+    let searches = nsArray[NSString]([@ns"merenda", @ns"ravynos"])
     search.setRecentSearches(searches)
     let loadedSearches = search.recentSearches()
     check(loadedSearches.len == 2)
-    check(loadedSearches[0] == @ns"knutella")
+    check(loadedSearches[0] == @ns"merenda")
     check(loadedSearches[1] == @ns"ravynos")
 
     var box = NSBox.new()

@@ -391,8 +391,7 @@ objcImpl:
     if self.isTransparent():
       return
     var contentFrame = frame
-    let contextFlipped =
-        NSGraphicsContext.currentContext().isFlipped()
+    let contextFlipped = NSGraphicsContext.currentContext().isFlipped()
     let adjustment = self.getControlSizeAdjustment(contextFlipped)
     contentFrame.size.width = max(contentFrame.size.width - adjustment.size.width, 0.0)
     contentFrame.size.height =

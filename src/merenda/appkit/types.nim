@@ -173,17 +173,15 @@ type
     NSHorizontalRuler = 0
     NSVerticalRuler = 1
 
-type
-  NSWindowDecorations* {.size: sizeof(cint).} = enum
-    NSTitledWindow = 1
-    NSClosableWindow = 2
-    NSMiniaturizableWindow = 3
-    NSResizableWindow = 4
-    NSTexturedBackgroundWindow = 8
-    NSAppKitPrivateWindow = 28
+type NSWindowDecorations* {.size: sizeof(cint).} = enum
+  NSTitledWindow = 1
+  NSClosableWindow = 2
+  NSMiniaturizableWindow = 3
+  NSResizableWindow = 4
+  NSTexturedBackgroundWindow = 8
+  NSAppKitPrivateWindow = 28
 
-const
-  NSBorderlessWindowMask*: set[NSWindowDecorations] = {}
+const NSBorderlessWindowMask*: set[NSWindowDecorations] = {}
 
 type
   NSBackingStoreType* {.size: sizeof(cint).} = enum
@@ -204,17 +202,15 @@ const
   NSChangeGrayCellMask*: set[NSCellMask] = {NSChangeGrayCell}
   NSChangeBackgroundCellMask*: set[NSCellMask] = {NSChangeBackgroundCell}
 
-type
-  NSAutoResizingMask* {.size: sizeof(cint).} = enum
-    NSViewMinXMargin = 0
-    NSViewWidthSizable = 1
-    NSViewMaxXMargin = 2
-    NSViewMinYMargin = 3
-    NSViewHeightSizable = 4
-    NSViewMaxYMargin = 5
+type NSAutoResizingMask* {.size: sizeof(cint).} = enum
+  NSViewMinXMargin = 0
+  NSViewWidthSizable = 1
+  NSViewMaxXMargin = 2
+  NSViewMinYMargin = 3
+  NSViewHeightSizable = 4
+  NSViewMaxYMargin = 5
 
-const
-  NSViewNotSizable*: set[NSAutoResizingMask] = {}
+const NSViewNotSizable*: set[NSAutoResizingMask] = {}
 
 type
   NSBezelStyle* {.size: sizeof(cint).} = enum
@@ -322,23 +318,19 @@ type
     NSTrackingMouseEnteredAndExited = 0
     NSTrackingMouseMoved = 1
     NSTrackingCursorUpdate = 2
-
     NSTrackingActiveWhenFirstResponder = 4
     NSTrackingActiveInKeyWindow = 5
     NSTrackingActiveInActiveApp = 6
     NSTrackingActiveAlways = 7
-
     NSTrackingAssumeInside = 8
     NSTrackingInVisibleRect = 9
     NSTrackingEnabledDuringMouseDrag = 10
 
-const
-  NSScrollerArrowsDefaultSetting* = NSScrollerArrowsMaxEnd
+const NSScrollerArrowsDefaultSetting* = NSScrollerArrowsMaxEnd
 
-type
-  AffineTransformation* = object
-    a, b, c, d: float32
-    tx, ty: float32
+type AffineTransformation* = object
+  a, b, c, d: float32
+  tx, ty: float32
 
 proc nsPoint*(x, y: float32): NSPoint =
   NSPoint(x: x, y: y)
@@ -369,7 +361,7 @@ proc contains*(r: NSRect, x, y: float32): bool =
     y < (r.origin.y + r.size.height)
 
 proc NSEqualSizes*(size0, size1: NSSize): bool =
-   return (size0.width==size1.width) and (size0.height==size1.height)
+  return (size0.width == size1.width) and (size0.height == size1.height)
 
 proc maxX*(rect: NSRect): float32 {.inline.} =
   rect.origin.x + rect.size.width
