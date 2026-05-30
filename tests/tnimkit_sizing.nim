@@ -94,7 +94,7 @@ suite "nimkit sizing":
 
     var appearance = initAppearance()
     appearance[srButton, StyleTextInsets] = initEdgeInsets(0.0, 24.0)
-    appearance[srButton, StyleMinimumHeight] = 40.0
+    appearance[srButton, StyleMinimumSize] = initSize(0.0, 40.0)
     button.setAppearance(appearance)
 
     let styled = button.intrinsicContentSize()

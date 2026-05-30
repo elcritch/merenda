@@ -179,7 +179,7 @@ exposing a modern intrinsic measurement model where it fits NimKit:
   affordances; combo-box cells should measure selected text plus arrow and
   popup/list requirements.
 - Put chrome metrics in `Appearance`/theme, not hardcoded controls. Borders,
-  focus rings, shadows, control insets, minimum heights, indicator metrics,
+  focus rings, shadows, control insets, minimum sizes, indicator metrics,
   arrow metrics, and state/style-specific margins should be resolved through
   style tokens and concrete style objects before drawing or measuring.
 - Add modern measurement procs on NimKit objects: `intrinsicContentSize`,
@@ -223,7 +223,7 @@ How the current theme engine fits:
   `indicatorSpacing`; combo boxes should use `ComboBoxStyle.arrowWidth` and text
   insets.
 - Add missing metric tokens only when measurement needs them:
-  minimum control width/height, content baseline offsets, popup row height,
+  minimum control sizes, content baseline offsets, popup row height,
   and any control-size-specific insets. Keep them as generic `StyleKey[T]`
   values so future query/CSS-style matching can override them by role, state,
   id, or class.
@@ -251,9 +251,9 @@ Concrete task order and status:
    consume resolved `ButtonStyle`, `ChoiceButtonStyle`, `TextFieldStyle`, and
    `ComboBoxStyle` values.
 3. Done: Implement button/checkbox/radio intrinsic sizing from title,
-   indicator, control insets, focus-ring allowance, and minimum control heights.
+   indicator, control insets, focus-ring allowance, and minimum control sizes.
 4. Done: Implement text-field and combo-box intrinsic sizing from text metrics,
-   text/editor insets, arrow/indicator metrics, and minimum control heights.
+   text/editor insets, arrow/indicator metrics, and minimum control sizes.
 5. Done: Add `Control.sizeThatFits`, `Control.intrinsicContentSize`,
    `sizeToFit`, and intrinsic-size invalidation from cell/style changes.
 6. Mostly done: Wire intrinsic invalidation into `setNeedsLayout` on parents and

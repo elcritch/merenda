@@ -80,11 +80,13 @@ suite "nimkit theme":
       parent = newStyleTokenStore()
       child = newStyleTokenStore(parent)
       accent = initColor(0.7, 0.2, 0.3, 1.0)
+      minSize = initSize(24.0, 18.0)
       padding = initEdgeInsets(1, 2, 3, 4)
       shadows = @[dropShadow(initColor(0, 0, 0, 0.25), y = 2.0, blur = 4.0)]
 
     parent.setToken("accent", accent)
     parent.setToken("space", 6.0)
+    parent.setToken("minimum.size", minSize)
     parent.setToken("padding", padding)
     parent.setToken("shadow", shadows)
     child.setToken("nested.accent", styleToken("accent"))
@@ -97,6 +99,7 @@ suite "nimkit theme":
     let appearance = Appearance(theme: Theme(tokens: child))
     check appearance.colorToken("nested.accent", initColor(0, 0, 0, 1)) == accent
     check appearance.lengthToken("space", 0.0) == 6.0
+    check appearance.sizeToken("minimum.size", initSize(0, 0)) == minSize
     check appearance.insetsToken("padding", initEdgeInsets(0)) == padding
     check appearance.shadowsToken("shadow", @[]) == shadows
     check appearance.colorToken("missing", accent) == accent
@@ -107,6 +110,7 @@ suite "nimkit theme":
       buttonFill = initColor(0.11, 0.22, 0.33, 1.0)
       focusRing = initColor(0.24, 0.42, 0.90, 0.75)
       fieldText = initColor(0.44, 0.55, 0.66, 1.0)
+      buttonMinimum = initSize(72.0, 32.0)
       buttonInsets = initEdgeInsets(2.0, 10.0)
       buttonShadows =
         @[
@@ -119,6 +123,7 @@ suite "nimkit theme":
     appearance[srButton, StyleCornerRadius] = 9.0
     appearance[srButton, StyleFocusRingColor] = focusRing
     appearance[srButton, StyleTextInsets] = buttonInsets
+    appearance[srButton, StyleMinimumSize] = buttonMinimum
     appearance[srButton, StyleBoxShadows] = buttonShadows
     appearance[srTextField, StyleTextColor] = styleToken("field.text.override")
     appearance[srTextField, StyleBorderWidth] = 4.0
@@ -134,6 +139,7 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingColor == focusRing
     check buttonStyle.box.shadows == buttonShadows
     check buttonStyle.text.insets == buttonInsets
+    check buttonStyle.minSize == buttonMinimum
     check textFieldStyle.text.color == fieldText
     check textFieldStyle.box.borderWidth == 4.0
     let textPatch = appearance[srTextField, StyleTextColor]
@@ -206,10 +212,12 @@ suite "nimkit theme":
     check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
     check buttonStyle.box.cornerRadius == 8.0
     check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
+    check buttonStyle.minSize == initSize(0.0, 24.0)
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
 
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
+    check checkBoxStyle.minSize == initSize(0.0, 18.0)
     check checkBoxStyle.indicator.fill == initColor(0.20, 0.48, 0.86, 1.0)
     check checkBoxStyle.indicator.cornerRadius == 6.0
     check checkBoxStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
@@ -227,12 +235,14 @@ suite "nimkit theme":
     check textFieldStyle.box.borderColor == initColor(0.72, 0.75, 0.80, 1.0)
     check textFieldStyle.box.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
     check textFieldStyle.text.color == initColor(0.2, 0.3, 0.4, 1.0)
+    check textFieldStyle.minSize == initSize(80.0, 24.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
 
     check comboBoxStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
     check comboBoxStyle.box.borderColor == initColor(0.30, 0.50, 0.84, 1.0)
     check comboBoxStyle.box.cornerRadius == 6.0
+    check comboBoxStyle.minSize == initSize(90.0, 24.0)
     check comboBoxStyle.arrowWidth == 24.0
     check comboBoxStyle.arrowColor == initColor(0.20, 0.22, 0.26, 1.0)
     check comboBoxStyle.comboBoxArrowRect(initRect(0, 0, 100, 28)) ==
@@ -241,3 +251,4 @@ suite "nimkit theme":
       initRect(8, 0, 60, 28)
     check comboBoxItemStyle.box.fill == initColor(0.20, 0.48, 0.86, 1.0)
     check comboBoxItemStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
+    check comboBoxItemStyle.minSize == initSize(0.0, 22.0)
