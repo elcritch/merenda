@@ -21,6 +21,8 @@ type Window* = ref object of Responder
   xInheritedAppearance: Appearance
   xHasInheritedAppearance: bool
   xFirstResponder: Responder
+  xInitialFirstResponder: View
+  xAutorecalculatesKeyViewLoop: bool
   xKeyBindings: KeyBindingTable
   xHostWindow: HostWindow
   xMouseCaptureView: View
@@ -43,9 +45,47 @@ type EventDispatchResult = object
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
 
+proc makeFirstResponder*(window: Window, responder: Responder): bool
+proc initialFirstResponder*(window: Window): View
+proc setInitialFirstResponder*(window: Window, view: View)
+proc autorecalculatesKeyViewLoop*(window: Window): bool
+proc setAutorecalculatesKeyViewLoop*(window: Window, value: bool)
+proc recalculateKeyViewLoop*(window: Window)
+proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.}
+proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.}
+proc effectiveAppearance*(window: Window): Appearance
+proc dispatchKeyEventInChain(
+  window: Window, target: Responder, event: types.KeyEvent
+): EventDispatchResult
+
+proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View
+
+protocol DefaultWindowKeyViewCommands of KeyViewCommandProtocol:
+  method insertTab(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewFollowingView(start)
+
+  method insertBacktab(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewPrecedingView(start)
+
+  method selectNextKeyView(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewFollowingView(start)
+
+  method selectPreviousKeyView(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewPrecedingView(start)
+
 proc newWindow*(frame: Rect, title: string): Window =
-  result = Window(xFrame: frame, xTitle: title, xKeyBindings: initDefaultKeyBindings())
+  result = Window(
+    xFrame: frame,
+    xTitle: title,
+    xAutorecalculatesKeyViewLoop: true,
+    xKeyBindings: initDefaultKeyBindings(),
+  )
   initResponder(result)
+  discard result.withProtocol(DefaultWindowKeyViewCommands)
 
 proc newWindow*(x, y, width, height: float32, title: string): Window =
   newWindow(initRect(x, y, width, height), title)
@@ -149,12 +189,6 @@ proc bindShortcuts*(
 ) =
   window.bindShortcut(key, modifiers, selector)
 
-proc makeFirstResponder*(window: Window, responder: Responder): bool
-proc effectiveAppearance*(window: Window): Appearance
-proc dispatchKeyEventInChain(
-  window: Window, target: Responder, event: types.KeyEvent
-): EventDispatchResult
-
 proc propagateAppearance(window: Window) =
   if window.isNil or window.xContentView.isNil:
     return
@@ -256,6 +290,8 @@ proc setContentView*(window: Window, view: View) =
 
   window.xContentView = view
   window.clearMouseState()
+  if window.xAutorecalculatesKeyViewLoop:
+    window.recalculateKeyViewLoop()
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title
@@ -265,8 +301,12 @@ proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool =
-  if not responder.isNil and not responder.acceptsFirstResponder():
-    return false
+  if not responder.isNil:
+    if responder of View:
+      if not View(responder).canBecomeKeyView():
+        return false
+    elif not responder.acceptsFirstResponder():
+      return false
   if not window.xFirstResponder.isNil:
     if not window.xFirstResponder.resignFirstResponder():
       return false
@@ -274,6 +314,117 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
     return false
   window.xFirstResponder = responder
   true
+
+proc initialFirstResponder*(window: Window): View =
+  if window.isNil:
+    return nil
+  window.xInitialFirstResponder
+
+proc setInitialFirstResponder*(window: Window, view: View) =
+  if window.isNil:
+    return
+  window.xInitialFirstResponder = view
+
+proc autorecalculatesKeyViewLoop*(window: Window): bool =
+  (not window.isNil) and window.xAutorecalculatesKeyViewLoop
+
+proc setAutorecalculatesKeyViewLoop*(window: Window, value: bool) =
+  if window.isNil:
+    return
+  window.xAutorecalculatesKeyViewLoop = value
+
+proc collectKeyViews(view: View, views: var seq[View]) =
+  if view.isNil:
+    return
+  views.add view
+  for child in view.subviews:
+    child.collectKeyViews(views)
+
+proc recalculateKeyViewLoop*(window: Window) =
+  if window.isNil or window.xContentView.isNil:
+    if not window.isNil:
+      window.xInitialFirstResponder = nil
+    return
+
+  var views: seq[View]
+  window.xContentView.collectKeyViews(views)
+  for view in views:
+    view.setNextKeyView(nil)
+    view.setPreviousKeyView(nil)
+
+  if views.len == 0:
+    window.xInitialFirstResponder = nil
+    return
+
+  for idx, view in views:
+    view.setNextKeyView(views[(idx + 1) mod views.len])
+
+  window.xInitialFirstResponder = window.xContentView.nextValidKeyView()
+
+proc firstKeyViewCandidate(window: Window, forward: bool): View =
+  if window.isNil:
+    return nil
+  let initial = window.xInitialFirstResponder
+  if not initial.isNil:
+    if initial.canBecomeKeyView():
+      return initial
+    if forward:
+      return initial.nextValidKeyView()
+    return initial.previousValidKeyView()
+  if window.xContentView.isNil:
+    return nil
+  if forward:
+    window.xContentView.nextValidKeyView()
+  else:
+    window.xContentView.previousValidKeyView()
+
+proc selectKeyView(window: Window, view: View): bool =
+  if window.isNil or view.isNil:
+    return false
+  if not window.makeFirstResponder(view):
+    return false
+  discard
+    view.sendLocalIfHandled(selectText(), ActionArgs(sender: DynamicAgent(window)))
+  true
+
+proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
+  if not sender.isNil and sender of View:
+    return View(sender)
+  if not window.isNil and not window.xFirstResponder.isNil and
+      window.xFirstResponder of View:
+    return View(window.xFirstResponder)
+
+proc prepareKeyViewLoop(window: Window) =
+  if not window.isNil and window.xAutorecalculatesKeyViewLoop:
+    window.recalculateKeyViewLoop()
+
+proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.} =
+  if window.isNil:
+    return false
+  window.prepareKeyViewLoop()
+  var candidate: View
+  if not view.isNil:
+    candidate = view.nextValidKeyView()
+  if candidate.isNil:
+    candidate = window.firstKeyViewCandidate(forward = true)
+  window.selectKeyView(candidate)
+
+proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.} =
+  if window.isNil:
+    return false
+  window.prepareKeyViewLoop()
+  var candidate: View
+  if not view.isNil:
+    candidate = view.previousValidKeyView()
+  if candidate.isNil:
+    candidate = window.firstKeyViewCandidate(forward = false)
+  window.selectKeyView(candidate)
+
+proc selectNextKeyView*(window: Window): bool {.discardable.} =
+  window.selectKeyViewFollowingView(window.keyViewCommandStartView(nil))
+
+proc selectPreviousKeyView*(window: Window): bool {.discardable.} =
+  window.selectKeyViewPrecedingView(window.keyViewCommandStartView(nil))
 
 proc buildRenders*(window: Window): Renders =
   nimkitRendering.buildRenders(window.xContentView, window.effectiveAppearance())

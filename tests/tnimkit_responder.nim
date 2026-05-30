@@ -213,6 +213,77 @@ suite "nimkit responder":
     check trackingEvents == @["parent.key:x"]
     check trackingModifiers == @[{kmCommand}]
 
+  test "tab moves first responder through automatic key view loop":
+    let
+      window = newWindow(0, 0, 320, 160, "Key views")
+      root = newView(0, 0, 320, 160)
+      first = newButton(10, 10, 80, 28, "First")
+      field = newTextField(100, 10, 100, 28, "value")
+      last = newButton(210, 10, 80, 28, "Last")
+
+    root.addSubview(first)
+    root.addSubview(field)
+    root.addSubview(last)
+    window.setContentView(root)
+
+    check window.initialFirstResponder == first
+    check window.makeFirstResponder(first)
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == field
+    check field.selectedRange == initTextRange(0, 5)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check window.firstResponder == first
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check window.firstResponder == last
+
+  test "tab skips views that cannot become key views":
+    let
+      window = newWindow(0, 0, 320, 160, "Key view skips")
+      root = newView(0, 0, 320, 160)
+      plain = newView(10, 10, 60, 28)
+      disabled = newButton(80, 10, 80, 28, "Disabled")
+      hidden = newButton(170, 10, 60, 28, "Hidden")
+      enabled = newButton(240, 10, 60, 28, "OK")
+
+    disabled.setEnabled(false)
+    hidden.setHidden(true)
+    root.addSubview(plain)
+    root.addSubview(disabled)
+    root.addSubview(hidden)
+    root.addSubview(enabled)
+    window.setContentView(root)
+
+    check not window.makeFirstResponder(disabled)
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == enabled
+
+  test "manual key view links are used when automatic loop is disabled":
+    let
+      window = newWindow(0, 0, 320, 160, "Manual key views")
+      root = newView(0, 0, 320, 160)
+      first = newButton(10, 10, 80, 28, "First")
+      skipped = newButton(100, 10, 80, 28, "Skipped")
+      last = newButton(190, 10, 80, 28, "Last")
+
+    root.addSubview(first)
+    root.addSubview(skipped)
+    root.addSubview(last)
+    first.setNextKeyView(last)
+    last.setNextKeyView(first)
+    window.setAutorecalculatesKeyViewLoop(false)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(first)
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == last
+
   test "doCommandBySelector raises for unhandled commands":
     let responder = newResponder()
 
