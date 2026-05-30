@@ -173,6 +173,11 @@ type
     btCheckBox
     btRadio
 
+  PopupPresentation* = enum
+    ppAutomatic ## Use popup windows when available and inline rendering otherwise.
+    ppWindow ## Use a separate popup window only.
+    ppInline ## Draw the popup inline in the owner window.
+
 proc initPoint*(x, y: float32): Point =
   Point(x: x, y: y)
 

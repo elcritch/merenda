@@ -91,3 +91,31 @@ suite "nimkit application":
       finally:
         combo.closePopup()
         window.close()
+
+  test "native combo boxes can force inline popup drawing":
+    block nativeInlineComboPopup:
+      let
+        app = newApplication()
+        window = newWindow(80, 80, 260, 160, "Nimkit Inline Combo Popup")
+        root = newView(0, 0, 260, 160)
+        combo = newComboBox(16, 16, 140, 24, ["Low", "Medium", "High"])
+
+      window.setPopupPresentation(ppInline)
+      root.addSubview(combo)
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      try:
+        check app.runForFrames(1) == 1
+        check window.nativeReady
+        check window.mouseDownAt(initPoint(24, 24))
+        check combo.popupOpen
+        let renders = window.buildRenders()
+        check PopupDrawLevel in renders.layers
+      except CatchableError:
+        skip()
+        break nativeInlineComboPopup
+      finally:
+        combo.closePopup()
+        window.close()
