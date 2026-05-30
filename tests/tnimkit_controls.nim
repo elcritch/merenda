@@ -37,6 +37,40 @@ suite "nimkit controls":
     check root.clickAt(initPoint(24, 72))
     check label.stringValue == "Clicked"
 
+  test "button mouse tracking cancels click when released outside":
+    let
+      window = newWindow(0, 0, 240, 180, "Button tracking")
+      root = newView(0, 0, 240, 180)
+      button = newButton(16, 64, 120, 36, "Click")
+      action = actionSelector("trackedClick")
+
+    var actionCount = 0
+
+    proc onClicked(sender: DynamicAgent) =
+      check sender == DynamicAgent(button)
+      inc actionCount
+
+    let target = newActionTarget(action, onClicked)
+
+    button.setTarget(target)
+    button.setAction(action)
+    root.addSubview(button)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(24, 72))
+    check button.isHighlighted
+    check window.mouseDraggedAt(initPoint(200, 150))
+    check not button.isHighlighted
+    check window.mouseUpAt(initPoint(200, 150))
+    check actionCount == 0
+
+    check window.mouseDownAt(initPoint(24, 72))
+    check window.mouseDraggedAt(initPoint(200, 150))
+    check window.mouseDraggedAt(initPoint(24, 72))
+    check button.isHighlighted
+    check window.mouseUpAt(initPoint(24, 72))
+    check actionCount == 1
+
   test "toggle button cycles state during performClick":
     var actionCount = 0
     let

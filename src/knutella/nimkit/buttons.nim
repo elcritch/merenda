@@ -36,10 +36,16 @@ protocol DefaultButtonEvents of ResponderEventProtocol:
     if button.isEnabled and event.button == mbPrimary:
       button.setHighlighted(true)
 
+  method mouseDragged(button: Button, event: MouseEvent) =
+    if button.isEnabled and event.button == mbPrimary:
+      button.setHighlighted(button.pointInside(event.location))
+
   method mouseUp(button: Button, event: MouseEvent) =
     if button.isEnabled and event.button == mbPrimary:
+      let clicked = button.pointInside(event.location)
       button.setHighlighted(false)
-      button.buttonPerformClick(ActionArgs(sender: button))
+      if clicked:
+        button.buttonPerformClick(ActionArgs(sender: button))
 
 protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
