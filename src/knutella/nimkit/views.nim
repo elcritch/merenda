@@ -21,6 +21,8 @@ type View* = ref object of Responder
   xHovered: bool
   xActive: bool
   xNeedsLayout: bool
+  xNextKeyView: View
+  xPreviousKeyView: View
   xSuperview: View
   xWindow: Responder
   xSubviews: seq[View]
@@ -42,6 +44,7 @@ proc notifyWillRemoveSubview(view, subview: View)
 proc setWindowOwner(view: View, window: Responder)
 proc setNeedsLayout*(view: View, value: bool)
 proc setNeedsDisplaySubtree(view: View)
+proc viewCanBecomeKeyView*(view: View): bool
 proc effectiveAppearance*(view: View): Appearance
 proc setInheritedAppearance*(view: View, appearance: Appearance)
 proc clearInheritedAppearance*(view: View)
@@ -51,6 +54,8 @@ protocol ViewProtocolInternal from View:
   property bounds -> Rect
   property needsDisplay -> bool
   property backgroundColor -> Color
+  property nextKeyView -> View
+  property previousKeyView -> View
 
   method frame(self: View): Rect =
     self.xFrame
@@ -129,6 +134,68 @@ protocol ViewProtocolInternal from View:
     self.xBackgroundColor = color
     self.setNeedsDisplay(true)
 
+  method nextKeyView(self: View): View =
+    self.xNextKeyView
+
+  method setNextKeyView(self: View, next: View) =
+    if self.isNil or self.xNextKeyView == next:
+      return
+
+    let oldNext = self.xNextKeyView
+    if not oldNext.isNil and oldNext.xPreviousKeyView == self:
+      oldNext.xPreviousKeyView = nil
+
+    self.xNextKeyView = next
+    if not next.isNil:
+      let oldPrevious = next.xPreviousKeyView
+      if not oldPrevious.isNil and oldPrevious != self and
+          oldPrevious.xNextKeyView == next:
+        oldPrevious.xNextKeyView = nil
+      next.xPreviousKeyView = self
+
+  method previousKeyView(self: View): View =
+    self.xPreviousKeyView
+
+  method setPreviousKeyView(self: View, previous: View) =
+    if self.isNil or self.xPreviousKeyView == previous:
+      return
+    if previous.isNil:
+      let oldPrevious = self.xPreviousKeyView
+      if not oldPrevious.isNil and oldPrevious.xNextKeyView == self:
+        oldPrevious.xNextKeyView = nil
+      self.xPreviousKeyView = nil
+      return
+    previous.setNextKeyView(self)
+
+  method canBecomeKeyView*(self: View): bool =
+    self.viewCanBecomeKeyView()
+
+  method nextValidKeyView*(self: View): View =
+    var candidate = self.nextKeyView()
+    var hopCount = 0
+    while not candidate.isNil and hopCount < 4096:
+      if candidate == self:
+        if candidate.canBecomeKeyView():
+          return candidate
+        return nil
+      if candidate.canBecomeKeyView():
+        return candidate
+      candidate = candidate.nextKeyView()
+      inc hopCount
+
+  method previousValidKeyView*(self: View): View =
+    var candidate = self.previousKeyView()
+    var hopCount = 0
+    while not candidate.isNil and hopCount < 4096:
+      if candidate == self:
+        if candidate.canBecomeKeyView():
+          return candidate
+        return nil
+      if candidate.canBecomeKeyView():
+        return candidate
+      candidate = candidate.previousKeyView()
+      inc hopCount
+
   method isHidden*(self: View): bool =
     self.xHidden
 
@@ -182,6 +249,8 @@ protocol ViewProtocolInternal from View:
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.clearNextResponder()
+    self.setNextKeyView(nil)
+    self.setPreviousKeyView(nil)
     self.setWindowOwner(nil)
     self.clearInheritedAppearance()
     self.notifyDidMoveToSuperview()
@@ -240,6 +309,10 @@ proc setNeedsDisplaySubtree(view: View) =
   view.setNeedsDisplay(true)
   for child in view.xSubviews:
     child.setNeedsDisplaySubtree()
+
+proc viewCanBecomeKeyView*(view: View): bool =
+  (not view.isNil) and view.acceptsFirstResponder() and
+    not view.isHiddenOrHasHiddenAncestor()
 
 proc hasAppearance*(view: View): bool =
   (not view.isNil) and view.xHasAppearance

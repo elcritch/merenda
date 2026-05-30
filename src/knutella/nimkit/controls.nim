@@ -28,6 +28,10 @@ protocol ControlProtocolInternal from Control:
 
   method setEnabled*(self: Control, enabled: bool) =
     self.cell().setEnabled(enabled)
+    self.setNeedsDisplay(true)
+
+  method canBecomeKeyView*(self: Control): bool =
+    self.isEnabled() and View(self).viewCanBecomeKeyView()
 
   method sendAction*(self: Control): bool =
     let target = self.target()

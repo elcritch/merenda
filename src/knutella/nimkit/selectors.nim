@@ -77,6 +77,12 @@ protocol TextEditingCommandProtocolInternal:
   method moveToBeginningOfLineAndModifySelection*(args: ActionArgs) {.optional.}
   method moveToEndOfLineAndModifySelection*(args: ActionArgs) {.optional.}
 
+protocol KeyViewCommandProtocolInternal:
+  method insertTab*(args: ActionArgs) {.optional.}
+  method insertBacktab*(args: ActionArgs) {.optional.}
+  method selectNextKeyView*(args: ActionArgs) {.optional.}
+  method selectPreviousKeyView*(args: ActionArgs) {.optional.}
+
 protocol ViewDrawingProtocolInternal:
   method draw*(context: DrawContext) {.optional.}
 
@@ -93,5 +99,6 @@ let
   ButtonActionProtocol* = ButtonActionProtocolInternal
   TextInputProtocol* = TextInputProtocolInternal
   TextEditingCommandProtocol* = TextEditingCommandProtocolInternal
+  KeyViewCommandProtocol* = KeyViewCommandProtocolInternal
   ViewDrawingProtocol* = ViewDrawingProtocolInternal
   ViewLayoutProtocol* = ViewLayoutProtocolInternal
