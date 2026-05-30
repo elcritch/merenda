@@ -4,21 +4,79 @@ import ./types
 
 export controls
 
-type Button* = ref object of Control
-  xTitle: string
-  xHighlighted: bool
-  xState: ButtonState
-  xButtonType: ButtonType
-  xAllowsMixedState: bool
+type
+  Button* = ref object of Control
 
-proc nextButtonState(button: Button): ButtonState =
-  case button.xState
-  of bsOff:
-    bsOn
-  of bsOn:
-    if button.xAllowsMixedState: bsMixed else: bsOff
-  of bsMixed:
-    bsOff
+  ButtonCell* = ref object of ActionCell
+    xTitle: string
+    xButtonType: ButtonType
+
+protocol ButtonProtocolInternal:
+  property title -> string
+  property state -> ButtonState
+  property buttonType -> ButtonType
+  property allowsMixedState -> bool
+
+  method isHighlighted*(): bool
+  method setHighlighted*(highlighted: bool)
+
+protocol DefaultButtonCell of ButtonProtocolInternal:
+  method title(cell: ButtonCell): string =
+    cell.xTitle
+
+  method setTitle(cell: ButtonCell, title: string) =
+    if cell.xTitle == title:
+      return
+    cell.xTitle = title
+    cell.updateControlView()
+
+  method state(cell: ButtonCell): ButtonState =
+    Cell(cell).state()
+
+  method setState(cell: ButtonCell, state: ButtonState) =
+    Cell(cell).setState(state)
+
+  method buttonType(cell: ButtonCell): ButtonType =
+    cell.xButtonType
+
+  method setButtonType(cell: ButtonCell, buttonType: ButtonType) =
+    if cell.xButtonType == buttonType:
+      return
+    cell.xButtonType = buttonType
+    if buttonType == btRadio:
+      cell.setAllowsMixedState(false)
+    cell.updateControlView()
+
+  method allowsMixedState(cell: ButtonCell): bool =
+    Cell(cell).allowsMixedState()
+
+  method setAllowsMixedState(cell: ButtonCell, value: bool) =
+    if value and cell.xButtonType == btRadio:
+      return
+    Cell(cell).setAllowsMixedState(value)
+
+  method isHighlighted(cell: ButtonCell): bool =
+    Cell(cell).isHighlighted()
+
+  method setHighlighted(cell: ButtonCell, highlighted: bool) =
+    Cell(cell).setHighlighted(highlighted)
+
+proc initButtonCellFields*(cell: ButtonCell, title: string) =
+  initActionCellFields(cell)
+  cell.xTitle = title
+  cell.xButtonType = btMomentary
+  discard cell.withProtocol(DefaultButtonCell)
+
+proc newButtonCell*(title = "Button"): ButtonCell =
+  result = ButtonCell()
+  initButtonCellFields(result, title)
+
+proc buttonCell*(button: Button): ButtonCell =
+  if button.isNil:
+    return nil
+  let controlCell = button.cell()
+  if controlCell of ButtonCell:
+    return ButtonCell(controlCell)
 
 proc clearRadioSiblings(button: Button) =
   let parent = button.superview
@@ -27,23 +85,22 @@ proc clearRadioSiblings(button: Button) =
   for sibling in parent.subviews:
     if sibling != button and sibling of Button:
       let siblingButton = Button(sibling)
-      if siblingButton.xButtonType == btRadio and siblingButton.xState != bsOff:
-        siblingButton.xState = bsOff
-        siblingButton.setNeedsDisplay(true)
+      if siblingButton.buttonType == btRadio and
+          siblingButton.action() == button.action() and siblingButton.state != bsOff:
+        siblingButton.setState(bsOff)
 
 proc buttonPerformClick(button: Button, args: ActionArgs) =
   if not button.isEnabled or args.sender.isNil:
     return
-  case button.xButtonType
+  case button.buttonType
   of btMomentary:
     discard
   of btToggle, btCheckBox:
-    button.xState = button.nextButtonState()
+    button.buttonCell().setNextState()
   of btRadio:
-    button.xState = bsOn
+    button.setState(bsOn)
+  if button.sendAction() and button.buttonType == btRadio:
     button.clearRadioSiblings()
-  button.setNeedsDisplay(true)
-  discard button.sendAction()
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseDown(button: Button, event: MouseEvent) =
@@ -65,70 +122,12 @@ protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args)
 
-protocol ButtonProtocolInternal from Button:
-  property title -> string
-  property state -> ButtonState
-  property buttonType -> ButtonType
-  property allowsMixedState -> bool
-
-  method title(button: Button): string =
-    button.xTitle
-
-  method setTitle(button: Button, title: string) =
-    if button.xTitle == title:
-      return
-    button.xTitle = title
-    button.setNeedsDisplay(true)
-
-  method state(button: Button): ButtonState =
-    button.xState
-
-  method setState(button: Button, state: ButtonState) =
-    if button.xState == state:
-      return
-    button.xState = state
-    button.setNeedsDisplay(true)
-
-  method buttonType(button: Button): ButtonType =
-    button.xButtonType
-
-  method setButtonType(button: Button, buttonType: ButtonType) =
-    if button.xButtonType == buttonType:
-      return
-    button.xButtonType = buttonType
-    if buttonType == btRadio:
-      button.xAllowsMixedState = false
-      if button.xState == bsMixed:
-        button.xState = bsOff
-    button.setNeedsDisplay(true)
-
-  method allowsMixedState(button: Button): bool =
-    button.xAllowsMixedState
-
-  method setAllowsMixedState(button: Button, value: bool) =
-    if value and button.xButtonType == btRadio:
-      return
-    button.xAllowsMixedState = value
-    if not value and button.state == bsMixed:
-      button.setState(bsOff)
-
-  method isHighlighted*(button: Button): bool =
-    button.xHighlighted
-
-  method setHighlighted*(button: Button, highlighted: bool) =
-    if button.xHighlighted == highlighted:
-      return
-    button.xHighlighted = highlighted
-    button.setNeedsDisplay(true)
-
 proc initButtonFields*(button: Button, frame: Rect, title: string) =
   initControlFields(button, frame)
-  button.xTitle = title
-  button.xButtonType = btMomentary
+  button.setCell(newButtonCell(title))
   button.setAcceptsFirstResponder(true)
   discard button.withProtocol(DefaultButtonEvents)
   discard button.withProtocol(DefaultButtonAction)
-  discard button.withProto()
 
 proc newButton*(frame: Rect, title: string): Button =
   result = Button()
