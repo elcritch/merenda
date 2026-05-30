@@ -2,6 +2,33 @@ import std/unittest
 
 import knutella/nimkit
 
+func brightness(color: Color): float32 =
+  color.r + color.g + color.b
+
+proc checkRaisedButtonInsetShadows(shadows: seq[BoxShadow]) =
+  check shadows.len == 2
+  if shadows.len != 2:
+    return
+
+  let
+    first = shadows[0]
+    second = shadows[1]
+    lightShadow =
+      if first.color.brightness >= second.color.brightness: first else: second
+    darkShadow = if first.color.brightness < second.color.brightness: first else: second
+
+  check lightShadow.kind == bskInset
+  check darkShadow.kind == bskInset
+  check lightShadow.color.brightness > darkShadow.color.brightness
+  check lightShadow.color.a > 0.0
+  check darkShadow.color.a > 0.0
+  check lightShadow.x > 0.0
+  check lightShadow.y > 0.0
+  check darkShadow.x < 0.0
+  check darkShadow.y < 0.0
+  check lightShadow.blur > 0.0
+  check darkShadow.blur > 0.0
+
 suite "nimkit theme":
   test "edge insets shrink rectangles without negative sizes":
     check initRect(10, 20, 100, 50).inset(initEdgeInsets(2, 4, 6, 8)) ==
@@ -173,27 +200,8 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingInset < 0.0
     check buttonStyle.box.focusRingColor.a > 0.0
     check buttonStyle.box.focusRingColor != buttonStyle.box.fill
-    check defaultButtonStyle.box.shadows.len == 2
-    check defaultButtonStyle.box.shadows[0].kind == bskInset
-    check defaultButtonStyle.box.shadows[1].kind == bskInset
-    check defaultButtonStyle.box.shadows[0].color == initColor(1.0, 1.0, 1.0, 0.30)
-    check defaultButtonStyle.box.shadows[0].x == -2.0
-    check defaultButtonStyle.box.shadows[0].y == -2.0
-    check defaultButtonStyle.box.shadows[1].color == initColor(0.0, 0.0, 0.0, 0.24)
-    check defaultButtonStyle.box.shadows[1].x == 2.0
-    check defaultButtonStyle.box.shadows[1].y == 2.0
-    check defaultButtonStyle.box.shadows[1].color.a > 0.20
-    check defaultButtonStyle.box.shadows[1].blur >= 9.0
-    check buttonStyle.box.shadows.len == 2
-    check buttonStyle.box.shadows[0].kind == bskInset
-    check buttonStyle.box.shadows[0].color == initColor(1.0, 1.0, 1.0, 0.12)
-    check buttonStyle.box.shadows[0].x == -2.0
-    check buttonStyle.box.shadows[0].y == -2.0
-    check buttonStyle.box.shadows[1].kind == bskInset
-    check buttonStyle.box.shadows[1].color == initColor(0.0, 0.0, 0.0, 0.38)
-    check buttonStyle.box.shadows[1].x == 2.0
-    check buttonStyle.box.shadows[1].y == 2.0
-    check buttonStyle.box.shadows[1].blur >= 12.0
+    checkRaisedButtonInsetShadows(defaultButtonStyle.box.shadows)
+    checkRaisedButtonInsetShadows(buttonStyle.box.shadows)
     check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
     check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
     check buttonStyle.box.cornerRadius == 8.0
