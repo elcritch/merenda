@@ -11,7 +11,7 @@ useful, and backend/runtime details kept behind NimKit boundaries.
 
 ## Current State
 
-NimKit already has the first useful vertical slice:
+NimKit currently includes:
 
 - `Application`, `Window`, `Responder`, `View`, `Control`, `Button`,
   checkbox/radio button variants, `TextField`, and `ComboBox`.
@@ -22,8 +22,8 @@ NimKit already has the first useful vertical slice:
   tracking, layout, and appearance directly; controls are the cell-backed
   branch; delegates/data sources are explicit selector hooks rather than
   generic forwarding targets.
-- View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
-  first-responder dispatch.
+- View hierarchy, lifecycle hooks, optional clipping, dirty-rect invalidation,
+  hit testing, and first-responder dispatch.
 - Application/window/view appearance inheritance through `effectiveAppearance`,
   plus stable view `styleId`/`styleClasses` for future query-like theme
   matching.
@@ -36,14 +36,18 @@ NimKit already has the first useful vertical slice:
 - Window key bindings map text/typed-key/key-code plus modifier combinations to
   command selectors, dispatch them through the responder chain before raw
   `keyDown`, and fall through cleanly when no responder handles the command.
+  macOS/Windows/Linux/BSD profiles are switchable at runtime.
 - Text fields are editable/selectable first-responder controls with selected
   ranges, insertion points, click focus, text insertion, select-all, arrow
   movement, shift-selection movement, and forward/backward deletion. Combo boxes
-  provide local items, selector-backed data source/delegate hooks, popup
-  tracking, keyboard navigation, and action dispatch on selection.
-- figdraw rendering for view backgrounds, selector-backed custom drawing, button
-  rectangles, single-line text, text-field selection/caret affordances, and
-  style-resolved button/text-field metrics.
+  provide local items, selector-backed data source/delegate hooks, inline or
+  window-backed popups, popup tracking, keyboard navigation, and action dispatch
+  on selection.
+- Tab and backtab traverse automatic or manual key-view loops, and focus-visible
+  rings are driven by keyboard focus rather than mouse focus.
+- figdraw rendering for view backgrounds, per-widget selector-backed drawing,
+  button rectangles, single-line text, text-field selection/caret affordances,
+  combo-box popups, and style-resolved control metrics.
 - siwin native windows, modifier-aware mouse/scroll dispatch, key/text input
   dispatch, and framebuffer/UI-scale-aware mouse coordinate conversion.
 - Runnable examples:
@@ -53,7 +57,8 @@ NimKit already has the first useful vertical slice:
   `examples/nimkit_checkbox_demo.nim`,
   `examples/nimkit_radio_demo.nim`,
   `examples/nimkit_textfield_demo.nim`,
-  `examples/nimkit_combobox_demo.nim`.
+  `examples/nimkit_combobox_demo.nim`,
+  `examples/nimkit_controls_showcase.nim`.
 - Focused tests for values, views, controls, responders, rendering,
   screenshots, and native application pumping.
 
@@ -143,124 +148,6 @@ NimKit already has the first useful vertical slice:
 - `src/merenda/nimkit/application.nim`:
   App singleton/lifetime, window list, app-level appearance, run loop helpers,
   and frame-limited test execution.
-
-## Completed Milestones
-
-### Foundations
-
-- `import merenda/nimkit` compiles without exposing backend runtime types.
-- Constructors exist for the core object and value types:
-  `newApplication`, `newWindow`, `newView`, `newButton`, `newTextField`,
-  `newComboBox`, `initPoint`, `initSize`, `initRect`, `initColor`.
-- Core event/action selectors exist:
-  `mouseDown`, `mouseUp`, `keyDown`, `performClick`, `sendAction`,
-  `tryToPerform`, `doCommandBySelector`, `noResponderFor`,
-  `validateUserInterfaceItem`.
-
-### Basic Visible UI
-
-- Native windows can be opened and pumped through `Application.run` and
-  `runForFrames`.
-- Views, selector-backed custom drawing, text fields, and buttons render through
-  figdraw.
-- Button clicks hit-test through the view hierarchy, dispatch mouse events
-  through selectors, perform target/action, mutate state, invalidate, and redraw.
-- Screenshot coverage captures the button demo before and after a synthetic
-  click.
-
-### View Geometry And Lifecycle
-
-- Visible rects account for hidden ancestors, parent clipping, bounds origins,
-  and child invalidation propagation.
-- `addSubview`, `removeFromSuperview`, and `setContentView` route through
-  selector-backed view lifecycle hooks:
-  `viewWillMoveToSuperview`, `viewDidMoveToSuperview`,
-  `viewWillMoveToWindow`, `viewDidMoveToWindow`, `didAddSubview`, and
-  `willRemoveSubview`.
-- Content views track window ownership through descendants, content roots use
-  the window as next responder, and replacing content clears a first responder
-  from the removed subtree.
-
-### Responder And Event Core
-
-- Responder chains forward selector dispatch through `sigils/selectors`.
-- `Window` tracks first responder and dispatches key events to it before falling
-  back to the content view.
-- `KeyBindingTable` maps text/typed-key/key-code plus modifier combinations to
-  command selectors. `Window` resolves key commands before raw `keyDown`,
-  dispatches them through the same responder command path as
-  `doCommandBySelector`, and falls through to raw key dispatch when the command
-  is unhandled.
-- Space key activation of buttons is now the default key binding for
-  `performClick`, covered by responder tests.
-- siwin mouse positions are converted from the native input coordinate extent to
-  NimKit logical coordinates, including scaled-display cases.
-
-### Controls
-
-- `Control` supports enabled state and target/action.
-- `Control` owns a `Cell`; target/action state is mirrored through
-  `ActionCell`, and control property selectors can forward to the installed
-  cell.
-- `Button` supports momentary and toggle modes, mixed-state cycling, highlight,
-  disabled rendering, mouse activation, key activation, release-outside
-  cancellation, and checkbox/radio variants.
-- Checkbox buttons reuse button target/action and mixed-state cycling while
-  rendering through choice-control theme metrics.
-- Radio buttons reuse button target/action, select without toggling off, and
-  clear sibling radio buttons in the same superview.
-- `TextField` supports displayed string value, alignment, text color, editable,
-  selectable state, selected range/insertion state, first-responder editing,
-  text insertion, select-all, arrow movement, shift-selection movement,
-  forward/backward deletion, delegate storage, and an explicit `textDidChange`
-  delegate hook without treating the delegate as a generic forwarding target.
-- `ComboBox` supports local item lists, selector-backed data sources, explicit
-  delegate change notifications, editable string value selectors, popup
-  open/close/highlight state, mouse selection, keyboard navigation, and
-  target/action dispatch when an item is activated.
-
-### Theme And Metrics
-
-- `Theme` is a plain Nim value object with button/text-field colors, borders,
-  corner radius, focus-ring metrics, checkbox/radio indicator metrics, and
-  text/control insets.
-- `Appearance` is the resolver boundary between theme tokens, control state,
-  and concrete draw styles.
-- `StyleContext` carries role and control-state facts that an appearance or
-  future query-like style resolver can match without changing render code.
-- `StyleTokenStore` provides named color/length/inset token lookup, parent
-  fallback, nested token references, and typed accessors without adding CSS
-  parsing.
-- Generic `StyleKey[T]` and role-scoped `StylePatch` values let callers layer
-  targeted appearance overrides onto the default theme before FigDraw sees
-  concrete styles.
-- Built-in button, text-field, and combo-box rendering resolves `ButtonStyle`,
-  `TextFieldStyle`, and `ComboBoxStyle` values before drawing, and
-  checkbox/radio rendering resolves `ChoiceButtonStyle` before drawing. Render
-  helpers consume concrete fills, strokes, corner radii, text colors, indicator
-  metrics, and text rectangles instead of reaching through raw theme slots.
-- `buildRenders(root, theme)` and `buildRenders(window, theme)` allow focused
-  render-tree tests and callers to supply a theme without native-window setup.
-
-### Appearance, State, Layout, And Display
-
-- `Application`, `Window`, and `View` can carry local `Appearance` values.
-  `effectiveAppearance` inherits from view parent, window, then app, with local
-  view appearances overriding inherited values for the subtree.
-- Appearance changes on app/window/view invalidate the affected content subtree.
-- Views store stable `styleId` and `styleClasses`, and built-in rendering passes
-  those through `StyleContext` for future query-like theme resolvers.
-- Window mouse dispatch now drives `mouseEntered`/`mouseExited`, `isHovered`,
-  and `isActive`; built-in control rendering feeds hover/active state into
-  style resolution.
-- Window dispatch computes repeated click counts for close successive mouse
-  presses on the same target, preserves the count through mouse-up, and routes
-  mouse/scroll events through responder fallback while converting event
-  locations into each responder view's local coordinates.
-- Views expose `needsLayout`, `setNeedsLayout`, `layoutSubtreeIfNeeded`,
-  `prepareDisplaySubtree`, and `finishDisplaySubtree`. Rendering explicitly
-  runs layout/display preparation before building FigDraw nodes and clears dirty
-  state only after render construction succeeds.
 
 ## Next Work
 
@@ -363,32 +250,29 @@ Concrete task order:
 8. Add examples showing `sizeToFit` and intrinsic-size-driven layout for common
    controls, then broaden to simple stack/container layout if the API holds.
 
-### View Geometry And Rendering
-
-- Keep whole-window FigDraw rebuilds until they become measurable; preserve
-  dirty rect metadata and the explicit display traversal so a later backend can
-  narrow rendering without changing view APIs.
-- Add clipped dirty-rect rendering when the FigDraw/backend boundary has a
-  concrete partial-present path.
-
-### Responder/Event Coverage
-
-- Grow the default key binding table as text editing commands, menu shortcuts,
-  and richer key equivalents are added.
-
 ### Controls
 
-- Add controls only after the current `Control`/`Button`/`TextField` contracts
-  stay stable under more examples.
-- Combo box now has a first local-data/data-source implementation. Next control
-  work should focus on popup/list foundations, scrollable popup content, and any
-  missing examples that expose event-ordering gaps.
+- Add the next controls after intrinsic sizing is in place, so their default
+  frame behavior, cell metrics, keyboard focus, and examples use the same
+  measurement path from the start.
+- Extend combo-box/list infrastructure with scrollable popup content and shared
+  list-row behavior rather than adding one-off popup logic per control.
 - Keep delegate/custom policy hooks selector-based and explicit where they
   affect behavior. Use generic forwarding for control-to-cell delegation, not
   for arbitrary view or delegate dispatch.
 - For future complex widgets, keep the same split: cells for reusable control
   display/interaction state, delegates for policy decisions, data sources for
   externally owned data, and containment for scroll/window structure.
+
+### Rendering And Events
+
+- Keep whole-window FigDraw rebuilds until they become measurable; preserve
+  dirty rect metadata and the explicit display traversal so a later backend can
+  narrow rendering without changing view APIs.
+- Add clipped dirty-rect rendering when the FigDraw/backend boundary has a
+  concrete partial-present path.
+- Grow the default key binding table only as new text editing commands, menu
+  shortcuts, and richer key equivalents need it.
 
 ### Native Integration
 
@@ -405,13 +289,9 @@ Concrete task order:
   lookup, renderer ownership, and backend operations should sit behind a small
   NimKit backend interface so siwin-specific details stay out of `Application`
   and `Window`.
-- Tighten the view display pipeline around dirty rects. Dirty children should
-  mark ancestors dirty, invalidation should clip to visible rects where needed,
-  and dirty state should clear only after display construction succeeds.
-- Make coordinate caching and invalidation a first-class view subsystem.
-  Frame, bounds, superview, hidden-state, and clipping changes should invalidate
-  cached transforms and visible rects through one clear lifecycle, with tests
-  for nested conversion, bounds origins, and reparenting.
+- Add coordinate caching only after profiling shows the current uncached
+  conversion helpers are a measurable cost. Keep frame/bounds/superview/clipping
+  invalidation explicit if caching lands.
 - Keep growing the theme/metrics drawing boundary. `Theme` and `Appearance`
   should centralize borders, focus rings, control metrics, menu/window chrome,
   and state-specific colors as those features are added.
@@ -422,12 +302,8 @@ Concrete task order:
   size-to-fit, layout invalidation, and simple intrinsic-aware containers first;
   defer a full constraint solver until there are enough controls and examples
   to justify it.
-- Centralize the application/window event path. Event queueing, window dispatch,
-  tracking loops, modal loops, key equivalents, mouse capture, and invisible or
-  closed-window filtering should be explicit before more widgets depend on
-  edge-case event ordering.
-- Extend the command/key-binding layer as text editing grows. Text editing,
-  menu key equivalents, and responder fallback will need more default bindings.
+- Add modal/tracking loop infrastructure before menus, popovers, or drag
+  sessions depend on edge-case event ordering.
 
 ### Priority Order
 
@@ -449,6 +325,8 @@ Concrete task order:
   `tests/tnimkit_views.nim`,
   `tests/tnimkit_rendering.nim`,
   `tests/tnimkit_theme.nim`,
+  `tests/tnimkit_keybindings.nim`,
+  `tests/tnimkit_textfields.nim`,
   `tests/tnimkit_comboboxes.nim`,
   `tests/tnimkit_controls.nim`,
   `tests/tnimkit_responder.nim`,
@@ -461,7 +339,8 @@ Concrete task order:
   `examples/nimkit_checkbox_demo.nim`,
   `examples/nimkit_radio_demo.nim`,
   `examples/nimkit_textfield_demo.nim`,
-  `examples/nimkit_combobox_demo.nim`.
+  `examples/nimkit_combobox_demo.nim`,
+  `examples/nimkit_controls_showcase.nim`.
 - Run the full suite with `nim test` before considering a larger stage complete.
 
 ## Risks
