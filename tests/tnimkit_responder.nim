@@ -14,6 +14,7 @@ var
   trackingModifiers: seq[set[KeyModifier]]
   trackingTimestamps: seq[float]
   trackingScrollDeltas: seq[Point]
+  trackingCommandSenders: seq[DynamicAgent]
 
 proc recordTrackingEvent(spy: TrackingSpyView, name: string, event: MouseEvent) =
   let
@@ -46,6 +47,7 @@ proc resetTracking() =
   trackingModifiers.setLen(0)
   trackingTimestamps.setLen(0)
   trackingScrollDeltas.setLen(0)
+  trackingCommandSenders.setLen(0)
 
 protocol TrackingSpyEvents of ResponderEventProtocol:
   method mouseDown(spy: TrackingSpyView, event: MouseEvent) =
@@ -73,10 +75,19 @@ protocol TrackingSpyEvents of ResponderEventProtocol:
     trackingEvents.add(spy.xName & ".key:" & event.text)
     trackingModifiers.add(event.modifiers)
 
+protocol TrackingSpyCommandProtocolInternal:
+  method trackingCommand*(args: ActionArgs) {.optional.}
+
+protocol TrackingSpyCommands of TrackingSpyCommandProtocolInternal:
+  method trackingCommand(spy: TrackingSpyView, args: ActionArgs) =
+    trackingEvents.add(spy.xName & ".command")
+    trackingCommandSenders.add(args.sender)
+
 proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
   result = TrackingSpyView(xName: name)
   initViewFields(result, frame)
   discard result.withProtocol(TrackingSpyEvents)
+  discard result.withProtocol(TrackingSpyCommands)
 
 suite "nimkit responder":
   test "next responder is observable and forwards selector dispatch":
@@ -108,7 +119,7 @@ suite "nimkit responder":
     check window.makeFirstResponder(button)
     check window.firstResponder == button
 
-  test "space key activates button through first responder dispatch":
+  test "space key activates button through default command binding":
     let
       window = newWindow(0, 0, 240, 160, "Keys")
       root = newView(0, 0, 240, 160)
@@ -130,6 +141,58 @@ suite "nimkit responder":
     check window.makeFirstResponder(button)
     check window.dispatchKeyDown(KeyEvent(text: " ", keyCode: 32))
     check actionCount == 1
+
+  test "window key bindings dispatch commands through responder chain":
+    let
+      window = newWindow(0, 0, 240, 160, "Key commands")
+      root = newView(0, 0, 240, 160)
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(20, 15, 30, 20)
+
+    child.setAcceptsFirstResponder(true)
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+    window.bindKey("k", {kmCommand}, trackingCommand())
+
+    resetTracking()
+
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(keyCode: keyCodeForText("k"), modifiers: {kmCommand})
+    )
+
+    check trackingEvents == @["parent.command"]
+    check trackingCommandSenders == @[DynamicAgent(child)]
+
+  test "unhandled key bindings fall through to raw key dispatch":
+    let
+      window = newWindow(0, 0, 240, 160, "Key fallback")
+      root = newView(0, 0, 240, 160)
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(20, 15, 30, 20)
+
+    child.setAcceptsFirstResponder(true)
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+    window.bindKey("x", {kmCommand}, actionSelector("missingCommand"))
+
+    resetTracking()
+
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(text: "x", keyCode: 88, modifiers: {kmCommand})
+    )
+
+    check trackingEvents == @["parent.key:x"]
+    check trackingModifiers == @[{kmCommand}]
+
+  test "doCommandBySelector raises for unhandled commands":
+    let responder = newResponder()
+
+    expect(UnhandledSelectorError):
+      responder.doCommandBySelector(actionSelector("missingCommand"))
 
   test "window mouse tracking sends drag and up to mouse-down view":
     let

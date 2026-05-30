@@ -18,7 +18,7 @@ NimKit already has the first useful vertical slice:
   `TextField`.
 - Plain Nim value types for geometry, events, and control options, with
   `chroma.Color` used directly for color state.
-- Responder/action dispatch through `sigils/selectors`.
+- Responder/action and key-command dispatch through `sigils/selectors`.
 - View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
   first-responder dispatch.
 - Application/window/view appearance inheritance through `effectiveAppearance`,
@@ -30,6 +30,9 @@ NimKit already has the first useful vertical slice:
   mouse/scroll dispatch walks the responder chain with view-local coordinate
   conversion at each step, and repeated click counts stay scoped to the clicked
   target.
+- Window key bindings map text/key-code plus modifier combinations to command
+  selectors, dispatch them through the responder chain before raw `keyDown`, and
+  fall through cleanly when no responder handles the command.
 - figdraw rendering for view backgrounds, selector-backed custom drawing, button
   rectangles, single-line text, and style-resolved button/text-field metrics.
 - siwin native windows, modifier-aware mouse/scroll dispatch, key/text input
@@ -82,6 +85,9 @@ NimKit already has the first useful vertical slice:
 - `src/knutella/nimkit/drawing.nim`:
   `DrawContext`, FigDraw node insertion, and local-to-window drawing geometry
   helpers used by selector-backed custom drawing.
+- `src/knutella/nimkit/keybindings.nim`:
+  Plain `KeyStroke`, `KeyBinding`, and `KeyBindingTable` values for mapping
+  key/modifier combinations to command selectors.
 - `src/knutella/nimkit/views.nim`:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
   appearance/style identity, layout/display invalidation, hover/active state,
@@ -155,7 +161,12 @@ NimKit already has the first useful vertical slice:
 - Responder chains forward selector dispatch through `sigils/selectors`.
 - `Window` tracks first responder and dispatches key events to it before falling
   back to the content view.
-- Space key activation of buttons is covered by tests.
+- `KeyBindingTable` maps text/key-code plus modifier combinations to command
+  selectors. `Window` resolves key commands before raw `keyDown`, dispatches
+  them through the same responder command path as `doCommandBySelector`, and
+  falls through to raw key dispatch when the command is unhandled.
+- Space key activation of buttons is now the default key binding for
+  `performClick`, covered by responder tests.
 - siwin mouse positions are converted from the native input coordinate extent to
   NimKit logical coordinates, including scaled-display cases.
 
@@ -220,7 +231,8 @@ NimKit already has the first useful vertical slice:
 
 ### Responder/Event Coverage
 
-- Add richer key command dispatch and unhandled-selector tests.
+- Grow the default key binding table as text editing commands, menu shortcuts,
+  and richer key equivalents are added.
 
 ### Controls
 
@@ -305,15 +317,15 @@ its implementation.
   tracking loops, key equivalents, mouse capture, and closed/invisible-window
   filtering should be made explicit before more widgets depend on edge-case
   event ordering.
-- Add a command/key-binding layer before text editing grows. GNUstep has key
-  binding tables and command actions; our text fields currently handle command
-  selectors directly. A small command table would keep text editing, menu key
-  equivalents, and responder fallback from diverging.
+- Extend the command/key-binding layer as text editing grows. GNUstep has key
+  binding tables and command actions; NimKit now has the command-table core, but
+  text editing, menu key equivalents, and responder fallback will need more
+  default bindings.
 
 ### Priority Order
 
-- Short term: command/key-binding layer, cleaner cell invalidation/default-cell
-  construction, and more controls using the theme metrics.
+- Short term: cleaner cell invalidation/default-cell construction, and more
+  controls using the theme metrics.
 - Medium term: constraint layout groundwork and broader control coverage.
 - Later: constraint layout, panels/services integration, loadable themes, and
   broader GNUstep-style resource organization.
@@ -327,25 +339,18 @@ Current comparison source:
 NimKit is intentionally much smaller than AppKit, but the GNUstep architecture
 still points to the next correctness boundaries:
 
-- Add a command/key-binding layer before text editing grows. GNUstep routes key
+- The first command/key-binding layer is in place. GNUstep routes key
   equivalents through the application/window path and text commands through key
-  binding tables and responder selectors. NimKit currently has only `keyDown`
-  dispatch plus space activation. Add a small command table mapping key/modifier
-  combinations to command selectors so text editing, buttons, and future menus
-  share one responder path.
+  binding tables and responder selectors; NimKit now has the same core shape
+  with a small table that maps key/modifier combinations to command selectors.
 
 Recommended NimKit order:
 
-- First: command/key-binding layer.
-- Second: expand controls while keeping rendering routed through theme metrics.
+- Next: expand controls while keeping rendering routed through theme metrics.
 
 Concrete task list:
 
-1. Add a command/key-binding layer before real text editing expands. Map
-   key/modifier combinations to command selectors, then dispatch through the
-   responder chain. This should share the same path for text editing commands,
-   button key equivalents, and future menu shortcuts.
-2. Expand controls after the above contracts stabilize. Prioritize checkbox,
+1. Expand controls after the above contracts stabilize. Prioritize checkbox,
    radio, toggle variants, combo box, and basic text editing. Keep policy hooks
    selector-based where behavior is overridable.
 
