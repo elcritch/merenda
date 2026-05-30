@@ -708,6 +708,7 @@ proc renderNativeWindow*(window: Window) =
   if window.isNil or not window.nativeReady:
     return
 
+  window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
   var renders = window.buildRenders()
   window.xHostWindow.render(renders, logicalSize)

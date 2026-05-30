@@ -152,6 +152,10 @@ proc contentScale*(host: HostWindow): float32 =
     return 1.0'f32
   max(host.xNativeWindow.contentScale(), 1.0'f32)
 
+proc refreshContentScale*(host: HostWindow) =
+  if host.isReady:
+    host.xNativeWindow.refreshUiScale(host.xAutoScale)
+
 proc markClosed(host: HostWindow, notify: bool) =
   if host.isNil:
     return
@@ -184,6 +188,7 @@ proc setVisible*(host: HostWindow, visible: bool) =
 proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
     return
+  host.refreshContentScale()
   let size = vec2(logicalSize.width, logicalSize.height)
   host.xRenderer.beginFrame()
   host.xRenderer.renderFrame(renders, size)
