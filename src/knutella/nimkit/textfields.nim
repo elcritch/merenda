@@ -12,6 +12,8 @@ type TextField* = ref object of Control
   xSelectable: bool
   xDelegate: DynamicAgent
 
+proc notifyTextDidChange(textField: TextField)
+
 protocol TextFieldDelegateProtocolInternal:
   method textDidChange*(args: ActionArgs) {.optional.}
 
@@ -28,6 +30,7 @@ protocol TextFieldProtocolInternal from TextField:
       return
     textField.xStringValue = value
     textField.setNeedsDisplay(true)
+    textField.notifyTextDidChange()
 
   method alignment(textField: TextField): TextAlignment =
     textField.xAlignment
@@ -74,19 +77,15 @@ proc setDelegate*(textField: TextField, delegate: DynamicAgent) =
 proc setDelegate*(textField: TextField, delegate: Responder) =
   textField.setDelegate(DynamicAgent(delegate))
 
-proc installTextFieldForwarding(textField: TextField) =
-  textField.setForwardingTarget(
-    proc(self: DynamicAgent, selector: SigilName): DynamicAgent =
-      let textField = TextField(self)
-      result = cellForwardingTarget(textField, selector)
-      if result.isNil and not textField.xDelegate.isNil and
-          textField.xDelegate.respondsTo(selector):
-        result = textField.xDelegate
+proc notifyTextDidChange(textField: TextField) =
+  if textField.isNil or textField.xDelegate.isNil:
+    return
+  discard textField.xDelegate.sendLocalIfHandled(
+    textDidChange(), ActionArgs(sender: DynamicAgent(textField))
   )
 
 proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   initControlFields(textField, frame)
-  textField.installTextFieldForwarding()
   textField.xStringValue = value
   textField.xAlignment = taLeft
   textField.xTextColor = initColor(0.08, 0.09, 0.11)

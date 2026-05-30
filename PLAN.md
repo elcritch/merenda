@@ -19,6 +19,10 @@ NimKit already has the first useful vertical slice:
 - Plain Nim value types for geometry, events, and control options, with
   `chroma.Color` used directly for color state.
 - Responder/action and key-command dispatch through `sigils/selectors`.
+- Cocoa/AppKit-shaped object boundaries: views own hierarchy, geometry,
+  drawing, tracking, layout, and appearance directly; controls are the
+  cell-backed branch; delegates/data sources are explicit selector hooks rather
+  than generic forwarding targets.
 - View hierarchy, lifecycle hooks, invalidation, hit testing, and basic
   first-responder dispatch.
 - Application/window/view appearance inheritance through `effectiveAppearance`,
@@ -95,13 +99,18 @@ NimKit already has the first useful vertical slice:
   `View`, frame/bounds state, subviews, lifecycle hooks, hit testing,
   appearance/style identity, layout/display invalidation, hover/active state,
   and event dispatch into selector methods.
+- `src/knutella/nimkit/cells.nim`:
+  `Cell` and `ActionCell`, control-view back references, enabled/highlighted
+  state, button state cycling, and target/action storage used by controls.
 - `src/knutella/nimkit/controls.nim`:
-  `Control`, enabled state, target/action, and closure-backed action targets.
+  `Control`, cell ownership, cell selector forwarding, enabled state,
+  target/action, and closure-backed action targets.
 - `src/knutella/nimkit/buttons.nim`:
   `Button`, title, state cycling, mixed-state support, checkbox/radio variants,
   highlight/tracking behavior, and keyboard activation.
 - `src/knutella/nimkit/textfields.nim`:
-  `TextField`, string value, alignment, text color, editable/selectable flags.
+  `TextField`, string value, alignment, text color, editable/selectable flags,
+  delegate storage, and explicit text-field delegate selector hooks.
 - `src/knutella/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field style
   objects, typed style tokens, style overrides, `EdgeInsets`, control-state
@@ -177,6 +186,9 @@ NimKit already has the first useful vertical slice:
 ### Controls
 
 - `Control` supports enabled state and target/action.
+- `Control` owns a `Cell`; target/action state is mirrored through
+  `ActionCell`, and control property selectors can forward to the installed
+  cell.
 - `Button` supports momentary and toggle modes, mixed-state cycling, highlight,
   disabled rendering, mouse activation, key activation, Cocoa-style
   release-outside cancellation, and checkbox/radio variants.
@@ -185,7 +197,8 @@ NimKit already has the first useful vertical slice:
 - Radio buttons reuse button target/action, select without toggling off, and
   clear sibling radio buttons in the same superview.
 - `TextField` supports displayed string value, alignment, text color, editable,
-  and selectable state.
+  selectable state, delegate storage, and an explicit `textDidChange` delegate
+  hook without treating the delegate as a generic forwarding target.
 
 ### Theme And Metrics
 
@@ -252,7 +265,13 @@ NimKit already has the first useful vertical slice:
 - Prioritize combo box and basic text editing next because existing AppKit
   examples can act as references. Checkbox/radio/toggle variants now have the
   first NimKit implementation.
-- Keep delegate/custom policy hooks selector-based where they affect behavior.
+- Keep delegate/custom policy hooks selector-based and explicit where they
+  affect behavior. Use generic forwarding for control-to-cell delegation, not
+  for arbitrary view or delegate dispatch.
+- For future complex widgets, follow the AppKit split: cells for reusable
+  control display/interaction state, delegates for policy decisions, data
+  sources for externally owned data, and containment for scroll/window
+  structure.
 
 ### Native Integration
 
