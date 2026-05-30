@@ -70,6 +70,66 @@ proc textNode(
     )
   Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
 
+proc textLayout(
+    rect: types.Rect, text: string, color: types.Color, alignment = taLeft
+): GlyphArrangement =
+  let
+    font = defaultFont(13.0'f32)
+    style = fs(font, fill(color.rgba))
+  typeset(
+    rect.toFigRect,
+    [(style, text)],
+    hAlign = alignment.toFontHorizontal,
+    vAlign = Middle,
+    minContent = false,
+    wrap = false,
+  )
+
+proc textNode(rect: types.Rect, layout: GlyphArrangement): Fig =
+  Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
+
+proc selectTextNode(node: var Fig, selectedRange: TextRange, color: types.Color) =
+  let count = node.textLayout.selectionRects.len
+  if selectedRange.length == 0 or count == 0:
+    return
+
+  let
+    first = min(selectedRange.location.int, count)
+    last = min(first + selectedRange.length.int, count)
+  if first >= last or first > high(int16).int:
+    return
+
+  node.flags.incl NfSelectText
+  node.fill = fill(color.rgba)
+  node.selectionRange = first.int16 .. min(last - 1, high(int16).int).int16
+
+proc caretRect(
+    textRect: types.Rect, layout: GlyphArrangement, insertionPoint: int
+): types.Rect =
+  let index = max(insertionPoint, 0)
+  if layout.selectionRects.len > 0:
+    let rect =
+      if index <= 0:
+        layout.selectionRects[0]
+      else:
+        layout.selectionRects[min(index - 1, layout.selectionRects.high)]
+    let x =
+      if index <= 0:
+        rect.x
+      else:
+        min(rect.x + rect.w, textRect.size.width - 1.0'f32)
+    return initRect(textRect.origin.x + x, textRect.origin.y + rect.y, 1.0, rect.h)
+
+  let
+    font = defaultFont(13.0'f32)
+    lineHeight = max(13.0'f32, getLineHeightImpl(font))
+  initRect(
+    textRect.origin.x,
+    textRect.origin.y + max((textRect.size.height - lineHeight) / 2.0'f32, 0.0),
+    1.0,
+    min(lineHeight, textRect.size.height),
+  )
+
 proc choiceRole(button: Button): StyleRole =
   if button.buttonType == btRadio: srRadioButton else: srCheckBox
 
@@ -202,12 +262,24 @@ proc renderBuiltInView(
         style.box.cornerRadius,
       ),
     )
-    context.addText(
-      style.textFieldTextRect(view.bounds),
-      textField.stringValue,
-      style.text.color,
-      textField.alignment,
-    )
+    let
+      textRect = style.textFieldTextRect(view.bounds)
+      layout = textLayout(
+        textRect, textField.stringValue, style.text.color, textField.alignment
+      )
+      selectedRange = textField.selectedRange
+      selectionColor = initColor(0.22, 0.46, 0.84, 0.32)
+    if textField.isEditing and selectedRange.length > 0:
+      var node = textNode(context.localRectToWindow(textRect), layout)
+      node.selectTextNode(selectedRange, selectionColor)
+      discard context.addFig(node)
+    else:
+      discard context.addFig(textNode(context.localRectToWindow(textRect), layout))
+
+    if textField.isEditing and textField.isEditable and selectedRange.length == 0:
+      context.addRectangle(
+        textRect.caretRect(layout, textField.insertionPoint), style.text.color
+      )
 
 proc renderViewInto(
     context: DrawContext,

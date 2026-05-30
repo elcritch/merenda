@@ -222,3 +222,14 @@ proc commandFor*(table: KeyBindingTable, event: KeyEvent): Option[CommandSelecto
 
 proc initDefaultKeyBindings*(): KeyBindingTable =
   result.bindKey(" ", {}, performClick())
+  result.bindKey(keyBackspace, {}, deleteBackward())
+  result.bindKey(keyDelete, {}, deleteForward())
+  result.bindKey(keyArrowLeft, {}, moveLeft())
+  result.bindKey(keyArrowRight, {}, moveRight())
+  result.bindKey(keyHome, {}, moveToBeginningOfLine())
+  result.bindKey(keyEnd, {}, moveToEndOfLine())
+  result.bindKey(keyArrowLeft, {kmShift}, moveLeftAndModifySelection())
+  result.bindKey(keyArrowRight, {kmShift}, moveRightAndModifySelection())
+  result.bindKey(keyHome, {kmShift}, moveToBeginningOfLineAndModifySelection())
+  result.bindKey(keyEnd, {kmShift}, moveToEndOfLineAndModifySelection())
+  result.bindShortcut(keyA, {smShortcut}, selectAll())

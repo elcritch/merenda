@@ -108,6 +108,34 @@ suite "nimkit rendering":
     check buttonTextBoxFound
     check fieldTextBoxFound
 
+  test "buildRenders draws focused text field selection and caret":
+    let
+      root = newView(0, 0, 180, 80)
+      field = newTextField(10, 20, 120, 30, "Field")
+
+    root.addSubview(field)
+    discard field.becomeFirstResponder()
+    field.setSelectedRange(initTextRange(1, 2))
+
+    let selectionRenders = buildRenders(root)
+    var selectionFound = false
+    for node in selectionRenders[0.ZLevel].nodes:
+      if node.kind == nkText and NfSelectText in node.flags and node.fill.kind == flColor and
+          node.fill.color == initColor(0.22, 0.46, 0.84, 0.32).rgba and
+          node.selectionRange.a == 1'i16 and node.selectionRange.b == 2'i16:
+        selectionFound = true
+
+    field.setSelectedRange(initTextRange(3, 0))
+    let caretRenders = buildRenders(root)
+    var caretFound = false
+    for node in caretRenders[0.ZLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == field.textColor.rgba and node.screenBox.w == 1.0:
+        caretFound = true
+
+    check selectionFound
+    check caretFound
+
   test "buildRenders uses active view state for control styling":
     let
       root = newView(0, 0, 140, 80)

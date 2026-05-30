@@ -37,6 +37,10 @@ status.setTextColor(initColor(0.12, 0.28, 0.20))
 sync.setAllowsMixedState(true)
 sync.setState(bsMixed)
 
+for label in [title, status]:
+  label.setEditable(false)
+  label.setSelectable(false)
+
 for checkbox in [downloads, notifications, sync]:
   checkbox.setTarget(target)
   checkbox.setAction(changedAction)

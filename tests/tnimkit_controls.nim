@@ -4,9 +4,6 @@ import sigils/selectors
 
 import knutella/nimkit
 
-method overrideTitle(self: Button): string {.selector.} =
-  "Swizzled"
-
 protocol PlaceholderDelegate:
   method placeholderText(): string
 
@@ -18,7 +15,8 @@ suite "nimkit controls":
     let button = newButton(0, 0, 120, 36, "Original")
 
     check button.conformsTo(ButtonProtocol)
-    discard button.replaceMethod(title(), overrideTitle)
+    button.replaceMethod(title()) do(self: Button) -> string:
+      "Swizzled"
     check button.title == "Swizzled"
 
   test "button click sends selector action to closure target":
