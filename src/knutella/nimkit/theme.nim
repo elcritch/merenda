@@ -896,7 +896,7 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       borderColor:
         theme.colorRule(context, StyleBorderColor, initColor(0.10, 0.25, 0.46, 1.0)),
       borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 4.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 8.0),
       focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
       focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
       focusRingColor:
@@ -916,7 +916,7 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
       borderColor:
         theme.colorRule(context, StyleBorderColor, initColor(0.50, 0.55, 0.62, 1.0)),
       borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 3.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
       focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
       focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
       focusRingColor:
@@ -941,7 +941,7 @@ proc resolveTextFieldStyle*(
       borderColor:
         theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
       borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 3.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
       focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
       focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
       focusRingColor:
@@ -964,7 +964,7 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
       borderColor:
         theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
       borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 3.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
       focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
       focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
       focusRingColor:
@@ -1229,7 +1229,7 @@ proc initTheme*(): Theme =
     styleToken(ButtonDisabledTextColorToken),
   )
   result.setStyle(srButton, StyleBorderWidth, 1.0)
-  result.setStyle(srButton, StyleCornerRadius, 4.0)
+  result.setStyle(srButton, StyleCornerRadius, 8.0)
   result.setStyle(srButton, StyleTextInsets, initEdgeInsets(0.0, 8.0))
   result.setStyle(srButton, StyleFocusRingWidth, 3.0)
   result.setStyle(srButton, StyleFocusRingInset, -2.0)
@@ -1249,7 +1249,7 @@ proc initTheme*(): Theme =
   )
 
   for role in [srCheckBox, srRadioButton]:
-    let radius = if role == srCheckBox: 3.0'f32 else: 7.0'f32
+    let radius = if role == srCheckBox: 6.0'f32 else: 7.0'f32
     result.addChoiceRule(
       role,
       {},
@@ -1310,7 +1310,7 @@ proc initTheme*(): Theme =
   result.setStyle(srTextField, StyleFill, styleToken(TextFieldFillToken))
   result.setStyle(srTextField, StyleBorderColor, styleToken(TextFieldBorderColorToken))
   result.setStyle(srTextField, StyleBorderWidth, 1.0)
-  result.setStyle(srTextField, StyleCornerRadius, 3.0)
+  result.setStyle(srTextField, StyleCornerRadius, 6.0)
   result.setStyle(srTextField, StyleTextInsets, initEdgeInsets(0.0, 6.0))
   result.setStyle(srTextField, StyleFocusRingWidth, 3.0)
   result.setStyle(srTextField, StyleFocusRingInset, 2.0)
@@ -1338,7 +1338,7 @@ proc initTheme*(): Theme =
     styleToken(DisabledTextColorToken),
   )
   result.setStyle(srComboBox, StyleBorderWidth, 1.0)
-  result.setStyle(srComboBox, StyleCornerRadius, 3.0)
+  result.setStyle(srComboBox, StyleCornerRadius, 6.0)
   result.setStyle(srComboBox, StyleTextInsets, initEdgeInsets(0.0, 8.0))
   result.setStyle(srComboBox, StyleFocusRingWidth, 3.0)
   result.setStyle(srComboBox, StyleFocusRingInset, 2.0)

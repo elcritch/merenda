@@ -12,6 +12,8 @@ type
     xTitle: string
     xButtonType: ButtonType
 
+const CheckboxCheckmark = "✓"
+
 protocol ButtonProtocolInternal:
   property title -> string
   property state -> ButtonState
@@ -153,21 +155,26 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         style.indicator.shadows,
       )
       if selected:
-        let markRect =
-          if button.state == bsMixed and button.buttonType == btCheckBox:
-            indicatorRect.mixedMarkRect()
-          else:
-            indicatorRect.selectedMarkRect()
-        discard context.addWindowRectangle(
-          button.rectToWindow(markRect),
-          style.markColor,
-          style.markColor,
-          0.0'f32,
-          if button.buttonType == btRadio:
-            markRect.size.width / 2.0'f32
-          else:
-            1.0'f32,
-        )
+        if button.buttonType == btCheckBox and button.state == bsOn:
+          context.addText(
+            indicatorRect, CheckboxCheckmark, style.markColor, alignment = taCenter
+          )
+        else:
+          let markRect =
+            if button.state == bsMixed and button.buttonType == btCheckBox:
+              indicatorRect.mixedMarkRect()
+            else:
+              indicatorRect.selectedMarkRect()
+          discard context.addWindowRectangle(
+            button.rectToWindow(markRect),
+            style.markColor,
+            style.markColor,
+            0.0'f32,
+            if button.buttonType == btRadio:
+              markRect.size.width / 2.0'f32
+            else:
+              1.0'f32,
+          )
       if button.isFocusVisible:
         context.addFocusRing(button.rectToWindow(indicatorRect), style.indicator)
       context.addText(
