@@ -138,6 +138,7 @@ const
   ButtonBorderColorToken* = "button.border.color"
   ButtonHighlightedBorderColorToken* = "button.border.color.highlighted"
   ButtonDisabledBorderColorToken* = "button.border.color.disabled"
+  ButtonFocusRingColorToken* = "button.focus.ring.color"
 
   ChoiceIndicatorFillToken* = "choice.indicator.fill"
   ChoiceIndicatorHighlightedFillToken* = "choice.indicator.fill.highlighted"
@@ -894,6 +895,9 @@ proc initTheme*(): Theme =
   result.setDefaultToken(
     ButtonDisabledBorderColorToken, styleColor(initColor(0.46, 0.50, 0.56, 1.0))
   )
+  result.setDefaultToken(
+    ButtonFocusRingColorToken, styleColor(initColor(1.0, 1.0, 1.0, 0.90))
+  )
 
   result.setDefaultToken(
     ChoiceIndicatorFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
@@ -975,8 +979,8 @@ proc initTheme*(): Theme =
   result.setStyle(srButton, StyleCornerRadius, 4.0)
   result.setStyle(srButton, StyleTextInsets, initEdgeInsets(0.0, 8.0))
   result.setStyle(srButton, StyleFocusRingWidth, 3.0)
-  result.setStyle(srButton, StyleFocusRingInset, 2.0)
-  result.setStyle(srButton, StyleFocusRingColor, styleToken(FocusRingColorToken))
+  result.setStyle(srButton, StyleFocusRingInset, -2.0)
+  result.setStyle(srButton, StyleFocusRingColor, styleToken(ButtonFocusRingColorToken))
 
   for role in [srCheckBox, srRadioButton]:
     let radius = if role == srCheckBox: 3.0'f32 else: 7.0'f32

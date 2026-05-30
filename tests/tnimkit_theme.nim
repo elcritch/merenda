@@ -152,7 +152,9 @@ suite "nimkit theme":
     check buttonStyle.box.borderWidth > 0.0
     check buttonStyle.box.cornerRadius > 0.0
     check buttonStyle.box.focusRingWidth > 0.0
+    check buttonStyle.box.focusRingInset < 0.0
     check buttonStyle.box.focusRingColor.a > 0.0
+    check buttonStyle.box.focusRingColor != buttonStyle.box.fill
     check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
     check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
     check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
@@ -162,9 +164,9 @@ suite "nimkit theme":
     check checkBoxStyle.indicatorSpacing > 0.0
     check checkBoxStyle.indicator.fill == initColor(0.20, 0.48, 0.86, 1.0)
     check checkBoxStyle.indicator.cornerRadius == 3.0
-    check checkBoxStyle.indicator.focusRingColor == buttonStyle.box.focusRingColor
+    check checkBoxStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
     check radioStyle.indicator.cornerRadius == 7.0
-    check radioStyle.indicator.focusRingColor == buttonStyle.box.focusRingColor
+    check radioStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
     check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
       initRect(2, 5, 14, 14)
     check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
@@ -175,7 +177,7 @@ suite "nimkit theme":
     check textFieldStyle.box.focusRingWidth > 0.0
     check textFieldStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
     check textFieldStyle.box.borderColor == initColor(0.72, 0.75, 0.80, 1.0)
-    check textFieldStyle.box.focusRingColor == buttonStyle.box.focusRingColor
+    check textFieldStyle.box.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
     check textFieldStyle.text.color == initColor(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
