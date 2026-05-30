@@ -64,6 +64,92 @@ suite "nimkit text fields":
     check field.stringValue == "aZef"
     check field.selectedRange == initTextRange(2, 0)
 
+  test "macOS profile moves and deletes by word":
+    let
+      window = newWindow(0, 0, 240, 120, "Text word commands")
+      root = newView(0, 0, 240, 120)
+      field = newTextField(10, 10, 180, 24, "one two three")
+
+    window.setKeyBindingProfile(kbpMacOS)
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+
+    field.setSelectedRange(initTextRange(0, 0))
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmOption})
+    )
+    check field.selectedRange == initTextRange(3, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmOption})
+    )
+    check field.selectedRange == initTextRange(7, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmOption})
+    )
+    check field.selectedRange == initTextRange(4, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(
+        key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmShift, kmOption}
+      )
+    )
+    check field.selectedRange == initTextRange(4, 3)
+
+    field.setSelectedRange(initTextRange(field.stringValue.len, 0))
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmOption})
+    )
+    check field.stringValue == "one two "
+    check field.selectedRange == initTextRange(8, 0)
+
+  test "windows profile uses control arrows for word movement":
+    let
+      window = newWindow(0, 0, 240, 120, "Text windows word commands")
+      root = newView(0, 0, 240, 120)
+      field = newTextField(10, 10, 180, 24, "one two")
+
+    window.setKeyBindingProfile(kbpWindows)
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+
+    field.setSelectedRange(initTextRange(0, 0))
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmControl})
+    )
+    check field.selectedRange == initTextRange(3, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(
+        key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmShift, kmControl}
+      )
+    )
+    check field.selectedRange == initTextRange(3, 4)
+
+  test "control character text input after command shortcuts is ignored":
+    let
+      window = newWindow(0, 0, 240, 120, "Text control input")
+      root = newView(0, 0, 240, 120)
+      field = newTextField(10, 10, 180, 24, "abcdef")
+
+    window.setKeyBindingProfile(kbpMacOS)
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+    field.setSelectedRange(initTextRange(6, 0))
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
+    )
+    check field.selectedRange == initTextRange(0, 0)
+
+    discard window.dispatchKeyDown(KeyEvent(text: "\x01", keyCode: 0))
+    check field.stringValue == "abcdef"
+    check field.selectedRange == initTextRange(0, 0)
+
   test "select all shortcut selects and replaces the full value":
     let
       window = newWindow(0, 0, 240, 120, "Text select all")

@@ -69,6 +69,11 @@ proc setKeyBindings*(window: Window, bindings: KeyBindingTable) =
     return
   window.xKeyBindings = bindings
 
+proc setKeyBindingProfile*(window: Window, profile: KeyBindingProfile) =
+  if window.isNil:
+    return
+  window.xKeyBindings = initDefaultKeyBindings(profile)
+
 proc addKeyBinding*(window: Window, stroke: KeyStroke, selector: CommandSelector) =
   if window.isNil:
     return
