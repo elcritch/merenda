@@ -199,6 +199,7 @@ suite "nimkit controls":
 
   test "radio buttons select one sibling without toggling off":
     var actionCount = 0
+    var observedSelection = ""
     let
       root = newView(0, 0, 220, 100)
       first = newRadioButton(10, 10, 160, 24, "First")
@@ -210,6 +211,14 @@ suite "nimkit controls":
     proc onSelect(sender: DynamicAgent) =
       check sender == DynamicAgent(first) or sender == DynamicAgent(second) or
         sender == DynamicAgent(other)
+      if first.state == bsOn:
+        observedSelection = "first"
+      elif second.state == bsOn:
+        observedSelection = "second"
+      elif other.state == bsOn:
+        observedSelection = "other"
+      else:
+        observedSelection = "none"
       inc actionCount
 
     let target = newActionTarget(action, onSelect)
@@ -228,12 +237,15 @@ suite "nimkit controls":
     check first.state == bsOn
     check second.state == bsOff
     check other.state == bsOn
+    check observedSelection == "first"
 
     discard second.send(performClick(), ActionArgs(sender: second))
     check first.state == bsOff
     check second.state == bsOn
     check other.state == bsOn
+    check observedSelection == "second"
 
     discard second.send(performClick(), ActionArgs(sender: second))
     check second.state == bsOn
+    check observedSelection == "second"
     check actionCount == 3
