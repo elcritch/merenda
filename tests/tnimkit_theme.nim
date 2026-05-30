@@ -8,10 +8,21 @@ suite "nimkit theme":
       initRect(14, 22, 88, 42)
     check initRect(0, 0, 10, 10).inset(initEdgeInsets(8)) == initRect(8, 8, 0, 0)
 
-  test "button theme state follows enabled and highlighted flags":
-    check buttonThemeState(enabled = true, highlighted = false) == tcsNormal
-    check buttonThemeState(enabled = true, highlighted = true) == tcsHighlighted
-    check buttonThemeState(enabled = false, highlighted = true) == tcsDisabled
+  test "style selectors match role state id and classes":
+    let context = initStyleContext(
+      srButton,
+      {ssFocused, ssFocusVisible},
+      id = "primary",
+      classes = @["default", "toolbar"],
+    )
+
+    check initStyleSelector(srButton).matches(context)
+    check initStyleSelector(srButton, {ssFocused}).matches(context)
+    check initStyleSelector(srButton, id = "primary").matches(context)
+    check initStyleSelector(srButton, classes = @["toolbar"]).matches(context)
+    check not initStyleSelector(srTextField).matches(context)
+    check not initStyleSelector(srButton, {ssDisabled}).matches(context)
+    check not initStyleSelector(srButton, id = "secondary").matches(context)
 
   test "style context stores role and control states":
     let context = initControlStyleContext(
@@ -36,7 +47,6 @@ suite "nimkit theme":
       ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
       ssFocusWithin, ssSelected, ssOpen,
     }
-    check buttonThemeState(context) == tcsDisabled
 
   test "style token store resolves typed values and nested references":
     let
@@ -45,9 +55,9 @@ suite "nimkit theme":
       accent = initColor(0.7, 0.2, 0.3, 1.0)
       padding = initEdgeInsets(1, 2, 3, 4)
 
-    parent.setToken("accent", styleColor(accent))
-    parent.setToken("space", styleLength(6.0))
-    parent.setToken("padding", styleInsets(padding))
+    parent.setToken("accent", accent)
+    parent.setToken("space", 6.0)
+    parent.setToken("padding", padding)
     child.setToken("nested.accent", styleToken("accent"))
 
     var value: StyleValue
@@ -55,7 +65,7 @@ suite "nimkit theme":
     check value.kind == svColor
     check value.color == accent
 
-    let appearance = Appearance(theme: initTheme(), tokens: child)
+    let appearance = Appearance(theme: Theme(tokens: child))
     check appearance.colorToken("nested.accent", initColor(0, 0, 0, 1)) == accent
     check appearance.lengthToken("space", 0.0) == 6.0
     check appearance.insetsToken("padding", initEdgeInsets(0)) == padding
@@ -69,7 +79,7 @@ suite "nimkit theme":
       fieldText = initColor(0.44, 0.55, 0.66, 1.0)
       buttonInsets = initEdgeInsets(2.0, 10.0)
 
-    appearance.tokens.setToken("field.text.override", styleColor(fieldText))
+    appearance.setToken("field.text.override", fieldText)
     appearance[srButton, StyleFill] = buttonFill
     appearance[srButton, StyleCornerRadius] = 9.0
     appearance[srButton, StyleFocusRingColor] = focusRing
@@ -93,6 +103,32 @@ suite "nimkit theme":
     check textPatch.kind == svToken
     check textPatch.token == "field.text.override"
 
+  test "appearance overrides do not mutate the base theme":
+    let theme = initTheme()
+    var
+      firstAppearance = initAppearance(theme)
+      secondAppearance = initAppearance(theme)
+
+    let
+      baseStyle = theme.resolveButtonStyle(initControlStyleContext(srButton))
+      overrideFill = initColor(0.67, 0.18, 0.22, 1.0)
+
+    firstAppearance.setToken(ButtonFillToken, overrideFill)
+    firstAppearance[srButton, StyleCornerRadius] = 11.0
+
+    check firstAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
+      overrideFill
+    check firstAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.cornerRadius ==
+      11.0
+    check secondAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
+      baseStyle.box.fill
+    check secondAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.cornerRadius ==
+      baseStyle.box.cornerRadius
+    check theme.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
+      baseStyle.box.fill
+    check theme.resolveButtonStyle(initControlStyleContext(srButton)).box.cornerRadius ==
+      baseStyle.box.cornerRadius
+
   test "default theme exposes resolved button and text field styles":
     let theme = initTheme()
     let
@@ -110,38 +146,36 @@ suite "nimkit theme":
         initControlStyleContext(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
       )
 
-    check appearance.theme == theme
-    check theme.button.borderWidth > 0.0
-    check theme.button.cornerRadius > 0.0
-    check theme.button.focusRingWidth > 0.0
-    check theme.button.focusRingColor.a > 0.0
-    check buttonStyle.box.fill == theme.button.fill[tcsHighlighted]
-    check buttonStyle.box.borderColor == theme.button.borderColor[tcsHighlighted]
-    check buttonStyle.box.focusRingColor == theme.button.focusRingColor
-    check buttonStyle.text.color == theme.button.textColor[tcsHighlighted]
+    check appearance.theme.rules.len == theme.rules.len
+    check theme.tokens != nil
+    check theme.rules.len > 0
+    check buttonStyle.box.borderWidth > 0.0
+    check buttonStyle.box.cornerRadius > 0.0
+    check buttonStyle.box.focusRingWidth > 0.0
+    check buttonStyle.box.focusRingColor.a > 0.0
+    check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
+    check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
+    check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
-    check theme.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
 
-    check theme.choiceButton.indicatorSize > 0.0
-    check theme.choiceButton.indicatorSpacing > 0.0
-    check checkBoxStyle.indicator.fill ==
-      theme.choiceButton.indicatorSelectedFill[tcsNormal]
-    check checkBoxStyle.indicator.cornerRadius == theme.choiceButton.checkBoxCornerRadius
-    check checkBoxStyle.indicator.focusRingColor == theme.choiceButton.focusRingColor
-    check radioStyle.indicator.cornerRadius == theme.choiceButton.radioCornerRadius
-    check radioStyle.indicator.focusRingColor == theme.choiceButton.focusRingColor
+    check checkBoxStyle.indicatorSize > 0.0
+    check checkBoxStyle.indicatorSpacing > 0.0
+    check checkBoxStyle.indicator.fill == initColor(0.20, 0.48, 0.86, 1.0)
+    check checkBoxStyle.indicator.cornerRadius == 3.0
+    check checkBoxStyle.indicator.focusRingColor == buttonStyle.box.focusRingColor
+    check radioStyle.indicator.cornerRadius == 7.0
+    check radioStyle.indicator.focusRingColor == buttonStyle.box.focusRingColor
     check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
       initRect(2, 5, 14, 14)
     check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
       initRect(23, 0, 75, 24)
 
-    check theme.textField.borderWidth > 0.0
-    check theme.textField.cornerRadius > 0.0
-    check theme.textField.focusRingWidth > 0.0
-    check textFieldStyle.box.fill == theme.textField.fill
-    check textFieldStyle.box.borderColor == theme.textField.borderColor
-    check textFieldStyle.box.focusRingColor == theme.textField.focusRingColor
+    check textFieldStyle.box.borderWidth > 0.0
+    check textFieldStyle.box.cornerRadius > 0.0
+    check textFieldStyle.box.focusRingWidth > 0.0
+    check textFieldStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
+    check textFieldStyle.box.borderColor == initColor(0.72, 0.75, 0.80, 1.0)
+    check textFieldStyle.box.focusRingColor == buttonStyle.box.focusRingColor
     check textFieldStyle.text.color == initColor(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
-    check theme.textFieldTextRect(initRect(0, 0, 100, 30)) == initRect(6, 0, 88, 30)

@@ -33,6 +33,12 @@ type
     id*: string
     classes*: seq[string]
 
+  StyleSelector* = object
+    role*: StyleRole
+    states*: set[StyleState]
+    id*: string
+    classes*: seq[string]
+
   StyleValueKind* = enum
     svMissing
     svColor
@@ -65,10 +71,16 @@ type
   StylePatch* = ref object
     values*: Table[string, StyleValue]
 
-  ThemeControlState* = enum
-    tcsNormal
-    tcsHighlighted
-    tcsDisabled
+  StyleRule* = object
+    selector*: StyleSelector
+    patch*: StylePatch
+
+  Theme* = object
+    tokens*: StyleTokenStore
+    rules*: seq[StyleRule]
+
+  Appearance* = object
+    theme*: Theme
 
   ControlBoxStyle* = object
     fill*: Color
@@ -98,53 +110,6 @@ type
     box*: ControlBoxStyle
     text*: TextStyle
 
-  ButtonTheme* = object
-    fill*: array[ThemeControlState, Color]
-    textColor*: array[ThemeControlState, Color]
-    borderColor*: array[ThemeControlState, Color]
-    borderWidth*: float32
-    cornerRadius*: float32
-    contentInsets*: EdgeInsets
-    focusRingWidth*: float32
-    focusRingInset*: float32
-    focusRingColor*: Color
-
-  ChoiceButtonTheme* = object
-    indicatorFill*: array[ThemeControlState, Color]
-    indicatorSelectedFill*: array[ThemeControlState, Color]
-    indicatorBorderColor*: array[ThemeControlState, Color]
-    markColor*: array[ThemeControlState, Color]
-    textColor*: array[ThemeControlState, Color]
-    indicatorSize*: float32
-    indicatorBorderWidth*: float32
-    checkBoxCornerRadius*: float32
-    radioCornerRadius*: float32
-    indicatorSpacing*: float32
-    contentInsets*: EdgeInsets
-    focusRingWidth*: float32
-    focusRingInset*: float32
-    focusRingColor*: Color
-
-  TextFieldTheme* = object
-    fill*: Color
-    borderColor*: Color
-    borderWidth*: float32
-    cornerRadius*: float32
-    textInsets*: EdgeInsets
-    focusRingWidth*: float32
-    focusRingInset*: float32
-    focusRingColor*: Color
-
-  Theme* = object
-    button*: ButtonTheme
-    choiceButton*: ChoiceButtonTheme
-    textField*: TextFieldTheme
-
-  Appearance* = object
-    theme*: Theme
-    tokens*: StyleTokenStore
-    patches*: array[StyleRole, StylePatch]
-
 const
   StyleFill* = StyleKey[Color]("fill")
   StyleBorderColor* = StyleKey[Color]("border.color")
@@ -159,102 +124,40 @@ const
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
   StyleMarkColor* = StyleKey[Color]("mark.color")
 
-  ButtonFillTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "button.fill",
-    tcsHighlighted: "button.fill.highlighted",
-    tcsDisabled: "button.fill.disabled",
-  ]
-  ButtonTextColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "button.text.color",
-    tcsHighlighted: "button.text.color.highlighted",
-    tcsDisabled: "button.text.color.disabled",
-  ]
-  ButtonBorderColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "button.border.color",
-    tcsHighlighted: "button.border.color.highlighted",
-    tcsDisabled: "button.border.color.disabled",
-  ]
-  ButtonBorderWidthToken* = "button.border.width"
-  ButtonCornerRadiusToken* = "button.corner.radius"
-  ButtonContentInsetsToken* = "button.content.insets"
-  ButtonFocusRingWidthToken* = "button.focus.ring.width"
-  ButtonFocusRingInsetToken* = "button.focus.ring.inset"
-  ButtonFocusRingColorToken* = "button.focus.ring.color"
-  CheckBoxIndicatorFillTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "checkBox.indicator.fill",
-    tcsHighlighted: "checkBox.indicator.fill.highlighted",
-    tcsDisabled: "checkBox.indicator.fill.disabled",
-  ]
-  CheckBoxIndicatorSelectedFillTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "checkBox.indicator.fill.selected",
-    tcsHighlighted: "checkBox.indicator.fill.selected.highlighted",
-    tcsDisabled: "checkBox.indicator.fill.selected.disabled",
-  ]
-  CheckBoxIndicatorBorderColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "checkBox.indicator.border.color",
-    tcsHighlighted: "checkBox.indicator.border.color.highlighted",
-    tcsDisabled: "checkBox.indicator.border.color.disabled",
-  ]
-  CheckBoxMarkColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "checkBox.mark.color",
-    tcsHighlighted: "checkBox.mark.color.highlighted",
-    tcsDisabled: "checkBox.mark.color.disabled",
-  ]
-  CheckBoxTextColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "checkBox.text.color",
-    tcsHighlighted: "checkBox.text.color.highlighted",
-    tcsDisabled: "checkBox.text.color.disabled",
-  ]
-  CheckBoxIndicatorSizeToken* = "checkBox.indicator.size"
-  CheckBoxIndicatorBorderWidthToken* = "checkBox.indicator.border.width"
-  CheckBoxIndicatorCornerRadiusToken* = "checkBox.indicator.corner.radius"
-  CheckBoxIndicatorSpacingToken* = "checkBox.indicator.spacing"
-  CheckBoxContentInsetsToken* = "checkBox.content.insets"
-  CheckBoxFocusRingWidthToken* = "checkBox.focus.ring.width"
-  CheckBoxFocusRingInsetToken* = "checkBox.focus.ring.inset"
-  CheckBoxFocusRingColorToken* = "checkBox.focus.ring.color"
-  RadioButtonIndicatorFillTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "radioButton.indicator.fill",
-    tcsHighlighted: "radioButton.indicator.fill.highlighted",
-    tcsDisabled: "radioButton.indicator.fill.disabled",
-  ]
-  RadioButtonIndicatorSelectedFillTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "radioButton.indicator.fill.selected",
-    tcsHighlighted: "radioButton.indicator.fill.selected.highlighted",
-    tcsDisabled: "radioButton.indicator.fill.selected.disabled",
-  ]
-  RadioButtonIndicatorBorderColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "radioButton.indicator.border.color",
-    tcsHighlighted: "radioButton.indicator.border.color.highlighted",
-    tcsDisabled: "radioButton.indicator.border.color.disabled",
-  ]
-  RadioButtonMarkColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "radioButton.mark.color",
-    tcsHighlighted: "radioButton.mark.color.highlighted",
-    tcsDisabled: "radioButton.mark.color.disabled",
-  ]
-  RadioButtonTextColorTokens*: array[ThemeControlState, string] = [
-    tcsNormal: "radioButton.text.color",
-    tcsHighlighted: "radioButton.text.color.highlighted",
-    tcsDisabled: "radioButton.text.color.disabled",
-  ]
-  RadioButtonIndicatorSizeToken* = "radioButton.indicator.size"
-  RadioButtonIndicatorBorderWidthToken* = "radioButton.indicator.border.width"
-  RadioButtonIndicatorCornerRadiusToken* = "radioButton.indicator.corner.radius"
-  RadioButtonIndicatorSpacingToken* = "radioButton.indicator.spacing"
-  RadioButtonContentInsetsToken* = "radioButton.content.insets"
-  RadioButtonFocusRingWidthToken* = "radioButton.focus.ring.width"
-  RadioButtonFocusRingInsetToken* = "radioButton.focus.ring.inset"
-  RadioButtonFocusRingColorToken* = "radioButton.focus.ring.color"
+  AccentToken* = "accent"
+  AccentPressedToken* = "accent.pressed"
+  DisabledFillToken* = "disabled.fill"
+  DisabledTextColorToken* = "disabled.text.color"
+  FocusRingColorToken* = "focus.ring.color"
+
+  ButtonFillToken* = "button.fill"
+  ButtonHighlightedFillToken* = "button.fill.highlighted"
+  ButtonDisabledFillToken* = "button.fill.disabled"
+  ButtonTextColorToken* = "button.text.color"
+  ButtonDisabledTextColorToken* = "button.text.color.disabled"
+  ButtonBorderColorToken* = "button.border.color"
+  ButtonHighlightedBorderColorToken* = "button.border.color.highlighted"
+  ButtonDisabledBorderColorToken* = "button.border.color.disabled"
+
+  ChoiceIndicatorFillToken* = "choice.indicator.fill"
+  ChoiceIndicatorHighlightedFillToken* = "choice.indicator.fill.highlighted"
+  ChoiceIndicatorDisabledFillToken* = "choice.indicator.fill.disabled"
+  ChoiceIndicatorSelectedFillToken* = "choice.indicator.fill.selected"
+  ChoiceIndicatorSelectedHighlightedFillToken* =
+    "choice.indicator.fill.selected.highlighted"
+  ChoiceIndicatorSelectedDisabledFillToken* = "choice.indicator.fill.selected.disabled"
+  ChoiceIndicatorBorderColorToken* = "choice.indicator.border.color"
+  ChoiceIndicatorHighlightedBorderColorToken* =
+    "choice.indicator.border.color.highlighted"
+  ChoiceIndicatorDisabledBorderColorToken* = "choice.indicator.border.color.disabled"
+  ChoiceMarkColorToken* = "choice.mark.color"
+  ChoiceDisabledMarkColorToken* = "choice.mark.color.disabled"
+  ChoiceTextColorToken* = "choice.text.color"
+  ChoiceDisabledTextColorToken* = "choice.text.color.disabled"
+
   TextFieldFillToken* = "textField.fill"
   TextFieldBorderColorToken* = "textField.border.color"
-  TextFieldBorderWidthToken* = "textField.border.width"
-  TextFieldCornerRadiusToken* = "textField.corner.radius"
-  TextFieldTextInsetsToken* = "textField.text.insets"
   TextFieldTextColorToken* = "textField.text.color"
-  TextFieldFocusRingWidthToken* = "textField.focus.ring.width"
-  TextFieldFocusRingInsetToken* = "textField.focus.ring.inset"
-  TextFieldFocusRingColorToken* = "textField.focus.ring.color"
 
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -289,22 +192,150 @@ func styleKey*[T](name: string): StyleKey[T] =
 func keyName*[T](key: StyleKey[T]): string =
   string(key)
 
+func initStyleSelector*(
+    role: StyleRole, states: set[StyleState] = {}, id = "", classes: seq[string] = @[]
+): StyleSelector =
+  StyleSelector(role: role, states: states, id: id, classes: classes)
+
+func initStyleContext*(
+    role: StyleRole, states: set[StyleState] = {}, id = "", classes: seq[string] = @[]
+): StyleContext =
+  StyleContext(role: role, states: states, id: id, classes: classes)
+
+func initControlStyleContext*(
+    role: StyleRole,
+    enabled = true,
+    highlighted = false,
+    hovered = false,
+    active = false,
+    focused = false,
+    focusVisible = false,
+    focusWithin = false,
+    selected = false,
+    opened = false,
+    id = "",
+    classes: seq[string] = @[],
+): StyleContext =
+  result = initStyleContext(role, id = id, classes = classes)
+  if not enabled:
+    result.states.incl ssDisabled
+  if highlighted:
+    result.states.incl ssHighlighted
+  if hovered:
+    result.states.incl ssHovered
+  if active:
+    result.states.incl ssActive
+  if focused:
+    result.states.incl ssFocused
+  if focusVisible:
+    result.states.incl ssFocusVisible
+  if focusWithin:
+    result.states.incl ssFocusWithin
+  if selected:
+    result.states.incl ssSelected
+  if opened:
+    result.states.incl ssOpen
+
+func inset*(rect: Rect, insets: EdgeInsets): Rect =
+  initRect(
+    rect.origin.x + insets.left,
+    rect.origin.y + insets.top,
+    rect.size.width - insets.left - insets.right,
+    rect.size.height - insets.top - insets.bottom,
+  )
+
 proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
   StyleTokenStore(parent: parent, values: initTable[string, StyleValue]())
 
+proc ensureTokens(theme: var Theme): StyleTokenStore =
+  if theme.tokens.isNil:
+    theme.tokens = newStyleTokenStore()
+  theme.tokens
+
 proc newStylePatch*(): StylePatch =
   StylePatch(values: initTable[string, StyleValue]())
+
+proc clone*(tokens: StyleTokenStore): StyleTokenStore =
+  if tokens.isNil:
+    return
+  result = newStyleTokenStore(tokens.parent.clone)
+  result.values = tokens.values
+
+proc clone*(patch: StylePatch): StylePatch =
+  if patch.isNil:
+    return
+  result = newStylePatch()
+  result.values = patch.values
+
+proc clone*(theme: Theme): Theme =
+  result.tokens = theme.tokens.clone
+  for rule in theme.rules:
+    result.rules.add StyleRule(selector: rule.selector, patch: rule.patch.clone)
 
 proc setToken*(tokens: StyleTokenStore, name: string, value: StyleValue) =
   if tokens.isNil:
     return
   tokens.values[name] = value
 
+proc setToken*(tokens: StyleTokenStore, name: string, value: Color) =
+  tokens.setToken(name, styleColor(value))
+
+proc setToken*(tokens: StyleTokenStore, name: string, value: float32) =
+  tokens.setToken(name, styleLength(value))
+
+proc setToken*(tokens: StyleTokenStore, name: string, value: float) =
+  tokens.setToken(name, styleLength(value.float32))
+
+proc setToken*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
+  tokens.setToken(name, styleInsets(value))
+
+proc setToken*(theme: var Theme, name: string, value: StyleValue) =
+  theme.ensureTokens().setToken(name, value)
+
+proc setToken*(theme: var Theme, name: string, value: Color) =
+  theme.ensureTokens().setToken(name, value)
+
+proc setToken*(theme: var Theme, name: string, value: float32) =
+  theme.ensureTokens().setToken(name, value)
+
+proc setToken*(theme: var Theme, name: string, value: float) =
+  theme.ensureTokens().setToken(name, value)
+
+proc setToken*(theme: var Theme, name: string, value: EdgeInsets) =
+  theme.ensureTokens().setToken(name, value)
+
 proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: StyleValue) =
   if tokens.isNil:
     return
   if not tokens.values.hasKey(name):
     tokens.setToken(name, value)
+
+proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: Color) =
+  tokens.setDefaultToken(name, styleColor(value))
+
+proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: float32) =
+  tokens.setDefaultToken(name, styleLength(value))
+
+proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: float) =
+  tokens.setDefaultToken(name, styleLength(value.float32))
+
+proc setDefaultToken*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
+  tokens.setDefaultToken(name, styleInsets(value))
+
+proc setDefaultToken*(theme: var Theme, name: string, value: StyleValue) =
+  theme.ensureTokens().setDefaultToken(name, value)
+
+proc setDefaultToken*(theme: var Theme, name: string, value: Color) =
+  theme.ensureTokens().setDefaultToken(name, value)
+
+proc setDefaultToken*(theme: var Theme, name: string, value: float32) =
+  theme.ensureTokens().setDefaultToken(name, value)
+
+proc setDefaultToken*(theme: var Theme, name: string, value: float) =
+  theme.ensureTokens().setDefaultToken(name, value)
+
+proc setDefaultToken*(theme: var Theme, name: string, value: EdgeInsets) =
+  theme.ensureTokens().setDefaultToken(name, value)
 
 proc lookupToken(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
   var current = tokens
@@ -370,33 +401,291 @@ proc getStyle*(patch: StylePatch, key: string, value: var StyleValue): bool =
 proc getStyle*[T](patch: StylePatch, key: StyleKey[T], value: var StyleValue): bool =
   patch.getStyle(key.keyName, value)
 
-proc stylePatch*(appearance: Appearance, role: StyleRole): StylePatch =
-  appearance.patches[role]
+func matches*(selector: StyleSelector, context: StyleContext): bool =
+  if selector.role != context.role:
+    return false
+  if not (selector.states <= context.states):
+    return false
+  if selector.id.len > 0 and selector.id != context.id:
+    return false
+  for class in selector.classes:
+    if class notin context.classes:
+      return false
+  true
 
-proc stylePatch*(appearance: var Appearance, role: StyleRole): StylePatch =
-  if appearance.patches[role].isNil:
-    appearance.patches[role] = newStylePatch()
-  appearance.patches[role]
+proc stylePatch*(theme: var Theme, selector: StyleSelector): StylePatch =
+  for rule in theme.rules:
+    if rule.selector == selector:
+      return rule.patch
+  result = newStylePatch()
+  theme.rules.add StyleRule(selector: selector, patch: result)
+
+proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
+  for rule in theme.rules:
+    if rule.selector == selector:
+      return rule.patch
+
+proc addRule*(theme: var Theme, selector: StyleSelector, patch: StylePatch) =
+  theme.rules.add StyleRule(selector: selector, patch: patch)
+
+proc setStyle*[T](
+    theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*[T](
+    theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Color], value: Color) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme, role: StyleRole, key: StyleKey[EdgeInsets], value: EdgeInsets
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*[T](
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[Color],
+    value: Color,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[float32],
+    value: float32,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[float32],
+    value: float,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc `[]=`*[T](theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Color], value: Color) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float32) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var Theme, role: StyleRole, key: StyleKey[EdgeInsets], value: EdgeInsets
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
+  let patch = theme.stylePatch(initStyleSelector(role))
+  if patch.isNil or not patch.getStyle(key, result):
+    result = missingStyleValue()
+
+proc ruleValue(
+    theme: Theme, context: StyleContext, key: string, fallback: StyleValue
+): StyleValue =
+  result = fallback
+  for rule in theme.rules:
+    if rule.selector.matches(context):
+      var value: StyleValue
+      if rule.patch.getStyle(key, value):
+        var resolved: StyleValue
+        if theme.tokens.resolveValue(value, resolved):
+          result = resolved
+        elif value.kind != svToken:
+          result = value
+
+proc colorRule(
+    theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
+): Color =
+  let value = theme.ruleValue(context, key.keyName, styleColor(fallback))
+  if value.kind == svColor: value.color else: fallback
+
+proc lengthRule(
+    theme: Theme, context: StyleContext, key: StyleKey[float32], fallback: float32
+): float32 =
+  let value = theme.ruleValue(context, key.keyName, styleLength(fallback))
+  if value.kind == svLength: value.length else: fallback
+
+proc insetsRule(
+    theme: Theme, context: StyleContext, key: StyleKey[EdgeInsets], fallback: EdgeInsets
+): EdgeInsets =
+  let value = theme.ruleValue(context, key.keyName, styleInsets(fallback))
+  if value.kind == svInsets: value.insets else: fallback
+
+proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
+  if theme.tokens.isNil:
+    return fallback
+  if not theme.tokens.resolveToken(name, result):
+    result = fallback
+
+proc colorToken*(theme: Theme, name: string, fallback: Color): Color =
+  let value = theme.styleValue(name, styleColor(fallback))
+  if value.kind == svColor: value.color else: fallback
+
+proc lengthToken*(theme: Theme, name: string, fallback: float32): float32 =
+  let value = theme.styleValue(name, styleLength(fallback))
+  if value.kind == svLength: value.length else: fallback
+
+proc insetsToken*(theme: Theme, name: string, fallback: EdgeInsets): EdgeInsets =
+  let value = theme.styleValue(name, styleInsets(fallback))
+  if value.kind == svInsets: value.insets else: fallback
+
+proc styleValue*(
+    appearance: Appearance, name: string, fallback: StyleValue
+): StyleValue =
+  appearance.theme.styleValue(name, fallback)
+
+proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
+  appearance.theme.colorToken(name, fallback)
+
+proc lengthToken*(appearance: Appearance, name: string, fallback: float32): float32 =
+  appearance.theme.lengthToken(name, fallback)
+
+proc insetsToken*(
+    appearance: Appearance, name: string, fallback: EdgeInsets
+): EdgeInsets =
+  appearance.theme.insetsToken(name, fallback)
+
+proc setToken*(appearance: var Appearance, name: string, value: StyleValue) =
+  appearance.theme.setToken(name, value)
+
+proc setToken*(appearance: var Appearance, name: string, value: Color) =
+  appearance.theme.setToken(name, value)
+
+proc setToken*(appearance: var Appearance, name: string, value: float32) =
+  appearance.theme.setToken(name, value)
+
+proc setToken*(appearance: var Appearance, name: string, value: float) =
+  appearance.theme.setToken(name, value)
+
+proc setToken*(appearance: var Appearance, name: string, value: EdgeInsets) =
+  appearance.theme.setToken(name, value)
+
+proc setStyle*[T](
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Color],
+    value: Color,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float32,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme.setStyle(selector, key, value)
 
 proc setStyle*[T](
     appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
 ) =
-  appearance.stylePatch(role).setStyle(key, value)
+  appearance.theme.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[Color], value: Color
 ) =
-  appearance.stylePatch(role).setStyle(key, value)
+  appearance.theme.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float32
 ) =
-  appearance.stylePatch(role).setStyle(key, value)
+  appearance.theme.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
 ) =
-  appearance.stylePatch(role).setStyle(key, value)
+  appearance.theme.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -404,7 +693,7 @@ proc setStyle*(
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
-  appearance.stylePatch(role).setStyle(key, value)
+  appearance.theme.setStyle(role, key, value)
 
 proc `[]=`*[T](
     appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
@@ -435,435 +724,93 @@ proc `[]=`*(
   appearance.setStyle(role, key, value)
 
 proc `[]`*[T](appearance: Appearance, role: StyleRole, key: StyleKey[T]): StyleValue =
-  if not appearance.stylePatch(role).getStyle(key, result):
-    result = missingStyleValue()
+  appearance.theme[role, key]
 
-func initStyleContext*(
-    role: StyleRole, states: set[StyleState] = {}, id = "", classes: seq[string] = @[]
-): StyleContext =
-  StyleContext(role: role, states: states, id: id, classes: classes)
-
-func initControlStyleContext*(
-    role: StyleRole,
-    enabled = true,
-    highlighted = false,
-    hovered = false,
-    active = false,
-    focused = false,
-    focusVisible = false,
-    focusWithin = false,
-    selected = false,
-    opened = false,
-    id = "",
-    classes: seq[string] = @[],
-): StyleContext =
-  result = initStyleContext(role, id = id, classes = classes)
-  if not enabled:
-    result.states.incl ssDisabled
-  if highlighted:
-    result.states.incl ssHighlighted
-  if hovered:
-    result.states.incl ssHovered
-  if active:
-    result.states.incl ssActive
-  if focused:
-    result.states.incl ssFocused
-  if focusVisible:
-    result.states.incl ssFocusVisible
-  if focusWithin:
-    result.states.incl ssFocusWithin
-  if selected:
-    result.states.incl ssSelected
-  if opened:
-    result.states.incl ssOpen
-
-func inset*(rect: Rect, insets: EdgeInsets): Rect =
-  initRect(
-    rect.origin.x + insets.left,
-    rect.origin.y + insets.top,
-    rect.size.width - insets.left - insets.right,
-    rect.size.height - insets.top - insets.bottom,
-  )
-
-func buttonThemeState*(context: StyleContext): ThemeControlState =
-  if ssDisabled in context.states:
-    tcsDisabled
-  elif ssHighlighted in context.states or ssActive in context.states:
-    tcsHighlighted
-  else:
-    tcsNormal
-
-func buttonThemeState*(enabled, highlighted: bool): ThemeControlState =
-  buttonThemeState(initControlStyleContext(srButton, enabled, highlighted))
-
-func resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
-  let state = buttonThemeState(context)
+proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
   ButtonStyle(
     box: ControlBoxStyle(
-      fill: theme.button.fill[state],
-      borderColor: theme.button.borderColor[state],
-      borderWidth: theme.button.borderWidth,
-      cornerRadius: theme.button.cornerRadius,
-      focusRingWidth: theme.button.focusRingWidth,
-      focusRingInset: theme.button.focusRingInset,
-      focusRingColor: theme.button.focusRingColor,
+      fill: theme.colorRule(context, StyleFill, initColor(0.20, 0.48, 0.86, 1.0)),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.10, 0.25, 0.46, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 4.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
     ),
     text: TextStyle(
-      color: theme.button.textColor[state], insets: theme.button.contentInsets
+      color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
     ),
   )
 
-func choiceButtonCornerRadius(theme: ChoiceButtonTheme, role: StyleRole): float32 =
-  if role == srRadioButton: theme.radioCornerRadius else: theme.checkBoxCornerRadius
-
-func resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
-  let
-    state = buttonThemeState(context)
-    selected = ssSelected in context.states
-    indicatorFill =
-      if selected:
-        theme.choiceButton.indicatorSelectedFill[state]
-      else:
-        theme.choiceButton.indicatorFill[state]
+proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
   ChoiceButtonStyle(
     indicator: ControlBoxStyle(
-      fill: indicatorFill,
-      borderColor: theme.choiceButton.indicatorBorderColor[state],
-      borderWidth: theme.choiceButton.indicatorBorderWidth,
-      cornerRadius: theme.choiceButton.choiceButtonCornerRadius(context.role),
-      focusRingWidth: theme.choiceButton.focusRingWidth,
-      focusRingInset: theme.choiceButton.focusRingInset,
-      focusRingColor: theme.choiceButton.focusRingColor,
+      fill: theme.colorRule(context, StyleFill, initColor(1.0, 1.0, 1.0, 1.0)),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.50, 0.55, 0.62, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 3.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
     ),
-    markColor: theme.choiceButton.markColor[state],
+    markColor: theme.colorRule(context, StyleMarkColor, initColor(1.0, 1.0, 1.0, 1.0)),
     text: TextStyle(
-      color: theme.choiceButton.textColor[state],
-      insets: theme.choiceButton.contentInsets,
+      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 2.0)),
     ),
-    indicatorSize: theme.choiceButton.indicatorSize,
-    indicatorSpacing: theme.choiceButton.indicatorSpacing,
+    indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
+    indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
   )
 
-func resolveTextFieldStyle*(
+proc resolveTextFieldStyle*(
     theme: Theme, context: StyleContext, textColor: Color
 ): TextFieldStyle =
   TextFieldStyle(
     box: ControlBoxStyle(
-      fill: theme.textField.fill,
-      borderColor: theme.textField.borderColor,
-      borderWidth: theme.textField.borderWidth,
-      cornerRadius: theme.textField.cornerRadius,
-      focusRingWidth: theme.textField.focusRingWidth,
-      focusRingInset: theme.textField.focusRingInset,
-      focusRingColor: theme.textField.focusRingColor,
+      fill: theme.colorRule(context, StyleFill, initColor(1.0, 1.0, 1.0, 1.0)),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 3.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
     ),
-    text: TextStyle(color: textColor, insets: theme.textField.textInsets),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, textColor),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
+    ),
   )
 
-func resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
-  resolveTextFieldStyle(theme, context, initColor(0.08, 0.09, 0.11))
-
-proc styleValue*(
-    appearance: Appearance, name: string, fallback: StyleValue
-): StyleValue =
-  if appearance.tokens.isNil:
-    return fallback
-  if not appearance.tokens.resolveToken(name, result):
-    result = fallback
-
-proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
-  let value = appearance.styleValue(name, styleColor(fallback))
-  if value.kind == svColor: value.color else: fallback
-
-proc lengthToken*(appearance: Appearance, name: string, fallback: float32): float32 =
-  let value = appearance.styleValue(name, styleLength(fallback))
-  if value.kind == svLength: value.length else: fallback
-
-proc insetsToken*(
-    appearance: Appearance, name: string, fallback: EdgeInsets
-): EdgeInsets =
-  let value = appearance.styleValue(name, styleInsets(fallback))
-  if value.kind == svInsets: value.insets else: fallback
-
-proc patchValue(
-    appearance: Appearance, role: StyleRole, key: string, fallback: StyleValue
-): StyleValue =
-  var value: StyleValue
-  if not appearance.stylePatch(role).getStyle(key, value):
-    return fallback
-  if not appearance.tokens.resolveValue(value, result):
-    result = fallback
-
-proc colorPatch*(
-    appearance: Appearance, role: StyleRole, key: StyleKey[Color], fallback: Color
-): Color =
-  let value = appearance.patchValue(role, key.keyName, styleColor(fallback))
-  if value.kind == svColor: value.color else: fallback
-
-proc lengthPatch*(
-    appearance: Appearance, role: StyleRole, key: StyleKey[float32], fallback: float32
-): float32 =
-  let value = appearance.patchValue(role, key.keyName, styleLength(fallback))
-  if value.kind == svLength: value.length else: fallback
-
-proc insetsPatch*(
-    appearance: Appearance,
-    role: StyleRole,
-    key: StyleKey[EdgeInsets],
-    fallback: EdgeInsets,
-): EdgeInsets =
-  let value = appearance.patchValue(role, key.keyName, styleInsets(fallback))
-  if value.kind == svInsets: value.insets else: fallback
+proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
+  theme.resolveTextFieldStyle(context, initColor(0.08, 0.09, 0.11, 1.0))
 
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
-  let state = buttonThemeState(context)
-  result = appearance.theme.resolveButtonStyle(context)
-  result.box.fill = appearance.colorToken(ButtonFillTokens[state], result.box.fill)
-  result.box.borderColor =
-    appearance.colorToken(ButtonBorderColorTokens[state], result.box.borderColor)
-  result.box.borderWidth =
-    appearance.lengthToken(ButtonBorderWidthToken, result.box.borderWidth)
-  result.box.cornerRadius =
-    appearance.lengthToken(ButtonCornerRadiusToken, result.box.cornerRadius)
-  result.box.focusRingWidth =
-    appearance.lengthToken(ButtonFocusRingWidthToken, result.box.focusRingWidth)
-  result.box.focusRingInset =
-    appearance.lengthToken(ButtonFocusRingInsetToken, result.box.focusRingInset)
-  result.box.focusRingColor =
-    appearance.colorToken(ButtonFocusRingColorToken, result.box.focusRingColor)
-  result.text.color =
-    appearance.colorToken(ButtonTextColorTokens[state], result.text.color)
-  result.text.insets =
-    appearance.insetsToken(ButtonContentInsetsToken, result.text.insets)
-  result.box.fill = appearance.colorPatch(context.role, StyleFill, result.box.fill)
-  result.box.borderColor =
-    appearance.colorPatch(context.role, StyleBorderColor, result.box.borderColor)
-  result.box.borderWidth =
-    appearance.lengthPatch(context.role, StyleBorderWidth, result.box.borderWidth)
-  result.box.cornerRadius =
-    appearance.lengthPatch(context.role, StyleCornerRadius, result.box.cornerRadius)
-  result.box.focusRingWidth =
-    appearance.lengthPatch(context.role, StyleFocusRingWidth, result.box.focusRingWidth)
-  result.box.focusRingInset =
-    appearance.lengthPatch(context.role, StyleFocusRingInset, result.box.focusRingInset)
-  result.box.focusRingColor =
-    appearance.colorPatch(context.role, StyleFocusRingColor, result.box.focusRingColor)
-  result.text.color =
-    appearance.colorPatch(context.role, StyleTextColor, result.text.color)
-  result.text.insets =
-    appearance.insetsPatch(context.role, StyleTextInsets, result.text.insets)
-
-func choiceIndicatorFillToken(role: StyleRole, state: ThemeControlState): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorFillTokens[state]
-  else:
-    CheckBoxIndicatorFillTokens[state]
-
-func choiceIndicatorSelectedFillToken(
-    role: StyleRole, state: ThemeControlState
-): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorSelectedFillTokens[state]
-  else:
-    CheckBoxIndicatorSelectedFillTokens[state]
-
-func choiceIndicatorBorderColorToken(
-    role: StyleRole, state: ThemeControlState
-): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorBorderColorTokens[state]
-  else:
-    CheckBoxIndicatorBorderColorTokens[state]
-
-func choiceMarkColorToken(role: StyleRole, state: ThemeControlState): string =
-  if role == srRadioButton:
-    RadioButtonMarkColorTokens[state]
-  else:
-    CheckBoxMarkColorTokens[state]
-
-func choiceTextColorToken(role: StyleRole, state: ThemeControlState): string =
-  if role == srRadioButton:
-    RadioButtonTextColorTokens[state]
-  else:
-    CheckBoxTextColorTokens[state]
-
-func choiceIndicatorSizeToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorSizeToken
-  else:
-    CheckBoxIndicatorSizeToken
-
-func choiceIndicatorBorderWidthToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorBorderWidthToken
-  else:
-    CheckBoxIndicatorBorderWidthToken
-
-func choiceIndicatorCornerRadiusToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorCornerRadiusToken
-  else:
-    CheckBoxIndicatorCornerRadiusToken
-
-func choiceIndicatorSpacingToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonIndicatorSpacingToken
-  else:
-    CheckBoxIndicatorSpacingToken
-
-func choiceContentInsetsToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonContentInsetsToken
-  else:
-    CheckBoxContentInsetsToken
-
-func choiceFocusRingWidthToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonFocusRingWidthToken
-  else:
-    CheckBoxFocusRingWidthToken
-
-func choiceFocusRingInsetToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonFocusRingInsetToken
-  else:
-    CheckBoxFocusRingInsetToken
-
-func choiceFocusRingColorToken(role: StyleRole): string =
-  if role == srRadioButton:
-    RadioButtonFocusRingColorToken
-  else:
-    CheckBoxFocusRingColorToken
+  appearance.theme.resolveButtonStyle(context)
 
 proc resolveChoiceButtonStyle*(
     appearance: Appearance, context: StyleContext
 ): ChoiceButtonStyle =
-  let state = buttonThemeState(context)
-  result = appearance.theme.resolveChoiceButtonStyle(context)
-  result.indicator.fill =
-    if ssSelected in context.states:
-      appearance.colorToken(
-        choiceIndicatorSelectedFillToken(context.role, state), result.indicator.fill
-      )
-    else:
-      appearance.colorToken(
-        choiceIndicatorFillToken(context.role, state), result.indicator.fill
-      )
-  result.indicator.borderColor = appearance.colorToken(
-    choiceIndicatorBorderColorToken(context.role, state), result.indicator.borderColor
-  )
-  result.indicator.borderWidth = appearance.lengthToken(
-    choiceIndicatorBorderWidthToken(context.role), result.indicator.borderWidth
-  )
-  result.indicator.cornerRadius = appearance.lengthToken(
-    choiceIndicatorCornerRadiusToken(context.role), result.indicator.cornerRadius
-  )
-  result.indicator.focusRingWidth = appearance.lengthToken(
-    choiceFocusRingWidthToken(context.role), result.indicator.focusRingWidth
-  )
-  result.indicator.focusRingInset = appearance.lengthToken(
-    choiceFocusRingInsetToken(context.role), result.indicator.focusRingInset
-  )
-  result.indicator.focusRingColor = appearance.colorToken(
-    choiceFocusRingColorToken(context.role), result.indicator.focusRingColor
-  )
-  result.markColor =
-    appearance.colorToken(choiceMarkColorToken(context.role, state), result.markColor)
-  result.text.color =
-    appearance.colorToken(choiceTextColorToken(context.role, state), result.text.color)
-  result.text.insets =
-    appearance.insetsToken(choiceContentInsetsToken(context.role), result.text.insets)
-  result.indicatorSize =
-    appearance.lengthToken(choiceIndicatorSizeToken(context.role), result.indicatorSize)
-  result.indicatorSpacing = appearance.lengthToken(
-    choiceIndicatorSpacingToken(context.role), result.indicatorSpacing
-  )
-  result.indicator.fill =
-    appearance.colorPatch(context.role, StyleFill, result.indicator.fill)
-  result.indicator.borderColor =
-    appearance.colorPatch(context.role, StyleBorderColor, result.indicator.borderColor)
-  result.indicator.borderWidth =
-    appearance.lengthPatch(context.role, StyleBorderWidth, result.indicator.borderWidth)
-  result.indicator.cornerRadius = appearance.lengthPatch(
-    context.role, StyleCornerRadius, result.indicator.cornerRadius
-  )
-  result.indicator.focusRingWidth = appearance.lengthPatch(
-    context.role, StyleFocusRingWidth, result.indicator.focusRingWidth
-  )
-  result.indicator.focusRingInset = appearance.lengthPatch(
-    context.role, StyleFocusRingInset, result.indicator.focusRingInset
-  )
-  result.indicator.focusRingColor = appearance.colorPatch(
-    context.role, StyleFocusRingColor, result.indicator.focusRingColor
-  )
-  result.markColor =
-    appearance.colorPatch(context.role, StyleMarkColor, result.markColor)
-  result.text.color =
-    appearance.colorPatch(context.role, StyleTextColor, result.text.color)
-  result.text.insets =
-    appearance.insetsPatch(context.role, StyleTextInsets, result.text.insets)
-  result.indicatorSize =
-    appearance.lengthPatch(context.role, StyleIndicatorSize, result.indicatorSize)
-  result.indicatorSpacing =
-    appearance.lengthPatch(context.role, StyleIndicatorSpacing, result.indicatorSpacing)
+  appearance.theme.resolveChoiceButtonStyle(context)
 
 proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext, textColor: Color
 ): TextFieldStyle =
-  result = appearance.theme.resolveTextFieldStyle(context, textColor)
-  result.box.fill = appearance.colorToken(TextFieldFillToken, result.box.fill)
-  result.box.borderColor =
-    appearance.colorToken(TextFieldBorderColorToken, result.box.borderColor)
-  result.box.borderWidth =
-    appearance.lengthToken(TextFieldBorderWidthToken, result.box.borderWidth)
-  result.box.cornerRadius =
-    appearance.lengthToken(TextFieldCornerRadiusToken, result.box.cornerRadius)
-  result.box.focusRingWidth =
-    appearance.lengthToken(TextFieldFocusRingWidthToken, result.box.focusRingWidth)
-  result.box.focusRingInset =
-    appearance.lengthToken(TextFieldFocusRingInsetToken, result.box.focusRingInset)
-  result.box.focusRingColor =
-    appearance.colorToken(TextFieldFocusRingColorToken, result.box.focusRingColor)
-  result.text.color = appearance.colorToken(TextFieldTextColorToken, result.text.color)
-  result.text.insets =
-    appearance.insetsToken(TextFieldTextInsetsToken, result.text.insets)
-  result.box.fill = appearance.colorPatch(context.role, StyleFill, result.box.fill)
-  result.box.borderColor =
-    appearance.colorPatch(context.role, StyleBorderColor, result.box.borderColor)
-  result.box.borderWidth =
-    appearance.lengthPatch(context.role, StyleBorderWidth, result.box.borderWidth)
-  result.box.cornerRadius =
-    appearance.lengthPatch(context.role, StyleCornerRadius, result.box.cornerRadius)
-  result.box.focusRingWidth =
-    appearance.lengthPatch(context.role, StyleFocusRingWidth, result.box.focusRingWidth)
-  result.box.focusRingInset =
-    appearance.lengthPatch(context.role, StyleFocusRingInset, result.box.focusRingInset)
-  result.box.focusRingColor =
-    appearance.colorPatch(context.role, StyleFocusRingColor, result.box.focusRingColor)
-  result.text.color =
-    appearance.colorPatch(context.role, StyleTextColor, result.text.color)
-  result.text.insets =
-    appearance.insetsPatch(context.role, StyleTextInsets, result.text.insets)
+  appearance.theme.resolveTextFieldStyle(context, textColor)
 
 proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext
 ): TextFieldStyle =
-  appearance.resolveTextFieldStyle(context, initColor(0.08, 0.09, 0.11))
-
-func buttonFillColor*(theme: Theme, enabled, highlighted: bool): Color =
-  theme.resolveButtonStyle(initControlStyleContext(srButton, enabled, highlighted)).box.fill
-
-func buttonTextColor*(theme: Theme, enabled, highlighted: bool): Color =
-  theme.resolveButtonStyle(initControlStyleContext(srButton, enabled, highlighted)).text.color
-
-func buttonBorderColor*(theme: Theme, enabled, highlighted: bool): Color =
-  theme.resolveButtonStyle(initControlStyleContext(srButton, enabled, highlighted)).box.borderColor
+  appearance.theme.resolveTextFieldStyle(context)
 
 func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
-
-func buttonTextRect*(theme: Theme, bounds: Rect): Rect =
-  theme.resolveButtonStyle(initControlStyleContext(srButton)).buttonTextRect(bounds)
 
 func choiceIndicatorRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
   let
@@ -885,226 +832,222 @@ func choiceTextRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
 func textFieldTextRect*(style: TextFieldStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
 
-func textFieldTextRect*(theme: Theme, bounds: Rect): Rect =
-  theme.resolveTextFieldStyle(initControlStyleContext(srTextField)).textFieldTextRect(
-    bounds
+proc addRoleRule(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    fill: StyleValue,
+    borderColor: StyleValue,
+    textColor: StyleValue,
+) =
+  let selector = initStyleSelector(role, states)
+  theme.setStyle(selector, StyleFill, fill)
+  theme.setStyle(selector, StyleBorderColor, borderColor)
+  theme.setStyle(selector, StyleTextColor, textColor)
+
+proc addChoiceRule(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[StyleState],
+    fill: StyleValue,
+    borderColor: StyleValue,
+    markColor: StyleValue,
+    textColor: StyleValue,
+) =
+  let selector = initStyleSelector(role, states)
+  theme.setStyle(selector, StyleFill, fill)
+  theme.setStyle(selector, StyleBorderColor, borderColor)
+  theme.setStyle(selector, StyleMarkColor, markColor)
+  theme.setStyle(selector, StyleTextColor, textColor)
+
+proc initTheme*(): Theme =
+  result.tokens = newStyleTokenStore()
+  result.setDefaultToken(AccentToken, styleColor(initColor(0.20, 0.48, 0.86, 1.0)))
+  result.setDefaultToken(
+    AccentPressedToken, styleColor(initColor(0.12, 0.34, 0.68, 1.0))
+  )
+  result.setDefaultToken(
+    DisabledFillToken, styleColor(initColor(0.58, 0.62, 0.68, 1.0))
+  )
+  result.setDefaultToken(
+    DisabledTextColorToken, styleColor(initColor(0.92, 0.94, 0.96, 1.0))
+  )
+  result.setDefaultToken(
+    FocusRingColorToken, styleColor(initColor(0.24, 0.48, 0.92, 0.58))
   )
 
-func initTheme*(): Theme =
-  Theme(
-    button: ButtonTheme(
-      fill: [
-        tcsNormal: initColor(0.20, 0.48, 0.86, 1.0),
-        tcsHighlighted: initColor(0.12, 0.34, 0.68, 1.0),
-        tcsDisabled: initColor(0.58, 0.62, 0.68, 1.0),
-      ],
-      textColor: [
-        tcsNormal: initColor(1.0, 1.0, 1.0, 1.0),
-        tcsHighlighted: initColor(1.0, 1.0, 1.0, 1.0),
-        tcsDisabled: initColor(0.92, 0.94, 0.96, 1.0),
-      ],
-      borderColor: [
-        tcsNormal: initColor(0.10, 0.25, 0.46, 1.0),
-        tcsHighlighted: initColor(0.06, 0.18, 0.36, 1.0),
-        tcsDisabled: initColor(0.46, 0.50, 0.56, 1.0),
-      ],
-      borderWidth: 1.0,
-      cornerRadius: 4.0,
-      contentInsets: initEdgeInsets(0.0, 8.0),
-      focusRingWidth: 3.0,
-      focusRingInset: 2.0,
-      focusRingColor: initColor(0.24, 0.48, 0.92, 0.58),
-    ),
-    choiceButton: ChoiceButtonTheme(
-      indicatorFill: [
-        tcsNormal: initColor(1.0, 1.0, 1.0, 1.0),
-        tcsHighlighted: initColor(0.90, 0.94, 1.0, 1.0),
-        tcsDisabled: initColor(0.90, 0.92, 0.95, 1.0),
-      ],
-      indicatorSelectedFill: [
-        tcsNormal: initColor(0.20, 0.48, 0.86, 1.0),
-        tcsHighlighted: initColor(0.12, 0.34, 0.68, 1.0),
-        tcsDisabled: initColor(0.58, 0.62, 0.68, 1.0),
-      ],
-      indicatorBorderColor: [
-        tcsNormal: initColor(0.50, 0.55, 0.62, 1.0),
-        tcsHighlighted: initColor(0.24, 0.38, 0.58, 1.0),
-        tcsDisabled: initColor(0.68, 0.72, 0.78, 1.0),
-      ],
-      markColor: [
-        tcsNormal: initColor(1.0, 1.0, 1.0, 1.0),
-        tcsHighlighted: initColor(1.0, 1.0, 1.0, 1.0),
-        tcsDisabled: initColor(0.92, 0.94, 0.96, 1.0),
-      ],
-      textColor: [
-        tcsNormal: initColor(0.08, 0.09, 0.11, 1.0),
-        tcsHighlighted: initColor(0.08, 0.09, 0.11, 1.0),
-        tcsDisabled: initColor(0.52, 0.56, 0.62, 1.0),
-      ],
-      indicatorSize: 14.0,
-      indicatorBorderWidth: 1.0,
-      checkBoxCornerRadius: 3.0,
-      radioCornerRadius: 7.0,
-      indicatorSpacing: 7.0,
-      contentInsets: initEdgeInsets(0.0, 2.0),
-      focusRingWidth: 3.0,
-      focusRingInset: 2.0,
-      focusRingColor: initColor(0.24, 0.48, 0.92, 0.58),
-    ),
-    textField: TextFieldTheme(
-      fill: initColor(1.0, 1.0, 1.0, 1.0),
-      borderColor: initColor(0.72, 0.75, 0.80, 1.0),
-      borderWidth: 1.0,
-      cornerRadius: 3.0,
-      textInsets: initEdgeInsets(0.0, 6.0),
-      focusRingWidth: 3.0,
-      focusRingInset: 2.0,
-      focusRingColor: initColor(0.24, 0.48, 0.92, 0.58),
-    ),
+  result.setDefaultToken(ButtonFillToken, styleToken(AccentToken))
+  result.setDefaultToken(ButtonHighlightedFillToken, styleToken(AccentPressedToken))
+  result.setDefaultToken(ButtonDisabledFillToken, styleToken(DisabledFillToken))
+  result.setDefaultToken(
+    ButtonTextColorToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  )
+  result.setDefaultToken(
+    ButtonDisabledTextColorToken, styleToken(DisabledTextColorToken)
+  )
+  result.setDefaultToken(
+    ButtonBorderColorToken, styleColor(initColor(0.10, 0.25, 0.46, 1.0))
+  )
+  result.setDefaultToken(
+    ButtonHighlightedBorderColorToken, styleColor(initColor(0.06, 0.18, 0.36, 1.0))
+  )
+  result.setDefaultToken(
+    ButtonDisabledBorderColorToken, styleColor(initColor(0.46, 0.50, 0.56, 1.0))
   )
 
-proc newStyleTokenStore*(theme: Theme): StyleTokenStore =
-  result = newStyleTokenStore()
-  for state in ThemeControlState:
-    result.setDefaultToken(
-      ButtonFillTokens[state], styleColor(theme.button.fill[state])
+  result.setDefaultToken(
+    ChoiceIndicatorFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  )
+  result.setDefaultToken(
+    ChoiceIndicatorHighlightedFillToken, styleColor(initColor(0.90, 0.94, 1.0, 1.0))
+  )
+  result.setDefaultToken(
+    ChoiceIndicatorDisabledFillToken, styleColor(initColor(0.90, 0.92, 0.95, 1.0))
+  )
+  result.setDefaultToken(ChoiceIndicatorSelectedFillToken, styleToken(AccentToken))
+  result.setDefaultToken(
+    ChoiceIndicatorSelectedHighlightedFillToken, styleToken(AccentPressedToken)
+  )
+  result.setDefaultToken(
+    ChoiceIndicatorSelectedDisabledFillToken, styleToken(DisabledFillToken)
+  )
+  result.setDefaultToken(
+    ChoiceIndicatorBorderColorToken, styleColor(initColor(0.50, 0.55, 0.62, 1.0))
+  )
+  result.setDefaultToken(
+    ChoiceIndicatorHighlightedBorderColorToken,
+    styleColor(initColor(0.24, 0.38, 0.58, 1.0)),
+  )
+  result.setDefaultToken(
+    ChoiceIndicatorDisabledBorderColorToken,
+    styleColor(initColor(0.68, 0.72, 0.78, 1.0)),
+  )
+  result.setDefaultToken(
+    ChoiceMarkColorToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  )
+  result.setDefaultToken(
+    ChoiceDisabledMarkColorToken, styleToken(DisabledTextColorToken)
+  )
+  result.setDefaultToken(
+    ChoiceTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  )
+  result.setDefaultToken(
+    ChoiceDisabledTextColorToken, styleColor(initColor(0.52, 0.56, 0.62, 1.0))
+  )
+
+  result.setDefaultToken(TextFieldFillToken, styleColor(initColor(1.0, 1.0, 1.0, 1.0)))
+  result.setDefaultToken(
+    TextFieldBorderColorToken, styleColor(initColor(0.72, 0.75, 0.80, 1.0))
+  )
+  result.setDefaultToken(
+    TextFieldTextColorToken, styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  )
+
+  result.addRoleRule(
+    srButton,
+    {},
+    styleToken(ButtonFillToken),
+    styleToken(ButtonBorderColorToken),
+    styleToken(ButtonTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssHighlighted},
+    styleToken(ButtonHighlightedFillToken),
+    styleToken(ButtonHighlightedBorderColorToken),
+    styleToken(ButtonTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssActive},
+    styleToken(ButtonHighlightedFillToken),
+    styleToken(ButtonHighlightedBorderColorToken),
+    styleToken(ButtonTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssDisabled},
+    styleToken(ButtonDisabledFillToken),
+    styleToken(ButtonDisabledBorderColorToken),
+    styleToken(ButtonDisabledTextColorToken),
+  )
+  result.setStyle(srButton, StyleBorderWidth, 1.0)
+  result.setStyle(srButton, StyleCornerRadius, 4.0)
+  result.setStyle(srButton, StyleTextInsets, initEdgeInsets(0.0, 8.0))
+  result.setStyle(srButton, StyleFocusRingWidth, 3.0)
+  result.setStyle(srButton, StyleFocusRingInset, 2.0)
+  result.setStyle(srButton, StyleFocusRingColor, styleToken(FocusRingColorToken))
+
+  for role in [srCheckBox, srRadioButton]:
+    let radius = if role == srCheckBox: 3.0'f32 else: 7.0'f32
+    result.addChoiceRule(
+      role,
+      {},
+      styleToken(ChoiceIndicatorFillToken),
+      styleToken(ChoiceIndicatorBorderColorToken),
+      styleToken(ChoiceMarkColorToken),
+      styleToken(ChoiceTextColorToken),
     )
-    result.setDefaultToken(
-      ButtonTextColorTokens[state], styleColor(theme.button.textColor[state])
+    result.addChoiceRule(
+      role,
+      {ssHighlighted},
+      styleToken(ChoiceIndicatorHighlightedFillToken),
+      styleToken(ChoiceIndicatorHighlightedBorderColorToken),
+      styleToken(ChoiceMarkColorToken),
+      styleToken(ChoiceTextColorToken),
     )
-    result.setDefaultToken(
-      ButtonBorderColorTokens[state], styleColor(theme.button.borderColor[state])
+    result.addChoiceRule(
+      role,
+      {ssSelected},
+      styleToken(ChoiceIndicatorSelectedFillToken),
+      styleToken(ChoiceIndicatorBorderColorToken),
+      styleToken(ChoiceMarkColorToken),
+      styleToken(ChoiceTextColorToken),
     )
-  result.setDefaultToken(ButtonBorderWidthToken, styleLength(theme.button.borderWidth))
-  result.setDefaultToken(
-    ButtonCornerRadiusToken, styleLength(theme.button.cornerRadius)
-  )
-  result.setDefaultToken(
-    ButtonContentInsetsToken, styleInsets(theme.button.contentInsets)
-  )
-  result.setDefaultToken(
-    ButtonFocusRingWidthToken, styleLength(theme.button.focusRingWidth)
-  )
-  result.setDefaultToken(
-    ButtonFocusRingInsetToken, styleLength(theme.button.focusRingInset)
-  )
-  result.setDefaultToken(
-    ButtonFocusRingColorToken, styleColor(theme.button.focusRingColor)
-  )
-  for state in ThemeControlState:
-    result.setDefaultToken(
-      CheckBoxIndicatorFillTokens[state],
-      styleColor(theme.choiceButton.indicatorFill[state]),
+    result.addChoiceRule(
+      role,
+      {ssSelected, ssHighlighted},
+      styleToken(ChoiceIndicatorSelectedHighlightedFillToken),
+      styleToken(ChoiceIndicatorHighlightedBorderColorToken),
+      styleToken(ChoiceMarkColorToken),
+      styleToken(ChoiceTextColorToken),
     )
-    result.setDefaultToken(
-      CheckBoxIndicatorSelectedFillTokens[state],
-      styleColor(theme.choiceButton.indicatorSelectedFill[state]),
+    result.addChoiceRule(
+      role,
+      {ssDisabled},
+      styleToken(ChoiceIndicatorDisabledFillToken),
+      styleToken(ChoiceIndicatorDisabledBorderColorToken),
+      styleToken(ChoiceDisabledMarkColorToken),
+      styleToken(ChoiceDisabledTextColorToken),
     )
-    result.setDefaultToken(
-      CheckBoxIndicatorBorderColorTokens[state],
-      styleColor(theme.choiceButton.indicatorBorderColor[state]),
+    result.addChoiceRule(
+      role,
+      {ssSelected, ssDisabled},
+      styleToken(ChoiceIndicatorSelectedDisabledFillToken),
+      styleToken(ChoiceIndicatorDisabledBorderColorToken),
+      styleToken(ChoiceDisabledMarkColorToken),
+      styleToken(ChoiceDisabledTextColorToken),
     )
-    result.setDefaultToken(
-      CheckBoxMarkColorTokens[state], styleColor(theme.choiceButton.markColor[state])
-    )
-    result.setDefaultToken(
-      CheckBoxTextColorTokens[state], styleColor(theme.choiceButton.textColor[state])
-    )
-    result.setDefaultToken(
-      RadioButtonIndicatorFillTokens[state],
-      styleColor(theme.choiceButton.indicatorFill[state]),
-    )
-    result.setDefaultToken(
-      RadioButtonIndicatorSelectedFillTokens[state],
-      styleColor(theme.choiceButton.indicatorSelectedFill[state]),
-    )
-    result.setDefaultToken(
-      RadioButtonIndicatorBorderColorTokens[state],
-      styleColor(theme.choiceButton.indicatorBorderColor[state]),
-    )
-    result.setDefaultToken(
-      RadioButtonMarkColorTokens[state], styleColor(theme.choiceButton.markColor[state])
-    )
-    result.setDefaultToken(
-      RadioButtonTextColorTokens[state], styleColor(theme.choiceButton.textColor[state])
-    )
-  result.setDefaultToken(
-    CheckBoxIndicatorSizeToken, styleLength(theme.choiceButton.indicatorSize)
-  )
-  result.setDefaultToken(
-    CheckBoxIndicatorBorderWidthToken,
-    styleLength(theme.choiceButton.indicatorBorderWidth),
-  )
-  result.setDefaultToken(
-    CheckBoxIndicatorCornerRadiusToken,
-    styleLength(theme.choiceButton.checkBoxCornerRadius),
-  )
-  result.setDefaultToken(
-    CheckBoxIndicatorSpacingToken, styleLength(theme.choiceButton.indicatorSpacing)
-  )
-  result.setDefaultToken(
-    CheckBoxContentInsetsToken, styleInsets(theme.choiceButton.contentInsets)
-  )
-  result.setDefaultToken(
-    CheckBoxFocusRingWidthToken, styleLength(theme.choiceButton.focusRingWidth)
-  )
-  result.setDefaultToken(
-    CheckBoxFocusRingInsetToken, styleLength(theme.choiceButton.focusRingInset)
-  )
-  result.setDefaultToken(
-    CheckBoxFocusRingColorToken, styleColor(theme.choiceButton.focusRingColor)
-  )
-  result.setDefaultToken(
-    RadioButtonIndicatorSizeToken, styleLength(theme.choiceButton.indicatorSize)
-  )
-  result.setDefaultToken(
-    RadioButtonIndicatorBorderWidthToken,
-    styleLength(theme.choiceButton.indicatorBorderWidth),
-  )
-  result.setDefaultToken(
-    RadioButtonIndicatorCornerRadiusToken,
-    styleLength(theme.choiceButton.radioCornerRadius),
-  )
-  result.setDefaultToken(
-    RadioButtonIndicatorSpacingToken, styleLength(theme.choiceButton.indicatorSpacing)
-  )
-  result.setDefaultToken(
-    RadioButtonContentInsetsToken, styleInsets(theme.choiceButton.contentInsets)
-  )
-  result.setDefaultToken(
-    RadioButtonFocusRingWidthToken, styleLength(theme.choiceButton.focusRingWidth)
-  )
-  result.setDefaultToken(
-    RadioButtonFocusRingInsetToken, styleLength(theme.choiceButton.focusRingInset)
-  )
-  result.setDefaultToken(
-    RadioButtonFocusRingColorToken, styleColor(theme.choiceButton.focusRingColor)
-  )
-  result.setDefaultToken(TextFieldFillToken, styleColor(theme.textField.fill))
-  result.setDefaultToken(
-    TextFieldBorderColorToken, styleColor(theme.textField.borderColor)
-  )
-  result.setDefaultToken(
-    TextFieldBorderWidthToken, styleLength(theme.textField.borderWidth)
-  )
-  result.setDefaultToken(
-    TextFieldCornerRadiusToken, styleLength(theme.textField.cornerRadius)
-  )
-  result.setDefaultToken(
-    TextFieldTextInsetsToken, styleInsets(theme.textField.textInsets)
-  )
-  result.setDefaultToken(
-    TextFieldFocusRingWidthToken, styleLength(theme.textField.focusRingWidth)
-  )
-  result.setDefaultToken(
-    TextFieldFocusRingInsetToken, styleLength(theme.textField.focusRingInset)
-  )
-  result.setDefaultToken(
-    TextFieldFocusRingColorToken, styleColor(theme.textField.focusRingColor)
-  )
+    result.setStyle(role, StyleIndicatorSize, 14.0)
+    result.setStyle(role, StyleBorderWidth, 1.0)
+    result.setStyle(role, StyleCornerRadius, radius)
+    result.setStyle(role, StyleIndicatorSpacing, 7.0)
+    result.setStyle(role, StyleTextInsets, initEdgeInsets(0.0, 2.0))
+    result.setStyle(role, StyleFocusRingWidth, 3.0)
+    result.setStyle(role, StyleFocusRingInset, 2.0)
+    result.setStyle(role, StyleFocusRingColor, styleToken(FocusRingColorToken))
+
+  result.setStyle(srTextField, StyleFill, styleToken(TextFieldFillToken))
+  result.setStyle(srTextField, StyleBorderColor, styleToken(TextFieldBorderColorToken))
+  result.setStyle(srTextField, StyleBorderWidth, 1.0)
+  result.setStyle(srTextField, StyleCornerRadius, 3.0)
+  result.setStyle(srTextField, StyleTextInsets, initEdgeInsets(0.0, 6.0))
+  result.setStyle(srTextField, StyleFocusRingWidth, 3.0)
+  result.setStyle(srTextField, StyleFocusRingInset, 2.0)
+  result.setStyle(srTextField, StyleFocusRingColor, styleToken(FocusRingColorToken))
 
 proc initAppearance*(theme: Theme): Appearance =
-  Appearance(theme: theme, tokens: newStyleTokenStore(theme))
+  Appearance(theme: theme.clone)
 
 proc initAppearance*(): Appearance =
   initAppearance(initTheme())

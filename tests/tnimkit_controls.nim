@@ -15,8 +15,12 @@ suite "nimkit controls":
     let button = newButton(0, 0, 120, 36, "Original")
 
     check button.conformsTo(ButtonProtocol)
-    button.replaceMethod(title()) do(self: Button) -> string:
-      "Swizzled"
+    let swizzledTitle: DynamicMethod = proc(
+        self: DynamicAgent, invocation: var Invocation
+    ) =
+      check Button(self) == button
+      invocation.setResult("Swizzled")
+    button.replaceMethod(title(), swizzledTitle)
     check button.title == "Swizzled"
 
   test "button click sends selector action to closure target":
