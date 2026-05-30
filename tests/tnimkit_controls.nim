@@ -104,3 +104,57 @@ suite "nimkit controls":
     check button.state == bsMixed
     discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOff
+
+  test "checkbox toggles state and supports mixed state":
+    var actionCount = 0
+    let
+      checkbox = newCheckBox(0, 0, 140, 24, "Enabled")
+      action = actionSelector("checkboxAction")
+
+    proc onToggle(sender: DynamicAgent) =
+      check sender == DynamicAgent(checkbox)
+      inc actionCount
+
+    checkbox.setTarget(newActionTarget(action, onToggle))
+    checkbox.setAction(action)
+    checkbox.setAllowsMixedState(true)
+
+    discard checkbox.send(performClick(), ActionArgs(sender: checkbox))
+    check checkbox.state == bsOn
+    discard checkbox.send(performClick(), ActionArgs(sender: checkbox))
+    check checkbox.state == bsMixed
+    discard checkbox.send(performClick(), ActionArgs(sender: checkbox))
+    check checkbox.state == bsOff
+    check actionCount == 3
+
+  test "radio buttons select one sibling without toggling off":
+    var actionCount = 0
+    let
+      root = newView(0, 0, 220, 100)
+      first = newRadioButton(10, 10, 160, 24, "First")
+      second = newRadioButton(10, 42, 160, 24, "Second")
+      action = actionSelector("radioAction")
+
+    proc onSelect(sender: DynamicAgent) =
+      check sender == DynamicAgent(first) or sender == DynamicAgent(second)
+      inc actionCount
+
+    let target = newActionTarget(action, onSelect)
+    first.setTarget(target)
+    first.setAction(action)
+    second.setTarget(target)
+    second.setAction(action)
+    root.addSubview(first)
+    root.addSubview(second)
+
+    discard first.send(performClick(), ActionArgs(sender: first))
+    check first.state == bsOn
+    check second.state == bsOff
+
+    discard second.send(performClick(), ActionArgs(sender: second))
+    check first.state == bsOff
+    check second.state == bsOn
+
+    discard second.send(performClick(), ActionArgs(sender: second))
+    check second.state == bsOn
+    check actionCount == 3
