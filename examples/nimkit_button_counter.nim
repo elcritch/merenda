@@ -4,12 +4,12 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow(100, 100, 300, 300, "Nimkit Button Counter")
-  root = newView(0, 0, 300, 300)
-  button1 = newButton(50, 225, 90, 25, "button1")
-  button2 = newButton(50, 125, 200, 75, "button2")
-  label1 = newTextField(50, 80, 200, 20, "button1 clicked 0 times")
-  label2 = newTextField(50, 50, 200, 20, "button2 clicked 0 times")
+  window = newWindow("Nimkit Button Counter", frame = initRect(100, 100, 300, 300))
+  root = newView(frame = initRect(0, 0, 300, 300))
+  button1 = newButton("button1", frame = initRect(50, 225, 90, 25))
+  button2 = newButton("button2", frame = initRect(50, 125, 200, 75))
+  label1 = newTextField("button1 clicked 0 times", frame = initRect(50, 80, 200, 20))
+  label2 = newTextField("button2 clicked 0 times", frame = initRect(50, 50, 200, 20))
   button1Action = actionSelector("button1Clicked")
   button2Action = actionSelector("button2Clicked")
 

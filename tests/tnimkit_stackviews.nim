@@ -19,7 +19,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
 suite "nimkit stack views":
   test "horizontal stack intrinsic size sums widths and spacing with insets":
     let
-      stack = newStackView(0, 0, 1, 1, laHorizontal)
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 32)
       third = newFixedIntrinsicView(10, 12)
@@ -43,7 +43,7 @@ suite "nimkit stack views":
 
   test "vertical stack intrinsic size sums heights and spacing with insets":
     let
-      stack = newStackView(0, 0, 1, 1, laVertical)
+      stack = newStackView(laVertical, frame = initRect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 32)
 
@@ -62,7 +62,7 @@ suite "nimkit stack views":
 
   test "cross-axis alignment can fill center and trail":
     let
-      stack = newStackView(0, 0, 120, 50, laHorizontal)
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 120, 50))
       fillChild = newFixedIntrinsicView(20, 10)
       centeredChild = newFixedIntrinsicView(20, 10)
       trailingChild = newFixedIntrinsicView(20, 10)
@@ -88,7 +88,7 @@ suite "nimkit stack views":
 
   test "fill equally distribution divides the main axis":
     let
-      stack = newStackView(0, 0, 122, 24, laHorizontal)
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 122, 24))
       first = newFixedIntrinsicView(10, 10)
       second = newFixedIntrinsicView(30, 10)
 
@@ -103,7 +103,7 @@ suite "nimkit stack views":
 
   test "fill distribution expands lower hugging priority views first":
     let
-      stack = newStackView(0, 0, 130, 20, laHorizontal)
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 130, 20))
       field = newFixedIntrinsicView(40, 10)
       label = newFixedIntrinsicView(40, 10)
 
@@ -119,9 +119,9 @@ suite "nimkit stack views":
 
   test "arranged subview content changes invalidate stack and parent lazily":
     let
-      root = newView(0, 0, 300, 120)
-      stack = newStackView(10, 10, 1, 1, laHorizontal)
-      button = newButton(0, 0, 20, 20, "Go")
+      root = newView(frame = initRect(0, 0, 300, 120))
+      stack = newStackView(laHorizontal, frame = initRect(10, 10, 1, 1))
+      button = newButton("Go", frame = initRect(0, 0, 20, 20))
 
     root.addSubview(stack)
     stack.addArrangedSubview(button)
@@ -145,8 +145,8 @@ suite "nimkit stack views":
 
   test "stack participates in deterministic constraint layout":
     let
-      root = newView(0, 0, 300, 100)
-      stack = newStackView(0, 0, 1, 1, laHorizontal)
+      root = newView(frame = initRect(0, 0, 300, 100))
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 20)
       left = newLayoutConstraint(stack, latLeft, lrEqual, root, latLeft, constant = 20)
@@ -169,7 +169,7 @@ suite "nimkit stack views":
 
   test "removing a subview removes it from arranged layout":
     let
-      stack = newStackView(0, 0, 100, 20, laHorizontal)
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 100, 20))
       first = newFixedIntrinsicView(20, 10)
       second = newFixedIntrinsicView(20, 10)
 

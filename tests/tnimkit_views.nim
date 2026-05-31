@@ -96,9 +96,9 @@ proc newConstraintSpyView(name: string, frame: Rect): ConstraintSpyView =
 
 suite "nimkit views":
   test "subviews participate in hit testing from front to back":
-    let root = newView(0, 0, 200, 160)
-    let back = newView(20, 20, 80, 50)
-    let front = newView(30, 25, 80, 50)
+    let root = newView(frame = initRect(0, 0, 200, 160))
+    let back = newView(frame = initRect(20, 20, 80, 50))
+    let front = newView(frame = initRect(30, 25, 80, 50))
     root.addSubview(back)
     root.addSubview(front)
 
@@ -108,8 +108,8 @@ suite "nimkit views":
     check root.hitTest(initPoint(220, 159)).isNil
 
   test "hidden views do not hit test":
-    let root = newView(0, 0, 200, 160)
-    let child = newView(20, 20, 80, 50)
+    let root = newView(frame = initRect(0, 0, 200, 160))
+    let child = newView(frame = initRect(20, 20, 80, 50))
     root.addSubview(child)
     child.setHidden(true)
 
@@ -117,9 +117,9 @@ suite "nimkit views":
 
   test "unclipped subviews can hit test outside parent bounds":
     let
-      root = newView(0, 0, 200, 160)
-      parent = newView(20, 20, 40, 40)
-      child = newView(50, 0, 40, 40)
+      root = newView(frame = initRect(0, 0, 200, 160))
+      parent = newView(frame = initRect(20, 20, 40, 40))
+      child = newView(frame = initRect(50, 0, 40, 40))
 
     root.addSubview(parent)
     parent.addSubview(child)
@@ -130,8 +130,8 @@ suite "nimkit views":
     check root.hitTest(initPoint(85, 30)) == root
 
   test "child invalidation propagates to parent":
-    let root = newView(0, 0, 200, 160)
-    let child = newView(20, 20, 80, 50)
+    let root = newView(frame = initRect(0, 0, 200, 160))
+    let child = newView(frame = initRect(20, 20, 80, 50))
     root.addSubview(child)
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
@@ -144,9 +144,9 @@ suite "nimkit views":
   test "appearance inherits from application window and view":
     let
       app = newApplication()
-      window = newWindow(0, 0, 240, 160, "Appearance")
-      root = newView(0, 0, 240, 160)
-      child = newView(10, 10, 80, 40)
+      window = newWindow("Appearance", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      child = newView(frame = initRect(10, 10, 80, 40))
 
     root.addSubview(child)
     window.setContentView(root)
@@ -195,7 +195,7 @@ suite "nimkit views":
     check clearedStyle.box.fill == windowFill
 
   test "style identity is stored on views and invalidates display":
-    let view = newView(0, 0, 100, 80)
+    let view = newView(frame = initRect(0, 0, 100, 80))
     view.setNeedsDisplay(false)
 
     view.setStyleId("primary")
@@ -220,7 +220,7 @@ suite "nimkit views":
     check view.needsDisplay
 
   test "clipsToBounds defaults off and invalidates display":
-    let view = newView(0, 0, 100, 80)
+    let view = newView(frame = initRect(0, 0, 100, 80))
 
     check not view.clipsToBounds
 
@@ -299,7 +299,7 @@ suite "nimkit views":
     check not child.needsLayout
 
   test "setNeedsUpdateConstraints ignores false like AppKit":
-    let view = newView(0, 0, 100, 80)
+    let view = newView(frame = initRect(0, 0, 100, 80))
 
     check not view.needsUpdateConstraints
     view.setNeedsUpdateConstraints(false)
@@ -309,7 +309,7 @@ suite "nimkit views":
     check view.needsUpdateConstraints
 
   test "setNeedsDisplayInRect clips and unions dirty rects":
-    let view = newView(0, 0, 100, 80)
+    let view = newView(frame = initRect(0, 0, 100, 80))
     view.setNeedsDisplay(false)
 
     view.setNeedsDisplayInRect(initRect(10, 10, 20, 20))
@@ -326,9 +326,9 @@ suite "nimkit views":
 
   test "visibleRect only clips through clipping ancestors":
     let
-      root = newView(0, 0, 100, 80)
-      child = newView(80, 60, 50, 40)
-      grandchild = newView(10, 10, 30, 30)
+      root = newView(frame = initRect(0, 0, 100, 80))
+      child = newView(frame = initRect(80, 60, 50, 40))
+      grandchild = newView(frame = initRect(10, 10, 30, 30))
 
     root.addSubview(child)
     child.addSubview(grandchild)
@@ -348,8 +348,8 @@ suite "nimkit views":
 
   test "setNeedsDisplayInRect clips to effective visibleRect":
     let
-      root = newView(0, 0, 100, 80)
-      child = newView(80, 60, 50, 40)
+      root = newView(frame = initRect(0, 0, 100, 80))
+      child = newView(frame = initRect(80, 60, 50, 40))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
@@ -371,8 +371,8 @@ suite "nimkit views":
 
   test "child invalid rect propagates to parent coordinates":
     let
-      root = newView(0, 0, 200, 160)
-      child = newView(20, 30, 80, 50)
+      root = newView(frame = initRect(0, 0, 200, 160))
+      child = newView(frame = initRect(20, 30, 80, 50))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
@@ -385,8 +385,8 @@ suite "nimkit views":
 
   test "whole-view invalidation propagates as child frame":
     let
-      root = newView(0, 0, 200, 160)
-      child = newView(20, 30, 80, 50)
+      root = newView(frame = initRect(0, 0, 200, 160))
+      child = newView(frame = initRect(20, 30, 80, 50))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
@@ -399,10 +399,10 @@ suite "nimkit views":
 
   test "coordinate conversion covers hierarchy, siblings, and rectangles":
     let
-      root = newView(0, 0, 300, 240)
-      child = newView(20, 30, 100, 80)
-      sibling = newView(150, 40, 70, 60)
-      grandchild = newView(5, 7, 30, 20)
+      root = newView(frame = initRect(0, 0, 300, 240))
+      child = newView(frame = initRect(20, 30, 100, 80))
+      sibling = newView(frame = initRect(150, 40, 70, 60))
+      grandchild = newView(frame = initRect(5, 7, 30, 20))
 
     root.addSubview(child)
     root.addSubview(sibling)
@@ -419,8 +419,8 @@ suite "nimkit views":
 
   test "coordinate conversion honors non-zero bounds origins":
     let
-      root = newView(0, 0, 300, 240)
-      child = newView(30, 40, 100, 80)
+      root = newView(frame = initRect(0, 0, 300, 240))
+      child = newView(frame = initRect(30, 40, 100, 80))
 
     root.setBounds(initRect(10, 20, 300, 240))
     child.setBounds(initRect(5, 6, 100, 80))
@@ -433,9 +433,9 @@ suite "nimkit views":
 
   test "coordinate conversion updates after reparenting":
     let
-      firstRoot = newView(0, 0, 200, 160)
-      secondRoot = newView(10, 15, 200, 160)
-      child = newView(20, 30, 80, 40)
+      firstRoot = newView(frame = initRect(0, 0, 200, 160))
+      secondRoot = newView(frame = initRect(10, 15, 200, 160))
+      child = newView(frame = initRect(20, 30, 80, 40))
 
     firstRoot.addSubview(child)
     check child.pointToWindow(initPoint(0, 0)) == initPoint(20, 30)
@@ -471,7 +471,7 @@ suite "nimkit views":
 
   test "content view changes route window lifecycle through descendants":
     let
-      window = newWindow(0, 0, 240, 160, "Lifecycle")
+      window = newWindow("Lifecycle", frame = initRect(0, 0, 240, 160))
       root = newLifecycleSpyView(initRect(0, 0, 240, 160))
       child = newLifecycleSpyView(initRect(20, 30, 80, 40))
       replacement = newLifecycleSpyView(initRect(0, 0, 240, 160))
@@ -507,9 +507,9 @@ suite "nimkit views":
 
   test "content view replacement clears first responder from removed subtree":
     let
-      window = newWindow(0, 0, 240, 160, "First responder cleanup")
-      root = newView(0, 0, 240, 160)
-      button = newButton(20, 30, 80, 30, "Action")
+      window = newWindow("First responder cleanup", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      button = newButton("Action", frame = initRect(20, 30, 80, 30))
 
     root.addSubview(button)
     window.setContentView(root)
@@ -517,12 +517,12 @@ suite "nimkit views":
     check window.makeFirstResponder(button)
     check window.firstResponder == button
 
-    window.setContentView(newView(0, 0, 240, 160))
+    window.setContentView(newView(frame = initRect(0, 0, 240, 160)))
 
     check window.firstResponder.isNil
 
   test "window coordinate helpers convert through content view frames and bounds":
-    let content = newView(10, 15, 240, 180)
+    let content = newView(frame = initRect(10, 15, 240, 180))
     content.setBounds(initRect(5, 7, 240, 180))
 
     check content.pointToWindow(initPoint(5, 7)) == initPoint(10, 15)
@@ -532,7 +532,7 @@ suite "nimkit views":
 
   test "hit testing and mouse dispatch use conversion helpers":
     let
-      root = newView(0, 0, 200, 160)
+      root = newView(frame = initRect(0, 0, 200, 160))
       child = newMouseSpyView(initRect(30, 40, 80, 50))
 
     root.setBounds(initRect(10, 20, 200, 160))

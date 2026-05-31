@@ -182,6 +182,34 @@ proc sizeThatFits*(view: View, proposedSize: Size): Size =
     return initSize(0.0, 0.0)
   view.sizeThatFits(initFittingSize(proposedSize))
 
+proc resolvedFrame*(view: View, frame: Rect): Rect =
+  if view.isNil:
+    return frame.resolveAutoRect(initRect(0.0, 0.0, 0.0, 0.0))
+
+  let
+    fallbackSize =
+      if frame.size.hasAutoMetric:
+        view.sizeThatFits(UnconstrainedFittingSize)
+      else:
+        view.xFrame.size
+    fallback = initRect(view.xFrame.origin, fallbackSize)
+  frame.resolveAutoRect(fallback)
+
+proc applyInitialFrame*(view: View, frame: Rect) =
+  if view.isNil or not frame.hasAutoMetric:
+    return
+
+  let nextFrame = view.resolvedFrame(frame)
+  if view.xFrame == nextFrame:
+    return
+
+  view.xFrame = nextFrame
+  view.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
+  view.invalidateLayoutItemGeometry()
+  view.markSubviewAutoresizingConstraintsChanged()
+  view.xNeedsDisplay = true
+  view.xInvalidRects.setLen(0)
+
 proc sizeToFit*(view: View) =
   if view.isNil:
     return

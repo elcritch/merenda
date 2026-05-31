@@ -4,12 +4,12 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow(160, 160, 420, 240, "Nimkit ComboBox Demo")
-  root = newView(0, 0, 420, 240)
-  title = newTextField(28, 24, 280, 28, "Combo Box")
-  status = newTextField(28, 68, 340, 24, "")
-  priority = newComboBox(28, 116, 180, 28, ["Low", "Medium", "High"])
-  color = newComboBox(28, 154, 180, 28, ["Red", "Green", "Blue"])
+  window = newWindow("Nimkit ComboBox Demo", frame = initRect(160, 160, 420, 240))
+  root = newView(frame = initRect(0, 0, 420, 240))
+  title = newTextField("Combo Box", frame = initRect(28, 24, 280, 28))
+  status = newTextField("", frame = initRect(28, 68, 340, 24))
+  priority = newComboBox(["Low", "Medium", "High"], frame = initRect(28, 116, 180, 28))
+  color = newComboBox(["Red", "Green", "Blue"], frame = initRect(28, 154, 180, 28))
   changedAction = actionSelector("comboChanged")
 
 proc updateStatus() =

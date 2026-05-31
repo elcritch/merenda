@@ -2,12 +2,12 @@ import merenda/nimkit
 
 let
   app = sharedApplication()
-  window = newWindow(150, 150, 420, 220, "Nimkit Text Field Demo")
-  root = newView(0, 0, 420, 220)
-  title = newTextField(28, 24, 300, 28, "Text Field")
-  field = newTextField(28, 70, 260, 30, "Edit me")
-  secondField = newTextField(28, 108, 260, 30, "Tab here")
-  status = newTextField(28, 152, 340, 24, "")
+  window = newWindow("Nimkit Text Field Demo", frame = initRect(150, 150, 420, 220))
+  root = newView(frame = initRect(0, 0, 420, 220))
+  title = newTextField("Text Field", frame = initRect(28, 24, 300, 28))
+  field = newTextField("Edit me", frame = initRect(28, 70, 260, 30))
+  secondField = newTextField("Tab here", frame = initRect(28, 108, 260, 30))
+  status = newTextField("", frame = initRect(28, 152, 340, 24))
 
 proc updateStatus() =
   status.setStringValue(

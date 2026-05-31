@@ -4,7 +4,7 @@ import merenda/nimkit
 
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
-    let field = newTextField(0, 0, 120, 24, "abc")
+    let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
 
     check field.isEditable
     check field.isSelectable
@@ -15,9 +15,9 @@ suite "nimkit text fields":
 
   test "first responder text input replaces the current selection":
     let
-      window = newWindow(0, 0, 240, 120, "Text input")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 140, 24, "abc")
+      window = newWindow("Text input", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -36,9 +36,9 @@ suite "nimkit text fields":
 
   test "default edit commands move and delete text":
     let
-      window = newWindow(0, 0, 240, 120, "Text commands")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 140, 24, "abcdef")
+      window = newWindow("Text commands", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -67,9 +67,9 @@ suite "nimkit text fields":
 
   test "macOS profile moves and deletes by word":
     let
-      window = newWindow(0, 0, 240, 120, "Text word commands")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 180, 24, "one two three")
+      window = newWindow("Text word commands", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("one two three", frame = initRect(10, 10, 180, 24))
 
     window.setKeyBindingProfile(kbpMacOS)
     root.addSubview(field)
@@ -108,9 +108,9 @@ suite "nimkit text fields":
 
   test "windows profile uses control arrows for word movement":
     let
-      window = newWindow(0, 0, 240, 120, "Text windows word commands")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 180, 24, "one two")
+      window = newWindow("Text windows word commands", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("one two", frame = initRect(10, 10, 180, 24))
 
     window.setKeyBindingProfile(kbpWindows)
     root.addSubview(field)
@@ -132,9 +132,9 @@ suite "nimkit text fields":
 
   test "control character text input after command shortcuts is ignored":
     let
-      window = newWindow(0, 0, 240, 120, "Text control input")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 180, 24, "abcdef")
+      window = newWindow("Text control input", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = initRect(10, 10, 180, 24))
 
     window.setKeyBindingProfile(kbpMacOS)
     root.addSubview(field)
@@ -153,9 +153,9 @@ suite "nimkit text fields":
 
   test "select all shortcut selects and replaces the full value":
     let
-      window = newWindow(0, 0, 240, 120, "Text select all")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 140, 24, "abcdef")
+      window = newWindow("Text select all", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -173,9 +173,9 @@ suite "nimkit text fields":
 
   test "mouse down focuses text field and places caret at the end":
     let
-      window = newWindow(0, 0, 240, 120, "Text mouse")
-      root = newView(0, 0, 240, 120)
-      field = newTextField(10, 10, 140, 24, "abcdef")
+      window = newWindow("Text mouse", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)

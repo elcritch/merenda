@@ -325,7 +325,7 @@ protocol DefaultFormViewLifecycle of ViewLifecycleProtocol:
   method willRemoveSubview(formView: FormView, subview: View) =
     formView.removeRowContaining(subview)
 
-proc initFormViewFields*(formView: FormView, frame: Rect) =
+proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   initViewFields(formView, frame)
   formView.xRowSpacing = 8.0'f32
   formView.xColumnSpacing = 8.0'f32
@@ -333,10 +333,8 @@ proc initFormViewFields*(formView: FormView, frame: Rect) =
   formView.xRowAlignment = fraCenter
   discard formView.withProtocol(DefaultFormViewLayout)
   discard formView.withProtocol(DefaultFormViewLifecycle)
+  formView.applyInitialFrame(frame)
 
-proc newFormView*(frame: Rect): FormView =
+proc newFormView*(frame: Rect = AutoRect): FormView =
   result = FormView()
   initFormViewFields(result, frame)
-
-proc newFormView*(x, y, width, height: float32): FormView =
-  newFormView(initRect(x, y, width, height))

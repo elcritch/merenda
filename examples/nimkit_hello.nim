@@ -10,14 +10,17 @@ proc stateName(state: ButtonState): string =
 
 let
   app = sharedApplication()
-  window = newWindow(120, 120, 720, 360, "KNutella Nimkit Hello")
-  root = newView(0, 0, 720, 360)
-  title = newTextField(28, 28, 520, 48, "Hello from KNutella/nimkit")
+  window = newWindow("KNutella Nimkit Hello", frame = initRect(120, 120, 720, 360))
+  root = newView(frame = initRect(0, 0, 720, 360))
+  title = newTextField("Hello from KNutella/nimkit", frame = initRect(28, 28, 520, 48))
   subtitle = newTextField(
-    28, 86, 620, 36, "Pure Nim responder/action dispatch with plain widget state"
+    "Pure Nim responder/action dispatch with plain widget state",
+    frame = initRect(28, 86, 620, 36),
   )
-  status = newTextField(28, 132, 420, 30, "Button state: Off (click to cycle)")
-  button = newButton(28, 172, 220, 44, "Cycle State (Off)")
+  status = newTextField(
+    "Button state: Off (click to cycle)", frame = initRect(28, 132, 420, 30)
+  )
+  button = newButton("Cycle State (Off)", frame = initRect(28, 172, 220, 44))
   action = actionSelector("cycleState")
 
 proc updateStatus() =

@@ -4,13 +4,13 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow(140, 140, 400, 260, "Nimkit Radio Demo")
-  root = newView(0, 0, 400, 260)
-  title = newTextField(28, 24, 260, 32, "Radio Buttons")
-  status = newTextField(28, 64, 300, 30, "")
-  small = newRadioButton(28, 116, 220, 28, "Small")
-  medium = newRadioButton(28, 152, 220, 28, "Medium")
-  large = newRadioButton(28, 188, 220, 28, "Large")
+  window = newWindow("Nimkit Radio Demo", frame = initRect(140, 140, 400, 260))
+  root = newView(frame = initRect(0, 0, 400, 260))
+  title = newTextField("Radio Buttons", frame = initRect(28, 24, 260, 32))
+  status = newTextField("", frame = initRect(28, 64, 300, 30))
+  small = newRadioButton("Small", frame = initRect(28, 116, 220, 28))
+  medium = newRadioButton("Medium", frame = initRect(28, 152, 220, 28))
+  large = newRadioButton("Large", frame = initRect(28, 188, 220, 28))
   changedAction = actionSelector("radioChanged")
 
 proc selectedSize(): string =

@@ -5,8 +5,8 @@ import merenda/nimkit
 suite "nimkit constraints":
   test "layout constraints store Cocoa-shaped relation data":
     let
-      view = newView(0, 0, 100, 80)
-      peer = newView(10, 10, 40, 20)
+      view = newView(frame = initRect(0, 0, 100, 80))
+      peer = newView(frame = initRect(10, 10, 40, 20))
       constraint = newLayoutConstraint(
         view,
         latWidth,
@@ -34,7 +34,7 @@ suite "nimkit constraints":
 
   test "unary constraints activate on their first item":
     let
-      view = newView(0, 0, 100, 80)
+      view = newView(frame = initRect(0, 0, 100, 80))
       width = newLayoutConstraint(view, latWidth, constant = 120.0'f32)
 
     view.layoutSubtreeIfNeeded()
@@ -58,9 +58,9 @@ suite "nimkit constraints":
 
   test "two-item constraints activate on the nearest common view":
     let
-      root = newView(0, 0, 240, 120)
-      left = newView(0, 0, 80, 40)
-      right = newView(100, 0, 80, 40)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      left = newView(frame = initRect(0, 0, 80, 40))
+      right = newView(frame = initRect(100, 0, 80, 40))
 
     root.addSubview(left)
     root.addSubview(right)
@@ -84,8 +84,8 @@ suite "nimkit constraints":
 
   test "active constraint changes invalidate owning view lifecycle":
     let
-      root = newView(0, 0, 240, 120)
-      child = newView(20, 20, 80, 40)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 20, 80, 40))
       width = newLayoutConstraint(child, latWidth, constant = 80.0'f32)
 
     root.addSubview(child)
@@ -111,7 +111,7 @@ suite "nimkit constraints":
     check child.needsLayout
 
   test "autoresizing mask stores Cocoa bridge state":
-    let view = newView(0, 0, 100, 80)
+    let view = newView(frame = initRect(0, 0, 100, 80))
 
     check view.autoresizingMask == {}
     check view.translatesAutoresizingMaskIntoConstraints
@@ -134,8 +134,8 @@ suite "nimkit constraints":
 
   test "autoresizing changes invalidate child and container constraints":
     let
-      root = newView(0, 0, 240, 120)
-      child = newView(20, 20, 80, 40)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 20, 80, 40))
 
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
@@ -171,8 +171,8 @@ suite "nimkit constraints":
 
   test "deterministic constraints apply constant sizes":
     let
-      root = newView(0, 0, 240, 120)
-      child = newView(10, 12, 20, 10)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(10, 12, 20, 10))
       width = newLayoutConstraint(child, latWidth, constant = 96.0'f32)
       height = newLayoutConstraint(child, latHeight, constant = 28.0'f32)
 
@@ -186,8 +186,8 @@ suite "nimkit constraints":
 
   test "deterministic constraints apply superview edge pins":
     let
-      root = newView(0, 0, 300, 200)
-      child = newView(0, 0, 20, 10)
+      root = newView(frame = initRect(0, 0, 300, 200))
+      child = newView(frame = initRect(0, 0, 20, 10))
       left =
         newLayoutConstraint(child, latLeft, lrEqual, root, latLeft, constant = 20.0)
       top = newLayoutConstraint(child, latTop, lrEqual, root, latTop, constant = 15.0)
@@ -205,8 +205,8 @@ suite "nimkit constraints":
 
   test "deterministic constraints apply superview centers":
     let
-      root = newView(0, 0, 300, 200)
-      child = newView(0, 0, 10, 10)
+      root = newView(frame = initRect(0, 0, 300, 200))
+      child = newView(frame = initRect(0, 0, 10, 10))
       width = newLayoutConstraint(child, latWidth, constant = 50.0)
       height = newLayoutConstraint(child, latHeight, constant = 20.0)
       centerX = newLayoutConstraint(child, latCenterX, lrEqual, root, latCenterX)
@@ -220,8 +220,8 @@ suite "nimkit constraints":
 
   test "translates false lets intrinsic size participate in layout":
     let
-      root = newView(0, 0, 300, 120)
-      button = newButton(10, 10, 1, 1, "Intrinsic")
+      root = newView(frame = initRect(0, 0, 300, 120))
+      button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
 
     root.addSubview(button)
     button.setTranslatesAutoresizingMaskIntoConstraints(false)
@@ -233,9 +233,9 @@ suite "nimkit constraints":
 
   test "unsupported sibling constraints are ignored by deterministic pass":
     let
-      root = newView(0, 0, 240, 120)
-      left = newView(0, 0, 80, 40)
-      right = newView(100, 0, 80, 40)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      left = newView(frame = initRect(0, 0, 80, 40))
+      right = newView(frame = initRect(100, 0, 80, 40))
       spacing = newLayoutConstraint(left, latRight, lrEqual, right, latLeft)
 
     root.addSubview(left)
@@ -247,7 +247,7 @@ suite "nimkit constraints":
     check right.frame() == initRect(100, 0, 80, 40)
 
   test "layout item geometry exposes alignment rect and baseline hooks":
-    let view = newView(10, 20, 100, 50)
+    let view = newView(frame = initRect(10, 20, 100, 50))
 
     check view.alignmentRectInsets == initEdgeInsets(0.0)
     check view.alignmentRect == view.frame()
@@ -283,9 +283,9 @@ suite "nimkit constraints":
 
   test "layout item geometry invalidation follows frame and priority changes":
     let
-      root = newView(0, 0, 240, 120)
-      left = newView(0, 0, 80, 40)
-      right = newView(100, 0, 80, 40)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      left = newView(frame = initRect(0, 0, 80, 40))
+      right = newView(frame = initRect(100, 0, 80, 40))
       spacing = newLayoutConstraint(left, latRight, lrEqual, right, latLeft)
 
     root.addSubview(left)
@@ -342,8 +342,8 @@ suite "nimkit constraints":
 
   test "layout item geometry invalidation follows hierarchy changes":
     let
-      root = newView(0, 0, 240, 120)
-      child = newView(20, 20, 80, 40)
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 20, 80, 40))
 
     root.layoutSubtreeIfNeeded()
     root.addSubview(child)
@@ -361,9 +361,9 @@ suite "nimkit constraints":
 
   test "explicit storage can move constraints between views":
     let
-      firstOwner = newView(0, 0, 100, 80)
-      secondOwner = newView(0, 0, 100, 80)
-      child = newView(0, 0, 40, 20)
+      firstOwner = newView(frame = initRect(0, 0, 100, 80))
+      secondOwner = newView(frame = initRect(0, 0, 100, 80))
+      child = newView(frame = initRect(0, 0, 40, 20))
       width = newLayoutConstraint(child, latWidth, constant = 40.0'f32)
 
     firstOwner.addConstraint(width)

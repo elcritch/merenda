@@ -51,6 +51,9 @@ type EventDispatchResult = object
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
 
+func defaultWindowFrame*(): Rect =
+  initRect(100.0'f32, 100.0'f32, 640.0'f32, 480.0'f32)
+
 func nativePopupWindowsSupported*(): bool =
   when defined(android) or defined(emscripten) or defined(js) or defined(wasm):
     false
@@ -106,18 +109,16 @@ protocol DefaultWindowKeyViewCommands of KeyViewCommandProtocol:
     let start = window.keyViewCommandStartView(args.sender)
     discard window.selectKeyViewPrecedingView(start)
 
-proc newWindow*(frame: Rect, title: string): Window =
+proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): Window =
+  let resolvedFrame = frame.resolveAutoRect(defaultWindowFrame())
   result = Window(
-    xFrame: frame,
+    xFrame: resolvedFrame,
     xTitle: title,
     xAutorecalculatesKeyViewLoop: true,
     xKeyBindings: initDefaultKeyBindings(),
   )
   initResponder(result)
   discard result.withProtocol(DefaultWindowKeyViewCommands)
-
-proc newWindow*(x, y, width, height: float32, title: string): Window =
-  newWindow(initRect(x, y, width, height), title)
 
 proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
   max((value * scale).round().int32, minimum)
@@ -631,7 +632,7 @@ proc newPopupWindow*(
     max(popupSize.width, 1.0'f32),
     max(popupSize.height, 1.0'f32),
   )
-  result = newWindow(frame, title)
+  result = newWindow(title, frame)
   result.xOwnerWindow = owner
   result.xIsPopup = true
   result.xPopupPlacement =

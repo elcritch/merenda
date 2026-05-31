@@ -19,10 +19,10 @@ suite "nimkit application":
     block nativeRun:
       let
         app = newApplication()
-        window = newWindow(80, 80, 240, 140, "Nimkit Native Test")
-        root = newView(0, 0, 240, 140)
+        window = newWindow("Nimkit Native Test", frame = initRect(80, 80, 240, 140))
+        root = newView(frame = initRect(0, 0, 240, 140))
 
-      root.addSubview(newTextField(16, 16, 180, 32, "Native window"))
+      root.addSubview(newTextField("Native window", frame = initRect(16, 16, 180, 32)))
       window.setContentView(root)
       app.addWindow(window)
 
@@ -44,9 +44,9 @@ suite "nimkit application":
     block nativeClose:
       let
         app = newApplication()
-        window = newWindow(80, 80, 240, 140, "Nimkit Native Close")
+        window = newWindow("Nimkit Native Close", frame = initRect(80, 80, 240, 140))
 
-      window.setContentView(newView(0, 0, 240, 140))
+      window.setContentView(newView(frame = initRect(0, 0, 240, 140)))
       app.addWindow(window)
       window.makeKeyAndOrderFront()
 
@@ -69,10 +69,12 @@ suite "nimkit application":
     block nativeComboPopup:
       let
         app = newApplication()
-        window = newWindow(80, 80, 260, 160, "Nimkit Native Combo Popup")
-        root = newView(0, 0, 260, 160)
-        combo = newComboBox(16, 16, 140, 24, ["Low", "Medium", "High"])
-        other = newComboBox(16, 58, 140, 24, ["Red", "Green", "Blue"])
+        window =
+          newWindow("Nimkit Native Combo Popup", frame = initRect(80, 80, 260, 160))
+        root = newView(frame = initRect(0, 0, 260, 160))
+        combo =
+          newComboBox(["Low", "Medium", "High"], frame = initRect(16, 16, 140, 24))
+        other = newComboBox(["Red", "Green", "Blue"], frame = initRect(16, 58, 140, 24))
 
       root.addSubview(combo)
       root.addSubview(other)
@@ -132,9 +134,11 @@ suite "nimkit application":
     block nativeInlineComboPopup:
       let
         app = newApplication()
-        window = newWindow(80, 80, 260, 160, "Nimkit Inline Combo Popup")
-        root = newView(0, 0, 260, 160)
-        combo = newComboBox(16, 16, 140, 24, ["Low", "Medium", "High"])
+        window =
+          newWindow("Nimkit Inline Combo Popup", frame = initRect(80, 80, 260, 160))
+        root = newView(frame = initRect(0, 0, 260, 160))
+        combo =
+          newComboBox(["Low", "Medium", "High"], frame = initRect(16, 16, 140, 24))
 
       window.setPopupPresentation(ppInline)
       root.addSubview(combo)

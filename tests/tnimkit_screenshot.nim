@@ -92,9 +92,9 @@ proc renderAndScreenshotOnce(
 suite "nimkit screenshot":
   test "captures button demo before and after click":
     let
-      root = newView(0, 0, 360, 220)
-      label = newTextField(24, 24, 220, 32, "Ready")
-      button = newButton(24, 72, 140, 40, "Click")
+      root = newView(frame = initRect(0, 0, 360, 220))
+      label = newTextField("Ready", frame = initRect(24, 24, 220, 32))
+      button = newButton("Click", frame = initRect(24, 72, 140, 40))
       action = actionSelector("buttonClicked")
 
     proc onClicked(sender: DynamicAgent) =
