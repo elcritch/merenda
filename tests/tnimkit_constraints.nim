@@ -32,6 +32,74 @@ suite "nimkit constraints":
     check LayoutAttributeBaseline == latLastBaseline
     check ord(lrLessThanOrEqual) == -1
 
+  test "layout anchors create Cocoa-shaped constraints":
+    let
+      root = newView(frame = initRect(0, 0, 320, 200))
+      child = newView(frame = initRect(0, 0, 40, 20))
+      left = child.leftAnchor.constraintEqualTo(root.leftAnchor, constant = 18.0'f32)
+      centerY = child.centerYAnchor.constraintEqualTo(root.centerYAnchor)
+      width = child.widthAnchor.constraintEqualTo(96.0'f32)
+      height = child.heightAnchor.constraintGreaterThanOrEqualTo(
+        root.heightAnchor, multiplier = 0.5'f32, constant = -12.0'f32
+      )
+
+    check child.leftAnchor.item == child
+    check child.leftAnchor.attribute == latLeft
+    check child.leftAnchor.offset == 0.0'f32
+    check left.firstItem == child
+    check left.firstAttribute == latLeft
+    check left.secondItem == root
+    check left.secondAttribute == latLeft
+    check left.constant == 18.0'f32
+
+    check centerY.firstAttribute == latCenterY
+    check centerY.secondAttribute == latCenterY
+    check width.secondItem.isNil
+    check width.secondAttribute == latNotAnAttribute
+    check width.constant == 96.0'f32
+    check height.firstAttribute == latHeight
+    check height.relation == lrGreaterThanOrEqual
+    check height.multiplier == 0.5'f32
+    check height.constant == -12.0'f32
+
+  test "content layout guides and edge pins resolve through constraints":
+    let
+      root = newView(frame = initRect(0, 0, 300, 200))
+      child = newView(frame = initRect(0, 0, 10, 10))
+      guide = root.contentLayoutGuide(initEdgeInsets(10.0, 20.0, 30.0, 40.0))
+
+    check guide.owningView == root
+    check guide.insets == initEdgeInsets(10.0, 20.0, 30.0, 40.0)
+    check guide.leftAnchor.offset == 20.0'f32
+    check guide.rightAnchor.offset == -40.0'f32
+    check guide.topAnchor.offset == 10.0'f32
+    check guide.bottomAnchor.offset == -30.0'f32
+    check guide.widthAnchor.offset == -60.0'f32
+    check guide.heightAnchor.offset == -40.0'f32
+
+    root.addSubview(child)
+    activateConstraints(child.pinEdges(toGuide = guide))
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(20, 10, 240, 160)
+
+  test "edge pin helpers can constrain a subset":
+    let
+      root = newView(frame = initRect(0, 0, 300, 200))
+      child = newView(frame = initRect(0, 0, 10, 30))
+
+    root.addSubview(child)
+    activateConstraints(
+      child.pinEdges(
+        toView = root,
+        insets = initEdgeInsets(12.0, 18.0, 24.0, 30.0),
+        edges = {leLeft, leTop, leRight},
+      )
+    )
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(18, 12, 252, 30)
+
   test "unary constraints activate on their first item":
     let
       view = newView(frame = initRect(0, 0, 100, 80))

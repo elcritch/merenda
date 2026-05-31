@@ -55,6 +55,10 @@ NimKit currently includes the core desktop-control slice:
   `intrinsicContentSize`, `sizeThatFits`, `sizeToFit`, cell measurement hooks,
   theme-backed minimum/chrome metrics, lazy parent layout invalidation, and
   content hugging/compression priority storage.
+- A Cocoa-like constraint convenience layer over the core constraint model:
+  typed x/y/dimension anchors, inset-backed content layout guides, and
+  edge-pinning helpers that return normal `LayoutConstraint` values for
+  explicit activation.
 - Runnable NimKit examples:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
@@ -128,6 +132,10 @@ NimKit currently includes the core desktop-control slice:
   coordinate conversion, optional clipping, appearance/style identity,
   layout/display invalidation, key-view links, hover/active/focus state, and
   event dispatch into selector methods.
+- `src/merenda/nimkit/viewconstraints.nim`:
+  `LayoutConstraint` construction/storage/activation, deterministic constraint
+  application, typed layout anchors, content layout guides, and edge-pinning
+  helper APIs.
 - `src/merenda/nimkit/stackviews.nim`:
   `StackView`, arranged subviews, orientation, spacing, edge insets,
   cross-axis alignment, fill/fill-equally distribution, intrinsic stack
@@ -334,6 +342,10 @@ Concrete task order and status:
 15. Done for the current examples: Add `examples/nimkit_layout_showcase.nim`
    showing `sizeToFit`, intrinsic-size-driven layout, stack/form layout, and
    the current deterministic superview constraint subset for common controls.
+16. Done for the current API: Add modern constraint conveniences on top of the
+   existing model: typed x/y/dimension anchors, inset-backed content layout
+   guides, and `pinEdges` helpers. NimKit examples now use those helpers
+   instead of spelling common root-edge constraints manually.
 
 ### Controls
 
@@ -403,9 +415,8 @@ Concrete task order and status:
 - Short term: Cocoa-like layout lifecycle, constraint data shapes, autoresizing
   mask semantics, cleaner cell invalidation/default-cell construction, and
   measurement tests that prove theme/rendering/layout agreement.
-- Medium term: simple intrinsic-aware `StackView`/`FormView`/grid containers
-  built on the layout core, scrollable list/popup infrastructure, and broader
-  control coverage.
+- Medium term: a simple intrinsic-aware grid container built on the layout
+  core, scrollable list/popup infrastructure, and broader control coverage.
 - Later: fuller constraint solving, loadable/query-like themes, menus/popovers,
   and broader resource organization.
 
