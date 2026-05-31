@@ -46,11 +46,10 @@ layout.addArrangedSubview(label2)
 
 root.addSubview(layout)
 activateConstraints(
-  [
-    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 50.0),
-    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 50.0),
-    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -50.0),
-  ]
+  layout.pinEdges(
+    toGuide = root.contentLayoutGuide(initEdgeInsets(50.0, 50.0, 0.0, 50.0)),
+    edges = {leLeft, leTop, leRight},
+  )
 )
 
 window.setContentView(root)

@@ -56,11 +56,10 @@ updateStatus()
 
 root.addSubview(layout)
 activateConstraints(
-  [
-    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 28.0),
-    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 24.0),
-    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -28.0),
-  ]
+  layout.pinEdges(
+    toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
+    edges = {leLeft, leTop, leRight},
+  )
 )
 
 window.setContentView(root)

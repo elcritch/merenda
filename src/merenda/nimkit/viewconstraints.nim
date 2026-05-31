@@ -1,5 +1,6 @@
 import std/options
 
+import ./theme
 import ./types
 import ./viewgeometry
 import ./viewbase
@@ -7,6 +8,33 @@ import ./viewbase
 export viewbase
 
 type
+  LayoutEdge* = enum
+    leLeft
+    leTop
+    leRight
+    leBottom
+
+  LayoutEdges* = set[LayoutEdge]
+
+  LayoutXAxisAnchor* = object
+    xItem: View
+    xAttribute: LayoutAttribute
+    xOffset: float32
+
+  LayoutYAxisAnchor* = object
+    xItem: View
+    xAttribute: LayoutAttribute
+    xOffset: float32
+
+  LayoutDimensionAnchor* = object
+    xItem: View
+    xAttribute: LayoutAttribute
+    xOffset: float32
+
+  LayoutGuide* = object
+    xOwningView: View
+    xInsets: EdgeInsets
+
   LayoutMetricKind = enum
     lmkMin
     lmkMax
@@ -30,6 +58,125 @@ type
     axes: array[LayoutAxis, AxisLayoutInput]
 
 const LayoutAxes = [laHorizontal, laVertical]
+const AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
+
+proc item*(anchor: LayoutXAxisAnchor): View =
+  anchor.xItem
+
+proc item*(anchor: LayoutYAxisAnchor): View =
+  anchor.xItem
+
+proc item*(anchor: LayoutDimensionAnchor): View =
+  anchor.xItem
+
+proc attribute*(anchor: LayoutXAxisAnchor): LayoutAttribute =
+  anchor.xAttribute
+
+proc attribute*(anchor: LayoutYAxisAnchor): LayoutAttribute =
+  anchor.xAttribute
+
+proc attribute*(anchor: LayoutDimensionAnchor): LayoutAttribute =
+  anchor.xAttribute
+
+proc offset*(anchor: LayoutXAxisAnchor): float32 =
+  anchor.xOffset
+
+proc offset*(anchor: LayoutYAxisAnchor): float32 =
+  anchor.xOffset
+
+proc offset*(anchor: LayoutDimensionAnchor): float32 =
+  anchor.xOffset
+
+proc owningView*(guide: LayoutGuide): View =
+  guide.xOwningView
+
+proc insets*(guide: LayoutGuide): EdgeInsets =
+  guide.xInsets
+
+proc initLayoutGuide*(owningView: View, insets = initEdgeInsets(0.0)): LayoutGuide =
+  LayoutGuide(xOwningView: owningView, xInsets: insets)
+
+proc contentLayoutGuide*(view: View, insets = initEdgeInsets(0.0)): LayoutGuide =
+  initLayoutGuide(view, insets)
+
+proc initXAxisAnchor(
+    item: View, attribute: LayoutAttribute, offset = 0.0'f32
+): LayoutXAxisAnchor =
+  LayoutXAxisAnchor(xItem: item, xAttribute: attribute, xOffset: offset)
+
+proc initYAxisAnchor(
+    item: View, attribute: LayoutAttribute, offset = 0.0'f32
+): LayoutYAxisAnchor =
+  LayoutYAxisAnchor(xItem: item, xAttribute: attribute, xOffset: offset)
+
+proc initDimensionAnchor(
+    item: View, attribute: LayoutAttribute, offset = 0.0'f32
+): LayoutDimensionAnchor =
+  LayoutDimensionAnchor(xItem: item, xAttribute: attribute, xOffset: offset)
+
+proc leftAnchor*(view: View): LayoutXAxisAnchor =
+  initXAxisAnchor(view, latLeft)
+
+proc rightAnchor*(view: View): LayoutXAxisAnchor =
+  initXAxisAnchor(view, latRight)
+
+proc leadingAnchor*(view: View): LayoutXAxisAnchor =
+  initXAxisAnchor(view, latLeading)
+
+proc trailingAnchor*(view: View): LayoutXAxisAnchor =
+  initXAxisAnchor(view, latTrailing)
+
+proc centerXAnchor*(view: View): LayoutXAxisAnchor =
+  initXAxisAnchor(view, latCenterX)
+
+proc topAnchor*(view: View): LayoutYAxisAnchor =
+  initYAxisAnchor(view, latTop)
+
+proc bottomAnchor*(view: View): LayoutYAxisAnchor =
+  initYAxisAnchor(view, latBottom)
+
+proc centerYAnchor*(view: View): LayoutYAxisAnchor =
+  initYAxisAnchor(view, latCenterY)
+
+proc widthAnchor*(view: View): LayoutDimensionAnchor =
+  initDimensionAnchor(view, latWidth)
+
+proc heightAnchor*(view: View): LayoutDimensionAnchor =
+  initDimensionAnchor(view, latHeight)
+
+proc leftAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
+  initXAxisAnchor(guide.xOwningView, latLeft, guide.xInsets.left)
+
+proc rightAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
+  initXAxisAnchor(guide.xOwningView, latRight, -guide.xInsets.right)
+
+proc leadingAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
+  initXAxisAnchor(guide.xOwningView, latLeading, guide.xInsets.left)
+
+proc trailingAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
+  initXAxisAnchor(guide.xOwningView, latTrailing, -guide.xInsets.right)
+
+proc centerXAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
+  initXAxisAnchor(
+    guide.xOwningView, latCenterX, (guide.xInsets.left - guide.xInsets.right) / 2.0
+  )
+
+proc topAnchor*(guide: LayoutGuide): LayoutYAxisAnchor =
+  initYAxisAnchor(guide.xOwningView, latTop, guide.xInsets.top)
+
+proc bottomAnchor*(guide: LayoutGuide): LayoutYAxisAnchor =
+  initYAxisAnchor(guide.xOwningView, latBottom, -guide.xInsets.bottom)
+
+proc centerYAnchor*(guide: LayoutGuide): LayoutYAxisAnchor =
+  initYAxisAnchor(
+    guide.xOwningView, latCenterY, (guide.xInsets.top - guide.xInsets.bottom) / 2.0
+  )
+
+proc widthAnchor*(guide: LayoutGuide): LayoutDimensionAnchor =
+  initDimensionAnchor(guide.xOwningView, latWidth, -guide.xInsets.horizontal)
+
+proc heightAnchor*(guide: LayoutGuide): LayoutDimensionAnchor =
+  initDimensionAnchor(guide.xOwningView, latHeight, -guide.xInsets.vertical)
 
 proc newLayoutConstraint*(
     firstItem: View,
@@ -51,6 +198,257 @@ proc newLayoutConstraint*(
     xConstant: constant,
     xPriority: priority,
   )
+
+func resolvedAnchorConstant(firstOffset, secondOffset, constant: float32): float32 =
+  secondOffset + constant - firstOffset
+
+proc newAnchorConstraint(
+    firstItem: View,
+    firstAttribute: LayoutAttribute,
+    relation: LayoutRelation,
+    secondItem: View,
+    secondAttribute: LayoutAttribute,
+    multiplier: float32,
+    constant: float32,
+    priority: LayoutPriority,
+): LayoutConstraint =
+  newLayoutConstraint(
+    firstItem,
+    firstAttribute,
+    relation,
+    secondItem,
+    secondAttribute,
+    multiplier = multiplier,
+    constant = constant,
+    priority = priority,
+  )
+
+proc constraintWithAnchor(
+    first: LayoutXAxisAnchor,
+    relation: LayoutRelation,
+    second: LayoutXAxisAnchor,
+    constant: float32,
+    priority: LayoutPriority,
+): LayoutConstraint =
+  newAnchorConstraint(
+    first.xItem,
+    first.xAttribute,
+    relation,
+    second.xItem,
+    second.xAttribute,
+    1.0'f32,
+    resolvedAnchorConstant(first.xOffset, second.xOffset, constant),
+    priority,
+  )
+
+proc constraintWithAnchor(
+    first: LayoutYAxisAnchor,
+    relation: LayoutRelation,
+    second: LayoutYAxisAnchor,
+    constant: float32,
+    priority: LayoutPriority,
+): LayoutConstraint =
+  newAnchorConstraint(
+    first.xItem,
+    first.xAttribute,
+    relation,
+    second.xItem,
+    second.xAttribute,
+    1.0'f32,
+    resolvedAnchorConstant(first.xOffset, second.xOffset, constant),
+    priority,
+  )
+
+proc constraintWithAnchor(
+    first: LayoutDimensionAnchor,
+    relation: LayoutRelation,
+    second: LayoutDimensionAnchor,
+    multiplier: float32,
+    constant: float32,
+    priority: LayoutPriority,
+): LayoutConstraint =
+  newAnchorConstraint(
+    first.xItem,
+    first.xAttribute,
+    relation,
+    second.xItem,
+    second.xAttribute,
+    multiplier,
+    resolvedAnchorConstant(first.xOffset, second.xOffset * multiplier, constant),
+    priority,
+  )
+
+proc constraintWithConstant(
+    first: LayoutDimensionAnchor,
+    relation: LayoutRelation,
+    constant: float32,
+    priority: LayoutPriority,
+): LayoutConstraint =
+  newAnchorConstraint(
+    first.xItem,
+    first.xAttribute,
+    relation,
+    nil,
+    latNotAnAttribute,
+    1.0'f32,
+    constant - first.xOffset,
+    priority,
+  )
+
+proc constraintEqualTo*(
+    first: LayoutXAxisAnchor,
+    second: LayoutXAxisAnchor,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrEqual, second, constant, priority)
+
+proc constraintGreaterThanOrEqualTo*(
+    first: LayoutXAxisAnchor,
+    second: LayoutXAxisAnchor,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrGreaterThanOrEqual, second, constant, priority)
+
+proc constraintLessThanOrEqualTo*(
+    first: LayoutXAxisAnchor,
+    second: LayoutXAxisAnchor,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrLessThanOrEqual, second, constant, priority)
+
+proc constraintEqualTo*(
+    first: LayoutYAxisAnchor,
+    second: LayoutYAxisAnchor,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrEqual, second, constant, priority)
+
+proc constraintGreaterThanOrEqualTo*(
+    first: LayoutYAxisAnchor,
+    second: LayoutYAxisAnchor,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrGreaterThanOrEqual, second, constant, priority)
+
+proc constraintLessThanOrEqualTo*(
+    first: LayoutYAxisAnchor,
+    second: LayoutYAxisAnchor,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrLessThanOrEqual, second, constant, priority)
+
+proc constraintEqualTo*(
+    first: LayoutDimensionAnchor,
+    second: LayoutDimensionAnchor,
+    multiplier = 1.0'f32,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrEqual, second, multiplier, constant, priority)
+
+proc constraintGreaterThanOrEqualTo*(
+    first: LayoutDimensionAnchor,
+    second: LayoutDimensionAnchor,
+    multiplier = 1.0'f32,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(
+    lrGreaterThanOrEqual, second, multiplier, constant, priority
+  )
+
+proc constraintLessThanOrEqualTo*(
+    first: LayoutDimensionAnchor,
+    second: LayoutDimensionAnchor,
+    multiplier = 1.0'f32,
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  first.constraintWithAnchor(lrLessThanOrEqual, second, multiplier, constant, priority)
+
+proc constraintEqualTo*(
+    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
+): LayoutConstraint =
+  first.constraintWithConstant(lrEqual, constant, priority)
+
+proc constraintGreaterThanOrEqualTo*(
+    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
+): LayoutConstraint =
+  first.constraintWithConstant(lrGreaterThanOrEqual, constant, priority)
+
+proc constraintLessThanOrEqualTo*(
+    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
+): LayoutConstraint =
+  first.constraintWithConstant(lrLessThanOrEqual, constant, priority)
+
+proc constraintEqualToConstant*(
+    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
+): LayoutConstraint =
+  first.constraintEqualTo(constant, priority)
+
+proc constraintGreaterThanOrEqualToConstant*(
+    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
+): LayoutConstraint =
+  first.constraintGreaterThanOrEqualTo(constant, priority)
+
+proc constraintLessThanOrEqualToConstant*(
+    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
+): LayoutConstraint =
+  first.constraintLessThanOrEqualTo(constant, priority)
+
+proc pinEdges*(
+    view: View,
+    toView: View,
+    insets = initEdgeInsets(0.0),
+    edges = AllLayoutEdges,
+    priority = LayoutPriorityRequired,
+): seq[LayoutConstraint] =
+  if leLeft in edges:
+    result.add view.leftAnchor.constraintEqualTo(
+      toView.leftAnchor, constant = insets.left, priority = priority
+    )
+  if leTop in edges:
+    result.add view.topAnchor.constraintEqualTo(
+      toView.topAnchor, constant = insets.top, priority = priority
+    )
+  if leRight in edges:
+    result.add view.rightAnchor.constraintEqualTo(
+      toView.rightAnchor, constant = -insets.right, priority = priority
+    )
+  if leBottom in edges:
+    result.add view.bottomAnchor.constraintEqualTo(
+      toView.bottomAnchor, constant = -insets.bottom, priority = priority
+    )
+
+proc pinEdges*(
+    view: View,
+    toGuide: LayoutGuide,
+    insets = initEdgeInsets(0.0),
+    edges = AllLayoutEdges,
+    priority = LayoutPriorityRequired,
+): seq[LayoutConstraint] =
+  if leLeft in edges:
+    result.add view.leftAnchor.constraintEqualTo(
+      toGuide.leftAnchor, constant = insets.left, priority = priority
+    )
+  if leTop in edges:
+    result.add view.topAnchor.constraintEqualTo(
+      toGuide.topAnchor, constant = insets.top, priority = priority
+    )
+  if leRight in edges:
+    result.add view.rightAnchor.constraintEqualTo(
+      toGuide.rightAnchor, constant = -insets.right, priority = priority
+    )
+  if leBottom in edges:
+    result.add view.bottomAnchor.constraintEqualTo(
+      toGuide.bottomAnchor, constant = -insets.bottom, priority = priority
+    )
 
 proc firstItem*(constraint: LayoutConstraint): View =
   if constraint.isNil: nil else: constraint.xFirstItem
