@@ -99,8 +99,7 @@ suite "nimkit views":
     let root = newView(frame = initRect(0, 0, 200, 160))
     let back = newView(frame = initRect(20, 20, 80, 50))
     let front = newView(frame = initRect(30, 25, 80, 50))
-    root.addSubview(back)
-    root.addSubview(front)
+    root.addSubview(back, front)
 
     check root.hitTest(initPoint(35, 30)) == front
     check root.hitTest(initPoint(22, 22)) == back

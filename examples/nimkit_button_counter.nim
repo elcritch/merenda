@@ -39,10 +39,7 @@ for label in [label1, label2]:
 
 layout.setSpacing(12.0)
 layout.setAlignment(svaFill)
-layout.addArrangedSubview(button1)
-layout.addArrangedSubview(button2)
-layout.addArrangedSubview(label1)
-layout.addArrangedSubview(label2)
+layout.addArrangedSubview(button1, button2, label1, label2)
 
 root.addSubview(layout)
 activateConstraints(

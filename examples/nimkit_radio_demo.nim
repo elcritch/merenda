@@ -48,10 +48,7 @@ for radio in [small, medium, large]:
 
 layout.setSpacing(10.0)
 layout.setAlignment(svaFill)
-layout.addArrangedSubview(title)
-layout.addArrangedSubview(status)
-for radio in [small, medium, large]:
-  layout.addArrangedSubview(radio)
+layout.addArrangedSubview(title, status, small, medium, large)
 updateStatus()
 
 root.addSubview(layout)

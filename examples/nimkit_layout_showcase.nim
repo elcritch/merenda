@@ -50,12 +50,9 @@ priority.selectItemAtIndex(1)
 form.addRow(nameLabel, nameField)
 form.addRow(priorityLabel, priority)
 form.addRow(makeLabel("Options"), downloads)
-actionRow.addArrangedSubview(runButton)
-actionRow.addArrangedSubview(cancelButton)
+actionRow.addArrangedSubview(runButton, cancelButton)
 
-layout.addArrangedSubview(title)
-layout.addArrangedSubview(form)
-layout.addArrangedSubview(actionRow)
+layout.addArrangedSubview(title, form, actionRow)
 
 root.addSubview(layout)
 activateConstraints(

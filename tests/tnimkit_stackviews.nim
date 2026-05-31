@@ -26,9 +26,7 @@ suite "nimkit stack views":
 
     stack.setSpacing(6.0)
     stack.setEdgeInsets(initEdgeInsets(2.0, 3.0, 4.0, 5.0))
-    stack.addArrangedSubview(first)
-    stack.addArrangedSubview(second)
-    stack.addArrangedSubview(third)
+    stack.addArrangedSubview(first, second, third)
 
     check stack.arrangedSubviews == @[View(first), View(second), View(third)]
     check stack.intrinsicContentSize() == initIntrinsicSize(100.0, 38.0)

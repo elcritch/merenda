@@ -48,10 +48,7 @@ for checkbox in [downloads, notifications, sync]:
 
 layout.setSpacing(10.0)
 layout.setAlignment(svaFill)
-layout.addArrangedSubview(title)
-layout.addArrangedSubview(status)
-for checkbox in [downloads, notifications, sync]:
-  layout.addArrangedSubview(checkbox)
+layout.addArrangedSubview(title, status, downloads, notifications, sync)
 updateStatus()
 
 root.addSubview(layout)
