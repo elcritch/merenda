@@ -11,9 +11,8 @@ suite "nimkit sizing":
     check not view.intrinsicContentSize().hasWidth
     check not view.intrinsicContentSize().hasHeight
     check view.sizeThatFits() == initSize(80, 30)
-    check view.contentHuggingPriority(laHorizontal) == LayoutPriorityDefaultLow
-    check view.contentCompressionResistancePriority(laHorizontal) ==
-      LayoutPriorityDefaultHigh
+    check view.huggingPriority(laHorizontal) == LayoutPriorityDefaultLow
+    check view.compressionPriority(laHorizontal) == LayoutPriorityDefaultHigh
 
     view.sizeToFit()
     check view.frame() == initialFrame
@@ -41,20 +40,20 @@ suite "nimkit sizing":
     check AutoMetric.isAutoMetric
     check initSize().hasAutoMetric
     check plain.frame() == initRect(0, 0, 0, 0)
-    check not plain.translatesAutoresizingMaskIntoConstraints()
+    check not plain.autoresizingMaskConstraints
 
     let buttonNatural =
       button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
     check button.frame().origin == initPoint(10, 20)
     check button.frame().size == buttonNatural
-    check not button.translatesAutoresizingMaskIntoConstraints()
+    check not button.autoresizingMaskConstraints
 
     let fieldNatural = field.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
     check field.frame() == initRect(4, 5, 120, fieldNatural.height)
-    check not field.translatesAutoresizingMaskIntoConstraints()
+    check not field.autoresizingMaskConstraints
 
     check explicit.frame() == initRect(1, 2, 30, 10)
-    check explicit.translatesAutoresizingMaskIntoConstraints()
+    check explicit.autoresizingMaskConstraints
 
   test "content changes invalidate parent layout without mutating frames":
     let
@@ -83,8 +82,8 @@ suite "nimkit sizing":
       radio = newRadioButton("Option", frame = initRect(0, 0, 20, 18))
       textSize = textNaturalSize("Enabled")
 
-    check checkbox.contentHuggingPriority(laHorizontal) == LayoutPriorityDefaultHigh
-    check radio.contentHuggingPriority(laHorizontal) == LayoutPriorityDefaultHigh
+    check checkbox.huggingPriority(laHorizontal) == LayoutPriorityDefaultHigh
+    check radio.huggingPriority(laHorizontal) == LayoutPriorityDefaultHigh
     check checkbox.intrinsicContentSize().width > textSize.width
     check radio.intrinsicContentSize().width > textNaturalSize("Option").width
 
@@ -93,7 +92,7 @@ suite "nimkit sizing":
       field = newTextField("Name", frame = initRect(0, 0, 10, 10))
       combo = newComboBox(["Short", "Much longer item"], frame = initRect(0, 0, 10, 10))
 
-    check field.contentHuggingPriority(laHorizontal) == LayoutPriorityDefaultLow
+    check field.huggingPriority(laHorizontal) == LayoutPriorityDefaultLow
     check field.intrinsicContentSize().width >= 80.0
     check field.intrinsicContentSize().height >= 24.0
 

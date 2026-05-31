@@ -163,9 +163,9 @@ proc lowestAdjustmentPriority(
   for child in children:
     let priority =
       if growing:
-        child.contentHuggingPriority(axis)
+        child.huggingPriority(axis)
       else:
-        child.contentCompressionResistancePriority(axis)
+        child.compressionPriority(axis)
     if not hasPriority or priority < result:
       result = priority
       hasPriority = true
@@ -176,9 +176,9 @@ proc countPriority(
   for child in children:
     let childPriority =
       if growing:
-        child.contentHuggingPriority(axis)
+        child.huggingPriority(axis)
       else:
-        child.contentCompressionResistancePriority(axis)
+        child.compressionPriority(axis)
     if childPriority == priority:
       inc result
 
@@ -210,9 +210,9 @@ proc adjustFillSizes(
   for index, child in children:
     let childPriority =
       if growing:
-        child.contentHuggingPriority(stackView.xOrientation)
+        child.huggingPriority(stackView.xOrientation)
       else:
-        child.contentCompressionResistancePriority(stackView.xOrientation)
+        child.compressionPriority(stackView.xOrientation)
     if childPriority == priority:
       sizes[index] = max(sizes[index] + share, 0.0'f32)
 

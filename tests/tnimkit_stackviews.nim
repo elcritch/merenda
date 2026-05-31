@@ -13,7 +13,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
   initViewFields(result, initRect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
-  result.translatesAutoresizingMaskIntoConstraints = false
+  result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit stack views":
@@ -106,8 +106,8 @@ suite "nimkit stack views":
       label = newFixedIntrinsicView(40, 10)
 
     stack.spacing = 10.0
-    field.horizontalContentHuggingPriority = LayoutPriorityDefaultLow
-    label.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
+    field.horizHuggingPriority = LayoutPriorityDefaultLow
+    label.horizHuggingPriority = LayoutPriorityDefaultHigh
     stack.addArrangedSubview(field)
     stack.addArrangedSubview(label)
     stack.layoutSubtreeIfNeeded()
@@ -153,7 +153,7 @@ suite "nimkit stack views":
       top = newLayoutConstraint(stack, latTop, lrEqual, root, latTop, constant = 10)
       height = newLayoutConstraint(stack, latHeight, constant = 40)
 
-    stack.translatesAutoresizingMaskIntoConstraints = false
+    stack.autoresizingMaskConstraints = false
     stack.spacing = 10.0
     root.addSubview(stack)
     stack.addArrangedSubview(first)

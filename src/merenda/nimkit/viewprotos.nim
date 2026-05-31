@@ -21,7 +21,7 @@ protocol ViewProtocolInternal from View:
   method setFrame(self: View, frame: Rect) =
     let nextFrame = self.resolvedFrame(frame)
     if frame.hasAutoMetric:
-      self.setTranslatesAutoresizingMaskIntoConstraints(false)
+      self.autoresizingMaskConstraints = false
     if self.xFrame == nextFrame:
       return
     self.xFrame = nextFrame

@@ -182,7 +182,7 @@ suite "nimkit constraints":
     let view = newView(frame = initRect(0, 0, 100, 80))
 
     check view.autoresizingMask == {}
-    check view.translatesAutoresizingMaskIntoConstraints
+    check view.autoresizingMaskConstraints
 
     view.setAutoresizingMask({cxMinXMargin, cxWidthSizable, cxMaxYMargin})
     check view.autoresizingMask == {cxMinXMargin, cxWidthSizable, cxMaxYMargin}
@@ -195,8 +195,8 @@ suite "nimkit constraints":
     check not view.needsUpdateConstraints
     check not view.needsLayout
 
-    view.translatesAutoresizingMaskIntoConstraints = false
-    check not view.translatesAutoresizingMaskIntoConstraints
+    view.autoresizingMaskConstraints = false
+    check not view.autoresizingMaskConstraints
     check view.needsUpdateConstraints
     check view.needsLayout
 
@@ -217,7 +217,7 @@ suite "nimkit constraints":
     check child.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    child.translatesAutoresizingMaskIntoConstraints = false
+    child.autoresizingMaskConstraints = false
     check root.needsUpdateConstraints
     check root.needsLayout
     check child.needsUpdateConstraints
@@ -229,7 +229,7 @@ suite "nimkit constraints":
     check root.needsLayout
     check not child.needsUpdateConstraints
 
-    child.translatesAutoresizingMaskIntoConstraints = true
+    child.autoresizingMaskConstraints = true
     root.layoutSubtreeIfNeeded()
     root.setBounds(initRect(0, 0, 320, 200))
     check root.needsUpdateConstraints
@@ -292,7 +292,7 @@ suite "nimkit constraints":
       button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
 
     root.addSubview(button)
-    button.translatesAutoresizingMaskIntoConstraints = false
+    button.autoresizingMaskConstraints = false
     root.layoutSubtreeIfNeeded()
 
     let natural = button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
@@ -317,16 +317,16 @@ suite "nimkit constraints":
   test "layout item geometry exposes alignment rect and baseline hooks":
     let view = newView(frame = initRect(10, 20, 100, 50))
 
-    check view.alignmentRectInsets == initEdgeInsets(0.0)
+    check view.alignmentInsets == initEdgeInsets(0.0)
     check view.alignmentRect == view.frame()
     check view.alignmentRectForFrame(view.frame()) == view.frame()
     check view.frameForAlignmentRect(view.alignmentRect()) == view.frame()
-    check view.baselineOffsetFromBottom == 0.0'f32
-    check view.firstBaselineOffsetFromTop == 0.0'f32
+    check view.lastBaselineOffset == 0.0'f32
+    check view.firstBaselineOffset == 0.0'f32
 
-    view.alignmentRectInsets = initEdgeInsets(2.0, 4.0, 6.0, 8.0)
-    view.baselineOffsetFromBottom = 7.0'f32
-    view.firstBaselineOffsetFromTop = 9.0'f32
+    view.alignmentInsets = initEdgeInsets(2.0, 4.0, 6.0, 8.0)
+    view.lastBaselineOffset = 7.0'f32
+    view.firstBaselineOffset = 9.0'f32
 
     let alignmentRect = view.alignmentRect()
     check alignmentRect == initRect(14, 22, 88, 42)
@@ -384,27 +384,27 @@ suite "nimkit constraints":
     check root.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    left.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
+    left.horizHuggingPriority = LayoutPriorityDefaultHigh
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
     root.layoutSubtreeIfNeeded()
-    left.setContentCompressionResistancePriority(LayoutPriorityRequired, laVertical)
+    left.vertCompressionPriority = LayoutPriorityRequired
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
     root.layoutSubtreeIfNeeded()
-    left.setAlignmentRectInsets(initEdgeInsets(1.0))
+    left.alignmentInsets = initEdgeInsets(1.0)
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
     root.layoutSubtreeIfNeeded()
-    left.setBaselineOffsetFromBottom(4.0'f32)
+    left.lastBaselineOffset = 4.0'f32
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
     root.layoutSubtreeIfNeeded()
-    left.setFirstBaselineOffsetFromTop(3.0'f32)
+    left.firstBaselineOffset = 3.0'f32
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 

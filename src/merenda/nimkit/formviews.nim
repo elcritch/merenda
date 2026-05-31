@@ -280,24 +280,18 @@ proc setRowAlignment*(formView: FormView, alignment: FormRowAlignment) =
 proc `rowAlignment=`*(formView: FormView, alignment: FormRowAlignment) =
   formView.setRowAlignment(alignment)
 
-proc minimumFieldWidth*(formView: FormView): float32 =
+proc minFieldWidth*(formView: FormView): float32 =
   if formView.isNil: 0.0'f32 else: formView.xMinimumFieldWidth
 
-proc minFieldWidth*(formView: FormView): float32 =
-  formView.minimumFieldWidth()
-
-proc setMinimumFieldWidth*(formView: FormView, width: float32) =
+proc setMinFieldWidth*(formView: FormView, width: float32) =
   let normalized = max(width, 0.0'f32)
   if formView.isNil or formView.xMinimumFieldWidth == normalized:
     return
   formView.xMinimumFieldWidth = normalized
   formView.invalidateFormLayout()
 
-proc `minimumFieldWidth=`*(formView: FormView, width: float32) =
-  formView.setMinimumFieldWidth(width)
-
 proc `minFieldWidth=`*(formView: FormView, width: float32) =
-  formView.setMinimumFieldWidth(width)
+  formView.setMinFieldWidth(width)
 
 proc intrinsicContentSize*(formView: FormView): IntrinsicSize =
   if formView.isNil:
