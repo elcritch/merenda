@@ -1,6 +1,6 @@
-<img width="2172" height="724" alt="merenda-github-banner-robot-chocolate" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
-
 # Merenda
+
+<img width="2172" height="724" alt="merenda-github-banner-robot-chocolate" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
 
 Merenda is a Nim-native UI toolkit built on FigDraw for drawing and `siwin` for
 native windows and events.
