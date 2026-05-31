@@ -110,6 +110,65 @@ suite "nimkit constraints":
     check child.needsUpdateConstraints
     check child.needsLayout
 
+  test "autoresizing mask stores Cocoa bridge state":
+    let view = newView(0, 0, 100, 80)
+
+    check view.autoresizingMask == {}
+    check view.translatesAutoresizingMaskIntoConstraints
+
+    view.setAutoresizingMask({cxMinXMargin, cxWidthSizable, cxMaxYMargin})
+    check view.autoresizingMask == {cxMinXMargin, cxWidthSizable, cxMaxYMargin}
+    check view.needsUpdateConstraints
+    check view.needsLayout
+
+    view.updateConstraintsForSubtreeIfNeeded()
+    view.setNeedsLayout(false)
+    view.setAutoresizingMask(view.autoresizingMask())
+    check not view.needsUpdateConstraints
+    check not view.needsLayout
+
+    view.setTranslatesAutoresizingMaskIntoConstraints(false)
+    check not view.translatesAutoresizingMaskIntoConstraints
+    check view.needsUpdateConstraints
+    check view.needsLayout
+
+  test "autoresizing changes invalidate child and container constraints":
+    let
+      root = newView(0, 0, 240, 120)
+      child = newView(20, 20, 80, 40)
+
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+    check not root.needsUpdateConstraints
+    check not child.needsUpdateConstraints
+
+    child.setAutoresizingMask({cxWidthSizable, cxHeightSizable})
+    check root.needsUpdateConstraints
+    check root.needsLayout
+    check child.needsUpdateConstraints
+    check child.needsLayout
+
+    root.layoutSubtreeIfNeeded()
+    child.setTranslatesAutoresizingMaskIntoConstraints(false)
+    check root.needsUpdateConstraints
+    check root.needsLayout
+    check child.needsUpdateConstraints
+    check child.needsLayout
+
+    root.layoutSubtreeIfNeeded()
+    root.setFrame(initRect(0, 0, 300, 180))
+    check root.needsUpdateConstraints
+    check root.needsLayout
+    check not child.needsUpdateConstraints
+
+    child.setTranslatesAutoresizingMaskIntoConstraints(true)
+    root.layoutSubtreeIfNeeded()
+    root.setBounds(initRect(0, 0, 320, 200))
+    check root.needsUpdateConstraints
+    check root.needsLayout
+    check child.needsUpdateConstraints
+    check child.needsLayout
+
   test "layout item geometry exposes alignment rect and baseline hooks":
     let view = newView(10, 20, 100, 50)
 
