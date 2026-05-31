@@ -314,6 +314,37 @@ suite "nimkit constraints":
     check button.frame().origin == initPoint(10, 10)
     check button.frame().size == natural
 
+  test "constraint participants use intrinsic size with autoresizing enabled":
+    let
+      root = newView(frame = initRect(0, 0, 300, 120))
+      button = newButton("Intrinsic", frame = initRect(1, 1, 1, 1))
+      left =
+        newLayoutConstraint(button, latLeft, lrEqual, root, latLeft, constant = 10.0)
+      top = newLayoutConstraint(button, latTop, lrEqual, root, latTop, constant = 12.0)
+
+    root.addSubview(button)
+    check button.autoresizingMaskConstraints
+    activateConstraints([left, top])
+    root.layoutSubtreeIfNeeded()
+
+    let natural = button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
+    check button.frame().origin == initPoint(10, 12)
+    check button.frame().size == natural
+
+  test "subtree solver ignores constraints that reference outside views":
+    let
+      root = newView(frame = initRect(0, 0, 100, 80))
+      child = newView(frame = initRect(10, 10, 20, 10))
+      external = newView(frame = initRect(200, 0, 80, 40))
+      outside = newLayoutConstraint(child, latRight, lrEqual, external, latLeft)
+
+    root.addSubview(child)
+    child.addConstraint(outside)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(10, 10, 20, 10)
+    check external.frame() == initRect(200, 0, 80, 40)
+
   test "solver applies sibling constraints":
     let
       root = newView(frame = initRect(0, 0, 240, 120))

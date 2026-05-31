@@ -45,6 +45,7 @@ type
   LayoutSolveState = object
     solver: Solver
     items: seq[SolverView]
+    constraintItems: seq[View]
 
 const AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
 
@@ -621,12 +622,42 @@ proc ensureSolverView(state: var LayoutSolveState, item: View): int =
 proc solverView(state: var LayoutSolveState, item: View): SolverView =
   state.items[state.ensureSolverView(item)]
 
+proc hasSolverView(state: LayoutSolveState, item: View): bool =
+  for solverView in state.items:
+    if solverView.item == item:
+      return true
+  false
+
+proc addConstraintItem(state: var LayoutSolveState, item: View) =
+  if item.isNil or not state.hasSolverView(item):
+    return
+  for existing in state.constraintItems:
+    if existing == item:
+      return
+  state.constraintItems.add item
+
+proc hasConstraintItem(state: LayoutSolveState, item: View): bool =
+  for existing in state.constraintItems:
+    if existing == item:
+      return true
+  false
+
 proc collectSolverViews(state: var LayoutSolveState, item: View) =
   if item.isNil:
     return
   discard state.ensureSolverView(item)
   for child in item.xSubviews:
     state.collectSolverViews(child)
+
+proc collectConstraintItems(state: var LayoutSolveState, owner: View) =
+  if owner.isNil:
+    return
+  for constraint in owner.xConstraints:
+    if not constraint.isNil and constraint.xActive:
+      state.addConstraintItem(constraint.xFirstItem)
+      state.addConstraintItem(constraint.xSecondItem)
+  for child in owner.xSubviews:
+    state.collectConstraintItems(child)
 
 proc addStay(
     state: var LayoutSolveState, variable: Variable, value: float32, strength: Strength
@@ -636,13 +667,12 @@ proc addStay(
 
 proc addGeometryStays(state: var LayoutSolveState, root: View) =
   for solverView in state.items:
-    if solverView.item == root:
-      continue
-    let rect = solverView.item.alignmentRect()
-    state.addStay(solverView.left, rect.minX, Weak)
-    state.addStay(solverView.top, rect.minY, Weak)
-    state.addStay(solverView.width, rect.size.width, Weak)
-    state.addStay(solverView.height, rect.size.height, Weak)
+    if solverView.item != root:
+      let rect = solverView.item.alignmentRect()
+      state.addStay(solverView.left, rect.minX, Weak)
+      state.addStay(solverView.top, rect.minY, Weak)
+      state.addStay(solverView.width, rect.size.width, Weak)
+      state.addStay(solverView.height, rect.size.height, Weak)
 
 proc expressionFor(solverView: SolverView, attribute: LayoutAttribute): Expression =
   case attribute
@@ -721,7 +751,7 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
   if item.isNil:
     return
 
-  if not item.xAutoresizingMaskConstraints:
+  if not item.xAutoresizingMaskConstraints or state.hasConstraintItem(item):
     let
       solverView = state.solverView(item)
       intrinsicSize = item.resolvedIntrinsicContentSize()
@@ -749,6 +779,12 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
 
 proc addLayoutConstraint(state: var LayoutSolveState, constraint: LayoutConstraint) =
   if constraint.isNil or not constraint.xActive or constraint.xFirstItem.isNil:
+    return
+  if not state.hasSolverView(constraint.xFirstItem):
+    return
+  if not constraint.xSecondItem.isNil and not state.hasSolverView(
+    constraint.xSecondItem
+  ):
     return
 
   let left =
@@ -792,6 +828,7 @@ proc applyConstraintsForSubtree*(view: View) =
     return
   var state = initLayoutSolveState()
   state.collectSolverViews(view)
+  state.collectConstraintItems(view)
   state.addRootGeometryConstraints(view)
   state.addGeometryStays(view)
   state.addNonNegativeSizeConstraints()
