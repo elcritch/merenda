@@ -1041,7 +1041,9 @@ proc addItems*(comboBox: ComboBox, values: openArray[string]) =
   for value in values:
     comboBox.addItem(value)
 
-proc initComboBoxFields*(comboBox: ComboBox, frame: Rect, items: openArray[string]) =
+proc initComboBoxFields*(
+    comboBox: ComboBox, items: openArray[string] = [], frame: Rect = AutoRect
+) =
   initControlFields(comboBox, frame)
   comboBox.setCell(newComboBoxCell())
   comboBox.xPopupHighlightedIndex = -1
@@ -1053,15 +1055,11 @@ proc initComboBoxFields*(comboBox: ComboBox, frame: Rect, items: openArray[strin
   discard comboBox.withProtocol(DefaultComboBoxDrawing)
   discard comboBox.withProtocol(DefaultComboBoxEvents)
   comboBox.addItems(items)
+  comboBox.applyInitialFrame(frame)
 
-proc newComboBox*(frame: Rect, items: openArray[string] = []): ComboBox =
+proc newComboBox*(items: openArray[string] = [], frame: Rect = AutoRect): ComboBox =
   result = ComboBox()
-  initComboBoxFields(result, frame, items)
-
-proc newComboBox*(
-    x, y, width, height: float32, items: openArray[string] = []
-): ComboBox =
-  newComboBox(initRect(x, y, width, height), items)
+  initComboBoxFields(result, items, frame)
 
 let
   ComboBoxProtocol* = ComboBoxProtocolInternal

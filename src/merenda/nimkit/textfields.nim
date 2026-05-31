@@ -521,7 +521,7 @@ proc textFieldCell*(textField: TextField): TextFieldCell =
   textField.setCell(replacement)
   replacement
 
-proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
+proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRect) =
   initControlFields(textField, frame)
   textField.setCell(newTextFieldCell())
   textField.setClipsToBounds(true)
@@ -538,13 +538,11 @@ proc initTextFieldFields*(textField: TextField, frame: Rect, value: string) =
   discard textField.withProtocol(DefaultTextFieldCommands)
   discard textField.withProtocol(DefaultTextFieldDrawing)
   discard textField.withProtocol(DefaultTextFieldEvents)
+  textField.applyInitialFrame(frame)
 
-proc newTextField*(frame: Rect, value: string): TextField =
+proc newTextField*(value = "", frame: Rect = AutoRect): TextField =
   result = TextField()
-  initTextFieldFields(result, frame, value)
-
-proc newTextField*(x, y, width, height: float32, value: string): TextField =
-  newTextField(initRect(x, y, width, height), value)
+  initTextFieldFields(result, value, frame)
 
 let
   TextFieldProtocol* = TextFieldProtocolInternal

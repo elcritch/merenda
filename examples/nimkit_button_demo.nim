@@ -4,10 +4,10 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow(100, 100, 360, 220, "Nimkit Button Demo")
-  root = newView(0, 0, 360, 220)
-  label = newTextField(24, 24, 220, 32, "Ready")
-  button = newButton(24, 72, 140, 40, "Click")
+  window = newWindow("Nimkit Button Demo", frame = initRect(100, 100, 360, 220))
+  root = newView(frame = initRect(0, 0, 360, 220))
+  label = newTextField("Ready", frame = initRect(24, 24, 220, 32))
+  button = newButton("Click", frame = initRect(24, 72, 140, 40))
   action = actionSelector("buttonClicked")
 
 proc onClicked(sender: DynamicAgent) =

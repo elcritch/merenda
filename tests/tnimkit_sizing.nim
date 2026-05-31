@@ -4,7 +4,7 @@ import merenda/nimkit
 
 suite "nimkit sizing":
   test "plain views expose no intrinsic metric and preserve frame on sizeToFit":
-    let view = newView(10, 20, 80, 30)
+    let view = newView(frame = initRect(10, 20, 80, 30))
     let initialFrame = view.frame()
 
     check view.intrinsicContentSize() == NoIntrinsicContentSize
@@ -19,7 +19,7 @@ suite "nimkit sizing":
     check view.frame() == initialFrame
 
   test "button sizeToFit uses cell intrinsic size and preserves origin":
-    let button = newButton(10, 20, 12, 10, "Resize")
+    let button = newButton("Resize", frame = initRect(10, 20, 12, 10))
     let natural = button.intrinsicContentSize()
 
     check natural.hasWidth
@@ -31,10 +31,35 @@ suite "nimkit sizing":
     check button.frame().origin == initPoint(10, 20)
     check button.frame().size == natural.resolveIntrinsicSize(initSize(0, 0))
 
+  test "auto frame metrics resolve from intrinsic content":
+    let
+      plain = newView()
+      button = newButton("Auto", frame = initRect(10, 20))
+      field = newTextField("Height", frame = initRect(4, 5, 120))
+      explicit = newButton("Explicit", frame = initRect(1, 2, 30, 10))
+
+    check AutoMetric.isAutoMetric
+    check initSize().hasAutoMetric
+    check plain.frame() == initRect(0, 0, 0, 0)
+    check not plain.translatesAutoresizingMaskIntoConstraints()
+
+    let buttonNatural =
+      button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
+    check button.frame().origin == initPoint(10, 20)
+    check button.frame().size == buttonNatural
+    check not button.translatesAutoresizingMaskIntoConstraints()
+
+    let fieldNatural = field.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
+    check field.frame() == initRect(4, 5, 120, fieldNatural.height)
+    check not field.translatesAutoresizingMaskIntoConstraints()
+
+    check explicit.frame() == initRect(1, 2, 30, 10)
+    check explicit.translatesAutoresizingMaskIntoConstraints()
+
   test "content changes invalidate parent layout without mutating frames":
     let
-      root = newView(0, 0, 240, 120)
-      button = newButton(10, 10, 48, 24, "Go")
+      root = newView(frame = initRect(0, 0, 240, 120))
+      button = newButton("Go", frame = initRect(10, 10, 48, 24))
 
     root.addSubview(button)
     root.layoutSubtreeIfNeeded()
@@ -54,8 +79,8 @@ suite "nimkit sizing":
 
   test "choice controls include indicators and hug horizontally":
     let
-      checkbox = newCheckBox(0, 0, 20, 18, "Enabled")
-      radio = newRadioButton(0, 0, 20, 18, "Option")
+      checkbox = newCheckBox("Enabled", frame = initRect(0, 0, 20, 18))
+      radio = newRadioButton("Option", frame = initRect(0, 0, 20, 18))
       textSize = textNaturalSize("Enabled")
 
     check checkbox.contentHuggingPriority(laHorizontal) == LayoutPriorityDefaultHigh
@@ -65,8 +90,8 @@ suite "nimkit sizing":
 
   test "text fields and combo boxes measure text and chrome":
     let
-      field = newTextField(0, 0, 10, 10, "Name")
-      combo = newComboBox(0, 0, 10, 10, ["Short", "Much longer item"])
+      field = newTextField("Name", frame = initRect(0, 0, 10, 10))
+      combo = newComboBox(["Short", "Much longer item"], frame = initRect(0, 0, 10, 10))
 
     check field.contentHuggingPriority(laHorizontal) == LayoutPriorityDefaultLow
     check field.intrinsicContentSize().width >= 80.0
@@ -79,9 +104,9 @@ suite "nimkit sizing":
 
   test "undersized fitting proposals preserve natural control sizes":
     let
-      button = newButton(0, 0, 10, 10, "Long button title")
-      field = newTextField(0, 0, 10, 10, "Long field value")
-      combo = newComboBox(0, 0, 10, 10, ["Long combo item"])
+      button = newButton("Long button title", frame = initRect(0, 0, 10, 10))
+      field = newTextField("Long field value", frame = initRect(0, 0, 10, 10))
+      combo = newComboBox(["Long combo item"], frame = initRect(0, 0, 10, 10))
       proposed = initFittingSize(4.0, 4.0)
 
     check button.sizeThatFits(proposed) == button.sizeThatFits()
@@ -89,7 +114,7 @@ suite "nimkit sizing":
     check combo.sizeThatFits(proposed) == combo.sizeThatFits()
 
   test "theme metrics affect measurement and agree with text rects":
-    let button = newButton(0, 0, 10, 10, "Pad")
+    let button = newButton("Pad", frame = initRect(0, 0, 10, 10))
     let base = button.intrinsicContentSize()
 
     var appearance = initAppearance()

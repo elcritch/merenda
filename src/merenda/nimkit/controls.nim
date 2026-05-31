@@ -98,7 +98,7 @@ proc sizeToFit*(control: Control) =
     initRect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize))
   )
 
-proc initControlFields*(control: Control, frame: Rect) =
+proc initControlFields*(control: Control, frame: Rect = AutoRect) =
   initViewFields(control, frame)
   control.setContentHuggingPriority(LayoutPriorityDefaultHigh, laVertical)
   control.installCellForwarding()

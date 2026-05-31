@@ -110,9 +110,9 @@ suite "nimkit responder":
 
   test "window first responder requires acceptance":
     let
-      window = newWindow(0, 0, 240, 160, "Responder")
-      plain = newView(0, 0, 240, 160)
-      button = newButton(20, 20, 120, 36, "Default")
+      window = newWindow("Responder", frame = initRect(0, 0, 240, 160))
+      plain = newView(frame = initRect(0, 0, 240, 160))
+      button = newButton("Default", frame = initRect(20, 20, 120, 36))
 
     check not window.makeFirstResponder(plain)
     check window.firstResponder.isNil
@@ -123,9 +123,9 @@ suite "nimkit responder":
 
   test "mouse focus does not force visible focus rings":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse focus")
-      root = newView(0, 0, 240, 160)
-      button = newButton(20, 20, 120, 36, "Default")
+      window = newWindow("Mouse focus", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      button = newButton("Default", frame = initRect(20, 20, 120, 36))
 
     root.addSubview(button)
     window.setContentView(root)
@@ -137,9 +137,9 @@ suite "nimkit responder":
 
   test "space key activates button through default command binding":
     let
-      window = newWindow(0, 0, 240, 160, "Keys")
-      root = newView(0, 0, 240, 160)
-      button = newButton(20, 20, 120, 36, "Default")
+      window = newWindow("Keys", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      button = newButton("Default", frame = initRect(20, 20, 120, 36))
       action = actionSelector("keyAction")
 
     var actionCount = 0
@@ -162,10 +162,10 @@ suite "nimkit responder":
 
   test "window key bindings dispatch commands through responder chain":
     let
-      window = newWindow(0, 0, 240, 160, "Key commands")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Key commands", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
-      child = newView(20, 15, 30, 20)
+      child = newView(frame = initRect(20, 15, 30, 20))
 
     child.setAcceptsFirstResponder(true)
     parent.addSubview(child)
@@ -185,10 +185,10 @@ suite "nimkit responder":
 
   test "window shortcut bindings resolve primary platform modifier":
     let
-      window = newWindow(0, 0, 240, 160, "Shortcuts")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Shortcuts", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
-      child = newView(20, 15, 30, 20)
+      child = newView(frame = initRect(20, 15, 30, 20))
 
     child.setAcceptsFirstResponder(true)
     parent.addSubview(child)
@@ -208,10 +208,10 @@ suite "nimkit responder":
 
   test "unhandled key bindings fall through to raw key dispatch":
     let
-      window = newWindow(0, 0, 240, 160, "Key fallback")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Key fallback", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
-      child = newView(20, 15, 30, 20)
+      child = newView(frame = initRect(20, 15, 30, 20))
 
     child.setAcceptsFirstResponder(true)
     parent.addSubview(child)
@@ -231,11 +231,11 @@ suite "nimkit responder":
 
   test "tab moves first responder through automatic key view loop":
     let
-      window = newWindow(0, 0, 320, 160, "Key views")
-      root = newView(0, 0, 320, 160)
-      first = newButton(10, 10, 80, 28, "First")
-      field = newTextField(100, 10, 100, 28, "value")
-      last = newButton(210, 10, 80, 28, "Last")
+      window = newWindow("Key views", frame = initRect(0, 0, 320, 160))
+      root = newView(frame = initRect(0, 0, 320, 160))
+      first = newButton("First", frame = initRect(10, 10, 80, 28))
+      field = newTextField("value", frame = initRect(100, 10, 100, 28))
+      last = newButton("Last", frame = initRect(210, 10, 80, 28))
 
     root.addSubview(first)
     root.addSubview(field)
@@ -269,12 +269,12 @@ suite "nimkit responder":
 
   test "tab skips views that cannot become key views":
     let
-      window = newWindow(0, 0, 320, 160, "Key view skips")
-      root = newView(0, 0, 320, 160)
-      plain = newView(10, 10, 60, 28)
-      disabled = newButton(80, 10, 80, 28, "Disabled")
-      hidden = newButton(170, 10, 60, 28, "Hidden")
-      enabled = newButton(240, 10, 60, 28, "OK")
+      window = newWindow("Key view skips", frame = initRect(0, 0, 320, 160))
+      root = newView(frame = initRect(0, 0, 320, 160))
+      plain = newView(frame = initRect(10, 10, 60, 28))
+      disabled = newButton("Disabled", frame = initRect(80, 10, 80, 28))
+      hidden = newButton("Hidden", frame = initRect(170, 10, 60, 28))
+      enabled = newButton("OK", frame = initRect(240, 10, 60, 28))
 
     disabled.setEnabled(false)
     hidden.setHidden(true)
@@ -290,11 +290,11 @@ suite "nimkit responder":
 
   test "manual key view links are used when automatic loop is disabled":
     let
-      window = newWindow(0, 0, 320, 160, "Manual key views")
-      root = newView(0, 0, 320, 160)
-      first = newButton(10, 10, 80, 28, "First")
-      skipped = newButton(100, 10, 80, 28, "Skipped")
-      last = newButton(190, 10, 80, 28, "Last")
+      window = newWindow("Manual key views", frame = initRect(0, 0, 320, 160))
+      root = newView(frame = initRect(0, 0, 320, 160))
+      first = newButton("First", frame = initRect(10, 10, 80, 28))
+      skipped = newButton("Skipped", frame = initRect(100, 10, 80, 28))
+      last = newButton("Last", frame = initRect(190, 10, 80, 28))
 
     root.addSubview(first)
     root.addSubview(skipped)
@@ -316,8 +316,8 @@ suite "nimkit responder":
 
   test "window mouse tracking sends drag and up to mouse-down view":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse tracking")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse tracking", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       left = newTrackingSpyView("left", initRect(10, 10, 60, 40))
       right = newTrackingSpyView("right", initRect(120, 10, 60, 40))
 
@@ -338,8 +338,8 @@ suite "nimkit responder":
 
   test "window mouse move hit-tests normally after tracking clears":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse move")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse move", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       left = newTrackingSpyView("left", initRect(10, 10, 60, 40))
       right = newTrackingSpyView("right", initRect(120, 10, 60, 40))
 
@@ -359,8 +359,8 @@ suite "nimkit responder":
 
   test "window mouse move drives hover entered and exited state":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse hover")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse hover", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       left = newTrackingSpyView("left", initRect(10, 10, 60, 40))
       right = newTrackingSpyView("right", initRect(120, 10, 60, 40))
 
@@ -399,8 +399,8 @@ suite "nimkit responder":
 
   test "window mouse dispatch computes repeated click counts":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse clicks")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse clicks", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
 
     root.addSubview(left)
@@ -421,8 +421,8 @@ suite "nimkit responder":
 
   test "window mouse dispatch keeps click counts target-local":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse click targets")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse click targets", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
       right = newTrackingSpyView("right", initRect(10, 10, 80, 40))
 
@@ -445,10 +445,10 @@ suite "nimkit responder":
 
   test "window mouse dispatch bubbles unhandled child events in parent coordinates":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse bubbling")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse bubbling", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
-      child = newView(20, 15, 30, 20)
+      child = newView(frame = initRect(20, 15, 30, 20))
 
     parent.addSubview(child)
     root.addSubview(parent)
@@ -473,10 +473,10 @@ suite "nimkit responder":
 
   test "window key dispatch bubbles first responder key events":
     let
-      window = newWindow(0, 0, 240, 160, "Key bubbling")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Key bubbling", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
-      child = newView(20, 15, 30, 20)
+      child = newView(frame = initRect(20, 15, 30, 20))
 
     child.setAcceptsFirstResponder(true)
     parent.addSubview(child)
@@ -495,8 +495,8 @@ suite "nimkit responder":
 
   test "window scroll dispatch hit-tests and converts local coordinates":
     let
-      window = newWindow(0, 0, 240, 160, "Mouse scroll")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Mouse scroll", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
 
     root.addSubview(left)
@@ -520,8 +520,8 @@ suite "nimkit responder":
 
   test "window mouse and scroll dispatch stop at content bounds":
     let
-      window = newWindow(0, 0, 100, 80, "Content bounds")
-      root = newView(0, 0, 100, 80)
+      window = newWindow("Content bounds", frame = initRect(0, 0, 100, 80))
+      root = newView(frame = initRect(0, 0, 100, 80))
       child = newTrackingSpyView("child", initRect(120, 10, 40, 30))
 
     root.addSubview(child)
@@ -536,10 +536,10 @@ suite "nimkit responder":
 
   test "window scroll dispatch bubbles unhandled child scrolls":
     let
-      window = newWindow(0, 0, 240, 160, "Scroll bubbling")
-      root = newView(0, 0, 240, 160)
+      window = newWindow("Scroll bubbling", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
-      child = newView(20, 15, 30, 20)
+      child = newView(frame = initRect(20, 15, 30, 20))
 
     parent.addSubview(child)
     root.addSubview(parent)

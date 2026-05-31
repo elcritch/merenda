@@ -285,7 +285,7 @@ protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args)
 
-proc initButtonFields*(button: Button, frame: Rect, title: string) =
+proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame)
   button.setCell(newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
@@ -293,26 +293,20 @@ proc initButtonFields*(button: Button, frame: Rect, title: string) =
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)
   discard button.withProtocol(DefaultButtonAction)
+  button.applyInitialFrame(frame)
 
-proc newButton*(frame: Rect, title: string): Button =
+proc newButton*(title = "Button", frame: Rect = AutoRect): Button =
   result = Button()
-  initButtonFields(result, frame, title)
+  initButtonFields(result, title, frame)
 
-proc newButton*(x, y, width, height: float32, title: string): Button =
-  newButton(initRect(x, y, width, height), title)
-
-proc newCheckBox*(frame: Rect, title: string): Button =
-  result = newButton(frame, title)
+proc newCheckBox*(title = "Check Box", frame: Rect = AutoRect): Button =
+  result = newButton(title, frame)
   result.setButtonType(btCheckBox)
+  result.applyInitialFrame(frame)
 
-proc newCheckBox*(x, y, width, height: float32, title: string): Button =
-  newCheckBox(initRect(x, y, width, height), title)
-
-proc newRadioButton*(frame: Rect, title: string): Button =
-  result = newButton(frame, title)
+proc newRadioButton*(title = "Radio", frame: Rect = AutoRect): Button =
+  result = newButton(title, frame)
   result.setButtonType(btRadio)
-
-proc newRadioButton*(x, y, width, height: float32, title: string): Button =
-  newRadioButton(initRect(x, y, width, height), title)
+  result.applyInitialFrame(frame)
 
 let ButtonProtocol* = ButtonProtocolInternal

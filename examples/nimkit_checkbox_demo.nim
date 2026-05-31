@@ -10,13 +10,13 @@ proc stateName(state: ButtonState): string =
 
 let
   app = sharedApplication()
-  window = newWindow(120, 120, 440, 280, "Nimkit Checkbox Demo")
-  root = newView(0, 0, 440, 280)
-  title = newTextField(28, 24, 280, 32, "Checkboxes")
-  status = newTextField(28, 64, 360, 30, "")
-  downloads = newCheckBox(28, 116, 260, 28, "Enable downloads")
-  notifications = newCheckBox(28, 152, 260, 28, "Show notifications")
-  sync = newCheckBox(28, 188, 280, 28, "Sync over cellular")
+  window = newWindow("Nimkit Checkbox Demo", frame = initRect(120, 120, 440, 280))
+  root = newView(frame = initRect(0, 0, 440, 280))
+  title = newTextField("Checkboxes", frame = initRect(28, 24, 280, 32))
+  status = newTextField("", frame = initRect(28, 64, 360, 30))
+  downloads = newCheckBox("Enable downloads", frame = initRect(28, 116, 260, 28))
+  notifications = newCheckBox("Show notifications", frame = initRect(28, 152, 260, 28))
+  sync = newCheckBox("Sync over cellular", frame = initRect(28, 188, 280, 28))
   changedAction = actionSelector("checkboxChanged")
 
 proc updateStatus() =

@@ -6,7 +6,6 @@ import ./viewbase
 
 export viewbase, viewgeometry
 
-
 protocol ViewProtocolInternal from View:
   property frame -> Rect
   property bounds -> Rect
@@ -20,10 +19,13 @@ protocol ViewProtocolInternal from View:
     self.xFrame
 
   method setFrame(self: View, frame: Rect) =
-    if self.xFrame == frame:
+    let nextFrame = self.resolvedFrame(frame)
+    if frame.hasAutoMetric:
+      self.setTranslatesAutoresizingMaskIntoConstraints(false)
+    if self.xFrame == nextFrame:
       return
-    self.xFrame = frame
-    self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+    self.xFrame = nextFrame
+    self.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
     self.invalidateLayoutItemGeometry()
     self.markSubviewAutoresizingConstraintsChanged()
     self.setNeedsDisplay(true)

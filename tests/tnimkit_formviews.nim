@@ -19,7 +19,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
 suite "nimkit form views":
   test "intrinsic size uses max label and field columns with spacing and insets":
     let
-      form = newFormView(0, 0, 1, 1)
+      form = newFormView(frame = initRect(0, 0, 1, 1))
       shortLabel = newFixedIntrinsicView(40, 12)
       longLabel = newFixedIntrinsicView(60, 14)
       nameField = newFixedIntrinsicView(100, 20)
@@ -45,7 +45,7 @@ suite "nimkit form views":
 
   test "field column stretches while labels keep natural width":
     let
-      form = newFormView(0, 0, 240, 48)
+      form = newFormView(frame = initRect(0, 0, 240, 48))
       label = newFixedIntrinsicView(48, 14)
       field = newFixedIntrinsicView(80, 20)
 
@@ -58,7 +58,7 @@ suite "nimkit form views":
 
   test "leading labels and fill row alignment are supported":
     let
-      form = newFormView(0, 0, 180, 40)
+      form = newFormView(frame = initRect(0, 0, 180, 40))
       label = newFixedIntrinsicView(36, 12)
       field = newFixedIntrinsicView(90, 20)
 
@@ -73,7 +73,7 @@ suite "nimkit form views":
 
   test "minimum field width participates in intrinsic and layout sizing":
     let
-      form = newFormView(0, 0, 1, 1)
+      form = newFormView(frame = initRect(0, 0, 1, 1))
       label = newFixedIntrinsicView(30, 10)
       field = newFixedIntrinsicView(20, 12)
 
@@ -88,7 +88,7 @@ suite "nimkit form views":
 
   test "hidden rows are omitted from intrinsic size and layout":
     let
-      form = newFormView(0, 0, 1, 1)
+      form = newFormView(frame = initRect(0, 0, 1, 1))
       visibleLabel = newFixedIntrinsicView(30, 10)
       visibleField = newFixedIntrinsicView(80, 20)
       hiddenLabel = newFixedIntrinsicView(100, 10)
@@ -108,10 +108,10 @@ suite "nimkit form views":
 
   test "field content changes invalidate form and parent lazily":
     let
-      root = newView(0, 0, 300, 120)
-      form = newFormView(10, 10, 1, 1)
-      label = newTextField(0, 0, 1, 1, "Name")
-      field = newTextField(0, 0, 1, 1, "Ada")
+      root = newView(frame = initRect(0, 0, 300, 120))
+      form = newFormView(frame = initRect(10, 10, 1, 1))
+      label = newTextField("Name", frame = initRect(0, 0, 1, 1))
+      field = newTextField("Ada", frame = initRect(0, 0, 1, 1))
 
     label.setEditable(false)
     label.setSelectable(false)
@@ -137,8 +137,8 @@ suite "nimkit form views":
 
   test "form participates in deterministic constraint layout":
     let
-      root = newView(0, 0, 320, 120)
-      form = newFormView(0, 0, 1, 1)
+      root = newView(frame = initRect(0, 0, 320, 120))
+      form = newFormView(frame = initRect(0, 0, 1, 1))
       label = newFixedIntrinsicView(50, 12)
       field = newFixedIntrinsicView(80, 20)
       left = newLayoutConstraint(form, latLeft, lrEqual, root, latLeft, constant = 20)
@@ -160,7 +160,7 @@ suite "nimkit form views":
 
   test "removing a row subview removes the row":
     let
-      form = newFormView(0, 0, 120, 40)
+      form = newFormView(frame = initRect(0, 0, 120, 40))
       label = newFixedIntrinsicView(30, 10)
       field = newFixedIntrinsicView(80, 20)
 

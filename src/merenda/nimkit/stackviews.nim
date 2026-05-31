@@ -394,7 +394,9 @@ protocol DefaultStackViewLifecycle of ViewLifecycleProtocol:
   method willRemoveSubview(stackView: StackView, subview: View) =
     stackView.removeArrangedSubview(subview)
 
-proc initStackViewFields*(stackView: StackView, frame: Rect, orientation = laVertical) =
+proc initStackViewFields*(
+    stackView: StackView, orientation = laVertical, frame: Rect = AutoRect
+) =
   initViewFields(stackView, frame)
   stackView.xOrientation = orientation
   stackView.xSpacing = 8.0'f32
@@ -402,10 +404,8 @@ proc initStackViewFields*(stackView: StackView, frame: Rect, orientation = laVer
   stackView.xDistribution = svdFill
   discard stackView.withProtocol(DefaultStackViewLayout)
   discard stackView.withProtocol(DefaultStackViewLifecycle)
+  stackView.applyInitialFrame(frame)
 
-proc newStackView*(frame: Rect, orientation = laVertical): StackView =
+proc newStackView*(orientation = laVertical, frame: Rect = AutoRect): StackView =
   result = StackView()
-  initStackViewFields(result, frame, orientation)
-
-proc newStackView*(x, y, width, height: float32, orientation = laVertical): StackView =
-  newStackView(initRect(x, y, width, height), orientation)
+  initStackViewFields(result, orientation, frame)

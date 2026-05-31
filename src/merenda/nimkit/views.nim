@@ -199,13 +199,13 @@ proc containsView*(view, candidate: View): bool =
       return true
   false
 
-proc initViewFields*(view: View, frame: Rect) =
+proc initViewFields*(view: View, frame: Rect = AutoRect) =
   initResponder(view)
-  view.xFrame = frame
-  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  view.xFrame = frame.resolveAutoRect(initRect(0.0, 0.0, 0.0, 0.0))
+  view.xBounds = initRect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
   view.xNeedsDisplay = true
   view.xNeedsLayout = true
-  view.xTranslatesAutoresizingMaskIntoConstraints = true
+  view.xTranslatesAutoresizingMaskIntoConstraints = not frame.hasAutoMetric
   view.xHorizontalContentHuggingPriority = LayoutPriorityDefaultLow
   view.xVerticalContentHuggingPriority = LayoutPriorityDefaultLow
   view.xHorizontalContentCompressionResistancePriority = LayoutPriorityDefaultHigh
@@ -213,12 +213,9 @@ proc initViewFields*(view: View, frame: Rect) =
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
 
-proc newView*(frame: Rect): View =
+proc newView*(frame: Rect = AutoRect): View =
   result = View()
   initViewFields(result, frame)
-
-proc newView*(x, y, width, height: float32): View =
-  newView(initRect(x, y, width, height))
 
 proc handleMouseDown*(view: View, event: MouseEvent): bool =
   view.sendLocalIfHandled(mouseDown(), event)

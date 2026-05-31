@@ -12,7 +12,7 @@ method delegatePlaceholder(self: Responder): string {.selector.} =
 
 suite "nimkit controls":
   test "button core methods are selector-backed and protocol visible":
-    let button = newButton(0, 0, 120, 36, "Original")
+    let button = newButton("Original", frame = initRect(0, 0, 120, 36))
 
     check button.conformsTo(ButtonProtocol)
     let swizzledTitle: DynamicMethod = proc(
@@ -25,9 +25,9 @@ suite "nimkit controls":
 
   test "button click sends selector action to closure target":
     let
-      root = newView(0, 0, 240, 180)
-      label = newTextField(16, 16, 180, 32, "Ready")
-      button = newButton(16, 64, 120, 36, "Click")
+      root = newView(frame = initRect(0, 0, 240, 180))
+      label = newTextField("Ready", frame = initRect(16, 16, 180, 32))
+      button = newButton("Click", frame = initRect(16, 64, 120, 36))
       action = actionSelector("clickedAction")
 
     proc onClicked(sender: DynamicAgent) =
@@ -46,7 +46,7 @@ suite "nimkit controls":
     check label.stringValue == "Clicked"
 
   test "button properties are forwarded through its button cell":
-    let button = newButton(0, 0, 120, 36, "Original")
+    let button = newButton("Original", frame = initRect(0, 0, 120, 36))
     let cell = button.buttonCell()
 
     check not cell.isNil
@@ -64,7 +64,7 @@ suite "nimkit controls":
 
   test "text fields do not forward arbitrary selectors to delegates":
     let
-      field = newTextField(0, 0, 120, 24, "Value")
+      field = newTextField("Value", frame = initRect(0, 0, 120, 24))
       delegate = newResponder()
 
     discard delegate.replaceMethods(
@@ -77,7 +77,7 @@ suite "nimkit controls":
 
   test "text fields notify delegates through explicit hooks":
     let
-      field = newTextField(0, 0, 120, 24, "Value")
+      field = newTextField("Value", frame = initRect(0, 0, 120, 24))
       delegate = newResponder()
 
     var
@@ -113,9 +113,9 @@ suite "nimkit controls":
 
   test "button mouse tracking cancels click when released outside":
     let
-      window = newWindow(0, 0, 240, 180, "Button tracking")
-      root = newView(0, 0, 240, 180)
-      button = newButton(16, 64, 120, 36, "Click")
+      window = newWindow("Button tracking", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      button = newButton("Click", frame = initRect(16, 64, 120, 36))
       action = actionSelector("trackedClick")
 
     var actionCount = 0
@@ -148,7 +148,7 @@ suite "nimkit controls":
   test "toggle button cycles state during performClick":
     var actionCount = 0
     let
-      button = newButton(0, 0, 120, 36, "Toggle")
+      button = newButton("Toggle", frame = initRect(0, 0, 120, 36))
       action = actionSelector("toggleAction")
 
     proc onToggle(sender: DynamicAgent) =
@@ -168,7 +168,7 @@ suite "nimkit controls":
     check actionCount == 2
 
   test "toggle button supports mixed state cycling":
-    let button = newButton(0, 0, 120, 36, "Mixed")
+    let button = newButton("Mixed", frame = initRect(0, 0, 120, 36))
     button.setButtonType(btToggle)
     button.setAllowsMixedState(true)
 
@@ -182,7 +182,7 @@ suite "nimkit controls":
   test "checkbox toggles state and supports mixed state":
     var actionCount = 0
     let
-      checkbox = newCheckBox(0, 0, 140, 24, "Enabled")
+      checkbox = newCheckBox("Enabled", frame = initRect(0, 0, 140, 24))
       action = actionSelector("checkboxAction")
 
     proc onToggle(sender: DynamicAgent) =
@@ -205,10 +205,10 @@ suite "nimkit controls":
     var actionCount = 0
     var observedSelection = ""
     let
-      root = newView(0, 0, 220, 100)
-      first = newRadioButton(10, 10, 160, 24, "First")
-      second = newRadioButton(10, 42, 160, 24, "Second")
-      other = newRadioButton(10, 74, 160, 24, "Other")
+      root = newView(frame = initRect(0, 0, 220, 100))
+      first = newRadioButton("First", frame = initRect(10, 10, 160, 24))
+      second = newRadioButton("Second", frame = initRect(10, 42, 160, 24))
+      other = newRadioButton("Other", frame = initRect(10, 74, 160, 24))
       action = actionSelector("radioAction")
       otherAction = actionSelector("otherRadioAction")
 

@@ -130,7 +130,7 @@ suite "nimkit key bindings":
     .get() == moveWordLeft()
 
   test "windows can switch key binding profiles at runtime":
-    let window = newWindow(0, 0, 120, 80, "Key profile")
+    let window = newWindow("Key profile", frame = initRect(0, 0, 120, 80))
 
     window.setKeyBindingProfile(kbpMacOS)
     check window

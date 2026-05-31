@@ -1,3 +1,5 @@
+import std/math
+
 import pkg/chroma
 
 type
@@ -223,6 +225,10 @@ type
     ppInline ## Draw the popup inline in the owner window.
 
 const
+  AutoMetric* = NaN.float32
+  AutoPoint* = Point(x: AutoMetric, y: AutoMetric)
+  AutoSize* = Size(width: AutoMetric, height: AutoMetric)
+  AutoRect* = Rect(origin: AutoPoint, size: AutoSize)
   LayoutAttributeBaseline* = latLastBaseline
   NoIntrinsicMetric* = -1.0'f32
   NoIntrinsicContentSize* =
@@ -238,14 +244,56 @@ func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
 func `<=`*(a, b: LayoutPriority): bool {.borrow.}
 
-func normalizeOptionalMetric(value: float32): float32 =
-  if value < 0.0'f32: NoIntrinsicMetric else: value
+func isAutoMetric*(value: float32): bool =
+  value.isNaN
 
-proc initPoint*(x, y: float32): Point =
+func normalizeOptionalMetric(value: float32): float32 =
+  if value.isAutoMetric or value < 0.0'f32: NoIntrinsicMetric else: value
+
+func normalizeSizeMetric(value: float32): float32 =
+  if value.isAutoMetric:
+    AutoMetric
+  else:
+    max(value, 0.0'f32)
+
+proc initPoint*(x = AutoMetric, y = AutoMetric): Point =
   Point(x: x, y: y)
 
-proc initSize*(width, height: float32): Size =
-  Size(width: max(width, 0.0'f32), height: max(height, 0.0'f32))
+proc initSize*(width = AutoMetric, height = AutoMetric): Size =
+  Size(width: width.normalizeSizeMetric, height: height.normalizeSizeMetric)
+
+func hasAutoMetric*(point: Point): bool =
+  point.x.isAutoMetric or point.y.isAutoMetric
+
+func hasAutoMetric*(size: Size): bool =
+  size.width.isAutoMetric or size.height.isAutoMetric
+
+func hasAutoMetric*(rect: Rect): bool =
+  rect.origin.hasAutoMetric or rect.size.hasAutoMetric
+
+func hasWidth*(size: Size): bool =
+  not size.width.isAutoMetric
+
+func hasHeight*(size: Size): bool =
+  not size.height.isAutoMetric
+
+func resolveAutoPoint*(point, fallback: Point): Point =
+  initPoint(
+    if point.x.isAutoMetric: fallback.x else: point.x,
+    if point.y.isAutoMetric: fallback.y else: point.y,
+  )
+
+func resolveAutoSize*(size, fallback: Size): Size =
+  initSize(
+    if size.hasWidth: size.width else: fallback.width,
+    if size.hasHeight: size.height else: fallback.height,
+  )
+
+func resolveAutoRect*(rect, fallback: Rect): Rect =
+  Rect(
+    origin: rect.origin.resolveAutoPoint(fallback.origin),
+    size: rect.size.resolveAutoSize(fallback.size),
+  )
 
 func initIntrinsicSize*(
     width = NoIntrinsicMetric, height = NoIntrinsicMetric
@@ -303,7 +351,9 @@ func initLayoutPriority*(value: float32): LayoutPriority =
 func priorityValue*(priority: LayoutPriority): float32 =
   float32(priority)
 
-proc initRect*(x, y, width, height: float32): Rect =
+proc initRect*(
+    x = AutoMetric, y = AutoMetric, width = AutoMetric, height = AutoMetric
+): Rect =
   Rect(origin: initPoint(x, y), size: initSize(width, height))
 
 proc initRect*(origin: Point, size: Size): Rect =

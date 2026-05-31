@@ -1,28 +1,28 @@
 import merenda/nimkit
 
 proc makeLabel(text: string): TextField =
-  result = newTextField(0, 0, 1, 1, text)
+  result = newTextField(text)
   result.setEditable(false)
   result.setSelectable(false)
   result.setTextColor(initColor(0.09, 0.12, 0.18))
 
 let
   app = sharedApplication()
-  window = newWindow(180, 160, 540, 300, "Nimkit Layout Showcase")
-  root = newView(0, 0, 540, 300)
+  window = newWindow("Nimkit Layout Showcase", frame = initRect(180, 160, 540, 300))
+  root = newView(frame = initRect(0, 0, 540, 300))
 
   title = makeLabel("Intrinsic, Stack, and Constraint Layout")
-  layout = newStackView(24, 24, 1, 1, laVertical)
-  form = newFormView(0, 0, 1, 1)
-  actionRow = newStackView(0, 0, 1, 1, laHorizontal)
+  layout = newStackView(laVertical, frame = initRect(24, 24))
+  form = newFormView()
+  actionRow = newStackView(laHorizontal)
 
   nameLabel = makeLabel("Name")
-  nameField = newTextField(0, 0, 1, 1, "Ada Lovelace")
+  nameField = newTextField("Ada Lovelace")
   priorityLabel = makeLabel("Priority")
-  priority = newComboBox(0, 0, 1, 1, ["Low", "Medium", "High"])
-  downloads = newCheckBox(0, 0, 1, 1, "Enable downloads")
-  runButton = newButton(0, 0, 1, 1, "Run")
-  cancelButton = newButton(0, 0, 1, 1, "Cancel")
+  priority = newComboBox(["Low", "Medium", "High"])
+  downloads = newCheckBox("Enable downloads")
+  runButton = newButton("Run")
+  cancelButton = newButton("Cancel")
 
 root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
 
@@ -47,8 +47,6 @@ priorityLabel.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
 nameField.setContentHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
 priority.setContentHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
 
-runButton.sizeToFit()
-cancelButton.sizeToFit()
 priority.selectItemAtIndex(1)
 
 form.addRow(nameLabel, nameField)

@@ -43,7 +43,7 @@ proc newComboDelegate(): ComboDelegate =
 
 suite "nimkit comboboxes":
   test "combo box stores local items and syncs selected string":
-    let combo = newComboBox(0, 0, 140, 26, ["Small", "Medium"])
+    let combo = newComboBox(["Small", "Medium"], frame = initRect(0, 0, 140, 26))
 
     check combo.conformsTo(ComboBoxProtocol)
     check combo.numberOfItems == 2
@@ -71,7 +71,7 @@ suite "nimkit comboboxes":
 
   test "combo box resolves items from data source and notifies delegate on activation":
     let
-      combo = newComboBox(0, 0, 140, 26)
+      combo = newComboBox(frame = initRect(0, 0, 140, 26))
       source = newComboDataSource(["Red", "Green", "Blue"])
       delegate = newComboDelegate()
       action = actionSelector("comboSelectionChanged")
@@ -105,9 +105,9 @@ suite "nimkit comboboxes":
 
   test "mouse opens popup and selects clicked item":
     let
-      window = newWindow(0, 0, 240, 160, "Combo mouse")
-      root = newView(0, 0, 240, 160)
-      combo = newComboBox(10, 10, 120, 24, ["Low", "Medium", "High"])
+      window = newWindow("Combo mouse", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
 
     combo.setItemHeight(20.0)
     root.addSubview(combo)
@@ -129,9 +129,9 @@ suite "nimkit comboboxes":
 
   test "popup presentation can force inline or window rendering":
     let
-      window = newWindow(0, 0, 220, 150, "Combo popup presentation")
-      root = newView(0, 0, 220, 150)
-      combo = newComboBox(10, 20, 120, 26, ["Low", "Medium", "High"])
+      window = newWindow("Combo popup presentation", frame = initRect(0, 0, 220, 150))
+      root = newView(frame = initRect(0, 0, 220, 150))
+      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 20, 120, 26))
 
     root.addSubview(combo)
     window.setContentView(root)
@@ -160,10 +160,11 @@ suite "nimkit comboboxes":
 
   test "open popup wins hit testing over overlapping sibling controls":
     let
-      window = newWindow(0, 0, 240, 180, "Combo popup")
-      root = newView(0, 0, 240, 180)
-      priority = newComboBox(10, 10, 140, 24, ["Low", "Medium", "High"])
-      color = newComboBox(10, 48, 140, 24, ["Red", "Green", "Blue"])
+      window = newWindow("Combo popup", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      priority =
+        newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 140, 24))
+      color = newComboBox(["Red", "Green", "Blue"], frame = initRect(10, 48, 140, 24))
 
     priority.setItemHeight(20.0)
     color.setItemHeight(20.0)
@@ -190,9 +191,9 @@ suite "nimkit comboboxes":
 
   test "keyboard opens navigates confirms and cancels popup":
     let
-      window = newWindow(0, 0, 240, 160, "Combo keys")
-      root = newView(0, 0, 240, 160)
-      combo = newComboBox(10, 10, 120, 24, ["Low", "Medium", "High"])
+      window = newWindow("Combo keys", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
       action = actionSelector("comboKeyboardChanged")
 
     var actionCount = 0
