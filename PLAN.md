@@ -61,9 +61,10 @@ NimKit currently includes the core desktop-control slice:
   explicit activation.
 - A Kiwiberry/Cassowary-backed constraint application pass that solves active
   constraints per view subtree, keeps the subtree root geometry fixed,
-  preserves descendant geometry with edit-variable stays, applies intrinsic
-  size through hugging/compression priorities, and supports sibling constraints
-  and soft-priority conflicts.
+  preserves descendant geometry with edit-variable stays, keeps solver variables
+  scoped to the collected subtree, applies intrinsic size for opted-in or
+  constraint-participating views through hugging/compression priorities, and
+  supports sibling constraints and soft-priority conflicts.
 - Runnable NimKit examples:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
@@ -336,10 +337,11 @@ Concrete task order and status:
    subset with Kiwiberry/Cassowary-backed solving after constraint updates and
    before layout hooks. The pass rebuilds a solver for the view subtree,
    keeps the subtree root geometry fixed, preserves descendant geometry with
-   edit-variable stays, applies active `LayoutConstraint` values as required or
-   soft solver constraints, maps intrinsic content size into
-   compression/hugging inequalities, supports sibling constraints, and honors
-   stronger soft priorities.
+   edit-variable stays, ignores constraints whose referenced items are outside
+   that subtree, applies active `LayoutConstraint` values as required or soft
+   solver constraints, maps intrinsic content size for opted-in or
+   constraint-participating views into compression/hugging inequalities,
+   supports sibling constraints, and honors stronger soft priorities.
 14. Done for the first container layers: Add intrinsic-aware `StackView`,
    `FormView`, and `GridView` on top of the core. `StackView` supports
    arranged subviews, orientation, spacing, edge insets, cross-axis alignment,
