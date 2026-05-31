@@ -38,14 +38,14 @@ type
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
     xAutoresizingMask*: AutoresizingMask
-    xTranslatesAutoresizingMaskIntoConstraints*: bool
-    xAlignmentRectInsets*: EdgeInsets
-    xBaselineOffsetFromBottom*: float32
-    xFirstBaselineOffsetFromTop*: float32
-    xHorizontalContentHuggingPriority*: LayoutPriority
-    xVerticalContentHuggingPriority*: LayoutPriority
-    xHorizontalContentCompressionResistancePriority*: LayoutPriority
-    xVerticalContentCompressionResistancePriority*: LayoutPriority
+    xAutoresizingMaskConstraints*: bool
+    xAlignmentInsets*: EdgeInsets
+    xLastBaselineOffset*: float32
+    xFirstBaselineOffset*: float32
+    xHorizHuggingPriority*: LayoutPriority
+    xVertHuggingPriority*: LayoutPriority
+    xHorizCompressionPriority*: LayoutPriority
+    xVertCompressionPriority*: LayoutPriority
     xConstraints*: seq[LayoutConstraint]
     xNextKeyView*: View
     xPreviousKeyView*: View

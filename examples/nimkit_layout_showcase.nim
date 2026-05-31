@@ -40,10 +40,10 @@ actionRow.spacing = 8.0
 actionRow.alignment = svaCenter
 actionRow.distribution = svdFill
 
-nameLabel.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
-priorityLabel.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
-nameField.horizontalContentHuggingPriority = LayoutPriorityDefaultLow
-priority.horizontalContentHuggingPriority = LayoutPriorityDefaultLow
+nameLabel.horizHuggingPriority = LayoutPriorityDefaultHigh
+priorityLabel.horizHuggingPriority = LayoutPriorityDefaultHigh
+nameField.horizHuggingPriority = LayoutPriorityDefaultLow
+priority.horizHuggingPriority = LayoutPriorityDefaultLow
 
 priority.selectedIndex = 1
 

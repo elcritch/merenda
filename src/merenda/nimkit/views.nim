@@ -238,11 +238,11 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xBounds = initRect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
   view.xNeedsDisplay = true
   view.xNeedsLayout = true
-  view.xTranslatesAutoresizingMaskIntoConstraints = not frame.hasAutoMetric
-  view.xHorizontalContentHuggingPriority = LayoutPriorityDefaultLow
-  view.xVerticalContentHuggingPriority = LayoutPriorityDefaultLow
-  view.xHorizontalContentCompressionResistancePriority = LayoutPriorityDefaultHigh
-  view.xVerticalContentCompressionResistancePriority = LayoutPriorityDefaultHigh
+  view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
+  view.xHorizHuggingPriority = LayoutPriorityDefaultLow
+  view.xVertHuggingPriority = LayoutPriorityDefaultLow
+  view.xHorizCompressionPriority = LayoutPriorityDefaultHigh
+  view.xVertCompressionPriority = LayoutPriorityDefaultHigh
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
 

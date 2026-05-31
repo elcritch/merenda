@@ -13,7 +13,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
   initViewFields(result, initRect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
-  result.translatesAutoresizingMaskIntoConstraints = false
+  result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit form views":
@@ -147,7 +147,7 @@ suite "nimkit form views":
       top = newLayoutConstraint(form, latTop, lrEqual, root, latTop, constant = 10)
       height = newLayoutConstraint(form, latHeight, constant = 40)
 
-    form.translatesAutoresizingMaskIntoConstraints = false
+    form.autoresizingMaskConstraints = false
     form.columnSpacing = 10.0
     root.addSubview(form)
     form.addRow(label, field)

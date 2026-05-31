@@ -318,8 +318,9 @@ Concrete task order and status:
    lifecycle/model are now in place before autoresizing masks, containers, or
    any solver work.
 12. Done for the current core: Add autoresizing mask and
-   `translatesAutoresizingMaskIntoConstraints` semantics. The first pass stores
-   the Cocoa bridge state and invalidates child/container constraints when the
+   `autoresizingMaskConstraints` semantics, matching Cocoa's translate flag
+   without carrying the long API name into NimKit. The first pass stores the
+   Cocoa bridge state and invalidates child/container constraints when the
    mask, translate flag, frame, bounds, or hierarchy changes. Direct mask
    application or generated solver inputs belong with the deterministic
    constraint application subset.

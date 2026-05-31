@@ -782,7 +782,7 @@ proc collectOwnedLayoutInputs(owner: View): seq[LayoutInput] =
 
 proc intrinsicLayoutInput(view: View): LayoutInput =
   result.item = view
-  if view.isNil or view.xTranslatesAutoresizingMaskIntoConstraints:
+  if view.isNil or view.xAutoresizingMaskConstraints:
     return
 
   let intrinsicSize = view.resolvedIntrinsicContentSize()

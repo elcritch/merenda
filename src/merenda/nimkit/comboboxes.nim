@@ -28,7 +28,7 @@ type
     xStringValue: string
     xSelectedIndex: int
     xEditable: bool
-    xNumberOfVisibleItems: int
+    xMaxVisibleItems: int
     xItemHeight: float32
 
   ComboBoxPopupView = ref object of View
@@ -36,8 +36,8 @@ type
 
 proc comboBoxCell*(comboBox: ComboBox): ComboBoxCell
 proc dataSource*(comboBox: ComboBox): DynamicAgent
-proc popupHighlightedIndex*(comboBox: ComboBox): int
-proc setPopupHighlightedIndex*(comboBox: ComboBox, index: int)
+proc highlightedIndex*(comboBox: ComboBox): int
+proc setHighlightedIndex*(comboBox: ComboBox, index: int)
 proc visibleItemCount*(comboBox: ComboBox): int
 proc popupItemHeight*(comboBox: ComboBox): float32
 proc popupFirstItemIndex*(comboBox: ComboBox): int
@@ -67,8 +67,8 @@ proc drawPopupContents(
 
 proc cellStringValue(cell: ComboBoxCell): string
 proc setCellSelectedIndex(cell: ComboBoxCell, index: int)
-proc cellNumberOfVisibleItems(cell: ComboBoxCell): int
-proc setCellNumberOfVisibleItems(cell: ComboBoxCell, value: int)
+proc cellMaxVisibleItems(cell: ComboBoxCell): int
+proc setCellMaxVisibleItems(cell: ComboBoxCell, value: int)
 proc cellItemHeight(cell: ComboBoxCell): float32
 proc setCellItemHeight(cell: ComboBoxCell, value: float32)
 proc cellIsEditable(cell: ComboBoxCell): bool
@@ -96,7 +96,7 @@ protocol ComboBoxViewProtocolInternal:
 protocol ComboBoxProtocolInternal from ComboBox:
   property selectedIndex -> int
   property popupOpen -> bool
-  property numberOfVisibleItems -> int
+  property maxVisibleItems -> int
   property itemHeight -> float32
   property popupPresentation -> PopupPresentation
 
@@ -133,11 +133,11 @@ protocol ComboBoxProtocolInternal from ComboBox:
       comboBox.xTrackingPopup = false
     comboBox.setNeedsDisplay(true)
 
-  method numberOfVisibleItems(comboBox: ComboBox): int =
-    comboBox.comboBoxCell().cellNumberOfVisibleItems()
+  method maxVisibleItems(comboBox: ComboBox): int =
+    comboBox.comboBoxCell().cellMaxVisibleItems()
 
-  method setNumberOfVisibleItems(comboBox: ComboBox, value: int) =
-    comboBox.comboBoxCell().setCellNumberOfVisibleItems(value)
+  method setMaxVisibleItems(comboBox: ComboBox, value: int) =
+    comboBox.comboBoxCell().setCellMaxVisibleItems(value)
 
   method itemHeight(comboBox: ComboBox): float32 =
     comboBox.comboBoxCell().cellItemHeight()
@@ -209,7 +209,7 @@ protocol ComboBoxProtocolInternal from ComboBox:
       return
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
-    comboBox.setPopupHighlightedIndex(-1)
+    comboBox.setHighlightedIndex(-1)
     cell.updateControlView()
 
   method addItem*(comboBox: ComboBox, value: string) =
@@ -349,25 +349,19 @@ protocol DefaultComboBoxPopupEvents of ResponderEventProtocol:
     if comboBox.isNil or not comboBox.isEnabled or event.button != mbPrimary:
       return
     comboBox.xTrackingPopup = true
-    comboBox.setPopupHighlightedIndex(
-      comboBox.popupItemIndexAtPopupPoint(event.location)
-    )
+    comboBox.setHighlightedIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
 
   method mouseDragged(popupView: ComboBoxPopupView, event: MouseEvent) =
     let comboBox = popupView.xComboBox
     if comboBox.isNil or not comboBox.popupOpen:
       return
-    comboBox.setPopupHighlightedIndex(
-      comboBox.popupItemIndexAtPopupPoint(event.location)
-    )
+    comboBox.setHighlightedIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
 
   method mouseMoved(popupView: ComboBoxPopupView, event: MouseEvent) =
     let comboBox = popupView.xComboBox
     if comboBox.isNil or not comboBox.popupOpen:
       return
-    comboBox.setPopupHighlightedIndex(
-      comboBox.popupItemIndexAtPopupPoint(event.location)
-    )
+    comboBox.setHighlightedIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
 
   method mouseUp(popupView: ComboBoxPopupView, event: MouseEvent) =
     let comboBox = popupView.xComboBox
@@ -396,7 +390,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
     if comboBox.popupOpen() and
         comboBox.popupRect(comboBox.bounds()).contains(event.location):
       comboBox.xTrackingPopup = true
-      comboBox.setPopupHighlightedIndex(
+      comboBox.setHighlightedIndex(
         comboBox.popupItemIndexAtPoint(comboBox.bounds(), event.location)
       )
     else:
@@ -407,13 +401,13 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
 
   method mouseDragged(comboBox: ComboBox, event: MouseEvent) =
     if comboBox.popupOpen():
-      comboBox.setPopupHighlightedIndex(
+      comboBox.setHighlightedIndex(
         comboBox.popupItemIndexAtPoint(comboBox.bounds(), event.location)
       )
 
   method mouseMoved(comboBox: ComboBox, event: MouseEvent) =
     if comboBox.popupOpen():
-      comboBox.setPopupHighlightedIndex(
+      comboBox.setHighlightedIndex(
         comboBox.popupItemIndexAtPoint(comboBox.bounds(), event.location)
       )
 
@@ -447,8 +441,8 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       else:
         comboBox.movePopupHighlight(-1)
     of keyEnter:
-      if comboBox.popupOpen() and comboBox.popupHighlightedIndex() >= 0:
-        comboBox.activateItemAtIndex(comboBox.popupHighlightedIndex())
+      if comboBox.popupOpen() and comboBox.highlightedIndex() >= 0:
+        comboBox.activateItemAtIndex(comboBox.highlightedIndex())
         comboBox.closePopup()
       elif comboBox.indexOfSelectedItem() >= 0:
         discard comboBox.sendAction()
@@ -479,18 +473,18 @@ proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
   cell.xStringValue = cell.xItems[index]
   cell.updateControlView()
 
-proc cellNumberOfVisibleItems(cell: ComboBoxCell): int =
+proc cellMaxVisibleItems(cell: ComboBoxCell): int =
   if cell.isNil:
     return 0
-  cell.xNumberOfVisibleItems
+  cell.xMaxVisibleItems
 
-proc setCellNumberOfVisibleItems(cell: ComboBoxCell, value: int) =
+proc setCellMaxVisibleItems(cell: ComboBoxCell, value: int) =
   if cell.isNil:
     return
   let count = max(value, 1)
-  if cell.xNumberOfVisibleItems == count:
+  if cell.xMaxVisibleItems == count:
     return
-  cell.xNumberOfVisibleItems = count
+  cell.xMaxVisibleItems = count
   cell.updateControlView()
 
 proc cellItemHeight(cell: ComboBoxCell): float32 =
@@ -649,7 +643,7 @@ proc initComboBoxCellFields*(cell: ComboBoxCell) =
   initActionCellFields(cell)
   cell.xSelectedIndex = -1
   cell.xEditable = true
-  cell.xNumberOfVisibleItems = 5
+  cell.xMaxVisibleItems = 5
   cell.xItemHeight = 22.0
   discard cell.withProtocol(DefaultComboBoxCellMeasurement)
 
@@ -689,8 +683,8 @@ proc `selectedIndex=`*(comboBox: ComboBox, index: int) =
 proc `popupOpen=`*(comboBox: ComboBox, open: bool) =
   comboBox.setPopupOpen(open)
 
-proc `numberOfVisibleItems=`*(comboBox: ComboBox, value: int) =
-  comboBox.setNumberOfVisibleItems(value)
+proc `maxVisibleItems=`*(comboBox: ComboBox, value: int) =
+  comboBox.setMaxVisibleItems(value)
 
 proc `itemHeight=`*(comboBox: ComboBox, value: float32) =
   comboBox.setItemHeight(value)
@@ -737,12 +731,12 @@ proc setDelegate*(comboBox: ComboBox, delegate: Responder) =
 proc `delegate=`*(comboBox: ComboBox, delegate: Responder) =
   comboBox.setDelegate(delegate)
 
-proc popupHighlightedIndex*(comboBox: ComboBox): int =
+proc highlightedIndex*(comboBox: ComboBox): int =
   if comboBox.isNil:
     return -1
   comboBox.xPopupHighlightedIndex
 
-proc setPopupHighlightedIndex*(comboBox: ComboBox, index: int) =
+proc setHighlightedIndex*(comboBox: ComboBox, index: int) =
   if comboBox.isNil:
     return
   let boundedIndex = if index < 0 or index >= comboBox.numberOfItems(): -1 else: index
@@ -752,8 +746,8 @@ proc setPopupHighlightedIndex*(comboBox: ComboBox, index: int) =
   comboBox.notifyComboBoxSelectionIsChanging()
   comboBox.setNeedsDisplay(true)
 
-proc `popupHighlightedIndex=`*(comboBox: ComboBox, index: int) =
-  comboBox.setPopupHighlightedIndex(index)
+proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
+  comboBox.setHighlightedIndex(index)
 
 proc isButtonPressed*(comboBox: ComboBox): bool =
   not comboBox.isNil and comboBox.xButtonPressed
@@ -764,7 +758,7 @@ proc visibleItemCount*(comboBox: ComboBox): int =
   let count = comboBox.numberOfItems()
   if count <= 0:
     return 0
-  min(count, max(comboBox.numberOfVisibleItems(), 1))
+  min(count, max(comboBox.maxVisibleItems(), 1))
 
 proc popupItemHeight*(comboBox: ComboBox): float32 =
   if comboBox.isNil:
@@ -1020,7 +1014,7 @@ proc drawPopupContents(
     let
       itemIndex = first + visibleIndex
       selected = itemIndex == comboBox.indexOfSelectedItem()
-      hovered = itemIndex == comboBox.popupHighlightedIndex()
+      hovered = itemIndex == comboBox.highlightedIndex()
       itemStyle = context.appearance.resolveTextFieldStyle(
         initControlStyleContext(
           srComboBoxItem,
@@ -1057,13 +1051,13 @@ proc movePopupHighlight*(comboBox: ComboBox, delta: int) =
   if comboBox.isNil or comboBox.numberOfItems() == 0:
     return
   let current =
-    if comboBox.popupHighlightedIndex() >= 0:
-      comboBox.popupHighlightedIndex()
+    if comboBox.highlightedIndex() >= 0:
+      comboBox.highlightedIndex()
     elif comboBox.indexOfSelectedItem() >= 0:
       comboBox.indexOfSelectedItem()
     else:
       0
-  comboBox.setPopupHighlightedIndex(
+  comboBox.setHighlightedIndex(
     max(0, min(current + delta, comboBox.numberOfItems() - 1))
   )
 

@@ -26,7 +26,7 @@ proc markSubviewAutoresizingConstraintsChanged*(view: View) =
   if view.isNil:
     return
   for child in view.xSubviews:
-    if child.xTranslatesAutoresizingMaskIntoConstraints:
+    if child.xAutoresizingMaskConstraints:
       child.markConstraintStorageChanged()
 
 proc invalidateLayoutItemGeometry*(view: View) =
@@ -51,41 +51,35 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
 proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
   view.setAutoresizingMask(mask)
 
-proc translatesAutoresizingMaskIntoConstraints*(view: View): bool =
-  (not view.isNil) and view.xTranslatesAutoresizingMaskIntoConstraints
+proc autoresizingMaskConstraints*(view: View): bool =
+  (not view.isNil) and view.xAutoresizingMaskConstraints
 
-proc setTranslatesAutoresizingMaskIntoConstraints*(view: View, value: bool) =
-  if view.isNil or view.xTranslatesAutoresizingMaskIntoConstraints == value:
+proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
+  if view.isNil or view.xAutoresizingMaskConstraints == value:
     return
-  view.xTranslatesAutoresizingMaskIntoConstraints = value
+  view.xAutoresizingMaskConstraints = value
   view.invalidateLayoutItemGeometry()
 
-proc `translatesAutoresizingMaskIntoConstraints=`*(view: View, value: bool) =
-  view.setTranslatesAutoresizingMaskIntoConstraints(value)
-
-proc alignmentRectInsets*(view: View): EdgeInsets =
+proc alignmentInsets*(view: View): EdgeInsets =
   if view.isNil:
     return initEdgeInsets(0.0)
-  view.xAlignmentRectInsets
+  view.xAlignmentInsets
 
-proc setAlignmentRectInsets*(view: View, insets: EdgeInsets) =
-  if view.isNil or view.xAlignmentRectInsets == insets:
+proc `alignmentInsets=`*(view: View, insets: EdgeInsets) =
+  if view.isNil or view.xAlignmentInsets == insets:
     return
-  view.xAlignmentRectInsets = insets
+  view.xAlignmentInsets = insets
   view.invalidateLayoutItemGeometry()
-
-proc `alignmentRectInsets=`*(view: View, insets: EdgeInsets) =
-  view.setAlignmentRectInsets(insets)
 
 proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
   if view.isNil:
     return initRect(0.0, 0.0, 0.0, 0.0)
-  frame.inset(view.alignmentRectInsets())
+  frame.inset(view.alignmentInsets())
 
 proc frameForAlignmentRect*(view: View, alignmentRect: Rect): Rect =
   if view.isNil:
     return initRect(0.0, 0.0, 0.0, 0.0)
-  let insets = view.alignmentRectInsets()
+  let insets = view.alignmentInsets()
   initRect(
     alignmentRect.origin.x - insets.left,
     alignmentRect.origin.y - insets.top,
@@ -114,31 +108,25 @@ proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
 proc `alignmentRect=`*(view: View, alignmentRect: Rect) =
   view.setFrameFromAlignmentRect(alignmentRect)
 
-proc baselineOffsetFromBottom*(view: View): float32 =
-  if view.isNil: 0.0'f32 else: view.xBaselineOffsetFromBottom
+proc lastBaselineOffset*(view: View): float32 =
+  if view.isNil: 0.0'f32 else: view.xLastBaselineOffset
 
-proc setBaselineOffsetFromBottom*(view: View, offset: float32) =
+proc `lastBaselineOffset=`*(view: View, offset: float32) =
   let normalized = max(offset, 0.0'f32)
-  if view.isNil or view.xBaselineOffsetFromBottom == normalized:
+  if view.isNil or view.xLastBaselineOffset == normalized:
     return
-  view.xBaselineOffsetFromBottom = normalized
+  view.xLastBaselineOffset = normalized
   view.invalidateLayoutItemGeometry()
 
-proc `baselineOffsetFromBottom=`*(view: View, offset: float32) =
-  view.setBaselineOffsetFromBottom(offset)
+proc firstBaselineOffset*(view: View): float32 =
+  if view.isNil: 0.0'f32 else: view.xFirstBaselineOffset
 
-proc firstBaselineOffsetFromTop*(view: View): float32 =
-  if view.isNil: 0.0'f32 else: view.xFirstBaselineOffsetFromTop
-
-proc setFirstBaselineOffsetFromTop*(view: View, offset: float32) =
+proc `firstBaselineOffset=`*(view: View, offset: float32) =
   let normalized = max(offset, 0.0'f32)
-  if view.isNil or view.xFirstBaselineOffsetFromTop == normalized:
+  if view.isNil or view.xFirstBaselineOffset == normalized:
     return
-  view.xFirstBaselineOffsetFromTop = normalized
+  view.xFirstBaselineOffset = normalized
   view.invalidateLayoutItemGeometry()
-
-proc `firstBaselineOffsetFromTop=`*(view: View, offset: float32) =
-  view.setFirstBaselineOffsetFromTop(offset)
 
 proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
   if view.isNil:
@@ -162,9 +150,9 @@ proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
   of latCenterY:
     rect.minY + rect.size.height / 2.0'f32
   of latLastBaseline:
-    rect.maxY - view.baselineOffsetFromBottom()
+    rect.maxY - view.lastBaselineOffset()
   of latFirstBaseline:
-    rect.minY + view.firstBaselineOffsetFromTop()
+    rect.minY + view.firstBaselineOffset()
   of latNotAnAttribute:
     0.0'f32
 
@@ -256,81 +244,71 @@ proc invalidateIntrinsicContentSizeSubtree*(view: View) =
   for child in view.xSubviews:
     child.invalidateIntrinsicContentSizeSubtree()
 
-proc contentHuggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
+proc huggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
   if view.isNil:
     return LayoutPriorityDefaultLow
   case axis
-  of laHorizontal: view.xHorizontalContentHuggingPriority
-  of laVertical: view.xVerticalContentHuggingPriority
+  of laHorizontal: view.xHorizHuggingPriority
+  of laVertical: view.xVertHuggingPriority
 
-proc setContentHuggingPriority*(
-    view: View, priority: LayoutPriority, axis: LayoutAxis
-) =
+proc setHuggingPriority*(view: View, priority: LayoutPriority, axis: LayoutAxis) =
   if view.isNil:
     return
   case axis
   of laHorizontal:
-    if view.xHorizontalContentHuggingPriority == priority:
+    if view.xHorizHuggingPriority == priority:
       return
-    view.xHorizontalContentHuggingPriority = priority
+    view.xHorizHuggingPriority = priority
   of laVertical:
-    if view.xVerticalContentHuggingPriority == priority:
+    if view.xVertHuggingPriority == priority:
       return
-    view.xVerticalContentHuggingPriority = priority
+    view.xVertHuggingPriority = priority
   view.invalidateIntrinsicContentSize()
 
-proc horizontalContentHuggingPriority*(view: View): LayoutPriority =
-  view.contentHuggingPriority(laHorizontal)
+proc horizHuggingPriority*(view: View): LayoutPriority =
+  view.huggingPriority(laHorizontal)
 
-proc `horizontalContentHuggingPriority=`*(view: View, priority: LayoutPriority) =
-  view.setContentHuggingPriority(priority, laHorizontal)
+proc `horizHuggingPriority=`*(view: View, priority: LayoutPriority) =
+  view.setHuggingPriority(priority, laHorizontal)
 
-proc verticalContentHuggingPriority*(view: View): LayoutPriority =
-  view.contentHuggingPriority(laVertical)
+proc vertHuggingPriority*(view: View): LayoutPriority =
+  view.huggingPriority(laVertical)
 
-proc `verticalContentHuggingPriority=`*(view: View, priority: LayoutPriority) =
-  view.setContentHuggingPriority(priority, laVertical)
+proc `vertHuggingPriority=`*(view: View, priority: LayoutPriority) =
+  view.setHuggingPriority(priority, laVertical)
 
-proc contentCompressionResistancePriority*(
-    view: View, axis: LayoutAxis
-): LayoutPriority =
+proc compressionPriority*(view: View, axis: LayoutAxis): LayoutPriority =
   if view.isNil:
     return LayoutPriorityDefaultHigh
   case axis
-  of laHorizontal: view.xHorizontalContentCompressionResistancePriority
-  of laVertical: view.xVerticalContentCompressionResistancePriority
+  of laHorizontal: view.xHorizCompressionPriority
+  of laVertical: view.xVertCompressionPriority
 
-proc setContentCompressionResistancePriority*(
-    view: View, priority: LayoutPriority, axis: LayoutAxis
-) =
+proc setCompressionPriority*(view: View, priority: LayoutPriority, axis: LayoutAxis) =
   if view.isNil:
     return
   case axis
   of laHorizontal:
-    if view.xHorizontalContentCompressionResistancePriority == priority:
+    if view.xHorizCompressionPriority == priority:
       return
-    view.xHorizontalContentCompressionResistancePriority = priority
+    view.xHorizCompressionPriority = priority
   of laVertical:
-    if view.xVerticalContentCompressionResistancePriority == priority:
+    if view.xVertCompressionPriority == priority:
       return
-    view.xVerticalContentCompressionResistancePriority = priority
+    view.xVertCompressionPriority = priority
   view.invalidateIntrinsicContentSize()
 
-proc horizontalContentCompressionResistancePriority*(view: View): LayoutPriority =
-  view.contentCompressionResistancePriority(laHorizontal)
+proc horizCompressionPriority*(view: View): LayoutPriority =
+  view.compressionPriority(laHorizontal)
 
-proc `horizontalContentCompressionResistancePriority=`*(
-    view: View, priority: LayoutPriority
-) =
-  view.setContentCompressionResistancePriority(priority, laHorizontal)
+proc `horizCompressionPriority=`*(view: View, priority: LayoutPriority) =
+  view.setCompressionPriority(priority, laHorizontal)
 
-proc verticalContentCompressionResistancePriority*(view: View): LayoutPriority =
-  view.contentCompressionResistancePriority(laVertical)
+proc vertCompressionPriority*(view: View): LayoutPriority =
+  view.compressionPriority(laVertical)
 
-proc `verticalContentCompressionResistancePriority=`*(
-    view: View, priority: LayoutPriority
-) =
-  view.setContentCompressionResistancePriority(priority, laVertical)
+proc `vertCompressionPriority=`*(view: View, priority: LayoutPriority) =
+  view.setCompressionPriority(priority, laVertical)
 
 func axisOrigin*(rect: Rect, axis: LayoutAxis): float32 =
   case axis

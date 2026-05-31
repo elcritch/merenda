@@ -51,10 +51,10 @@ suite "nimkit comboboxes":
     check combo.indexOfItem("Small") == 0
     check combo.indexOfSelectedItem() == -1
 
-    combo.numberOfVisibleItems = 3
+    combo.maxVisibleItems = 3
     combo.itemHeight = 18.0
     combo.editable = false
-    check combo.numberOfVisibleItems == 3
+    check combo.maxVisibleItems == 3
     check combo.itemHeight == 18.0
     check not combo.editable
 
@@ -122,13 +122,13 @@ suite "nimkit comboboxes":
 
     check window.mouseDownAt(initPoint(20, 20))
     check combo.popupOpen
-    check combo.popupHighlightedIndex == 0
+    check combo.highlightedIndex == 0
     check window.mouseUpAt(initPoint(20, 20))
     check combo.popupOpen
 
     let mediumPoint = initPoint(20, 10 + 24 + 1 + 20 + 10)
     check window.mouseDownAt(mediumPoint)
-    check combo.popupHighlightedIndex == 1
+    check combo.highlightedIndex == 1
     check window.mouseUpAt(mediumPoint)
     check not combo.popupOpen
     check combo.indexOfSelectedItem() == 1
@@ -188,7 +188,7 @@ suite "nimkit comboboxes":
     check color.bounds().contains(color.pointFromView(mediumPoint, root))
     check root.hitTest(mediumPoint) == priority
     check window.mouseDownAt(mediumPoint)
-    check priority.popupHighlightedIndex == 1
+    check priority.highlightedIndex == 1
     check window.mouseUpAt(mediumPoint)
     check priority.indexOfSelectedItem() == 1
     check priority.stringValue == "Medium"
@@ -217,10 +217,10 @@ suite "nimkit comboboxes":
     check window.makeFirstResponder(combo)
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
     check combo.popupOpen
-    check combo.popupHighlightedIndex == 0
+    check combo.highlightedIndex == 0
 
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
-    check combo.popupHighlightedIndex == 1
+    check combo.highlightedIndex == 1
 
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check not combo.popupOpen
@@ -230,7 +230,7 @@ suite "nimkit comboboxes":
 
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
     check combo.popupOpen
-    check combo.popupHighlightedIndex == 1
+    check combo.highlightedIndex == 1
     check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
     check not combo.popupOpen
     check combo.indexOfSelectedItem() == 1
