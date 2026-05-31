@@ -42,11 +42,9 @@ layout.alignment = svaFill
 layout.addArrangedSubview(button1, button2, label1, label2)
 
 root.addSubview(layout)
-activateConstraints(
-  layout.pinEdges(
-    toGuide = root.contentLayoutGuide(initEdgeInsets(50.0, 50.0, 0.0, 50.0)),
-    edges = {leLeft, leTop, leRight},
-  )
+layout.pinEdges(
+  toGuide = root.contentLayoutGuide(initEdgeInsets(50.0, 50.0, 0.0, 50.0)),
+  edges = {leLeft, leTop, leRight},
 )
 
 window.setContentView(root)

@@ -52,11 +52,9 @@ layout.addArrangedSubview(title, status, form)
 updateStatus()
 
 root.addSubview(layout)
-activateConstraints(
-  layout.pinEdges(
-    toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
-    edges = {leLeft, leTop, leRight},
-  )
+layout.pinEdges(
+  toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
+  edges = {leLeft, leTop, leRight},
 )
 
 window.setContentView(root)
