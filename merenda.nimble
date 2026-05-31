@@ -12,6 +12,7 @@ requires "chronicles"
 requires "siwin >= 1.0.1"
 requires "figdraw[siwin] >= 0.22.9"
 requires "sigils >= 0.20.1"
+requires "kiwiberry"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
