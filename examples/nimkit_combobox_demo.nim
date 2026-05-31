@@ -5,11 +5,15 @@ import sigils/selectors
 let
   app = sharedApplication()
   window = newWindow("Nimkit ComboBox Demo", frame = initRect(160, 160, 420, 240))
-  root = newView(frame = initRect(0, 0, 420, 240))
-  title = newTextField("Combo Box", frame = initRect(28, 24, 280, 28))
-  status = newTextField("", frame = initRect(28, 68, 340, 24))
-  priority = newComboBox(["Low", "Medium", "High"], frame = initRect(28, 116, 180, 28))
-  color = newComboBox(["Red", "Green", "Blue"], frame = initRect(28, 154, 180, 28))
+  root = newView()
+  layout = newStackView(laVertical)
+  form = newFormView()
+  title = newTextField("Combo Box")
+  status = newTextField("")
+  priority = newComboBox(["Low", "Medium", "High"])
+  color = newComboBox(["Red", "Green", "Blue"])
+  priorityLabel = newTextField("Priority")
+  colorLabel = newTextField("Color")
   changedAction = actionSelector("comboChanged")
 
 proc updateStatus() =
@@ -27,7 +31,7 @@ root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
 title.setTextColor(initColor(0.13, 0.20, 0.34))
 status.setTextColor(initColor(0.12, 0.28, 0.20))
 
-for label in [title, status]:
+for label in [title, status, priorityLabel, colorLabel]:
   label.setEditable(false)
   label.setSelectable(false)
 
@@ -37,11 +41,29 @@ color.selectItemAtIndex(0)
 for combo in [priority, color]:
   combo.setTarget(target)
   combo.setAction(changedAction)
-  root.addSubview(combo)
 
-root.addSubview(title)
-root.addSubview(status)
+layout.setSpacing(10.0)
+layout.setAlignment(svaFill)
+form.setEdgeInsets(initEdgeInsets(0.0))
+form.setColumnSpacing(12.0)
+form.setRowSpacing(10.0)
+form.setMinimumFieldWidth(180.0)
+form.addRow(priorityLabel, priority)
+form.addRow(colorLabel, color)
+layout.addArrangedSubview(title)
+layout.addArrangedSubview(status)
+layout.addArrangedSubview(form)
 updateStatus()
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 28.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 24.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -28.0),
+  ]
+)
+
 window.setContentView(root)
 discard window.selectNextKeyView()
 app.addWindow(window)

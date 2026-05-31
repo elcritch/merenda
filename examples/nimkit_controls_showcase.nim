@@ -48,33 +48,40 @@ proc showcaseAppearance(): Appearance =
 let
   app = sharedApplication()
   window = newWindow("Nimkit Controls Showcase", frame = initRect(140, 140, 760, 500))
-  root = newView(frame = initRect(0, 0, 760, 500))
+  root = newView()
 
-  title = newTextField("Nimkit Controls", frame = initRect(24, 22, 420, 34))
-  summary = newTextField("", frame = initRect(24, 448, 710, 28))
+  layout = newStackView(laVertical)
+  bodyRow = newStackView(laHorizontal)
+  inputColumn = newStackView(laVertical)
+  buttonRow = newStackView(laHorizontal)
+  choiceColumn = newStackView(laVertical)
+  popupColumn = newStackView(laVertical)
 
-  inputTitle = newTextField("Text Fields", frame = initRect(24, 78, 240, 26))
-  nameField = newTextField("Ada", frame = initRect(24, 116, 250, 30))
-  noteField = newTextField("Building UI", frame = initRect(24, 154, 250, 30))
+  title = newTextField("Nimkit Controls")
+  summary = newTextField("")
 
-  actionTitle = newTextField("Buttons", frame = initRect(24, 216, 240, 26))
-  pushButton = newButton("Push", frame = initRect(24, 254, 118, 36))
-  toggleButton = newButton("Toggle Off", frame = initRect(156, 254, 118, 36))
-  actionCountLabel = newTextField("Push count: 0", frame = initRect(24, 306, 250, 26))
+  inputTitle = newTextField("Text Fields")
+  nameField = newTextField("Ada")
+  noteField = newTextField("Building UI")
 
-  choiceTitle = newTextField("Choices", frame = initRect(326, 78, 260, 26))
-  downloads = newCheckBox("Enable downloads", frame = initRect(326, 116, 250, 26))
-  notifications = newCheckBox("Show notifications", frame = initRect(326, 150, 250, 26))
-  sync = newCheckBox("Sync over cellular", frame = initRect(326, 184, 250, 26))
+  actionTitle = newTextField("Buttons")
+  pushButton = newButton("Push")
+  toggleButton = newButton("Toggle Off")
+  actionCountLabel = newTextField("Push count: 0")
 
-  sizeTitle = newTextField("Radio Buttons", frame = initRect(326, 238, 260, 26))
-  small = newRadioButton("Small", frame = initRect(326, 276, 150, 26))
-  medium = newRadioButton("Medium", frame = initRect(326, 310, 150, 26))
-  large = newRadioButton("Large", frame = initRect(326, 344, 150, 26))
+  choiceTitle = newTextField("Choices")
+  downloads = newCheckBox("Enable downloads")
+  notifications = newCheckBox("Show notifications")
+  sync = newCheckBox("Sync over cellular")
 
-  popupTitle = newTextField("Combo Boxes", frame = initRect(560, 78, 150, 26))
-  priority = newComboBox(["Low", "Medium", "High"], frame = initRect(560, 116, 150, 28))
-  color = newComboBox(["Red", "Green", "Blue"], frame = initRect(560, 154, 150, 28))
+  sizeTitle = newTextField("Radio Buttons")
+  small = newRadioButton("Small")
+  medium = newRadioButton("Medium")
+  large = newRadioButton("Large")
+
+  popupTitle = newTextField("Combo Boxes")
+  priority = newComboBox(["Low", "Medium", "High"])
+  color = newComboBox(["Red", "Green", "Blue"])
 
   pushAction = actionSelector("showcasePush")
   toggleAction = actionSelector("showcaseToggle")
@@ -174,12 +181,60 @@ for combo in [priority, color]:
   combo.setTarget(comboTarget)
   combo.setAction(comboAction)
 
-for view in [
-  title, inputTitle, nameField, noteField, actionTitle, pushButton, toggleButton,
-  actionCountLabel, choiceTitle, downloads, notifications, sync, sizeTitle, small,
-  medium, large, popupTitle, priority, color, summary,
-]:
-  root.addSubview(view)
+layout.setSpacing(16.0)
+layout.setAlignment(svaFill)
+
+bodyRow.setSpacing(28.0)
+bodyRow.setAlignment(svaFill)
+bodyRow.setDistribution(svdFill)
+
+for column in [inputColumn, choiceColumn, popupColumn]:
+  column.setSpacing(10.0)
+  column.setAlignment(svaFill)
+
+buttonRow.setSpacing(8.0)
+buttonRow.setAlignment(svaFill)
+buttonRow.setDistribution(svdFillEqually)
+
+buttonRow.addArrangedSubview(pushButton)
+buttonRow.addArrangedSubview(toggleButton)
+
+inputColumn.addArrangedSubview(inputTitle)
+inputColumn.addArrangedSubview(nameField)
+inputColumn.addArrangedSubview(noteField)
+inputColumn.addArrangedSubview(actionTitle)
+inputColumn.addArrangedSubview(buttonRow)
+inputColumn.addArrangedSubview(actionCountLabel)
+
+choiceColumn.addArrangedSubview(choiceTitle)
+choiceColumn.addArrangedSubview(downloads)
+choiceColumn.addArrangedSubview(notifications)
+choiceColumn.addArrangedSubview(sync)
+choiceColumn.addArrangedSubview(sizeTitle)
+choiceColumn.addArrangedSubview(small)
+choiceColumn.addArrangedSubview(medium)
+choiceColumn.addArrangedSubview(large)
+
+popupColumn.addArrangedSubview(popupTitle)
+popupColumn.addArrangedSubview(priority)
+popupColumn.addArrangedSubview(color)
+
+bodyRow.addArrangedSubview(inputColumn)
+bodyRow.addArrangedSubview(choiceColumn)
+bodyRow.addArrangedSubview(popupColumn)
+
+layout.addArrangedSubview(title)
+layout.addArrangedSubview(bodyRow)
+layout.addArrangedSubview(summary)
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 24.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 22.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -24.0),
+  ]
+)
 
 updateToggleTitle()
 updateSummary()

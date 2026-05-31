@@ -11,12 +11,13 @@ proc stateName(state: ButtonState): string =
 let
   app = sharedApplication()
   window = newWindow("Nimkit Checkbox Demo", frame = initRect(120, 120, 440, 280))
-  root = newView(frame = initRect(0, 0, 440, 280))
-  title = newTextField("Checkboxes", frame = initRect(28, 24, 280, 32))
-  status = newTextField("", frame = initRect(28, 64, 360, 30))
-  downloads = newCheckBox("Enable downloads", frame = initRect(28, 116, 260, 28))
-  notifications = newCheckBox("Show notifications", frame = initRect(28, 152, 260, 28))
-  sync = newCheckBox("Sync over cellular", frame = initRect(28, 188, 280, 28))
+  root = newView()
+  layout = newStackView(laVertical)
+  title = newTextField("Checkboxes")
+  status = newTextField("")
+  downloads = newCheckBox("Enable downloads")
+  notifications = newCheckBox("Show notifications")
+  sync = newCheckBox("Sync over cellular")
   changedAction = actionSelector("checkboxChanged")
 
 proc updateStatus() =
@@ -44,11 +45,24 @@ for label in [title, status]:
 for checkbox in [downloads, notifications, sync]:
   checkbox.setTarget(target)
   checkbox.setAction(changedAction)
-  root.addSubview(checkbox)
 
-root.addSubview(title)
-root.addSubview(status)
+layout.setSpacing(10.0)
+layout.setAlignment(svaFill)
+layout.addArrangedSubview(title)
+layout.addArrangedSubview(status)
+for checkbox in [downloads, notifications, sync]:
+  layout.addArrangedSubview(checkbox)
 updateStatus()
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 28.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 24.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -28.0),
+  ]
+)
+
 window.setContentView(root)
 discard window.selectNextKeyView()
 app.addWindow(window)

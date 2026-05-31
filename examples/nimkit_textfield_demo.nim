@@ -3,11 +3,12 @@ import merenda/nimkit
 let
   app = sharedApplication()
   window = newWindow("Nimkit Text Field Demo", frame = initRect(150, 150, 420, 220))
-  root = newView(frame = initRect(0, 0, 420, 220))
-  title = newTextField("Text Field", frame = initRect(28, 24, 300, 28))
-  field = newTextField("Edit me", frame = initRect(28, 70, 260, 30))
-  secondField = newTextField("Tab here", frame = initRect(28, 108, 260, 30))
-  status = newTextField("", frame = initRect(28, 152, 340, 24))
+  root = newView()
+  layout = newStackView(laVertical)
+  title = newTextField("Text Field")
+  field = newTextField("Edit me")
+  secondField = newTextField("Tab here")
+  status = newTextField("")
 
 proc updateStatus() =
   status.setStringValue(
@@ -28,11 +29,23 @@ field.setDelegate(newActionTarget(textDidChange(), onTextDidChange))
 secondField.setDelegate(newActionTarget(textDidChange(), onTextDidChange))
 
 root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
-root.addSubview(title)
-root.addSubview(field)
-root.addSubview(secondField)
-root.addSubview(status)
+layout.setSpacing(10.0)
+layout.setAlignment(svaFill)
+layout.addArrangedSubview(title)
+layout.addArrangedSubview(field)
+layout.addArrangedSubview(secondField)
+layout.addArrangedSubview(status)
 updateStatus()
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 28.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 24.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -28.0),
+  ]
+)
+
 window.setContentView(root)
 discard window.makeFirstResponder(field)
 app.addWindow(window)
