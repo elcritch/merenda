@@ -22,6 +22,13 @@ proc selectedCell*(control: Control): Cell
 proc target*(control: Control): DynamicAgent
 proc action*(control: Control): ActionSelector
 
+proc controlIntrinsicContentSize(control: Control): IntrinsicSize =
+  let controlCell = control.cell()
+  if controlCell.isNil:
+    NoIntrinsicContentSize
+  else:
+    controlCell.cellSize()
+
 protocol ControlProtocolInternal from Control:
   method isEnabled*(self: Control): bool =
     self.cell().isEnabled()
@@ -32,6 +39,9 @@ protocol ControlProtocolInternal from Control:
 
   method canBecomeKeyView*(self: Control): bool =
     self.isEnabled() and View(self).viewCanBecomeKeyView()
+
+  method layoutIntrinsicContentSize*(self: Control): IntrinsicSize =
+    self.controlIntrinsicContentSize()
 
   method sendAction*(self: Control): bool =
     let target = self.target()
@@ -53,11 +63,7 @@ proc installCellForwarding(control: Control) =
   )
 
 proc intrinsicContentSize*(control: Control): IntrinsicSize =
-  let controlCell = control.cell()
-  if controlCell.isNil:
-    NoIntrinsicContentSize
-  else:
-    controlCell.cellSize()
+  control.controlIntrinsicContentSize()
 
 proc sizeThatFits*(control: Control, proposedSize: FittingSize): Size =
   if control.isNil:

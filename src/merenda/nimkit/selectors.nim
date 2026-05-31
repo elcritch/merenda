@@ -87,6 +87,7 @@ protocol ViewDrawingProtocolInternal:
   method draw*(context: DrawContext) {.optional.}
 
 protocol ViewLayoutProtocolInternal:
+  method layoutIntrinsicContentSize*(): IntrinsicSize {.optional.}
   method updateConstraints*() {.optional.}
   method layoutSubviews*() {.optional.}
   method layout*() {.optional.}

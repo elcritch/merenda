@@ -169,6 +169,83 @@ suite "nimkit constraints":
     check child.needsUpdateConstraints
     check child.needsLayout
 
+  test "deterministic constraints apply constant sizes":
+    let
+      root = newView(0, 0, 240, 120)
+      child = newView(10, 12, 20, 10)
+      width = newLayoutConstraint(child, latWidth, constant = 96.0'f32)
+      height = newLayoutConstraint(child, latHeight, constant = 28.0'f32)
+
+    root.addSubview(child)
+    activateConstraints([width, height])
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(10, 12, 96, 28)
+    check not child.needsUpdateConstraints
+    check not child.needsLayout
+
+  test "deterministic constraints apply superview edge pins":
+    let
+      root = newView(0, 0, 300, 200)
+      child = newView(0, 0, 20, 10)
+      left =
+        newLayoutConstraint(child, latLeft, lrEqual, root, latLeft, constant = 20.0)
+      top = newLayoutConstraint(child, latTop, lrEqual, root, latTop, constant = 15.0)
+      right =
+        newLayoutConstraint(child, latRight, lrEqual, root, latRight, constant = -30.0)
+      bottom = newLayoutConstraint(
+        child, latBottom, lrEqual, root, latBottom, constant = -25.0
+      )
+
+    root.addSubview(child)
+    activateConstraints([left, top, right, bottom])
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(20, 15, 250, 160)
+
+  test "deterministic constraints apply superview centers":
+    let
+      root = newView(0, 0, 300, 200)
+      child = newView(0, 0, 10, 10)
+      width = newLayoutConstraint(child, latWidth, constant = 50.0)
+      height = newLayoutConstraint(child, latHeight, constant = 20.0)
+      centerX = newLayoutConstraint(child, latCenterX, lrEqual, root, latCenterX)
+      centerY = newLayoutConstraint(child, latCenterY, lrEqual, root, latCenterY)
+
+    root.addSubview(child)
+    activateConstraints([width, height, centerX, centerY])
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(125, 90, 50, 20)
+
+  test "translates false lets intrinsic size participate in layout":
+    let
+      root = newView(0, 0, 300, 120)
+      button = newButton(10, 10, 1, 1, "Intrinsic")
+
+    root.addSubview(button)
+    button.setTranslatesAutoresizingMaskIntoConstraints(false)
+    root.layoutSubtreeIfNeeded()
+
+    let natural = button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
+    check button.frame().origin == initPoint(10, 10)
+    check button.frame().size == natural
+
+  test "unsupported sibling constraints are ignored by deterministic pass":
+    let
+      root = newView(0, 0, 240, 120)
+      left = newView(0, 0, 80, 40)
+      right = newView(100, 0, 80, 40)
+      spacing = newLayoutConstraint(left, latRight, lrEqual, right, latLeft)
+
+    root.addSubview(left)
+    root.addSubview(right)
+    activateConstraints([spacing])
+    root.layoutSubtreeIfNeeded()
+
+    check left.frame() == initRect(0, 0, 80, 40)
+    check right.frame() == initRect(100, 0, 80, 40)
+
   test "layout item geometry exposes alignment rect and baseline hooks":
     let view = newView(10, 20, 100, 50)
 
