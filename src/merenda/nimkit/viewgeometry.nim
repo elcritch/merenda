@@ -7,6 +7,15 @@ import ./viewbase
 
 export viewbase
 
+type
+  ViewLayoutPriorityKind = enum
+    vlpkHugging
+    vlpkCompression
+
+  ViewLayoutPriority* = object
+    xView: View
+    xKind: ViewLayoutPriorityKind
+
 proc pointFromView*(view: View, point: Point, fromView: View): Point
 proc pointToView*(view: View, point: Point, toView: View): Point
 proc rectFromView*(view: View, rect: Rect, fromView: View): Rect
@@ -244,71 +253,62 @@ proc invalidateIntrinsicContentSizeSubtree*(view: View) =
   for child in view.xSubviews:
     child.invalidateIntrinsicContentSizeSubtree()
 
-proc huggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
+proc layoutPriority(
+    view: View, kind: ViewLayoutPriorityKind, axis: LayoutAxis
+): LayoutPriority =
   if view.isNil:
-    return LayoutPriorityDefaultLow
-  case axis
-  of laHorizontal: view.xHorizHuggingPriority
-  of laVertical: view.xVertHuggingPriority
+    case kind
+    of vlpkHugging:
+      return LayoutPriorityDefaultLow
+    of vlpkCompression:
+      return LayoutPriorityDefaultHigh
+  case kind
+  of vlpkHugging:
+    view.xHuggingPriority[axis]
+  of vlpkCompression:
+    view.xCompressionPriority[axis]
+
+proc setLayoutPriority(
+    view: View, kind: ViewLayoutPriorityKind, priority: LayoutPriority, axis: LayoutAxis
+) =
+  if view.isNil:
+    return
+  case kind
+  of vlpkHugging:
+    if view.xHuggingPriority[axis] == priority:
+      return
+    view.xHuggingPriority[axis] = priority
+  of vlpkCompression:
+    if view.xCompressionPriority[axis] == priority:
+      return
+    view.xCompressionPriority[axis] = priority
+  view.invalidateIntrinsicContentSize()
+
+proc huggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
+  view.layoutPriority(vlpkHugging, axis)
+
+proc huggingPriority*(view: View): ViewLayoutPriority =
+  ViewLayoutPriority(xView: view, xKind: vlpkHugging)
 
 proc setHuggingPriority*(view: View, priority: LayoutPriority, axis: LayoutAxis) =
-  if view.isNil:
-    return
-  case axis
-  of laHorizontal:
-    if view.xHorizHuggingPriority == priority:
-      return
-    view.xHorizHuggingPriority = priority
-  of laVertical:
-    if view.xVertHuggingPriority == priority:
-      return
-    view.xVertHuggingPriority = priority
-  view.invalidateIntrinsicContentSize()
-
-proc horizHuggingPriority*(view: View): LayoutPriority =
-  view.huggingPriority(laHorizontal)
-
-proc `horizHuggingPriority=`*(view: View, priority: LayoutPriority) =
-  view.setHuggingPriority(priority, laHorizontal)
-
-proc vertHuggingPriority*(view: View): LayoutPriority =
-  view.huggingPriority(laVertical)
-
-proc `vertHuggingPriority=`*(view: View, priority: LayoutPriority) =
-  view.setHuggingPriority(priority, laVertical)
+  view.setLayoutPriority(vlpkHugging, priority, axis)
 
 proc compressionPriority*(view: View, axis: LayoutAxis): LayoutPriority =
-  if view.isNil:
-    return LayoutPriorityDefaultHigh
-  case axis
-  of laHorizontal: view.xHorizCompressionPriority
-  of laVertical: view.xVertCompressionPriority
+  view.layoutPriority(vlpkCompression, axis)
+
+proc compressionPriority*(view: View): ViewLayoutPriority =
+  ViewLayoutPriority(xView: view, xKind: vlpkCompression)
 
 proc setCompressionPriority*(view: View, priority: LayoutPriority, axis: LayoutAxis) =
-  if view.isNil:
-    return
-  case axis
-  of laHorizontal:
-    if view.xHorizCompressionPriority == priority:
-      return
-    view.xHorizCompressionPriority = priority
-  of laVertical:
-    if view.xVertCompressionPriority == priority:
-      return
-    view.xVertCompressionPriority = priority
-  view.invalidateIntrinsicContentSize()
+  view.setLayoutPriority(vlpkCompression, priority, axis)
 
-proc horizCompressionPriority*(view: View): LayoutPriority =
-  view.compressionPriority(laHorizontal)
+proc `[]`*(priority: ViewLayoutPriority, direction: SpacingDirection): LayoutPriority =
+  priority.xView.layoutPriority(priority.xKind, direction.layoutAxis)
 
-proc `horizCompressionPriority=`*(view: View, priority: LayoutPriority) =
-  view.setCompressionPriority(priority, laHorizontal)
-
-proc vertCompressionPriority*(view: View): LayoutPriority =
-  view.compressionPriority(laVertical)
-
-proc `vertCompressionPriority=`*(view: View, priority: LayoutPriority) =
-  view.setCompressionPriority(priority, laVertical)
+proc `[]=`*(
+    priority: ViewLayoutPriority, direction: SpacingDirection, value: LayoutPriority
+) =
+  priority.xView.setLayoutPriority(priority.xKind, value, direction.layoutAxis)
 
 func axisOrigin*(rect: Rect, axis: LayoutAxis): float32 =
   case axis

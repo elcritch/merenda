@@ -42,10 +42,8 @@ type
     xAlignmentInsets*: EdgeInsets
     xLastBaselineOffset*: float32
     xFirstBaselineOffset*: float32
-    xHorizHuggingPriority*: LayoutPriority
-    xVertHuggingPriority*: LayoutPriority
-    xHorizCompressionPriority*: LayoutPriority
-    xVertCompressionPriority*: LayoutPriority
+    xHuggingPriority*: array[LayoutAxis, LayoutPriority]
+    xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
     xNextKeyView*: View
     xPreviousKeyView*: View

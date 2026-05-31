@@ -384,12 +384,12 @@ suite "nimkit constraints":
     check root.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    left.horizHuggingPriority = LayoutPriorityDefaultHigh
+    left.huggingPriority[dcol] = LayoutPriorityDefaultHigh
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
     root.layoutSubtreeIfNeeded()
-    left.vertCompressionPriority = LayoutPriorityRequired
+    left.compressionPriority[drow] = LayoutPriorityRequired
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
