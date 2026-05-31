@@ -376,6 +376,10 @@ proc addArrangedSubview*(stackView: StackView, child: View) =
     return
   stackView.insertArrangedSubview(child, stackView.xArrangedSubviews.len)
 
+proc addArrangedSubview*(stackView: StackView, children: varargs[View]) =
+  for child in children:
+    stackView.addArrangedSubview(child)
+
 proc removeArrangedSubview*(stackView: StackView, child: View) =
   let index = stackView.arrangedIndex(child)
   if index < 0:

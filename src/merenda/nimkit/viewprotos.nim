@@ -397,6 +397,12 @@ proc setWindowOwner*(view: View, window: Responder) =
   for child in view.xSubviews:
     child.setWindowOwner(window)
 
+proc addSubview*(view: View, first, second: View, rest: varargs[View]) =
+  view.addSubview(first)
+  view.addSubview(second)
+  for child in rest:
+    view.addSubview(child)
+
 let
   ViewProtocol* = ViewProtocolInternal
   ViewLifecycleProtocol* = ViewLifecycleProtocolInternal

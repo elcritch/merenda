@@ -196,36 +196,16 @@ buttonRow.setSpacing(8.0)
 buttonRow.setAlignment(svaFill)
 buttonRow.setDistribution(svdFillEqually)
 
-buttonRow.addArrangedSubview(pushButton)
-buttonRow.addArrangedSubview(toggleButton)
-
-inputColumn.addArrangedSubview(inputTitle)
-inputColumn.addArrangedSubview(nameField)
-inputColumn.addArrangedSubview(noteField)
-inputColumn.addArrangedSubview(actionTitle)
-inputColumn.addArrangedSubview(buttonRow)
-inputColumn.addArrangedSubview(actionCountLabel)
-
-choiceColumn.addArrangedSubview(choiceTitle)
-choiceColumn.addArrangedSubview(downloads)
-choiceColumn.addArrangedSubview(notifications)
-choiceColumn.addArrangedSubview(sync)
-choiceColumn.addArrangedSubview(sizeTitle)
-choiceColumn.addArrangedSubview(small)
-choiceColumn.addArrangedSubview(medium)
-choiceColumn.addArrangedSubview(large)
-
-popupColumn.addArrangedSubview(popupTitle)
-popupColumn.addArrangedSubview(priority)
-popupColumn.addArrangedSubview(color)
-
-bodyRow.addArrangedSubview(inputColumn)
-bodyRow.addArrangedSubview(choiceColumn)
-bodyRow.addArrangedSubview(popupColumn)
-
-layout.addArrangedSubview(title)
-layout.addArrangedSubview(bodyRow)
-layout.addArrangedSubview(summary)
+buttonRow.addArrangedSubview(pushButton, toggleButton)
+inputColumn.addArrangedSubview(
+  inputTitle, nameField, noteField, actionTitle, buttonRow, actionCountLabel
+)
+choiceColumn.addArrangedSubview(
+  choiceTitle, downloads, notifications, sync, sizeTitle, small, medium, large
+)
+popupColumn.addArrangedSubview(popupTitle, priority, color)
+bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
+layout.addArrangedSubview(title, bodyRow, summary)
 
 root.addSubview(layout)
 activateConstraints(

@@ -45,10 +45,7 @@ button.setAction(action)
 
 layout.setSpacing(12.0)
 layout.setAlignment(svaFill)
-layout.addArrangedSubview(title)
-layout.addArrangedSubview(subtitle)
-layout.addArrangedSubview(status)
-layout.addArrangedSubview(button)
+layout.addArrangedSubview(title, subtitle, status, button)
 
 root.addSubview(layout)
 activateConstraints(
