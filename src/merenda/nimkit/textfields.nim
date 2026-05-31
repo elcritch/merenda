@@ -463,11 +463,10 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
         textRect, textField.stringValue, style.text.color, textField.alignment
       )
       selectedRange = textField.selectedRange
-      selectionColor = initColor(0.22, 0.46, 0.84, 0.32)
     if textField.isEditing and selectedRange.length > 0:
       discard context.addSelectedText(
         textRect, layout, selectedRange.location.int, selectedRange.length.int,
-        selectionColor,
+        style.selectionColor,
       )
     else:
       discard context.addText(textRect, layout)

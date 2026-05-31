@@ -132,6 +132,7 @@ type
   TextFieldStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
+    selectionColor*: Color
     minSize*: Size
 
   ComboBoxStyle* = object
@@ -151,6 +152,7 @@ const
   StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
   StyleBoxShadows* = StyleKey[seq[BoxShadow]]("box.shadows")
   StyleTextColor* = StyleKey[Color]("text.color")
+  StyleSelectionColor* = StyleKey[Color]("selection.color")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
@@ -195,6 +197,7 @@ const
   TextFieldFillToken* = "textField.fill"
   TextFieldBorderColorToken* = "textField.border.color"
   TextFieldTextColorToken* = "textField.text.color"
+  TextFieldSelectionColorToken* = "textField.selection.color"
 
   ComboBoxFillToken* = "comboBox.fill"
   ComboBoxBorderColorToken* = "comboBox.border.color"
@@ -1217,6 +1220,8 @@ proc resolveTextFieldStyle*(
       color: theme.colorRule(context, StyleTextColor, textColor),
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
     ),
+    selectionColor:
+      theme.colorRule(context, StyleSelectionColor, initColor(0.22, 0.46, 0.84, 0.32)),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
   )
 
@@ -1434,6 +1439,7 @@ proc initTheme*(): Theme =
   result[TextFieldFillToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
   result[TextFieldBorderColorToken] = styleColor(initColor(0.72, 0.75, 0.80, 1.0))
   result[TextFieldTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
+  result[TextFieldSelectionColorToken] = styleColor(initColor(0.22, 0.46, 0.84, 0.32))
   result[ComboBoxFillToken] = styleToken(TextFieldFillToken)
   result[ComboBoxBorderColorToken] = styleToken(TextFieldBorderColorToken)
   result[ComboBoxOpenBorderColorToken] = styleColor(initColor(0.30, 0.50, 0.84, 1.0))
@@ -1556,6 +1562,7 @@ proc initTheme*(): Theme =
   result[srTextField, StyleCornerRadius] = 6.0
   result[srTextField, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srTextField, StyleMinimumSize] = initSize(80.0, 24.0)
+  result[srTextField, StyleSelectionColor] = styleToken(TextFieldSelectionColorToken)
   result[srTextField, StyleFocusRingWidth] = 3.0
   result[srTextField, StyleFocusRingInset] = 2.0
   result[srTextField, StyleFocusRingColor] = styleToken(FocusRingColorToken)
@@ -1623,6 +1630,44 @@ proc initTheme*(): Theme =
   result[srComboBoxItem, StyleCornerRadius] = 0.0
   result[srComboBoxItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srComboBoxItem, StyleMinimumSize] = initSize(0.0, 22.0)
+
+proc initBannerTheme*(): Theme =
+  result = initTheme()
+  result[AccentToken] = initColor(0.89, 0.38, 0.21, 1.0)
+  result[AccentPressedToken] = initColor(0.62, 0.24, 0.14, 1.0)
+  result[DisabledFillToken] = initColor(0.52, 0.50, 0.45, 1.0)
+  result[DisabledTextColorToken] = initColor(0.94, 0.91, 0.86, 1.0)
+  result[FocusRingColorToken] = initColor(0.31, 0.58, 0.54, 0.60)
+
+  result[ButtonTextColorToken] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[ButtonBorderColorToken] = initColor(0.18, 0.12, 0.08, 1.0)
+  result[ButtonHighlightedBorderColorToken] = initColor(0.12, 0.08, 0.05, 1.0)
+  result[ButtonDisabledBorderColorToken] = initColor(0.40, 0.37, 0.33, 1.0)
+  result[ButtonFocusRingColorToken] = initColor(1.0, 0.97, 0.94, 0.90)
+
+  result[ChoiceIndicatorFillToken] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[ChoiceIndicatorHighlightedFillToken] = initColor(0.98, 0.93, 0.84, 1.0)
+  result[ChoiceIndicatorDisabledFillToken] = initColor(0.86, 0.82, 0.75, 1.0)
+  result[ChoiceIndicatorBorderColorToken] = initColor(0.54, 0.49, 0.42, 1.0)
+  result[ChoiceIndicatorHighlightedBorderColorToken] = initColor(0.26, 0.51, 0.47, 1.0)
+  result[ChoiceIndicatorDisabledBorderColorToken] = initColor(0.70, 0.65, 0.58, 1.0)
+  result[ChoiceMarkColorToken] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[ChoiceTextColorToken] = initColor(0.11, 0.10, 0.10, 1.0)
+  result[ChoiceDisabledTextColorToken] = initColor(0.48, 0.45, 0.40, 1.0)
+
+  result[TextFieldFillToken] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[TextFieldBorderColorToken] = initColor(0.84, 0.80, 0.75, 1.0)
+  result[TextFieldTextColorToken] = initColor(0.11, 0.10, 0.10, 1.0)
+  result[TextFieldSelectionColorToken] = initColor(0.31, 0.58, 0.54, 0.32)
+
+  result[ComboBoxOpenBorderColorToken] = initColor(0.31, 0.58, 0.54, 1.0)
+  result[ComboBoxArrowColorToken] = initColor(0.16, 0.15, 0.15, 1.0)
+  result[ComboBoxItemFillToken] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[ComboBoxItemHighlightedFillToken] = initColor(0.99, 0.93, 0.84, 1.0)
+  result[ComboBoxItemSelectedFillToken] = initColor(0.26, 0.51, 0.47, 1.0)
+  result[ComboBoxItemSelectedHighlightedFillToken] = initColor(0.19, 0.38, 0.35, 1.0)
+  result[ComboBoxItemTextColorToken] = initColor(0.11, 0.10, 0.10, 1.0)
+  result[ComboBoxItemSelectedTextColorToken] = initColor(1.0, 0.97, 0.94, 1.0)
 
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)
