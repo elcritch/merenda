@@ -12,9 +12,8 @@ let
   root = newView(0, 0, 540, 300)
 
   title = makeLabel("Intrinsic, Stack, and Constraint Layout")
-  form = newStackView(24, 24, 1, 1, laVertical)
-  nameRow = newStackView(0, 0, 1, 1, laHorizontal)
-  choiceRow = newStackView(0, 0, 1, 1, laHorizontal)
+  layout = newStackView(24, 24, 1, 1, laVertical)
+  form = newFormView(0, 0, 1, 1)
   actionRow = newStackView(0, 0, 1, 1, laHorizontal)
 
   nameLabel = makeLabel("Name")
@@ -30,15 +29,18 @@ root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
 title.setAlignment(taCenter)
 title.sizeToFit()
 
-form.setSpacing(10.0)
-form.setEdgeInsets(initEdgeInsets(12.0, 14.0))
-form.setAlignment(svaFill)
-form.setTranslatesAutoresizingMaskIntoConstraints(false)
+layout.setSpacing(12.0)
+layout.setAlignment(svaFill)
+layout.setTranslatesAutoresizingMaskIntoConstraints(false)
 
-for row in [nameRow, choiceRow, actionRow]:
-  row.setSpacing(8.0)
-  row.setAlignment(svaFill)
-  row.setDistribution(svdFill)
+form.setEdgeInsets(initEdgeInsets(12.0, 14.0))
+form.setColumnSpacing(12.0)
+form.setRowSpacing(10.0)
+form.setMinimumFieldWidth(180.0)
+
+actionRow.setSpacing(8.0)
+actionRow.setAlignment(svaCenter)
+actionRow.setDistribution(svdFill)
 
 nameLabel.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
 priorityLabel.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
@@ -49,26 +51,23 @@ runButton.sizeToFit()
 cancelButton.sizeToFit()
 priority.selectItemAtIndex(1)
 
-nameRow.addArrangedSubview(nameLabel)
-nameRow.addArrangedSubview(nameField)
-choiceRow.addArrangedSubview(priorityLabel)
-choiceRow.addArrangedSubview(priority)
-actionRow.addArrangedSubview(downloads)
+form.addRow(nameLabel, nameField)
+form.addRow(priorityLabel, priority)
+form.addRow(makeLabel("Options"), downloads)
 actionRow.addArrangedSubview(runButton)
 actionRow.addArrangedSubview(cancelButton)
 
-form.addArrangedSubview(title)
-form.addArrangedSubview(nameRow)
-form.addArrangedSubview(choiceRow)
-form.addArrangedSubview(actionRow)
-form.sizeToFit()
+layout.addArrangedSubview(title)
+layout.addArrangedSubview(form)
+layout.addArrangedSubview(actionRow)
+layout.sizeToFit()
 
-root.addSubview(form)
+root.addSubview(layout)
 activateConstraints(
   [
-    newLayoutConstraint(form, latLeft, lrEqual, root, latLeft, constant = 24.0),
-    newLayoutConstraint(form, latTop, lrEqual, root, latTop, constant = 24.0),
-    newLayoutConstraint(form, latRight, lrEqual, root, latRight, constant = -24.0),
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 24.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 24.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -24.0),
   ]
 )
 
