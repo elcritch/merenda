@@ -106,8 +106,8 @@ suite "nimkit stack views":
       label = newFixedIntrinsicView(40, 10)
 
     stack.spacing = 10.0
-    field.huggingPriority[dcol] = LayoutPriorityDefaultLow
-    label.huggingPriority[dcol] = LayoutPriorityDefaultHigh
+    field.huggingPriority[dcol] = LayoutPriorityLow
+    label.huggingPriority[dcol] = LayoutPriorityHigh
     stack.addArrangedSubview(field)
     stack.addArrangedSubview(label)
     stack.layoutSubtreeIfNeeded()

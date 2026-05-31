@@ -15,7 +15,7 @@ suite "nimkit constraints":
         latHeight,
         multiplier = 2.0'f32,
         constant = 8.0'f32,
-        priority = LayoutPriorityDefaultHigh,
+        priority = LayoutPriorityHigh,
       )
 
     check constraint.firstItem == view
@@ -25,7 +25,7 @@ suite "nimkit constraints":
     check constraint.secondAttribute == latHeight
     check constraint.multiplier == 2.0'f32
     check constraint.constant == 8.0'f32
-    check constraint.priority == LayoutPriorityDefaultHigh
+    check constraint.priority == LayoutPriorityHigh
     check not constraint.isActive
     check constraint.owningView.isNil
     check ord(latLeft) == 1
@@ -173,8 +173,8 @@ suite "nimkit constraints":
     child.updateConstraintsForSubtreeIfNeeded()
     child.setNeedsLayout(false)
 
-    width.setPriority(LayoutPriorityDefaultLow)
-    check width.priority == LayoutPriorityDefaultLow
+    width.setPriority(LayoutPriorityLow)
+    check width.priority == LayoutPriorityLow
     check child.needsUpdateConstraints
     check child.needsLayout
 
@@ -384,7 +384,7 @@ suite "nimkit constraints":
     check root.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    left.huggingPriority[dcol] = LayoutPriorityDefaultHigh
+    left.huggingPriority[dcol] = LayoutPriorityHigh
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 
