@@ -305,10 +305,13 @@ Concrete task order and status:
    mask, translate flag, frame, bounds, or hierarchy changes. Direct mask
    application or generated solver inputs belong with the deterministic
    constraint application subset.
-13. Not started: Add a small deterministic constraint application subset:
-   width/height constants, edge pins to superview, centers, and intrinsic
-   min/max behavior from hugging and compression resistance. Avoid a full
-   Cassowary-style solver until real examples require it.
+13. Done for the current subset: Add a deterministic constraint application
+   pass after constraint updates and before layout hooks. It applies
+   width/height constants, direct superview edge pins, direct superview centers,
+   and intrinsic size inputs for views that do not translate autoresizing masks.
+   Unsupported relationships are ignored rather than half-solved; priority
+   conflict handling and a full Cassowary-style solver remain deferred until
+   real examples require them.
 14. Not started: Add intrinsic-aware containers on top of that core, starting
    with `StackView` and then a simple grid/form layout. Containers should
    participate in the same update/layout/invalidation lifecycle instead of
