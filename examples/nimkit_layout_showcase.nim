@@ -9,10 +9,10 @@ proc makeLabel(text: string): TextField =
 let
   app = sharedApplication()
   window = newWindow("Nimkit Layout Showcase", frame = initRect(180, 160, 540, 300))
-  root = newView(frame = initRect(0, 0, 540, 300))
+  root = newView()
 
   title = makeLabel("Intrinsic, Stack, and Constraint Layout")
-  layout = newStackView(laVertical, frame = initRect(24, 24))
+  layout = newStackView(laVertical)
   form = newFormView()
   actionRow = newStackView(laHorizontal)
 
@@ -27,11 +27,9 @@ let
 root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
 
 title.setAlignment(taCenter)
-title.sizeToFit()
 
 layout.setSpacing(12.0)
 layout.setAlignment(svaFill)
-layout.setTranslatesAutoresizingMaskIntoConstraints(false)
 
 form.setEdgeInsets(initEdgeInsets(12.0, 14.0))
 form.setColumnSpacing(12.0)
@@ -58,7 +56,6 @@ actionRow.addArrangedSubview(cancelButton)
 layout.addArrangedSubview(title)
 layout.addArrangedSubview(form)
 layout.addArrangedSubview(actionRow)
-layout.sizeToFit()
 
 root.addSubview(layout)
 activateConstraints(

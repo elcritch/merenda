@@ -5,9 +5,10 @@ import sigils/selectors
 let
   app = sharedApplication()
   window = newWindow("Nimkit Button Demo", frame = initRect(100, 100, 360, 220))
-  root = newView(frame = initRect(0, 0, 360, 220))
-  label = newTextField("Ready", frame = initRect(24, 24, 220, 32))
-  button = newButton("Click", frame = initRect(24, 72, 140, 40))
+  root = newView()
+  layout = newStackView(laVertical)
+  label = newTextField("Ready")
+  button = newButton("Click")
   action = actionSelector("buttonClicked")
 
 proc onClicked(sender: DynamicAgent) =
@@ -20,8 +21,21 @@ label.setEditable(false)
 label.setSelectable(false)
 button.setTarget(target)
 button.setAction(action)
-root.addSubview(label)
-root.addSubview(button)
+
+layout.setSpacing(12.0)
+layout.setAlignment(svaFill)
+layout.addArrangedSubview(label)
+layout.addArrangedSubview(button)
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 24.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 24.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -24.0),
+  ]
+)
+
 window.setContentView(root)
 discard window.selectNextKeyView()
 app.addWindow(window)

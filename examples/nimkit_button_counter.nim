@@ -5,11 +5,12 @@ import sigils/selectors
 let
   app = sharedApplication()
   window = newWindow("Nimkit Button Counter", frame = initRect(100, 100, 300, 300))
-  root = newView(frame = initRect(0, 0, 300, 300))
-  button1 = newButton("button1", frame = initRect(50, 225, 90, 25))
-  button2 = newButton("button2", frame = initRect(50, 125, 200, 75))
-  label1 = newTextField("button1 clicked 0 times", frame = initRect(50, 80, 200, 20))
-  label2 = newTextField("button2 clicked 0 times", frame = initRect(50, 50, 200, 20))
+  root = newView()
+  layout = newStackView(laVertical)
+  button1 = newButton("button1")
+  button2 = newButton("button2")
+  label1 = newTextField("button1 clicked 0 times")
+  label2 = newTextField("button2 clicked 0 times")
   button1Action = actionSelector("button1Clicked")
   button2Action = actionSelector("button2Clicked")
 
@@ -36,10 +37,22 @@ for label in [label1, label2]:
   label.setEditable(false)
   label.setSelectable(false)
 
-root.addSubview(button1)
-root.addSubview(button2)
-root.addSubview(label1)
-root.addSubview(label2)
+layout.setSpacing(12.0)
+layout.setAlignment(svaFill)
+layout.addArrangedSubview(button1)
+layout.addArrangedSubview(button2)
+layout.addArrangedSubview(label1)
+layout.addArrangedSubview(label2)
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 50.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 50.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -50.0),
+  ]
+)
+
 window.setContentView(root)
 discard window.selectNextKeyView()
 app.addWindow(window)

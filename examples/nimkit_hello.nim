@@ -11,16 +11,12 @@ proc stateName(state: ButtonState): string =
 let
   app = sharedApplication()
   window = newWindow("KNutella Nimkit Hello", frame = initRect(120, 120, 720, 360))
-  root = newView(frame = initRect(0, 0, 720, 360))
-  title = newTextField("Hello from KNutella/nimkit", frame = initRect(28, 28, 520, 48))
-  subtitle = newTextField(
-    "Pure Nim responder/action dispatch with plain widget state",
-    frame = initRect(28, 86, 620, 36),
-  )
-  status = newTextField(
-    "Button state: Off (click to cycle)", frame = initRect(28, 132, 420, 30)
-  )
-  button = newButton("Cycle State (Off)", frame = initRect(28, 172, 220, 44))
+  root = newView()
+  layout = newStackView(laVertical)
+  title = newTextField("Hello from KNutella/nimkit")
+  subtitle = newTextField("Pure Nim responder/action dispatch with plain widget state")
+  status = newTextField("Button state: Off (click to cycle)")
+  button = newButton("Cycle State (Off)")
   action = actionSelector("cycleState")
 
 proc updateStatus() =
@@ -47,10 +43,22 @@ button.setAllowsMixedState(true)
 button.setTarget(newActionTarget(action, onCycle))
 button.setAction(action)
 
-root.addSubview(title)
-root.addSubview(subtitle)
-root.addSubview(status)
-root.addSubview(button)
+layout.setSpacing(12.0)
+layout.setAlignment(svaFill)
+layout.addArrangedSubview(title)
+layout.addArrangedSubview(subtitle)
+layout.addArrangedSubview(status)
+layout.addArrangedSubview(button)
+
+root.addSubview(layout)
+activateConstraints(
+  [
+    newLayoutConstraint(layout, latLeft, lrEqual, root, latLeft, constant = 28.0),
+    newLayoutConstraint(layout, latTop, lrEqual, root, latTop, constant = 28.0),
+    newLayoutConstraint(layout, latRight, lrEqual, root, latRight, constant = -28.0),
+  ]
+)
+
 window.setContentView(root)
 discard window.selectNextKeyView()
 app.addWindow(window)
