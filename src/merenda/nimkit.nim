@@ -5,6 +5,7 @@ import merenda/nimkit/comboboxes
 import merenda/nimkit/controls
 import merenda/nimkit/drawing
 import merenda/nimkit/formviews
+import merenda/nimkit/gridviews
 import merenda/nimkit/keybindings
 import merenda/nimkit/rendering
 import merenda/nimkit/responders
@@ -23,6 +24,7 @@ export comboboxes
 export controls
 export drawing
 export formviews
+export gridviews
 export keybindings
 export rendering
 export responders

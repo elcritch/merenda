@@ -14,8 +14,8 @@ useful, and backend/runtime details kept behind NimKit boundaries.
 NimKit currently includes the core desktop-control slice:
 
 - Core objects: `Application`, `Window`, `Responder`, `View`, `StackView`,
-  `FormView`, `Control`, `Cell`/`ActionCell`, `Button`, checkbox/radio
-  variants, `TextField`, and `ComboBox`.
+  `FormView`, `GridView`, `Control`, `Cell`/`ActionCell`, `Button`,
+  checkbox/radio variants, `TextField`, and `ComboBox`.
 - Plain Nim value types for geometry, events, key identifiers, modifiers,
   popup options, and control state. `chroma.Color` is used directly for color
   state.
@@ -68,10 +68,11 @@ NimKit currently includes the core desktop-control slice:
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
   `examples/nimkit_controls_showcase.nim`,
-  `examples/nimkit_layout_showcase.nim`.
-- Focused tests cover value types, views, controls, text fields, combo boxes,
-  responders, key bindings, rendering, screenshots, and native application
-  pumping.
+  `examples/nimkit_layout_showcase.nim`,
+  `examples/nimkit_grid_preferences.nim`.
+- Focused tests cover value types, views, layout containers, controls, text
+  fields, combo boxes, responders, key bindings, rendering, screenshots, and
+  native application pumping.
 
 ## Coding Style
 
@@ -145,6 +146,10 @@ NimKit currently includes the core desktop-control slice:
   `FormView`, label/field rows, max label-column measurement, field-column
   stretching, row/column spacing, edge insets, label and row alignment,
   minimum field width, intrinsic form measurement, and lifecycle-driven layout.
+- `src/merenda/nimkit/gridviews.nim`:
+  `GridView`, explicit row/column placement, row/column spacing, edge insets,
+  directional cell alignment, spanning items, intrinsic grid measurement, and
+  lifecycle-driven layout.
 - `src/merenda/nimkit/cells.nim`:
   `Cell` and `ActionCell`, control-view back references, enabled/highlighted
   state, button state cycling, and target/action storage used by controls.
@@ -331,18 +336,21 @@ Concrete task order and status:
    Unsupported relationships are ignored rather than half-solved; priority
    conflict handling and a full Cassowary-style solver remain deferred until
    real examples require them.
-14. Done for the first container layers: Add intrinsic-aware `StackView` and
-   `FormView` on top of the core. `StackView` supports arranged subviews,
-   orientation, spacing, edge insets, cross-axis alignment, fill/fill-equally
-   distribution, intrinsic measurement, priority-guided fill growth/shrink,
-   hidden-view omission, and lazy invalidation. `FormView` supports
-   label/field rows, max label-column measurement, stretching fields,
-   row/column spacing, insets, label/row alignment, minimum field width, hidden
-   row omission, and the same update/layout lifecycle. A more general grid
-   layout remains the next container step.
+14. Done for the first container layers: Add intrinsic-aware `StackView`,
+   `FormView`, and `GridView` on top of the core. `StackView` supports
+   arranged subviews, orientation, spacing, edge insets, cross-axis alignment,
+   fill/fill-equally distribution, intrinsic measurement, priority-guided fill
+   growth/shrink, hidden-view omission, and lazy invalidation. `FormView`
+   supports label/field rows, max label-column measurement, stretching fields,
+   row/column spacing, insets, label and row alignment, minimum field width,
+   hidden row omission, and the same update/layout lifecycle. `GridView`
+   supports explicit row/column placement, row/column spacing, insets,
+   directional alignment, spanning items, hidden-view omission, intrinsic
+   measurement, and deterministic layout through the same view lifecycle.
 15. Done for the current examples: Add `examples/nimkit_layout_showcase.nim`
-   showing `sizeToFit`, intrinsic-size-driven layout, stack/form layout, and
-   the current deterministic superview constraint subset for common controls.
+   and `examples/nimkit_grid_preferences.nim` showing intrinsic-size-driven
+   stack/form/grid layout and the current deterministic superview constraint
+   subset for common controls.
 16. Done for the current API: Add modern constraint conveniences on top of the
    existing model: typed x/y/dimension anchors, inset-backed content layout
    guides, and `pinEdges` helpers. NimKit examples now use those helpers
@@ -413,11 +421,10 @@ Concrete task order and status:
 
 ### Priority Order
 
-- Short term: Cocoa-like layout lifecycle, constraint data shapes, autoresizing
-  mask semantics, cleaner cell invalidation/default-cell construction, and
+- Short term: cleaner cell invalidation/default-cell construction and
   measurement tests that prove theme/rendering/layout agreement.
-- Medium term: a simple intrinsic-aware grid container built on the layout
-  core, scrollable list/popup infrastructure, and broader control coverage.
+- Medium term: scrollable list/popup infrastructure, richer container behavior
+  where examples need it, and broader control coverage.
 - Later: fuller constraint solving, loadable/query-like themes, menus/popovers,
   and broader resource organization.
 
@@ -435,6 +442,7 @@ Concrete task order and status:
   `tests/tnimkit_sizing.nim`,
   `tests/tnimkit_stackviews.nim`,
   `tests/tnimkit_formviews.nim`,
+  `tests/tnimkit_gridviews.nim`,
   `tests/tnimkit_keybindings.nim`,
   `tests/tnimkit_textfields.nim`,
   `tests/tnimkit_comboboxes.nim`,
@@ -450,7 +458,9 @@ Concrete task order and status:
   `examples/nimkit_radio_demo.nim`,
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
-  `examples/nimkit_controls_showcase.nim`.
+  `examples/nimkit_controls_showcase.nim`,
+  `examples/nimkit_layout_showcase.nim`,
+  `examples/nimkit_grid_preferences.nim`.
 - Run the full suite with `nim test` before considering a larger stage complete.
 
 ## Risks
