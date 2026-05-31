@@ -888,7 +888,7 @@ proc addOwnedConstraints(state: var LayoutSolveState, owner: View) =
     state.addOwnedConstraints(child)
 
 proc solvedFloat(variable: Variable): float32 =
-  float32(variable.value.toFloat)
+  float32(variable.value)
 
 proc applySolvedFrames(state: LayoutSolveState) =
   for solverView in state.items:
