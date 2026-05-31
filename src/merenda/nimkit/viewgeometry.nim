@@ -1,0 +1,380 @@
+import std/options
+
+import ./selectors
+import ./theme
+import ./types
+import ./viewbase
+
+export viewbase
+
+proc pointFromView*(view: View, point: Point, fromView: View): Point
+proc pointToView*(view: View, point: Point, toView: View): Point
+proc rectFromView*(view: View, rect: Rect, fromView: View): Rect
+proc rectToView*(view: View, rect: Rect, toView: View): Rect
+proc pointFromWindow*(view: View, point: Point): Point
+proc pointToWindow*(view: View, point: Point): Point
+proc rectFromWindow*(view: View, rect: Rect): Rect
+proc rectToWindow*(view: View, rect: Rect): Rect
+
+proc markConstraintStorageChanged*(view: View) =
+  if view.isNil:
+    return
+  view.xNeedsUpdateConstraints = true
+  view.xNeedsLayout = true
+
+proc markSubviewAutoresizingConstraintsChanged*(view: View) =
+  if view.isNil:
+    return
+  for child in view.xSubviews:
+    if child.xTranslatesAutoresizingMaskIntoConstraints:
+      child.markConstraintStorageChanged()
+
+proc referencesLayoutItem(constraint: LayoutConstraint, view: View): bool =
+  (not constraint.isNil) and
+    (constraint.xFirstItem == view or constraint.xSecondItem == view)
+
+proc hasConstraintReferencing(view, item: View): bool =
+  if view.isNil or item.isNil:
+    return false
+  for constraint in view.xConstraints:
+    if constraint.referencesLayoutItem(item):
+      return true
+
+proc invalidateLayoutItemGeometry*(view: View) =
+  if view.isNil:
+    return
+  let parent = view.xSuperview
+  var current = view
+  while not current.isNil:
+    if current == view or current == parent or current.hasConstraintReferencing(view):
+      current.markConstraintStorageChanged()
+    current = current.xSuperview
+
+proc autoresizingMask*(view: View): AutoresizingMask =
+  if view.isNil:
+    return {}
+  view.xAutoresizingMask
+
+proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
+  if view.isNil or view.xAutoresizingMask == mask:
+    return
+  view.xAutoresizingMask = mask
+  view.invalidateLayoutItemGeometry()
+
+proc translatesAutoresizingMaskIntoConstraints*(view: View): bool =
+  (not view.isNil) and view.xTranslatesAutoresizingMaskIntoConstraints
+
+proc setTranslatesAutoresizingMaskIntoConstraints*(view: View, value: bool) =
+  if view.isNil or view.xTranslatesAutoresizingMaskIntoConstraints == value:
+    return
+  view.xTranslatesAutoresizingMaskIntoConstraints = value
+  view.invalidateLayoutItemGeometry()
+
+proc alignmentRectInsets*(view: View): EdgeInsets =
+  if view.isNil:
+    return initEdgeInsets(0.0)
+  view.xAlignmentRectInsets
+
+proc setAlignmentRectInsets*(view: View, insets: EdgeInsets) =
+  if view.isNil or view.xAlignmentRectInsets == insets:
+    return
+  view.xAlignmentRectInsets = insets
+  view.invalidateLayoutItemGeometry()
+
+proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
+  if view.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  frame.inset(view.alignmentRectInsets())
+
+proc frameForAlignmentRect*(view: View, alignmentRect: Rect): Rect =
+  if view.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let insets = view.alignmentRectInsets()
+  initRect(
+    alignmentRect.origin.x - insets.left,
+    alignmentRect.origin.y - insets.top,
+    alignmentRect.size.width + insets.horizontal,
+    alignmentRect.size.height + insets.vertical,
+  )
+
+proc alignmentRect*(view: View): Rect =
+  if view.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  view.alignmentRectForFrame(view.xFrame)
+
+proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
+  if view.isNil:
+    return
+  let frame = view.frameForAlignmentRect(alignmentRect)
+  if view.xFrame == frame:
+    return
+  view.xFrame = frame
+  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  view.invalidateLayoutItemGeometry()
+  view.markSubviewAutoresizingConstraintsChanged()
+  view.xNeedsDisplay = true
+  view.xInvalidRects.setLen(0)
+
+proc baselineOffsetFromBottom*(view: View): float32 =
+  if view.isNil: 0.0'f32 else: view.xBaselineOffsetFromBottom
+
+proc setBaselineOffsetFromBottom*(view: View, offset: float32) =
+  let normalized = max(offset, 0.0'f32)
+  if view.isNil or view.xBaselineOffsetFromBottom == normalized:
+    return
+  view.xBaselineOffsetFromBottom = normalized
+  view.invalidateLayoutItemGeometry()
+
+proc firstBaselineOffsetFromTop*(view: View): float32 =
+  if view.isNil: 0.0'f32 else: view.xFirstBaselineOffsetFromTop
+
+proc setFirstBaselineOffsetFromTop*(view: View, offset: float32) =
+  let normalized = max(offset, 0.0'f32)
+  if view.isNil or view.xFirstBaselineOffsetFromTop == normalized:
+    return
+  view.xFirstBaselineOffsetFromTop = normalized
+  view.invalidateLayoutItemGeometry()
+
+proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
+  if view.isNil:
+    return 0.0'f32
+  let rect = view.alignmentRect()
+  case attribute
+  of latLeft, latLeading:
+    rect.minX
+  of latRight, latTrailing:
+    rect.maxX
+  of latTop:
+    rect.minY
+  of latBottom:
+    rect.maxY
+  of latWidth:
+    rect.size.width
+  of latHeight:
+    rect.size.height
+  of latCenterX:
+    rect.minX + rect.size.width / 2.0'f32
+  of latCenterY:
+    rect.minY + rect.size.height / 2.0'f32
+  of latLastBaseline:
+    rect.maxY - view.baselineOffsetFromBottom()
+  of latFirstBaseline:
+    rect.minY + view.firstBaselineOffsetFromTop()
+  of latNotAnAttribute:
+    0.0'f32
+
+proc intrinsicContentSize*(view: View): IntrinsicSize =
+  NoIntrinsicContentSize
+
+proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
+  if view.isNil:
+    return NoIntrinsicContentSize
+  let measured = view.performOptional(layoutIntrinsicContentSize(), ())
+  if measured.isSome:
+    return measured.get()
+  view.intrinsicContentSize()
+
+proc sizeThatFits*(view: View, proposedSize: FittingSize): Size =
+  if view.isNil:
+    return initSize(0.0, 0.0)
+  let
+    intrinsicSize = view.resolvedIntrinsicContentSize()
+    fallbackSize = initSize(
+      if proposedSize.hasWidth: proposedSize.width else: view.xBounds.size.width,
+      if proposedSize.hasHeight: proposedSize.height else: view.xBounds.size.height,
+    )
+  intrinsicSize.resolveIntrinsicSize(fallbackSize).constrainSize(proposedSize)
+
+proc sizeThatFits*(view: View): Size =
+  if view.isNil:
+    return initSize(0.0, 0.0)
+  view.sizeThatFits(UnconstrainedFittingSize)
+
+proc sizeThatFits*(view: View, proposedSize: Size): Size =
+  if view.isNil:
+    return initSize(0.0, 0.0)
+  view.sizeThatFits(initFittingSize(proposedSize))
+
+proc sizeToFit*(view: View) =
+  if view.isNil:
+    return
+  let
+    frame = view.xFrame
+    fittingSize = view.sizeThatFits(UnconstrainedFittingSize)
+    nextFrame = initRect(frame.origin, fittingSize)
+  if frame == nextFrame:
+    return
+  view.xFrame = nextFrame
+  view.xBounds = initRect(0.0, 0.0, fittingSize.width, fittingSize.height)
+  view.invalidateLayoutItemGeometry()
+  view.markSubviewAutoresizingConstraintsChanged()
+  view.xNeedsDisplay = true
+  view.xInvalidRects.setLen(0)
+
+proc invalidateIntrinsicContentSize*(view: View) =
+  if view.isNil:
+    return
+  view.invalidateLayoutItemGeometry()
+
+proc invalidateIntrinsicContentSizeSubtree*(view: View) =
+  if view.isNil:
+    return
+  view.invalidateIntrinsicContentSize()
+  for child in view.xSubviews:
+    child.invalidateIntrinsicContentSizeSubtree()
+
+proc contentHuggingPriority*(view: View, axis: LayoutAxis): LayoutPriority =
+  if view.isNil:
+    return LayoutPriorityDefaultLow
+  case axis
+  of laHorizontal: view.xHorizontalContentHuggingPriority
+  of laVertical: view.xVerticalContentHuggingPriority
+
+proc setContentHuggingPriority*(
+    view: View, priority: LayoutPriority, axis: LayoutAxis
+) =
+  if view.isNil:
+    return
+  case axis
+  of laHorizontal:
+    if view.xHorizontalContentHuggingPriority == priority:
+      return
+    view.xHorizontalContentHuggingPriority = priority
+  of laVertical:
+    if view.xVerticalContentHuggingPriority == priority:
+      return
+    view.xVerticalContentHuggingPriority = priority
+  view.invalidateIntrinsicContentSize()
+
+proc contentCompressionResistancePriority*(
+    view: View, axis: LayoutAxis
+): LayoutPriority =
+  if view.isNil:
+    return LayoutPriorityDefaultHigh
+  case axis
+  of laHorizontal: view.xHorizontalContentCompressionResistancePriority
+  of laVertical: view.xVerticalContentCompressionResistancePriority
+
+proc setContentCompressionResistancePriority*(
+    view: View, priority: LayoutPriority, axis: LayoutAxis
+) =
+  if view.isNil:
+    return
+  case axis
+  of laHorizontal:
+    if view.xHorizontalContentCompressionResistancePriority == priority:
+      return
+    view.xHorizontalContentCompressionResistancePriority = priority
+  of laVertical:
+    if view.xVerticalContentCompressionResistancePriority == priority:
+      return
+    view.xVerticalContentCompressionResistancePriority = priority
+  view.invalidateIntrinsicContentSize()
+
+func axisOrigin*(rect: Rect, axis: LayoutAxis): float32 =
+  case axis
+  of laHorizontal: rect.origin.x
+  of laVertical: rect.origin.y
+
+func axisSize*(rect: Rect, axis: LayoutAxis): float32 =
+  case axis
+  of laHorizontal: rect.size.width
+  of laVertical: rect.size.height
+
+func axisMax*(rect: Rect, axis: LayoutAxis): float32 =
+  rect.axisOrigin(axis) + rect.axisSize(axis)
+
+func axisCenter*(rect: Rect, axis: LayoutAxis): float32 =
+  rect.axisOrigin(axis) + rect.axisSize(axis) / 2.0'f32
+
+proc pointToSuperview(view: View, point: Point): Point =
+  let
+    frame = view.xFrame
+    bounds = view.xBounds
+  initPoint(
+    frame.origin.x + point.x - bounds.origin.x,
+    frame.origin.y + point.y - bounds.origin.y,
+  )
+
+proc pointFromSuperview(view: View, point: Point): Point =
+  let
+    frame = view.xFrame
+    bounds = view.xBounds
+  initPoint(
+    bounds.origin.x + point.x - frame.origin.x,
+    bounds.origin.y + point.y - frame.origin.y,
+  )
+
+proc pointToWindow*(view: View, point: Point): Point =
+  if view.isNil:
+    return point
+  var resultPoint = point
+  var current = view
+  while not current.isNil:
+    resultPoint = current.pointToSuperview(resultPoint)
+    current = current.xSuperview
+  resultPoint
+
+proc pointFromWindow*(view: View, point: Point): Point =
+  if view.isNil:
+    return point
+  var chain: seq[View] = @[]
+  var current = view
+  while not current.isNil:
+    chain.add(current)
+    current = current.xSuperview
+  var resultPoint = point
+  for idx in countdown(chain.high, 0):
+    resultPoint = chain[idx].pointFromSuperview(resultPoint)
+  resultPoint
+
+proc pointToView*(view: View, point: Point, toView: View): Point =
+  if view.isNil:
+    if toView.isNil:
+      return point
+    return toView.pointFromWindow(point)
+  if view == toView:
+    return point
+  let windowPoint = view.pointToWindow(point)
+  if toView.isNil:
+    windowPoint
+  else:
+    toView.pointFromWindow(windowPoint)
+
+proc pointFromView*(view: View, point: Point, fromView: View): Point =
+  if view.isNil:
+    if fromView.isNil:
+      return point
+    return fromView.pointToWindow(point)
+  if view == fromView:
+    return point
+  if fromView.isNil:
+    return view.pointFromWindow(point)
+  view.pointFromWindow(fromView.pointToWindow(point))
+
+proc rectFromCorners(p0, p1: Point): Rect =
+  initRect(min(p0.x, p1.x), min(p0.y, p1.y), abs(p1.x - p0.x), abs(p1.y - p0.y))
+
+proc rectToWindow*(view: View, rect: Rect): Rect =
+  let
+    p0 = view.pointToWindow(rect.origin)
+    p1 = view.pointToWindow(initPoint(rect.maxX, rect.maxY))
+  rectFromCorners(p0, p1)
+
+proc rectFromWindow*(view: View, rect: Rect): Rect =
+  let
+    p0 = view.pointFromWindow(rect.origin)
+    p1 = view.pointFromWindow(initPoint(rect.maxX, rect.maxY))
+  rectFromCorners(p0, p1)
+
+proc rectToView*(view: View, rect: Rect, toView: View): Rect =
+  let
+    p0 = view.pointToView(rect.origin, toView)
+    p1 = view.pointToView(initPoint(rect.maxX, rect.maxY), toView)
+  rectFromCorners(p0, p1)
+
+proc rectFromView*(view: View, rect: Rect, fromView: View): Rect =
+  let
+    p0 = view.pointFromView(rect.origin, fromView)
+    p1 = view.pointFromView(initPoint(rect.maxX, rect.maxY), fromView)
+  rectFromCorners(p0, p1)
