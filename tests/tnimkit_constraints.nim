@@ -78,24 +78,31 @@ suite "nimkit constraints":
     check guide.heightAnchor.offset == -40.0'f32
 
     root.addSubview(child)
-    activateConstraints(child.pinEdges(toGuide = guide))
+    let constraints = child.pinEdges(toGuide = guide)
+    check constraints.len == 4
+    for constraint in constraints:
+      check constraint.active
     root.layoutSubtreeIfNeeded()
 
     check child.frame() == initRect(20, 10, 240, 160)
 
-  test "edge pin helpers can constrain a subset":
+  test "edge constraints can build an inactive subset":
     let
       root = newView(frame = initRect(0, 0, 300, 200))
       child = newView(frame = initRect(0, 0, 10, 30))
 
     root.addSubview(child)
-    activateConstraints(
-      child.pinEdges(
-        toView = root,
-        insets = initEdgeInsets(12.0, 18.0, 24.0, 30.0),
-        edges = {leLeft, leTop, leRight},
-      )
+    let constraints = child.edgeConstraints(
+      toView = root,
+      insets = initEdgeInsets(12.0, 18.0, 24.0, 30.0),
+      edges = {leLeft, leTop, leRight},
     )
+    check constraints.len == 3
+    for constraint in constraints:
+      check not constraint.active
+    check root.constraints.len == 0
+
+    activate(constraints)
     root.layoutSubtreeIfNeeded()
 
     check child.frame() == initRect(18, 12, 252, 30)
@@ -108,9 +115,9 @@ suite "nimkit constraints":
     view.layoutSubtreeIfNeeded()
     check view.constraints.len == 0
 
-    width.setActive(true)
+    width.active = true
 
-    check width.isActive
+    check width.active
     check width.owningView == view
     check view.constraints == @[width]
     check view.needsUpdateConstraints
@@ -119,8 +126,8 @@ suite "nimkit constraints":
     view.addConstraint(width)
     check view.constraints == @[width]
 
-    width.setActive(false)
-    check not width.isActive
+    width.active = false
+    check not width.active
     check width.owningView.isNil
     check view.constraints.len == 0
 
@@ -137,16 +144,16 @@ suite "nimkit constraints":
     let spacing =
       newLayoutConstraint(left, latRight, lrEqual, right, latLeft, constant = -12.0'f32)
 
-    activateConstraints([spacing])
+    activate(spacing)
 
-    check spacing.isActive
+    check spacing.active
     check spacing.owningView == root
     check root.constraints == @[spacing]
     check left.constraints.len == 0
     check right.constraints.len == 0
 
-    deactivateConstraints([spacing])
-    check not spacing.isActive
+    deactivate(spacing)
+    check not spacing.active
     check spacing.owningView.isNil
     check root.constraints.len == 0
 
@@ -166,14 +173,14 @@ suite "nimkit constraints":
     child.updateConstraintsForSubtreeIfNeeded()
     child.setNeedsLayout(false)
 
-    width.setConstant(120.0'f32)
+    width.constant = 120.0'f32
     check child.needsUpdateConstraints
     check child.needsLayout
 
     child.updateConstraintsForSubtreeIfNeeded()
     child.setNeedsLayout(false)
 
-    width.setPriority(LayoutPriorityLow)
+    width.priority = LayoutPriorityLow
     check width.priority == LayoutPriorityLow
     check child.needsUpdateConstraints
     check child.needsLayout
@@ -245,7 +252,7 @@ suite "nimkit constraints":
       height = newLayoutConstraint(child, latHeight, constant = 28.0'f32)
 
     root.addSubview(child)
-    activateConstraints([width, height])
+    activate(width, height)
     root.layoutSubtreeIfNeeded()
 
     check child.frame() == initRect(10, 12, 96, 28)
@@ -266,7 +273,7 @@ suite "nimkit constraints":
       )
 
     root.addSubview(child)
-    activateConstraints([left, top, right, bottom])
+    activate(left, top, right, bottom)
     root.layoutSubtreeIfNeeded()
 
     check child.frame() == initRect(20, 15, 250, 160)
@@ -281,7 +288,7 @@ suite "nimkit constraints":
       centerY = newLayoutConstraint(child, latCenterY, lrEqual, root, latCenterY)
 
     root.addSubview(child)
-    activateConstraints([width, height, centerX, centerY])
+    activate(width, height, centerX, centerY)
     root.layoutSubtreeIfNeeded()
 
     check child.frame() == initRect(125, 90, 50, 20)
@@ -295,7 +302,7 @@ suite "nimkit constraints":
       width = newLayoutConstraint(child, latWidth, constant = 160.0)
 
     root.addSubview(child)
-    activateConstraints([left, right, width])
+    activate(left, right, width)
     root.layoutSubtreeIfNeeded()
 
     check root.frame() == initRect(0, 0, 100, 80)
@@ -324,7 +331,7 @@ suite "nimkit constraints":
 
     root.addSubview(button)
     check button.autoresizingMaskConstraints
-    activateConstraints([left, top])
+    activate(left, top)
     root.layoutSubtreeIfNeeded()
 
     let natural = button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
@@ -356,7 +363,7 @@ suite "nimkit constraints":
 
     root.addSubview(left)
     root.addSubview(right)
-    activateConstraints([rightPin, spacing])
+    activate(rightPin, spacing)
     root.layoutSubtreeIfNeeded()
 
     check left.frame().maxX == right.frame().minX
@@ -375,7 +382,7 @@ suite "nimkit constraints":
       )
 
     root.addSubview(child)
-    activateConstraints([low, high])
+    activate(low, high)
     root.layoutSubtreeIfNeeded()
 
     check child.frame().size == initSize(90, 20)
@@ -424,7 +431,7 @@ suite "nimkit constraints":
 
     root.addSubview(left)
     root.addSubview(right)
-    activateConstraints([spacing])
+    activate(spacing)
     root.layoutSubtreeIfNeeded()
     check not root.needsUpdateConstraints
     check not left.needsUpdateConstraints
@@ -499,14 +506,24 @@ suite "nimkit constraints":
       secondOwner = newView(frame = initRect(0, 0, 100, 80))
       child = newView(frame = initRect(0, 0, 40, 20))
       width = newLayoutConstraint(child, latWidth, constant = 40.0'f32)
+      height = newLayoutConstraint(child, latHeight, constant = 20.0'f32)
 
-    firstOwner.addConstraint(width)
-    check width.isActive
+    firstOwner.addConstraints(width, height)
+    check width.active
+    check height.active
     check width.owningView == firstOwner
-    check firstOwner.constraints == @[width]
+    check height.owningView == firstOwner
+    check firstOwner.constraints == @[width, height]
 
-    secondOwner.addConstraint(width)
-    check width.isActive
+    secondOwner.addConstraints(width, height)
+    check width.active
+    check height.active
     check width.owningView == secondOwner
+    check height.owningView == secondOwner
     check firstOwner.constraints.len == 0
-    check secondOwner.constraints == @[width]
+    check secondOwner.constraints == @[width, height]
+
+    secondOwner.removeConstraints(width, height)
+    check not width.active
+    check not height.active
+    check secondOwner.constraints.len == 0

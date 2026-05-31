@@ -391,7 +391,9 @@ proc constraintLessThanOrEqualToConstant*(
 ): LayoutConstraint =
   first.constraintLessThanOrEqualTo(constant, priority)
 
-proc pinEdges*(
+proc activateConstraints*(constraints: openArray[LayoutConstraint])
+
+proc edgeConstraints*(
     view: View,
     toView: View,
     insets = initEdgeInsets(0.0),
@@ -417,6 +419,18 @@ proc pinEdges*(
 
 proc pinEdges*(
     view: View,
+    toView: View,
+    insets = initEdgeInsets(0.0),
+    edges = AllLayoutEdges,
+    priority = LayoutPriorityRequired,
+): seq[LayoutConstraint] {.discardable.} =
+  result = view.edgeConstraints(
+    toView = toView, insets = insets, edges = edges, priority = priority
+  )
+  activateConstraints(result)
+
+proc edgeConstraints*(
+    view: View,
     toGuide: LayoutGuide,
     insets = initEdgeInsets(0.0),
     edges = AllLayoutEdges,
@@ -438,6 +452,18 @@ proc pinEdges*(
     result.add view.bottomAnchor.constraintEqualTo(
       toGuide.bottomAnchor, constant = -insets.bottom, priority = priority
     )
+
+proc pinEdges*(
+    view: View,
+    toGuide: LayoutGuide,
+    insets = initEdgeInsets(0.0),
+    edges = AllLayoutEdges,
+    priority = LayoutPriorityRequired,
+): seq[LayoutConstraint] {.discardable.} =
+  result = view.edgeConstraints(
+    toGuide = toGuide, insets = insets, edges = edges, priority = priority
+  )
+  activateConstraints(result)
 
 proc firstItem*(constraint: LayoutConstraint): View =
   if constraint.isNil: nil else: constraint.xFirstItem
@@ -466,6 +492,9 @@ proc priority*(constraint: LayoutConstraint): LayoutPriority =
 proc isActive*(constraint: LayoutConstraint): bool =
   (not constraint.isNil) and constraint.xActive
 
+proc active*(constraint: LayoutConstraint): bool =
+  constraint.isActive()
+
 proc owningView*(constraint: LayoutConstraint): View =
   if constraint.isNil: nil else: constraint.xOwningView
 
@@ -480,11 +509,17 @@ proc setConstant*(constraint: LayoutConstraint, constant: float32) =
   constraint.xConstant = constant
   constraint.invalidateActiveConstraint()
 
+proc `constant=`*(constraint: LayoutConstraint, constant: float32) =
+  constraint.setConstant(constant)
+
 proc setPriority*(constraint: LayoutConstraint, priority: LayoutPriority) =
   if constraint.isNil or constraint.xPriority == priority:
     return
   constraint.xPriority = priority
   constraint.invalidateActiveConstraint()
+
+proc `priority=`*(constraint: LayoutConstraint, priority: LayoutPriority) =
+  constraint.setPriority(priority)
 
 proc indexOfConstraint(view: View, constraint: LayoutConstraint): int =
   if view.isNil or constraint.isNil:
@@ -534,12 +569,24 @@ proc addConstraints*(view: View, constraints: openArray[LayoutConstraint]) =
   for constraint in constraints:
     view.addConstraint(constraint)
 
+proc addConstraints*(
+    view: View, constraint: LayoutConstraint, rest: varargs[LayoutConstraint]
+) =
+  view.addConstraint(constraint)
+  view.addConstraints(rest)
+
 proc removeConstraint*(view: View, constraint: LayoutConstraint) =
   view.removeStoredConstraint(constraint)
 
 proc removeConstraints*(view: View, constraints: openArray[LayoutConstraint]) =
   for constraint in constraints:
     view.removeConstraint(constraint)
+
+proc removeConstraints*(
+    view: View, constraint: LayoutConstraint, rest: varargs[LayoutConstraint]
+) =
+  view.removeConstraint(constraint)
+  view.removeConstraints(rest)
 
 proc nearestCommonSuperview(first, second: View): View =
   var candidate = first
@@ -572,13 +619,46 @@ proc setActive*(constraint: LayoutConstraint, active: bool) =
   else:
     constraint.xActive = false
 
-proc activateConstraints*(constraints: openArray[LayoutConstraint]) =
+proc `active=`*(constraint: LayoutConstraint, active: bool) =
+  constraint.setActive(active)
+
+proc setConstraintsActive(constraints: openArray[LayoutConstraint], active: bool) =
   for constraint in constraints:
-    constraint.setActive(true)
+    constraint.active = active
+
+proc setConstraintsActive(
+    constraint: LayoutConstraint, rest: openArray[LayoutConstraint], active: bool
+) =
+  constraint.active = active
+  setConstraintsActive(rest, active)
+
+proc activateConstraints*(constraints: openArray[LayoutConstraint]) =
+  setConstraintsActive(constraints, true)
+
+proc activateConstraints*(
+    constraint: LayoutConstraint, rest: varargs[LayoutConstraint]
+) =
+  setConstraintsActive(constraint, rest, true)
 
 proc deactivateConstraints*(constraints: openArray[LayoutConstraint]) =
-  for constraint in constraints:
-    constraint.setActive(false)
+  setConstraintsActive(constraints, false)
+
+proc deactivateConstraints*(
+    constraint: LayoutConstraint, rest: varargs[LayoutConstraint]
+) =
+  setConstraintsActive(constraint, rest, false)
+
+proc activate*(constraints: openArray[LayoutConstraint]) =
+  setConstraintsActive(constraints, true)
+
+proc activate*(constraint: LayoutConstraint, rest: varargs[LayoutConstraint]) =
+  setConstraintsActive(constraint, rest, true)
+
+proc deactivate*(constraints: openArray[LayoutConstraint]) =
+  setConstraintsActive(constraints, false)
+
+proc deactivate*(constraint: LayoutConstraint, rest: varargs[LayoutConstraint]) =
+  setConstraintsActive(constraint, rest, false)
 
 proc setFrameFromLayout(view: View, frame: Rect) =
   if view.isNil or view.xFrame == frame:

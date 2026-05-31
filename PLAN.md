@@ -57,8 +57,9 @@ NimKit currently includes the core desktop-control slice:
   content hugging/compression priority storage.
 - A Cocoa-like constraint convenience layer over the core constraint model:
   typed x/y/dimension anchors, inset-backed content layout guides, and
-  edge-pinning helpers that return normal `LayoutConstraint` values for
-  explicit activation.
+  active-by-default edge-pinning helpers, inactive edge-constraint builders,
+  property-style mutation for constants/priorities/activation, and short batch
+  activation helpers.
 - A Kiwiberry/Cassowary-backed constraint application pass that solves active
   constraints per view subtree, keeps the subtree root geometry fixed,
   preserves descendant geometry with edit-variable stays, keeps solver variables
@@ -360,6 +361,14 @@ Concrete task order and status:
    existing model: typed x/y/dimension anchors, inset-backed content layout
    guides, and `pinEdges` helpers. NimKit examples now use those helpers
    instead of spelling common root-edge constraints manually.
+17. Done for Nim-style constraint API polish: Add `constraint.constant =`,
+   `constraint.priority =`, `constraint.active =`, `constraint.active`,
+   `activate`/`deactivate` aliases, and varargs batch helpers for
+   `addConstraints`, `removeConstraints`, activation, and deactivation.
+   `pinEdges` now activates the common edge-pin case directly, while
+   `edgeConstraints` builds inactive constraints for callers that need delayed
+   activation. Examples now use direct edge pins without a separate activation
+   wrapper.
 
 ### Controls
 

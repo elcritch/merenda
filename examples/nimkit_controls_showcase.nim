@@ -207,11 +207,9 @@ bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
 layout.addArrangedSubview(title, bodyRow, summary)
 
 root.addSubview(layout)
-activateConstraints(
-  layout.pinEdges(
-    toGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
-    edges = {leLeft, leTop, leRight},
-  )
+layout.pinEdges(
+  toGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
+  edges = {leLeft, leTop, leRight},
 )
 
 updateToggleTitle()
