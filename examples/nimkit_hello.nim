@@ -21,30 +21,30 @@ let
 
 proc updateStatus() =
   let label = stateName(button.state)
-  status.setStringValue("Button state: " & label & " (click to cycle)")
-  button.setTitle("Cycle State (" & label & ")")
+  status.text = "Button state: " & label & " (click to cycle)"
+  button.title = "Cycle State (" & label & ")"
 
 proc onCycle(sender: DynamicAgent) =
   if not sender.isNil:
     updateStatus()
 
-root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
-title.setAlignment(taCenter)
-title.setTextColor(initColor(0.13, 0.20, 0.34))
-subtitle.setTextColor(initColor(0.20, 0.24, 0.31))
-status.setTextColor(initColor(0.12, 0.28, 0.20))
+root.background = initColor(0.95, 0.96, 0.98)
+title.alignment = taCenter
+title.textColor = initColor(0.13, 0.20, 0.34)
+subtitle.textColor = initColor(0.20, 0.24, 0.31)
+status.textColor = initColor(0.12, 0.28, 0.20)
 
 for label in [title, subtitle, status]:
-  label.setEditable(false)
-  label.setSelectable(false)
+  label.editable = false
+  label.selectable = false
 
-button.setButtonType(btToggle)
-button.setAllowsMixedState(true)
-button.setTarget(newActionTarget(action, onCycle))
-button.setAction(action)
+button.buttonType = btToggle
+button.allowsMixedState = true
+button.target = newActionTarget(action, onCycle)
+button.action = action
 
-layout.setSpacing(12.0)
-layout.setAlignment(svaFill)
+layout.spacing = 12.0
+layout.alignment = svaFill
 layout.addArrangedSubview(title, subtitle, status, button)
 
 root.addSubview(layout)

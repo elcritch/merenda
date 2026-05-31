@@ -13,7 +13,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
   initViewFields(result, initRect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
-  result.setTranslatesAutoresizingMaskIntoConstraints(false)
+  result.translatesAutoresizingMaskIntoConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit form views":
@@ -25,9 +25,9 @@ suite "nimkit form views":
       nameField = newFixedIntrinsicView(100, 20)
       roleField = newFixedIntrinsicView(80, 30)
 
-    form.setColumnSpacing(8.0)
-    form.setRowSpacing(5.0)
-    form.setEdgeInsets(initEdgeInsets(1.0, 2.0, 3.0, 4.0))
+    form.columnSpacing = 8.0
+    form.rowSpacing = 5.0
+    form.edgeInsets = initEdgeInsets(1.0, 2.0, 3.0, 4.0)
     form.addRow(shortLabel, nameField)
     form.addRow(longLabel, roleField)
 
@@ -49,7 +49,7 @@ suite "nimkit form views":
       label = newFixedIntrinsicView(48, 14)
       field = newFixedIntrinsicView(80, 20)
 
-    form.setColumnSpacing(12.0)
+    form.columnSpacing = 12.0
     form.addRow(label, field)
     form.layoutSubtreeIfNeeded()
 
@@ -62,9 +62,9 @@ suite "nimkit form views":
       label = newFixedIntrinsicView(36, 12)
       field = newFixedIntrinsicView(90, 20)
 
-    form.setLabelAlignment(flaLeading)
-    form.setRowAlignment(fraFill)
-    form.setColumnSpacing(10.0)
+    form.labelAlignment = flaLeading
+    form.rowAlignment = fraFill
+    form.columnSpacing = 10.0
     form.addRow(label, field)
     form.layoutSubtreeIfNeeded()
 
@@ -77,7 +77,7 @@ suite "nimkit form views":
       label = newFixedIntrinsicView(30, 10)
       field = newFixedIntrinsicView(20, 12)
 
-    form.setMinimumFieldWidth(96.0)
+    form.minFieldWidth = 96.0
     form.addRow(label, field)
 
     check form.intrinsicContentSize() == initIntrinsicSize(134.0, 12.0)
@@ -96,8 +96,8 @@ suite "nimkit form views":
 
     form.addRow(visibleLabel, visibleField)
     form.addRow(hiddenLabel, hiddenField)
-    hiddenLabel.setHidden(true)
-    hiddenField.setHidden(true)
+    hiddenLabel.hidden = true
+    hiddenField.hidden = true
 
     check form.intrinsicContentSize() == initIntrinsicSize(118.0, 20.0)
 
@@ -113,8 +113,8 @@ suite "nimkit form views":
       label = newTextField("Name", frame = initRect(0, 0, 1, 1))
       field = newTextField("Ada", frame = initRect(0, 0, 1, 1))
 
-    label.setEditable(false)
-    label.setSelectable(false)
+    label.editable = false
+    label.selectable = false
     root.addSubview(form)
     form.addRow(label, field)
     form.sizeToFit()
@@ -124,7 +124,7 @@ suite "nimkit form views":
     field.setNeedsLayout(false)
 
     let oldFrame = form.frame()
-    field.setStringValue("A much longer field value")
+    field.text = "A much longer field value"
 
     check form.frame() == oldFrame
     check root.needsLayout
@@ -147,8 +147,8 @@ suite "nimkit form views":
       top = newLayoutConstraint(form, latTop, lrEqual, root, latTop, constant = 10)
       height = newLayoutConstraint(form, latHeight, constant = 40)
 
-    form.setTranslatesAutoresizingMaskIntoConstraints(false)
-    form.setColumnSpacing(10.0)
+    form.translatesAutoresizingMaskIntoConstraints = false
+    form.columnSpacing = 10.0
     root.addSubview(form)
     form.addRow(label, field)
     activateConstraints([left, right, top, height])

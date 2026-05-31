@@ -17,9 +17,7 @@ let
   changedAction = actionSelector("comboChanged")
 
 proc updateStatus() =
-  status.setStringValue(
-    "Priority: " & priority.stringValue & " / Color: " & color.stringValue
-  )
+  status.text = "Priority: " & priority.stringValue & " / Color: " & color.stringValue
 
 proc onChanged(sender: DynamicAgent) =
   if not sender.isNil:
@@ -27,27 +25,27 @@ proc onChanged(sender: DynamicAgent) =
 
 let target = newActionTarget(changedAction, onChanged)
 
-root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
-title.setTextColor(initColor(0.13, 0.20, 0.34))
-status.setTextColor(initColor(0.12, 0.28, 0.20))
+root.background = initColor(0.95, 0.96, 0.98)
+title.textColor = initColor(0.13, 0.20, 0.34)
+status.textColor = initColor(0.12, 0.28, 0.20)
 
 for label in [title, status, priorityLabel, colorLabel]:
-  label.setEditable(false)
-  label.setSelectable(false)
+  label.editable = false
+  label.selectable = false
 
-priority.selectItemAtIndex(1)
-color.selectItemAtIndex(0)
+priority.selectedIndex = 1
+color.selectedIndex = 0
 
 for combo in [priority, color]:
-  combo.setTarget(target)
-  combo.setAction(changedAction)
+  combo.target = target
+  combo.action = changedAction
 
-layout.setSpacing(10.0)
-layout.setAlignment(svaFill)
-form.setEdgeInsets(initEdgeInsets(0.0))
-form.setColumnSpacing(12.0)
-form.setRowSpacing(10.0)
-form.setMinimumFieldWidth(180.0)
+layout.spacing = 10.0
+layout.alignment = svaFill
+form.edgeInsets = initEdgeInsets(0.0)
+form.columnSpacing = 12.0
+form.rowSpacing = 10.0
+form.minFieldWidth = 180.0
 form.addRow(priorityLabel, priority)
 form.addRow(colorLabel, color)
 layout.addArrangedSubview(title, status, form)

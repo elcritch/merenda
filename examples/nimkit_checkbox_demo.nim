@@ -21,10 +21,9 @@ let
   changedAction = actionSelector("checkboxChanged")
 
 proc updateStatus() =
-  status.setStringValue(
+  status.text =
     "Downloads: " & downloads.state.stateName & "   Notifications: " &
-      notifications.state.stateName & "   Sync: " & sync.state.stateName
-  )
+    notifications.state.stateName & "   Sync: " & sync.state.stateName
 
 proc onChanged(sender: DynamicAgent) =
   if not sender.isNil:
@@ -32,22 +31,22 @@ proc onChanged(sender: DynamicAgent) =
 
 let target = newActionTarget(changedAction, onChanged)
 
-root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
-title.setTextColor(initColor(0.13, 0.20, 0.34))
-status.setTextColor(initColor(0.12, 0.28, 0.20))
-sync.setAllowsMixedState(true)
-sync.setState(bsMixed)
+root.background = initColor(0.95, 0.96, 0.98)
+title.textColor = initColor(0.13, 0.20, 0.34)
+status.textColor = initColor(0.12, 0.28, 0.20)
+sync.allowsMixedState = true
+sync.state = bsMixed
 
 for label in [title, status]:
-  label.setEditable(false)
-  label.setSelectable(false)
+  label.editable = false
+  label.selectable = false
 
 for checkbox in [downloads, notifications, sync]:
-  checkbox.setTarget(target)
-  checkbox.setAction(changedAction)
+  checkbox.target = target
+  checkbox.action = changedAction
 
-layout.setSpacing(10.0)
-layout.setAlignment(svaFill)
+layout.spacing = 10.0
+layout.alignment = svaFill
 layout.addArrangedSubview(title, status, downloads, notifications, sync)
 updateStatus()
 

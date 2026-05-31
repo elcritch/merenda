@@ -2,9 +2,9 @@ import merenda/nimkit
 
 proc makeLabel(text: string): TextField =
   result = newTextField(text)
-  result.setEditable(false)
-  result.setSelectable(false)
-  result.setTextColor(initColor(0.09, 0.12, 0.18))
+  result.editable = false
+  result.selectable = false
+  result.textColor = initColor(0.09, 0.12, 0.18)
 
 let
   app = sharedApplication()
@@ -24,28 +24,28 @@ let
   runButton = newButton("Run")
   cancelButton = newButton("Cancel")
 
-root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
+root.background = initColor(0.95, 0.96, 0.98)
 
-title.setAlignment(taCenter)
+title.alignment = taCenter
 
-layout.setSpacing(12.0)
-layout.setAlignment(svaFill)
+layout.spacing = 12.0
+layout.alignment = svaFill
 
-form.setEdgeInsets(initEdgeInsets(12.0, 14.0))
-form.setColumnSpacing(12.0)
-form.setRowSpacing(10.0)
-form.setMinimumFieldWidth(180.0)
+form.edgeInsets = initEdgeInsets(12.0, 14.0)
+form.columnSpacing = 12.0
+form.rowSpacing = 10.0
+form.minFieldWidth = 180.0
 
-actionRow.setSpacing(8.0)
-actionRow.setAlignment(svaCenter)
-actionRow.setDistribution(svdFill)
+actionRow.spacing = 8.0
+actionRow.alignment = svaCenter
+actionRow.distribution = svdFill
 
-nameLabel.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
-priorityLabel.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
-nameField.setContentHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
-priority.setContentHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
+nameLabel.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
+priorityLabel.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
+nameField.horizontalContentHuggingPriority = LayoutPriorityDefaultLow
+priority.horizontalContentHuggingPriority = LayoutPriorityDefaultLow
 
-priority.selectItemAtIndex(1)
+priority.selectedIndex = 1
 
 form.addRow(nameLabel, nameField)
 form.addRow(priorityLabel, priority)

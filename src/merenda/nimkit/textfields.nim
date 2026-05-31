@@ -295,6 +295,41 @@ protocol TextFieldProtocolInternal from TextField:
     textField.setNeedsDisplay(true)
     true
 
+proc text*(textField: TextField): string =
+  textField.stringValue()
+
+proc `text=`*(textField: TextField, value: string) =
+  textField.setStringValue(value)
+
+proc `stringValue=`*(textField: TextField, value: string) =
+  textField.setStringValue(value)
+
+proc `alignment=`*(textField: TextField, alignment: TextAlignment) =
+  textField.setAlignment(alignment)
+
+proc `textColor=`*(textField: TextField, color: Color) =
+  textField.setTextColor(color)
+
+proc editable*(textField: TextField): bool =
+  (not textField.isNil) and textField.isEditable()
+
+proc `editable=`*(textField: TextField, editable: bool) =
+  if not textField.isNil:
+    textField.setEditable(editable)
+
+proc selectable*(textField: TextField): bool =
+  (not textField.isNil) and textField.isSelectable()
+
+proc `selectable=`*(textField: TextField, selectable: bool) =
+  if not textField.isNil:
+    textField.setSelectable(selectable)
+
+proc editing*(textField: TextField): bool =
+  (not textField.isNil) and textField.isEditing()
+
+proc `selectedRange=`*(textField: TextField, value: TextRange) =
+  textField.setSelectedRange(value)
+
 protocol DefaultTextFieldInput of TextInputProtocol:
   method insertText(textField: TextField, text: string) =
     if text.isInsertableText:
@@ -461,8 +496,14 @@ proc setDelegate*(textField: TextField, delegate: DynamicAgent) =
     return
   textField.xDelegate = delegate
 
+proc `delegate=`*(textField: TextField, delegate: DynamicAgent) =
+  textField.setDelegate(delegate)
+
 proc setDelegate*(textField: TextField, delegate: Responder) =
   textField.setDelegate(DynamicAgent(delegate))
+
+proc `delegate=`*(textField: TextField, delegate: Responder) =
+  textField.setDelegate(delegate)
 
 proc notifyTextDidChange(textField: TextField) =
   if textField.isNil or textField.xDelegate.isNil:
