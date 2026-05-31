@@ -27,6 +27,16 @@ type
     laHorizontal
     laVertical
 
+  AutoresizingMaskOption* = enum
+    cxMinXMargin
+    cxWidthSizable
+    cxMaxXMargin
+    cxMinYMargin
+    cxHeightSizable
+    cxMaxYMargin
+
+  AutoresizingMask* = set[AutoresizingMaskOption]
+
   LayoutAttribute* = enum
     latNotAnAttribute = 0
     latLeft = 1

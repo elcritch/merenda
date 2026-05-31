@@ -38,6 +38,8 @@ type
     xFocusVisible: bool
     xNeedsUpdateConstraints: bool
     xNeedsLayout: bool
+    xAutoresizingMask: AutoresizingMask
+    xTranslatesAutoresizingMaskIntoConstraints: bool
     xAlignmentRectInsets: EdgeInsets
     xBaselineOffsetFromBottom: float32
     xFirstBaselineOffsetFromTop: float32
@@ -68,6 +70,7 @@ proc notifyDidAddSubview(view, subview: View)
 proc notifyWillRemoveSubview(view, subview: View)
 proc setWindowOwner(view: View, window: Responder)
 proc markConstraintStorageChanged(view: View)
+proc markSubviewAutoresizingConstraintsChanged(view: View)
 proc setNeedsUpdateConstraints*(view: View, value: bool)
 proc setNeedsLayout*(view: View, value: bool)
 proc invalidateLayoutItemGeometry*(view: View)
@@ -96,6 +99,7 @@ protocol ViewProtocolInternal from View:
     self.xFrame = frame
     self.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
     self.invalidateLayoutItemGeometry()
+    self.markSubviewAutoresizingConstraintsChanged()
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
@@ -106,6 +110,7 @@ protocol ViewProtocolInternal from View:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
     self.markConstraintStorageChanged()
+    self.markSubviewAutoresizingConstraintsChanged()
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -416,6 +421,13 @@ proc markConstraintStorageChanged(view: View) =
   view.setNeedsUpdateConstraints(true)
   view.setNeedsLayout(true)
 
+proc markSubviewAutoresizingConstraintsChanged(view: View) =
+  if view.isNil:
+    return
+  for child in view.xSubviews:
+    if child.xTranslatesAutoresizingMaskIntoConstraints:
+      child.markConstraintStorageChanged()
+
 proc referencesLayoutItem(constraint: LayoutConstraint, view: View): bool =
   (not constraint.isNil) and
     (constraint.xFirstItem == view or constraint.xSecondItem == view)
@@ -436,6 +448,26 @@ proc invalidateLayoutItemGeometry*(view: View) =
     if current == view or current == parent or current.hasConstraintReferencing(view):
       current.markConstraintStorageChanged()
     current = current.xSuperview
+
+proc autoresizingMask*(view: View): AutoresizingMask =
+  if view.isNil:
+    return {}
+  view.xAutoresizingMask
+
+proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
+  if view.isNil or view.xAutoresizingMask == mask:
+    return
+  view.xAutoresizingMask = mask
+  view.invalidateLayoutItemGeometry()
+
+proc translatesAutoresizingMaskIntoConstraints*(view: View): bool =
+  (not view.isNil) and view.xTranslatesAutoresizingMaskIntoConstraints
+
+proc setTranslatesAutoresizingMaskIntoConstraints*(view: View, value: bool) =
+  if view.isNil or view.xTranslatesAutoresizingMaskIntoConstraints == value:
+    return
+  view.xTranslatesAutoresizingMaskIntoConstraints = value
+  view.invalidateLayoutItemGeometry()
 
 proc alignmentRectInsets*(view: View): EdgeInsets =
   if view.isNil:
@@ -1024,6 +1056,7 @@ proc initViewFields*(view: View, frame: Rect) =
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
   view.xNeedsDisplay = true
   view.xNeedsLayout = true
+  view.xTranslatesAutoresizingMaskIntoConstraints = true
   view.xHorizontalContentHuggingPriority = LayoutPriorityDefaultLow
   view.xVerticalContentHuggingPriority = LayoutPriorityDefaultLow
   view.xHorizontalContentCompressionResistancePriority = LayoutPriorityDefaultHigh

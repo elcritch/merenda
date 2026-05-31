@@ -299,10 +299,12 @@ Concrete task order and status:
    size-to-fit, layout invalidation, and a Cocoa-like constraint
    lifecycle/model are now in place before autoresizing masks, containers, or
    any solver work.
-12. Not started: Add autoresizing mask and
-   `translatesAutoresizingMaskIntoConstraints` semantics. The first pass may
-   apply masks directly or generate simple internal layout inputs; preserve the
-   Cocoa shape while keeping the implementation small.
+12. Done for the current core: Add autoresizing mask and
+   `translatesAutoresizingMaskIntoConstraints` semantics. The first pass stores
+   the Cocoa bridge state and invalidates child/container constraints when the
+   mask, translate flag, frame, bounds, or hierarchy changes. Direct mask
+   application or generated solver inputs belong with the deterministic
+   constraint application subset.
 13. Not started: Add a small deterministic constraint application subset:
    width/height constants, edge pins to superview, centers, and intrinsic
    min/max behavior from hugging and compression resistance. Avoid a full
