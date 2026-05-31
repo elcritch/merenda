@@ -43,8 +43,8 @@ for combo in [priority, color]:
 layout.spacing = 10.0
 layout.alignment = svaFill
 form.edgeInsets = initEdgeInsets(0.0)
-form.columnSpacing = 12.0
-form.rowSpacing = 10.0
+form.spacing[dcol] = 12.0
+form.spacing[drow] = 10.0
 form.minFieldWidth = 180.0
 form.addRow(priorityLabel, priority)
 form.addRow(colorLabel, color)

@@ -29,6 +29,10 @@ type
     laHorizontal
     laVertical
 
+  SpacingDirection* = enum
+    drow
+    dcol
+
   AutoresizingMaskOption* = enum
     cxMinXMargin
     cxWidthSizable
@@ -243,6 +247,16 @@ const
 func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
 func `<=`*(a, b: LayoutPriority): bool {.borrow.}
+
+func layoutAxis*(direction: SpacingDirection): LayoutAxis =
+  case direction
+  of dcol: laHorizontal
+  of drow: laVertical
+
+func spacingDirection*(axis: LayoutAxis): SpacingDirection =
+  case axis
+  of laHorizontal: dcol
+  of laVertical: drow
 
 func isAutoMetric*(value: float32): bool =
   value.isNaN

@@ -20,10 +20,12 @@ type
     label*: View
     field*: View
 
+  FormSpacing* = object
+    xFormView: FormView
+
   FormView* = ref object of View
     xRows: seq[FormRow]
-    xRowSpacing: float32
-    xColumnSpacing: float32
+    xSpacing: array[SpacingDirection, float32]
     xEdgeInsets: EdgeInsets
     xLabelAlignment: FormLabelAlignment
     xRowAlignment: FormRowAlignment
@@ -93,15 +95,19 @@ proc naturalSize(formView: FormView): Size =
   let
     metrics = formView.formMetrics()
     rowCount = metrics.rowHeights.len
-    columnSpacing = if metrics.hasColumns: formView.xColumnSpacing else: 0.0'f32
+    colSpacing =
+      if metrics.hasColumns:
+        formView.xSpacing[dcol]
+      else:
+        0.0'f32
 
   var height =
-    formView.xEdgeInsets.vertical + formView.xRowSpacing.totalSpacing(rowCount)
+    formView.xEdgeInsets.vertical + formView.xSpacing[drow].totalSpacing(rowCount)
   for rowHeight in metrics.rowHeights:
     height += rowHeight
 
   initSize(
-    formView.xEdgeInsets.horizontal + metrics.labelWidth + columnSpacing +
+    formView.xEdgeInsets.horizontal + metrics.labelWidth + colSpacing +
       metrics.fieldWidth,
     height,
   )
@@ -157,11 +163,14 @@ proc layoutFormRows(formView: FormView) =
     rows = formView.visibleRows()
     metrics = formView.formMetrics()
     content = formView.contentRect()
-    columnSpacing = if metrics.hasColumns: formView.xColumnSpacing else: 0.0'f32
-    fieldX = content.origin.x + metrics.labelWidth + columnSpacing
+    colSpacing =
+      if metrics.hasColumns:
+        formView.xSpacing[dcol]
+      else:
+        0.0'f32
+    fieldX = content.origin.x + metrics.labelWidth + colSpacing
     fieldWidth = max(
-      content.size.width - metrics.labelWidth - columnSpacing,
-      formView.xMinimumFieldWidth,
+      content.size.width - metrics.labelWidth - colSpacing, formView.xMinimumFieldWidth
     )
 
   var rowY = content.origin.y
@@ -190,7 +199,7 @@ proc layoutFormRows(formView: FormView) =
         initRect(fieldX, frame.y, fieldWidth, frame.height)
       )
 
-    rowY += rowHeight + formView.xRowSpacing
+    rowY += rowHeight + formView.xSpacing[drow]
 
 proc rowIndex(formView: FormView, label, field: View): int =
   if formView.isNil:
@@ -214,31 +223,24 @@ proc rows*(formView: FormView): seq[FormRow] =
   else:
     formView.xRows
 
-proc rowSpacing*(formView: FormView): float32 =
-  if formView.isNil: 0.0'f32 else: formView.xRowSpacing
+proc spacing*(formView: FormView): FormSpacing =
+  FormSpacing(xFormView: formView)
 
-proc setRowSpacing*(formView: FormView, spacing: float32) =
+proc setSpacing*(formView: FormView, direction: SpacingDirection, spacing: float32) =
   let normalized = spacing.normalizedSpacing()
-  if formView.isNil or formView.xRowSpacing == normalized:
+  if formView.isNil or formView.xSpacing[direction] == normalized:
     return
-  formView.xRowSpacing = normalized
+  formView.xSpacing[direction] = normalized
   formView.invalidateFormLayout()
 
-proc `rowSpacing=`*(formView: FormView, spacing: float32) =
-  formView.setRowSpacing(spacing)
+proc `[]`*(spacing: FormSpacing, direction: SpacingDirection): float32 =
+  let formView = spacing.xFormView
+  if formView.isNil:
+    return 0.0'f32
+  formView.xSpacing[direction]
 
-proc columnSpacing*(formView: FormView): float32 =
-  if formView.isNil: 0.0'f32 else: formView.xColumnSpacing
-
-proc setColumnSpacing*(formView: FormView, spacing: float32) =
-  let normalized = spacing.normalizedSpacing()
-  if formView.isNil or formView.xColumnSpacing == normalized:
-    return
-  formView.xColumnSpacing = normalized
-  formView.invalidateFormLayout()
-
-proc `columnSpacing=`*(formView: FormView, spacing: float32) =
-  formView.setColumnSpacing(spacing)
+proc `[]=`*(spacing: FormSpacing, direction: SpacingDirection, value: float32) =
+  spacing.xFormView.setSpacing(direction, value)
 
 proc edgeInsets*(formView: FormView): EdgeInsets =
   if formView.isNil:
@@ -345,8 +347,8 @@ protocol DefaultFormViewLifecycle of ViewLifecycleProtocol:
 
 proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   initViewFields(formView, frame)
-  formView.xRowSpacing = 8.0'f32
-  formView.xColumnSpacing = 8.0'f32
+  formView.xSpacing[drow] = 8.0'f32
+  formView.xSpacing[dcol] = 8.0'f32
   formView.xLabelAlignment = flaTrailing
   formView.xRowAlignment = fraCenter
   discard formView.withProtocol(DefaultFormViewLayout)

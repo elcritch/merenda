@@ -32,18 +32,18 @@ layout.spacing = 12.0
 layout.alignment = svaFill
 
 form.edgeInsets = initEdgeInsets(12.0, 14.0)
-form.columnSpacing = 12.0
-form.rowSpacing = 10.0
+form.spacing[dcol] = 12.0
+form.spacing[drow] = 10.0
 form.minFieldWidth = 180.0
 
 actionRow.spacing = 8.0
 actionRow.alignment = svaCenter
 actionRow.distribution = svdFill
 
-nameLabel.horizHuggingPriority = LayoutPriorityDefaultHigh
-priorityLabel.horizHuggingPriority = LayoutPriorityDefaultHigh
-nameField.horizHuggingPriority = LayoutPriorityDefaultLow
-priority.horizHuggingPriority = LayoutPriorityDefaultLow
+nameLabel.huggingPriority[dcol] = LayoutPriorityDefaultHigh
+priorityLabel.huggingPriority[dcol] = LayoutPriorityDefaultHigh
+nameField.huggingPriority[dcol] = LayoutPriorityDefaultLow
+priority.huggingPriority[dcol] = LayoutPriorityDefaultLow
 
 priority.selectedIndex = 1
 

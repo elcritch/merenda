@@ -25,13 +25,15 @@ suite "nimkit form views":
       nameField = newFixedIntrinsicView(100, 20)
       roleField = newFixedIntrinsicView(80, 30)
 
-    form.columnSpacing = 8.0
-    form.rowSpacing = 5.0
+    form.spacing[dcol] = 8.0
+    form.spacing[drow] = 5.0
     form.edgeInsets = initEdgeInsets(1.0, 2.0, 3.0, 4.0)
     form.addRow(shortLabel, nameField)
     form.addRow(longLabel, roleField)
 
     check form.rows.len == 2
+    check form.spacing[dcol] == 8.0
+    check form.spacing[drow] == 5.0
     check form.intrinsicContentSize() == initIntrinsicSize(174.0, 59.0)
 
     form.sizeToFit()
@@ -49,7 +51,7 @@ suite "nimkit form views":
       label = newFixedIntrinsicView(48, 14)
       field = newFixedIntrinsicView(80, 20)
 
-    form.columnSpacing = 12.0
+    form.spacing[dcol] = 12.0
     form.addRow(label, field)
     form.layoutSubtreeIfNeeded()
 
@@ -64,7 +66,7 @@ suite "nimkit form views":
 
     form.labelAlignment = flaLeading
     form.rowAlignment = fraFill
-    form.columnSpacing = 10.0
+    form.spacing[dcol] = 10.0
     form.addRow(label, field)
     form.layoutSubtreeIfNeeded()
 
@@ -148,7 +150,7 @@ suite "nimkit form views":
       height = newLayoutConstraint(form, latHeight, constant = 40)
 
     form.autoresizingMaskConstraints = false
-    form.columnSpacing = 10.0
+    form.spacing[dcol] = 10.0
     root.addSubview(form)
     form.addRow(label, field)
     activateConstraints([left, right, top, height])
