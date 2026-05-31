@@ -292,6 +292,39 @@ protocol ViewLifecycleProtocolInternal:
   method didAddSubview*(subview: View) {.optional.}
   method willRemoveSubview*(subview: View) {.optional.}
 
+proc `frame=`*(view: View, frame: Rect) =
+  view.setFrame(frame)
+
+proc `bounds=`*(view: View, bounds: Rect) =
+  view.setBounds(bounds)
+
+proc `needsDisplay=`*(view: View, value: bool) =
+  view.setNeedsDisplay(value)
+
+proc background*(view: View): Color =
+  view.backgroundColor()
+
+proc `background=`*(view: View, color: Color) =
+  view.setBackgroundColor(color)
+
+proc `backgroundColor=`*(view: View, color: Color) =
+  view.setBackgroundColor(color)
+
+proc `clipsToBounds=`*(view: View, clipsToBounds: bool) =
+  view.setClipsToBounds(clipsToBounds)
+
+proc `nextKeyView=`*(view: View, next: View) =
+  view.setNextKeyView(next)
+
+proc `previousKeyView=`*(view: View, previous: View) =
+  view.setPreviousKeyView(previous)
+
+proc hidden*(view: View): bool =
+  view.isHidden()
+
+proc `hidden=`*(view: View, hidden: bool) =
+  view.setHidden(hidden)
+
 proc setNeedsDisplaySubtree*(view: View) =
   if view.isNil:
     return
@@ -338,6 +371,9 @@ proc setAppearance*(view: View, appearance: Appearance) =
   view.xHasAppearance = true
   view.invalidateIntrinsicContentSizeSubtree()
   view.setNeedsDisplaySubtree()
+
+proc `appearance=`*(view: View, appearance: Appearance) =
+  view.setAppearance(appearance)
 
 proc clearAppearance*(view: View) =
   if view.isNil or not view.xHasAppearance:

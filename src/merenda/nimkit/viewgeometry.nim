@@ -48,6 +48,9 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
   view.xAutoresizingMask = mask
   view.invalidateLayoutItemGeometry()
 
+proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
+  view.setAutoresizingMask(mask)
+
 proc translatesAutoresizingMaskIntoConstraints*(view: View): bool =
   (not view.isNil) and view.xTranslatesAutoresizingMaskIntoConstraints
 
@@ -56,6 +59,9 @@ proc setTranslatesAutoresizingMaskIntoConstraints*(view: View, value: bool) =
     return
   view.xTranslatesAutoresizingMaskIntoConstraints = value
   view.invalidateLayoutItemGeometry()
+
+proc `translatesAutoresizingMaskIntoConstraints=`*(view: View, value: bool) =
+  view.setTranslatesAutoresizingMaskIntoConstraints(value)
 
 proc alignmentRectInsets*(view: View): EdgeInsets =
   if view.isNil:
@@ -67,6 +73,9 @@ proc setAlignmentRectInsets*(view: View, insets: EdgeInsets) =
     return
   view.xAlignmentRectInsets = insets
   view.invalidateLayoutItemGeometry()
+
+proc `alignmentRectInsets=`*(view: View, insets: EdgeInsets) =
+  view.setAlignmentRectInsets(insets)
 
 proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
   if view.isNil:
@@ -102,6 +111,9 @@ proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
 
+proc `alignmentRect=`*(view: View, alignmentRect: Rect) =
+  view.setFrameFromAlignmentRect(alignmentRect)
+
 proc baselineOffsetFromBottom*(view: View): float32 =
   if view.isNil: 0.0'f32 else: view.xBaselineOffsetFromBottom
 
@@ -112,6 +124,9 @@ proc setBaselineOffsetFromBottom*(view: View, offset: float32) =
   view.xBaselineOffsetFromBottom = normalized
   view.invalidateLayoutItemGeometry()
 
+proc `baselineOffsetFromBottom=`*(view: View, offset: float32) =
+  view.setBaselineOffsetFromBottom(offset)
+
 proc firstBaselineOffsetFromTop*(view: View): float32 =
   if view.isNil: 0.0'f32 else: view.xFirstBaselineOffsetFromTop
 
@@ -121,6 +136,9 @@ proc setFirstBaselineOffsetFromTop*(view: View, offset: float32) =
     return
   view.xFirstBaselineOffsetFromTop = normalized
   view.invalidateLayoutItemGeometry()
+
+proc `firstBaselineOffsetFromTop=`*(view: View, offset: float32) =
+  view.setFirstBaselineOffsetFromTop(offset)
 
 proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
   if view.isNil:
@@ -261,6 +279,18 @@ proc setContentHuggingPriority*(
     view.xVerticalContentHuggingPriority = priority
   view.invalidateIntrinsicContentSize()
 
+proc horizontalContentHuggingPriority*(view: View): LayoutPriority =
+  view.contentHuggingPriority(laHorizontal)
+
+proc `horizontalContentHuggingPriority=`*(view: View, priority: LayoutPriority) =
+  view.setContentHuggingPriority(priority, laHorizontal)
+
+proc verticalContentHuggingPriority*(view: View): LayoutPriority =
+  view.contentHuggingPriority(laVertical)
+
+proc `verticalContentHuggingPriority=`*(view: View, priority: LayoutPriority) =
+  view.setContentHuggingPriority(priority, laVertical)
+
 proc contentCompressionResistancePriority*(
     view: View, axis: LayoutAxis
 ): LayoutPriority =
@@ -285,6 +315,22 @@ proc setContentCompressionResistancePriority*(
       return
     view.xVerticalContentCompressionResistancePriority = priority
   view.invalidateIntrinsicContentSize()
+
+proc horizontalContentCompressionResistancePriority*(view: View): LayoutPriority =
+  view.contentCompressionResistancePriority(laHorizontal)
+
+proc `horizontalContentCompressionResistancePriority=`*(
+    view: View, priority: LayoutPriority
+) =
+  view.setContentCompressionResistancePriority(priority, laHorizontal)
+
+proc verticalContentCompressionResistancePriority*(view: View): LayoutPriority =
+  view.contentCompressionResistancePriority(laVertical)
+
+proc `verticalContentCompressionResistancePriority=`*(
+    view: View, priority: LayoutPriority
+) =
+  view.setContentCompressionResistancePriority(priority, laVertical)
 
 func axisOrigin*(rect: Rect, axis: LayoutAxis): float32 =
   case axis

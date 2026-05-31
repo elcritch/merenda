@@ -303,6 +303,9 @@ proc setOrientation*(stackView: StackView, orientation: LayoutAxis) =
   stackView.xOrientation = orientation
   stackView.invalidateStackLayout()
 
+proc `orientation=`*(stackView: StackView, orientation: LayoutAxis) =
+  stackView.setOrientation(orientation)
+
 proc spacing*(stackView: StackView): float32 =
   if stackView.isNil: 0.0'f32 else: stackView.xSpacing
 
@@ -312,6 +315,9 @@ proc setSpacing*(stackView: StackView, spacing: float32) =
     return
   stackView.xSpacing = normalized
   stackView.invalidateStackLayout()
+
+proc `spacing=`*(stackView: StackView, spacing: float32) =
+  stackView.setSpacing(spacing)
 
 proc edgeInsets*(stackView: StackView): EdgeInsets =
   if stackView.isNil:
@@ -326,6 +332,9 @@ proc setEdgeInsets*(stackView: StackView, insets: EdgeInsets) =
   stackView.xEdgeInsets = normalized
   stackView.invalidateStackLayout()
 
+proc `edgeInsets=`*(stackView: StackView, insets: EdgeInsets) =
+  stackView.setEdgeInsets(insets)
+
 proc alignment*(stackView: StackView): StackViewAlignment =
   if stackView.isNil: svaFill else: stackView.xAlignment
 
@@ -335,6 +344,9 @@ proc setAlignment*(stackView: StackView, alignment: StackViewAlignment) =
   stackView.xAlignment = alignment
   stackView.invalidateStackLayout()
 
+proc `alignment=`*(stackView: StackView, alignment: StackViewAlignment) =
+  stackView.setAlignment(alignment)
+
 proc distribution*(stackView: StackView): StackViewDistribution =
   if stackView.isNil: svdFill else: stackView.xDistribution
 
@@ -343,6 +355,9 @@ proc setDistribution*(stackView: StackView, distribution: StackViewDistribution)
     return
   stackView.xDistribution = distribution
   stackView.invalidateStackLayout()
+
+proc `distribution=`*(stackView: StackView, distribution: StackViewDistribution) =
+  stackView.setDistribution(distribution)
 
 proc intrinsicContentSize*(stackView: StackView): IntrinsicSize =
   if stackView.isNil:

@@ -21,24 +21,24 @@ var
 proc onButton1(sender: DynamicAgent) =
   if not sender.isNil:
     inc button1Clicked
-    label1.setStringValue("button1 clicked " & $button1Clicked & " times")
+    label1.text = "button1 clicked " & $button1Clicked & " times"
 
 proc onButton2(sender: DynamicAgent) =
   if not sender.isNil:
     inc button2Clicked
-    label2.setStringValue("button2 clicked " & $button2Clicked & " times")
+    label2.text = "button2 clicked " & $button2Clicked & " times"
 
-button1.setTarget(newActionTarget(button1Action, onButton1))
-button1.setAction(button1Action)
-button2.setTarget(newActionTarget(button2Action, onButton2))
-button2.setAction(button2Action)
+button1.target = newActionTarget(button1Action, onButton1)
+button1.action = button1Action
+button2.target = newActionTarget(button2Action, onButton2)
+button2.action = button2Action
 
 for label in [label1, label2]:
-  label.setEditable(false)
-  label.setSelectable(false)
+  label.editable = false
+  label.selectable = false
 
-layout.setSpacing(12.0)
-layout.setAlignment(svaFill)
+layout.spacing = 12.0
+layout.alignment = svaFill
 layout.addArrangedSubview(button1, button2, label1, label2)
 
 root.addSubview(layout)

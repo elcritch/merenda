@@ -51,11 +51,18 @@ suite "nimkit comboboxes":
     check combo.indexOfItem("Small") == 0
     check combo.indexOfSelectedItem() == -1
 
-    combo.selectItemAtIndex(1)
+    combo.numberOfVisibleItems = 3
+    combo.itemHeight = 18.0
+    combo.editable = false
+    check combo.numberOfVisibleItems == 3
+    check combo.itemHeight == 18.0
+    check not combo.editable
+
+    combo.selectedIndex = 1
     check combo.selectedIndex == 1
     check combo.stringValue == "Medium"
 
-    combo.setStringValue("Custom")
+    combo.text = "Custom"
     check combo.stringValue == "Custom"
     check combo.indexOfSelectedItem() == -1
 
@@ -84,15 +91,15 @@ suite "nimkit comboboxes":
       inc actionCount
       actionSender = sender
 
-    combo.setDataSource(source)
-    combo.setDelegate(delegate)
-    combo.setTarget(newActionTarget(action, onChanged))
-    combo.setAction(action)
+    combo.dataSource = source
+    combo.delegate = delegate
+    combo.target = newActionTarget(action, onChanged)
+    combo.action = action
 
     check combo.numberOfItems == 3
     check combo.itemAtIndex(2) == "Blue"
 
-    combo.setStringValue("Green")
+    combo.text = "Green"
     check combo.indexOfSelectedItem() == 1
 
     combo.activateItemAtIndex(2)
@@ -109,7 +116,7 @@ suite "nimkit comboboxes":
       root = newView(frame = initRect(0, 0, 240, 160))
       combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
 
-    combo.setItemHeight(20.0)
+    combo.itemHeight = 20.0
     root.addSubview(combo)
     window.setContentView(root)
 
@@ -139,21 +146,21 @@ suite "nimkit comboboxes":
     check combo.popupPresentation == ppAutomatic
     check window.popupPresentation == ppAutomatic
 
-    combo.setPopupPresentation(ppWindow)
-    combo.openPopup()
+    combo.popupPresentation = ppWindow
+    combo.popupOpen = true
     check combo.popupOpen
     check PopupDrawLevel notin window.buildRenders().layers
 
     combo.closePopup()
-    combo.setPopupPresentation(ppInline)
-    combo.openPopup()
+    combo.popupPresentation = ppInline
+    combo.popupOpen = true
     check combo.popupOpen
     check PopupDrawLevel in window.buildRenders().layers
 
     combo.closePopup()
-    combo.setPopupPresentation(ppAutomatic)
+    combo.popupPresentation = ppAutomatic
     window.setPopupPresentation(ppInline)
-    combo.openPopup()
+    combo.popupOpen = true
     check combo.popupPresentation == ppAutomatic
     check window.effectivePopupPresentation == ppInline
     check PopupDrawLevel in window.buildRenders().layers
@@ -166,8 +173,8 @@ suite "nimkit comboboxes":
         newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 140, 24))
       color = newComboBox(["Red", "Green", "Blue"], frame = initRect(10, 48, 140, 24))
 
-    priority.setItemHeight(20.0)
-    color.setItemHeight(20.0)
+    priority.itemHeight = 20.0
+    color.itemHeight = 20.0
     root.addSubview(priority)
     root.addSubview(color)
     window.setContentView(root)
@@ -202,8 +209,8 @@ suite "nimkit comboboxes":
       if sender == DynamicAgent(combo):
         inc actionCount
 
-    combo.setTarget(newActionTarget(action, onChanged))
-    combo.setAction(action)
+    combo.target = newActionTarget(action, onChanged)
+    combo.action = action
     root.addSubview(combo)
     window.setContentView(root)
 

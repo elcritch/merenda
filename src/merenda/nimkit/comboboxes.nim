@@ -667,6 +667,37 @@ proc comboBoxCell*(comboBox: ComboBox): ComboBoxCell =
   comboBox.setCell(replacement)
   replacement
 
+proc text*(comboBox: ComboBox): string =
+  comboBox.stringValue()
+
+proc `text=`*(comboBox: ComboBox, value: string) =
+  comboBox.setStringValue(value)
+
+proc `stringValue=`*(comboBox: ComboBox, value: string) =
+  comboBox.setStringValue(value)
+
+proc editable*(comboBox: ComboBox): bool =
+  (not comboBox.isNil) and comboBox.isEditable()
+
+proc `editable=`*(comboBox: ComboBox, editable: bool) =
+  if not comboBox.isNil:
+    comboBox.setEditable(editable)
+
+proc `selectedIndex=`*(comboBox: ComboBox, index: int) =
+  comboBox.setSelectedIndex(index)
+
+proc `popupOpen=`*(comboBox: ComboBox, open: bool) =
+  comboBox.setPopupOpen(open)
+
+proc `numberOfVisibleItems=`*(comboBox: ComboBox, value: int) =
+  comboBox.setNumberOfVisibleItems(value)
+
+proc `itemHeight=`*(comboBox: ComboBox, value: float32) =
+  comboBox.setItemHeight(value)
+
+proc `popupPresentation=`*(comboBox: ComboBox, popupPresentation: PopupPresentation) =
+  comboBox.setPopupPresentation(popupPresentation)
+
 proc dataSource*(comboBox: ComboBox): DynamicAgent =
   if comboBox.isNil:
     return nil
@@ -678,8 +709,14 @@ proc setDataSource*(comboBox: ComboBox, dataSource: DynamicAgent) =
   comboBox.xDataSource = dataSource
   comboBox.reloadData()
 
+proc `dataSource=`*(comboBox: ComboBox, dataSource: DynamicAgent) =
+  comboBox.setDataSource(dataSource)
+
 proc setDataSource*(comboBox: ComboBox, dataSource: Responder) =
   comboBox.setDataSource(DynamicAgent(dataSource))
+
+proc `dataSource=`*(comboBox: ComboBox, dataSource: Responder) =
+  comboBox.setDataSource(dataSource)
 
 proc delegate*(comboBox: ComboBox): DynamicAgent =
   if comboBox.isNil:
@@ -691,8 +728,14 @@ proc setDelegate*(comboBox: ComboBox, delegate: DynamicAgent) =
     return
   comboBox.xDelegate = delegate
 
+proc `delegate=`*(comboBox: ComboBox, delegate: DynamicAgent) =
+  comboBox.setDelegate(delegate)
+
 proc setDelegate*(comboBox: ComboBox, delegate: Responder) =
   comboBox.setDelegate(DynamicAgent(delegate))
+
+proc `delegate=`*(comboBox: ComboBox, delegate: Responder) =
+  comboBox.setDelegate(delegate)
 
 proc popupHighlightedIndex*(comboBox: ComboBox): int =
   if comboBox.isNil:
@@ -708,6 +751,9 @@ proc setPopupHighlightedIndex*(comboBox: ComboBox, index: int) =
   comboBox.xPopupHighlightedIndex = boundedIndex
   comboBox.notifyComboBoxSelectionIsChanging()
   comboBox.setNeedsDisplay(true)
+
+proc `popupHighlightedIndex=`*(comboBox: ComboBox, index: int) =
+  comboBox.setPopupHighlightedIndex(index)
 
 proc isButtonPressed*(comboBox: ComboBox): bool =
   not comboBox.isNil and comboBox.xButtonPressed

@@ -13,6 +13,17 @@ suite "nimkit text fields":
     check field.selectedRange == initTextRange(3, 0)
     check field.insertionPoint == 3
 
+    field.text = "abcd"
+    field.alignment = taCenter
+    field.editable = false
+    field.selectable = false
+
+    check field.text == "abcd"
+    check field.stringValue == "abcd"
+    check field.alignment == taCenter
+    check not field.editable
+    check not field.selectable
+
   test "first responder text input replaces the current selection":
     let
       window = newWindow("Text input", frame = initRect(0, 0, 240, 120))
@@ -44,7 +55,7 @@ suite "nimkit text fields":
     window.setContentView(root)
     check window.makeFirstResponder(field)
 
-    field.setSelectedRange(initTextRange(3, 0))
+    field.selectedRange = initTextRange(3, 0)
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
     check field.stringValue == "abdef"
     check field.selectedRange == initTextRange(2, 0)
@@ -76,7 +87,7 @@ suite "nimkit text fields":
     window.setContentView(root)
     check window.makeFirstResponder(field)
 
-    field.setSelectedRange(initTextRange(0, 0))
+    field.selectedRange = initTextRange(0, 0)
     check window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmOption})
     )
@@ -99,7 +110,7 @@ suite "nimkit text fields":
     )
     check field.selectedRange == initTextRange(4, 3)
 
-    field.setSelectedRange(initTextRange(field.stringValue.len, 0))
+    field.selectedRange = initTextRange(field.stringValue.len, 0)
     check window.dispatchKeyDown(
       KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmOption})
     )
@@ -117,7 +128,7 @@ suite "nimkit text fields":
     window.setContentView(root)
     check window.makeFirstResponder(field)
 
-    field.setSelectedRange(initTextRange(0, 0))
+    field.selectedRange = initTextRange(0, 0)
     check window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord, modifiers: {kmControl})
     )
@@ -140,7 +151,7 @@ suite "nimkit text fields":
     root.addSubview(field)
     window.setContentView(root)
     check window.makeFirstResponder(field)
-    field.setSelectedRange(initTextRange(6, 0))
+    field.selectedRange = initTextRange(6, 0)
 
     check window.dispatchKeyDown(
       KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
@@ -160,7 +171,7 @@ suite "nimkit text fields":
     root.addSubview(field)
     window.setContentView(root)
     check window.makeFirstResponder(field)
-    field.setSelectedRange(initTextRange(2, 0))
+    field.selectedRange = initTextRange(2, 0)
 
     check window.dispatchKeyDown(
       KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: shortcutModifiers())

@@ -32,12 +32,12 @@ suite "nimkit controls":
 
     proc onClicked(sender: DynamicAgent) =
       check sender == DynamicAgent(button)
-      label.setStringValue("Clicked")
+      label.text = "Clicked"
 
     let target = newActionTarget(action, onClicked)
 
-    button.setTarget(target)
-    button.setAction(action)
+    button.target = target
+    button.action = action
     root.addSubview(label)
     root.addSubview(button)
 
@@ -52,14 +52,19 @@ suite "nimkit controls":
     check not cell.isNil
     check button.cell() == Cell(cell)
     check cell.title == "Original"
+    check button.enabled
 
-    button.setTitle("Forwarded")
+    button.enabled = false
+    check not button.enabled
+    button.enabled = true
+
+    button.title = "Forwarded"
     check cell.title == "Forwarded"
 
     cell.setState(bsOn)
     check button.state == bsOn
 
-    button.setButtonType(btCheckBox)
+    button.buttonType = btCheckBox
     check cell.buttonType == btCheckBox
 
   test "text fields do not forward arbitrary selectors to delegates":
@@ -70,7 +75,7 @@ suite "nimkit controls":
     discard delegate.replaceMethods(
       PlaceholderDelegate, [placeholderText => delegatePlaceholder]
     )
-    field.setDelegate(delegate)
+    field.delegate = delegate
 
     check delegate.placeholderText() == "Forwarded placeholder"
     check not field.respondsTo(placeholderText())
@@ -95,20 +100,20 @@ suite "nimkit controls":
 
     discard
       delegate.replaceMethods(TextFieldDelegate, [textDidChange => onTextDidChange])
-    field.setDelegate(delegate)
+    field.delegate = delegate
 
-    field.setStringValue("Changed")
+    field.text = "Changed"
     check changeCount == 1
     check lastSender == DynamicAgent(field)
 
-    field.setStringValue("Changed")
+    field.text = "Changed"
     check changeCount == 1
 
     let chainedDelegate = newResponder()
     chainedDelegate.setNextResponder(delegate)
-    field.setDelegate(chainedDelegate)
+    field.delegate = chainedDelegate
 
-    field.setStringValue("Changed again")
+    field.text = "Changed again"
     check changeCount == 1
 
   test "button mouse tracking cancels click when released outside":
@@ -126,8 +131,8 @@ suite "nimkit controls":
 
     let target = newActionTarget(action, onClicked)
 
-    button.setTarget(target)
-    button.setAction(action)
+    button.target = target
+    button.action = action
     root.addSubview(button)
     window.setContentView(root)
 
@@ -157,9 +162,9 @@ suite "nimkit controls":
 
     let target = newActionTarget(action, onToggle)
 
-    button.setButtonType(btToggle)
-    button.setTarget(target)
-    button.setAction(action)
+    button.buttonType = btToggle
+    button.target = target
+    button.action = action
 
     discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOn
@@ -169,8 +174,8 @@ suite "nimkit controls":
 
   test "toggle button supports mixed state cycling":
     let button = newButton("Mixed", frame = initRect(0, 0, 120, 36))
-    button.setButtonType(btToggle)
-    button.setAllowsMixedState(true)
+    button.buttonType = btToggle
+    button.allowsMixedState = true
 
     discard button.send(performClick(), ActionArgs(sender: button))
     check button.state == bsOn
@@ -189,9 +194,9 @@ suite "nimkit controls":
       check sender == DynamicAgent(checkbox)
       inc actionCount
 
-    checkbox.setTarget(newActionTarget(action, onToggle))
-    checkbox.setAction(action)
-    checkbox.setAllowsMixedState(true)
+    checkbox.target = newActionTarget(action, onToggle)
+    checkbox.action = action
+    checkbox.allowsMixedState = true
 
     discard checkbox.send(performClick(), ActionArgs(sender: checkbox))
     check checkbox.state == bsOn
@@ -226,13 +231,13 @@ suite "nimkit controls":
       inc actionCount
 
     let target = newActionTarget(action, onSelect)
-    first.setTarget(target)
-    first.setAction(action)
-    second.setTarget(target)
-    second.setAction(action)
-    other.setTarget(target)
-    other.setAction(otherAction)
-    other.setState(bsOn)
+    first.target = target
+    first.action = action
+    second.target = target
+    second.action = action
+    other.target = target
+    other.action = otherAction
+    other.state = bsOn
     root.addSubview(first)
     root.addSubview(second)
     root.addSubview(other)

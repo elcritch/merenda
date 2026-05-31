@@ -9,13 +9,13 @@ proc stateName(state: ButtonState): string =
   of bsMixed: "Mixed"
 
 proc configureLabel(label: TextField, color: Color) =
-  label.setEditable(false)
-  label.setSelectable(false)
-  label.setTextColor(color)
+  label.editable = false
+  label.selectable = false
+  label.textColor = color
 
 proc configureHeader(label: TextField) =
   label.configureLabel(initColor(0.10, 0.18, 0.32))
-  label.setStyleClasses(["showcase-header"])
+  label.styleClasses = ["showcase-header"]
 
 proc showcaseAppearance(): Appearance =
   result = initAppearance()
@@ -102,15 +102,14 @@ proc selectedSize(): string =
     "None"
 
 proc updateSummary() =
-  summary.setStringValue(
+  summary.text =
     nameField.stringValue & " / " & noteField.stringValue & " / Toggle: " &
-      toggleButton.state.stateName & " / Downloads: " & downloads.state.stateName &
-      " / Size: " & selectedSize() & " / Priority: " & priority.stringValue &
-      " / Color: " & color.stringValue
-  )
+    toggleButton.state.stateName & " / Downloads: " & downloads.state.stateName &
+    " / Size: " & selectedSize() & " / Priority: " & priority.stringValue & " / Color: " &
+    color.stringValue
 
 proc updateToggleTitle() =
-  toggleButton.setTitle("Toggle " & toggleButton.state.stateName)
+  toggleButton.title = "Toggle " & toggleButton.state.stateName
 
 proc onTextDidChange(sender: DynamicAgent) =
   if sender == DynamicAgent(nameField) or sender == DynamicAgent(noteField):
@@ -119,7 +118,7 @@ proc onTextDidChange(sender: DynamicAgent) =
 proc onPush(sender: DynamicAgent) =
   if not sender.isNil:
     inc pushCount
-    actionCountLabel.setStringValue("Push count: " & $pushCount)
+    actionCountLabel.text = "Push count: " & $pushCount
     updateSummary()
 
 proc onToggle(sender: DynamicAgent) =
@@ -131,10 +130,10 @@ proc onChoiceChanged(sender: DynamicAgent) =
   if not sender.isNil:
     updateSummary()
 
-root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
-title.setAlignment(taCenter)
-title.setStyleClasses(["showcase-title"])
-root.setAppearance(showcaseAppearance())
+root.background = initColor(0.95, 0.96, 0.98)
+title.alignment = taCenter
+title.styleClasses = ["showcase-title"]
+root.appearance = showcaseAppearance()
 
 title.configureLabel(initColor(0.09, 0.14, 0.26))
 for label in [inputTitle, actionTitle, choiceTitle, sizeTitle, popupTitle]:
@@ -143,58 +142,58 @@ for label in [inputTitle, actionTitle, choiceTitle, sizeTitle, popupTitle]:
 for label in [summary, actionCountLabel]:
   label.configureLabel(initColor(0.14, 0.18, 0.28))
 
-summary.setStyleClasses(["showcase-status"])
-summary.setTextColor(initColor(0.10, 0.28, 0.20))
-actionCountLabel.setTextColor(initColor(0.10, 0.28, 0.20))
+summary.styleClasses = ["showcase-status"]
+summary.textColor = initColor(0.10, 0.28, 0.20)
+actionCountLabel.textColor = initColor(0.10, 0.28, 0.20)
 
 for field in [nameField, noteField]:
-  field.setDelegate(newActionTarget(textDidChange(), onTextDidChange))
+  field.delegate = newActionTarget(textDidChange(), onTextDidChange)
 
-pushButton.setTarget(newActionTarget(pushAction, onPush))
-pushButton.setAction(pushAction)
+pushButton.target = newActionTarget(pushAction, onPush)
+pushButton.action = pushAction
 
-toggleButton.setButtonType(btToggle)
-toggleButton.setAllowsMixedState(true)
-toggleButton.setTarget(newActionTarget(toggleAction, onToggle))
-toggleButton.setAction(toggleAction)
+toggleButton.buttonType = btToggle
+toggleButton.allowsMixedState = true
+toggleButton.target = newActionTarget(toggleAction, onToggle)
+toggleButton.action = toggleAction
 
-sync.setAllowsMixedState(true)
-sync.setState(bsMixed)
+sync.allowsMixedState = true
+sync.state = bsMixed
 
 let choiceTarget = newActionTarget(choiceAction, onChoiceChanged)
 for checkbox in [downloads, notifications, sync]:
-  checkbox.setTarget(choiceTarget)
-  checkbox.setAction(choiceAction)
+  checkbox.target = choiceTarget
+  checkbox.action = choiceAction
 
-medium.setState(bsOn)
+medium.state = bsOn
 
 let radioTarget = newActionTarget(radioAction, onChoiceChanged)
 for radio in [small, medium, large]:
-  radio.setTarget(radioTarget)
-  radio.setAction(radioAction)
+  radio.target = radioTarget
+  radio.action = radioAction
 
-priority.selectItemAtIndex(1)
-color.selectItemAtIndex(0)
+priority.selectedIndex = 1
+color.selectedIndex = 0
 
 let comboTarget = newActionTarget(comboAction, onChoiceChanged)
 for combo in [priority, color]:
-  combo.setTarget(comboTarget)
-  combo.setAction(comboAction)
+  combo.target = comboTarget
+  combo.action = comboAction
 
-layout.setSpacing(16.0)
-layout.setAlignment(svaFill)
+layout.spacing = 16.0
+layout.alignment = svaFill
 
-bodyRow.setSpacing(28.0)
-bodyRow.setAlignment(svaFill)
-bodyRow.setDistribution(svdFill)
+bodyRow.spacing = 28.0
+bodyRow.alignment = svaFill
+bodyRow.distribution = svdFill
 
 for column in [inputColumn, choiceColumn, popupColumn]:
-  column.setSpacing(10.0)
-  column.setAlignment(svaFill)
+  column.spacing = 10.0
+  column.alignment = svaFill
 
-buttonRow.setSpacing(8.0)
-buttonRow.setAlignment(svaFill)
-buttonRow.setDistribution(svdFillEqually)
+buttonRow.spacing = 8.0
+buttonRow.alignment = svaFill
+buttonRow.distribution = svdFillEqually
 
 buttonRow.addArrangedSubview(pushButton, toggleButton)
 inputColumn.addArrangedSubview(

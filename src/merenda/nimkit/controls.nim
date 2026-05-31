@@ -49,6 +49,13 @@ protocol ControlProtocolInternal from Control:
       return false
     target.sendIfHandled(self.action(), ActionArgs(sender: DynamicAgent(self)))
 
+proc enabled*(control: Control): bool =
+  (not control.isNil) and control.isEnabled()
+
+proc `enabled=`*(control: Control, enabled: bool) =
+  if not control.isNil:
+    control.setEnabled(enabled)
+
 proc cellForwardingTarget*(control: Control, selector: SigilName): DynamicAgent =
   if control.isNil:
     return nil
@@ -141,8 +148,14 @@ proc setTarget*(control: Control, target: DynamicAgent) =
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setTarget(target)
 
+proc `target=`*(control: Control, target: DynamicAgent) =
+  control.setTarget(target)
+
 proc setTarget*(control: Control, target: Responder) =
   control.setTarget(DynamicAgent(target))
+
+proc `target=`*(control: Control, target: Responder) =
+  control.setTarget(target)
 
 proc action*(control: Control): ActionSelector =
   let selected = control.selectedCell()
@@ -155,6 +168,9 @@ proc setAction*(control: Control, action: ActionSelector) =
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setAction(action)
+
+proc `action=`*(control: Control, action: ActionSelector) =
+  control.setAction(action)
 
 proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarget =
   result = ClosureTarget()

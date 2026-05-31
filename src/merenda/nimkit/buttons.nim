@@ -139,6 +139,25 @@ proc buttonCell*(button: Button): ButtonCell =
   if controlCell of ButtonCell:
     return ButtonCell(controlCell)
 
+proc `title=`*(button: Button, title: string) =
+  button.setTitle(title)
+
+proc `state=`*(button: Button, state: ButtonState) =
+  button.setState(state)
+
+proc `buttonType=`*(button: Button, buttonType: ButtonType) =
+  button.setButtonType(buttonType)
+
+proc `allowsMixedState=`*(button: Button, value: bool) =
+  button.setAllowsMixedState(value)
+
+proc highlighted*(button: Button): bool =
+  (not button.isNil) and button.isHighlighted()
+
+proc `highlighted=`*(button: Button, highlighted: bool) =
+  if not button.isNil:
+    button.setHighlighted(highlighted)
+
 proc clearRadioSiblings(button: Button) =
   let parent = button.superview
   if parent.isNil:

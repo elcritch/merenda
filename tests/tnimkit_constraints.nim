@@ -195,7 +195,7 @@ suite "nimkit constraints":
     check not view.needsUpdateConstraints
     check not view.needsLayout
 
-    view.setTranslatesAutoresizingMaskIntoConstraints(false)
+    view.translatesAutoresizingMaskIntoConstraints = false
     check not view.translatesAutoresizingMaskIntoConstraints
     check view.needsUpdateConstraints
     check view.needsLayout
@@ -217,7 +217,7 @@ suite "nimkit constraints":
     check child.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    child.setTranslatesAutoresizingMaskIntoConstraints(false)
+    child.translatesAutoresizingMaskIntoConstraints = false
     check root.needsUpdateConstraints
     check root.needsLayout
     check child.needsUpdateConstraints
@@ -229,7 +229,7 @@ suite "nimkit constraints":
     check root.needsLayout
     check not child.needsUpdateConstraints
 
-    child.setTranslatesAutoresizingMaskIntoConstraints(true)
+    child.translatesAutoresizingMaskIntoConstraints = true
     root.layoutSubtreeIfNeeded()
     root.setBounds(initRect(0, 0, 320, 200))
     check root.needsUpdateConstraints
@@ -292,7 +292,7 @@ suite "nimkit constraints":
       button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
 
     root.addSubview(button)
-    button.setTranslatesAutoresizingMaskIntoConstraints(false)
+    button.translatesAutoresizingMaskIntoConstraints = false
     root.layoutSubtreeIfNeeded()
 
     let natural = button.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
@@ -324,9 +324,9 @@ suite "nimkit constraints":
     check view.baselineOffsetFromBottom == 0.0'f32
     check view.firstBaselineOffsetFromTop == 0.0'f32
 
-    view.setAlignmentRectInsets(initEdgeInsets(2.0, 4.0, 6.0, 8.0))
-    view.setBaselineOffsetFromBottom(7.0'f32)
-    view.setFirstBaselineOffsetFromTop(9.0'f32)
+    view.alignmentRectInsets = initEdgeInsets(2.0, 4.0, 6.0, 8.0)
+    view.baselineOffsetFromBottom = 7.0'f32
+    view.firstBaselineOffsetFromTop = 9.0'f32
 
     let alignmentRect = view.alignmentRect()
     check alignmentRect == initRect(14, 22, 88, 42)
@@ -345,7 +345,7 @@ suite "nimkit constraints":
     check view.layoutValue(latLastBaseline) == 57.0'f32
     check view.layoutValue(latNotAnAttribute) == 0.0'f32
 
-    view.setFrameFromAlignmentRect(initRect(20, 30, 60, 30))
+    view.alignmentRect = initRect(20, 30, 60, 30)
     check view.frame() == initRect(16, 28, 72, 38)
     check view.alignmentRect() == initRect(20, 30, 60, 30)
 
@@ -365,7 +365,7 @@ suite "nimkit constraints":
     check not root.needsLayout
     check not left.needsLayout
 
-    left.setFrame(initRect(4, 5, 90, 44))
+    left.frame = initRect(4, 5, 90, 44)
     check left.needsUpdateConstraints
     check left.needsLayout
     check root.needsUpdateConstraints
@@ -384,7 +384,7 @@ suite "nimkit constraints":
     check root.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    left.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
+    left.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 

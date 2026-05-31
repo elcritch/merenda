@@ -13,7 +13,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
   initViewFields(result, initRect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
-  result.setTranslatesAutoresizingMaskIntoConstraints(false)
+  result.translatesAutoresizingMaskIntoConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit stack views":
@@ -24,8 +24,8 @@ suite "nimkit stack views":
       second = newFixedIntrinsicView(30, 32)
       third = newFixedIntrinsicView(10, 12)
 
-    stack.setSpacing(6.0)
-    stack.setEdgeInsets(initEdgeInsets(2.0, 3.0, 4.0, 5.0))
+    stack.spacing = 6.0
+    stack.edgeInsets = initEdgeInsets(2.0, 3.0, 4.0, 5.0)
     stack.addArrangedSubview(first, second, third)
 
     check stack.arrangedSubviews == @[View(first), View(second), View(third)]
@@ -45,8 +45,8 @@ suite "nimkit stack views":
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 32)
 
-    stack.setSpacing(5.0)
-    stack.setEdgeInsets(initEdgeInsets(1.0, 2.0, 3.0, 4.0))
+    stack.spacing = 5.0
+    stack.edgeInsets = initEdgeInsets(1.0, 2.0, 3.0, 4.0)
     stack.addArrangedSubview(first)
     stack.addArrangedSubview(second)
 
@@ -65,21 +65,21 @@ suite "nimkit stack views":
       centeredChild = newFixedIntrinsicView(20, 10)
       trailingChild = newFixedIntrinsicView(20, 10)
 
-    stack.setSpacing(0.0)
+    stack.spacing = 0.0
     stack.addArrangedSubview(fillChild)
     stack.layoutSubtreeIfNeeded()
     check fillChild.frame() == initRect(0.0, 0.0, 120.0, 50.0)
 
     stack.removeArrangedSubview(fillChild)
     fillChild.removeFromSuperview()
-    stack.setAlignment(svaCenter)
+    stack.alignment = svaCenter
     stack.addArrangedSubview(centeredChild)
     stack.layoutSubtreeIfNeeded()
     check centeredChild.frame() == initRect(0.0, 20.0, 120.0, 10.0)
 
     stack.removeArrangedSubview(centeredChild)
     centeredChild.removeFromSuperview()
-    stack.setAlignment(svaTrailing)
+    stack.alignment = svaTrailing
     stack.addArrangedSubview(trailingChild)
     stack.layoutSubtreeIfNeeded()
     check trailingChild.frame() == initRect(0.0, 40.0, 120.0, 10.0)
@@ -90,8 +90,8 @@ suite "nimkit stack views":
       first = newFixedIntrinsicView(10, 10)
       second = newFixedIntrinsicView(30, 10)
 
-    stack.setSpacing(2.0)
-    stack.setDistribution(svdFillEqually)
+    stack.spacing = 2.0
+    stack.distribution = svdFillEqually
     stack.addArrangedSubview(first)
     stack.addArrangedSubview(second)
     stack.layoutSubtreeIfNeeded()
@@ -105,9 +105,9 @@ suite "nimkit stack views":
       field = newFixedIntrinsicView(40, 10)
       label = newFixedIntrinsicView(40, 10)
 
-    stack.setSpacing(10.0)
-    field.setContentHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
-    label.setContentHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
+    stack.spacing = 10.0
+    field.horizontalContentHuggingPriority = LayoutPriorityDefaultLow
+    label.horizontalContentHuggingPriority = LayoutPriorityDefaultHigh
     stack.addArrangedSubview(field)
     stack.addArrangedSubview(label)
     stack.layoutSubtreeIfNeeded()
@@ -130,7 +130,7 @@ suite "nimkit stack views":
     button.setNeedsLayout(false)
 
     let oldFrame = stack.frame()
-    button.setTitle("A much longer title")
+    button.title = "A much longer title"
 
     check stack.frame() == oldFrame
     check root.needsLayout
@@ -153,8 +153,8 @@ suite "nimkit stack views":
       top = newLayoutConstraint(stack, latTop, lrEqual, root, latTop, constant = 10)
       height = newLayoutConstraint(stack, latHeight, constant = 40)
 
-    stack.setTranslatesAutoresizingMaskIntoConstraints(false)
-    stack.setSpacing(10.0)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    stack.spacing = 10.0
     root.addSubview(stack)
     stack.addArrangedSubview(first)
     stack.addArrangedSubview(second)

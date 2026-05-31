@@ -13,17 +13,17 @@ let
 
 proc onClicked(sender: DynamicAgent) =
   if not sender.isNil:
-    label.setStringValue("Clicked")
+    label.text = "Clicked"
 
 let target = newActionTarget(action, onClicked)
 
-label.setEditable(false)
-label.setSelectable(false)
-button.setTarget(target)
-button.setAction(action)
+label.editable = false
+label.selectable = false
+button.target = target
+button.action = action
 
-layout.setSpacing(12.0)
-layout.setAlignment(svaFill)
+layout.spacing = 12.0
+layout.alignment = svaFill
 layout.addArrangedSubview(label, button)
 
 root.addSubview(layout)

@@ -11,26 +11,24 @@ let
   status = newTextField("")
 
 proc updateStatus() =
-  status.setStringValue(
-    "Values: " & field.stringValue & " / " & secondField.stringValue
-  )
+  status.text = "Values: " & field.stringValue & " / " & secondField.stringValue
 
 proc onTextDidChange(sender: DynamicAgent) =
   if sender == DynamicAgent(field) or sender == DynamicAgent(secondField):
     updateStatus()
 
-title.setEditable(false)
-title.setSelectable(false)
-status.setEditable(false)
-status.setSelectable(false)
-title.setTextColor(initColor(0.13, 0.20, 0.34))
-status.setTextColor(initColor(0.12, 0.28, 0.20))
-field.setDelegate(newActionTarget(textDidChange(), onTextDidChange))
-secondField.setDelegate(newActionTarget(textDidChange(), onTextDidChange))
+title.editable = false
+title.selectable = false
+status.editable = false
+status.selectable = false
+title.textColor = initColor(0.13, 0.20, 0.34)
+status.textColor = initColor(0.12, 0.28, 0.20)
+field.delegate = newActionTarget(textDidChange(), onTextDidChange)
+secondField.delegate = newActionTarget(textDidChange(), onTextDidChange)
 
-root.setBackgroundColor(initColor(0.95, 0.96, 0.98))
-layout.setSpacing(10.0)
-layout.setAlignment(svaFill)
+root.background = initColor(0.95, 0.96, 0.98)
+layout.spacing = 10.0
+layout.alignment = svaFill
 layout.addArrangedSubview(title, field, secondField, status)
 updateStatus()
 

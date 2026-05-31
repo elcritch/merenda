@@ -110,7 +110,7 @@ suite "nimkit views":
     let root = newView(frame = initRect(0, 0, 200, 160))
     let child = newView(frame = initRect(20, 20, 80, 50))
     root.addSubview(child)
-    child.setHidden(true)
+    child.hidden = true
 
     check root.hitTest(initPoint(25, 25)) == root
 
@@ -125,17 +125,17 @@ suite "nimkit views":
 
     check root.hitTest(initPoint(85, 30)) == child
 
-    parent.setClipsToBounds(true)
+    parent.clipsToBounds = true
     check root.hitTest(initPoint(85, 30)) == root
 
   test "child invalidation propagates to parent":
     let root = newView(frame = initRect(0, 0, 200, 160))
     let child = newView(frame = initRect(20, 20, 80, 50))
     root.addSubview(child)
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
-    child.setBackgroundColor(initColor(1, 0, 0))
+    child.background = initColor(1, 0, 0)
 
     check child.needsDisplay
     check root.needsDisplay
@@ -180,7 +180,7 @@ suite "nimkit views":
     var rootAppearance = initAppearance()
     let rootFill = initColor(0.7, 0.2, 0.1, 1.0)
     rootAppearance[srButton, StyleFill] = rootFill
-    root.setAppearance(rootAppearance)
+    root.appearance = rootAppearance
 
     let rootStyle =
       child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
@@ -195,14 +195,14 @@ suite "nimkit views":
 
   test "style identity is stored on views and invalidates display":
     let view = newView(frame = initRect(0, 0, 100, 80))
-    view.setNeedsDisplay(false)
+    view.needsDisplay = false
 
-    view.setStyleId("primary")
+    view.styleId = "primary"
     check view.styleId == "primary"
     check view.needsDisplay
 
-    view.setNeedsDisplay(false)
-    view.setStyleClasses(["toolbar", "primary"])
+    view.needsDisplay = false
+    view.styleClasses = ["toolbar", "primary"]
     check view.styleClasses == @["toolbar", "primary"]
     check view.hasStyleClass("toolbar")
     check view.needsDisplay
@@ -223,13 +223,13 @@ suite "nimkit views":
 
     check not view.clipsToBounds
 
-    view.setNeedsDisplay(false)
-    view.setClipsToBounds(true)
+    view.needsDisplay = false
+    view.clipsToBounds = true
     check view.clipsToBounds
     check view.needsDisplay
 
-    view.setNeedsDisplay(false)
-    view.setClipsToBounds(false)
+    view.needsDisplay = false
+    view.clipsToBounds = false
     check not view.clipsToBounds
     check view.needsDisplay
 
@@ -251,7 +251,7 @@ suite "nimkit views":
     check not root.needsLayout
     check not child.needsLayout
 
-    root.setFrame(initRect(0, 0, 220, 180))
+    root.frame = initRect(0, 0, 220, 180)
     check root.needsLayout
     root.finishDisplaySubtree()
     check not root.needsDisplay
@@ -336,11 +336,11 @@ suite "nimkit views":
     check child.visibleRect == initRect(0, 0, 50, 40)
     check grandchild.visibleRect == initRect(0, 0, 30, 30)
 
-    root.setClipsToBounds(true)
+    root.clipsToBounds = true
     check child.visibleRect == initRect(0, 0, 20, 20)
     check grandchild.visibleRect == initRect(0, 0, 10, 10)
 
-    root.setHidden(true)
+    root.hidden = true
     check root.visibleRect.isEmpty
     check child.visibleRect.isEmpty
     check grandchild.visibleRect.isEmpty
@@ -359,7 +359,7 @@ suite "nimkit views":
     check child.invalidRects == @[initRect(0, 0, 50, 40)]
     check root.invalidRects == @[initRect(80, 60, 20, 20)]
 
-    root.setClipsToBounds(true)
+    root.clipsToBounds = true
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
 
