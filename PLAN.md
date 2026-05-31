@@ -14,8 +14,8 @@ useful, and backend/runtime details kept behind NimKit boundaries.
 NimKit currently includes the core desktop-control slice:
 
 - Core objects: `Application`, `Window`, `Responder`, `View`, `StackView`,
-  `Control`, `Cell`/`ActionCell`, `Button`, checkbox/radio variants,
-  `TextField`, and `ComboBox`.
+  `FormView`, `Control`, `Cell`/`ActionCell`, `Button`, checkbox/radio
+  variants, `TextField`, and `ComboBox`.
 - Plain Nim value types for geometry, events, key identifiers, modifiers,
   popup options, and control state. `chroma.Color` is used directly for color
   state.
@@ -133,6 +133,10 @@ NimKit currently includes the core desktop-control slice:
   cross-axis alignment, fill/fill-equally distribution, intrinsic stack
   measurement, and layout through the same view lifecycle hooks as other
   containers.
+- `src/merenda/nimkit/formviews.nim`:
+  `FormView`, label/field rows, max label-column measurement, field-column
+  stretching, row/column spacing, edge insets, label and row alignment,
+  minimum field width, intrinsic form measurement, and lifecycle-driven layout.
 - `src/merenda/nimkit/cells.nim`:
   `Cell` and `ActionCell`, control-view back references, enabled/highlighted
   state, button state cycling, and target/action storage used by controls.
@@ -318,15 +322,18 @@ Concrete task order and status:
    Unsupported relationships are ignored rather than half-solved; priority
    conflict handling and a full Cassowary-style solver remain deferred until
    real examples require them.
-14. Done for the first container layer: Add intrinsic-aware `StackView` on top
-   of the core. It supports arranged subviews, orientation, spacing, edge
-   insets, cross-axis alignment, fill/fill-equally distribution, intrinsic
-   measurement, priority-guided fill growth/shrink, hidden-view omission, and
-   lazy invalidation through the existing update/layout lifecycle. A simple
-   grid/form layout remains the next container step.
+14. Done for the first container layers: Add intrinsic-aware `StackView` and
+   `FormView` on top of the core. `StackView` supports arranged subviews,
+   orientation, spacing, edge insets, cross-axis alignment, fill/fill-equally
+   distribution, intrinsic measurement, priority-guided fill growth/shrink,
+   hidden-view omission, and lazy invalidation. `FormView` supports
+   label/field rows, max label-column measurement, stretching fields,
+   row/column spacing, insets, label/row alignment, minimum field width, hidden
+   row omission, and the same update/layout lifecycle. A more general grid
+   layout remains the next container step.
 15. Done for the current examples: Add `examples/nimkit_layout_showcase.nim`
-   showing `sizeToFit`, intrinsic-size-driven layout, stack layout, and the
-   current deterministic superview constraint subset for common controls.
+   showing `sizeToFit`, intrinsic-size-driven layout, stack/form layout, and
+   the current deterministic superview constraint subset for common controls.
 
 ### Controls
 
@@ -396,9 +403,9 @@ Concrete task order and status:
 - Short term: Cocoa-like layout lifecycle, constraint data shapes, autoresizing
   mask semantics, cleaner cell invalidation/default-cell construction, and
   measurement tests that prove theme/rendering/layout agreement.
-- Medium term: simple intrinsic-aware `StackView`/grid containers built on the
-  layout core, scrollable list/popup infrastructure, and broader control
-  coverage.
+- Medium term: simple intrinsic-aware `StackView`/`FormView`/grid containers
+  built on the layout core, scrollable list/popup infrastructure, and broader
+  control coverage.
 - Later: fuller constraint solving, loadable/query-like themes, menus/popovers,
   and broader resource organization.
 
@@ -415,6 +422,7 @@ Concrete task order and status:
   `tests/tnimkit_theme.nim`,
   `tests/tnimkit_sizing.nim`,
   `tests/tnimkit_stackviews.nim`,
+  `tests/tnimkit_formviews.nim`,
   `tests/tnimkit_keybindings.nim`,
   `tests/tnimkit_textfields.nim`,
   `tests/tnimkit_comboboxes.nim`,
