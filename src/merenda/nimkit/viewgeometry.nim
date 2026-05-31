@@ -29,25 +29,12 @@ proc markSubviewAutoresizingConstraintsChanged*(view: View) =
     if child.xTranslatesAutoresizingMaskIntoConstraints:
       child.markConstraintStorageChanged()
 
-proc referencesLayoutItem(constraint: LayoutConstraint, view: View): bool =
-  (not constraint.isNil) and
-    (constraint.xFirstItem == view or constraint.xSecondItem == view)
-
-proc hasConstraintReferencing(view, item: View): bool =
-  if view.isNil or item.isNil:
-    return false
-  for constraint in view.xConstraints:
-    if constraint.referencesLayoutItem(item):
-      return true
-
 proc invalidateLayoutItemGeometry*(view: View) =
   if view.isNil:
     return
-  let parent = view.xSuperview
   var current = view
   while not current.isNil:
-    if current == view or current == parent or current.hasConstraintReferencing(view):
-      current.markConstraintStorageChanged()
+    current.markConstraintStorageChanged()
     current = current.xSuperview
 
 proc autoresizingMask*(view: View): AutoresizingMask =

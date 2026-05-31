@@ -8,6 +8,7 @@ import merenda/nimkit/keybindings
 import merenda/nimkit/rendering
 import merenda/nimkit/responders
 import merenda/nimkit/selectors
+import merenda/nimkit/stackviews
 import merenda/nimkit/textfields
 import merenda/nimkit/theme
 import merenda/nimkit/types
@@ -24,6 +25,7 @@ export keybindings
 export rendering
 export responders
 export selectors
+export stackviews
 export textfields
 export theme
 export types
