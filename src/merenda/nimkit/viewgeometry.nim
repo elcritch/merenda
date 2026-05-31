@@ -259,9 +259,9 @@ proc layoutPriority(
   if view.isNil:
     case kind
     of vlpkHugging:
-      return LayoutPriorityDefaultLow
+      return LayoutPriorityLow
     of vlpkCompression:
-      return LayoutPriorityDefaultHigh
+      return LayoutPriorityHigh
   case kind
   of vlpkHugging:
     view.xHuggingPriority[axis]
@@ -302,12 +302,10 @@ proc compressionPriority*(view: View): ViewLayoutPriority =
 proc setCompressionPriority*(view: View, priority: LayoutPriority, axis: LayoutAxis) =
   view.setLayoutPriority(vlpkCompression, priority, axis)
 
-proc `[]`*(priority: ViewLayoutPriority, direction: SpacingDirection): LayoutPriority =
+proc `[]`*(priority: ViewLayoutPriority, direction: Direction): LayoutPriority =
   priority.xView.layoutPriority(priority.xKind, direction.layoutAxis)
 
-proc `[]=`*(
-    priority: ViewLayoutPriority, direction: SpacingDirection, value: LayoutPriority
-) =
+proc `[]=`*(priority: ViewLayoutPriority, direction: Direction, value: LayoutPriority) =
   priority.xView.setLayoutPriority(priority.xKind, value, direction.layoutAxis)
 
 func axisOrigin*(rect: Rect, axis: LayoutAxis): float32 =

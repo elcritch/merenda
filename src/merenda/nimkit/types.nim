@@ -29,7 +29,7 @@ type
     laHorizontal
     laVertical
 
-  SpacingDirection* = enum
+  Direction* = enum
     drow
     dcol
 
@@ -240,20 +240,20 @@ const
   UnconstrainedFittingSize* =
     FittingSize(width: NoIntrinsicMetric, height: NoIntrinsicMetric)
   LayoutPriorityFittingSizeLevel* = LayoutPriority(50.0'f32)
-  LayoutPriorityDefaultLow* = LayoutPriority(250.0'f32)
-  LayoutPriorityDefaultHigh* = LayoutPriority(750.0'f32)
+  LayoutPriorityLow* = LayoutPriority(250.0'f32)
+  LayoutPriorityHigh* = LayoutPriority(750.0'f32)
   LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
 
 func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
 func `<=`*(a, b: LayoutPriority): bool {.borrow.}
 
-func layoutAxis*(direction: SpacingDirection): LayoutAxis =
+func layoutAxis*(direction: Direction): LayoutAxis =
   case direction
   of dcol: laHorizontal
   of drow: laVertical
 
-func spacingDirection*(axis: LayoutAxis): SpacingDirection =
+func direction*(axis: LayoutAxis): Direction =
   case axis
   of laHorizontal: dcol
   of laVertical: drow

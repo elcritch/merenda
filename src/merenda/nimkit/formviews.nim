@@ -25,7 +25,7 @@ type
 
   FormView* = ref object of View
     xRows: seq[FormRow]
-    xSpacing: array[SpacingDirection, float32]
+    xSpacing: array[Direction, float32]
     xEdgeInsets: EdgeInsets
     xLabelAlignment: FormLabelAlignment
     xRowAlignment: FormRowAlignment
@@ -226,20 +226,20 @@ proc rows*(formView: FormView): seq[FormRow] =
 proc spacing*(formView: FormView): FormSpacing =
   FormSpacing(xFormView: formView)
 
-proc setSpacing*(formView: FormView, direction: SpacingDirection, spacing: float32) =
+proc setSpacing*(formView: FormView, direction: Direction, spacing: float32) =
   let normalized = spacing.normalizedSpacing()
   if formView.isNil or formView.xSpacing[direction] == normalized:
     return
   formView.xSpacing[direction] = normalized
   formView.invalidateFormLayout()
 
-proc `[]`*(spacing: FormSpacing, direction: SpacingDirection): float32 =
+proc `[]`*(spacing: FormSpacing, direction: Direction): float32 =
   let formView = spacing.xFormView
   if formView.isNil:
     return 0.0'f32
   formView.xSpacing[direction]
 
-proc `[]=`*(spacing: FormSpacing, direction: SpacingDirection, value: float32) =
+proc `[]=`*(spacing: FormSpacing, direction: Direction, value: float32) =
   spacing.xFormView.setSpacing(direction, value)
 
 proc edgeInsets*(formView: FormView): EdgeInsets =

@@ -19,9 +19,9 @@ proc updateButtonLayoutPriorities(cell: ButtonCell) =
   if view of Button:
     let button = Button(view)
     if cell.xButtonType in {btCheckBox, btRadio}:
-      button.setHuggingPriority(LayoutPriorityDefaultHigh, laHorizontal)
+      button.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
     else:
-      button.setHuggingPriority(LayoutPriorityDefaultLow, laHorizontal)
+      button.setHuggingPriority(LayoutPriorityLow, laHorizontal)
 
 proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
   let view = cell.controlView()

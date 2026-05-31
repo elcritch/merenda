@@ -11,8 +11,8 @@ suite "nimkit sizing":
     check not view.intrinsicContentSize().hasWidth
     check not view.intrinsicContentSize().hasHeight
     check view.sizeThatFits() == initSize(80, 30)
-    check view.huggingPriority[dcol] == LayoutPriorityDefaultLow
-    check view.compressionPriority[dcol] == LayoutPriorityDefaultHigh
+    check view.huggingPriority[dcol] == LayoutPriorityLow
+    check view.compressionPriority[dcol] == LayoutPriorityHigh
 
     view.sizeToFit()
     check view.frame() == initialFrame
@@ -82,8 +82,8 @@ suite "nimkit sizing":
       radio = newRadioButton("Option", frame = initRect(0, 0, 20, 18))
       textSize = textNaturalSize("Enabled")
 
-    check checkbox.huggingPriority[dcol] == LayoutPriorityDefaultHigh
-    check radio.huggingPriority[dcol] == LayoutPriorityDefaultHigh
+    check checkbox.huggingPriority[dcol] == LayoutPriorityHigh
+    check radio.huggingPriority[dcol] == LayoutPriorityHigh
     check checkbox.intrinsicContentSize().width > textSize.width
     check radio.intrinsicContentSize().width > textNaturalSize("Option").width
 
@@ -92,7 +92,7 @@ suite "nimkit sizing":
       field = newTextField("Name", frame = initRect(0, 0, 10, 10))
       combo = newComboBox(["Short", "Much longer item"], frame = initRect(0, 0, 10, 10))
 
-    check field.huggingPriority[dcol] == LayoutPriorityDefaultLow
+    check field.huggingPriority[dcol] == LayoutPriorityLow
     check field.intrinsicContentSize().width >= 80.0
     check field.intrinsicContentSize().height >= 24.0
 
