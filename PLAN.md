@@ -13,9 +13,9 @@ useful, and backend/runtime details kept behind NimKit boundaries.
 
 NimKit currently includes the core desktop-control slice:
 
-- Core objects: `Application`, `Window`, `Responder`, `View`, `Control`,
-  `Cell`/`ActionCell`, `Button`, checkbox/radio variants, `TextField`, and
-  `ComboBox`.
+- Core objects: `Application`, `Window`, `Responder`, `View`, `StackView`,
+  `Control`, `Cell`/`ActionCell`, `Button`, checkbox/radio variants,
+  `TextField`, and `ComboBox`.
 - Plain Nim value types for geometry, events, key identifiers, modifiers,
   popup options, and control state. `chroma.Color` is used directly for color
   state.
@@ -63,7 +63,8 @@ NimKit currently includes the core desktop-control slice:
   `examples/nimkit_radio_demo.nim`,
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
-  `examples/nimkit_controls_showcase.nim`.
+  `examples/nimkit_controls_showcase.nim`,
+  `examples/nimkit_layout_showcase.nim`.
 - Focused tests cover value types, views, controls, text fields, combo boxes,
   responders, key bindings, rendering, screenshots, and native application
   pumping.
@@ -127,6 +128,11 @@ NimKit currently includes the core desktop-control slice:
   coordinate conversion, optional clipping, appearance/style identity,
   layout/display invalidation, key-view links, hover/active/focus state, and
   event dispatch into selector methods.
+- `src/merenda/nimkit/stackviews.nim`:
+  `StackView`, arranged subviews, orientation, spacing, edge insets,
+  cross-axis alignment, fill/fill-equally distribution, intrinsic stack
+  measurement, and layout through the same view lifecycle hooks as other
+  containers.
 - `src/merenda/nimkit/cells.nim`:
   `Cell` and `ActionCell`, control-view back references, enabled/highlighted
   state, button state cycling, and target/action storage used by controls.
@@ -312,12 +318,15 @@ Concrete task order and status:
    Unsupported relationships are ignored rather than half-solved; priority
    conflict handling and a full Cassowary-style solver remain deferred until
    real examples require them.
-14. Not started: Add intrinsic-aware containers on top of that core, starting
-   with `StackView` and then a simple grid/form layout. Containers should
-   participate in the same update/layout/invalidation lifecycle instead of
-   growing a parallel layout system.
-15. Not started: Add examples showing `sizeToFit`, intrinsic-size-driven
-   layout, stack layout, and the minimal constraint subset for common controls.
+14. Done for the first container layer: Add intrinsic-aware `StackView` on top
+   of the core. It supports arranged subviews, orientation, spacing, edge
+   insets, cross-axis alignment, fill/fill-equally distribution, intrinsic
+   measurement, priority-guided fill growth/shrink, hidden-view omission, and
+   lazy invalidation through the existing update/layout lifecycle. A simple
+   grid/form layout remains the next container step.
+15. Done for the current examples: Add `examples/nimkit_layout_showcase.nim`
+   showing `sizeToFit`, intrinsic-size-driven layout, stack layout, and the
+   current deterministic superview constraint subset for common controls.
 
 ### Controls
 
@@ -405,6 +414,7 @@ Concrete task order and status:
   `tests/tnimkit_rendering.nim`,
   `tests/tnimkit_theme.nim`,
   `tests/tnimkit_sizing.nim`,
+  `tests/tnimkit_stackviews.nim`,
   `tests/tnimkit_keybindings.nim`,
   `tests/tnimkit_textfields.nim`,
   `tests/tnimkit_comboboxes.nim`,
