@@ -59,6 +59,11 @@ NimKit currently includes the core desktop-control slice:
   typed x/y/dimension anchors, inset-backed content layout guides, and
   edge-pinning helpers that return normal `LayoutConstraint` values for
   explicit activation.
+- A Kiwiberry/Cassowary-backed constraint application pass that solves active
+  constraints per view subtree, keeps the subtree root geometry fixed,
+  preserves descendant geometry with edit-variable stays, applies intrinsic
+  size through hugging/compression priorities, and supports sibling constraints
+  and soft-priority conflicts.
 - Runnable NimKit examples:
   `examples/nimkit_hello.nim`,
   `examples/nimkit_button_demo.nim`,
@@ -134,9 +139,9 @@ NimKit currently includes the core desktop-control slice:
   layout/display invalidation, key-view links, hover/active/focus state, and
   event dispatch into selector methods.
 - `src/merenda/nimkit/viewconstraints.nim`:
-  `LayoutConstraint` construction/storage/activation, deterministic constraint
-  application, typed layout anchors, content layout guides, and edge-pinning
-  helper APIs.
+  `LayoutConstraint` construction/storage/activation, Kiwiberry-backed
+  constraint solving, typed layout anchors, content layout guides, and
+  edge-pinning helper APIs.
 - `src/merenda/nimkit/stackviews.nim`:
   `StackView`, arranged subviews, orientation, spacing, edge insets,
   cross-axis alignment, fill/fill-equally distribution, intrinsic stack
@@ -232,11 +237,10 @@ exposing a modern intrinsic measurement model where it fits NimKit:
   storage live on `View`; intrinsic size contributes priority-like constraints;
   autoresizing masks can translate into layout inputs; stack/grid containers sit
   above the same lifecycle.
-- Add layout containers only after the core shapes exist. A first useful
-  container layer can support manual `layoutSubviews`, `sizeToFit`, stack-like
-  examples, and intrinsic-size-aware helper layout. Defer a full Auto Layout
-  solver until the Cocoa-like public model and container examples prove the
-  simpler path insufficient.
+- Add layout containers on the same core shapes. Stack/form/grid containers,
+  intrinsic sizing, and Kiwiberry-backed solving now share the view lifecycle;
+  generated autoresizing-mask constraints and fuller compatibility conveniences
+  can be added as examples require them.
 
 How the current theme engine fits:
 
@@ -326,16 +330,16 @@ Concrete task order and status:
    `autoresizingMaskConstraints` semantics, matching Cocoa's translate flag
    without carrying the long API name into NimKit. The first pass stores the
    Cocoa bridge state and invalidates child/container constraints when the
-   mask, translate flag, frame, bounds, or hierarchy changes. Direct mask
-   application or generated solver inputs belong with the deterministic
-   constraint application subset.
-13. Done for the current subset: Add a deterministic constraint application
-   pass after constraint updates and before layout hooks. It applies
-   width/height constants, direct superview edge pins, direct superview centers,
-   and intrinsic size inputs for views that do not translate autoresizing masks.
-   Unsupported relationships are ignored rather than half-solved; priority
-   conflict handling and a full Cassowary-style solver remain deferred until
-   real examples require them.
+   mask, translate flag, frame, bounds, or hierarchy changes. Generated
+   autoresizing-mask constraints remain a future compatibility layer.
+13. Done for the current solver core: Replace the deterministic constraint
+   subset with Kiwiberry/Cassowary-backed solving after constraint updates and
+   before layout hooks. The pass rebuilds a solver for the view subtree,
+   keeps the subtree root geometry fixed, preserves descendant geometry with
+   edit-variable stays, applies active `LayoutConstraint` values as required or
+   soft solver constraints, maps intrinsic content size into
+   compression/hugging inequalities, supports sibling constraints, and honors
+   stronger soft priorities.
 14. Done for the first container layers: Add intrinsic-aware `StackView`,
    `FormView`, and `GridView` on top of the core. `StackView` supports
    arranged subviews, orientation, spacing, edge insets, cross-axis alignment,
@@ -346,11 +350,10 @@ Concrete task order and status:
    hidden row omission, and the same update/layout lifecycle. `GridView`
    supports explicit row/column placement, row/column spacing, insets,
    directional alignment, spanning items, hidden-view omission, intrinsic
-   measurement, and deterministic layout through the same view lifecycle.
+   measurement, and solver-backed layout through the same view lifecycle.
 15. Done for the current examples: Add `examples/nimkit_layout_showcase.nim`
    and `examples/nimkit_grid_preferences.nim` showing intrinsic-size-driven
-   stack/form/grid layout and the current deterministic superview constraint
-   subset for common controls.
+   stack/form/grid layout and the current constraint APIs for common controls.
 16. Done for the current API: Add modern constraint conveniences on top of the
    existing model: typed x/y/dimension anchors, inset-backed content layout
    guides, and `pinEdges` helpers. NimKit examples now use those helpers
@@ -410,10 +413,9 @@ Concrete task order and status:
 - Keep strengthening the control/cell split. Centralize cell invalidation,
   value conversion, target/action storage, highlight/tracking behavior, and
   default cell construction so controls stay thin.
-- Stage layout work conservatively. Finish intrinsic content sizes, size-to-fit,
-  layout invalidation, and a Cocoa-like constraint lifecycle/model first; then
-  build intrinsic-aware containers on that core. Defer a full constraint solver
-  until the public layout shapes, controls, and examples justify it.
+- Stage layout work conservatively. Keep expanding constraints through the
+  Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
+  conveniences only when controls and examples prove the need.
 - Add modal/tracking loop infrastructure before menus, popovers, or drag
   sessions depend on edge-case event ordering.
 - Keep expanding command/key-binding behavior through the responder command path
@@ -425,8 +427,8 @@ Concrete task order and status:
   measurement tests that prove theme/rendering/layout agreement.
 - Medium term: scrollable list/popup infrastructure, richer container behavior
   where examples need it, and broader control coverage.
-- Later: fuller constraint solving, loadable/query-like themes, menus/popovers,
-  and broader resource organization.
+- Later: generated autoresizing-mask constraints, loadable/query-like themes,
+  menus/popovers, and broader resource organization.
 
 ## Test Plan
 
@@ -482,9 +484,9 @@ Concrete task order and status:
 
 ## Non-Goals For Now
 
-- Full Auto Layout compatibility or a complete constraint solver. The near-term
-  goal is the Cocoa-like lifecycle and public model, not source compatibility
-  with AppKit or a port of GNUstep internals.
+- Full Auto Layout source compatibility. The near-term goal is the Cocoa-like
+  lifecycle and public model, not source compatibility with AppKit or a port of
+  GNUstep internals.
 - Menus.
 - Scroll views.
 - Multiline or rich text editing.

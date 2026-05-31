@@ -137,7 +137,7 @@ suite "nimkit form views":
     root.layoutSubtreeIfNeeded()
     check form.frame().size.width > oldFrame.size.width
 
-  test "form participates in deterministic constraint layout":
+  test "form participates in solver constraint layout":
     let
       root = newView(frame = initRect(0, 0, 320, 120))
       form = newFormView(frame = initRect(0, 0, 1, 1))

@@ -237,7 +237,7 @@ suite "nimkit constraints":
     check child.needsUpdateConstraints
     check child.needsLayout
 
-  test "deterministic constraints apply constant sizes":
+  test "solver applies constant sizes":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
       child = newView(frame = initRect(10, 12, 20, 10))
@@ -252,7 +252,7 @@ suite "nimkit constraints":
     check not child.needsUpdateConstraints
     check not child.needsLayout
 
-  test "deterministic constraints apply superview edge pins":
+  test "solver applies superview edge pins":
     let
       root = newView(frame = initRect(0, 0, 300, 200))
       child = newView(frame = initRect(0, 0, 20, 10))
@@ -271,7 +271,7 @@ suite "nimkit constraints":
 
     check child.frame() == initRect(20, 15, 250, 160)
 
-  test "deterministic constraints apply superview centers":
+  test "solver applies superview centers":
     let
       root = newView(frame = initRect(0, 0, 300, 200))
       child = newView(frame = initRect(0, 0, 10, 10))
@@ -286,6 +286,21 @@ suite "nimkit constraints":
 
     check child.frame() == initRect(125, 90, 50, 20)
 
+  test "solver keeps subtree root geometry fixed":
+    let
+      root = newView(frame = initRect(0, 0, 100, 80))
+      child = newView(frame = initRect(0, 0, 20, 10))
+      left = newLayoutConstraint(child, latLeft, lrEqual, root, latLeft)
+      right = newLayoutConstraint(child, latRight, lrEqual, root, latRight)
+      width = newLayoutConstraint(child, latWidth, constant = 160.0)
+
+    root.addSubview(child)
+    activateConstraints([left, right, width])
+    root.layoutSubtreeIfNeeded()
+
+    check root.frame() == initRect(0, 0, 100, 80)
+    check child.frame() == initRect(0, 0, 100, 10)
+
   test "translates false lets intrinsic size participate in layout":
     let
       root = newView(frame = initRect(0, 0, 300, 120))
@@ -299,20 +314,40 @@ suite "nimkit constraints":
     check button.frame().origin == initPoint(10, 10)
     check button.frame().size == natural
 
-  test "unsupported sibling constraints are ignored by deterministic pass":
+  test "solver applies sibling constraints":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
       left = newView(frame = initRect(0, 0, 80, 40))
       right = newView(frame = initRect(100, 0, 80, 40))
+      rightPin =
+        newLayoutConstraint(right, latLeft, lrEqual, root, latLeft, constant = 100.0)
       spacing = newLayoutConstraint(left, latRight, lrEqual, right, latLeft)
 
     root.addSubview(left)
     root.addSubview(right)
-    activateConstraints([spacing])
+    activateConstraints([rightPin, spacing])
     root.layoutSubtreeIfNeeded()
 
-    check left.frame() == initRect(0, 0, 80, 40)
+    check left.frame().maxX == right.frame().minX
+    check left.frame().size == initSize(80, 40)
     check right.frame() == initRect(100, 0, 80, 40)
+
+  test "solver honors stronger soft constraints":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(0, 0, 40, 20))
+      low = newLayoutConstraint(
+        child, latWidth, lrEqual, nil, constant = 160.0, priority = LayoutPriorityLow
+      )
+      high = newLayoutConstraint(
+        child, latWidth, lrEqual, nil, constant = 90.0, priority = LayoutPriorityHigh
+      )
+
+    root.addSubview(child)
+    activateConstraints([low, high])
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame().size == initSize(90, 20)
 
   test "layout item geometry exposes alignment rect and baseline hooks":
     let view = newView(frame = initRect(10, 20, 100, 50))

@@ -135,7 +135,7 @@ suite "nimkit grid views":
     root.layoutSubtreeIfNeeded()
     check grid.frame().size.width > oldFrame.size.width
 
-  test "grid participates in deterministic constraint layout":
+  test "grid participates in solver constraint layout":
     let
       root = newView(frame = initRect(0, 0, 300, 100))
       grid = newGridView(frame = initRect(0, 0, 1, 1))

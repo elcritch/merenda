@@ -141,7 +141,7 @@ suite "nimkit stack views":
     root.layoutSubtreeIfNeeded()
     check stack.frame().size.width > oldFrame.size.width
 
-  test "stack participates in deterministic constraint layout":
+  test "stack participates in solver constraint layout":
     let
       root = newView(frame = initRect(0, 0, 300, 100))
       stack = newStackView(laHorizontal, frame = initRect(0, 0, 1, 1))
