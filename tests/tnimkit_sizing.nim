@@ -24,7 +24,7 @@ suite "nimkit sizing":
     check natural.hasWidth
     check natural.hasHeight
     check natural.width > button.frame().size.width
-    check natural.height >= 24.0
+    check natural.height >= 32.0
 
     button.sizeToFit()
     check button.frame().origin == initPoint(10, 20)

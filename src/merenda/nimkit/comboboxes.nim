@@ -306,9 +306,11 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       arrowFrame = comboBox.rectToWindow(arrowRect)
       arrowFill =
         if comboBox.isButtonPressed or comboBox.popupOpen:
-          initColor(0.88, 0.90, 0.94, 1.0)
+          linear(
+            initColor(0.86, 0.93, 1.0, 1.0), initColor(0.56, 0.76, 0.96, 1.0), fgaY
+          )
         else:
-          initColor(0.94, 0.95, 0.97, 1.0)
+          linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.83, 0.90, 0.98, 1.0), fgaY)
       separatorRect = initRect(
         arrowRect.origin.x,
         arrowRect.origin.y + 2.0'f32,

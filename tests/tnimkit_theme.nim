@@ -5,29 +5,57 @@ import merenda/nimkit
 func brightness(color: Color): float32 =
   color.r + color.g + color.b
 
-proc checkRaisedButtonInsetShadows(shadows: seq[BoxShadow]) =
-  check shadows.len == 2
-  if shadows.len != 2:
-    return
+proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
+  check shadows.len >= 3
 
-  let
-    first = shadows[0]
-    second = shadows[1]
-    lightShadow =
-      if first.color.brightness >= second.color.brightness: first else: second
-    darkShadow = if first.color.brightness < second.color.brightness: first else: second
+  var
+    hasDrop = false
+    hasLightInset = false
+    hasDarkInset = false
 
-  check lightShadow.kind == bskInset
-  check darkShadow.kind == bskInset
-  check lightShadow.color.brightness > darkShadow.color.brightness
-  check lightShadow.color.a > 0.0
-  check darkShadow.color.a > 0.0
-  check lightShadow.x > 0.0
-  check lightShadow.y > 0.0
-  check darkShadow.x < 0.0
-  check darkShadow.y < 0.0
-  check lightShadow.blur > 0.0
-  check darkShadow.blur > 0.0
+  for shadow in shadows:
+    if shadow.kind == bskDrop and shadow.color.a > 0.0 and shadow.blur > 0.0:
+      hasDrop = true
+    if shadow.kind == bskInset and shadow.color.brightness > 2.5 and shadow.color.a > 0.0 and
+        shadow.blur > 0.0:
+      hasLightInset = true
+    if shadow.kind == bskInset and shadow.color.brightness < 0.5 and shadow.color.a > 0.0 and
+        shadow.blur > 0.0:
+      hasDarkInset = true
+
+  check hasDrop
+  check hasLightInset
+  check hasDarkInset
+
+func aquaButtonFill(): Fill =
+  linear(
+    initColor(0.72, 0.91, 1.0, 1.0),
+    initColor(0.18, 0.61, 0.98, 1.0),
+    initColor(0.02, 0.30, 0.82, 1.0),
+    fgaY,
+    88'u8,
+  )
+
+func aquaButtonPressedFill(): Fill =
+  linear(
+    initColor(0.11, 0.48, 0.92, 1.0),
+    initColor(0.02, 0.28, 0.75, 1.0),
+    initColor(0.01, 0.14, 0.46, 1.0),
+    fgaY,
+    96'u8,
+  )
+
+func aquaTextFieldFill(): Fill =
+  linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.95, 0.98, 1.0, 1.0), fgaY)
+
+func aquaComboItemSelectedFill(): Fill =
+  linear(
+    initColor(0.45, 0.75, 1.0, 1.0),
+    initColor(0.10, 0.45, 0.95, 1.0),
+    initColor(0.02, 0.26, 0.76, 1.0),
+    fgaY,
+    104'u8,
+  )
 
 suite "nimkit theme":
   test "edge insets shrink rectangles without negative sizes":
@@ -205,24 +233,25 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingWidth > 0.0
     check buttonStyle.box.focusRingInset < 0.0
     check buttonStyle.box.focusRingColor.a > 0.0
-    check buttonStyle.box.focusRingColor != buttonStyle.box.fill
-    checkRaisedButtonInsetShadows(defaultButtonStyle.box.shadows)
-    checkRaisedButtonInsetShadows(buttonStyle.box.shadows)
-    check buttonStyle.box.fill == initColor(0.12, 0.34, 0.68, 1.0)
-    check buttonStyle.box.borderColor == initColor(0.06, 0.18, 0.36, 1.0)
-    check buttonStyle.box.cornerRadius == 8.0
+    check buttonStyle.box.focusRingColor != buttonStyle.box.fill.centerColor()
+    checkAquaButtonShadows(defaultButtonStyle.box.shadows)
+    checkAquaButtonShadows(buttonStyle.box.shadows)
+    check defaultButtonStyle.box.fill == aquaButtonFill()
+    check buttonStyle.box.fill == aquaButtonPressedFill()
+    check buttonStyle.box.borderColor == initColor(0.01, 0.12, 0.42, 1.0)
+    check buttonStyle.box.cornerRadius == 14.0
     check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
-    check buttonStyle.minSize == initSize(0.0, 24.0)
+    check buttonStyle.minSize == initSize(0.0, 32.0)
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
 
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
     check checkBoxStyle.minSize == initSize(0.0, 18.0)
-    check checkBoxStyle.indicator.fill == initColor(0.20, 0.48, 0.86, 1.0)
+    check checkBoxStyle.indicator.fill == aquaButtonFill()
     check checkBoxStyle.indicator.cornerRadius == 6.0
-    check checkBoxStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
+    check checkBoxStyle.indicator.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
     check radioStyle.indicator.cornerRadius == 7.0
-    check radioStyle.indicator.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
+    check radioStyle.indicator.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
     check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
       initRect(2, 5, 14, 14)
     check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
@@ -231,26 +260,26 @@ suite "nimkit theme":
     check textFieldStyle.box.borderWidth > 0.0
     check textFieldStyle.box.cornerRadius == 6.0
     check textFieldStyle.box.focusRingWidth > 0.0
-    check textFieldStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
-    check textFieldStyle.box.borderColor == initColor(0.72, 0.75, 0.80, 1.0)
-    check textFieldStyle.box.focusRingColor == initColor(0.24, 0.48, 0.92, 0.58)
+    check textFieldStyle.box.fill == aquaTextFieldFill()
+    check textFieldStyle.box.borderColor == initColor(0.56, 0.64, 0.76, 1.0)
+    check textFieldStyle.box.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
     check textFieldStyle.text.color == initColor(0.2, 0.3, 0.4, 1.0)
-    check textFieldStyle.selectionColor == initColor(0.22, 0.46, 0.84, 0.32)
+    check textFieldStyle.selectionColor == initColor(0.24, 0.56, 1.0, 0.34)
     check textFieldStyle.minSize == initSize(80.0, 24.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
 
-    check comboBoxStyle.box.fill == initColor(1.0, 1.0, 1.0, 1.0)
-    check comboBoxStyle.box.borderColor == initColor(0.30, 0.50, 0.84, 1.0)
+    check comboBoxStyle.box.fill == aquaTextFieldFill()
+    check comboBoxStyle.box.borderColor == initColor(0.12, 0.42, 0.86, 1.0)
     check comboBoxStyle.box.cornerRadius == 6.0
     check comboBoxStyle.minSize == initSize(90.0, 24.0)
     check comboBoxStyle.arrowWidth == 24.0
-    check comboBoxStyle.arrowColor == initColor(0.20, 0.22, 0.26, 1.0)
+    check comboBoxStyle.arrowColor == initColor(0.10, 0.16, 0.26, 1.0)
     check comboBoxStyle.comboBoxArrowRect(initRect(0, 0, 100, 28)) ==
       initRect(76, 0, 24, 28)
     check comboBoxStyle.comboBoxTextRect(initRect(0, 0, 100, 28)) ==
       initRect(8, 0, 60, 28)
-    check comboBoxItemStyle.box.fill == initColor(0.20, 0.48, 0.86, 1.0)
+    check comboBoxItemStyle.box.fill == aquaComboItemSelectedFill()
     check comboBoxItemStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
     check comboBoxItemStyle.minSize == initSize(0.0, 22.0)
 

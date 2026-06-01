@@ -205,7 +205,7 @@ suite "nimkit rendering":
         popupInBaseLayer = true
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.20, 0.22, 0.26, 1.0).rgba and
+          node.fill.color == initColor(0.10, 0.16, 0.26, 1.0).rgba and
           node.screenBox.h == 1.0:
         if node.screenBox.y == 32.0:
           arrowTopWidth = node.screenBox.w
@@ -221,9 +221,15 @@ suite "nimkit rendering":
           node.screenBox.h == 68.0:
         popupFound = true
 
-      if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.12, 0.34, 0.68, 1.0).rgba and
-          node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and
+      if node.kind == nkRectangle and
+          node.fill ==
+          linear(
+            initColor(0.20, 0.57, 0.98, 1.0),
+            initColor(0.03, 0.33, 0.82, 1.0),
+            initColor(0.01, 0.18, 0.58, 1.0),
+            fgaY,
+            104'u8,
+          ) and node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and
           node.screenBox.w == 118.0 and node.screenBox.h == 22.0:
         selectedItemFound = true
 
@@ -247,7 +253,7 @@ suite "nimkit rendering":
     var selectionFound = false
     for node in selectionRenders[DefaultDrawLevel].nodes:
       if node.kind == nkText and NfSelectText in node.flags and node.fill.kind == flColor and
-          node.fill.color == initColor(0.22, 0.46, 0.84, 0.32).rgba and
+          node.fill.color == initColor(0.24, 0.56, 1.0, 0.34).rgba and
           node.selectionRange.a == 1'i16 and node.selectionRange.b == 2'i16:
         selectionFound = true
 
