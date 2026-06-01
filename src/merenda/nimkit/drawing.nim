@@ -1,11 +1,14 @@
 import pkg/bumpy
 
 import figdraw/commons
+import figdraw/common/filltypes
 import figdraw/common/typefaces
 import figdraw/fignodes
 
 import ./theme
 import ./types as nimkitTypes
+
+export filltypes
 
 const
   DefaultDrawLevel* = 50.ZLevel
@@ -51,7 +54,7 @@ proc toFigShadow(shadow: BoxShadow): RenderShadow =
 
 proc rectangleNode(
     rect: nimkitTypes.Rect,
-    color: nimkitTypes.Color,
+    fillValue: Fill,
     strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
@@ -61,7 +64,7 @@ proc rectangleNode(
   result = Fig(
     kind: nkRectangle,
     screenBox: rect.toFigRect,
-    fill: fill(color.rgba),
+    fill: fillValue,
     corners: cornerRadii(cornerRadius),
     stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
@@ -229,7 +232,7 @@ proc addWindowRectangle*(
     layer: ZLevel,
     parent: FigIdx,
     rect: nimkitTypes.Rect,
-    color: nimkitTypes.Color,
+    fillValue: Fill,
     strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
@@ -239,14 +242,16 @@ proc addWindowRectangle*(
   context.addFig(
     layer,
     parent,
-    rectangleNode(rect, color, strokeColor, strokeWidth, cornerRadius, shadows, clips),
+    rectangleNode(
+      rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows, clips
+    ),
   )
 
 proc addWindowRectangle*(
     context: DrawContext,
     parent: FigIdx,
     rect: nimkitTypes.Rect,
-    color: nimkitTypes.Color,
+    fillValue: Fill,
     strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
@@ -254,14 +259,14 @@ proc addWindowRectangle*(
     clips = false,
 ): FigIdx {.discardable.} =
   context.addWindowRectangle(
-    DefaultDrawLevel, parent, rect, color, strokeColor, strokeWidth, cornerRadius,
+    DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
     shadows, clips,
   )
 
 proc addWindowRectangle*(
     context: DrawContext,
     rect: nimkitTypes.Rect,
-    color: nimkitTypes.Color,
+    fillValue: Fill,
     strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
@@ -269,13 +274,14 @@ proc addWindowRectangle*(
     clips = false,
 ): FigIdx {.discardable.} =
   context.addWindowRectangle(
-    context.xParent, rect, color, strokeColor, strokeWidth, cornerRadius, shadows, clips
+    context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
+    clips,
   )
 
 proc addRectangle*(
-    context: DrawContext, rect: nimkitTypes.Rect, color: nimkitTypes.Color
+    context: DrawContext, rect: nimkitTypes.Rect, fillValue: Fill
 ): FigIdx {.discardable.} =
-  context.addFig(rectangleNode(context.localRectToWindow(rect), color))
+  context.addFig(rectangleNode(context.localRectToWindow(rect), fillValue))
 
 proc addText*(
     context: DrawContext,
