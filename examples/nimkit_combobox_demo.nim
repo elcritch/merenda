@@ -8,12 +8,12 @@ let
   root = newView()
   layout = newStackView(laVertical)
   form = newFormView()
-  title = newTextField("Combo Box")
-  status = newTextField("")
+  title = newTitleLabel("Combo Box")
+  status = newStatusLabel("")
   priority = newComboBox(["Low", "Medium", "High"])
   color = newComboBox(["Red", "Green", "Blue"])
-  priorityLabel = newTextField("Priority")
-  colorLabel = newTextField("Color")
+  priorityLabel = newFormLabel("Priority")
+  colorLabel = newFormLabel("Color")
   changedAction = actionSelector("comboChanged")
 
 proc updateStatus() =
@@ -26,12 +26,6 @@ proc onChanged(sender: DynamicAgent) =
 let target = newActionTarget(changedAction, onChanged)
 
 root.background = initColor(0.95, 0.96, 0.98)
-title.textColor = initColor(0.13, 0.20, 0.34)
-status.textColor = initColor(0.12, 0.28, 0.20)
-
-for label in [title, status, priorityLabel, colorLabel]:
-  label.editable = false
-  label.selectable = false
 
 priority.selectedIndex = 1
 color.selectedIndex = 0

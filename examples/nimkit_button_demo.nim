@@ -7,7 +7,7 @@ let
   window = newWindow("Nimkit Button Demo", frame = initRect(100, 100, 360, 220))
   root = newView()
   layout = newStackView(laVertical)
-  label = newTextField("Ready")
+  label = newStatusLabel("Ready")
   button = newButton("Click")
   action = actionSelector("buttonClicked")
 
@@ -17,8 +17,6 @@ proc onClicked(sender: DynamicAgent) =
 
 let target = newActionTarget(action, onClicked)
 
-label.editable = false
-label.selectable = false
 button.target = target
 button.action = action
 

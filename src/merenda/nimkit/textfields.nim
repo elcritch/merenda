@@ -8,6 +8,13 @@ import ./types
 export controls
 
 type
+  LabelStyle* = enum
+    lsBody
+    lsTitle
+    lsHeading
+    lsStatus
+    lsForm
+
   TextRange* = object
     location*: Natural
     length*: Natural
@@ -24,6 +31,9 @@ type
     xInsertionPoint: int
     xSelectionAnchor: int
     xDelegate: DynamicAgent
+
+  Label* = ref object of TextField
+    xLabelStyle: LabelStyle
 
 proc notifyTextDidChange(textField: TextField)
 proc textFieldCell*(textField: TextField): TextFieldCell
@@ -583,6 +593,63 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
 proc newTextField*(value = "", frame: Rect = AutoRect): TextField =
   result = TextField()
   initTextFieldFields(result, value, frame)
+
+func labelStyleClass(style: LabelStyle): string =
+  case style
+  of lsBody: LabelStyleClass
+  of lsTitle: LabelTitleStyleClass
+  of lsHeading: LabelHeadingStyleClass
+  of lsStatus: LabelStatusStyleClass
+  of lsForm: LabelFormStyleClass
+
+func labelStyleClasses(style: LabelStyle): seq[string] =
+  if style == lsBody:
+    @[LabelStyleClass]
+  else:
+    @[LabelStyleClass, style.labelStyleClass]
+
+func defaultAlignment(style: LabelStyle): TextAlignment =
+  case style
+  of lsTitle: taCenter
+  of lsForm: taRight
+  else: taLeft
+
+proc labelStyle*(label: Label): LabelStyle =
+  if label.isNil: lsBody else: label.xLabelStyle
+
+proc setLabelStyle*(label: Label, style: LabelStyle) =
+  if label.isNil:
+    return
+  label.xLabelStyle = style
+  label.styleClasses = style.labelStyleClasses()
+  label.alignment = style.defaultAlignment()
+
+proc `labelStyle=`*(label: Label, style: LabelStyle) =
+  label.setLabelStyle(style)
+
+proc initLabelFields*(
+    label: Label, value = "", style: LabelStyle = lsBody, frame: Rect = AutoRect
+) =
+  initTextFieldFields(label, value, frame)
+  label.editable = false
+  label.selectable = false
+  label.setLabelStyle(style)
+
+proc newLabel*(value = "", style: LabelStyle = lsBody, frame: Rect = AutoRect): Label =
+  result = Label()
+  initLabelFields(result, value, style, frame)
+
+proc newTitleLabel*(value = "", frame: Rect = AutoRect): Label =
+  newLabel(value, lsTitle, frame)
+
+proc newHeadingLabel*(value = "", frame: Rect = AutoRect): Label =
+  newLabel(value, lsHeading, frame)
+
+proc newStatusLabel*(value = "", frame: Rect = AutoRect): Label =
+  newLabel(value, lsStatus, frame)
+
+proc newFormLabel*(value = "", frame: Rect = AutoRect): Label =
+  newLabel(value, lsForm, frame)
 
 let
   TextFieldProtocol* = TextFieldProtocolInternal

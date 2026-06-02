@@ -1,12 +1,5 @@
 import merenda/nimkit
 
-proc makeLabel(text: string): TextField =
-  result = newTextField(text)
-  result.editable = false
-  result.selectable = false
-  result.alignment = taRight
-  result.textColor = initColor(0.10, 0.14, 0.22)
-
 let
   app = sharedApplication()
   window = newWindow("Nimkit Grid Preferences", frame = initRect(180, 160, 520, 280))
@@ -15,10 +8,10 @@ let
   grid = newGridView()
   actionRow = newStackView(laHorizontal)
 
-  title = newTextField("Preferences")
-  nameLabel = makeLabel("Name")
-  emailLabel = makeLabel("Email")
-  themeLabel = makeLabel("Theme")
+  title = newTitleLabel("Preferences")
+  nameLabel = newFormLabel("Name")
+  emailLabel = newFormLabel("Email")
+  themeLabel = newFormLabel("Theme")
   nameField = newTextField("Ada Lovelace")
   emailField = newTextField("ada@example.com")
   themeChoice = newComboBox(["System", "Light", "Dark"])
@@ -28,11 +21,6 @@ let
   saveButton = newButton("Save")
 
 root.background = initColor(0.95, 0.96, 0.98)
-
-title.editable = false
-title.selectable = false
-title.alignment = taCenter
-title.textColor = initColor(0.08, 0.12, 0.20)
 
 themeChoice.selectedIndex = 0
 nameLabel.huggingPriority[dcol] = LayoutPriorityHigh

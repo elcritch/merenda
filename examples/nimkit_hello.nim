@@ -13,9 +13,9 @@ let
   window = newWindow("KNutella Nimkit Hello", frame = initRect(120, 120, 720, 360))
   root = newView()
   layout = newStackView(laVertical)
-  title = newTextField("Hello from KNutella/nimkit")
-  subtitle = newTextField("Pure Nim responder/action dispatch with plain widget state")
-  status = newTextField("Button state: Off (click to cycle)")
+  title = newTitleLabel("Hello from KNutella/nimkit")
+  subtitle = newLabel("Pure Nim responder/action dispatch with plain widget state")
+  status = newStatusLabel("Button state: Off (click to cycle)")
   button = newButton("Cycle State (Off)")
   action = actionSelector("cycleState")
 
@@ -29,14 +29,6 @@ proc onCycle(sender: DynamicAgent) =
     updateStatus()
 
 root.background = initColor(0.95, 0.96, 0.98)
-title.alignment = taCenter
-title.textColor = initColor(0.13, 0.20, 0.34)
-subtitle.textColor = initColor(0.20, 0.24, 0.31)
-status.textColor = initColor(0.12, 0.28, 0.20)
-
-for label in [title, subtitle, status]:
-  label.editable = false
-  label.selectable = false
 
 button.buttonType = btToggle
 button.allowsMixedState = true

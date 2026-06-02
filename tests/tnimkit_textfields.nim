@@ -24,6 +24,39 @@ suite "nimkit text fields":
     check not field.editable
     check not field.selectable
 
+  test "labels are styled non-editable text fields":
+    let
+      body = newLabel("Body")
+      title = newTitleLabel("Title")
+      heading = newHeadingLabel("Heading")
+      status = newStatusLabel("Status")
+      form = newFormLabel("Name")
+
+    for label in [body, title, heading, status, form]:
+      check not label.editable
+      check not label.selectable
+      check not label.acceptsFirstResponder
+      check label.clipsToBounds
+
+    check body.labelStyle == lsBody
+    check body.styleClasses == @[LabelStyleClass]
+    check body.alignment == taLeft
+    check title.labelStyle == lsTitle
+    check title.styleClasses == @[LabelStyleClass, LabelTitleStyleClass]
+    check title.alignment == taCenter
+    check heading.labelStyle == lsHeading
+    check heading.styleClasses == @[LabelStyleClass, LabelHeadingStyleClass]
+    check status.labelStyle == lsStatus
+    check status.styleClasses == @[LabelStyleClass, LabelStatusStyleClass]
+    check form.labelStyle == lsForm
+    check form.styleClasses == @[LabelStyleClass, LabelFormStyleClass]
+    check form.alignment == taRight
+
+    title.labelStyle = lsForm
+    check title.labelStyle == lsForm
+    check title.styleClasses == @[LabelStyleClass, LabelFormStyleClass]
+    check title.alignment == taRight
+
   test "first responder text input replaces the current selection":
     let
       window = newWindow("Text input", frame = initRect(0, 0, 240, 120))
