@@ -29,13 +29,28 @@ proc controlIntrinsicContentSize(control: Control): IntrinsicSize =
   else:
     controlCell.cellSize()
 
+proc invalidateCellMetrics(control: Control) =
+  if control.isNil:
+    return
+  control.invalidateIntrinsicContentSize()
+  control.setNeedsDisplay(true)
+
+proc syncActionCell(control: Control, cell: Cell) =
+  if control.isNil or cell.isNil or not (cell of ActionCell):
+    return
+  let actionCell = ActionCell(cell)
+  actionCell.setTarget(control.xTarget)
+  actionCell.setAction(control.xAction)
+
+proc defaultControlCell(): Cell =
+  newActionCell()
+
 protocol ControlProtocolInternal from Control:
   method isEnabled*(self: Control): bool =
     self.cell().isEnabled()
 
   method setEnabled*(self: Control, enabled: bool) =
     self.cell().setEnabled(enabled)
-    self.setNeedsDisplay(true)
 
   method canBecomeKeyView*(self: Control): bool =
     self.isEnabled() and View(self).viewCanBecomeKeyView()
@@ -105,11 +120,16 @@ proc sizeToFit*(control: Control) =
     initRect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize))
   )
 
-proc initControlFields*(control: Control, frame: Rect = AutoRect) =
+proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)
   control.setHuggingPriority(LayoutPriorityHigh, laVertical)
   control.installCellForwarding()
-  control.setCell(newActionCell())
+  control.setCell(
+    if cell.isNil:
+      defaultControlCell()
+    else:
+      cell
+  )
   discard control.withProto()
 
 proc cell*(control: Control): Cell =
@@ -122,16 +142,17 @@ proc cell*(control: Control): Cell =
 proc setCell*(control: Control, cell: Cell) =
   if control.isNil:
     return
+  if control.xCell == cell:
+    control.syncActionCell(cell)
+    return
+  let oldCell = control.xCell
+  if not oldCell.isNil and oldCell.controlView() == View(control):
+    oldCell.setControlView(nil)
   control.xCell = cell
-  let bound = control.xCell
-  if not bound.isNil:
-    bound.setControlView(control)
-    if bound of ActionCell:
-      let actionCell = ActionCell(bound)
-      actionCell.setTarget(control.xTarget)
-      actionCell.setAction(control.xAction)
-  control.invalidateIntrinsicContentSize()
-  control.setNeedsDisplay(true)
+  control.syncActionCell(control.xCell)
+  if not control.xCell.isNil:
+    control.xCell.setControlView(control)
+  control.invalidateCellMetrics()
 
 proc selectedCell*(control: Control): Cell =
   control.cell()

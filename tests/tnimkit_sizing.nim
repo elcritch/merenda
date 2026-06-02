@@ -133,3 +133,84 @@ suite "nimkit sizing":
       )
     check style.buttonTextRect(button.bounds()).size.width >=
       textNaturalSize("Pad").width
+
+  test "theme metric changes invalidate container layout for controls":
+    let
+      root = newView(frame = initRect(0, 0, 360, 220))
+      stack = newStackView(laVertical)
+      button = newButton("Metric")
+      checkbox = newCheckBox("Choice")
+      field = newTextField("Field")
+      combo = newComboBox(["Short", "Longest metric item"])
+
+    combo.selectedIndex = 1
+    stack.addArrangedSubview(button, checkbox, field, combo)
+    root.addSubview(stack)
+    stack.sizeToFit()
+    root.layoutSubtreeIfNeeded()
+
+    let
+      baseButton = button.intrinsicContentSize()
+      baseCheck = checkbox.intrinsicContentSize()
+      baseField = field.intrinsicContentSize()
+      baseCombo = combo.intrinsicContentSize()
+
+    root.setNeedsLayout(false)
+    stack.setNeedsLayout(false)
+    button.setNeedsLayout(false)
+    checkbox.setNeedsLayout(false)
+    field.setNeedsLayout(false)
+    combo.setNeedsLayout(false)
+
+    var appearance = initAppearance()
+    appearance[srButton, StyleTextInsets] = initEdgeInsets(6.0, 26.0)
+    appearance[srButton, StyleMinimumSize] = initSize(0.0, 48.0)
+    appearance[srCheckBox, StyleIndicatorSize] = 28.0
+    appearance[srCheckBox, StyleIndicatorSpacing] = 14.0
+    appearance[srCheckBox, StyleTextInsets] = initEdgeInsets(4.0, 10.0)
+    appearance[srTextField, StyleTextInsets] = initEdgeInsets(5.0, 22.0)
+    appearance[srTextField, StyleMinimumSize] = initSize(120.0, 38.0)
+    appearance[srComboBox, StyleTextInsets] = initEdgeInsets(4.0, 18.0)
+    appearance[srComboBox, StyleIndicatorSize] = 34.0
+    appearance[srComboBox, StyleMinimumSize] = initSize(140.0, 36.0)
+    root.setAppearance(appearance)
+
+    check root.needsLayout
+    check stack.needsLayout
+    check button.needsLayout
+    check checkbox.needsLayout
+    check field.needsLayout
+    check combo.needsLayout
+
+    check button.intrinsicContentSize().height > baseButton.height
+    check checkbox.intrinsicContentSize().width > baseCheck.width
+    check field.intrinsicContentSize().width > baseField.width
+    check combo.intrinsicContentSize().width > baseCombo.width
+
+  test "replacing a control cell detaches the old cell":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      button = newButton("Old")
+      oldCell = button.buttonCell()
+      nextCell = newButtonCell("New")
+
+    root.addSubview(button)
+    root.layoutSubtreeIfNeeded()
+    root.setNeedsLayout(false)
+    button.setNeedsLayout(false)
+
+    button.setCell(nextCell)
+    check oldCell.controlView().isNil
+    check nextCell.controlView() == button
+    check root.needsLayout
+    check button.needsLayout
+
+    root.setNeedsLayout(false)
+    button.setNeedsLayout(false)
+    oldCell.setTitle("Detached")
+    check not root.needsLayout
+    check not button.needsLayout
+
+    nextCell.setTitle("Attached and wider")
+    check root.needsLayout
+    check button.needsLayout

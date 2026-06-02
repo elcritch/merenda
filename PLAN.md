@@ -298,10 +298,11 @@ Concrete task order and status:
    `setNeedsLayout` on parents and add tests that property changes update
    layout lazily rather than mutating frames unexpectedly. Continue broadening
    this once container layout exists.
-7. Partly done: Add tests that theme token/rule changes affecting metrics
-   invalidate intrinsic size and cause measurement/rendering to agree on text
-   and chrome rectangles. Current coverage checks style metric changes against
-   text rects; broader render-tree agreement can be added with container tests.
+7. Done for the current control set: Add tests that theme token/rule changes
+   affecting metrics invalidate intrinsic size and cause measurement/rendering
+   to agree on text and chrome rectangles. Coverage now checks style metric
+   changes against intrinsic sizing, parent/container layout invalidation, and
+   rendered FigDraw text/indicator rectangles for representative controls.
 8. Done: Compare the first NimKit sizing pass with local GNUstep
    `deps/libs-gui`. GNUstep's `NSControl.sizeToFit` delegates directly to cell
    natural size, plain `NSView` has no intrinsic metric, orientation-specific
@@ -434,12 +435,12 @@ Concrete task order and status:
 
 ### Priority Order
 
-- Short term: cleaner cell invalidation/default-cell construction and
-  measurement tests that prove theme/rendering/layout agreement.
-- Medium term: scrollable list/popup infrastructure, richer container behavior
+- Short term: scrollable list/popup infrastructure, richer container behavior
   where examples need it, and broader control coverage.
-- Later: generated autoresizing-mask constraints, loadable/query-like themes,
-  menus/popovers, and broader resource organization.
+- Medium term: generated autoresizing-mask constraints, loadable/query-like
+  themes, menus/popovers, and broader resource organization.
+- Later: full source-compatibility conveniences only when examples prove the
+  need.
 
 ## Test Plan
 

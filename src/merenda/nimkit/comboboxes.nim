@@ -201,7 +201,7 @@ protocol ComboBoxProtocolInternal from ComboBox:
       return
     cell.xSelectedIndex = index
     cell.xStringValue = value
-    cell.updateControlView()
+    cell.invalidateControlMetrics()
 
   method deselectItem*(comboBox: ComboBox) =
     let cell = comboBox.comboBoxCell()
@@ -210,7 +210,7 @@ protocol ComboBoxProtocolInternal from ComboBox:
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
     comboBox.setHighlightedIndex(-1)
-    cell.updateControlView()
+    cell.invalidateControlMetrics()
 
   method addItem*(comboBox: ComboBox, value: string) =
     comboBox.comboBoxCell().cellAddItem(value)
@@ -273,7 +273,11 @@ protocol DefaultComboBoxView of ComboBoxViewProtocolInternal:
 protocol DefaultComboBoxAction of ButtonActionProtocol:
   method performClick(comboBox: ComboBox, args: ActionArgs) =
     if comboBox.isEnabled:
-      comboBox.togglePopup()
+      if comboBox.popupOpen() and comboBox.highlightedIndex() >= 0:
+        comboBox.activateItemAtIndex(comboBox.highlightedIndex())
+        comboBox.closePopup()
+      else:
+        comboBox.togglePopup()
 
 protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
   method draw(comboBox: ComboBox, context: DrawContext) =
@@ -467,13 +471,13 @@ proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
       return
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
-    cell.updateControlView()
+    cell.invalidateControlMetrics()
     return
   if index >= cell.xItems.len:
     return
   cell.xSelectedIndex = index
   cell.xStringValue = cell.xItems[index]
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellMaxVisibleItems(cell: ComboBoxCell): int =
   if cell.isNil:
@@ -487,7 +491,7 @@ proc setCellMaxVisibleItems(cell: ComboBoxCell, value: int) =
   if cell.xMaxVisibleItems == count:
     return
   cell.xMaxVisibleItems = count
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellItemHeight(cell: ComboBoxCell): float32 =
   if cell.isNil:
@@ -501,7 +505,7 @@ proc setCellItemHeight(cell: ComboBoxCell, value: float32) =
   if cell.xItemHeight == height:
     return
   cell.xItemHeight = height
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellIsEditable(cell: ComboBoxCell): bool =
   not cell.isNil and cell.xEditable
@@ -510,7 +514,7 @@ proc setCellEditable(cell: ComboBoxCell, editable: bool) =
   if cell.isNil or cell.xEditable == editable:
     return
   cell.xEditable = editable
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellNumberOfItems(cell: ComboBoxCell): int =
   if cell.isNil:
@@ -526,7 +530,7 @@ proc cellAddItem(cell: ComboBoxCell, value: string) =
   if cell.isNil:
     return
   cell.xItems.add value
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellInsertItem(cell: ComboBoxCell, value: string, index: int) =
   if cell.isNil:
@@ -535,7 +539,7 @@ proc cellInsertItem(cell: ComboBoxCell, value: string, index: int) =
   cell.xItems.insert(value, boundedIndex)
   if cell.xSelectedIndex >= boundedIndex:
     inc cell.xSelectedIndex
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
   if cell.isNil or index < 0 or index >= cell.xItems.len:
@@ -548,7 +552,7 @@ proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
     cell.setCellSelectedIndex(min(index, cell.xItems.len - 1))
   elif index < cell.xSelectedIndex:
     dec cell.xSelectedIndex
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc cellRemoveAllItems(cell: ComboBoxCell) =
   if cell.isNil:
@@ -556,7 +560,7 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.xItems.setLen(0)
   cell.xStringValue = ""
   cell.xSelectedIndex = -1
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
   initControlStyleContext(
@@ -619,7 +623,7 @@ proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
     return
   cell.xStringValue = value
   cell.xSelectedIndex = index
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc comboBoxStringValueMethod(self: DynamicAgent, invocation: var Invocation) =
   invocation.setResult(ComboBox(self).comboBoxCell().cellStringValue())
@@ -1086,8 +1090,7 @@ proc addItems*(comboBox: ComboBox, values: openArray[string]) =
 proc initComboBoxFields*(
     comboBox: ComboBox, items: openArray[string] = [], frame: Rect = AutoRect
 ) =
-  initControlFields(comboBox, frame)
-  comboBox.setCell(newComboBoxCell())
+  initControlFields(comboBox, frame, newComboBoxCell())
   comboBox.xPopupHighlightedIndex = -1
   comboBox.setAcceptsFirstResponder(true)
   discard comboBox.withProto()
