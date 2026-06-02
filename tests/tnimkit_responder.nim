@@ -160,6 +160,40 @@ suite "nimkit responder":
     )
     check actionCount == 1
 
+  test "space and enter activate tab-selected checkbox":
+    let
+      window = newWindow("Checkbox keys", frame = initRect(0, 0, 260, 120))
+      root = newView(frame = initRect(0, 0, 260, 120))
+      field = newTextField("value", frame = initRect(10, 10, 90, 28))
+      checkbox = newCheckBox("Enabled", frame = initRect(110, 10, 120, 28))
+      action = actionSelector("checkboxKeyAction")
+
+    var actionCount = 0
+
+    proc onCheckboxKeyAction(sender: DynamicAgent) =
+      check sender == DynamicAgent(checkbox)
+      inc actionCount
+
+    let target = newActionTarget(action, onCheckboxKeyAction)
+    checkbox.setTarget(target)
+    checkbox.setAction(action)
+    root.addSubview(field, checkbox)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == checkbox
+    check checkbox.isFocused
+    check checkbox.isFocusVisible
+
+    check window.dispatchKeyDown(KeyEvent(key: keySpace, keyCode: keySpace.ord))
+    check checkbox.state == bsOn
+    check actionCount == 1
+
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check checkbox.state == bsOff
+    check actionCount == 2
+
   test "window key bindings dispatch commands through responder chain":
     let
       window = newWindow("Key commands", frame = initRect(0, 0, 240, 160))

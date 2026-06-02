@@ -342,7 +342,7 @@ proc `selectedRange=`*(textField: TextField, value: TextRange) =
 
 protocol DefaultTextFieldInput of TextInputProtocol:
   method insertText(textField: TextField, text: string) =
-    if text.isInsertableText:
+    if textField.xEditable and text.isInsertableText:
       textField.replaceSelectedText(text)
 
 protocol DefaultTextFieldCommands of TextEditingCommandProtocol:

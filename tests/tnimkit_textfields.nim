@@ -78,6 +78,19 @@ suite "nimkit text fields":
     check field.stringValue == "Xy"
     check field.selectedRange == initTextRange(2, 0)
 
+  test "insertText respects text field editability":
+    let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
+
+    field.editable = false
+    discard field.send(insertText(), "x")
+    check field.stringValue == "abc"
+    check field.selectedRange == initTextRange(3, 0)
+
+    field.editable = true
+    discard field.send(insertText(), "x")
+    check field.stringValue == "abcx"
+    check field.selectedRange == initTextRange(4, 0)
+
   test "default edit commands move and delete text":
     let
       window = newWindow("Text commands", frame = initRect(0, 0, 240, 120))

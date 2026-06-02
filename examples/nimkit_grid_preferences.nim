@@ -2,7 +2,7 @@ import merenda/nimkit
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Grid Preferences", frame = initRect(180, 160, 520, 280))
+  window = newWindow("Nimkit Grid Preferences", frame = initRect(180, 160, 520, 340))
   root = newView()
   layout = newStackView(laVertical)
   grid = newGridView()
