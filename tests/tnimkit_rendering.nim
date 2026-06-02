@@ -20,6 +20,22 @@ proc newCustomDrawView(frame: nimkitTypes.Rect): CustomDrawView =
   initViewFields(result, frame)
   discard result.withProtocol(CustomDrawing)
 
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+proc renderedRect(node: Fig): nimkitTypes.Rect =
+  nimkitTypes.initRect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
+
+proc rectsClose(left, right: nimkitTypes.Rect): bool =
+  abs(left.origin.x - right.origin.x) <= 0.01'f32 and
+    abs(left.origin.y - right.origin.y) <= 0.01'f32 and
+    abs(left.size.width - right.size.width) <= 0.01'f32 and
+    abs(left.size.height - right.size.height) <= 0.01'f32
+
 suite "nimkit rendering":
   test "buildRenders emits root, text field, and button nodes":
     let root = newView(frame = initRect(0, 0, 320, 200))
@@ -128,6 +144,105 @@ suite "nimkit rendering":
     check themedTextFieldFound
     check buttonTextBoxFound
     check fieldTextBoxFound
+
+  test "rendered control boxes agree with resolved metric styles":
+    let
+      root = newView(frame = initRect(0, 0, 360, 220))
+      button = newButton("Metric", frame = initRect(12, 14, 20, 10))
+      checkbox = newCheckBox("Choice", frame = initRect(12, 62, 20, 10))
+      field = newTextField("Field", frame = initRect(12, 104, 20, 10))
+      combo =
+        newComboBox(["Short", "Longest metric item"], frame = initRect(12, 148, 20, 10))
+      checkFill = initColor(0.64, 0.22, 0.17, 1.0)
+
+    var appearance = initAppearance()
+    appearance[srButton, StyleTextInsets] = initEdgeInsets(5.0, 18.0, 7.0, 22.0)
+    appearance[srButton, StyleMinimumSize] = initSize(0.0, 46.0)
+    appearance[srCheckBox, StyleFill] = checkFill
+    appearance[srCheckBox, StyleIndicatorSize] = 20.0
+    appearance[srCheckBox, StyleIndicatorSpacing] = 11.0
+    appearance[srCheckBox, StyleTextInsets] = initEdgeInsets(3.0, 8.0, 5.0, 10.0)
+    appearance[srTextField, StyleTextInsets] = initEdgeInsets(4.0, 16.0, 6.0, 14.0)
+    appearance[srTextField, StyleMinimumSize] = initSize(116.0, 36.0)
+    appearance[srComboBox, StyleTextInsets] = initEdgeInsets(4.0, 15.0, 6.0, 13.0)
+    appearance[srComboBox, StyleIndicatorSize] = 32.0
+    appearance[srComboBox, StyleMinimumSize] = initSize(142.0, 36.0)
+
+    root.setAppearance(appearance)
+    root.addSubview(button, checkbox, field, combo)
+    combo.selectedIndex = 1
+    button.sizeToFit()
+    checkbox.sizeToFit()
+    field.sizeToFit()
+    combo.sizeToFit()
+
+    let
+      buttonStyle = button.effectiveAppearance().resolveButtonStyle(
+          initControlStyleContext(
+            srButton, id = button.styleId, classes = button.styleClasses
+          )
+        )
+      checkStyle = checkbox.effectiveAppearance().resolveChoiceButtonStyle(
+          initControlStyleContext(
+            srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses
+          )
+        )
+      fieldStyle = field.effectiveAppearance().resolveTextFieldStyle(
+          initControlStyleContext(
+            srTextField, id = field.styleId, classes = field.styleClasses
+          ),
+          field.textColor(),
+        )
+      comboStyle = combo.effectiveAppearance().resolveComboBoxStyle(
+          initControlStyleContext(
+            srComboBox, id = combo.styleId, classes = combo.styleClasses
+          )
+        )
+      expectedButtonText =
+        button.rectToWindow(buttonStyle.buttonTextRect(button.bounds))
+      expectedCheckText =
+        checkbox.rectToWindow(checkStyle.choiceTextRect(checkbox.bounds))
+      expectedCheckIndicator =
+        checkbox.rectToWindow(checkStyle.choiceIndicatorRect(checkbox.bounds))
+      expectedFieldText = field.rectToWindow(fieldStyle.textFieldTextRect(field.bounds))
+      expectedComboText = combo.rectToWindow(comboStyle.comboBoxTextRect(combo.bounds))
+
+    let list = buildRenders(root)[DefaultDrawLevel]
+    var
+      buttonTextFound = false
+      checkTextFound = false
+      checkIndicatorFound = false
+      fieldTextFound = false
+      comboTextFound = false
+
+    for node in list.nodes:
+      case node.kind
+      of nkText:
+        let text = node.renderedText()
+        if text == "Metric":
+          buttonTextFound = true
+          check node.renderedRect().rectsClose(expectedButtonText)
+        elif text == "Choice":
+          checkTextFound = true
+          check node.renderedRect().rectsClose(expectedCheckText)
+        elif text == "Field":
+          fieldTextFound = true
+          check node.renderedRect().rectsClose(expectedFieldText)
+        elif text == "Longest metric item":
+          comboTextFound = true
+          check node.renderedRect().rectsClose(expectedComboText)
+      of nkRectangle:
+        if node.fill.kind == flColor and node.fill.color == checkFill.rgba:
+          checkIndicatorFound = true
+          check node.renderedRect().rectsClose(expectedCheckIndicator)
+      else:
+        discard
+
+    check buttonTextFound
+    check checkTextFound
+    check checkIndicatorFound
+    check fieldTextFound
+    check comboTextFound
 
   test "buildRenders centers push button text by default":
     let

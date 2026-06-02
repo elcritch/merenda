@@ -572,8 +572,7 @@ proc textFieldCell*(textField: TextField): TextFieldCell =
   replacement
 
 proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRect) =
-  initControlFields(textField, frame)
-  textField.setCell(newTextFieldCell())
+  initControlFields(textField, frame, newTextFieldCell())
   textField.setClipsToBounds(true)
   textField.xStringValue = value
   textField.xAlignment = taLeft

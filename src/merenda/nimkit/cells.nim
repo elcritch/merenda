@@ -36,11 +36,16 @@ protocol DefaultCellMeasurement of CellMeasurementProtocolInternal:
   method cellSizeForBounds(cell: Cell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
 
-proc updateControlView*(cell: Cell) =
-  let view = cell.controlView()
+proc invalidateViewCellMetrics(view: View) =
   if not view.isNil:
     view.invalidateIntrinsicContentSize()
     view.setNeedsDisplay(true)
+
+proc invalidateControlMetrics*(cell: Cell) =
+  cell.controlView().invalidateViewCellMetrics()
+
+proc updateControlView*(cell: Cell) =
+  cell.invalidateControlMetrics()
 
 proc initCellFields*(cell: Cell) =
   cell.xEnabled = true
@@ -65,12 +70,16 @@ proc controlView*(cell: Cell): View =
 proc setControlView*(cell: Cell, view: View) =
   if cell.isNil:
     return
+  let oldView = cell.controlView()
+  if oldView == view:
+    return
   cell.xControlView =
     if view.isNil:
       WeakRef[View]()
     else:
       view.unsafeWeakRef()
-  cell.updateControlView()
+  oldView.invalidateViewCellMetrics()
+  cell.invalidateControlMetrics()
 
 proc isEnabled*(cell: Cell): bool =
   (not cell.isNil) and cell.xEnabled
@@ -79,7 +88,7 @@ proc setEnabled*(cell: Cell, enabled: bool) =
   if cell.isNil or cell.xEnabled == enabled:
     return
   cell.xEnabled = enabled
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc isHighlighted*(cell: Cell): bool =
   (not cell.isNil) and cell.xHighlighted
@@ -88,7 +97,7 @@ proc setHighlighted*(cell: Cell, highlighted: bool) =
   if cell.isNil or cell.xHighlighted == highlighted:
     return
   cell.xHighlighted = highlighted
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc state*(cell: Cell): ButtonState =
   if cell.isNil:
@@ -102,7 +111,7 @@ proc setState*(cell: Cell, state: ButtonState) =
   if cell.xState == normalized:
     return
   cell.xState = normalized
-  cell.updateControlView()
+  cell.invalidateControlMetrics()
 
 proc allowsMixedState*(cell: Cell): bool =
   (not cell.isNil) and cell.xAllowsMixedState
@@ -116,7 +125,7 @@ proc setAllowsMixedState*(cell: Cell, value: bool) =
   if not value and cell.xState == bsMixed:
     cell.setState(bsOff)
   else:
-    cell.updateControlView()
+    cell.invalidateControlMetrics()
 
 proc nextState*(cell: Cell): ButtonState =
   if cell.isNil:

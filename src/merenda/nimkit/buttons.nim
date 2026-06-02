@@ -63,7 +63,7 @@ protocol DefaultButtonCell of ButtonProtocolInternal:
     if cell.xTitle == title:
       return
     cell.xTitle = title
-    cell.updateControlView()
+    cell.invalidateControlMetrics()
 
   method state(cell: ButtonCell): ButtonState =
     Cell(cell).state()
@@ -81,7 +81,7 @@ protocol DefaultButtonCell of ButtonProtocolInternal:
     if buttonType == btRadio:
       cell.setAllowsMixedState(false)
     cell.updateButtonLayoutPriorities()
-    cell.updateControlView()
+    cell.invalidateControlMetrics()
 
   method allowsMixedState(cell: ButtonCell): bool =
     Cell(cell).allowsMixedState()
@@ -305,8 +305,7 @@ protocol DefaultButtonAction of ButtonActionProtocol:
     button.buttonPerformClick(args)
 
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
-  initControlFields(button, frame)
-  button.setCell(newButtonCell(title))
+  initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
   button.setAcceptsFirstResponder(true)
   discard button.withProtocol(DefaultButtonDrawing)
