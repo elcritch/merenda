@@ -235,6 +235,7 @@ proc defaultKeyBindingProfile*(): KeyBindingProfile =
 
 proc bindCoreEditing(table: var KeyBindingTable) =
   table.bindKey(" ", {}, performClick())
+  table.bindKey("\n", {}, performClick())
   table.bindKey(keyBackspace, {}, deleteBackward())
   table.bindKey(keyDelete, {}, deleteForward())
   table.bindKey(keyArrowLeft, {}, moveLeft())

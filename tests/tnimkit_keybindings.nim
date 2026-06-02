@@ -49,6 +49,10 @@ suite "nimkit key bindings":
     check bindings
     .commandFor(KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift}))
     .get() == insertBacktab()
+    check bindings.commandFor(KeyEvent(key: keySpace, keyCode: keySpace.ord)).get() ==
+      performClick()
+    check bindings.commandFor(KeyEvent(key: keyEnter, keyCode: keyEnter.ord)).get() ==
+      performClick()
 
   test "macOS key binding profile includes Cocoa text shortcuts":
     let bindings = initMacOSKeyBindings()

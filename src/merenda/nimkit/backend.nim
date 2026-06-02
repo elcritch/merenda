@@ -91,7 +91,6 @@ proc toNimkitKey(key: siwinshim.Key): types.Key =
 
 proc keyText(key: siwinshim.Key): string =
   case key
-  of siwinshim.Key.space: " "
   of siwinshim.Key.enter: "\n"
   of siwinshim.Key.tab: "\t"
   else: ""

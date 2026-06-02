@@ -825,6 +825,15 @@ proc dispatchKeyEventInChain(
     target, initPoint(0.0, 0.0), event, keyDown(), localKeyEvent
   )
 
+proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchResult =
+  var responder = target
+  while not responder.isNil:
+    if responder.sendLocalIfHandled(insertText(), text):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
 ): bool =
@@ -1027,8 +1036,9 @@ proc dispatchHostKey(window: Window, event: HostKeyEvent) =
     discard window.dispatchKeyDown(event.event)
 
 proc dispatchHostTextInput(window: Window, text: string) =
-  if text.len > 0:
-    discard window.dispatchKeyDown(types.KeyEvent(text: text, keyCode: 0))
+  if text.len == 0:
+    return
+  discard dispatchTextInputInChain(window.keyDispatchTarget(), text)
 
 proc dispatchHostFocusChanged(window: Window, focused: bool) =
   if window.isNil:
