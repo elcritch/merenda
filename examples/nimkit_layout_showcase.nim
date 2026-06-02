@@ -1,32 +1,24 @@
 import merenda/nimkit
 
-proc makeLabel(text: string): TextField =
-  result = newTextField(text)
-  result.editable = false
-  result.selectable = false
-  result.textColor = initColor(0.09, 0.12, 0.18)
-
 let
   app = sharedApplication()
   window = newWindow("Nimkit Layout Showcase", frame = initRect(180, 160, 540, 300))
   root = newView()
 
-  title = makeLabel("Intrinsic, Stack, and Constraint Layout")
+  title = newTitleLabel("Intrinsic, Stack, and Constraint Layout")
   layout = newStackView(laVertical)
   form = newFormView()
   actionRow = newStackView(laHorizontal)
 
-  nameLabel = makeLabel("Name")
+  nameLabel = newFormLabel("Name")
   nameField = newTextField("Ada Lovelace")
-  priorityLabel = makeLabel("Priority")
+  priorityLabel = newFormLabel("Priority")
   priority = newComboBox(["Low", "Medium", "High"])
   downloads = newCheckBox("Enable downloads")
   runButton = newButton("Run")
   cancelButton = newButton("Cancel")
 
 root.background = initColor(0.95, 0.96, 0.98)
-
-title.alignment = taCenter
 
 layout.spacing = 12.0
 layout.alignment = svaFill
@@ -49,7 +41,7 @@ priority.selectedIndex = 1
 
 form.addRow(nameLabel, nameField)
 form.addRow(priorityLabel, priority)
-form.addRow(makeLabel("Options"), downloads)
+form.addRow(newFormLabel("Options"), downloads)
 actionRow.addArrangedSubview(runButton, cancelButton)
 
 layout.addArrangedSubview(title, form, actionRow)

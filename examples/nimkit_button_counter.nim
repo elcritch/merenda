@@ -9,8 +9,8 @@ let
   layout = newStackView(laVertical)
   button1 = newButton("button1")
   button2 = newButton("button2")
-  label1 = newTextField("button1 clicked 0 times")
-  label2 = newTextField("button2 clicked 0 times")
+  label1 = newStatusLabel("button1 clicked 0 times")
+  label2 = newStatusLabel("button2 clicked 0 times")
   button1Action = actionSelector("button1Clicked")
   button2Action = actionSelector("button2Clicked")
 
@@ -32,10 +32,6 @@ button1.target = newActionTarget(button1Action, onButton1)
 button1.action = button1Action
 button2.target = newActionTarget(button2Action, onButton2)
 button2.action = button2Action
-
-for label in [label1, label2]:
-  label.editable = false
-  label.selectable = false
 
 layout.spacing = 12.0
 layout.alignment = svaFill

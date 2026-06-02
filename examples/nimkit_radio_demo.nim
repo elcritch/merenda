@@ -7,8 +7,8 @@ let
   window = newWindow("Nimkit Radio Demo", frame = initRect(140, 140, 400, 260))
   root = newView()
   layout = newStackView(laVertical)
-  title = newTextField("Radio Buttons")
-  status = newTextField("")
+  title = newTitleLabel("Radio Buttons")
+  status = newStatusLabel("")
   small = newRadioButton("Small")
   medium = newRadioButton("Medium")
   large = newRadioButton("Large")
@@ -34,13 +34,7 @@ proc onChanged(sender: DynamicAgent) =
 let target = newActionTarget(changedAction, onChanged)
 
 root.background = initColor(0.95, 0.96, 0.98)
-title.textColor = initColor(0.13, 0.20, 0.34)
-status.textColor = initColor(0.12, 0.28, 0.20)
 medium.state = bsOn
-
-for label in [title, status]:
-  label.editable = false
-  label.selectable = false
 
 for radio in [small, medium, large]:
   radio.target = target

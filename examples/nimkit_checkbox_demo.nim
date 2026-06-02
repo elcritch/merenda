@@ -13,8 +13,8 @@ let
   window = newWindow("Nimkit Checkbox Demo", frame = initRect(120, 120, 440, 280))
   root = newView()
   layout = newStackView(laVertical)
-  title = newTextField("Checkboxes")
-  status = newTextField("")
+  title = newTitleLabel("Checkboxes")
+  status = newStatusLabel("")
   downloads = newCheckBox("Enable downloads")
   notifications = newCheckBox("Show notifications")
   sync = newCheckBox("Sync over cellular")
@@ -32,14 +32,8 @@ proc onChanged(sender: DynamicAgent) =
 let target = newActionTarget(changedAction, onChanged)
 
 root.background = initColor(0.95, 0.96, 0.98)
-title.textColor = initColor(0.13, 0.20, 0.34)
-status.textColor = initColor(0.12, 0.28, 0.20)
 sync.allowsMixedState = true
 sync.state = bsMixed
-
-for label in [title, status]:
-  label.editable = false
-  label.selectable = false
 
 for checkbox in [downloads, notifications, sync]:
   checkbox.target = target

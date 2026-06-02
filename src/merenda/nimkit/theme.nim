@@ -207,6 +207,12 @@ const
   TextFieldTextColorToken* = "textField.text.color"
   TextFieldSelectionColorToken* = "textField.selection.color"
 
+  LabelStyleClass* = "label"
+  LabelTitleStyleClass* = "label-title"
+  LabelHeadingStyleClass* = "label-heading"
+  LabelStatusStyleClass* = "label-status"
+  LabelFormStyleClass* = "label-form"
+
   ComboBoxFillToken* = "comboBox.fill"
   ComboBoxBorderColorToken* = "comboBox.border.color"
   ComboBoxOpenBorderColorToken* = "comboBox.border.color.open"
@@ -1536,6 +1542,29 @@ proc addChoiceRule(
   theme[selector, StyleMarkColor] = markColor
   theme[selector, StyleTextColor] = textColor
 
+proc addLabelRule(
+    theme: var Theme,
+    className: string,
+    fillValue: Fill,
+    borderColor: Color,
+    borderWidth: float32,
+    cornerRadius: float32,
+    textColor: Color,
+    textInsets: EdgeInsets,
+    minSize: Size,
+) =
+  let selector = initStyleSelector(srTextField, classes = @[className])
+  theme[selector, StyleFill] = fillValue
+  theme[selector, StyleBorderColor] = borderColor
+  theme[selector, StyleBorderWidth] = borderWidth
+  theme[selector, StyleCornerRadius] = cornerRadius
+  theme[selector, StyleTextColor] = textColor
+  theme[selector, StyleTextInsets] = textInsets
+  theme[selector, StyleMinimumSize] = minSize
+  theme[selector, StyleFocusRingWidth] = 0.0
+  theme[selector, StyleFocusRingInset] = 0.0
+  theme[selector, StyleBoxShadows] = newSeq[BoxShadow]()
+
 func defaultButtonShadows(): seq[BoxShadow] =
   @[
     insetShadow(initColor(1.0, 1.0, 1.0, 0.30), x = 2.0, y = 1.0, blur = 5.0),
@@ -1790,6 +1819,57 @@ proc initTheme*(): Theme =
   result[srTextField, StyleFocusRingInset] = 2.0
   result[srTextField, StyleFocusRingColor] = styleToken(FocusRingColorToken)
   result[srTextField, StyleBoxShadows] = aquaInsetControlShadows()
+
+  result.addLabelRule(
+    LabelStyleClass,
+    fill(initColor(0.0, 0.0, 0.0, 0.0)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0,
+    0.0,
+    initColor(0.09, 0.12, 0.18, 1.0),
+    initEdgeInsets(0.0),
+    initSize(0.0, 18.0),
+  )
+  result.addLabelRule(
+    LabelTitleStyleClass,
+    linear(initColor(0.94, 0.98, 1.0, 1.0), initColor(0.84, 0.91, 0.98, 1.0), fgaY),
+    initColor(0.62, 0.70, 0.84, 1.0),
+    1.0,
+    6.0,
+    initColor(0.09, 0.14, 0.26, 1.0),
+    initEdgeInsets(0.0, 12.0),
+    initSize(0.0, 28.0),
+  )
+  result.addLabelRule(
+    LabelHeadingStyleClass,
+    linear(initColor(0.90, 0.95, 1.0, 1.0), initColor(0.78, 0.86, 0.96, 1.0), fgaY),
+    initColor(0.74, 0.82, 0.93, 1.0),
+    1.0,
+    5.0,
+    initColor(0.10, 0.18, 0.32, 1.0),
+    initEdgeInsets(0.0, 10.0),
+    initSize(0.0, 24.0),
+  )
+  result.addLabelRule(
+    LabelStatusStyleClass,
+    linear(initColor(0.94, 0.99, 0.95, 1.0), initColor(0.84, 0.94, 0.87, 1.0), fgaY),
+    initColor(0.68, 0.82, 0.72, 1.0),
+    1.0,
+    6.0,
+    initColor(0.09, 0.27, 0.18, 1.0),
+    initEdgeInsets(0.0, 10.0),
+    initSize(0.0, 24.0),
+  )
+  result.addLabelRule(
+    LabelFormStyleClass,
+    fill(initColor(0.0, 0.0, 0.0, 0.0)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0,
+    0.0,
+    initColor(0.10, 0.14, 0.22, 1.0),
+    initEdgeInsets(0.0, 2.0),
+    initSize(0.0, 18.0),
+  )
 
   result.addRoleRule(
     srComboBox,

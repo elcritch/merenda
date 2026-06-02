@@ -5,10 +5,10 @@ let
   window = newWindow("Nimkit Text Field Demo", frame = initRect(150, 150, 420, 220))
   root = newView()
   layout = newStackView(laVertical)
-  title = newTextField("Text Field")
+  title = newTitleLabel("Text Field")
   field = newTextField("Edit me")
   secondField = newTextField("Tab here")
-  status = newTextField("")
+  status = newStatusLabel("")
 
 proc updateStatus() =
   status.text = "Values: " & field.stringValue & " / " & secondField.stringValue
@@ -17,12 +17,6 @@ proc onTextDidChange(sender: DynamicAgent) =
   if sender == DynamicAgent(field) or sender == DynamicAgent(secondField):
     updateStatus()
 
-title.editable = false
-title.selectable = false
-status.editable = false
-status.selectable = false
-title.textColor = initColor(0.13, 0.20, 0.34)
-status.textColor = initColor(0.12, 0.28, 0.20)
 field.delegate = newActionTarget(textDidChange(), onTextDidChange)
 secondField.delegate = newActionTarget(textDidChange(), onTextDidChange)
 

@@ -218,6 +218,29 @@ suite "nimkit theme":
       textFieldStyle = theme.resolveTextFieldStyle(
         initControlStyleContext(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
       )
+      bodyLabelStyle = theme.resolveTextFieldStyle(
+        initControlStyleContext(srTextField, classes = @[LabelStyleClass])
+      )
+      titleLabelStyle = theme.resolveTextFieldStyle(
+        initControlStyleContext(
+          srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass]
+        )
+      )
+      headingLabelStyle = theme.resolveTextFieldStyle(
+        initControlStyleContext(
+          srTextField, classes = @[LabelStyleClass, LabelHeadingStyleClass]
+        )
+      )
+      statusLabelStyle = theme.resolveTextFieldStyle(
+        initControlStyleContext(
+          srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass]
+        )
+      )
+      formLabelStyle = theme.resolveTextFieldStyle(
+        initControlStyleContext(
+          srTextField, classes = @[LabelStyleClass, LabelFormStyleClass]
+        )
+      )
       comboBoxStyle = appearance.resolveComboBoxStyle(
         initControlStyleContext(srComboBox, opened = true)
       )
@@ -268,6 +291,21 @@ suite "nimkit theme":
     check textFieldStyle.minSize == initSize(80.0, 24.0)
     check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
       initRect(6, 0, 88, 30)
+
+    check bodyLabelStyle.box.fill.centerColor().a == 0.0
+    check bodyLabelStyle.box.borderWidth == 0.0
+    check bodyLabelStyle.box.focusRingWidth == 0.0
+    check bodyLabelStyle.text.color == initColor(0.09, 0.12, 0.18, 1.0)
+    check bodyLabelStyle.minSize == initSize(0.0, 18.0)
+    check titleLabelStyle.box.borderWidth == 1.0
+    check titleLabelStyle.box.cornerRadius == 6.0
+    check titleLabelStyle.text.insets == initEdgeInsets(0.0, 12.0)
+    check titleLabelStyle.minSize == initSize(0.0, 28.0)
+    check headingLabelStyle.box.cornerRadius == 5.0
+    check headingLabelStyle.minSize == initSize(0.0, 24.0)
+    check statusLabelStyle.text.color == initColor(0.09, 0.27, 0.18, 1.0)
+    check formLabelStyle.box.borderWidth == 0.0
+    check formLabelStyle.text.color == initColor(0.10, 0.14, 0.22, 1.0)
 
     check comboBoxStyle.box.fill == aquaTextFieldFill()
     check comboBoxStyle.box.borderColor == initColor(0.12, 0.42, 0.86, 1.0)
