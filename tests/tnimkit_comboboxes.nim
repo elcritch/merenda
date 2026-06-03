@@ -283,6 +283,88 @@ suite "nimkit comboboxes":
     check combo.indexOfSelectedItem() == 4
     check combo.stringValue == "Five"
 
+  test "popup page home and end keys move highlight through row windows":
+    let
+      window = newWindow("Combo page keys", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      combo = newComboBox(
+        ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
+        frame = initRect(10, 10, 120, 24),
+      )
+
+    combo.popupPresentation = ppInline
+    combo.maxVisibleItems = 3
+    combo.itemHeight = 20.0
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(combo)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.popupOpen
+    check combo.highlightedIndex == 0
+    check combo.popupFirstItemIndex() == 0
+
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check combo.highlightedIndex == 3
+    check combo.popupFirstItemIndex() == 3
+
+    let
+      popup = combo.popupRect(combo.bounds())
+      indicator = combo.popupScrollIndicatorRect(combo.bounds())
+    check popup.size.height == 62.0'f32
+    check not indicator.isEmpty
+    check indicator.origin.x > popup.origin.x
+    check indicator.maxX <= popup.maxX
+    check indicator.origin.y > popup.origin.y
+    check listScrollIndicatorRect(popup, 0, 3, 3).isEmpty
+
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check combo.highlightedIndex == 6
+    check combo.popupFirstItemIndex() == 5
+
+    check window.dispatchKeyDown(KeyEvent(key: keyPageUp, keyCode: keyPageUp.ord))
+    check combo.highlightedIndex == 3
+    check combo.popupFirstItemIndex() == 3
+
+    check window.dispatchKeyDown(KeyEvent(key: keyEnd, keyCode: keyEnd.ord))
+    check combo.highlightedIndex == 7
+    check combo.popupFirstItemIndex() == 5
+
+    check window.dispatchKeyDown(KeyEvent(key: keyHome, keyCode: keyHome.ord))
+    check combo.highlightedIndex == 0
+    check combo.popupFirstItemIndex() == 0
+
+  test "popup border hover keeps keyboard highlight without delegate noise":
+    let
+      window = newWindow("Combo hover border", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      combo =
+        newComboBox(["One", "Two", "Three", "Four"], frame = initRect(10, 10, 120, 24))
+      delegate = newComboDelegate()
+
+    combo.popupPresentation = ppInline
+    combo.maxVisibleItems = 3
+    combo.itemHeight = 20.0
+    combo.delegate = delegate
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(combo)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.highlightedIndex == 1
+    let changingCount = delegate.changingCount
+
+    check window.mouseMovedAt(initPoint(20.0'f32, 34.5'f32))
+    check combo.highlightedIndex == 1
+    check delegate.changingCount == changingCount
+
+    check window.mouseMovedAt(
+      initPoint(20.0'f32, 10.0'f32 + 24.0'f32 + 1.0'f32 + 45.0'f32)
+    )
+    check combo.highlightedIndex == 2
+    check delegate.changingCount == changingCount + 1
+
   test "mouse wheel scrolls open inline popup viewport":
     let
       window = newWindow("Combo wheel", frame = initRect(0, 0, 240, 180))

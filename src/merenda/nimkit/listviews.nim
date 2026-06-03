@@ -20,6 +20,43 @@ func maxFirstIndex*(itemCount, visibleCount: int): int =
 func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int =
   max(0, min(firstIndex, maxFirstIndex(itemCount, visibleCount)))
 
+func hasHiddenListItems*(itemCount, visibleCount: int): bool =
+  itemCount > max(visibleCount, 0)
+
+func listScrollIndicatorRect*(
+    popup: Rect, firstIndex, visibleCount, itemCount: int
+): Rect =
+  if popup.isEmpty or visibleCount <= 0 or
+      not hasHiddenListItems(itemCount, visibleCount):
+    return initRect(popup.origin.x, popup.origin.y, 0.0, 0.0)
+
+  let
+    trackInset = 3.0'f32
+    trackWidth = 3.0'f32
+    trackHeight = max(popup.size.height - trackInset * 2.0'f32, 0.0'f32)
+  if trackHeight <= 0.0'f32:
+    return initRect(popup.origin.x, popup.origin.y, 0.0, 0.0)
+
+  let
+    clampedFirst = clampFirstIndex(firstIndex, itemCount, visibleCount)
+    lastFirst = maxFirstIndex(itemCount, visibleCount)
+    thumbHeight = min(
+      max(trackHeight * visibleCount.float32 / itemCount.float32, 8.0'f32), trackHeight
+    )
+    travel = max(trackHeight - thumbHeight, 0.0'f32)
+    progress =
+      if lastFirst <= 0:
+        0.0'f32
+      else:
+        clampedFirst.float32 / lastFirst.float32
+
+  initRect(
+    popup.maxX - trackInset - trackWidth,
+    popup.origin.y + trackInset + travel * progress,
+    trackWidth,
+    thumbHeight,
+  )
+
 proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int) =
   viewport.firstIndex = clampFirstIndex(viewport.firstIndex, itemCount, visibleCount)
 
