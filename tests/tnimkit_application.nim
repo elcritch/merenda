@@ -87,10 +87,12 @@ suite "nimkit application":
         check window.nativeReady
         check window.mouseDownAt(initPoint(24, 24))
         check combo.popupOpen
+        check window.hasActiveTransientSession()
         let renders = window.buildRenders()
         check PopupDrawLevel notin renders.layers
         combo.activateItemAtIndex(1)
         combo.closePopup()
+        check not window.hasActiveTransientSession()
         check combo.indexOfSelectedItem() == 1
         check combo.stringValue == "Medium"
         check window.firstResponder == combo
@@ -109,14 +111,19 @@ suite "nimkit application":
             )
           )
         check not combo.popupOpen
+        check not window.hasActiveTransientSession()
+        check window.transientDismissReason() == tdrFocusChange
         check combo.indexOfSelectedItem() == 1
         check other.indexOfSelectedItem() == -1
 
         check window.mouseDownAt(initPoint(24, 24))
         check combo.popupOpen
+        check window.hasActiveTransientSession()
         check window.mouseDownAt(initPoint(24, 68))
         check window.mouseUpAt(initPoint(24, 68))
         check not combo.popupOpen
+        check not window.hasActiveTransientSession()
+        check window.transientDismissReason() == tdrOutsideClick
         check not other.popupOpen
         check combo.indexOfSelectedItem() == 1
         check other.indexOfSelectedItem() == -1
@@ -151,6 +158,7 @@ suite "nimkit application":
         check window.nativeReady
         check window.mouseDownAt(initPoint(24, 24))
         check combo.popupOpen
+        check window.hasActiveTransientSession()
         let renders = window.buildRenders()
         check PopupDrawLevel in renders.layers
       except CatchableError:

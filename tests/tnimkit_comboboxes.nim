@@ -235,6 +235,37 @@ suite "nimkit comboboxes":
     check not combo.popupOpen
     check combo.indexOfSelectedItem() == 1
 
+  test "inline popup session handles escape and outside click dismissal":
+    let
+      window = newWindow("Combo transient", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
+
+    combo.popupPresentation = ppInline
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(combo)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.popupOpen
+    check window.hasActiveTransientSession()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check not combo.popupOpen
+    check not window.hasActiveTransientSession()
+    check window.transientDismissReason() == tdrEscape
+    check window.firstResponder == combo
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.popupOpen
+    check window.hasActiveTransientSession()
+
+    check window.mouseDownAt(initPoint(220, 140))
+    check not combo.popupOpen
+    check not window.hasActiveTransientSession()
+    check window.transientDismissReason() == tdrOutsideClick
+    check window.firstResponder == combo
+
   test "keyboard navigation scrolls popup rows into view":
     let
       window = newWindow("Combo scroll keys", frame = initRect(0, 0, 240, 180))

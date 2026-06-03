@@ -61,10 +61,14 @@ proc scrollPopupRows(comboBox: ComboBox, delta: int)
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox)
 proc notifyComboBoxSelectionDidChange(comboBox: ComboBox)
 proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation
+proc popupWindowActive(comboBox: ComboBox): bool
 proc shouldUseWindowPopup(comboBox: ComboBox): bool
 proc usesInlinePopup(comboBox: ComboBox): bool
+proc beginPopupSession(comboBox: ComboBox)
+proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool
+proc dismissPopupFromSession(comboBox: ComboBox, reason: TransientDismissReason)
 proc openPopupWindow(comboBox: ComboBox)
-proc closePopupWindow(comboBox: ComboBox)
+proc closePopupWindow(comboBox: ComboBox, restoreOwner = true)
 proc reactivateOwnerWindow(comboBox: ComboBox)
 proc updatePopupPresentation(comboBox: ComboBox)
 proc drawPopupContents(
@@ -139,7 +143,8 @@ protocol ComboBoxProtocolInternal from ComboBox:
       comboBox.scrollPopupItemToVisible(comboBox.xPopupHighlightedIndex)
       comboBox.updatePopupPresentation()
     else:
-      comboBox.closePopupWindow()
+      let restoredBySession = comboBox.endPopupSession()
+      comboBox.closePopupWindow(restoreOwner = not restoredBySession)
       comboBox.xPopupHighlightedIndex = -1
       comboBox.xButtonPressed = false
       comboBox.xTrackingPopup = false
@@ -959,6 +964,34 @@ proc ownerWindow(comboBox: ComboBox): Window =
   if owner of Window:
     result = Window(owner)
 
+proc dismissPopupFromSession(comboBox: ComboBox, reason: TransientDismissReason) =
+  if comboBox.isNil:
+    return
+  case reason
+  of tdrProgrammatic, tdrOutsideClick, tdrEscape, tdrFocusChange, tdrOwnerClosed,
+      tdrNativeDone:
+    if comboBox.popupOpen():
+      comboBox.closePopup()
+
+proc beginPopupSession(comboBox: ComboBox) =
+  let owner = comboBox.ownerWindow()
+  if comboBox.isNil or owner.isNil:
+    return
+  let popupWindow = if comboBox.popupWindowActive(): comboBox.xPopupWindow else: nil
+  owner.beginTransientSession(
+    owner = Responder(comboBox),
+    transientWindow = popupWindow,
+    restoreResponder = Responder(comboBox),
+    onDismiss = proc(reason: TransientDismissReason) =
+      comboBox.dismissPopupFromSession(reason),
+  )
+
+proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool =
+  let owner = comboBox.ownerWindow()
+  if comboBox.isNil or owner.isNil:
+    return false
+  owner.endTransientSession(reason)
+
 proc popupWindowActive(comboBox: ComboBox): bool =
   not comboBox.isNil and not comboBox.xPopupWindow.isNil and
     not comboBox.xPopupWindow.isClosed and comboBox.xPopupWindow.nativeReady
@@ -1018,7 +1051,8 @@ proc openPopupWindow(comboBox: ComboBox) =
   if not comboBox.shouldUseWindowPopup():
     return
   if not comboBox.xPopupWindow.isNil:
-    comboBox.closePopupWindow()
+    discard comboBox.endPopupSession()
+    comboBox.closePopupWindow(restoreOwner = false)
   let owner = comboBox.ownerWindow()
   if owner.isNil or not owner.nativeReady:
     return
@@ -1032,7 +1066,9 @@ proc openPopupWindow(comboBox: ComboBox) =
   popupWindow.setContentView(popupView)
   popupWindow.setPopupDoneHandler(
     proc() =
-      if comboBox.xPopupWindow == popupWindow:
+      if owner.hasActiveTransientSession():
+        discard owner.dismissTransientSession(tdrNativeDone)
+      elif comboBox.xPopupWindow == popupWindow:
         comboBox.closePopup()
   )
   comboBox.xPopupWindow = popupWindow
@@ -1044,14 +1080,14 @@ proc openPopupWindow(comboBox: ComboBox) =
     comboBox.xPopupWindow = nil
     popupWindow.close()
 
-proc closePopupWindow(comboBox: ComboBox) =
+proc closePopupWindow(comboBox: ComboBox, restoreOwner = true) =
   if comboBox.isNil:
     return
   let popupWindow = comboBox.xPopupWindow
   comboBox.xPopupWindow = nil
   if not popupWindow.isNil and not popupWindow.isClosed:
     popupWindow.close()
-  if not popupWindow.isNil:
+  if restoreOwner and not popupWindow.isNil:
     comboBox.reactivateOwnerWindow()
 
 proc reactivateOwnerWindow(comboBox: ComboBox) =
@@ -1071,7 +1107,10 @@ proc updatePopupPresentation(comboBox: ComboBox) =
   if comboBox.shouldUseWindowPopup():
     comboBox.openPopupWindow()
   elif not comboBox.xPopupWindow.isNil:
-    comboBox.closePopupWindow()
+    discard comboBox.endPopupSession()
+    comboBox.closePopupWindow(restoreOwner = false)
+  if comboBox.popupOpen():
+    comboBox.beginPopupSession()
 
 proc drawPopupContents(
     comboBox: ComboBox,

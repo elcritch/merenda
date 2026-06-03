@@ -389,10 +389,11 @@ Concrete task order and status:
    draw a lightweight scroll indicator for popups with hidden rows, and keep
    tests at the combo-box/window level so inline and native popup presentations
    stay aligned.
-20. Next: Add minimal modal/tracking-loop infrastructure for popup-like UI:
-   outside-click dismissal, Escape dismissal, focus/key-window restoration,
-   and a small owner relationship for transient windows. Build this before
-   menus, popovers, or drag sessions depend on edge-case event ordering.
+20. Done for minimal transient popup/session infrastructure: Add a narrow
+   `Window`-owned transient session with owner responder, optional transient
+   window, dismissal reason, callback, and focus restoration target. Combo-box
+   popups now use that shared path for inline and window-backed outside-click,
+   Escape, focus-change, native-done, and programmatic dismissal.
 21. Next: Revisit autoresizing-mask compatibility after the popup/event layer.
    Generate mask-derived constraints only when examples need compatibility
    behavior beyond the current stored mask/translate state.
@@ -422,6 +423,10 @@ Concrete task order and status:
 - Keep whole-window FigDraw rebuilds until they become measurable; preserve
   dirty rect metadata and the explicit display traversal so a later backend can
   narrow rendering without changing view APIs.
+- Done for the current popup/event pass: use an explicit transient popup session
+  on `Window`, not extra combo-box-only state, for outside-click dismissal,
+  Escape cancellation, auxiliary window closure, and focus restoration. Future
+  menus, popovers, and drag sessions should reuse the same ordering.
 - Add clipped dirty-rect rendering when the FigDraw/backend boundary has a
   concrete partial-present path.
 - Grow the default key binding table only as new text editing commands, menu
@@ -458,16 +463,17 @@ Concrete task order and status:
 - Stage layout work conservatively. Keep expanding constraints through the
   Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
   conveniences only when controls and examples prove the need.
-- Add modal/tracking loop infrastructure before menus, popovers, or drag
-  sessions depend on edge-case event ordering.
+- Build full modal/tracking loop behavior on top of the new transient session
+  base before menus, popovers, or drag sessions depend on edge-case event
+  ordering.
 - Keep expanding command/key-binding behavior through the responder command path
   rather than adding raw key special cases in individual controls.
 
 ### Priority Order
 
-- Short term: popup/list keyboard polish, transient popup dismissal/focus
-  restoration, richer container behavior where examples need it, and broader
-  control coverage.
+- Short term: richer container behavior where examples need it, generated
+  autoresizing-mask compatibility when examples justify it, and broader control
+  coverage.
 - Medium term: generated autoresizing-mask constraints, loadable/query-like
   themes, menu/popover implementations on top of the transient popup
   infrastructure, and broader resource organization.
