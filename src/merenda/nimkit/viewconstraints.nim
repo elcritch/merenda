@@ -42,6 +42,15 @@ type
     width: Variable
     height: Variable
 
+  AutoresizingAxisOptions = object
+    minMargin: AutoresizingMaskOption
+    size: AutoresizingMaskOption
+    maxMargin: AutoresizingMaskOption
+
+  AutoresizingAxisShares = object
+    minMargin: float32
+    size: float32
+
   LayoutSolveState = object
     solver: Solver
     items: seq[SolverView]
@@ -779,6 +788,60 @@ proc expressionFor(solverView: SolverView, attribute: LayoutAttribute): Expressi
   of latNotAnAttribute:
     toExpression(0.KiwiScalar)
 
+func autoresizingOptions(axis: LayoutAxis): AutoresizingAxisOptions =
+  case axis
+  of laHorizontal:
+    AutoresizingAxisOptions(
+      minMargin: cxMinXMargin, size: cxWidthSizable, maxMargin: cxMaxXMargin
+    )
+  of laVertical:
+    AutoresizingAxisOptions(
+      minMargin: cxMinYMargin, size: cxHeightSizable, maxMargin: cxMaxYMargin
+    )
+
+func originAttribute(axis: LayoutAxis): LayoutAttribute =
+  case axis
+  of laHorizontal: latLeft
+  of laVertical: latTop
+
+func sizeAttribute(axis: LayoutAxis): LayoutAttribute =
+  case axis
+  of laHorizontal: latWidth
+  of laVertical: latHeight
+
+func axisFlexShare(
+    flexible: bool, base, totalWeight: float32, flexibleCount: int
+): float32 =
+  if not flexible:
+    return 0.0'f32
+  if totalWeight > 0.0'f32:
+    return max(base, 0.0'f32) / totalWeight
+  if flexibleCount > 0:
+    return 1.0'f32 / float32(flexibleCount)
+  0.0'f32
+
+func autoresizingAxisShares(
+    mask: AutoresizingMask, axis: LayoutAxis, minMargin, size, maxMargin: float32
+): AutoresizingAxisShares =
+  let
+    options = axis.autoresizingOptions()
+    minFlexible = options.minMargin in mask
+    sizeFlexible = options.size in mask
+    maxFlexible = options.maxMargin in mask
+    flexibleCount = ord(minFlexible) + ord(sizeFlexible) + ord(maxFlexible)
+    totalWeight =
+      (if minFlexible: max(minMargin, 0.0'f32) else: 0.0'f32) +
+      (if sizeFlexible: max(size, 0.0'f32) else: 0.0'f32) +
+      (if maxFlexible: max(maxMargin, 0.0'f32) else: 0.0'f32)
+
+  if flexibleCount == 0:
+    return AutoresizingAxisShares(minMargin: 0.0'f32, size: 0.0'f32)
+
+  AutoresizingAxisShares(
+    minMargin: axisFlexShare(minFlexible, minMargin, totalWeight, flexibleCount),
+    size: axisFlexShare(sizeFlexible, size, totalWeight, flexibleCount),
+  )
+
 proc strengthened(constraint: Constraint, priority: LayoutPriority): Constraint =
   if priority.priorityValue >= LayoutPriorityRequired.priorityValue:
     constraint
@@ -857,6 +920,50 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
   for child in item.xSubviews:
     state.addIntrinsicConstraints(child)
 
+proc addAutoresizingAxisConstraints(
+    state: var LayoutSolveState, item, superview: View, axis: LayoutAxis
+) =
+  if item.isNil or superview.isNil:
+    return
+
+  let
+    childView = state.solverView(item)
+    parentView = state.solverView(superview)
+    autoresizing = item.xAutoresizingState
+    referenceChild = autoresizing.referenceRect
+    referenceParent = autoresizing.referenceSuperviewRect
+    minMargin = referenceChild.axisOrigin(axis) - referenceParent.axisOrigin(axis)
+    size = referenceChild.axisSize(axis)
+    maxMargin = referenceParent.axisSize(axis) - minMargin - size
+    shares =
+      item.xAutoresizingMask.autoresizingAxisShares(axis, minMargin, size, maxMargin)
+    parentDelta =
+      parentView.expressionFor(axis.sizeAttribute()) -
+      referenceParent.axisSize(axis).solverValue
+    childOrigin = childView.expressionFor(axis.originAttribute())
+    childSize = childView.expressionFor(axis.sizeAttribute())
+    targetOrigin =
+      parentView.expressionFor(axis.originAttribute()) + minMargin.solverValue +
+      parentDelta * shares.minMargin.solverValue
+    targetSize = size.solverValue + parentDelta * shares.size.solverValue
+
+  state.addSolverConstraint(eq(childOrigin, targetOrigin))
+  state.addSolverConstraint(eq(childSize, targetSize))
+
+proc addAutoresizingMaskConstraints(state: var LayoutSolveState, owner: View) =
+  if owner.isNil:
+    return
+
+  for child in owner.xSubviews:
+    if child.xAutoresizingMaskConstraints and not state.hasConstraintItem(child):
+      if not child.xAutoresizingState.hasReference:
+        child.captureAutoresizingState()
+      if child.xAutoresizingState.hasReference and state.hasSolverView(child) and
+          state.hasSolverView(owner):
+        state.addAutoresizingAxisConstraints(child, owner, laHorizontal)
+        state.addAutoresizingAxisConstraints(child, owner, laVertical)
+    state.addAutoresizingMaskConstraints(child)
+
 proc addLayoutConstraint(state: var LayoutSolveState, constraint: LayoutConstraint) =
   if constraint.isNil or not constraint.xActive or constraint.xFirstItem.isNil:
     return
@@ -903,6 +1010,11 @@ proc applySolvedFrames(state: LayoutSolveState) =
         solverView.item.frameForAlignmentRect(alignmentRect)
       )
 
+proc refreshAutoresizingStates(state: LayoutSolveState) =
+  for solverView in state.items:
+    if not solverView.item.isNil and solverView.item.xAutoresizingMaskConstraints:
+      solverView.item.captureAutoresizingState()
+
 proc applyConstraintsForSubtree*(view: View) =
   if view.isNil:
     return
@@ -912,7 +1024,9 @@ proc applyConstraintsForSubtree*(view: View) =
   state.addRootGeometryConstraints(view)
   state.addGeometryStays(view)
   state.addNonNegativeSizeConstraints()
+  state.addAutoresizingMaskConstraints(view)
   state.addIntrinsicConstraints(view)
   state.addOwnedConstraints(view)
   state.solver.updateVariables()
   state.applySolvedFrames()
+  state.refreshAutoresizingStates()
