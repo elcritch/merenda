@@ -443,17 +443,25 @@ Concrete task order and status:
    sources drive per-source generated-input cache refresh where practical.
    The solver still rebuilds the full subtree for correctness, but generated
    autoresizing, intrinsic, and future container inputs are now cached in
-   source buckets with per-source generations. First solve, user-constraint
-   changes, and structural changes conservatively rebuild all generated
-   buckets.
+   source buckets with per-source generations. The signal slot now updates
+   local and aggregate dirty sources so the solve root can choose generated
+   buckets without scanning descendants for dirty state. First solve,
+   user-constraint changes, and structural changes conservatively rebuild all
+   generated buckets.
 29. Done for optional Cocoa naming compatibility: Keep
    `autoresizingMaskConstraints` as the short Nim-facing API and add
    `translatesAutoresizingMaskIntoConstraints` as an AppKit comparison alias.
-30. Next layout-cache refinement: Split broad `lirSubviews` usage into more
-   precise descendant-geometry and hierarchy-structure reasons so ordinary
-   child frame edits do not have to look like subtree structure changes. Keep
-   the current conservative full generated-bucket rebuild for actual
-   add/remove/visibility changes.
+30. Done for the layout-cache refinement: Split broad `lirSubviews` usage into
+   precise `lirDescendantGeometry`, `lirDescendantIntrinsic`, and
+   `lirHierarchy` reasons for internal propagation. Ordinary child frame and
+   intrinsic edits now dirty aggregate source buckets without looking like
+   subtree structure changes; add/remove/visibility and user-constraint
+   changes still conservatively rebuild all generated buckets.
+31. Next layout-cache refinement: Audit remaining layout-affecting setters and
+   container hooks for direct lifecycle flag edits, and route any cache-relevant
+   changes through `layoutInputChanged` with a precise reason. Keep direct
+   `setNeedsDisplay` and pure lifecycle-only paths separate from layout cache
+   invalidation.
 
 ### Controls
 

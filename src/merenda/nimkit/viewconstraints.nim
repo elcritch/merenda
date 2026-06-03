@@ -55,10 +55,6 @@ type
     constraintItems: seq[View]
     generatedInputs: seq[LayoutInput]
 
-  LayoutCacheDirtyState = object
-    sources: LayoutInputSources
-    structureDirty: bool
-
 const
   AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
   GeneratedLayoutSources = {lisAutoresizingMask, lisIntrinsic, lisContainer}
@@ -1181,26 +1177,18 @@ proc refreshAutoresizingStates(state: LayoutSolveState) =
     if not solverView.item.isNil and solverView.item.xAutoresizingMaskConstraints:
       solverView.item.refreshAutoresizingReference()
 
-proc collectDirtyState(view: View, dirty: var LayoutCacheDirtyState) =
-  if view.isNil:
-    return
-  dirty.sources = dirty.sources + view.xLayoutInputCache.dirtySources
-  dirty.structureDirty = dirty.structureDirty or view.xLayoutInputCache.structureDirty
-  for child in view.xSubviews:
-    child.collectDirtyState(dirty)
-
 proc generatedSourcesToRebuild(root: View): LayoutInputSources =
   if root.isNil:
     return {}
 
-  var dirty = LayoutCacheDirtyState()
-  root.collectDirtyState(dirty)
-  if root.xLayoutInputCache.generation == 0 or dirty.structureDirty or
-      lisUser in dirty.sources:
+  let dirtySources =
+    root.xLayoutInputCache.dirtySources + root.xLayoutInputCache.aggregateDirtySources
+  if root.xLayoutInputCache.generation == 0 or root.xLayoutInputCache.structureDirty or
+      root.xLayoutInputCache.aggregateStructureDirty or lisUser in dirtySources:
     return GeneratedLayoutSources
 
   for source in GeneratedLayoutSources:
-    if source in dirty.sources:
+    if source in dirtySources:
       result.incl source
 
 proc generateLayoutInputsForSource(
@@ -1236,7 +1224,9 @@ proc refreshGeneratedLayoutInputs(state: var LayoutSolveState, root: View) =
 proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
   if not root.isNil:
     root.xLayoutInputCache.dirtySources = {}
+    root.xLayoutInputCache.aggregateDirtySources = {}
     root.xLayoutInputCache.structureDirty = false
+    root.xLayoutInputCache.aggregateStructureDirty = false
     inc root.xLayoutInputCache.generation
 
   for solverView in state.items:
@@ -1244,7 +1234,9 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
       solverView.item.xLayoutInputCache.generated =
         default(array[LayoutInputSource, seq[LayoutInput]])
       solverView.item.xLayoutInputCache.dirtySources = {}
+      solverView.item.xLayoutInputCache.aggregateDirtySources = {}
       solverView.item.xLayoutInputCache.structureDirty = false
+      solverView.item.xLayoutInputCache.aggregateStructureDirty = false
       solverView.item.xLayoutInputCache.sourceGenerations =
         default(array[LayoutInputSource, Natural])
       solverView.item.xLayoutInputCache.generation = 0

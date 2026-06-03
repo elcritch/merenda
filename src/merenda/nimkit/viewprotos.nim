@@ -218,7 +218,8 @@ protocol ViewProtocolInternal from View:
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
-      self.invalidateLayoutItemGeometry(lirSuperview)
+      self.notifyLayoutInputChanged(lirSuperview)
+      parent.notifyLayoutInputChanged(lirHierarchy)
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.resetAutoresizingState()
@@ -251,7 +252,8 @@ protocol ViewProtocolInternal from View:
     child.notifyDidMoveToSuperview()
     if oldWindow != self.xWindow:
       child.notifyDidMoveToWindow()
-    child.invalidateLayoutItemGeometry(lirSuperview)
+    child.notifyLayoutInputChanged(lirSuperview)
+    self.notifyLayoutInputChanged(lirHierarchy)
     self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
