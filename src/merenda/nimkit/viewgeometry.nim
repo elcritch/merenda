@@ -28,7 +28,7 @@ proc rectFromWindow*(view: View, rect: Rect): Rect
 proc rectToWindow*(view: View, rect: Rect): Rect
 proc alignmentRect*(view: View): Rect
 proc resetAutoresizingState*(view: View)
-proc captureAutoresizingState*(view: View)
+proc refreshAutoresizingReference*(view: View)
 
 proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
 
@@ -40,7 +40,8 @@ proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
     lisIntrinsic
   of lirHidden, lirContainerMetrics:
     lisContainer
-  of lirFrame, lirBounds, lirSuperview, lirSubviews, lirAutoresizingMask:
+  of lirFrame, lirBounds, lirSuperview, lirSuperviewGeometry, lirSubviews,
+      lirAutoresizingMask:
     lisAutoresizingMask
 
 proc markConstraintStorageChangedRaw(view: View) =
@@ -54,8 +55,11 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
     return
   view.xLayoutInputCache.dirtySources.incl reason.sourceFor()
   case reason
-  of lirFrame, lirBounds, lirSuperview, lirSubviews, lirAutoresizingMask:
-    view.xAutoresizingState.dirty = true
+  of lirFrame, lirSuperview, lirAutoresizingMask:
+    view.xAutoresizingState.referenceDirty = true
+    view.xAutoresizingState.inputsDirty = true
+  of lirBounds, lirSuperviewGeometry, lirSubviews:
+    view.xAutoresizingState.inputsDirty = true
   else:
     discard
   view.markConstraintStorageChangedRaw()
@@ -76,7 +80,7 @@ proc notifyLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) =
 proc markConstraintStorageChanged*(view: View) =
   view.notifyLayoutInputChanged(lirConstraints)
 
-proc markSubviewAutoresizingConstraintsChanged*(view: View, reason = lirSuperview) =
+proc notifyAutoresizingDependentsChanged*(view: View, reason = lirSuperviewGeometry) =
   if view.isNil:
     return
   for child in view.xSubviews:
@@ -104,9 +108,11 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
   if view.isNil or view.xAutoresizingMask == mask:
     return
   view.xAutoresizingMask = mask
-  if view.xAutoresizingMaskConstraints:
-    view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry(lirAutoresizingMask)
+  if view.xAutoresizingMaskConstraints:
+    view.refreshAutoresizingReference()
+  else:
+    view.resetAutoresizingState()
 
 proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
   view.setAutoresizingMask(mask)
@@ -119,10 +125,11 @@ proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
     return
   view.xAutoresizingMaskConstraints = value
   if value:
-    view.captureAutoresizingState()
+    view.invalidateLayoutItemGeometry(lirAutoresizingMask)
+    view.refreshAutoresizingReference()
   else:
+    view.invalidateLayoutItemGeometry(lirAutoresizingMask)
     view.resetAutoresizingState()
-  view.invalidateLayoutItemGeometry(lirAutoresizingMask)
 
 proc alignmentInsets*(view: View): EdgeInsets =
   if view.isNil:
@@ -161,7 +168,7 @@ proc resetAutoresizingState*(view: View) =
     return
   view.xAutoresizingState = AutoresizingState()
 
-proc captureAutoresizingState*(view: View) =
+proc refreshAutoresizingReference*(view: View) =
   if view.isNil or view.xSuperview.isNil or not view.xAutoresizingMaskConstraints:
     view.resetAutoresizingState()
     return
@@ -169,8 +176,30 @@ proc captureAutoresizingState*(view: View) =
     referenceRect: view.alignmentRect(),
     referenceSuperviewRect: view.xSuperview.alignmentRect(),
     hasReference: true,
-    dirty: false,
+    referenceDirty: false,
+    inputsDirty: false,
   )
+
+proc refreshAutoresizingReferenceIfNeeded*(view: View) =
+  if view.isNil:
+    return
+  if not view.xAutoresizingState.hasReference or view.xAutoresizingState.referenceDirty:
+    view.refreshAutoresizingReference()
+
+proc setFrameFromLayout*(
+    view: View, frame: Rect, refreshReference = true, notifyDependents = true
+) =
+  if view.isNil or view.xFrame == frame:
+    return
+  view.xFrame = frame
+  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  view.xNeedsLayout = true
+  view.xNeedsDisplay = true
+  view.xInvalidRects.setLen(0)
+  if refreshReference:
+    view.refreshAutoresizingReference()
+  if notifyDependents:
+    view.notifyAutoresizingDependentsChanged()
 
 proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
   if view.isNil:
@@ -180,9 +209,9 @@ proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
     return
   view.xFrame = frame
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
-  view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry(lirFrame)
-  view.markSubviewAutoresizingConstraintsChanged()
+  view.refreshAutoresizingReference()
+  view.notifyAutoresizingDependentsChanged()
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
 
@@ -292,9 +321,9 @@ proc applyInitialFrame*(view: View, frame: Rect) =
 
   view.xFrame = nextFrame
   view.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
-  view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry(lirFrame)
-  view.markSubviewAutoresizingConstraintsChanged()
+  view.refreshAutoresizingReference()
+  view.notifyAutoresizingDependentsChanged()
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
 
@@ -309,9 +338,9 @@ proc sizeToFit*(view: View) =
     return
   view.xFrame = nextFrame
   view.xBounds = initRect(0.0, 0.0, fittingSize.width, fittingSize.height)
-  view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry(lirFrame)
-  view.markSubviewAutoresizingConstraintsChanged()
+  view.refreshAutoresizingReference()
+  view.notifyAutoresizingDependentsChanged()
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
 

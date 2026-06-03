@@ -9,6 +9,7 @@ type
     lirFrame
     lirBounds
     lirSuperview
+    lirSuperviewGeometry
     lirSubviews
     lirHidden
     lirAutoresizingMask
@@ -33,7 +34,8 @@ type
     referenceRect*: Rect
     referenceSuperviewRect*: Rect
     hasReference*: bool
-    dirty*: bool
+    referenceDirty*: bool
+    inputsDirty*: bool
 
   LayoutConstraint* = ref object
     xFirstItem*: View

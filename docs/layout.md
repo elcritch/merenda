@@ -151,6 +151,7 @@ type
     lirFrame
     lirBounds
     lirSuperview
+    lirSuperviewGeometry
     lirSubviews
     lirHidden
     lirAutoresizingMask
@@ -167,9 +168,11 @@ proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.
 
 proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
   case reason
-  of lirFrame, lirBounds, lirSuperview, lirSubviews, lirAutoresizingMask:
-    view.xAutoresizingState.dirty = true
-    view.xLayoutInputCache.autoresizingDirty = true
+  of lirFrame, lirSuperview, lirAutoresizingMask:
+    view.xAutoresizingState.referenceDirty = true
+    view.xAutoresizingState.inputsDirty = true
+  of lirBounds, lirSuperviewGeometry, lirSubviews:
+    view.xAutoresizingState.inputsDirty = true
   of lirConstraints:
     view.xLayoutInputCache.userDirty = true
   of lirIntrinsic, lirAppearanceMetrics, lirContainerMetrics:
@@ -245,6 +248,11 @@ Autoresizing masks should remain a compatibility path for framed views:
 - Generated autoresizing equations use `AutoresizingState` reference geometry
   to translate flexible margins and sizable dimensions into parent-size
   dependent equations.
+- `AutoresizingState.referenceDirty` means the view's local frame, superview
+  relationship, or mask changed and its stored reference geometry should be
+  refreshed. `AutoresizingState.inputsDirty` means generated equations should
+  be rebuilt; superview geometry changes set this without replacing the stored
+  reference before the solver runs.
 - These generated equations are source-tagged as `lisAutoresizingMask`.
 
 This avoids the common Cocoa debugging problem where generated

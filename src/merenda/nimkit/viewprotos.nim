@@ -26,9 +26,9 @@ protocol ViewProtocolInternal from View:
       return
     self.xFrame = nextFrame
     self.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
-    self.captureAutoresizingState()
     self.invalidateLayoutItemGeometry(lirFrame)
-    self.markSubviewAutoresizingConstraintsChanged()
+    self.refreshAutoresizingReference()
+    self.notifyAutoresizingDependentsChanged()
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
@@ -39,7 +39,7 @@ protocol ViewProtocolInternal from View:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
     self.notifyLayoutInputChanged(lirBounds)
-    self.markSubviewAutoresizingConstraintsChanged(lirBounds)
+    self.notifyAutoresizingDependentsChanged()
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -244,7 +244,7 @@ protocol ViewProtocolInternal from View:
     if oldWindow != self.xWindow:
       child.notifyWillMoveToWindow(self.xWindow)
     child.xSuperview = self
-    child.captureAutoresizingState()
+    child.refreshAutoresizingReference()
     self.xSubviews.add child
     child.setNextResponder(self)
     child.setWindowOwner(self.xWindow)
