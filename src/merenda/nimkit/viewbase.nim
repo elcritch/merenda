@@ -5,10 +5,35 @@ import ./types
 export responders
 
 type
+  LayoutInvalidationReason* = enum
+    lirFrame
+    lirBounds
+    lirSuperview
+    lirSubviews
+    lirHidden
+    lirAutoresizingMask
+    lirConstraints
+    lirIntrinsic
+    lirAppearanceMetrics
+    lirContainerMetrics
+
+  LayoutInputSource* = enum
+    lisUser
+    lisAutoresizingMask
+    lisIntrinsic
+    lisContainer
+
+  LayoutInputSources* = set[LayoutInputSource]
+
+  LayoutInputKind* = enum
+    likConstraint
+    likEquation
+
   AutoresizingState* = object
     referenceRect*: Rect
     referenceSuperviewRect*: Rect
     hasReference*: bool
+    dirty*: bool
 
   LayoutConstraint* = ref object
     xFirstItem*: View
@@ -21,6 +46,30 @@ type
     xPriority*: LayoutPriority
     xActive*: bool
     xOwningView*: View
+
+  LayoutTerm* = object
+    item*: View
+    attribute*: LayoutAttribute
+    multiplier*: float32
+
+  LayoutEquation* = object
+    terms*: seq[LayoutTerm]
+    relation*: LayoutRelation
+    constant*: float32
+    priority*: LayoutPriority
+    source*: LayoutInputSource
+
+  LayoutInput* = object
+    case kind*: LayoutInputKind
+    of likConstraint:
+      constraint*: LayoutConstraint
+    of likEquation:
+      equation*: LayoutEquation
+
+  LayoutInputCache* = object
+    generated*: seq[LayoutInput]
+    dirtySources*: LayoutInputSources
+    generation*: Natural
 
   View* = ref object of Responder
     xFrame*: Rect
@@ -51,6 +100,7 @@ type
     xHuggingPriority*: array[LayoutAxis, LayoutPriority]
     xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
+    xLayoutInputCache*: LayoutInputCache
     xNextKeyView*: View
     xPreviousKeyView*: View
     xSuperview*: View

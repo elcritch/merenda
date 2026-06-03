@@ -27,7 +27,7 @@ protocol ViewProtocolInternal from View:
     self.xFrame = nextFrame
     self.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
     self.captureAutoresizingState()
-    self.invalidateLayoutItemGeometry()
+    self.invalidateLayoutItemGeometry(lirFrame)
     self.markSubviewAutoresizingConstraintsChanged()
     self.setNeedsDisplay(true)
 
@@ -38,8 +38,8 @@ protocol ViewProtocolInternal from View:
     if self.xBounds == bounds:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
-    self.markConstraintStorageChanged()
-    self.markSubviewAutoresizingConstraintsChanged()
+    self.notifyLayoutInputChanged(lirBounds)
+    self.markSubviewAutoresizingConstraintsChanged(lirBounds)
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -176,7 +176,7 @@ protocol ViewProtocolInternal from View:
     if self.xHidden == hidden:
       return
     self.xHidden = hidden
-    self.invalidateLayoutItemGeometry()
+    self.invalidateLayoutItemGeometry(lirHidden)
     self.setNeedsDisplay(true)
 
   method isHiddenOrHasHiddenAncestor*(self: View): bool =
@@ -220,7 +220,7 @@ protocol ViewProtocolInternal from View:
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
-      self.invalidateLayoutItemGeometry()
+      self.invalidateLayoutItemGeometry(lirSuperview)
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.resetAutoresizingState()
@@ -232,7 +232,7 @@ protocol ViewProtocolInternal from View:
     self.notifyDidMoveToSuperview()
     if oldWindow != nil:
       self.notifyDidMoveToWindow()
-    self.markConstraintStorageChanged()
+    self.notifyLayoutInputChanged(lirSuperview)
 
   method addSubview*(self: View, child: View) =
     if child.isNil:
@@ -253,7 +253,7 @@ protocol ViewProtocolInternal from View:
     child.notifyDidMoveToSuperview()
     if oldWindow != self.xWindow:
       child.notifyDidMoveToWindow()
-    child.invalidateLayoutItemGeometry()
+    child.invalidateLayoutItemGeometry(lirSuperview)
     self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =

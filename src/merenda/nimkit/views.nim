@@ -234,6 +234,7 @@ proc containsView*(view, candidate: View): bool =
 
 proc initViewFields*(view: View, frame: Rect = AutoRect) =
   initResponder(view)
+  view.initLayoutSignalBus()
   view.xFrame = frame.resolveAutoRect(initRect(0.0, 0.0, 0.0, 0.0))
   view.xBounds = initRect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
   view.xNeedsDisplay = true

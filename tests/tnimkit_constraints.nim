@@ -1,6 +1,14 @@
 import std/unittest
 
+import sigils/core
+
 import merenda/nimkit
+
+type LayoutInvalidationSpy = ref object of Agent
+  reasons: seq[LayoutInvalidationReason]
+
+proc record(spy: LayoutInvalidationSpy, reason: LayoutInvalidationReason) {.slot.} =
+  spy.reasons.add reason
 
 suite "nimkit constraints":
   test "layout constraints store Cocoa-shaped relation data":
@@ -552,6 +560,63 @@ suite "nimkit constraints":
     check root.needsLayout
     check child.needsUpdateConstraints
     check child.needsLayout
+
+  test "layout invalidation signal bus notifies subscribers and dirty sources":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      spy = LayoutInvalidationSpy()
+
+    connect(root, layoutInputChanged, spy, record)
+    root.layoutSubtreeIfNeeded()
+
+    root.frame = initRect(0, 0, 260, 120)
+    check spy.reasons.len == 1
+    check spy.reasons[0] == lirFrame
+    check lisAutoresizingMask in root.layoutInputDirtySources()
+    check root.needsUpdateConstraints
+    check root.needsLayout
+
+    root.layoutSubtreeIfNeeded()
+    root.invalidateIntrinsicContentSize()
+    check spy.reasons[^1] == lirIntrinsic
+    check lisIntrinsic in root.layoutInputDirtySources()
+
+  test "generated layout inputs expose internal autoresizing equations":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 10, 80, 30))
+
+    child.autoresizingMask = {cxWidthSizable, cxHeightSizable}
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+
+    let inputs = root.generatedLayoutInputs()
+    var autoresizingCount = 0
+    for input in inputs:
+      if input.source == lisAutoresizingMask:
+        inc autoresizingCount
+        check input.kind == likEquation
+        check input.equation.terms.len in {2, 3}
+    check autoresizingCount == 4
+
+  test "generated layout inputs expose intrinsic equations":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
+
+    button.autoresizingMaskConstraints = false
+    root.addSubview(button)
+    root.layoutSubtreeIfNeeded()
+
+    let inputs = root.generatedLayoutInputs()
+    var intrinsicCount = 0
+    for input in inputs:
+      if input.source == lisIntrinsic:
+        inc intrinsicCount
+        check input.kind == likEquation
+        check input.equation.terms.len == 1
+        check input.equation.terms[0].item == button
+    check intrinsicCount == 4
 
   test "explicit storage can move constraints between views":
     let

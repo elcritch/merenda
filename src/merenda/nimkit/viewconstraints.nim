@@ -55,8 +55,55 @@ type
     solver: Solver
     items: seq[SolverView]
     constraintItems: seq[View]
+    generatedInputs: seq[LayoutInput]
 
 const AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
+
+proc initLayoutTerm(
+    item: View, attribute: LayoutAttribute, multiplier = 1.0'f32
+): LayoutTerm =
+  LayoutTerm(item: item, attribute: attribute, multiplier: multiplier)
+
+proc initLayoutEquation(
+    terms: openArray[LayoutTerm],
+    relation: LayoutRelation,
+    constant: float32,
+    priority = LayoutPriorityRequired,
+    source = lisContainer,
+): LayoutEquation =
+  LayoutEquation(
+    terms: @terms,
+    relation: relation,
+    constant: constant,
+    priority: priority,
+    source: source,
+  )
+
+proc layoutEquationInput(equation: LayoutEquation): LayoutInput =
+  LayoutInput(kind: likEquation, equation: equation)
+
+proc layoutConstraintInput(constraint: LayoutConstraint): LayoutInput =
+  LayoutInput(kind: likConstraint, constraint: constraint)
+
+proc source*(input: LayoutInput): LayoutInputSource =
+  case input.kind
+  of likConstraint: lisUser
+  of likEquation: input.equation.source
+
+proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
+  if view.isNil:
+    @[]
+  else:
+    view.xLayoutInputCache.generated
+
+proc layoutInputDirtySources*(view: View): LayoutInputSources =
+  if view.isNil:
+    {}
+  else:
+    view.xLayoutInputCache.dirtySources
+
+proc layoutInputGeneration*(view: View): Natural =
+  if view.isNil: 0 else: view.xLayoutInputCache.generation
 
 proc item*(anchor: LayoutXAxisAnchor): View =
   anchor.xItem
@@ -885,6 +932,32 @@ proc addRelation(
       ge(left, right)
   state.addSolverConstraint(constraint, priority)
 
+proc expressionFor(state: var LayoutSolveState, term: LayoutTerm): Expression =
+  if term.item.isNil or not state.hasSolverView(term.item):
+    return toExpression(0.KiwiScalar)
+  state.solverView(term.item).expressionFor(term.attribute) * term.multiplier.solverValue
+
+proc addLayoutEquation(state: var LayoutSolveState, equation: LayoutEquation) =
+  if equation.terms.len == 0:
+    return
+  for term in equation.terms:
+    if term.item.isNil or not state.hasSolverView(term.item):
+      return
+
+  var left = toExpression(0.KiwiScalar)
+  for term in equation.terms:
+    left = left + state.expressionFor(term)
+  state.addRelation(
+    left,
+    toExpression(equation.constant.solverValue),
+    equation.relation,
+    equation.priority,
+  )
+
+proc addGeneratedEquation(state: var LayoutSolveState, equation: LayoutEquation) =
+  state.generatedInputs.add equation.layoutEquationInput()
+  state.addLayoutEquation(equation)
+
 proc addNonNegativeSizeConstraints(state: var LayoutSolveState) =
   for solverView in state.items:
     state.addSolverConstraint(ge(solverView.width, 0))
@@ -895,26 +968,44 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
     return
 
   if not item.xAutoresizingMaskConstraints or state.hasConstraintItem(item):
-    let
-      solverView = state.solverView(item)
-      intrinsicSize = item.resolvedIntrinsicContentSize()
+    let intrinsicSize = item.resolvedIntrinsicContentSize()
     if intrinsicSize.hasWidth:
-      state.addSolverConstraint(
-        ge(solverView.width, intrinsicSize.width.solverValue),
-        item.compressionPriority(laHorizontal),
+      state.addGeneratedEquation(
+        initLayoutEquation(
+          [initLayoutTerm(item, latWidth)],
+          lrGreaterThanOrEqual,
+          intrinsicSize.width,
+          item.compressionPriority(laHorizontal),
+          lisIntrinsic,
+        )
       )
-      state.addSolverConstraint(
-        le(solverView.width, intrinsicSize.width.solverValue),
-        item.huggingPriority(laHorizontal),
+      state.addGeneratedEquation(
+        initLayoutEquation(
+          [initLayoutTerm(item, latWidth)],
+          lrLessThanOrEqual,
+          intrinsicSize.width,
+          item.huggingPriority(laHorizontal),
+          lisIntrinsic,
+        )
       )
     if intrinsicSize.hasHeight:
-      state.addSolverConstraint(
-        ge(solverView.height, intrinsicSize.height.solverValue),
-        item.compressionPriority(laVertical),
+      state.addGeneratedEquation(
+        initLayoutEquation(
+          [initLayoutTerm(item, latHeight)],
+          lrGreaterThanOrEqual,
+          intrinsicSize.height,
+          item.compressionPriority(laVertical),
+          lisIntrinsic,
+        )
       )
-      state.addSolverConstraint(
-        le(solverView.height, intrinsicSize.height.solverValue),
-        item.huggingPriority(laVertical),
+      state.addGeneratedEquation(
+        initLayoutEquation(
+          [initLayoutTerm(item, latHeight)],
+          lrLessThanOrEqual,
+          intrinsicSize.height,
+          item.huggingPriority(laVertical),
+          lisIntrinsic,
+        )
       )
 
   for child in item.xSubviews:
@@ -927,8 +1018,6 @@ proc addAutoresizingAxisConstraints(
     return
 
   let
-    childView = state.solverView(item)
-    parentView = state.solverView(superview)
     autoresizing = item.xAutoresizingState
     referenceChild = autoresizing.referenceRect
     referenceParent = autoresizing.referenceSuperviewRect
@@ -937,18 +1026,33 @@ proc addAutoresizingAxisConstraints(
     maxMargin = referenceParent.axisSize(axis) - minMargin - size
     shares =
       item.xAutoresizingMask.autoresizingAxisShares(axis, minMargin, size, maxMargin)
-    parentDelta =
-      parentView.expressionFor(axis.sizeAttribute()) -
-      referenceParent.axisSize(axis).solverValue
-    childOrigin = childView.expressionFor(axis.originAttribute())
-    childSize = childView.expressionFor(axis.sizeAttribute())
-    targetOrigin =
-      parentView.expressionFor(axis.originAttribute()) + minMargin.solverValue +
-      parentDelta * shares.minMargin.solverValue
-    targetSize = size.solverValue + parentDelta * shares.size.solverValue
+    parentSize = referenceParent.axisSize(axis)
+    originAttribute = axis.originAttribute()
+    sizeAttribute = axis.sizeAttribute()
 
-  state.addSolverConstraint(eq(childOrigin, targetOrigin))
-  state.addSolverConstraint(eq(childSize, targetSize))
+  state.addGeneratedEquation(
+    initLayoutEquation(
+      [
+        initLayoutTerm(item, originAttribute),
+        initLayoutTerm(superview, originAttribute, -1.0'f32),
+        initLayoutTerm(superview, sizeAttribute, -shares.minMargin),
+      ],
+      lrEqual,
+      minMargin - parentSize * shares.minMargin,
+      source = lisAutoresizingMask,
+    )
+  )
+  state.addGeneratedEquation(
+    initLayoutEquation(
+      [
+        initLayoutTerm(item, sizeAttribute),
+        initLayoutTerm(superview, sizeAttribute, -shares.size),
+      ],
+      lrEqual,
+      size - parentSize * shares.size,
+      source = lisAutoresizingMask,
+    )
+  )
 
 proc addAutoresizingMaskConstraints(state: var LayoutSolveState, owner: View) =
   if owner.isNil:
@@ -986,11 +1090,18 @@ proc addLayoutConstraint(state: var LayoutSolveState, constraint: LayoutConstrai
 
   state.addRelation(left, right, constraint.xRelation, constraint.xPriority)
 
+proc addLayoutInput(state: var LayoutSolveState, input: LayoutInput) =
+  case input.kind
+  of likConstraint:
+    state.addLayoutConstraint(input.constraint)
+  of likEquation:
+    state.addLayoutEquation(input.equation)
+
 proc addOwnedConstraints(state: var LayoutSolveState, owner: View) =
   if owner.isNil:
     return
   for constraint in owner.xConstraints:
-    state.addLayoutConstraint(constraint)
+    state.addLayoutInput(constraint.layoutConstraintInput())
   for child in owner.xSubviews:
     state.addOwnedConstraints(child)
 
@@ -1015,6 +1126,17 @@ proc refreshAutoresizingStates(state: LayoutSolveState) =
     if not solverView.item.isNil and solverView.item.xAutoresizingMaskConstraints:
       solverView.item.captureAutoresizingState()
 
+proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
+  if not root.isNil:
+    root.xLayoutInputCache.generated = state.generatedInputs
+    root.xLayoutInputCache.dirtySources = {}
+    inc root.xLayoutInputCache.generation
+
+  for solverView in state.items:
+    if not solverView.item.isNil and solverView.item != root:
+      solverView.item.xLayoutInputCache.generated.setLen(0)
+      solverView.item.xLayoutInputCache.dirtySources = {}
+
 proc applyConstraintsForSubtree*(view: View) =
   if view.isNil:
     return
@@ -1030,3 +1152,4 @@ proc applyConstraintsForSubtree*(view: View) =
   state.solver.updateVariables()
   state.applySolvedFrames()
   state.refreshAutoresizingStates()
+  state.refreshLayoutInputCaches(view)

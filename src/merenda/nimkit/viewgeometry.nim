@@ -1,5 +1,7 @@
 import std/options
 
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -28,25 +30,69 @@ proc alignmentRect*(view: View): Rect
 proc resetAutoresizingState*(view: View)
 proc captureAutoresizingState*(view: View)
 
-proc markConstraintStorageChanged*(view: View) =
+proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
+
+proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
+  case reason
+  of lirConstraints:
+    lisUser
+  of lirIntrinsic, lirAppearanceMetrics:
+    lisIntrinsic
+  of lirHidden, lirContainerMetrics:
+    lisContainer
+  of lirFrame, lirBounds, lirSuperview, lirSubviews, lirAutoresizingMask:
+    lisAutoresizingMask
+
+proc markConstraintStorageChangedRaw(view: View) =
   if view.isNil:
     return
   view.xNeedsUpdateConstraints = true
   view.xNeedsLayout = true
 
-proc markSubviewAutoresizingConstraintsChanged*(view: View) =
+proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
+  if view.isNil:
+    return
+  view.xLayoutInputCache.dirtySources.incl reason.sourceFor()
+  case reason
+  of lirFrame, lirBounds, lirSuperview, lirSubviews, lirAutoresizingMask:
+    view.xAutoresizingState.dirty = true
+  else:
+    discard
+  view.markConstraintStorageChangedRaw()
+
+proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
+  view.markLayoutInputDirty(reason)
+
+proc initLayoutSignalBus*(view: View) =
+  if view.isNil:
+    return
+  connect(view, layoutInputChanged, view, onLayoutInputChanged)
+
+proc notifyLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) =
+  if view.isNil:
+    return
+  emit view.layoutInputChanged(reason)
+
+proc markConstraintStorageChanged*(view: View) =
+  view.notifyLayoutInputChanged(lirConstraints)
+
+proc markSubviewAutoresizingConstraintsChanged*(view: View, reason = lirSuperview) =
   if view.isNil:
     return
   for child in view.xSubviews:
     if child.xAutoresizingMaskConstraints:
-      child.markConstraintStorageChanged()
+      child.notifyLayoutInputChanged(reason)
 
-proc invalidateLayoutItemGeometry*(view: View) =
+proc invalidateLayoutItemGeometry*(
+    view: View, reason = lirFrame, ancestorReason = lirSubviews
+) =
   if view.isNil:
     return
   var current = view
+  var isOrigin = true
   while not current.isNil:
-    current.markConstraintStorageChanged()
+    current.notifyLayoutInputChanged(if isOrigin: reason else: ancestorReason)
+    isOrigin = false
     current = current.xSuperview
 
 proc autoresizingMask*(view: View): AutoresizingMask =
@@ -60,7 +106,7 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
   view.xAutoresizingMask = mask
   if view.xAutoresizingMaskConstraints:
     view.captureAutoresizingState()
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirAutoresizingMask)
 
 proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
   view.setAutoresizingMask(mask)
@@ -76,7 +122,7 @@ proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
     view.captureAutoresizingState()
   else:
     view.resetAutoresizingState()
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirAutoresizingMask)
 
 proc alignmentInsets*(view: View): EdgeInsets =
   if view.isNil:
@@ -87,7 +133,7 @@ proc `alignmentInsets=`*(view: View, insets: EdgeInsets) =
   if view.isNil or view.xAlignmentInsets == insets:
     return
   view.xAlignmentInsets = insets
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirFrame)
 
 proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
   if view.isNil:
@@ -123,6 +169,7 @@ proc captureAutoresizingState*(view: View) =
     referenceRect: view.alignmentRect(),
     referenceSuperviewRect: view.xSuperview.alignmentRect(),
     hasReference: true,
+    dirty: false,
   )
 
 proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
@@ -134,7 +181,7 @@ proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
   view.xFrame = frame
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
   view.captureAutoresizingState()
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirFrame)
   view.markSubviewAutoresizingConstraintsChanged()
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
@@ -150,7 +197,7 @@ proc `lastBaselineOffset=`*(view: View, offset: float32) =
   if view.isNil or view.xLastBaselineOffset == normalized:
     return
   view.xLastBaselineOffset = normalized
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirIntrinsic)
 
 proc firstBaselineOffset*(view: View): float32 =
   if view.isNil: 0.0'f32 else: view.xFirstBaselineOffset
@@ -160,7 +207,7 @@ proc `firstBaselineOffset=`*(view: View, offset: float32) =
   if view.isNil or view.xFirstBaselineOffset == normalized:
     return
   view.xFirstBaselineOffset = normalized
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirIntrinsic)
 
 proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
   if view.isNil:
@@ -246,7 +293,7 @@ proc applyInitialFrame*(view: View, frame: Rect) =
   view.xFrame = nextFrame
   view.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
   view.captureAutoresizingState()
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirFrame)
   view.markSubviewAutoresizingConstraintsChanged()
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
@@ -263,7 +310,7 @@ proc sizeToFit*(view: View) =
   view.xFrame = nextFrame
   view.xBounds = initRect(0.0, 0.0, fittingSize.width, fittingSize.height)
   view.captureAutoresizingState()
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirFrame)
   view.markSubviewAutoresizingConstraintsChanged()
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
@@ -271,7 +318,7 @@ proc sizeToFit*(view: View) =
 proc invalidateIntrinsicContentSize*(view: View) =
   if view.isNil:
     return
-  view.invalidateLayoutItemGeometry()
+  view.invalidateLayoutItemGeometry(lirIntrinsic)
 
 proc invalidateIntrinsicContentSizeSubtree*(view: View) =
   if view.isNil:

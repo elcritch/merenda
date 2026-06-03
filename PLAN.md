@@ -409,6 +409,14 @@ Concrete task order and status:
    origin/size behavior, and lets explicit constraints take precedence.
    Richer source-compat behavior, especially unusual multi-flex combinations
    and bounds-origin edge cases, remains deferred until examples need it.
+23. Done for the first layout input/invalidation bus pass: Add
+   `docs/layout.md`, source-tagged `LayoutInput`/`LayoutEquation` shapes, a
+   Sigils-backed `layoutInputChanged` signal bus for constraint/layout
+   invalidation reasons, and generated input inspection for the current solve
+   root. Autoresizing-mask and intrinsic-size solver inputs now flow through
+   the common internal equation path, while authored constraints remain
+   Cocoa-shaped `LayoutConstraint` values. Partial per-source cache rebuilds
+   and richer public debug summaries remain deferred.
 
 ### Controls
 
