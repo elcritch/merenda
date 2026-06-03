@@ -5,6 +5,11 @@ import ./types
 export responders
 
 type
+  AutoresizingState* = object
+    referenceRect*: Rect
+    referenceSuperviewRect*: Rect
+    hasReference*: bool
+
   LayoutConstraint* = ref object
     xFirstItem*: View
     xFirstAttribute*: LayoutAttribute
@@ -39,6 +44,7 @@ type
     xNeedsLayout*: bool
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingMaskConstraints*: bool
+    xAutoresizingState*: AutoresizingState
     xAlignmentInsets*: EdgeInsets
     xLastBaselineOffset*: float32
     xFirstBaselineOffset*: float32

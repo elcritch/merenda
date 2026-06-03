@@ -401,9 +401,14 @@ Concrete task order and status:
    Escape, focus-change, native-done, and programmatic dismissal.
    It gives us a narrow base for full modal/tracking-loop behavior later
    without committing to a full AppKit-style modal system now.
-22. Next: Revisit autoresizing-mask compatibility after the popup/event layer.
-   Generate mask-derived constraints only when examples need compatibility
-   behavior beyond the current stored mask/translate state.
+22. Done for the current autoresizing-mask compatibility layer: Generate
+   solver constraints for framed subviews with `autoresizingMaskConstraints`
+   enabled and no explicit layout constraints. The pass stores reference
+   geometry in `AutoresizingState`, translates flexible min margins and sizable
+   dimensions into proportional parent-size equations, preserves the default fixed
+   origin/size behavior, and lets explicit constraints take precedence.
+   Richer source-compat behavior, especially unusual multi-flex combinations
+   and bounds-origin edge cases, remains deferred until examples need it.
 
 ### Controls
 
@@ -478,12 +483,11 @@ Concrete task order and status:
 
 ### Priority Order
 
-- Short term: richer container behavior where examples need it, generated
-  autoresizing-mask compatibility when examples justify it, and broader control
-  coverage.
-- Medium term: generated autoresizing-mask constraints, loadable/query-like
-  themes, menu/popover implementations on top of the transient popup
-  infrastructure, and broader resource organization.
+- Short term: richer container behavior where examples need it, remaining
+  autoresizing-mask compatibility details when examples justify them, and
+  broader control coverage.
+- Medium term: loadable/query-like themes, menu/popover implementations on top
+  of the transient popup infrastructure, and broader resource organization.
 - Later: full source-compatibility conveniences only when examples prove the
   need.
 

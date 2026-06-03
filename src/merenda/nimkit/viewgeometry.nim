@@ -24,6 +24,9 @@ proc pointFromWindow*(view: View, point: Point): Point
 proc pointToWindow*(view: View, point: Point): Point
 proc rectFromWindow*(view: View, rect: Rect): Rect
 proc rectToWindow*(view: View, rect: Rect): Rect
+proc alignmentRect*(view: View): Rect
+proc resetAutoresizingState*(view: View)
+proc captureAutoresizingState*(view: View)
 
 proc markConstraintStorageChanged*(view: View) =
   if view.isNil:
@@ -55,6 +58,8 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
   if view.isNil or view.xAutoresizingMask == mask:
     return
   view.xAutoresizingMask = mask
+  if view.xAutoresizingMaskConstraints:
+    view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry()
 
 proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
@@ -67,6 +72,10 @@ proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
   if view.isNil or view.xAutoresizingMaskConstraints == value:
     return
   view.xAutoresizingMaskConstraints = value
+  if value:
+    view.captureAutoresizingState()
+  else:
+    view.resetAutoresizingState()
   view.invalidateLayoutItemGeometry()
 
 proc alignmentInsets*(view: View): EdgeInsets =
@@ -101,6 +110,21 @@ proc alignmentRect*(view: View): Rect =
     return initRect(0.0, 0.0, 0.0, 0.0)
   view.alignmentRectForFrame(view.xFrame)
 
+proc resetAutoresizingState*(view: View) =
+  if view.isNil:
+    return
+  view.xAutoresizingState = AutoresizingState()
+
+proc captureAutoresizingState*(view: View) =
+  if view.isNil or view.xSuperview.isNil or not view.xAutoresizingMaskConstraints:
+    view.resetAutoresizingState()
+    return
+  view.xAutoresizingState = AutoresizingState(
+    referenceRect: view.alignmentRect(),
+    referenceSuperviewRect: view.xSuperview.alignmentRect(),
+    hasReference: true,
+  )
+
 proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
   if view.isNil:
     return
@@ -109,6 +133,7 @@ proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
     return
   view.xFrame = frame
   view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry()
   view.markSubviewAutoresizingConstraintsChanged()
   view.xNeedsDisplay = true
@@ -220,6 +245,7 @@ proc applyInitialFrame*(view: View, frame: Rect) =
 
   view.xFrame = nextFrame
   view.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
+  view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry()
   view.markSubviewAutoresizingConstraintsChanged()
   view.xNeedsDisplay = true
@@ -236,6 +262,7 @@ proc sizeToFit*(view: View) =
     return
   view.xFrame = nextFrame
   view.xBounds = initRect(0.0, 0.0, fittingSize.width, fittingSize.height)
+  view.captureAutoresizingState()
   view.invalidateLayoutItemGeometry()
   view.markSubviewAutoresizingConstraintsChanged()
   view.xNeedsDisplay = true

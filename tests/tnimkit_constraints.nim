@@ -244,6 +244,59 @@ suite "nimkit constraints":
     check child.needsUpdateConstraints
     check child.needsLayout
 
+  test "generated autoresizing constraints preserve default origin and size":
+    let
+      root = newView(frame = initRect(0, 0, 200, 100))
+      child = newView(frame = initRect(20, 10, 80, 30))
+
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+    root.frame = initRect(0, 0, 300, 160)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(20, 10, 80, 30)
+
+  test "generated autoresizing constraints resize sizable dimensions":
+    let
+      root = newView(frame = initRect(0, 0, 200, 100))
+      child = newView(frame = initRect(20, 10, 80, 30))
+
+    root.addSubview(child)
+    child.autoresizingMask = {cxWidthSizable, cxHeightSizable}
+    root.layoutSubtreeIfNeeded()
+    root.frame = initRect(0, 0, 300, 160)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(20, 10, 180, 90)
+
+  test "generated autoresizing constraints move flexible minimum margins":
+    let
+      root = newView(frame = initRect(0, 0, 200, 100))
+      child = newView(frame = initRect(20, 10, 80, 30))
+
+    root.addSubview(child)
+    child.autoresizingMask = {cxMinXMargin, cxMinYMargin}
+    root.layoutSubtreeIfNeeded()
+    root.frame = initRect(0, 0, 300, 160)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame() == initRect(120, 70, 80, 30)
+
+  test "explicit constraints take precedence over autoresizing masks":
+    let
+      root = newView(frame = initRect(0, 0, 200, 100))
+      child = newView(frame = initRect(20, 10, 80, 30))
+      width = newLayoutConstraint(child, latWidth, constant = 50.0)
+
+    root.addSubview(child)
+    child.autoresizingMask = {cxWidthSizable}
+    activate(width)
+    root.layoutSubtreeIfNeeded()
+    root.frame = initRect(0, 0, 300, 100)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame().size.width == 50.0'f32
+
   test "solver applies constant sizes":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
