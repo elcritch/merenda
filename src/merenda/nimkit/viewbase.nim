@@ -11,6 +11,9 @@ type
     lirSuperview
     lirSuperviewGeometry
     lirSubviews
+    lirHierarchy
+    lirDescendantGeometry
+    lirDescendantIntrinsic
     lirHidden
     lirAutoresizingMask
     lirConstraints
@@ -76,7 +79,9 @@ type
   LayoutInputCache* = object
     generated*: array[LayoutInputSource, seq[LayoutInput]]
     dirtySources*: LayoutInputSources
+    aggregateDirtySources*: LayoutInputSources
     structureDirty*: bool
+    aggregateStructureDirty*: bool
     sourceGenerations*: array[LayoutInputSource, Natural]
     generation*: Natural
 

@@ -35,13 +35,16 @@ proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
   case reason
   of lirConstraints:
     lisUser
-  of lirIntrinsic, lirAppearanceMetrics:
+  of lirIntrinsic, lirDescendantIntrinsic, lirAppearanceMetrics:
     lisIntrinsic
-  of lirHidden, lirContainerMetrics:
+  of lirHidden, lirHierarchy, lirContainerMetrics:
     lisContainer
   of lirFrame, lirBounds, lirSuperview, lirSuperviewGeometry, lirSubviews,
-      lirAutoresizingMask:
+      lirDescendantGeometry, lirAutoresizingMask:
     lisAutoresizingMask
+
+func isStructureDirtyReason(reason: LayoutInvalidationReason): bool =
+  reason in {lirSuperview, lirSubviews, lirHierarchy, lirHidden}
 
 proc markConstraintStorageChangedRaw(view: View) =
   if view.isNil:
@@ -49,11 +52,25 @@ proc markConstraintStorageChangedRaw(view: View) =
   view.xNeedsUpdateConstraints = true
   view.xNeedsLayout = true
 
+proc markAggregateLayoutInputDirty(
+    view: View, source: LayoutInputSource, structureDirty: bool
+) =
+  var current = view
+  while not current.isNil:
+    current.xLayoutInputCache.aggregateDirtySources.incl source
+    if structureDirty:
+      current.xLayoutInputCache.aggregateStructureDirty = true
+    current.markConstraintStorageChangedRaw()
+    current = current.xSuperview
+
 proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
   if view.isNil:
     return
-  view.xLayoutInputCache.dirtySources.incl reason.sourceFor()
-  if reason in {lirSuperview, lirSubviews, lirHidden}:
+  let
+    source = reason.sourceFor()
+    structureDirty = reason.isStructureDirtyReason()
+  view.xLayoutInputCache.dirtySources.incl source
+  if structureDirty:
     view.xLayoutInputCache.structureDirty = true
   case reason
   of lirFrame, lirSuperview, lirAutoresizingMask:
@@ -63,7 +80,7 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
     view.xAutoresizingState.inputsDirty = true
   else:
     discard
-  view.markConstraintStorageChangedRaw()
+  view.markAggregateLayoutInputDirty(source, structureDirty)
 
 proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
   view.markLayoutInputDirty(reason)
@@ -89,7 +106,7 @@ proc notifyAutoresizingDependentsChanged*(view: View, reason = lirSuperviewGeome
       child.notifyLayoutInputChanged(reason)
 
 proc invalidateLayoutItemGeometry*(
-    view: View, reason = lirFrame, ancestorReason = lirSubviews
+    view: View, reason = lirFrame, ancestorReason = lirDescendantGeometry
 ) =
   if view.isNil:
     return
@@ -231,7 +248,9 @@ proc `lastBaselineOffset=`*(view: View, offset: float32) =
   if view.isNil or view.xLastBaselineOffset == normalized:
     return
   view.xLastBaselineOffset = normalized
-  view.invalidateLayoutItemGeometry(lirIntrinsic)
+  view.invalidateLayoutItemGeometry(
+    lirIntrinsic, ancestorReason = lirDescendantIntrinsic
+  )
 
 proc firstBaselineOffset*(view: View): float32 =
   if view.isNil: 0.0'f32 else: view.xFirstBaselineOffset
@@ -241,7 +260,9 @@ proc `firstBaselineOffset=`*(view: View, offset: float32) =
   if view.isNil or view.xFirstBaselineOffset == normalized:
     return
   view.xFirstBaselineOffset = normalized
-  view.invalidateLayoutItemGeometry(lirIntrinsic)
+  view.invalidateLayoutItemGeometry(
+    lirIntrinsic, ancestorReason = lirDescendantIntrinsic
+  )
 
 proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
   if view.isNil:
@@ -335,7 +356,9 @@ proc sizeToFit*(view: View) =
 proc invalidateIntrinsicContentSize*(view: View) =
   if view.isNil:
     return
-  view.invalidateLayoutItemGeometry(lirIntrinsic, ancestorReason = lirIntrinsic)
+  view.invalidateLayoutItemGeometry(
+    lirIntrinsic, ancestorReason = lirDescendantIntrinsic
+  )
 
 proc invalidateIntrinsicContentSizeSubtree*(view: View) =
   if view.isNil:

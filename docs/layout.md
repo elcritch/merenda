@@ -37,8 +37,8 @@ NimKit already has the core pieces needed to build this direction:
   `AutoresizingState` and generates internal solver constraints when a framed
   child has no explicit active constraints.
 - `layoutInputChanged` is the active invalidation bus. Setters emit layout
-  reasons, and the slot maps those reasons to dirty sources, lifecycle flags,
-  and autoresizing state.
+  reasons, and the slot maps those reasons to local dirty sources, aggregate
+  dirty sources on ancestors, lifecycle flags, and autoresizing state.
 - Generated solver inputs are cached per source on the current solve root.
   Dirty sources can rebuild only their source bucket, while structural and
   user-constraint changes still rebuild all generated buckets.
@@ -154,7 +154,7 @@ do not couple to the internal equation representation.
 The signal bus should be a core invalidation primitive. It should describe what
 changed, then let layout storage decide which caches and flags to dirty.
 
-Proposed reason enum:
+Current reason enum:
 
 ```nim
 type
@@ -163,7 +163,10 @@ type
     lirBounds
     lirSuperview
     lirSuperviewGeometry
-    lirSubviews
+    lirSubviews # legacy broad descendant/hierarchy reason
+    lirHierarchy
+    lirDescendantGeometry
+    lirDescendantIntrinsic
     lirHidden
     lirAutoresizingMask
     lirConstraints
@@ -178,8 +181,12 @@ Current signal and slot shape:
 proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
 
 proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
-  view.xLayoutInputCache.dirtySources.incl reason.sourceFor()
-  if reason in {lirSuperview, lirSubviews, lirHidden}:
+  let
+    source = reason.sourceFor()
+    structureDirty = reason.isStructureDirtyReason()
+
+  view.xLayoutInputCache.dirtySources.incl source
+  if structureDirty:
     view.xLayoutInputCache.structureDirty = true
 
   case reason
@@ -191,8 +198,7 @@ proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.
   else:
     discard
 
-  view.xNeedsUpdateConstraints = true
-  view.xNeedsLayout = true
+  view.markAggregateLayoutInputDirty(source, structureDirty)
 ```
 
 The exact cache fields can evolve, but the event model should stay narrow:
@@ -211,7 +217,8 @@ The intended layout pass is:
 2. The setter emits `layoutInputChanged(view, reason)` when the change affects
    constraints, intrinsic size, generated inputs, or layout.
 3. The layout invalidation slot marks local caches dirty and propagates
-   lifecycle flags to the relevant layout root or ancestors.
+   aggregate dirty sources and lifecycle flags to the relevant layout root or
+   ancestors.
 4. `updateConstraintsForSubtreeIfNeeded` runs optional view hooks.
 5. The layout input cache is refreshed for dirty roots:
    authored constraints, autoresizing inputs, intrinsic inputs, and future
@@ -237,9 +244,12 @@ global. That keeps solver systems small and makes invalidation bounded.
 Current cache contents:
 
 - generated inputs bucketed by `LayoutInputSource`
-- dirty flags grouped by source
+- local dirty flags grouped by source
+- aggregate dirty flags grouped by source for the view's subtree
 - a structural-dirty flag for hierarchy/visibility changes that require a
   broader generated-input refresh
+- an aggregate structural-dirty flag for hierarchy/visibility changes anywhere
+  in the view's subtree
 - per-source generation counters for diagnostics
 - a solve/cache generation number for diagnostics
 
@@ -249,6 +259,10 @@ changes rebuild all generated buckets because constraint participation and
 view membership can change. Superview geometry changes can rebuild only
 autoresizing-mask equations, and intrinsic invalidations can rebuild only
 intrinsic equations.
+
+The generated-cache refresh reads the solve root's local and aggregate dirty
+state directly. It no longer scans the subtree to rediscover dirty sources
+before deciding which generated source buckets to rebuild.
 
 The solver itself is still rebuilt for the full subtree on each layout pass.
 That keeps correctness straightforward while the cache model settles. A future

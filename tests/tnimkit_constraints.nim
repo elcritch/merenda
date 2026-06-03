@@ -625,6 +625,28 @@ suite "nimkit constraints":
     check spy.reasons[^1] == lirIntrinsic
     check lisIntrinsic in root.layoutInputDirtySources()
 
+  test "layout invalidation signal bus aggregates descendant dirty sources":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 10, 80, 30))
+
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+
+    child.frame = initRect(24, 14, 90, 34)
+    check lisAutoresizingMask in root.xLayoutInputCache.aggregateDirtySources
+    check not root.xLayoutInputCache.aggregateStructureDirty
+
+    root.layoutSubtreeIfNeeded()
+    child.invalidateIntrinsicContentSize()
+    check lisIntrinsic in root.xLayoutInputCache.aggregateDirtySources
+    check not root.xLayoutInputCache.aggregateStructureDirty
+
+    root.layoutSubtreeIfNeeded()
+    root.addSubview(newView(frame = initRect(0, 0, 10, 10)))
+    check lisContainer in root.xLayoutInputCache.aggregateDirtySources
+    check root.xLayoutInputCache.aggregateStructureDirty
+
   test "generated layout summary exposes internal autoresizing equations":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
@@ -703,6 +725,93 @@ suite "nimkit constraints":
       resizedAutoresizingGeneration
     check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
       resizedIntrinsicGeneration + 1
+
+  test "generated layout cache rebuilds all source buckets for structural changes":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      autoresized = newView(frame = initRect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+
+    autoresized.autoresizingMask = {cxWidthSizable}
+    button.autoresizingMaskConstraints = false
+    root.addSubview(autoresized, button)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      initialAutoresizingGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask]
+      initialIntrinsicGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisIntrinsic]
+      initialContainerGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisContainer]
+
+    root.addSubview(newView(frame = initRect(0, 0, 10, 10)))
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
+      initialAutoresizingGeneration + 1
+    check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
+      initialIntrinsicGeneration + 1
+    check root.xLayoutInputCache.sourceGenerations[lisContainer] ==
+      initialContainerGeneration + 1
+
+  test "generated layout cache rebuilds all source buckets for user constraints":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      autoresized = newView(frame = initRect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+
+    autoresized.autoresizingMask = {cxWidthSizable}
+    button.autoresizingMaskConstraints = false
+    root.addSubview(autoresized, button)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      initialAutoresizingGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask]
+      initialIntrinsicGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisIntrinsic]
+      initialContainerGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisContainer]
+
+    activate(autoresized.widthAnchor.constraintEqualTo(90.0'f32))
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
+      initialAutoresizingGeneration + 1
+    check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
+      initialIntrinsicGeneration + 1
+    check root.xLayoutInputCache.sourceGenerations[lisContainer] ==
+      initialContainerGeneration + 1
+
+  test "display invalidation does not rebuild generated source buckets":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      autoresized = newView(frame = initRect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+
+    autoresized.autoresizingMask = {cxWidthSizable}
+    button.autoresizingMaskConstraints = false
+    root.addSubview(autoresized, button)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      initialAutoresizingGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask]
+      initialIntrinsicGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisIntrinsic]
+      initialContainerGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisContainer]
+
+    root.setNeedsDisplay(true)
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
+      initialAutoresizingGeneration
+    check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
+      initialIntrinsicGeneration
+    check root.xLayoutInputCache.sourceGenerations[lisContainer] ==
+      initialContainerGeneration
 
   test "explicit storage can move constraints between views":
     let
