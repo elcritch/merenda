@@ -252,6 +252,39 @@ suite "nimkit constraints":
     check child.needsUpdateConstraints
     check child.needsLayout
 
+  test "autoresizing state separates reference refresh from input rebuild":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 20, 80, 40))
+
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+    let oldSuperviewReference = child.xAutoresizingState.referenceSuperviewRect
+    check child.xAutoresizingState.hasReference
+    check not child.xAutoresizingState.referenceDirty
+    check not child.xAutoresizingState.inputsDirty
+
+    root.frame = initRect(0, 0, 300, 180)
+    check child.xAutoresizingState.hasReference
+    check child.xAutoresizingState.referenceSuperviewRect == oldSuperviewReference
+    check not child.xAutoresizingState.referenceDirty
+    check child.xAutoresizingState.inputsDirty
+
+    root.layoutSubtreeIfNeeded()
+    check child.xAutoresizingState.referenceSuperviewRect == root.alignmentRect()
+    check not child.xAutoresizingState.referenceDirty
+    check not child.xAutoresizingState.inputsDirty
+
+    child.frame = initRect(30, 25, 90, 45)
+    check child.xAutoresizingState.referenceRect == child.alignmentRect()
+    check not child.xAutoresizingState.referenceDirty
+    check not child.xAutoresizingState.inputsDirty
+
+    child.autoresizingMaskConstraints = false
+    check not child.xAutoresizingState.hasReference
+    check not child.xAutoresizingState.referenceDirty
+    check not child.xAutoresizingState.inputsDirty
+
   test "generated autoresizing constraints preserve default origin and size":
     let
       root = newView(frame = initRect(0, 0, 200, 100))

@@ -143,14 +143,7 @@ proc contentRect(stackView: StackView): Rect =
   )
 
 proc setFrameFromStackLayout(view: View, frame: Rect) =
-  if view.isNil or view.xFrame == frame:
-    return
-  view.xFrame = frame
-  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
-  view.xNeedsLayout = true
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
-  view.markSubviewAutoresizingConstraintsChanged()
+  view.setFrameFromLayout(frame)
 
 func shouldAdjust(delta: float32): bool =
   delta < -LayoutEpsilon or delta > LayoutEpsilon

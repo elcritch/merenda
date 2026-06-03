@@ -417,6 +417,12 @@ Concrete task order and status:
    the common internal equation path, while authored constraints remain
    Cocoa-shaped `LayoutConstraint` values. Partial per-source cache rebuilds
    and richer public debug summaries remain deferred.
+24. Done for the first autoresizing state cleanup: Split
+   `AutoresizingState` dirty tracking into local reference refresh and generated
+   input rebuild flags. Local frame/autoresizing changes refresh the stored
+   reference geometry, while superview geometry changes dirty generated inputs
+   without replacing the existing reference before solving. Solver and
+   container frame application now share the same internal layout-frame helper.
 
 ### Controls
 

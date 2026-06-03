@@ -716,15 +716,6 @@ proc deactivate*(constraints: openArray[LayoutConstraint]) =
 proc deactivate*(constraint: LayoutConstraint, rest: varargs[LayoutConstraint]) =
   setConstraintsActive(constraint, rest, false)
 
-proc setFrameFromLayout(view: View, frame: Rect) =
-  if view.isNil or view.xFrame == frame:
-    return
-  view.xFrame = frame
-  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
-  view.xNeedsLayout = true
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
-
 func solverValue(value: float32): KiwiScalar =
   value.KiwiScalar
 
@@ -1060,8 +1051,7 @@ proc addAutoresizingMaskConstraints(state: var LayoutSolveState, owner: View) =
 
   for child in owner.xSubviews:
     if child.xAutoresizingMaskConstraints and not state.hasConstraintItem(child):
-      if not child.xAutoresizingState.hasReference:
-        child.captureAutoresizingState()
+      child.refreshAutoresizingReferenceIfNeeded()
       if child.xAutoresizingState.hasReference and state.hasSolverView(child) and
           state.hasSolverView(owner):
         state.addAutoresizingAxisConstraints(child, owner, laHorizontal)
@@ -1118,13 +1108,15 @@ proc applySolvedFrames(state: LayoutSolveState) =
         max(solverView.height.solvedFloat(), 0.0'f32),
       )
       solverView.item.setFrameFromLayout(
-        solverView.item.frameForAlignmentRect(alignmentRect)
+        solverView.item.frameForAlignmentRect(alignmentRect),
+        refreshReference = false,
+        notifyDependents = false,
       )
 
 proc refreshAutoresizingStates(state: LayoutSolveState) =
   for solverView in state.items:
     if not solverView.item.isNil and solverView.item.xAutoresizingMaskConstraints:
-      solverView.item.captureAutoresizingState()
+      solverView.item.refreshAutoresizingReference()
 
 proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
   if not root.isNil:
