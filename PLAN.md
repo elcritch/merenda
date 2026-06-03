@@ -175,13 +175,13 @@ NimKit currently includes the core desktop-control slice:
   command handlers.
 - `src/merenda/nimkit/comboboxes.nim`:
   `ComboBox`, local item storage through `ComboBoxCell`, selector-backed data
-  source/delegate hooks, popup presentation preference, inline popup drawing,
-  window-backed popup views, popup open/highlight/selection state, mouse
-  tracking, keyboard navigation, scroll-wheel popup navigation, and text
-  selector compatibility.
+  source/delegate hooks, popup presentation preference, popup open policy,
+  selected string/index syncing, and text selector compatibility.
 - `src/merenda/nimkit/listviews.nim`:
-  `ListViewport` and shared list/popup row helpers for visible-count
-  clamping, first-row scrolling, popup bounds, row bounds, and row hit testing.
+  `ListViewport`, shared list/popup row helpers for visible-count clamping,
+  first-row scrolling, popup bounds, row bounds, and row hit testing, plus a
+  narrow callback-backed `PopupListView` for transient single-column popup
+  drawing, row tracking, scrolling, highlighting, and activation.
 - `src/merenda/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field/combo-box
   style objects, typed style tokens, style overrides, `EdgeInsets`,
@@ -389,12 +389,19 @@ Concrete task order and status:
    draw a lightweight scroll indicator for popups with hidden rows, and keep
    tests at the combo-box/window level so inline and native popup presentations
    stay aligned.
-20. Done for minimal transient popup/session infrastructure: Add a narrow
+20. Done for smaller popup-list extraction: Move transient single-column row
+   drawing, native popup row event handling, inline row tracking helpers, scroll
+   direction mapping, and activation/close callbacks into `PopupListView`.
+   `ComboBox` now supplies item text, selected/highlighted indices, and popup
+   policy through callbacks instead of owning a private popup view.
+21. Done for minimal transient popup/session infrastructure: Add a narrow
    `Window`-owned transient session with owner responder, optional transient
    window, dismissal reason, callback, and focus restoration target. Combo-box
    popups now use that shared path for inline and window-backed outside-click,
    Escape, focus-change, native-done, and programmatic dismissal.
-21. Next: Revisit autoresizing-mask compatibility after the popup/event layer.
+   It gives us a narrow base for full modal/tracking-loop behavior later
+   without committing to a full AppKit-style modal system now.
+22. Next: Revisit autoresizing-mask compatibility after the popup/event layer.
    Generate mask-derived constraints only when examples need compatibility
    behavior beyond the current stored mask/translate state.
 
@@ -403,9 +410,9 @@ Concrete task order and status:
 - Add the next controls after intrinsic sizing is in place, so their default
   frame behavior, cell metrics, keyboard focus, and examples use the same
   measurement path from the start.
-- Done for combo boxes and future list-like controls: add `ListViewport` plus
-  shared list-row geometry for scrollable popup content rather than adding
-  one-off popup logic per control.
+- Done for combo boxes and future list-like controls: add `ListViewport`,
+  shared list-row geometry, and `PopupListView` for scrollable transient popup
+  content rather than adding one-off popup logic per control.
 - Keep future list-like controls on this base: start with shared viewport,
   row geometry, selection, and keyboard command behavior before adding a
   full `ListView` or table-style API.
