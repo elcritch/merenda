@@ -415,8 +415,7 @@ Concrete task order and status:
    invalidation reasons, and generated input inspection for the current solve
    root. Autoresizing-mask and intrinsic-size solver inputs now flow through
    the common internal equation path, while authored constraints remain
-   Cocoa-shaped `LayoutConstraint` values. Partial per-source cache rebuilds
-   and richer public debug summaries remain deferred.
+   Cocoa-shaped `LayoutConstraint` values.
 24. Done for the first autoresizing state cleanup: Split
    `AutoresizingState` dirty tracking into local reference refresh and generated
    input rebuild flags. Local frame/autoresizing changes refresh the stored
@@ -439,14 +438,22 @@ Concrete task order and status:
    encouraging callers to inspect raw `LayoutInput` values. Keep `constraints()`
    authored only, and group generated autoresizing, intrinsic, and future
    container inputs by source for Cocoa-style debugging.
-28. Next signal-bus/cache step: Treat the current Sigils-backed
-   `layoutInputChanged` path as the core invalidation bus, then make dirty
-   sources drive per-source cache refresh where practical. The current full
-   subtree solve remains acceptable, but `inputsDirty`, `dirtySources`, and
-   generations should eventually determine which generated inputs need rebuild.
+28. Done for the first signal-bus/cache step: Treat the Sigils-backed
+   `layoutInputChanged` path as the core invalidation bus and make dirty
+   sources drive per-source generated-input cache refresh where practical.
+   The solver still rebuilds the full subtree for correctness, but generated
+   autoresizing, intrinsic, and future container inputs are now cached in
+   source buckets with per-source generations. First solve, user-constraint
+   changes, and structural changes conservatively rebuild all generated
+   buckets.
 29. Done for optional Cocoa naming compatibility: Keep
    `autoresizingMaskConstraints` as the short Nim-facing API and add
    `translatesAutoresizingMaskIntoConstraints` as an AppKit comparison alias.
+30. Next layout-cache refinement: Split broad `lirSubviews` usage into more
+   precise descendant-geometry and hierarchy-structure reasons so ordinary
+   child frame edits do not have to look like subtree structure changes. Keep
+   the current conservative full generated-bucket rebuild for actual
+   add/remove/visibility changes.
 
 ### Controls
 

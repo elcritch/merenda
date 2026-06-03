@@ -36,10 +36,17 @@ NimKit already has the core pieces needed to build this direction:
 - Autoresizing-mask compatibility currently stores reference geometry in
   `AutoresizingState` and generates internal solver constraints when a framed
   child has no explicit active constraints.
+- `layoutInputChanged` is the active invalidation bus. Setters emit layout
+  reasons, and the slot maps those reasons to dirty sources, lifecycle flags,
+  and autoresizing state.
+- Generated solver inputs are cached per source on the current solve root.
+  Dirty sources can rebuild only their source bucket, while structural and
+  user-constraint changes still rebuild all generated buckets.
 
-The next step is to make invalidation and generated solver inputs explicit
-enough that the system can grow without each widget hand-wiring the same state
-changes.
+The remaining work is to grow on this core without making every widget
+hand-wire cache behavior. New controls should emit layout reasons through the
+bus, add focused generated-input sources only when needed, and keep public
+debugging APIs summary-oriented.
 
 ## Public API Shape
 
@@ -130,7 +137,7 @@ Generated input sources:
 Generated inputs should be inspectable in debug APIs, but should not appear as
 normal authored constraints returned by `view.constraints()`.
 
-Useful future debug APIs:
+Current summary debug APIs:
 
 ```nim
 view.constraints()               # authored constraints only
@@ -165,24 +172,24 @@ type
     lirContainerMetrics
 ```
 
-Proposed signal and slot shape:
+Current signal and slot shape:
 
 ```nim
 proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
 
 proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
+  view.xLayoutInputCache.dirtySources.incl reason.sourceFor()
+  if reason in {lirSuperview, lirSubviews, lirHidden}:
+    view.xLayoutInputCache.structureDirty = true
+
   case reason
   of lirFrame, lirSuperview, lirAutoresizingMask:
     view.xAutoresizingState.referenceDirty = true
     view.xAutoresizingState.inputsDirty = true
   of lirBounds, lirSuperviewGeometry, lirSubviews:
     view.xAutoresizingState.inputsDirty = true
-  of lirConstraints:
-    view.xLayoutInputCache.userDirty = true
-  of lirIntrinsic, lirAppearanceMetrics, lirContainerMetrics:
-    view.xLayoutInputCache.intrinsicDirty = true
-  of lirHidden:
-    view.xLayoutInputCache.visibilityDirty = true
+  else:
+    discard
 
   view.xNeedsUpdateConstraints = true
   view.xNeedsLayout = true
@@ -224,22 +231,29 @@ from half-applied solver output.
 
 ## Caching
 
-A future `LayoutInputCache` should be local to a layout root or container-sized
-subtree, not global. That keeps solver systems small and makes invalidation
-bounded.
+`LayoutInputCache` is local to a layout root or container-sized subtree, not
+global. That keeps solver systems small and makes invalidation bounded.
 
-Expected cache contents:
+Current cache contents:
 
-- authored constraints collected for the subtree
-- generated autoresizing inputs
-- generated intrinsic inputs
-- future container-generated inputs
+- generated inputs bucketed by `LayoutInputSource`
 - dirty flags grouped by source
-- a generation number for diagnostics
+- a structural-dirty flag for hierarchy/visibility changes that require a
+  broader generated-input refresh
+- per-source generation counters for diagnostics
+- a solve/cache generation number for diagnostics
 
-The cache should rebuild only the sources dirtied by the signal bus where that
-is practical. A complete rebuild remains acceptable for early implementation,
-but the representation should not prevent partial rebuilds later.
+The cache now rebuilds only the generated sources dirtied by the signal bus
+where that is practical. First solve, user-constraint changes, and structural
+changes rebuild all generated buckets because constraint participation and
+view membership can change. Superview geometry changes can rebuild only
+autoresizing-mask equations, and intrinsic invalidations can rebuild only
+intrinsic equations.
+
+The solver itself is still rebuilt for the full subtree on each layout pass.
+That keeps correctness straightforward while the cache model settles. A future
+incremental solver cache can build on the same source buckets and generation
+counters if examples show real pressure.
 
 ## Autoresizing Masks
 
@@ -319,8 +333,9 @@ constraint systems while preserving the ability to compose with constraints.
   diagnostics, but most callers should not need to emit layout signals directly.
 - Whether container-generated inputs should become a real source before adding
   a full list/table control.
-- How aggressively to preserve partial generated-input caches before examples
-  show real performance pressure.
+- Whether the current source-bucket generations are enough diagnostics, or
+  whether generated input summaries should expose rebuild/cache metadata
+  through public debug APIs.
 
 ## Sources Reviewed
 
