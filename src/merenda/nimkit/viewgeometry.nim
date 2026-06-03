@@ -53,6 +53,8 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
   if view.isNil:
     return
   view.xLayoutInputCache.dirtySources.incl reason.sourceFor()
+  if reason in {lirSuperview, lirSubviews, lirHidden}:
+    view.xLayoutInputCache.structureDirty = true
   case reason
   of lirFrame, lirSuperview, lirAutoresizingMask:
     view.xAutoresizingState.referenceDirty = true
@@ -333,7 +335,7 @@ proc sizeToFit*(view: View) =
 proc invalidateIntrinsicContentSize*(view: View) =
   if view.isNil:
     return
-  view.invalidateLayoutItemGeometry(lirIntrinsic)
+  view.invalidateLayoutItemGeometry(lirIntrinsic, ancestorReason = lirIntrinsic)
 
 proc invalidateIntrinsicContentSizeSubtree*(view: View) =
   if view.isNil:

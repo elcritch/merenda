@@ -55,7 +55,13 @@ type
     constraintItems: seq[View]
     generatedInputs: seq[LayoutInput]
 
-const AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
+  LayoutCacheDirtyState = object
+    sources: LayoutInputSources
+    structureDirty: bool
+
+const
+  AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
+  GeneratedLayoutSources = {lisAutoresizingMask, lisIntrinsic, lisContainer}
 
 proc initLayoutTerm(
     item: View, attribute: LayoutAttribute, multiplier = 1.0'f32
@@ -90,9 +96,10 @@ proc source*(input: LayoutInput): LayoutInputSource =
 
 proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
   if view.isNil:
-    @[]
-  else:
-    view.xLayoutInputCache.generated
+    return @[]
+  for source in LayoutInputSource:
+    for input in view.xLayoutInputCache.generated[source]:
+      result.add input
 
 proc addToSummary(
     summaries: var seq[LayoutInputSummary],
@@ -136,7 +143,7 @@ proc collectAuthoredConstraintSummary(
 proc generatedLayoutSummary*(view: View): seq[LayoutInputSummary] =
   if view.isNil:
     return @[]
-  for input in view.xLayoutInputCache.generated:
+  for input in view.generatedLayoutInputs():
     result.addInputSummary(input)
 
 proc constraintsAffectingLayout*(view: View): seq[LayoutInputSummary] =
@@ -1002,7 +1009,6 @@ proc addLayoutEquation(state: var LayoutSolveState, equation: LayoutEquation) =
 
 proc addGeneratedEquation(state: var LayoutSolveState, equation: LayoutEquation) =
   state.generatedInputs.add equation.layoutEquationInput()
-  state.addLayoutEquation(equation)
 
 proc addNonNegativeSizeConstraints(state: var LayoutSolveState) =
   for solverView in state.items:
@@ -1142,6 +1148,10 @@ proc addLayoutInput(state: var LayoutSolveState, input: LayoutInput) =
   of likEquation:
     state.addLayoutEquation(input.equation)
 
+proc addLayoutInputs(state: var LayoutSolveState, inputs: openArray[LayoutInput]) =
+  for input in inputs:
+    state.addLayoutInput(input)
+
 proc addOwnedConstraints(state: var LayoutSolveState, owner: View) =
   if owner.isNil:
     return
@@ -1171,16 +1181,73 @@ proc refreshAutoresizingStates(state: LayoutSolveState) =
     if not solverView.item.isNil and solverView.item.xAutoresizingMaskConstraints:
       solverView.item.refreshAutoresizingReference()
 
+proc collectDirtyState(view: View, dirty: var LayoutCacheDirtyState) =
+  if view.isNil:
+    return
+  dirty.sources = dirty.sources + view.xLayoutInputCache.dirtySources
+  dirty.structureDirty = dirty.structureDirty or view.xLayoutInputCache.structureDirty
+  for child in view.xSubviews:
+    child.collectDirtyState(dirty)
+
+proc generatedSourcesToRebuild(root: View): LayoutInputSources =
+  if root.isNil:
+    return {}
+
+  var dirty = LayoutCacheDirtyState()
+  root.collectDirtyState(dirty)
+  if root.xLayoutInputCache.generation == 0 or dirty.structureDirty or
+      lisUser in dirty.sources:
+    return GeneratedLayoutSources
+
+  for source in GeneratedLayoutSources:
+    if source in dirty.sources:
+      result.incl source
+
+proc generateLayoutInputsForSource(
+    state: var LayoutSolveState, root: View, source: LayoutInputSource
+): seq[LayoutInput] =
+  let start = state.generatedInputs.len
+  case source
+  of lisAutoresizingMask:
+    state.addAutoresizingMaskConstraints(root)
+  of lisIntrinsic:
+    state.addIntrinsicConstraints(root)
+  of lisContainer:
+    discard
+  of lisUser:
+    discard
+
+  if state.generatedInputs.len > start:
+    result = state.generatedInputs[start ..< state.generatedInputs.len]
+    state.generatedInputs.setLen(start)
+
+proc refreshGeneratedLayoutInputs(state: var LayoutSolveState, root: View) =
+  if root.isNil:
+    return
+
+  for source in root.generatedSourcesToRebuild():
+    root.xLayoutInputCache.generated[source] =
+      state.generateLayoutInputsForSource(root, source)
+    inc root.xLayoutInputCache.sourceGenerations[source]
+
+  for source in GeneratedLayoutSources:
+    state.addLayoutInputs(root.xLayoutInputCache.generated[source])
+
 proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
   if not root.isNil:
-    root.xLayoutInputCache.generated = state.generatedInputs
     root.xLayoutInputCache.dirtySources = {}
+    root.xLayoutInputCache.structureDirty = false
     inc root.xLayoutInputCache.generation
 
   for solverView in state.items:
     if not solverView.item.isNil and solverView.item != root:
-      solverView.item.xLayoutInputCache.generated.setLen(0)
+      solverView.item.xLayoutInputCache.generated =
+        default(array[LayoutInputSource, seq[LayoutInput]])
       solverView.item.xLayoutInputCache.dirtySources = {}
+      solverView.item.xLayoutInputCache.structureDirty = false
+      solverView.item.xLayoutInputCache.sourceGenerations =
+        default(array[LayoutInputSource, Natural])
+      solverView.item.xLayoutInputCache.generation = 0
 
 proc applyConstraintsForSubtree*(view: View) =
   if view.isNil:
@@ -1191,8 +1258,7 @@ proc applyConstraintsForSubtree*(view: View) =
   state.addRootGeometryConstraints(view)
   state.addGeometryStays(view)
   state.addNonNegativeSizeConstraints()
-  state.addAutoresizingMaskConstraints(view)
-  state.addIntrinsicConstraints(view)
+  state.refreshGeneratedLayoutInputs(view)
   state.addOwnedConstraints(view)
   state.solver.updateVariables()
   state.applySolvedFrames()

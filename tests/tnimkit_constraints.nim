@@ -661,6 +661,49 @@ suite "nimkit constraints":
         check summary.terms == 4
     check found
 
+  test "generated layout cache rebuilds dirty source buckets":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      autoresized = newView(frame = initRect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+
+    autoresized.autoresizingMask = {cxWidthSizable}
+    button.autoresizingMaskConstraints = false
+    root.addSubview(autoresized, button)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      initialSolveGeneration = root.layoutInputGeneration()
+      initialAutoresizingGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask]
+      initialIntrinsicGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisIntrinsic]
+
+    check initialSolveGeneration == 1
+    check initialAutoresizingGeneration > 0
+    check initialIntrinsicGeneration > 0
+
+    root.frame = initRect(0, 0, 300, 120)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      resizedAutoresizingGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask]
+      resizedIntrinsicGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisIntrinsic]
+
+    check root.layoutInputGeneration() == initialSolveGeneration + 1
+    check resizedAutoresizingGeneration == initialAutoresizingGeneration + 1
+    check resizedIntrinsicGeneration == initialIntrinsicGeneration
+
+    button.invalidateIntrinsicContentSize()
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
+      resizedAutoresizingGeneration
+    check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
+      resizedIntrinsicGeneration + 1
+
   test "explicit storage can move constraints between views":
     let
       firstOwner = newView(frame = initRect(0, 0, 100, 80))

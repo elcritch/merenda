@@ -74,8 +74,10 @@ type
       equation*: LayoutEquation
 
   LayoutInputCache* = object
-    generated*: seq[LayoutInput]
+    generated*: array[LayoutInputSource, seq[LayoutInput]]
     dirtySources*: LayoutInputSources
+    structureDirty*: bool
+    sourceGenerations*: array[LayoutInputSource, Natural]
     generation*: Natural
 
   LayoutInputSummary* = object
