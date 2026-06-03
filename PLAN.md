@@ -376,6 +376,26 @@ Concrete task order and status:
    `edgeConstraints` builds inactive constraints for callers that need delayed
    activation. Examples now use direct edge pins without a separate activation
    wrapper.
+18. Done for scrollable combo/list popup infrastructure: Add shared
+   `ListViewport` row-window state and list geometry helpers, wire combo boxes
+   to scroll highlighted rows into view, support mouse-wheel popup scrolling
+   for inline and window-backed popup paths, ignore popup border hit tests,
+   draw only visible rows, add combo-box scroll tests, and add
+   `examples/nimkit_combo_scroll_demo.nim` plus a long combo in the regular
+   combo-box demo.
+19. Done for popup/list ergonomics without inventing a full list widget:
+   Add page/home/end key commands, keep hover and keyboard highlight behavior
+   on the same row-window geometry while ignoring popup-border hover misses,
+   draw a lightweight scroll indicator for popups with hidden rows, and keep
+   tests at the combo-box/window level so inline and native popup presentations
+   stay aligned.
+20. Next: Add minimal modal/tracking-loop infrastructure for popup-like UI:
+   outside-click dismissal, Escape dismissal, focus/key-window restoration,
+   and a small owner relationship for transient windows. Build this before
+   menus, popovers, or drag sessions depend on edge-case event ordering.
+21. Next: Revisit autoresizing-mask compatibility after the popup/event layer.
+   Generate mask-derived constraints only when examples need compatibility
+   behavior beyond the current stored mask/translate state.
 
 ### Controls
 
@@ -385,6 +405,9 @@ Concrete task order and status:
 - Done for combo boxes and future list-like controls: add `ListViewport` plus
   shared list-row geometry for scrollable popup content rather than adding
   one-off popup logic per control.
+- Keep future list-like controls on this base: start with shared viewport,
+  row geometry, selection, and keyboard command behavior before adding a
+  full `ListView` or table-style API.
 - Keep text editing scoped to single-line control behavior for now. Grow command
   selectors and key bindings before adding multiline editor features.
 - Keep delegate/custom policy hooks selector-based and explicit where they
@@ -442,10 +465,12 @@ Concrete task order and status:
 
 ### Priority Order
 
-- Short term: richer container behavior where examples need it and broader
+- Short term: popup/list keyboard polish, transient popup dismissal/focus
+  restoration, richer container behavior where examples need it, and broader
   control coverage.
 - Medium term: generated autoresizing-mask constraints, loadable/query-like
-  themes, menus/popovers, and broader resource organization.
+  themes, menu/popover implementations on top of the transient popup
+  infrastructure, and broader resource organization.
 - Later: full source-compatibility conveniences only when examples prove the
   need.
 

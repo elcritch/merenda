@@ -46,12 +46,17 @@ proc popupFirstItemIndex*(comboBox: ComboBox): int
 proc scrollPopupItemToVisible(comboBox: ComboBox, itemIndex: int)
 proc popupScrollRows(event: ScrollEvent): int
 proc setPopupNeedsDisplay(comboBox: ComboBox)
+proc setHoveredPopupIndex(comboBox: ComboBox, index: int)
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
+proc popupScrollIndicatorRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc popupItemRectInPopup(comboBox: ComboBox, itemIndex: int): Rect
 proc popupItemIndexAtPopupPoint(comboBox: ComboBox, point: Point): int
+proc popupScrollIndicatorRectInPopup(comboBox: ComboBox): Rect
 proc movePopupHighlight*(comboBox: ComboBox, delta: int)
+proc movePopupHighlightTo(comboBox: ComboBox, index: int)
+proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int)
 proc scrollPopupRows(comboBox: ComboBox, delta: int)
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox)
 proc notifyComboBoxSelectionDidChange(comboBox: ComboBox)
@@ -371,19 +376,19 @@ protocol DefaultComboBoxPopupEvents of ResponderEventProtocol:
     if comboBox.isNil or not comboBox.isEnabled or event.button != mbPrimary:
       return
     comboBox.xTrackingPopup = true
-    comboBox.setHighlightedIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
+    comboBox.setHoveredPopupIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
 
   method mouseDragged(popupView: ComboBoxPopupView, event: MouseEvent) =
     let comboBox = popupView.xComboBox
     if comboBox.isNil or not comboBox.popupOpen:
       return
-    comboBox.setHighlightedIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
+    comboBox.setHoveredPopupIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
 
   method mouseMoved(popupView: ComboBoxPopupView, event: MouseEvent) =
     let comboBox = popupView.xComboBox
     if comboBox.isNil or not comboBox.popupOpen:
       return
-    comboBox.setHighlightedIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
+    comboBox.setHoveredPopupIndex(comboBox.popupItemIndexAtPopupPoint(event.location))
 
   method mouseUp(popupView: ComboBoxPopupView, event: MouseEvent) =
     let comboBox = popupView.xComboBox
@@ -418,7 +423,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
     if comboBox.popupOpen() and
         comboBox.popupRect(comboBox.bounds()).contains(event.location):
       comboBox.xTrackingPopup = true
-      comboBox.setHighlightedIndex(
+      comboBox.setHoveredPopupIndex(
         comboBox.popupItemIndexAtPoint(comboBox.bounds(), event.location)
       )
     else:
@@ -429,13 +434,13 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
 
   method mouseDragged(comboBox: ComboBox, event: MouseEvent) =
     if comboBox.popupOpen():
-      comboBox.setHighlightedIndex(
+      comboBox.setHoveredPopupIndex(
         comboBox.popupItemIndexAtPoint(comboBox.bounds(), event.location)
       )
 
   method mouseMoved(comboBox: ComboBox, event: MouseEvent) =
     if comboBox.popupOpen():
-      comboBox.setHighlightedIndex(
+      comboBox.setHoveredPopupIndex(
         comboBox.popupItemIndexAtPoint(comboBox.bounds(), event.location)
       )
 
@@ -472,6 +477,18 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
         comboBox.openPopup()
       else:
         comboBox.movePopupHighlight(-1)
+    of keyPageDown:
+      if comboBox.popupOpen():
+        comboBox.pagePopupHighlight(1)
+    of keyPageUp:
+      if comboBox.popupOpen():
+        comboBox.pagePopupHighlight(-1)
+    of keyHome:
+      if comboBox.popupOpen():
+        comboBox.movePopupHighlightTo(0)
+    of keyEnd:
+      if comboBox.popupOpen():
+        comboBox.movePopupHighlightTo(comboBox.numberOfItems() - 1)
     of keyEnter:
       if comboBox.popupOpen() and comboBox.highlightedIndex() >= 0:
         comboBox.activateItemAtIndex(comboBox.highlightedIndex())
@@ -795,6 +812,11 @@ proc setHighlightedIndex*(comboBox: ComboBox, index: int) =
 proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
   comboBox.setHighlightedIndex(index)
 
+proc setHoveredPopupIndex(comboBox: ComboBox, index: int) =
+  if comboBox.isNil or index < 0:
+    return
+  comboBox.setHighlightedIndex(index)
+
 proc isButtonPressed*(comboBox: ComboBox): bool =
   not comboBox.isNil and comboBox.xButtonPressed
 
@@ -873,6 +895,16 @@ proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
     comboBox.popupItemHeight(),
   )
 
+proc popupScrollIndicatorRect*(comboBox: ComboBox, bounds: Rect): Rect =
+  if comboBox.isNil:
+    return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
+  listScrollIndicatorRect(
+    comboBox.popupRect(bounds),
+    comboBox.popupFirstItemIndex(),
+    comboBox.visibleItemCount(),
+    comboBox.numberOfItems(),
+  )
+
 proc popupItemRectInPopup(comboBox: ComboBox, itemIndex: int): Rect =
   let
     first = comboBox.popupFirstItemIndex()
@@ -901,6 +933,19 @@ proc popupItemIndexAtPopupPoint(comboBox: ComboBox, point: Point): int =
     visible,
     comboBox.numberOfItems(),
     comboBox.popupItemHeight(),
+  )
+
+proc popupScrollIndicatorRectInPopup(comboBox: ComboBox): Rect =
+  let
+    visible = comboBox.visibleItemCount()
+    popupBounds = initRect(
+      0.0'f32,
+      0.0'f32,
+      comboBox.bounds.size.width,
+      comboBox.popupItemHeight() * visible.float32 + 2.0'f32,
+    )
+  listScrollIndicatorRect(
+    popupBounds, comboBox.popupFirstItemIndex(), visible, comboBox.numberOfItems()
   )
 
 proc popupWindowSize(comboBox: ComboBox): Size =
@@ -1096,6 +1141,22 @@ proc drawPopupContents(
       itemStyle.text.color,
     )
 
+  let indicatorRect =
+    if popupWindowLocal:
+      comboBox.popupScrollIndicatorRectInPopup()
+    else:
+      comboBox.popupScrollIndicatorRect(comboBox.bounds)
+  if not indicatorRect.isEmpty:
+    discard context.addWindowRectangle(
+      layer,
+      popupRoot,
+      context.localRectToWindow(indicatorRect),
+      fill(initColor(0.10, 0.18, 0.30, 0.34)),
+      initColor(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
+      2.0'f32,
+    )
+
 proc movePopupHighlight*(comboBox: ComboBox, delta: int) =
   if comboBox.isNil or comboBox.numberOfItems() == 0:
     return
@@ -1109,6 +1170,33 @@ proc movePopupHighlight*(comboBox: ComboBox, delta: int) =
   comboBox.setHighlightedIndex(
     max(0, min(current + delta, comboBox.numberOfItems() - 1))
   )
+
+proc movePopupHighlightTo(comboBox: ComboBox, index: int) =
+  if comboBox.isNil or comboBox.numberOfItems() == 0:
+    return
+  comboBox.setHighlightedIndex(max(0, min(index, comboBox.numberOfItems() - 1)))
+
+proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int) =
+  if comboBox.isNil or comboBox.numberOfItems() == 0 or deltaPages == 0:
+    return
+
+  let
+    total = comboBox.numberOfItems()
+    visible = comboBox.visibleItemCount()
+    current =
+      if comboBox.highlightedIndex() >= 0:
+        comboBox.highlightedIndex()
+      elif comboBox.indexOfSelectedItem() >= 0:
+        comboBox.indexOfSelectedItem()
+      else:
+        0
+  if visible <= 0:
+    comboBox.movePopupHighlightTo(current)
+    return
+
+  let target = max(0, min(current + deltaPages * visible, total - 1))
+  comboBox.xPopupViewport.firstIndex = clampFirstIndex(target, total, visible)
+  comboBox.movePopupHighlightTo(target)
 
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox) =
   if comboBox.isNil or comboBox.xDelegate.isNil:
