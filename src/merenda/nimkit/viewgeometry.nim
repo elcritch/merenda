@@ -7,8 +7,6 @@ import ./theme
 import ./types
 import ./viewbase
 
-export viewbase
-
 type
   ViewLayoutPriorityKind = enum
     vlpkHugging
@@ -29,6 +27,7 @@ proc rectToWindow*(view: View, rect: Rect): Rect
 proc alignmentRect*(view: View): Rect
 proc resetAutoresizingState*(view: View)
 proc refreshAutoresizingReference*(view: View)
+proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer)
 
 proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
 
@@ -131,6 +130,12 @@ proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
     view.invalidateLayoutItemGeometry(lirAutoresizingMask)
     view.resetAutoresizingState()
 
+proc translatesAutoresizingMaskIntoConstraints*(view: View): bool =
+  view.autoresizingMaskConstraints()
+
+proc `translatesAutoresizingMaskIntoConstraints=`*(view: View, value: bool) =
+  view.autoresizingMaskConstraints = value
+
 proc alignmentInsets*(view: View): EdgeInsets =
   if view.isNil:
     return initEdgeInsets(0.0)
@@ -186,9 +191,7 @@ proc refreshAutoresizingReferenceIfNeeded*(view: View) =
   if not view.xAutoresizingState.hasReference or view.xAutoresizingState.referenceDirty:
     view.refreshAutoresizingReference()
 
-proc setFrameFromLayout*(
-    view: View, frame: Rect, refreshReference = true, notifyDependents = true
-) =
+proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   if view.isNil or view.xFrame == frame:
     return
   view.xFrame = frame
@@ -196,24 +199,24 @@ proc setFrameFromLayout*(
   view.xNeedsLayout = true
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
-  if refreshReference:
+  case origin
+  of lfoAuthored:
+    view.invalidateLayoutItemGeometry(lirFrame)
     view.refreshAutoresizingReference()
-  if notifyDependents:
     view.notifyAutoresizingDependentsChanged()
+  of lfoContainer:
+    view.refreshAutoresizingReference()
+    view.notifyAutoresizingDependentsChanged()
+  of lfoSolver:
+    discard
+
+proc setFrameFromLayout*(view: View, frame: Rect) =
+  view.applyLayoutFrame(frame, lfoContainer)
 
 proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
   if view.isNil:
     return
-  let frame = view.frameForAlignmentRect(alignmentRect)
-  if view.xFrame == frame:
-    return
-  view.xFrame = frame
-  view.xBounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
-  view.invalidateLayoutItemGeometry(lirFrame)
-  view.refreshAutoresizingReference()
-  view.notifyAutoresizingDependentsChanged()
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
+  view.applyLayoutFrame(view.frameForAlignmentRect(alignmentRect), lfoAuthored)
 
 proc `alignmentRect=`*(view: View, alignmentRect: Rect) =
   view.setFrameFromAlignmentRect(alignmentRect)
@@ -316,16 +319,7 @@ proc applyInitialFrame*(view: View, frame: Rect) =
     return
 
   let nextFrame = view.resolvedFrame(frame)
-  if view.xFrame == nextFrame:
-    return
-
-  view.xFrame = nextFrame
-  view.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
-  view.invalidateLayoutItemGeometry(lirFrame)
-  view.refreshAutoresizingReference()
-  view.notifyAutoresizingDependentsChanged()
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
+  view.applyLayoutFrame(nextFrame, lfoAuthored)
 
 proc sizeToFit*(view: View) =
   if view.isNil:
@@ -334,15 +328,7 @@ proc sizeToFit*(view: View) =
     frame = view.xFrame
     fittingSize = view.sizeThatFits(UnconstrainedFittingSize)
     nextFrame = initRect(frame.origin, fittingSize)
-  if frame == nextFrame:
-    return
-  view.xFrame = nextFrame
-  view.xBounds = initRect(0.0, 0.0, fittingSize.width, fittingSize.height)
-  view.invalidateLayoutItemGeometry(lirFrame)
-  view.refreshAutoresizingReference()
-  view.notifyAutoresizingDependentsChanged()
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
+  view.applyLayoutFrame(nextFrame, lfoAuthored)
 
 proc invalidateIntrinsicContentSize*(view: View) =
   if view.isNil:

@@ -3,6 +3,7 @@ import std/unittest
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/viewbase
 
 type LayoutInvalidationSpy = ref object of Agent
   reasons: seq[LayoutInvalidationReason]
@@ -93,6 +94,13 @@ suite "nimkit constraints":
     root.layoutSubtreeIfNeeded()
 
     check child.frame() == initRect(20, 10, 240, 160)
+    var foundUserSummary = false
+    for summary in root.constraintsAffectingLayout():
+      if summary.source == lisUser:
+        foundUserSummary = true
+        check summary.constraints == 4
+        check summary.equations == 0
+    check foundUserSummary
 
   test "edge constraints can build an inactive subset":
     let
@@ -212,6 +220,9 @@ suite "nimkit constraints":
 
     view.autoresizingMaskConstraints = false
     check not view.autoresizingMaskConstraints
+    view.translatesAutoresizingMaskIntoConstraints = true
+    check view.autoresizingMaskConstraints
+    check view.translatesAutoresizingMaskIntoConstraints
     check view.needsUpdateConstraints
     check view.needsLayout
 
@@ -614,7 +625,7 @@ suite "nimkit constraints":
     check spy.reasons[^1] == lirIntrinsic
     check lisIntrinsic in root.layoutInputDirtySources()
 
-  test "generated layout inputs expose internal autoresizing equations":
+  test "generated layout summary exposes internal autoresizing equations":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
       child = newView(frame = initRect(20, 10, 80, 30))
@@ -623,16 +634,16 @@ suite "nimkit constraints":
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
 
-    let inputs = root.generatedLayoutInputs()
-    var autoresizingCount = 0
-    for input in inputs:
-      if input.source == lisAutoresizingMask:
-        inc autoresizingCount
-        check input.kind == likEquation
-        check input.equation.terms.len in {2, 3}
-    check autoresizingCount == 4
+    var found = false
+    for summary in root.generatedLayoutSummary():
+      if summary.source == lisAutoresizingMask:
+        found = true
+        check summary.constraints == 0
+        check summary.equations == 4
+        check summary.terms == 10
+    check found
 
-  test "generated layout inputs expose intrinsic equations":
+  test "generated layout summary exposes intrinsic equations":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
       button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
@@ -641,15 +652,14 @@ suite "nimkit constraints":
     root.addSubview(button)
     root.layoutSubtreeIfNeeded()
 
-    let inputs = root.generatedLayoutInputs()
-    var intrinsicCount = 0
-    for input in inputs:
-      if input.source == lisIntrinsic:
-        inc intrinsicCount
-        check input.kind == likEquation
-        check input.equation.terms.len == 1
-        check input.equation.terms[0].item == button
-    check intrinsicCount == 4
+    var found = false
+    for summary in root.generatedLayoutSummary():
+      if summary.source == lisIntrinsic:
+        found = true
+        check summary.constraints == 0
+        check summary.equations == 4
+        check summary.terms == 4
+    check found
 
   test "explicit storage can move constraints between views":
     let

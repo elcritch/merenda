@@ -423,31 +423,30 @@ Concrete task order and status:
    reference geometry, while superview geometry changes dirty generated inputs
    without replacing the existing reference before solving. Solver and
    container frame application now share the same internal layout-frame helper.
-25. Next layout/API cleanup: Narrow the public NimKit layout surface so
-   `merenda/nimkit` exposes Cocoa-like view, anchor, guide, constraint, and
-   debug APIs without leaking raw `x*` fields, `AutoresizingState`, or mutable
-   layout-input cache internals. Keep those details available to internal
-   NimKit modules through focused modules instead of umbrella exports.
-26. Next internal frame-application cleanup: Replace boolean options on the
-   internal layout-frame helper with a small enum or options object that names
-   the origin of the frame change, such as authored frame edit, container
-   layout, or solver application. Preserve the current rule that solver-applied
-   geometry does not immediately regenerate layout inputs from half-applied
-   output.
-27. Next debug API cleanup: Add a stable generated-layout summary API, such as
-   `constraintsAffectingLayout` or `generatedLayoutSummary`, before encouraging
-   callers to inspect raw `LayoutInput` values. Keep `constraints()` authored
-   only, and group generated autoresizing, intrinsic, and future container
-   inputs by source for Cocoa-style debugging.
+25. Done for the first layout/API cleanup: Narrow the `merenda/nimkit` umbrella
+   export so raw `LayoutInput`, `LayoutEquation`, `LayoutInputCache`, and
+   `AutoresizingState` type names stay out of the normal public import while
+   internal modules can still import focused implementation modules directly.
+   Fully hiding `View.x*` fields remains a deeper refactor because those fields
+   are exported on the public `View` object for cross-module internals today.
+26. Done for internal frame-application cleanup: Replace boolean options on the
+   internal layout-frame helper with `LayoutFrameOrigin`, naming authored frame
+   edits, container layout, and solver application directly. Preserve the
+   current rule that solver-applied geometry does not immediately regenerate
+   layout inputs from half-applied output.
+27. Done for the first debug API cleanup: Add stable generated-layout summary
+   APIs, `generatedLayoutSummary` and `constraintsAffectingLayout`, before
+   encouraging callers to inspect raw `LayoutInput` values. Keep `constraints()`
+   authored only, and group generated autoresizing, intrinsic, and future
+   container inputs by source for Cocoa-style debugging.
 28. Next signal-bus/cache step: Treat the current Sigils-backed
    `layoutInputChanged` path as the core invalidation bus, then make dirty
    sources drive per-source cache refresh where practical. The current full
    subtree solve remains acceptable, but `inputsDirty`, `dirtySources`, and
    generations should eventually determine which generated inputs need rebuild.
-29. Optional Cocoa naming compatibility: Keep `autoresizingMaskConstraints` as
-   the short Nim-facing API, but consider a
-   `translatesAutoresizingMaskIntoConstraints` alias for callers comparing
-   NimKit code directly to AppKit examples.
+29. Done for optional Cocoa naming compatibility: Keep
+   `autoresizingMaskConstraints` as the short Nim-facing API and add
+   `translatesAutoresizingMaskIntoConstraints` as an AppKit comparison alias.
 
 ### Controls
 

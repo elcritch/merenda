@@ -1,6 +1,7 @@
 import ./selectors
 import ./theme
 import ./types
+import ./viewgeometry
 import ./views
 
 export views
@@ -220,7 +221,7 @@ func spannedLength(
     result += tracks[index]
 
 proc setFrameFromGridLayout(view: View, frame: Rect) =
-  view.setFrameFromLayout(frame)
+  view.applyLayoutFrame(frame, lfoContainer)
 
 func alignedLength(
     cellOrigin, cellLength, naturalLength: float32, alignment: GridAlignment

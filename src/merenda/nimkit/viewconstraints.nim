@@ -5,8 +5,6 @@ import ./types
 import ./viewgeometry
 import ./viewbase
 
-export viewbase
-
 type
   LayoutEdge* = enum
     leLeft
@@ -95,6 +93,63 @@ proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
     @[]
   else:
     view.xLayoutInputCache.generated
+
+proc addToSummary(
+    summaries: var seq[LayoutInputSummary],
+    source: LayoutInputSource,
+    constraints = 0.Natural,
+    equations = 0.Natural,
+    terms = 0.Natural,
+) =
+  for summary in mitems(summaries):
+    if summary.source == source:
+      summary.constraints += constraints
+      summary.equations += equations
+      summary.terms += terms
+      return
+  summaries.add LayoutInputSummary(
+    source: source, constraints: constraints, equations: equations, terms: terms
+  )
+
+proc addInputSummary(summaries: var seq[LayoutInputSummary], input: LayoutInput) =
+  case input.kind
+  of likConstraint:
+    summaries.addToSummary(lisUser, constraints = 1.Natural)
+  of likEquation:
+    summaries.addToSummary(
+      input.equation.source,
+      equations = 1.Natural,
+      terms = Natural(input.equation.terms.len),
+    )
+
+proc collectAuthoredConstraintSummary(
+    view: View, summaries: var seq[LayoutInputSummary]
+) =
+  if view.isNil:
+    return
+  for constraint in view.xConstraints:
+    if not constraint.isNil and constraint.xActive:
+      summaries.addToSummary(lisUser, constraints = 1.Natural)
+  for child in view.xSubviews:
+    child.collectAuthoredConstraintSummary(summaries)
+
+proc generatedLayoutSummary*(view: View): seq[LayoutInputSummary] =
+  if view.isNil:
+    return @[]
+  for input in view.xLayoutInputCache.generated:
+    result.addInputSummary(input)
+
+proc constraintsAffectingLayout*(view: View): seq[LayoutInputSummary] =
+  if view.isNil:
+    return @[]
+  view.collectAuthoredConstraintSummary(result)
+  for summary in view.generatedLayoutSummary():
+    result.addToSummary(
+      summary.source,
+      constraints = summary.constraints,
+      equations = summary.equations,
+      terms = summary.terms,
+    )
 
 proc layoutInputDirtySources*(view: View): LayoutInputSources =
   if view.isNil:
@@ -1107,10 +1162,8 @@ proc applySolvedFrames(state: LayoutSolveState) =
         max(solverView.width.solvedFloat(), 0.0'f32),
         max(solverView.height.solvedFloat(), 0.0'f32),
       )
-      solverView.item.setFrameFromLayout(
-        solverView.item.frameForAlignmentRect(alignmentRect),
-        refreshReference = false,
-        notifyDependents = false,
+      solverView.item.applyLayoutFrame(
+        solverView.item.frameForAlignmentRect(alignmentRect), lfoSolver
       )
 
 proc refreshAutoresizingStates(state: LayoutSolveState) =

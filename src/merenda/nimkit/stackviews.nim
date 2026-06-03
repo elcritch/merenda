@@ -1,6 +1,7 @@
 import ./selectors
 import ./theme
 import ./types
+import ./viewgeometry
 import ./views
 
 export views
@@ -143,7 +144,7 @@ proc contentRect(stackView: StackView): Rect =
   )
 
 proc setFrameFromStackLayout(view: View, frame: Rect) =
-  view.setFrameFromLayout(frame)
+  view.applyLayoutFrame(frame, lfoContainer)
 
 func shouldAdjust(delta: float32): bool =
   delta < -LayoutEpsilon or delta > LayoutEpsilon

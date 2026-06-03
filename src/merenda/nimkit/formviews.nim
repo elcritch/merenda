@@ -1,6 +1,7 @@
 import ./selectors
 import ./theme
 import ./types
+import ./viewgeometry
 import ./views
 
 export views
@@ -124,7 +125,7 @@ proc contentRect(formView: FormView): Rect =
   )
 
 proc setFrameFromFormLayout(view: View, frame: Rect) =
-  view.setFrameFromLayout(frame)
+  view.applyLayoutFrame(frame, lfoContainer)
 
 proc invalidateFormLayout(formView: FormView) =
   if formView.isNil:
