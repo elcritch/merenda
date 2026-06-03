@@ -4,6 +4,7 @@ from figdraw/fignodes import FigIdx
 from figdraw/figbasics import ZLevel
 
 import ./controls
+import ./listviews
 import ./selectors
 import ./textfields
 import ./theme
@@ -22,6 +23,7 @@ type
     xTrackingPopup: bool
     xPopupWindow: Window
     xPopupPresentation: PopupPresentation
+    xPopupViewport: ListViewport
 
   ComboBoxCell* = ref object of ActionCell
     xItems: seq[string]
@@ -41,12 +43,16 @@ proc setHighlightedIndex*(comboBox: ComboBox, index: int)
 proc visibleItemCount*(comboBox: ComboBox): int
 proc popupItemHeight*(comboBox: ComboBox): float32
 proc popupFirstItemIndex*(comboBox: ComboBox): int
+proc scrollPopupItemToVisible(comboBox: ComboBox, itemIndex: int)
+proc popupScrollRows(event: ScrollEvent): int
+proc setPopupNeedsDisplay(comboBox: ComboBox)
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
 proc popupItemRectInPopup(comboBox: ComboBox, itemIndex: int): Rect
 proc popupItemIndexAtPopupPoint(comboBox: ComboBox, point: Point): int
 proc movePopupHighlight*(comboBox: ComboBox, delta: int)
+proc scrollPopupRows(comboBox: ComboBox, delta: int)
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox)
 proc notifyComboBoxSelectionDidChange(comboBox: ComboBox)
 proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation
@@ -125,12 +131,14 @@ protocol ComboBoxProtocolInternal from ComboBox:
     if comboBox.xPopupOpen:
       let selected = comboBox.indexOfSelectedItem()
       comboBox.xPopupHighlightedIndex = if selected >= 0: selected else: 0
+      comboBox.scrollPopupItemToVisible(comboBox.xPopupHighlightedIndex)
       comboBox.updatePopupPresentation()
     else:
       comboBox.closePopupWindow()
       comboBox.xPopupHighlightedIndex = -1
       comboBox.xButtonPressed = false
       comboBox.xTrackingPopup = false
+      comboBox.xPopupViewport.reset()
     comboBox.setNeedsDisplay(true)
 
   method maxVisibleItems(comboBox: ComboBox): int =
@@ -138,12 +146,20 @@ protocol ComboBoxProtocolInternal from ComboBox:
 
   method setMaxVisibleItems(comboBox: ComboBox, value: int) =
     comboBox.comboBoxCell().setCellMaxVisibleItems(value)
+    if comboBox.popupOpen():
+      comboBox.scrollPopupItemToVisible(comboBox.highlightedIndex())
+      comboBox.updatePopupPresentation()
+      comboBox.setPopupNeedsDisplay()
 
   method itemHeight(comboBox: ComboBox): float32 =
     comboBox.comboBoxCell().cellItemHeight()
 
   method setItemHeight(comboBox: ComboBox, value: float32) =
     comboBox.comboBoxCell().setCellItemHeight(value)
+    if comboBox.popupOpen():
+      comboBox.scrollPopupItemToVisible(comboBox.highlightedIndex())
+      comboBox.updatePopupPresentation()
+      comboBox.setPopupNeedsDisplay()
 
   method popupPresentation(comboBox: ComboBox): PopupPresentation =
     if comboBox.isNil:
@@ -383,6 +399,12 @@ protocol DefaultComboBoxPopupEvents of ResponderEventProtocol:
       comboBox.activateItemAtIndex(itemIndex)
     comboBox.closePopup()
 
+  method scrollWheel(popupView: ComboBoxPopupView, event: ScrollEvent) =
+    let comboBox = popupView.xComboBox
+    if comboBox.isNil or not comboBox.popupOpen:
+      return
+    comboBox.scrollPopupRows(event.popupScrollRows())
+
   method keyDown(popupView: ComboBoxPopupView, event: KeyEvent) =
     let comboBox = popupView.xComboBox
     if comboBox.isNil:
@@ -431,6 +453,10 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       comboBox.activateItemAtIndex(itemIndex)
       comboBox.closePopup()
     comboBox.setNeedsDisplay(true)
+
+  method scrollWheel(comboBox: ComboBox, event: ScrollEvent) =
+    if comboBox.popupOpen():
+      comboBox.scrollPopupRows(event.popupScrollRows())
 
   method keyDown(comboBox: ComboBox, event: KeyEvent) =
     if not comboBox.isEnabled:
@@ -742,15 +768,29 @@ proc highlightedIndex*(comboBox: ComboBox): int =
     return -1
   comboBox.xPopupHighlightedIndex
 
+proc setPopupNeedsDisplay(comboBox: ComboBox) =
+  if comboBox.isNil:
+    return
+  comboBox.setNeedsDisplay(true)
+  if not comboBox.xPopupWindow.isNil:
+    let contentView = comboBox.xPopupWindow.contentView()
+    if not contentView.isNil:
+      contentView.setNeedsDisplay(true)
+
 proc setHighlightedIndex*(comboBox: ComboBox, index: int) =
   if comboBox.isNil:
     return
   let boundedIndex = if index < 0 or index >= comboBox.numberOfItems(): -1 else: index
+  let oldFirst = comboBox.popupFirstItemIndex()
+  comboBox.scrollPopupItemToVisible(boundedIndex)
+  let firstChanged = comboBox.popupFirstItemIndex() != oldFirst
   if comboBox.xPopupHighlightedIndex == boundedIndex:
+    if firstChanged:
+      comboBox.setPopupNeedsDisplay()
     return
   comboBox.xPopupHighlightedIndex = boundedIndex
   comboBox.notifyComboBoxSelectionIsChanging()
-  comboBox.setNeedsDisplay(true)
+  comboBox.setPopupNeedsDisplay()
 
 proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
   comboBox.setHighlightedIndex(index)
@@ -761,15 +801,12 @@ proc isButtonPressed*(comboBox: ComboBox): bool =
 proc visibleItemCount*(comboBox: ComboBox): int =
   if comboBox.isNil:
     return 0
-  let count = comboBox.numberOfItems()
-  if count <= 0:
-    return 0
-  min(count, max(comboBox.maxVisibleItems(), 1))
+  visibleListItemCount(comboBox.numberOfItems(), comboBox.maxVisibleItems())
 
 proc popupItemHeight*(comboBox: ComboBox): float32 =
   if comboBox.isNil:
     return 0.0
-  max(comboBox.itemHeight(), 18.0'f32)
+  max(comboBox.itemHeight(), 18.0'f32).normalizedRowHeight()
 
 proc popupFirstItemIndex*(comboBox: ComboBox): int =
   if comboBox.isNil:
@@ -777,88 +814,94 @@ proc popupFirstItemIndex*(comboBox: ComboBox): int =
   let
     total = comboBox.numberOfItems()
     visible = comboBox.visibleItemCount()
-  if total <= visible or visible <= 0:
-    return 0
-  let selected = comboBox.indexOfSelectedItem()
-  if selected < 0:
-    return 0
-  max(0, min(selected - visible + 1, total - visible))
+  comboBox.xPopupViewport.firstIndex.clampFirstIndex(total, visible)
+
+proc scrollPopupItemToVisible(comboBox: ComboBox, itemIndex: int) =
+  if comboBox.isNil:
+    return
+  comboBox.xPopupViewport.scrollToVisible(
+    itemIndex, comboBox.numberOfItems(), comboBox.visibleItemCount()
+  )
+
+proc popupScrollRows(event: ScrollEvent): int =
+  if event.deltaY < 0.0'f32:
+    1
+  elif event.deltaY > 0.0'f32:
+    -1
+  else:
+    0
+
+proc scrollPopupRows(comboBox: ComboBox, delta: int) =
+  if comboBox.isNil or delta == 0:
+    return
+  let oldFirst = comboBox.popupFirstItemIndex()
+  comboBox.xPopupViewport.scrollBy(
+    delta, comboBox.numberOfItems(), comboBox.visibleItemCount()
+  )
+  if comboBox.popupFirstItemIndex() != oldFirst:
+    comboBox.setPopupNeedsDisplay()
 
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect =
-  let visible = comboBox.visibleItemCount()
-  if visible <= 0:
+  if comboBox.isNil:
     return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
-  initRect(
-    bounds.origin.x,
-    bounds.maxY,
-    bounds.size.width,
-    comboBox.popupItemHeight() * visible.float32 + 2.0'f32,
+  listPopupRect(
+    bounds,
+    comboBox.numberOfItems(),
+    comboBox.maxVisibleItems(),
+    comboBox.popupItemHeight(),
   )
 
 proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect =
   let
     first = comboBox.popupFirstItemIndex()
-    visibleIndex = itemIndex - first
     visible = comboBox.visibleItemCount()
-  if visibleIndex < 0 or visibleIndex >= visible:
-    return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
-  let
     popup = comboBox.popupRect(bounds)
-    height = comboBox.popupItemHeight()
-  initRect(
-    popup.origin.x + 1.0'f32,
-    popup.origin.y + 1.0'f32 + visibleIndex.float32 * height,
-    max(popup.size.width - 2.0'f32, 0.0'f32),
-    height,
-  )
+  listItemRect(popup, first, visible, itemIndex, comboBox.popupItemHeight())
 
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int =
-  let popup = comboBox.popupRect(bounds)
-  if popup.isEmpty or not popup.contains(point):
+  if comboBox.isNil:
     return -1
   let
-    height = comboBox.popupItemHeight()
-    visibleIndex = int((point.y - popup.origin.y - 1.0'f32) / height)
-  if height <= 0.0'f32 or visibleIndex < 0 or visibleIndex >= comboBox.visibleItemCount():
-    return -1
-  let index = comboBox.popupFirstItemIndex() + visibleIndex
-  if index < 0 or index >= comboBox.numberOfItems():
-    return -1
-  index
+    popup = comboBox.popupRect(bounds)
+    first = comboBox.popupFirstItemIndex()
+  listItemIndexAtPoint(
+    popup,
+    point,
+    first,
+    comboBox.visibleItemCount(),
+    comboBox.numberOfItems(),
+    comboBox.popupItemHeight(),
+  )
 
 proc popupItemRectInPopup(comboBox: ComboBox, itemIndex: int): Rect =
   let
     first = comboBox.popupFirstItemIndex()
-    visibleIndex = itemIndex - first
     visible = comboBox.visibleItemCount()
-  if visibleIndex < 0 or visibleIndex >= visible:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  let height = comboBox.popupItemHeight()
-  initRect(
-    1.0'f32,
-    1.0'f32 + visibleIndex.float32 * height,
-    max(comboBox.bounds.size.width - 2.0'f32, 0.0'f32),
-    height,
-  )
+    popup = initRect(
+      0.0'f32,
+      0.0'f32,
+      comboBox.bounds.size.width,
+      comboBox.popupItemHeight() * visible.float32 + 2.0'f32,
+    )
+  listItemRect(popup, first, visible, itemIndex, comboBox.popupItemHeight())
 
 proc popupItemIndexAtPopupPoint(comboBox: ComboBox, point: Point): int =
-  let popupBounds = initRect(
-    0.0'f32,
-    0.0'f32,
-    comboBox.bounds.size.width,
-    comboBox.popupItemHeight() * comboBox.visibleItemCount().float32 + 2.0'f32,
-  )
-  if popupBounds.isEmpty or not popupBounds.contains(point):
-    return -1
   let
-    height = comboBox.popupItemHeight()
-    visibleIndex = int((point.y - 1.0'f32) / height)
-  if height <= 0.0'f32 or visibleIndex < 0 or visibleIndex >= comboBox.visibleItemCount():
-    return -1
-  let index = comboBox.popupFirstItemIndex() + visibleIndex
-  if index < 0 or index >= comboBox.numberOfItems():
-    return -1
-  index
+    visible = comboBox.visibleItemCount()
+    popupBounds = initRect(
+      0.0'f32,
+      0.0'f32,
+      comboBox.bounds.size.width,
+      comboBox.popupItemHeight() * visible.float32 + 2.0'f32,
+    )
+  listItemIndexAtPoint(
+    popupBounds,
+    point,
+    comboBox.popupFirstItemIndex(),
+    visible,
+    comboBox.numberOfItems(),
+    comboBox.popupItemHeight(),
+  )
 
 proc popupWindowSize(comboBox: ComboBox): Size =
   let popup = comboBox.popupRect(comboBox.bounds)

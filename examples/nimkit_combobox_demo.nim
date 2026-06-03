@@ -12,12 +12,21 @@ let
   status = newStatusLabel("")
   priority = newComboBox(["Low", "Medium", "High"])
   color = newComboBox(["Red", "Green", "Blue"])
+  framework = newComboBox(
+    [
+      "NimKit", "Merenda", "FigDraw", "Kiwiberry", "Sigils", "Siwin", "Pixie", "Chroma",
+      "Atlas",
+    ]
+  )
   priorityLabel = newFormLabel("Priority")
   colorLabel = newFormLabel("Color")
+  frameworkLabel = newFormLabel("Framework")
   changedAction = actionSelector("comboChanged")
 
 proc updateStatus() =
-  status.text = "Priority: " & priority.stringValue & " / Color: " & color.stringValue
+  status.text =
+    "Priority: " & priority.stringValue & " / Color: " & color.stringValue &
+    " / Framework: " & framework.stringValue
 
 proc onChanged(sender: DynamicAgent) =
   if not sender.isNil:
@@ -29,8 +38,10 @@ root.background = initColor(0.95, 0.96, 0.98)
 
 priority.selectedIndex = 1
 color.selectedIndex = 0
+framework.selectedIndex = 3
+framework.maxVisibleItems = 4
 
-for combo in [priority, color]:
+for combo in [priority, color, framework]:
   combo.target = target
   combo.action = changedAction
 
@@ -42,6 +53,7 @@ form.spacing[drow] = 10.0
 form.minFieldWidth = 180.0
 form.addRow(priorityLabel, priority)
 form.addRow(colorLabel, color)
+form.addRow(frameworkLabel, framework)
 layout.addArrangedSubview(title, status, form)
 updateStatus()
 
