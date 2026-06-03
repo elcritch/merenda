@@ -6,7 +6,18 @@ import ./viewgeometry
 import ./viewprotos
 import ./viewbase
 
-export responders, viewbase, viewconstraints, viewgeometry, viewprotos
+export responders
+export viewbase except
+  AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
+  LayoutInputCache
+export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
+export viewgeometry except
+  resetAutoresizingState, refreshAutoresizingReference,
+  refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
+  initLayoutSignalBus, notifyLayoutInputChanged, markConstraintStorageChanged,
+  notifyAutoresizingDependentsChanged, invalidateLayoutItemGeometry,
+  onLayoutInputChanged
+export viewprotos
 
 proc styleId*(view: View): string =
   if view.isNil: "" else: view.xStyleId

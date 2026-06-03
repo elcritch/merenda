@@ -4,8 +4,6 @@ import ./types
 import ./viewgeometry
 import ./viewbase
 
-export viewbase, viewgeometry
-
 protocol ViewProtocolInternal from View:
   property frame -> Rect
   property bounds -> Rect

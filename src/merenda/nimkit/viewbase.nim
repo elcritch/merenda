@@ -30,6 +30,11 @@ type
     likConstraint
     likEquation
 
+  LayoutFrameOrigin* = enum
+    lfoAuthored
+    lfoContainer
+    lfoSolver
+
   AutoresizingState* = object
     referenceRect*: Rect
     referenceSuperviewRect*: Rect
@@ -72,6 +77,12 @@ type
     generated*: seq[LayoutInput]
     dirtySources*: LayoutInputSources
     generation*: Natural
+
+  LayoutInputSummary* = object
+    source*: LayoutInputSource
+    constraints*: Natural
+    equations*: Natural
+    terms*: Natural
 
   View* = ref object of Responder
     xFrame*: Rect

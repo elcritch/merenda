@@ -134,9 +134,13 @@ Useful future debug APIs:
 
 ```nim
 view.constraints()               # authored constraints only
-view.generatedLayoutInputs()      # generated equations and constraints
-view.constraintsAffectingLayout() # debug summary grouped by source
+view.generatedLayoutSummary()     # generated input counts grouped by source
+view.constraintsAffectingLayout() # authored/generated summary grouped by source
 ```
+
+Raw generated `LayoutInput` values can remain available to focused internal
+modules and tests, but the normal public API should prefer summaries so callers
+do not couple to the internal equation representation.
 
 ## Signal Bus
 
@@ -304,8 +308,13 @@ constraint systems while preserving the ability to compose with constraints.
 
 - Whether `LayoutInput` should live in `viewconstraints.nim` or a smaller
   `viewlayoutinputs.nim` module once the cache exists.
-- Whether generated input inspection should return raw internal objects or a
-  read-only debug summary.
+- How far to take public export narrowing for `View.x*` storage. The current
+  umbrella import hides raw layout-input/cache type names, but full field
+  hiding needs a deeper internal accessor or module-organization refactor
+  because Nim object field visibility is attached to the public `View` type.
+- Whether generated input summaries should grow richer fields, such as item
+  names, attributes, priorities, or conflict diagnostics, before exposing any
+  raw internal objects broadly.
 - How much of the signal bus should be public. The reason enum is useful for
   diagnostics, but most callers should not need to emit layout signals directly.
 - Whether container-generated inputs should become a real source before adding
