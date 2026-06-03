@@ -12,37 +12,58 @@ import ./theme
 import ./types
 import ./views
 
-type Window* = ref object of Responder
-  xFrame: Rect
-  xTitle: string
-  xContentView: View
-  xAppearance: Appearance
-  xHasAppearance: bool
-  xInheritedAppearance: Appearance
-  xHasInheritedAppearance: bool
-  xPopupPresentation: PopupPresentation
-  xFirstResponder: Responder
-  xInitialFirstResponder: View
-  xAutorecalculatesKeyViewLoop: bool
-  xKeyBindings: KeyBindingTable
-  xHostWindow: HostWindow
-  xOwnerWindow: Window
-  xAuxiliaryWindows: seq[Window]
-  xIsPopup: bool
-  xPopupPlacement: siwinshim.PopupPlacement
-  xOnPopupDone: proc() {.closure.}
-  xMouseCaptureView: View
-  xMouseActiveView: View
-  xMouseHoverView: View
-  xMouseClickCount: int
-  xLastClickPoint: Point
-  xLastClickButton: types.MouseButton
-  xLastClickView: View
-  xLastClickCount: int
-  xLastClickTime: float
-  xHasLastClick: bool
-  xVisibleRequested: bool
-  xClosed: bool
+type
+  TransientDismissReason* = enum
+    tdrProgrammatic
+    tdrOutsideClick
+    tdrEscape
+    tdrFocusChange
+    tdrOwnerClosed
+    tdrNativeDone
+
+  TransientDismissHandler* = proc(reason: TransientDismissReason) {.closure.}
+
+  Window* = ref object of Responder
+    xFrame: Rect
+    xTitle: string
+    xContentView: View
+    xAppearance: Appearance
+    xHasAppearance: bool
+    xInheritedAppearance: Appearance
+    xHasInheritedAppearance: bool
+    xPopupPresentation: PopupPresentation
+    xFirstResponder: Responder
+    xInitialFirstResponder: View
+    xAutorecalculatesKeyViewLoop: bool
+    xKeyBindings: KeyBindingTable
+    xHostWindow: HostWindow
+    xOwnerWindow: Window
+    xAuxiliaryWindows: seq[Window]
+    xIsPopup: bool
+    xPopupPlacement: siwinshim.PopupPlacement
+    xOnPopupDone: proc() {.closure.}
+    xTransientSession: TransientSession
+    xLastTransientDismissReason: TransientDismissReason
+    xMouseCaptureView: View
+    xMouseActiveView: View
+    xMouseHoverView: View
+    xMouseClickCount: int
+    xLastClickPoint: Point
+    xLastClickButton: types.MouseButton
+    xLastClickView: View
+    xLastClickCount: int
+    xLastClickTime: float
+    xHasLastClick: bool
+    xVisibleRequested: bool
+    xClosed: bool
+
+  TransientSession = object
+    active: bool
+    ownerResponder: Responder
+    transientWindow: Window
+    restoreWindow: Window
+    restoreResponder: Responder
+    onDismiss: TransientDismissHandler
 
 type EventDispatchResult = object
   handled: bool
@@ -79,7 +100,24 @@ proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable
 proc effectiveAppearance*(window: Window): Appearance
 proc effectivePopupPresentation*(window: Window): PopupPresentation
 proc close*(window: Window)
-proc closeAuxiliaryWindows(window: Window)
+proc closeAuxiliaryWindows(window: Window, notifyDone = true)
+proc hasActiveTransientSession*(window: Window): bool
+proc beginTransientSession*(
+  window: Window,
+  owner: Responder,
+  transientWindow: Window = nil,
+  restoreResponder: Responder = nil,
+  onDismiss: TransientDismissHandler = nil,
+)
+
+proc dismissTransientSession*(
+  window: Window, reason: TransientDismissReason
+): bool {.discardable.}
+
+proc endTransientSession*(
+  window: Window, reason = tdrProgrammatic
+): bool {.discardable.}
+
 proc nativeContentScale*(window: Window): float32
 proc newPopupWindow*(
   owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
@@ -286,7 +324,10 @@ proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
   if window.isNil or window.xPopupPresentation == presentation:
     return
   window.xPopupPresentation = presentation
-  window.closeAuxiliaryWindows()
+  if window.hasActiveTransientSession():
+    discard window.dismissTransientSession(tdrProgrammatic)
+  else:
+    window.closeAuxiliaryWindows()
   if not window.xContentView.isNil:
     window.xContentView.setNeedsDisplay(true)
 
@@ -584,23 +625,97 @@ proc detachAuxiliaryWindow(owner, auxiliary: Window) =
   if idx >= 0:
     owner.xAuxiliaryWindows.delete(idx)
 
-proc hasOpenAuxiliaryWindows(window: Window): bool =
-  if window.isNil:
-    return false
-  for auxiliary in window.xAuxiliaryWindows:
-    if not auxiliary.isNil and not auxiliary.isClosed:
-      return true
-  false
+proc attachAuxiliaryWindow(owner, auxiliary: Window) =
+  if owner.isNil or auxiliary.isNil:
+    return
+  auxiliary.xOwnerWindow = owner
+  if auxiliary notin owner.xAuxiliaryWindows:
+    owner.xAuxiliaryWindows.add auxiliary
 
-proc closeAuxiliaryWindows(window: Window) =
+proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
   if window.isNil:
     return
   let auxiliaries = window.xAuxiliaryWindows
   window.xAuxiliaryWindows.setLen(0)
   for auxiliary in auxiliaries:
     if not auxiliary.isNil:
+      if not notifyDone:
+        auxiliary.xOnPopupDone = nil
       auxiliary.xOwnerWindow = nil
       auxiliary.close()
+
+proc hasActiveTransientSession*(window: Window): bool =
+  not window.isNil and window.xTransientSession.active
+
+proc transientDismissReason*(window: Window): TransientDismissReason =
+  if window.isNil:
+    return tdrProgrammatic
+  window.xLastTransientDismissReason
+
+proc restoreTransientFocus(window: Window, session: TransientSession) =
+  let restoreWindow = if session.restoreWindow.isNil: window else: session.restoreWindow
+  if restoreWindow.isNil or restoreWindow.isClosed:
+    return
+  if restoreWindow.isVisible:
+    restoreWindow.makeKeyAndOrderFront()
+  if not session.restoreResponder.isNil:
+    discard restoreWindow.makeFirstResponder(session.restoreResponder)
+
+proc finishTransientSession(
+    window: Window, reason: TransientDismissReason, notifyDismiss: bool
+): bool =
+  if window.isNil or not window.xTransientSession.active:
+    return false
+
+  let session = window.xTransientSession
+  window.xTransientSession = TransientSession()
+  window.xLastTransientDismissReason = reason
+  window.closeAuxiliaryWindows(notifyDone = false)
+
+  if notifyDismiss and not session.onDismiss.isNil:
+    session.onDismiss(reason)
+  if reason != tdrOwnerClosed:
+    window.restoreTransientFocus(session)
+  if not window.xContentView.isNil:
+    window.xContentView.setNeedsDisplay(true)
+  true
+
+proc beginTransientSession*(
+    window: Window,
+    owner: Responder,
+    transientWindow: Window = nil,
+    restoreResponder: Responder = nil,
+    onDismiss: TransientDismissHandler = nil,
+) =
+  if window.isNil:
+    return
+  if window.xTransientSession.active:
+    let session = window.xTransientSession
+    if session.ownerResponder != owner or session.transientWindow != transientWindow:
+      discard window.dismissTransientSession(tdrProgrammatic)
+
+  let resolvedRestore =
+    if restoreResponder.isNil: window.xFirstResponder else: restoreResponder
+  if not transientWindow.isNil:
+    window.attachAuxiliaryWindow(transientWindow)
+  window.xTransientSession = TransientSession(
+    active: true,
+    ownerResponder: owner,
+    transientWindow: transientWindow,
+    restoreWindow: window,
+    restoreResponder: resolvedRestore,
+    onDismiss: onDismiss,
+  )
+
+proc dismissTransientSession*(
+    window: Window, reason: TransientDismissReason
+): bool {.discardable.} =
+  window.finishTransientSession(reason, notifyDismiss = true)
+
+proc endTransientSession*(
+    window: Window, reason = tdrProgrammatic
+): bool {.discardable.} =
+  window.finishTransientSession(reason, notifyDismiss = false)
 
 proc close*(window: Window) =
   if window.isNil:
@@ -609,7 +724,10 @@ proc close*(window: Window) =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
   window.xClosed = true
   window.xVisibleRequested = false
-  window.closeAuxiliaryWindows()
+  if window.xTransientSession.active:
+    discard window.dismissTransientSession(tdrOwnerClosed)
+  else:
+    window.closeAuxiliaryWindows(notifyDone = false)
   if not window.xOwnerWindow.isNil:
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
@@ -633,12 +751,11 @@ proc newPopupWindow*(
     max(popupSize.height, 1.0'f32),
   )
   result = newWindow(title, frame)
-  result.xOwnerWindow = owner
   result.xIsPopup = true
   result.xPopupPlacement =
     popupPlacement(anchorFrame, popupSize, owner.nativeContentScale())
-  if not owner.isNil and result notin owner.xAuxiliaryWindows:
-    owner.xAuxiliaryWindows.add result
+  if not owner.isNil:
+    owner.attachAuxiliaryWindow(result)
     result.xPopupPresentation = owner.popupPresentation()
     result.setInheritedAppearance(owner.effectiveAppearance())
 
@@ -691,6 +808,12 @@ proc dispatchKeyCommand(
   dispatchCommandInChain(target, command.get())
 
 proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
+  if event.key == keyEscape:
+    if not window.xOwnerWindow.isNil:
+      return window.xOwnerWindow.dismissTransientSession(tdrEscape)
+    if window.hasActiveTransientSession():
+      return window.dismissTransientSession(tdrEscape)
+
   let target = window.keyDispatchTarget()
   if target.isNil:
     return false
@@ -852,9 +975,29 @@ proc updateHoverView(
     let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
     result = target.handleMouseEntered(localEvent) or result
 
+proc responderChainContains(responder, owner: Responder): bool =
+  if responder.isNil or owner.isNil:
+    return false
+  var current = responder
+  while not current.isNil:
+    if current == owner:
+      return true
+    current = current.nextResponder()
+  false
+
+proc shouldDismissTransientForMouse(window: Window, target: View): bool =
+  if window.isNil or not window.xTransientSession.active:
+    return false
+  let session = window.xTransientSession
+  if not session.transientWindow.isNil:
+    return true
+  if target.isNil:
+    return true
+  not responderChainContains(Responder(target), session.ownerResponder)
+
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
-  if pressed and window.hasOpenAuxiliaryWindows():
-    window.closeAuxiliaryWindows()
+  if pressed and window.hasActiveTransientSession() and window.xContentView.isNil:
+    discard window.dismissTransientSession(tdrOutsideClick)
     return true
   if window.xContentView.isNil:
     return false
@@ -863,6 +1006,9 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
   var target: View
   if pressed:
     target = window.contentHitTest(contentPoint)
+    if window.shouldDismissTransientForMouse(target):
+      discard window.dismissTransientSession(tdrOutsideClick)
+      return true
     window.xMouseCaptureView = target
     if target.isNil:
       return false
@@ -1030,7 +1176,12 @@ proc dispatchHostScroll(window: Window, event: types.ScrollEvent) =
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   if event.pressed and event.isEscape:
-    window.close()
+    if not window.xOwnerWindow.isNil:
+      discard window.xOwnerWindow.dismissTransientSession(tdrEscape)
+    elif window.hasActiveTransientSession():
+      discard window.dismissTransientSession(tdrEscape)
+    else:
+      window.close()
     return
   if event.pressed:
     discard window.dispatchKeyDown(event.event)
@@ -1043,15 +1194,18 @@ proc dispatchHostTextInput(window: Window, text: string) =
 proc dispatchHostFocusChanged(window: Window, focused: bool) =
   if window.isNil:
     return
-  if focused and not window.xIsPopup and window.hasOpenAuxiliaryWindows():
-    window.closeAuxiliaryWindows()
+  if focused and not window.xIsPopup and window.hasActiveTransientSession():
+    discard window.dismissTransientSession(tdrFocusChange)
 
 proc markHostClosed(window: Window) =
   if window.isNil:
     return
-  window.closeAuxiliaryWindows()
   window.xClosed = true
   window.xVisibleRequested = false
+  if window.xTransientSession.active:
+    discard window.dismissTransientSession(tdrOwnerClosed)
+  else:
+    window.closeAuxiliaryWindows(notifyDone = false)
   if not window.xOwnerWindow.isNil:
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
