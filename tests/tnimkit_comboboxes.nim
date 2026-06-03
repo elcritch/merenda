@@ -234,3 +234,82 @@ suite "nimkit comboboxes":
     check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
     check not combo.popupOpen
     check combo.indexOfSelectedItem() == 1
+
+  test "keyboard navigation scrolls popup rows into view":
+    let
+      window = newWindow("Combo scroll keys", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      combo = newComboBox(
+        ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
+        frame = initRect(10, 10, 120, 24),
+      )
+
+    combo.popupPresentation = ppInline
+    combo.maxVisibleItems = 3
+    combo.itemHeight = 20.0
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(combo)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.popupOpen
+    check combo.highlightedIndex == 0
+    check combo.popupFirstItemIndex() == 0
+
+    let popup = combo.popupRect(combo.bounds())
+    check popup.size.height == 62.0'f32
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+
+    check combo.highlightedIndex == 4
+    check combo.popupFirstItemIndex() == 2
+    check combo.popupItemRect(combo.bounds(), 1).isEmpty
+    check not combo.popupItemRect(combo.bounds(), 2).isEmpty
+    check combo.popupItemIndexAtPoint(
+      combo.bounds(), initPoint(0.5'f32, combo.bounds().maxY + 10.0'f32)
+    ) == -1
+    check combo.popupItemIndexAtPoint(
+      combo.bounds(), initPoint(8.0'f32, combo.bounds().maxY + 0.5'f32)
+    ) == -1
+    check combo.popupItemIndexAtPoint(
+      combo.bounds(), initPoint(8.0, combo.bounds().maxY + 10.0)
+    ) == 2
+
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check not combo.popupOpen
+    check combo.indexOfSelectedItem() == 4
+    check combo.stringValue == "Five"
+
+  test "mouse wheel scrolls open inline popup viewport":
+    let
+      window = newWindow("Combo wheel", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      combo = newComboBox(
+        ["One", "Two", "Three", "Four", "Five", "Six"],
+        frame = initRect(10, 10, 120, 24),
+      )
+
+    combo.popupPresentation = ppInline
+    combo.maxVisibleItems = 3
+    combo.itemHeight = 20.0
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(20, 20))
+    check combo.popupOpen
+    check window.mouseUpAt(initPoint(20, 20))
+    check combo.popupOpen
+    check combo.popupFirstItemIndex() == 0
+
+    let firstRowPoint = initPoint(20.0, 10.0 + 24.0 + 10.0)
+    check window.scrollWheelAt(firstRowPoint, deltaY = -1.0'f32)
+    check combo.popupFirstItemIndex() == 1
+    check combo.popupItemIndexAtPoint(
+      combo.bounds(), initPoint(8.0, combo.bounds().maxY + 10.0)
+    ) == 1
+
+    check window.scrollWheelAt(firstRowPoint, deltaY = 1.0'f32)
+    check combo.popupFirstItemIndex() == 0

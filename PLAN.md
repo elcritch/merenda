@@ -50,7 +50,8 @@ NimKit currently includes the core desktop-control slice:
   cancellation, keyboard activation, toggle/mixed/check/radio state cycling,
   editable/selectable single-line text fields, and combo boxes with local items,
   data source/delegate hooks, inline or window-backed popups, keyboard
-  navigation, and action dispatch on selection.
+  navigation, scrollable popup viewport behavior, and action dispatch on
+  selection.
 - Intrinsic sizing for the built-in control set: sizing value types,
   `intrinsicContentSize`, `sizeThatFits`, `sizeToFit`, cell measurement hooks,
   theme-backed minimum/chrome metrics, lazy parent layout invalidation, and
@@ -74,6 +75,7 @@ NimKit currently includes the core desktop-control slice:
   `examples/nimkit_radio_demo.nim`,
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
+  `examples/nimkit_combo_scroll_demo.nim`,
   `examples/nimkit_controls_showcase.nim`,
   `examples/nimkit_layout_showcase.nim`,
   `examples/nimkit_grid_preferences.nim`.
@@ -175,7 +177,11 @@ NimKit currently includes the core desktop-control slice:
   `ComboBox`, local item storage through `ComboBoxCell`, selector-backed data
   source/delegate hooks, popup presentation preference, inline popup drawing,
   window-backed popup views, popup open/highlight/selection state, mouse
-  tracking, keyboard navigation, and text selector compatibility.
+  tracking, keyboard navigation, scroll-wheel popup navigation, and text
+  selector compatibility.
+- `src/merenda/nimkit/listviews.nim`:
+  `ListViewport` and shared list/popup row helpers for visible-count
+  clamping, first-row scrolling, popup bounds, row bounds, and row hit testing.
 - `src/merenda/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field/combo-box
   style objects, typed style tokens, style overrides, `EdgeInsets`,
@@ -376,8 +382,9 @@ Concrete task order and status:
 - Add the next controls after intrinsic sizing is in place, so their default
   frame behavior, cell metrics, keyboard focus, and examples use the same
   measurement path from the start.
-- Extend combo-box/list infrastructure with scrollable popup content and shared
-  list-row behavior rather than adding one-off popup logic per control.
+- Done for combo boxes and future list-like controls: add `ListViewport` plus
+  shared list-row geometry for scrollable popup content rather than adding
+  one-off popup logic per control.
 - Keep text editing scoped to single-line control behavior for now. Grow command
   selectors and key bindings before adding multiline editor features.
 - Keep delegate/custom policy hooks selector-based and explicit where they
@@ -435,8 +442,8 @@ Concrete task order and status:
 
 ### Priority Order
 
-- Short term: scrollable list/popup infrastructure, richer container behavior
-  where examples need it, and broader control coverage.
+- Short term: richer container behavior where examples need it and broader
+  control coverage.
 - Medium term: generated autoresizing-mask constraints, loadable/query-like
   themes, menus/popovers, and broader resource organization.
 - Later: full source-compatibility conveniences only when examples prove the
@@ -472,6 +479,7 @@ Concrete task order and status:
   `examples/nimkit_radio_demo.nim`,
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
+  `examples/nimkit_combo_scroll_demo.nim`,
   `examples/nimkit_controls_showcase.nim`,
   `examples/nimkit_layout_showcase.nim`,
   `examples/nimkit_grid_preferences.nim`.
