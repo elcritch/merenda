@@ -67,8 +67,7 @@ proc fittingSize(view: View): Size =
 proc invalidateGridLayout(gridView: GridView) =
   if gridView.isNil:
     return
-  gridView.invalidateIntrinsicContentSize()
-  gridView.setNeedsLayout()
+  gridView.invalidateContainerMetrics()
   gridView.setNeedsDisplay(true)
 
 proc visibleGridItems(gridView: GridView): seq[GridItem] =

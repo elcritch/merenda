@@ -35,9 +35,9 @@ proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
   case reason
   of lirConstraints:
     lisUser
-  of lirIntrinsic, lirDescendantIntrinsic, lirAppearanceMetrics:
+  of lirIntrinsic, lirDescendantIntrinsic, lirAppearanceMetrics, lirContainerMetrics:
     lisIntrinsic
-  of lirHidden, lirHierarchy, lirContainerMetrics:
+  of lirHidden, lirHierarchy:
     lisContainer
   of lirFrame, lirBounds, lirSuperview, lirSuperviewGeometry, lirSubviews,
       lirDescendantGeometry, lirAutoresizingMask:
@@ -358,6 +358,13 @@ proc invalidateIntrinsicContentSize*(view: View) =
     return
   view.invalidateLayoutItemGeometry(
     lirIntrinsic, ancestorReason = lirDescendantIntrinsic
+  )
+
+proc invalidateContainerMetrics*(view: View) =
+  if view.isNil:
+    return
+  view.invalidateLayoutItemGeometry(
+    lirContainerMetrics, ancestorReason = lirDescendantIntrinsic
   )
 
 proc invalidateIntrinsicContentSizeSubtree*(view: View) =

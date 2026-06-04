@@ -130,7 +130,8 @@ Generated input sources:
 - `lisAutoresizingMask`: compatibility inputs generated from frame,
   autoresizing mask, reference rect, and reference superview rect.
 - `lisIntrinsic`: compression resistance and hugging inequalities generated
-  from intrinsic content size and priorities.
+  from intrinsic content size, priorities, appearance metrics, and native
+  container metrics such as spacing and insets.
 - `lisContainer`: future container-generated relationships when a native
   container needs solver participation.
 
@@ -301,7 +302,10 @@ matters:
   spacing, insets, or content changes
 
 The signal reason should be `lirIntrinsic`, `lirAppearanceMetrics`, or
-`lirContainerMetrics` depending on the source. The solver should still consume
+`lirContainerMetrics` depending on the source. These currently dirty the
+`lisIntrinsic` bucket because the generated equations are still intrinsic-size
+inputs. `lisContainer` remains reserved for future container-generated
+relationships that need solver participation. The solver should still consume
 the resulting inputs through the same `LayoutInput` model.
 
 ## Containers
