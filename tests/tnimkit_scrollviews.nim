@@ -1,0 +1,349 @@
+import std/unittest
+
+import figdraw/fignodes
+
+import merenda/nimkit
+import merenda/nimkit/types as nimkitTypes
+
+type ScrollResizeFixture = object
+  root: View
+  title: View
+  status: View
+  scrollView: ScrollView
+  controls: View
+
+const GeometryTolerance = 0.01'f32
+
+func nearlyEqual(a, b: float32): bool =
+  abs(a - b) <= GeometryTolerance
+
+func insideAxis(track, bounds: nimkitTypes.Rect, axis: LayoutAxis): bool =
+  track.axisOrigin(axis) >= bounds.axisOrigin(axis) - GeometryTolerance and
+    track.axisMax(axis) <= bounds.axisMax(axis) + GeometryTolerance
+
+proc checkRectNearlyEqual(actual, expected: nimkitTypes.Rect) =
+  check actual.origin.x.nearlyEqual(expected.origin.x)
+  check actual.origin.y.nearlyEqual(expected.origin.y)
+  check actual.size.width.nearlyEqual(expected.size.width)
+  check actual.size.height.nearlyEqual(expected.size.height)
+
+proc checkScrollerRectInside(scrollView: ScrollView, rect: nimkitTypes.Rect) =
+  check not rect.isEmpty
+  check rect.insideAxis(scrollView.bounds(), laHorizontal)
+  check rect.insideAxis(scrollView.bounds(), laVertical)
+
+proc checkScrollViewResizeInvariants(scrollView: ScrollView) =
+  let
+    viewport = scrollView.viewportRect()
+    contentView = scrollView.contentView()
+    bounds = scrollView.bounds()
+    offset = scrollView.contentOffset()
+    maximumOffset = scrollView.maximumContentOffset()
+
+  checkRectNearlyEqual(contentView.frame(), viewport)
+  checkRectNearlyEqual(contentView.bounds(), initRect(offset, viewport.size))
+  check offset.x >= 0.0'f32
+  check offset.y >= 0.0'f32
+  check offset.x <= maximumOffset.x + GeometryTolerance
+  check offset.y <= maximumOffset.y + GeometryTolerance
+  check viewport.size.width >= 0.0'f32
+  check viewport.size.height >= 0.0'f32
+  check viewport.insideAxis(bounds, laHorizontal)
+  check viewport.insideAxis(bounds, laVertical)
+
+  if scrollView.showsHorizontalScroller():
+    checkScrollerRectInside(scrollView, scrollView.horizontalScrollerRect())
+    checkScrollerRectInside(scrollView, scrollView.horizontalScrollerKnobRect())
+  else:
+    check scrollView.horizontalScrollerRect().isEmpty
+    check scrollView.horizontalScrollerKnobRect().isEmpty
+
+  if scrollView.showsVerticalScroller():
+    checkScrollerRectInside(scrollView, scrollView.verticalScrollerRect())
+    checkScrollerRectInside(scrollView, scrollView.verticalScrollerKnobRect())
+  else:
+    check scrollView.verticalScrollerRect().isEmpty
+    check scrollView.verticalScrollerKnobRect().isEmpty
+
+proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
+  result.root = newView(frame = frame)
+  result.title = newTitleLabel("Scroll View")
+  result.status = newStatusLabel("")
+  result.scrollView =
+    newScrollView(documentView = newView(frame = initRect(0, 0, 620, 620)))
+  result.controls = newStackView(laHorizontal)
+
+  let
+    guide = result.root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 22.0, 24.0))
+    topButton = newButton("Top")
+    middleButton = newButton("Middle")
+    bottomButton = newButton("Bottom")
+
+  result.scrollView.hasHorizontalScroller = true
+  result.scrollView.hasVerticalScroller = true
+  result.scrollView.autohidesScrollers = true
+
+  StackView(result.controls).spacing = 8.0
+  StackView(result.controls).alignment = svaCenter
+  StackView(result.controls).distribution = svdFill
+  StackView(result.controls).addArrangedSubview(topButton, middleButton, bottomButton)
+  result.root.addSubview(
+    result.title, result.status, result.scrollView, result.controls
+  )
+
+  result.title.pinEdges(toGuide = guide, edges = {leLeft, leTop, leRight})
+  activate(
+    result.status.topAnchor.constraintEqualTo(result.title.bottomAnchor, constant = 8.0),
+    result.status.leftAnchor.constraintEqualTo(result.title.leftAnchor),
+    result.status.rightAnchor.constraintEqualTo(result.title.rightAnchor),
+    result.scrollView.topAnchor.constraintEqualTo(
+      result.status.bottomAnchor, constant = 12.0
+    ),
+    result.scrollView.leftAnchor.constraintEqualTo(result.title.leftAnchor),
+    result.scrollView.rightAnchor.constraintEqualTo(result.title.rightAnchor),
+    result.controls.topAnchor.constraintEqualTo(
+      result.scrollView.bottomAnchor, constant = 12.0
+    ),
+    result.controls.leftAnchor.constraintEqualTo(result.title.leftAnchor),
+    result.controls.rightAnchor.constraintEqualTo(result.title.rightAnchor),
+    result.controls.bottomAnchor.constraintEqualTo(guide.bottomAnchor),
+  )
+
+proc checkHeaderVisible(fixture: ScrollResizeFixture) =
+  let
+    rootBounds = fixture.root.bounds()
+    titleFrame = fixture.title.frame()
+    statusFrame = fixture.status.frame()
+    scrollFrame = fixture.scrollView.frame()
+    controlsFrame = fixture.controls.frame()
+
+  check titleFrame.origin.x >= 0.0'f32
+  check titleFrame.origin.y >= 0.0'f32
+  check titleFrame.maxX <= rootBounds.size.width + GeometryTolerance
+  check titleFrame.maxY <= rootBounds.size.height + GeometryTolerance
+  check statusFrame.origin.y >= titleFrame.maxY - GeometryTolerance
+  check scrollFrame.origin.y >= statusFrame.maxY - GeometryTolerance
+  check controlsFrame.origin.y >= scrollFrame.maxY - GeometryTolerance
+  check controlsFrame.maxY <= rootBounds.size.height + GeometryTolerance
+  check scrollFrame.size.width > 0.0'f32
+  check scrollFrame.size.height > 0.0'f32
+
+proc checkDemoScrollerVisibility(fixture: ScrollResizeFixture) =
+  let
+    rootSize = fixture.root.bounds().size
+    documentSize = fixture.scrollView.documentSize()
+    maxViewportWidth = max(rootSize.width - 48.0'f32, 0.0'f32)
+    maxViewportHeight = max(rootSize.height - 44.0'f32, 0.0'f32)
+
+  if documentSize.width > maxViewportWidth + GeometryTolerance:
+    check fixture.scrollView.showsHorizontalScroller()
+  if documentSize.height > maxViewportHeight + GeometryTolerance:
+    check fixture.scrollView.showsVerticalScroller()
+
+suite "nimkit scroll views":
+  test "scroll view owns a clipped content view and document view":
+    let
+      document = newView(frame = initRect(0, 0, 320, 220))
+      scrollView =
+        newScrollView(frame = initRect(10, 12, 120, 80), documentView = document)
+
+    check scrollView.contentView() != nil
+    check scrollView.contentView().clipsToBounds
+    check scrollView.documentView() == document
+    check document.superview == scrollView.contentView()
+    check scrollView.viewportSize() == initSize(120, 80)
+    check scrollView.contentOffset() == initPoint(0, 0)
+
+  test "content offset clamps to document and viewport bounds":
+    let
+      document = newView(frame = initRect(0, 0, 300, 210))
+      scrollView =
+        newScrollView(frame = initRect(0, 0, 100, 70), documentView = document)
+
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = false
+    scrollView.scrollerThickness = 10.0
+
+    check scrollView.viewportSize() == initSize(90, 60)
+    check scrollView.maximumContentOffset() == initPoint(210, 150)
+
+    scrollView.contentOffset = initPoint(250, 200)
+    check scrollView.contentOffset() == initPoint(210, 150)
+    check scrollView.contentView().bounds.origin == initPoint(210, 150)
+
+    scrollView.contentOffset = initPoint(-10, -20)
+    check scrollView.contentOffset() == initPoint(0, 0)
+
+  test "scroll wheel and scroll rect update content offset":
+    let
+      window = newWindow("ScrollView", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      document = newView(frame = initRect(0, 0, 300, 260))
+      scrollView =
+        newScrollView(frame = initRect(10, 10, 100, 80), documentView = document)
+
+    scrollView.lineScroll = 10.0
+    root.addSubview(scrollView)
+    window.setContentView(root)
+
+    check window.scrollWheelAt(initPoint(20, 20), deltaY = -2.0)
+    check scrollView.contentOffset() == initPoint(0, 20)
+
+    check scrollView.scrollRectToVisible(initRect(160, 150, 40, 40))
+    check scrollView.contentOffset().x > 0.0
+    check scrollView.contentOffset().y > 20.0
+
+    let visible = initRect(scrollView.contentOffset(), scrollView.viewportSize())
+    check visible.contains(initPoint(160, 150))
+    check visible.contains(initPoint(199.99, 189.99))
+
+  test "autohide scroller policy follows document size":
+    let
+      document = newView(frame = initRect(0, 0, 80, 60))
+      scrollView =
+        newScrollView(frame = initRect(0, 0, 100, 80), documentView = document)
+
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = true
+
+    check not scrollView.showsHorizontalScroller()
+    check not scrollView.showsVerticalScroller()
+
+    document.frame = initRect(0, 0, 160, 120)
+    scrollView.tile()
+
+    check scrollView.showsHorizontalScroller()
+    check scrollView.showsVerticalScroller()
+    check not scrollView.horizontalScrollerRect().isEmpty
+    check not scrollView.verticalScrollerRect().isEmpty
+
+  test "direct frame resize retiles viewport and scroller geometry":
+    let
+      document = newView(frame = initRect(0, 0, 620, 620))
+      scrollView =
+        newScrollView(frame = initRect(0, 0, 240, 160), documentView = document)
+
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = true
+
+    scrollView.layoutSubtreeIfNeeded()
+    scrollView.scrollTo(scrollView.maximumContentOffset())
+    checkScrollViewResizeInvariants(scrollView)
+    check scrollView.showsHorizontalScroller()
+    check scrollView.showsVerticalScroller()
+
+    scrollView.frame = initRect(0, 0, 760, 680)
+    scrollView.layoutSubtreeIfNeeded()
+    checkScrollViewResizeInvariants(scrollView)
+    check scrollView.contentOffset() == initPoint(0, 0)
+    check not scrollView.showsHorizontalScroller()
+    check not scrollView.showsVerticalScroller()
+
+    scrollView.frame = initRect(0, 0, 260, 180)
+    scrollView.layoutSubtreeIfNeeded()
+    checkScrollViewResizeInvariants(scrollView)
+    check scrollView.showsHorizontalScroller()
+    check scrollView.showsVerticalScroller()
+
+  test "scroll view resizes with constraint layout":
+    let
+      root = newView(frame = initRect(0, 0, 260, 180))
+      guide = root.contentLayoutGuide(initEdgeInsets(12.0))
+      document = newView(frame = initRect(0, 0, 420, 360))
+      scrollView = newScrollView(documentView = document)
+      footer = newButton("Done")
+
+    root.addSubview(scrollView, footer)
+    activate(
+      scrollView.topAnchor.constraintEqualTo(guide.topAnchor),
+      scrollView.leftAnchor.constraintEqualTo(guide.leftAnchor),
+      scrollView.rightAnchor.constraintEqualTo(guide.rightAnchor),
+      footer.topAnchor.constraintEqualTo(scrollView.bottomAnchor, constant = 8.0),
+      footer.leftAnchor.constraintEqualTo(guide.leftAnchor),
+      footer.rightAnchor.constraintEqualTo(guide.rightAnchor),
+      footer.bottomAnchor.constraintEqualTo(guide.bottomAnchor),
+    )
+
+    root.layoutSubtreeIfNeeded()
+    let firstFrame = scrollView.frame()
+
+    root.frame = initRect(0, 0, 340, 260)
+    root.layoutSubtreeIfNeeded()
+
+    check scrollView.frame().size.width > firstFrame.size.width
+    check scrollView.frame().size.height > firstFrame.size.height
+
+  test "scroll view viewport remains coherent across repeated grow shrink layout":
+    let fixture = newScrollResizeFixture(initRect(0, 0, 520, 380))
+
+    fixture.root.layoutSubtreeIfNeeded()
+    fixture.scrollView.scrollTo(fixture.scrollView.maximumContentOffset())
+    checkScrollViewResizeInvariants(fixture.scrollView)
+    checkDemoScrollerVisibility(fixture)
+    check fixture.scrollView.contentOffset().x > 0.0'f32
+    check fixture.scrollView.contentOffset().y > 0.0'f32
+
+    for size in [
+      initSize(760, 620),
+      initSize(360, 260),
+      initSize(680, 560),
+      initSize(300, 220),
+      initSize(520, 380),
+    ]:
+      fixture.root.frame = initRect(0, 0, size.width, size.height)
+      fixture.root.layoutSubtreeIfNeeded()
+      checkHeaderVisible(fixture)
+      checkScrollViewResizeInvariants(fixture.scrollView)
+      checkDemoScrollerVisibility(fixture)
+
+  test "large scroll document does not push header out of constrained viewport":
+    let fixture = newScrollResizeFixture(initRect(0, 0, 520, 380))
+
+    fixture.root.layoutSubtreeIfNeeded()
+    checkHeaderVisible(fixture)
+    checkScrollViewResizeInvariants(fixture.scrollView)
+    checkDemoScrollerVisibility(fixture)
+
+    fixture.root.frame = initRect(0, 0, 360, 260)
+    fixture.root.layoutSubtreeIfNeeded()
+    checkHeaderVisible(fixture)
+    checkScrollViewResizeInvariants(fixture.scrollView)
+    checkDemoScrollerVisibility(fixture)
+
+  test "buildRenders clips scroll content and offsets document rendering":
+    let
+      root = newView(frame = initRect(0, 0, 180, 140))
+      document = newView(frame = initRect(0, 0, 240, 180))
+      child = newView(frame = initRect(60, 50, 30, 20))
+      scrollView =
+        newScrollView(frame = initRect(20, 30, 100, 70), documentView = document)
+
+    child.background = initColor(0.2, 0.4, 0.7, 1.0)
+    document.addSubview(child)
+    root.addSubview(scrollView)
+
+    scrollView.contentOffset = initPoint(40, 30)
+    let renders = buildRenders(root)
+
+    var
+      clipNodeFound = false
+      childNodeFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and NfClipContent in node.flags and
+          node.screenBox.x == 20.0 and node.screenBox.y == 30.0 and
+          node.screenBox.w == 100.0 and node.screenBox.h == 70.0:
+        clipNodeFound = true
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == initColor(0.2, 0.4, 0.7, 1.0).rgba:
+        childNodeFound = true
+        check node.screenBox.x == 40.0
+        check node.screenBox.y == 50.0
+        check node.screenBox.w == 30.0
+        check node.screenBox.h == 20.0
+
+    check clipNodeFound
+    check childNodeFound
