@@ -15,9 +15,14 @@ type
 
   ClipView* = ref object of View
 
+  Scroller* = ref object of View
+    xScrollView: ScrollView
+    xAxis: LayoutAxis
+
   ScrollView* = ref object of View
     xClipView: ClipView
     xDocumentView: View
+    xScroller: array[LayoutAxis, Scroller]
     xHasScroller: array[LayoutAxis, bool]
     xAutohidesScrollers: bool
     xScrollerThickness: float32
@@ -30,6 +35,8 @@ func normalizedLineScroll(value: float32): float32 =
   max(value, 1.0'f32)
 
 proc contentOffset*(scrollView: ScrollView): Point
+proc horizontalScrollerRect*(scrollView: ScrollView): Rect
+proc verticalScrollerRect*(scrollView: ScrollView): Rect
 
 func initScrollViewport*(
     offset, visibleExtent, contentExtent: float32
@@ -166,14 +173,33 @@ proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
 proc tile*(scrollView: ScrollView) =
   if scrollView.isNil or scrollView.xClipView.isNil:
     return
+  let visibleAxes = scrollView.visibleScrollerAxes()
   scrollView.xClipView.frame = scrollView.viewportRect()
   scrollView.setClipViewBoundsOrigin(scrollView.contentOffset())
+  if not scrollView.xScroller[laHorizontal].isNil:
+    scrollView.xScroller[laHorizontal].frame = scrollView.horizontalScrollerRect()
+    scrollView.xScroller[laHorizontal].hidden = laHorizontal notin visibleAxes
+  if not scrollView.xScroller[laVertical].isNil:
+    scrollView.xScroller[laVertical].frame = scrollView.verticalScrollerRect()
+    scrollView.xScroller[laVertical].hidden = laVertical notin visibleAxes
 
 proc clipView*(scrollView: ScrollView): ClipView =
   if scrollView.isNil: nil else: scrollView.xClipView
 
 proc contentView*(scrollView: ScrollView): View =
   scrollView.clipView()
+
+proc horizontalScroller*(scrollView: ScrollView): Scroller =
+  if scrollView.isNil:
+    nil
+  else:
+    scrollView.xScroller[laHorizontal]
+
+proc verticalScroller*(scrollView: ScrollView): Scroller =
+  if scrollView.isNil:
+    nil
+  else:
+    scrollView.xScroller[laVertical]
 
 proc documentView*(scrollView: ScrollView): View =
   if scrollView.isNil: nil else: scrollView.xDocumentView
@@ -372,6 +398,33 @@ proc verticalScrollerKnobRect*(scrollView: ScrollView): Rect =
     y = scrollerKnobOffset(viewport, document, scrollView.contentOffset().y)
   initRect(track.origin.x, track.origin.y + y, track.size.width, length)
 
+proc scrollerTrackRect*(scroller: Scroller): Rect =
+  if scroller.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  scroller.bounds()
+
+proc scrollerKnobRect*(scroller: Scroller): Rect =
+  if scroller.isNil or scroller.xScrollView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let
+    track = scroller.scrollerTrackRect()
+    scrollView = scroller.xScrollView
+    viewport = scrollView.viewportSize()
+    document = scrollView.documentSize()
+    offset = scrollView.contentOffset()
+
+  case scroller.xAxis
+  of laHorizontal:
+    let
+      length = scrollerKnobLength(viewport.width, document.width)
+      x = scrollerKnobOffset(viewport.width, document.width, offset.x)
+    initRect(x, 0.0, length, track.size.height)
+  of laVertical:
+    let
+      length = scrollerKnobLength(viewport.height, document.height)
+      y = scrollerKnobOffset(viewport.height, document.height, offset.y)
+    initRect(0.0, y, track.size.width, length)
+
 proc drawScroller(context: DrawContext, track, knob: Rect) =
   if track.isEmpty:
     return
@@ -391,15 +444,10 @@ proc drawScroller(context: DrawContext, track, knob: Rect) =
       3.0'f32,
     )
 
-proc drawScrollers(scrollView: ScrollView, context: DrawContext) =
-  if scrollView.isNil:
+proc drawScroller(scroller: Scroller, context: DrawContext) =
+  if scroller.isNil:
     return
-  context.drawScroller(
-    scrollView.horizontalScrollerRect(), scrollView.horizontalScrollerKnobRect()
-  )
-  context.drawScroller(
-    scrollView.verticalScrollerRect(), scrollView.verticalScrollerKnobRect()
-  )
+  context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
 
 protocol DefaultScrollViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(scrollView: ScrollView): IntrinsicSize =
@@ -408,9 +456,9 @@ protocol DefaultScrollViewLayout of ViewLayoutProtocol:
   method layoutSubviews(scrollView: ScrollView) =
     scrollView.tile()
 
-protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
-  method draw(scrollView: ScrollView, context: DrawContext) =
-    scrollView.drawScrollers(context)
+protocol DefaultScrollerDrawing of ViewDrawingProtocol:
+  method draw(scroller: Scroller, context: DrawContext) =
+    scroller.drawScroller(context)
 
 protocol DefaultScrollViewEvents of ResponderEventProtocol:
   method wantsForwardedScrollEvents(scrollView: ScrollView, event: ScrollEvent): bool =
@@ -426,6 +474,15 @@ proc initClipView(frame: Rect): ClipView =
   result.background = initColor(0.0, 0.0, 0.0, 0.0)
   result.clipsToBounds = true
 
+proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
+  result = Scroller()
+  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.hidden = true
+  result.xScrollView = scrollView
+  result.xAxis = axis
+  discard result.withProtocol(DefaultScrollerDrawing)
+
 proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   initViewFields(scrollView, frame)
   scrollView.background = initColor(0.98, 0.985, 0.995, 1.0)
@@ -436,9 +493,12 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   scrollView.xScrollerThickness = 12.0'f32
   scrollView.xLineScroll = 16.0'f32
   scrollView.xClipView = initClipView(scrollView.viewportRect())
+  scrollView.xScroller[laHorizontal] = initScroller(scrollView, laHorizontal)
+  scrollView.xScroller[laVertical] = initScroller(scrollView, laVertical)
   scrollView.addSubview(scrollView.xClipView)
+  scrollView.addSubview(scrollView.xScroller[laHorizontal])
+  scrollView.addSubview(scrollView.xScroller[laVertical])
   discard scrollView.withProtocol(DefaultScrollViewLayout)
-  discard scrollView.withProtocol(DefaultScrollViewDrawing)
   discard scrollView.withProtocol(DefaultScrollViewEvents)
 
 proc newScrollView*(frame: Rect = AutoRect, documentView: View = nil): ScrollView =
