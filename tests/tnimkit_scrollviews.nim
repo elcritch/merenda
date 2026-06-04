@@ -33,6 +33,53 @@ proc checkRectNearlyEqual(actual, expected: nimkitTypes.Rect) =
   check actual.size.width.nearlyEqual(expected.size.width)
   check actual.size.height.nearlyEqual(expected.size.height)
 
+proc hasAncestor(list: RenderList, nodeIndex, ancestorIndex: int): bool =
+  var current = list.nodes[nodeIndex].parent.int
+  while current >= 0:
+    if current == ancestorIndex:
+      return true
+    current = list.nodes[current].parent.int
+
+proc renderedRect(node: Fig): nimkitTypes.Rect =
+  initRect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
+
+proc rectsClose(left, right: nimkitTypes.Rect): bool =
+  left.origin.x.nearlyEqual(right.origin.x) and left.origin.y.nearlyEqual(
+    right.origin.y
+  ) and left.size.width.nearlyEqual(right.size.width) and
+    left.size.height.nearlyEqual(right.size.height)
+
+proc childIndexOf(list: RenderList, parentIndex, childIndex: int): int =
+  if parentIndex < 0 or childIndex < 0:
+    return -1
+  result = -1
+  var order = 0
+  for idx in childIndex(list.nodes, parentIndex.FigIdx):
+    if idx.int == childIndex:
+      return order
+    inc order
+
+proc findClippedNode(list: RenderList, rect: nimkitTypes.Rect): int =
+  result = -1
+  for idx, node in list.nodes:
+    if node.kind == nkRectangle and NfClipContent in node.flags and
+        node.renderedRect().rectsClose(rect):
+      return idx
+
+proc findChildRectNode(
+    list: RenderList, parentIndex: int, rect: nimkitTypes.Rect
+): int =
+  if parentIndex < 0:
+    return -1
+  result = -1
+  for idx, node in list.nodes:
+    if node.parent.int == parentIndex and node.kind == nkRectangle and
+        node.renderedRect().rectsClose(rect):
+      return idx
+
 proc checkScrollerRectInside(scrollView: ScrollView, rect: nimkitTypes.Rect) =
   check not rect.isEmpty
   check rect.insideAxis(scrollView.bounds(), laHorizontal)
@@ -179,6 +226,12 @@ suite "nimkit scroll views":
     check scrollView.contentView().clipsToBounds
     check scrollView.documentView() == document
     check document.superview == scrollView.contentView()
+    check scrollView.horizontalScroller() != nil
+    check scrollView.horizontalScroller().superview == scrollView
+    check scrollView.horizontalScroller().hidden
+    check scrollView.verticalScroller() != nil
+    check scrollView.verticalScroller().superview == scrollView
+    check scrollView.verticalScroller().hidden
     check scrollView.viewportSize() == initSize(120, 80)
     check scrollView.contentOffset() == initPoint(0, 0)
 
@@ -431,26 +484,109 @@ suite "nimkit scroll views":
     child.background = initColor(0.2, 0.4, 0.7, 1.0)
     document.addSubview(child)
     root.addSubview(scrollView)
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
 
     scrollView.contentOffset = initPoint(40, 30)
     let renders = buildRenders(root)
+    let nodes = renders[DefaultDrawLevel]
 
     var
-      clipNodeFound = false
+      scrollViewNodeIndex = -1
+      clipViewNodeIndex = -1
       childNodeFound = false
+      childNodeIndex = -1
+      verticalScrollerIndex = -1
+      horizontalScrollerIndex = -1
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for idx, node in nodes.nodes:
       if node.kind == nkRectangle and NfClipContent in node.flags and
           node.screenBox.x == 20.0 and node.screenBox.y == 30.0 and
           node.screenBox.w == 100.0 and node.screenBox.h == 70.0:
-        clipNodeFound = true
+        scrollViewNodeIndex = idx
+      if node.kind == nkRectangle and NfClipContent in node.flags and
+          node.screenBox.x == 20.0 and node.screenBox.y == 30.0 and
+          node.screenBox.w == 88.0 and node.screenBox.h == 58.0:
+        clipViewNodeIndex = idx
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == initColor(0.2, 0.4, 0.7, 1.0).rgba:
         childNodeFound = true
+        childNodeIndex = idx
         check node.screenBox.x == 40.0
         check node.screenBox.y == 50.0
         check node.screenBox.w == 30.0
         check node.screenBox.h == 20.0
+      if verticalScrollerIndex < 0 and node.kind == nkRectangle and
+          node.screenBox.x == 108.0 and node.screenBox.y == 30.0 and
+          node.screenBox.w == 12.0 and node.screenBox.h == 58.0:
+        verticalScrollerIndex = idx
+      if horizontalScrollerIndex < 0 and node.kind == nkRectangle and
+          node.screenBox.x == 20.0 and node.screenBox.y == 88.0 and
+          node.screenBox.w == 88.0 and node.screenBox.h == 12.0:
+        horizontalScrollerIndex = idx
 
-    check clipNodeFound
+    check scrollViewNodeIndex >= 0
+    check clipViewNodeIndex >= 0
     check childNodeFound
+    check verticalScrollerIndex >= 0
+    check horizontalScrollerIndex >= 0
+    check nodes.nodes[clipViewNodeIndex].parent.int == scrollViewNodeIndex
+    check nodes.nodes[verticalScrollerIndex].parent.int == scrollViewNodeIndex
+    check nodes.nodes[horizontalScrollerIndex].parent.int == scrollViewNodeIndex
+    check nodes.hasAncestor(childNodeIndex, clipViewNodeIndex)
+
+  test "horizontal scroll renders scrollers above demo document content":
+    let
+      window = newWindow("Scroll render", frame = initRect(0, 0, 420, 340))
+      fixture = newScrollResizeFixture(initRect(0, 0, 420, 340))
+      document = fixture.scrollView.documentView()
+      row = newView(frame = initRect(22, 22, 540, 56))
+      headingLabel =
+        newHeadingLabel("Document Header", frame = initRect(12, 7, 220, 20))
+      bodyLabel = newStatusLabel(
+        "The document is larger than the viewport.", frame = initRect(12, 30, 500, 18)
+      )
+
+    row.background = initColor(0.92, 0.95, 0.99, 1.0)
+    row.addSubview(headingLabel, bodyLabel)
+    document.addSubview(row)
+    window.setContentView(fixture.root)
+    fixture.root.layoutSubtreeIfNeeded()
+
+    let scrollPoint = fixture.scrollView.frame().origin.offset(30.0, 30.0)
+    check window.scrollWheelAt(scrollPoint, deltaX = 3.0)
+    check fixture.scrollView.contentOffset().x > 0.0'f32
+    check fixture.scrollView.showsHorizontalScroller()
+    check fixture.scrollView.showsVerticalScroller()
+
+    let
+      renders = buildRenders(fixture.root)
+      nodes = renders[DefaultDrawLevel]
+      scrollViewNodeIndex = nodes.findClippedNode(
+        fixture.scrollView.rectToWindow(fixture.scrollView.bounds())
+      )
+      clipViewNodeIndex = nodes.findClippedNode(
+        fixture.scrollView.clipView().rectToWindow(
+          fixture.scrollView.clipView().bounds()
+        )
+      )
+      horizontalScrollerIndex = nodes.findChildRectNode(
+        scrollViewNodeIndex,
+        fixture.scrollView.rectToWindow(fixture.scrollView.horizontalScrollerRect()),
+      )
+      verticalScrollerIndex = nodes.findChildRectNode(
+        scrollViewNodeIndex,
+        fixture.scrollView.rectToWindow(fixture.scrollView.verticalScrollerRect()),
+      )
+      clipViewOrder = nodes.childIndexOf(scrollViewNodeIndex, clipViewNodeIndex)
+      horizontalScrollerOrder =
+        nodes.childIndexOf(scrollViewNodeIndex, horizontalScrollerIndex)
+      verticalScrollerOrder =
+        nodes.childIndexOf(scrollViewNodeIndex, verticalScrollerIndex)
+
+    check scrollViewNodeIndex >= 0
+    check clipViewNodeIndex >= 0
+    check horizontalScrollerIndex >= 0
+    check verticalScrollerIndex >= 0
+    check horizontalScrollerOrder > clipViewOrder
+    check verticalScrollerOrder > clipViewOrder
