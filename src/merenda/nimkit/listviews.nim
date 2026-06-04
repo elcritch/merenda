@@ -14,6 +14,14 @@ type
     lsmNone
     lsmSingle
 
+  ListRowState* = object
+    index*: int
+    text*: string
+    selected*: bool
+    highlighted*: bool
+    enabled*: bool
+    focused*: bool
+
   PopupListCountProc* = proc(): int {.closure.}
   PopupListMetricProc* = proc(): float32 {.closure.}
   PopupListBoolProc* = proc(): bool {.closure.}
@@ -64,7 +72,6 @@ type
     xTrackingItem: bool
     xListRole: StyleRole
     xItemRole: StyleRole
-    xRowList: PopupListView
 
 proc itemCount*(popupList: PopupListView): int
 proc visibleItemCount*(popupList: PopupListView): int
@@ -133,8 +140,18 @@ proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
 proc handleListKeyDown(listView: ListView, event: KeyEvent)
-proc rowList(listView: ListView): PopupListView
 proc listNaturalSize(listView: ListView): Size
+proc drawListView(listView: ListView, context: DrawContext)
+proc drawListRow(
+  context: DrawContext,
+  layer: ZLevel,
+  parent: FigIdx,
+  rect: Rect,
+  row: ListRowState,
+  itemRole: StyleRole,
+  id = "",
+  classes: seq[string] = @[],
+)
 
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method draw(popupList: PopupListView, context: DrawContext) =
@@ -175,19 +192,7 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
   method draw(listView: ListView, context: DrawContext) =
     if listView.isNil:
       return
-    listView.rowList().drawPopupList(context, listView.bounds)
-    if listView.isFocusVisible:
-      let style = context.appearance.resolveComboBoxStyle(
-        initControlStyleContext(
-          listView.xListRole,
-          enabled = listView.isEnabled(),
-          focused = listView.isFocused(),
-          focusVisible = listView.isFocusVisible(),
-          id = listView.styleId(),
-          classes = listView.styleClasses(),
-        )
-      )
-      context.addFocusRing(listView.rectToWindow(listView.bounds), style.box)
+    listView.drawListView(context)
 
 protocol DefaultListViewEvents of ResponderEventProtocol:
   method mouseDown(listView: ListView, event: MouseEvent) =
@@ -353,6 +358,23 @@ func listItemIndexAtPoint*(
     return -1
   index
 
+func initListRowState*(
+    index: int,
+    text: string,
+    selected = false,
+    highlighted = false,
+    enabled = true,
+    focused = false,
+): ListRowState =
+  ListRowState(
+    index: index,
+    text: text,
+    selected: selected,
+    highlighted: highlighted,
+    enabled: enabled,
+    focused: focused,
+  )
+
 proc itemCount*(popupList: PopupListView): int =
   if popupList.isNil or popupList.xData.itemCount.isNil:
     return 0
@@ -456,6 +478,43 @@ proc popupListScrollIndicatorRect*(popupList: PopupListView, popupBounds: Rect):
     popupList.itemCount(),
   )
 
+proc drawListRow(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: Rect,
+    row: ListRowState,
+    itemRole: StyleRole,
+    id = "",
+    classes: seq[string] = @[],
+) =
+  if rect.isEmpty:
+    return
+  let itemStyle = context.appearance.resolveListItemStyle(
+    initControlStyleContext(
+      itemRole,
+      enabled = row.enabled,
+      hovered = row.highlighted,
+      focused = row.focused,
+      selected = row.selected,
+      id = id,
+      classes = classes,
+    )
+  )
+  discard context.addWindowRectangle(
+    layer,
+    parent,
+    context.localRectToWindow(rect),
+    itemStyle.box.fill,
+    itemStyle.box.borderColor,
+    itemStyle.box.borderWidth,
+    itemStyle.box.cornerRadius,
+    itemStyle.box.shadows,
+  )
+  context.addText(
+    layer, parent, itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color
+  )
+
 proc drawPopupList*(
     popupList: PopupListView,
     context: DrawContext,
@@ -497,31 +556,16 @@ proc drawPopupList*(
       continue
     let
       itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
-      itemStyle = appearance.resolveTextFieldStyle(
-        initControlStyleContext(
-          popupList.xItemRole,
-          enabled = popupList.isEnabled(),
-          hovered = itemIndex == popupList.highlightedIndex(),
-          selected = itemIndex == popupList.selectedIndex(),
-          id = popupList.styleId(),
-          classes = classes,
-        )
+      row = initListRowState(
+        itemIndex,
+        popupList.itemText(itemIndex),
+        selected = itemIndex == popupList.selectedIndex(),
+        highlighted = itemIndex == popupList.highlightedIndex(),
+        enabled = popupList.isEnabled(),
+        focused = popupList.isFocused(),
       )
-    discard context.addWindowRectangle(
-      layer,
-      popupRoot,
-      context.localRectToWindow(itemRect),
-      itemStyle.box.fill,
-      itemStyle.box.borderColor,
-      itemStyle.box.borderWidth,
-      itemStyle.box.cornerRadius,
-    )
-    context.addText(
-      layer,
-      popupRoot,
-      itemStyle.textFieldTextRect(itemRect),
-      popupList.itemText(itemIndex),
-      itemStyle.text.color,
+    context.drawListRow(
+      layer, popupRoot, itemRect, row, popupList.xItemRole, popupList.styleId(), classes
     )
 
   let indicatorRect = popupList.popupListScrollIndicatorRect(popupBounds)
@@ -979,59 +1023,10 @@ proc handleListKeyDown(listView: ListView, event: KeyEvent) =
   else:
     discard
 
-proc listPopupData(listView: ListView): PopupListData =
-  PopupListData(
-    itemCount: proc(): int =
-      listView.len(),
-    visibleCount: proc(): int =
-      listView.visibleItemCount(),
-    firstIndex: proc(): int =
-      listView.firstVisibleIndex(),
-    selectedIndex: proc(): int =
-      listView.selectedIndex(),
-    highlightedIndex: proc(): int =
-      listView.highlightedIndex(),
-    rowHeight: proc(): float32 =
-      listView.rowHeight(),
-    itemText: proc(index: int): string =
-      listView.itemAtIndex(index),
-    enabled: proc(): bool =
-      listView.isEnabled(),
-    focused: proc(): bool =
-      listView.isFocused(),
-    opened: proc(): bool =
-      true,
-    styleId: proc(): string =
-      listView.styleId(),
-    styleClasses: proc(): seq[string] =
-      listView.styleClasses(),
-  )
-
-proc listPopupActions(listView: ListView): PopupListActions =
-  PopupListActions(
-    highlight: proc(index: int) =
-      listView.setHighlightedIndex(index),
-    activate: proc(index: int) =
-      listView.activateItemAtIndex(index),
-    scroll: proc(delta: int) =
-      listView.scrollRows(delta),
-    keyDown: proc(event: KeyEvent) =
-      listView.handleListKeyDown(event),
-  )
-
-proc rowList(listView: ListView): PopupListView =
-  if listView.isNil:
-    return nil
-  if listView.xRowList.isNil:
-    listView.xRowList =
-      newPopupListView(listView.listPopupData(), listView.listPopupActions())
-  listView.xRowList.setPopupListRoles(listView.xListRole, listView.xItemRole)
-  listView.xRowList
-
 proc setListViewRoles*(
     listView: ListView,
-    listRole: StyleRole = srComboBox,
-    itemRole: StyleRole = srComboBoxItem,
+    listRole: StyleRole = srListView,
+    itemRole: StyleRole = srListItem,
 ) =
   if listView.isNil:
     return
@@ -1039,9 +1034,72 @@ proc setListViewRoles*(
     return
   listView.xListRole = listRole
   listView.xItemRole = itemRole
-  if not listView.xRowList.isNil:
-    listView.xRowList.setPopupListRoles(listRole, itemRole)
   listView.reloadData()
+
+proc drawListView(listView: ListView, context: DrawContext) =
+  if listView.isNil or listView.bounds().isEmpty:
+    return
+  let
+    classes = listView.styleClasses()
+    listStyle = context.appearance.resolveListViewStyle(
+      initControlStyleContext(
+        listView.xListRole,
+        enabled = listView.isEnabled(),
+        focused = listView.isFocused(),
+        focusVisible = listView.isFocusVisible(),
+        id = listView.styleId(),
+        classes = classes,
+      )
+    )
+    listRoot = context.addWindowRectangle(
+      context.localRectToWindow(listView.bounds()),
+      listStyle.box.fill,
+      listStyle.box.borderColor,
+      listStyle.box.borderWidth,
+      listStyle.box.cornerRadius,
+      listStyle.box.shadows,
+      clips = true,
+    )
+    first = listView.firstVisibleIndex()
+    visible = listView.visibleItemCount()
+    total = listView.len()
+
+  for visibleIndex in 0 ..< visible:
+    let itemIndex = first + visibleIndex
+    if itemIndex < 0 or itemIndex >= total:
+      continue
+    let row = initListRowState(
+      itemIndex,
+      listView.itemAtIndex(itemIndex),
+      selected = itemIndex == listView.selectedIndex(),
+      highlighted = itemIndex == listView.highlightedIndex(),
+      enabled = listView.isEnabled(),
+      focused = listView.isFocused(),
+    )
+    context.drawListRow(
+      DefaultDrawLevel,
+      listRoot,
+      listView.listItemRect(itemIndex),
+      row,
+      listView.xItemRole,
+      listView.styleId(),
+      classes,
+    )
+
+  let indicatorRect = listView.listScrollIndicatorRect()
+  if not indicatorRect.isEmpty:
+    discard context.addWindowRectangle(
+      DefaultDrawLevel,
+      listRoot,
+      context.localRectToWindow(indicatorRect),
+      fill(initColor(0.10, 0.18, 0.30, 0.34)),
+      initColor(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
+      2.0'f32,
+    )
+
+  if listView.isFocusVisible:
+    context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
 
 proc listNaturalSize(listView: ListView): Size =
   if listView.isNil:
@@ -1049,7 +1107,15 @@ proc listNaturalSize(listView: ListView): Size =
 
   let
     appearance = listView.effectiveAppearance()
-    itemStyle = appearance.resolveTextFieldStyle(
+    listStyle = appearance.resolveListViewStyle(
+      initControlStyleContext(
+        listView.xListRole,
+        enabled = listView.isEnabled(),
+        id = listView.styleId(),
+        classes = listView.styleClasses(),
+      )
+    )
+    itemStyle = appearance.resolveListItemStyle(
       initControlStyleContext(
         listView.xItemRole,
         enabled = listView.isEnabled(),
@@ -1068,8 +1134,14 @@ proc listNaturalSize(listView: ListView): Size =
     maxTextWidth = max(maxTextWidth, textNaturalSize(item).width)
 
   initSize(
-    max(120.0'f32, maxTextWidth + itemStyle.text.insets.horizontal + 2.0'f32),
-    listView.rowHeight() * rowCount.float32 + 2.0'f32,
+    max(
+      listStyle.minSize.width,
+      max(
+        itemStyle.minSize.width,
+        maxTextWidth + itemStyle.text.insets.horizontal + 2.0'f32,
+      ),
+    ),
+    max(listStyle.minSize.height, listView.rowHeight() * rowCount.float32 + 2.0'f32),
   )
 
 proc initListViewFields*(
@@ -1081,8 +1153,8 @@ proc initListViewFields*(
   listView.xRowHeight = 22.0'f32
   listView.xVisibleRows = 5
   listView.xSelectionMode = lsmSingle
-  listView.xListRole = srComboBox
-  listView.xItemRole = srComboBoxItem
+  listView.xListRole = srListView
+  listView.xItemRole = srListItem
   listView.setAcceptsFirstResponder(true)
   listView.clipsToBounds = true
   discard listView.withProtocol(DefaultListViewLayout)
