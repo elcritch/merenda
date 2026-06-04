@@ -1,15 +1,19 @@
 from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 
+import ./controls
 import ./selectors
 import ./theme
 import ./types
-import ./views
 
 type ListViewport* = object
   firstIndex*: int
 
 type
+  ListSelectionMode* = enum
+    lsmNone
+    lsmSingle
+
   PopupListCountProc* = proc(): int {.closure.}
   PopupListMetricProc* = proc(): float32 {.closure.}
   PopupListBoolProc* = proc(): bool {.closure.}
@@ -48,6 +52,19 @@ type
     xTrackingItem: bool
     xPopupRole: StyleRole
     xItemRole: StyleRole
+
+  ListView* = ref object of Control
+    xItems: seq[string]
+    xSelectedIndex: int
+    xHighlightedIndex: int
+    xViewport: ListViewport
+    xRowHeight: float32
+    xVisibleRows: int
+    xSelectionMode: ListSelectionMode
+    xTrackingItem: bool
+    xListRole: StyleRole
+    xItemRole: StyleRole
+    xRowList: PopupListView
 
 proc itemCount*(popupList: PopupListView): int
 proc visibleItemCount*(popupList: PopupListView): int
@@ -90,6 +107,35 @@ proc close(popupList: PopupListView)
 proc scrollBy(popupList: PopupListView, delta: int)
 proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
 
+func normalizedRowHeight*(rowHeight: float32): float32
+func visibleListItemCount*(itemCount, maxVisibleItems: int): int
+func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int
+proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int)
+proc reset*(viewport: var ListViewport, firstIndex = 0)
+proc scrollToVisible*(
+  viewport: var ListViewport, itemIndex, itemCount, visibleCount: int
+)
+
+proc scrollBy*(viewport: var ListViewport, delta, itemCount, visibleCount: int)
+
+proc len*(listView: ListView): int
+proc itemAtIndex(listView: ListView, index: int): string
+proc selectItemAtIndex(listView: ListView, index: int)
+proc deselectItem(listView: ListView)
+proc reloadData*(listView: ListView)
+proc visibleItemCount*(listView: ListView): int
+proc highlightedIndex*(listView: ListView): int
+proc listItemRect*(listView: ListView, itemIndex: int): Rect
+proc listItemIndexAtPoint*(listView: ListView, point: Point): int
+proc listScrollIndicatorRect*(listView: ListView): Rect
+proc scrollItemToVisible*(listView: ListView, itemIndex: int)
+proc scrollRows*(listView: ListView, delta: int)
+proc setHighlightedIndex*(listView: ListView, index: int)
+proc activateItemAtIndex*(listView: ListView, index: int)
+proc handleListKeyDown(listView: ListView, event: KeyEvent)
+proc rowList(listView: ListView): PopupListView
+proc listNaturalSize(listView: ListView): Size
+
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method draw(popupList: PopupListView, context: DrawContext) =
     if popupList.isOpened():
@@ -120,6 +166,63 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
 
   method keyDown(popupList: PopupListView, event: KeyEvent) =
     popupList.dispatchKeyDown(event)
+
+protocol DefaultListViewLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(listView: ListView): IntrinsicSize =
+    initIntrinsicSize(listView.listNaturalSize())
+
+protocol DefaultListViewDrawing of ViewDrawingProtocol:
+  method draw(listView: ListView, context: DrawContext) =
+    if listView.isNil:
+      return
+    listView.rowList().drawPopupList(context, listView.bounds)
+    if listView.isFocusVisible:
+      let style = context.appearance.resolveComboBoxStyle(
+        initControlStyleContext(
+          listView.xListRole,
+          enabled = listView.isEnabled(),
+          focused = listView.isFocused(),
+          focusVisible = listView.isFocusVisible(),
+          id = listView.styleId(),
+          classes = listView.styleClasses(),
+        )
+      )
+      context.addFocusRing(listView.rectToWindow(listView.bounds), style.box)
+
+protocol DefaultListViewEvents of ResponderEventProtocol:
+  method mouseDown(listView: ListView, event: MouseEvent) =
+    if listView.isNil or not listView.isEnabled() or event.button != mbPrimary:
+      return
+    listView.xTrackingItem = true
+    listView.setHighlightedIndex(listView.listItemIndexAtPoint(event.location))
+
+  method mouseDragged(listView: ListView, event: MouseEvent) =
+    if not listView.isNil and listView.isEnabled():
+      listView.setHighlightedIndex(listView.listItemIndexAtPoint(event.location))
+
+  method mouseMoved(listView: ListView, event: MouseEvent) =
+    if not listView.isNil and listView.isEnabled():
+      listView.setHighlightedIndex(listView.listItemIndexAtPoint(event.location))
+
+  method mouseUp(listView: ListView, event: MouseEvent) =
+    if listView.isNil or not listView.isEnabled() or event.button != mbPrimary:
+      return
+    let index =
+      if listView.xTrackingItem:
+        listView.listItemIndexAtPoint(event.location)
+      else:
+        -1
+    listView.xTrackingItem = false
+    if index >= 0:
+      listView.activateItemAtIndex(index)
+    listView.setNeedsDisplay(true)
+
+  method scrollWheel(listView: ListView, event: ScrollEvent) =
+    if not listView.isNil and listView.isEnabled():
+      listView.scrollRows(popupListScrollRows(event))
+
+  method keyDown(listView: ListView, event: KeyEvent) =
+    listView.handleListKeyDown(event)
 
 func initListViewport*(firstIndex = 0): ListViewport =
   ListViewport(firstIndex: max(firstIndex, 0))
@@ -526,3 +629,468 @@ proc newPopupListView*(
 ): PopupListView =
   result = PopupListView()
   initPopupListViewFields(result, data, actions, frame)
+
+proc len*(listView: ListView): int =
+  if listView.isNil:
+    return 0
+  listView.xItems.len
+
+proc items*(listView: ListView): seq[string] =
+  if listView.isNil:
+    @[]
+  else:
+    listView.xItems
+
+proc itemAtIndex(listView: ListView, index: int): string =
+  if listView.isNil or index < 0 or index >= listView.xItems.len:
+    ""
+  else:
+    listView.xItems[index]
+
+proc setItems*(listView: ListView, values: openArray[string]) =
+  if listView.isNil:
+    return
+  var nextItems: seq[string]
+  for value in values:
+    nextItems.add value
+  if listView.xItems == nextItems:
+    return
+  listView.xItems = nextItems
+  listView.reloadData()
+
+proc `items=`*(listView: ListView, values: openArray[string]) =
+  listView.setItems(values)
+
+proc `[]`*(listView: ListView, index: int): string =
+  listView.itemAtIndex(index)
+
+proc addItem*(listView: ListView, value: string) =
+  if listView.isNil:
+    return
+  listView.xItems.add value
+  listView.reloadData()
+
+proc addItems*(listView: ListView, values: openArray[string]) =
+  if listView.isNil or values.len == 0:
+    return
+  for value in values:
+    listView.xItems.add value
+  listView.reloadData()
+
+proc insertItem*(listView: ListView, value: string, index: int) =
+  if listView.isNil:
+    return
+  let boundedIndex = max(0, min(index, listView.xItems.len))
+  listView.xItems.insert(value, boundedIndex)
+  if listView.xSelectedIndex >= boundedIndex:
+    inc listView.xSelectedIndex
+  if listView.xHighlightedIndex >= boundedIndex:
+    inc listView.xHighlightedIndex
+  listView.reloadData()
+
+proc removeItemAtIndex*(listView: ListView, index: int) =
+  if listView.isNil or index < 0 or index >= listView.xItems.len:
+    return
+  listView.xItems.delete(index)
+  if listView.xSelectedIndex == index:
+    listView.xSelectedIndex =
+      if listView.xItems.len == 0:
+        -1
+      else:
+        min(index, listView.xItems.len - 1)
+  elif index < listView.xSelectedIndex:
+    dec listView.xSelectedIndex
+  if listView.xHighlightedIndex == index:
+    listView.xHighlightedIndex = -1
+  elif index < listView.xHighlightedIndex:
+    dec listView.xHighlightedIndex
+  listView.reloadData()
+
+proc removeAllItems*(listView: ListView) =
+  if listView.isNil or listView.xItems.len == 0:
+    return
+  listView.xItems.setLen(0)
+  listView.xSelectedIndex = -1
+  listView.xHighlightedIndex = -1
+  listView.xViewport.reset()
+  listView.reloadData()
+
+proc highlightedIndex*(listView: ListView): int =
+  if listView.isNil:
+    return -1
+  listView.xHighlightedIndex
+
+proc setHighlightedIndex*(listView: ListView, index: int) =
+  if listView.isNil:
+    return
+  let boundedIndex = if index < 0 or index >= listView.len(): -1 else: index
+  if listView.xHighlightedIndex == boundedIndex:
+    return
+  listView.xHighlightedIndex = boundedIndex
+  listView.setNeedsDisplay(true)
+
+proc `highlightedIndex=`*(listView: ListView, index: int) =
+  listView.setHighlightedIndex(index)
+
+proc selectItemAtIndex(listView: ListView, index: int) =
+  if listView.isNil or listView.xSelectionMode == lsmNone:
+    return
+  let boundedIndex = if index < 0 or index >= listView.len(): -1 else: index
+  if listView.xSelectedIndex == boundedIndex:
+    if boundedIndex >= 0:
+      listView.scrollItemToVisible(boundedIndex)
+    return
+  listView.xSelectedIndex = boundedIndex
+  if boundedIndex >= 0:
+    listView.scrollItemToVisible(boundedIndex)
+  listView.setNeedsDisplay(true)
+
+proc deselectItem(listView: ListView) =
+  if listView.isNil or listView.xSelectedIndex < 0:
+    return
+  listView.xSelectedIndex = -1
+  listView.setNeedsDisplay(true)
+
+proc selectedIndex*(listView: ListView): int =
+  if listView.isNil:
+    return -1
+  listView.xSelectedIndex
+
+proc setSelectedIndex*(listView: ListView, index: int) =
+  if listView.isNil:
+    return
+  if index < 0:
+    listView.deselectItem()
+  else:
+    listView.selectItemAtIndex(index)
+
+proc `selectedIndex=`*(listView: ListView, index: int) =
+  listView.setSelectedIndex(index)
+
+proc firstVisibleIndex*(listView: ListView): int =
+  if listView.isNil:
+    return 0
+  listView.xViewport.firstIndex.clampFirstIndex(
+    listView.len(), listView.visibleItemCount()
+  )
+
+proc setFirstVisibleIndex*(listView: ListView, index: int) =
+  if listView.isNil:
+    return
+  let oldFirst = listView.firstVisibleIndex()
+  listView.xViewport.reset(index)
+  listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
+  if listView.firstVisibleIndex() != oldFirst:
+    listView.setNeedsDisplay(true)
+
+proc `firstVisibleIndex=`*(listView: ListView, index: int) =
+  listView.setFirstVisibleIndex(index)
+
+proc rowHeight*(listView: ListView): float32 =
+  if listView.isNil:
+    return 0.0'f32
+  listView.xRowHeight.normalizedRowHeight()
+
+proc setRowHeight*(listView: ListView, height: float32) =
+  if listView.isNil:
+    return
+  let normalized = height.normalizedRowHeight()
+  if listView.xRowHeight == normalized:
+    return
+  listView.xRowHeight = normalized
+  listView.reloadData()
+
+proc `rowHeight=`*(listView: ListView, height: float32) =
+  listView.setRowHeight(height)
+
+proc visibleRows*(listView: ListView): int =
+  if listView.isNil:
+    return 0
+  listView.xVisibleRows
+
+proc setVisibleRows*(listView: ListView, rows: int) =
+  if listView.isNil:
+    return
+  let normalized = max(rows, 1)
+  if listView.xVisibleRows == normalized:
+    return
+  listView.xVisibleRows = normalized
+  listView.reloadData()
+
+proc `visibleRows=`*(listView: ListView, rows: int) =
+  listView.setVisibleRows(rows)
+
+proc selectionMode*(listView: ListView): ListSelectionMode =
+  if listView.isNil:
+    return lsmSingle
+  listView.xSelectionMode
+
+proc setSelectionMode*(listView: ListView, mode: ListSelectionMode) =
+  if listView.isNil or listView.xSelectionMode == mode:
+    return
+  listView.xSelectionMode = mode
+  if mode == lsmNone:
+    listView.xSelectedIndex = -1
+  listView.reloadData()
+
+proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
+  listView.setSelectionMode(mode)
+
+proc reloadData*(listView: ListView) =
+  if listView.isNil:
+    return
+  if listView.xSelectionMode == lsmNone or listView.len() == 0:
+    listView.xSelectedIndex = -1
+  elif listView.xSelectedIndex >= listView.len():
+    listView.xSelectedIndex = listView.len() - 1
+  elif listView.xSelectedIndex < -1:
+    listView.xSelectedIndex = -1
+
+  if listView.xHighlightedIndex < 0 or listView.xHighlightedIndex >= listView.len():
+    listView.xHighlightedIndex = -1
+  if listView.xSelectedIndex >= 0:
+    listView.xViewport.scrollToVisible(
+      listView.xSelectedIndex, listView.len(), listView.visibleItemCount()
+    )
+  else:
+    listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
+  listView.invalidateIntrinsicContentSize()
+  listView.setNeedsDisplay(true)
+
+proc visibleItemCount*(listView: ListView): int =
+  if listView.isNil or listView.len() <= 0:
+    return 0
+  let
+    rowHeight = listView.rowHeight()
+    contentHeight = max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
+    visibleFromBounds =
+      if rowHeight <= 0.0'f32:
+        0
+      else:
+        int(contentHeight / rowHeight)
+    preferredRows =
+      if visibleFromBounds > 0:
+        visibleFromBounds
+      else:
+        listView.visibleRows()
+  visibleListItemCount(listView.len(), preferredRows)
+
+proc listItemRect*(listView: ListView, itemIndex: int): Rect =
+  if listView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  listItemRect(
+    listView.bounds(),
+    listView.firstVisibleIndex(),
+    listView.visibleItemCount(),
+    itemIndex,
+    listView.rowHeight(),
+  )
+
+proc listItemIndexAtPoint*(listView: ListView, point: Point): int =
+  if listView.isNil:
+    return -1
+  listItemIndexAtPoint(
+    listView.bounds(),
+    point,
+    listView.firstVisibleIndex(),
+    listView.visibleItemCount(),
+    listView.len(),
+    listView.rowHeight(),
+  )
+
+proc listScrollIndicatorRect*(listView: ListView): Rect =
+  if listView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  listScrollIndicatorRect(
+    listView.bounds(),
+    listView.firstVisibleIndex(),
+    listView.visibleItemCount(),
+    listView.len(),
+  )
+
+proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
+  if listView.isNil:
+    return
+  let oldFirst = listView.firstVisibleIndex()
+  listView.xViewport.scrollToVisible(
+    itemIndex, listView.len(), listView.visibleItemCount()
+  )
+  if listView.firstVisibleIndex() != oldFirst:
+    listView.setNeedsDisplay(true)
+
+proc scrollRows*(listView: ListView, delta: int) =
+  if listView.isNil or delta == 0:
+    return
+  let oldFirst = listView.firstVisibleIndex()
+  listView.xViewport.scrollBy(delta, listView.len(), listView.visibleItemCount())
+  if listView.firstVisibleIndex() != oldFirst:
+    listView.setNeedsDisplay(true)
+
+proc activateItemAtIndex*(listView: ListView, index: int) =
+  if listView.isNil or index < 0 or index >= listView.len():
+    return
+  if listView.selectionMode() != lsmNone:
+    listView.selectItemAtIndex(index)
+  discard listView.sendAction()
+
+proc moveSelectionTo(listView: ListView, index: int) =
+  if listView.isNil or listView.len() == 0 or listView.selectionMode() == lsmNone:
+    return
+  listView.selectItemAtIndex(max(0, min(index, listView.len() - 1)))
+
+proc moveSelection(listView: ListView, delta: int) =
+  if listView.isNil:
+    return
+  let start =
+    if listView.selectedIndex() >= 0:
+      listView.selectedIndex()
+    elif delta > 0:
+      listView.firstVisibleIndex() - 1
+    elif delta < 0:
+      listView.firstVisibleIndex() + listView.visibleItemCount()
+    else:
+      listView.firstVisibleIndex()
+  listView.moveSelectionTo(start + delta)
+
+proc pageSelection(listView: ListView, deltaPages: int) =
+  if listView.isNil:
+    return
+  listView.moveSelection(deltaPages * max(listView.visibleItemCount(), 1))
+
+proc handleListKeyDown(listView: ListView, event: KeyEvent) =
+  if listView.isNil or not listView.isEnabled():
+    return
+  case event.key
+  of keyArrowDown:
+    listView.moveSelection(1)
+  of keyArrowUp:
+    listView.moveSelection(-1)
+  of keyPageDown:
+    listView.pageSelection(1)
+  of keyPageUp:
+    listView.pageSelection(-1)
+  of keyHome:
+    listView.moveSelectionTo(0)
+  of keyEnd:
+    listView.moveSelectionTo(listView.len() - 1)
+  of keyEnter, keySpace:
+    if listView.selectedIndex() >= 0:
+      discard listView.sendAction()
+  else:
+    discard
+
+proc listPopupData(listView: ListView): PopupListData =
+  PopupListData(
+    itemCount: proc(): int =
+      listView.len(),
+    visibleCount: proc(): int =
+      listView.visibleItemCount(),
+    firstIndex: proc(): int =
+      listView.firstVisibleIndex(),
+    selectedIndex: proc(): int =
+      listView.selectedIndex(),
+    highlightedIndex: proc(): int =
+      listView.highlightedIndex(),
+    rowHeight: proc(): float32 =
+      listView.rowHeight(),
+    itemText: proc(index: int): string =
+      listView.itemAtIndex(index),
+    enabled: proc(): bool =
+      listView.isEnabled(),
+    focused: proc(): bool =
+      listView.isFocused(),
+    opened: proc(): bool =
+      true,
+    styleId: proc(): string =
+      listView.styleId(),
+    styleClasses: proc(): seq[string] =
+      listView.styleClasses(),
+  )
+
+proc listPopupActions(listView: ListView): PopupListActions =
+  PopupListActions(
+    highlight: proc(index: int) =
+      listView.setHighlightedIndex(index),
+    activate: proc(index: int) =
+      listView.activateItemAtIndex(index),
+    scroll: proc(delta: int) =
+      listView.scrollRows(delta),
+    keyDown: proc(event: KeyEvent) =
+      listView.handleListKeyDown(event),
+  )
+
+proc rowList(listView: ListView): PopupListView =
+  if listView.isNil:
+    return nil
+  if listView.xRowList.isNil:
+    listView.xRowList =
+      newPopupListView(listView.listPopupData(), listView.listPopupActions())
+  listView.xRowList.setPopupListRoles(listView.xListRole, listView.xItemRole)
+  listView.xRowList
+
+proc setListViewRoles*(
+    listView: ListView,
+    listRole: StyleRole = srComboBox,
+    itemRole: StyleRole = srComboBoxItem,
+) =
+  if listView.isNil:
+    return
+  if listView.xListRole == listRole and listView.xItemRole == itemRole:
+    return
+  listView.xListRole = listRole
+  listView.xItemRole = itemRole
+  if not listView.xRowList.isNil:
+    listView.xRowList.setPopupListRoles(listRole, itemRole)
+  listView.reloadData()
+
+proc listNaturalSize(listView: ListView): Size =
+  if listView.isNil:
+    return initSize(0.0, 0.0)
+
+  let
+    appearance = listView.effectiveAppearance()
+    itemStyle = appearance.resolveTextFieldStyle(
+      initControlStyleContext(
+        listView.xItemRole,
+        enabled = listView.isEnabled(),
+        id = listView.styleId(),
+        classes = listView.styleClasses(),
+      )
+    )
+    rowCount =
+      if listView.len() == 0:
+        max(listView.visibleRows(), 1)
+      else:
+        visibleListItemCount(listView.len(), listView.visibleRows())
+
+  var maxTextWidth = 0.0'f32
+  for item in listView.xItems:
+    maxTextWidth = max(maxTextWidth, textNaturalSize(item).width)
+
+  initSize(
+    max(120.0'f32, maxTextWidth + itemStyle.text.insets.horizontal + 2.0'f32),
+    listView.rowHeight() * rowCount.float32 + 2.0'f32,
+  )
+
+proc initListViewFields*(
+    listView: ListView, items: openArray[string] = [], frame: Rect = AutoRect
+) =
+  initControlFields(listView, frame)
+  listView.xSelectedIndex = -1
+  listView.xHighlightedIndex = -1
+  listView.xRowHeight = 22.0'f32
+  listView.xVisibleRows = 5
+  listView.xSelectionMode = lsmSingle
+  listView.xListRole = srComboBox
+  listView.xItemRole = srComboBoxItem
+  listView.setAcceptsFirstResponder(true)
+  listView.clipsToBounds = true
+  discard listView.withProtocol(DefaultListViewLayout)
+  discard listView.withProtocol(DefaultListViewDrawing)
+  discard listView.withProtocol(DefaultListViewEvents)
+  listView.addItems(items)
+  listView.applyInitialFrame(frame)
+
+proc newListView*(items: openArray[string] = [], frame: Rect = AutoRect): ListView =
+  result = ListView()
+  initListViewFields(result, items, frame)

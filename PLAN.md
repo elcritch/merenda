@@ -76,12 +76,13 @@ NimKit currently includes the core desktop-control slice:
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
   `examples/nimkit_combo_scroll_demo.nim`,
+  `examples/nimkit_list_demo.nim`,
   `examples/nimkit_controls_showcase.nim`,
   `examples/nimkit_layout_showcase.nim`,
   `examples/nimkit_grid_preferences.nim`.
 - Focused tests cover value types, views, layout containers, controls, text
-  fields, combo boxes, responders, key bindings, rendering, screenshots, and
-  native application pumping.
+  fields, combo boxes, list views, responders, key bindings, rendering,
+  screenshots, and native application pumping.
 
 ## Coding Style
 
@@ -181,7 +182,10 @@ NimKit currently includes the core desktop-control slice:
   `ListViewport`, shared list/popup row helpers for visible-count clamping,
   first-row scrolling, popup bounds, row bounds, and row hit testing, plus a
   narrow callback-backed `PopupListView` for transient single-column popup
-  drawing, row tracking, scrolling, highlighting, and activation.
+  drawing, row tracking, scrolling, highlighting, and activation. Also includes
+  the first narrow public `ListView` with local string items, single/none
+  selection, keyboard/mouse navigation, wheel scrolling, intrinsic sizing, and
+  target/action activation.
 - `src/merenda/nimkit/theme.nim`:
   `Theme`, `Appearance`, `StyleContext`, resolved button/text-field/combo-box
   style objects, typed style tokens, style overrides, `EdgeInsets`,
@@ -401,7 +405,13 @@ Concrete task order and status:
    Escape, focus-change, native-done, and programmatic dismissal.
    It gives us a narrow base for full modal/tracking-loop behavior later
    without committing to a full AppKit-style modal system now.
-22. Done for the current autoresizing-mask compatibility layer: Generate
+22. Done for the first standalone list widget: Add a narrow public `ListView`
+   on the shared `ListViewport`/`PopupListView` row geometry. It keeps local
+   string items, uses Nim-style `items`, `[]`, `selectedIndex`, `visibleRows`,
+   and `rowHeight` APIs, supports single/none selection, keyboard and mouse
+   navigation, wheel scrolling, intrinsic sizing, and target/action activation,
+   with focused tests and `examples/nimkit_list_demo.nim`.
+23. Done for the current autoresizing-mask compatibility layer: Generate
    solver constraints for framed subviews with `autoresizingMaskConstraints`
    enabled and no explicit layout constraints. The pass stores reference
    geometry in `AutoresizingState`, translates flexible min margins and sizable
@@ -409,20 +419,20 @@ Concrete task order and status:
    origin/size behavior, and lets explicit constraints take precedence.
    Richer source-compat behavior, especially unusual multi-flex combinations
    and bounds-origin edge cases, remains deferred until examples need it.
-23. Done for the first layout input/invalidation bus pass: Add
+24. Done for the first layout input/invalidation bus pass: Add
    `docs/layout.md`, source-tagged `LayoutInput`/`LayoutEquation` shapes, a
    Sigils-backed `layoutInputChanged` signal bus for constraint/layout
    invalidation reasons, and generated input inspection for the current solve
    root. Autoresizing-mask and intrinsic-size solver inputs now flow through
    the common internal equation path, while authored constraints remain
    Cocoa-shaped `LayoutConstraint` values.
-24. Done for the first autoresizing state cleanup: Split
+25. Done for the first autoresizing state cleanup: Split
    `AutoresizingState` dirty tracking into local reference refresh and generated
    input rebuild flags. Local frame/autoresizing changes refresh the stored
    reference geometry, while superview geometry changes dirty generated inputs
    without replacing the existing reference before solving. Solver and
    container frame application now share the same internal layout-frame helper.
-25. Done for the first layout/API cleanup: Narrow the `merenda/nimkit` umbrella
+26. Done for the first layout/API cleanup: Narrow the `merenda/nimkit` umbrella
    export so raw `LayoutInput`, `LayoutEquation`, `LayoutInputCache`, and
    `AutoresizingState` type names stay out of the normal public import while
    internal modules can still import focused implementation modules directly.
@@ -473,9 +483,12 @@ Concrete task order and status:
 - Done for combo boxes and future list-like controls: add `ListViewport`,
   shared list-row geometry, and `PopupListView` for scrollable transient popup
   content rather than adding one-off popup logic per control.
-- Keep future list-like controls on this base: start with shared viewport,
-  row geometry, selection, and keyboard command behavior before adding a
-  full `ListView` or table-style API.
+- Done for the first narrow public list control: add `ListView` on the shared
+  viewport/row geometry with local string items, selection, keyboard command
+  behavior, scrolling, intrinsic sizing, and target/action activation.
+- Keep richer list-like controls on this base: add reusable row renderers,
+  scroll containment, and data-source/delegate hooks only when the narrow
+  `ListView` needs them, before moving to a table-style API.
 - Keep text editing scoped to single-line control behavior for now. Grow command
   selectors and key bindings before adding multiline editor features.
 - Keep delegate/custom policy hooks selector-based and explicit where they
@@ -564,6 +577,7 @@ Concrete task order and status:
   `tests/tnimkit_keybindings.nim`,
   `tests/tnimkit_textfields.nim`,
   `tests/tnimkit_comboboxes.nim`,
+  `tests/tnimkit_listviews.nim`,
   `tests/tnimkit_controls.nim`,
   `tests/tnimkit_responder.nim`,
   `tests/tnimkit_application.nim`,
@@ -577,6 +591,7 @@ Concrete task order and status:
   `examples/nimkit_textfield_demo.nim`,
   `examples/nimkit_combobox_demo.nim`,
   `examples/nimkit_combo_scroll_demo.nim`,
+  `examples/nimkit_list_demo.nim`,
   `examples/nimkit_controls_showcase.nim`,
   `examples/nimkit_layout_showcase.nim`,
   `examples/nimkit_grid_preferences.nim`.
