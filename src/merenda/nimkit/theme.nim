@@ -34,6 +34,8 @@ type
     srTextField
     srComboBox
     srComboBoxItem
+    srListView
+    srListItem
 
   StyleState* = enum
     ssDisabled
@@ -150,6 +152,15 @@ type
     arrowColor*: Color
     minSize*: Size
 
+  ListViewStyle* = object
+    box*: ControlBoxStyle
+    minSize*: Size
+
+  ListItemStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    minSize*: Size
+
 const
   StyleFill* = StyleKey[Fill]("fill")
   StyleBorderColor* = StyleKey[Color]("border.color")
@@ -224,6 +235,14 @@ const
   ComboBoxItemSelectedHighlightedFillToken* = "comboBox.item.fill.selected.highlighted"
   ComboBoxItemTextColorToken* = "comboBox.item.text.color"
   ComboBoxItemSelectedTextColorToken* = "comboBox.item.text.color.selected"
+  ListViewFillToken* = "listView.fill"
+  ListViewBorderColorToken* = "listView.border.color"
+  ListItemFillToken* = "list.item.fill"
+  ListItemHighlightedFillToken* = "list.item.fill.highlighted"
+  ListItemSelectedFillToken* = "list.item.fill.selected"
+  ListItemSelectedHighlightedFillToken* = "list.item.fill.selected.highlighted"
+  ListItemTextColorToken* = "list.item.text.color"
+  ListItemSelectedTextColorToken* = "list.item.text.color.selected"
 
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -1410,6 +1429,44 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(90.0, 24.0)),
   )
 
+proc resolveListViewStyle*(theme: Theme, context: StyleContext): ListViewStyle =
+  ListViewStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(120.0, 24.0)),
+  )
+
+proc resolveListItemStyle*(theme: Theme, context: StyleContext): ListItemStyle =
+  ListItemStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.0, 0.0, 0.0, 0.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 0.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 0.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 0.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 0.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.0, 0.0, 0.0, 0.0)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
+    ),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 22.0)),
+  )
+
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
   appearance.theme.resolveButtonStyle(context)
 
@@ -1432,6 +1489,16 @@ proc resolveComboBoxStyle*(
     appearance: Appearance, context: StyleContext
 ): ComboBoxStyle =
   appearance.theme.resolveComboBoxStyle(context)
+
+proc resolveListViewStyle*(
+    appearance: Appearance, context: StyleContext
+): ListViewStyle =
+  appearance.theme.resolveListViewStyle(context)
+
+proc resolveListItemStyle*(
+    appearance: Appearance, context: StyleContext
+): ListItemStyle =
+  appearance.theme.resolveListItemStyle(context)
 
 func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
@@ -1470,6 +1537,9 @@ func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
     max(bounds.size.width - insets.left - insets.right - arrow.size.width, 0.0'f32),
     max(bounds.size.height - insets.top - insets.bottom, 0.0'f32),
   )
+
+func listItemTextRect*(style: ListItemStyle, bounds: Rect): Rect =
+  bounds.inset(style.text.insets)
 
 func controlChromeOutset*(box: ControlBoxStyle): float32 =
   max(-box.focusRingInset, 0.0'f32)
@@ -1703,6 +1773,16 @@ proc initTheme*(): Theme =
     aquaComboItemSelectedHighlightedFill()
   result[ComboBoxItemTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
   result[ComboBoxItemSelectedTextColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ListViewFillToken] = styleToken(TextFieldFillToken)
+  result[ListViewBorderColorToken] = styleToken(TextFieldBorderColorToken)
+  result[ListItemFillToken] = styleToken(ComboBoxItemFillToken)
+  result[ListItemHighlightedFillToken] = styleToken(ComboBoxItemHighlightedFillToken)
+  result[ListItemSelectedFillToken] = styleToken(ComboBoxItemSelectedFillToken)
+  result[ListItemSelectedHighlightedFillToken] =
+    styleToken(ComboBoxItemSelectedHighlightedFillToken)
+  result[ListItemTextColorToken] = styleToken(ComboBoxItemTextColorToken)
+  result[ListItemSelectedTextColorToken] =
+    styleToken(ComboBoxItemSelectedTextColorToken)
 
   result.addRoleRule(
     srButton,
@@ -1935,6 +2015,49 @@ proc initTheme*(): Theme =
   result[srComboBoxItem, StyleCornerRadius] = 0.0
   result[srComboBoxItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srComboBoxItem, StyleMinimumSize] = initSize(0.0, 22.0)
+
+  result[srListView, StyleFill] = styleToken(ListViewFillToken)
+  result[srListView, StyleBorderColor] = styleToken(ListViewBorderColorToken)
+  result[srListView, StyleBorderWidth] = 1.0
+  result[srListView, StyleCornerRadius] = 6.0
+  result[srListView, StyleMinimumSize] = initSize(120.0, 24.0)
+  result[srListView, StyleFocusRingWidth] = 3.0
+  result[srListView, StyleFocusRingInset] = 2.0
+  result[srListView, StyleFocusRingColor] = styleToken(FocusRingColorToken)
+  result[srListView, StyleBoxShadows] = aquaInsetControlShadows()
+
+  result.addRoleRule(
+    srListItem,
+    {},
+    styleToken(ListItemFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
+    {ssHovered},
+    styleToken(ListItemHighlightedFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
+    {ssSelected},
+    styleToken(ListItemSelectedFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemSelectedTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
+    {ssSelected, ssHovered},
+    styleToken(ListItemSelectedHighlightedFillToken),
+    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemSelectedTextColorToken),
+  )
+  result[srListItem, StyleBorderWidth] = 0.0
+  result[srListItem, StyleCornerRadius] = 0.0
+  result[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srListItem, StyleMinimumSize] = initSize(0.0, 22.0)
 
 proc initBannerTheme*(): Theme =
   result = initTheme()

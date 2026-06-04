@@ -355,6 +355,94 @@ suite "nimkit rendering":
     check arrowTopWidth > arrowBottomWidth
     check textNodeCount >= 4
 
+  test "buildRenders draws standalone list views with list roles":
+    let
+      root = newView(frame = initRect(0, 0, 220, 140))
+      listView =
+        newListView(["One", "Two", "Three", "Four"], frame = initRect(10, 20, 130, 68))
+      listFill = initColor(0.77, 0.79, 0.81, 1.0)
+      listBorder = initColor(0.24, 0.28, 0.34, 1.0)
+      selectedFill = initColor(0.23, 0.48, 0.92, 1.0)
+      hoverFill = initColor(0.90, 0.95, 1.0, 1.0)
+      selectedText = initColor(1.0, 1.0, 1.0, 1.0)
+      focusColor = initColor(0.91, 0.38, 0.18, 0.66)
+
+    var theme = initTheme()
+    theme[srListView, StyleFill] = listFill
+    theme[srListView, StyleBorderColor] = listBorder
+    theme[srListView, StyleBorderWidth] = 2.0
+    theme[srListView, StyleCornerRadius] = 4.0
+    theme[srListView, StyleFocusRingWidth] = 3.0
+    theme[srListView, StyleFocusRingInset] = -1.0
+    theme[srListView, StyleFocusRingColor] = focusColor
+    theme[srListItem, {ssSelected}, StyleFill] = selectedFill
+    theme[srListItem, {ssSelected}, StyleTextColor] = selectedText
+    theme[srListItem, {ssHovered}, StyleFill] = hoverFill
+    theme[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 5.0)
+
+    listView.rowHeight = 20.0
+    listView.selectedIndex = 1
+    listView.highlightedIndex = 2
+    listView.setFocusVisible(true)
+    root.addSubview(listView)
+
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+
+    var
+      listBoxFound = false
+      selectedRowFound = false
+      highlightedRowFound = false
+      selectedTextFound = false
+      focusRingFound = false
+
+    for node in list.nodes:
+      case node.kind
+      of nkRectangle:
+        if node.fill.kind == flColor and node.fill.color == listFill.rgba and
+            node.screenBox.x == 10.0 and node.screenBox.y == 20.0 and
+            node.screenBox.w == 130.0 and node.screenBox.h == 68.0:
+          listBoxFound = true
+          check node.stroke.weight == 2.0
+          check node.stroke.fill.kind == flColor
+          check node.stroke.fill.color == listBorder.rgba
+          check node.corners[dcTopLeft] == 4'u16
+          check NfClipContent in node.flags
+
+        if node.fill.kind == flColor and node.fill.color == selectedFill.rgba and
+            node.screenBox.x == 11.0 and node.screenBox.y == 41.0 and
+            node.screenBox.w == 128.0 and node.screenBox.h == 20.0:
+          selectedRowFound = true
+
+        if node.fill.kind == flColor and node.fill.color == hoverFill.rgba and
+            node.screenBox.x == 11.0 and node.screenBox.y == 61.0 and
+            node.screenBox.w == 128.0 and node.screenBox.h == 20.0:
+          highlightedRowFound = true
+
+        if node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+          focusRingFound = true
+          check node.stroke.weight == 3.0
+          check node.screenBox.x == 9.0
+          check node.screenBox.y == 19.0
+          check node.screenBox.w == 132.0
+          check node.screenBox.h == 70.0
+      of nkText:
+        if node.renderedText() == "Two" and node.textLayout.spanColors.len > 0 and
+            node.textLayout.spanColors[0].kind == flColor and
+            node.textLayout.spanColors[0].color == selectedText.rgba:
+          selectedTextFound = true
+          check node.screenBox.x == 16.0
+          check node.screenBox.y == 41.0
+          check node.screenBox.w == 118.0
+          check node.screenBox.h == 20.0
+      else:
+        discard
+
+    check listBoxFound
+    check selectedRowFound
+    check highlightedRowFound
+    check selectedTextFound
+    check focusRingFound
+
   test "buildRenders draws focused text field selection and caret":
     let
       root = newView(frame = initRect(0, 0, 180, 80))

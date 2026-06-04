@@ -411,7 +411,13 @@ Concrete task order and status:
    and `rowHeight` APIs, supports single/none selection, keyboard and mouse
    navigation, wheel scrolling, intrinsic sizing, and target/action activation,
    with focused tests and `examples/nimkit_list_demo.nim`.
-23. Done for the current autoresizing-mask compatibility layer: Generate
+23. Done for the first ListView polish pass: Add dedicated `srListView` and
+   `srListItem` theme roles, list-specific default tokens and resolvers, and a
+   shared plain `ListRowState` drawing helper used by both popup rows and
+   standalone list rows. `ListView` now draws its own clipped list container
+   instead of going through a private always-open popup shim, while combo-box
+   popups keep their combo-specific roles.
+24. Done for the current autoresizing-mask compatibility layer: Generate
    solver constraints for framed subviews with `autoresizingMaskConstraints`
    enabled and no explicit layout constraints. The pass stores reference
    geometry in `AutoresizingState`, translates flexible min margins and sizable
@@ -419,36 +425,36 @@ Concrete task order and status:
    origin/size behavior, and lets explicit constraints take precedence.
    Richer source-compat behavior, especially unusual multi-flex combinations
    and bounds-origin edge cases, remains deferred until examples need it.
-24. Done for the first layout input/invalidation bus pass: Add
+25. Done for the first layout input/invalidation bus pass: Add
    `docs/layout.md`, source-tagged `LayoutInput`/`LayoutEquation` shapes, a
    Sigils-backed `layoutInputChanged` signal bus for constraint/layout
    invalidation reasons, and generated input inspection for the current solve
    root. Autoresizing-mask and intrinsic-size solver inputs now flow through
    the common internal equation path, while authored constraints remain
    Cocoa-shaped `LayoutConstraint` values.
-25. Done for the first autoresizing state cleanup: Split
+26. Done for the first autoresizing state cleanup: Split
    `AutoresizingState` dirty tracking into local reference refresh and generated
    input rebuild flags. Local frame/autoresizing changes refresh the stored
    reference geometry, while superview geometry changes dirty generated inputs
    without replacing the existing reference before solving. Solver and
    container frame application now share the same internal layout-frame helper.
-26. Done for the first layout/API cleanup: Narrow the `merenda/nimkit` umbrella
+27. Done for the first layout/API cleanup: Narrow the `merenda/nimkit` umbrella
    export so raw `LayoutInput`, `LayoutEquation`, `LayoutInputCache`, and
    `AutoresizingState` type names stay out of the normal public import while
    internal modules can still import focused implementation modules directly.
    Fully hiding `View.x*` fields remains a deeper refactor because those fields
    are exported on the public `View` object for cross-module internals today.
-26. Done for internal frame-application cleanup: Replace boolean options on the
+28. Done for internal frame-application cleanup: Replace boolean options on the
    internal layout-frame helper with `LayoutFrameOrigin`, naming authored frame
    edits, container layout, and solver application directly. Preserve the
    current rule that solver-applied geometry does not immediately regenerate
    layout inputs from half-applied output.
-27. Done for the first debug API cleanup: Add stable generated-layout summary
+29. Done for the first debug API cleanup: Add stable generated-layout summary
    APIs, `generatedLayoutSummary` and `constraintsAffectingLayout`, before
    encouraging callers to inspect raw `LayoutInput` values. Keep `constraints()`
    authored only, and group generated autoresizing, intrinsic, and future
    container inputs by source for Cocoa-style debugging.
-28. Done for the first signal-bus/cache step: Treat the Sigils-backed
+30. Done for the first signal-bus/cache step: Treat the Sigils-backed
    `layoutInputChanged` path as the core invalidation bus and make dirty
    sources drive per-source generated-input cache refresh where practical.
    The solver still rebuilds the full subtree for correctness, but generated
@@ -458,16 +464,16 @@ Concrete task order and status:
    buckets without scanning descendants for dirty state. First solve,
    user-constraint changes, and structural changes conservatively rebuild all
    generated buckets.
-29. Done for optional Cocoa naming compatibility: Keep
+31. Done for optional Cocoa naming compatibility: Keep
    `autoresizingMaskConstraints` as the short Nim-facing API and add
    `translatesAutoresizingMaskIntoConstraints` as an AppKit comparison alias.
-30. Done for the layout-cache refinement: Split broad `lirSubviews` usage into
+32. Done for the layout-cache refinement: Split broad `lirSubviews` usage into
    precise `lirDescendantGeometry`, `lirDescendantIntrinsic`, and
    `lirHierarchy` reasons for internal propagation. Ordinary child frame and
    intrinsic edits now dirty aggregate source buckets without looking like
    subtree structure changes; add/remove/visibility and user-constraint
    changes still conservatively rebuild all generated buckets.
-31. Done for the first layout-affecting setter audit: Route stack, form, and
+33. Done for the first layout-affecting setter audit: Route stack, form, and
    grid metric changes through a dedicated `lirContainerMetrics` bus reason
    instead of redundant direct layout flag writes. Container metrics currently
    dirty the intrinsic generated-input bucket because native containers still
@@ -486,6 +492,9 @@ Concrete task order and status:
 - Done for the first narrow public list control: add `ListView` on the shared
   viewport/row geometry with local string items, selection, keyboard command
   behavior, scrolling, intrinsic sizing, and target/action activation.
+- Done for the first ListView polish pass: give standalone lists dedicated
+  theme roles and render them through a shared row-state helper rather than a
+  private always-open popup path.
 - Keep richer list-like controls on this base: add reusable row renderers,
   scroll containment, and data-source/delegate hooks only when the narrow
   `ListView` needs them, before moving to a table-style API.
