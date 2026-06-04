@@ -12,6 +12,7 @@ import merenda/nimkit/rendering
 import merenda/nimkit/responders
 import merenda/nimkit/selectors
 import merenda/nimkit/stackviews
+import merenda/nimkit/scrollviews
 import merenda/nimkit/textfields
 import merenda/nimkit/theme
 import merenda/nimkit/types
@@ -32,6 +33,7 @@ export rendering
 export responders
 export selectors
 export stackviews
+export scrollviews
 export textfields
 export theme
 export types
