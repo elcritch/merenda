@@ -25,18 +25,67 @@ layout model unless a new control proves a missing shape.
 
 ## Near-Term Work
 
-### ListView
+### ScrollView And ListView
 
-- Add data-source and delegate hooks once the local-item `ListView` needs
-  externally owned data or policy decisions.
-- Extract reusable row rendering policy only when rows need custom content,
-  not before. The current `ListRowState` helper should remain the narrow base
-  for plain single-column rows.
-- Add scroll containment and visible-row polish for standalone lists where it
-  differs from popup lists: keyboard/wheel edge cases, focus rendering, and
-  selection affordances.
-- Defer a full table/list-view API until single-column list behavior is stable
-  and examples show which delegate/data-source hooks are actually useful.
+Build this stage as reusable infrastructure, not as list-only behavior. The
+target is enough Cocoa/AppKit-like behavior to support complex applications:
+sidebars, inspectors, pickers, logs, search results, simple data browsers, and
+future table/outline-style controls.
+
+1. Add `ScrollView` as the next core container:
+   - document/content view
+   - clipped viewport
+   - bounds-origin scrolling
+   - horizontal and vertical scroll positions
+   - scroll wheel handling
+   - programmatic `scrollTo`, `scrollRectToVisible`, and `contentOffset`
+   - optional horizontal/vertical scrollers
+   - autohide scroller policy
+   - intrinsic/fitting behavior that separates viewport size from document size
+2. Move popup/list viewport mechanics onto `ScrollView` concepts:
+   - reuse viewport clipping and scroll offset
+   - keep transient popup behavior narrow
+   - avoid separate popup/list scrolling models unless popup behavior truly
+     differs
+3. Grow `ListView` into a data-driven single-column list:
+   - keep local `items` as the simple default path
+   - add selector-backed data source hooks for row count and row value/view
+   - add delegate hooks for selection, activation, row height, and optional row
+     styling
+   - keep row state as plain values: index, selected, highlighted, focused,
+     enabled
+4. Add a real selection model:
+   - none, single, multiple, and extended selection
+   - selected index sets/ranges
+   - keyboard selection extension with Shift
+   - command/control discontiguous selection where platform appropriate
+   - delegate notifications before and after selection changes
+5. Add row virtualization and reuse:
+   - draw/layout only visible rows
+   - reusable row views or row renderers
+   - support fixed row height first
+   - add variable row heights after fixed-height behavior is stable
+   - keep row reuse separate from data ownership
+6. Add AppKit-like keyboard and focus behavior:
+   - up/down/page/home/end
+   - type-select or incremental search
+   - focus ring and first-responder behavior
+   - activation through Enter/Return/double-click
+   - disabled or nonselectable rows if delegate support justifies it
+7. Add richer list affordances:
+   - empty state rendering hook
+   - alternating row backgrounds
+   - separators/grid lines if theme roles support them
+   - row hover and pressed states
+   - scroll-to-selection helpers
+   - accessibility/debug summaries for visible rows and selection state
+8. Defer full table/outline APIs until this base is solid:
+   - column headers
+   - sortable columns
+   - resizable/reorderable columns
+   - tree disclosure rows
+   - drag reordering
+   - cell editing
 
 ### Controls
 
@@ -87,6 +136,13 @@ layout model unless a new control proves a missing shape.
 - Keep strengthening the control/cell split. Centralize cell invalidation,
   value conversion, target/action storage, highlight/tracking behavior, and
   default cell construction so controls stay thin.
+- Treat `ScrollView` as a primitive container like AppKit does. Future text
+  editors, list views, table views, outline views, collection views, and large
+  forms should be able to build on the same clipped document-view and scrolling
+  model.
+- Treat `ListView` as the first serious scroll-backed data widget. It should
+  become feature-complete enough for complex app use before adding a full table
+  view.
 - Stage layout work conservatively. Expand constraints through the existing
   Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
   conveniences only when controls and examples prove the need.
