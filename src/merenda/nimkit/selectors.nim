@@ -33,6 +33,7 @@ type
   ActionSelector* = Selector[ActionArgs, EmptyArgs]
   CommandSelector* = ActionSelector
   ValidationSelector* = Selector[ValidationArgs, bool]
+  ScrollEventForwardingSelector* = Selector[ScrollEvent, bool]
 
   TryToPerformArgs* = object
     selector*: CommandSelector
@@ -45,6 +46,7 @@ protocol ResponderEventProtocolInternal:
   method mouseExited*(event: MouseEvent) {.optional.}
   method mouseMoved*(event: MouseEvent) {.optional.}
   method mouseDragged*(event: MouseEvent) {.optional.}
+  method wantsForwardedScrollEvents*(event: ScrollEvent): bool {.optional.}
   method scrollWheel*(event: ScrollEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
 

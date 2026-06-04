@@ -47,6 +47,8 @@ type
     xMouseCaptureView: View
     xMouseActiveView: View
     xMouseHoverView: View
+    xMomentumScrollTarget: View
+    xMomentumScrollContentPoint: Point
     xMouseClickCount: int
     xLastClickPoint: Point
     xLastClickButton: types.MouseButton
@@ -863,6 +865,8 @@ proc localScrollEvent(
     location: target.pointFromView(contentPoint, contentView),
     deltaX: event.deltaX,
     deltaY: event.deltaY,
+    phase: event.phase,
+    momentumPhase: event.momentumPhase,
     modifiers: event.modifiers,
     timestamp: event.timestamp,
   )
@@ -937,9 +941,21 @@ proc dispatchMouseEventInChain(
 proc dispatchScrollEventInChain(
     window: Window, target: View, contentPoint: Point, event: types.ScrollEvent
 ): EventDispatchResult =
-  window.dispatchEventInChain(
-    Responder(target), contentPoint, event, scrollWheel(), localScrollEvent
-  )
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        localScrollEvent(View(responder), window.xContentView, contentPoint, event)
+
+    let wantsForwarded =
+      responder.trySendLocal(wantsForwardedScrollEvents(), localEvent)
+    if (wantsForwarded.isNone or not wantsForwarded.get()) and
+        responder.sendLocalIfHandled(scrollWheel(), localEvent):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
 
 proc dispatchKeyEventInChain(
     window: Window, target: Responder, event: types.KeyEvent
@@ -1071,11 +1087,21 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
 proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
   if window.xContentView.isNil:
     return false
-  let contentPoint = window.contentPoint(event.location)
-  let target = window.contentHitTest(contentPoint)
+  var contentPoint = window.contentPoint(event.location)
+  var target = window.contentHitTest(contentPoint)
+  if event.momentumPhase == sepBegan:
+    window.xMomentumScrollTarget = target
+    window.xMomentumScrollContentPoint = contentPoint
+  elif event.momentumPhase != sepNone and not window.xMomentumScrollTarget.isNil:
+    target = window.xMomentumScrollTarget
+    contentPoint = window.xMomentumScrollContentPoint
+  elif event.momentumPhase == sepNone:
+    window.xMomentumScrollTarget = nil
   if target.isNil:
     return false
-  window.dispatchScrollEventInChain(target, contentPoint, event).handled
+  result = window.dispatchScrollEventInChain(target, contentPoint, event).handled
+  if event.momentumPhase in {sepEnded, sepCancelled}:
+    window.xMomentumScrollTarget = nil
 
 proc mouseDownAt*(
     window: Window,
@@ -1128,6 +1154,7 @@ proc scrollWheelAt*(
       location: point,
       deltaX: deltaX,
       deltaY: deltaY,
+      phase: sepChanged,
       modifiers: modifiers,
       timestamp: eventTimestamp(timestamp),
     )

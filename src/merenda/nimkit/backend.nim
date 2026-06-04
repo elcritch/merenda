@@ -244,6 +244,7 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
       location: nativeMousePoint(nativeWindow),
       deltaX: event.deltaX.float32,
       deltaY: event.delta.float32,
+      phase: sepChanged,
       modifiers: nativeWindow.nativeModifiers,
       timestamp: epochTime(),
     )

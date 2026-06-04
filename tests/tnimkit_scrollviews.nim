@@ -175,6 +175,7 @@ suite "nimkit scroll views":
         newScrollView(frame = initRect(10, 12, 120, 80), documentView = document)
 
     check scrollView.contentView() != nil
+    check View(scrollView.clipView()) == scrollView.contentView()
     check scrollView.contentView().clipsToBounds
     check scrollView.documentView() == document
     check document.superview == scrollView.contentView()
@@ -197,10 +198,14 @@ suite "nimkit scroll views":
 
     scrollView.contentOffset = initPoint(250, 200)
     check scrollView.contentOffset() == initPoint(210, 150)
+    check scrollView.clipView().bounds.origin == initPoint(210, 150)
     check scrollView.contentView().bounds.origin == initPoint(210, 150)
 
     scrollView.contentOffset = initPoint(-10, -20)
     check scrollView.contentOffset() == initPoint(0, 0)
+    scrollView.clipView().bounds =
+      initRect(initPoint(50, 20), scrollView.viewportSize())
+    check scrollView.contentOffset() == initPoint(50, 20)
 
   test "scroll wheel and scroll rect update content offset":
     let
@@ -224,6 +229,25 @@ suite "nimkit scroll views":
     let visible = initRect(scrollView.contentOffset(), scrollView.viewportSize())
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
+
+  test "wheel over scrollable nested scroll view stays with child":
+    let
+      childDocument = newView(frame = initRect(0, 0, 100, 260))
+      child =
+        newScrollView(frame = initRect(20, 20, 100, 80), documentView = childDocument)
+      fixture = newNestedScrollFixture(child)
+
+    child.hasVerticalScroller = true
+    child.autohidesScrollers = true
+    child.lineScroll = 10.0
+
+    check child.maximumContentOffset().y > 0.0'f32
+    check fixture.parent.contentOffset() == initPoint(0, 0)
+    check fixture.window.scrollWheelAt(
+      fixture.windowPointForDocumentChild(child), deltaY = -2.0
+    )
+    check child.contentOffset().y > 0.0'f32
+    check fixture.parent.contentOffset() == initPoint(0, 0)
 
   test "wheel over non-scrollable nested scroll view bubbles to parent":
     let

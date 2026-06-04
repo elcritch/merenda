@@ -194,10 +194,19 @@ type
     modifiers*: set[KeyModifier]
     timestamp*: float
 
+  ScrollEventPhase* = enum
+    sepNone
+    sepBegan
+    sepChanged
+    sepEnded
+    sepCancelled
+
   ScrollEvent* = object
     location*: Point
     deltaX*: float32
     deltaY*: float32
+    phase*: ScrollEventPhase
+    momentumPhase*: ScrollEventPhase
     modifiers*: set[KeyModifier]
     timestamp*: float
 
