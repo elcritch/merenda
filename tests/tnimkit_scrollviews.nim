@@ -12,6 +12,12 @@ type ScrollResizeFixture = object
   scrollView: ScrollView
   controls: View
 
+type NestedScrollFixture = object
+  window: Window
+  root: View
+  parent: ScrollView
+  document: View
+
 const GeometryTolerance = 0.01'f32
 
 func nearlyEqual(a, b: float32): bool =
@@ -140,6 +146,27 @@ proc checkDemoScrollerVisibility(fixture: ScrollResizeFixture) =
   if documentSize.height > maxViewportHeight + GeometryTolerance:
     check fixture.scrollView.showsVerticalScroller()
 
+proc newNestedScrollFixture(child: View): NestedScrollFixture =
+  result.window = newWindow("Nested scroll", frame = initRect(0, 0, 260, 200))
+  result.root = newView(frame = initRect(0, 0, 260, 200))
+  result.document = newView(frame = initRect(0, 0, 420, 420))
+  result.parent =
+    newScrollView(frame = initRect(10, 10, 160, 120), documentView = result.document)
+
+  result.parent.hasVerticalScroller = true
+  result.parent.autohidesScrollers = true
+  result.parent.lineScroll = 10.0
+  result.document.addSubview(child)
+  result.root.addSubview(result.parent)
+  result.window.setContentView(result.root)
+  result.root.layoutSubtreeIfNeeded()
+
+proc windowPointForDocumentChild(fixture: NestedScrollFixture, child: View): Point =
+  initPoint(
+    fixture.parent.frame().origin.x + child.frame().origin.x + 10.0'f32,
+    fixture.parent.frame().origin.y + child.frame().origin.y + 10.0'f32,
+  )
+
 suite "nimkit scroll views":
   test "scroll view owns a clipped content view and document view":
     let
@@ -197,6 +224,62 @@ suite "nimkit scroll views":
     let visible = initRect(scrollView.contentOffset(), scrollView.viewportSize())
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
+
+  test "wheel over non-scrollable nested scroll view bubbles to parent":
+    let
+      childDocument = newView(frame = initRect(0, 0, 60, 40))
+      child =
+        newScrollView(frame = initRect(20, 20, 100, 80), documentView = childDocument)
+      fixture = newNestedScrollFixture(child)
+
+    child.hasVerticalScroller = true
+    child.autohidesScrollers = true
+    child.lineScroll = 10.0
+
+    check child.maximumContentOffset() == initPoint(0, 0)
+    check fixture.parent.contentOffset() == initPoint(0, 0)
+    check fixture.window.scrollWheelAt(
+      fixture.windowPointForDocumentChild(child), deltaY = -2.0
+    )
+    check child.contentOffset() == initPoint(0, 0)
+    check fixture.parent.contentOffset().y > 0.0'f32
+
+  test "wheel past nested scroll view end bubbles to parent":
+    let
+      childDocument = newView(frame = initRect(0, 0, 100, 260))
+      child =
+        newScrollView(frame = initRect(20, 20, 100, 80), documentView = childDocument)
+      fixture = newNestedScrollFixture(child)
+
+    child.hasVerticalScroller = true
+    child.autohidesScrollers = true
+    child.lineScroll = 10.0
+    child.scrollTo(child.maximumContentOffset())
+    let childOffset = child.contentOffset()
+
+    check childOffset.y > 0.0'f32
+    check fixture.parent.contentOffset() == initPoint(0, 0)
+    check fixture.window.scrollWheelAt(
+      fixture.windowPointForDocumentChild(child), deltaY = -2.0
+    )
+    check child.contentOffset() == childOffset
+    check fixture.parent.contentOffset().y > 0.0'f32
+
+  test "wheel over non-scrollable list view bubbles to parent scroll view":
+    let
+      listView = newListView(["One", "Two"], frame = initRect(20, 20, 120, 68))
+      fixture = newNestedScrollFixture(listView)
+
+    listView.rowHeight = 20.0
+
+    check listView.visibleItemCount() == listView.len()
+    check listView.listScrollIndicatorRect().isEmpty
+    check fixture.parent.contentOffset() == initPoint(0, 0)
+    check fixture.window.scrollWheelAt(
+      fixture.windowPointForDocumentChild(listView), deltaY = -2.0
+    )
+    check listView.firstVisibleIndex() == 0
+    check fixture.parent.contentOffset().y > 0.0'f32
 
   test "autohide scroller policy follows document size":
     let
