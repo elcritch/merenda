@@ -2,6 +2,7 @@ from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 
 import ./controls
+import ./scrollviews
 import ./selectors
 import ./theme
 import ./types
@@ -93,6 +94,7 @@ proc popupListItemIndexAtPoint*(
 ): int
 
 proc popupListScrollIndicatorRect*(popupList: PopupListView, popupBounds: Rect): Rect
+proc canScrollRows*(popupList: PopupListView, delta: int): bool
 proc drawPopupList*(
   popupList: PopupListView,
   context: DrawContext,
@@ -119,6 +121,7 @@ func visibleListItemCount*(itemCount, maxVisibleItems: int): int
 func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int
 proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int)
 proc reset*(viewport: var ListViewport, firstIndex = 0)
+func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): bool
 proc scrollToVisible*(
   viewport: var ListViewport, itemIndex, itemCount, visibleCount: int
 )
@@ -136,6 +139,7 @@ proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
 proc listScrollIndicatorRect*(listView: ListView): Rect
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
+proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
@@ -177,9 +181,15 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
       return
     popupList.finishPopupListTracking(popupList.bounds, event.location)
 
+  method wantsForwardedScrollEvents(
+      popupList: PopupListView, event: ScrollEvent
+  ): bool =
+    not popupList.isOpened() or not popupList.canScrollRows(popupListScrollRows(event))
+
   method scrollWheel(popupList: PopupListView, event: ScrollEvent) =
-    if popupList.isOpened():
-      popupList.scrollBy(popupListScrollRows(event))
+    let delta = popupListScrollRows(event)
+    if popupList.isOpened() and popupList.canScrollRows(delta):
+      popupList.scrollBy(delta)
 
   method keyDown(popupList: PopupListView, event: KeyEvent) =
     popupList.dispatchKeyDown(event)
@@ -222,9 +232,14 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
       listView.activateItemAtIndex(index)
     listView.setNeedsDisplay(true)
 
+  method wantsForwardedScrollEvents(listView: ListView, event: ScrollEvent): bool =
+    listView.isNil or not listView.isEnabled() or
+      not listView.canScrollRows(popupListScrollRows(event))
+
   method scrollWheel(listView: ListView, event: ScrollEvent) =
-    if not listView.isNil and listView.isEnabled():
-      listView.scrollRows(popupListScrollRows(event))
+    let delta = popupListScrollRows(event)
+    if not listView.isNil and listView.isEnabled() and listView.canScrollRows(delta):
+      listView.scrollRows(delta)
 
   method keyDown(listView: ListView, event: KeyEvent) =
     listView.handleListKeyDown(event)
@@ -245,6 +260,14 @@ func maxFirstIndex*(itemCount, visibleCount: int): int =
 
 func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int =
   max(0, min(firstIndex, maxFirstIndex(itemCount, visibleCount)))
+
+func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): bool =
+  if delta == 0:
+    return false
+  let rowViewport = initScrollViewport(
+    viewport.firstIndex.float32, visibleCount.float32, itemCount.float32
+  )
+  rowViewport.canScrollBy(delta.float32)
 
 func hasHiddenListItems*(itemCount, visibleCount: int): bool =
   itemCount > max(visibleCount, 0)
@@ -304,8 +327,10 @@ proc scrollToVisible*(
 proc scrollBy*(viewport: var ListViewport, delta, itemCount, visibleCount: int) =
   if delta == 0:
     return
-  viewport.firstIndex += delta
-  viewport.normalize(itemCount, visibleCount)
+  let rowViewport = initScrollViewport(
+    viewport.firstIndex.float32, visibleCount.float32, itemCount.float32
+  )
+  viewport.firstIndex = rowViewport.scrolledBy(delta.float32).int
 
 func listPopupRect*(
     bounds: Rect, itemCount, maxVisibleItems: int, rowHeight: float32
@@ -629,6 +654,13 @@ proc close(popupList: PopupListView) =
 proc scrollBy(popupList: PopupListView, delta: int) =
   if delta != 0 and not popupList.isNil and not popupList.xActions.scroll.isNil:
     popupList.xActions.scroll(delta)
+
+proc canScrollRows*(popupList: PopupListView, delta: int): bool =
+  if popupList.isNil:
+    return false
+  initListViewport(popupList.firstIndex()).canScrollBy(
+    delta, popupList.itemCount(), popupList.visibleItemCount()
+  )
 
 proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent) =
   if not popupList.isNil and not popupList.xActions.keyDown.isNil:
@@ -961,6 +993,11 @@ proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
   )
   if listView.firstVisibleIndex() != oldFirst:
     listView.setNeedsDisplay(true)
+
+proc canScrollRows*(listView: ListView, delta: int): bool =
+  if listView.isNil:
+    return false
+  listView.xViewport.canScrollBy(delta, listView.len(), listView.visibleItemCount())
 
 proc scrollRows*(listView: ListView, delta: int) =
   if listView.isNil or delta == 0:

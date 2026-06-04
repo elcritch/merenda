@@ -50,6 +50,7 @@ proc popupScrollIndicatorRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc movePopupHighlight*(comboBox: ComboBox, delta: int)
 proc movePopupHighlightTo(comboBox: ComboBox, index: int)
 proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int)
+proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool
 proc scrollPopupRows(comboBox: ComboBox, delta: int)
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox)
 proc notifyComboBoxSelectionDidChange(comboBox: ComboBox)
@@ -385,9 +386,14 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       )
     comboBox.setNeedsDisplay(true)
 
+  method wantsForwardedScrollEvents(comboBox: ComboBox, event: ScrollEvent): bool =
+    not comboBox.popupOpen() or
+      not comboBox.canScrollPopupRows(popupListScrollRows(event))
+
   method scrollWheel(comboBox: ComboBox, event: ScrollEvent) =
-    if comboBox.popupOpen():
-      comboBox.scrollPopupRows(popupListScrollRows(event))
+    let delta = popupListScrollRows(event)
+    if comboBox.popupOpen() and comboBox.canScrollPopupRows(delta):
+      comboBox.scrollPopupRows(delta)
 
   method keyDown(comboBox: ComboBox, event: KeyEvent) =
     if not comboBox.isEnabled:
@@ -831,6 +837,13 @@ proc scrollPopupRows(comboBox: ComboBox, delta: int) =
   )
   if comboBox.popupFirstItemIndex() != oldFirst:
     comboBox.setPopupNeedsDisplay()
+
+proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool =
+  if comboBox.isNil:
+    return false
+  comboBox.xPopupViewport.canScrollBy(
+    delta, comboBox.numberOfItems(), comboBox.visibleItemCount()
+  )
 
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect =
   if comboBox.isNil:

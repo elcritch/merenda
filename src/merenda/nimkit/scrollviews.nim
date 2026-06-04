@@ -8,12 +8,16 @@ import ./views
 export views
 
 type
-  ScrollContentView = ref object of View
+  ScrollViewport* = object
+    offset*: float32
+    visibleExtent*: float32
+    contentExtent*: float32
+
+  ClipView* = ref object of View
 
   ScrollView* = ref object of View
-    xContentView: ScrollContentView
+    xClipView: ClipView
     xDocumentView: View
-    xContentOffset: Point
     xHasScroller: array[LayoutAxis, bool]
     xAutohidesScrollers: bool
     xScrollerThickness: float32
@@ -24,6 +28,30 @@ func normalizedScrollerThickness(value: float32): float32 =
 
 func normalizedLineScroll(value: float32): float32 =
   max(value, 1.0'f32)
+
+proc contentOffset*(scrollView: ScrollView): Point
+
+func initScrollViewport*(
+    offset, visibleExtent, contentExtent: float32
+): ScrollViewport =
+  ScrollViewport(
+    offset: max(offset, 0.0'f32),
+    visibleExtent: max(visibleExtent, 0.0'f32),
+    contentExtent: max(contentExtent, 0.0'f32),
+  )
+
+func maxScrollOffset*(viewport: ScrollViewport): float32 =
+  max(viewport.contentExtent - viewport.visibleExtent, 0.0'f32)
+
+func clampScrollOffset*(viewport: ScrollViewport, offset: float32): float32 =
+  min(max(offset, 0.0'f32), viewport.maxScrollOffset())
+
+func canScrollBy*(viewport: ScrollViewport, delta: float32): bool =
+  viewport.clampScrollOffset(viewport.offset + delta) !=
+    viewport.clampScrollOffset(viewport.offset)
+
+func scrolledBy*(viewport: ScrollViewport, delta: float32): float32 =
+  viewport.clampScrollOffset(viewport.offset + delta)
 
 func visibleScrollerAxes(
     boundsSize, documentSize: Size,
@@ -112,30 +140,40 @@ proc maximumContentOffset*(scrollView: ScrollView): Point =
 proc clampContentOffset(scrollView: ScrollView, offset: Point): Point =
   if scrollView.isNil:
     return initPoint(0.0, 0.0)
-  let maximum = scrollView.maximumContentOffset()
+  let
+    viewportSize = scrollView.viewportSize()
+    documentSize = scrollView.documentSize()
+    horizontal = initScrollViewport(0.0, viewportSize.width, documentSize.width)
+    vertical = initScrollViewport(0.0, viewportSize.height, documentSize.height)
   initPoint(
-    min(max(offset.x, 0.0'f32), maximum.x), min(max(offset.y, 0.0'f32), maximum.y)
+    horizontal.clampScrollOffset(offset.x), vertical.clampScrollOffset(offset.y)
   )
 
-proc applyContentOffset(scrollView: ScrollView, offset: Point) =
-  if scrollView.isNil or scrollView.xContentView.isNil:
+proc reflectScrolledClipView(scrollView: ScrollView) =
+  if scrollView.isNil:
     return
-  let
-    nextOffset = scrollView.clampContentOffset(offset)
-    nextBounds = initRect(nextOffset, scrollView.viewportSize())
-  scrollView.xContentOffset = nextOffset
-  if scrollView.xContentView.bounds() != nextBounds:
-    scrollView.xContentView.bounds = nextBounds
   scrollView.setNeedsDisplay(true)
 
-proc tile*(scrollView: ScrollView) =
-  if scrollView.isNil or scrollView.xContentView.isNil:
+proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
+  if scrollView.isNil or scrollView.xClipView.isNil:
     return
-  scrollView.xContentView.frame = scrollView.viewportRect()
-  scrollView.applyContentOffset(scrollView.xContentOffset)
+  let nextBounds =
+    initRect(scrollView.clampContentOffset(offset), scrollView.viewportSize())
+  if scrollView.xClipView.bounds() != nextBounds:
+    scrollView.xClipView.bounds = nextBounds
+    scrollView.reflectScrolledClipView()
+
+proc tile*(scrollView: ScrollView) =
+  if scrollView.isNil or scrollView.xClipView.isNil:
+    return
+  scrollView.xClipView.frame = scrollView.viewportRect()
+  scrollView.setClipViewBoundsOrigin(scrollView.contentOffset())
+
+proc clipView*(scrollView: ScrollView): ClipView =
+  if scrollView.isNil: nil else: scrollView.xClipView
 
 proc contentView*(scrollView: ScrollView): View =
-  if scrollView.isNil: nil else: scrollView.xContentView
+  scrollView.clipView()
 
 proc documentView*(scrollView: ScrollView): View =
   if scrollView.isNil: nil else: scrollView.xDocumentView
@@ -147,7 +185,7 @@ proc setDocumentView*(scrollView: ScrollView, documentView: View) =
     scrollView.xDocumentView.removeFromSuperview()
   scrollView.xDocumentView = documentView
   if not documentView.isNil:
-    scrollView.xContentView.addSubview(documentView)
+    scrollView.xClipView.addSubview(documentView)
   scrollView.tile()
   scrollView.invalidateContainerMetrics()
   scrollView.setNeedsDisplay(true)
@@ -156,20 +194,19 @@ proc `documentView=`*(scrollView: ScrollView, documentView: View) =
   scrollView.setDocumentView(documentView)
 
 proc contentOffset*(scrollView: ScrollView): Point =
-  if scrollView.isNil:
+  if scrollView.isNil or scrollView.xClipView.isNil:
     initPoint(0.0, 0.0)
   else:
-    scrollView.clampContentOffset(scrollView.xContentOffset)
+    scrollView.clampContentOffset(scrollView.xClipView.bounds().origin)
 
 proc setContentOffset*(scrollView: ScrollView, offset: Point) =
   if scrollView.isNil:
     return
   scrollView.tile()
   let nextOffset = scrollView.clampContentOffset(offset)
-  if scrollView.xContentOffset == nextOffset and
-      scrollView.xContentView.bounds().origin == nextOffset:
+  if scrollView.xClipView.bounds().origin == nextOffset:
     return
-  scrollView.applyContentOffset(nextOffset)
+  scrollView.setClipViewBoundsOrigin(nextOffset)
 
 proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
   scrollView.setContentOffset(offset)
@@ -180,11 +217,8 @@ proc scrollTo*(scrollView: ScrollView, offset: Point) =
 proc scrollBy*(scrollView: ScrollView, delta: Point) =
   if scrollView.isNil:
     return
-  scrollView.setContentOffset(
-    initPoint(
-      scrollView.xContentOffset.x + delta.x, scrollView.xContentOffset.y + delta.y
-    )
-  )
+  let current = scrollView.contentOffset()
+  scrollView.setContentOffset(initPoint(current.x + delta.x, current.y + delta.y))
 
 proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
   if scrollView.isNil:
@@ -216,6 +250,17 @@ proc scrollWheelDelta*(scrollView: ScrollView, event: ScrollEvent): Point =
   initPoint(
     event.deltaX * scrollView.xLineScroll, -event.deltaY * scrollView.xLineScroll
   )
+
+proc scrollWheelWouldMove(scrollView: ScrollView, event: ScrollEvent): bool =
+  if scrollView.isNil:
+    return false
+  let
+    delta = scrollView.scrollWheelDelta(event)
+    currentOffset = scrollView.contentOffset()
+    nextOffset = scrollView.clampContentOffset(
+      initPoint(currentOffset.x + delta.x, currentOffset.y + delta.y)
+    )
+  nextOffset != currentOffset
 
 proc hasHorizontalScroller*(scrollView: ScrollView): bool =
   not scrollView.isNil and scrollView.xHasScroller[laHorizontal]
@@ -368,11 +413,15 @@ protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
     scrollView.drawScrollers(context)
 
 protocol DefaultScrollViewEvents of ResponderEventProtocol:
-  method scrollWheel(scrollView: ScrollView, event: ScrollEvent) =
-    scrollView.scrollBy(scrollView.scrollWheelDelta(event))
+  method wantsForwardedScrollEvents(scrollView: ScrollView, event: ScrollEvent): bool =
+    not scrollView.scrollWheelWouldMove(event)
 
-proc initScrollContentView(frame: Rect): ScrollContentView =
-  result = ScrollContentView()
+  method scrollWheel(scrollView: ScrollView, event: ScrollEvent) =
+    if scrollView.scrollWheelWouldMove(event):
+      scrollView.scrollBy(scrollView.scrollWheelDelta(event))
+
+proc initClipView(frame: Rect): ClipView =
+  result = ClipView()
   initViewFields(result, frame)
   result.background = initColor(0.0, 0.0, 0.0, 0.0)
   result.clipsToBounds = true
@@ -386,8 +435,8 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   scrollView.xAutohidesScrollers = true
   scrollView.xScrollerThickness = 12.0'f32
   scrollView.xLineScroll = 16.0'f32
-  scrollView.xContentView = initScrollContentView(scrollView.viewportRect())
-  scrollView.addSubview(scrollView.xContentView)
+  scrollView.xClipView = initClipView(scrollView.viewportRect())
+  scrollView.addSubview(scrollView.xClipView)
   discard scrollView.withProtocol(DefaultScrollViewLayout)
   discard scrollView.withProtocol(DefaultScrollViewDrawing)
   discard scrollView.withProtocol(DefaultScrollViewEvents)

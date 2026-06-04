@@ -14,6 +14,8 @@ var
   trackingModifiers: seq[set[KeyModifier]]
   trackingTimestamps: seq[float]
   trackingScrollDeltas: seq[Point]
+  trackingScrollPhases: seq[ScrollEventPhase]
+  trackingScrollMomentumPhases: seq[ScrollEventPhase]
   trackingCommandSenders: seq[DynamicAgent]
 
 proc recordTrackingEvent(spy: TrackingSpyView, name: string, event: MouseEvent) =
@@ -34,11 +36,15 @@ proc recordScrollEvent(spy: TrackingSpyView, event: ScrollEvent) =
     delta = initPoint(event.deltaX, event.deltaY)
     modifiers = event.modifiers
     timestamp = event.timestamp
+    phase = event.phase
+    momentumPhase = event.momentumPhase
   trackingEvents.add(spy.xName & ".scroll")
   trackingPoints.add(location)
   trackingModifiers.add(modifiers)
   trackingTimestamps.add(timestamp)
   trackingScrollDeltas.add(delta)
+  trackingScrollPhases.add(phase)
+  trackingScrollMomentumPhases.add(momentumPhase)
 
 proc resetTracking() =
   trackingEvents.setLen(0)
@@ -47,6 +53,8 @@ proc resetTracking() =
   trackingModifiers.setLen(0)
   trackingTimestamps.setLen(0)
   trackingScrollDeltas.setLen(0)
+  trackingScrollPhases.setLen(0)
+  trackingScrollMomentumPhases.setLen(0)
   trackingCommandSenders.setLen(0)
 
 protocol TrackingSpyEvents of ResponderEventProtocol:
@@ -549,8 +557,42 @@ suite "nimkit responder":
     check trackingEvents == @["left.scroll"]
     check trackingPoints == @[initPoint(10, 10)]
     check trackingScrollDeltas == @[initPoint(1.5, -2.0)]
+    check trackingScrollPhases == @[sepChanged]
+    check trackingScrollMomentumPhases == @[sepNone]
     check trackingModifiers == @[{kmOption}]
     check trackingTimestamps == @[42.0]
+
+  test "window scroll dispatch preserves event phase and momentum target":
+    let
+      window = newWindow("Momentum scroll", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      left = newTrackingSpyView("left", initRect(10, 10, 80, 40))
+      right = newTrackingSpyView("right", initRect(120, 10, 80, 40))
+
+    root.addSubview(left)
+    root.addSubview(right)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(
+        location: initPoint(20, 20),
+        deltaY: -1.0'f32,
+        phase: sepEnded,
+        momentumPhase: sepBegan,
+      )
+    )
+    check window.dispatchScrollWheel(
+      ScrollEvent(
+        location: initPoint(130, 20), deltaY: -1.0'f32, momentumPhase: sepChanged
+      )
+    )
+
+    check trackingEvents == @["left.scroll", "left.scroll"]
+    check trackingPoints == @[initPoint(10, 10), initPoint(10, 10)]
+    check trackingScrollPhases == @[sepEnded, sepNone]
+    check trackingScrollMomentumPhases == @[sepBegan, sepChanged]
 
   test "window mouse and scroll dispatch stop at content bounds":
     let
