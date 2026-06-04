@@ -726,6 +726,40 @@ suite "nimkit constraints":
     check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
       resizedIntrinsicGeneration + 1
 
+  test "container metric invalidation rebuilds intrinsic source bucket":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      stack = newStackView(frame = initRect(10, 10, 120, 40))
+      button = newButton("Stack", frame = initRect(0, 0, 1, 1))
+
+    stack.autoresizingMaskConstraints = false
+    stack.addArrangedSubview(button)
+    root.addSubview(stack)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      initialAutoresizingGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask]
+      initialIntrinsicGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisIntrinsic]
+      initialContainerGeneration =
+        root.xLayoutInputCache.sourceGenerations[lisContainer]
+
+    stack.spacing = stack.spacing + 6.0'f32
+
+    check lisIntrinsic in stack.layoutInputDirtySources()
+    check lisIntrinsic in root.xLayoutInputCache.aggregateDirtySources
+    check not root.xLayoutInputCache.aggregateStructureDirty
+
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
+      initialAutoresizingGeneration
+    check root.xLayoutInputCache.sourceGenerations[lisIntrinsic] ==
+      initialIntrinsicGeneration + 1
+    check root.xLayoutInputCache.sourceGenerations[lisContainer] ==
+      initialContainerGeneration
+
   test "generated layout cache rebuilds all source buckets for structural changes":
     let
       root = newView(frame = initRect(0, 0, 240, 120))

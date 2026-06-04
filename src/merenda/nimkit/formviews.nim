@@ -130,8 +130,7 @@ proc setFrameFromFormLayout(view: View, frame: Rect) =
 proc invalidateFormLayout(formView: FormView) =
   if formView.isNil:
     return
-  formView.invalidateIntrinsicContentSize()
-  formView.setNeedsLayout()
+  formView.invalidateContainerMetrics()
   formView.setNeedsDisplay(true)
 
 proc boundedRowFrame(

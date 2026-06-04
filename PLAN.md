@@ -457,11 +457,13 @@ Concrete task order and status:
    intrinsic edits now dirty aggregate source buckets without looking like
    subtree structure changes; add/remove/visibility and user-constraint
    changes still conservatively rebuild all generated buckets.
-31. Next layout-cache refinement: Audit remaining layout-affecting setters and
-   container hooks for direct lifecycle flag edits, and route any cache-relevant
-   changes through `layoutInputChanged` with a precise reason. Keep direct
+31. Done for the first layout-affecting setter audit: Route stack, form, and
+   grid metric changes through a dedicated `lirContainerMetrics` bus reason
+   instead of redundant direct layout flag writes. Container metrics currently
+   dirty the intrinsic generated-input bucket because native containers still
+   expose their solver participation through intrinsic size. Keep direct
    `setNeedsDisplay` and pure lifecycle-only paths separate from layout cache
-   invalidation.
+   invalidation, and continue this audit as new controls land.
 
 ### Controls
 

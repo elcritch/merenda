@@ -83,8 +83,7 @@ func initStackFrame(
 proc invalidateStackLayout(stackView: StackView) =
   if stackView.isNil:
     return
-  stackView.invalidateIntrinsicContentSize()
-  stackView.setNeedsLayout()
+  stackView.invalidateContainerMetrics()
   stackView.setNeedsDisplay(true)
 
 proc arrangedIndex(stackView: StackView, child: View): int =
