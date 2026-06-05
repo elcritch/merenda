@@ -8,7 +8,7 @@ import ./theme
 import ./types
 
 type ListViewport* = object
-  firstIndex*: int
+  rows: ScrollViewport
 
 type
   ListSelectionMode* = enum
@@ -118,7 +118,11 @@ proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
 
 func normalizedRowHeight*(rowHeight: float32): float32
 func visibleListItemCount*(itemCount, maxVisibleItems: int): int
+func listScrollViewport*(firstIndex, itemCount, visibleCount: int): ScrollViewport
 func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int
+func firstIndex*(viewport: ListViewport): int
+proc setFirstIndex*(viewport: var ListViewport, firstIndex: int)
+proc `firstIndex=`*(viewport: var ListViewport, firstIndex: int)
 proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int)
 proc reset*(viewport: var ListViewport, firstIndex = 0)
 func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): bool
@@ -244,9 +248,6 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
   method keyDown(listView: ListView, event: KeyEvent) =
     listView.handleListKeyDown(event)
 
-func initListViewport*(firstIndex = 0): ListViewport =
-  ListViewport(firstIndex: max(firstIndex, 0))
-
 func normalizedRowHeight*(rowHeight: float32): float32 =
   max(rowHeight, 1.0'f32)
 
@@ -256,18 +257,40 @@ func visibleListItemCount*(itemCount, maxVisibleItems: int): int =
   min(itemCount, max(maxVisibleItems, 1))
 
 func maxFirstIndex*(itemCount, visibleCount: int): int =
-  max(itemCount - max(visibleCount, 0), 0)
+  listScrollViewport(0, itemCount, visibleCount).maxScrollOffset().int
+
+func listScrollViewport*(firstIndex, itemCount, visibleCount: int): ScrollViewport =
+  result = initScrollViewport(
+    firstIndex.float32, max(visibleCount, 0).float32, max(itemCount, 0).float32
+  )
+  result.offset = result.clampScrollOffset(result.offset)
 
 func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int =
-  max(0, min(firstIndex, maxFirstIndex(itemCount, visibleCount)))
+  listScrollViewport(firstIndex, itemCount, visibleCount).offset.int
+
+func initListViewport*(firstIndex = 0): ListViewport =
+  ListViewport(rows: initScrollViewport(firstIndex.float32, 0.0, 0.0))
+
+func firstIndex*(viewport: ListViewport): int =
+  max(viewport.rows.offset.int, 0)
+
+proc setFirstIndex*(viewport: var ListViewport, firstIndex: int) =
+  viewport.rows.offset = max(firstIndex, 0).float32
+
+proc `firstIndex=`*(viewport: var ListViewport, firstIndex: int) =
+  viewport.setFirstIndex(firstIndex)
+
+proc updateRows(viewport: var ListViewport, itemCount, visibleCount: int) =
+  viewport.rows.visibleExtent = max(visibleCount, 0).float32
+  viewport.rows.contentExtent = max(itemCount, 0).float32
+  viewport.rows.offset = viewport.rows.clampScrollOffset(viewport.rows.offset)
 
 func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): bool =
   if delta == 0:
     return false
-  let rowViewport = initScrollViewport(
-    viewport.firstIndex.float32, visibleCount.float32, itemCount.float32
+  listScrollViewport(viewport.firstIndex, itemCount, visibleCount).canScrollBy(
+    delta.float32
   )
-  rowViewport.canScrollBy(delta.float32)
 
 func hasHiddenListItems*(itemCount, visibleCount: int): bool =
   itemCount > max(visibleCount, 0)
@@ -287,17 +310,17 @@ func listScrollIndicatorRect*(
     return initRect(popup.origin.x, popup.origin.y, 0.0, 0.0)
 
   let
-    clampedFirst = clampFirstIndex(firstIndex, itemCount, visibleCount)
-    lastFirst = maxFirstIndex(itemCount, visibleCount)
+    rowViewport = listScrollViewport(firstIndex, itemCount, visibleCount)
+    lastFirst = rowViewport.maxScrollOffset()
     thumbHeight = min(
       max(trackHeight * visibleCount.float32 / itemCount.float32, 8.0'f32), trackHeight
     )
     travel = max(trackHeight - thumbHeight, 0.0'f32)
     progress =
-      if lastFirst <= 0:
+      if lastFirst <= 0.0'f32:
         0.0'f32
       else:
-        clampedFirst.float32 / lastFirst.float32
+        rowViewport.offset / lastFirst
 
   initRect(
     popup.maxX - trackInset - trackWidth,
@@ -307,10 +330,10 @@ func listScrollIndicatorRect*(
   )
 
 proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int) =
-  viewport.firstIndex = clampFirstIndex(viewport.firstIndex, itemCount, visibleCount)
+  viewport.updateRows(itemCount, visibleCount)
 
 proc reset*(viewport: var ListViewport, firstIndex = 0) =
-  viewport.firstIndex = max(firstIndex, 0)
+  viewport.firstIndex = firstIndex
 
 proc scrollToVisible*(
     viewport: var ListViewport, itemIndex, itemCount, visibleCount: int
@@ -327,10 +350,8 @@ proc scrollToVisible*(
 proc scrollBy*(viewport: var ListViewport, delta, itemCount, visibleCount: int) =
   if delta == 0:
     return
-  let rowViewport = initScrollViewport(
-    viewport.firstIndex.float32, visibleCount.float32, itemCount.float32
-  )
-  viewport.firstIndex = rowViewport.scrolledBy(delta.float32).int
+  viewport.updateRows(itemCount, visibleCount)
+  viewport.rows.offset = viewport.rows.scrolledBy(delta.float32)
 
 func listPopupRect*(
     bounds: Rect, itemCount, maxVisibleItems: int, rowHeight: float32

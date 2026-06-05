@@ -83,6 +83,29 @@ suite "nimkit list views":
     check popupListScrollRows(ScrollEvent(deltaY: 1.0'f32)) == -1
     check popupListScrollRows(ScrollEvent(deltaY: 0.0'f32)) == 0
 
+  test "list viewport uses shared scroll viewport row mechanics":
+    var viewport = initListViewport(2)
+
+    check viewport.firstIndex == 2
+    check maxFirstIndex(6, 3) == 3
+    check clampFirstIndex(-2, 6, 3) == 0
+    check clampFirstIndex(8, 6, 3) == 3
+
+    viewport.normalize(6, 3)
+    check viewport.firstIndex == 2
+    check viewport.canScrollBy(1, 6, 3)
+
+    viewport.scrollBy(10, 6, 3)
+    check viewport.firstIndex == 3
+    check not viewport.canScrollBy(1, 6, 3)
+
+    viewport.scrollToVisible(1, 6, 3)
+    check viewport.firstIndex == 1
+
+    viewport.firstIndex = 20
+    viewport.normalize(6, 3)
+    check viewport.firstIndex == 3
+
   test "list view stores local items and clamps selection viewport":
     let listView =
       newListView(["One", "Two", "Three", "Four"], frame = initRect(0, 0, 120, 46))
