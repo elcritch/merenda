@@ -67,6 +67,8 @@ proc rowHeight*(listView: ListView): float32
 proc reloadData*(listView: ListView)
 proc visibleItemCount*(listView: ListView): int
 proc highlightedIndex*(listView: ListView): int
+proc rowEnabled*(listView: ListView, index: int): bool
+proc rowSelectable*(listView: ListView, index: int): bool
 proc drawListRow*(
   listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
 )
@@ -94,6 +96,8 @@ protocol ListViewDelegateProtocolInternal:
   method listViewSelectionIsChanging*(args: ActionArgs) {.optional.}
   method listViewSelectionDidChange*(args: ActionArgs) {.optional.}
   method listViewRowWasActivated*(args: ActionArgs) {.optional.}
+  method listViewRowIsEnabled*(listView: ListView, row: int): bool {.optional.}
+  method listViewShouldSelectRow*(listView: ListView, row: int): bool {.optional.}
   method listViewDrawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
   ) {.optional.}
@@ -286,12 +290,13 @@ proc delegate*(listView: ListView): DynamicAgent =
     return listView.xDelegate
 
 proc `delegate=`*(listView: ListView, delegate: DynamicAgent) =
-  if not listView.isNil:
-    listView.xDelegate = delegate
+  if listView.isNil or listView.xDelegate == delegate:
+    return
+  listView.xDelegate = delegate
+  listView.reloadData()
 
 proc `delegate=`*(listView: ListView, delegate: Responder) =
-  if not listView.isNil:
-    listView.xDelegate = DynamicAgent(delegate)
+  listView.delegate = DynamicAgent(delegate)
 
 proc highlightedIndex*(listView: ListView): int =
   if listView.isNil:
@@ -301,7 +306,7 @@ proc highlightedIndex*(listView: ListView): int =
 proc setHighlightedIndex*(listView: ListView, index: int) =
   if listView.isNil:
     return
-  let boundedIndex = if index < 0 or index >= listView.len(): -1 else: index
+  let boundedIndex = if listView.rowEnabled(index): index else: -1
   if listView.xHighlightedIndex == boundedIndex:
     return
   listView.xHighlightedIndex = boundedIndex
@@ -393,6 +398,28 @@ proc setListViewRoles*(
   listView.xListRole = listRole
   listView.xItemRole = itemRole
   listView.reloadData()
+
+proc rowEnabled*(listView: ListView, index: int): bool =
+  if listView.isNil or index < 0 or index >= listView.len() or not listView.isEnabled():
+    return false
+  if not listView.xDelegate.isNil:
+    let enabled = listView.xDelegate.trySendLocal(
+      listViewRowIsEnabled(), (listView: listView, row: index)
+    )
+    if enabled.isSome:
+      return enabled.get()
+  true
+
+proc rowSelectable*(listView: ListView, index: int): bool =
+  if not listView.rowEnabled(index):
+    return false
+  if not listView.xDelegate.isNil:
+    let selectable = listView.xDelegate.trySendLocal(
+      listViewShouldSelectRow(), (listView: listView, row: index)
+    )
+    if selectable.isSome:
+      return selectable.get()
+  true
 
 proc drawListRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -558,7 +585,7 @@ proc normalizeSelection(listView: ListView, indexes: openArray[int]): seq[int] =
   if listView.isNil or listView.xSelectionMode == lsmNone or listView.len() == 0:
     return @[]
   for index in indexes:
-    if index >= 0 and index < listView.len():
+    if listView.rowSelectable(index):
       result.add index
   result.sort()
   var writeIndex = 0
@@ -585,7 +612,7 @@ proc syncSelectedIndex(listView: ListView) =
   listView.xSelectedIndex = firstSelectedIndex(listView.xSelectedIndexes)
 
 proc normalizeSelectionAnchor(listView: ListView, anchor: int): int =
-  if listView.validListIndex(anchor): anchor else: listView.xSelectedIndex
+  if listView.rowSelectable(anchor): anchor else: listView.xSelectedIndex
 
 proc syncSelectionCursor(listView: ListView) =
   if listView.isNil:
@@ -598,10 +625,38 @@ proc syncSelectionCursor(listView: ListView) =
     listView.xSelectionAnchor = listView.xSelectedIndex
     listView.xSelectionLead = listView.xSelectedIndex
     return
-  if not listView.validListIndex(listView.xSelectionAnchor):
+  if not listView.rowSelectable(listView.xSelectionAnchor):
     listView.xSelectionAnchor = listView.xSelectedIndex
-  if not listView.validListIndex(listView.xSelectionLead):
+  if not listView.rowSelectable(listView.xSelectionLead):
     listView.xSelectionLead = listView.xSelectedIndex
+
+proc firstSelectableIndex(listView: ListView): int =
+  if listView.isNil:
+    return -1
+  for index in 0 ..< listView.len():
+    if listView.rowSelectable(index):
+      return index
+  -1
+
+proc lastSelectableIndex(listView: ListView): int =
+  if listView.isNil:
+    return -1
+  for countdown in 0 ..< listView.len():
+    let index = listView.len() - countdown - 1
+    if listView.rowSelectable(index):
+      return index
+  -1
+
+proc nextSelectableIndex(listView: ListView, index, delta: int): int =
+  if listView.isNil or delta == 0 or listView.len() == 0:
+    return -1
+  let step = if delta < 0: -1 else: 1
+  var current = index
+  while current >= 0 and current < listView.len():
+    if listView.rowSelectable(current):
+      return current
+    current += step
+  -1
 
 proc reloadData*(listView: ListView) =
   if listView.isNil:
@@ -619,7 +674,7 @@ proc reloadData*(listView: ListView) =
   listView.syncSelectedIndex()
   listView.syncSelectionCursor()
 
-  if listView.xHighlightedIndex < 0 or listView.xHighlightedIndex >= listView.len():
+  if not listView.rowEnabled(listView.xHighlightedIndex):
     listView.xHighlightedIndex = -1
   var viewport = initListViewport(listView.firstVisibleIndex())
   if listView.xSelectedIndex >= 0:
@@ -736,14 +791,14 @@ proc applySelectedIndexes(
     nextAnchor =
       if nextIndexes.len == 0:
         -1
-      elif listView.validListIndex(anchor):
+      elif listView.rowSelectable(anchor):
         anchor
       else:
         nextSelected
     nextLead =
       if nextIndexes.len == 0:
         -1
-      elif listView.validListIndex(lead):
+      elif listView.rowSelectable(lead):
         lead
       else:
         nextSelected
@@ -779,6 +834,8 @@ proc selectItemAtIndex(listView: ListView, index: int) =
   if listView.isNil or listView.xSelectionMode == lsmNone:
     return
   let boundedIndex = if index < 0 or index >= listView.len(): -1 else: index
+  if boundedIndex >= 0 and not listView.rowSelectable(boundedIndex):
+    return
   if listView.xSelectedIndex == boundedIndex and listView.xSelectedIndexes.len <= 1:
     if boundedIndex >= 0:
       listView.scrollItemToVisible(boundedIndex)
@@ -802,7 +859,7 @@ proc extendSelectionToIndex(listView: ListView, index: int) =
     listView.selectItemAtIndex(index)
     return
   let boundedIndex = if listView.validListIndex(index): index else: -1
-  if boundedIndex < 0:
+  if boundedIndex < 0 or not listView.rowSelectable(boundedIndex):
     return
   let anchor = listView.normalizeSelectionAnchor(listView.xSelectionAnchor)
   listView.applySelectedIndexes(
@@ -813,7 +870,7 @@ proc toggleSelectionAtIndex(listView: ListView, index: int) =
   if listView.isNil or listView.xSelectionMode notin {lsmMultiple, lsmExtended}:
     listView.selectItemAtIndex(index)
     return
-  if not listView.validListIndex(index):
+  if not listView.rowSelectable(index):
     return
   var nextIndexes: seq[int]
   if listView.selectionContains(index):
@@ -856,15 +913,17 @@ proc `selectedIndex=`*(listView: ListView, index: int) =
   listView.setSelectedIndex(index)
 
 proc sendListActivation(listView: ListView, index: int) =
-  if listView.isNil or index < 0 or index >= listView.len():
+  if listView.isNil or not listView.rowEnabled(index):
     return
   listView.notifyListViewRowWasActivated()
   discard listView.sendAction()
 
 proc activateItemAtIndex(listView: ListView, index: int, modifiers: set[KeyModifier]) =
-  if listView.isNil or index < 0 or index >= listView.len():
+  if listView.isNil or not listView.rowEnabled(index):
     return
   if listView.selectionMode() != lsmNone:
+    if not listView.rowSelectable(index):
+      return
     listView.selectItemAtIndex(index, modifiers)
   listView.sendListActivation(index)
 
@@ -879,10 +938,13 @@ proc selectionLeadIndex(listView: ListView): int =
   else:
     listView.selectedIndex()
 
-proc moveSelectionTo(listView: ListView, index: int, extend = false) =
+proc moveSelectionTo(listView: ListView, index: int, extend = false, direction = 1) =
   if listView.isNil or listView.len() == 0 or listView.selectionMode() == lsmNone:
     return
-  let boundedIndex = max(0, min(index, listView.len() - 1))
+  let boundedIndex =
+    listView.nextSelectableIndex(max(0, min(index, listView.len() - 1)), direction)
+  if boundedIndex < 0:
+    return
   if extend and listView.xSelectionMode == lsmExtended:
     listView.extendSelectionToIndex(boundedIndex)
   else:
@@ -900,7 +962,7 @@ proc moveSelection(listView: ListView, delta: int, extend = false) =
       listView.firstVisibleIndex() + listView.visibleItemCount()
     else:
       listView.firstVisibleIndex()
-  listView.moveSelectionTo(start + delta, extend)
+  listView.moveSelectionTo(start + delta, extend, delta)
 
 proc pageSelection(listView: ListView, deltaPages: int, extend = false) =
   if listView.isNil:
@@ -929,7 +991,7 @@ proc listRowState(listView: ListView, itemIndex: int): ListRowState =
     listView[itemIndex],
     selected = listView.selectionContains(itemIndex),
     highlighted = itemIndex == listView.highlightedIndex(),
-    enabled = listView.isEnabled(),
+    enabled = listView.rowEnabled(itemIndex),
     focused = listView.isFocused(),
   )
 
@@ -1183,9 +1245,9 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     of keyPageUp:
       listView.pageSelection(-1, extendSelection)
     of keyHome:
-      listView.moveSelectionTo(0, extendSelection)
+      listView.moveSelectionTo(listView.firstSelectableIndex(), extendSelection)
     of keyEnd:
-      listView.moveSelectionTo(listView.len() - 1, extendSelection)
+      listView.moveSelectionTo(listView.lastSelectableIndex(), extendSelection, -1)
     of keyEnter, keySpace:
       let activeIndex = listView.selectionLeadIndex()
       if activeIndex >= 0:
