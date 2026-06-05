@@ -144,6 +144,22 @@ proc maximumContentOffset*(scrollView: ScrollView): Point =
     max(documentSize.height - viewportSize.height, 0.0'f32),
   )
 
+func clampedScrollFraction(value: float32): float32 =
+  min(max(value, 0.0'f32), 1.0'f32)
+
+proc contentOffsetForFraction*(
+    scrollView: ScrollView, x = AutoMetric, y = AutoMetric
+): Point =
+  let maximumOffset = scrollView.maximumContentOffset()
+  result = scrollView.contentOffset()
+  if not x.isAutoMetric:
+    result.x = maximumOffset.x * clampedScrollFraction(x)
+  if not y.isAutoMetric:
+    result.y = maximumOffset.y * clampedScrollFraction(y)
+
+proc contentOffsetForFraction*(scrollView: ScrollView, fraction: Point): Point =
+  scrollView.contentOffsetForFraction(fraction.x, fraction.y)
+
 proc clampContentOffset(scrollView: ScrollView, offset: Point): Point =
   if scrollView.isNil:
     return initPoint(0.0, 0.0)
@@ -239,6 +255,14 @@ proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
 
 proc scrollTo*(scrollView: ScrollView, offset: Point) =
   scrollView.setContentOffset(offset)
+
+proc scrollToFraction*(scrollView: ScrollView, x = AutoMetric, y = AutoMetric) =
+  if scrollView.isNil:
+    return
+  scrollView.scrollTo(scrollView.contentOffsetForFraction(x, y))
+
+proc scrollToFraction*(scrollView: ScrollView, fraction: Point) =
+  scrollView.scrollToFraction(fraction.x, fraction.y)
 
 proc scrollBy*(scrollView: ScrollView, delta: Point) =
   if scrollView.isNil:
