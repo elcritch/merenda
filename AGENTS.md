@@ -42,6 +42,7 @@
 - Use plain fields for internal widget state such as frame, bounds, title, enabled, highlighted, state, text, colors, and flags. Only use `Sigil` when a property is actually observed, bound, or participates in a reactive graph.
 - Keep mutation procs when setting a field has side effects such as display invalidation, responder updates, native window updates, or parent/child bookkeeping.
 - Keep proc-based getter/setter boundaries for properties that may need swizzling, overriding, validation, layout hooks, or instrumentation to modify core GUI behavior. Use plain backing storage behind those procs; do not bypass the proc boundary just to expose fields. Do not add getter/setter pairs only for compatibility when direct Nim access is clearer and no future hook point is expected.
+- For NimKit property APIs, prefer Nim assignment setters like `foo=` only for single-argument property updates, with the implementation body directly in that proc. More complex setters should keep a descriptive proc name unless an indexed assignment shape like `foo[]=` naturally fits. Avoid duplicated public `setFoo` wrappers unless the setter is specifically part of a protocol, selector, or AppKit/OpenSTEP-style API surface.
 
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.
