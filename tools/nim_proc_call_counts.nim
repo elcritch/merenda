@@ -1,9 +1,14 @@
-import std/[os, strformat, strutils]
+import std/[algorithm, os, strformat, strutils]
 
 type SymbolDef = object
   kind: string
   name: string
   line: int
+
+type SymbolCount = object
+  def: SymbolDef
+  calls: int
+  otherCalls: int
 
 func isIdentChar(c: char): bool =
   c.isAlphaNumeric or c == '_'
@@ -76,6 +81,9 @@ proc countCallsInOtherModules(rootDir, targetPath, name: string): int =
     if path.normalizedPath() != target:
       result += countCallsInModule(path, name)
 
+func padRight(text: string, width: int): string =
+  text & repeat(' ', max(width - text.len, 0))
+
 proc main() =
   if paramCount() != 1:
     quit &"usage: {getAppFilename().extractFilename()} module.nim", 1
@@ -95,14 +103,30 @@ proc main() =
       defs.add SymbolDef(kind: kind, name: name, line: lineNumber + 1)
       declarationLines[lineNumber] = true
 
-  echo "line\tkind\tname\tcalls\totherModules"
+  var counts: seq[SymbolCount]
+  var longestName = "name".len
   for def in defs:
+    longestName = max(longestName, def.name.len)
     var calls = 0
     for lineNumber, line in pairs(lines):
       if not declarationLines[lineNumber]:
         calls += countCalls(line, def.name)
     let otherCalls = countCallsInOtherModules(rootDir, path, def.name)
-    echo &"{def.line}\t{def.kind}\t{def.name}\t{calls}\t{otherCalls}"
+    counts.add SymbolCount(def: def, calls: calls, otherCalls: otherCalls)
+
+  counts.sort(
+    proc(a, b: SymbolCount): int =
+      result = cmp(a.otherCalls, b.otherCalls)
+      if result == 0:
+        result = cmp(a.calls, b.calls)
+      if result == 0:
+        result = cmp(a.def.line, b.def.line)
+  )
+
+  echo &"line kind name{repeat(' ', longestName - \"name\".len)} calls otherModules"
+  for count in counts:
+    let def = count.def
+    echo &"{def.line:<4} {def.kind:<4} {def.name.padRight(longestName)} {count.calls:<5} {count.otherCalls}"
 
 when isMainModule:
   main()

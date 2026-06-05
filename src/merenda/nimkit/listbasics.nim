@@ -44,11 +44,9 @@ func initListViewport*(firstIndex = 0): ListViewport =
 func firstIndex*(viewport: ListViewport): int =
   max(viewport.rows.offset.int, 0)
 
-proc setFirstIndex*(viewport: var ListViewport, firstIndex: int) =
-  viewport.rows.offset = max(firstIndex, 0).float32
 
 proc `firstIndex=`*(viewport: var ListViewport, firstIndex: int) =
-  viewport.setFirstIndex(firstIndex)
+  viewport.rows.offset = max(firstIndex, 0).float32
 
 proc updateRows(viewport: var ListViewport, itemCount, visibleCount: int) =
   viewport.rows.visibleExtent = max(visibleCount, 0).float32
@@ -61,9 +59,6 @@ func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): 
   listScrollViewport(viewport.firstIndex, itemCount, visibleCount).canScrollBy(
     delta.float32
   )
-
-func hasHiddenListItems*(itemCount, visibleCount: int): bool =
-  itemCount > max(visibleCount, 0)
 
 proc listScrollRows*(event: ScrollEvent): int =
   if event.deltaY < 0.0'f32:
@@ -80,7 +75,7 @@ func listScrollerKnobRect*(
     inset = 3.0'f32,
 ): Rect =
   if container.isEmpty or visibleCount <= 0 or
-      not hasHiddenListItems(itemCount, visibleCount):
+      not itemCount > visibleCount.max(0):
     return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
 
   let track = scrollerTrackRect(container, laVertical, thickness, inset)
