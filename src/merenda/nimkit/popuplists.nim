@@ -273,7 +273,13 @@ proc drawPopupList*(
         focused = popupList.isFocused(),
       )
     context.drawListRow(
-      layer, popupRoot, itemRect, row, popupList.xItemRole, popupList.styleId(), classes
+      itemRect,
+      row,
+      popupList.xItemRole,
+      popupList.styleId(),
+      classes,
+      layer = layer,
+      parent = popupRoot,
     )
 
   let knobRect = popupList.popupListScrollerKnobRect(popupBounds)

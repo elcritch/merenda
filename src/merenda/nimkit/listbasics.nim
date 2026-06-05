@@ -1,4 +1,3 @@
-from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 
 import ./drawing
@@ -44,7 +43,6 @@ func initListViewport*(firstIndex = 0): ListViewport =
 func firstIndex*(viewport: ListViewport): int =
   max(viewport.rows.offset.int, 0)
 
-
 proc `firstIndex=`*(viewport: var ListViewport, firstIndex: int) =
   viewport.rows.offset = max(firstIndex, 0).float32
 
@@ -74,8 +72,7 @@ func listScrollerKnobRect*(
     thickness = 3.0'f32,
     inset = 3.0'f32,
 ): Rect =
-  if container.isEmpty or visibleCount <= 0 or
-      not itemCount > visibleCount.max(0):
+  if container.isEmpty or visibleCount <= 0 or not itemCount > visibleCount.max(0):
     return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
 
   let track = scrollerTrackRect(container, laVertical, thickness, inset)
@@ -178,69 +175,52 @@ func initListRowState*(
     focused: focused,
   )
 
-proc resolveListRowStyle(
+proc drawListRow*(
     context: DrawContext,
+    rect: Rect,
     row: ListRowState,
     itemRole: StyleRole,
     id = "",
     classes: seq[string] = @[],
-): ListItemStyle =
-  context.appearance.resolveListItemStyle(
-    initControlStyleContext(
-      itemRole,
-      enabled = row.enabled,
-      hovered = row.highlighted,
-      focused = row.focused,
-      selected = row.selected,
-      id = id,
-      classes = classes,
+    layer = DefaultDrawLevel,
+    parent = (-1).FigIdx,
+) =
+  if rect.isEmpty:
+    return
+  let
+    currentParent = int16(parent) < 0
+    itemStyle = context.appearance.resolveListItemStyle(
+      initControlStyleContext(
+        itemRole,
+        enabled = row.enabled,
+        hovered = row.highlighted,
+        focused = row.focused,
+        selected = row.selected,
+        id = id,
+        classes = classes,
+      )
     )
-  )
-
-proc drawListRow*(
-    context: DrawContext,
-    layer: ZLevel,
-    parent: FigIdx,
-    rect: Rect,
-    row: ListRowState,
-    itemRole: StyleRole,
-    id = "",
-    classes: seq[string] = @[],
-) =
-  if rect.isEmpty:
-    return
-  let itemStyle = context.resolveListRowStyle(row, itemRole, id, classes)
-  discard context.addWindowRectangle(
-    layer,
-    parent,
-    context.localRectToWindow(rect),
-    itemStyle.box.fill,
-    itemStyle.box.borderColor,
-    itemStyle.box.borderWidth,
-    itemStyle.box.cornerRadius,
-    itemStyle.box.shadows,
-  )
-  context.addText(
-    layer, parent, itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color
-  )
-
-proc drawListRow*(
-    context: DrawContext,
-    rect: Rect,
-    row: ListRowState,
-    itemRole: StyleRole,
-    id = "",
-    classes: seq[string] = @[],
-) =
-  if rect.isEmpty:
-    return
-  let itemStyle = context.resolveListRowStyle(row, itemRole, id, classes)
-  discard context.addWindowRectangle(
-    context.localRectToWindow(rect),
-    itemStyle.box.fill,
-    itemStyle.box.borderColor,
-    itemStyle.box.borderWidth,
-    itemStyle.box.cornerRadius,
-    itemStyle.box.shadows,
-  )
-  context.addText(itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color)
+  if currentParent:
+    discard context.addWindowRectangle(
+      context.localRectToWindow(rect),
+      itemStyle.box.fill,
+      itemStyle.box.borderColor,
+      itemStyle.box.borderWidth,
+      itemStyle.box.cornerRadius,
+      itemStyle.box.shadows,
+    )
+    context.addText(itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color)
+  else:
+    discard context.addWindowRectangle(
+      layer,
+      parent,
+      context.localRectToWindow(rect),
+      itemStyle.box.fill,
+      itemStyle.box.borderColor,
+      itemStyle.box.borderWidth,
+      itemStyle.box.cornerRadius,
+      itemStyle.box.shadows,
+    )
+    context.addText(
+      layer, parent, itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color
+    )
