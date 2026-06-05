@@ -61,7 +61,7 @@ proc shouldUseWindowPopup(comboBox: ComboBox): bool
 proc usesInlinePopup(comboBox: ComboBox): bool
 proc beginPopupSession(comboBox: ComboBox)
 proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool
-proc dismissPopupFromSession(comboBox: ComboBox, reason: TransientDismissReason)
+proc dismissPopupFromSession(comboBox: ComboBox, reason: DismissReason)
 proc openPopupWindow(comboBox: ComboBox)
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true)
 proc reactivateOwnerWindow(comboBox: ComboBox)
@@ -899,7 +899,7 @@ proc ownerWindow(comboBox: ComboBox): Window =
   if owner of Window:
     result = Window(owner)
 
-proc dismissPopupFromSession(comboBox: ComboBox, reason: TransientDismissReason) =
+proc dismissPopupFromSession(comboBox: ComboBox, reason: DismissReason) =
   if comboBox.isNil:
     return
   case reason
@@ -917,7 +917,7 @@ proc beginPopupSession(comboBox: ComboBox) =
     owner = Responder(comboBox),
     transientWindow = popupWindow,
     restoreResponder = Responder(comboBox),
-    onDismiss = proc(reason: TransientDismissReason) =
+    onDismiss = proc(reason: DismissReason) =
       comboBox.dismissPopupFromSession(reason),
   )
 
