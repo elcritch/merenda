@@ -210,11 +210,11 @@ Popup and list behavior shares a narrow base:
   optional transient window, dismissal reason, callback, and focus restoration.
 - `ListView` is the first narrow public list control. It supports local string
   items, selector-backed row count/value data sources, delegate notifications
-  for selection and activation, none/single/multiple/extended selection,
-  Shift range extension, command/control discontiguous toggles, keyboard and
-  mouse navigation, wheel scrolling, intrinsic sizing, target/action
-  activation, dedicated `srListView` and `srListItem` theme roles, and shared
-  `ListRowState` row rendering.
+  for selection, activation, and visible-row drawing,
+  none/single/multiple/extended selection, Shift range extension,
+  command/control discontiguous toggles, keyboard and mouse navigation, wheel
+  scrolling, intrinsic sizing, target/action activation, dedicated `srListView`
+  and `srListItem` theme roles, and shared `ListRowState` row rendering.
 - `ListContentView` is the internal row document for standalone `ListView`.
   It stays non-focusable and manually tiled by the list, keeping selection and
   keyboard behavior on `ListView` while giving future scroll-hosted lists a
@@ -224,6 +224,9 @@ Popup and list behavior shares a narrow base:
   draw through the shared row renderer, do not participate in hit testing or
   focus, and are retargeted from the clip-view visible rect as scrolling or
   resizing changes the visible window.
+- `listViewDrawRow` receives row-local drawing bounds plus `ListRowState`.
+  Callers that want stock styling with small additions can call
+  `drawListRow(listView, context, rect, row)` from inside the delegate hook.
 
 The transient session layer is intentionally smaller than a full AppKit modal
 system. It gives menus, popovers, combo boxes, and future drag/tracking flows a

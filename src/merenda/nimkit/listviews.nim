@@ -67,6 +67,10 @@ proc rowHeight*(listView: ListView): float32
 proc reloadData*(listView: ListView)
 proc visibleItemCount*(listView: ListView): int
 proc highlightedIndex*(listView: ListView): int
+proc drawListRow*(
+  listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+)
+
 proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
 proc showsVerticalScroller*(listView: ListView): bool
@@ -90,6 +94,9 @@ protocol ListViewDelegateProtocolInternal:
   method listViewSelectionIsChanging*(args: ActionArgs) {.optional.}
   method listViewSelectionDidChange*(args: ActionArgs) {.optional.}
   method listViewRowWasActivated*(args: ActionArgs) {.optional.}
+  method listViewDrawRow*(
+    listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+  ) {.optional.}
 
 proc listView(rowView: ListRowView): ListView =
   if rowView.isNil: nil else: rowView.xListView
@@ -386,6 +393,24 @@ proc setListViewRoles*(
   listView.xListRole = listRole
   listView.xItemRole = itemRole
   listView.reloadData()
+
+proc drawListRow*(
+    listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+) =
+  if listView.isNil or context.isNil:
+    return
+  context.drawListRow(
+    rect, row, listView.xItemRole, listView.styleId(), listView.styleClasses()
+  )
+
+proc drawCustomListRow(
+    listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+): bool =
+  if listView.isNil or listView.xDelegate.isNil or context.isNil:
+    return false
+  listView.xDelegate.sendLocalIfHandled(
+    listViewDrawRow(), (listView: listView, context: context, rect: rect, row: row)
+  )
 
 proc listViewportSize(listView: ListView): Size =
   if listView.isNil:
@@ -1015,13 +1040,9 @@ protocol DefaultListRowViewDrawing of ViewDrawingProtocol:
     let listView = rowView.listView()
     if rowView.isNil or listView.isNil:
       return
-    context.drawListRow(
-      rowView.bounds(),
-      rowView.xRow,
-      listView.xItemRole,
-      listView.styleId(),
-      listView.styleClasses(),
-    )
+    let rect = rowView.bounds()
+    if not listView.drawCustomListRow(context, rect, rowView.xRow):
+      listView.drawListRow(context, rect, rowView.xRow)
 
 protocol DefaultListRowViewHitTesting of ViewProtocol:
   method pointInside(rowView: ListRowView, point: Point): bool =

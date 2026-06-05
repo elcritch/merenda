@@ -14,6 +14,11 @@ type
     activatedCount: int
     lastSender: DynamicAgent
 
+  ListRowRendererSpy = ref object of Responder
+    views: seq[ListView]
+    rows: seq[ListRowState]
+    rects: seq[Rect]
+
 protocol ListDataSourceSpyMethods of ListViewDataSource:
   method numberOfRowsInListView(source: ListDataSourceSpy, listView: ListView): int =
     source.rows.len
@@ -38,6 +43,19 @@ protocol ListDelegateSpyMethods of ListViewDelegate:
     inc delegate.activatedCount
     delegate.lastSender = args.sender
 
+protocol ListRowRendererSpyMethods of ListViewDelegate:
+  method listViewDrawRow(
+      renderer: ListRowRendererSpy,
+      listView: ListView,
+      context: DrawContext,
+      rect: Rect,
+      row: ListRowState,
+  ) =
+    renderer.views.add listView
+    renderer.rows.add row
+    renderer.rects.add rect
+    listView.drawListRow(context, rect, row)
+
 proc newListDataSourceSpy(rows: openArray[string]): ListDataSourceSpy =
   result = ListDataSourceSpy(rows: @rows)
   initResponder(result)
@@ -47,6 +65,16 @@ proc newListDelegateSpy(): ListDelegateSpy =
   result = ListDelegateSpy()
   initResponder(result)
   discard result.withProtocol(ListDelegateSpyMethods)
+
+proc newListRowRendererSpy(): ListRowRendererSpy =
+  result = ListRowRendererSpy()
+  initResponder(result)
+  discard result.withProtocol(ListRowRendererSpyMethods)
+
+proc clear(spy: ListRowRendererSpy) =
+  spy.views.setLen(0)
+  spy.rows.setLen(0)
+  spy.rects.setLen(0)
 
 proc listViewScrollerKnobRect(listView: ListView): Rect =
   scrollerKnobRect(
@@ -430,6 +458,43 @@ suite "nimkit list views":
     listView.removeAllItems()
     discard buildRenders(listView)
     check content.subviews().len == 0
+
+  test "list view delegate can render visible row states":
+    let
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
+        frame = initRect(0, 0, 120, 62),
+      )
+      renderer = newListRowRendererSpy()
+
+    listView.rowHeight = 20.0
+    listView.delegate = renderer
+    listView.selectedIndex = 1
+    listView.highlightedIndex = 2
+
+    discard buildRenders(listView)
+
+    check renderer.rows.len == 3
+    check renderer.views.len == 3
+    check renderer.views[0] == listView
+    check renderer.rows[0] == initListRowState(0, "One")
+    check renderer.rows[1] == initListRowState(1, "Two", selected = true)
+    check renderer.rows[2] == initListRowState(2, "Three", highlighted = true)
+    check renderer.rects[0] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+    check renderer.rects[1] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+    check renderer.rects[2] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+
+    listView.firstVisibleIndex = 4
+    renderer.clear()
+    discard buildRenders(listView)
+
+    check renderer.rows.len == 3
+    check renderer.rows[0] == initListRowState(4, "Five")
+    check renderer.rows[1] == initListRowState(5, "Six")
+    check renderer.rows[2] == initListRowState(6, "Seven")
+    check renderer.rects[0] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+    check renderer.rects[1] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+    check renderer.rects[2] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
 
   test "list view scroller pages and drags row viewport":
     let
