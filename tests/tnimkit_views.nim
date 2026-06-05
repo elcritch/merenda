@@ -1,6 +1,7 @@
 import std/unittest
 
 import merenda/nimkit
+import merenda/nimkit/viewgeometry
 
 type
   MouseSpyView = ref object of View
@@ -95,6 +96,16 @@ proc newConstraintSpyView(name: string, frame: Rect): ConstraintSpyView =
   discard result.withProtocol(ConstraintSpyHooks)
 
 suite "nimkit views":
+  test "frame changes preserve bounds origin":
+    let view = newView(frame = initRect(0, 0, 100, 80))
+
+    view.bounds = initRect(20, 30, 100, 80)
+    view.frame = initRect(10, 15, 120, 90)
+    check view.bounds == initRect(20, 30, 120, 90)
+
+    view.applyLayoutFrame(initRect(12, 18, 130, 95))
+    check view.bounds == initRect(20, 30, 130, 95)
+
   test "subviews participate in hit testing from front to back":
     let root = newView(frame = initRect(0, 0, 200, 160))
     let back = newView(frame = initRect(20, 20, 80, 50))

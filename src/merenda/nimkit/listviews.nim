@@ -19,8 +19,13 @@ type
     lsmMultiple
     lsmExtended
 
+  ListRowView = ref object of View
+    xListView: ListView
+    xRow: ListRowState
+
   ListContentView* = ref object of View
     xListView: ListView
+    xRowViews: seq[ListRowView]
 
   ListScroller* = ref object of View
     xListView: ListView
@@ -32,6 +37,8 @@ type
     xDelegate: DynamicAgent
     xSelectedIndex: int
     xSelectedIndexes: seq[int]
+    xSelectionAnchor: int
+    xSelectionLead: int
     xHighlightedIndex: int
     xViewport: ListViewport
     xClipView: ClipView
@@ -44,8 +51,11 @@ type
     xListRole: StyleRole
     xItemRole: StyleRole
 
+proc listView(rowView: ListRowView): ListView
 proc listView*(contentView: ListContentView): ListView
 proc listView*(scroller: ListScroller): ListView
+proc initListRowView(listView: ListView): ListRowView
+proc syncVisibleRowViews(contentView: ListContentView)
 proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
 proc verticalScroller*(listView: ListView): ListScroller
@@ -66,6 +76,7 @@ proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
+proc selectedIndex*(listView: ListView): int
 proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
@@ -79,6 +90,9 @@ protocol ListViewDelegateProtocolInternal:
   method listViewSelectionIsChanging*(args: ActionArgs) {.optional.}
   method listViewSelectionDidChange*(args: ActionArgs) {.optional.}
   method listViewRowWasActivated*(args: ActionArgs) {.optional.}
+
+proc listView(rowView: ListRowView): ListView =
+  if rowView.isNil: nil else: rowView.xListView
 
 proc listView*(contentView: ListContentView): ListView =
   if contentView.isNil: nil else: contentView.xListView
@@ -98,6 +112,8 @@ proc verticalScroller*(listView: ListView): ListScroller =
 proc invalidateListRows(listView: ListView) =
   if listView.isNil:
     return
+  if not listView.xContentView.isNil:
+    listView.xContentView.syncVisibleRowViews()
   if not listView.xClipView.isNil:
     listView.xClipView.setNeedsDisplay(true)
   if not listView.xContentView.isNil:
@@ -187,6 +203,10 @@ proc insertItem*(listView: ListView, value: string, index: int) =
   for selectedIndex in listView.xSelectedIndexes.mitems:
     if selectedIndex >= boundedIndex:
       inc selectedIndex
+  if listView.xSelectionAnchor >= boundedIndex:
+    inc listView.xSelectionAnchor
+  if listView.xSelectionLead >= boundedIndex:
+    inc listView.xSelectionLead
   if listView.xHighlightedIndex >= boundedIndex:
     inc listView.xHighlightedIndex
   listView.reloadData()
@@ -214,6 +234,14 @@ proc removeItemAtIndex*(listView: ListView, index: int) =
   elif index < listView.xSelectedIndex:
     dec listView.xSelectedIndex
   listView.xSelectedIndexes = nextSelected
+  if listView.xSelectionAnchor == index:
+    listView.xSelectionAnchor = -1
+  elif index < listView.xSelectionAnchor:
+    dec listView.xSelectionAnchor
+  if listView.xSelectionLead == index:
+    listView.xSelectionLead = -1
+  elif index < listView.xSelectionLead:
+    dec listView.xSelectionLead
   if listView.xHighlightedIndex == index:
     listView.xHighlightedIndex = -1
   elif index < listView.xHighlightedIndex:
@@ -226,6 +254,8 @@ proc removeAllItems*(listView: ListView) =
   listView.xItems.setLen(0)
   listView.xSelectedIndex = -1
   listView.xSelectedIndexes.setLen(0)
+  listView.xSelectionAnchor = -1
+  listView.xSelectionLead = -1
   listView.xHighlightedIndex = -1
   listView.xViewport.reset()
   listView.reloadData()
@@ -234,7 +264,6 @@ proc dataSource*(listView: ListView): DynamicAgent =
   if listView.isNil:
     return nil
   listView.xDataSource
-
 
 proc `dataSource=`*(listView: ListView, dataSource: DynamicAgent) =
   if listView.isNil or listView.xDataSource == dataSource:
@@ -320,9 +349,13 @@ proc setSelectionMode*(listView: ListView, mode: ListSelectionMode) =
   if mode == lsmNone:
     listView.xSelectedIndex = -1
     listView.xSelectedIndexes.setLen(0)
+    listView.xSelectionAnchor = -1
+    listView.xSelectionLead = -1
   elif mode == lsmSingle and listView.xSelectedIndexes.len > 1:
     listView.xSelectedIndexes.setLen(1)
     listView.xSelectedIndex = listView.xSelectedIndexes[0]
+    listView.xSelectionAnchor = listView.xSelectedIndex
+    listView.xSelectionLead = listView.xSelectedIndex
   listView.reloadData()
 
 proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
@@ -433,6 +466,8 @@ proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool) =
     if invalidate:
       listView.invalidateListRows()
   listView.syncListViewport(nextOffset)
+  if not listView.xContentView.isNil:
+    listView.xContentView.syncVisibleRowViews()
 
 proc firstVisibleIndex*(listView: ListView): int =
   if listView.isNil:
@@ -510,14 +545,38 @@ proc normalizeSelection(listView: ListView, indexes: openArray[int]): seq[int] =
   if listView.xSelectionMode == lsmSingle and result.len > 1:
     result.setLen(1)
 
+proc validListIndex(listView: ListView, index: int): bool =
+  not listView.isNil and index >= 0 and index < listView.len()
+
+proc firstSelectedIndex(indexes: openArray[int]): int =
+  if indexes.len == 0:
+    -1
+  else:
+    indexes[0]
+
 proc syncSelectedIndex(listView: ListView) =
   if listView.isNil:
     return
-  listView.xSelectedIndex =
-    if listView.xSelectedIndexes.len == 0:
-      -1
-    else:
-      listView.xSelectedIndexes[0]
+  listView.xSelectedIndex = firstSelectedIndex(listView.xSelectedIndexes)
+
+proc normalizeSelectionAnchor(listView: ListView, anchor: int): int =
+  if listView.validListIndex(anchor): anchor else: listView.xSelectedIndex
+
+proc syncSelectionCursor(listView: ListView) =
+  if listView.isNil:
+    return
+  if listView.xSelectedIndexes.len == 0:
+    listView.xSelectionAnchor = -1
+    listView.xSelectionLead = -1
+    return
+  if listView.xSelectionMode == lsmSingle:
+    listView.xSelectionAnchor = listView.xSelectedIndex
+    listView.xSelectionLead = listView.xSelectedIndex
+    return
+  if not listView.validListIndex(listView.xSelectionAnchor):
+    listView.xSelectionAnchor = listView.xSelectedIndex
+  if not listView.validListIndex(listView.xSelectionLead):
+    listView.xSelectionLead = listView.xSelectedIndex
 
 proc reloadData*(listView: ListView) =
   if listView.isNil:
@@ -533,6 +592,7 @@ proc reloadData*(listView: ListView) =
     listView.xSelectedIndexes.add listView.xSelectedIndex
   listView.xSelectedIndexes = listView.normalizeSelection(listView.xSelectedIndexes)
   listView.syncSelectedIndex()
+  listView.syncSelectionCursor()
 
   if listView.xHighlightedIndex < 0 or listView.xHighlightedIndex >= listView.len():
     listView.xHighlightedIndex = -1
@@ -640,21 +700,52 @@ proc selectedIndexes*(listView: ListView): seq[int] =
   else:
     listView.xSelectedIndexes
 
-proc setSelectedIndexes*(listView: ListView, indexes: openArray[int]) =
+proc applySelectedIndexes(
+    listView: ListView, indexes: openArray[int], anchor: int, lead: int
+) =
   if listView.isNil:
     return
   let nextIndexes = listView.normalizeSelection(indexes)
-  if listView.xSelectedIndexes == nextIndexes:
-    if nextIndexes.len > 0:
-      listView.scrollItemToVisible(nextIndexes[0])
+  let
+    nextSelected = firstSelectedIndex(nextIndexes)
+    nextAnchor =
+      if nextIndexes.len == 0:
+        -1
+      elif listView.validListIndex(anchor):
+        anchor
+      else:
+        nextSelected
+    nextLead =
+      if nextIndexes.len == 0:
+        -1
+      elif listView.validListIndex(lead):
+        lead
+      else:
+        nextSelected
+    selectionChanged = listView.xSelectedIndexes != nextIndexes
+  if not selectionChanged:
+    listView.xSelectionAnchor = nextAnchor
+    listView.xSelectionLead = nextLead
+    if nextLead >= 0:
+      listView.scrollItemToVisible(nextLead)
     return
   listView.notifyListViewSelectionIsChanging()
   listView.xSelectedIndexes = nextIndexes
   listView.syncSelectedIndex()
-  if listView.xSelectedIndex >= 0:
-    listView.scrollItemToVisible(listView.xSelectedIndex)
+  listView.xSelectionAnchor = nextAnchor
+  listView.xSelectionLead = nextLead
+  if nextLead >= 0:
+    listView.scrollItemToVisible(nextLead)
   listView.invalidateListRows()
   listView.notifyListViewSelectionDidChange()
+
+proc setSelectedIndexes*(listView: ListView, indexes: openArray[int]) =
+  if listView.isNil:
+    return
+  let nextIndexes = listView.normalizeSelection(indexes)
+  listView.applySelectedIndexes(
+    nextIndexes, firstSelectedIndex(nextIndexes), firstSelectedIndex(nextIndexes)
+  )
 
 proc `selectedIndexes=`*(listView: ListView, indexes: openArray[int]) =
   listView.setSelectedIndexes(indexes)
@@ -670,7 +761,58 @@ proc selectItemAtIndex(listView: ListView, index: int) =
   if boundedIndex < 0:
     listView.setSelectedIndexes(@[])
   else:
-    listView.setSelectedIndexes([boundedIndex])
+    listView.applySelectedIndexes([boundedIndex], boundedIndex, boundedIndex)
+
+proc rangeSelectionIndexes(anchor, lead: int): seq[int] =
+  if anchor < 0 or lead < 0:
+    return @[]
+  let
+    firstIndex = min(anchor, lead)
+    lastIndex = max(anchor, lead)
+  for index in firstIndex .. lastIndex:
+    result.add index
+
+proc extendSelectionToIndex(listView: ListView, index: int) =
+  if listView.isNil or listView.xSelectionMode != lsmExtended:
+    listView.selectItemAtIndex(index)
+    return
+  let boundedIndex = if listView.validListIndex(index): index else: -1
+  if boundedIndex < 0:
+    return
+  let anchor = listView.normalizeSelectionAnchor(listView.xSelectionAnchor)
+  listView.applySelectedIndexes(
+    rangeSelectionIndexes(anchor, boundedIndex), anchor, boundedIndex
+  )
+
+proc toggleSelectionAtIndex(listView: ListView, index: int) =
+  if listView.isNil or listView.xSelectionMode notin {lsmMultiple, lsmExtended}:
+    listView.selectItemAtIndex(index)
+    return
+  if not listView.validListIndex(index):
+    return
+  var nextIndexes: seq[int]
+  if listView.selectionContains(index):
+    for selectedIndex in listView.xSelectedIndexes:
+      if selectedIndex != index:
+        nextIndexes.add selectedIndex
+  else:
+    nextIndexes = listView.xSelectedIndexes
+    nextIndexes.add index
+  listView.applySelectedIndexes(nextIndexes, index, index)
+
+proc usesDiscontiguousSelection(modifiers: set[KeyModifier]): bool =
+  kmCommand in modifiers or kmControl in modifiers
+
+proc selectItemAtIndex(listView: ListView, index: int, modifiers: set[KeyModifier]) =
+  if listView.isNil or listView.xSelectionMode == lsmNone:
+    return
+  if kmShift in modifiers and listView.xSelectionMode == lsmExtended:
+    listView.extendSelectionToIndex(index)
+  elif modifiers.usesDiscontiguousSelection() and
+      listView.xSelectionMode in {lsmMultiple, lsmExtended}:
+    listView.toggleSelectionAtIndex(index)
+  else:
+    listView.selectItemAtIndex(index)
 
 proc selectedIndex*(listView: ListView): int =
   if listView.isNil:
@@ -688,37 +830,57 @@ proc setSelectedIndex*(listView: ListView, index: int) =
 proc `selectedIndex=`*(listView: ListView, index: int) =
   listView.setSelectedIndex(index)
 
-proc activateItemAtIndex*(listView: ListView, index: int) =
+proc sendListActivation(listView: ListView, index: int) =
   if listView.isNil or index < 0 or index >= listView.len():
     return
-  if listView.selectionMode() != lsmNone:
-    listView.selectItemAtIndex(index)
   listView.notifyListViewRowWasActivated()
   discard listView.sendAction()
 
-proc moveSelectionTo(listView: ListView, index: int) =
+proc activateItemAtIndex(listView: ListView, index: int, modifiers: set[KeyModifier]) =
+  if listView.isNil or index < 0 or index >= listView.len():
+    return
+  if listView.selectionMode() != lsmNone:
+    listView.selectItemAtIndex(index, modifiers)
+  listView.sendListActivation(index)
+
+proc activateItemAtIndex*(listView: ListView, index: int) =
+  listView.activateItemAtIndex(index, {})
+
+proc selectionLeadIndex(listView: ListView): int =
+  if listView.isNil:
+    return -1
+  if listView.validListIndex(listView.xSelectionLead):
+    listView.xSelectionLead
+  else:
+    listView.selectedIndex()
+
+proc moveSelectionTo(listView: ListView, index: int, extend = false) =
   if listView.isNil or listView.len() == 0 or listView.selectionMode() == lsmNone:
     return
-  listView.selectItemAtIndex(max(0, min(index, listView.len() - 1)))
+  let boundedIndex = max(0, min(index, listView.len() - 1))
+  if extend and listView.xSelectionMode == lsmExtended:
+    listView.extendSelectionToIndex(boundedIndex)
+  else:
+    listView.selectItemAtIndex(boundedIndex)
 
-proc moveSelection(listView: ListView, delta: int) =
+proc moveSelection(listView: ListView, delta: int, extend = false) =
   if listView.isNil:
     return
   let start =
-    if listView.selectedIndex() >= 0:
-      listView.selectedIndex()
+    if listView.selectionLeadIndex() >= 0:
+      listView.selectionLeadIndex()
     elif delta > 0:
       listView.firstVisibleIndex() - 1
     elif delta < 0:
       listView.firstVisibleIndex() + listView.visibleItemCount()
     else:
       listView.firstVisibleIndex()
-  listView.moveSelectionTo(start + delta)
+  listView.moveSelectionTo(start + delta, extend)
 
-proc pageSelection(listView: ListView, deltaPages: int) =
+proc pageSelection(listView: ListView, deltaPages: int, extend = false) =
   if listView.isNil:
     return
-  listView.moveSelection(deltaPages * max(listView.visibleItemCount(), 1))
+  listView.moveSelection(deltaPages * max(listView.visibleItemCount(), 1), extend)
 
 proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   let listView = contentView.listView()
@@ -734,30 +896,49 @@ proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   if result.last < result.first:
     result.last = result.first
 
-proc drawListContent(contentView: ListContentView, context: DrawContext) =
+proc listRowState(listView: ListView, itemIndex: int): ListRowState =
+  if listView.isNil or itemIndex < 0 or itemIndex >= listView.len():
+    return initListRowState(-1, "", enabled = false)
+  initListRowState(
+    itemIndex,
+    listView[itemIndex],
+    selected = listView.selectionContains(itemIndex),
+    highlighted = itemIndex == listView.highlightedIndex(),
+    enabled = listView.isEnabled(),
+    focused = listView.isFocused(),
+  )
+
+proc configureRowView(rowView: ListRowView, itemIndex: int) =
+  if rowView.isNil:
+    return
+  let listView = rowView.listView()
+  if listView.isNil or listView.xContentView.isNil:
+    return
+  rowView.xRow = listView.listRowState(itemIndex)
+  rowView.frame = listView.xContentView.listContentItemRect(itemIndex)
+
+proc removeLastRowView(contentView: ListContentView) =
+  if contentView.isNil or contentView.xRowViews.len == 0:
+    return
+  let rowView = contentView.xRowViews[^1]
+  contentView.xRowViews.setLen(contentView.xRowViews.len - 1)
+  rowView.removeFromSuperview()
+
+proc syncVisibleRowViews(contentView: ListContentView) =
   let listView = contentView.listView()
   if listView.isNil:
     return
   let
-    classes = listView.styleClasses()
     rows = contentView.visibleContentRows()
-
-  for itemIndex in rows.first ..< rows.last:
-    let row = initListRowState(
-      itemIndex,
-      listView[itemIndex],
-      selected = listView.selectionContains(itemIndex),
-      highlighted = itemIndex == listView.highlightedIndex(),
-      enabled = listView.isEnabled(),
-      focused = listView.isFocused(),
-    )
-    context.drawListRow(
-      contentView.listContentItemRect(itemIndex),
-      row,
-      listView.xItemRole,
-      listView.styleId(),
-      classes,
-    )
+    needed = max(rows.last - rows.first, 0)
+  while contentView.xRowViews.len < needed:
+    let rowView = initListRowView(listView)
+    contentView.xRowViews.add rowView
+    contentView.addSubview(rowView)
+  while contentView.xRowViews.len > needed:
+    contentView.removeLastRowView()
+  for slot in 0 ..< needed:
+    contentView.xRowViews[slot].configureRowView(rows.first + slot)
 
 proc scrollListKnobTo(scroller: ListScroller, point: Point) =
   let listView = scroller.listView()
@@ -829,9 +1010,26 @@ proc listNaturalSize(listView: ListView): Size =
     max(listStyle.minSize.height, listView.rowHeight() * rowCount.float32 + 2.0'f32),
   )
 
+protocol DefaultListRowViewDrawing of ViewDrawingProtocol:
+  method draw(rowView: ListRowView, context: DrawContext) =
+    let listView = rowView.listView()
+    if rowView.isNil or listView.isNil:
+      return
+    context.drawListRow(
+      rowView.bounds(),
+      rowView.xRow,
+      listView.xItemRole,
+      listView.styleId(),
+      listView.styleClasses(),
+    )
+
+protocol DefaultListRowViewHitTesting of ViewProtocol:
+  method pointInside(rowView: ListRowView, point: Point): bool =
+    false
+
 protocol DefaultListContentViewDrawing of ViewDrawingProtocol:
   method draw(contentView: ListContentView, context: DrawContext) =
-    contentView.drawListContent(context)
+    contentView.syncVisibleRowViews()
 
 protocol DefaultListContentViewHitTesting of ViewProtocol:
   method pointInside(contentView: ListContentView, point: Point): bool =
@@ -938,7 +1136,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
         -1
     listView.xTrackingItem = false
     if index >= 0:
-      listView.activateItemAtIndex(index)
+      listView.activateItemAtIndex(index, event.modifiers)
     listView.setNeedsDisplay(true)
 
   method wantsForwardedScrollEvents(listView: ListView, event: ScrollEvent): bool =
@@ -953,22 +1151,24 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
   method keyDown(listView: ListView, event: KeyEvent) =
     if listView.isNil or not listView.isEnabled():
       return
+    let extendSelection = kmShift in event.modifiers
     case event.key
     of keyArrowDown:
-      listView.moveSelection(1)
+      listView.moveSelection(1, extendSelection)
     of keyArrowUp:
-      listView.moveSelection(-1)
+      listView.moveSelection(-1, extendSelection)
     of keyPageDown:
-      listView.pageSelection(1)
+      listView.pageSelection(1, extendSelection)
     of keyPageUp:
-      listView.pageSelection(-1)
+      listView.pageSelection(-1, extendSelection)
     of keyHome:
-      listView.moveSelectionTo(0)
+      listView.moveSelectionTo(0, extendSelection)
     of keyEnd:
-      listView.moveSelectionTo(listView.len() - 1)
+      listView.moveSelectionTo(listView.len() - 1, extendSelection)
     of keyEnter, keySpace:
-      if listView.selectedIndex() >= 0:
-        listView.activateItemAtIndex(listView.selectedIndex())
+      let activeIndex = listView.selectionLeadIndex()
+      if activeIndex >= 0:
+        listView.sendListActivation(activeIndex)
     else:
       discard
 
@@ -980,6 +1180,17 @@ proc initListClipView(): ClipView =
   result.autoresizingMaskConstraints = false
   result.setAcceptsFirstResponder(false)
   discard result.withProtocol(DefaultListClipViewHitTesting)
+
+proc initListRowView(listView: ListView): ListRowView =
+  result = ListRowView()
+  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  result.xListView = listView
+  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.clipsToBounds = false
+  result.autoresizingMaskConstraints = false
+  result.setAcceptsFirstResponder(false)
+  discard result.withProtocol(DefaultListRowViewDrawing)
+  discard result.withProtocol(DefaultListRowViewHitTesting)
 
 proc initListContentView(listView: ListView): ListContentView =
   result = ListContentView()
@@ -1009,6 +1220,8 @@ proc initListViewFields*(
   initControlFields(listView, frame)
   listView.xSelectedIndex = -1
   listView.xSelectedIndexes = @[]
+  listView.xSelectionAnchor = -1
+  listView.xSelectionLead = -1
   listView.xHighlightedIndex = -1
   listView.xRowHeight = 22.0'f32
   listView.xVisibleRows = 5

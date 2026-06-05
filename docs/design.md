@@ -200,19 +200,30 @@ Popup and list behavior shares a narrow base:
 - `ScrollView` owns a `ClipView`, optional axis scrollers, and a document view.
   Scrollers are real child views: they draw their track/knob, page on gutter
   clicks, and drag the knob by translating track position into content offset.
+- Clip-view scroll position is represented by bounds origin. Core frame and
+  layout-frame updates preserve existing bounds origins while updating bounds
+  sizes, so scroll offsets survive normal layout passes.
 - `ListViewport` stores visible-row window state and common row geometry.
 - `PopupListView` handles transient single-column popup drawing, row tracking,
   scrolling, highlighting, activation, and close callbacks.
 - `Window` owns a transient popup/session layer with owner responder,
   optional transient window, dismissal reason, callback, and focus restoration.
 - `ListView` is the first narrow public list control. It supports local string
-  items, single/none selection, keyboard and mouse navigation, wheel scrolling,
-  intrinsic sizing, target/action activation, dedicated `srListView` and
-  `srListItem` theme roles, and shared `ListRowState` row rendering.
+  items, selector-backed row count/value data sources, delegate notifications
+  for selection and activation, none/single/multiple/extended selection,
+  Shift range extension, command/control discontiguous toggles, keyboard and
+  mouse navigation, wheel scrolling, intrinsic sizing, target/action
+  activation, dedicated `srListView` and `srListItem` theme roles, and shared
+  `ListRowState` row rendering.
 - `ListContentView` is the internal row document for standalone `ListView`.
   It stays non-focusable and manually tiled by the list, keeping selection and
-  keyboard behavior on `ListView` while giving future virtualized or
-  scroll-hosted lists a concrete content-view boundary.
+  keyboard behavior on `ListView` while giving future scroll-hosted lists a
+  concrete content-view boundary.
+- Standalone `ListView` virtualizes fixed-height rows as private reusable row
+  views under `ListContentView`. Row views hold plain `ListRowState` values,
+  draw through the shared row renderer, do not participate in hit testing or
+  focus, and are retargeted from the clip-view visible rect as scrolling or
+  resizing changes the visible window.
 
 The transient session layer is intentionally smaller than a full AppKit modal
 system. It gives menus, popovers, combo boxes, and future drag/tracking flows a
