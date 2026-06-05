@@ -91,9 +91,12 @@ proc scrollBy(popupList: PopupListView, delta: int)
 proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
 
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
+  method drawLevel(popupList: PopupListView): ZLevel =
+    PopupDrawLevel
+
   method draw(popupList: PopupListView, context: DrawContext) =
     if popupList.isOpened():
-      popupList.drawPopupList(context, popupList.bounds)
+      popupList.drawPopupList(context, popupList.bounds, popupList.drawLevel())
 
 protocol DefaultPopupListEvents of ResponderEventProtocol:
   method mouseDown(popupList: PopupListView, event: MouseEvent) =
