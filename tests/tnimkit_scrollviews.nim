@@ -85,6 +85,40 @@ proc checkScrollerRectInside(scrollView: ScrollView, rect: nimkitTypes.Rect) =
   check rect.insideAxis(scrollView.bounds(), laHorizontal)
   check rect.insideAxis(scrollView.bounds(), laVertical)
 
+proc scrollViewScrollerKnobRect(
+    scrollView: ScrollView, axis: LayoutAxis
+): nimkitTypes.Rect =
+  let
+    track =
+      case axis
+      of laHorizontal:
+        scrollView.horizontalScrollerRect()
+      of laVertical:
+        scrollView.verticalScrollerRect()
+    viewport = scrollView.viewportSize()
+    document = scrollView.documentSize()
+    offset = scrollView.contentOffset()
+  if track.isEmpty:
+    return track
+  case axis
+  of laHorizontal:
+    scrollerKnobRect(
+      track, axis, initScrollViewport(offset.x, viewport.width, document.width)
+    )
+  of laVertical:
+    scrollerKnobRect(
+      track, axis, initScrollViewport(offset.y, viewport.height, document.height)
+    )
+
+proc listViewScrollerKnobRect(listView: ListView): nimkitTypes.Rect =
+  scrollerKnobRect(
+    listView.verticalScrollerRect(),
+    laVertical,
+    listScrollViewport(
+      listView.firstVisibleIndex(), listView.len(), listView.visibleItemCount()
+    ),
+  )
+
 proc checkScrollViewResizeInvariants(scrollView: ScrollView) =
   let
     viewport = scrollView.viewportRect()
@@ -104,19 +138,25 @@ proc checkScrollViewResizeInvariants(scrollView: ScrollView) =
   check viewport.insideAxis(bounds, laHorizontal)
   check viewport.insideAxis(bounds, laVertical)
 
-  if scrollView.showsHorizontalScroller():
-    checkScrollerRectInside(scrollView, scrollView.horizontalScrollerRect())
-    checkScrollerRectInside(scrollView, scrollView.horizontalScrollerKnobRect())
+  let horizontalScroller = scrollView.horizontalScrollerRect()
+  if not horizontalScroller.isEmpty:
+    checkScrollerRectInside(scrollView, horizontalScroller)
+    checkScrollerRectInside(
+      scrollView, scrollView.scrollViewScrollerKnobRect(laHorizontal)
+    )
   else:
-    check scrollView.horizontalScrollerRect().isEmpty
-    check scrollView.horizontalScrollerKnobRect().isEmpty
+    check horizontalScroller.isEmpty
+    check scrollView.scrollViewScrollerKnobRect(laHorizontal).isEmpty
 
-  if scrollView.showsVerticalScroller():
-    checkScrollerRectInside(scrollView, scrollView.verticalScrollerRect())
-    checkScrollerRectInside(scrollView, scrollView.verticalScrollerKnobRect())
+  let verticalScroller = scrollView.verticalScrollerRect()
+  if not verticalScroller.isEmpty:
+    checkScrollerRectInside(scrollView, verticalScroller)
+    checkScrollerRectInside(
+      scrollView, scrollView.scrollViewScrollerKnobRect(laVertical)
+    )
   else:
-    check scrollView.verticalScrollerRect().isEmpty
-    check scrollView.verticalScrollerKnobRect().isEmpty
+    check verticalScroller.isEmpty
+    check scrollView.scrollViewScrollerKnobRect(laVertical).isEmpty
 
 proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
   result.root = newView(frame = frame)
@@ -189,9 +229,9 @@ proc checkDemoScrollerVisibility(fixture: ScrollResizeFixture) =
     maxViewportHeight = max(rootSize.height - 44.0'f32, 0.0'f32)
 
   if documentSize.width > maxViewportWidth + GeometryTolerance:
-    check fixture.scrollView.showsHorizontalScroller()
+    check not fixture.scrollView.horizontalScrollerRect().isEmpty
   if documentSize.height > maxViewportHeight + GeometryTolerance:
-    check fixture.scrollView.showsVerticalScroller()
+    check not fixture.scrollView.verticalScrollerRect().isEmpty
 
 proc newNestedScrollFixture(child: View): NestedScrollFixture =
   result.window = newWindow("Nested scroll", frame = initRect(0, 0, 260, 200))
@@ -361,7 +401,7 @@ suite "nimkit scroll views":
 
     let
       verticalTrack = vertical.verticalScrollerRect()
-      verticalKnob = vertical.verticalScrollerKnobRect()
+      verticalKnob = vertical.scrollViewScrollerKnobRect(laVertical)
       verticalDownPoint = vertical.frame().origin.offset(
           verticalTrack.origin.x + verticalTrack.size.width / 2.0'f32,
           verticalKnob.maxY + 8.0'f32,
@@ -382,7 +422,7 @@ suite "nimkit scroll views":
 
     let
       horizontalTrack = horizontal.horizontalScrollerRect()
-      horizontalKnob = horizontal.horizontalScrollerKnobRect()
+      horizontalKnob = horizontal.scrollViewScrollerKnobRect(laHorizontal)
       horizontalRightPoint = horizontal.frame().origin.offset(
           horizontalKnob.maxX + 8.0'f32,
           horizontalTrack.origin.y + horizontalTrack.size.height / 2.0'f32,
@@ -408,7 +448,7 @@ suite "nimkit scroll views":
 
     let
       track = scrollView.verticalScrollerRect()
-      knob = scrollView.verticalScrollerKnobRect()
+      knob = scrollView.scrollViewScrollerKnobRect(laVertical)
       grip = 5.0'f32
       dragY = 45.0'f32
       startPoint = scrollView.frame().origin.offset(
@@ -498,7 +538,7 @@ suite "nimkit scroll views":
     listView.rowHeight = 20.0
 
     check listView.visibleItemCount() == listView.len()
-    check listView.verticalScrollerKnobRect().isEmpty
+    check listView.listViewScrollerKnobRect().isEmpty
     check fixture.parent.contentOffset() == initPoint(0, 0)
     check fixture.window.scrollWheelAt(
       fixture.windowPointForDocumentChild(listView), deltaY = -2.0
@@ -516,14 +556,12 @@ suite "nimkit scroll views":
     scrollView.hasVerticalScroller = true
     scrollView.autohidesScrollers = true
 
-    check not scrollView.showsHorizontalScroller()
-    check not scrollView.showsVerticalScroller()
+    check scrollView.horizontalScrollerRect().isEmpty
+    check scrollView.verticalScrollerRect().isEmpty
 
     document.frame = initRect(0, 0, 160, 120)
     scrollView.tile()
 
-    check scrollView.showsHorizontalScroller()
-    check scrollView.showsVerticalScroller()
     check not scrollView.horizontalScrollerRect().isEmpty
     check not scrollView.verticalScrollerRect().isEmpty
 
@@ -540,21 +578,21 @@ suite "nimkit scroll views":
     scrollView.layoutSubtreeIfNeeded()
     scrollView.scrollTo(scrollView.maximumContentOffset())
     checkScrollViewResizeInvariants(scrollView)
-    check scrollView.showsHorizontalScroller()
-    check scrollView.showsVerticalScroller()
+    check not scrollView.horizontalScrollerRect().isEmpty
+    check not scrollView.verticalScrollerRect().isEmpty
 
     scrollView.frame = initRect(0, 0, 760, 680)
     scrollView.layoutSubtreeIfNeeded()
     checkScrollViewResizeInvariants(scrollView)
     check scrollView.contentOffset() == initPoint(0, 0)
-    check not scrollView.showsHorizontalScroller()
-    check not scrollView.showsVerticalScroller()
+    check scrollView.horizontalScrollerRect().isEmpty
+    check scrollView.verticalScrollerRect().isEmpty
 
     scrollView.frame = initRect(0, 0, 260, 180)
     scrollView.layoutSubtreeIfNeeded()
     checkScrollViewResizeInvariants(scrollView)
-    check scrollView.showsHorizontalScroller()
-    check scrollView.showsVerticalScroller()
+    check not scrollView.horizontalScrollerRect().isEmpty
+    check not scrollView.verticalScrollerRect().isEmpty
 
   test "scroll view resizes with constraint layout":
     let
@@ -704,8 +742,8 @@ suite "nimkit scroll views":
     let scrollPoint = fixture.scrollView.frame().origin.offset(30.0, 30.0)
     check window.scrollWheelAt(scrollPoint, deltaX = 3.0)
     check fixture.scrollView.contentOffset().x > 0.0'f32
-    check fixture.scrollView.showsHorizontalScroller()
-    check fixture.scrollView.showsVerticalScroller()
+    check not fixture.scrollView.horizontalScrollerRect().isEmpty
+    check not fixture.scrollView.verticalScrollerRect().isEmpty
 
     let
       renders = buildRenders(fixture.root)

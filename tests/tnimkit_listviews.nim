@@ -4,6 +4,15 @@ import sigils/selectors
 
 import merenda/nimkit
 
+proc listViewScrollerKnobRect(listView: ListView): Rect =
+  scrollerKnobRect(
+    listView.verticalScrollerRect(),
+    laVertical,
+    listScrollViewport(
+      listView.firstVisibleIndex(), listView.len(), listView.visibleItemCount()
+    ),
+  )
+
 suite "nimkit list views":
   test "popup list view tracks highlight activation and close callbacks":
     let
@@ -121,7 +130,7 @@ suite "nimkit list views":
     listView.selectedIndex = 3
     check listView.selectedIndex == 3
     check listView.firstVisibleIndex == 2
-    check not listView.verticalScrollerKnobRect().isEmpty
+    check not listView.listViewScrollerKnobRect().isEmpty
 
     listView.scrollRows(-1)
     check listView.firstVisibleIndex == 1
@@ -158,7 +167,7 @@ suite "nimkit list views":
     check not scroller.acceptsFirstResponder
     check listView.verticalScrollerRect() ==
       initRect(107.0'f32, 1.0'f32, 12.0'f32, 44.0'f32)
-    check listView.verticalScrollerKnobRect() ==
+    check listView.listViewScrollerKnobRect() ==
       initRect(107.0'f32, 1.0'f32, 12.0'f32, 22.0'f32)
     check content != nil
     check content.listView == listView
@@ -178,7 +187,7 @@ suite "nimkit list views":
     listView.firstVisibleIndex = 2
     check content.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 80.0'f32)
     check clip.bounds.origin == initPoint(0.0'f32, 40.0'f32)
-    check listView.verticalScrollerKnobRect() ==
+    check listView.listViewScrollerKnobRect() ==
       initRect(107.0'f32, 23.0'f32, 12.0'f32, 22.0'f32)
     check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
     check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
@@ -198,7 +207,7 @@ suite "nimkit list views":
 
     let
       track = listView.verticalScrollerRect()
-      knob = listView.verticalScrollerKnobRect()
+      knob = listView.listViewScrollerKnobRect()
       scroller = listView.verticalScroller()
 
     check not scroller.isNil
@@ -207,7 +216,7 @@ suite "nimkit list views":
     check window.mouseDownAt(listView.pointToWindow(initPoint(trackX, knob.maxY + 2.0)))
     check listView.firstVisibleIndex == 2
 
-    let nextKnob = listView.verticalScrollerKnobRect()
+    let nextKnob = listView.listViewScrollerKnobRect()
     check window.mouseDownAt(
       listView.pointToWindow(
         initPoint(trackX, nextKnob.origin.y + nextKnob.size.height * 0.5'f32)

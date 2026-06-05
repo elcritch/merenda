@@ -56,7 +56,6 @@ proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
 proc showsVerticalScroller*(listView: ListView): bool
 proc verticalScrollerRect*(listView: ListView): Rect
-proc verticalScrollerKnobRect*(listView: ListView): Rect
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
 proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
@@ -361,9 +360,6 @@ proc verticalScrollerRect*(listView: ListView): Rect =
     return initRect(0.0, 0.0, 0.0, 0.0)
   scrollerTrackRect(listView.bounds(), laVertical, ListScrollerThickness, 1.0'f32)
 
-proc verticalScrollerKnobRect*(listView: ListView): Rect =
-  listView.listScrollerKnobRect(listView.verticalScrollerRect())
-
 proc tileListContent(listView: ListView) =
   if listView.isNil or listView.xClipView.isNil or listView.xContentView.isNil:
     return
@@ -374,8 +370,9 @@ proc tileListContent(listView: ListView) =
   listView.xClipView.frame = viewport
   listView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
   if not listView.xVerticalScroller.isNil:
-    listView.xVerticalScroller.frame = listView.verticalScrollerRect()
-    listView.xVerticalScroller.hidden = not listView.showsVerticalScroller()
+    let scrollerRect = listView.verticalScrollerRect()
+    listView.xVerticalScroller.frame = scrollerRect
+    listView.xVerticalScroller.hidden = scrollerRect.isEmpty
   listView.setListContentOffset(offset, false)
 
 proc setFirstVisibleIndex*(listView: ListView, index: int) =

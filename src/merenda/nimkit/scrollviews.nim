@@ -340,14 +340,8 @@ proc `lineScroll=`*(scrollView: ScrollView, value: float32) =
     return
   scrollView.xLineScroll = value.normalizedLineScroll()
 
-proc showsHorizontalScroller*(scrollView: ScrollView): bool =
-  not scrollView.isNil and laHorizontal in scrollView.visibleScrollerAxes()
-
-proc showsVerticalScroller*(scrollView: ScrollView): bool =
-  not scrollView.isNil and laVertical in scrollView.visibleScrollerAxes()
-
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
-  if scrollView.isNil or not scrollView.showsHorizontalScroller():
+  if scrollView.isNil or laHorizontal notin scrollView.visibleScrollerAxes():
     return initRect(0.0, 0.0, 0.0, 0.0)
   let viewport = scrollView.viewportRect()
   initRect(
@@ -355,39 +349,11 @@ proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
   )
 
 proc verticalScrollerRect*(scrollView: ScrollView): Rect =
-  if scrollView.isNil or not scrollView.showsVerticalScroller():
+  if scrollView.isNil or laVertical notin scrollView.visibleScrollerAxes():
     return initRect(0.0, 0.0, 0.0, 0.0)
   let viewport = scrollView.viewportRect()
   initRect(
     viewport.size.width, 0.0, scrollView.xScrollerThickness, viewport.size.height
-  )
-
-proc horizontalScrollerKnobRect*(scrollView: ScrollView): Rect =
-  let track = scrollView.horizontalScrollerRect()
-  if track.isEmpty:
-    return track
-  scrollerKnobRect(
-    track,
-    laHorizontal,
-    initScrollViewport(
-      scrollView.contentOffset().x,
-      scrollView.viewportSize().width,
-      scrollView.documentSize().width,
-    ),
-  )
-
-proc verticalScrollerKnobRect*(scrollView: ScrollView): Rect =
-  let track = scrollView.verticalScrollerRect()
-  if track.isEmpty:
-    return track
-  scrollerKnobRect(
-    track,
-    laVertical,
-    initScrollViewport(
-      scrollView.contentOffset().y,
-      scrollView.viewportSize().height,
-      scrollView.documentSize().height,
-    ),
   )
 
 proc scrollerTrackRect*(scroller: Scroller): Rect =
