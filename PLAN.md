@@ -56,39 +56,44 @@ Recently completed:
   document. The list scroller uses the shared `ScrollView` scroller metrics and
   renderer, reserves a scroller strip from row content, and supports gutter
   paging plus knob dragging while preserving the row-based public scroll API.
+- `ListView` now has selector-backed data source hooks for row count and row
+  value lookup, delegate hooks for selection changes and activation, and a
+  first real selection model with none, single, multiple, and extended modes.
+  Extended selection tracks anchor/lead rows, supports Shift range extension
+  from mouse and keyboard, and supports command/control discontiguous toggles.
+- View frame/layout updates now preserve existing bounds origins, so clip-view
+  scroll positions survive display preparation and constraint/layout passes.
+- `ListContentView` now virtualizes fixed-height rows as reusable private row
+  views. The row slots are non-focusable, non-hit-testable, retargeted from the
+  clip-view visible rect, and keep row reuse separate from data ownership.
 
-1. Grow `ListView` into a data-driven single-column list:
+1. Finish `ListView` data/delegate policy hooks:
    - keep local `items` as the simple default path
-   - add selector-backed data source hooks for row count and row value/view
-   - add delegate hooks for selection, activation, row height, and optional row
-     styling
+   - add row view or row renderer hooks once row reuse exists
+   - add delegate hooks for row height and optional row styling
+   - consider disabled or nonselectable rows if examples justify the policy
    - keep row state as plain values: index, selected, highlighted, focused,
      enabled
-2. Add a real selection model:
-   - none, single, multiple, and extended selection
-   - selected index sets/ranges
-   - keyboard selection extension with Shift
-   - command/control discontiguous selection where platform appropriate
-   - delegate notifications before and after selection changes
-3. Add row virtualization and reuse:
-   - draw/layout only visible rows
-   - reusable row views or row renderers
-   - support fixed row height first
+2. Polish selection APIs and diagnostics:
+   - add selected range convenience APIs if callers need them
+   - add scroll-to-selection helpers
+   - add accessibility/debug summaries for visible rows and selection state
+   - keep delegate notifications before and after real selection changes
+3. Finish row virtualization polish:
+   - add row view or row renderer customization hooks
    - add variable row heights after fixed-height behavior is stable
-   - keep row reuse separate from data ownership
+   - keep reusable row slots private until the cell/view customization shape is
+     clear
 4. Add AppKit-like keyboard and focus behavior:
-   - up/down/page/home/end
+   - up/down/page/home/end are in place for fixed-height rows
    - type-select or incremental search
    - focus ring and first-responder behavior
    - activation through Enter/Return/double-click
-   - disabled or nonselectable rows if delegate support justifies it
 5. Add richer list affordances:
    - empty state rendering hook
    - alternating row backgrounds
    - separators/grid lines if theme roles support them
    - row hover and pressed states
-   - scroll-to-selection helpers
-   - accessibility/debug summaries for visible rows and selection state
 6. Defer full table/outline APIs until this base is solid:
    - column headers
    - sortable columns

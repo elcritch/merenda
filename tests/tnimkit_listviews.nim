@@ -57,6 +57,17 @@ proc listViewScrollerKnobRect(listView: ListView): Rect =
     ),
   )
 
+proc clickListRow(
+    window: Window, listView: ListView, row: int, modifiers: set[KeyModifier] = {}
+): bool =
+  let point = listView.pointToWindow(
+    initPoint(
+      6.0'f32, row.float32 * listView.rowHeight() + listView.rowHeight() * 0.5'f32
+    )
+  )
+  window.mouseDownAt(point, modifiers = modifiers) and
+    window.mouseUpAt(point, modifiers = modifiers)
+
 suite "nimkit list views":
   test "popup list view tracks highlight activation and close callbacks":
     let
@@ -265,6 +276,64 @@ suite "nimkit list views":
     check listView.selectedIndexes == newSeq[int]()
     check listView.selectedIndex == -1
 
+  test "list view extended keyboard selection uses anchor and lead rows":
+    let
+      window = newWindow("List extended keyboard", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five", "Six"],
+        frame = initRect(10, 10, 120, 62),
+      )
+
+    listView.rowHeight = 20.0
+    listView.selectionMode = lsmExtended
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(listView)
+    listView.selectedIndex = 1
+    check listView.selectedIndexes == @[1]
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord, modifiers: {kmShift})
+    )
+    check listView.selectedIndexes == @[1, 2]
+    check listView.selectedIndex == 1
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord, modifiers: {kmShift})
+    )
+    check listView.selectedIndexes == @[1, 2, 3, 4, 5]
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
+    check listView.selectedIndexes == @[4]
+    check listView.selectedIndex == 4
+
+  test "list view mouse modifiers extend and toggle selection":
+    let
+      window = newWindow("List extended mouse", frame = initRect(0, 0, 220, 180))
+      root = newView(frame = initRect(0, 0, 220, 180))
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five"], frame = initRect(10, 10, 120, 102)
+      )
+
+    listView.rowHeight = 20.0
+    listView.selectionMode = lsmExtended
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.clickListRow(listView, 1)
+    check listView.selectedIndexes == @[1]
+
+    check window.clickListRow(listView, 3, modifiers = {kmShift})
+    check listView.selectedIndexes == @[1, 2, 3]
+
+    check window.clickListRow(listView, 2, modifiers = shortcutModifiers())
+    check listView.selectedIndexes == @[1, 3]
+
+    check window.clickListRow(listView, 4, modifiers = shortcutModifiers())
+    check listView.selectedIndexes == @[1, 3, 4]
+
   test "list view owns a row content document view":
     let listView =
       newListView(["One", "Two", "Three", "Four"], frame = initRect(0, 0, 120, 46))
@@ -312,6 +381,55 @@ suite "nimkit list views":
       initRect(107.0'f32, 23.0'f32, 12.0'f32, 22.0'f32)
     check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
     check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
+
+  test "list view reuses visible row views":
+    let listView = newListView(
+      ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
+      frame = initRect(0, 0, 120, 62),
+    )
+
+    listView.rowHeight = 20.0
+    discard buildRenders(listView)
+
+    let
+      content = listView.contentView()
+      initialRows = content.subviews()
+
+    check initialRows.len == 3
+    check initialRows[0].frame == content.listContentItemRect(0)
+    check initialRows[1].frame == content.listContentItemRect(1)
+    check initialRows[2].frame == content.listContentItemRect(2)
+    check listView.hitTest(initPoint(6.0'f32, 25.0'f32)) == listView
+
+    listView.firstVisibleIndex = 4
+    discard buildRenders(listView)
+
+    let scrolledRows = content.subviews()
+    check scrolledRows.len == 3
+    check scrolledRows[0] == initialRows[0]
+    check scrolledRows[1] == initialRows[1]
+    check scrolledRows[2] == initialRows[2]
+    check scrolledRows[0].frame == content.listContentItemRect(4)
+    check scrolledRows[1].frame == content.listContentItemRect(5)
+    check scrolledRows[2].frame == content.listContentItemRect(6)
+
+    listView.frame = initRect(0, 0, 120, 102)
+    discard buildRenders(listView)
+    let expandedRows = content.subviews()
+    check expandedRows.len == 5
+    check expandedRows[0] == initialRows[0]
+    check expandedRows[1] == initialRows[1]
+    check expandedRows[2] == initialRows[2]
+
+    listView.frame = initRect(0, 0, 120, 22)
+    discard buildRenders(listView)
+    let collapsedRows = content.subviews()
+    check collapsedRows.len == 1
+    check collapsedRows[0] == initialRows[0]
+
+    listView.removeAllItems()
+    discard buildRenders(listView)
+    check content.subviews().len == 0
 
   test "list view scroller pages and drags row viewport":
     let

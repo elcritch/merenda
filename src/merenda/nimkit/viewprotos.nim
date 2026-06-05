@@ -25,7 +25,7 @@ protocol ViewProtocolInternal from View:
     if self.xFrame == nextFrame:
       return
     self.xFrame = nextFrame
-    self.xBounds = initRect(0.0, 0.0, nextFrame.size.width, nextFrame.size.height)
+    self.xBounds = initRect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)
     self.refreshAutoresizingReference()
     self.notifyAutoresizingDependentsChanged()
