@@ -80,13 +80,11 @@ proc verticalScrollerRect*(listView: ListView): Rect
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
 proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
-proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
 proc selectedIndex*(listView: ListView): int
 proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
-proc setSelectedIndexes*(listView: ListView, indexes: openArray[int])
 
 protocol ListViewDataSourceProtocolInternal:
   method numberOfRowsInListView*(listView: ListView): int {.optional.}
@@ -303,7 +301,7 @@ proc highlightedIndex*(listView: ListView): int =
     return -1
   listView.xHighlightedIndex
 
-proc setHighlightedIndex*(listView: ListView, index: int) =
+proc `highlightedIndex=`*(listView: ListView, index: int) =
   if listView.isNil:
     return
   let boundedIndex = if listView.rowEnabled(index): index else: -1
@@ -312,15 +310,12 @@ proc setHighlightedIndex*(listView: ListView, index: int) =
   listView.xHighlightedIndex = boundedIndex
   listView.invalidateListRows()
 
-proc `highlightedIndex=`*(listView: ListView, index: int) =
-  listView.setHighlightedIndex(index)
-
 proc rowHeight*(listView: ListView): float32 =
   if listView.isNil:
     return 0.0'f32
   listView.xRowHeight.normalizedRowHeight()
 
-proc setRowHeight*(listView: ListView, height: float32) =
+proc `rowHeight=`*(listView: ListView, height: float32) =
   if listView.isNil:
     return
   let normalized = height.normalizedRowHeight()
@@ -329,15 +324,12 @@ proc setRowHeight*(listView: ListView, height: float32) =
   listView.xRowHeight = normalized
   listView.reloadData()
 
-proc `rowHeight=`*(listView: ListView, height: float32) =
-  listView.setRowHeight(height)
-
 proc visibleRows*(listView: ListView): int =
   if listView.isNil:
     return 0
   listView.xVisibleRows
 
-proc setVisibleRows*(listView: ListView, rows: int) =
+proc `visibleRows=`*(listView: ListView, rows: int) =
   if listView.isNil:
     return
   let normalized = max(rows, 1)
@@ -346,15 +338,12 @@ proc setVisibleRows*(listView: ListView, rows: int) =
   listView.xVisibleRows = normalized
   listView.reloadData()
 
-proc `visibleRows=`*(listView: ListView, rows: int) =
-  listView.setVisibleRows(rows)
-
 proc selectionMode*(listView: ListView): ListSelectionMode =
   if listView.isNil:
     return lsmSingle
   listView.xSelectionMode
 
-proc setSelectionMode*(listView: ListView, mode: ListSelectionMode) =
+proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
   if listView.isNil or listView.xSelectionMode == mode:
     return
   listView.xSelectionMode = mode
@@ -369,9 +358,6 @@ proc setSelectionMode*(listView: ListView, mode: ListSelectionMode) =
     listView.xSelectionAnchor = listView.xSelectedIndex
     listView.xSelectionLead = listView.xSelectedIndex
   listView.reloadData()
-
-proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
-  listView.setSelectionMode(mode)
 
 proc showsVerticalScroller*(listView: ListView): bool =
   if listView.isNil or listView.len() <= 0:
@@ -562,7 +548,7 @@ proc tileListContent(listView: ListView) =
     listView.xVerticalScroller.hidden = scrollerRect.isEmpty
   listView.setListContentOffset(offset, false)
 
-proc setFirstVisibleIndex*(listView: ListView, index: int) =
+proc `firstVisibleIndex=`*(listView: ListView, index: int) =
   if listView.isNil:
     return
   let oldFirst = listView.firstVisibleIndex()
@@ -577,9 +563,6 @@ proc setFirstVisibleIndex*(listView: ListView, index: int) =
   )
   if listView.firstVisibleIndex() != oldFirst:
     listView.invalidateListRows()
-
-proc `firstVisibleIndex=`*(listView: ListView, index: int) =
-  listView.setFirstVisibleIndex(index)
 
 proc normalizeSelection(listView: ListView, indexes: openArray[int]): seq[int] =
   if listView.isNil or listView.xSelectionMode == lsmNone or listView.len() == 0:
@@ -819,16 +802,13 @@ proc applySelectedIndexes(
   listView.invalidateListRows()
   listView.notifyListViewSelectionDidChange()
 
-proc setSelectedIndexes*(listView: ListView, indexes: openArray[int]) =
+proc `selectedIndexes=`*(listView: ListView, indexes: openArray[int]) =
   if listView.isNil:
     return
   let nextIndexes = listView.normalizeSelection(indexes)
   listView.applySelectedIndexes(
     nextIndexes, firstSelectedIndex(nextIndexes), firstSelectedIndex(nextIndexes)
   )
-
-proc `selectedIndexes=`*(listView: ListView, indexes: openArray[int]) =
-  listView.setSelectedIndexes(indexes)
 
 proc selectItemAtIndex(listView: ListView, index: int) =
   if listView.isNil or listView.xSelectionMode == lsmNone:
@@ -841,7 +821,7 @@ proc selectItemAtIndex(listView: ListView, index: int) =
       listView.scrollItemToVisible(boundedIndex)
     return
   if boundedIndex < 0:
-    listView.setSelectedIndexes(@[])
+    listView.selectedIndexes = @[]
   else:
     listView.applySelectedIndexes([boundedIndex], boundedIndex, boundedIndex)
 
@@ -901,16 +881,13 @@ proc selectedIndex*(listView: ListView): int =
     return -1
   listView.xSelectedIndex
 
-proc setSelectedIndex*(listView: ListView, index: int) =
+proc `selectedIndex=`*(listView: ListView, index: int) =
   if listView.isNil:
     return
   if index < 0:
-    listView.setSelectedIndexes(@[])
+    listView.selectedIndexes = @[]
   else:
     listView.selectItemAtIndex(index)
-
-proc `selectedIndex=`*(listView: ListView, index: int) =
-  listView.setSelectedIndex(index)
 
 proc sendListActivation(listView: ListView, index: int) =
   if listView.isNil or not listView.rowEnabled(index):
@@ -1199,15 +1176,15 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     if listView.isNil or not listView.isEnabled() or event.button != mbPrimary:
       return
     listView.xTrackingItem = true
-    listView.setHighlightedIndex(listView.listItemIndexAtPoint(event.location))
+    listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
 
   method mouseDragged(listView: ListView, event: MouseEvent) =
     if not listView.isNil and listView.isEnabled():
-      listView.setHighlightedIndex(listView.listItemIndexAtPoint(event.location))
+      listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
 
   method mouseMoved(listView: ListView, event: MouseEvent) =
     if not listView.isNil and listView.isEnabled():
-      listView.setHighlightedIndex(listView.listItemIndexAtPoint(event.location))
+      listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
 
   method mouseUp(listView: ListView, event: MouseEvent) =
     if listView.isNil or not listView.isEnabled() or event.button != mbPrimary:
