@@ -183,7 +183,6 @@ proc activateItemAtIndex*(listView: ListView, index: int)
 proc handleListKeyDown(listView: ListView, event: KeyEvent)
 proc drawListScroller(scroller: ListScroller, context: DrawContext)
 proc listScrollerKnobRect(listView: ListView, track: Rect): Rect
-proc localKnobRect(scroller: ListScroller): Rect
 proc beginListScrollerTracking(scroller: ListScroller, point: Point)
 proc trackListScroller(scroller: ListScroller, point: Point)
 proc endListScrollerTracking(scroller: ListScroller, point: Point)
@@ -1453,28 +1452,22 @@ proc listScrollerKnobRect(listView: ListView, track: Rect): Rect =
     ),
   )
 
-proc localKnobRect(scroller: ListScroller): Rect =
-  if scroller.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  let listView = scroller.listView()
-  if listView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  listView.listScrollerKnobRect(scroller.bounds())
-
 proc drawListScroller(scroller: ListScroller, context: DrawContext) =
   if scroller.isNil or scroller.hidden:
     return
-  context.drawScroller(scroller.bounds(), scroller.localKnobRect())
+  let track = scroller.bounds()
+  context.drawScroller(track, scroller.listView().listScrollerKnobRect(track))
 
 proc contentFirstIndexForKnobOrigin(scroller: ListScroller, knobOrigin: float32): int =
   let listView = scroller.listView()
   if scroller.isNil or listView.isNil:
     return 0
   let
+    track = scroller.bounds()
     maxFirst = maxFirstIndex(listView.len(), listView.visibleItemCount())
     next = contentOffsetForScrollerKnobOrigin(
-      scroller.bounds(),
-      scroller.localKnobRect(),
+      track,
+      listView.listScrollerKnobRect(track),
       laVertical,
       maxFirst.float32,
       knobOrigin,
@@ -1492,7 +1485,7 @@ proc scrollListPageToward(scroller: ListScroller, point: Point) =
   let listView = scroller.listView()
   if scroller.isNil or listView.isNil:
     return
-  let knob = scroller.localKnobRect()
+  let knob = listView.listScrollerKnobRect(scroller.bounds())
   if knob.isEmpty or (point.y >= knob.minY and point.y < knob.maxY):
     return
   let direction = if point.y < knob.minY: -1 else: 1
@@ -1503,7 +1496,7 @@ proc beginListScrollerTracking(scroller: ListScroller, point: Point) =
     return
   let
     track = scroller.bounds()
-    knob = scroller.localKnobRect()
+    knob = scroller.listView().listScrollerKnobRect(track)
   if scroller.xTracking.beginScrollerTracking(track, knob, laVertical, point):
     return
   if track.contains(point):
