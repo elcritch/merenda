@@ -100,13 +100,7 @@ proc items*(listView: ListView): seq[string] =
   else:
     listView.xItems
 
-proc itemAtIndex(listView: ListView, index: int): string =
-  if listView.isNil or index < 0 or index >= listView.xItems.len:
-    ""
-  else:
-    listView.xItems[index]
-
-proc setItems*(listView: ListView, values: openArray[string]) =
+proc `items=`*(listView: ListView, values: openArray[string]) =
   if listView.isNil:
     return
   var nextItems: seq[string]
@@ -117,17 +111,11 @@ proc setItems*(listView: ListView, values: openArray[string]) =
   listView.xItems = nextItems
   listView.reloadData()
 
-proc `items=`*(listView: ListView, values: openArray[string]) =
-  listView.setItems(values)
-
 proc `[]`*(listView: ListView, index: int): string =
-  listView.itemAtIndex(index)
-
-proc addItem*(listView: ListView, value: string) =
-  if listView.isNil:
-    return
-  listView.xItems.add value
-  listView.reloadData()
+  if listView.isNil or index < 0 or index >= listView.xItems.len:
+    ""
+  else:
+    listView.xItems[index]
 
 proc addItems*(listView: ListView, values: openArray[string]) =
   if listView.isNil or values.len == 0:
@@ -627,7 +615,7 @@ proc drawListContent(contentView: ListContentView, context: DrawContext) =
   for itemIndex in rows.first ..< rows.last:
     let row = initListRowState(
       itemIndex,
-      listView.itemAtIndex(itemIndex),
+      listView[itemIndex],
       selected = itemIndex == listView.selectedIndex(),
       highlighted = itemIndex == listView.highlightedIndex(),
       enabled = listView.isEnabled(),
@@ -641,10 +629,10 @@ proc drawListContent(contentView: ListContentView, context: DrawContext) =
       classes,
     )
 
-proc contentFirstIndexForKnobOrigin(scroller: ListScroller, knobOrigin: float32): int =
+proc scrollListKnobTo(scroller: ListScroller, point: Point) =
   let listView = scroller.listView()
-  if listView.isNil:
-    return 0
+  if scroller.isNil or listView.isNil:
+    return
   let
     track = scroller.bounds()
     maxFirst = maxFirstIndex(listView.len(), listView.visibleItemCount())
@@ -653,16 +641,10 @@ proc contentFirstIndexForKnobOrigin(scroller: ListScroller, knobOrigin: float32)
       listView.listScrollerKnobRect(track),
       laVertical,
       maxFirst.float32,
-      knobOrigin,
+      scroller.xTracking.knobOriginForPoint(laVertical, point),
     )
-  clampFirstIndex(round(next).int, listView.len(), listView.visibleItemCount())
-
-proc scrollListKnobTo(scroller: ListScroller, point: Point) =
-  let listView = scroller.listView()
-  if scroller.isNil or listView.isNil:
-    return
-  let knobOrigin = scroller.xTracking.knobOriginForPoint(laVertical, point)
-  listView.firstVisibleIndex = scroller.contentFirstIndexForKnobOrigin(knobOrigin)
+  listView.firstVisibleIndex =
+    clampFirstIndex(round(next).int, listView.len(), listView.visibleItemCount())
 
 proc scrollListPageToward(scroller: ListScroller, point: Point) =
   let listView = scroller.listView()
