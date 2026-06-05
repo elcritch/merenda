@@ -4,10 +4,13 @@ from figdraw/fignodes import FigIdx
 import std/math
 
 import ./controls
+import ./scrollertracking
 import ./scrollviews
 import ./selectors
 import ./theme
 import ./types
+
+const ListScrollerThickness = 12.0'f32
 
 type ListViewport* = object
   rows: ScrollViewport
@@ -67,6 +70,10 @@ type
   ListContentView* = ref object of View
     xListView: ListView
 
+  ListScroller* = ref object of View
+    xListView: ListView
+    xTracking: ScrollerTrackingState
+
   ListView* = ref object of Control
     xItems: seq[string]
     xSelectedIndex: int
@@ -74,6 +81,7 @@ type
     xViewport: ListViewport
     xClipView: ClipView
     xContentView: ListContentView
+    xVerticalScroller: ListScroller
     xRowHeight: float32
     xVisibleRows: int
     xSelectionMode: ListSelectionMode
@@ -100,7 +108,7 @@ proc popupListItemIndexAtPoint*(
   popupList: PopupListView, popupBounds: Rect, point: Point
 ): int
 
-proc popupListScrollIndicatorRect*(popupList: PopupListView, popupBounds: Rect): Rect
+proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect
 proc canScrollRows*(popupList: PopupListView, delta: int): bool
 proc drawPopupList*(
   popupList: PopupListView,
@@ -140,8 +148,10 @@ proc scrollToVisible*(
 proc scrollBy*(viewport: var ListViewport, delta, itemCount, visibleCount: int)
 
 proc listView*(contentView: ListContentView): ListView
+proc listView*(scroller: ListScroller): ListView
 proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
+proc verticalScroller*(listView: ListView): ListScroller
 proc listViewportSize(listView: ListView): Size
 proc listViewportRect(listView: ListView): Rect
 proc listContentOffset(listView: ListView): Point
@@ -162,13 +172,21 @@ proc visibleItemCount*(listView: ListView): int
 proc highlightedIndex*(listView: ListView): int
 proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
-proc listScrollIndicatorRect*(listView: ListView): Rect
+proc showsVerticalScroller*(listView: ListView): bool
+proc verticalScrollerRect*(listView: ListView): Rect
+proc verticalScrollerKnobRect*(listView: ListView): Rect
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
 proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
 proc handleListKeyDown(listView: ListView, event: KeyEvent)
+proc drawListScroller(scroller: ListScroller, context: DrawContext)
+proc listScrollerKnobRect(listView: ListView, track: Rect): Rect
+proc localKnobRect(scroller: ListScroller): Rect
+proc beginListScrollerTracking(scroller: ListScroller, point: Point)
+proc trackListScroller(scroller: ListScroller, point: Point)
+proc endListScrollerTracking(scroller: ListScroller, point: Point)
 proc listNaturalSize(listView: ListView): Size
 proc drawListView(listView: ListView, context: DrawContext)
 proc drawListRow(
@@ -193,6 +211,23 @@ protocol DefaultListContentViewHitTesting of ViewProtocol:
 protocol DefaultListClipViewHitTesting of ViewProtocol:
   method pointInside(clipView: ClipView, point: Point): bool =
     false
+
+protocol DefaultListScrollerDrawing of ViewDrawingProtocol:
+  method draw(scroller: ListScroller, context: DrawContext) =
+    scroller.drawListScroller(context)
+
+protocol DefaultListScrollerEvents of ResponderEventProtocol:
+  method mouseDown(scroller: ListScroller, event: MouseEvent) =
+    if event.button == mbPrimary:
+      scroller.beginListScrollerTracking(event.location)
+
+  method mouseDragged(scroller: ListScroller, event: MouseEvent) =
+    if event.button == mbPrimary:
+      scroller.trackListScroller(event.location)
+
+  method mouseUp(scroller: ListScroller, event: MouseEvent) =
+    if event.button == mbPrimary:
+      scroller.endListScrollerTracking(event.location)
 
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method draw(popupList: PopupListView, context: DrawContext) =
@@ -331,38 +366,22 @@ func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): 
 func hasHiddenListItems*(itemCount, visibleCount: int): bool =
   itemCount > max(visibleCount, 0)
 
-func listScrollIndicatorRect*(
-    popup: Rect, firstIndex, visibleCount, itemCount: int
+func listScrollerKnobRect*(
+    container: Rect,
+    firstIndex, visibleCount, itemCount: int,
+    thickness = 3.0'f32,
+    inset = 3.0'f32,
 ): Rect =
-  if popup.isEmpty or visibleCount <= 0 or
+  if container.isEmpty or visibleCount <= 0 or
       not hasHiddenListItems(itemCount, visibleCount):
-    return initRect(popup.origin.x, popup.origin.y, 0.0, 0.0)
+    return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
 
-  let
-    trackInset = 3.0'f32
-    trackWidth = 3.0'f32
-    trackHeight = max(popup.size.height - trackInset * 2.0'f32, 0.0'f32)
-  if trackHeight <= 0.0'f32:
-    return initRect(popup.origin.x, popup.origin.y, 0.0, 0.0)
+  let track = scrollerTrackRect(container, laVertical, thickness, inset)
+  if track.isEmpty:
+    return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
 
-  let
-    rowViewport = listScrollViewport(firstIndex, itemCount, visibleCount)
-    lastFirst = rowViewport.maxScrollOffset()
-    thumbHeight = min(
-      max(trackHeight * visibleCount.float32 / itemCount.float32, 8.0'f32), trackHeight
-    )
-    travel = max(trackHeight - thumbHeight, 0.0'f32)
-    progress =
-      if lastFirst <= 0.0'f32:
-        0.0'f32
-      else:
-        rowViewport.offset / lastFirst
-
-  initRect(
-    popup.maxX - trackInset - trackWidth,
-    popup.origin.y + trackInset + travel * progress,
-    trackWidth,
-    thumbHeight,
+  scrollerKnobRect(
+    track, laVertical, listScrollViewport(firstIndex, itemCount, visibleCount)
   )
 
 proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int) =
@@ -550,10 +569,10 @@ proc popupListItemIndexAtPoint*(
     popupList.rowHeight(),
   )
 
-proc popupListScrollIndicatorRect*(popupList: PopupListView, popupBounds: Rect): Rect =
+proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect =
   if popupList.isNil:
     return initRect(popupBounds.origin.x, popupBounds.origin.y, 0.0, 0.0)
-  listScrollIndicatorRect(
+  listScrollerKnobRect(
     popupBounds,
     popupList.firstIndex(),
     popupList.visibleItemCount(),
@@ -681,12 +700,12 @@ proc drawPopupList*(
       layer, popupRoot, itemRect, row, popupList.xItemRole, popupList.styleId(), classes
     )
 
-  let indicatorRect = popupList.popupListScrollIndicatorRect(popupBounds)
-  if not indicatorRect.isEmpty:
+  let knobRect = popupList.popupListScrollerKnobRect(popupBounds)
+  if not knobRect.isEmpty:
     discard context.addWindowRectangle(
       layer,
       popupRoot,
-      context.localRectToWindow(indicatorRect),
+      context.localRectToWindow(knobRect),
       fill(initColor(0.10, 0.18, 0.30, 0.34)),
       initColor(0.0, 0.0, 0.0, 0.0),
       0.0'f32,
@@ -814,14 +833,31 @@ proc initListContentView(listView: ListView): ListContentView =
   discard result.withProtocol(DefaultListContentViewDrawing)
   discard result.withProtocol(DefaultListContentViewHitTesting)
 
+proc initListScroller(listView: ListView): ListScroller =
+  result = ListScroller()
+  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  result.xListView = listView
+  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.autoresizingMaskConstraints = false
+  result.hidden = true
+  result.setAcceptsFirstResponder(false)
+  discard result.withProtocol(DefaultListScrollerDrawing)
+  discard result.withProtocol(DefaultListScrollerEvents)
+
 proc listView*(contentView: ListContentView): ListView =
   if contentView.isNil: nil else: contentView.xListView
+
+proc listView*(scroller: ListScroller): ListView =
+  if scroller.isNil: nil else: scroller.xListView
 
 proc clipView*(listView: ListView): ClipView =
   if listView.isNil: nil else: listView.xClipView
 
 proc contentView*(listView: ListView): ListContentView =
   if listView.isNil: nil else: listView.xContentView
+
+proc verticalScroller*(listView: ListView): ListScroller =
+  if listView.isNil: nil else: listView.xVerticalScroller
 
 proc invalidateListRows(listView: ListView) =
   if listView.isNil:
@@ -830,6 +866,8 @@ proc invalidateListRows(listView: ListView) =
     listView.xClipView.setNeedsDisplay(true)
   if not listView.xContentView.isNil:
     listView.xContentView.setNeedsDisplay(true)
+  if not listView.xVerticalScroller.isNil:
+    listView.xVerticalScroller.setNeedsDisplay(true)
   listView.setNeedsDisplay(true)
 
 proc len*(listView: ListView): int =
@@ -1117,15 +1155,26 @@ proc listItemIndexAtPoint*(listView: ListView, point: Point): int =
     return -1
   contentView.listContentItemIndexAtPoint(contentView.pointFromView(point, listView))
 
-proc listScrollIndicatorRect*(listView: ListView): Rect =
-  if listView.isNil:
+proc showsVerticalScroller*(listView: ListView): bool =
+  if listView.isNil or listView.len() <= 0:
+    return false
+  let
+    rowHeight = listView.rowHeight()
+    contentHeight = max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
+    visibleRows =
+      if rowHeight <= 0.0'f32:
+        0
+      else:
+        int(contentHeight / rowHeight)
+  hasHiddenListItems(listView.len(), visibleListItemCount(listView.len(), visibleRows))
+
+proc verticalScrollerRect*(listView: ListView): Rect =
+  if listView.isNil or not listView.showsVerticalScroller():
     return initRect(0.0, 0.0, 0.0, 0.0)
-  listScrollIndicatorRect(
-    listView.bounds(),
-    listView.firstVisibleIndex(),
-    listView.visibleItemCount(),
-    listView.len(),
-  )
+  scrollerTrackRect(listView.bounds(), laVertical, ListScrollerThickness, 1.0'f32)
+
+proc verticalScrollerKnobRect*(listView: ListView): Rect =
+  listView.listScrollerKnobRect(listView.verticalScrollerRect())
 
 proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
   if listView.isNil:
@@ -1257,7 +1306,11 @@ proc listViewportSize(listView: ListView): Size =
   if listView.isNil:
     return initSize(0.0, 0.0)
   initSize(
-    max(listView.bounds().size.width - 2.0'f32, 0.0'f32),
+    max(
+      listView.bounds().size.width - 2.0'f32 -
+        (if listView.showsVerticalScroller(): ListScrollerThickness else: 0.0'f32),
+      0.0'f32,
+    ),
     max(listView.bounds().size.height - 2.0'f32, 0.0'f32),
   )
 
@@ -1325,6 +1378,9 @@ proc tileListContent(listView: ListView) =
     size = listView.listContentSize()
   listView.xClipView.frame = viewport
   listView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
+  if not listView.xVerticalScroller.isNil:
+    listView.xVerticalScroller.frame = listView.verticalScrollerRect()
+    listView.xVerticalScroller.hidden = not listView.showsVerticalScroller()
   listView.setListContentOffset(offset, false)
 
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
@@ -1386,15 +1442,84 @@ proc drawListContent(contentView: ListContentView, context: DrawContext) =
       classes,
     )
 
-  let indicatorRect = listView.listScrollIndicatorRect()
-  if not indicatorRect.isEmpty:
-    discard context.addWindowRectangle(
-      context.localRectToWindow(contentView.rectFromView(indicatorRect, listView)),
-      fill(initColor(0.10, 0.18, 0.30, 0.34)),
-      initColor(0.0, 0.0, 0.0, 0.0),
-      0.0'f32,
-      2.0'f32,
+proc listScrollerKnobRect(listView: ListView, track: Rect): Rect =
+  if listView.isNil or track.isEmpty:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  scrollerKnobRect(
+    track,
+    laVertical,
+    listScrollViewport(
+      listView.firstVisibleIndex(), listView.len(), listView.visibleItemCount()
+    ),
+  )
+
+proc localKnobRect(scroller: ListScroller): Rect =
+  if scroller.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let listView = scroller.listView()
+  if listView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  listView.listScrollerKnobRect(scroller.bounds())
+
+proc drawListScroller(scroller: ListScroller, context: DrawContext) =
+  if scroller.isNil or scroller.hidden:
+    return
+  context.drawScroller(scroller.bounds(), scroller.localKnobRect())
+
+proc contentFirstIndexForKnobOrigin(scroller: ListScroller, knobOrigin: float32): int =
+  let listView = scroller.listView()
+  if scroller.isNil or listView.isNil:
+    return 0
+  let
+    maxFirst = maxFirstIndex(listView.len(), listView.visibleItemCount())
+    next = contentOffsetForScrollerKnobOrigin(
+      scroller.bounds(),
+      scroller.localKnobRect(),
+      laVertical,
+      maxFirst.float32,
+      knobOrigin,
     )
+  clampFirstIndex(round(next).int, listView.len(), listView.visibleItemCount())
+
+proc scrollListKnobTo(scroller: ListScroller, point: Point) =
+  let listView = scroller.listView()
+  if scroller.isNil or listView.isNil:
+    return
+  let knobOrigin = scroller.xTracking.knobOriginForPoint(laVertical, point)
+  listView.firstVisibleIndex = scroller.contentFirstIndexForKnobOrigin(knobOrigin)
+
+proc scrollListPageToward(scroller: ListScroller, point: Point) =
+  let listView = scroller.listView()
+  if scroller.isNil or listView.isNil:
+    return
+  let knob = scroller.localKnobRect()
+  if knob.isEmpty or (point.y >= knob.minY and point.y < knob.maxY):
+    return
+  let direction = if point.y < knob.minY: -1 else: 1
+  listView.scrollRows(direction * max(listView.visibleItemCount(), 1))
+
+proc beginListScrollerTracking(scroller: ListScroller, point: Point) =
+  if scroller.isNil:
+    return
+  let
+    track = scroller.bounds()
+    knob = scroller.localKnobRect()
+  if scroller.xTracking.beginScrollerTracking(track, knob, laVertical, point):
+    return
+  if track.contains(point):
+    scroller.scrollListPageToward(point)
+
+proc trackListScroller(scroller: ListScroller, point: Point) =
+  if scroller.isNil or not scroller.xTracking.isDraggingKnob():
+    return
+  scroller.scrollListKnobTo(point)
+
+proc endListScrollerTracking(scroller: ListScroller, point: Point) =
+  if scroller.isNil:
+    return
+  if scroller.xTracking.isDraggingKnob():
+    scroller.scrollListKnobTo(point)
+  scroller.xTracking.endScrollerTracking()
 
 proc listNaturalSize(listView: ListView): Size =
   if listView.isNil:
@@ -1452,10 +1577,12 @@ proc initListViewFields*(
   listView.xItemRole = srListItem
   listView.xClipView = initListClipView()
   listView.xContentView = initListContentView(listView)
+  listView.xVerticalScroller = initListScroller(listView)
   listView.setAcceptsFirstResponder(true)
   listView.clipsToBounds = true
   listView.addSubview(listView.xClipView)
   listView.xClipView.addSubview(listView.xContentView)
+  listView.addSubview(listView.xVerticalScroller)
   discard listView.withProtocol(DefaultListViewLayout)
   discard listView.withProtocol(DefaultListViewDrawing)
   discard listView.withProtocol(DefaultListViewEvents)

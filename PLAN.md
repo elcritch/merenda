@@ -52,48 +52,44 @@ Recently completed:
   point-to-row mapping, and `firstVisibleIndex` now flow through the clip
   bounds origin while `ListView` keeps the public control, selection, keyboard,
   and target/action surface.
+- Standalone `ListView` now owns a sibling `ListScroller` above its clipped row
+  document. The list scroller uses the shared `ScrollView` scroller metrics and
+  renderer, reserves a scroller strip from row content, and supports gutter
+  paging plus knob dragging while preserving the row-based public scroll API.
 
-1. Finish scroll-backed list polish:
-   - replace the custom list scroll indicator with real scroller pieces or
-     shared scroller track math
-   - keep `ListView`'s public row scrolling API stable while its implementation
-     uses clip/document geometry
-   - keep compact popup lists lightweight; their row scroll math already uses
-     the same viewport helpers, but rendering remains intentionally inline
-   - share popup/list rendering helpers only where it reduces duplication
-2. Grow `ListView` into a data-driven single-column list:
+1. Grow `ListView` into a data-driven single-column list:
    - keep local `items` as the simple default path
    - add selector-backed data source hooks for row count and row value/view
    - add delegate hooks for selection, activation, row height, and optional row
      styling
    - keep row state as plain values: index, selected, highlighted, focused,
      enabled
-3. Add a real selection model:
+2. Add a real selection model:
    - none, single, multiple, and extended selection
    - selected index sets/ranges
    - keyboard selection extension with Shift
    - command/control discontiguous selection where platform appropriate
    - delegate notifications before and after selection changes
-4. Add row virtualization and reuse:
+3. Add row virtualization and reuse:
    - draw/layout only visible rows
    - reusable row views or row renderers
    - support fixed row height first
    - add variable row heights after fixed-height behavior is stable
    - keep row reuse separate from data ownership
-5. Add AppKit-like keyboard and focus behavior:
+4. Add AppKit-like keyboard and focus behavior:
    - up/down/page/home/end
    - type-select or incremental search
    - focus ring and first-responder behavior
    - activation through Enter/Return/double-click
    - disabled or nonselectable rows if delegate support justifies it
-6. Add richer list affordances:
+5. Add richer list affordances:
    - empty state rendering hook
    - alternating row backgrounds
    - separators/grid lines if theme roles support them
    - row hover and pressed states
    - scroll-to-selection helpers
    - accessibility/debug summaries for visible rows and selection state
-7. Defer full table/outline APIs until this base is solid:
+6. Defer full table/outline APIs until this base is solid:
    - column headers
    - sortable columns
    - resizable/reorderable columns

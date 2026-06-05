@@ -121,7 +121,7 @@ suite "nimkit list views":
     listView.selectedIndex = 3
     check listView.selectedIndex == 3
     check listView.firstVisibleIndex == 2
-    check not listView.listScrollIndicatorRect().isEmpty
+    check not listView.verticalScrollerKnobRect().isEmpty
 
     listView.scrollRows(-1)
     check listView.firstVisibleIndex == 1
@@ -143,34 +143,79 @@ suite "nimkit list views":
     let
       clip = listView.clipView()
       content = listView.contentView()
+      scroller = listView.verticalScroller()
 
     check clip != nil
     check clip.superview == listView
     check not clip.acceptsFirstResponder
     check not clip.autoresizingMaskConstraints
     check clip.clipsToBounds
-    check clip.frame == initRect(1.0'f32, 1.0'f32, 118.0'f32, 44.0'f32)
-    check clip.bounds == initRect(0.0'f32, 0.0'f32, 118.0'f32, 44.0'f32)
+    check clip.frame == initRect(1.0'f32, 1.0'f32, 106.0'f32, 44.0'f32)
+    check clip.bounds == initRect(0.0'f32, 0.0'f32, 106.0'f32, 44.0'f32)
+    check scroller != nil
+    check scroller.superview == listView
+    check not scroller.hidden
+    check not scroller.acceptsFirstResponder
+    check listView.verticalScrollerRect() ==
+      initRect(107.0'f32, 1.0'f32, 12.0'f32, 44.0'f32)
+    check listView.verticalScrollerKnobRect() ==
+      initRect(107.0'f32, 1.0'f32, 12.0'f32, 22.0'f32)
     check content != nil
     check content.listView == listView
     check content.superview == View(clip)
     check not content.acceptsFirstResponder
     check not content.autoresizingMaskConstraints
-    check content.frame == initRect(0.0'f32, 0.0'f32, 118.0'f32, 80.0'f32)
-    check content.bounds.size == initSize(118.0'f32, 80.0'f32)
-    check listView.listContentSize() == initSize(118.0'f32, 80.0'f32)
+    check content.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 80.0'f32)
+    check content.bounds.size == initSize(106.0'f32, 80.0'f32)
+    check listView.listContentSize() == initSize(106.0'f32, 80.0'f32)
     check content.listContentItemRect(2) ==
-      initRect(0.0'f32, 40.0'f32, 118.0'f32, 20.0'f32)
+      initRect(0.0'f32, 40.0'f32, 106.0'f32, 20.0'f32)
 
-    check listView.listItemRect(0) == initRect(1.0'f32, 1.0'f32, 118.0'f32, 20.0'f32)
+    check listView.listItemRect(0) == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
     check listView.listItemRect(2).isEmpty
     check content.listContentItemIndexAtPoint(initPoint(6.0'f32, 45.0'f32)) == 2
 
     listView.firstVisibleIndex = 2
-    check content.frame == initRect(0.0'f32, 0.0'f32, 118.0'f32, 80.0'f32)
+    check content.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 80.0'f32)
     check clip.bounds.origin == initPoint(0.0'f32, 40.0'f32)
-    check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 118.0'f32, 20.0'f32)
+    check listView.verticalScrollerKnobRect() ==
+      initRect(107.0'f32, 23.0'f32, 12.0'f32, 22.0'f32)
+    check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
     check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
+
+  test "list view scroller pages and drags row viewport":
+    let
+      window = newWindow("List scroller", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five", "Six"],
+        frame = initRect(10, 10, 120, 46),
+      )
+
+    listView.rowHeight = 20.0
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    let
+      track = listView.verticalScrollerRect()
+      knob = listView.verticalScrollerKnobRect()
+      scroller = listView.verticalScroller()
+
+    check not scroller.isNil
+    check not scroller.hidden
+    let trackX = track.origin.x + track.size.width * 0.5'f32
+    check window.mouseDownAt(listView.pointToWindow(initPoint(trackX, knob.maxY + 2.0)))
+    check listView.firstVisibleIndex == 2
+
+    let nextKnob = listView.verticalScrollerKnobRect()
+    check window.mouseDownAt(
+      listView.pointToWindow(
+        initPoint(trackX, nextKnob.origin.y + nextKnob.size.height * 0.5'f32)
+      )
+    )
+    check window.mouseDraggedAt(listView.pointToWindow(initPoint(trackX, track.maxY)))
+    check window.mouseUpAt(listView.pointToWindow(initPoint(trackX, track.maxY)))
+    check listView.firstVisibleIndex == 4
 
   test "list view mouse selection sends control action":
     let
