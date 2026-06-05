@@ -1,19 +1,157 @@
 import std/[tables, unittest]
 
-import figdraw/windowing/siwinshim
+from figdraw/windowing/siwinshim import nil
+import sigils/core
 
 import merenda/nimkit
 
+type WindowHookObserver = ref object of Agent
+
+var
+  windowHookEvents: seq[string]
+  windowHookAllowContentView: bool
+  windowHookAllowFirstResponder: bool
+  windowHookAllowDismiss: bool
+
+protocol WindowLifecycleSpyHooks of WindowLifecycleProtocol:
+  method shouldSetContentView(window: Window, view: View): bool =
+    windowHookEvents.add "shouldContentView"
+    windowHookAllowContentView
+
+protocol WindowFocusSpyHooks of WindowFocusProtocol:
+  method shouldMakeFirstResponder(window: Window, responder: Responder): bool =
+    windowHookEvents.add "shouldFirstResponder"
+    windowHookAllowFirstResponder
+
+protocol WindowPopupSpyHooks of WindowPopupProtocol:
+  method shouldDismissTransientSession(window: Window, reason: DismissReason): bool =
+    windowHookEvents.add "shouldDismiss"
+    windowHookAllowDismiss
+
+proc rememberWillSetContentView(observer: WindowHookObserver, view: View) {.slot.} =
+  windowHookEvents.add "willContentView"
+
+proc rememberDidSetContentView(observer: WindowHookObserver, oldView: View) {.slot.} =
+  windowHookEvents.add "didContentView"
+
+proc rememberDidChangeFirstResponder(
+    observer: WindowHookObserver, previous: Responder
+) {.slot.} =
+  windowHookEvents.add "didFirstResponder"
+
+proc rememberDidChangeEffectiveAppearance(
+    observer: WindowHookObserver, appearance: Appearance
+) {.slot.} =
+  windowHookEvents.add "didAppearance"
+
+proc rememberDidDismissTransientSession(
+    observer: WindowHookObserver, reason: DismissReason
+) {.slot.} =
+  windowHookEvents.add "didDismiss"
+
+proc rememberDidChangePopupPresentation(
+    observer: WindowHookObserver, presentation: PopupPresentation
+) {.slot.} =
+  windowHookEvents.add "didPopupPresentation"
+
 suite "nimkit application":
+  test "window protocols observe and veto core window behavior":
+    let
+      window = newWindow("Window hooks", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      replacement = newView(frame = initRect(0, 0, 240, 160))
+      button = newButton("Focus", frame = initRect(16, 16, 90, 32))
+      observer = WindowHookObserver()
+
+    windowHookEvents = @[]
+    windowHookAllowContentView = false
+    windowHookAllowFirstResponder = false
+    windowHookAllowDismiss = false
+    discard window.withProtocol(WindowLifecycleSpyHooks)
+    discard window.withProtocol(WindowFocusSpyHooks)
+    discard window.withProtocol(WindowPopupSpyHooks)
+    connect(window, willSetContentView, observer, rememberWillSetContentView)
+    connect(window, didSetContentView, observer, rememberDidSetContentView)
+    connect(window, didChangeFirstResponder, observer, rememberDidChangeFirstResponder)
+    connect(
+      window, didChangeEffectiveAppearance, observer,
+      rememberDidChangeEffectiveAppearance,
+    )
+    connect(
+      window, didDismissTransientSession, observer, rememberDidDismissTransientSession
+    )
+    connect(
+      window, didChangePopupPresentation, observer, rememberDidChangePopupPresentation
+    )
+
+    window.setContentView(root)
+    check window.contentView.isNil
+    check windowHookEvents == @["shouldContentView"]
+
+    windowHookEvents = @[]
+    windowHookAllowContentView = true
+    window.setContentView(root)
+    check window.contentView == root
+    check windowHookEvents == @[
+      "shouldContentView", "willContentView", "didContentView"
+    ]
+
+    root.addSubview(button)
+    windowHookEvents = @[]
+    check not window.makeFirstResponder(button)
+    check window.firstResponder.isNil
+    check windowHookEvents == @["shouldFirstResponder"]
+
+    windowHookEvents = @[]
+    windowHookAllowFirstResponder = true
+    check window.makeFirstResponder(button)
+    check window.firstResponder == button
+    check windowHookEvents == @["shouldFirstResponder", "didFirstResponder"]
+
+    windowHookEvents = @[]
+    window.setContentView(replacement)
+    check window.contentView == replacement
+    check window.firstResponder.isNil
+    check windowHookEvents ==
+      @[
+        "shouldContentView", "willContentView", "shouldFirstResponder",
+        "didFirstResponder", "didContentView",
+      ]
+
+    windowHookEvents = @[]
+    window.setAppearance(initAppearance())
+    check windowHookEvents == @["didAppearance"]
+
+    windowHookEvents = @[]
+    window.setPopupPresentation(ppInline)
+    check window.popupPresentation == ppInline
+    check windowHookEvents == @["didPopupPresentation"]
+
+    window.beginTransientSession(owner = window)
+    windowHookEvents = @[]
+    check not window.dismissTransientSession(tdrProgrammatic)
+    check window.hasActiveTransientSession()
+    check windowHookEvents == @["shouldDismiss"]
+
+    windowHookEvents = @[]
+    windowHookAllowDismiss = true
+    check window.dismissTransientSession(tdrProgrammatic)
+    check not window.hasActiveTransientSession()
+    check windowHookEvents == @["shouldDismiss", "didDismiss"]
+
   test "raw mouse input converts from reported input size to logical size":
-    let logicalSize = vec2(360.0'f32, 220.0'f32)
+    let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)
 
     check rawInputToLogical(
-      vec2(72.0'f32, 108.0'f32), ivec2(360'i32, 220'i32), logicalSize
-    ) == vec2(72.0'f32, 108.0'f32)
+      siwinshim.vec2(72.0'f32, 108.0'f32),
+      siwinshim.ivec2(360'i32, 220'i32),
+      logicalSize,
+    ) == siwinshim.vec2(72.0'f32, 108.0'f32)
     check rawInputToLogical(
-      vec2(108.0'f32, 162.0'f32), ivec2(540'i32, 330'i32), logicalSize
-    ) == vec2(72.0'f32, 108.0'f32)
+      siwinshim.vec2(108.0'f32, 162.0'f32),
+      siwinshim.ivec2(540'i32, 330'i32),
+      logicalSize,
+    ) == siwinshim.vec2(72.0'f32, 108.0'f32)
 
   test "runForFrames opens and pumps a visible native window":
     block nativeRun:
@@ -98,7 +236,7 @@ suite "nimkit application":
         check window.firstResponder == combo
         let nativeWindow = window.nativeWindowOrNil()
         if not nativeWindow.isNil:
-          check nativeWindow.focused()
+          check siwinshim.focused(nativeWindow)
 
         check window.mouseDownAt(initPoint(24, 24))
         check combo.popupOpen
@@ -129,7 +267,7 @@ suite "nimkit application":
         check other.indexOfSelectedItem() == -1
         check window.firstResponder == combo
         if not nativeWindow.isNil:
-          check nativeWindow.focused()
+          check siwinshim.focused(nativeWindow)
       except CatchableError:
         skip()
         break nativeComboPopup

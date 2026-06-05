@@ -3,6 +3,7 @@ import std/[math, options, times]
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
+import sigils/core
 
 import ./backend as nimkitBackend
 import ./keybindings
@@ -13,7 +14,7 @@ import ./types
 import ./views
 
 type
-  TransientDismissReason* = enum
+  DismissReason* = enum
     tdrProgrammatic
     tdrOutsideClick
     tdrEscape
@@ -21,7 +22,7 @@ type
     tdrOwnerClosed
     tdrNativeDone
 
-  TransientDismissHandler* = proc(reason: TransientDismissReason) {.closure.}
+  TransientDismissHandler* = proc(reason: DismissReason) {.closure.}
 
   Window* = ref object of Responder
     xFrame: Rect
@@ -43,7 +44,7 @@ type
     xPopupPlacement: siwinshim.PopupPlacement
     xOnPopupDone: proc() {.closure.}
     xTransientSession: TransientSession
-    xLastTransientDismissReason: TransientDismissReason
+    xLastTransientDismissReason: DismissReason
     xMouseCaptureView: View
     xMouseActiveView: View
     xMouseHoverView: View
@@ -70,6 +71,31 @@ type
 type EventDispatchResult = object
   handled: bool
   responder: Responder
+
+protocol WindowLifecycleProtocolInternal:
+  method shouldSetContentView*(v: View): bool {.optional.}
+  proc willSetContentView*(w: Window, v: View) {.signal.}
+  proc didSetContentView*(w: Window, oldView: View) {.signal.}
+  proc willClose*(w: Window) {.signal.}
+  proc didClose*(w: Window) {.signal.}
+
+protocol WindowFocusProtocolInternal:
+  method shouldMakeFirstResponder*(r: Responder): bool {.optional.}
+  proc didChangeFirstResponder*(w: Window, previous: Responder) {.signal.}
+
+protocol WindowAppearanceProtocolInternal:
+  proc didChangeEffectiveAppearance*(w: Window, appearance: Appearance) {.signal.}
+
+protocol WindowPopupProtocolInternal:
+  method shouldDismissTransientSession*(reason: DismissReason): bool {.optional.}
+  proc didDismissTransientSession*(w: Window, reason: DismissReason) {.signal.}
+  proc didChangePopupPresentation*(w: Window, present: PopupPresentation) {.signal.}
+
+let
+  WindowLifecycleProtocol* = WindowLifecycleProtocolInternal
+  WindowFocusProtocol* = WindowFocusProtocolInternal
+  WindowAppearanceProtocol* = WindowAppearanceProtocolInternal
+  WindowPopupProtocol* = WindowPopupProtocolInternal
 
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
@@ -113,7 +139,7 @@ proc beginTransientSession*(
 )
 
 proc dismissTransientSession*(
-  window: Window, reason: TransientDismissReason
+  window: Window, reason: DismissReason
 ): bool {.discardable.}
 
 proc endTransientSession*(
@@ -293,6 +319,21 @@ proc propagateAppearance(window: Window) =
     return
   window.xContentView.setInheritedAppearance(window.effectiveAppearance())
 
+proc shouldSetContentView(window: Window, view: View): bool =
+  if window.isNil:
+    return false
+  window.trySendLocal(shouldSetContentView(), view).get(true)
+
+proc shouldMakeFirstResponder(window: Window, responder: Responder): bool =
+  if window.isNil:
+    return false
+  window.trySendLocal(shouldMakeFirstResponder(), responder).get(true)
+
+proc shouldDismissTransientSession(window: Window, reason: DismissReason): bool =
+  if window.isNil:
+    return false
+  window.trySendLocal(shouldDismissTransientSession(), reason).get(true)
+
 proc hasAppearance*(window: Window): bool =
   (not window.isNil) and window.xHasAppearance
 
@@ -326,6 +367,7 @@ proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
   if window.isNil or window.xPopupPresentation == presentation:
     return
   window.xPopupPresentation = presentation
+  emit window.didChangePopupPresentation(window.xPopupPresentation)
   if window.hasActiveTransientSession():
     discard window.dismissTransientSession(tdrProgrammatic)
   else:
@@ -339,6 +381,7 @@ proc setAppearance*(window: Window, appearance: Appearance) =
   window.xAppearance = appearance
   window.xHasAppearance = true
   window.propagateAppearance()
+  emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
 
 proc clearAppearance*(window: Window) =
   if window.isNil or not window.xHasAppearance:
@@ -346,6 +389,7 @@ proc clearAppearance*(window: Window) =
   window.xAppearance = Appearance()
   window.xHasAppearance = false
   window.propagateAppearance()
+  emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
 
 proc setInheritedAppearance*(window: Window, appearance: Appearance) =
   if window.isNil:
@@ -354,6 +398,7 @@ proc setInheritedAppearance*(window: Window, appearance: Appearance) =
   window.xHasInheritedAppearance = true
   if not window.xHasAppearance:
     window.propagateAppearance()
+    emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
 
 proc clearInheritedAppearance*(window: Window) =
   if window.isNil:
@@ -362,6 +407,7 @@ proc clearInheritedAppearance*(window: Window) =
   window.xHasInheritedAppearance = false
   if not window.xHasAppearance:
     window.propagateAppearance()
+    emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
 
 proc clearMouseState(window: Window) =
   if not window.xMouseActiveView.isNil:
@@ -386,11 +432,14 @@ proc setMouseActiveView(window: Window, view: View) =
     view.setActive(true)
 
 proc setContentView*(window: Window, view: View) =
+  if window.isNil or not window.shouldSetContentView(view):
+    return
   if window.xContentView == view:
     window.clearMouseState()
     return
 
   let oldContent = window.xContentView
+  emit window.willSetContentView(view)
   if not oldContent.isNil:
     window.clearMouseState()
     if not window.xFirstResponder.isNil and window.xFirstResponder of View:
@@ -414,6 +463,7 @@ proc setContentView*(window: Window, view: View) =
   window.clearMouseState()
   if window.xAutorecalculatesKeyViewLoop:
     window.recalculateKeyViewLoop()
+  emit window.didSetContentView(oldContent)
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title
@@ -438,6 +488,9 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
         return false
     elif not responder.acceptsFirstResponder():
       return false
+  if not window.shouldMakeFirstResponder(responder):
+    return false
+  let previousResponder = window.xFirstResponder
   if not window.xFirstResponder.isNil:
     if not window.xFirstResponder.resignFirstResponder():
       return false
@@ -453,6 +506,7 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
     next.setFocused(true)
     next.setFocusVisible(focusVisible)
   window.xFirstResponder = responder
+  emit window.didChangeFirstResponder(previousResponder)
   true
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool =
@@ -649,7 +703,7 @@ proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
 proc hasActiveTransientSession*(window: Window): bool =
   not window.isNil and window.xTransientSession.active
 
-proc transientDismissReason*(window: Window): TransientDismissReason =
+proc transientDismissReason*(window: Window): DismissReason =
   if window.isNil:
     return tdrProgrammatic
   window.xLastTransientDismissReason
@@ -664,9 +718,11 @@ proc restoreTransientFocus(window: Window, session: TransientSession) =
     discard restoreWindow.makeFirstResponder(session.restoreResponder)
 
 proc finishTransientSession(
-    window: Window, reason: TransientDismissReason, notifyDismiss: bool
+    window: Window, reason: DismissReason, notifyDismiss: bool
 ): bool =
   if window.isNil or not window.xTransientSession.active:
+    return false
+  if reason != tdrOwnerClosed and not window.shouldDismissTransientSession(reason):
     return false
 
   let session = window.xTransientSession
@@ -676,6 +732,7 @@ proc finishTransientSession(
 
   if notifyDismiss and not session.onDismiss.isNil:
     session.onDismiss(reason)
+  emit window.didDismissTransientSession(reason)
   if reason != tdrOwnerClosed:
     window.restoreTransientFocus(session)
   if not window.xContentView.isNil:
@@ -710,7 +767,7 @@ proc beginTransientSession*(
   )
 
 proc dismissTransientSession*(
-    window: Window, reason: TransientDismissReason
+    window: Window, reason: DismissReason
 ): bool {.discardable.} =
   window.finishTransientSession(reason, notifyDismiss = true)
 
@@ -722,6 +779,7 @@ proc endTransientSession*(
 proc close*(window: Window) =
   if window.isNil:
     return
+  emit window.willClose()
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
   window.xClosed = true
@@ -737,6 +795,7 @@ proc close*(window: Window) =
   window.xHostWindow = nil
   if notifyPopupDone:
     window.xOnPopupDone()
+  emit window.didClose()
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
   if window.isNil:
