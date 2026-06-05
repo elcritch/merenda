@@ -197,6 +197,9 @@ Controls are kept thin and cell-driven:
 
 Popup and list behavior shares a narrow base:
 
+- `ScrollView` owns a `ClipView`, optional axis scrollers, and a document view.
+  Scrollers are real child views: they draw their track/knob, page on gutter
+  clicks, and drag the knob by translating track position into content offset.
 - `ListViewport` stores visible-row window state and common row geometry.
 - `PopupListView` handles transient single-column popup drawing, row tracking,
   scrolling, highlighting, activation, and close callbacks.

@@ -36,6 +36,9 @@ Recently completed:
 - `ScrollView` now has a real `ClipView`, explicit document/content ownership,
   content offsets derived from clip-view bounds, intrinsic sizing separated from
   document size, and sibling scroller views tiled through one reflection path.
+- Scroller views now handle direct interaction: gutter clicks page content along
+  the scroller axis, and knob dragging maps track motion back to content
+  offsets with normal clamping.
 - Scroll routing now carries phase/momentum metadata, preserves momentum target
   routing, uses `wantsForwardedScrollEvents`, and keeps edge-forwarding policy
   out of the main public scroll API.
