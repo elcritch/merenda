@@ -46,7 +46,7 @@ proc setHoveredPopupIndex(comboBox: ComboBox, index: int)
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
-proc popupScrollIndicatorRect*(comboBox: ComboBox, bounds: Rect): Rect
+proc popupScrollerKnobRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc movePopupHighlight*(comboBox: ComboBox, delta: int)
 proc movePopupHighlightTo(comboBox: ComboBox, index: int)
 proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int)
@@ -877,10 +877,10 @@ proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
     comboBox.popupItemHeight(),
   )
 
-proc popupScrollIndicatorRect*(comboBox: ComboBox, bounds: Rect): Rect =
+proc popupScrollerKnobRect*(comboBox: ComboBox, bounds: Rect): Rect =
   if comboBox.isNil:
     return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
-  listScrollIndicatorRect(
+  listScrollerKnobRect(
     comboBox.popupRect(bounds),
     comboBox.popupFirstItemIndex(),
     comboBox.visibleItemCount(),

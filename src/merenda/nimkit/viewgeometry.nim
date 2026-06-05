@@ -434,6 +434,19 @@ func axisOrigin*(rect: Rect, axis: LayoutAxis): float32 =
   of laHorizontal: rect.origin.x
   of laVertical: rect.origin.y
 
+func axisOrigin*(point: Point, axis: LayoutAxis): float32 =
+  case axis
+  of laHorizontal: point.x
+  of laVertical: point.y
+
+func axisOffset*(point: Point, axis: LayoutAxis): float32 =
+  point.axisOrigin(axis)
+
+func axisSize*(size: Size, axis: LayoutAxis): float32 =
+  case axis
+  of laHorizontal: size.width
+  of laVertical: size.height
+
 func axisSize*(rect: Rect, axis: LayoutAxis): float32 =
   case axis
   of laHorizontal: rect.size.width

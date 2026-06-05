@@ -235,6 +235,26 @@ suite "nimkit scroll views":
     check scrollView.viewportSize() == initSize(120, 80)
     check scrollView.contentOffset() == initPoint(0, 0)
 
+  test "axis scroller API mirrors horizontal and vertical wrappers":
+    let scrollView = newScrollView(frame = initRect(0, 0, 120, 80))
+
+    check not scrollView.hasScroller(laHorizontal)
+    check not scrollView.hasScroller(laVertical)
+
+    scrollView.setHasScroller(laHorizontal, true)
+    scrollView.setHasScroller(laVertical, true)
+
+    check scrollView.hasHorizontalScroller
+    check scrollView.hasVerticalScroller
+    check scrollView.hasScroller(laHorizontal)
+    check scrollView.hasScroller(laVertical)
+
+    scrollView.hasHorizontalScroller = false
+    scrollView.hasVerticalScroller = false
+
+    check not scrollView.hasScroller(laHorizontal)
+    check not scrollView.hasScroller(laVertical)
+
   test "content offset clamps to document and viewport bounds":
     let
       document = newView(frame = initRect(0, 0, 300, 210))
@@ -478,7 +498,7 @@ suite "nimkit scroll views":
     listView.rowHeight = 20.0
 
     check listView.visibleItemCount() == listView.len()
-    check listView.listScrollIndicatorRect().isEmpty
+    check listView.verticalScrollerKnobRect().isEmpty
     check fixture.parent.contentOffset() == initPoint(0, 0)
     check fixture.window.scrollWheelAt(
       fixture.windowPointForDocumentChild(listView), deltaY = -2.0

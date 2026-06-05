@@ -341,13 +341,13 @@ suite "nimkit comboboxes":
 
     let
       popup = combo.popupRect(combo.bounds())
-      indicator = combo.popupScrollIndicatorRect(combo.bounds())
+      knob = combo.popupScrollerKnobRect(combo.bounds())
     check popup.size.height == 62.0'f32
-    check not indicator.isEmpty
-    check indicator.origin.x > popup.origin.x
-    check indicator.maxX <= popup.maxX
-    check indicator.origin.y > popup.origin.y
-    check listScrollIndicatorRect(popup, 0, 3, 3).isEmpty
+    check not knob.isEmpty
+    check knob.origin.x > popup.origin.x
+    check knob.maxX <= popup.maxX
+    check knob.origin.y > popup.origin.y
+    check listScrollerKnobRect(popup, 0, 3, 3).isEmpty
 
     check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
     check combo.highlightedIndex == 6
