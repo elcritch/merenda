@@ -240,7 +240,7 @@ proc showsVerticalScroller*(listView: ListView): bool =
         0
       else:
         int(contentHeight / rowHeight)
-  hasHiddenListItems(listView.len(), visibleListItemCount(listView.len(), visibleRows))
+  listView.len() > visibleListItemCount(listView.len(), visibleRows).max(0)
 
 proc setListViewRoles*(
     listView: ListView,

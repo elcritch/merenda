@@ -1078,7 +1078,7 @@ proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int) =
     return
 
   let target = max(0, min(current + deltaPages * visible, total - 1))
-  comboBox.xPopupViewport.setFirstIndex(clampFirstIndex(target, total, visible))
+  comboBox.xPopupViewport.firstIndex = clampFirstIndex(target, total, visible)
   comboBox.movePopupHighlightTo(target)
 
 proc notifyComboBoxSelectionIsChanging(comboBox: ComboBox) =
