@@ -43,6 +43,8 @@ func scrollerTrackRect*(
   container: Rect, axis: LayoutAxis, thickness, inset: float32
 ): Rect
 proc drawScroller*(context: DrawContext, track, knob: Rect)
+proc scrollKnobTo(scroller: Scroller, point: Point)
+proc scrollPageToward(scroller: Scroller, point: Point)
 
 func initScrollViewport*(
     offset, visibleExtent, contentExtent: float32
@@ -178,11 +180,6 @@ proc clampContentOffset(scrollView: ScrollView, offset: Point): Point =
     horizontal.clampScrollOffset(offset.x), vertical.clampScrollOffset(offset.y)
   )
 
-proc reflectScrolledClipView(scrollView: ScrollView) =
-  if scrollView.isNil:
-    return
-  scrollView.setNeedsDisplay(true)
-
 proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
   if scrollView.isNil or scrollView.xClipView.isNil:
     return
@@ -190,7 +187,7 @@ proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
     initRect(scrollView.clampContentOffset(offset), scrollView.viewportSize())
   if scrollView.xClipView.bounds() != nextBounds:
     scrollView.xClipView.bounds = nextBounds
-    scrollView.reflectScrolledClipView()
+    scrollView.setNeedsDisplay(true)
 
 proc tile*(scrollView: ScrollView) =
   if scrollView.isNil or scrollView.xClipView.isNil:
@@ -542,11 +539,6 @@ proc drawScroller*(context: DrawContext, track, knob: Rect) =
       3.0'f32,
     )
 
-proc drawScroller(scroller: Scroller, context: DrawContext) =
-  if scroller.isNil:
-    return
-  context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
-
 proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32) =
   if scrollView.isNil:
     return
@@ -558,21 +550,19 @@ proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32)
     nextOffset.y = offset
   scrollView.contentOffset = nextOffset
 
-proc contentOffsetForKnobOrigin(scroller: Scroller, knobOrigin: float32): float32 =
-  if scroller.isNil or scroller.xScrollView.isNil:
-    return 0.0'f32
-  let
-    track = scroller.scrollerTrackRect()
-    knob = scroller.scrollerKnobRect()
-    maxOffset = scroller.xScrollView.maximumContentOffset().axisOffset(scroller.xAxis)
-  contentOffsetForScrollerKnobOrigin(track, knob, scroller.xAxis, maxOffset, knobOrigin)
-
 proc scrollKnobTo(scroller: Scroller, point: Point) =
   if scroller.isNil or scroller.xScrollView.isNil:
     return
-  let knobOrigin = scroller.xTracking.knobOriginForPoint(scroller.xAxis, point)
+  let
+    knobOrigin = scroller.xTracking.knobOriginForPoint(scroller.xAxis, point)
+    track = scroller.scrollerTrackRect()
+    knob = scroller.scrollerKnobRect()
+    maxOffset = scroller.xScrollView.maximumContentOffset().axisOffset(scroller.xAxis)
   scroller.xScrollView.setContentOffset(
-    scroller.xAxis, scroller.contentOffsetForKnobOrigin(knobOrigin)
+    scroller.xAxis,
+    contentOffsetForScrollerKnobOrigin(
+      track, knob, scroller.xAxis, maxOffset, knobOrigin
+    ),
   )
 
 proc scrollPageToward(scroller: Scroller, point: Point) =
@@ -594,29 +584,6 @@ proc scrollPageToward(scroller: Scroller, point: Point) =
     page = scrollView.viewportSize().axisSize(scroller.xAxis)
   scrollView.setContentOffset(scroller.xAxis, currentOffset + direction * page)
 
-proc beginScrollerTracking(scroller: Scroller, point: Point) =
-  if scroller.isNil or scroller.xScrollView.isNil:
-    return
-  let
-    track = scroller.scrollerTrackRect()
-    knob = scroller.scrollerKnobRect()
-  if scroller.xTracking.beginScrollerTracking(track, knob, scroller.xAxis, point):
-    return
-  if track.contains(point):
-    scroller.scrollPageToward(point)
-
-proc trackScroller(scroller: Scroller, point: Point) =
-  if scroller.isNil or not scroller.xTracking.isDraggingKnob():
-    return
-  scroller.scrollKnobTo(point)
-
-proc endScrollerTracking(scroller: Scroller, point: Point) =
-  if scroller.isNil:
-    return
-  if scroller.xTracking.isDraggingKnob():
-    scroller.scrollKnobTo(point)
-  scroller.xTracking.endScrollerTracking()
-
 protocol DefaultScrollViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(scrollView: ScrollView): IntrinsicSize =
     NoIntrinsicContentSize
@@ -626,20 +593,37 @@ protocol DefaultScrollViewLayout of ViewLayoutProtocol:
 
 protocol DefaultScrollerDrawing of ViewDrawingProtocol:
   method draw(scroller: Scroller, context: DrawContext) =
-    scroller.drawScroller(context)
+    if scroller.isNil:
+      return
+    context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
 
 protocol DefaultScrollerEvents of ResponderEventProtocol:
   method mouseDown(scroller: Scroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      scroller.beginScrollerTracking(event.location)
+      if scroller.isNil or scroller.xScrollView.isNil:
+        return
+      let
+        track = scroller.scrollerTrackRect()
+        knob = scroller.scrollerKnobRect()
+      if scroller.xTracking.beginScrollerTracking(
+        track, knob, scroller.xAxis, event.location
+      ):
+        return
+      if track.contains(event.location):
+        scroller.scrollPageToward(event.location)
 
   method mouseDragged(scroller: Scroller, event: MouseEvent) =
-    if event.button == mbPrimary:
-      scroller.trackScroller(event.location)
+    if event.button == mbPrimary and not scroller.isNil and
+        scroller.xTracking.isDraggingKnob():
+      scroller.scrollKnobTo(event.location)
 
   method mouseUp(scroller: Scroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      scroller.endScrollerTracking(event.location)
+      if scroller.isNil:
+        return
+      if scroller.xTracking.isDraggingKnob():
+        scroller.scrollKnobTo(event.location)
+      scroller.xTracking.endScrollerTracking()
 
 protocol DefaultScrollViewEvents of ResponderEventProtocol:
   method wantsForwardedScrollEvents(scrollView: ScrollView, event: ScrollEvent): bool =
@@ -648,12 +632,6 @@ protocol DefaultScrollViewEvents of ResponderEventProtocol:
   method scrollWheel(scrollView: ScrollView, event: ScrollEvent) =
     if scrollView.scrollWheelWouldMove(event):
       scrollView.scrollBy(scrollView.scrollWheelDelta(event))
-
-proc initClipView(frame: Rect): ClipView =
-  result = ClipView()
-  initViewFields(result, frame)
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
-  result.clipsToBounds = true
 
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()
@@ -674,7 +652,10 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   scrollView.xAutohidesScrollers = true
   scrollView.xScrollerThickness = 12.0'f32
   scrollView.xLineScroll = 16.0'f32
-  scrollView.xClipView = initClipView(scrollView.viewportRect())
+  scrollView.xClipView = ClipView()
+  initViewFields(scrollView.xClipView, scrollView.viewportRect())
+  scrollView.xClipView.background = initColor(0.0, 0.0, 0.0, 0.0)
+  scrollView.xClipView.clipsToBounds = true
   scrollView.xScroller[laHorizontal] = initScroller(scrollView, laHorizontal)
   scrollView.xScroller[laVertical] = initScroller(scrollView, laVertical)
   scrollView.addSubview(scrollView.xClipView)
