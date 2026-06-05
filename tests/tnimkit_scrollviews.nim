@@ -260,6 +260,40 @@ suite "nimkit scroll views":
       initRect(initPoint(50, 20), scrollView.viewportSize())
     check scrollView.contentOffset() == initPoint(50, 20)
 
+  test "fraction scrolling is stable from top and bottom":
+    let
+      document = newView(frame = initRect(0, 0, 300, 210))
+      scrollView =
+        newScrollView(frame = initRect(0, 0, 100, 70), documentView = document)
+
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = false
+    scrollView.scrollerThickness = 10.0
+
+    let expected = initPoint(105.0, 75.0)
+    check scrollView.contentOffsetForFraction(initPoint(0.5, 0.5)) == expected
+    check scrollView.contentOffsetForFraction(initPoint(-1.0, 2.0)) ==
+      initPoint(0.0, 150.0)
+
+    scrollView.scrollTo(initPoint(20.0, 40.0))
+    check scrollView.contentOffsetForFraction(x = 0.5) == initPoint(105.0, 40.0)
+    check scrollView.contentOffsetForFraction(y = 0.5) == initPoint(20.0, 75.0)
+
+    scrollView.scrollTo(initPoint(0, 0))
+    scrollView.scrollToFraction(0.5, 0.5)
+    check scrollView.contentOffset() == expected
+
+    scrollView.scrollTo(scrollView.maximumContentOffset())
+    scrollView.scrollToFraction(initPoint(0.5, 0.5))
+    check scrollView.contentOffset() == expected
+
+    scrollView.scrollTo(initPoint(20.0, 40.0))
+    scrollView.scrollToFraction(x = 0.5)
+    check scrollView.contentOffset() == initPoint(105.0, 40.0)
+    scrollView.scrollToFraction(y = 0.5)
+    check scrollView.contentOffset() == expected
+
   test "scroll wheel and scroll rect update content offset":
     let
       window = newWindow("ScrollView", frame = initRect(0, 0, 220, 160))

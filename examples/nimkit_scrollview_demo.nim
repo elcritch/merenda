@@ -40,17 +40,17 @@ proc addDocumentRow(index: int, heading, body: string) =
 
 proc scrollToTop(sender: DynamicAgent) =
   if sender == DynamicAgent(topButton):
-    scrollView.scrollTo(initPoint(0, 0))
+    scrollView.scrollToFraction(y = 0.0)
     updateStatus()
 
 proc scrollToMiddle(sender: DynamicAgent) =
   if sender == DynamicAgent(middleButton):
-    discard scrollView.scrollRectToVisible(initRect(260, 280, 160, 80))
+    scrollView.scrollToFraction(y = 0.5)
     updateStatus()
 
 proc scrollToBottom(sender: DynamicAgent) =
   if sender == DynamicAgent(bottomButton):
-    scrollView.scrollTo(scrollView.maximumContentOffset())
+    scrollView.scrollToFraction(y = 1.0)
     updateStatus()
 
 root.background = initColor(0.95, 0.96, 0.98)
