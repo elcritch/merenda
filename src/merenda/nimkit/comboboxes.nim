@@ -966,7 +966,7 @@ proc usesInlinePopup(comboBox: ComboBox): bool =
   of ppInline:
     true
   of ppAutomatic:
-    not comboBox.popupWindowActive()
+    not comboBox.shouldUseWindowPopup()
   of ppWindow:
     false
 

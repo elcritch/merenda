@@ -1,5 +1,7 @@
 import sigils/selectors
 
+from figdraw/figbasics import ZLevel
+
 import ./drawing
 import ./types
 
@@ -86,6 +88,7 @@ protocol KeyViewCommandProtocolInternal:
   method selectPreviousKeyView*(args: ActionArgs) {.optional.}
 
 protocol ViewDrawingProtocolInternal:
+  method drawLevel*(): ZLevel {.optional.}
   method draw*(context: DrawContext) {.optional.}
 
 protocol ViewLayoutProtocolInternal:

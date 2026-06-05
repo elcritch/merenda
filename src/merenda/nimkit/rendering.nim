@@ -1,3 +1,4 @@
+import std/options
 import std/tables
 
 import figdraw/fignodes
@@ -29,6 +30,7 @@ proc renderViewInto(
     view: View,
     inheritedAppearance: Appearance,
     parent = (-1).FigIdx,
+    parentLevel = DefaultDrawLevel,
 ) =
   if view.visibleRect.isEmpty:
     return
@@ -36,14 +38,20 @@ proc renderViewInto(
   let
     appearance = view.resolvedAppearance(inheritedAppearance)
     absoluteFrame = view.rectToWindow(view.bounds)
+    level = view.trySendLocal(drawLevel()).get(DefaultDrawLevel)
+    nodeParent =
+      if parent == (-1).FigIdx or level == parentLevel:
+        parent
+      else:
+        (-1).FigIdx
     rootIdx = context.addWindowRectangle(
-      parent, absoluteFrame, view.backgroundColor, clips = view.clipsToBounds
+      level, nodeParent, absoluteFrame, view.backgroundColor, clips = view.clipsToBounds
     )
-  context.beginDraw(view, rootIdx, parent, appearance)
+  context.beginDraw(view, rootIdx, nodeParent, appearance)
   discard view.sendIfHandled(draw(), context)
 
   for child in view.subviews:
-    renderViewInto(context, child, appearance, rootIdx)
+    renderViewInto(context, child, appearance, rootIdx, level)
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
