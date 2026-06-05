@@ -72,6 +72,7 @@ type
     xSelectedIndex: int
     xHighlightedIndex: int
     xViewport: ListViewport
+    xClipView: ClipView
     xContentView: ListContentView
     xRowHeight: float32
     xVisibleRows: int
@@ -139,13 +140,20 @@ proc scrollToVisible*(
 proc scrollBy*(viewport: var ListViewport, delta, itemCount, visibleCount: int)
 
 proc listView*(contentView: ListContentView): ListView
+proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
+proc listViewportSize(listView: ListView): Size
+proc listViewportRect(listView: ListView): Rect
+proc listContentOffset(listView: ListView): Point
+proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc listContentSize*(listView: ListView): Size
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int
 proc tileListContent(listView: ListView)
 proc drawListContent(contentView: ListContentView, context: DrawContext)
+proc invalidateListRows(listView: ListView)
 proc len*(listView: ListView): int
+proc rowHeight*(listView: ListView): float32
 proc itemAtIndex(listView: ListView, index: int): string
 proc selectItemAtIndex(listView: ListView, index: int)
 proc deselectItem(listView: ListView)
@@ -180,6 +188,10 @@ protocol DefaultListContentViewDrawing of ViewDrawingProtocol:
 
 protocol DefaultListContentViewHitTesting of ViewProtocol:
   method pointInside(contentView: ListContentView, point: Point): bool =
+    false
+
+protocol DefaultListClipViewHitTesting of ViewProtocol:
+  method pointInside(clipView: ClipView, point: Point): bool =
     false
 
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
@@ -782,6 +794,15 @@ proc newPopupListView*(
   result = PopupListView()
   initPopupListViewFields(result, data, actions, frame)
 
+proc initListClipView(): ClipView =
+  result = ClipView()
+  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.clipsToBounds = true
+  result.autoresizingMaskConstraints = false
+  result.setAcceptsFirstResponder(false)
+  discard result.withProtocol(DefaultListClipViewHitTesting)
+
 proc initListContentView(listView: ListView): ListContentView =
   result = ListContentView()
   initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
@@ -796,12 +817,17 @@ proc initListContentView(listView: ListView): ListContentView =
 proc listView*(contentView: ListContentView): ListView =
   if contentView.isNil: nil else: contentView.xListView
 
+proc clipView*(listView: ListView): ClipView =
+  if listView.isNil: nil else: listView.xClipView
+
 proc contentView*(listView: ListView): ListContentView =
   if listView.isNil: nil else: listView.xContentView
 
 proc invalidateListRows(listView: ListView) =
   if listView.isNil:
     return
+  if not listView.xClipView.isNil:
+    listView.xClipView.setNeedsDisplay(true)
   if not listView.xContentView.isNil:
     listView.xContentView.setNeedsDisplay(true)
   listView.setNeedsDisplay(true)
@@ -946,7 +972,10 @@ proc `selectedIndex=`*(listView: ListView, index: int) =
 proc firstVisibleIndex*(listView: ListView): int =
   if listView.isNil:
     return 0
-  listView.xViewport.firstIndex.clampFirstIndex(
+  let rowHeight = listView.rowHeight()
+  if rowHeight <= 0.0'f32:
+    return 0
+  floor(listView.listContentOffset().y / rowHeight).int.clampFirstIndex(
     listView.len(), listView.visibleItemCount()
   )
 
@@ -954,10 +983,16 @@ proc setFirstVisibleIndex*(listView: ListView, index: int) =
   if listView.isNil:
     return
   let oldFirst = listView.firstVisibleIndex()
-  listView.xViewport.reset(index)
-  listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
+  listView.tileListContent()
+  listView.setListContentOffset(
+    initPoint(
+      0.0'f32,
+      index.clampFirstIndex(listView.len(), listView.visibleItemCount()).float32 *
+        listView.rowHeight(),
+    ),
+    false,
+  )
   if listView.firstVisibleIndex() != oldFirst:
-    listView.tileListContent()
     listView.invalidateListRows()
 
 proc `firstVisibleIndex=`*(listView: ListView, index: int) =
@@ -1025,13 +1060,17 @@ proc reloadData*(listView: ListView) =
 
   if listView.xHighlightedIndex < 0 or listView.xHighlightedIndex >= listView.len():
     listView.xHighlightedIndex = -1
+  var viewport = initListViewport(listView.firstVisibleIndex())
   if listView.xSelectedIndex >= 0:
-    listView.xViewport.scrollToVisible(
+    viewport.scrollToVisible(
       listView.xSelectedIndex, listView.len(), listView.visibleItemCount()
     )
   else:
-    listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
+    viewport.normalize(listView.len(), listView.visibleItemCount())
   listView.tileListContent()
+  listView.setListContentOffset(
+    initPoint(0.0'f32, viewport.firstIndex.float32 * listView.rowHeight()), false
+  )
   listView.invalidateIntrinsicContentSize()
   listView.invalidateListRows()
 
@@ -1040,7 +1079,7 @@ proc visibleItemCount*(listView: ListView): int =
     return 0
   let
     rowHeight = listView.rowHeight()
-    contentHeight = max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
+    contentHeight = listView.listViewportSize().height
     visibleFromBounds =
       if rowHeight <= 0.0'f32:
         0
@@ -1092,25 +1131,31 @@ proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
   if listView.isNil:
     return
   let oldFirst = listView.firstVisibleIndex()
-  listView.xViewport.scrollToVisible(
-    itemIndex, listView.len(), listView.visibleItemCount()
+  var viewport = initListViewport(oldFirst)
+  viewport.scrollToVisible(itemIndex, listView.len(), listView.visibleItemCount())
+  listView.setListContentOffset(
+    initPoint(0.0'f32, viewport.firstIndex.float32 * listView.rowHeight()), false
   )
   if listView.firstVisibleIndex() != oldFirst:
-    listView.tileListContent()
     listView.invalidateListRows()
 
 proc canScrollRows*(listView: ListView, delta: int): bool =
   if listView.isNil:
     return false
-  listView.xViewport.canScrollBy(delta, listView.len(), listView.visibleItemCount())
+  initListViewport(listView.firstVisibleIndex()).canScrollBy(
+    delta, listView.len(), listView.visibleItemCount()
+  )
 
 proc scrollRows*(listView: ListView, delta: int) =
   if listView.isNil or delta == 0:
     return
   let oldFirst = listView.firstVisibleIndex()
-  listView.xViewport.scrollBy(delta, listView.len(), listView.visibleItemCount())
+  var viewport = initListViewport(oldFirst)
+  viewport.scrollBy(delta, listView.len(), listView.visibleItemCount())
+  listView.setListContentOffset(
+    initPoint(0.0'f32, viewport.firstIndex.float32 * listView.rowHeight()), false
+  )
   if listView.firstVisibleIndex() != oldFirst:
-    listView.tileListContent()
     listView.invalidateListRows()
 
 proc activateItemAtIndex*(listView: ListView, index: int) =
@@ -1208,24 +1253,79 @@ proc drawListView(listView: ListView, context: DrawContext) =
   if listView.isFocusVisible:
     context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
 
-proc listContentSize*(listView: ListView): Size =
+proc listViewportSize(listView: ListView): Size =
   if listView.isNil:
     return initSize(0.0, 0.0)
   initSize(
     max(listView.bounds().size.width - 2.0'f32, 0.0'f32),
-    listView.rowHeight() * listView.len().float32,
+    max(listView.bounds().size.height - 2.0'f32, 0.0'f32),
   )
 
-proc tileListContent(listView: ListView) =
-  if listView.isNil or listView.xContentView.isNil:
+proc listViewportRect(listView: ListView): Rect =
+  if listView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  initRect(initPoint(1.0'f32, 1.0'f32), listView.listViewportSize())
+
+proc listContentSize*(listView: ListView): Size =
+  if listView.isNil:
+    return initSize(0.0, 0.0)
+  initSize(
+    listView.listViewportSize().width, listView.rowHeight() * listView.len().float32
+  )
+
+proc clampListContentOffset(listView: ListView, offset: Point): Point =
+  if listView.isNil:
+    return initPoint(0.0, 0.0)
+  let
+    viewportSize = listView.listViewportSize()
+    contentSize = listView.listContentSize()
+    horizontal = initScrollViewport(0.0, viewportSize.width, contentSize.width)
+    maxFirst = maxFirstIndex(listView.len(), listView.visibleItemCount()).float32
+    maxY = maxFirst * listView.rowHeight()
+  initPoint(
+    horizontal.clampScrollOffset(offset.x),
+    min(max(offset.y, 0.0'f32), max(maxY, 0.0'f32)),
+  )
+
+proc syncListViewport(listView: ListView, offset: Point) =
+  if listView.isNil:
+    return
+  let rowHeight = listView.rowHeight()
+  listView.xViewport.reset(
+    if rowHeight <= 0.0'f32:
+      0
+    else:
+      floor(offset.y / rowHeight).int
+  )
+  listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
+
+proc listContentOffset(listView: ListView): Point =
+  if listView.isNil or listView.xClipView.isNil:
+    return initPoint(0.0, 0.0)
+  listView.clampListContentOffset(listView.xClipView.bounds().origin)
+
+proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool) =
+  if listView.isNil or listView.xClipView.isNil:
     return
   let
+    nextOffset = listView.clampListContentOffset(offset)
+    nextBounds = initRect(nextOffset, listView.listViewportSize())
+  if listView.xClipView.bounds() != nextBounds:
+    listView.xClipView.bounds = nextBounds
+    if invalidate:
+      listView.invalidateListRows()
+  listView.syncListViewport(nextOffset)
+
+proc tileListContent(listView: ListView) =
+  if listView.isNil or listView.xClipView.isNil or listView.xContentView.isNil:
+    return
+  let
+    offset = listView.listContentOffset()
+    viewport = listView.listViewportRect()
     size = listView.listContentSize()
-    first = listView.firstVisibleIndex()
-    frame = initRect(
-      1.0'f32, 1.0'f32 - first.float32 * listView.rowHeight(), size.width, size.height
-    )
-  listView.xContentView.frame = frame
+  listView.xClipView.frame = viewport
+  listView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
+  listView.setListContentOffset(offset, false)
 
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
   let listView = contentView.listView()
@@ -1350,10 +1450,12 @@ proc initListViewFields*(
   listView.xSelectionMode = lsmSingle
   listView.xListRole = srListView
   listView.xItemRole = srListItem
+  listView.xClipView = initListClipView()
   listView.xContentView = initListContentView(listView)
   listView.setAcceptsFirstResponder(true)
   listView.clipsToBounds = true
-  listView.addSubview(listView.xContentView)
+  listView.addSubview(listView.xClipView)
+  listView.xClipView.addSubview(listView.xContentView)
   discard listView.withProtocol(DefaultListViewLayout)
   discard listView.withProtocol(DefaultListViewDrawing)
   discard listView.withProtocol(DefaultListViewEvents)

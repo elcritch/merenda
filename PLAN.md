@@ -47,21 +47,20 @@ Recently completed:
 - List and popup row-window math now flows through `ListViewport` backed by the
   shared `ScrollViewport` helpers, covering row offset clamping, scroll-by,
   scroll-to-visible, and scroll indicator progress.
-- Standalone `ListView` now owns a non-focusable `ListContentView` row document.
-  Row sizing, visible-row drawing, and point-to-row mapping flow through that
-  content view while `ListView` keeps the public control, selection, keyboard,
+- Standalone `ListView` now owns a non-hit-testable `ClipView` and a
+  non-focusable `ListContentView` row document. Row sizing, visible-row drawing,
+  point-to-row mapping, and `firstVisibleIndex` now flow through the clip
+  bounds origin while `ListView` keeps the public control, selection, keyboard,
   and target/action surface.
 
-1. Move popup/list viewport mechanics onto `ScrollView` concepts:
-   - reuse viewport clipping and scroll offset for full list-like views
-   - use the `ListContentView` document split as the bridge to hosting full
-     lists inside `ScrollView`/`ClipView`
-   - keep transient popup behavior narrow
-   - avoid separate popup/list scrolling models unless popup behavior truly
-     differs
-   - prefer list-like document views inside a `ScrollView` for full scrolling
+1. Finish scroll-backed list polish:
+   - replace the custom list scroll indicator with real scroller pieces or
+     shared scroller track math
+   - keep `ListView`'s public row scrolling API stable while its implementation
+     uses clip/document geometry
    - keep compact popup lists lightweight; their row scroll math already uses
      the same viewport helpers, but rendering remains intentionally inline
+   - share popup/list rendering helpers only where it reduces duplication
 2. Grow `ListView` into a data-driven single-column list:
    - keep local `items` as the simple default path
    - add selector-backed data source hooks for row count and row value/view

@@ -140,14 +140,23 @@ suite "nimkit list views":
       newListView(["One", "Two", "Three", "Four"], frame = initRect(0, 0, 120, 46))
 
     listView.rowHeight = 20.0
-    let content = listView.contentView()
+    let
+      clip = listView.clipView()
+      content = listView.contentView()
 
+    check clip != nil
+    check clip.superview == listView
+    check not clip.acceptsFirstResponder
+    check not clip.autoresizingMaskConstraints
+    check clip.clipsToBounds
+    check clip.frame == initRect(1.0'f32, 1.0'f32, 118.0'f32, 44.0'f32)
+    check clip.bounds == initRect(0.0'f32, 0.0'f32, 118.0'f32, 44.0'f32)
     check content != nil
     check content.listView == listView
-    check content.superview == listView
+    check content.superview == View(clip)
     check not content.acceptsFirstResponder
     check not content.autoresizingMaskConstraints
-    check content.frame == initRect(1.0'f32, 1.0'f32, 118.0'f32, 80.0'f32)
+    check content.frame == initRect(0.0'f32, 0.0'f32, 118.0'f32, 80.0'f32)
     check content.bounds.size == initSize(118.0'f32, 80.0'f32)
     check listView.listContentSize() == initSize(118.0'f32, 80.0'f32)
     check content.listContentItemRect(2) ==
@@ -158,7 +167,8 @@ suite "nimkit list views":
     check content.listContentItemIndexAtPoint(initPoint(6.0'f32, 45.0'f32)) == 2
 
     listView.firstVisibleIndex = 2
-    check content.frame == initRect(1.0'f32, -39.0'f32, 118.0'f32, 80.0'f32)
+    check content.frame == initRect(0.0'f32, 0.0'f32, 118.0'f32, 80.0'f32)
+    check clip.bounds.origin == initPoint(0.0'f32, 40.0'f32)
     check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 118.0'f32, 20.0'f32)
     check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
 
