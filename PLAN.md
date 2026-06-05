@@ -32,30 +32,17 @@ target is enough Cocoa/AppKit-like behavior to support complex applications:
 sidebars, inspectors, pickers, logs, search results, simple data browsers, and
 future table/outline-style controls.
 
-1. Refine `ScrollView` toward the AppKit `NSScrollView`/`NSClipView` shape:
-   - make the clipped viewport a real `ClipView` concept instead of only a
-     private content wrapper
-   - keep document/content view ownership explicit
-   - make scroll position derive from the clip view bounds origin instead of
-     duplicating parallel `xContentOffset` state
-   - keep `contentOffset`, `scrollTo`, and `scrollRectToVisible` as Nim-friendly
-     conveniences over the clip-view bounds model
-   - keep intrinsic/fitting behavior separated from document size so a scroll
-     view never asks containers to grow to fit its whole document
-   - mirror clip/document geometry into horizontal and vertical scroller state
-     through one tiling/reflection path
-2. Make scroll event behavior closer to Cocoa/AppKit:
-   - extend `ScrollEvent` with phase and momentum phase so trackpad gesture
-     routing can distinguish initial, changed, ended, and momentum scrolling
-   - preserve the initial scroll target through momentum events instead of
-     repeatedly retargeting to the view under the pointer
-   - replace the conceptual role of public `canScrollWheel` with an
-     AppKit-like forwarded-scroll policy such as `wantsForwardedScrollEvents`
-   - keep simple "would this delta move me?" checks as internal helpers for
-     scrollers and tests, not as the main public responder API
-   - bubble scroll events at scroll edges only when the scroll view/list policy
-     allows forwarding
-3. Move popup/list viewport mechanics onto `ScrollView` concepts:
+Recently completed:
+- `ScrollView` now has a real `ClipView`, explicit document/content ownership,
+  content offsets derived from clip-view bounds, intrinsic sizing separated from
+  document size, and sibling scroller views tiled through one reflection path.
+- Scroll routing now carries phase/momentum metadata, preserves momentum target
+  routing, uses `wantsForwardedScrollEvents`, and keeps edge-forwarding policy
+  out of the main public scroll API.
+- Programmatic scroll helpers include exact offsets, `scrollRectToVisible`, and
+  normalized fraction scrolling with independent `x`/`y` axes.
+
+1. Move popup/list viewport mechanics onto `ScrollView` concepts:
    - reuse viewport clipping and scroll offset
    - keep transient popup behavior narrow
    - avoid separate popup/list scrolling models unless popup behavior truly
@@ -63,39 +50,39 @@ future table/outline-style controls.
    - prefer list-like document views inside a `ScrollView` for full scrolling
    - keep compact popup lists lightweight, but route their scroll math through
      the same viewport helpers where possible
-4. Grow `ListView` into a data-driven single-column list:
+2. Grow `ListView` into a data-driven single-column list:
    - keep local `items` as the simple default path
    - add selector-backed data source hooks for row count and row value/view
    - add delegate hooks for selection, activation, row height, and optional row
      styling
    - keep row state as plain values: index, selected, highlighted, focused,
      enabled
-5. Add a real selection model:
+3. Add a real selection model:
    - none, single, multiple, and extended selection
    - selected index sets/ranges
    - keyboard selection extension with Shift
    - command/control discontiguous selection where platform appropriate
    - delegate notifications before and after selection changes
-6. Add row virtualization and reuse:
+4. Add row virtualization and reuse:
    - draw/layout only visible rows
    - reusable row views or row renderers
    - support fixed row height first
    - add variable row heights after fixed-height behavior is stable
    - keep row reuse separate from data ownership
-7. Add AppKit-like keyboard and focus behavior:
+5. Add AppKit-like keyboard and focus behavior:
    - up/down/page/home/end
    - type-select or incremental search
    - focus ring and first-responder behavior
    - activation through Enter/Return/double-click
    - disabled or nonselectable rows if delegate support justifies it
-8. Add richer list affordances:
+6. Add richer list affordances:
    - empty state rendering hook
    - alternating row backgrounds
    - separators/grid lines if theme roles support them
    - row hover and pressed states
    - scroll-to-selection helpers
    - accessibility/debug summaries for visible rows and selection state
-9. Defer full table/outline APIs until this base is solid:
+7. Defer full table/outline APIs until this base is solid:
    - column headers
    - sortable columns
    - resizable/reorderable columns
