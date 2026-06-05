@@ -317,6 +317,100 @@ suite "nimkit scroll views":
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
 
+  test "scroller gutter clicks page content along axis":
+    let
+      window = newWindow("Scroller gutter", frame = initRect(0, 0, 260, 220))
+      root = newView(frame = initRect(0, 0, 260, 220))
+      verticalDocument = newView(frame = initRect(0, 0, 80, 260))
+      vertical = newScrollView(
+        frame = initRect(10, 10, 100, 80), documentView = verticalDocument
+      )
+      horizontalDocument = newView(frame = initRect(0, 0, 320, 70))
+      horizontal = newScrollView(
+        frame = initRect(10, 120, 100, 80), documentView = horizontalDocument
+      )
+
+    vertical.hasVerticalScroller = true
+    vertical.autohidesScrollers = false
+    vertical.scrollerThickness = 10.0
+    horizontal.hasHorizontalScroller = true
+    horizontal.autohidesScrollers = false
+    horizontal.scrollerThickness = 10.0
+    root.addSubview(vertical, horizontal)
+    window.setContentView(root)
+
+    let
+      verticalTrack = vertical.verticalScrollerRect()
+      verticalKnob = vertical.verticalScrollerKnobRect()
+      verticalDownPoint = vertical.frame().origin.offset(
+          verticalTrack.origin.x + verticalTrack.size.width / 2.0'f32,
+          verticalKnob.maxY + 8.0'f32,
+        )
+
+    check window.mouseDownAt(verticalDownPoint)
+    check window.mouseUpAt(verticalDownPoint)
+    check vertical.contentOffset().y.nearlyEqual(vertical.viewportSize().height)
+
+    let verticalUpPoint = vertical.frame().origin.offset(
+        verticalTrack.origin.x + verticalTrack.size.width / 2.0'f32,
+        verticalKnob.origin.y + 2.0'f32,
+      )
+
+    check window.mouseDownAt(verticalUpPoint)
+    check window.mouseUpAt(verticalUpPoint)
+    check vertical.contentOffset().y.nearlyEqual(0.0'f32)
+
+    let
+      horizontalTrack = horizontal.horizontalScrollerRect()
+      horizontalKnob = horizontal.horizontalScrollerKnobRect()
+      horizontalRightPoint = horizontal.frame().origin.offset(
+          horizontalKnob.maxX + 8.0'f32,
+          horizontalTrack.origin.y + horizontalTrack.size.height / 2.0'f32,
+        )
+
+    check window.mouseDownAt(horizontalRightPoint)
+    check window.mouseUpAt(horizontalRightPoint)
+    check horizontal.contentOffset().x.nearlyEqual(horizontal.viewportSize().width)
+
+  test "scroller knob drag maps track movement to content offset":
+    let
+      window = newWindow("Scroller drag", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      document = newView(frame = initRect(0, 0, 80, 260))
+      scrollView =
+        newScrollView(frame = initRect(10, 10, 100, 80), documentView = document)
+
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = false
+    scrollView.scrollerThickness = 10.0
+    root.addSubview(scrollView)
+    window.setContentView(root)
+
+    let
+      track = scrollView.verticalScrollerRect()
+      knob = scrollView.verticalScrollerKnobRect()
+      grip = 5.0'f32
+      dragY = 45.0'f32
+      startPoint = scrollView.frame().origin.offset(
+          knob.origin.x + knob.size.width / 2.0'f32, knob.origin.y + grip
+        )
+      dragPoint = scrollView.frame().origin.offset(
+          knob.origin.x + knob.size.width / 2.0'f32, dragY
+        )
+      travel = track.size.height - knob.size.height
+      expectedOffset = (dragY - grip) / travel * scrollView.maximumContentOffset().y
+
+    check window.mouseDownAt(startPoint)
+    check window.mouseDraggedAt(dragPoint)
+    check scrollView.contentOffset().y.nearlyEqual(expectedOffset)
+
+    let endPoint = scrollView.frame().origin.offset(
+        knob.origin.x + knob.size.width / 2.0'f32, track.maxY + 120.0'f32
+      )
+    check window.mouseDraggedAt(endPoint)
+    check scrollView.contentOffset().y.nearlyEqual(scrollView.maximumContentOffset().y)
+    check window.mouseUpAt(endPoint)
+
   test "wheel over scrollable nested scroll view stays with child":
     let
       childDocument = newView(frame = initRect(0, 0, 100, 260))
