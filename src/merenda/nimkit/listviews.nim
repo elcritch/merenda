@@ -561,35 +561,6 @@ proc pageSelection(listView: ListView, deltaPages: int) =
     return
   listView.moveSelection(deltaPages * max(listView.visibleItemCount(), 1))
 
-proc drawListView(listView: ListView, context: DrawContext) =
-  if listView.isNil or listView.bounds().isEmpty:
-    return
-  listView.tileListContent()
-  let
-    classes = listView.styleClasses()
-    listStyle = context.appearance.resolveListViewStyle(
-      initControlStyleContext(
-        listView.xListRole,
-        enabled = listView.isEnabled(),
-        focused = listView.isFocused(),
-        focusVisible = listView.isFocusVisible(),
-        id = listView.styleId(),
-        classes = classes,
-      )
-    )
-  discard context.addWindowRectangle(
-    context.localRectToWindow(listView.bounds()),
-    listStyle.box.fill,
-    listStyle.box.borderColor,
-    listStyle.box.borderWidth,
-    listStyle.box.cornerRadius,
-    listStyle.box.shadows,
-    clips = true,
-  )
-
-  if listView.isFocusVisible:
-    context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
-
 proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   let listView = contentView.listView()
   if listView.isNil or listView.len() <= 0:
@@ -755,9 +726,33 @@ protocol DefaultListViewLayout of ViewLayoutProtocol:
 
 protocol DefaultListViewDrawing of ViewDrawingProtocol:
   method draw(listView: ListView, context: DrawContext) =
-    if listView.isNil:
+    if listView.isNil or listView.bounds().isEmpty:
       return
-    listView.drawListView(context)
+    listView.tileListContent()
+    let
+      classes = listView.styleClasses()
+      listStyle = context.appearance.resolveListViewStyle(
+        initControlStyleContext(
+          listView.xListRole,
+          enabled = listView.isEnabled(),
+          focused = listView.isFocused(),
+          focusVisible = listView.isFocusVisible(),
+          id = listView.styleId(),
+          classes = classes,
+        )
+      )
+    discard context.addWindowRectangle(
+      context.localRectToWindow(listView.bounds()),
+      listStyle.box.fill,
+      listStyle.box.borderColor,
+      listStyle.box.borderWidth,
+      listStyle.box.cornerRadius,
+      listStyle.box.shadows,
+      clips = true,
+    )
+
+    if listView.isFocusVisible:
+      context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
 
 protocol DefaultListViewEvents of ResponderEventProtocol:
   method mouseDown(listView: ListView, event: MouseEvent) =
