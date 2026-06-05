@@ -110,6 +110,14 @@ proc popupListItemIndexAtPoint*(
 
 proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect
 proc canScrollRows*(popupList: PopupListView, delta: int): bool
+proc resolveListRowStyle(
+  context: DrawContext,
+  row: ListRowState,
+  itemRole: StyleRole,
+  id = "",
+  classes: seq[string] = @[],
+): ListItemStyle
+
 proc drawPopupList*(
   popupList: PopupListView,
   context: DrawContext,
@@ -187,17 +195,6 @@ proc beginListScrollerTracking(scroller: ListScroller, point: Point)
 proc trackListScroller(scroller: ListScroller, point: Point)
 proc endListScrollerTracking(scroller: ListScroller, point: Point)
 proc listNaturalSize(listView: ListView): Size
-proc drawListView(listView: ListView, context: DrawContext)
-proc drawListRow(
-  context: DrawContext,
-  layer: ZLevel,
-  parent: FigIdx,
-  rect: Rect,
-  row: ListRowState,
-  itemRole: StyleRole,
-  id = "",
-  classes: seq[string] = @[],
-)
 
 protocol DefaultListContentViewDrawing of ViewDrawingProtocol:
   method draw(contentView: ListContentView, context: DrawContext) =
@@ -544,8 +541,6 @@ proc popupListScrollRows*(event: ScrollEvent): int =
 proc popupListItemRect*(
     popupList: PopupListView, popupBounds: Rect, itemIndex: int
 ): Rect =
-  if popupList.isNil:
-    return initRect(popupBounds.origin.x, popupBounds.origin.y, 0.0, 0.0)
   listItemRect(
     popupBounds,
     popupList.firstIndex(),
@@ -557,8 +552,6 @@ proc popupListItemRect*(
 proc popupListItemIndexAtPoint*(
     popupList: PopupListView, popupBounds: Rect, point: Point
 ): int =
-  if popupList.isNil:
-    return -1
   listItemIndexAtPoint(
     popupBounds,
     point,
@@ -569,13 +562,30 @@ proc popupListItemIndexAtPoint*(
   )
 
 proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect =
-  if popupList.isNil:
-    return initRect(popupBounds.origin.x, popupBounds.origin.y, 0.0, 0.0)
   listScrollerKnobRect(
     popupBounds,
     popupList.firstIndex(),
     popupList.visibleItemCount(),
     popupList.itemCount(),
+  )
+
+proc resolveListRowStyle(
+    context: DrawContext,
+    row: ListRowState,
+    itemRole: StyleRole,
+    id = "",
+    classes: seq[string] = @[],
+): ListItemStyle =
+  context.appearance.resolveListItemStyle(
+    initControlStyleContext(
+      itemRole,
+      enabled = row.enabled,
+      hovered = row.highlighted,
+      focused = row.focused,
+      selected = row.selected,
+      id = id,
+      classes = classes,
+    )
   )
 
 proc drawListRow(
@@ -590,17 +600,7 @@ proc drawListRow(
 ) =
   if rect.isEmpty:
     return
-  let itemStyle = context.appearance.resolveListItemStyle(
-    initControlStyleContext(
-      itemRole,
-      enabled = row.enabled,
-      hovered = row.highlighted,
-      focused = row.focused,
-      selected = row.selected,
-      id = id,
-      classes = classes,
-    )
-  )
+  let itemStyle = context.resolveListRowStyle(row, itemRole, id, classes)
   discard context.addWindowRectangle(
     layer,
     parent,
@@ -625,17 +625,7 @@ proc drawListRow(
 ) =
   if rect.isEmpty:
     return
-  let itemStyle = context.appearance.resolveListItemStyle(
-    initControlStyleContext(
-      itemRole,
-      enabled = row.enabled,
-      hovered = row.highlighted,
-      focused = row.focused,
-      selected = row.selected,
-      id = id,
-      classes = classes,
-    )
-  )
+  let itemStyle = context.resolveListRowStyle(row, itemRole, id, classes)
   discard context.addWindowRectangle(
     context.localRectToWindow(rect),
     itemStyle.box.fill,
@@ -1136,7 +1126,7 @@ proc listItemRect*(listView: ListView, itemIndex: int): Rect =
   let
     contentView = listView.contentView()
     contentRect = contentView.listContentItemRect(itemIndex)
-  if contentView.isNil or contentRect.isEmpty:
+  if contentRect.isEmpty:
     return initRect(0.0, 0.0, 0.0, 0.0)
   let visibleRect =
     contentView.rectToView(contentRect, listView).intersection(listView.bounds())
@@ -1168,7 +1158,7 @@ proc showsVerticalScroller*(listView: ListView): bool =
   hasHiddenListItems(listView.len(), visibleListItemCount(listView.len(), visibleRows))
 
 proc verticalScrollerRect*(listView: ListView): Rect =
-  if listView.isNil or not listView.showsVerticalScroller():
+  if not listView.showsVerticalScroller():
     return initRect(0.0, 0.0, 0.0, 0.0)
   scrollerTrackRect(listView.bounds(), laVertical, ListScrollerThickness, 1.0'f32)
 
@@ -1395,7 +1385,7 @@ proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
 
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int =
   let listView = contentView.listView()
-  if contentView.isNil or listView.isNil or not contentView.bounds().contains(point):
+  if listView.isNil or not contentView.bounds().contains(point):
     return -1
   let index = int(point.y / listView.rowHeight())
   if index < 0 or index >= listView.len():
@@ -1404,7 +1394,7 @@ proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): i
 
 proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   let listView = contentView.listView()
-  if contentView.isNil or listView.isNil or listView.len() <= 0:
+  if listView.isNil or listView.len() <= 0:
     return (0, 0)
   let
     rowHeight = listView.rowHeight()
@@ -1418,7 +1408,7 @@ proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
 
 proc drawListContent(contentView: ListContentView, context: DrawContext) =
   let listView = contentView.listView()
-  if contentView.isNil or listView.isNil:
+  if listView.isNil:
     return
   let
     classes = listView.styleClasses()
@@ -1460,7 +1450,7 @@ proc drawListScroller(scroller: ListScroller, context: DrawContext) =
 
 proc contentFirstIndexForKnobOrigin(scroller: ListScroller, knobOrigin: float32): int =
   let listView = scroller.listView()
-  if scroller.isNil or listView.isNil:
+  if listView.isNil:
     return 0
   let
     track = scroller.bounds()
