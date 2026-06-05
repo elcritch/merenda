@@ -72,30 +72,24 @@ type EventDispatchResult = object
   handled: bool
   responder: Responder
 
-protocol WindowLifecycleProtocolInternal:
+protocol WindowLifecycleProtocol:
   method shouldSetContentView*(v: View): bool {.optional.}
   proc willSetContentView*(w: Window, v: View) {.signal.}
   proc didSetContentView*(w: Window, oldView: View) {.signal.}
   proc willClose*(w: Window) {.signal.}
   proc didClose*(w: Window) {.signal.}
 
-protocol WindowFocusProtocolInternal:
+protocol WindowFocusProtocol:
   method shouldMakeFirstResponder*(r: Responder): bool {.optional.}
   proc didChangeFirstResponder*(w: Window, previous: Responder) {.signal.}
 
-protocol WindowAppearanceProtocolInternal:
+protocol WindowAppearanceProtocol:
   proc didChangeEffectiveAppearance*(w: Window, appearance: Appearance) {.signal.}
 
-protocol WindowPopupProtocolInternal:
+protocol WindowPopupProtocol:
   method shouldDismissTransientSession*(reason: DismissReason): bool {.optional.}
   proc didDismissTransientSession*(w: Window, reason: DismissReason) {.signal.}
   proc didChangePopupPresentation*(w: Window, present: PopupPresentation) {.signal.}
-
-let
-  WindowLifecycleProtocol* = WindowLifecycleProtocolInternal
-  WindowFocusProtocol* = WindowFocusProtocolInternal
-  WindowAppearanceProtocol* = WindowAppearanceProtocolInternal
-  WindowPopupProtocol* = WindowPopupProtocolInternal
 
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
