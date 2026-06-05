@@ -191,7 +191,7 @@ proc verticalScroller*(scrollView: ScrollView): Scroller =
 proc documentView*(scrollView: ScrollView): View =
   if scrollView.isNil: nil else: scrollView.xDocumentView
 
-proc setDocumentView*(scrollView: ScrollView, documentView: View) =
+proc `documentView=`*(scrollView: ScrollView, documentView: View) =
   if scrollView.isNil or scrollView.xDocumentView == documentView:
     return
   if not scrollView.xDocumentView.isNil:
@@ -203,16 +203,13 @@ proc setDocumentView*(scrollView: ScrollView, documentView: View) =
   scrollView.invalidateContainerMetrics()
   scrollView.setNeedsDisplay(true)
 
-proc `documentView=`*(scrollView: ScrollView, documentView: View) =
-  scrollView.setDocumentView(documentView)
-
 proc contentOffset*(scrollView: ScrollView): Point =
   if scrollView.isNil or scrollView.xClipView.isNil:
     initPoint(0.0, 0.0)
   else:
     scrollView.clampContentOffset(scrollView.xClipView.bounds().origin)
 
-proc setContentOffset*(scrollView: ScrollView, offset: Point) =
+proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
   if scrollView.isNil:
     return
   scrollView.tile()
@@ -221,11 +218,8 @@ proc setContentOffset*(scrollView: ScrollView, offset: Point) =
     return
   scrollView.setClipViewBoundsOrigin(nextOffset)
 
-proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
-  scrollView.setContentOffset(offset)
-
 proc scrollTo*(scrollView: ScrollView, offset: Point) =
-  scrollView.setContentOffset(offset)
+  scrollView.contentOffset = offset
 
 proc scrollToFraction*(scrollView: ScrollView, x = AutoMetric, y = AutoMetric) =
   if scrollView.isNil:
@@ -239,7 +233,7 @@ proc scrollBy*(scrollView: ScrollView, delta: Point) =
   if scrollView.isNil:
     return
   let current = scrollView.contentOffset()
-  scrollView.setContentOffset(initPoint(current.x + delta.x, current.y + delta.y))
+  scrollView.contentOffset = initPoint(current.x + delta.x, current.y + delta.y)
 
 proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
   if scrollView.isNil:
@@ -263,7 +257,7 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
   nextOffset = scrollView.clampContentOffset(nextOffset)
   result = nextOffset != currentOffset
   if result:
-    scrollView.setContentOffset(nextOffset)
+    scrollView.contentOffset = nextOffset
 
 proc scrollWheelDelta*(scrollView: ScrollView, event: ScrollEvent): Point =
   if scrollView.isNil:
@@ -528,4 +522,4 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
 proc newScrollView*(frame: Rect = AutoRect, documentView: View = nil): ScrollView =
   result = ScrollView()
   result.initScrollViewFields(frame)
-  result.setDocumentView(documentView)
+  result.documentView = documentView
