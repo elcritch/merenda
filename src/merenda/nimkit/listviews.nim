@@ -62,10 +62,10 @@ proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
+
 proc moveSelectionTo(listView: ListView, index: int)
 proc moveSelection(listView: ListView, delta: int)
 proc pageSelection(listView: ListView, deltaPages: int)
-
 proc listViewportSize(listView: ListView): Size
 proc listContentOffset(listView: ListView): Point
 proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
