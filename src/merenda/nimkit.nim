@@ -7,7 +7,9 @@ import merenda/nimkit/drawing
 import merenda/nimkit/formviews
 import merenda/nimkit/gridviews
 import merenda/nimkit/keybindings
+import merenda/nimkit/listbasics
 import merenda/nimkit/listviews
+import merenda/nimkit/popuplists
 import merenda/nimkit/rendering
 import merenda/nimkit/responders
 import merenda/nimkit/selectors
@@ -28,7 +30,9 @@ export drawing
 export formviews
 export gridviews
 export keybindings
+export listbasics
 export listviews
+export popuplists
 export rendering
 export responders
 export selectors

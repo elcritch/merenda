@@ -1,0 +1,393 @@
+from figdraw/figbasics import ZLevel
+from figdraw/fignodes import FigIdx
+
+import ./controls
+import ./drawing
+import ./listbasics
+import ./selectors
+import ./theme
+import ./types
+
+type
+  PopupListCountProc* = proc(): int {.closure.}
+  PopupListMetricProc* = proc(): float32 {.closure.}
+  PopupListBoolProc* = proc(): bool {.closure.}
+  PopupListStringProc* = proc(): string {.closure.}
+  PopupListClassesProc* = proc(): seq[string] {.closure.}
+  PopupListItemTextProc* = proc(index: int): string {.closure.}
+  PopupListItemProc* = proc(index: int) {.closure.}
+  PopupListScrollProc* = proc(delta: int) {.closure.}
+  PopupListKeyProc* = proc(event: KeyEvent) {.closure.}
+  PopupListActionProc* = proc() {.closure.}
+
+  PopupListData* = object
+    itemCount*: PopupListCountProc
+    visibleCount*: PopupListCountProc
+    firstIndex*: PopupListCountProc
+    selectedIndex*: PopupListCountProc
+    highlightedIndex*: PopupListCountProc
+    rowHeight*: PopupListMetricProc
+    itemText*: PopupListItemTextProc
+    enabled*: PopupListBoolProc
+    focused*: PopupListBoolProc
+    opened*: PopupListBoolProc
+    styleId*: PopupListStringProc
+    styleClasses*: PopupListClassesProc
+
+  PopupListActions* = object
+    highlight*: PopupListItemProc
+    activate*: PopupListItemProc
+    close*: PopupListActionProc
+    scroll*: PopupListScrollProc
+    keyDown*: PopupListKeyProc
+
+  PopupListView* = ref object of View
+    xData: PopupListData
+    xActions: PopupListActions
+    xTrackingItem: bool
+    xPopupRole: StyleRole
+    xItemRole: StyleRole
+
+proc itemCount*(popupList: PopupListView): int
+proc visibleItemCount*(popupList: PopupListView): int
+proc firstIndex*(popupList: PopupListView): int
+proc selectedIndex*(popupList: PopupListView): int
+proc highlightedIndex*(popupList: PopupListView): int
+proc rowHeight*(popupList: PopupListView): float32
+proc itemText*(popupList: PopupListView, index: int): string
+proc isEnabled*(popupList: PopupListView): bool
+proc isFocused*(popupList: PopupListView): bool
+proc isOpened*(popupList: PopupListView): bool
+proc canScrollRows*(popupList: PopupListView, delta: int): bool
+proc popupListScrollRows*(event: ScrollEvent): int
+proc popupListItemRect*(
+  popupList: PopupListView, popupBounds: Rect, itemIndex: int
+): Rect
+
+proc popupListItemIndexAtPoint*(
+  popupList: PopupListView, popupBounds: Rect, point: Point
+): int
+
+proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect
+proc drawPopupList*(
+  popupList: PopupListView,
+  context: DrawContext,
+  popupBounds: Rect,
+  layer: ZLevel = DefaultDrawLevel,
+  parent: FigIdx = (-1).FigIdx,
+)
+
+proc beginPopupListTracking*(popupList: PopupListView, popupBounds: Rect, point: Point)
+proc trackPopupListPoint*(popupList: PopupListView, popupBounds: Rect, point: Point)
+proc finishPopupListTracking*(
+  popupList: PopupListView, popupBounds: Rect, point: Point, closeWhenDone = true
+)
+
+proc resetPopupListTracking*(popupList: PopupListView)
+proc highlightItemAtPoint(popupList: PopupListView, popupBounds: Rect, point: Point)
+proc activateItem(popupList: PopupListView, index: int)
+proc close(popupList: PopupListView)
+proc scrollBy(popupList: PopupListView, delta: int)
+proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
+
+protocol DefaultPopupListDrawing of ViewDrawingProtocol:
+  method draw(popupList: PopupListView, context: DrawContext) =
+    if popupList.isOpened():
+      popupList.drawPopupList(context, popupList.bounds)
+
+protocol DefaultPopupListEvents of ResponderEventProtocol:
+  method mouseDown(popupList: PopupListView, event: MouseEvent) =
+    if not popupList.isEnabled() or event.button != mbPrimary:
+      return
+    popupList.beginPopupListTracking(popupList.bounds, event.location)
+
+  method mouseDragged(popupList: PopupListView, event: MouseEvent) =
+    if popupList.isOpened():
+      popupList.trackPopupListPoint(popupList.bounds, event.location)
+
+  method mouseMoved(popupList: PopupListView, event: MouseEvent) =
+    if popupList.isOpened():
+      popupList.trackPopupListPoint(popupList.bounds, event.location)
+
+  method mouseUp(popupList: PopupListView, event: MouseEvent) =
+    if not popupList.isEnabled() or event.button != mbPrimary:
+      return
+    popupList.finishPopupListTracking(popupList.bounds, event.location)
+
+  method wantsForwardedScrollEvents(
+      popupList: PopupListView, event: ScrollEvent
+  ): bool =
+    not popupList.isOpened() or not popupList.canScrollRows(popupListScrollRows(event))
+
+  method scrollWheel(popupList: PopupListView, event: ScrollEvent) =
+    let delta = popupListScrollRows(event)
+    if popupList.isOpened() and popupList.canScrollRows(delta):
+      popupList.scrollBy(delta)
+
+  method keyDown(popupList: PopupListView, event: KeyEvent) =
+    popupList.dispatchKeyDown(event)
+
+proc data(popupList: PopupListView): PopupListData =
+  if popupList.isNil:
+    PopupListData()
+  else:
+    popupList.xData
+
+proc actions(popupList: PopupListView): PopupListActions =
+  if popupList.isNil:
+    PopupListActions()
+  else:
+    popupList.xActions
+
+template valueOr(callback, fallback: untyped): untyped =
+  if callback.isNil:
+    fallback
+  else:
+    callback()
+
+template valueAtOr(callback, index, fallback: untyped): untyped =
+  if callback.isNil:
+    fallback
+  else:
+    callback(index)
+
+proc itemCount*(popupList: PopupListView): int =
+  max(popupList.data().itemCount.valueOr(0), 0)
+
+proc visibleItemCount*(popupList: PopupListView): int =
+  max(popupList.data().visibleCount.valueOr(popupList.itemCount()), 0)
+
+proc firstIndex*(popupList: PopupListView): int =
+  popupList.data().firstIndex.valueOr(0).clampFirstIndex(
+    popupList.itemCount(), popupList.visibleItemCount()
+  )
+
+proc selectedIndex*(popupList: PopupListView): int =
+  popupList.data().selectedIndex.valueOr(-1)
+
+proc highlightedIndex*(popupList: PopupListView): int =
+  popupList.data().highlightedIndex.valueOr(-1)
+
+proc rowHeight*(popupList: PopupListView): float32 =
+  popupList.data().rowHeight.valueOr(18.0'f32).normalizedRowHeight()
+
+proc itemText*(popupList: PopupListView, index: int): string =
+  popupList.data().itemText.valueAtOr(index, "")
+
+proc isEnabled*(popupList: PopupListView): bool =
+  popupList.data().enabled.valueOr(true)
+
+proc isFocused*(popupList: PopupListView): bool =
+  popupList.data().focused.valueOr(false)
+
+proc isOpened*(popupList: PopupListView): bool =
+  popupList.data().opened.valueOr(true)
+
+proc styleId(popupList: PopupListView): string =
+  popupList.data().styleId.valueOr("")
+
+proc styleClasses(popupList: PopupListView): seq[string] =
+  popupList.data().styleClasses.valueOr(@[])
+
+proc popupListScrollRows*(event: ScrollEvent): int =
+  listScrollRows(event)
+
+proc popupListItemRect*(
+    popupList: PopupListView, popupBounds: Rect, itemIndex: int
+): Rect =
+  listItemRect(
+    popupBounds,
+    popupList.firstIndex(),
+    popupList.visibleItemCount(),
+    itemIndex,
+    popupList.rowHeight(),
+  )
+
+proc popupListItemIndexAtPoint*(
+    popupList: PopupListView, popupBounds: Rect, point: Point
+): int =
+  listItemIndexAtPoint(
+    popupBounds,
+    point,
+    popupList.firstIndex(),
+    popupList.visibleItemCount(),
+    popupList.itemCount(),
+    popupList.rowHeight(),
+  )
+
+proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect =
+  listScrollerKnobRect(
+    popupBounds,
+    popupList.firstIndex(),
+    popupList.visibleItemCount(),
+    popupList.itemCount(),
+  )
+
+proc drawPopupList*(
+    popupList: PopupListView,
+    context: DrawContext,
+    popupBounds: Rect,
+    layer: ZLevel = DefaultDrawLevel,
+    parent: FigIdx = (-1).FigIdx,
+) =
+  if popupList.isNil or popupBounds.isEmpty:
+    return
+  let
+    classes = popupList.styleClasses()
+    appearance = context.appearance()
+    popupStyle = appearance.resolveComboBoxStyle(
+      initControlStyleContext(
+        popupList.xPopupRole,
+        enabled = popupList.isEnabled(),
+        focused = popupList.isFocused(),
+        opened = popupList.isOpened(),
+        id = popupList.styleId(),
+        classes = classes,
+      )
+    )
+    popupRoot = context.addWindowRectangle(
+      layer,
+      parent,
+      context.localRectToWindow(popupBounds),
+      initColor(1.0, 1.0, 1.0, 1.0),
+      popupStyle.box.borderColor,
+      popupStyle.box.borderWidth,
+      2.0'f32,
+    )
+    first = popupList.firstIndex()
+    visible = popupList.visibleItemCount()
+    total = popupList.itemCount()
+
+  for visibleIndex in 0 ..< visible:
+    let itemIndex = first + visibleIndex
+    if itemIndex < 0 or itemIndex >= total:
+      continue
+    let
+      itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
+      row = initListRowState(
+        itemIndex,
+        popupList.itemText(itemIndex),
+        selected = itemIndex == popupList.selectedIndex(),
+        highlighted = itemIndex == popupList.highlightedIndex(),
+        enabled = popupList.isEnabled(),
+        focused = popupList.isFocused(),
+      )
+    context.drawListRow(
+      layer, popupRoot, itemRect, row, popupList.xItemRole, popupList.styleId(), classes
+    )
+
+  let knobRect = popupList.popupListScrollerKnobRect(popupBounds)
+  if not knobRect.isEmpty:
+    discard context.addWindowRectangle(
+      layer,
+      popupRoot,
+      context.localRectToWindow(knobRect),
+      fill(initColor(0.10, 0.18, 0.30, 0.34)),
+      initColor(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
+      2.0'f32,
+    )
+
+proc highlightItemAtPoint(popupList: PopupListView, popupBounds: Rect, point: Point) =
+  let itemIndex = popupList.popupListItemIndexAtPoint(popupBounds, point)
+  let highlight = popupList.actions().highlight
+  if itemIndex >= 0 and not highlight.isNil:
+    highlight(itemIndex)
+
+proc beginPopupListTracking*(
+    popupList: PopupListView, popupBounds: Rect, point: Point
+) =
+  if popupList.isNil:
+    return
+  popupList.xTrackingItem = true
+  popupList.highlightItemAtPoint(popupBounds, point)
+
+proc trackPopupListPoint*(popupList: PopupListView, popupBounds: Rect, point: Point) =
+  if popupList.isNil:
+    return
+  popupList.highlightItemAtPoint(popupBounds, point)
+
+proc finishPopupListTracking*(
+    popupList: PopupListView, popupBounds: Rect, point: Point, closeWhenDone = true
+) =
+  if popupList.isNil:
+    return
+  let itemIndex =
+    if popupList.isOpened() and popupList.xTrackingItem:
+      popupList.popupListItemIndexAtPoint(popupBounds, point)
+    else:
+      -1
+  popupList.xTrackingItem = false
+  if itemIndex >= 0:
+    popupList.activateItem(itemIndex)
+  if closeWhenDone:
+    popupList.close()
+
+proc resetPopupListTracking*(popupList: PopupListView) =
+  if not popupList.isNil:
+    popupList.xTrackingItem = false
+
+proc activateItem(popupList: PopupListView, index: int) =
+  let activate = popupList.actions().activate
+  if not activate.isNil:
+    activate(index)
+
+proc close(popupList: PopupListView) =
+  let closeAction = popupList.actions().close
+  if not closeAction.isNil:
+    closeAction()
+
+proc scrollBy(popupList: PopupListView, delta: int) =
+  let scroll = popupList.actions().scroll
+  if delta != 0 and not scroll.isNil:
+    scroll(delta)
+
+proc canScrollRows*(popupList: PopupListView, delta: int): bool =
+  initListViewport(popupList.firstIndex()).canScrollBy(
+    delta, popupList.itemCount(), popupList.visibleItemCount()
+  )
+
+proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent) =
+  let keyDown = popupList.actions().keyDown
+  if not keyDown.isNil:
+    keyDown(event)
+
+proc configure*(
+    popupList: PopupListView, data: PopupListData, actions: PopupListActions
+) =
+  if popupList.isNil:
+    return
+  popupList.xData = data
+  popupList.xActions = actions
+
+proc setPopupListRoles*(
+    popupList: PopupListView,
+    popupRole: StyleRole = srComboBox,
+    itemRole: StyleRole = srComboBoxItem,
+) =
+  if popupList.isNil:
+    return
+  popupList.xPopupRole = popupRole
+  popupList.xItemRole = itemRole
+  popupList.setNeedsDisplay(true)
+
+proc initPopupListViewFields*(
+    popupList: PopupListView,
+    data = PopupListData(),
+    actions = PopupListActions(),
+    frame: Rect = AutoRect,
+) =
+  initViewFields(popupList, frame)
+  popupList.xPopupRole = srComboBox
+  popupList.xItemRole = srComboBoxItem
+  popupList.configure(data, actions)
+  popupList.setBackgroundColor(initColor(1.0, 1.0, 1.0, 1.0))
+  popupList.setAcceptsFirstResponder(true)
+  discard popupList.withProtocol(DefaultPopupListDrawing)
+  discard popupList.withProtocol(DefaultPopupListEvents)
+
+proc newPopupListView*(
+    data = PopupListData(), actions = PopupListActions(), frame: Rect = AutoRect
+): PopupListView =
+  result = PopupListView()
+  initPopupListViewFields(result, data, actions, frame)
