@@ -41,15 +41,18 @@ Recently completed:
   out of the main public scroll API.
 - Programmatic scroll helpers include exact offsets, `scrollRectToVisible`, and
   normalized fraction scrolling with independent `x`/`y` axes.
+- List and popup row-window math now flows through `ListViewport` backed by the
+  shared `ScrollViewport` helpers, covering row offset clamping, scroll-by,
+  scroll-to-visible, and scroll indicator progress.
 
 1. Move popup/list viewport mechanics onto `ScrollView` concepts:
-   - reuse viewport clipping and scroll offset
+   - reuse viewport clipping and scroll offset for full list-like views
    - keep transient popup behavior narrow
    - avoid separate popup/list scrolling models unless popup behavior truly
      differs
    - prefer list-like document views inside a `ScrollView` for full scrolling
-   - keep compact popup lists lightweight, but route their scroll math through
-     the same viewport helpers where possible
+   - keep compact popup lists lightweight; their row scroll math already uses
+     the same viewport helpers, but rendering remains intentionally inline
 2. Grow `ListView` into a data-driven single-column list:
    - keep local `items` as the simple default path
    - add selector-backed data source hooks for row count and row value/view
