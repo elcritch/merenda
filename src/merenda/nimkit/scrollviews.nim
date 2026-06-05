@@ -43,8 +43,6 @@ func scrollerTrackRect*(
   container: Rect, axis: LayoutAxis, thickness, inset: float32
 ): Rect
 proc drawScroller*(context: DrawContext, track, knob: Rect)
-proc scrollKnobTo(scroller: Scroller, point: Point)
-proc scrollPageToward(scroller: Scroller, point: Point)
 
 func initScrollViewport*(
     offset, visibleExtent, contentExtent: float32
