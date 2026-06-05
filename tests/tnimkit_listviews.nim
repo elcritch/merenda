@@ -19,6 +19,17 @@ type
     rows: seq[ListRowState]
     rects: seq[Rect]
 
+  ListPolicyDelegateSpy = ref object of Responder
+    disabledRows: seq[int]
+    nonselectableRows: seq[int]
+    rows: seq[ListRowState]
+
+proc containsIndex(indexes: openArray[int], index: int): bool =
+  for value in indexes:
+    if value == index:
+      return true
+  false
+
 protocol ListDataSourceSpyMethods of ListViewDataSource:
   method numberOfRowsInListView(source: ListDataSourceSpy, listView: ListView): int =
     source.rows.len
@@ -56,6 +67,27 @@ protocol ListRowRendererSpyMethods of ListViewDelegate:
     renderer.rects.add rect
     listView.drawListRow(context, rect, row)
 
+protocol ListPolicyDelegateSpyMethods of ListViewDelegate:
+  method listViewRowIsEnabled(
+      policy: ListPolicyDelegateSpy, listView: ListView, row: int
+  ): bool =
+    not policy.disabledRows.containsIndex(row)
+
+  method listViewShouldSelectRow(
+      policy: ListPolicyDelegateSpy, listView: ListView, row: int
+  ): bool =
+    not policy.nonselectableRows.containsIndex(row)
+
+  method listViewDrawRow(
+      policy: ListPolicyDelegateSpy,
+      listView: ListView,
+      context: DrawContext,
+      rect: Rect,
+      row: ListRowState,
+  ) =
+    policy.rows.add row
+    listView.drawListRow(context, rect, row)
+
 proc newListDataSourceSpy(rows: openArray[string]): ListDataSourceSpy =
   result = ListDataSourceSpy(rows: @rows)
   initResponder(result)
@@ -71,10 +103,22 @@ proc newListRowRendererSpy(): ListRowRendererSpy =
   initResponder(result)
   discard result.withProtocol(ListRowRendererSpyMethods)
 
+proc newListPolicyDelegateSpy(
+    disabledRows: openArray[int] = [], nonselectableRows: openArray[int] = []
+): ListPolicyDelegateSpy =
+  result = ListPolicyDelegateSpy(
+    disabledRows: @disabledRows, nonselectableRows: @nonselectableRows
+  )
+  initResponder(result)
+  discard result.withProtocol(ListPolicyDelegateSpyMethods)
+
 proc clear(spy: ListRowRendererSpy) =
   spy.views.setLen(0)
   spy.rows.setLen(0)
   spy.rects.setLen(0)
+
+proc clear(spy: ListPolicyDelegateSpy) =
+  spy.rows.setLen(0)
 
 proc listViewScrollerKnobRect(listView: ListView): Rect =
   scrollerKnobRect(
@@ -495,6 +539,89 @@ suite "nimkit list views":
     check renderer.rects[0] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[1] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[2] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+
+  test "list view row policy controls enabled state and selection":
+    let
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five"], frame = initRect(0, 0, 120, 102)
+      )
+      policy = newListPolicyDelegateSpy(disabledRows = [1], nonselectableRows = [3])
+
+    listView.rowHeight = 20.0
+    listView.delegate = policy
+
+    check listView.rowEnabled(0)
+    check not listView.rowEnabled(1)
+    check listView.rowEnabled(3)
+    check listView.rowSelectable(0)
+    check not listView.rowSelectable(1)
+    check not listView.rowSelectable(3)
+
+    listView.selectedIndex = 1
+    check listView.selectedIndex == -1
+    listView.selectedIndex = 3
+    check listView.selectedIndex == -1
+    listView.selectedIndex = 2
+    check listView.selectedIndex == 2
+
+    listView.selectionMode = lsmMultiple
+    listView.selectedIndexes = [0, 1, 2, 3, 4]
+    check listView.selectedIndexes == @[0, 2, 4]
+
+    policy.clear()
+    discard buildRenders(listView)
+    check policy.rows.len == 5
+    check policy.rows[1] == initListRowState(1, "Two", enabled = false)
+    check policy.rows[3] == initListRowState(3, "Four")
+
+  test "list view row policy skips mouse and keyboard selection":
+    let
+      window = newWindow("List row policy", frame = initRect(0, 0, 220, 180))
+      root = newView(frame = initRect(0, 0, 220, 180))
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five"], frame = initRect(10, 10, 120, 102)
+      )
+      policy = newListPolicyDelegateSpy(disabledRows = [1], nonselectableRows = [3])
+      action = actionSelector("listPolicyAction")
+
+    var actionCount = 0
+
+    proc onAction(sender: DynamicAgent) =
+      check sender == DynamicAgent(listView)
+      inc actionCount
+
+    listView.rowHeight = 20.0
+    listView.delegate = policy
+    listView.target = newActionTarget(action, onAction)
+    listView.action = action
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.clickListRow(listView, 0)
+    check listView.selectedIndex == 0
+    check actionCount == 1
+
+    check window.clickListRow(listView, 1)
+    check listView.selectedIndex == 0
+    check actionCount == 1
+
+    check window.clickListRow(listView, 3)
+    check listView.selectedIndex == 0
+    check actionCount == 1
+
+    check window.makeFirstResponder(listView)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check listView.selectedIndex == 2
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check listView.selectedIndex == 4
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
+    check listView.selectedIndex == 2
+    check window.dispatchKeyDown(KeyEvent(key: keyHome, keyCode: keyHome.ord))
+    check listView.selectedIndex == 0
+    check window.dispatchKeyDown(KeyEvent(key: keyEnd, keyCode: keyEnd.ord))
+    check listView.selectedIndex == 4
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check actionCount == 2
 
   test "list view scroller pages and drags row viewport":
     let

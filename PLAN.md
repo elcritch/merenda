@@ -70,11 +70,14 @@ Recently completed:
   `listViewDrawRow` with a plain `ListRowState` and row-local bounds. Custom
   renderers can call `drawListRow` to reuse the default themed row drawing
   without depending on private reusable row views.
+- `ListView` delegates can control row policy through `listViewRowIsEnabled`
+  and `listViewShouldSelectRow`. Disabled rows feed `ListRowState.enabled`,
+  disabled and nonselectable rows are filtered out of selection state, and
+  mouse/keyboard selection skips rows the delegate marks unavailable.
 
 1. Finish `ListView` data/delegate policy hooks:
    - keep local `items` as the simple default path
    - add delegate hooks for row height and optional row styling
-   - consider disabled or nonselectable rows if examples justify the policy
    - keep row state as plain values: index, selected, highlighted, focused,
      enabled
 2. Polish selection APIs and diagnostics:
