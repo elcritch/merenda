@@ -62,9 +62,11 @@ proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
+proc moveSelectionTo(listView: ListView, index: int)
+proc moveSelection(listView: ListView, delta: int)
+proc pageSelection(listView: ListView, deltaPages: int)
 
 proc listViewportSize(listView: ListView): Size
-proc listViewportRect(listView: ListView): Rect
 proc listContentOffset(listView: ListView): Point
 proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc tileListContent(listView: ListView)
@@ -72,13 +74,9 @@ proc drawListContent(contentView: ListContentView, context: DrawContext)
 proc invalidateListRows(listView: ListView)
 proc itemAtIndex(listView: ListView, index: int): string
 proc selectItemAtIndex(listView: ListView, index: int)
-proc deselectItem(listView: ListView)
-proc handleListKeyDown(listView: ListView, event: KeyEvent)
-proc drawListScroller(scroller: ListScroller, context: DrawContext)
 proc listScrollerKnobRect(listView: ListView, track: Rect): Rect
-proc beginListScrollerTracking(scroller: ListScroller, point: Point)
-proc trackListScroller(scroller: ListScroller, point: Point)
-proc endListScrollerTracking(scroller: ListScroller, point: Point)
+proc scrollListKnobTo(scroller: ListScroller, point: Point)
+proc scrollListPageToward(scroller: ListScroller, point: Point)
 proc listNaturalSize(listView: ListView): Size
 
 protocol DefaultListContentViewDrawing of ViewDrawingProtocol:
@@ -95,20 +93,38 @@ protocol DefaultListClipViewHitTesting of ViewProtocol:
 
 protocol DefaultListScrollerDrawing of ViewDrawingProtocol:
   method draw(scroller: ListScroller, context: DrawContext) =
-    scroller.drawListScroller(context)
+    if scroller.isNil or scroller.hidden:
+      return
+    let track = scroller.bounds()
+    context.drawScroller(track, scroller.listView().listScrollerKnobRect(track))
 
 protocol DefaultListScrollerEvents of ResponderEventProtocol:
   method mouseDown(scroller: ListScroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      scroller.beginListScrollerTracking(event.location)
+      if scroller.isNil:
+        return
+      let
+        track = scroller.bounds()
+        knob = scroller.listView().listScrollerKnobRect(track)
+      if scroller.xTracking.beginScrollerTracking(
+        track, knob, laVertical, event.location
+      ):
+        return
+      if track.contains(event.location):
+        scroller.scrollListPageToward(event.location)
 
   method mouseDragged(scroller: ListScroller, event: MouseEvent) =
-    if event.button == mbPrimary:
-      scroller.trackListScroller(event.location)
+    if event.button == mbPrimary and not scroller.isNil and
+        scroller.xTracking.isDraggingKnob():
+      scroller.scrollListKnobTo(event.location)
 
   method mouseUp(scroller: ListScroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      scroller.endListScrollerTracking(event.location)
+      if scroller.isNil:
+        return
+      if scroller.xTracking.isDraggingKnob():
+        scroller.scrollListKnobTo(event.location)
+      scroller.xTracking.endScrollerTracking()
 
 protocol DefaultListViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(listView: ListView): IntrinsicSize =
@@ -161,7 +177,26 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
       listView.scrollRows(delta)
 
   method keyDown(listView: ListView, event: KeyEvent) =
-    listView.handleListKeyDown(event)
+    if listView.isNil or not listView.isEnabled():
+      return
+    case event.key
+    of keyArrowDown:
+      listView.moveSelection(1)
+    of keyArrowUp:
+      listView.moveSelection(-1)
+    of keyPageDown:
+      listView.pageSelection(1)
+    of keyPageUp:
+      listView.pageSelection(-1)
+    of keyHome:
+      listView.moveSelectionTo(0)
+    of keyEnd:
+      listView.moveSelectionTo(listView.len() - 1)
+    of keyEnter, keySpace:
+      if listView.selectedIndex() >= 0:
+        discard listView.sendAction()
+    else:
+      discard
 
 proc initListClipView(): ClipView =
   result = ClipView()
@@ -335,12 +370,6 @@ proc selectItemAtIndex(listView: ListView, index: int) =
     listView.scrollItemToVisible(boundedIndex)
   listView.invalidateListRows()
 
-proc deselectItem(listView: ListView) =
-  if listView.isNil or listView.xSelectedIndex < 0:
-    return
-  listView.xSelectedIndex = -1
-  listView.invalidateListRows()
-
 proc selectedIndex*(listView: ListView): int =
   if listView.isNil:
     return -1
@@ -350,7 +379,9 @@ proc setSelectedIndex*(listView: ListView, index: int) =
   if listView.isNil:
     return
   if index < 0:
-    listView.deselectItem()
+    if listView.xSelectedIndex >= 0:
+      listView.xSelectedIndex = -1
+      listView.invalidateListRows()
   else:
     listView.selectItemAtIndex(index)
 
@@ -588,28 +619,6 @@ proc pageSelection(listView: ListView, deltaPages: int) =
     return
   listView.moveSelection(deltaPages * max(listView.visibleItemCount(), 1))
 
-proc handleListKeyDown(listView: ListView, event: KeyEvent) =
-  if listView.isNil or not listView.isEnabled():
-    return
-  case event.key
-  of keyArrowDown:
-    listView.moveSelection(1)
-  of keyArrowUp:
-    listView.moveSelection(-1)
-  of keyPageDown:
-    listView.pageSelection(1)
-  of keyPageUp:
-    listView.pageSelection(-1)
-  of keyHome:
-    listView.moveSelectionTo(0)
-  of keyEnd:
-    listView.moveSelectionTo(listView.len() - 1)
-  of keyEnter, keySpace:
-    if listView.selectedIndex() >= 0:
-      discard listView.sendAction()
-  else:
-    discard
-
 proc setListViewRoles*(
     listView: ListView,
     listRole: StyleRole = srListView,
@@ -663,11 +672,6 @@ proc listViewportSize(listView: ListView): Size =
     ),
     max(listView.bounds().size.height - 2.0'f32, 0.0'f32),
   )
-
-proc listViewportRect(listView: ListView): Rect =
-  if listView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  initRect(initPoint(1.0'f32, 1.0'f32), listView.listViewportSize())
 
 proc listContentSize*(listView: ListView): Size =
   if listView.isNil:
@@ -724,7 +728,7 @@ proc tileListContent(listView: ListView) =
     return
   let
     offset = listView.listContentOffset()
-    viewport = listView.listViewportRect()
+    viewport = initRect(initPoint(1.0'f32, 1.0'f32), listView.listViewportSize())
     size = listView.listContentSize()
   listView.xClipView.frame = viewport
   listView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
@@ -803,12 +807,6 @@ proc listScrollerKnobRect(listView: ListView, track: Rect): Rect =
     ),
   )
 
-proc drawListScroller(scroller: ListScroller, context: DrawContext) =
-  if scroller.isNil or scroller.hidden:
-    return
-  let track = scroller.bounds()
-  context.drawScroller(track, scroller.listView().listScrollerKnobRect(track))
-
 proc contentFirstIndexForKnobOrigin(scroller: ListScroller, knobOrigin: float32): int =
   let listView = scroller.listView()
   if listView.isNil:
@@ -841,29 +839,6 @@ proc scrollListPageToward(scroller: ListScroller, point: Point) =
     return
   let direction = if point.y < knob.minY: -1 else: 1
   listView.scrollRows(direction * max(listView.visibleItemCount(), 1))
-
-proc beginListScrollerTracking(scroller: ListScroller, point: Point) =
-  if scroller.isNil:
-    return
-  let
-    track = scroller.bounds()
-    knob = scroller.listView().listScrollerKnobRect(track)
-  if scroller.xTracking.beginScrollerTracking(track, knob, laVertical, point):
-    return
-  if track.contains(point):
-    scroller.scrollListPageToward(point)
-
-proc trackListScroller(scroller: ListScroller, point: Point) =
-  if scroller.isNil or not scroller.xTracking.isDraggingKnob():
-    return
-  scroller.scrollListKnobTo(point)
-
-proc endListScrollerTracking(scroller: ListScroller, point: Point) =
-  if scroller.isNil:
-    return
-  if scroller.xTracking.isDraggingKnob():
-    scroller.scrollListKnobTo(point)
-  scroller.xTracking.endScrollerTracking()
 
 proc listNaturalSize(listView: ListView): Size =
   if listView.isNil:
