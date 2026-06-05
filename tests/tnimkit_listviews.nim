@@ -4,6 +4,50 @@ import sigils/selectors
 
 import merenda/nimkit
 
+type
+  ListDataSourceSpy = ref object of Responder
+    rows: seq[string]
+
+  ListDelegateSpy = ref object of Responder
+    changingCount: int
+    changedCount: int
+    activatedCount: int
+    lastSender: DynamicAgent
+
+protocol ListDataSourceSpyMethods of ListViewDataSource:
+  method numberOfRowsInListView(source: ListDataSourceSpy, listView: ListView): int =
+    source.rows.len
+
+  method listViewObjectValueForRow(
+      source: ListDataSourceSpy, listView: ListView, row: int
+  ): string =
+    if row < 0 or row >= source.rows.len:
+      return ""
+    source.rows[row]
+
+protocol ListDelegateSpyMethods of ListViewDelegate:
+  method listViewSelectionIsChanging(delegate: ListDelegateSpy, args: ActionArgs) =
+    inc delegate.changingCount
+    delegate.lastSender = args.sender
+
+  method listViewSelectionDidChange(delegate: ListDelegateSpy, args: ActionArgs) =
+    inc delegate.changedCount
+    delegate.lastSender = args.sender
+
+  method listViewRowWasActivated(delegate: ListDelegateSpy, args: ActionArgs) =
+    inc delegate.activatedCount
+    delegate.lastSender = args.sender
+
+proc newListDataSourceSpy(rows: openArray[string]): ListDataSourceSpy =
+  result = ListDataSourceSpy(rows: @rows)
+  initResponder(result)
+  discard result.withProtocol(ListDataSourceSpyMethods)
+
+proc newListDelegateSpy(): ListDelegateSpy =
+  result = ListDelegateSpy()
+  initResponder(result)
+  discard result.withProtocol(ListDelegateSpyMethods)
+
 proc listViewScrollerKnobRect(listView: ListView): Rect =
   scrollerKnobRect(
     listView.verticalScrollerRect(),
@@ -142,6 +186,83 @@ suite "nimkit list views":
     listView.selectionMode = lsmNone
     check listView.selectedIndex == -1
     listView.selectedIndex = 1
+    check listView.selectedIndex == -1
+
+  test "list view resolves rows from data source and reload clamps selection":
+    let
+      listView = newListView(["Local"], frame = initRect(0, 0, 120, 46))
+      source = newListDataSourceSpy(["Red", "Green", "Blue", "Indigo"])
+
+    listView.rowHeight = 20.0
+    listView.dataSource = source
+
+    check listView.len == 4
+    check listView.items == @["Local"]
+    check listView[2] == "Blue"
+
+    listView.selectedIndex = 3
+    check listView.selectedIndex == 3
+    check listView.selectedIndexes == @[3]
+    check listView.firstVisibleIndex == 2
+
+    source.rows.setLen(2)
+    listView.reloadData()
+    check listView.len == 2
+    check listView.selectedIndex == 1
+    check listView.selectedIndexes == @[1]
+    check listView.firstVisibleIndex == 0
+
+  test "list view delegate receives selection and activation callbacks":
+    let
+      listView = newListView(["One", "Two", "Three"], frame = initRect(0, 0, 120, 46))
+      delegate = newListDelegateSpy()
+      action = actionSelector("listDelegateAction")
+
+    var actionCount = 0
+
+    proc onAction(sender: DynamicAgent) =
+      check sender == DynamicAgent(listView)
+      inc actionCount
+
+    listView.rowHeight = 20.0
+    listView.delegate = delegate
+    listView.target = newActionTarget(action, onAction)
+    listView.action = action
+
+    listView.selectedIndex = 1
+    check delegate.changingCount == 1
+    check delegate.changedCount == 1
+    check delegate.activatedCount == 0
+    check delegate.lastSender == DynamicAgent(listView)
+
+    listView.selectedIndex = 1
+    check delegate.changingCount == 1
+    check delegate.changedCount == 1
+
+    listView.activateItemAtIndex(2)
+    check listView.selectedIndex == 2
+    check delegate.changingCount == 2
+    check delegate.changedCount == 2
+    check delegate.activatedCount == 1
+    check actionCount == 1
+
+  test "list view selected indexes normalize by selection mode":
+    let listView =
+      newListView(["One", "Two", "Three", "Four"], frame = initRect(0, 0, 120, 46))
+
+    listView.selectionMode = lsmMultiple
+    listView.selectedIndexes = [3, 1, 1, 8, -1, 2]
+    check listView.selectedIndexes == @[1, 2, 3]
+    check listView.selectedIndex == 1
+
+    listView.selectionMode = lsmSingle
+    check listView.selectedIndexes == @[1]
+    check listView.selectedIndex == 1
+
+    listView.selectionMode = lsmNone
+    check listView.selectedIndexes == newSeq[int]()
+    listView.selectedIndexes = [2]
+    check listView.selectedIndexes == newSeq[int]()
     check listView.selectedIndex == -1
 
   test "list view owns a row content document view":
