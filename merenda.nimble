@@ -1,4 +1,4 @@
-version       = "0.2.0"
+version       = "0.3.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit and Objective-C AppKit experiments"
 license       = "MPL-2.0"
@@ -11,7 +11,7 @@ requires "msgpack4nim"
 requires "chronicles"
 requires "siwin >= 1.0.1"
 requires "figdraw[siwin] >= 0.22.9"
-requires "sigils >= 0.20.1"
+requires "sigils >= 0.22"
 requires "gh:elcritch/kiwiberry"
 
 feature "references":
