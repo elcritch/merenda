@@ -44,21 +44,11 @@ proc listView*(scroller: ListScroller): ListView
 proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
 proc verticalScroller*(listView: ListView): ListScroller
-proc listViewportSize(listView: ListView): Size
-proc listViewportRect(listView: ListView): Rect
-proc listContentOffset(listView: ListView): Point
-proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc listContentSize*(listView: ListView): Size
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int
-proc tileListContent(listView: ListView)
-proc drawListContent(contentView: ListContentView, context: DrawContext)
-proc invalidateListRows(listView: ListView)
 proc len*(listView: ListView): int
 proc rowHeight*(listView: ListView): float32
-proc itemAtIndex(listView: ListView, index: int): string
-proc selectItemAtIndex(listView: ListView, index: int)
-proc deselectItem(listView: ListView)
 proc reloadData*(listView: ListView)
 proc visibleItemCount*(listView: ListView): int
 proc highlightedIndex*(listView: ListView): int
@@ -72,6 +62,17 @@ proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc setHighlightedIndex*(listView: ListView, index: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
+
+proc listViewportSize(listView: ListView): Size
+proc listViewportRect(listView: ListView): Rect
+proc listContentOffset(listView: ListView): Point
+proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
+proc tileListContent(listView: ListView)
+proc drawListContent(contentView: ListContentView, context: DrawContext)
+proc invalidateListRows(listView: ListView)
+proc itemAtIndex(listView: ListView, index: int): string
+proc selectItemAtIndex(listView: ListView, index: int)
+proc deselectItem(listView: ListView)
 proc handleListKeyDown(listView: ListView, event: KeyEvent)
 proc drawListScroller(scroller: ListScroller, context: DrawContext)
 proc listScrollerKnobRect(listView: ListView, track: Rect): Rect
