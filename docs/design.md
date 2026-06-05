@@ -206,6 +206,10 @@ Popup and list behavior shares a narrow base:
   items, single/none selection, keyboard and mouse navigation, wheel scrolling,
   intrinsic sizing, target/action activation, dedicated `srListView` and
   `srListItem` theme roles, and shared `ListRowState` row rendering.
+- `ListContentView` is the internal row document for standalone `ListView`.
+  It stays non-focusable and manually tiled by the list, keeping selection and
+  keyboard behavior on `ListView` while giving future virtualized or
+  scroll-hosted lists a concrete content-view boundary.
 
 The transient session layer is intentionally smaller than a full AppKit modal
 system. It gives menus, popovers, combo boxes, and future drag/tracking flows a

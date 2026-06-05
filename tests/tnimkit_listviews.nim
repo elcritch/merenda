@@ -135,6 +135,33 @@ suite "nimkit list views":
     listView.selectedIndex = 1
     check listView.selectedIndex == -1
 
+  test "list view owns a row content document view":
+    let listView =
+      newListView(["One", "Two", "Three", "Four"], frame = initRect(0, 0, 120, 46))
+
+    listView.rowHeight = 20.0
+    let content = listView.contentView()
+
+    check content != nil
+    check content.listView == listView
+    check content.superview == listView
+    check not content.acceptsFirstResponder
+    check not content.autoresizingMaskConstraints
+    check content.frame == initRect(1.0'f32, 1.0'f32, 118.0'f32, 80.0'f32)
+    check content.bounds.size == initSize(118.0'f32, 80.0'f32)
+    check listView.listContentSize() == initSize(118.0'f32, 80.0'f32)
+    check content.listContentItemRect(2) ==
+      initRect(0.0'f32, 40.0'f32, 118.0'f32, 20.0'f32)
+
+    check listView.listItemRect(0) == initRect(1.0'f32, 1.0'f32, 118.0'f32, 20.0'f32)
+    check listView.listItemRect(2).isEmpty
+    check content.listContentItemIndexAtPoint(initPoint(6.0'f32, 45.0'f32)) == 2
+
+    listView.firstVisibleIndex = 2
+    check content.frame == initRect(1.0'f32, -39.0'f32, 118.0'f32, 80.0'f32)
+    check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 118.0'f32, 20.0'f32)
+    check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
+
   test "list view mouse selection sends control action":
     let
       window = newWindow("List mouse", frame = initRect(0, 0, 220, 140))
