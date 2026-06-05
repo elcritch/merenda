@@ -14,6 +14,8 @@ protocol ViewProtocolInternal from View:
   property previousKeyView -> View
 
   method frame(self: View): Rect =
+    if self.isNil:
+      return
     self.xFrame
 
   method setFrame(self: View, frame: Rect) =
@@ -30,6 +32,8 @@ protocol ViewProtocolInternal from View:
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
+    if self.isNil:
+      return
     self.xBounds
 
   method setBounds(self: View, bounds: Rect) =
@@ -186,8 +190,8 @@ protocol ViewProtocolInternal from View:
     false
 
   method visibleRect*(self: View): Rect =
-    if self.isHiddenOrHasHiddenAncestor():
-      return initRect(0.0, 0.0, 0.0, 0.0)
+    if self.isNil or self.isHiddenOrHasHiddenAncestor():
+      return
     result = self.xBounds
     var ancestor = self.xSuperview
     while not ancestor.isNil:
