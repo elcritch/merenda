@@ -12,6 +12,7 @@ import merenda/nimkit/listviews
 import merenda/nimkit/popuplists
 import merenda/nimkit/rendering
 import merenda/nimkit/responders
+import merenda/nimkit/scrollergeometry
 import merenda/nimkit/selectors
 import merenda/nimkit/stackviews
 import merenda/nimkit/scrollviews
@@ -35,6 +36,7 @@ export listviews
 export popuplists
 export rendering
 export responders
+export scrollergeometry
 export selectors
 export stackviews
 export scrollviews

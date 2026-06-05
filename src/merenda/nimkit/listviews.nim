@@ -2,7 +2,7 @@ import std/math
 
 import ./controls
 import ./listbasics
-import ./scrollertracking
+import ./scrollergeometry
 import ./scrollviews
 import ./selectors
 import ./theme

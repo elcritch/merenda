@@ -2,7 +2,7 @@ from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 
 import ./drawing
-import ./scrollviews
+import ./scrollergeometry
 import ./theme
 import ./types
 
