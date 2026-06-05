@@ -66,10 +66,13 @@ Recently completed:
 - `ListContentView` now virtualizes fixed-height rows as reusable private row
   views. The row slots are non-focusable, non-hit-testable, retargeted from the
   clip-view visible rect, and keep row reuse separate from data ownership.
+- `ListView` delegates can override visible row rendering through
+  `listViewDrawRow` with a plain `ListRowState` and row-local bounds. Custom
+  renderers can call `drawListRow` to reuse the default themed row drawing
+  without depending on private reusable row views.
 
 1. Finish `ListView` data/delegate policy hooks:
    - keep local `items` as the simple default path
-   - add row view or row renderer hooks once row reuse exists
    - add delegate hooks for row height and optional row styling
    - consider disabled or nonselectable rows if examples justify the policy
    - keep row state as plain values: index, selected, highlighted, focused,
@@ -80,7 +83,6 @@ Recently completed:
    - add accessibility/debug summaries for visible rows and selection state
    - keep delegate notifications before and after real selection changes
 3. Finish row virtualization polish:
-   - add row view or row renderer customization hooks
    - add variable row heights after fixed-height behavior is stable
    - keep reusable row slots private until the cell/view customization shape is
      clear
