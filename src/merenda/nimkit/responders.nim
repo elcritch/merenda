@@ -7,7 +7,7 @@ import ./selectors
 type Responder* = ref object of DynamicAgent
   xAcceptsFirstResponder: bool
 
-protocol ResponderProtocolInternal from Responder:
+protocol ResponderProtocol from Responder:
   property acceptsFirstResponder -> bool
 
   method acceptsFirstResponder(self: Responder): bool =
@@ -55,5 +55,3 @@ proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A
 ): Option[R] =
   responder.trySend(selector, ensureMove args)
-
-let ResponderProtocol* = ResponderProtocolInternal

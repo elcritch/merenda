@@ -4,7 +4,7 @@ import ./types
 import ./viewgeometry
 import ./viewbase
 
-protocol ViewProtocolInternal from View:
+protocol ViewProtocol from View:
   property frame -> Rect
   property bounds -> Rect
   property needsDisplay -> bool
@@ -291,7 +291,7 @@ protocol ViewProtocolInternal from View:
 
     if inside: self else: nil
 
-protocol ViewLifecycleProtocolInternal:
+protocol ViewLifecycleProtocol:
   method viewWillMoveToSuperview*(superview: View) {.optional.}
   method viewDidMoveToSuperview*() {.optional.}
   method viewWillMoveToWindow*(window: Responder) {.optional.}
@@ -445,7 +445,3 @@ proc addSubview*(view: View, first, second: View, rest: varargs[View]) =
   view.addSubview(second)
   for child in rest:
     view.addSubview(child)
-
-let
-  ViewProtocol* = ViewProtocolInternal
-  ViewLifecycleProtocol* = ViewLifecycleProtocolInternal
