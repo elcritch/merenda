@@ -3,6 +3,7 @@ import std/unittest
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/responders as nimkitResponders
 import merenda/nimkit/viewgeometry
 
 type
@@ -37,28 +38,38 @@ protocol MouseSpyEvents of ResponderEventProtocol:
     spyMouseUpPoint = event.location
     inc spyMouseUpCount
 
-protocol LifecycleSpyViewEvents from LifecycleSpyView:
-  includes ViewLifecycleProtocol
-
-  proc viewWillMoveToSuperview(spy: LifecycleSpyView, superview: View) {.slot.} =
+protocol LifecycleSpyViewEvents of ViewLifecycleProtocol:
+  proc rememberViewWillMoveToSuperview(
+      spy: LifecycleSpyView, superview: View
+  ) {.slotFor: viewWillMoveToSuperview.} =
     spy.events.add "willSuperview"
     spy.superviews.add superview
 
-  proc viewDidMoveToSuperview(spy: LifecycleSpyView) {.slot.} =
+  proc rememberViewDidMoveToSuperview(
+      spy: LifecycleSpyView
+  ) {.slotFor: viewDidMoveToSuperview.} =
     spy.events.add "didSuperview"
 
-  proc viewWillMoveToWindow(spy: LifecycleSpyView, window: Responder) {.slot.} =
+  proc rememberViewWillMoveToWindow(
+      spy: LifecycleSpyView, window: Responder
+  ) {.slotFor: viewWillMoveToWindow.} =
     spy.events.add "willWindow"
     spy.windows.add window
 
-  proc viewDidMoveToWindow(spy: LifecycleSpyView) {.slot.} =
+  proc rememberViewDidMoveToWindow(
+      spy: LifecycleSpyView
+  ) {.slotFor: viewDidMoveToWindow.} =
     spy.events.add "didWindow"
 
-  proc didAddSubview(spy: LifecycleSpyView, subview: View) {.slot.} =
+  proc rememberDidAddSubview(
+      spy: LifecycleSpyView, subview: View
+  ) {.slotFor: didAddSubview.} =
     spy.events.add "didAddSubview"
     spy.addedSubviews.add subview
 
-  proc willRemoveSubview(spy: LifecycleSpyView, subview: View) {.slot.} =
+  proc rememberWillRemoveSubview(
+      spy: LifecycleSpyView, subview: View
+  ) {.slotFor: willRemoveSubview.} =
     spy.events.add "willRemoveSubview"
     spy.removedSubviews.add subview
 
@@ -88,6 +99,7 @@ proc newLifecycleSpyView(frame: Rect): LifecycleSpyView =
   result = LifecycleSpyView()
   initViewFields(result, frame)
   result = result.withProto()
+  discard result.withProtocol(LifecycleSpyViewEvents)
   result.observeProtocol(result, LifecycleSpyViewEvents)
 
 proc newLayoutSpyView(frame: Rect): LayoutSpyView =
@@ -467,7 +479,7 @@ suite "nimkit views":
     parent.addSubview(child)
 
     check child.superview == parent
-    check child.nextResponder == parent
+    check nimkitResponders.nextResponder(Responder(child)) == Responder(parent)
     check parent.addedSubviews == @[View(child)]
     check child.superviews == @[View(parent)]
     check child.events == @["willSuperview", "didSuperview"]
@@ -476,7 +488,7 @@ suite "nimkit views":
     child.removeFromSuperview()
 
     check child.superview.isNil
-    check child.nextResponder.isNil
+    check nimkitResponders.nextResponder(Responder(child)).isNil
     check parent.removedSubviews == @[View(child)]
     check child.superviews.len == 2
     check child.superviews[1].isNil
@@ -500,8 +512,8 @@ suite "nimkit views":
     check window.contentView == root
     check root.window == Responder(window)
     check child.window == Responder(window)
-    check root.nextResponder == Responder(window)
-    check child.nextResponder == root
+    check nimkitResponders.nextResponder(Responder(root)) == Responder(window)
+    check nimkitResponders.nextResponder(Responder(child)) == Responder(root)
     check root.windows == @[Responder(window)]
     check child.windows == @[Responder(window)]
     check root.events == @["willWindow", "didWindow"]
@@ -512,13 +524,13 @@ suite "nimkit views":
     check window.contentView == replacement
     check root.window.isNil
     check child.window.isNil
-    check root.nextResponder.isNil
+    check nimkitResponders.nextResponder(Responder(root)).isNil
     check root.windows.len == 2
     check root.windows[1].isNil
     check child.windows.len == 2
     check child.windows[1].isNil
     check replacement.window == Responder(window)
-    check replacement.nextResponder == Responder(window)
+    check nimkitResponders.nextResponder(Responder(replacement)) == Responder(window)
 
   test "content view replacement clears first responder from removed subtree":
     let

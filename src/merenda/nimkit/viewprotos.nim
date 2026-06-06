@@ -300,17 +300,14 @@ protocol ViewLifecycleProtocol:
   proc didAddSubview*(view: View, subview: View) {.signal.}
   proc willRemoveSubview*(view: View, subview: View) {.signal.}
 
-proc unbindSuperviewGeometry(view: View, superview: View) {.slot.} =
-  view.unobserveSuperviewGeometry()
+protocol ViewSuperviewLifecycleSlots of ViewLifecycleProtocol:
+  proc unbindSuperviewGeometry(
+      view: View, superview: View
+  ) {.slotFor: viewWillMoveToSuperview.} =
+    view.unobserveSuperviewGeometry()
 
-proc bindSuperviewGeometry(view: View) {.slot.} =
-  view.observeSuperviewGeometry()
-
-proc initViewLifecycleSignalBus*(view: View) =
-  if view.isNil:
-    return
-  view.connect(viewWillMoveToSuperview, view, unbindSuperviewGeometry)
-  view.connect(viewDidMoveToSuperview, view, bindSuperviewGeometry)
+  proc bindSuperviewGeometry(view: View) {.slotFor: viewDidMoveToSuperview.} =
+    view.observeSuperviewGeometry()
 
 proc `frame=`*(view: View, frame: Rect) =
   view.setFrame(frame)

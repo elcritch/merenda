@@ -69,33 +69,37 @@ proc markAggregateLayoutInputDirty(
     current.markConstraintStorageChangedRaw()
     current = current.xSuperview
 
-proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) {.slot.} =
-  if view.isNil:
-    return
-  let
-    source = reason.sourceFor()
-    structureDirty = reason.isStructureDirtyReason()
-  view.xLayoutInputCache.dirtySources.incl source
-  if structureDirty:
-    view.xLayoutInputCache.structureDirty = true
-  case reason
-  of lirFrame, lirSuperview, lirAutoresizingMask:
-    view.xAutoresizingState.referenceDirty = true
-    view.xAutoresizingState.inputsDirty = true
-  of lirBounds, lirSuperviewGeometry, lirSubviews:
-    view.xAutoresizingState.inputsDirty = true
-  else:
-    discard
-  view.markAggregateLayoutInputDirty(source, structureDirty)
+protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
+  proc markLayoutInputDirty(
+      view: View, reason: LayoutInvalidationReason
+  ) {.slotFor: layoutInputChanged.} =
+    if view.isNil:
+      return
+    let
+      source = reason.sourceFor()
+      structureDirty = reason.isStructureDirtyReason()
+    view.xLayoutInputCache.dirtySources.incl source
+    if structureDirty:
+      view.xLayoutInputCache.structureDirty = true
+    case reason
+    of lirFrame, lirSuperview, lirAutoresizingMask:
+      view.xAutoresizingState.referenceDirty = true
+      view.xAutoresizingState.inputsDirty = true
+    of lirBounds, lirSuperviewGeometry, lirSubviews:
+      view.xAutoresizingState.inputsDirty = true
+    else:
+      discard
+    view.markAggregateLayoutInputDirty(source, structureDirty)
 
-proc markSuperviewGeometryDirty(view: View) {.slot.} =
-  if not view.isNil and view.xAutoresizingMaskConstraints:
-    emit view.layoutInputChanged(lirSuperviewGeometry)
+protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
+  proc markSuperviewGeometryDirty(view: View) {.slotFor: geometryDidChange.} =
+    if not view.isNil and view.xAutoresizingMaskConstraints:
+      emit view.layoutInputChanged(lirSuperviewGeometry)
 
 proc initLayoutSignalBus*(view: View) =
   if view.isNil:
     return
-  view.connect(layoutInputChanged, view, markLayoutInputDirty)
+  view.observeProtocol(view, ViewLayoutInputSlots)
 
 proc markConstraintStorageChanged*(view: View) =
   if view.isNil:
@@ -107,14 +111,14 @@ proc observeSuperviewGeometry*(view: View) =
     return
   let parent = view.xSuperview
   if not parent.isNil:
-    parent.connect(geometryDidChange, view, markSuperviewGeometryDirty)
+    view.observeProtocol(parent, ViewSuperviewGeometrySlots)
 
 proc unobserveSuperviewGeometry*(view: View) =
   if view.isNil:
     return
   let parent = view.xSuperview
   if not parent.isNil:
-    parent.disconnect(geometryDidChange, view, markSuperviewGeometryDirty)
+    view.unobserveProtocol(parent, ViewSuperviewGeometrySlots)
 
 proc invalidateLayoutItemGeometry*(
     view: View, reason = lirFrame, ancestorReason = lirDescendantGeometry

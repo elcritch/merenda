@@ -15,8 +15,9 @@ export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
   initLayoutSignalBus, markConstraintStorageChanged, observeSuperviewGeometry,
-  unobserveSuperviewGeometry, invalidateLayoutItemGeometry
-export viewprotos except initViewLifecycleSignalBus
+  unobserveSuperviewGeometry, invalidateLayoutItemGeometry, ViewLayoutInputSlots,
+  ViewSuperviewGeometrySlots
+export viewprotos except ViewSuperviewLifecycleSlots
 
 proc styleId*(view: View): string =
   if view.isNil: "" else: view.xStyleId
@@ -235,7 +236,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xCompressionPriority[laVertical] = LayoutPriorityHigh
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
-  view.initViewLifecycleSignalBus()
+  view.observeProtocol(view, ViewSuperviewLifecycleSlots)
 
 proc newView*(frame: Rect = AutoRect): View =
   result = View()

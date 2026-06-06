@@ -217,11 +217,12 @@ signal and translate that into `lirSuperviewGeometry` locally. Lifecycle slots
 bind and unbind that observation when a view moves between superviews, which
 avoids stale dirtying from an old parent.
 
-When the event source and observer are both `View`, internal slots keep
-descriptive names such as `markLayoutInputDirty` instead of reusing the signal
-selector name. This avoids Nim-level ambiguity between the signal helper and a
-same-signature slot while keeping protocol-declared event surfaces public and
-inspectable.
+When the event source and observer are both `View`, internal slots use Sigils'
+`slotFor` pragma to keep descriptive implementation names such as
+`markLayoutInputDirty` while binding them to public event names such as
+`layoutInputChanged`. This avoids Nim-level ambiguity between the signal helper
+and a same-signature slot while keeping protocol-declared event surfaces public
+and inspectable.
 
 This keeps Sigils useful as a bus without making frame, bounds, size, title,
 enabled state, or other widget fields reactive values. That is less surprising
