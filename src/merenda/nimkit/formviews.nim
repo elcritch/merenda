@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -310,7 +312,7 @@ proc removeRow*(formView: FormView, index: int) =
   formView.xRows.delete(index)
   formView.invalidateFormLayout()
 
-proc removeRowContaining*(formView: FormView, view: View) =
+proc removeRowContaining*(formView: FormView, view: View) {.slot.} =
   let index = formView.rowIndexContaining(view)
   if index >= 0:
     formView.removeRow(index)
@@ -322,10 +324,6 @@ protocol DefaultFormViewLayout of ViewLayoutProtocol:
   method layoutSubviews(formView: FormView) =
     formView.layoutFormRows()
 
-protocol DefaultFormViewLifecycle of ViewLifecycleProtocol:
-  method willRemoveSubview(formView: FormView, subview: View) =
-    formView.removeRowContaining(subview)
-
 proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   initViewFields(formView, frame)
   formView.xSpacing[drow] = 8.0'f32
@@ -333,7 +331,7 @@ proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   formView.xLabelAlignment = flaTrailing
   formView.xRowAlignment = fraCenter
   discard formView.withProtocol(DefaultFormViewLayout)
-  discard formView.withProtocol(DefaultFormViewLifecycle)
+  connect(formView, willRemoveSubview, formView, removeRowContaining)
   formView.applyInitialFrame(frame)
 
 proc newFormView*(frame: Rect = AutoRect): FormView =

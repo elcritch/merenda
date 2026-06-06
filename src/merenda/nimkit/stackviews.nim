@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -373,7 +375,7 @@ proc addArrangedSubview*(stackView: StackView, children: varargs[View]) =
   for child in children:
     stackView.addArrangedSubview(child)
 
-proc removeArrangedSubview*(stackView: StackView, child: View) =
+proc removeArrangedSubview*(stackView: StackView, child: View) {.slot.} =
   let index = stackView.arrangedIndex(child)
   if index < 0:
     return
@@ -387,10 +389,6 @@ protocol DefaultStackViewLayout of ViewLayoutProtocol:
   method layoutSubviews(stackView: StackView) =
     stackView.layoutStackSubviews()
 
-protocol DefaultStackViewLifecycle of ViewLifecycleProtocol:
-  method willRemoveSubview(stackView: StackView, subview: View) =
-    stackView.removeArrangedSubview(subview)
-
 proc initStackViewFields*(
     stackView: StackView, orientation = laVertical, frame: Rect = AutoRect
 ) =
@@ -400,7 +398,7 @@ proc initStackViewFields*(
   stackView.xAlignment = svaFill
   stackView.xDistribution = svdFill
   discard stackView.withProtocol(DefaultStackViewLayout)
-  discard stackView.withProtocol(DefaultStackViewLifecycle)
+  connect(stackView, willRemoveSubview, stackView, removeArrangedSubview)
   stackView.applyInitialFrame(frame)
 
 proc newStackView*(orientation = laVertical, frame: Rect = AutoRect): StackView =

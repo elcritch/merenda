@@ -1,5 +1,7 @@
 import std/unicode
 
+import sigils/core
+
 import ./controls
 import ./selectors
 import ./theme
@@ -30,16 +32,116 @@ type
     xFocused: bool
     xInsertionPoint: int
     xSelectionAnchor: int
-    xDelegate: DynamicAgent
 
   Label* = ref object of TextField
     xLabelStyle: LabelStyle
 
-proc notifyTextDidChange(textField: TextField)
-proc textFieldCell*(textField: TextField): TextFieldCell
+proc setEditedString(
+  textField: TextField, value: string, cursor: int, anchor: int, notify = true
+)
+proc selectAllText(textField: TextField)
 
 proc initTextRange*(location, length: int): TextRange =
   TextRange(location: max(location, 0).Natural, length: max(length, 0).Natural)
+
+protocol TextFieldEvents:
+  proc textDidChange*(textField: TextField, sender: DynamicAgent) {.signal.}
+
+protocol TextFieldProtocol from TextField:
+  property stringValue -> string
+  property alignment -> TextAlignment
+  property textColor -> Color
+  property selectedRange -> TextRange
+
+  method stringValue(textField: TextField): string =
+    textField.xStringValue
+
+  method setStringValue(textField: TextField, value: string) =
+    if textField.xStringValue == value:
+      return
+    let cursor = min(textField.xInsertionPoint, value.runeLen)
+    let anchor = min(textField.xSelectionAnchor, value.runeLen)
+    textField.setEditedString(value, cursor, anchor)
+
+  method alignment(textField: TextField): TextAlignment =
+    textField.xAlignment
+
+  method setAlignment(textField: TextField, alignment: TextAlignment) =
+    if textField.xAlignment == alignment:
+      return
+    textField.xAlignment = alignment
+    textField.setNeedsDisplay(true)
+
+  method textColor(textField: TextField): Color =
+    textField.xTextColor
+
+  method setTextColor(textField: TextField, color: Color) =
+    if textField.xTextColor == color:
+      return
+    textField.xTextColor = color
+    textField.setNeedsDisplay(true)
+
+  method isEditable*(textField: TextField): bool =
+    textField.xEditable
+
+  method setEditable*(textField: TextField, editable: bool) =
+    if textField.xEditable == editable:
+      return
+    textField.xEditable = editable
+    textField.setAcceptsFirstResponder(editable or textField.xSelectable)
+    textField.invalidateIntrinsicContentSize()
+
+  method isSelectable*(textField: TextField): bool =
+    textField.xSelectable
+
+  method setSelectable*(textField: TextField, selectable: bool) =
+    if textField.xSelectable == selectable:
+      return
+    textField.xSelectable = selectable
+    textField.setAcceptsFirstResponder(selectable or textField.isEditable)
+    textField.invalidateIntrinsicContentSize()
+
+  method isEditing*(textField: TextField): bool =
+    textField.xFocused
+
+  method selectedRange(textField: TextField): TextRange =
+    if textField.isNil:
+      return initTextRange(0, 0)
+    let
+      start = min(textField.xSelectionAnchor, textField.xInsertionPoint)
+      stop = max(textField.xSelectionAnchor, textField.xInsertionPoint)
+    initTextRange(start, stop - start)
+
+  method setSelectedRange(textField: TextField, value: TextRange) =
+    if textField.isNil:
+      return
+    let
+      total = textField.xStringValue.runeLen
+      start = max(0, min(value.location.int, total))
+      length = max(0, min(value.length.int, total - start))
+    textField.xSelectionAnchor = start
+    textField.xInsertionPoint = start + length
+    textField.setNeedsDisplay(true)
+
+  method insertionPoint*(textField: TextField): int =
+    textField.xInsertionPoint
+
+  method selectionAnchor*(textField: TextField): int =
+    textField.xSelectionAnchor
+
+  method becomeFirstResponder(textField: TextField): bool =
+    if not textField.isEnabled or (
+      not textField.xEditable and not textField.xSelectable
+    ):
+      return false
+    textField.xFocused = true
+    textField.selectAllText()
+    true
+
+  method resignFirstResponder(textField: TextField): bool =
+    textField.xFocused = false
+    textField.setNeedsDisplay(true)
+    true
 
 proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
@@ -88,23 +190,6 @@ proc setCursor(textField: TextField, index: int, extending = false) =
     textField.xSelectionAnchor = cursor
   textField.setNeedsDisplay(true)
 
-proc setSelectedTextRange(textField: TextField, value: TextRange) =
-  if textField.isNil:
-    return
-  let
-    total = textField.runeCount
-    start = clampIndex(total, value.location.int)
-    length = clampIndex(total - start, value.length.int)
-  textField.xSelectionAnchor = start
-  textField.xInsertionPoint = start + length
-  textField.setNeedsDisplay(true)
-
-proc selectedTextRange(textField: TextField): TextRange =
-  if textField.isNil:
-    return initTextRange(0, 0)
-  let selected = textField.currentSelection()
-  initTextRange(selected.start, selected.stop - selected.start)
-
 proc setEditedString(
     textField: TextField, value: string, cursor: int, anchor: int, notify = true
 ) =
@@ -119,7 +204,7 @@ proc setEditedString(
     textField.invalidateIntrinsicContentSize()
   textField.setNeedsDisplay(true)
   if changed and notify:
-    textField.notifyTextDidChange()
+    emit textField.textDidChange(DynamicAgent(textField))
 
 proc selectAllText(textField: TextField) =
   if textField.isNil:
@@ -218,92 +303,6 @@ proc shouldInsertText(event: KeyEvent): bool =
   if event.modifiers - {kmShift} != {}:
     return false
   event.text.isInsertableText()
-
-protocol TextFieldDelegate:
-  method textDidChange*(args: ActionArgs) {.optional.}
-
-protocol TextFieldProtocol from TextField:
-  property stringValue -> string
-  property alignment -> TextAlignment
-  property textColor -> Color
-  property selectedRange -> TextRange
-
-  method stringValue(textField: TextField): string =
-    textField.xStringValue
-
-  method setStringValue(textField: TextField, value: string) =
-    if textField.xStringValue == value:
-      return
-    let cursor = min(textField.xInsertionPoint, value.runeLen)
-    let anchor = min(textField.xSelectionAnchor, value.runeLen)
-    textField.setEditedString(value, cursor, anchor)
-
-  method alignment(textField: TextField): TextAlignment =
-    textField.xAlignment
-
-  method setAlignment(textField: TextField, alignment: TextAlignment) =
-    if textField.xAlignment == alignment:
-      return
-    textField.xAlignment = alignment
-    textField.setNeedsDisplay(true)
-
-  method textColor(textField: TextField): Color =
-    textField.xTextColor
-
-  method setTextColor(textField: TextField, color: Color) =
-    if textField.xTextColor == color:
-      return
-    textField.xTextColor = color
-    textField.setNeedsDisplay(true)
-
-  method isEditable*(textField: TextField): bool =
-    textField.xEditable
-
-  method setEditable*(textField: TextField, editable: bool) =
-    if textField.xEditable == editable:
-      return
-    textField.xEditable = editable
-    textField.setAcceptsFirstResponder(editable or textField.xSelectable)
-    textField.invalidateIntrinsicContentSize()
-
-  method isSelectable*(textField: TextField): bool =
-    textField.xSelectable
-
-  method setSelectable*(textField: TextField, selectable: bool) =
-    if textField.xSelectable == selectable:
-      return
-    textField.xSelectable = selectable
-    textField.setAcceptsFirstResponder(selectable or textField.isEditable)
-    textField.invalidateIntrinsicContentSize()
-
-  method isEditing*(textField: TextField): bool =
-    textField.xFocused
-
-  method selectedRange(textField: TextField): TextRange =
-    textField.selectedTextRange()
-
-  method setSelectedRange(textField: TextField, value: TextRange) =
-    textField.setSelectedTextRange(value)
-
-  method insertionPoint*(textField: TextField): int =
-    textField.xInsertionPoint
-
-  method selectionAnchor*(textField: TextField): int =
-    textField.xSelectionAnchor
-
-  method becomeFirstResponder(textField: TextField): bool =
-    if not textField.isEnabled or (
-      not textField.xEditable and not textField.xSelectable
-    ):
-      return false
-    textField.xFocused = true
-    textField.selectAllText()
-    true
-
-  method resignFirstResponder(textField: TextField): bool =
-    textField.xFocused = false
-    textField.setNeedsDisplay(true)
-    true
 
 proc text*(textField: TextField): string =
   textField.stringValue()
@@ -494,26 +493,6 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
   method keyDown(textField: TextField, event: KeyEvent) =
     if textField.xEditable and event.shouldInsertText():
       textField.replaceSelectedText(event.text)
-
-proc delegate*(textField: TextField): DynamicAgent =
-  if textField.isNil:
-    return nil
-  textField.xDelegate
-
-proc `delegate=`*(textField: TextField, delegate: DynamicAgent) =
-  if textField.isNil:
-    return
-  textField.xDelegate = delegate
-
-proc `delegate=`*(textField: TextField, delegate: Responder) =
-  textField.delegate = DynamicAgent(delegate)
-
-proc notifyTextDidChange(textField: TextField) =
-  if textField.isNil or textField.xDelegate.isNil:
-    return
-  discard textField.xDelegate.sendLocalIfHandled(
-    textDidChange(), ActionArgs(sender: DynamicAgent(textField))
-  )
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
   initControlStyleContext(

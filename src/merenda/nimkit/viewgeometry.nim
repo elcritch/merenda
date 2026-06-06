@@ -63,7 +63,7 @@ proc markAggregateLayoutInputDirty(
     current.markConstraintStorageChangedRaw()
     current = current.xSuperview
 
-proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
+proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) {.slot.} =
   if view.isNil:
     return
   let
@@ -82,28 +82,24 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
     discard
   view.markAggregateLayoutInputDirty(source, structureDirty)
 
-proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
-  view.markLayoutInputDirty(reason)
-
 proc initLayoutSignalBus*(view: View) =
   if view.isNil:
     return
-  connect(view, layoutInputChanged, view, onLayoutInputChanged)
-
-proc notifyLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) =
-  if view.isNil:
-    return
-  emit view.layoutInputChanged(reason)
+  connect(view, layoutInputChanged, view, markLayoutInputDirty)
 
 proc markConstraintStorageChanged*(view: View) =
-  view.notifyLayoutInputChanged(lirConstraints)
+  if view.isNil:
+    return
+  emit view.layoutInputChanged(lirConstraints)
 
-proc notifyAutoresizingDependentsChanged*(view: View, reason = lirSuperviewGeometry) =
+proc propagateAutoresizingDependentsChanged*(
+    view: View, reason = lirSuperviewGeometry
+) =
   if view.isNil:
     return
   for child in view.xSubviews:
     if child.xAutoresizingMaskConstraints:
-      child.notifyLayoutInputChanged(reason)
+      emit child.layoutInputChanged(reason)
 
 proc invalidateLayoutItemGeometry*(
     view: View, reason = lirFrame, ancestorReason = lirDescendantGeometry
@@ -113,7 +109,7 @@ proc invalidateLayoutItemGeometry*(
   var current = view
   var isOrigin = true
   while not current.isNil:
-    current.notifyLayoutInputChanged(if isOrigin: reason else: ancestorReason)
+    emit current.layoutInputChanged(if isOrigin: reason else: ancestorReason)
     isOrigin = false
     current = current.xSuperview
 
@@ -219,10 +215,10 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   of lfoAuthored:
     view.invalidateLayoutItemGeometry(lirFrame)
     view.refreshAutoresizingReference()
-    view.notifyAutoresizingDependentsChanged()
+    view.propagateAutoresizingDependentsChanged()
   of lfoContainer:
     view.refreshAutoresizingReference()
-    view.notifyAutoresizingDependentsChanged()
+    view.propagateAutoresizingDependentsChanged()
   of lfoSolver:
     discard
 

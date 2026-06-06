@@ -12,7 +12,8 @@ requires "chronicles"
 # requires "siwin >= 1.0.2"
 requires "gh:elcritch/siwin#handle-horizontal-scrolling-macos"
 requires "figdraw[siwin] >= 0.22.9"
-requires "sigils >= 0.22.2"
+# requires "sigils >= 0.22.3"
+requires "sigils#head"
 requires "gh:elcritch/kiwiberry"
 
 feature "references":

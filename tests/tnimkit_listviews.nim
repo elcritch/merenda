@@ -1,5 +1,6 @@
 import std/unittest
 
+import sigils/core
 import sigils/selectors
 
 import merenda/nimkit
@@ -41,18 +42,20 @@ protocol ListDataSourceSpyMethods of ListViewDataSource:
       return ""
     source.rows[row]
 
-protocol ListDelegateSpyMethods of ListViewDelegate:
-  method listViewSelectionIsChanging(delegate: ListDelegateSpy, args: ActionArgs) =
+protocol ListDelegateSpyEvents from ListDelegateSpy:
+  includes ListViewEvents
+
+  proc selectionIsChanging(delegate: ListDelegateSpy, sender: DynamicAgent) {.slot.} =
     inc delegate.changingCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
-  method listViewSelectionDidChange(delegate: ListDelegateSpy, args: ActionArgs) =
+  proc selectionDidChange(delegate: ListDelegateSpy, sender: DynamicAgent) {.slot.} =
     inc delegate.changedCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
-  method listViewRowWasActivated(delegate: ListDelegateSpy, args: ActionArgs) =
+  proc rowWasActivated(delegate: ListDelegateSpy, sender: DynamicAgent) {.slot.} =
     inc delegate.activatedCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
 protocol ListRowRendererSpyMethods of ListViewDelegate:
   method listViewDrawRow(
@@ -96,7 +99,7 @@ proc newListDataSourceSpy(rows: openArray[string]): ListDataSourceSpy =
 proc newListDelegateSpy(): ListDelegateSpy =
   result = ListDelegateSpy()
   initResponder(result)
-  discard result.withProtocol(ListDelegateSpyMethods)
+  result = result.withProto()
 
 proc newListRowRendererSpy(): ListRowRendererSpy =
   result = ListRowRendererSpy()

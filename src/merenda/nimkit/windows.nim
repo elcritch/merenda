@@ -74,6 +74,8 @@ type EventDispatchResult = object
 
 protocol WindowLifecycleProtocol:
   method shouldSetContentView*(v: View): bool {.optional.}
+
+protocol WindowLifecycleEvents:
   proc willSetContentView*(w: Window, v: View) {.signal.}
   proc didSetContentView*(w: Window, oldView: View) {.signal.}
   proc willClose*(w: Window) {.signal.}
@@ -81,13 +83,17 @@ protocol WindowLifecycleProtocol:
 
 protocol WindowFocusProtocol:
   method shouldMakeFirstResponder*(r: Responder): bool {.optional.}
+
+protocol WindowFocusEvents:
   proc didChangeFirstResponder*(w: Window, previous: Responder) {.signal.}
 
-protocol WindowAppearanceProtocol:
+protocol WindowAppearanceEvents:
   proc didChangeEffectiveAppearance*(w: Window, appearance: Appearance) {.signal.}
 
 protocol WindowPopupProtocol:
   method shouldDismissTransientSession*(reason: DismissReason): bool {.optional.}
+
+protocol WindowPopupEvents:
   proc didDismissTransientSession*(w: Window, reason: DismissReason) {.signal.}
   proc didChangePopupPresentation*(w: Window, present: PopupPresentation) {.signal.}
 

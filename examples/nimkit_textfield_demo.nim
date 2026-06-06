@@ -1,5 +1,7 @@
 import merenda/nimkit
 
+import sigils/core
+
 let
   app = sharedApplication()
   window = newWindow("Nimkit Text Field Demo", frame = initRect(150, 150, 420, 220))
@@ -13,12 +15,12 @@ let
 proc updateStatus() =
   status.text = "Values: " & field.stringValue & " / " & secondField.stringValue
 
-proc onTextDidChange(sender: DynamicAgent) =
-  if sender == DynamicAgent(field) or sender == DynamicAgent(secondField):
+proc updateStatusOnTextChange(textField: TextField, sender: DynamicAgent) {.slot.} =
+  if sender == DynamicAgent(textField):
     updateStatus()
 
-field.delegate = newActionTarget(textDidChange(), onTextDidChange)
-secondField.delegate = newActionTarget(textDidChange(), onTextDidChange)
+connect(field, textDidChange, field, updateStatusOnTextChange)
+connect(secondField, textDidChange, secondField, updateStatusOnTextChange)
 
 root.background = initColor(0.95, 0.96, 0.98)
 layout.spacing = 10.0

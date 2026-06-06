@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -389,7 +391,7 @@ proc addSubview*(
 ) =
   gridView.setGridSubview(child, row, col, rowSpan, colSpan)
 
-proc removeGridSubview*(gridView: GridView, child: View) =
+proc removeGridSubview*(gridView: GridView, child: View) {.slot.} =
   let index = gridView.gridItemIndex(child)
   if index < 0:
     return
@@ -403,10 +405,6 @@ protocol DefaultGridViewLayout of ViewLayoutProtocol:
   method layoutSubviews(gridView: GridView) =
     gridView.layoutGridSubviews()
 
-protocol DefaultGridViewLifecycle of ViewLifecycleProtocol:
-  method willRemoveSubview(gridView: GridView, subview: View) =
-    gridView.removeGridSubview(subview)
-
 proc initGridViewFields*(gridView: GridView, frame: Rect = AutoRect) =
   initViewFields(gridView, frame)
   gridView.xSpacing[drow] = 8.0'f32
@@ -414,7 +412,7 @@ proc initGridViewFields*(gridView: GridView, frame: Rect = AutoRect) =
   gridView.xAlignment[drow] = gaFill
   gridView.xAlignment[dcol] = gaFill
   discard gridView.withProtocol(DefaultGridViewLayout)
-  discard gridView.withProtocol(DefaultGridViewLifecycle)
+  connect(gridView, willRemoveSubview, gridView, removeGridSubview)
   gridView.applyInitialFrame(frame)
 
 proc newGridView*(frame: Rect = AutoRect): GridView =

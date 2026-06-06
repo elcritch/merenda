@@ -28,31 +28,35 @@ protocol WindowPopupSpyHooks of WindowPopupProtocol:
     windowHookEvents.add "shouldDismiss"
     windowHookAllowDismiss
 
-proc rememberWillSetContentView(observer: WindowHookObserver, view: View) {.slot.} =
-  windowHookEvents.add "willContentView"
+protocol WindowLifecycleObserverEvents of WindowLifecycleEvents:
+  proc willSetContentView(observer: WindowHookObserver, view: View) {.slot.} =
+    windowHookEvents.add "willContentView"
 
-proc rememberDidSetContentView(observer: WindowHookObserver, oldView: View) {.slot.} =
-  windowHookEvents.add "didContentView"
+  proc didSetContentView(observer: WindowHookObserver, oldView: View) {.slot.} =
+    windowHookEvents.add "didContentView"
 
-proc rememberDidChangeFirstResponder(
-    observer: WindowHookObserver, previous: Responder
-) {.slot.} =
-  windowHookEvents.add "didFirstResponder"
+protocol WindowFocusObserverEvents of WindowFocusEvents:
+  proc didChangeFirstResponder(
+      observer: WindowHookObserver, previous: Responder
+  ) {.slot.} =
+    windowHookEvents.add "didFirstResponder"
 
-proc rememberDidChangeEffectiveAppearance(
-    observer: WindowHookObserver, appearance: Appearance
-) {.slot.} =
-  windowHookEvents.add "didAppearance"
+protocol WindowAppearanceObserverEvents of WindowAppearanceEvents:
+  proc didChangeEffectiveAppearance(
+      observer: WindowHookObserver, appearance: Appearance
+  ) {.slot.} =
+    windowHookEvents.add "didAppearance"
 
-proc rememberDidDismissTransientSession(
-    observer: WindowHookObserver, reason: DismissReason
-) {.slot.} =
-  windowHookEvents.add "didDismiss"
+protocol WindowPopupObserverEvents of WindowPopupEvents:
+  proc didDismissTransientSession(
+      observer: WindowHookObserver, reason: DismissReason
+  ) {.slot.} =
+    windowHookEvents.add "didDismiss"
 
-proc rememberDidChangePopupPresentation(
-    observer: WindowHookObserver, presentation: PopupPresentation
-) {.slot.} =
-  windowHookEvents.add "didPopupPresentation"
+  proc didChangePopupPresentation(
+      observer: WindowHookObserver, presentation: PopupPresentation
+  ) {.slot.} =
+    windowHookEvents.add "didPopupPresentation"
 
 suite "nimkit application":
   test "window protocols observe and veto core window behavior":
@@ -70,19 +74,10 @@ suite "nimkit application":
     discard window.withProtocol(WindowLifecycleSpyHooks)
     discard window.withProtocol(WindowFocusSpyHooks)
     discard window.withProtocol(WindowPopupSpyHooks)
-    connect(window, willSetContentView, observer, rememberWillSetContentView)
-    connect(window, didSetContentView, observer, rememberDidSetContentView)
-    connect(window, didChangeFirstResponder, observer, rememberDidChangeFirstResponder)
-    connect(
-      window, didChangeEffectiveAppearance, observer,
-      rememberDidChangeEffectiveAppearance,
-    )
-    connect(
-      window, didDismissTransientSession, observer, rememberDidDismissTransientSession
-    )
-    connect(
-      window, didChangePopupPresentation, observer, rememberDidChangePopupPresentation
-    )
+    observer.observeProtocol(window, WindowLifecycleEvents)
+    observer.observeProtocol(window, WindowFocusEvents)
+    observer.observeProtocol(window, WindowAppearanceEvents)
+    observer.observeProtocol(window, WindowPopupEvents)
 
     window.setContentView(root)
     check window.contentView.isNil

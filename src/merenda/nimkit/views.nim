@@ -14,8 +14,8 @@ export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
-  initLayoutSignalBus, notifyLayoutInputChanged, markConstraintStorageChanged,
-  notifyAutoresizingDependentsChanged, invalidateLayoutItemGeometry,
+  initLayoutSignalBus, markConstraintStorageChanged,
+  propagateAutoresizingDependentsChanged, invalidateLayoutItemGeometry,
   onLayoutInputChanged
 export viewprotos
 
@@ -202,9 +202,9 @@ proc finishDisplaySubtree*(view: View) =
 proc moveToWindowOwner*(view: View, window: Responder) =
   if view.isNil or view.xWindow == window:
     return
-  view.notifyWillMoveToWindow(window)
+  view.propagateWillMoveToWindow(window)
   view.setWindowOwner(window)
-  view.notifyDidMoveToWindow()
+  view.propagateDidMoveToWindow()
 
 proc clearSuperviewForWindowOwner*(view: View) =
   if view.isNil:
