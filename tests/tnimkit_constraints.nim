@@ -45,12 +45,14 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 320, 200))
       child = newView(frame = initRect(0, 0, 40, 20))
-      left = child.leftAnchor.constraintEqualTo(root.leftAnchor, constant = 18.0'f32)
-      centerY = child.centerYAnchor.constraintEqualTo(root.centerYAnchor)
-      width = child.widthAnchor.constraintEqualTo(96.0'f32)
-      height = child.heightAnchor.constraintGreaterThanOrEqualTo(
+      left = child.leftAnchor.equalTo(root.leftAnchor, constant = 18.0'f32)
+      centerY = child.centerYAnchor.equalTo(root.centerYAnchor)
+      width = child.widthAnchor.equalTo(96.0'f32)
+      height = child.heightAnchor.greaterThanOrEqualTo(
         root.heightAnchor, multiplier = 0.5'f32, constant = -12.0'f32
       )
+      renamedTop = child.topAnchor.equalTo(root.bottomAnchor, constant = 10.0'f32)
+      renamedWidth = child.widthAnchor.equalTo(88.0'f32)
 
     check child.leftAnchor.item == child
     check child.leftAnchor.attribute == latLeft
@@ -66,6 +68,11 @@ suite "nimkit constraints":
     check width.secondItem.isNil
     check width.secondAttribute == latNotAnAttribute
     check width.constant == 96.0'f32
+    check renamedTop.firstAttribute == latTop
+    check renamedTop.secondAttribute == latBottom
+    check renamedTop.constant == 10.0'f32
+    check renamedWidth.secondItem.isNil
+    check renamedWidth.constant == 88.0'f32
     check height.firstAttribute == latHeight
     check height.relation == lrGreaterThanOrEqual
     check height.multiplier == 0.5'f32
@@ -830,7 +837,7 @@ suite "nimkit constraints":
       initialContainerGeneration =
         root.xLayoutInputCache.sourceGenerations[lisContainer]
 
-    activate(autoresized.widthAnchor.constraintEqualTo(90.0'f32))
+    activate(autoresized.widthAnchor.equalTo(90.0'f32))
     root.layoutSubtreeIfNeeded()
 
     check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==

@@ -398,7 +398,7 @@ proc constraintWithConstant(
     priority,
   )
 
-proc constraintEqualTo*(
+proc equalTo*(
     first: LayoutXAxisAnchor,
     second: LayoutXAxisAnchor,
     constant = 0.0'f32,
@@ -406,7 +406,7 @@ proc constraintEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrEqual, second, constant, priority)
 
-proc constraintGreaterThanOrEqualTo*(
+proc greaterThanOrEqualTo*(
     first: LayoutXAxisAnchor,
     second: LayoutXAxisAnchor,
     constant = 0.0'f32,
@@ -414,7 +414,7 @@ proc constraintGreaterThanOrEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrGreaterThanOrEqual, second, constant, priority)
 
-proc constraintLessThanOrEqualTo*(
+proc lessThanOrEqualTo*(
     first: LayoutXAxisAnchor,
     second: LayoutXAxisAnchor,
     constant = 0.0'f32,
@@ -422,7 +422,7 @@ proc constraintLessThanOrEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrLessThanOrEqual, second, constant, priority)
 
-proc constraintEqualTo*(
+proc equalTo*(
     first: LayoutYAxisAnchor,
     second: LayoutYAxisAnchor,
     constant = 0.0'f32,
@@ -430,7 +430,7 @@ proc constraintEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrEqual, second, constant, priority)
 
-proc constraintGreaterThanOrEqualTo*(
+proc greaterThanOrEqualTo*(
     first: LayoutYAxisAnchor,
     second: LayoutYAxisAnchor,
     constant = 0.0'f32,
@@ -438,7 +438,7 @@ proc constraintGreaterThanOrEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrGreaterThanOrEqual, second, constant, priority)
 
-proc constraintLessThanOrEqualTo*(
+proc lessThanOrEqualTo*(
     first: LayoutYAxisAnchor,
     second: LayoutYAxisAnchor,
     constant = 0.0'f32,
@@ -446,7 +446,7 @@ proc constraintLessThanOrEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrLessThanOrEqual, second, constant, priority)
 
-proc constraintEqualTo*(
+proc equalTo*(
     first: LayoutDimensionAnchor,
     second: LayoutDimensionAnchor,
     multiplier = 1.0'f32,
@@ -455,7 +455,7 @@ proc constraintEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrEqual, second, multiplier, constant, priority)
 
-proc constraintGreaterThanOrEqualTo*(
+proc greaterThanOrEqualTo*(
     first: LayoutDimensionAnchor,
     second: LayoutDimensionAnchor,
     multiplier = 1.0'f32,
@@ -466,7 +466,7 @@ proc constraintGreaterThanOrEqualTo*(
     lrGreaterThanOrEqual, second, multiplier, constant, priority
   )
 
-proc constraintLessThanOrEqualTo*(
+proc lessThanOrEqualTo*(
     first: LayoutDimensionAnchor,
     second: LayoutDimensionAnchor,
     multiplier = 1.0'f32,
@@ -475,35 +475,20 @@ proc constraintLessThanOrEqualTo*(
 ): LayoutConstraint =
   first.constraintWithAnchor(lrLessThanOrEqual, second, multiplier, constant, priority)
 
-proc constraintEqualTo*(
+proc equalTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
 ): LayoutConstraint =
   first.constraintWithConstant(lrEqual, constant, priority)
 
-proc constraintGreaterThanOrEqualTo*(
+proc greaterThanOrEqualTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
 ): LayoutConstraint =
   first.constraintWithConstant(lrGreaterThanOrEqual, constant, priority)
 
-proc constraintLessThanOrEqualTo*(
+proc lessThanOrEqualTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
 ): LayoutConstraint =
   first.constraintWithConstant(lrLessThanOrEqual, constant, priority)
-
-proc constraintEqualToConstant*(
-    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
-): LayoutConstraint =
-  first.constraintEqualTo(constant, priority)
-
-proc constraintGreaterThanOrEqualToConstant*(
-    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
-): LayoutConstraint =
-  first.constraintGreaterThanOrEqualTo(constant, priority)
-
-proc constraintLessThanOrEqualToConstant*(
-    first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
-): LayoutConstraint =
-  first.constraintLessThanOrEqualTo(constant, priority)
 
 proc activateConstraints*(constraints: openArray[LayoutConstraint])
 
@@ -515,19 +500,19 @@ proc edgeConstraints*(
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
   if leLeft in edges:
-    result.add view.leftAnchor.constraintEqualTo(
+    result.add view.leftAnchor.equalTo(
       toView.leftAnchor, constant = insets.left, priority = priority
     )
   if leTop in edges:
-    result.add view.topAnchor.constraintEqualTo(
+    result.add view.topAnchor.equalTo(
       toView.topAnchor, constant = insets.top, priority = priority
     )
   if leRight in edges:
-    result.add view.rightAnchor.constraintEqualTo(
+    result.add view.rightAnchor.equalTo(
       toView.rightAnchor, constant = -insets.right, priority = priority
     )
   if leBottom in edges:
-    result.add view.bottomAnchor.constraintEqualTo(
+    result.add view.bottomAnchor.equalTo(
       toView.bottomAnchor, constant = -insets.bottom, priority = priority
     )
 
@@ -551,19 +536,19 @@ proc edgeConstraints*(
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
   if leLeft in edges:
-    result.add view.leftAnchor.constraintEqualTo(
+    result.add view.leftAnchor.equalTo(
       toGuide.leftAnchor, constant = insets.left, priority = priority
     )
   if leTop in edges:
-    result.add view.topAnchor.constraintEqualTo(
+    result.add view.topAnchor.equalTo(
       toGuide.topAnchor, constant = insets.top, priority = priority
     )
   if leRight in edges:
-    result.add view.rightAnchor.constraintEqualTo(
+    result.add view.rightAnchor.equalTo(
       toGuide.rightAnchor, constant = -insets.right, priority = priority
     )
   if leBottom in edges:
-    result.add view.bottomAnchor.constraintEqualTo(
+    result.add view.bottomAnchor.equalTo(
       toGuide.bottomAnchor, constant = -insets.bottom, priority = priority
     )
 

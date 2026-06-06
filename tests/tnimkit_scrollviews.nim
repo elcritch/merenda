@@ -186,20 +186,16 @@ proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
 
   result.title.pinEdges(toGuide = guide, edges = {leLeft, leTop, leRight})
   activate(
-    result.status.topAnchor.constraintEqualTo(result.title.bottomAnchor, constant = 8.0),
-    result.status.leftAnchor.constraintEqualTo(result.title.leftAnchor),
-    result.status.rightAnchor.constraintEqualTo(result.title.rightAnchor),
-    result.scrollView.topAnchor.constraintEqualTo(
-      result.status.bottomAnchor, constant = 12.0
-    ),
-    result.scrollView.leftAnchor.constraintEqualTo(result.title.leftAnchor),
-    result.scrollView.rightAnchor.constraintEqualTo(result.title.rightAnchor),
-    result.controls.topAnchor.constraintEqualTo(
-      result.scrollView.bottomAnchor, constant = 12.0
-    ),
-    result.controls.leftAnchor.constraintEqualTo(result.title.leftAnchor),
-    result.controls.rightAnchor.constraintEqualTo(result.title.rightAnchor),
-    result.controls.bottomAnchor.constraintEqualTo(guide.bottomAnchor),
+    result.status.topAnchor.equalTo(result.title.bottomAnchor, constant = 8.0),
+    result.status.leftAnchor.equalTo(result.title.leftAnchor),
+    result.status.rightAnchor.equalTo(result.title.rightAnchor),
+    result.scrollView.topAnchor.equalTo(result.status.bottomAnchor, constant = 12.0),
+    result.scrollView.leftAnchor.equalTo(result.title.leftAnchor),
+    result.scrollView.rightAnchor.equalTo(result.title.rightAnchor),
+    result.controls.topAnchor.equalTo(result.scrollView.bottomAnchor, constant = 12.0),
+    result.controls.leftAnchor.equalTo(result.title.leftAnchor),
+    result.controls.rightAnchor.equalTo(result.title.rightAnchor),
+    result.controls.bottomAnchor.equalTo(guide.bottomAnchor),
   )
 
 proc checkHeaderVisible(fixture: ScrollResizeFixture) =
@@ -604,13 +600,13 @@ suite "nimkit scroll views":
 
     root.addSubview(scrollView, footer)
     activate(
-      scrollView.topAnchor.constraintEqualTo(guide.topAnchor),
-      scrollView.leftAnchor.constraintEqualTo(guide.leftAnchor),
-      scrollView.rightAnchor.constraintEqualTo(guide.rightAnchor),
-      footer.topAnchor.constraintEqualTo(scrollView.bottomAnchor, constant = 8.0),
-      footer.leftAnchor.constraintEqualTo(guide.leftAnchor),
-      footer.rightAnchor.constraintEqualTo(guide.rightAnchor),
-      footer.bottomAnchor.constraintEqualTo(guide.bottomAnchor),
+      scrollView.topAnchor.equalTo(guide.topAnchor),
+      scrollView.leftAnchor.equalTo(guide.leftAnchor),
+      scrollView.rightAnchor.equalTo(guide.rightAnchor),
+      footer.topAnchor.equalTo(scrollView.bottomAnchor, constant = 8.0),
+      footer.leftAnchor.equalTo(guide.leftAnchor),
+      footer.rightAnchor.equalTo(guide.rightAnchor),
+      footer.bottomAnchor.equalTo(guide.bottomAnchor),
     )
 
     root.layoutSubtreeIfNeeded()
