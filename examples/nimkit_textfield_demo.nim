@@ -15,12 +15,12 @@ let
 proc updateStatus() =
   status.text = "Values: " & field.stringValue & " / " & secondField.stringValue
 
-proc updateStatusOnTextChange(textField: TextField, sender: DynamicAgent) {.slot.} =
+proc updateOnChange(textField: TextField, sender: DynamicAgent) {.slot.} =
   if sender == DynamicAgent(textField):
     updateStatus()
 
-field.connect(textDidChange, field, updateStatusOnTextChange)
-secondField.connect(textDidChange, secondField, updateStatusOnTextChange)
+field.connect(textDidChange, field, updateOnChange)
+secondField.connect(textDidChange, secondField, updateOnChange)
 
 root.background = initColor(0.95, 0.96, 0.98)
 layout.spacing = 10.0
