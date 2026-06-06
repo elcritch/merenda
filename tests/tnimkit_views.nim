@@ -273,8 +273,8 @@ suite "nimkit views":
       child = newConstraintSpyView("child", initRect(20, 30, 80, 40))
 
     root.addSubview(child)
-    root.setNeedsLayout(false)
-    child.setNeedsLayout(false)
+    root.needsLayout = false
+    child.needsLayout = false
     constraintEvents.setLen(0)
 
     root.setNeedsUpdateConstraints()
@@ -291,8 +291,8 @@ suite "nimkit views":
     check not child.needsLayout
 
     constraintEvents.setLen(0)
-    root.setNeedsLayout(true)
-    child.setNeedsLayout(true)
+    root.needsLayout = true
+    child.needsLayout = true
     root.setNeedsUpdateConstraints()
     child.setNeedsUpdateConstraints()
 

@@ -241,52 +241,40 @@ proc edgeInsets*(formView: FormView): EdgeInsets =
   else:
     formView.xEdgeInsets
 
-proc setEdgeInsets*(formView: FormView, insets: EdgeInsets) =
+proc `edgeInsets=`*(formView: FormView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
   if formView.isNil or formView.xEdgeInsets == normalized:
     return
   formView.xEdgeInsets = normalized
   formView.invalidateFormLayout()
 
-proc `edgeInsets=`*(formView: FormView, insets: EdgeInsets) =
-  formView.setEdgeInsets(insets)
-
 proc labelAlignment*(formView: FormView): FormLabelAlignment =
   if formView.isNil: flaTrailing else: formView.xLabelAlignment
 
-proc setLabelAlignment*(formView: FormView, alignment: FormLabelAlignment) =
+proc `labelAlignment=`*(formView: FormView, alignment: FormLabelAlignment) =
   if formView.isNil or formView.xLabelAlignment == alignment:
     return
   formView.xLabelAlignment = alignment
   formView.invalidateFormLayout()
 
-proc `labelAlignment=`*(formView: FormView, alignment: FormLabelAlignment) =
-  formView.setLabelAlignment(alignment)
-
 proc rowAlignment*(formView: FormView): FormRowAlignment =
   if formView.isNil: fraCenter else: formView.xRowAlignment
 
-proc setRowAlignment*(formView: FormView, alignment: FormRowAlignment) =
+proc `rowAlignment=`*(formView: FormView, alignment: FormRowAlignment) =
   if formView.isNil or formView.xRowAlignment == alignment:
     return
   formView.xRowAlignment = alignment
   formView.invalidateFormLayout()
 
-proc `rowAlignment=`*(formView: FormView, alignment: FormRowAlignment) =
-  formView.setRowAlignment(alignment)
-
 proc minFieldWidth*(formView: FormView): float32 =
   if formView.isNil: 0.0'f32 else: formView.xMinimumFieldWidth
 
-proc setMinFieldWidth*(formView: FormView, width: float32) =
+proc `minFieldWidth=`*(formView: FormView, width: float32) =
   let normalized = max(width, 0.0'f32)
   if formView.isNil or formView.xMinimumFieldWidth == normalized:
     return
   formView.xMinimumFieldWidth = normalized
   formView.invalidateFormLayout()
-
-proc `minFieldWidth=`*(formView: FormView, width: float32) =
-  formView.setMinFieldWidth(width)
 
 proc intrinsicContentSize*(formView: FormView): IntrinsicSize =
   if formView.isNil:

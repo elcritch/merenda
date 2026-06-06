@@ -371,16 +371,13 @@ proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
     return view.xInheritedAppearance
   inherited
 
-proc setAppearance*(view: View, appearance: Appearance) =
+proc `appearance=`*(view: View, appearance: Appearance) =
   if view.isNil:
     return
   view.xAppearance = appearance
   view.xHasAppearance = true
   view.invalidateIntrinsicContentSizeSubtree()
   view.setNeedsDisplaySubtree()
-
-proc `appearance=`*(view: View, appearance: Appearance) =
-  view.setAppearance(appearance)
 
 proc clearAppearance*(view: View) =
   if view.isNil or not view.xHasAppearance:

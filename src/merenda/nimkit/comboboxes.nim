@@ -34,7 +34,7 @@ type
 proc comboBoxCell*(comboBox: ComboBox): ComboBoxCell
 proc dataSource*(comboBox: ComboBox): DynamicAgent
 proc highlightedIndex*(comboBox: ComboBox): int
-proc setHighlightedIndex*(comboBox: ComboBox, index: int)
+proc `highlightedIndex=`*(comboBox: ComboBox, index: int)
 proc popupListData(comboBox: ComboBox): PopupListData
 proc popupListActions(comboBox: ComboBox): PopupListActions
 proc popupList(comboBox: ComboBox): PopupListView
@@ -222,7 +222,7 @@ protocol ComboBoxProtocol from ComboBox:
       return
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
-    comboBox.setHighlightedIndex(-1)
+    comboBox.highlightedIndex = -1
     cell.invalidateControlMetrics()
 
   method addItem*(comboBox: ComboBox, value: string) =
@@ -679,39 +679,27 @@ proc dataSource*(comboBox: ComboBox): DynamicAgent =
     return nil
   comboBox.xDataSource
 
-proc setDataSource*(comboBox: ComboBox, dataSource: DynamicAgent) =
+proc `dataSource=`*(comboBox: ComboBox, dataSource: DynamicAgent) =
   if comboBox.isNil or comboBox.xDataSource == dataSource:
     return
   comboBox.xDataSource = dataSource
   comboBox.reloadData()
 
-proc `dataSource=`*(comboBox: ComboBox, dataSource: DynamicAgent) =
-  comboBox.setDataSource(dataSource)
-
-proc setDataSource*(comboBox: ComboBox, dataSource: Responder) =
-  comboBox.setDataSource(DynamicAgent(dataSource))
-
 proc `dataSource=`*(comboBox: ComboBox, dataSource: Responder) =
-  comboBox.setDataSource(dataSource)
+  comboBox.dataSource = DynamicAgent(dataSource)
 
 proc delegate*(comboBox: ComboBox): DynamicAgent =
   if comboBox.isNil:
     return nil
   comboBox.xDelegate
 
-proc setDelegate*(comboBox: ComboBox, delegate: DynamicAgent) =
+proc `delegate=`*(comboBox: ComboBox, delegate: DynamicAgent) =
   if comboBox.isNil:
     return
   comboBox.xDelegate = delegate
 
-proc `delegate=`*(comboBox: ComboBox, delegate: DynamicAgent) =
-  comboBox.setDelegate(delegate)
-
-proc setDelegate*(comboBox: ComboBox, delegate: Responder) =
-  comboBox.setDelegate(DynamicAgent(delegate))
-
 proc `delegate=`*(comboBox: ComboBox, delegate: Responder) =
-  comboBox.setDelegate(delegate)
+  comboBox.delegate = DynamicAgent(delegate)
 
 proc highlightedIndex*(comboBox: ComboBox): int =
   if comboBox.isNil:
@@ -727,7 +715,7 @@ proc setPopupNeedsDisplay(comboBox: ComboBox) =
     if not contentView.isNil:
       contentView.setNeedsDisplay(true)
 
-proc setHighlightedIndex*(comboBox: ComboBox, index: int) =
+proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
   if comboBox.isNil:
     return
   let boundedIndex = if index < 0 or index >= comboBox.numberOfItems(): -1 else: index
@@ -741,9 +729,6 @@ proc setHighlightedIndex*(comboBox: ComboBox, index: int) =
   comboBox.xPopupHighlightedIndex = boundedIndex
   comboBox.notifyComboBoxSelectionIsChanging()
   comboBox.setPopupNeedsDisplay()
-
-proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
-  comboBox.setHighlightedIndex(index)
 
 proc popupListData(comboBox: ComboBox): PopupListData =
   PopupListData(
@@ -799,7 +784,7 @@ proc popupList(comboBox: ComboBox): PopupListView =
 proc setHoveredPopupIndex(comboBox: ComboBox, index: int) =
   if comboBox.isNil or index < 0:
     return
-  comboBox.setHighlightedIndex(index)
+  comboBox.highlightedIndex = index
 
 proc isButtonPressed*(comboBox: ComboBox): bool =
   not comboBox.isNil and comboBox.xButtonPressed
@@ -1050,14 +1035,12 @@ proc movePopupHighlight*(comboBox: ComboBox, delta: int) =
       comboBox.indexOfSelectedItem()
     else:
       0
-  comboBox.setHighlightedIndex(
-    max(0, min(current + delta, comboBox.numberOfItems() - 1))
-  )
+  comboBox.highlightedIndex = max(0, min(current + delta, comboBox.numberOfItems() - 1))
 
 proc movePopupHighlightTo(comboBox: ComboBox, index: int) =
   if comboBox.isNil or comboBox.numberOfItems() == 0:
     return
-  comboBox.setHighlightedIndex(max(0, min(index, comboBox.numberOfItems() - 1)))
+  comboBox.highlightedIndex = max(0, min(index, comboBox.numberOfItems() - 1))
 
 proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int) =
   if comboBox.isNil or comboBox.numberOfItems() == 0 or deltaPages == 0:

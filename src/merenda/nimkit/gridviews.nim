@@ -310,15 +310,12 @@ proc edgeInsets*(gridView: GridView): EdgeInsets =
   else:
     gridView.xEdgeInsets
 
-proc setEdgeInsets*(gridView: GridView, insets: EdgeInsets) =
+proc `edgeInsets=`*(gridView: GridView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
   if gridView.isNil or gridView.xEdgeInsets == normalized:
     return
   gridView.xEdgeInsets = normalized
   gridView.invalidateGridLayout()
-
-proc `edgeInsets=`*(gridView: GridView, insets: EdgeInsets) =
-  gridView.setEdgeInsets(insets)
 
 proc alignment*(gridView: GridView): GridAlignmentValues =
   GridAlignmentValues(xGridView: gridView)

@@ -22,15 +22,12 @@ export viewprotos
 proc styleId*(view: View): string =
   if view.isNil: "" else: view.xStyleId
 
-proc setStyleId*(view: View, id: string) =
+proc `styleId=`*(view: View, id: string) =
   if view.isNil or view.xStyleId == id:
     return
   view.xStyleId = id
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
-
-proc `styleId=`*(view: View, id: string) =
-  view.setStyleId(id)
 
 proc styleClasses*(view: View): seq[string] =
   if view.isNil:
@@ -38,7 +35,7 @@ proc styleClasses*(view: View): seq[string] =
   else:
     view.xStyleClasses
 
-proc setStyleClasses*(view: View, classes: openArray[string]) =
+proc `styleClasses=`*(view: View, classes: openArray[string]) =
   if view.isNil:
     return
   let nextClasses = @classes
@@ -47,9 +44,6 @@ proc setStyleClasses*(view: View, classes: openArray[string]) =
   view.xStyleClasses = nextClasses
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
-
-proc `styleClasses=`*(view: View, classes: openArray[string]) =
-  view.setStyleClasses(classes)
 
 proc hasStyleClass*(view: View, className: string): bool =
   (not view.isNil) and view.xStyleClasses.find(className) >= 0
@@ -77,15 +71,12 @@ proc isHovered*(view: View): bool =
 proc hovered*(view: View): bool =
   view.isHovered()
 
-proc setHovered*(view: View, hovered: bool) =
+proc `hovered=`*(view: View, hovered: bool) =
   if view.isNil or view.xHovered == hovered:
     return
   view.xHovered = hovered
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
-
-proc `hovered=`*(view: View, hovered: bool) =
-  view.setHovered(hovered)
 
 proc isActive*(view: View): bool =
   (not view.isNil) and view.xActive
@@ -93,15 +84,12 @@ proc isActive*(view: View): bool =
 proc active*(view: View): bool =
   view.isActive()
 
-proc setActive*(view: View, active: bool) =
+proc `active=`*(view: View, active: bool) =
   if view.isNil or view.xActive == active:
     return
   view.xActive = active
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
-
-proc `active=`*(view: View, active: bool) =
-  view.setActive(active)
 
 proc isFocused*(view: View): bool =
   (not view.isNil) and view.xHasFocus
@@ -109,15 +97,12 @@ proc isFocused*(view: View): bool =
 proc focused*(view: View): bool =
   view.isFocused()
 
-proc setFocused*(view: View, focused: bool) =
+proc `focused=`*(view: View, focused: bool) =
   if view.isNil or view.xHasFocus == focused:
     return
   view.xHasFocus = focused
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
-
-proc `focused=`*(view: View, focused: bool) =
-  view.setFocused(focused)
 
 proc isFocusVisible*(view: View): bool =
   (not view.isNil) and view.xFocusVisible
@@ -125,15 +110,12 @@ proc isFocusVisible*(view: View): bool =
 proc focusVisible*(view: View): bool =
   view.isFocusVisible()
 
-proc setFocusVisible*(view: View, focusVisible: bool) =
+proc `focusVisible=`*(view: View, focusVisible: bool) =
   if view.isNil or view.xFocusVisible == focusVisible:
     return
   view.xFocusVisible = focusVisible
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
-
-proc `focusVisible=`*(view: View, focusVisible: bool) =
-  view.setFocusVisible(focusVisible)
 
 proc needsUpdateConstraints*(view: View): bool =
   (not view.isNil) and view.xNeedsUpdateConstraints
@@ -163,16 +145,13 @@ proc updateConstraintsForSubtreeIfNeeded*(view: View) =
 proc needsLayout*(view: View): bool =
   (not view.isNil) and view.xNeedsLayout
 
-proc setNeedsLayout*(view: View, value: bool) =
+proc `needsLayout=`*(view: View, value: bool) =
   if view.isNil:
     return
   view.xNeedsLayout = value
 
-proc `needsLayout=`*(view: View, value: bool) =
-  view.setNeedsLayout(value)
-
 proc setNeedsLayout*(view: View) =
-  view.setNeedsLayout(true)
+  view.needsLayout = true
 
 proc layoutSubtree(view: View) =
   if view.isNil:

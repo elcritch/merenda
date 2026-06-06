@@ -122,7 +122,7 @@ proc autoresizingMask*(view: View): AutoresizingMask =
     return {}
   view.xAutoresizingMask
 
-proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
+proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
   if view.isNil or view.xAutoresizingMask == mask:
     return
   view.xAutoresizingMask = mask
@@ -131,9 +131,6 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
     view.refreshAutoresizingReference()
   else:
     view.resetAutoresizingState()
-
-proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
-  view.setAutoresizingMask(mask)
 
 proc autoresizingMaskConstraints*(view: View): bool =
   (not view.isNil) and view.xAutoresizingMaskConstraints

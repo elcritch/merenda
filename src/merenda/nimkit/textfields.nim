@@ -500,19 +500,13 @@ proc delegate*(textField: TextField): DynamicAgent =
     return nil
   textField.xDelegate
 
-proc setDelegate*(textField: TextField, delegate: DynamicAgent) =
+proc `delegate=`*(textField: TextField, delegate: DynamicAgent) =
   if textField.isNil:
     return
   textField.xDelegate = delegate
 
-proc `delegate=`*(textField: TextField, delegate: DynamicAgent) =
-  textField.setDelegate(delegate)
-
-proc setDelegate*(textField: TextField, delegate: Responder) =
-  textField.setDelegate(DynamicAgent(delegate))
-
 proc `delegate=`*(textField: TextField, delegate: Responder) =
-  textField.setDelegate(delegate)
+  textField.delegate = DynamicAgent(delegate)
 
 proc notifyTextDidChange(textField: TextField) =
   if textField.isNil or textField.xDelegate.isNil:
@@ -616,15 +610,12 @@ func defaultAlignment(style: LabelStyle): TextAlignment =
 proc labelStyle*(label: Label): LabelStyle =
   if label.isNil: lsBody else: label.xLabelStyle
 
-proc setLabelStyle*(label: Label, style: LabelStyle) =
+proc `labelStyle=`*(label: Label, style: LabelStyle) =
   if label.isNil:
     return
   label.xLabelStyle = style
   label.styleClasses = style.labelStyleClasses()
   label.alignment = style.defaultAlignment()
-
-proc `labelStyle=`*(label: Label, style: LabelStyle) =
-  label.setLabelStyle(style)
 
 proc initLabelFields*(
     label: Label, value = "", style: LabelStyle = lsBody, frame: Rect = AutoRect
@@ -632,7 +623,7 @@ proc initLabelFields*(
   initTextFieldFields(label, value, frame)
   label.editable = false
   label.selectable = false
-  label.setLabelStyle(style)
+  label.labelStyle = style
 
 proc newLabel*(value = "", style: LabelStyle = lsBody, frame: Rect = AutoRect): Label =
   result = Label()

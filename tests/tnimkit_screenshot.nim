@@ -102,8 +102,8 @@ suite "nimkit screenshot":
         label.setStringValue("Clicked")
 
     let target = newActionTarget(action, onClicked)
-    button.setTarget(target)
-    button.setAction(action)
+    button.target = target
+    button.action = action
     root.addSubview(label)
     root.addSubview(button)
 

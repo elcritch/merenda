@@ -183,18 +183,18 @@ suite "nimkit constraints":
     root.layoutSubtreeIfNeeded()
     child.setNeedsUpdateConstraints()
     child.updateConstraintsForSubtreeIfNeeded()
-    child.setNeedsLayout(false)
+    child.needsLayout = false
 
     child.addConstraint(width)
     child.updateConstraintsForSubtreeIfNeeded()
-    child.setNeedsLayout(false)
+    child.needsLayout = false
 
     width.constant = 120.0'f32
     check child.needsUpdateConstraints
     check child.needsLayout
 
     child.updateConstraintsForSubtreeIfNeeded()
-    child.setNeedsLayout(false)
+    child.needsLayout = false
 
     width.priority = LayoutPriorityLow
     check width.priority == LayoutPriorityLow
@@ -207,14 +207,14 @@ suite "nimkit constraints":
     check view.autoresizingMask == {}
     check view.autoresizingMaskConstraints
 
-    view.setAutoresizingMask({cxMinXMargin, cxWidthSizable, cxMaxYMargin})
+    view.autoresizingMask = {cxMinXMargin, cxWidthSizable, cxMaxYMargin}
     check view.autoresizingMask == {cxMinXMargin, cxWidthSizable, cxMaxYMargin}
     check view.needsUpdateConstraints
     check view.needsLayout
 
     view.updateConstraintsForSubtreeIfNeeded()
-    view.setNeedsLayout(false)
-    view.setAutoresizingMask(view.autoresizingMask())
+    view.needsLayout = false
+    view.autoresizingMask = view.autoresizingMask()
     check not view.needsUpdateConstraints
     check not view.needsLayout
 
@@ -236,7 +236,7 @@ suite "nimkit constraints":
     check not root.needsUpdateConstraints
     check not child.needsUpdateConstraints
 
-    child.setAutoresizingMask({cxWidthSizable, cxHeightSizable})
+    child.autoresizingMask = {cxWidthSizable, cxHeightSizable}
     check root.needsUpdateConstraints
     check root.needsLayout
     check child.needsUpdateConstraints

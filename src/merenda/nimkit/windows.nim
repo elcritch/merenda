@@ -405,9 +405,9 @@ proc clearInheritedAppearance*(window: Window) =
 
 proc clearMouseState(window: Window) =
   if not window.xMouseActiveView.isNil:
-    window.xMouseActiveView.setActive(false)
+    window.xMouseActiveView.active = false
   if not window.xMouseHoverView.isNil:
-    window.xMouseHoverView.setHovered(false)
+    window.xMouseHoverView.hovered = false
   window.xMouseCaptureView = nil
   window.xMouseActiveView = nil
   window.xMouseHoverView = nil
@@ -420,10 +420,10 @@ proc setMouseActiveView(window: Window, view: View) =
   if window.xMouseActiveView == view:
     return
   if not window.xMouseActiveView.isNil:
-    window.xMouseActiveView.setActive(false)
+    window.xMouseActiveView.active = false
   window.xMouseActiveView = view
   if not view.isNil:
-    view.setActive(true)
+    view.active = true
 
 proc setContentView*(window: Window, view: View) =
   if window.isNil or not window.shouldSetContentView(view):
@@ -472,8 +472,8 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if window.xFirstResponder == responder:
     if not responder.isNil and responder of View:
       let view = View(responder)
-      view.setFocused(true)
-      view.setFocusVisible(focusVisible)
+      view.focused = true
+      view.focusVisible = focusVisible
     return true
 
   if not responder.isNil:
@@ -493,12 +493,12 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
 
   if not window.xFirstResponder.isNil and window.xFirstResponder of View:
     let previous = View(window.xFirstResponder)
-    previous.setFocused(false)
-    previous.setFocusVisible(false)
+    previous.focused = false
+    previous.focusVisible = false
   if not responder.isNil and responder of View:
     let next = View(responder)
-    next.setFocused(true)
-    next.setFocusVisible(focusVisible)
+    next.focused = true
+    next.focusVisible = focusVisible
   window.xFirstResponder = responder
   emit window.didChangeFirstResponder(previousResponder)
   true
@@ -1034,13 +1034,13 @@ proc updateHoverView(
 
   let previous = window.xMouseHoverView
   if not previous.isNil:
-    previous.setHovered(false)
+    previous.hovered = false
     let localEvent = previous.localMouseEvent(window.xContentView, contentPoint, event)
     result = previous.handleMouseExited(localEvent)
 
   window.xMouseHoverView = target
   if not target.isNil:
-    target.setHovered(true)
+    target.hovered = true
     let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
     result = target.handleMouseEntered(localEvent) or result
 
