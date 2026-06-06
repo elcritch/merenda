@@ -1,7 +1,7 @@
 version       = "0.3.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
-license       = "MPL-2.0"
+license       = "BSD-3-Clause"
 srcDir        = "src"
 
 # Dependencies
