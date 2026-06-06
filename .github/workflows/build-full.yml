@@ -23,7 +23,7 @@ jobs:
           - macos-14
           # - windows-2022
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Weston (Wayland)
       if: runner.os == 'Linux'
@@ -80,8 +80,8 @@ jobs:
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> $GITHUB_PATH
-        git clone --depth 1 https://github.com/nim-lang/atlas "$RUNNER_TEMP/atlas"
-        nim c -d:release --out:"$HOME/.local/bin/atlas" "$RUNNER_TEMP/atlas/src/atlas.nim"
+        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
         echo "Nim:: "
         nim -v
         echo "Atlas:: "
@@ -176,7 +176,7 @@ jobs:
 
     - name: Upload Test Output (on failure)
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: tests-output-${{ runner.os }}-nim${{ matrix.nimversion }}
         path: |
