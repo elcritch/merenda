@@ -57,6 +57,7 @@ suite "nimkit constraints":
       equalHeight = cx(child.heightAnchor == root.heightAnchor)
       equalWidth = cx(child.widthAnchor == 72.0'f32)
       offsetTop = cx(child.topAnchor == root.bottomAnchor + 12.0'f32)
+      offsetRight = cx(child.rightAnchor == root.rightAnchor - 8.0'f32)
       minWidth = cx(child.widthAnchor >= root.widthAnchor, multiplier = 0.5'f32)
       maxHeight = cx(child.heightAnchor <= 42.0'f32, priority = LayoutPriorityHigh)
 
@@ -88,6 +89,9 @@ suite "nimkit constraints":
     check offsetTop.firstAttribute == latTop
     check offsetTop.secondAttribute == latBottom
     check offsetTop.constant == 12.0'f32
+    check offsetRight.firstAttribute == latRight
+    check offsetRight.secondAttribute == latRight
+    check offsetRight.constant == -8.0'f32
     check minWidth.relation == lrGreaterThanOrEqual
     check minWidth.multiplier == 0.5'f32
     check maxHeight.relation == lrLessThanOrEqual
