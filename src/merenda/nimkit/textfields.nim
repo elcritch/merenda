@@ -48,7 +48,7 @@ proc initTextRange*(location, length: int): TextRange =
 protocol TextFieldEvents:
   proc textDidChange*(textField: TextField, sender: DynamicAgent) {.signal.}
 
-protocol TextFieldProtocol {.selectorScope: protocol.} from TextField:
+protocol TextFieldProtocol from TextField:
   property stringValue -> string
   property alignment -> TextAlignment
   property textColor -> Color

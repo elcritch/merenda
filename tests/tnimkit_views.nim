@@ -37,27 +37,30 @@ protocol MouseSpyEvents of ResponderEventProtocol:
     spyMouseUpPoint = event.location
     inc spyMouseUpCount
 
-proc rememberViewWillMoveToSuperview(spy: LifecycleSpyView, superview: View) {.slot.} =
-  spy.events.add "willSuperview"
-  spy.superviews.add superview
+protocol LifecycleSpyViewEvents from LifecycleSpyView:
+  includes ViewLifecycleProtocol
 
-proc rememberViewDidMoveToSuperview(spy: LifecycleSpyView) {.slot.} =
-  spy.events.add "didSuperview"
+  proc viewWillMoveToSuperview(spy: LifecycleSpyView, superview: View) {.slot.} =
+    spy.events.add "willSuperview"
+    spy.superviews.add superview
 
-proc rememberViewWillMoveToWindow(spy: LifecycleSpyView, window: Responder) {.slot.} =
-  spy.events.add "willWindow"
-  spy.windows.add window
+  proc viewDidMoveToSuperview(spy: LifecycleSpyView) {.slot.} =
+    spy.events.add "didSuperview"
 
-proc rememberViewDidMoveToWindow(spy: LifecycleSpyView) {.slot.} =
-  spy.events.add "didWindow"
+  proc viewWillMoveToWindow(spy: LifecycleSpyView, window: Responder) {.slot.} =
+    spy.events.add "willWindow"
+    spy.windows.add window
 
-proc rememberDidAddSubview(spy: LifecycleSpyView, subview: View) {.slot.} =
-  spy.events.add "didAddSubview"
-  spy.addedSubviews.add subview
+  proc viewDidMoveToWindow(spy: LifecycleSpyView) {.slot.} =
+    spy.events.add "didWindow"
 
-proc rememberWillRemoveSubview(spy: LifecycleSpyView, subview: View) {.slot.} =
-  spy.events.add "willRemoveSubview"
-  spy.removedSubviews.add subview
+  proc didAddSubview(spy: LifecycleSpyView, subview: View) {.slot.} =
+    spy.events.add "didAddSubview"
+    spy.addedSubviews.add subview
+
+  proc willRemoveSubview(spy: LifecycleSpyView, subview: View) {.slot.} =
+    spy.events.add "willRemoveSubview"
+    spy.removedSubviews.add subview
 
 protocol LayoutSpyHooks of ViewLayoutProtocol:
   method layoutSubviews(spy: LayoutSpyView) =
@@ -84,12 +87,8 @@ proc newMouseSpyView(frame: Rect): MouseSpyView =
 proc newLifecycleSpyView(frame: Rect): LifecycleSpyView =
   result = LifecycleSpyView()
   initViewFields(result, frame)
-  result.connect(viewWillMoveToSuperview, result, rememberViewWillMoveToSuperview)
-  result.connect(viewDidMoveToSuperview, result, rememberViewDidMoveToSuperview)
-  result.connect(viewWillMoveToWindow, result, rememberViewWillMoveToWindow)
-  result.connect(viewDidMoveToWindow, result, rememberViewDidMoveToWindow)
-  result.connect(didAddSubview, result, rememberDidAddSubview)
-  result.connect(willRemoveSubview, result, rememberWillRemoveSubview)
+  result = result.withProto()
+  result.observeProtocol(result, LifecycleSpyViewEvents)
 
 proc newLayoutSpyView(frame: Rect): LayoutSpyView =
   result = LayoutSpyView()

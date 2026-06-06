@@ -149,6 +149,10 @@ dirtying:
   constraints, intrinsic size, generated inputs, or layout.
 - The layout slot maps reasons to local dirty sources, aggregate dirty sources,
   lifecycle flags, and autoresizing state.
+- Superview geometry changes use a separate `geometryDidChange` bus. Children
+  subscribe to their current superview and translate that signal to
+  `lirSuperviewGeometry`, so moved children stop receiving old-parent geometry
+  dirties.
 - The generated input cache can rebuild per-source buckets where practical.
 - First solve, user-constraint changes, and structural changes still rebuild
   all generated buckets for correctness.

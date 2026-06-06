@@ -29,7 +29,7 @@ protocol ViewProtocol from View:
     self.xBounds = initRect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)
     self.refreshAutoresizingReference()
-    self.propagateAutoresizingDependentsChanged()
+    emit self.geometryDidChange()
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
@@ -42,7 +42,7 @@ protocol ViewProtocol from View:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
     emit self.layoutInputChanged(lirBounds)
-    self.propagateAutoresizingDependentsChanged()
+    emit self.geometryDidChange()
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -299,6 +299,18 @@ protocol ViewLifecycleProtocol:
   proc viewDidMoveToWindow*(view: View) {.signal.}
   proc didAddSubview*(view: View, subview: View) {.signal.}
   proc willRemoveSubview*(view: View, subview: View) {.signal.}
+
+proc unbindSuperviewGeometry(view: View, superview: View) {.slot.} =
+  view.unobserveSuperviewGeometry()
+
+proc bindSuperviewGeometry(view: View) {.slot.} =
+  view.observeSuperviewGeometry()
+
+proc initViewLifecycleSignalBus*(view: View) =
+  if view.isNil:
+    return
+  view.connect(viewWillMoveToSuperview, view, unbindSuperviewGeometry)
+  view.connect(viewDidMoveToSuperview, view, bindSuperviewGeometry)
 
 proc `frame=`*(view: View, frame: Rect) =
   view.setFrame(frame)

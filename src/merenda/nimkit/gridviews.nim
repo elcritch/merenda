@@ -391,12 +391,16 @@ proc addSubview*(
 ) =
   gridView.setGridSubview(child, row, col, rowSpan, colSpan)
 
-proc removeGridSubview*(gridView: GridView, child: View) {.slot.} =
+proc removeGridSubview*(gridView: GridView, child: View) =
   let index = gridView.gridItemIndex(child)
   if index < 0:
     return
   gridView.xItems.delete(index)
   gridView.invalidateGridLayout()
+
+protocol GridViewLifecycleSlots of ViewLifecycleProtocol:
+  proc willRemoveSubview(gridView: GridView, child: View) {.slot.} =
+    gridView.removeGridSubview(child)
 
 protocol DefaultGridViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(gridView: GridView): IntrinsicSize =
@@ -412,7 +416,8 @@ proc initGridViewFields*(gridView: GridView, frame: Rect = AutoRect) =
   gridView.xAlignment[drow] = gaFill
   gridView.xAlignment[dcol] = gaFill
   discard gridView.withProtocol(DefaultGridViewLayout)
-  gridView.connect(willRemoveSubview, gridView, removeGridSubview)
+  discard gridView.withProtocol(GridViewLifecycleSlots)
+  gridView.observeProtocol(gridView, GridViewLifecycleSlots)
   gridView.applyInitialFrame(frame)
 
 proc newGridView*(frame: Rect = AutoRect): GridView =

@@ -27,9 +27,15 @@ proc rectToWindow*(view: View, rect: Rect): Rect
 proc alignmentRect*(view: View): Rect
 proc resetAutoresizingState*(view: View)
 proc refreshAutoresizingReference*(view: View)
+proc observeSuperviewGeometry*(view: View)
+proc unobserveSuperviewGeometry*(view: View)
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer)
 
-proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
+protocol ViewLayoutInputEvents:
+  proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
+
+protocol ViewGeometryEvents:
+  proc geometryDidChange*(view: View) {.signal.}
 
 proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
   case reason
@@ -82,6 +88,10 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) {.slot.}
     discard
   view.markAggregateLayoutInputDirty(source, structureDirty)
 
+proc markSuperviewGeometryDirty(view: View) {.slot.} =
+  if not view.isNil and view.xAutoresizingMaskConstraints:
+    emit view.layoutInputChanged(lirSuperviewGeometry)
+
 proc initLayoutSignalBus*(view: View) =
   if view.isNil:
     return
@@ -92,14 +102,19 @@ proc markConstraintStorageChanged*(view: View) =
     return
   emit view.layoutInputChanged(lirConstraints)
 
-proc propagateAutoresizingDependentsChanged*(
-    view: View, reason = lirSuperviewGeometry
-) =
+proc observeSuperviewGeometry*(view: View) =
   if view.isNil:
     return
-  for child in view.xSubviews:
-    if child.xAutoresizingMaskConstraints:
-      emit child.layoutInputChanged(reason)
+  let parent = view.xSuperview
+  if not parent.isNil:
+    parent.connect(geometryDidChange, view, markSuperviewGeometryDirty)
+
+proc unobserveSuperviewGeometry*(view: View) =
+  if view.isNil:
+    return
+  let parent = view.xSuperview
+  if not parent.isNil:
+    parent.disconnect(geometryDidChange, view, markSuperviewGeometryDirty)
 
 proc invalidateLayoutItemGeometry*(
     view: View, reason = lirFrame, ancestorReason = lirDescendantGeometry
@@ -215,10 +230,10 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   of lfoAuthored:
     view.invalidateLayoutItemGeometry(lirFrame)
     view.refreshAutoresizingReference()
-    view.propagateAutoresizingDependentsChanged()
+    emit view.geometryDidChange()
   of lfoContainer:
     view.refreshAutoresizingReference()
-    view.propagateAutoresizingDependentsChanged()
+    emit view.geometryDidChange()
   of lfoSolver:
     discard
 

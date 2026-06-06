@@ -375,12 +375,16 @@ proc addArrangedSubview*(stackView: StackView, children: varargs[View]) =
   for child in children:
     stackView.addArrangedSubview(child)
 
-proc removeArrangedSubview*(stackView: StackView, child: View) {.slot.} =
+proc removeArrangedSubview*(stackView: StackView, child: View) =
   let index = stackView.arrangedIndex(child)
   if index < 0:
     return
   stackView.xArrangedSubviews.delete(index)
   stackView.invalidateStackLayout()
+
+protocol StackViewLifecycleSlots of ViewLifecycleProtocol:
+  proc willRemoveSubview(stackView: StackView, child: View) {.slot.} =
+    stackView.removeArrangedSubview(child)
 
 protocol DefaultStackViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(stackView: StackView): IntrinsicSize =
@@ -398,7 +402,8 @@ proc initStackViewFields*(
   stackView.xAlignment = svaFill
   stackView.xDistribution = svdFill
   discard stackView.withProtocol(DefaultStackViewLayout)
-  stackView.connect(willRemoveSubview, stackView, removeArrangedSubview)
+  discard stackView.withProtocol(StackViewLifecycleSlots)
+  stackView.observeProtocol(stackView, StackViewLifecycleSlots)
   stackView.applyInitialFrame(frame)
 
 proc newStackView*(orientation = laVertical, frame: Rect = AutoRect): StackView =

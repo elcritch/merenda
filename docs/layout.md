@@ -179,9 +179,13 @@ type
 Current signal and slot shape:
 
 ```nim
-proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
+protocol ViewLayoutInputEvents:
+  proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
 
-proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
+protocol ViewGeometryEvents:
+  proc geometryDidChange*(view: View) {.signal.}
+
+proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) {.slot.} =
   let
     source = reason.sourceFor()
     structureDirty = reason.isStructureDirtyReason()
@@ -205,6 +209,19 @@ proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.
 The exact cache fields can evolve, but the event model should stay narrow:
 mutating procs emit layout invalidation reasons; the layout layer maps reasons
 to dirty flags and lifecycle flags.
+
+Superview geometry is a separate bus because child autoresizing depends on the
+parent's actual frame or bounds, including frames applied by native container
+layout. Child views observe their current superview's `geometryDidChange`
+signal and translate that into `lirSuperviewGeometry` locally. Lifecycle slots
+bind and unbind that observation when a view moves between superviews, which
+avoids stale dirtying from an old parent.
+
+When the event source and observer are both `View`, internal slots keep
+descriptive names such as `markLayoutInputDirty` instead of reusing the signal
+selector name. This avoids Nim-level ambiguity between the signal helper and a
+same-signature slot while keeping protocol-declared event surfaces public and
+inspectable.
 
 This keeps Sigils useful as a bus without making frame, bounds, size, title,
 enabled state, or other widget fields reactive values. That is less surprising

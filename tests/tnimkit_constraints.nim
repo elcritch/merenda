@@ -296,6 +296,28 @@ suite "nimkit constraints":
     check not child.xAutoresizingState.referenceDirty
     check not child.xAutoresizingState.inputsDirty
 
+  test "superview geometry observations follow moved views":
+    let
+      first = newView(frame = initRect(0, 0, 240, 120))
+      second = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 20, 80, 40))
+
+    first.addSubview(child)
+    first.layoutSubtreeIfNeeded()
+    check not child.needsUpdateConstraints
+
+    second.addSubview(child)
+    first.layoutSubtreeIfNeeded()
+    second.layoutSubtreeIfNeeded()
+    check not child.needsUpdateConstraints
+
+    first.frame = initRect(0, 0, 280, 140)
+    check not child.needsUpdateConstraints
+
+    second.frame = initRect(0, 0, 300, 160)
+    check child.needsUpdateConstraints
+    check child.xAutoresizingState.inputsDirty
+
   test "generated autoresizing constraints preserve default origin and size":
     let
       root = newView(frame = initRect(0, 0, 200, 100))

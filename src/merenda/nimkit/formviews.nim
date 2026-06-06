@@ -312,10 +312,14 @@ proc removeRow*(formView: FormView, index: int) =
   formView.xRows.delete(index)
   formView.invalidateFormLayout()
 
-proc removeRowContaining*(formView: FormView, view: View) {.slot.} =
+proc removeRowContaining(formView: FormView, view: View) =
   let index = formView.rowIndexContaining(view)
   if index >= 0:
     formView.removeRow(index)
+
+protocol FormViewLifecycleSlots of ViewLifecycleProtocol:
+  proc willRemoveSubview(formView: FormView, child: View) {.slot.} =
+    formView.removeRowContaining(child)
 
 protocol DefaultFormViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(formView: FormView): IntrinsicSize =
@@ -331,7 +335,8 @@ proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   formView.xLabelAlignment = flaTrailing
   formView.xRowAlignment = fraCenter
   discard formView.withProtocol(DefaultFormViewLayout)
-  formView.connect(willRemoveSubview, formView, removeRowContaining)
+  discard formView.withProtocol(FormViewLifecycleSlots)
+  formView.observeProtocol(formView, FormViewLifecycleSlots)
   formView.applyInitialFrame(frame)
 
 proc newFormView*(frame: Rect = AutoRect): FormView =
