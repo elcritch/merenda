@@ -88,16 +88,16 @@ root.addSubview(title, status, scrollView, controls)
 title.pinEdges(toGuide = contentGuide, edges = {leLeft, leTop, leRight})
 
 activate(
-  status.topAnchor.constraintEqualTo(title.bottomAnchor, constant = 8.0),
-  status.leftAnchor.constraintEqualTo(title.leftAnchor),
-  status.rightAnchor.constraintEqualTo(title.rightAnchor),
-  scrollView.topAnchor.constraintEqualTo(status.bottomAnchor, constant = 12.0),
-  scrollView.leftAnchor.constraintEqualTo(title.leftAnchor),
-  scrollView.rightAnchor.constraintEqualTo(title.rightAnchor),
-  controls.topAnchor.constraintEqualTo(scrollView.bottomAnchor, constant = 12.0),
-  controls.leftAnchor.constraintEqualTo(title.leftAnchor),
-  controls.rightAnchor.constraintEqualTo(title.rightAnchor),
-  controls.bottomAnchor.constraintEqualTo(contentGuide.bottomAnchor),
+  status.topAnchor.equalTo(title.bottomAnchor, constant = 8.0),
+  status.leftAnchor.equalTo(title.leftAnchor),
+  status.rightAnchor.equalTo(title.rightAnchor),
+  scrollView.topAnchor.equalTo(status.bottomAnchor, constant = 12.0),
+  scrollView.leftAnchor.equalTo(title.leftAnchor),
+  scrollView.rightAnchor.equalTo(title.rightAnchor),
+  controls.topAnchor.equalTo(scrollView.bottomAnchor, constant = 12.0),
+  controls.leftAnchor.equalTo(title.leftAnchor),
+  controls.rightAnchor.equalTo(title.rightAnchor),
+  controls.bottomAnchor.equalTo(contentGuide.bottomAnchor),
 )
 
 updateStatus()

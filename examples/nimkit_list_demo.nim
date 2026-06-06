@@ -42,15 +42,15 @@ title.pinEdges(
 )
 
 activate(
-  list.topAnchor.constraintEqualTo(title.bottomAnchor, constant = 18.0),
-  list.leftAnchor.constraintEqualTo(title.leftAnchor),
-  list.widthAnchor.constraintEqualTo(188.0),
-  detailTitle.topAnchor.constraintEqualTo(list.topAnchor, constant = 4.0),
-  detailTitle.leftAnchor.constraintEqualTo(list.rightAnchor, constant = 18.0),
-  detailTitle.rightAnchor.constraintEqualTo(title.rightAnchor),
-  detail.topAnchor.constraintEqualTo(detailTitle.bottomAnchor, constant = 10.0),
-  detail.leftAnchor.constraintEqualTo(detailTitle.leftAnchor),
-  detail.rightAnchor.constraintEqualTo(detailTitle.rightAnchor),
+  list.topAnchor.equalTo(title.bottomAnchor, constant = 18.0),
+  list.leftAnchor.equalTo(title.leftAnchor),
+  list.widthAnchor.equalTo(188.0),
+  detailTitle.topAnchor.equalTo(list.topAnchor, constant = 4.0),
+  detailTitle.leftAnchor.equalTo(list.rightAnchor, constant = 18.0),
+  detailTitle.rightAnchor.equalTo(title.rightAnchor),
+  detail.topAnchor.equalTo(detailTitle.bottomAnchor, constant = 10.0),
+  detail.leftAnchor.equalTo(detailTitle.leftAnchor),
+  detail.rightAnchor.equalTo(detailTitle.rightAnchor),
 )
 
 updateDetail()
