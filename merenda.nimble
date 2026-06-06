@@ -10,7 +10,7 @@ requires "nim >= 2.2.6"
 requires "msgpack4nim"
 requires "chronicles"
 requires "figdraw[siwin] >= 0.22.9"
-requires "gh:elcritch/kiwiberry#3f2d737"
+requires "gh:elcritch/kiwiberry"
 requires "siwin#head"
 requires "sigils >= 0.23.0"
 
