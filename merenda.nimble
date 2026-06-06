@@ -11,7 +11,7 @@ requires "msgpack4nim"
 requires "chronicles"
 requires "figdraw[siwin] >= 0.22.9"
 requires "gh:elcritch/kiwiberry"
-requires "siwin >= 1.0.2"
+requires "siwin#head"
 requires "sigils >= 0.23.0"
 
 feature "references":
