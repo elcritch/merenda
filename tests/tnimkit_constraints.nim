@@ -53,6 +53,12 @@ suite "nimkit constraints":
       )
       renamedTop = child.topAnchor.equalTo(root.bottomAnchor, constant = 10.0'f32)
       renamedWidth = child.widthAnchor.equalTo(88.0'f32)
+      equalLeft = cx(child.leftAnchor == root.leftAnchor)
+      equalHeight = cx(child.heightAnchor == root.heightAnchor)
+      equalWidth = cx(child.widthAnchor == 72.0'f32)
+      offsetTop = cx(child.topAnchor == root.bottomAnchor + 12.0'f32)
+      minWidth = cx(child.widthAnchor >= root.widthAnchor, multiplier = 0.5'f32)
+      maxHeight = cx(child.heightAnchor <= 42.0'f32, priority = LayoutPriorityHigh)
 
     check child.leftAnchor.item == child
     check child.leftAnchor.attribute == latLeft
@@ -73,6 +79,19 @@ suite "nimkit constraints":
     check renamedTop.constant == 10.0'f32
     check renamedWidth.secondItem.isNil
     check renamedWidth.constant == 88.0'f32
+    check equalLeft.firstAttribute == latLeft
+    check equalLeft.secondAttribute == latLeft
+    check equalHeight.firstAttribute == latHeight
+    check equalHeight.secondAttribute == latHeight
+    check equalWidth.secondItem.isNil
+    check equalWidth.constant == 72.0'f32
+    check offsetTop.firstAttribute == latTop
+    check offsetTop.secondAttribute == latBottom
+    check offsetTop.constant == 12.0'f32
+    check minWidth.relation == lrGreaterThanOrEqual
+    check minWidth.multiplier == 0.5'f32
+    check maxHeight.relation == lrLessThanOrEqual
+    check maxHeight.priority == LayoutPriorityHigh
     check height.firstAttribute == latHeight
     check height.relation == lrGreaterThanOrEqual
     check height.multiplier == 0.5'f32
