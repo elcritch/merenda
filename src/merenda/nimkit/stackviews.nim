@@ -18,6 +18,8 @@ type
   StackViewDistribution* = enum
     svdFill
     svdFillEqually
+    svdNatural
+    svdEqualSpacing
 
   StackView* = ref object of View
     xArrangedSubviews: seq[View]
@@ -172,6 +174,11 @@ proc setFrameFromStackLayout(view: View, frame: Rect) =
 func shouldAdjust(delta: float32): bool =
   delta < -LayoutEpsilon or delta > LayoutEpsilon
 
+func usedMainLength(sizes: openArray[float32], spacing: float32): float32 =
+  result = spacing.totalSpacing(sizes.len)
+  for size in sizes:
+    result += size
+
 proc lowestAdjustmentPriority(
     children: openArray[View], axis: LayoutAxis, growing: bool
 ): LayoutPriority =
@@ -208,11 +215,7 @@ proc adjustFillSizes(
   if children.len == 0:
     return
 
-  var usedMain = stackView.xSpacing.totalSpacing(children.len)
-  for size in sizes:
-    usedMain += size
-
-  let delta = availableMain - usedMain
+  let delta = availableMain - sizes.usedMainLength(stackView.xSpacing)
   if not delta.shouldAdjust():
     return
 
@@ -259,6 +262,25 @@ proc arrangedMainSizes(
     result.setLen(children.len)
     for index in 0 ..< result.len:
       result[index] = size
+  of svdNatural, svdEqualSpacing:
+    for size in naturalSizes:
+      result.add size.mainSize(axis)
+    if result.usedMainLength(stackView.xSpacing) > availableMain:
+      stackView.adjustFillSizes(children, result, availableMain)
+
+proc arrangedSpacing(
+    stackView: StackView, children: openArray[View], mainSizes: openArray[float32]
+): float32 =
+  result = stackView.xSpacing
+  if stackView.xDistribution != svdEqualSpacing or children.len <= 1:
+    return
+
+  let
+    availableMain = stackView.contentRect().size.mainSize(stackView.xOrientation)
+    usedMain = mainSizes.usedMainLength(stackView.xSpacing)
+    extra = availableMain - usedMain
+  if extra > LayoutEpsilon:
+    result += extra / float32(children.len - 1)
 
 proc alignedCrossFrame(
     stackView: StackView, content: Rect, naturalCross: float32
@@ -299,6 +321,7 @@ proc layoutStackSubviews(stackView: StackView) =
     naturalSizes.add child.fittingSize()
 
   let mainSizes = stackView.arrangedMainSizes(children, naturalSizes)
+  let spacing = stackView.arrangedSpacing(children, mainSizes)
   var mainCursor =
     case axis
     of laHorizontal: content.origin.x
@@ -311,7 +334,7 @@ proc layoutStackSubviews(stackView: StackView) =
       frame =
         initStackFrame(axis, mainCursor, cross.origin, mainSizes[index], cross.length)
     child.setFrameFromStackLayout(frame)
-    mainCursor += mainSizes[index] + stackView.xSpacing
+    mainCursor += mainSizes[index] + spacing
 
 proc orientation*(stackView: StackView): LayoutAxis =
   if stackView.isNil: laVertical else: stackView.xOrientation
