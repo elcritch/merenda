@@ -46,7 +46,7 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
     selected = cell.state in {bsOn, bsMixed},
   )
 
-protocol ButtonProtocolInternal:
+protocol ButtonProtocol:
   property title -> string
   property state -> ButtonState
   property buttonType -> ButtonType
@@ -55,7 +55,7 @@ protocol ButtonProtocolInternal:
   method isHighlighted*(): bool
   method setHighlighted*(highlighted: bool)
 
-protocol DefaultButtonCell of ButtonProtocolInternal:
+protocol DefaultButtonCell of ButtonProtocol:
   method title(cell: ButtonCell): string =
     cell.xTitle
 
@@ -326,5 +326,3 @@ proc newRadioButton*(title = "Radio", frame: Rect = AutoRect): Button =
   result = newButton(title, frame)
   result.setButtonType(btRadio)
   result.applyInitialFrame(frame)
-
-let ButtonProtocol* = ButtonProtocolInternal

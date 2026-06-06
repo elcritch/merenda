@@ -219,10 +219,10 @@ proc shouldInsertText(event: KeyEvent): bool =
     return false
   event.text.isInsertableText()
 
-protocol TextFieldDelegateProtocolInternal:
+protocol TextFieldDelegate:
   method textDidChange*(args: ActionArgs) {.optional.}
 
-protocol TextFieldProtocolInternal from TextField:
+protocol TextFieldProtocol from TextField:
   property stringValue -> string
   property alignment -> TextAlignment
   property textColor -> Color
@@ -649,7 +649,3 @@ proc newStatusLabel*(value = "", frame: Rect = AutoRect): Label =
 
 proc newFormLabel*(value = "", frame: Rect = AutoRect): Label =
   newLabel(value, lsForm, frame)
-
-let
-  TextFieldProtocol* = TextFieldProtocolInternal
-  TextFieldDelegate* = TextFieldDelegateProtocolInternal

@@ -45,7 +45,7 @@ proc syncActionCell(control: Control, cell: Cell) =
 proc defaultControlCell(): Cell =
   newActionCell()
 
-protocol ControlProtocolInternal from Control:
+protocol ControlProtocol from Control:
   method isEnabled*(self: Control): bool =
     self.cell().isEnabled()
 
@@ -204,5 +204,3 @@ proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarg
       target.xCallback(args.sender)
     invocation.setResult(())
   discard result.replaceMethod(action, fn)
-
-let ControlProtocol* = ControlProtocolInternal

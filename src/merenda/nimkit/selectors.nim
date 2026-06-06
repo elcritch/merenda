@@ -41,7 +41,7 @@ type
     selector*: CommandSelector
     sender*: DynamicAgent
 
-protocol ResponderEventProtocolInternal:
+protocol ResponderEventProtocol:
   method mouseDown*(event: MouseEvent) {.optional.}
   method mouseUp*(event: MouseEvent) {.optional.}
   method mouseEntered*(event: MouseEvent) {.optional.}
@@ -52,16 +52,16 @@ protocol ResponderEventProtocolInternal:
   method scrollWheel*(event: ScrollEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
 
-protocol UserInterfaceValidationsInternal:
+protocol UserInterfaceValidations:
   method validateUserInterfaceItem*(args: ValidationArgs): bool
 
-protocol ButtonActionProtocolInternal:
+protocol ButtonActionProtocol:
   method performClick*(args: ActionArgs) {.optional.}
 
-protocol TextInputProtocolInternal:
+protocol TextInputProtocol:
   method insertText*(text: string) {.optional.}
 
-protocol TextEditingCommandProtocolInternal:
+protocol TextEditingCommandProtocol:
   method selectText*(args: ActionArgs) {.optional.}
   method selectAll*(args: ActionArgs) {.optional.}
   method deleteBackward*(args: ActionArgs) {.optional.}
@@ -81,17 +81,17 @@ protocol TextEditingCommandProtocolInternal:
   method moveToBeginningOfLineAndModifySelection*(args: ActionArgs) {.optional.}
   method moveToEndOfLineAndModifySelection*(args: ActionArgs) {.optional.}
 
-protocol KeyViewCommandProtocolInternal:
+protocol KeyViewCommandProtocol:
   method insertTab*(args: ActionArgs) {.optional.}
   method insertBacktab*(args: ActionArgs) {.optional.}
   method selectNextKeyView*(args: ActionArgs) {.optional.}
   method selectPreviousKeyView*(args: ActionArgs) {.optional.}
 
-protocol ViewDrawingProtocolInternal:
+protocol ViewDrawingProtocol:
   method drawLevel*(): ZLevel {.optional.}
   method draw*(context: DrawContext) {.optional.}
 
-protocol ViewLayoutProtocolInternal:
+protocol ViewLayoutProtocol:
   method layoutIntrinsicContentSize*(): IntrinsicSize {.optional.}
   method updateConstraints*() {.optional.}
   method layoutSubviews*() {.optional.}
@@ -99,13 +99,3 @@ protocol ViewLayoutProtocolInternal:
 
 proc actionSelector*(name: string): ActionSelector =
   selector[ActionArgs, EmptyArgs](name)
-
-let
-  ResponderEventProtocol* = ResponderEventProtocolInternal
-  UserInterfaceValidations* = UserInterfaceValidationsInternal
-  ButtonActionProtocol* = ButtonActionProtocolInternal
-  TextInputProtocol* = TextInputProtocolInternal
-  TextEditingCommandProtocol* = TextEditingCommandProtocolInternal
-  KeyViewCommandProtocol* = KeyViewCommandProtocolInternal
-  ViewDrawingProtocol* = ViewDrawingProtocolInternal
-  ViewLayoutProtocol* = ViewLayoutProtocolInternal

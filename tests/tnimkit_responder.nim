@@ -83,10 +83,10 @@ protocol TrackingSpyEvents of ResponderEventProtocol:
     trackingEvents.add(spy.xName & ".key:" & event.text)
     trackingModifiers.add(event.modifiers)
 
-protocol TrackingSpyCommandProtocolInternal:
+protocol TrackingSpyCommandProtocol:
   method trackingCommand*(args: ActionArgs) {.optional.}
 
-protocol TrackingSpyCommands of TrackingSpyCommandProtocolInternal:
+protocol TrackingSpyCommands of TrackingSpyCommandProtocol:
   method trackingCommand(spy: TrackingSpyView, args: ActionArgs) =
     trackingEvents.add(spy.xName & ".command")
     trackingCommandSenders.add(args.sender)

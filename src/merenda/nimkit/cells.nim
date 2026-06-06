@@ -25,11 +25,11 @@ proc normalizeState(value: ButtonState, allowsMixedState: bool): ButtonState =
 
 proc controlView*(cell: Cell): View
 
-protocol CellMeasurementProtocolInternal:
+protocol CellMeasurementProtocol:
   method cellSize*(): IntrinsicSize
   method cellSizeForBounds*(bounds: Rect): Size
 
-protocol DefaultCellMeasurement of CellMeasurementProtocolInternal:
+protocol DefaultCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: Cell): IntrinsicSize =
     NoIntrinsicContentSize
 
@@ -162,5 +162,3 @@ proc setAction*(cell: ActionCell, action: ActionSelector) =
   if cell.isNil:
     return
   cell.xAction = action
-
-let CellMeasurementProtocol* = CellMeasurementProtocolInternal

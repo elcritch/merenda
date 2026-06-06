@@ -86,11 +86,11 @@ proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
 
-protocol ListViewDataSourceProtocolInternal:
+protocol ListViewDataSource:
   method numberOfRowsInListView*(listView: ListView): int {.optional.}
   method listViewObjectValueForRow*(listView: ListView, row: int): string {.optional.}
 
-protocol ListViewDelegateProtocolInternal:
+protocol ListViewDelegate:
   method listViewSelectionIsChanging*(args: ActionArgs) {.optional.}
   method listViewSelectionDidChange*(args: ActionArgs) {.optional.}
   method listViewRowWasActivated*(args: ActionArgs) {.optional.}
@@ -1305,7 +1305,3 @@ proc initListViewFields*(
 proc newListView*(items: openArray[string] = [], frame: Rect = AutoRect): ListView =
   result = ListView()
   initListViewFields(result, items, frame)
-
-let
-  ListViewDataSource* = ListViewDataSourceProtocolInternal
-  ListViewDelegate* = ListViewDelegateProtocolInternal

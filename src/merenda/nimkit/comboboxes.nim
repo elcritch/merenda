@@ -82,20 +82,20 @@ proc cellInsertItem(cell: ComboBoxCell, value: string, index: int)
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int)
 proc cellRemoveAllItems(cell: ComboBoxCell)
 
-protocol ComboBoxDataSourceProtocolInternal:
+protocol ComboBoxDataSource:
   method numberOfItemsInComboBox*(comboBox: ComboBox): int {.optional.}
   method comboBoxObjectValueForItemAtIndex*(
     comboBox: ComboBox, index: int
   ): string {.optional.}
 
-protocol ComboBoxDelegateProtocolInternal:
+protocol ComboBoxDelegate:
   method comboBoxSelectionIsChanging*(args: ActionArgs) {.optional.}
   method comboBoxSelectionDidChange*(args: ActionArgs) {.optional.}
 
-protocol ComboBoxViewProtocolInternal:
+protocol ComboBoxViewProtocol:
   method pointInside*(point: Point): bool
 
-protocol ComboBoxProtocolInternal from ComboBox:
+protocol ComboBoxProtocol from ComboBox:
   property selectedIndex -> int
   property popupOpen -> bool
   property maxVisibleItems -> int
@@ -269,7 +269,7 @@ protocol ComboBoxProtocolInternal from ComboBox:
     comboBox.invalidateIntrinsicContentSize()
     comboBox.setNeedsDisplay(true)
 
-protocol DefaultComboBoxView of ComboBoxViewProtocolInternal:
+protocol DefaultComboBoxView of ComboBoxViewProtocol:
   method pointInside(comboBox: ComboBox, point: Point): bool =
     comboBox.bounds().contains(point) or (
       comboBox.usesInlinePopup() and
@@ -1119,9 +1119,3 @@ proc initComboBoxFields*(
 proc newComboBox*(items: openArray[string] = [], frame: Rect = AutoRect): ComboBox =
   result = ComboBox()
   initComboBoxFields(result, items, frame)
-
-let
-  ComboBoxProtocol* = ComboBoxProtocolInternal
-  ComboBoxDataSource* = ComboBoxDataSourceProtocolInternal
-  ComboBoxDelegate* = ComboBoxDelegateProtocolInternal
-  ComboBoxViewProtocol* = ComboBoxViewProtocolInternal
