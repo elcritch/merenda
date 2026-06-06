@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -380,16 +382,16 @@ proc removeArrangedSubview*(stackView: StackView, child: View) =
   stackView.xArrangedSubviews.delete(index)
   stackView.invalidateStackLayout()
 
+protocol StackViewLifecycleSlots of ViewLifecycleProtocol:
+  proc willRemoveSubview(stackView: StackView, child: View) {.slot.} =
+    stackView.removeArrangedSubview(child)
+
 protocol DefaultStackViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(stackView: StackView): IntrinsicSize =
     initIntrinsicSize(stackView.stackNaturalSize())
 
   method layoutSubviews(stackView: StackView) =
     stackView.layoutStackSubviews()
-
-protocol DefaultStackViewLifecycle of ViewLifecycleProtocol:
-  method willRemoveSubview(stackView: StackView, subview: View) =
-    stackView.removeArrangedSubview(subview)
 
 proc initStackViewFields*(
     stackView: StackView, orientation = laVertical, frame: Rect = AutoRect
@@ -400,7 +402,8 @@ proc initStackViewFields*(
   stackView.xAlignment = svaFill
   stackView.xDistribution = svdFill
   discard stackView.withProtocol(DefaultStackViewLayout)
-  discard stackView.withProtocol(DefaultStackViewLifecycle)
+  discard stackView.withProtocol(StackViewLifecycleSlots)
+  stackView.observeProtocol(stackView, StackViewLifecycleSlots)
   stackView.applyInitialFrame(frame)
 
 proc newStackView*(orientation = laVertical, frame: Rect = AutoRect): StackView =

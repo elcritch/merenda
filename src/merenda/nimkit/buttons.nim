@@ -46,7 +46,7 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
     selected = cell.state in {bsOn, bsMixed},
   )
 
-protocol ButtonProtocol:
+protocol ButtonProtocol {.selectorScope: protocol.}:
   property title -> string
   property state -> ButtonState
   property buttonType -> ButtonType

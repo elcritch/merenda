@@ -121,9 +121,9 @@ suite "nimkit form views":
     form.addRow(label, field)
     form.sizeToFit()
     root.layoutSubtreeIfNeeded()
-    root.setNeedsLayout(false)
-    form.setNeedsLayout(false)
-    field.setNeedsLayout(false)
+    root.needsLayout = false
+    form.needsLayout = false
+    field.needsLayout = false
 
     let oldFrame = form.frame()
     field.text = "A much longer field value"

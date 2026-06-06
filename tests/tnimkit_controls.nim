@@ -1,14 +1,17 @@
 import std/unittest
 
+import sigils/core
 import sigils/selectors
 
 import merenda/nimkit
 
-protocol PlaceholderDelegate:
-  method placeholderText(): string
+type TextChangeSpy = ref object of Agent
+  changeCount: int
+  lastSender: DynamicAgent
 
-method delegatePlaceholder(self: Responder): string {.selector.} =
-  "Forwarded placeholder"
+proc rememberTextDidChange(spy: TextChangeSpy, sender: DynamicAgent) {.slot.} =
+  inc spy.changeCount
+  spy.lastSender = sender
 
 suite "nimkit controls":
   test "button core methods are selector-backed and protocol visible":
@@ -67,54 +70,19 @@ suite "nimkit controls":
     button.buttonType = btCheckBox
     check cell.buttonType == btCheckBox
 
-  test "text fields do not forward arbitrary selectors to delegates":
+  test "text fields emit explicit change signals":
     let
       field = newTextField("Value", frame = initRect(0, 0, 120, 24))
-      delegate = newResponder()
+      spy = TextChangeSpy()
 
-    discard delegate.replaceMethods(
-      PlaceholderDelegate, [placeholderText => delegatePlaceholder]
-    )
-    field.delegate = delegate
-
-    check delegate.placeholderText() == "Forwarded placeholder"
-    check not field.respondsTo(placeholderText())
-
-  test "text fields notify delegates through explicit hooks":
-    let
-      field = newTextField("Value", frame = initRect(0, 0, 120, 24))
-      delegate = newResponder()
-
-    var
-      changeCount = 0
-      lastSender: DynamicAgent
-
-    let onTextDidChange: DynamicMethod = proc(
-        self: DynamicAgent, invocation: var Invocation
-    ) =
-      check self == DynamicAgent(delegate)
-      let args = invocation.argsAs(ActionArgs)
-      inc changeCount
-      lastSender = args.sender
-      invocation.setResult(())
-
-    discard
-      delegate.replaceMethods(TextFieldDelegate, [textDidChange => onTextDidChange])
-    field.delegate = delegate
+    field.connect(textDidChange, spy, rememberTextDidChange)
 
     field.text = "Changed"
-    check changeCount == 1
-    check lastSender == DynamicAgent(field)
+    check spy.changeCount == 1
+    check spy.lastSender == DynamicAgent(field)
 
     field.text = "Changed"
-    check changeCount == 1
-
-    let chainedDelegate = newResponder()
-    chainedDelegate.setNextResponder(delegate)
-    field.delegate = chainedDelegate
-
-    field.text = "Changed again"
-    check changeCount == 1
+    check spy.changeCount == 1
 
   test "button mouse tracking cancels click when released outside":
     let

@@ -1,5 +1,6 @@
 import std/unittest
 
+import sigils/core
 import sigils/selectors
 
 import merenda/nimkit
@@ -31,31 +32,33 @@ proc containsIndex(indexes: openArray[int], index: int): bool =
   false
 
 protocol ListDataSourceSpyMethods of ListViewDataSource:
-  method numberOfRowsInListView(source: ListDataSourceSpy, listView: ListView): int =
+  method rowCount(source: ListDataSourceSpy, listView: ListView): int =
     source.rows.len
 
-  method listViewObjectValueForRow(
+  method objectValueForRow(
       source: ListDataSourceSpy, listView: ListView, row: int
   ): string =
     if row < 0 or row >= source.rows.len:
       return ""
     source.rows[row]
 
-protocol ListDelegateSpyMethods of ListViewDelegate:
-  method listViewSelectionIsChanging(delegate: ListDelegateSpy, args: ActionArgs) =
+protocol ListDelegateSpyEvents from ListDelegateSpy:
+  includes ListViewEvents
+
+  proc selectionIsChanging(delegate: ListDelegateSpy, sender: DynamicAgent) {.slot.} =
     inc delegate.changingCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
-  method listViewSelectionDidChange(delegate: ListDelegateSpy, args: ActionArgs) =
+  proc selectionDidChange(delegate: ListDelegateSpy, sender: DynamicAgent) {.slot.} =
     inc delegate.changedCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
-  method listViewRowWasActivated(delegate: ListDelegateSpy, args: ActionArgs) =
+  proc rowWasActivated(delegate: ListDelegateSpy, sender: DynamicAgent) {.slot.} =
     inc delegate.activatedCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
 protocol ListRowRendererSpyMethods of ListViewDelegate:
-  method listViewDrawRow(
+  method drawRow(
       renderer: ListRowRendererSpy,
       listView: ListView,
       context: DrawContext,
@@ -68,17 +71,17 @@ protocol ListRowRendererSpyMethods of ListViewDelegate:
     listView.drawListRow(context, rect, row)
 
 protocol ListPolicyDelegateSpyMethods of ListViewDelegate:
-  method listViewRowIsEnabled(
+  method rowIsEnabled(
       policy: ListPolicyDelegateSpy, listView: ListView, row: int
   ): bool =
     not policy.disabledRows.containsIndex(row)
 
-  method listViewShouldSelectRow(
+  method shouldSelectRow(
       policy: ListPolicyDelegateSpy, listView: ListView, row: int
   ): bool =
     not policy.nonselectableRows.containsIndex(row)
 
-  method listViewDrawRow(
+  method drawRow(
       policy: ListPolicyDelegateSpy,
       listView: ListView,
       context: DrawContext,
@@ -96,7 +99,7 @@ proc newListDataSourceSpy(rows: openArray[string]): ListDataSourceSpy =
 proc newListDelegateSpy(): ListDelegateSpy =
   result = ListDelegateSpy()
   initResponder(result)
-  discard result.withProtocol(ListDelegateSpyMethods)
+  result = result.withProto()
 
 proc newListRowRendererSpy(): ListRowRendererSpy =
   result = ListRowRendererSpy()

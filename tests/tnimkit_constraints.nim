@@ -183,18 +183,18 @@ suite "nimkit constraints":
     root.layoutSubtreeIfNeeded()
     child.setNeedsUpdateConstraints()
     child.updateConstraintsForSubtreeIfNeeded()
-    child.setNeedsLayout(false)
+    child.needsLayout = false
 
     child.addConstraint(width)
     child.updateConstraintsForSubtreeIfNeeded()
-    child.setNeedsLayout(false)
+    child.needsLayout = false
 
     width.constant = 120.0'f32
     check child.needsUpdateConstraints
     check child.needsLayout
 
     child.updateConstraintsForSubtreeIfNeeded()
-    child.setNeedsLayout(false)
+    child.needsLayout = false
 
     width.priority = LayoutPriorityLow
     check width.priority == LayoutPriorityLow
@@ -207,14 +207,14 @@ suite "nimkit constraints":
     check view.autoresizingMask == {}
     check view.autoresizingMaskConstraints
 
-    view.setAutoresizingMask({cxMinXMargin, cxWidthSizable, cxMaxYMargin})
+    view.autoresizingMask = {cxMinXMargin, cxWidthSizable, cxMaxYMargin}
     check view.autoresizingMask == {cxMinXMargin, cxWidthSizable, cxMaxYMargin}
     check view.needsUpdateConstraints
     check view.needsLayout
 
     view.updateConstraintsForSubtreeIfNeeded()
-    view.setNeedsLayout(false)
-    view.setAutoresizingMask(view.autoresizingMask())
+    view.needsLayout = false
+    view.autoresizingMask = view.autoresizingMask()
     check not view.needsUpdateConstraints
     check not view.needsLayout
 
@@ -236,7 +236,7 @@ suite "nimkit constraints":
     check not root.needsUpdateConstraints
     check not child.needsUpdateConstraints
 
-    child.setAutoresizingMask({cxWidthSizable, cxHeightSizable})
+    child.autoresizingMask = {cxWidthSizable, cxHeightSizable}
     check root.needsUpdateConstraints
     check root.needsLayout
     check child.needsUpdateConstraints
@@ -295,6 +295,28 @@ suite "nimkit constraints":
     check not child.xAutoresizingState.hasReference
     check not child.xAutoresizingState.referenceDirty
     check not child.xAutoresizingState.inputsDirty
+
+  test "superview geometry observations follow moved views":
+    let
+      first = newView(frame = initRect(0, 0, 240, 120))
+      second = newView(frame = initRect(0, 0, 240, 120))
+      child = newView(frame = initRect(20, 20, 80, 40))
+
+    first.addSubview(child)
+    first.layoutSubtreeIfNeeded()
+    check not child.needsUpdateConstraints
+
+    second.addSubview(child)
+    first.layoutSubtreeIfNeeded()
+    second.layoutSubtreeIfNeeded()
+    check not child.needsUpdateConstraints
+
+    first.frame = initRect(0, 0, 280, 140)
+    check not child.needsUpdateConstraints
+
+    second.frame = initRect(0, 0, 300, 160)
+    check child.needsUpdateConstraints
+    check child.xAutoresizingState.inputsDirty
 
   test "generated autoresizing constraints preserve default origin and size":
     let
@@ -610,7 +632,7 @@ suite "nimkit constraints":
       root = newView(frame = initRect(0, 0, 240, 120))
       spy = LayoutInvalidationSpy()
 
-    connect(root, layoutInputChanged, spy, record)
+    root.connect(layoutInputChanged, spy, record)
     root.layoutSubtreeIfNeeded()
 
     root.frame = initRect(0, 0, 260, 120)

@@ -1,5 +1,7 @@
 import std/[algorithm, math, options]
 
+import sigils/core
+
 import ./controls
 import ./listbasics
 import ./scrollergeometry
@@ -86,17 +88,19 @@ proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
 
-protocol ListViewDataSource:
-  method numberOfRowsInListView*(listView: ListView): int {.optional.}
-  method listViewObjectValueForRow*(listView: ListView, row: int): string {.optional.}
+protocol ListViewDataSource {.selectorScope: protocol.}:
+  method rowCount*(listView: ListView): int {.optional.}
+  method objectValueForRow*(listView: ListView, row: int): string {.optional.}
 
-protocol ListViewDelegate:
-  method listViewSelectionIsChanging*(args: ActionArgs) {.optional.}
-  method listViewSelectionDidChange*(args: ActionArgs) {.optional.}
-  method listViewRowWasActivated*(args: ActionArgs) {.optional.}
-  method listViewRowIsEnabled*(listView: ListView, row: int): bool {.optional.}
-  method listViewShouldSelectRow*(listView: ListView, row: int): bool {.optional.}
-  method listViewDrawRow*(
+protocol ListViewEvents:
+  proc selectionIsChanging*(listView: ListView, sender: DynamicAgent) {.signal.}
+  proc selectionDidChange*(listView: ListView, sender: DynamicAgent) {.signal.}
+  proc rowWasActivated*(listView: ListView, sender: DynamicAgent) {.signal.}
+
+protocol ListViewDelegate {.selectorScope: protocol.}:
+  method rowIsEnabled*(listView: ListView, row: int): bool {.optional.}
+  method shouldSelectRow*(listView: ListView, row: int): bool {.optional.}
+  method drawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
   ) {.optional.}
 
@@ -131,33 +135,12 @@ proc invalidateListRows(listView: ListView) =
     listView.xVerticalScroller.setNeedsDisplay(true)
   listView.setNeedsDisplay(true)
 
-proc notifyListViewSelectionIsChanging(listView: ListView) =
-  if listView.isNil or listView.xDelegate.isNil:
-    return
-  discard listView.xDelegate.sendLocalIfHandled(
-    listViewSelectionIsChanging(), ActionArgs(sender: DynamicAgent(listView))
-  )
-
-proc notifyListViewSelectionDidChange(listView: ListView) =
-  if listView.isNil or listView.xDelegate.isNil:
-    return
-  discard listView.xDelegate.sendLocalIfHandled(
-    listViewSelectionDidChange(), ActionArgs(sender: DynamicAgent(listView))
-  )
-
-proc notifyListViewRowWasActivated(listView: ListView) =
-  if listView.isNil or listView.xDelegate.isNil:
-    return
-  discard listView.xDelegate.sendLocalIfHandled(
-    listViewRowWasActivated(), ActionArgs(sender: DynamicAgent(listView))
-  )
-
 proc len*(listView: ListView): int =
   if listView.isNil:
     return 0
   let source = listView.dataSource()
   if not source.isNil:
-    let count = source.trySendLocal(numberOfRowsInListView(), listView)
+    let count = source.trySendLocal(rowCount(), listView)
     if count.isSome:
       return max(count.get(), 0)
   listView.xItems.len
@@ -185,9 +168,8 @@ proc `[]`*(listView: ListView, index: int): string =
   else:
     let source = listView.dataSource()
     if not source.isNil:
-      let item = source.trySendLocal(
-        listViewObjectValueForRow(), (listView: listView, row: index)
-      )
+      let item =
+        source.trySendLocal(objectValueForRow(), (listView: listView, row: index))
       if item.isSome:
         return item.get()
     if index < listView.xItems.len:
@@ -288,10 +270,12 @@ proc delegate*(listView: ListView): DynamicAgent =
     return listView.xDelegate
 
 proc `delegate=`*(listView: ListView, delegate: DynamicAgent) =
-  if listView.isNil or listView.xDelegate == delegate:
+  if listView.isNil:
     return
-  listView.xDelegate = delegate
-  listView.reloadData()
+  if listView.setProtocolDelegate(
+    listView.xDelegate, delegate, ListViewDelegate, ListViewEvents
+  ):
+    listView.reloadData()
 
 proc `delegate=`*(listView: ListView, delegate: Responder) =
   listView.delegate = DynamicAgent(delegate)
@@ -389,9 +373,8 @@ proc rowEnabled*(listView: ListView, index: int): bool =
   if listView.isNil or index < 0 or index >= listView.len() or not listView.isEnabled():
     return false
   if not listView.xDelegate.isNil:
-    let enabled = listView.xDelegate.trySendLocal(
-      listViewRowIsEnabled(), (listView: listView, row: index)
-    )
+    let enabled =
+      listView.xDelegate.trySendLocal(rowIsEnabled(), (listView: listView, row: index))
     if enabled.isSome:
       return enabled.get()
   true
@@ -401,7 +384,7 @@ proc rowSelectable*(listView: ListView, index: int): bool =
     return false
   if not listView.xDelegate.isNil:
     let selectable = listView.xDelegate.trySendLocal(
-      listViewShouldSelectRow(), (listView: listView, row: index)
+      shouldSelectRow(), (listView: listView, row: index)
     )
     if selectable.isSome:
       return selectable.get()
@@ -422,7 +405,7 @@ proc drawCustomListRow(
   if listView.isNil or listView.xDelegate.isNil or context.isNil:
     return false
   listView.xDelegate.sendLocalIfHandled(
-    listViewDrawRow(), (listView: listView, context: context, rect: rect, row: row)
+    drawRow(), (listView: listView, context: context, rect: rect, row: row)
   )
 
 proc listViewportSize(listView: ListView): Size =
@@ -792,7 +775,7 @@ proc applySelectedIndexes(
     if nextLead >= 0:
       listView.scrollItemToVisible(nextLead)
     return
-  listView.notifyListViewSelectionIsChanging()
+  emit listView.selectionIsChanging(DynamicAgent(listView))
   listView.xSelectedIndexes = nextIndexes
   listView.syncSelectedIndex()
   listView.xSelectionAnchor = nextAnchor
@@ -800,7 +783,7 @@ proc applySelectedIndexes(
   if nextLead >= 0:
     listView.scrollItemToVisible(nextLead)
   listView.invalidateListRows()
-  listView.notifyListViewSelectionDidChange()
+  emit listView.selectionDidChange(DynamicAgent(listView))
 
 proc `selectedIndexes=`*(listView: ListView, indexes: openArray[int]) =
   if listView.isNil:
@@ -892,7 +875,7 @@ proc `selectedIndex=`*(listView: ListView, index: int) =
 proc sendListActivation(listView: ListView, index: int) =
   if listView.isNil or not listView.rowEnabled(index):
     return
-  listView.notifyListViewRowWasActivated()
+  emit listView.rowWasActivated(DynamicAgent(listView))
   discard listView.sendAction()
 
 proc activateItemAtIndex(listView: ListView, index: int, modifiers: set[KeyModifier]) =

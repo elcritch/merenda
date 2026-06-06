@@ -119,9 +119,9 @@ suite "nimkit grid views":
     grid.addSubview(field, row = 0, col = 1)
     grid.sizeToFit()
     root.layoutSubtreeIfNeeded()
-    root.setNeedsLayout(false)
-    grid.setNeedsLayout(false)
-    field.setNeedsLayout(false)
+    root.needsLayout = false
+    grid.needsLayout = false
+    field.needsLayout = false
 
     let oldFrame = grid.frame()
     field.text = "A much longer field value"

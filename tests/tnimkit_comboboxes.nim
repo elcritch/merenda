@@ -1,5 +1,7 @@
 import std/[tables, unittest]
 
+import sigils/core
+
 import merenda/nimkit
 
 type
@@ -12,24 +14,26 @@ type
     lastSender: DynamicAgent
 
 protocol ComboDataSourceMethods of ComboBoxDataSource:
-  method numberOfItemsInComboBox(source: ComboDataSource, comboBox: ComboBox): int =
+  method itemCount(source: ComboDataSource, comboBox: ComboBox): int =
     source.items.len
 
-  method comboBoxObjectValueForItemAtIndex(
+  method objectValueAtIndex(
       source: ComboDataSource, comboBox: ComboBox, index: int
   ): string =
     if index < 0 or index >= source.items.len:
       return ""
     source.items[index]
 
-protocol ComboDelegateMethods of ComboBoxDelegate:
-  method comboBoxSelectionIsChanging(delegate: ComboDelegate, args: ActionArgs) =
-    inc delegate.changingCount
-    delegate.lastSender = args.sender
+protocol ComboDelegateEvents from ComboDelegate:
+  includes ComboBoxEvents
 
-  method comboBoxSelectionDidChange(delegate: ComboDelegate, args: ActionArgs) =
+  proc selectionIsChanging(delegate: ComboDelegate, sender: DynamicAgent) {.slot.} =
+    inc delegate.changingCount
+    delegate.lastSender = sender
+
+  proc selectionDidChange(delegate: ComboDelegate, sender: DynamicAgent) {.slot.} =
     inc delegate.changedCount
-    delegate.lastSender = args.sender
+    delegate.lastSender = sender
 
 proc newComboDataSource(items: openArray[string]): ComboDataSource =
   result = ComboDataSource(items: @items)
@@ -39,7 +43,7 @@ proc newComboDataSource(items: openArray[string]): ComboDataSource =
 proc newComboDelegate(): ComboDelegate =
   result = ComboDelegate()
   initResponder(result)
-  discard result.withProtocol(ComboDelegateMethods)
+  result = result.withProto()
 
 suite "nimkit comboboxes":
   test "combo box stores local items and syncs selected string":
@@ -76,7 +80,7 @@ suite "nimkit comboboxes":
     check combo.numberOfItems == 0
     check combo.stringValue == ""
 
-  test "combo box resolves items from data source and notifies delegate on activation":
+  test "combo box resolves items from data source and emits activation signal":
     let
       combo = newComboBox(frame = initRect(0, 0, 140, 26))
       source = newComboDataSource(["Red", "Green", "Blue"])
@@ -92,7 +96,7 @@ suite "nimkit comboboxes":
       actionSender = sender
 
     combo.dataSource = source
-    combo.delegate = delegate
+    delegate.observeProtocol(combo, ComboBoxEvents)
     combo.target = newActionTarget(action, onChanged)
     combo.action = action
 
@@ -365,7 +369,7 @@ suite "nimkit comboboxes":
     check combo.highlightedIndex == 0
     check combo.popupFirstItemIndex() == 0
 
-  test "popup border hover keeps keyboard highlight without delegate noise":
+  test "popup border hover keeps keyboard highlight without selection signal noise":
     let
       window = newWindow("Combo hover border", frame = initRect(0, 0, 240, 180))
       root = newView(frame = initRect(0, 0, 240, 180))
@@ -376,7 +380,7 @@ suite "nimkit comboboxes":
     combo.popupPresentation = ppInline
     combo.maxVisibleItems = 3
     combo.itemHeight = 20.0
-    combo.delegate = delegate
+    delegate.observeProtocol(combo, ComboBoxEvents)
     root.addSubview(combo)
     window.setContentView(root)
 

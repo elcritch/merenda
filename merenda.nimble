@@ -9,11 +9,10 @@ srcDir        = "src"
 requires "nim >= 2.2.6"
 requires "msgpack4nim"
 requires "chronicles"
-# requires "siwin >= 1.0.2"
-requires "gh:elcritch/siwin#handle-horizontal-scrolling-macos"
 requires "figdraw[siwin] >= 0.22.9"
-requires "sigils >= 0.22.2"
 requires "gh:elcritch/kiwiberry"
+requires "siwin#head"
+requires "sigils#head"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
