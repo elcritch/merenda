@@ -10,6 +10,7 @@ type
 
   ButtonCell* = ref object of ActionCell
     xTitle: string
+    xReservedTitles: seq[string]
     xButtonType: ButtonType
 
 const CheckboxCheckmark = "✓"
@@ -54,6 +55,13 @@ protocol ButtonProtocol {.selectorScope: protocol.}:
 
   method isHighlighted*(): bool
   method setHighlighted*(highlighted: bool)
+
+proc buttonTextSize(cell: ButtonCell): Size =
+  result = textNaturalSize(cell.title())
+  for title in cell.xReservedTitles:
+    let titleSize = textNaturalSize(title)
+    result.width = max(result.width, titleSize.width)
+    result.height = max(result.height, titleSize.height)
 
 protocol DefaultButtonCell of ButtonProtocol:
   method title(cell: ButtonCell): string =
@@ -100,7 +108,7 @@ protocol DefaultButtonCell of ButtonProtocol:
 protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ButtonCell): IntrinsicSize =
     let
-      textSize = textNaturalSize(cell.title())
+      textSize = cell.buttonTextSize()
       view = cell.controlView()
       appearance =
         if view.isNil:
@@ -138,6 +146,22 @@ proc buttonCell*(button: Button): ButtonCell =
   let controlCell = button.cell()
   if controlCell of ButtonCell:
     return ButtonCell(controlCell)
+
+proc reservedTitles*(button: Button): seq[string] =
+  let cell = button.buttonCell()
+  if cell.isNil:
+    return @[]
+  cell.xReservedTitles
+
+proc `reservedTitles=`*(button: Button, titles: openArray[string]) =
+  let cell = button.buttonCell()
+  if cell.isNil:
+    return
+  let nextTitles = @titles
+  if cell.xReservedTitles == nextTitles:
+    return
+  cell.xReservedTitles = nextTitles
+  cell.invalidateControlMetrics()
 
 proc `title=`*(button: Button, title: string) =
   button.setTitle(title)

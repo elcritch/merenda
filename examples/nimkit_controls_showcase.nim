@@ -104,6 +104,7 @@ pushButton.action = pushAction
 
 toggleButton.buttonType = btToggle
 toggleButton.allowsMixedState = true
+toggleButton.reservedTitles = ["Toggle Off", "Toggle On", "Toggle Mixed"]
 toggleButton.target = newActionTarget(toggleAction, onToggle)
 toggleButton.action = toggleAction
 
