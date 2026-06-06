@@ -10,6 +10,7 @@ on:
 jobs:
   tests:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     defaults:
       run:
         shell: bash
@@ -22,7 +23,7 @@ jobs:
           - macos-14
           # - windows-2022
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Weston (Wayland)
       if: runner.os == 'Linux'
@@ -60,7 +61,7 @@ jobs:
       run: |
         curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
         echo "$HOME/.local/share/grabnim/current/bin" >> $GITHUB_PATH
-        echo "$HOME/.nimble/bin" >> $GITHUB_PATH
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Install Nim
       if: runner.os != 'Windows'
@@ -76,22 +77,32 @@ jobs:
 
     - name: Install Atlas
       run: |
-        nimble install 'https://github.com/nim-lang/atlas@#head'
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        git clone --depth 1 https://github.com/nim-lang/atlas "$RUNNER_TEMP/atlas"
+        nim c -d:release --out:"$HOME/.local/bin/atlas" "$RUNNER_TEMP/atlas/src/atlas.nim"
         echo "Nim:: "
         nim -v
-        echo "Nimble:: "
+        echo "Atlas:: "
         atlas -v
 
     - name: Cache packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: deps/
-        key: ${{ runner.os }}-${{ hashFiles('merenda.nimble') }}
+        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
     - name: Install Deps
       run: |
         # sync deps
         atlas install
+
+    - name: Clean generated examples
+      run: |
+        find examples -maxdepth 1 -type f \
+          ! -name '*.nim' \
+          ! -name '*.nims' \
+          -delete
 
     - name: Build Tests
       if: runner.os == 'Linux'
