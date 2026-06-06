@@ -3,6 +3,7 @@ import ./theme
 import ./types
 import ./viewgeometry
 import ./viewbase
+import sigils/core
 
 protocol ViewProtocol from View:
   property frame -> Rect
@@ -28,7 +29,7 @@ protocol ViewProtocol from View:
     self.xBounds = initRect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)
     self.refreshAutoresizingReference()
-    self.notifyAutoresizingDependentsChanged()
+    emit self.geometryDidChange()
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
@@ -40,8 +41,8 @@ protocol ViewProtocol from View:
     if self.xBounds == bounds:
       return
     self.xBounds = initRect(bounds.origin, bounds.size)
-    self.notifyLayoutInputChanged(lirBounds)
-    self.notifyAutoresizingDependentsChanged()
+    emit self.layoutInputChanged(lirBounds)
+    emit self.geometryDidChange()
     self.setNeedsDisplay(true)
 
   method needsDisplay(self: View): bool =
@@ -215,15 +216,15 @@ protocol ViewProtocol from View:
     if parent.isNil:
       return
     let oldWindow = self.xWindow
-    parent.notifyWillRemoveSubview(self)
-    self.notifyWillMoveToSuperview(nil)
+    emit parent.willRemoveSubview(self)
+    emit self.viewWillMoveToSuperview(nil)
     if oldWindow != nil:
-      self.notifyWillMoveToWindow(nil)
+      self.propagateWillMoveToWindow(nil)
     let idx = parent.xSubviews.find(self)
     if idx >= 0:
       parent.xSubviews.delete(idx)
-      self.notifyLayoutInputChanged(lirSuperview)
-      parent.notifyLayoutInputChanged(lirHierarchy)
+      emit self.layoutInputChanged(lirSuperview)
+      emit parent.layoutInputChanged(lirHierarchy)
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview = nil
     self.resetAutoresizingState()
@@ -232,10 +233,10 @@ protocol ViewProtocol from View:
     self.setPreviousKeyView(nil)
     self.setWindowOwner(nil)
     self.clearInheritedAppearance()
-    self.notifyDidMoveToSuperview()
+    emit self.viewDidMoveToSuperview()
     if oldWindow != nil:
-      self.notifyDidMoveToWindow()
-    self.notifyLayoutInputChanged(lirSuperview)
+      self.propagateDidMoveToWindow()
+    emit self.layoutInputChanged(lirSuperview)
 
   method addSubview*(self: View, child: View) =
     if child.isNil:
@@ -243,21 +244,21 @@ protocol ViewProtocol from View:
     if not child.xSuperview.isNil:
       child.removeFromSuperview()
     let oldWindow = child.xWindow
-    child.notifyWillMoveToSuperview(self)
+    emit child.viewWillMoveToSuperview(self)
     if oldWindow != self.xWindow:
-      child.notifyWillMoveToWindow(self.xWindow)
+      child.propagateWillMoveToWindow(self.xWindow)
     child.xSuperview = self
     child.refreshAutoresizingReference()
     self.xSubviews.add child
     child.setNextResponder(self)
     child.setWindowOwner(self.xWindow)
     child.setInheritedAppearance(self.effectiveAppearance())
-    self.notifyDidAddSubview(child)
-    child.notifyDidMoveToSuperview()
+    emit self.didAddSubview(child)
+    emit child.viewDidMoveToSuperview()
     if oldWindow != self.xWindow:
-      child.notifyDidMoveToWindow()
-    child.notifyLayoutInputChanged(lirSuperview)
-    self.notifyLayoutInputChanged(lirHierarchy)
+      child.propagateDidMoveToWindow()
+    emit child.layoutInputChanged(lirSuperview)
+    emit self.layoutInputChanged(lirHierarchy)
     self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
@@ -292,12 +293,21 @@ protocol ViewProtocol from View:
     if inside: self else: nil
 
 protocol ViewLifecycleProtocol:
-  method viewWillMoveToSuperview*(superview: View) {.optional.}
-  method viewDidMoveToSuperview*() {.optional.}
-  method viewWillMoveToWindow*(window: Responder) {.optional.}
-  method viewDidMoveToWindow*() {.optional.}
-  method didAddSubview*(subview: View) {.optional.}
-  method willRemoveSubview*(subview: View) {.optional.}
+  proc viewWillMoveToSuperview*(view: View, superview: View) {.signal.}
+  proc viewDidMoveToSuperview*(view: View) {.signal.}
+  proc viewWillMoveToWindow*(view: View, window: Responder) {.signal.}
+  proc viewDidMoveToWindow*(view: View) {.signal.}
+  proc didAddSubview*(view: View, subview: View) {.signal.}
+  proc willRemoveSubview*(view: View, subview: View) {.signal.}
+
+protocol ViewSuperviewLifecycleSlots of ViewLifecycleProtocol:
+  proc unbindSuperviewGeometry(
+      view: View, superview: View
+  ) {.slotFor: viewWillMoveToSuperview.} =
+    view.unobserveSuperviewGeometry()
+
+  proc bindSuperviewGeometry(view: View) {.slotFor: viewDidMoveToSuperview.} =
+    view.observeSuperviewGeometry()
 
 proc `frame=`*(view: View, frame: Rect) =
   view.setFrame(frame)
@@ -371,16 +381,13 @@ proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
     return view.xInheritedAppearance
   inherited
 
-proc setAppearance*(view: View, appearance: Appearance) =
+proc `appearance=`*(view: View, appearance: Appearance) =
   if view.isNil:
     return
   view.xAppearance = appearance
   view.xHasAppearance = true
   view.invalidateIntrinsicContentSizeSubtree()
   view.setNeedsDisplaySubtree()
-
-proc `appearance=`*(view: View, appearance: Appearance) =
-  view.setAppearance(appearance)
 
 proc clearAppearance*(view: View) =
   if view.isNil or not view.xHasAppearance:
@@ -413,27 +420,15 @@ proc clearInheritedAppearance*(view: View) =
     child.clearInheritedAppearance()
   view.setNeedsDisplay(true)
 
-proc notifyWillMoveToSuperview*(view, superview: View) =
-  discard view.sendIfHandled(viewWillMoveToSuperview(), superview)
-
-proc notifyDidMoveToSuperview*(view: View) =
-  discard view.sendIfHandled(viewDidMoveToSuperview())
-
-proc notifyWillMoveToWindow*(view: View, window: Responder) =
-  discard view.sendIfHandled(viewWillMoveToWindow(), window)
+proc propagateWillMoveToWindow*(view: View, window: Responder) =
+  emit view.viewWillMoveToWindow(window)
   for child in view.xSubviews:
-    child.notifyWillMoveToWindow(window)
+    child.propagateWillMoveToWindow(window)
 
-proc notifyDidMoveToWindow*(view: View) =
-  discard view.sendIfHandled(viewDidMoveToWindow())
+proc propagateDidMoveToWindow*(view: View) =
+  emit view.viewDidMoveToWindow()
   for child in view.xSubviews:
-    child.notifyDidMoveToWindow()
-
-proc notifyDidAddSubview*(view, subview: View) =
-  discard view.sendIfHandled(didAddSubview(), subview)
-
-proc notifyWillRemoveSubview*(view, subview: View) =
-  discard view.sendIfHandled(willRemoveSubview(), subview)
+    child.propagateDidMoveToWindow()
 
 proc setWindowOwner*(view: View, window: Responder) =
   view.xWindow = window

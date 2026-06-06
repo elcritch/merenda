@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -310,15 +312,12 @@ proc edgeInsets*(gridView: GridView): EdgeInsets =
   else:
     gridView.xEdgeInsets
 
-proc setEdgeInsets*(gridView: GridView, insets: EdgeInsets) =
+proc `edgeInsets=`*(gridView: GridView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
   if gridView.isNil or gridView.xEdgeInsets == normalized:
     return
   gridView.xEdgeInsets = normalized
   gridView.invalidateGridLayout()
-
-proc `edgeInsets=`*(gridView: GridView, insets: EdgeInsets) =
-  gridView.setEdgeInsets(insets)
 
 proc alignment*(gridView: GridView): GridAlignmentValues =
   GridAlignmentValues(xGridView: gridView)
@@ -399,16 +398,16 @@ proc removeGridSubview*(gridView: GridView, child: View) =
   gridView.xItems.delete(index)
   gridView.invalidateGridLayout()
 
+protocol GridViewLifecycleSlots of ViewLifecycleProtocol:
+  proc willRemoveSubview(gridView: GridView, child: View) {.slot.} =
+    gridView.removeGridSubview(child)
+
 protocol DefaultGridViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(gridView: GridView): IntrinsicSize =
     initIntrinsicSize(gridView.naturalSize())
 
   method layoutSubviews(gridView: GridView) =
     gridView.layoutGridSubviews()
-
-protocol DefaultGridViewLifecycle of ViewLifecycleProtocol:
-  method willRemoveSubview(gridView: GridView, subview: View) =
-    gridView.removeGridSubview(subview)
 
 proc initGridViewFields*(gridView: GridView, frame: Rect = AutoRect) =
   initViewFields(gridView, frame)
@@ -417,7 +416,8 @@ proc initGridViewFields*(gridView: GridView, frame: Rect = AutoRect) =
   gridView.xAlignment[drow] = gaFill
   gridView.xAlignment[dcol] = gaFill
   discard gridView.withProtocol(DefaultGridViewLayout)
-  discard gridView.withProtocol(DefaultGridViewLifecycle)
+  discard gridView.withProtocol(GridViewLifecycleSlots)
+  gridView.observeProtocol(gridView, GridViewLifecycleSlots)
   gridView.applyInitialFrame(frame)
 
 proc newGridView*(frame: Rect = AutoRect): GridView =

@@ -163,20 +163,14 @@ proc target*(control: Control): DynamicAgent =
     return ActionCell(selected).target()
   control.xTarget
 
-proc setTarget*(control: Control, target: DynamicAgent) =
+proc `target=`*(control: Control, target: DynamicAgent) =
   control.xTarget = target
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setTarget(target)
 
-proc `target=`*(control: Control, target: DynamicAgent) =
-  control.setTarget(target)
-
-proc setTarget*(control: Control, target: Responder) =
-  control.setTarget(DynamicAgent(target))
-
 proc `target=`*(control: Control, target: Responder) =
-  control.setTarget(target)
+  control.target = DynamicAgent(target)
 
 proc action*(control: Control): ActionSelector =
   let selected = control.selectedCell()
@@ -184,14 +178,11 @@ proc action*(control: Control): ActionSelector =
     return ActionCell(selected).action()
   control.xAction
 
-proc setAction*(control: Control, action: ActionSelector) =
+proc `action=`*(control: Control, action: ActionSelector) =
   control.xAction = action
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setAction(action)
-
-proc `action=`*(control: Control, action: ActionSelector) =
-  control.setAction(action)
 
 proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarget =
   result = ClosureTarget()

@@ -1,5 +1,6 @@
 import merenda/nimkit
 
+import sigils/core
 import sigils/selectors
 
 proc stateName(state: ButtonState): string =
@@ -74,8 +75,8 @@ proc updateSummary() =
 proc updateToggleTitle() =
   toggleButton.title = "Toggle " & toggleButton.state.stateName
 
-proc onTextDidChange(sender: DynamicAgent) =
-  if sender == DynamicAgent(nameField) or sender == DynamicAgent(noteField):
+proc onTextDidChange(field: TextField, sender: DynamicAgent) {.slot.} =
+  if sender == DynamicAgent(field):
     updateSummary()
 
 proc onPush(sender: DynamicAgent) =
@@ -96,7 +97,7 @@ proc onChoiceChanged(sender: DynamicAgent) =
 root.background = initColor(0.95, 0.96, 0.98)
 
 for field in [nameField, noteField]:
-  field.delegate = newActionTarget(textDidChange(), onTextDidChange)
+  field.connect(textDidChange, field, onTextDidChange)
 
 pushButton.target = newActionTarget(pushAction, onPush)
 pushButton.action = pushAction

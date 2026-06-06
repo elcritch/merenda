@@ -27,9 +27,15 @@ proc rectToWindow*(view: View, rect: Rect): Rect
 proc alignmentRect*(view: View): Rect
 proc resetAutoresizingState*(view: View)
 proc refreshAutoresizingReference*(view: View)
+proc observeSuperviewGeometry*(view: View)
+proc unobserveSuperviewGeometry*(view: View)
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer)
 
-proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
+protocol ViewLayoutInputEvents:
+  proc layoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.signal.}
+
+protocol ViewGeometryEvents:
+  proc geometryDidChange*(view: View) {.signal.}
 
 proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
   case reason
@@ -63,47 +69,56 @@ proc markAggregateLayoutInputDirty(
     current.markConstraintStorageChangedRaw()
     current = current.xSuperview
 
-proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) =
-  if view.isNil:
-    return
-  let
-    source = reason.sourceFor()
-    structureDirty = reason.isStructureDirtyReason()
-  view.xLayoutInputCache.dirtySources.incl source
-  if structureDirty:
-    view.xLayoutInputCache.structureDirty = true
-  case reason
-  of lirFrame, lirSuperview, lirAutoresizingMask:
-    view.xAutoresizingState.referenceDirty = true
-    view.xAutoresizingState.inputsDirty = true
-  of lirBounds, lirSuperviewGeometry, lirSubviews:
-    view.xAutoresizingState.inputsDirty = true
-  else:
-    discard
-  view.markAggregateLayoutInputDirty(source, structureDirty)
+protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
+  proc markLayoutInputDirty(
+      view: View, reason: LayoutInvalidationReason
+  ) {.slotFor: layoutInputChanged.} =
+    if view.isNil:
+      return
+    let
+      source = reason.sourceFor()
+      structureDirty = reason.isStructureDirtyReason()
+    view.xLayoutInputCache.dirtySources.incl source
+    if structureDirty:
+      view.xLayoutInputCache.structureDirty = true
+    case reason
+    of lirFrame, lirSuperview, lirAutoresizingMask:
+      view.xAutoresizingState.referenceDirty = true
+      view.xAutoresizingState.inputsDirty = true
+    of lirBounds, lirSuperviewGeometry, lirSubviews:
+      view.xAutoresizingState.inputsDirty = true
+    else:
+      discard
+    view.markAggregateLayoutInputDirty(source, structureDirty)
 
-proc onLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) {.slot.} =
-  view.markLayoutInputDirty(reason)
+protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
+  proc markSuperviewGeometryDirty(view: View) {.slotFor: geometryDidChange.} =
+    if not view.isNil and view.xAutoresizingMaskConstraints:
+      emit view.layoutInputChanged(lirSuperviewGeometry)
 
 proc initLayoutSignalBus*(view: View) =
   if view.isNil:
     return
-  connect(view, layoutInputChanged, view, onLayoutInputChanged)
-
-proc notifyLayoutInputChanged*(view: View, reason: LayoutInvalidationReason) =
-  if view.isNil:
-    return
-  emit view.layoutInputChanged(reason)
+  view.observeProtocol(view, ViewLayoutInputSlots)
 
 proc markConstraintStorageChanged*(view: View) =
-  view.notifyLayoutInputChanged(lirConstraints)
-
-proc notifyAutoresizingDependentsChanged*(view: View, reason = lirSuperviewGeometry) =
   if view.isNil:
     return
-  for child in view.xSubviews:
-    if child.xAutoresizingMaskConstraints:
-      child.notifyLayoutInputChanged(reason)
+  emit view.layoutInputChanged(lirConstraints)
+
+proc observeSuperviewGeometry*(view: View) =
+  if view.isNil:
+    return
+  let parent = view.xSuperview
+  if not parent.isNil:
+    view.observeProtocol(parent, ViewSuperviewGeometrySlots)
+
+proc unobserveSuperviewGeometry*(view: View) =
+  if view.isNil:
+    return
+  let parent = view.xSuperview
+  if not parent.isNil:
+    view.unobserveProtocol(parent, ViewSuperviewGeometrySlots)
 
 proc invalidateLayoutItemGeometry*(
     view: View, reason = lirFrame, ancestorReason = lirDescendantGeometry
@@ -113,7 +128,7 @@ proc invalidateLayoutItemGeometry*(
   var current = view
   var isOrigin = true
   while not current.isNil:
-    current.notifyLayoutInputChanged(if isOrigin: reason else: ancestorReason)
+    emit current.layoutInputChanged(if isOrigin: reason else: ancestorReason)
     isOrigin = false
     current = current.xSuperview
 
@@ -122,7 +137,7 @@ proc autoresizingMask*(view: View): AutoresizingMask =
     return {}
   view.xAutoresizingMask
 
-proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
+proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
   if view.isNil or view.xAutoresizingMask == mask:
     return
   view.xAutoresizingMask = mask
@@ -131,9 +146,6 @@ proc setAutoresizingMask*(view: View, mask: AutoresizingMask) =
     view.refreshAutoresizingReference()
   else:
     view.resetAutoresizingState()
-
-proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
-  view.setAutoresizingMask(mask)
 
 proc autoresizingMaskConstraints*(view: View): bool =
   (not view.isNil) and view.xAutoresizingMaskConstraints
@@ -222,10 +234,10 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   of lfoAuthored:
     view.invalidateLayoutItemGeometry(lirFrame)
     view.refreshAutoresizingReference()
-    view.notifyAutoresizingDependentsChanged()
+    emit view.geometryDidChange()
   of lfoContainer:
     view.refreshAutoresizingReference()
-    view.notifyAutoresizingDependentsChanged()
+    emit view.geometryDidChange()
   of lfoSolver:
     discard
 

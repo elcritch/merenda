@@ -125,9 +125,9 @@ suite "nimkit stack views":
     stack.addArrangedSubview(button)
     stack.sizeToFit()
     root.layoutSubtreeIfNeeded()
-    root.setNeedsLayout(false)
-    stack.setNeedsLayout(false)
-    button.setNeedsLayout(false)
+    root.needsLayout = false
+    stack.needsLayout = false
+    button.needsLayout = false
 
     let oldFrame = stack.frame()
     button.title = "A much longer title"

@@ -62,8 +62,8 @@ suite "nimkit sizing":
 
     root.addSubview(button)
     root.layoutSubtreeIfNeeded()
-    root.setNeedsLayout(false)
-    button.setNeedsLayout(false)
+    root.needsLayout = false
+    button.needsLayout = false
 
     let initialFrame = button.frame()
     button.setTitle("A much longer title")
@@ -119,7 +119,7 @@ suite "nimkit sizing":
     var appearance = initAppearance()
     appearance[srButton, StyleTextInsets] = initEdgeInsets(0.0, 24.0)
     appearance[srButton, StyleMinimumSize] = initSize(0.0, 40.0)
-    button.setAppearance(appearance)
+    button.appearance = appearance
 
     let styled = button.intrinsicContentSize()
     check styled.width > base.width
@@ -155,12 +155,12 @@ suite "nimkit sizing":
       baseField = field.intrinsicContentSize()
       baseCombo = combo.intrinsicContentSize()
 
-    root.setNeedsLayout(false)
-    stack.setNeedsLayout(false)
-    button.setNeedsLayout(false)
-    checkbox.setNeedsLayout(false)
-    field.setNeedsLayout(false)
-    combo.setNeedsLayout(false)
+    root.needsLayout = false
+    stack.needsLayout = false
+    button.needsLayout = false
+    checkbox.needsLayout = false
+    field.needsLayout = false
+    combo.needsLayout = false
 
     var appearance = initAppearance()
     appearance[srButton, StyleTextInsets] = initEdgeInsets(6.0, 26.0)
@@ -173,7 +173,7 @@ suite "nimkit sizing":
     appearance[srComboBox, StyleTextInsets] = initEdgeInsets(4.0, 18.0)
     appearance[srComboBox, StyleIndicatorSize] = 34.0
     appearance[srComboBox, StyleMinimumSize] = initSize(140.0, 36.0)
-    root.setAppearance(appearance)
+    root.appearance = appearance
 
     check root.needsLayout
     check stack.needsLayout
@@ -196,8 +196,8 @@ suite "nimkit sizing":
 
     root.addSubview(button)
     root.layoutSubtreeIfNeeded()
-    root.setNeedsLayout(false)
-    button.setNeedsLayout(false)
+    root.needsLayout = false
+    button.needsLayout = false
 
     button.setCell(nextCell)
     check oldCell.controlView().isNil
@@ -205,8 +205,8 @@ suite "nimkit sizing":
     check root.needsLayout
     check button.needsLayout
 
-    root.setNeedsLayout(false)
-    button.setNeedsLayout(false)
+    root.needsLayout = false
+    button.needsLayout = false
     oldCell.setTitle("Detached")
     check not root.needsLayout
     check not button.needsLayout

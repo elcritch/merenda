@@ -617,23 +617,17 @@ proc invalidateActiveConstraint(constraint: LayoutConstraint) =
     return
   constraint.xOwningView.markConstraintStorageChanged()
 
-proc setConstant*(constraint: LayoutConstraint, constant: float32) =
+proc `constant=`*(constraint: LayoutConstraint, constant: float32) =
   if constraint.isNil or constraint.xConstant == constant:
     return
   constraint.xConstant = constant
   constraint.invalidateActiveConstraint()
 
-proc `constant=`*(constraint: LayoutConstraint, constant: float32) =
-  constraint.setConstant(constant)
-
-proc setPriority*(constraint: LayoutConstraint, priority: LayoutPriority) =
+proc `priority=`*(constraint: LayoutConstraint, priority: LayoutPriority) =
   if constraint.isNil or constraint.xPriority == priority:
     return
   constraint.xPriority = priority
   constraint.invalidateActiveConstraint()
-
-proc `priority=`*(constraint: LayoutConstraint, priority: LayoutPriority) =
-  constraint.setPriority(priority)
 
 proc indexOfConstraint(view: View, constraint: LayoutConstraint): int =
   if view.isNil or constraint.isNil:
@@ -720,7 +714,7 @@ proc activationOwner(constraint: LayoutConstraint): View =
   let common = constraint.xFirstItem.nearestCommonSuperview(constraint.xSecondItem)
   if common.isNil: constraint.xFirstItem else: common
 
-proc setActive*(constraint: LayoutConstraint, active: bool) =
+proc `active=`*(constraint: LayoutConstraint, active: bool) =
   if constraint.isNil or constraint.xActive == active:
     return
   if active:
@@ -732,9 +726,6 @@ proc setActive*(constraint: LayoutConstraint, active: bool) =
     constraint.xOwningView.removeConstraint(constraint)
   else:
     constraint.xActive = false
-
-proc `active=`*(constraint: LayoutConstraint, active: bool) =
-  constraint.setActive(active)
 
 proc setConstraintsActive(constraints: openArray[LayoutConstraint], active: bool) =
   for constraint in constraints:

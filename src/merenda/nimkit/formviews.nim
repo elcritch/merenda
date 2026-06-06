@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./selectors
 import ./theme
 import ./types
@@ -241,52 +243,40 @@ proc edgeInsets*(formView: FormView): EdgeInsets =
   else:
     formView.xEdgeInsets
 
-proc setEdgeInsets*(formView: FormView, insets: EdgeInsets) =
+proc `edgeInsets=`*(formView: FormView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
   if formView.isNil or formView.xEdgeInsets == normalized:
     return
   formView.xEdgeInsets = normalized
   formView.invalidateFormLayout()
 
-proc `edgeInsets=`*(formView: FormView, insets: EdgeInsets) =
-  formView.setEdgeInsets(insets)
-
 proc labelAlignment*(formView: FormView): FormLabelAlignment =
   if formView.isNil: flaTrailing else: formView.xLabelAlignment
 
-proc setLabelAlignment*(formView: FormView, alignment: FormLabelAlignment) =
+proc `labelAlignment=`*(formView: FormView, alignment: FormLabelAlignment) =
   if formView.isNil or formView.xLabelAlignment == alignment:
     return
   formView.xLabelAlignment = alignment
   formView.invalidateFormLayout()
 
-proc `labelAlignment=`*(formView: FormView, alignment: FormLabelAlignment) =
-  formView.setLabelAlignment(alignment)
-
 proc rowAlignment*(formView: FormView): FormRowAlignment =
   if formView.isNil: fraCenter else: formView.xRowAlignment
 
-proc setRowAlignment*(formView: FormView, alignment: FormRowAlignment) =
+proc `rowAlignment=`*(formView: FormView, alignment: FormRowAlignment) =
   if formView.isNil or formView.xRowAlignment == alignment:
     return
   formView.xRowAlignment = alignment
   formView.invalidateFormLayout()
 
-proc `rowAlignment=`*(formView: FormView, alignment: FormRowAlignment) =
-  formView.setRowAlignment(alignment)
-
 proc minFieldWidth*(formView: FormView): float32 =
   if formView.isNil: 0.0'f32 else: formView.xMinimumFieldWidth
 
-proc setMinFieldWidth*(formView: FormView, width: float32) =
+proc `minFieldWidth=`*(formView: FormView, width: float32) =
   let normalized = max(width, 0.0'f32)
   if formView.isNil or formView.xMinimumFieldWidth == normalized:
     return
   formView.xMinimumFieldWidth = normalized
   formView.invalidateFormLayout()
-
-proc `minFieldWidth=`*(formView: FormView, width: float32) =
-  formView.setMinFieldWidth(width)
 
 proc intrinsicContentSize*(formView: FormView): IntrinsicSize =
   if formView.isNil:
@@ -322,10 +312,14 @@ proc removeRow*(formView: FormView, index: int) =
   formView.xRows.delete(index)
   formView.invalidateFormLayout()
 
-proc removeRowContaining*(formView: FormView, view: View) =
+proc removeRowContaining(formView: FormView, view: View) =
   let index = formView.rowIndexContaining(view)
   if index >= 0:
     formView.removeRow(index)
+
+protocol FormViewLifecycleSlots of ViewLifecycleProtocol:
+  proc willRemoveSubview(formView: FormView, child: View) {.slot.} =
+    formView.removeRowContaining(child)
 
 protocol DefaultFormViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(formView: FormView): IntrinsicSize =
@@ -334,10 +328,6 @@ protocol DefaultFormViewLayout of ViewLayoutProtocol:
   method layoutSubviews(formView: FormView) =
     formView.layoutFormRows()
 
-protocol DefaultFormViewLifecycle of ViewLifecycleProtocol:
-  method willRemoveSubview(formView: FormView, subview: View) =
-    formView.removeRowContaining(subview)
-
 proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   initViewFields(formView, frame)
   formView.xSpacing[drow] = 8.0'f32
@@ -345,7 +335,8 @@ proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   formView.xLabelAlignment = flaTrailing
   formView.xRowAlignment = fraCenter
   discard formView.withProtocol(DefaultFormViewLayout)
-  discard formView.withProtocol(DefaultFormViewLifecycle)
+  discard formView.withProtocol(FormViewLifecycleSlots)
+  formView.observeProtocol(formView, FormViewLifecycleSlots)
   formView.applyInitialFrame(frame)
 
 proc newFormView*(frame: Rect = AutoRect): FormView =

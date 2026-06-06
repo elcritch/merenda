@@ -157,8 +157,8 @@ suite "nimkit responder":
       inc actionCount
 
     let target = newActionTarget(action, onKeyAction)
-    button.setTarget(target)
-    button.setAction(action)
+    button.target = target
+    button.action = action
     root.addSubview(button)
     window.setContentView(root)
 
@@ -183,8 +183,8 @@ suite "nimkit responder":
       inc actionCount
 
     let target = newActionTarget(action, onCheckboxKeyAction)
-    checkbox.setTarget(target)
-    checkbox.setAction(action)
+    checkbox.target = target
+    checkbox.action = action
     root.addSubview(field, checkbox)
     window.setContentView(root)
 

@@ -168,7 +168,7 @@ suite "nimkit rendering":
     appearance[srComboBox, StyleIndicatorSize] = 32.0
     appearance[srComboBox, StyleMinimumSize] = initSize(142.0, 36.0)
 
-    root.setAppearance(appearance)
+    root.appearance = appearance
     root.addSubview(button, checkbox, field, combo)
     combo.selectedIndex = 1
     button.sizeToFit()
@@ -383,7 +383,7 @@ suite "nimkit rendering":
     listView.rowHeight = 20.0
     listView.selectedIndex = 1
     listView.highlightedIndex = 2
-    listView.setFocusVisible(true)
+    listView.focusVisible = true
     root.addSubview(listView)
 
     let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
@@ -482,7 +482,7 @@ suite "nimkit rendering":
     theme[srButton, {ssActive}, StyleFill] = activeFill
 
     root.addSubview(button)
-    button.setActive(true)
+    button.active = true
 
     let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
@@ -507,8 +507,8 @@ suite "nimkit rendering":
     theme[srButton, StyleCornerRadius] = 5.0
 
     root.addSubview(button)
-    button.setFocused(true)
-    button.setFocusVisible(true)
+    button.focused = true
+    button.focusVisible = true
 
     let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
@@ -594,12 +594,12 @@ suite "nimkit rendering":
 
     var rootAppearance = initAppearance()
     rootAppearance[srButton, StyleFill] = rootFill
-    root.setAppearance(rootAppearance)
+    root.appearance = rootAppearance
     root.addSubview(button)
 
     var buttonAppearance = initAppearance()
     buttonAppearance[srButton, StyleFill] = buttonFill
-    button.setAppearance(buttonAppearance)
+    button.appearance = buttonAppearance
 
     let list = buildRenders(root)[DefaultDrawLevel]
 
