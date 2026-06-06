@@ -6,7 +6,6 @@ on:
     branches:
     - "*"
 
-
 jobs:
   tests:
     runs-on: ${{ matrix.os }}
@@ -17,7 +16,7 @@ jobs:
     strategy:
       matrix:
         nimversion:
-          - '2.2.8'
+          - '2.2.10'
         os:
           # - ubuntu-24.04
           - macos-14
@@ -96,7 +95,7 @@ jobs:
     - name: Install Deps
       run: |
         # sync deps
-        atlas install
+        atlas -t --update install
 
     - name: Clean generated examples
       run: |
