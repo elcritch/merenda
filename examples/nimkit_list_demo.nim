@@ -42,15 +42,15 @@ title.pinEdges(
 )
 
 activate(
-  list.topAnchor.equalTo(title.bottomAnchor, constant = 18.0),
-  list.leftAnchor.equalTo(title.leftAnchor),
-  list.widthAnchor.equalTo(188.0),
-  detailTitle.topAnchor.equalTo(list.topAnchor, constant = 4.0),
-  detailTitle.leftAnchor.equalTo(list.rightAnchor, constant = 18.0),
-  detailTitle.rightAnchor.equalTo(title.rightAnchor),
-  detail.topAnchor.equalTo(detailTitle.bottomAnchor, constant = 10.0),
-  detail.leftAnchor.equalTo(detailTitle.leftAnchor),
-  detail.rightAnchor.equalTo(detailTitle.rightAnchor),
+  cx(list.topAnchor == title.bottomAnchor, constant = 18.0),
+  cx(list.leftAnchor == title.leftAnchor),
+  cx(list.widthAnchor == 188.0),
+  cx(detailTitle.topAnchor == list.topAnchor + 4.0),
+  cx(detailTitle.leftAnchor == list.rightAnchor, constant = 18.0),
+  cx(detailTitle.rightAnchor == title.rightAnchor),
+  cx(detail.topAnchor == detailTitle.bottomAnchor, constant = 10.0),
+  cx(detail.leftAnchor == detailTitle.leftAnchor),
+  cx(detail.rightAnchor == detailTitle.rightAnchor),
 )
 
 updateDetail()

@@ -29,6 +29,16 @@ type
     xAttribute: LayoutAttribute
     xOffset: float32
 
+  LayoutConstraintExpression*[A] = object
+    xFirstItem: View
+    xFirstAttribute: LayoutAttribute
+    xRelation: LayoutRelation
+    xSecondItem: View
+    xSecondAttribute: LayoutAttribute
+    xFirstOffset: float32
+    xSecondOffset: float32
+    xConstant: float32
+
   LayoutGuide* = object
     xOwningView: View
     xInsets: EdgeInsets
@@ -216,6 +226,33 @@ proc initDimensionAnchor(
     item: View, attribute: LayoutAttribute, offset = 0.0'f32
 ): LayoutDimensionAnchor =
   LayoutDimensionAnchor(xItem: item, xAttribute: attribute, xOffset: offset)
+
+proc `+`*(anchor: LayoutXAxisAnchor, constant: float32): LayoutXAxisAnchor =
+  initXAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
+
+proc `+`*(constant: float32, anchor: LayoutXAxisAnchor): LayoutXAxisAnchor =
+  anchor + constant
+
+proc `-`*(anchor: LayoutXAxisAnchor, constant: float32): LayoutXAxisAnchor =
+  initXAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
+
+proc `+`*(anchor: LayoutYAxisAnchor, constant: float32): LayoutYAxisAnchor =
+  initYAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
+
+proc `+`*(constant: float32, anchor: LayoutYAxisAnchor): LayoutYAxisAnchor =
+  anchor + constant
+
+proc `-`*(anchor: LayoutYAxisAnchor, constant: float32): LayoutYAxisAnchor =
+  initYAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
+
+proc `+`*(anchor: LayoutDimensionAnchor, constant: float32): LayoutDimensionAnchor =
+  initDimensionAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
+
+proc `+`*(constant: float32, anchor: LayoutDimensionAnchor): LayoutDimensionAnchor =
+  anchor + constant
+
+proc `-`*(anchor: LayoutDimensionAnchor, constant: float32): LayoutDimensionAnchor =
+  initDimensionAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
 
 proc leftAnchor*(view: View): LayoutXAxisAnchor =
   initXAxisAnchor(view, latLeft)
@@ -479,6 +516,170 @@ proc equalTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
 ): LayoutConstraint =
   first.constraintWithConstant(lrEqual, constant, priority)
+
+proc initConstraintExpression(
+    A: typedesc,
+    firstItem: View,
+    firstAttribute: LayoutAttribute,
+    relation: LayoutRelation,
+    secondItem: View,
+    secondAttribute: LayoutAttribute,
+    firstOffset: float32,
+    secondOffset: float32,
+    constant: float32,
+): LayoutConstraintExpression[A] =
+  LayoutConstraintExpression[A](
+    xFirstItem: firstItem,
+    xFirstAttribute: firstAttribute,
+    xRelation: relation,
+    xSecondItem: secondItem,
+    xSecondAttribute: secondAttribute,
+    xFirstOffset: firstOffset,
+    xSecondOffset: secondOffset,
+    xConstant: constant,
+  )
+
+proc constraintExpression(
+    first: LayoutXAxisAnchor, relation: LayoutRelation, second: LayoutXAxisAnchor
+): LayoutConstraintExpression[LayoutXAxisAnchor] =
+  initConstraintExpression(
+    LayoutXAxisAnchor, first.xItem, first.xAttribute, relation, second.xItem,
+    second.xAttribute, first.xOffset, second.xOffset, 0.0'f32,
+  )
+
+proc constraintExpression(
+    first: LayoutYAxisAnchor, relation: LayoutRelation, second: LayoutYAxisAnchor
+): LayoutConstraintExpression[LayoutYAxisAnchor] =
+  initConstraintExpression(
+    LayoutYAxisAnchor, first.xItem, first.xAttribute, relation, second.xItem,
+    second.xAttribute, first.xOffset, second.xOffset, 0.0'f32,
+  )
+
+proc constraintExpression(
+    first: LayoutDimensionAnchor,
+    relation: LayoutRelation,
+    second: LayoutDimensionAnchor,
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  initConstraintExpression(
+    LayoutDimensionAnchor, first.xItem, first.xAttribute, relation, second.xItem,
+    second.xAttribute, first.xOffset, second.xOffset, 0.0'f32,
+  )
+
+proc constraintExpression(
+    first: LayoutDimensionAnchor, relation: LayoutRelation, constant: float32
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  initConstraintExpression(
+    LayoutDimensionAnchor, first.xItem, first.xAttribute, relation, nil,
+    latNotAnAttribute, first.xOffset, 0.0'f32, constant,
+  )
+
+proc `==`*(
+    first, second: LayoutXAxisAnchor
+): LayoutConstraintExpression[LayoutXAxisAnchor] =
+  first.constraintExpression(lrEqual, second)
+
+proc `>=`*(
+    first, second: LayoutXAxisAnchor
+): LayoutConstraintExpression[LayoutXAxisAnchor] =
+  first.constraintExpression(lrGreaterThanOrEqual, second)
+
+proc `<=`*(
+    first, second: LayoutXAxisAnchor
+): LayoutConstraintExpression[LayoutXAxisAnchor] =
+  first.constraintExpression(lrLessThanOrEqual, second)
+
+proc `==`*(
+    first, second: LayoutYAxisAnchor
+): LayoutConstraintExpression[LayoutYAxisAnchor] =
+  first.constraintExpression(lrEqual, second)
+
+proc `>=`*(
+    first, second: LayoutYAxisAnchor
+): LayoutConstraintExpression[LayoutYAxisAnchor] =
+  first.constraintExpression(lrGreaterThanOrEqual, second)
+
+proc `<=`*(
+    first, second: LayoutYAxisAnchor
+): LayoutConstraintExpression[LayoutYAxisAnchor] =
+  first.constraintExpression(lrLessThanOrEqual, second)
+
+proc `==`*(
+    first, second: LayoutDimensionAnchor
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrEqual, second)
+
+proc `>=`*(
+    first, second: LayoutDimensionAnchor
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrGreaterThanOrEqual, second)
+
+proc `<=`*(
+    first, second: LayoutDimensionAnchor
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrLessThanOrEqual, second)
+
+proc `==`*(
+    first: LayoutDimensionAnchor, constant: float32
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrEqual, constant)
+
+proc `>=`*(
+    first: LayoutDimensionAnchor, constant: float32
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrGreaterThanOrEqual, constant)
+
+proc `<=`*(
+    first: LayoutDimensionAnchor, constant: float32
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrLessThanOrEqual, constant)
+
+proc constraintFromExpression(
+    expression: LayoutConstraintExpression,
+    constant = 0.0'f32,
+    multiplier = 1.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  let resolvedConstant =
+    if expression.xSecondItem.isNil:
+      expression.xConstant + constant - expression.xFirstOffset
+    else:
+      resolvedAnchorConstant(
+        expression.xFirstOffset,
+        expression.xSecondOffset * multiplier,
+        expression.xConstant + constant,
+      )
+  newAnchorConstraint(
+    expression.xFirstItem, expression.xFirstAttribute, expression.xRelation,
+    expression.xSecondItem, expression.xSecondAttribute, multiplier, resolvedConstant,
+    priority,
+  )
+
+proc cx*(
+    expression: LayoutConstraintExpression[LayoutXAxisAnchor],
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  expression.constraintFromExpression(constant = constant, priority = priority)
+
+proc cx*(
+    expression: LayoutConstraintExpression[LayoutYAxisAnchor],
+    constant = 0.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  expression.constraintFromExpression(constant = constant, priority = priority)
+
+proc cx*(
+    expression: LayoutConstraintExpression[LayoutDimensionAnchor],
+    constant = 0.0'f32,
+    multiplier = 1.0'f32,
+    priority = LayoutPriorityRequired,
+): LayoutConstraint =
+  expression.constraintFromExpression(
+    constant = constant, multiplier = multiplier, priority = priority
+  )
+
+proc cx*(constraint: LayoutConstraint): LayoutConstraint =
+  constraint
 
 proc greaterThanOrEqualTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
