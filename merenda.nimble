@@ -1,6 +1,6 @@
 version       = "0.3.0"
 author        = "Jaremy Creechley"
-description   = "Nim-native UI toolkit and Objective-C AppKit experiments"
+description   = "Nim-native UI toolkit"
 license       = "MPL-2.0"
 srcDir        = "src"
 
