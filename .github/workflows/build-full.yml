@@ -18,8 +18,8 @@ jobs:
         nimversion:
           - '2.2.10'
         os:
-          # - ubuntu-24.04
-          - macos-14
+          - ubuntu-latest
+          # - macos-14
           # - windows-2022
     steps:
     - uses: actions/checkout@v5
