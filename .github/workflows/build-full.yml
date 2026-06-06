@@ -19,7 +19,7 @@ jobs:
           - '2.2.10'
         os:
           - ubuntu-latest
-          # - macos-14
+          - macos-latest
           # - windows-2022
     steps:
     - uses: actions/checkout@v5
@@ -113,8 +113,6 @@ jobs:
         LIBGL_ALWAYS_SOFTWARE: "1"
         MESA_GL_VERSION_OVERRIDE: "3.3"
         MESA_GLSL_VERSION_OVERRIDE: "330"
-        VK_ICD_FILENAMES: "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
-        VK_DRIVER_FILES: "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
       run: |
         export XDG_RUNTIME_DIR="${RUNNER_TEMP}/xdg-runtime"
         mkdir -p "${XDG_RUNTIME_DIR}"
@@ -136,6 +134,12 @@ jobs:
           sleep 0.1
         done
         [[ -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]] || (cat "${RUNNER_TEMP}/weston.log" && exit 1)
+
+        LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f \( -name '*lvp*.json' -o -name '*lavapipe*.json' \) | head -n 1 || true)"
+        if [[ -n "${LVP_ICD}" ]]; then
+          export VK_ICD_FILENAMES="${LVP_ICD}"
+          export VK_DRIVER_FILES="${LVP_ICD}"
+        fi
 
         vulkaninfo --summary || true
         nim test
