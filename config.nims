@@ -54,7 +54,7 @@ task test, "run unit test":
         nimExec("r", file, platform = platformArg)
 
   for file in listFiles("examples"):
-    if isDefaultExample(file):
+    if nimFileStemHasPrefix(file, ""):
       nimExec("c", file)
 
 task test_compile, "compile unit tests without running":
