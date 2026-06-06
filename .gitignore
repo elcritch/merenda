@@ -1,6 +1,7 @@
 *
 !*/
 !*.*
+!LICENSE
 !.githooks
 !.githooks/pre-commit
 nim.cfg
