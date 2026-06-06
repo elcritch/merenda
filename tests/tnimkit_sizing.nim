@@ -76,6 +76,25 @@ suite "nimkit sizing":
     button.sizeToFit()
     check button.frame().size == natural
 
+  test "button reserved titles stabilize intrinsic width":
+    let button = newButton("Toggle Off")
+
+    let offWidth = button.intrinsicContentSize().width
+    button.title = "Toggle Mixed"
+    let mixedWidth = button.intrinsicContentSize().width
+    check mixedWidth > offWidth
+
+    button.title = "Toggle Off"
+    button.reservedTitles = ["Toggle Off", "Toggle On", "Toggle Mixed"]
+    let reservedWidth = button.intrinsicContentSize().width
+    check reservedWidth == mixedWidth
+
+    button.title = "Toggle On"
+    check button.intrinsicContentSize().width == reservedWidth
+    button.title = "Toggle Mixed"
+    check button.intrinsicContentSize().width == reservedWidth
+    check button.reservedTitles == @["Toggle Off", "Toggle On", "Toggle Mixed"]
+
   test "choice controls include indicators and hug horizontally":
     let
       checkbox = newCheckBox("Enabled", frame = initRect(0, 0, 20, 18))
