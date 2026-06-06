@@ -72,7 +72,7 @@ type EventDispatchResult = object
   handled: bool
   responder: Responder
 
-protocol WindowLifecycleProtocol:
+protocol WindowLifecycleProtocol {.selectorScope: protocol.}:
   method shouldSetContentView*(v: View): bool {.optional.}
 
 protocol WindowLifecycleEvents:
@@ -81,7 +81,7 @@ protocol WindowLifecycleEvents:
   proc willClose*(w: Window) {.signal.}
   proc didClose*(w: Window) {.signal.}
 
-protocol WindowFocusProtocol:
+protocol WindowFocusProtocol {.selectorScope: protocol.}:
   method shouldMakeFirstResponder*(r: Responder): bool {.optional.}
 
 protocol WindowFocusEvents:
@@ -90,8 +90,8 @@ protocol WindowFocusEvents:
 protocol WindowAppearanceEvents:
   proc didChangeEffectiveAppearance*(w: Window, appearance: Appearance) {.signal.}
 
-protocol WindowPopupProtocol:
-  method shouldDismissTransientSession*(reason: DismissReason): bool {.optional.}
+protocol WindowPopupProtocol {.selectorScope: protocol.}:
+  method shouldDismiss*(reason: DismissReason): bool {.optional.}
 
 protocol WindowPopupEvents:
   proc didDismissTransientSession*(w: Window, reason: DismissReason) {.signal.}
@@ -332,7 +332,7 @@ proc shouldMakeFirstResponder(window: Window, responder: Responder): bool =
 proc shouldDismissTransientSession(window: Window, reason: DismissReason): bool =
   if window.isNil:
     return false
-  window.trySendLocal(shouldDismissTransientSession(), reason).get(true)
+  window.trySendLocal(shouldDismiss(), reason).get(true)
 
 proc hasAppearance*(window: Window): bool =
   (not window.isNil) and window.xHasAppearance

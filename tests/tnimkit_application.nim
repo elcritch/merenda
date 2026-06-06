@@ -24,7 +24,7 @@ protocol WindowFocusSpyHooks of WindowFocusProtocol:
     windowHookAllowFirstResponder
 
 protocol WindowPopupSpyHooks of WindowPopupProtocol:
-  method shouldDismissTransientSession(window: Window, reason: DismissReason): bool =
+  method shouldDismiss(window: Window, reason: DismissReason): bool =
     windowHookEvents.add "shouldDismiss"
     windowHookAllowDismiss
 
