@@ -42,13 +42,13 @@ title.pinEdges(
 )
 
 activate(
-  cx(list.topAnchor == title.bottomAnchor, constant = 18.0),
+  cx(list.topAnchor == title.bottomAnchor + 18.0),
   cx(list.leftAnchor == title.leftAnchor),
   cx(list.widthAnchor == 188.0),
   cx(detailTitle.topAnchor == list.topAnchor + 4.0),
-  cx(detailTitle.leftAnchor == list.rightAnchor, constant = 18.0),
+  cx(detailTitle.leftAnchor == list.rightAnchor + 18.0),
   cx(detailTitle.rightAnchor == title.rightAnchor),
-  cx(detail.topAnchor == detailTitle.bottomAnchor, constant = 10.0),
+  cx(detail.topAnchor == detailTitle.bottomAnchor + 10.0),
   cx(detail.leftAnchor == detailTitle.leftAnchor),
   cx(detail.rightAnchor == detailTitle.rightAnchor),
 )

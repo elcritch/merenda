@@ -635,18 +635,17 @@ proc `<=`*(
 
 proc constraintFromExpression(
     expression: LayoutConstraintExpression,
-    constant = 0.0'f32,
     multiplier = 1.0'f32,
     priority = LayoutPriorityRequired,
 ): LayoutConstraint =
   let resolvedConstant =
     if expression.xSecondItem.isNil:
-      expression.xConstant + constant - expression.xFirstOffset
+      expression.xConstant - expression.xFirstOffset
     else:
       resolvedAnchorConstant(
         expression.xFirstOffset,
         expression.xSecondOffset * multiplier,
-        expression.xConstant + constant,
+        expression.xConstant,
       )
   newAnchorConstraint(
     expression.xFirstItem, expression.xFirstAttribute, expression.xRelation,
@@ -656,27 +655,22 @@ proc constraintFromExpression(
 
 proc cx*(
     expression: LayoutConstraintExpression[LayoutXAxisAnchor],
-    constant = 0.0'f32,
     priority = LayoutPriorityRequired,
 ): LayoutConstraint =
-  expression.constraintFromExpression(constant = constant, priority = priority)
+  expression.constraintFromExpression(priority = priority)
 
 proc cx*(
     expression: LayoutConstraintExpression[LayoutYAxisAnchor],
-    constant = 0.0'f32,
     priority = LayoutPriorityRequired,
 ): LayoutConstraint =
-  expression.constraintFromExpression(constant = constant, priority = priority)
+  expression.constraintFromExpression(priority = priority)
 
 proc cx*(
     expression: LayoutConstraintExpression[LayoutDimensionAnchor],
-    constant = 0.0'f32,
     multiplier = 1.0'f32,
     priority = LayoutPriorityRequired,
 ): LayoutConstraint =
-  expression.constraintFromExpression(
-    constant = constant, multiplier = multiplier, priority = priority
-  )
+  expression.constraintFromExpression(multiplier = multiplier, priority = priority)
 
 proc cx*(constraint: LayoutConstraint): LayoutConstraint =
   constraint
