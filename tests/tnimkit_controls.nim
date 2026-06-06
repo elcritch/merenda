@@ -75,7 +75,7 @@ suite "nimkit controls":
       field = newTextField("Value", frame = initRect(0, 0, 120, 24))
       spy = TextChangeSpy()
 
-    connect(field, textDidChange, spy, rememberTextDidChange)
+    field.connect(textDidChange, spy, rememberTextDidChange)
 
     field.text = "Changed"
     check spy.changeCount == 1

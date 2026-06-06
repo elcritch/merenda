@@ -398,7 +398,7 @@ proc initStackViewFields*(
   stackView.xAlignment = svaFill
   stackView.xDistribution = svdFill
   discard stackView.withProtocol(DefaultStackViewLayout)
-  connect(stackView, willRemoveSubview, stackView, removeArrangedSubview)
+  stackView.connect(willRemoveSubview, stackView, removeArrangedSubview)
   stackView.applyInitialFrame(frame)
 
 proc newStackView*(orientation = laVertical, frame: Rect = AutoRect): StackView =

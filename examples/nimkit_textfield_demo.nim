@@ -19,8 +19,8 @@ proc updateStatusOnTextChange(textField: TextField, sender: DynamicAgent) {.slot
   if sender == DynamicAgent(textField):
     updateStatus()
 
-connect(field, textDidChange, field, updateStatusOnTextChange)
-connect(secondField, textDidChange, secondField, updateStatusOnTextChange)
+field.connect(textDidChange, field, updateStatusOnTextChange)
+secondField.connect(textDidChange, secondField, updateStatusOnTextChange)
 
 root.background = initColor(0.95, 0.96, 0.98)
 layout.spacing = 10.0

@@ -85,7 +85,7 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) {.slot.}
 proc initLayoutSignalBus*(view: View) =
   if view.isNil:
     return
-  connect(view, layoutInputChanged, view, markLayoutInputDirty)
+  view.connect(layoutInputChanged, view, markLayoutInputDirty)
 
 proc markConstraintStorageChanged*(view: View) =
   if view.isNil:

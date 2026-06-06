@@ -97,7 +97,7 @@ proc onChoiceChanged(sender: DynamicAgent) =
 root.background = initColor(0.95, 0.96, 0.98)
 
 for field in [nameField, noteField]:
-  connect(field, textDidChange, field, onTextDidChange)
+  field.connect(textDidChange, field, onTextDidChange)
 
 pushButton.target = newActionTarget(pushAction, onPush)
 pushButton.action = pushAction

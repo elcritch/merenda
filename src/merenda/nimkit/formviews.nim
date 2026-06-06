@@ -331,7 +331,7 @@ proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   formView.xLabelAlignment = flaTrailing
   formView.xRowAlignment = fraCenter
   discard formView.withProtocol(DefaultFormViewLayout)
-  connect(formView, willRemoveSubview, formView, removeRowContaining)
+  formView.connect(willRemoveSubview, formView, removeRowContaining)
   formView.applyInitialFrame(frame)
 
 proc newFormView*(frame: Rect = AutoRect): FormView =

@@ -84,12 +84,12 @@ proc newMouseSpyView(frame: Rect): MouseSpyView =
 proc newLifecycleSpyView(frame: Rect): LifecycleSpyView =
   result = LifecycleSpyView()
   initViewFields(result, frame)
-  connect(result, viewWillMoveToSuperview, result, rememberViewWillMoveToSuperview)
-  connect(result, viewDidMoveToSuperview, result, rememberViewDidMoveToSuperview)
-  connect(result, viewWillMoveToWindow, result, rememberViewWillMoveToWindow)
-  connect(result, viewDidMoveToWindow, result, rememberViewDidMoveToWindow)
-  connect(result, didAddSubview, result, rememberDidAddSubview)
-  connect(result, willRemoveSubview, result, rememberWillRemoveSubview)
+  result.connect(viewWillMoveToSuperview, result, rememberViewWillMoveToSuperview)
+  result.connect(viewDidMoveToSuperview, result, rememberViewDidMoveToSuperview)
+  result.connect(viewWillMoveToWindow, result, rememberViewWillMoveToWindow)
+  result.connect(viewDidMoveToWindow, result, rememberViewDidMoveToWindow)
+  result.connect(didAddSubview, result, rememberDidAddSubview)
+  result.connect(willRemoveSubview, result, rememberWillRemoveSubview)
 
 proc newLayoutSpyView(frame: Rect): LayoutSpyView =
   result = LayoutSpyView()

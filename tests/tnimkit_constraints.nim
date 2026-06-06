@@ -610,7 +610,7 @@ suite "nimkit constraints":
       root = newView(frame = initRect(0, 0, 240, 120))
       spy = LayoutInvalidationSpy()
 
-    connect(root, layoutInputChanged, spy, record)
+    root.connect(layoutInputChanged, spy, record)
     root.layoutSubtreeIfNeeded()
 
     root.frame = initRect(0, 0, 260, 120)

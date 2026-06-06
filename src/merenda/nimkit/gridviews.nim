@@ -412,7 +412,7 @@ proc initGridViewFields*(gridView: GridView, frame: Rect = AutoRect) =
   gridView.xAlignment[drow] = gaFill
   gridView.xAlignment[dcol] = gaFill
   discard gridView.withProtocol(DefaultGridViewLayout)
-  connect(gridView, willRemoveSubview, gridView, removeGridSubview)
+  gridView.connect(willRemoveSubview, gridView, removeGridSubview)
   gridView.applyInitialFrame(frame)
 
 proc newGridView*(frame: Rect = AutoRect): GridView =
