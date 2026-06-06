@@ -88,19 +88,19 @@ proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
 
-protocol ListViewDataSource:
-  method numberOfRowsInListView*(listView: ListView): int {.optional.}
-  method listViewObjectValueForRow*(listView: ListView, row: int): string {.optional.}
+protocol ListViewDataSource {.selectorScope: protocol.}:
+  method rowCount*(listView: ListView): int {.optional.}
+  method objectValueForRow*(listView: ListView, row: int): string {.optional.}
 
 protocol ListViewEvents:
   proc selectionIsChanging*(listView: ListView, sender: DynamicAgent) {.signal.}
   proc selectionDidChange*(listView: ListView, sender: DynamicAgent) {.signal.}
   proc rowWasActivated*(listView: ListView, sender: DynamicAgent) {.signal.}
 
-protocol ListViewDelegate:
-  method listViewRowIsEnabled*(listView: ListView, row: int): bool {.optional.}
-  method listViewShouldSelectRow*(listView: ListView, row: int): bool {.optional.}
-  method listViewDrawRow*(
+protocol ListViewDelegate {.selectorScope: protocol.}:
+  method rowIsEnabled*(listView: ListView, row: int): bool {.optional.}
+  method shouldSelectRow*(listView: ListView, row: int): bool {.optional.}
+  method drawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
   ) {.optional.}
 
@@ -140,7 +140,7 @@ proc len*(listView: ListView): int =
     return 0
   let source = listView.dataSource()
   if not source.isNil:
-    let count = source.trySendLocal(numberOfRowsInListView(), listView)
+    let count = source.trySendLocal(rowCount(), listView)
     if count.isSome:
       return max(count.get(), 0)
   listView.xItems.len
@@ -168,9 +168,8 @@ proc `[]`*(listView: ListView, index: int): string =
   else:
     let source = listView.dataSource()
     if not source.isNil:
-      let item = source.trySendLocal(
-        listViewObjectValueForRow(), (listView: listView, row: index)
-      )
+      let item =
+        source.trySendLocal(objectValueForRow(), (listView: listView, row: index))
       if item.isSome:
         return item.get()
     if index < listView.xItems.len:
@@ -374,9 +373,8 @@ proc rowEnabled*(listView: ListView, index: int): bool =
   if listView.isNil or index < 0 or index >= listView.len() or not listView.isEnabled():
     return false
   if not listView.xDelegate.isNil:
-    let enabled = listView.xDelegate.trySendLocal(
-      listViewRowIsEnabled(), (listView: listView, row: index)
-    )
+    let enabled =
+      listView.xDelegate.trySendLocal(rowIsEnabled(), (listView: listView, row: index))
     if enabled.isSome:
       return enabled.get()
   true
@@ -386,7 +384,7 @@ proc rowSelectable*(listView: ListView, index: int): bool =
     return false
   if not listView.xDelegate.isNil:
     let selectable = listView.xDelegate.trySendLocal(
-      listViewShouldSelectRow(), (listView: listView, row: index)
+      shouldSelectRow(), (listView: listView, row: index)
     )
     if selectable.isSome:
       return selectable.get()
@@ -407,7 +405,7 @@ proc drawCustomListRow(
   if listView.isNil or listView.xDelegate.isNil or context.isNil:
     return false
   listView.xDelegate.sendLocalIfHandled(
-    listViewDrawRow(), (listView: listView, context: context, rect: rect, row: row)
+    drawRow(), (listView: listView, context: context, rect: rect, row: row)
   )
 
 proc listViewportSize(listView: ListView): Size =

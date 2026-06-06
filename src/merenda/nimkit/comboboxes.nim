@@ -36,20 +36,18 @@ proc comboBoxCell*(comboBox: ComboBox): ComboBoxCell
 proc dataSource*(comboBox: ComboBox): DynamicAgent
 proc highlightedIndex*(comboBox: ComboBox): int
 proc `highlightedIndex=`*(comboBox: ComboBox, index: int)
-proc popupListData(comboBox: ComboBox): PopupListData
-proc popupListActions(comboBox: ComboBox): PopupListActions
-proc popupList(comboBox: ComboBox): PopupListView
 proc visibleItemCount*(comboBox: ComboBox): int
 proc popupItemHeight*(comboBox: ComboBox): float32
 proc popupFirstItemIndex*(comboBox: ComboBox): int
-proc scrollPopupItemToVisible(comboBox: ComboBox, itemIndex: int)
-proc setPopupNeedsDisplay(comboBox: ComboBox)
-proc setHoveredPopupIndex(comboBox: ComboBox, index: int)
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
 proc popupScrollerKnobRect*(comboBox: ComboBox, bounds: Rect): Rect
 proc movePopupHighlight*(comboBox: ComboBox, delta: int)
+
+proc scrollPopupItemToVisible(comboBox: ComboBox, itemIndex: int)
+proc setPopupNeedsDisplay(comboBox: ComboBox)
+proc setHoveredPopupIndex(comboBox: ComboBox, index: int)
 proc movePopupHighlightTo(comboBox: ComboBox, index: int)
 proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int)
 proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool
@@ -65,6 +63,9 @@ proc openPopupWindow(comboBox: ComboBox)
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true)
 proc reactivateOwnerWindow(comboBox: ComboBox)
 proc updatePopupPresentation(comboBox: ComboBox)
+proc popupListData(comboBox: ComboBox): PopupListData
+proc popupListActions(comboBox: ComboBox): PopupListActions
+proc popupList(comboBox: ComboBox): PopupListView
 
 proc cellStringValue(cell: ComboBoxCell): string
 proc setCellSelectedIndex(cell: ComboBoxCell, index: int)
@@ -81,11 +82,9 @@ proc cellInsertItem(cell: ComboBoxCell, value: string, index: int)
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int)
 proc cellRemoveAllItems(cell: ComboBoxCell)
 
-protocol ComboBoxDataSource:
-  method numberOfItemsInComboBox*(comboBox: ComboBox): int {.optional.}
-  method comboBoxObjectValueForItemAtIndex*(
-    comboBox: ComboBox, index: int
-  ): string {.optional.}
+protocol ComboBoxDataSource {.selectorScope: protocol.}:
+  method itemCount*(comboBox: ComboBox): int {.optional.}
+  method objectValueAtIndex*(comboBox: ComboBox, index: int): string {.optional.}
 
 protocol ComboBoxEvents:
   proc selectionIsChanging*(comboBox: ComboBox, sender: DynamicAgent) {.signal.}
@@ -94,7 +93,7 @@ protocol ComboBoxEvents:
 protocol ComboBoxViewProtocol:
   method pointInside*(point: Point): bool
 
-protocol ComboBoxProtocol from ComboBox:
+protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   property selectedIndex -> int
   property popupOpen -> bool
   property maxVisibleItems -> int
@@ -172,7 +171,7 @@ protocol ComboBoxProtocol from ComboBox:
   method numberOfItems*(comboBox: ComboBox): int =
     let source = comboBox.dataSource()
     if not source.isNil:
-      let count = source.trySendLocal(numberOfItemsInComboBox(), comboBox)
+      let count = source.trySendLocal(itemCount(), comboBox)
       if count.isSome:
         return max(count.get(), 0)
     comboBox.comboBoxCell().cellNumberOfItems()
@@ -182,9 +181,8 @@ protocol ComboBoxProtocol from ComboBox:
       return ""
     let source = comboBox.dataSource()
     if not source.isNil:
-      let item = source.trySendLocal(
-        comboBoxObjectValueForItemAtIndex(), (comboBox: comboBox, index: index)
-      )
+      let item =
+        source.trySendLocal(objectValueAtIndex(), (comboBox: comboBox, index: index))
       if item.isSome:
         return item.get()
     comboBox.comboBoxCell().cellItemAtIndex(index)

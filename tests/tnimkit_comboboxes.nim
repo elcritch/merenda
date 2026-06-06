@@ -14,10 +14,10 @@ type
     lastSender: DynamicAgent
 
 protocol ComboDataSourceMethods of ComboBoxDataSource:
-  method numberOfItemsInComboBox(source: ComboDataSource, comboBox: ComboBox): int =
+  method itemCount(source: ComboDataSource, comboBox: ComboBox): int =
     source.items.len
 
-  method comboBoxObjectValueForItemAtIndex(
+  method objectValueAtIndex(
       source: ComboDataSource, comboBox: ComboBox, index: int
   ): string =
     if index < 0 or index >= source.items.len:
