@@ -573,6 +573,11 @@ proc constraintExpression(
     latNotAnAttribute, first.xOffset, 0.0'f32, constant,
   )
 
+proc constraintExpression(
+    first: LayoutDimensionAnchor, relation: LayoutRelation, constant: LayoutLength
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(relation, constant.resolveLayoutLength())
+
 proc `==`*(
     first, second: LayoutXAxisAnchor
 ): LayoutConstraintExpression[LayoutXAxisAnchor] =
@@ -623,13 +628,28 @@ proc `==`*(
 ): LayoutConstraintExpression[LayoutDimensionAnchor] =
   first.constraintExpression(lrEqual, constant)
 
+proc `==`*(
+    first: LayoutDimensionAnchor, constant: LayoutLength
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrEqual, constant)
+
 proc `>=`*(
     first: LayoutDimensionAnchor, constant: float32
 ): LayoutConstraintExpression[LayoutDimensionAnchor] =
   first.constraintExpression(lrGreaterThanOrEqual, constant)
 
+proc `>=`*(
+    first: LayoutDimensionAnchor, constant: LayoutLength
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrGreaterThanOrEqual, constant)
+
 proc `<=`*(
     first: LayoutDimensionAnchor, constant: float32
+): LayoutConstraintExpression[LayoutDimensionAnchor] =
+  first.constraintExpression(lrLessThanOrEqual, constant)
+
+proc `<=`*(
+    first: LayoutDimensionAnchor, constant: LayoutLength
 ): LayoutConstraintExpression[LayoutDimensionAnchor] =
   first.constraintExpression(lrLessThanOrEqual, constant)
 

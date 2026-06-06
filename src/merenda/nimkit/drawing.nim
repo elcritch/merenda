@@ -83,7 +83,7 @@ proc textLayout*(
     rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
 ): GlyphArrangement =
   let
-    font = defaultFont(13.0'f32)
+    font = defaultFont(DefaultFontSize)
     style = fs(font, fill(color.rgba))
   typeset(
     rect.toFigRect,
@@ -96,9 +96,9 @@ proc textLayout*(
 
 proc textNaturalSize*(text: string): nimkitTypes.Size =
   let
-    font = defaultFont(13.0'f32)
+    font = defaultFont(DefaultFontSize)
     style = fs(font, fill(initColor(0.0, 0.0, 0.0, 1.0).rgba))
-    lineHeight = max(13.0'f32, getLineHeightImpl(font))
+    lineHeight = max(DefaultFontSize, getLineHeightImpl(font))
     layout = typeset(
       bumpy.rect(0.0, 0.0, 10000.0, max(lineHeight, 100.0'f32)),
       [(style, text)],
@@ -156,8 +156,8 @@ proc caretRect*(
     return initRect(textRect.origin.x + x, textRect.origin.y + rect.y, 1.0, rect.h)
 
   let
-    font = defaultFont(13.0'f32)
-    lineHeight = max(13.0'f32, getLineHeightImpl(font))
+    font = defaultFont(DefaultFontSize)
+    lineHeight = max(DefaultFontSize, getLineHeightImpl(font))
   initRect(
     textRect.origin.x,
     textRect.origin.y + max((textRect.size.height - lineHeight) / 2.0'f32, 0.0),

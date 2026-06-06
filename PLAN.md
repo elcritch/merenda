@@ -166,6 +166,12 @@ Recently completed:
 - Stage layout work conservatively. Expand constraints through the existing
   Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
   conveniences only when controls and examples prove the need.
+- Expand layout length support beyond the current fixed-font `em` dimension
+  constant shortcut. A fuller `LayoutSize`/`LayoutLength` model should preserve
+  unresolved units through anchor expressions, resolve them against the relevant
+  view/theme/font context, and support offsets such as
+  `cx(label.topAnchor == field.bottomAnchor + 1'em)` without converting to
+  points too early.
 
 ## Open Questions
 

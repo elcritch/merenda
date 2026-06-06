@@ -1,4 +1,4 @@
-import std/math
+import std/[math, parseutils]
 
 import pkg/chroma
 
@@ -64,6 +64,14 @@ type
     lrGreaterThanOrEqual = 1
 
   LayoutPriority* = distinct float32
+
+  LayoutLengthKind* = enum
+    llPoints
+    llEm
+
+  LayoutLength* = object
+    kind*: LayoutLengthKind
+    value*: float32
 
   MouseButton* = enum
     mbPrimary
@@ -252,6 +260,7 @@ const
   LayoutPriorityLow* = LayoutPriority(250.0'f32)
   LayoutPriorityHigh* = LayoutPriority(750.0'f32)
   LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
+  DefaultFontSize* = 13.0'f32
 
 func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
@@ -266,6 +275,28 @@ func direction*(axis: LayoutAxis): Direction =
   case axis
   of laHorizontal: dcol
   of laVertical: drow
+
+func initLayoutLength*(kind: LayoutLengthKind, value: float32): LayoutLength =
+  LayoutLength(kind: kind, value: value)
+
+func points*(value: float32): LayoutLength =
+  initLayoutLength(llPoints, value)
+
+func em*(value: float32): LayoutLength =
+  initLayoutLength(llEm, value)
+
+proc `'em`*(raw: string): LayoutLength =
+  var value: float
+  if parseFloat(raw, value) == 0:
+    return em(0.0'f32)
+  em(value.float32)
+
+func resolveLayoutLength*(length: LayoutLength, fontSize = DefaultFontSize): float32 =
+  case length.kind
+  of llPoints:
+    length.value
+  of llEm:
+    length.value * fontSize
 
 func isAutoMetric*(value: float32): bool =
   value.isNaN
