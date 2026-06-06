@@ -115,6 +115,36 @@ suite "nimkit stack views":
     check field.frame() == initRect(0.0, 0.0, 80.0, 20.0)
     check label.frame() == initRect(90.0, 0.0, 40.0, 20.0)
 
+  test "fill distribution leaves required hugging views at natural size":
+    let
+      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 80))
+      first = newFixedIntrinsicView(40, 20)
+      second = newFixedIntrinsicView(40, 10)
+
+    first.huggingPriority[drow] = LayoutPriorityRequired
+    second.huggingPriority[drow] = LayoutPriorityRequired
+    stack.addArrangedSubview(first, second)
+    stack.layoutSubtreeIfNeeded()
+
+    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
+    check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
+
+  test "flexible spacers absorb extra stack space":
+    let
+      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 100))
+      first = newFixedIntrinsicView(40, 20)
+      second = newFixedIntrinsicView(40, 10)
+
+    first.huggingPriority[drow] = LayoutPriorityRequired
+    second.huggingPriority[drow] = LayoutPriorityRequired
+    stack.addArrangedSubview(first, second)
+    let spacer = stack.addFlexibleSpacer()
+    stack.layoutSubtreeIfNeeded()
+
+    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
+    check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
+    check spacer.frame() == initRect(0.0, 46.0, 80.0, 54.0)
+
   test "arranged subview content changes invalidate stack and parent lazily":
     let
       root = newView(frame = initRect(0, 0, 300, 120))

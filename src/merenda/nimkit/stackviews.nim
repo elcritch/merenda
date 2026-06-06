@@ -27,6 +27,8 @@ type
     xAlignment: StackViewAlignment
     xDistribution: StackViewDistribution
 
+  FlexibleSpacerView = ref object of View
+
 const LayoutEpsilon = 0.001'f32
 
 func normalizedSpacing(value: float32): float32 =
@@ -81,6 +83,26 @@ func initStackFrame(
     initRect(mainOrigin, crossOrigin, mainLength, crossLength)
   of laVertical:
     initRect(crossOrigin, mainOrigin, crossLength, mainLength)
+
+func crossAxis(axis: LayoutAxis): LayoutAxis =
+  case axis
+  of laHorizontal: laVertical
+  of laVertical: laHorizontal
+
+protocol FlexibleSpacerLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(spacer: FlexibleSpacerView): IntrinsicSize =
+    initIntrinsicSize(0.0, 0.0)
+
+proc newFlexibleSpacer*(axis = laVertical, frame: Rect = AutoRect): View =
+  let spacer = FlexibleSpacerView()
+  initViewFields(spacer, frame)
+  discard spacer.withProtocol(FlexibleSpacerLayout)
+  result = spacer
+  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.setHuggingPriority(LayoutPriorityLow, axis)
+  result.setCompressionPriority(LayoutPriorityLow, axis)
+  result.setHuggingPriority(LayoutPriorityRequired, axis.crossAxis)
+  result.setCompressionPriority(LayoutPriorityRequired, axis.crossAxis)
 
 proc invalidateStackLayout(stackView: StackView) =
   if stackView.isNil:
@@ -198,6 +220,8 @@ proc adjustFillSizes(
     growing = delta > 0.0'f32
     priority = children.lowestAdjustmentPriority(stackView.xOrientation, growing)
     count = children.countPriority(stackView.xOrientation, growing, priority)
+  if growing and priority == LayoutPriorityRequired:
+    return
   if count <= 0:
     return
 
@@ -374,6 +398,12 @@ proc addArrangedSubview*(stackView: StackView, child: View) =
 proc addArrangedSubview*(stackView: StackView, children: varargs[View]) =
   for child in children:
     stackView.addArrangedSubview(child)
+
+proc addFlexibleSpacer*(stackView: StackView): View {.discardable.} =
+  if stackView.isNil:
+    return nil
+  result = newFlexibleSpacer(stackView.xOrientation)
+  stackView.addArrangedSubview(result)
 
 proc removeArrangedSubview*(stackView: StackView, child: View) =
   let index = stackView.arrangedIndex(child)

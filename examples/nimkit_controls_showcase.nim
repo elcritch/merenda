@@ -150,10 +150,13 @@ buttonRow.addArrangedSubview(pushButton, toggleButton)
 inputColumn.addArrangedSubview(
   inputTitle, nameField, noteField, actionTitle, buttonRow, actionCountLabel
 )
+inputColumn.addFlexibleSpacer()
 choiceColumn.addArrangedSubview(
   choiceTitle, downloads, notifications, sync, sizeTitle, small, medium, large
 )
+choiceColumn.addFlexibleSpacer()
 popupColumn.addArrangedSubview(popupTitle, priority, color)
+popupColumn.addFlexibleSpacer()
 bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
 layout.addArrangedSubview(title, bodyRow, summary)
 
