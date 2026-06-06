@@ -99,6 +99,35 @@ suite "nimkit stack views":
     check first.frame() == initRect(0.0, 0.0, 60.0, 24.0)
     check second.frame() == initRect(62.0, 0.0, 60.0, 24.0)
 
+  test "natural distribution leaves surplus as trailing slack":
+    let
+      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 100))
+      first = newFixedIntrinsicView(40, 20)
+      second = newFixedIntrinsicView(40, 10)
+
+    stack.distribution = svdNatural
+    stack.addArrangedSubview(first, second)
+    stack.layoutSubtreeIfNeeded()
+
+    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
+    check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
+
+  test "equal spacing distribution keeps natural sizes and expands gaps":
+    let
+      stack = newStackView(laHorizontal, frame = initRect(0, 0, 100, 24))
+      first = newFixedIntrinsicView(10, 10)
+      second = newFixedIntrinsicView(20, 10)
+      third = newFixedIntrinsicView(30, 10)
+
+    stack.spacing = 5.0
+    stack.distribution = svdEqualSpacing
+    stack.addArrangedSubview(first, second, third)
+    stack.layoutSubtreeIfNeeded()
+
+    check first.frame() == initRect(0.0, 0.0, 10.0, 24.0)
+    check second.frame() == initRect(30.0, 0.0, 20.0, 24.0)
+    check third.frame() == initRect(70.0, 0.0, 30.0, 24.0)
+
   test "fill distribution expands lower hugging priority views first":
     let
       stack = newStackView(laHorizontal, frame = initRect(0, 0, 130, 20))

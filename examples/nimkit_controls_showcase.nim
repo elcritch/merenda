@@ -142,6 +142,8 @@ for column in [inputColumn, choiceColumn, popupColumn]:
   column.spacing = 10.0
   column.alignment = svaFill
 
+popupColumn.distribution = svdNatural
+
 buttonRow.spacing = 8.0
 buttonRow.alignment = svaFill
 buttonRow.distribution = svdFillEqually
@@ -156,7 +158,6 @@ choiceColumn.addArrangedSubview(
 )
 choiceColumn.addFlexibleSpacer()
 popupColumn.addArrangedSubview(popupTitle, priority, color)
-popupColumn.addFlexibleSpacer()
 bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
 layout.addArrangedSubview(title, bodyRow, summary)
 
