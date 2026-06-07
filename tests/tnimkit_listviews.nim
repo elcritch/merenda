@@ -406,6 +406,30 @@ suite "nimkit list views":
     check listView.selectedIndexes == newSeq[int]()
     check listView.selectedIndex == -1
 
+  test "list view exposes selected range convenience APIs":
+    let listView = newListView(
+      ["One", "Two", "Three", "Four", "Five", "Six"], frame = initRect(0, 0, 120, 46)
+    )
+
+    check listView.selectedRange == 0 .. -1
+    check listView.selectedRanges == newSeq[Slice[int]]()
+
+    listView.selectionMode = lsmExtended
+    listView.selectedRange = 1 .. 3
+    check listView.selectedIndexes == @[1, 2, 3]
+    check listView.selectedRange == 1 .. 3
+    check listView.selectedRanges == @[1 .. 3]
+    check listView.selectedIndex == 1
+
+    listView.selectedIndexes = [0, 2, 3, 5]
+    check listView.selectedRange == 0 .. 0
+    check listView.selectedRanges == @[0 .. 0, 2 .. 3, 5 .. 5]
+
+    listView.selectionMode = lsmSingle
+    listView.selectedRange = 2 .. 4
+    check listView.selectedIndexes == @[2]
+    check listView.selectedRange == 2 .. 2
+
   test "list view extended keyboard selection uses anchor and lead rows":
     let
       window = newWindow("List extended keyboard", frame = initRect(0, 0, 220, 160))

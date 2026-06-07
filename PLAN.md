@@ -32,20 +32,17 @@ target is enough Cocoa/AppKit-like behavior to support complex applications:
 sidebars, inspectors, pickers, logs, search results, simple data browsers, and
 future table/outline-style controls.
 
-1. Watch for caller-driven selection convenience APIs:
-   - add selected range convenience APIs only if real callers need them
-2. Finish row virtualization polish:
+1. Finish row virtualization polish:
    - keep reusable row slots private until the cell/view customization shape is
      clear
-3. Add AppKit-like keyboard and focus behavior:
-   - up/down/page/home/end are in place for fixed-height rows
+2. Add AppKit-like keyboard and focus behavior:
    - focus ring and first-responder behavior
    - activation through double-click
-4. Add richer list affordances:
+3. Add richer list affordances:
    - alternating row backgrounds
    - separators/grid lines if theme roles support them
    - row hover and pressed states
-5. Defer full table/outline APIs until this base is solid:
+4. Defer full table/outline APIs until this base is solid:
    - column headers
    - sortable columns
    - resizable/reorderable columns

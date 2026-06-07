@@ -120,6 +120,8 @@ proc selectedIndex*(listView: ListView): int
 proc selectionLeadIndex(listView: ListView): int
 proc selectionSummary*(listView: ListView): ListSelectionSummary
 proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary]
+proc selectedRange*(listView: ListView): Slice[int]
+proc selectedRanges*(listView: ListView): seq[Slice[int]]
 proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
@@ -858,6 +860,35 @@ proc listRowState(listView: ListView, index: int): ListRowState =
 proc selectedIndexes*(listView: ListView): seq[int] =
   listView.xSelectedIndexes
 
+proc selectedRange*(listView: ListView): Slice[int] =
+  let ranges = listView.selectedRanges()
+  if ranges.len == 0:
+    0 .. -1
+  else:
+    ranges[0]
+
+proc selectedRanges*(listView: ListView): seq[Slice[int]] =
+  if listView.xSelectedIndexes.len == 0:
+    return @[]
+  var
+    firstIndex = listView.xSelectedIndexes[0]
+    previousIndex = firstIndex
+  for offset in 1 ..< listView.xSelectedIndexes.len:
+    let index = listView.xSelectedIndexes[offset]
+    if index == previousIndex + 1:
+      previousIndex = index
+    else:
+      result.add firstIndex .. previousIndex
+      firstIndex = index
+      previousIndex = index
+  result.add firstIndex .. previousIndex
+
+proc indexesInRange(selectionRange: Slice[int]): seq[int] =
+  if selectionRange.b < selectionRange.a:
+    return @[]
+  for index in selectionRange.a .. selectionRange.b:
+    result.add index
+
 proc applySelectedIndexes(
     listView: ListView, indexes: openArray[int], anchor: int, lead: int
 ) =
@@ -900,6 +931,10 @@ proc `selectedIndexes=`*(listView: ListView, indexes: openArray[int]) =
   listView.applySelectedIndexes(
     nextIndexes, firstSelectedIndex(nextIndexes), firstSelectedIndex(nextIndexes)
   )
+
+proc `selectedRange=`*(listView: ListView, selectionRange: Slice[int]) =
+  let indexes = selectionRange.indexesInRange()
+  listView.selectedIndexes = indexes
 
 proc selectItemAtIndex(listView: ListView, index: int) =
   if listView.xSelectionMode == lsmNone:
