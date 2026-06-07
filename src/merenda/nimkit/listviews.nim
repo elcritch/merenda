@@ -1069,8 +1069,6 @@ proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
     result.last = result.first
 
 proc configureRowView(rowView: ListRowView, itemIndex: int) =
-  if rowView.isNil:
-    return
   let listView = rowView.listView()
   if listView.isNil or listView.xContentView.isNil:
     return
