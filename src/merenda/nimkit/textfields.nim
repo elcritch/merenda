@@ -24,13 +24,18 @@ type
 
   TextFieldCell* = ref object of ActionCell
 
+  TextFieldFlag = enum
+    tfEditable
+    tfSelectable
+    tfEditing
+
+  TextFieldFlags = set[TextFieldFlag]
+
   TextField* = ref object of Control
     xStringValue: string
     xAlignment: TextAlignment
     xTextColor: Color
-    xEditable: bool
-    xSelectable: bool
-    xEditing: bool
+    xFlags: TextFieldFlags
     xInsertionPoint: int
     xSelectionAnchor: int
 
@@ -84,27 +89,33 @@ protocol TextFieldProtocol from TextField:
     textField.setNeedsDisplay(true)
 
   method isEditable*(textField: TextField): bool =
-    textField.xEditable
+    tfEditable in textField.xFlags
 
   method setEditable*(textField: TextField, editable: bool) =
-    if textField.xEditable == editable:
+    if (tfEditable in textField.xFlags) == editable:
       return
-    textField.xEditable = editable
-    textField.setAcceptsFirstResponder(editable or textField.xSelectable)
+    if editable:
+      textField.xFlags.incl(tfEditable)
+    else:
+      textField.xFlags.excl(tfEditable)
+    textField.setAcceptsFirstResponder(editable or textField.isSelectable())
     textField.invalidateIntrinsicContentSize()
 
   method isSelectable*(textField: TextField): bool =
-    textField.xSelectable
+    tfSelectable in textField.xFlags
 
   method setSelectable*(textField: TextField, selectable: bool) =
-    if textField.xSelectable == selectable:
+    if (tfSelectable in textField.xFlags) == selectable:
       return
-    textField.xSelectable = selectable
+    if selectable:
+      textField.xFlags.incl(tfSelectable)
+    else:
+      textField.xFlags.excl(tfSelectable)
     textField.setAcceptsFirstResponder(selectable or textField.isEditable)
     textField.invalidateIntrinsicContentSize()
 
   method isEditing*(textField: TextField): bool =
-    textField.xEditing
+    tfEditing in textField.xFlags
 
   method selectedRange(textField: TextField): TextRange =
     let
@@ -129,15 +140,15 @@ protocol TextFieldProtocol from TextField:
 
   method becomeFirstResponder(textField: TextField): bool =
     if not textField.isEnabled or (
-      not textField.xEditable and not textField.xSelectable
+      not textField.isEditable() and not textField.isSelectable()
     ):
       return false
-    textField.xEditing = true
+    textField.xFlags.incl(tfEditing)
     textField.selectAllText()
     true
 
   method resignFirstResponder(textField: TextField): bool =
-    textField.xEditing = false
+    textField.xFlags.excl(tfEditing)
     textField.setNeedsDisplay(true)
     true
 
@@ -206,7 +217,7 @@ proc selectAllText(textField: TextField) =
   textField.setNeedsDisplay(true)
 
 proc replaceSelectedText(textField: TextField, insertion: string) =
-  if textField.isNil or not textField.xEditable:
+  if textField.isNil or not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -218,7 +229,7 @@ proc replaceSelectedText(textField: TextField, insertion: string) =
   textField.setEditedString(value, cursor, cursor)
 
 proc deleteBackwardText(textField: TextField) =
-  if textField.isNil or not textField.xEditable:
+  if textField.isNil or not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -234,7 +245,7 @@ proc deleteBackwardText(textField: TextField) =
   textField.setEditedString(value, cursor, cursor)
 
 proc deleteForwardText(textField: TextField) =
-  if textField.isNil or not textField.xEditable:
+  if textField.isNil or not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -250,7 +261,7 @@ proc deleteForwardText(textField: TextField) =
   textField.setEditedString(value, selected.start, selected.start)
 
 proc deleteWordBackwardText(textField: TextField) =
-  if textField.isNil or not textField.xEditable:
+  if textField.isNil or not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -265,7 +276,7 @@ proc deleteWordBackwardText(textField: TextField) =
   textField.setEditedString(value, cursor, cursor)
 
 proc deleteWordForwardText(textField: TextField) =
-  if textField.isNil or not textField.xEditable:
+  if textField.isNil or not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -333,7 +344,7 @@ proc `selectedRange=`*(textField: TextField, value: TextRange) =
 
 protocol DefaultTextFieldInput of TextInputProtocol:
   method insertText(textField: TextField, text: string) =
-    if textField.xEditable and text.isInsertableText:
+    if textField.isEditable() and text.isInsertableText:
       textField.replaceSelectedText(text)
 
 protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
@@ -356,7 +367,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
     textField.deleteWordForwardText()
 
   method moveLeft(textField: TextField, args: ActionArgs) =
-    if not textField.xEditable and not textField.xSelectable:
+    if not textField.isEditable() and not textField.isSelectable():
       return
     let selected = textField.currentSelection()
     if selected.stop > selected.start:
@@ -365,7 +376,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
       textField.setCursor(selected.start - 1)
 
   method moveRight(textField: TextField, args: ActionArgs) =
-    if not textField.xEditable and not textField.xSelectable:
+    if not textField.isEditable() and not textField.isSelectable():
       return
     let selected = textField.currentSelection()
     if selected.stop > selected.start:
@@ -374,7 +385,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
       textField.setCursor(selected.stop + 1)
 
   method moveWordLeft(textField: TextField, args: ActionArgs) =
-    if not textField.xEditable and not textField.xSelectable:
+    if not textField.isEditable() and not textField.isSelectable():
       return
     let selected = textField.currentSelection()
     if selected.stop > selected.start:
@@ -383,7 +394,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
       textField.setCursor(textField.xStringValue.previousWordBoundary(selected.start))
 
   method moveWordRight(textField: TextField, args: ActionArgs) =
-    if not textField.xEditable and not textField.xSelectable:
+    if not textField.isEditable() and not textField.isSelectable():
       return
     let selected = textField.currentSelection()
     if selected.stop > selected.start:
@@ -392,30 +403,30 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
       textField.setCursor(textField.xStringValue.nextWordBoundary(selected.stop))
 
   method moveToBeginningOfLine(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(0)
 
   method moveToEndOfLine(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(textField.runeCount)
 
   method moveLeftAndModifySelection(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(textField.xInsertionPoint - 1, extending = true)
 
   method moveRightAndModifySelection(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(textField.xInsertionPoint + 1, extending = true)
 
   method moveWordLeftAndModifySelection(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(
         textField.xStringValue.previousWordBoundary(textField.xInsertionPoint),
         extending = true,
       )
 
   method moveWordRightAndModifySelection(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(
         textField.xStringValue.nextWordBoundary(textField.xInsertionPoint),
         extending = true,
@@ -424,11 +435,11 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
   method moveToBeginningOfLineAndModifySelection(
       textField: TextField, args: ActionArgs
   ) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(0, extending = true)
 
   method moveToEndOfLineAndModifySelection(textField: TextField, args: ActionArgs) =
-    if textField.xEditable or textField.xSelectable:
+    if textField.isEditable() or textField.isSelectable():
       textField.setCursor(textField.runeCount, extending = true)
 
 protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
@@ -474,11 +485,13 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
 
 protocol DefaultTextFieldEvents of ResponderEventProtocol:
   method mouseDown(textField: TextField, event: MouseEvent) =
-    if event.button == mbPrimary and (textField.xEditable or textField.xSelectable):
+    if event.button == mbPrimary and (
+      textField.isEditable() or textField.isSelectable()
+    ):
       textField.setCursor(textField.runeCount)
 
   method keyDown(textField: TextField, event: KeyEvent) =
-    if textField.xEditable and event.shouldInsertText():
+    if textField.isEditable() and event.shouldInsertText():
       textField.replaceSelectedText(event.text)
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
@@ -532,8 +545,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   textField.xStringValue = value
   textField.xAlignment = taLeft
   textField.xTextColor = initColor(0.08, 0.09, 0.11)
-  textField.xEditable = true
-  textField.xSelectable = true
+  textField.xFlags = {tfEditable, tfSelectable}
   textField.xInsertionPoint = value.runeLen
   textField.xSelectionAnchor = textField.xInsertionPoint
   textField.setAcceptsFirstResponder(true)
