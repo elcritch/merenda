@@ -16,6 +16,23 @@ type
     lsmMultiple
     lsmExtended
 
+  ListVisibleRowSummary* = object
+    index*: int
+    text*: string
+    rect*: Rect
+    selected*: bool
+    highlighted*: bool
+    enabled*: bool
+    focused*: bool
+
+  ListSelectionSummary* = object
+    mode*: ListSelectionMode
+    selectedIndex*: int
+    selectedIndexes*: seq[int]
+    anchorIndex*: int
+    leadIndex*: int
+    hasSelection*: bool
+
   ListRowView = ref object of View
     xListView: ListView
     xRow: ListRowState
@@ -95,6 +112,8 @@ proc scrollRows*(listView: ListView, delta: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
 proc selectedIndex*(listView: ListView): int
 proc selectionLeadIndex(listView: ListView): int
+proc selectionSummary*(listView: ListView): ListSelectionSummary
+proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary]
 proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
@@ -806,6 +825,19 @@ proc selectionContains(listView: ListView, index: int): bool =
       return true
   false
 
+proc listRowState(listView: ListView, index: int): ListRowState =
+  if index notin 0 ..< listView.len():
+    initListRowState(-1, "", enabled = false)
+  else:
+    initListRowState(
+      index,
+      listView[index],
+      selected = listView.selectionContains(index),
+      highlighted = index == listView.highlightedIndex(),
+      enabled = listView.rowEnabled(index),
+      focused = listView.isFocused(),
+    )
+
 proc selectedIndexes*(listView: ListView): seq[int] =
   listView.xSelectedIndexes
 
@@ -951,6 +983,16 @@ proc selectionLeadIndex(listView: ListView): int =
   else:
     listView.selectedIndex()
 
+proc selectionSummary*(listView: ListView): ListSelectionSummary =
+  ListSelectionSummary(
+    mode: listView.selectionMode(),
+    selectedIndex: listView.selectedIndex(),
+    selectedIndexes: listView.selectedIndexes(),
+    anchorIndex: listView.xSelectionAnchor,
+    leadIndex: listView.selectionLeadIndex(),
+    hasSelection: listView.xSelectedIndexes.len > 0,
+  )
+
 proc moveSelectionTo(listView: ListView, index: int, extend = false, direction = 1) =
   if listView.len() == 0 or listView.selectionMode() == lsmNone:
     return
@@ -992,22 +1034,36 @@ proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   if result.last < result.first:
     result.last = result.first
 
+proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary] =
+  if listView.isNil:
+    return @[]
+  listView.tileListContent()
+  let contentView = listView.contentView()
+  if contentView.isNil:
+    return @[]
+  let rows = contentView.visibleContentRows()
+  for index in rows.first ..< rows.last:
+    let
+      row = listView.listRowState(index)
+      contentRect = contentView.listContentItemRect(index)
+      rect =
+        contentView.rectToView(contentRect, listView).intersection(listView.bounds())
+    if not rect.isEmpty:
+      result.add ListVisibleRowSummary(
+        index: row.index,
+        text: row.text,
+        rect: rect,
+        selected: row.selected,
+        highlighted: row.highlighted,
+        enabled: row.enabled,
+        focused: row.focused,
+      )
+
 proc configureRowView(rowView: ListRowView, itemIndex: int) =
   let listView = rowView.listView()
   if listView.xContentView.isNil:
     return
-  rowView.xRow =
-    if itemIndex notin 0 ..< listView.len():
-      initListRowState(-1, "", enabled = false)
-    else:
-      initListRowState(
-        itemIndex,
-        listView[itemIndex],
-        selected = listView.selectionContains(itemIndex),
-        highlighted = itemIndex == listView.highlightedIndex(),
-        enabled = listView.rowEnabled(itemIndex),
-        focused = listView.isFocused(),
-      )
+  rowView.xRow = listView.listRowState(itemIndex)
   rowView.frame = listView.xContentView.listContentItemRect(itemIndex)
 
 proc removeLastRowView(contentView: ListContentView) =

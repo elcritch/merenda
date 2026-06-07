@@ -32,63 +32,8 @@ target is enough Cocoa/AppKit-like behavior to support complex applications:
 sidebars, inspectors, pickers, logs, search results, simple data browsers, and
 future table/outline-style controls.
 
-Recently completed:
-- `ScrollView` now has a real `ClipView`, explicit document/content ownership,
-  content offsets derived from clip-view bounds, intrinsic sizing separated from
-  document size, and sibling scroller views tiled through one reflection path.
-- Scroller views now handle direct interaction: gutter clicks page content along
-  the scroller axis, and knob dragging maps track motion back to content
-  offsets with normal clamping.
-- Scroll routing now carries phase/momentum metadata, preserves momentum target
-  routing, uses `wantsForwardedScrollEvents`, and keeps edge-forwarding policy
-  out of the main public scroll API.
-- Programmatic scroll helpers include exact offsets, `scrollRectToVisible`, and
-  normalized fraction scrolling with independent `x`/`y` axes.
-- List and popup row-window math now flows through `ListViewport` backed by the
-  shared `ScrollViewport` helpers, covering row offset clamping, scroll-by,
-  scroll-to-visible, and scroll indicator progress.
-- Standalone `ListView` now owns a non-hit-testable `ClipView` and a
-  non-focusable `ListContentView` row document. Row sizing, visible-row drawing,
-  point-to-row mapping, and `firstVisibleIndex` now flow through the clip
-  bounds origin while `ListView` keeps the public control, selection, keyboard,
-  and target/action surface.
-- Standalone `ListView` now owns a sibling `ListScroller` above its clipped row
-  document. The list scroller uses the shared `ScrollView` scroller metrics and
-  renderer, reserves a scroller strip from row content, and supports gutter
-  paging plus knob dragging while preserving the row-based public scroll API.
-- `ListView` now has selector-backed data source hooks for row count and row
-  value lookup, delegate hooks for selection changes and activation, and a
-  first real selection model with none, single, multiple, and extended modes.
-  Extended selection tracks anchor/lead rows, supports Shift range extension
-  from mouse and keyboard, and supports command/control discontiguous toggles.
-- View frame/layout updates now preserve existing bounds origins, so clip-view
-  scroll positions survive display preparation and constraint/layout passes.
-- `ListContentView` now virtualizes fixed-height rows as reusable private row
-  views. The row slots are non-focusable, non-hit-testable, retargeted from the
-  clip-view visible rect, and keep row reuse separate from data ownership.
-- `ListView` delegates can override visible row rendering through
-  `listViewDrawRow` with a plain `ListRowState` and row-local bounds. Custom
-  renderers can call `drawListRow` to reuse the default themed row drawing
-  without depending on private reusable row views.
-- `ListView` delegates can control row policy through `listViewRowIsEnabled`
-  and `listViewShouldSelectRow`. Disabled rows feed `ListRowState.enabled`,
-  disabled and nonselectable rows are filtered out of selection state, and
-  mouse/keyboard selection skips rows the delegate marks unavailable.
-- `ListView` delegates can now report per-row policy height and optional row
-  styling. Local `items` remain the simple default data path, row state stays a
-  plain value, default row drawing can apply delegate-provided fill/text
-  overrides, and row-height policy feeds measurement.
-- `ListView` row-height policy now follows Cocoa's table-view shape: delegates
-  can implement `heightOfRow`, row heights are cached, `reloadData()` clears the
-  cache, `noteHeightOfRowsChanged`/`noteHeightOfRowChanged` explicitly retile
-  changed rows, and content geometry, hit testing, row reuse, and scrolling use
-  the resolved variable heights.
-
-1. Polish selection APIs and diagnostics:
-   - add selected range convenience APIs if callers need them
-   - add scroll-to-selection helpers
-   - add accessibility/debug summaries for visible rows and selection state
-   - keep delegate notifications before and after real selection changes
+1. Watch for caller-driven selection convenience APIs:
+   - add selected range convenience APIs only if real callers need them
 2. Finish row virtualization polish:
    - keep reusable row slots private until the cell/view customization shape is
      clear
