@@ -375,9 +375,9 @@ suite "nimkit rendering":
     theme[srListView, StyleFocusRingWidth] = 3.0
     theme[srListView, StyleFocusRingInset] = -1.0
     theme[srListView, StyleFocusRingColor] = focusColor
-    theme[srListItem, {StyleState.selected}, StyleFill] = selectedFill
-    theme[srListItem, {StyleState.selected}, StyleTextColor] = selectedText
-    theme[srListItem, {StyleState.hovered}, StyleFill] = hoverFill
+    theme[srListItem, {ssSelected}, StyleFill] = selectedFill
+    theme[srListItem, {ssSelected}, StyleTextColor] = selectedText
+    theme[srListItem, {ssHovered}, StyleFill] = hoverFill
     theme[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 5.0)
 
     listView.rowHeight = 20.0
@@ -479,7 +479,7 @@ suite "nimkit rendering":
     let activeFill = initColor(0.8, 0.2, 0.1, 1.0)
     var theme = initTheme()
     theme[srButton, StyleFill] = initColor(0.1, 0.1, 0.1, 1.0)
-    theme[srButton, {StyleState.active}, StyleFill] = activeFill
+    theme[srButton, {ssActive}, StyleFill] = activeFill
 
     root.addSubview(button)
     button.active = true
@@ -538,8 +538,8 @@ suite "nimkit rendering":
 
     var theme = initTheme()
     for role in [srCheckBox, srRadioButton]:
-      theme[role, {StyleState.selected}, StyleFill] = selectedFill
-      theme[role, {StyleState.selected}, StyleMarkColor] = markFill
+      theme[role, {ssSelected}, StyleFill] = selectedFill
+      theme[role, {ssSelected}, StyleMarkColor] = markFill
       theme[role, StyleIndicatorSize] = 12.0
       theme[role, StyleIndicatorSpacing] = 5.0
       theme[role, StyleTextInsets] = initEdgeInsets(0.0, 3.0)
