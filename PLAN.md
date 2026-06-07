@@ -40,29 +40,21 @@ ranges, keyboard/focus behavior, row activation, row states, and list drawing
 affordances. Keep `ListView` as the simple single-column control; extract shared
 row infrastructure only when the table implementation proves the boundary.
 
-1. Reuse and generalize row virtualization:
-   - virtualize rows first and render all visible columns for each visible row
-   - keep reusable row/cell slots private until custom cell lifetime and reuse
-     semantics are clear
-   - support hosted views per visible cell, plus a cheaper text-cell path for
-     common data browsers
-   - preserve ListView's visible-row summaries and activation behavior where the
-     concepts still apply
-2. Implement table layout and headers:
+1. Implement table layout and headers:
    - compute column frames from ordered `TableColumn` widths
    - add a header band with column title rendering, hover/pressed state, focus
      handoff, and hit testing
    - support vertical scrolling in the first milestone; add horizontal scrolling
      once total column width can exceed the viewport
    - keep header, row, cell, and grid metrics in theme/appearance types
-3. Add table affordances in AppKit order:
+2. Add table affordances in AppKit order:
    - alternating row backgrounds, row hover/pressed states, separators, and grid
      lines using existing `WidgetState` and theme roles
    - column resizing with minimum/maximum constraints
    - sort request state and sort indicator rendering; let callers own the data
      ordering instead of sorting opaque data internally
    - column reordering after resizing and sorting are solid
-4. Defer advanced table/outline behavior until the base is solid:
+3. Defer advanced table/outline behavior until the base is solid:
    - editable cells and commit/cancel flow
    - cell selection and column selection
    - drag reordering

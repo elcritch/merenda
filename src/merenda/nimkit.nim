@@ -35,7 +35,7 @@ export formviews
 export gridviews
 export keybindings
 export listbasics
-export listviews
+export listviews except visibleRowViews
 export popuplists
 export rendering
 export responders

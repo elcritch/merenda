@@ -144,6 +144,7 @@ protocol ListViewDelegate {.selectorScope: protocol.}:
   method heightOfRow*(listView: ListView, row: int): float32 {.optional.}
   method heightForRow*(listView: ListView, row: int): float32 {.optional.}
   method rowDidActivate*(listView: ListView, row: int) {.optional.}
+  method visibleRowsDidSync*(listView: ListView) {.optional.}
   method styleForRow*(listView: ListView, row: ListRowState): ListRowStyle {.optional.}
   method drawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -1213,6 +1214,17 @@ proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary] =
         states: row.states * {ssDisabled, ssFocused, ssSelected, ssHovered},
       )
 
+iterator visibleRowViews*(
+    listView: ListView
+): tuple[index: int, view: View, rect: Rect] =
+  if not listView.isNil:
+    listView.tileListContent()
+    let contentView = listView.contentView()
+    if not contentView.isNil:
+      contentView.syncVisibleRowViews()
+      for rowView in contentView.xRowViews:
+        yield (rowView.xRow.index, View(rowView), rowView.frame())
+
 proc configureRowView(rowView: ListRowView, itemIndex: int) =
   let listView = rowView.listView()
   if listView.xContentView.isNil:
@@ -1331,6 +1343,9 @@ protocol DefaultListRowViewHitTesting of ViewProtocol:
 protocol DefaultListContentViewDrawing of ViewDrawingProtocol:
   method draw(contentView: ListContentView, context: DrawContext) =
     contentView.syncVisibleRowViews()
+    let listView = contentView.listView()
+    if not listView.isNil and not listView.xDelegate.isNil:
+      discard listView.xDelegate.sendLocalIfHandled(visibleRowsDidSync(), listView)
 
 protocol DefaultListContentViewHitTesting of ViewProtocol:
   method pointInside(contentView: ListContentView, point: Point): bool =

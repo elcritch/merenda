@@ -1,5 +1,6 @@
-import std/unittest
+import std/[unicode, unittest]
 
+import figdraw/fignodes
 import sigils/core
 
 import merenda/nimkit
@@ -23,6 +24,25 @@ proc containsIndex(indexes: openArray[int], index: int): bool =
     if value == index:
       return true
   false
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+proc renderedTexts(view: View): seq[string] =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return @[]
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText:
+      result.add node.renderedText()
+
+proc hostedTableCellCount(tableView: TableView): int =
+  let content = tableView.contentView()
+  if content.isNil:
+    return 0
+  for rowView in content.subviews():
+    result += rowView.subviews().len
 
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
@@ -200,6 +220,52 @@ suite "NimKit TableView":
     let cellView = tableView.tableCellView(1, name)
     check not cellView.isNil
     check delegate.viewCalls == @["name:1"]
+
+  test "table view renders text cells for every visible column":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 260, 68))
+      source = newTableDataSourceSpy(3)
+
+    tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableView.addColumn(newTableColumn("age", "Age", width = 80.0))
+    tableView.dataSource = source
+
+    let texts = tableView.renderedTexts()
+
+    check texts.contains("name:0")
+    check texts.contains("age:0")
+    check texts.contains("name:1")
+    check texts.contains("age:1")
+
+  test "table view hosts cell views only for visible rows":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 260, 46))
+      delegate = newTableDelegateSpy()
+
+    tableView.rowCount = 5
+    tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableView.addColumn(newTableColumn("age", "Age", width = 80.0))
+    tableView.delegate = delegate
+
+    var texts = tableView.renderedTexts()
+    check tableView.visibleRowSummaries().len == 2
+    check tableView.hostedTableCellCount() == 4
+    check texts.contains("name:0")
+    check texts.contains("age:0")
+    check texts.contains("name:1")
+    check texts.contains("age:1")
+
+    tableView.scrollRows(1)
+    texts = tableView.renderedTexts()
+
+    check tableView.visibleRowSummaries()[0].index == 1
+    check tableView.hostedTableCellCount() == 4
+    check not texts.contains("name:0")
+    check not texts.contains("age:0")
+    check texts.contains("name:1")
+    check texts.contains("age:1")
+    check texts.contains("name:2")
+    check texts.contains("age:2")
 
   test "table row policy hooks feed inherited list row behavior":
     let
