@@ -1068,25 +1068,24 @@ proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   if result.last < result.first:
     result.last = result.first
 
-proc listRowState(listView: ListView, itemIndex: int): ListRowState =
-  if listView.isNil or itemIndex < 0 or itemIndex >= listView.len():
-    return initListRowState(-1, "", enabled = false)
-  initListRowState(
-    itemIndex,
-    listView[itemIndex],
-    selected = listView.selectionContains(itemIndex),
-    highlighted = itemIndex == listView.highlightedIndex(),
-    enabled = listView.rowEnabled(itemIndex),
-    focused = listView.isFocused(),
-  )
-
 proc configureRowView(rowView: ListRowView, itemIndex: int) =
   if rowView.isNil:
     return
   let listView = rowView.listView()
   if listView.isNil or listView.xContentView.isNil:
     return
-  rowView.xRow = listView.listRowState(itemIndex)
+  rowView.xRow =
+    if itemIndex notin 0..<listView.len():
+      initListRowState(-1, "", enabled = false)
+    else:
+      initListRowState(
+        itemIndex,
+        listView[itemIndex],
+        selected = listView.selectionContains(itemIndex),
+        highlighted = itemIndex == listView.highlightedIndex(),
+        enabled = listView.rowEnabled(itemIndex),
+        focused = listView.isFocused(),
+      )
   rowView.frame = listView.xContentView.listContentItemRect(itemIndex)
 
 proc removeLastRowView(contentView: ListContentView) =
