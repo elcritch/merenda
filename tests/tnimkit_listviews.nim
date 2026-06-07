@@ -906,3 +906,48 @@ suite "nimkit list views":
     check listView.selectedIndex == 5
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check actionCount == 1
+
+  test "list view type-select matches rows incrementally":
+    let
+      window = newWindow("List type select", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView = newListView(
+        ["Apple", "Banana", "Blueberry", "Cherry", "Date"],
+        frame = initRect(10, 10, 120, 62),
+      )
+
+    listView.rowHeight = 20.0
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(listView)
+    check window.dispatchKeyDown(KeyEvent(text: "b", key: keyB, keyCode: keyB.ord))
+    check listView.selectedIndex == 1
+    check window.dispatchKeyDown(KeyEvent(text: "l", key: keyL, keyCode: keyL.ord))
+    check listView.selectedIndex == 2
+    check window.dispatchKeyDown(KeyEvent(text: "c", key: keyC, keyCode: keyC.ord))
+    check listView.selectedIndex == 3
+
+    check window.dispatchKeyDown(
+      KeyEvent(text: "d", key: keyD, keyCode: keyD.ord, modifiers: {kmCommand})
+    )
+    check listView.selectedIndex == 3
+
+  test "list view type-select wraps and skips nonselectable rows":
+    let
+      window = newWindow("List type select policy", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView = newListView(
+        ["Alpha", "Beta", "Bravo", "Charlie"], frame = initRect(10, 10, 120, 62)
+      )
+      policy = newListPolicyDelegateSpy(nonselectableRows = [1])
+
+    listView.rowHeight = 20.0
+    listView.delegate = policy
+    listView.selectedIndex = 3
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(listView)
+    check window.dispatchKeyDown(KeyEvent(text: "b", key: keyB, keyCode: keyB.ord))
+    check listView.selectedIndex == 2

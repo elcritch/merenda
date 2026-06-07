@@ -39,9 +39,8 @@ future table/outline-style controls.
      clear
 3. Add AppKit-like keyboard and focus behavior:
    - up/down/page/home/end are in place for fixed-height rows
-   - type-select or incremental search
    - focus ring and first-responder behavior
-   - activation through Enter/Return/double-click
+   - activation through double-click
 4. Add richer list affordances:
    - empty state rendering hook
    - alternating row backgrounds

@@ -1,4 +1,4 @@
-import std/[algorithm, math, options]
+import std/[algorithm, math, options, strutils, times]
 
 import sigils/core
 
@@ -7,7 +7,9 @@ import controls, listbasics, scrollergeometry, scrollviews
 
 export listbasics
 
-const ListScrollerThickness = 12.0'f32
+const
+  ListScrollerThickness = 12.0'f32
+  ListTypeSelectTimeout = 1.0
 
 type
   ListSelectionMode* = enum
@@ -66,6 +68,8 @@ type
     xComputingRowHeights: bool
     xSelectionMode: ListSelectionMode
     xTrackingItem: bool
+    xTypeSelectBuffer: string
+    xTypeSelectLastTime: float
     xListRole: StyleRole
     xItemRole: StyleRole
 
@@ -993,6 +997,61 @@ proc selectionSummary*(listView: ListView): ListSelectionSummary =
     hasSelection: listView.xSelectedIndexes.len > 0,
   )
 
+proc typeSelectStartIndex(listView: ListView): int =
+  if listView.selectionLeadIndex() >= 0:
+    listView.selectionLeadIndex() + 1
+  elif listView.selectedIndex() >= 0:
+    listView.selectedIndex() + 1
+  else:
+    listView.firstVisibleIndex()
+
+proc rowTextMatchesPrefix(
+    listView: ListView, index: int, normalizedPrefix: string
+): bool =
+  listView[index].toLowerAscii().startsWith(normalizedPrefix)
+
+proc firstRowMatchingText(listView: ListView, text: string): int =
+  if text.len == 0 or listView.len() == 0:
+    return -1
+  let
+    normalized = text.toLowerAscii()
+    start = max(listView.typeSelectStartIndex(), 0)
+  for offset in 0 ..< listView.len():
+    let index = (start + offset) mod listView.len()
+    if listView.rowSelectable(index) and listView.rowTextMatchesPrefix(
+      index, normalized
+    ):
+      return index
+  -1
+
+proc selectItemMatchingText(listView: ListView, text: string): bool =
+  if listView.selectionMode() == lsmNone:
+    return false
+  let index = listView.firstRowMatchingText(text)
+  if index < 0:
+    return false
+  listView.selectItemAtIndex(index)
+  true
+
+proc isTypeSelectEvent(event: KeyEvent): bool =
+  event.text.len > 0 and event.text notin [" ", "\n", "\r", "\t"] and
+    event.modifiers * {kmControl, kmOption, kmCommand} == {}
+
+proc handleTypeSelect(listView: ListView, event: KeyEvent): bool =
+  if not event.isTypeSelectEvent():
+    return false
+  let now = epochTime()
+  if now - listView.xTypeSelectLastTime > ListTypeSelectTimeout:
+    listView.xTypeSelectBuffer = ""
+  listView.xTypeSelectLastTime = now
+  listView.xTypeSelectBuffer.add event.text
+  if listView.selectItemMatchingText(listView.xTypeSelectBuffer):
+    return true
+  if event.text != listView.xTypeSelectBuffer:
+    listView.xTypeSelectBuffer = event.text
+    return listView.selectItemMatchingText(listView.xTypeSelectBuffer)
+  false
+
 proc moveSelectionTo(listView: ListView, index: int, extend = false, direction = 1) =
   if listView.len() == 0 or listView.selectionMode() == lsmNone:
     return
@@ -1311,7 +1370,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
       if activeIndex >= 0:
         listView.sendListActivation(activeIndex)
     else:
-      discard
+      discard listView.handleTypeSelect(event)
 
 proc initListBaseChild(view: View, clipsToBounds: bool) =
   initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
