@@ -23,10 +23,7 @@ type
     index*: int
     text*: string
     rect*: Rect
-    selected*: bool
-    highlighted*: bool
-    enabled*: bool
-    focused*: bool
+    states*: set[WidgetState]
 
   ListSelectionSummary* = object
     mode*: ListSelectionMode
@@ -1208,10 +1205,7 @@ proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary] =
         index: row.index,
         text: row.text,
         rect: rect,
-        selected: ssSelected in row.states,
-        highlighted: ssHovered in row.states,
-        enabled: not (ssDisabled in row.states),
-        focused: ssFocused in row.states,
+        states: row.states * {ssDisabled, ssFocused, ssSelected, ssHovered},
       )
 
 proc configureRowView(rowView: ListRowView, itemIndex: int) =

@@ -608,12 +608,12 @@ suite "nimkit list views":
     check rows[0].index == 4
     check rows[0].text == "Five"
     check rows[0].rect == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
-    check not rows[0].selected
-    check rows[0].focused
+    check not (ssSelected in rows[0].states)
+    check ssFocused in rows[0].states
     check rows[1].index == 5
-    check rows[1].selected
+    check ssSelected in rows[1].states
     check rows[2].index == 6
-    check rows[2].highlighted
+    check ssHovered in rows[2].states
 
     var selection = listView.selectionSummary()
     check selection.mode == lsmExtended
