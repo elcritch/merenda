@@ -2,12 +2,15 @@ import std/[math, options]
 
 import sigils/core
 
+import ./drawing
 import ./listviews
+import ./listbasics
 import ./selectors
+import ./theme
 import ./types
 import ./views
 
-export listviews
+export listviews except visibleRowViews
 
 const
   DefaultTableColumnWidth = 120.0'f32
@@ -24,6 +27,12 @@ type
     xRowCount: int
     xTableDataSource: DynamicAgent
     xTableDelegate: DynamicAgent
+    xCellSlots: seq[TableCellSlot]
+
+  TableCellSlot = object
+    row: int
+    column: TableColumn
+    view: View
 
   TableColumn* = ref object
     xTableView: TableView
@@ -48,6 +57,11 @@ proc resolvedRowHeight(tableView: TableView, row: int): float32
 proc tableRowDidActivate(tableView: TableView, row: int)
 proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
+proc clearTableCellSlots(tableView: TableView)
+proc syncVisibleTableCells(tableView: TableView)
+proc drawTableRow(
+  tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+)
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
   method numberOfRows*(tableView: TableView): int {.optional.}
@@ -84,6 +98,18 @@ protocol TableViewListDelegate of ListViewDelegate:
 
   method rowDidActivate(tableView: TableView, listView: ListView, row: int) =
     tableView.tableRowDidActivate(row)
+
+  method visibleRowsDidSync(tableView: TableView, listView: ListView) =
+    tableView.syncVisibleTableCells()
+
+  method drawRow(
+      tableView: TableView,
+      listView: ListView,
+      context: DrawContext,
+      rect: Rect,
+      row: ListRowState,
+  ) =
+    tableView.drawTableRow(context, rect, row)
 
 func normalizedColumnMetric(value, fallback: float32): float32 =
   if value.isNaN:
@@ -267,6 +293,7 @@ proc `dataSource=`*(tableView: TableView, dataSource: DynamicAgent) =
     return
   if not dataSource.isNil:
     discard dataSource.adopt(TableViewDataSource)
+  tableView.clearTableCellSlots()
   tableView.xTableDataSource = dataSource
   ListView(tableView).reloadData()
 
@@ -278,6 +305,7 @@ proc `delegate=`*(tableView: TableView, delegate: DynamicAgent) =
     return
   if not delegate.isNil:
     discard delegate.adopt(TableViewDelegate)
+  tableView.clearTableCellSlots()
   tableView.xTableDelegate = delegate
   ListView(tableView).reloadData()
 
@@ -315,6 +343,17 @@ iterator columns*(tableView: TableView): TableColumn =
   if not tableView.isNil:
     for column in tableView.xColumns:
       yield column
+
+proc columnRect(tableView: TableView, bounds: Rect, column: TableColumn): Rect =
+  if tableView.isNil or column.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  var x = bounds.origin.x
+  for current in tableView.xColumns:
+    if current == column:
+      let width = min(current.width(), max(bounds.maxX - x, 0.0'f32))
+      return initRect(x, bounds.origin.y, width, bounds.size.height)
+    x += current.width()
+  initRect(bounds.origin.x, bounds.origin.y, 0.0, 0.0)
 
 proc validCell(tableView: TableView, row: int, column: TableColumn): bool =
   not tableView.isNil and row in 0 ..< tableView.rowCount() and not column.isNil and
@@ -392,9 +431,97 @@ proc tableRowDidActivate(tableView: TableView, row: int) =
   discard
     delegate.sendLocalIfHandled(didActivateRow(), (tableView: tableView, row: row))
 
+proc findCellSlot(slots: openArray[TableCellSlot], row: int, column: TableColumn): int =
+  for index, slot in slots:
+    if slot.row == row and slot.column == column:
+      return index
+  -1
+
+proc clearTableCellSlots(tableView: TableView) =
+  if tableView.isNil:
+    return
+  for slot in tableView.xCellSlots:
+    if not slot.view.isNil:
+      slot.view.removeFromSuperview()
+  tableView.xCellSlots.setLen(0)
+
+proc hasHostedCell(tableView: TableView, row: int, column: TableColumn): bool =
+  not tableView.isNil and tableView.xCellSlots.findCellSlot(row, column) >= 0
+
+proc syncVisibleTableCells(tableView: TableView) =
+  if tableView.isNil:
+    return
+  let previousSlots = tableView.xCellSlots
+  var
+    nextSlots: seq[TableCellSlot]
+    used = newSeq[bool](previousSlots.len)
+  for (row, rowView, rowRect) in ListView(tableView).visibleRowViews():
+    let rowBounds = initRect(0.0, 0.0, rowRect.size.width, rowRect.size.height)
+    for column in tableView.columns:
+      var cellView: View
+      let previousIndex = previousSlots.findCellSlot(row, column)
+      if previousIndex >= 0:
+        used[previousIndex] = true
+        cellView = previousSlots[previousIndex].view
+      else:
+        cellView = tableView.tableCellView(row, column)
+      if not cellView.isNil:
+        if cellView.superview() != rowView:
+          rowView.addSubview(cellView)
+        cellView.frame = tableView.columnRect(rowBounds, column)
+        cellView.hidden = false
+        nextSlots.add TableCellSlot(row: row, column: column, view: cellView)
+  for index, slot in previousSlots:
+    if not used[index] and not slot.view.isNil:
+      slot.view.removeFromSuperview()
+  tableView.xCellSlots = nextSlots
+
+proc listItemStyle(
+    tableView: TableView, context: DrawContext, states: set[WidgetState]
+): ListItemStyle =
+  context.appearance.resolveListItemStyle(
+    initControlStyleContext(
+      srListItem, states, id = tableView.styleId(), classes = tableView.styleClasses()
+    )
+  )
+
+proc drawTableCellText(
+    tableView: TableView,
+    context: DrawContext,
+    row: int,
+    column: TableColumn,
+    rect: Rect,
+    style: ListItemStyle,
+) =
+  if rect.isEmpty:
+    return
+  let text = tableView.tableCellText(row, column)
+  if text.len > 0:
+    discard context.addText(
+      style.listItemTextRect(rect), text, style.text.color, column.alignment()
+    )
+
+proc drawTableRow(
+    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+) =
+  if tableView.isNil or context.isNil:
+    return
+  let emptyRow = initListRowState(row.index, "", states = row.states)
+  ListView(tableView).drawListRow(context, rect, emptyRow)
+  if row.index < 0:
+    return
+  let
+    rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
+    style = tableView.listItemStyle(context, row.states)
+  for column in tableView.columns:
+    if not tableView.hasHostedCell(row.index, column):
+      let cellRect = tableView.columnRect(rowBounds, column)
+      tableView.drawTableCellText(context, row.index, column, cellRect, style)
+
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
     return
+  tableView.clearTableCellSlots()
   tableView.invalidateIntrinsicContentSize()
   tableView.setNeedsLayout()
   tableView.setNeedsDisplay(true)
