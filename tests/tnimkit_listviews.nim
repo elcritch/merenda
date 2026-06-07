@@ -651,12 +651,8 @@ suite "nimkit list views":
     check renderer.views.len == 3
     check renderer.views[0] == listView
     check renderer.rows[0] == initListRowState(0, "One")
-    check renderer.rows[1] == initListRowState(
-      1, "Two", states = {lrsEnabled, lrsSelected}
-    )
-    check renderer.rows[2] == initListRowState(
-      2, "Three", states = {lrsEnabled, lrsHighlighted}
-    )
+    check renderer.rows[1] == initListRowState(1, "Two", states = {ssSelected})
+    check renderer.rows[2] == initListRowState(2, "Three", states = {ssHovered})
     check renderer.rects[0] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[1] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[2] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
@@ -691,10 +687,10 @@ suite "nimkit list views":
     discard buildRenders(listView)
 
     check renderer.rows.len == 3
-    check not (lrsAlternating in renderer.rows[0].states)
-    check lrsAlternating in renderer.rows[1].states
-    check not (lrsPressed in renderer.rows[1].states)
-    check lrsPressed in renderer.rows[2].states
+    check not (ssAlternating in renderer.rows[0].states)
+    check ssAlternating in renderer.rows[1].states
+    check not (ssPressed in renderer.rows[1].states)
+    check ssPressed in renderer.rows[2].states
 
   test "list view renders alternating rows and separators":
     let
@@ -773,7 +769,7 @@ suite "nimkit list views":
     policy.clear()
     discard buildRenders(listView)
     check policy.rows.len == 5
-    check policy.rows[1] == initListRowState(1, "Two", states = {})
+    check policy.rows[1] == initListRowState(1, "Two", states = {ssDisabled})
     check policy.rows[3] == initListRowState(3, "Four")
 
   test "list view delegates expose row height and optional row styling":

@@ -2007,6 +2007,13 @@ proc initTheme*(): Theme =
   )
   result.addRoleRule(
     srListItem,
+    {ssPressed},
+    styleToken(ListItemHighlightedFillToken),
+    styleToken(ListItemSeparatorColorToken),
+    styleToken(ListItemTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
     {ssSelected},
     styleToken(ListItemSelectedFillToken),
     styleToken(ListItemSeparatorColorToken),
@@ -2022,6 +2029,13 @@ proc initTheme*(): Theme =
   result.addRoleRule(
     srListItem,
     {ssSelected, ssHighlighted},
+    styleToken(ListItemSelectedHighlightedFillToken),
+    styleToken(ListItemSeparatorColorToken),
+    styleToken(ListItemSelectedTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
+    {ssSelected, ssPressed},
     styleToken(ListItemSelectedHighlightedFillToken),
     styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemSelectedTextColorToken),
