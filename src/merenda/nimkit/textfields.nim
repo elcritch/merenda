@@ -5,6 +5,7 @@ import sigils/core
 import ./controls
 import ./selectors
 import ./theme
+import ./events
 import ./types
 
 export controls
@@ -432,29 +433,24 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
 
 protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
-    let
-      absoluteFrame = textField.rectToWindow(textField.bounds)
-      focused = textField.isEditing or textField.isFocused
-      focusVisible = textField.isEditing or textField.isFocusVisible
-      style = context.appearance.resolveTextFieldStyle(
-        initControlStyleContext(
-          srTextField,
-          enabled = textField.isEnabled,
-          hovered = textField.isHovered,
-          active = textField.isActive,
-          focused = focused,
-          focusVisible = focusVisible,
-          id = textField.styleId,
-          classes = textField.styleClasses,
-        ),
-        textField.textColor,
-      )
+    let absoluteFrame = textField.rectToWindow(textField.bounds)
+    var states: set[WidgetState] = textField.widgetStateSet()
+    if textField.isEditing:
+      states.incl ssFocused
+      states.incl ssFocusVisible
+
+    let style = context.appearance.resolveTextFieldStyle(
+      initControlStyleContext(
+        srTextField, states, id = textField.styleId, classes = textField.styleClasses
+      ),
+      textField.textColor,
+    )
 
     discard context.addWindowRectangle(
       absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
       style.box.cornerRadius, style.box.shadows,
     )
-    if focusVisible:
+    if ssFocusVisible in states:
       context.addFocusRing(absoluteFrame, style.box)
 
     let
@@ -486,15 +482,12 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
       textField.replaceSelectedText(event.text)
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
+  var states: set[WidgetState] = textField.widgetStateSet()
+  if textField.isEditing:
+    states.incl ssFocused
+    states.incl ssFocusVisible
   initControlStyleContext(
-    srTextField,
-    enabled = textField.isEnabled,
-    hovered = textField.isHovered,
-    active = textField.isActive,
-    focused = textField.isEditing or textField.isFocused,
-    focusVisible = textField.isEditing or textField.isFocusVisible,
-    id = textField.styleId,
-    classes = textField.styleClasses,
+    srTextField, states, id = textField.styleId, classes = textField.styleClasses
   )
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:

@@ -3,6 +3,7 @@ import std/[algorithm, math, options, strutils, times]
 import sigils/core
 
 import selectors, theme, types
+import events
 import controls, listbasics, scrollergeometry, scrollviews
 
 export listbasics
@@ -555,10 +556,15 @@ proc drawListRow*(
   )
   if listView.showsRowSeparators() and row.index >= 0 and row.index < listView.len() - 1:
     let
+      separatorStates: set[WidgetState] =
+        if lrsEnabled in row.states:
+          {}
+        else:
+          {ssDisabled}
       itemStyle = context.appearance.resolveListItemStyle(
         initControlStyleContext(
           listView.xItemRole,
-          enabled = lrsEnabled in row.states,
+          separatorStates,
           id = listView.styleId(),
           classes = listView.styleClasses(),
         )
@@ -1270,10 +1276,12 @@ proc scrollListPageToward(scroller: ListScroller, point: Point) =
 proc naturalSize(listView: ListView): Size =
   let
     appearance = listView.effectiveAppearance()
+    listState = listView.widgetStateSet()
+    itemState = listView.widgetStateSet()
     listStyle = appearance.resolveListViewStyle(
       initControlStyleContext(
         listView.xListRole,
-        enabled = listView.isEnabled(),
+        listState,
         id = listView.styleId(),
         classes = listView.styleClasses(),
       )
@@ -1281,7 +1289,7 @@ proc naturalSize(listView: ListView): Size =
     itemStyle = appearance.resolveListItemStyle(
       initControlStyleContext(
         listView.xItemRole,
-        enabled = listView.isEnabled(),
+        itemState,
         id = listView.styleId(),
         classes = listView.styleClasses(),
       )
@@ -1383,14 +1391,18 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
     listView.tileListContent()
     let
       classes = listView.styleClasses()
+      focusedState = listView.widgetStateSet() +
+        (if listView.isFocused():
+          {ssFocused}
+        else:
+          {}) +
+        (if listView.isFocusVisible():
+          {ssFocusVisible}
+        else:
+          {})
       listStyle = context.appearance.resolveListViewStyle(
         initControlStyleContext(
-          listView.xListRole,
-          enabled = listView.isEnabled(),
-          focused = listView.isFocused(),
-          focusVisible = listView.isFocusVisible(),
-          id = listView.styleId(),
-          classes = classes,
+          listView.xListRole, focusedState, id = listView.styleId(), classes = classes
         )
       )
     discard context.addWindowRectangle(

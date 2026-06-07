@@ -8,6 +8,7 @@ import sigils/core
 import ./backend as nimkitBackend
 import ./keybindings
 import ./rendering as nimkitRendering
+import ./events
 import ./selectors
 import ./theme
 import ./types
@@ -52,7 +53,7 @@ type
     xMomentumScrollContentPoint: Point
     xMouseClickCount: int
     xLastClickPoint: Point
-    xLastClickButton: types.MouseButton
+    xLastClickButton: events.MouseButton
     xLastClickView: View
     xLastClickCount: int
     xLastClickTime: float
@@ -153,7 +154,7 @@ proc newPopupWindow*(
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc dispatchKeyEventInChain(
-  window: Window, target: Responder, event: types.KeyEvent
+  window: Window, target: Responder, event: events.KeyEvent
 ): EventDispatchResult
 
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View
@@ -249,7 +250,7 @@ proc bindKey*(
 
 proc bindKey*(
     window: Window,
-    key: types.Key,
+    key: events.Key,
     modifiers: set[KeyModifier],
     selector: CommandSelector,
 ) =
@@ -270,7 +271,7 @@ proc bindShortcut*(
 
 proc bindShortcut*(
     window: Window,
-    key: types.Key,
+    key: events.Key,
     modifiers: set[ShortcutModifier],
     selector: CommandSelector,
 ) =
@@ -286,7 +287,7 @@ proc bindShortcuts*(
 
 proc bindShortcuts*(
     window: Window,
-    key: types.Key,
+    key: events.Key,
     modifiers: set[ShortcutModifier],
     selector: CommandSelector,
 ) =
@@ -783,14 +784,14 @@ proc dispatchCommandInChain(
     result.responder = target
 
 proc dispatchKeyCommand(
-    window: Window, target: Responder, event: types.KeyEvent
+    window: Window, target: Responder, event: events.KeyEvent
 ): EventDispatchResult =
   let command = window.xKeyBindings.commandFor(event)
   if command.isNone:
     return
   dispatchCommandInChain(target, command.get())
 
-proc dispatchKeyDown*(window: Window, event: types.KeyEvent): bool =
+proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   if event.key == keyEscape:
     if not window.xOwnerWindow.isNil:
       return window.xOwnerWindow.dismissTransientSession(tdrEscape)
@@ -840,9 +841,9 @@ proc localMouseEvent(
   )
 
 proc localScrollEvent(
-    target, contentView: View, contentPoint: Point, event: types.ScrollEvent
-): types.ScrollEvent =
-  result = types.ScrollEvent(
+    target, contentView: View, contentPoint: Point, event: events.ScrollEvent
+): events.ScrollEvent =
+  result = events.ScrollEvent(
     location: target.pointFromView(contentPoint, contentView),
     deltaX: event.deltaX,
     deltaY: event.deltaY,
@@ -853,8 +854,8 @@ proc localScrollEvent(
   )
 
 proc localKeyEvent(
-    target, contentView: View, contentPoint: Point, event: types.KeyEvent
-): types.KeyEvent =
+    target, contentView: View, contentPoint: Point, event: events.KeyEvent
+): events.KeyEvent =
   event
 
 proc eventTimestamp(timestamp: float): float =
@@ -920,7 +921,7 @@ proc dispatchMouseEventInChain(
   )
 
 proc dispatchScrollEventInChain(
-    window: Window, target: View, contentPoint: Point, event: types.ScrollEvent
+    window: Window, target: View, contentPoint: Point, event: events.ScrollEvent
 ): EventDispatchResult =
   var responder = Responder(target)
   while not responder.isNil:
@@ -939,7 +940,7 @@ proc dispatchScrollEventInChain(
     responder = responder.nextResponder()
 
 proc dispatchKeyEventInChain(
-    window: Window, target: Responder, event: types.KeyEvent
+    window: Window, target: Responder, event: events.KeyEvent
 ): EventDispatchResult =
   window.dispatchEventInChain(
     target, initPoint(0.0, 0.0), event, keyDown(), localKeyEvent
@@ -1065,7 +1066,7 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
       window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()).handled or
       result
 
-proc dispatchScrollWheel*(window: Window, event: types.ScrollEvent): bool =
+proc dispatchScrollWheel*(window: Window, event: events.ScrollEvent): bool =
   if window.xContentView.isNil:
     return false
   var contentPoint = window.contentPoint(event.location)
@@ -1131,7 +1132,7 @@ proc scrollWheelAt*(
     timestamp = 0.0,
 ): bool =
   window.dispatchScrollWheel(
-    types.ScrollEvent(
+    events.ScrollEvent(
       location: point,
       deltaX: deltaX,
       deltaY: deltaY,
@@ -1179,7 +1180,7 @@ proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
 proc dispatchHostMouseMove(window: Window, event: MouseEvent, dragging: bool) =
   discard window.dispatchMouseMove(event, dragging)
 
-proc dispatchHostScroll(window: Window, event: types.ScrollEvent) =
+proc dispatchHostScroll(window: Window, event: events.ScrollEvent) =
   discard window.dispatchScrollWheel(event)
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
@@ -1229,7 +1230,7 @@ proc ensureNativeWindow*(window: Window) =
       window.dispatchHostMouseButton(event, pressed),
     onMouseMove: proc(event: MouseEvent, dragging: bool) =
       window.dispatchHostMouseMove(event, dragging),
-    onScroll: proc(event: types.ScrollEvent) =
+    onScroll: proc(event: events.ScrollEvent) =
       window.dispatchHostScroll(event),
     onKey: proc(event: HostKeyEvent) =
       window.dispatchHostKey(event),

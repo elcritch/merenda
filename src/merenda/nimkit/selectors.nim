@@ -3,6 +3,7 @@ import sigils/selectors
 from figdraw/figbasics import ZLevel
 
 import ./drawing
+import ./events
 import ./types
 
 export drawing
