@@ -305,6 +305,20 @@ suite "nimkit list views":
     listView.selectedIndex = 1
     check listView.selectedIndex == -1
 
+  test "list view scrolls selected item to visible":
+    let listView = newListView(
+      ["One", "Two", "Three", "Four", "Five"], frame = initRect(0, 0, 120, 46)
+    )
+
+    listView.rowHeight = 20.0
+    listView.selectedIndex = 4
+    check listView.firstVisibleIndex == 2
+
+    listView.firstVisibleIndex = 0
+    check listView.firstVisibleIndex == 0
+    listView.scrollSelectedItemToVisible()
+    check listView.firstVisibleIndex == 2
+
   test "list view resolves rows from data source and reload clamps selection":
     let
       listView = newListView(["Local"], frame = initRect(0, 0, 120, 46))
@@ -714,6 +728,36 @@ suite "nimkit list views":
     check listView.selectedIndex == 4
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check actionCount == 2
+
+  test "list view scrolls selection lead with variable row heights":
+    let
+      window = newWindow("List selection scroll", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five"], frame = initRect(10, 10, 120, 42)
+      )
+      policy = newListPolicyDelegateSpy(rowHeights = [12.0'f32, 18.0, 44.0, 20.0, 16.0])
+
+    listView.delegate = policy
+    listView.selectionMode = lsmExtended
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(listView)
+    listView.selectedIndex = 1
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord, modifiers: {kmShift})
+    )
+    check listView.selectedIndexes == @[1, 2, 3]
+    check listView.selectedIndex == 1
+
+    listView.firstVisibleIndex = 0
+    listView.scrollSelectionToVisible()
+    check listView.firstVisibleIndex == 2
+
+    listView.firstVisibleIndex = 2
+    listView.scrollSelectedItemToVisible()
+    check listView.firstVisibleIndex == 1
 
   test "list view scroller pages and drags row viewport":
     let
