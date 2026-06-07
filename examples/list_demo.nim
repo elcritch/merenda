@@ -1,3 +1,5 @@
+import std/strutils
+
 import merenda/nimkit
 
 import sigils/selectors
@@ -15,12 +17,28 @@ let
   changedAction = actionSelector("listSelectionChanged")
 
 proc updateDetail() =
-  let index = list.selectedIndex
-  detail.text =
-    if index >= 0:
-      "Selected: " & list[index]
+  let indexes = list.selectedIndexes()
+  if indexes.len == 0:
+    detail.text = "No selection"
+    return
+
+  var names: seq[string]
+  for index in indexes:
+    names.add list[index]
+
+  let ranges = list.selectedRanges()
+  let firstRangeLength =
+    if ranges.len == 0:
+      0
     else:
-      "No selection"
+      ranges[0].b - ranges[0].a + 1
+  detail.text =
+    if ranges.len == 1 and firstRangeLength > 1:
+      "Selected " & $firstRangeLength & ": " & names.join(", ")
+    elif indexes.len == 1:
+      "Selected: " & names[0]
+    else:
+      "Selected " & $indexes.len & ": " & names.join(", ")
 
 proc onListChanged(sender: DynamicAgent) =
   if sender == DynamicAgent(list):
@@ -30,6 +48,7 @@ root.background = initColor(0.95, 0.96, 0.98)
 
 list.visibleRows = 6
 list.rowHeight = 24.0
+list.selectionMode = lsmExtended
 list.selectedIndex = 0
 list.target = newActionTarget(changedAction, onListChanged)
 list.action = changedAction
