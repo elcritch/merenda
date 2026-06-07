@@ -547,7 +547,8 @@ proc drawListRow*(
   if listView.isNil or context.isNil:
     return
   var style = listView.rowStyle(row)
-  if row.alternating and not row.selected and style.fill.isNone:
+  if lrsAlternating in row.states and not (lrsSelected in row.states) and
+      style.fill.isNone:
     style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
   context.drawListRow(
     rect, row, style, listView.xItemRole, listView.styleId(), listView.styleClasses()
@@ -557,7 +558,7 @@ proc drawListRow*(
       itemStyle = context.appearance.resolveListItemStyle(
         initControlStyleContext(
           listView.xItemRole,
-          enabled = row.enabled,
+          enabled = lrsEnabled in row.states,
           id = listView.styleId(),
           classes = listView.styleClasses(),
         )
@@ -886,18 +887,22 @@ proc selectionContains(listView: ListView, index: int): bool =
 
 proc listRowState(listView: ListView, index: int): ListRowState =
   if index notin 0 ..< listView.len():
-    initListRowState(-1, "", enabled = false)
+    initListRowState(-1, "", states = {})
   else:
-    initListRowState(
-      index,
-      listView[index],
-      selected = listView.selectionContains(index),
-      highlighted = index == listView.highlightedIndex(),
-      alternating = listView.usesAlternatingRowBackgrounds() and index mod 2 == 1,
-      pressed = index == listView.xPressedIndex,
-      enabled = listView.rowEnabled(index),
-      focused = listView.isFocused(),
-    )
+    var rowStates: set[ListRowStateFlag] = {}
+    if listView.rowEnabled(index):
+      rowStates.incl(lrsEnabled)
+    if listView.selectionContains(index):
+      rowStates.incl(lrsSelected)
+    if index == listView.highlightedIndex():
+      rowStates.incl(lrsHighlighted)
+    if listView.usesAlternatingRowBackgrounds() and index mod 2 == 1:
+      rowStates.incl(lrsAlternating)
+    if index == listView.xPressedIndex:
+      rowStates.incl(lrsPressed)
+    if listView.isFocused():
+      rowStates.incl(lrsFocused)
+    initListRowState(index, listView[index], states = rowStates)
 
 proc selectedIndexes*(listView: ListView): seq[int] =
   listView.xSelectedIndexes
@@ -1202,10 +1207,10 @@ proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary] =
         index: row.index,
         text: row.text,
         rect: rect,
-        selected: row.selected,
-        highlighted: row.highlighted,
-        enabled: row.enabled,
-        focused: row.focused,
+        selected: lrsSelected in row.states,
+        highlighted: lrsHighlighted in row.states,
+        enabled: lrsEnabled in row.states,
+        focused: lrsFocused in row.states,
       )
 
 proc configureRowView(rowView: ListRowView, itemIndex: int) =
