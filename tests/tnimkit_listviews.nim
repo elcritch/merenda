@@ -1,4 +1,4 @@
-import std/[options, unicode, unittest]
+import std/[options, unicode, unittest, sequtils]
 
 import figdraw/fignodes except Rect
 import sigils/core
@@ -283,7 +283,7 @@ suite "nimkit list views":
     listView.rowHeight = 20.0
 
     check listView.len == 4
-    check listView.items == @["One", "Two", "Three", "Four"]
+    check listView.items().toSeq() == @["One", "Two", "Three", "Four"]
     check listView[1] == "Two"
     check listView.visibleItemCount() == 2
     check listView.listItemIndexAtPoint(initPoint(6, 25)) == 1
@@ -314,7 +314,7 @@ suite "nimkit list views":
     listView.dataSource = source
 
     check listView.len == 4
-    check listView.items == @["Local"]
+    check listView.items.toSeq == @["Local"]
     check listView[2] == "Blue"
 
     listView.selectedIndex = 3
@@ -623,7 +623,7 @@ suite "nimkit list views":
     listView.rowHeight = 20.0
     listView.delegate = policy
 
-    check listView.items == @["One", "Two", "Three"]
+    check listView.items.toSeq == @["One", "Two", "Three"]
     check listView.rowHeight() == 20.0'f32
     check listView.rowHeightForRow(0) == 20.0'f32
     check listView.rowHeightForRow(1) == 34.0'f32
