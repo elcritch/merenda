@@ -551,6 +551,53 @@ suite "nimkit list views":
     discard buildRenders(listView)
     check content.subviews().len == 0
 
+  test "list view exposes visible row and selection summaries":
+    let
+      window = newWindow("List summaries", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
+        frame = initRect(10, 10, 120, 62),
+      )
+
+    listView.rowHeight = 20.0
+    listView.selectionMode = lsmExtended
+    listView.selectedIndex = 5
+    listView.highlightedIndex = 6
+    listView.firstVisibleIndex = 4
+    root.addSubview(listView)
+    window.setContentView(root)
+    check window.makeFirstResponder(listView)
+
+    let rows = listView.visibleRowSummaries()
+    check rows.len == 3
+    check rows[0].index == 4
+    check rows[0].text == "Five"
+    check rows[0].rect == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
+    check not rows[0].selected
+    check rows[0].focused
+    check rows[1].index == 5
+    check rows[1].selected
+    check rows[2].index == 6
+    check rows[2].highlighted
+
+    var selection = listView.selectionSummary()
+    check selection.mode == lsmExtended
+    check selection.selectedIndex == 5
+    check selection.selectedIndexes == @[5]
+    check selection.anchorIndex == 5
+    check selection.leadIndex == 5
+    check selection.hasSelection
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord, modifiers: {kmShift})
+    )
+    selection = listView.selectionSummary()
+    check selection.selectedIndex == 5
+    check selection.selectedIndexes == @[5, 6]
+    check selection.anchorIndex == 5
+    check selection.leadIndex == 6
+
   test "list view delegate can render visible row states":
     let
       listView = newListView(
