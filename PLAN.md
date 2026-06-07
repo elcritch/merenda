@@ -42,7 +42,6 @@ future table/outline-style controls.
    - focus ring and first-responder behavior
    - activation through double-click
 4. Add richer list affordances:
-   - empty state rendering hook
    - alternating row backgrounds
    - separators/grid lines if theme roles support them
    - row hover and pressed states
