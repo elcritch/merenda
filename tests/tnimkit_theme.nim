@@ -66,17 +66,17 @@ suite "nimkit theme":
   test "style selectors match role state id and classes":
     let context = initStyleContext(
       srButton,
-      {ssFocused, ssFocusVisible},
+      {StyleState.focused, StyleState.focusVisible},
       id = "primary",
       classes = @["default", "toolbar"],
     )
 
     check initStyleSelector(srButton).matches(context)
-    check initStyleSelector(srButton, {ssFocused}).matches(context)
+    check initStyleSelector(srButton, {StyleState.focused}).matches(context)
     check initStyleSelector(srButton, id = "primary").matches(context)
     check initStyleSelector(srButton, classes = @["toolbar"]).matches(context)
     check not initStyleSelector(srTextField).matches(context)
-    check not initStyleSelector(srButton, {ssDisabled}).matches(context)
+    check not initStyleSelector(srButton, {StyleState.disabled}).matches(context)
     check not initStyleSelector(srButton, id = "secondary").matches(context)
 
   test "style context stores role and control states":
@@ -99,8 +99,8 @@ suite "nimkit theme":
     check context.id == "primary"
     check context.classes == @["default", "toolbar"]
     check context.states == {
-      ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
-      ssFocusWithin, ssSelected, ssOpen,
+      disabled, highlighted, hovered, active, focused, focusVisible, focusWithin,
+      selected, opened,
     }
 
   test "style token store resolves typed values and nested references":

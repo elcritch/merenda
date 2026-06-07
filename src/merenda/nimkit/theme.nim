@@ -38,15 +38,15 @@ type
     srListItem
 
   StyleState* = enum
-    ssDisabled
-    ssHighlighted
-    ssHovered
-    ssActive
-    ssFocused
-    ssFocusVisible
-    ssFocusWithin
-    ssSelected
-    ssOpen
+    disabled
+    highlighted
+    hovered
+    active
+    focused
+    focusVisible
+    focusWithin
+    selected
+    opened
 
   StyleContext* = object
     role*: StyleRole
@@ -365,23 +365,23 @@ func initControlStyleContext*(
 ): StyleContext =
   result = initStyleContext(role, id = id, classes = classes)
   if not enabled:
-    result.states.incl ssDisabled
+    result.states.incl StyleState.disabled
   if highlighted:
-    result.states.incl ssHighlighted
+    result.states.incl StyleState.highlighted
   if hovered:
-    result.states.incl ssHovered
+    result.states.incl StyleState.hovered
   if active:
-    result.states.incl ssActive
+    result.states.incl StyleState.active
   if focused:
-    result.states.incl ssFocused
+    result.states.incl StyleState.focused
   if focusVisible:
-    result.states.incl ssFocusVisible
+    result.states.incl StyleState.focusVisible
   if focusWithin:
-    result.states.incl ssFocusWithin
+    result.states.incl StyleState.focusWithin
   if selected:
-    result.states.incl ssSelected
+    result.states.incl StyleState.selected
   if opened:
-    result.states.incl ssOpen
+    result.states.incl StyleState.opened
 
 func inset*(rect: Rect, insets: EdgeInsets): Rect =
   initRect(
@@ -1791,21 +1791,21 @@ proc initTheme*(): Theme =
   )
   result.addRoleRule(
     srButton,
-    {ssHighlighted},
+    {highlighted},
     styleToken(ButtonHighlightedFillToken),
     styleToken(ButtonHighlightedBorderColorToken),
     styleToken(ButtonTextColorToken),
   )
   result.addRoleRule(
     srButton,
-    {ssActive},
+    {active},
     styleToken(ButtonHighlightedFillToken),
     styleToken(ButtonHighlightedBorderColorToken),
     styleToken(ButtonTextColorToken),
   )
   result.addRoleRule(
     srButton,
-    {ssDisabled},
+    {disabled},
     styleToken(ButtonDisabledFillToken),
     styleToken(ButtonDisabledBorderColorToken),
     styleToken(ButtonDisabledTextColorToken),
@@ -1818,12 +1818,11 @@ proc initTheme*(): Theme =
   result[srButton, StyleFocusRingInset] = -2.0
   result[srButton, StyleFocusRingColor] = styleToken(ButtonFocusRingColorToken)
   result[srButton, StyleBoxShadows] = styleToken(ButtonShadowsToken)
-  result[srButton, {ssHighlighted}, StyleBoxShadows] =
+  result[srButton, {highlighted}, StyleBoxShadows] =
     styleToken(ButtonHighlightedShadowsToken)
-  result[srButton, {ssActive}, StyleBoxShadows] =
+  result[srButton, {active}, StyleBoxShadows] =
     styleToken(ButtonHighlightedShadowsToken)
-  result[srButton, {ssDisabled}, StyleBoxShadows] =
-    styleToken(ButtonDisabledShadowsToken)
+  result[srButton, {disabled}, StyleBoxShadows] = styleToken(ButtonDisabledShadowsToken)
 
   for role in [srCheckBox, srRadioButton]:
     let radius = if role == srCheckBox: 6.0'f32 else: 7.0'f32
@@ -1837,7 +1836,7 @@ proc initTheme*(): Theme =
     )
     result.addChoiceRule(
       role,
-      {ssHighlighted},
+      {highlighted},
       styleToken(ChoiceIndicatorHighlightedFillToken),
       styleToken(ChoiceIndicatorHighlightedBorderColorToken),
       styleToken(ChoiceMarkColorToken),
@@ -1845,7 +1844,7 @@ proc initTheme*(): Theme =
     )
     result.addChoiceRule(
       role,
-      {ssSelected},
+      {selected},
       styleToken(ChoiceIndicatorSelectedFillToken),
       styleToken(ChoiceIndicatorBorderColorToken),
       styleToken(ChoiceMarkColorToken),
@@ -1853,7 +1852,7 @@ proc initTheme*(): Theme =
     )
     result.addChoiceRule(
       role,
-      {ssSelected, ssHighlighted},
+      {selected, highlighted},
       styleToken(ChoiceIndicatorSelectedHighlightedFillToken),
       styleToken(ChoiceIndicatorHighlightedBorderColorToken),
       styleToken(ChoiceMarkColorToken),
@@ -1861,7 +1860,7 @@ proc initTheme*(): Theme =
     )
     result.addChoiceRule(
       role,
-      {ssDisabled},
+      {disabled},
       styleToken(ChoiceIndicatorDisabledFillToken),
       styleToken(ChoiceIndicatorDisabledBorderColorToken),
       styleToken(ChoiceDisabledMarkColorToken),
@@ -1869,7 +1868,7 @@ proc initTheme*(): Theme =
     )
     result.addChoiceRule(
       role,
-      {ssSelected, ssDisabled},
+      {selected, disabled},
       styleToken(ChoiceIndicatorSelectedDisabledFillToken),
       styleToken(ChoiceIndicatorDisabledBorderColorToken),
       styleToken(ChoiceDisabledMarkColorToken),
@@ -1958,14 +1957,14 @@ proc initTheme*(): Theme =
   )
   result.addRoleRule(
     srComboBox,
-    {ssOpen},
+    {opened},
     styleToken(ComboBoxFillToken),
     styleToken(ComboBoxOpenBorderColorToken),
     styleToken(ComboBoxTextColorToken),
   )
   result.addRoleRule(
     srComboBox,
-    {ssDisabled},
+    {disabled},
     styleToken(TextFieldFillToken),
     styleToken(TextFieldBorderColorToken),
     styleToken(DisabledTextColorToken),
@@ -1990,21 +1989,21 @@ proc initTheme*(): Theme =
   )
   result.addRoleRule(
     srComboBoxItem,
-    {ssHovered},
+    {hovered},
     styleToken(ComboBoxItemHighlightedFillToken),
     styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
     styleToken(ComboBoxItemTextColorToken),
   )
   result.addRoleRule(
     srComboBoxItem,
-    {ssSelected},
+    {selected},
     styleToken(ComboBoxItemSelectedFillToken),
     styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
     styleToken(ComboBoxItemSelectedTextColorToken),
   )
   result.addRoleRule(
     srComboBoxItem,
-    {ssSelected, ssHovered},
+    {selected, hovered},
     styleToken(ComboBoxItemSelectedHighlightedFillToken),
     styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
     styleToken(ComboBoxItemSelectedTextColorToken),
@@ -2033,35 +2032,35 @@ proc initTheme*(): Theme =
   )
   result.addRoleRule(
     srListItem,
-    {ssHovered},
+    {hovered},
     styleToken(ListItemHighlightedFillToken),
     styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemTextColorToken),
   )
   result.addRoleRule(
     srListItem,
-    {ssHighlighted},
+    {highlighted},
     styleToken(ListItemHighlightedFillToken),
     styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemTextColorToken),
   )
   result.addRoleRule(
     srListItem,
-    {ssSelected},
+    {selected},
     styleToken(ListItemSelectedFillToken),
     styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemSelectedTextColorToken),
   )
   result.addRoleRule(
     srListItem,
-    {ssSelected, ssHovered},
+    {selected, hovered},
     styleToken(ListItemSelectedHighlightedFillToken),
     styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemSelectedTextColorToken),
   )
   result.addRoleRule(
     srListItem,
-    {ssSelected, ssHighlighted},
+    {selected, highlighted},
     styleToken(ListItemSelectedHighlightedFillToken),
     styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemSelectedTextColorToken),
