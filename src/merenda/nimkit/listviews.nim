@@ -68,8 +68,11 @@ type
     xComputingRowHeights: bool
     xSelectionMode: ListSelectionMode
     xTrackingItem: bool
+    xPressedIndex: int
     xTypeSelectBuffer: string
     xTypeSelectLastTime: float
+    xUsesAlternatingRowBackgrounds: bool
+    xShowsRowSeparators: bool
     xListRole: StyleRole
     xItemRole: StyleRole
 
@@ -95,6 +98,8 @@ proc reloadData*(listView: ListView)
 proc visibleItemCount*(listView: ListView): int
 proc firstVisibleIndex*(listView: ListView): int
 proc highlightedIndex*(listView: ListView): int
+proc usesAlternatingRowBackgrounds*(listView: ListView): bool
+proc showsRowSeparators*(listView: ListView): bool
 proc rowEnabled*(listView: ListView, index: int): bool
 proc rowSelectable*(listView: ListView, index: int): bool
 proc rowStyle*(listView: ListView, row: ListRowState): ListRowStyle
@@ -266,6 +271,10 @@ proc removeItemAtIndex*(listView: ListView, index: int) =
     listView.xHighlightedIndex = -1
   elif index < listView.xHighlightedIndex:
     dec listView.xHighlightedIndex
+  if listView.xPressedIndex == index:
+    listView.xPressedIndex = -1
+  elif index < listView.xPressedIndex:
+    dec listView.xPressedIndex
   listView.reloadData()
 
 proc removeAllItems*(listView: ListView) =
@@ -277,6 +286,7 @@ proc removeAllItems*(listView: ListView) =
   listView.xSelectionAnchor = -1
   listView.xSelectionLead = -1
   listView.xHighlightedIndex = -1
+  listView.xPressedIndex = -1
   listView.xViewport.reset()
   listView.reloadData()
 
@@ -312,6 +322,24 @@ proc `highlightedIndex=`*(listView: ListView, index: int) =
   if listView.xHighlightedIndex == boundedIndex:
     return
   listView.xHighlightedIndex = boundedIndex
+  listView.invalidateListRows()
+
+proc usesAlternatingRowBackgrounds*(listView: ListView): bool =
+  listView.xUsesAlternatingRowBackgrounds
+
+proc `usesAlternatingRowBackgrounds=`*(listView: ListView, value: bool) =
+  if listView.xUsesAlternatingRowBackgrounds == value:
+    return
+  listView.xUsesAlternatingRowBackgrounds = value
+  listView.invalidateListRows()
+
+proc showsRowSeparators*(listView: ListView): bool =
+  listView.xShowsRowSeparators
+
+proc `showsRowSeparators=`*(listView: ListView, value: bool) =
+  if listView.xShowsRowSeparators == value:
+    return
+  listView.xShowsRowSeparators = value
   listView.invalidateListRows()
 
 proc rowHeight*(listView: ListView): float32 =
@@ -518,14 +546,24 @@ proc drawListRow*(
 ) =
   if listView.isNil or context.isNil:
     return
+  var style = listView.rowStyle(row)
+  if row.alternating and not row.selected and style.fill.isNone:
+    style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
   context.drawListRow(
-    rect,
-    row,
-    listView.rowStyle(row),
-    listView.xItemRole,
-    listView.styleId(),
-    listView.styleClasses(),
+    rect, row, style, listView.xItemRole, listView.styleId(), listView.styleClasses()
   )
+  if listView.showsRowSeparators() and row.index >= 0 and row.index < listView.len() - 1:
+    let
+      itemStyle = context.appearance.resolveListItemStyle(
+        initControlStyleContext(
+          listView.xItemRole,
+          enabled = row.enabled,
+          id = listView.styleId(),
+          classes = listView.styleClasses(),
+        )
+      )
+      separatorRect = initRect(rect.origin.x, rect.maxY - 1.0'f32, rect.size.width, 1.0)
+    discard context.addWindowRectangle(separatorRect, fill(itemStyle.box.borderColor))
 
 proc drawCustomListRow(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -734,6 +772,8 @@ proc reloadData*(listView: ListView) =
 
   if not listView.rowEnabled(listView.xHighlightedIndex):
     listView.xHighlightedIndex = -1
+  if not listView.rowEnabled(listView.xPressedIndex):
+    listView.xPressedIndex = -1
   listView.tileListContent()
   listView.setListContentOffset(
     initPoint(
@@ -853,6 +893,8 @@ proc listRowState(listView: ListView, index: int): ListRowState =
       listView[index],
       selected = listView.selectionContains(index),
       highlighted = index == listView.highlightedIndex(),
+      alternating = listView.usesAlternatingRowBackgrounds() and index mod 2 == 1,
+      pressed = index == listView.xPressedIndex,
       enabled = listView.rowEnabled(index),
       focused = listView.isFocused(),
     )
@@ -1367,11 +1409,17 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     if not listView.isEnabled() or event.button != mbPrimary:
       return
     listView.xTrackingItem = true
-    listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
+    let index = listView.listItemIndexAtPoint(event.location)
+    listView.highlightedIndex = index
+    listView.xPressedIndex = listView.highlightedIndex()
+    listView.invalidateListRows()
 
   method mouseDragged(listView: ListView, event: MouseEvent) =
-    if listView.isEnabled():
-      listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
+    if listView.isEnabled() and listView.xTrackingItem:
+      let index = listView.listItemIndexAtPoint(event.location)
+      listView.highlightedIndex = index
+      listView.xPressedIndex = listView.highlightedIndex()
+      listView.invalidateListRows()
 
   method mouseMoved(listView: ListView, event: MouseEvent) =
     if listView.isEnabled():
@@ -1386,6 +1434,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
       else:
         -1
     listView.xTrackingItem = false
+    listView.xPressedIndex = -1
     if index >= 0:
       listView.activateItemAtIndex(index, event.modifiers)
     listView.setNeedsDisplay(true)
@@ -1466,6 +1515,7 @@ proc initListViewFields*(
   listView.xSelectionAnchor = -1
   listView.xSelectionLead = -1
   listView.xHighlightedIndex = -1
+  listView.xPressedIndex = -1
   listView.xRowHeight = 22.0'f32
   listView.xVisibleRows = 5
   listView.xSelectionMode = lsmSingle

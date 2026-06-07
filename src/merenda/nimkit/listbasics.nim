@@ -15,6 +15,8 @@ type
     text*: string
     selected*: bool
     highlighted*: bool
+    alternating*: bool
+    pressed*: bool
     enabled*: bool
     focused*: bool
 
@@ -168,6 +170,8 @@ func initListRowState*(
     text: string,
     selected = false,
     highlighted = false,
+    alternating = false,
+    pressed = false,
     enabled = true,
     focused = false,
 ): ListRowState =
@@ -176,6 +180,8 @@ func initListRowState*(
     text: text,
     selected: selected,
     highlighted: highlighted,
+    alternating: alternating,
+    pressed: pressed,
     enabled: enabled,
     focused: focused,
   )
@@ -201,6 +207,7 @@ proc drawListRow*(
     initControlStyleContext(
       itemRole,
       enabled = row.enabled,
+      highlighted = row.pressed,
       hovered = row.highlighted,
       focused = row.focused,
       selected = row.selected,

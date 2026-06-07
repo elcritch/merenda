@@ -669,6 +669,59 @@ suite "nimkit list views":
     check renderer.rects[1] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[2] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
 
+  test "list view row states include alternating and pressed affordances":
+    let
+      window = newWindow("List affordance states", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      listView =
+        newListView(["One", "Two", "Three", "Four"], frame = initRect(10, 10, 120, 62))
+      renderer = newListRowRendererSpy()
+
+    listView.rowHeight = 20.0
+    listView.usesAlternatingRowBackgrounds = true
+    listView.delegate = renderer
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(16, 56))
+    discard buildRenders(listView)
+
+    check renderer.rows.len == 3
+    check not renderer.rows[0].alternating
+    check renderer.rows[1].alternating
+    check not renderer.rows[1].pressed
+    check renderer.rows[2].pressed
+
+  test "list view renders alternating rows and separators":
+    let
+      listView = newListView(["One", "Two", "Three"], frame = initRect(0, 0, 120, 62))
+      alternatingFill = initColor(0.96, 0.97, 0.99, 1.0)
+      separatorFill = initColor(0.86, 0.88, 0.91, 1.0)
+
+    listView.rowHeight = 20.0
+    listView.usesAlternatingRowBackgrounds = true
+    listView.showsRowSeparators = true
+
+    var theme = initTheme()
+    theme[ListItemSeparatorColorToken] = separatorFill
+
+    let nodes = buildRenders(listView, initAppearance(theme))[DefaultDrawLevel]
+    var
+      alternatingFound = false
+      separatorCount = 0
+    for node in nodes.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor:
+        if node.fill.color == alternatingFill.rgba and node.screenBox.x == 1.0 and
+            node.screenBox.y == 21.0 and node.screenBox.w == 118.0 and
+            node.screenBox.h == 20.0:
+          alternatingFound = true
+        if node.fill.color == separatorFill.rgba and node.screenBox.w == 118.0 and
+            node.screenBox.h == 1.0:
+          inc separatorCount
+
+    check alternatingFound
+    check separatorCount == 2
+
   test "list view delegate can render an empty state":
     let
       listView = newListView(frame = initRect(0, 0, 120, 62))
@@ -919,6 +972,31 @@ suite "nimkit list views":
     check listView.selectedIndex == 1
     check actionCount == 1
     check selectedText == "Two"
+
+  test "list view double-click activates selected row":
+    let
+      window = newWindow("List double click", frame = initRect(0, 0, 220, 140))
+      root = newView(frame = initRect(0, 0, 220, 140))
+      listView = newListView(["One", "Two", "Three"], frame = initRect(10, 10, 120, 62))
+      action = actionSelector("listDoubleClickAction")
+
+    var actionCount = 0
+
+    proc onActivate(sender: DynamicAgent) =
+      check sender == DynamicAgent(listView)
+      inc actionCount
+
+    listView.rowHeight = 20.0
+    listView.selectedIndex = 0
+    listView.target = newActionTarget(action, onActivate)
+    listView.action = action
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(16, 56), clickCount = 2)
+    check window.mouseUpAt(initPoint(16, 56), clickCount = 2)
+    check listView.selectedIndex == 2
+    check actionCount == 1
 
   test "list view keyboard navigation scrolls and activates selection":
     let

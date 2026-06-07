@@ -243,6 +243,7 @@ const
   ListItemSelectedHighlightedFillToken* = "list.item.fill.selected.highlighted"
   ListItemTextColorToken* = "list.item.text.color"
   ListItemSelectedTextColorToken* = "list.item.text.color.selected"
+  ListItemSeparatorColorToken* = "list.item.separator.color"
 
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -1779,6 +1780,7 @@ proc initTheme*(): Theme =
   result[ListItemTextColorToken] = styleToken(ComboBoxItemTextColorToken)
   result[ListItemSelectedTextColorToken] =
     styleToken(ComboBoxItemSelectedTextColorToken)
+  result[ListItemSeparatorColorToken] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
 
   result.addRoleRule(
     srButton,
@@ -2026,28 +2028,42 @@ proc initTheme*(): Theme =
     srListItem,
     {},
     styleToken(ListItemFillToken),
-    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemTextColorToken),
   )
   result.addRoleRule(
     srListItem,
     {ssHovered},
     styleToken(ListItemHighlightedFillToken),
-    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemSeparatorColorToken),
+    styleToken(ListItemTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
+    {ssHighlighted},
+    styleToken(ListItemHighlightedFillToken),
+    styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemTextColorToken),
   )
   result.addRoleRule(
     srListItem,
     {ssSelected},
     styleToken(ListItemSelectedFillToken),
-    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemSelectedTextColorToken),
   )
   result.addRoleRule(
     srListItem,
     {ssSelected, ssHovered},
     styleToken(ListItemSelectedHighlightedFillToken),
-    styleColor(initColor(0.0, 0.0, 0.0, 0.0)),
+    styleToken(ListItemSeparatorColorToken),
+    styleToken(ListItemSelectedTextColorToken),
+  )
+  result.addRoleRule(
+    srListItem,
+    {ssSelected, ssHighlighted},
+    styleToken(ListItemSelectedHighlightedFillToken),
+    styleToken(ListItemSeparatorColorToken),
     styleToken(ListItemSelectedTextColorToken),
   )
   result[srListItem, StyleBorderWidth] = 0.0
@@ -2062,6 +2078,7 @@ proc initBannerTheme*(): Theme =
   result[DisabledFillToken] = initColor(0.52, 0.50, 0.45, 1.0)
   result[DisabledTextColorToken] = initColor(0.94, 0.91, 0.86, 1.0)
   result[FocusRingColorToken] = initColor(0.31, 0.58, 0.54, 0.60)
+  result[ListItemSeparatorColorToken] = initColor(0.74, 0.70, 0.63, 1.0)
 
   result[ButtonFillToken] = styleToken(AccentToken)
   result[ButtonHighlightedFillToken] = styleToken(AccentPressedToken)
