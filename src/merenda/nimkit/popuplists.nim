@@ -267,14 +267,16 @@ proc drawPopupList*(
       continue
     let
       itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
-      row = initListRowState(
-        itemIndex,
-        popupList.itemText(itemIndex),
-        selected = itemIndex == popupList.selectedIndex(),
-        highlighted = itemIndex == popupList.highlightedIndex(),
-        enabled = popupList.isEnabled(),
-        focused = popupList.isFocused(),
-      )
+      states = block:
+        var rowStates: set[ListRowStateFlag] = {lrsEnabled}
+        if itemIndex == popupList.selectedIndex():
+          rowStates.incl(lrsSelected)
+        if itemIndex == popupList.highlightedIndex():
+          rowStates.incl(lrsHighlighted)
+        if popupList.isFocused():
+          rowStates.incl(lrsFocused)
+        rowStates
+      row = initListRowState(itemIndex, popupList.itemText(itemIndex), states = states)
     context.drawListRow(
       itemRect,
       row,

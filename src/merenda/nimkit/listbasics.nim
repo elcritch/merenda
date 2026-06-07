@@ -10,15 +10,18 @@ type
   ListViewport* = object
     rows: ScrollViewport
 
+  ListRowStateFlag* = enum
+    lrsEnabled
+    lrsFocused
+    lrsSelected
+    lrsHighlighted
+    lrsAlternating
+    lrsPressed
+
   ListRowState* = object
     index*: int
     text*: string
-    selected*: bool
-    highlighted*: bool
-    alternating*: bool
-    pressed*: bool
-    enabled*: bool
-    focused*: bool
+    states*: set[ListRowStateFlag]
 
   ListRowStyle* = object
     fill*: Option[Fill]
@@ -166,25 +169,9 @@ func listItemIndexAtPoint*(
   index
 
 func initListRowState*(
-    index: int,
-    text: string,
-    selected = false,
-    highlighted = false,
-    alternating = false,
-    pressed = false,
-    enabled = true,
-    focused = false,
+    index: int, text: string, states: set[ListRowStateFlag] = {lrsEnabled}
 ): ListRowState =
-  ListRowState(
-    index: index,
-    text: text,
-    selected: selected,
-    highlighted: highlighted,
-    alternating: alternating,
-    pressed: pressed,
-    enabled: enabled,
-    focused: focused,
-  )
+  ListRowState(index: index, text: text, states: states)
 
 func initListRowStyle*(fill = none(Fill), textColor = none(Color)): ListRowStyle =
   ListRowStyle(fill: fill, textColor: textColor)
@@ -206,11 +193,11 @@ proc drawListRow*(
   var itemStyle = context.appearance.resolveListItemStyle(
     initControlStyleContext(
       itemRole,
-      enabled = row.enabled,
-      highlighted = row.pressed,
-      hovered = row.highlighted,
-      focused = row.focused,
-      selected = row.selected,
+      enabled = lrsEnabled in row.states,
+      highlighted = lrsPressed in row.states,
+      hovered = lrsHighlighted in row.states,
+      focused = lrsFocused in row.states,
+      selected = lrsSelected in row.states,
       id = id,
       classes = classes,
     )
