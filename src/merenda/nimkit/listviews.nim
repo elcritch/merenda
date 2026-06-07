@@ -548,19 +548,14 @@ proc drawListRow*(
   if listView.isNil or context.isNil:
     return
   var style = listView.rowStyle(row)
-  if lrsAlternating in row.states and not (lrsSelected in row.states) and
-      style.fill.isNone:
+  if ssAlternating in row.states and not (ssSelected in row.states) and style.fill.isNone:
     style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
   context.drawListRow(
     rect, row, style, listView.xItemRole, listView.styleId(), listView.styleClasses()
   )
   if listView.showsRowSeparators() and row.index >= 0 and row.index < listView.len() - 1:
     let
-      separatorStates: set[WidgetState] =
-        if lrsEnabled in row.states:
-          {}
-        else:
-          {ssDisabled}
+      separatorStates: set[WidgetState] = row.states * {ssDisabled}
       itemStyle = context.appearance.resolveListItemStyle(
         initControlStyleContext(
           listView.xItemRole,
@@ -895,19 +890,19 @@ proc listRowState(listView: ListView, index: int): ListRowState =
   if index notin 0 ..< listView.len():
     initListRowState(-1, "", states = {})
   else:
-    var rowStates: set[ListRowStateFlag] = {}
-    if listView.rowEnabled(index):
-      rowStates.incl(lrsEnabled)
+    var rowStates: set[WidgetState] = {}
+    if not listView.rowEnabled(index):
+      rowStates.incl(ssDisabled)
     if listView.selectionContains(index):
-      rowStates.incl(lrsSelected)
+      rowStates.incl(ssSelected)
     if index == listView.highlightedIndex():
-      rowStates.incl(lrsHighlighted)
+      rowStates.incl(ssHovered)
     if listView.usesAlternatingRowBackgrounds() and index mod 2 == 1:
-      rowStates.incl(lrsAlternating)
+      rowStates.incl(ssAlternating)
     if index == listView.xPressedIndex:
-      rowStates.incl(lrsPressed)
+      rowStates.incl(ssPressed)
     if ssFocused in listView.widgetStateSet():
-      rowStates.incl(lrsFocused)
+      rowStates.incl(ssFocused)
     initListRowState(index, listView[index], states = rowStates)
 
 proc selectedIndexes*(listView: ListView): seq[int] =
@@ -1213,10 +1208,10 @@ proc visibleRowSummaries*(listView: ListView): seq[ListVisibleRowSummary] =
         index: row.index,
         text: row.text,
         rect: rect,
-        selected: lrsSelected in row.states,
-        highlighted: lrsHighlighted in row.states,
-        enabled: lrsEnabled in row.states,
-        focused: lrsFocused in row.states,
+        selected: ssSelected in row.states,
+        highlighted: ssHovered in row.states,
+        enabled: not (ssDisabled in row.states),
+        focused: ssFocused in row.states,
       )
 
 proc configureRowView(rowView: ListRowView, itemIndex: int) =

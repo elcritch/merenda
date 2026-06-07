@@ -84,7 +84,7 @@ suite "nimkit theme":
       srButton,
       {
         ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
-        ssFocusWithin, ssSelected, ssOpen,
+        ssFocusWithin, ssSelected, ssOpen, ssAlternating, ssPressed, ssAccent,
       },
       id = "primary",
       classes = @["default", "toolbar"],
@@ -95,7 +95,7 @@ suite "nimkit theme":
     check context.classes == @["default", "toolbar"]
     check context.states == {
       ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
-      ssFocusWithin, ssSelected, ssOpen,
+      ssFocusWithin, ssSelected, ssOpen, ssAlternating, ssPressed, ssAccent,
     }
 
   test "style token store resolves typed values and nested references":

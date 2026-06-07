@@ -11,18 +11,10 @@ type
   ListViewport* = object
     rows: ScrollViewport
 
-  ListRowStateFlag* = enum
-    lrsEnabled
-    lrsFocused
-    lrsSelected
-    lrsHighlighted
-    lrsAlternating
-    lrsPressed
-
   ListRowState* = object
     index*: int
     text*: string
-    states*: set[ListRowStateFlag]
+    states*: set[WidgetState]
 
   ListRowStyle* = object
     fill*: Option[Fill]
@@ -170,7 +162,7 @@ func listItemIndexAtPoint*(
   index
 
 func initListRowState*(
-    index: int, text: string, states: set[ListRowStateFlag] = {lrsEnabled}
+    index: int, text: string, states: set[WidgetState] = {}
 ): ListRowState =
   ListRowState(index: index, text: text, states: states)
 
@@ -191,19 +183,8 @@ proc drawListRow*(
   if rect.isEmpty:
     return
   let currentParent = int16(parent) < 0
-  var controlStates: set[WidgetState] = {}
-  if not (lrsEnabled in row.states):
-    controlStates.incl ssDisabled
-  if lrsPressed in row.states:
-    controlStates.incl ssHighlighted
-  if lrsHighlighted in row.states:
-    controlStates.incl ssHovered
-  if lrsFocused in row.states:
-    controlStates.incl ssFocused
-  if lrsSelected in row.states:
-    controlStates.incl ssSelected
   var itemStyle = context.appearance.resolveListItemStyle(
-    initControlStyleContext(itemRole, controlStates, id = id, classes = classes)
+    initControlStyleContext(itemRole, row.states, id = id, classes = classes)
   )
   if style.fill.isSome:
     itemStyle.box.fill = style.fill.get()

@@ -94,6 +94,9 @@ type
     ssFocusWithin
     ssSelected
     ssOpen
+    ssAlternating
+    ssPressed
+    ssAccent
 
   ButtonType* = enum
     btMomentary
