@@ -20,6 +20,8 @@ type
     views: seq[ListView]
     rows: seq[ListRowState]
     rects: seq[Rect]
+    emptyViews: seq[ListView]
+    emptyRects: seq[Rect]
 
   ListPolicyDelegateSpy = ref object of Responder
     disabledRows: seq[int]
@@ -77,6 +79,12 @@ protocol ListRowRendererSpyMethods of ListViewDelegate:
     renderer.rows.add row
     renderer.rects.add rect
     listView.drawListRow(context, rect, row)
+
+  method drawEmptyState(
+      renderer: ListRowRendererSpy, listView: ListView, context: DrawContext, rect: Rect
+  ) =
+    renderer.emptyViews.add listView
+    renderer.emptyRects.add rect
 
 protocol ListPolicyDelegateSpyMethods of ListViewDelegate:
   method rowIsEnabled(
@@ -150,6 +158,8 @@ proc clear(spy: ListRowRendererSpy) =
   spy.views.setLen(0)
   spy.rows.setLen(0)
   spy.rects.setLen(0)
+  spy.emptyViews.setLen(0)
+  spy.emptyRects.setLen(0)
 
 proc clear(spy: ListPolicyDelegateSpy) =
   spy.rows.setLen(0)
@@ -634,6 +644,22 @@ suite "nimkit list views":
     check renderer.rects[0] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[1] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check renderer.rects[2] == initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+
+  test "list view delegate can render an empty state":
+    let
+      listView = newListView(frame = initRect(0, 0, 120, 62))
+      renderer = newListRowRendererSpy()
+
+    listView.delegate = renderer
+    discard buildRenders(listView)
+
+    check renderer.rows.len == 0
+    check renderer.emptyViews.len > 0
+    check renderer.emptyViews.len == renderer.emptyRects.len
+    for view in renderer.emptyViews:
+      check view == listView
+    for rect in renderer.emptyRects:
+      check rect == initRect(1.0'f32, 1.0'f32, 118.0'f32, 60.0'f32)
 
   test "list view row policy controls enabled state and selection":
     let

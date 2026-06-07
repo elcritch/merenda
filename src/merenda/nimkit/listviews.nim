@@ -102,6 +102,8 @@ proc drawListRow*(
   listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
 )
 
+proc drawCustomEmptyState(listView: ListView, context: DrawContext, rect: Rect): bool
+
 proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
 proc showsVerticalScroller*(listView: ListView): bool
@@ -139,6 +141,10 @@ protocol ListViewDelegate {.selectorScope: protocol.}:
   method styleForRow*(listView: ListView, row: ListRowState): ListRowStyle {.optional.}
   method drawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+  ) {.optional.}
+
+  method drawEmptyState*(
+    listView: ListView, context: DrawContext, rect: Rect
   ) {.optional.}
 
 proc listView(rowView: ListRowView): ListView =
@@ -526,6 +532,13 @@ proc drawCustomListRow(
     return false
   listView.xDelegate.sendLocalIfHandled(
     drawRow(), (listView: listView, context: context, rect: rect, row: row)
+  )
+
+proc drawCustomEmptyState(listView: ListView, context: DrawContext, rect: Rect): bool =
+  if listView.isNil or listView.xDelegate.isNil or context.isNil or rect.isEmpty:
+    return false
+  listView.xDelegate.sendLocalIfHandled(
+    drawEmptyState(), (listView: listView, context: context, rect: rect)
   )
 
 proc viewportSize(listView: ListView): Size =
@@ -1307,6 +1320,9 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
       listStyle.box.shadows,
       clips = true,
     )
+
+    if listView.len() == 0 and not listView.clipView().isNil:
+      discard listView.drawCustomEmptyState(context, listView.clipView().frame())
 
     if listView.isFocusVisible:
       context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
