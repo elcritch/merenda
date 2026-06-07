@@ -18,7 +18,6 @@ type
   ComboBox* = ref object of Control
     xDataSource: DynamicAgent
     xPopupHighlightedIndex: int
-    xButtonPressed: bool
     xPopupWindow: Window
     xPopupPresentation: PopupPresentation
     xPopupViewport: ListViewport
@@ -129,7 +128,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       discard comboBox.endPopupSession()
       comboBox.closePopupWindow()
       comboBox.xPopupHighlightedIndex = -1
-      comboBox.xButtonPressed = false
+      comboBox.setWidgetState(ssPressed, false)
       comboBox.popupList().resetPopupListTracking()
       comboBox.xPopupViewport.reset()
 
@@ -287,9 +286,7 @@ protocol DefaultComboBoxAction of ButtonActionProtocol:
 protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
   method draw(comboBox: ComboBox, context: DrawContext) =
     let absoluteFrame = comboBox.rectToWindow(comboBox.bounds)
-    var styleStates: set[WidgetState] = comboBox.widgetStateSet()
-    if comboBox.isButtonPressed:
-      styleStates.incl ssHighlighted
+    let styleStates = comboBox.widgetStateSet()
     let style = context.appearance.resolveComboBoxStyle(
       initControlStyleContext(
         srComboBox, styleStates, id = comboBox.styleId, classes = comboBox.styleClasses
@@ -345,7 +342,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       )
     else:
       comboBox.popupList().resetPopupListTracking()
-      comboBox.xButtonPressed = true
+      comboBox.setWidgetState(ssPressed, true)
       comboBox.togglePopup()
       comboBox.setNeedsDisplay(true)
 
@@ -364,7 +361,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
   method mouseUp(comboBox: ComboBox, event: MouseEvent) =
     if not comboBox.isEnabled or event.button != mbPrimary:
       return
-    comboBox.xButtonPressed = false
+    comboBox.setWidgetState(ssPressed, false)
     if comboBox.popupOpen() and
         comboBox.popupRect(comboBox.bounds()).contains(event.location):
       comboBox.popupList().finishPopupListTracking(
@@ -504,13 +501,11 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.invalidateControlMetrics()
 
 proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
-  var states = comboBox.widgetStateSet()
-  if comboBox.xButtonPressed:
-    states.incl ssHighlighted
-  if comboBox.popupOpen:
-    states.incl ssOpen
   initControlStyleContext(
-    srComboBox, states, id = comboBox.styleId, classes = comboBox.styleClasses
+    srComboBox,
+    comboBox.widgetStateSet(),
+    id = comboBox.styleId,
+    classes = comboBox.styleClasses,
   )
 
 proc comboBoxMeasuredTextSize(cell: ComboBoxCell): Size =
@@ -721,7 +716,7 @@ proc setHoveredPopupIndex(comboBox: ComboBox, index: int) =
   comboBox.highlightedIndex = index
 
 proc isButtonPressed*(comboBox: ComboBox): bool =
-  not comboBox.isNil and comboBox.xButtonPressed
+  not comboBox.isNil and ssPressed in comboBox.widgetStateSet()
 
 proc visibleItemCount*(comboBox: ComboBox): int =
   visibleListItemCount(comboBox.numberOfItems(), comboBox.maxVisibleItems())
