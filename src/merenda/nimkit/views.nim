@@ -36,8 +36,6 @@ proc styleClasses*(view: View): seq[string] =
     view.xStyleClasses
 
 proc `styleClasses=`*(view: View, classes: openArray[string]) =
-  if view.isNil:
-    return
   let nextClasses = @classes
   if view.xStyleClasses == nextClasses:
     return
@@ -56,8 +54,6 @@ proc addStyleClass*(view: View, className: string) =
   view.setNeedsDisplay(true)
 
 proc removeStyleClass*(view: View, className: string) =
-  if view.isNil:
-    return
   let idx = view.xStyleClasses.find(className)
   if idx < 0:
     return
@@ -129,14 +125,10 @@ proc setNeedsUpdateConstraints*(view: View) =
   view.setNeedsUpdateConstraints(true)
 
 proc runUpdateConstraints(view: View) =
-  if view.isNil:
-    return
   view.xNeedsUpdateConstraints = false
   discard view.sendIfHandled(updateConstraints())
 
 proc updateConstraintsForSubtreeIfNeeded*(view: View) =
-  if view.isNil:
-    return
   for child in view.xSubviews:
     child.updateConstraintsForSubtreeIfNeeded()
   if view.xNeedsUpdateConstraints:
@@ -146,16 +138,12 @@ proc needsLayout*(view: View): bool =
   (not view.isNil) and view.xNeedsLayout
 
 proc `needsLayout=`*(view: View, value: bool) =
-  if view.isNil:
-    return
   view.xNeedsLayout = value
 
 proc setNeedsLayout*(view: View) =
   view.needsLayout = true
 
 proc layoutSubtree(view: View) =
-  if view.isNil:
-    return
   if view.xNeedsLayout:
     view.xNeedsLayout = false
     discard view.sendIfHandled(layoutSubviews())
@@ -164,8 +152,6 @@ proc layoutSubtree(view: View) =
     child.layoutSubtree()
 
 proc layoutSubtreeIfNeeded*(view: View) =
-  if view.isNil:
-    return
   view.updateConstraintsForSubtreeIfNeeded()
   view.applyConstraintsForSubtree()
   view.layoutSubtree()
@@ -177,8 +163,6 @@ proc dirtyRects*(view: View): seq[Rect] =
     view.invalidRects()
 
 proc needsDisplayInSubtree*(view: View): bool =
-  if view.isNil:
-    return false
   if view.needsDisplay:
     return true
   for child in view.xSubviews:
@@ -187,14 +171,10 @@ proc needsDisplayInSubtree*(view: View): bool =
   false
 
 proc prepareDisplaySubtree*(view: View): bool =
-  if view.isNil:
-    return false
   view.layoutSubtreeIfNeeded()
   view.needsDisplayInSubtree()
 
 proc finishDisplaySubtree*(view: View) =
-  if view.isNil:
-    return
   view.setNeedsDisplay(false)
   for child in view.xSubviews:
     child.finishDisplaySubtree()
@@ -207,8 +187,6 @@ proc moveToWindowOwner*(view: View, window: Responder) =
   view.propagateDidMoveToWindow()
 
 proc clearSuperviewForWindowOwner*(view: View) =
-  if view.isNil:
-    return
   view.xSuperview = nil
   view.clearNextResponder()
 

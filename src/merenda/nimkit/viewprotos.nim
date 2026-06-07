@@ -15,8 +15,6 @@ protocol ViewProtocol from View:
   property previousKeyView -> View
 
   method frame(self: View): Rect =
-    if self.isNil:
-      return
     self.xFrame
 
   method setFrame(self: View, frame: Rect) =
@@ -33,8 +31,6 @@ protocol ViewProtocol from View:
     self.setNeedsDisplay(true)
 
   method bounds(self: View): Rect =
-    if self.isNil:
-      return
     self.xBounds
 
   method setBounds(self: View, bounds: Rect) =
@@ -343,8 +339,6 @@ proc `hidden=`*(view: View, hidden: bool) =
   view.setHidden(hidden)
 
 proc setNeedsDisplaySubtree*(view: View) =
-  if view.isNil:
-    return
   view.setNeedsDisplay(true)
   for child in view.xSubviews:
     child.setNeedsDisplaySubtree()
@@ -373,8 +367,6 @@ proc effectiveAppearance*(view: View): Appearance =
   initAppearance()
 
 proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
-  if view.isNil:
-    return inherited
   if view.xHasAppearance:
     return view.xAppearance
   if view.xHasInheritedAppearance and view.xSuperview.isNil:
@@ -382,8 +374,6 @@ proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
   inherited
 
 proc `appearance=`*(view: View, appearance: Appearance) =
-  if view.isNil:
-    return
   view.xAppearance = appearance
   view.xHasAppearance = true
   view.invalidateIntrinsicContentSizeSubtree()
@@ -405,14 +395,10 @@ proc assignInheritedAppearance(view: View, appearance: Appearance) =
     child.assignInheritedAppearance(appearance)
 
 proc setInheritedAppearance*(view: View, appearance: Appearance) =
-  if view.isNil:
-    return
   view.assignInheritedAppearance(appearance)
   view.setNeedsDisplaySubtree()
 
 proc clearInheritedAppearance*(view: View) =
-  if view.isNil:
-    return
   view.xInheritedAppearance = Appearance()
   view.xHasInheritedAppearance = false
   view.invalidateIntrinsicContentSize()

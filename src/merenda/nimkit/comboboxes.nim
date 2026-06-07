@@ -113,8 +113,6 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     not comboBox.isNil and comboBox.xPopupOpen
 
   method setPopupOpen(comboBox: ComboBox, open: bool) =
-    if comboBox.isNil:
-      return
     let shouldOpen = open and comboBox.isEnabled and comboBox.numberOfItems() > 0
     if comboBox.xPopupOpen == shouldOpen:
       if shouldOpen:
@@ -157,8 +155,6 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       comboBox.setPopupNeedsDisplay()
 
   method popupPresentation(comboBox: ComboBox): PopupPresentation =
-    if comboBox.isNil:
-      return ppAutomatic
     comboBox.xPopupPresentation
 
   method setPopupPresentation(comboBox: ComboBox, presentation: PopupPresentation) =
@@ -432,13 +428,9 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
         comboBox.setStringValue(event.text)
 
 proc cellStringValue(cell: ComboBoxCell): string =
-  if cell.isNil:
-    return ""
   cell.xStringValue
 
 proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
-  if cell.isNil:
-    return
   if index < 0:
     if cell.xSelectedIndex < 0 and cell.xStringValue.len == 0:
       return
@@ -453,13 +445,9 @@ proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
   cell.invalidateControlMetrics()
 
 proc cellMaxVisibleItems(cell: ComboBoxCell): int =
-  if cell.isNil:
-    return 0
   cell.xMaxVisibleItems
 
 proc setCellMaxVisibleItems(cell: ComboBoxCell, value: int) =
-  if cell.isNil:
-    return
   let count = max(value, 1)
   if cell.xMaxVisibleItems == count:
     return
@@ -467,13 +455,9 @@ proc setCellMaxVisibleItems(cell: ComboBoxCell, value: int) =
   cell.invalidateControlMetrics()
 
 proc cellItemHeight(cell: ComboBoxCell): float32 =
-  if cell.isNil:
-    return 0.0
   cell.xItemHeight
 
 proc setCellItemHeight(cell: ComboBoxCell, value: float32) =
-  if cell.isNil:
-    return
   let height = max(value, 1.0'f32)
   if cell.xItemHeight == height:
     return
@@ -490,8 +474,6 @@ proc setCellEditable(cell: ComboBoxCell, editable: bool) =
   cell.invalidateControlMetrics()
 
 proc cellNumberOfItems(cell: ComboBoxCell): int =
-  if cell.isNil:
-    return 0
   cell.xItems.len
 
 proc cellItemAtIndex(cell: ComboBoxCell, index: int): string =
@@ -500,14 +482,10 @@ proc cellItemAtIndex(cell: ComboBoxCell, index: int): string =
   cell.xItems[index]
 
 proc cellAddItem(cell: ComboBoxCell, value: string) =
-  if cell.isNil:
-    return
   cell.xItems.add value
   cell.invalidateControlMetrics()
 
 proc cellInsertItem(cell: ComboBoxCell, value: string, index: int) =
-  if cell.isNil:
-    return
   let boundedIndex = max(0, min(index, cell.xItems.len))
   cell.xItems.insert(value, boundedIndex)
   if cell.xSelectedIndex >= boundedIndex:
@@ -528,8 +506,6 @@ proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
   cell.invalidateControlMetrics()
 
 proc cellRemoveAllItems(cell: ComboBoxCell) =
-  if cell.isNil:
-    return
   cell.xItems.setLen(0)
   cell.xStringValue = ""
   cell.xSelectedIndex = -1
@@ -587,8 +563,6 @@ protocol DefaultComboBoxCellMeasurement of CellMeasurementProtocol:
     cell.cellSize().resolveIntrinsicSize(bounds.size)
 
 proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
-  if comboBox.isNil:
-    return
   let
     cell = comboBox.comboBoxCell()
     index = comboBox.indexOfItem(value)
@@ -631,8 +605,6 @@ proc newComboBoxCell*(): ComboBoxCell =
   initComboBoxCellFields(result)
 
 proc comboBoxCell*(comboBox: ComboBox): ComboBoxCell =
-  if comboBox.isNil:
-    return nil
   let controlCell = comboBox.cell()
   if controlCell of ComboBoxCell:
     return ComboBoxCell(controlCell)
@@ -672,8 +644,6 @@ proc `popupPresentation=`*(comboBox: ComboBox, popupPresentation: PopupPresentat
   comboBox.setPopupPresentation(popupPresentation)
 
 proc dataSource*(comboBox: ComboBox): DynamicAgent =
-  if comboBox.isNil:
-    return nil
   comboBox.xDataSource
 
 proc `dataSource=`*(comboBox: ComboBox, dataSource: DynamicAgent) =
@@ -686,13 +656,9 @@ proc `dataSource=`*(comboBox: ComboBox, dataSource: Responder) =
   comboBox.dataSource = DynamicAgent(dataSource)
 
 proc highlightedIndex*(comboBox: ComboBox): int =
-  if comboBox.isNil:
-    return -1
   comboBox.xPopupHighlightedIndex
 
 proc setPopupNeedsDisplay(comboBox: ComboBox) =
-  if comboBox.isNil:
-    return
   comboBox.setNeedsDisplay(true)
   if not comboBox.xPopupWindow.isNil:
     let contentView = comboBox.xPopupWindow.contentView()
@@ -700,8 +666,6 @@ proc setPopupNeedsDisplay(comboBox: ComboBox) =
       contentView.setNeedsDisplay(true)
 
 proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
-  if comboBox.isNil:
-    return
   let boundedIndex = if index < 0 or index >= comboBox.numberOfItems(): -1 else: index
   let oldFirst = comboBox.popupFirstItemIndex()
   comboBox.scrollPopupItemToVisible(boundedIndex)
@@ -758,8 +722,6 @@ proc popupListActions(comboBox: ComboBox): PopupListActions =
   )
 
 proc popupList(comboBox: ComboBox): PopupListView =
-  if comboBox.isNil:
-    return nil
   if comboBox.xPopupList.isNil:
     comboBox.xPopupList =
       newPopupListView(comboBox.popupListData(), comboBox.popupListActions())
@@ -774,26 +736,18 @@ proc isButtonPressed*(comboBox: ComboBox): bool =
   not comboBox.isNil and comboBox.xButtonPressed
 
 proc visibleItemCount*(comboBox: ComboBox): int =
-  if comboBox.isNil:
-    return 0
   visibleListItemCount(comboBox.numberOfItems(), comboBox.maxVisibleItems())
 
 proc popupItemHeight*(comboBox: ComboBox): float32 =
-  if comboBox.isNil:
-    return 0.0
   max(comboBox.itemHeight(), 18.0'f32).normalizedRowHeight()
 
 proc popupFirstItemIndex*(comboBox: ComboBox): int =
-  if comboBox.isNil:
-    return 0
   let
     total = comboBox.numberOfItems()
     visible = comboBox.visibleItemCount()
   comboBox.xPopupViewport.firstIndex.clampFirstIndex(total, visible)
 
 proc scrollPopupItemToVisible(comboBox: ComboBox, itemIndex: int) =
-  if comboBox.isNil:
-    return
   comboBox.xPopupViewport.scrollToVisible(
     itemIndex, comboBox.numberOfItems(), comboBox.visibleItemCount()
   )
@@ -809,15 +763,11 @@ proc scrollPopupRows(comboBox: ComboBox, delta: int) =
     comboBox.setPopupNeedsDisplay()
 
 proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool =
-  if comboBox.isNil:
-    return false
   comboBox.xPopupViewport.canScrollBy(
     delta, comboBox.numberOfItems(), comboBox.visibleItemCount()
   )
 
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect =
-  if comboBox.isNil:
-    return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
   listPopupRect(
     bounds,
     comboBox.numberOfItems(),
@@ -833,8 +783,6 @@ proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect =
   listItemRect(popup, first, visible, itemIndex, comboBox.popupItemHeight())
 
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int =
-  if comboBox.isNil:
-    return -1
   let
     popup = comboBox.popupRect(bounds)
     first = comboBox.popupFirstItemIndex()
@@ -848,8 +796,6 @@ proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
   )
 
 proc popupScrollerKnobRect*(comboBox: ComboBox, bounds: Rect): Rect =
-  if comboBox.isNil:
-    return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
   listScrollerKnobRect(
     comboBox.popupRect(bounds),
     comboBox.popupFirstItemIndex(),
@@ -862,15 +808,11 @@ proc popupWindowSize(comboBox: ComboBox): Size =
   initSize(max(popup.size.width, 1.0'f32), max(popup.size.height, 1.0'f32))
 
 proc ownerWindow(comboBox: ComboBox): Window =
-  if comboBox.isNil:
-    return nil
   let owner = comboBox.window()
   if owner of Window:
     result = Window(owner)
 
 proc dismissPopupFromSession(comboBox: ComboBox, reason: DismissReason) =
-  if comboBox.isNil:
-    return
   case reason
   of tdrProgrammatic, tdrOutsideClick, tdrEscape, tdrFocusChange, tdrOwnerClosed,
       tdrNativeDone:
@@ -901,8 +843,6 @@ proc popupWindowActive(comboBox: ComboBox): bool =
     not comboBox.xPopupWindow.isClosed and comboBox.xPopupWindow.nativeReady
 
 proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation =
-  if comboBox.isNil:
-    return ppAutomatic
   if comboBox.xPopupPresentation == ppAutomatic:
     let owner = comboBox.ownerWindow()
     if owner.isNil:
@@ -978,8 +918,6 @@ proc openPopupWindow(comboBox: ComboBox) =
     popupWindow.close()
 
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true) =
-  if comboBox.isNil:
-    return
   let popupWindow = comboBox.xPopupWindow
   comboBox.xPopupWindow = nil
   if not popupWindow.isNil and not popupWindow.isClosed:
@@ -996,8 +934,6 @@ proc reactivateOwnerWindow(comboBox: ComboBox) =
   discard owner.makeFirstResponder(comboBox)
 
 proc updatePopupPresentation(comboBox: ComboBox) =
-  if comboBox.isNil:
-    return
   if not comboBox.popupOpen():
     comboBox.closePopupWindow()
     return
@@ -1049,8 +985,6 @@ proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int) =
   comboBox.movePopupHighlightTo(target)
 
 proc addItems*(comboBox: ComboBox, values: openArray[string]) =
-  if comboBox.isNil:
-    return
   for value in values:
     comboBox.addItem(value)
 

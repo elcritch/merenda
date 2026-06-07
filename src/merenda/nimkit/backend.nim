@@ -116,13 +116,9 @@ proc nativeMousePoint(window: siwinshim.Window, rawPos: Vec2): Point =
   initPoint(pos.x.float32, pos.y.float32)
 
 proc nativeModifiers(window: siwinshim.Window): set[KeyModifier] =
-  if window.isNil:
-    return {}
   window.keyboard.modifiers.toNimkitModifiers
 
 proc activeMouseButton(window: siwinshim.Window): types.MouseButton =
-  if window.isNil:
-    return mbPrimary
   if siwinshim.MouseButton.left in window.mouse.pressed:
     return mbPrimary
   if siwinshim.MouseButton.right in window.mouse.pressed:
@@ -135,15 +131,11 @@ proc isReady*(host: HostWindow): bool =
   (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
 
 proc nativeWindowOrNil*(host: HostWindow): siwinshim.Window =
-  if host.isNil:
-    return nil
   host.xNativeWindow
 
 proc rendererOrNil*(
     host: HostWindow
 ): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
-  if host.isNil:
-    return nil
   host.xRenderer
 
 proc contentScale*(host: HostWindow): float32 =
@@ -156,8 +148,6 @@ proc refreshContentScale*(host: HostWindow) =
     host.xNativeWindow.refreshUiScale(host.xAutoScale)
 
 proc markClosed(host: HostWindow, notify: bool) =
-  if host.isNil:
-    return
   let callbacks = host.xCallbacks
   host.unregisterHost()
   host.xReady = false
@@ -194,8 +184,6 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   host.xRenderer.endFrame()
 
 proc close*(host: HostWindow) =
-  if host.isNil:
-    return
   let nativeWindow = host.xNativeWindow
   let shouldClose = not nativeWindow.isNil and not nativeWindow.closed()
   host.markClosed(notify = false)
@@ -282,16 +270,12 @@ proc installEventHandlers(host: HostWindow) =
     ,
     onPopupDone: proc(event: siwinshim.PopupEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
-      if host.isNil:
-        return
       host.markClosed(notify = false)
       if not host.xCallbacks.onPopupDone.isNil:
         host.xCallbacks.onPopupDone()
     ,
     onResize: proc(event: siwinshim.ResizeEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
-      if host.isNil:
-        return
       let nativeWindow = if event.window.isNil: host.xNativeWindow else: event.window
       if nativeWindow.isNil:
         return
@@ -338,8 +322,6 @@ proc installEventHandlers(host: HostWindow) =
     ,
     onStateBoolChanged: proc(event: siwinshim.StateBoolChangedEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
-      if host.isNil:
-        return
       if event.kind == siwinshim.StateBoolChangedEventKind.focus and
           not host.xCallbacks.onFocusChanged.isNil:
         host.xCallbacks.onFocusChanged(event.value)

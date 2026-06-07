@@ -101,8 +101,6 @@ proc source*(input: LayoutInput): LayoutInputSource =
   of likEquation: input.equation.source
 
 proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
-  if view.isNil:
-    return @[]
   for source in LayoutInputSource:
     for input in view.xLayoutInputCache.generated[source]:
       result.add input
@@ -138,8 +136,6 @@ proc addInputSummary(summaries: var seq[LayoutInputSummary], input: LayoutInput)
 proc collectAuthoredConstraintSummary(
     view: View, summaries: var seq[LayoutInputSummary]
 ) =
-  if view.isNil:
-    return
   for constraint in view.xConstraints:
     if not constraint.isNil and constraint.xActive:
       summaries.addToSummary(lisUser, constraints = 1.Natural)
@@ -147,14 +143,10 @@ proc collectAuthoredConstraintSummary(
     child.collectAuthoredConstraintSummary(summaries)
 
 proc generatedLayoutSummary*(view: View): seq[LayoutInputSummary] =
-  if view.isNil:
-    return @[]
   for input in view.generatedLayoutInputs():
     result.addInputSummary(input)
 
 proc constraintsAffectingLayout*(view: View): seq[LayoutInputSummary] =
-  if view.isNil:
-    return @[]
   view.collectAuthoredConstraintSummary(result)
   for summary in view.generatedLayoutSummary():
     result.addToSummary(
@@ -1369,8 +1361,6 @@ proc refreshAutoresizingStates(state: LayoutSolveState) =
       solverView.item.refreshAutoresizingReference()
 
 proc generatedSourcesToRebuild(root: View): LayoutInputSources =
-  if root.isNil:
-    return {}
 
   let dirtySources =
     root.xLayoutInputCache.dirtySources + root.xLayoutInputCache.aggregateDirtySources
@@ -1433,8 +1423,6 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
       solverView.item.xLayoutInputCache.generation = 0
 
 proc applyConstraintsForSubtree*(view: View) =
-  if view.isNil:
-    return
   var state = initLayoutSolveState()
   state.collectSolverViews(view)
   state.collectConstraintItems(view)

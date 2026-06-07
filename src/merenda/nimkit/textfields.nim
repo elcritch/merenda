@@ -106,16 +106,12 @@ protocol TextFieldProtocol from TextField:
     textField.xFocused
 
   method selectedRange(textField: TextField): TextRange =
-    if textField.isNil:
-      return initTextRange(0, 0)
     let
       start = min(textField.xSelectionAnchor, textField.xInsertionPoint)
       stop = max(textField.xSelectionAnchor, textField.xInsertionPoint)
     initTextRange(start, stop - start)
 
   method setSelectedRange(textField: TextField, value: TextRange) =
-    if textField.isNil:
-      return
     let
       total = textField.xStringValue.runeLen
       start = max(0, min(value.location.int, total))
@@ -183,8 +179,6 @@ proc nextWordBoundary(text: string, index: int): int =
     inc result
 
 proc setCursor(textField: TextField, index: int, extending = false) =
-  if textField.isNil:
-    return
   let cursor = clampIndex(textField.runeCount, index)
   textField.xInsertionPoint = cursor
   if not extending:
@@ -194,8 +188,6 @@ proc setCursor(textField: TextField, index: int, extending = false) =
 proc setEditedString(
     textField: TextField, value: string, cursor: int, anchor: int, notify = true
 ) =
-  if textField.isNil:
-    return
   let changed = textField.xStringValue != value
   textField.xStringValue = value
   let total = textField.runeCount
@@ -208,8 +200,6 @@ proc setEditedString(
     emit textField.textDidChange(DynamicAgent(textField))
 
 proc selectAllText(textField: TextField) =
-  if textField.isNil:
-    return
   textField.xSelectionAnchor = 0
   textField.xInsertionPoint = textField.runeCount
   textField.setNeedsDisplay(true)
@@ -536,8 +526,6 @@ proc newTextFieldCell*(): TextFieldCell =
   initTextFieldCellFields(result)
 
 proc textFieldCell*(textField: TextField): TextFieldCell =
-  if textField.isNil:
-    return nil
   let controlCell = textField.cell()
   if controlCell of TextFieldCell:
     return TextFieldCell(controlCell)
@@ -591,8 +579,6 @@ proc labelStyle*(label: Label): LabelStyle =
   if label.isNil: lsBody else: label.xLabelStyle
 
 proc `labelStyle=`*(label: Label, style: LabelStyle) =
-  if label.isNil:
-    return
   label.xLabelStyle = style
   label.styleClasses = style.labelStyleClasses()
   label.alignment = style.defaultAlignment()

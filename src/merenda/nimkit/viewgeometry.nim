@@ -53,8 +53,6 @@ func isStructureDirtyReason(reason: LayoutInvalidationReason): bool =
   reason in {lirSuperview, lirSubviews, lirHierarchy, lirHidden}
 
 proc markConstraintStorageChangedRaw(view: View) =
-  if view.isNil:
-    return
   view.xNeedsUpdateConstraints = true
   view.xNeedsLayout = true
 
@@ -73,8 +71,6 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
   proc markLayoutInputDirty(
       view: View, reason: LayoutInvalidationReason
   ) {.slotFor: layoutInputChanged.} =
-    if view.isNil:
-      return
     let
       source = reason.sourceFor()
       structureDirty = reason.isStructureDirtyReason()
@@ -97,25 +93,17 @@ protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
       emit view.layoutInputChanged(lirSuperviewGeometry)
 
 proc initLayoutSignalBus*(view: View) =
-  if view.isNil:
-    return
   view.observeProtocol(view, ViewLayoutInputSlots)
 
 proc markConstraintStorageChanged*(view: View) =
-  if view.isNil:
-    return
   emit view.layoutInputChanged(lirConstraints)
 
 proc observeSuperviewGeometry*(view: View) =
-  if view.isNil:
-    return
   let parent = view.xSuperview
   if not parent.isNil:
     view.observeProtocol(parent, ViewSuperviewGeometrySlots)
 
 proc unobserveSuperviewGeometry*(view: View) =
-  if view.isNil:
-    return
   let parent = view.xSuperview
   if not parent.isNil:
     view.unobserveProtocol(parent, ViewSuperviewGeometrySlots)
@@ -123,8 +111,6 @@ proc unobserveSuperviewGeometry*(view: View) =
 proc invalidateLayoutItemGeometry*(
     view: View, reason = lirFrame, ancestorReason = lirDescendantGeometry
 ) =
-  if view.isNil:
-    return
   var current = view
   var isOrigin = true
   while not current.isNil:
@@ -133,8 +119,6 @@ proc invalidateLayoutItemGeometry*(
     current = current.xSuperview
 
 proc autoresizingMask*(view: View): AutoresizingMask =
-  if view.isNil:
-    return {}
   view.xAutoresizingMask
 
 proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
@@ -168,8 +152,6 @@ proc `translatesAutoresizingMaskIntoConstraints=`*(view: View, value: bool) =
   view.autoresizingMaskConstraints = value
 
 proc alignmentInsets*(view: View): EdgeInsets =
-  if view.isNil:
-    return initEdgeInsets(0.0)
   view.xAlignmentInsets
 
 proc `alignmentInsets=`*(view: View, insets: EdgeInsets) =
@@ -179,13 +161,9 @@ proc `alignmentInsets=`*(view: View, insets: EdgeInsets) =
   view.invalidateLayoutItemGeometry(lirFrame)
 
 proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
-  if view.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
   frame.inset(view.alignmentInsets())
 
 proc frameForAlignmentRect*(view: View, alignmentRect: Rect): Rect =
-  if view.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
   let insets = view.alignmentInsets()
   initRect(
     alignmentRect.origin.x - insets.left,
@@ -195,13 +173,9 @@ proc frameForAlignmentRect*(view: View, alignmentRect: Rect): Rect =
   )
 
 proc alignmentRect*(view: View): Rect =
-  if view.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
   view.alignmentRectForFrame(view.xFrame)
 
 proc resetAutoresizingState*(view: View) =
-  if view.isNil:
-    return
   view.xAutoresizingState = AutoresizingState()
 
 proc refreshAutoresizingReference*(view: View) =
@@ -217,8 +191,6 @@ proc refreshAutoresizingReference*(view: View) =
   )
 
 proc refreshAutoresizingReferenceIfNeeded*(view: View) =
-  if view.isNil:
-    return
   if not view.xAutoresizingState.hasReference or view.xAutoresizingState.referenceDirty:
     view.refreshAutoresizingReference()
 
@@ -245,8 +217,6 @@ proc setFrameFromLayout*(view: View, frame: Rect) =
   view.applyLayoutFrame(frame, lfoContainer)
 
 proc setFrameFromAlignmentRect*(view: View, alignmentRect: Rect) =
-  if view.isNil:
-    return
   view.applyLayoutFrame(view.frameForAlignmentRect(alignmentRect), lfoAuthored)
 
 proc `alignmentRect=`*(view: View, alignmentRect: Rect) =
@@ -277,8 +247,6 @@ proc `firstBaselineOffset=`*(view: View, offset: float32) =
   )
 
 proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
-  if view.isNil:
-    return 0.0'f32
   let rect = view.alignmentRect()
   case attribute
   of latLeft, latLeading:
@@ -308,16 +276,12 @@ proc intrinsicContentSize*(view: View): IntrinsicSize =
   NoIntrinsicContentSize
 
 proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
-  if view.isNil:
-    return NoIntrinsicContentSize
   let measured = view.performOptional(layoutIntrinsicContentSize(), ())
   if measured.isSome:
     return measured.get()
   view.intrinsicContentSize()
 
 proc sizeThatFits*(view: View, proposedSize: FittingSize): Size =
-  if view.isNil:
-    return initSize(0.0, 0.0)
   let
     intrinsicSize = view.resolvedIntrinsicContentSize()
     fallbackSize = initSize(
@@ -327,18 +291,12 @@ proc sizeThatFits*(view: View, proposedSize: FittingSize): Size =
   intrinsicSize.resolveIntrinsicSize(fallbackSize).constrainSize(proposedSize)
 
 proc sizeThatFits*(view: View): Size =
-  if view.isNil:
-    return initSize(0.0, 0.0)
   view.sizeThatFits(UnconstrainedFittingSize)
 
 proc sizeThatFits*(view: View, proposedSize: Size): Size =
-  if view.isNil:
-    return initSize(0.0, 0.0)
   view.sizeThatFits(initFittingSize(proposedSize))
 
 proc resolvedFrame*(view: View, frame: Rect): Rect =
-  if view.isNil:
-    return frame.resolveAutoRect(initRect(0.0, 0.0, 0.0, 0.0))
 
   let
     fallbackSize =
@@ -357,8 +315,6 @@ proc applyInitialFrame*(view: View, frame: Rect) =
   view.applyLayoutFrame(nextFrame, lfoAuthored)
 
 proc sizeToFit*(view: View) =
-  if view.isNil:
-    return
   let
     frame = view.xFrame
     fittingSize = view.sizeThatFits(UnconstrainedFittingSize)
@@ -366,22 +322,16 @@ proc sizeToFit*(view: View) =
   view.applyLayoutFrame(nextFrame, lfoAuthored)
 
 proc invalidateIntrinsicContentSize*(view: View) =
-  if view.isNil:
-    return
   view.invalidateLayoutItemGeometry(
     lirIntrinsic, ancestorReason = lirDescendantIntrinsic
   )
 
 proc invalidateContainerMetrics*(view: View) =
-  if view.isNil:
-    return
   view.invalidateLayoutItemGeometry(
     lirContainerMetrics, ancestorReason = lirDescendantIntrinsic
   )
 
 proc invalidateIntrinsicContentSizeSubtree*(view: View) =
-  if view.isNil:
-    return
   view.invalidateIntrinsicContentSize()
   for child in view.xSubviews:
     child.invalidateIntrinsicContentSizeSubtree()
@@ -404,8 +354,6 @@ proc layoutPriority(
 proc setLayoutPriority(
     view: View, kind: ViewLayoutPriorityKind, priority: LayoutPriority, axis: LayoutAxis
 ) =
-  if view.isNil:
-    return
   case kind
   of vlpkHugging:
     if view.xHuggingPriority[axis] == priority:
@@ -489,8 +437,6 @@ proc pointFromSuperview(view: View, point: Point): Point =
   )
 
 proc pointToWindow*(view: View, point: Point): Point =
-  if view.isNil:
-    return point
   var resultPoint = point
   var current = view
   while not current.isNil:
@@ -499,8 +445,6 @@ proc pointToWindow*(view: View, point: Point): Point =
   resultPoint
 
 proc pointFromWindow*(view: View, point: Point): Point =
-  if view.isNil:
-    return point
   var chain: seq[View] = @[]
   var current = view
   while not current.isNil:

@@ -30,8 +30,6 @@ proc controlIntrinsicContentSize(control: Control): IntrinsicSize =
     controlCell.cellSize()
 
 proc invalidateCellMetrics(control: Control) =
-  if control.isNil:
-    return
   control.invalidateIntrinsicContentSize()
   control.setNeedsDisplay(true)
 
@@ -72,8 +70,6 @@ proc `enabled=`*(control: Control, enabled: bool) =
     control.setEnabled(enabled)
 
 proc cellForwardingTarget*(control: Control, selector: SigilName): DynamicAgent =
-  if control.isNil:
-    return nil
   let controlCell = control.xCell
   if not controlCell.isNil and controlCell.respondsTo(selector):
     return DynamicAgent(controlCell)
@@ -88,8 +84,6 @@ proc intrinsicContentSize*(control: Control): IntrinsicSize =
   control.controlIntrinsicContentSize()
 
 proc sizeThatFits*(control: Control, proposedSize: FittingSize): Size =
-  if control.isNil:
-    return initSize(0.0, 0.0)
   let controlCell = control.cell()
   if controlCell.isNil:
     return control.bounds().size.constrainSize(proposedSize)
@@ -113,8 +107,6 @@ proc sizeThatFits*(control: Control, proposedSize: Size): Size =
   control.sizeThatFits(initFittingSize(proposedSize))
 
 proc sizeToFit*(control: Control) =
-  if control.isNil:
-    return
   let frame = control.frame()
   control.setFrame(
     initRect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize))
@@ -133,15 +125,11 @@ proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = n
   discard control.withProto()
 
 proc cell*(control: Control): Cell =
-  if control.isNil:
-    return nil
   if control.xCell.isNil:
     control.setCell(newActionCell())
   control.xCell
 
 proc setCell*(control: Control, cell: Cell) =
-  if control.isNil:
-    return
   if control.xCell == cell:
     control.syncActionCell(cell)
     return

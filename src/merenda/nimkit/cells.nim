@@ -68,8 +68,6 @@ proc controlView*(cell: Cell): View =
   cell.xControlView[]
 
 proc setControlView*(cell: Cell, view: View) =
-  if cell.isNil:
-    return
   let oldView = cell.controlView()
   if oldView == view:
     return
@@ -100,13 +98,9 @@ proc setHighlighted*(cell: Cell, highlighted: bool) =
   cell.invalidateControlMetrics()
 
 proc state*(cell: Cell): ButtonState =
-  if cell.isNil:
-    return bsOff
   cell.xState
 
 proc setState*(cell: Cell, state: ButtonState) =
-  if cell.isNil:
-    return
   let normalized = state.normalizeState(cell.xAllowsMixedState)
   if cell.xState == normalized:
     return
@@ -117,8 +111,6 @@ proc allowsMixedState*(cell: Cell): bool =
   (not cell.isNil) and cell.xAllowsMixedState
 
 proc setAllowsMixedState*(cell: Cell, value: bool) =
-  if cell.isNil:
-    return
   if cell.xAllowsMixedState == value:
     return
   cell.xAllowsMixedState = value
@@ -128,8 +120,6 @@ proc setAllowsMixedState*(cell: Cell, value: bool) =
     cell.invalidateControlMetrics()
 
 proc nextState*(cell: Cell): ButtonState =
-  if cell.isNil:
-    return bsOff
   case cell.xState
   of bsOff:
     bsOn
@@ -139,26 +129,16 @@ proc nextState*(cell: Cell): ButtonState =
     bsOff
 
 proc setNextState*(cell: Cell) =
-  if cell.isNil:
-    return
   cell.setState(cell.nextState())
 
 proc target*(cell: ActionCell): DynamicAgent =
-  if cell.isNil:
-    return nil
   cell.xTarget
 
 proc setTarget*(cell: ActionCell, target: DynamicAgent) =
-  if cell.isNil:
-    return
   cell.xTarget = target
 
 proc action*(cell: ActionCell): ActionSelector =
-  if cell.isNil:
-    return default(ActionSelector)
   cell.xAction
 
 proc setAction*(cell: ActionCell, action: ActionSelector) =
-  if cell.isNil:
-    return
   cell.xAction = action

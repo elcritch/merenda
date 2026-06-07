@@ -33,15 +33,11 @@ proc effectiveAppearance*(app: Application): Appearance =
   app.xAppearance
 
 proc propagateAppearance(app: Application) =
-  if app.isNil:
-    return
   let inherited = app.effectiveAppearance()
   for window in app.xWindows:
     window.setInheritedAppearance(inherited)
 
 proc setAppearance*(app: Application, appearance: Appearance) =
-  if app.isNil:
-    return
   app.xAppearance = appearance
   app.xHasAppearance = true
   app.propagateAppearance()

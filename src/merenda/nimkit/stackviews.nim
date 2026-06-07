@@ -107,8 +107,6 @@ proc newFlexibleSpacer*(axis = laVertical, frame: Rect = AutoRect): View =
   result.setCompressionPriority(LayoutPriorityRequired, axis.crossAxis)
 
 proc invalidateStackLayout(stackView: StackView) =
-  if stackView.isNil:
-    return
   stackView.invalidateContainerMetrics()
   stackView.setNeedsDisplay(true)
 
@@ -121,8 +119,6 @@ proc arrangedIndex(stackView: StackView, child: View): int =
   -1
 
 proc layoutArrangedSubviews(stackView: StackView): seq[View] =
-  if stackView.isNil:
-    return
   for child in stackView.xArrangedSubviews:
     if not child.isNil and child.superview == stackView and not child.isHidden:
       result.add child
@@ -134,8 +130,6 @@ proc fittingSize(child: View): Size =
     child.sizeThatFits(UnconstrainedFittingSize)
 
 proc stackNaturalSize(stackView: StackView): Size =
-  if stackView.isNil:
-    return initSize(0.0, 0.0)
 
   let
     children = stackView.layoutArrangedSubviews()
@@ -308,8 +302,6 @@ proc alignedCrossFrame(
     result.origin = contentCrossOrigin + availableCross - result.length
 
 proc layoutStackSubviews(stackView: StackView) =
-  if stackView.isNil:
-    return
 
   let
     children = stackView.layoutArrangedSubviews()
@@ -423,8 +415,6 @@ proc addArrangedSubview*(stackView: StackView, children: varargs[View]) =
     stackView.addArrangedSubview(child)
 
 proc addFlexibleSpacer*(stackView: StackView): View {.discardable.} =
-  if stackView.isNil:
-    return nil
   result = newFlexibleSpacer(stackView.xOrientation)
   stackView.addArrangedSubview(result)
 

@@ -496,8 +496,6 @@ proc resolveValue*(
     true
 
 proc setStyle*(patch: StylePatch, key: string, value: StyleValue) =
-  if patch.isNil:
-    return
   patch.values[key] = value
 
 proc setStyle*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
@@ -556,8 +554,6 @@ proc `[]=`*(
   patch.setStyle(key, value)
 
 proc getStyle*(patch: StylePatch, key: string, value: var StyleValue): bool =
-  if patch.isNil:
-    return false
   if patch.values.hasKey(key):
     value = patch.values[key]
     return true

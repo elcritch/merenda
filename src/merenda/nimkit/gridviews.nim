@@ -67,14 +67,10 @@ proc fittingSize(view: View): Size =
     view.sizeThatFits(UnconstrainedFittingSize)
 
 proc invalidateGridLayout(gridView: GridView) =
-  if gridView.isNil:
-    return
   gridView.invalidateContainerMetrics()
   gridView.setNeedsDisplay(true)
 
 proc visibleGridItems(gridView: GridView): seq[GridItem] =
-  if gridView.isNil:
-    return
   for item in gridView.xItems:
     if not item.view.isNil and item.view.superview == gridView and not item.view.isHidden:
       result.add item
@@ -125,8 +121,6 @@ proc growTracks(tracks: var seq[float32], start, span: int, needed, spacing: flo
     tracks[index] += share
 
 proc gridMetrics(gridView: GridView): GridMetrics =
-  if gridView.isNil:
-    return
 
   let items = gridView.visibleGridItems()
   result.colWidths.setLen(items.trackCount(dcol))
@@ -168,8 +162,6 @@ func naturalLength(tracks: openArray[float32], spacing: float32): float32 =
   tracks.trackSum() + spacing.totalSpacing(tracks.len)
 
 proc naturalSize(gridView: GridView): Size =
-  if gridView.isNil:
-    return initSize(0.0, 0.0)
   let metrics = gridView.gridMetrics()
   initSize(
     gridView.xEdgeInsets.horizontal +
@@ -259,8 +251,6 @@ proc itemCell(
   )
 
 proc layoutGridSubviews(gridView: GridView) =
-  if gridView.isNil:
-    return
 
   let
     items = gridView.visibleGridItems()

@@ -141,8 +141,6 @@ proc newButtonCell*(title = "Button"): ButtonCell =
   initButtonCellFields(result, title)
 
 proc buttonCell*(button: Button): ButtonCell =
-  if button.isNil:
-    return nil
   let controlCell = button.cell()
   if controlCell of ButtonCell:
     return ButtonCell(controlCell)
