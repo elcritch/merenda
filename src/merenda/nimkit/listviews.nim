@@ -170,9 +170,7 @@ proc items*(listView: ListView): seq[string] =
 proc `items=`*(listView: ListView, values: openArray[string]) =
   if listView.isNil:
     return
-  var nextItems: seq[string]
-  for value in values:
-    nextItems.add value
+  let nextItems = @values
   if listView.xItems == nextItems:
     return
   listView.xItems = nextItems
@@ -258,7 +256,7 @@ proc removeItemAtIndex*(listView: ListView, index: int) =
 proc removeAllItems*(listView: ListView) =
   if listView.isNil or listView.xItems.len == 0:
     return
-  listView.xItems.setLen(0)
+  listView.xItems.clear()
   listView.xSelectedIndex = -1
   listView.xSelectedIndexes.setLen(0)
   listView.xSelectionAnchor = -1
@@ -989,9 +987,7 @@ proc selectItemAtIndex(listView: ListView, index: int, modifiers: set[KeyModifie
     listView.selectItemAtIndex(index)
 
 proc selectedIndex*(listView: ListView): int =
-  if listView.isNil:
-    return -1
-  listView.xSelectedIndex
+  if listView.isNil: -1 else: listView.xSelectedIndex
 
 proc `selectedIndex=`*(listView: ListView, index: int) =
   if listView.isNil:
@@ -1351,43 +1347,35 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
 
 proc initListClipView(): ClipView =
   result = ClipView()
-  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
-  result.clipsToBounds = true
-  result.autoresizingMaskConstraints = false
-  result.setAcceptsFirstResponder(false)
+  initListBaseChild(result, true)
   discard result.withProtocol(DefaultListClipViewHitTesting)
+
+proc initListBaseChild(view: View, clipsToBounds: bool) =
+  initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
+  view.background = initColor(0.0, 0.0, 0.0, 0.0)
+  view.clipsToBounds = clipsToBounds
+  view.autoresizingMaskConstraints = false
+  view.setAcceptsFirstResponder(false)
 
 proc initListRowView(listView: ListView): ListRowView =
   result = ListRowView()
-  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  initListBaseChild(result, false)
   result.xListView = listView
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
-  result.clipsToBounds = false
-  result.autoresizingMaskConstraints = false
-  result.setAcceptsFirstResponder(false)
   discard result.withProtocol(DefaultListRowViewDrawing)
   discard result.withProtocol(DefaultListRowViewHitTesting)
 
 proc initListContentView(listView: ListView): ListContentView =
   result = ListContentView()
-  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  initListBaseChild(result, false)
   result.xListView = listView
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
-  result.clipsToBounds = false
-  result.autoresizingMaskConstraints = false
-  result.setAcceptsFirstResponder(false)
   discard result.withProtocol(DefaultListContentViewDrawing)
   discard result.withProtocol(DefaultListContentViewHitTesting)
 
 proc initListScroller(listView: ListView): ListScroller =
   result = ListScroller()
-  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  initListBaseChild(result, false)
   result.xListView = listView
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
-  result.autoresizingMaskConstraints = false
   result.hidden = true
-  result.setAcceptsFirstResponder(false)
   discard result.withProtocol(DefaultListScrollerDrawing)
   discard result.withProtocol(DefaultListScrollerEvents)
 
