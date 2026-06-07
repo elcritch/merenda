@@ -92,17 +92,6 @@ func scrollerTrackRect*(
       container.maxX - safeInset - width, container.origin.y + safeInset, width, height
     )
 
-func scrollerKnobLength*(viewport, document: float32): float32 =
-  if viewport <= 0.0'f32 or document <= viewport:
-    return 0.0'f32
-  max(viewport * viewport / document, 12.0'f32)
-
-func scrollerKnobOffset*(viewport, document, offset: float32): float32 =
-  let knob = scrollerKnobLength(viewport, document)
-  if knob <= 0.0'f32 or document <= viewport:
-    return 0.0'f32
-  offset / (document - viewport) * max(viewport - knob, 0.0'f32)
-
 func scrollerKnobRect*(track: Rect, axis: LayoutAxis, viewport: ScrollViewport): Rect =
   if track.isEmpty:
     return track
