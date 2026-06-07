@@ -225,40 +225,26 @@ proc contentView*(window: Window): View =
   window.xContentView
 
 proc keyBindings*(window: Window): KeyBindingTable =
-  if window.isNil:
-    return KeyBindingTable()
   window.xKeyBindings
 
 proc setKeyBindings*(window: Window, bindings: KeyBindingTable) =
-  if window.isNil:
-    return
   window.xKeyBindings = bindings
 
 proc setKeyBindingProfile*(window: Window, profile: KeyBindingProfile) =
-  if window.isNil:
-    return
   window.xKeyBindings = initDefaultKeyBindings(profile)
 
 proc addKeyBinding*(window: Window, stroke: KeyStroke, selector: CommandSelector) =
-  if window.isNil:
-    return
   window.xKeyBindings.add(stroke, selector)
 
 proc removeKeyBinding*(window: Window, stroke: KeyStroke): bool {.discardable.} =
-  if window.isNil:
-    return false
   window.xKeyBindings.remove(stroke)
 
 proc clearKeyBindings*(window: Window) =
-  if window.isNil:
-    return
   window.xKeyBindings.clear()
 
 proc bindKey*(
     window: Window, text: string, modifiers: set[KeyModifier], selector: CommandSelector
 ) =
-  if window.isNil:
-    return
   window.xKeyBindings.bindKey(text, modifiers, selector)
 
 proc bindKey*(
@@ -267,15 +253,11 @@ proc bindKey*(
     modifiers: set[KeyModifier],
     selector: CommandSelector,
 ) =
-  if window.isNil:
-    return
   window.xKeyBindings.bindKey(key, modifiers, selector)
 
 proc bindKey*(
     window: Window, keyCode: int, modifiers: set[KeyModifier], selector: CommandSelector
 ) =
-  if window.isNil:
-    return
   window.xKeyBindings.bindKey(keyCode, modifiers, selector)
 
 proc bindShortcut*(
@@ -284,8 +266,6 @@ proc bindShortcut*(
     modifiers: set[ShortcutModifier],
     selector: CommandSelector,
 ) =
-  if window.isNil:
-    return
   window.xKeyBindings.bindShortcut(text, modifiers, selector)
 
 proc bindShortcut*(
@@ -294,8 +274,6 @@ proc bindShortcut*(
     modifiers: set[ShortcutModifier],
     selector: CommandSelector,
 ) =
-  if window.isNil:
-    return
   window.xKeyBindings.bindShortcut(key, modifiers, selector)
 
 proc bindShortcuts*(
@@ -320,18 +298,12 @@ proc propagateAppearance(window: Window) =
   window.xContentView.setInheritedAppearance(window.effectiveAppearance())
 
 proc shouldSetContentView(window: Window, view: View): bool =
-  if window.isNil:
-    return false
   window.trySendLocal(shouldSetContentView(), view).get(true)
 
 proc shouldMakeFirstResponder(window: Window, responder: Responder): bool =
-  if window.isNil:
-    return false
   window.trySendLocal(shouldMakeFirstResponder(), responder).get(true)
 
 proc shouldDismissTransientSession(window: Window, reason: DismissReason): bool =
-  if window.isNil:
-    return false
   window.trySendLocal(shouldDismiss(), reason).get(true)
 
 proc hasAppearance*(window: Window): bool =
@@ -343,8 +315,6 @@ proc appearance*(window: Window): Appearance =
   window.xAppearance
 
 proc effectiveAppearance*(window: Window): Appearance =
-  if window.isNil:
-    return initAppearance()
   if window.xHasAppearance:
     return window.xAppearance
   if window.xHasInheritedAppearance:
@@ -352,13 +322,9 @@ proc effectiveAppearance*(window: Window): Appearance =
   initAppearance()
 
 proc popupPresentation*(window: Window): PopupPresentation =
-  if window.isNil:
-    return ppAutomatic
   window.xPopupPresentation
 
 proc effectivePopupPresentation*(window: Window): PopupPresentation =
-  if window.isNil:
-    return platformDefaultPopupPresentation()
   if window.xPopupPresentation == ppAutomatic:
     return platformDefaultPopupPresentation()
   window.xPopupPresentation
@@ -376,8 +342,6 @@ proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
     window.xContentView.setNeedsDisplay(true)
 
 proc setAppearance*(window: Window, appearance: Appearance) =
-  if window.isNil:
-    return
   window.xAppearance = appearance
   window.xHasAppearance = true
   window.propagateAppearance()
@@ -392,8 +356,6 @@ proc clearAppearance*(window: Window) =
   emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
 
 proc setInheritedAppearance*(window: Window, appearance: Appearance) =
-  if window.isNil:
-    return
   window.xInheritedAppearance = appearance
   window.xHasInheritedAppearance = true
   if not window.xHasAppearance:
@@ -401,8 +363,6 @@ proc setInheritedAppearance*(window: Window, appearance: Appearance) =
     emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
 
 proc clearInheritedAppearance*(window: Window) =
-  if window.isNil:
-    return
   window.xInheritedAppearance = Appearance()
   window.xHasInheritedAppearance = false
   if not window.xHasAppearance:
@@ -473,8 +433,6 @@ proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
 proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool): bool =
-  if window.isNil:
-    return false
   if window.xFirstResponder == responder:
     if not responder.isNil and responder of View:
       let view = View(responder)
@@ -513,26 +471,18 @@ proc makeFirstResponder*(window: Window, responder: Responder): bool =
   window.setFirstResponder(responder, focusVisible = true)
 
 proc initialFirstResponder*(window: Window): View =
-  if window.isNil:
-    return nil
   window.xInitialFirstResponder
 
 proc setInitialFirstResponder*(window: Window, view: View) =
-  if window.isNil:
-    return
   window.xInitialFirstResponder = view
 
 proc autorecalculatesKeyViewLoop*(window: Window): bool =
   (not window.isNil) and window.xAutorecalculatesKeyViewLoop
 
 proc setAutorecalculatesKeyViewLoop*(window: Window, value: bool) =
-  if window.isNil:
-    return
   window.xAutorecalculatesKeyViewLoop = value
 
 proc collectKeyViews(view: View, views: var seq[View]) =
-  if view.isNil:
-    return
   views.add view
   for child in view.subviews:
     child.collectKeyViews(views)
@@ -559,8 +509,6 @@ proc recalculateKeyViewLoop*(window: Window) =
   window.xInitialFirstResponder = window.xContentView.nextValidKeyView()
 
 proc firstKeyViewCandidate(window: Window, forward: bool): View =
-  if window.isNil:
-    return nil
   let initial = window.xInitialFirstResponder
   if not initial.isNil:
     if initial.canBecomeKeyView():
@@ -596,8 +544,6 @@ proc prepareKeyViewLoop(window: Window) =
     window.recalculateKeyViewLoop()
 
 proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.} =
-  if window.isNil:
-    return false
   window.prepareKeyViewLoop()
   var candidate: View
   if not view.isNil:
@@ -607,8 +553,6 @@ proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable
   window.selectKeyView(candidate)
 
 proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.} =
-  if window.isNil:
-    return false
   window.prepareKeyViewLoop()
   var candidate: View
   if not view.isNil:
@@ -633,23 +577,17 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   nimkitRendering.buildRenders(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
-  if window.isNil:
-    return nil
   window.xHostWindow.nativeWindowOrNil()
 
 proc rendererOrNil*(
     window: Window
 ): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
-  if window.isNil:
-    return nil
   window.xHostWindow.rendererOrNil()
 
 proc nativeReady*(window: Window): bool =
   (not window.isNil) and window.xHostWindow.isReady
 
 proc nativeContentScale*(window: Window): float32 =
-  if window.isNil:
-    return 1.0'f32
   window.xHostWindow.contentScale()
 
 proc isClosed*(window: Window): bool =
@@ -659,8 +597,6 @@ proc isVisible*(window: Window): bool =
   (not window.isNil) and window.xVisibleRequested and not window.xClosed
 
 proc makeKeyAndOrderFront*(window: Window) =
-  if window.isNil:
-    return
   window.xClosed = false
   window.xVisibleRequested = true
   window.xHostWindow.setVisible(true)
@@ -669,8 +605,6 @@ proc orderFront*(window: Window) =
   window.makeKeyAndOrderFront()
 
 proc orderOut*(window: Window) =
-  if window.isNil:
-    return
   window.xVisibleRequested = false
   window.xHostWindow.setVisible(false)
 
@@ -689,8 +623,6 @@ proc attachAuxiliaryWindow(owner, auxiliary: Window) =
     owner.xAuxiliaryWindows.add auxiliary
 
 proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
-  if window.isNil:
-    return
   let auxiliaries = window.xAuxiliaryWindows
   window.xAuxiliaryWindows.setLen(0)
   for auxiliary in auxiliaries:
@@ -704,8 +636,6 @@ proc hasActiveTransientSession*(window: Window): bool =
   not window.isNil and window.xTransientSession.active
 
 proc transientDismissReason*(window: Window): DismissReason =
-  if window.isNil:
-    return tdrProgrammatic
   window.xLastTransientDismissReason
 
 proc restoreTransientFocus(window: Window, session: TransientSession) =
@@ -746,8 +676,6 @@ proc beginTransientSession*(
     restoreResponder: Responder = nil,
     onDismiss: TransientDismissHandler = nil,
 ) =
-  if window.isNil:
-    return
   if window.xTransientSession.active:
     let session = window.xTransientSession
     if session.ownerResponder != owner or session.transientWindow != transientWindow:
@@ -777,8 +705,6 @@ proc endTransientSession*(
   window.finishTransientSession(reason, notifyDismiss = false)
 
 proc close*(window: Window) =
-  if window.isNil:
-    return
   emit window.willClose()
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
@@ -798,8 +724,6 @@ proc close*(window: Window) =
   emit window.didClose()
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
-  if window.isNil:
-    return
   window.xOnPopupDone = handler
 
 proc newPopupWindow*(
@@ -853,8 +777,6 @@ proc keyDispatchTarget(window: Window): Responder =
 proc dispatchCommandInChain(
     target: Responder, selector: CommandSelector
 ): EventDispatchResult =
-  if target.isNil:
-    return
   let args = TryToPerformArgs(selector: selector, sender: DynamicAgent(target))
   if target.tryToPerform(args):
     result.handled = true
@@ -1278,14 +1200,10 @@ proc dispatchHostTextInput(window: Window, text: string) =
   discard dispatchTextInputInChain(window.keyDispatchTarget(), text)
 
 proc dispatchHostFocusChanged(window: Window, focused: bool) =
-  if window.isNil:
-    return
   if focused and not window.xIsPopup and window.hasActiveTransientSession():
     discard window.dismissTransientSession(tdrFocusChange)
 
 proc markHostClosed(window: Window) =
-  if window.isNil:
-    return
   window.xClosed = true
   window.xVisibleRequested = false
   if window.xTransientSession.active:
@@ -1297,8 +1215,6 @@ proc markHostClosed(window: Window) =
     window.xOwnerWindow = nil
 
 proc ensureNativeWindow*(window: Window) =
-  if window.isNil:
-    return
   if window.xHostWindow.isReady:
     return
 

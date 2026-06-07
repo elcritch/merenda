@@ -66,8 +66,6 @@ proc visibleFormView(formView: FormView, view: View): View =
   if view.isNil or view.superview != formView or view.isHidden: nil else: view
 
 proc visibleRows(formView: FormView): seq[FormRow] =
-  if formView.isNil:
-    return
   for row in formView.xRows:
     let
       label = formView.visibleFormView(row.label)
@@ -76,8 +74,6 @@ proc visibleRows(formView: FormView): seq[FormRow] =
       result.add FormRow(label: label, field: field)
 
 proc formMetrics(formView: FormView): FormMetrics =
-  if formView.isNil:
-    return
 
   result.fieldWidth = formView.xMinimumFieldWidth
   for row in formView.visibleRows():
@@ -92,8 +88,6 @@ func hasColumns(metrics: FormMetrics): bool =
   metrics.labelWidth > 0.0'f32 and metrics.fieldWidth > 0.0'f32
 
 proc naturalSize(formView: FormView): Size =
-  if formView.isNil:
-    return initSize(0.0, 0.0)
 
   let
     metrics = formView.formMetrics()
@@ -130,8 +124,6 @@ proc setFrameFromFormLayout(view: View, frame: Rect) =
   view.applyLayoutFrame(frame, lfoContainer)
 
 proc invalidateFormLayout(formView: FormView) =
-  if formView.isNil:
-    return
   formView.invalidateContainerMetrics()
   formView.setNeedsDisplay(true)
 
@@ -151,8 +143,6 @@ proc boundedRowFrame(
     (rowY + rowHeight - height, height)
 
 proc layoutFormRows(formView: FormView) =
-  if formView.isNil:
-    return
 
   let
     rows = formView.visibleRows()
@@ -197,8 +187,6 @@ proc layoutFormRows(formView: FormView) =
     rowY += rowHeight + formView.xSpacing[drow]
 
 proc rowIndex(formView: FormView, label, field: View): int =
-  if formView.isNil:
-    return -1
   for index, row in formView.xRows:
     if row.label == label and row.field == field:
       return index
@@ -302,8 +290,6 @@ proc insertRow*(formView: FormView, label, field: View, index: int) =
   formView.invalidateFormLayout()
 
 proc addRow*(formView: FormView, label, field: View) =
-  if formView.isNil:
-    return
   formView.insertRow(label, field, formView.xRows.len)
 
 proc removeRow*(formView: FormView, index: int) =

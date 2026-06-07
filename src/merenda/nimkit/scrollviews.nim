@@ -76,8 +76,6 @@ proc contentSize*(scrollView: ScrollView): Size =
   scrollView.documentSize()
 
 proc visibleScrollerAxes(scrollView: ScrollView): set[LayoutAxis] =
-  if scrollView.isNil:
-    return {}
   visibleScrollerAxes(
     scrollView.bounds().size,
     scrollView.documentSize(),
@@ -88,8 +86,6 @@ proc visibleScrollerAxes(scrollView: ScrollView): set[LayoutAxis] =
   )
 
 proc viewportSize*(scrollView: ScrollView): Size =
-  if scrollView.isNil:
-    return initSize(0.0, 0.0)
   let visible = scrollView.visibleScrollerAxes()
   initSize(
     max(
@@ -105,13 +101,9 @@ proc viewportSize*(scrollView: ScrollView): Size =
   )
 
 proc viewportRect*(scrollView: ScrollView): Rect =
-  if scrollView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
   initRect(initPoint(0.0, 0.0), scrollView.viewportSize())
 
 proc maximumContentOffset*(scrollView: ScrollView): Point =
-  if scrollView.isNil:
-    return initPoint(0.0, 0.0)
   let
     documentSize = scrollView.documentSize()
     viewportSize = scrollView.viewportSize()
@@ -137,8 +129,6 @@ proc contentOffsetForFraction*(scrollView: ScrollView, fraction: Point): Point =
   scrollView.contentOffsetForFraction(fraction.x, fraction.y)
 
 proc clampContentOffset(scrollView: ScrollView, offset: Point): Point =
-  if scrollView.isNil:
-    return initPoint(0.0, 0.0)
   let
     viewportSize = scrollView.viewportSize()
     documentSize = scrollView.documentSize()
@@ -210,8 +200,6 @@ proc contentOffset*(scrollView: ScrollView): Point =
     scrollView.clampContentOffset(scrollView.xClipView.bounds().origin)
 
 proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
-  if scrollView.isNil:
-    return
   scrollView.tile()
   let nextOffset = scrollView.clampContentOffset(offset)
   if scrollView.xClipView.bounds().origin == nextOffset:
@@ -222,22 +210,16 @@ proc scrollTo*(scrollView: ScrollView, offset: Point) =
   scrollView.contentOffset = offset
 
 proc scrollToFraction*(scrollView: ScrollView, x = AutoMetric, y = AutoMetric) =
-  if scrollView.isNil:
-    return
   scrollView.scrollTo(scrollView.contentOffsetForFraction(x, y))
 
 proc scrollToFraction*(scrollView: ScrollView, fraction: Point) =
   scrollView.scrollToFraction(fraction.x, fraction.y)
 
 proc scrollBy*(scrollView: ScrollView, delta: Point) =
-  if scrollView.isNil:
-    return
   let current = scrollView.contentOffset()
   scrollView.contentOffset = initPoint(current.x + delta.x, current.y + delta.y)
 
 proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
-  if scrollView.isNil:
-    return false
   let
     currentOffset = scrollView.contentOffset()
     viewportSize = scrollView.viewportSize()
@@ -260,15 +242,11 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
     scrollView.contentOffset = nextOffset
 
 proc scrollWheelDelta*(scrollView: ScrollView, event: ScrollEvent): Point =
-  if scrollView.isNil:
-    return initPoint(0.0, 0.0)
   initPoint(
     event.deltaX * scrollView.xLineScroll, -event.deltaY * scrollView.xLineScroll
   )
 
 proc scrollWheelWouldMove(scrollView: ScrollView, event: ScrollEvent): bool =
-  if scrollView.isNil:
-    return false
   let
     delta = scrollView.scrollWheelDelta(event)
     currentOffset = scrollView.contentOffset()
@@ -278,8 +256,6 @@ proc scrollWheelWouldMove(scrollView: ScrollView, event: ScrollEvent): bool =
   nextOffset != currentOffset
 
 proc scrollerMetricsChanged(scrollView: ScrollView) =
-  if scrollView.isNil:
-    return
   scrollView.tile()
   scrollView.invalidateContainerMetrics()
   scrollView.setNeedsDisplay(true)
@@ -318,8 +294,6 @@ proc scrollerThickness*(scrollView: ScrollView): float32 =
   if scrollView.isNil: 0.0'f32 else: scrollView.xScrollerThickness
 
 proc `scrollerThickness=`*(scrollView: ScrollView, value: float32) =
-  if scrollView.isNil:
-    return
   let nextValue = value.normalizedScrollerThickness()
   if scrollView.xScrollerThickness == nextValue:
     return
@@ -330,8 +304,6 @@ proc lineScroll*(scrollView: ScrollView): float32 =
   if scrollView.isNil: 0.0'f32 else: scrollView.xLineScroll
 
 proc `lineScroll=`*(scrollView: ScrollView, value: float32) =
-  if scrollView.isNil:
-    return
   scrollView.xLineScroll = value.normalizedLineScroll()
 
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
@@ -351,8 +323,6 @@ proc verticalScrollerRect*(scrollView: ScrollView): Rect =
   )
 
 proc scrollerTrackRect*(scroller: Scroller): Rect =
-  if scroller.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
   scroller.bounds()
 
 proc scrollerKnobRect*(scroller: Scroller): Rect =
@@ -395,8 +365,6 @@ proc drawScroller*(context: DrawContext, track, knob: Rect) =
     )
 
 proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32) =
-  if scrollView.isNil:
-    return
   var nextOffset = scrollView.contentOffset()
   case axis
   of laHorizontal:
@@ -448,8 +416,6 @@ protocol DefaultScrollViewLayout of ViewLayoutProtocol:
 
 protocol DefaultScrollerDrawing of ViewDrawingProtocol:
   method draw(scroller: Scroller, context: DrawContext) =
-    if scroller.isNil:
-      return
     context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
 
 protocol DefaultScrollerEvents of ResponderEventProtocol:
@@ -474,8 +440,6 @@ protocol DefaultScrollerEvents of ResponderEventProtocol:
 
   method mouseUp(scroller: Scroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      if scroller.isNil:
-        return
       if scroller.xTracking.isDraggingKnob():
         scroller.scrollKnobTo(event.location)
       scroller.xTracking.endScrollerTracking()

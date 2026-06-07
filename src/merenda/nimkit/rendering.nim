@@ -55,8 +55,6 @@ proc renderViewInto(
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
-  if root.isNil:
-    return
   discard root.prepareDisplaySubtree()
   let context = initDrawContext()
   renderViewInto(context, root, appearance)

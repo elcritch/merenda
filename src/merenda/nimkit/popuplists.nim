@@ -306,21 +306,15 @@ proc highlightItemAtPoint(popupList: PopupListView, popupBounds: Rect, point: Po
 proc beginPopupListTracking*(
     popupList: PopupListView, popupBounds: Rect, point: Point
 ) =
-  if popupList.isNil:
-    return
   popupList.xTrackingItem = true
   popupList.highlightItemAtPoint(popupBounds, point)
 
 proc trackPopupListPoint*(popupList: PopupListView, popupBounds: Rect, point: Point) =
-  if popupList.isNil:
-    return
   popupList.highlightItemAtPoint(popupBounds, point)
 
 proc finishPopupListTracking*(
     popupList: PopupListView, popupBounds: Rect, point: Point, closeWhenDone = true
 ) =
-  if popupList.isNil:
-    return
   let itemIndex =
     if popupList.isOpened() and popupList.xTrackingItem:
       popupList.popupListItemIndexAtPoint(popupBounds, point)
@@ -364,8 +358,6 @@ proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent) =
 proc configure*(
     popupList: PopupListView, data: PopupListData, actions: PopupListActions
 ) =
-  if popupList.isNil:
-    return
   popupList.xData = data
   popupList.xActions = actions
 
@@ -374,8 +366,6 @@ proc setPopupListRoles*(
     popupRole: StyleRole = srComboBox,
     itemRole: StyleRole = srComboBoxItem,
 ) =
-  if popupList.isNil:
-    return
   popupList.xPopupRole = popupRole
   popupList.xItemRole = itemRole
   popupList.setNeedsDisplay(true)

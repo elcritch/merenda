@@ -270,8 +270,6 @@ proc `delegate=`*(listView: ListView, delegate: Responder) =
   listView.delegate = DynamicAgent(delegate)
 
 proc highlightedIndex*(listView: ListView): int =
-  if listView.isNil:
-    return -1
   listView.xHighlightedIndex
 
 proc `highlightedIndex=`*(listView: ListView, index: int) =
@@ -653,16 +651,12 @@ proc syncSelectionCursor(listView: ListView) =
     listView.xSelectionLead = listView.xSelectedIndex
 
 proc firstSelectableIndex(listView: ListView): int =
-  if listView.isNil:
-    return -1
   for index in 0 ..< listView.len():
     if listView.rowSelectable(index):
       return index
   -1
 
 proc lastSelectableIndex(listView: ListView): int =
-  if listView.isNil:
-    return -1
   for countdown in 0 ..< listView.len():
     let index = listView.len() - countdown - 1
     if listView.rowSelectable(index):
@@ -745,8 +739,6 @@ proc listItemRect*(listView: ListView, itemIndex: int): Rect =
     visibleRect
 
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int =
-  if listView.isNil:
-    return -1
   listView.tileListContent()
   let contentView = listView.contentView()
   if contentView.isNil:
@@ -936,8 +928,6 @@ proc activateItemAtIndex*(listView: ListView, index: int) =
   listView.activateItemAtIndex(index, {})
 
 proc selectionLeadIndex(listView: ListView): int =
-  if listView.isNil:
-    return -1
   if listView.validListIndex(listView.xSelectionLead):
     listView.xSelectionLead
   else:
@@ -1130,8 +1120,6 @@ protocol DefaultListScrollerDrawing of ViewDrawingProtocol:
 protocol DefaultListScrollerEvents of ResponderEventProtocol:
   method mouseDown(scroller: ListScroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      if scroller.isNil:
-        return
       let
         track = scroller.bounds()
         knob = scroller.listView().listScrollerKnobRect(track)
@@ -1149,8 +1137,6 @@ protocol DefaultListScrollerEvents of ResponderEventProtocol:
 
   method mouseUp(scroller: ListScroller, event: MouseEvent) =
     if event.button == mbPrimary:
-      if scroller.isNil:
-        return
       if scroller.xTracking.isDraggingKnob():
         scroller.scrollListKnobTo(event.location)
       scroller.xTracking.endScrollerTracking()
