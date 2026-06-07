@@ -2,13 +2,7 @@ import std/[algorithm, math, options]
 
 import sigils/core
 
-import ./controls
-import ./listbasics
-import ./scrollergeometry
-import ./scrollviews
-import ./selectors
-import ./theme
-import ./types
+import ./controls, ./listbasics, ./scrollergeometry, ./scrollviews, ./selectors, ./theme, ./types
 
 export listbasics
 
