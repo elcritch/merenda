@@ -77,25 +77,46 @@ proc setControlView*(cell: Cell, view: View) =
     else:
       view.unsafeWeakRef()
   oldView.invalidateViewCellMetrics()
+  if not view.isNil:
+    view.setWidgetState(ssDisabled, not cell.xEnabled)
+    view.setWidgetState(ssHighlighted, cell.xHighlighted)
   cell.invalidateControlMetrics()
 
 proc isEnabled*(cell: Cell): bool =
-  (not cell.isNil) and cell.xEnabled
+  if cell.isNil:
+    return false
+  let view = cell.controlView()
+  if not view.isNil:
+    return ssDisabled notin view.widgetStateSet()
+  cell.xEnabled
 
 proc setEnabled*(cell: Cell, enabled: bool) =
-  if cell.isNil or cell.xEnabled == enabled:
+  let oldEnabled = cell.isEnabled()
+  if cell.xEnabled == enabled and oldEnabled == enabled:
     return
   cell.xEnabled = enabled
-  cell.invalidateControlMetrics()
+  let view = cell.controlView()
+  if not view.isNil:
+    view.setWidgetState(ssDisabled, not enabled)
+  elif oldEnabled != enabled:
+    cell.invalidateControlMetrics()
 
 proc isHighlighted*(cell: Cell): bool =
-  (not cell.isNil) and cell.xHighlighted
+  let view = cell.controlView()
+  if not view.isNil:
+    return ssHighlighted in view.widgetStateSet()
+  cell.xHighlighted
 
 proc setHighlighted*(cell: Cell, highlighted: bool) =
-  if cell.isNil or cell.xHighlighted == highlighted:
+  let oldHighlighted = cell.isHighlighted()
+  if cell.xHighlighted == highlighted and oldHighlighted == highlighted:
     return
   cell.xHighlighted = highlighted
-  cell.invalidateControlMetrics()
+  let view = cell.controlView()
+  if not view.isNil:
+    view.setWidgetState(ssHighlighted, highlighted)
+  elif oldHighlighted != highlighted:
+    cell.invalidateControlMetrics()
 
 proc state*(cell: Cell): ButtonState =
   cell.xState

@@ -30,7 +30,7 @@ type
     xTextColor: Color
     xEditable: bool
     xSelectable: bool
-    xFocused: bool
+    xEditing: bool
     xInsertionPoint: int
     xSelectionAnchor: int
 
@@ -104,7 +104,7 @@ protocol TextFieldProtocol from TextField:
     textField.invalidateIntrinsicContentSize()
 
   method isEditing*(textField: TextField): bool =
-    textField.xFocused
+    textField.xEditing
 
   method selectedRange(textField: TextField): TextRange =
     let
@@ -132,12 +132,12 @@ protocol TextFieldProtocol from TextField:
       not textField.xEditable and not textField.xSelectable
     ):
       return false
-    textField.xFocused = true
+    textField.xEditing = true
     textField.selectAllText()
     true
 
   method resignFirstResponder(textField: TextField): bool =
-    textField.xFocused = false
+    textField.xEditing = false
     textField.setNeedsDisplay(true)
     true
 

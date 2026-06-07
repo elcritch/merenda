@@ -95,14 +95,10 @@ protocol DefaultButtonCell of ButtonProtocol:
     Cell(cell).setAllowsMixedState(value)
 
   method isHighlighted(cell: ButtonCell): bool =
-    let view = cell.controlView()
-    not view.isNil and ssHighlighted in view.widgetStateSet()
+    Cell(cell).isHighlighted()
 
   method setHighlighted(cell: ButtonCell, highlighted: bool) =
-    let view = cell.controlView()
-    if view.isNil:
-      return
-    view.setWidgetState(ssHighlighted, highlighted)
+    Cell(cell).setHighlighted(highlighted)
 
 protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ButtonCell): IntrinsicSize =
