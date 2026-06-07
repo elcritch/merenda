@@ -2,14 +2,8 @@ import std/[algorithm, math, options]
 
 import sigils/core
 
-import
-  ./controls,
-  ./listbasics,
-  ./scrollergeometry,
-  ./scrollviews,
-  ./selectors,
-  ./theme,
-  ./types
+import selectors, theme, types
+import controls, listbasics, scrollergeometry, scrollviews
 
 export listbasics
 
@@ -94,10 +88,13 @@ proc verticalScrollerRect*(listView: ListView): Rect
 proc tileListContent(listView: ListView)
 proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
+proc scrollSelectedItemToVisible*(listView: ListView)
+proc scrollSelectionToVisible*(listView: ListView)
 proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
 proc selectedIndex*(listView: ListView): int
+proc selectionLeadIndex(listView: ListView): int
 proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
@@ -752,22 +749,36 @@ proc listItemIndexAtPoint*(listView: ListView, point: Point): int =
     return -1
   contentView.listContentItemIndexAtPoint(contentView.pointFromView(point, listView))
 
-proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
+proc scrollContentRectToVisible(listView: ListView, rect: Rect) =
   let oldFirst = listView.firstVisibleIndex()
-  if itemIndex < 0 or itemIndex >= listView.len():
+  if rect.isEmpty:
     return
   let
-    rowRect = listView.contentView().listContentItemRect(itemIndex)
     visible = listView.listContentOffset()
     viewportHeight = listView.viewportSize().height
   var nextY = visible.y
-  if rowRect.minY < visible.y:
-    nextY = rowRect.minY
-  elif rowRect.maxY > visible.y + viewportHeight:
-    nextY = rowRect.maxY - viewportHeight
+  if rect.minY < visible.y:
+    nextY = rect.minY
+  elif rect.maxY > visible.y + viewportHeight:
+    nextY = rect.maxY - viewportHeight
   listView.setListContentOffset(initPoint(0.0'f32, nextY), false)
   if listView.firstVisibleIndex() != oldFirst:
     listView.invalidateListRows()
+
+proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
+  if itemIndex < 0 or itemIndex >= listView.len():
+    return
+  listView.scrollContentRectToVisible(
+    listView.contentView().listContentItemRect(itemIndex)
+  )
+
+proc scrollSelectedItemToVisible*(listView: ListView) =
+  listView.scrollItemToVisible(listView.selectedIndex())
+
+proc scrollSelectionToVisible*(listView: ListView) =
+  let lead = listView.selectionLeadIndex()
+  if lead >= 0:
+    listView.scrollItemToVisible(lead)
 
 proc canScrollRows*(listView: ListView, delta: int): bool =
   let
