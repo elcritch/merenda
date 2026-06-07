@@ -1361,7 +1361,6 @@ proc refreshAutoresizingStates(state: LayoutSolveState) =
       solverView.item.refreshAutoresizingReference()
 
 proc generatedSourcesToRebuild(root: View): LayoutInputSources =
-
   let dirtySources =
     root.xLayoutInputCache.dirtySources + root.xLayoutInputCache.aggregateDirtySources
   if root.xLayoutInputCache.generation == 0 or root.xLayoutInputCache.structureDirty or

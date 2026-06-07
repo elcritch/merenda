@@ -297,7 +297,6 @@ proc sizeThatFits*(view: View, proposedSize: Size): Size =
   view.sizeThatFits(initFittingSize(proposedSize))
 
 proc resolvedFrame*(view: View, frame: Rect): Rect =
-
   let
     fallbackSize =
       if frame.size.hasAutoMetric:

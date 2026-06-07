@@ -121,7 +121,6 @@ proc growTracks(tracks: var seq[float32], start, span: int, needed, spacing: flo
     tracks[index] += share
 
 proc gridMetrics(gridView: GridView): GridMetrics =
-
   let items = gridView.visibleGridItems()
   result.colWidths.setLen(items.trackCount(dcol))
   result.rowHeights.setLen(items.trackCount(drow))
@@ -251,7 +250,6 @@ proc itemCell(
   )
 
 proc layoutGridSubviews(gridView: GridView) =
-
   let
     items = gridView.visibleGridItems()
     metrics = gridView.gridMetrics()

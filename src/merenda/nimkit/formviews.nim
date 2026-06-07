@@ -74,7 +74,6 @@ proc visibleRows(formView: FormView): seq[FormRow] =
       result.add FormRow(label: label, field: field)
 
 proc formMetrics(formView: FormView): FormMetrics =
-
   result.fieldWidth = formView.xMinimumFieldWidth
   for row in formView.visibleRows():
     let
@@ -88,7 +87,6 @@ func hasColumns(metrics: FormMetrics): bool =
   metrics.labelWidth > 0.0'f32 and metrics.fieldWidth > 0.0'f32
 
 proc naturalSize(formView: FormView): Size =
-
   let
     metrics = formView.formMetrics()
     rowCount = metrics.rowHeights.len
@@ -143,7 +141,6 @@ proc boundedRowFrame(
     (rowY + rowHeight - height, height)
 
 proc layoutFormRows(formView: FormView) =
-
   let
     rows = formView.visibleRows()
     metrics = formView.formMetrics()
