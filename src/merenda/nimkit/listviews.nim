@@ -143,6 +143,7 @@ protocol ListViewDelegate {.selectorScope: protocol.}:
   method shouldSelectRow*(listView: ListView, row: int): bool {.optional.}
   method heightOfRow*(listView: ListView, row: int): float32 {.optional.}
   method heightForRow*(listView: ListView, row: int): float32 {.optional.}
+  method rowDidActivate*(listView: ListView, row: int) {.optional.}
   method styleForRow*(listView: ListView, row: ListRowState): ListRowStyle {.optional.}
   method drawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -1059,6 +1060,10 @@ proc `selectedIndex=`*(listView: ListView, index: int) =
 proc sendListActivation(listView: ListView, index: int) =
   if not listView.rowEnabled(index):
     return
+  if not listView.xDelegate.isNil:
+    discard listView.xDelegate.sendLocalIfHandled(
+      rowDidActivate(), (listView: listView, row: index)
+    )
   emit listView.rowWasActivated(DynamicAgent(listView))
   discard listView.sendAction()
 

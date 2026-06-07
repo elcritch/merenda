@@ -6,18 +6,72 @@ import merenda/nimkit
 
 type TableDataSourceSpy = ref object of Responder
   rows: int
+  textCalls: seq[string]
 
 type TableColumnUserInfo = ref object of Responder
   label: string
+
+type TableDelegateSpy = ref object of Responder
+  disabledRows: seq[int]
+  nonselectableRows: seq[int]
+  rowHeights: seq[float32]
+  viewCalls: seq[string]
+  activatedRows: seq[int]
+
+proc containsIndex(indexes: openArray[int], index: int): bool =
+  for value in indexes:
+    if value == index:
+      return true
+  false
 
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
     source.rows
 
+  method textForCell(
+      source: TableDataSourceSpy, tableView: TableView, row: int, column: TableColumn
+  ): string =
+    result = column.identifier & ":" & $row
+    source.textCalls.add result
+
+protocol TableDelegateSpyMethods of TableViewDelegate:
+  method viewForCell(
+      delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
+  ): View =
+    let text = column.identifier & ":" & $row
+    delegate.viewCalls.add text
+    newLabel(text)
+
+  method tableRowHeight(
+      delegate: TableDelegateSpy, tableView: TableView, row: int
+  ): float32 =
+    if row in 0 ..< delegate.rowHeights.len:
+      delegate.rowHeights[row]
+    else:
+      ListView(tableView).rowHeight()
+
+  method isRowEnabled(
+      delegate: TableDelegateSpy, tableView: TableView, row: int
+  ): bool =
+    not delegate.disabledRows.containsIndex(row)
+
+  method shouldSelectTableRow(
+      delegate: TableDelegateSpy, tableView: TableView, row: int
+  ): bool =
+    not delegate.nonselectableRows.containsIndex(row)
+
+  method didActivateRow(delegate: TableDelegateSpy, tableView: TableView, row: int) =
+    delegate.activatedRows.add row
+
 proc newTableDataSourceSpy(rows: int): TableDataSourceSpy =
   result = TableDataSourceSpy(rows: rows)
   initResponder(result)
   discard result.withProtocol(TableDataSourceSpyMethods)
+
+proc newTableDelegateSpy(): TableDelegateSpy =
+  result = TableDelegateSpy()
+  initResponder(result)
+  discard result.withProtocol(TableDelegateSpyMethods)
 
 suite "NimKit TableView":
   test "table columns expose stable identifiers and mutable display properties":
@@ -127,6 +181,58 @@ suite "NimKit TableView":
     check tableView.dataSource == DynamicAgent(source)
     check tableView.rowCount == 7
     check len(tableView) == 7
+
+  test "table view resolves text and hosted cell views through explicit hooks":
+    let
+      tableView = newTableView()
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name")
+
+    tableView.addColumn(name)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    source.textCalls.setLen(0)
+
+    check tableView.tableCellText(2, name) == "name:2"
+    check source.textCalls == @["name:2"]
+
+    let cellView = tableView.tableCellView(1, name)
+    check not cellView.isNil
+    check delegate.viewCalls == @["name:1"]
+
+  test "table row policy hooks feed inherited list row behavior":
+    let
+      tableView = newTableView()
+      delegate = newTableDelegateSpy()
+
+    tableView.rowCount = 4
+    delegate.disabledRows = @[1]
+    delegate.nonselectableRows = @[2]
+    delegate.rowHeights = @[20.0'f32, 30.0'f32, 40.0'f32, 50.0'f32]
+    tableView.delegate = delegate
+
+    check tableView.rowEnabled(0)
+    check not tableView.rowEnabled(1)
+    check tableView.rowSelectable(0)
+    check not tableView.rowSelectable(1)
+    check not tableView.rowSelectable(2)
+    check tableView.rowHeightForRow(3) == 50.0'f32
+
+    tableView.selectionMode = lsmMultiple
+    tableView.selectedIndexes = [0, 1, 2, 3]
+    check tableView.selectedIndexes == @[0, 3]
+
+  test "table activation hook receives activated row":
+    let
+      tableView = newTableView()
+      delegate = newTableDelegateSpy()
+
+    tableView.rowCount = 3
+    tableView.delegate = delegate
+    tableView.activateItemAtIndex(2)
+
+    check delegate.activatedRows == @[2]
 
   test "table view keeps inherited row selection behavior":
     let tableView = newTableView()

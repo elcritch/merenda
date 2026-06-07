@@ -23,6 +23,7 @@ type
     xColumns: seq[TableColumn]
     xRowCount: int
     xTableDataSource: DynamicAgent
+    xTableDelegate: DynamicAgent
 
   TableColumn* = ref object
     xTableView: TableView
@@ -41,16 +42,48 @@ proc noteColumnsChanged(tableView: TableView)
 proc detachColumn(column: TableColumn)
 proc removeColumnAtIndex(tableView: TableView, index: int)
 proc resolvedRowCount(tableView: TableView): int
+proc tableRowEnabled(tableView: TableView, row: int): bool
+proc tableRowSelectable(tableView: TableView, row: int): bool
+proc resolvedRowHeight(tableView: TableView, row: int): float32
+proc tableRowDidActivate(tableView: TableView, row: int)
+proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
+proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
   method numberOfRows*(tableView: TableView): int {.optional.}
+  method textForCell*(
+    tableView: TableView, row: int, column: TableColumn
+  ): string {.optional.}
+
+protocol TableViewDelegate {.selectorScope: protocol.}:
+  method viewForCell*(
+    tableView: TableView, row: int, column: TableColumn
+  ): View {.optional.}
+
+  method tableRowHeight*(tableView: TableView, row: int): float32 {.optional.}
+  method isRowEnabled*(tableView: TableView, row: int): bool {.optional.}
+  method shouldSelectTableRow*(tableView: TableView, row: int): bool {.optional.}
+  method didActivateRow*(tableView: TableView, row: int) {.optional.}
 
 protocol TableViewListDataSource of ListViewDataSource:
   method rowCount(tableView: TableView, listView: ListView): int =
     resolvedRowCount(tableView)
 
   method objectValueForRow(tableView: TableView, listView: ListView, row: int): string =
-    ""
+    tableView.tableCellText(row, tableView.columnAt(0))
+
+protocol TableViewListDelegate of ListViewDelegate:
+  method rowIsEnabled(tableView: TableView, listView: ListView, row: int): bool =
+    tableView.tableRowEnabled(row)
+
+  method shouldSelectRow(tableView: TableView, listView: ListView, row: int): bool =
+    tableView.tableRowSelectable(row)
+
+  method heightOfRow(tableView: TableView, listView: ListView, row: int): float32 =
+    tableView.resolvedRowHeight(row)
+
+  method rowDidActivate(tableView: TableView, listView: ListView, row: int) =
+    tableView.tableRowDidActivate(row)
 
 func normalizedColumnMetric(value, fallback: float32): float32 =
   if value.isNaN:
@@ -204,6 +237,9 @@ proc newTableColumn*(
 proc dataSource*(tableView: TableView): DynamicAgent =
   if tableView.isNil: nil else: tableView.xTableDataSource
 
+proc delegate*(tableView: TableView): DynamicAgent =
+  if tableView.isNil: nil else: tableView.xTableDelegate
+
 proc resolvedRowCount(tableView: TableView): int =
   if tableView.isNil:
     return 0
@@ -229,11 +265,24 @@ proc `rowCount=`*(tableView: TableView, count: int) =
 proc `dataSource=`*(tableView: TableView, dataSource: DynamicAgent) =
   if tableView.isNil or tableView.xTableDataSource == dataSource:
     return
+  if not dataSource.isNil:
+    discard dataSource.adopt(TableViewDataSource)
   tableView.xTableDataSource = dataSource
   ListView(tableView).reloadData()
 
 proc `dataSource=`*(tableView: TableView, dataSource: Responder) =
   tableView.dataSource = DynamicAgent(dataSource)
+
+proc `delegate=`*(tableView: TableView, delegate: DynamicAgent) =
+  if tableView.isNil or tableView.xTableDelegate == delegate:
+    return
+  if not delegate.isNil:
+    discard delegate.adopt(TableViewDelegate)
+  tableView.xTableDelegate = delegate
+  ListView(tableView).reloadData()
+
+proc `delegate=`*(tableView: TableView, delegate: Responder) =
+  tableView.delegate = DynamicAgent(delegate)
 
 proc columnCount*(tableView: TableView): int =
   if tableView.isNil: 0 else: tableView.xColumns.len
@@ -266,6 +315,82 @@ iterator columns*(tableView: TableView): TableColumn =
   if not tableView.isNil:
     for column in tableView.xColumns:
       yield column
+
+proc validCell(tableView: TableView, row: int, column: TableColumn): bool =
+  not tableView.isNil and row in 0 ..< tableView.rowCount() and not column.isNil and
+    column.tableView() == tableView
+
+proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string =
+  if not tableView.validCell(row, column):
+    return ""
+  let source = tableView.dataSource()
+  if source.isNil:
+    return ""
+  let text =
+    source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
+  if text.isSome:
+    text.get()
+  else:
+    ""
+
+proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View =
+  if not tableView.validCell(row, column):
+    return nil
+  let delegate = tableView.delegate()
+  if delegate.isNil:
+    return nil
+  let cellView = delegate.trySendLocal(
+    viewForCell(), (tableView: tableView, row: row, column: column)
+  )
+  if cellView.isSome:
+    cellView.get()
+  else:
+    nil
+
+proc tableRowEnabled(tableView: TableView, row: int): bool =
+  if tableView.isNil or row notin 0 ..< tableView.rowCount():
+    return false
+  let delegate = tableView.delegate()
+  if delegate.isNil:
+    return true
+  let enabled = delegate.trySendLocal(isRowEnabled(), (tableView: tableView, row: row))
+  if enabled.isSome:
+    enabled.get()
+  else:
+    true
+
+proc tableRowSelectable(tableView: TableView, row: int): bool =
+  if not tableView.tableRowEnabled(row):
+    return false
+  let delegate = tableView.delegate()
+  if delegate.isNil:
+    return true
+  let selectable =
+    delegate.trySendLocal(shouldSelectTableRow(), (tableView: tableView, row: row))
+  if selectable.isSome:
+    selectable.get()
+  else:
+    true
+
+proc resolvedRowHeight(tableView: TableView, row: int): float32 =
+  if tableView.isNil:
+    return 0.0'f32
+  if row notin 0 ..< tableView.rowCount():
+    return ListView(tableView).rowHeight()
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    let height =
+      delegate.trySendLocal(tableRowHeight(), (tableView: tableView, row: row))
+    if height.isSome:
+      return height.get()
+  ListView(tableView).rowHeight()
+
+proc tableRowDidActivate(tableView: TableView, row: int) =
+  let delegate = tableView.delegate()
+  if delegate.isNil:
+    return
+  discard
+    delegate.sendLocalIfHandled(didActivateRow(), (tableView: tableView, row: row))
 
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
@@ -326,7 +451,9 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   initListViewFields(ListView(tableView), frame = frame)
   tableView.xRowCount = 0
   discard tableView.withProtocol(TableViewListDataSource)
+  discard tableView.withProtocol(TableViewListDelegate)
   ListView(tableView).dataSource = DynamicAgent(tableView)
+  ListView(tableView).delegate = DynamicAgent(tableView)
 
 proc newTableView*(frame: Rect = AutoRect): TableView =
   result = TableView()
