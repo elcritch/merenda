@@ -4,6 +4,7 @@ import std/options
 import ./drawing
 import ./scrollergeometry
 import ./theme
+import ./events
 import ./types
 
 type
@@ -190,17 +191,19 @@ proc drawListRow*(
   if rect.isEmpty:
     return
   let currentParent = int16(parent) < 0
+  var controlStates: set[WidgetState] = {}
+  if not (lrsEnabled in row.states):
+    controlStates.incl ssDisabled
+  if lrsPressed in row.states:
+    controlStates.incl ssHighlighted
+  if lrsHighlighted in row.states:
+    controlStates.incl ssHovered
+  if lrsFocused in row.states:
+    controlStates.incl ssFocused
+  if lrsSelected in row.states:
+    controlStates.incl ssSelected
   var itemStyle = context.appearance.resolveListItemStyle(
-    initControlStyleContext(
-      itemRole,
-      enabled = lrsEnabled in row.states,
-      highlighted = lrsPressed in row.states,
-      hovered = lrsHighlighted in row.states,
-      focused = lrsFocused in row.states,
-      selected = lrsSelected in row.states,
-      id = id,
-      classes = classes,
-    )
+    initControlStyleContext(itemRole, controlStates, id = id, classes = classes)
   )
   if style.fill.isSome:
     itemStyle.box.fill = style.fill.get()

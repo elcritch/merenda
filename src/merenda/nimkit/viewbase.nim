@@ -94,7 +94,6 @@ type
   View* = ref object of Responder
     xFrame*: Rect
     xBounds*: Rect
-    xHidden*: bool
     xNeedsDisplay*: bool
     xInvalidRects*: seq[Rect]
     xBackgroundColor*: Color
@@ -105,10 +104,7 @@ type
     xHasInheritedAppearance*: bool
     xStyleId*: string
     xStyleClasses*: seq[string]
-    xHovered*: bool
-    xActive*: bool
-    xHasFocus*: bool
-    xFocusVisible*: bool
+    xWidgetStates*: set[WidgetState]
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
     xAutoresizingMask*: AutoresizingMask

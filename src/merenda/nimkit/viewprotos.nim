@@ -169,19 +169,22 @@ protocol ViewProtocol from View:
       inc hopCount
 
   method isHidden*(self: View): bool =
-    self.xHidden
+    ssHidden in self.xWidgetStates
 
   method setHidden*(self: View, hidden: bool) =
-    if self.xHidden == hidden:
+    if (ssHidden in self.xWidgetStates) == hidden:
       return
-    self.xHidden = hidden
+    if hidden:
+      self.xWidgetStates.incl(ssHidden)
+    else:
+      self.xWidgetStates.excl(ssHidden)
     self.invalidateLayoutItemGeometry(lirHidden)
     self.setNeedsDisplay(true)
 
   method isHiddenOrHasHiddenAncestor*(self: View): bool =
     var current = self
     while not current.isNil:
-      if current.xHidden:
+      if ssHidden in current.xWidgetStates:
         return true
       current = current.xSuperview
     false
@@ -264,7 +267,7 @@ protocol ViewProtocol from View:
     DefaultDrawLevel.int
 
   method hitTest*(self: View, point: Point): View =
-    if self.xHidden:
+    if self.isHidden():
       return nil
 
     let inside = self.pointInside(point)

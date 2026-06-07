@@ -82,15 +82,10 @@ suite "nimkit theme":
   test "style context stores role and control states":
     let context = initControlStyleContext(
       srButton,
-      enabled = false,
-      highlighted = true,
-      hovered = true,
-      active = true,
-      focused = true,
-      focusVisible = true,
-      focusWithin = true,
-      selected = true,
-      opened = true,
+      {
+        ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
+        ssFocusWithin, ssSelected, ssOpen,
+      },
       id = "primary",
       classes = @["default", "toolbar"],
     )
@@ -207,13 +202,13 @@ suite "nimkit theme":
       defaultButtonStyle =
         appearance.resolveButtonStyle(initControlStyleContext(srButton))
       buttonStyle = appearance.resolveButtonStyle(
-        initControlStyleContext(srButton, highlighted = true)
+        initControlStyleContext(srButton, {ssHighlighted})
       )
       checkBoxStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(srCheckBox, selected = true)
+        initControlStyleContext(srCheckBox, {ssSelected})
       )
       radioStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(srRadioButton, selected = true)
+        initControlStyleContext(srRadioButton, {ssSelected})
       )
       textFieldStyle = theme.resolveTextFieldStyle(
         initControlStyleContext(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
@@ -241,11 +236,10 @@ suite "nimkit theme":
           srTextField, classes = @[LabelStyleClass, LabelFormStyleClass]
         )
       )
-      comboBoxStyle = appearance.resolveComboBoxStyle(
-        initControlStyleContext(srComboBox, opened = true)
-      )
+      comboBoxStyle =
+        appearance.resolveComboBoxStyle(initControlStyleContext(srComboBox, {ssOpen}))
       comboBoxItemStyle = appearance.resolveTextFieldStyle(
-        initControlStyleContext(srComboBoxItem, selected = true)
+        initControlStyleContext(srComboBoxItem, {ssSelected})
       )
 
     check appearance.theme.rules.len == theme.rules.len
@@ -326,15 +320,15 @@ suite "nimkit theme":
       theme = initBannerTheme()
       buttonStyle = theme.resolveButtonStyle(initControlStyleContext(srButton))
       highlightedButtonStyle =
-        theme.resolveButtonStyle(initControlStyleContext(srButton, highlighted = true))
+        theme.resolveButtonStyle(initControlStyleContext(srButton, {ssHighlighted}))
       checkBoxStyle = theme.resolveChoiceButtonStyle(
-        initControlStyleContext(srCheckBox, selected = true)
+        initControlStyleContext(srCheckBox, {ssSelected})
       )
       textFieldStyle = theme.resolveTextFieldStyle(initControlStyleContext(srTextField))
       comboBoxStyle =
-        theme.resolveComboBoxStyle(initControlStyleContext(srComboBox, opened = true))
+        theme.resolveComboBoxStyle(initControlStyleContext(srComboBox, {ssOpen}))
       comboBoxItemStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(srComboBoxItem, selected = true, hovered = true)
+        initControlStyleContext(srComboBoxItem, {ssSelected, ssHovered})
       )
 
     check buttonStyle.box.fill == initColor(0.89, 0.38, 0.21, 1.0)

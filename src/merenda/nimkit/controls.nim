@@ -48,7 +48,10 @@ protocol ControlProtocol from Control:
     self.cell().isEnabled()
 
   method setEnabled*(self: Control, enabled: bool) =
+    if self.isNil:
+      return
     self.cell().setEnabled(enabled)
+    View(self).setWidgetState(ssDisabled, not enabled)
 
   method canBecomeKeyView*(self: Control): bool =
     self.isEnabled() and View(self).viewCanBecomeKeyView()

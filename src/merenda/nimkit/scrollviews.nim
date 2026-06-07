@@ -2,6 +2,7 @@ import ./drawing
 import ./scrollergeometry
 import ./selectors
 import ./theme
+import ./events
 import ./types
 import ./viewgeometry
 import ./views

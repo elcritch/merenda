@@ -5,10 +5,11 @@ from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
 
 import ./types
+import ./events
 
 type
   HostKeyEvent* = object
-    event*: types.KeyEvent
+    event*: events.KeyEvent
     pressed*: bool
     isEscape*: bool
 
@@ -16,9 +17,9 @@ type
     onClose*: proc() {.closure.}
     onResize*: proc() {.closure.}
     onMove*: proc(pos: Point) {.closure.}
-    onMouseButton*: proc(event: types.MouseEvent, pressed: bool) {.closure.}
-    onMouseMove*: proc(event: types.MouseEvent, dragging: bool) {.closure.}
-    onScroll*: proc(event: types.ScrollEvent) {.closure.}
+    onMouseButton*: proc(event: events.MouseEvent, pressed: bool) {.closure.}
+    onMouseMove*: proc(event: events.MouseEvent, dragging: bool) {.closure.}
+    onScroll*: proc(event: events.ScrollEvent) {.closure.}
     onKey*: proc(event: HostKeyEvent) {.closure.}
     onTextInput*: proc(text: string) {.closure.}
     onRender*: proc() {.closure.}
@@ -68,26 +69,28 @@ proc hostForNativeWindow(
     return nil
   hostWindows[key]
 
-proc toNimkitMouseButton(button: siwinshim.MouseButton): types.MouseButton =
+proc toNimkitMouseButton(button: siwinshim.MouseButton): events.MouseButton =
   case button
-  of siwinshim.MouseButton.left: mbPrimary
-  of siwinshim.MouseButton.right: mbSecondary
-  else: mbOther
+  of siwinshim.MouseButton.left: events.mbPrimary
+  of siwinshim.MouseButton.right: events.mbSecondary
+  else: events.mbOther
 
-proc toNimkitModifiers(modifiers: set[siwinshim.ModifierKey]): set[KeyModifier] =
+proc toNimkitModifiers(
+    modifiers: set[siwinshim.ModifierKey]
+): set[events.KeyModifier] =
   if siwinshim.ModifierKey.shift in modifiers:
-    result.incl kmShift
+    result.incl events.kmShift
   if siwinshim.ModifierKey.control in modifiers:
-    result.incl kmControl
+    result.incl events.kmControl
   if siwinshim.ModifierKey.alt in modifiers:
-    result.incl kmOption
+    result.incl events.kmOption
   if siwinshim.ModifierKey.system in modifiers:
-    result.incl kmCommand
+    result.incl events.kmCommand
 
-proc toNimkitKey(key: siwinshim.Key): types.Key =
-  if key.ord < ord(low(types.Key)) or key.ord > ord(high(types.Key)):
-    return keyUnknown
-  types.Key(key.ord)
+proc toNimkitKey(key: siwinshim.Key): events.Key =
+  if key.ord < ord(low(events.Key)) or key.ord > ord(high(events.Key)):
+    return events.keyUnknown
+  events.Key(key.ord)
 
 proc keyText(key: siwinshim.Key): string =
   case key
@@ -115,17 +118,17 @@ proc nativeMousePoint(window: siwinshim.Window, rawPos: Vec2): Point =
   let pos = rawInputToLogical(rawPos, window.size(), window.logicalSize())
   initPoint(pos.x.float32, pos.y.float32)
 
-proc nativeModifiers(window: siwinshim.Window): set[KeyModifier] =
+proc nativeModifiers(window: siwinshim.Window): set[events.KeyModifier] =
   window.keyboard.modifiers.toNimkitModifiers
 
-proc activeMouseButton(window: siwinshim.Window): types.MouseButton =
+proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
   if siwinshim.MouseButton.left in window.mouse.pressed:
-    return mbPrimary
+    return events.mbPrimary
   if siwinshim.MouseButton.right in window.mouse.pressed:
-    return mbSecondary
+    return events.mbSecondary
   if window.mouse.pressed.len > 0:
-    return mbOther
-  mbPrimary
+    return events.mbOther
+  return events.mbPrimary
 
 proc isReady*(host: HostWindow): bool =
   (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
@@ -195,7 +198,7 @@ proc dispatchMouseButton(host: HostWindow, event: siwinshim.MouseButtonEvent) =
   if nativeWindow.isNil or host.xCallbacks.onMouseButton.isNil:
     return
   host.xCallbacks.onMouseButton(
-    types.MouseEvent(
+    events.MouseEvent(
       location: nativeMousePoint(nativeWindow),
       button: event.button.toNimkitMouseButton,
       clickCount: 0,
@@ -213,7 +216,7 @@ proc dispatchMouseMove(host: HostWindow, event: siwinshim.MouseMoveEvent) =
     event.kind == siwinshim.MouseMoveKind.moveWhileDragging or
     nativeWindow.mouse.pressed != {}
   host.xCallbacks.onMouseMove(
-    types.MouseEvent(
+    events.MouseEvent(
       location: nativeMousePoint(nativeWindow, event.pos),
       button: nativeWindow.activeMouseButton,
       clickCount: 0,
@@ -228,7 +231,7 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
   if nativeWindow.isNil or host.xCallbacks.onScroll.isNil:
     return
   host.xCallbacks.onScroll(
-    types.ScrollEvent(
+    events.ScrollEvent(
       location: nativeMousePoint(nativeWindow),
       deltaX: event.deltaX.float32,
       deltaY: event.delta.float32,
@@ -243,7 +246,7 @@ proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
     return
   host.xCallbacks.onKey(
     HostKeyEvent(
-      event: types.KeyEvent(
+      event: events.KeyEvent(
         text: event.key.keyText,
         key: event.key.toNimkitKey,
         keyCode: event.key.ord,

@@ -1,6 +1,7 @@
 import ./controls
 import ./selectors
 import ./theme
+import ./events
 import ./types
 
 export controls
@@ -28,24 +29,18 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
   let view = cell.controlView()
   if view of Button:
     let button = Button(view)
+    var states: set[WidgetState] = button.widgetStateSet()
+    if Cell(cell).state() in {bsOn, bsMixed}:
+      states.incl ssSelected
     return initControlStyleContext(
-      role,
-      enabled = button.isEnabled,
-      highlighted = cell.isHighlighted,
-      hovered = button.isHovered,
-      active = button.isActive,
-      focused = button.isFocused,
-      focusVisible = button.isFocusVisible,
-      selected = Cell(cell).state() in {bsOn, bsMixed},
-      id = button.styleId,
-      classes = button.styleClasses,
+      role, states = states, id = button.styleId, classes = button.styleClasses
     )
-  initControlStyleContext(
-    role,
-    enabled = cell.isEnabled,
-    highlighted = cell.isHighlighted,
-    selected = cell.state in {bsOn, bsMixed},
-  )
+  var states: set[WidgetState] = {}
+  if not cell.isEnabled:
+    states.incl ssDisabled
+  if cell.state in {bsOn, bsMixed}:
+    states.incl ssSelected
+  initControlStyleContext(role, states = states)
 
 protocol ButtonProtocol {.selectorScope: protocol.}:
   property title -> string
@@ -100,10 +95,14 @@ protocol DefaultButtonCell of ButtonProtocol:
     Cell(cell).setAllowsMixedState(value)
 
   method isHighlighted(cell: ButtonCell): bool =
-    Cell(cell).isHighlighted()
+    let view = cell.controlView()
+    not view.isNil and ssHighlighted in view.widgetStateSet()
 
   method setHighlighted(cell: ButtonCell, highlighted: bool) =
-    Cell(cell).setHighlighted(highlighted)
+    let view = cell.controlView()
+    if view.isNil:
+      return
+    view.setWidgetState(ssHighlighted, highlighted)
 
 protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ButtonCell): IntrinsicSize =
@@ -226,24 +225,18 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
   method draw(button: Button, context: DrawContext) =
     let absoluteFrame = button.rectToWindow(button.bounds)
     if button.buttonType in {btCheckBox, btRadio}:
-      let
-        role = button.choiceRole()
-        selected = button.state in {bsOn, bsMixed}
-        style = context.appearance.resolveChoiceButtonStyle(
-          initControlStyleContext(
-            role,
-            enabled = button.isEnabled,
-            highlighted = button.isHighlighted,
-            hovered = button.isHovered,
-            active = button.isActive,
-            focused = button.isFocused,
-            focusVisible = button.isFocusVisible,
-            selected = selected,
-            id = button.styleId,
-            classes = button.styleClasses,
-          )
+      let role = button.choiceRole()
+      let selected = button.state in {bsOn, bsMixed}
+      var states: set[WidgetState] = button.widgetStateSet()
+      if selected:
+        states.incl ssSelected
+
+      let style = context.appearance.resolveChoiceButtonStyle(
+        initControlStyleContext(
+          role, states, id = button.styleId, classes = button.styleClasses
         )
-        indicatorRect = style.choiceIndicatorRect(button.bounds)
+      )
+      let indicatorRect = style.choiceIndicatorRect(button.bounds)
 
       discard context.addWindowRectangle(
         button.rectToWindow(indicatorRect),
@@ -280,17 +273,11 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         style.choiceTextRect(button.bounds), button.title, style.text.color
       )
     else:
+      let states = button.widgetStateSet()
+
       let style = context.appearance.resolveButtonStyle(
         initControlStyleContext(
-          srButton,
-          enabled = button.isEnabled,
-          highlighted = button.isHighlighted,
-          hovered = button.isHovered,
-          active = button.isActive,
-          focused = button.isFocused,
-          focusVisible = button.isFocusVisible,
-          id = button.styleId,
-          classes = button.styleClasses,
+          srButton, states, id = button.styleId, classes = button.styleClasses
         )
       )
       discard context.addWindowRectangle(

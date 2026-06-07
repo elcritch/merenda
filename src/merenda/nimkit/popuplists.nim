@@ -6,6 +6,7 @@ import ./drawing
 import ./listbasics
 import ./selectors
 import ./theme
+import ./events
 import ./types
 
 type
@@ -235,17 +236,19 @@ proc drawPopupList*(
 ) =
   if popupList.isNil or popupBounds.isEmpty:
     return
+  var states: set[WidgetState] = {}
+  if not popupList.isEnabled():
+    states.incl ssDisabled
+  if popupList.isFocused():
+    states.incl ssFocused
+  if popupList.isOpened():
+    states.incl ssOpen
   let
     classes = popupList.styleClasses()
     appearance = context.appearance()
     popupStyle = appearance.resolveComboBoxStyle(
       initControlStyleContext(
-        popupList.xPopupRole,
-        enabled = popupList.isEnabled(),
-        focused = popupList.isFocused(),
-        opened = popupList.isOpened(),
-        id = popupList.styleId(),
-        classes = classes,
+        popupList.xPopupRole, states, id = popupList.styleId(), classes = classes
       )
     )
     popupRoot = context.addWindowRectangle(

@@ -8,6 +8,7 @@ import ./popuplists
 import ./selectors
 import ./textfields
 import ./theme
+import ./events
 import ./types
 import ./windows
 
@@ -16,7 +17,6 @@ export controls
 type
   ComboBox* = ref object of Control
     xDataSource: DynamicAgent
-    xPopupOpen: bool
     xPopupHighlightedIndex: int
     xButtonPressed: bool
     xPopupWindow: Window
@@ -110,17 +110,17 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       comboBox.selectItemAtIndex(index)
 
   method popupOpen(comboBox: ComboBox): bool =
-    not comboBox.isNil and comboBox.xPopupOpen
+    not comboBox.isNil and ssOpen in comboBox.widgetStateSet()
 
   method setPopupOpen(comboBox: ComboBox, open: bool) =
+    let wasOpen = comboBox.popupOpen()
     let shouldOpen = open and comboBox.isEnabled and comboBox.numberOfItems() > 0
-    if comboBox.xPopupOpen == shouldOpen:
+    if wasOpen == shouldOpen:
       if shouldOpen:
         comboBox.updatePopupPresentation()
       return
-
-    comboBox.xPopupOpen = shouldOpen
-    if comboBox.xPopupOpen:
+    View(comboBox).setWidgetState(ssOpen, shouldOpen)
+    if shouldOpen:
       let selected = comboBox.indexOfSelectedItem()
       comboBox.xPopupHighlightedIndex = if selected >= 0: selected else: 0
       comboBox.scrollPopupItemToVisible(comboBox.xPopupHighlightedIndex)
@@ -132,7 +132,6 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       comboBox.xButtonPressed = false
       comboBox.popupList().resetPopupListTracking()
       comboBox.xPopupViewport.reset()
-    comboBox.setNeedsDisplay(true)
 
   method maxVisibleItems(comboBox: ComboBox): int =
     comboBox.comboBoxCell().cellMaxVisibleItems()
@@ -287,22 +286,15 @@ protocol DefaultComboBoxAction of ButtonActionProtocol:
 
 protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
   method draw(comboBox: ComboBox, context: DrawContext) =
-    let
-      absoluteFrame = comboBox.rectToWindow(comboBox.bounds)
-      style = context.appearance.resolveComboBoxStyle(
-        initControlStyleContext(
-          srComboBox,
-          enabled = comboBox.isEnabled,
-          highlighted = comboBox.isButtonPressed,
-          hovered = comboBox.isHovered,
-          active = comboBox.isActive,
-          focused = comboBox.isFocused,
-          focusVisible = comboBox.isFocusVisible,
-          opened = comboBox.popupOpen,
-          id = comboBox.styleId,
-          classes = comboBox.styleClasses,
-        )
+    let absoluteFrame = comboBox.rectToWindow(comboBox.bounds)
+    var styleStates: set[WidgetState] = comboBox.widgetStateSet()
+    if comboBox.isButtonPressed:
+      styleStates.incl ssHighlighted
+    let style = context.appearance.resolveComboBoxStyle(
+      initControlStyleContext(
+        srComboBox, styleStates, id = comboBox.styleId, classes = comboBox.styleClasses
       )
+    )
 
     discard context.addWindowRectangle(
       absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
@@ -512,17 +504,13 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.invalidateControlMetrics()
 
 proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
+  var states = comboBox.widgetStateSet()
+  if comboBox.xButtonPressed:
+    states.incl ssHighlighted
+  if comboBox.popupOpen:
+    states.incl ssOpen
   initControlStyleContext(
-    srComboBox,
-    enabled = comboBox.isEnabled,
-    highlighted = comboBox.xButtonPressed,
-    hovered = comboBox.isHovered,
-    active = comboBox.isActive,
-    focused = comboBox.isFocused,
-    focusVisible = comboBox.isFocusVisible,
-    opened = comboBox.popupOpen,
-    id = comboBox.styleId,
-    classes = comboBox.styleClasses,
+    srComboBox, states, id = comboBox.styleId, classes = comboBox.styleClasses
   )
 
 proc comboBoxMeasuredTextSize(cell: ComboBoxCell): Size =

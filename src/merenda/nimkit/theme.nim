@@ -37,26 +37,15 @@ type
     srListView
     srListItem
 
-  StyleState* = enum
-    ssDisabled
-    ssHighlighted
-    ssHovered
-    ssActive
-    ssFocused
-    ssFocusVisible
-    ssFocusWithin
-    ssSelected
-    ssOpen
-
   StyleContext* = object
     role*: StyleRole
-    states*: set[StyleState]
+    states*: set[WidgetState]
     id*: string
     classes*: seq[string]
 
   StyleSelector* = object
     role*: StyleRole
-    states*: set[StyleState]
+    states*: set[WidgetState]
     id*: string
     classes*: seq[string]
 
@@ -340,48 +329,19 @@ func keyName*[T](key: StyleKey[T]): string =
   string(key)
 
 func initStyleSelector*(
-    role: StyleRole, states: set[StyleState] = {}, id = "", classes: seq[string] = @[]
+    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
 ): StyleSelector =
   StyleSelector(role: role, states: states, id: id, classes: classes)
 
 func initStyleContext*(
-    role: StyleRole, states: set[StyleState] = {}, id = "", classes: seq[string] = @[]
+    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
 ): StyleContext =
   StyleContext(role: role, states: states, id: id, classes: classes)
 
 func initControlStyleContext*(
-    role: StyleRole,
-    enabled = true,
-    highlighted = false,
-    hovered = false,
-    active = false,
-    focused = false,
-    focusVisible = false,
-    focusWithin = false,
-    selected = false,
-    opened = false,
-    id = "",
-    classes: seq[string] = @[],
+    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
 ): StyleContext =
-  result = initStyleContext(role, id = id, classes = classes)
-  if not enabled:
-    result.states.incl ssDisabled
-  if highlighted:
-    result.states.incl ssHighlighted
-  if hovered:
-    result.states.incl ssHovered
-  if active:
-    result.states.incl ssActive
-  if focused:
-    result.states.incl ssFocused
-  if focusVisible:
-    result.states.incl ssFocusVisible
-  if focusWithin:
-    result.states.incl ssFocusWithin
-  if selected:
-    result.states.incl ssSelected
-  if opened:
-    result.states.incl ssOpen
+  initStyleContext(role, states, id, classes)
 
 func inset*(rect: Rect, insets: EdgeInsets): Rect =
   initRect(
@@ -675,7 +635,7 @@ proc setStyle*(
 proc setStyle*[T](
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[T],
     value: StyleValue,
 ) =
@@ -684,7 +644,7 @@ proc setStyle*[T](
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Color],
     value: Color,
 ) =
@@ -693,7 +653,7 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Fill],
     value: Fill,
 ) =
@@ -702,7 +662,7 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[float32],
     value: float32,
 ) =
@@ -711,7 +671,7 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Size],
     value: Size,
 ) =
@@ -720,7 +680,7 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[float32],
     value: float,
 ) =
@@ -729,7 +689,7 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
@@ -738,7 +698,7 @@ proc setStyle*(
 proc setStyle*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
@@ -824,7 +784,7 @@ proc `[]=`*(
 proc `[]=`*[T](
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[T],
     value: StyleValue,
 ) =
@@ -833,7 +793,7 @@ proc `[]=`*[T](
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Color],
     value: Color,
 ) =
@@ -842,7 +802,7 @@ proc `[]=`*(
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Fill],
     value: Fill,
 ) =
@@ -851,7 +811,7 @@ proc `[]=`*(
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[float32],
     value: float32,
 ) =
@@ -860,7 +820,7 @@ proc `[]=`*(
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[float32],
     value: float,
 ) =
@@ -869,7 +829,7 @@ proc `[]=`*(
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Size],
     value: Size,
 ) =
@@ -878,7 +838,7 @@ proc `[]=`*(
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
@@ -887,7 +847,7 @@ proc `[]=`*(
 proc `[]=`*(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
@@ -1257,7 +1217,7 @@ proc `[]=`*(
 proc `[]=`*[T](
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[T],
     value: StyleValue,
 ) =
@@ -1266,7 +1226,7 @@ proc `[]=`*[T](
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Color],
     value: Color,
 ) =
@@ -1275,7 +1235,7 @@ proc `[]=`*(
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Fill],
     value: Fill,
 ) =
@@ -1284,7 +1244,7 @@ proc `[]=`*(
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[float32],
     value: float32,
 ) =
@@ -1293,7 +1253,7 @@ proc `[]=`*(
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[float32],
     value: float,
 ) =
@@ -1302,7 +1262,7 @@ proc `[]=`*(
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[Size],
     value: Size,
 ) =
@@ -1311,7 +1271,7 @@ proc `[]=`*(
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
@@ -1320,7 +1280,7 @@ proc `[]=`*(
 proc `[]=`*(
     appearance: var Appearance,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
@@ -1584,7 +1544,7 @@ func comboBoxControlSize*(style: ComboBoxStyle, textSize: Size): Size =
 proc addRoleRule(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     fill: StyleValue,
     borderColor: StyleValue,
     textColor: StyleValue,
@@ -1597,7 +1557,7 @@ proc addRoleRule(
 proc addChoiceRule(
     theme: var Theme,
     role: StyleRole,
-    states: set[StyleState],
+    states: set[WidgetState],
     fill: StyleValue,
     borderColor: StyleValue,
     markColor: StyleValue,

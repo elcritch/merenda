@@ -2,6 +2,7 @@ import ./responders
 import ./selectors
 import ./types
 import ./viewconstraints
+import ./events
 import ./viewgeometry
 import ./viewprotos
 import ./viewbase
@@ -61,57 +62,54 @@ proc removeStyleClass*(view: View, className: string) =
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
+proc widgetStateSet*(view: View): set[WidgetState] =
+  view.xWidgetStates
+
+proc setWidgetState*(view: View, state: WidgetState, value: bool) =
+  if value == (state in view.xWidgetStates):
+    return
+  if value:
+    view.xWidgetStates.incl state
+  else:
+    view.xWidgetStates.excl state
+  view.invalidateIntrinsicContentSize()
+  view.setNeedsDisplay(true)
+
 proc isHovered*(view: View): bool =
-  (not view.isNil) and view.xHovered
+  ssHovered in view.xWidgetStates
 
 proc hovered*(view: View): bool =
   view.isHovered()
 
 proc `hovered=`*(view: View, hovered: bool) =
-  if view.isNil or view.xHovered == hovered:
-    return
-  view.xHovered = hovered
-  view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.setWidgetState(ssHovered, hovered)
 
 proc isActive*(view: View): bool =
-  (not view.isNil) and view.xActive
+  (not view.isNil) and ssActive in view.xWidgetStates
 
 proc active*(view: View): bool =
   view.isActive()
 
 proc `active=`*(view: View, active: bool) =
-  if view.isNil or view.xActive == active:
-    return
-  view.xActive = active
-  view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.setWidgetState(ssActive, active)
 
 proc isFocused*(view: View): bool =
-  (not view.isNil) and view.xHasFocus
+  (not view.isNil) and ssFocused in view.xWidgetStates
 
 proc focused*(view: View): bool =
   view.isFocused()
 
 proc `focused=`*(view: View, focused: bool) =
-  if view.isNil or view.xHasFocus == focused:
-    return
-  view.xHasFocus = focused
-  view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.setWidgetState(ssFocused, focused)
 
 proc isFocusVisible*(view: View): bool =
-  (not view.isNil) and view.xFocusVisible
+  (not view.isNil) and ssFocusVisible in view.xWidgetStates
 
 proc focusVisible*(view: View): bool =
   view.isFocusVisible()
 
 proc `focusVisible=`*(view: View, focusVisible: bool) =
-  if view.isNil or view.xFocusVisible == focusVisible:
-    return
-  view.xFocusVisible = focusVisible
-  view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.setWidgetState(ssFocusVisible, focusVisible)
 
 proc needsUpdateConstraints*(view: View): bool =
   (not view.isNil) and view.xNeedsUpdateConstraints
