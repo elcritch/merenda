@@ -17,6 +17,7 @@ import merenda/nimkit/scrollergeometry
 import merenda/nimkit/selectors
 import merenda/nimkit/stackviews
 import merenda/nimkit/scrollviews
+import merenda/nimkit/tableviews
 import merenda/nimkit/textfields
 import merenda/nimkit/theme
 import merenda/nimkit/types
@@ -42,6 +43,7 @@ export scrollergeometry
 export selectors
 export stackviews
 export scrollviews
+export tableviews
 export textfields
 export theme
 export types
