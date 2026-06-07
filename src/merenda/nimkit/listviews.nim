@@ -48,6 +48,10 @@ type
     xVerticalScroller: ListScroller
     xRowHeight: float32
     xVisibleRows: int
+    xRowHeights: seq[float32]
+    xRowOffsets: seq[float32]
+    xRowHeightCacheValid: bool
+    xComputingRowHeights: bool
     xSelectionMode: ListSelectionMode
     xTrackingItem: bool
     xListRole: StyleRole
@@ -61,16 +65,23 @@ proc syncVisibleRowViews(contentView: ListContentView)
 proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
 proc verticalScroller*(listView: ListView): ListScroller
+proc listViewportSize(listView: ListView): Size
 proc listContentSize*(listView: ListView): Size
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int
 proc len*(listView: ListView): int
 proc rowHeight*(listView: ListView): float32
+proc rowHeightForRow*(listView: ListView, index: int): float32
+proc noteRowHeightsChanged*(listView: ListView)
+proc noteHeightOfRowsChanged*(listView: ListView, rows: openArray[int])
+proc noteHeightOfRowChanged*(listView: ListView, row: int)
 proc reloadData*(listView: ListView)
 proc visibleItemCount*(listView: ListView): int
+proc firstVisibleIndex*(listView: ListView): int
 proc highlightedIndex*(listView: ListView): int
 proc rowEnabled*(listView: ListView, index: int): bool
 proc rowSelectable*(listView: ListView, index: int): bool
+proc rowStyle*(listView: ListView, row: ListRowState): ListRowStyle
 proc drawListRow*(
   listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
 )
@@ -79,6 +90,8 @@ proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
 proc showsVerticalScroller*(listView: ListView): bool
 proc verticalScrollerRect*(listView: ListView): Rect
+proc tileListContent(listView: ListView)
+proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
 proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
@@ -100,6 +113,9 @@ protocol ListViewEvents:
 protocol ListViewDelegate {.selectorScope: protocol.}:
   method rowIsEnabled*(listView: ListView, row: int): bool {.optional.}
   method shouldSelectRow*(listView: ListView, row: int): bool {.optional.}
+  method heightOfRow*(listView: ListView, row: int): float32 {.optional.}
+  method heightForRow*(listView: ListView, row: int): float32 {.optional.}
+  method styleForRow*(listView: ListView, row: ListRowState): ListRowStyle {.optional.}
   method drawRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
   ) {.optional.}
@@ -306,7 +322,126 @@ proc `rowHeight=`*(listView: ListView, height: float32) =
   if listView.xRowHeight == normalized:
     return
   listView.xRowHeight = normalized
+  listView.xRowHeightCacheValid = false
   listView.reloadData()
+
+proc uncachedRowHeightForRow(listView: ListView, index: int): float32 =
+  if listView.isNil or index < 0 or index >= listView.len():
+    return 0.0'f32
+  if not listView.xDelegate.isNil:
+    let cocoaHeight =
+      listView.xDelegate.trySendLocal(heightOfRow(), (listView: listView, row: index))
+    if cocoaHeight.isSome:
+      return cocoaHeight.get().normalizedRowHeight()
+    let height =
+      listView.xDelegate.trySendLocal(heightForRow(), (listView: listView, row: index))
+    if height.isSome:
+      return height.get().normalizedRowHeight()
+  listView.rowHeight()
+
+proc ensureRowHeightCache(listView: ListView) =
+  if listView.isNil or listView.xRowHeightCacheValid or listView.xComputingRowHeights:
+    return
+  listView.xComputingRowHeights = true
+  try:
+    var
+      heights: seq[float32]
+      offsets: seq[float32]
+      offset = 0.0'f32
+    for index in 0 ..< listView.len():
+      offsets.add offset
+      let height = listView.uncachedRowHeightForRow(index)
+      heights.add height
+      offset += height
+    listView.xRowHeights = heights
+    listView.xRowOffsets = offsets
+    listView.xRowHeightCacheValid = true
+  finally:
+    listView.xComputingRowHeights = false
+
+proc invalidateRowHeightCache(listView: ListView) =
+  if listView.isNil:
+    return
+  listView.xRowHeightCacheValid = false
+
+proc rowOffset(listView: ListView, index: int): float32 =
+  if listView.isNil or index <= 0:
+    return 0.0'f32
+  listView.ensureRowHeightCache()
+  if index >= listView.xRowHeights.len:
+    result = 0.0'f32
+    for height in listView.xRowHeights:
+      result += height
+  elif index < listView.xRowOffsets.len:
+    result = listView.xRowOffsets[index]
+
+proc rowIndexAtContentY(listView: ListView, y: float32): int =
+  if listView.isNil or listView.len() <= 0:
+    return -1
+  listView.ensureRowHeightCache()
+  let targetY = max(y, 0.0'f32)
+  for index, offset in listView.xRowOffsets:
+    if targetY < offset + listView.xRowHeights[index]:
+      return index
+  listView.len() - 1
+
+proc listContentHeight(listView: ListView): float32 =
+  if listView.isNil:
+    return 0.0'f32
+  listView.rowOffset(listView.len())
+
+proc visibleRowsFrom(listView: ListView, firstIndex: int, height: float32): int =
+  if listView.isNil or listView.len() <= 0 or firstIndex < 0 or height <= 0.0'f32:
+    return 0
+  var
+    count = 0
+    consumed = 0.0'f32
+    index = firstIndex
+  while index < listView.len():
+    let next = consumed + listView.rowHeightForRow(index)
+    if count > 0 and next > height:
+      break
+    consumed = next
+    inc count
+    inc index
+  max(count, 1)
+
+proc maxFirstVisibleIndex(listView: ListView): int =
+  if listView.isNil or listView.len() <= 0:
+    return 0
+  listView.rowIndexAtContentY(
+    max(listView.listContentHeight() - listView.listViewportSize().height, 0.0'f32)
+  )
+
+proc rowHeightForRow*(listView: ListView, index: int): float32 =
+  if listView.isNil or index < 0 or index >= listView.len():
+    return 0.0'f32
+  if listView.xComputingRowHeights:
+    return listView.rowHeight()
+  listView.ensureRowHeightCache()
+  if index < listView.xRowHeights.len:
+    listView.xRowHeights[index]
+  else:
+    listView.rowHeight()
+
+proc noteRowHeightsChanged*(listView: ListView) =
+  if listView.isNil:
+    return
+  let oldFirst = listView.firstVisibleIndex()
+  listView.invalidateRowHeightCache()
+  listView.tileListContent()
+  listView.setListContentOffset(initPoint(0.0'f32, listView.rowOffset(oldFirst)), false)
+  listView.invalidateIntrinsicContentSize()
+  listView.invalidateListRows()
+
+proc noteHeightOfRowsChanged*(listView: ListView, rows: openArray[int]) =
+  if listView.isNil or rows.len == 0:
+    return
+  listView.noteRowHeightsChanged()
+
+proc noteHeightOfRowChanged*(listView: ListView, row: int) =
+  if not listView.isNil and row >= 0 and row < listView.len():
+    listView.noteHeightOfRowsChanged([row])
 
 proc visibleRows*(listView: ListView): int =
   if listView.isNil:
@@ -346,15 +481,7 @@ proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
 proc showsVerticalScroller*(listView: ListView): bool =
   if listView.isNil or listView.len() <= 0:
     return false
-  let
-    rowHeight = listView.rowHeight()
-    contentHeight = max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
-    visibleRows =
-      if rowHeight <= 0.0'f32:
-        0
-      else:
-        int(contentHeight / rowHeight)
-  listView.len() > visibleListItemCount(listView.len(), visibleRows).max(0)
+  listView.listContentHeight() > max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
 
 proc setListViewRoles*(
     listView: ListView,
@@ -390,13 +517,28 @@ proc rowSelectable*(listView: ListView, index: int): bool =
       return selectable.get()
   true
 
+proc rowStyle*(listView: ListView, row: ListRowState): ListRowStyle =
+  if listView.isNil or listView.xDelegate.isNil or row.index < 0:
+    return initListRowStyle()
+  let style =
+    listView.xDelegate.trySendLocal(styleForRow(), (listView: listView, row: row))
+  if style.isSome:
+    style.get()
+  else:
+    initListRowStyle()
+
 proc drawListRow*(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
 ) =
   if listView.isNil or context.isNil:
     return
   context.drawListRow(
-    rect, row, listView.xItemRole, listView.styleId(), listView.styleClasses()
+    rect,
+    row,
+    listView.rowStyle(row),
+    listView.xItemRole,
+    listView.styleId(),
+    listView.styleClasses(),
   )
 
 proc drawCustomListRow(
@@ -423,21 +565,15 @@ proc listViewportSize(listView: ListView): Size =
 proc listContentSize*(listView: ListView): Size =
   if listView.isNil:
     return initSize(0.0, 0.0)
-  initSize(
-    listView.listViewportSize().width, listView.rowHeight() * listView.len().float32
-  )
+  initSize(listView.listViewportSize().width, listView.listContentHeight())
 
 proc visibleItemCount*(listView: ListView): int =
   if listView.isNil or listView.len() <= 0:
     return 0
   let
-    rowHeight = listView.rowHeight()
     contentHeight = listView.listViewportSize().height
     visibleFromBounds =
-      if rowHeight <= 0.0'f32:
-        0
-      else:
-        int(contentHeight / rowHeight)
+      listView.visibleRowsFrom(listView.firstVisibleIndex(), contentHeight)
     preferredRows =
       if visibleFromBounds > 0:
         visibleFromBounds
@@ -452,8 +588,7 @@ proc clampListContentOffset(listView: ListView, offset: Point): Point =
     viewportSize = listView.listViewportSize()
     contentSize = listView.listContentSize()
     horizontal = initScrollViewport(0.0, viewportSize.width, contentSize.width)
-    maxFirst = maxFirstIndex(listView.len(), listView.visibleItemCount()).float32
-    maxY = maxFirst * listView.rowHeight()
+    maxY = max(contentSize.height - viewportSize.height, 0.0'f32)
   initPoint(
     horizontal.clampScrollOffset(offset.x),
     min(max(offset.y, 0.0'f32), max(maxY, 0.0'f32)),
@@ -462,13 +597,7 @@ proc clampListContentOffset(listView: ListView, offset: Point): Point =
 proc syncListViewport(listView: ListView, offset: Point) =
   if listView.isNil:
     return
-  let rowHeight = listView.rowHeight()
-  listView.xViewport.reset(
-    if rowHeight <= 0.0'f32:
-      0
-    else:
-      floor(offset.y / rowHeight).int
-  )
+  listView.xViewport.reset(listView.rowIndexAtContentY(offset.y))
   listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
 
 proc listContentOffset(listView: ListView): Point =
@@ -493,12 +622,7 @@ proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool) =
 proc firstVisibleIndex*(listView: ListView): int =
   if listView.isNil:
     return 0
-  let rowHeight = listView.rowHeight()
-  if rowHeight <= 0.0'f32:
-    return 0
-  floor(listView.listContentOffset().y / rowHeight).int.clampFirstIndex(
-    listView.len(), listView.visibleItemCount()
-  )
+  listView.rowIndexAtContentY(listView.listContentOffset().y)
 
 proc listScrollerKnobRect(listView: ListView, track: Rect): Rect =
   if listView.isNil or track.isEmpty:
@@ -537,12 +661,7 @@ proc `firstVisibleIndex=`*(listView: ListView, index: int) =
   let oldFirst = listView.firstVisibleIndex()
   listView.tileListContent()
   listView.setListContentOffset(
-    initPoint(
-      0.0'f32,
-      index.clampFirstIndex(listView.len(), listView.visibleItemCount()).float32 *
-        listView.rowHeight(),
-    ),
-    false,
+    initPoint(0.0'f32, listView.rowOffset(max(index, 0))), false
   )
   if listView.firstVisibleIndex() != oldFirst:
     listView.invalidateListRows()
@@ -627,6 +746,8 @@ proc nextSelectableIndex(listView: ListView, index, delta: int): int =
 proc reloadData*(listView: ListView) =
   if listView.isNil:
     return
+  let oldFirst = listView.firstVisibleIndex()
+  listView.invalidateRowHeightCache()
   if listView.xSelectionMode == lsmSingle and listView.xSelectedIndexes.len > 0 and
       listView.len() > 0:
     listView.xSelectedIndexes[0] =
@@ -642,17 +763,15 @@ proc reloadData*(listView: ListView) =
 
   if not listView.rowEnabled(listView.xHighlightedIndex):
     listView.xHighlightedIndex = -1
-  var viewport = initListViewport(listView.firstVisibleIndex())
-  if listView.xSelectedIndex >= 0:
-    viewport.scrollToVisible(
-      listView.xSelectedIndex, listView.len(), listView.visibleItemCount()
-    )
-  else:
-    viewport.normalize(listView.len(), listView.visibleItemCount())
   listView.tileListContent()
   listView.setListContentOffset(
-    initPoint(0.0'f32, viewport.firstIndex.float32 * listView.rowHeight()), false
+    initPoint(
+      0.0'f32, listView.rowOffset(min(oldFirst, listView.maxFirstVisibleIndex()))
+    ),
+    false,
   )
+  if listView.xSelectedIndex >= 0:
+    listView.scrollItemToVisible(listView.xSelectedIndex)
   listView.invalidateIntrinsicContentSize()
   listView.invalidateListRows()
 
@@ -662,16 +781,16 @@ proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
     return initRect(0.0, 0.0, 0.0, 0.0)
   initRect(
     0.0'f32,
-    itemIndex.float32 * listView.rowHeight(),
+    listView.rowOffset(itemIndex),
     max(contentView.bounds().size.width, 0.0'f32),
-    listView.rowHeight(),
+    listView.rowHeightForRow(itemIndex),
   )
 
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int =
   let listView = contentView.listView()
   if listView.isNil or not contentView.bounds().contains(point):
     return -1
-  let index = int(point.y / listView.rowHeight())
+  let index = listView.rowIndexAtContentY(point.y)
   if index < 0 or index >= listView.len():
     return -1
   index
@@ -687,7 +806,7 @@ proc listItemRect*(listView: ListView, itemIndex: int): Rect =
     return initRect(0.0, 0.0, 0.0, 0.0)
   let visibleRect =
     contentView.rectToView(contentRect, listView).intersection(listView.bounds())
-  if visibleRect.size.height < listView.rowHeight() or visibleRect.isEmpty:
+  if visibleRect.size.height < listView.rowHeightForRow(itemIndex) or visibleRect.isEmpty:
     initRect(0.0, 0.0, 0.0, 0.0)
   else:
     visibleRect
@@ -705,29 +824,39 @@ proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
   if listView.isNil:
     return
   let oldFirst = listView.firstVisibleIndex()
-  var viewport = initListViewport(oldFirst)
-  viewport.scrollToVisible(itemIndex, listView.len(), listView.visibleItemCount())
-  listView.setListContentOffset(
-    initPoint(0.0'f32, viewport.firstIndex.float32 * listView.rowHeight()), false
-  )
+  if itemIndex < 0 or itemIndex >= listView.len():
+    return
+  let
+    rowRect = listView.contentView().listContentItemRect(itemIndex)
+    visible = listView.listContentOffset()
+    viewportHeight = listView.listViewportSize().height
+  var nextY = visible.y
+  if rowRect.minY < visible.y:
+    nextY = rowRect.minY
+  elif rowRect.maxY > visible.y + viewportHeight:
+    nextY = rowRect.maxY - viewportHeight
+  listView.setListContentOffset(initPoint(0.0'f32, nextY), false)
   if listView.firstVisibleIndex() != oldFirst:
     listView.invalidateListRows()
 
 proc canScrollRows*(listView: ListView, delta: int): bool =
   if listView.isNil:
     return false
-  initListViewport(listView.firstVisibleIndex()).canScrollBy(
-    delta, listView.len(), listView.visibleItemCount()
-  )
+  let
+    currentY = listView.listContentOffset().y
+    nextIndex = max(listView.firstVisibleIndex() + delta, 0)
+    nextY = listView.clampListContentOffset(
+      initPoint(0.0'f32, listView.rowOffset(nextIndex))
+    ).y
+  delta != 0 and nextY != currentY
 
 proc scrollRows*(listView: ListView, delta: int) =
   if listView.isNil or delta == 0:
     return
   let oldFirst = listView.firstVisibleIndex()
-  var viewport = initListViewport(oldFirst)
-  viewport.scrollBy(delta, listView.len(), listView.visibleItemCount())
+  let nextFirst = max(oldFirst + delta, 0)
   listView.setListContentOffset(
-    initPoint(0.0'f32, viewport.firstIndex.float32 * listView.rowHeight()), false
+    initPoint(0.0'f32, listView.rowOffset(nextFirst)), false
   )
   if listView.firstVisibleIndex() != oldFirst:
     listView.invalidateListRows()
@@ -933,13 +1062,13 @@ proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   let listView = contentView.listView()
   if listView.isNil or listView.len() <= 0:
     return (0, 0)
-  let
-    rowHeight = listView.rowHeight()
-    visible = contentView.visibleRect()
-  if rowHeight <= 0.0'f32 or visible.isEmpty:
+  let visible = contentView.visibleRect()
+  if visible.isEmpty:
     return (0, 0)
-  result.first = max(floor(max(visible.minY, 0.0'f32) / rowHeight).int, 0)
-  result.last = min(ceil(max(visible.maxY, 0.0'f32) / rowHeight).int, listView.len())
+  result.first = max(listView.rowIndexAtContentY(visible.minY), 0)
+  result.last = result.first
+  while result.last < listView.len() and listView.rowOffset(result.last) < visible.maxY:
+    inc result.last
   if result.last < result.first:
     result.last = result.first
 
@@ -993,7 +1122,7 @@ proc scrollListKnobTo(scroller: ListScroller, point: Point) =
     return
   let
     track = scroller.bounds()
-    maxFirst = maxFirstIndex(listView.len(), listView.visibleItemCount())
+    maxFirst = listView.maxFirstVisibleIndex()
     next = contentOffsetForScrollerKnobOrigin(
       track,
       listView.listScrollerKnobRect(track),
@@ -1001,8 +1130,7 @@ proc scrollListKnobTo(scroller: ListScroller, point: Point) =
       maxFirst.float32,
       scroller.xTracking.knobOriginForPoint(laVertical, point),
     )
-  listView.firstVisibleIndex =
-    clampFirstIndex(round(next).int, listView.len(), listView.visibleItemCount())
+  listView.firstVisibleIndex = min(max(round(next).int, 0), maxFirst)
 
 proc scrollListPageToward(scroller: ListScroller, point: Point) =
   let listView = scroller.listView()
@@ -1042,9 +1170,15 @@ proc listNaturalSize(listView: ListView): Size =
       else:
         visibleListItemCount(listView.len(), listView.visibleRows())
 
-  var maxTextWidth = 0.0'f32
+  var
+    maxTextWidth = 0.0'f32
+    naturalHeight = 0.0'f32
   for index in 0 ..< listView.len():
     maxTextWidth = max(maxTextWidth, textNaturalSize(listView[index]).width)
+    if index < rowCount:
+      naturalHeight += listView.rowHeightForRow(index)
+  if listView.len() == 0:
+    naturalHeight = listView.rowHeight() * rowCount.float32
 
   initSize(
     max(
@@ -1054,7 +1188,7 @@ proc listNaturalSize(listView: ListView): Size =
         maxTextWidth + itemStyle.text.insets.horizontal + 2.0'f32,
       ),
     ),
-    max(listStyle.minSize.height, listView.rowHeight() * rowCount.float32 + 2.0'f32),
+    max(listStyle.minSize.height, naturalHeight + 2.0'f32),
   )
 
 protocol DefaultListRowViewDrawing of ViewDrawingProtocol:

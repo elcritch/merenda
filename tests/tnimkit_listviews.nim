@@ -1,5 +1,6 @@
-import std/unittest
+import std/[options, unicode, unittest]
 
+import figdraw/fignodes except Rect
 import sigils/core
 import sigils/selectors
 
@@ -23,6 +24,9 @@ type
   ListPolicyDelegateSpy = ref object of Responder
     disabledRows: seq[int]
     nonselectableRows: seq[int]
+    rowHeights: seq[float32]
+    styledRow: int
+    style: ListRowStyle
     rows: seq[ListRowState]
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
@@ -30,6 +34,10 @@ proc containsIndex(indexes: openArray[int], index: int): bool =
     if value == index:
       return true
   false
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
 
 protocol ListDataSourceSpyMethods of ListViewDataSource:
   method rowCount(source: ListDataSourceSpy, listView: ListView): int =
@@ -81,6 +89,21 @@ protocol ListPolicyDelegateSpyMethods of ListViewDelegate:
   ): bool =
     not policy.nonselectableRows.containsIndex(row)
 
+  method heightOfRow(
+      policy: ListPolicyDelegateSpy, listView: ListView, row: int
+  ): float32 =
+    if row < 0 or row >= policy.rowHeights.len:
+      return listView.rowHeight()
+    policy.rowHeights[row]
+
+  method styleForRow(
+      policy: ListPolicyDelegateSpy, listView: ListView, row: ListRowState
+  ): ListRowStyle =
+    if row.index == policy.styledRow:
+      policy.style
+    else:
+      initListRowStyle()
+
   method drawRow(
       policy: ListPolicyDelegateSpy,
       listView: ListView,
@@ -107,10 +130,18 @@ proc newListRowRendererSpy(): ListRowRendererSpy =
   discard result.withProtocol(ListRowRendererSpyMethods)
 
 proc newListPolicyDelegateSpy(
-    disabledRows: openArray[int] = [], nonselectableRows: openArray[int] = []
+    disabledRows: openArray[int] = [],
+    nonselectableRows: openArray[int] = [],
+    rowHeights: openArray[float32] = [],
+    styledRow = -1,
+    style = initListRowStyle(),
 ): ListPolicyDelegateSpy =
   result = ListPolicyDelegateSpy(
-    disabledRows: @disabledRows, nonselectableRows: @nonselectableRows
+    disabledRows: @disabledRows,
+    nonselectableRows: @nonselectableRows,
+    rowHeights: @rowHeights,
+    styledRow: styledRow,
+    style: style,
   )
   initResponder(result)
   discard result.withProtocol(ListPolicyDelegateSpyMethods)
@@ -259,11 +290,11 @@ suite "nimkit list views":
 
     listView.selectedIndex = 3
     check listView.selectedIndex == 3
-    check listView.firstVisibleIndex == 2
+    check listView.firstVisibleIndex == 1
     check not listView.listViewScrollerKnobRect().isEmpty
 
     listView.scrollRows(-1)
-    check listView.firstVisibleIndex == 1
+    check listView.firstVisibleIndex == 0
 
     listView.removeItemAtIndex(3)
     check listView.len == 3
@@ -289,7 +320,7 @@ suite "nimkit list views":
     listView.selectedIndex = 3
     check listView.selectedIndex == 3
     check listView.selectedIndexes == @[3]
-    check listView.firstVisibleIndex == 2
+    check listView.firstVisibleIndex == 1
 
     source.rows.setLen(2)
     listView.reloadData()
@@ -451,10 +482,10 @@ suite "nimkit list views":
 
     listView.firstVisibleIndex = 2
     check content.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 80.0'f32)
-    check clip.bounds.origin == initPoint(0.0'f32, 40.0'f32)
+    check clip.bounds.origin == initPoint(0.0'f32, 36.0'f32)
     check listView.listViewScrollerKnobRect() ==
-      initRect(107.0'f32, 23.0'f32, 12.0'f32, 22.0'f32)
-    check listView.listItemRect(2) == initRect(1.0'f32, 1.0'f32, 106.0'f32, 20.0'f32)
+      initRect(107.0'f32, 12.0'f32, 12.0'f32, 22.0'f32)
+    check listView.listItemRect(2) == initRect(1.0'f32, 5.0'f32, 106.0'f32, 20.0'f32)
     check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
 
   test "list view reuses visible row views":
@@ -577,6 +608,64 @@ suite "nimkit list views":
     check policy.rows[1] == initListRowState(1, "Two", enabled = false)
     check policy.rows[3] == initListRowState(3, "Four")
 
+  test "list view delegates expose row height and optional row styling":
+    let
+      listView = newListView(["One", "Two", "Three"], frame = initRect(0, 0, 120, 62))
+      styledFill = initColor(0.46, 0.18, 0.62, 1.0)
+      styledText = initColor(0.96, 0.92, 1.0, 1.0)
+      policy = newListPolicyDelegateSpy(
+        rowHeights = [20.0'f32, 34.0'f32, 18.0'f32],
+        styledRow = 1,
+        style =
+          initListRowStyle(fill = some(fill(styledFill)), textColor = some(styledText)),
+      )
+
+    listView.rowHeight = 20.0
+    listView.delegate = policy
+
+    check listView.items == @["One", "Two", "Three"]
+    check listView.rowHeight() == 20.0'f32
+    check listView.rowHeightForRow(0) == 20.0'f32
+    check listView.rowHeightForRow(1) == 34.0'f32
+    check listView.rowHeightForRow(2) == 18.0'f32
+    check listView.rowHeightForRow(3) == 0.0'f32
+    check listView.resolvedIntrinsicContentSize().height == 74.0'f32
+    check listView.listContentSize().height == 72.0'f32
+    check listView.contentView().listContentItemRect(0) ==
+      initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
+    check listView.contentView().listContentItemRect(1) ==
+      initRect(0.0'f32, 20.0'f32, 106.0'f32, 34.0'f32)
+    check listView.contentView().listContentItemRect(2) ==
+      initRect(0.0'f32, 54.0'f32, 106.0'f32, 18.0'f32)
+    check listView.contentView().listContentItemIndexAtPoint(initPoint(6.0, 55.0)) == 2
+    check listView.rowStyle(initListRowState(0, "One")) == initListRowStyle()
+    check listView.rowStyle(initListRowState(1, "Two")) ==
+      initListRowStyle(fill = some(fill(styledFill)), textColor = some(styledText))
+
+    let nodes = buildRenders(listView)[DefaultDrawLevel]
+    var
+      styledFillFound = false
+      styledTextFound = false
+    for node in nodes.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == styledFill.rgba and node.screenBox.h == 34.0:
+        styledFillFound = true
+      if node.kind == nkText and node.renderedText() == "Two" and
+          node.textLayout.spanColors.len > 0 and
+          node.textLayout.spanColors[0].kind == flColor and
+          node.textLayout.spanColors[0].color == styledText.rgba:
+        styledTextFound = true
+
+    check styledFillFound
+    check styledTextFound
+
+    policy.rowHeights[1] = 40.0'f32
+    check listView.rowHeightForRow(1) == 34.0'f32
+    listView.noteHeightOfRowChanged(1)
+    check listView.rowHeightForRow(1) == 40.0'f32
+    check listView.listContentSize().height == 78.0'f32
+    check listView.contentView().listContentItemRect(2).origin.y == 60.0'f32
+
   test "list view row policy skips mouse and keyboard selection":
     let
       window = newWindow("List row policy", frame = initRect(0, 0, 220, 180))
@@ -658,7 +747,7 @@ suite "nimkit list views":
     )
     check window.mouseDraggedAt(listView.pointToWindow(initPoint(trackX, track.maxY)))
     check window.mouseUpAt(listView.pointToWindow(initPoint(trackX, track.maxY)))
-    check listView.firstVisibleIndex == 4
+    check listView.firstVisibleIndex == 3
 
   test "list view mouse selection sends control action":
     let

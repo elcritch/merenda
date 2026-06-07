@@ -74,32 +74,35 @@ Recently completed:
   and `listViewShouldSelectRow`. Disabled rows feed `ListRowState.enabled`,
   disabled and nonselectable rows are filtered out of selection state, and
   mouse/keyboard selection skips rows the delegate marks unavailable.
+- `ListView` delegates can now report per-row policy height and optional row
+  styling. Local `items` remain the simple default data path, row state stays a
+  plain value, default row drawing can apply delegate-provided fill/text
+  overrides, and row-height policy feeds measurement.
+- `ListView` row-height policy now follows Cocoa's table-view shape: delegates
+  can implement `heightOfRow`, row heights are cached, `reloadData()` clears the
+  cache, `noteHeightOfRowsChanged`/`noteHeightOfRowChanged` explicitly retile
+  changed rows, and content geometry, hit testing, row reuse, and scrolling use
+  the resolved variable heights.
 
-1. Finish `ListView` data/delegate policy hooks:
-   - keep local `items` as the simple default path
-   - add delegate hooks for row height and optional row styling
-   - keep row state as plain values: index, selected, highlighted, focused,
-     enabled
-2. Polish selection APIs and diagnostics:
+1. Polish selection APIs and diagnostics:
    - add selected range convenience APIs if callers need them
    - add scroll-to-selection helpers
    - add accessibility/debug summaries for visible rows and selection state
    - keep delegate notifications before and after real selection changes
-3. Finish row virtualization polish:
-   - add variable row heights after fixed-height behavior is stable
+2. Finish row virtualization polish:
    - keep reusable row slots private until the cell/view customization shape is
      clear
-4. Add AppKit-like keyboard and focus behavior:
+3. Add AppKit-like keyboard and focus behavior:
    - up/down/page/home/end are in place for fixed-height rows
    - type-select or incremental search
    - focus ring and first-responder behavior
    - activation through Enter/Return/double-click
-5. Add richer list affordances:
+4. Add richer list affordances:
    - empty state rendering hook
    - alternating row backgrounds
    - separators/grid lines if theme roles support them
    - row hover and pressed states
-6. Defer full table/outline APIs until this base is solid:
+5. Defer full table/outline APIs until this base is solid:
    - column headers
    - sortable columns
    - resizable/reorderable columns

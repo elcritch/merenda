@@ -1,4 +1,5 @@
 from figdraw/fignodes import FigIdx
+import std/options
 
 import ./drawing
 import ./scrollergeometry
@@ -16,6 +17,10 @@ type
     highlighted*: bool
     enabled*: bool
     focused*: bool
+
+  ListRowStyle* = object
+    fill*: Option[Fill]
+    textColor*: Option[Color]
 
 func normalizedRowHeight*(rowHeight: float32): float32 =
   max(rowHeight, 1.0'f32)
@@ -175,10 +180,14 @@ func initListRowState*(
     focused: focused,
   )
 
+func initListRowStyle*(fill = none(Fill), textColor = none(Color)): ListRowStyle =
+  ListRowStyle(fill: fill, textColor: textColor)
+
 proc drawListRow*(
     context: DrawContext,
     rect: Rect,
     row: ListRowState,
+    style: ListRowStyle,
     itemRole: StyleRole,
     id = "",
     classes: seq[string] = @[],
@@ -187,19 +196,23 @@ proc drawListRow*(
 ) =
   if rect.isEmpty:
     return
-  let
-    currentParent = int16(parent) < 0
-    itemStyle = context.appearance.resolveListItemStyle(
-      initControlStyleContext(
-        itemRole,
-        enabled = row.enabled,
-        hovered = row.highlighted,
-        focused = row.focused,
-        selected = row.selected,
-        id = id,
-        classes = classes,
-      )
+  let currentParent = int16(parent) < 0
+  var itemStyle = context.appearance.resolveListItemStyle(
+    initControlStyleContext(
+      itemRole,
+      enabled = row.enabled,
+      hovered = row.highlighted,
+      focused = row.focused,
+      selected = row.selected,
+      id = id,
+      classes = classes,
     )
+  )
+  if style.fill.isSome:
+    itemStyle.box.fill = style.fill.get()
+  if style.textColor.isSome:
+    itemStyle.text.color = style.textColor.get()
+
   if currentParent:
     discard context.addWindowRectangle(
       context.localRectToWindow(rect),
@@ -224,3 +237,17 @@ proc drawListRow*(
     context.addText(
       layer, parent, itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color
     )
+
+proc drawListRow*(
+    context: DrawContext,
+    rect: Rect,
+    row: ListRowState,
+    itemRole: StyleRole,
+    id = "",
+    classes: seq[string] = @[],
+    layer = DefaultDrawLevel,
+    parent = (-1).FigIdx,
+) =
+  context.drawListRow(
+    rect, row, initListRowStyle(), itemRole, id, classes, layer, parent
+  )
