@@ -133,8 +133,6 @@ proc verticalScroller*(listView: ListView): ListScroller =
   if listView.isNil: nil else: listView.xVerticalScroller
 
 proc invalidateListRows(listView: ListView) =
-  if listView.isNil:
-    return
   if not listView.xContentView.isNil:
     listView.xContentView.syncVisibleRowViews()
   if not listView.xClipView.isNil:
@@ -343,7 +341,7 @@ proc rowOffset(listView: ListView, index: int): float32 =
     result = listView.xRowOffsets[index]
 
 proc rowIndexAtContentY(listView: ListView, y: float32): int =
-  if listView.isNil or listView.len() <= 0:
+  if listView.len() <= 0:
     return -1
   listView.ensureRowHeightCache()
   let targetY = max(y, 0.0'f32)
@@ -436,7 +434,7 @@ proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
   listView.reloadData()
 
 proc showsVerticalScroller*(listView: ListView): bool =
-  if listView.isNil or listView.len() <= 0:
+  if listView.len() <= 0:
     return false
   listView.contentHeight() > max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
 
@@ -544,8 +542,6 @@ proc clampListContentOffset(listView: ListView, offset: Point): Point =
   )
 
 proc syncListViewport(listView: ListView, offset: Point) =
-  if listView.isNil:
-    return
   listView.xViewport.reset(listView.rowIndexAtContentY(offset.y))
   listView.xViewport.normalize(listView.len(), listView.visibleItemCount())
 
@@ -588,7 +584,7 @@ proc verticalScrollerRect*(listView: ListView): Rect =
   scrollerTrackRect(listView.bounds(), laVertical, ListScrollerThickness, 1.0'f32)
 
 proc tileListContent(listView: ListView) =
-  if listView.isNil or listView.xClipView.isNil or listView.xContentView.isNil:
+  if listView.xClipView.isNil or listView.xContentView.isNil:
     return
   let
     offset = listView.listContentOffset()
@@ -603,8 +599,6 @@ proc tileListContent(listView: ListView) =
   listView.setListContentOffset(offset, false)
 
 proc `firstVisibleIndex=`*(listView: ListView, index: int) =
-  if listView.isNil:
-    return
   let oldFirst = listView.firstVisibleIndex()
   listView.tileListContent()
   listView.setListContentOffset(
@@ -614,7 +608,7 @@ proc `firstVisibleIndex=`*(listView: ListView, index: int) =
     listView.invalidateListRows()
 
 proc normalizeSelection(listView: ListView, indexes: openArray[int]): seq[int] =
-  if listView.isNil or listView.xSelectionMode == lsmNone or listView.len() == 0:
+  if listView.xSelectionMode == lsmNone or listView.len() == 0:
     return @[]
   for index in indexes:
     if listView.rowSelectable(index):
@@ -639,16 +633,12 @@ proc firstSelectedIndex(indexes: openArray[int]): int =
     indexes[0]
 
 proc syncSelectedIndex(listView: ListView) =
-  if listView.isNil:
-    return
   listView.xSelectedIndex = firstSelectedIndex(listView.xSelectedIndexes)
 
 proc normalizeSelectionAnchor(listView: ListView, anchor: int): int =
   if listView.rowSelectable(anchor): anchor else: listView.xSelectedIndex
 
 proc syncSelectionCursor(listView: ListView) =
-  if listView.isNil:
-    return
   if listView.xSelectedIndexes.len == 0:
     listView.xSelectionAnchor = -1
     listView.xSelectionLead = -1
@@ -680,7 +670,7 @@ proc lastSelectableIndex(listView: ListView): int =
   -1
 
 proc nextSelectableIndex(listView: ListView, index, delta: int): int =
-  if listView.isNil or delta == 0 or listView.len() == 0:
+  if delta == 0 or listView.len() == 0:
     return -1
   let step = if delta < 0: -1 else: 1
   var current = index
@@ -722,7 +712,7 @@ proc reloadData*(listView: ListView) =
 
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
   let listView = contentView.listView()
-  if listView.isNil or itemIndex < 0 or itemIndex >= listView.len():
+  if itemIndex notin 0..<listView.len():
     return initRect(0.0, 0.0, 0.0, 0.0)
   initRect(
     0.0'f32,
@@ -733,7 +723,7 @@ proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
 
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int =
   let listView = contentView.listView()
-  if listView.isNil or not contentView.bounds().contains(point):
+  if not contentView.bounds().contains(point):
     return -1
   let index = listView.rowIndexAtContentY(point.y)
   if index < 0 or index >= listView.len():
@@ -919,7 +909,7 @@ proc selectItemAtIndex(listView: ListView, index: int, modifiers: set[KeyModifie
     listView.selectItemAtIndex(index)
 
 proc selectedIndex*(listView: ListView): int =
-  if listView.isNil: -1 else: listView.xSelectedIndex
+  listView.xSelectedIndex
 
 proc `selectedIndex=`*(listView: ListView, index: int) =
   if index < 0:
@@ -982,7 +972,7 @@ proc pageSelection(listView: ListView, deltaPages: int, extend = false) =
 
 proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   let listView = contentView.listView()
-  if listView.isNil or listView.len() <= 0:
+  if listView.len() <= 0:
     return (0, 0)
   let visible = contentView.visibleRect()
   if visible.isEmpty:
@@ -1021,8 +1011,6 @@ proc removeLastRowView(contentView: ListContentView) =
 
 proc syncVisibleRowViews(contentView: ListContentView) =
   let listView = contentView.listView()
-  if listView.isNil:
-    return
   let
     rows = contentView.visibleContentRows()
     needed = max(rows.last - rows.first, 0)
@@ -1176,7 +1164,7 @@ protocol DefaultListViewLayout of ViewLayoutProtocol:
 
 protocol DefaultListViewDrawing of ViewDrawingProtocol:
   method draw(listView: ListView, context: DrawContext) =
-    if listView.isNil or listView.bounds().isEmpty:
+    if listView.bounds().isEmpty:
       return
     listView.tileListContent()
     let
@@ -1206,21 +1194,21 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
 
 protocol DefaultListViewEvents of ResponderEventProtocol:
   method mouseDown(listView: ListView, event: MouseEvent) =
-    if listView.isNil or not listView.isEnabled() or event.button != mbPrimary:
+    if not listView.isEnabled() or event.button != mbPrimary:
       return
     listView.xTrackingItem = true
     listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
 
   method mouseDragged(listView: ListView, event: MouseEvent) =
-    if not listView.isNil and listView.isEnabled():
+    if listView.isEnabled():
       listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
 
   method mouseMoved(listView: ListView, event: MouseEvent) =
-    if not listView.isNil and listView.isEnabled():
+    if listView.isEnabled():
       listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
 
   method mouseUp(listView: ListView, event: MouseEvent) =
-    if listView.isNil or not listView.isEnabled() or event.button != mbPrimary:
+    if not listView.isEnabled() or event.button != mbPrimary:
       return
     let index =
       if listView.xTrackingItem:
@@ -1238,11 +1226,11 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
 
   method scrollWheel(listView: ListView, event: ScrollEvent) =
     let delta = listScrollRows(event)
-    if not listView.isNil and listView.isEnabled() and listView.canScrollRows(delta):
+    if listView.isEnabled() and listView.canScrollRows(delta):
       listView.scrollRows(delta)
 
   method keyDown(listView: ListView, event: KeyEvent) =
-    if listView.isNil or not listView.isEnabled():
+    if not listView.isEnabled():
       return
     let extendSelection = kmShift in event.modifiers
     case event.key
