@@ -40,18 +40,7 @@ ranges, keyboard/focus behavior, row activation, row states, and list drawing
 affordances. Keep `ListView` as the simple single-column control; extract shared
 row infrastructure only when the table implementation proves the boundary.
 
-1. Add NSTableView-like cell data source and delegate hooks:
-   - `method viewForCell(tableView: TableView, row: int,
-     column: TableColumn): View`
-   - optional lightweight fallback hooks such as `textForCell`, `rowHeight`,
-     `isRowEnabled`, `shouldSelectRow`, and `didActivateRow`
-   - keep hooks selector-backed and explicit so callers can customize behavior
-     without subclass-style inheritance requirements
-   - strengthen the control/cell split as needed while adding table cells:
-     centralize cell invalidation, value conversion, target/action storage,
-     highlight/tracking behavior, and default cell construction instead of
-     duplicating those paths in table-specific code
-2. Reuse and generalize row virtualization:
+1. Reuse and generalize row virtualization:
    - virtualize rows first and render all visible columns for each visible row
    - keep reusable row/cell slots private until custom cell lifetime and reuse
      semantics are clear
@@ -59,21 +48,21 @@ row infrastructure only when the table implementation proves the boundary.
      common data browsers
    - preserve ListView's visible-row summaries and activation behavior where the
      concepts still apply
-3. Implement table layout and headers:
+2. Implement table layout and headers:
    - compute column frames from ordered `TableColumn` widths
    - add a header band with column title rendering, hover/pressed state, focus
      handoff, and hit testing
    - support vertical scrolling in the first milestone; add horizontal scrolling
      once total column width can exceed the viewport
    - keep header, row, cell, and grid metrics in theme/appearance types
-4. Add table affordances in AppKit order:
+3. Add table affordances in AppKit order:
    - alternating row backgrounds, row hover/pressed states, separators, and grid
      lines using existing `WidgetState` and theme roles
    - column resizing with minimum/maximum constraints
    - sort request state and sort indicator rendering; let callers own the data
      ordering instead of sorting opaque data internally
    - column reordering after resizing and sorting are solid
-5. Defer advanced table/outline behavior until the base is solid:
+4. Defer advanced table/outline behavior until the base is solid:
    - editable cells and commit/cancel flow
    - cell selection and column selection
    - drag reordering
