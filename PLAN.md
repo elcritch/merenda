@@ -32,13 +32,63 @@ target is enough Cocoa/AppKit-like behavior to support complex applications:
 sidebars, inspectors, pickers, logs, search results, simple data browsers, and
 future table/outline-style controls.
 
-1. Defer full table/outline APIs until this base is solid:
-   - column headers
-   - sortable columns
-   - resizable/reorderable columns
-   - tree disclosure rows
+### TableView
+
+Build `TableView` as a sibling control that reuses the durable parts of
+`ListView`: scroll integration, fixed-height row virtualization, selection
+ranges, keyboard/focus behavior, row activation, row states, and list drawing
+affordances. Keep `ListView` as the simple single-column control; extract shared
+row infrastructure only when the table implementation proves the boundary.
+
+1. Establish the core table model:
+   - add `TableView` as a scroll-backed data control
+   - add `TableColumn` objects with stable identifiers, title text, width,
+     minimum/maximum width, alignment, resize policy, style id/classes, and
+     optional user info
+   - provide column collection APIs: `addColumn`, `insertColumn`, `removeColumn`,
+     `columnCount`, `columnAt`, lookup by identifier, and iteration
+   - keep row selection as the first selection mode; defer cell and column
+     selection until row tables are stable
+2. Add NSTableView-like data source and delegate hooks:
+   - `method numberOfRows(tableView: TableView): int`
+   - `method viewForCell(tableView: TableView, row: int,
+     column: TableColumn): View`
+   - optional lightweight fallback hooks such as `textForCell`, `rowHeight`,
+     `isRowEnabled`, `shouldSelectRow`, and `didActivateRow`
+   - keep hooks selector-backed and explicit so callers can customize behavior
+     without subclass-style inheritance requirements
+   - strengthen the control/cell split as needed while adding table cells:
+     centralize cell invalidation, value conversion, target/action storage,
+     highlight/tracking behavior, and default cell construction instead of
+     duplicating those paths in table-specific code
+3. Reuse and generalize row virtualization:
+   - virtualize rows first and render all visible columns for each visible row
+   - keep reusable row/cell slots private until custom cell lifetime and reuse
+     semantics are clear
+   - support hosted views per visible cell, plus a cheaper text-cell path for
+     common data browsers
+   - preserve ListView's visible-row summaries and activation behavior where the
+     concepts still apply
+4. Implement table layout and headers:
+   - compute column frames from ordered `TableColumn` widths
+   - add a header band with column title rendering, hover/pressed state, focus
+     handoff, and hit testing
+   - support vertical scrolling in the first milestone; add horizontal scrolling
+     once total column width can exceed the viewport
+   - keep header, row, cell, and grid metrics in theme/appearance types
+5. Add table affordances in AppKit order:
+   - alternating row backgrounds, row hover/pressed states, separators, and grid
+     lines using existing `WidgetState` and theme roles
+   - column resizing with minimum/maximum constraints
+   - sort request state and sort indicator rendering; let callers own the data
+     ordering instead of sorting opaque data internally
+   - column reordering after resizing and sorting are solid
+6. Defer advanced table/outline behavior until the base is solid:
+   - editable cells and commit/cancel flow
+   - cell selection and column selection
    - drag reordering
-   - cell editing
+   - tree disclosure rows and `OutlineView`
+   - frozen columns, column groups, and very-wide column virtualization
 
 ### Controls
 
