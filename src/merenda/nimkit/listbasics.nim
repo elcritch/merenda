@@ -6,6 +6,8 @@ import ./scrollergeometry
 import ./theme
 import ./types
 
+const ListScrollerThickness = 12.0'f32
+
 type
   ListViewport* = object
     rows: ScrollViewport
