@@ -906,7 +906,7 @@ proc listRowState(listView: ListView, index: int): ListRowState =
       rowStates.incl(lrsAlternating)
     if index == listView.xPressedIndex:
       rowStates.incl(lrsPressed)
-    if listView.isFocused():
+    if ssFocused in listView.widgetStateSet():
       rowStates.incl(lrsFocused)
     initListRowState(index, listView[index], states = rowStates)
 
@@ -1391,20 +1391,12 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
     listView.tileListContent()
     let
       classes = listView.styleClasses()
-      focusedState = listView.widgetStateSet() +
-        (if listView.isFocused():
-          {ssFocused}
-        else:
-          {}) +
-        (if listView.isFocusVisible():
-          {ssFocusVisible}
-        else:
-          {})
-      listStyle = context.appearance.resolveListViewStyle(
-        initControlStyleContext(
-          listView.xListRole, focusedState, id = listView.styleId(), classes = classes
-        )
+      focusedState = listView.widgetStateSet()
+    let listStyle = context.appearance.resolveListViewStyle(
+      initControlStyleContext(
+        listView.xListRole, focusedState, id = listView.styleId(), classes = classes
       )
+    )
     discard context.addWindowRectangle(
       context.localRectToWindow(listView.bounds()),
       listStyle.box.fill,
@@ -1418,7 +1410,7 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
     if listView.len() == 0 and not listView.clipView().isNil:
       discard listView.drawCustomEmptyState(context, listView.clipView().frame())
 
-    if listView.isFocusVisible:
+    if ssFocusVisible in focusedState:
       context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
 
 protocol DefaultListViewEvents of ResponderEventProtocol:
