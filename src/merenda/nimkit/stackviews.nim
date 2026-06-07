@@ -130,7 +130,6 @@ proc fittingSize(child: View): Size =
     child.sizeThatFits(UnconstrainedFittingSize)
 
 proc stackNaturalSize(stackView: StackView): Size =
-
   let
     children = stackView.layoutArrangedSubviews()
     axis = stackView.xOrientation
@@ -302,7 +301,6 @@ proc alignedCrossFrame(
     result.origin = contentCrossOrigin + availableCross - result.length
 
 proc layoutStackSubviews(stackView: StackView) =
-
   let
     children = stackView.layoutArrangedSubviews()
     axis = stackView.xOrientation

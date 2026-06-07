@@ -2,7 +2,14 @@ import std/[algorithm, math, options]
 
 import sigils/core
 
-import ./controls, ./listbasics, ./scrollergeometry, ./scrollviews, ./selectors, ./theme, ./types
+import
+  ./controls,
+  ./listbasics,
+  ./scrollergeometry,
+  ./scrollviews,
+  ./selectors,
+  ./theme,
+  ./types
 
 export listbasics
 
@@ -163,7 +170,7 @@ proc `items=`*(listView: ListView, values: openArray[string]) =
   listView.reloadData()
 
 proc `[]`*(listView: ListView, index: int): string =
-  if index in 0..<listView.len():
+  if index in 0 ..< listView.len():
     let source = listView.dataSource()
     if not source.isNil:
       let item =
@@ -197,7 +204,7 @@ proc insertItem*(listView: ListView, value: string, index: int) =
   listView.reloadData()
 
 proc removeItemAtIndex*(listView: ListView, index: int) =
-  if index notin 0..<listView.xItems.len:
+  if index notin 0 ..< listView.xItems.len:
     return
   listView.xItems.delete(index)
   var nextSelected: seq[int]
@@ -291,7 +298,7 @@ proc `rowHeight=`*(listView: ListView, height: float32) =
   listView.reloadData()
 
 proc uncachedRowHeightForRow(listView: ListView, index: int): float32 =
-  if index notin 0..<listView.len():
+  if index notin 0 ..< listView.len():
     return 0.0'f32
   if not listView.xDelegate.isNil:
     let cocoaHeight =
@@ -399,7 +406,7 @@ proc noteHeightOfRowsChanged*(listView: ListView, rows: openArray[int]) =
   listView.noteRowHeightsChanged()
 
 proc noteHeightOfRowChanged*(listView: ListView, row: int) =
-  if row in 0..<listView.len():
+  if row in 0 ..< listView.len():
     listView.noteHeightOfRowsChanged([row])
 
 proc visibleRows*(listView: ListView): int =
@@ -448,7 +455,7 @@ proc setListViewRoles*(
   listView.reloadData()
 
 proc rowEnabled*(listView: ListView, index: int): bool =
-  if index notin 0..<listView.len() or not listView.isEnabled():
+  if index notin 0 ..< listView.len() or not listView.isEnabled():
     return false
   if not listView.xDelegate.isNil:
     let enabled =
@@ -706,7 +713,7 @@ proc reloadData*(listView: ListView) =
 
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect =
   let listView = contentView.listView()
-  if itemIndex notin 0..<listView.len():
+  if itemIndex notin 0 ..< listView.len():
     return initRect(0.0, 0.0, 0.0, 0.0)
   initRect(
     0.0'f32,
@@ -979,7 +986,7 @@ proc configureRowView(rowView: ListRowView, itemIndex: int) =
   if listView.xContentView.isNil:
     return
   rowView.xRow =
-    if itemIndex notin 0..<listView.len():
+    if itemIndex notin 0 ..< listView.len():
       initListRowState(-1, "", enabled = false)
     else:
       initListRowState(
