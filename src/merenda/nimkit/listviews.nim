@@ -65,8 +65,8 @@ proc syncVisibleRowViews(contentView: ListContentView)
 proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
 proc verticalScroller*(listView: ListView): ListScroller
-proc listViewportSize(listView: ListView): Size
-proc listContentSize*(listView: ListView): Size
+proc viewportSize(listView: ListView): Size
+proc contentSize*(listView: ListView): Size
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int
 proc len*(listView: ListView): int
@@ -385,7 +385,7 @@ proc rowIndexAtContentY(listView: ListView, y: float32): int =
       return index
   listView.len() - 1
 
-proc listContentHeight(listView: ListView): float32 =
+proc contentHeight(listView: ListView): float32 =
   if listView.isNil:
     return 0.0'f32
   listView.rowOffset(listView.len())
@@ -410,7 +410,7 @@ proc maxFirstVisibleIndex(listView: ListView): int =
   if listView.isNil or listView.len() <= 0:
     return 0
   listView.rowIndexAtContentY(
-    max(listView.listContentHeight() - listView.listViewportSize().height, 0.0'f32)
+    max(listView.contentHeight() - listView.viewportSize().height, 0.0'f32)
   )
 
 proc rowHeightForRow*(listView: ListView, index: int): float32 =
@@ -481,7 +481,7 @@ proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
 proc showsVerticalScroller*(listView: ListView): bool =
   if listView.isNil or listView.len() <= 0:
     return false
-  listView.listContentHeight() > max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
+  listView.contentHeight() > max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
 
 proc setListViewRoles*(
     listView: ListView,
@@ -550,7 +550,7 @@ proc drawCustomListRow(
     drawRow(), (listView: listView, context: context, rect: rect, row: row)
   )
 
-proc listViewportSize(listView: ListView): Size =
+proc viewportSize(listView: ListView): Size =
   if listView.isNil:
     return initSize(0.0, 0.0)
   initSize(
@@ -562,16 +562,16 @@ proc listViewportSize(listView: ListView): Size =
     max(listView.bounds().size.height - 2.0'f32, 0.0'f32),
   )
 
-proc listContentSize*(listView: ListView): Size =
+proc contentSize*(listView: ListView): Size =
   if listView.isNil:
     return initSize(0.0, 0.0)
-  initSize(listView.listViewportSize().width, listView.listContentHeight())
+  initSize(listView.viewportSize().width, listView.contentHeight())
 
 proc visibleItemCount*(listView: ListView): int =
   if listView.isNil or listView.len() <= 0:
     return 0
   let
-    contentHeight = listView.listViewportSize().height
+    contentHeight = listView.viewportSize().height
     visibleFromBounds =
       listView.visibleRowsFrom(listView.firstVisibleIndex(), contentHeight)
     preferredRows =
@@ -585,8 +585,8 @@ proc clampListContentOffset(listView: ListView, offset: Point): Point =
   if listView.isNil:
     return initPoint(0.0, 0.0)
   let
-    viewportSize = listView.listViewportSize()
-    contentSize = listView.listContentSize()
+    viewportSize = listView.viewportSize()
+    contentSize = listView.contentSize()
     horizontal = initScrollViewport(0.0, viewportSize.width, contentSize.width)
     maxY = max(contentSize.height - viewportSize.height, 0.0'f32)
   initPoint(
@@ -610,7 +610,7 @@ proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool) =
     return
   let
     nextOffset = listView.clampListContentOffset(offset)
-    nextBounds = initRect(nextOffset, listView.listViewportSize())
+    nextBounds = initRect(nextOffset, listView.viewportSize())
   if listView.xClipView.bounds() != nextBounds:
     listView.xClipView.bounds = nextBounds
     if invalidate:
@@ -645,8 +645,8 @@ proc tileListContent(listView: ListView) =
     return
   let
     offset = listView.listContentOffset()
-    viewport = initRect(initPoint(1.0'f32, 1.0'f32), listView.listViewportSize())
-    size = listView.listContentSize()
+    viewport = initRect(initPoint(1.0'f32, 1.0'f32), listView.viewportSize())
+    size = listView.contentSize()
   listView.xClipView.frame = viewport
   listView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
   if not listView.xVerticalScroller.isNil:
@@ -829,7 +829,7 @@ proc scrollItemToVisible*(listView: ListView, itemIndex: int) =
   let
     rowRect = listView.contentView().listContentItemRect(itemIndex)
     visible = listView.listContentOffset()
-    viewportHeight = listView.listViewportSize().height
+    viewportHeight = listView.viewportSize().height
   var nextY = visible.y
   if rowRect.minY < visible.y:
     nextY = rowRect.minY
