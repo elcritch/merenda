@@ -256,7 +256,7 @@ proc removeItemAtIndex*(listView: ListView, index: int) =
 proc removeAllItems*(listView: ListView) =
   if listView.isNil or listView.xItems.len == 0:
     return
-  listView.xItems.clear()
+  listView.xItems.setLen(0)
   listView.xSelectedIndex = -1
   listView.xSelectedIndexes.setLen(0)
   listView.xSelectionAnchor = -1
@@ -1345,17 +1345,17 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     else:
       discard
 
-proc initListClipView(): ClipView =
-  result = ClipView()
-  initListBaseChild(result, true)
-  discard result.withProtocol(DefaultListClipViewHitTesting)
-
 proc initListBaseChild(view: View, clipsToBounds: bool) =
   initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
   view.background = initColor(0.0, 0.0, 0.0, 0.0)
   view.clipsToBounds = clipsToBounds
   view.autoresizingMaskConstraints = false
   view.setAcceptsFirstResponder(false)
+
+proc initListClipView(): ClipView =
+  result = ClipView()
+  initListBaseChild(result, true)
+  discard result.withProtocol(DefaultListClipViewHitTesting)
 
 proc initListRowView(listView: ListView): ListRowView =
   result = ListRowView()
