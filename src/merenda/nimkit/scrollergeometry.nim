@@ -35,9 +35,6 @@ func scrolledBy*(viewport: ScrollViewport, delta: float32): float32 =
 func isDraggingKnob*(tracking: ScrollerTrackingState): bool =
   tracking.draggingKnob
 
-func dragGripOffset*(tracking: ScrollerTrackingState): float32 =
-  tracking.dragGripOffset
-
 proc beginScrollerTracking*(
     tracking: var ScrollerTrackingState,
     track, knob: Rect,
