@@ -169,7 +169,7 @@ proc listViewScrollerKnobRect(listView: ListView): Rect =
   if scrollView.isNil:
     return initRect(0.0, 0.0, 0.0, 0.0)
   scrollerKnobRect(
-    listView.verticalScrollerRect(),
+    scrollView.verticalScrollerRect(),
     laVertical,
     initScrollViewport(
       scrollView.contentOffset().y,
@@ -519,8 +519,8 @@ suite "nimkit list views":
     check scroller.superview == View(scrollView)
     check not scroller.hidden
     check not scroller.acceptsFirstResponder
-    check listView.verticalScrollerRect() ==
-      initRect(107.0'f32, 1.0'f32, 12.0'f32, 44.0'f32)
+    check scrollView.verticalScrollerRect() ==
+      initRect(106.0'f32, 0.0'f32, 12.0'f32, 44.0'f32)
     check not listView.listViewScrollerKnobRect().isEmpty
     check content != nil
     check content.listView == listView
@@ -960,19 +960,22 @@ suite "nimkit list views":
     window.setContentView(root)
 
     let
-      track = listView.verticalScrollerRect()
+      scrollView = listView.scrollView()
+      track = scrollView.verticalScrollerRect()
       knob = listView.listViewScrollerKnobRect()
       scroller = listView.verticalScroller()
 
     check not scroller.isNil
     check not scroller.hidden
     let trackX = track.origin.x + track.size.width * 0.5'f32
-    check window.mouseDownAt(listView.pointToWindow(initPoint(trackX, knob.maxY + 2.0)))
+    check window.mouseDownAt(
+      scrollView.pointToWindow(initPoint(trackX, knob.maxY + 2.0))
+    )
     check listView.firstVisibleIndex == 2
 
     let nextKnob = listView.listViewScrollerKnobRect()
     check window.mouseDownAt(
-      listView.pointToWindow(
+      scrollView.pointToWindow(
         initPoint(trackX, nextKnob.origin.y + nextKnob.size.height * 0.5'f32)
       )
     )
