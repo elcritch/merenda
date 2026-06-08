@@ -111,11 +111,16 @@ proc scrollViewScrollerKnobRect(
     )
 
 proc listViewScrollerKnobRect(listView: ListView): nimkitTypes.Rect =
+  let scrollView = listView.scrollView()
+  if scrollView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
   scrollerKnobRect(
-    listView.verticalScrollerRect(),
+    scrollView.verticalScrollerRect(),
     laVertical,
-    listScrollViewport(
-      listView.firstVisibleIndex(), listView.len(), listView.visibleItemCount()
+    initScrollViewport(
+      scrollView.contentOffset().y,
+      scrollView.viewportSize().height,
+      scrollView.documentSize().height,
     ),
   )
 

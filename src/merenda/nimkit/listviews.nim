@@ -103,7 +103,6 @@ proc drawCustomEmptyState(listView: ListView, context: DrawContext, rect: Rect):
 proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
 proc showsVerticalScroller*(listView: ListView): bool
-proc verticalScrollerRect*(listView: ListView): Rect
 proc tileListContent(listView: ListView)
 proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
@@ -632,21 +631,6 @@ proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool) =
 
 proc firstVisibleIndex*(listView: ListView): int =
   listView.rowIndexAtContentY(listView.listContentOffset().y)
-
-proc verticalScrollerRect*(listView: ListView): Rect =
-  let scrollView = listView.scrollView()
-  if scrollView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  let
-    frame = scrollView.frame()
-    rect = scrollView.verticalScrollerRect()
-  if rect.isEmpty:
-    initRect(0.0, 0.0, 0.0, 0.0)
-  else:
-    initRect(
-      initPoint(frame.origin.x + rect.origin.x, frame.origin.y + rect.origin.y),
-      rect.size,
-    )
 
 proc tileListContent(listView: ListView) =
   if listView.xScrollView.isNil or listView.xContentView.isNil:
