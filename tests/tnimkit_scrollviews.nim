@@ -526,6 +526,24 @@ suite "nimkit scroll views":
     check child.contentOffset() == childOffset
     check fixture.parent.contentOffset().y > 0.0'f32
 
+  test "wheel over scrollable list view stays with list scroll view":
+    let
+      listView = newListView(
+        ["One", "Two", "Three", "Four", "Five", "Six"],
+        frame = initRect(20, 20, 120, 68),
+      )
+      fixture = newNestedScrollFixture(listView)
+
+    listView.rowHeight = 20.0
+
+    check listView.scrollView().maximumContentOffset().y > 0.0'f32
+    check fixture.parent.contentOffset() == initPoint(0, 0)
+    check fixture.window.scrollWheelAt(
+      fixture.windowPointForDocumentChild(listView), deltaY = -2.0
+    )
+    check listView.scrollView().contentOffset().y > 0.0'f32
+    check fixture.parent.contentOffset() == initPoint(0, 0)
+
   test "wheel over non-scrollable list view bubbles to parent scroll view":
     let
       listView = newListView(["One", "Two"], frame = initRect(20, 20, 120, 68))
