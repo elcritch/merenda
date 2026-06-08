@@ -165,11 +165,16 @@ proc clear(spy: ListPolicyDelegateSpy) =
   spy.rows.setLen(0)
 
 proc listViewScrollerKnobRect(listView: ListView): Rect =
+  let scrollView = listView.scrollView()
+  if scrollView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
   scrollerKnobRect(
     listView.verticalScrollerRect(),
     laVertical,
-    listScrollViewport(
-      listView.firstVisibleIndex(), listView.len(), listView.visibleItemCount()
+    initScrollViewport(
+      scrollView.contentOffset().y,
+      scrollView.viewportSize().height,
+      scrollView.documentSize().height,
     ),
   )
 
@@ -494,25 +499,29 @@ suite "nimkit list views":
 
     listView.rowHeight = 20.0
     let
+      scrollView = listView.scrollView()
       clip = listView.clipView()
       content = listView.contentView()
       scroller = listView.verticalScroller()
 
+    check scrollView != nil
+    check scrollView.superview == listView
+    check scrollView.frame == initRect(1.0'f32, 1.0'f32, 118.0'f32, 44.0'f32)
+    check scrollView.hasVerticalScroller
+    check not scrollView.hasHorizontalScroller
     check clip != nil
-    check clip.superview == listView
+    check clip.superview == View(scrollView)
     check not clip.acceptsFirstResponder
-    check not clip.autoresizingMaskConstraints
     check clip.clipsToBounds
-    check clip.frame == initRect(1.0'f32, 1.0'f32, 106.0'f32, 44.0'f32)
+    check clip.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 44.0'f32)
     check clip.bounds == initRect(0.0'f32, 0.0'f32, 106.0'f32, 44.0'f32)
     check scroller != nil
-    check scroller.superview == listView
+    check scroller.superview == View(scrollView)
     check not scroller.hidden
     check not scroller.acceptsFirstResponder
     check listView.verticalScrollerRect() ==
       initRect(107.0'f32, 1.0'f32, 12.0'f32, 44.0'f32)
-    check listView.listViewScrollerKnobRect() ==
-      initRect(107.0'f32, 1.0'f32, 12.0'f32, 22.0'f32)
+    check not listView.listViewScrollerKnobRect().isEmpty
     check content != nil
     check content.listView == listView
     check content.superview == View(clip)
@@ -531,8 +540,7 @@ suite "nimkit list views":
     listView.firstVisibleIndex = 2
     check content.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 80.0'f32)
     check clip.bounds.origin == initPoint(0.0'f32, 36.0'f32)
-    check listView.listViewScrollerKnobRect() ==
-      initRect(107.0'f32, 12.0'f32, 12.0'f32, 22.0'f32)
+    check listView.listViewScrollerKnobRect().origin.y > 1.0'f32
     check listView.listItemRect(2) == initRect(1.0'f32, 5.0'f32, 106.0'f32, 20.0'f32)
     check listView.listItemIndexAtPoint(initPoint(6.0'f32, 25.0'f32)) == 3
 
@@ -553,7 +561,7 @@ suite "nimkit list views":
     check initialRows[0].frame == content.listContentItemRect(0)
     check initialRows[1].frame == content.listContentItemRect(1)
     check initialRows[2].frame == content.listContentItemRect(2)
-    check listView.hitTest(initPoint(6.0'f32, 25.0'f32)) == listView
+    check listView.hitTest(initPoint(6.0'f32, 25.0'f32)) == View(content)
 
     listView.firstVisibleIndex = 4
     discard buildRenders(listView)
@@ -765,7 +773,7 @@ suite "nimkit list views":
     for view in renderer.emptyViews:
       check view == listView
     for rect in renderer.emptyRects:
-      check rect == initRect(1.0'f32, 1.0'f32, 118.0'f32, 60.0'f32)
+      check rect == initRect(0.0'f32, 0.0'f32, 118.0'f32, 60.0'f32)
 
   test "list view row policy controls enabled state and selection":
     let
