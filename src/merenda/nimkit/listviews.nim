@@ -72,11 +72,8 @@ proc listView*(contentView: ListContentView): ListView
 proc initListRowView(listView: ListView): ListRowView
 proc syncVisibleRowViews(contentView: ListContentView)
 proc scrollView*(listView: ListView): ScrollView
-proc clipView*(listView: ListView): ClipView
 proc contentView*(listView: ListView): ListContentView
-proc verticalScroller*(listView: ListView): Scroller
 proc viewportSize(listView: ListView): Size
-proc contentSize*(listView: ListView): Size
 proc listContentItemRect*(contentView: ListContentView, itemIndex: int): Rect
 proc listContentItemIndexAtPoint*(contentView: ListContentView, point: Point): int
 proc len*(listView: ListView): int
@@ -102,13 +99,11 @@ proc drawCustomEmptyState(listView: ListView, context: DrawContext, rect: Rect):
 
 proc listItemRect*(listView: ListView, itemIndex: int): Rect
 proc listItemIndexAtPoint*(listView: ListView, point: Point): int
-proc showsVerticalScroller*(listView: ListView): bool
 proc tileListContent(listView: ListView)
 proc setListContentOffset(listView: ListView, offset: Point, invalidate: bool)
 proc scrollItemToVisible*(listView: ListView, itemIndex: int)
 proc scrollSelectedItemToVisible*(listView: ListView)
 proc scrollSelectionToVisible*(listView: ListView)
-proc canScrollRows*(listView: ListView, delta: int): bool
 proc scrollRows*(listView: ListView, delta: int)
 proc activateItemAtIndex*(listView: ListView, index: int)
 proc selectedIndex*(listView: ListView): int
@@ -155,32 +150,19 @@ proc listView*(contentView: ListContentView): ListView =
 proc scrollView*(listView: ListView): ScrollView =
   if listView.isNil: nil else: listView.xScrollView
 
-proc clipView*(listView: ListView): ClipView =
-  let scrollView = listView.scrollView()
-  if scrollView.isNil:
-    nil
-  else:
-    scrollView.clipView()
-
 proc contentView*(listView: ListView): ListContentView =
   if listView.isNil: nil else: listView.xContentView
-
-proc verticalScroller*(listView: ListView): Scroller =
-  let scrollView = listView.scrollView()
-  if scrollView.isNil:
-    nil
-  else:
-    scrollView.verticalScroller()
 
 proc invalidateListRows(listView: ListView) =
   if not listView.xContentView.isNil:
     listView.xContentView.syncVisibleRowViews()
   if not listView.xScrollView.isNil:
     listView.xScrollView.setNeedsDisplay(true)
+    let scroller = listView.xScrollView.verticalScroller()
+    if not scroller.isNil:
+      scroller.setNeedsDisplay(true)
   if not listView.xContentView.isNil:
     listView.xContentView.setNeedsDisplay(true)
-  if not listView.verticalScroller().isNil:
-    listView.verticalScroller().setNeedsDisplay(true)
   listView.setNeedsDisplay(true)
 
 proc len*(listView: ListView): int =
@@ -495,11 +477,6 @@ proc `selectionMode=`*(listView: ListView, mode: ListSelectionMode) =
     listView.xSelectionLead = listView.xSelectedIndex
   listView.reloadData()
 
-proc showsVerticalScroller*(listView: ListView): bool =
-  if listView.len() <= 0:
-    return false
-  listView.contentHeight() > max(listView.bounds().size.height - 2.0'f32, 0.0'f32)
-
 proc setListViewRoles*(
     listView: ListView,
     listRole: StyleRole = srListView,
@@ -591,9 +568,6 @@ proc viewportSize(listView: ListView): Size =
     initSize(0.0, 0.0)
   else:
     scrollView.viewportSize()
-
-proc contentSize*(listView: ListView): Size =
-  initSize(listView.viewportSize().width, listView.contentHeight())
 
 proc visibleItemCount*(listView: ListView): int =
   if listView.len() <= 0:
@@ -832,16 +806,6 @@ proc scrollSelectionToVisible*(listView: ListView) =
   let lead = listView.selectionLeadIndex()
   if lead >= 0:
     listView.scrollItemToVisible(lead)
-
-proc canScrollRows*(listView: ListView, delta: int): bool =
-  if delta == 0 or listView.scrollView().isNil:
-    return false
-  let
-    currentY = listView.listContentOffset().y
-    nextIndex = max(listView.firstVisibleIndex() + delta, 0)
-    maxY = listView.scrollView().maximumContentOffset().y
-    nextY = min(max(listView.rowOffset(nextIndex), 0.0'f32), maxY)
-  nextY != currentY
 
 proc scrollRows*(listView: ListView, delta: int) =
   if delta == 0:
@@ -1330,8 +1294,9 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
       clips = true,
     )
 
-    if listView.len() == 0 and not listView.clipView().isNil:
-      discard listView.drawCustomEmptyState(context, listView.clipView().frame())
+    let scrollView = listView.scrollView()
+    if listView.len() == 0 and not scrollView.isNil and not scrollView.clipView().isNil:
+      discard listView.drawCustomEmptyState(context, scrollView.clipView().frame())
 
     if ssFocusVisible in focusedState:
       context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)

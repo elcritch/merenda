@@ -500,9 +500,9 @@ suite "nimkit list views":
     listView.rowHeight = 20.0
     let
       scrollView = listView.scrollView()
-      clip = listView.clipView()
+      clip = scrollView.clipView()
       content = listView.contentView()
-      scroller = listView.verticalScroller()
+      scroller = scrollView.verticalScroller()
 
     check scrollView != nil
     check scrollView.superview == listView
@@ -529,7 +529,7 @@ suite "nimkit list views":
     check not content.autoresizingMaskConstraints
     check content.frame == initRect(0.0'f32, 0.0'f32, 106.0'f32, 80.0'f32)
     check content.bounds.size == initSize(106.0'f32, 80.0'f32)
-    check listView.contentSize() == initSize(106.0'f32, 80.0'f32)
+    check scrollView.documentSize() == initSize(106.0'f32, 80.0'f32)
     check content.listContentItemRect(2) ==
       initRect(0.0'f32, 40.0'f32, 106.0'f32, 20.0'f32)
 
@@ -831,7 +831,7 @@ suite "nimkit list views":
     check listView.rowHeightForRow(2) == 18.0'f32
     check listView.rowHeightForRow(3) == 0.0'f32
     check listView.resolvedIntrinsicContentSize().height == 74.0'f32
-    check listView.contentSize().height == 72.0'f32
+    check listView.scrollView().documentSize().height == 72.0'f32
     check listView.contentView().listContentItemRect(0) ==
       initRect(0.0'f32, 0.0'f32, 106.0'f32, 20.0'f32)
     check listView.contentView().listContentItemRect(1) ==
@@ -864,7 +864,7 @@ suite "nimkit list views":
     check listView.rowHeightForRow(1) == 34.0'f32
     listView.noteHeightOfRowChanged(1)
     check listView.rowHeightForRow(1) == 40.0'f32
-    check listView.contentSize().height == 78.0'f32
+    check listView.scrollView().documentSize().height == 78.0'f32
     check listView.contentView().listContentItemRect(2).origin.y == 60.0'f32
 
   test "list view row policy skips mouse and keyboard selection":
@@ -963,7 +963,7 @@ suite "nimkit list views":
       scrollView = listView.scrollView()
       track = scrollView.verticalScrollerRect()
       knob = listView.listViewScrollerKnobRect()
-      scroller = listView.verticalScroller()
+      scroller = scrollView.verticalScroller()
 
     check not scroller.isNil
     check not scroller.hidden
