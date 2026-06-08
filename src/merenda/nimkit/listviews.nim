@@ -547,7 +547,9 @@ proc drawListRow*(
   if listView.isNil or context.isNil:
     return
   var style = listView.rowStyle(row)
-  if ssAlternating in row.states and not (ssSelected in row.states) and style.fill.isNone:
+  let interactiveFillStates =
+    row.states * {ssSelected, ssHovered, ssHighlighted, ssPressed}
+  if ssAlternating in row.states and interactiveFillStates == {} and style.fill.isNone:
     style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
   context.drawListRow(
     rect, row, style, listView.xItemRole, listView.styleId(), listView.styleClasses()

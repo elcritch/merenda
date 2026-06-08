@@ -722,6 +722,35 @@ suite "nimkit list views":
     check alternatingFound
     check separatorCount == 2
 
+  test "list view hover fill overrides alternating row fill":
+    let
+      listView = newListView(["One", "Two", "Three"], frame = initRect(0, 0, 120, 62))
+      alternatingFill = initColor(0.96, 0.97, 0.99, 1.0)
+      hoverFill = initColor(0.90, 0.95, 1.0, 1.0)
+
+    listView.rowHeight = 20.0
+    listView.usesAlternatingRowBackgrounds = true
+    listView.highlightedIndex = 1
+
+    var theme = initTheme()
+    theme[srListItem, {ssHovered}, StyleFill] = hoverFill
+
+    let nodes = buildRenders(listView, initAppearance(theme))[DefaultDrawLevel]
+    var
+      alternatingOnHoveredRow = false
+      hoverFound = false
+    for node in nodes.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.screenBox.x == 1.0 and node.screenBox.y == 21.0 and
+          node.screenBox.w == 118.0 and node.screenBox.h == 20.0:
+        if node.fill.color == alternatingFill.rgba:
+          alternatingOnHoveredRow = true
+        if node.fill.color == hoverFill.rgba:
+          hoverFound = true
+
+    check not alternatingOnHoveredRow
+    check hoverFound
+
   test "list view delegate can render an empty state":
     let
       listView = newListView(frame = initRect(0, 0, 120, 62))

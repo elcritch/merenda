@@ -378,13 +378,11 @@ proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View =
   let delegate = tableView.delegate()
   if delegate.isNil:
     return nil
-  let cellView = delegate.trySendLocal(
-    viewForCell(), (tableView: tableView, row: row, column: column)
+  var cellView: View
+  discard delegate.performLocal(
+    viewForCell(), (tableView: tableView, row: row, column: column), cellView
   )
-  if cellView.isSome:
-    cellView.get()
-  else:
-    nil
+  cellView
 
 proc tableRowEnabled(tableView: TableView, row: int): bool =
   if tableView.isNil or row notin 0 ..< tableView.rowCount():

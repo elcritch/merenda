@@ -16,12 +16,19 @@ type TableDelegateSpy = ref object of Responder
   disabledRows: seq[int]
   nonselectableRows: seq[int]
   rowHeights: seq[float32]
+  hostedColumns: seq[string]
   viewCalls: seq[string]
   activatedRows: seq[int]
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
   for value in indexes:
     if value == index:
+      return true
+  false
+
+proc containsValue(values: openArray[string], value: string): bool =
+  for item in values:
+    if item == value:
       return true
   false
 
@@ -60,6 +67,9 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
   ): View =
     let text = column.identifier & ":" & $row
     delegate.viewCalls.add text
+    if delegate.hostedColumns.len > 0 and
+        not delegate.hostedColumns.containsValue(column.identifier):
+      return nil
     newLabel(text)
 
   method tableRowHeight(
@@ -220,6 +230,26 @@ suite "NimKit TableView":
     let cellView = tableView.tableCellView(1, name)
     check not cellView.isNil
     check delegate.viewCalls == @["name:1"]
+
+  test "table view falls back to text cells when view hook returns nil":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 260, 68))
+      source = newTableDataSourceSpy(2)
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name", width = 120.0)
+      state = newTableColumn("state", "State", width = 80.0)
+
+    delegate.hostedColumns = @["state"]
+    tableView.addColumn(name)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+
+    check tableView.tableCellView(0, name).isNil
+
+    let texts = tableView.renderedTexts()
+    check texts.contains("name:0")
+    check texts.contains("state:0")
 
   test "table view renders text cells for every visible column":
     let
