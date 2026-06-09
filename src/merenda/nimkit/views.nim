@@ -221,6 +221,8 @@ proc newView*(frame: Rect = AutoRect): View =
 proc handleMouse*(
     view: View, selector: MouseEventSelector, event: MouseEvent
 ): bool =
+  ## ``true`` means event handled and should not bubble further.
+  ## ``false`` means event should continue up the responder chain.
   var handled = false
   view.performLocal(selector, event, handled) and handled
 

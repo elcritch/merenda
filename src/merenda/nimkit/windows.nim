@@ -916,6 +916,9 @@ proc dispatchMouseEventInChain(
     event: MouseEvent,
     selector: MouseEventSelector,
 ): EventDispatchResult =
+  ## Walks the responder chain from ``target`` outward.
+  ## The first responder method returning ``true`` ends dispatch.
+  ## ``false`` means "not handled", so we continue to ``nextResponder``.
   var responder = Responder(target)
   while not responder.isNil:
     var localEvent = event
