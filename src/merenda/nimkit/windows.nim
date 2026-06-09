@@ -448,72 +448,59 @@ proc fieldEditor*(window: Window): FieldEditor =
   window.xFieldEditor
 
 proc fieldEditorClient*(window: Window): Responder =
-  if window.isNil or window.xFieldEditor.isNil:
-    nil
-  else:
-    window.xFieldEditor.client()
-
-proc responderFocusView(responder: Responder): View =
-  if responder of View:
-    return View(responder)
-  if responder of FieldEditor:
-    let client = FieldEditor(responder).client()
-    if client of View:
-      return View(client)
+  if window.isNil:
+    return nil
+  if window.xFirstResponder of FieldEditor:
+    return FieldEditor(window.xFirstResponder).client()
+  if not window.xFieldEditor.isNil:
+    return window.xFieldEditor.client()
 
 proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
   if window.isNil or responder.isNil:
     return responder
-  let editor = window.fieldEditor()
-  if responder.wantsFieldEditor(editor):
-    return editor
+  let defaultEditor = window.fieldEditor()
+  if responder.wantsFieldEditor(defaultEditor):
+    let editor = responder.fieldEditorForClient(defaultEditor)
+    if not editor.isNil:
+      if editor.superview().isNil:
+        editor.setNextResponder(window)
+      return editor
   responder
 
 proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool): bool =
   let nextResponder = window.resolvedFirstResponder(responder)
-  if window.xFirstResponder == nextResponder and
-      not (
-        nextResponder of FieldEditor and FieldEditor(nextResponder).client() != responder
-      ):
-    let view = responder.responderFocusView()
-    if not view.isNil:
-      view.focused = true
-      view.focusVisible = focusVisible
-    return true
+  if window.xFirstResponder == nextResponder:
+    let changingFieldEditorClient =
+      nextResponder of FieldEditor and responder != nextResponder and
+      FieldEditor(nextResponder).client() != responder
+    if not changingFieldEditorClient:
+      if not nextResponder.isNil:
+        nextResponder.setFirstResponderFocusState(true, focusVisible)
+      return true
 
   if not responder.isNil:
-    if responder of View:
-      if not View(responder).canBecomeKeyView():
-        return false
-    elif not responder.acceptsFirstResponder():
+    if not responder.acceptsFirstResponder():
       return false
     if not responder.shouldBecomeFirstResponder():
       return false
   if not window.shouldMakeFirstResponder(responder):
     return false
   let previousResponder = window.xFirstResponder
-  let previousView = window.xFirstResponder.responderFocusView()
   if not window.xFirstResponder.isNil:
     if not window.xFirstResponder.shouldResignFirstResponder():
       return false
     if not window.xFirstResponder.resignFirstResponder():
       return false
   if not responder.isNil and nextResponder of FieldEditor:
-    if not FieldEditor(nextResponder).beginEditing(responder):
+    if not FieldEditor(nextResponder).beginEditing(responder, focusVisible):
       return false
   if not nextResponder.isNil and not nextResponder.becomeFirstResponder():
     return false
 
-  if not previousView.isNil:
-    let previous = previousView
-    previous.focused = false
-    previous.focusVisible = false
-
-  let nextView = responder.responderFocusView()
-  if not nextView.isNil:
-    let next = nextView
-    next.focused = true
-    next.focusVisible = focusVisible
+  if not previousResponder.isNil:
+    previousResponder.setFirstResponderFocusState(false, false)
+  if not nextResponder.isNil:
+    nextResponder.setFirstResponderFocusState(true, focusVisible)
   window.xFirstResponder = nextResponder
   if not previousResponder.isNil:
     previousResponder.didResignFirstResponder()
@@ -595,10 +582,6 @@ proc selectKeyView(window: Window, view: View): bool =
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
   if not sender.isNil and sender of View:
     return View(sender)
-  if not window.isNil:
-    let client = window.fieldEditorClient()
-    if client of View:
-      return View(client)
   if not window.isNil and not window.xFirstResponder.isNil and
       window.xFirstResponder of View:
     return View(window.xFirstResponder)

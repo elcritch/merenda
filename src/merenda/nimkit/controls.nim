@@ -1,4 +1,5 @@
 import ./cells
+import ./fieldeditors
 import ./selectors
 import ./types
 import ./views
@@ -11,6 +12,7 @@ type
     xCell: Cell
     xTarget: DynamicAgent
     xAction: ActionSelector
+    xCurrentEditor: FieldEditor
 
   ActionProc* = proc(sender: DynamicAgent) {.closure.}
 
@@ -20,6 +22,8 @@ type
 proc cell*(control: Control): Cell
 proc setCell*(control: Control, cell: Cell)
 proc selectedCell*(control: Control): Cell
+proc currentEditor*(control: Control): FieldEditor
+proc setCurrentEditor*(control: Control, editor: FieldEditor)
 proc target*(control: Control): DynamicAgent
 proc action*(control: Control): ActionSelector
 
@@ -56,6 +60,9 @@ protocol ControlProtocol from Control:
   method canBecomeKeyView*(self: Control): bool =
     self.isEnabled() and View(self).viewCanBecomeKeyView()
 
+  method shouldBecomeFirstResponder*(self: Control): bool =
+    self.isEnabled() and self.acceptsFirstResponder()
+
   method layoutIntrinsicContentSize*(self: Control): IntrinsicSize =
     self.controlIntrinsicContentSize()
 
@@ -68,6 +75,20 @@ protocol ControlProtocol from Control:
     if owner of Window:
       return Window(owner).sendAction(self.action(), DynamicAgent(self))
     false
+
+  method validateEditing*(self: Control): bool =
+    let editor = self.currentEditor()
+    editor.isNil or editor.validateEditing()
+
+  method abortEditing*(self: Control): bool =
+    let editor = self.currentEditor()
+    if editor.isNil:
+      return false
+    result = editor.cancelEditing()
+    if result:
+      let owner = self.window()
+      if owner of Window and Window(owner).firstResponder() == editor:
+        discard Window(owner).makeFirstResponder(nil)
 
 proc enabled*(control: Control): bool =
   (not control.isNil) and control.isEnabled()
@@ -151,6 +172,22 @@ proc setCell*(control: Control, cell: Cell) =
 
 proc selectedCell*(control: Control): Cell =
   control.cell()
+
+proc currentEditor*(control: Control): FieldEditor =
+  if control.isNil or control.xCurrentEditor.isNil:
+    return nil
+  let owner = control.window()
+  if owner of Window and Window(owner).firstResponder() == control.xCurrentEditor:
+    control.xCurrentEditor
+  else:
+    nil
+
+proc activeEditor*(control: Control): FieldEditor =
+  if control.isNil: nil else: control.xCurrentEditor
+
+proc setCurrentEditor*(control: Control, editor: FieldEditor) =
+  if not control.isNil:
+    control.xCurrentEditor = editor
 
 proc target*(control: Control): DynamicAgent =
   let selected = control.selectedCell()

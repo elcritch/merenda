@@ -235,7 +235,7 @@ proc defaultKeyBindingProfile*(): KeyBindingProfile =
 
 proc bindCoreEditing(table: var KeyBindingTable) =
   table.bindKey(" ", {}, performClick())
-  table.bindKey("\n", {}, performClick())
+  table.bindKey("\n", {}, insertNewline())
   table.bindKey(keyBackspace, {}, deleteBackward())
   table.bindKey(keyDelete, {}, deleteForward())
   table.bindKey(keyArrowLeft, {}, moveLeft())
@@ -277,6 +277,11 @@ proc bindMacOSEditing(table: var KeyBindingTable) =
   table.bindKey(keyBackspace, {kmOption}, deleteWordBackward())
   table.bindKey(keyDelete, {kmOption}, deleteWordForward())
   table.bindKey(keyA, {kmCommand}, selectAll())
+  table.bindKey(keyC, {kmCommand}, copy())
+  table.bindKey(keyX, {kmCommand}, cut())
+  table.bindKey(keyV, {kmCommand}, paste())
+  table.bindKey(keyZ, {kmCommand}, undo())
+  table.bindKey(keyZ, {kmCommand, kmShift}, redo())
 
 proc bindWindowsEditing(table: var KeyBindingTable) =
   table.bindWordEditing({kmControl})
@@ -289,6 +294,11 @@ proc bindWindowsEditing(table: var KeyBindingTable) =
   table.bindKey(keyBackspace, {kmControl}, deleteWordBackward())
   table.bindKey(keyDelete, {kmControl}, deleteWordForward())
   table.bindKey(keyA, {kmControl}, selectAll())
+  table.bindKey(keyC, {kmControl}, copy())
+  table.bindKey(keyX, {kmControl}, cut())
+  table.bindKey(keyV, {kmControl}, paste())
+  table.bindKey(keyZ, {kmControl}, undo())
+  table.bindKey(keyY, {kmControl}, redo())
 
 proc bindLinuxBsdEditing(table: var KeyBindingTable) =
   table.bindWordEditing({kmControl})
@@ -297,6 +307,11 @@ proc bindLinuxBsdEditing(table: var KeyBindingTable) =
   table.bindKey(keyBackspace, {kmControl}, deleteWordBackward())
   table.bindKey(keyDelete, {kmControl}, deleteWordForward())
   table.bindKey(keyA, {kmControl}, selectAll())
+  table.bindKey(keyC, {kmControl}, copy())
+  table.bindKey(keyX, {kmControl}, cut())
+  table.bindKey(keyV, {kmControl}, paste())
+  table.bindKey(keyZ, {kmControl}, undo())
+  table.bindKey(keyY, {kmControl}, redo())
 
 proc initMacOSKeyBindings*(): KeyBindingTable =
   result.bindCoreEditing()

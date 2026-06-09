@@ -3,9 +3,12 @@ import std/[tables, times]
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
+import siwin/clipboards as siwinClipboards
+import sigils/selectors
 
 import ./types
 import ./events
+import ./pasteboards
 
 type
   HostKeyEvent* = object
@@ -34,9 +37,13 @@ type
     xReady: bool
     xOwnerKey: pointer
 
+  NativePasteboardProvider = ref object of DynamicAgent
+    xHost: HostWindow
+
 var
   hostWindows {.threadvar.}: Table[pointer, HostWindow]
   hostWindowsReady {.threadvar.}: bool
+  nativePasteboardProvider {.threadvar.}: NativePasteboardProvider
 
 proc ensureHostRegistry() =
   if not hostWindowsReady:
@@ -60,6 +67,88 @@ proc unregisterHost(host: HostWindow) =
   hostWindows.del(host.xOwnerKey)
   host.xOwnerKey = nil
 
+proc hostReady(host: HostWindow): bool =
+  (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
+
+proc firstReadyHost(): HostWindow =
+  ensureHostRegistry()
+  for host in hostWindows.values:
+    if host.hostReady:
+      return host
+
+proc clipboardText(clipboard: siwinClipboards.Clipboard): string =
+  let content = clipboard.content(siwinClipboards.ClipboardContentKind.text)
+  case content.kind
+  of siwinClipboards.ClipboardContentKind.text: content.text
+  else: ""
+
+proc `clipboardText=`(clipboard: siwinClipboards.Clipboard, value: string) =
+  type TextClipboardPayload = ref object of RootObj
+    value: string
+
+  var content: siwinClipboards.ClipboardConvertableContent
+  content.data = TextClipboardPayload(value: value)
+  content.converters.add siwinClipboards.ClipboardContentConverter(
+    kind: siwinClipboards.ClipboardContentKind.text,
+    f: proc(
+        data: ref RootObj, kind: siwinClipboards.ClipboardContentKind, mimeType: string
+    ): siwinClipboards.ClipboardContent =
+      siwinClipboards.ClipboardContent(
+        kind: siwinClipboards.ClipboardContentKind.text,
+        text: TextClipboardPayload(data).value,
+      ),
+  )
+  clipboard.content = content
+
+proc readyHost(provider: NativePasteboardProvider): HostWindow =
+  if provider.isNil:
+    return nil
+  if not provider.xHost.hostReady:
+    provider.xHost = firstReadyHost()
+  provider.xHost
+
+protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
+  method pasteboardTypes(
+      provider: NativePasteboardProvider, pasteboard: Pasteboard
+  ): seq[string] =
+    let host = provider.readyHost()
+    if host.hostReady:
+      let text = host.xNativeWindow.clipboard.clipboardText
+      if text.len > 0:
+        result.add PasteboardTypeString
+
+  method stringForPasteboardType(
+      provider: NativePasteboardProvider, request: PasteboardTypeRequest
+  ): string =
+    let host = provider.readyHost()
+    if host.hostReady and request.kind == PasteboardTypeString:
+      return host.xNativeWindow.clipboard.clipboardText
+
+  method setStringForPasteboardType(
+      provider: NativePasteboardProvider, request: PasteboardStringRequest
+  ): bool =
+    let host = provider.readyHost()
+    if host.hostReady and request.kind == PasteboardTypeString:
+      host.xNativeWindow.clipboard.clipboardText = request.value
+      return true
+
+  method clearPasteboardContents(
+      provider: NativePasteboardProvider, pasteboard: Pasteboard
+  ): bool =
+    let host = provider.readyHost()
+    if host.hostReady:
+      host.xNativeWindow.clipboard.clipboardText = ""
+      return true
+
+proc installNativeClipboardBridge(host: HostWindow) =
+  if host.isNil:
+    return
+  if nativePasteboardProvider.isNil:
+    nativePasteboardProvider = NativePasteboardProvider()
+    discard nativePasteboardProvider.withProtocol(NativePasteboardProviderProtocol)
+  nativePasteboardProvider.xHost = host
+  generalPasteboard().provider = nativePasteboardProvider
+
 proc hostForNativeWindow(
     nativeWindow: siwinshim.Window, fallbackKey: pointer
 ): HostWindow =
@@ -75,9 +164,7 @@ proc toNimkitMouseButton(button: siwinshim.MouseButton): events.MouseButton =
   of siwinshim.MouseButton.right: events.mbSecondary
   else: events.mbOther
 
-proc toNimkitModifiers(
-    modifiers: set[siwinshim.ModifierKey]
-): set[events.KeyModifier] =
+proc toNimkitModifiers(modifiers: set[siwinshim.ModifierKey]): set[events.KeyModifier] =
   if siwinshim.ModifierKey.shift in modifiers:
     result.incl events.kmShift
   if siwinshim.ModifierKey.control in modifiers:
@@ -131,7 +218,7 @@ proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
   return events.mbPrimary
 
 proc isReady*(host: HostWindow): bool =
-  (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
+  host.hostReady
 
 proc nativeWindowOrNil*(host: HostWindow): siwinshim.Window =
   host.xNativeWindow
@@ -153,6 +240,8 @@ proc refreshContentScale*(host: HostWindow) =
 proc markClosed(host: HostWindow, notify: bool) =
   let callbacks = host.xCallbacks
   host.unregisterHost()
+  if not nativePasteboardProvider.isNil and nativePasteboardProvider.xHost == host:
+    nativePasteboardProvider.xHost = firstReadyHost()
   host.xReady = false
   if notify and not callbacks.onClose.isNil:
     callbacks.onClose()
@@ -346,6 +435,7 @@ proc createHostWindow*(
   )
   result.xRenderer.setupBackend(result.xNativeWindow)
   result.registerHost()
+  result.installNativeClipboardBridge()
   result.installEventHandlers()
 
   result.xNativeWindow.firstStep()

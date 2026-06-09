@@ -10,6 +10,10 @@
 import std/strutils
 import std/os
 
+const
+  referenceDir = "docs/reference"
+  openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"
+
 proc nimExec(subcmd, file: string, extraFlags = "", platform = "") =
   let nimFlags = getEnv("NIMFLAGS").strip()
   var cmd: string
@@ -29,6 +33,13 @@ proc isDefaultTest(file: string): bool =
 
 proc isDefaultExample(file: string): bool =
   file.nimFileStemHasPrefix("nimkit_")
+
+proc downloadReference(url, outputFile: string) =
+  exec("mkdir -p " & parentDir(outputFile).quoteShell())
+  exec(
+    "curl -L --fail --show-error -o " & outputFile.quoteShell() & " " &
+      url.quoteShell()
+  )
 
 proc platforms(): seq[string] =
   when defined(linux) or defined(bsd):
@@ -75,3 +86,9 @@ task test_emscripten, "build emscripten examples":
   for file in listFiles("examples"):
     if nimFileStemHasPrefix(file, "windy_"):
       nimExec("c", file, "-d:emscripten")
+
+task download_references, "download local study copies of reference docs":
+  let openStepSpecPdf = referenceDir / "OpenStepSpec.pdf"
+  downloadReference(openStepSpecUrl, openStepSpecPdf)
+  echo "Downloaded ", openStepSpecPdf
+  echo "OpenStep UI guidelines remain link-only; their notice restricts copying."

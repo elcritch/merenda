@@ -312,6 +312,10 @@ protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args)
 
+protocol DefaultButtonKeyCommands of KeyViewCommandProtocol:
+  method insertNewline(button: Button, args: ActionArgs) =
+    button.buttonPerformClick(args)
+
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
@@ -319,6 +323,7 @@ proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect)
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)
   discard button.withProtocol(DefaultButtonAction)
+  discard button.withProtocol(DefaultButtonKeyCommands)
   button.applyInitialFrame(frame)
 
 proc newButton*(title = "Button", frame: Rect = AutoRect): Button =

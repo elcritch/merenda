@@ -7,9 +7,14 @@ import ./selectors
 import ./theme
 import ./events
 import ./fieldeditors
+import ./textstorage
+import ./texttypes
+import ./textviews
 import ./types
+import ./windows
 
 export controls
+export texttypes
 
 type
   LabelStyle* = enum
@@ -18,10 +23,6 @@ type
     lsHeading
     lsStatus
     lsForm
-
-  TextRange* = object
-    location*: Natural
-    length*: Natural
 
   TextFieldCell* = ref object of ActionCell
 
@@ -48,9 +49,9 @@ proc setEditedString(
 )
 
 proc selectAllText(textField: TextField)
-
-proc initTextRange*(location, length: int): TextRange =
-  TextRange(location: max(location, 0).Natural, length: max(length, 0).Natural)
+proc activeFieldEditor(textField: TextField): FieldEditor
+proc layoutFieldEditor(textField: TextField)
+proc textFieldStyleContext(textField: TextField): StyleContext
 
 protocol TextFieldEvents:
   proc textDidChange*(textField: TextField, sender: DynamicAgent) {.signal.}
@@ -62,6 +63,9 @@ protocol TextFieldProtocol from TextField:
   property selectedRange -> TextRange
 
   method stringValue(textField: TextField): string =
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return textviews.stringValue(TextView(editor))
     textField.xStringValue
 
   method setStringValue(textField: TextField, value: string) =
@@ -70,6 +74,9 @@ protocol TextFieldProtocol from TextField:
     let cursor = min(textField.xInsertionPoint, value.runeLen)
     let anchor = min(textField.xSelectionAnchor, value.runeLen)
     textField.setEditedString(value, cursor, anchor)
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      textviews.setStringValue(TextView(editor), value)
 
   method alignment(textField: TextField): TextAlignment =
     textField.xAlignment
@@ -119,24 +126,36 @@ protocol TextFieldProtocol from TextField:
     tfEditing in textField.xFlags
 
   method selectedRange(textField: TextField): TextRange =
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return textviews.selectedRange(TextView(editor))
     let
       start = min(textField.xSelectionAnchor, textField.xInsertionPoint)
       stop = max(textField.xSelectionAnchor, textField.xInsertionPoint)
     initTextRange(start, stop - start)
 
   method setSelectedRange(textField: TextField, value: TextRange) =
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      textviews.setSelectedRange(TextView(editor), value)
     let
       total = textField.xStringValue.runeLen
-      start = max(0, min(value.location.int, total))
-      length = max(0, min(value.length.int, total - start))
+      start = max(0, min(int(value.location), total))
+      length = max(0, min(int(value.length), total - start))
     textField.xSelectionAnchor = start
     textField.xInsertionPoint = start + length
     textField.setNeedsDisplay(true)
 
   method insertionPoint*(textField: TextField): int =
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return textviews.insertionPoint(TextView(editor))
     textField.xInsertionPoint
 
   method selectionAnchor*(textField: TextField): int =
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return textviews.selectionAnchor(TextView(editor))
     textField.xSelectionAnchor
 
   method becomeFirstResponder(textField: TextField): bool =
@@ -152,23 +171,145 @@ protocol TextFieldProtocol from TextField:
     textField.setNeedsDisplay(true)
     true
 
+protocol DefaultTextFieldCellEditing of CellEditingProtocol:
+  method fieldEditorForView(cell: TextFieldCell, controlView: View): FieldEditor =
+    nil
+
+  method setUpFieldEditorAttributes(
+      cell: TextFieldCell, editor: FieldEditor, controlView: View
+  ) =
+    if editor.isNil:
+      return
+    if controlView of TextField:
+      let textField = TextField(controlView)
+      editor.editable = textField.isEditable()
+      editor.selectable = textField.isSelectable()
+      editor.alignment = textField.alignment()
+      editor.textColor = textField.textColor()
+      editor.typingAttributes = defaultTextAttributes(textField.textColor())
+      editor.allowsUndo = true
+      if editor.textStorage().len > 0:
+        editor.textStorage().setAttributes(
+          initTextRange(0, editor.textStorage().len),
+          defaultTextAttributes(textField.textColor()),
+        )
+
+  method editWithFrame(
+      cell: TextFieldCell, frame: Rect, controlView: View, editor: FieldEditor
+  ) =
+    if editor.isNil:
+      return
+    cell.setUpFieldEditorAttributes(editor, controlView)
+    editor.frame = frame
+    if not controlView.isNil and editor.superview() != controlView:
+      controlView.addSubview(editor)
+
+  method selectWithFrame(
+      cell: TextFieldCell,
+      frame: Rect,
+      controlView: View,
+      editor: FieldEditor,
+      start, length: int,
+  ) =
+    cell.editWithFrame(frame, controlView, editor)
+    if not editor.isNil:
+      editor.selectedRange = initTextRange(start, length)
+
+  method endEditing(cell: TextFieldCell, editor: FieldEditor, controlView: View) =
+    if not editor.isNil and editor.superview() == controlView:
+      editor.removeFromSuperview()
+
 protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
+  method fieldEditorForClient(
+      textField: TextField, defaultEditor: FieldEditor
+  ): FieldEditor =
+    let editor = textField.textFieldCell().fieldEditorForView(textField)
+    if editor.isNil: defaultEditor else: editor
+
   method usesFieldEditor(textField: TextField, editor: FieldEditor): bool =
     textField.isEnabled and (textField.isEditable() or textField.isSelectable())
+
+  method stringForFieldEditor(textField: TextField, editor: FieldEditor): string =
+    textField.xStringValue
+
+  method setStringFromFieldEditor(
+      textField: TextField, editor: FieldEditor, value: string
+  ) =
+    textField.setEditedString(
+      value,
+      textviews.insertionPoint(TextView(editor)),
+      textviews.selectionAnchor(TextView(editor)),
+      notify = true,
+    )
+
+  method didChangeTextInEditor(textField: TextField, editor: FieldEditor) =
+    textField.setNeedsDisplay(true)
 
   method shouldBeginEditing(textField: TextField, editor: FieldEditor): bool =
     textField.isEnabled and (textField.isEditable() or textField.isSelectable())
 
   method didBeginEditing(textField: TextField, editor: FieldEditor) =
+    textField.setCurrentEditor(editor)
     textField.xFlags.incl(tfEditing)
-    textField.selectAllText()
+    textField.focused = true
+    textField.focusVisible = editor.isFocusVisible()
+    textField.textFieldCell().selectWithFrame(
+      textField.fieldEditorFrame(), textField, editor, 0, editor.textStorage().len
+    )
+    textField.setNeedsDisplay(true)
+
+  method didChangeFocusInEditor(textField: TextField, editor: FieldEditor) =
+    if editor == textField.activeFieldEditor():
+      textField.focused = editor.isFocused()
+      textField.focusVisible = editor.isFocusVisible()
 
   method shouldEndEditing(textField: TextField, editor: FieldEditor): bool =
     true
 
   method didEndEditing(textField: TextField, editor: FieldEditor) =
+    textField.setEditedString(
+      textviews.stringValue(TextView(editor)),
+      textviews.insertionPoint(TextView(editor)),
+      textviews.selectionAnchor(TextView(editor)),
+    )
+    textField.textFieldCell().endEditing(editor, textField)
+    textField.setCurrentEditor(nil)
     textField.xFlags.excl(tfEditing)
+    textField.focused = false
+    textField.focusVisible = false
     textField.setNeedsDisplay(true)
+
+  method didEndEditingMovement(
+      textField: TextField, editor: FieldEditor, movement: TextEditMovement
+  ) =
+    let owner = textField.window()
+    let ownerWindow =
+      if owner of Window:
+        Window(owner)
+      else:
+        nil
+    case movement
+    of temTab:
+      if textField.textFieldCell().sendsActionOnEndEditing():
+        discard textField.sendAction()
+      if not ownerWindow.isNil:
+        if not ownerWindow.selectKeyViewFollowingView(textField) and
+            ownerWindow.firstResponder() == editor:
+          discard ownerWindow.makeFirstResponder(nil)
+    of temBacktab:
+      if textField.textFieldCell().sendsActionOnEndEditing():
+        discard textField.sendAction()
+      if not ownerWindow.isNil:
+        if not ownerWindow.selectKeyViewPrecedingView(textField) and
+            ownerWindow.firstResponder() == editor:
+          discard ownerWindow.makeFirstResponder(nil)
+    of temReturn:
+      discard textField.sendAction()
+      if not ownerWindow.isNil and ownerWindow.firstResponder() == editor:
+        discard ownerWindow.makeFirstResponder(nil)
+    of temNone:
+      if textField.textFieldCell().sendsActionOnEndEditing():
+        discard textField.sendAction()
 
 proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
@@ -187,6 +328,26 @@ proc currentSelection(textField: TextField): tuple[start, stop: int] =
   selectionBounds(
     textField.runeCount, textField.xSelectionAnchor, textField.xInsertionPoint
   )
+
+proc activeFieldEditor(textField: TextField): FieldEditor =
+  if textField.isNil:
+    return nil
+  activeEditor(Control(textField))
+
+proc currentEditor*(textField: TextField): FieldEditor =
+  currentEditor(Control(textField))
+
+proc fieldEditorFrame(textField: TextField): Rect =
+  let style = textField.effectiveAppearance().resolveTextFieldStyle(
+      textField.textFieldStyleContext(), textField.textColor()
+    )
+  style.textFieldTextRect(textField.bounds)
+
+proc layoutFieldEditor(textField: TextField) =
+  let editor = textField.activeFieldEditor()
+  if editor.isNil:
+    return
+  editor.frame = textField.fieldEditorFrame()
 
 proc runesOf(text: string): seq[Rune] =
   for rune in text.runes:
@@ -307,23 +468,6 @@ proc deleteWordForwardText(textField: TextField) =
     return
   let value = current.runeSubStr(0, selected.start) & current.runeSubStr(cursor)
   textField.setEditedString(value, selected.start, selected.start)
-
-proc isControlInput(rune: Rune): bool =
-  let code = rune.int
-  code < 32 or (code >= 127 and code <= 159)
-
-proc isInsertableText(text: string): bool =
-  if text.len == 0:
-    return false
-  for rune in text.runes:
-    if rune.isControlInput:
-      return false
-  true
-
-proc shouldInsertText(event: KeyEvent): bool =
-  if event.modifiers - {kmShift} != {}:
-    return false
-  event.text.isInsertableText()
 
 proc text*(textField: TextField): string =
   textField.stringValue()
@@ -463,10 +607,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
 protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
     let absoluteFrame = textField.rectToWindow(textField.bounds)
-    var states: set[WidgetState] = textField.widgetStateSet()
-    if textField.isEditing:
-      states.incl ssFocused
-      states.incl ssFocusVisible
+    let states: set[WidgetState] = textField.widgetStateSet()
 
     let style = context.appearance.resolveTextFieldStyle(
       initControlStyleContext(
@@ -482,6 +623,10 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
     if ssFocusVisible in states:
       context.addFocusRing(absoluteFrame, style.box)
 
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return
+
     let
       textRect = style.textFieldTextRect(textField.bounds)
       layout = textLayout(
@@ -490,7 +635,10 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
       selectedRange = textField.selectedRange
     if textField.isEditing and selectedRange.length > 0:
       discard context.addSelectedText(
-        textRect, layout, selectedRange.location.int, selectedRange.length.int,
+        textRect,
+        layout,
+        int(selectedRange.location),
+        int(selectedRange.length),
         style.selectionColor,
       )
     else:
@@ -506,22 +654,30 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
     if event.button == mbPrimary and (
       textField.isEditable() or textField.isSelectable()
     ):
-      textField.setCursor(textField.runeCount)
+      let editor = textField.activeFieldEditor()
+      if not editor.isNil:
+        var editorEvent = event
+        editorEvent.location = editor.pointFromView(event.location, textField)
+        discard editor.handleMouse(mouseDown(), editorEvent)
+      else:
+        textField.selectedRange = initTextRange(textField.runeCount, 0)
       return true
     false
 
   method keyDown(textField: TextField, event: KeyEvent) =
-    if textField.isEditable() and event.shouldInsertText():
+    if textField.isEditable() and event.modifiers - {kmShift} == {} and
+        event.text.isInsertableText():
       textField.replaceSelectedText(event.text)
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
-  var states: set[WidgetState] = textField.widgetStateSet()
-  if textField.isEditing:
-    states.incl ssFocused
-    states.incl ssFocusVisible
+  let states: set[WidgetState] = textField.widgetStateSet()
   initControlStyleContext(
     srTextField, states, id = textField.styleId, classes = textField.styleClasses
   )
+
+protocol DefaultTextFieldLayout of ViewLayoutProtocol:
+  method layoutSubviews(textField: TextField) =
+    textField.layoutFieldEditor()
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: TextFieldCell): IntrinsicSize =
@@ -546,6 +702,7 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
 proc initTextFieldCellFields*(cell: TextFieldCell) =
   initActionCellFields(cell)
   discard cell.withProtocol(DefaultTextFieldCellMeasurement)
+  discard cell.withProtocol(DefaultTextFieldCellEditing)
 
 proc newTextFieldCell*(): TextFieldCell =
   result = TextFieldCell()
@@ -575,6 +732,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   discard textField.withProtocol(DefaultTextFieldFieldEditorClient)
   discard textField.withProtocol(DefaultTextFieldDrawing)
   discard textField.withProtocol(DefaultTextFieldEvents)
+  discard textField.withProtocol(DefaultTextFieldLayout)
   textField.applyInitialFrame(frame)
 
 proc newTextField*(value = "", frame: Rect = AutoRect): TextField =

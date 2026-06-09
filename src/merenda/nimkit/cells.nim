@@ -1,4 +1,7 @@
 import ./selectors
+import ./fieldeditors
+import ./texttypes
+import ./textviews
 import ./types
 import ./views
 
@@ -11,6 +14,7 @@ type
     xHighlighted: bool
     xState: ButtonState
     xAllowsMixedState: bool
+    xSendsActionOnEndEditing: bool
 
   ActionCell* = ref object of Cell
     xTarget: DynamicAgent
@@ -29,12 +33,71 @@ protocol CellMeasurementProtocol:
   method cellSize*(): IntrinsicSize
   method cellSizeForBounds*(bounds: Rect): Size
 
+protocol CellEditingProtocol:
+  method fieldEditorForView*(controlView: View): FieldEditor {.optional.}
+  method setUpFieldEditorAttributes*(
+    editor: FieldEditor, controlView: View
+  ) {.optional.}
+
+  method editWithFrame*(
+    frame: Rect, controlView: View, editor: FieldEditor
+  ) {.optional.}
+
+  method selectWithFrame*(
+    frame: Rect, controlView: View, editor: FieldEditor, start, length: int
+  ) {.optional.}
+
+  method endEditing*(editor: FieldEditor, controlView: View) {.optional.}
+  method sendsActionOnEndEditing*(): bool
+  method setSendsActionOnEndEditing*(value: bool)
+
 protocol DefaultCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: Cell): IntrinsicSize =
     NoIntrinsicContentSize
 
   method cellSizeForBounds(cell: Cell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
+
+protocol DefaultCellEditing of CellEditingProtocol:
+  method fieldEditorForView(cell: Cell, controlView: View): FieldEditor =
+    nil
+
+  method setUpFieldEditorAttributes(
+      cell: Cell, editor: FieldEditor, controlView: View
+  ) =
+    discard
+
+  method editWithFrame(
+      cell: Cell, frame: Rect, controlView: View, editor: FieldEditor
+  ) =
+    if editor.isNil:
+      return
+    cell.setUpFieldEditorAttributes(editor, controlView)
+    editor.frame = frame
+    if not controlView.isNil and editor.superview() != controlView:
+      controlView.addSubview(editor)
+
+  method selectWithFrame(
+      cell: Cell,
+      frame: Rect,
+      controlView: View,
+      editor: FieldEditor,
+      start, length: int,
+  ) =
+    cell.editWithFrame(frame, controlView, editor)
+    if not editor.isNil:
+      TextView(editor).selectedRange = initTextRange(start, length)
+
+  method endEditing(cell: Cell, editor: FieldEditor, controlView: View) =
+    if not editor.isNil and editor.superview() == controlView:
+      editor.removeFromSuperview()
+
+  method sendsActionOnEndEditing(cell: Cell): bool =
+    (not cell.isNil) and cell.xSendsActionOnEndEditing
+
+  method setSendsActionOnEndEditing(cell: Cell, value: bool) =
+    if not cell.isNil:
+      cell.xSendsActionOnEndEditing = value
 
 proc invalidateViewCellMetrics(view: View) =
   if not view.isNil:
@@ -50,6 +113,7 @@ proc updateControlView*(cell: Cell) =
 proc initCellFields*(cell: Cell) =
   cell.xEnabled = true
   discard cell.withProtocol(DefaultCellMeasurement)
+  discard cell.withProtocol(DefaultCellEditing)
 
 proc initActionCellFields*(cell: ActionCell) =
   initCellFields(cell)

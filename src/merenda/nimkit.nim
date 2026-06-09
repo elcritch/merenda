@@ -11,6 +11,7 @@ import merenda/nimkit/gridviews
 import merenda/nimkit/keybindings
 import merenda/nimkit/listbasics
 import merenda/nimkit/listviews
+import merenda/nimkit/pasteboards
 import merenda/nimkit/popuplists
 import merenda/nimkit/rendering
 import merenda/nimkit/responders
@@ -20,6 +21,10 @@ import merenda/nimkit/stackviews
 import merenda/nimkit/scrollviews
 import merenda/nimkit/tableviews
 import merenda/nimkit/textfields
+import merenda/nimkit/textlayout
+import merenda/nimkit/textstorage
+import merenda/nimkit/texttypes
+import merenda/nimkit/textviews
 import merenda/nimkit/theme
 import merenda/nimkit/types
 import merenda/nimkit/views
@@ -38,6 +43,7 @@ export gridviews
 export keybindings
 export listbasics
 export listviews except visibleRowViews
+export pasteboards
 export popuplists
 export rendering
 export responders
@@ -47,6 +53,10 @@ export stackviews
 export scrollviews
 export tableviews
 export textfields
+export textlayout
+export textstorage
+export texttypes
+export textviews
 export theme
 export types
 export views

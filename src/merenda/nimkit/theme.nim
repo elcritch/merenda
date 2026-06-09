@@ -1854,7 +1854,7 @@ proc initTheme*(): Theme =
   result[srTextField, StyleMinimumSize] = initSize(80.0, 24.0)
   result[srTextField, StyleSelectionColor] = styleToken(TextFieldSelectionColorToken)
   result[srTextField, StyleFocusRingWidth] = 3.0
-  result[srTextField, StyleFocusRingInset] = 2.0
+  result[srTextField, StyleFocusRingInset] = -2.0
   result[srTextField, StyleFocusRingColor] = styleToken(FocusRingColorToken)
   result[srTextField, StyleBoxShadows] = aquaInsetControlShadows()
 
@@ -1934,7 +1934,7 @@ proc initTheme*(): Theme =
   result[srComboBox, StyleCornerRadius] = 6.0
   result[srComboBox, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
   result[srComboBox, StyleFocusRingWidth] = 3.0
-  result[srComboBox, StyleFocusRingInset] = 2.0
+  result[srComboBox, StyleFocusRingInset] = -2.0
   result[srComboBox, StyleFocusRingColor] = styleToken(FocusRingColorToken)
   result[srComboBox, StyleIndicatorSize] = 24.0
   result[srComboBox, StyleMinimumSize] = initSize(90.0, 24.0)
