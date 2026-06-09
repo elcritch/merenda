@@ -339,3 +339,31 @@ suite "NimKit TableView":
 
     check tableView.selectedIndexes == @[1, 2, 3]
     check ListView(tableView).selectedRange == 1 .. 3
+
+  test "table view pages to scroll edge when trailing rows are disabled":
+    let
+      window =
+        newWindow("Table disabled trailing row", frame = initRect(0, 0, 360, 260))
+      root = newView(frame = initRect(0, 0, 360, 260))
+      tableView = newTableView(frame = initRect(10, 10, 260, 224))
+      delegate = newTableDelegateSpy()
+      scrollView = ListView(tableView).scrollView()
+
+    tableView.rowCount = 12
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    ListView(tableView).rowHeight = 28.0
+    delegate.disabledRows = @[11]
+    tableView.delegate = delegate
+    ListView(tableView).selectedIndex = 0
+    root.addSubview(tableView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(tableView)
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check ListView(tableView).selectedIndex == 10
+    check scrollView.contentOffset().y == scrollView.maximumContentOffset().y
+
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check ListView(tableView).selectedIndex == 10
+    check scrollView.contentOffset().y == scrollView.maximumContentOffset().y

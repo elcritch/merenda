@@ -32,7 +32,7 @@ func demoRows(): seq[BuildRow] =
     BuildRow(project: "Inspector", state: "Running", owner: "Nia", elapsed: "7m"),
     BuildRow(project: "Preview Cache", state: "Queued", owner: "Sol", elapsed: "1h"),
     BuildRow(project: "Layout Tests", state: "Done", owner: "Ari", elapsed: "24m"),
-    BuildRow(project: "Release Notes", state: "Paused", owner: "Paz", elapsed: "3h"),
+    BuildRow(project: "Release Notes", state: "Done", owner: "Paz", elapsed: "3h"),
   ]
 
 func rowAt(controller: TableDemoController, row: int): BuildRow =

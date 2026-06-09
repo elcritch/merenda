@@ -1093,8 +1093,12 @@ proc handleTypeSelect(listView: ListView, event: KeyEvent): bool =
 proc moveSelectionTo(listView: ListView, index: int, extend = false, direction = 1) =
   if listView.len() == 0 or listView.selectionMode() == lsmNone:
     return
-  let boundedIndex =
-    listView.nextSelectableIndex(max(0, min(index, listView.len() - 1)), direction)
+  let targetIndex = max(0, min(index, listView.len() - 1))
+  var boundedIndex = listView.nextSelectableIndex(targetIndex, direction)
+  if boundedIndex < 0 and direction > 0:
+    boundedIndex = listView.nextSelectableIndex(targetIndex, -1)
+  elif boundedIndex < 0 and direction < 0:
+    boundedIndex = listView.nextSelectableIndex(targetIndex, 1)
   if boundedIndex < 0:
     return
   if extend and listView.xSelectionMode == lsmExtended:
@@ -1115,7 +1119,25 @@ proc moveSelection(listView: ListView, delta: int, extend = false) =
   listView.moveSelectionTo(start + delta, extend, delta)
 
 proc pageSelection(listView: ListView, deltaPages: int, extend = false) =
-  listView.moveSelection(deltaPages * max(listView.visibleItemCount(), 1), extend)
+  let delta = deltaPages * max(listView.visibleItemCount(), 1)
+  if delta == 0:
+    return
+  let start =
+    if listView.selectionLeadIndex() >= 0:
+      listView.selectionLeadIndex()
+    elif delta > 0:
+      listView.firstVisibleIndex() - 1
+    else:
+      listView.firstVisibleIndex() + listView.visibleItemCount()
+  let target = start + delta
+  listView.moveSelectionTo(target, extend, delta)
+  let scrollView = listView.scrollView()
+  if scrollView.isNil:
+    return
+  if target >= listView.len():
+    listView.setListContentOffset(scrollView.maximumContentOffset(), true)
+  elif target < 0:
+    listView.setListContentOffset(initPoint(0.0'f32, 0.0'f32), true)
 
 proc visibleContentRows(contentView: ListContentView): tuple[first, last: int] =
   let listView = contentView.listView()

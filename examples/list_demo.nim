@@ -14,7 +14,6 @@ let
   )
   detailTitle = newHeadingLabel("Selection")
   detail = newStatusLabel("")
-  changedAction = actionSelector("listSelectionChanged")
 
 proc updateDetail() =
   let indexes = list.selectedIndexes()
@@ -40,9 +39,21 @@ proc updateDetail() =
     else:
       "Selected " & $indexes.len & ": " & names.join(", ")
 
-proc onListChanged(sender: DynamicAgent) =
-  if sender == DynamicAgent(list):
-    updateDetail()
+type ListDemoDelegate = ref object of Responder
+
+protocol ListDemoDelegateEvents from ListDemoDelegate:
+  includes ListViewEvents
+
+  proc selectionDidChange(delegate: ListDemoDelegate, sender: DynamicAgent) {.slot.} =
+    if sender == DynamicAgent(list):
+      updateDetail()
+
+proc newListDemoDelegate(): ListDemoDelegate =
+  result = ListDemoDelegate()
+  initResponder(result)
+  result = result.withProto()
+
+let selectionDelegate = newListDemoDelegate()
 
 root.background = initColor(0.95, 0.96, 0.98)
 
@@ -52,8 +63,7 @@ list.selectionMode = lsmExtended
 list.usesAlternatingRowBackgrounds = true
 list.showsRowSeparators = true
 list.selectedIndex = 0
-list.target = newActionTarget(changedAction, onListChanged)
-list.action = changedAction
+list.delegate = selectionDelegate
 
 root.addSubview(title, list, detailTitle, detail)
 

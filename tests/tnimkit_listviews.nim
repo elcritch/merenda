@@ -334,6 +334,122 @@ suite "nimkit list views":
     listView.scrollSelectedItemToVisible()
     check listView.firstVisibleIndex == 2
 
+  test "list view reaches final row in demo sized viewport":
+    let
+      window = newWindow("List final row", frame = initRect(0, 0, 360, 240))
+      root = newView(frame = initRect(0, 0, 360, 240))
+      title = newTitleLabel("List View")
+      listView = newListView(
+        ["Inbox", "Drafts", "Sent", "Archive", "Settings", "Updates", "Builds", "Logs"]
+      )
+
+    listView.visibleRows = 6
+    listView.rowHeight = 24.0
+    listView.selectionMode = lsmExtended
+    listView.selectedIndex = 0
+    root.addSubview(title, listView)
+    title.pinEdges(
+      toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
+      edges = {leLeft, leTop, leRight},
+    )
+    activate(
+      cx(listView.topAnchor == title.bottomAnchor + 18.0),
+      cx(listView.leftAnchor == title.leftAnchor),
+      cx(listView.widthAnchor == 188.0),
+    )
+    window.setContentView(root)
+    discard buildRenders(root)
+    check window.makeFirstResponder(listView)
+
+    for _ in 0 ..< 7:
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+      )
+    check listView.selectedIndex == 7
+    check listView.firstVisibleIndex == 2
+
+    listView.selectedIndex = 0
+    listView.scrollView().scrollTo(initPoint(0.0'f32, 0.0'f32))
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check listView.selectedIndex == 6
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check listView.selectedIndex == 7
+    check listView.firstVisibleIndex == 2
+    check window.dispatchKeyDown(KeyEvent(key: keyPageUp, keyCode: keyPageUp.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyPageUp, keyCode: keyPageUp.ord))
+    check listView.selectedIndex == 0
+    check listView.firstVisibleIndex == 0
+
+    listView.selectedIndex = 6
+    listView.scrollItemToVisible(7)
+    let
+      rowRect = listView.listItemRect(7)
+      point = listView.pointToWindow(
+        initPoint(
+          rowRect.origin.x + 6.0'f32, rowRect.origin.y + rowRect.size.height / 2
+        )
+      )
+    check not rowRect.isEmpty
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
+    check listView.selectedIndex == 7
+
+    listView.selectedIndex = 0
+    listView.scrollView().scrollTo(initPoint(0.0'f32, 0.0'f32))
+    let wheelPoint = listView.pointToWindow(initPoint(20.0'f32, 40.0'f32))
+    check window.scrollWheelAt(wheelPoint, deltaY = -1.0)
+    for _ in 0 ..< 3:
+      discard window.scrollWheelAt(wheelPoint, deltaY = -1.0)
+    let
+      finalRowRect = listView.listItemRect(7)
+      finalRowPoint = listView.pointToWindow(
+        initPoint(
+          finalRowRect.origin.x + 6.0'f32,
+          finalRowRect.origin.y + finalRowRect.size.height / 2,
+        )
+      )
+    check not finalRowRect.isEmpty
+    check window.mouseDownAt(finalRowPoint)
+    check window.mouseUpAt(finalRowPoint)
+    check listView.selectedIndex == 7
+
+  test "list view pages to scroll edge when trailing rows are disabled":
+    let
+      window = newWindow("List disabled trailing row", frame = initRect(0, 0, 360, 260))
+      root = newView(frame = initRect(0, 0, 360, 260))
+      listView = newListView(
+        [
+          "Renderer Pipeline", "Auth Gateway", "Crash Reporter", "Asset Importer",
+          "Search Index", "Telemetry", "Installer", "Sync Engine", "Preview Server",
+          "Local Cache", "Layout Tests", "Release Notes",
+        ],
+        frame = initRect(10, 10, 220, 224),
+      )
+      policy = newListPolicyDelegateSpy(disabledRows = [11])
+
+    listView.rowHeight = 28.0
+    listView.delegate = policy
+    listView.selectedIndex = 0
+    root.addSubview(listView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(listView)
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check listView.selectedIndex == 10
+    check listView.scrollView().contentOffset().y ==
+      listView.scrollView().maximumContentOffset().y
+
+    check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
+    check listView.selectedIndex == 10
+    check listView.scrollView().contentOffset().y ==
+      listView.scrollView().maximumContentOffset().y
+
+    check window.dispatchKeyDown(KeyEvent(key: keyPageUp, keyCode: keyPageUp.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyPageUp, keyCode: keyPageUp.ord))
+    check listView.selectedIndex == 0
+    check listView.scrollView().contentOffset().y == 0.0'f32
+
   test "list view resolves rows from data source and reload clamps selection":
     let
       listView = newListView(["Local"], frame = initRect(0, 0, 120, 46))
