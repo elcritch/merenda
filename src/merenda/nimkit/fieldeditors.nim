@@ -7,6 +7,7 @@ import ./textviews
 
 type FieldEditor* = ref object of TextView
   xClient: Responder
+  xEndingClient: Responder
   xOriginalString: string
 
 protocol FieldEditorClient {.selectorScope: protocol.}:
@@ -24,9 +25,20 @@ protocol FieldEditorClient {.selectorScope: protocol.}:
   method shouldEndEditing*(editor: FieldEditor): bool {.optional.}
   method didEndEditing*(editor: FieldEditor) {.optional.}
   method didEndEditingReason*(editor: FieldEditor, reason: TextEditReason) {.optional.}
+  method didEndEditingMovement*(
+    editor: FieldEditor, movement: TextEditMovement
+  ) {.optional.}
 
 proc client*(editor: FieldEditor): Responder =
   if editor.isNil: nil else: editor.xClient
+
+proc focusClient*(editor: FieldEditor): Responder =
+  if editor.isNil:
+    nil
+  elif not editor.xClient.isNil:
+    editor.xClient
+  else:
+    editor.xEndingClient
 
 proc wantsFieldEditor*(client: Responder, editor: FieldEditor): bool =
   if client.isNil:
@@ -71,7 +83,9 @@ proc notifyClientChanged(editor: FieldEditor) =
   )
   discard client.sendLocalIfHandled(didChangeTextInEditor(), editor)
 
-proc finishEditing(editor: FieldEditor, reason: TextEditReason): bool =
+proc finishEditing(
+    editor: FieldEditor, reason: TextEditReason, movement = temNone
+): bool =
   if editor.isNil or editor.xClient.isNil:
     return true
   let client = editor.xClient
@@ -81,10 +95,15 @@ proc finishEditing(editor: FieldEditor, reason: TextEditReason): bool =
     editor.stringValue = editor.xOriginalString
   else:
     editor.notifyClientChanged()
+  editor.xEndingClient = client
   editor.xClient = nil
   discard client.sendLocalIfHandled(didEndEditing(), editor)
   discard
     client.sendLocalIfHandled(didEndEditingReason(), (editor: editor, reason: reason))
+  discard client.sendLocalIfHandled(
+    didEndEditingMovement(), (editor: editor, movement: movement)
+  )
+  editor.xEndingClient = nil
   true
 
 proc beginEditing*(editor: FieldEditor, client: Responder): bool =
@@ -192,6 +211,16 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
   method moveToEndOfLineAndModifySelection(editor: FieldEditor, args: ActionArgs) =
     editor.moveToEndOfLineText(extending = true)
 
+protocol DefaultFieldEditorKeyCommands of KeyViewCommandProtocol:
+  method insertNewline(editor: FieldEditor, args: ActionArgs) =
+    discard editor.finishEditing(terCommit, temReturn)
+
+  method insertTab(editor: FieldEditor, args: ActionArgs) =
+    discard editor.finishEditing(terCommit, temTab)
+
+  method insertBacktab(editor: FieldEditor, args: ActionArgs) =
+    discard editor.finishEditing(terCommit, temBacktab)
+
 proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)
   editor.editable = true
@@ -202,6 +231,7 @@ proc initFieldEditorFields*(editor: FieldEditor) =
   discard editor.withProtocol(DefaultFieldEditorEvents)
   discard editor.withProtocol(DefaultFieldEditorInput)
   discard editor.withProtocol(DefaultFieldEditorCommands)
+  discard editor.withProtocol(DefaultFieldEditorKeyCommands)
 
 proc newFieldEditor*(): FieldEditor =
   result = FieldEditor()

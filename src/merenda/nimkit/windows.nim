@@ -453,16 +453,13 @@ proc fieldEditorClient*(window: Window): Responder =
   else:
     window.xFieldEditor.client()
 
-proc representedView(responder: Responder): View =
+proc responderFocusView(responder: Responder): View =
   if responder of FieldEditor:
-    let client = FieldEditor(responder).client()
+    let client = FieldEditor(responder).focusClient()
     if client of View:
       return View(client)
   if responder of View:
     return View(responder)
-
-proc responderFocusView(responder: Responder): View =
-  responder.representedView()
 
 proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
   if window.isNil or responder.isNil:
@@ -596,17 +593,11 @@ proc selectKeyView(window: Window, view: View): bool =
   true
 
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
-  if not sender.isNil and sender of Responder:
-    let senderView = Responder(sender).representedView()
-    if not senderView.isNil:
-      return senderView
-  if not window.isNil:
-    let client = window.fieldEditorClient()
-    if client of View:
-      return View(client)
+  if not sender.isNil and sender of View:
+    return View(sender)
   if not window.isNil and not window.xFirstResponder.isNil and
-      not window.xFirstResponder.representedView().isNil:
-    return window.xFirstResponder.representedView()
+      window.xFirstResponder of View:
+    return View(window.xFirstResponder)
 
 proc prepareKeyViewLoop(window: Window) =
   if not window.isNil and window.xAutorecalculatesKeyViewLoop:

@@ -21,6 +21,12 @@ type
     terFocusChange
     terProgrammatic
 
+  TextEditMovement* = enum
+    temNone
+    temTab
+    temBacktab
+    temReturn
+
   TextAttributes* = object
     foregroundColor*: Color
     fontSize*: float32

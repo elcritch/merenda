@@ -512,6 +512,16 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
   method moveToEndOfLineAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveToEndOfLineText(extending = true)
 
+protocol DefaultTextViewKeyCommands of KeyViewCommandProtocol:
+  method insertNewline(textView: TextView, args: ActionArgs) =
+    textView.replaceSelectedText("\n")
+
+  method insertTab(textView: TextView, args: ActionArgs) =
+    textView.replaceSelectedText("\t")
+
+  method insertBacktab(textView: TextView, args: ActionArgs) =
+    textView.replaceSelectedText("\t")
+
 proc initTextViewFields*(
     textView: TextView,
     value = "",
@@ -535,6 +545,7 @@ proc initTextViewFields*(
     discard textView.withProtocol(DefaultTextViewEvents)
     discard textView.withProtocol(DefaultTextViewInput)
     discard textView.withProtocol(DefaultTextViewCommands)
+    discard textView.withProtocol(DefaultTextViewKeyCommands)
   textView.applyInitialFrame(frame)
 
 proc newTextView*(value = "", frame: Rect = AutoRect): TextView =

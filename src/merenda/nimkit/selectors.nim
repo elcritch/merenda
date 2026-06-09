@@ -95,6 +95,7 @@ protocol TextEditingCommandProtocol:
   method moveToEndOfLineAndModifySelection*(args: ActionArgs) {.optional.}
 
 protocol KeyViewCommandProtocol:
+  method insertNewline*(args: ActionArgs) {.optional.}
   method insertTab*(args: ActionArgs) {.optional.}
   method insertBacktab*(args: ActionArgs) {.optional.}
   method selectNextKeyView*(args: ActionArgs) {.optional.}

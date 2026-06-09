@@ -218,6 +218,33 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
     textField.xFlags.excl(tfEditing)
     textField.setNeedsDisplay(true)
 
+  method didEndEditingMovement(
+      textField: TextField, editor: FieldEditor, movement: TextEditMovement
+  ) =
+    let owner = textField.window()
+    let ownerWindow =
+      if owner of Window:
+        Window(owner)
+      else:
+        nil
+    case movement
+    of temTab:
+      if not ownerWindow.isNil:
+        if not ownerWindow.selectKeyViewFollowingView(textField) and
+            ownerWindow.firstResponder() == editor:
+          discard ownerWindow.makeFirstResponder(nil)
+    of temBacktab:
+      if not ownerWindow.isNil:
+        if not ownerWindow.selectKeyViewPrecedingView(textField) and
+            ownerWindow.firstResponder() == editor:
+          discard ownerWindow.makeFirstResponder(nil)
+    of temReturn:
+      discard textField.sendAction()
+      if not ownerWindow.isNil and ownerWindow.firstResponder() == editor:
+        discard ownerWindow.makeFirstResponder(nil)
+    of temNone:
+      discard
+
 proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
 

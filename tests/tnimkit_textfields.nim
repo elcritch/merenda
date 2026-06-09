@@ -246,3 +246,28 @@ suite "nimkit text fields":
     check not field.isFocusVisible
     check field.isEditing
     check field.selectedRange == initTextRange(6, 0)
+
+  test "return ends field editor editing and sends text field action":
+    let
+      window = newWindow("Text return", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      action = actionSelector("textFieldReturnAction")
+
+    var actionCount = 0
+
+    proc onReturn(sender: DynamicAgent) =
+      check sender == DynamicAgent(field)
+      inc actionCount
+
+    field.target = newActionTarget(action, onReturn)
+    field.action = action
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    check window.firstResponder == window.fieldEditor()
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check actionCount == 1
+    check not field.isEditing
+    check window.firstResponder != window.fieldEditor()
