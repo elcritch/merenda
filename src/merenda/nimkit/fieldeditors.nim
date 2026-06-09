@@ -1,16 +1,29 @@
 import ./events
 import ./responders
 import ./selectors
+import ./textstorage
+import ./texttypes
+import ./textviews
 
-type FieldEditor* = ref object of Responder
+type FieldEditor* = ref object of TextView
   xClient: Responder
+  xOriginalString: string
 
 protocol FieldEditorClient {.selectorScope: protocol.}:
   method usesFieldEditor*(editor: FieldEditor): bool {.optional.}
+  method stringForFieldEditor*(editor: FieldEditor): string {.optional.}
+  method attributedTextForEditor*(editor: FieldEditor): TextStorage {.optional.}
+  method setStringFromFieldEditor*(editor: FieldEditor, value: string) {.optional.}
+  method setAttributedTextFromEditor*(
+    editor: FieldEditor, value: TextStorage
+  ) {.optional.}
+
+  method didChangeTextInEditor*(editor: FieldEditor) {.optional.}
   method shouldBeginEditing*(editor: FieldEditor): bool {.optional.}
   method didBeginEditing*(editor: FieldEditor) {.optional.}
   method shouldEndEditing*(editor: FieldEditor): bool {.optional.}
   method didEndEditing*(editor: FieldEditor) {.optional.}
+  method didEndEditingReason*(editor: FieldEditor, reason: TextEditReason) {.optional.}
 
 proc client*(editor: FieldEditor): Responder =
   if editor.isNil: nil else: editor.xClient
@@ -33,6 +46,47 @@ proc canEdit*(editor: FieldEditor, client: Responder): bool =
   (not editor.isNil) and client.wantsFieldEditor(editor) and
     client.clientShouldBeginEditing(editor)
 
+proc loadClientText(editor: FieldEditor, client: Responder) =
+  let storage = client.trySendLocal(attributedTextForEditor(), editor)
+  if storage.isSome and not storage.get().isNil:
+    editor.textStorage = storage.get().copyTextStorage()
+  else:
+    let text = client.trySendLocal(stringForFieldEditor(), editor)
+    editor.stringValue =
+      if text.isSome:
+        text.get()
+      else:
+        ""
+  editor.xOriginalString = editor.stringValue()
+
+proc notifyClientChanged(editor: FieldEditor) =
+  let client = editor.client()
+  if client.isNil:
+    return
+  discard client.sendLocalIfHandled(
+    setAttributedTextFromEditor(), (editor: editor, value: editor.textStorage())
+  )
+  discard client.sendLocalIfHandled(
+    setStringFromFieldEditor(), (editor: editor, value: editor.stringValue())
+  )
+  discard client.sendLocalIfHandled(didChangeTextInEditor(), editor)
+
+proc finishEditing(editor: FieldEditor, reason: TextEditReason): bool =
+  if editor.isNil or editor.xClient.isNil:
+    return true
+  let client = editor.xClient
+  if not client.clientShouldEndEditing(editor):
+    return false
+  if reason == terCancel:
+    editor.stringValue = editor.xOriginalString
+  else:
+    editor.notifyClientChanged()
+  editor.xClient = nil
+  discard client.sendLocalIfHandled(didEndEditing(), editor)
+  discard
+    client.sendLocalIfHandled(didEndEditingReason(), (editor: editor, reason: reason))
+  true
+
 proc beginEditing*(editor: FieldEditor, client: Responder): bool =
   if editor.isNil or client.isNil:
     return false
@@ -40,108 +94,109 @@ proc beginEditing*(editor: FieldEditor, client: Responder): bool =
     return true
   if not editor.canEdit(client):
     return false
+  editor.loadClientText(client)
   editor.xClient = client
   discard client.sendLocalIfHandled(didBeginEditing(), editor)
   true
 
 proc endEditing*(editor: FieldEditor): bool =
-  if editor.isNil or editor.xClient.isNil:
-    return true
-  let client = editor.xClient
-  if not client.clientShouldEndEditing(editor):
-    return false
-  editor.xClient = nil
-  discard client.sendLocalIfHandled(didEndEditing(), editor)
-  true
+  editor.finishEditing(terFocusChange)
 
-proc sendCommandToClient(
-    editor: FieldEditor, selector: CommandSelector, args: ActionArgs
-) =
-  let client = editor.client()
-  if not client.isNil:
-    discard client.sendLocalIfHandled(selector, args)
+proc commitEditing*(editor: FieldEditor): bool =
+  editor.finishEditing(terCommit)
+
+proc cancelEditing*(editor: FieldEditor): bool =
+  editor.finishEditing(terCancel)
 
 protocol DefaultFieldEditorResponder of ResponderProtocol:
   method acceptsFirstResponder(editor: FieldEditor): bool =
     true
 
   method shouldResignFirstResponder(editor: FieldEditor): bool =
-    editor.endEditing()
+    let client = editor.client()
+    client.isNil or client.clientShouldEndEditing(editor)
 
   method resignFirstResponder(editor: FieldEditor): bool =
     editor.endEditing()
 
 protocol DefaultFieldEditorEvents of ResponderEventProtocol:
   method keyDown(editor: FieldEditor, event: KeyEvent) =
-    let client = editor.client()
-    if not client.isNil:
-      discard client.sendLocalIfHandled(keyDown(), event)
+    if editor.editable and event.text.isInsertableText():
+      editor.replaceSelectedText(event.text)
+      editor.notifyClientChanged()
 
 protocol DefaultFieldEditorInput of TextInputProtocol:
   method insertText(editor: FieldEditor, text: string) =
-    let client = editor.client()
-    if not client.isNil:
-      discard client.sendLocalIfHandled(insertText(), text)
+    if text.isInsertableText():
+      editor.replaceSelectedText(text)
+      editor.notifyClientChanged()
 
 protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
   method selectText(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(selectText(), args)
+    editor.selectAllText()
 
   method selectAll(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(selectAll(), args)
+    editor.selectAllText()
 
   method deleteBackward(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(deleteBackward(), args)
+    editor.deleteBackwardText()
+    editor.notifyClientChanged()
 
   method deleteForward(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(deleteForward(), args)
+    editor.deleteForwardText()
+    editor.notifyClientChanged()
 
   method deleteWordBackward(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(deleteWordBackward(), args)
+    editor.deleteWordBackwardText()
+    editor.notifyClientChanged()
 
   method deleteWordForward(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(deleteWordForward(), args)
+    editor.deleteWordForwardText()
+    editor.notifyClientChanged()
 
   method moveLeft(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveLeft(), args)
+    editor.moveLeftText()
 
   method moveRight(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveRight(), args)
+    editor.moveRightText()
 
   method moveWordLeft(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveWordLeft(), args)
+    editor.moveWordLeftText()
 
   method moveWordRight(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveWordRight(), args)
+    editor.moveWordRightText()
 
   method moveToBeginningOfLine(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveToBeginningOfLine(), args)
+    editor.moveToBeginningOfLineText()
 
   method moveToEndOfLine(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveToEndOfLine(), args)
+    editor.moveToEndOfLineText()
 
   method moveLeftAndModifySelection(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveLeftAndModifySelection(), args)
+    editor.moveLeftText(extending = true)
 
   method moveRightAndModifySelection(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveRightAndModifySelection(), args)
+    editor.moveRightText(extending = true)
 
   method moveWordLeftAndModifySelection(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveWordLeftAndModifySelection(), args)
+    editor.moveWordLeftText(extending = true)
 
   method moveWordRightAndModifySelection(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveWordRightAndModifySelection(), args)
+    editor.moveWordRightText(extending = true)
 
   method moveToBeginningOfLineAndModifySelection(
       editor: FieldEditor, args: ActionArgs
   ) =
-    editor.sendCommandToClient(moveToBeginningOfLineAndModifySelection(), args)
+    editor.moveToBeginningOfLineText(extending = true)
 
   method moveToEndOfLineAndModifySelection(editor: FieldEditor, args: ActionArgs) =
-    editor.sendCommandToClient(moveToEndOfLineAndModifySelection(), args)
+    editor.moveToEndOfLineText(extending = true)
 
 proc initFieldEditorFields*(editor: FieldEditor) =
-  initResponder(editor)
+  initTextViewFields(editor, installDefaultProtocols = false)
+  editor.editable = true
+  editor.selectable = true
+  editor.richText = true
   editor.setAcceptsFirstResponder(true)
   discard editor.withProtocol(DefaultFieldEditorResponder)
   discard editor.withProtocol(DefaultFieldEditorEvents)

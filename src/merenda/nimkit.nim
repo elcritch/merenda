@@ -20,6 +20,10 @@ import merenda/nimkit/stackviews
 import merenda/nimkit/scrollviews
 import merenda/nimkit/tableviews
 import merenda/nimkit/textfields
+import merenda/nimkit/textlayout
+import merenda/nimkit/textstorage
+import merenda/nimkit/texttypes
+import merenda/nimkit/textviews
 import merenda/nimkit/theme
 import merenda/nimkit/types
 import merenda/nimkit/views
@@ -47,6 +51,10 @@ export stackviews
 export scrollviews
 export tableviews
 export textfields
+export textlayout
+export textstorage
+export texttypes
+export textviews
 export theme
 export types
 export views
