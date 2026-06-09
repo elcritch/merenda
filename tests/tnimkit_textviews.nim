@@ -40,6 +40,75 @@ suite "nimkit text views":
     check textView.stringValue == "aZc"
     check textView.textStorage().attributesAt(1) == accent
 
+  test "text view uses explicit typing attributes for inserted text":
+    let
+      textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+      accent = TextAttributes(
+        foregroundColor: initColor(0.2, 0.4, 0.8), fontSize: 15.0, underline: true
+      )
+
+    textView.selectedRange = initTextRange(1, 0)
+    textView.typingAttributes = accent
+    discard textView.send(insertText(), "Z")
+
+    check textView.stringValue == "aZbc"
+    check textView.textStorage().attributesAt(1) == accent
+
+  test "text view marked text replaces selection and commits through insert text":
+    let textView = newTextView("abcd", frame = initRect(0, 0, 160, 24))
+
+    textView.selectedRange = initTextRange(1, 2)
+    textView.setMarkedTextValue("XY", initTextRange(1, 0), initTextRange(0, 0))
+
+    check textView.hasMarkedText
+    check textView.markedRange == initTextRange(1, 2)
+    check textView.selectedRange == initTextRange(2, 0)
+    check textView.stringValue == "aXYd"
+
+    textView.insertTextValue("Z")
+    check not textView.hasMarkedText
+    check textView.stringValue == "aZd"
+    check textView.selectedRange == initTextRange(2, 0)
+    check textView.undoText()
+    check textView.stringValue == "abcd"
+    check textView.selectedRange == initTextRange(1, 2)
+
+  test "text view undo and redo restore text and selection":
+    let textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+
+    textView.selectedRange = initTextRange(3, 0)
+    textView.insertTextValue("d")
+
+    check textView.stringValue == "abcd"
+    check textView.selectedRange == initTextRange(4, 0)
+    check textView.undoText()
+    check textView.stringValue == "abc"
+    check textView.selectedRange == initTextRange(3, 0)
+    check textView.redoText()
+    check textView.stringValue == "abcd"
+    check textView.selectedRange == initTextRange(4, 0)
+
+  test "text view copy cut and paste use the general pasteboard":
+    let
+      pasteboard = generalPasteboard()
+      source = newTextView("abcd", frame = initRect(0, 0, 160, 24))
+      target = newTextView("zz", frame = initRect(0, 0, 160, 24))
+
+    pasteboard.clearContents()
+    source.selectedRange = initTextRange(1, 2)
+
+    check source.copyText()
+    check pasteboard.stringForType(PasteboardTypeString) == "bc"
+
+    target.selectedRange = initTextRange(1, 0)
+    check target.pasteText()
+    check target.stringValue == "zbcz"
+    check target.selectedRange == initTextRange(3, 0)
+
+    check source.cutText()
+    check source.stringValue == "ad"
+    check source.selectedRange == initTextRange(1, 0)
+
   test "text view newline and tab commands insert text":
     let textView = newTextView("ab", frame = initRect(0, 0, 160, 24))
 
@@ -51,3 +120,18 @@ suite "nimkit text views":
     discard textView.send(insertTab(), ActionArgs(sender: DynamicAgent(textView)))
     check textView.stringValue == "a\n\tb"
     check textView.selectedRange == initTextRange(3, 0)
+
+  test "field editor ignoring commands insert literal newline and tab":
+    let editor = newFieldEditor()
+
+    TextView(editor).stringValue = "ab"
+    TextView(editor).selectedRange = initTextRange(1, 0)
+    discard editor.send(
+      insertNewlineIgnoringFieldEditor(), ActionArgs(sender: DynamicAgent(editor))
+    )
+    discard editor.send(
+      insertTabIgnoringFieldEditor(), ActionArgs(sender: DynamicAgent(editor))
+    )
+
+    check TextView(editor).stringValue == "a\n\tb"
+    check TextView(editor).selectedRange == initTextRange(3, 0)

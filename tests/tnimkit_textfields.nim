@@ -1,11 +1,19 @@
 import std/unittest
 
+import sigils/core
+
 import merenda/nimkit
 
 type CustomEditorTextFieldCell = ref object of TextFieldCell
   editor: FieldEditor
 
-protocol CustomEditorTextFieldCellProtocol of TextFieldCellFieldEditorProtocol:
+type TextFieldChangeSpy = ref object of Agent
+  changeCount: int
+
+proc rememberTextFieldChange(spy: TextFieldChangeSpy, sender: DynamicAgent) {.slot.} =
+  inc spy.changeCount
+
+protocol CustomEditorTextFieldCellProtocol of CellEditingProtocol:
   method fieldEditorForView(
       cell: CustomEditorTextFieldCell, controlView: View
   ): FieldEditor =
@@ -309,6 +317,74 @@ suite "nimkit text fields":
     check window.fieldEditor().superview.isNil
     check not field.isFocused
     check window.firstResponder != window.fieldEditor()
+
+  test "validateEditing syncs field editor text without ending editing":
+    let
+      window = newWindow("Validate editing", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      spy = TextFieldChangeSpy()
+
+    field.connect(textDidChange, spy, rememberTextFieldChange)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let editor = field.currentEditor
+    check editor == window.fieldEditor()
+
+    TextView(editor).insertTextValue("draft")
+    check spy.changeCount == 0
+    check field.validateEditing()
+    check spy.changeCount == 1
+    check field.currentEditor == editor
+    check window.firstResponder == editor
+    check field.stringValue == "draft"
+
+  test "abortEditing cancels field editor text and clears first responder":
+    let
+      window = newWindow("Abort editing", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let editor = field.currentEditor
+    TextView(editor).insertTextValue("draft")
+
+    check field.abortEditing()
+    check field.stringValue == "abc"
+    check field.currentEditor.isNil
+    check editor.superview.isNil
+    check window.firstResponder.isNil
+
+  test "sendsActionOnEndEditing sends action before tab key-view movement":
+    let
+      window = newWindow("End editing action", frame = initRect(0, 0, 260, 120))
+      root = newView(frame = initRect(0, 0, 260, 120))
+      first = newTextField("one", frame = initRect(10, 10, 100, 24))
+      second = newTextField("two", frame = initRect(10, 44, 100, 24))
+      action = actionSelector("textFieldEndEditingAction")
+
+    var actionCount = 0
+
+    proc onEndEditing(sender: DynamicAgent) =
+      check sender == DynamicAgent(first)
+      inc actionCount
+
+    first.textFieldCell().setSendsActionOnEndEditing(true)
+    first.target = newActionTarget(action, onEndEditing)
+    first.action = action
+    root.addSubview(first)
+    root.addSubview(second)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(first)
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check actionCount == 1
+    check window.fieldEditorClient() == second
 
   test "text field cells can provide a custom field editor":
     let

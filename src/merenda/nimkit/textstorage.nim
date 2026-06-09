@@ -64,6 +64,28 @@ proc copyTextStorage*(storage: TextStorage): TextStorage =
   result.xStringValue = storage.xStringValue
   result.xRuns = storage.xRuns
 
+proc sliceTextStorage*(storage: TextStorage, range: TextRange): TextStorage =
+  result = newTextStorage()
+  if storage.isNil:
+    return
+  let
+    clamped = clampTextRange(storage.xStringValue.runeLen, range)
+    start = int(clamped.location)
+    stop = clamped.maxIndex
+  result.xStringValue = storage.xStringValue.runeSubStr(start, int(clamped.length))
+  for run in storage.xRuns:
+    let
+      runStart = int(run.range.location)
+      runStop = run.range.maxIndex
+      overlapStart = max(start, runStart)
+      overlapStop = min(stop, runStop)
+    if overlapStop > overlapStart:
+      result.xRuns.add TextAttributeRun(
+        range: initTextRange(overlapStart - start, overlapStop - overlapStart),
+        attributes: run.attributes,
+      )
+  result.normalizeRuns()
+
 proc stringValue*(storage: TextStorage): string =
   if storage.isNil: "" else: storage.xStringValue
 
@@ -186,6 +208,22 @@ proc setAttributes*(
         )
   storage.xRuns = nextRuns
   storage.normalizeRuns()
+
+proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
+  if storage.isNil:
+    return
+  if inserted.isNil:
+    storage.replace(range, "")
+    return
+  let
+    clamped = clampTextRange(storage.len, range)
+    start = int(clamped.location)
+  storage.replace(clamped, inserted.stringValue())
+  for run in inserted.xRuns:
+    storage.setAttributes(
+      initTextRange(start + int(run.range.location), int(run.range.length)),
+      run.attributes,
+    )
 
 iterator runs*(storage: TextStorage): TextAttributeRun =
   if not storage.isNil:

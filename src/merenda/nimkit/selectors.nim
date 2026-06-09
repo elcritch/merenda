@@ -4,6 +4,7 @@ from figdraw/figbasics import ZLevel
 
 import ./drawing
 import ./events
+import ./texttypes
 import ./types
 
 export drawing
@@ -73,10 +74,20 @@ protocol ButtonActionProtocol:
 
 protocol TextInputProtocol:
   method insertText*(text: string) {.optional.}
+  method setMarkedText*(
+    text: string, selectedRange: TextRange, replacementRange: TextRange
+  ) {.optional.}
+
+  method unmarkText*() {.optional.}
 
 protocol TextEditingCommandProtocol:
   method selectText*(args: ActionArgs) {.optional.}
   method selectAll*(args: ActionArgs) {.optional.}
+  method copy*(args: ActionArgs) {.optional.}
+  method cut*(args: ActionArgs) {.optional.}
+  method paste*(args: ActionArgs) {.optional.}
+  method undo*(args: ActionArgs) {.optional.}
+  method redo*(args: ActionArgs) {.optional.}
   method deleteBackward*(args: ActionArgs) {.optional.}
   method deleteForward*(args: ActionArgs) {.optional.}
   method deleteWordBackward*(args: ActionArgs) {.optional.}
@@ -98,6 +109,8 @@ protocol KeyViewCommandProtocol:
   method insertNewline*(args: ActionArgs) {.optional.}
   method insertTab*(args: ActionArgs) {.optional.}
   method insertBacktab*(args: ActionArgs) {.optional.}
+  method insertNewlineIgnoringFieldEditor*(args: ActionArgs) {.optional.}
+  method insertTabIgnoringFieldEditor*(args: ActionArgs) {.optional.}
   method selectNextKeyView*(args: ActionArgs) {.optional.}
   method selectPreviousKeyView*(args: ActionArgs) {.optional.}
 

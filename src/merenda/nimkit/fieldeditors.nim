@@ -85,6 +85,12 @@ proc notifyClientChanged(editor: FieldEditor) =
   )
   discard client.sendLocalIfHandled(didChangeTextInEditor(), editor)
 
+proc validateEditing*(editor: FieldEditor): bool =
+  if editor.isNil or editor.client().isNil:
+    return true
+  editor.notifyClientChanged()
+  true
+
 proc notifyClientFocusChanged(editor: FieldEditor) =
   let client = editor.client()
   if client.isNil:
@@ -171,14 +177,23 @@ protocol DefaultFieldEditorEvents of ResponderEventProtocol:
 
   method keyDown(editor: FieldEditor, event: KeyEvent) =
     if editor.editable and event.text.isInsertableText():
-      editor.replaceSelectedText(event.text)
+      TextView(editor).insertTextValue(event.text)
       editor.notifyClientChanged()
 
 protocol DefaultFieldEditorInput of TextInputProtocol:
   method insertText(editor: FieldEditor, text: string) =
     if text.isInsertableText():
-      editor.replaceSelectedText(text)
+      TextView(editor).insertTextValue(text)
       editor.notifyClientChanged()
+
+  method setMarkedText(
+      editor: FieldEditor, text: string, selectedRange, replacementRange: TextRange
+  ) =
+    TextView(editor).setMarkedTextValue(text, selectedRange, replacementRange)
+    editor.notifyClientChanged()
+
+  method unmarkText(editor: FieldEditor) =
+    TextView(editor).unmarkMarkedText()
 
 protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
   method selectText(editor: FieldEditor, args: ActionArgs) =
@@ -186,6 +201,25 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
 
   method selectAll(editor: FieldEditor, args: ActionArgs) =
     editor.selectAllText()
+
+  method copy(editor: FieldEditor, args: ActionArgs) =
+    discard editor.copyText()
+
+  method cut(editor: FieldEditor, args: ActionArgs) =
+    if editor.cutText():
+      editor.notifyClientChanged()
+
+  method paste(editor: FieldEditor, args: ActionArgs) =
+    if editor.pasteText():
+      editor.notifyClientChanged()
+
+  method undo(editor: FieldEditor, args: ActionArgs) =
+    if editor.undoText():
+      editor.notifyClientChanged()
+
+  method redo(editor: FieldEditor, args: ActionArgs) =
+    if editor.redoText():
+      editor.notifyClientChanged()
 
   method deleteBackward(editor: FieldEditor, args: ActionArgs) =
     editor.deleteBackwardText()
@@ -251,11 +285,20 @@ protocol DefaultFieldEditorKeyCommands of KeyViewCommandProtocol:
   method insertBacktab(editor: FieldEditor, args: ActionArgs) =
     discard editor.finishEditing(terCommit, temBacktab)
 
+  method insertNewlineIgnoringFieldEditor(editor: FieldEditor, args: ActionArgs) =
+    TextView(editor).insertTextValue("\n")
+    editor.notifyClientChanged()
+
+  method insertTabIgnoringFieldEditor(editor: FieldEditor, args: ActionArgs) =
+    TextView(editor).insertTextValue("\t")
+    editor.notifyClientChanged()
+
 proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)
   editor.editable = true
   editor.selectable = true
   editor.richText = true
+  editor.fieldEditor = true
   editor.setAcceptsFirstResponder(true)
   discard editor.withProtocol(DefaultFieldEditorResponder)
   discard editor.withProtocol(DefaultFieldEditorView)

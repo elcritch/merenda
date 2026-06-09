@@ -52,7 +52,7 @@ suite "nimkit key bindings":
     check bindings.commandFor(KeyEvent(key: keySpace, keyCode: keySpace.ord)).get() ==
       performClick()
     check bindings.commandFor(KeyEvent(key: keyEnter, keyCode: keyEnter.ord)).get() ==
-      performClick()
+      insertNewline()
 
   test "macOS key binding profile includes Cocoa text shortcuts":
     let bindings = initMacOSKeyBindings()
@@ -88,6 +88,21 @@ suite "nimkit key bindings":
     check bindings
     .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmCommand}))
     .get() == selectAll()
+    check bindings
+    .commandFor(KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmCommand}))
+    .get() == copy()
+    check bindings
+    .commandFor(KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: {kmCommand}))
+    .get() == cut()
+    check bindings
+    .commandFor(KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand}))
+    .get() == paste()
+    check bindings
+    .commandFor(KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: {kmCommand}))
+    .get() == undo()
+    check bindings
+    .commandFor(KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: {kmCommand, kmShift}))
+    .get() == redo()
 
   test "windows key binding profile includes platform text shortcuts":
     let bindings = initWindowsKeyBindings()
@@ -95,6 +110,21 @@ suite "nimkit key bindings":
     check bindings
     .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
     .get() == selectAll()
+    check bindings
+    .commandFor(KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl}))
+    .get() == copy()
+    check bindings
+    .commandFor(KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: {kmControl}))
+    .get() == cut()
+    check bindings
+    .commandFor(KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmControl}))
+    .get() == paste()
+    check bindings
+    .commandFor(KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: {kmControl}))
+    .get() == undo()
+    check bindings
+    .commandFor(KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl}))
+    .get() == redo()
     check bindings
     .commandFor(
       KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmControl})
@@ -119,6 +149,21 @@ suite "nimkit key bindings":
     check bindings
     .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
     .get() == selectAll()
+    check bindings
+    .commandFor(KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl}))
+    .get() == copy()
+    check bindings
+    .commandFor(KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: {kmControl}))
+    .get() == cut()
+    check bindings
+    .commandFor(KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmControl}))
+    .get() == paste()
+    check bindings
+    .commandFor(KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: {kmControl}))
+    .get() == undo()
+    check bindings
+    .commandFor(KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl}))
+    .get() == redo()
     check bindings
     .commandFor(KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmControl}))
     .get() == moveToEndOfLine()

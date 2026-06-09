@@ -38,7 +38,6 @@ type
     xAlignment: TextAlignment
     xTextColor: Color
     xFlags: TextFieldFlags
-    xCurrentEditor: FieldEditor
     xInsertionPoint: int
     xSelectionAnchor: int
 
@@ -172,15 +171,7 @@ protocol TextFieldProtocol from TextField:
     textField.setNeedsDisplay(true)
     true
 
-protocol TextFieldCellFieldEditorProtocol:
-  method fieldEditorForView*(controlView: View): FieldEditor {.optional.}
-  method setUpFieldEditorAttributes*(
-    editor: FieldEditor, controlView: View
-  ) {.optional.}
-
-  method endFieldEditing*(editor: FieldEditor, controlView: View) {.optional.}
-
-protocol DefaultTextFieldCellFieldEditor of TextFieldCellFieldEditorProtocol:
+protocol DefaultTextFieldCellEditing of CellEditingProtocol:
   method fieldEditorForView(cell: TextFieldCell, controlView: View): FieldEditor =
     nil
 
@@ -195,13 +186,36 @@ protocol DefaultTextFieldCellFieldEditor of TextFieldCellFieldEditorProtocol:
       editor.selectable = textField.isSelectable()
       editor.alignment = textField.alignment()
       editor.textColor = textField.textColor()
+      editor.typingAttributes = defaultTextAttributes(textField.textColor())
+      editor.allowsUndo = true
       if editor.textStorage().len > 0:
         editor.textStorage().setAttributes(
           initTextRange(0, editor.textStorage().len),
           defaultTextAttributes(textField.textColor()),
         )
 
-  method endFieldEditing(cell: TextFieldCell, editor: FieldEditor, controlView: View) =
+  method editWithFrame(
+      cell: TextFieldCell, frame: Rect, controlView: View, editor: FieldEditor
+  ) =
+    if editor.isNil:
+      return
+    cell.setUpFieldEditorAttributes(editor, controlView)
+    editor.frame = frame
+    if not controlView.isNil and editor.superview() != controlView:
+      controlView.addSubview(editor)
+
+  method selectWithFrame(
+      cell: TextFieldCell,
+      frame: Rect,
+      controlView: View,
+      editor: FieldEditor,
+      start, length: int,
+  ) =
+    cell.editWithFrame(frame, controlView, editor)
+    if not editor.isNil:
+      editor.selectedRange = initTextRange(start, length)
+
+  method endEditing(cell: TextFieldCell, editor: FieldEditor, controlView: View) =
     if not editor.isNil and editor.superview() == controlView:
       editor.removeFromSuperview()
 
@@ -235,19 +249,17 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
     textField.isEnabled and (textField.isEditable() or textField.isSelectable())
 
   method didBeginEditing(textField: TextField, editor: FieldEditor) =
-    textField.textFieldCell().setUpFieldEditorAttributes(editor, textField)
-    textField.xCurrentEditor = editor
+    textField.setCurrentEditor(editor)
     textField.xFlags.incl(tfEditing)
     textField.focused = true
     textField.focusVisible = editor.isFocusVisible()
-    textField.layoutFieldEditor()
-    if editor.superview() != textField:
-      textField.addSubview(editor)
-    editor.selectAllText()
+    textField.textFieldCell().selectWithFrame(
+      textField.fieldEditorFrame(), textField, editor, 0, editor.textStorage().len
+    )
     textField.setNeedsDisplay(true)
 
   method didChangeFocusInEditor(textField: TextField, editor: FieldEditor) =
-    if editor == textField.xCurrentEditor:
+    if editor == textField.activeFieldEditor():
       textField.focused = editor.isFocused()
       textField.focusVisible = editor.isFocusVisible()
 
@@ -260,11 +272,8 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
       textviews.insertionPoint(TextView(editor)),
       textviews.selectionAnchor(TextView(editor)),
     )
-    textField.textFieldCell().endFieldEditing(editor, textField)
-    if not textField.xCurrentEditor.isNil and
-        textField.xCurrentEditor.superview() == textField:
-      textField.xCurrentEditor.removeFromSuperview()
-    textField.xCurrentEditor = nil
+    textField.textFieldCell().endEditing(editor, textField)
+    textField.setCurrentEditor(nil)
     textField.xFlags.excl(tfEditing)
     textField.focused = false
     textField.focusVisible = false
@@ -281,11 +290,15 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
         nil
     case movement
     of temTab:
+      if textField.textFieldCell().sendsActionOnEndEditing():
+        discard textField.sendAction()
       if not ownerWindow.isNil:
         if not ownerWindow.selectKeyViewFollowingView(textField) and
             ownerWindow.firstResponder() == editor:
           discard ownerWindow.makeFirstResponder(nil)
     of temBacktab:
+      if textField.textFieldCell().sendsActionOnEndEditing():
+        discard textField.sendAction()
       if not ownerWindow.isNil:
         if not ownerWindow.selectKeyViewPrecedingView(textField) and
             ownerWindow.firstResponder() == editor:
@@ -295,7 +308,8 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
       if not ownerWindow.isNil and ownerWindow.firstResponder() == editor:
         discard ownerWindow.makeFirstResponder(nil)
     of temNone:
-      discard
+      if textField.textFieldCell().sendsActionOnEndEditing():
+        discard textField.sendAction()
 
 proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
@@ -318,16 +332,10 @@ proc currentSelection(textField: TextField): tuple[start, stop: int] =
 proc activeFieldEditor(textField: TextField): FieldEditor =
   if textField.isNil:
     return nil
-  textField.xCurrentEditor
+  activeEditor(Control(textField))
 
 proc currentEditor*(textField: TextField): FieldEditor =
-  if textField.isNil or textField.xCurrentEditor.isNil:
-    return nil
-  let owner = textField.window()
-  if owner of Window:
-    let editor = textField.xCurrentEditor
-    if Window(owner).firstResponder() == editor:
-      return editor
+  currentEditor(Control(textField))
 
 proc fieldEditorFrame(textField: TextField): Rect =
   let style = textField.effectiveAppearance().resolveTextFieldStyle(
@@ -694,7 +702,7 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
 proc initTextFieldCellFields*(cell: TextFieldCell) =
   initActionCellFields(cell)
   discard cell.withProtocol(DefaultTextFieldCellMeasurement)
-  discard cell.withProtocol(DefaultTextFieldCellFieldEditor)
+  discard cell.withProtocol(DefaultTextFieldCellEditing)
 
 proc newTextFieldCell*(): TextFieldCell =
   result = TextFieldCell()

@@ -4,6 +4,7 @@ import sigils/core
 
 import ./drawing
 import ./events
+import ./pasteboards
 import ./selectors
 import ./textlayout
 import ./textstorage
@@ -22,8 +23,16 @@ type
     tvEditable
     tvSelectable
     tvRichText
+    tvFieldEditor
+    tvAllowsUndo
 
   TextViewFlags = set[TextViewFlag]
+
+  TextUndoRecord = object
+    storageBefore: TextStorage
+    storageAfter: TextStorage
+    selectionBefore: TextRange
+    selectionAfter: TextRange
 
   TextView* = ref object of View
     xTextStorage: TextStorage
@@ -35,8 +44,17 @@ type
     xInsertionPoint: int
     xTextColor: Color
     xSelectionColor: Color
+    xTypingAttributes: TextAttributes
+    xMarkedRange: TextRange
+    xHasMarkedText: bool
+    xMarkedUndoStorage: TextStorage
+    xMarkedUndoSelection: TextRange
+    xUndoStack: seq[TextUndoRecord]
+    xRedoStack: seq[TextUndoRecord]
+    xApplyingUndo: bool
 
 proc syncLayout(textView: TextView)
+proc clearMarkedText(textView: TextView)
 proc textViewStringValue(textView: TextView): string
 proc setTextViewStringValue(textView: TextView, value: string)
 proc textViewSelectedRange(textView: TextView): TextRange
@@ -46,6 +64,17 @@ proc textViewSelectionAnchor(textView: TextView): int
 proc setCursor*(textView: TextView, index: int, extending = false)
 proc selectAllText*(textView: TextView)
 proc replaceSelectedText*(textView: TextView, insertion: string)
+proc insertTextValue*(textView: TextView, insertion: string)
+proc setMarkedTextValue*(
+  textView: TextView, text: string, selectedRange, replacementRange: TextRange
+)
+
+proc unmarkMarkedText*(textView: TextView)
+proc copyText*(textView: TextView): bool
+proc cutText*(textView: TextView): bool
+proc pasteText*(textView: TextView): bool
+proc undoText*(textView: TextView): bool
+proc redoText*(textView: TextView): bool
 proc deleteBackwardText*(textView: TextView)
 proc deleteForwardText*(textView: TextView)
 proc deleteWordBackwardText*(textView: TextView)
@@ -112,6 +141,7 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   let total = textView.xTextStorage.len
   textView.xInsertionPoint = clampIndex(total, textView.xInsertionPoint)
   textView.xSelectionAnchor = clampIndex(total, textView.xSelectionAnchor)
+  textView.clearMarkedText()
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
 
@@ -144,6 +174,7 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   let total = textView.xTextStorage.len
   textView.xInsertionPoint = total
   textView.xSelectionAnchor = total
+  textView.clearMarkedText()
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
@@ -187,6 +218,30 @@ proc `richText=`*(textView: TextView, richText: bool) =
   else:
     textView.xFlags.excl tvRichText
 
+proc isFieldEditor*(textView: TextView): bool =
+  (not textView.isNil) and tvFieldEditor in textView.xFlags
+
+proc `fieldEditor=`*(textView: TextView, fieldEditor: bool) =
+  if textView.isNil or fieldEditor == textView.isFieldEditor:
+    return
+  if fieldEditor:
+    textView.xFlags.incl tvFieldEditor
+  else:
+    textView.xFlags.excl tvFieldEditor
+
+proc allowsUndo*(textView: TextView): bool =
+  (not textView.isNil) and tvAllowsUndo in textView.xFlags
+
+proc `allowsUndo=`*(textView: TextView, allowsUndo: bool) =
+  if textView.isNil or allowsUndo == textView.allowsUndo:
+    return
+  if allowsUndo:
+    textView.xFlags.incl tvAllowsUndo
+  else:
+    textView.xFlags.excl tvAllowsUndo
+    textView.xUndoStack.setLen(0)
+    textView.xRedoStack.setLen(0)
+
 proc alignment*(textView: TextView): TextAlignment =
   if textView.isNil: taLeft else: textView.xAlignment
 
@@ -221,11 +276,41 @@ proc `selectionColor=`*(textView: TextView, color: Color) =
   textView.xSelectionColor = color
   textView.setNeedsDisplay(true)
 
+proc typingAttributes*(textView: TextView): TextAttributes =
+  if textView.isNil:
+    defaultTextAttributes()
+  else:
+    textView.xTypingAttributes
+
+proc `typingAttributes=`*(textView: TextView, attributes: TextAttributes) =
+  if textView.isNil or textView.xTypingAttributes == attributes:
+    return
+  textView.xTypingAttributes = attributes
+
+proc hasMarkedText*(textView: TextView): bool =
+  (not textView.isNil) and textView.xHasMarkedText
+
+proc markedRange*(textView: TextView): TextRange =
+  if textView.hasMarkedText:
+    textView.xMarkedRange
+  else:
+    initTextRange(0, 0)
+
 proc textViewInsertionPoint(textView: TextView): int =
   if textView.isNil: 0 else: textView.xInsertionPoint
 
 proc textViewSelectionAnchor(textView: TextView): int =
   if textView.isNil: 0 else: textView.xSelectionAnchor
+
+proc updateTypingAttributesForSelection(textView: TextView) =
+  if textView.isNil or textView.xTextStorage.len == 0:
+    return
+  let
+    total = textView.xTextStorage.len
+    anchor = clampIndex(total, textView.xSelectionAnchor)
+    cursor = clampIndex(total, textView.xInsertionPoint)
+    index = max(0, min(min(anchor, cursor), total - 1))
+  textView.xTypingAttributes = textView.xTextStorage.attributesAt(index)
 
 proc textViewSelectedRange(textView: TextView): TextRange =
   if textView.isNil:
@@ -244,6 +329,7 @@ proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
     length = max(0, min(int(value.length), total - start))
   textView.xSelectionAnchor = start
   textView.xInsertionPoint = start + length
+  textView.updateTypingAttributesForSelection()
   textView.setNeedsDisplay(true)
 
 proc stringValue*(textView: TextView): string =
@@ -278,6 +364,99 @@ proc currentSelection(textView: TextView): tuple[start, stop: int] =
   result.start = min(anchor, cursor)
   result.stop = max(anchor, cursor)
 
+proc clampedRange(textView: TextView, range: TextRange): TextRange =
+  if textView.isNil:
+    return initTextRange(0, 0)
+  let
+    total = textView.xTextStorage.len
+    start = clampIndex(total, int(range.location))
+    length = max(0, min(int(range.length), total - start))
+  initTextRange(start, length)
+
+proc setSelection(textView: TextView, range: TextRange) =
+  let clamped = textView.clampedRange(range)
+  textView.xSelectionAnchor = int(clamped.location)
+  textView.xInsertionPoint = clamped.maxIndex
+  textView.updateTypingAttributesForSelection()
+
+proc clearMarkedText(textView: TextView) =
+  if textView.isNil:
+    return
+  textView.xHasMarkedText = false
+  textView.xMarkedRange = initTextRange(0, 0)
+  textView.xMarkedUndoStorage = nil
+  textView.xMarkedUndoSelection = initTextRange(0, 0)
+
+proc recordUndo(
+    textView: TextView,
+    before: TextStorage,
+    beforeSelection: TextRange,
+    afterSelection: TextRange,
+) =
+  if textView.isNil or textView.xApplyingUndo or not textView.allowsUndo:
+    return
+  let after = textView.xTextStorage.copyTextStorage()
+  if before.stringValue() == after.stringValue() and beforeSelection == afterSelection:
+    return
+  textView.xUndoStack.add TextUndoRecord(
+    storageBefore: before,
+    storageAfter: after,
+    selectionBefore: beforeSelection,
+    selectionAfter: afterSelection,
+  )
+  textView.xRedoStack.setLen(0)
+
+proc finishTextMutation(textView: TextView) =
+  textView.syncLayout()
+  textView.invalidateIntrinsicContentSize()
+  textView.setNeedsDisplay(true)
+
+proc replaceRange(
+    textView: TextView,
+    range: TextRange,
+    inserted: TextStorage,
+    record = true,
+    clearMark = true,
+) =
+  if textView.isNil or not textView.editable:
+    return
+  let
+    before = textView.xTextStorage.copyTextStorage()
+    beforeSelection = textView.textViewSelectedRange()
+    clamped = textView.clampedRange(range)
+    insertedLength = inserted.len
+    nextSelection = initTextRange(int(clamped.location) + insertedLength, 0)
+
+  textView.xTextStorage.replace(clamped, inserted)
+  if clearMark:
+    textView.clearMarkedText()
+  textView.setSelection(nextSelection)
+  textView.finishTextMutation()
+  if record:
+    textView.recordUndo(before, beforeSelection, textView.textViewSelectedRange())
+
+proc replaceRange(
+    textView: TextView,
+    range: TextRange,
+    insertion: string,
+    attributes: TextAttributes,
+    record = true,
+    clearMark = true,
+) =
+  textView.replaceRange(
+    range, newTextStorage(insertion, attributes), record = record, clearMark = clearMark
+  )
+
+proc displayTextStorage(textView: TextView): TextStorage =
+  if textView.isNil:
+    return newTextStorage()
+  result = textView.xTextStorage
+  if textView.xHasMarkedText and textView.xMarkedRange.length > 0:
+    result = textView.xTextStorage.copyTextStorage()
+    var attributes = result.attributesAt(int(textView.xMarkedRange.location))
+    attributes.underline = true
+    result.setAttributes(textView.xMarkedRange, attributes)
+
 proc syncLayout(textView: TextView) =
   if textView.isNil or textView.xLayoutManager.isNil:
     return
@@ -293,6 +472,7 @@ proc setCursor*(textView: TextView, index: int, extending = false) =
   textView.xInsertionPoint = cursor
   if not extending:
     textView.xSelectionAnchor = cursor
+  textView.updateTypingAttributesForSelection()
   textView.setNeedsDisplay(true)
 
 proc selectAllText*(textView: TextView) =
@@ -300,23 +480,140 @@ proc selectAllText*(textView: TextView) =
     return
   textView.xSelectionAnchor = 0
   textView.xInsertionPoint = textView.xTextStorage.len
+  textView.updateTypingAttributesForSelection()
   textView.setNeedsDisplay(true)
 
 proc replaceSelectedText*(textView: TextView, insertion: string) =
   if textView.isNil or not textView.editable:
     return
-  let
-    selected = textView.currentSelection()
-    attributes = textView.xTextStorage.attributesAt(selected.start)
-  textView.xTextStorage.replace(
-    initTextRange(selected.start, selected.stop - selected.start), insertion, attributes
+  let selected =
+    if textView.xHasMarkedText:
+      textView.xMarkedRange
+    else:
+      textView.textViewSelectedRange()
+  textView.replaceRange(selected, insertion, textView.xTypingAttributes)
+
+proc insertTextValue*(textView: TextView, insertion: string) =
+  if textView.isNil or not textView.editable:
+    return
+  if textView.xHasMarkedText:
+    let
+      before = textView.xMarkedUndoStorage
+      beforeSelection = textView.xMarkedUndoSelection
+    textView.replaceRange(
+      textView.xMarkedRange, insertion, textView.xTypingAttributes, record = false
+    )
+    if not before.isNil:
+      textView.recordUndo(before, beforeSelection, textView.textViewSelectedRange())
+  else:
+    textView.replaceSelectedText(insertion)
+
+proc setMarkedTextValue*(
+    textView: TextView, text: string, selectedRange, replacementRange: TextRange
+) =
+  if textView.isNil or not textView.editable:
+    return
+  let target =
+    if textView.xHasMarkedText:
+      textView.xMarkedRange
+    elif replacementRange.length > 0:
+      replacementRange
+    else:
+      textView.textViewSelectedRange()
+  let clamped = textView.clampedRange(target)
+  if not textView.xHasMarkedText:
+    textView.xMarkedUndoStorage = textView.xTextStorage.copyTextStorage()
+    textView.xMarkedUndoSelection = textView.textViewSelectedRange()
+  textView.replaceRange(
+    clamped, text, textView.xTypingAttributes, record = false, clearMark = false
   )
-  let cursor = selected.start + insertion.runeLen
-  textView.xInsertionPoint = cursor
-  textView.xSelectionAnchor = cursor
-  textView.syncLayout()
-  textView.invalidateIntrinsicContentSize()
+  let
+    markedStart = int(clamped.location)
+    markedLength = text.runeLen
+    selectedStart = markedStart + max(0, min(int(selectedRange.location), markedLength))
+    selectedLength = max(0, min(int(selectedRange.length), markedLength))
+  textView.xHasMarkedText = true
+  textView.xMarkedRange = initTextRange(markedStart, markedLength)
+  textView.setSelection(initTextRange(selectedStart, selectedLength))
   textView.setNeedsDisplay(true)
+
+proc unmarkMarkedText*(textView: TextView) =
+  if textView.isNil:
+    return
+  textView.clearMarkedText()
+  textView.setNeedsDisplay(true)
+
+proc copyText*(textView: TextView): bool =
+  if textView.isNil or not textView.selectable:
+    return false
+  let selected = textView.textViewSelectedRange()
+  if selected.length == 0:
+    return false
+  let pasteboard = generalPasteboard()
+  pasteboard.declareTypes([PasteboardTypeTextStorage, PasteboardTypeString])
+  discard pasteboard.setTextStorage(
+    PasteboardTypeTextStorage, textView.xTextStorage.sliceTextStorage(selected)
+  )
+  discard pasteboard.setString(
+    PasteboardTypeString, textView.xTextStorage.substring(selected)
+  )
+  true
+
+proc cutText*(textView: TextView): bool =
+  if textView.isNil or not textView.editable or not textView.copyText():
+    return false
+  textView.replaceSelectedText("")
+  true
+
+proc pasteText*(textView: TextView): bool =
+  if textView.isNil or not textView.editable:
+    return false
+  let
+    pasteboard = generalPasteboard()
+    kind = pasteboard.availableTypeFromArray(
+      [PasteboardTypeTextStorage, PasteboardTypeString]
+    )
+  case kind
+  of PasteboardTypeTextStorage:
+    let storage = pasteboard.textStorageForType(PasteboardTypeTextStorage)
+    if storage.isNil:
+      return false
+    let selected =
+      if textView.xHasMarkedText:
+        textView.xMarkedRange
+      else:
+        textView.textViewSelectedRange()
+    textView.replaceRange(selected, storage)
+    true
+  of PasteboardTypeString:
+    textView.insertTextValue(pasteboard.stringForType(PasteboardTypeString))
+    true
+  else:
+    false
+
+proc applyUndoRecord(textView: TextView, storage: TextStorage, selection: TextRange) =
+  textView.xApplyingUndo = true
+  textView.xTextStorage = storage.copyTextStorage()
+  textView.clearMarkedText()
+  textView.setSelection(selection)
+  textView.finishTextMutation()
+  textView.xApplyingUndo = false
+
+proc undoText*(textView: TextView): bool =
+  if textView.isNil or textView.xUndoStack.len == 0:
+    return false
+  let record = textView.xUndoStack.pop()
+  textView.applyUndoRecord(record.storageBefore, record.selectionBefore)
+  textView.xRedoStack.add record
+  true
+
+proc redoText*(textView: TextView): bool =
+  if textView.isNil or textView.xRedoStack.len == 0:
+    return false
+  let record = textView.xRedoStack.pop()
+  textView.applyUndoRecord(record.storageAfter, record.selectionAfter)
+  textView.xUndoStack.add record
+  true
 
 proc deleteBackwardText*(textView: TextView) =
   if textView.isNil or not textView.editable:
@@ -325,9 +622,9 @@ proc deleteBackwardText*(textView: TextView) =
   if selected.stop > selected.start:
     textView.replaceSelectedText("")
   elif selected.start > 0:
-    textView.xTextStorage.replace(initTextRange(selected.start - 1, 1), "")
-    textView.setCursor(selected.start - 1)
-    textView.syncLayout()
+    textView.replaceRange(
+      initTextRange(selected.start - 1, 1), "", textView.xTypingAttributes
+    )
 
 proc deleteForwardText*(textView: TextView) =
   if textView.isNil or not textView.editable:
@@ -338,9 +635,9 @@ proc deleteForwardText*(textView: TextView) =
   if selected.stop > selected.start:
     textView.replaceSelectedText("")
   elif selected.start < total:
-    textView.xTextStorage.replace(initTextRange(selected.start, 1), "")
-    textView.setCursor(selected.start)
-    textView.syncLayout()
+    textView.replaceRange(
+      initTextRange(selected.start, 1), "", textView.xTypingAttributes
+    )
 
 proc deleteWordBackwardText*(textView: TextView) =
   if textView.isNil or not textView.editable:
@@ -351,9 +648,9 @@ proc deleteWordBackwardText*(textView: TextView) =
   else:
     let cursor = textView.textViewStringValue().previousWordBoundary(selected.start)
     if cursor != selected.start:
-      textView.xTextStorage.replace(initTextRange(cursor, selected.start - cursor), "")
-      textView.setCursor(cursor)
-      textView.syncLayout()
+      textView.replaceRange(
+        initTextRange(cursor, selected.start - cursor), "", textView.xTypingAttributes
+      )
 
 proc deleteWordForwardText*(textView: TextView) =
   if textView.isNil or not textView.editable:
@@ -364,11 +661,11 @@ proc deleteWordForwardText*(textView: TextView) =
   else:
     let cursor = textView.textViewStringValue().nextWordBoundary(selected.start)
     if cursor != selected.start:
-      textView.xTextStorage.replace(
-        initTextRange(selected.start, cursor - selected.start), ""
+      textView.replaceRange(
+        initTextRange(selected.start, cursor - selected.start),
+        "",
+        textView.xTypingAttributes,
       )
-      textView.setCursor(selected.start)
-      textView.syncLayout()
 
 proc moveLeftText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
@@ -428,7 +725,12 @@ proc textIndexAtPoint*(textView: TextView, point: Point): int =
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method draw(textView: TextView, context: DrawContext) =
     textView.updateTextContainer()
-    let layout = textView.xLayoutManager.glyphArrangement()
+    let layout = textLayout(
+      textView.bounds,
+      textView.displayTextStorage(),
+      textView.alignment(),
+      textView.xTextContainer.wraps,
+    )
     let selected = textView.textViewSelectedRange()
     if selected.length > 0:
       discard context.addSelectedText(
@@ -455,12 +757,20 @@ protocol DefaultTextViewEvents of ResponderEventProtocol:
 
   method keyDown(textView: TextView, event: KeyEvent) =
     if textView.editable and event.shouldInsertText():
-      textView.replaceSelectedText(event.text)
+      textView.insertTextValue(event.text)
 
 protocol DefaultTextViewInput of TextInputProtocol:
   method insertText(textView: TextView, text: string) =
     if text.isInsertableText():
-      textView.replaceSelectedText(text)
+      textView.insertTextValue(text)
+
+  method setMarkedText(
+      textView: TextView, text: string, selectedRange, replacementRange: TextRange
+  ) =
+    textView.setMarkedTextValue(text, selectedRange, replacementRange)
+
+  method unmarkText(textView: TextView) =
+    textView.unmarkMarkedText()
 
 protocol DefaultTextViewCommands of TextEditingCommandProtocol:
   method selectText(textView: TextView, args: ActionArgs) =
@@ -468,6 +778,21 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
 
   method selectAll(textView: TextView, args: ActionArgs) =
     textView.selectAllText()
+
+  method copy(textView: TextView, args: ActionArgs) =
+    discard textView.copyText()
+
+  method cut(textView: TextView, args: ActionArgs) =
+    discard textView.cutText()
+
+  method paste(textView: TextView, args: ActionArgs) =
+    discard textView.pasteText()
+
+  method undo(textView: TextView, args: ActionArgs) =
+    discard textView.undoText()
+
+  method redo(textView: TextView, args: ActionArgs) =
+    discard textView.redoText()
 
   method deleteBackward(textView: TextView, args: ActionArgs) =
     textView.deleteBackwardText()
@@ -519,13 +844,19 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
 
 protocol DefaultTextViewKeyCommands of KeyViewCommandProtocol:
   method insertNewline(textView: TextView, args: ActionArgs) =
-    textView.replaceSelectedText("\n")
+    textView.insertTextValue("\n")
 
   method insertTab(textView: TextView, args: ActionArgs) =
-    textView.replaceSelectedText("\t")
+    textView.insertTextValue("\t")
 
   method insertBacktab(textView: TextView, args: ActionArgs) =
-    textView.replaceSelectedText("\t")
+    textView.insertTextValue("\t")
+
+  method insertNewlineIgnoringFieldEditor(textView: TextView, args: ActionArgs) =
+    textView.insertTextValue("\n")
+
+  method insertTabIgnoringFieldEditor(textView: TextView, args: ActionArgs) =
+    textView.insertTextValue("\t")
 
 proc initTextViewFields*(
     textView: TextView,
@@ -538,12 +869,13 @@ proc initTextViewFields*(
   textView.xTextContainer = initTextContainer()
   textView.xLayoutManager =
     newTextLayoutManager(textView.xTextStorage, textView.xTextContainer)
-  textView.xFlags = {tvEditable, tvSelectable, tvRichText}
+  textView.xFlags = {tvEditable, tvSelectable, tvRichText, tvAllowsUndo}
   textView.xAlignment = taLeft
   textView.xInsertionPoint = textView.xTextStorage.len
   textView.xSelectionAnchor = textView.xInsertionPoint
   textView.xTextColor = initColor(0.08, 0.09, 0.11)
   textView.xSelectionColor = initColor(0.24, 0.56, 1.0, 0.34)
+  textView.xTypingAttributes = defaultTextAttributes(textView.xTextColor)
   textView.setAcceptsFirstResponder(true)
   if installDefaultProtocols:
     discard textView.withProtocol(DefaultTextViewDrawing)
