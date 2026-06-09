@@ -134,6 +134,63 @@ suite "nimkit application":
     check not window.hasActiveTransientSession()
     check windowHookEvents == @["shouldDismiss", "didDismiss"]
 
+  test "nil-target actions dispatch through window app and app delegate":
+    let
+      app = newApplication()
+      window = newWindow("Action chain", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      button = newButton("Run", frame = initRect(20, 20, 90, 32))
+      action = actionSelector("appDelegateAction")
+
+    var
+      actionCount = 0
+      actionSender: DynamicAgent
+
+    proc onAction(sender: DynamicAgent) =
+      inc actionCount
+      actionSender = sender
+
+    let delegate = newActionTarget(action, onAction)
+    app.delegate = delegate
+    button.action = action
+    root.addSubview(button)
+    window.setContentView(root)
+    app.addWindow(window)
+
+    check button.sendAction()
+    check actionCount == 1
+    check actionSender == DynamicAgent(button)
+
+  test "window key commands continue through application delegate":
+    let
+      app = newApplication()
+      window = newWindow("Command chain", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      child = newView(frame = initRect(20, 20, 80, 32))
+      action = actionSelector("appDelegateCommand")
+
+    var
+      actionCount = 0
+      actionSender: DynamicAgent
+
+    proc onAction(sender: DynamicAgent) =
+      inc actionCount
+      actionSender = sender
+
+    child.setAcceptsFirstResponder(true)
+    root.addSubview(child)
+    window.setContentView(root)
+    window.bindKey("k", {kmCommand}, action)
+    app.delegate = newActionTarget(action, onAction)
+    app.addWindow(window)
+
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmCommand})
+    )
+    check actionCount == 1
+    check actionSender == DynamicAgent(child)
+
   test "raw mouse input converts from reported input size to logical size":
     let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)
 
