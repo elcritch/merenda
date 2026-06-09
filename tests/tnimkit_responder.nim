@@ -353,10 +353,26 @@ suite "nimkit responder":
     check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
     check field.isFocused
     check field.isFocusVisible
     check not first.isFocused
     check field.selectedRange == initTextRange(0, 5)
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == last
+    check last.isFocused
+    check last.isFocusVisible
+    check not field.isFocused
+    check field.currentEditor.isNil
+    check window.fieldEditor().superview.isNil
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check window.firstResponder == window.fieldEditor()
+    check field.currentEditor == window.fieldEditor()
 
     check window.dispatchKeyDown(
       KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})

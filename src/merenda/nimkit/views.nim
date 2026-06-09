@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./responders
 import ./selectors
 import ./types
@@ -111,6 +113,25 @@ proc focusVisible*(view: View): bool =
 proc `focusVisible=`*(view: View, focusVisible: bool) =
   view.setWidgetState(ssFocusVisible, focusVisible)
 
+protocol DefaultViewResponder of ResponderProtocol:
+  method setFirstResponderFocusState(view: View, focused, focusVisible: bool) =
+    if view.isNil:
+      return
+    var states = view.xWidgetStates
+    if focused:
+      states.incl ssFocused
+    else:
+      states.excl ssFocused
+    if focusVisible:
+      states.incl ssFocusVisible
+    else:
+      states.excl ssFocusVisible
+    if view.xWidgetStates == states:
+      return
+    view.xWidgetStates = states
+    view.invalidateIntrinsicContentSize()
+    view.setNeedsDisplay(true)
+
 proc needsUpdateConstraints*(view: View): bool =
   (not view.isNil) and view.xNeedsUpdateConstraints
 
@@ -212,6 +233,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xCompressionPriority[laVertical] = LayoutPriorityHigh
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
+  discard view.withProtocol(DefaultViewResponder)
   view.observeProtocol(view, ViewSuperviewLifecycleSlots)
 
 proc newView*(frame: Rect = AutoRect): View =

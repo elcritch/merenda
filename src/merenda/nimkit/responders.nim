@@ -34,6 +34,9 @@ protocol ResponderProtocol from Responder:
   method didResignFirstResponder*(self: Responder) =
     discard
 
+  method setFirstResponderFocusState*(self: Responder, focused, focusVisible: bool) =
+    discard
+
   method tryToPerform*(self: Responder, args: TryToPerformArgs): bool =
     self.sendLocalIfHandled(args.selector, ActionArgs(sender: args.sender))
 

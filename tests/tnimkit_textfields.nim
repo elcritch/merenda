@@ -1,6 +1,119 @@
-import std/unittest
+import std/[unicode, unittest]
+
+import figdraw/fignodes
+
+import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/types as nimkitTypes
+
+type CustomEditorTextFieldCell = ref object of TextFieldCell
+  editor: FieldEditor
+
+type TextFieldChangeSpy = ref object of Agent
+  changeCount: int
+
+type TextFieldPasteboardProvider = ref object of DynamicAgent
+  text: string
+
+protocol TextFieldPasteboardProviderProtocol of PasteboardProviderProtocol:
+  method pasteboardTypes(
+      provider: TextFieldPasteboardProvider, pasteboard: Pasteboard
+  ): seq[string] =
+    if provider.text.len > 0:
+      result.add PasteboardTypeString
+
+  method stringForPasteboardType(
+      provider: TextFieldPasteboardProvider, request: PasteboardTypeRequest
+  ): string =
+    if request.kind == PasteboardTypeString: provider.text else: ""
+
+  method setStringForPasteboardType(
+      provider: TextFieldPasteboardProvider, request: PasteboardStringRequest
+  ): bool =
+    if request.kind != PasteboardTypeString:
+      return false
+    provider.text = request.value
+    true
+
+  method clearPasteboardContents(
+      provider: TextFieldPasteboardProvider, pasteboard: Pasteboard
+  ): bool =
+    provider.text = ""
+    true
+
+proc newTextFieldPasteboardProvider(text: string): TextFieldPasteboardProvider =
+  result = TextFieldPasteboardProvider(text: text)
+  discard result.withProtocol(TextFieldPasteboardProviderProtocol)
+
+proc rememberTextFieldChange(spy: TextFieldChangeSpy, sender: DynamicAgent) {.slot.} =
+  inc spy.changeCount
+
+protocol CustomEditorTextFieldCellProtocol of CellEditingProtocol:
+  method fieldEditorForView(
+      cell: CustomEditorTextFieldCell, controlView: View
+  ): FieldEditor =
+    cell.editor
+
+proc newCustomEditorTextFieldCell(editor: FieldEditor): CustomEditorTextFieldCell =
+  result = CustomEditorTextFieldCell(editor: editor)
+  initTextFieldCellFields(result)
+  discard result.withProtocol(CustomEditorTextFieldCellProtocol)
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+proc renderedRect(node: Fig): nimkitTypes.Rect =
+  nimkitTypes.initRect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
+
+proc containsRect(outer, inner: nimkitTypes.Rect): bool =
+  inner.minX >= outer.minX - 0.01'f32 and inner.minY >= outer.minY - 0.01'f32 and
+    inner.maxX <= outer.maxX + 0.01'f32 and inner.maxY <= outer.maxY + 0.01'f32
+
+proc nodeRenderedInView(node: Fig, view: View): bool =
+  view.rectToWindow(view.bounds).containsRect(node.renderedRect())
+
+proc renderedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
+  for node in nodes:
+    if node.kind == nkText and node.renderedText() == text and
+        node.nodeRenderedInView(view):
+      return true
+
+proc renderedSelectedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
+  for node in nodes:
+    if node.kind == nkText and NfSelectText in node.flags and node.renderedText() == text and
+        node.nodeRenderedInView(view):
+      return true
+
+proc renderedCaretInView(
+    nodes: openArray[Fig], view: View, color: nimkitTypes.Color
+): bool =
+  for node in nodes:
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == color.rgba and abs(node.screenBox.w - 1.0) <= 0.01 and
+        node.nodeRenderedInView(view):
+      return true
+
+proc renderedFocusRingInView(nodes: openArray[Fig], view: View): bool =
+  let viewRect = view.rectToWindow(view.bounds)
+  for node in nodes:
+    if node.kind == nkRectangle and node.stroke.weight > 1.0 and
+        not viewRect.intersection(node.renderedRect()).isEmpty:
+      return true
+
+proc renderedFocusRingOutsetsView(nodes: openArray[Fig], view: View): bool =
+  let viewRect = view.rectToWindow(view.bounds)
+  for node in nodes:
+    if node.kind != nkRectangle or node.stroke.weight <= 1.0:
+      continue
+    let ringRect = node.renderedRect()
+    if ringRect.minX < viewRect.minX and ringRect.minY < viewRect.minY and
+        ringRect.maxX > viewRect.maxX and ringRect.maxY > viewRect.maxY:
+      return true
 
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
@@ -69,6 +182,8 @@ suite "nimkit text fields":
     check window.makeFirstResponder(field)
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
     check field.isEditing
     check field.selectedRange == initTextRange(0, 3)
 
@@ -79,6 +194,32 @@ suite "nimkit text fields":
     check window.dispatchKeyDown(KeyEvent(text: "y", key: keyY, keyCode: keyY.ord))
     check field.stringValue == "Xy"
     check field.selectedRange == initTextRange(2, 0)
+
+  test "window-backed field editor renders live text before blur":
+    let
+      window = newWindow("Text field render", frame = initRect(0, 0, 420, 220))
+      root = newView(frame = initRect(0, 0, 420, 220))
+      title = newTitleLabel("Text Field", frame = initRect(28, 24, 240, 28))
+      field = newTextField("Edit me", frame = initRect(28, 70, 240, 30))
+      secondField = newTextField("Tab here", frame = initRect(28, 112, 240, 30))
+      status =
+        newStatusLabel("Values: Edit me / Tab here", frame = initRect(28, 154, 320, 24))
+
+    root.addSubview(title, field, secondField, status)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let focusedNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check focusedNodes.renderedSelectedTextInView(field, "Edit me")
+    check focusedNodes.renderedFocusRingInView(field)
+    check focusedNodes.renderedFocusRingOutsetsView(field)
+
+    check window.dispatchKeyDown(KeyEvent(text: "X", key: keyX, keyCode: keyX.ord))
+    let editedNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check editedNodes.renderedTextInView(field, "X")
+    check editedNodes.renderedCaretInView(field, field.textColor())
+    check editedNodes.renderedFocusRingInView(field)
+    check editedNodes.renderedFocusRingOutsetsView(field)
 
   test "insertText respects text field editability":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
@@ -230,7 +371,34 @@ suite "nimkit text fields":
     check field.stringValue == "q"
     check field.selectedRange == initTextRange(1, 0)
 
-  test "mouse down focuses text field and places caret at the end":
+  test "paste shortcut inserts provider-backed general pasteboard text":
+    let
+      pasteboard = generalPasteboard()
+      previousProvider = pasteboard.provider
+      provider = newTextFieldPasteboardProvider("clip")
+      window = newWindow("Text paste", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("az", frame = initRect(10, 10, 140, 24))
+
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    pasteboard.provider = provider
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+    field.selectedRange = initTextRange(1, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: shortcutModifiers())
+    )
+    check field.stringValue == "aclipz"
+    check field.selectedRange == initTextRange(5, 0)
+
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    pasteboard.provider = previousProvider
+
+  test "mouse down focuses text field and places caret at clicked position":
     let
       window = newWindow("Text mouse", frame = initRect(0, 0, 240, 120))
       root = newView(frame = initRect(0, 0, 240, 120))
@@ -242,7 +410,141 @@ suite "nimkit text fields":
     check window.mouseDownAt(initPoint(20, 20))
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
     check field.isFocused
     check not field.isFocusVisible
     check field.isEditing
-    check field.selectedRange == initTextRange(6, 0)
+    check field.selectedRange == initTextRange(1, 0)
+
+    check window.makeFirstResponder(field)
+    check window.firstResponder == window.fieldEditor()
+    check field.isFocused
+    check field.isFocusVisible
+    check window.fieldEditor().isFocusVisible
+
+    check window.mouseDownAt(initPoint(30, 20))
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
+    check field.isFocused
+    check not field.isFocusVisible
+    check not window.fieldEditor().isFocusVisible
+    check field.isEditing
+
+  test "return ends field editor editing and sends text field action":
+    let
+      window = newWindow("Text return", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      action = actionSelector("textFieldReturnAction")
+
+    var actionCount = 0
+
+    proc onReturn(sender: DynamicAgent) =
+      check sender == DynamicAgent(field)
+      inc actionCount
+
+    field.target = newActionTarget(action, onReturn)
+    field.action = action
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditor().superview == field
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check actionCount == 1
+    check not field.isEditing
+    check field.currentEditor.isNil
+    check window.fieldEditor().superview.isNil
+    check not field.isFocused
+    check window.firstResponder != window.fieldEditor()
+
+  test "validateEditing syncs field editor text without ending editing":
+    let
+      window = newWindow("Validate editing", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      spy = TextFieldChangeSpy()
+
+    field.connect(textDidChange, spy, rememberTextFieldChange)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let editor = field.currentEditor
+    check editor == window.fieldEditor()
+
+    TextView(editor).insertTextValue("draft")
+    check spy.changeCount == 0
+    check field.validateEditing()
+    check spy.changeCount == 1
+    check field.currentEditor == editor
+    check window.firstResponder == editor
+    check field.stringValue == "draft"
+
+  test "abortEditing cancels field editor text and clears first responder":
+    let
+      window = newWindow("Abort editing", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let editor = field.currentEditor
+    TextView(editor).insertTextValue("draft")
+
+    check field.abortEditing()
+    check field.stringValue == "abc"
+    check field.currentEditor.isNil
+    check editor.superview.isNil
+    check window.firstResponder.isNil
+
+  test "sendsActionOnEndEditing sends action before tab key-view movement":
+    let
+      window = newWindow("End editing action", frame = initRect(0, 0, 260, 120))
+      root = newView(frame = initRect(0, 0, 260, 120))
+      first = newTextField("one", frame = initRect(10, 10, 100, 24))
+      second = newTextField("two", frame = initRect(10, 44, 100, 24))
+      action = actionSelector("textFieldEndEditingAction")
+
+    var actionCount = 0
+
+    proc onEndEditing(sender: DynamicAgent) =
+      check sender == DynamicAgent(first)
+      inc actionCount
+
+    first.textFieldCell().setSendsActionOnEndEditing(true)
+    first.target = newActionTarget(action, onEndEditing)
+    first.action = action
+    root.addSubview(first)
+    root.addSubview(second)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(first)
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check actionCount == 1
+    check window.fieldEditorClient() == second
+
+  test "text field cells can provide a custom field editor":
+    let
+      window = newWindow("Custom editor", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      customEditor = newFieldEditor()
+      customCell = newCustomEditorTextFieldCell(customEditor)
+
+    field.setCell(customCell)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    check window.firstResponder == customEditor
+    check window.fieldEditorClient() == field
+    check field.currentEditor == customEditor
+    check customEditor.superview == field
+    check customEditor.selectedRange == initTextRange(0, 3)

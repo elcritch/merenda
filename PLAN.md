@@ -17,72 +17,156 @@ Detailed layout, constraint, invalidation, and solver notes live in
 
 NimKit has the core desktop-control slice in place: views, responders, windows,
 theme/rendering, intrinsic sizing, constraints, stack/form/grid containers,
-buttons, text fields, combo boxes, popup list infrastructure, and the first
-standalone `ListView`.
+buttons, text fields, combo boxes, scroll views, list views, table views, basic
+text editing lifecycle, action dispatch, and in-process pasteboard support.
 
-The next work should keep building on that stable core rather than reopening the
-layout model unless a new control proves a missing shape.
+The next work should move NimKit toward the OpenSTEP/AppKit framework shape:
+application/window/menu/responder infrastructure first, then richer view,
+pasteboard, dragging, graphics-resource, document, table, and outline systems.
+Avoid adding widget-local special cases where AppKit solves the behavior through
+the application, responder, view, window, or control/cell layers.
 
 ## Near-Term Work
 
-### ScrollView And ListView
+### OpenSTEP Application Spine
 
-Build this stage as reusable infrastructure, not as list-only behavior. The
-target is enough Cocoa/AppKit-like behavior to support complex applications:
-sidebars, inspectors, pickers, logs, search results, simple data browsers, and
-future table/outline-style controls.
+Build the framework-level pieces that AppKit treats as core infrastructure.
 
-### TableView
+1. Add real menu infrastructure:
+   - `Menu` and `MenuItem` objects with title, action, target, state, enabled
+     state, key equivalent, modifier mask, submenu, separator item, tag, and
+     optional represented/user info
+   - application `mainMenu` and `windowsMenu`
+   - menu validation through the responder/action chain
+   - key-equivalent dispatch before normal key handling
+   - menu delegate hooks such as update/open/close notifications
+2. Strengthen `Application`:
+   - track current event, key window, main window, active/running/hidden state
+   - add activation, hide/unhide, termination request/reply, and application
+     delegate lifecycle hooks
+   - add modal sessions as a first-class application/window flow instead of
+     ad-hoc control state
+3. Strengthen `Window`:
+   - style masks, levels, key/main window roles, delegates, min/max sizes,
+     resize increments, autosave names, initial/future first responder, and
+     richer screen/window/view coordinate conversion
+   - modal sheets, panels, alerts, and open/save panels after the core window
+     delegate and modal-session model is stable
 
-Build `TableView` as a sibling control that reuses the durable parts of
-`ListView`: scroll integration, fixed-height row virtualization, selection
-ranges, keyboard/focus behavior, row activation, row states, and list drawing
-affordances. Keep `ListView` as the simple single-column control; extract shared
-row infrastructure only when the table implementation proves the boundary.
+### Responder, Action, And Validation Chain
 
-1. Implement table layout and headers:
-   - compute column frames from ordered `TableColumn` widths
-   - add a header band with column title rendering, hover/pressed state, focus
-     handoff, and hit testing
-   - support vertical scrolling in the first milestone; add horizontal scrolling
-     once total column width can exceed the viewport
-   - keep header, row, cell, and grid metrics in theme/appearance types
-2. Add table affordances in AppKit order:
-   - alternating row backgrounds, row hover/pressed states, separators, and grid
-     lines using existing `WidgetState` and theme roles
-   - column resizing with minimum/maximum constraints
-   - sort request state and sort indicator rendering; let callers own the data
-     ordering instead of sorting opaque data internally
-   - column reordering after resizing and sorting are solid
-3. Defer advanced table/outline behavior until the base is solid:
-   - editable cells and commit/cancel flow
-   - cell selection and column selection
-   - drag reordering
-   - tree disclosure rows and `OutlineView`
-   - frozen columns, column groups, and very-wide column virtualization
+Move closer to `NSResponder` semantics while keeping NimKit's explicit return
+values.
 
-### Controls
+1. Expand event coverage:
+   - key up, modifier flag changes, right/other mouse events, scroll phases,
+     help requests, and cursor/tracking events
+2. Expand command/action dispatch:
+   - `performKeyEquivalent`, `tryToPerform`, `doCommandBySelector`,
+     `validRequestorForSendType`, and undo-manager lookup through the chain
+   - richer movement/editing selectors for text, menu commands, tables, and
+     collection-like controls
+3. Document and test the responder contract:
+   - handlers return whether an event/action was consumed
+   - unhandled events continue through the next responder
+   - controls may apply policy before forwarding, matching AppKit's split
+     between generic dispatch and control-specific interpretation
 
-- Keep text editing scoped to single-line control behavior for now. Grow
-  command selectors and key bindings before adding multiline editor features.
-- Add new controls only after their default frame behavior, intrinsic sizing,
-  focus handling, theme metrics, and examples can use the existing measurement
-  path from the start.
-- Keep delegate/custom policy hooks selector-based and explicit where they
-  affect behavior. Use generic forwarding for control-to-cell delegation, not
-  for arbitrary view or delegate dispatch.
+### View System Parity
 
-### Rendering And Events
+Fill in high-value `NSView` behavior before adding more complex controls.
 
-- Keep whole-window FigDraw rebuilds until they become measurable. Preserve
-  dirty-rect metadata and explicit display traversal so a later backend can
-  narrow rendering without changing view APIs.
-- Add clipped dirty-rect rendering only when the FigDraw/backend boundary has a
-  concrete partial-present path.
-- Grow the default key binding table only as new text editing commands, menu
-  shortcuts, and richer key equivalents need it.
-- Build future menus, popovers, and drag/tracking behavior on the existing
-  transient popup/session base so dismissal and focus restoration stay shared.
+1. Add view identity and hierarchy APIs:
+   - tag, identifier, lookup by tag, positioned subview insertion, subview
+     replacement, subview sorting, and view lifecycle notifications
+2. Expand coordinate and display behavior:
+   - flipped coordinate support where needed, visible-rect queries, richer
+     invalidation/display traversal, focus-ring type, alpha/shadow, and clearer
+     frame/bounds conversion semantics
+3. Add tracking affordances:
+   - cursor rects, tracking rects/areas, tooltips, drag registration, and
+     autoscroll hooks
+
+### Pasteboard And Dragging
+
+Turn the current in-process text pasteboard into an AppKit-like data exchange
+foundation.
+
+1. Add named pasteboards:
+   - general, drag, find, font, ruler, and unique pasteboards
+   - change counts, global release semantics where a backend supports them, and
+     typed data declarations
+2. Add richer pasteboard payloads:
+   - strings, text storage, data blobs, property lists, URLs/files, colors,
+     fonts, and images as the resource types land
+   - owner/lazy-data callbacks for expensive values
+3. Add dragging protocols:
+   - source and destination hooks, drag operations, dragging info, session
+     lifecycle, promised files, and control/table/list integration
+
+### Graphics Resources
+
+Keep FigDraw as the renderer boundary, but add AppKit-style resource objects on
+top of it.
+
+1. Add richer color support:
+   - color spaces, grayscale/RGB/HSB/CMYK constructors, system colors, theme
+     conversion, and pasteboard support
+2. Add font resources:
+   - system/user/fixed fonts, traits, metrics, descriptors, and typing
+     attribute integration
+3. Add image resources:
+   - file/data/pasteboard construction, named images, size/cache policy, image
+     views, and image drawing nodes
+
+### Documents And Controllers
+
+Add the document/window-controller layer after application, menu, and window
+semantics are stable enough to host it.
+
+1. Add `WindowController`:
+   - owns a window, controls loading/showing/closing, synchronizes titles, and
+     bridges window delegates without making every document own window details
+2. Add `Document`:
+   - file URL/name/type, display name, edited state, undo manager, window
+     controllers, readable/writable type hooks, save/revert/close lifecycle, and
+     print hooks as backend support appears
+3. Add `DocumentController`:
+   - shared controller, new/open/reopen document flow, recent documents,
+     document lookup by window/URL, close-all/review-unsaved flow, and menu
+     validation for document actions
+
+### ScrollView And ClipView Parity
+
+Keep treating `ScrollView` as a primitive container like AppKit does.
+
+1. Expand `ClipView` responsibilities:
+   - document cursor, `scrollToPoint`, `constrainScrollPoint`, autoscroll,
+     document rect, visible rect, background/draws-background policy, and
+     `reflectScrolledClipView` notifications
+2. Expand `ScrollView` chrome:
+   - horizontal/vertical line and page scroll values, border/background policy,
+     scroller insets, header/corner views, ruler placeholders, dynamic
+     scrolling, and autohide policy
+
+### TableView And OutlineView
+
+Continue growing `TableView` after the application, responder, view, pasteboard,
+and dragging foundations can support it.
+
+1. Add table headers and column behavior:
+   - header band, column hover/pressed state, hit testing, resizing with
+     min/max constraints, sort request state, sort indicator rendering, and
+     column reordering
+2. Add table selection and editing:
+   - cell and column selection, clicked row/column reporting, editable cells,
+     commit/cancel flow, row views, and reuse identifiers
+3. Add drag/drop and persistence:
+   - row/column drag behavior, column autosave, selection persistence helpers,
+     and integration with named pasteboards
+4. Add `OutlineView` after `TableView` is stable:
+   - item tree data source, expansion/collapse, row/item mappings,
+     indentation, outline column, disclosure rows, persistence, and drag/drop
 
 ### Native Integration
 
@@ -114,9 +198,9 @@ row infrastructure only when the table implementation proves the boundary.
   editors, list views, table views, outline views, collection views, and large
   forms should be able to build on the same clipped document-view and scrolling
   model.
-- Treat `ListView` as the first serious scroll-backed data widget. It should
-  become feature-complete enough for complex app use before adding a full table
-  view.
+- Keep `ListView` as the simple single-column data widget. Share row
+  infrastructure with table/outline controls only when the reuse boundary is
+  proven by real table and outline behavior.
 - Stage layout work conservatively. Expand constraints through the existing
   Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
   conveniences only when controls and examples prove the need.
@@ -133,7 +217,7 @@ row infrastructure only when the table implementation proves the boundary.
   import already hides raw layout-input/cache type names, but fully hiding view
   storage needs a deeper internal accessor or module organization refactor.
 - Whether container-generated layout inputs should become a real source before
-  adding a table-style control.
+  adding more collection-style controls.
 - Whether generated layout summaries should expose richer diagnostics such as
   item names, attributes, priorities, conflicts, or cache-generation metadata.
 - How much of the layout invalidation bus should be public. It is useful for
