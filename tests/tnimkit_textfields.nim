@@ -1,8 +1,11 @@
-import std/unittest
+import std/[unicode, unittest]
+
+import figdraw/fignodes
 
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/types as nimkitTypes
 
 type CustomEditorTextFieldCell = ref object of TextFieldCell
   editor: FieldEditor
@@ -23,6 +26,44 @@ proc newCustomEditorTextFieldCell(editor: FieldEditor): CustomEditorTextFieldCel
   result = CustomEditorTextFieldCell(editor: editor)
   initTextFieldCellFields(result)
   discard result.withProtocol(CustomEditorTextFieldCellProtocol)
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+proc renderedRect(node: Fig): nimkitTypes.Rect =
+  nimkitTypes.initRect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
+
+proc containsRect(outer, inner: nimkitTypes.Rect): bool =
+  inner.minX >= outer.minX - 0.01'f32 and inner.minY >= outer.minY - 0.01'f32 and
+    inner.maxX <= outer.maxX + 0.01'f32 and inner.maxY <= outer.maxY + 0.01'f32
+
+proc nodeRenderedInView(node: Fig, view: View): bool =
+  view.rectToWindow(view.bounds).containsRect(node.renderedRect())
+
+proc renderedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
+  for node in nodes:
+    if node.kind == nkText and node.renderedText() == text and
+        node.nodeRenderedInView(view):
+      return true
+
+proc renderedSelectedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
+  for node in nodes:
+    if node.kind == nkText and NfSelectText in node.flags and node.renderedText() == text and
+        node.nodeRenderedInView(view):
+      return true
+
+proc renderedCaretInView(
+    nodes: openArray[Fig], view: View, color: nimkitTypes.Color
+): bool =
+  for node in nodes:
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == color.rgba and abs(node.screenBox.w - 1.0) <= 0.01 and
+        node.nodeRenderedInView(view):
+      return true
 
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
@@ -103,6 +144,28 @@ suite "nimkit text fields":
     check window.dispatchKeyDown(KeyEvent(text: "y", key: keyY, keyCode: keyY.ord))
     check field.stringValue == "Xy"
     check field.selectedRange == initTextRange(2, 0)
+
+  test "window-backed field editor renders live text before blur":
+    let
+      window = newWindow("Text field render", frame = initRect(0, 0, 420, 220))
+      root = newView(frame = initRect(0, 0, 420, 220))
+      title = newTitleLabel("Text Field", frame = initRect(28, 24, 240, 28))
+      field = newTextField("Edit me", frame = initRect(28, 70, 240, 30))
+      secondField = newTextField("Tab here", frame = initRect(28, 112, 240, 30))
+      status =
+        newStatusLabel("Values: Edit me / Tab here", frame = initRect(28, 154, 320, 24))
+
+    root.addSubview(title, field, secondField, status)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let focusedNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check focusedNodes.renderedSelectedTextInView(field, "Edit me")
+
+    check window.dispatchKeyDown(KeyEvent(text: "X", key: keyX, keyCode: keyX.ord))
+    let editedNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check editedNodes.renderedTextInView(field, "X")
+    check editedNodes.renderedCaretInView(field, field.textColor())
 
   test "insertText respects text field editability":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
