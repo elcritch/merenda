@@ -58,23 +58,29 @@ proc resetTracking() =
   trackingCommandSenders.setLen(0)
 
 protocol TrackingSpyEvents of ResponderEventProtocol:
-  method mouseDown(spy: TrackingSpyView, event: MouseEvent) =
+  method mouseDown(spy: TrackingSpyView, event: MouseEvent): bool =
     spy.recordTrackingEvent("down", event)
+    true
 
-  method mouseUp(spy: TrackingSpyView, event: MouseEvent) =
+  method mouseUp(spy: TrackingSpyView, event: MouseEvent): bool =
     spy.recordTrackingEvent("up", event)
+    true
 
-  method mouseEntered(spy: TrackingSpyView, event: MouseEvent) =
+  method mouseEntered(spy: TrackingSpyView, event: MouseEvent): bool =
     spy.recordTrackingEvent("entered", event)
+    true
 
-  method mouseExited(spy: TrackingSpyView, event: MouseEvent) =
+  method mouseExited(spy: TrackingSpyView, event: MouseEvent): bool =
     spy.recordTrackingEvent("exited", event)
+    true
 
-  method mouseMoved(spy: TrackingSpyView, event: MouseEvent) =
+  method mouseMoved(spy: TrackingSpyView, event: MouseEvent): bool =
     spy.recordTrackingEvent("moved", event)
+    true
 
-  method mouseDragged(spy: TrackingSpyView, event: MouseEvent) =
+  method mouseDragged(spy: TrackingSpyView, event: MouseEvent): bool =
     spy.recordTrackingEvent("dragged", event)
+    true
 
   method scrollWheel(spy: TrackingSpyView, event: ScrollEvent) =
     spy.recordScrollEvent(event)

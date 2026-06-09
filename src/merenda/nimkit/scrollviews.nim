@@ -420,30 +420,35 @@ protocol DefaultScrollerDrawing of ViewDrawingProtocol:
     context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
 
 protocol DefaultScrollerEvents of ResponderEventProtocol:
-  method mouseDown(scroller: Scroller, event: MouseEvent) =
-    if event.button == mbPrimary:
-      if scroller.isNil or scroller.xScrollView.isNil:
-        return
-      let
-        track = scroller.scrollerTrackRect()
-        knob = scroller.scrollerKnobRect()
-      if scroller.xTracking.beginScrollerTracking(
-        track, knob, scroller.xAxis, event.location
-      ):
-        return
-      if track.contains(event.location):
-        scroller.scrollPageToward(event.location)
+  method mouseDown(scroller: Scroller, event: MouseEvent): bool =
+    if event.button != mbPrimary or scroller.isNil or scroller.xScrollView.isNil:
+      return false
+    let
+      track = scroller.scrollerTrackRect()
+      knob = scroller.scrollerKnobRect()
+    if scroller.xTracking.beginScrollerTracking(
+      track, knob, scroller.xAxis, event.location
+    ):
+      return true
+    if track.contains(event.location):
+      scroller.scrollPageToward(event.location)
+      return true
+    false
 
-  method mouseDragged(scroller: Scroller, event: MouseEvent) =
+  method mouseDragged(scroller: Scroller, event: MouseEvent): bool =
     if event.button == mbPrimary and not scroller.isNil and
         scroller.xTracking.isDraggingKnob():
       scroller.scrollKnobTo(event.location)
+      return true
+    false
 
-  method mouseUp(scroller: Scroller, event: MouseEvent) =
-    if event.button == mbPrimary:
-      if scroller.xTracking.isDraggingKnob():
-        scroller.scrollKnobTo(event.location)
-      scroller.xTracking.endScrollerTracking()
+  method mouseUp(scroller: Scroller, event: MouseEvent): bool =
+    if event.button != mbPrimary:
+      return false
+    if scroller.xTracking.isDraggingKnob():
+      scroller.scrollKnobTo(event.location)
+    scroller.xTracking.endScrollerTracking()
+    true
 
 protocol DefaultScrollViewEvents of ResponderEventProtocol:
   method wantsForwardedScrollEvents(scrollView: ScrollView, event: ScrollEvent): bool =

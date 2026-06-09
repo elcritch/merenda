@@ -330,6 +330,29 @@ suite "NimKit TableView":
 
     check delegate.activatedRows == @[2]
 
+  test "table view selects rows through hosted label cells":
+    let
+      window =
+        newWindow("Table hosted label selection", frame = initRect(0, 0, 360, 180))
+      root = newView(frame = initRect(0, 0, 360, 180))
+      tableView = newTableView(frame = initRect(10, 10, 260, 90))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+
+    delegate.hostedColumns = @["state"]
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("state", "State", width = 80.0))
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    ListView(tableView).rowHeight = 28.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check window.mouseDownAt(tableView.pointToWindow(initPoint(170.0'f32, 42.0'f32)))
+    check window.mouseUpAt(tableView.pointToWindow(initPoint(170.0'f32, 42.0'f32)))
+    check ListView(tableView).selectedIndex == 1
+
   test "table view keeps inherited row selection behavior":
     let tableView = newTableView()
 

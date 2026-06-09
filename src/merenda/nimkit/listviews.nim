@@ -1324,9 +1324,9 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
       context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
 
 protocol DefaultListViewEvents of ResponderEventProtocol:
-  method mouseDown(listView: ListView, event: MouseEvent) =
+  method mouseDown(listView: ListView, event: MouseEvent): bool =
     if not listView.isEnabled() or event.button != mbPrimary:
-      return
+      return false
     let owner = listView.window()
     if owner of Window:
       discard Window(owner).makeFirstResponder(listView)
@@ -1335,21 +1335,26 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     listView.highlightedIndex = index
     listView.xPressedIndex = listView.highlightedIndex()
     listView.invalidateListRows()
+    true
 
-  method mouseDragged(listView: ListView, event: MouseEvent) =
+  method mouseDragged(listView: ListView, event: MouseEvent): bool =
     if listView.isEnabled() and listView.xTrackingItem:
       let index = listView.listItemIndexAtPoint(event.location)
       listView.highlightedIndex = index
       listView.xPressedIndex = listView.highlightedIndex()
       listView.invalidateListRows()
+      return true
+    false
 
-  method mouseMoved(listView: ListView, event: MouseEvent) =
+  method mouseMoved(listView: ListView, event: MouseEvent): bool =
     if listView.isEnabled():
       listView.highlightedIndex = listView.listItemIndexAtPoint(event.location)
+      return true
+    false
 
-  method mouseUp(listView: ListView, event: MouseEvent) =
+  method mouseUp(listView: ListView, event: MouseEvent): bool =
     if not listView.isEnabled() or event.button != mbPrimary:
-      return
+      return false
     let index =
       if listView.xTrackingItem:
         listView.listItemIndexAtPoint(event.location)
@@ -1360,6 +1365,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     if index >= 0:
       listView.activateItemAtIndex(index, event.modifiers)
     listView.setNeedsDisplay(true)
+    true
 
   method keyDown(listView: ListView, event: KeyEvent) =
     if not listView.isEnabled():

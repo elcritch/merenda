@@ -139,9 +139,8 @@ protocol TextFieldProtocol from TextField:
     textField.xSelectionAnchor
 
   method becomeFirstResponder(textField: TextField): bool =
-    if not textField.isEnabled or (
-      not textField.isEditable() and not textField.isSelectable()
-    ):
+    if not textField.isEnabled or
+        (not textField.isEditable() and not textField.isSelectable()):
       return false
     textField.xFlags.incl(tfEditing)
     textField.selectAllText()
@@ -484,11 +483,13 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
       )
 
 protocol DefaultTextFieldEvents of ResponderEventProtocol:
-  method mouseDown(textField: TextField, event: MouseEvent) =
+  method mouseDown(textField: TextField, event: MouseEvent): bool =
     if event.button == mbPrimary and (
       textField.isEditable() or textField.isSelectable()
     ):
       textField.setCursor(textField.runeCount)
+      return true
+    false
 
   method keyDown(textField: TextField, event: KeyEvent) =
     if textField.isEditable() and event.shouldInsertText():

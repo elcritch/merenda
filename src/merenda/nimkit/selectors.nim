@@ -30,7 +30,7 @@ type
   ValidationArgs* = object
     item*: DynamicAgent
 
-  MouseEventSelector* = Selector[MouseEvent, EmptyArgs]
+  MouseEventSelector* = Selector[MouseEvent, bool]
   ScrollEventSelector* = Selector[ScrollEvent, EmptyArgs]
   KeyEventSelector* = Selector[KeyEvent, EmptyArgs]
   ActionSelector* = Selector[ActionArgs, EmptyArgs]
@@ -43,12 +43,12 @@ type
     sender*: DynamicAgent
 
 protocol ResponderEventProtocol:
-  method mouseDown*(event: MouseEvent) {.optional.}
-  method mouseUp*(event: MouseEvent) {.optional.}
-  method mouseEntered*(event: MouseEvent) {.optional.}
-  method mouseExited*(event: MouseEvent) {.optional.}
-  method mouseMoved*(event: MouseEvent) {.optional.}
-  method mouseDragged*(event: MouseEvent) {.optional.}
+  method mouseDown*(event: MouseEvent): bool {.optional.}
+  method mouseUp*(event: MouseEvent): bool {.optional.}
+  method mouseEntered*(event: MouseEvent): bool {.optional.}
+  method mouseExited*(event: MouseEvent): bool {.optional.}
+  method mouseMoved*(event: MouseEvent): bool {.optional.}
+  method mouseDragged*(event: MouseEvent): bool {.optional.}
   method wantsForwardedScrollEvents*(event: ScrollEvent): bool {.optional.}
   method scrollWheel*(event: ScrollEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
