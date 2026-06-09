@@ -7,10 +7,10 @@ import ./textviews
 
 type FieldEditor* = ref object of TextView
   xClient: Responder
-  xEndingClient: Responder
   xOriginalString: string
 
 protocol FieldEditorClient {.selectorScope: protocol.}:
+  method fieldEditorForClient*(defaultEditor: FieldEditor): FieldEditor {.optional.}
   method usesFieldEditor*(editor: FieldEditor): bool {.optional.}
   method stringForFieldEditor*(editor: FieldEditor): string {.optional.}
   method attributedTextForEditor*(editor: FieldEditor): TextStorage {.optional.}
@@ -20,6 +20,7 @@ protocol FieldEditorClient {.selectorScope: protocol.}:
   ) {.optional.}
 
   method didChangeTextInEditor*(editor: FieldEditor) {.optional.}
+  method didChangeFocusInEditor*(editor: FieldEditor) {.optional.}
   method shouldBeginEditing*(editor: FieldEditor): bool {.optional.}
   method didBeginEditing*(editor: FieldEditor) {.optional.}
   method shouldEndEditing*(editor: FieldEditor): bool {.optional.}
@@ -32,19 +33,20 @@ protocol FieldEditorClient {.selectorScope: protocol.}:
 proc client*(editor: FieldEditor): Responder =
   if editor.isNil: nil else: editor.xClient
 
-proc focusClient*(editor: FieldEditor): Responder =
-  if editor.isNil:
-    nil
-  elif not editor.xClient.isNil:
-    editor.xClient
-  else:
-    editor.xEndingClient
-
 proc wantsFieldEditor*(client: Responder, editor: FieldEditor): bool =
   if client.isNil:
     return false
   let wants = client.trySendLocal(usesFieldEditor(), editor)
   wants.isSome and wants.get()
+
+proc fieldEditorForClient*(client: Responder, defaultEditor: FieldEditor): FieldEditor =
+  if client.isNil:
+    return defaultEditor
+  let editor = client.trySendLocal(fieldEditorForClient(), defaultEditor)
+  if editor.isSome and not editor.get().isNil:
+    editor.get()
+  else:
+    defaultEditor
 
 proc clientShouldBeginEditing(client: Responder, editor: FieldEditor): bool =
   let shouldBegin = client.trySendLocal(shouldBeginEditing(), editor)
@@ -83,6 +85,19 @@ proc notifyClientChanged(editor: FieldEditor) =
   )
   discard client.sendLocalIfHandled(didChangeTextInEditor(), editor)
 
+proc notifyClientFocusChanged(editor: FieldEditor) =
+  let client = editor.client()
+  if client.isNil:
+    return
+  discard client.sendLocalIfHandled(didChangeFocusInEditor(), editor)
+
+proc updateFieldEditorFocus*(editor: FieldEditor, focusVisible: bool) =
+  if editor.isNil:
+    return
+  editor.focused = true
+  editor.focusVisible = focusVisible
+  editor.notifyClientFocusChanged()
+
 proc finishEditing(
     editor: FieldEditor, reason: TextEditReason, movement = temNone
 ): bool =
@@ -95,7 +110,6 @@ proc finishEditing(
     editor.stringValue = editor.xOriginalString
   else:
     editor.notifyClientChanged()
-  editor.xEndingClient = client
   editor.xClient = nil
   discard client.sendLocalIfHandled(didEndEditing(), editor)
   discard
@@ -103,10 +117,9 @@ proc finishEditing(
   discard client.sendLocalIfHandled(
     didEndEditingMovement(), (editor: editor, movement: movement)
   )
-  editor.xEndingClient = nil
   true
 
-proc beginEditing*(editor: FieldEditor, client: Responder): bool =
+proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true): bool =
   if editor.isNil or client.isNil:
     return false
   if editor.xClient == client:
@@ -115,7 +128,10 @@ proc beginEditing*(editor: FieldEditor, client: Responder): bool =
     return false
   editor.loadClientText(client)
   editor.xClient = client
+  editor.focused = true
+  editor.focusVisible = focusVisible
   discard client.sendLocalIfHandled(didBeginEditing(), editor)
+  editor.notifyClientFocusChanged()
   true
 
 proc endEditing*(editor: FieldEditor): bool =
@@ -138,7 +154,17 @@ protocol DefaultFieldEditorResponder of ResponderProtocol:
   method resignFirstResponder(editor: FieldEditor): bool =
     editor.endEditing()
 
+protocol DefaultFieldEditorView of ViewProtocol:
+  method canBecomeKeyView(editor: FieldEditor): bool =
+    false
+
 protocol DefaultFieldEditorEvents of ResponderEventProtocol:
+  method mouseDown(editor: FieldEditor, event: MouseEvent): bool =
+    if event.button == mbPrimary and (editor.editable or editor.selectable):
+      editor.setCursor(editor.textIndexAtPoint(event.location))
+      return true
+    false
+
   method keyDown(editor: FieldEditor, event: KeyEvent) =
     if editor.editable and event.text.isInsertableText():
       editor.replaceSelectedText(event.text)
@@ -228,6 +254,7 @@ proc initFieldEditorFields*(editor: FieldEditor) =
   editor.richText = true
   editor.setAcceptsFirstResponder(true)
   discard editor.withProtocol(DefaultFieldEditorResponder)
+  discard editor.withProtocol(DefaultFieldEditorView)
   discard editor.withProtocol(DefaultFieldEditorEvents)
   discard editor.withProtocol(DefaultFieldEditorInput)
   discard editor.withProtocol(DefaultFieldEditorCommands)

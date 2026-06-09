@@ -56,6 +56,9 @@ protocol ControlProtocol from Control:
   method canBecomeKeyView*(self: Control): bool =
     self.isEnabled() and View(self).viewCanBecomeKeyView()
 
+  method shouldBecomeFirstResponder*(self: Control): bool =
+    self.isEnabled() and self.acceptsFirstResponder()
+
   method layoutIntrinsicContentSize*(self: Control): IntrinsicSize =
     self.controlIntrinsicContentSize()
 

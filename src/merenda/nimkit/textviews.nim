@@ -419,6 +419,12 @@ proc updateTextContainer(textView: TextView) =
   textView.xTextContainer.size = textView.bounds.size
   textView.syncLayout()
 
+proc textIndexAtPoint*(textView: TextView, point: Point): int =
+  if textView.isNil:
+    return 0
+  textView.updateTextContainer()
+  textView.xLayoutManager.textIndexAtPoint(point)
+
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method draw(textView: TextView, context: DrawContext) =
     textView.updateTextContainer()
@@ -443,8 +449,7 @@ protocol DefaultTextViewDrawing of ViewDrawingProtocol:
 protocol DefaultTextViewEvents of ResponderEventProtocol:
   method mouseDown(textView: TextView, event: MouseEvent): bool =
     if event.button == mbPrimary and (textView.editable or textView.selectable):
-      textView.updateTextContainer()
-      textView.setCursor(textView.xLayoutManager.textIndexAtPoint(event.location))
+      textView.setCursor(textView.textIndexAtPoint(event.location))
       return true
     false
 

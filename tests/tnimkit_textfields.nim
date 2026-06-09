@@ -2,6 +2,20 @@ import std/unittest
 
 import merenda/nimkit
 
+type CustomEditorTextFieldCell = ref object of TextFieldCell
+  editor: FieldEditor
+
+protocol CustomEditorTextFieldCellProtocol of TextFieldCellFieldEditorProtocol:
+  method fieldEditorForView(
+      cell: CustomEditorTextFieldCell, controlView: View
+  ): FieldEditor =
+    cell.editor
+
+proc newCustomEditorTextFieldCell(editor: FieldEditor): CustomEditorTextFieldCell =
+  result = CustomEditorTextFieldCell(editor: editor)
+  initTextFieldCellFields(result)
+  discard result.withProtocol(CustomEditorTextFieldCellProtocol)
+
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
@@ -69,6 +83,8 @@ suite "nimkit text fields":
     check window.makeFirstResponder(field)
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
     check field.isEditing
     check field.selectedRange == initTextRange(0, 3)
 
@@ -230,7 +246,7 @@ suite "nimkit text fields":
     check field.stringValue == "q"
     check field.selectedRange == initTextRange(1, 0)
 
-  test "mouse down focuses text field and places caret at the end":
+  test "mouse down focuses text field and places caret at clicked position":
     let
       window = newWindow("Text mouse", frame = initRect(0, 0, 240, 120))
       root = newView(frame = initRect(0, 0, 240, 120))
@@ -242,10 +258,28 @@ suite "nimkit text fields":
     check window.mouseDownAt(initPoint(20, 20))
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
     check field.isFocused
     check not field.isFocusVisible
     check field.isEditing
-    check field.selectedRange == initTextRange(6, 0)
+    check field.selectedRange == initTextRange(1, 0)
+
+    check window.makeFirstResponder(field)
+    check window.firstResponder == window.fieldEditor()
+    check field.isFocused
+    check field.isFocusVisible
+    check window.fieldEditor().isFocusVisible
+
+    check window.mouseDownAt(initPoint(30, 20))
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditorClient() == field
+    check field.currentEditor == window.fieldEditor()
+    check window.fieldEditor().superview == field
+    check field.isFocused
+    check not field.isFocusVisible
+    check not window.fieldEditor().isFocusVisible
+    check field.isEditing
 
   test "return ends field editor editing and sends text field action":
     let
@@ -267,7 +301,30 @@ suite "nimkit text fields":
 
     check window.makeFirstResponder(field)
     check window.firstResponder == window.fieldEditor()
+    check window.fieldEditor().superview == field
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check actionCount == 1
     check not field.isEditing
+    check field.currentEditor.isNil
+    check window.fieldEditor().superview.isNil
+    check not field.isFocused
     check window.firstResponder != window.fieldEditor()
+
+  test "text field cells can provide a custom field editor":
+    let
+      window = newWindow("Custom editor", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      customEditor = newFieldEditor()
+      customCell = newCustomEditorTextFieldCell(customEditor)
+
+    field.setCell(customCell)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    check window.firstResponder == customEditor
+    check window.fieldEditorClient() == field
+    check field.currentEditor == customEditor
+    check customEditor.superview == field
+    check customEditor.selectedRange == initTextRange(0, 3)

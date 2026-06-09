@@ -38,6 +38,7 @@ type
     xAlignment: TextAlignment
     xTextColor: Color
     xFlags: TextFieldFlags
+    xCurrentEditor: FieldEditor
     xInsertionPoint: int
     xSelectionAnchor: int
 
@@ -50,6 +51,8 @@ proc setEditedString(
 
 proc selectAllText(textField: TextField)
 proc activeFieldEditor(textField: TextField): FieldEditor
+proc layoutFieldEditor(textField: TextField)
+proc textFieldStyleContext(textField: TextField): StyleContext
 
 protocol TextFieldEvents:
   proc textDidChange*(textField: TextField, sender: DynamicAgent) {.signal.}
@@ -169,7 +172,46 @@ protocol TextFieldProtocol from TextField:
     textField.setNeedsDisplay(true)
     true
 
+protocol TextFieldCellFieldEditorProtocol:
+  method fieldEditorForView*(controlView: View): FieldEditor {.optional.}
+  method setUpFieldEditorAttributes*(
+    editor: FieldEditor, controlView: View
+  ) {.optional.}
+
+  method endFieldEditing*(editor: FieldEditor, controlView: View) {.optional.}
+
+protocol DefaultTextFieldCellFieldEditor of TextFieldCellFieldEditorProtocol:
+  method fieldEditorForView(cell: TextFieldCell, controlView: View): FieldEditor =
+    nil
+
+  method setUpFieldEditorAttributes(
+      cell: TextFieldCell, editor: FieldEditor, controlView: View
+  ) =
+    if editor.isNil:
+      return
+    if controlView of TextField:
+      let textField = TextField(controlView)
+      editor.editable = textField.isEditable()
+      editor.selectable = textField.isSelectable()
+      editor.alignment = textField.alignment()
+      editor.textColor = textField.textColor()
+      if editor.textStorage().len > 0:
+        editor.textStorage().setAttributes(
+          initTextRange(0, editor.textStorage().len),
+          defaultTextAttributes(textField.textColor()),
+        )
+
+  method endFieldEditing(cell: TextFieldCell, editor: FieldEditor, controlView: View) =
+    if not editor.isNil and editor.superview() == controlView:
+      editor.removeFromSuperview()
+
 protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
+  method fieldEditorForClient(
+      textField: TextField, defaultEditor: FieldEditor
+  ): FieldEditor =
+    let editor = textField.textFieldCell().fieldEditorForView(textField)
+    if editor.isNil: defaultEditor else: editor
+
   method usesFieldEditor(textField: TextField, editor: FieldEditor): bool =
     textField.isEnabled and (textField.isEditable() or textField.isSelectable())
 
@@ -193,18 +235,21 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
     textField.isEnabled and (textField.isEditable() or textField.isSelectable())
 
   method didBeginEditing(textField: TextField, editor: FieldEditor) =
+    textField.textFieldCell().setUpFieldEditorAttributes(editor, textField)
+    textField.xCurrentEditor = editor
     textField.xFlags.incl(tfEditing)
-    editor.editable = textField.isEditable()
-    editor.selectable = textField.isSelectable()
-    editor.alignment = textField.alignment()
-    editor.textColor = textField.textColor()
-    if editor.textStorage().len > 0:
-      editor.textStorage().setAttributes(
-        initTextRange(0, editor.textStorage().len),
-        defaultTextAttributes(textField.textColor()),
-      )
+    textField.focused = true
+    textField.focusVisible = editor.isFocusVisible()
+    textField.layoutFieldEditor()
+    if editor.superview() != textField:
+      textField.addSubview(editor)
     editor.selectAllText()
     textField.setNeedsDisplay(true)
+
+  method didChangeFocusInEditor(textField: TextField, editor: FieldEditor) =
+    if editor == textField.xCurrentEditor:
+      textField.focused = editor.isFocused()
+      textField.focusVisible = editor.isFocusVisible()
 
   method shouldEndEditing(textField: TextField, editor: FieldEditor): bool =
     true
@@ -215,7 +260,14 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
       textviews.insertionPoint(TextView(editor)),
       textviews.selectionAnchor(TextView(editor)),
     )
+    textField.textFieldCell().endFieldEditing(editor, textField)
+    if not textField.xCurrentEditor.isNil and
+        textField.xCurrentEditor.superview() == textField:
+      textField.xCurrentEditor.removeFromSuperview()
+    textField.xCurrentEditor = nil
     textField.xFlags.excl(tfEditing)
+    textField.focused = false
+    textField.focusVisible = false
     textField.setNeedsDisplay(true)
 
   method didEndEditingMovement(
@@ -266,11 +318,28 @@ proc currentSelection(textField: TextField): tuple[start, stop: int] =
 proc activeFieldEditor(textField: TextField): FieldEditor =
   if textField.isNil:
     return nil
+  textField.xCurrentEditor
+
+proc currentEditor*(textField: TextField): FieldEditor =
+  if textField.isNil or textField.xCurrentEditor.isNil:
+    return nil
   let owner = textField.window()
   if owner of Window:
-    let editor = Window(owner).fieldEditor()
-    if editor.client() == textField:
+    let editor = textField.xCurrentEditor
+    if Window(owner).firstResponder() == editor:
       return editor
+
+proc fieldEditorFrame(textField: TextField): Rect =
+  let style = textField.effectiveAppearance().resolveTextFieldStyle(
+      textField.textFieldStyleContext(), textField.textColor()
+    )
+  style.textFieldTextRect(textField.bounds)
+
+proc layoutFieldEditor(textField: TextField) =
+  let editor = textField.activeFieldEditor()
+  if editor.isNil:
+    return
+  editor.frame = textField.fieldEditorFrame()
 
 proc runesOf(text: string): seq[Rune] =
   for rune in text.runes:
@@ -530,10 +599,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
 protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
     let absoluteFrame = textField.rectToWindow(textField.bounds)
-    var states: set[WidgetState] = textField.widgetStateSet()
-    if textField.isEditing:
-      states.incl ssFocused
-      states.incl ssFocusVisible
+    let states: set[WidgetState] = textField.widgetStateSet()
 
     let style = context.appearance.resolveTextFieldStyle(
       initControlStyleContext(
@@ -549,16 +615,15 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
     if ssFocusVisible in states:
       context.addFocusRing(absoluteFrame, style.box)
 
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return
+
     let
       textRect = style.textFieldTextRect(textField.bounds)
-      editor = textField.activeFieldEditor()
-      layout =
-        if not editor.isNil:
-          textLayout(textRect, editor.textStorage(), textField.alignment)
-        else:
-          textLayout(
-            textRect, textField.stringValue, style.text.color, textField.alignment
-          )
+      layout = textLayout(
+        textRect, textField.stringValue, style.text.color, textField.alignment
+      )
       selectedRange = textField.selectedRange
     if textField.isEditing and selectedRange.length > 0:
       discard context.addSelectedText(
@@ -581,7 +646,13 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
     if event.button == mbPrimary and (
       textField.isEditable() or textField.isSelectable()
     ):
-      textField.selectedRange = initTextRange(textField.runeCount, 0)
+      let editor = textField.activeFieldEditor()
+      if not editor.isNil:
+        var editorEvent = event
+        editorEvent.location = editor.pointFromView(event.location, textField)
+        discard editor.handleMouse(mouseDown(), editorEvent)
+      else:
+        textField.selectedRange = initTextRange(textField.runeCount, 0)
       return true
     false
 
@@ -591,13 +662,14 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
       textField.replaceSelectedText(event.text)
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
-  var states: set[WidgetState] = textField.widgetStateSet()
-  if textField.isEditing:
-    states.incl ssFocused
-    states.incl ssFocusVisible
+  let states: set[WidgetState] = textField.widgetStateSet()
   initControlStyleContext(
     srTextField, states, id = textField.styleId, classes = textField.styleClasses
   )
+
+protocol DefaultTextFieldLayout of ViewLayoutProtocol:
+  method layoutSubviews(textField: TextField) =
+    textField.layoutFieldEditor()
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: TextFieldCell): IntrinsicSize =
@@ -622,6 +694,7 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
 proc initTextFieldCellFields*(cell: TextFieldCell) =
   initActionCellFields(cell)
   discard cell.withProtocol(DefaultTextFieldCellMeasurement)
+  discard cell.withProtocol(DefaultTextFieldCellFieldEditor)
 
 proc newTextFieldCell*(): TextFieldCell =
   result = TextFieldCell()
@@ -651,6 +724,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   discard textField.withProtocol(DefaultTextFieldFieldEditorClient)
   discard textField.withProtocol(DefaultTextFieldDrawing)
   discard textField.withProtocol(DefaultTextFieldEvents)
+  discard textField.withProtocol(DefaultTextFieldLayout)
   textField.applyInitialFrame(frame)
 
 proc newTextField*(value = "", frame: Rect = AutoRect): TextField =
