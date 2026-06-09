@@ -351,7 +351,8 @@ suite "nimkit responder":
     check window.makeFirstResponder(first)
 
     check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
-    check window.firstResponder == field
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditorClient() == field
     check field.isFocused
     check field.isFocusVisible
     check not first.isFocused

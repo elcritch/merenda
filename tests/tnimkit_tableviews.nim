@@ -17,6 +17,13 @@ type TableDelegateSpy = ref object of Responder
   nonselectableRows: seq[int]
   rowHeights: seq[float32]
   hostedColumns: seq[string]
+  buttonColumns: seq[string]
+  policyColumn: string
+  policy: CellHitPolicy
+  hasPolicy: bool
+  shouldTrackColumn: string
+  shouldTrackValue: bool
+  hasShouldTrack: bool
   viewCalls: seq[string]
   activatedRows: seq[int]
 
@@ -70,6 +77,8 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
     if delegate.hostedColumns.len > 0 and
         not delegate.hostedColumns.containsValue(column.identifier):
       return nil
+    if delegate.buttonColumns.containsValue(column.identifier):
+      return newButton(text)
     newLabel(text)
 
   method tableRowHeight(
@@ -90,8 +99,32 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
   ): bool =
     not delegate.nonselectableRows.containsIndex(row)
 
+  method hitPolicyForCell(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      target: View,
+      event: MouseEvent,
+  ): CellHitPolicy =
+    if delegate.hasPolicy and column.identifier == delegate.policyColumn:
+      return delegate.policy
+    chpDefault
+
   method didActivateRow(delegate: TableDelegateSpy, tableView: TableView, row: int) =
     delegate.activatedRows.add row
+
+protocol TableDelegateShouldTrackSpyMethods of TableViewDelegate:
+  method shouldTrackCell(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      target: View,
+  ): bool =
+    if delegate.hasShouldTrack and column.identifier == delegate.shouldTrackColumn:
+      return delegate.shouldTrackValue
+    true
 
 proc newTableDataSourceSpy(rows: int): TableDataSourceSpy =
   result = TableDataSourceSpy(rows: rows)
@@ -351,6 +384,69 @@ suite "NimKit TableView":
 
     check window.mouseDownAt(tableView.pointToWindow(initPoint(170.0'f32, 42.0'f32)))
     check window.mouseUpAt(tableView.pointToWindow(initPoint(170.0'f32, 42.0'f32)))
+    check ListView(tableView).selectedIndex == 1
+
+  test "table view lets interactive hosted cells consume clicks by default":
+    let
+      window =
+        newWindow("Table hosted button default", frame = initRect(0, 0, 360, 180))
+      root = newView(frame = initRect(0, 0, 360, 180))
+      tableView = newTableView(frame = initRect(10, 10, 280, 90))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+
+    delegate.hostedColumns = @["action"]
+    delegate.buttonColumns = @["action"]
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    ListView(tableView).rowHeight = 28.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let point = tableView.pointToWindow(initPoint(178.0'f32, 42.0'f32))
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
+    check ListView(tableView).selectedIndex == -1
+
+  test "table view cell hit policy can select rows around hosted controls":
+    let
+      window = newWindow("Table hosted button policy", frame = initRect(0, 0, 360, 180))
+      root = newView(frame = initRect(0, 0, 360, 180))
+      tableView = newTableView(frame = initRect(10, 10, 280, 90))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+
+    delegate.hostedColumns = @["action"]
+    delegate.buttonColumns = @["action"]
+    delegate.hasPolicy = true
+    delegate.policyColumn = "action"
+    delegate.policy = chpSelectAndTrack
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    ListView(tableView).rowHeight = 28.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let point = tableView.pointToWindow(initPoint(178.0'f32, 42.0'f32))
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
+    check ListView(tableView).selectedIndex == 1
+
+    ListView(tableView).selectedIndex = -1
+    delegate.hasPolicy = false
+    delegate.hasShouldTrack = true
+    delegate.shouldTrackColumn = "action"
+    delegate.shouldTrackValue = false
+    discard delegate.withProtocol(TableDelegateShouldTrackSpyMethods)
+
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
     check ListView(tableView).selectedIndex == 1
 
   test "table view keeps inherited row selection behavior":

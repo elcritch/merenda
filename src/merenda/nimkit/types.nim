@@ -109,6 +109,13 @@ type
     ppWindow ## Use a separate popup window only.
     ppInline ## Draw the popup inline in the owner window.
 
+  CellHitPolicy* = enum
+    chpDefault ## Use normal responder dispatch and bubbling.
+    chpSelectRow ## Route tracking to the owning row control.
+    chpTrackCell ## Let the hit cell/control handle the mouse event.
+    chpSelectAndTrack ## Select the owning row, then let the cell/control track.
+    chpIgnore ## Consume the event without row or cell handling.
+
 const
   AutoMetric* = NaN.float32
   AutoPoint* = Point(x: AutoMetric, y: AutoMetric)
