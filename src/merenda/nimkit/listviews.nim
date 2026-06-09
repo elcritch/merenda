@@ -90,6 +90,10 @@ proc usesAlternatingRowBackgrounds*(listView: ListView): bool
 proc showsRowSeparators*(listView: ListView): bool
 proc rowEnabled*(listView: ListView, index: int): bool
 proc rowSelectable*(listView: ListView, index: int): bool
+proc rowHitPolicy*(
+  listView: ListView, row: int, target: View, event: MouseEvent
+): CellHitPolicy
+
 proc rowStyle*(listView: ListView, row: ListRowState): ListRowStyle
 proc drawListRow*(
   listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -128,6 +132,10 @@ protocol ListViewEvents:
 protocol ListViewDelegate {.selectorScope: protocol.}:
   method rowIsEnabled*(listView: ListView, row: int): bool {.optional.}
   method shouldSelectRow*(listView: ListView, row: int): bool {.optional.}
+  method hitPolicyForRow*(
+    listView: ListView, row: int, target: View, event: MouseEvent
+  ): CellHitPolicy {.optional.}
+
   method heightOfRow*(listView: ListView, row: int): float32 {.optional.}
   method heightForRow*(listView: ListView, row: int): float32 {.optional.}
   method rowDidActivate*(listView: ListView, row: int) {.optional.}
@@ -508,6 +516,19 @@ proc rowSelectable*(listView: ListView, index: int): bool =
     if selectable.isSome:
       return selectable.get()
   true
+
+proc rowHitPolicy*(
+    listView: ListView, row: int, target: View, event: MouseEvent
+): CellHitPolicy =
+  if listView.isNil or row notin 0 ..< listView.len() or listView.xDelegate.isNil:
+    return chpDefault
+  let policy = listView.xDelegate.trySendLocal(
+    hitPolicyForRow(), (listView: listView, row: row, target: target, event: event)
+  )
+  if policy.isSome:
+    policy.get()
+  else:
+    chpDefault
 
 proc rowStyle*(listView: ListView, row: ListRowState): ListRowStyle =
   if listView.xDelegate.isNil or row.index < 0:
@@ -1391,6 +1412,35 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     else:
       discard listView.handleTypeSelect(event)
 
+protocol DefaultListViewMouseHitPolicy of MouseHitPolicyProtocol:
+  method mouseHitPolicy(listView: ListView, args: MouseHitPolicyArgs): CellHitPolicy =
+    if not listView.isEnabled() or args.event.button != mbPrimary:
+      return chpDefault
+    let row = listView.listItemIndexAtPoint(args.event.location)
+    if row < 0:
+      return chpDefault
+    let target =
+      if args.target of View:
+        View(args.target)
+      else:
+        nil
+    listView.rowHitPolicy(row, target, args.event)
+
+  method applyMouseHitPolicy(listView: ListView, args: MouseHitPolicyArgs): bool =
+    if not listView.isEnabled() or args.event.button != mbPrimary:
+      return false
+    let row = listView.listItemIndexAtPoint(args.event.location)
+    if row < 0:
+      return false
+    let owner = listView.window()
+    if owner of Window:
+      discard Window(owner).makeFirstResponder(listView, focusVisible = false)
+    listView.selectItemAtIndex(row, args.event.modifiers)
+    listView.highlightedIndex = row
+    listView.xPressedIndex = row
+    listView.invalidateListRows()
+    true
+
 proc initListBaseChild(view: View, clipsToBounds: bool) =
   initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
   view.background = initColor(0.0, 0.0, 0.0, 0.0)
@@ -1449,6 +1499,7 @@ proc initListViewFields*(
   discard listView.withProtocol(DefaultListViewLayout)
   discard listView.withProtocol(DefaultListViewDrawing)
   discard listView.withProtocol(DefaultListViewEvents)
+  discard listView.withProtocol(DefaultListViewMouseHitPolicy)
   listView.addItems(items)
   listView.applyInitialFrame(frame)
 

@@ -67,6 +67,8 @@ suite "nimkit text fields":
     window.setContentView(root)
 
     check window.makeFirstResponder(field)
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditorClient() == field
     check field.isEditing
     check field.selectedRange == initTextRange(0, 3)
 
@@ -238,7 +240,8 @@ suite "nimkit text fields":
     window.setContentView(root)
 
     check window.mouseDownAt(initPoint(20, 20))
-    check window.firstResponder == field
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditorClient() == field
     check field.isFocused
     check not field.isFocusVisible
     check field.isEditing

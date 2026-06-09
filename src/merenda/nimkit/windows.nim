@@ -9,6 +9,7 @@ import ./backend as nimkitBackend
 import ./keybindings
 import ./rendering as nimkitRendering
 import ./events
+import ./fieldeditors
 import ./selectors
 import ./theme
 import ./types
@@ -35,6 +36,7 @@ type
     xHasInheritedAppearance: bool
     xPopupPresentation: PopupPresentation
     xFirstResponder: Responder
+    xFieldEditor: FieldEditor
     xInitialFirstResponder: View
     xAutorecalculatesKeyViewLoop: bool
     xKeyBindings: KeyBindingTable
@@ -49,6 +51,7 @@ type
     xMouseCaptureView: View
     xMouseActiveView: View
     xMouseHoverView: View
+    xMousePolicyStopResponder: Responder
     xMomentumScrollTarget: View
     xMomentumScrollContentPoint: Point
     xMouseClickCount: int
@@ -119,6 +122,9 @@ func platformDefaultPopupPresentation*(): PopupPresentation =
     result = ppAutomatic
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool
+proc makeFirstResponder*(window: Window, responder: Responder, focusVisible: bool): bool
+proc fieldEditor*(window: Window): FieldEditor
+proc fieldEditorClient*(window: Window): Responder
 proc initialFirstResponder*(window: Window): View
 proc setInitialFirstResponder*(window: Window, view: View)
 proc autorecalculatesKeyViewLoop*(window: Window): bool
@@ -433,10 +439,44 @@ proc setTitle*(window: Window, title: string) =
 proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
+proc fieldEditor*(window: Window): FieldEditor =
+  if window.isNil:
+    return nil
+  if window.xFieldEditor.isNil:
+    window.xFieldEditor = newFieldEditor()
+    window.xFieldEditor.setNextResponder(window)
+  window.xFieldEditor
+
+proc fieldEditorClient*(window: Window): Responder =
+  if window.isNil or window.xFieldEditor.isNil:
+    nil
+  else:
+    window.xFieldEditor.client()
+
+proc responderFocusView(responder: Responder): View =
+  if responder of View:
+    return View(responder)
+  if responder of FieldEditor:
+    let client = FieldEditor(responder).client()
+    if client of View:
+      return View(client)
+
+proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
+  if window.isNil or responder.isNil:
+    return responder
+  let editor = window.fieldEditor()
+  if responder.wantsFieldEditor(editor):
+    return editor
+  responder
+
 proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool): bool =
-  if window.xFirstResponder == responder:
-    if not responder.isNil and responder of View:
-      let view = View(responder)
+  let nextResponder = window.resolvedFirstResponder(responder)
+  if window.xFirstResponder == nextResponder and
+      not (
+        nextResponder of FieldEditor and FieldEditor(nextResponder).client() != responder
+      ):
+    let view = responder.responderFocusView()
+    if not view.isNil:
       view.focused = true
       view.focusVisible = focusVisible
     return true
@@ -452,27 +492,33 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if not window.shouldMakeFirstResponder(responder):
     return false
   let previousResponder = window.xFirstResponder
+  let previousView = window.xFirstResponder.responderFocusView()
   if not window.xFirstResponder.isNil:
     if not window.xFirstResponder.shouldResignFirstResponder():
       return false
     if not window.xFirstResponder.resignFirstResponder():
       return false
-  if not responder.isNil and not responder.becomeFirstResponder():
+  if not responder.isNil and nextResponder of FieldEditor:
+    if not FieldEditor(nextResponder).beginEditing(responder):
+      return false
+  if not nextResponder.isNil and not nextResponder.becomeFirstResponder():
     return false
 
-  if not window.xFirstResponder.isNil and window.xFirstResponder of View:
-    let previous = View(window.xFirstResponder)
+  if not previousView.isNil:
+    let previous = previousView
     previous.focused = false
     previous.focusVisible = false
-  if not responder.isNil and responder of View:
-    let next = View(responder)
+
+  let nextView = responder.responderFocusView()
+  if not nextView.isNil:
+    let next = nextView
     next.focused = true
     next.focusVisible = focusVisible
-  window.xFirstResponder = responder
+  window.xFirstResponder = nextResponder
   if not previousResponder.isNil:
     previousResponder.didResignFirstResponder()
-  if not responder.isNil:
-    responder.didBecomeFirstResponder()
+  if not nextResponder.isNil:
+    nextResponder.didBecomeFirstResponder()
   emit window.didChangeFirstResponder(previousResponder)
   true
 
@@ -549,6 +595,10 @@ proc selectKeyView(window: Window, view: View): bool =
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
   if not sender.isNil and sender of View:
     return View(sender)
+  if not window.isNil:
+    let client = window.fieldEditorClient()
+    if client of View:
+      return View(client)
   if not window.isNil and not window.xFirstResponder.isNil and
       window.xFirstResponder of View:
     return View(window.xFirstResponder)
@@ -952,12 +1002,13 @@ proc dispatchMouseEventInChain(
     contentPoint: Point,
     event: MouseEvent,
     selector: MouseEventSelector,
+    stopBefore: Responder = nil,
 ): EventDispatchResult =
   ## Walks the responder chain from ``target`` outward.
   ## The first responder method returning ``true`` ends dispatch.
   ## ``false`` means "not handled", so we continue to ``nextResponder``.
   var responder = Responder(target)
-  while not responder.isNil:
+  while not responder.isNil and responder != stopBefore:
     var localEvent = event
     if responder of View:
       localEvent =
@@ -968,6 +1019,44 @@ proc dispatchMouseEventInChain(
       result.responder = responder
       return
     responder = responder.nextResponder()
+
+proc mouseHitPolicyInChain(
+    window: Window, target: View, contentPoint: Point, event: MouseEvent
+): tuple[policy: CellHitPolicy, responder: Responder] =
+  result.policy = chpDefault
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        localMouseEvent(View(responder), window.xContentView, contentPoint, event)
+    let policy = responder.trySendLocal(
+      mouseHitPolicy(),
+      MouseHitPolicyArgs(target: DynamicAgent(target), event: localEvent),
+    )
+    if policy.isSome and policy.get() != chpDefault:
+      result.policy = policy.get()
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc applyMouseHitPolicy(
+    window: Window,
+    responder: Responder,
+    target: View,
+    contentPoint: Point,
+    event: MouseEvent,
+): bool =
+  if responder.isNil:
+    return false
+  var localEvent = event
+  if responder of View:
+    localEvent =
+      localMouseEvent(View(responder), window.xContentView, contentPoint, event)
+  responder.sendLocalIfHandled(
+    applyMouseHitPolicy(),
+    MouseHitPolicyArgs(target: DynamicAgent(target), event: localEvent),
+  )
 
 proc dispatchScrollEventInChain(
     window: Window, target: View, contentPoint: Point, event: events.ScrollEvent
@@ -1051,15 +1140,32 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
   let contentPoint = window.contentPoint(event.location)
   var dispatchEvent = event
   var target: View
+  var stopBefore: Responder
   if pressed:
     target = window.contentHitTest(contentPoint)
     if window.shouldDismissTransientForMouse(target):
       discard window.dismissTransientSession(tdrOutsideClick)
       return true
-    window.xMouseCaptureView = target
     if target.isNil:
       return false
     dispatchEvent.clickCount = window.nextClickCount(target, event)
+    let hitPolicy = window.mouseHitPolicyInChain(target, contentPoint, dispatchEvent)
+    case hitPolicy.policy
+    of chpDefault:
+      discard
+    of chpIgnore:
+      return true
+    of chpSelectRow:
+      if hitPolicy.responder of View:
+        target = View(hitPolicy.responder)
+    of chpTrackCell:
+      window.xMousePolicyStopResponder = hitPolicy.responder
+    of chpSelectAndTrack:
+      discard window.applyMouseHitPolicy(
+        hitPolicy.responder, target, contentPoint, dispatchEvent
+      )
+      window.xMousePolicyStopResponder = hitPolicy.responder
+    window.xMouseCaptureView = target
     if target.acceptsFirstResponder():
       discard window.setFirstResponder(target, focusVisible = false)
   else:
@@ -1067,6 +1173,8 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     if target.isNil:
       target = window.contentHitTest(contentPoint)
     window.xMouseCaptureView = nil
+    stopBefore = window.xMousePolicyStopResponder
+    window.xMousePolicyStopResponder = nil
     if target.isNil:
       window.setMouseActiveView(nil)
       return false
@@ -1074,16 +1182,18 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
       dispatchEvent.clickCount = max(window.xMouseClickCount, 1)
 
   if pressed:
-    let dispatch =
-      window.dispatchMouseEventInChain(target, contentPoint, dispatchEvent, mouseDown())
+    let dispatch = window.dispatchMouseEventInChain(
+      target, contentPoint, dispatchEvent, mouseDown(), window.xMousePolicyStopResponder
+    )
     result = dispatch.handled
     if dispatch.handled and dispatch.responder of View:
       window.setMouseActiveView(View(dispatch.responder))
     else:
       window.setMouseActiveView(nil)
   else:
-    let dispatch =
-      window.dispatchMouseEventInChain(target, contentPoint, dispatchEvent, mouseUp())
+    let dispatch = window.dispatchMouseEventInChain(
+      target, contentPoint, dispatchEvent, mouseUp(), stopBefore
+    )
     result = dispatch.handled
     window.setMouseActiveView(nil)
     window.xMouseClickCount = 0
@@ -1108,7 +1218,7 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
 
   if dragging:
     result = window.dispatchMouseEventInChain(
-      target, contentPoint, event, mouseDragged()
+      target, contentPoint, event, mouseDragged(), window.xMousePolicyStopResponder
     ).handled
   else:
     result =

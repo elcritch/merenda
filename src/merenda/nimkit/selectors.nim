@@ -21,6 +21,10 @@ type
   KeyEventArgs* = object
     event*: KeyEvent
 
+  MouseHitPolicyArgs* = object
+    target*: DynamicAgent
+    event*: MouseEvent
+
   ActionArgs* = object
     sender*: DynamicAgent
 
@@ -56,6 +60,10 @@ protocol ResponderEventProtocol:
   method wantsForwardedScrollEvents*(event: ScrollEvent): bool {.optional.}
   method scrollWheel*(event: ScrollEvent) {.optional.}
   method keyDown*(event: KeyEvent) {.optional.}
+
+protocol MouseHitPolicyProtocol:
+  method mouseHitPolicy*(args: MouseHitPolicyArgs): CellHitPolicy {.optional.}
+  method applyMouseHitPolicy*(args: MouseHitPolicyArgs): bool {.optional.}
 
 protocol UserInterfaceValidations:
   method validateUserInterfaceItem*(args: ValidationArgs): bool

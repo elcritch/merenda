@@ -6,6 +6,7 @@ import ./controls
 import ./selectors
 import ./theme
 import ./events
+import ./fieldeditors
 import ./types
 
 export controls
@@ -150,6 +151,24 @@ protocol TextFieldProtocol from TextField:
     textField.xFlags.excl(tfEditing)
     textField.setNeedsDisplay(true)
     true
+
+protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
+  method usesFieldEditor(textField: TextField, editor: FieldEditor): bool =
+    textField.isEnabled and (textField.isEditable() or textField.isSelectable())
+
+  method shouldBeginEditing(textField: TextField, editor: FieldEditor): bool =
+    textField.isEnabled and (textField.isEditable() or textField.isSelectable())
+
+  method didBeginEditing(textField: TextField, editor: FieldEditor) =
+    textField.xFlags.incl(tfEditing)
+    textField.selectAllText()
+
+  method shouldEndEditing(textField: TextField, editor: FieldEditor): bool =
+    true
+
+  method didEndEditing(textField: TextField, editor: FieldEditor) =
+    textField.xFlags.excl(tfEditing)
+    textField.setNeedsDisplay(true)
 
 proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
@@ -553,6 +572,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   discard textField.withProto()
   discard textField.withProtocol(DefaultTextFieldInput)
   discard textField.withProtocol(DefaultTextFieldCommands)
+  discard textField.withProtocol(DefaultTextFieldFieldEditorClient)
   discard textField.withProtocol(DefaultTextFieldDrawing)
   discard textField.withProtocol(DefaultTextFieldEvents)
   textField.applyInitialFrame(frame)
