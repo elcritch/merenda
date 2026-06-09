@@ -65,6 +65,23 @@ proc renderedCaretInView(
         node.nodeRenderedInView(view):
       return true
 
+proc renderedFocusRingInView(nodes: openArray[Fig], view: View): bool =
+  let viewRect = view.rectToWindow(view.bounds)
+  for node in nodes:
+    if node.kind == nkRectangle and node.stroke.weight > 1.0 and
+        not viewRect.intersection(node.renderedRect()).isEmpty:
+      return true
+
+proc renderedFocusRingOutsetsView(nodes: openArray[Fig], view: View): bool =
+  let viewRect = view.rectToWindow(view.bounds)
+  for node in nodes:
+    if node.kind != nkRectangle or node.stroke.weight <= 1.0:
+      continue
+    let ringRect = node.renderedRect()
+    if ringRect.minX < viewRect.minX and ringRect.minY < viewRect.minY and
+        ringRect.maxX > viewRect.maxX and ringRect.maxY > viewRect.maxY:
+      return true
+
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
@@ -161,11 +178,15 @@ suite "nimkit text fields":
     check window.makeFirstResponder(field)
     let focusedNodes = window.buildRenders()[DefaultDrawLevel].nodes
     check focusedNodes.renderedSelectedTextInView(field, "Edit me")
+    check focusedNodes.renderedFocusRingInView(field)
+    check focusedNodes.renderedFocusRingOutsetsView(field)
 
     check window.dispatchKeyDown(KeyEvent(text: "X", key: keyX, keyCode: keyX.ord))
     let editedNodes = window.buildRenders()[DefaultDrawLevel].nodes
     check editedNodes.renderedTextInView(field, "X")
     check editedNodes.renderedCaretInView(field, field.textColor())
+    check editedNodes.renderedFocusRingInView(field)
+    check editedNodes.renderedFocusRingOutsetsView(field)
 
   test "insertText respects text field editability":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))

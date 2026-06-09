@@ -293,6 +293,10 @@ protocol DefaultFieldEditorKeyCommands of KeyViewCommandProtocol:
     TextView(editor).insertTextValue("\t")
     editor.notifyClientChanged()
 
+protocol DefaultFieldEditorDrawing of ViewDrawingProtocol:
+  method draw(editor: FieldEditor, context: DrawContext) =
+    TextView(editor).drawTextViewContents(context)
+
 proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)
   editor.editable = true
@@ -306,6 +310,7 @@ proc initFieldEditorFields*(editor: FieldEditor) =
   discard editor.withProtocol(DefaultFieldEditorInput)
   discard editor.withProtocol(DefaultFieldEditorCommands)
   discard editor.withProtocol(DefaultFieldEditorKeyCommands)
+  discard editor.withProtocol(DefaultFieldEditorDrawing)
 
 proc newFieldEditor*(): FieldEditor =
   result = FieldEditor()

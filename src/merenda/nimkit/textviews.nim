@@ -722,31 +722,34 @@ proc textIndexAtPoint*(textView: TextView, point: Point): int =
   textView.updateTextContainer()
   textView.xLayoutManager.textIndexAtPoint(point)
 
+proc drawTextViewContents*(textView: TextView, context: DrawContext) =
+  textView.updateTextContainer()
+  let layout = textLayout(
+    textView.bounds,
+    textView.displayTextStorage(),
+    textView.alignment(),
+    textView.xTextContainer.wraps,
+  )
+  let selected = textView.textViewSelectedRange()
+  if selected.length > 0:
+    discard context.addSelectedText(
+      textView.bounds,
+      layout,
+      int(selected.location),
+      int(selected.length),
+      textView.selectionColor(),
+    )
+  else:
+    discard context.addText(textView.bounds, layout)
+  if textView.editable and selected.length == 0 and textView.isFocused:
+    context.addRectangle(
+      textView.xLayoutManager.caretRect(textView.textViewInsertionPoint()),
+      textView.textColor(),
+    )
+
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method draw(textView: TextView, context: DrawContext) =
-    textView.updateTextContainer()
-    let layout = textLayout(
-      textView.bounds,
-      textView.displayTextStorage(),
-      textView.alignment(),
-      textView.xTextContainer.wraps,
-    )
-    let selected = textView.textViewSelectedRange()
-    if selected.length > 0:
-      discard context.addSelectedText(
-        textView.bounds,
-        layout,
-        int(selected.location),
-        int(selected.length),
-        textView.selectionColor(),
-      )
-    else:
-      discard context.addText(textView.bounds, layout)
-    if textView.editable and selected.length == 0 and textView.isFocused:
-      context.addRectangle(
-        textView.xLayoutManager.caretRect(textView.textViewInsertionPoint()),
-        textView.textColor(),
-      )
+    textView.drawTextViewContents(context)
 
 protocol DefaultTextViewEvents of ResponderEventProtocol:
   method mouseDown(textView: TextView, event: MouseEvent): bool =
