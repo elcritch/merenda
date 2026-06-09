@@ -3,6 +3,7 @@ import std/[math, options]
 import sigils/core
 
 import ./drawing
+import ./events
 import ./listviews
 import ./listbasics
 import ./selectors
@@ -55,6 +56,11 @@ proc tableRowEnabled(tableView: TableView, row: int): bool
 proc tableRowSelectable(tableView: TableView, row: int): bool
 proc resolvedRowHeight(tableView: TableView, row: int): float32
 proc tableRowDidActivate(tableView: TableView, row: int)
+proc tableColumnAtPoint(tableView: TableView, point: Point): TableColumn
+proc tableCellHitPolicy(
+  tableView: TableView, row: int, column: TableColumn, target: View, event: MouseEvent
+): CellHitPolicy
+
 proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
 proc clearTableCellSlots(tableView: TableView)
@@ -77,6 +83,14 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   method tableRowHeight*(tableView: TableView, row: int): float32 {.optional.}
   method isRowEnabled*(tableView: TableView, row: int): bool {.optional.}
   method shouldSelectTableRow*(tableView: TableView, row: int): bool {.optional.}
+  method shouldTrackCell*(
+    tableView: TableView, row: int, column: TableColumn, target: View
+  ): bool {.optional.}
+
+  method hitPolicyForCell*(
+    tableView: TableView, row: int, column: TableColumn, target: View, event: MouseEvent
+  ): CellHitPolicy {.optional.}
+
   method didActivateRow*(tableView: TableView, row: int) {.optional.}
 
 protocol TableViewListDataSource of ListViewDataSource:
@@ -92,6 +106,16 @@ protocol TableViewListDelegate of ListViewDelegate:
 
   method shouldSelectRow(tableView: TableView, listView: ListView, row: int): bool =
     tableView.tableRowSelectable(row)
+
+  method hitPolicyForRow(
+      tableView: TableView,
+      listView: ListView,
+      row: int,
+      target: View,
+      event: MouseEvent,
+  ): CellHitPolicy =
+    let column = tableView.tableColumnAtPoint(event.location)
+    tableView.tableCellHitPolicy(row, column, target, event)
 
   method heightOfRow(tableView: TableView, listView: ListView, row: int): float32 =
     tableView.resolvedRowHeight(row)
@@ -408,6 +432,38 @@ proc tableRowSelectable(tableView: TableView, row: int): bool =
     selectable.get()
   else:
     true
+
+proc tableColumnAtPoint(tableView: TableView, point: Point): TableColumn =
+  if tableView.isNil:
+    return nil
+  var x = 0.0'f32
+  for column in tableView.columns:
+    let nextX = x + column.width()
+    if point.x >= x and point.x < nextX:
+      return column
+    x = nextX
+
+proc tableCellHitPolicy(
+    tableView: TableView, row: int, column: TableColumn, target: View, event: MouseEvent
+): CellHitPolicy =
+  if tableView.isNil or column.isNil or row notin 0 ..< tableView.rowCount():
+    return chpDefault
+  let delegate = tableView.delegate()
+  if delegate.isNil:
+    return chpDefault
+  let explicitPolicy = delegate.trySendLocal(
+    hitPolicyForCell(),
+    (tableView: tableView, row: row, column: column, target: target, event: event),
+  )
+  if explicitPolicy.isSome and explicitPolicy.get() != chpDefault:
+    return explicitPolicy.get()
+  let shouldTrack = delegate.trySendLocal(
+    shouldTrackCell(), (tableView: tableView, row: row, column: column, target: target)
+  )
+  if shouldTrack.isSome:
+    if shouldTrack.get(): chpTrackCell else: chpSelectRow
+  else:
+    chpDefault
 
 proc resolvedRowHeight(tableView: TableView, row: int): float32 =
   if tableView.isNil:
