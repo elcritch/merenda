@@ -2,6 +2,43 @@ import std/unittest
 
 import merenda/nimkit
 
+type TestPasteboardProvider = ref object of DynamicAgent
+  text: string
+  clearCount: int
+  writtenText: seq[string]
+
+protocol TestPasteboardProviderProtocol of PasteboardProviderProtocol:
+  method pasteboardTypes(
+      provider: TestPasteboardProvider, pasteboard: Pasteboard
+  ): seq[string] =
+    if provider.text.len > 0:
+      result.add PasteboardTypeString
+
+  method stringForPasteboardType(
+      provider: TestPasteboardProvider, request: PasteboardTypeRequest
+  ): string =
+    if request.kind == PasteboardTypeString: provider.text else: ""
+
+  method setStringForPasteboardType(
+      provider: TestPasteboardProvider, request: PasteboardStringRequest
+  ): bool =
+    if request.kind != PasteboardTypeString:
+      return false
+    provider.text = request.value
+    provider.writtenText.add request.value
+    true
+
+  method clearPasteboardContents(
+      provider: TestPasteboardProvider, pasteboard: Pasteboard
+  ): bool =
+    provider.text = ""
+    inc provider.clearCount
+    true
+
+proc newTestPasteboardProvider(text = ""): TestPasteboardProvider =
+  result = TestPasteboardProvider(text: text)
+  discard result.withProtocol(TestPasteboardProviderProtocol)
+
 suite "nimkit text views":
   test "text view inserts and replaces selected text":
     let textView = newTextView("abcdef", frame = initRect(0, 0, 160, 24))
@@ -108,6 +145,39 @@ suite "nimkit text views":
     check source.cutText()
     check source.stringValue == "ad"
     check source.selectedRange == initTextRange(1, 0)
+
+  test "general pasteboard is named and can sync string data through a provider":
+    let
+      pasteboard = generalPasteboard()
+      previousProvider = pasteboard.provider
+      provider = newTestPasteboardProvider()
+      target = newTextView("zz", frame = initRect(0, 0, 160, 24))
+      source = newTextView("abcd", frame = initRect(0, 0, 160, 24))
+
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    pasteboard.provider = provider
+    check pasteboard == pasteboardWithName(GeneralPasteboardName)
+    check pasteboardWithName(FindPasteboardName) ==
+      pasteboardWithName(FindPasteboardName)
+    check pasteboardWithUniqueName() != pasteboardWithUniqueName()
+
+    provider.text = "clip"
+    target.selectedRange = initTextRange(1, 0)
+    check target.pasteText()
+    check target.stringValue == "zclipz"
+    check target.selectedRange == initTextRange(5, 0)
+
+    source.selectedRange = initTextRange(1, 2)
+    check source.copyText()
+    check provider.writtenText[^1] == "bc"
+    check pasteboard.availableTypeFromArray(
+      [PasteboardTypeTextStorage, PasteboardTypeString]
+    ) == PasteboardTypeTextStorage
+
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    pasteboard.provider = previousProvider
 
   test "text view newline and tab commands insert text":
     let textView = newTextView("ab", frame = initRect(0, 0, 160, 24))

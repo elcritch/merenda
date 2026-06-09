@@ -13,6 +13,39 @@ type CustomEditorTextFieldCell = ref object of TextFieldCell
 type TextFieldChangeSpy = ref object of Agent
   changeCount: int
 
+type TextFieldPasteboardProvider = ref object of DynamicAgent
+  text: string
+
+protocol TextFieldPasteboardProviderProtocol of PasteboardProviderProtocol:
+  method pasteboardTypes(
+      provider: TextFieldPasteboardProvider, pasteboard: Pasteboard
+  ): seq[string] =
+    if provider.text.len > 0:
+      result.add PasteboardTypeString
+
+  method stringForPasteboardType(
+      provider: TextFieldPasteboardProvider, request: PasteboardTypeRequest
+  ): string =
+    if request.kind == PasteboardTypeString: provider.text else: ""
+
+  method setStringForPasteboardType(
+      provider: TextFieldPasteboardProvider, request: PasteboardStringRequest
+  ): bool =
+    if request.kind != PasteboardTypeString:
+      return false
+    provider.text = request.value
+    true
+
+  method clearPasteboardContents(
+      provider: TextFieldPasteboardProvider, pasteboard: Pasteboard
+  ): bool =
+    provider.text = ""
+    true
+
+proc newTextFieldPasteboardProvider(text: string): TextFieldPasteboardProvider =
+  result = TextFieldPasteboardProvider(text: text)
+  discard result.withProtocol(TextFieldPasteboardProviderProtocol)
+
 proc rememberTextFieldChange(spy: TextFieldChangeSpy, sender: DynamicAgent) {.slot.} =
   inc spy.changeCount
 
@@ -337,6 +370,33 @@ suite "nimkit text fields":
     check window.dispatchKeyDown(KeyEvent(text: "q", key: keyQ, keyCode: keyQ.ord))
     check field.stringValue == "q"
     check field.selectedRange == initTextRange(1, 0)
+
+  test "paste shortcut inserts provider-backed general pasteboard text":
+    let
+      pasteboard = generalPasteboard()
+      previousProvider = pasteboard.provider
+      provider = newTextFieldPasteboardProvider("clip")
+      window = newWindow("Text paste", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("az", frame = initRect(10, 10, 140, 24))
+
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    pasteboard.provider = provider
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+    field.selectedRange = initTextRange(1, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: shortcutModifiers())
+    )
+    check field.stringValue == "aclipz"
+    check field.selectedRange == initTextRange(5, 0)
+
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    pasteboard.provider = previousProvider
 
   test "mouse down focuses text field and places caret at clicked position":
     let
