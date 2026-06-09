@@ -447,10 +447,14 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
         return false
     elif not responder.acceptsFirstResponder():
       return false
+    if not responder.shouldBecomeFirstResponder():
+      return false
   if not window.shouldMakeFirstResponder(responder):
     return false
   let previousResponder = window.xFirstResponder
   if not window.xFirstResponder.isNil:
+    if not window.xFirstResponder.shouldResignFirstResponder():
+      return false
     if not window.xFirstResponder.resignFirstResponder():
       return false
   if not responder.isNil and not responder.becomeFirstResponder():
@@ -465,11 +469,20 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
     next.focused = true
     next.focusVisible = focusVisible
   window.xFirstResponder = responder
+  if not previousResponder.isNil:
+    previousResponder.didResignFirstResponder()
+  if not responder.isNil:
+    responder.didBecomeFirstResponder()
   emit window.didChangeFirstResponder(previousResponder)
   true
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool =
   window.setFirstResponder(responder, focusVisible = true)
+
+proc makeFirstResponder*(
+    window: Window, responder: Responder, focusVisible: bool
+): bool =
+  window.setFirstResponder(responder, focusVisible)
 
 proc initialFirstResponder*(window: Window): View =
   window.xInitialFirstResponder
@@ -776,12 +789,36 @@ proc keyDispatchTarget(window: Window): Responder =
   Responder(window.xContentView)
 
 proc dispatchCommandInChain(
-    target: Responder, selector: CommandSelector
+    target: Responder, selector: CommandSelector, sender: DynamicAgent
 ): EventDispatchResult =
-  let args = TryToPerformArgs(selector: selector, sender: DynamicAgent(target))
-  if target.tryToPerform(args):
-    result.handled = true
-    result.responder = target
+  let args = TryToPerformArgs(selector: selector, sender: sender)
+  var responder = target
+  while not responder.isNil:
+    if responder.tryToPerform(args):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc dispatchActionInChain*(
+    window: Window, selector: ActionSelector, sender: DynamicAgent
+): EventDispatchResult =
+  var target = window.keyDispatchTarget()
+  if target.isNil:
+    target = Responder(window)
+  dispatchCommandInChain(target, selector, sender)
+
+proc sendAction*(
+    window: Window,
+    selector: ActionSelector,
+    sender: DynamicAgent = nil,
+    target: DynamicAgent = nil,
+): bool =
+  if window.isNil:
+    return false
+  if not target.isNil:
+    return target.sendLocalIfHandled(selector, ActionArgs(sender: sender))
+  window.dispatchActionInChain(selector, sender).handled
 
 proc dispatchKeyCommand(
     window: Window, target: Responder, event: events.KeyEvent
@@ -789,7 +826,7 @@ proc dispatchKeyCommand(
   let command = window.xKeyBindings.commandFor(event)
   if command.isNone:
     return
-  dispatchCommandInChain(target, command.get())
+  dispatchCommandInChain(target, command.get(), DynamicAgent(target))
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   if event.key == keyEscape:

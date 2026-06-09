@@ -218,9 +218,7 @@ proc newView*(frame: Rect = AutoRect): View =
   result = View()
   initViewFields(result, frame)
 
-proc handleMouse*(
-    view: View, selector: MouseEventSelector, event: MouseEvent
-): bool =
+proc handleMouse*(view: View, selector: MouseEventSelector, event: MouseEvent): bool =
   ## ``true`` means event handled and should not bubble further.
   ## ``false`` means event should continue up the responder chain.
   var handled = false

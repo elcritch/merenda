@@ -7,6 +7,9 @@ import merenda/nimkit
 type TrackingSpyView = ref object of View
   xName: string
 
+type FocusSpyView = ref object of View
+  xName: string
+
 var
   trackingEvents: seq[string]
   trackingPoints: seq[Point]
@@ -97,11 +100,40 @@ protocol TrackingSpyCommands of TrackingSpyCommandProtocol:
     trackingEvents.add(spy.xName & ".command")
     trackingCommandSenders.add(args.sender)
 
+protocol FocusSpyResponderLifecycle of ResponderProtocol:
+  method shouldBecomeFirstResponder(spy: FocusSpyView): bool =
+    trackingEvents.add(spy.xName & ".shouldBecome")
+    true
+
+  method becomeFirstResponder(spy: FocusSpyView): bool =
+    trackingEvents.add(spy.xName & ".become")
+    true
+
+  method didBecomeFirstResponder(spy: FocusSpyView) =
+    trackingEvents.add(spy.xName & ".didBecome")
+
+  method shouldResignFirstResponder(spy: FocusSpyView): bool =
+    trackingEvents.add(spy.xName & ".shouldResign")
+    true
+
+  method resignFirstResponder(spy: FocusSpyView): bool =
+    trackingEvents.add(spy.xName & ".resign")
+    true
+
+  method didResignFirstResponder(spy: FocusSpyView) =
+    trackingEvents.add(spy.xName & ".didResign")
+
 proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
   result = TrackingSpyView(xName: name)
   initViewFields(result, frame)
   discard result.withProtocol(TrackingSpyEvents)
   discard result.withProtocol(TrackingSpyCommands)
+
+proc newFocusSpyView(name: string, frame: Rect): FocusSpyView =
+  result = FocusSpyView(xName: name)
+  initViewFields(result, frame)
+  result.setAcceptsFirstResponder(true)
+  discard result.withProtocol(FocusSpyResponderLifecycle)
 
 suite "nimkit responder":
   test "next responder is observable and forwards selector dispatch":
@@ -134,6 +166,31 @@ suite "nimkit responder":
     check window.firstResponder == button
     check button.isFocused
     check button.isFocusVisible
+
+  test "first responder lifecycle validates and observes transitions":
+    let
+      window = newWindow("Responder lifecycle", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      first = newFocusSpyView("first", initRect(10, 10, 80, 30))
+      second = newFocusSpyView("second", initRect(100, 10, 80, 30))
+
+    root.addSubview(first)
+    root.addSubview(second)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.makeFirstResponder(first)
+    check trackingEvents == @["first.shouldBecome", "first.become", "first.didBecome"]
+
+    resetTracking()
+
+    check window.makeFirstResponder(second)
+    check trackingEvents ==
+      @[
+        "second.shouldBecome", "first.shouldResign", "first.resign", "second.become",
+        "first.didResign", "second.didBecome",
+      ]
 
   test "mouse focus does not force visible focus rings":
     let

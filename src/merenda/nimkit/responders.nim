@@ -16,18 +16,35 @@ protocol ResponderProtocol from Responder:
   method setAcceptsFirstResponder(self: Responder, value: bool) =
     self.xAcceptsFirstResponder = value
 
+  method shouldBecomeFirstResponder*(self: Responder): bool =
+    self.acceptsFirstResponder()
+
   method becomeFirstResponder*(self: Responder): bool =
+    true
+
+  method didBecomeFirstResponder*(self: Responder) =
+    discard
+
+  method shouldResignFirstResponder*(self: Responder): bool =
     true
 
   method resignFirstResponder*(self: Responder): bool =
     true
 
+  method didResignFirstResponder*(self: Responder) =
+    discard
+
   method tryToPerform*(self: Responder, args: TryToPerformArgs): bool =
-    self.sendIfHandled(args.selector, ActionArgs(sender: args.sender))
+    self.sendLocalIfHandled(args.selector, ActionArgs(sender: args.sender))
 
   method doCommandBySelector*(self: Responder, selector: CommandSelector) =
-    if not self.sendIfHandled(selector, ActionArgs(sender: DynamicAgent(self))):
-      self.noResponderFor(selector)
+    let args = TryToPerformArgs(selector: selector, sender: DynamicAgent(self))
+    var responder = self
+    while not responder.isNil:
+      if responder.tryToPerform(args):
+        return
+      responder = Responder(dynamicSelectors.nextResponder(responder))
+    self.noResponderFor(selector)
 
   method noResponderFor*(self: Responder, selector: CommandSelector) =
     let owner = if self.isNil: "nil" else: "responder"

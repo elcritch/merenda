@@ -1,18 +1,35 @@
 import std/os
 
+import sigils/selectors
+
+import ./responders
+import ./selectors as nimkitSelectors
 import ./theme
 import ./windows
 
-type Application* = ref object
+type Application* = ref object of Responder
   xWindows: seq[Window]
+  xDelegate: DynamicAgent
   xAppearance: Appearance
   xHasAppearance: bool
   xRunning: bool
 
 var sharedApplicationInstance: Application
 
+proc applicationForwardingTarget(app: Application, selector: SigilName): DynamicAgent =
+  if not app.xDelegate.isNil and app.xDelegate.respondsTo(selector):
+    return app.xDelegate
+
+proc installApplicationForwarding(app: Application) =
+  app.setForwardingTarget(
+    proc(self: DynamicAgent, selector: SigilName): DynamicAgent =
+      applicationForwardingTarget(Application(self), selector)
+  )
+
 proc newApplication*(): Application =
-  Application()
+  result = Application()
+  initResponder(result)
+  result.installApplicationForwarding()
 
 proc sharedApplication*(): Application =
   if sharedApplicationInstance.isNil:
@@ -32,6 +49,17 @@ proc effectiveAppearance*(app: Application): Appearance =
     return initAppearance()
   app.xAppearance
 
+proc delegate*(app: Application): DynamicAgent =
+  if app.isNil: nil else: app.xDelegate
+
+proc `delegate=`*(app: Application, delegate: DynamicAgent) =
+  if app.isNil:
+    return
+  app.xDelegate = delegate
+
+proc `delegate=`*(app: Application, delegate: Responder) =
+  app.delegate = DynamicAgent(delegate)
+
 proc propagateAppearance(app: Application) =
   let inherited = app.effectiveAppearance()
   for window in app.xWindows:
@@ -50,9 +78,12 @@ proc clearAppearance*(app: Application) =
   app.propagateAppearance()
 
 proc addWindow*(app: Application, window: Window) =
+  if app.isNil or window.isNil:
+    return
   if window notin app.xWindows:
     app.xWindows.add window
-    window.setInheritedAppearance(app.effectiveAppearance())
+  window.setNextResponder(app)
+  window.setInheritedAppearance(app.effectiveAppearance())
 
 proc windows*(app: Application): lent seq[Window] =
   app.xWindows
@@ -70,6 +101,8 @@ proc runForFrames*(app: Application, frames: Natural): int =
     while idx < app.xWindows.len:
       let window = app.xWindows[idx]
       if window.isNil or window.isClosed:
+        if not window.isNil and window.nextResponder() == Responder(app):
+          window.clearNextResponder()
         app.xWindows.delete(idx)
         continue
       if window.isVisible:
@@ -94,6 +127,8 @@ proc run*(app: Application) =
     while idx < app.xWindows.len:
       let window = app.xWindows[idx]
       if window.isNil or window.isClosed:
+        if not window.isNil and window.nextResponder() == Responder(app):
+          window.clearNextResponder()
         app.xWindows.delete(idx)
         continue
       if window.isVisible:

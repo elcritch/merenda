@@ -2,6 +2,7 @@ import ./cells
 import ./selectors
 import ./types
 import ./views
+import ./windows
 
 export cells, views
 
@@ -60,9 +61,13 @@ protocol ControlProtocol from Control:
 
   method sendAction*(self: Control): bool =
     let target = self.target()
-    if target.isNil:
-      return false
-    target.sendIfHandled(self.action(), ActionArgs(sender: DynamicAgent(self)))
+    if not target.isNil:
+      return
+        target.sendLocalIfHandled(self.action(), ActionArgs(sender: DynamicAgent(self)))
+    let owner = self.window()
+    if owner of Window:
+      return Window(owner).sendAction(self.action(), DynamicAgent(self))
+    false
 
 proc enabled*(control: Control): bool =
   (not control.isNil) and control.isEnabled()
