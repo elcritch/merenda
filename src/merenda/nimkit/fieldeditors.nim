@@ -91,13 +91,6 @@ proc notifyClientFocusChanged(editor: FieldEditor) =
     return
   discard client.sendLocalIfHandled(didChangeFocusInEditor(), editor)
 
-proc updateFieldEditorFocus*(editor: FieldEditor, focusVisible: bool) =
-  if editor.isNil:
-    return
-  editor.focused = true
-  editor.focusVisible = focusVisible
-  editor.notifyClientFocusChanged()
-
 proc finishEditing(
     editor: FieldEditor, reason: TextEditReason, movement = temNone
 ): bool =
@@ -153,6 +146,17 @@ protocol DefaultFieldEditorResponder of ResponderProtocol:
 
   method resignFirstResponder(editor: FieldEditor): bool =
     editor.endEditing()
+
+  method setFirstResponderFocusState(editor: FieldEditor, focused, focusVisible: bool) =
+    if editor.isNil:
+      return
+    let changed =
+      editor.isFocused() != focused or editor.isFocusVisible() != focusVisible
+    if not changed:
+      return
+    editor.focused = focused
+    editor.focusVisible = focusVisible
+    editor.notifyClientFocusChanged()
 
 protocol DefaultFieldEditorView of ViewProtocol:
   method canBecomeKeyView(editor: FieldEditor): bool =

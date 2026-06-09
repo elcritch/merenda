@@ -474,12 +474,8 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
       nextResponder of FieldEditor and responder != nextResponder and
       FieldEditor(nextResponder).client() != responder
     if not changingFieldEditorClient:
-      if nextResponder of FieldEditor:
-        FieldEditor(nextResponder).updateFieldEditorFocus(focusVisible)
-      elif nextResponder of View:
-        let view = View(nextResponder)
-        view.focused = true
-        view.focusVisible = focusVisible
+      if not nextResponder.isNil:
+        nextResponder.setFirstResponderFocusState(true, focusVisible)
       return true
 
   if not responder.isNil:
@@ -490,11 +486,6 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if not window.shouldMakeFirstResponder(responder):
     return false
   let previousResponder = window.xFirstResponder
-  let previousView =
-    if window.xFirstResponder of View:
-      View(window.xFirstResponder)
-    else:
-      nil
   if not window.xFirstResponder.isNil:
     if not window.xFirstResponder.shouldResignFirstResponder():
       return false
@@ -506,20 +497,10 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if not nextResponder.isNil and not nextResponder.becomeFirstResponder():
     return false
 
-  if not previousView.isNil:
-    let previous = previousView
-    previous.focused = false
-    previous.focusVisible = false
-
-  let nextView =
-    if nextResponder of View:
-      View(nextResponder)
-    else:
-      nil
-  if not nextView.isNil:
-    let next = nextView
-    next.focused = true
-    next.focusVisible = focusVisible
+  if not previousResponder.isNil:
+    previousResponder.setFirstResponderFocusState(false, false)
+  if not nextResponder.isNil:
+    nextResponder.setFirstResponderFocusState(true, focusVisible)
   window.xFirstResponder = nextResponder
   if not previousResponder.isNil:
     previousResponder.didResignFirstResponder()
