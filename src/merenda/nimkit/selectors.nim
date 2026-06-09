@@ -43,6 +43,10 @@ type
     sender*: DynamicAgent
 
 protocol ResponderEventProtocol:
+  ## Event handler return contract:
+  ## returning ``true`` means the handler consumed the event and bubbling should stop;
+  ## returning ``false`` means the event was not handled and should continue to the
+  ## next responder in the chain.
   method mouseDown*(event: MouseEvent): bool {.optional.}
   method mouseUp*(event: MouseEvent): bool {.optional.}
   method mouseEntered*(event: MouseEvent): bool {.optional.}
