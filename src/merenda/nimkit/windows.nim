@@ -916,9 +916,18 @@ proc dispatchMouseEventInChain(
     event: MouseEvent,
     selector: MouseEventSelector,
 ): EventDispatchResult =
-  window.dispatchEventInChain(
-    Responder(target), contentPoint, event, selector, localMouseEvent
-  )
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        localMouseEvent(View(responder), window.xContentView, contentPoint, event)
+    var handled = false
+    if responder.performLocal(selector, localEvent, handled) and handled:
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
 
 proc dispatchScrollEventInChain(
     window: Window, target: View, contentPoint: Point, event: events.ScrollEvent
@@ -965,13 +974,13 @@ proc updateHoverView(
   if not previous.isNil:
     previous.hovered = false
     let localEvent = previous.localMouseEvent(window.xContentView, contentPoint, event)
-    result = previous.handleMouseExited(localEvent)
+    result = previous.handleMouse(mouseExited(), localEvent)
 
   window.xMouseHoverView = target
   if not target.isNil:
     target.hovered = true
     let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
-    result = target.handleMouseEntered(localEvent) or result
+    result = target.handleMouse(mouseEntered(), localEvent) or result
 
 proc responderChainContains(responder, owner: Responder): bool =
   if responder.isNil or owner.isNil:

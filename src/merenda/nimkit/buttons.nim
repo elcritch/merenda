@@ -290,20 +290,23 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       )
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
-  method mouseDown(button: Button, event: MouseEvent) =
+  method mouseDown(button: Button, event: MouseEvent): bool =
     if button.isEnabled and event.button == mbPrimary:
       button.setHighlighted(true)
+      return true
 
-  method mouseDragged(button: Button, event: MouseEvent) =
+  method mouseDragged(button: Button, event: MouseEvent): bool =
     if button.isEnabled and event.button == mbPrimary:
       button.setHighlighted(button.pointInside(event.location))
+      return true
 
-  method mouseUp(button: Button, event: MouseEvent) =
+  method mouseUp(button: Button, event: MouseEvent): bool =
     if button.isEnabled and event.button == mbPrimary:
       let clicked = button.pointInside(event.location)
       button.setHighlighted(false)
       if clicked:
         button.buttonPerformClick(ActionArgs(sender: button))
+      return true
 
 protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =

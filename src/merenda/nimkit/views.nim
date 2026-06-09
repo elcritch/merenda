@@ -218,29 +218,11 @@ proc newView*(frame: Rect = AutoRect): View =
   result = View()
   initViewFields(result, frame)
 
-proc handleMouseDown*(view: View, event: MouseEvent): bool =
-  view.sendLocalIfHandled(mouseDown(), event)
-
-proc handleMouseUp*(view: View, event: MouseEvent): bool =
-  view.sendLocalIfHandled(mouseUp(), event)
-
-proc handleMouseEntered*(view: View, event: MouseEvent): bool =
-  view.sendLocalIfHandled(mouseEntered(), event)
-
-proc handleMouseExited*(view: View, event: MouseEvent): bool =
-  view.sendLocalIfHandled(mouseExited(), event)
-
-proc handleMouseMoved*(view: View, event: MouseEvent): bool =
-  view.sendLocalIfHandled(mouseMoved(), event)
-
-proc handleMouseDragged*(view: View, event: MouseEvent): bool =
-  view.sendLocalIfHandled(mouseDragged(), event)
-
-proc handleScrollWheel*(view: View, event: ScrollEvent): bool =
-  view.sendLocalIfHandled(scrollWheel(), event)
-
-proc handleKeyDown*(view: View, event: KeyEvent): bool =
-  view.sendLocalIfHandled(keyDown(), event)
+proc handleMouse*(
+    view: View, selector: MouseEventSelector, event: MouseEvent
+): bool =
+  var handled = false
+  view.performLocal(selector, event, handled) and handled
 
 proc clearNeedsDisplayTree*(view: View) =
   view.finishDisplaySubtree()
@@ -253,5 +235,5 @@ proc clickAt*(view: View, point: Point): bool =
   let event = MouseEvent(
     location: hit.pointFromView(point, view), button: mbPrimary, clickCount: 1
   )
-  discard hit.handleMouseDown(event)
-  result = hit.handleMouseUp(event)
+  discard hit.handleMouse(mouseDown(), event)
+  result = hit.handleMouse(mouseUp(), event)

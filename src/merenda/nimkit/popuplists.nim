@@ -100,23 +100,29 @@ protocol DefaultPopupListDrawing of ViewDrawingProtocol:
       popupList.drawPopupList(context, popupList.bounds, popupList.drawLevel())
 
 protocol DefaultPopupListEvents of ResponderEventProtocol:
-  method mouseDown(popupList: PopupListView, event: MouseEvent) =
+  method mouseDown(popupList: PopupListView, event: MouseEvent): bool =
     if not popupList.isEnabled() or event.button != mbPrimary:
-      return
+      return false
     popupList.beginPopupListTracking(popupList.bounds, event.location)
+    true
 
-  method mouseDragged(popupList: PopupListView, event: MouseEvent) =
+  method mouseDragged(popupList: PopupListView, event: MouseEvent): bool =
     if popupList.isOpened():
       popupList.trackPopupListPoint(popupList.bounds, event.location)
+      return true
+    false
 
-  method mouseMoved(popupList: PopupListView, event: MouseEvent) =
+  method mouseMoved(popupList: PopupListView, event: MouseEvent): bool =
     if popupList.isOpened():
       popupList.trackPopupListPoint(popupList.bounds, event.location)
+      return true
+    false
 
-  method mouseUp(popupList: PopupListView, event: MouseEvent) =
+  method mouseUp(popupList: PopupListView, event: MouseEvent): bool =
     if not popupList.isEnabled() or event.button != mbPrimary:
-      return
+      return false
     popupList.finishPopupListTracking(popupList.bounds, event.location)
+    true
 
   method wantsForwardedScrollEvents(
       popupList: PopupListView, event: ScrollEvent

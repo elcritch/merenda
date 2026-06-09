@@ -332,9 +332,9 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       )
 
 protocol DefaultComboBoxEvents of ResponderEventProtocol:
-  method mouseDown(comboBox: ComboBox, event: MouseEvent) =
+  method mouseDown(comboBox: ComboBox, event: MouseEvent): bool =
     if not comboBox.isEnabled or event.button != mbPrimary:
-      return
+      return false
     if comboBox.popupOpen() and
         comboBox.popupRect(comboBox.bounds()).contains(event.location):
       comboBox.popupList().beginPopupListTracking(
@@ -345,22 +345,27 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       comboBox.setWidgetState(ssPressed, true)
       comboBox.togglePopup()
       comboBox.setNeedsDisplay(true)
+    true
 
-  method mouseDragged(comboBox: ComboBox, event: MouseEvent) =
+  method mouseDragged(comboBox: ComboBox, event: MouseEvent): bool =
     if comboBox.popupOpen():
       comboBox.popupList().trackPopupListPoint(
         comboBox.popupRect(comboBox.bounds()), event.location
       )
+      return true
+    false
 
-  method mouseMoved(comboBox: ComboBox, event: MouseEvent) =
+  method mouseMoved(comboBox: ComboBox, event: MouseEvent): bool =
     if comboBox.popupOpen():
       comboBox.popupList().trackPopupListPoint(
         comboBox.popupRect(comboBox.bounds()), event.location
       )
+      return true
+    false
 
-  method mouseUp(comboBox: ComboBox, event: MouseEvent) =
+  method mouseUp(comboBox: ComboBox, event: MouseEvent): bool =
     if not comboBox.isEnabled or event.button != mbPrimary:
-      return
+      return false
     comboBox.setWidgetState(ssPressed, false)
     if comboBox.popupOpen() and
         comboBox.popupRect(comboBox.bounds()).contains(event.location):
@@ -368,6 +373,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
         comboBox.popupRect(comboBox.bounds()), event.location, closeWhenDone = false
       )
     comboBox.setNeedsDisplay(true)
+    true
 
   method wantsForwardedScrollEvents(comboBox: ComboBox, event: ScrollEvent): bool =
     not comboBox.popupOpen() or

@@ -30,13 +30,15 @@ var
   constraintEvents: seq[string]
 
 protocol MouseSpyEvents of ResponderEventProtocol:
-  method mouseDown(spy: MouseSpyView, event: MouseEvent) =
+  method mouseDown(spy: MouseSpyView, event: MouseEvent): bool =
     spyMouseDownPoint = event.location
     inc spyMouseDownCount
+    true
 
-  method mouseUp(spy: MouseSpyView, event: MouseEvent) =
+  method mouseUp(spy: MouseSpyView, event: MouseEvent): bool =
     spyMouseUpPoint = event.location
     inc spyMouseUpCount
+    true
 
 protocol LifecycleSpyViewEvents of ViewLifecycleProtocol:
   proc rememberViewWillMoveToSuperview(
