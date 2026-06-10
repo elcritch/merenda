@@ -115,6 +115,14 @@ proc renderedFocusRingOutsetsView(nodes: openArray[Fig], view: View): bool =
         ringRect.maxX > viewRect.maxX and ringRect.maxY > viewRect.maxY:
       return true
 
+proc renderedOpaqueBackgroundForView(nodes: openArray[Fig], view: View): bool =
+  let viewRect = view.rectToWindow(view.bounds)
+  for node in nodes:
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color != initColor(0.0, 0.0, 0.0, 0.0).rgba and
+        node.renderedRect() == viewRect:
+      return true
+
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
@@ -220,6 +228,24 @@ suite "nimkit text fields":
     check editedNodes.renderedCaretInView(field, field.textColor())
     check editedNodes.renderedFocusRingInView(field)
     check editedNodes.renderedFocusRingOutsetsView(field)
+
+  test "field editor does not paint an opaque background over text field chrome":
+    let
+      window = newWindow("Field editor chrome", frame = initRect(0, 0, 420, 180))
+      root = newView(frame = initRect(0, 0, 420, 180))
+      field = newTextField("Edit me", frame = initRect(28, 44, 240, 30))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(40, 58))
+    check field.isFocused
+    check not field.isFocusVisible
+    let editor = window.fieldEditor()
+    check editor.superview == field
+
+    let nodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check not nodes.renderedOpaqueBackgroundForView(editor)
 
   test "tabbing through field editor keeps constrained showcase layout stretched":
     let
