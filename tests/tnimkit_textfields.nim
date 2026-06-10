@@ -221,6 +221,96 @@ suite "nimkit text fields":
     check editedNodes.renderedFocusRingInView(field)
     check editedNodes.renderedFocusRingOutsetsView(field)
 
+  test "tabbing through field editor keeps constrained showcase layout stretched":
+    let
+      window = newWindow("Controls Showcase", frame = initRect(0, 0, 760, 500))
+      root = newView()
+      layout = newStackView(laVertical)
+      bodyRow = newStackView(laHorizontal)
+      inputColumn = newStackView(laVertical)
+      buttonRow = newStackView(laHorizontal)
+      choiceColumn = newStackView(laVertical)
+      popupColumn = newStackView(laVertical)
+      title = newTitleLabel("Nimkit Controls")
+      summary = newStatusLabel("/ Building UI / Toggle: Off")
+      inputTitle = newHeadingLabel("Text Fields")
+      nameField = newTextField("")
+      noteField = newTextField("Building UI")
+      actionTitle = newHeadingLabel("Buttons")
+      pushButton = newButton("Push")
+      toggleButton = newButton("Toggle Off")
+      actionCountLabel = newStatusLabel("Push count: 0")
+      choiceTitle = newHeadingLabel("Choices")
+      downloads = newCheckBox("Enable downloads")
+      notifications = newCheckBox("Show notifications")
+      sync = newCheckBox("Sync over cellular")
+      sizeTitle = newHeadingLabel("Radio Buttons")
+      small = newRadioButton("Small")
+      medium = newRadioButton("Medium")
+      large = newRadioButton("Large")
+      popupTitle = newHeadingLabel("Combo Boxes")
+      priority = newComboBox(["Low", "Medium", "High"])
+      color = newComboBox(["Red", "Green", "Blue"])
+
+    root.background = initColor(0.95, 0.96, 0.98)
+    layout.spacing = 16.0
+    layout.alignment = svaFill
+    bodyRow.spacing = 28.0
+    bodyRow.alignment = svaFill
+    bodyRow.distribution = svdFill
+    for column in [inputColumn, choiceColumn, popupColumn]:
+      column.spacing = 10.0
+      column.alignment = svaFill
+    popupColumn.distribution = svdNatural
+    buttonRow.spacing = 8.0
+    buttonRow.alignment = svaFill
+    buttonRow.distribution = svdFillEqually
+
+    buttonRow.addArrangedSubview(pushButton, toggleButton)
+    inputColumn.addArrangedSubview(
+      inputTitle, nameField, noteField, actionTitle, buttonRow, actionCountLabel
+    )
+    inputColumn.addFlexibleSpacer()
+    choiceColumn.addArrangedSubview(
+      choiceTitle, downloads, notifications, sync, sizeTitle, small, medium, large
+    )
+    choiceColumn.addFlexibleSpacer()
+    popupColumn.addArrangedSubview(popupTitle, priority, color)
+    bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
+    layout.addArrangedSubview(title, bodyRow, summary)
+
+    root.addSubview(layout)
+    layout.pinEdges(
+      toGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
+      edges = {leLeft, leTop, leRight},
+    )
+    window.setContentView(root)
+    check window.makeFirstResponder(nameField)
+    root.frame = initRect(0, 0, 760, 500)
+
+    discard window.buildRenders()
+    let stretchedWidth = layout.frame.size.width
+    check stretchedWidth > 700.0'f32
+    check title.frame.size.width == stretchedWidth
+    check summary.frame.size.width == stretchedWidth
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    discard window.buildRenders()
+
+    check layout.frame.size.width == stretchedWidth
+    check title.frame.size.width == stretchedWidth
+    check summary.frame.size.width == stretchedWidth
+
+    check not root.needsUpdateConstraints
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == toggleButton
+    check not root.needsUpdateConstraints
+    discard window.buildRenders()
+    check layout.frame.size.width == stretchedWidth
+    check title.frame.size.width == stretchedWidth
+    check summary.frame.size.width == stretchedWidth
+
   test "insertText respects text field editability":
     let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
 

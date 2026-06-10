@@ -68,13 +68,12 @@ proc widgetStateSet*(view: View): set[WidgetState] =
   view.xWidgetStates
 
 proc setWidgetState*(view: View, state: WidgetState, value: bool) =
-  if value == (state in view.xWidgetStates):
+  if view.isNil or value == (state in view.xWidgetStates):
     return
   if value:
     view.xWidgetStates.incl state
   else:
     view.xWidgetStates.excl state
-  view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc isHovered*(view: View): bool =
@@ -129,7 +128,6 @@ protocol DefaultViewResponder of ResponderProtocol:
     if view.xWidgetStates == states:
       return
     view.xWidgetStates = states
-    view.invalidateIntrinsicContentSize()
     view.setNeedsDisplay(true)
 
 proc needsUpdateConstraints*(view: View): bool =

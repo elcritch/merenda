@@ -211,7 +211,8 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
     view.refreshAutoresizingReference()
     emit view.geometryDidChange()
   of lfoSolver:
-    discard
+    if not view.xSuperview.isNil:
+      view.xSuperview.xNeedsLayout = true
 
 proc setFrameFromLayout*(view: View, frame: Rect) =
   view.applyLayoutFrame(frame, lfoContainer)
