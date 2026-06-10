@@ -26,6 +26,7 @@ type TableDelegateSpy = ref object of Responder
   hasShouldTrack: bool
   viewCalls: seq[string]
   activatedRows: seq[int]
+  buttonActionRows: seq[int]
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
   for value in indexes:
@@ -58,6 +59,25 @@ proc hostedTableCellCount(tableView: TableView): int =
   for rowView in content.subviews():
     result += rowView.subviews().len
 
+proc tableActionPoint(tableView: TableView, row: int): Point =
+  let rowRect = tableView.listItemRect(row)
+  if rowRect.isEmpty:
+    return initPoint(0.0, 0.0)
+  let actionColumn = tableView.columnAt(1)
+  if actionColumn.isNil or tableView.columnCount() < 2:
+    return initPoint(
+      rowRect.origin.x + rowRect.size.width * 0.5'f32,
+      rowRect.origin.y + rowRect.size.height * 0.5'f32
+    )
+  let actionX = actionColumn.width() * 0.5'f32
+  let leftColumn = tableView.columnAt(0)
+  if leftColumn.isNil:
+    return initPoint(
+      rowRect.origin.x + rowRect.size.width * 0.5'f32,
+      rowRect.origin.y + rowRect.size.height * 0.5'f32
+    )
+  initPoint(actionX + leftColumn.width(), rowRect.origin.y + rowRect.size.height * 0.5'f32)
+
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
     source.rows
@@ -78,7 +98,15 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
         not delegate.hostedColumns.containsValue(column.identifier):
       return nil
     if delegate.buttonColumns.containsValue(column.identifier):
-      return newButton(text)
+      let action = actionSelector("tableAction")
+      let button = newButton(text)
+      button.target = newActionTarget(
+        action,
+        proc(sender: DynamicAgent) =
+          delegate.buttonActionRows.add row
+      )
+      button.action = action
+      return button
     newLabel(text)
 
   method tableRowHeight(
@@ -410,6 +438,32 @@ suite "NimKit TableView":
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
     check ListView(tableView).selectedIndex == -1
+
+  test "table action buttons use row-local callbacks when selection does not change":
+    let
+      window =
+        newWindow("Table hosted button action", frame = initRect(0, 0, 360, 190))
+      root = newView(frame = initRect(0, 0, 360, 190))
+      tableView = newTableView(frame = initRect(10, 10, 280, 84))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+
+    tableView.addColumn(newTableColumn("name", "Name", width = 160.0))
+    tableView.addColumn(newTableColumn("action", "Action", width = 88.0))
+    tableView.dataSource = source
+    delegate.buttonColumns = @["action"]
+    delegate.nonselectableRows = @[1]
+    tableView.selectionMode = lsmNone
+    tableView.delegate = delegate
+    ListView(tableView).rowHeight = 22.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let point = tableView.pointToWindow(tableActionPoint(tableView, 1))
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
+    check delegate.buttonActionRows == @[1]
 
   test "table view cell hit policy can select rows around hosted controls":
     let
