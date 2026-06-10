@@ -11,6 +11,9 @@ type
     owner: string
     elapsed: string
 
+  ColumnInfo = ref object of Responder
+    note: string
+
   TableDemoController = ref object of Responder
     rows: seq[BuildRow]
     table: TableView
@@ -47,7 +50,12 @@ func cellText(row: BuildRow, column: TableColumn): string =
   of "state": row.state
   of "owner": row.owner
   of "elapsed": row.elapsed
+  of "action": "Inspect"
   else: ""
+
+proc newColumnInfo(note: string): ColumnInfo =
+  result = ColumnInfo(note: note)
+  initResponder(result)
 
 proc selectedProjectNames(controller: TableDemoController): seq[string] =
   for index in controller.table.selectedIndexes:
@@ -66,6 +74,22 @@ proc updateSelection(controller: TableDemoController) =
 proc makeStateCell(state: string): Label =
   result = newStatusLabel(state)
   result.alignment = taCenter
+
+proc onInspect(controller: TableDemoController, sender: DynamicAgent) =
+  let index = controller.table.selectedIndex
+  if index in 0 ..< controller.rows.len:
+    let build = controller.rows[index]
+    controller.activity.text = "Inspecting: " & build.project & " (" & build.owner & ")"
+
+proc makeActionButton(controller: TableDemoController, row: int): Button =
+  result = newButton("Inspect")
+  result.target = newActionTarget(
+    actionSelector("tableInspect"),
+    proc(sender: DynamicAgent) =
+      controller.onInspect(sender),
+  )
+  result.action = actionSelector("tableInspect")
+  result.enabled = controller.rowAt(row).state != "Paused"
 
 protocol TableDemoDataSource of TableViewDataSource:
   method numberOfRows(controller: TableDemoController, tableView: TableView): int =
@@ -88,6 +112,8 @@ protocol TableDemoDelegate of TableViewDelegate:
   ): View =
     if column.identifier == "state":
       return controller.rowAt(row).state.makeStateCell()
+    if column.identifier == "action":
+      return controller.makeActionButton(row)
     nil
 
   method tableRowHeight(
@@ -99,6 +125,21 @@ protocol TableDemoDelegate of TableViewDelegate:
       controller: TableDemoController, tableView: TableView, row: int
   ): bool =
     controller.rowAt(row).state != "Paused"
+
+  method shouldSelectTableRow(
+      controller: TableDemoController, tableView: TableView, row: int
+  ): bool =
+    controller.rowAt(row).state != "Blocked"
+
+  method hitPolicyForCell(
+      controller: TableDemoController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      target: View,
+      event: MouseEvent,
+  ): CellHitPolicy =
+    if column.identifier == "action": chpSelectAndTrack else: chpDefault
 
   method didActivateRow(
       controller: TableDemoController, tableView: TableView, row: int
@@ -129,18 +170,21 @@ const
   StateColumnWidth = 100.0
   OwnerColumnWidth = 110.0
   ElapsedColumnWidth = 80.0
+  ActionColumnWidth = 90.0
   TableWidth =
-    ProjectColumnWidth + StateColumnWidth + OwnerColumnWidth + ElapsedColumnWidth + 20.0
+    ProjectColumnWidth + StateColumnWidth + OwnerColumnWidth + ElapsedColumnWidth +
+    ActionColumnWidth + 20.0
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Table Demo", frame = initRect(140, 140, 740, 380))
+  window = newWindow("Nimkit Table Demo", frame = initRect(140, 140, 820, 380))
   root = newView()
   title = newTitleLabel("Table View")
   projectHeader = newStatusLabel("Project")
   stateHeader = newStatusLabel("State")
   ownerHeader = newStatusLabel("Owner")
   elapsedHeader = newStatusLabel("Elapsed")
+  actionHeader = newStatusLabel("Action")
   table = newTableView()
   detailTitle = newHeadingLabel("Selection")
   detail = newStatusLabel("")
@@ -152,15 +196,48 @@ root.background = initColor(0.95, 0.96, 0.98)
 
 stateHeader.alignment = taCenter
 elapsedHeader.alignment = taRight
+actionHeader.alignment = taCenter
 
-table.addColumn(newTableColumn("project", "Project", width = ProjectColumnWidth))
-table.addColumn(
-  newTableColumn("state", "State", width = StateColumnWidth, alignment = taCenter)
-)
-table.addColumn(newTableColumn("owner", "Owner", width = OwnerColumnWidth))
-table.addColumn(
-  newTableColumn("elapsed", "Elapsed", width = ElapsedColumnWidth, alignment = taRight)
-)
+let
+  projectColumn =
+    newTableColumn("project", "Project", width = ProjectColumnWidth, minWidth = 150.0)
+  stateColumn =
+    newTableColumn("state", "State", width = StateColumnWidth, alignment = taCenter)
+  ownerColumn = newTableColumn("owner", "Owner", width = OwnerColumnWidth)
+  elapsedColumn = newTableColumn(
+    "elapsed",
+    "Elapsed",
+    width = ElapsedColumnWidth,
+    alignment = taRight,
+    resizePolicy = tcrFixed,
+  )
+  actionColumn = newTableColumn(
+    "action",
+    "Action",
+    width = ActionColumnWidth,
+    minWidth = 72.0,
+    maxWidth = 120.0,
+    alignment = taCenter,
+  )
+  scratchColumn = newTableColumn("scratch", "Scratch")
+
+projectColumn.styleClasses = ["primary"]
+projectColumn.userInfo = newColumnInfo("Primary project identity")
+discard projectColumn.userInfo of ColumnInfo
+table.addColumn(projectColumn)
+table.addColumn(stateColumn)
+table.addColumn(elapsedColumn)
+table.insertColumn(ownerColumn, table.columnIndex("elapsed"))
+table.addColumn(scratchColumn)
+table.removeColumn("scratch")
+if table.containsColumn("action") == false:
+  table.addColumn(actionColumn)
+if not table.columnWithIdentifier("elapsed").isNil:
+  table.columnWithIdentifier("elapsed").title = "Elapsed"
+
+for column in table.columns:
+  column.styleId = "table-column-" & column.identifier
+
 table.dataSource = controller
 table.delegate = controller
 table.visibleRows = 8
@@ -172,8 +249,8 @@ table.selectedIndex = 0
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 
 root.addSubview(
-  title, projectHeader, stateHeader, ownerHeader, elapsedHeader, table, detailTitle,
-  detail, activityTitle, activity,
+  title, projectHeader, stateHeader, ownerHeader, elapsedHeader, actionHeader, table,
+  detailTitle, detail, activityTitle, activity,
 )
 
 title.pinEdges(
@@ -194,6 +271,9 @@ activate(
   cx(elapsedHeader.topAnchor == projectHeader.topAnchor),
   cx(elapsedHeader.leftAnchor == ownerHeader.rightAnchor),
   cx(elapsedHeader.widthAnchor == ElapsedColumnWidth),
+  cx(actionHeader.topAnchor == projectHeader.topAnchor),
+  cx(actionHeader.leftAnchor == elapsedHeader.rightAnchor),
+  cx(actionHeader.widthAnchor == ActionColumnWidth),
   cx(table.topAnchor == projectHeader.bottomAnchor + 6.0),
   cx(table.leftAnchor == title.leftAnchor),
   cx(table.widthAnchor == TableWidth),
