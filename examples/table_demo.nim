@@ -75,20 +75,21 @@ proc makeStateCell(state: string): Label =
   result = newStatusLabel(state)
   result.alignment = taCenter
 
-proc onInspect(controller: TableDemoController, sender: DynamicAgent) =
-  let index = controller.table.selectedIndex
+proc onInspect(controller: TableDemoController, row: int) =
+  let index = row
   if index in 0 ..< controller.rows.len:
     let build = controller.rows[index]
     controller.activity.text = "Inspecting: " & build.project & " (" & build.owner & ")"
 
 proc makeActionButton(controller: TableDemoController, row: int): Button =
   result = newButton("Inspect")
+  let action = actionSelector("tableInspect")
   result.target = newActionTarget(
-    actionSelector("tableInspect"),
+    action,
     proc(sender: DynamicAgent) =
-      controller.onInspect(sender),
+      controller.onInspect(row),
   )
-  result.action = actionSelector("tableInspect")
+  result.action = action
   result.enabled = controller.rowAt(row).state != "Paused"
 
 protocol TableDemoDataSource of TableViewDataSource:
