@@ -4,6 +4,7 @@ import ./selectors
 import ./textstorage
 import ./texttypes
 import ./textviews
+import ./types
 
 type FieldEditor* = ref object of TextView
   xClient: Responder
@@ -299,6 +300,7 @@ protocol DefaultFieldEditorDrawing of ViewDrawingProtocol:
 
 proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)
+  editor.background = initColor(0.0, 0.0, 0.0, 0.0)
   editor.editable = true
   editor.selectable = true
   editor.richText = true
