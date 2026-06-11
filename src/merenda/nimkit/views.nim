@@ -180,6 +180,8 @@ proc dirtyRects*(view: View): seq[Rect] =
     view.invalidRects()
 
 proc needsDisplayInSubtree*(view: View): bool =
+  if view.isNil:
+    return false
   if view.needsDisplay:
     return true
   for child in view.xSubviews:
@@ -187,11 +189,25 @@ proc needsDisplayInSubtree*(view: View): bool =
       return true
   false
 
+proc needsDisplayUpdateInSubtree*(view: View): bool =
+  if view.isNil:
+    return false
+  if view.xNeedsDisplay or view.xNeedsLayout or view.xNeedsUpdateConstraints:
+    return true
+  for child in view.xSubviews:
+    if child.needsDisplayUpdateInSubtree():
+      return true
+  false
+
 proc prepareDisplaySubtree*(view: View): bool =
+  if view.isNil:
+    return false
   view.layoutSubtreeIfNeeded()
   view.needsDisplayInSubtree()
 
 proc finishDisplaySubtree*(view: View) =
+  if view.isNil:
+    return
   view.setNeedsDisplay(false)
   for child in view.xSubviews:
     child.finishDisplaySubtree()

@@ -230,6 +230,42 @@ suite "nimkit application":
       finally:
         window.close()
 
+  test "native render request follows display dirty state":
+    block nativeRenderRequest:
+      let
+        app = newApplication()
+        window =
+          newWindow("Nimkit Native Render Request", frame = initRect(80, 80, 240, 140))
+        root = newView(frame = initRect(0, 0, 240, 140))
+        child = newView(frame = initRect(16, 16, 80, 40))
+
+      root.addSubview(child)
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      try:
+        check app.runForFrames(1) == 1
+        check window.nativeReady
+        check not root.needsDisplayUpdateInSubtree()
+        check not window.nativeRenderRequested()
+        check not window.requestNativeDisplayUpdateIfNeeded()
+
+        let before = window.nativeRenderCount()
+        child.background = initColor(1, 0, 0)
+        check root.needsDisplayUpdateInSubtree()
+        check window.requestNativeDisplayUpdateIfNeeded()
+        check window.nativeRenderRequested()
+        check app.runForFrames(1) == 1
+        check window.nativeRenderCount() > before
+        check not root.needsDisplayUpdateInSubtree()
+        check not window.nativeRenderRequested()
+      except CatchableError:
+        skip()
+        break nativeRenderRequest
+      finally:
+        window.close()
+
   test "native close marks window closed without releasing during callback":
     block nativeClose:
       let

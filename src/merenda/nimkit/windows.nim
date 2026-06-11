@@ -158,6 +158,9 @@ proc newPopupWindow*(
   owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
 ): Window
 
+proc needsDisplayUpdate*(window: Window): bool
+proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
+
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc dispatchKeyEventInChain(
   window: Window, target: Responder, event: events.KeyEvent
@@ -636,6 +639,30 @@ proc nativeReady*(window: Window): bool =
 
 proc nativeContentScale*(window: Window): float32 =
   window.xHostWindow.contentScale()
+
+proc nativeRenderCount*(window: Window): Natural =
+  if window.isNil or window.xHostWindow.isNil:
+    return 0
+  window.xHostWindow.renderCount()
+
+proc nativeRenderRequested*(window: Window): bool =
+  (not window.isNil) and (not window.xHostWindow.isNil) and
+    window.xHostWindow.renderRequested()
+
+proc needsDisplayUpdate*(window: Window): bool =
+  (not window.isNil) and (not window.xContentView.isNil) and
+    window.xContentView.needsDisplayUpdateInSubtree()
+
+proc requestNativeDisplayUpdate*(window: Window) =
+  if window.isNil or window.xHostWindow.isNil:
+    return
+  window.xHostWindow.requestRender()
+
+proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.} =
+  if window.needsDisplayUpdate():
+    window.requestNativeDisplayUpdate()
+    return true
+  false
 
 proc isClosed*(window: Window): bool =
   window.isNil or window.xClosed
@@ -1318,12 +1345,15 @@ proc mouseDraggedAt*(
 
 proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
   discard window.dispatchMouseButton(event, pressed)
+  discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostMouseMove(window: Window, event: MouseEvent, dragging: bool) =
   discard window.dispatchMouseMove(event, dragging)
+  discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostScroll(window: Window, event: events.ScrollEvent) =
   discard window.dispatchScrollWheel(event)
+  discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   if event.pressed and event.isEscape:
@@ -1333,18 +1363,22 @@ proc dispatchHostKey(window: Window, event: HostKeyEvent) =
       discard window.dismissTransientSession(tdrEscape)
     else:
       window.close()
+    discard window.requestNativeDisplayUpdateIfNeeded()
     return
   if event.pressed:
     discard window.dispatchKeyDown(event.event)
+  discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostTextInput(window: Window, text: string) =
   if text.len == 0:
     return
   discard dispatchTextInputInChain(window.keyDispatchTarget(), text)
+  discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostFocusChanged(window: Window, focused: bool) =
   if focused and not window.xIsPopup and window.hasActiveTransientSession():
     discard window.dismissTransientSession(tdrFocusChange)
+  discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc markHostClosed(window: Window) =
   window.xClosed = true
@@ -1406,6 +1440,7 @@ proc pumpNativeWindowFrame*(window: Window) =
   if window.isNil or not window.xVisibleRequested or window.xClosed:
     return
   window.ensureNativeWindow()
+  discard window.requestNativeDisplayUpdateIfNeeded()
   if window.xHostWindow.isReady:
     window.xHostWindow.pump()
   var idx = 0
