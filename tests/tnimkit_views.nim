@@ -286,6 +286,31 @@ suite "nimkit views":
     root.finishDisplaySubtree()
     check not root.needsDisplay
 
+  test "display update predicate includes display layout and constraints":
+    let
+      root = newView(frame = initRect(0, 0, 200, 160))
+      child = newView(frame = initRect(20, 20, 80, 40))
+
+    root.addSubview(child)
+    discard root.prepareDisplaySubtree()
+    root.finishDisplaySubtree()
+    check not root.needsDisplayUpdateInSubtree()
+
+    child.setNeedsDisplay(true)
+    check root.needsDisplayUpdateInSubtree()
+    root.finishDisplaySubtree()
+    check not root.needsDisplayUpdateInSubtree()
+
+    child.setNeedsLayout()
+    check root.needsDisplayUpdateInSubtree()
+    child.layoutSubtreeIfNeeded()
+    check not root.needsDisplayUpdateInSubtree()
+
+    child.setNeedsUpdateConstraints()
+    check root.needsDisplayUpdateInSubtree()
+    child.updateConstraintsForSubtreeIfNeeded()
+    check not root.needsDisplayUpdateInSubtree()
+
   test "constraint update lifecycle runs before layout":
     let
       root = newConstraintSpyView("root", initRect(0, 0, 200, 160))

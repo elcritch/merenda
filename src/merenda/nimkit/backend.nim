@@ -36,6 +36,8 @@ type
     xCallbacks: HostWindowCallbacks
     xReady: bool
     xOwnerKey: pointer
+    xRenderRequested: bool
+    xRenderCount: Natural
 
   NativePasteboardProvider = ref object of DynamicAgent
     xHost: HostWindow
@@ -228,6 +230,23 @@ proc rendererOrNil*(
 ): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
   host.xRenderer
 
+proc renderRequested*(host: HostWindow): bool =
+  not host.isNil and host.xRenderRequested
+
+proc renderCount*(host: HostWindow): Natural =
+  if host.isNil:
+    return 0
+  host.xRenderCount
+
+proc requestRender*(host: HostWindow) =
+  if host.isNil:
+    return
+  if host.xRenderRequested:
+    return
+  host.xRenderRequested = true
+  if host.isReady and not host.xNativeWindow.isNil:
+    host.xNativeWindow.redraw()
+
 proc contentScale*(host: HostWindow): float32 =
   if not host.isReady:
     return 1.0'f32
@@ -243,6 +262,7 @@ proc markClosed(host: HostWindow, notify: bool) =
   if not nativePasteboardProvider.isNil and nativePasteboardProvider.xHost == host:
     nativePasteboardProvider.xHost = firstReadyHost()
   host.xReady = false
+  host.xRenderRequested = false
   if notify and not callbacks.onClose.isNil:
     callbacks.onClose()
 
@@ -269,11 +289,13 @@ proc setVisible*(host: HostWindow, visible: bool) =
 proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
     return
+  host.xRenderRequested = false
   host.refreshContentScale()
   let size = vec2(logicalSize.width, logicalSize.height)
   host.xRenderer.beginFrame()
   host.xRenderer.renderFrame(renders, size)
   host.xRenderer.endFrame()
+  inc host.xRenderCount
 
 proc close*(host: HostWindow) =
   let nativeWindow = host.xNativeWindow
@@ -472,7 +494,8 @@ proc pump*(host: HostWindow) =
   let nativeWindow = host.xNativeWindow
   if nativeWindow.isNil or not nativeWindow.opened():
     return
-  nativeWindow.redraw()
+  if host.xRenderRequested:
+    nativeWindow.redraw()
   nativeWindow.step()
   if host.isReady and nativeWindow.closed():
     host.markClosed(notify = true)
