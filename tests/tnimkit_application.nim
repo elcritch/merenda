@@ -415,6 +415,37 @@ suite "nimkit application":
     check openPanel.canChooseFiles
     check savePanel.window.title == "Save"
 
+  test "popup menu button opens menu popup and activates items":
+    let
+      window = newWindow("Popup Menu", frame = initRect(0, 0, 320, 180))
+      root = newView(frame = initRect(0, 0, 320, 180))
+      bar = newView(frame = initRect(0, 0, 320, 28))
+      menu = newMenu("Actions")
+      action = actionSelector("popupMenuAction")
+      item = newMenuItem("Run", action)
+      button = newPopupMenuButton("Actions", menu, initRect(8, 2, 80, 24))
+
+    var actionCount = 0
+
+    proc onAction(sender: DynamicAgent) =
+      check sender == DynamicAgent(button)
+      inc actionCount
+
+    item.target = newActionTarget(action, onAction)
+    discard menu.addItem(item)
+    button.popupPresentation = ppInline
+    bar.addSubview(button)
+    root.addSubview(bar)
+    window.setContentView(root)
+
+    check not button.popupOpen
+    check window.clickAt(initPoint(16, 12))
+    check button.popupOpen
+
+    check window.clickAt(initPoint(16, 38))
+    check actionCount == 1
+    check not button.popupOpen
+
   test "raw mouse input converts from reported input size to logical size":
     let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)
 
