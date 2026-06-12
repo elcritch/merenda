@@ -16,17 +16,17 @@ Detailed layout, constraint, invalidation, and solver notes live in
 ## Current Focus
 
 NimKit has the core desktop-control slice in place: views, responders, windows,
-application/menu infrastructure, theme/rendering, intrinsic sizing,
+application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid containers, buttons, text fields, combo boxes,
 scroll views, list views, table views, basic text editing lifecycle, action
 dispatch, and in-process pasteboard support.
 
 The next work should move NimKit toward the OpenSTEP/AppKit framework shape:
-finish the application/window/menu behavior now that the first infrastructure
-slice exists, then richer view, pasteboard, dragging, graphics-resource,
-document, table, and outline systems. Avoid adding widget-local special cases
-where AppKit solves the behavior through the application, responder, view,
-window, or control/cell layers.
+stabilize the remaining native/backend edges around application and window
+behavior, then add richer pasteboard, dragging, graphics-resource, document,
+table, and outline systems. Avoid adding widget-local special cases where AppKit
+solves the behavior through the application, responder, view, window, or
+control/cell layers.
 
 ## Recently Completed
 
@@ -71,32 +71,44 @@ window, or control/cell layers.
   min/max sizes, resize increments, autosave names, initial/future first
   responder hooks, richer screen/window/view coordinate conversion, transient
   popup sessions, and sheet attachment lifecycle.
+- Finished the pure Nim menu-tracking path with cascading submenu popups,
+  menu-bar hover switching across open top-level menus, keyboard navigation,
+  first-enabled-item selection, separator/disabled skipping, checked/mixed state
+  rendering, and disabled item rendering/activation behavior.
+- Integrated application `windowsMenu` population and validation with the main
+  menu model, including order-front actions and checked main-window state.
+- Built modal sessions and sheet presentation on the application/window model,
+  including app-modal and window-modal modes, visible attached sheet windows,
+  modal result propagation, alert/open/save panel entry points, and termination
+  deferral while a modal session is active.
+- Added application/window integration for programmatic activation, key/main
+  transitions, hide/unhide window restore, frame autosave helpers, and window
+  menu refresh when windows are added, removed, activated, or closed.
 
 ## Near-Term Work
 
-### OpenSTEP Application Spine
+### Application And Window Hardening
 
-Finish the behavior that sits on top of the first application/menu/window
-infrastructure slice.
+Keep the pure Nim application spine stable while connecting more behavior to
+real native backends.
 
-1. Finish menu tracking and interaction:
-   - cascading submenu popups, hover-open tracking across menu-bar items, and
-     robust outside-click/escape/focus dismissal across nested menus
-   - keyboard menu navigation, first enabled item selection, separator skipping,
-     and checked/mixed/disabled menu item rendering
-   - `windowsMenu` population and validation, menu-bar integration with the
-     application main menu, and optional native-menu bridging after the pure Nim
-     path is stable
-2. Build modal and panel UI on the stable window/session model:
-   - modal sheets as visible attached windows, app-modal/window-modal blocking
-     behavior, and modal result propagation
-   - panels, alerts, and open/save panels that use window delegates and modal
-     sessions rather than control-local state
-3. Deepen application/window integration:
-   - activation, hide/unhide, and key/main-window transitions against real
-     native backends
-   - termination review flows for modal panels and, later, unsaved documents
-   - window autosave persistence and richer window-level menu validation
+1. Deepen native activation behavior:
+   - verify activation, hide/unhide, focus changes, and key/main-window
+     transitions on macOS, X11, Wayland, and inline-windowless targets
+   - route native focus/resign/key-window notifications through the same
+     `Application` and `Window` state transitions used by tests
+2. Harden modal and termination flows:
+   - extend termination review from active modal panels to document-driven
+     unsaved-change review once the document layer lands
+   - make window-modal event blocking enforceable at the backend dispatch
+     boundary, not only through application state queries
+3. Round out menu and persistence integration:
+   - add optional native-menu bridging after the pure Nim menu path remains
+     stable across examples
+   - move window frame autosave from the current in-process helper store to a
+     backend/user-defaults persistence layer
+   - add richer window-level menu validation for close/minimize/zoom and
+     document-window commands
 
 ### Pasteboard And Dragging
 
