@@ -1,5 +1,6 @@
 import std/[tables, unittest]
 
+import figdraw/fignodes
 from figdraw/windowing/siwinshim import nil
 import sigils/core
 
@@ -477,6 +478,33 @@ suite "nimkit application":
 
     check window.clickAt(initPoint(18, 38))
     check actionCount == 1
+
+  test "menu bar highlights top-level items on mouse hover":
+    let
+      window = newWindow("Menu Bar Hover", frame = initRect(0, 0, 320, 180))
+      root = newView(frame = initRect(0, 0, 320, 180))
+      mainMenu = newMenu("Main")
+      actionsMenu = newMenu("Actions")
+      actionsItem = newMenuItem("Actions")
+      menuBar = newMenuBar(mainMenu, initRect(0, 0, 320, 28))
+
+    actionsItem.submenu = actionsMenu
+    discard mainMenu.addItem(actionsItem)
+    menuBar.reload()
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    check window.mouseMovedAt(initPoint(18, 12))
+
+    let renders = window.buildRenders()
+    var hoverFound = false
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == initColor(0.76, 0.81, 0.91).rgba:
+        hoverFound = true
+
+    check hoverFound
 
   test "raw mouse input converts from reported input size to logical size":
     let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)
