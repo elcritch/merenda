@@ -446,6 +446,38 @@ suite "nimkit application":
     check actionCount == 1
     check not button.popupOpen
 
+  test "menu bar presents top-level menu submenus":
+    let
+      window = newWindow("Menu Bar", frame = initRect(0, 0, 320, 180))
+      root = newView(frame = initRect(0, 0, 320, 180))
+      mainMenu = newMenu("Main")
+      actionsMenu = newMenu("Actions")
+      actionsItem = newMenuItem("Actions")
+      action = actionSelector("menuBarAction")
+      item = newMenuItem("Run", action)
+      menuBar = newMenuBar(mainMenu, initRect(0, 0, 320, 28))
+
+    var actionCount = 0
+
+    proc onAction(sender: DynamicAgent) =
+      inc actionCount
+
+    item.target = newActionTarget(action, onAction)
+    actionsItem.submenu = actionsMenu
+    discard actionsMenu.addItem(item)
+    discard mainMenu.addItem(actionsItem)
+    menuBar.reload()
+    window.setPopupPresentation(ppInline)
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    check window.clickAt(initPoint(18, 12))
+    check PopupDrawLevel in window.buildRenders().layers
+
+    check window.clickAt(initPoint(18, 38))
+    check actionCount == 1
+
   test "raw mouse input converts from reported input size to logical size":
     let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)
 
