@@ -51,13 +51,65 @@ type
     xMenu: Menu
     xButtons: seq[PopupMenuButton]
 
-proc openPopup*(button: PopupMenuButton)
-proc closePopup*(button: PopupMenuButton)
-proc reload*(menuBar: MenuBar)
+proc openImpl(menu: Menu)
+proc closeImpl(menu: Menu)
+proc updateImpl(menu: Menu, start: Responder)
+proc performKeyEquivalentImpl(menu: Menu, event: KeyEvent, start: Responder): bool
+proc openPopupImpl(button: PopupMenuButton)
+proc closePopupImpl(button: PopupMenuButton)
+proc reloadImpl(menuBar: MenuBar)
+
+protocol MenuProtocol {.selectorScope: protocol.} from Menu:
+  method openMenu*(menu: Menu) =
+    menu.openImpl()
+
+  method closeMenu*(menu: Menu) =
+    menu.closeImpl()
+
+  method updateMenu*(menu: Menu, start: Responder = nil) =
+    menu.updateImpl(start)
+
+  method performMenuKeyEquivalent*(
+      menu: Menu, event: KeyEvent, start: Responder
+  ): bool =
+    menu.performKeyEquivalentImpl(event, start)
+
+protocol PopupMenuButtonProtocol {.selectorScope: protocol.} from PopupMenuButton:
+  method openPopupMenu*(button: PopupMenuButton) =
+    button.openPopupImpl()
+
+  method closePopupMenu*(button: PopupMenuButton) =
+    button.closePopupImpl()
+
+protocol MenuBarProtocol {.selectorScope: protocol.} from MenuBar:
+  method reloadMenuBar*(menuBar: MenuBar) =
+    menuBar.reloadImpl()
+
+proc open*(menu: Menu) =
+  menu.openMenu()
+
+proc close*(menu: Menu) =
+  menu.closeMenu()
+
+proc update*(menu: Menu, start: Responder = nil) =
+  menu.updateMenu(start)
+
+proc performKeyEquivalent*(menu: Menu, event: KeyEvent, start: Responder): bool =
+  menu.performMenuKeyEquivalent(event, start)
+
+proc openPopup*(button: PopupMenuButton) =
+  button.openPopupMenu()
+
+proc closePopup*(button: PopupMenuButton) =
+  button.closePopupMenu()
+
+proc reload*(menuBar: MenuBar) =
+  menuBar.reloadMenuBar()
 
 proc newMenu*(title = ""): Menu =
   result = Menu(xTitle: title)
   initResponder(result)
+  discard result.withProto()
 
 proc newMenuItem*(
     title = "",
@@ -247,7 +299,7 @@ proc menuNeedsUpdate*(menu: Menu) =
   if not menu.isNil and not menu.xDelegate.isNil:
     discard menu.xDelegate.sendLocalIfHandled(menuNeedsUpdate(), DynamicAgent(menu))
 
-proc open*(menu: Menu) =
+proc openImpl(menu: Menu) =
   if menu.isNil:
     return
   menu.menuNeedsUpdate()
@@ -255,7 +307,7 @@ proc open*(menu: Menu) =
   if not menu.xDelegate.isNil:
     discard menu.xDelegate.sendLocalIfHandled(menuWillOpen(), DynamicAgent(menu))
 
-proc close*(menu: Menu) =
+proc closeImpl(menu: Menu) =
   if menu.isNil:
     return
   menu.xOpen = false
@@ -297,7 +349,7 @@ proc validate*(item: MenuItem, start: Responder): bool =
       findActionTarget(start, item.xAction)
   item.validate(target)
 
-proc update*(menu: Menu, start: Responder = nil) =
+proc updateImpl(menu: Menu, start: Responder) =
   if menu.isNil:
     return
   menu.menuNeedsUpdate()
@@ -351,7 +403,7 @@ proc findKeyEquivalentItem*(menu: Menu, event: KeyEvent): MenuItem =
       if not found.isNil:
         return found
 
-proc performKeyEquivalent*(menu: Menu, event: KeyEvent, start: Responder): bool =
+proc performKeyEquivalentImpl(menu: Menu, event: KeyEvent, start: Responder): bool =
   let item = menu.findKeyEquivalentItem(event)
   if item.isNil:
     return false
@@ -688,7 +740,7 @@ proc openPopupWindow(button: PopupMenuButton) =
     button.xPopupWindow = nil
     popupWindow.close()
 
-proc openPopup*(button: PopupMenuButton) =
+proc openPopupImpl(button: PopupMenuButton) =
   if button.isNil or button.xMenu.isNil or button.menuItemCount() == 0:
     return
   if button.popupOpen():
@@ -705,7 +757,7 @@ proc openPopup*(button: PopupMenuButton) =
   button.setWidgetState(ssOpen, true)
   button.setNeedsDisplay(true)
 
-proc closePopup*(button: PopupMenuButton) =
+proc closePopupImpl(button: PopupMenuButton) =
   if button.isNil or not button.popupOpen():
     return
   button.xPopupOpen = false
@@ -804,6 +856,7 @@ proc initPopupMenuButtonFields*(
   button.background = initColor(0.0, 0.0, 0.0, 0.0)
   button.menu = menu
   button.setAcceptsFirstResponder(true)
+  discard button.withProto()
   discard button.withProtocol(PopupMenuButtonDrawing)
   discard button.withProtocol(PopupMenuButtonEvents)
   button.applyInitialFrame(frame)
@@ -841,7 +894,7 @@ proc clearMenuBarButtons(menuBar: MenuBar) =
     button.removeFromSuperview()
   menuBar.xButtons.setLen(0)
 
-proc reload*(menuBar: MenuBar) =
+proc reloadImpl(menuBar: MenuBar) =
   if menuBar.isNil:
     return
   menuBar.clearMenuBarButtons()
@@ -905,6 +958,7 @@ protocol MenuBarLayout of ViewLayoutProtocol:
 proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRect) =
   initViewFields(menuBar, frame)
   menuBar.background = initColor(0.91, 0.92, 0.94)
+  discard menuBar.withProto()
   discard menuBar.withProtocol(MenuBarDrawing)
   discard menuBar.withProtocol(MenuBarLayout)
   menuBar.menu = menu
