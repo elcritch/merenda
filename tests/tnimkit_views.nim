@@ -263,6 +263,59 @@ suite "nimkit views":
     check not view.clipsToBounds
     check view.needsDisplay
 
+  test "view identity supports tag identifier and recursive tag lookup":
+    let
+      root = newView(frame = initRect(0, 0, 200, 160))
+      child = newView(frame = initRect(20, 20, 80, 40))
+      grandchild = newView(frame = initRect(5, 5, 30, 20))
+
+    root.tag = 1
+    root.identifier = "root"
+    child.tag = 2
+    child.identifier = "child"
+    grandchild.tag = 3
+    root.addSubview(child)
+    child.addSubview(grandchild)
+
+    check root.tag == 1
+    check child.identifier == "child"
+    check root.viewWithTag(1) == root
+    check root.viewWithTag(2) == child
+    check root.viewWithTag(3) == grandchild
+    check root.viewWithTag(99).isNil
+
+  test "positioned subview insertion replacement and sorting preserve hierarchy state":
+    let
+      parent = newLifecycleSpyView(initRect(0, 0, 200, 160))
+      first = newLifecycleSpyView(initRect(0, 0, 10, 10))
+      second = newLifecycleSpyView(initRect(0, 0, 10, 10))
+      third = newLifecycleSpyView(initRect(0, 0, 10, 10))
+      replacement = newLifecycleSpyView(initRect(0, 0, 10, 10))
+
+    first.tag = 30
+    second.tag = 10
+    third.tag = 20
+    replacement.tag = 15
+
+    parent.addSubview(first)
+    parent.insertSubview(second, 0)
+    parent.addSubview(third, positioned = svpBelow, relativeTo = first)
+
+    check parent.subviews == @[View(second), View(third), View(first)]
+    check third.superview == parent
+    check parent.addedSubviews == @[View(first), View(second), View(third)]
+
+    check parent.replaceSubview(third, replacement)
+    check third.superview.isNil
+    check replacement.superview == parent
+    check parent.subviews == @[View(second), View(replacement), View(first)]
+
+    parent.sortSubviews(
+      proc(a, b: View): int =
+        cmp(a.tag, b.tag)
+    )
+    check parent.subviews == @[View(second), View(replacement), View(first)]
+
   test "layout lifecycle runs selector hooks before display cleanup":
     let
       root = newLayoutSpyView(initRect(0, 0, 200, 160))
@@ -485,6 +538,24 @@ suite "nimkit views":
     check child.pointToWindow(initPoint(5, 6)) == initPoint(20, 20)
     check child.pointFromWindow(initPoint(20, 20)) == initPoint(5, 6)
 
+  test "coordinate conversion supports unflipped y-up local coordinates":
+    let
+      root = newView(frame = initRect(0, 0, 300, 240))
+      child = newView(frame = initRect(10, 20, 100, 80))
+
+    root.addSubview(child)
+
+    check child.flipped
+    check child.pointToWindow(initPoint(0, 0)) == initPoint(10, 20)
+
+    child.flipped = false
+
+    check not child.flipped
+    check child.pointToWindow(initPoint(0, 0)) == initPoint(10, 100)
+    check child.pointFromWindow(initPoint(10, 100)) == initPoint(0, 0)
+    check child.rectToWindow(initRect(0, 0, 10, 10)) == initRect(10, 90, 10, 10)
+    check child.rectFromWindow(initRect(10, 90, 10, 10)) == initRect(0, 0, 10, 10)
+
   test "coordinate conversion updates after reparenting":
     let
       firstRoot = newView(frame = initRect(0, 0, 200, 160))
@@ -604,3 +675,60 @@ suite "nimkit views":
     check spyMouseUpPoint == initPoint(5, 6)
     check spyMouseDownCount == 1
     check spyMouseUpCount == 1
+
+  test "focus alpha and shadow attributes invalidate display":
+    let view = newView(frame = initRect(0, 0, 100, 80))
+    let shadow = dropShadow(initColor(0, 0, 0, 0.25), 0, 2, 6, 0)
+
+    check view.focusRingType == frtDefault
+    check view.alphaValue == 1.0'f32
+
+    view.needsDisplay = false
+    view.focusRingType = frtExterior
+    check view.focusRingType == frtExterior
+    check view.needsDisplay
+
+    view.needsDisplay = false
+    view.alphaValue = 0.5
+    check view.alphaValue == 0.5'f32
+    check view.needsDisplay
+
+    view.needsDisplay = false
+    view.alphaValue = 2.0
+    check view.alphaValue == 1.0'f32
+    check view.needsDisplay
+
+    view.needsDisplay = false
+    view.shadow = [shadow]
+    check view.shadow == @[shadow]
+    check view.needsDisplay
+
+  test "tracking cursor tooltip and drag metadata are stored explicitly":
+    let view = newView(frame = initRect(0, 0, 100, 80))
+    let area = ViewTrackingArea(
+      rect: initRect(0, 0, 30, 20),
+      options: {vtoMouseEnteredAndExited, vtoMouseMoved},
+      tag: 42,
+      owner: Responder(view),
+    )
+
+    view.toolTip = "Details"
+    check view.toolTip == "Details"
+
+    view.addCursorRect(initRect(0, 0, 10, 10), "pointingHand")
+    check view.cursorRects ==
+      @[ViewCursorRect(rect: initRect(0, 0, 10, 10), cursor: "pointingHand")]
+    view.discardCursorRects()
+    check view.cursorRects.len == 0
+
+    view.addTrackingArea(area)
+    check view.trackingAreas == @[area]
+    check view.removeTrackingArea(42)
+    check view.trackingAreas.len == 0
+
+    view.registerForDraggedTypes(["public.text", "public.file-url"])
+    check view.registeredDraggedTypes == @["public.text", "public.file-url"]
+    view.unregisterDraggedTypes()
+    check view.registeredDraggedTypes.len == 0
+
+    check not view.autoscroll(MouseEvent(location: initPoint(0, 0)))

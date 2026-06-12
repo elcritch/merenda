@@ -422,19 +422,23 @@ proc pointToSuperview(view: View, point: Point): Point =
   let
     frame = view.xFrame
     bounds = view.xBounds
-  initPoint(
-    frame.origin.x + point.x - bounds.origin.x,
-    frame.origin.y + point.y - bounds.origin.y,
-  )
+    y =
+      if view.xFlipped:
+        frame.origin.y + point.y - bounds.origin.y
+      else:
+        frame.origin.y + bounds.maxY - point.y
+  initPoint(frame.origin.x + point.x - bounds.origin.x, y)
 
 proc pointFromSuperview(view: View, point: Point): Point =
   let
     frame = view.xFrame
     bounds = view.xBounds
-  initPoint(
-    bounds.origin.x + point.x - frame.origin.x,
-    bounds.origin.y + point.y - frame.origin.y,
-  )
+    y =
+      if view.xFlipped:
+        bounds.origin.y + point.y - frame.origin.y
+      else:
+        bounds.maxY - (point.y - frame.origin.y)
+  initPoint(bounds.origin.x + point.x - frame.origin.x, y)
 
 proc pointToWindow*(view: View, point: Point): Point =
   var resultPoint = point

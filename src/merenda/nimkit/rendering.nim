@@ -25,6 +25,10 @@ proc beginDraw(
     appearance,
   )
 
+proc viewBackgroundFill(view: View): types.Color =
+  let color = view.backgroundColor
+  initColor(color.r, color.g, color.b, color.a * view.alphaValue)
+
 proc renderViewInto(
     context: DrawContext,
     view: View,
@@ -45,7 +49,12 @@ proc renderViewInto(
       else:
         (-1).FigIdx
     rootIdx = context.addWindowRectangle(
-      level, nodeParent, absoluteFrame, view.backgroundColor, clips = view.clipsToBounds
+      level,
+      nodeParent,
+      absoluteFrame,
+      view.viewBackgroundFill(),
+      shadows = view.shadow,
+      clips = view.clipsToBounds,
     )
   context.beginDraw(view, rootIdx, nodeParent, appearance)
   discard view.sendIfHandled(draw(), context)

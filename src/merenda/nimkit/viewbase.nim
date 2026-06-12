@@ -38,6 +38,34 @@ type
     lfoContainer
     lfoSolver
 
+  FocusRingType* = enum
+    frtDefault
+    frtNone
+    frtExterior
+
+  SubviewPosition* = enum
+    svpAbove
+    svpBelow
+
+  ViewTrackingOption* = enum
+    vtoMouseEnteredAndExited
+    vtoMouseMoved
+    vtoCursorUpdate
+    vtoActiveAlways
+    vtoInVisibleRect
+
+  ViewTrackingOptions* = set[ViewTrackingOption]
+
+  ViewCursorRect* = object
+    rect*: Rect
+    cursor*: string
+
+  ViewTrackingArea* = object
+    rect*: Rect
+    options*: ViewTrackingOptions
+    tag*: int
+    owner*: Responder
+
   AutoresizingState* = object
     referenceRect*: Rect
     referenceSuperviewRect*: Rect
@@ -92,12 +120,18 @@ type
     terms*: Natural
 
   View* = ref object of Responder
+    xTag*: int
+    xIdentifier*: string
     xFrame*: Rect
     xBounds*: Rect
+    xFlipped*: bool
     xNeedsDisplay*: bool
     xInvalidRects*: seq[Rect]
     xBackgroundColor*: Color
     xClipsToBounds*: bool
+    xFocusRingType*: FocusRingType
+    xAlphaValue*: float32
+    xShadow*: seq[BoxShadow]
     xAppearance*: Appearance
     xHasAppearance*: bool
     xInheritedAppearance*: Appearance
@@ -122,3 +156,7 @@ type
     xSuperview*: View
     xWindow*: Responder
     xSubviews*: seq[View]
+    xToolTip*: string
+    xCursorRects*: seq[ViewCursorRect]
+    xTrackingAreas*: seq[ViewTrackingArea]
+    xRegisteredDraggedTypes*: seq[string]
