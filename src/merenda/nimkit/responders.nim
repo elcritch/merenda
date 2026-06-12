@@ -2,6 +2,7 @@ import std/options
 
 import sigils/selectors as dynamicSelectors
 
+import ./events
 import ./selectors
 
 type Responder* = ref object of DynamicAgent
@@ -70,6 +71,51 @@ proc setNextResponder*(responder, next: Responder) =
 
 proc clearNextResponder*(responder: Responder) =
   dynamicSelectors.clearNextResponder(responder)
+
+proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
+  var current = responder
+  while not current.isNil:
+    let handled = current.trySendLocal(performKeyEquivalent(), event)
+    if handled.isSome and handled.get():
+      return true
+    current = current.nextResponder()
+
+proc tryToPerform*(
+    responder: Responder, selector: CommandSelector, sender: DynamicAgent = nil
+): bool =
+  if responder.isNil:
+    return false
+  responder.tryToPerform(TryToPerformArgs(selector: selector, sender: sender))
+
+proc doCommandBySelector*(
+    responder: Responder, selector: CommandSelector, sender: DynamicAgent
+) =
+  let args = TryToPerformArgs(selector: selector, sender: sender)
+  var current = responder
+  while not current.isNil:
+    if current.tryToPerform(args):
+      return
+    current = current.nextResponder()
+  responder.noResponderFor(selector)
+
+proc findValidRequestorForSendType*(
+    responder: Responder, sendType, returnType: string
+): DynamicAgent =
+  let args = ValidRequestorArgs(sendType: sendType, returnType: returnType)
+  var current = responder
+  while not current.isNil:
+    let requestor = current.trySendLocal(validRequestorForSendType(), args)
+    if requestor.isSome and requestor.get().isSome:
+      return requestor.get().get()
+    current = current.nextResponder()
+
+proc findUndoManager*(responder: Responder): DynamicAgent =
+  var current = responder
+  while not current.isNil:
+    let manager = current.trySendLocal(undoManager(), ())
+    if manager.isSome and manager.get().isSome:
+      return manager.get().get()
+    current = current.nextResponder()
 
 proc performOptional*[A, R](
     responder: Responder, selector: Selector[A, R], args: sink A

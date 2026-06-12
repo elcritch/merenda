@@ -57,6 +57,14 @@ controls, widgets, responders, native handles, and target/action objects.
 `Responder` provides next-responder links, selector forwarding, first-responder
 hooks, command fallback behavior, and key-view traversal support.
 
+Responder event handlers return `bool`: `true` means the event or action was
+consumed, while `false` lets dispatch continue to `nextResponder`. Windows use
+the same contract for key down/up, modifier changes, mouse button and tracking
+events, help/cursor events, scroll-wheel delivery, key equivalents, command
+selectors, valid-requestor lookup, and undo-manager lookup. Controls may apply
+their own policy before forwarding, so generic responder dispatch stays separate
+from widget-specific interpretation.
+
 `Window` owns content, first-responder state, hover/active/focus-visible state,
 key bindings, key-view loops, scale-aware coordinate conversion, mouse capture
 during drag/up tracking, repeated click counts, scroll bubbling, popup

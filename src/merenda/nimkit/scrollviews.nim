@@ -454,9 +454,10 @@ protocol DefaultScrollViewEvents of ResponderEventProtocol:
   method wantsForwardedScrollEvents(scrollView: ScrollView, event: ScrollEvent): bool =
     not scrollView.scrollWheelWouldMove(event)
 
-  method scrollWheel(scrollView: ScrollView, event: ScrollEvent) =
+  method scrollWheel(scrollView: ScrollView, event: ScrollEvent): bool =
     if scrollView.scrollWheelWouldMove(event):
       scrollView.scrollBy(scrollView.scrollWheelDelta(event))
+      return true
 
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()

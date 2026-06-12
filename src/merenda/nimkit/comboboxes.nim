@@ -379,14 +379,16 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
     not comboBox.popupOpen() or
       not comboBox.canScrollPopupRows(popupListScrollRows(event))
 
-  method scrollWheel(comboBox: ComboBox, event: ScrollEvent) =
+  method scrollWheel(comboBox: ComboBox, event: ScrollEvent): bool =
     let delta = popupListScrollRows(event)
     if comboBox.popupOpen() and comboBox.canScrollPopupRows(delta):
       comboBox.scrollPopupRows(delta)
+      return true
 
-  method keyDown(comboBox: ComboBox, event: KeyEvent) =
+  method keyDown(comboBox: ComboBox, event: KeyEvent): bool =
     if not comboBox.isEnabled:
-      return
+      return false
+    result = true
     case event.key
     of keyArrowDown:
       if not comboBox.popupOpen():
@@ -421,6 +423,8 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
     else:
       if comboBox.isEditable and event.text.len > 0:
         comboBox.setStringValue(event.text)
+      else:
+        result = false
 
 proc cellStringValue(cell: ComboBoxCell): string =
   cell.xStringValue
@@ -707,7 +711,7 @@ proc popupListActions(comboBox: ComboBox): PopupListActions =
     scroll: proc(delta: int) =
       comboBox.scrollPopupRows(delta),
     keyDown: proc(event: KeyEvent) =
-      comboBox.keyDown(event),
+      discard comboBox.keyDown(event),
   )
 
 proc popupList(comboBox: ComboBox): PopupListView =

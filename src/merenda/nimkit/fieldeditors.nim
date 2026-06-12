@@ -90,7 +90,7 @@ proc validateEditing*(editor: FieldEditor): bool =
   if editor.isNil or editor.client().isNil:
     return true
   editor.notifyClientChanged()
-  true
+  result = true
 
 proc notifyClientFocusChanged(editor: FieldEditor) =
   let client = editor.client()
@@ -117,7 +117,7 @@ proc finishEditing(
   discard client.sendLocalIfHandled(
     didEndEditingMovement(), (editor: editor, movement: movement)
   )
-  true
+  result = true
 
 proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true): bool =
   if editor.isNil or client.isNil:
@@ -132,7 +132,7 @@ proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true):
   editor.focusVisible = focusVisible
   discard client.sendLocalIfHandled(didBeginEditing(), editor)
   editor.notifyClientFocusChanged()
-  true
+  result = true
 
 proc endEditing*(editor: FieldEditor): bool =
   editor.finishEditing(terFocusChange)
@@ -174,12 +174,12 @@ protocol DefaultFieldEditorEvents of ResponderEventProtocol:
     if event.button == mbPrimary and (editor.editable or editor.selectable):
       editor.setCursor(editor.textIndexAtPoint(event.location))
       return true
-    false
 
-  method keyDown(editor: FieldEditor, event: KeyEvent) =
+  method keyDown(editor: FieldEditor, event: KeyEvent): bool =
     if editor.editable and event.text.isInsertableText():
       TextView(editor).insertTextValue(event.text)
       editor.notifyClientChanged()
+      return true
 
 protocol DefaultFieldEditorInput of TextInputProtocol:
   method insertText(editor: FieldEditor, text: string) =

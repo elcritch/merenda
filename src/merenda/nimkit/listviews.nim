@@ -1388,9 +1388,10 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     listView.setNeedsDisplay(true)
     true
 
-  method keyDown(listView: ListView, event: KeyEvent) =
+  method keyDown(listView: ListView, event: KeyEvent): bool =
     if not listView.isEnabled():
-      return
+      return false
+    result = true
     let extendSelection = kmShift in event.modifiers
     case event.key
     of keyArrowDown:
@@ -1410,7 +1411,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
       if activeIndex >= 0:
         listView.sendListActivation(activeIndex)
     else:
-      discard listView.handleTypeSelect(event)
+      result = listView.handleTypeSelect(event) or event.text.len > 0
 
 protocol DefaultListViewMouseHitPolicy of MouseHitPolicyProtocol:
   method mouseHitPolicy(listView: ListView, args: MouseHitPolicyArgs): CellHitPolicy =

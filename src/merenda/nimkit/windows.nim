@@ -163,7 +163,7 @@ proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc dispatchKeyEventInChain(
-  window: Window, target: Responder, event: events.KeyEvent
+  window: Window, target: Responder, event: events.KeyEvent, selector: KeyEventSelector
 ): EventDispatchResult
 
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View
@@ -888,6 +888,16 @@ proc dispatchKeyCommand(
     return
   dispatchCommandInChain(target, command.get(), DynamicAgent(target))
 
+proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
+  if window.isNil:
+    return false
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  if target.performKeyEquivalentInChain(event):
+    return true
+  window.dispatchKeyCommand(target, event).handled
+
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   if event.key == keyEscape:
     if not window.xOwnerWindow.isNil:
@@ -898,10 +908,21 @@ proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   let target = window.keyDispatchTarget()
   if target.isNil:
     return false
-  let commandDispatch = window.dispatchKeyCommand(target, event)
-  if commandDispatch.handled:
+  if window.performKeyEquivalent(event):
     return true
-  window.dispatchKeyEventInChain(target, event).handled
+  window.dispatchKeyEventInChain(target, event, keyDown()).handled
+
+proc dispatchKeyUp*(window: Window, event: events.KeyEvent): bool =
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  window.dispatchKeyEventInChain(target, event, keyUp()).handled
+
+proc dispatchFlagsChanged*(window: Window, event: events.KeyEvent): bool =
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  window.dispatchKeyEventInChain(target, event, flagsChanged()).handled
 
 proc syncNativeGeometry(window: Window): Size =
   result = window.xHostWindow.logicalSize(window.xFrame.size)
@@ -987,12 +1008,12 @@ proc nextClickCount(window: Window, target: View, event: MouseEvent): int =
   window.xHasLastClick = true
   window.xMouseClickCount = result
 
-proc dispatchEventInChain[A, R](
+proc dispatchEventInChain[A](
     window: Window,
     target: Responder,
     contentPoint: Point,
     event: A,
-    selector: Selector[A, R],
+    selector: Selector[A, bool],
     localize: proc(target, contentView: View, contentPoint: Point, event: A): A,
 ): EventDispatchResult =
   var responder = target
@@ -1000,7 +1021,8 @@ proc dispatchEventInChain[A, R](
     var localEvent = event
     if responder of View:
       localEvent = localize(View(responder), window.xContentView, contentPoint, event)
-    if responder.sendLocalIfHandled(selector, localEvent):
+    var handled = false
+    if responder.performLocal(selector, localEvent, handled) and handled:
       result.handled = true
       result.responder = responder
       return
@@ -1088,10 +1110,13 @@ proc dispatchScrollEventInChain(
     responder = responder.nextResponder()
 
 proc dispatchKeyEventInChain(
-    window: Window, target: Responder, event: events.KeyEvent
+    window: Window,
+    target: Responder,
+    event: events.KeyEvent,
+    selector: KeyEventSelector,
 ): EventDispatchResult =
   window.dispatchEventInChain(
-    target, initPoint(0.0, 0.0), event, keyDown(), localKeyEvent
+    target, initPoint(0.0, 0.0), event, selector, localKeyEvent
   )
 
 proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchResult =
@@ -1191,9 +1216,27 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     if dispatchEvent.clickCount <= 0:
       dispatchEvent.clickCount = max(window.xMouseClickCount, 1)
 
+  let selector =
+    case event.button
+    of mbPrimary:
+      if pressed:
+        mouseDown()
+      else:
+        mouseUp()
+    of mbSecondary:
+      if pressed:
+        rightMouseDown()
+      else:
+        rightMouseUp()
+    of mbOther:
+      if pressed:
+        otherMouseDown()
+      else:
+        otherMouseUp()
+
   if pressed:
     let dispatch = window.dispatchMouseEventInChain(
-      target, contentPoint, dispatchEvent, mouseDown(), window.xMousePolicyStopResponder
+      target, contentPoint, dispatchEvent, selector, window.xMousePolicyStopResponder
     )
     result = dispatch.handled
     if dispatch.handled and dispatch.responder of View:
@@ -1202,7 +1245,7 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
       window.setMouseActiveView(nil)
   else:
     let dispatch = window.dispatchMouseEventInChain(
-      target, contentPoint, dispatchEvent, mouseUp(), stopBefore
+      target, contentPoint, dispatchEvent, selector, stopBefore
     )
     result = dispatch.handled
     window.setMouseActiveView(nil)
@@ -1227,13 +1270,49 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
     return result
 
   if dragging:
+    let selector =
+      case event.button
+      of mbPrimary:
+        mouseDragged()
+      of mbSecondary:
+        rightMouseDragged()
+      of mbOther:
+        otherMouseDragged()
     result = window.dispatchMouseEventInChain(
-      target, contentPoint, event, mouseDragged(), window.xMousePolicyStopResponder
+      target, contentPoint, event, selector, window.xMousePolicyStopResponder
     ).handled
   else:
     result =
       window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()).handled or
       result
+
+proc dispatchHelpRequested*(window: Window, event: MouseEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.contentHitTest(contentPoint)
+  if target.isNil:
+    return false
+  window.dispatchMouseEventInChain(target, contentPoint, event, helpRequested()).handled
+
+proc dispatchCursorUpdate*(window: Window, event: MouseEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.contentHitTest(contentPoint)
+  if target.isNil:
+    return false
+  window.dispatchMouseEventInChain(target, contentPoint, event, cursorUpdate()).handled
+
+proc dispatchUpdateTrackingAreas*(window: Window, event: MouseEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.contentHitTest(contentPoint)
+  if target.isNil:
+    return false
+
+  window.dispatchMouseEventInChain(target, contentPoint, event, updateTrackingAreas()).handled
 
 proc dispatchScrollWheel*(window: Window, event: events.ScrollEvent): bool =
   if window.xContentView.isNil:
@@ -1291,6 +1370,42 @@ proc mouseUpAt*(
     ),
     false,
   )
+
+proc rightMouseDownAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseDownAt(point, mbSecondary, clickCount, modifiers, timestamp)
+
+proc rightMouseUpAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseUpAt(point, mbSecondary, clickCount, modifiers, timestamp)
+
+proc otherMouseDownAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseDownAt(point, mbOther, clickCount, modifiers, timestamp)
+
+proc otherMouseUpAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseUpAt(point, mbOther, clickCount, modifiers, timestamp)
 
 proc scrollWheelAt*(
     window: Window,
@@ -1365,8 +1480,12 @@ proc dispatchHostKey(window: Window, event: HostKeyEvent) =
       window.close()
     discard window.requestNativeDisplayUpdateIfNeeded()
     return
-  if event.pressed:
+  if event.isModifierChange:
+    discard window.dispatchFlagsChanged(event.event)
+  elif event.pressed:
     discard window.dispatchKeyDown(event.event)
+  else:
+    discard window.dispatchKeyUp(event.event)
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostTextInput(window: Window, text: string) =

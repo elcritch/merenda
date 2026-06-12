@@ -662,12 +662,12 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
       else:
         textField.selectedRange = initTextRange(textField.runeCount, 0)
       return true
-    false
 
-  method keyDown(textField: TextField, event: KeyEvent) =
+  method keyDown(textField: TextField, event: KeyEvent): bool =
     if textField.isEditable() and event.modifiers - {kmShift} == {} and
         event.text.isInsertableText():
       textField.replaceSelectedText(event.text)
+      return true
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
   let states: set[WidgetState] = textField.widgetStateSet()
