@@ -40,6 +40,16 @@ the application, responder, view, window, or control/cell layers.
   consumed an event/action, unhandled events continue through `nextResponder`,
   and controls may apply policy before forwarding.
 - Updated tests and design notes for the responder contract.
+- Added core `NSView` parity APIs for identity and hierarchy management:
+  `tag`, `identifier`, recursive tag lookup, positioned/indexed subview
+  insertion, replacement, sorting, and lifecycle-preserving hierarchy updates.
+- Added flipped coordinate conversion support while preserving NimKit's
+  existing y-down default, plus view-level focus-ring type, alpha, and shadow
+  properties.
+- Wired view alpha and shadows into render construction for view background
+  nodes.
+- Added view tracking affordance storage for cursor rects, tracking areas,
+  tooltips, drag type registration, and a default autoscroll hook.
 
 ## Near-Term Work
 
@@ -67,21 +77,6 @@ Build the framework-level pieces that AppKit treats as core infrastructure.
      richer screen/window/view coordinate conversion
    - modal sheets, panels, alerts, and open/save panels after the core window
      delegate and modal-session model is stable
-
-### View System Parity
-
-Fill in high-value `NSView` behavior before adding more complex controls.
-
-1. Add view identity and hierarchy APIs:
-   - tag, identifier, lookup by tag, positioned subview insertion, subview
-     replacement, subview sorting, and view lifecycle notifications
-2. Expand coordinate and display behavior:
-   - flipped coordinate support where needed, visible-rect queries, richer
-     invalidation/display traversal, focus-ring type, alpha/shadow, and clearer
-     frame/bounds conversion semantics
-3. Add tracking affordances:
-   - cursor rects, tracking rects/areas, tooltips, drag registration, and
-     autoscroll hooks
 
 ### Pasteboard And Dragging
 
