@@ -26,6 +26,21 @@ pasteboard, dragging, graphics-resource, document, table, and outline systems.
 Avoid adding widget-local special cases where AppKit solves the behavior through
 the application, responder, view, window, or control/cell layers.
 
+## Recently Completed
+
+- Expanded responder event coverage for key up, modifier flag changes,
+  right/other mouse events, scroll phases, help requests, and cursor/tracking
+  events.
+- Added responder-chain command/action helpers for `performKeyEquivalent`,
+  `tryToPerform`, `doCommandBySelector`, valid requestor lookup, and
+  undo-manager lookup.
+- Broadened selector coverage for text movement/editing, menu commands, and
+  collection-like controls.
+- Made the event return contract explicit: handlers return whether they
+  consumed an event/action, unhandled events continue through `nextResponder`,
+  and controls may apply policy before forwarding.
+- Updated tests and design notes for the responder contract.
+
 ## Near-Term Work
 
 ### OpenSTEP Application Spine
@@ -52,25 +67,6 @@ Build the framework-level pieces that AppKit treats as core infrastructure.
      richer screen/window/view coordinate conversion
    - modal sheets, panels, alerts, and open/save panels after the core window
      delegate and modal-session model is stable
-
-### Responder, Action, And Validation Chain
-
-Move closer to `NSResponder` semantics while keeping NimKit's explicit return
-values.
-
-1. Expand event coverage:
-   - key up, modifier flag changes, right/other mouse events, scroll phases,
-     help requests, and cursor/tracking events
-2. Expand command/action dispatch:
-   - `performKeyEquivalent`, `tryToPerform`, `doCommandBySelector`,
-     `validRequestorForSendType`, and undo-manager lookup through the chain
-   - richer movement/editing selectors for text, menu commands, tables, and
-     collection-like controls
-3. Document and test the responder contract:
-   - handlers return whether an event/action was consumed
-   - unhandled events continue through the next responder
-   - controls may apply policy before forwarding, matching AppKit's split
-     between generic dispatch and control-specific interpretation
 
 ### View System Parity
 
