@@ -721,20 +721,31 @@ proc closePopup*(button: PopupMenuButton) =
 protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
   method draw(button: PopupMenuButton, context: DrawContext) =
     let states = button.widgetStateSet()
+    let isPullDown = button.hasStyleClass("pullDown")
     let fillColor =
-      if ssOpen in states or ssActive in states:
+      if isPullDown and (ssOpen in states or ssActive in states):
+        initColor(0.58, 0.66, 0.82)
+      elif isPullDown and ssHovered in states:
+        initColor(0.76, 0.81, 0.91)
+      elif ssOpen in states or ssActive in states:
         initColor(0.78, 0.84, 0.96)
       elif ssHovered in states:
         initColor(0.88, 0.91, 0.97)
       else:
         initColor(0.0, 0.0, 0.0, 0.0)
+    let borderColor =
+      if isPullDown and (ssOpen in states or ssActive in states):
+        initColor(0.30, 0.36, 0.48)
+      elif isPullDown and ssHovered in states:
+        initColor(0.45, 0.50, 0.62)
+      elif ssOpen in states or ssHovered in states:
+        initColor(0.50, 0.54, 0.62)
+      else:
+        initColor(0.0, 0.0, 0.0, 0.0)
     discard context.addWindowRectangle(
       button.rectToWindow(button.bounds),
       fill(fillColor),
-      if ssOpen in states or ssHovered in states:
-        initColor(0.50, 0.54, 0.62)
-      else:
-        initColor(0.0, 0.0, 0.0, 0.0),
+      borderColor,
       if ssOpen in states or ssHovered in states: 1.0'f32 else: 0.0'f32,
       4.0'f32,
     )
@@ -806,7 +817,8 @@ proc newPopupMenuButton*(
 proc newPullDownButton*(
     title = "", menu: Menu = nil, frame: Rect = AutoRect
 ): PopupMenuButton =
-  newPopupMenuButton(title, menu, frame)
+  result = newPopupMenuButton(title, menu, frame)
+  result.addStyleClass("pullDown")
 
 proc menu*(menuBar: MenuBar): Menu =
   if menuBar.isNil: nil else: menuBar.xMenu

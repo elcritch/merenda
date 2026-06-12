@@ -457,6 +457,35 @@ suite "nimkit rendering":
     check titleFound
     check dividerFound
 
+  test "buildRenders draws hovered menu bar items as highlighted":
+    let
+      root = newView(frame = initRect(0, 0, 240, 80))
+      mainMenu = newMenu("Main")
+      actionsMenu = newMenu("Actions")
+      actionsItem = newMenuItem("Actions")
+      menuBar = newMenuBar(mainMenu, initRect(0, 0, 240, 28))
+
+    actionsItem.submenu = actionsMenu
+    discard mainMenu.addItem(actionsItem)
+    menuBar.reload()
+    root.addSubview(menuBar)
+    root.layoutSubtreeIfNeeded()
+    check menuBar.subviews.len == 1
+    menuBar.subviews[0].hovered = true
+
+    let renders = buildRenders(root)
+    var hoverFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBox.y == 2.0 and
+          node.screenBox.h == 24.0 and node.fill.kind == flColor and
+          node.fill.color == initColor(0.76, 0.81, 0.91).rgba:
+        hoverFound = true
+        check node.stroke.weight == 1.0
+        check node.corners[dcTopLeft] == 4'u16
+
+    check hoverFound
+
   test "buildRenders draws standalone list views with list roles":
     let
       root = newView(frame = initRect(0, 0, 220, 140))
