@@ -377,6 +377,47 @@ suite "nimkit rendering":
     check arrowTopWidth > arrowBottomWidth
     check textNodeCount >= 4
 
+  test "buildRenders draws popup menu button items":
+    let
+      root = newView(frame = initRect(0, 0, 220, 150))
+      menu = newMenu("Actions")
+      button = newPopupMenuButton("Actions", menu, initRect(10, 4, 82, 24))
+
+    discard menu.addItem(newMenuItem("Run Menu Action"))
+    discard menu.addSeparator()
+    discard menu.addItem(newMenuItem("Reset Count"))
+    root.addSubview(button)
+    button.popupPresentation = ppInline
+    button.openPopup()
+
+    let renders = buildRenders(root)
+    check PopupDrawLevel in renders
+
+    var
+      panelFound = false
+      runFound = false
+      resetFound = false
+
+    for node in renders[PopupDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
+          node.screenBox.y == 28.0 and node.screenBox.w == 180.0 and
+          node.screenBox.h == 74.0 and node.stroke.weight == 1.0:
+        panelFound = true
+        check node.corners[dcTopLeft] == 4'u16
+        check node.corners[dcTopRight] == 4'u16
+      if node.kind == nkText:
+        case node.renderedText()
+        of "Run Menu Action":
+          runFound = true
+        of "Reset Count":
+          resetFound = true
+        else:
+          discard
+
+    check panelFound
+    check runFound
+    check resetFound
+
   test "buildRenders draws standalone list views with list roles":
     let
       root = newView(frame = initRect(0, 0, 220, 140))

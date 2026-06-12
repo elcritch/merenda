@@ -263,10 +263,11 @@ proc drawPopupList*(
       layer,
       parent,
       context.localRectToWindow(popupBounds),
-      initColor(1.0, 1.0, 1.0, 1.0),
-      popupStyle.box.borderColor,
-      popupStyle.box.borderWidth,
-      2.0'f32,
+      fill(initColor(0.985, 0.985, 0.975)),
+      initColor(0.36, 0.37, 0.39),
+      max(popupStyle.box.borderWidth, 1.0'f32),
+      4.0'f32,
+      [dropShadow(initColor(0.0, 0.0, 0.0, 0.22), y = 3.0, blur = 8.0)],
     )
     first = popupList.firstIndex()
     visible = popupList.visibleItemCount()
