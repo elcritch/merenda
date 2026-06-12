@@ -383,7 +383,9 @@ suite "nimkit rendering":
       menu = newMenu("Actions")
       button = newPopupMenuButton("Actions", menu, initRect(10, 4, 82, 24))
 
-    discard menu.addItem(newMenuItem("Run Menu Action"))
+    discard menu.addItem(
+      newMenuItem("Run Menu Action", keyEquivalent = "r", modifiers = {kmCommand})
+    )
     discard menu.addSeparator()
     discard menu.addItem(newMenuItem("Reset Count"))
     root.addSubview(button)
@@ -396,6 +398,8 @@ suite "nimkit rendering":
     var
       panelFound = false
       runFound = false
+      keyEquivalentFound = false
+      separatorFound = false
       resetFound = false
 
     for node in renders[PopupDrawLevel].nodes:
@@ -405,10 +409,16 @@ suite "nimkit rendering":
         panelFound = true
         check node.corners[dcTopLeft] == 4'u16
         check node.corners[dcTopRight] == 4'u16
+      if node.kind == nkRectangle and node.screenBox.x == 19.0 and
+          node.screenBox.y == 65.0 and node.screenBox.w == 162.0 and
+          node.screenBox.h == 1.0:
+        separatorFound = true
       if node.kind == nkText:
         case node.renderedText()
         of "Run Menu Action":
           runFound = true
+        of "Cmd-r":
+          keyEquivalentFound = true
         of "Reset Count":
           resetFound = true
         else:
@@ -416,7 +426,36 @@ suite "nimkit rendering":
 
     check panelFound
     check runFound
+    check keyEquivalentFound
+    check separatorFound
     check resetFound
+
+  test "buildRenders draws a menu bar from a main menu":
+    let
+      root = newView(frame = initRect(0, 0, 240, 80))
+      mainMenu = newMenu("Main")
+      actionsMenu = newMenu("Actions")
+      actionsItem = newMenuItem("Actions")
+
+    actionsItem.submenu = actionsMenu
+    discard mainMenu.addItem(actionsItem)
+    root.addSubview(newMenuBar(mainMenu, initRect(0, 0, 240, 28)))
+
+    let renders = buildRenders(root)
+    var
+      titleFound = false
+      dividerFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkText and node.renderedText() == "Actions":
+        titleFound = true
+      if node.kind == nkRectangle and node.screenBox.x == 0.0 and
+          node.screenBox.y == 27.0 and node.screenBox.w == 240.0 and
+          node.screenBox.h == 1.0:
+        dividerFound = true
+
+    check titleFound
+    check dividerFound
 
   test "buildRenders draws standalone list views with list roles":
     let

@@ -47,8 +47,13 @@ type
     xItemHeight: float32
     xPopupPresentation: PopupPresentation
 
+  MenuBar* = ref object of View
+    xMenu: Menu
+    xButtons: seq[PopupMenuButton]
+
 proc openPopup*(button: PopupMenuButton)
 proc closePopup*(button: PopupMenuButton)
+proc reload*(menuBar: MenuBar)
 
 proc newMenu*(title = ""): Menu =
   result = Menu(xTitle: title)
@@ -358,6 +363,18 @@ func popupMenuDefaultItemHeight*(): float32 =
 func popupMenuDefaultMaxVisibleItems*(): int =
   12
 
+func menuBarDefaultHeight*(): float32 =
+  28.0'f32
+
+func menuBarHorizontalInset(): float32 =
+  8.0'f32
+
+func menuBarItemGap(): float32 =
+  2.0'f32
+
+func menuBarItemPadding(): float32 =
+  24.0'f32
+
 proc title*(button: PopupMenuButton): string =
   if button.isNil: "" else: button.xTitle
 
@@ -455,18 +472,28 @@ proc menuItemText(button: PopupMenuButton, index: int): string =
   if item.isNil:
     return ""
   if item.isSeparatorItem():
-    return "----------------"
-  var text = item.title()
+    return ""
+  item.title()
+
+proc menuItemKeyEquivalentText(button: PopupMenuButton, index: int): string =
+  let item = button.menuItem(index)
+  if item.isNil:
+    return ""
   if item.hasKeyEquivalent():
     let key = item.keyEquivalent()
     if key.text.len > 0:
-      text.add "    "
+      var text = ""
+      if kmShift in key.modifiers:
+        text.add "Shift-"
+      if kmControl in key.modifiers:
+        text.add "Ctrl-"
+      if kmOption in key.modifiers:
+        text.add "Opt-"
       if kmCommand in key.modifiers:
         text.add "Cmd-"
-      elif kmControl in key.modifiers:
-        text.add "Ctrl-"
       text.add key.text
-  text
+      return text
+  ""
 
 proc setPopupNeedsDisplay(button: PopupMenuButton) =
   button.setNeedsDisplay(true)
@@ -519,6 +546,14 @@ proc popupListData(button: PopupMenuButton): PopupListData =
       button.itemHeight(),
     itemText: proc(index: int): string =
       button.menuItemText(index),
+    itemKeyEquivalentText: proc(index: int): string =
+      button.menuItemKeyEquivalentText(index),
+    itemIsSeparator: proc(index: int): bool =
+      let item = button.menuItem(index)
+      not item.isNil and item.isSeparatorItem(),
+    itemHasSubmenu: proc(index: int): bool =
+      let item = button.menuItem(index)
+      not item.isNil and not item.submenu().isNil,
     enabled: proc(): bool =
       button.enabled(),
     focused: proc(): bool =
@@ -755,6 +790,7 @@ proc initPopupMenuButtonFields*(
   button.xItemHeight = popupMenuDefaultItemHeight()
   button.xHighlightedIndex = -1
   button.xPopupPresentation = ppAutomatic
+  button.background = initColor(0.0, 0.0, 0.0, 0.0)
   button.menu = menu
   button.setAcceptsFirstResponder(true)
   discard button.withProtocol(PopupMenuButtonDrawing)
@@ -766,3 +802,102 @@ proc newPopupMenuButton*(
 ): PopupMenuButton =
   result = PopupMenuButton()
   initPopupMenuButtonFields(result, title, menu, frame)
+
+proc newPullDownButton*(
+    title = "", menu: Menu = nil, frame: Rect = AutoRect
+): PopupMenuButton =
+  newPopupMenuButton(title, menu, frame)
+
+proc menu*(menuBar: MenuBar): Menu =
+  if menuBar.isNil: nil else: menuBar.xMenu
+
+proc menuBarItemWidth(item: MenuItem): float32 =
+  if item.isNil:
+    return 0.0'f32
+  max(textNaturalSize(item.title()).width + menuBarItemPadding(), 44.0'f32)
+
+proc menuBarNaturalSize(menuBar: MenuBar): Size =
+  var width = menuBarHorizontalInset()
+  if not menuBar.isNil and not menuBar.xMenu.isNil:
+    for item in menuBar.xMenu.items:
+      width += menuBarItemWidth(item) + menuBarItemGap()
+  initSize(width + menuBarHorizontalInset(), menuBarDefaultHeight())
+
+proc clearMenuBarButtons(menuBar: MenuBar) =
+  for button in menuBar.xButtons:
+    button.closePopup()
+    button.removeFromSuperview()
+  menuBar.xButtons.setLen(0)
+
+proc reload*(menuBar: MenuBar) =
+  if menuBar.isNil:
+    return
+  menuBar.clearMenuBarButtons()
+  if menuBar.xMenu.isNil:
+    menuBar.setNeedsLayout()
+    menuBar.setNeedsDisplay(true)
+    return
+  for item in menuBar.xMenu.items:
+    let button = newPullDownButton(item.title(), item.submenu())
+    button.enabled = not item.submenu().isNil
+    button.popupPresentation = ppAutomatic
+    menuBar.addSubview(button)
+    menuBar.xButtons.add button
+  menuBar.setNeedsLayout()
+  menuBar.setNeedsDisplay(true)
+
+proc `menu=`*(menuBar: MenuBar, menu: Menu) =
+  if menuBar.isNil or menuBar.xMenu == menu:
+    return
+  menuBar.xMenu = menu
+  menuBar.reload()
+
+proc tileMenuBarItems(menuBar: MenuBar) =
+  if menuBar.isNil:
+    return
+  var x = menuBarHorizontalInset()
+  let
+    bounds = menuBar.bounds()
+    buttonHeight = min(max(bounds.size.height - 4.0'f32, 0.0'f32), 24.0'f32)
+    buttonY = max((bounds.size.height - buttonHeight) / 2.0'f32, 0.0'f32)
+  if menuBar.xMenu.isNil:
+    return
+  for index, button in menuBar.xButtons:
+    if index < menuBar.xMenu.len:
+      let
+        item = menuBar.xMenu[index]
+        width = menuBarItemWidth(item)
+      button.title = item.title()
+      button.menu = item.submenu()
+      button.enabled = not item.submenu().isNil
+      button.frame = initRect(x, buttonY, width, buttonHeight)
+      x += width + menuBarItemGap()
+
+protocol MenuBarDrawing of ViewDrawingProtocol:
+  method draw(menuBar: MenuBar, context: DrawContext) =
+    let bounds = menuBar.bounds()
+    if bounds.isEmpty:
+      return
+    discard context.addWindowRectangle(
+      initRect(0.0'f32, bounds.maxY - 1.0'f32, bounds.size.width, 1.0'f32),
+      fill(initColor(0.76, 0.78, 0.82)),
+    )
+
+protocol MenuBarLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(menuBar: MenuBar): IntrinsicSize =
+    initIntrinsicSize(menuBar.menuBarNaturalSize())
+
+  method layoutSubviews(menuBar: MenuBar) =
+    menuBar.tileMenuBarItems()
+
+proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRect) =
+  initViewFields(menuBar, frame)
+  menuBar.background = initColor(0.91, 0.92, 0.94)
+  discard menuBar.withProtocol(MenuBarDrawing)
+  discard menuBar.withProtocol(MenuBarLayout)
+  menuBar.menu = menu
+  menuBar.applyInitialFrame(frame)
+
+proc newMenuBar*(menu: Menu = nil, frame: Rect = AutoRect): MenuBar =
+  result = MenuBar()
+  initMenuBarFields(result, menu, frame)

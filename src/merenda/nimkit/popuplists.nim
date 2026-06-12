@@ -16,6 +16,7 @@ type
   PopupListStringProc* = proc(): string {.closure.}
   PopupListClassesProc* = proc(): seq[string] {.closure.}
   PopupListItemTextProc* = proc(index: int): string {.closure.}
+  PopupListItemBoolProc* = proc(index: int): bool {.closure.}
   PopupListItemProc* = proc(index: int) {.closure.}
   PopupListScrollProc* = proc(delta: int) {.closure.}
   PopupListKeyProc* = proc(event: KeyEvent) {.closure.}
@@ -29,6 +30,9 @@ type
     highlightedIndex*: PopupListCountProc
     rowHeight*: PopupListMetricProc
     itemText*: PopupListItemTextProc
+    itemKeyEquivalentText*: PopupListItemTextProc
+    itemIsSeparator*: PopupListItemBoolProc
+    itemHasSubmenu*: PopupListItemBoolProc
     enabled*: PopupListBoolProc
     focused*: PopupListBoolProc
     opened*: PopupListBoolProc
@@ -56,6 +60,9 @@ proc selectedIndex*(popupList: PopupListView): int
 proc highlightedIndex*(popupList: PopupListView): int
 proc rowHeight*(popupList: PopupListView): float32
 proc itemText*(popupList: PopupListView, index: int): string
+proc itemKeyEquivalentText*(popupList: PopupListView, index: int): string
+proc itemIsSeparator*(popupList: PopupListView, index: int): bool
+proc itemHasSubmenu*(popupList: PopupListView, index: int): bool
 proc isEnabled*(popupList: PopupListView): bool
 proc isFocused*(popupList: PopupListView): bool
 proc isOpened*(popupList: PopupListView): bool
@@ -186,6 +193,15 @@ proc rowHeight*(popupList: PopupListView): float32 =
 proc itemText*(popupList: PopupListView, index: int): string =
   popupList.data().itemText.valueAtOr(index, "")
 
+proc itemKeyEquivalentText*(popupList: PopupListView, index: int): string =
+  popupList.data().itemKeyEquivalentText.valueAtOr(index, "")
+
+proc itemIsSeparator*(popupList: PopupListView, index: int): bool =
+  popupList.data().itemIsSeparator.valueAtOr(index, false)
+
+proc itemHasSubmenu*(popupList: PopupListView, index: int): bool =
+  popupList.data().itemHasSubmenu.valueAtOr(index, false)
+
 proc isEnabled*(popupList: PopupListView): bool =
   popupList.data().enabled.valueOr(true)
 
@@ -276,30 +292,80 @@ proc drawPopupList*(
   for visibleIndex in 0 ..< visible:
     let itemIndex = first + visibleIndex
     if itemIndex < 0 or itemIndex >= total:
-      continue
-    let
-      itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
-      states = block:
-        var rowStates: set[WidgetState] = {}
-        if not popupList.isEnabled():
-          rowStates.incl(ssDisabled)
-        if itemIndex == popupList.selectedIndex():
-          rowStates.incl(ssSelected)
-        if itemIndex == popupList.highlightedIndex():
-          rowStates.incl(ssHovered)
-        if popupList.isFocused():
-          rowStates.incl(ssFocused)
-        rowStates
-      row = initListRowState(itemIndex, popupList.itemText(itemIndex), states = states)
-    context.drawListRow(
-      itemRect,
-      row,
-      popupList.xItemRole,
-      popupList.styleId(),
-      classes,
-      layer = layer,
-      parent = popupRoot,
-    )
+      discard
+    else:
+      let itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
+      if popupList.itemIsSeparator(itemIndex):
+        let line = initRect(
+          itemRect.origin.x + 8.0'f32,
+          itemRect.origin.y + itemRect.size.height / 2.0'f32,
+          max(itemRect.size.width - 16.0'f32, 0.0'f32),
+          1.0'f32,
+        )
+        discard context.addWindowRectangle(
+          layer,
+          popupRoot,
+          context.localRectToWindow(line),
+          fill(initColor(0.68, 0.69, 0.71)),
+        )
+      else:
+        let
+          states = block:
+            var rowStates: set[WidgetState] = {}
+            if not popupList.isEnabled():
+              rowStates.incl(ssDisabled)
+            if itemIndex == popupList.selectedIndex():
+              rowStates.incl(ssSelected)
+            if itemIndex == popupList.highlightedIndex():
+              rowStates.incl(ssHovered)
+            if popupList.isFocused():
+              rowStates.incl(ssFocused)
+            rowStates
+          row =
+            initListRowState(itemIndex, popupList.itemText(itemIndex), states = states)
+          keyEquivalentText = popupList.itemKeyEquivalentText(itemIndex)
+          accessoryColor =
+            if ssHovered in states:
+              initColor(1.0, 1.0, 1.0)
+            else:
+              initColor(0.27, 0.29, 0.33)
+        context.drawListRow(
+          itemRect,
+          row,
+          popupList.xItemRole,
+          popupList.styleId(),
+          classes,
+          layer = layer,
+          parent = popupRoot,
+        )
+        if keyEquivalentText.len > 0:
+          context.addText(
+            layer,
+            popupRoot,
+            initRect(
+              itemRect.maxX - 86.0'f32,
+              itemRect.origin.y + 3.0'f32,
+              74.0'f32,
+              max(itemRect.size.height - 5.0'f32, 0.0'f32),
+            ),
+            keyEquivalentText,
+            accessoryColor,
+            taRight,
+          )
+        if popupList.itemHasSubmenu(itemIndex):
+          context.addText(
+            layer,
+            popupRoot,
+            initRect(
+              itemRect.maxX - 18.0'f32,
+              itemRect.origin.y + 3.0'f32,
+              10.0'f32,
+              max(itemRect.size.height - 5.0'f32, 0.0'f32),
+            ),
+            ">",
+            accessoryColor,
+            taRight,
+          )
 
   let knobRect = popupList.popupListScrollerKnobRect(popupBounds)
   if not knobRect.isEmpty:
@@ -337,9 +403,9 @@ proc finishPopupListTracking*(
     else:
       -1
   popupList.xTrackingItem = false
-  if itemIndex >= 0:
+  if itemIndex >= 0 and not popupList.itemIsSeparator(itemIndex):
     popupList.activateItem(itemIndex)
-  if closeWhenDone:
+  if closeWhenDone and (itemIndex < 0 or not popupList.itemIsSeparator(itemIndex)):
     popupList.close()
 
 proc resetPopupListTracking*(popupList: PopupListView) =

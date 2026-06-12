@@ -6,7 +6,6 @@ let
   app = sharedApplication()
   window = newWindow("Nimkit Menu Demo", frame = initRect(120, 120, 520, 300))
   root = newView(frame = initRect(0, 0, 520, 300))
-  menuBar = newView(frame = initRect(0, 0, 520, 28))
   content = newStackView(laVertical)
   title = newTitleLabel("Menu Demo")
   status = newStatusLabel("Menu action count: 0")
@@ -14,6 +13,7 @@ let
   runAction = actionSelector("runMenuDemoAction")
   resetAction = actionSelector("resetMenuDemoAction")
   mainMenu = newMenu("Main")
+  menuBar = newMenuBar(mainMenu, initRect(0, 0, 520, 28))
   actionsMenu = newMenu("Actions")
   actionsItem = newMenuItem("Actions")
   runItem = newMenuItem("Run Menu Action", runAction, "r", {kmCommand})
@@ -35,7 +35,6 @@ proc onReset(sender: DynamicAgent) =
 let
   runTarget = newActionTarget(runAction, onRun)
   resetTarget = newActionTarget(resetAction, onReset)
-  menuButton = newPopupMenuButton("Actions", actionsMenu, initRect(8, 2, 72, 24))
 
 runItem.target = runTarget
 resetItem.target = resetTarget
@@ -45,9 +44,9 @@ discard actionsMenu.addSeparator()
 discard actionsMenu.addItem(resetItem)
 discard mainMenu.addItem(actionsItem)
 app.mainMenu = mainMenu
+menuBar.reload()
 
 root.background = initColor(0.95, 0.96, 0.98)
-menuBar.background = initColor(0.91, 0.92, 0.94)
 
 button.target = runTarget
 button.action = runAction
@@ -55,8 +54,6 @@ button.action = runAction
 content.spacing = 12.0
 content.alignment = svaFill
 content.addArrangedSubview(title, status, button)
-
-menuBar.addSubview(menuButton)
 root.addSubview(menuBar, content)
 
 menuBar.pinEdges(toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight})
