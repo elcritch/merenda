@@ -16,6 +16,50 @@ import ./types
 import ./views
 
 type
+  WindowStyleMask* = enum
+    wsmTitled
+    wsmClosable
+    wsmMiniaturizable
+    wsmResizable
+    wsmUtilityWindow
+    wsmDocModalWindow
+    wsmNonactivatingPanel
+
+  WindowLevel* = enum
+    wlNormal
+    wlFloating
+    wlModalPanel
+    wlMainMenu
+    wlStatus
+
+  Panel* = Window
+
+  AlertStyle* = enum
+    asInformational
+    asWarning
+    asCritical
+
+  Alert* = ref object of Responder
+    messageText*: string
+    informativeText*: string
+    style*: AlertStyle
+    buttons*: seq[string]
+    window*: Window
+
+  OpenPanel* = ref object of Responder
+    window*: Window
+    directoryUrl*: string
+    allowedFileTypes*: seq[string]
+    allowsMultipleSelection*: bool
+    canChooseFiles*: bool
+    canChooseDirectories*: bool
+
+  SavePanel* = ref object of Responder
+    window*: Window
+    directoryUrl*: string
+    nameFieldStringValue*: string
+    allowedFileTypes*: seq[string]
+
   DismissReason* = enum
     tdrProgrammatic
     tdrOutsideClick
@@ -29,6 +73,9 @@ type
   Window* = ref object of Responder
     xFrame: Rect
     xTitle: string
+    xStyleMask: set[WindowStyleMask]
+    xLevel: WindowLevel
+    xDelegate: DynamicAgent
     xContentView: View
     xAppearance: Appearance
     xHasAppearance: bool
@@ -38,11 +85,20 @@ type
     xFirstResponder: Responder
     xFieldEditor: FieldEditor
     xInitialFirstResponder: View
+    xFutureFirstResponder: Responder
     xAutorecalculatesKeyViewLoop: bool
+    xIsKeyWindow: bool
+    xIsMainWindow: bool
+    xMinSize: Size
+    xMaxSize: Size
+    xResizeIncrements: Size
+    xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xHostWindow: HostWindow
     xOwnerWindow: Window
     xAuxiliaryWindows: seq[Window]
+    xSheet: Window
+    xSheetParent: Window
     xIsPopup: bool
     xPopupPlacement: siwinshim.PopupPlacement
     xOnPopupDone: proc() {.closure.}
@@ -90,6 +146,21 @@ protocol WindowFocusProtocol {.selectorScope: protocol.}:
 
 protocol WindowFocusEvents:
   proc didChangeFirstResponder*(w: Window, previous: Responder) {.signal.}
+  proc didBecomeKeyWindow*(w: Window) {.signal.}
+  proc didResignKeyWindow*(w: Window) {.signal.}
+  proc didBecomeMainWindow*(w: Window) {.signal.}
+  proc didResignMainWindow*(w: Window) {.signal.}
+
+protocol WindowDelegateProtocol:
+  method windowShouldClose*(w: Window): bool {.optional.}
+  method windowWillClose*(w: Window) {.optional.}
+  method windowDidClose*(w: Window) {.optional.}
+  method windowDidBecomeKey*(w: Window) {.optional.}
+  method windowDidResignKey*(w: Window) {.optional.}
+  method windowDidBecomeMain*(w: Window) {.optional.}
+  method windowDidResignMain*(w: Window) {.optional.}
+  method windowWillBeginSheet*(sheet: Window) {.optional.}
+  method windowDidEndSheet*(sheet: Window) {.optional.}
 
 protocol WindowAppearanceEvents:
   proc didChangeEffectiveAppearance*(w: Window, appearance: Appearance) {.signal.}
@@ -135,6 +206,9 @@ proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable
 proc effectiveAppearance*(window: Window): Appearance
 proc effectivePopupPresentation*(window: Window): PopupPresentation
 proc close*(window: Window)
+proc setKeyWindow*(window: Window, value: bool)
+proc setMainWindow*(window: Window, value: bool)
+proc endSheet*(window: Window, sheet: Window = nil)
 proc closeAuxiliaryWindows(window: Window, notifyDone = true)
 proc hasActiveTransientSession*(window: Window): bool
 proc beginTransientSession*(
@@ -190,11 +264,47 @@ proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): 
   result = Window(
     xFrame: resolvedFrame,
     xTitle: title,
+    xStyleMask: {wsmTitled, wsmClosable, wsmMiniaturizable, wsmResizable},
+    xLevel: wlNormal,
+    xMinSize: initSize(1.0'f32, 1.0'f32),
+    xMaxSize: initSize(float32.high, float32.high),
+    xResizeIncrements: initSize(1.0'f32, 1.0'f32),
     xAutorecalculatesKeyViewLoop: true,
     xKeyBindings: initDefaultKeyBindings(),
   )
   initResponder(result)
   discard result.withProtocol(DefaultWindowKeyViewCommands)
+
+proc newPanel*(title = "Panel", frame: Rect = defaultWindowFrame()): Panel =
+  result = newWindow(title, frame)
+  result.xLevel = wlFloating
+  result.xStyleMask = {wsmTitled, wsmClosable, wsmUtilityWindow}
+
+proc newAlert*(
+    messageText: string,
+    informativeText = "",
+    style = asInformational,
+    buttons: openArray[string] = ["OK"],
+): Alert =
+  result = Alert(
+    messageText: messageText,
+    informativeText: informativeText,
+    style: style,
+    window: newPanel(messageText, initRect(100, 100, 360, 160)),
+  )
+  initResponder(result)
+  for button in buttons:
+    result.buttons.add button
+
+proc newOpenPanel*(): OpenPanel =
+  result = OpenPanel(
+    window: newPanel("Open", initRect(100, 100, 520, 360)), canChooseFiles: true
+  )
+  initResponder(result)
+
+proc newSavePanel*(): SavePanel =
+  result = SavePanel(window: newPanel("Save", initRect(100, 100, 520, 280)))
+  initResponder(result)
 
 proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
   max((value * scale).round().int32, minimum)
@@ -231,8 +341,78 @@ proc frame*(window: Window): Rect =
 proc title*(window: Window): string =
   window.xTitle
 
+proc styleMask*(window: Window): set[WindowStyleMask] =
+  if window.isNil:
+    {}
+  else:
+    window.xStyleMask
+
+proc `styleMask=`*(window: Window, mask: set[WindowStyleMask]) =
+  if not window.isNil:
+    window.xStyleMask = mask
+
+proc level*(window: Window): WindowLevel =
+  if window.isNil: wlNormal else: window.xLevel
+
+proc `level=`*(window: Window, level: WindowLevel) =
+  if not window.isNil:
+    window.xLevel = level
+
+proc delegate*(window: Window): DynamicAgent =
+  if window.isNil: nil else: window.xDelegate
+
+proc `delegate=`*(window: Window, delegate: DynamicAgent) =
+  if not window.isNil:
+    window.xDelegate = delegate
+
+proc `delegate=`*(window: Window, delegate: Responder) =
+  window.delegate = DynamicAgent(delegate)
+
 proc contentView*(window: Window): View =
   window.xContentView
+
+proc isKeyWindow*(window: Window): bool =
+  (not window.isNil) and window.xIsKeyWindow
+
+proc isMainWindow*(window: Window): bool =
+  (not window.isNil) and window.xIsMainWindow
+
+proc minSize*(window: Window): Size =
+  if window.isNil:
+    initSize()
+  else:
+    window.xMinSize
+
+proc `minSize=`*(window: Window, size: Size) =
+  if not window.isNil:
+    window.xMinSize = size
+
+proc maxSize*(window: Window): Size =
+  if window.isNil:
+    initSize()
+  else:
+    window.xMaxSize
+
+proc `maxSize=`*(window: Window, size: Size) =
+  if not window.isNil:
+    window.xMaxSize = size
+
+proc resizeIncrements*(window: Window): Size =
+  if window.isNil:
+    initSize()
+  else:
+    window.xResizeIncrements
+
+proc `resizeIncrements=`*(window: Window, size: Size) =
+  if not window.isNil:
+    window.xResizeIncrements = size
+
+proc frameAutosaveName*(window: Window): string =
+  if window.isNil: "" else: window.xFrameAutosaveName
+
+proc `frameAutosaveName=`*(window: Window, name: string) =
+  if not window.isNil:
+    window.xFrameAutosaveName = name
 
 proc keyBindings*(window: Window): KeyBindingTable =
   window.xKeyBindings
@@ -437,7 +617,44 @@ proc setContentView*(window: Window, view: View) =
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title
-  window.xHostWindow.setTitle(title)
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setTitle(title)
+
+proc convertPointToScreen*(window: Window, point: Point): Point =
+  if window.isNil:
+    return point
+  point.offset(window.xFrame.origin.x, window.xFrame.origin.y)
+
+proc convertPointFromScreen*(window: Window, point: Point): Point =
+  if window.isNil:
+    return point
+  point.offset(-window.xFrame.origin.x, -window.xFrame.origin.y)
+
+proc convertRectToScreen*(window: Window, rect: Rect): Rect =
+  initRect(window.convertPointToScreen(rect.origin), rect.size)
+
+proc convertRectFromScreen*(window: Window, rect: Rect): Rect =
+  initRect(window.convertPointFromScreen(rect.origin), rect.size)
+
+proc convertPointToContent*(window: Window, point: Point): Point =
+  if window.isNil or window.xContentView.isNil:
+    return point
+  window.xContentView.pointFromWindow(point)
+
+proc convertPointFromContent*(window: Window, point: Point): Point =
+  if window.isNil or window.xContentView.isNil:
+    return point
+  window.xContentView.pointToWindow(point)
+
+proc convertRectToContent*(window: Window, rect: Rect): Rect =
+  if window.isNil or window.xContentView.isNil:
+    return rect
+  window.xContentView.rectFromWindow(rect)
+
+proc convertRectFromContent*(window: Window, rect: Rect): Rect =
+  if window.isNil or window.xContentView.isNil:
+    return rect
+  window.xContentView.rectToWindow(rect)
 
 proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
@@ -525,6 +742,13 @@ proc initialFirstResponder*(window: Window): View =
 
 proc setInitialFirstResponder*(window: Window, view: View) =
   window.xInitialFirstResponder = view
+
+proc futureFirstResponder*(window: Window): Responder =
+  if window.isNil: nil else: window.xFutureFirstResponder
+
+proc setFutureFirstResponder*(window: Window, responder: Responder) =
+  if not window.isNil:
+    window.xFutureFirstResponder = responder
 
 proc autorecalculatesKeyViewLoop*(window: Window): bool =
   (not window.isNil) and window.xAutorecalculatesKeyViewLoop
@@ -670,17 +894,49 @@ proc isClosed*(window: Window): bool =
 proc isVisible*(window: Window): bool =
   (not window.isNil) and window.xVisibleRequested and not window.xClosed
 
+proc sendWindowDelegate[A](
+    window: Window, selector: Selector[A, EmptyArgs], args: sink A
+) =
+  if not window.isNil and not window.xDelegate.isNil:
+    discard window.xDelegate.sendLocalIfHandled(selector, ensureMove args)
+
+proc setKeyWindow*(window: Window, value: bool) =
+  if window.isNil or window.xIsKeyWindow == value:
+    return
+  window.xIsKeyWindow = value
+  if value:
+    window.sendWindowDelegate(windowDidBecomeKey(), window)
+    emit window.didBecomeKeyWindow()
+  else:
+    window.sendWindowDelegate(windowDidResignKey(), window)
+    emit window.didResignKeyWindow()
+
+proc setMainWindow*(window: Window, value: bool) =
+  if window.isNil or window.xIsMainWindow == value:
+    return
+  window.xIsMainWindow = value
+  if value:
+    window.sendWindowDelegate(windowDidBecomeMain(), window)
+    emit window.didBecomeMainWindow()
+  else:
+    window.sendWindowDelegate(windowDidResignMain(), window)
+    emit window.didResignMainWindow()
+
 proc makeKeyAndOrderFront*(window: Window) =
   window.xClosed = false
   window.xVisibleRequested = true
-  window.xHostWindow.setVisible(true)
+  window.setKeyWindow(true)
+  window.setMainWindow(true)
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setVisible(true)
 
 proc orderFront*(window: Window) =
   window.makeKeyAndOrderFront()
 
 proc orderOut*(window: Window) =
   window.xVisibleRequested = false
-  window.xHostWindow.setVisible(false)
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setVisible(false)
 
 proc detachAuxiliaryWindow(owner, auxiliary: Window) =
   if owner.isNil or auxiliary.isNil:
@@ -695,6 +951,36 @@ proc attachAuxiliaryWindow(owner, auxiliary: Window) =
   auxiliary.xOwnerWindow = owner
   if auxiliary notin owner.xAuxiliaryWindows:
     owner.xAuxiliaryWindows.add auxiliary
+
+proc beginSheet*(window: Window, sheet: Window) =
+  if window.isNil or sheet.isNil:
+    return
+  if not window.xSheet.isNil and window.xSheet != sheet:
+    window.endSheet(window.xSheet)
+  window.xSheet = sheet
+  sheet.xSheetParent = window
+  window.attachAuxiliaryWindow(sheet)
+  window.sendWindowDelegate(windowWillBeginSheet(), sheet)
+  sheet.makeKeyAndOrderFront()
+
+proc endSheet*(window: Window, sheet: Window = nil) =
+  if window.isNil:
+    return
+  let activeSheet = if sheet.isNil: window.xSheet else: sheet
+  if activeSheet.isNil:
+    return
+  if window.xSheet == activeSheet:
+    window.xSheet = nil
+  activeSheet.xSheetParent = nil
+  window.detachAuxiliaryWindow(activeSheet)
+  activeSheet.orderOut()
+  window.sendWindowDelegate(windowDidEndSheet(), activeSheet)
+
+proc attachedSheet*(window: Window): Window =
+  if window.isNil: nil else: window.xSheet
+
+proc sheetParent*(window: Window): Window =
+  if window.isNil: nil else: window.xSheetParent
 
 proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
   let auxiliaries = window.xAuxiliaryWindows
@@ -779,23 +1065,42 @@ proc endTransientSession*(
   window.finishTransientSession(reason, notifyDismiss = false)
 
 proc close*(window: Window) =
+  if window.isNil:
+    return
+  let shouldClose =
+    if window.xDelegate.isNil:
+      true
+    else:
+      window.xDelegate.trySendLocal(windowShouldClose(), window).get(true)
+  if not shouldClose:
+    return
+  window.sendWindowDelegate(windowWillClose(), window)
   emit window.willClose()
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
   window.xClosed = true
   window.xVisibleRequested = false
+  window.xIsKeyWindow = false
+  window.xIsMainWindow = false
   if window.xTransientSession.active:
     discard window.dismissTransientSession(tdrOwnerClosed)
   else:
     window.closeAuxiliaryWindows(notifyDone = false)
   if not window.xOwnerWindow.isNil:
+    if window.xOwnerWindow.xSheet == window:
+      window.xOwnerWindow.xSheet = nil
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
-  window.xHostWindow.close()
-  window.xHostWindow = nil
+  if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
+    window.xSheetParent.xSheet = nil
+    window.xSheetParent = nil
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.close()
+    window.xHostWindow = nil
   if notifyPopupDone:
     window.xOnPopupDone()
   emit window.didClose()
+  window.sendWindowDelegate(windowDidClose(), window)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
   window.xOnPopupDone = handler

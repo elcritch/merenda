@@ -41,6 +41,11 @@ type
   ValidationArgs* = object
     item*: DynamicAgent
 
+  TerminationReply* = enum
+    trCancel
+    trNow
+    trLater
+
   MouseEventSelector* = Selector[MouseEvent, bool]
   ScrollEventSelector* = Selector[ScrollEvent, bool]
   KeyEventSelector* = Selector[KeyEvent, bool]
@@ -96,6 +101,23 @@ protocol MouseHitPolicyProtocol:
 
 protocol UserInterfaceValidations:
   method validateUserInterfaceItem*(args: ValidationArgs): bool
+
+protocol MenuDelegateProtocol:
+  method menuNeedsUpdate*(menu: DynamicAgent) {.optional.}
+  method menuWillOpen*(menu: DynamicAgent) {.optional.}
+  method menuDidClose*(menu: DynamicAgent) {.optional.}
+
+protocol ApplicationDelegateProtocol:
+  method appWillFinishLaunching*(app: DynamicAgent) {.optional.}
+  method appDidFinishLaunching*(app: DynamicAgent) {.optional.}
+  method appDidBecomeActive*(app: DynamicAgent) {.optional.}
+  method appDidResignActive*(app: DynamicAgent) {.optional.}
+  method appWillHide*(app: DynamicAgent) {.optional.}
+  method appDidHide*(app: DynamicAgent) {.optional.}
+  method appWillUnhide*(app: DynamicAgent) {.optional.}
+  method appDidUnhide*(app: DynamicAgent) {.optional.}
+  method appShouldTerminate*(app: DynamicAgent): TerminationReply {.optional.}
+  method appWillTerminate*(app: DynamicAgent) {.optional.}
 
 protocol ButtonActionProtocol:
   method performClick*(args: ActionArgs) {.optional.}
