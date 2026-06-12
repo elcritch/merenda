@@ -129,13 +129,15 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
   ): bool =
     not popupList.isOpened() or not popupList.canScrollRows(popupListScrollRows(event))
 
-  method scrollWheel(popupList: PopupListView, event: ScrollEvent) =
+  method scrollWheel(popupList: PopupListView, event: ScrollEvent): bool =
     let delta = popupListScrollRows(event)
     if popupList.isOpened() and popupList.canScrollRows(delta):
       popupList.scrollBy(delta)
+      return true
 
-  method keyDown(popupList: PopupListView, event: KeyEvent) =
+  method keyDown(popupList: PopupListView, event: KeyEvent): bool =
     popupList.dispatchKeyDown(event)
+    result = true
 
 proc data(popupList: PopupListView): PopupListData =
   if popupList.isNil:

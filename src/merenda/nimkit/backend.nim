@@ -15,6 +15,7 @@ type
     event*: events.KeyEvent
     pressed*: bool
     isEscape*: bool
+    isModifierChange*: bool
 
   HostWindowCallbacks* = object
     onClose*: proc() {.closure.}
@@ -187,6 +188,13 @@ proc keyText(key: siwinshim.Key): string =
   of siwinshim.Key.tab: "\t"
   else: ""
 
+proc isModifierKey(key: events.Key): bool =
+  key in {
+    events.keyLeftControl, events.keyRightControl, events.keyLeftShift,
+    events.keyRightShift, events.keyLeftOption, events.keyRightOption,
+    events.keyLeftCommand, events.keyRightCommand,
+  }
+
 proc rawInputToLogical*(rawPos: Vec2, inputSize: IVec2, logicalSize: Vec2): Vec2 =
   if inputSize.x <= 0 or inputSize.y <= 0:
     return rawPos
@@ -355,16 +363,18 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
 proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
   if host.xCallbacks.onKey.isNil:
     return
+  let key = event.key.toNimkitKey
   host.xCallbacks.onKey(
     HostKeyEvent(
       event: events.KeyEvent(
         text: event.key.keyText,
-        key: event.key.toNimkitKey,
+        key: key,
         keyCode: event.key.ord,
         modifiers: event.modifiers.toNimkitModifiers,
       ),
       pressed: event.pressed,
       isEscape: event.key == siwinshim.Key.escape,
+      isModifierChange: key.isModifierKey,
     )
   )
 

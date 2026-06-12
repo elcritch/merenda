@@ -17,6 +17,7 @@
 ## Coding Style & Naming
 - Indentation: 2 spaces; no tabs.
 - Formatting: run `nph src/*.nim` and format any touched test files.
+- Rely on Nim's zero-initialization for default result values. For example, a `bool` result already defaults to `false`, so do not assign `result = false` or return a final explicit `false` unless the branch needs to make that value clear or override earlier state.
 
 ## NimKit Coding Rules
 - Keep geometry, color, event, and option data as plain Nim value types (`object`, enums, sets). Do not wrap scalar widget state in `ref object` or `Sigil`.

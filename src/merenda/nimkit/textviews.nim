@@ -756,11 +756,11 @@ protocol DefaultTextViewEvents of ResponderEventProtocol:
     if event.button == mbPrimary and (textView.editable or textView.selectable):
       textView.setCursor(textView.textIndexAtPoint(event.location))
       return true
-    false
 
-  method keyDown(textView: TextView, event: KeyEvent) =
+  method keyDown(textView: TextView, event: KeyEvent): bool =
     if textView.editable and event.shouldInsertText():
       textView.insertTextValue(event.text)
+      return true
 
 protocol DefaultTextViewInput of TextInputProtocol:
   method insertText(textView: TextView, text: string) =

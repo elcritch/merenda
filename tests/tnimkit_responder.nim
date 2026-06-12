@@ -1,4 +1,4 @@
-import std/unittest
+import std/[options, unittest]
 
 import sigils/selectors
 
@@ -6,6 +6,7 @@ import merenda/nimkit
 
 type TrackingSpyView = ref object of View
   xName: string
+  xUndoManager: DynamicAgent
 
 type FocusSpyView = ref object of View
   xName: string
@@ -85,12 +86,56 @@ protocol TrackingSpyEvents of ResponderEventProtocol:
     spy.recordTrackingEvent("dragged", event)
     true
 
-  method scrollWheel(spy: TrackingSpyView, event: ScrollEvent) =
-    spy.recordScrollEvent(event)
+  method rightMouseDown(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("rightDown", event)
+    true
 
-  method keyDown(spy: TrackingSpyView, event: KeyEvent) =
+  method rightMouseDragged(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("rightDragged", event)
+    true
+
+  method rightMouseUp(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("rightUp", event)
+    true
+
+  method otherMouseDown(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("otherDown", event)
+    true
+
+  method otherMouseUp(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("otherUp", event)
+    true
+
+  method cursorUpdate(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("cursor", event)
+    true
+
+  method updateTrackingAreas(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("tracking", event)
+    true
+
+  method helpRequested(spy: TrackingSpyView, event: MouseEvent): bool =
+    spy.recordTrackingEvent("help", event)
+    true
+
+  method scrollWheel(spy: TrackingSpyView, event: ScrollEvent): bool =
+    spy.recordScrollEvent(event)
+    true
+
+  method keyDown(spy: TrackingSpyView, event: KeyEvent): bool =
     trackingEvents.add(spy.xName & ".key:" & event.text)
     trackingModifiers.add(event.modifiers)
+    true
+
+  method keyUp(spy: TrackingSpyView, event: KeyEvent): bool =
+    trackingEvents.add(spy.xName & ".keyUp:" & event.text)
+    trackingModifiers.add(event.modifiers)
+    true
+
+  method flagsChanged(spy: TrackingSpyView, event: KeyEvent): bool =
+    trackingEvents.add(spy.xName & ".flags:" & $event.key)
+    trackingModifiers.add(event.modifiers)
+    true
 
 protocol TrackingSpyCommandProtocol:
   method trackingCommand*(args: ActionArgs) {.optional.}
@@ -99,6 +144,28 @@ protocol TrackingSpyCommands of TrackingSpyCommandProtocol:
   method trackingCommand(spy: TrackingSpyView, args: ActionArgs) =
     trackingEvents.add(spy.xName & ".command")
     trackingCommandSenders.add(args.sender)
+
+protocol TrackingSpyResponderCommands of ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(spy: TrackingSpyView, event: KeyEvent): bool =
+    if event.key == keyF12:
+      trackingEvents.add(spy.xName & ".equivalent")
+      trackingModifiers.add(event.modifiers)
+      return true
+    false
+
+  method validRequestorForSendType(
+      spy: TrackingSpyView, args: ValidRequestorArgs
+  ): Option[DynamicAgent] =
+    if args.sendType == PasteboardTypeString and args.returnType.len == 0:
+      some(DynamicAgent(spy))
+    else:
+      none(DynamicAgent)
+
+  method undoManager(spy: TrackingSpyView): Option[DynamicAgent] =
+    if spy.xUndoManager.isNil:
+      none(DynamicAgent)
+    else:
+      some(spy.xUndoManager)
 
 protocol FocusSpyResponderLifecycle of ResponderProtocol:
   method shouldBecomeFirstResponder(spy: FocusSpyView): bool =
@@ -128,6 +195,7 @@ proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
   initViewFields(result, frame)
   discard result.withProtocol(TrackingSpyEvents)
   discard result.withProtocol(TrackingSpyCommands)
+  discard result.withProtocol(TrackingSpyResponderCommands)
 
 proc newFocusSpyView(name: string, frame: Rect): FocusSpyView =
   result = FocusSpyView(xName: name)
@@ -593,6 +661,60 @@ suite "nimkit responder":
     check trackingModifiers == @[{kmShift, kmCommand}, {kmShift, kmCommand}]
     check trackingTimestamps == @[20.0, 20.1]
 
+  test "window dispatches right and other mouse events through responder chain":
+    let
+      window = newWindow("Aux mouse bubbling", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(frame = initRect(20, 15, 30, 20))
+
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.rightMouseDownAt(initPoint(35, 30), modifiers = {kmOption})
+    check window.mouseDraggedAt(initPoint(40, 35), button = mbSecondary)
+    check window.rightMouseUpAt(initPoint(40, 35), modifiers = {kmOption})
+    check window.otherMouseDownAt(initPoint(35, 30))
+    check window.otherMouseUpAt(initPoint(35, 30))
+
+    check trackingEvents ==
+      @[
+        "parent.rightDown", "parent.rightDragged", "parent.rightUp", "parent.otherDown",
+        "parent.otherUp",
+      ]
+    check trackingPoints ==
+      @[
+        initPoint(25, 20),
+        initPoint(30, 25),
+        initPoint(30, 25),
+        initPoint(25, 20),
+        initPoint(25, 20),
+      ]
+    check trackingModifiers == @[{kmOption}, {}, {kmOption}, {}, {}]
+
+  test "window dispatches help cursor and tracking events through responder chain":
+    let
+      window = newWindow("Cursor bubbling", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(frame = initRect(20, 15, 30, 20))
+
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.dispatchHelpRequested(MouseEvent(location: initPoint(35, 30)))
+    check window.dispatchCursorUpdate(MouseEvent(location: initPoint(35, 30)))
+    check window.dispatchUpdateTrackingAreas(MouseEvent(location: initPoint(35, 30)))
+
+    check trackingEvents == @["parent.help", "parent.cursor", "parent.tracking"]
+    check trackingPoints == @[initPoint(25, 20), initPoint(25, 20), initPoint(25, 20)]
+
   test "window key dispatch bubbles first responder key events":
     let
       window = newWindow("Key bubbling", frame = initRect(0, 0, 240, 160))
@@ -614,6 +736,67 @@ suite "nimkit responder":
 
     check trackingEvents == @["parent.key:x"]
     check trackingModifiers == @[{kmControl}]
+
+  test "window key up and modifier changes bubble through next responder":
+    let
+      window = newWindow("Key up bubbling", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(frame = initRect(20, 15, 30, 20))
+
+    child.setAcceptsFirstResponder(true)
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyUp(
+      KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmShift})
+    )
+    check window.dispatchFlagsChanged(
+      KeyEvent(key: keyLeftCommand, keyCode: keyLeftCommand.ord, modifiers: {kmCommand})
+    )
+
+    check trackingEvents == @["parent.keyUp:x", "parent.flags:keyLeftCommand"]
+    check trackingModifiers == @[{kmShift}, {kmCommand}]
+
+  test "performKeyEquivalent walks responder chain before raw key dispatch":
+    let
+      window = newWindow("Key equivalent", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(frame = initRect(20, 15, 30, 20))
+
+    child.setAcceptsFirstResponder(true)
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+
+    resetTracking()
+
+    check window.makeFirstResponder(child)
+    check window.performKeyEquivalent(
+      KeyEvent(key: keyF12, keyCode: keyF12.ord, modifiers: {kmCommand})
+    )
+
+    check trackingEvents == @["parent.equivalent"]
+    check trackingModifiers == @[{kmCommand}]
+
+  test "valid requestor and undo manager lookup walk responder chain":
+    let
+      manager = newResponder()
+      parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
+      child = newView(frame = initRect(20, 15, 30, 20))
+
+    parent.xUndoManager = DynamicAgent(manager)
+    parent.addSubview(child)
+
+    check child.findValidRequestorForSendType(PasteboardTypeString, "") ==
+      DynamicAgent(parent)
+    check child.findValidRequestorForSendType("missing.type", "") == nil
+    check child.findUndoManager() == DynamicAgent(manager)
 
   test "window scroll dispatch hit-tests and converts local coordinates":
     let

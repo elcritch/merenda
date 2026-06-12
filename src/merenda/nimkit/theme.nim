@@ -258,17 +258,6 @@ func linear*(start, stop: Color, axis: FillGradientAxis): Fill =
 func linear*(start, mid, stop: Color, axis: FillGradientAxis, midPos = 128'u8): Fill =
   filltypes.linear(start.rgba, mid.rgba, stop.rgba, axis, midPos)
 
-func `==`*(a, b: Fill): bool =
-  if a.kind != b.kind:
-    return false
-  case a.kind
-  of flColor:
-    a.color == b.color
-  of flLinear2:
-    a.lin2 == b.lin2
-  of flLinear3:
-    a.lin3 == b.lin3
-
 func initBoxShadow*(
     kind: BoxShadowKind,
     color: Color,

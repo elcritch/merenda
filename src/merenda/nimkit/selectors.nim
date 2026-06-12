@@ -1,3 +1,5 @@
+import std/options
+
 import sigils/selectors
 
 from figdraw/figbasics import ZLevel
@@ -32,16 +34,23 @@ type
   CommandArgs* = object
     sender*: DynamicAgent
 
+  ValidRequestorArgs* = object
+    sendType*: string
+    returnType*: string
+
   ValidationArgs* = object
     item*: DynamicAgent
 
   MouseEventSelector* = Selector[MouseEvent, bool]
-  ScrollEventSelector* = Selector[ScrollEvent, EmptyArgs]
-  KeyEventSelector* = Selector[KeyEvent, EmptyArgs]
+  ScrollEventSelector* = Selector[ScrollEvent, bool]
+  KeyEventSelector* = Selector[KeyEvent, bool]
   ActionSelector* = Selector[ActionArgs, EmptyArgs]
   CommandSelector* = ActionSelector
   ValidationSelector* = Selector[ValidationArgs, bool]
   ScrollEventForwardingSelector* = Selector[ScrollEvent, bool]
+  KeyEquivalentSelector* = Selector[KeyEvent, bool]
+  ValidRequestorSelector* = Selector[ValidRequestorArgs, Option[DynamicAgent]]
+  UndoManagerSelector* = Selector[EmptyArgs, Option[DynamicAgent]]
 
   TryToPerformArgs* = object
     selector*: CommandSelector
@@ -54,13 +63,32 @@ type
 protocol ResponderEventProtocol:
   method mouseDown*(event: MouseEvent): bool {.optional.}
   method mouseUp*(event: MouseEvent): bool {.optional.}
+  method rightMouseDown*(event: MouseEvent): bool {.optional.}
+  method rightMouseDragged*(event: MouseEvent): bool {.optional.}
+  method rightMouseUp*(event: MouseEvent): bool {.optional.}
+  method otherMouseDown*(event: MouseEvent): bool {.optional.}
+  method otherMouseDragged*(event: MouseEvent): bool {.optional.}
+  method otherMouseUp*(event: MouseEvent): bool {.optional.}
   method mouseEntered*(event: MouseEvent): bool {.optional.}
   method mouseExited*(event: MouseEvent): bool {.optional.}
   method mouseMoved*(event: MouseEvent): bool {.optional.}
   method mouseDragged*(event: MouseEvent): bool {.optional.}
+  method cursorUpdate*(event: MouseEvent): bool {.optional.}
+  method updateTrackingAreas*(event: MouseEvent): bool {.optional.}
   method wantsForwardedScrollEvents*(event: ScrollEvent): bool {.optional.}
-  method scrollWheel*(event: ScrollEvent) {.optional.}
-  method keyDown*(event: KeyEvent) {.optional.}
+  method scrollWheel*(event: ScrollEvent): bool {.optional.}
+  method keyDown*(event: KeyEvent): bool {.optional.}
+  method keyUp*(event: KeyEvent): bool {.optional.}
+  method flagsChanged*(event: KeyEvent): bool {.optional.}
+  method helpRequested*(event: MouseEvent): bool {.optional.}
+
+protocol ResponderCommandDispatchProtocol:
+  method performKeyEquivalent*(event: KeyEvent): bool {.optional.}
+  method validRequestorForSendType*(
+    args: ValidRequestorArgs
+  ): Option[DynamicAgent] {.optional.}
+
+  method undoManager*(): Option[DynamicAgent] {.optional.}
 
 protocol MouseHitPolicyProtocol:
   method mouseHitPolicy*(args: MouseHitPolicyArgs): CellHitPolicy {.optional.}
@@ -92,18 +120,34 @@ protocol TextEditingCommandProtocol:
   method deleteForward*(args: ActionArgs) {.optional.}
   method deleteWordBackward*(args: ActionArgs) {.optional.}
   method deleteWordForward*(args: ActionArgs) {.optional.}
+  method deleteToBeginningOfLine*(args: ActionArgs) {.optional.}
+  method deleteToEndOfLine*(args: ActionArgs) {.optional.}
+  method insertLineBreak*(args: ActionArgs) {.optional.}
+  method insertParagraphSeparator*(args: ActionArgs) {.optional.}
   method moveLeft*(args: ActionArgs) {.optional.}
   method moveRight*(args: ActionArgs) {.optional.}
+  method moveUp*(args: ActionArgs) {.optional.}
+  method moveDown*(args: ActionArgs) {.optional.}
   method moveWordLeft*(args: ActionArgs) {.optional.}
   method moveWordRight*(args: ActionArgs) {.optional.}
+  method moveWordBackward*(args: ActionArgs) {.optional.}
+  method moveWordForward*(args: ActionArgs) {.optional.}
   method moveToBeginningOfLine*(args: ActionArgs) {.optional.}
   method moveToEndOfLine*(args: ActionArgs) {.optional.}
+  method moveToBeginningOfDocument*(args: ActionArgs) {.optional.}
+  method moveToEndOfDocument*(args: ActionArgs) {.optional.}
   method moveLeftAndModifySelection*(args: ActionArgs) {.optional.}
   method moveRightAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveUpAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveDownAndModifySelection*(args: ActionArgs) {.optional.}
   method moveWordLeftAndModifySelection*(args: ActionArgs) {.optional.}
   method moveWordRightAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveWordBackwardAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveWordForwardAndModifySelection*(args: ActionArgs) {.optional.}
   method moveToBeginningOfLineAndModifySelection*(args: ActionArgs) {.optional.}
   method moveToEndOfLineAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveToBeginningOfDocumentAndModifySelection*(args: ActionArgs) {.optional.}
+  method moveToEndOfDocumentAndModifySelection*(args: ActionArgs) {.optional.}
 
 protocol KeyViewCommandProtocol:
   method insertNewline*(args: ActionArgs) {.optional.}
@@ -113,6 +157,34 @@ protocol KeyViewCommandProtocol:
   method insertTabIgnoringFieldEditor*(args: ActionArgs) {.optional.}
   method selectNextKeyView*(args: ActionArgs) {.optional.}
   method selectPreviousKeyView*(args: ActionArgs) {.optional.}
+
+protocol MenuCommandProtocol:
+  method cancelOperation*(args: ActionArgs) {.optional.}
+  method complete*(args: ActionArgs) {.optional.}
+  method orderFrontStandardAboutPanel*(args: ActionArgs) {.optional.}
+  method hide*(args: ActionArgs) {.optional.}
+  method hideOtherApplications*(args: ActionArgs) {.optional.}
+  method unhideAllApplications*(args: ActionArgs) {.optional.}
+  method terminate*(args: ActionArgs) {.optional.}
+  method newDocument*(args: ActionArgs) {.optional.}
+  method openDocument*(args: ActionArgs) {.optional.}
+  method saveDocument*(args: ActionArgs) {.optional.}
+  method saveDocumentAs*(args: ActionArgs) {.optional.}
+  method revertDocumentToSaved*(args: ActionArgs) {.optional.}
+  method printDocument*(args: ActionArgs) {.optional.}
+  method close*(args: ActionArgs) {.optional.}
+  method performClose*(args: ActionArgs) {.optional.}
+  method performMiniaturize*(args: ActionArgs) {.optional.}
+  method performZoom*(args: ActionArgs) {.optional.}
+  method toggleFullScreen*(args: ActionArgs) {.optional.}
+
+protocol CollectionCommandProtocol:
+  method pageUp*(args: ActionArgs) {.optional.}
+  method pageDown*(args: ActionArgs) {.optional.}
+  method scrollToBeginningOfDocument*(args: ActionArgs) {.optional.}
+  method scrollToEndOfDocument*(args: ActionArgs) {.optional.}
+  method insertNewItem*(args: ActionArgs) {.optional.}
+  method deleteSelection*(args: ActionArgs) {.optional.}
 
 protocol ViewDrawingProtocol:
   method drawLevel*(): ZLevel {.optional.}
