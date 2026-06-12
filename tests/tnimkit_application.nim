@@ -7,11 +7,22 @@ import merenda/nimkit
 
 type WindowHookObserver = ref object of Agent
 
+type
+  MenuSpyTarget = ref object of View
+  AppDelegateSpy = ref object of Responder
+  WindowDelegateSpy = ref object of Responder
+
 var
   windowHookEvents: seq[string]
   windowHookAllowContentView: bool
   windowHookAllowFirstResponder: bool
   windowHookAllowDismiss: bool
+  menuSpyEvents: seq[string]
+  menuSpyValidate: bool
+  appDelegateEvents: seq[string]
+  appTerminateReply: TerminationReply
+  windowDelegateEvents: seq[string]
+  windowDelegateShouldClose: bool
 
 protocol WindowLifecycleSpyHooks of WindowLifecycleProtocol:
   method shouldSetContentView(window: Window, view: View): bool =
@@ -57,6 +68,75 @@ protocol WindowPopupObserverEvents of WindowPopupEvents:
       observer: WindowHookObserver, presentation: PopupPresentation
   ) {.slot.} =
     windowHookEvents.add "didPopupPresentation"
+
+protocol MenuSpyActionProtocol:
+  method menuSpyAction*(args: ActionArgs) {.optional.}
+
+protocol MenuSpyActions of MenuSpyActionProtocol:
+  method menuSpyAction(target: MenuSpyTarget, args: ActionArgs) =
+    menuSpyEvents.add "action"
+
+protocol MenuSpyValidation of UserInterfaceValidations:
+  method validateUserInterfaceItem(target: MenuSpyTarget, args: ValidationArgs): bool =
+    menuSpyEvents.add "validate:" & MenuItem(args.item).title
+    menuSpyValidate
+
+protocol AppDelegateSpyProtocol of ApplicationDelegateProtocol:
+  method appWillFinishLaunching(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "willLaunch"
+
+  method appDidFinishLaunching(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "didLaunch"
+
+  method appDidBecomeActive(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "active"
+
+  method appDidResignActive(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "inactive"
+
+  method appWillHide(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "willHide"
+
+  method appDidHide(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "didHide"
+
+  method appWillUnhide(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "willUnhide"
+
+  method appDidUnhide(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "didUnhide"
+
+  method appShouldTerminate(
+      delegate: AppDelegateSpy, app: DynamicAgent
+  ): TerminationReply =
+    appDelegateEvents.add "shouldTerminate"
+    appTerminateReply
+
+  method appWillTerminate(delegate: AppDelegateSpy, app: DynamicAgent) =
+    appDelegateEvents.add "willTerminate"
+
+protocol WindowDelegateSpyProtocol of WindowDelegateProtocol:
+  method windowShouldClose(delegate: WindowDelegateSpy, window: Window): bool =
+    windowDelegateEvents.add "shouldClose"
+    windowDelegateShouldClose
+
+  method windowWillClose(delegate: WindowDelegateSpy, window: Window) =
+    windowDelegateEvents.add "willClose"
+
+  method windowDidClose(delegate: WindowDelegateSpy, window: Window) =
+    windowDelegateEvents.add "didClose"
+
+  method windowDidBecomeKey(delegate: WindowDelegateSpy, window: Window) =
+    windowDelegateEvents.add "key"
+
+  method windowDidBecomeMain(delegate: WindowDelegateSpy, window: Window) =
+    windowDelegateEvents.add "main"
+
+  method windowWillBeginSheet(delegate: WindowDelegateSpy, sheet: Window) =
+    windowDelegateEvents.add "willSheet:" & sheet.title
+
+  method windowDidEndSheet(delegate: WindowDelegateSpy, sheet: Window) =
+    windowDelegateEvents.add "didSheet:" & sheet.title
 
 suite "nimkit application":
   test "window protocols observe and veto core window behavior":
@@ -190,6 +270,150 @@ suite "nimkit application":
     )
     check actionCount == 1
     check actionSender == DynamicAgent(child)
+
+  test "main menu validates items and dispatches key equivalents through action chain":
+    let
+      app = newApplication()
+      window = newWindow("Menu dispatch", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      target = MenuSpyTarget()
+      menu = newMenu("Main")
+      item = newMenuItem("Do Thing", actionSelector("menuSpyAction"), "d", {kmCommand})
+
+    initViewFields(target, initRect(10, 10, 80, 30))
+    discard target.withProtocol(MenuSpyActions)
+    discard target.withProtocol(MenuSpyValidation)
+    target.setAcceptsFirstResponder(true)
+
+    menuSpyEvents = @[]
+    menuSpyValidate = true
+    root.addSubview(target)
+    window.setContentView(root)
+    app.addWindow(window)
+    app.mainMenu = menu
+    discard menu.addItem(item)
+
+    check window.makeFirstResponder(target)
+    menu.update(target)
+    check item.enabled
+    check menuSpyEvents == @["validate:Do Thing"]
+
+    menuSpyEvents = @[]
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyD, keyCode: keyD.ord, modifiers: {kmCommand})
+    )
+    check menuSpyEvents == @["validate:Do Thing", "action"]
+
+    menuSpyEvents = @[]
+    menuSpyValidate = false
+    menu.update(target)
+    check not item.enabled
+    check not window.dispatchKeyDown(
+      KeyEvent(key: keyD, keyCode: keyD.ord, modifiers: {kmCommand})
+    )
+    check menuSpyEvents == @["validate:Do Thing"]
+
+  test "application lifecycle state and modal sessions are first-class":
+    let
+      app = newApplication()
+      delegate = AppDelegateSpy()
+      window = newWindow("Modal", frame = initRect(0, 0, 240, 160))
+
+    initResponder(delegate)
+    discard delegate.withProtocol(AppDelegateSpyProtocol)
+    app.delegate = delegate
+    app.addWindow(window)
+
+    appDelegateEvents = @[]
+    appTerminateReply = trLater
+    app.finishLaunching()
+    app.activate()
+    app.deactivate()
+    app.hide()
+    app.unhide()
+    check appDelegateEvents ==
+      @[
+        "willLaunch", "didLaunch", "active", "inactive", "willHide", "didHide",
+        "willUnhide", "didUnhide",
+      ]
+    check not app.isHidden
+
+    let session = app.beginModalSession(window)
+    check app.modalSession == session
+    check app.keyWindow == window
+    app.stopModal(42)
+    check session.state == mssStopped
+    check session.response == 42
+    app.endModalSession(session)
+    check app.modalSession.isNil
+
+    appDelegateEvents = @[]
+    check app.terminate() == trLater
+    check app.isTerminating
+    check appDelegateEvents == @["shouldTerminate"]
+    app.replyToApplicationShouldTerminate(true)
+    check appDelegateEvents == @["shouldTerminate", "willTerminate"]
+
+  test "window roles metadata delegates coordinates and sheets":
+    let
+      window = newWindow("Owner", frame = initRect(20, 30, 240, 160))
+      sheet = newPanel("Sheet", frame = initRect(40, 50, 180, 120))
+      delegate = WindowDelegateSpy()
+      content = newView(frame = initRect(10, 15, 100, 80))
+
+    initResponder(delegate)
+    discard delegate.withProtocol(WindowDelegateSpyProtocol)
+    windowDelegateEvents = @[]
+    windowDelegateShouldClose = false
+    window.delegate = delegate
+    window.setContentView(content)
+
+    window.makeKeyAndOrderFront()
+    check window.isKeyWindow
+    check window.isMainWindow
+    check windowDelegateEvents == @["key", "main"]
+
+    window.styleMask = {wsmTitled, wsmClosable}
+    window.level = wlFloating
+    window.minSize = initSize(120, 80)
+    window.maxSize = initSize(500, 400)
+    window.resizeIncrements = initSize(10, 10)
+    window.frameAutosaveName = "owner-frame"
+    check window.styleMask == {wsmTitled, wsmClosable}
+    check window.level == wlFloating
+    check window.minSize == initSize(120, 80)
+    check window.maxSize == initSize(500, 400)
+    check window.resizeIncrements == initSize(10, 10)
+    check window.frameAutosaveName == "owner-frame"
+
+    check window.convertPointToScreen(initPoint(1, 2)) == initPoint(21, 32)
+    check window.convertPointFromScreen(initPoint(21, 32)) == initPoint(1, 2)
+    check window.convertPointToContent(initPoint(10, 15)) == initPoint(0, 0)
+    check window.convertPointFromContent(initPoint(0, 0)) == initPoint(10, 15)
+
+    window.beginSheet(sheet)
+    check window.attachedSheet == sheet
+    check sheet.sheetParent == window
+    window.endSheet()
+    check window.attachedSheet.isNil
+    check sheet.sheetParent.isNil
+    check windowDelegateEvents[^2 .. ^1] == @["willSheet:Sheet", "didSheet:Sheet"]
+
+    window.close()
+    check not window.isClosed
+    windowDelegateShouldClose = true
+    window.close()
+    check window.isClosed
+    check windowDelegateEvents[^3 .. ^1] == @["shouldClose", "willClose", "didClose"]
+
+    let
+      alert = newAlert("Replace file?", "This cannot be undone.", asWarning)
+      openPanel = newOpenPanel()
+      savePanel = newSavePanel()
+    check alert.window.level == wlFloating
+    check alert.buttons == @["OK"]
+    check openPanel.canChooseFiles
+    check savePanel.window.title == "Save"
 
   test "raw mouse input converts from reported input size to logical size":
     let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)
