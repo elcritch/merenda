@@ -16,15 +16,17 @@ Detailed layout, constraint, invalidation, and solver notes live in
 ## Current Focus
 
 NimKit has the core desktop-control slice in place: views, responders, windows,
-theme/rendering, intrinsic sizing, constraints, stack/form/grid containers,
-buttons, text fields, combo boxes, scroll views, list views, table views, basic
-text editing lifecycle, action dispatch, and in-process pasteboard support.
+application/menu infrastructure, theme/rendering, intrinsic sizing,
+constraints, stack/form/grid containers, buttons, text fields, combo boxes,
+scroll views, list views, table views, basic text editing lifecycle, action
+dispatch, and in-process pasteboard support.
 
 The next work should move NimKit toward the OpenSTEP/AppKit framework shape:
-application/window/menu/responder infrastructure first, then richer view,
-pasteboard, dragging, graphics-resource, document, table, and outline systems.
-Avoid adding widget-local special cases where AppKit solves the behavior through
-the application, responder, view, window, or control/cell layers.
+finish the application/window/menu behavior now that the first infrastructure
+slice exists, then richer view, pasteboard, dragging, graphics-resource,
+document, table, and outline systems. Avoid adding widget-local special cases
+where AppKit solves the behavior through the application, responder, view,
+window, or control/cell layers.
 
 ## Recently Completed
 
@@ -50,33 +52,51 @@ the application, responder, view, window, or control/cell layers.
   nodes.
 - Added view tracking affordance storage for cursor rects, tracking areas,
   tooltips, drag type registration, and a default autoscroll hook.
+- Added OpenSTEP-style menu infrastructure: `Menu`, `MenuItem`, application
+  `mainMenu`/`windowsMenu`, responder-chain validation, key-equivalent dispatch,
+  delegate update/open/close hooks, submenu/separator/key-equivalent rendering,
+  and a menu demo.
+- Added popup menu presentation infrastructure with inline/window popup policy,
+  a `PopupMenuButton`, popup list rows for menu items, separator rows, submenu
+  indicators, key-equivalent columns, menu-bar pull-down buttons, and hover/open
+  highlighting.
+- Added overridable menu protocols for menu lifecycle, menu key-equivalent
+  dispatch, popup menu open/close, and menu bar reload while preserving the
+  typed public proc API.
+- Strengthened `Application` with current-event, key/main-window,
+  active/running/hidden state, launch/activation/hide/termination delegate
+  lifecycle, termination reply flow, main-menu key-equivalent dispatch, and
+  first-class modal sessions.
+- Strengthened `Window` with style masks, levels, key/main roles, delegates,
+  min/max sizes, resize increments, autosave names, initial/future first
+  responder hooks, richer screen/window/view coordinate conversion, transient
+  popup sessions, and sheet attachment lifecycle.
 
 ## Near-Term Work
 
 ### OpenSTEP Application Spine
 
-Build the framework-level pieces that AppKit treats as core infrastructure.
+Finish the behavior that sits on top of the first application/menu/window
+infrastructure slice.
 
-1. Add real menu infrastructure:
-   - `Menu` and `MenuItem` objects with title, action, target, state, enabled
-     state, key equivalent, modifier mask, submenu, separator item, tag, and
-     optional represented/user info
-   - application `mainMenu` and `windowsMenu`
-   - menu validation through the responder/action chain
-   - key-equivalent dispatch before normal key handling
-   - menu delegate hooks such as update/open/close notifications
-2. Strengthen `Application`:
-   - track current event, key window, main window, active/running/hidden state
-   - add activation, hide/unhide, termination request/reply, and application
-     delegate lifecycle hooks
-   - add modal sessions as a first-class application/window flow instead of
-     ad-hoc control state
-3. Strengthen `Window`:
-   - style masks, levels, key/main window roles, delegates, min/max sizes,
-     resize increments, autosave names, initial/future first responder, and
-     richer screen/window/view coordinate conversion
-   - modal sheets, panels, alerts, and open/save panels after the core window
-     delegate and modal-session model is stable
+1. Finish menu tracking and interaction:
+   - cascading submenu popups, hover-open tracking across menu-bar items, and
+     robust outside-click/escape/focus dismissal across nested menus
+   - keyboard menu navigation, first enabled item selection, separator skipping,
+     and checked/mixed/disabled menu item rendering
+   - `windowsMenu` population and validation, menu-bar integration with the
+     application main menu, and optional native-menu bridging after the pure Nim
+     path is stable
+2. Build modal and panel UI on the stable window/session model:
+   - modal sheets as visible attached windows, app-modal/window-modal blocking
+     behavior, and modal result propagation
+   - panels, alerts, and open/save panels that use window delegates and modal
+     sessions rather than control-local state
+3. Deepen application/window integration:
+   - activation, hide/unhide, and key/main-window transitions against real
+     native backends
+   - termination review flows for modal panels and, later, unsaved documents
+   - window autosave persistence and richer window-level menu validation
 
 ### Pasteboard And Dragging
 
