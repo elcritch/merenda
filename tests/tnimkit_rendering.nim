@@ -64,6 +64,28 @@ suite "nimkit rendering":
     check textNodeCount >= 2
     check rectangleNodeCount >= 3
 
+  test "buildRenders applies view alpha and shadow to view background node":
+    let
+      root = newView(frame = initRect(0, 0, 120, 80))
+      shadow = dropShadow(initColor(0, 0, 0, 0.4), y = 3.0, blur = 7.0)
+
+    root.backgroundColor = initColor(0.2, 0.4, 0.6, 0.8)
+    root.alphaValue = 0.5
+    root.shadow = [shadow]
+
+    let list = buildRenders(root)[DefaultDrawLevel]
+    check list.rootIds.len == 1
+
+    let node = list.nodes[list.rootIds[0].int]
+    check node.kind == nkRectangle
+    check node.fill.kind == flColor
+    check node.fill.color == initColor(0.2, 0.4, 0.6, 0.4).rgba
+    check node.shadows[0].style == DropShadow
+    check node.shadows[0].fill.kind == flColor
+    check node.shadows[0].fill.color == initColor(0, 0, 0, 0.4).rgba
+    check node.shadows[0].y == 3.0
+    check node.shadows[0].blur == 7.0
+
   test "buildRenders uses theme colors and metrics for built-in controls":
     let
       root = newView(frame = initRect(0, 0, 180, 120))

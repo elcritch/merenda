@@ -1,3 +1,5 @@
+import std/algorithm
+
 import ./selectors
 import ./theme
 import ./types
@@ -423,6 +425,68 @@ proc setWindowOwner*(view: View, window: Responder) =
   view.xWindow = window
   for child in view.xSubviews:
     child.setWindowOwner(window)
+
+proc attachSubviewAt(view, child: View, index: Natural) =
+  if child.isNil:
+    return
+  if not child.xSuperview.isNil:
+    child.removeFromSuperview()
+  let oldWindow = child.xWindow
+  emit child.viewWillMoveToSuperview(view)
+  if oldWindow != view.xWindow:
+    child.propagateWillMoveToWindow(view.xWindow)
+  child.xSuperview = view
+  child.refreshAutoresizingReference()
+  view.xSubviews.insert(child, min(index, view.xSubviews.len))
+  child.setNextResponder(view)
+  child.setWindowOwner(view.xWindow)
+  child.setInheritedAppearance(view.effectiveAppearance())
+  emit view.didAddSubview(child)
+  emit child.viewDidMoveToSuperview()
+  if oldWindow != view.xWindow:
+    child.propagateDidMoveToWindow()
+  emit child.layoutInputChanged(lirSuperview)
+  emit view.layoutInputChanged(lirHierarchy)
+  view.setNeedsDisplayInRect(child.rectToView(child.bounds, view))
+
+proc insertSubview*(view, child: View, index: Natural) =
+  if view.isNil:
+    return
+  view.attachSubviewAt(child, index)
+
+proc addSubview*(
+    view, child: View, positioned: SubviewPosition, relativeTo: View = nil
+) =
+  if view.isNil:
+    return
+  var index = if positioned == svpBelow: 0 else: view.xSubviews.len
+  if not relativeTo.isNil:
+    let relativeIndex = view.xSubviews.find(relativeTo)
+    if relativeIndex >= 0:
+      index =
+        if positioned == svpBelow:
+          relativeIndex
+        else:
+          relativeIndex + 1
+  view.attachSubviewAt(child, index)
+
+proc replaceSubview*(view, oldChild, newChild: View): bool =
+  if view.isNil or oldChild.isNil or oldChild.xSuperview != view:
+    return
+  let index = view.xSubviews.find(oldChild)
+  if index < 0:
+    return
+  oldChild.removeFromSuperview()
+  if not newChild.isNil:
+    view.attachSubviewAt(newChild, index)
+  true
+
+proc sortSubviews*(view: View, compare: proc(a, b: View): int) =
+  if view.isNil or compare.isNil:
+    return
+  view.xSubviews.sort(compare)
+  emit view.layoutInputChanged(lirHierarchy)
+  view.setNeedsDisplay(true)
 
 proc addSubview*(view: View, first, second: View, rest: varargs[View]) =
   view.addSubview(first)

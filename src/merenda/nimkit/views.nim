@@ -5,6 +5,7 @@ import ./selectors
 import ./types
 import ./viewconstraints
 import ./events
+import ./theme
 import ./viewgeometry
 import ./viewprotos
 import ./viewbase
@@ -21,6 +22,149 @@ export viewgeometry except
   unobserveSuperviewGeometry, invalidateLayoutItemGeometry, ViewLayoutInputSlots,
   ViewSuperviewGeometrySlots
 export viewprotos except ViewSuperviewLifecycleSlots
+
+proc tag*(view: View): int =
+  if view.isNil: 0 else: view.xTag
+
+proc `tag=`*(view: View, tag: int) =
+  if view.isNil:
+    return
+  view.xTag = tag
+
+proc identifier*(view: View): string =
+  if view.isNil: "" else: view.xIdentifier
+
+proc `identifier=`*(view: View, identifier: string) =
+  if view.isNil:
+    return
+  view.xIdentifier = identifier
+
+proc viewWithTag*(view: View, tag: int): View =
+  if view.isNil:
+    return nil
+  if view.xTag == tag:
+    return view
+  for child in view.xSubviews:
+    let match = child.viewWithTag(tag)
+    if not match.isNil:
+      return match
+
+proc flipped*(view: View): bool =
+  view.isNil or view.xFlipped
+
+proc isFlipped*(view: View): bool =
+  view.flipped()
+
+proc `flipped=`*(view: View, flipped: bool) =
+  if view.isNil or view.xFlipped == flipped:
+    return
+  view.xFlipped = flipped
+  view.invalidateLayoutItemGeometry(lirBounds)
+  view.setNeedsDisplaySubtree()
+
+proc focusRingType*(view: View): FocusRingType =
+  if view.isNil: frtDefault else: view.xFocusRingType
+
+proc `focusRingType=`*(view: View, focusRingType: FocusRingType) =
+  if view.isNil or view.xFocusRingType == focusRingType:
+    return
+  view.xFocusRingType = focusRingType
+  view.setNeedsDisplay(true)
+
+proc alphaValue*(view: View): float32 =
+  if view.isNil: 1.0'f32 else: view.xAlphaValue
+
+proc `alphaValue=`*(view: View, alphaValue: float32) =
+  if view.isNil:
+    return
+  let normalized = min(max(alphaValue, 0.0'f32), 1.0'f32)
+  if view.xAlphaValue == normalized:
+    return
+  view.xAlphaValue = normalized
+  view.setNeedsDisplaySubtree()
+
+proc shadow*(view: View): seq[BoxShadow] =
+  if view.isNil:
+    @[]
+  else:
+    view.xShadow
+
+proc `shadow=`*(view: View, shadows: openArray[BoxShadow]) =
+  if view.isNil:
+    return
+  let nextShadows = @shadows
+  if view.xShadow == nextShadows:
+    return
+  view.xShadow = nextShadows
+  view.setNeedsDisplay(true)
+
+proc toolTip*(view: View): string =
+  if view.isNil: "" else: view.xToolTip
+
+proc `toolTip=`*(view: View, toolTip: string) =
+  if view.isNil:
+    return
+  view.xToolTip = toolTip
+
+proc cursorRects*(view: View): seq[ViewCursorRect] =
+  if view.isNil:
+    @[]
+  else:
+    view.xCursorRects
+
+proc addCursorRect*(view: View, rect: Rect, cursor: string) =
+  if view.isNil:
+    return
+  view.xCursorRects.add ViewCursorRect(rect: rect, cursor: cursor)
+
+proc discardCursorRects*(view: View) =
+  if view.isNil:
+    return
+  view.xCursorRects.setLen(0)
+
+proc trackingAreas*(view: View): seq[ViewTrackingArea] =
+  if view.isNil:
+    @[]
+  else:
+    view.xTrackingAreas
+
+proc addTrackingArea*(view: View, area: ViewTrackingArea) =
+  if view.isNil:
+    return
+  view.xTrackingAreas.add area
+
+proc removeTrackingArea*(view: View, tag: int): bool =
+  if view.isNil:
+    return
+  for idx, area in view.xTrackingAreas:
+    if area.tag == tag:
+      view.xTrackingAreas.delete(idx)
+      return true
+
+proc discardTrackingAreas*(view: View) =
+  if view.isNil:
+    return
+  view.xTrackingAreas.setLen(0)
+
+proc registeredDraggedTypes*(view: View): seq[string] =
+  if view.isNil:
+    @[]
+  else:
+    view.xRegisteredDraggedTypes
+
+proc registerForDraggedTypes*(view: View, types: openArray[string]) =
+  if view.isNil:
+    return
+  view.xRegisteredDraggedTypes = @types
+
+proc unregisterDraggedTypes*(view: View) =
+  if view.isNil:
+    return
+  view.xRegisteredDraggedTypes.setLen(0)
+
+proc autoscroll*(view: View, event: MouseEvent): bool =
+  discard view
+  discard event
 
 proc styleId*(view: View): string =
   if view.isNil: "" else: view.xStyleId
@@ -238,6 +382,8 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.initLayoutSignalBus()
   view.xFrame = frame.resolveAutoRect(initRect(0.0, 0.0, 0.0, 0.0))
   view.xBounds = initRect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
+  view.xFlipped = true
+  view.xAlphaValue = 1.0'f32
   view.xNeedsDisplay = true
   view.xNeedsLayout = true
   view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
