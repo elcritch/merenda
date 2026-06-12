@@ -693,8 +693,16 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         initColor(0.88, 0.91, 0.97)
       else:
         initColor(0.0, 0.0, 0.0, 0.0)
-    discard
-      context.addWindowRectangle(button.rectToWindow(button.bounds), fill(fillColor))
+    discard context.addWindowRectangle(
+      button.rectToWindow(button.bounds),
+      fill(fillColor),
+      if ssOpen in states or ssHovered in states:
+        initColor(0.50, 0.54, 0.62)
+      else:
+        initColor(0.0, 0.0, 0.0, 0.0),
+      if ssOpen in states or ssHovered in states: 1.0'f32 else: 0.0'f32,
+      4.0'f32,
+    )
     context.addText(
       button.bounds.inset(initEdgeInsets(6.0, 10.0, 2.0, 10.0)),
       button.title(),
