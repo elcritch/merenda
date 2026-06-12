@@ -1,10 +1,14 @@
-import std/[tables, unittest]
+import std/[tables, unicode, unittest]
 
 import figdraw/fignodes
 from figdraw/windowing/siwinshim import nil
 import sigils/core
 
 import merenda/nimkit
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
 
 type WindowHookObserver = ref object of Agent
 
@@ -447,6 +451,74 @@ suite "nimkit application":
     check actionCount == 1
     check not button.popupOpen
 
+  test "popup menus skip disabled rows render states and navigate submenus":
+    let
+      window = newWindow("Popup Menu Keyboard", frame = initRect(0, 0, 360, 220))
+      root = newView(frame = initRect(0, 0, 360, 220))
+      menu = newMenu("Actions")
+      submenu = newMenu("More")
+      disabled = newMenuItem("Disabled", actionSelector("disabledAction"))
+      checked = newMenuItem("Checked")
+      mixed = newMenuItem("Mixed")
+      more = newMenuItem("More")
+      leafAction = actionSelector("leafMenuAction")
+      leaf = newMenuItem("Leaf", leafAction)
+      button = newPopupMenuButton("Actions", menu, initRect(8, 2, 90, 24))
+
+    var actionCount = 0
+
+    proc onLeaf(sender: DynamicAgent) =
+      inc actionCount
+
+    disabled.enabled = false
+    checked.state = bsOn
+    mixed.state = bsMixed
+    leaf.target = newActionTarget(leafAction, onLeaf)
+    discard submenu.addItem(leaf)
+    more.submenu = submenu
+    discard menu.addItem(disabled)
+    discard menu.addSeparator()
+    discard menu.addItem(checked)
+    discard menu.addItem(mixed)
+    discard menu.addItem(more)
+
+    button.popupPresentation = ppInline
+    root.addSubview(button)
+    window.setContentView(root)
+    button.openPopup()
+
+    check button.popupOpen
+    check button.highlightedIndex == 2
+
+    let renders = window.buildRenders()
+    var
+      checkedMarkFound = false
+      mixedMarkFound = false
+
+    for node in renders[PopupDrawLevel].nodes:
+      if node.kind == nkText:
+        if node.renderedText() == "✓":
+          checkedMarkFound = true
+        elif node.renderedText() == "-":
+          mixedMarkFound = true
+
+    check checkedMarkFound
+    check mixedMarkFound
+
+    check button.dispatchPopupKeyDown(KeyEvent(key: keyArrowDown))
+    check button.highlightedIndex == 3
+    check button.dispatchPopupKeyDown(KeyEvent(key: keyArrowDown))
+    check button.highlightedIndex == 4
+    check button.dispatchPopupKeyDown(KeyEvent(key: keyArrowRight))
+    let child = button.activeSubmenuButton()
+    check not child.isNil
+    check child.popupOpen
+    check child.highlightedIndex == 0
+
+    check child.dispatchPopupKeyDown(KeyEvent(key: keyEnter))
+    check actionCount == 1
+    check not button.popupOpen
+
   test "menu bar presents top-level menu submenus":
     let
       window = newWindow("Menu Bar", frame = initRect(0, 0, 320, 180))
@@ -505,6 +577,94 @@ suite "nimkit application":
         hoverFound = true
 
     check hoverFound
+
+  test "menu bar hover switches the open top-level menu":
+    let
+      window = newWindow("Menu Bar Switch", frame = initRect(0, 0, 360, 180))
+      root = newView(frame = initRect(0, 0, 360, 180))
+      mainMenu = newMenu("Main")
+      actionsMenu = newMenu("Actions")
+      editMenu = newMenu("Edit")
+      actionsItem = newMenuItem("Actions")
+      editItem = newMenuItem("Edit")
+      menuBar = newMenuBar(mainMenu, initRect(0, 0, 360, 28))
+
+    actionsItem.submenu = actionsMenu
+    editItem.submenu = editMenu
+    discard actionsMenu.addItem(newMenuItem("Run"))
+    discard editMenu.addItem(newMenuItem("Copy"))
+    discard mainMenu.addItem(actionsItem)
+    discard mainMenu.addItem(editItem)
+    menuBar.reload()
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    let
+      first = PopupMenuButton(menuBar.subviews[0])
+      second = PopupMenuButton(menuBar.subviews[1])
+
+    check window.clickAt(first.frame.origin.offset(6.0, 8.0))
+    check first.popupOpen
+    check not second.popupOpen
+
+    check window.mouseMovedAt(second.frame.origin.offset(6.0, 8.0))
+    check not first.popupOpen
+    check second.popupOpen
+
+  test "windows menu modal sheets hide restore and autosave integrate with app":
+    let
+      app = newApplication()
+      first = newWindow("First", frame = initRect(10, 20, 240, 160))
+      second = newWindow("Second", frame = initRect(30, 40, 260, 180))
+      sheet = newPanel("Sheet", frame = initRect(40, 50, 180, 120))
+      windowsMenu = newMenu("Window")
+
+    app.addWindow(first)
+    app.addWindow(second)
+    app.windowsMenu = windowsMenu
+
+    check windowsMenu.len == 2
+    check windowsMenu[0].title == "First"
+    check windowsMenu[0].state == bsOn
+    check windowsMenu[1].state == bsOff
+
+    app.activateWindow(second)
+    check app.keyWindow == second
+    check app.mainWindow == second
+    check windowsMenu[1].state == bsOn
+
+    check windowsMenu[0].perform(Responder(app))
+    check app.keyWindow == first
+    check app.mainWindow == first
+
+    first.makeKeyAndOrderFront()
+    check first.isVisible
+    app.hide()
+    check not first.isVisible
+    app.unhide()
+    check first.isVisible
+
+    let session = app.beginModalSheet(first, sheet)
+    check app.modalSession == session
+    check session.mode == msmWindowModal
+    check first.attachedSheet == sheet
+    check app.windowBlockedByModal(first)
+    check not app.windowBlockedByModal(sheet)
+    check app.terminate() == trLater
+    app.stopModal(7)
+    check app.runModalSession(session) == 7
+    app.endModalSession(session)
+    check first.attachedSheet.isNil
+    check app.modalSession.isNil
+
+    first.frameAutosaveName = "tnimkit-application-first"
+    first.frame = initRect(70, 80, 300, 210)
+    check first.saveFrameUsingName()
+    let restored = newWindow("Restored", frame = initRect(0, 0, 120, 90))
+    restored.frameAutosaveName = "tnimkit-application-first"
+    check restored.frame == initRect(70, 80, 300, 210)
+    check removeSavedFrameForName("tnimkit-application-first")
 
   test "raw mouse input converts from reported input size to logical size":
     let logicalSize = siwinshim.vec2(360.0'f32, 220.0'f32)

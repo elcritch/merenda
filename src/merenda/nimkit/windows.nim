@@ -1,4 +1,4 @@
-import std/[math, options, times]
+import std/[math, options, tables, times]
 
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
@@ -132,6 +132,10 @@ type EventDispatchResult = object
   handled: bool
   responder: Responder
 
+var
+  savedWindowFrames {.threadvar.}: Table[string, Rect]
+  savedWindowFramesReady {.threadvar.}: bool
+
 protocol WindowLifecycleProtocol {.selectorScope: protocol.}:
   method shouldSetContentView*(v: View): bool {.optional.}
 
@@ -174,6 +178,11 @@ protocol WindowPopupEvents:
 
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
+
+proc ensureWindowFrameStore() =
+  if not savedWindowFramesReady:
+    savedWindowFrames = initTable[string, Rect]()
+    savedWindowFramesReady = true
 
 func defaultWindowFrame*(): Rect =
   initRect(100.0'f32, 100.0'f32, 640.0'f32, 480.0'f32)
@@ -233,6 +242,7 @@ proc newPopupWindow*(
 ): Window
 
 proc needsDisplayUpdate*(window: Window): bool
+proc requestNativeDisplayUpdate*(window: Window)
 proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
@@ -338,6 +348,20 @@ proc popupPlacement(
 proc frame*(window: Window): Rect =
   window.xFrame
 
+proc setFrame*(window: Window, frame: Rect) =
+  if window.isNil or window.xFrame == frame:
+    return
+  window.xFrame = frame
+  if not window.xContentView.isNil:
+    window.xContentView.setFrame(
+      initRect(0.0, 0.0, frame.size.width, frame.size.height)
+    )
+  if not window.xHostWindow.isNil:
+    window.requestNativeDisplayUpdate()
+
+proc `frame=`*(window: Window, frame: Rect) =
+  window.setFrame(frame)
+
 proc title*(window: Window): string =
   window.xTitle
 
@@ -410,9 +434,48 @@ proc `resizeIncrements=`*(window: Window, size: Size) =
 proc frameAutosaveName*(window: Window): string =
   if window.isNil: "" else: window.xFrameAutosaveName
 
+proc savedFrameForName*(name: string): Option[Rect] =
+  if name.len == 0:
+    return none(Rect)
+  ensureWindowFrameStore()
+  if name in savedWindowFrames:
+    return some(savedWindowFrames[name])
+  none(Rect)
+
+proc saveFrameUsingName*(window: Window, name: string): bool {.discardable.} =
+  if window.isNil or name.len == 0:
+    return false
+  ensureWindowFrameStore()
+  savedWindowFrames[name] = window.frame()
+  true
+
+proc saveFrameUsingName*(window: Window): bool {.discardable.} =
+  if window.isNil:
+    return false
+  window.saveFrameUsingName(window.xFrameAutosaveName)
+
+proc setFrameUsingName*(window: Window, name: string): bool {.discardable.} =
+  if window.isNil or name.len == 0:
+    return false
+  window.xFrameAutosaveName = name
+  let saved = savedFrameForName(name)
+  if saved.isSome:
+    window.frame = saved.get()
+    return true
+  false
+
+proc removeSavedFrameForName*(name: string): bool {.discardable.} =
+  if name.len == 0:
+    return false
+  ensureWindowFrameStore()
+  if name notin savedWindowFrames:
+    return false
+  savedWindowFrames.del(name)
+  true
+
 proc `frameAutosaveName=`*(window: Window, name: string) =
   if not window.isNil:
-    window.xFrameAutosaveName = name
+    discard window.setFrameUsingName(name)
 
 proc keyBindings*(window: Window): KeyBindingTable =
   window.xKeyBindings
@@ -1078,6 +1141,7 @@ proc close*(window: Window) =
   emit window.willClose()
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
+  discard window.saveFrameUsingName()
   window.xClosed = true
   window.xVisibleRequested = false
   window.xIsKeyWindow = false
@@ -1231,9 +1295,11 @@ proc dispatchFlagsChanged*(window: Window, event: events.KeyEvent): bool =
 
 proc syncNativeGeometry(window: Window): Size =
   result = window.xHostWindow.logicalSize(window.xFrame.size)
-  window.xFrame.size = result
-  if not window.xContentView.isNil:
-    window.xContentView.setFrame(initRect(0.0, 0.0, result.width, result.height))
+  if window.xFrame.size != result:
+    window.xFrame.size = result
+    if not window.xContentView.isNil:
+      window.xContentView.setFrame(initRect(0.0, 0.0, result.width, result.height))
+    discard window.saveFrameUsingName()
 
 proc renderNativeWindow*(window: Window) =
   if window.isNil or not window.nativeReady:
@@ -1825,7 +1891,8 @@ proc ensureNativeWindow*(window: Window) =
     onResize: proc() =
       discard window.syncNativeGeometry(),
     onMove: proc(pos: Point) =
-      window.xFrame.origin = pos,
+      window.xFrame.origin = pos
+      discard window.saveFrameUsingName(),
     onMouseButton: proc(event: MouseEvent, pressed: bool) =
       window.dispatchHostMouseButton(event, pressed),
     onMouseMove: proc(event: MouseEvent, dragging: bool) =

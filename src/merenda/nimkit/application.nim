@@ -7,6 +7,7 @@ import ./menus
 import ./responders
 import ./selectors as nimkitSelectors
 import ./theme
+import ./types
 import ./windows
 
 type
@@ -15,8 +16,16 @@ type
     mssStopped
     mssAborted
 
+  ModalSessionMode* = enum
+    msmApplicationModal
+    msmWindowModal
+
   ModalSession* = ref object
     window*: Window
+    parentWindow*: Window
+    previousKeyWindow*: Window
+    previousMainWindow*: Window
+    mode*: ModalSessionMode
     state*: ModalSessionState
     response*: int
 
@@ -34,6 +43,7 @@ type
     xRunning: bool
     xActive: bool
     xHidden: bool
+    xHiddenWindows: seq[Window]
     xLaunched: bool
     xTerminating: bool
     xModalSessions: seq[ModalSession]
@@ -43,8 +53,15 @@ var sharedApplicationInstance: Application
 proc hide*(app: Application)
 proc terminate*(app: Application): TerminationReply {.discardable.}
 proc stop*(app: Application)
+proc addWindow*(app: Application, window: Window)
+proc activateWindow*(app: Application, window: Window)
+proc updateWindowsMenu*(app: Application)
+proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
+
+proc orderFrontWindowAction*(): ActionSelector =
+  actionSelector("orderFrontWindow")
 
 proc installApplicationCommandMethods(app: Application) =
   let hideMethod: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
@@ -58,6 +75,17 @@ proc installApplicationCommandMethods(app: Application) =
     discard Application(self).terminate()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("terminate"), terminateMethod)
+
+  let orderFrontWindowMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    let args = invocation.argsAs(ActionArgs)
+    if not args.sender.isNil and args.sender of MenuItem:
+      let represented = MenuItem(args.sender).representedObject()
+      if represented of Window:
+        Application(self).activateWindow(Window(represented))
+    invocation.setResult(())
+  discard app.replaceMethod(orderFrontWindowAction(), orderFrontWindowMethod)
 
   let keyEquivalentMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -140,6 +168,7 @@ proc setKeyWindow*(app: Application, window: Window) =
   app.xKeyWindow = window
   if not window.isNil:
     window.setKeyWindow(true)
+  app.updateWindowsMenu()
 
 proc setMainWindow*(app: Application, window: Window) =
   if app.isNil or app.xMainWindow == window:
@@ -149,6 +178,7 @@ proc setMainWindow*(app: Application, window: Window) =
   app.xMainWindow = window
   if not window.isNil:
     window.setMainWindow(true)
+  app.updateWindowsMenu()
 
 proc mainMenu*(app: Application): Menu =
   if app.isNil: nil else: app.xMainMenu
@@ -169,6 +199,7 @@ proc `windowsMenu=`*(app: Application, menu: Menu) =
   app.xWindowsMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
+  app.updateWindowsMenu()
 
 proc isActive*(app: Application): bool =
   (not app.isNil) and app.xActive
@@ -210,8 +241,11 @@ proc hide*(app: Application) =
     return
   app.sendDelegate(appWillHide())
   app.xHidden = true
+  app.xHiddenWindows.setLen(0)
   for window in app.xWindows:
     if not window.isNil:
+      if window.isVisible:
+        app.xHiddenWindows.add window
       window.orderOut()
   app.sendDelegate(appDidHide())
 
@@ -220,6 +254,12 @@ proc unhide*(app: Application) =
     return
   app.sendDelegate(appWillUnhide())
   app.xHidden = false
+  for window in app.xHiddenWindows:
+    if not window.isNil and not window.isClosed:
+      window.orderFront()
+  if not app.xKeyWindow.isNil and not app.xKeyWindow.isClosed:
+    app.xKeyWindow.makeKeyAndOrderFront()
+  app.xHiddenWindows.setLen(0)
   app.sendDelegate(appDidUnhide())
 
 proc replyToApplicationShouldTerminate*(app: Application, shouldTerminate: bool) =
@@ -235,6 +275,9 @@ proc replyToApplicationShouldTerminate*(app: Application, shouldTerminate: bool)
 proc terminate*(app: Application): TerminationReply {.discardable.} =
   if app.isNil:
     return trCancel
+  if not app.modalSession().isNil:
+    app.xTerminating = true
+    return trLater
   result = trNow
   if not app.xDelegate.isNil:
     result =
@@ -264,6 +307,38 @@ proc clearAppearance*(app: Application) =
   app.xHasAppearance = false
   app.propagateAppearance()
 
+proc clearMenuItems(menu: Menu) =
+  if menu.isNil:
+    return
+  while menu.len > 0:
+    discard menu.removeItem(menu[0])
+
+proc updateWindowsMenu*(app: Application) =
+  if app.isNil or app.xWindowsMenu.isNil:
+    return
+  let menu = app.xWindowsMenu
+  menu.clearMenuItems()
+  for window in app.xWindows:
+    if not window.isNil and not window.isClosed:
+      let item = newMenuItem(window.title(), orderFrontWindowAction())
+      item.target = app
+      item.representedObject = DynamicAgent(window)
+      if window == app.xMainWindow:
+        item.state = bsOn
+      discard menu.addItem(item)
+
+proc activateWindow*(app: Application, window: Window) =
+  if app.isNil or window.isNil or window.isClosed:
+    return
+  if window notin app.xWindows:
+    app.addWindow(window)
+  if app.xHidden:
+    app.xHidden = false
+  window.makeKeyAndOrderFront()
+  app.setMainWindow(window)
+  app.setKeyWindow(window)
+  app.updateWindowsMenu()
+
 proc addWindow*(app: Application, window: Window) =
   if app.isNil or window.isNil:
     return
@@ -275,6 +350,7 @@ proc addWindow*(app: Application, window: Window) =
     app.setMainWindow(window)
   if app.xKeyWindow.isNil:
     app.setKeyWindow(window)
+  app.updateWindowsMenu()
 
 proc windows*(app: Application): lent seq[Window] =
   app.xWindows
@@ -296,15 +372,39 @@ proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool =
   if app.isNil or app.xMainMenu.isNil:
     return false
   app.setCurrentEvent(event)
+  app.updateWindowsMenu()
   app.xMainMenu.performKeyEquivalent(event, app.keyEquivalentDispatchStart())
 
-proc beginModalSession*(app: Application, window: Window): ModalSession =
+proc beginModalSession*(
+    app: Application,
+    window: Window,
+    mode = msmApplicationModal,
+    parentWindow: Window = nil,
+): ModalSession =
   if app.isNil or window.isNil:
     return nil
-  result = ModalSession(window: window, state: mssRunning)
+  result = ModalSession(
+    window: window,
+    parentWindow: parentWindow,
+    previousKeyWindow: app.xKeyWindow,
+    previousMainWindow: app.xMainWindow,
+    mode: mode,
+    state: mssRunning,
+  )
   app.xModalSessions.add result
+  if window notin app.xWindows:
+    app.addWindow(window)
+  if mode == msmWindowModal and not parentWindow.isNil:
+    parentWindow.beginSheet(window)
+  else:
+    window.makeKeyAndOrderFront()
   app.setKeyWindow(window)
   app.setMainWindow(window)
+
+proc beginModalSheet*(
+    app: Application, parentWindow: Window, sheet: Window
+): ModalSession =
+  app.beginModalSession(sheet, msmWindowModal, parentWindow)
 
 proc modalSession*(app: Application): ModalSession =
   if app.isNil or app.xModalSessions.len == 0:
@@ -328,12 +428,23 @@ proc endModalSession*(app: Application, session: ModalSession) =
   let idx = app.xModalSessions.find(session)
   if idx >= 0:
     app.xModalSessions.delete(idx)
+  if session.mode == msmWindowModal and not session.parentWindow.isNil:
+    session.parentWindow.endSheet(session.window)
+  elif not session.window.isNil:
+    session.window.orderOut()
+  if not session.previousMainWindow.isNil and not session.previousMainWindow.isClosed:
+    app.setMainWindow(session.previousMainWindow)
+  if not session.previousKeyWindow.isNil and not session.previousKeyWindow.isClosed:
+    app.setKeyWindow(session.previousKeyWindow)
+  app.updateWindowsMenu()
 
 proc runModalSession*(app: Application, session: ModalSession): int =
   if app.isNil or session.isNil:
     return 0
-  while app.xRunning and session.state == mssRunning:
-    discard app.runForFrames(1)
+  while session.state == mssRunning:
+    if app.runForFrames(1) == 0:
+      session.state = mssAborted
+      break
   result = session.response
 
 proc runModalForWindow*(app: Application, window: Window): int =
@@ -341,25 +452,100 @@ proc runModalForWindow*(app: Application, window: Window): int =
   result = app.runModalSession(session)
   app.endModalSession(session)
 
+proc runModalForWindow*(
+    app: Application, window: Window, mode: ModalSessionMode, parentWindow: Window = nil
+): int =
+  let session = app.beginModalSession(window, mode, parentWindow)
+  result = app.runModalSession(session)
+  app.endModalSession(session)
+
+proc runModalSheet*(app: Application, parentWindow: Window, sheet: Window): int =
+  app.runModalForWindow(sheet, msmWindowModal, parentWindow)
+
+proc runModal*(app: Application, alert: Alert): int =
+  if alert.isNil:
+    return 0
+  app.runModalForWindow(alert.window)
+
+proc runModal*(app: Application, panel: OpenPanel): int =
+  if panel.isNil:
+    return 0
+  app.runModalForWindow(panel.window)
+
+proc runModal*(app: Application, panel: SavePanel): int =
+  if panel.isNil:
+    return 0
+  app.runModalForWindow(panel.window)
+
+proc beginModalSheet*(
+    app: Application, parentWindow: Window, alert: Alert
+): ModalSession =
+  if alert.isNil:
+    return nil
+  app.beginModalSheet(parentWindow, alert.window)
+
+proc beginModalSheet*(
+    app: Application, parentWindow: Window, panel: OpenPanel
+): ModalSession =
+  if panel.isNil:
+    return nil
+  app.beginModalSheet(parentWindow, panel.window)
+
+proc beginModalSheet*(
+    app: Application, parentWindow: Window, panel: SavePanel
+): ModalSession =
+  if panel.isNil:
+    return nil
+  app.beginModalSheet(parentWindow, panel.window)
+
+proc runModal*(alert: Alert, app = sharedApplication()): int =
+  app.runModal(alert)
+
+proc runModal*(panel: OpenPanel, app = sharedApplication()): int =
+  app.runModal(panel)
+
+proc runModal*(panel: SavePanel, app = sharedApplication()): int =
+  app.runModal(panel)
+
+proc windowBlockedByModal*(app: Application, window: Window): bool =
+  let session = app.modalSession()
+  if session.isNil or window.isNil:
+    return false
+  if window == session.window:
+    return false
+  case session.mode
+  of msmApplicationModal:
+    true
+  of msmWindowModal:
+    window == session.parentWindow
+
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
     return 0
   app.xRunning = true
   while app.xRunning:
     var activeWindows = 0
+    var removedWindow = false
     var idx = 0
     while idx < app.xWindows.len:
       let window = app.xWindows[idx]
       if window.isNil or window.isClosed:
         if not window.isNil and window.nextResponder() == Responder(app):
           window.clearNextResponder()
+        if window == app.xKeyWindow:
+          app.setKeyWindow(nil)
+        if window == app.xMainWindow:
+          app.setMainWindow(nil)
         app.xWindows.delete(idx)
-        continue
-      if window.isVisible:
-        window.pumpNativeWindowFrame()
-        if not window.isClosed:
-          inc activeWindows
-      inc idx
+        removedWindow = true
+      else:
+        if window.isVisible:
+          window.pumpNativeWindowFrame()
+          if not window.isClosed:
+            inc activeWindows
+        inc idx
+    if removedWindow:
+      app.updateWindowsMenu()
 
     inc result
     if result >= frames.int:
@@ -373,19 +559,27 @@ proc run*(app: Application) =
   app.xRunning = true
   while app.xRunning:
     var activeWindows = 0
+    var removedWindow = false
     var idx = 0
     while idx < app.xWindows.len:
       let window = app.xWindows[idx]
       if window.isNil or window.isClosed:
         if not window.isNil and window.nextResponder() == Responder(app):
           window.clearNextResponder()
+        if window == app.xKeyWindow:
+          app.setKeyWindow(nil)
+        if window == app.xMainWindow:
+          app.setMainWindow(nil)
         app.xWindows.delete(idx)
-        continue
-      if window.isVisible:
-        window.pumpNativeWindowFrame()
-        if not window.isClosed:
-          inc activeWindows
-      inc idx
+        removedWindow = true
+      else:
+        if window.isVisible:
+          window.pumpNativeWindowFrame()
+          if not window.isClosed:
+            inc activeWindows
+        inc idx
+    if removedWindow:
+      app.updateWindowsMenu()
 
     if activeWindows == 0:
       break
