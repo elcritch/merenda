@@ -20,6 +20,7 @@ import merenda/nimkit/scrollergeometry
 import merenda/nimkit/selectors
 import merenda/nimkit/stackviews
 import merenda/nimkit/scrollviews
+import merenda/nimkit/tabviews
 import merenda/nimkit/tableviews
 import merenda/nimkit/textfields
 import merenda/nimkit/textlayout
@@ -53,6 +54,7 @@ export scrollergeometry
 export selectors
 export stackviews
 export scrollviews
+export tabviews
 export tableviews
 export textfields
 export textlayout
