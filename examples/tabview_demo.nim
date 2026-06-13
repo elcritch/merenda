@@ -129,6 +129,10 @@ layout.edgeInsets = initEdgeInsets(22.0, 24.0)
 controls.spacing = 8.0
 controls.alignment = svaCenter
 controls.distribution = svdNatural
+controls.setHuggingPriority(LayoutPriorityRequired, laVertical)
+controls.setCompressionPriority(LayoutPriorityRequired, laVertical)
+tabView.setHuggingPriority(LayoutPriorityLow, laVertical)
+tabView.setCompressionPriority(LayoutPriorityLow, laVertical)
 
 discard tabView.addTabViewItem(newTabViewItem("General", generalPane(), "general"))
 discard tabView.addTabViewItem(newTabViewItem("Editor", editorPane(), "editor"))
@@ -151,8 +155,9 @@ controls.addFlexibleSpacer()
 layout.addArrangedSubview(header, status, tabView, controls)
 root.addSubview(layout)
 
-layout.pinEdges(toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight})
-tabView.heightAnchor.equalTo(210.0).active = true
+layout.pinEdges(
+  toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight, leBottom}
+)
 
 window.setContentView(root)
 discard window.makeFirstResponder(tabView)
