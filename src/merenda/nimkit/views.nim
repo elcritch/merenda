@@ -287,7 +287,7 @@ proc setNeedsUpdateConstraints*(view: View) =
 
 proc runUpdateConstraints(view: View) =
   view.xNeedsUpdateConstraints = false
-  discard view.sendIfHandled(updateConstraints())
+  discard view.sendLocalIfHandled(updateConstraints())
 
 proc updateConstraintsForSubtreeIfNeeded*(view: View) =
   for child in view.xSubviews:
@@ -307,8 +307,8 @@ proc setNeedsLayout*(view: View) =
 proc layoutSubtree(view: View) =
   if view.xNeedsLayout:
     view.xNeedsLayout = false
-    discard view.sendIfHandled(layoutSubviews())
-    discard view.sendIfHandled(layout())
+    discard view.sendLocalIfHandled(layoutSubviews())
+    discard view.sendLocalIfHandled(layout())
   for child in view.xSubviews:
     child.layoutSubtree()
 

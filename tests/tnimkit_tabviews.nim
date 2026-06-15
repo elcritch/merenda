@@ -2,6 +2,9 @@ import std/unittest
 
 import sigils/core
 
+import figdraw/commons
+import figdraw/debugtools
+import figdraw/figrender as figRenderer
 import figdraw/fignodes
 
 import merenda/nimkit
@@ -31,6 +34,74 @@ proc newTabDelegateSpy(): TabDelegateSpy =
   result = TabDelegateSpy()
   initResponder(result)
   discard result.withProtocol(TabDelegateSpyProtocol)
+
+func colorDifference(a, b: auto): int =
+  abs(a.r.int - b.r.int) + abs(a.g.int - b.g.int) + abs(a.b.int - b.b.int) +
+    abs(a.a.int - b.a.int)
+
+proc newTabViewDemoPane(): View =
+  let
+    stack = newStackView(laVertical)
+    title = newHeadingLabel("General")
+    summary = newTextField("Application preferences live in tab view items.")
+    option = newCheckBox("Open recent documents on launch")
+    button = newButton("Reset Warnings")
+
+  stack.background = initColor(0.98, 0.98, 0.96, 0.0)
+  stack.edgeInsets = initEdgeInsets(18.0, 20.0)
+  stack.spacing = 12.0
+  stack.alignment = svaFill
+
+  summary.editable = false
+  summary.selectable = false
+  option.state = bsOn
+  stack.addArrangedSubview(title, summary, option, button)
+  stack.addFlexibleSpacer()
+  View(stack)
+
+proc newTabViewDemoRoot(): View =
+  let
+    root = newView()
+    layout = newStackView(laVertical)
+    header = newTitleLabel("Tab View Demo")
+    status = newStatusLabel("Selected tab: General")
+    tabView = newTabView()
+    controls = newStackView(laHorizontal)
+    disabledItem = newTabViewItem("Disabled", newStackView(laVertical), "disabled")
+
+  root.background = initColor(0.95, 0.96, 0.98)
+  layout.spacing = 12.0
+  layout.alignment = svaFill
+  layout.edgeInsets = initEdgeInsets(22.0, 24.0)
+
+  controls.spacing = 8.0
+  controls.alignment = svaCenter
+  controls.distribution = svdNatural
+  controls.setHuggingPriority(LayoutPriorityRequired, laVertical)
+  controls.setCompressionPriority(LayoutPriorityRequired, laVertical)
+  tabView.setHuggingPriority(LayoutPriorityLow, laVertical)
+  tabView.setCompressionPriority(LayoutPriorityLow, laVertical)
+
+  discard
+    tabView.addTabViewItem(newTabViewItem("General", newTabViewDemoPane(), "general"))
+  discard
+    tabView.addTabViewItem(newTabViewItem("Editor", newTabViewDemoPane(), "editor"))
+  discard
+    tabView.addTabViewItem(newTabViewItem("Account", newTabViewDemoPane(), "account"))
+  disabledItem.enabled = false
+  discard tabView.addTabViewItem(disabledItem)
+
+  controls.addArrangedSubview(
+    newButton("Previous"), newButton("Next"), newCheckBox("Tabs on bottom")
+  )
+  controls.addFlexibleSpacer()
+
+  layout.addArrangedSubview(header, status, tabView, controls)
+  root.addSubview(layout)
+  layout.pinEdges(
+    toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight, leBottom}
+  )
+  root
 
 suite "nimkit tab views":
   test "tab view items select content views through lifecycle helpers":
@@ -156,3 +227,22 @@ suite "nimkit tab views":
     check labelFound
     check panelFound
     check contentFound
+
+  test "tab view selected pane keeps rendering after vertical resize":
+    let
+      root = newTabViewDemoRoot()
+      renderer = figRenderer.newFigRenderer(atlasSize = 2048)
+
+    root.frame = initRect(0, 0, 560, 360)
+    var initialRenders = buildRenders(root)
+    renderer.renderFrame(initialRenders, vec2(560.0'f32, 360.0'f32))
+    let initialImage = figRenderer.takeScreenshot(renderer)
+    check initialImage.colorAt(280, 280).colorDifference(initialImage.colorAt(280, 310)) >
+      8
+
+    root.frame = initRect(0, 0, 560, 500)
+    var resizedRenders = buildRenders(root)
+    renderer.renderFrame(resizedRenders, vec2(560.0'f32, 500.0'f32))
+    let resizedImage = figRenderer.takeScreenshot(renderer)
+    check resizedImage.colorAt(280, 280).colorDifference(resizedImage.colorAt(280, 400)) >
+      8

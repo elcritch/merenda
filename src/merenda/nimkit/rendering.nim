@@ -57,7 +57,7 @@ proc renderViewInto(
       clips = view.clipsToBounds,
     )
   context.beginDraw(view, rootIdx, nodeParent, appearance)
-  discard view.sendIfHandled(draw(), context)
+  discard view.sendLocalIfHandled(draw(), context)
 
   for child in view.subviews:
     renderViewInto(context, child, appearance, rootIdx, level)
