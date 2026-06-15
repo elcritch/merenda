@@ -1,19 +1,22 @@
-import std/unittest
+import std/[unicode, unittest]
 
 import sigils/core
 
-import figdraw/commons
-import figdraw/debugtools
-import figdraw/figrender as figRenderer
 import figdraw/fignodes
 
 import merenda/nimkit
+import merenda/nimkit/types as nimkitTypes
 
-type TabDelegateSpy = ref object of Responder
-  allowSecond: bool
-  shouldCount: int
-  didCount: int
-  lastItem: TabViewItem
+type
+  TabDelegateSpy = ref object of Responder
+    allowSecond: bool
+    shouldCount: int
+    didCount: int
+    lastItem: TabViewItem
+
+  TabViewDemoFixture = object
+    root: View
+    tabView: TabView
 
 protocol TabDelegateSpyProtocol of TabViewDelegate:
   method shouldSelectTabViewItem(
@@ -35,9 +38,19 @@ proc newTabDelegateSpy(): TabDelegateSpy =
   initResponder(result)
   discard result.withProtocol(TabDelegateSpyProtocol)
 
-func colorDifference(a, b: auto): int =
-  abs(a.r.int - b.r.int) + abs(a.g.int - b.g.int) + abs(a.b.int - b.b.int) +
-    abs(a.a.int - b.a.int)
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+func screenBoxClose(node: Fig, rect: nimkitTypes.Rect): bool =
+  abs(node.screenBox.x - rect.origin.x) <= 0.01'f32 and
+    abs(node.screenBox.y - rect.origin.y) <= 0.01'f32 and
+    abs(node.screenBox.w - rect.size.width) <= 0.01'f32 and
+    abs(node.screenBox.h - rect.size.height) <= 0.01'f32
+
+func drawsOpaquePanelFill(node: Fig, rect: nimkitTypes.Rect): bool =
+  node.kind == nkRectangle and node.fill.kind == flColor and
+    node.fill.color == initColor(0.98, 0.98, 0.96).rgba and node.screenBoxClose(rect)
 
 proc newTabViewDemoPane(): View =
   let
@@ -59,7 +72,7 @@ proc newTabViewDemoPane(): View =
   stack.addFlexibleSpacer()
   View(stack)
 
-proc newTabViewDemoRoot(): View =
+proc newTabViewDemoFixture(): TabViewDemoFixture =
   let
     root = newView()
     layout = newStackView(laVertical)
@@ -101,7 +114,7 @@ proc newTabViewDemoRoot(): View =
   layout.pinEdges(
     toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight, leBottom}
   )
-  root
+  TabViewDemoFixture(root: root, tabView: tabView)
 
 suite "nimkit tab views":
   test "tab view items select content views through lifecycle helpers":
@@ -228,21 +241,23 @@ suite "nimkit tab views":
     check panelFound
     check contentFound
 
-  test "tab view selected pane keeps rendering after vertical resize":
+  test "tab view selected pane does not redraw panel over resized content":
+    let fixture = newTabViewDemoFixture()
+
+    fixture.root.frame = initRect(0, 0, 560, 500)
     let
-      root = newTabViewDemoRoot()
-      renderer = figRenderer.newFigRenderer(atlasSize = 2048)
+      renders = buildRenders(fixture.root)
+      panelRect = fixture.tabView.rectToWindow(fixture.tabView.contentRect())
 
-    root.frame = initRect(0, 0, 560, 360)
-    var initialRenders = buildRenders(root)
-    renderer.renderFrame(initialRenders, vec2(560.0'f32, 360.0'f32))
-    let initialImage = figRenderer.takeScreenshot(renderer)
-    check initialImage.colorAt(280, 280).colorDifference(initialImage.colorAt(280, 310)) >
-      8
+    var
+      panelFillCount = 0
+      resetWarningsTextFound = false
 
-    root.frame = initRect(0, 0, 560, 500)
-    var resizedRenders = buildRenders(root)
-    renderer.renderFrame(resizedRenders, vec2(560.0'f32, 500.0'f32))
-    let resizedImage = figRenderer.takeScreenshot(renderer)
-    check resizedImage.colorAt(280, 280).colorDifference(resizedImage.colorAt(280, 400)) >
-      8
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.drawsOpaquePanelFill(panelRect):
+        inc panelFillCount
+      if node.kind == nkText and node.renderedText() == "Reset Warnings":
+        resetWarningsTextFound = true
+
+    check panelFillCount == 1
+    check resetWarningsTextFound
