@@ -30,6 +30,12 @@ func isEnabled(chrome: ChromeContext): bool =
 func isPressed(chrome: ChromeContext): bool =
   ssHighlighted in chrome.states or ssPressed in chrome.states
 
+func isSelected(chrome: ChromeContext): bool =
+  ssSelected in chrome.states
+
+func isOpen(chrome: ChromeContext): bool =
+  ssOpen in chrome.states
+
 func clampUnit(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
 
@@ -100,6 +106,117 @@ func aquaButtonInnerShadows(fillValue: Fill, enabled: bool): seq[BoxShadow] =
     ),
     insetShadow(initColor(0.0, 0.0, 0.0, darkAlpha), y = -2.0, blur = 7.0),
   ]
+
+func aquaChoiceFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return linear(
+      base.lightenColor(0.28'f32, 0.62'f32), base.darkenColor(0.04'f32, 0.62'f32), fgaY
+    )
+  if chrome.isSelected:
+    return linear(
+      base.lightenColor(0.56'f32, 1.0'f32),
+      base.lightenColor(0.08'f32, 1.0'f32),
+      base.darkenColor(0.20'f32, 1.0'f32),
+      fgaDiagTLBR,
+      116'u8,
+    )
+  if chrome.isPressed:
+    return linear(
+      base.lightenColor(0.22'f32, 1.0'f32), base.darkenColor(0.18'f32, 1.0'f32), fgaY
+    )
+  linear(
+    base.lightenColor(0.80'f32, 1.0'f32), base.darkenColor(0.08'f32, 1.0'f32), fgaY
+  )
+
+func aquaChoiceGlossFill(chrome: ChromeContext): Fill =
+  let topAlpha =
+    if not chrome.isEnabled:
+      0.24'f32
+    elif chrome.isSelected:
+      0.56'f32
+    else:
+      0.70'f32
+  linear(initColor(1.0, 1.0, 1.0, topAlpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+
+func aquaComboFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return linear(
+      base.lightenColor(0.18'f32, 0.62'f32), base.darkenColor(0.04'f32, 0.62'f32), fgaY
+    )
+  if chrome.isPressed or chrome.isOpen:
+    return linear(
+      base.lightenColor(0.70'f32, 1.0'f32),
+      base.lightenColor(0.18'f32, 1.0'f32),
+      base.darkenColor(0.18'f32, 1.0'f32),
+      fgaY,
+      104'u8,
+    )
+  linear(
+    base.lightenColor(0.86'f32, 1.0'f32),
+    base.lightenColor(0.42'f32, 1.0'f32),
+    base.darkenColor(0.12'f32, 1.0'f32),
+    fgaY,
+    92'u8,
+  )
+
+func aquaComboGlossFill(chrome: ChromeContext): Fill =
+  let alpha =
+    if not chrome.isEnabled:
+      0.20'f32
+    elif chrome.isPressed or chrome.isOpen:
+      0.42'f32
+    else:
+      0.58'f32
+  linear(initColor(1.0, 1.0, 1.0, alpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+
+func aquaComboLowerWash(chrome: ChromeContext): Fill =
+  let
+    base = chrome.baseFill.centerColor()
+    alpha =
+      if not chrome.isEnabled:
+        0.08'f32
+      elif chrome.isPressed or chrome.isOpen:
+        0.20'f32
+      else:
+        0.14'f32
+  linear(initColor(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.18'f32, alpha), fgaY)
+
+func aquaComboArrowFill(chrome: ChromeContext): Fill =
+  if not chrome.isEnabled:
+    return
+      linear(initColor(0.82, 0.84, 0.86, 0.78), initColor(0.62, 0.65, 0.68, 0.78), fgaY)
+  if chrome.isPressed or chrome.isOpen:
+    return linear(
+      initColor(0.62, 0.84, 1.0, 1.0),
+      initColor(0.08, 0.48, 0.94, 1.0),
+      initColor(0.0, 0.25, 0.70, 1.0),
+      fgaY,
+      104'u8,
+    )
+  linear(
+    initColor(0.50, 0.90, 1.0, 1.0),
+    initColor(0.15, 0.67, 0.98, 1.0),
+    initColor(0.0, 0.44, 0.88, 1.0),
+    fgaY,
+    104'u8,
+  )
+
+func aquaComboSeparatorFill(chrome: ChromeContext): Fill =
+  if not chrome.isEnabled:
+    return fill(initColor(0.50, 0.54, 0.58, 0.52))
+  linear(initColor(0.0, 0.34, 0.78, 0.72), initColor(0.0, 0.18, 0.52, 0.88), fgaY)
+
+func aquaPopupListFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return linear(
+      base.lightenColor(0.18'f32, 0.88'f32), base.darkenColor(0.02'f32, 0.88'f32), fgaY
+    )
+  linear(
+    base.lightenColor(0.88'f32, 1.0'f32), base.lightenColor(0.24'f32, 1.0'f32), fgaY
+  )
 
 func aquaTabFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -175,6 +292,7 @@ proc drawAquaButtonExtras(
     innerChrome = chrome.withPart(cpInnerFace)
     innerRadius = max(radius - AquaButtonInset, 1.0'f32)
     innerRoot = context.addRenderRectangle(
+      extras.layer,
       extras.parent,
       inner,
       context.appearance.chromeFill(innerChrome),
@@ -210,6 +328,7 @@ proc drawAquaButtonExtras(
     )
 
   discard context.addRenderRectangle(
+    extras.layer,
     innerRoot,
     topGlow,
     transparentFill(),
@@ -222,12 +341,19 @@ proc drawAquaButtonExtras(
     ],
   )
   discard context.addRenderRectangle(
-    innerRoot, topGloss, context.appearance.chromeFill(chrome.withPart(cpGloss))
+    extras.layer,
+    innerRoot,
+    topGloss,
+    context.appearance.chromeFill(chrome.withPart(cpGloss)),
   )
   discard context.addRenderRectangle(
-    innerRoot, lowerWash, context.appearance.chromeFill(chrome.withPart(cpLowerWash))
+    extras.layer,
+    innerRoot,
+    lowerWash,
+    context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
   )
   discard context.addRenderRectangle(
+    extras.layer,
     innerRoot,
     waistGlow,
     transparentFill(),
@@ -245,6 +371,103 @@ proc drawAquaButtonExtras(
     ],
   )
 
+proc drawAquaChoiceExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let
+    inset = if ssSelected in chrome.states: 1.2'f32 else: 1.4'f32
+    gloss = initRect(
+      extras.rect.origin.x + inset,
+      extras.rect.origin.y + inset,
+      max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
+      max(extras.rect.size.height * 0.34'f32, 1.0'f32),
+    )
+  if gloss.isEmpty:
+    return
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    gloss,
+    context.appearance.chromeFill(chrome.withPart(cpGloss)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    max(extras.cornerRadius - inset, 1.0'f32),
+  )
+
+proc drawAquaComboFaceExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let
+    gloss = initRect(
+      extras.rect.origin.x + 2.0'f32,
+      extras.rect.origin.y + 1.0'f32,
+      max(extras.rect.size.width - 4.0'f32, 0.0'f32),
+      max(extras.rect.size.height * 0.32'f32, 1.0'f32),
+    )
+    lowerWash = initRect(
+      extras.rect.origin.x,
+      extras.rect.origin.y + extras.rect.size.height * 0.48'f32,
+      extras.rect.size.width,
+      extras.rect.size.height * 0.52'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    gloss,
+    context.appearance.chromeFill(chrome.withPart(cpGloss)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    max(extras.cornerRadius - 1.0'f32, 1.0'f32),
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    lowerWash,
+    context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
+  )
+
+proc drawAquaComboArrowExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let gloss = initRect(
+    extras.rect.origin.x + 2.0'f32,
+    extras.rect.origin.y + 1.0'f32,
+    max(extras.rect.size.width - 4.0'f32, 0.0'f32),
+    max(extras.rect.size.height * 0.26'f32, 1.0'f32),
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    gloss,
+    context.appearance.chromeFill(chrome.withPart(cpGloss)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    1.4'f32,
+  )
+
+proc drawAquaPopupListExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let
+    topHighlight = initRect(
+      extras.rect.origin.x + 2.0'f32,
+      extras.rect.origin.y + 1.0'f32,
+      max(extras.rect.size.width - 4.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    bottomShade = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.maxY - 2.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer, extras.parent, topHighlight, fill(initColor(1.0, 1.0, 1.0, 0.62))
+  )
+  discard context.addRenderRectangle(
+    extras.layer, extras.parent, bottomShade, fill(initColor(0.0, 0.0, 0.0, 0.08))
+  )
+
 proc drawAquaTabExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
@@ -252,12 +475,14 @@ proc drawAquaTabExtras(
     return
 
   discard context.addRenderRectangle(
+    extras.layer,
     extras.parent,
     chromeEdgeHighlightRect(extras.edge, extras.rect),
     context.appearance.chromeFill(chrome.withPart(cpHighlight, extras.highlightFill)),
   )
   if ssSelected in chrome.states:
     discard context.addRenderRectangle(
+      extras.layer,
       extras.parent,
       chromeEdgeSeamRect(extras.edge, extras.rect),
       context.appearance.chromeFill(chrome.withPart(cpSeam, extras.seamFill)),
@@ -274,6 +499,34 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaButtonGlossFill(context.isEnabled)
       of cpLowerWash:
         aquaButtonLowerWash(context.baseFill, context.isEnabled)
+      else:
+        context.baseFill
+    of crChoiceIndicator:
+      case context.part
+      of cpFace:
+        aquaChoiceFaceFill(context)
+      of cpGloss:
+        aquaChoiceGlossFill(context)
+      else:
+        context.baseFill
+    of crComboBox:
+      case context.part
+      of cpFace:
+        aquaComboFaceFill(context)
+      of cpArrow:
+        aquaComboArrowFill(context)
+      of cpSeparator:
+        aquaComboSeparatorFill(context)
+      of cpGloss:
+        aquaComboGlossFill(context)
+      of cpLowerWash:
+        aquaComboLowerWash(context)
+      else:
+        context.baseFill
+    of crPopupList:
+      case context.part
+      of cpFace:
+        aquaPopupListFaceFill(context)
       else:
         context.baseFill
     of crTab:
@@ -300,6 +553,20 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crButton:
       if chromeContext.part == cpFace:
         context.drawAquaButtonExtras(chromeContext, extras)
+    of crChoiceIndicator:
+      if chromeContext.part == cpFace:
+        context.drawAquaChoiceExtras(chromeContext, extras)
+    of crComboBox:
+      case chromeContext.part
+      of cpFace:
+        context.drawAquaComboFaceExtras(chromeContext, extras)
+      of cpArrow:
+        context.drawAquaComboArrowExtras(chromeContext, extras)
+      else:
+        discard
+    of crPopupList:
+      if chromeContext.part == cpFace:
+        context.drawAquaPopupListExtras(chromeContext, extras)
     of crTab:
       if chromeContext.part == cpFace:
         context.drawAquaTabExtras(chromeContext, extras)

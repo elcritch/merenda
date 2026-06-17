@@ -1,5 +1,6 @@
 import std/options
 
+from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 
 import sigils/core
@@ -13,6 +14,8 @@ type
   ChromeRole* = enum
     crButton
     crChoiceIndicator
+    crComboBox
+    crPopupList
     crTab
     crTabPanel
 
@@ -23,6 +26,8 @@ type
     cpLowerWash
     cpHighlight
     cpSeam
+    cpArrow
+    cpSeparator
 
   ChromeEdge* = enum
     ceNone
@@ -37,6 +42,7 @@ type
     baseFill*: Fill
 
   ChromeExtras* = object
+    layer*: ZLevel
     parent*: FigIdx
     rect*: Rect
     cornerRadius*: float32
@@ -68,12 +74,14 @@ func chromeContext*(
 func initChromeExtras*(
     parent: FigIdx,
     rect: Rect,
+    layer = DefaultDrawLevel,
     cornerRadius = 0.0'f32,
     edge = ceNone,
     seamFill = transparentFill(),
     highlightFill = transparentFill(),
 ): ChromeExtras =
   ChromeExtras(
+    layer: layer,
     parent: parent,
     rect: rect,
     cornerRadius: cornerRadius,

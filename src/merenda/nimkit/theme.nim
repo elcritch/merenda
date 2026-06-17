@@ -136,6 +136,7 @@ type
     indicatorSize*: float32
     indicatorSpacing*: float32
     minSize*: Size
+    chrome*: string
 
   ThemeInstaller* = proc(theme: var Theme)
 
@@ -151,6 +152,7 @@ type
     arrowWidth*: float32
     arrowColor*: Color
     minSize*: Size
+    chrome*: string
 
   ListViewStyle* = object
     box*: ControlBoxStyle
@@ -1431,6 +1433,7 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
     indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
     indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 18.0)),
+    chrome: theme.resolveChromeName(context),
   )
 
 proc resolveTextFieldStyle*(
@@ -1483,6 +1486,7 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
     arrowColor:
       theme.colorRule(context, StyleMarkColor, initColor(0.20, 0.22, 0.26, 1.0)),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(90.0, 24.0)),
+    chrome: theme.resolveChromeName(context),
   )
 
 proc resolveListViewStyle*(theme: Theme, context: StyleContext): ListViewStyle =
@@ -1820,7 +1824,7 @@ proc initTheme*(): Theme =
     styleColor(initColor(0.16, 0.38, 0.72, 1.0))
   result[ChoiceIndicatorDisabledBorderColorToken] =
     styleColor(initColor(0.64, 0.68, 0.74, 1.0))
-  result[ChoiceMarkColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ChoiceMarkColorToken] = styleColor(initColor(0.03, 0.07, 0.12, 0.96))
   result[ChoiceDisabledMarkColorToken] = styleToken(DisabledTextColorToken)
   result[ChoiceTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
   result[ChoiceDisabledTextColorToken] = styleColor(initColor(0.48, 0.52, 0.58, 1.0))
@@ -2041,6 +2045,7 @@ proc initTheme*(): Theme =
     result[role, StyleFocusRingInset] = 2.0
     result[role, StyleFocusRingColor] = styleToken(FocusRingColorToken)
     result[role, StyleBoxShadows] = aquaInsetControlShadows()
+    result[role, StyleChrome] = styleKeyword(AquaChromeName)
 
   result[srTextField, StyleFill] = styleToken(TextFieldFillToken)
   result[srTextField, StyleBorderColor] = styleToken(TextFieldBorderColorToken)
@@ -2136,6 +2141,7 @@ proc initTheme*(): Theme =
   result[srComboBox, StyleMinimumSize] = initSize(90.0, 24.0)
   result[srComboBox, StyleMarkColor] = styleToken(ComboBoxArrowColorToken)
   result[srComboBox, StyleBoxShadows] = aquaInsetControlShadows()
+  result[srComboBox, StyleChrome] = styleKeyword(AquaChromeName)
 
   result.addRoleRule(
     srComboBoxItem,
@@ -2245,6 +2251,9 @@ proc initTheme*(): Theme =
 proc initBannerTheme*(): Theme =
   result = initTheme()
   result[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[srCheckBox, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[srRadioButton, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[srComboBox, StyleChrome] = styleKeyword(DefaultChromeName)
   result[srButton, StyleTextHighlightColor] = initColor(0.0, 0.0, 0.0, 0.0)
   result[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.0)
   result[srTab, StyleChrome] = styleKeyword(DefaultChromeName)
