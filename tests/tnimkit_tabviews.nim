@@ -200,6 +200,45 @@ suite "nimkit tab views":
     check tabView.clickAt(initPoint(thirdRect.origin.x + 6, thirdRect.origin.y + 6))
     check tabView.selectedTabViewItem == third
 
+  test "arrow keys in selected pane child keep focus in the pane":
+    let
+      window = newWindow("Tab pane focus", frame = initRect(0, 0, 360, 180))
+      root = newView(frame = initRect(0, 0, 360, 180))
+      tabView = newTabView(frame = initRect(0, 0, 360, 180))
+      firstPane = newStackView(laVertical)
+      secondPane = newStackView(laVertical)
+      firstButton = newButton("First option")
+      secondButton = newButton("Second option")
+      first = newTabViewItem("First", firstPane, "first")
+      second = newTabViewItem("Second", secondPane, "second")
+
+    firstPane.addArrangedSubview(firstButton)
+    secondPane.addArrangedSubview(secondButton)
+    discard tabView.addTabViewItem(first)
+    discard tabView.addTabViewItem(second)
+    root.addSubview(tabView)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(tabView)
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+    )
+    check tabView.selectedTabViewItem == second
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponder == secondButton
+    check secondButton.isFocused
+    check secondButton.window == window
+
+    check not window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+    )
+    check tabView.selectedTabViewItem == second
+    check window.firstResponder == secondButton
+    check secondButton.isFocused
+    check secondButton.isFocusVisible
+    check secondButton.window == window
+
   test "tab view exposes top and bottom geometry":
     let tabView = newTabView(frame = initRect(0, 0, 320, 180))
     discard tabView.addTabViewItem(newTabViewItem("Top", newView()))
