@@ -2,6 +2,7 @@ import std/options
 
 import sigils/core
 
+import ./chrome
 import ./drawing
 import ./events
 import ./selectors
@@ -424,27 +425,11 @@ proc tabTextRect(rect: Rect): Rect =
 func panelFillColor(): Color =
   initColor(0.98, 0.98, 0.96)
 
+func panelFill(): Fill =
+  fill(panelFillColor())
+
 func panelBorderColor(): Color =
   initColor(0.42, 0.44, 0.48)
-
-func aquaTabFill(selected, pressed, enabled: bool): Fill =
-  if not enabled:
-    result =
-      linear(initColor(0.90, 0.91, 0.93, 1.0), initColor(0.78, 0.80, 0.84, 1.0), fgaY)
-  elif selected:
-    result = linear(
-      initColor(1.0, 1.0, 1.0, 1.0),
-      initColor(0.96, 0.97, 0.98, 1.0),
-      panelFillColor(),
-      fgaY,
-      92'u8,
-    )
-  elif pressed:
-    result =
-      linear(initColor(0.76, 0.79, 0.84, 1.0), initColor(0.64, 0.68, 0.75, 1.0), fgaY)
-  else:
-    result =
-      linear(initColor(0.93, 0.94, 0.96, 1.0), initColor(0.76, 0.79, 0.84, 1.0), fgaY)
 
 func tabBorderColor(selected, enabled: bool): Color =
   if selected:
@@ -462,39 +447,10 @@ func tabTextColor(enabled, selected: bool): Color =
   else:
     initColor(0.14, 0.15, 0.18)
 
-proc tabSeamRect(tabView: TabView, rect: Rect): Rect =
-  case tabView.tabPosition()
-  of tpTop:
-    initRect(
-      rect.origin.x + ContentBorderWidth,
-      rect.maxY - ContentBorderWidth,
-      max(rect.size.width - ContentBorderWidth * 2.0'f32, 0.0'f32),
-      ContentBorderWidth + 1.0'f32,
-    )
-  of tpBottom:
-    initRect(
-      rect.origin.x + ContentBorderWidth,
-      rect.origin.y,
-      max(rect.size.width - ContentBorderWidth * 2.0'f32, 0.0'f32),
-      ContentBorderWidth + 1.0'f32,
-    )
-
-proc tabHighlightRect(tabView: TabView, rect: Rect): Rect =
-  case tabView.tabPosition()
-  of tpTop:
-    initRect(
-      rect.origin.x + 4.0'f32,
-      rect.origin.y + 1.0'f32,
-      max(rect.size.width - 8.0'f32, 0.0'f32),
-      1.0'f32,
-    )
-  of tpBottom:
-    initRect(
-      rect.origin.x + 4.0'f32,
-      rect.maxY - 2.0'f32,
-      max(rect.size.width - 8.0'f32, 0.0'f32),
-      1.0'f32,
-    )
+func chromeEdge(position: TabPosition): ChromeEdge =
+  case position
+  of tpTop: ceTop
+  of tpBottom: ceBottom
 
 proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   let
@@ -504,22 +460,44 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     enabled = item.enabled()
     rect = tabView.tabRectInBar(index)
     renderRect = context.renderRectFor(rect)
+    panelFillValue =
+      context.appearance.resolveFill(initControlStyleContext(srTabPanel), panelFill())
 
-  discard context.addRenderRectangle(
+  var states: set[WidgetState]
+  if selected:
+    states.incl ssSelected
+  if pressed:
+    states.incl ssHighlighted
+  if not enabled:
+    states.incl ssDisabled
+
+  let
+    tabStyleContext = initControlStyleContext(srTab, states)
+    tabChrome = chromeContext(
+      context.appearance.resolveChromeName(tabStyleContext),
+      crTab,
+      cpFace,
+      context.appearance.resolveFill(tabStyleContext, panelFillValue),
+      states,
+    )
+
+  let tabRoot = context.addRenderRectangle(
     renderRect,
-    aquaTabFill(selected, pressed, enabled),
+    tabChrome.chromeFill(),
     tabBorderColor(selected, enabled),
     1.0'f32,
     TabCornerRadius,
   )
-  discard context.addRenderRectangle(
-    context.renderRectFor(tabHighlightRect(tabView, rect)),
-    initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30),
+  context.drawChromeExtras(
+    tabChrome,
+    initChromeExtras(
+      tabRoot,
+      renderRect,
+      cornerRadius = TabCornerRadius,
+      edge = tabView.tabPosition.chromeEdge(),
+      seamFill = panelFillValue,
+    ),
   )
-  if selected:
-    discard context.addRenderRectangle(
-      context.renderRectFor(tabSeamRect(tabView, rect)), panelFillColor()
-    )
   context.addText(
     rect.tabTextRect(),
     item.label(),
@@ -586,9 +564,11 @@ protocol TabBarEvents of ResponderEventProtocol:
 protocol TabViewDrawing of ViewDrawingProtocol:
   method draw(tabView: TabView, context: DrawContext) =
     let content = tabView.contentRect()
+    let fillValue =
+      context.appearance.resolveFill(initControlStyleContext(srTabPanel), panelFill())
     discard context.addRenderRectangle(
       context.renderRectFor(content),
-      panelFillColor(),
+      fillValue,
       panelBorderColor(),
       ContentBorderWidth,
       4.0'f32,
