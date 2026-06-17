@@ -3,8 +3,8 @@ import std/unittest
 import sigils/core
 
 import merenda/nimkit
-import merenda/nimkit/responders as nimkitResponders
-import merenda/nimkit/viewgeometry
+import merenda/nimkit/responder/responders as nimkitResponders
+import merenda/nimkit/view/viewgeometry
 
 type
   MouseSpyView = ref object of View

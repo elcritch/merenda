@@ -3,7 +3,7 @@ import std/unittest
 import sigils/core
 
 import merenda/nimkit
-import merenda/nimkit/viewbase
+import merenda/nimkit/view/viewbase
 
 type LayoutInvalidationSpy = ref object of Agent
   reasons: seq[LayoutInvalidationReason]

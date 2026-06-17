@@ -4,7 +4,7 @@ import figdraw/debugtools
 import figdraw/fignodes
 
 import merenda/nimkit
-import merenda/nimkit/types as nimkitTypes
+import merenda/nimkit/foundation/types as nimkitTypes
 
 type ScrollResizeFixture = object
   root: View

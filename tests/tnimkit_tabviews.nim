@@ -5,7 +5,7 @@ import sigils/core
 import figdraw/fignodes
 
 import merenda/nimkit
-import merenda/nimkit/types as nimkitTypes
+import merenda/nimkit/foundation/types as nimkitTypes
 
 type
   TabDelegateSpy = ref object of Responder

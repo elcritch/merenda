@@ -1,3 +1,0 @@
-import merenda/nimkit/accessibility/accessibilityprotocols
-
-export accessibilityprotocols
