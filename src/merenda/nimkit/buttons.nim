@@ -203,8 +203,11 @@ proc buttonPerformClick(button: Button, args: ActionArgs) =
 proc choiceRole(button: Button): StyleRole =
   if button.buttonType == btRadio: srRadioButton else: srCheckBox
 
+proc choiceChromeRole(button: Button): ChromeRole =
+  if button.buttonType == btRadio: crRadioIndicator else: crCheckBoxIndicator
+
 proc selectedMarkRect(rect: Rect): Rect =
-  let inset = max(rect.size.width * 0.28'f32, 3.0'f32)
+  let inset = max(rect.size.width * 0.33'f32, 3.0'f32)
   rect.inset(initEdgeInsets(inset))
 
 proc mixedMarkRect(rect: Rect): Rect =
@@ -262,7 +265,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       let
         indicatorFrame = context.renderRectFor(indicatorRect)
         indicatorChrome = chromeContext(
-          style.chrome, crChoiceIndicator, cpFace, style.indicator.fill, states
+          style.chrome, button.choiceChromeRole(), cpFace, style.indicator.fill, states
         )
 
       let indicatorRoot = context.addRenderRectangle(
@@ -284,6 +287,12 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         if button.buttonType == btCheckBox and button.state == bsOn:
           context.addText(
             indicatorRect, CheckboxCheckmark, style.markColor, alignment = taCenter
+          )
+          context.addText(
+            indicatorRect.offsetRect(0.35'f32, 0.0'f32),
+            CheckboxCheckmark,
+            style.markColor,
+            alignment = taCenter,
           )
         else:
           let markRect =

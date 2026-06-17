@@ -53,6 +53,9 @@ func aquaAccentButtonPressedFill(): Fill =
     104'u8,
   )
 
+func aquaChoiceSelectedFill(): Fill =
+  linear(initColor(0.48, 0.91, 1.0, 1.0), initColor(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+
 func aquaTextFieldFill(): Fill =
   linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.95, 0.98, 1.0, 1.0), fgaY)
 
@@ -356,16 +359,18 @@ suite "nimkit theme":
 
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
-    check checkBoxStyle.minSize == initSize(0.0, 18.0)
-    check checkBoxStyle.indicator.fill == aquaAccentButtonFill()
-    check checkBoxStyle.indicator.cornerRadius == 6.0
+    check checkBoxStyle.minSize == initSize(0.0, 20.0)
+    check checkBoxStyle.indicator.fill == aquaChoiceSelectedFill()
+    check checkBoxStyle.indicator.borderColor == initColor(0.0, 0.32, 0.75, 0.96)
+    check checkBoxStyle.indicator.cornerRadius == 3.0
     check checkBoxStyle.indicator.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
-    check radioStyle.indicator.cornerRadius == 7.0
+    check radioStyle.indicator.borderColor == initColor(0.42, 0.50, 0.62, 1.0)
+    check radioStyle.indicator.cornerRadius == 8.0
     check radioStyle.indicator.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
     check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
-      initRect(2, 5, 14, 14)
+      initRect(2, 4, 16, 16)
     check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
-      initRect(23, 0, 75, 24)
+      initRect(25, 0, 73, 24)
 
     check textFieldStyle.box.borderWidth > 0.0
     check textFieldStyle.box.cornerRadius == 6.0

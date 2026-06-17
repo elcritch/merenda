@@ -218,6 +218,7 @@ const
     "choice.indicator.fill.selected.highlighted"
   ChoiceIndicatorSelectedDisabledFillToken* = "choice.indicator.fill.selected.disabled"
   ChoiceIndicatorBorderColorToken* = "choice.indicator.border.color"
+  ChoiceIndicatorSelectedBorderColorToken* = "choice.indicator.border.color.selected"
   ChoiceIndicatorHighlightedBorderColorToken* =
     "choice.indicator.border.color.highlighted"
   ChoiceIndicatorDisabledBorderColorToken* = "choice.indicator.border.color.disabled"
@@ -1735,10 +1736,22 @@ func aquaButtonDisabledFill(): Fill =
   linear(initColor(0.90, 0.91, 0.93, 1.0), initColor(0.76, 0.78, 0.82, 1.0), fgaY)
 
 func aquaChoiceFill(): Fill =
-  linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.90, 0.94, 0.99, 1.0), fgaY)
+  linear(initColor(1.0, 1.0, 0.99, 1.0), initColor(0.84, 0.85, 0.83, 1.0), fgaY)
 
 func aquaChoiceHighlightedFill(): Fill =
-  linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.82, 0.91, 1.0, 1.0), fgaY)
+  linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.78, 0.90, 1.0, 1.0), fgaY)
+
+func aquaChoiceSelectedFill(): Fill =
+  linear(initColor(0.48, 0.91, 1.0, 1.0), initColor(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+
+func aquaChoiceSelectedHighlightedFill(): Fill =
+  linear(
+    initColor(0.45, 0.80, 1.0, 1.0),
+    initColor(0.0, 0.32, 0.86, 1.0),
+    initColor(0.0, 0.18, 0.58, 1.0),
+    fgaY,
+    104'u8,
+  )
 
 func aquaTextFieldFill(): Fill =
   linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.95, 0.98, 1.0, 1.0), fgaY)
@@ -1816,15 +1829,18 @@ proc initTheme*(): Theme =
   result[ChoiceIndicatorFillToken] = aquaChoiceFill()
   result[ChoiceIndicatorHighlightedFillToken] = aquaChoiceHighlightedFill()
   result[ChoiceIndicatorDisabledFillToken] = aquaButtonDisabledFill()
-  result[ChoiceIndicatorSelectedFillToken] = aquaAccentButtonFill()
-  result[ChoiceIndicatorSelectedHighlightedFillToken] = aquaAccentButtonPressedFill()
+  result[ChoiceIndicatorSelectedFillToken] = aquaChoiceSelectedFill()
+  result[ChoiceIndicatorSelectedHighlightedFillToken] =
+    aquaChoiceSelectedHighlightedFill()
   result[ChoiceIndicatorSelectedDisabledFillToken] = aquaButtonDisabledFill()
   result[ChoiceIndicatorBorderColorToken] = styleColor(initColor(0.42, 0.50, 0.62, 1.0))
+  result[ChoiceIndicatorSelectedBorderColorToken] =
+    styleColor(initColor(0.0, 0.32, 0.75, 0.96))
   result[ChoiceIndicatorHighlightedBorderColorToken] =
     styleColor(initColor(0.16, 0.38, 0.72, 1.0))
   result[ChoiceIndicatorDisabledBorderColorToken] =
     styleColor(initColor(0.64, 0.68, 0.74, 1.0))
-  result[ChoiceMarkColorToken] = styleColor(initColor(0.03, 0.07, 0.12, 0.96))
+  result[ChoiceMarkColorToken] = styleColor(initColor(0.02, 0.15, 0.30, 0.96))
   result[ChoiceDisabledMarkColorToken] = styleToken(DisabledTextColorToken)
   result[ChoiceTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
   result[ChoiceDisabledTextColorToken] = styleColor(initColor(0.48, 0.52, 0.58, 1.0))
@@ -1986,7 +2002,13 @@ proc initTheme*(): Theme =
   result[srTabPanel, StyleChrome] = styleKeyword(AquaChromeName)
 
   for role in [srCheckBox, srRadioButton]:
-    let radius = if role == srCheckBox: 6.0'f32 else: 7.0'f32
+    let
+      radius = if role == srCheckBox: 3.0'f32 else: 8.0'f32
+      selectedBorder =
+        if role == srCheckBox:
+          styleToken(ChoiceIndicatorSelectedBorderColorToken)
+        else:
+          styleToken(ChoiceIndicatorBorderColorToken)
     result.addChoiceRule(
       role,
       {},
@@ -2007,7 +2029,7 @@ proc initTheme*(): Theme =
       role,
       {ssSelected},
       styleToken(ChoiceIndicatorSelectedFillToken),
-      styleToken(ChoiceIndicatorBorderColorToken),
+      selectedBorder,
       styleToken(ChoiceMarkColorToken),
       styleToken(ChoiceTextColorToken),
     )
@@ -2015,7 +2037,7 @@ proc initTheme*(): Theme =
       role,
       {ssSelected, ssHighlighted},
       styleToken(ChoiceIndicatorSelectedHighlightedFillToken),
-      styleToken(ChoiceIndicatorHighlightedBorderColorToken),
+      selectedBorder,
       styleToken(ChoiceMarkColorToken),
       styleToken(ChoiceTextColorToken),
     )
@@ -2035,12 +2057,12 @@ proc initTheme*(): Theme =
       styleToken(ChoiceDisabledMarkColorToken),
       styleToken(ChoiceDisabledTextColorToken),
     )
-    result[role, StyleIndicatorSize] = 14.0
+    result[role, StyleIndicatorSize] = 16.0
     result[role, StyleBorderWidth] = 1.0
     result[role, StyleCornerRadius] = radius
     result[role, StyleIndicatorSpacing] = 7.0
     result[role, StyleTextInsets] = initEdgeInsets(0.0, 2.0)
-    result[role, StyleMinimumSize] = initSize(0.0, 18.0)
+    result[role, StyleMinimumSize] = initSize(0.0, 20.0)
     result[role, StyleFocusRingWidth] = 3.0
     result[role, StyleFocusRingInset] = 2.0
     result[role, StyleFocusRingColor] = styleToken(FocusRingColorToken)
