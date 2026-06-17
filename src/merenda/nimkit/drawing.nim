@@ -39,10 +39,15 @@ proc defaultFont(size: float32): FigFont =
     defaultTypefaceReady = true
   defaultTypefaceId.fontWithSize(size)
 
-proc cornerRadii(radius: float32): array[DirectionCorners, uint16] =
+const AllCorners = {dcTopLeft, dcTopRight, dcBottomLeft, dcBottomRight}
+
+proc cornerRadii(
+    radius: float32, roundedCorners: set[DirectionCorners] = AllCorners
+): array[DirectionCorners, uint16] =
   let clamped = max(radius, 0.0'f32)
   for corner in DirectionCorners:
-    result[corner] = clamped.round().uint16
+    if corner in roundedCorners:
+      result[corner] = clamped.round().uint16
 
 proc toFigShadow(shadow: BoxShadow): RenderShadow =
   RenderShadow(
@@ -63,12 +68,13 @@ proc rectangleNode(
     shadows: openArray[BoxShadow] = [],
     clips = false,
     maskContent = false,
+    roundedCorners: set[DirectionCorners] = AllCorners,
 ): Fig =
   result = Fig(
     kind: nkRectangle,
     screenBox: rect.toFigRect,
     fill: fillValue,
-    corners: cornerRadii(cornerRadius),
+    corners: cornerRadii(cornerRadius, roundedCorners),
     stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
   if maskContent:
@@ -274,13 +280,14 @@ proc addRenderRectangle*(
     shadows: openArray[BoxShadow] = [],
     clips = false,
     maskContent = false,
+    roundedCorners: set[DirectionCorners] = AllCorners,
 ): FigIdx {.discardable.} =
   context.addFig(
     layer,
     parent,
     rectangleNode(
       rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows, clips,
-      maskContent,
+      maskContent, roundedCorners,
     ),
   )
 
@@ -295,10 +302,11 @@ proc addRenderRectangle*(
     shadows: openArray[BoxShadow] = [],
     clips = false,
     maskContent = false,
+    roundedCorners: set[DirectionCorners] = AllCorners,
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
     DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
-    shadows, clips, maskContent,
+    shadows, clips, maskContent, roundedCorners,
   )
 
 proc addRenderRectangle*(
@@ -311,10 +319,11 @@ proc addRenderRectangle*(
     shadows: openArray[BoxShadow] = [],
     clips = false,
     maskContent = false,
+    roundedCorners: set[DirectionCorners] = AllCorners,
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
-    clips, maskContent,
+    clips, maskContent, roundedCorners,
   )
 
 proc addRenderTranslation*(

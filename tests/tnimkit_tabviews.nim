@@ -244,17 +244,47 @@ suite "nimkit tab views":
   test "tab face fill comes from selected chrome":
     let
       baseFill = fill(initColor(0.98, 0.98, 0.96, 1.0))
+      highlightFill = fill(initColor(0.82, 0.84, 0.88, 0.73))
       selectedAqua = chromeContext(
           AquaChromeName, crTab, cpFace, baseFill, {ssSelected}
         )
         .chromeFill()
+      highlightAqua =
+        chromeContext(AquaChromeName, crTab, cpHighlight, highlightFill).chromeFill()
       defaultChrome = chromeContext(
           DefaultChromeName, crTab, cpFace, baseFill, {ssSelected}
         )
         .chromeFill()
 
     check selectedAqua.kind == flLinear3
+    check selectedAqua.lin3.stop == baseFill.centerColor().rgba
+    check highlightAqua == highlightFill
     check defaultChrome == baseFill
+
+  test "selected tab only rounds the edge away from the pane":
+    let tabView = newTabView(frame = initRect(0, 0, 320, 180))
+    discard tabView.addTabViewItem(newTabViewItem("General", newView()))
+
+    var topTabFound = false
+    for node in buildRenders(tabView)[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBoxClose(tabView.tabRect(0)):
+        topTabFound = true
+        check node.corners[dcTopLeft] > 0'u16
+        check node.corners[dcTopRight] > 0'u16
+        check node.corners[dcBottomLeft] == 0'u16
+        check node.corners[dcBottomRight] == 0'u16
+    check topTabFound
+
+    tabView.tabPosition = tpBottom
+    var bottomTabFound = false
+    for node in buildRenders(tabView)[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBoxClose(tabView.tabRect(0)):
+        bottomTabFound = true
+        check node.corners[dcTopLeft] == 0'u16
+        check node.corners[dcTopRight] == 0'u16
+        check node.corners[dcBottomLeft] > 0'u16
+        check node.corners[dcBottomRight] > 0'u16
+    check bottomTabFound
 
   test "tab view selected pane does not redraw panel over resized content":
     let fixture = newTabViewDemoFixture()

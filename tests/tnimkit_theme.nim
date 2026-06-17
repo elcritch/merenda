@@ -260,6 +260,8 @@ suite "nimkit theme":
       comboBoxItemStyle = appearance.resolveTextFieldStyle(
         initControlStyleContext(srComboBoxItem, {ssSelected})
       )
+      tabStyle = initControlStyleContext(srTab)
+      selectedTabStyle = initControlStyleContext(srTab, {ssSelected})
 
     check appearance.theme.rules.len == theme.rules.len
     check theme.tokens != nil
@@ -274,6 +276,17 @@ suite "nimkit theme":
     check appearance.resolveChromeName(initControlStyleContext(srTab)) == AquaChromeName
     check appearance.resolveChromeName(initControlStyleContext(srTabPanel)) ==
       AquaChromeName
+    check appearance.resolveFill(tabStyle, fill(initColor(0.0, 0.0, 0.0, 1.0))) ==
+      fill(initColor(0.70, 0.72, 0.76, 1.0))
+    check appearance.resolveFill(
+      tabStyle, fill(initColor(0.0, 0.0, 0.0, 0.0)), StyleHighlightFill
+    ) == fill(initColor(1.0, 1.0, 1.0, 0.68))
+    check appearance.resolveColor(
+      tabStyle, StyleTextColor, initColor(0.0, 0.0, 0.0, 1.0)
+    ) == initColor(0.14, 0.15, 0.18, 1.0)
+    check appearance.resolveColor(
+      selectedTabStyle, StyleBorderColor, initColor(0.0, 0.0, 0.0, 1.0)
+    ) == initColor(0.42, 0.44, 0.48, 1.0)
     checkAquaButtonShadows(defaultButtonStyle.box.shadows)
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
@@ -364,6 +377,7 @@ suite "nimkit theme":
       comboBoxItemStyle = theme.resolveTextFieldStyle(
         initControlStyleContext(srComboBoxItem, {ssSelected, ssHovered})
       )
+      tabStyle = initControlStyleContext(srTab)
 
     check buttonStyle.box.fill == initColor(0.89, 0.38, 0.21, 1.0)
     check highlightedButtonStyle.box.fill == initColor(0.62, 0.24, 0.14, 1.0)
@@ -376,3 +390,8 @@ suite "nimkit theme":
     check buttonStyle.chrome == DefaultChromeName
     check buttonStyle.textHighlightColor.a == 0.0
     check buttonStyle.textShadowColor.a == 0.0
+    check theme.resolveChromeName(tabStyle) == DefaultChromeName
+    check theme.resolveFill(tabStyle, fill(initColor(0.0, 0.0, 0.0, 1.0))) ==
+      fill(initColor(0.86, 0.82, 0.75, 1.0))
+    check theme.resolveColor(tabStyle, StyleTextColor, initColor(0.0, 0.0, 0.0, 1.0)) ==
+      initColor(0.11, 0.10, 0.10, 1.0)
