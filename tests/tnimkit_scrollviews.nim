@@ -1,5 +1,6 @@
 import std/unittest
 
+import figdraw/debugtools
 import figdraw/fignodes
 
 import merenda/nimkit
@@ -699,6 +700,7 @@ suite "nimkit scroll views":
     var
       scrollViewNodeIndex = -1
       clipViewNodeIndex = -1
+      scrollTransformIndex = -1
       childNodeFound = false
       childNodeIndex = -1
       verticalScrollerIndex = -1
@@ -713,12 +715,15 @@ suite "nimkit scroll views":
           node.screenBox.x == 20.0 and node.screenBox.y == 30.0 and
           node.screenBox.w == 88.0 and node.screenBox.h == 58.0:
         clipViewNodeIndex = idx
+      if node.kind == nkTransform and node.transform.translation.x == -40.0 and
+          node.transform.translation.y == -30.0:
+        scrollTransformIndex = idx
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == initColor(0.2, 0.4, 0.7, 1.0).rgba:
         childNodeFound = true
         childNodeIndex = idx
-        check node.screenBox.x == 40.0
-        check node.screenBox.y == 50.0
+        check node.screenBox.x == 80.0
+        check node.screenBox.y == 80.0
         check node.screenBox.w == 30.0
         check node.screenBox.h == 20.0
       if verticalScrollerIndex < 0 and node.kind == nkRectangle and
@@ -732,13 +737,23 @@ suite "nimkit scroll views":
 
     check scrollViewNodeIndex >= 0
     check clipViewNodeIndex >= 0
+    check scrollTransformIndex >= 0
     check childNodeFound
     check verticalScrollerIndex >= 0
     check horizontalScrollerIndex >= 0
     check nodes.nodes[clipViewNodeIndex].parent.int == scrollViewNodeIndex
+    check nodes.nodes[scrollTransformIndex].parent.int == clipViewNodeIndex
     check nodes.nodes[verticalScrollerIndex].parent.int == scrollViewNodeIndex
     check nodes.nodes[horizontalScrollerIndex].parent.int == scrollViewNodeIndex
+    check nodes.hasAncestor(childNodeIndex, scrollTransformIndex)
     check nodes.hasAncestor(childNodeIndex, clipViewNodeIndex)
+
+    let childVisibility = renders.figVisibility(DefaultDrawLevel, childNodeIndex.FigIdx)
+    check childVisibility.visible
+    check childVisibility.bounds.x == 40.0
+    check childVisibility.bounds.y == 50.0
+    check childVisibility.bounds.w == 30.0
+    check childVisibility.bounds.h == 20.0
 
   test "horizontal scroll renders scrollers above demo document content":
     let

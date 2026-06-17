@@ -2,6 +2,8 @@ import ./responders
 import ./theme
 import ./types
 
+from figdraw/fignodes import Renders
+
 export responders
 
 type
@@ -160,3 +162,6 @@ type
     xCursorRects*: seq[ViewCursorRect]
     xTrackingAreas*: seq[ViewTrackingArea]
     xRegisteredDraggedTypes*: seq[string]
+    xCachedRenders*: Renders
+    xCachedAppearance*: Appearance
+    xHasCachedRenders*: bool

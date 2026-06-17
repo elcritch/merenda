@@ -78,6 +78,13 @@ proc rectangleNode(
   for idx in 0 ..< min(shadows.len, result.shadows.len):
     result.shadows[idx] = shadows[idx].toFigShadow()
 
+proc translationNode(rect: nimkitTypes.Rect, translation: nimkitTypes.Point): Fig =
+  Fig(
+    kind: nkTransform,
+    screenBox: rect.toFigRect,
+    transform: TransformStyle(translation: vec2(translation.x, translation.y)),
+  )
+
 proc toFontHorizontal(alignment: TextAlignment): FontHorizontal =
   case alignment
   of taLeft: Left
@@ -311,6 +318,23 @@ proc addWindowRectangle*(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
     clips, maskContent,
   )
+
+proc addWindowTranslation*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    translation: nimkitTypes.Point,
+): FigIdx {.discardable.} =
+  context.addFig(layer, parent, translationNode(rect, translation))
+
+proc addWindowTranslation*(
+    context: DrawContext,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    translation: nimkitTypes.Point,
+): FigIdx {.discardable.} =
+  context.addWindowTranslation(DefaultDrawLevel, parent, rect, translation)
 
 proc addRectangle*(
     context: DrawContext, rect: nimkitTypes.Rect, fillValue: Fill

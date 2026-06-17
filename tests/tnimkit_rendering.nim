@@ -831,6 +831,31 @@ suite "nimkit rendering":
     check not child.needsDisplay
     check child.invalidRects.len == 0
 
+  test "buildRenders reuses cached renders until display or appearance changes":
+    let
+      root = newView(frame = initRect(0, 0, 120, 90))
+      custom = newCustomDrawView(initRect(10, 12, 50, 30))
+
+    customDrawCount = 0
+    root.addSubview(custom)
+
+    let firstRenders = buildRenders(root)
+    check customDrawCount == 1
+    let cachedRenders = buildRenders(root)
+    check cachedRenders == firstRenders
+    check customDrawCount == 1
+
+    custom.setNeedsDisplay(true)
+    let invalidatedRenders = buildRenders(root)
+    check invalidatedRenders != firstRenders
+    check customDrawCount == 2
+
+    var theme = initTheme()
+    theme[srView, StyleFill] = initColor(0.1, 0.2, 0.3, 1.0)
+    let themedRenders = buildRenders(root, initAppearance(theme))
+    check themedRenders != invalidatedRenders
+    check customDrawCount == 3
+
   test "buildRenders does not clip view subtrees by default":
     let
       root = newView(frame = initRect(0, 0, 100, 80))
@@ -849,14 +874,24 @@ suite "nimkit rendering":
     check list.nodes[int(rootIdx)].screenBox.h == 80.0
     check NfClipContent notin list.nodes[int(rootIdx)].flags
 
-    var childIdx = (-1).FigIdx
+    var transformIdx = (-1).FigIdx
     for idx in childIndex(list.nodes, rootIdx):
-      childIdx = idx
+      if list.nodes[int(idx)].kind == nkTransform:
+        transformIdx = idx
+
+    check transformIdx != (-1).FigIdx
+    check list.nodes[int(transformIdx)].transform.translation.x == -10.0
+    check list.nodes[int(transformIdx)].transform.translation.y == -20.0
+
+    var childIdx = (-1).FigIdx
+    for idx in childIndex(list.nodes, transformIdx):
+      if list.nodes[int(idx)].kind == nkRectangle:
+        childIdx = idx
 
     check childIdx != (-1).FigIdx
-    check list.nodes[int(childIdx)].parent == rootIdx
-    check list.nodes[int(childIdx)].screenBox.x == 80.0
-    check list.nodes[int(childIdx)].screenBox.y == 70.0
+    check list.nodes[int(childIdx)].parent == transformIdx
+    check list.nodes[int(childIdx)].screenBox.x == 90.0
+    check list.nodes[int(childIdx)].screenBox.y == 90.0
     check list.nodes[int(childIdx)].screenBox.w == 50.0
     check list.nodes[int(childIdx)].screenBox.h == 40.0
     check NfClipContent notin list.nodes[int(childIdx)].flags
@@ -877,9 +912,17 @@ suite "nimkit rendering":
 
     check NfClipContent in list.nodes[int(rootIdx)].flags
 
-    var childIdx = (-1).FigIdx
+    var transformIdx = (-1).FigIdx
     for idx in childIndex(list.nodes, rootIdx):
-      childIdx = idx
+      if list.nodes[int(idx)].kind == nkTransform:
+        transformIdx = idx
+
+    check transformIdx != (-1).FigIdx
+
+    var childIdx = (-1).FigIdx
+    for idx in childIndex(list.nodes, transformIdx):
+      if list.nodes[int(idx)].kind == nkRectangle:
+        childIdx = idx
 
     check childIdx != (-1).FigIdx
     check NfClipContent in list.nodes[int(childIdx)].flags
