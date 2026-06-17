@@ -979,8 +979,8 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         initColor(0.50, 0.54, 0.62)
       else:
         initColor(0.0, 0.0, 0.0, 0.0)
-    discard context.addWindowRectangle(
-      button.rectToWindow(button.bounds),
+    discard context.addRenderRectangle(
+      context.renderRectFor(button.bounds),
       fill(fillColor),
       borderColor,
       if ssOpen in states or ssHovered in states: 1.0'f32 else: 0.0'f32,
@@ -1201,7 +1201,7 @@ protocol MenuBarDrawing of ViewDrawingProtocol:
     let bounds = menuBar.bounds()
     if bounds.isEmpty:
       return
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       initRect(0.0'f32, bounds.maxY - 1.0'f32, bounds.size.width, 1.0'f32),
       fill(initColor(0.76, 0.78, 0.82)),
     )

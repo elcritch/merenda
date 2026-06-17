@@ -606,7 +606,7 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
 
 protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
-    let absoluteFrame = textField.rectToWindow(textField.bounds)
+    let absoluteFrame = context.renderRectFor(textField.bounds)
     let states: set[WidgetState] = textField.widgetStateSet()
 
     let style = context.appearance.resolveTextFieldStyle(
@@ -616,7 +616,7 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
       textField.textColor,
     )
 
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
       style.box.cornerRadius, style.box.shadows,
     )

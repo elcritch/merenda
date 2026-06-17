@@ -192,8 +192,8 @@ proc drawListRow*(
     itemStyle.text.color = style.textColor.get()
 
   if currentParent:
-    discard context.addWindowRectangle(
-      context.localRectToWindow(rect),
+    discard context.addRenderRectangle(
+      context.renderRectFor(rect),
       itemStyle.box.fill,
       itemStyle.box.borderColor,
       itemStyle.box.borderWidth,
@@ -202,10 +202,10 @@ proc drawListRow*(
     )
     context.addText(itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color)
   else:
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       layer,
       parent,
-      context.localRectToWindow(rect),
+      context.renderRectFor(rect),
       itemStyle.box.fill,
       itemStyle.box.borderColor,
       itemStyle.box.borderWidth,

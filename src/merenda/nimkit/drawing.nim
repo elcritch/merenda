@@ -20,7 +20,7 @@ type DrawContext* = ref object
   xRenders: Renders
   xParent: FigIdx
   xViewParent: FigIdx
-  xLocalOriginInWindow: nimkitTypes.Point
+  xRenderOrigin: nimkitTypes.Point
   xBounds: nimkitTypes.Rect
   xVisibleRect: nimkitTypes.Rect
   xAppearance: Appearance
@@ -211,14 +211,14 @@ proc beginDraw*(
     context: DrawContext,
     parent: FigIdx,
     viewParent: FigIdx,
-    localOriginInWindow: nimkitTypes.Point,
+    renderOrigin: nimkitTypes.Point,
     bounds: nimkitTypes.Rect,
     visibleRect: nimkitTypes.Rect,
     appearance: Appearance,
 ) =
   context.xParent = parent
   context.xViewParent = viewParent
-  context.xLocalOriginInWindow = localOriginInWindow
+  context.xRenderOrigin = renderOrigin
   context.xBounds = bounds
   context.xVisibleRect = visibleRect
   context.xAppearance = appearance
@@ -234,12 +234,10 @@ proc renders*(context: DrawContext): Renders =
 proc appearance*(context: DrawContext): Appearance =
   context.xAppearance
 
-proc localRectToWindow*(
-    context: DrawContext, rect: nimkitTypes.Rect
-): nimkitTypes.Rect =
+proc renderRectFor*(context: DrawContext, rect: nimkitTypes.Rect): nimkitTypes.Rect =
   nimkitTypes.initRect(
-    context.xLocalOriginInWindow.x + rect.origin.x,
-    context.xLocalOriginInWindow.y + rect.origin.y,
+    context.xRenderOrigin.x + rect.origin.x,
+    context.xRenderOrigin.y + rect.origin.y,
     rect.size.width,
     rect.size.height,
   )
@@ -264,7 +262,7 @@ proc addFig*(context: DrawContext, parent: FigIdx, node: Fig): FigIdx {.discarda
 proc addFig*(context: DrawContext, node: Fig): FigIdx {.discardable.} =
   context.addFig(context.xParent, node)
 
-proc addWindowRectangle*(
+proc addRenderRectangle*(
     context: DrawContext,
     layer: ZLevel,
     parent: FigIdx,
@@ -286,7 +284,7 @@ proc addWindowRectangle*(
     ),
   )
 
-proc addWindowRectangle*(
+proc addRenderRectangle*(
     context: DrawContext,
     parent: FigIdx,
     rect: nimkitTypes.Rect,
@@ -298,12 +296,12 @@ proc addWindowRectangle*(
     clips = false,
     maskContent = false,
 ): FigIdx {.discardable.} =
-  context.addWindowRectangle(
+  context.addRenderRectangle(
     DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
     shadows, clips, maskContent,
   )
 
-proc addWindowRectangle*(
+proc addRenderRectangle*(
     context: DrawContext,
     rect: nimkitTypes.Rect,
     fillValue: Fill,
@@ -314,12 +312,12 @@ proc addWindowRectangle*(
     clips = false,
     maskContent = false,
 ): FigIdx {.discardable.} =
-  context.addWindowRectangle(
+  context.addRenderRectangle(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
     clips, maskContent,
   )
 
-proc addWindowTranslation*(
+proc addRenderTranslation*(
     context: DrawContext,
     layer: ZLevel,
     parent: FigIdx,
@@ -328,18 +326,18 @@ proc addWindowTranslation*(
 ): FigIdx {.discardable.} =
   context.addFig(layer, parent, translationNode(rect, translation))
 
-proc addWindowTranslation*(
+proc addRenderTranslation*(
     context: DrawContext,
     parent: FigIdx,
     rect: nimkitTypes.Rect,
     translation: nimkitTypes.Point,
 ): FigIdx {.discardable.} =
-  context.addWindowTranslation(DefaultDrawLevel, parent, rect, translation)
+  context.addRenderTranslation(DefaultDrawLevel, parent, rect, translation)
 
 proc addRectangle*(
     context: DrawContext, rect: nimkitTypes.Rect, fillValue: Fill
 ): FigIdx {.discardable.} =
-  context.addFig(rectangleNode(context.localRectToWindow(rect), fillValue))
+  context.addFig(rectangleNode(context.renderRectFor(rect), fillValue))
 
 proc addText*(
     context: DrawContext,
@@ -348,7 +346,7 @@ proc addText*(
     color: nimkitTypes.Color,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
-  context.addFig(textNode(context.localRectToWindow(rect), text, color, alignment))
+  context.addFig(textNode(context.renderRectFor(rect), text, color, alignment))
 
 proc addText*(
     context: DrawContext,
@@ -360,13 +358,13 @@ proc addText*(
     alignment = taLeft,
 ): FigIdx {.discardable.} =
   context.addFig(
-    layer, parent, textNode(context.localRectToWindow(rect), text, color, alignment)
+    layer, parent, textNode(context.renderRectFor(rect), text, color, alignment)
   )
 
 proc addText*(
     context: DrawContext, rect: nimkitTypes.Rect, layout: GlyphArrangement
 ): FigIdx {.discardable.} =
-  context.addFig(textNode(context.localRectToWindow(rect), layout))
+  context.addFig(textNode(context.renderRectFor(rect), layout))
 
 proc addSelectedText*(
     context: DrawContext,
@@ -375,7 +373,7 @@ proc addSelectedText*(
     selectedLocation, selectedLength: int,
     selectionColor: nimkitTypes.Color,
 ): FigIdx {.discardable.} =
-  var node = textNode(context.localRectToWindow(rect), layout)
+  var node = textNode(context.renderRectFor(rect), layout)
   node.selectTextNode(selectedLocation, selectedLength, selectionColor)
   context.addFig(node)
 
@@ -387,7 +385,7 @@ proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBox
     return
   let parent =
     if box.focusRingInset < 0.0'f32: context.xViewParent else: context.xParent
-  discard context.addWindowRectangle(
+  discard context.addRenderRectangle(
     parent,
     ringRect,
     initColor(0.0, 0.0, 0.0, 0.0),
@@ -409,15 +407,15 @@ proc addComboBoxArrow*(
     centerX = rect.origin.x + rect.size.width * 0.5'f32
     centerY = rect.origin.y + rect.size.height * 0.5'f32
     topY = centerY - 1.0'f32
-  discard context.addWindowRectangle(
+  discard context.addRenderRectangle(
     parent, initRect(centerX - width * 0.50'f32, topY, width, 1.0'f32), color
   )
-  discard context.addWindowRectangle(
+  discard context.addRenderRectangle(
     parent,
     initRect(centerX - width * 0.35'f32, topY + 1.0'f32, width * 0.70'f32, 1.0'f32),
     color,
   )
-  discard context.addWindowRectangle(
+  discard context.addRenderRectangle(
     parent,
     initRect(centerX - width * 0.20'f32, topY + 2.0'f32, width * 0.40'f32, 1.0'f32),
     color,

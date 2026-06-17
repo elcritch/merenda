@@ -81,6 +81,13 @@ proc findChildRectNode(
         node.renderedRect().rectsClose(rect):
       return idx
 
+proc findRectNode(list: RenderList, rect: nimkitTypes.Rect, fillValue: Fill): int =
+  result = -1
+  for idx, node in list.nodes:
+    if node.kind == nkRectangle and node.fill == fillValue and
+        node.renderedRect().rectsClose(rect):
+      return idx
+
 proc checkScrollerRectInside(scrollView: ScrollView, rect: nimkitTypes.Rect) =
   check not rect.isEmpty
   check rect.insideAxis(scrollView.bounds(), laHorizontal)
@@ -754,6 +761,51 @@ suite "nimkit scroll views":
     check childVisibility.bounds.y == 50.0
     check childVisibility.bounds.w == 30.0
     check childVisibility.bounds.h == 20.0
+
+  test "scrolled document controls draw chrome in render space":
+    let
+      root = newView(frame = initRect(0, 0, 220, 160))
+      document = newView(frame = initRect(0, 0, 260, 220))
+      heading = newHeadingLabel("Heading", frame = initRect(60, 50, 100, 20))
+      button = newButton("Press", frame = initRect(60, 90, 100, 26))
+      scrollView =
+        newScrollView(frame = initRect(20, 30, 120, 80), documentView = document)
+
+    document.addSubview(heading, button)
+    root.addSubview(scrollView)
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.contentOffset = initPoint(40, 30)
+
+    let
+      headingStyle = heading.effectiveAppearance().resolveTextFieldStyle(
+          initControlStyleContext(
+            srTextField, id = heading.styleId, classes = heading.styleClasses
+          ),
+          heading.textColor(),
+        )
+      buttonStyle = button.effectiveAppearance().resolveButtonStyle(
+          initControlStyleContext(
+            srButton, id = button.styleId, classes = button.styleClasses
+          )
+        )
+      renders = buildRenders(root)
+      nodes = renders[DefaultDrawLevel]
+      scrollWindowOffset = scrollView.contentOffset()
+      expectedHeadingRenderRect = initRect(80, 80, 100, 20)
+      expectedButtonRenderRect = initRect(80, 120, 100, 26)
+      headingScrolledWindowRect = heading.rectToWindow(heading.bounds())
+      buttonScrolledWindowRect = button.rectToWindow(button.bounds())
+      headingChromeIndex =
+        nodes.findRectNode(expectedHeadingRenderRect, headingStyle.box.fill)
+      buttonChromeIndex =
+        nodes.findRectNode(expectedButtonRenderRect, buttonStyle.box.fill)
+
+    check scrollWindowOffset == initPoint(40, 30)
+    checkRectNearlyEqual(headingScrolledWindowRect, initRect(40, 50, 100, 20))
+    checkRectNearlyEqual(buttonScrolledWindowRect, initRect(40, 90, 100, 26))
+    check headingChromeIndex >= 0
+    check buttonChromeIndex >= 0
 
   test "horizontal scroll renders scrollers above demo document content":
     let
