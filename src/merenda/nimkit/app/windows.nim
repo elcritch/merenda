@@ -1,0 +1,1953 @@
+import std/[math, options, tables, times]
+
+import figdraw/figrender as figrender
+from figdraw/fignodes import Renders
+import figdraw/windowing/siwinshim as siwinshim
+import sigils/core
+
+import ../accessibility/accessibility
+import ./backend as nimkitBackend
+import ../responder/keybindings
+import ../drawing/rendering as nimkitRendering
+import ../foundation/events
+import ../text/fieldeditors
+import ../foundation/selectors
+import ../drawing/theme
+import ../foundation/types
+import ../view/views
+
+type
+  WindowStyleMask* = enum
+    wsmTitled
+    wsmClosable
+    wsmMiniaturizable
+    wsmResizable
+    wsmUtilityWindow
+    wsmDocModalWindow
+    wsmNonactivatingPanel
+
+  WindowLevel* = enum
+    wlNormal
+    wlFloating
+    wlModalPanel
+    wlMainMenu
+    wlStatus
+
+  Panel* = Window
+
+  AlertStyle* = enum
+    asInformational
+    asWarning
+    asCritical
+
+  Alert* = ref object of Responder
+    messageText*: string
+    informativeText*: string
+    style*: AlertStyle
+    buttons*: seq[string]
+    window*: Window
+
+  OpenPanel* = ref object of Responder
+    window*: Window
+    directoryUrl*: string
+    allowedFileTypes*: seq[string]
+    allowsMultipleSelection*: bool
+    canChooseFiles*: bool
+    canChooseDirectories*: bool
+
+  SavePanel* = ref object of Responder
+    window*: Window
+    directoryUrl*: string
+    nameFieldStringValue*: string
+    allowedFileTypes*: seq[string]
+
+  DismissReason* = enum
+    tdrProgrammatic
+    tdrOutsideClick
+    tdrEscape
+    tdrFocusChange
+    tdrOwnerClosed
+    tdrNativeDone
+
+  TransientDismissHandler* = proc(reason: DismissReason) {.closure.}
+
+  Window* = ref object of Responder
+    xFrame: Rect
+    xTitle: string
+    xStyleMask: set[WindowStyleMask]
+    xLevel: WindowLevel
+    xDelegate: DynamicAgent
+    xContentView: View
+    xAppearance: Appearance
+    xHasAppearance: bool
+    xInheritedAppearance: Appearance
+    xHasInheritedAppearance: bool
+    xPopupPresentation: PopupPresentation
+    xFirstResponder: Responder
+    xFieldEditor: FieldEditor
+    xInitialFirstResponder: View
+    xFutureFirstResponder: Responder
+    xAutorecalculatesKeyViewLoop: bool
+    xIsKeyWindow: bool
+    xIsMainWindow: bool
+    xMinSize: Size
+    xMaxSize: Size
+    xResizeIncrements: Size
+    xFrameAutosaveName: string
+    xKeyBindings: KeyBindingTable
+    xHostWindow: HostWindow
+    xOwnerWindow: Window
+    xAuxiliaryWindows: seq[Window]
+    xSheet: Window
+    xSheetParent: Window
+    xIsPopup: bool
+    xPopupPlacement: siwinshim.PopupPlacement
+    xOnPopupDone: proc() {.closure.}
+    xTransientSession: TransientSession
+    xLastTransientDismissReason: DismissReason
+    xMouseCaptureView: View
+    xMouseActiveView: View
+    xMouseHoverView: View
+    xMousePolicyStopResponder: Responder
+    xMomentumScrollTarget: View
+    xMomentumScrollContentPoint: Point
+    xMouseClickCount: int
+    xLastClickPoint: Point
+    xLastClickButton: events.MouseButton
+    xLastClickView: View
+    xLastClickCount: int
+    xLastClickTime: float
+    xHasLastClick: bool
+    xVisibleRequested: bool
+    xClosed: bool
+
+  TransientSession = object
+    active: bool
+    ownerResponder: Responder
+    transientWindow: Window
+    restoreWindow: Window
+    restoreResponder: Responder
+    onDismiss: TransientDismissHandler
+
+type EventDispatchResult = object
+  handled: bool
+  responder: Responder
+
+var
+  savedWindowFrames {.threadvar.}: Table[string, Rect]
+  savedWindowFramesReady {.threadvar.}: bool
+
+protocol WindowLifecycleProtocol {.selectorScope: protocol.}:
+  method shouldSetContentView*(v: View): bool {.optional.}
+
+protocol WindowLifecycleEvents:
+  proc willSetContentView*(w: Window, v: View) {.signal.}
+  proc didSetContentView*(w: Window, oldView: View) {.signal.}
+  proc willClose*(w: Window) {.signal.}
+  proc didClose*(w: Window) {.signal.}
+
+protocol WindowFocusProtocol {.selectorScope: protocol.}:
+  method shouldMakeFirstResponder*(r: Responder): bool {.optional.}
+
+protocol WindowFocusEvents:
+  proc didChangeFirstResponder*(w: Window, previous: Responder) {.signal.}
+  proc didBecomeKeyWindow*(w: Window) {.signal.}
+  proc didResignKeyWindow*(w: Window) {.signal.}
+  proc didBecomeMainWindow*(w: Window) {.signal.}
+  proc didResignMainWindow*(w: Window) {.signal.}
+
+protocol WindowDelegateProtocol:
+  method windowShouldClose*(w: Window): bool {.optional.}
+  method windowWillClose*(w: Window) {.optional.}
+  method windowDidClose*(w: Window) {.optional.}
+  method windowDidBecomeKey*(w: Window) {.optional.}
+  method windowDidResignKey*(w: Window) {.optional.}
+  method windowDidBecomeMain*(w: Window) {.optional.}
+  method windowDidResignMain*(w: Window) {.optional.}
+  method windowWillBeginSheet*(sheet: Window) {.optional.}
+  method windowDidEndSheet*(sheet: Window) {.optional.}
+
+protocol WindowAppearanceEvents:
+  proc didChangeEffectiveAppearance*(w: Window, appearance: Appearance) {.signal.}
+
+protocol WindowPopupProtocol {.selectorScope: protocol.}:
+  method shouldDismiss*(reason: DismissReason): bool {.optional.}
+
+protocol WindowPopupEvents:
+  proc didDismissTransientSession*(w: Window, reason: DismissReason) {.signal.}
+  proc didChangePopupPresentation*(w: Window, present: PopupPresentation) {.signal.}
+
+const ClickSlop = 4.0'f32
+const ClickInterval = 0.5
+
+proc ensureWindowFrameStore() =
+  if not savedWindowFramesReady:
+    savedWindowFrames = initTable[string, Rect]()
+    savedWindowFramesReady = true
+
+func defaultWindowFrame*(): Rect =
+  initRect(100.0'f32, 100.0'f32, 640.0'f32, 480.0'f32)
+
+func nativePopupWindowsSupported*(): bool =
+  when defined(android) or defined(emscripten) or defined(js) or defined(wasm):
+    false
+  else:
+    true
+
+func platformDefaultPopupPresentation*(): PopupPresentation =
+  when defined(nimkitInlinePopups) or defined(emscripten) or defined(js) or defined(
+    wasm
+  ):
+    result = ppInline
+  else:
+    result = ppAutomatic
+
+proc makeFirstResponder*(window: Window, responder: Responder): bool
+proc makeFirstResponder*(window: Window, responder: Responder, focusVisible: bool): bool
+proc fieldEditor*(window: Window): FieldEditor
+proc fieldEditorClient*(window: Window): Responder
+proc initialFirstResponder*(window: Window): View
+proc setInitialFirstResponder*(window: Window, view: View)
+proc autorecalculatesKeyViewLoop*(window: Window): bool
+proc setAutorecalculatesKeyViewLoop*(window: Window, value: bool)
+proc recalculateKeyViewLoop*(window: Window)
+proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.}
+proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.}
+proc effectiveAppearance*(window: Window): Appearance
+proc effectivePopupPresentation*(window: Window): PopupPresentation
+proc close*(window: Window)
+proc setKeyWindow*(window: Window, value: bool)
+proc setMainWindow*(window: Window, value: bool)
+proc endSheet*(window: Window, sheet: Window = nil)
+proc closeAuxiliaryWindows(window: Window, notifyDone = true)
+proc hasActiveTransientSession*(window: Window): bool
+proc beginTransientSession*(
+  window: Window,
+  owner: Responder,
+  transientWindow: Window = nil,
+  restoreResponder: Responder = nil,
+  onDismiss: TransientDismissHandler = nil,
+)
+
+proc dismissTransientSession*(
+  window: Window, reason: DismissReason
+): bool {.discardable.}
+
+proc endTransientSession*(
+  window: Window, reason = tdrProgrammatic
+): bool {.discardable.}
+
+proc nativeContentScale*(window: Window): float32
+proc newPopupWindow*(
+  owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
+): Window
+
+proc needsDisplayUpdate*(window: Window): bool
+proc requestNativeDisplayUpdate*(window: Window)
+proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
+
+proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
+proc dispatchKeyEventInChain(
+  window: Window, target: Responder, event: events.KeyEvent, selector: KeyEventSelector
+): EventDispatchResult
+
+proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View
+
+protocol DefaultWindowKeyViewCommands of KeyViewCommandProtocol:
+  method insertTab(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewFollowingView(start)
+
+  method insertBacktab(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewPrecedingView(start)
+
+  method selectNextKeyView(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewFollowingView(start)
+
+  method selectPreviousKeyView(window: Window, args: ActionArgs) =
+    let start = window.keyViewCommandStartView(args.sender)
+    discard window.selectKeyViewPrecedingView(start)
+
+proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): Window =
+  let resolvedFrame = frame.resolveAutoRect(defaultWindowFrame())
+  result = Window(
+    xFrame: resolvedFrame,
+    xTitle: title,
+    xStyleMask: {wsmTitled, wsmClosable, wsmMiniaturizable, wsmResizable},
+    xLevel: wlNormal,
+    xMinSize: initSize(1.0'f32, 1.0'f32),
+    xMaxSize: initSize(float32.high, float32.high),
+    xResizeIncrements: initSize(1.0'f32, 1.0'f32),
+    xAutorecalculatesKeyViewLoop: true,
+    xKeyBindings: initDefaultKeyBindings(),
+  )
+  initResponder(result)
+  discard result.withProtocol(DefaultWindowKeyViewCommands)
+
+proc newPanel*(title = "Panel", frame: Rect = defaultWindowFrame()): Panel =
+  result = newWindow(title, frame)
+  result.xLevel = wlFloating
+  result.xStyleMask = {wsmTitled, wsmClosable, wsmUtilityWindow}
+
+proc newAlert*(
+    messageText: string,
+    informativeText = "",
+    style = asInformational,
+    buttons: openArray[string] = ["OK"],
+): Alert =
+  result = Alert(
+    messageText: messageText,
+    informativeText: informativeText,
+    style: style,
+    window: newPanel(messageText, initRect(100, 100, 360, 160)),
+  )
+  initResponder(result)
+  for button in buttons:
+    result.buttons.add button
+
+proc newOpenPanel*(): OpenPanel =
+  result = OpenPanel(
+    window: newPanel("Open", initRect(100, 100, 520, 360)), canChooseFiles: true
+  )
+  initResponder(result)
+
+proc newSavePanel*(): SavePanel =
+  result = SavePanel(window: newPanel("Save", initRect(100, 100, 520, 280)))
+  initResponder(result)
+
+proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
+  max((value * scale).round().int32, minimum)
+
+proc popupPlacement(
+    anchorFrame: Rect, popupSize: Size, scale: float32
+): siwinshim.PopupPlacement =
+  siwinshim.PopupPlacement(
+    anchorRectPos: siwinshim.ivec2(
+      popupPixels(anchorFrame.origin.x, scale, 0),
+      popupPixels(anchorFrame.origin.y, scale, 0),
+    ),
+    anchorRectSize: siwinshim.ivec2(
+      popupPixels(anchorFrame.size.width, scale, 1),
+      popupPixels(anchorFrame.size.height, scale, 1),
+    ),
+    size: siwinshim.ivec2(
+      popupPixels(popupSize.width, scale, 1), popupPixels(popupSize.height, scale, 1)
+    ),
+    anchor: siwinshim.Edge.bottomLeft,
+    gravity: siwinshim.Edge.topLeft,
+    offset: siwinshim.ivec2(0, 0),
+    constraintAdjustment: {
+      siwinshim.PopupConstraintAdjustment.pcaFlipY,
+      siwinshim.PopupConstraintAdjustment.pcaSlideX,
+      siwinshim.PopupConstraintAdjustment.pcaResizeY,
+    },
+    reactive: true,
+  )
+
+proc frame*(window: Window): Rect =
+  window.xFrame
+
+proc setFrame*(window: Window, frame: Rect) =
+  if window.isNil or window.xFrame == frame:
+    return
+  window.xFrame = frame
+  if not window.xContentView.isNil:
+    window.xContentView.setFrame(
+      initRect(0.0, 0.0, frame.size.width, frame.size.height)
+    )
+  if not window.xHostWindow.isNil:
+    window.requestNativeDisplayUpdate()
+
+proc `frame=`*(window: Window, frame: Rect) =
+  window.setFrame(frame)
+
+proc title*(window: Window): string =
+  window.xTitle
+
+proc styleMask*(window: Window): set[WindowStyleMask] =
+  if window.isNil:
+    {}
+  else:
+    window.xStyleMask
+
+proc `styleMask=`*(window: Window, mask: set[WindowStyleMask]) =
+  if not window.isNil:
+    window.xStyleMask = mask
+
+proc level*(window: Window): WindowLevel =
+  if window.isNil: wlNormal else: window.xLevel
+
+proc `level=`*(window: Window, level: WindowLevel) =
+  if not window.isNil:
+    window.xLevel = level
+
+proc delegate*(window: Window): DynamicAgent =
+  if window.isNil: nil else: window.xDelegate
+
+proc `delegate=`*(window: Window, delegate: DynamicAgent) =
+  if not window.isNil:
+    window.xDelegate = delegate
+
+proc `delegate=`*(window: Window, delegate: Responder) =
+  window.delegate = DynamicAgent(delegate)
+
+proc contentView*(window: Window): View =
+  window.xContentView
+
+proc isKeyWindow*(window: Window): bool =
+  (not window.isNil) and window.xIsKeyWindow
+
+proc isMainWindow*(window: Window): bool =
+  (not window.isNil) and window.xIsMainWindow
+
+proc minSize*(window: Window): Size =
+  if window.isNil:
+    initSize()
+  else:
+    window.xMinSize
+
+proc `minSize=`*(window: Window, size: Size) =
+  if not window.isNil:
+    window.xMinSize = size
+
+proc maxSize*(window: Window): Size =
+  if window.isNil:
+    initSize()
+  else:
+    window.xMaxSize
+
+proc `maxSize=`*(window: Window, size: Size) =
+  if not window.isNil:
+    window.xMaxSize = size
+
+proc resizeIncrements*(window: Window): Size =
+  if window.isNil:
+    initSize()
+  else:
+    window.xResizeIncrements
+
+proc `resizeIncrements=`*(window: Window, size: Size) =
+  if not window.isNil:
+    window.xResizeIncrements = size
+
+proc frameAutosaveName*(window: Window): string =
+  if window.isNil: "" else: window.xFrameAutosaveName
+
+proc savedFrameForName*(name: string): Option[Rect] =
+  if name.len == 0:
+    return none(Rect)
+  ensureWindowFrameStore()
+  if name in savedWindowFrames:
+    return some(savedWindowFrames[name])
+  none(Rect)
+
+proc saveFrameUsingName*(window: Window, name: string): bool {.discardable.} =
+  if window.isNil or name.len == 0:
+    return false
+  ensureWindowFrameStore()
+  savedWindowFrames[name] = window.frame()
+  true
+
+proc saveFrameUsingName*(window: Window): bool {.discardable.} =
+  if window.isNil:
+    return false
+  window.saveFrameUsingName(window.xFrameAutosaveName)
+
+proc setFrameUsingName*(window: Window, name: string): bool {.discardable.} =
+  if window.isNil or name.len == 0:
+    return false
+  window.xFrameAutosaveName = name
+  let saved = savedFrameForName(name)
+  if saved.isSome:
+    window.frame = saved.get()
+    return true
+  false
+
+proc removeSavedFrameForName*(name: string): bool {.discardable.} =
+  if name.len == 0:
+    return false
+  ensureWindowFrameStore()
+  if name notin savedWindowFrames:
+    return false
+  savedWindowFrames.del(name)
+  true
+
+proc `frameAutosaveName=`*(window: Window, name: string) =
+  if not window.isNil:
+    discard window.setFrameUsingName(name)
+
+proc keyBindings*(window: Window): KeyBindingTable =
+  window.xKeyBindings
+
+proc setKeyBindings*(window: Window, bindings: KeyBindingTable) =
+  window.xKeyBindings = bindings
+
+proc setKeyBindingProfile*(window: Window, profile: KeyBindingProfile) =
+  window.xKeyBindings = initDefaultKeyBindings(profile)
+
+proc addKeyBinding*(window: Window, stroke: KeyStroke, selector: CommandSelector) =
+  window.xKeyBindings.add(stroke, selector)
+
+proc removeKeyBinding*(window: Window, stroke: KeyStroke): bool {.discardable.} =
+  window.xKeyBindings.remove(stroke)
+
+proc clearKeyBindings*(window: Window) =
+  window.xKeyBindings.clear()
+
+proc bindKey*(
+    window: Window, text: string, modifiers: set[KeyModifier], selector: CommandSelector
+) =
+  window.xKeyBindings.bindKey(text, modifiers, selector)
+
+proc bindKey*(
+    window: Window,
+    key: events.Key,
+    modifiers: set[KeyModifier],
+    selector: CommandSelector,
+) =
+  window.xKeyBindings.bindKey(key, modifiers, selector)
+
+proc bindKey*(
+    window: Window, keyCode: int, modifiers: set[KeyModifier], selector: CommandSelector
+) =
+  window.xKeyBindings.bindKey(keyCode, modifiers, selector)
+
+proc bindShortcut*(
+    window: Window,
+    text: string,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  window.xKeyBindings.bindShortcut(text, modifiers, selector)
+
+proc bindShortcut*(
+    window: Window,
+    key: events.Key,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  window.xKeyBindings.bindShortcut(key, modifiers, selector)
+
+proc bindShortcuts*(
+    window: Window,
+    text: string,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  window.bindShortcut(text, modifiers, selector)
+
+proc bindShortcuts*(
+    window: Window,
+    key: events.Key,
+    modifiers: set[ShortcutModifier],
+    selector: CommandSelector,
+) =
+  window.bindShortcut(key, modifiers, selector)
+
+proc propagateAppearance(window: Window) =
+  if window.isNil or window.xContentView.isNil:
+    return
+  window.xContentView.setInheritedAppearance(window.effectiveAppearance())
+
+proc shouldSetContentView(window: Window, view: View): bool =
+  window.trySendLocal(shouldSetContentView(), view).get(true)
+
+proc shouldMakeFirstResponder(window: Window, responder: Responder): bool =
+  window.trySendLocal(shouldMakeFirstResponder(), responder).get(true)
+
+proc shouldDismissTransientSession(window: Window, reason: DismissReason): bool =
+  window.trySendLocal(shouldDismiss(), reason).get(true)
+
+proc hasAppearance*(window: Window): bool =
+  (not window.isNil) and window.xHasAppearance
+
+proc appearance*(window: Window): Appearance =
+  if window.isNil or not window.xHasAppearance:
+    return initAppearance()
+  window.xAppearance
+
+proc effectiveAppearance*(window: Window): Appearance =
+  if window.xHasAppearance:
+    return window.xAppearance
+  if window.xHasInheritedAppearance:
+    return window.xInheritedAppearance
+  initAppearance()
+
+proc popupPresentation*(window: Window): PopupPresentation =
+  window.xPopupPresentation
+
+proc effectivePopupPresentation*(window: Window): PopupPresentation =
+  if window.xPopupPresentation == ppAutomatic:
+    return platformDefaultPopupPresentation()
+  window.xPopupPresentation
+
+proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
+  if window.isNil or window.xPopupPresentation == presentation:
+    return
+  window.xPopupPresentation = presentation
+  emit window.didChangePopupPresentation(window.xPopupPresentation)
+  if window.hasActiveTransientSession():
+    discard window.dismissTransientSession(tdrProgrammatic)
+  else:
+    window.closeAuxiliaryWindows()
+  if not window.xContentView.isNil:
+    window.xContentView.setNeedsDisplay(true)
+
+proc setAppearance*(window: Window, appearance: Appearance) =
+  window.xAppearance = appearance
+  window.xHasAppearance = true
+  window.propagateAppearance()
+  emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+
+proc clearAppearance*(window: Window) =
+  if window.isNil or not window.xHasAppearance:
+    return
+  window.xAppearance = Appearance()
+  window.xHasAppearance = false
+  window.propagateAppearance()
+  emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+
+proc setInheritedAppearance*(window: Window, appearance: Appearance) =
+  window.xInheritedAppearance = appearance
+  window.xHasInheritedAppearance = true
+  if not window.xHasAppearance:
+    window.propagateAppearance()
+    emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+
+proc clearInheritedAppearance*(window: Window) =
+  window.xInheritedAppearance = Appearance()
+  window.xHasInheritedAppearance = false
+  if not window.xHasAppearance:
+    window.propagateAppearance()
+    emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+
+proc clearMouseState(window: Window) =
+  if not window.xMouseActiveView.isNil:
+    window.xMouseActiveView.active = false
+  if not window.xMouseHoverView.isNil:
+    window.xMouseHoverView.hovered = false
+  window.xMouseCaptureView = nil
+  window.xMouseActiveView = nil
+  window.xMouseHoverView = nil
+  window.xMouseClickCount = 0
+  window.xLastClickView = nil
+  window.xHasLastClick = false
+  window.xLastClickCount = 0
+
+proc setMouseActiveView(window: Window, view: View) =
+  if window.xMouseActiveView == view:
+    return
+  if not window.xMouseActiveView.isNil:
+    window.xMouseActiveView.active = false
+  window.xMouseActiveView = view
+  if not view.isNil:
+    view.active = true
+
+proc setContentView*(window: Window, view: View) =
+  if window.isNil or not window.shouldSetContentView(view):
+    return
+  if window.xContentView == view:
+    window.clearMouseState()
+    return
+
+  let oldContent = window.xContentView
+  emit window.willSetContentView(view)
+  if not oldContent.isNil:
+    window.clearMouseState()
+    if not window.xFirstResponder.isNil and window.xFirstResponder of View:
+      let firstResponderView = View(window.xFirstResponder)
+      if oldContent.containsView(firstResponderView):
+        if not window.makeFirstResponder(nil):
+          window.xFirstResponder = nil
+    oldContent.moveToWindowOwner(nil)
+    oldContent.clearSuperviewForWindowOwner()
+    oldContent.clearInheritedAppearance()
+
+  if not view.isNil:
+    if not view.superview.isNil:
+      view.removeFromSuperview()
+    view.clearSuperviewForWindowOwner()
+    view.setNextResponder(window)
+    view.moveToWindowOwner(window)
+    view.setInheritedAppearance(window.effectiveAppearance())
+
+  window.xContentView = view
+  window.clearMouseState()
+  if window.xAutorecalculatesKeyViewLoop:
+    window.recalculateKeyViewLoop()
+  emit window.didSetContentView(oldContent)
+
+proc setTitle*(window: Window, title: string) =
+  window.xTitle = title
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setTitle(title)
+
+proc convertPointToScreen*(window: Window, point: Point): Point =
+  if window.isNil:
+    return point
+  point.offset(window.xFrame.origin.x, window.xFrame.origin.y)
+
+proc convertPointFromScreen*(window: Window, point: Point): Point =
+  if window.isNil:
+    return point
+  point.offset(-window.xFrame.origin.x, -window.xFrame.origin.y)
+
+proc convertRectToScreen*(window: Window, rect: Rect): Rect =
+  initRect(window.convertPointToScreen(rect.origin), rect.size)
+
+proc convertRectFromScreen*(window: Window, rect: Rect): Rect =
+  initRect(window.convertPointFromScreen(rect.origin), rect.size)
+
+proc convertPointToContent*(window: Window, point: Point): Point =
+  if window.isNil or window.xContentView.isNil:
+    return point
+  window.xContentView.pointFromWindow(point)
+
+proc convertPointFromContent*(window: Window, point: Point): Point =
+  if window.isNil or window.xContentView.isNil:
+    return point
+  window.xContentView.pointToWindow(point)
+
+proc convertRectToContent*(window: Window, rect: Rect): Rect =
+  if window.isNil or window.xContentView.isNil:
+    return rect
+  window.xContentView.rectFromWindow(rect)
+
+proc convertRectFromContent*(window: Window, rect: Rect): Rect =
+  if window.isNil or window.xContentView.isNil:
+    return rect
+  window.xContentView.rectToWindow(rect)
+
+proc firstResponder*(window: Window): Responder =
+  window.xFirstResponder
+
+proc fieldEditor*(window: Window): FieldEditor =
+  if window.isNil:
+    return nil
+  if window.xFieldEditor.isNil:
+    window.xFieldEditor = newFieldEditor()
+    window.xFieldEditor.setNextResponder(window)
+  window.xFieldEditor
+
+proc fieldEditorClient*(window: Window): Responder =
+  if window.isNil:
+    return nil
+  if window.xFirstResponder of FieldEditor:
+    return FieldEditor(window.xFirstResponder).client()
+  if not window.xFieldEditor.isNil:
+    return window.xFieldEditor.client()
+
+proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
+  if window.isNil or responder.isNil:
+    return responder
+  let defaultEditor = window.fieldEditor()
+  if responder.wantsFieldEditor(defaultEditor):
+    let editor = responder.fieldEditorForClient(defaultEditor)
+    if not editor.isNil:
+      if editor.superview().isNil:
+        editor.setNextResponder(window)
+      return editor
+  responder
+
+proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool): bool =
+  let nextResponder = window.resolvedFirstResponder(responder)
+  if window.xFirstResponder == nextResponder:
+    let changingFieldEditorClient =
+      nextResponder of FieldEditor and responder != nextResponder and
+      FieldEditor(nextResponder).client() != responder
+    if not changingFieldEditorClient:
+      if not nextResponder.isNil:
+        nextResponder.setFirstResponderFocusState(true, focusVisible)
+      return true
+
+  if not responder.isNil:
+    if not responder.acceptsFirstResponder():
+      return false
+    if not responder.shouldBecomeFirstResponder():
+      return false
+  if not window.shouldMakeFirstResponder(responder):
+    return false
+  let previousResponder = window.xFirstResponder
+  if not window.xFirstResponder.isNil:
+    if not window.xFirstResponder.shouldResignFirstResponder():
+      return false
+    if not window.xFirstResponder.resignFirstResponder():
+      return false
+  if not responder.isNil and nextResponder of FieldEditor:
+    if not FieldEditor(nextResponder).beginEditing(responder, focusVisible):
+      return false
+  if not nextResponder.isNil and not nextResponder.becomeFirstResponder():
+    return false
+
+  if not previousResponder.isNil:
+    previousResponder.setFirstResponderFocusState(false, false)
+  if not nextResponder.isNil:
+    nextResponder.setFirstResponderFocusState(true, focusVisible)
+  window.xFirstResponder = nextResponder
+  if not previousResponder.isNil:
+    previousResponder.didResignFirstResponder()
+  if not nextResponder.isNil:
+    nextResponder.didBecomeFirstResponder()
+  if responder of View:
+    View(responder).postAccessibilityNotification(anFocusedUIElementChanged)
+  emit window.didChangeFirstResponder(previousResponder)
+  true
+
+proc makeFirstResponder*(window: Window, responder: Responder): bool =
+  window.setFirstResponder(responder, focusVisible = true)
+
+proc makeFirstResponder*(
+    window: Window, responder: Responder, focusVisible: bool
+): bool =
+  window.setFirstResponder(responder, focusVisible)
+
+proc initialFirstResponder*(window: Window): View =
+  window.xInitialFirstResponder
+
+proc setInitialFirstResponder*(window: Window, view: View) =
+  window.xInitialFirstResponder = view
+
+proc futureFirstResponder*(window: Window): Responder =
+  if window.isNil: nil else: window.xFutureFirstResponder
+
+proc setFutureFirstResponder*(window: Window, responder: Responder) =
+  if not window.isNil:
+    window.xFutureFirstResponder = responder
+
+proc autorecalculatesKeyViewLoop*(window: Window): bool =
+  (not window.isNil) and window.xAutorecalculatesKeyViewLoop
+
+proc setAutorecalculatesKeyViewLoop*(window: Window, value: bool) =
+  window.xAutorecalculatesKeyViewLoop = value
+
+proc collectKeyViews(view: View, views: var seq[View]) =
+  views.add view
+  for child in view.subviews:
+    child.collectKeyViews(views)
+
+proc recalculateKeyViewLoop*(window: Window) =
+  if window.isNil or window.xContentView.isNil:
+    if not window.isNil:
+      window.xInitialFirstResponder = nil
+    return
+
+  var views: seq[View]
+  window.xContentView.collectKeyViews(views)
+  for view in views:
+    view.setNextKeyView(nil)
+    view.setPreviousKeyView(nil)
+
+  if views.len == 0:
+    window.xInitialFirstResponder = nil
+    return
+
+  for idx, view in views:
+    view.setNextKeyView(views[(idx + 1) mod views.len])
+
+  window.xInitialFirstResponder = window.xContentView.nextValidKeyView()
+
+proc firstKeyViewCandidate(window: Window, forward: bool): View =
+  let initial = window.xInitialFirstResponder
+  if not initial.isNil:
+    if initial.canBecomeKeyView():
+      return initial
+    if forward:
+      return initial.nextValidKeyView()
+    return initial.previousValidKeyView()
+  if window.xContentView.isNil:
+    return nil
+  if forward:
+    window.xContentView.nextValidKeyView()
+  else:
+    window.xContentView.previousValidKeyView()
+
+proc selectKeyView(window: Window, view: View): bool =
+  if window.isNil or view.isNil:
+    return false
+  if not window.makeFirstResponder(view):
+    return false
+  discard
+    view.sendLocalIfHandled(selectText(), ActionArgs(sender: DynamicAgent(window)))
+  true
+
+proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
+  if not sender.isNil and sender of View:
+    return View(sender)
+  if not window.isNil and not window.xFirstResponder.isNil and
+      window.xFirstResponder of View:
+    return View(window.xFirstResponder)
+
+proc prepareKeyViewLoop(window: Window) =
+  if not window.isNil and window.xAutorecalculatesKeyViewLoop:
+    window.recalculateKeyViewLoop()
+
+proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.} =
+  window.prepareKeyViewLoop()
+  var candidate: View
+  if not view.isNil:
+    candidate = view.nextValidKeyView()
+  if candidate.isNil:
+    candidate = window.firstKeyViewCandidate(forward = true)
+  window.selectKeyView(candidate)
+
+proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.} =
+  window.prepareKeyViewLoop()
+  var candidate: View
+  if not view.isNil:
+    candidate = view.previousValidKeyView()
+  if candidate.isNil:
+    candidate = window.firstKeyViewCandidate(forward = false)
+  window.selectKeyView(candidate)
+
+proc selectNextKeyView*(window: Window): bool {.discardable.} =
+  window.selectKeyViewFollowingView(window.keyViewCommandStartView(nil))
+
+proc selectPreviousKeyView*(window: Window): bool {.discardable.} =
+  window.selectKeyViewPrecedingView(window.keyViewCommandStartView(nil))
+
+proc buildRenders*(window: Window): Renders =
+  nimkitRendering.buildRenders(window.xContentView, window.effectiveAppearance())
+
+proc buildRenders*(window: Window, appearance: Appearance): Renders =
+  nimkitRendering.buildRenders(window.xContentView, appearance)
+
+proc buildRenders*(window: Window, theme: Theme): Renders =
+  nimkitRendering.buildRenders(window.xContentView, theme)
+
+proc nativeWindowOrNil*(window: Window): siwinshim.Window =
+  window.xHostWindow.nativeWindowOrNil()
+
+proc rendererOrNil*(
+    window: Window
+): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
+  window.xHostWindow.rendererOrNil()
+
+proc nativeReady*(window: Window): bool =
+  (not window.isNil) and window.xHostWindow.isReady
+
+proc nativeContentScale*(window: Window): float32 =
+  window.xHostWindow.contentScale()
+
+proc nativeRenderCount*(window: Window): Natural =
+  if window.isNil or window.xHostWindow.isNil:
+    return 0
+  window.xHostWindow.renderCount()
+
+proc nativeRenderRequested*(window: Window): bool =
+  (not window.isNil) and (not window.xHostWindow.isNil) and
+    window.xHostWindow.renderRequested()
+
+proc needsDisplayUpdate*(window: Window): bool =
+  (not window.isNil) and (not window.xContentView.isNil) and
+    window.xContentView.needsDisplayUpdateInSubtree()
+
+proc requestNativeDisplayUpdate*(window: Window) =
+  if window.isNil or window.xHostWindow.isNil:
+    return
+  window.xHostWindow.requestRender()
+
+proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.} =
+  if window.needsDisplayUpdate():
+    window.requestNativeDisplayUpdate()
+    return true
+  false
+
+proc isClosed*(window: Window): bool =
+  window.isNil or window.xClosed
+
+proc isVisible*(window: Window): bool =
+  (not window.isNil) and window.xVisibleRequested and not window.xClosed
+
+proc sendWindowDelegate[A](
+    window: Window, selector: Selector[A, EmptyArgs], args: sink A
+) =
+  if not window.isNil and not window.xDelegate.isNil:
+    discard window.xDelegate.sendLocalIfHandled(selector, ensureMove args)
+
+proc setKeyWindow*(window: Window, value: bool) =
+  if window.isNil or window.xIsKeyWindow == value:
+    return
+  window.xIsKeyWindow = value
+  if value:
+    window.sendWindowDelegate(windowDidBecomeKey(), window)
+    emit window.didBecomeKeyWindow()
+  else:
+    window.sendWindowDelegate(windowDidResignKey(), window)
+    emit window.didResignKeyWindow()
+
+proc setMainWindow*(window: Window, value: bool) =
+  if window.isNil or window.xIsMainWindow == value:
+    return
+  window.xIsMainWindow = value
+  if value:
+    window.sendWindowDelegate(windowDidBecomeMain(), window)
+    emit window.didBecomeMainWindow()
+  else:
+    window.sendWindowDelegate(windowDidResignMain(), window)
+    emit window.didResignMainWindow()
+
+proc makeKeyAndOrderFront*(window: Window) =
+  window.xClosed = false
+  window.xVisibleRequested = true
+  window.setKeyWindow(true)
+  window.setMainWindow(true)
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setVisible(true)
+
+proc orderFront*(window: Window) =
+  window.makeKeyAndOrderFront()
+
+proc orderOut*(window: Window) =
+  window.xVisibleRequested = false
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setVisible(false)
+
+proc detachAuxiliaryWindow(owner, auxiliary: Window) =
+  if owner.isNil or auxiliary.isNil:
+    return
+  let idx = owner.xAuxiliaryWindows.find(auxiliary)
+  if idx >= 0:
+    owner.xAuxiliaryWindows.delete(idx)
+
+proc attachAuxiliaryWindow(owner, auxiliary: Window) =
+  if owner.isNil or auxiliary.isNil:
+    return
+  auxiliary.xOwnerWindow = owner
+  if auxiliary notin owner.xAuxiliaryWindows:
+    owner.xAuxiliaryWindows.add auxiliary
+
+proc beginSheet*(window: Window, sheet: Window) =
+  if window.isNil or sheet.isNil:
+    return
+  if not window.xSheet.isNil and window.xSheet != sheet:
+    window.endSheet(window.xSheet)
+  window.xSheet = sheet
+  sheet.xSheetParent = window
+  window.attachAuxiliaryWindow(sheet)
+  window.sendWindowDelegate(windowWillBeginSheet(), sheet)
+  sheet.makeKeyAndOrderFront()
+
+proc endSheet*(window: Window, sheet: Window = nil) =
+  if window.isNil:
+    return
+  let activeSheet = if sheet.isNil: window.xSheet else: sheet
+  if activeSheet.isNil:
+    return
+  if window.xSheet == activeSheet:
+    window.xSheet = nil
+  activeSheet.xSheetParent = nil
+  window.detachAuxiliaryWindow(activeSheet)
+  activeSheet.orderOut()
+  window.sendWindowDelegate(windowDidEndSheet(), activeSheet)
+
+proc attachedSheet*(window: Window): Window =
+  if window.isNil: nil else: window.xSheet
+
+proc sheetParent*(window: Window): Window =
+  if window.isNil: nil else: window.xSheetParent
+
+proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
+  let auxiliaries = window.xAuxiliaryWindows
+  window.xAuxiliaryWindows.setLen(0)
+  for auxiliary in auxiliaries:
+    if not auxiliary.isNil:
+      if not notifyDone:
+        auxiliary.xOnPopupDone = nil
+      auxiliary.xOwnerWindow = nil
+      auxiliary.close()
+
+proc hasActiveTransientSession*(window: Window): bool =
+  not window.isNil and window.xTransientSession.active
+
+proc transientDismissReason*(window: Window): DismissReason =
+  window.xLastTransientDismissReason
+
+proc restoreTransientFocus(window: Window, session: TransientSession) =
+  let restoreWindow = if session.restoreWindow.isNil: window else: session.restoreWindow
+  if restoreWindow.isNil or restoreWindow.isClosed:
+    return
+  if restoreWindow.isVisible:
+    restoreWindow.makeKeyAndOrderFront()
+  if not session.restoreResponder.isNil:
+    discard restoreWindow.makeFirstResponder(session.restoreResponder)
+
+proc finishTransientSession(
+    window: Window, reason: DismissReason, notifyDismiss: bool
+): bool =
+  if window.isNil or not window.xTransientSession.active:
+    return false
+  if reason != tdrOwnerClosed and not window.shouldDismissTransientSession(reason):
+    return false
+
+  let session = window.xTransientSession
+  window.xTransientSession = TransientSession()
+  window.xLastTransientDismissReason = reason
+  window.closeAuxiliaryWindows(notifyDone = false)
+
+  if notifyDismiss and not session.onDismiss.isNil:
+    session.onDismiss(reason)
+  emit window.didDismissTransientSession(reason)
+  if reason != tdrOwnerClosed:
+    window.restoreTransientFocus(session)
+  if not window.xContentView.isNil:
+    window.xContentView.setNeedsDisplay(true)
+  true
+
+proc beginTransientSession*(
+    window: Window,
+    owner: Responder,
+    transientWindow: Window = nil,
+    restoreResponder: Responder = nil,
+    onDismiss: TransientDismissHandler = nil,
+) =
+  if window.xTransientSession.active:
+    let session = window.xTransientSession
+    if session.ownerResponder != owner or session.transientWindow != transientWindow:
+      discard window.dismissTransientSession(tdrProgrammatic)
+
+  let resolvedRestore =
+    if restoreResponder.isNil: window.xFirstResponder else: restoreResponder
+  if not transientWindow.isNil:
+    window.attachAuxiliaryWindow(transientWindow)
+  window.xTransientSession = TransientSession(
+    active: true,
+    ownerResponder: owner,
+    transientWindow: transientWindow,
+    restoreWindow: window,
+    restoreResponder: resolvedRestore,
+    onDismiss: onDismiss,
+  )
+
+proc dismissTransientSession*(
+    window: Window, reason: DismissReason
+): bool {.discardable.} =
+  window.finishTransientSession(reason, notifyDismiss = true)
+
+proc endTransientSession*(
+    window: Window, reason = tdrProgrammatic
+): bool {.discardable.} =
+  window.finishTransientSession(reason, notifyDismiss = false)
+
+proc close*(window: Window) =
+  if window.isNil:
+    return
+  let shouldClose =
+    if window.xDelegate.isNil:
+      true
+    else:
+      window.xDelegate.trySendLocal(windowShouldClose(), window).get(true)
+  if not shouldClose:
+    return
+  window.sendWindowDelegate(windowWillClose(), window)
+  emit window.willClose()
+  let notifyPopupDone =
+    window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
+  discard window.saveFrameUsingName()
+  window.xClosed = true
+  window.xVisibleRequested = false
+  window.xIsKeyWindow = false
+  window.xIsMainWindow = false
+  if window.xTransientSession.active:
+    discard window.dismissTransientSession(tdrOwnerClosed)
+  else:
+    window.closeAuxiliaryWindows(notifyDone = false)
+  if not window.xOwnerWindow.isNil:
+    if window.xOwnerWindow.xSheet == window:
+      window.xOwnerWindow.xSheet = nil
+    window.xOwnerWindow.detachAuxiliaryWindow(window)
+    window.xOwnerWindow = nil
+  if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
+    window.xSheetParent.xSheet = nil
+    window.xSheetParent = nil
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.close()
+    window.xHostWindow = nil
+  if notifyPopupDone:
+    window.xOnPopupDone()
+  emit window.didClose()
+  window.sendWindowDelegate(windowDidClose(), window)
+
+proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
+  window.xOnPopupDone = handler
+
+proc newPopupWindow*(
+    owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
+): Window =
+  let frame = initRect(
+    anchorFrame.origin.x,
+    anchorFrame.origin.y + anchorFrame.size.height,
+    max(popupSize.width, 1.0'f32),
+    max(popupSize.height, 1.0'f32),
+  )
+  result = newWindow(title, frame)
+  result.xIsPopup = true
+  result.xPopupPlacement =
+    popupPlacement(anchorFrame, popupSize, owner.nativeContentScale())
+  if not owner.isNil:
+    owner.attachAuxiliaryWindow(result)
+    result.xPopupPresentation = owner.popupPresentation()
+    result.setInheritedAppearance(owner.effectiveAppearance())
+
+proc mouseDownAt*(
+  window: Window,
+  point: Point,
+  button = mbPrimary,
+  clickCount = 0,
+  modifiers: set[KeyModifier] = {},
+  timestamp = 0.0,
+): bool
+
+proc mouseUpAt*(
+  window: Window,
+  point: Point,
+  button = mbPrimary,
+  clickCount = 0,
+  modifiers: set[KeyModifier] = {},
+  timestamp = 0.0,
+): bool
+
+proc clickAt*(window: Window, point: Point): bool =
+  if not window.mouseDownAt(point):
+    return false
+  window.mouseUpAt(point)
+
+proc keyDispatchTarget(window: Window): Responder =
+  if not window.xFirstResponder.isNil:
+    return window.xFirstResponder
+  if window.xContentView.isNil:
+    return nil
+  Responder(window.xContentView)
+
+proc dispatchCommandInChain(
+    target: Responder, selector: CommandSelector, sender: DynamicAgent
+): EventDispatchResult =
+  let args = TryToPerformArgs(selector: selector, sender: sender)
+  var responder = target
+  while not responder.isNil:
+    if responder.tryToPerform(args):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc dispatchActionInChain*(
+    window: Window, selector: ActionSelector, sender: DynamicAgent
+): EventDispatchResult =
+  var target = window.keyDispatchTarget()
+  if target.isNil:
+    target = Responder(window)
+  dispatchCommandInChain(target, selector, sender)
+
+proc sendAction*(
+    window: Window,
+    selector: ActionSelector,
+    sender: DynamicAgent = nil,
+    target: DynamicAgent = nil,
+): bool =
+  if window.isNil:
+    return false
+  if not target.isNil:
+    return target.sendLocalIfHandled(selector, ActionArgs(sender: sender))
+  window.dispatchActionInChain(selector, sender).handled
+
+proc dispatchKeyCommand(
+    window: Window, target: Responder, event: events.KeyEvent
+): EventDispatchResult =
+  let command = window.xKeyBindings.commandFor(event)
+  if command.isNone:
+    return
+  dispatchCommandInChain(target, command.get(), DynamicAgent(target))
+
+proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
+  if window.isNil:
+    return false
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  if target.performKeyEquivalentInChain(event):
+    return true
+  window.dispatchKeyCommand(target, event).handled
+
+proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
+  if event.key == keyEscape:
+    if not window.xOwnerWindow.isNil:
+      return window.xOwnerWindow.dismissTransientSession(tdrEscape)
+    if window.hasActiveTransientSession():
+      return window.dismissTransientSession(tdrEscape)
+
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  if window.performKeyEquivalent(event):
+    return true
+  window.dispatchKeyEventInChain(target, event, keyDown()).handled
+
+proc dispatchKeyUp*(window: Window, event: events.KeyEvent): bool =
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  window.dispatchKeyEventInChain(target, event, keyUp()).handled
+
+proc dispatchFlagsChanged*(window: Window, event: events.KeyEvent): bool =
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  window.dispatchKeyEventInChain(target, event, flagsChanged()).handled
+
+proc syncNativeGeometry(window: Window): Size =
+  result = window.xHostWindow.logicalSize(window.xFrame.size)
+  if window.xFrame.size != result:
+    window.xFrame.size = result
+    if not window.xContentView.isNil:
+      window.xContentView.setFrame(initRect(0.0, 0.0, result.width, result.height))
+    discard window.saveFrameUsingName()
+
+proc renderNativeWindow*(window: Window) =
+  if window.isNil or not window.nativeReady:
+    return
+
+  window.xHostWindow.refreshContentScale()
+  let logicalSize = window.syncNativeGeometry()
+  var renders = window.buildRenders()
+  window.xHostWindow.render(renders, logicalSize)
+
+proc contentPoint(window: Window, windowPoint: Point): Point =
+  window.xContentView.pointFromWindow(windowPoint)
+
+proc contentHitTest(window: Window, contentPoint: Point): View =
+  if window.xContentView.isNil or not window.xContentView.pointInside(contentPoint):
+    return nil
+  window.xContentView.hitTest(contentPoint)
+
+proc localMouseEvent(
+    target, contentView: View, contentPoint: Point, event: MouseEvent
+): MouseEvent =
+  result = MouseEvent(
+    location: target.pointFromView(contentPoint, contentView),
+    button: event.button,
+    clickCount: event.clickCount,
+    modifiers: event.modifiers,
+    timestamp: event.timestamp,
+  )
+
+proc localScrollEvent(
+    target, contentView: View, contentPoint: Point, event: events.ScrollEvent
+): events.ScrollEvent =
+  result = events.ScrollEvent(
+    location: target.pointFromView(contentPoint, contentView),
+    deltaX: event.deltaX,
+    deltaY: event.deltaY,
+    phase: event.phase,
+    momentumPhase: event.momentumPhase,
+    modifiers: event.modifiers,
+    timestamp: event.timestamp,
+  )
+
+proc localKeyEvent(
+    target, contentView: View, contentPoint: Point, event: events.KeyEvent
+): events.KeyEvent =
+  event
+
+proc eventTimestamp(timestamp: float): float =
+  if timestamp > 0.0:
+    timestamp
+  else:
+    epochTime()
+
+proc isRepeatClick(window: Window, target: View, event: MouseEvent, now: float): bool =
+  if not window.xHasLastClick or window.xLastClickView != target or
+      window.xLastClickButton != event.button:
+    return false
+  if now - window.xLastClickTime > ClickInterval:
+    return false
+  abs(window.xLastClickPoint.x - event.location.x) <= ClickSlop and
+    abs(window.xLastClickPoint.y - event.location.y) <= ClickSlop
+
+proc nextClickCount(window: Window, target: View, event: MouseEvent): int =
+  let now = eventTimestamp(event.timestamp)
+  if event.clickCount > 0:
+    result = event.clickCount
+  elif window.isRepeatClick(target, event, now):
+    result = window.xLastClickCount + 1
+  else:
+    result = 1
+
+  window.xLastClickPoint = event.location
+  window.xLastClickButton = event.button
+  window.xLastClickView = target
+  window.xLastClickCount = result
+  window.xLastClickTime = now
+  window.xHasLastClick = true
+  window.xMouseClickCount = result
+
+proc dispatchEventInChain[A](
+    window: Window,
+    target: Responder,
+    contentPoint: Point,
+    event: A,
+    selector: Selector[A, bool],
+    localize: proc(target, contentView: View, contentPoint: Point, event: A): A,
+): EventDispatchResult =
+  var responder = target
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent = localize(View(responder), window.xContentView, contentPoint, event)
+    var handled = false
+    if responder.performLocal(selector, localEvent, handled) and handled:
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc dispatchMouseEventInChain(
+    window: Window,
+    target: View,
+    contentPoint: Point,
+    event: MouseEvent,
+    selector: MouseEventSelector,
+    stopBefore: Responder = nil,
+): EventDispatchResult =
+  ## Walks the responder chain from ``target`` outward.
+  ## The first responder method returning ``true`` ends dispatch.
+  ## ``false`` means "not handled", so we continue to ``nextResponder``.
+  var responder = Responder(target)
+  while not responder.isNil and responder != stopBefore:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        localMouseEvent(View(responder), window.xContentView, contentPoint, event)
+    var handled = false
+    if responder.performLocal(selector, localEvent, handled) and handled:
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc mouseHitPolicyInChain(
+    window: Window, target: View, contentPoint: Point, event: MouseEvent
+): tuple[policy: CellHitPolicy, responder: Responder] =
+  result.policy = chpDefault
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        localMouseEvent(View(responder), window.xContentView, contentPoint, event)
+    let policy = responder.trySendLocal(
+      mouseHitPolicy(),
+      MouseHitPolicyArgs(target: DynamicAgent(target), event: localEvent),
+    )
+    if policy.isSome and policy.get() != chpDefault:
+      result.policy = policy.get()
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc applyMouseHitPolicy(
+    window: Window,
+    responder: Responder,
+    target: View,
+    contentPoint: Point,
+    event: MouseEvent,
+): bool =
+  if responder.isNil:
+    return false
+  var localEvent = event
+  if responder of View:
+    localEvent =
+      localMouseEvent(View(responder), window.xContentView, contentPoint, event)
+  responder.sendLocalIfHandled(
+    applyMouseHitPolicy(),
+    MouseHitPolicyArgs(target: DynamicAgent(target), event: localEvent),
+  )
+
+proc dispatchScrollEventInChain(
+    window: Window, target: View, contentPoint: Point, event: events.ScrollEvent
+): EventDispatchResult =
+  var responder = Responder(target)
+  while not responder.isNil:
+    var localEvent = event
+    if responder of View:
+      localEvent =
+        localScrollEvent(View(responder), window.xContentView, contentPoint, event)
+
+    let wantsForwarded =
+      responder.trySendLocal(wantsForwardedScrollEvents(), localEvent)
+    if (wantsForwarded.isNone or not wantsForwarded.get()) and
+        responder.sendLocalIfHandled(scrollWheel(), localEvent):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc dispatchKeyEventInChain(
+    window: Window,
+    target: Responder,
+    event: events.KeyEvent,
+    selector: KeyEventSelector,
+): EventDispatchResult =
+  window.dispatchEventInChain(
+    target, initPoint(0.0, 0.0), event, selector, localKeyEvent
+  )
+
+proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchResult =
+  var responder = target
+  while not responder.isNil:
+    if responder.sendLocalIfHandled(insertText(), text):
+      result.handled = true
+      result.responder = responder
+      return
+    responder = responder.nextResponder()
+
+proc updateHoverView(
+    window: Window, target: View, contentPoint: Point, event: MouseEvent
+): bool =
+  if window.xMouseHoverView == target:
+    return false
+
+  let previous = window.xMouseHoverView
+  if not previous.isNil:
+    previous.hovered = false
+    let localEvent = previous.localMouseEvent(window.xContentView, contentPoint, event)
+    result = previous.handleMouse(mouseExited(), localEvent)
+
+  window.xMouseHoverView = target
+  if not target.isNil:
+    target.hovered = true
+    let localEvent = target.localMouseEvent(window.xContentView, contentPoint, event)
+    result = target.handleMouse(mouseEntered(), localEvent) or result
+
+proc responderChainContains(responder, owner: Responder): bool =
+  if responder.isNil or owner.isNil:
+    return false
+  var current = responder
+  while not current.isNil:
+    if current == owner:
+      return true
+    current = current.nextResponder()
+  false
+
+proc shouldDismissTransientForMouse(window: Window, target: View): bool =
+  if window.isNil or not window.xTransientSession.active:
+    return false
+  let session = window.xTransientSession
+  if not session.transientWindow.isNil:
+    return true
+  if target.isNil:
+    return true
+  not responderChainContains(Responder(target), session.ownerResponder)
+
+proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
+  if pressed and window.hasActiveTransientSession() and window.xContentView.isNil:
+    discard window.dismissTransientSession(tdrOutsideClick)
+    return true
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  var dispatchEvent = event
+  var target: View
+  var stopBefore: Responder
+  if pressed:
+    target = window.contentHitTest(contentPoint)
+    if window.shouldDismissTransientForMouse(target):
+      discard window.dismissTransientSession(tdrOutsideClick)
+      return true
+    if target.isNil:
+      return false
+    dispatchEvent.clickCount = window.nextClickCount(target, event)
+    let hitPolicy = window.mouseHitPolicyInChain(target, contentPoint, dispatchEvent)
+    case hitPolicy.policy
+    of chpDefault:
+      discard
+    of chpIgnore:
+      return true
+    of chpSelectRow:
+      if hitPolicy.responder of View:
+        target = View(hitPolicy.responder)
+    of chpTrackCell:
+      window.xMousePolicyStopResponder = hitPolicy.responder
+    of chpSelectAndTrack:
+      discard window.applyMouseHitPolicy(
+        hitPolicy.responder, target, contentPoint, dispatchEvent
+      )
+      window.xMousePolicyStopResponder = hitPolicy.responder
+    window.xMouseCaptureView = target
+    if target.acceptsFirstResponder():
+      discard window.setFirstResponder(target, focusVisible = false)
+  else:
+    target = window.xMouseCaptureView
+    if target.isNil:
+      target = window.contentHitTest(contentPoint)
+    window.xMouseCaptureView = nil
+    stopBefore = window.xMousePolicyStopResponder
+    window.xMousePolicyStopResponder = nil
+    if target.isNil:
+      window.setMouseActiveView(nil)
+      return false
+    if dispatchEvent.clickCount <= 0:
+      dispatchEvent.clickCount = max(window.xMouseClickCount, 1)
+
+  let selector =
+    case event.button
+    of mbPrimary:
+      if pressed:
+        mouseDown()
+      else:
+        mouseUp()
+    of mbSecondary:
+      if pressed:
+        rightMouseDown()
+      else:
+        rightMouseUp()
+    of mbOther:
+      if pressed:
+        otherMouseDown()
+      else:
+        otherMouseUp()
+
+  if pressed:
+    let dispatch = window.dispatchMouseEventInChain(
+      target, contentPoint, dispatchEvent, selector, window.xMousePolicyStopResponder
+    )
+    result = dispatch.handled
+    if dispatch.handled and dispatch.responder of View:
+      window.setMouseActiveView(View(dispatch.responder))
+    else:
+      window.setMouseActiveView(nil)
+  else:
+    let dispatch = window.dispatchMouseEventInChain(
+      target, contentPoint, dispatchEvent, selector, stopBefore
+    )
+    result = dispatch.handled
+    window.setMouseActiveView(nil)
+    window.xMouseClickCount = 0
+
+proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  var target: View
+  if dragging:
+    target = window.xMouseCaptureView
+    if target.isNil:
+      target = window.contentHitTest(contentPoint)
+  else:
+    target = window.contentHitTest(contentPoint)
+
+  if not dragging:
+    result = window.updateHoverView(target, contentPoint, event)
+
+  if target.isNil:
+    return result
+
+  if dragging:
+    let selector =
+      case event.button
+      of mbPrimary:
+        mouseDragged()
+      of mbSecondary:
+        rightMouseDragged()
+      of mbOther:
+        otherMouseDragged()
+    result = window.dispatchMouseEventInChain(
+      target, contentPoint, event, selector, window.xMousePolicyStopResponder
+    ).handled
+  else:
+    result =
+      window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()).handled or
+      result
+
+proc dispatchHelpRequested*(window: Window, event: MouseEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.contentHitTest(contentPoint)
+  if target.isNil:
+    return false
+  window.dispatchMouseEventInChain(target, contentPoint, event, helpRequested()).handled
+
+proc dispatchCursorUpdate*(window: Window, event: MouseEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.contentHitTest(contentPoint)
+  if target.isNil:
+    return false
+  window.dispatchMouseEventInChain(target, contentPoint, event, cursorUpdate()).handled
+
+proc dispatchUpdateTrackingAreas*(window: Window, event: MouseEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  let contentPoint = window.contentPoint(event.location)
+  let target = window.contentHitTest(contentPoint)
+  if target.isNil:
+    return false
+
+  window.dispatchMouseEventInChain(target, contentPoint, event, updateTrackingAreas()).handled
+
+proc dispatchScrollWheel*(window: Window, event: events.ScrollEvent): bool =
+  if window.xContentView.isNil:
+    return false
+  var contentPoint = window.contentPoint(event.location)
+  var target = window.contentHitTest(contentPoint)
+  if event.momentumPhase == sepBegan:
+    window.xMomentumScrollTarget = target
+    window.xMomentumScrollContentPoint = contentPoint
+  elif event.momentumPhase != sepNone and not window.xMomentumScrollTarget.isNil:
+    target = window.xMomentumScrollTarget
+    contentPoint = window.xMomentumScrollContentPoint
+  elif event.momentumPhase == sepNone:
+    window.xMomentumScrollTarget = nil
+  if target.isNil:
+    return false
+  result = window.dispatchScrollEventInChain(target, contentPoint, event).handled
+  if event.momentumPhase in {sepEnded, sepCancelled}:
+    window.xMomentumScrollTarget = nil
+
+proc mouseDownAt*(
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.dispatchMouseButton(
+    MouseEvent(
+      location: point,
+      button: button,
+      clickCount: clickCount,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    true,
+  )
+
+proc mouseUpAt*(
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.dispatchMouseButton(
+    MouseEvent(
+      location: point,
+      button: button,
+      clickCount: clickCount,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    false,
+  )
+
+proc rightMouseDownAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseDownAt(point, mbSecondary, clickCount, modifiers, timestamp)
+
+proc rightMouseUpAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseUpAt(point, mbSecondary, clickCount, modifiers, timestamp)
+
+proc otherMouseDownAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseDownAt(point, mbOther, clickCount, modifiers, timestamp)
+
+proc otherMouseUpAt*(
+    window: Window,
+    point: Point,
+    clickCount = 0,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.mouseUpAt(point, mbOther, clickCount, modifiers, timestamp)
+
+proc scrollWheelAt*(
+    window: Window,
+    point: Point,
+    deltaX = 0.0'f32,
+    deltaY = 0.0'f32,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.dispatchScrollWheel(
+    events.ScrollEvent(
+      location: point,
+      deltaX: deltaX,
+      deltaY: deltaY,
+      phase: sepChanged,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    )
+  )
+
+proc mouseMovedAt*(
+    window: Window, point: Point, modifiers: set[KeyModifier] = {}, timestamp = 0.0
+): bool =
+  window.dispatchMouseMove(
+    MouseEvent(
+      location: point,
+      button: mbPrimary,
+      clickCount: 0,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    dragging = false,
+  )
+
+proc mouseDraggedAt*(
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  window.dispatchMouseMove(
+    MouseEvent(
+      location: point,
+      button: button,
+      clickCount: 0,
+      modifiers: modifiers,
+      timestamp: eventTimestamp(timestamp),
+    ),
+    dragging = true,
+  )
+
+proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
+  discard window.dispatchMouseButton(event, pressed)
+  discard window.requestNativeDisplayUpdateIfNeeded()
+
+proc dispatchHostMouseMove(window: Window, event: MouseEvent, dragging: bool) =
+  discard window.dispatchMouseMove(event, dragging)
+  discard window.requestNativeDisplayUpdateIfNeeded()
+
+proc dispatchHostScroll(window: Window, event: events.ScrollEvent) =
+  discard window.dispatchScrollWheel(event)
+  discard window.requestNativeDisplayUpdateIfNeeded()
+
+proc dispatchHostKey(window: Window, event: HostKeyEvent) =
+  if event.pressed and event.isEscape:
+    if not window.xOwnerWindow.isNil:
+      discard window.xOwnerWindow.dismissTransientSession(tdrEscape)
+    elif window.hasActiveTransientSession():
+      discard window.dismissTransientSession(tdrEscape)
+    else:
+      window.close()
+    discard window.requestNativeDisplayUpdateIfNeeded()
+    return
+  if event.isModifierChange:
+    discard window.dispatchFlagsChanged(event.event)
+  elif event.pressed:
+    discard window.dispatchKeyDown(event.event)
+  else:
+    discard window.dispatchKeyUp(event.event)
+  discard window.requestNativeDisplayUpdateIfNeeded()
+
+proc dispatchHostTextInput(window: Window, text: string) =
+  if text.len == 0:
+    return
+  discard dispatchTextInputInChain(window.keyDispatchTarget(), text)
+  discard window.requestNativeDisplayUpdateIfNeeded()
+
+proc dispatchHostFocusChanged(window: Window, focused: bool) =
+  if focused and not window.xIsPopup and window.hasActiveTransientSession():
+    discard window.dismissTransientSession(tdrFocusChange)
+  discard window.requestNativeDisplayUpdateIfNeeded()
+
+proc markHostClosed(window: Window) =
+  window.xClosed = true
+  window.xVisibleRequested = false
+  if window.xTransientSession.active:
+    discard window.dismissTransientSession(tdrOwnerClosed)
+  else:
+    window.closeAuxiliaryWindows(notifyDone = false)
+  if not window.xOwnerWindow.isNil:
+    window.xOwnerWindow.detachAuxiliaryWindow(window)
+    window.xOwnerWindow = nil
+
+proc ensureNativeWindow*(window: Window) =
+  if window.xHostWindow.isReady:
+    return
+
+  let callbacks = HostWindowCallbacks(
+    onClose: proc() =
+      window.markHostClosed(),
+    onResize: proc() =
+      discard window.syncNativeGeometry(),
+    onMove: proc(pos: Point) =
+      window.xFrame.origin = pos
+      discard window.saveFrameUsingName(),
+    onMouseButton: proc(event: MouseEvent, pressed: bool) =
+      window.dispatchHostMouseButton(event, pressed),
+    onMouseMove: proc(event: MouseEvent, dragging: bool) =
+      window.dispatchHostMouseMove(event, dragging),
+    onScroll: proc(event: events.ScrollEvent) =
+      window.dispatchHostScroll(event),
+    onKey: proc(event: HostKeyEvent) =
+      window.dispatchHostKey(event),
+    onTextInput: proc(text: string) =
+      window.dispatchHostTextInput(text),
+    onRender: proc() =
+      window.renderNativeWindow(),
+    onFocusChanged: proc(focused: bool) =
+      window.dispatchHostFocusChanged(focused),
+    onPopupDone: proc() =
+      window.markHostClosed()
+      if not window.xOnPopupDone.isNil:
+        window.xOnPopupDone()
+    ,
+  )
+  if window.xIsPopup:
+    if window.xOwnerWindow.isNil:
+      return
+    window.xOwnerWindow.ensureNativeWindow()
+    if not window.xOwnerWindow.nativeReady:
+      return
+    window.xHostWindow = createPopupHostWindow(
+      window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
+    )
+  else:
+    window.xHostWindow = createHostWindow(window.xFrame, window.xTitle, callbacks)
+  if window.xVisibleRequested:
+    window.xHostWindow.setVisible(true)
+
+proc pumpNativeWindowFrame*(window: Window) =
+  if window.isNil or not window.xVisibleRequested or window.xClosed:
+    return
+  window.ensureNativeWindow()
+  discard window.requestNativeDisplayUpdateIfNeeded()
+  if window.xHostWindow.isReady:
+    window.xHostWindow.pump()
+  var idx = 0
+  while idx < window.xAuxiliaryWindows.len:
+    let auxiliary = window.xAuxiliaryWindows[idx]
+    if auxiliary.isNil or auxiliary.isClosed:
+      window.xAuxiliaryWindows.delete(idx)
+      continue
+    if auxiliary.isVisible:
+      auxiliary.pumpNativeWindowFrame()
+    inc idx
+
+proc rawInputToLogical*(
+    rawPos: siwinshim.Vec2, inputSize: siwinshim.IVec2, logicalSize: siwinshim.Vec2
+): siwinshim.Vec2 =
+  nimkitBackend.rawInputToLogical(rawPos, inputSize, logicalSize)

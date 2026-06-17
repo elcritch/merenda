@@ -1,0 +1,496 @@
+import ../drawing/drawing
+import ./scrollergeometry
+import ../foundation/selectors
+import ../drawing/theme
+import ../foundation/events
+import ../foundation/types
+import ../view/viewgeometry
+import ../view/views
+
+export views
+
+type
+  ClipView* = ref object of View
+
+  Scroller* = ref object of View
+    xScrollView: ScrollView
+    xAxis: LayoutAxis
+    xTracking: ScrollerTrackingState
+
+  ScrollView* = ref object of View
+    xClipView: ClipView
+    xDocumentView: View
+    xScroller: array[LayoutAxis, Scroller]
+    xHasScroller: array[LayoutAxis, bool]
+    xAutohidesScrollers: bool
+    xScrollerThickness: float32
+    xLineScroll: float32
+
+func normalizedScrollerThickness(value: float32): float32 =
+  max(value, 0.0'f32)
+
+func normalizedLineScroll(value: float32): float32 =
+  max(value, 1.0'f32)
+
+proc contentOffset*(scrollView: ScrollView): Point
+proc horizontalScrollerRect*(scrollView: ScrollView): Rect
+proc verticalScrollerRect*(scrollView: ScrollView): Rect
+proc drawScroller*(context: DrawContext, track, knob: Rect)
+
+func visibleScrollerAxes(
+    boundsSize, documentSize: Size,
+    hasHorizontal, hasVertical, autohides: bool,
+    thickness: float32,
+): set[LayoutAxis] =
+  var
+    visible: set[LayoutAxis] = {}
+    viewport = boundsSize
+
+  for _ in 0 ..< 3:
+    let
+      nextHorizontal =
+        hasHorizontal and (not autohides or documentSize.width > viewport.width)
+      nextVertical =
+        hasVertical and (not autohides or documentSize.height > viewport.height)
+      nextVisible =
+        (if nextHorizontal: {laHorizontal} else: {}) +
+        (if nextVertical: {laVertical} else: {})
+    if nextVisible == visible:
+      return visible
+    visible = nextVisible
+    viewport = initSize(
+      max(boundsSize.width - (if laVertical in visible: thickness else: 0.0'f32), 0.0),
+      max(
+        boundsSize.height - (if laHorizontal in visible: thickness else: 0.0'f32), 0.0
+      ),
+    )
+
+  visible
+
+proc documentSize*(scrollView: ScrollView): Size =
+  if scrollView.isNil or scrollView.xDocumentView.isNil:
+    initSize(0.0, 0.0)
+  else:
+    scrollView.xDocumentView.frame().size
+
+proc contentSize*(scrollView: ScrollView): Size =
+  scrollView.documentSize()
+
+proc visibleScrollerAxes(scrollView: ScrollView): set[LayoutAxis] =
+  visibleScrollerAxes(
+    scrollView.bounds().size,
+    scrollView.documentSize(),
+    scrollView.xHasScroller[laHorizontal],
+    scrollView.xHasScroller[laVertical],
+    scrollView.xAutohidesScrollers,
+    scrollView.xScrollerThickness,
+  )
+
+proc viewportSize*(scrollView: ScrollView): Size =
+  let visible = scrollView.visibleScrollerAxes()
+  initSize(
+    max(
+      scrollView.bounds().size.width -
+        (if laVertical in visible: scrollView.xScrollerThickness else: 0.0'f32),
+      0.0'f32,
+    ),
+    max(
+      scrollView.bounds().size.height -
+        (if laHorizontal in visible: scrollView.xScrollerThickness else: 0.0'f32),
+      0.0'f32,
+    ),
+  )
+
+proc viewportRect*(scrollView: ScrollView): Rect =
+  initRect(initPoint(0.0, 0.0), scrollView.viewportSize())
+
+proc maximumContentOffset*(scrollView: ScrollView): Point =
+  let
+    documentSize = scrollView.documentSize()
+    viewportSize = scrollView.viewportSize()
+  initPoint(
+    max(documentSize.width - viewportSize.width, 0.0'f32),
+    max(documentSize.height - viewportSize.height, 0.0'f32),
+  )
+
+func clampedScrollFraction(value: float32): float32 =
+  min(max(value, 0.0'f32), 1.0'f32)
+
+proc contentOffsetForFraction*(
+    scrollView: ScrollView, x = AutoMetric, y = AutoMetric
+): Point =
+  let maximumOffset = scrollView.maximumContentOffset()
+  result = scrollView.contentOffset()
+  if not x.isAutoMetric:
+    result.x = maximumOffset.x * clampedScrollFraction(x)
+  if not y.isAutoMetric:
+    result.y = maximumOffset.y * clampedScrollFraction(y)
+
+proc contentOffsetForFraction*(scrollView: ScrollView, fraction: Point): Point =
+  scrollView.contentOffsetForFraction(fraction.x, fraction.y)
+
+proc clampContentOffset(scrollView: ScrollView, offset: Point): Point =
+  let
+    viewportSize = scrollView.viewportSize()
+    documentSize = scrollView.documentSize()
+    horizontal = initScrollViewport(0.0, viewportSize.width, documentSize.width)
+    vertical = initScrollViewport(0.0, viewportSize.height, documentSize.height)
+  initPoint(
+    horizontal.clampScrollOffset(offset.x), vertical.clampScrollOffset(offset.y)
+  )
+
+proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
+  if scrollView.isNil or scrollView.xClipView.isNil:
+    return
+  let nextBounds =
+    initRect(scrollView.clampContentOffset(offset), scrollView.viewportSize())
+  if scrollView.xClipView.bounds() != nextBounds:
+    scrollView.xClipView.bounds = nextBounds
+    scrollView.setNeedsDisplay(true)
+
+proc tile*(scrollView: ScrollView) =
+  if scrollView.isNil or scrollView.xClipView.isNil:
+    return
+  let visibleAxes = scrollView.visibleScrollerAxes()
+  scrollView.xClipView.frame = scrollView.viewportRect()
+  scrollView.setClipViewBoundsOrigin(scrollView.contentOffset())
+  if not scrollView.xScroller[laHorizontal].isNil:
+    scrollView.xScroller[laHorizontal].frame = scrollView.horizontalScrollerRect()
+    scrollView.xScroller[laHorizontal].hidden = laHorizontal notin visibleAxes
+  if not scrollView.xScroller[laVertical].isNil:
+    scrollView.xScroller[laVertical].frame = scrollView.verticalScrollerRect()
+    scrollView.xScroller[laVertical].hidden = laVertical notin visibleAxes
+
+proc clipView*(scrollView: ScrollView): ClipView =
+  if scrollView.isNil: nil else: scrollView.xClipView
+
+proc contentView*(scrollView: ScrollView): View =
+  scrollView.clipView()
+
+proc horizontalScroller*(scrollView: ScrollView): Scroller =
+  if scrollView.isNil:
+    nil
+  else:
+    scrollView.xScroller[laHorizontal]
+
+proc verticalScroller*(scrollView: ScrollView): Scroller =
+  if scrollView.isNil:
+    nil
+  else:
+    scrollView.xScroller[laVertical]
+
+proc documentView*(scrollView: ScrollView): View =
+  if scrollView.isNil: nil else: scrollView.xDocumentView
+
+proc `documentView=`*(scrollView: ScrollView, documentView: View) =
+  if scrollView.isNil or scrollView.xDocumentView == documentView:
+    return
+  if not scrollView.xDocumentView.isNil:
+    scrollView.xDocumentView.removeFromSuperview()
+  scrollView.xDocumentView = documentView
+  if not documentView.isNil:
+    scrollView.xClipView.addSubview(documentView)
+  scrollView.tile()
+  scrollView.invalidateContainerMetrics()
+  scrollView.setNeedsDisplay(true)
+
+proc contentOffset*(scrollView: ScrollView): Point =
+  if scrollView.isNil or scrollView.xClipView.isNil:
+    initPoint(0.0, 0.0)
+  else:
+    scrollView.clampContentOffset(scrollView.xClipView.bounds().origin)
+
+proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
+  scrollView.tile()
+  let nextOffset = scrollView.clampContentOffset(offset)
+  if scrollView.xClipView.bounds().origin == nextOffset:
+    return
+  scrollView.setClipViewBoundsOrigin(nextOffset)
+
+proc scrollTo*(scrollView: ScrollView, offset: Point) =
+  scrollView.contentOffset = offset
+
+proc scrollToFraction*(scrollView: ScrollView, x = AutoMetric, y = AutoMetric) =
+  scrollView.scrollTo(scrollView.contentOffsetForFraction(x, y))
+
+proc scrollToFraction*(scrollView: ScrollView, fraction: Point) =
+  scrollView.scrollToFraction(fraction.x, fraction.y)
+
+proc scrollBy*(scrollView: ScrollView, delta: Point) =
+  let current = scrollView.contentOffset()
+  scrollView.contentOffset = initPoint(current.x + delta.x, current.y + delta.y)
+
+proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
+  let
+    currentOffset = scrollView.contentOffset()
+    viewportSize = scrollView.viewportSize()
+    viewport = initRect(currentOffset, viewportSize)
+  var nextOffset = currentOffset
+
+  if rect.minX < viewport.minX:
+    nextOffset.x = rect.minX
+  elif rect.maxX > viewport.maxX:
+    nextOffset.x = rect.maxX - viewport.size.width
+
+  if rect.minY < viewport.minY:
+    nextOffset.y = rect.minY
+  elif rect.maxY > viewport.maxY:
+    nextOffset.y = rect.maxY - viewport.size.height
+
+  nextOffset = scrollView.clampContentOffset(nextOffset)
+  result = nextOffset != currentOffset
+  if result:
+    scrollView.contentOffset = nextOffset
+
+proc scrollWheelDelta*(scrollView: ScrollView, event: ScrollEvent): Point =
+  initPoint(
+    event.deltaX * scrollView.xLineScroll, -event.deltaY * scrollView.xLineScroll
+  )
+
+proc scrollWheelWouldMove(scrollView: ScrollView, event: ScrollEvent): bool =
+  let
+    delta = scrollView.scrollWheelDelta(event)
+    currentOffset = scrollView.contentOffset()
+    nextOffset = scrollView.clampContentOffset(
+      initPoint(currentOffset.x + delta.x, currentOffset.y + delta.y)
+    )
+  nextOffset != currentOffset
+
+proc scrollerMetricsChanged(scrollView: ScrollView) =
+  scrollView.tile()
+  scrollView.invalidateContainerMetrics()
+  scrollView.setNeedsDisplay(true)
+
+proc hasScroller*(scrollView: ScrollView, axis: LayoutAxis): bool =
+  not scrollView.isNil and scrollView.xHasScroller[axis]
+
+proc setHasScroller*(scrollView: ScrollView, axis: LayoutAxis, value: bool) =
+  if scrollView.isNil or scrollView.xHasScroller[axis] == value:
+    return
+  scrollView.xHasScroller[axis] = value
+  scrollView.scrollerMetricsChanged()
+
+proc hasHorizontalScroller*(scrollView: ScrollView): bool =
+  scrollView.hasScroller(laHorizontal)
+
+proc `hasHorizontalScroller=`*(scrollView: ScrollView, value: bool) =
+  scrollView.setHasScroller(laHorizontal, value)
+
+proc hasVerticalScroller*(scrollView: ScrollView): bool =
+  scrollView.hasScroller(laVertical)
+
+proc `hasVerticalScroller=`*(scrollView: ScrollView, value: bool) =
+  scrollView.setHasScroller(laVertical, value)
+
+proc autohidesScrollers*(scrollView: ScrollView): bool =
+  not scrollView.isNil and scrollView.xAutohidesScrollers
+
+proc `autohidesScrollers=`*(scrollView: ScrollView, value: bool) =
+  if scrollView.isNil or scrollView.xAutohidesScrollers == value:
+    return
+  scrollView.xAutohidesScrollers = value
+  scrollView.scrollerMetricsChanged()
+
+proc scrollerThickness*(scrollView: ScrollView): float32 =
+  if scrollView.isNil: 0.0'f32 else: scrollView.xScrollerThickness
+
+proc `scrollerThickness=`*(scrollView: ScrollView, value: float32) =
+  let nextValue = value.normalizedScrollerThickness()
+  if scrollView.xScrollerThickness == nextValue:
+    return
+  scrollView.xScrollerThickness = nextValue
+  scrollView.scrollerMetricsChanged()
+
+proc lineScroll*(scrollView: ScrollView): float32 =
+  if scrollView.isNil: 0.0'f32 else: scrollView.xLineScroll
+
+proc `lineScroll=`*(scrollView: ScrollView, value: float32) =
+  scrollView.xLineScroll = value.normalizedLineScroll()
+
+proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
+  if scrollView.isNil or laHorizontal notin scrollView.visibleScrollerAxes():
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let viewport = scrollView.viewportRect()
+  initRect(
+    0.0, viewport.size.height, viewport.size.width, scrollView.xScrollerThickness
+  )
+
+proc verticalScrollerRect*(scrollView: ScrollView): Rect =
+  if scrollView.isNil or laVertical notin scrollView.visibleScrollerAxes():
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let viewport = scrollView.viewportRect()
+  initRect(
+    viewport.size.width, 0.0, scrollView.xScrollerThickness, viewport.size.height
+  )
+
+proc scrollerTrackRect*(scroller: Scroller): Rect =
+  scroller.bounds()
+
+proc scrollerKnobRect*(scroller: Scroller): Rect =
+  if scroller.isNil or scroller.xScrollView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let
+    track = scroller.scrollerTrackRect()
+    scrollView = scroller.xScrollView
+    viewport = scrollView.viewportSize()
+    document = scrollView.documentSize()
+    offset = scrollView.contentOffset()
+
+  case scroller.xAxis
+  of laHorizontal:
+    scrollerKnobRect(
+      track, laHorizontal, initScrollViewport(offset.x, viewport.width, document.width)
+    )
+  of laVertical:
+    scrollerKnobRect(
+      track, laVertical, initScrollViewport(offset.y, viewport.height, document.height)
+    )
+
+proc drawScroller*(context: DrawContext, track, knob: Rect) =
+  if track.isEmpty:
+    return
+  discard context.addRenderRectangle(
+    context.renderRectFor(track),
+    fill(initColor(0.88, 0.90, 0.94, 0.70)),
+    initColor(0.67, 0.71, 0.78, 0.80),
+    1.0'f32,
+    3.0'f32,
+  )
+  if not knob.isEmpty:
+    discard context.addRenderRectangle(
+      context.renderRectFor(knob.inset(initEdgeInsets(2.0))),
+      fill(initColor(0.36, 0.42, 0.50, 0.65)),
+      initColor(0.24, 0.29, 0.36, 0.50),
+      1.0'f32,
+      3.0'f32,
+    )
+
+proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32) =
+  var nextOffset = scrollView.contentOffset()
+  case axis
+  of laHorizontal:
+    nextOffset.x = offset
+  of laVertical:
+    nextOffset.y = offset
+  scrollView.contentOffset = nextOffset
+
+proc scrollKnobTo(scroller: Scroller, point: Point) =
+  if scroller.isNil or scroller.xScrollView.isNil:
+    return
+  let
+    knobOrigin = scroller.xTracking.knobOriginForPoint(scroller.xAxis, point)
+    track = scroller.scrollerTrackRect()
+    knob = scroller.scrollerKnobRect()
+    maxOffset = scroller.xScrollView.maximumContentOffset().axisOffset(scroller.xAxis)
+  scroller.xScrollView.setContentOffset(
+    scroller.xAxis,
+    contentOffsetForScrollerKnobOrigin(
+      track, knob, scroller.xAxis, maxOffset, knobOrigin
+    ),
+  )
+
+proc scrollPageToward(scroller: Scroller, point: Point) =
+  if scroller.isNil or scroller.xScrollView.isNil:
+    return
+  let
+    knob = scroller.scrollerKnobRect()
+    pointOnAxis = point.axisOffset(scroller.xAxis)
+  if knob.isEmpty or (
+    pointOnAxis >= knob.axisOrigin(scroller.xAxis) and
+    pointOnAxis < knob.axisMax(scroller.xAxis)
+  ):
+    return
+
+  let
+    direction = if pointOnAxis < knob.axisOrigin(scroller.xAxis): -1.0'f32 else: 1.0'f32
+    scrollView = scroller.xScrollView
+    currentOffset = scrollView.contentOffset().axisOffset(scroller.xAxis)
+    page = scrollView.viewportSize().axisSize(scroller.xAxis)
+  scrollView.setContentOffset(scroller.xAxis, currentOffset + direction * page)
+
+protocol DefaultScrollViewLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(scrollView: ScrollView): IntrinsicSize =
+    NoIntrinsicContentSize
+
+  method layoutSubviews(scrollView: ScrollView) =
+    scrollView.tile()
+
+protocol DefaultScrollerDrawing of ViewDrawingProtocol:
+  method draw(scroller: Scroller, context: DrawContext) =
+    context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
+
+protocol DefaultScrollerEvents of ResponderEventProtocol:
+  method mouseDown(scroller: Scroller, event: MouseEvent): bool =
+    if event.button != mbPrimary or scroller.isNil or scroller.xScrollView.isNil:
+      return false
+    let
+      track = scroller.scrollerTrackRect()
+      knob = scroller.scrollerKnobRect()
+    if scroller.xTracking.beginScrollerTracking(
+      track, knob, scroller.xAxis, event.location
+    ):
+      return true
+    if track.contains(event.location):
+      scroller.scrollPageToward(event.location)
+      return true
+    false
+
+  method mouseDragged(scroller: Scroller, event: MouseEvent): bool =
+    if event.button == mbPrimary and not scroller.isNil and
+        scroller.xTracking.isDraggingKnob():
+      scroller.scrollKnobTo(event.location)
+      return true
+    false
+
+  method mouseUp(scroller: Scroller, event: MouseEvent): bool =
+    if event.button != mbPrimary:
+      return false
+    if scroller.xTracking.isDraggingKnob():
+      scroller.scrollKnobTo(event.location)
+    scroller.xTracking.endScrollerTracking()
+    true
+
+protocol DefaultScrollViewEvents of ResponderEventProtocol:
+  method wantsForwardedScrollEvents(scrollView: ScrollView, event: ScrollEvent): bool =
+    not scrollView.scrollWheelWouldMove(event)
+
+  method scrollWheel(scrollView: ScrollView, event: ScrollEvent): bool =
+    if scrollView.scrollWheelWouldMove(event):
+      scrollView.scrollBy(scrollView.scrollWheelDelta(event))
+      return true
+
+proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
+  result = Scroller()
+  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.hidden = true
+  result.xScrollView = scrollView
+  result.xAxis = axis
+  discard result.withProtocol(DefaultScrollerDrawing)
+  discard result.withProtocol(DefaultScrollerEvents)
+
+proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
+  initViewFields(scrollView, frame)
+  scrollView.background = initColor(0.98, 0.985, 0.995, 1.0)
+  scrollView.clipsToBounds = true
+  scrollView.xHasScroller[laHorizontal] = false
+  scrollView.xHasScroller[laVertical] = false
+  scrollView.xAutohidesScrollers = true
+  scrollView.xScrollerThickness = 12.0'f32
+  scrollView.xLineScroll = 16.0'f32
+  scrollView.xClipView = ClipView()
+  initViewFields(scrollView.xClipView, scrollView.viewportRect())
+  scrollView.xClipView.background = initColor(0.0, 0.0, 0.0, 0.0)
+  scrollView.xClipView.clipsToBounds = true
+  scrollView.xScroller[laHorizontal] = initScroller(scrollView, laHorizontal)
+  scrollView.xScroller[laVertical] = initScroller(scrollView, laVertical)
+  scrollView.addSubview(scrollView.xClipView)
+  scrollView.addSubview(scrollView.xScroller[laHorizontal])
+  scrollView.addSubview(scrollView.xScroller[laVertical])
+  discard scrollView.withProtocol(DefaultScrollViewLayout)
+  discard scrollView.withProtocol(DefaultScrollViewEvents)
+
+proc newScrollView*(frame: Rect = AutoRect, documentView: View = nil): ScrollView =
+  result = ScrollView()
+  result.initScrollViewFields(frame)
+  result.documentView = documentView
