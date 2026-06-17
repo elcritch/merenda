@@ -9,16 +9,40 @@ type CustomDrawView = ref object of View
 
 var customDrawCount: int
 
+const ExtraChromeName = "render-extra-chrome"
+
+let ExtraChromeFill = fill(initColor(0.72, 0.10, 0.48, 1.0))
+
+type ExtraChrome = ref object of Chrome
+
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
     inc customDrawCount
     context.addRectangle(initRect(4, 5, 20, 10), initColor(0.8, 0.1, 0.1))
     context.addText(initRect(4, 5, 20, 10), "C", initColor(1, 1, 1))
 
+protocol ExtraChromeProtocol of ChromeProtocol:
+  method drawChromeExtrasFor(
+      chrome: ExtraChrome,
+      context: DrawContext,
+      chromeContext: ChromeContext,
+      extras: ChromeExtras,
+  ) =
+    discard chrome
+    discard chromeContext
+    discard context.addRenderRectangle(
+      extras.parent, extras.rect.inset(initEdgeInsets(5.0)), ExtraChromeFill
+    )
+
 proc newCustomDrawView(frame: nimkitTypes.Rect): CustomDrawView =
   result = CustomDrawView()
   initViewFields(result, frame)
   discard result.withProtocol(CustomDrawing)
+
+proc newExtraChrome(): Chrome =
+  let chrome = ExtraChrome()
+  discard chrome.withProtocol(ExtraChromeProtocol)
+  Chrome(chrome)
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -362,6 +386,34 @@ suite "nimkit rendering":
 
     check buttonChildCount == 0
     check okTextLayerCount == 1
+
+  test "buildRenders uses installed chrome extras selected per button":
+    let
+      root = newView(frame = initRect(0, 0, 260, 120))
+      normalButton = newButton("Default", frame = initRect(20, 20, 100, 32))
+      specialButton = newButton("Special", frame = initRect(140, 20, 100, 32))
+
+    specialButton.styleId = "special"
+    root.addSubview(normalButton)
+    root.addSubview(specialButton)
+
+    var theme = initTheme()
+    theme.installChrome(ExtraChromeName, newExtraChrome())
+    theme[initStyleSelector(srButton, id = "special"), StyleChrome] =
+      styleKeyword(ExtraChromeName)
+
+    let
+      list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+      expectedExtraRect =
+        specialButton.rectToWindow(specialButton.bounds).inset(initEdgeInsets(5.0))
+
+    var extraFound = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill == ExtraChromeFill and
+          node.renderedRect().rectsClose(expectedExtraRect):
+        extraFound = true
+
+    check extraFound
 
   test "buildRenders centers push button text by default":
     let

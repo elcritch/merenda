@@ -1,5 +1,7 @@
 import std/unittest
 
+import sigils/core
+
 import merenda/nimkit
 
 func brightness(color: Color): float32 =
@@ -63,6 +65,23 @@ func aquaComboItemSelectedFill(): Fill =
     104'u8,
   )
 
+const CustomChromeName = "custom-widget-chrome"
+
+let CustomChromeFill = fill(initColor(0.42, 0.10, 0.74, 1.0))
+
+type CustomFillChrome = ref object of Chrome
+
+protocol CustomFillChromeProtocol of ChromeProtocol:
+  method chromeFillFor(chrome: CustomFillChrome, context: ChromeContext): Fill =
+    discard chrome
+    discard context
+    CustomChromeFill
+
+proc newCustomFillChrome(): Chrome =
+  let chrome = CustomFillChrome()
+  discard chrome.withProtocol(CustomFillChromeProtocol)
+  Chrome(chrome)
+
 suite "nimkit theme":
   test "edge insets shrink rectangles without negative sizes":
     check initRect(10, 20, 100, 50).inset(initEdgeInsets(2, 4, 6, 8)) ==
@@ -103,6 +122,28 @@ suite "nimkit theme":
       ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
       ssFocusWithin, ssSelected, ssOpen, ssAlternating, ssPressed, ssAccent,
     }
+
+  test "chrome delegates install by name and selectors choose per widget":
+    var theme = initTheme()
+    theme.installChrome(CustomChromeName, newCustomFillChrome())
+    theme[initStyleSelector(srButton, id = "special"), StyleChrome] =
+      styleKeyword(CustomChromeName)
+
+    let
+      appearance = initAppearance(theme)
+      normalContext = initControlStyleContext(srButton)
+      specialContext = initControlStyleContext(srButton, id = "special")
+      baseFill = fill(initColor(0.12, 0.20, 0.34, 1.0))
+
+    check appearance.hasChrome(CustomChromeName)
+    check appearance.resolveChromeName(normalContext) == AquaChromeName
+    check appearance.resolveChromeName(specialContext) == CustomChromeName
+    check appearance.chromeFill(
+      chromeContext(CustomChromeName, crButton, cpFace, baseFill)
+    ) == CustomChromeFill
+    check appearance.chromeFill(
+      chromeContext("missing-widget-chrome", crButton, cpFace, baseFill)
+    ) == baseFill
 
   test "style token store resolves typed values and nested references":
     let
@@ -272,6 +313,8 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingInset < 0.0
     check buttonStyle.box.focusRingColor.a > 0.0
     check buttonStyle.box.focusRingColor != buttonStyle.box.fill.centerColor()
+    check appearance.hasChrome(DefaultChromeName)
+    check appearance.hasChrome(AquaChromeName)
     check defaultButtonStyle.chrome == AquaChromeName
     check appearance.resolveChromeName(initControlStyleContext(srTab)) == AquaChromeName
     check appearance.resolveChromeName(initControlStyleContext(srTabPanel)) ==

@@ -232,7 +232,7 @@ proc drawPushButtonFace(
     radius = style.box.cornerRadius
     buttonRoot = context.addRenderRectangle(
       absoluteFrame,
-      chrome.chromeFill(),
+      context.appearance.chromeFill(chrome),
       style.box.borderColor,
       style.box.borderWidth,
       radius,
