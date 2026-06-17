@@ -2,6 +2,7 @@ import std/options
 
 import sigils/selectors
 
+import ./chrome
 import ./controls
 import ./drawing
 import ./events
@@ -959,6 +960,67 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
   method draw(button: PopupMenuButton, context: DrawContext) =
     let states = button.widgetStateSet()
     let isPullDown = button.hasStyleClass("pullDown")
+    if not isPullDown:
+      let
+        style = context.appearance.resolveComboBoxStyle(
+          initControlStyleContext(
+            srComboBox, states, id = button.styleId, classes = button.styleClasses
+          )
+        )
+        absoluteFrame = context.renderRectFor(button.bounds)
+        faceChrome =
+          chromeContext(style.chrome, crComboBox, cpFace, style.box.fill, states)
+        faceRoot = context.addRenderRectangle(
+          absoluteFrame,
+          context.appearance.chromeFill(faceChrome),
+          style.box.borderColor,
+          style.box.borderWidth,
+          style.box.cornerRadius,
+          style.box.shadows,
+          maskContent = true,
+        )
+      context.drawChromeExtras(
+        faceChrome,
+        initChromeExtras(faceRoot, absoluteFrame, cornerRadius = style.box.cornerRadius),
+      )
+      if button.isFocusVisible:
+        context.addFocusRing(absoluteFrame, style.box)
+
+      let
+        arrowRect = style.comboBoxArrowRect(button.bounds)
+        arrowFrame = context.renderRectFor(arrowRect)
+        arrowChrome =
+          chromeContext(style.chrome, crComboBox, cpArrow, style.box.fill, states)
+        separatorRect = initRect(
+          arrowRect.origin.x,
+          arrowRect.origin.y + 2.0'f32,
+          1.0'f32,
+          max(arrowRect.size.height - 4.0'f32, 0.0'f32),
+        )
+        separatorChrome = chromeContext(
+          style.chrome, crComboBox, cpSeparator, fill(style.box.borderColor), states
+        )
+        arrowRoot = context.addRenderRectangle(
+          faceRoot,
+          arrowFrame,
+          context.appearance.chromeFill(arrowChrome),
+          initColor(0.0, 0.0, 0.0, 0.0),
+          0.0'f32,
+        )
+      context.drawChromeExtras(
+        arrowChrome, initChromeExtras(arrowRoot, arrowFrame, cornerRadius = 0.0'f32)
+      )
+      discard context.addRenderRectangle(
+        faceRoot,
+        context.renderRectFor(separatorRect),
+        context.appearance.chromeFill(separatorChrome),
+      )
+      context.addComboBoxDoubleArrow(arrowRoot, arrowFrame, style.arrowColor)
+      context.addText(
+        style.comboBoxTextRect(button.bounds), button.title(), style.text.color
+      )
+      return
+
     let fillColor =
       if isPullDown and (ssOpen in states or ssActive in states):
         initColor(0.58, 0.66, 0.82)

@@ -259,14 +259,26 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         )
       )
       let indicatorRect = style.choiceIndicatorRect(button.bounds)
+      let
+        indicatorFrame = context.renderRectFor(indicatorRect)
+        indicatorChrome = chromeContext(
+          style.chrome, crChoiceIndicator, cpFace, style.indicator.fill, states
+        )
 
-      discard context.addRenderRectangle(
-        context.renderRectFor(indicatorRect),
-        style.indicator.fill,
+      let indicatorRoot = context.addRenderRectangle(
+        indicatorFrame,
+        context.appearance.chromeFill(indicatorChrome),
         style.indicator.borderColor,
         style.indicator.borderWidth,
         style.indicator.cornerRadius,
         style.indicator.shadows,
+        maskContent = true,
+      )
+      context.drawChromeExtras(
+        indicatorChrome,
+        initChromeExtras(
+          indicatorRoot, indicatorFrame, cornerRadius = style.indicator.cornerRadius
+        ),
       )
       if selected:
         if button.buttonType == btCheckBox and button.state == bsOn:

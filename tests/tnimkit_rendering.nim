@@ -31,7 +31,10 @@ protocol ExtraChromeProtocol of ChromeProtocol:
     discard chrome
     discard chromeContext
     discard context.addRenderRectangle(
-      extras.parent, extras.rect.inset(initEdgeInsets(5.0)), ExtraChromeFill
+      extras.layer,
+      extras.parent,
+      extras.rect.inset(initEdgeInsets(5.0)),
+      ExtraChromeFill,
     )
 
 proc newCustomDrawView(frame: nimkitTypes.Rect): CustomDrawView =
@@ -205,6 +208,7 @@ suite "nimkit rendering":
     appearance[srButton, StyleTextInsets] = initEdgeInsets(5.0, 18.0, 7.0, 22.0)
     appearance[srButton, StyleMinimumSize] = initSize(0.0, 46.0)
     appearance[srCheckBox, StyleFill] = checkFill
+    appearance[srCheckBox, StyleChrome] = styleKeyword(DefaultChromeName)
     appearance[srCheckBox, StyleIndicatorSize] = 20.0
     appearance[srCheckBox, StyleIndicatorSpacing] = 11.0
     appearance[srCheckBox, StyleTextInsets] = initEdgeInsets(3.0, 8.0, 5.0, 10.0)
@@ -415,6 +419,62 @@ suite "nimkit rendering":
 
     check extraFound
 
+  test "buildRenders uses installed chrome extras for choices and combo popups":
+    let
+      root = newView(frame = initRect(0, 0, 240, 150))
+      checkbox = newCheckBox("Choice", frame = initRect(12, 16, 120, 24))
+      combo = newComboBox(["One", "Two"], frame = initRect(12, 52, 120, 26))
+
+    checkbox.styleId = "special-choice"
+    combo.styleId = "special-combo"
+    combo.selectedIndex = 0
+    combo.openPopup()
+    root.addSubview(checkbox)
+    root.addSubview(combo)
+
+    var theme = initTheme()
+    theme.installChrome(ExtraChromeName, newExtraChrome())
+    theme[initStyleSelector(srCheckBox, id = "special-choice"), StyleChrome] =
+      styleKeyword(ExtraChromeName)
+    theme[initStyleSelector(srComboBox, id = "special-combo"), StyleChrome] =
+      styleKeyword(ExtraChromeName)
+
+    let
+      appearance = initAppearance(theme)
+      checkStyle = appearance.resolveChoiceButtonStyle(
+        initControlStyleContext(
+          srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses
+        )
+      )
+      expectedChoiceExtra = checkbox
+        .rectToWindow(checkStyle.choiceIndicatorRect(checkbox.bounds))
+        .inset(initEdgeInsets(5.0))
+      expectedComboExtra = combo.rectToWindow(combo.bounds).inset(initEdgeInsets(5.0))
+      expectedPopupExtra =
+        combo.rectToWindow(combo.popupRect(combo.bounds)).inset(initEdgeInsets(5.0))
+      renders = buildRenders(root, appearance)
+
+    var
+      choiceExtraFound = false
+      comboExtraFound = false
+      popupExtraFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill == ExtraChromeFill:
+        if node.renderedRect().rectsClose(expectedChoiceExtra):
+          choiceExtraFound = true
+        if node.renderedRect().rectsClose(expectedComboExtra):
+          comboExtraFound = true
+
+    for node in renders[PopupDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill == ExtraChromeFill and
+          node.renderedRect().rectsClose(expectedPopupExtra):
+        popupExtraFound = true
+
+    check choiceExtraFound
+    check comboExtraFound
+    check popupExtraFound
+
   test "buildRenders centers push button text by default":
     let
       root = newView(frame = initRect(0, 0, 160, 80))
@@ -556,8 +616,8 @@ suite "nimkit rendering":
           node.screenBox.y == 28.0 and node.screenBox.w == 180.0 and
           node.screenBox.h == 74.0 and node.stroke.weight == 1.0:
         panelFound = true
-        check node.corners[dcTopLeft] == 4'u16
-        check node.corners[dcTopRight] == 4'u16
+        check node.corners[dcTopLeft] == 6'u16
+        check node.corners[dcTopRight] == 6'u16
       if node.kind == nkRectangle and node.screenBox.x == 19.0 and
           node.screenBox.y == 65.0 and node.screenBox.w == 162.0 and
           node.screenBox.h == 1.0:
@@ -820,6 +880,7 @@ suite "nimkit rendering":
     for role in [srCheckBox, srRadioButton]:
       theme[role, {ssSelected}, StyleFill] = selectedFill
       theme[role, {ssSelected}, StyleMarkColor] = markFill
+      theme[role, StyleChrome] = styleKeyword(DefaultChromeName)
       theme[role, StyleIndicatorSize] = 12.0
       theme[role, StyleIndicatorSpacing] = 5.0
       theme[role, StyleTextInsets] = initEdgeInsets(0.0, 3.0)

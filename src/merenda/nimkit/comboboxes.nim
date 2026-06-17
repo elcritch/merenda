@@ -2,6 +2,7 @@ import std/options
 
 import sigils/core
 
+import ./chrome
 import ./controls
 import ./listbasics
 import ./popuplists
@@ -292,10 +293,21 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
         srComboBox, styleStates, id = comboBox.styleId, classes = comboBox.styleClasses
       )
     )
+    let comboChrome =
+      chromeContext(style.chrome, crComboBox, cpFace, style.box.fill, styleStates)
 
-    discard context.addRenderRectangle(
-      absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
-      style.box.cornerRadius, style.box.shadows,
+    let comboRoot = context.addRenderRectangle(
+      absoluteFrame,
+      context.appearance.chromeFill(comboChrome),
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      style.box.shadows,
+      maskContent = true,
+    )
+    context.drawChromeExtras(
+      comboChrome,
+      initChromeExtras(comboRoot, absoluteFrame, cornerRadius = style.box.cornerRadius),
     )
     if comboBox.isFocusVisible:
       context.addFocusRing(absoluteFrame, style.box)
@@ -303,25 +315,33 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
     let
       arrowRect = style.comboBoxArrowRect(comboBox.bounds)
       arrowFrame = context.renderRectFor(arrowRect)
-      arrowFill =
-        if comboBox.isButtonPressed or comboBox.popupOpen:
-          linear(
-            initColor(0.86, 0.93, 1.0, 1.0), initColor(0.56, 0.76, 0.96, 1.0), fgaY
-          )
-        else:
-          linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.83, 0.90, 0.98, 1.0), fgaY)
+      arrowChrome =
+        chromeContext(style.chrome, crComboBox, cpArrow, style.box.fill, styleStates)
       separatorRect = initRect(
         arrowRect.origin.x,
         arrowRect.origin.y + 2.0'f32,
         1.0'f32,
         max(arrowRect.size.height - 4.0'f32, 0.0'f32),
       )
-    discard
-      context.addRenderRectangle(arrowFrame, arrowFill, style.box.borderColor, 0.0'f32)
-    discard context.addRenderRectangle(
-      context.renderRectFor(separatorRect), style.box.borderColor, style.box.borderColor
+      separatorChrome = chromeContext(
+        style.chrome, crComboBox, cpSeparator, fill(style.box.borderColor), styleStates
+      )
+    let arrowRoot = context.addRenderRectangle(
+      comboRoot,
+      arrowFrame,
+      context.appearance.chromeFill(arrowChrome),
+      initColor(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
     )
-    context.addComboBoxArrow(arrowFrame, style.arrowColor)
+    context.drawChromeExtras(
+      arrowChrome, initChromeExtras(arrowRoot, arrowFrame, cornerRadius = 0.0'f32)
+    )
+    discard context.addRenderRectangle(
+      comboRoot,
+      context.renderRectFor(separatorRect),
+      context.appearance.chromeFill(separatorChrome),
+    )
+    context.addComboBoxArrow(arrowRoot, arrowFrame, style.arrowColor)
     context.addText(
       style.comboBoxTextRect(comboBox.bounds), comboBox.stringValue, style.text.color
     )

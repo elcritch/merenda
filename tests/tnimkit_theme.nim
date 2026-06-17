@@ -316,6 +316,9 @@ suite "nimkit theme":
     check appearance.hasChrome(DefaultChromeName)
     check appearance.hasChrome(AquaChromeName)
     check defaultButtonStyle.chrome == AquaChromeName
+    check checkBoxStyle.chrome == AquaChromeName
+    check radioStyle.chrome == AquaChromeName
+    check comboBoxStyle.chrome == AquaChromeName
     check appearance.resolveChromeName(initControlStyleContext(srTab)) == AquaChromeName
     check appearance.resolveChromeName(initControlStyleContext(srTabPanel)) ==
       AquaChromeName
@@ -431,6 +434,8 @@ suite "nimkit theme":
     check comboBoxStyle.arrowColor == initColor(0.16, 0.15, 0.15, 1.0)
     check comboBoxItemStyle.box.fill == initColor(0.19, 0.38, 0.35, 1.0)
     check buttonStyle.chrome == DefaultChromeName
+    check checkBoxStyle.chrome == DefaultChromeName
+    check comboBoxStyle.chrome == DefaultChromeName
     check buttonStyle.textHighlightColor.a == 0.0
     check buttonStyle.textShadowColor.a == 0.0
     check theme.resolveChromeName(tabStyle) == DefaultChromeName

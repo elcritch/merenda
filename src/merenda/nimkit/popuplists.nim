@@ -2,6 +2,7 @@ from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 import std/options
 
+import ./chrome
 import ./controls
 import ./drawing
 import ./listbasics
@@ -287,19 +288,30 @@ proc drawPopupList*(
         popupList.xPopupRole, states, id = popupList.styleId(), classes = classes
       )
     )
+    popupFrame = context.renderRectFor(popupBounds)
+    popupChrome =
+      chromeContext(popupStyle.chrome, crPopupList, cpFace, popupStyle.box.fill, states)
     popupRoot = context.addRenderRectangle(
       layer,
       parent,
-      context.renderRectFor(popupBounds),
-      fill(initColor(0.985, 0.985, 0.975)),
-      initColor(0.36, 0.37, 0.39),
+      popupFrame,
+      appearance.chromeFill(popupChrome),
+      popupStyle.box.borderColor,
       max(popupStyle.box.borderWidth, 1.0'f32),
-      4.0'f32,
-      [dropShadow(initColor(0.0, 0.0, 0.0, 0.22), y = 3.0, blur = 8.0)],
+      popupStyle.box.cornerRadius,
+      popupStyle.box.shadows,
+      maskContent = true,
     )
     first = popupList.firstIndex()
     visible = popupList.visibleItemCount()
     total = popupList.itemCount()
+
+  context.drawChromeExtras(
+    popupChrome,
+    initChromeExtras(
+      popupRoot, popupFrame, layer = layer, cornerRadius = popupStyle.box.cornerRadius
+    ),
+  )
 
   for visibleIndex in 0 ..< visible:
     let itemIndex = first + visibleIndex
