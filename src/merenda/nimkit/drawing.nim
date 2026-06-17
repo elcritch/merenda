@@ -62,6 +62,7 @@ proc rectangleNode(
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
     clips = false,
+    maskContent = false,
 ): Fig =
   result = Fig(
     kind: nkRectangle,
@@ -70,7 +71,9 @@ proc rectangleNode(
     corners: cornerRadii(cornerRadius),
     stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
-  if clips:
+  if maskContent:
+    result.flags.incl NfRectMaskContent
+  elif clips:
     result.flags.incl NfClipContent
   for idx in 0 ..< min(shadows.len, result.shadows.len):
     result.shadows[idx] = shadows[idx].toFigShadow()
@@ -265,12 +268,14 @@ proc addWindowRectangle*(
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
     clips = false,
+    maskContent = false,
 ): FigIdx {.discardable.} =
   context.addFig(
     layer,
     parent,
     rectangleNode(
-      rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows, clips
+      rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows, clips,
+      maskContent,
     ),
   )
 
@@ -284,10 +289,11 @@ proc addWindowRectangle*(
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
     clips = false,
+    maskContent = false,
 ): FigIdx {.discardable.} =
   context.addWindowRectangle(
     DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
-    shadows, clips,
+    shadows, clips, maskContent,
   )
 
 proc addWindowRectangle*(
@@ -299,10 +305,11 @@ proc addWindowRectangle*(
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
     clips = false,
+    maskContent = false,
 ): FigIdx {.discardable.} =
   context.addWindowRectangle(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
-    clips,
+    clips, maskContent,
   )
 
 proc addRectangle*(

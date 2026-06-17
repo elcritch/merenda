@@ -241,9 +241,8 @@ suite "nimkit rendering":
       case node.kind
       of nkText:
         let text = node.renderedText()
-        if text == "Metric":
+        if text == "Metric" and node.renderedRect().rectsClose(expectedButtonText):
           buttonTextFound = true
-          check node.renderedRect().rectsClose(expectedButtonText)
         elif text == "Choice":
           checkTextFound = true
           check node.renderedRect().rectsClose(expectedCheckText)
@@ -265,6 +264,64 @@ suite "nimkit rendering":
     check checkIndicatorFound
     check fieldTextFound
     check comboTextFound
+
+  test "buildRenders draws Aqua push button layers":
+    let
+      root = newView(frame = initRect(0, 0, 180, 90))
+      button = newButton("OK", frame = initRect(20, 24, 120, 32))
+
+    root.addSubview(button)
+
+    let
+      style = button.effectiveAppearance().resolveButtonStyle(
+          initControlStyleContext(
+            srButton, id = button.styleId, classes = button.styleClasses
+          )
+        )
+      expectedButtonRect = button.rectToWindow(button.bounds)
+      expectedTextRect = button.rectToWindow(style.buttonTextRect(button.bounds))
+      list = buildRenders(root)[DefaultDrawLevel]
+
+    var buttonRoot = (-1).FigIdx
+    for idx, node in list.nodes:
+      if node.kind == nkRectangle and node.fill == style.box.fill and
+          node.renderedRect().rectsClose(expectedButtonRect):
+        buttonRoot = idx.FigIdx
+        check NfRectMaskContent in node.flags
+        check node.stroke.weight == style.box.borderWidth
+        check node.stroke.fill.kind == flColor
+        check node.stroke.fill.color == style.box.borderColor.rgba
+
+    check buttonRoot != (-1).FigIdx
+
+    var innerRoot = (-1).FigIdx
+    for idx in childIndex(list.nodes, buttonRoot):
+      let node = list.nodes[int(idx)]
+      if node.kind == nkRectangle and NfRectMaskContent in node.flags and
+          node.fill.kind == flLinear2:
+        innerRoot = idx
+
+    check innerRoot != (-1).FigIdx
+
+    var glossFound = false
+    for idx in childIndex(list.nodes, innerRoot):
+      let node = list.nodes[int(idx)]
+      if node.kind == nkRectangle and node.fill.kind == flLinear2 and
+          node.fill.lin2.start.a > 0'u8 and node.fill.lin2.stop.a == 0'u8:
+        glossFound = true
+
+    var
+      okTextLayerCount = 0
+      mainTextFound = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "OK":
+        inc okTextLayerCount
+        if node.renderedRect().rectsClose(expectedTextRect):
+          mainTextFound = true
+
+    check glossFound
+    check okTextLayerCount >= 3
+    check mainTextFound
 
   test "buildRenders centers push button text by default":
     let
