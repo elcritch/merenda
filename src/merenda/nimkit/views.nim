@@ -9,6 +9,7 @@ import ./theme
 import ./viewgeometry
 import ./viewprotos
 import ./viewbase
+import ./accessibilityprotocols
 
 export responders
 export viewbase except
@@ -394,6 +395,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xBackgroundColor = initColor(0.94, 0.95, 0.97, 1.0)
   discard view.withProto()
   discard view.withProtocol(DefaultViewResponder)
+  discard view.withProtocol(DefaultAccessibilityProtocol)
   view.observeProtocol(view, ViewSuperviewLifecycleSlots)
 
 proc newView*(frame: Rect = AutoRect): View =

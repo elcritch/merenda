@@ -141,6 +141,15 @@ type
     xStyleId*: string
     xStyleClasses*: seq[string]
     xWidgetStates*: set[WidgetState]
+    xHasAccessibilityRole*: bool
+    xAccessibilityRole*: AccessibilityRole
+    xAccessibilityElement*: bool
+    xAccessibilityIgnored*: bool
+    xAccessibilityLabel*: string
+    xAccessibilityValue*: string
+    xAccessibilityHelp*: string
+    xAccessibilityIdentifier*: string
+    xAccessibilityTraits*: AccessibilityTraits
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
     xAutoresizingMask*: AutoresizingMask
