@@ -19,7 +19,19 @@ type NestedScrollFixture = object
   parent: ScrollView
   document: View
 
+type OverlayDrawView = ref object of View
+
 const GeometryTolerance = 0.01'f32
+const OverlayDrawLevel = 75.ZLevel
+
+protocol OverlayDrawing of ViewDrawingProtocol:
+  method drawLevel(view: OverlayDrawView): ZLevel =
+    OverlayDrawLevel
+
+proc newOverlayDrawView(frame: nimkitTypes.Rect): OverlayDrawView =
+  result = OverlayDrawView()
+  initViewFields(result, frame)
+  discard result.withProtocol(OverlayDrawing)
 
 func nearlyEqual(a, b: float32): bool =
   abs(a - b) <= GeometryTolerance
@@ -806,6 +818,56 @@ suite "nimkit scroll views":
     checkRectNearlyEqual(buttonScrolledWindowRect, initRect(40, 90, 100, 26))
     check headingChromeIndex >= 0
     check buttonChromeIndex >= 0
+
+  test "scrolled non-default draw level descendant uses active translation":
+    let
+      root = newView(frame = initRect(0, 0, 220, 160))
+      document = newView(frame = initRect(0, 0, 260, 220))
+      overlay = newOverlayDrawView(initRect(60, 50, 30, 20))
+      scrollView =
+        newScrollView(frame = initRect(20, 30, 120, 80), documentView = document)
+
+    overlay.background = initColor(0.6, 0.2, 0.8, 1.0)
+    document.addSubview(overlay)
+    root.addSubview(scrollView)
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.contentOffset = initPoint(40, 30)
+
+    let
+      renders = buildRenders(root)
+      defaultNodes = renders[DefaultDrawLevel]
+      overlayNodes = renders[OverlayDrawLevel]
+      expectedOverlayRenderRect = initRect(40, 50, 30, 20)
+      expectedOverlayVisibleRect = initRect(40, 50, 30, 20)
+      overlayIndex = overlayNodes.findRectNode(
+        expectedOverlayRenderRect, fill(initColor(0.6, 0.2, 0.8, 1.0).rgba)
+      )
+
+    var scrollTransformIndex = -1
+    for idx, node in defaultNodes.nodes:
+      if node.kind == nkTransform and node.transform.translation.x == -40.0 and
+          node.transform.translation.y == -30.0:
+        scrollTransformIndex = idx
+
+    check scrollTransformIndex >= 0
+    check OverlayDrawLevel in renders
+    check overlayIndex >= 0
+    if overlayIndex >= 0:
+      check overlayNodes.nodes[overlayIndex].parent.int == -1
+      check overlayNodes.rootIds.contains(overlayIndex.FigIdx)
+
+      let overlayVisibility =
+        renders.figVisibility(OverlayDrawLevel, overlayIndex.FigIdx)
+      check overlayVisibility.visible
+      check overlayVisibility.bounds.x.nearlyEqual(expectedOverlayVisibleRect.origin.x)
+      check overlayVisibility.bounds.y.nearlyEqual(expectedOverlayVisibleRect.origin.y)
+      check overlayVisibility.bounds.w.nearlyEqual(
+        expectedOverlayVisibleRect.size.width
+      )
+      check overlayVisibility.bounds.h.nearlyEqual(
+        expectedOverlayVisibleRect.size.height
+      )
 
   test "horizontal scroll renders scrollers above demo document content":
     let
