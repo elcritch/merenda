@@ -177,13 +177,18 @@ proc contentRect*(tabView: TabView): Rect =
       max(bounds.size.height - DefaultTabHeight + ContentBorderWidth, 0.0'f32),
     )
 
-proc contentViewRect*(tabView: TabView): Rect =
-  let rect = tabView.contentRect()
-  case tabView.tabPosition()
+func contentViewInsets(position: TabPosition): EdgeInsets =
+  case position
   of tpTop:
-    rect.inset(initEdgeInsets(18.0'f32, 16.0'f32, 14.0'f32, 16.0'f32))
+    initEdgeInsets(18.0'f32, 16.0'f32, 14.0'f32, 16.0'f32)
   of tpBottom:
-    rect.inset(initEdgeInsets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32))
+    initEdgeInsets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32)
+
+func contentChromeHeight(position: TabPosition): float32 =
+  DefaultTabHeight - ContentBorderWidth + position.contentViewInsets().vertical
+
+proc contentViewRect*(tabView: TabView): Rect =
+  tabView.contentRect().inset(tabView.tabPosition().contentViewInsets())
 
 proc tabBarFrame(tabView: TabView): Rect =
   if tabView.isNil:
@@ -268,6 +273,17 @@ proc selectedContentView(tabView: TabView): View =
     nil
   else:
     item.view()
+
+proc contentIntrinsicHeight(tabView: TabView): float32 =
+  if tabView.isNil:
+    return
+  for item in tabView.xItems:
+    let content = item.view()
+    if content.isNil:
+      continue
+    let measured = content.trySendLocal(layoutIntrinsicContentSize(), ())
+    if measured.isSome and measured.get().hasHeight:
+      result = max(result, measured.get().height)
 
 proc detachItemView(tabView: TabView, item: TabViewItem) =
   if tabView.isNil or item.isNil or item.xView.isNil:
@@ -375,6 +391,7 @@ proc addTabViewItem*(tabView: TabView, item: TabViewItem): TabViewItem {.discard
   if tabView.isNil or item.isNil:
     return nil
   tabView.xItems.add item
+  tabView.invalidateIntrinsicContentSize()
   if tabView.xSelectedIndex < 0 and item.enabled():
     tabView.xSelectedIndex = tabView.xItems.high
     tabView.syncSelectedContent()
@@ -389,6 +406,7 @@ proc insertTabViewItem*(
     return nil
   let boundedIndex = min(index.int, tabView.xItems.len)
   tabView.xItems.insert(item, boundedIndex)
+  tabView.invalidateIntrinsicContentSize()
   if tabView.xSelectedIndex >= boundedIndex:
     inc tabView.xSelectedIndex
   elif tabView.xSelectedIndex < 0 and item.enabled():
@@ -403,6 +421,7 @@ proc removeTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
   let removingSelected = index == tabView.xSelectedIndex
   tabView.detachItemView(tabView.xItems[index])
   tabView.xItems.delete(index)
+  tabView.invalidateIntrinsicContentSize()
   if tabView.xItems.len == 0:
     tabView.xSelectedIndex = -1
   elif removingSelected:
@@ -607,7 +626,11 @@ protocol TabViewLayout of ViewLayoutProtocol:
     var tabWidthSum = TabInset * 2.0'f32
     for item in tabView.xItems:
       tabWidthSum += item.tabWidth() + TabGap
-    initIntrinsicSize(max(tabWidthSum, 160.0'f32), 120.0'f32)
+    let contentHeight = tabView.contentIntrinsicHeight()
+    initIntrinsicSize(
+      max(tabWidthSum, 160.0'f32),
+      max(120.0'f32, contentHeight + tabView.tabPosition.contentChromeHeight()),
+    )
 
 protocol TabViewEvents of ResponderEventProtocol:
   method keyDown(tabView: TabView, event: KeyEvent): bool =

@@ -211,6 +211,36 @@ suite "nimkit tab views":
     check tabView.contentRect.origin.y == 0.0
     check tabView.tabRect(0).origin.y == tabView.contentRect.maxY - 1.0
 
+  test "tab view intrinsic height includes child pane content":
+    let
+      tabView = newTabView(frame = initRect(0, 0, 320, 180))
+      pane = newStackView(laVertical)
+
+    pane.edgeInsets = initEdgeInsets(18.0, 20.0)
+    pane.spacing = 12.0
+    pane.alignment = svaFill
+    pane.addArrangedSubview(newHeadingLabel("Account"))
+    pane.addArrangedSubview(newFormLabel("Display Name"))
+    pane.addArrangedSubview(newTextField("Ada Lovelace"))
+    pane.addArrangedSubview(newFormLabel("Email"))
+    pane.addArrangedSubview(newTextField("ada@example.com"))
+    pane.addArrangedSubview(newCheckBox("Sync preferences across devices"))
+    pane.addArrangedSubview(newButton("Save Account"))
+    discard tabView.addTabViewItem(newTabViewItem("Account", pane))
+
+    let
+      paneHeight = pane
+        .resolvedIntrinsicContentSize()
+        .resolveIntrinsicSize(initSize(0.0, 0.0)).height
+      tabHeight = tabView
+        .resolvedIntrinsicContentSize()
+        .resolveIntrinsicSize(initSize(0.0, 0.0)).height
+
+    check tabHeight > 120.0'f32
+    tabView.frame = initRect(0, 0, 320, tabHeight)
+    tabView.layoutSubtreeIfNeeded()
+    check pane.frame.size.height >= paneHeight - 0.01'f32
+
   test "tab view renders panel tab labels and selected content":
     let
       tabView = newTabView(frame = initRect(0, 0, 320, 180))
