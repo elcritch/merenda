@@ -104,6 +104,57 @@ type
     btCheckBox
     btRadio
 
+  AccessibilityRole* = enum
+    arUnknown
+    arApplication
+    arWindow
+    arGroup
+    arStaticText
+    arButton
+    arCheckBox
+    arRadioButton
+    arTextField
+    arList
+    arListItem
+    arTable
+    arCell
+    arImage
+    arLink
+    arMenu
+    arMenuItem
+    arPopupButton
+    arComboBox
+    arScrollArea
+    arSlider
+    arTabGroup
+    arTab
+
+  AccessibilityTrait* = enum
+    atButton
+    atImage
+    atLink
+    atHeader
+    atSelected
+    atFocused
+    atDisabled
+    atAdjustable
+    atEditable
+    atSelectable
+    atModal
+    atUpdatesFrequently
+
+  AccessibilityTraits* = set[AccessibilityTrait]
+
+  AccessibilityNotification* = enum
+    anCreated
+    anDestroyed
+    anLayoutChanged
+    anFocusedUIElementChanged
+    anValueChanged
+    anSelectionChanged
+    anExpandedChanged
+    anLiveRegionChanged
+
   PopupPresentation* = enum
     ppAutomatic ## Use popup windows when available and inline rendering otherwise.
     ppWindow ## Use a separate popup window only.

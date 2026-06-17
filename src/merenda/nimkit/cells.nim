@@ -1,4 +1,5 @@
 import ./selectors
+import ./accessibility
 import ./fieldeditors
 import ./texttypes
 import ./textviews
@@ -191,6 +192,7 @@ proc setState*(cell: Cell, state: ButtonState) =
     return
   cell.xState = normalized
   cell.invalidateControlMetrics()
+  cell.controlView().postAccessibilityNotification(anValueChanged)
 
 proc allowsMixedState*(cell: Cell): bool =
   (not cell.isNil) and cell.xAllowsMixedState

@@ -5,6 +5,7 @@ from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
 import sigils/core
 
+import ./accessibility
 import ./backend as nimkitBackend
 import ./keybindings
 import ./rendering as nimkitRendering
@@ -789,6 +790,8 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
     previousResponder.didResignFirstResponder()
   if not nextResponder.isNil:
     nextResponder.didBecomeFirstResponder()
+  if responder of View:
+    View(responder).postAccessibilityNotification(anFocusedUIElementChanged)
   emit window.didChangeFirstResponder(previousResponder)
   true
 

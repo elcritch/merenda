@@ -1,3 +1,4 @@
+import ./accessibility
 import ./controls
 import ./chrome
 import ./selectors
@@ -200,6 +201,46 @@ proc buttonPerformClick(button: Button, args: ActionArgs) =
     button.clearRadioSiblings()
   discard button.sendAction()
 
+protocol DefaultButtonAccessibility of AccessibilityProtocol:
+  method accessibilityRole(button: Button): AccessibilityRole =
+    case button.buttonType()
+    of btCheckBox: arCheckBox
+    of btRadio: arRadioButton
+    else: arButton
+
+  method accessibilityLabel(button: Button): string =
+    if button.xAccessibilityLabel.len > 0:
+      button.xAccessibilityLabel
+    else:
+      button.title()
+
+  method accessibilityValue(button: Button): string =
+    case button.state()
+    of bsOff: "off"
+    of bsOn: "on"
+    of bsMixed: "mixed"
+
+  method accessibilityTraits(button: Button): AccessibilityTraits =
+    result = button.xAccessibilityTraits + {atButton}
+    if not button.isEnabled():
+      result.incl atDisabled
+    if button.focused():
+      result.incl atFocused
+    if button.state() in {bsOn, bsMixed}:
+      result.incl atSelected
+
+  method isAccessibilityElement(button: Button): bool =
+    true
+
+  method accessibilityActionNames(button: Button): seq[string] =
+    @[AccessibilityActionPress]
+
+  method accessibilityPerformAction(button: Button, action: string): bool =
+    if action != AccessibilityActionPress or not button.isEnabled():
+      return false
+    button.buttonPerformClick(ActionArgs(sender: button))
+    true
+
 proc choiceRole(button: Button): StyleRole =
   if button.buttonType == btRadio: srRadioButton else: srCheckBox
 
@@ -378,6 +419,7 @@ proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect)
   discard button.withProtocol(DefaultButtonEvents)
   discard button.withProtocol(DefaultButtonAction)
   discard button.withProtocol(DefaultButtonKeyCommands)
+  discard button.withProtocol(DefaultButtonAccessibility)
   button.applyInitialFrame(frame)
 
 proc newButton*(title = "Button", frame: Rect = AutoRect): Button =

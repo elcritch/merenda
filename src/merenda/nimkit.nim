@@ -1,4 +1,5 @@
 import merenda/nimkit/application
+import merenda/nimkit/accessibility
 import merenda/nimkit/buttons
 import merenda/nimkit/cells
 import merenda/nimkit/chrome
@@ -35,6 +36,7 @@ import merenda/nimkit/views
 import merenda/nimkit/windows
 
 export application
+export accessibility
 export buttons
 export cells
 export chrome

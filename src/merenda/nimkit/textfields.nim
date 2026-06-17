@@ -2,6 +2,7 @@ import std/unicode
 
 import sigils/core
 
+import ./accessibility
 import ./controls
 import ./selectors
 import ./theme
@@ -679,6 +680,40 @@ protocol DefaultTextFieldLayout of ViewLayoutProtocol:
   method layoutSubviews(textField: TextField) =
     textField.layoutFieldEditor()
 
+protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
+  method accessibilityRole(textField: TextField): AccessibilityRole =
+    if textField of Label: arStaticText else: arTextField
+
+  method accessibilityLabel(textField: TextField): string =
+    if textField.xAccessibilityLabel.len > 0:
+      textField.xAccessibilityLabel
+    elif textField of Label:
+      textField.stringValue()
+    else:
+      textField.identifier()
+
+  method accessibilityValue(textField: TextField): string =
+    if textField of Label:
+      ""
+    else:
+      textField.stringValue()
+
+  method accessibilityTraits(textField: TextField): AccessibilityTraits =
+    result = textField.xAccessibilityTraits
+    if not textField.isEnabled():
+      result.incl atDisabled
+    if textField.focused():
+      result.incl atFocused
+    if textField.isEditable():
+      result.incl atEditable
+    if textField.isSelectable():
+      result.incl atSelectable
+    if textField of Label and Label(textField).xLabelStyle in {lsTitle, lsHeading}:
+      result.incl atHeader
+
+  method isAccessibilityElement(textField: TextField): bool =
+    true
+
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: TextFieldCell): IntrinsicSize =
     let view = cell.controlView()
@@ -733,6 +768,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   discard textField.withProtocol(DefaultTextFieldDrawing)
   discard textField.withProtocol(DefaultTextFieldEvents)
   discard textField.withProtocol(DefaultTextFieldLayout)
+  discard textField.withProtocol(DefaultTextFieldAccessibility)
   textField.applyInitialFrame(frame)
 
 proc newTextField*(value = "", frame: Rect = AutoRect): TextField =
