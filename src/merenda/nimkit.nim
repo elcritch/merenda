@@ -2,6 +2,7 @@ import merenda/nimkit/application
 import merenda/nimkit/buttons
 import merenda/nimkit/cells
 import merenda/nimkit/chrome
+import merenda/nimkit/chromes/aquachrome
 import merenda/nimkit/comboboxes
 import merenda/nimkit/controls
 import merenda/nimkit/drawing
@@ -37,6 +38,7 @@ export application
 export buttons
 export cells
 export chrome
+export aquachrome
 export comboboxes
 export controls
 export drawing

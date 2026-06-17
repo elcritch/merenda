@@ -2,6 +2,7 @@ import std/tables
 
 import figdraw/common/filltypes
 from pkg/chroma import rgba
+from sigils/selectors import DynamicAgent
 
 import ./types
 
@@ -96,9 +97,12 @@ type
     selector*: StyleSelector
     patch*: StylePatch
 
+  Chrome* = ref object of DynamicAgent
+
   Theme* = object
     tokens*: StyleTokenStore
     rules*: seq[StyleRule]
+    chromes*: Table[string, Chrome]
 
   Appearance* = object
     theme*: Theme
@@ -132,6 +136,8 @@ type
     indicatorSize*: float32
     indicatorSpacing*: float32
     minSize*: Size
+
+  ThemeInstaller* = proc(theme: var Theme)
 
   TextFieldStyle* = object
     box*: ControlBoxStyle
@@ -266,6 +272,8 @@ const
   TabSelectedBorderColorToken* = "tab.border.color.selected"
   TabDisabledBorderColorToken* = "tab.border.color.disabled"
 
+var themeInstallers {.threadvar.}: seq[ThemeInstaller]
+
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
 
@@ -394,6 +402,39 @@ proc clone*(theme: Theme): Theme =
   result.tokens = theme.tokens.clone
   for rule in theme.rules:
     result.rules.add StyleRule(selector: rule.selector, patch: rule.patch.clone)
+  result.chromes = theme.chromes
+
+proc registerThemeInstaller*(installer: ThemeInstaller) =
+  themeInstallers.add installer
+
+proc installThemeExtensions(theme: var Theme) =
+  for installer in themeInstallers:
+    installer(theme)
+
+proc installChrome*(theme: var Theme, name: string, chrome: Chrome) =
+  if name.len == 0:
+    return
+  if chrome.isNil:
+    if name in theme.chromes:
+      theme.chromes.del(name)
+  else:
+    theme.chromes[name] = chrome
+
+proc hasChrome*(theme: Theme, name: string): bool =
+  name in theme.chromes
+
+proc chrome*(theme: Theme, name: string): Chrome =
+  if name in theme.chromes:
+    return theme.chromes[name]
+
+proc installChrome*(appearance: var Appearance, name: string, chrome: Chrome) =
+  appearance.theme.installChrome(name, chrome)
+
+proc hasChrome*(appearance: Appearance, name: string): bool =
+  appearance.theme.hasChrome(name)
+
+proc chrome*(appearance: Appearance, name: string): Chrome =
+  appearance.theme.chrome(name)
 
 proc `[]=`*(tokens: StyleTokenStore, name: string, value: StyleValue) =
   tokens.values[name] = value
@@ -1742,6 +1783,7 @@ func aquaInsetControlShadows(): seq[BoxShadow] =
 
 proc initTheme*(): Theme =
   result.tokens = newStyleTokenStore()
+  result.chromes = initTable[string, Chrome]()
   result[AccentToken] = styleColor(initColor(0.10, 0.48, 0.96, 1.0))
   result[AccentPressedToken] = styleColor(initColor(0.02, 0.25, 0.70, 1.0))
   result[DisabledFillToken] = styleColor(initColor(0.64, 0.68, 0.74, 1.0))
@@ -2198,6 +2240,7 @@ proc initTheme*(): Theme =
   result[srListItem, StyleCornerRadius] = 0.0
   result[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srListItem, StyleMinimumSize] = initSize(0.0, 22.0)
+  result.installThemeExtensions()
 
 proc initBannerTheme*(): Theme =
   result = initTheme()

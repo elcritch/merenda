@@ -312,18 +312,18 @@ suite "nimkit tab views":
 
   test "tab face fill comes from selected chrome":
     let
+      appearance = initAppearance()
       baseFill = fill(initColor(0.98, 0.98, 0.96, 1.0))
       highlightFill = fill(initColor(0.82, 0.84, 0.88, 0.73))
-      selectedAqua = chromeContext(
-          AquaChromeName, crTab, cpFace, baseFill, {ssSelected}
-        )
-        .chromeFill()
-      highlightAqua =
-        chromeContext(AquaChromeName, crTab, cpHighlight, highlightFill).chromeFill()
-      defaultChrome = chromeContext(
-          DefaultChromeName, crTab, cpFace, baseFill, {ssSelected}
-        )
-        .chromeFill()
+      selectedAqua = appearance.chromeFill(
+        chromeContext(AquaChromeName, crTab, cpFace, baseFill, {ssSelected})
+      )
+      highlightAqua = appearance.chromeFill(
+        chromeContext(AquaChromeName, crTab, cpHighlight, highlightFill)
+      )
+      defaultChrome = appearance.chromeFill(
+        chromeContext(DefaultChromeName, crTab, cpFace, baseFill, {ssSelected})
+      )
 
     check selectedAqua.kind == flLinear3
     check selectedAqua.lin3.stop == baseFill.centerColor().rgba

@@ -526,7 +526,7 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
 
   let tabRoot = context.addRenderRectangle(
     renderRect,
-    tabChrome.chromeFill(),
+    context.appearance.chromeFill(tabChrome),
     tabBorderValue,
     1.0'f32,
     TabCornerRadius,

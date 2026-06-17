@@ -157,8 +157,17 @@ proc sameStylePatch(a, b: StylePatch): bool =
 proc sameStyleRule(a, b: StyleRule): bool =
   a.selector == b.selector and a.patch.sameStylePatch(b.patch)
 
+proc sameChromes(a, b: Table[string, Chrome]): bool =
+  if a.len != b.len:
+    return false
+  for name, chrome in a.pairs:
+    if name notin b or b[name] != chrome:
+      return false
+  true
+
 proc sameTheme(a, b: Theme): bool =
-  if not a.tokens.sameTokenStore(b.tokens) or a.rules.len != b.rules.len:
+  if not a.tokens.sameTokenStore(b.tokens) or not a.chromes.sameChromes(b.chromes) or
+      a.rules.len != b.rules.len:
     return false
   for idx in 0 ..< a.rules.len:
     if not a.rules[idx].sameStyleRule(b.rules[idx]):
