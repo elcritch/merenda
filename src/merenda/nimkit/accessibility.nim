@@ -1,3 +1,3 @@
-import ./accessibilityprotocols
+import merenda/nimkit/accessibility/accessibility
 
-export accessibilityprotocols
+export accessibility
