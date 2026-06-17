@@ -54,6 +54,7 @@ proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
 proc tabIndexAtBarPoint(tabView: TabView, point: Point): int
 proc drawTab(tabView: TabView, context: DrawContext, index: int)
 proc syncTabBarFrame(tabView: TabView)
+proc canHandleTabKeyNavigation(tabView: TabView): bool
 
 protocol TabViewDelegate {.selectorScope: protocol.}:
   method shouldSelectTabViewItem*(
@@ -636,15 +637,28 @@ protocol TabViewEvents of ResponderEventProtocol:
   method keyDown(tabView: TabView, event: KeyEvent): bool =
     case event.key
     of keyArrowRight, keyArrowDown:
+      if not tabView.canHandleTabKeyNavigation():
+        return false
       return tabView.selectNextTabViewItem()
     of keyArrowLeft, keyArrowUp:
+      if not tabView.canHandleTabKeyNavigation():
+        return false
       return tabView.selectPreviousTabViewItem()
     of keyHome:
+      if not tabView.canHandleTabKeyNavigation():
+        return false
       return tabView.selectTabViewItemAtIndex(tabView.firstSelectableIndex())
     of keyEnd:
+      if not tabView.canHandleTabKeyNavigation():
+        return false
       return tabView.selectTabViewItemAtIndex(tabView.lastSelectableIndex())
     else:
       false
+
+proc canHandleTabKeyNavigation(tabView: TabView): bool =
+  if tabView.isNil:
+    return false
+  tabView.window().isNil or tabView.isFocused()
 
 proc newTabBarView(tabView: TabView): TabBarView =
   result = TabBarView(xTabView: tabView)
