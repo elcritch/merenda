@@ -3,7 +3,7 @@ import std/[unicode, unittest]
 import figdraw/fignodes
 
 import merenda/nimkit
-import merenda/nimkit/types as nimkitTypes
+import merenda/nimkit/foundation/types as nimkitTypes
 
 type CustomDrawView = ref object of View
 

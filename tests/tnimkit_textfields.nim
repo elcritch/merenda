@@ -5,7 +5,7 @@ import figdraw/fignodes
 import sigils/core
 
 import merenda/nimkit
-import merenda/nimkit/types as nimkitTypes
+import merenda/nimkit/foundation/types as nimkitTypes
 
 type CustomEditorTextFieldCell = ref object of TextFieldCell
   editor: FieldEditor
