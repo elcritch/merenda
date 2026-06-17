@@ -31,6 +31,8 @@ type
     srButton
     srCheckBox
     srRadioButton
+    srTab
+    srTabPanel
     srTextField
     srComboBox
     srComboBoxItem
@@ -119,6 +121,7 @@ type
     box*: ControlBoxStyle
     text*: TextStyle
     minSize*: Size
+    chrome*: string
 
   ChoiceButtonStyle* = object
     indicator*: ControlBoxStyle
@@ -166,6 +169,10 @@ const
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
   StyleMarkColor* = StyleKey[Color]("mark.color")
   StyleMinimumSize* = StyleKey[Size]("minimum.size")
+  StyleChrome* = StyleKey[string]("chrome")
+
+  DefaultChromeName* = "default"
+  AquaChromeName* = "aqua"
 
   AccentToken* = "accent"
   AccentPressedToken* = "accent.pressed"
@@ -916,6 +923,12 @@ proc shadowsRule(
   let value = theme.ruleValue(context, key.keyName, styleShadows(fallback))
   if value.kind == svShadows: value.shadows else: fallback
 
+proc keywordRule(
+    theme: Theme, context: StyleContext, key: StyleKey[string], fallback: string
+): string =
+  let value = theme.ruleValue(context, key.keyName, styleKeyword(fallback))
+  if value.kind == svKeyword: value.keyword else: fallback
+
 proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
   if theme.tokens.isNil:
     return fallback
@@ -986,6 +999,22 @@ proc shadowsToken*(
     appearance: Appearance, name: string, fallback: seq[BoxShadow]
 ): seq[BoxShadow] =
   appearance.theme.shadowsToken(name, fallback)
+
+proc resolveFill*(
+    theme: Theme, context: StyleContext, fallback: Fill, key = StyleFill
+): Fill =
+  theme.fillRule(context, key, fallback)
+
+proc resolveFill*(
+    appearance: Appearance, context: StyleContext, fallback: Fill, key = StyleFill
+): Fill =
+  appearance.theme.resolveFill(context, fallback, key)
+
+proc resolveChromeName*(theme: Theme, context: StyleContext): string =
+  theme.keywordRule(context, StyleChrome, DefaultChromeName)
+
+proc resolveChromeName*(appearance: Appearance, context: StyleContext): string =
+  appearance.theme.resolveChromeName(context)
 
 proc setStyle*[T](
     appearance: var Appearance,
@@ -1301,6 +1330,7 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
     ),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 32.0)),
+    chrome: theme.resolveChromeName(context),
   )
 
 proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
@@ -1810,12 +1840,16 @@ proc initTheme*(): Theme =
   result[srButton, StyleFocusRingInset] = -2.0
   result[srButton, StyleFocusRingColor] = styleToken(ButtonFocusRingColorToken)
   result[srButton, StyleBoxShadows] = styleToken(ButtonShadowsToken)
+  result[srButton, StyleChrome] = styleKeyword(AquaChromeName)
   result[srButton, {ssHighlighted}, StyleBoxShadows] =
     styleToken(ButtonHighlightedShadowsToken)
   result[srButton, {ssActive}, StyleBoxShadows] =
     styleToken(ButtonHighlightedShadowsToken)
   result[srButton, {ssDisabled}, StyleBoxShadows] =
     styleToken(ButtonDisabledShadowsToken)
+
+  result[srTab, StyleChrome] = styleKeyword(AquaChromeName)
+  result[srTabPanel, StyleChrome] = styleKeyword(AquaChromeName)
 
   for role in [srCheckBox, srRadioButton]:
     let radius = if role == srCheckBox: 6.0'f32 else: 7.0'f32
@@ -2079,6 +2113,10 @@ proc initTheme*(): Theme =
 
 proc initBannerTheme*(): Theme =
   result = initTheme()
+  result[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[srTab, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[srTabPanel, StyleChrome] = styleKeyword(DefaultChromeName)
+
   result[AccentToken] = initColor(0.89, 0.38, 0.21, 1.0)
   result[AccentPressedToken] = initColor(0.62, 0.24, 0.14, 1.0)
   result[DisabledFillToken] = initColor(0.52, 0.50, 0.45, 1.0)

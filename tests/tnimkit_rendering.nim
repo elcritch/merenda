@@ -323,6 +323,44 @@ suite "nimkit rendering":
     check okTextLayerCount >= 3
     check mainTextFound
 
+  test "buildRenders omits Aqua extras for default button chrome":
+    let
+      root = newView(frame = initRect(0, 0, 180, 90))
+      button = newButton("OK", frame = initRect(20, 24, 120, 32))
+
+    var theme = initTheme()
+    theme[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+    root.addSubview(button)
+
+    let
+      style = initAppearance(theme).resolveButtonStyle(
+          initControlStyleContext(
+            srButton, id = button.styleId, classes = button.styleClasses
+          )
+        )
+      expectedButtonRect = button.rectToWindow(button.bounds)
+      list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+
+    var buttonRoot = (-1).FigIdx
+    for idx, node in list.nodes:
+      if node.kind == nkRectangle and node.fill == style.box.fill and
+          node.renderedRect().rectsClose(expectedButtonRect):
+        buttonRoot = idx.FigIdx
+
+    check buttonRoot != (-1).FigIdx
+
+    var buttonChildCount = 0
+    for _ in childIndex(list.nodes, buttonRoot):
+      inc buttonChildCount
+
+    var okTextLayerCount = 0
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "OK":
+        inc okTextLayerCount
+
+    check buttonChildCount == 0
+    check okTextLayerCount == 1
+
   test "buildRenders centers push button text by default":
     let
       root = newView(frame = initRect(0, 0, 160, 80))

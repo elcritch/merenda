@@ -154,6 +154,7 @@ suite "nimkit theme":
     appearance[srButton, StyleTextInsets] = buttonInsets
     appearance[srButton, StyleMinimumSize] = buttonMinimum
     appearance[srButton, StyleBoxShadows] = buttonShadows
+    appearance[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
     appearance[srTextField, StyleTextColor] = styleToken("field.text.override")
     appearance[srTextField, StyleBorderWidth] = 4.0
 
@@ -169,6 +170,7 @@ suite "nimkit theme":
     check buttonStyle.box.shadows == buttonShadows
     check buttonStyle.text.insets == buttonInsets
     check buttonStyle.minSize == buttonMinimum
+    check buttonStyle.chrome == DefaultChromeName
     check textFieldStyle.text.color == fieldText
     check textFieldStyle.box.borderWidth == 4.0
     let textPatch = appearance[srTextField, StyleTextColor]
@@ -262,6 +264,10 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingInset < 0.0
     check buttonStyle.box.focusRingColor.a > 0.0
     check buttonStyle.box.focusRingColor != buttonStyle.box.fill.centerColor()
+    check defaultButtonStyle.chrome == AquaChromeName
+    check appearance.resolveChromeName(initControlStyleContext(srTab)) == AquaChromeName
+    check appearance.resolveChromeName(initControlStyleContext(srTabPanel)) ==
+      AquaChromeName
     checkAquaButtonShadows(defaultButtonStyle.box.shadows)
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
@@ -357,3 +363,4 @@ suite "nimkit theme":
     check comboBoxStyle.box.borderColor == initColor(0.31, 0.58, 0.54, 1.0)
     check comboBoxStyle.arrowColor == initColor(0.16, 0.15, 0.15, 1.0)
     check comboBoxItemStyle.box.fill == initColor(0.19, 0.38, 0.35, 1.0)
+    check buttonStyle.chrome == DefaultChromeName

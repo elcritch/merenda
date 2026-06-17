@@ -241,6 +241,21 @@ suite "nimkit tab views":
     check panelFound
     check contentFound
 
+  test "tab face fill comes from selected chrome":
+    let
+      baseFill = fill(initColor(0.98, 0.98, 0.96, 1.0))
+      selectedAqua = chromeContext(
+          AquaChromeName, crTab, cpFace, baseFill, {ssSelected}
+        )
+        .chromeFill()
+      defaultChrome = chromeContext(
+          DefaultChromeName, crTab, cpFace, baseFill, {ssSelected}
+        )
+        .chromeFill()
+
+    check selectedAqua.kind == flLinear3
+    check defaultChrome == baseFill
+
   test "tab view selected pane does not redraw panel over resized content":
     let fixture = newTabViewDemoFixture()
 
