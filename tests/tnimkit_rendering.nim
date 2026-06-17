@@ -330,6 +330,8 @@ suite "nimkit rendering":
 
     var theme = initTheme()
     theme[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+    theme[srButton, StyleTextHighlightColor] = initColor(0.0, 0.0, 0.0, 0.0)
+    theme[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.0)
     root.addSubview(button)
 
     let

@@ -120,6 +120,8 @@ type
   ButtonStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
+    textHighlightColor*: Color
+    textShadowColor*: Color
     minSize*: Size
     chrome*: string
 
@@ -163,6 +165,8 @@ const
   StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
   StyleBoxShadows* = StyleKey[seq[BoxShadow]]("box.shadows")
   StyleTextColor* = StyleKey[Color]("text.color")
+  StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
+  StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
@@ -1329,6 +1333,10 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
     ),
+    textHighlightColor:
+      theme.colorRule(context, StyleTextHighlightColor, initColor(0.0, 0.0, 0.0, 0.0)),
+    textShadowColor:
+      theme.colorRule(context, StyleTextShadowColor, initColor(0.0, 0.0, 0.0, 0.0)),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 32.0)),
     chrome: theme.resolveChromeName(context),
   )
@@ -1835,6 +1843,8 @@ proc initTheme*(): Theme =
   result[srButton, StyleBorderWidth] = 1.0
   result[srButton, StyleCornerRadius] = 14.0
   result[srButton, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
+  result[srButton, StyleTextHighlightColor] = initColor(1.0, 1.0, 1.0, 0.42)
+  result[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.20)
   result[srButton, StyleMinimumSize] = initSize(0.0, 32.0)
   result[srButton, StyleFocusRingWidth] = 3.0
   result[srButton, StyleFocusRingInset] = -2.0
@@ -1847,6 +1857,9 @@ proc initTheme*(): Theme =
     styleToken(ButtonHighlightedShadowsToken)
   result[srButton, {ssDisabled}, StyleBoxShadows] =
     styleToken(ButtonDisabledShadowsToken)
+  result[srButton, {ssDisabled}, StyleTextHighlightColor] =
+    initColor(1.0, 1.0, 1.0, 0.16)
+  result[srButton, {ssDisabled}, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.08)
 
   result[srTab, StyleChrome] = styleKeyword(AquaChromeName)
   result[srTabPanel, StyleChrome] = styleKeyword(AquaChromeName)
@@ -2114,6 +2127,8 @@ proc initTheme*(): Theme =
 proc initBannerTheme*(): Theme =
   result = initTheme()
   result[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[srButton, StyleTextHighlightColor] = initColor(0.0, 0.0, 0.0, 0.0)
+  result[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.0)
   result[srTab, StyleChrome] = styleKeyword(DefaultChromeName)
   result[srTabPanel, StyleChrome] = styleKeyword(DefaultChromeName)
 

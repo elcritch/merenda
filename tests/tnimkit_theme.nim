@@ -139,6 +139,8 @@ suite "nimkit theme":
       buttonFill = initColor(0.11, 0.22, 0.33, 1.0)
       focusRing = initColor(0.24, 0.42, 0.90, 0.75)
       fieldText = initColor(0.44, 0.55, 0.66, 1.0)
+      buttonHighlight = initColor(0.95, 0.96, 0.97, 0.44)
+      buttonShadow = initColor(0.04, 0.05, 0.06, 0.22)
       buttonMinimum = initSize(72.0, 32.0)
       buttonInsets = initEdgeInsets(2.0, 10.0)
       buttonShadows =
@@ -152,6 +154,8 @@ suite "nimkit theme":
     appearance[srButton, StyleCornerRadius] = 9.0
     appearance[srButton, StyleFocusRingColor] = focusRing
     appearance[srButton, StyleTextInsets] = buttonInsets
+    appearance[srButton, StyleTextHighlightColor] = buttonHighlight
+    appearance[srButton, StyleTextShadowColor] = buttonShadow
     appearance[srButton, StyleMinimumSize] = buttonMinimum
     appearance[srButton, StyleBoxShadows] = buttonShadows
     appearance[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
@@ -169,6 +173,8 @@ suite "nimkit theme":
     check buttonStyle.box.focusRingColor == focusRing
     check buttonStyle.box.shadows == buttonShadows
     check buttonStyle.text.insets == buttonInsets
+    check buttonStyle.textHighlightColor == buttonHighlight
+    check buttonStyle.textShadowColor == buttonShadow
     check buttonStyle.minSize == buttonMinimum
     check buttonStyle.chrome == DefaultChromeName
     check textFieldStyle.text.color == fieldText
@@ -281,6 +287,10 @@ suite "nimkit theme":
     )
     check buttonStyle.box.cornerRadius == 14.0
     check buttonStyle.text.color == initColor(0.08, 0.08, 0.07, 0.95)
+    check defaultButtonStyle.textHighlightColor == initColor(1.0, 1.0, 1.0, 0.42)
+    check defaultButtonStyle.textShadowColor == initColor(0.0, 0.0, 0.0, 0.20)
+    check theme.resolveButtonStyle(initControlStyleContext(srButton, {ssDisabled})).textHighlightColor ==
+      initColor(1.0, 1.0, 1.0, 0.16)
     check accentButtonStyle.text.color == initColor(0.08, 0.08, 0.07, 0.95)
     check buttonStyle.minSize == initSize(0.0, 32.0)
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
@@ -364,3 +374,5 @@ suite "nimkit theme":
     check comboBoxStyle.arrowColor == initColor(0.16, 0.15, 0.15, 1.0)
     check comboBoxItemStyle.box.fill == initColor(0.19, 0.38, 0.35, 1.0)
     check buttonStyle.chrome == DefaultChromeName
+    check buttonStyle.textHighlightColor.a == 0.0
+    check buttonStyle.textShadowColor.a == 0.0

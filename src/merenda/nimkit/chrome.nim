@@ -18,8 +18,6 @@ type
     cpLowerWash
     cpHighlight
     cpSeam
-    cpTextHighlight
-    cpTextShadow
 
   ChromeEdge* = enum
     ceNone
@@ -207,17 +205,6 @@ func chromeFill*(chrome: ChromeContext): Fill =
       chrome.baseFill
   else:
     chrome.baseFill
-
-func chromeColor*(chrome: ChromeContext, fallback: Color): Color =
-  if chrome.isAqua and chrome.role == crButton:
-    case chrome.part
-    of cpTextHighlight:
-      return initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.42 else: 0.16)
-    of cpTextShadow:
-      return initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.20 else: 0.08)
-    else:
-      discard
-  fallback
 
 func chromeEdgeHighlightRect(edge: ChromeEdge, rect: Rect): Rect =
   case edge

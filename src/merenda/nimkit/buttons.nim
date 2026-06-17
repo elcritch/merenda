@@ -306,27 +306,18 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       if button.isFocusVisible:
         context.addFocusRing(absoluteFrame, style.box)
       let textRect = style.buttonTextRect(button.bounds)
-      let
-        highlightColor = chromeContext(
-            style.chrome, crButton, cpTextHighlight, style.box.fill, states
-          )
-          .chromeColor(initColor(0.0, 0.0, 0.0, 0.0))
-        shadowColor = chromeContext(
-            style.chrome, crButton, cpTextShadow, style.box.fill, states
-          )
-          .chromeColor(initColor(0.0, 0.0, 0.0, 0.0))
-      if highlightColor.a > 0.0:
+      if style.textHighlightColor.a > 0.0:
         context.addText(
           textRect.offsetRect(0.0, 1.0),
           button.title,
-          highlightColor,
+          style.textHighlightColor,
           alignment = taCenter,
         )
-      if shadowColor.a > 0.0:
+      if style.textShadowColor.a > 0.0:
         context.addText(
           textRect.offsetRect(0.0, -0.6'f32),
           button.title,
-          shadowColor,
+          style.textShadowColor,
           alignment = taCenter,
         )
       context.addText(textRect, button.title, style.text.color, alignment = taCenter)
