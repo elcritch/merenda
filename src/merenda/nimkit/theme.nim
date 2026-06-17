@@ -168,6 +168,7 @@ const
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
+  StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
@@ -248,6 +249,22 @@ const
   ListItemTextColorToken* = "list.item.text.color"
   ListItemSelectedTextColorToken* = "list.item.text.color.selected"
   ListItemSeparatorColorToken* = "list.item.separator.color"
+
+  TabPanelFillToken* = "tab.panel.fill"
+  TabPanelBorderColorToken* = "tab.panel.border.color"
+  TabFillToken* = "tab.fill"
+  TabHighlightedFillToken* = "tab.fill.highlighted"
+  TabSelectedFillToken* = "tab.fill.selected"
+  TabDisabledFillToken* = "tab.fill.disabled"
+  TabHighlightFillToken* = "tab.highlight.fill"
+  TabDisabledHighlightFillToken* = "tab.highlight.fill.disabled"
+  TabTextColorToken* = "tab.text.color"
+  TabSelectedTextColorToken* = "tab.text.color.selected"
+  TabDisabledTextColorToken* = "tab.text.color.disabled"
+  TabBorderColorToken* = "tab.border.color"
+  TabHighlightedBorderColorToken* = "tab.border.color.highlighted"
+  TabSelectedBorderColorToken* = "tab.border.color.selected"
+  TabDisabledBorderColorToken* = "tab.border.color.disabled"
 
 func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -1013,6 +1030,16 @@ proc resolveFill*(
     appearance: Appearance, context: StyleContext, fallback: Fill, key = StyleFill
 ): Fill =
   appearance.theme.resolveFill(context, fallback, key)
+
+proc resolveColor*(
+    theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
+): Color =
+  theme.colorRule(context, key, fallback)
+
+proc resolveColor*(
+    appearance: Appearance, context: StyleContext, key: StyleKey[Color], fallback: Color
+): Color =
+  appearance.theme.resolveColor(context, key, fallback)
 
 proc resolveChromeName*(theme: Theme, context: StyleContext): string =
   theme.keywordRule(context, StyleChrome, DefaultChromeName)
@@ -1783,6 +1810,21 @@ proc initTheme*(): Theme =
   result[ListItemSelectedTextColorToken] =
     styleToken(ComboBoxItemSelectedTextColorToken)
   result[ListItemSeparatorColorToken] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
+  result[TabPanelFillToken] = fill(initColor(0.98, 0.98, 0.96, 1.0))
+  result[TabPanelBorderColorToken] = styleColor(initColor(0.42, 0.44, 0.48, 1.0))
+  result[TabFillToken] = styleColor(initColor(0.70, 0.72, 0.76, 1.0))
+  result[TabHighlightedFillToken] = styleColor(initColor(0.58, 0.61, 0.66, 1.0))
+  result[TabSelectedFillToken] = styleToken(TabPanelFillToken)
+  result[TabDisabledFillToken] = styleColor(initColor(0.78, 0.80, 0.84, 1.0))
+  result[TabHighlightFillToken] = styleFill(initColor(1.0, 1.0, 1.0, 0.68))
+  result[TabDisabledHighlightFillToken] = styleFill(initColor(1.0, 1.0, 1.0, 0.30))
+  result[TabTextColorToken] = styleColor(initColor(0.14, 0.15, 0.18, 1.0))
+  result[TabSelectedTextColorToken] = styleColor(initColor(0.07, 0.08, 0.10, 1.0))
+  result[TabDisabledTextColorToken] = styleColor(initColor(0.48, 0.50, 0.54, 1.0))
+  result[TabBorderColorToken] = styleColor(initColor(0.55, 0.57, 0.62, 1.0))
+  result[TabHighlightedBorderColorToken] = styleColor(initColor(0.43, 0.45, 0.50, 1.0))
+  result[TabSelectedBorderColorToken] = styleToken(TabPanelBorderColorToken)
+  result[TabDisabledBorderColorToken] = styleColor(initColor(0.65, 0.67, 0.70, 1.0))
 
   result.addRoleRule(
     srButton,
@@ -1861,7 +1903,40 @@ proc initTheme*(): Theme =
     initColor(1.0, 1.0, 1.0, 0.16)
   result[srButton, {ssDisabled}, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.08)
 
+  result.addRoleRule(
+    srTab,
+    {},
+    styleToken(TabFillToken),
+    styleToken(TabBorderColorToken),
+    styleToken(TabTextColorToken),
+  )
+  result.addRoleRule(
+    srTab,
+    {ssHighlighted},
+    styleToken(TabHighlightedFillToken),
+    styleToken(TabHighlightedBorderColorToken),
+    styleToken(TabTextColorToken),
+  )
+  result.addRoleRule(
+    srTab,
+    {ssSelected},
+    styleToken(TabSelectedFillToken),
+    styleToken(TabSelectedBorderColorToken),
+    styleToken(TabSelectedTextColorToken),
+  )
+  result.addRoleRule(
+    srTab,
+    {ssDisabled},
+    styleToken(TabDisabledFillToken),
+    styleToken(TabDisabledBorderColorToken),
+    styleToken(TabDisabledTextColorToken),
+  )
+  result[srTab, StyleHighlightFill] = styleToken(TabHighlightFillToken)
+  result[srTab, {ssDisabled}, StyleHighlightFill] =
+    styleToken(TabDisabledHighlightFillToken)
   result[srTab, StyleChrome] = styleKeyword(AquaChromeName)
+  result[srTabPanel, StyleFill] = styleToken(TabPanelFillToken)
+  result[srTabPanel, StyleBorderColor] = styleToken(TabPanelBorderColorToken)
   result[srTabPanel, StyleChrome] = styleKeyword(AquaChromeName)
 
   for role in [srCheckBox, srRadioButton]:
@@ -2138,6 +2213,21 @@ proc initBannerTheme*(): Theme =
   result[DisabledTextColorToken] = initColor(0.94, 0.91, 0.86, 1.0)
   result[FocusRingColorToken] = initColor(0.31, 0.58, 0.54, 0.60)
   result[ListItemSeparatorColorToken] = initColor(0.74, 0.70, 0.63, 1.0)
+  result[TabPanelFillToken] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[TabPanelBorderColorToken] = initColor(0.84, 0.80, 0.75, 1.0)
+  result[TabFillToken] = initColor(0.86, 0.82, 0.75, 1.0)
+  result[TabHighlightedFillToken] = initColor(0.78, 0.70, 0.62, 1.0)
+  result[TabSelectedFillToken] = styleToken(TabPanelFillToken)
+  result[TabDisabledFillToken] = initColor(0.82, 0.78, 0.72, 1.0)
+  result[TabHighlightFillToken] = initColor(1.0, 0.97, 0.94, 0.0)
+  result[TabDisabledHighlightFillToken] = initColor(1.0, 0.97, 0.94, 0.0)
+  result[TabTextColorToken] = initColor(0.11, 0.10, 0.10, 1.0)
+  result[TabSelectedTextColorToken] = initColor(0.11, 0.10, 0.10, 1.0)
+  result[TabDisabledTextColorToken] = initColor(0.48, 0.45, 0.40, 1.0)
+  result[TabBorderColorToken] = initColor(0.54, 0.49, 0.42, 1.0)
+  result[TabHighlightedBorderColorToken] = initColor(0.42, 0.36, 0.30, 1.0)
+  result[TabSelectedBorderColorToken] = styleToken(TabPanelBorderColorToken)
+  result[TabDisabledBorderColorToken] = initColor(0.70, 0.65, 0.58, 1.0)
 
   result[ButtonFillToken] = styleToken(AccentToken)
   result[ButtonHighlightedFillToken] = styleToken(AccentPressedToken)

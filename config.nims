@@ -6,6 +6,10 @@
   useMalloc
 --mm:
   arc
+--define:
+  release
+--debugger:
+  native
 
 import std/strutils
 import std/os

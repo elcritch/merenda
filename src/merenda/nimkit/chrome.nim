@@ -37,6 +37,7 @@ type
     cornerRadius*: float32
     edge*: ChromeEdge
     seamFill*: Fill
+    highlightFill*: Fill
 
 const AquaButtonInset = 2.5'f32
 
@@ -58,6 +59,7 @@ func initChromeExtras*(
     cornerRadius = 0.0'f32,
     edge = ceNone,
     seamFill = transparentFill(),
+    highlightFill = transparentFill(),
 ): ChromeExtras =
   ChromeExtras(
     parent: parent,
@@ -65,6 +67,7 @@ func initChromeExtras*(
     cornerRadius: cornerRadius,
     edge: edge,
     seamFill: seamFill,
+    highlightFill: highlightFill,
   )
 
 func withPart(chrome: ChromeContext, part: ChromePart): ChromeContext =
@@ -156,27 +159,28 @@ func aquaButtonInnerShadows(fillValue: Fill, enabled: bool): seq[BoxShadow] =
     insetShadow(initColor(0.0, 0.0, 0.0, darkAlpha), y = -2.0, blur = 7.0),
   ]
 
-func aquaPanelFillColor(): Color =
-  initColor(0.98, 0.98, 0.96)
-
 func aquaTabFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
-    linear(initColor(0.90, 0.91, 0.93, 1.0), initColor(0.78, 0.80, 0.84, 1.0), fgaY)
+    linear(
+      base.lightenColor(0.24'f32, 0.95'f32), base.darkenColor(0.04'f32, 0.95'f32), fgaY
+    )
   elif ssSelected in chrome.states:
     linear(
-      initColor(1.0, 1.0, 1.0, 1.0),
-      initColor(0.96, 0.97, 0.98, 1.0),
-      aquaPanelFillColor(),
+      base.lightenColor(0.70'f32, 1.0'f32),
+      base.lightenColor(0.32'f32, 1.0'f32),
+      base,
       fgaY,
-      92'u8,
+      96'u8,
     )
   elif chrome.isPressed:
-    linear(initColor(0.76, 0.79, 0.84, 1.0), initColor(0.64, 0.68, 0.75, 1.0), fgaY)
+    linear(
+      base.lightenColor(0.12'f32, 1.0'f32), base.darkenColor(0.18'f32, 1.0'f32), fgaY
+    )
   else:
-    linear(initColor(0.93, 0.94, 0.96, 1.0), initColor(0.76, 0.79, 0.84, 1.0), fgaY)
-
-func aquaTabHighlightFill(enabled: bool): Fill =
-  fill(initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30))
+    linear(
+      base.lightenColor(0.36'f32, 1.0'f32), base.darkenColor(0.16'f32, 1.0'f32), fgaY
+    )
 
 func chromeFill*(chrome: ChromeContext): Fill =
   if not chrome.isAqua:
@@ -198,7 +202,7 @@ func chromeFill*(chrome: ChromeContext): Fill =
     of cpFace:
       aquaTabFaceFill(chrome)
     of cpHighlight:
-      aquaTabHighlightFill(chrome.isEnabled)
+      chrome.baseFill
     of cpSeam:
       chrome.baseFill
     else:
@@ -336,7 +340,7 @@ proc drawAquaTabExtras(
   discard context.addRenderRectangle(
     extras.parent,
     chromeEdgeHighlightRect(extras.edge, extras.rect),
-    chrome.withPart(cpHighlight).chromeFill(),
+    chrome.withPart(cpHighlight, extras.highlightFill).chromeFill(),
   )
   if ssSelected in chrome.states:
     discard context.addRenderRectangle(

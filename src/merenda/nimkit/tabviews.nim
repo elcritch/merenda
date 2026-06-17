@@ -1,5 +1,8 @@
 import std/options
 
+from figdraw/figbasics import
+  DirectionCorners, dcBottomLeft, dcBottomRight, dcTopLeft, dcTopRight
+
 import sigils/core
 
 import ./chrome
@@ -447,10 +450,20 @@ func tabTextColor(enabled, selected: bool): Color =
   else:
     initColor(0.14, 0.15, 0.18)
 
+func tabHighlightFill(enabled: bool): Fill =
+  fill(initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30))
+
 func chromeEdge(position: TabPosition): ChromeEdge =
   case position
   of tpTop: ceTop
   of tpBottom: ceBottom
+
+func tabRoundedCorners(position: TabPosition): set[DirectionCorners] =
+  case position
+  of tpTop:
+    {dcTopLeft, dcTopRight}
+  of tpBottom:
+    {dcBottomLeft, dcBottomRight}
 
 proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   let
@@ -460,8 +473,6 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     enabled = item.enabled()
     rect = tabView.tabRectInBar(index)
     renderRect = context.renderRectFor(rect)
-    panelFillValue =
-      context.appearance.resolveFill(initControlStyleContext(srTabPanel), panelFill())
 
   var states: set[WidgetState]
   if selected:
@@ -472,21 +483,34 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     states.incl ssDisabled
 
   let
+    panelStyleContext = initControlStyleContext(srTabPanel)
+    panelFillValue = context.appearance.resolveFill(panelStyleContext, panelFill())
     tabStyleContext = initControlStyleContext(srTab, states)
+    tabFillValue = context.appearance.resolveFill(tabStyleContext, panelFillValue)
+    tabBorderValue = context.appearance.resolveColor(
+      tabStyleContext, StyleBorderColor, tabBorderColor(selected, enabled)
+    )
+    tabTextValue = context.appearance.resolveColor(
+      tabStyleContext, StyleTextColor, tabTextColor(enabled, selected)
+    )
+    tabHighlightFillValue = context.appearance.resolveFill(
+      tabStyleContext, tabHighlightFill(enabled), StyleHighlightFill
+    )
     tabChrome = chromeContext(
       context.appearance.resolveChromeName(tabStyleContext),
       crTab,
       cpFace,
-      context.appearance.resolveFill(tabStyleContext, panelFillValue),
+      tabFillValue,
       states,
     )
 
   let tabRoot = context.addRenderRectangle(
     renderRect,
     tabChrome.chromeFill(),
-    tabBorderColor(selected, enabled),
+    tabBorderValue,
     1.0'f32,
     TabCornerRadius,
+    roundedCorners = tabView.tabPosition.tabRoundedCorners(),
   )
   context.drawChromeExtras(
     tabChrome,
@@ -496,14 +520,10 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
       cornerRadius = TabCornerRadius,
       edge = tabView.tabPosition.chromeEdge(),
       seamFill = panelFillValue,
+      highlightFill = tabHighlightFillValue,
     ),
   )
-  context.addText(
-    rect.tabTextRect(),
-    item.label(),
-    tabTextColor(enabled, selected),
-    alignment = taCenter,
-  )
+  context.addText(rect.tabTextRect(), item.label(), tabTextValue, alignment = taCenter)
   if selected and tabView.isFocusVisible:
     discard context.addRenderRectangle(
       context.renderRectFor(rect.inset(initEdgeInsets(3.0'f32))),
@@ -563,13 +583,17 @@ protocol TabBarEvents of ResponderEventProtocol:
 
 protocol TabViewDrawing of ViewDrawingProtocol:
   method draw(tabView: TabView, context: DrawContext) =
-    let content = tabView.contentRect()
-    let fillValue =
-      context.appearance.resolveFill(initControlStyleContext(srTabPanel), panelFill())
+    let
+      content = tabView.contentRect()
+      panelStyleContext = initControlStyleContext(srTabPanel)
+      fillValue = context.appearance.resolveFill(panelStyleContext, panelFill())
+      borderColor = context.appearance.resolveColor(
+        panelStyleContext, StyleBorderColor, panelBorderColor()
+      )
     discard context.addRenderRectangle(
       context.renderRectFor(content),
       fillValue,
-      panelBorderColor(),
+      borderColor,
       ContentBorderWidth,
       4.0'f32,
     )
