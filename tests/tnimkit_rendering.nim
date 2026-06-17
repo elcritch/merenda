@@ -15,6 +15,12 @@ let ExtraChromeFill = fill(initColor(0.72, 0.10, 0.48, 1.0))
 
 type ExtraChrome = ref object of Chrome
 
+func aquaChoiceSelectedFill(): Fill =
+  linear(initColor(0.48, 0.91, 1.0, 1.0), initColor(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+
+func aquaRadioShellFill(): Fill =
+  linear(initColor(0.99, 0.99, 0.98, 1.0), initColor(0.65, 0.66, 0.64, 1.0), fgaY)
+
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
     inc customDrawCount
@@ -475,6 +481,69 @@ suite "nimkit rendering":
     check comboExtraFound
     check popupExtraFound
 
+  test "buildRenders keeps Aqua radio accent inside neutral shell":
+    let
+      root = newView(frame = initRect(0, 0, 220, 110))
+      checkbox = newCheckBox("Check", frame = initRect(10, 20, 120, 24))
+      radio = newRadioButton("Radio", frame = initRect(10, 56, 120, 24))
+
+    checkbox.setState(bsOn)
+    radio.setState(bsOn)
+    root.addSubview(checkbox)
+    root.addSubview(radio)
+
+    let
+      appearance = initAppearance(initTheme())
+      checkStyle = appearance.resolveChoiceButtonStyle(
+        initControlStyleContext(srCheckBox, {ssSelected})
+      )
+      radioStyle = appearance.resolveChoiceButtonStyle(
+        initControlStyleContext(srRadioButton, {ssSelected})
+      )
+      checkboxIndicator =
+        checkbox.rectToWindow(checkStyle.choiceIndicatorRect(checkbox.bounds))
+      radioIndicator = radio.rectToWindow(radioStyle.choiceIndicatorRect(radio.bounds))
+      radioInner = radioIndicator.inset(initEdgeInsets(1.6))
+      radioGlossWidth = max(radioInner.size.width * 0.52'f32, 1.0'f32)
+      radioGloss = initRect(
+        radioInner.origin.x + (radioInner.size.width - radioGlossWidth) / 2.0'f32,
+        radioInner.origin.y + 1.0'f32,
+        radioGlossWidth,
+        max(radioInner.size.height * 0.18'f32, 1.0'f32),
+      )
+      list = buildRenders(root, appearance)[DefaultDrawLevel]
+
+    var
+      checkboxAccentFound = false
+      radioShellFound = false
+      radioInnerAccentFound = false
+      radioGlossFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle:
+        let nodeRect = node.renderedRect()
+        if nodeRect.rectsClose(checkboxIndicator):
+          checkboxAccentFound = true
+          check node.fill == aquaChoiceSelectedFill()
+          check node.stroke.fill.kind == flColor
+          check node.stroke.fill.color == initColor(0.0, 0.32, 0.75, 0.96).rgba
+        if nodeRect.rectsClose(radioIndicator):
+          radioShellFound = true
+          check node.fill == aquaRadioShellFill()
+        if nodeRect.rectsClose(radioInner):
+          radioInnerAccentFound = true
+          check node.fill == aquaChoiceSelectedFill()
+          check node.stroke.fill.kind == flColor
+          check node.stroke.fill.color == initColor(0.0, 0.32, 0.75, 0.96).rgba
+        if nodeRect.rectsClose(radioGloss):
+          radioGlossFound = true
+          check nodeRect.size.width < radioInner.size.width * 0.60'f32
+
+    check checkboxAccentFound
+    check radioShellFound
+    check radioInnerAccentFound
+    check radioGlossFound
+
   test "buildRenders centers push button text by default":
     let
       root = newView(frame = initRect(0, 0, 160, 80))
@@ -882,6 +951,7 @@ suite "nimkit rendering":
       theme[role, {ssSelected}, StyleMarkColor] = markFill
       theme[role, StyleChrome] = styleKeyword(DefaultChromeName)
       theme[role, StyleIndicatorSize] = 12.0
+      theme[role, StyleCornerRadius] = if role == srRadioButton: 6.0 else: 3.0
       theme[role, StyleIndicatorSpacing] = 5.0
       theme[role, StyleTextInsets] = initEdgeInsets(0.0, 3.0)
 
@@ -895,7 +965,7 @@ suite "nimkit rendering":
     var
       selectedIndicatorCount = 0
       markCount = 0
-      checkmarkTextFound = false
+      checkmarkTextCount = 0
       radioIndicatorFound = false
 
     for node in list.nodes:
@@ -907,13 +977,13 @@ suite "nimkit rendering":
         if node.screenBox.x == 13.0 and node.screenBox.y == 62.0 and
             node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
           radioIndicatorFound = true
-          check node.corners[dcTopLeft] == 7'u16
+          check node.corners[dcTopLeft] == 6'u16
       elif node.kind == nkText and node.textLayout.runes.len > 0:
         var text = ""
         for rune in node.textLayout.runes:
           text.add(rune)
         if text == "✓":
-          checkmarkTextFound = true
+          inc checkmarkTextCount
           check node.textLayout.selectionRects.len == 1
           check node.textLayout.selectionRects[0].w > 0.0
           check node.textLayout.selectionRects[0].h > 0.0
@@ -923,7 +993,7 @@ suite "nimkit rendering":
 
     check selectedIndicatorCount == 2
     check markCount == 1
-    check checkmarkTextFound
+    check checkmarkTextCount == 2
     check radioIndicatorFound
 
   test "buildRenders uses effective appearance from view hierarchy":

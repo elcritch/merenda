@@ -14,6 +14,8 @@ type
   ChromeRole* = enum
     crButton
     crChoiceIndicator
+    crCheckBoxIndicator
+    crRadioIndicator
     crComboBox
     crPopupList
     crTab
