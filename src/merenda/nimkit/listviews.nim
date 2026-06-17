@@ -565,7 +565,7 @@ proc drawListRow*(
         )
       )
       separatorRect = initRect(rect.origin.x, rect.maxY - 1.0'f32, rect.size.width, 1.0)
-    discard context.addWindowRectangle(separatorRect, fill(itemStyle.box.borderColor))
+    discard context.addRenderRectangle(separatorRect, fill(itemStyle.box.borderColor))
 
 proc drawCustomListRow(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -1327,8 +1327,8 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
         listView.xListRole, focusedState, id = listView.styleId(), classes = classes
       )
     )
-    discard context.addWindowRectangle(
-      context.localRectToWindow(listView.bounds()),
+    discard context.addRenderRectangle(
+      context.renderRectFor(listView.bounds()),
       listStyle.box.fill,
       listStyle.box.borderColor,
       listStyle.box.borderWidth,
@@ -1342,7 +1342,7 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
       discard listView.drawCustomEmptyState(context, scrollView.clipView().frame())
 
     if ssFocusVisible in focusedState:
-      context.addFocusRing(listView.rectToWindow(listView.bounds), listStyle.box)
+      context.addFocusRing(context.renderRectFor(listView.bounds), listStyle.box)
 
 protocol DefaultListViewEvents of ResponderEventProtocol:
   method mouseDown(listView: ListView, event: MouseEvent): bool =

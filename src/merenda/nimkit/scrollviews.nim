@@ -349,16 +349,16 @@ proc scrollerKnobRect*(scroller: Scroller): Rect =
 proc drawScroller*(context: DrawContext, track, knob: Rect) =
   if track.isEmpty:
     return
-  discard context.addWindowRectangle(
-    context.localRectToWindow(track),
+  discard context.addRenderRectangle(
+    context.renderRectFor(track),
     fill(initColor(0.88, 0.90, 0.94, 0.70)),
     initColor(0.67, 0.71, 0.78, 0.80),
     1.0'f32,
     3.0'f32,
   )
   if not knob.isEmpty:
-    discard context.addWindowRectangle(
-      context.localRectToWindow(knob.inset(initEdgeInsets(2.0))),
+    discard context.addRenderRectangle(
+      context.renderRectFor(knob.inset(initEdgeInsets(2.0))),
       fill(initColor(0.36, 0.42, 0.50, 0.65)),
       initColor(0.24, 0.29, 0.36, 0.50),
       1.0'f32,

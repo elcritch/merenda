@@ -298,7 +298,7 @@ proc drawAquaPushButton(
   let
     enabled = button.isEnabled()
     radius = style.box.cornerRadius
-    buttonRoot = context.addWindowRectangle(
+    buttonRoot = context.addRenderRectangle(
       absoluteFrame,
       style.box.fill,
       style.box.borderColor,
@@ -311,7 +311,7 @@ proc drawAquaPushButton(
   if not inner.isEmpty:
     let
       innerRadius = max(radius - AquaButtonInset, 1.0'f32)
-      innerRoot = context.addWindowRectangle(
+      innerRoot = context.addRenderRectangle(
         buttonRoot,
         inner,
         aquaFaceFill(style.box.fill, enabled),
@@ -346,7 +346,7 @@ proc drawAquaPushButton(
         1.0'f32,
       )
 
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       innerRoot,
       topGlow,
       initColor(0, 0, 0, 0),
@@ -356,11 +356,11 @@ proc drawAquaPushButton(
         )
       ],
     )
-    discard context.addWindowRectangle(innerRoot, topGloss, aquaGlossFill(enabled))
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(innerRoot, topGloss, aquaGlossFill(enabled))
+    discard context.addRenderRectangle(
       innerRoot, lowerWash, aquaLowerWash(style.box.fill, enabled)
     )
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       innerRoot,
       waistGlow,
       initColor(0, 0, 0, 0),
@@ -376,7 +376,7 @@ proc drawAquaPushButton(
 
 protocol DefaultButtonDrawing of ViewDrawingProtocol:
   method draw(button: Button, context: DrawContext) =
-    let absoluteFrame = button.rectToWindow(button.bounds)
+    let absoluteFrame = context.renderRectFor(button.bounds)
     if button.buttonType in {btCheckBox, btRadio}:
       let role = button.choiceRole()
       let selected = button.state in {bsOn, bsMixed}
@@ -391,8 +391,8 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       )
       let indicatorRect = style.choiceIndicatorRect(button.bounds)
 
-      discard context.addWindowRectangle(
-        button.rectToWindow(indicatorRect),
+      discard context.addRenderRectangle(
+        context.renderRectFor(indicatorRect),
         style.indicator.fill,
         style.indicator.borderColor,
         style.indicator.borderWidth,
@@ -410,8 +410,8 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
               indicatorRect.mixedMarkRect()
             else:
               indicatorRect.selectedMarkRect()
-          discard context.addWindowRectangle(
-            button.rectToWindow(markRect),
+          discard context.addRenderRectangle(
+            context.renderRectFor(markRect),
             style.markColor,
             style.markColor,
             0.0'f32,
@@ -421,7 +421,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
               1.0'f32,
           )
       if button.isFocusVisible:
-        context.addFocusRing(button.rectToWindow(indicatorRect), style.indicator)
+        context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
       context.addText(
         style.choiceTextRect(button.bounds), button.title, style.text.color
       )

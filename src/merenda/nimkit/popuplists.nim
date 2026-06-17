@@ -287,10 +287,10 @@ proc drawPopupList*(
         popupList.xPopupRole, states, id = popupList.styleId(), classes = classes
       )
     )
-    popupRoot = context.addWindowRectangle(
+    popupRoot = context.addRenderRectangle(
       layer,
       parent,
-      context.localRectToWindow(popupBounds),
+      context.renderRectFor(popupBounds),
       fill(initColor(0.985, 0.985, 0.975)),
       initColor(0.36, 0.37, 0.39),
       max(popupStyle.box.borderWidth, 1.0'f32),
@@ -314,10 +314,10 @@ proc drawPopupList*(
           max(itemRect.size.width - 16.0'f32, 0.0'f32),
           1.0'f32,
         )
-        discard context.addWindowRectangle(
+        discard context.addRenderRectangle(
           layer,
           popupRoot,
-          context.localRectToWindow(line),
+          context.renderRectFor(line),
           fill(initColor(0.68, 0.69, 0.71)),
         )
       else:
@@ -407,10 +407,10 @@ proc drawPopupList*(
 
   let knobRect = popupList.popupListScrollerKnobRect(popupBounds)
   if not knobRect.isEmpty:
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       layer,
       popupRoot,
-      context.localRectToWindow(knobRect),
+      context.renderRectFor(knobRect),
       fill(initColor(0.10, 0.18, 0.30, 0.34)),
       initColor(0.0, 0.0, 0.0, 0.0),
       0.0'f32,

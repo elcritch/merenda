@@ -285,7 +285,7 @@ protocol DefaultComboBoxAction of ButtonActionProtocol:
 
 protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
   method draw(comboBox: ComboBox, context: DrawContext) =
-    let absoluteFrame = comboBox.rectToWindow(comboBox.bounds)
+    let absoluteFrame = context.renderRectFor(comboBox.bounds)
     let styleStates = comboBox.widgetStateSet()
     let style = context.appearance.resolveComboBoxStyle(
       initControlStyleContext(
@@ -293,7 +293,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       )
     )
 
-    discard context.addWindowRectangle(
+    discard context.addRenderRectangle(
       absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
       style.box.cornerRadius, style.box.shadows,
     )
@@ -302,7 +302,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
 
     let
       arrowRect = style.comboBoxArrowRect(comboBox.bounds)
-      arrowFrame = comboBox.rectToWindow(arrowRect)
+      arrowFrame = context.renderRectFor(arrowRect)
       arrowFill =
         if comboBox.isButtonPressed or comboBox.popupOpen:
           linear(
@@ -317,9 +317,9 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
         max(arrowRect.size.height - 4.0'f32, 0.0'f32),
       )
     discard
-      context.addWindowRectangle(arrowFrame, arrowFill, style.box.borderColor, 0.0'f32)
-    discard context.addWindowRectangle(
-      comboBox.rectToWindow(separatorRect), style.box.borderColor, style.box.borderColor
+      context.addRenderRectangle(arrowFrame, arrowFill, style.box.borderColor, 0.0'f32)
+    discard context.addRenderRectangle(
+      context.renderRectFor(separatorRect), style.box.borderColor, style.box.borderColor
     )
     context.addComboBoxArrow(arrowFrame, style.arrowColor)
     context.addText(

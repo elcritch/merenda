@@ -78,7 +78,7 @@ proc renderViewInto(
         parent
       else:
         (-1).FigIdx
-    rootIdx = context.addWindowRectangle(
+    rootIdx = context.addRenderRectangle(
       level,
       nodeParent,
       absoluteFrame,
@@ -95,7 +95,7 @@ proc renderViewInto(
   )
   if translation.hasTranslation():
     placement.contentParent =
-      context.addWindowTranslation(level, rootIdx, placement.rootRect, translation)
+      context.addRenderTranslation(level, rootIdx, placement.rootRect, translation)
     placement.activeTranslation = placement.activeTranslation.addPoints(translation)
 
   context.beginDraw(

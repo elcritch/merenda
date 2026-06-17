@@ -503,22 +503,22 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     pressed = index == tabView.xPressedIndex
     enabled = item.enabled()
     rect = tabView.tabRectInBar(index)
-    windowRect = tabView.xTabBar.rectToWindow(rect)
+    renderRect = context.renderRectFor(rect)
 
-  discard context.addWindowRectangle(
-    windowRect,
+  discard context.addRenderRectangle(
+    renderRect,
     aquaTabFill(selected, pressed, enabled),
     tabBorderColor(selected, enabled),
     1.0'f32,
     TabCornerRadius,
   )
-  discard context.addWindowRectangle(
-    tabView.xTabBar.rectToWindow(tabHighlightRect(tabView, rect)),
+  discard context.addRenderRectangle(
+    context.renderRectFor(tabHighlightRect(tabView, rect)),
     initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30),
   )
   if selected:
-    discard context.addWindowRectangle(
-      tabView.xTabBar.rectToWindow(tabSeamRect(tabView, rect)), panelFillColor()
+    discard context.addRenderRectangle(
+      context.renderRectFor(tabSeamRect(tabView, rect)), panelFillColor()
     )
   context.addText(
     rect.tabTextRect(),
@@ -527,8 +527,8 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     alignment = taCenter,
   )
   if selected and tabView.isFocusVisible:
-    discard context.addWindowRectangle(
-      tabView.xTabBar.rectToWindow(rect.inset(initEdgeInsets(3.0'f32))),
+    discard context.addRenderRectangle(
+      context.renderRectFor(rect.inset(initEdgeInsets(3.0'f32))),
       initColor(0.0, 0.0, 0.0, 0.0),
       initColor(0.25, 0.45, 0.90),
       1.0'f32,
@@ -586,8 +586,8 @@ protocol TabBarEvents of ResponderEventProtocol:
 protocol TabViewDrawing of ViewDrawingProtocol:
   method draw(tabView: TabView, context: DrawContext) =
     let content = tabView.contentRect()
-    discard context.addWindowRectangle(
-      tabView.rectToWindow(content),
+    discard context.addRenderRectangle(
+      context.renderRectFor(content),
       panelFillColor(),
       panelBorderColor(),
       ContentBorderWidth,
