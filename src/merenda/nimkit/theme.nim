@@ -176,11 +176,15 @@ const
   ButtonFillToken* = "button.fill"
   ButtonHighlightedFillToken* = "button.fill.highlighted"
   ButtonDisabledFillToken* = "button.fill.disabled"
+  ButtonAccentFillToken* = "button.fill.accent"
+  ButtonAccentHighlightedFillToken* = "button.fill.accent.highlighted"
   ButtonTextColorToken* = "button.text.color"
   ButtonDisabledTextColorToken* = "button.text.color.disabled"
   ButtonBorderColorToken* = "button.border.color"
   ButtonHighlightedBorderColorToken* = "button.border.color.highlighted"
   ButtonDisabledBorderColorToken* = "button.border.color.disabled"
+  ButtonAccentBorderColorToken* = "button.border.color.accent"
+  ButtonAccentHighlightedBorderColorToken* = "button.border.color.accent.highlighted"
   ButtonFocusRingColorToken* = "button.focus.ring.color"
   ButtonShadowsToken* = "button.shadows"
   ButtonHighlightedShadowsToken* = "button.shadows.highlighted"
@@ -1594,25 +1598,31 @@ func highlightedButtonShadows(): seq[BoxShadow] =
   ]
 
 func aquaButtonFill(): Fill =
-  linear(
-    initColor(0.72, 0.91, 1.0, 1.0),
-    initColor(0.18, 0.61, 0.98, 1.0),
-    initColor(0.02, 0.30, 0.82, 1.0),
-    fgaY,
-    88'u8,
-  )
+  linear(initColor(0.48, 0.48, 0.47, 1.0), initColor(0.93, 0.93, 0.92, 1.0), fgaY)
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    initColor(0.11, 0.48, 0.92, 1.0),
-    initColor(0.02, 0.28, 0.75, 1.0),
-    initColor(0.01, 0.14, 0.46, 1.0),
+    initColor(0.53, 0.54, 0.55, 1.0),
+    initColor(0.72, 0.74, 0.77, 1.0),
+    initColor(0.55, 0.57, 0.61, 1.0),
     fgaY,
-    96'u8,
+    112'u8,
+  )
+
+func aquaAccentButtonFill(): Fill =
+  linear(initColor(0.04, 0.13, 0.57, 1.0), initColor(0.20, 0.62, 0.98, 1.0), fgaY)
+
+func aquaAccentButtonPressedFill(): Fill =
+  linear(
+    initColor(0.10, 0.40, 0.88, 1.0),
+    initColor(0.02, 0.24, 0.68, 1.0),
+    initColor(0.01, 0.12, 0.42, 1.0),
+    fgaY,
+    104'u8,
   )
 
 func aquaButtonDisabledFill(): Fill =
-  linear(initColor(0.92, 0.94, 0.97, 1.0), initColor(0.70, 0.75, 0.82, 1.0), fgaY)
+  linear(initColor(0.90, 0.91, 0.93, 1.0), initColor(0.76, 0.78, 0.82, 1.0), fgaY)
 
 func aquaChoiceFill(): Fill =
   linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.90, 0.94, 0.99, 1.0), fgaY)
@@ -1676,12 +1686,17 @@ proc initTheme*(): Theme =
   result[ButtonFillToken] = aquaButtonFill()
   result[ButtonHighlightedFillToken] = aquaButtonPressedFill()
   result[ButtonDisabledFillToken] = aquaButtonDisabledFill()
-  result[ButtonTextColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result[ButtonAccentFillToken] = aquaAccentButtonFill()
+  result[ButtonAccentHighlightedFillToken] = aquaAccentButtonPressedFill()
+  result[ButtonTextColorToken] = styleColor(initColor(0.08, 0.08, 0.07, 0.95))
   result[ButtonDisabledTextColorToken] = styleToken(DisabledTextColorToken)
-  result[ButtonBorderColorToken] = styleColor(initColor(0.02, 0.20, 0.58, 1.0))
+  result[ButtonBorderColorToken] = styleColor(initColor(0.39, 0.39, 0.38, 0.84))
   result[ButtonHighlightedBorderColorToken] =
-    styleColor(initColor(0.01, 0.12, 0.42, 1.0))
+    styleColor(initColor(0.30, 0.31, 0.33, 0.92))
   result[ButtonDisabledBorderColorToken] = styleColor(initColor(0.52, 0.57, 0.64, 1.0))
+  result[ButtonAccentBorderColorToken] = styleColor(initColor(0.01, 0.11, 0.49, 1.0))
+  result[ButtonAccentHighlightedBorderColorToken] =
+    styleColor(initColor(0.0, 0.07, 0.32, 1.0))
   result[ButtonFocusRingColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 0.90))
   result[ButtonShadowsToken] = aquaButtonShadows()
   result[ButtonHighlightedShadowsToken] = aquaPressedButtonShadows()
@@ -1690,8 +1705,8 @@ proc initTheme*(): Theme =
   result[ChoiceIndicatorFillToken] = aquaChoiceFill()
   result[ChoiceIndicatorHighlightedFillToken] = aquaChoiceHighlightedFill()
   result[ChoiceIndicatorDisabledFillToken] = aquaButtonDisabledFill()
-  result[ChoiceIndicatorSelectedFillToken] = aquaButtonFill()
-  result[ChoiceIndicatorSelectedHighlightedFillToken] = aquaButtonPressedFill()
+  result[ChoiceIndicatorSelectedFillToken] = aquaAccentButtonFill()
+  result[ChoiceIndicatorSelectedHighlightedFillToken] = aquaAccentButtonPressedFill()
   result[ChoiceIndicatorSelectedDisabledFillToken] = aquaButtonDisabledFill()
   result[ChoiceIndicatorBorderColorToken] = styleColor(initColor(0.42, 0.50, 0.62, 1.0))
   result[ChoiceIndicatorHighlightedBorderColorToken] =
@@ -1755,6 +1770,34 @@ proc initTheme*(): Theme =
   result.addRoleRule(
     srButton,
     {ssDisabled},
+    styleToken(ButtonDisabledFillToken),
+    styleToken(ButtonDisabledBorderColorToken),
+    styleToken(ButtonDisabledTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssAccent},
+    styleToken(ButtonAccentFillToken),
+    styleToken(ButtonAccentBorderColorToken),
+    styleToken(ButtonTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssAccent, ssHighlighted},
+    styleToken(ButtonAccentHighlightedFillToken),
+    styleToken(ButtonAccentHighlightedBorderColorToken),
+    styleToken(ButtonTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssAccent, ssActive},
+    styleToken(ButtonAccentHighlightedFillToken),
+    styleToken(ButtonAccentHighlightedBorderColorToken),
+    styleToken(ButtonTextColorToken),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssAccent, ssDisabled},
     styleToken(ButtonDisabledFillToken),
     styleToken(ButtonDisabledBorderColorToken),
     styleToken(ButtonDisabledTextColorToken),
@@ -2046,10 +2089,14 @@ proc initBannerTheme*(): Theme =
   result[ButtonFillToken] = styleToken(AccentToken)
   result[ButtonHighlightedFillToken] = styleToken(AccentPressedToken)
   result[ButtonDisabledFillToken] = styleToken(DisabledFillToken)
+  result[ButtonAccentFillToken] = styleToken(AccentToken)
+  result[ButtonAccentHighlightedFillToken] = styleToken(AccentPressedToken)
   result[ButtonTextColorToken] = initColor(1.0, 0.97, 0.94, 1.0)
   result[ButtonBorderColorToken] = initColor(0.18, 0.12, 0.08, 1.0)
   result[ButtonHighlightedBorderColorToken] = initColor(0.12, 0.08, 0.05, 1.0)
   result[ButtonDisabledBorderColorToken] = initColor(0.40, 0.37, 0.33, 1.0)
+  result[ButtonAccentBorderColorToken] = initColor(0.18, 0.12, 0.08, 1.0)
+  result[ButtonAccentHighlightedBorderColorToken] = initColor(0.12, 0.08, 0.05, 1.0)
   result[ButtonFocusRingColorToken] = initColor(1.0, 0.97, 0.94, 0.90)
   result[ButtonShadowsToken] = defaultButtonShadows()
   result[ButtonHighlightedShadowsToken] = highlightedButtonShadows()

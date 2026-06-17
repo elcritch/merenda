@@ -28,21 +28,27 @@ proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
   check hasDarkInset
 
 func aquaButtonFill(): Fill =
-  linear(
-    initColor(0.72, 0.91, 1.0, 1.0),
-    initColor(0.18, 0.61, 0.98, 1.0),
-    initColor(0.02, 0.30, 0.82, 1.0),
-    fgaY,
-    88'u8,
-  )
+  linear(initColor(0.48, 0.48, 0.47, 1.0), initColor(0.93, 0.93, 0.92, 1.0), fgaY)
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    initColor(0.11, 0.48, 0.92, 1.0),
-    initColor(0.02, 0.28, 0.75, 1.0),
-    initColor(0.01, 0.14, 0.46, 1.0),
+    initColor(0.53, 0.54, 0.55, 1.0),
+    initColor(0.72, 0.74, 0.77, 1.0),
+    initColor(0.55, 0.57, 0.61, 1.0),
     fgaY,
-    96'u8,
+    112'u8,
+  )
+
+func aquaAccentButtonFill(): Fill =
+  linear(initColor(0.04, 0.13, 0.57, 1.0), initColor(0.20, 0.62, 0.98, 1.0), fgaY)
+
+func aquaAccentButtonPressedFill(): Fill =
+  linear(
+    initColor(0.10, 0.40, 0.88, 1.0),
+    initColor(0.02, 0.24, 0.68, 1.0),
+    initColor(0.01, 0.12, 0.42, 1.0),
+    fgaY,
+    104'u8,
   )
 
 func aquaTextFieldFill(): Fill =
@@ -204,6 +210,11 @@ suite "nimkit theme":
       buttonStyle = appearance.resolveButtonStyle(
         initControlStyleContext(srButton, {ssHighlighted})
       )
+      accentButtonStyle =
+        appearance.resolveButtonStyle(initControlStyleContext(srButton, {ssAccent}))
+      accentHighlightedButtonStyle = appearance.resolveButtonStyle(
+        initControlStyleContext(srButton, {ssAccent, ssHighlighted})
+      )
       checkBoxStyle = appearance.resolveChoiceButtonStyle(
         initControlStyleContext(srCheckBox, {ssSelected})
       )
@@ -255,16 +266,23 @@ suite "nimkit theme":
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
     check buttonStyle.box.fill == aquaButtonPressedFill()
-    check buttonStyle.box.borderColor == initColor(0.01, 0.12, 0.42, 1.0)
+    check accentButtonStyle.box.fill == aquaAccentButtonFill()
+    check accentHighlightedButtonStyle.box.fill == aquaAccentButtonPressedFill()
+    check buttonStyle.box.borderColor == initColor(0.30, 0.31, 0.33, 0.92)
+    check accentButtonStyle.box.borderColor == initColor(0.01, 0.11, 0.49, 1.0)
+    check accentHighlightedButtonStyle.box.borderColor == initColor(
+      0.0, 0.07, 0.32, 1.0
+    )
     check buttonStyle.box.cornerRadius == 14.0
-    check buttonStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
+    check buttonStyle.text.color == initColor(0.08, 0.08, 0.07, 0.95)
+    check accentButtonStyle.text.color == initColor(0.08, 0.08, 0.07, 0.95)
     check buttonStyle.minSize == initSize(0.0, 32.0)
     check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
 
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
     check checkBoxStyle.minSize == initSize(0.0, 18.0)
-    check checkBoxStyle.indicator.fill == aquaButtonFill()
+    check checkBoxStyle.indicator.fill == aquaAccentButtonFill()
     check checkBoxStyle.indicator.cornerRadius == 6.0
     check checkBoxStyle.indicator.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
     check radioStyle.indicator.cornerRadius == 7.0
