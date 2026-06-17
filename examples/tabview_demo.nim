@@ -6,6 +6,8 @@ import sigils/selectors
 type TabDemoDelegate = ref object of Responder
   status: TextField
 
+const DemoWindowWidth = 560.0'f32
+
 protocol TabDemoDelegateProtocol of TabViewDelegate:
   method didSelectTabViewItem(
       delegate: TabDemoDelegate, tabView: TabView, item: TabViewItem
@@ -82,7 +84,6 @@ proc accountPane(): View =
 
 let
   app = sharedApplication()
-  window = newWindow("NimKit Tab View Demo", frame = initRect(160, 160, 560, 360))
   root = newView()
   layout = newStackView(laVertical)
   header = newTitleLabel("Tab View Demo")
@@ -132,7 +133,7 @@ controls.distribution = svdNatural
 controls.setHuggingPriority(LayoutPriorityRequired, laVertical)
 controls.setCompressionPriority(LayoutPriorityRequired, laVertical)
 tabView.setHuggingPriority(LayoutPriorityLow, laVertical)
-tabView.setCompressionPriority(LayoutPriorityLow, laVertical)
+tabView.setCompressionPriority(LayoutPriorityRequired, laVertical)
 
 discard tabView.addTabViewItem(newTabViewItem("General", generalPane(), "general"))
 discard tabView.addTabViewItem(newTabViewItem("Editor", editorPane(), "editor"))
@@ -159,6 +160,16 @@ layout.pinEdges(
   toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight, leBottom}
 )
 
+let
+  minimumWindowHeight = layout
+    .resolvedIntrinsicContentSize()
+    .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height
+  window = newWindow(
+    "NimKit Tab View Demo",
+    frame = initRect(160, 160, DemoWindowWidth, minimumWindowHeight),
+  )
+
+window.minSize = initSize(DemoWindowWidth, minimumWindowHeight)
 window.setContentView(root)
 discard window.makeFirstResponder(tabView)
 app.addWindow(window)
