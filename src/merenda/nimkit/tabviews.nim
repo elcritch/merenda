@@ -19,6 +19,7 @@ const
   TabInset = 8.0'f32
   TabGap = 1.0'f32
   ContentBorderWidth = 1.0'f32
+  TabCornerRadius = 6.0'f32
 
 type
   TabPosition* = enum
@@ -415,10 +416,85 @@ proc removeTabViewItem*(tabView: TabView, item: TabViewItem): bool {.discardable
 proc tabTextRect(rect: Rect): Rect =
   initRect(
     rect.origin.x + 8.0'f32,
-    rect.origin.y + 2.0'f32,
+    rect.origin.y + 1.0'f32,
     max(rect.size.width - 16.0'f32, 0.0'f32),
     max(rect.size.height - 4.0'f32, 0.0'f32),
   )
+
+func panelFillColor(): Color =
+  initColor(0.98, 0.98, 0.96)
+
+func panelBorderColor(): Color =
+  initColor(0.42, 0.44, 0.48)
+
+func aquaTabFill(selected, pressed, enabled: bool): Fill =
+  if not enabled:
+    result =
+      linear(initColor(0.90, 0.91, 0.93, 1.0), initColor(0.78, 0.80, 0.84, 1.0), fgaY)
+  elif selected:
+    result = linear(
+      initColor(1.0, 1.0, 1.0, 1.0),
+      initColor(0.96, 0.97, 0.98, 1.0),
+      panelFillColor(),
+      fgaY,
+      92'u8,
+    )
+  elif pressed:
+    result =
+      linear(initColor(0.76, 0.79, 0.84, 1.0), initColor(0.64, 0.68, 0.75, 1.0), fgaY)
+  else:
+    result =
+      linear(initColor(0.93, 0.94, 0.96, 1.0), initColor(0.76, 0.79, 0.84, 1.0), fgaY)
+
+func tabBorderColor(selected, enabled: bool): Color =
+  if selected:
+    panelBorderColor()
+  elif enabled:
+    initColor(0.55, 0.57, 0.62)
+  else:
+    initColor(0.65, 0.67, 0.70)
+
+func tabTextColor(enabled, selected: bool): Color =
+  if not enabled:
+    initColor(0.48, 0.50, 0.54)
+  elif selected:
+    initColor(0.07, 0.08, 0.10)
+  else:
+    initColor(0.14, 0.15, 0.18)
+
+proc tabSeamRect(tabView: TabView, rect: Rect): Rect =
+  case tabView.tabPosition()
+  of tpTop:
+    initRect(
+      rect.origin.x + ContentBorderWidth,
+      rect.maxY - ContentBorderWidth,
+      max(rect.size.width - ContentBorderWidth * 2.0'f32, 0.0'f32),
+      ContentBorderWidth + 1.0'f32,
+    )
+  of tpBottom:
+    initRect(
+      rect.origin.x + ContentBorderWidth,
+      rect.origin.y,
+      max(rect.size.width - ContentBorderWidth * 2.0'f32, 0.0'f32),
+      ContentBorderWidth + 1.0'f32,
+    )
+
+proc tabHighlightRect(tabView: TabView, rect: Rect): Rect =
+  case tabView.tabPosition()
+  of tpTop:
+    initRect(
+      rect.origin.x + 4.0'f32,
+      rect.origin.y + 1.0'f32,
+      max(rect.size.width - 8.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  of tpBottom:
+    initRect(
+      rect.origin.x + 4.0'f32,
+      rect.maxY - 2.0'f32,
+      max(rect.size.width - 8.0'f32, 0.0'f32),
+      1.0'f32,
+    )
 
 proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   let
@@ -427,28 +503,29 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     pressed = index == tabView.xPressedIndex
     enabled = item.enabled()
     rect = tabView.tabRectInBar(index)
-    fillColor =
-      if selected:
-        initColor(0.98, 0.98, 0.96)
-      elif pressed:
-        initColor(0.78, 0.80, 0.84)
-      else:
-        initColor(0.86, 0.87, 0.89)
-    borderColor =
-      if selected:
-        initColor(0.42, 0.44, 0.48)
-      else:
-        initColor(0.56, 0.58, 0.62)
-    textColor =
-      if enabled:
-        initColor(0.08, 0.09, 0.11)
-      else:
-        initColor(0.50, 0.52, 0.56)
+    windowRect = tabView.xTabBar.rectToWindow(rect)
 
   discard context.addWindowRectangle(
-    tabView.xTabBar.rectToWindow(rect), fillColor, borderColor, 1.0'f32, 5.0'f32
+    windowRect,
+    aquaTabFill(selected, pressed, enabled),
+    tabBorderColor(selected, enabled),
+    1.0'f32,
+    TabCornerRadius,
   )
-  context.addText(rect.tabTextRect(), item.label(), textColor, alignment = taCenter)
+  discard context.addWindowRectangle(
+    tabView.xTabBar.rectToWindow(tabHighlightRect(tabView, rect)),
+    initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30),
+  )
+  if selected:
+    discard context.addWindowRectangle(
+      tabView.xTabBar.rectToWindow(tabSeamRect(tabView, rect)), panelFillColor()
+    )
+  context.addText(
+    rect.tabTextRect(),
+    item.label(),
+    tabTextColor(enabled, selected),
+    alignment = taCenter,
+  )
   if selected and tabView.isFocusVisible:
     discard context.addWindowRectangle(
       tabView.xTabBar.rectToWindow(rect.inset(initEdgeInsets(3.0'f32))),
@@ -508,12 +585,13 @@ protocol TabBarEvents of ResponderEventProtocol:
 
 protocol TabViewDrawing of ViewDrawingProtocol:
   method draw(tabView: TabView, context: DrawContext) =
-    let
-      content = tabView.contentRect()
-      panelFill = initColor(0.98, 0.98, 0.96)
-      panelBorder = initColor(0.42, 0.44, 0.48)
+    let content = tabView.contentRect()
     discard context.addWindowRectangle(
-      tabView.rectToWindow(content), panelFill, panelBorder, ContentBorderWidth, 4.0'f32
+      tabView.rectToWindow(content),
+      panelFillColor(),
+      panelBorderColor(),
+      ContentBorderWidth,
+      4.0'f32,
     )
 
 protocol TabViewLayout of ViewLayoutProtocol:
