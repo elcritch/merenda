@@ -178,12 +178,6 @@ foundation.
    - source and destination hooks, drag operations, dragging info, session
      lifecycle, promised files, and control/table/list integration
 
-### Graphics Resources
-
-Keep FigDraw as the renderer boundary, but add AppKit-style resource objects on
-top of it.
-
-
 ### Documents And Controllers
 
 Add the document/window-controller layer after application, menu, and window
