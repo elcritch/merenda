@@ -160,10 +160,10 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   method didCancelEditingCell*(
     tableView: TableView, row: int, column: TableColumn
   ) {.optional.}
-  method validateDragging*(
+  method validateDragOperation*(
     tableView: TableView, info: TableDraggingInfo
   ): TableDragOperation {.optional.}
-  method acceptDragging*(
+  method acceptDragOperation*(
     tableView: TableView, info: TableDraggingInfo
   ): bool {.optional.}
 
@@ -708,6 +708,17 @@ proc clickedColumnIndex*(tableView: TableView): int =
   else:
     tableView.columnIndex(tableView.xClickedColumn.identifier())
 
+proc selectedIndex*(tableView: TableView): int =
+  if tableView.isNil:
+    -1
+  else:
+    ListView(tableView).selectedIndex()
+
+proc `selectedIndex=`*(tableView: TableView, index: int) =
+  if tableView.isNil:
+    return
+  ListView(tableView).selectedIndex = index
+
 proc allowsColumnSelection*(tableView: TableView): bool =
   (not tableView.isNil) and tableView.xAllowsColumnSelection
 
@@ -862,27 +873,33 @@ proc beginDraggingRows*(
   )
   tableView.xDraggingInfo = result
 
-proc validateDragging*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
+proc validateDragOperation*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
   if tableView.isNil:
     return tdoNone
   let delegate = tableView.delegate()
   if not delegate.isNil:
     let operation =
-      delegate.trySendLocal(validateDragging(), (tableView: tableView, info: info))
+      delegate.trySendLocal(validateDragOperation(), (tableView: tableView, info: info))
     if operation.isSome:
       return operation.get()
   info.operation
 
-proc acceptDragging*(tableView: TableView, info: TableDraggingInfo): bool =
+proc acceptDragOperation*(tableView: TableView, info: TableDraggingInfo): bool =
   if tableView.isNil:
     return false
   let delegate = tableView.delegate()
   if not delegate.isNil:
     let accepted =
-      delegate.trySendLocal(acceptDragging(), (tableView: tableView, info: info))
+      delegate.trySendLocal(acceptDragOperation(), (tableView: tableView, info: info))
     if accepted.isSome:
       return accepted.get()
   info.operation != tdoNone
+
+proc validateDragging*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
+  tableView.validateDragOperation(info)
+
+proc acceptDragging*(tableView: TableView, info: TableDraggingInfo): bool =
+  tableView.acceptDragOperation(info)
 
 proc findCellSlot(slots: openArray[TableCellSlot], row: int, column: TableColumn): int =
   for index, slot in slots:

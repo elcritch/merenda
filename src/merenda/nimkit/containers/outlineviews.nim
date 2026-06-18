@@ -177,7 +177,7 @@ proc outlineCellText(outlineView: OutlineView, row: int, column: TableColumn): s
     for _ in 0 ..< outlineRow.level:
       result.add "  "
     if outlineView.isItemExpandable(outlineRow.item.identifier):
-      result.add(if outlineView.isItemExpanded(outlineRow.item.identifier): "v " else: "> ")
+      result.add "> "
     else:
       result.add "  "
     result.add outlineRow.item.title

@@ -181,7 +181,7 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
   ) =
     delegate.cancelledEdits.add column.identifier & ":" & $row
 
-  method validateDragging(
+  method validateDragOperation(
       delegate: TableDelegateSpy, tableView: TableView, info: TableDraggingInfo
   ): TableDragOperation =
     if delegate.dragOperation == tdoNone:
@@ -189,7 +189,7 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
     else:
       delegate.dragOperation
 
-  method acceptDragging(
+  method acceptDragOperation(
       delegate: TableDelegateSpy, tableView: TableView, info: TableDraggingInfo
   ): bool =
     delegate.dragAccepted
