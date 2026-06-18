@@ -47,6 +47,13 @@ application, responder, view, window, accessibility, or control/cell layers.
   image registration, cache policy storage, pasteboard image storage, image
   drawing nodes, and `ImageView` with intrinsic sizing and accessibility
   semantics.
+- Expanded `ClipView` and `ScrollView` parity: clipped document ownership,
+  constrained `scrollToPoint`, autoscroll, document/visible rect helpers,
+  clip-view background policy, reflected scroll notifications, per-axis
+  line/page scrolling, border/background policy, scroller insets, header/corner
+  chrome, ruler placeholders, dynamic scrolling storage, and explicit scroller
+  autohide policy. Updated `examples/scrollview_demo.nim` to exercise the new
+  chrome and scrolling APIs.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -194,19 +201,6 @@ semantics are stable enough to host it.
    - shared controller, new/open/reopen document flow, recent documents,
      document lookup by window/URL, close-all/review-unsaved flow, and menu
      validation for document actions
-
-### ScrollView And ClipView Parity
-
-Keep treating `ScrollView` as a primitive container like AppKit does.
-
-1. Expand `ClipView` responsibilities:
-   - document cursor, `scrollToPoint`, `constrainScrollPoint`, autoscroll,
-     document rect, visible rect, background/draws-background policy, and
-     `reflectScrolledClipView` notifications
-2. Expand `ScrollView` chrome:
-   - horizontal/vertical line and page scroll values, border/background policy,
-     scroller insets, header/corner views, ruler placeholders, dynamic
-     scrolling, and autohide policy
 
 ### TableView And OutlineView
 
