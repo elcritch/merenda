@@ -27,6 +27,13 @@ type TableDelegateSpy = ref object of Responder
   viewCalls: seq[string]
   activatedRows: seq[int]
   buttonActionRows: seq[int]
+  sortChanges: seq[string]
+  deniedEditRows: seq[int]
+  beganEdits: seq[string]
+  committedEdits: seq[string]
+  cancelledEdits: seq[string]
+  dragOperation: TableDragOperation
+  dragAccepted: bool
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
   for value in indexes:
@@ -142,6 +149,51 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
   method didActivateRow(delegate: TableDelegateSpy, tableView: TableView, row: int) =
     delegate.activatedRows.add row
 
+  method sortDescriptorsDidChange(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      column: TableColumn,
+      direction: TableSortDirection,
+  ) =
+    delegate.sortChanges.add column.identifier & ":" & $direction
+
+  method shouldEditCell(
+      delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
+  ): bool =
+    not delegate.deniedEditRows.containsIndex(row)
+
+  method didBeginEditingCell(
+      delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
+  ) =
+    delegate.beganEdits.add column.identifier & ":" & $row
+
+  method didCommitEditingCell(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ) =
+    delegate.committedEdits.add column.identifier & ":" & $row & ":" & value
+
+  method didCancelEditingCell(
+      delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
+  ) =
+    delegate.cancelledEdits.add column.identifier & ":" & $row
+
+  method validateDragging(
+      delegate: TableDelegateSpy, tableView: TableView, info: TableDraggingInfo
+  ): TableDragOperation =
+    if delegate.dragOperation == tdoNone:
+      info.operation
+    else:
+      delegate.dragOperation
+
+  method acceptDragging(
+      delegate: TableDelegateSpy, tableView: TableView, info: TableDraggingInfo
+  ): bool =
+    delegate.dragAccepted
+
 protocol TableDelegateShouldTrackSpyMethods of TableViewDelegate:
   method shouldTrackCell(
       delegate: TableDelegateSpy,
@@ -243,6 +295,39 @@ suite "NimKit TableView":
     tableView.removeColumn(email)
     check tableView.columnCount == 1
     check email.tableView.isNil
+
+  test "table headers hit test resize reorder and sort columns":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 300, 160))
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name", width = 120.0, minWidth = 80.0)
+      age = newTableColumn("age", "Age", width = 60.0)
+
+    tableView.delegate = delegate
+    tableView.addColumn(name)
+    tableView.addColumn(age)
+
+    check tableView.showsHeader()
+    check tableView.tableHeaderHeight() == 24.0'f32
+    check tableView.tableHeaderHitTest(initPoint(20.0'f32, 10.0'f32)).column == name
+    check tableView.tableHeaderHitTest(initPoint(118.0'f32, 10.0'f32)).part == thpResizeHandle
+
+    tableView.resizeColumn(name, 70.0)
+    check name.width == 80.0'f32
+
+    tableView.requestSort(age, tsdAscending)
+    check age.sortDirection == tsdAscending
+    check delegate.sortChanges == @["age:tsdAscending"]
+
+    tableView.moveColumn(1, 0)
+    check tableView.columnAt(0) == age
+    check tableView.columnAt(1) == name
+
+    age.hidden = true
+    var visible: seq[string]
+    for column in tableView.visibleColumns():
+      visible.add column.identifier
+    check visible == @["name"]
 
   test "table columns move cleanly between table views":
     let
@@ -512,6 +597,63 @@ suite "NimKit TableView":
 
     check tableView.selectedIndexes == @[1, 2, 3]
     check ListView(tableView).selectedRange == 1 .. 3
+
+  test "table view tracks selected columns clicked cell editing persistence and drag state":
+    let
+      tableView = newTableView()
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name", width = 120.0)
+      state = newTableColumn("state", "State", width = 80.0)
+
+    tableView.rowCount = 4
+    tableView.addColumn(name)
+    tableView.addColumn(state)
+    tableView.delegate = delegate
+    tableView.allowsColumnSelection = true
+
+    tableView.selectCell(2, state)
+    check tableView.clickedRow == 2
+    check tableView.clickedColumn == state
+    check tableView.clickedColumnIndex == 1
+    check tableView.selectedColumns == @[state]
+    check tableView.selectedIndex == 2
+
+    check tableView.beginEditingCell(2, state)
+    check tableView.editingState.active
+    check delegate.beganEdits == @["state:2"]
+    check tableView.commitEditingCell("done")
+    check not tableView.editingState.active
+    check delegate.committedEdits == @["state:2:done"]
+
+    delegate.deniedEditRows = @[1]
+    check not tableView.beginEditingCell(1, name)
+    check tableView.beginEditingCell(3, name)
+    check tableView.cancelEditingCell()
+    check delegate.cancelledEdits == @["name:3"]
+
+    tableView.autosaveName = "main-table"
+    state.hidden = true
+    tableView.requestSort(name, tsdDescending)
+    let records = tableView.columnAutosaveRecords()
+    check tableView.autosaveName == "main-table"
+    check records.len == 2
+
+    tableView.moveColumn(1, 0)
+    state.hidden = false
+    name.width = 200.0
+    tableView.restoreColumnAutosaveRecords(records)
+    check tableView.columnAt(0) == name
+    check tableView.columnAt(1) == state
+    check state.hidden
+    check name.sortDirection == tsdDescending
+
+    delegate.dragOperation = tdoCopy
+    delegate.dragAccepted = true
+    let info = tableView.beginDraggingRows([0, 3, 9], operation = tdoMove)
+    check info.rows == @[0, 3]
+    check info.operation == tdoMove
+    check tableView.validateDragging(info) == tdoCopy
+    check tableView.acceptDragging(info)
 
   test "table view pages to scroll edge when trailing rows are disabled":
     let
