@@ -29,7 +29,7 @@ suite "NimKit OutlineView":
     check outlineView.rowCount == 5
     check outlineView.itemAtRow(2).identifier == "main"
     check outlineView.levelForRow(2) == 2
-    check outlineView.tableCellText(0, outlineView.outlineColumn()).startsWith("> ")
+    check outlineView.tableCellText(0, outlineView.outlineColumn()).startsWith("v ")
     check outlineView.tableCellText(2, outlineView.outlineColumn()).startsWith("      ")
 
     outlineView.collapseItem("project")
