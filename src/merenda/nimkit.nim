@@ -7,10 +7,12 @@ import merenda/nimkit/drawing/chromes/aquachrome
 import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
 import merenda/nimkit/drawing/drawing
+import merenda/nimkit/drawing/images
 import merenda/nimkit/foundation/events
 import merenda/nimkit/text/fieldeditors
 import merenda/nimkit/containers/formviews
 import merenda/nimkit/containers/gridviews
+import merenda/nimkit/view/imageviews
 import merenda/nimkit/responder/keybindings
 import merenda/nimkit/containers/listbasics
 import merenda/nimkit/containers/listviews
@@ -44,10 +46,12 @@ export aquachrome
 export comboboxes
 export controls
 export drawing
+export images
 export events
 export fieldeditors
 export formviews
 export gridviews
+export imageviews
 export keybindings
 export listbasics
 export listviews except visibleRowViews

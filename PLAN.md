@@ -43,6 +43,10 @@ application, responder, view, window, accessibility, or control/cell layers.
 - Removed the leftover `src/merenda/nimkit/chromes/aquachrome.nim`
   compatibility shim; Aqua chrome now lives only at
   `src/merenda/nimkit/drawing/chromes/aquachrome.nim`.
+- Added image resources on top of FigDraw: pixel/data/file construction, named
+  image registration, cache policy storage, pasteboard image storage, image
+  drawing nodes, and `ImageView` with intrinsic sizing and accessibility
+  semantics.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -179,9 +183,6 @@ foundation.
 Keep FigDraw as the renderer boundary, but add AppKit-style resource objects on
 top of it.
 
-3. Add image resources:
-   - file/data/pasteboard construction, named images, size/cache policy, image
-     views, and image drawing nodes
 
 ### Documents And Controllers
 

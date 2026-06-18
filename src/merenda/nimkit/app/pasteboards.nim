@@ -2,6 +2,7 @@ import std/[options, tables]
 
 import sigils/selectors
 
+import ../drawing/images
 import ../text/textstorage
 
 type
@@ -10,6 +11,7 @@ type
     xTypes: seq[string]
     xStrings: Table[string, string]
     xTextStorage: Table[string, TextStorage]
+    xImages: Table[string, ImageResource]
     xChangeCount: int
     xProvider: DynamicAgent
 
@@ -31,6 +33,7 @@ const
 
   PasteboardTypeString* = "public.utf8-plain-text"
   PasteboardTypeTextStorage* = "nimkit.text-storage"
+  PasteboardTypeImage* = "public.image"
 
 protocol PasteboardProviderProtocol:
   method pasteboardTypes*(pasteboard: Pasteboard): seq[string] {.optional.}
@@ -54,6 +57,7 @@ proc newPasteboard*(name = ""): Pasteboard =
   result = Pasteboard(xName: name)
   result.xStrings = initTable[string, string]()
   result.xTextStorage = initTable[string, TextStorage]()
+  result.xImages = initTable[string, ImageResource]()
 
 proc pasteboardName*(pasteboard: Pasteboard): string =
   if pasteboard.isNil: "" else: pasteboard.xName
@@ -116,6 +120,7 @@ proc syncProviderString(pasteboard: Pasteboard) =
   pasteboard.xTypes.setLen(0)
   pasteboard.xStrings.clear()
   pasteboard.xTextStorage.clear()
+  pasteboard.xImages.clear()
   pasteboard.xTypes.add PasteboardTypeString
   pasteboard.xStrings[PasteboardTypeString] = providerString
   inc pasteboard.xChangeCount
@@ -136,6 +141,7 @@ proc clearContents*(pasteboard: Pasteboard) =
   pasteboard.xTypes.setLen(0)
   pasteboard.xStrings.clear()
   pasteboard.xTextStorage.clear()
+  pasteboard.xImages.clear()
   inc pasteboard.xChangeCount
   discard pasteboard.clearProviderContents()
 
@@ -184,6 +190,19 @@ proc textStorageForType*(pasteboard: Pasteboard, kind: string): TextStorage =
   if pasteboard.isNil or kind notin pasteboard.xTextStorage:
     return nil
   pasteboard.xTextStorage[kind].copyTextStorage()
+
+proc setImage*(pasteboard: Pasteboard, kind: string, image: ImageResource): bool =
+  if pasteboard.isNil or image.isNil:
+    return false
+  pasteboard.addType(kind)
+  pasteboard.xImages[kind] = image.copyImageResource()
+  inc pasteboard.xChangeCount
+  true
+
+proc imageForType*(pasteboard: Pasteboard, kind: string): ImageResource =
+  if pasteboard.isNil or kind notin pasteboard.xImages:
+    return nil
+  pasteboard.xImages[kind].copyImageResource()
 
 proc availableTypeFromArray*(
     pasteboard: Pasteboard, preferredTypes: openArray[string]
