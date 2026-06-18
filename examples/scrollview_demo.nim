@@ -9,19 +9,31 @@ let
   contentGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 22.0, 24.0))
   title = newTitleLabel("Scroll View")
   status = newStatusLabel("")
+  details = newStatusLabel("")
   scrollView = newScrollView()
-  document = newView(frame = initRect(0, 0, 620, 620))
+  document = newView(frame = initRect(0, 0, 760, 660))
+  headerView = newStatusLabel("  Document header view - scroller insets, border, background, and headers are owned by ScrollView",
+    frame = initRect(0, 0, 760, 24))
+  cornerView = newStatusLabel("Corner", frame = initRect(0, 0, 72, 24))
   controls = newStackView(laHorizontal)
   topButton = newButton("Top")
   middleButton = newButton("Middle")
   bottomButton = newButton("Bottom")
+  rightButton = newButton("Right Edge")
   topAction = actionSelector("scrollToTop")
   middleAction = actionSelector("scrollToMiddle")
   bottomAction = actionSelector("scrollToBottom")
+  rightAction = actionSelector("scrollToRightEdge")
 
 proc updateStatus() =
   let offset = scrollView.contentOffset()
-  status.text = "Offset: " & $offset.x.int & ", " & $offset.y.int
+  let visible = scrollView.clipView().documentVisibleRect()
+  status.text = "Offset: " & $offset.x.int & ", " & $offset.y.int &
+    "  visible: " & $visible.size.width.int & " x " & $visible.size.height.int
+  details.text = "line scroll H/V: " & $scrollView.horizontalLineScroll().int &
+    "/" & $scrollView.verticalLineScroll().int &
+    "  page scroll H/V: " & $scrollView.horizontalPageScroll().int &
+    "/" & $scrollView.verticalPageScroll().int
 
 proc addDocumentRow(index: int, heading, body: string) =
   let
@@ -53,14 +65,31 @@ proc scrollToBottom(sender: DynamicAgent) =
     scrollView.scrollToFraction(y = 1.0)
     updateStatus()
 
+proc scrollToRightEdge(sender: DynamicAgent) =
+  if sender == DynamicAgent(rightButton):
+    scrollView.scrollToFraction(x = 1.0)
+    updateStatus()
+
 root.background = initColor(0.95, 0.96, 0.98)
 document.background = initColor(1.0, 1.0, 1.0, 1.0)
+headerView.background = initColor(0.88, 0.91, 0.96, 1.0)
+cornerView.background = initColor(0.82, 0.87, 0.94, 1.0)
 
 scrollView.documentView = document
 scrollView.hasHorizontalScroller = true
 scrollView.hasVerticalScroller = true
-scrollView.autohidesScrollers = true
-scrollView.lineScroll = 18.0
+scrollView.autohidePolicy = sapWhenNeeded
+scrollView.horizontalLineScroll = 28.0
+scrollView.verticalLineScroll = 18.0
+scrollView.horizontalPageScroll = 180.0
+scrollView.verticalPageScroll = 140.0
+scrollView.borderType = svbLineBorder
+scrollView.drawsBackground = true
+scrollView.scrollerInsets = initEdgeInsets(4.0, 4.0, 4.0, 4.0)
+scrollView.horizontalHeaderView = headerView
+scrollView.cornerView = cornerView
+scrollView.setRulerPlaceholder(laHorizontal, initRulerPlaceholder(visible = true, thickness = 18.0))
+scrollView.dynamicScrolling = true
 
 controls.spacing = 8.0
 controls.alignment = svaCenter
@@ -72,18 +101,22 @@ middleButton.target = newActionTarget(middleAction, scrollToMiddle)
 middleButton.action = middleAction
 bottomButton.target = newActionTarget(bottomAction, scrollToBottom)
 bottomButton.action = bottomAction
+rightButton.target = newActionTarget(rightAction, scrollToRightEdge)
+rightButton.action = rightAction
 
 addDocumentRow(0, "Document Header", "The document is larger than the viewport.")
-addDocumentRow(1, "Notebook", "Mouse-wheel scrolling changes the content offset.")
-addDocumentRow(2, "Preview", "The scroll view clips its document view.")
-addDocumentRow(3, "Assets", "Horizontal scrolling is enabled for wide content.")
-addDocumentRow(4, "Inspector", "Autohiding scrollers appear only when needed.")
-addDocumentRow(5, "Timeline", "Programmatic scrolling uses ScrollView APIs.")
-addDocumentRow(6, "Search Results", "Rows can be ordinary NimKit views.")
-addDocumentRow(7, "Debug Log", "The first pass keeps scrollers lightweight.")
+addDocumentRow(1, "Clip View", "scrollToPoint and constrained content offsets are routed through ClipView.")
+addDocumentRow(2, "Preview", "The scroll view clips its document view and reports the visible document rect.")
+addDocumentRow(3, "Assets", "Horizontal scrolling has its own line and page increments.")
+addDocumentRow(4, "Inspector", "Autohide policy is explicit: never, when needed, or always hidden.")
+addDocumentRow(5, "Timeline", "Border, background, and scroller insets are ScrollView chrome policy.")
+addDocumentRow(6, "Header", "Header and corner views are plumbed in as owned chrome views.")
+addDocumentRow(7, "Rulers", "Ruler placeholders store visibility and thickness before native rulers exist.")
+addDocumentRow(8, "Autoscroll", "ClipView autoscroll uses axis line-scroll values near the viewport edge.")
+addDocumentRow(9, "Debug Log", "Dynamic scrolling is stored separately from scroller visibility policy.")
 
-controls.addArrangedSubview(topButton, middleButton, bottomButton)
-root.addSubview(title, status, scrollView, controls)
+controls.addArrangedSubview(topButton, middleButton, bottomButton, rightButton)
+root.addSubview(title, status, details, scrollView, controls)
 
 title.pinEdges(toGuide = contentGuide, edges = {leLeft, leTop, leRight})
 
@@ -91,7 +124,10 @@ activate(
   status.topAnchor.equalTo(title.bottomAnchor, constant = 8.0),
   status.leftAnchor.equalTo(title.leftAnchor),
   status.rightAnchor.equalTo(title.rightAnchor),
-  scrollView.topAnchor.equalTo(status.bottomAnchor, constant = 12.0),
+  details.topAnchor.equalTo(status.bottomAnchor, constant = 4.0),
+  details.leftAnchor.equalTo(title.leftAnchor),
+  details.rightAnchor.equalTo(title.rightAnchor),
+  scrollView.topAnchor.equalTo(details.bottomAnchor, constant = 12.0),
   scrollView.leftAnchor.equalTo(title.leftAnchor),
   scrollView.rightAnchor.equalTo(title.rightAnchor),
   controls.topAnchor.equalTo(scrollView.bottomAnchor, constant = 12.0),
