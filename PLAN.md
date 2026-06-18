@@ -19,17 +19,36 @@ NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid containers, buttons, text fields, combo boxes,
 scroll views, list views, table views, basic text editing lifecycle, action
-dispatch, and in-process pasteboard support.
+dispatch, in-process pasteboard support, and a pure Nim accessibility metadata
+and protocol core.
+
+The source tree is now organized around domain modules under
+`accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
+`responder`, `text`, and `view`. The stable public entry point remains
+`merenda/nimkit`; internal code and tests should import the domain modules
+directly when they need a narrower surface.
 
 The next work should move NimKit toward the OpenSTEP/AppKit framework shape:
-stabilize the remaining native/backend edges around application and window
-behavior, then add richer pasteboard, dragging, graphics-resource, document,
-table, and outline systems. Avoid adding widget-local special cases where AppKit
-solves the behavior through the application, responder, view, window, or
-control/cell layers.
+stabilize the remaining native/backend edges around application, window, and
+semantic accessibility behavior, then add richer pasteboard, dragging,
+graphics-resource, document, table, and outline systems. Avoid adding
+widget-local special cases where AppKit solves the behavior through the
+application, responder, view, window, accessibility, or control/cell layers.
 
 ## Recently Completed
 
+- Reorganized NimKit into domain subdirectories and removed the old empty
+  top-level module forwarders. The `merenda/nimkit` umbrella remains the
+  compatibility import for users.
+- Removed the leftover `src/merenda/nimkit/chromes/aquachrome.nim`
+  compatibility shim; Aqua chrome now lives only at
+  `src/merenda/nimkit/drawing/chromes/aquachrome.nim`.
+- Added a pure Nim accessibility core: roles, traits, notifications, typed
+  attribute values, default view metadata, ignored/element state, flattened
+  accessibility children, settable attribute helpers, and action dispatch.
+- Added built-in accessibility semantics for views, buttons, checkboxes, text
+  fields, labels, and value-change notifications, with
+  `tests/tnimkit_accessibility.nim` covering the core behavior.
 - Expanded responder event coverage for key up, modifier flag changes,
   right/other mouse events, scroll phases, help requests, and cursor/tracking
   events.
@@ -85,7 +104,46 @@ control/cell layers.
   transitions, hide/unhide window restore, frame autosave helpers, and window
   menu refresh when windows are added, removed, activated, or closed.
 
+## Current Verification
+
+- `nim test` passes locally on macOS with the current domain module layout.
+- GitHub Actions is currently blocked before runner startup by account billing
+  or spending-limit state, not by a Nim build or test failure. Rerun CI after
+  the GitHub account issue is cleared.
+
 ## Near-Term Work
+
+### Module Organization And Public Surface
+
+Keep the new domain layout stable and make import boundaries intentional.
+
+1. Keep `src/merenda/nimkit.nim` as the user-facing umbrella export, and avoid
+   recreating broad root-level forwarding modules for internal convenience.
+2. Audit domain imports for accidental cycles or oversized exports now that
+   tests import the narrower module paths.
+3. Update docs and examples to prefer either `import merenda/nimkit` for
+   application code or explicit domain imports for focused tests and internals.
+
+### Accessibility Core
+
+Keep accessibility backend-neutral until the native application/window backend
+boundary is ready.
+
+1. Fill out role and trait defaults for menus, popup lists, combo box popup
+   rows, tabs, scroll areas, list rows, table rows, and table cells.
+2. Route focus, selection, enabled-state, expanded/collapsed, and value-change
+   notifications from the same mutation procs that already update rendering or
+   responder state.
+3. Add semantic traversal helpers:
+   - accessibility element at point
+   - ordered accessibility descendants
+   - role/action validation helpers for tests and future backend bridges
+4. Add richer text accessibility hooks:
+   - selected range, insertion point, editable/selectable traits, and basic
+     line/character geometry once text layout exposes stable offsets
+5. Stage native bridge work later behind a backend adapter for NSAccessibility,
+   UI Automation, and AT-SPI-style APIs; do not put platform imports in the core
+   accessibility modules.
 
 ### Application And Window Hardening
 
@@ -196,6 +254,8 @@ and dragging foundations can support it.
 - Continue testing scaled input against rendering on macOS, X11, Wayland, and
   inline-windowless targets.
 - Keep render construction unit-testable without a live native window.
+- Keep accessibility construction and notification tests backend-free until the
+  native bridge exists.
 - Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style
   escape hatches for tests and diagnostics.
 
@@ -203,8 +263,8 @@ and dragging foundations can support it.
 
 - Add a formal backend boundary when `Application`/`Window` start accumulating
   more siwin-specific logic. Window creation, event polling, native handle
-  lookup, renderer ownership, and backend operations should sit behind a small
-  NimKit backend interface.
+  lookup, renderer ownership, accessibility bridge operations, and backend
+  operations should sit behind a small NimKit backend interface.
 - Keep popup presentation policy on `Window`/control instances. Do not add
   global popup state; platforms without native popup windows should keep using
   the same inline FigDraw path.
@@ -239,6 +299,8 @@ and dragging foundations can support it.
 - How far to take public export narrowing for `View.x*` storage. The umbrella
   import already hides raw layout-input/cache type names, but fully hiding view
   storage needs a deeper internal accessor or module organization refactor.
+- Whether accessibility storage should stay directly on `View` or move behind a
+  small per-view semantic record if more role-specific state accumulates.
 - Whether container-generated layout inputs should become a real source before
   adding more collection-style controls.
 - Whether generated layout summaries should expose richer diagnostics such as
