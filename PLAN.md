@@ -244,10 +244,6 @@ and dragging foundations can support it.
 
 ## Medium-Term Architecture
 
-- Add a formal backend boundary when `Application`/`Window` start accumulating
-  more siwin-specific logic. Window creation, event polling, native handle
-  lookup, renderer ownership, accessibility bridge operations, and backend
-  operations should sit behind a small NimKit backend interface.
 - Keep popup presentation policy on `Window`/control instances. Do not add
   global popup state; platforms without native popup windows should keep using
   the same inline FigDraw path.
