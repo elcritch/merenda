@@ -17,6 +17,7 @@ import merenda/nimkit/responder/keybindings
 import merenda/nimkit/containers/listbasics
 import merenda/nimkit/containers/listviews
 import merenda/nimkit/controls/menus
+import merenda/nimkit/containers/outlineviews
 import merenda/nimkit/app/pasteboards
 import merenda/nimkit/controls/popuplists
 import merenda/nimkit/drawing/rendering
@@ -56,6 +57,7 @@ export keybindings
 export listbasics
 export listviews except visibleRowViews
 export menus
+export outlineviews
 export pasteboards
 export popuplists
 export rendering
