@@ -113,17 +113,6 @@ application, responder, view, window, accessibility, or control/cell layers.
 
 ## Near-Term Work
 
-### Module Organization And Public Surface
-
-Keep the new domain layout stable and make import boundaries intentional.
-
-1. Keep `src/merenda/nimkit.nim` as the user-facing umbrella export, and avoid
-   recreating broad root-level forwarding modules for internal convenience.
-2. Audit domain imports for accidental cycles or oversized exports now that
-   tests import the narrower module paths.
-3. Update docs and examples to prefer either `import merenda/nimkit` for
-   application code or explicit domain imports for focused tests and internals.
-
 ### Accessibility Core
 
 Keep accessibility backend-neutral until the native application/window backend
@@ -190,12 +179,6 @@ foundation.
 Keep FigDraw as the renderer boundary, but add AppKit-style resource objects on
 top of it.
 
-1. Add richer color support:
-   - color spaces, grayscale/RGB/HSB/CMYK constructors, system colors, theme
-     conversion, and pasteboard support
-2. Add font resources:
-   - system/user/fixed fonts, traits, metrics, descriptors, and typing
-     attribute integration
 3. Add image resources:
    - file/data/pasteboard construction, named images, size/cache policy, image
      views, and image drawing nodes
