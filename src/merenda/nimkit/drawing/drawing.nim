@@ -5,12 +5,14 @@ import figdraw/common/filltypes
 import figdraw/common/typefaces
 import figdraw/fignodes
 
+import ./images
 import ./theme
 import ../text/textstorage
 import ../text/texttypes
 import ../foundation/types as nimkitTypes
 
 export filltypes
+export images
 
 const
   DefaultDrawLevel* = 50.ZLevel
@@ -163,6 +165,17 @@ proc textNode(
 
 proc textNode(rect: nimkitTypes.Rect, layout: GlyphArrangement): Fig =
   Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
+
+proc imageNode(
+    rect: nimkitTypes.Rect,
+    image: ImageResource,
+    fillValue: Fill,
+): Fig =
+  Fig(
+    kind: nkImage,
+    screenBox: rect.toFigRect,
+    image: ImageStyle(id: image.imageId(), fill: fillValue),
+  )
 
 proc selectTextNode(
     node: var Fig, selectedLocation, selectedLength: int, color: nimkitTypes.Color
@@ -374,6 +387,28 @@ proc addText*(
     context: DrawContext, rect: nimkitTypes.Rect, layout: GlyphArrangement
 ): FigIdx {.discardable.} =
   context.addFig(textNode(context.renderRectFor(rect), layout))
+
+proc addImage*(
+    context: DrawContext,
+    rect: nimkitTypes.Rect,
+    image: ImageResource,
+    tint = initColor(1.0, 1.0, 1.0, 1.0),
+): FigIdx {.discardable.} =
+  if image.isNil:
+    return (-1).FigIdx
+  context.addFig(imageNode(context.renderRectFor(rect), image, fill(tint.rgba)))
+
+proc addImage*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    image: ImageResource,
+    tint = initColor(1.0, 1.0, 1.0, 1.0),
+): FigIdx {.discardable.} =
+  if image.isNil:
+    return (-1).FigIdx
+  context.addFig(layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba)))
 
 proc addSelectedText*(
     context: DrawContext,
