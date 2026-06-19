@@ -83,6 +83,7 @@ type
     xEditing: TableEditingState
     xAutosaveName: string
     xTableDraggingSession: DraggingSession
+    xTableDropTarget: DraggingDropTarget
     xHeaderTrackingPart: TableHeaderHitPart
     xTrackingColumn: TableColumn
     xTrackingColumnIndex: int
@@ -129,6 +130,10 @@ proc enqueueReusableCellView(tableView: TableView, identifier: string, view: Vie
 proc clearTableCellSlots(tableView: TableView)
 proc syncVisibleTableCells(tableView: TableView)
 proc drawTableRow(
+  tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+)
+
+proc drawTableDropTarget(
   tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
 )
 
@@ -184,6 +189,10 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   method acceptDragOperation*(
     tableView: TableView, info: DraggingInfo
   ): bool {.optional.}
+
+  method tableDropTargetForLocation*(
+    tableView: TableView, location: Point, proposedTarget: DraggingDropTarget
+  ): DraggingDropTarget {.optional.}
 
 protocol TableViewEditingProtocol:
   method shouldBeginEditingCell*(row: int, column: TableColumn): bool
@@ -821,6 +830,59 @@ proc withDropTarget*(
   else:
     info.withDropTarget(initDraggingDropTarget())
 
+proc defaultDropTargetForDraggingLocation(
+    tableView: TableView, location: Point
+): DraggingDropTarget =
+  if tableView.isNil:
+    return initDraggingDropTarget()
+  let
+    row = ListView(tableView).listItemIndexAtPoint(location)
+    column = tableView.tableColumnAtPoint(location)
+  if row >= 0 and not column.isNil:
+    let
+      rowRect = ListView(tableView).listItemRect(row)
+      cellRect = tableView.columnRect(rowRect, column)
+    return initCellDropTarget(row, column.identifier(), cellRect)
+  if row >= 0:
+    return initRowDropTarget(row, ListView(tableView).listItemRect(row))
+  if not column.isNil and tableView.tableHeaderRect().contains(location):
+    return
+      initColumnDropTarget(column.identifier(), tableView.tableHeaderColumnRect(column))
+  initDraggingDropTarget()
+
+proc dropTargetForDraggingLocation*(
+    tableView: TableView, location: Point
+): DraggingDropTarget =
+  if tableView.isNil:
+    return initDraggingDropTarget()
+  let proposedTarget = tableView.defaultDropTargetForDraggingLocation(location)
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    let resolved = delegate.trySendLocal(
+      tableDropTargetForLocation(),
+      (tableView: tableView, location: location, proposedTarget: proposedTarget),
+    )
+    if resolved.isSome:
+      return resolved.get()
+  proposedTarget
+
+proc activeDropTarget(tableView: TableView): DraggingDropTarget =
+  if tableView.isNil:
+    return initDraggingDropTarget()
+  if not tableView.xTableDraggingSession.isNil and
+      tableView.xTableDraggingSession.state() == dssActive:
+    return tableView.xTableDraggingSession.dropTarget()
+  tableView.xTableDropTarget
+
+proc currentDropTarget*(tableView: TableView): DraggingDropTarget =
+  tableView.activeDropTarget()
+
+proc updateTableDropTarget(tableView: TableView, target: DraggingDropTarget) =
+  if tableView.isNil or tableView.xTableDropTarget == target:
+    return
+  tableView.xTableDropTarget = target
+  tableView.setNeedsDisplay(true)
+
 proc joinRowIndexes(rows: openArray[int]): string =
   for index, row in rows:
     if index > 0:
@@ -954,6 +1016,29 @@ proc drawTableRow(
     if not tableView.hasHostedCell(row.index, column):
       let cellRect = tableView.columnRect(rowBounds, column)
       tableView.drawTableCellText(context, row.index, column, cellRect, style)
+  tableView.drawTableDropTarget(context, rect, row)
+
+proc drawTableDropTarget(
+    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+) =
+  if tableView.isNil or context.isNil or row.index < 0:
+    return
+  let target = tableView.activeDropTarget()
+  if target.kind notin {ddtRow, ddtCell, ddtItem} or target.row != row.index:
+    return
+  var indicatorBounds = rect
+  if target.kind == ddtCell and target.column.len > 0:
+    let column = tableView.columnWithIdentifier(target.column)
+    if not column.isNil:
+      indicatorBounds = tableView.columnRect(rect, column)
+  let indicatorRect = initRect(
+    indicatorBounds.origin.x,
+    max(indicatorBounds.maxY - 2.0'f32, indicatorBounds.minY),
+    indicatorBounds.size.width,
+    2.0,
+  )
+  discard
+    context.addRenderRectangle(indicatorRect, fill(initColor(0.18, 0.42, 0.88, 0.95)))
 
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
@@ -1447,13 +1532,19 @@ protocol DefaultTableViewDraggingSource of DraggingSourceProtocol:
   method draggingSessionEnded(tableView: TableView, info: DraggingInfo) =
     if not tableView.isNil and tableView.xTableDraggingSession == info.session:
       tableView.xTableDraggingSession = nil
+      tableView.updateTableDropTarget(initDraggingDropTarget())
 
 protocol DefaultTableViewDraggingDestination of DraggingDestinationProtocol:
   method draggingEntered(tableView: TableView, info: DraggingInfo): DragOperations =
+    tableView.updateTableDropTarget(info.dropTarget)
     tableView.validateDragging(info)
 
   method draggingUpdated(tableView: TableView, info: DraggingInfo): DragOperations =
+    tableView.updateTableDropTarget(info.dropTarget)
     tableView.validateDragging(info)
+
+  method draggingExited(tableView: TableView, info: DraggingInfo) =
+    tableView.updateTableDropTarget(initDraggingDropTarget())
 
   method prepareForDragOperation(tableView: TableView, info: DraggingInfo): bool =
     tableView.validateDragging(info) != NoDragOperations
@@ -1461,8 +1552,25 @@ protocol DefaultTableViewDraggingDestination of DraggingDestinationProtocol:
   method performDragOperation(tableView: TableView, info: DraggingInfo): bool =
     tableView.acceptDragging(info)
 
+  method concludeDragOperation(tableView: TableView, info: DraggingInfo) =
+    tableView.updateTableDropTarget(initDraggingDropTarget())
+
   method autoscrollDraggingSession(tableView: TableView, info: DraggingInfo): bool =
     ListView(tableView).autoscrollDraggingInfo(info)
+
+protocol DefaultTableViewEvents of ResponderEventProtocol:
+  method mouseDragged(tableView: TableView, event: MouseEvent): bool =
+    let session = tableView.draggingSession()
+    if not session.isNil and session.state() == dssActive:
+      let target = tableView.dropTargetForDraggingLocation(event.location)
+      tableView.updateTableDropTarget(target)
+      discard
+        updateDraggingSession(session, event.location, DynamicAgent(tableView), target)
+      discard autoscrollDraggingSession(
+        session, event.location, DynamicAgent(tableView), target
+      )
+      return true
+    ListView(tableView).mouseDragged(event)
 
 protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
   method columnAutosaveRecords(tableView: TableView): seq[TableColumnAutosaveRecord] =
@@ -1560,12 +1668,14 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xClickedRow = -1
   tableView.xAllowsColumnSelection = false
   tableView.xEditing = TableEditingState(row: -1)
+  tableView.xTableDropTarget = initDraggingDropTarget()
   tableView.xTrackingColumnIndex = -1
   tableView.xReusableCellViews = initTable[string, seq[View]]()
   tableView.syncTableScrollChrome()
   discard tableView.withProtocol(DefaultTableViewColumnBehavior)
   discard tableView.withProtocol(DefaultTableViewSelectionBehavior)
   discard tableView.withProtocol(DefaultTableViewEditingBehavior)
+  discard tableView.withProtocol(DefaultTableViewEvents)
   discard tableView.withProtocol(DefaultTableViewDraggingBehavior)
   discard tableView.withProtocol(DefaultTableViewDraggingSource)
   discard tableView.withProtocol(DefaultTableViewDraggingDestination)

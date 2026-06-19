@@ -1,11 +1,13 @@
-import std/[tables, times]
+import std/[strutils, tables, times]
 
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
+import pkg/pixie/fileformats/png
 import siwin/clipboards as siwinClipboards
 import sigils/selectors
 
+import ../drawing/images
 import ../foundation/types
 import ../foundation/events
 import ./pasteboards
@@ -42,11 +44,20 @@ type
 
   NativePasteboardProvider = ref object of DynamicAgent
     xHost: HostWindow
+    xTypes: seq[string]
+    xItems: Table[string, PasteboardItem]
+    xItemsReady: bool
+    xChangeCount: int
+
+  NativePasteboardPayload = ref object of RootObj
+    items: Table[string, PasteboardItem]
 
 var
   hostWindows {.threadvar.}: Table[pointer, HostWindow]
   hostWindowsReady {.threadvar.}: bool
   nativePasteboardProvider {.threadvar.}: NativePasteboardProvider
+
+const NativeImagePngType = "image/png"
 
 proc ensureHostRegistry() =
   if not hostWindowsReady:
@@ -85,6 +96,20 @@ proc clipboardText(clipboard: siwinClipboards.Clipboard): string =
   of siwinClipboards.ClipboardContentKind.text: content.text
   else: ""
 
+proc clipboardFiles(clipboard: siwinClipboards.Clipboard): seq[string] =
+  let content = clipboard.content(siwinClipboards.ClipboardContentKind.files)
+  case content.kind
+  of siwinClipboards.ClipboardContentKind.files:
+    content.files
+  else:
+    @[]
+
+proc clipboardData(clipboard: siwinClipboards.Clipboard, mimeType: string): string =
+  let content = clipboard.content(siwinClipboards.ClipboardContentKind.other, mimeType)
+  case content.kind
+  of siwinClipboards.ClipboardContentKind.other: content.data
+  else: ""
+
 proc `clipboardText=`(clipboard: siwinClipboards.Clipboard, value: string) =
   type TextClipboardPayload = ref object of RootObj
     value: string
@@ -110,15 +135,258 @@ proc readyHost(provider: NativePasteboardProvider): HostWindow =
     provider.xHost = firstReadyHost()
   provider.xHost
 
+proc ensureItems(provider: NativePasteboardProvider) =
+  if provider.isNil or provider.xItemsReady:
+    return
+  provider.xItems = initTable[string, PasteboardItem]()
+  provider.xItemsReady = true
+
+proc addType(provider: NativePasteboardProvider, kind: string) =
+  if provider.isNil or kind.len == 0:
+    return
+  if kind notin provider.xTypes:
+    provider.xTypes.add kind
+
+proc addType(types: var seq[string], kind: string) =
+  if kind.len > 0 and kind notin types:
+    types.add kind
+
+proc hostTypes(provider: NativePasteboardProvider): seq[string] =
+  let host = provider.readyHost()
+  if not host.hostReady:
+    return @[]
+  let clipboard = host.xNativeWindow.clipboard
+  if clipboard.clipboardText.len > 0:
+    result.addType(PasteboardTypeString)
+  if clipboard.clipboardFiles.len > 0:
+    result.addType(PasteboardTypeFile)
+    result.addType(PasteboardTypeUrl)
+  for mimeType in clipboard.availableMimeTypes:
+    case mimeType
+    of NativeImagePngType:
+      result.addType(PasteboardTypeImage)
+    of "public.utf8-plain-text", "NSStringPboardType", "text/plain":
+      result.addType(PasteboardTypeString)
+    of "text/uri-list":
+      result.addType(PasteboardTypeFile)
+      result.addType(PasteboardTypeUrl)
+    else:
+      result.addType(mimeType)
+
+proc copyItems(provider: NativePasteboardProvider): Table[string, PasteboardItem] =
+  provider.ensureItems()
+  result = initTable[string, PasteboardItem]()
+  for kind, item in provider.xItems:
+    result[kind] = item.copyPasteboardItem()
+
+proc itemForPayload(
+    data: ref RootObj, kind: string, fallbackKind = ""
+): PasteboardItem =
+  if data.isNil:
+    return PasteboardItem(kind: pikNone)
+  let payload = NativePasteboardPayload(data)
+  if kind in payload.items:
+    return payload.items[kind].copyPasteboardItem()
+  if fallbackKind.len > 0 and fallbackKind in payload.items:
+    return payload.items[fallbackKind].copyPasteboardItem()
+  PasteboardItem(kind: pikNone)
+
+proc payloadFiles(data: ref RootObj): seq[string] =
+  if data.isNil:
+    return @[]
+  let payload = NativePasteboardPayload(data)
+  for item in payload.items.values:
+    case item.kind
+    of pikFile:
+      if item.filePath.len > 0:
+        result.add item.filePath
+    of pikUrl:
+      if item.url.startsWith("file://"):
+        result.add item.url.substr("file://".len)
+    else:
+      discard
+
+proc payloadOtherData(data: ref RootObj, mimeType: string): string =
+  let item =
+    if mimeType == NativeImagePngType:
+      itemForPayload(data, PasteboardTypeImage)
+    else:
+      itemForPayload(data, mimeType, PasteboardTypeData)
+  case item.kind
+  of pikData:
+    item.data
+  of pikUrl:
+    item.url
+  of pikFile:
+    item.filePath
+  of pikString:
+    item.stringValue
+  of pikImage:
+    let pixels = item.image.pixels()
+    if pixels.isNil:
+      ""
+    else:
+      pixels.encodePng()
+  else:
+    ""
+
+proc addClipboardConverter(
+    content: var siwinClipboards.ClipboardConvertableContent,
+    kind: siwinClipboards.ClipboardContentKind,
+    mimeType = "",
+) =
+  for entry in content.converters:
+    if entry.kind == kind and entry.mimeType == mimeType:
+      return
+  content.converters.add siwinClipboards.ClipboardContentConverter(
+    kind: kind,
+    mimeType: mimeType,
+    f: proc(
+        data: ref RootObj, kind: siwinClipboards.ClipboardContentKind, mimeType: string
+    ): siwinClipboards.ClipboardContent =
+      case kind
+      of siwinClipboards.ClipboardContentKind.text:
+        let item = itemForPayload(data, PasteboardTypeString)
+        siwinClipboards.ClipboardContent(
+          kind: siwinClipboards.ClipboardContentKind.text,
+          text: if item.kind == pikString: item.stringValue else: "",
+        )
+      of siwinClipboards.ClipboardContentKind.files:
+        siwinClipboards.ClipboardContent(
+          kind: siwinClipboards.ClipboardContentKind.files, files: payloadFiles(data)
+        )
+      of siwinClipboards.ClipboardContentKind.other:
+        siwinClipboards.ClipboardContent(
+          kind: siwinClipboards.ClipboardContentKind.other,
+          mimeType: mimeType,
+          data: payloadOtherData(data, mimeType),
+        ),
+  )
+
+proc publishHostClipboard(provider: NativePasteboardProvider) =
+  let host = provider.readyHost()
+  if not host.hostReady:
+    return
+  provider.ensureItems()
+  var content: siwinClipboards.ClipboardConvertableContent
+  content.data = NativePasteboardPayload(items: provider.copyItems())
+  if PasteboardTypeString in provider.xItems and
+      provider.xItems[PasteboardTypeString].kind == pikString:
+    content.addClipboardConverter(siwinClipboards.ClipboardContentKind.text)
+
+  var hasFileItem = false
+  for item in provider.xItems.values:
+    if item.kind == pikFile or item.kind == pikUrl and item.url.startsWith("file://"):
+      hasFileItem = true
+  if hasFileItem:
+    content.addClipboardConverter(siwinClipboards.ClipboardContentKind.files)
+
+  for kind, item in provider.xItems:
+    case item.kind
+    of pikData:
+      content.addClipboardConverter(siwinClipboards.ClipboardContentKind.other, kind)
+    of pikUrl:
+      content.addClipboardConverter(siwinClipboards.ClipboardContentKind.other, kind)
+    of pikImage:
+      content.addClipboardConverter(
+        siwinClipboards.ClipboardContentKind.other, NativeImagePngType
+      )
+      content.addClipboardConverter(siwinClipboards.ClipboardContentKind.other, kind)
+    else:
+      discard
+
+  if content.converters.len > 0:
+    host.xNativeWindow.clipboard.content = content
+  else:
+    host.xNativeWindow.clipboard.clipboardText = ""
+
+proc storeItem(
+    provider: NativePasteboardProvider, kind: string, item: PasteboardItem
+): bool =
+  if provider.isNil or kind.len == 0 or item.kind == pikNone:
+    return false
+  provider.ensureItems()
+  provider.addType(kind)
+  provider.xItems[kind] = item.copyPasteboardItem()
+  inc provider.xChangeCount
+  provider.publishHostClipboard()
+  true
+
+proc nativeItemForType(
+    provider: NativePasteboardProvider, kind: string
+): PasteboardItem =
+  let host = provider.readyHost()
+  if not host.hostReady or kind.len == 0:
+    return PasteboardItem(kind: pikNone)
+  let clipboard = host.xNativeWindow.clipboard
+  case kind
+  of PasteboardTypeString:
+    let value = clipboard.clipboardText
+    if value.len > 0 or kind in clipboard.availableMimeTypes:
+      return initPasteboardStringItem(value)
+  of PasteboardTypeFile:
+    let files = clipboard.clipboardFiles
+    if files.len > 0:
+      return initPasteboardFileItem(files[0])
+  of PasteboardTypeUrl:
+    let url = clipboard.clipboardData(PasteboardTypeUrl)
+    if url.len > 0 or PasteboardTypeUrl in clipboard.availableMimeTypes:
+      return initPasteboardUrlItem(url)
+    let files = clipboard.clipboardFiles
+    if files.len > 0:
+      return initPasteboardUrlItem("file://" & files[0])
+  of PasteboardTypeData:
+    let data = clipboard.clipboardData(kind)
+    if data.len > 0 or kind in clipboard.availableMimeTypes:
+      return initPasteboardDataItem(data)
+  of PasteboardTypeImage:
+    var data = clipboard.clipboardData(NativeImagePngType)
+    if data.len == 0:
+      data = clipboard.clipboardData(PasteboardTypeImage)
+    if data.len > 0:
+      try:
+        return initPasteboardImageItem(newImageResourceFromData(data))
+      except CatchableError:
+        discard
+  else:
+    let data = clipboard.clipboardData(kind)
+    if data.len > 0 or kind in clipboard.availableMimeTypes:
+      return initPasteboardDataItem(data)
+  PasteboardItem(kind: pikNone)
+
+proc clearStoredItems(provider: NativePasteboardProvider) =
+  if provider.isNil:
+    return
+  provider.ensureItems()
+  provider.xTypes.setLen(0)
+  provider.xItems.clear()
+  inc provider.xChangeCount
+  provider.publishHostClipboard()
+
 protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
   method pasteboardTypes(
       provider: NativePasteboardProvider, pasteboard: Pasteboard
   ): seq[string] =
-    let host = provider.readyHost()
-    if host.hostReady:
-      let text = host.xNativeWindow.clipboard.clipboardText
-      if text.len > 0:
-        result.add PasteboardTypeString
+    provider.ensureItems()
+    for kind in provider.xTypes:
+      result.addType(kind)
+    for kind in provider.hostTypes():
+      result.addType(kind)
+
+  method pasteboardChangeCount(
+      provider: NativePasteboardProvider, pasteboard: Pasteboard
+  ): int =
+    provider.xChangeCount
+
+  method pasteboardItemForType(
+      provider: NativePasteboardProvider, request: PasteboardTypeRequest
+  ): PasteboardItem =
+    let nativeItem = provider.nativeItemForType(request.kind)
+    if nativeItem.kind != pikNone:
+      return nativeItem
+    provider.ensureItems()
+    if request.kind in provider.xItems:
+      return provider.xItems[request.kind].copyPasteboardItem()
 
   method stringForPasteboardType(
       provider: NativePasteboardProvider, request: PasteboardTypeRequest
@@ -130,24 +398,31 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
   method setStringForPasteboardType(
       provider: NativePasteboardProvider, request: PasteboardStringRequest
   ): bool =
-    let host = provider.readyHost()
-    if host.hostReady and request.kind == PasteboardTypeString:
-      host.xNativeWindow.clipboard.clipboardText = request.value
-      return true
+    provider.storeItem(request.kind, initPasteboardStringItem(request.value))
+
+  method setPasteboardItemForType(
+      provider: NativePasteboardProvider, request: PasteboardItemRequest
+  ): bool =
+    provider.storeItem(request.kind, request.item)
 
   method clearPasteboardContents(
       provider: NativePasteboardProvider, pasteboard: Pasteboard
   ): bool =
-    let host = provider.readyHost()
-    if host.hostReady:
-      host.xNativeWindow.clipboard.clipboardText = ""
-      return true
+    provider.clearStoredItems()
+    true
+
+  method releasePasteboard(
+      provider: NativePasteboardProvider, pasteboard: Pasteboard
+  ): bool =
+    provider.clearStoredItems()
+    true
 
 proc installNativeClipboardBridge(host: HostWindow) =
   if host.isNil:
     return
   if nativePasteboardProvider.isNil:
     nativePasteboardProvider = NativePasteboardProvider()
+    nativePasteboardProvider.ensureItems()
     discard nativePasteboardProvider.withProtocol(NativePasteboardProviderProtocol)
   nativePasteboardProvider.xHost = host
   generalPasteboard().provider = nativePasteboardProvider

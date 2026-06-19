@@ -88,6 +88,17 @@ protocol OutlineViewDelegate {.selectorScope: protocol.}:
 
   method didCollapseItem*(outlineView: OutlineView, identifier: string) {.optional.}
 
+  method dropTargetForOutlineItem*(
+    outlineView: OutlineView,
+    identifier: string,
+    row: int,
+    proposedTarget: DraggingDropTarget,
+  ): DraggingDropTarget {.optional.}
+
+  method outlineDropTargetForLocation*(
+    outlineView: OutlineView, location: Point, proposedTarget: DraggingDropTarget
+  ): DraggingDropTarget {.optional.}
+
 proc containsIdentifier(values: openArray[string], identifier: string): bool =
   for value in values:
     if value == identifier:
@@ -515,14 +526,36 @@ proc dropTargetForDraggingLocation*(
 ): DraggingDropTarget =
   if outlineView.isNil:
     return initDraggingDropTarget()
+  var proposedTarget = initDraggingDropTarget()
   let row = TableView(outlineView).listItemIndexAtPoint(location)
   if row >= 0:
     let item = outlineView.itemAtRow(row)
     if item.identifier.len > 0:
-      return initItemDropTarget(
+      proposedTarget = initItemDropTarget(
         item.identifier, row, TableView(outlineView).listItemRect(row)
       )
-  initDraggingDropTarget()
+      let delegate = outlineView.outlineDelegate()
+      if not delegate.isNil:
+        let itemTarget = delegate.trySendLocal(
+          dropTargetForOutlineItem(),
+          (
+            outlineView: outlineView,
+            identifier: item.identifier,
+            row: row,
+            proposedTarget: proposedTarget,
+          ),
+        )
+        if itemTarget.isSome:
+          return itemTarget.get()
+  let delegate = outlineView.outlineDelegate()
+  if not delegate.isNil:
+    let resolved = delegate.trySendLocal(
+      outlineDropTargetForLocation(),
+      (outlineView: outlineView, location: location, proposedTarget: proposedTarget),
+    )
+    if resolved.isSome:
+      return resolved.get()
+  proposedTarget
 
 proc outlineCellText(outlineView: OutlineView, row: int, column: TableColumn): string =
   let rows = outlineView.visibleOutlineRows()
@@ -688,6 +721,23 @@ proc drawOutlineRowText(
         textRect, text, initColor(0.14, 0.18, 0.25, 1.0), column.alignment()
       )
 
+proc drawOutlineDropTarget(
+    outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect
+) =
+  if outlineView.isNil or context.isNil or row < 0:
+    return
+  let target = TableView(outlineView).currentDropTarget()
+  if target.kind notin {ddtItem, ddtRow, ddtCell} or target.row != row:
+    return
+  let indicatorRect = initRect(
+    rowBounds.origin.x,
+    max(rowBounds.maxY - 2.0'f32, rowBounds.minY),
+    rowBounds.size.width,
+    2.0,
+  )
+  discard
+    context.addRenderRectangle(indicatorRect, fill(initColor(0.18, 0.42, 0.88, 0.95)))
+
 protocol OutlineViewDrawing of ViewDrawingProtocol:
   method draw(outlineView: OutlineView, context: DrawContext) =
     if outlineView.isNil or context.isNil or outlineView.bounds().isEmpty:
@@ -725,6 +775,7 @@ protocol OutlineViewEvents of ResponderEventProtocol:
       discard updateDraggingSession(
         session, event.location, DynamicAgent(outlineView), target
       )
+      outlineView.setNeedsDisplay(true)
       discard autoscrollDraggingSession(
         session, event.location, DynamicAgent(outlineView), target
       )
@@ -801,6 +852,7 @@ protocol OutlineViewTableListDelegate of ListViewDelegate:
       )
       outlineView.drawDisclosureAffordance(context, row.index, localDisclosure)
     outlineView.drawOutlineRowText(context, row.index, rowBounds)
+    outlineView.drawOutlineDropTarget(context, row.index, rowBounds)
 
 protocol OutlineViewTableDataSource of TableViewDataSource:
   method numberOfRows(outlineView: OutlineView, tableView: TableView): int =
