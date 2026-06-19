@@ -1,5 +1,8 @@
 import ./cells
+import ../app/dragging
+import ../app/pasteboards
 import ../text/fieldeditors
+import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
 import ../view/views
@@ -13,6 +16,7 @@ type
     xTarget: DynamicAgent
     xAction: ActionSelector
     xCurrentEditor: FieldEditor
+    xDraggingSession: DraggingSession
 
   ActionProc* = proc(sender: DynamicAgent) {.closure.}
 
@@ -26,6 +30,7 @@ proc currentEditor*(control: Control): FieldEditor
 proc setCurrentEditor*(control: Control, editor: FieldEditor)
 proc target*(control: Control): DynamicAgent
 proc action*(control: Control): ActionSelector
+proc draggingSession*(control: Control): DraggingSession
 
 proc controlIntrinsicContentSize(control: Control): IntrinsicSize =
   let controlCell = control.cell()
@@ -90,6 +95,45 @@ protocol ControlProtocol from Control:
       if owner of Window and Window(owner).firstResponder() == editor:
         discard Window(owner).makeFirstResponder(nil)
 
+proc acceptsDraggingInfo(control: Control, info: DraggingInfo): bool =
+  if control.isNil or info.pasteboard.isNil:
+    return false
+  let acceptedTypes = control.registeredDraggedTypes()
+  acceptedTypes.len > 0 and
+    info.pasteboard.availableTypeFromArray(acceptedTypes).len > 0
+
+protocol DefaultControlDraggingSource of DraggingSourceProtocol:
+  method draggingSourceOperationMask(
+      control: Control, info: DraggingInfo
+  ): DragOperations =
+    if control.isNil:
+      NoDragOperations
+    else:
+      info.allowedOperations
+
+  method draggingSessionEnded(control: Control, info: DraggingInfo) =
+    if not control.isNil and control.xDraggingSession == info.session:
+      control.xDraggingSession = nil
+
+protocol DefaultControlDraggingDestination of DraggingDestinationProtocol:
+  method draggingEntered(control: Control, info: DraggingInfo): DragOperations =
+    if control.acceptsDraggingInfo(info):
+      info.allowedOperations
+    else:
+      NoDragOperations
+
+  method draggingUpdated(control: Control, info: DraggingInfo): DragOperations =
+    if control.acceptsDraggingInfo(info):
+      info.allowedOperations
+    else:
+      NoDragOperations
+
+  method prepareForDragOperation(control: Control, info: DraggingInfo): bool =
+    control.acceptsDraggingInfo(info)
+
+  method performDragOperation(control: Control, info: DraggingInfo): bool =
+    control.acceptsDraggingInfo(info)
+
 proc enabled*(control: Control): bool =
   (not control.isNil) and control.isEnabled()
 
@@ -151,6 +195,8 @@ proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = n
       cell
   )
   discard control.withProto()
+  discard control.withProtocol(DefaultControlDraggingSource)
+  discard control.withProtocol(DefaultControlDraggingDestination)
 
 proc cell*(control: Control): Cell =
   if control.xCell.isNil:
@@ -215,6 +261,60 @@ proc `action=`*(control: Control, action: ActionSelector) =
   let selected = control.selectedCell()
   if not selected.isNil and selected of ActionCell:
     ActionCell(selected).setAction(action)
+
+proc draggingSession*(control: Control): DraggingSession =
+  if control.isNil: nil else: control.xDraggingSession
+
+proc beginDraggingItems*(
+    control: Control,
+    items: openArray[DraggingItem],
+    allowedOperations = EveryDragOperation,
+    pasteboardName = DragPasteboardName,
+): DraggingSession =
+  if control.isNil:
+    return nil
+  result = beginDraggingSession(
+    DynamicAgent(control), items, allowedOperations, pasteboardName
+  )
+  control.xDraggingSession = result
+
+proc updateDragging*(
+    control: Control,
+    event: MouseEvent,
+    destination: DynamicAgent = nil,
+    dropTarget = initDraggingDropTarget(),
+): DragOperations =
+  if control.isNil or control.xDraggingSession.isNil:
+    return NoDragOperations
+  updateDraggingSession(
+    control.xDraggingSession,
+    event.location,
+    if destination.isNil: DynamicAgent(control) else: destination,
+    dropTarget,
+  )
+
+proc autoscrollDragging*(
+    control: Control,
+    event: MouseEvent,
+    destination: DynamicAgent = nil,
+    dropTarget = initDraggingDropTarget(),
+): bool =
+  if control.isNil or control.xDraggingSession.isNil:
+    return false
+  autoscrollDraggingSession(
+    control.xDraggingSession,
+    event.location,
+    if destination.isNil: DynamicAgent(control) else: destination,
+    dropTarget,
+  )
+
+proc finishDragging*(control: Control, operations = NoDragOperations) =
+  if not control.isNil and not control.xDraggingSession.isNil:
+    control.xDraggingSession.endDraggingSession(operations)
+
+proc cancelDragging*(control: Control) =
+  if not control.isNil and not control.xDraggingSession.isNil:
+    control.xDraggingSession.cancelDraggingSession()
 
 proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarget =
   result = ClosureTarget()
