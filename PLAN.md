@@ -261,13 +261,9 @@ AppKit-style widgets.
 
 ### Native Integration
 
-- Continue testing scaled input against rendering on macOS, X11, Wayland, and
-  inline-windowless targets.
 - Keep render construction unit-testable without a live native window.
-- Keep accessibility construction and notification tests backend-free until the
-  native bridge exists.
-- Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style
-  escape hatches for tests and diagnostics.
+- Keep accessibility construction and notification tests backend-free until the native bridge exists.
+- Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style escape hatches for tests and diagnostics.
 
 ## Medium-Term Architecture
 
