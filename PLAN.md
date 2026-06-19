@@ -54,6 +54,14 @@ application, responder, view, window, accessibility, or control/cell layers.
   chrome, ruler placeholders, dynamic scrolling storage, and explicit scroller
   autohide policy. Updated `examples/scrollview_demo.nim` to exercise the new
   chrome and scrolling APIs.
+- Expanded `TableView` and added initial `OutlineView`: table columns now carry
+  hidden/sort/reuse metadata, header hit testing and resize/reorder/sort request
+  helpers are in place, table selection tracks clicked row/column and selected
+  columns, editable-cell begin/commit/cancel state is modeled with delegate
+  hooks, column autosave records serialize table-owned column state, drag-info
+  value objects and validation/acceptance hooks are staged, and `OutlineView`
+  flattens expandable items into table rows with outline-column disclosure
+  text, row/item mapping, and expansion/collapse APIs.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -204,22 +212,25 @@ semantics are stable enough to host it.
 
 ### TableView And OutlineView
 
-Continue growing `TableView` after the application, responder, view, pasteboard,
-and dragging foundations can support it.
+Continue growing the first-pass table and outline APIs into production
+AppKit-style widgets.
 
-1. Add table headers and column behavior:
-   - header band, column hover/pressed state, hit testing, resizing with
-     min/max constraints, sort request state, sort indicator rendering, and
-     column reordering
-2. Add table selection and editing:
-   - cell and column selection, clicked row/column reporting, editable cells,
-     commit/cancel flow, row views, and reuse identifiers
-3. Add drag/drop and persistence:
-   - row/column drag behavior, column autosave, selection persistence helpers,
-     and integration with named pasteboards
-4. Add `OutlineView` after `TableView` is stable:
-   - item tree data source, expansion/collapse, row/item mappings,
-     indentation, outline column, disclosure rows, persistence, and drag/drop
+1. Harden table headers and column behavior:
+   - render header cells, hover/pressed state, sort indicators, resize cursors,
+     resize dragging, and column reordering by pointer drag
+2. Deepen table editing and reuse:
+   - route begin/commit/cancel through overridable table protocols, connect
+     field editors or hosted cell editors, add reusable row/cell view queues,
+     and expose stronger edit validation hooks
+3. Finish drag/drop and persistence integration:
+   - connect staged `TableDraggingInfo` to named pasteboards and real drag
+     sessions, support row/column drop targets, persist column autosave records
+     through an application/user-defaults adapter, and add selection persistence
+     helpers
+4. Expand `OutlineView`:
+   - replace the simple local item list with data-source/delegate protocols,
+     add disclosure hit testing and mouse/key toggling, render indentation and
+     disclosure affordances, persist expansion state, and integrate drag/drop
 
 ### Native Integration
 
