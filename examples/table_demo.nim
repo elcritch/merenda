@@ -1,4 +1,4 @@
-import std/strutils
+import std/[algorithm, strutils]
 
 import merenda/nimkit
 
@@ -19,6 +19,15 @@ type
     table: TableView
     detail: Label
     activity: Label
+    stateStore: TableViewStateStore
+
+func fieldText(row: BuildRow, identifier: string): string =
+  case identifier
+  of "project": row.project
+  of "state": row.state
+  of "owner": row.owner
+  of "elapsed": row.elapsed
+  else: ""
 
 func demoRows(): seq[BuildRow] =
   @[
@@ -62,14 +71,27 @@ proc selectedProjectNames(controller: TableDemoController): seq[string] =
     if index in 0 ..< controller.rows.len:
       result.add controller.rows[index].project
 
+proc selectedColumnNames(controller: TableDemoController): seq[string] =
+  for column in controller.table.selectedColumns:
+    if not column.isNil:
+      result.add column.title
+
 proc updateSelection(controller: TableDemoController) =
   let names = controller.selectedProjectNames()
+  var text: string
   if names.len == 0:
-    controller.detail.text = "No rows selected"
+    text = "No rows selected"
   elif names.len == 1:
-    controller.detail.text = "Selected: " & names[0]
+    text = "Selected: " & names[0]
   else:
-    controller.detail.text = "Selected " & $names.len & ": " & names.join(", ")
+    text = "Selected " & $names.len & ": " & names.join(", ")
+  let columns = controller.selectedColumnNames()
+  if columns.len > 0:
+    text.add "\nColumn: " & columns.join(", ")
+  if not controller.table.clickedColumn.isNil:
+    text.add "\nClicked: row " & $controller.table.clickedRow &
+      ", " & controller.table.clickedColumn.title
+  controller.detail.text = text
 
 proc makeStateCell(state: string): Label =
   result = newStatusLabel(state)
@@ -79,7 +101,44 @@ proc onInspect(controller: TableDemoController, row: int) =
   let index = row
   if index in 0 ..< controller.rows.len:
     let build = controller.rows[index]
-    controller.activity.text = "Inspecting: " & build.project & " (" & build.owner & ")"
+    let ownerColumn = controller.table.columnWithIdentifier("owner")
+    controller.activity.text =
+      "Inspecting: " & build.project & " (" & build.owner & ")"
+    if not ownerColumn.isNil and controller.table.beginEditingCell(row, ownerColumn):
+      controller.activity.text = controller.activity.text & "\nEditing owner cell"
+
+proc sortRows(
+    controller: TableDemoController, column: TableColumn, direction: TableSortDirection
+) =
+  if column.isNil or direction == tsdNone:
+    return
+  let identifier = column.identifier
+  controller.rows.sort(
+    proc(left, right: BuildRow): int =
+      result = cmp(left.fieldText(identifier), right.fieldText(identifier))
+      if direction == tsdDescending:
+        result = -result
+  )
+  ListView(controller.table).reloadData()
+
+proc updateCellValue(
+    controller: TableDemoController, row: int, column: TableColumn, value: string
+) =
+  if row notin 0 ..< controller.rows.len or column.isNil:
+    return
+  case column.identifier
+  of "project":
+    controller.rows[row].project = value
+  of "state":
+    controller.rows[row].state = value
+  of "owner":
+    controller.rows[row].owner = value
+  of "elapsed":
+    controller.rows[row].elapsed = value
+  else:
+    discard
+  ListView(controller.table).reloadData()
+  controller.updateSelection()
 
 proc makeActionButton(controller: TableDemoController, row: int): Button =
   result = newButton("Inspect")
@@ -132,6 +191,50 @@ protocol TableDemoDelegate of TableViewDelegate:
   ): bool =
     controller.rowAt(row).state != "Blocked"
 
+  method sortDescriptorsDidChange(
+      controller: TableDemoController,
+      tableView: TableView,
+      column: TableColumn,
+      direction: TableSortDirection,
+  ) =
+    controller.sortRows(column, direction)
+    controller.activity.text = "Sorted by " & column.title & " (" & $direction & ")"
+
+  method shouldEditCell(
+      controller: TableDemoController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+  ): bool =
+    column.identifier in ["project", "state", "owner", "elapsed"] and
+      controller.rowAt(row).state != "Blocked"
+
+  method didBeginEditingCell(
+      controller: TableDemoController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+  ) =
+    controller.activity.text = "Editing " & column.title & " for row " & $row
+
+  method didCommitEditingCell(
+      controller: TableDemoController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ) =
+    controller.updateCellValue(row, column, value)
+    controller.activity.text = "Committed " & column.title & ": " & value
+
+  method didCancelEditingCell(
+      controller: TableDemoController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+  ) =
+    controller.activity.text = "Cancelled edit for " & column.title & " row " & $row
+
   method hitPolicyForCell(
       controller: TableDemoController,
       tableView: TableView,
@@ -160,7 +263,11 @@ proc newTableDemoController(
     table: TableView, detail, activity: Label
 ): TableDemoController =
   result = TableDemoController(
-    rows: demoRows(), table: table, detail: detail, activity: activity
+    rows: demoRows(),
+    table: table,
+    detail: detail,
+    activity: activity,
+    stateStore: newTableViewStateStore(),
   )
   initResponder(result)
   discard result.withProtocol(TableDemoDataSource)
@@ -214,6 +321,9 @@ let
 
 projectColumn.styleClasses = ["primary"]
 projectColumn.userInfo = newColumnInfo("Primary project identity")
+stateColumn.reuseIdentifier = "status-cell"
+actionColumn.resizePolicy = tcrFixed
+scratchColumn.hidden = true
 discard projectColumn.userInfo of ColumnInfo
 table.addColumn(projectColumn)
 table.addColumn(stateColumn)
@@ -231,12 +341,22 @@ for column in table.columns:
 
 table.dataSource = controller
 table.delegate = controller
+table.autosaveName = "table-demo"
 table.visibleRows = 8
+table.showsHeader = true
+table.tableHeaderHeight = 26.0
 table.rowHeight = 28.0
 table.selectionMode = lsmExtended
+table.allowsColumnSelection = true
 table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true
 table.selectedIndex = 0
+table.selectedColumns = [projectColumn]
+table.requestSort(projectColumn, tsdAscending)
+table.saveState(controller.stateStore)
+stateColumn.hidden = true
+table.moveColumn(table.columnIndex("owner"), table.columnIndex("project"))
+table.restoreState(controller.stateStore)
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 
 root.addSubview(title, table, detailTitle, detail, activityTitle, activity)
