@@ -74,16 +74,18 @@ proc tableActionPoint(tableView: TableView, row: int): Point =
   if actionColumn.isNil or tableView.columnCount() < 2:
     return initPoint(
       rowRect.origin.x + rowRect.size.width * 0.5'f32,
-      rowRect.origin.y + rowRect.size.height * 0.5'f32
+      rowRect.origin.y + rowRect.size.height * 0.5'f32,
     )
   let actionX = actionColumn.width() * 0.5'f32
   let leftColumn = tableView.columnAt(0)
   if leftColumn.isNil:
     return initPoint(
       rowRect.origin.x + rowRect.size.width * 0.5'f32,
-      rowRect.origin.y + rowRect.size.height * 0.5'f32
+      rowRect.origin.y + rowRect.size.height * 0.5'f32,
     )
-  initPoint(actionX + leftColumn.width(), rowRect.origin.y + rowRect.size.height * 0.5'f32)
+  initPoint(
+    actionX + leftColumn.width(), rowRect.origin.y + rowRect.size.height * 0.5'f32
+  )
 
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
@@ -111,6 +113,7 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
         action,
         proc(sender: DynamicAgent) =
           delegate.buttonActionRows.add row
+        ,
       )
       button.action = action
       return button
@@ -310,7 +313,8 @@ suite "NimKit TableView":
     check tableView.showsHeader()
     check tableView.tableHeaderHeight() == 24.0'f32
     check tableView.tableHeaderHitTest(initPoint(20.0'f32, 10.0'f32)).column == name
-    check tableView.tableHeaderHitTest(initPoint(118.0'f32, 10.0'f32)).part == thpResizeHandle
+    check tableView.tableHeaderHitTest(initPoint(118.0'f32, 10.0'f32)).part ==
+      thpResizeHandle
 
     tableView.resizeColumn(name, 70.0)
     check name.width == 80.0'f32
@@ -344,14 +348,26 @@ suite "NimKit TableView":
     check texts.contains("Name")
     check texts.contains("Age")
 
-    check tableView.headerMouseMoved(MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary))
-    check tableView.headerMouseDown(MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary))
-    check tableView.headerMouseUp(MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary))
+    check tableView.headerMouseMoved(
+      MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
+    )
+    check tableView.headerMouseDown(
+      MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
+    )
+    check tableView.headerMouseUp(
+      MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
+    )
     check name.sortDirection == tsdAscending
 
-    check tableView.headerMouseDown(MouseEvent(location: initPoint(118.0, 10.0), button: mbPrimary))
-    check tableView.headerMouseDragged(MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary))
-    check tableView.headerMouseUp(MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary))
+    check tableView.headerMouseDown(
+      MouseEvent(location: initPoint(118.0, 10.0), button: mbPrimary)
+    )
+    check tableView.headerMouseDragged(
+      MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary)
+    )
+    check tableView.headerMouseUp(
+      MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary)
+    )
     check name.width > 120.0'f32
 
     tableView.saveState(store)
@@ -559,8 +575,7 @@ suite "NimKit TableView":
 
   test "table action buttons use row-local callbacks when selection does not change":
     let
-      window =
-        newWindow("Table hosted button action", frame = initRect(0, 0, 360, 190))
+      window = newWindow("Table hosted button action", frame = initRect(0, 0, 360, 190))
       root = newView(frame = initRect(0, 0, 360, 190))
       tableView = newTableView(frame = initRect(10, 10, 280, 84))
       source = newTableDataSourceSpy(3)
@@ -684,7 +699,7 @@ suite "NimKit TableView":
 
     delegate.dragOperation = {dgoCopy}
     delegate.dragAccepted = true
-    let session = tableView.beginDraggingRows([0, 3, 9], operations = {dgoMove})
+    let session = tableView.beginDraggingRows(@[0, 3, 9], {dgoMove}, DragPasteboardName)
     let info = session.draggingInfo()
     check info.tableDraggingRows() == @[0, 3]
     check info.selectedOperations == {dgoMove}
@@ -696,10 +711,12 @@ suite "NimKit TableView":
     tableView.restoreSelectionPersistenceString(selectionState)
     check tableView.selectedIndexes == @[3]
 
-    let columnDrag = tableView.beginDraggingColumns([name, state], operations = {dgoCopy})
+    let columnDrag =
+      tableView.beginDraggingColumns(@[name, state], {dgoCopy}, DragPasteboardName)
     let columnInfo = columnDrag.draggingInfo()
     check columnInfo.tableDraggingColumns() == @["name", "state"]
-    check pasteboardWithName(DragPasteboardName).stringForType(PasteboardTypeString) == "name,state"
+    check pasteboardWithName(DragPasteboardName).stringForType(PasteboardTypeString) ==
+      "name,state"
     let targeted = columnInfo.withDropTarget(row = 1, column = state)
     check targeted.tableDropRow() == 1
     check targeted.tableDropColumn() == "state"

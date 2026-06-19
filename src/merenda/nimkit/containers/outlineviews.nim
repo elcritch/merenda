@@ -67,9 +67,11 @@ protocol OutlineViewDataSource {.selectorScope: protocol.}:
   method numberOfChildren*(
     outlineView: OutlineView, parentIdentifier: string
   ): int {.optional.}
+
   method childIdentifier*(
     outlineView: OutlineView, parentIdentifier: string, index: int
   ): string {.optional.}
+
   method outlineItem*(
     outlineView: OutlineView, identifier: string
   ): OutlineItem {.optional.}
@@ -78,10 +80,12 @@ protocol OutlineViewDelegate {.selectorScope: protocol.}:
   method shouldExpandItem*(
     outlineView: OutlineView, identifier: string
   ): bool {.optional.}
+
   method didExpandItem*(outlineView: OutlineView, identifier: string) {.optional.}
   method shouldCollapseItem*(
     outlineView: OutlineView, identifier: string
   ): bool {.optional.}
+
   method didCollapseItem*(outlineView: OutlineView, identifier: string) {.optional.}
 
 proc containsIdentifier(values: openArray[string], identifier: string): bool =
@@ -99,7 +103,9 @@ proc itemIndex(outlineView: OutlineView, identifier: string): int =
   -1
 
 proc isItemExpanded*(outlineView: OutlineView, identifier: string): bool
-proc outlineItemWithIdentifier*(outlineView: OutlineView, identifier: string): OutlineItem
+proc outlineItemWithIdentifier*(
+  outlineView: OutlineView, identifier: string
+): OutlineItem
 
 proc hasChildren(outlineView: OutlineView, identifier: string): bool =
   if outlineView.isNil:
@@ -127,14 +133,15 @@ proc sourcedOutlineItem(outlineView: OutlineView, identifier: string): OutlineIt
   else:
     OutlineItem()
 
-proc childrenForParent(outlineView: OutlineView, parentIdentifier: string): seq[OutlineItem] =
+proc childrenForParent(
+    outlineView: OutlineView, parentIdentifier: string
+): seq[OutlineItem] =
   if outlineView.isNil:
     return @[]
   let source = outlineView.xOutlineDataSource
   if not source.isNil:
     let count = source.trySendLocal(
-      numberOfChildren(),
-      (outlineView: outlineView, parentIdentifier: parentIdentifier),
+      numberOfChildren(), (outlineView: outlineView, parentIdentifier: parentIdentifier)
     )
     if count.isSome:
       for index in 0 ..< max(count.get(), 0):
@@ -166,10 +173,7 @@ proc appendVisibleRows(
       outlineView.appendVisibleRows(item.identifier, level + 1, rows)
 
 proc initOutlineItem*(
-    identifier: string,
-    title: string,
-    parentIdentifier = "",
-    expandable = false,
+    identifier: string, title: string, parentIdentifier = "", expandable = false
 ): OutlineItem =
   OutlineItem(
     identifier: identifier,
@@ -217,7 +221,10 @@ proc `outlineDelegate=`*(outlineView: OutlineView, delegate: Responder) =
   outlineView.outlineDelegate = DynamicAgent(delegate)
 
 proc outlineItems*(outlineView: OutlineView): seq[OutlineItem] =
-  if outlineView.isNil: @[] else: outlineView.xOutlineItems
+  if outlineView.isNil:
+    @[]
+  else:
+    outlineView.xOutlineItems
 
 proc `outlineItems=`*(outlineView: OutlineView, items: openArray[OutlineItem]) =
   if outlineView.isNil:
@@ -269,14 +276,17 @@ proc levelForRow*(outlineView: OutlineView, row: int): int =
 proc isItemExpandable*(outlineView: OutlineView, identifier: string): bool =
   let index = outlineView.itemIndex(identifier)
   if index >= 0:
-    return outlineView.xOutlineItems[index].expandable or outlineView.hasChildren(identifier)
+    return
+      outlineView.xOutlineItems[index].expandable or outlineView.hasChildren(identifier)
   let item = outlineView.sourcedOutlineItem(identifier)
   item.expandable or outlineView.hasChildren(identifier)
 
 proc isItemExpanded*(outlineView: OutlineView, identifier: string): bool =
   (not outlineView.isNil) and outlineView.xExpanded.containsIdentifier(identifier)
 
-proc outlineItemWithIdentifier*(outlineView: OutlineView, identifier: string): OutlineItem =
+proc outlineItemWithIdentifier*(
+    outlineView: OutlineView, identifier: string
+): OutlineItem =
   if outlineView.isNil:
     return OutlineItem()
   let index = outlineView.itemIndex(identifier)
@@ -293,7 +303,9 @@ proc parentIdentifierForItem*(outlineView: OutlineView, identifier: string): str
 proc titleForItem*(outlineView: OutlineView, identifier: string): string =
   outlineView.outlineItemWithIdentifier(identifier).title
 
-proc childIdentifiersForItem*(outlineView: OutlineView, identifier: string): seq[string] =
+proc childIdentifiersForItem*(
+    outlineView: OutlineView, identifier: string
+): seq[string] =
   for child in outlineView.childrenForParent(identifier):
     result.add child.identifier
 
@@ -303,7 +315,9 @@ proc levelForItem*(outlineView: OutlineView, identifier: string): int =
 proc isItemVisible*(outlineView: OutlineView, identifier: string): bool =
   outlineView.rowForItem(identifier) >= 0
 
-proc outlineItemIdentity*(outlineView: OutlineView, identifier: string): OutlineItemIdentity =
+proc outlineItemIdentity*(
+    outlineView: OutlineView, identifier: string
+): OutlineItemIdentity =
   let
     item = outlineView.outlineItemWithIdentifier(identifier)
     row = outlineView.rowForItem(identifier)
@@ -324,8 +338,9 @@ proc expandItem*(outlineView: OutlineView, identifier: string) =
     return
   let delegate = outlineView.outlineDelegate()
   if not delegate.isNil:
-    let allowed =
-      delegate.trySendLocal(shouldExpandItem(), (outlineView: outlineView, identifier: identifier))
+    let allowed = delegate.trySendLocal(
+      shouldExpandItem(), (outlineView: outlineView, identifier: identifier)
+    )
     if allowed.isSome and not allowed.get():
       return
   outlineView.xExpanded.add identifier
@@ -340,8 +355,9 @@ proc collapseItem*(outlineView: OutlineView, identifier: string) =
     return
   let delegate = outlineView.outlineDelegate()
   if not delegate.isNil:
-    let allowed =
-      delegate.trySendLocal(shouldCollapseItem(), (outlineView: outlineView, identifier: identifier))
+    let allowed = delegate.trySendLocal(
+      shouldCollapseItem(), (outlineView: outlineView, identifier: identifier)
+    )
     if allowed.isSome and not allowed.get():
       return
   var next: seq[string]
@@ -364,9 +380,14 @@ proc toggleItem*(outlineView: OutlineView, identifier: string) =
     outlineView.expandItem(identifier)
 
 proc expandedItemIdentifiers*(outlineView: OutlineView): seq[string] =
-  if outlineView.isNil: @[] else: outlineView.xExpanded
+  if outlineView.isNil:
+    @[]
+  else:
+    outlineView.xExpanded
 
-proc `expandedItemIdentifiers=`*(outlineView: OutlineView, identifiers: openArray[string]) =
+proc `expandedItemIdentifiers=`*(
+    outlineView: OutlineView, identifiers: openArray[string]
+) =
   if outlineView.isNil:
     return
   outlineView.xExpanded = @identifiers
@@ -409,7 +430,8 @@ proc disclosureHitTest*(outlineView: OutlineView, point: Point): OutlineDisclosu
   for row in 0 ..< outlineView.rowCount():
     let rect = outlineView.disclosureRectForRow(row)
     if rect.contains(point):
-      return OutlineDisclosureHit(row: row, item: outlineView.itemAtRow(row), rect: rect)
+      return
+        OutlineDisclosureHit(row: row, item: outlineView.itemAtRow(row), rect: rect)
   OutlineDisclosureHit(row: -1)
 
 proc toggleItemAtPoint*(outlineView: OutlineView, point: Point): bool =
@@ -437,7 +459,8 @@ proc disclosureMouseUp*(outlineView: OutlineView, event: MouseEvent): bool =
   let
     trackingIdentifier = outlineView.xTrackingDisclosureIdentifier
     hit = outlineView.disclosureHitTest(event.location)
-    clicked = hit.row == outlineView.xTrackingDisclosureRow and
+    clicked =
+      hit.row == outlineView.xTrackingDisclosureRow and
       hit.item.identifier == trackingIdentifier
   outlineView.xTrackingDisclosureRow = -1
   outlineView.xTrackingDisclosureIdentifier = ""
@@ -497,9 +520,7 @@ proc dropTargetForDraggingLocation*(
     let item = outlineView.itemAtRow(row)
     if item.identifier.len > 0:
       return initItemDropTarget(
-        item.identifier,
-        row,
-        TableView(outlineView).listItemRect(row),
+        item.identifier, row, TableView(outlineView).listItemRect(row)
       )
   initDraggingDropTarget()
 
@@ -550,7 +571,9 @@ proc outlineAccessibilityElementForRow*(
     selected: TableView(outlineView).selectedIndex() == row,
   )
 
-proc outlineAccessibilityElements*(outlineView: OutlineView): seq[OutlineAccessibilityElement] =
+proc outlineAccessibilityElements*(
+    outlineView: OutlineView
+): seq[OutlineAccessibilityElement] =
   if outlineView.isNil:
     return @[]
   for row in 0 ..< outlineView.rowCount():
@@ -560,10 +583,7 @@ proc outlineAccessibilityElements*(outlineView: OutlineView): seq[OutlineAccessi
       result.add disclosure
 
 proc drawDisclosureAffordance(
-    outlineView: OutlineView,
-    context: DrawContext,
-    row: int,
-    rect: Rect,
+    outlineView: OutlineView, context: DrawContext, row: int, rect: Rect
 ) =
   if outlineView.isNil or context.isNil or rect.isEmpty:
     return
@@ -574,7 +594,10 @@ proc drawDisclosureAffordance(
     color = initColor(0.22, 0.26, 0.32, 1.0)
     borderAlpha = if pressed: 1.0'f32 else: 0.42'f32
     shellFill =
-      if pressed: initColor(0.74, 0.80, 0.90, 1.0) else: initColor(0.0, 0.0, 0.0, 0.0)
+      if pressed:
+        initColor(0.74, 0.80, 0.90, 1.0)
+      else:
+        initColor(0.0, 0.0, 0.0, 0.0)
     shell = rect.inset(initEdgeInsets(2.0'f32))
   discard context.addRenderRectangle(
     context.renderRectFor(shell),
@@ -590,14 +613,25 @@ proc drawDisclosureAffordance(
     for index in 0 .. 2:
       let width = 7.0'f32 - index.float32 * 2.0'f32
       discard context.addRenderRectangle(
-        context.renderRectFor(initRect(centerX - width * 0.5'f32, centerY - 2.0'f32 + index.float32, width, 1.0'f32)),
+        context.renderRectFor(
+          initRect(
+            centerX - width * 0.5'f32, centerY - 2.0'f32 + index.float32, width, 1.0'f32
+          )
+        ),
         fill(color),
       )
   else:
     for index in 0 .. 2:
       let height = 7.0'f32 - index.float32 * 2.0'f32
       discard context.addRenderRectangle(
-        context.renderRectFor(initRect(centerX - 1.0'f32 + index.float32, centerY - height * 0.5'f32, 1.0'f32, height)),
+        context.renderRectFor(
+          initRect(
+            centerX - 1.0'f32 + index.float32,
+            centerY - height * 0.5'f32,
+            1.0'f32,
+            height,
+          )
+        ),
         fill(color),
       )
 
@@ -639,10 +673,7 @@ proc outlineTextRectForCell(
     result.size.width = max(result.size.width - 12.0'f32, 0.0'f32)
 
 proc drawOutlineRowText(
-    outlineView: OutlineView,
-    context: DrawContext,
-    row: int,
-    rowBounds: Rect,
+    outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect
 ) =
   if outlineView.isNil or context.isNil or row < 0:
     return
@@ -654,10 +685,7 @@ proc drawOutlineRowText(
       textRect = outlineView.outlineTextRectForCell(row, column, rowBounds)
     if text.len > 0 and not textRect.isEmpty:
       discard context.addText(
-        textRect,
-        text,
-        initColor(0.14, 0.18, 0.25, 1.0),
-        column.alignment(),
+        textRect, text, initColor(0.14, 0.18, 0.25, 1.0), column.alignment()
       )
 
 protocol OutlineViewDrawing of ViewDrawingProtocol:
@@ -722,7 +750,7 @@ protocol OutlineViewAccessibility of AccessibilityProtocol:
     $outlineView.rowCount()
 
 protocol OutlineViewStateBehavior of TableViewStateProtocol:
-  method performCaptureState(outlineView: OutlineView): TableViewState =
+  method captureState(outlineView: OutlineView): TableViewState =
     if outlineView.isNil:
       return initTableViewState()
     var selectedColumns: seq[string]
@@ -736,7 +764,7 @@ protocol OutlineViewStateBehavior of TableViewStateProtocol:
       outlineView.expandedItemIdentifiers(),
     )
 
-  method performRestoreState(outlineView: OutlineView, state: TableViewState) =
+  method restoreState(outlineView: OutlineView, state: TableViewState) =
     if outlineView.isNil:
       return
     TableView(outlineView).restoreColumnAutosaveRecords(state.columns)
