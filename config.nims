@@ -72,16 +72,17 @@ task test, "run unit test":
       if isDefaultTest(file):
         nimExec("r", file, platform = platformArg)
 
-  for file in listFiles("examples"):
-    if nimFileStemHasPrefix(file, ""):
-      nimExec("c", file)
-
 task test_compile, "compile unit tests without running":
   for file in listFiles("tests"):
     if nimFileStemHasPrefix(file, "t"):
       nimExec("c", file)
 
-task test_compile_examples, "compile unit tests without running":
+task examples, "compile examples":
+  for file in listFiles("examples"):
+    if nimFileStemHasPrefix(file, ""):
+      nimExec("c", file)
+
+task test_compile_examples, "compile examples (legacy compatibility task)":
   for file in listFiles("examples"):
     if nimFileStemHasPrefix(file, ""):
       nimExec("c", file)

@@ -146,6 +146,10 @@ jobs:
 
         vulkaninfo --summary || true
         nim test
+    - name: Build Examples
+      if: runner.os == 'Linux'
+      run: |
+        nim examples
 
     - name: Build Tests (Vulkan Compile Check)
       if: runner.os == 'Linux'
@@ -158,6 +162,10 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         nim test
+    - name: Build Examples
+      if: runner.os == 'macOS'
+      run: |
+        nim examples
 
     - name: Build Tests
       if: runner.os == 'Windows'
@@ -165,6 +173,11 @@ jobs:
         NIMFLAGS: "-d:figdraw.vulkan=off"
       run: |
         nim test
+
+    - name: Build Examples
+      if: runner.os == 'Windows'
+      run: |
+        nim examples
 
     - name: Build Tests (Vulkan Compile Check)
       if: runner.os == 'Windows'
