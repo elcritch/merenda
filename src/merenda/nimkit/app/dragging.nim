@@ -66,6 +66,12 @@ type
     sequenceNumber*: Natural
     dropTarget*: DraggingDropTarget
 
+  DraggingPromisedFileRequest* = object
+    session*: DraggingSession
+    info*: DraggingInfo
+    item*: DraggingItem
+    fileName*: string
+
 const
   NoDragOperations*: DragOperations = {}
   EveryDragOperation*: DragOperations =
@@ -79,6 +85,8 @@ protocol DraggingSourceProtocol:
   method ignoreModifierKeysForDraggingSession*(
     session: DraggingSession
   ): bool {.optional.}
+
+  method writePromisedFile*(request: DraggingPromisedFileRequest): bool {.optional.}
 
 protocol DraggingDestinationProtocol:
   method draggingEntered*(info: DraggingInfo): DragOperations {.optional.}
@@ -198,6 +206,13 @@ proc items*(session: DraggingSession): seq[DraggingItem] =
   for item in session.xItems:
     result.add item.copyDraggingItem()
 
+proc promisedFileItems*(session: DraggingSession): seq[DraggingItem] =
+  if session.isNil:
+    return @[]
+  for item in session.xItems:
+    if item.promisedFileName.len > 0 or item.pasteboardType == PasteboardTypePromisedFile:
+      result.add item.copyDraggingItem()
+
 proc draggingInfo*(
     session: DraggingSession, location = AutoPoint, destination: DynamicAgent = nil
 ): DraggingInfo =
@@ -237,6 +252,49 @@ proc writeItemsToPasteboard(session: DraggingSession) =
   for item in session.xItems:
     if item.pasteboardType.len > 0 and item.pasteboardItem.kind != pikNone:
       discard session.xPasteboard.setItem(item.pasteboardType, item.pasteboardItem)
+
+proc writePromisedFileFallback(session: DraggingSession, item: DraggingItem): bool =
+  if session.isNil or session.xPasteboard.isNil:
+    return false
+  let promisedItem =
+    if item.pasteboardItem.kind != pikNone:
+      item.pasteboardItem
+    elif item.promisedFileName.len > 0:
+      initPasteboardFileItem(item.promisedFileName)
+    else:
+      PasteboardItem(kind: pikNone)
+  if promisedItem.kind == pikNone:
+    return false
+  let pasteboardType =
+    if item.pasteboardType.len > 0: item.pasteboardType else: PasteboardTypePromisedFile
+  session.xPasteboard.setItem(pasteboardType, promisedItem)
+
+proc fulfillPromisedFile(
+    session: DraggingSession, info: DraggingInfo, item: DraggingItem
+): bool =
+  if session.isNil:
+    return false
+  if not session.xSource.isNil:
+    let written = session.xSource.trySendLocal(
+      writePromisedFile(),
+      DraggingPromisedFileRequest(
+        session: session,
+        info: info,
+        item: item.copyDraggingItem(),
+        fileName: item.promisedFileName,
+      ),
+    )
+    if written.isSome:
+      return written.get()
+  session.writePromisedFileFallback(item)
+
+proc fulfillPromisedFiles*(session: DraggingSession, info: DraggingInfo): bool =
+  if session.isNil:
+    return false
+  result = true
+  for item in session.xItems:
+    if item.promisedFileName.len > 0 or item.pasteboardType == PasteboardTypePromisedFile:
+      result = session.fulfillPromisedFile(info, item) and result
 
 proc sourceOperationMask(session: DraggingSession, location: Point): DragOperations =
   if session.isNil:
@@ -332,6 +390,8 @@ proc performDraggingOperation*(
       session.xSelectedOperations != NoDragOperations
 
   if result:
+    if not session.fulfillPromisedFiles(info):
+      return false
     discard resolvedDestination.sendLocalIfHandled(concludeDragOperation(), info)
 
 proc autoscrollDraggingSession*(

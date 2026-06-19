@@ -108,6 +108,10 @@ proc drawListRow*(
   listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
 )
 
+proc drawListDropTarget(
+  listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+)
+
 proc drawCustomEmptyState(listView: ListView, context: DrawContext, rect: Rect): bool
 
 proc listItemRect*(listView: ListView, itemIndex: int): Rect
@@ -172,6 +176,10 @@ protocol ListViewDelegate {.selectorScope: protocol.}:
     listView: ListView, rows: seq[int]
   ): seq[DraggingItem] {.optional.}
 
+  method listDropTargetForLocation*(
+    listView: ListView, location: Point, proposedTarget: DraggingDropTarget
+  ): DraggingDropTarget {.optional.}
+
   method validateDrop*(
     listView: ListView, info: DraggingInfo
   ): DragOperations {.optional.}
@@ -229,6 +237,12 @@ proc invalidateListRows(listView: ListView) =
     listView.xContentView.setNeedsDisplay(true)
   listView.setNeedsDisplay(true)
 
+proc updateVisibleDropTarget(listView: ListView, target: DraggingDropTarget) =
+  if listView.isNil or listView.xListDraggingInfo.dropTarget == target:
+    return
+  listView.xListDraggingInfo.dropTarget = target
+  listView.invalidateListRows()
+
 proc rowPayload(rows: openArray[int]): string =
   for index, row in rows:
     if index > 0:
@@ -264,10 +278,19 @@ proc dropTargetForDraggingLocation*(
 ): DraggingDropTarget =
   if listView.isNil:
     return initDraggingDropTarget()
+  var proposedTarget = initDraggingDropTarget()
   let row = listView.listItemIndexAtPoint(location)
   if row >= 0:
-    return initRowDropTarget(row, listView.listItemRect(row))
-  initDraggingDropTarget()
+    proposedTarget = initRowDropTarget(row, listView.listItemRect(row))
+  let delegate = listView.delegate()
+  if not delegate.isNil:
+    let resolved = delegate.trySendLocal(
+      listDropTargetForLocation(),
+      (listView: listView, location: location, proposedTarget: proposedTarget),
+    )
+    if resolved.isSome:
+      return resolved.get()
+  proposedTarget
 
 proc validateListDragging(listView: ListView, info: DraggingInfo): DragOperations =
   if listView.isNil:
@@ -697,6 +720,19 @@ proc drawListRow*(
       )
       separatorRect = initRect(rect.origin.x, rect.maxY - 1.0'f32, rect.size.width, 1.0)
     discard context.addRenderRectangle(separatorRect, fill(itemStyle.box.borderColor))
+
+proc drawListDropTarget(
+    listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
+) =
+  if listView.isNil or context.isNil or row.index < 0:
+    return
+  let target = listView.xListDraggingInfo.dropTarget
+  if target.kind notin {ddtRow, ddtItem} or target.row != row.index:
+    return
+  let indicatorRect =
+    initRect(rect.origin.x, max(rect.maxY - 2.0'f32, rect.minY), rect.size.width, 2.0)
+  discard
+    context.addRenderRectangle(indicatorRect, fill(initColor(0.18, 0.42, 0.88, 0.95)))
 
 proc drawCustomListRow(
     listView: ListView, context: DrawContext, rect: Rect, row: ListRowState
@@ -1422,6 +1458,7 @@ protocol DefaultListRowViewDrawing of ViewDrawingProtocol:
     let rect = rowView.bounds()
     if not listView.drawCustomListRow(context, rect, rowView.xRow):
       listView.drawListRow(context, rect, rowView.xRow)
+    listView.drawListDropTarget(context, rect, rowView.xRow)
 
 protocol DefaultListRowViewHitTesting of ViewProtocol:
   method pointInside(rowView: ListRowView, point: Point): bool =
@@ -1538,7 +1575,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     if not listView.xListDraggingInfo.session.isNil and
         listView.xListDraggingInfo.session.state() == dssActive:
       let target = listView.dropTargetForDraggingLocation(event.location)
-      listView.xListDraggingInfo.dropTarget = target
+      listView.updateVisibleDropTarget(target)
       discard updateDraggingSession(
         listView.xListDraggingInfo.session,
         event.location,
@@ -1590,19 +1627,28 @@ protocol DefaultListViewDraggingSource of DraggingSourceProtocol:
   method draggingSessionEnded(listView: ListView, info: DraggingInfo) =
     if not listView.isNil and listView.xListDraggingInfo.session == info.session:
       listView.xListDraggingInfo = ListDraggingInfo()
+      listView.invalidateListRows()
 
 protocol DefaultListViewDraggingDestination of DraggingDestinationProtocol:
   method draggingEntered(listView: ListView, info: DraggingInfo): DragOperations =
+    listView.updateVisibleDropTarget(info.dropTarget)
     listView.validateListDragging(info)
 
   method draggingUpdated(listView: ListView, info: DraggingInfo): DragOperations =
+    listView.updateVisibleDropTarget(info.dropTarget)
     listView.validateListDragging(info)
+
+  method draggingExited(listView: ListView, info: DraggingInfo) =
+    listView.updateVisibleDropTarget(initDraggingDropTarget())
 
   method prepareForDragOperation(listView: ListView, info: DraggingInfo): bool =
     listView.validateListDragging(info) != NoDragOperations
 
   method performDragOperation(listView: ListView, info: DraggingInfo): bool =
     listView.acceptListDragging(info)
+
+  method concludeDragOperation(listView: ListView, info: DraggingInfo) =
+    listView.updateVisibleDropTarget(initDraggingDropTarget())
 
   method autoscrollDraggingSession(listView: ListView, info: DraggingInfo): bool =
     listView.autoscrollDraggingInfo(info)

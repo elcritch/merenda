@@ -30,8 +30,8 @@ directly when they need a narrower surface.
 
 The next work should move NimKit toward the OpenSTEP/AppKit framework shape:
 stabilize the remaining native/backend edges around application, window, and
-semantic accessibility behavior, then add richer pasteboard, dragging,
-graphics-resource, document, table, and outline systems. Avoid adding
+semantic accessibility behavior, then add richer graphics-resource, document,
+table, and outline systems. Avoid adding
 widget-local special cases where AppKit solves the behavior through the
 application, responder, view, window, accessibility, or control/cell layers.
 
@@ -98,6 +98,14 @@ application, responder, view, window, accessibility, or control/cell layers.
   protocols, lifecycle hooks, promised-file item staging, control/list/table
   hooks, table row/column payload helpers, and outline item dragging routed
   through the shared `DraggingSession`/`DraggingInfo` path.
+- Hardened pasteboard and dragging integration: backend pasteboard providers now
+  bridge host-supported text, file, URL, data, and image payloads while
+  retaining typed in-process storage for colors/fonts and higher-level NimKit
+  items; provider change counts and global release hooks are surfaced through
+  the generic pasteboard API; promised-file drags now materialize through source
+  callbacks with a pure Nim fallback; and list/table/outline drag sessions have
+  delegate-refined drop targets, visible drop affordances, and active-session
+  autoscroll/update dispatch.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -214,25 +222,6 @@ real native backends.
      backend/user-defaults persistence layer
    - add richer window-level menu validation for close/minimize/zoom and
      document-window commands
-
-### Pasteboard And Dragging
-
-Harden the new in-process AppKit-style pasteboard and dragging foundations and
-connect them to widgets and native backends.
-
-1. Add backend provider coverage beyond text:
-   - bridge data blobs, URLs/files, images, colors, fonts, and native change
-     counts where the host backend exposes them
-   - map `releaseGlobally` to true global pasteboard release where supported
-2. Integrate generic drag sessions with controls and containers:
-   - harden the existing control/list/table/outline source and destination
-     hooks now that table/outline dragging has been migrated onto
-     `DraggingSession`/`DraggingInfo`
-   - add richer item drop targeting for outline/list delegates, visible drop
-     affordances, and backend-dispatched autoscroll during active sessions
-3. Finish promised-file behavior:
-   - turn promised-file drag items into backend callbacks for real native drag
-     sessions while keeping the pure Nim in-process fallback
 
 ### Documents And Controllers
 

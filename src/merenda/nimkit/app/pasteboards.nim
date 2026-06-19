@@ -113,6 +113,7 @@ const
 
 protocol PasteboardProviderProtocol:
   method pasteboardTypes*(pasteboard: Pasteboard): seq[string] {.optional.}
+  method pasteboardChangeCount*(pasteboard: Pasteboard): int {.optional.}
   method pasteboardItemForType*(
     request: PasteboardTypeRequest
   ): PasteboardItem {.optional.}
@@ -265,6 +266,13 @@ proc providerTypes(pasteboard: Pasteboard): seq[string] =
   if types.isSome:
     return types.get()
 
+proc providerChangeCount(pasteboard: Pasteboard): Option[int] =
+  if pasteboard.isNil or pasteboard.xProvider.isNil:
+    return none(int)
+  let count = pasteboard.xProvider.trySendLocal(pasteboardChangeCount(), pasteboard)
+  if count.isSome:
+    return some(count.get())
+
 proc providerItem(pasteboard: Pasteboard, kind: string): PasteboardItem =
   if pasteboard.isNil or pasteboard.xProvider.isNil:
     return PasteboardItem(kind: pikNone)
@@ -361,7 +369,13 @@ proc materializeItem(pasteboard: Pasteboard, kind: string): bool =
   pasteboard.storeMaterializedItem(kind, item)
 
 proc changeCount*(pasteboard: Pasteboard): int =
-  if pasteboard.isNil: 0 else: pasteboard.xChangeCount
+  if pasteboard.isNil:
+    return 0
+  let providerCount = pasteboard.providerChangeCount()
+  if providerCount.isSome:
+    max(pasteboard.xChangeCount, providerCount.get())
+  else:
+    pasteboard.xChangeCount
 
 proc types*(pasteboard: Pasteboard): seq[string] =
   if pasteboard.isNil:
@@ -510,7 +524,11 @@ proc releaseGlobally*(pasteboard: Pasteboard): bool =
   pasteboard.xOwner = nil
   inc pasteboard.xChangeCount
   let providerReleased = pasteboard.releaseProviderPasteboard()
-  let providerCleared = pasteboard.clearProviderContents()
+  let providerCleared =
+    if providerReleased:
+      false
+    else:
+      pasteboard.clearProviderContents()
 
   ensureNamedPasteboards()
   var removed = false
