@@ -7,6 +7,7 @@ import ../app/pasteboards
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
+import ../responder/responders
 
 export tableviews
 
