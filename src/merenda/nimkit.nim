@@ -7,6 +7,7 @@ import merenda/nimkit/drawing/chromes/aquachrome
 import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
 import merenda/nimkit/drawing/drawing
+import merenda/nimkit/app/dragging
 import merenda/nimkit/drawing/images
 import merenda/nimkit/foundation/events
 import merenda/nimkit/text/fieldeditors
@@ -47,6 +48,7 @@ export aquachrome
 export comboboxes
 export controls
 export drawing
+export dragging
 export images
 export events
 export fieldeditors
