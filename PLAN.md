@@ -104,6 +104,11 @@ application, responder, view, window, accessibility, or control/cell layers.
 - Added built-in accessibility semantics for views, buttons, checkboxes, text
   fields, labels, and value-change notifications, with
   `tests/tnimkit_accessibility.nim` covering the core behavior.
+- Filled out the next accessibility role/trait defaults for menus, menu items,
+  popup menu buttons, popup lists, combo boxes, tab groups, scroll areas, list
+  views, visible list rows, table views, and hosted table cells. Expanded
+  `tests/tnimkit_accessibility.nim` to cover the broader control/container
+  semantics.
 - Expanded responder event coverage for key up, modifier flag changes,
   right/other mouse events, scroll phases, help requests, and cursor/tracking
   events.
@@ -173,19 +178,17 @@ application, responder, view, window, accessibility, or control/cell layers.
 Keep accessibility backend-neutral until the native application/window backend
 boundary is ready.
 
-1. Fill out role and trait defaults for menus, popup lists, combo box popup
-   rows, tabs, scroll areas, list rows, table rows, and table cells.
-2. Route focus, selection, enabled-state, expanded/collapsed, and value-change
+1. Route focus, selection, enabled-state, expanded/collapsed, and value-change
    notifications from the same mutation procs that already update rendering or
    responder state.
-3. Add semantic traversal helpers:
+2. Add semantic traversal helpers:
    - accessibility element at point
    - ordered accessibility descendants
    - role/action validation helpers for tests and future backend bridges
-4. Add richer text accessibility hooks:
+3. Add richer text accessibility hooks:
    - selected range, insertion point, editable/selectable traits, and basic
      line/character geometry once text layout exposes stable offsets
-5. Stage native bridge work later behind a backend adapter for NSAccessibility,
+4. Stage native bridge work later behind a backend adapter for NSAccessibility,
    UI Automation, and AT-SPI-style APIs; do not put platform imports in the core
    accessibility modules.
 

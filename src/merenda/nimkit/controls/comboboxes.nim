@@ -2,6 +2,7 @@ import std/options
 
 import sigils/core
 
+import ../accessibility/accessibilityprotocols
 import ../drawing/chrome
 import ./controls
 import ../containers/listbasics
@@ -92,6 +93,40 @@ protocol ComboBoxEvents:
 
 protocol ComboBoxViewProtocol:
   method pointInside*(point: Point): bool
+
+protocol DefaultComboBoxAccessibility of AccessibilityProtocol:
+  method accessibilityRole(comboBox: ComboBox): AccessibilityRole =
+    arComboBox
+
+  method accessibilityLabel(comboBox: ComboBox): string =
+    if comboBox.xAccessibilityLabel.len > 0:
+      comboBox.xAccessibilityLabel
+    else:
+      comboBox.identifier()
+
+  method accessibilityValue(comboBox: ComboBox): string =
+    comboBox.stringValue()
+
+  method accessibilityTraits(comboBox: ComboBox): AccessibilityTraits =
+    result = comboBox.xAccessibilityTraits + {atSelectable}
+    if comboBox.isEditable():
+      result.incl atEditable
+    if not comboBox.isEnabled():
+      result.incl atDisabled
+    if comboBox.focused():
+      result.incl atFocused
+
+  method isAccessibilityElement(comboBox: ComboBox): bool =
+    true
+
+  method accessibilityActionNames(comboBox: ComboBox): seq[string] =
+    @[AccessibilityActionShowMenu]
+
+  method accessibilityPerformAction(comboBox: ComboBox, action: string): bool =
+    if action != AccessibilityActionShowMenu or not comboBox.isEnabled():
+      return false
+    comboBox.popupOpen = true
+    true
 
 protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   property selectedIndex -> int
@@ -1013,6 +1048,7 @@ proc initComboBoxFields*(
   discard comboBox.withProtocol(DefaultComboBoxAction)
   discard comboBox.withProtocol(DefaultComboBoxDrawing)
   discard comboBox.withProtocol(DefaultComboBoxEvents)
+  discard comboBox.withProtocol(DefaultComboBoxAccessibility)
   comboBox.addItems(items)
   comboBox.applyInitialFrame(frame)
 

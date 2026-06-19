@@ -5,6 +5,7 @@ from figdraw/figbasics import
 
 import sigils/core
 
+import ../accessibility/accessibilityprotocols
 import ../drawing/chrome
 import ../drawing/drawing
 import ../foundation/events
@@ -655,6 +656,27 @@ protocol TabViewEvents of ResponderEventProtocol:
     else:
       false
 
+protocol TabViewAccessibility of AccessibilityProtocol:
+  method accessibilityRole(tabView: TabView): AccessibilityRole =
+    arTabGroup
+
+  method accessibilityValue(tabView: TabView): string =
+    let item = tabView.selectedTabViewItem()
+    if item.isNil:
+      ""
+    else:
+      item.label()
+
+  method accessibilityTraits(tabView: TabView): AccessibilityTraits =
+    result = tabView.xAccessibilityTraits + {atSelectable}
+    if ssDisabled in tabView.xWidgetStates:
+      result.incl atDisabled
+    if tabView.isFocused():
+      result.incl atFocused
+
+  method isAccessibilityElement(tabView: TabView): bool =
+    true
+
 proc canHandleTabKeyNavigation(tabView: TabView): bool =
   if tabView.isNil:
     return false
@@ -684,6 +706,7 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   discard tabView.withProtocol(TabViewDrawing)
   discard tabView.withProtocol(TabViewLayout)
   discard tabView.withProtocol(TabViewEvents)
+  discard tabView.withProtocol(TabViewAccessibility)
   tabView.addSubview(tabView.xTabBar)
   tabView.syncTabBarFrame()
   tabView.applyInitialFrame(frame)

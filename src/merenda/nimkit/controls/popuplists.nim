@@ -2,6 +2,7 @@ from figdraw/figbasics import ZLevel
 from figdraw/fignodes import FigIdx
 import std/options
 
+import ../accessibility/accessibilityprotocols
 import ../drawing/chrome
 import ./controls
 import ../drawing/drawing
@@ -152,6 +153,23 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
   method keyDown(popupList: PopupListView, event: KeyEvent): bool =
     popupList.dispatchKeyDown(event)
     result = true
+
+protocol DefaultPopupListAccessibility of AccessibilityProtocol:
+  method accessibilityRole(popupList: PopupListView): AccessibilityRole =
+    arList
+
+  method accessibilityValue(popupList: PopupListView): string =
+    $popupList.itemCount()
+
+  method accessibilityTraits(popupList: PopupListView): AccessibilityTraits =
+    result = popupList.xAccessibilityTraits + {atSelectable}
+    if not popupList.isEnabled():
+      result.incl atDisabled
+    if popupList.isFocused():
+      result.incl atFocused
+
+  method isAccessibilityElement(popupList: PopupListView): bool =
+    true
 
 proc data(popupList: PopupListView): PopupListData =
   if popupList.isNil:
@@ -519,6 +537,7 @@ proc initPopupListViewFields*(
   popupList.setAcceptsFirstResponder(true)
   discard popupList.withProtocol(DefaultPopupListDrawing)
   discard popupList.withProtocol(DefaultPopupListEvents)
+  discard popupList.withProtocol(DefaultPopupListAccessibility)
 
 proc newPopupListView*(
     data = PopupListData(), actions = PopupListActions(), frame: Rect = AutoRect
