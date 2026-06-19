@@ -66,8 +66,13 @@ type
     destinationRow*: int
     destinationColumn*: string
 
-  TableColumnAutosaveAdapter* = ref object
-    xRecords: Table[string, seq[TableColumnAutosaveRecord]]
+  TableViewState* = object
+    columns*: seq[TableColumnAutosaveRecord]
+    selectedRows*: seq[int]
+    selectedColumns*: seq[string]
+
+  TableViewStateStore* = ref object of DynamicAgent
+    xStates: Table[string, TableViewState]
 
   TableView* = ref object of ListView
     xColumns: seq[TableColumn]
@@ -184,64 +189,55 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   ): bool {.optional.}
 
 protocol TableViewEditingProtocol:
-  method canBeginEditingCell*(
-    tableView: TableView, row: int, column: TableColumn
-  ): bool
-  method performBeginEditingCell*(
-    tableView: TableView, row: int, column: TableColumn
-  ): bool
-  method performCommitEditingCell*(tableView: TableView, value: string): bool
-  method performCancelEditingCell*(tableView: TableView): bool
+  method canBeginEditingCell*(row: int, column: TableColumn): bool
+  method performBeginEditingCell*(row: int, column: TableColumn): bool
+  method performCommitEditingCell*(value: string): bool
+  method performCancelEditingCell*(): bool
 
 protocol TableViewColumnProtocol:
-  method performColumnAtPoint*(tableView: TableView, point: Point): TableColumn
-  method performHeaderHitTest*(tableView: TableView, point: Point): TableHeaderHit
-  method performResizeColumn*(
-    tableView: TableView, column: TableColumn, width: float32
-  )
-  method performMoveColumn*(tableView: TableView, fromIndex, toIndex: int)
-  method performRequestSort*(
-    tableView: TableView, column: TableColumn, direction: TableSortDirection
-  )
-  method performHeaderMouseDown*(tableView: TableView, event: MouseEvent): bool
-  method performHeaderMouseDragged*(tableView: TableView, event: MouseEvent): bool
-  method performHeaderMouseUp*(tableView: TableView, event: MouseEvent): bool
-  method performHeaderMouseMoved*(tableView: TableView, event: MouseEvent): bool
+  method performColumnAtPoint*(point: Point): TableColumn
+  method performHeaderHitTest*(point: Point): TableHeaderHit
+  method performResizeColumn*(column: TableColumn, width: float32)
+  method performMoveColumn*(fromIndex, toIndex: int)
+  method performRequestSort*(column: TableColumn, direction: TableSortDirection)
+  method performHeaderMouseDown*(event: MouseEvent): bool
+  method performHeaderMouseDragged*(event: MouseEvent): bool
+  method performHeaderMouseUp*(event: MouseEvent): bool
+  method performHeaderMouseMoved*(event: MouseEvent): bool
 
 protocol TableViewSelectionProtocol:
-  method canSelectCell*(tableView: TableView, row: int, column: TableColumn): bool
-  method performSelectCell*(tableView: TableView, row: int, column: TableColumn)
-  method performSetSelectedColumns*(
-    tableView: TableView, columns: seq[TableColumn]
-  )
-  method performSelectionPersistenceString*(tableView: TableView): string
-  method performRestoreSelectionPersistenceString*(tableView: TableView, value: string)
+  method canSelectCell*(row: int, column: TableColumn): bool
+  method performSelectCell*(row: int, column: TableColumn)
+  method performSetSelectedColumns*(columns: seq[TableColumn])
+  method performSelectionPersistenceString*(): string
+  method performRestoreSelectionPersistenceString*(value: string)
 
 protocol TableViewDraggingProtocol:
   method performBeginDraggingRows*(
-    tableView: TableView,
     rows: seq[int],
     operation: TableDragOperation,
     pasteboardName: string,
   ): TableDraggingInfo
   method performBeginDraggingColumns*(
-    tableView: TableView,
     columns: seq[TableColumn],
     operation: TableDragOperation,
     pasteboardName: string,
   ): TableDraggingInfo
-  method performValidateDragging*(
-    tableView: TableView, info: TableDraggingInfo
-  ): TableDragOperation
-  method performAcceptDragging*(tableView: TableView, info: TableDraggingInfo): bool
+  method performValidateDragging*(info: TableDraggingInfo): TableDragOperation
+  method performAcceptDragging*(info: TableDraggingInfo): bool
 
 protocol TableViewPersistenceProtocol:
-  method performColumnAutosaveRecords*(
-    tableView: TableView
-  ): seq[TableColumnAutosaveRecord]
-  method performRestoreColumnAutosaveRecords*(
-    tableView: TableView, records: seq[TableColumnAutosaveRecord]
-  )
+  method performColumnAutosaveRecords*(): seq[TableColumnAutosaveRecord]
+  method performRestoreColumnAutosaveRecords*(records: seq[TableColumnAutosaveRecord])
+
+protocol TableViewStateProtocol:
+  method performCaptureState*(): TableViewState
+  method performRestoreState*(state: TableViewState)
+
+protocol TableViewStateStorageProtocol:
+  method saveTableViewState*(name: string, state: TableViewState) {.optional.}
+  method loadTableViewState*(name: string): TableViewState {.optional.}
+  method hasTableViewState*(name: string): bool {.optional.}
 
 protocol TableViewListDataSource of ListViewDataSource:
   method rowCount(tableView: TableView, listView: ListView): int =
@@ -876,21 +872,15 @@ proc beginDraggingColumns*(
     return TableDraggingInfo()
   tableView.performBeginDraggingColumns(@columns, operation, pasteboardName)
 
-proc validateDragOperation*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
+proc validateDragging*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
   if tableView.isNil:
     return tdoNone
   tableView.performValidateDragging(info)
 
-proc acceptDragOperation*(tableView: TableView, info: TableDraggingInfo): bool =
+proc acceptDragging*(tableView: TableView, info: TableDraggingInfo): bool =
   if tableView.isNil:
     return false
   tableView.performAcceptDragging(info)
-
-proc validateDragging*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
-  tableView.validateDragOperation(info)
-
-proc acceptDragging*(tableView: TableView, info: TableDraggingInfo): bool =
-  tableView.acceptDragOperation(info)
 
 proc findCellSlot(slots: openArray[TableCellSlot], row: int, column: TableColumn): int =
   for index, slot in slots:
@@ -1051,42 +1041,66 @@ proc removeColumn*(tableView: TableView, column: TableColumn) =
 proc removeColumn*(tableView: TableView, identifier: string) =
   tableView.removeColumnAtIndex(tableView.columnIndex(identifier))
 
-proc newTableColumnAutosaveAdapter*(): TableColumnAutosaveAdapter =
-  result = TableColumnAutosaveAdapter()
-  result.xRecords = initTable[string, seq[TableColumnAutosaveRecord]]()
-
-proc saveColumnAutosaveRecords*(
-    adapter: TableColumnAutosaveAdapter, name: string,
-    records: openArray[TableColumnAutosaveRecord],
-) =
-  if adapter.isNil or name.len == 0:
-    return
-  adapter.xRecords[name] = @records
-
-proc columnAutosaveRecords*(
-    adapter: TableColumnAutosaveAdapter, name: string
-): seq[TableColumnAutosaveRecord] =
-  if adapter.isNil or name.len == 0:
-    return @[]
-  adapter.xRecords.getOrDefault(name, @[])
-
-proc saveColumnAutosaveState*(
-    tableView: TableView, adapter: TableColumnAutosaveAdapter
-) =
-  if tableView.isNil or adapter.isNil or tableView.autosaveName().len == 0:
-    return
-  adapter.saveColumnAutosaveRecords(
-    tableView.autosaveName(), tableView.columnAutosaveRecords()
+proc initTableViewState*(
+    columns: openArray[TableColumnAutosaveRecord] = [],
+    selectedRows: openArray[int] = [],
+    selectedColumns: openArray[string] = [],
+): TableViewState =
+  TableViewState(
+    columns: @columns,
+    selectedRows: @selectedRows,
+    selectedColumns: @selectedColumns,
   )
 
-proc restoreColumnAutosaveState*(
-    tableView: TableView, adapter: TableColumnAutosaveAdapter
-) =
-  if tableView.isNil or adapter.isNil or tableView.autosaveName().len == 0:
+proc captureState*(tableView: TableView): TableViewState =
+  if tableView.isNil:
+    initTableViewState()
+  else:
+    tableView.performCaptureState()
+
+proc restoreState*(tableView: TableView, state: TableViewState) =
+  if not tableView.isNil:
+    tableView.performRestoreState(state)
+
+proc saveState*(tableView: TableView, storage: DynamicAgent) =
+  if tableView.isNil or storage.isNil or tableView.autosaveName().len == 0:
     return
-  tableView.restoreColumnAutosaveRecords(
-    adapter.columnAutosaveRecords(tableView.autosaveName())
+  discard storage.sendLocalIfHandled(
+    saveTableViewState(),
+    (name: tableView.autosaveName(), state: tableView.captureState()),
   )
+
+proc restoreState*(tableView: TableView, storage: DynamicAgent) =
+  if tableView.isNil or storage.isNil or tableView.autosaveName().len == 0:
+    return
+  let name = tableView.autosaveName()
+  let hasState = storage.trySendLocal(hasTableViewState(), name)
+  if hasState.isSome and not hasState.get():
+    return
+  let state = storage.trySendLocal(loadTableViewState(), name)
+  if state.isSome:
+    tableView.restoreState(state.get())
+
+protocol TableViewStateStoreBehavior of TableViewStateStorageProtocol:
+  method saveTableViewState(
+      store: TableViewStateStore, name: string, state: TableViewState
+  ) =
+    if store.isNil or name.len == 0:
+      return
+    store.xStates[name] = state
+
+  method loadTableViewState(store: TableViewStateStore, name: string): TableViewState =
+    if store.isNil or name.len == 0:
+      return initTableViewState()
+    store.xStates.getOrDefault(name, initTableViewState())
+
+  method hasTableViewState(store: TableViewStateStore, name: string): bool =
+    (not store.isNil) and name in store.xStates
+
+proc newTableViewStateStore*(): TableViewStateStore =
+  result = TableViewStateStore()
+  result.xStates = initTable[string, TableViewState]()
+  discard result.withProtocol(TableViewStateStoreBehavior)
 
 proc selectionPersistenceString*(tableView: TableView): string =
   if tableView.isNil:
@@ -1508,6 +1522,33 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
     tableView.xColumns = ordered
     tableView.noteColumnsChanged()
 
+protocol DefaultTableViewStateBehavior of TableViewStateProtocol:
+  method performCaptureState(tableView: TableView): TableViewState =
+    if tableView.isNil:
+      return initTableViewState()
+    var selectedColumns: seq[string]
+    for column in tableView.selectedColumns():
+      if not column.isNil:
+        selectedColumns.add column.identifier()
+    initTableViewState(
+      tableView.columnAutosaveRecords(),
+      tableView.selectedIndexes(),
+      selectedColumns,
+    )
+
+  method performRestoreState(tableView: TableView, state: TableViewState) =
+    if tableView.isNil:
+      return
+    tableView.restoreColumnAutosaveRecords(state.columns)
+    tableView.selectedIndexes = state.selectedRows
+    if tableView.allowsColumnSelection():
+      var columns: seq[TableColumn]
+      for identifier in state.selectedColumns:
+        let column = tableView.columnWithIdentifier(identifier)
+        if not column.isNil:
+          columns.add column
+      tableView.selectedColumns = columns
+
 protocol DefaultTableViewDrawing of ViewDrawingProtocol:
   method draw(tableView: TableView, context: DrawContext) =
     if tableView.isNil or context.isNil or tableView.bounds().isEmpty:
@@ -1538,6 +1579,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   discard tableView.withProtocol(DefaultTableViewEditingBehavior)
   discard tableView.withProtocol(DefaultTableViewDraggingBehavior)
   discard tableView.withProtocol(DefaultTableViewPersistenceBehavior)
+  discard tableView.withProtocol(DefaultTableViewStateBehavior)
   discard tableView.withProtocol(DefaultTableViewDrawing)
   discard tableView.withProtocol(TableViewListDataSource)
   discard tableView.withProtocol(TableViewListDelegate)

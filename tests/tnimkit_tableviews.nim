@@ -334,7 +334,7 @@ suite "NimKit TableView":
       tableView = newTableView(frame = initRect(0, 0, 300, 160))
       name = newTableColumn("name", "Name", width = 120.0)
       age = newTableColumn("age", "Age", width = 60.0)
-      adapter = newTableColumnAutosaveAdapter()
+      store = newTableViewStateStore()
 
     tableView.addColumn(name)
     tableView.addColumn(age)
@@ -354,9 +354,9 @@ suite "NimKit TableView":
     check tableView.headerMouseUp(MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary))
     check name.width > 120.0'f32
 
-    tableView.saveColumnAutosaveState(adapter)
+    tableView.saveState(store)
     name.width = 80.0
-    tableView.restoreColumnAutosaveState(adapter)
+    tableView.restoreState(store)
     check name.width > 120.0'f32
 
   test "table columns move cleanly between table views":
@@ -449,6 +449,7 @@ suite "NimKit TableView":
       delegate = newTableDelegateSpy()
 
     tableView.rowCount = 5
+    tableView.showsHeader = false
     tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
     tableView.addColumn(newTableColumn("age", "Age", width = 80.0))
     tableView.delegate = delegate
@@ -516,6 +517,7 @@ suite "NimKit TableView":
       delegate = newTableDelegateSpy()
 
     delegate.hostedColumns = @["state"]
+    tableView.showsHeader = false
     tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
     tableView.addColumn(newTableColumn("state", "State", width = 80.0))
     tableView.dataSource = source
@@ -540,6 +542,7 @@ suite "NimKit TableView":
 
     delegate.hostedColumns = @["action"]
     delegate.buttonColumns = @["action"]
+    tableView.showsHeader = false
     tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
     tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
     tableView.dataSource = source
@@ -565,6 +568,7 @@ suite "NimKit TableView":
 
     tableView.addColumn(newTableColumn("name", "Name", width = 160.0))
     tableView.addColumn(newTableColumn("action", "Action", width = 88.0))
+    tableView.showsHeader = false
     tableView.dataSource = source
     delegate.buttonColumns = @["action"]
     delegate.nonselectableRows = @[1]
@@ -593,6 +597,7 @@ suite "NimKit TableView":
     delegate.hasPolicy = true
     delegate.policyColumn = "action"
     delegate.policy = chpSelectAndTrack
+    tableView.showsHeader = false
     tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
     tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
     tableView.dataSource = source

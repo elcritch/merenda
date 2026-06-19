@@ -62,6 +62,16 @@ application, responder, view, window, accessibility, or control/cell layers.
   value objects and validation/acceptance hooks are staged, and `OutlineView`
   flattens expandable items into table rows with outline-column disclosure
   text, row/item mapping, and expansion/collapse APIs.
+- Hardened the table/outline model toward AppKit-style behavior: table header
+  cells now render and track hover/pressed, resize, reorder, and sort
+  interactions; editing, column/header behavior, selection, dragging,
+  persistence, and state capture/restore route through overridable table
+  protocols while preserving typed public procs; hosted cell views have a reuse
+  queue; table state snapshots can save/restore column state and selections
+  through a backend-neutral state storage protocol; drag payloads integrate with
+  named pasteboards; and `OutlineView` now has data-source/delegate protocols,
+  disclosure hit testing, keyboard toggling, expansion persistence, and item
+  drag helpers.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -215,22 +225,26 @@ semantics are stable enough to host it.
 Continue growing the first-pass table and outline APIs into production
 AppKit-style widgets.
 
-1. Harden table headers and column behavior:
-   - render header cells, hover/pressed state, sort indicators, resize cursors,
-     resize dragging, and column reordering by pointer drag
-2. Deepen table editing and reuse:
-   - route begin/commit/cancel through overridable table protocols, connect
-     field editors or hosted cell editors, add reusable row/cell view queues,
-     and expose stronger edit validation hooks
-3. Finish drag/drop and persistence integration:
-   - connect staged `TableDraggingInfo` to named pasteboards and real drag
-     sessions, support row/column drop targets, persist column autosave records
-     through an application/user-defaults adapter, and add selection persistence
-     helpers
-4. Expand `OutlineView`:
-   - replace the simple local item list with data-source/delegate protocols,
-     add disclosure hit testing and mouse/key toggling, render indentation and
-     disclosure affordances, persist expansion state, and integrate drag/drop
+1. Connect real editing surfaces:
+   - attach field editors or hosted cell editors to the protocol-backed
+     begin/commit/cancel flow, support validation errors, and route tab/return
+     navigation between editable cells
+2. Finish native-feeling header interaction:
+   - add resize cursors/tracking areas, richer sort indicator rendering,
+     column drag insertion affordances, and autoscroll while reordering columns
+3. Finish drag/drop integration:
+   - connect `TableDraggingInfo` and outline item dragging to full dragging
+     sessions, source/destination lifecycle hooks, row/column drop targets,
+     promised data, and named pasteboard payload declarations
+4. Finish persistence integration:
+   - back the table state storage protocol with application/user-defaults,
+     document/workspace-specific state stores, migration behavior for renamed
+     columns/items, and restore timing tied to window/document lifecycle
+5. Expand `OutlineView` rendering and semantics:
+   - draw dedicated disclosure affordances instead of text prefixes, add mouse
+     down/up disclosure tracking, expose richer item identity APIs, persist
+     expansion state through the table/outline state protocol, and add
+     accessibility roles for outline rows/disclosure controls
 
 ### Native Integration
 
