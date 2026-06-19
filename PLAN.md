@@ -72,6 +72,19 @@ application, responder, view, window, accessibility, or control/cell layers.
   named pasteboards; and `OutlineView` now has data-source/delegate protocols,
   disclosure hit testing, keyboard toggling, expansion persistence, and item
   drag helpers.
+- Finished the latest table/outline API cleanup: table behavior and state
+  protocols no longer pass the table view back into table-owned methods, state
+  save/restore flows through the protocol surface without compatibility
+  wrappers, and public selection/resize/editing/persistence procs delegate
+  through those protocols consistently.
+- Expanded `OutlineView` rendering and semantics with dedicated disclosure
+  affordances instead of text prefixes, mouse down/up disclosure tracking,
+  richer item identity helpers, expansion state capture/restore through the
+  shared table state protocol, and accessibility roles/actions for outline rows
+  and disclosure controls.
+- Updated `examples/table_demo.nim` to use real table headers instead of fake
+  temporary label headers, and constrained the title/table layout so the table
+  resizes with the window without unstable vertical stretching.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -222,7 +235,7 @@ semantics are stable enough to host it.
 
 ### TableView And OutlineView
 
-Continue growing the first-pass table and outline APIs into production
+Continue growing the protocol-backed table and outline APIs into production
 AppKit-style widgets.
 
 1. Connect real editing surfaces:
@@ -231,7 +244,8 @@ AppKit-style widgets.
      navigation between editable cells
 2. Finish native-feeling header interaction:
    - add resize cursors/tracking areas, richer sort indicator rendering,
-     column drag insertion affordances, and autoscroll while reordering columns
+     visible column drag insertion affordances, and autoscroll while reordering
+     columns
 3. Finish drag/drop integration:
    - connect `TableDraggingInfo` and outline item dragging to full dragging
      sessions, source/destination lifecycle hooks, row/column drop targets,
@@ -240,11 +254,10 @@ AppKit-style widgets.
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
      columns/items, and restore timing tied to window/document lifecycle
-5. Expand `OutlineView` rendering and semantics:
-   - draw dedicated disclosure affordances instead of text prefixes, add mouse
-     down/up disclosure tracking, expose richer item identity APIs, persist
-     expansion state through the table/outline state protocol, and add
-     accessibility roles for outline rows/disclosure controls
+5. Harden outline behavior on top of the new rendering path:
+   - add richer outline keyboard navigation, row/item drop targeting, selection
+     persistence by stable item identity, and optional delegate hooks for
+     disclosure rendering/indent metrics
 
 ### Native Integration
 
