@@ -50,14 +50,16 @@ proc uploadImage(image: ImageResource) =
   loadImage(image.xImageId, image.xPixels)
 
 proc newImageResource*(
-    image: Image,
-    name = "",
-    cachePolicy = icpDefault,
+    image: Image, name = "", cachePolicy = icpDefault
 ): ImageResource =
   result = ImageResource(
     xName: name,
     xCachePolicy: cachePolicy,
-    xPixels: if image.isNil: nil else: image.copy(),
+    xPixels:
+      if image.isNil:
+        nil
+      else:
+        image.copy(),
   )
   if not result.xPixels.isNil:
     result.xSize = initSize(result.xPixels.width.float32, result.xPixels.height.float32)
@@ -69,9 +71,7 @@ proc newImageResource*(
   result.uploadImage()
 
 proc newImageResourceFromData*(
-    data: string,
-    name = "",
-    cachePolicy = icpDefault,
+    data: string, name = "", cachePolicy = icpDefault
 ): ImageResource =
   let pixels = decodeImage(data)
   result = ImageResource(
@@ -84,9 +84,7 @@ proc newImageResourceFromData*(
   result.uploadImage()
 
 proc newImageResourceFromFile*(
-    filePath: string,
-    name = "",
-    cachePolicy = icpDefault,
+    filePath: string, name = "", cachePolicy = icpDefault
 ): ImageResource =
   let
     pixels = pixie.readImage(filePath)
@@ -114,7 +112,11 @@ proc copyImageResource*(image: ImageResource): ImageResource =
     xSize: image.xSize,
     xImageId: image.xImageId,
     xCachePolicy: image.xCachePolicy,
-    xPixels: if image.xPixels.isNil: nil else: image.xPixels.copy(),
+    xPixels:
+      if image.xPixels.isNil:
+        nil
+      else:
+        image.xPixels.copy(),
   )
   result.uploadImage()
 
@@ -125,10 +127,16 @@ proc filePath*(image: ImageResource): string =
   if image.isNil: "" else: image.xFilePath
 
 proc size*(image: ImageResource): Size =
-  if image.isNil: initSize(0.0, 0.0) else: image.xSize
+  if image.isNil:
+    initSize(0.0, 0.0)
+  else:
+    image.xSize
 
 proc imageId*(image: ImageResource): ImageId =
-  if image.isNil: ImageId(0) else: image.xImageId
+  if image.isNil:
+    ImageId(0)
+  else:
+    image.xImageId
 
 proc cachePolicy*(image: ImageResource): ImageCachePolicy =
   if image.isNil: icpDefault else: image.xCachePolicy

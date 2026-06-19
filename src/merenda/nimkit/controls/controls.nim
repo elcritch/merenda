@@ -99,17 +99,13 @@ proc acceptsDraggingInfo(control: Control, info: DraggingInfo): bool =
   if control.isNil or info.pasteboard.isNil:
     return false
   let acceptedTypes = control.registeredDraggedTypes()
-  acceptedTypes.len > 0 and
-    info.pasteboard.availableTypeFromArray(acceptedTypes).len > 0
+  acceptedTypes.len > 0 and info.pasteboard.availableTypeFromArray(acceptedTypes).len > 0
 
 protocol DefaultControlDraggingSource of DraggingSourceProtocol:
   method draggingSourceOperationMask(
       control: Control, info: DraggingInfo
   ): DragOperations =
-    if control.isNil:
-      NoDragOperations
-    else:
-      info.allowedOperations
+    if control.isNil: NoDragOperations else: info.allowedOperations
 
   method draggingSessionEnded(control: Control, info: DraggingInfo) =
     if not control.isNil and control.xDraggingSession == info.session:
@@ -117,16 +113,10 @@ protocol DefaultControlDraggingSource of DraggingSourceProtocol:
 
 protocol DefaultControlDraggingDestination of DraggingDestinationProtocol:
   method draggingEntered(control: Control, info: DraggingInfo): DragOperations =
-    if control.acceptsDraggingInfo(info):
-      info.allowedOperations
-    else:
-      NoDragOperations
+    if control.acceptsDraggingInfo(info): info.allowedOperations else: NoDragOperations
 
   method draggingUpdated(control: Control, info: DraggingInfo): DragOperations =
-    if control.acceptsDraggingInfo(info):
-      info.allowedOperations
-    else:
-      NoDragOperations
+    if control.acceptsDraggingInfo(info): info.allowedOperations else: NoDragOperations
 
   method prepareForDragOperation(control: Control, info: DraggingInfo): bool =
     control.acceptsDraggingInfo(info)
@@ -289,7 +279,10 @@ proc updateDragging*(
   updateDraggingSession(
     control.xDraggingSession,
     event.location,
-    if destination.isNil: DynamicAgent(control) else: destination,
+    if destination.isNil:
+      DynamicAgent(control)
+    else:
+      destination,
     dropTarget,
   )
 
@@ -304,7 +297,10 @@ proc autoscrollDragging*(
   autoscrollDraggingSession(
     control.xDraggingSession,
     event.location,
-    if destination.isNil: DynamicAgent(control) else: destination,
+    if destination.isNil:
+      DynamicAgent(control)
+    else:
+      destination,
     dropTarget,
   )
 

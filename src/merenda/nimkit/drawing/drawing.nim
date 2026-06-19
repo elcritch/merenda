@@ -166,11 +166,7 @@ proc textNode(
 proc textNode(rect: nimkitTypes.Rect, layout: GlyphArrangement): Fig =
   Fig(kind: nkText, screenBox: rect.toFigRect, textLayout: layout)
 
-proc imageNode(
-    rect: nimkitTypes.Rect,
-    image: ImageResource,
-    fillValue: Fill,
-): Fig =
+proc imageNode(rect: nimkitTypes.Rect, image: ImageResource, fillValue: Fill): Fig =
   Fig(
     kind: nkImage,
     screenBox: rect.toFigRect,
@@ -408,7 +404,9 @@ proc addImage*(
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
-  context.addFig(layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba)))
+  context.addFig(
+    layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba))
+  )
 
 proc addSelectedText*(
     context: DrawContext,

@@ -135,6 +135,7 @@ proc beginDraggingRows*(
   operations: DragOperations = {dgoMove},
   pasteboardName = DragPasteboardName,
 ): DraggingSession
+
 proc draggingInfo*(listView: ListView): ListDraggingInfo
 
 protocol ListViewDataSource {.selectorScope: protocol.}:
@@ -169,9 +170,11 @@ protocol ListViewDelegate {.selectorScope: protocol.}:
   method draggingItemsForRows*(
     listView: ListView, rows: seq[int]
   ): seq[DraggingItem] {.optional.}
+
   method validateDrop*(
     listView: ListView, info: DraggingInfo
   ): DragOperations {.optional.}
+
   method acceptDrop*(listView: ListView, info: DraggingInfo): bool {.optional.}
 
 proc listView(rowView: ListRowView): ListView =
@@ -210,9 +213,7 @@ proc beginDraggingRows*(
     pasteboardName,
   )
   listView.xListDraggingInfo = ListDraggingInfo(
-    rows: validRows,
-    session: result,
-    dropTarget: initDraggingDropTarget(),
+    rows: validRows, session: result, dropTarget: initDraggingDropTarget()
   )
 
 proc invalidateListRows(listView: ListView) =
@@ -244,19 +245,15 @@ proc defaultDraggingItemsForRows(
     listView: ListView, rows: openArray[int]
 ): seq[DraggingItem] =
   let payload = rows.rowPayload()
-  result.add initDraggingItem(
-    PasteboardTypeString,
-    initPasteboardStringItem(payload),
-  )
+  result.add initDraggingItem(PasteboardTypeString, initPasteboardStringItem(payload))
 
 proc resolvedDraggingItemsForRows(
     listView: ListView, rows: seq[int]
 ): seq[DraggingItem] =
   let delegate = listView.delegate()
   if not delegate.isNil:
-    let items = delegate.trySendLocal(
-      draggingItemsForRows(), (listView: listView, rows: rows)
-    )
+    let items =
+      delegate.trySendLocal(draggingItemsForRows(), (listView: listView, rows: rows))
     if items.isSome:
       return items.get()
   listView.defaultDraggingItemsForRows(rows)
@@ -271,16 +268,13 @@ proc dropTargetForDraggingLocation*(
     return initRowDropTarget(row, listView.listItemRect(row))
   initDraggingDropTarget()
 
-proc validateListDragging(
-    listView: ListView, info: DraggingInfo
-): DragOperations =
+proc validateListDragging(listView: ListView, info: DraggingInfo): DragOperations =
   if listView.isNil:
     return NoDragOperations
   let delegate = listView.delegate()
   if not delegate.isNil:
-    let operations = delegate.trySendLocal(
-      validateDrop(), (listView: listView, info: info)
-    )
+    let operations =
+      delegate.trySendLocal(validateDrop(), (listView: listView, info: info))
     if operations.isSome:
       return operations.get() * info.allowedOperations
   info.selectedOperations * info.allowedOperations
@@ -290,9 +284,7 @@ proc acceptListDragging(listView: ListView, info: DraggingInfo): bool =
     return false
   let delegate = listView.delegate()
   if not delegate.isNil:
-    let accepted = delegate.trySendLocal(
-      acceptDrop(), (listView: listView, info: info)
-    )
+    let accepted = delegate.trySendLocal(acceptDrop(), (listView: listView, info: info))
     if accepted.isSome:
       return accepted.get()
   info.selectedOperations != NoDragOperations
@@ -1547,10 +1539,7 @@ protocol DefaultListViewDraggingSource of DraggingSourceProtocol:
   method draggingSourceOperationMask(
       listView: ListView, info: DraggingInfo
   ): DragOperations =
-    if listView.isNil:
-      NoDragOperations
-    else:
-      info.allowedOperations
+    if listView.isNil: NoDragOperations else: info.allowedOperations
 
   method draggingSessionEnded(listView: ListView, info: DraggingInfo) =
     if not listView.isNil and listView.xListDraggingInfo.session == info.session:
