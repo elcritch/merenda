@@ -172,6 +172,7 @@ const
   OwnerColumnWidth = 110.0
   ElapsedColumnWidth = 80.0
   ActionColumnWidth = 90.0
+  TitleHeight = 32.0
   SidebarWidth = 220.0
 
 let
@@ -246,6 +247,7 @@ title.pinEdges(
 )
 
 activate(
+  cx(title.heightAnchor == TitleHeight),
   cx(table.topAnchor == title.bottomAnchor + 20.0),
   cx(table.leftAnchor == title.leftAnchor),
   cx(table.rightAnchor == detailTitle.leftAnchor - 22.0),
