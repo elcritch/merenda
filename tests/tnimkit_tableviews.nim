@@ -32,7 +32,7 @@ type TableDelegateSpy = ref object of Responder
   beganEdits: seq[string]
   committedEdits: seq[string]
   cancelledEdits: seq[string]
-  dragOperation: TableDragOperation
+  dragOperation: DragOperations
   dragAccepted: bool
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
@@ -182,15 +182,15 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
     delegate.cancelledEdits.add column.identifier & ":" & $row
 
   method validateDragOperation(
-      delegate: TableDelegateSpy, tableView: TableView, info: TableDraggingInfo
-  ): TableDragOperation =
-    if delegate.dragOperation == tdoNone:
-      info.operation
+      delegate: TableDelegateSpy, tableView: TableView, info: DraggingInfo
+  ): DragOperations =
+    if delegate.dragOperation == NoDragOperations:
+      info.selectedOperations
     else:
       delegate.dragOperation
 
   method acceptDragOperation(
-      delegate: TableDelegateSpy, tableView: TableView, info: TableDraggingInfo
+      delegate: TableDelegateSpy, tableView: TableView, info: DraggingInfo
   ): bool =
     delegate.dragAccepted
 
@@ -682,12 +682,13 @@ suite "NimKit TableView":
     check state.hidden
     check name.sortDirection == tsdDescending
 
-    delegate.dragOperation = tdoCopy
+    delegate.dragOperation = {dgoCopy}
     delegate.dragAccepted = true
-    let info = tableView.beginDraggingRows([0, 3, 9], operation = tdoMove)
-    check info.rows == @[0, 3]
-    check info.operation == tdoMove
-    check tableView.validateDragging(info) == tdoCopy
+    let session = tableView.beginDraggingRows([0, 3, 9], operations = {dgoMove})
+    let info = session.draggingInfo()
+    check info.tableDraggingRows() == @[0, 3]
+    check info.selectedOperations == {dgoMove}
+    check tableView.validateDragging(info) == {dgoCopy}
     check tableView.acceptDragging(info)
 
     let selectionState = tableView.selectionPersistenceString()
@@ -695,12 +696,13 @@ suite "NimKit TableView":
     tableView.restoreSelectionPersistenceString(selectionState)
     check tableView.selectedIndexes == @[3]
 
-    let columnDrag = tableView.beginDraggingColumns([name, state], operation = tdoCopy)
-    check columnDrag.columns == @["name", "state"]
+    let columnDrag = tableView.beginDraggingColumns([name, state], operations = {dgoCopy})
+    let columnInfo = columnDrag.draggingInfo()
+    check columnInfo.tableDraggingColumns() == @["name", "state"]
     check pasteboardWithName(DragPasteboardName).stringForType(PasteboardTypeString) == "name,state"
-    let targeted = columnDrag.withDropTarget(row = 1, column = state)
-    check targeted.destinationRow == 1
-    check targeted.destinationColumn == "state"
+    let targeted = columnInfo.withDropTarget(row = 1, column = state)
+    check targeted.tableDropRow() == 1
+    check targeted.tableDropColumn() == "state"
 
   test "table view queues hosted cell views by reuse identifier":
     let

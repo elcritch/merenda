@@ -23,6 +23,20 @@ type
     dssEnded
     dssCancelled
 
+  DraggingDropTargetKind* = enum
+    ddtNone
+    ddtRow
+    ddtColumn
+    ddtCell
+    ddtItem
+
+  DraggingDropTarget* = object
+    kind*: DraggingDropTargetKind
+    row*: int
+    column*: string
+    itemIdentifier*: string
+    rect*: Rect
+
   DraggingItem* = object
     pasteboardType*: string
     pasteboardItem*: PasteboardItem
@@ -39,6 +53,7 @@ type
     xSelectedOperations: DragOperations
     xState: DraggingSessionState
     xSequenceNumber: Natural
+    xDropTarget: DraggingDropTarget
 
   DraggingInfo* = object
     session*: DraggingSession
@@ -49,6 +64,7 @@ type
     allowedOperations*: DragOperations
     selectedOperations*: DragOperations
     sequenceNumber*: Natural
+    dropTarget*: DraggingDropTarget
 
 const
   NoDragOperations*: DragOperations = {}
@@ -77,6 +93,41 @@ protocol DraggingDestinationProtocol:
   method prepareForDragOperation*(info: DraggingInfo): bool {.optional.}
   method performDragOperation*(info: DraggingInfo): bool {.optional.}
   method concludeDragOperation*(info: DraggingInfo) {.optional.}
+  method wantsPeriodicDraggingUpdates*(info: DraggingInfo): bool {.optional.}
+  method autoscrollDraggingSession*(info: DraggingInfo): bool {.optional.}
+
+proc initDraggingDropTarget*(
+    kind = ddtNone,
+    row = -1,
+    column = "",
+    itemIdentifier = "",
+    rect = AutoRect,
+): DraggingDropTarget =
+  DraggingDropTarget(
+    kind: kind,
+    row: row,
+    column: column,
+    itemIdentifier: itemIdentifier,
+    rect: rect,
+  )
+
+proc initRowDropTarget*(row: int, rect = AutoRect): DraggingDropTarget =
+  initDraggingDropTarget(ddtRow, row = row, rect = rect)
+
+proc initColumnDropTarget*(
+    column: string, rect = AutoRect
+): DraggingDropTarget =
+  initDraggingDropTarget(ddtColumn, column = column, rect = rect)
+
+proc initCellDropTarget*(
+    row: int, column: string, rect = AutoRect
+): DraggingDropTarget =
+  initDraggingDropTarget(ddtCell, row = row, column = column, rect = rect)
+
+proc initItemDropTarget*(
+    itemIdentifier: string, row = -1, rect = AutoRect
+): DraggingDropTarget =
+  initDraggingDropTarget(ddtItem, row = row, itemIdentifier = itemIdentifier, rect = rect)
 
 proc initDraggingItem*(
     pasteboardType: string,
@@ -125,6 +176,7 @@ proc newDraggingSession*(
     xAllowedOperations: allowedOperations,
     xSelectedOperations: allowedOperations,
     xState: dssReady,
+    xDropTarget: initDraggingDropTarget(),
   )
 
 proc source*(session: DraggingSession): DynamicAgent =
@@ -144,6 +196,16 @@ proc allowedOperations*(session: DraggingSession): DragOperations =
 
 proc selectedOperations*(session: DraggingSession): DragOperations =
   if session.isNil: NoDragOperations else: session.xSelectedOperations
+
+proc dropTarget*(session: DraggingSession): DraggingDropTarget =
+  if session.isNil:
+    initDraggingDropTarget()
+  else:
+    session.xDropTarget
+
+proc setDropTarget*(session: DraggingSession, target: DraggingDropTarget) =
+  if not session.isNil:
+    session.xDropTarget = target
 
 proc items*(session: DraggingSession): seq[DraggingItem] =
   if session.isNil:
@@ -171,7 +233,16 @@ proc draggingInfo*(
     allowedOperations: session.xAllowedOperations,
     selectedOperations: session.xSelectedOperations,
     sequenceNumber: session.xSequenceNumber,
+    dropTarget: session.xDropTarget,
   )
+
+proc withDropTarget*(
+    info: DraggingInfo, target: DraggingDropTarget
+): DraggingInfo =
+  result = info
+  result.dropTarget = target
+  if not result.session.isNil:
+    result.session.setDropTarget(target)
 
 proc addDraggingItem*(session: DraggingSession, item: DraggingItem) =
   if session.isNil:
@@ -224,11 +295,13 @@ proc updateDraggingSession*(
     session: DraggingSession,
     location: Point,
     destination: DynamicAgent = nil,
+    dropTarget = initDraggingDropTarget(),
 ): DragOperations =
   if session.isNil or session.xState != dssActive:
     return NoDragOperations
 
   inc session.xSequenceNumber
+  session.xDropTarget = dropTarget
   let oldDestination = session.xDestination
   if oldDestination != destination:
     if not oldDestination.isNil:
@@ -261,9 +334,11 @@ proc performDraggingOperation*(
     session: DraggingSession,
     destination: DynamicAgent = nil,
     location = AutoPoint,
+    dropTarget = initDraggingDropTarget(),
 ): bool =
   if session.isNil or session.xState != dssActive:
     return false
+  session.xDropTarget = dropTarget
   let resolvedDestination =
     if destination.isNil:
       session.xDestination
@@ -286,6 +361,28 @@ proc performDraggingOperation*(
 
   if result:
     discard resolvedDestination.sendLocalIfHandled(concludeDragOperation(), info)
+
+proc autoscrollDraggingSession*(
+    session: DraggingSession,
+    location: Point,
+    destination: DynamicAgent = nil,
+    dropTarget = initDraggingDropTarget(),
+): bool =
+  if session.isNil or session.xState != dssActive:
+    return false
+  session.xDropTarget = dropTarget
+  let resolvedDestination =
+    if destination.isNil:
+      session.xDestination
+    else:
+      destination
+  if resolvedDestination.isNil:
+    return false
+  let handled = resolvedDestination.trySendLocal(
+    autoscrollDraggingSession(),
+    session.draggingInfo(location, resolvedDestination),
+  )
+  handled.isSome and handled.get()
 
 proc endDraggingSession*(
     session: DraggingSession,

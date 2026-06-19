@@ -5,6 +5,7 @@ import sigils/core
 import ./listbasics
 import ./tableviews
 import ../accessibility/accessibilityprotocols
+import ../app/dragging
 import ../app/pasteboards
 import ../drawing/drawing
 import ../drawing/theme
@@ -474,17 +475,33 @@ proc handleOutlineKey*(outlineView: OutlineView, event: KeyEvent): bool =
 proc beginDraggingItems*(
     outlineView: OutlineView,
     identifiers: openArray[string],
-    operation = tdoMove,
+    operations: DragOperations = {dgoMove},
     pasteboardName = DragPasteboardName,
-): TableDraggingInfo =
+): DraggingSession =
   if outlineView.isNil:
-    return TableDraggingInfo()
+    return nil
   var rows: seq[int]
   for identifier in identifiers:
     let row = outlineView.rowForItem(identifier)
     if row >= 0:
       rows.add row
-  TableView(outlineView).beginDraggingRows(rows, operation, pasteboardName)
+  TableView(outlineView).beginDraggingRows(rows, operations, pasteboardName)
+
+proc dropTargetForDraggingLocation*(
+    outlineView: OutlineView, location: Point
+): DraggingDropTarget =
+  if outlineView.isNil:
+    return initDraggingDropTarget()
+  let row = TableView(outlineView).listItemIndexAtPoint(location)
+  if row >= 0:
+    let item = outlineView.itemAtRow(row)
+    if item.identifier.len > 0:
+      return initItemDropTarget(
+        item.identifier,
+        row,
+        TableView(outlineView).listItemRect(row),
+      )
+  initDraggingDropTarget()
 
 proc outlineCellText(outlineView: OutlineView, row: int, column: TableColumn): string =
   let rows = outlineView.visibleOutlineRows()
@@ -673,6 +690,16 @@ protocol OutlineViewEvents of ResponderEventProtocol:
         else:
           -1
       outlineView.setNeedsDisplay(true)
+      return true
+    let session = TableView(outlineView).draggingSession()
+    if not session.isNil and session.state() == dssActive:
+      let target = outlineView.dropTargetForDraggingLocation(event.location)
+      discard updateDraggingSession(
+        session, event.location, DynamicAgent(outlineView), target
+      )
+      discard autoscrollDraggingSession(
+        session, event.location, DynamicAgent(outlineView), target
+      )
       return true
     ListView(outlineView).mouseDragged(event)
 

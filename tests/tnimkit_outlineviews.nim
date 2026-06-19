@@ -177,6 +177,7 @@ suite "NimKit OutlineView":
     check disclosureElement.role == arDisclosureButton
     check disclosureElement.action == AccessibilityActionCollapse
 
-    let drag = outlineView.beginDraggingItems(["child"], operation = tdoCopy)
-    check drag.rows == @[1]
-    check drag.operation == tdoCopy
+    let drag = outlineView.beginDraggingItems(["child"], operations = {dgoCopy})
+    let info = drag.draggingInfo()
+    check info.tableDraggingRows() == @[1]
+    check info.selectedOperations == {dgoCopy}

@@ -4,6 +4,7 @@ import sigils/core
 
 import ../drawing/drawing
 import ../foundation/events
+import ../app/dragging
 import ../app/pasteboards
 import ./listviews
 import ../containers/listbasics
@@ -19,6 +20,8 @@ const
   DefaultTableColumnWidth = 120.0'f32
   DefaultTableColumnMinWidth = 24.0'f32
   DefaultTableColumnMaxWidth = 10000.0'f32
+  TablePasteboardTypeRows* = "nimkit.table.rows"
+  TablePasteboardTypeColumns* = "nimkit.table.columns"
 
 type
   TableColumnResizePolicy* = enum
@@ -34,12 +37,6 @@ type
     thpNone
     thpColumn
     thpResizeHandle
-
-  TableDragOperation* = enum
-    tdoNone
-    tdoCopy
-    tdoMove
-    tdoLink
 
   TableHeaderHit* = object
     column*: TableColumn
@@ -57,14 +54,6 @@ type
     width*: float32
     hidden*: bool
     sortDirection*: TableSortDirection
-
-  TableDraggingInfo* = object
-    rows*: seq[int]
-    columns*: seq[string]
-    operation*: TableDragOperation
-    pasteboardName*: string
-    destinationRow*: int
-    destinationColumn*: string
 
   TableViewState* = object
     columns*: seq[TableColumnAutosaveRecord]
@@ -92,7 +81,7 @@ type
     xAllowsColumnSelection: bool
     xEditing: TableEditingState
     xAutosaveName: string
-    xDraggingInfo: TableDraggingInfo
+    xTableDraggingSession: DraggingSession
     xHeaderTrackingPart: TableHeaderHitPart
     xTrackingColumn: TableColumn
     xTrackingColumnIndex: int
@@ -183,10 +172,10 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     tableView: TableView, row: int, column: TableColumn
   ) {.optional.}
   method validateDragOperation*(
-    tableView: TableView, info: TableDraggingInfo
-  ): TableDragOperation {.optional.}
+    tableView: TableView, info: DraggingInfo
+  ): DragOperations {.optional.}
   method acceptDragOperation*(
-    tableView: TableView, info: TableDraggingInfo
+    tableView: TableView, info: DraggingInfo
   ): bool {.optional.}
 
 protocol TableViewEditingProtocol:
@@ -216,16 +205,16 @@ protocol TableViewSelectionProtocol:
 protocol TableViewDraggingProtocol:
   method performBeginDraggingRows*(
     rows: seq[int],
-    operation: TableDragOperation,
+    operations: DragOperations,
     pasteboardName: string,
-  ): TableDraggingInfo
+  ): DraggingSession
   method performBeginDraggingColumns*(
     columns: seq[TableColumn],
-    operation: TableDragOperation,
+    operations: DragOperations,
     pasteboardName: string,
-  ): TableDraggingInfo
-  method performValidateDragging*(info: TableDraggingInfo): TableDragOperation
-  method performAcceptDragging*(info: TableDraggingInfo): bool
+  ): DraggingSession
+  method performValidateDragging*(info: DraggingInfo): DragOperations
+  method performAcceptDragging*(info: DraggingInfo): bool
 
 protocol TableViewPersistenceProtocol:
   method performColumnAutosaveRecords*(): seq[TableColumnAutosaveRecord]
@@ -840,48 +829,99 @@ proc restoreColumnAutosaveRecords*(
   if not tableView.isNil:
     tableView.performRestoreColumnAutosaveRecords(@records)
 
-proc draggingInfo*(tableView: TableView): TableDraggingInfo =
-  if tableView.isNil:
-    TableDraggingInfo(destinationRow: -1)
+proc draggingSession*(tableView: TableView): DraggingSession =
+  if tableView.isNil: nil else: tableView.xTableDraggingSession
+
+proc draggingInfo*(tableView: TableView): DraggingInfo =
+  if tableView.isNil or tableView.xTableDraggingSession.isNil:
+    DraggingInfo()
   else:
-    tableView.xDraggingInfo
+    tableView.xTableDraggingSession.draggingInfo()
 
 proc withDropTarget*(
-    info: TableDraggingInfo, row = -1, column: TableColumn = nil
-): TableDraggingInfo =
-  result = info
-  result.destinationRow = row
-  result.destinationColumn = if column.isNil: "" else: column.identifier()
+    info: DraggingInfo, row = -1, column: TableColumn = nil
+): DraggingInfo =
+  if row >= 0 and not column.isNil:
+    info.withDropTarget(initCellDropTarget(row, column.identifier()))
+  elif row >= 0:
+    info.withDropTarget(initRowDropTarget(row))
+  elif not column.isNil:
+    info.withDropTarget(initColumnDropTarget(column.identifier()))
+  else:
+    info.withDropTarget(initDraggingDropTarget())
 
 proc beginDraggingRows*(
     tableView: TableView,
     rows: openArray[int],
-    operation = tdoMove,
-    pasteboardName = "drag",
-): TableDraggingInfo =
+    operations: DragOperations = {dgoMove},
+    pasteboardName = DragPasteboardName,
+): DraggingSession =
   if tableView.isNil:
-    return TableDraggingInfo()
-  tableView.performBeginDraggingRows(@rows, operation, pasteboardName)
+    return nil
+  tableView.performBeginDraggingRows(@rows, operations, pasteboardName)
 
 proc beginDraggingColumns*(
     tableView: TableView,
     columns: openArray[TableColumn],
-    operation = tdoMove,
+    operations: DragOperations = {dgoMove},
     pasteboardName = DragPasteboardName,
-): TableDraggingInfo =
+): DraggingSession =
   if tableView.isNil:
-    return TableDraggingInfo()
-  tableView.performBeginDraggingColumns(@columns, operation, pasteboardName)
+    return nil
+  tableView.performBeginDraggingColumns(@columns, operations, pasteboardName)
 
-proc validateDragging*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
+proc validateDragging*(tableView: TableView, info: DraggingInfo): DragOperations =
   if tableView.isNil:
-    return tdoNone
+    return NoDragOperations
   tableView.performValidateDragging(info)
 
-proc acceptDragging*(tableView: TableView, info: TableDraggingInfo): bool =
+proc acceptDragging*(tableView: TableView, info: DraggingInfo): bool =
   if tableView.isNil:
     return false
   tableView.performAcceptDragging(info)
+
+proc joinRowIndexes(rows: openArray[int]): string =
+  for index, row in rows:
+    if index > 0:
+      result.add ","
+    result.add $row
+
+proc joinIdentifiers(identifiers: openArray[string]): string =
+  for index, identifier in identifiers:
+    if index > 0:
+      result.add ","
+    result.add identifier
+
+proc parseRowIndexes(value: string): seq[int] =
+  for part in value.split(","):
+    let text = part.strip()
+    if text.len > 0:
+      try:
+        result.add parseInt(text)
+      except ValueError:
+        discard
+
+proc parseIdentifiers(value: string): seq[string] =
+  for part in value.split(","):
+    let identifier = part.strip()
+    if identifier.len > 0:
+      result.add identifier
+
+proc tableDraggingRows*(info: DraggingInfo): seq[int] =
+  if info.pasteboard.isNil:
+    return @[]
+  parseRowIndexes(info.pasteboard.stringForType(TablePasteboardTypeRows))
+
+proc tableDraggingColumns*(info: DraggingInfo): seq[string] =
+  if info.pasteboard.isNil:
+    return @[]
+  parseIdentifiers(info.pasteboard.stringForType(TablePasteboardTypeColumns))
+
+proc tableDropRow*(info: DraggingInfo): int =
+  info.dropTarget.row
+
+proc tableDropColumn*(info: DraggingInfo): string =
+  info.dropTarget.column
 
 proc findCellSlot(slots: openArray[TableCellSlot], row: int, column: TableColumn): int =
   for index, slot in slots:
@@ -1411,59 +1451,62 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
   method performBeginDraggingRows(
       tableView: TableView,
       rows: seq[int],
-      operation: TableDragOperation,
+      operations: DragOperations,
       pasteboardName: string,
-  ): TableDraggingInfo =
+  ): DraggingSession =
     if tableView.isNil:
-      return TableDraggingInfo()
+      return nil
     var validRows: seq[int]
     for row in rows:
       if row in 0 ..< tableView.rowCount():
         validRows.add row
-    result = TableDraggingInfo(
-      rows: validRows,
-      columns: @[],
-      operation: operation,
-      pasteboardName: pasteboardName,
-      destinationRow: -1,
+    if validRows.len == 0:
+      return nil
+    let payload = joinRowIndexes(validRows)
+    result = beginDraggingSession(
+      DynamicAgent(tableView),
+      [
+        initDraggingItem(TablePasteboardTypeRows, initPasteboardStringItem(payload)),
+        initDraggingItem(PasteboardTypeString, initPasteboardStringItem(payload)),
+      ],
+      operations,
+      pasteboardName,
     )
-    tableView.xDraggingInfo = result
-    discard pasteboardWithName(pasteboardName).setString(
-      PasteboardTypeString, tableView.selectionPersistenceString()
-    )
+    tableView.xTableDraggingSession = result
 
   method performBeginDraggingColumns(
       tableView: TableView,
       columns: seq[TableColumn],
-      operation: TableDragOperation,
+      operations: DragOperations,
       pasteboardName: string,
-  ): TableDraggingInfo =
+  ): DraggingSession =
     if tableView.isNil:
-      return TableDraggingInfo()
+      return nil
     var identifiers: seq[string]
     for column in columns:
       if not column.isNil and column.tableView() == tableView:
         identifiers.add column.identifier()
-    result = TableDraggingInfo(
-      rows: @[],
-      columns: identifiers,
-      operation: operation,
-      pasteboardName: pasteboardName,
-      destinationRow: -1,
+    if identifiers.len == 0:
+      return nil
+    let payload = joinIdentifiers(identifiers)
+    result = beginDraggingSession(
+      DynamicAgent(tableView),
+      [
+        initDraggingItem(
+          TablePasteboardTypeColumns, initPasteboardStringItem(payload)
+        ),
+        initDraggingItem(PasteboardTypeString, initPasteboardStringItem(payload)),
+      ],
+      operations,
+      pasteboardName,
     )
-    tableView.xDraggingInfo = result
-    var payload = ""
-    for index, identifier in identifiers:
-      if index > 0:
-        payload.add ","
-      payload.add identifier
-    discard pasteboardWithName(pasteboardName).setString(PasteboardTypeString, payload)
+    tableView.xTableDraggingSession = result
 
   method performValidateDragging(
-      tableView: TableView, info: TableDraggingInfo
-  ): TableDragOperation =
+      tableView: TableView, info: DraggingInfo
+  ): DragOperations =
     if tableView.isNil:
-      return tdoNone
+      return NoDragOperations
     let delegate = tableView.delegate()
     if not delegate.isNil:
       let operation = delegate.trySendLocal(
@@ -1471,10 +1514,10 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       )
       if operation.isSome:
         return operation.get()
-    info.operation
+    info.selectedOperations
 
   method performAcceptDragging(
-      tableView: TableView, info: TableDraggingInfo
+      tableView: TableView, info: DraggingInfo
   ): bool =
     if tableView.isNil:
       return false
@@ -1485,7 +1528,36 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       )
       if accepted.isSome:
         return accepted.get()
-    info.operation != tdoNone
+    info.selectedOperations != NoDragOperations
+
+protocol DefaultTableViewDraggingSource of DraggingSourceProtocol:
+  method draggingSourceOperationMask(
+      tableView: TableView, info: DraggingInfo
+  ): DragOperations =
+    if tableView.isNil:
+      NoDragOperations
+    else:
+      info.allowedOperations
+
+  method draggingSessionEnded(tableView: TableView, info: DraggingInfo) =
+    if not tableView.isNil and tableView.xTableDraggingSession == info.session:
+      tableView.xTableDraggingSession = nil
+
+protocol DefaultTableViewDraggingDestination of DraggingDestinationProtocol:
+  method draggingEntered(tableView: TableView, info: DraggingInfo): DragOperations =
+    tableView.performValidateDragging(info)
+
+  method draggingUpdated(tableView: TableView, info: DraggingInfo): DragOperations =
+    tableView.performValidateDragging(info)
+
+  method prepareForDragOperation(tableView: TableView, info: DraggingInfo): bool =
+    tableView.performValidateDragging(info) != NoDragOperations
+
+  method performDragOperation(tableView: TableView, info: DraggingInfo): bool =
+    tableView.performAcceptDragging(info)
+
+  method autoscrollDraggingSession(tableView: TableView, info: DraggingInfo): bool =
+    ListView(tableView).autoscrollDraggingInfo(info)
 
 protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
   method performColumnAutosaveRecords(
@@ -1581,6 +1653,8 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   discard tableView.withProtocol(DefaultTableViewSelectionBehavior)
   discard tableView.withProtocol(DefaultTableViewEditingBehavior)
   discard tableView.withProtocol(DefaultTableViewDraggingBehavior)
+  discard tableView.withProtocol(DefaultTableViewDraggingSource)
+  discard tableView.withProtocol(DefaultTableViewDraggingDestination)
   discard tableView.withProtocol(DefaultTableViewPersistenceBehavior)
   discard tableView.withProtocol(DefaultTableViewStateBehavior)
   discard tableView.withProtocol(DefaultTableViewDrawing)

@@ -5,6 +5,8 @@ import sigils/core
 import ../foundation/selectors, ../drawing/theme, ../foundation/types
 import ../foundation/events
 import ../controls/controls, ../containers/listbasics, ../containers/scrollviews
+import ../app/dragging
+import ../app/pasteboards
 import ../app/windows
 
 export listbasics
@@ -31,6 +33,11 @@ type
     anchorIndex*: int
     leadIndex*: int
     hasSelection*: bool
+
+  ListDraggingInfo* = object
+    rows*: seq[int]
+    session*: DraggingSession
+    dropTarget*: DraggingDropTarget
 
   ListRowView = ref object of View
     xListView: ListView
@@ -66,6 +73,7 @@ type
     xShowsRowSeparators: bool
     xListRole: StyleRole
     xItemRole: StyleRole
+    xListDraggingInfo: ListDraggingInfo
 
 proc listView(rowView: ListRowView): ListView
 proc listView*(contentView: ListContentView): ListView
@@ -119,6 +127,15 @@ proc selectedRanges*(listView: ListView): seq[Slice[int]]
 proc dataSource*(listView: ListView): DynamicAgent
 proc delegate*(listView: ListView): DynamicAgent
 proc selectedIndexes*(listView: ListView): seq[int]
+proc validDragRows(listView: ListView, rows: openArray[int]): seq[int]
+proc resolvedDraggingItemsForRows(listView: ListView, rows: seq[int]): seq[DraggingItem]
+proc beginDraggingRows*(
+  listView: ListView,
+  rows: openArray[int],
+  operations: DragOperations = {dgoMove},
+  pasteboardName = DragPasteboardName,
+): DraggingSession
+proc draggingInfo*(listView: ListView): ListDraggingInfo
 
 protocol ListViewDataSource {.selectorScope: protocol.}:
   method rowCount*(listView: ListView): int {.optional.}
@@ -149,6 +166,14 @@ protocol ListViewDelegate {.selectorScope: protocol.}:
     listView: ListView, context: DrawContext, rect: Rect
   ) {.optional.}
 
+  method draggingItemsForRows*(
+    listView: ListView, rows: seq[int]
+  ): seq[DraggingItem] {.optional.}
+  method validateDrop*(
+    listView: ListView, info: DraggingInfo
+  ): DragOperations {.optional.}
+  method acceptDrop*(listView: ListView, info: DraggingInfo): bool {.optional.}
+
 proc listView(rowView: ListRowView): ListView =
   if rowView.isNil: nil else: rowView.xListView
 
@@ -161,6 +186,35 @@ proc scrollView*(listView: ListView): ScrollView =
 proc contentView*(listView: ListView): ListContentView =
   if listView.isNil: nil else: listView.xContentView
 
+proc draggingInfo*(listView: ListView): ListDraggingInfo =
+  if listView.isNil:
+    ListDraggingInfo()
+  else:
+    listView.xListDraggingInfo
+
+proc beginDraggingRows*(
+    listView: ListView,
+    rows: openArray[int],
+    operations: DragOperations = {dgoMove},
+    pasteboardName = DragPasteboardName,
+): DraggingSession =
+  if listView.isNil:
+    return nil
+  let validRows = listView.validDragRows(rows)
+  if validRows.len == 0:
+    return nil
+  result = beginDraggingSession(
+    DynamicAgent(listView),
+    listView.resolvedDraggingItemsForRows(validRows),
+    operations,
+    pasteboardName,
+  )
+  listView.xListDraggingInfo = ListDraggingInfo(
+    rows: validRows,
+    session: result,
+    dropTarget: initDraggingDropTarget(),
+  )
+
 proc invalidateListRows(listView: ListView) =
   if not listView.xContentView.isNil:
     listView.xContentView.syncVisibleRowViews()
@@ -172,6 +226,90 @@ proc invalidateListRows(listView: ListView) =
   if not listView.xContentView.isNil:
     listView.xContentView.setNeedsDisplay(true)
   listView.setNeedsDisplay(true)
+
+proc rowPayload(rows: openArray[int]): string =
+  for index, row in rows:
+    if index > 0:
+      result.add ","
+    result.add $row
+
+proc validDragRows(listView: ListView, rows: openArray[int]): seq[int] =
+  if listView.isNil:
+    return @[]
+  for row in rows:
+    if row in 0 ..< listView.len():
+      result.add row
+
+proc defaultDraggingItemsForRows(
+    listView: ListView, rows: openArray[int]
+): seq[DraggingItem] =
+  let payload = rows.rowPayload()
+  result.add initDraggingItem(
+    PasteboardTypeString,
+    initPasteboardStringItem(payload),
+  )
+
+proc resolvedDraggingItemsForRows(
+    listView: ListView, rows: seq[int]
+): seq[DraggingItem] =
+  let delegate = listView.delegate()
+  if not delegate.isNil:
+    let items = delegate.trySendLocal(
+      draggingItemsForRows(), (listView: listView, rows: rows)
+    )
+    if items.isSome:
+      return items.get()
+  listView.defaultDraggingItemsForRows(rows)
+
+proc dropTargetForDraggingLocation*(
+    listView: ListView, location: Point
+): DraggingDropTarget =
+  if listView.isNil:
+    return initDraggingDropTarget()
+  let row = listView.listItemIndexAtPoint(location)
+  if row >= 0:
+    return initRowDropTarget(row, listView.listItemRect(row))
+  initDraggingDropTarget()
+
+proc validateListDragging(
+    listView: ListView, info: DraggingInfo
+): DragOperations =
+  if listView.isNil:
+    return NoDragOperations
+  let delegate = listView.delegate()
+  if not delegate.isNil:
+    let operations = delegate.trySendLocal(
+      validateDrop(), (listView: listView, info: info)
+    )
+    if operations.isSome:
+      return operations.get() * info.allowedOperations
+  info.selectedOperations * info.allowedOperations
+
+proc acceptListDragging(listView: ListView, info: DraggingInfo): bool =
+  if listView.isNil:
+    return false
+  let delegate = listView.delegate()
+  if not delegate.isNil:
+    let accepted = delegate.trySendLocal(
+      acceptDrop(), (listView: listView, info: info)
+    )
+    if accepted.isSome:
+      return accepted.get()
+  info.selectedOperations != NoDragOperations
+
+proc autoscrollDraggingInfo*(listView: ListView, info: DraggingInfo): bool =
+  if listView.isNil or listView.scrollView().isNil:
+    return false
+  let bounds = listView.bounds()
+  if bounds.isEmpty:
+    return false
+  let edge = max(listView.rowHeight(), 12.0'f32)
+  if info.location.y < bounds.minY + edge:
+    listView.scrollRows(-1)
+    return true
+  if info.location.y > bounds.maxY - edge:
+    listView.scrollRows(1)
+    return true
 
 proc len*(listView: ListView): int =
   let source = listView.dataSource()
@@ -1359,6 +1497,23 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     true
 
   method mouseDragged(listView: ListView, event: MouseEvent): bool =
+    if not listView.xListDraggingInfo.session.isNil and
+        listView.xListDraggingInfo.session.state() == dssActive:
+      let target = listView.dropTargetForDraggingLocation(event.location)
+      listView.xListDraggingInfo.dropTarget = target
+      discard updateDraggingSession(
+        listView.xListDraggingInfo.session,
+        event.location,
+        DynamicAgent(listView),
+        target,
+      )
+      discard autoscrollDraggingSession(
+        listView.xListDraggingInfo.session,
+        event.location,
+        DynamicAgent(listView),
+        target,
+      )
+      return true
     if listView.isEnabled() and listView.xTrackingItem:
       let index = listView.listItemIndexAtPoint(event.location)
       listView.highlightedIndex = index
@@ -1387,6 +1542,35 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
       listView.activateItemAtIndex(index, event.modifiers)
     listView.setNeedsDisplay(true)
     true
+
+protocol DefaultListViewDraggingSource of DraggingSourceProtocol:
+  method draggingSourceOperationMask(
+      listView: ListView, info: DraggingInfo
+  ): DragOperations =
+    if listView.isNil:
+      NoDragOperations
+    else:
+      info.allowedOperations
+
+  method draggingSessionEnded(listView: ListView, info: DraggingInfo) =
+    if not listView.isNil and listView.xListDraggingInfo.session == info.session:
+      listView.xListDraggingInfo = ListDraggingInfo()
+
+protocol DefaultListViewDraggingDestination of DraggingDestinationProtocol:
+  method draggingEntered(listView: ListView, info: DraggingInfo): DragOperations =
+    listView.validateListDragging(info)
+
+  method draggingUpdated(listView: ListView, info: DraggingInfo): DragOperations =
+    listView.validateListDragging(info)
+
+  method prepareForDragOperation(listView: ListView, info: DraggingInfo): bool =
+    listView.validateListDragging(info) != NoDragOperations
+
+  method performDragOperation(listView: ListView, info: DraggingInfo): bool =
+    listView.acceptListDragging(info)
+
+  method autoscrollDraggingSession(listView: ListView, info: DraggingInfo): bool =
+    listView.autoscrollDraggingInfo(info)
 
   method keyDown(listView: ListView, event: KeyEvent): bool =
     if not listView.isEnabled():
@@ -1491,8 +1675,11 @@ proc initListViewFields*(
   listView.xSelectionMode = lsmSingle
   listView.xListRole = srListView
   listView.xItemRole = srListItem
+  listView.xListDraggingInfo = ListDraggingInfo()
   listView.xScrollView = initListScrollView(listView)
   listView.xContentView = initListContentView(listView)
+  discard listView.withProtocol(DefaultListViewDraggingSource)
+  discard listView.withProtocol(DefaultListViewDraggingDestination)
   listView.xScrollView.documentView = listView.xContentView
   listView.setAcceptsFirstResponder(true)
   listView.clipsToBounds = true
