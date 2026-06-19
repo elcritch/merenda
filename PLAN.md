@@ -85,6 +85,10 @@ application, responder, view, window, accessibility, or control/cell layers.
 - Updated `examples/table_demo.nim` to use real table headers instead of fake
   temporary label headers, and constrained the title/table layout so the table
   resizes with the window without unstable vertical stretching.
+- Refreshed `examples/table_demo.nim` to exercise the newer `TableView` feature
+  surface: selected columns, clicked-cell metadata, sort callbacks, editable
+  cell callbacks, state save/restore, hidden/fixed/reusable columns, and
+  explicit list-view reload dispatch where selector names overlap.
 - Expanded pasteboard and dragging foundations toward the OpenStep/AppKit
   shape: pasteboards now use generic item storage with named/unique registry
   lookup, change counts, release semantics, typed declarations, owner/lazy
