@@ -172,20 +172,13 @@ const
   OwnerColumnWidth = 110.0
   ElapsedColumnWidth = 80.0
   ActionColumnWidth = 90.0
-  TableWidth =
-    ProjectColumnWidth + StateColumnWidth + OwnerColumnWidth + ElapsedColumnWidth +
-    ActionColumnWidth + 20.0
+  SidebarWidth = 220.0
 
 let
   app = sharedApplication()
   window = newWindow("Nimkit Table Demo", frame = initRect(140, 140, 820, 380))
   root = newView()
   title = newTitleLabel("Table View")
-  projectHeader = newStatusLabel("Project")
-  stateHeader = newStatusLabel("State")
-  ownerHeader = newStatusLabel("Owner")
-  elapsedHeader = newStatusLabel("Elapsed")
-  actionHeader = newStatusLabel("Action")
   table = newTableView()
   detailTitle = newHeadingLabel("Selection")
   detail = newStatusLabel("")
@@ -194,10 +187,6 @@ let
   controller = newTableDemoController(table, detail, activity)
 
 root.background = initColor(0.95, 0.96, 0.98)
-
-stateHeader.alignment = taCenter
-elapsedHeader.alignment = taRight
-actionHeader.alignment = taCenter
 
 let
   projectColumn =
@@ -249,10 +238,7 @@ table.showsRowSeparators = true
 table.selectedIndex = 0
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 
-root.addSubview(
-  title, projectHeader, stateHeader, ownerHeader, elapsedHeader, actionHeader, table,
-  detailTitle, detail, activityTitle, activity,
-)
+root.addSubview(title, table, detailTitle, detail, activityTitle, activity)
 
 title.pinEdges(
   toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
@@ -260,28 +246,13 @@ title.pinEdges(
 )
 
 activate(
-  cx(projectHeader.topAnchor == title.bottomAnchor + 18.0),
-  cx(projectHeader.leftAnchor == table.leftAnchor),
-  cx(projectHeader.widthAnchor == ProjectColumnWidth),
-  cx(stateHeader.topAnchor == projectHeader.topAnchor),
-  cx(stateHeader.leftAnchor == projectHeader.rightAnchor),
-  cx(stateHeader.widthAnchor == StateColumnWidth),
-  cx(ownerHeader.topAnchor == projectHeader.topAnchor),
-  cx(ownerHeader.leftAnchor == stateHeader.rightAnchor),
-  cx(ownerHeader.widthAnchor == OwnerColumnWidth),
-  cx(elapsedHeader.topAnchor == projectHeader.topAnchor),
-  cx(elapsedHeader.leftAnchor == ownerHeader.rightAnchor),
-  cx(elapsedHeader.widthAnchor == ElapsedColumnWidth),
-  cx(actionHeader.topAnchor == projectHeader.topAnchor),
-  cx(actionHeader.leftAnchor == elapsedHeader.rightAnchor),
-  cx(actionHeader.widthAnchor == ActionColumnWidth),
-  cx(table.topAnchor == projectHeader.bottomAnchor + 6.0),
+  cx(table.topAnchor == title.bottomAnchor + 20.0),
   cx(table.leftAnchor == title.leftAnchor),
-  cx(table.widthAnchor == TableWidth),
-  cx(table.heightAnchor == 224.0),
+  cx(table.rightAnchor == detailTitle.leftAnchor - 22.0),
+  cx(table.bottomAnchor == root.bottomAnchor - 28.0),
   cx(detailTitle.topAnchor == table.topAnchor + 4.0),
-  cx(detailTitle.leftAnchor == table.rightAnchor + 22.0),
   cx(detailTitle.rightAnchor == title.rightAnchor),
+  cx(detailTitle.widthAnchor == SidebarWidth),
   cx(detail.topAnchor == detailTitle.bottomAnchor + 10.0),
   cx(detail.leftAnchor == detailTitle.leftAnchor),
   cx(detail.rightAnchor == detailTitle.rightAnchor),

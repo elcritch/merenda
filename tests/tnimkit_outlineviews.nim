@@ -99,8 +99,10 @@ suite "NimKit OutlineView":
     check outlineView.rowCount == 5
     check outlineView.itemAtRow(2).identifier == "main"
     check outlineView.levelForRow(2) == 2
-    check outlineView.tableCellText(0, outlineView.outlineColumn()).startsWith("v ")
-    check outlineView.tableCellText(2, outlineView.outlineColumn()).startsWith("      ")
+    check outlineView.tableCellText(0, outlineView.outlineColumn()) == "Project"
+    check outlineView.tableCellText(2, outlineView.outlineColumn()) == "main.nim"
+    check outlineView.outlineItemIdentity("src").level == 1
+    check outlineView.childIdentifiersForItem("project") == @["src", "tests"]
 
     outlineView.collapseItem("project")
     check outlineView.rowCount == 2
@@ -142,9 +144,17 @@ suite "NimKit OutlineView":
     check outlineView.disclosureRectForRow(0).size.width > 0.0'f32
 
     let disclosure = outlineView.disclosureRectForRow(0)
-    check outlineView.toggleItemAtPoint(initPoint(disclosure.origin.x + 1.0, disclosure.origin.y + 1.0))
+    let disclosurePoint = initPoint(disclosure.origin.x + 1.0, disclosure.origin.y + 1.0)
+    check outlineView.mouseDown(MouseEvent(button: mbPrimary, location: disclosurePoint))
+    check outlineView.isItemExpanded("root")
+    check outlineView.mouseUp(MouseEvent(button: mbPrimary, location: disclosurePoint))
     check not outlineView.isItemExpanded("root")
     check delegate.collapsed == @["root"]
+
+    outlineView.expandItem("root")
+    check outlineView.toggleItemAtPoint(disclosurePoint)
+    check not outlineView.isItemExpanded("root")
+    check delegate.collapsed == @["root", "root"]
 
     outlineView.selectedIndex = 0
     check outlineView.handleOutlineKey(KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord))
@@ -154,6 +164,18 @@ suite "NimKit OutlineView":
     outlineView.collapseItem("root")
     outlineView.restoreExpansionPersistenceString(state)
     check outlineView.isItemExpanded("root")
+    let tableState = outlineView.captureState()
+    check tableState.expandedItems == @["root"]
+    outlineView.collapseItem("root")
+    outlineView.restoreState(tableState)
+    check outlineView.isItemExpanded("root")
+
+    let rowElement = outlineView.outlineAccessibilityElementForRow(0)
+    check rowElement.role == arOutlineRow
+    check rowElement.identifier == "root"
+    let disclosureElement = outlineView.disclosureAccessibilityElementForRow(0)
+    check disclosureElement.role == arDisclosureButton
+    check disclosureElement.action == AccessibilityActionCollapse
 
     let drag = outlineView.beginDraggingItems(["child"], operation = tdoCopy)
     check drag.rows == @[1]
