@@ -95,7 +95,9 @@ application, responder, view, window, accessibility, or control/cell layers.
   item callbacks, strings, text storage, data blobs, property lists, URLs/files,
   colors, font descriptors, and images; dragging now has generic operations as
   a set, pasteboard-backed drag items, drag sessions, source/destination
-  protocols, lifecycle hooks, and promised-file item staging.
+  protocols, lifecycle hooks, promised-file item staging, control/list/table
+  hooks, table row/column payload helpers, and outline item dragging routed
+  through the shared `DraggingSession`/`DraggingInfo` path.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -220,10 +222,11 @@ connect them to widgets and native backends.
      counts where the host backend exposes them
    - map `releaseGlobally` to true global pasteboard release where supported
 2. Integrate generic drag sessions with controls and containers:
-   - migrate table/outline drag helpers from `TableDraggingInfo` staging to
+   - harden the existing control/list/table/outline source and destination
+     hooks now that table/outline dragging has been migrated onto
      `DraggingSession`/`DraggingInfo`
-   - add list/control source and destination hooks, row/item drop targeting,
-     and autoscroll during active sessions
+   - add richer item drop targeting for outline/list delegates, visible drop
+     affordances, and backend-dispatched autoscroll during active sessions
 3. Finish promised-file behavior:
    - turn promised-file drag items into backend callbacks for real native drag
      sessions while keeping the pure Nim in-process fallback
@@ -259,9 +262,10 @@ AppKit-style widgets.
      visible column drag insertion affordances, and autoscroll while reordering
      columns
 3. Finish drag/drop integration:
-   - connect `TableDraggingInfo` and outline item dragging to full dragging
-     sessions, source/destination lifecycle hooks, row/column drop targets,
-     promised data, and named pasteboard payload declarations
+   - add visible row/column insertion affordances, richer delegate validation
+     hooks, promised data handoff, and native/session-backed pasteboard payload
+     declarations on top of the current `DraggingSession`/`DraggingInfo`
+     table/outline path
 4. Finish persistence integration:
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
