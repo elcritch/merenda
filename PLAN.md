@@ -19,8 +19,8 @@ NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid containers, buttons, text fields, combo boxes,
 scroll views, list views, table views, basic text editing lifecycle, action
-dispatch, in-process pasteboard support, and a pure Nim accessibility metadata
-and protocol core.
+dispatch, AppKit-style in-process pasteboard/dragging foundations, and a pure
+Nim accessibility metadata and protocol core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -85,6 +85,13 @@ application, responder, view, window, accessibility, or control/cell layers.
 - Updated `examples/table_demo.nim` to use real table headers instead of fake
   temporary label headers, and constrained the title/table layout so the table
   resizes with the window without unstable vertical stretching.
+- Expanded pasteboard and dragging foundations toward the OpenStep/AppKit
+  shape: pasteboards now use generic item storage with named/unique registry
+  lookup, change counts, release semantics, typed declarations, owner/lazy
+  item callbacks, strings, text storage, data blobs, property lists, URLs/files,
+  colors, font descriptors, and images; dragging now has generic operations as
+  a set, pasteboard-backed drag items, drag sessions, source/destination
+  protocols, lifecycle hooks, and promised-file item staging.
 - Added a pure Nim accessibility core: roles, traits, notifications, typed
   attribute values, default view metadata, ignored/element state, flattened
   accessibility children, settable attribute helpers, and action dispatch.
@@ -201,20 +208,21 @@ real native backends.
 
 ### Pasteboard And Dragging
 
-Turn the current in-process text pasteboard into an AppKit-like data exchange
-foundation.
+Harden the new in-process AppKit-style pasteboard and dragging foundations and
+connect them to widgets and native backends.
 
-1. Add named pasteboards:
-   - general, drag, find, font, ruler, and unique pasteboards
-   - change counts, global release semantics where a backend supports them, and
-     typed data declarations
-2. Add richer pasteboard payloads:
-   - strings, text storage, data blobs, property lists, URLs/files, colors,
-     fonts, and images as the resource types land
-   - owner/lazy-data callbacks for expensive values
-3. Add dragging protocols:
-   - source and destination hooks, drag operations, dragging info, session
-     lifecycle, promised files, and control/table/list integration
+1. Add backend provider coverage beyond text:
+   - bridge data blobs, URLs/files, images, colors, fonts, and native change
+     counts where the host backend exposes them
+   - map `releaseGlobally` to true global pasteboard release where supported
+2. Integrate generic drag sessions with controls and containers:
+   - migrate table/outline drag helpers from `TableDraggingInfo` staging to
+     `DraggingSession`/`DraggingInfo`
+   - add list/control source and destination hooks, row/item drop targeting,
+     and autoscroll during active sessions
+3. Finish promised-file behavior:
+   - turn promised-file drag items into backend callbacks for real native drag
+     sessions while keeping the pure Nim in-process fallback
 
 ### Documents And Controllers
 
