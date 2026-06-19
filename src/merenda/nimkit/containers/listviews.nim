@@ -2,6 +2,7 @@ import std/[algorithm, options, strutils, times]
 
 import sigils/core
 
+import ../accessibility/accessibilityprotocols
 import ../foundation/selectors, ../drawing/theme, ../foundation/types
 import ../foundation/events
 import ../controls/controls, ../containers/listbasics, ../containers/scrollviews
@@ -1437,6 +1438,51 @@ protocol DefaultListContentViewHitTesting of ViewProtocol:
   method pointInside(contentView: ListContentView, point: Point): bool =
     contentView.bounds().contains(point)
 
+protocol DefaultListRowViewAccessibility of AccessibilityProtocol:
+  method accessibilityRole(rowView: ListRowView): AccessibilityRole =
+    arListItem
+
+  method accessibilityLabel(rowView: ListRowView): string =
+    if rowView.isNil: "" else: rowView.xRow.text
+
+  method accessibilityValue(rowView: ListRowView): string =
+    if rowView.isNil:
+      ""
+    else:
+      $rowView.xRow.index
+
+  method accessibilityTraits(rowView: ListRowView): AccessibilityTraits =
+    if rowView.isNil:
+      return
+    if ssDisabled in rowView.xRow.states:
+      result.incl atDisabled
+    if ssFocused in rowView.xRow.states:
+      result.incl atFocused
+    if ssSelected in rowView.xRow.states:
+      result.incl atSelected
+    if not rowView.listView().isNil and rowView.listView().selectionMode() != lsmNone:
+      result.incl atSelectable
+
+  method isAccessibilityElement(rowView: ListRowView): bool =
+    not rowView.isNil and rowView.xRow.index >= 0
+
+protocol DefaultListViewAccessibility of AccessibilityProtocol:
+  method accessibilityRole(listView: ListView): AccessibilityRole =
+    arList
+
+  method accessibilityValue(listView: ListView): string =
+    $listView.len()
+
+  method accessibilityTraits(listView: ListView): AccessibilityTraits =
+    result = listView.xAccessibilityTraits + {atSelectable}
+    if not listView.isEnabled():
+      result.incl atDisabled
+    if listView.focused():
+      result.incl atFocused
+
+  method isAccessibilityElement(listView: ListView): bool =
+    true
+
 protocol DefaultListViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(listView: ListView): IntrinsicSize =
     initIntrinsicSize(listView.naturalSize())
@@ -1628,6 +1674,7 @@ proc initListRowView(listView: ListView): ListRowView =
   result.xListView = listView
   discard result.withProtocol(DefaultListRowViewDrawing)
   discard result.withProtocol(DefaultListRowViewHitTesting)
+  discard result.withProtocol(DefaultListRowViewAccessibility)
 
 proc initListContentView(listView: ListView): ListContentView =
   result = ListContentView()
@@ -1677,6 +1724,7 @@ proc initListViewFields*(
   discard listView.withProtocol(DefaultListViewDrawing)
   discard listView.withProtocol(DefaultListViewEvents)
   discard listView.withProtocol(DefaultListViewMouseHitPolicy)
+  discard listView.withProtocol(DefaultListViewAccessibility)
   listView.addItems(items)
   listView.applyInitialFrame(frame)
 

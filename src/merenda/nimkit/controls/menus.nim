@@ -2,6 +2,7 @@ import std/options
 
 import sigils/selectors
 
+import ../accessibility/accessibilityprotocols
 import ../drawing/chrome
 import ./controls
 import ../drawing/drawing
@@ -97,6 +98,96 @@ protocol MenuBarProtocol {.selectorScope: protocol.} from MenuBar:
   method reloadMenuBar*(menuBar: MenuBar) =
     menuBar.reloadImpl()
 
+protocol MenuAccessibility of AccessibilityProtocol:
+  method accessibilityRole(menu: Menu): AccessibilityRole =
+    arMenu
+
+  method accessibilityLabel(menu: Menu): string =
+    if menu.isNil: "" else: menu.xTitle
+
+  method accessibilityValue(menu: Menu): string =
+    if menu.isNil:
+      "0"
+    else:
+      $menu.xItems.len()
+
+  method isAccessibilityElement(menu: Menu): bool =
+    true
+
+protocol MenuItemAccessibility of AccessibilityProtocol:
+  method accessibilityRole(item: MenuItem): AccessibilityRole =
+    arMenuItem
+
+  method accessibilityLabel(item: MenuItem): string =
+    if item.isNil: "" else: item.xTitle
+
+  method accessibilityValue(item: MenuItem): string =
+    if item.isNil:
+      return ""
+    case item.xState
+    of bsOff: ""
+    of bsOn: "on"
+    of bsMixed: "mixed"
+
+  method accessibilityTraits(item: MenuItem): AccessibilityTraits =
+    if item.isNil or not item.xEnabled:
+      result.incl atDisabled
+    if not item.isNil and not item.xSubmenu.isNil:
+      result.incl atButton
+    if not item.isNil and item.xState in {bsOn, bsMixed}:
+      result.incl atSelected
+
+  method isAccessibilityElement(item: MenuItem): bool =
+    not item.isNil and not item.xSeparator
+
+  method accessibilityActionNames(item: MenuItem): seq[string] =
+    if not item.isNil and item.xEnabled and not item.xSeparator:
+      @[AccessibilityActionPress]
+    else:
+      @[]
+
+protocol PopupMenuButtonAccessibility of AccessibilityProtocol:
+  method accessibilityRole(button: PopupMenuButton): AccessibilityRole =
+    arPopupButton
+
+  method accessibilityLabel(button: PopupMenuButton): string =
+    if button.xAccessibilityLabel.len > 0: button.xAccessibilityLabel else: button.xTitle
+
+  method accessibilityValue(button: PopupMenuButton): string =
+    if button.popupOpen(): "open" else: "closed"
+
+  method accessibilityTraits(button: PopupMenuButton): AccessibilityTraits =
+    result = button.xAccessibilityTraits + {atButton}
+    if not button.enabled():
+      result.incl atDisabled
+    if button.focused():
+      result.incl atFocused
+
+  method isAccessibilityElement(button: PopupMenuButton): bool =
+    true
+
+  method accessibilityActionNames(button: PopupMenuButton): seq[string] =
+    @[AccessibilityActionShowMenu]
+
+  method accessibilityPerformAction(button: PopupMenuButton, action: string): bool =
+    if action != AccessibilityActionShowMenu or not button.enabled():
+      return false
+    button.openPopup()
+    true
+
+protocol MenuBarAccessibility of AccessibilityProtocol:
+  method accessibilityRole(menuBar: MenuBar): AccessibilityRole =
+    arMenu
+
+  method accessibilityValue(menuBar: MenuBar): string =
+    if menuBar.xMenu.isNil:
+      "0"
+    else:
+      $menuBar.xMenu.xItems.len()
+
+  method isAccessibilityElement(menuBar: MenuBar): bool =
+    true
+
 proc open*(menu: Menu) =
   menu.openMenu()
 
@@ -122,6 +213,7 @@ proc newMenu*(title = ""): Menu =
   result = Menu(xTitle: title)
   initResponder(result)
   discard result.withProto()
+  discard result.withProtocol(MenuAccessibility)
 
 proc newMenuItem*(
     title = "",
@@ -134,6 +226,7 @@ proc newMenuItem*(
   if keyEquivalent.len > 0:
     result.xKeyEquivalent = initKeyStroke(keyEquivalent, modifiers)
     result.xHasKeyEquivalent = true
+  discard result.withProtocol(MenuItemAccessibility)
 
 proc separatorMenuItem*(): MenuItem =
   result = newMenuItem()
@@ -1120,6 +1213,7 @@ proc initPopupMenuButtonFields*(
   discard button.withProto()
   discard button.withProtocol(PopupMenuButtonDrawing)
   discard button.withProtocol(PopupMenuButtonEvents)
+  discard button.withProtocol(PopupMenuButtonAccessibility)
   button.applyInitialFrame(frame)
 
 proc newPopupMenuButton*(
@@ -1281,6 +1375,7 @@ proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRe
   discard menuBar.withProto()
   discard menuBar.withProtocol(MenuBarDrawing)
   discard menuBar.withProtocol(MenuBarLayout)
+  discard menuBar.withProtocol(MenuBarAccessibility)
   menuBar.menu = menu
   menuBar.applyInitialFrame(frame)
 

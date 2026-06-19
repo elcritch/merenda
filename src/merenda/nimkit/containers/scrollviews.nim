@@ -1,5 +1,6 @@
 import sigils/core
 
+import ../accessibility/accessibilityprotocols
 import ../drawing/drawing
 import ./scrollergeometry
 import ../foundation/selectors
@@ -82,6 +83,24 @@ proc drawScroller*(context: DrawContext, track, knob: Rect)
 proc documentRect*(clipView: ClipView): Rect
 proc lineScroll*(scrollView: ScrollView, axis: LayoutAxis): float32
 proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView)
+
+protocol DefaultScrollViewAccessibility of AccessibilityProtocol:
+  method accessibilityRole(scrollView: ScrollView): AccessibilityRole =
+    arScrollArea
+
+  method accessibilityValue(scrollView: ScrollView): string =
+    let offset = scrollView.contentOffset()
+    $offset.x & "," & $offset.y
+
+  method accessibilityTraits(scrollView: ScrollView): AccessibilityTraits =
+    result = scrollView.xAccessibilityTraits
+    if ssDisabled in scrollView.xWidgetStates:
+      result.incl atDisabled
+    if ssFocused in scrollView.xWidgetStates:
+      result.incl atFocused
+
+  method isAccessibilityElement(scrollView: ScrollView): bool =
+    true
 
 proc initRulerPlaceholder*(visible = false, thickness = 0.0'f32): RulerPlaceholder =
   RulerPlaceholder(visible: visible, thickness: normalizedRulerThickness(thickness))
@@ -942,6 +961,7 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   discard scrollView.withProtocol(DefaultScrollViewLayout)
   discard scrollView.withProtocol(DefaultScrollViewDrawing)
   discard scrollView.withProtocol(DefaultScrollViewEvents)
+  discard scrollView.withProtocol(DefaultScrollViewAccessibility)
 
 proc newScrollView*(frame: Rect = AutoRect, documentView: View = nil): ScrollView =
   result = ScrollView()

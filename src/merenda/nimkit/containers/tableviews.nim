@@ -2,6 +2,7 @@ import std/[math, options, strutils, tables]
 
 import sigils/core
 
+import ../accessibility/accessibilityprotocols
 import ../drawing/drawing
 import ../foundation/events
 import ../app/dragging
@@ -618,6 +619,17 @@ proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View =
   )
   cellView
 
+proc applyCellAccessibility(
+    tableView: TableView, row: int, column: TableColumn, cell: View
+) =
+  if cell.isNil:
+    return
+  if not cell.xHasAccessibilityRole:
+    cell.accessibilityRole = arCell
+  if cell.xAccessibilityLabel.len == 0:
+    cell.accessibilityLabel = tableView.tableCellText(row, column)
+  cell.xAccessibilityTraits.incl atSelectable
+
 proc dequeueReusableCellView*(tableView: TableView, identifier: string): View =
   if tableView.isNil or identifier.len == 0:
     return nil
@@ -892,6 +904,7 @@ proc syncVisibleTableCells(tableView: TableView) =
           rowView.addSubview(cellView)
         cellView.frame = tableView.columnRect(rowBounds, column)
         cellView.hidden = false
+        tableView.applyCellAccessibility(row, column, cellView)
         nextSlots.add TableCellSlot(row: row, column: column, view: cellView)
   for index, slot in previousSlots:
     if not used[index] and not slot.view.isNil:
@@ -1522,6 +1535,23 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
     )
     tableView.drawTableHeader(context)
 
+protocol DefaultTableViewAccessibility of AccessibilityProtocol:
+  method accessibilityRole(tableView: TableView): AccessibilityRole =
+    arTable
+
+  method accessibilityValue(tableView: TableView): string =
+    $tableView.rowCount()
+
+  method accessibilityTraits(tableView: TableView): AccessibilityTraits =
+    result = tableView.xAccessibilityTraits + {atSelectable}
+    if ssDisabled in tableView.xWidgetStates:
+      result.incl atDisabled
+    if tableView.focused():
+      result.incl atFocused
+
+  method isAccessibilityElement(tableView: TableView): bool =
+    true
+
 proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   initListViewFields(ListView(tableView), frame = frame)
   tableView.xRowCount = 0
@@ -1542,6 +1572,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   discard tableView.withProtocol(DefaultTableViewPersistenceBehavior)
   discard tableView.withProtocol(DefaultTableViewStateBehavior)
   discard tableView.withProtocol(DefaultTableViewDrawing)
+  discard tableView.withProtocol(DefaultTableViewAccessibility)
   discard tableView.withProtocol(TableViewListDataSource)
   discard tableView.withProtocol(TableViewListDelegate)
   ListView(tableView).dataSource = DynamicAgent(tableView)
