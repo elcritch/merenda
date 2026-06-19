@@ -297,7 +297,7 @@ proc title*(column: TableColumn): string =
   column.xTitle
 
 proc `title=`*(column: TableColumn, title: string) =
-  if column.isNil or column.xTitle == title:
+  if column.xTitle == title:
     return
   column.xTitle = title
   column.tableView().noteColumnsChanged()
@@ -306,8 +306,6 @@ proc width*(column: TableColumn): float32 =
   column.xWidth
 
 proc `width=`*(column: TableColumn, width: float32) =
-  if column.isNil:
-    return
   let nextWidth = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
   if column.xWidth == nextWidth:
     return
@@ -318,8 +316,6 @@ proc minWidth*(column: TableColumn): float32 =
   column.xMinWidth
 
 proc `minWidth=`*(column: TableColumn, width: float32) =
-  if column.isNil:
-    return
   let nextMin = width.normalizedColumnMetric(DefaultTableColumnMinWidth)
   if column.xMinWidth == nextMin:
     return
@@ -332,8 +328,6 @@ proc maxWidth*(column: TableColumn): float32 =
   column.xMaxWidth
 
 proc `maxWidth=`*(column: TableColumn, width: float32) =
-  if column.isNil:
-    return
   let nextMax = width.normalizedMaxWidth(column.xMinWidth)
   if column.xMaxWidth == nextMax:
     return
@@ -345,7 +339,7 @@ proc alignment*(column: TableColumn): TextAlignment =
   column.xAlignment
 
 proc `alignment=`*(column: TableColumn, alignment: TextAlignment) =
-  if column.isNil or column.xAlignment == alignment:
+  if column.xAlignment == alignment:
     return
   column.xAlignment = alignment
   column.tableView().noteColumnsChanged()
@@ -354,7 +348,7 @@ proc resizePolicy*(column: TableColumn): TableColumnResizePolicy =
   column.xResizePolicy
 
 proc `resizePolicy=`*(column: TableColumn, policy: TableColumnResizePolicy) =
-  if column.isNil or column.xResizePolicy == policy:
+  if column.xResizePolicy == policy:
     return
   column.xResizePolicy = policy
   column.tableView().noteColumnsChanged()
@@ -363,7 +357,7 @@ proc hidden*(column: TableColumn): bool =
   column.xHidden
 
 proc `hidden=`*(column: TableColumn, hidden: bool) =
-  if column.isNil or column.xHidden == hidden:
+  if column.xHidden == hidden:
     return
   column.xHidden = hidden
   column.tableView().noteColumnsChanged()
@@ -372,7 +366,7 @@ proc sortDirection*(column: TableColumn): TableSortDirection =
   column.xSortDirection
 
 proc `sortDirection=`*(column: TableColumn, direction: TableSortDirection) =
-  if column.isNil or column.xSortDirection == direction:
+  if column.xSortDirection == direction:
     return
   column.xSortDirection = direction
   column.tableView().noteColumnsChanged()
@@ -386,7 +380,7 @@ proc reuseIdentifier*(column: TableColumn): string =
     column.identifier()
 
 proc `reuseIdentifier=`*(column: TableColumn, identifier: string) =
-  if column.isNil or column.xReuseIdentifier == identifier:
+  if column.xReuseIdentifier == identifier:
     return
   column.xReuseIdentifier = identifier
   let tableView = column.tableView()
@@ -398,7 +392,7 @@ proc styleId*(column: TableColumn): string =
   column.xStyleId
 
 proc `styleId=`*(column: TableColumn, id: string) =
-  if column.isNil or column.xStyleId == id:
+  if column.xStyleId == id:
     return
   column.xStyleId = id
   column.tableView().noteColumnsChanged()
@@ -407,8 +401,6 @@ proc styleClasses*(column: TableColumn): seq[string] =
   column.xStyleClasses
 
 proc `styleClasses=`*(column: TableColumn, classes: openArray[string]) =
-  if column.isNil:
-    return
   let nextClasses = @classes
   if column.xStyleClasses == nextClasses:
     return
@@ -419,7 +411,7 @@ proc userInfo*(column: TableColumn): DynamicAgent =
   column.xUserInfo
 
 proc `userInfo=`*(column: TableColumn, userInfo: DynamicAgent) =
-  if column.isNil or column.xUserInfo == userInfo:
+  if column.xUserInfo == userInfo:
     return
   column.xUserInfo = userInfo
   column.tableView().noteColumnsChanged()
@@ -478,8 +470,6 @@ proc rowCount*(tableView: TableView): int =
   tableView.resolvedRowCount()
 
 proc `rowCount=`*(tableView: TableView, count: int) =
-  if tableView.isNil:
-    return
   let nextCount = max(count, 0)
   if tableView.xRowCount == nextCount:
     return
@@ -487,7 +477,7 @@ proc `rowCount=`*(tableView: TableView, count: int) =
   ListView(tableView).reloadData()
 
 proc `dataSource=`*(tableView: TableView, dataSource: DynamicAgent) =
-  if tableView.isNil or tableView.xTableDataSource == dataSource:
+  if tableView.xTableDataSource == dataSource:
     return
   if not dataSource.isNil:
     discard dataSource.adopt(TableViewDataSource)
@@ -499,7 +489,7 @@ proc `dataSource=`*(tableView: TableView, dataSource: Responder) =
   tableView.dataSource = DynamicAgent(dataSource)
 
 proc `delegate=`*(tableView: TableView, delegate: DynamicAgent) =
-  if tableView.isNil or tableView.xTableDelegate == delegate:
+  if tableView.xTableDelegate == delegate:
     return
   if not delegate.isNil:
     discard delegate.adopt(TableViewDelegate)
@@ -565,8 +555,6 @@ proc tableHeaderHeight*(tableView: TableView): float32 =
   if not tableView.xShowsHeader: 0.0'f32 else: tableView.xHeaderHeight
 
 proc `tableHeaderHeight=`*(tableView: TableView, height: float32) =
-  if tableView.isNil:
-    return
   let nextHeight = max(height, 0.0'f32)
   if tableView.xHeaderHeight == nextHeight:
     return
@@ -577,7 +565,7 @@ proc showsHeader*(tableView: TableView): bool =
   tableView.xShowsHeader
 
 proc `showsHeader=`*(tableView: TableView, value: bool) =
-  if tableView.isNil or tableView.xShowsHeader == value:
+  if tableView.xShowsHeader == value:
     return
   tableView.xShowsHeader = value
   tableView.noteColumnsChanged()
@@ -738,15 +726,13 @@ proc selectedIndex*(tableView: TableView): int =
   ListView(tableView).selectedIndex()
 
 proc `selectedIndex=`*(tableView: TableView, index: int) =
-  if tableView.isNil:
-    return
   ListView(tableView).selectedIndex = index
 
 proc allowsColumnSelection*(tableView: TableView): bool =
   (not tableView.isNil) and tableView.xAllowsColumnSelection
 
 proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
-  if tableView.isNil or tableView.xAllowsColumnSelection == value:
+  if tableView.xAllowsColumnSelection == value:
     return
   tableView.xAllowsColumnSelection = value
   if not value:
@@ -757,8 +743,7 @@ proc selectedColumns*(tableView: TableView): seq[TableColumn] =
   tableView.xSelectedColumns
 
 proc `selectedColumns=`*(tableView: TableView, columns: openArray[TableColumn]) =
-  if not tableView.isNil:
-    tableView.setSelectedColumns(@columns)
+  tableView.setSelectedColumns(@columns)
 
 proc editingState*(tableView: TableView): TableEditingState =
   tableView.xEditing
@@ -767,8 +752,6 @@ proc autosaveName*(tableView: TableView): string =
   tableView.xAutosaveName
 
 proc `autosaveName=`*(tableView: TableView, name: string) =
-  if tableView.isNil:
-    return
   tableView.xAutosaveName = name
 
 proc draggingSession*(tableView: TableView): DraggingSession =
