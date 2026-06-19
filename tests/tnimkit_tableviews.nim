@@ -329,6 +329,36 @@ suite "NimKit TableView":
       visible.add column.identifier
     check visible == @["name"]
 
+  test "table header rendering mouse tracking and persistence adapters":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 300, 160))
+      name = newTableColumn("name", "Name", width = 120.0)
+      age = newTableColumn("age", "Age", width = 60.0)
+      adapter = newTableColumnAutosaveAdapter()
+
+    tableView.addColumn(name)
+    tableView.addColumn(age)
+    tableView.autosaveName = "people"
+
+    var texts = tableView.renderedTexts()
+    check texts.contains("Name")
+    check texts.contains("Age")
+
+    check tableView.headerMouseMoved(MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary))
+    check tableView.headerMouseDown(MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary))
+    check tableView.headerMouseUp(MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary))
+    check name.sortDirection == tsdAscending
+
+    check tableView.headerMouseDown(MouseEvent(location: initPoint(118.0, 10.0), button: mbPrimary))
+    check tableView.headerMouseDragged(MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary))
+    check tableView.headerMouseUp(MouseEvent(location: initPoint(180.0, 10.0), button: mbPrimary))
+    check name.width > 120.0'f32
+
+    tableView.saveColumnAutosaveState(adapter)
+    name.width = 80.0
+    tableView.restoreColumnAutosaveState(adapter)
+    check name.width > 120.0'f32
+
   test "table columns move cleanly between table views":
     let
       first = newTableView()
@@ -654,6 +684,34 @@ suite "NimKit TableView":
     check info.operation == tdoMove
     check tableView.validateDragging(info) == tdoCopy
     check tableView.acceptDragging(info)
+
+    let selectionState = tableView.selectionPersistenceString()
+    tableView.selectedIndexes = []
+    tableView.restoreSelectionPersistenceString(selectionState)
+    check tableView.selectedIndexes == @[3]
+
+    let columnDrag = tableView.beginDraggingColumns([name, state], operation = tdoCopy)
+    check columnDrag.columns == @["name", "state"]
+    check pasteboardWithName(DragPasteboardName).stringForType(PasteboardTypeString) == "name,state"
+    let targeted = columnDrag.withDropTarget(row = 1, column = state)
+    check targeted.destinationRow == 1
+    check targeted.destinationColumn == "state"
+
+  test "table view queues hosted cell views by reuse identifier":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 260, 46))
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name", width = 120.0)
+
+    name.reuseIdentifier = "text-cell"
+    tableView.rowCount = 4
+    tableView.addColumn(name)
+    tableView.delegate = delegate
+    discard tableView.renderedTexts()
+
+    tableView.recycleVisibleCellViews()
+    let reused = tableView.dequeueReusableCellView("text-cell")
+    check not reused.isNil
 
   test "table view pages to scroll edge when trailing rows are disabled":
     let

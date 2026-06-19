@@ -1,11 +1,13 @@
-import std/[math, options]
+import std/[math, options, strutils, tables]
 
 import sigils/core
 
 import ../drawing/drawing
 import ../foundation/events
+import ../app/pasteboards
 import ./listviews
 import ../containers/listbasics
+import ../containers/scrollviews
 import ../foundation/selectors
 import ../drawing/theme
 import ../foundation/types
@@ -61,6 +63,11 @@ type
     columns*: seq[string]
     operation*: TableDragOperation
     pasteboardName*: string
+    destinationRow*: int
+    destinationColumn*: string
+
+  TableColumnAutosaveAdapter* = ref object
+    xRecords: Table[string, seq[TableColumnAutosaveRecord]]
 
   TableView* = ref object of ListView
     xColumns: seq[TableColumn]
@@ -68,6 +75,7 @@ type
     xTableDataSource: DynamicAgent
     xTableDelegate: DynamicAgent
     xCellSlots: seq[TableCellSlot]
+    xReusableCellViews: Table[string, seq[View]]
     xShowsHeader: bool
     xHeaderHeight: float32
     xHoveredColumn: TableColumn
@@ -79,6 +87,11 @@ type
     xEditing: TableEditingState
     xAutosaveName: string
     xDraggingInfo: TableDraggingInfo
+    xHeaderTrackingPart: TableHeaderHitPart
+    xTrackingColumn: TableColumn
+    xTrackingColumnIndex: int
+    xDragStartPoint: Point
+    xDragStartWidth: float32
 
   TableCellSlot = object
     row: int
@@ -116,11 +129,14 @@ proc tableCellHitPolicy(
 
 proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
+proc enqueueReusableCellView(tableView: TableView, identifier: string, view: View)
 proc clearTableCellSlots(tableView: TableView)
 proc syncVisibleTableCells(tableView: TableView)
 proc drawTableRow(
   tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
 )
+
+proc syncTableScrollChrome(tableView: TableView)
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
   method numberOfRows*(tableView: TableView): int {.optional.}
@@ -166,6 +182,66 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   method acceptDragOperation*(
     tableView: TableView, info: TableDraggingInfo
   ): bool {.optional.}
+
+protocol TableViewEditingProtocol:
+  method canBeginEditingCell*(
+    tableView: TableView, row: int, column: TableColumn
+  ): bool
+  method performBeginEditingCell*(
+    tableView: TableView, row: int, column: TableColumn
+  ): bool
+  method performCommitEditingCell*(tableView: TableView, value: string): bool
+  method performCancelEditingCell*(tableView: TableView): bool
+
+protocol TableViewColumnProtocol:
+  method performColumnAtPoint*(tableView: TableView, point: Point): TableColumn
+  method performHeaderHitTest*(tableView: TableView, point: Point): TableHeaderHit
+  method performResizeColumn*(
+    tableView: TableView, column: TableColumn, width: float32
+  )
+  method performMoveColumn*(tableView: TableView, fromIndex, toIndex: int)
+  method performRequestSort*(
+    tableView: TableView, column: TableColumn, direction: TableSortDirection
+  )
+  method performHeaderMouseDown*(tableView: TableView, event: MouseEvent): bool
+  method performHeaderMouseDragged*(tableView: TableView, event: MouseEvent): bool
+  method performHeaderMouseUp*(tableView: TableView, event: MouseEvent): bool
+  method performHeaderMouseMoved*(tableView: TableView, event: MouseEvent): bool
+
+protocol TableViewSelectionProtocol:
+  method canSelectCell*(tableView: TableView, row: int, column: TableColumn): bool
+  method performSelectCell*(tableView: TableView, row: int, column: TableColumn)
+  method performSetSelectedColumns*(
+    tableView: TableView, columns: seq[TableColumn]
+  )
+  method performSelectionPersistenceString*(tableView: TableView): string
+  method performRestoreSelectionPersistenceString*(tableView: TableView, value: string)
+
+protocol TableViewDraggingProtocol:
+  method performBeginDraggingRows*(
+    tableView: TableView,
+    rows: seq[int],
+    operation: TableDragOperation,
+    pasteboardName: string,
+  ): TableDraggingInfo
+  method performBeginDraggingColumns*(
+    tableView: TableView,
+    columns: seq[TableColumn],
+    operation: TableDragOperation,
+    pasteboardName: string,
+  ): TableDraggingInfo
+  method performValidateDragging*(
+    tableView: TableView, info: TableDraggingInfo
+  ): TableDragOperation
+  method performAcceptDragging*(tableView: TableView, info: TableDraggingInfo): bool
+
+protocol TableViewPersistenceProtocol:
+  method performColumnAutosaveRecords*(
+    tableView: TableView
+  ): seq[TableColumnAutosaveRecord]
+  method performRestoreColumnAutosaveRecords*(
+    tableView: TableView, records: seq[TableColumnAutosaveRecord]
+  )
 
 protocol TableViewListDataSource of ListViewDataSource:
   method rowCount(tableView: TableView, listView: ListView): int =
@@ -539,54 +615,36 @@ proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
   tableView.columnRect(tableView.tableHeaderRect(), column)
 
 proc tableHeaderHitTest*(tableView: TableView, point: Point): TableHeaderHit =
-  result = TableHeaderHit(columnIndex: -1, part: thpNone)
-  if tableView.isNil or not tableView.tableHeaderRect().contains(point):
-    return
-  for index, column in tableView.xColumns:
-    let rect = tableView.tableHeaderColumnRect(column)
-    if rect.contains(point):
-      result.column = column
-      result.columnIndex = index
-      result.rect = rect
-      if column.resizePolicy() == tcrResizable and point.x >= rect.maxX - 5.0'f32:
-        result.part = thpResizeHandle
-      else:
-        result.part = thpColumn
-      return
+  if tableView.isNil:
+    TableHeaderHit(columnIndex: -1, part: thpNone)
+  else:
+    tableView.performHeaderHitTest(point)
 
 proc resizeColumn*(tableView: TableView, column: TableColumn, width: float32) =
-  if tableView.isNil or column.isNil or column.tableView() != tableView:
-    return
-  if column.resizePolicy() == tcrFixed:
-    return
-  column.width = width
+  if not tableView.isNil:
+    tableView.performResizeColumn(column, width)
 
 proc moveColumn*(tableView: TableView, fromIndex, toIndex: int) =
-  if tableView.isNil or fromIndex notin 0 ..< tableView.xColumns.len:
-    return
-  let boundedTo = max(0, min(toIndex, tableView.xColumns.len - 1))
-  if fromIndex == boundedTo:
-    return
-  let column = tableView.xColumns[fromIndex]
-  tableView.xColumns.delete(fromIndex)
-  tableView.xColumns.insert(column, boundedTo)
-  tableView.noteColumnsChanged()
+  if not tableView.isNil:
+    tableView.performMoveColumn(fromIndex, toIndex)
 
 proc requestSort*(
     tableView: TableView, column: TableColumn, direction: TableSortDirection
 ) =
-  if tableView.isNil or column.isNil or column.tableView() != tableView:
-    return
-  for current in tableView.xColumns.mitems:
-    if current != column and current.xSortDirection != tsdNone:
-      current.xSortDirection = tsdNone
-  column.sortDirection = direction
-  let delegate = tableView.delegate()
-  if not delegate.isNil:
-    discard delegate.sendLocalIfHandled(
-      sortDescriptorsDidChange(),
-      (tableView: tableView, column: column, direction: direction),
-    )
+  if not tableView.isNil:
+    tableView.performRequestSort(column, direction)
+
+proc headerMouseDown*(tableView: TableView, event: MouseEvent): bool =
+  (not tableView.isNil) and tableView.performHeaderMouseDown(event)
+
+proc headerMouseDragged*(tableView: TableView, event: MouseEvent): bool =
+  (not tableView.isNil) and tableView.performHeaderMouseDragged(event)
+
+proc headerMouseUp*(tableView: TableView, event: MouseEvent): bool =
+  (not tableView.isNil) and tableView.performHeaderMouseUp(event)
+
+proc headerMouseMoved*(tableView: TableView, event: MouseEvent): bool =
+  (not tableView.isNil) and tableView.performHeaderMouseMoved(event)
 
 proc validCell(tableView: TableView, row: int, column: TableColumn): bool =
   not tableView.isNil and row in 0 ..< tableView.rowCount() and not column.isNil and
@@ -617,6 +675,28 @@ proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View =
   )
   cellView
 
+proc dequeueReusableCellView*(tableView: TableView, identifier: string): View =
+  if tableView.isNil or identifier.len == 0:
+    return nil
+  if identifier notin tableView.xReusableCellViews:
+    return nil
+  var views = tableView.xReusableCellViews[identifier]
+  if views.len == 0:
+    return nil
+  result = views[^1]
+  views.setLen(views.len - 1)
+  tableView.xReusableCellViews[identifier] = views
+  if not result.isNil:
+    result.hidden = false
+
+proc enqueueReusableCellView(tableView: TableView, identifier: string, view: View) =
+  if tableView.isNil or view.isNil or identifier.len == 0:
+    return
+  view.hidden = true
+  if view.superview() != nil:
+    view.removeFromSuperview()
+  tableView.xReusableCellViews.mgetOrPut(identifier, @[]).add view
+
 proc tableRowEnabled(tableView: TableView, row: int): bool =
   if tableView.isNil or row notin 0 ..< tableView.rowCount():
     return false
@@ -643,16 +723,7 @@ proc tableRowSelectable(tableView: TableView, row: int): bool =
     true
 
 proc tableColumnAtPoint(tableView: TableView, point: Point): TableColumn =
-  if tableView.isNil:
-    return nil
-  var x = 0.0'f32
-  for column in tableView.columns:
-    if column.hidden():
-      continue
-    let nextX = x + column.width()
-    if point.x >= x and point.x < nextX:
-      return column
-    x = nextX
+  if tableView.isNil: nil else: tableView.performColumnAtPoint(point)
 
 proc tableCellHitPolicy(
     tableView: TableView, row: int, column: TableColumn, target: View, event: MouseEvent
@@ -734,78 +805,24 @@ proc selectedColumns*(tableView: TableView): seq[TableColumn] =
   if tableView.isNil: @[] else: tableView.xSelectedColumns
 
 proc `selectedColumns=`*(tableView: TableView, columns: openArray[TableColumn]) =
-  if tableView.isNil or not tableView.xAllowsColumnSelection:
-    return
-  var next: seq[TableColumn]
-  for column in columns:
-    if column.isNil or column.tableView() != tableView:
-      continue
-    var seen = false
-    for existing in next:
-      if existing == column:
-        seen = true
-    if not seen:
-      next.add column
-  tableView.xSelectedColumns = next
-  tableView.setNeedsDisplay(true)
+  if not tableView.isNil:
+    tableView.performSetSelectedColumns(@columns)
 
 proc selectCell*(tableView: TableView, row: int, column: TableColumn) =
-  if not tableView.validCell(row, column):
-    return
-  ListView(tableView).selectedIndex = row
-  if tableView.xAllowsColumnSelection:
-    tableView.xSelectedColumns = @[column]
-  tableView.xClickedRow = row
-  tableView.xClickedColumn = column
-  tableView.setNeedsDisplay(true)
+  if not tableView.isNil:
+    tableView.performSelectCell(row, column)
 
 proc editingState*(tableView: TableView): TableEditingState =
   if tableView.isNil: TableEditingState(row: -1) else: tableView.xEditing
 
 proc beginEditingCell*(tableView: TableView, row: int, column: TableColumn): bool =
-  if not tableView.validCell(row, column):
-    return false
-  let delegate = tableView.delegate()
-  if not delegate.isNil:
-    let allowed =
-      delegate.trySendLocal(shouldEditCell(), (tableView: tableView, row: row, column: column))
-    if allowed.isSome and not allowed.get():
-      return false
-  tableView.xEditing = TableEditingState(row: row, column: column, active: true)
-  tableView.selectCell(row, column)
-  if not delegate.isNil:
-    discard delegate.sendLocalIfHandled(
-      didBeginEditingCell(), (tableView: tableView, row: row, column: column)
-    )
-  true
+  if tableView.isNil: false else: tableView.performBeginEditingCell(row, column)
 
 proc commitEditingCell*(tableView: TableView, value = ""): bool =
-  if tableView.isNil or not tableView.xEditing.active:
-    return false
-  let editing = tableView.xEditing
-  tableView.xEditing = TableEditingState(row: -1)
-  let delegate = tableView.delegate()
-  if not delegate.isNil:
-    discard delegate.sendLocalIfHandled(
-      didCommitEditingCell(),
-      (tableView: tableView, row: editing.row, column: editing.column, value: value),
-    )
-  tableView.setNeedsDisplay(true)
-  true
+  if tableView.isNil: false else: tableView.performCommitEditingCell(value)
 
 proc cancelEditingCell*(tableView: TableView): bool =
-  if tableView.isNil or not tableView.xEditing.active:
-    return false
-  let editing = tableView.xEditing
-  tableView.xEditing = TableEditingState(row: -1)
-  let delegate = tableView.delegate()
-  if not delegate.isNil:
-    discard delegate.sendLocalIfHandled(
-      didCancelEditingCell(),
-      (tableView: tableView, row: editing.row, column: editing.column),
-    )
-  tableView.setNeedsDisplay(true)
-  true
+  if tableView.isNil: false else: tableView.performCancelEditingCell()
 
 proc autosaveName*(tableView: TableView): string =
   if tableView.isNil: "" else: tableView.xAutosaveName
@@ -818,40 +835,26 @@ proc `autosaveName=`*(tableView: TableView, name: string) =
 proc columnAutosaveRecords*(tableView: TableView): seq[TableColumnAutosaveRecord] =
   if tableView.isNil:
     return @[]
-  for column in tableView.xColumns:
-    result.add TableColumnAutosaveRecord(
-      identifier: column.identifier(),
-      width: column.width(),
-      hidden: column.hidden(),
-      sortDirection: column.sortDirection(),
-    )
+  tableView.performColumnAutosaveRecords()
 
 proc restoreColumnAutosaveRecords*(
     tableView: TableView, records: openArray[TableColumnAutosaveRecord]
 ) =
-  if tableView.isNil:
-    return
-  var ordered: seq[TableColumn]
-  for record in records:
-    let column = tableView.columnWithIdentifier(record.identifier)
-    if column.isNil:
-      continue
-    column.xWidth = record.width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-    column.xHidden = record.hidden
-    column.xSortDirection = record.sortDirection
-    ordered.add column
-  for column in tableView.xColumns:
-    var seen = false
-    for existing in ordered:
-      if existing == column:
-        seen = true
-    if not seen:
-      ordered.add column
-  tableView.xColumns = ordered
-  tableView.noteColumnsChanged()
+  if not tableView.isNil:
+    tableView.performRestoreColumnAutosaveRecords(@records)
 
 proc draggingInfo*(tableView: TableView): TableDraggingInfo =
-  if tableView.isNil: TableDraggingInfo() else: tableView.xDraggingInfo
+  if tableView.isNil:
+    TableDraggingInfo(destinationRow: -1)
+  else:
+    tableView.xDraggingInfo
+
+proc withDropTarget*(
+    info: TableDraggingInfo, row = -1, column: TableColumn = nil
+): TableDraggingInfo =
+  result = info
+  result.destinationRow = row
+  result.destinationColumn = if column.isNil: "" else: column.identifier()
 
 proc beginDraggingRows*(
     tableView: TableView,
@@ -861,39 +864,27 @@ proc beginDraggingRows*(
 ): TableDraggingInfo =
   if tableView.isNil:
     return TableDraggingInfo()
-  var validRows: seq[int]
-  for row in rows:
-    if row in 0 ..< tableView.rowCount():
-      validRows.add row
-  result = TableDraggingInfo(
-    rows: validRows,
-    columns: @[],
-    operation: operation,
-    pasteboardName: pasteboardName,
-  )
-  tableView.xDraggingInfo = result
+  tableView.performBeginDraggingRows(@rows, operation, pasteboardName)
+
+proc beginDraggingColumns*(
+    tableView: TableView,
+    columns: openArray[TableColumn],
+    operation = tdoMove,
+    pasteboardName = DragPasteboardName,
+): TableDraggingInfo =
+  if tableView.isNil:
+    return TableDraggingInfo()
+  tableView.performBeginDraggingColumns(@columns, operation, pasteboardName)
 
 proc validateDragOperation*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
   if tableView.isNil:
     return tdoNone
-  let delegate = tableView.delegate()
-  if not delegate.isNil:
-    let operation =
-      delegate.trySendLocal(validateDragOperation(), (tableView: tableView, info: info))
-    if operation.isSome:
-      return operation.get()
-  info.operation
+  tableView.performValidateDragging(info)
 
 proc acceptDragOperation*(tableView: TableView, info: TableDraggingInfo): bool =
   if tableView.isNil:
     return false
-  let delegate = tableView.delegate()
-  if not delegate.isNil:
-    let accepted =
-      delegate.trySendLocal(acceptDragOperation(), (tableView: tableView, info: info))
-    if accepted.isSome:
-      return accepted.get()
-  info.operation != tdoNone
+  tableView.performAcceptDragging(info)
 
 proc validateDragging*(tableView: TableView, info: TableDraggingInfo): TableDragOperation =
   tableView.validateDragOperation(info)
@@ -912,8 +903,11 @@ proc clearTableCellSlots(tableView: TableView) =
     return
   for slot in tableView.xCellSlots:
     if not slot.view.isNil:
-      slot.view.removeFromSuperview()
+      tableView.enqueueReusableCellView(slot.column.reuseIdentifier(), slot.view)
   tableView.xCellSlots.setLen(0)
+
+proc recycleVisibleCellViews*(tableView: TableView) =
+  tableView.clearTableCellSlots()
 
 proc hasHostedCell(tableView: TableView, row: int, column: TableColumn): bool =
   not tableView.isNil and tableView.xCellSlots.findCellSlot(row, column) >= 0
@@ -945,7 +939,7 @@ proc syncVisibleTableCells(tableView: TableView) =
         nextSlots.add TableCellSlot(row: row, column: column, view: cellView)
   for index, slot in previousSlots:
     if not used[index] and not slot.view.isNil:
-      slot.view.removeFromSuperview()
+      tableView.enqueueReusableCellView(slot.column.reuseIdentifier(), slot.view)
   tableView.xCellSlots = nextSlots
 
 proc listItemStyle(
@@ -995,10 +989,19 @@ proc drawTableRow(
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
     return
+  tableView.syncTableScrollChrome()
   tableView.clearTableCellSlots()
   tableView.invalidateIntrinsicContentSize()
   tableView.setNeedsLayout()
   tableView.setNeedsDisplay(true)
+
+proc syncTableScrollChrome(tableView: TableView) =
+  if tableView.isNil:
+    return
+  let scrollView = ListView(tableView).scrollView()
+  if scrollView.isNil:
+    return
+  scrollView.scrollerInsets = initEdgeInsets(tableView.tableHeaderHeight(), 0.0, 0.0, 0.0)
 
 proc detachColumn(column: TableColumn) =
   if column.isNil or column.xTableView.isNil:
@@ -1048,6 +1051,477 @@ proc removeColumn*(tableView: TableView, column: TableColumn) =
 proc removeColumn*(tableView: TableView, identifier: string) =
   tableView.removeColumnAtIndex(tableView.columnIndex(identifier))
 
+proc newTableColumnAutosaveAdapter*(): TableColumnAutosaveAdapter =
+  result = TableColumnAutosaveAdapter()
+  result.xRecords = initTable[string, seq[TableColumnAutosaveRecord]]()
+
+proc saveColumnAutosaveRecords*(
+    adapter: TableColumnAutosaveAdapter, name: string,
+    records: openArray[TableColumnAutosaveRecord],
+) =
+  if adapter.isNil or name.len == 0:
+    return
+  adapter.xRecords[name] = @records
+
+proc columnAutosaveRecords*(
+    adapter: TableColumnAutosaveAdapter, name: string
+): seq[TableColumnAutosaveRecord] =
+  if adapter.isNil or name.len == 0:
+    return @[]
+  adapter.xRecords.getOrDefault(name, @[])
+
+proc saveColumnAutosaveState*(
+    tableView: TableView, adapter: TableColumnAutosaveAdapter
+) =
+  if tableView.isNil or adapter.isNil or tableView.autosaveName().len == 0:
+    return
+  adapter.saveColumnAutosaveRecords(
+    tableView.autosaveName(), tableView.columnAutosaveRecords()
+  )
+
+proc restoreColumnAutosaveState*(
+    tableView: TableView, adapter: TableColumnAutosaveAdapter
+) =
+  if tableView.isNil or adapter.isNil or tableView.autosaveName().len == 0:
+    return
+  tableView.restoreColumnAutosaveRecords(
+    adapter.columnAutosaveRecords(tableView.autosaveName())
+  )
+
+proc selectionPersistenceString*(tableView: TableView): string =
+  if tableView.isNil:
+    ""
+  else:
+    tableView.performSelectionPersistenceString()
+
+proc restoreSelectionPersistenceString*(tableView: TableView, value: string) =
+  if not tableView.isNil:
+    tableView.performRestoreSelectionPersistenceString(value)
+
+proc drawTableHeader*(tableView: TableView, context: DrawContext) =
+  if tableView.isNil or context.isNil or not tableView.showsHeader():
+    return
+  let headerRect = tableView.tableHeaderRect()
+  if headerRect.isEmpty:
+    return
+  discard context.addRenderRectangle(
+    context.renderRectFor(headerRect),
+    fill(initColor(0.88, 0.90, 0.94, 1.0)),
+    initColor(0.60, 0.64, 0.70, 1.0),
+    1.0'f32,
+  )
+  for column in tableView.visibleColumns():
+    let rect = tableView.tableHeaderColumnRect(column)
+    if rect.isEmpty:
+      continue
+    var background = initColor(0.90, 0.92, 0.96, 1.0)
+    if column == tableView.xPressedColumn:
+      background = initColor(0.76, 0.82, 0.91, 1.0)
+    elif column == tableView.xHoveredColumn:
+      background = initColor(0.84, 0.88, 0.95, 1.0)
+    discard context.addRenderRectangle(
+      context.renderRectFor(rect),
+      fill(background),
+      initColor(0.62, 0.66, 0.72, 1.0),
+      1.0'f32,
+    )
+    var title = column.title()
+    case column.sortDirection()
+    of tsdAscending:
+      title.add " ^"
+    of tsdDescending:
+      title.add " v"
+    of tsdNone:
+      discard
+    context.addText(
+      initRect(rect.origin.x + 8.0'f32, rect.origin.y, max(rect.size.width - 16.0'f32, 0.0'f32), rect.size.height),
+      title,
+      initColor(0.14, 0.18, 0.25, 1.0),
+      column.alignment(),
+    )
+
+protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
+  method performColumnAtPoint(tableView: TableView, point: Point): TableColumn =
+    if tableView.isNil:
+      return nil
+    var x = 0.0'f32
+    for column in tableView.columns:
+      if column.hidden():
+        continue
+      let nextX = x + column.width()
+      if point.x >= x and point.x < nextX:
+        return column
+      x = nextX
+
+  method performHeaderHitTest(
+      tableView: TableView, point: Point
+  ): TableHeaderHit =
+    result = TableHeaderHit(columnIndex: -1, part: thpNone)
+    if tableView.isNil or not tableView.tableHeaderRect().contains(point):
+      return
+    for index, column in tableView.xColumns:
+      let rect = tableView.tableHeaderColumnRect(column)
+      if rect.contains(point):
+        result.column = column
+        result.columnIndex = index
+        result.rect = rect
+        if column.resizePolicy() == tcrResizable and point.x >= rect.maxX - 5.0'f32:
+          result.part = thpResizeHandle
+        else:
+          result.part = thpColumn
+        return
+
+  method performResizeColumn(
+      tableView: TableView, column: TableColumn, width: float32
+  ) =
+    if tableView.isNil or column.isNil or column.tableView() != tableView:
+      return
+    if column.resizePolicy() == tcrFixed:
+      return
+    column.width = width
+
+  method performMoveColumn(tableView: TableView, fromIndex, toIndex: int) =
+    if tableView.isNil or fromIndex notin 0 ..< tableView.xColumns.len:
+      return
+    let boundedTo = max(0, min(toIndex, tableView.xColumns.len - 1))
+    if fromIndex == boundedTo:
+      return
+    let column = tableView.xColumns[fromIndex]
+    tableView.xColumns.delete(fromIndex)
+    tableView.xColumns.insert(column, boundedTo)
+    tableView.noteColumnsChanged()
+
+  method performRequestSort(
+      tableView: TableView, column: TableColumn, direction: TableSortDirection
+  ) =
+    if tableView.isNil or column.isNil or column.tableView() != tableView:
+      return
+    for current in tableView.xColumns.mitems:
+      if current != column and current.xSortDirection != tsdNone:
+        current.xSortDirection = tsdNone
+    column.sortDirection = direction
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      discard delegate.sendLocalIfHandled(
+        sortDescriptorsDidChange(),
+        (tableView: tableView, column: column, direction: direction),
+      )
+
+  method performHeaderMouseDown(tableView: TableView, event: MouseEvent): bool =
+    if tableView.isNil or event.button != mbPrimary:
+      return false
+    let hit = tableView.tableHeaderHitTest(event.location)
+    if hit.part == thpNone or hit.column.isNil:
+      return false
+    tableView.xHeaderTrackingPart = hit.part
+    tableView.xTrackingColumn = hit.column
+    tableView.xTrackingColumnIndex = hit.columnIndex
+    tableView.xPressedColumn = hit.column
+    tableView.xDragStartPoint = event.location
+    tableView.xDragStartWidth = hit.column.width()
+    tableView.setNeedsDisplay(true)
+    true
+
+  method performHeaderMouseDragged(tableView: TableView, event: MouseEvent): bool =
+    if tableView.isNil or tableView.xTrackingColumn.isNil:
+      return false
+    case tableView.xHeaderTrackingPart
+    of thpResizeHandle:
+      tableView.resizeColumn(
+        tableView.xTrackingColumn,
+        tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x,
+      )
+    of thpColumn:
+      let hit = tableView.tableHeaderHitTest(event.location)
+      if hit.columnIndex >= 0 and hit.columnIndex != tableView.xTrackingColumnIndex:
+        tableView.moveColumn(tableView.xTrackingColumnIndex, hit.columnIndex)
+        tableView.xTrackingColumnIndex = hit.columnIndex
+    of thpNone:
+      discard
+    true
+
+  method performHeaderMouseUp(tableView: TableView, event: MouseEvent): bool =
+    if tableView.isNil or tableView.xTrackingColumn.isNil:
+      return false
+    let
+      hit = tableView.tableHeaderHitTest(event.location)
+      clickedColumn = tableView.xTrackingColumn
+      clickedPart = tableView.xHeaderTrackingPart
+      moved = abs(event.location.x - tableView.xDragStartPoint.x) > 3.0'f32
+    tableView.xHeaderTrackingPart = thpNone
+    tableView.xTrackingColumn = nil
+    tableView.xTrackingColumnIndex = -1
+    tableView.xPressedColumn = nil
+    if clickedPart == thpColumn and not moved and hit.column == clickedColumn:
+      let nextDirection =
+        if clickedColumn.sortDirection() == tsdAscending: tsdDescending else: tsdAscending
+      tableView.requestSort(clickedColumn, nextDirection)
+    tableView.setNeedsDisplay(true)
+    true
+
+  method performHeaderMouseMoved(tableView: TableView, event: MouseEvent): bool =
+    if tableView.isNil:
+      return false
+    let column = tableView.tableHeaderHitTest(event.location).column
+    if tableView.xHoveredColumn == column:
+      return column != nil
+    tableView.xHoveredColumn = column
+    tableView.setNeedsDisplay(true)
+    column != nil
+
+protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
+  method canSelectCell(tableView: TableView, row: int, column: TableColumn): bool =
+    tableView.validCell(row, column)
+
+  method performSelectCell(tableView: TableView, row: int, column: TableColumn) =
+    if not tableView.canSelectCell(row, column):
+      return
+    ListView(tableView).selectedIndex = row
+    if tableView.xAllowsColumnSelection:
+      tableView.xSelectedColumns = @[column]
+    tableView.xClickedRow = row
+    tableView.xClickedColumn = column
+    tableView.setNeedsDisplay(true)
+
+  method performSetSelectedColumns(
+      tableView: TableView, columns: seq[TableColumn]
+  ) =
+    if tableView.isNil or not tableView.xAllowsColumnSelection:
+      return
+    var next: seq[TableColumn]
+    for column in columns:
+      if column.isNil or column.tableView() != tableView:
+        continue
+      var seen = false
+      for existing in next:
+        if existing == column:
+          seen = true
+      if not seen:
+        next.add column
+    tableView.xSelectedColumns = next
+    tableView.setNeedsDisplay(true)
+
+  method performSelectionPersistenceString(tableView: TableView): string =
+    if tableView.isNil:
+      return ""
+    var first = true
+    for row in tableView.selectedIndexes():
+      if not first:
+        result.add ","
+      result.add $row
+      first = false
+
+  method performRestoreSelectionPersistenceString(tableView: TableView, value: string) =
+    if tableView.isNil:
+      return
+    var rows: seq[int]
+    var token = ""
+    for ch in value:
+      if ch == ',':
+        if token.len > 0:
+          try:
+            rows.add parseInt(token)
+          except ValueError:
+            discard
+        token.setLen(0)
+      else:
+        token.add ch
+    if token.len > 0:
+      try:
+        rows.add parseInt(token)
+      except ValueError:
+        discard
+    tableView.selectedIndexes = rows
+
+protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
+  method canBeginEditingCell(
+      tableView: TableView, row: int, column: TableColumn
+  ): bool =
+    if not tableView.validCell(row, column):
+      return false
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      let allowed = delegate.trySendLocal(
+        shouldEditCell(), (tableView: tableView, row: row, column: column)
+      )
+      if allowed.isSome:
+        return allowed.get()
+    true
+
+  method performBeginEditingCell(
+      tableView: TableView, row: int, column: TableColumn
+  ): bool =
+    if not tableView.canBeginEditingCell(row, column):
+      return false
+    tableView.xEditing = TableEditingState(row: row, column: column, active: true)
+    tableView.selectCell(row, column)
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      discard delegate.sendLocalIfHandled(
+        didBeginEditingCell(), (tableView: tableView, row: row, column: column)
+      )
+    true
+
+  method performCommitEditingCell(tableView: TableView, value: string): bool =
+    if tableView.isNil or not tableView.xEditing.active:
+      return false
+    let editing = tableView.xEditing
+    tableView.xEditing = TableEditingState(row: -1)
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      discard delegate.sendLocalIfHandled(
+        didCommitEditingCell(),
+        (tableView: tableView, row: editing.row, column: editing.column, value: value),
+      )
+    tableView.setNeedsDisplay(true)
+    true
+
+  method performCancelEditingCell(tableView: TableView): bool =
+    if tableView.isNil or not tableView.xEditing.active:
+      return false
+    let editing = tableView.xEditing
+    tableView.xEditing = TableEditingState(row: -1)
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      discard delegate.sendLocalIfHandled(
+        didCancelEditingCell(),
+        (tableView: tableView, row: editing.row, column: editing.column),
+      )
+    tableView.setNeedsDisplay(true)
+    true
+
+protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
+  method performBeginDraggingRows(
+      tableView: TableView,
+      rows: seq[int],
+      operation: TableDragOperation,
+      pasteboardName: string,
+  ): TableDraggingInfo =
+    if tableView.isNil:
+      return TableDraggingInfo()
+    var validRows: seq[int]
+    for row in rows:
+      if row in 0 ..< tableView.rowCount():
+        validRows.add row
+    result = TableDraggingInfo(
+      rows: validRows,
+      columns: @[],
+      operation: operation,
+      pasteboardName: pasteboardName,
+      destinationRow: -1,
+    )
+    tableView.xDraggingInfo = result
+    discard pasteboardWithName(pasteboardName).setString(
+      PasteboardTypeString, tableView.selectionPersistenceString()
+    )
+
+  method performBeginDraggingColumns(
+      tableView: TableView,
+      columns: seq[TableColumn],
+      operation: TableDragOperation,
+      pasteboardName: string,
+  ): TableDraggingInfo =
+    if tableView.isNil:
+      return TableDraggingInfo()
+    var identifiers: seq[string]
+    for column in columns:
+      if not column.isNil and column.tableView() == tableView:
+        identifiers.add column.identifier()
+    result = TableDraggingInfo(
+      rows: @[],
+      columns: identifiers,
+      operation: operation,
+      pasteboardName: pasteboardName,
+      destinationRow: -1,
+    )
+    tableView.xDraggingInfo = result
+    var payload = ""
+    for index, identifier in identifiers:
+      if index > 0:
+        payload.add ","
+      payload.add identifier
+    discard pasteboardWithName(pasteboardName).setString(PasteboardTypeString, payload)
+
+  method performValidateDragging(
+      tableView: TableView, info: TableDraggingInfo
+  ): TableDragOperation =
+    if tableView.isNil:
+      return tdoNone
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      let operation = delegate.trySendLocal(
+        validateDragOperation(), (tableView: tableView, info: info)
+      )
+      if operation.isSome:
+        return operation.get()
+    info.operation
+
+  method performAcceptDragging(
+      tableView: TableView, info: TableDraggingInfo
+  ): bool =
+    if tableView.isNil:
+      return false
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      let accepted = delegate.trySendLocal(
+        acceptDragOperation(), (tableView: tableView, info: info)
+      )
+      if accepted.isSome:
+        return accepted.get()
+    info.operation != tdoNone
+
+protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
+  method performColumnAutosaveRecords(
+      tableView: TableView
+  ): seq[TableColumnAutosaveRecord] =
+    if tableView.isNil:
+      return @[]
+    for column in tableView.xColumns:
+      result.add TableColumnAutosaveRecord(
+        identifier: column.identifier(),
+        width: column.width(),
+        hidden: column.hidden(),
+        sortDirection: column.sortDirection(),
+      )
+
+  method performRestoreColumnAutosaveRecords(
+      tableView: TableView, records: seq[TableColumnAutosaveRecord]
+  ) =
+    if tableView.isNil:
+      return
+    var ordered: seq[TableColumn]
+    for record in records:
+      let column = tableView.columnWithIdentifier(record.identifier)
+      if column.isNil:
+        continue
+      column.xWidth = record.width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+      column.xHidden = record.hidden
+      column.xSortDirection = record.sortDirection
+      ordered.add column
+    for column in tableView.xColumns:
+      var seen = false
+      for existing in ordered:
+        if existing == column:
+          seen = true
+      if not seen:
+        ordered.add column
+    tableView.xColumns = ordered
+    tableView.noteColumnsChanged()
+
+protocol DefaultTableViewDrawing of ViewDrawingProtocol:
+  method draw(tableView: TableView, context: DrawContext) =
+    if tableView.isNil or context.isNil or tableView.bounds().isEmpty:
+      return
+    discard context.addRenderRectangle(
+      context.renderRectFor(tableView.bounds()),
+      fill(initColor(0.98, 0.985, 0.995, 1.0)),
+      initColor(0.66, 0.68, 0.73, 1.0),
+      1.0'f32,
+      0.0'f32,
+      clips = true,
+    )
+    tableView.drawTableHeader(context)
+
 proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   initListViewFields(ListView(tableView), frame = frame)
   tableView.xRowCount = 0
@@ -1056,6 +1530,15 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xClickedRow = -1
   tableView.xAllowsColumnSelection = false
   tableView.xEditing = TableEditingState(row: -1)
+  tableView.xTrackingColumnIndex = -1
+  tableView.xReusableCellViews = initTable[string, seq[View]]()
+  tableView.syncTableScrollChrome()
+  discard tableView.withProtocol(DefaultTableViewColumnBehavior)
+  discard tableView.withProtocol(DefaultTableViewSelectionBehavior)
+  discard tableView.withProtocol(DefaultTableViewEditingBehavior)
+  discard tableView.withProtocol(DefaultTableViewDraggingBehavior)
+  discard tableView.withProtocol(DefaultTableViewPersistenceBehavior)
+  discard tableView.withProtocol(DefaultTableViewDrawing)
   discard tableView.withProtocol(TableViewListDataSource)
   discard tableView.withProtocol(TableViewListDelegate)
   ListView(tableView).dataSource = DynamicAgent(tableView)

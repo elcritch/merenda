@@ -1,6 +1,10 @@
+import std/[options, strutils]
+
 import sigils/core
 
 import ./tableviews
+import ../app/pasteboards
+import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
 
@@ -17,10 +21,38 @@ type
     item*: OutlineItem
     level*: int
 
+  OutlineDisclosureHit* = object
+    row*: int
+    item*: OutlineItem
+    rect*: Rect
+
   OutlineView* = ref object of TableView
     xOutlineItems: seq[OutlineItem]
     xExpanded: seq[string]
     xOutlineColumn: TableColumn
+    xOutlineDataSource: DynamicAgent
+    xOutlineDelegate: DynamicAgent
+
+protocol OutlineViewDataSource {.selectorScope: protocol.}:
+  method numberOfChildren*(
+    outlineView: OutlineView, parentIdentifier: string
+  ): int {.optional.}
+  method childIdentifier*(
+    outlineView: OutlineView, parentIdentifier: string, index: int
+  ): string {.optional.}
+  method outlineItem*(
+    outlineView: OutlineView, identifier: string
+  ): OutlineItem {.optional.}
+
+protocol OutlineViewDelegate {.selectorScope: protocol.}:
+  method shouldExpandItem*(
+    outlineView: OutlineView, identifier: string
+  ): bool {.optional.}
+  method didExpandItem*(outlineView: OutlineView, identifier: string) {.optional.}
+  method shouldCollapseItem*(
+    outlineView: OutlineView, identifier: string
+  ): bool {.optional.}
+  method didCollapseItem*(outlineView: OutlineView, identifier: string) {.optional.}
 
 proc containsIdentifier(values: openArray[string], identifier: string): bool =
   for value in values:
@@ -41,10 +73,55 @@ proc isItemExpanded*(outlineView: OutlineView, identifier: string): bool
 proc hasChildren(outlineView: OutlineView, identifier: string): bool =
   if outlineView.isNil:
     return false
+  let source = outlineView.xOutlineDataSource
+  if not source.isNil:
+    let count = source.trySendLocal(
+      numberOfChildren(), (outlineView: outlineView, parentIdentifier: identifier)
+    )
+    if count.isSome:
+      return count.get() > 0
   for item in outlineView.xOutlineItems:
     if item.parentIdentifier == identifier:
       return true
   false
+
+proc sourcedOutlineItem(outlineView: OutlineView, identifier: string): OutlineItem =
+  if outlineView.isNil or outlineView.xOutlineDataSource.isNil:
+    return OutlineItem()
+  let item = outlineView.xOutlineDataSource.trySendLocal(
+    outlineItem(), (outlineView: outlineView, identifier: identifier)
+  )
+  if item.isSome:
+    item.get()
+  else:
+    OutlineItem()
+
+proc childrenForParent(outlineView: OutlineView, parentIdentifier: string): seq[OutlineItem] =
+  if outlineView.isNil:
+    return @[]
+  let source = outlineView.xOutlineDataSource
+  if not source.isNil:
+    let count = source.trySendLocal(
+      numberOfChildren(),
+      (outlineView: outlineView, parentIdentifier: parentIdentifier),
+    )
+    if count.isSome:
+      for index in 0 ..< max(count.get(), 0):
+        let identifier = source.trySendLocal(
+          childIdentifier(),
+          (outlineView: outlineView, parentIdentifier: parentIdentifier, index: index),
+        )
+        if identifier.isNone:
+          continue
+        let item = source.trySendLocal(
+          outlineItem(), (outlineView: outlineView, identifier: identifier.get())
+        )
+        if item.isSome:
+          result.add item.get()
+      return
+  for item in outlineView.xOutlineItems:
+    if item.parentIdentifier == parentIdentifier:
+      result.add item
 
 proc appendVisibleRows(
     outlineView: OutlineView,
@@ -52,9 +129,7 @@ proc appendVisibleRows(
     level: int,
     rows: var seq[OutlineRow],
 ) =
-  for item in outlineView.xOutlineItems:
-    if item.parentIdentifier != parentIdentifier:
-      continue
+  for item in outlineView.childrenForParent(parentIdentifier):
     rows.add OutlineRow(item: item, level: level)
     if outlineView.isItemExpanded(item.identifier):
       outlineView.appendVisibleRows(item.identifier, level + 1, rows)
@@ -82,6 +157,33 @@ proc `outlineColumn=`*(outlineView: OutlineView, column: TableColumn) =
   if not column.isNil and column.tableView() != TableView(outlineView):
     TableView(outlineView).addColumn(column)
   TableView(outlineView).reloadData()
+
+proc outlineDataSource*(outlineView: OutlineView): DynamicAgent =
+  if outlineView.isNil: nil else: outlineView.xOutlineDataSource
+
+proc `outlineDataSource=`*(outlineView: OutlineView, dataSource: DynamicAgent) =
+  if outlineView.isNil or outlineView.xOutlineDataSource == dataSource:
+    return
+  if not dataSource.isNil:
+    discard dataSource.adopt(OutlineViewDataSource)
+  outlineView.xOutlineDataSource = dataSource
+  TableView(outlineView).reloadData()
+
+proc `outlineDataSource=`*(outlineView: OutlineView, dataSource: Responder) =
+  outlineView.outlineDataSource = DynamicAgent(dataSource)
+
+proc outlineDelegate*(outlineView: OutlineView): DynamicAgent =
+  if outlineView.isNil: nil else: outlineView.xOutlineDelegate
+
+proc `outlineDelegate=`*(outlineView: OutlineView, delegate: DynamicAgent) =
+  if outlineView.isNil or outlineView.xOutlineDelegate == delegate:
+    return
+  if not delegate.isNil:
+    discard delegate.adopt(OutlineViewDelegate)
+  outlineView.xOutlineDelegate = delegate
+
+proc `outlineDelegate=`*(outlineView: OutlineView, delegate: Responder) =
+  outlineView.outlineDelegate = DynamicAgent(delegate)
 
 proc outlineItems*(outlineView: OutlineView): seq[OutlineItem] =
   if outlineView.isNil: @[] else: outlineView.xOutlineItems
@@ -135,9 +237,10 @@ proc levelForRow*(outlineView: OutlineView, row: int): int =
 
 proc isItemExpandable*(outlineView: OutlineView, identifier: string): bool =
   let index = outlineView.itemIndex(identifier)
-  if index < 0:
-    return false
-  outlineView.xOutlineItems[index].expandable or outlineView.hasChildren(identifier)
+  if index >= 0:
+    return outlineView.xOutlineItems[index].expandable or outlineView.hasChildren(identifier)
+  let item = outlineView.sourcedOutlineItem(identifier)
+  item.expandable or outlineView.hasChildren(identifier)
 
 proc isItemExpanded*(outlineView: OutlineView, identifier: string): bool =
   (not outlineView.isNil) and outlineView.xExpanded.containsIdentifier(identifier)
@@ -147,12 +250,28 @@ proc expandItem*(outlineView: OutlineView, identifier: string) =
     return
   if outlineView.xExpanded.containsIdentifier(identifier):
     return
+  let delegate = outlineView.outlineDelegate()
+  if not delegate.isNil:
+    let allowed =
+      delegate.trySendLocal(shouldExpandItem(), (outlineView: outlineView, identifier: identifier))
+    if allowed.isSome and not allowed.get():
+      return
   outlineView.xExpanded.add identifier
   TableView(outlineView).reloadData()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(
+      didExpandItem(), (outlineView: outlineView, identifier: identifier)
+    )
 
 proc collapseItem*(outlineView: OutlineView, identifier: string) =
   if outlineView.isNil:
     return
+  let delegate = outlineView.outlineDelegate()
+  if not delegate.isNil:
+    let allowed =
+      delegate.trySendLocal(shouldCollapseItem(), (outlineView: outlineView, identifier: identifier))
+    if allowed.isSome and not allowed.get():
+      return
   var next: seq[string]
   for value in outlineView.xExpanded:
     if value != identifier:
@@ -161,12 +280,112 @@ proc collapseItem*(outlineView: OutlineView, identifier: string) =
     return
   outlineView.xExpanded = next
   TableView(outlineView).reloadData()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(
+      didCollapseItem(), (outlineView: outlineView, identifier: identifier)
+    )
 
 proc toggleItem*(outlineView: OutlineView, identifier: string) =
   if outlineView.isItemExpanded(identifier):
     outlineView.collapseItem(identifier)
   else:
     outlineView.expandItem(identifier)
+
+proc expandedItemIdentifiers*(outlineView: OutlineView): seq[string] =
+  if outlineView.isNil: @[] else: outlineView.xExpanded
+
+proc `expandedItemIdentifiers=`*(outlineView: OutlineView, identifiers: openArray[string]) =
+  if outlineView.isNil:
+    return
+  outlineView.xExpanded = @identifiers
+  TableView(outlineView).reloadData()
+
+proc expansionPersistenceString*(outlineView: OutlineView): string =
+  if outlineView.isNil:
+    return ""
+  outlineView.xExpanded.join(",")
+
+proc restoreExpansionPersistenceString*(outlineView: OutlineView, value: string) =
+  if outlineView.isNil:
+    return
+  if value.len == 0:
+    outlineView.xExpanded.setLen(0)
+  else:
+    outlineView.xExpanded = value.split(",")
+  TableView(outlineView).reloadData()
+
+proc disclosureRectForRow*(outlineView: OutlineView, row: int): Rect =
+  if outlineView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let item = outlineView.itemAtRow(row)
+  if item.identifier.len == 0 or not outlineView.isItemExpandable(item.identifier):
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let
+    rowRect = TableView(outlineView).listItemRect(row)
+    level = outlineView.levelForRow(row)
+    size = min(rowRect.size.height, 16.0'f32)
+  initRect(
+    rowRect.origin.x + level.float32 * 16.0'f32 + 4.0'f32,
+    rowRect.origin.y + max((rowRect.size.height - size) * 0.5'f32, 0.0'f32),
+    size,
+    size,
+  )
+
+proc disclosureHitTest*(outlineView: OutlineView, point: Point): OutlineDisclosureHit =
+  if outlineView.isNil:
+    return OutlineDisclosureHit(row: -1)
+  for row in 0 ..< outlineView.rowCount():
+    let rect = outlineView.disclosureRectForRow(row)
+    if rect.contains(point):
+      return OutlineDisclosureHit(row: row, item: outlineView.itemAtRow(row), rect: rect)
+  OutlineDisclosureHit(row: -1)
+
+proc toggleItemAtPoint*(outlineView: OutlineView, point: Point): bool =
+  let hit = outlineView.disclosureHitTest(point)
+  if hit.row < 0 or hit.item.identifier.len == 0:
+    return false
+  outlineView.toggleItem(hit.item.identifier)
+  true
+
+proc handleOutlineKey*(outlineView: OutlineView, event: KeyEvent): bool =
+  if outlineView.isNil:
+    return false
+  let row = TableView(outlineView).selectedIndex()
+  if row < 0:
+    return false
+  let item = outlineView.itemAtRow(row)
+  case event.key
+  of keyArrowRight:
+    if outlineView.isItemExpandable(item.identifier) and
+        not outlineView.isItemExpanded(item.identifier):
+      outlineView.expandItem(item.identifier)
+      return true
+  of keyArrowLeft:
+    if outlineView.isItemExpanded(item.identifier):
+      outlineView.collapseItem(item.identifier)
+      return true
+  of keySpace, keyEnter:
+    if outlineView.isItemExpandable(item.identifier):
+      outlineView.toggleItem(item.identifier)
+      return true
+  else:
+    discard
+  false
+
+proc beginDraggingItems*(
+    outlineView: OutlineView,
+    identifiers: openArray[string],
+    operation = tdoMove,
+    pasteboardName = DragPasteboardName,
+): TableDraggingInfo =
+  if outlineView.isNil:
+    return TableDraggingInfo()
+  var rows: seq[int]
+  for identifier in identifiers:
+    let row = outlineView.rowForItem(identifier)
+    if row >= 0:
+      rows.add row
+  TableView(outlineView).beginDraggingRows(rows, operation, pasteboardName)
 
 proc outlineCellText(outlineView: OutlineView, row: int, column: TableColumn): string =
   let rows = outlineView.visibleOutlineRows()
