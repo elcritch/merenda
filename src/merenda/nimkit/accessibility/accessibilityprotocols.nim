@@ -122,11 +122,15 @@ protocol AccessibilityProtocol:
   method accessibilityParent*(): View {.optional.}
   method accessibilityChildren*(): seq[View] {.optional.}
   method accessibilityAttributeNames*(): seq[string] {.optional.}
-  method accessibilityAttributeValue*(attribute: string): AccessibilityValue {.optional.}
+  method accessibilityAttributeValue*(
+    attribute: string
+  ): AccessibilityValue {.optional.}
+
   method accessibilityIsAttributeSettable*(attribute: string): bool {.optional.}
   method accessibilitySetAttributeValue*(
     attribute: string, value: AccessibilityValue
   ): bool {.optional.}
+
   method accessibilityActionNames*(): seq[string] {.optional.}
   method accessibilityActionDescription*(action: string): string {.optional.}
   method accessibilityPerformAction*(action: string): bool {.optional.}
@@ -158,10 +162,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     view.xAccessibilityElement = role != arGroup
 
   method accessibilityLabel(view: View): string =
-    if view.xAccessibilityLabel.len > 0:
-      view.xAccessibilityLabel
-    else:
-      view.xIdentifier
+    if view.xAccessibilityLabel.len > 0: view.xAccessibilityLabel else: view.xIdentifier
 
   method setAccessibilityLabel(view: View, label: string) =
     if not view.isNil:
@@ -179,10 +180,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     emit view.accessibilityNotificationPosted(anValueChanged)
 
   method accessibilityHelp(view: View): string =
-    if view.xAccessibilityHelp.len > 0:
-      view.xAccessibilityHelp
-    else:
-      view.xToolTip
+    if view.xAccessibilityHelp.len > 0: view.xAccessibilityHelp else: view.xToolTip
 
   method setAccessibilityHelp(view: View, value: string) =
     if not view.isNil:
@@ -218,7 +216,10 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     view.accessibilityIgnored()
 
   method accessibilityFrame*(view: View): Rect =
-    if view.isNil: initRect(0, 0, 0, 0) else: view.rectToWindow(view.xBounds)
+    if view.isNil:
+      initRect(0, 0, 0, 0)
+    else:
+      view.rectToWindow(view.xBounds)
 
   method accessibilityParent*(view: View): View =
     if view.isNil: nil else: view.xSuperview
@@ -227,20 +228,15 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     view.accessibilityChildrenForView()
 
   method accessibilityAttributeNames*(view: View): seq[string] =
-    result = @[
-      AccessibilityAttributeRole,
-      AccessibilityAttributeLabel,
-      AccessibilityAttributeValue,
-      AccessibilityAttributeHelp,
-      AccessibilityAttributeIdentifier,
-      AccessibilityAttributeEnabled,
-      AccessibilityAttributeFocused,
-      AccessibilityAttributeSelected,
-      AccessibilityAttributeFrame,
-      AccessibilityAttributeParent,
-      AccessibilityAttributeChildren,
-      AccessibilityAttributeWindow,
-    ]
+    result =
+      @[
+        AccessibilityAttributeRole, AccessibilityAttributeLabel,
+        AccessibilityAttributeValue, AccessibilityAttributeHelp,
+        AccessibilityAttributeIdentifier, AccessibilityAttributeEnabled,
+        AccessibilityAttributeFocused, AccessibilityAttributeSelected,
+        AccessibilityAttributeFrame, AccessibilityAttributeParent,
+        AccessibilityAttributeChildren, AccessibilityAttributeWindow,
+      ]
 
   method accessibilityAttributeValue*(
       view: View, attribute: string
@@ -272,8 +268,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       initAccessibilityValue()
 
   method accessibilityIsAttributeSettable*(view: View, attribute: string): bool =
-    attribute == AccessibilityAttributeLabel or
-      attribute == AccessibilityAttributeValue or
+    attribute == AccessibilityAttributeLabel or attribute == AccessibilityAttributeValue or
       attribute == AccessibilityAttributeHelp or
       attribute == AccessibilityAttributeIdentifier
 

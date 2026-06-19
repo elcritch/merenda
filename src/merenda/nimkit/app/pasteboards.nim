@@ -113,7 +113,10 @@ const
 
 protocol PasteboardProviderProtocol:
   method pasteboardTypes*(pasteboard: Pasteboard): seq[string] {.optional.}
-  method pasteboardItemForType*(request: PasteboardTypeRequest): PasteboardItem {.optional.}
+  method pasteboardItemForType*(
+    request: PasteboardTypeRequest
+  ): PasteboardItem {.optional.}
+
   method setPasteboardItemForType*(request: PasteboardItemRequest): bool {.optional.}
   method stringForPasteboardType*(request: PasteboardTypeRequest): string {.optional.}
   method setStringForPasteboardType*(
@@ -162,10 +165,7 @@ proc initPasteboardProperty*(key: string, value: bool): PasteboardProperty =
   PasteboardProperty(key: key, value: initPasteboardPropertyValue(value))
 
 proc initPasteboardFontDescriptor*(
-    name = "",
-    family = "",
-    size = 0.0'f32,
-    traits: openArray[string] = [],
+    name = "", family = "", size = 0.0'f32, traits: openArray[string] = []
 ): PasteboardFontDescriptor =
   PasteboardFontDescriptor(name: name, family: family, size: size, traits: @traits)
 
@@ -383,9 +383,7 @@ proc clearContents*(pasteboard: Pasteboard) =
   discard pasteboard.clearProviderContents()
 
 proc declareTypes*(
-    pasteboard: Pasteboard,
-    types: openArray[string],
-    owner: DynamicAgent = nil,
+    pasteboard: Pasteboard, types: openArray[string], owner: DynamicAgent = nil
 ) =
   if pasteboard.isNil:
     return
@@ -438,9 +436,7 @@ proc dataForType*(pasteboard: Pasteboard, kind: string): string =
     return item.data
 
 proc setPropertyList*(
-    pasteboard: Pasteboard,
-    kind: string,
-    propertyList: openArray[PasteboardProperty],
+    pasteboard: Pasteboard, kind: string, propertyList: openArray[PasteboardProperty]
 ): bool =
   pasteboard.setItem(kind, initPasteboardPropertyListItem(propertyList))
 

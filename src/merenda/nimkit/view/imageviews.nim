@@ -35,10 +35,7 @@ type
     xTint: Color
 
 proc imageRectForBounds(
-    bounds: Rect,
-    imageSize: Size,
-    scaling: ImageScaling,
-    alignment: ImageAlignment,
+    bounds: Rect, imageSize: Size, scaling: ImageScaling, alignment: ImageAlignment
 ): Rect =
   if imageSize.width <= 0.0'f32 or imageSize.height <= 0.0'f32 or bounds.isEmpty:
     return initRect(bounds.origin, initSize(0.0, 0.0))
@@ -50,7 +47,8 @@ proc imageRectForBounds(
   of isScaleAxesIndependently:
     drawSize = bounds.size
   of isScaleProportionallyUpOrDown, isScaleProportionallyDown:
-    let factor = min(bounds.size.width / imageSize.width, bounds.size.height / imageSize.height)
+    let factor =
+      min(bounds.size.width / imageSize.width, bounds.size.height / imageSize.height)
     let scale =
       if scaling == isScaleProportionallyDown:
         min(factor, 1.0'f32)
@@ -156,7 +154,10 @@ protocol ImageViewAccessibility of AccessibilityProtocol:
     if imageView.xIdentifier.len > 0:
       return imageView.xIdentifier
     let image = imageView.image()
-    if image.isNil: "" else: image.name()
+    if image.isNil:
+      ""
+    else:
+      image.name()
 
 proc intrinsicContentSize*(imageView: ImageView): IntrinsicSize =
   let image = imageView.image()
@@ -165,9 +166,7 @@ proc intrinsicContentSize*(imageView: ImageView): IntrinsicSize =
   initIntrinsicSize(image.size())
 
 proc initImageViewFields*(
-    imageView: ImageView,
-    image: ImageResource = nil,
-    frame: Rect = AutoRect,
+    imageView: ImageView, image: ImageResource = nil, frame: Rect = AutoRect
 ) =
   initViewFields(imageView, frame)
   imageView.xImage = image

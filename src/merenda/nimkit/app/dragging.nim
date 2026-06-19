@@ -68,14 +68,8 @@ type
 
 const
   NoDragOperations*: DragOperations = {}
-  EveryDragOperation*: DragOperations = {
-    dgoCopy,
-    dgoLink,
-    dgoGeneric,
-    dgoPrivate,
-    dgoMove,
-    dgoDelete,
-  }
+  EveryDragOperation*: DragOperations =
+    {dgoCopy, dgoLink, dgoGeneric, dgoPrivate, dgoMove, dgoDelete}
 
 protocol DraggingSourceProtocol:
   method draggingSessionWillBegin*(info: DraggingInfo) {.optional.}
@@ -97,26 +91,16 @@ protocol DraggingDestinationProtocol:
   method autoscrollDraggingSession*(info: DraggingInfo): bool {.optional.}
 
 proc initDraggingDropTarget*(
-    kind = ddtNone,
-    row = -1,
-    column = "",
-    itemIdentifier = "",
-    rect = AutoRect,
+    kind = ddtNone, row = -1, column = "", itemIdentifier = "", rect = AutoRect
 ): DraggingDropTarget =
   DraggingDropTarget(
-    kind: kind,
-    row: row,
-    column: column,
-    itemIdentifier: itemIdentifier,
-    rect: rect,
+    kind: kind, row: row, column: column, itemIdentifier: itemIdentifier, rect: rect
   )
 
 proc initRowDropTarget*(row: int, rect = AutoRect): DraggingDropTarget =
   initDraggingDropTarget(ddtRow, row = row, rect = rect)
 
-proc initColumnDropTarget*(
-    column: string, rect = AutoRect
-): DraggingDropTarget =
+proc initColumnDropTarget*(column: string, rect = AutoRect): DraggingDropTarget =
   initDraggingDropTarget(ddtColumn, column = column, rect = rect)
 
 proc initCellDropTarget*(
@@ -127,7 +111,9 @@ proc initCellDropTarget*(
 proc initItemDropTarget*(
     itemIdentifier: string, row = -1, rect = AutoRect
 ): DraggingDropTarget =
-  initDraggingDropTarget(ddtItem, row = row, itemIdentifier = itemIdentifier, rect = rect)
+  initDraggingDropTarget(
+    ddtItem, row = row, itemIdentifier = itemIdentifier, rect = rect
+  )
 
 proc initDraggingItem*(
     pasteboardType: string,
@@ -156,9 +142,8 @@ proc initPromisedFileDraggingItem*(
   result.promisedFileName = fileName
 
 proc copyDraggingItem*(item: DraggingItem): DraggingItem =
-  result = initDraggingItem(
-    item.pasteboardType, item.pasteboardItem, item.frame, item.image
-  )
+  result =
+    initDraggingItem(item.pasteboardType, item.pasteboardItem, item.frame, item.image)
   result.promisedFileName = item.promisedFileName
 
 proc newDraggingSession*(
@@ -214,9 +199,7 @@ proc items*(session: DraggingSession): seq[DraggingItem] =
     result.add item.copyDraggingItem()
 
 proc draggingInfo*(
-    session: DraggingSession,
-    location = AutoPoint,
-    destination: DynamicAgent = nil,
+    session: DraggingSession, location = AutoPoint, destination: DynamicAgent = nil
 ): DraggingInfo =
   if session.isNil:
     return DraggingInfo()
@@ -224,11 +207,7 @@ proc draggingInfo*(
     session: session,
     pasteboard: session.xPasteboard,
     source: session.xSource,
-    destination:
-      if destination.isNil:
-        session.xDestination
-      else:
-        destination,
+    destination: if destination.isNil: session.xDestination else: destination,
     location: location,
     allowedOperations: session.xAllowedOperations,
     selectedOperations: session.xSelectedOperations,
@@ -236,9 +215,7 @@ proc draggingInfo*(
     dropTarget: session.xDropTarget,
   )
 
-proc withDropTarget*(
-    info: DraggingInfo, target: DraggingDropTarget
-): DraggingInfo =
+proc withDropTarget*(info: DraggingInfo, target: DraggingDropTarget): DraggingInfo =
   result = info
   result.dropTarget = target
   if not result.session.isNil:
@@ -278,18 +255,15 @@ proc beginDraggingSession*(
     allowedOperations = EveryDragOperation,
     pasteboardName = DragPasteboardName,
 ): DraggingSession =
-  result = newDraggingSession(
-    source, pasteboardWithName(pasteboardName), allowedOperations
-  )
+  result =
+    newDraggingSession(source, pasteboardWithName(pasteboardName), allowedOperations)
   for item in items:
     result.addDraggingItem(item)
   result.writeItemsToPasteboard()
   result.xSelectedOperations = result.sourceOperationMask(AutoPoint)
   result.xState = dssActive
   if not source.isNil:
-    discard source.sendLocalIfHandled(
-      draggingSessionWillBegin(), result.draggingInfo()
-    )
+    discard source.sendLocalIfHandled(draggingSessionWillBegin(), result.draggingInfo())
 
 proc updateDraggingSession*(
     session: DraggingSession,
@@ -314,13 +288,15 @@ proc updateDraggingSession*(
         draggingEntered(), session.draggingInfo(location, destination)
       )
       if entered.isSome:
-        session.xSelectedOperations = entered.get() * session.sourceOperationMask(location)
+        session.xSelectedOperations =
+          entered.get() * session.sourceOperationMask(location)
   elif not destination.isNil:
     let updated = destination.trySendLocal(
       draggingUpdated(), session.draggingInfo(location, destination)
     )
     if updated.isSome:
-      session.xSelectedOperations = updated.get() * session.sourceOperationMask(location)
+      session.xSelectedOperations =
+        updated.get() * session.sourceOperationMask(location)
   else:
     session.xSelectedOperations = session.sourceOperationMask(location)
 
@@ -339,11 +315,7 @@ proc performDraggingOperation*(
   if session.isNil or session.xState != dssActive:
     return false
   session.xDropTarget = dropTarget
-  let resolvedDestination =
-    if destination.isNil:
-      session.xDestination
-    else:
-      destination
+  let resolvedDestination = if destination.isNil: session.xDestination else: destination
   if resolvedDestination.isNil:
     return false
 
@@ -371,31 +343,24 @@ proc autoscrollDraggingSession*(
   if session.isNil or session.xState != dssActive:
     return false
   session.xDropTarget = dropTarget
-  let resolvedDestination =
-    if destination.isNil:
-      session.xDestination
-    else:
-      destination
+  let resolvedDestination = if destination.isNil: session.xDestination else: destination
   if resolvedDestination.isNil:
     return false
   let handled = resolvedDestination.trySendLocal(
-    autoscrollDraggingSession(),
-    session.draggingInfo(location, resolvedDestination),
+    autoscrollDraggingSession(), session.draggingInfo(location, resolvedDestination)
   )
   handled.isSome and handled.get()
 
 proc endDraggingSession*(
-    session: DraggingSession,
-    operation: DragOperations = NoDragOperations,
+    session: DraggingSession, operation: DragOperations = NoDragOperations
 ) =
   if session.isNil or session.xState notin {dssReady, dssActive}:
     return
   session.xSelectedOperations = operation
   session.xState = dssEnded
   if not session.xSource.isNil:
-    discard session.xSource.sendLocalIfHandled(
-      draggingSessionEnded(), session.draggingInfo()
-    )
+    discard
+      session.xSource.sendLocalIfHandled(draggingSessionEnded(), session.draggingInfo())
 
 proc cancelDraggingSession*(session: DraggingSession) =
   if session.isNil or session.xState notin {dssReady, dssActive}:
@@ -403,6 +368,5 @@ proc cancelDraggingSession*(session: DraggingSession) =
   session.xSelectedOperations = NoDragOperations
   session.xState = dssCancelled
   if not session.xSource.isNil:
-    discard session.xSource.sendLocalIfHandled(
-      draggingSessionEnded(), session.draggingInfo()
-    )
+    discard
+      session.xSource.sendLocalIfHandled(draggingSessionEnded(), session.draggingInfo())
