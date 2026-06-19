@@ -70,6 +70,7 @@ type
     columns*: seq[TableColumnAutosaveRecord]
     selectedRows*: seq[int]
     selectedColumns*: seq[string]
+    expandedItems*: seq[string]
 
   TableViewStateStore* = ref object of DynamicAgent
     xStates: Table[string, TableViewState]
@@ -1045,11 +1046,13 @@ proc initTableViewState*(
     columns: openArray[TableColumnAutosaveRecord] = [],
     selectedRows: openArray[int] = [],
     selectedColumns: openArray[string] = [],
+    expandedItems: openArray[string] = [],
 ): TableViewState =
   TableViewState(
     columns: @columns,
     selectedRows: @selectedRows,
     selectedColumns: @selectedColumns,
+    expandedItems: @expandedItems,
   )
 
 proc captureState*(tableView: TableView): TableViewState =

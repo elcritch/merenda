@@ -85,32 +85,6 @@ func initAccessibilityValue*(value: View): AccessibilityValue =
 func initAccessibilityValue*(value: openArray[View]): AccessibilityValue =
   AccessibilityValue(kind: avViews, viewValues: @value)
 
-func accessibilityRoleName*(role: AccessibilityRole): string =
-  case role
-  of arUnknown: "unknown"
-  of arApplication: "application"
-  of arWindow: "window"
-  of arGroup: "group"
-  of arStaticText: "staticText"
-  of arButton: "button"
-  of arCheckBox: "checkBox"
-  of arRadioButton: "radioButton"
-  of arTextField: "textField"
-  of arList: "list"
-  of arListItem: "listItem"
-  of arTable: "table"
-  of arCell: "cell"
-  of arImage: "image"
-  of arLink: "link"
-  of arMenu: "menu"
-  of arMenuItem: "menuItem"
-  of arPopupButton: "popupButton"
-  of arComboBox: "comboBox"
-  of arScrollArea: "scrollArea"
-  of arSlider: "slider"
-  of arTabGroup: "tabGroup"
-  of arTab: "tab"
-
 proc hasHiddenAncestor(view: View): bool =
   var current = view
   while not current.isNil:
@@ -273,7 +247,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
   ): AccessibilityValue =
     case attribute
     of AccessibilityAttributeRole:
-      initAccessibilityValue(view.accessibilityRole().accessibilityRoleName())
+      initAccessibilityValue($view.accessibilityRole())
     of AccessibilityAttributeLabel:
       initAccessibilityValue(view.accessibilityLabel())
     of AccessibilityAttributeValue:

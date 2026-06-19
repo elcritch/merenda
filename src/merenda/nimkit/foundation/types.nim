@@ -105,55 +105,58 @@ type
     btRadio
 
   AccessibilityRole* = enum
-    arUnknown
-    arApplication
-    arWindow
-    arGroup
-    arStaticText
-    arButton
-    arCheckBox
-    arRadioButton
-    arTextField
-    arList
-    arListItem
-    arTable
-    arCell
-    arImage
-    arLink
-    arMenu
-    arMenuItem
-    arPopupButton
-    arComboBox
-    arScrollArea
-    arSlider
-    arTabGroup
-    arTab
+    arUnknown = "unknown"
+    arApplication = "application"
+    arWindow = "window"
+    arGroup = "group"
+    arStaticText = "staticText"
+    arButton = "button"
+    arCheckBox = "checkBox"
+    arRadioButton = "radioButton"
+    arTextField = "textField"
+    arList = "list"
+    arListItem = "listItem"
+    arTable = "table"
+    arCell = "cell"
+    arOutline = "outline"
+    arOutlineRow = "outlineRow"
+    arDisclosureButton = "disclosureButton"
+    arImage = "image"
+    arLink = "link"
+    arMenu = "menu"
+    arMenuItem = "menuItem"
+    arPopupButton = "popupButton"
+    arComboBox = "comboBox"
+    arScrollArea = "scrollArea"
+    arSlider = "slider"
+    arTabGroup = "tabGroup"
+    arTab = "tab"
 
   AccessibilityTrait* = enum
-    atButton
-    atImage
-    atLink
-    atHeader
-    atSelected
-    atFocused
-    atDisabled
-    atAdjustable
-    atEditable
-    atSelectable
-    atModal
-    atUpdatesFrequently
+    atButton = "button"
+    atImage = "image"
+    atLink = "link"
+    atHeader = "header"
+    atSelected = "selected"
+    atFocused = "focused"
+    atDisabled = "disabled"
+    atAdjustable = "adjustable"
+    atEditable = "editable"
+    atSelectable = "selectable"
+    atModal = "modal"
+    atUpdatesFrequently = "updatesFrequently"
 
   AccessibilityTraits* = set[AccessibilityTrait]
 
   AccessibilityNotification* = enum
-    anCreated
-    anDestroyed
-    anLayoutChanged
-    anFocusedUIElementChanged
-    anValueChanged
-    anSelectionChanged
-    anExpandedChanged
-    anLiveRegionChanged
+    anCreated = "created"
+    anDestroyed = "destroyed"
+    anLayoutChanged = "layoutChanged"
+    anFocusedUIElementChanged = "focusedUIElementChanged"
+    anValueChanged = "valueChanged"
+    anSelectionChanged = "selectionChanged"
+    anExpandedChanged = "expandedChanged"
+    anLiveRegionChanged = "liveRegionChanged"
 
   PopupPresentation* = enum
     ppAutomatic ## Use popup windows when available and inline rendering otherwise.
