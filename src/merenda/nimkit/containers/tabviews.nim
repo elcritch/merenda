@@ -76,49 +76,49 @@ proc newTabViewItem*(label = "Tab", view: View = nil, identifier = ""): TabViewI
   initTabViewItemFields(result, label, view, identifier)
 
 proc identifier*(item: TabViewItem): string =
-  if item.isNil: "" else: item.xIdentifier
+  item.xIdentifier
 
 proc `identifier=`*(item: TabViewItem, identifier: string) =
   if not item.isNil:
     item.xIdentifier = identifier
 
 proc label*(item: TabViewItem): string =
-  if item.isNil: "" else: item.xLabel
+  item.xLabel
 
 proc `label=`*(item: TabViewItem, label: string) =
   if not item.isNil:
     item.xLabel = label
 
 proc view*(item: TabViewItem): View =
-  if item.isNil: nil else: item.xView
+  item.xView
 
 proc `view=`*(item: TabViewItem, view: View) =
   if not item.isNil:
     item.xView = view
 
 proc enabled*(item: TabViewItem): bool =
-  item.isNil or item.xEnabled
+  item.xEnabled
 
 proc `enabled=`*(item: TabViewItem, enabled: bool) =
   if not item.isNil:
     item.xEnabled = enabled
 
 proc toolTip*(item: TabViewItem): string =
-  if item.isNil: "" else: item.xToolTip
+  item.xToolTip
 
 proc `toolTip=`*(item: TabViewItem, toolTip: string) =
   if not item.isNil:
     item.xToolTip = toolTip
 
 proc userInfo*(item: TabViewItem): DynamicAgent =
-  if item.isNil: nil else: item.xUserInfo
+  item.xUserInfo
 
 proc `userInfo=`*(item: TabViewItem, userInfo: DynamicAgent) =
   if not item.isNil:
     item.xUserInfo = userInfo
 
 proc len*(tabView: TabView): int =
-  if tabView.isNil: 0 else: tabView.xItems.len
+  tabView.xItems.len
 
 proc items*(tabView: TabView): lent seq[TabViewItem] =
   tabView.xItems
@@ -127,7 +127,7 @@ proc `[]`*(tabView: TabView, index: Natural): TabViewItem =
   tabView.xItems[index]
 
 proc delegate*(tabView: TabView): DynamicAgent =
-  if tabView.isNil: nil else: tabView.xDelegate
+  tabView.xDelegate
 
 proc `delegate=`*(tabView: TabView, delegate: DynamicAgent) =
   if not tabView.isNil:
@@ -137,7 +137,7 @@ proc `delegate=`*(tabView: TabView, delegate: Responder) =
   tabView.delegate = DynamicAgent(delegate)
 
 proc selectedIndex*(tabView: TabView): int =
-  if tabView.isNil: -1 else: tabView.xSelectedIndex
+  tabView.xSelectedIndex
 
 proc selectedTabViewItem*(tabView: TabView): TabViewItem =
   if tabView.isNil:
@@ -148,7 +148,7 @@ proc selectedTabViewItem*(tabView: TabView): TabViewItem =
   tabView.xItems[index]
 
 proc tabPosition*(tabView: TabView): TabPosition =
-  if tabView.isNil: tpTop else: tabView.xTabPosition
+  tabView.xTabPosition
 
 proc `tabPosition=`*(tabView: TabView, position: TabPosition) =
   if tabView.isNil or tabView.xTabPosition == position:
