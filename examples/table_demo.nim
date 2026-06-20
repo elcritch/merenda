@@ -370,17 +370,17 @@ activateConstraints:
   table[atTop] == title[atBottom] + 20.0
   table[atLeft] == title[atLeft]
   table[atRight] == detailTitle[atLeft] - 22.0
-  table[atBottom] == root[atBottom] - 28.0
+  table[atBottom] == root[atBottom] - 2'em
   detailTitle[atTop] == table[atTop] + 4.0
   detailTitle[atRight] == title[atRight]
   detailTitle[atWidth] == SidebarWidth
-  detail[atTop] == detailTitle[atBottom] + 10.0
+  detail[atTop] == detailTitle[atBottom] + 1'em
   detail[atLeft] == detailTitle[atLeft]
   detail[atRight] == detailTitle[atRight]
-  activityTitle[atTop] == detail[atBottom] + 28.0
+  activityTitle[atTop] == detail[atBottom] + 1'em
   activityTitle[atLeft] == detailTitle[atLeft]
   activityTitle[atRight] == detailTitle[atRight]
-  activity[atTop] == activityTitle[atBottom] + 10.0
+  activity[atTop] == activityTitle[atBottom] + 1'em
   activity[atLeft] == detailTitle[atLeft]
   activity[atRight] == detailTitle[atRight]
 
