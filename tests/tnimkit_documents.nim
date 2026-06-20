@@ -252,6 +252,34 @@ suite "nimkit documents":
     check controller.removeRecentDocumentUrl("file:///tmp/Second.txt")
     check controller.recentDocumentCount == 0
 
+  test "document controller reopens a file document after its window was closed":
+    let
+      app = newApplication()
+      controller = FileDocumentController()
+
+    fileEvents = @[]
+    controller.initDocumentController(app)
+    discard controller.withProtocol(FileDocumentControllerCreation)
+
+    let opened = controller.openDocument("file:///tmp/Reopen.txt", app = app)
+    check opened.windowControllerCount == 1
+    let firstWindow = opened.windowControllers()[0].windowOrNil()
+    check not firstWindow.isNil
+    check app.keyWindow == firstWindow
+
+    firstWindow.close()
+    check firstWindow.isClosed
+    check opened.windowControllerCount == 1
+
+    let reopened = controller.openDocument("file:///tmp/Reopen.txt", app = app)
+    check reopened == opened
+    check opened.windowControllerCount == 1
+    let secondWindow = opened.windowControllers()[0].windowOrNil()
+    check not secondWindow.isNil
+    check secondWindow != firstWindow
+    check not secondWindow.isClosed
+    check app.keyWindow == secondWindow
+
   test "document controller reviews unsaved documents before close all":
     let
       app = newApplication()
