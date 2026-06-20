@@ -250,27 +250,27 @@ proc `firstBaselineOffset=`*(view: View, offset: float32) =
 proc layoutValue*(view: View, attribute: LayoutAttribute): float32 =
   let rect = view.alignmentRect()
   case attribute
-  of latLeft, latLeading:
+  of atLeft, atLeading:
     rect.minX
-  of latRight, latTrailing:
+  of atRight, atTrailing:
     rect.maxX
-  of latTop:
+  of atTop:
     rect.minY
-  of latBottom:
+  of atBottom:
     rect.maxY
-  of latWidth:
+  of atWidth:
     rect.size.width
-  of latHeight:
+  of atHeight:
     rect.size.height
-  of latCenterX:
+  of atCenterX:
     rect.minX + rect.size.width / 2.0'f32
-  of latCenterY:
+  of atCenterY:
     rect.minY + rect.size.height / 2.0'f32
-  of latLastBaseline:
+  of atLastBaseline:
     rect.maxY - view.lastBaselineOffset()
-  of latFirstBaseline:
+  of atFirstBaseline:
     rect.minY + view.firstBaselineOffset()
-  of latNotAnAttribute:
+  of atNotAnAttribute:
     0.0'f32
 
 proc intrinsicContentSize*(view: View): IntrinsicSize =

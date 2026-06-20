@@ -14,18 +14,6 @@ type
 
   LayoutEdges* = set[LayoutEdge]
 
-  LayoutAnchor* = enum
-    anLeft
-    anRight
-    anLeading
-    anTrailing
-    anTop
-    anBottom
-    anCenterX
-    anCenterY
-    anWidth
-    anHeight
-
   LayoutXAxisAnchor* = object
     xItem: View
     xAttribute: LayoutAttribute
@@ -231,60 +219,55 @@ proc initDimensionAnchor(
 ): LayoutDimensionAnchor =
   LayoutDimensionAnchor(xItem: item, xAttribute: attribute, xOffset: offset)
 
-func anchorAttribute*(anchor: LayoutAnchor): LayoutAttribute =
-  case anchor
-  of anLeft:
-    latLeft
-  of anLeading:
-    latLeading
-  of anTrailing:
-    latTrailing
-  of anRight:
-    latRight
-  of anCenterX:
-    latCenterX
-  of anTop, anBottom:
-    if anchor == anTop: latTop else: latBottom
-  of anCenterY:
-    latCenterY
-  of anWidth:
-    latWidth
-  of anHeight:
-    latHeight
+const
+  ViewXAxisAnchors = {atLeft, atRight, atLeading, atTrailing, atCenterX}
+  ViewYAxisAnchors = {atTop, atBottom, atCenterY}
 
-proc `[]`*(view: View, anchor: static[LayoutAnchor]): auto =
-  when anchor in {anLeft, anRight, anLeading, anTrailing, anCenterX}:
-    return initXAxisAnchor(view, anchorAttribute(anchor))
-  elif anchor in {anTop, anBottom, anCenterY}:
-    return initYAxisAnchor(view, anchorAttribute(anchor))
+proc `[]`*(view: View, anchor: static[LayoutAttribute]): auto =
+  when anchor in ViewXAxisAnchors:
+    return initXAxisAnchor(view, anchor)
+  elif anchor in ViewYAxisAnchors:
+    return initYAxisAnchor(view, anchor)
+  elif anchor in {atWidth, atHeight}:
+    return initDimensionAnchor(view, anchor)
   else:
-    return initDimensionAnchor(view, anchorAttribute(anchor))
+    {.
+      error:
+        "Invalid LayoutAttribute in view[] indexing; use one of atLeft, atRight, atLeading, atTrailing, atTop, atBottom, atCenterX, atCenterY, atWidth, atHeight."
+    .}
 
-proc `[]`*(guide: LayoutGuide, anchor: static[LayoutAnchor]): auto =
+proc `[]`*(guide: LayoutGuide, anchor: static[LayoutAttribute]): auto =
   let offset =
     case anchor
-    of anLeft, anLeading:
+    of atLeft, atLeading:
       guide.xInsets.left
-    of anRight, anTrailing:
+    of atRight, atTrailing:
       -guide.xInsets.right
-    of anTop:
+    of atTop:
       guide.xInsets.top
-    of anBottom:
+    of atBottom:
       -guide.xInsets.bottom
-    of anCenterX:
+    of atCenterX:
       (guide.xInsets.left - guide.xInsets.right) / 2.0
-    of anCenterY:
+    of atCenterY:
       (guide.xInsets.top - guide.xInsets.bottom) / 2.0
-    of anWidth:
+    of atWidth:
       -guide.xInsets.horizontal
-    of anHeight:
+    of atHeight:
       -guide.xInsets.vertical
-  when anchor in {anLeft, anRight, anLeading, anTrailing, anCenterX}:
-    return initXAxisAnchor(guide.xOwningView, anchorAttribute(anchor), offset)
-  elif anchor in {anTop, anBottom, anCenterY}:
-    return initYAxisAnchor(guide.xOwningView, anchorAttribute(anchor), offset)
+    else:
+      0.0'f32
+  when anchor in ViewXAxisAnchors:
+    return initXAxisAnchor(guide.xOwningView, anchor, offset)
+  elif anchor in ViewYAxisAnchors:
+    return initYAxisAnchor(guide.xOwningView, anchor, offset)
+  elif anchor in {atWidth, atHeight}:
+    return initDimensionAnchor(guide.xOwningView, anchor, offset)
   else:
-    return initDimensionAnchor(guide.xOwningView, anchorAttribute(anchor), offset)
+    {.
+      error:
+        "Invalid LayoutAttribute in guide[] indexing; use one of atLeft, atRight, atLeading, atTrailing, atTop, atBottom, atCenterX, atCenterY, atWidth, atHeight."
+    .}
 
 proc `+`*(anchor: LayoutXAxisAnchor, constant: float32): LayoutXAxisAnchor =
   initXAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
@@ -318,7 +301,7 @@ proc newLayoutConstraint*(
     firstAttribute: LayoutAttribute,
     relation = lrEqual,
     secondItem: View = nil,
-    secondAttribute = latNotAnAttribute,
+    secondAttribute = atNotAnAttribute,
     multiplier = 1.0'f32,
     constant = 0.0'f32,
     priority = LayoutPriorityRequired,
@@ -328,7 +311,7 @@ proc newLayoutConstraint*(
     xFirstAttribute: firstAttribute,
     xRelation: relation,
     xSecondItem: secondItem,
-    xSecondAttribute: if secondItem.isNil: latNotAnAttribute else: secondAttribute,
+    xSecondAttribute: if secondItem.isNil: atNotAnAttribute else: secondAttribute,
     xMultiplier: multiplier,
     xConstant: constant,
     xPriority: priority,
@@ -424,7 +407,7 @@ proc constraintWithConstant(
     first.xAttribute,
     relation,
     nil,
-    latNotAnAttribute,
+    atNotAnAttribute,
     1.0'f32,
     constant - first.xOffset,
     priority,
@@ -565,7 +548,7 @@ proc constraintExpression(
 ): LayoutConstraintExpression[LayoutDimensionAnchor] =
   initConstraintExpression(
     LayoutDimensionAnchor, first.xItem, first.xAttribute, relation, nil,
-    latNotAnAttribute, first.xOffset, 0.0'f32, constant,
+    atNotAnAttribute, first.xOffset, 0.0'f32, constant,
   )
 
 proc constraintExpression(
@@ -710,20 +693,20 @@ proc edgeConstraints*(
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
   if leLeft in edges:
-    result.add view[anLeft].equalTo(
-      toView[anLeft], constant = insets.left, priority = priority
+    result.add view[atLeft].equalTo(
+      toView[atLeft], constant = insets.left, priority = priority
     )
   if leTop in edges:
-    result.add view[anTop].equalTo(
-      toView[anTop], constant = insets.top, priority = priority
+    result.add view[atTop].equalTo(
+      toView[atTop], constant = insets.top, priority = priority
     )
   if leRight in edges:
-    result.add view[anRight].equalTo(
-      toView[anRight], constant = -insets.right, priority = priority
+    result.add view[atRight].equalTo(
+      toView[atRight], constant = -insets.right, priority = priority
     )
   if leBottom in edges:
-    result.add view[anBottom].equalTo(
-      toView[anBottom], constant = -insets.bottom, priority = priority
+    result.add view[atBottom].equalTo(
+      toView[atBottom], constant = -insets.bottom, priority = priority
     )
 
 proc pinEdges*(
@@ -746,20 +729,20 @@ proc edgeConstraints*(
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
   if leLeft in edges:
-    result.add view[anLeft].equalTo(
-      toGuide[anLeft], constant = insets.left, priority = priority
+    result.add view[atLeft].equalTo(
+      toGuide[atLeft], constant = insets.left, priority = priority
     )
   if leTop in edges:
-    result.add view[anTop].equalTo(
-      toGuide[anTop], constant = insets.top, priority = priority
+    result.add view[atTop].equalTo(
+      toGuide[atTop], constant = insets.top, priority = priority
     )
   if leRight in edges:
-    result.add view[anRight].equalTo(
-      toGuide[anRight], constant = -insets.right, priority = priority
+    result.add view[atRight].equalTo(
+      toGuide[atRight], constant = -insets.right, priority = priority
     )
   if leBottom in edges:
-    result.add view[anBottom].equalTo(
-      toGuide[anBottom], constant = -insets.bottom, priority = priority
+    result.add view[atBottom].equalTo(
+      toGuide[atBottom], constant = -insets.bottom, priority = priority
     )
 
 proc pinEdges*(
@@ -778,7 +761,7 @@ proc firstItem*(constraint: LayoutConstraint): View =
   if constraint.isNil: nil else: constraint.xFirstItem
 
 proc firstAttribute*(constraint: LayoutConstraint): LayoutAttribute =
-  if constraint.isNil: latNotAnAttribute else: constraint.xFirstAttribute
+  if constraint.isNil: atNotAnAttribute else: constraint.xFirstAttribute
 
 proc relation*(constraint: LayoutConstraint): LayoutRelation =
   if constraint.isNil: lrEqual else: constraint.xRelation
@@ -787,7 +770,7 @@ proc secondItem*(constraint: LayoutConstraint): View =
   if constraint.isNil: nil else: constraint.xSecondItem
 
 proc secondAttribute*(constraint: LayoutConstraint): LayoutAttribute =
-  if constraint.isNil: latNotAnAttribute else: constraint.xSecondAttribute
+  if constraint.isNil: atNotAnAttribute else: constraint.xSecondAttribute
 
 proc multiplier*(constraint: LayoutConstraint): float32 =
   if constraint.isNil: 1.0'f32 else: constraint.xMultiplier
@@ -1047,27 +1030,27 @@ proc addGeometryStays(state: var LayoutSolveState, root: View) =
 
 proc expressionFor(solverView: SolverView, attribute: LayoutAttribute): Expression =
   case attribute
-  of latLeft, latLeading:
+  of atLeft, atLeading:
     solverView.left.toExpression()
-  of latRight, latTrailing:
+  of atRight, atTrailing:
     solverView.left + solverView.width
-  of latTop:
+  of atTop:
     solverView.top.toExpression()
-  of latBottom:
+  of atBottom:
     solverView.top + solverView.height
-  of latWidth:
+  of atWidth:
     solverView.width.toExpression()
-  of latHeight:
+  of atHeight:
     solverView.height.toExpression()
-  of latCenterX:
+  of atCenterX:
     solverView.left + solverView.width * 0.5
-  of latCenterY:
+  of atCenterY:
     solverView.top + solverView.height * 0.5
-  of latFirstBaseline:
+  of atFirstBaseline:
     solverView.top + solverView.item.firstBaselineOffset().solverValue
-  of latLastBaseline:
+  of atLastBaseline:
     solverView.top + solverView.height - solverView.item.lastBaselineOffset().solverValue
-  of latNotAnAttribute:
+  of atNotAnAttribute:
     toExpression(0.KiwiScalar)
 
 func autoresizingOptions(axis: LayoutAxis): AutoresizingAxisOptions =
@@ -1083,13 +1066,13 @@ func autoresizingOptions(axis: LayoutAxis): AutoresizingAxisOptions =
 
 func originAttribute(axis: LayoutAxis): LayoutAttribute =
   case axis
-  of laHorizontal: latLeft
-  of laVertical: latTop
+  of laHorizontal: atLeft
+  of laVertical: atTop
 
 func sizeAttribute(axis: LayoutAxis): LayoutAttribute =
   case axis
-  of laHorizontal: latWidth
-  of laVertical: latHeight
+  of laHorizontal: atWidth
+  of laVertical: atHeight
 
 func axisFlexShare(
     flexible: bool, base, totalWeight: float32, flexibleCount: int
@@ -1206,7 +1189,7 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
     if intrinsicSize.hasWidth:
       state.addGeneratedEquation(
         initLayoutEquation(
-          [initLayoutTerm(item, latWidth)],
+          [initLayoutTerm(item, atWidth)],
           lrGreaterThanOrEqual,
           intrinsicSize.width,
           item.compressionPriority(laHorizontal),
@@ -1215,7 +1198,7 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
       )
       state.addGeneratedEquation(
         initLayoutEquation(
-          [initLayoutTerm(item, latWidth)],
+          [initLayoutTerm(item, atWidth)],
           lrLessThanOrEqual,
           intrinsicSize.width,
           item.huggingPriority(laHorizontal),
@@ -1225,7 +1208,7 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
     if intrinsicSize.hasHeight:
       state.addGeneratedEquation(
         initLayoutEquation(
-          [initLayoutTerm(item, latHeight)],
+          [initLayoutTerm(item, atHeight)],
           lrGreaterThanOrEqual,
           intrinsicSize.height,
           item.compressionPriority(laVertical),
@@ -1234,7 +1217,7 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
       )
       state.addGeneratedEquation(
         initLayoutEquation(
-          [initLayoutTerm(item, latHeight)],
+          [initLayoutTerm(item, atHeight)],
           lrLessThanOrEqual,
           intrinsicSize.height,
           item.huggingPriority(laVertical),

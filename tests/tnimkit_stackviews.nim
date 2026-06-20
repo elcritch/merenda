@@ -206,11 +206,11 @@ suite "nimkit stack views":
       stack = newStackView(laHorizontal, frame = initRect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 20)
-      left = newLayoutConstraint(stack, latLeft, lrEqual, root, latLeft, constant = 20)
+      left = newLayoutConstraint(stack, atLeft, lrEqual, root, atLeft, constant = 20)
       right =
-        newLayoutConstraint(stack, latRight, lrEqual, root, latRight, constant = -30)
-      top = newLayoutConstraint(stack, latTop, lrEqual, root, latTop, constant = 10)
-      height = newLayoutConstraint(stack, latHeight, constant = 40)
+        newLayoutConstraint(stack, atRight, lrEqual, root, atRight, constant = -30)
+      top = newLayoutConstraint(stack, atTop, lrEqual, root, atTop, constant = 10)
+      height = newLayoutConstraint(stack, atHeight, constant = 40)
 
     stack.autoresizingMaskConstraints = false
     stack.spacing = 10.0

@@ -44,19 +44,19 @@ type
   AutoresizingMask* = set[AutoresizingMaskOption]
 
   LayoutAttribute* = enum
-    latNotAnAttribute = 0
-    latLeft = 1
-    latRight
-    latTop
-    latBottom
-    latLeading
-    latTrailing
-    latWidth
-    latHeight
-    latCenterX
-    latCenterY
-    latLastBaseline
-    latFirstBaseline
+    atNotAnAttribute = 0
+    atLeft = 1
+    atRight
+    atTop
+    atBottom
+    atLeading
+    atTrailing
+    atWidth
+    atHeight
+    atCenterX
+    atCenterY
+    atLastBaseline
+    atFirstBaseline
 
   LayoutRelation* = enum
     lrLessThanOrEqual = -1
@@ -175,7 +175,7 @@ const
   AutoPoint* = Point(x: AutoMetric, y: AutoMetric)
   AutoSize* = Size(width: AutoMetric, height: AutoMetric)
   AutoRect* = Rect(origin: AutoPoint, size: AutoSize)
-  LayoutAttributeBaseline* = latLastBaseline
+  LayoutAttributeBaseline* = atLastBaseline
   NoIntrinsicMetric* = -1.0'f32
   NoIntrinsicContentSize* =
     IntrinsicSize(width: NoIntrinsicMetric, height: NoIntrinsicMetric)

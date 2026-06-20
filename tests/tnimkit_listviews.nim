@@ -353,9 +353,9 @@ suite "nimkit list views":
       edges = {leLeft, leTop, leRight},
     )
     activate(
-      cx(listView[anTop] == title[anBottom] + 18.0),
-      cx(listView[anLeft] == title[anLeft]),
-      cx(listView[anWidth] == 188.0),
+      cx(listView[atTop] == title[atBottom] + 18.0),
+      cx(listView[atLeft] == title[atLeft]),
+      cx(listView[atWidth] == 188.0),
     )
     window.setContentView(root)
     discard buildRenders(root)

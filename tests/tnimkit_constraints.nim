@@ -18,80 +18,80 @@ suite "nimkit constraints":
       peer = newView(frame = initRect(10, 10, 40, 20))
       constraint = newLayoutConstraint(
         view,
-        latWidth,
+        atWidth,
         lrGreaterThanOrEqual,
         peer,
-        latHeight,
+        atHeight,
         multiplier = 2.0'f32,
         constant = 8.0'f32,
         priority = LayoutPriorityHigh,
       )
 
     check constraint.firstItem == view
-    check constraint.firstAttribute == latWidth
+    check constraint.firstAttribute == atWidth
     check constraint.relation == lrGreaterThanOrEqual
     check constraint.secondItem == peer
-    check constraint.secondAttribute == latHeight
+    check constraint.secondAttribute == atHeight
     check constraint.multiplier == 2.0'f32
     check constraint.constant == 8.0'f32
     check constraint.priority == LayoutPriorityHigh
     check not constraint.isActive
     check constraint.owningView.isNil
-    check ord(latLeft) == 1
-    check LayoutAttributeBaseline == latLastBaseline
+    check ord(atLeft) == 1
+    check LayoutAttributeBaseline == atLastBaseline
     check ord(lrLessThanOrEqual) == -1
 
   test "layout anchors create Cocoa-shaped constraints":
     let
       root = newView(frame = initRect(0, 0, 320, 200))
       child = newView(frame = initRect(0, 0, 40, 20))
-      left = child[anLeft].equalTo(root[anLeft], constant = 18.0'f32)
-      centerY = child[anCenterY].equalTo(root[anCenterY])
-      width = child[anWidth].equalTo(96.0'f32)
-      height = child[anHeight].greaterThanOrEqualTo(
-        root[anHeight], multiplier = 0.5'f32, constant = -12.0'f32
+      left = child[atLeft].equalTo(root[atLeft], constant = 18.0'f32)
+      centerY = child[atCenterY].equalTo(root[atCenterY])
+      width = child[atWidth].equalTo(96.0'f32)
+      height = child[atHeight].greaterThanOrEqualTo(
+        root[atHeight], multiplier = 0.5'f32, constant = -12.0'f32
       )
-      renamedTop = child[anTop].equalTo(root[anBottom], constant = 10.0'f32)
-      renamedWidth = child[anWidth].equalTo(88.0'f32)
-      equalLeft = cx(child[anLeft] == root[anLeft])
-      equalHeight = cx(child[anHeight] == root[anHeight])
-      equalWidth = cx(child[anWidth] == 72.0'f32)
-      offsetTop = cx(child[anTop] == root[anBottom] + 12.0'f32)
-      offsetRight = cx(child[anRight] == root[anRight] - 8.0'f32)
-      emMinWidth = cx(child[anWidth] >= 20'em)
-      minWidth = cx(child[anWidth] >= root[anWidth], multiplier = 0.5'f32)
-      maxHeight = cx(child[anHeight] <= 42.0'f32, priority = LayoutPriorityHigh)
+      renamedTop = child[atTop].equalTo(root[atBottom], constant = 10.0'f32)
+      renamedWidth = child[atWidth].equalTo(88.0'f32)
+      equalLeft = cx(child[atLeft] == root[atLeft])
+      equalHeight = cx(child[atHeight] == root[atHeight])
+      equalWidth = cx(child[atWidth] == 72.0'f32)
+      offsetTop = cx(child[atTop] == root[atBottom] + 12.0'f32)
+      offsetRight = cx(child[atRight] == root[atRight] - 8.0'f32)
+      emMinWidth = cx(child[atWidth] >= 20'em)
+      minWidth = cx(child[atWidth] >= root[atWidth], multiplier = 0.5'f32)
+      maxHeight = cx(child[atHeight] <= 42.0'f32, priority = LayoutPriorityHigh)
 
-    check child[anLeft].item == child
-    check child[anLeft].attribute == latLeft
-    check child[anLeft].offset == 0.0'f32
+    check child[atLeft].item == child
+    check child[atLeft].attribute == atLeft
+    check child[atLeft].offset == 0.0'f32
     check left.firstItem == child
-    check left.firstAttribute == latLeft
+    check left.firstAttribute == atLeft
     check left.secondItem == root
-    check left.secondAttribute == latLeft
+    check left.secondAttribute == atLeft
     check left.constant == 18.0'f32
 
-    check centerY.firstAttribute == latCenterY
-    check centerY.secondAttribute == latCenterY
+    check centerY.firstAttribute == atCenterY
+    check centerY.secondAttribute == atCenterY
     check width.secondItem.isNil
-    check width.secondAttribute == latNotAnAttribute
+    check width.secondAttribute == atNotAnAttribute
     check width.constant == 96.0'f32
-    check renamedTop.firstAttribute == latTop
-    check renamedTop.secondAttribute == latBottom
+    check renamedTop.firstAttribute == atTop
+    check renamedTop.secondAttribute == atBottom
     check renamedTop.constant == 10.0'f32
     check renamedWidth.secondItem.isNil
     check renamedWidth.constant == 88.0'f32
-    check equalLeft.firstAttribute == latLeft
-    check equalLeft.secondAttribute == latLeft
-    check equalHeight.firstAttribute == latHeight
-    check equalHeight.secondAttribute == latHeight
+    check equalLeft.firstAttribute == atLeft
+    check equalLeft.secondAttribute == atLeft
+    check equalHeight.firstAttribute == atHeight
+    check equalHeight.secondAttribute == atHeight
     check equalWidth.secondItem.isNil
     check equalWidth.constant == 72.0'f32
-    check offsetTop.firstAttribute == latTop
-    check offsetTop.secondAttribute == latBottom
+    check offsetTop.firstAttribute == atTop
+    check offsetTop.secondAttribute == atBottom
     check offsetTop.constant == 12.0'f32
-    check offsetRight.firstAttribute == latRight
-    check offsetRight.secondAttribute == latRight
+    check offsetRight.firstAttribute == atRight
+    check offsetRight.secondAttribute == atRight
     check offsetRight.constant == -8.0'f32
     check emMinWidth.relation == lrGreaterThanOrEqual
     check emMinWidth.secondItem.isNil
@@ -100,10 +100,16 @@ suite "nimkit constraints":
     check minWidth.multiplier == 0.5'f32
     check maxHeight.relation == lrLessThanOrEqual
     check maxHeight.priority == LayoutPriorityHigh
-    check height.firstAttribute == latHeight
+    check height.firstAttribute == atHeight
     check height.relation == lrGreaterThanOrEqual
     check height.multiplier == 0.5'f32
     check height.constant == -12.0'f32
+    check not compiles(child[atNotAnAttribute])
+    check not compiles(child[atFirstBaseline])
+    check not compiles(child[atLastBaseline])
+    check not compiles(root.contentLayoutGuide()[atNotAnAttribute])
+    check not compiles(root.contentLayoutGuide()[atFirstBaseline])
+    check not compiles(root.contentLayoutGuide()[atLastBaseline])
 
   test "content layout guides and edge pins resolve through constraints":
     let
@@ -113,12 +119,12 @@ suite "nimkit constraints":
 
     check guide.owningView == root
     check guide.insets == initEdgeInsets(10.0, 20.0, 30.0, 40.0)
-    check guide[anLeft].offset == 20.0'f32
-    check guide[anRight].offset == -40.0'f32
-    check guide[anTop].offset == 10.0'f32
-    check guide[anBottom].offset == -30.0'f32
-    check guide[anWidth].offset == -60.0'f32
-    check guide[anHeight].offset == -40.0'f32
+    check guide[atLeft].offset == 20.0'f32
+    check guide[atRight].offset == -40.0'f32
+    check guide[atTop].offset == 10.0'f32
+    check guide[atBottom].offset == -30.0'f32
+    check guide[atWidth].offset == -60.0'f32
+    check guide[atHeight].offset == -40.0'f32
 
     root.addSubview(child)
     let constraints = child.pinEdges(toGuide = guide)
@@ -160,7 +166,7 @@ suite "nimkit constraints":
   test "unary constraints activate on their first item":
     let
       view = newView(frame = initRect(0, 0, 100, 80))
-      width = newLayoutConstraint(view, latWidth, constant = 120.0'f32)
+      width = newLayoutConstraint(view, atWidth, constant = 120.0'f32)
 
     view.layoutSubtreeIfNeeded()
     check view.constraints.len == 0
@@ -192,7 +198,7 @@ suite "nimkit constraints":
     root.layoutSubtreeIfNeeded()
 
     let spacing =
-      newLayoutConstraint(left, latRight, lrEqual, right, latLeft, constant = -12.0'f32)
+      newLayoutConstraint(left, atRight, lrEqual, right, atLeft, constant = -12.0'f32)
 
     activate(spacing)
 
@@ -211,7 +217,7 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
       child = newView(frame = initRect(20, 20, 80, 40))
-      width = newLayoutConstraint(child, latWidth, constant = 80.0'f32)
+      width = newLayoutConstraint(child, atWidth, constant = 80.0'f32)
 
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
@@ -394,7 +400,7 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 200, 100))
       child = newView(frame = initRect(20, 10, 80, 30))
-      width = newLayoutConstraint(child, latWidth, constant = 50.0)
+      width = newLayoutConstraint(child, atWidth, constant = 50.0)
 
     root.addSubview(child)
     child.autoresizingMask = {cxWidthSizable}
@@ -409,8 +415,8 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 240, 120))
       child = newView(frame = initRect(10, 12, 20, 10))
-      width = newLayoutConstraint(child, latWidth, constant = 96.0'f32)
-      height = newLayoutConstraint(child, latHeight, constant = 28.0'f32)
+      width = newLayoutConstraint(child, atWidth, constant = 96.0'f32)
+      height = newLayoutConstraint(child, atHeight, constant = 28.0'f32)
 
     root.addSubview(child)
     activate(width, height)
@@ -424,14 +430,12 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 300, 200))
       child = newView(frame = initRect(0, 0, 20, 10))
-      left =
-        newLayoutConstraint(child, latLeft, lrEqual, root, latLeft, constant = 20.0)
-      top = newLayoutConstraint(child, latTop, lrEqual, root, latTop, constant = 15.0)
+      left = newLayoutConstraint(child, atLeft, lrEqual, root, atLeft, constant = 20.0)
+      top = newLayoutConstraint(child, atTop, lrEqual, root, atTop, constant = 15.0)
       right =
-        newLayoutConstraint(child, latRight, lrEqual, root, latRight, constant = -30.0)
-      bottom = newLayoutConstraint(
-        child, latBottom, lrEqual, root, latBottom, constant = -25.0
-      )
+        newLayoutConstraint(child, atRight, lrEqual, root, atRight, constant = -30.0)
+      bottom =
+        newLayoutConstraint(child, atBottom, lrEqual, root, atBottom, constant = -25.0)
 
     root.addSubview(child)
     activate(left, top, right, bottom)
@@ -443,10 +447,10 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 300, 200))
       child = newView(frame = initRect(0, 0, 10, 10))
-      width = newLayoutConstraint(child, latWidth, constant = 50.0)
-      height = newLayoutConstraint(child, latHeight, constant = 20.0)
-      centerX = newLayoutConstraint(child, latCenterX, lrEqual, root, latCenterX)
-      centerY = newLayoutConstraint(child, latCenterY, lrEqual, root, latCenterY)
+      width = newLayoutConstraint(child, atWidth, constant = 50.0)
+      height = newLayoutConstraint(child, atHeight, constant = 20.0)
+      centerX = newLayoutConstraint(child, atCenterX, lrEqual, root, atCenterX)
+      centerY = newLayoutConstraint(child, atCenterY, lrEqual, root, atCenterY)
 
     root.addSubview(child)
     activate(width, height, centerX, centerY)
@@ -458,9 +462,9 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 100, 80))
       child = newView(frame = initRect(0, 0, 20, 10))
-      left = newLayoutConstraint(child, latLeft, lrEqual, root, latLeft)
-      right = newLayoutConstraint(child, latRight, lrEqual, root, latRight)
-      width = newLayoutConstraint(child, latWidth, constant = 160.0)
+      left = newLayoutConstraint(child, atLeft, lrEqual, root, atLeft)
+      right = newLayoutConstraint(child, atRight, lrEqual, root, atRight)
+      width = newLayoutConstraint(child, atWidth, constant = 160.0)
 
     root.addSubview(child)
     activate(left, right, width)
@@ -486,9 +490,8 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 300, 120))
       button = newButton("Intrinsic", frame = initRect(1, 1, 1, 1))
-      left =
-        newLayoutConstraint(button, latLeft, lrEqual, root, latLeft, constant = 10.0)
-      top = newLayoutConstraint(button, latTop, lrEqual, root, latTop, constant = 12.0)
+      left = newLayoutConstraint(button, atLeft, lrEqual, root, atLeft, constant = 10.0)
+      top = newLayoutConstraint(button, atTop, lrEqual, root, atTop, constant = 12.0)
 
     root.addSubview(button)
     check button.autoresizingMaskConstraints
@@ -504,7 +507,7 @@ suite "nimkit constraints":
       root = newView(frame = initRect(0, 0, 100, 80))
       child = newView(frame = initRect(10, 10, 20, 10))
       external = newView(frame = initRect(200, 0, 80, 40))
-      outside = newLayoutConstraint(child, latRight, lrEqual, external, latLeft)
+      outside = newLayoutConstraint(child, atRight, lrEqual, external, atLeft)
 
     root.addSubview(child)
     child.addConstraint(outside)
@@ -519,8 +522,8 @@ suite "nimkit constraints":
       left = newView(frame = initRect(0, 0, 80, 40))
       right = newView(frame = initRect(100, 0, 80, 40))
       rightPin =
-        newLayoutConstraint(right, latLeft, lrEqual, root, latLeft, constant = 100.0)
-      spacing = newLayoutConstraint(left, latRight, lrEqual, right, latLeft)
+        newLayoutConstraint(right, atLeft, lrEqual, root, atLeft, constant = 100.0)
+      spacing = newLayoutConstraint(left, atRight, lrEqual, right, atLeft)
 
     root.addSubview(left)
     root.addSubview(right)
@@ -536,10 +539,10 @@ suite "nimkit constraints":
       root = newView(frame = initRect(0, 0, 240, 120))
       child = newView(frame = initRect(0, 0, 40, 20))
       low = newLayoutConstraint(
-        child, latWidth, lrEqual, nil, constant = 160.0, priority = LayoutPriorityLow
+        child, atWidth, lrEqual, nil, constant = 160.0, priority = LayoutPriorityLow
       )
       high = newLayoutConstraint(
-        child, latWidth, lrEqual, nil, constant = 90.0, priority = LayoutPriorityHigh
+        child, atWidth, lrEqual, nil, constant = 90.0, priority = LayoutPriorityHigh
       )
 
     root.addSubview(child)
@@ -565,19 +568,19 @@ suite "nimkit constraints":
     let alignmentRect = view.alignmentRect()
     check alignmentRect == initRect(14, 22, 88, 42)
     check view.frameForAlignmentRect(alignmentRect) == view.frame()
-    check view.layoutValue(latLeft) == 14.0'f32
-    check view.layoutValue(latLeading) == 14.0'f32
-    check view.layoutValue(latRight) == 102.0'f32
-    check view.layoutValue(latTrailing) == 102.0'f32
-    check view.layoutValue(latTop) == 22.0'f32
-    check view.layoutValue(latBottom) == 64.0'f32
-    check view.layoutValue(latWidth) == 88.0'f32
-    check view.layoutValue(latHeight) == 42.0'f32
-    check view.layoutValue(latCenterX) == 58.0'f32
-    check view.layoutValue(latCenterY) == 43.0'f32
-    check view.layoutValue(latFirstBaseline) == 31.0'f32
-    check view.layoutValue(latLastBaseline) == 57.0'f32
-    check view.layoutValue(latNotAnAttribute) == 0.0'f32
+    check view.layoutValue(atLeft) == 14.0'f32
+    check view.layoutValue(atLeading) == 14.0'f32
+    check view.layoutValue(atRight) == 102.0'f32
+    check view.layoutValue(atTrailing) == 102.0'f32
+    check view.layoutValue(atTop) == 22.0'f32
+    check view.layoutValue(atBottom) == 64.0'f32
+    check view.layoutValue(atWidth) == 88.0'f32
+    check view.layoutValue(atHeight) == 42.0'f32
+    check view.layoutValue(atCenterX) == 58.0'f32
+    check view.layoutValue(atCenterY) == 43.0'f32
+    check view.layoutValue(atFirstBaseline) == 31.0'f32
+    check view.layoutValue(atLastBaseline) == 57.0'f32
+    check view.layoutValue(atNotAnAttribute) == 0.0'f32
 
     view.alignmentRect = initRect(20, 30, 60, 30)
     check view.frame() == initRect(16, 28, 72, 38)
@@ -588,7 +591,7 @@ suite "nimkit constraints":
       root = newView(frame = initRect(0, 0, 240, 120))
       left = newView(frame = initRect(0, 0, 80, 40))
       right = newView(frame = initRect(100, 0, 80, 40))
-      spacing = newLayoutConstraint(left, latRight, lrEqual, right, latLeft)
+      spacing = newLayoutConstraint(left, atRight, lrEqual, right, atLeft)
 
     root.addSubview(left)
     root.addSubview(right)
@@ -864,7 +867,7 @@ suite "nimkit constraints":
       initialContainerGeneration =
         root.xLayoutInputCache.sourceGenerations[lisContainer]
 
-    activate(autoresized[anWidth].equalTo(90.0'f32))
+    activate(autoresized[atWidth].equalTo(90.0'f32))
     root.layoutSubtreeIfNeeded()
 
     check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
@@ -908,8 +911,8 @@ suite "nimkit constraints":
       firstOwner = newView(frame = initRect(0, 0, 100, 80))
       secondOwner = newView(frame = initRect(0, 0, 100, 80))
       child = newView(frame = initRect(0, 0, 40, 20))
-      width = newLayoutConstraint(child, latWidth, constant = 40.0'f32)
-      height = newLayoutConstraint(child, latHeight, constant = 20.0'f32)
+      width = newLayoutConstraint(child, atWidth, constant = 40.0'f32)
+      height = newLayoutConstraint(child, atHeight, constant = 20.0'f32)
 
     firstOwner.addConstraints(width, height)
     check width.active

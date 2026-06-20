@@ -143,11 +143,10 @@ suite "nimkit form views":
       form = newFormView(frame = initRect(0, 0, 1, 1))
       label = newFixedIntrinsicView(50, 12)
       field = newFixedIntrinsicView(80, 20)
-      left = newLayoutConstraint(form, latLeft, lrEqual, root, latLeft, constant = 20)
-      right =
-        newLayoutConstraint(form, latRight, lrEqual, root, latRight, constant = -30)
-      top = newLayoutConstraint(form, latTop, lrEqual, root, latTop, constant = 10)
-      height = newLayoutConstraint(form, latHeight, constant = 40)
+      left = newLayoutConstraint(form, atLeft, lrEqual, root, atLeft, constant = 20)
+      right = newLayoutConstraint(form, atRight, lrEqual, root, atRight, constant = -30)
+      top = newLayoutConstraint(form, atTop, lrEqual, root, atTop, constant = 10)
+      height = newLayoutConstraint(form, atHeight, constant = 40)
 
     form.autoresizingMaskConstraints = false
     form.spacing[dcol] = 10.0

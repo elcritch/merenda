@@ -149,19 +149,19 @@ root.addSubview(title, status, details, scrollView, controls)
 title.pinEdges(toGuide = contentGuide, edges = {leLeft, leTop, leRight})
 
 activate(
-  status[anTop].equalTo(title[anBottom], constant = 8.0),
-  status[anLeft].equalTo(title[anLeft]),
-  status[anRight].equalTo(title[anRight]),
-  details[anTop].equalTo(status[anBottom], constant = 4.0),
-  details[anLeft].equalTo(title[anLeft]),
-  details[anRight].equalTo(title[anRight]),
-  scrollView[anTop].equalTo(details[anBottom], constant = 12.0),
-  scrollView[anLeft].equalTo(title[anLeft]),
-  scrollView[anRight].equalTo(title[anRight]),
-  controls[anTop].equalTo(scrollView[anBottom], constant = 12.0),
-  controls[anLeft].equalTo(title[anLeft]),
-  controls[anRight].equalTo(title[anRight]),
-  controls[anBottom].equalTo(contentGuide[anBottom]),
+  status[atTop].equalTo(title[atBottom], constant = 8.0),
+  status[atLeft].equalTo(title[atLeft]),
+  status[atRight].equalTo(title[atRight]),
+  details[atTop].equalTo(status[atBottom], constant = 4.0),
+  details[atLeft].equalTo(title[atLeft]),
+  details[atRight].equalTo(title[atRight]),
+  scrollView[atTop].equalTo(details[atBottom], constant = 12.0),
+  scrollView[atLeft].equalTo(title[atLeft]),
+  scrollView[atRight].equalTo(title[atRight]),
+  controls[atTop].equalTo(scrollView[atBottom], constant = 12.0),
+  controls[atLeft].equalTo(title[atLeft]),
+  controls[atRight].equalTo(title[atRight]),
+  controls[atBottom].equalTo(contentGuide[atBottom]),
 )
 
 updateStatus()
