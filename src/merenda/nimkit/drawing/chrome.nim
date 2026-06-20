@@ -18,6 +18,8 @@ type
     crRadioIndicator
     crComboBox
     crPopupList
+    crSliderTrack
+    crSliderKnob
     crTab
     crTabPanel
 

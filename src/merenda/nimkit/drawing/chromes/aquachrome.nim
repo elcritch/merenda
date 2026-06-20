@@ -235,6 +235,74 @@ func aquaComboSeparatorFill(chrome: ChromeContext): Fill =
     return fill(initColor(0.50, 0.54, 0.58, 0.52))
   linear(initColor(0.0, 0.34, 0.78, 0.72), initColor(0.0, 0.18, 0.52, 0.88), fgaY)
 
+func aquaSliderTrackFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return linear(
+      base.lightenColor(0.32'f32, 0.50'f32), base.lightenColor(0.64'f32, 0.50'f32), fgaY
+    )
+  linear(
+    base.darkenColor(0.18'f32, 0.92'f32), base.lightenColor(0.36'f32, 0.92'f32), fgaY
+  )
+
+func aquaSliderTrackHighlightFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return linear(
+      base.lightenColor(0.52'f32, 0.34'f32), base.lightenColor(0.76'f32, 0.34'f32), fgaY
+    )
+  linear(
+    base.lightenColor(0.54'f32, 1.0'f32),
+    base.lightenColor(0.18'f32, 1.0'f32),
+    base.darkenColor(0.10'f32, 1.0'f32),
+    fgaY,
+    106'u8,
+  )
+
+func aquaSliderKnobFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return linear(
+      base.lightenColor(0.42'f32, 0.68'f32), base.darkenColor(0.06'f32, 0.68'f32), fgaY
+    )
+  if chrome.isPressed:
+    return linear(
+      base.lightenColor(0.58'f32, 1.0'f32),
+      base.lightenColor(0.18'f32, 1.0'f32),
+      base.darkenColor(0.22'f32, 1.0'f32),
+      fgaY,
+      104'u8,
+    )
+  linear(
+    base.lightenColor(0.98'f32, 1.0'f32),
+    base.lightenColor(0.48'f32, 1.0'f32),
+    base.darkenColor(0.10'f32, 1.0'f32),
+    fgaY,
+    102'u8,
+  )
+
+func aquaSliderKnobGlossFill(chrome: ChromeContext): Fill =
+  let alpha =
+    if not chrome.isEnabled:
+      0.18'f32
+    elif chrome.isPressed:
+      0.44'f32
+    else:
+      0.62'f32
+  linear(initColor(1.0, 1.0, 1.0, alpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+
+func aquaSliderKnobLowerWash(chrome: ChromeContext): Fill =
+  let
+    base = chrome.baseFill.centerColor()
+    alpha =
+      if not chrome.isEnabled:
+        0.08'f32
+      elif chrome.isPressed:
+        0.20'f32
+      else:
+        0.14'f32
+  linear(initColor(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.22'f32, alpha), fgaY)
+
 func aquaPopupListFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
@@ -542,6 +610,72 @@ proc drawAquaPopupListExtras(
     extras.layer, extras.parent, bottomShade, fill(initColor(0.0, 0.0, 0.0, 0.08))
   )
 
+proc drawAquaSliderTrackExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let
+    topHighlight = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.origin.y + 1.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    bottomShade = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.maxY - 2.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    topHighlight,
+    fill(initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.34 else: 0.14)),
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    bottomShade,
+    fill(initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.10 else: 0.04)),
+  )
+
+proc drawAquaSliderKnobExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let
+    inset = 1.6'f32
+    gloss = initRect(
+      extras.rect.origin.x + inset,
+      extras.rect.origin.y + inset,
+      max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
+      max(extras.rect.size.height * 0.38'f32, 1.0'f32),
+    )
+    lowerWash = initRect(
+      extras.rect.origin.x + inset,
+      extras.rect.origin.y + extras.rect.size.height * 0.46'f32,
+      max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
+      max(extras.rect.size.height * 0.42'f32, 1.0'f32),
+    )
+    radius = max(extras.cornerRadius - inset, 1.0'f32)
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    gloss,
+    context.appearance.chromeFill(chrome.withPart(cpGloss)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    radius,
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    lowerWash,
+    context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    radius,
+  )
+
 proc drawAquaTabExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
@@ -599,6 +733,24 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaComboLowerWash(context)
       else:
         context.baseFill
+    of crSliderTrack:
+      case context.part
+      of cpFace:
+        aquaSliderTrackFill(context)
+      of cpHighlight:
+        aquaSliderTrackHighlightFill(context)
+      else:
+        context.baseFill
+    of crSliderKnob:
+      case context.part
+      of cpFace:
+        aquaSliderKnobFill(context)
+      of cpGloss:
+        aquaSliderKnobGlossFill(context)
+      of cpLowerWash:
+        aquaSliderKnobLowerWash(context)
+      else:
+        context.baseFill
     of crPopupList:
       case context.part
       of cpFace:
@@ -643,6 +795,12 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crPopupList:
       if chromeContext.part == cpFace:
         context.drawAquaPopupListExtras(chromeContext, extras)
+    of crSliderTrack:
+      if chromeContext.part == cpFace:
+        context.drawAquaSliderTrackExtras(chromeContext, extras)
+    of crSliderKnob:
+      if chromeContext.part == cpFace:
+        context.drawAquaSliderKnobExtras(chromeContext, extras)
     of crTab:
       if chromeContext.part == cpFace:
         context.drawAquaTabExtras(chromeContext, extras)
