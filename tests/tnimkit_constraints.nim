@@ -130,13 +130,18 @@ suite "nimkit constraints":
       title[atHeight] == 30.0
       subtitle[atTop] == title[atBottom] + 4.0
       subtitle[atLeft] == title[atLeft]
+      toolbar[atTop] == subtitle[atBottom] + 1'em
+      toolbar[atBottom] == root[atBottom] + 4'em | priority = LayoutPriorityLow
       toolbar[atHeight] == 30.0
 
     check title.constraints.len == 1
-    check root.constraints.len == 2
+    check root.constraints.len == 4
     check toolbar.constraints.len == 1
     check title.constraints[0].isActive
     check root.constraints[0].isActive
+    check root.constraints[2].constant == DefaultFontSize
+    check root.constraints[3].constant == 4.0'f32 * DefaultFontSize
+    check root.constraints[3].priority == LayoutPriorityLow
     check toolbar.constraints[0].isActive
 
     let
