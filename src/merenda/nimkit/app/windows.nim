@@ -723,6 +723,9 @@ proc setTitle*(window: Window, title: string) =
   if not window.xHostWindow.isNil:
     window.xHostWindow.setTitle(title)
 
+proc `title=`*(window: Window, title: string) =
+  window.setTitle(title)
+
 proc convertPointToScreen*(window: Window, point: Point): Point =
   if window.isNil:
     return point

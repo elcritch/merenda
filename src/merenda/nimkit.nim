@@ -37,6 +37,7 @@ import merenda/nimkit/text/textviews
 import merenda/nimkit/drawing/theme
 import merenda/nimkit/foundation/types
 import merenda/nimkit/view/views
+import merenda/nimkit/app/windowcontrollers
 import merenda/nimkit/app/windows
 
 export application
@@ -78,4 +79,5 @@ export textviews
 export theme
 export types
 export views
+export windowcontrollers
 export windows
