@@ -290,7 +290,7 @@ suite "nimkit views":
     check root.viewNamed("grandchild") == grandchild
     check root.viewNamed("missing").isNil
 
-  test "addSubviews assigns default identifiers from child argument names":
+  test "addSubviews batches child views without assigning identifiers":
     let
       root = newView("root")
       title = newView()
@@ -300,24 +300,29 @@ suite "nimkit views":
     root.addSubviews(title, detail, explicit)
     root.addSubviews(newView())
 
-    check title.identifier == "title"
-    check title.name == "title"
-    check detail.identifier == "detail"
+    check title.identifier == ""
+    check title.name == ""
+    check detail.identifier == ""
     check explicit.identifier == "explicit.name"
-    check root.viewNamed("title") == title
+    check root.viewNamed("title").isNil
     check root.subviews[^1].identifier == ""
 
-  test "addSubviewsWithNames assigns explicit child identifiers":
+  test "addSubviewsNamedAs assigns explicit and automatic child identifiers":
     let
       root = newView("root")
       title = newView()
       detail = newView("old.detail")
 
-    root.addSubviewsWithNames({title: "main.title", detail: "main.detail"})
+    root.addSubviewsNamedAs(autoNames(title, detail))
 
-    check title.identifier == "main.title"
+    check title.identifier == "title"
+    check detail.identifier == "old.detail"
+    check root.viewNamed("title") == title
+    check root.viewNamed("detail").isNil
+
+    root.addSubviewsNamedAs({detail: "main.detail"}, override = true)
+
     check detail.identifier == "main.detail"
-    check root.viewNamed("main.title") == title
     check root.viewNamed("main.detail") == detail
 
   test "positioned subview insertion replacement and sorting preserve hierarchy state":
