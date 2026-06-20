@@ -55,7 +55,6 @@ let
   choiceAction = actionSelector("showcaseChoiceChanged")
   radioAction = actionSelector("showcaseRadioChanged")
   comboAction = actionSelector("showcaseComboChanged")
-  sliderAction = actionSelector("showcaseSliderChanged")
 
 var pushCount = 0
 
@@ -79,8 +78,11 @@ proc updateSummary() =
 proc updateToggleTitle() =
   toggleButton.title = "Toggle " & toggleButton.state.stateName
 
-proc updateVolumeLabel() =
-  volumeLabel.text = "Volume: " & $int(volumeSlider.value)
+proc updateVolumeLabel(slider: Slider) {.slot.} =
+  volumeLabel.text = "Volume: " & $int(slider.value)
+
+proc updateSliderSummary(slider: Slider, sender: DynamicAgent) {.slot.} =
+  updateSummary()
 
 proc onTextDidChange(field: TextField, sender: DynamicAgent) {.slot.} =
   if sender == DynamicAgent(field):
@@ -99,7 +101,6 @@ proc onToggle(sender: DynamicAgent) =
 
 proc onChoiceChanged(sender: DynamicAgent) =
   if not sender.isNil:
-    updateVolumeLabel()
     updateSummary()
 
 root.background = initColor(0.95, 0.96, 0.98)
@@ -140,8 +141,8 @@ for combo in [priority, color]:
   combo.action = comboAction
 
 volumeSlider.stepValue = 1.0
-volumeSlider.target = newActionTarget(sliderAction, onChoiceChanged)
-volumeSlider.action = sliderAction
+volumeSlider.connect(actionDidSend, volumeSlider, updateSliderSummary)
+volumeSlider.connect(actionDidSend, volumeSlider, updateVolumeLabel, acceptVoidSlot = true)
 
 layout.spacing = 16.0
 layout.alignment = svaFill
@@ -182,7 +183,7 @@ layout.pinEdges(
 )
 
 updateToggleTitle()
-updateVolumeLabel()
+updateVolumeLabel(volumeSlider)
 updateSummary()
 window.setContentView(root)
 discard window.makeFirstResponder(nameField)

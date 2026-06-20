@@ -9,8 +9,16 @@ type TextChangeSpy = ref object of Agent
   changeCount: int
   lastSender: DynamicAgent
 
+type ControlActionSpy = ref object of Agent
+  events: seq[string]
+  lastSender: DynamicAgent
+
 proc rememberTextDidChange(spy: TextChangeSpy, sender: DynamicAgent) {.slot.} =
   inc spy.changeCount
+  spy.lastSender = sender
+
+proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.} =
+  spy.events.add "signal"
   spy.lastSender = sender
 
 suite "nimkit controls":
@@ -132,12 +140,15 @@ suite "nimkit controls":
       window = newWindow("Slider tracking", frame = initRect(0, 0, 240, 80))
       root = newView(frame = initRect(0, 0, 240, 80))
       action = actionSelector("sliderAction")
+      spy = ControlActionSpy()
 
     var actionCount = 0
     proc onSlide(sender: DynamicAgent) =
       check sender == DynamicAgent(slider)
+      spy.events.add "target"
       inc actionCount
 
+    slider.connect(actionDidSend, spy, rememberActionDidSend)
     slider.target = newActionTarget(action, onSlide)
     slider.action = action
     root.addSubview(slider)
@@ -146,14 +157,29 @@ suite "nimkit controls":
     check window.mouseDownAt(initPoint(120, 22))
     check slider.cell().isHighlighted()
     check actionCount > 0
+    check spy.events == @["target", "signal"]
+    check spy.lastSender == DynamicAgent(slider)
 
     let previousCount = actionCount
     check window.mouseDraggedAt(initPoint(200, 22))
     check slider.value >= 90.0
     check actionCount > previousCount
+    check spy.events[spy.events.len - 2] == "target"
+    check spy.events[spy.events.len - 1] == "signal"
 
     check window.mouseUpAt(initPoint(200, 22))
     check not slider.cell().isHighlighted()
+
+  test "control action signal can be used without a target":
+    let
+      slider = newSlider(0.0, 1.0, 0.0)
+      spy = ControlActionSpy()
+
+    slider.connect(actionDidSend, spy, rememberActionDidSend)
+
+    check not slider.sendAction()
+    check spy.events == @["signal"]
+    check spy.lastSender == DynamicAgent(slider)
 
   test "toggle button cycles state during performClick":
     var actionCount = 0

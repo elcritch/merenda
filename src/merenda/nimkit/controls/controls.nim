@@ -1,3 +1,5 @@
+import sigils/core
+
 import ./cells
 import ../app/dragging
 import ../app/pasteboards
@@ -22,6 +24,9 @@ type
 
   ClosureTarget* = ref object of Responder
     xCallback: ActionProc
+
+protocol ControlEvents:
+  proc actionDidSend*(control: Control, sender: DynamicAgent) {.signal.}
 
 proc cell*(control: Control): Cell
 proc setCell*(control: Control, cell: Cell)
@@ -72,14 +77,17 @@ protocol ControlProtocol from Control:
     self.controlIntrinsicContentSize()
 
   method sendAction*(self: Control): bool =
+    var handled = false
     let target = self.target()
     if not target.isNil:
-      return
+      handled =
         target.sendLocalIfHandled(self.action(), ActionArgs(sender: DynamicAgent(self)))
-    let owner = self.window()
-    if owner of Window:
-      return Window(owner).sendAction(self.action(), DynamicAgent(self))
-    false
+    else:
+      let owner = self.window()
+      if owner of Window:
+        handled = Window(owner).sendAction(self.action(), DynamicAgent(self))
+    emit self.actionDidSend(DynamicAgent(self))
+    handled
 
   method validateEditing*(self: Control): bool =
     let editor = self.currentEditor()
