@@ -45,26 +45,26 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 320, 200))
       child = newView(frame = initRect(0, 0, 40, 20))
-      left = child.leftAnchor.equalTo(root.leftAnchor, constant = 18.0'f32)
-      centerY = child.centerYAnchor.equalTo(root.centerYAnchor)
-      width = child.widthAnchor.equalTo(96.0'f32)
-      height = child.heightAnchor.greaterThanOrEqualTo(
-        root.heightAnchor, multiplier = 0.5'f32, constant = -12.0'f32
+      left = child[anLeft].equalTo(root[anLeft], constant = 18.0'f32)
+      centerY = child[anCenterY].equalTo(root[anCenterY])
+      width = child[anWidth].equalTo(96.0'f32)
+      height = child[anHeight].greaterThanOrEqualTo(
+        root[anHeight], multiplier = 0.5'f32, constant = -12.0'f32
       )
-      renamedTop = child.topAnchor.equalTo(root.bottomAnchor, constant = 10.0'f32)
-      renamedWidth = child.widthAnchor.equalTo(88.0'f32)
-      equalLeft = cx(child.leftAnchor == root.leftAnchor)
-      equalHeight = cx(child.heightAnchor == root.heightAnchor)
-      equalWidth = cx(child.widthAnchor == 72.0'f32)
-      offsetTop = cx(child.topAnchor == root.bottomAnchor + 12.0'f32)
-      offsetRight = cx(child.rightAnchor == root.rightAnchor - 8.0'f32)
-      emMinWidth = cx(child.widthAnchor >= 20'em)
-      minWidth = cx(child.widthAnchor >= root.widthAnchor, multiplier = 0.5'f32)
-      maxHeight = cx(child.heightAnchor <= 42.0'f32, priority = LayoutPriorityHigh)
+      renamedTop = child[anTop].equalTo(root[anBottom], constant = 10.0'f32)
+      renamedWidth = child[anWidth].equalTo(88.0'f32)
+      equalLeft = cx(child[anLeft] == root[anLeft])
+      equalHeight = cx(child[anHeight] == root[anHeight])
+      equalWidth = cx(child[anWidth] == 72.0'f32)
+      offsetTop = cx(child[anTop] == root[anBottom] + 12.0'f32)
+      offsetRight = cx(child[anRight] == root[anRight] - 8.0'f32)
+      emMinWidth = cx(child[anWidth] >= 20'em)
+      minWidth = cx(child[anWidth] >= root[anWidth], multiplier = 0.5'f32)
+      maxHeight = cx(child[anHeight] <= 42.0'f32, priority = LayoutPriorityHigh)
 
-    check child.leftAnchor.item == child
-    check child.leftAnchor.attribute == latLeft
-    check child.leftAnchor.offset == 0.0'f32
+    check child[anLeft].item == child
+    check child[anLeft].attribute == latLeft
+    check child[anLeft].offset == 0.0'f32
     check left.firstItem == child
     check left.firstAttribute == latLeft
     check left.secondItem == root
@@ -113,12 +113,12 @@ suite "nimkit constraints":
 
     check guide.owningView == root
     check guide.insets == initEdgeInsets(10.0, 20.0, 30.0, 40.0)
-    check guide.leftAnchor.offset == 20.0'f32
-    check guide.rightAnchor.offset == -40.0'f32
-    check guide.topAnchor.offset == 10.0'f32
-    check guide.bottomAnchor.offset == -30.0'f32
-    check guide.widthAnchor.offset == -60.0'f32
-    check guide.heightAnchor.offset == -40.0'f32
+    check guide[anLeft].offset == 20.0'f32
+    check guide[anRight].offset == -40.0'f32
+    check guide[anTop].offset == 10.0'f32
+    check guide[anBottom].offset == -30.0'f32
+    check guide[anWidth].offset == -60.0'f32
+    check guide[anHeight].offset == -40.0'f32
 
     root.addSubview(child)
     let constraints = child.pinEdges(toGuide = guide)
@@ -864,7 +864,7 @@ suite "nimkit constraints":
       initialContainerGeneration =
         root.xLayoutInputCache.sourceGenerations[lisContainer]
 
-    activate(autoresized.widthAnchor.equalTo(90.0'f32))
+    activate(autoresized[anWidth].equalTo(90.0'f32))
     root.layoutSubtreeIfNeeded()
 
     check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==

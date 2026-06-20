@@ -14,6 +14,18 @@ type
 
   LayoutEdges* = set[LayoutEdge]
 
+  LayoutAnchor* = enum
+    anLeft
+    anRight
+    anLeading
+    anTrailing
+    anTop
+    anBottom
+    anCenterX
+    anCenterY
+    anWidth
+    anHeight
+
   LayoutXAxisAnchor* = object
     xItem: View
     xAttribute: LayoutAttribute
@@ -219,6 +231,61 @@ proc initDimensionAnchor(
 ): LayoutDimensionAnchor =
   LayoutDimensionAnchor(xItem: item, xAttribute: attribute, xOffset: offset)
 
+func anchorAttribute*(anchor: LayoutAnchor): LayoutAttribute =
+  case anchor
+  of anLeft:
+    latLeft
+  of anLeading:
+    latLeading
+  of anTrailing:
+    latTrailing
+  of anRight:
+    latRight
+  of anCenterX:
+    latCenterX
+  of anTop, anBottom:
+    if anchor == anTop: latTop else: latBottom
+  of anCenterY:
+    latCenterY
+  of anWidth:
+    latWidth
+  of anHeight:
+    latHeight
+
+proc `[]`*(view: View, anchor: static[LayoutAnchor]): auto =
+  when anchor in {anLeft, anRight, anLeading, anTrailing, anCenterX}:
+    return initXAxisAnchor(view, anchorAttribute(anchor))
+  elif anchor in {anTop, anBottom, anCenterY}:
+    return initYAxisAnchor(view, anchorAttribute(anchor))
+  else:
+    return initDimensionAnchor(view, anchorAttribute(anchor))
+
+proc `[]`*(guide: LayoutGuide, anchor: static[LayoutAnchor]): auto =
+  let offset =
+    case anchor
+    of anLeft, anLeading:
+      guide.xInsets.left
+    of anRight, anTrailing:
+      -guide.xInsets.right
+    of anTop:
+      guide.xInsets.top
+    of anBottom:
+      -guide.xInsets.bottom
+    of anCenterX:
+      (guide.xInsets.left - guide.xInsets.right) / 2.0
+    of anCenterY:
+      (guide.xInsets.top - guide.xInsets.bottom) / 2.0
+    of anWidth:
+      -guide.xInsets.horizontal
+    of anHeight:
+      -guide.xInsets.vertical
+  when anchor in {anLeft, anRight, anLeading, anTrailing, anCenterX}:
+    return initXAxisAnchor(guide.xOwningView, anchorAttribute(anchor), offset)
+  elif anchor in {anTop, anBottom, anCenterY}:
+    return initYAxisAnchor(guide.xOwningView, anchorAttribute(anchor), offset)
+  else:
+    return initDimensionAnchor(guide.xOwningView, anchorAttribute(anchor), offset)
+
 proc `+`*(anchor: LayoutXAxisAnchor, constant: float32): LayoutXAxisAnchor =
   initXAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
 
@@ -245,70 +312,6 @@ proc `+`*(constant: float32, anchor: LayoutDimensionAnchor): LayoutDimensionAnch
 
 proc `-`*(anchor: LayoutDimensionAnchor, constant: float32): LayoutDimensionAnchor =
   initDimensionAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
-
-proc leftAnchor*(view: View): LayoutXAxisAnchor =
-  initXAxisAnchor(view, latLeft)
-
-proc rightAnchor*(view: View): LayoutXAxisAnchor =
-  initXAxisAnchor(view, latRight)
-
-proc leadingAnchor*(view: View): LayoutXAxisAnchor =
-  initXAxisAnchor(view, latLeading)
-
-proc trailingAnchor*(view: View): LayoutXAxisAnchor =
-  initXAxisAnchor(view, latTrailing)
-
-proc centerXAnchor*(view: View): LayoutXAxisAnchor =
-  initXAxisAnchor(view, latCenterX)
-
-proc topAnchor*(view: View): LayoutYAxisAnchor =
-  initYAxisAnchor(view, latTop)
-
-proc bottomAnchor*(view: View): LayoutYAxisAnchor =
-  initYAxisAnchor(view, latBottom)
-
-proc centerYAnchor*(view: View): LayoutYAxisAnchor =
-  initYAxisAnchor(view, latCenterY)
-
-proc widthAnchor*(view: View): LayoutDimensionAnchor =
-  initDimensionAnchor(view, latWidth)
-
-proc heightAnchor*(view: View): LayoutDimensionAnchor =
-  initDimensionAnchor(view, latHeight)
-
-proc leftAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
-  initXAxisAnchor(guide.xOwningView, latLeft, guide.xInsets.left)
-
-proc rightAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
-  initXAxisAnchor(guide.xOwningView, latRight, -guide.xInsets.right)
-
-proc leadingAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
-  initXAxisAnchor(guide.xOwningView, latLeading, guide.xInsets.left)
-
-proc trailingAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
-  initXAxisAnchor(guide.xOwningView, latTrailing, -guide.xInsets.right)
-
-proc centerXAnchor*(guide: LayoutGuide): LayoutXAxisAnchor =
-  initXAxisAnchor(
-    guide.xOwningView, latCenterX, (guide.xInsets.left - guide.xInsets.right) / 2.0
-  )
-
-proc topAnchor*(guide: LayoutGuide): LayoutYAxisAnchor =
-  initYAxisAnchor(guide.xOwningView, latTop, guide.xInsets.top)
-
-proc bottomAnchor*(guide: LayoutGuide): LayoutYAxisAnchor =
-  initYAxisAnchor(guide.xOwningView, latBottom, -guide.xInsets.bottom)
-
-proc centerYAnchor*(guide: LayoutGuide): LayoutYAxisAnchor =
-  initYAxisAnchor(
-    guide.xOwningView, latCenterY, (guide.xInsets.top - guide.xInsets.bottom) / 2.0
-  )
-
-proc widthAnchor*(guide: LayoutGuide): LayoutDimensionAnchor =
-  initDimensionAnchor(guide.xOwningView, latWidth, -guide.xInsets.horizontal)
-
-proc heightAnchor*(guide: LayoutGuide): LayoutDimensionAnchor =
-  initDimensionAnchor(guide.xOwningView, latHeight, -guide.xInsets.vertical)
 
 proc newLayoutConstraint*(
     firstItem: View,
@@ -707,20 +710,20 @@ proc edgeConstraints*(
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
   if leLeft in edges:
-    result.add view.leftAnchor.equalTo(
-      toView.leftAnchor, constant = insets.left, priority = priority
+    result.add view[anLeft].equalTo(
+      toView[anLeft], constant = insets.left, priority = priority
     )
   if leTop in edges:
-    result.add view.topAnchor.equalTo(
-      toView.topAnchor, constant = insets.top, priority = priority
+    result.add view[anTop].equalTo(
+      toView[anTop], constant = insets.top, priority = priority
     )
   if leRight in edges:
-    result.add view.rightAnchor.equalTo(
-      toView.rightAnchor, constant = -insets.right, priority = priority
+    result.add view[anRight].equalTo(
+      toView[anRight], constant = -insets.right, priority = priority
     )
   if leBottom in edges:
-    result.add view.bottomAnchor.equalTo(
-      toView.bottomAnchor, constant = -insets.bottom, priority = priority
+    result.add view[anBottom].equalTo(
+      toView[anBottom], constant = -insets.bottom, priority = priority
     )
 
 proc pinEdges*(
@@ -743,20 +746,20 @@ proc edgeConstraints*(
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
   if leLeft in edges:
-    result.add view.leftAnchor.equalTo(
-      toGuide.leftAnchor, constant = insets.left, priority = priority
+    result.add view[anLeft].equalTo(
+      toGuide[anLeft], constant = insets.left, priority = priority
     )
   if leTop in edges:
-    result.add view.topAnchor.equalTo(
-      toGuide.topAnchor, constant = insets.top, priority = priority
+    result.add view[anTop].equalTo(
+      toGuide[anTop], constant = insets.top, priority = priority
     )
   if leRight in edges:
-    result.add view.rightAnchor.equalTo(
-      toGuide.rightAnchor, constant = -insets.right, priority = priority
+    result.add view[anRight].equalTo(
+      toGuide[anRight], constant = -insets.right, priority = priority
     )
   if leBottom in edges:
-    result.add view.bottomAnchor.equalTo(
-      toGuide.bottomAnchor, constant = -insets.bottom, priority = priority
+    result.add view[anBottom].equalTo(
+      toGuide[anBottom], constant = -insets.bottom, priority = priority
     )
 
 proc pinEdges*(

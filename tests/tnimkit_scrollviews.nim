@@ -211,16 +211,16 @@ proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
 
   result.title.pinEdges(toGuide = guide, edges = {leLeft, leTop, leRight})
   activate(
-    result.status.topAnchor.equalTo(result.title.bottomAnchor, constant = 8.0),
-    result.status.leftAnchor.equalTo(result.title.leftAnchor),
-    result.status.rightAnchor.equalTo(result.title.rightAnchor),
-    result.scrollView.topAnchor.equalTo(result.status.bottomAnchor, constant = 12.0),
-    result.scrollView.leftAnchor.equalTo(result.title.leftAnchor),
-    result.scrollView.rightAnchor.equalTo(result.title.rightAnchor),
-    result.controls.topAnchor.equalTo(result.scrollView.bottomAnchor, constant = 12.0),
-    result.controls.leftAnchor.equalTo(result.title.leftAnchor),
-    result.controls.rightAnchor.equalTo(result.title.rightAnchor),
-    result.controls.bottomAnchor.equalTo(guide.bottomAnchor),
+    result.status[anTop].equalTo(result.title[anBottom], constant = 8.0),
+    result.status[anLeft].equalTo(result.title[anLeft]),
+    result.status[anRight].equalTo(result.title[anRight]),
+    result.scrollView[anTop].equalTo(result.status[anBottom], constant = 12.0),
+    result.scrollView[anLeft].equalTo(result.title[anLeft]),
+    result.scrollView[anRight].equalTo(result.title[anRight]),
+    result.controls[anTop].equalTo(result.scrollView[anBottom], constant = 12.0),
+    result.controls[anLeft].equalTo(result.title[anLeft]),
+    result.controls[anRight].equalTo(result.title[anRight]),
+    result.controls[anBottom].equalTo(guide[anBottom]),
   )
 
 proc checkHeaderVisible(fixture: ScrollResizeFixture) =
@@ -643,13 +643,13 @@ suite "nimkit scroll views":
 
     root.addSubview(scrollView, footer)
     activate(
-      scrollView.topAnchor.equalTo(guide.topAnchor),
-      scrollView.leftAnchor.equalTo(guide.leftAnchor),
-      scrollView.rightAnchor.equalTo(guide.rightAnchor),
-      footer.topAnchor.equalTo(scrollView.bottomAnchor, constant = 8.0),
-      footer.leftAnchor.equalTo(guide.leftAnchor),
-      footer.rightAnchor.equalTo(guide.rightAnchor),
-      footer.bottomAnchor.equalTo(guide.bottomAnchor),
+      scrollView[anTop].equalTo(guide[anTop]),
+      scrollView[anLeft].equalTo(guide[anLeft]),
+      scrollView[anRight].equalTo(guide[anRight]),
+      footer[anTop].equalTo(scrollView[anBottom], constant = 8.0),
+      footer[anLeft].equalTo(guide[anLeft]),
+      footer[anRight].equalTo(guide[anRight]),
+      footer[anBottom].equalTo(guide[anBottom]),
     )
 
     root.layoutSubtreeIfNeeded()
