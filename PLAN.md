@@ -182,6 +182,11 @@ application, responder, view, window, accessibility, or control/cell layers.
   chain, controls showing/closing, synchronizes document-driven titles through
   protocol hooks, and bridges window delegate callbacks into controller
   delegates/events while preserving preexisting window delegates.
+- Added `Document` as the next document-controller layer: it tracks file
+  URL/name/type metadata, display names, edited state, undo-manager lookup, and
+  window controllers; exposes protocol-backed readable/writable type and
+  read/write content hooks; and owns save, save-as, revert, show-windows, and
+  close lifecycle events without native document registration.
 
 ## Current Verification
 
@@ -216,12 +221,7 @@ Add the document/window-controller layer after application, menu, and window
 semantics are stable enough to host it, keeping OS document integration behind
 future backend adapters.
 
-1. Add `Document`:
-   - file URL/name/type, display name, edited state, undo manager, window
-     controllers, readable/writable type hooks, and save/revert/close lifecycle
-   - keep read/write hooks explicit and Nim-side until native type registration
-     exists
-2. Add `DocumentController`:
+1. Add `DocumentController`:
    - shared controller, new/open/reopen document flow, document lookup by
      window/URL, close-all/review-unsaved flow, and menu validation for document
      actions
