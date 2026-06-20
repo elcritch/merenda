@@ -20,6 +20,7 @@ let
   buttonRow = newStackView(laHorizontal)
   choiceColumn = newStackView(laVertical)
   popupColumn = newStackView(laVertical)
+  switchRow = newStackView(laHorizontal)
 
   title = newTitleLabel("Nimkit Controls")
   summary = newStatusLabel("")
@@ -49,6 +50,9 @@ let
   sliderTitle = newHeadingLabel("Slider")
   volumeSlider = newSlider(0.0, 100.0, 42.0)
   volumeLabel = newStatusLabel("")
+  switchTitle = newHeadingLabel("Switch Button")
+  powerSwitch = newSwitchButton(true)
+  powerSwitchLabel = newStatusLabel("")
 
   pushAction = actionSelector("showcasePush")
   toggleAction = actionSelector("showcaseToggle")
@@ -73,7 +77,8 @@ proc updateSummary() =
     nameField.stringValue & " / " & noteField.stringValue & " / Toggle: " &
     toggleButton.state.stateName & " / Downloads: " & downloads.state.stateName &
     " / Size: " & selectedSize() & " / Priority: " & priority.stringValue & " / Color: " &
-    color.stringValue & " / Volume: " & $int(volumeSlider.value)
+    color.stringValue & " / Volume: " & $int(volumeSlider.value) & " / Power: " &
+    powerSwitch.state.stateName
 
 proc updateToggleTitle() =
   toggleButton.title = "Toggle " & toggleButton.state.stateName
@@ -82,6 +87,14 @@ proc updateVolumeLabel(slider: Slider) {.slot.} =
   volumeLabel.text = "Volume: " & $int(slider.value)
 
 proc updateSliderSummary(slider: Slider, sender: DynamicAgent) {.slot.} =
+  updateSummary()
+
+proc updatePowerSwitchLabel(switchButton: SwitchButton) {.slot.} =
+  powerSwitchLabel.text = "Power: " & switchButton.state.stateName
+
+proc updatePowerSwitchSummary(
+    switchButton: SwitchButton, sender: DynamicAgent
+) {.slot.} =
   updateSummary()
 
 proc onTextDidChange(field: TextField, sender: DynamicAgent) {.slot.} =
@@ -142,7 +155,14 @@ for combo in [priority, color]:
 
 volumeSlider.stepValue = 1.0
 volumeSlider.connect(actionDidSend, volumeSlider, updateSliderSummary)
-volumeSlider.connect(actionDidSend, volumeSlider, updateVolumeLabel, acceptVoidSlot = true)
+volumeSlider.connect(
+  actionDidSend, volumeSlider, updateVolumeLabel, acceptVoidSlot = true
+)
+
+powerSwitch.connect(actionDidSend, powerSwitch, updatePowerSwitchSummary)
+powerSwitch.connect(
+  actionDidSend, powerSwitch, updatePowerSwitchLabel, acceptVoidSlot = true
+)
 
 layout.spacing = 16.0
 layout.alignment = svaFill
@@ -156,6 +176,10 @@ for column in [inputColumn, choiceColumn, popupColumn]:
   column.alignment = svaFill
 
 popupColumn.distribution = svdNatural
+
+switchRow.spacing = 10.0
+switchRow.alignment = svaCenter
+switchRow.distribution = svdNatural
 
 buttonRow.spacing = 8.0
 buttonRow.alignment = svaFill
@@ -171,8 +195,10 @@ choiceColumn.addArrangedSubview(
 )
 choiceColumn.addFlexibleSpacer()
 popupColumn.addArrangedSubview(
-  popupTitle, priority, color, sliderTitle, volumeSlider, volumeLabel
+  popupTitle, priority, color, sliderTitle, volumeSlider, volumeLabel, switchTitle,
+  switchRow,
 )
+switchRow.addArrangedSubview(powerSwitch, powerSwitchLabel)
 bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
 layout.addArrangedSubview(title, bodyRow, summary)
 
@@ -184,6 +210,7 @@ layout.pinEdges(
 
 updateToggleTitle()
 updateVolumeLabel(volumeSlider)
+updatePowerSwitchLabel(powerSwitch)
 updateSummary()
 window.setContentView(root)
 discard window.makeFirstResponder(nameField)

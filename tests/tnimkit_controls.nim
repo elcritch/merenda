@@ -181,6 +181,67 @@ suite "nimkit controls":
     check spy.events == @["signal"]
     check spy.lastSender == DynamicAgent(slider)
 
+  test "switch button toggles state and sends action signal after target":
+    let
+      switchButton = newSwitchButton(false, frame = initRect(0, 0, 54, 30))
+      action = actionSelector("switchAction")
+      spy = ControlActionSpy()
+
+    var actionCount = 0
+    proc onSwitch(sender: DynamicAgent) =
+      check sender == DynamicAgent(switchButton)
+      spy.events.add "target"
+      inc actionCount
+
+    check switchButton.conformsTo(SwitchButtonProtocol)
+    check switchButton.state == bsOff
+    check not switchButton.on
+
+    switchButton.connect(actionDidSend, spy, rememberActionDidSend)
+    switchButton.target = newActionTarget(action, onSwitch)
+    switchButton.action = action
+
+    discard switchButton.send(performClick(), ActionArgs(sender: switchButton))
+    check switchButton.state == bsOn
+    check switchButton.on
+    check actionCount == 1
+    check spy.events == @["target", "signal"]
+    check spy.lastSender == DynamicAgent(switchButton)
+
+    switchButton.state = bsMixed
+    check switchButton.state == bsOff
+    check not switchButton.on
+
+  test "switch button mouse tracking cancels click when released outside":
+    let
+      window = newWindow("Switch tracking", frame = initRect(0, 0, 180, 90))
+      root = newView(frame = initRect(0, 0, 180, 90))
+      switchButton = newSwitchButton(false, frame = initRect(16, 24, 54, 30))
+      action = actionSelector("trackedSwitch")
+
+    var actionCount = 0
+    proc onSwitch(sender: DynamicAgent) =
+      check sender == DynamicAgent(switchButton)
+      inc actionCount
+
+    switchButton.target = newActionTarget(action, onSwitch)
+    switchButton.action = action
+    root.addSubview(switchButton)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(24, 32))
+    check switchButton.highlighted
+    check window.mouseDraggedAt(initPoint(150, 70))
+    check not switchButton.highlighted
+    check window.mouseUpAt(initPoint(150, 70))
+    check not switchButton.on
+    check actionCount == 0
+
+    check window.mouseDownAt(initPoint(24, 32))
+    check window.mouseUpAt(initPoint(24, 32))
+    check switchButton.on
+    check actionCount == 1
+
   test "toggle button cycles state during performClick":
     var actionCount = 0
     let
