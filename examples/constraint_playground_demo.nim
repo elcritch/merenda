@@ -50,7 +50,7 @@ let
   summary = newStatusLabel("")
   changedAction = actionSelector("constraintPlaygroundChanged")
 
-var activeConstraints: seq[LayoutConstraint]
+var cxs: seq[LayoutConstraint]
 
 proc updateSummary() =
   let
@@ -67,9 +67,9 @@ proc updateSummary() =
     alignmentChoice.stringValue
 
 proc rebuildPreviewConstraints() =
-  if activeConstraints.len > 0:
-    deactivateConstraints(activeConstraints)
-    activeConstraints.setLen(0)
+  if cxs.len > 0:
+    deactivateConstraints(cxs)
+    cxs.setLen(0)
 
   let
     spacing = spacingChoice.selectedFloat(SpacingValues)
@@ -81,50 +81,50 @@ proc rebuildPreviewConstraints() =
   for view in [sidebar, sidebarTitle, sidebarBody]:
     view.hidden = sidebarCollapsed
 
-  activeConstraints.add cx(previewTitle[atTop] == preview[atTop] + 14.0)
-  activeConstraints.add cx(previewTitle[atLeft] == preview[atLeft] + 18.0)
-  activeConstraints.add cx(previewTitle[atWidth] == 260.0)
-  activeConstraints.add cx(previewTitle[atHeight] == 24.0)
-  activeConstraints.add cx(previewSubtitle[atTop] == previewTitle[atBottom] + spacing)
-  activeConstraints.add cx(previewSubtitle[atLeft] == previewTitle[atLeft])
-  activeConstraints.add cx(previewSubtitle[atWidth] == 320.0)
-  activeConstraints.add cx(previewSubtitle[atHeight] == 20.0)
-  activeConstraints.add cx(toolbar[atTop] == previewSubtitle[atBottom] + spacing)
-  activeConstraints.add cx(toolbar[atLeft] == preview[atLeft] + 18.0)
-  activeConstraints.add cx(toolbar[atRight] == preview[atRight] - 18.0)
-  activeConstraints.add cx(toolbar[atHeight] == toolbarHeight)
-  activeConstraints.add cx(content[atTop] == toolbar[atBottom] + spacing)
-  activeConstraints.add cx(content[atLeft] == toolbar[atLeft])
-  activeConstraints.add cx(content[atBottom] == preview[atBottom] - 16.0)
+  cxs.add cx(previewTitle[atTop] == preview[atTop] + 14.0)
+  cxs.add cx(previewTitle[atLeft] == preview[atLeft] + 18.0)
+  cxs.add cx(previewTitle[atWidth] == 260.0)
+  cxs.add cx(previewTitle[atHeight] == 24.0)
+  cxs.add cx(previewSubtitle[atTop] == previewTitle[atBottom] + spacing)
+  cxs.add cx(previewSubtitle[atLeft] == previewTitle[atLeft])
+  cxs.add cx(previewSubtitle[atWidth] == 320.0)
+  cxs.add cx(previewSubtitle[atHeight] == 20.0)
+  cxs.add cx(toolbar[atTop] == previewSubtitle[atBottom] + spacing)
+  cxs.add cx(toolbar[atLeft] == preview[atLeft] + 18.0)
+  cxs.add cx(toolbar[atRight] == preview[atRight] - 18.0)
+  cxs.add cx(toolbar[atHeight] == toolbarHeight)
+  cxs.add cx(content[atTop] == toolbar[atBottom] + spacing)
+  cxs.add cx(content[atLeft] == toolbar[atLeft])
+  cxs.add cx(content[atBottom] == preview[atBottom] - 16.0)
 
   if sidebarWidth > 0.0'f32:
-    activeConstraints.add cx(sidebar[atTop] == content[atTop])
-    activeConstraints.add cx(sidebar[atRight] == toolbar[atRight])
-    activeConstraints.add cx(sidebar[atBottom] == content[atBottom])
-    activeConstraints.add cx(sidebar[atWidth] == sidebarWidth)
-    activeConstraints.add cx(content[atRight] == sidebar[atLeft] - spacing)
+    cxs.add cx(sidebar[atTop] == content[atTop])
+    cxs.add cx(sidebar[atRight] == toolbar[atRight])
+    cxs.add cx(sidebar[atBottom] == content[atBottom])
+    cxs.add cx(sidebar[atWidth] == sidebarWidth)
+    cxs.add cx(content[atRight] == sidebar[atLeft] - spacing)
   else:
-    activeConstraints.add cx(sidebar[atTop] == content[atTop])
-    activeConstraints.add cx(sidebar[atRight] == toolbar[atRight])
-    activeConstraints.add cx(sidebar[atBottom] == content[atBottom])
-    activeConstraints.add cx(sidebar[atWidth] == 0.0)
-    activeConstraints.add cx(content[atRight] == toolbar[atRight])
+    cxs.add cx(sidebar[atTop] == content[atTop])
+    cxs.add cx(sidebar[atRight] == toolbar[atRight])
+    cxs.add cx(sidebar[atBottom] == content[atBottom])
+    cxs.add cx(sidebar[atWidth] == 0.0)
+    cxs.add cx(content[atRight] == toolbar[atRight])
 
-  activeConstraints.add cx(card[atTop] == contentTitle[atBottom] + 4 * spacing)
-  activeConstraints.add cx(card[atWidth] == 240.0)
-  activeConstraints.add cx(card[atHeight] >= 108.0, priority = LayoutPriorityHigh)
-  activeConstraints.add cx(
+  cxs.add cx(card[atTop] == contentTitle[atBottom] + 4 * spacing)
+  cxs.add cx(card[atWidth] == 240.0)
+  cxs.add cx(card[atHeight] >= 108.0, priority = LayoutPriorityHigh)
+  cxs.add cx(
     card[atBottom] == content[atBottom] - 100.0, priority = LayoutPriorityLow
   )
   case alignment
   of 1:
-    activeConstraints.add cx(card[atCenterX] == content[atCenterX])
+    cxs.add cx(card[atCenterX] == content[atCenterX])
   of 2:
-    activeConstraints.add cx(card[atRight] == content[atRight] - spacing)
+    cxs.add cx(card[atRight] == content[atRight] - spacing)
   else:
-    activeConstraints.add cx(card[atLeft] == content[atLeft] + spacing)
+    cxs.add cx(card[atLeft] == content[atLeft] + spacing)
 
-  activateConstraints(activeConstraints)
+  activateConstraints(cxs)
   updateSummary()
 
 proc onChanged(sender: DynamicAgent) =
