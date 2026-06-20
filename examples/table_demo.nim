@@ -365,25 +365,24 @@ title.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-activate(
-  cx(title[atHeight] == TitleHeight),
-  cx(table[atTop] == title[atBottom] + 20.0),
-  cx(table[atLeft] == title[atLeft]),
-  cx(table[atRight] == detailTitle[atLeft] - 22.0),
-  cx(table[atBottom] == root[atBottom] - 28.0),
-  cx(detailTitle[atTop] == table[atTop] + 4.0),
-  cx(detailTitle[atRight] == title[atRight]),
-  cx(detailTitle[atWidth] == SidebarWidth),
-  cx(detail[atTop] == detailTitle[atBottom] + 10.0),
-  cx(detail[atLeft] == detailTitle[atLeft]),
-  cx(detail[atRight] == detailTitle[atRight]),
-  cx(activityTitle[atTop] == detail[atBottom] + 28.0),
-  cx(activityTitle[atLeft] == detailTitle[atLeft]),
-  cx(activityTitle[atRight] == detailTitle[atRight]),
-  cx(activity[atTop] == activityTitle[atBottom] + 10.0),
-  cx(activity[atLeft] == detailTitle[atLeft]),
-  cx(activity[atRight] == detailTitle[atRight]),
-)
+activateConstraints:
+  title[atHeight] == TitleHeight
+  table[atTop] == title[atBottom] + 20.0
+  table[atLeft] == title[atLeft]
+  table[atRight] == detailTitle[atLeft] - 22.0
+  table[atBottom] == root[atBottom] - 28.0
+  detailTitle[atTop] == table[atTop] + 4.0
+  detailTitle[atRight] == title[atRight]
+  detailTitle[atWidth] == SidebarWidth
+  detail[atTop] == detailTitle[atBottom] + 10.0
+  detail[atLeft] == detailTitle[atLeft]
+  detail[atRight] == detailTitle[atRight]
+  activityTitle[atTop] == detail[atBottom] + 28.0
+  activityTitle[atLeft] == detailTitle[atLeft]
+  activityTitle[atRight] == detailTitle[atRight]
+  activity[atTop] == activityTitle[atBottom] + 10.0
+  activity[atLeft] == detailTitle[atLeft]
+  activity[atRight] == detailTitle[atRight]
 
 controller.updateSelection()
 window.setContentView(root)

@@ -409,45 +409,44 @@ proc makeWorkspaceWindow(
     toGuide = root.contentLayoutGuide(initEdgeInsets(46.0, 26.0, 0.0, 26.0)),
     edges = {leLeft, leTop, leRight},
   )
-  activate(
-    cx(title[atHeight] == 30.0),
-    cx(subtitle[atTop] == title[atBottom] + 4.0),
-    cx(subtitle[atLeft] == title[atLeft]),
-    cx(subtitle[atRight] == title[atRight]),
-    cx(subtitle[atHeight] == 20.0),
-    cx(toolbar[atTop] == subtitle[atBottom] + 14.0),
-    cx(toolbar[atLeft] == title[atLeft]),
-    cx(toolbar[atRight] == title[atRight]),
-    cx(toolbar[atHeight] == 30.0),
-    cx(table[atTop] == toolbar[atBottom] + 18.0),
-    cx(table[atLeft] == title[atLeft]),
-    cx(table[atRight] == sideTitle[atLeft] - 22.0),
-    cx(table[atBottom] == root[atBottom] - 26.0),
-    cx(sideTitle[atTop] == table[atTop] + 4.0),
-    cx(sideTitle[atRight] == title[atRight]),
-    cx(sideTitle[atWidth] == 260.0),
-    cx(sideTitle[atHeight] == 22.0),
-    cx(activity[atTop] == sideTitle[atBottom] + 10.0),
-    cx(activity[atLeft] == sideTitle[atLeft]),
-    cx(activity[atRight] == sideTitle[atRight]),
-    cx(activity[atHeight] == pasteboardInfo[atHeight]),
-    cx(pasteboardTitle[atTop] == activity[atBottom] + 24.0),
-    cx(pasteboardTitle[atLeft] == sideTitle[atLeft]),
-    cx(pasteboardTitle[atRight] == sideTitle[atRight]),
-    cx(pasteboardTitle[atHeight] == sideTitle[atHeight]),
-    cx(pasteboardInfo[atTop] == pasteboardTitle[atBottom] + 10.0),
-    cx(pasteboardInfo[atLeft] == sideTitle[atLeft]),
-    cx(pasteboardInfo[atRight] == sideTitle[atRight]),
-    cx(pasteboardInfo[atHeight] == accessibilityInfo[atHeight]),
-    cx(accessibilityTitle[atTop] == pasteboardInfo[atBottom] + 24.0),
-    cx(accessibilityTitle[atLeft] == sideTitle[atLeft]),
-    cx(accessibilityTitle[atRight] == sideTitle[atRight]),
-    cx(accessibilityTitle[atHeight] == sideTitle[atHeight]),
-    cx(accessibilityInfo[atTop] == accessibilityTitle[atBottom] + 10.0),
-    cx(accessibilityInfo[atLeft] == sideTitle[atLeft]),
-    cx(accessibilityInfo[atRight] == sideTitle[atRight]),
-    cx(accessibilityInfo[atBottom] == table[atBottom]),
-  )
+  activateConstraints:
+    title[atHeight] == 30.0
+    subtitle[atTop] == title[atBottom] + 4.0
+    subtitle[atLeft] == title[atLeft]
+    subtitle[atRight] == title[atRight]
+    subtitle[atHeight] == 20.0
+    toolbar[atTop] == subtitle[atBottom] + 14.0
+    toolbar[atLeft] == title[atLeft]
+    toolbar[atRight] == title[atRight]
+    toolbar[atHeight] == 30.0
+    table[atTop] == toolbar[atBottom] + 18.0
+    table[atLeft] == title[atLeft]
+    table[atRight] == sideTitle[atLeft] - 22.0
+    table[atBottom] == root[atBottom] - 26.0
+    sideTitle[atTop] == table[atTop] + 4.0
+    sideTitle[atRight] == title[atRight]
+    sideTitle[atWidth] == 260.0
+    sideTitle[atHeight] == 22.0
+    activity[atTop] == sideTitle[atBottom] + 10.0
+    activity[atLeft] == sideTitle[atLeft]
+    activity[atRight] == sideTitle[atRight]
+    activity[atHeight] == pasteboardInfo[atHeight]
+    pasteboardTitle[atTop] == activity[atBottom] + 24.0
+    pasteboardTitle[atLeft] == sideTitle[atLeft]
+    pasteboardTitle[atRight] == sideTitle[atRight]
+    pasteboardTitle[atHeight] == sideTitle[atHeight]
+    pasteboardInfo[atTop] == pasteboardTitle[atBottom] + 10.0
+    pasteboardInfo[atLeft] == sideTitle[atLeft]
+    pasteboardInfo[atRight] == sideTitle[atRight]
+    pasteboardInfo[atHeight] == accessibilityInfo[atHeight]
+    accessibilityTitle[atTop] == pasteboardInfo[atBottom] + 24.0
+    accessibilityTitle[atLeft] == sideTitle[atLeft]
+    accessibilityTitle[atRight] == sideTitle[atRight]
+    accessibilityTitle[atHeight] == sideTitle[atHeight]
+    accessibilityInfo[atTop] == accessibilityTitle[atBottom] + 10.0
+    accessibilityInfo[atLeft] == sideTitle[atLeft]
+    accessibilityInfo[atRight] == sideTitle[atRight]
+    accessibilityInfo[atBottom] == table[atBottom]
 
   document.updateActivity("Ready")
   document.updatePasteboardInfo()
@@ -481,17 +480,16 @@ proc makeTextDocumentWindow(
     toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 24.0, 0.0, 24.0)),
     edges = {leLeft, leTop, leRight},
   )
-  activate(
-    cx(title[atHeight] == 30.0),
-    cx(subtitle[atTop] == title[atBottom] + 4.0),
-    cx(subtitle[atLeft] == title[atLeft]),
-    cx(subtitle[atRight] == title[atRight]),
-    cx(subtitle[atHeight] == 20.0),
-    cx(scroll[atTop] == subtitle[atBottom] + 18.0),
-    cx(scroll[atLeft] == title[atLeft]),
-    cx(scroll[atRight] == title[atRight]),
-    cx(scroll[atBottom] == root[atBottom] - 24.0),
-  )
+  activateConstraints:
+    title[atHeight] == 30.0
+    subtitle[atTop] == title[atBottom] + 4.0
+    subtitle[atLeft] == title[atLeft]
+    subtitle[atRight] == title[atRight]
+    subtitle[atHeight] == 20.0
+    scroll[atTop] == subtitle[atBottom] + 18.0
+    scroll[atLeft] == title[atLeft]
+    scroll[atRight] == title[atRight]
+    scroll[atBottom] == root[atBottom] - 24.0
 
   result.setContentView(root)
   discard result.makeFirstResponder(editor)

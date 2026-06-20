@@ -56,26 +56,25 @@ for combo in [projectChoice, sizeChoice]:
 
 root.addSubview(title, status, projectLabel, projectChoice, sizeLabel, sizeChoice)
 
-activate(
-  title[atTop] == root[atTop] + 24.0,
-  title[atLeft] == root[atLeft] + 28.0,
-  title[atRight] == root[atRight] - 28.0,
-  status[atTop] == title[atBottom] + 10.0,
-  status[atLeft] == title[atLeft],
-  status[atRight] == title[atRight],
-  projectLabel[atTop] == status[atBottom] + 24.0,
-  projectLabel[atLeft] == title[atLeft],
-  projectLabel[atWidth] == 104.0,
-  projectChoice[atLeft] == projectLabel[atRight] + 12.0,
-  projectChoice[atTop] == projectLabel[atTop],
-  projectChoice[atWidth] == 260.0,
-  sizeLabel[atTop] == projectChoice[atBottom] + 150.0,
-  sizeLabel[atLeft] == projectLabel[atLeft],
-  sizeLabel[atWidth] == projectLabel[atWidth],
-  sizeChoice[atLeft] == projectChoice[atLeft],
-  sizeChoice[atTop] == sizeLabel[atTop],
-  sizeChoice[atWidth] == projectChoice[atWidth],
-)
+activateConstraints:
+  title[atTop] == root[atTop] + 24.0
+  title[atLeft] == root[atLeft] + 28.0
+  title[atRight] == root[atRight] - 28.0
+  status[atTop] == title[atBottom] + 10.0
+  status[atLeft] == title[atLeft]
+  status[atRight] == title[atRight]
+  projectLabel[atTop] == status[atBottom] + 24.0
+  projectLabel[atLeft] == title[atLeft]
+  projectLabel[atWidth] == 104.0
+  projectChoice[atLeft] == projectLabel[atRight] + 12.0
+  projectChoice[atTop] == projectLabel[atTop]
+  projectChoice[atWidth] == 260.0
+  sizeLabel[atTop] == projectChoice[atBottom] + 150.0
+  sizeLabel[atLeft] == projectLabel[atLeft]
+  sizeLabel[atWidth] == projectLabel[atWidth]
+  sizeChoice[atLeft] == projectChoice[atLeft]
+  sizeChoice[atTop] == sizeLabel[atTop]
+  sizeChoice[atWidth] == projectChoice[atWidth]
 
 updateStatus()
 window.setContentView(root)
