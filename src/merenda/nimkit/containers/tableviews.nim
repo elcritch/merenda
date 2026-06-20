@@ -1570,7 +1570,11 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
         session, event.location, DynamicAgent(tableView), target
       )
       return true
-    ListView(tableView).mouseDragged(event)
+    let next = tableView.performNext(mouseDragged, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
 
 protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
   method columnAutosaveRecords(tableView: TableView): seq[TableColumnAutosaveRecord] =
@@ -1675,7 +1679,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   discard tableView.withProtocol(DefaultTableViewColumnBehavior)
   discard tableView.withProtocol(DefaultTableViewSelectionBehavior)
   discard tableView.withProtocol(DefaultTableViewEditingBehavior)
-  discard tableView.withProtocol(DefaultTableViewEvents)
+  discard DynamicAgent(tableView).pushMethods(DefaultTableViewEvents.init())
   discard tableView.withProtocol(DefaultTableViewDraggingBehavior)
   discard tableView.withProtocol(DefaultTableViewDraggingSource)
   discard tableView.withProtocol(DefaultTableViewDraggingDestination)

@@ -1557,45 +1557,66 @@ protocol DefaultListViewDrawing of ViewDrawingProtocol:
     if ssFocusVisible in focusedState:
       context.addFocusRing(context.renderRectFor(listView.bounds), listStyle.box)
 
-protocol DefaultListViewEvents of ResponderEventProtocol:
-  method mouseDown(listView: ListView, event: MouseEvent): bool =
-    if not listView.isEnabled() or event.button != mbPrimary:
-      return false
-    let owner = listView.window()
-    if owner of Window:
-      discard Window(owner).makeFirstResponder(listView)
-    listView.xTrackingItem = true
+proc defaultListViewMouseDown*(listView: ListView, event: MouseEvent): bool =
+  if not listView.isEnabled() or event.button != mbPrimary:
+    return false
+  let owner = listView.window()
+  if owner of Window:
+    discard Window(owner).makeFirstResponder(listView)
+  listView.xTrackingItem = true
+  let index = listView.listItemIndexAtPoint(event.location)
+  listView.highlightedIndex = index
+  listView.xPressedIndex = listView.highlightedIndex()
+  listView.invalidateListRows()
+  true
+
+proc defaultListViewMouseDragged*(listView: ListView, event: MouseEvent): bool =
+  if not listView.xListDraggingInfo.session.isNil and
+      listView.xListDraggingInfo.session.state() == dssActive:
+    let target = listView.dropTargetForDraggingLocation(event.location)
+    listView.updateVisibleDropTarget(target)
+    discard updateDraggingSession(
+      listView.xListDraggingInfo.session,
+      event.location,
+      DynamicAgent(listView),
+      target,
+    )
+    discard autoscrollDraggingSession(
+      listView.xListDraggingInfo.session,
+      event.location,
+      DynamicAgent(listView),
+      target,
+    )
+    return true
+  if listView.isEnabled() and listView.xTrackingItem:
     let index = listView.listItemIndexAtPoint(event.location)
     listView.highlightedIndex = index
     listView.xPressedIndex = listView.highlightedIndex()
     listView.invalidateListRows()
-    true
+    return true
+  false
+
+proc defaultListViewMouseUp*(listView: ListView, event: MouseEvent): bool =
+  if not listView.isEnabled() or event.button != mbPrimary:
+    return false
+  let index =
+    if listView.xTrackingItem:
+      listView.listItemIndexAtPoint(event.location)
+    else:
+      -1
+  listView.xTrackingItem = false
+  listView.xPressedIndex = -1
+  if index >= 0:
+    listView.activateItemAtIndex(index, event.modifiers)
+  listView.setNeedsDisplay(true)
+  true
+
+protocol DefaultListViewEvents of ResponderEventProtocol:
+  method mouseDown(listView: ListView, event: MouseEvent): bool =
+    defaultListViewMouseDown(listView, event)
 
   method mouseDragged(listView: ListView, event: MouseEvent): bool =
-    if not listView.xListDraggingInfo.session.isNil and
-        listView.xListDraggingInfo.session.state() == dssActive:
-      let target = listView.dropTargetForDraggingLocation(event.location)
-      listView.updateVisibleDropTarget(target)
-      discard updateDraggingSession(
-        listView.xListDraggingInfo.session,
-        event.location,
-        DynamicAgent(listView),
-        target,
-      )
-      discard autoscrollDraggingSession(
-        listView.xListDraggingInfo.session,
-        event.location,
-        DynamicAgent(listView),
-        target,
-      )
-      return true
-    if listView.isEnabled() and listView.xTrackingItem:
-      let index = listView.listItemIndexAtPoint(event.location)
-      listView.highlightedIndex = index
-      listView.xPressedIndex = listView.highlightedIndex()
-      listView.invalidateListRows()
-      return true
-    false
+    defaultListViewMouseDragged(listView, event)
 
   method mouseMoved(listView: ListView, event: MouseEvent): bool =
     if listView.isEnabled():
@@ -1604,19 +1625,7 @@ protocol DefaultListViewEvents of ResponderEventProtocol:
     false
 
   method mouseUp(listView: ListView, event: MouseEvent): bool =
-    if not listView.isEnabled() or event.button != mbPrimary:
-      return false
-    let index =
-      if listView.xTrackingItem:
-        listView.listItemIndexAtPoint(event.location)
-      else:
-        -1
-    listView.xTrackingItem = false
-    listView.xPressedIndex = -1
-    if index >= 0:
-      listView.activateItemAtIndex(index, event.modifiers)
-    listView.setNeedsDisplay(true)
-    true
+    defaultListViewMouseUp(listView, event)
 
 protocol DefaultListViewDraggingSource of DraggingSourceProtocol:
   method draggingSourceOperationMask(
