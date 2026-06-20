@@ -756,7 +756,11 @@ protocol OutlineViewEvents of ResponderEventProtocol:
   method mouseDown(outlineView: OutlineView, event: MouseEvent): bool =
     if outlineView.disclosureMouseDown(event):
       return true
-    ListView(outlineView).mouseDown(event)
+    let next = outlineView.performNext(mouseDown, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
 
   method mouseDragged(outlineView: OutlineView, event: MouseEvent): bool =
     if outlineView.xTrackingDisclosureRow >= 0:
@@ -780,12 +784,20 @@ protocol OutlineViewEvents of ResponderEventProtocol:
         session, event.location, DynamicAgent(outlineView), target
       )
       return true
-    ListView(outlineView).mouseDragged(event)
+    let next = outlineView.performNext(mouseDragged, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
 
   method mouseUp(outlineView: OutlineView, event: MouseEvent): bool =
     if outlineView.disclosureMouseUp(event):
       return true
-    ListView(outlineView).mouseUp(event)
+    let next = outlineView.performNext(mouseUp, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
 
 protocol OutlineViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(outlineView: OutlineView): AccessibilityRole =
@@ -873,7 +885,7 @@ proc initOutlineViewFields*(outlineView: OutlineView, frame: Rect = AutoRect) =
   discard outlineView.withProtocol(OutlineViewTableDataSource)
   discard outlineView.withProtocol(OutlineViewTableListDelegate)
   discard outlineView.withProtocol(OutlineViewDrawing)
-  discard outlineView.withProtocol(OutlineViewEvents)
+  discard DynamicAgent(outlineView).pushMethods(OutlineViewEvents.init())
   discard outlineView.withProtocol(OutlineViewAccessibility)
   discard outlineView.withProtocol(OutlineViewStateBehavior)
   TableView(outlineView).dataSource = DynamicAgent(outlineView)
