@@ -183,62 +183,65 @@ application, responder, view, window, accessibility, or control/cell layers.
 
 ### Accessibility Core
 
-Keep accessibility backend-neutral until the native application/window backend
-boundary is ready.
+Keep accessibility backend-neutral and driven by the same state mutations that
+update widgets, responder state, and rendering.
 
 1. Route focus, selection, enabled-state, expanded/collapsed, and value-change
    notifications from the same mutation procs that already update rendering or
    responder state.
 2. Add semantic traversal helpers:
-   - accessibility element at point
    - ordered accessibility descendants
    - role/action validation helpers for tests and future backend bridges
+   - accessibility element at point once inspection or native hit-testing needs
+     a stable semantic hit-test contract
 3. Add richer text accessibility hooks:
-   - selected range, insertion point, editable/selectable traits, and basic
-     line/character geometry once text layout exposes stable offsets
-4. Stage native bridge work later behind a backend adapter for NSAccessibility,
-   UI Automation, and AT-SPI-style APIs; do not put platform imports in the core
-   accessibility modules.
+   - selected range, insertion point, and editable/selectable traits
+   - basic line/character geometry only after text layout exposes stable offset
+     and line metrics
 
 ### Application And Window Hardening
 
-Keep the pure Nim application spine stable while connecting more behavior to
-real native backends.
+Keep the pure Nim application spine stable and document-ready without pulling
+native backend parity work into the core API.
 
-1. Deepen native activation behavior:
-   - verify activation, hide/unhide, focus changes, and key/main-window
-     transitions on macOS, X11, Wayland, and inline-windowless targets
-   - route native focus/resign/key-window notifications through the same
-     `Application` and `Window` state transitions used by tests
-2. Harden modal and termination flows:
-   - extend termination review from active modal panels to document-driven
+1. Finish core window command validation:
+   - add richer window-level validation for close, minimize, zoom, and related
+     responder-chain menu commands
+   - leave document-window command validation to the document layer once
+     `Document` and `DocumentController` exist
+2. Clarify modal and termination API contracts:
+   - define the pure Nim contract for app-modal and window-modal event blocking
+     so tests and callers can query blocked state consistently
+   - keep termination-review hook points ready for document-driven
      unsaved-change review once the document layer lands
-   - make window-modal event blocking enforceable at the backend dispatch
-     boundary, not only through application state queries
-3. Round out menu and persistence integration:
-   - add optional native-menu bridging after the pure Nim menu path remains
-     stable across examples
-   - move window frame autosave from the current in-process helper store to a
-     backend/user-defaults persistence layer
-   - add richer window-level menu validation for close/minimize/zoom and
-     document-window commands
+3. Keep persistence API boundaries backend-neutral:
+   - preserve window autosave names and in-process helper behavior as the core
+     API surface
+   - avoid committing to user-defaults or platform persistence until the native
+     backend adapter owns that storage
 
 ### Documents And Controllers
 
 Add the document/window-controller layer after application, menu, and window
-semantics are stable enough to host it.
+semantics are stable enough to host it, keeping OS document integration behind
+future backend adapters.
 
 1. Add `WindowController`:
    - owns a window, controls loading/showing/closing, synchronizes titles, and
      bridges window delegates without making every document own window details
+   - gives documents a stable place to coordinate window lifecycle without
+     coupling document state directly to native handles
 2. Add `Document`:
    - file URL/name/type, display name, edited state, undo manager, window
-     controllers, readable/writable type hooks, save/revert/close lifecycle, and
-     print hooks as backend support appears
+     controllers, readable/writable type hooks, and save/revert/close lifecycle
+   - keep read/write hooks explicit and Nim-side until native type registration
+     exists
 3. Add `DocumentController`:
-   - shared controller, new/open/reopen document flow, recent documents,
-     document lookup by window/URL, close-all/review-unsaved flow, and menu
-     validation for document actions
+   - shared controller, new/open/reopen document flow, document lookup by
+     window/URL, close-all/review-unsaved flow, and menu validation for document
+     actions
+   - keep recent-document storage as a backend-neutral in-process model until
+     native/user-defaults persistence is owned by the backend adapter
 
 ### TableView And OutlineView
 
@@ -254,26 +257,49 @@ AppKit-style widgets.
      visible column drag insertion affordances, and autoscroll while reordering
      columns
 3. Finish drag/drop integration:
-   - add visible row/column insertion affordances, richer delegate validation
-     hooks, promised data handoff, and native/session-backed pasteboard payload
-     declarations on top of the current `DraggingSession`/`DraggingInfo`
-     table/outline path
+   - add distinct before/after/on insertion targets for table rows, columns,
+     and outline items on top of the current item/cell drop target model
+   - add column-header drag insertion affordances and autoscroll while
+     reordering columns
+   - deepen table/outline delegate validation hooks for proposed operation,
+     target, and insertion position before accepting a drop
 4. Finish persistence integration:
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
      columns/items, and restore timing tied to window/document lifecycle
 5. Harden outline behavior on top of the new rendering path:
-   - add richer outline keyboard navigation, row/item drop targeting, selection
-     persistence by stable item identity, and optional delegate hooks for
-     disclosure rendering/indent metrics
+   - add richer outline keyboard navigation, selection persistence by stable
+     item identity, before/after/on item insertion semantics, and optional
+     delegate hooks for disclosure rendering/indent metrics
+
+
+## Medium-Term Architecture
 
 ### Native Integration
 
 - Keep render construction unit-testable without a live native window.
 - Keep accessibility construction and notification tests backend-free until the native bridge exists.
 - Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style escape hatches for tests and diagnostics.
+- Add accessibility backend adapters for NSAccessibility, UI Automation, and
+  AT-SPI-style APIs after the core semantic tree, notifications, and traversal
+  helpers are stable; do not put platform imports in the core accessibility
+  modules.
+- Verify activation, hide/unhide, focus changes, and key/main-window
+  transitions on macOS, X11, Wayland, and inline-windowless targets.
+- Route native focus/resign/key-window notifications through the same
+  `Application` and `Window` state transitions used by tests.
+- Enforce window-modal event blocking at the backend dispatch boundary after
+  the pure Nim modal blocking contract is stable.
+- Add optional native-menu bridging after the pure Nim menu path remains stable
+  across examples.
+- Move window frame autosave from the current in-process helper store to a
+  backend/user-defaults persistence layer when the backend adapter owns
+  platform persistence.
+- Add native open/save panels, recent-documents integration, represented file
+  URLs/proxy metadata, and native print/page setup only after the pure Nim
+  document/controller contracts are stable.
 
-## Medium-Term Architecture
+### Medium-Term Architecture Updates
 
 - Keep popup presentation policy on `Window`/control instances. Do not add
   global popup state; platforms without native popup windows should keep using
