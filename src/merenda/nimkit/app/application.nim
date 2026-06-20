@@ -31,6 +31,7 @@ type
 
   Application* = ref object of Responder
     xWindows: seq[Window]
+    xOrderedWindows: seq[Window]
     xDelegate: DynamicAgent
     xAppearance: Appearance
     xHasAppearance: bool
@@ -48,6 +49,11 @@ type
     xTerminating: bool
     xModalSessions: seq[ModalSession]
 
+const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
+const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
+const WindowDidOrderOutSelector = "_nimkitWindowDidOrderOut"
+const WindowDidCloseSelector = "_nimkitWindowDidClose"
+
 var sharedApplicationInstance: Application
 
 proc hide*(app: Application)
@@ -59,6 +65,12 @@ proc updateWindowsMenu*(app: Application)
 proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
+proc setKeyWindow*(app: Application, window: Window)
+proc setMainWindow*(app: Application, window: Window)
+proc noteWindowOrderedFront(app: Application, window: Window)
+proc noteWindowOrderedBack(app: Application, window: Window)
+proc noteWindowOrderedOut(app: Application, window: Window)
+proc noteWindowClosed(app: Application, window: Window)
 
 proc orderFrontWindowAction*(): ActionSelector =
   actionSelector("orderFrontWindow")
@@ -93,6 +105,47 @@ proc installApplicationCommandMethods(app: Application) =
     let event = invocation.argsAs(KeyEvent)
     invocation.setResult(Application(self).performMenuKeyEquivalent(event))
   discard app.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
+
+  let windowOrderedFrontMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    let args = invocation.argsAs(ActionArgs)
+    if args.sender of Window:
+      Application(self).noteWindowOrderedFront(Window(args.sender))
+    invocation.setResult(())
+  discard app.replaceMethod(
+    actionSelector(WindowDidOrderFrontSelector), windowOrderedFrontMethod
+  )
+
+  let windowOrderedBackMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    let args = invocation.argsAs(ActionArgs)
+    if args.sender of Window:
+      Application(self).noteWindowOrderedBack(Window(args.sender))
+    invocation.setResult(())
+  discard app.replaceMethod(
+    actionSelector(WindowDidOrderBackSelector), windowOrderedBackMethod
+  )
+
+  let windowOrderedOutMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    let args = invocation.argsAs(ActionArgs)
+    if args.sender of Window:
+      Application(self).noteWindowOrderedOut(Window(args.sender))
+    invocation.setResult(())
+  discard
+    app.replaceMethod(actionSelector(WindowDidOrderOutSelector), windowOrderedOutMethod)
+
+  let windowClosedMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    let args = invocation.argsAs(ActionArgs)
+    if args.sender of Window:
+      Application(self).noteWindowClosed(Window(args.sender))
+    invocation.setResult(())
+  discard app.replaceMethod(actionSelector(WindowDidCloseSelector), windowClosedMethod)
 
 proc applicationForwardingTarget(app: Application, selector: SigilName): DynamicAgent =
   if not app.xDelegate.isNil and app.xDelegate.respondsTo(selector):
@@ -153,6 +206,87 @@ proc clearCurrentEvent*(app: Application) =
   if not app.isNil:
     app.xCurrentEvent = KeyEvent()
     app.xHasCurrentEvent = false
+
+proc removeWindow(windows: var seq[Window], window: Window): bool =
+  let idx = windows.find(window)
+  if idx >= 0:
+    windows.delete(idx)
+    return true
+
+proc includeOrderedWindow(app: Application, window: Window) =
+  if app.isNil or window.isNil or window in app.xOrderedWindows:
+    return
+  app.xOrderedWindows.add window
+
+proc moveWindowToFront(app: Application, window: Window) =
+  if app.isNil or window.isNil:
+    return
+  discard app.xOrderedWindows.removeWindow(window)
+  app.xOrderedWindows.insert(window, 0)
+
+proc moveWindowToBack(app: Application, window: Window) =
+  if app.isNil or window.isNil:
+    return
+  discard app.xOrderedWindows.removeWindow(window)
+  app.xOrderedWindows.add window
+
+proc frontVisibleWindow(app: Application, excluding: Window = nil): Window =
+  if app.isNil:
+    return nil
+  for window in app.xOrderedWindows:
+    if window != excluding and not window.isNil and window.isVisible:
+      return window
+
+proc restoreFocusAfterWindowHidden(app: Application, window: Window) =
+  if app.isNil or app.xHidden:
+    return
+  let replacement = app.frontVisibleWindow(excluding = window)
+  if app.xKeyWindow == window:
+    app.setKeyWindow(replacement)
+  if app.xMainWindow == window:
+    app.setMainWindow(replacement)
+
+proc restoreFocusAfterWindowClosed(app: Application, window: Window) =
+  if app.isNil:
+    return
+  let replacement = app.frontVisibleWindow(excluding = window)
+  if app.xKeyWindow == window:
+    app.setKeyWindow(replacement)
+  if app.xMainWindow == window:
+    app.setMainWindow(replacement)
+
+proc noteWindowOrderedFront(app: Application, window: Window) =
+  if app.isNil or window.isNil or window.isClosed:
+    return
+  if window notin app.xWindows:
+    app.addWindow(window)
+  app.moveWindowToFront(window)
+  if window.isKeyWindow:
+    app.setKeyWindow(window)
+  if window.isMainWindow:
+    app.setMainWindow(window)
+  app.updateWindowsMenu()
+
+proc noteWindowOrderedBack(app: Application, window: Window) =
+  if app.isNil or window.isNil or window.isClosed:
+    return
+  if window notin app.xWindows:
+    app.addWindow(window)
+  app.moveWindowToBack(window)
+  app.updateWindowsMenu()
+
+proc noteWindowOrderedOut(app: Application, window: Window) =
+  if app.isNil or window.isNil:
+    return
+  app.restoreFocusAfterWindowHidden(window)
+  app.updateWindowsMenu()
+
+proc noteWindowClosed(app: Application, window: Window) =
+  if app.isNil or window.isNil:
+    return
+  discard app.xOrderedWindows.removeWindow(window)
+  app.restoreFocusAfterWindowClosed(window)
+  app.updateWindowsMenu()
 
 proc keyWindow*(app: Application): Window =
   if app.isNil: nil else: app.xKeyWindow
@@ -335,6 +469,7 @@ proc activateWindow*(app: Application, window: Window) =
   if app.xHidden:
     app.xHidden = false
   window.makeKeyAndOrderFront()
+  app.moveWindowToFront(window)
   app.setMainWindow(window)
   app.setKeyWindow(window)
   app.updateWindowsMenu()
@@ -344,6 +479,7 @@ proc addWindow*(app: Application, window: Window) =
     return
   if window notin app.xWindows:
     app.xWindows.add window
+  app.includeOrderedWindow(window)
   window.setNextResponder(app)
   window.setInheritedAppearance(app.effectiveAppearance())
   if app.xMainWindow.isNil:
@@ -354,6 +490,9 @@ proc addWindow*(app: Application, window: Window) =
 
 proc windows*(app: Application): lent seq[Window] =
   app.xWindows
+
+proc orderedWindows*(app: Application): lent seq[Window] =
+  app.xOrderedWindows
 
 proc isRunning*(app: Application): bool =
   app.xRunning
@@ -532,10 +671,9 @@ proc runForFrames*(app: Application, frames: Natural): int =
       if window.isNil or window.isClosed:
         if not window.isNil and window.nextResponder() == Responder(app):
           window.clearNextResponder()
-        if window == app.xKeyWindow:
-          app.setKeyWindow(nil)
-        if window == app.xMainWindow:
-          app.setMainWindow(nil)
+        if not window.isNil:
+          discard app.xOrderedWindows.removeWindow(window)
+          app.restoreFocusAfterWindowClosed(window)
         app.xWindows.delete(idx)
         removedWindow = true
       else:
@@ -566,10 +704,9 @@ proc run*(app: Application) =
       if window.isNil or window.isClosed:
         if not window.isNil and window.nextResponder() == Responder(app):
           window.clearNextResponder()
-        if window == app.xKeyWindow:
-          app.setKeyWindow(nil)
-        if window == app.xMainWindow:
-          app.setMainWindow(nil)
+        if not window.isNil:
+          discard app.xOrderedWindows.removeWindow(window)
+          app.restoreFocusAfterWindowClosed(window)
         app.xWindows.delete(idx)
         removedWindow = true
       else:

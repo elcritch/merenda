@@ -171,6 +171,12 @@ application, responder, view, window, accessibility, or control/cell layers.
 - Added application/window integration for programmatic activation, key/main
   transitions, hide/unhide window restore, frame autosave helpers, and window
   menu refresh when windows are added, removed, activated, or closed.
+- Finished Application And Window Hardening: window menu commands now validate
+  and dispatch through protocol-backed `performClose`, `performMiniaturize`,
+  and `performZoom` actions without a selector-level `close` special case;
+  application/window state tracks ordered windows, key/main transitions,
+  order-front/back/out, miniaturize/zoom state, modal blocking queries,
+  termination replies, and backend-neutral frame autosave boundaries.
 
 ## Current Verification
 
@@ -198,27 +204,6 @@ update widgets, responder state, and rendering.
    - selected range, insertion point, and editable/selectable traits
    - basic line/character geometry only after text layout exposes stable offset
      and line metrics
-
-### Application And Window Hardening
-
-Keep the pure Nim application spine stable and document-ready without pulling
-native backend parity work into the core API.
-
-1. Finish core window command validation:
-   - add richer window-level validation for close, minimize, zoom, and related
-     responder-chain menu commands
-   - leave document-window command validation to the document layer once
-     `Document` and `DocumentController` exist
-2. Clarify modal and termination API contracts:
-   - define the pure Nim contract for app-modal and window-modal event blocking
-     so tests and callers can query blocked state consistently
-   - keep termination-review hook points ready for document-driven
-     unsaved-change review once the document layer lands
-3. Keep persistence API boundaries backend-neutral:
-   - preserve window autosave names and in-process helper behavior as the core
-     API surface
-   - avoid committing to user-defaults or platform persistence until the native
-     backend adapter owns that storage
 
 ### Documents And Controllers
 

@@ -359,6 +359,135 @@ suite "nimkit application":
     app.replyToApplicationShouldTerminate(true)
     check appDelegateEvents == @["shouldTerminate", "willTerminate"]
 
+  test "application keeps ordered windows and hands off key main state":
+    let
+      app = newApplication()
+      first = newWindow("First", frame = initRect(0, 0, 240, 160))
+      second = newWindow("Second", frame = initRect(20, 20, 240, 160))
+      third = newWindow("Third", frame = initRect(40, 40, 240, 160))
+
+    app.addWindow(first)
+    app.addWindow(second)
+    app.addWindow(third)
+
+    check app.orderedWindows.len == 3
+    check app.orderedWindows[0] == first
+    check app.orderedWindows[1] == second
+    check app.orderedWindows[2] == third
+
+    app.activateWindow(second)
+    check app.keyWindow == second
+    check app.mainWindow == second
+    check second.isKeyWindow
+    check app.orderedWindows[0] == second
+
+    third.orderFront()
+    check third.isVisible
+    check app.orderedWindows[0] == third
+    check app.keyWindow == second
+    check not third.isKeyWindow
+
+    third.makeKeyAndOrderFront()
+    check app.keyWindow == third
+    check app.mainWindow == third
+    check third.isKeyWindow
+
+    second.orderBack()
+    check app.orderedWindows[^1] == second
+    check app.keyWindow == third
+
+    third.orderOut()
+    check not third.isVisible
+    check app.keyWindow == second
+    check app.mainWindow == second
+    check not third.isKeyWindow
+
+    second.close()
+    check second.isClosed
+    check app.keyWindow.isNil
+    check app.mainWindow.isNil
+    check app.orderedWindows.len == 2
+    check second notin app.orderedWindows
+
+  test "window commands validate style and update pure state":
+    let
+      app = newApplication()
+      window = newWindow("Commands", frame = initRect(0, 0, 240, 160))
+      closeItem = newMenuItem("Close", actionSelector("performClose"))
+      miniaturizeItem = newMenuItem("Minimize", actionSelector("performMiniaturize"))
+      zoomItem = newMenuItem("Zoom", actionSelector("performZoom"))
+
+    app.addWindow(window)
+    app.activateWindow(window)
+
+    check closeItem.validate(Responder(window))
+    check miniaturizeItem.validate(Responder(window))
+    check zoomItem.validate(Responder(window))
+
+    check miniaturizeItem.perform(Responder(window))
+    check window.isMiniaturized
+    check not window.isVisible
+    check app.keyWindow.isNil
+    check not miniaturizeItem.validate(Responder(window))
+
+    window.deminiaturize()
+    check not window.isMiniaturized
+    check window.isVisible
+
+    check zoomItem.perform(Responder(window))
+    check window.isZoomed
+    check zoomItem.perform(Responder(window))
+    check not window.isZoomed
+
+    window.styleMask = {wsmTitled}
+    check not closeItem.validate(Responder(window))
+    check not miniaturizeItem.validate(Responder(window))
+    check not zoomItem.validate(Responder(window))
+    check not closeItem.perform(Responder(window))
+    check not window.isClosed
+
+    window.styleMask = {wsmTitled, wsmClosable}
+    check closeItem.perform(Responder(window))
+    check window.isClosed
+
+  test "modal blocking and termination replies have pure query contracts":
+    let
+      app = newApplication()
+      delegate = AppDelegateSpy()
+      first = newWindow("First", frame = initRect(0, 0, 240, 160))
+      second = newWindow("Second", frame = initRect(20, 20, 240, 160))
+      sheet = newPanel("Sheet", frame = initRect(40, 40, 200, 120))
+
+    initResponder(delegate)
+    discard delegate.withProtocol(AppDelegateSpyProtocol)
+    app.delegate = delegate
+    app.addWindow(first)
+    app.addWindow(second)
+
+    let appModal = app.beginModalSession(second)
+    check app.windowBlockedByModal(first)
+    check not app.windowBlockedByModal(second)
+    check app.terminate() == trLater
+    app.endModalSession(appModal)
+
+    let sheetModal = app.beginModalSheet(first, sheet)
+    check app.windowBlockedByModal(first)
+    check not app.windowBlockedByModal(second)
+    check not app.windowBlockedByModal(sheet)
+    app.endModalSession(sheetModal)
+
+    appDelegateEvents = @[]
+    appTerminateReply = trCancel
+    check app.terminate() == trCancel
+    check not app.isTerminating
+    check appDelegateEvents == @["shouldTerminate"]
+
+    appTerminateReply = trLater
+    check app.terminate() == trLater
+    check app.isTerminating
+    app.replyToApplicationShouldTerminate(false)
+    check not app.isTerminating
+
   test "window roles metadata delegates coordinates and sheets":
     let
       window = newWindow("Owner", frame = initRect(20, 30, 240, 160))

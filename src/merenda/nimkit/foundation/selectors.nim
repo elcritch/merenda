@@ -40,6 +40,7 @@ type
 
   ValidationArgs* = object
     item*: DynamicAgent
+    action*: Selector[ActionArgs, EmptyArgs]
 
   TerminationReply* = enum
     trCancel
@@ -194,7 +195,6 @@ protocol MenuCommandProtocol:
   method saveDocumentAs*(args: ActionArgs) {.optional.}
   method revertDocumentToSaved*(args: ActionArgs) {.optional.}
   method printDocument*(args: ActionArgs) {.optional.}
-  method close*(args: ActionArgs) {.optional.}
   method performClose*(args: ActionArgs) {.optional.}
   method performMiniaturize*(args: ActionArgs) {.optional.}
   method performZoom*(args: ActionArgs) {.optional.}

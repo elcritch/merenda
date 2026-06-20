@@ -90,6 +90,8 @@ type
     xAutorecalculatesKeyViewLoop: bool
     xIsKeyWindow: bool
     xIsMainWindow: bool
+    xMiniaturized: bool
+    xZoomed: bool
     xMinSize: Size
     xMaxSize: Size
     xResizeIncrements: Size
@@ -179,6 +181,10 @@ protocol WindowPopupEvents:
 
 const ClickSlop = 4.0'f32
 const ClickInterval = 0.5
+const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
+const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
+const WindowDidOrderOutSelector = "_nimkitWindowDidOrderOut"
+const WindowDidCloseSelector = "_nimkitWindowDidClose"
 
 proc ensureWindowFrameStore() =
   if not savedWindowFramesReady:
@@ -218,6 +224,13 @@ proc effectivePopupPresentation*(window: Window): PopupPresentation
 proc close*(window: Window)
 proc setKeyWindow*(window: Window, value: bool)
 proc setMainWindow*(window: Window, value: bool)
+proc canClose*(window: Window): bool
+proc canMiniaturize*(window: Window): bool
+proc canZoom*(window: Window): bool
+proc validateWindowCommand*(window: Window, selector: ActionSelector): Option[bool]
+proc miniaturize*(window: Window)
+proc deminiaturize*(window: Window)
+proc zoom*(window: Window)
 proc endSheet*(window: Window, sheet: Window = nil)
 proc closeAuxiliaryWindows(window: Window, notifyDone = true)
 proc hasActiveTransientSession*(window: Window): bool
@@ -270,6 +283,24 @@ protocol DefaultWindowKeyViewCommands of KeyViewCommandProtocol:
     let start = window.keyViewCommandStartView(args.sender)
     discard window.selectKeyViewPrecedingView(start)
 
+protocol DefaultWindowCommands of MenuCommandProtocol:
+  method performClose(window: Window, args: ActionArgs) =
+    if window.canClose():
+      window.close()
+
+  method performMiniaturize(window: Window, args: ActionArgs) =
+    window.miniaturize()
+
+  method performZoom(window: Window, args: ActionArgs) =
+    window.zoom()
+
+protocol DefaultWindowValidations of UserInterfaceValidations:
+  method validateUserInterfaceItem(window: Window, args: ValidationArgs): bool =
+    let validation = window.validateWindowCommand(args.action)
+    if validation.isSome:
+      return validation.get()
+    args.action.name.len > 0 and window.respondsTo(args.action.name)
+
 proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): Window =
   let resolvedFrame = frame.resolveAutoRect(defaultWindowFrame())
   result = Window(
@@ -285,6 +316,8 @@ proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): 
   )
   initResponder(result)
   discard result.withProtocol(DefaultWindowKeyViewCommands)
+  discard result.withProtocol(DefaultWindowCommands)
+  discard result.withProtocol(DefaultWindowValidations)
 
 proc newPanel*(title = "Panel", frame: Rect = defaultWindowFrame()): Panel =
   result = newWindow(title, frame)
@@ -401,6 +434,12 @@ proc isKeyWindow*(window: Window): bool =
 
 proc isMainWindow*(window: Window): bool =
   (not window.isNil) and window.xIsMainWindow
+
+proc isMiniaturized*(window: Window): bool =
+  (not window.isNil) and window.xMiniaturized
+
+proc isZoomed*(window: Window): bool =
+  (not window.isNil) and window.xZoomed
 
 proc minSize*(window: Window): Size =
   if window.isNil:
@@ -958,13 +997,24 @@ proc isClosed*(window: Window): bool =
   window.isNil or window.xClosed
 
 proc isVisible*(window: Window): bool =
-  (not window.isNil) and window.xVisibleRequested and not window.xClosed
+  (not window.isNil) and window.xVisibleRequested and not window.xClosed and
+    not window.xMiniaturized
 
 proc sendWindowDelegate[A](
     window: Window, selector: Selector[A, EmptyArgs], args: sink A
 ) =
   if not window.isNil and not window.xDelegate.isNil:
     discard window.xDelegate.sendLocalIfHandled(selector, ensureMove args)
+
+proc notifyApplication(window: Window, selectorName: string) =
+  if window.isNil:
+    return
+  let owner = window.nextResponder()
+  if owner.isNil:
+    return
+  discard owner.sendLocalIfHandled(
+    actionSelector(selectorName), ActionArgs(sender: DynamicAgent(window))
+  )
 
 proc setKeyWindow*(window: Window, value: bool) =
   if window.isNil or window.xIsKeyWindow == value:
@@ -988,21 +1038,82 @@ proc setMainWindow*(window: Window, value: bool) =
     window.sendWindowDelegate(windowDidResignMain(), window)
     emit window.didResignMainWindow()
 
-proc makeKeyAndOrderFront*(window: Window) =
+proc canClose*(window: Window): bool =
+  (not window.isNil) and not window.xClosed and wsmClosable in window.xStyleMask
+
+proc canMiniaturize*(window: Window): bool =
+  (not window.isNil) and not window.xClosed and wsmMiniaturizable in window.xStyleMask and
+    not window.xMiniaturized
+
+proc canZoom*(window: Window): bool =
+  (not window.isNil) and not window.xClosed and wsmResizable in window.xStyleMask
+
+proc validateWindowCommand*(window: Window, selector: ActionSelector): Option[bool] =
+  if selector.name == "performClose":
+    some(window.canClose())
+  elif selector.name == "performMiniaturize":
+    some(window.canMiniaturize())
+  elif selector.name == "performZoom":
+    some(window.canZoom())
+  else:
+    none(bool)
+
+proc orderFrontImpl(window: Window, makeKeyMain: bool) =
+  if window.isNil:
+    return
   window.xClosed = false
+  window.xMiniaturized = false
   window.xVisibleRequested = true
-  window.setKeyWindow(true)
-  window.setMainWindow(true)
+  if makeKeyMain:
+    window.setKeyWindow(true)
+    window.setMainWindow(true)
   if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(true)
+  window.notifyApplication(WindowDidOrderFrontSelector)
+
+proc makeKeyAndOrderFront*(window: Window) =
+  window.orderFrontImpl(makeKeyMain = true)
 
 proc orderFront*(window: Window) =
-  window.makeKeyAndOrderFront()
+  window.orderFrontImpl(makeKeyMain = false)
+
+proc orderBack*(window: Window) =
+  if window.isNil or window.xClosed:
+    return
+  window.xMiniaturized = false
+  window.xVisibleRequested = true
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setVisible(true)
+  window.notifyApplication(WindowDidOrderBackSelector)
 
 proc orderOut*(window: Window) =
+  if window.isNil:
+    return
   window.xVisibleRequested = false
   if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(false)
+  window.notifyApplication(WindowDidOrderOutSelector)
+
+proc miniaturize*(window: Window) =
+  if not window.canMiniaturize():
+    return
+  window.xMiniaturized = true
+  window.xVisibleRequested = false
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setVisible(false)
+  window.notifyApplication(WindowDidOrderOutSelector)
+
+proc deminiaturize*(window: Window) =
+  if window.isNil or window.xClosed or not window.xMiniaturized:
+    return
+  window.orderFront()
+
+proc zoom*(window: Window) =
+  if not window.canZoom():
+    return
+  window.xZoomed = not window.xZoomed
+  if not window.xContentView.isNil:
+    window.xContentView.setNeedsDisplay(true)
 
 proc detachAuxiliaryWindow(owner, auxiliary: Window) =
   if owner.isNil or auxiliary.isNil:
@@ -1147,6 +1258,7 @@ proc close*(window: Window) =
   discard window.saveFrameUsingName()
   window.xClosed = true
   window.xVisibleRequested = false
+  window.xMiniaturized = false
   window.xIsKeyWindow = false
   window.xIsMainWindow = false
   if window.xTransientSession.active:
@@ -1168,6 +1280,7 @@ proc close*(window: Window) =
     window.xOnPopupDone()
   emit window.didClose()
   window.sendWindowDelegate(windowDidClose(), window)
+  window.notifyApplication(WindowDidCloseSelector)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
   window.xOnPopupDone = handler
@@ -1876,6 +1989,7 @@ proc dispatchHostFocusChanged(window: Window, focused: bool) =
 proc markHostClosed(window: Window) =
   window.xClosed = true
   window.xVisibleRequested = false
+  window.xMiniaturized = false
   if window.xTransientSession.active:
     discard window.dismissTransientSession(tdrOwnerClosed)
   else:
@@ -1883,6 +1997,7 @@ proc markHostClosed(window: Window) =
   if not window.xOwnerWindow.isNil:
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
+  window.notifyApplication(WindowDidCloseSelector)
 
 proc ensureNativeWindow*(window: Window) =
   if window.xHostWindow.isReady:
