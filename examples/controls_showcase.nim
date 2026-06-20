@@ -46,12 +46,16 @@ let
   popupTitle = newHeadingLabel("Combo Boxes")
   priority = newComboBox(["Low", "Medium", "High"])
   color = newComboBox(["Red", "Green", "Blue"])
+  sliderTitle = newHeadingLabel("Slider")
+  volumeSlider = newSlider(0.0, 100.0, 42.0)
+  volumeLabel = newStatusLabel("")
 
   pushAction = actionSelector("showcasePush")
   toggleAction = actionSelector("showcaseToggle")
   choiceAction = actionSelector("showcaseChoiceChanged")
   radioAction = actionSelector("showcaseRadioChanged")
   comboAction = actionSelector("showcaseComboChanged")
+  sliderAction = actionSelector("showcaseSliderChanged")
 
 var pushCount = 0
 
@@ -70,10 +74,13 @@ proc updateSummary() =
     nameField.stringValue & " / " & noteField.stringValue & " / Toggle: " &
     toggleButton.state.stateName & " / Downloads: " & downloads.state.stateName &
     " / Size: " & selectedSize() & " / Priority: " & priority.stringValue & " / Color: " &
-    color.stringValue
+    color.stringValue & " / Volume: " & $int(volumeSlider.value)
 
 proc updateToggleTitle() =
   toggleButton.title = "Toggle " & toggleButton.state.stateName
+
+proc updateVolumeLabel() =
+  volumeLabel.text = "Volume: " & $int(volumeSlider.value)
 
 proc onTextDidChange(field: TextField, sender: DynamicAgent) {.slot.} =
   if sender == DynamicAgent(field):
@@ -92,6 +99,7 @@ proc onToggle(sender: DynamicAgent) =
 
 proc onChoiceChanged(sender: DynamicAgent) =
   if not sender.isNil:
+    updateVolumeLabel()
     updateSummary()
 
 root.background = initColor(0.95, 0.96, 0.98)
@@ -131,6 +139,10 @@ for combo in [priority, color]:
   combo.target = comboTarget
   combo.action = comboAction
 
+volumeSlider.stepValue = 1.0
+volumeSlider.target = newActionTarget(sliderAction, onChoiceChanged)
+volumeSlider.action = sliderAction
+
 layout.spacing = 16.0
 layout.alignment = svaFill
 
@@ -157,7 +169,9 @@ choiceColumn.addArrangedSubview(
   choiceTitle, downloads, notifications, sync, sizeTitle, small, medium, large
 )
 choiceColumn.addFlexibleSpacer()
-popupColumn.addArrangedSubview(popupTitle, priority, color)
+popupColumn.addArrangedSubview(
+  popupTitle, priority, color, sliderTitle, volumeSlider, volumeLabel
+)
 bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
 layout.addArrangedSubview(title, bodyRow, summary)
 
@@ -168,6 +182,7 @@ layout.pinEdges(
 )
 
 updateToggleTitle()
+updateVolumeLabel()
 updateSummary()
 window.setContentView(root)
 discard window.makeFirstResponder(nameField)

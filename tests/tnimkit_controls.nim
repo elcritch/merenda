@@ -118,6 +118,43 @@ suite "nimkit controls":
     check window.mouseUpAt(initPoint(24, 72))
     check actionCount == 1
 
+  test "slider clamps, steps, and sends actions while tracking":
+    let slider = newSlider(0.0, 100.0, 25.0, frame = initRect(10, 10, 200, 24))
+    slider.stepValue = 10.0
+
+    check slider.value == 30.0
+    slider.value = 104.0
+    check slider.value == 100.0
+    slider.value = -4.0
+    check slider.value == 0.0
+
+    let
+      window = newWindow("Slider tracking", frame = initRect(0, 0, 240, 80))
+      root = newView(frame = initRect(0, 0, 240, 80))
+      action = actionSelector("sliderAction")
+
+    var actionCount = 0
+    proc onSlide(sender: DynamicAgent) =
+      check sender == DynamicAgent(slider)
+      inc actionCount
+
+    slider.target = newActionTarget(action, onSlide)
+    slider.action = action
+    root.addSubview(slider)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(120, 22))
+    check slider.cell().isHighlighted()
+    check actionCount > 0
+
+    let previousCount = actionCount
+    check window.mouseDraggedAt(initPoint(200, 22))
+    check slider.value >= 90.0
+    check actionCount > previousCount
+
+    check window.mouseUpAt(initPoint(200, 22))
+    check not slider.cell().isHighlighted()
+
   test "toggle button cycles state during performClick":
     var actionCount = 0
     let

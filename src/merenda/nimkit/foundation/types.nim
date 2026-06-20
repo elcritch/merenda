@@ -127,8 +127,8 @@ type
     arMenuItem = "menuItem"
     arPopupButton = "popupButton"
     arComboBox = "comboBox"
-    arScrollArea = "scrollArea"
     arSlider = "slider"
+    arScrollArea = "scrollArea"
     arTabGroup = "tabGroup"
     arTab = "tab"
 
