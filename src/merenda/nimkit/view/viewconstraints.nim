@@ -964,12 +964,30 @@ proc activate*(constraints: openArray[LayoutConstraint]) =
 proc activate*(constraint: LayoutConstraint, rest: varargs[LayoutConstraint]) =
   setConstraintsActive(constraint, rest, true)
 
+proc isPriorityPipe(node: NimNode): bool =
+  node.kind == nnkInfix and node[0].eqIdent("|") and node[2].eqIdent("priority")
+
+proc cxCallFromBlockStatement(statement: NimNode): NimNode =
+  if statement.kind == nnkAsgn:
+    let left = statement[0]
+    if left.isPriorityPipe():
+      return newCall(
+        ident"cx", left[1], newTree(nnkExprEqExpr, ident"priority", statement[1])
+      )
+    if left.kind == nnkInfix and left.len == 3 and left[2].isPriorityPipe():
+      var expression = copyNimTree(left)
+      expression[2] = left[2][1]
+      return newCall(
+        ident"cx", expression, newTree(nnkExprEqExpr, ident"priority", statement[1])
+      )
+  newCall(ident"cx", statement)
+
 macro activateConstraints*(constraints: varargs[untyped]): untyped =
   result = newCall(ident"activate")
   if constraints.len == 1 and constraints[0].kind == nnkStmtList:
     for statement in constraints[0]:
       if statement.kind != nnkEmpty:
-        result.add newCall(ident"cx", statement)
+        result.add statement.cxCallFromBlockStatement()
   else:
     for constraint in constraints:
       result.add constraint

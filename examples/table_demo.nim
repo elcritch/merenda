@@ -374,15 +374,19 @@ activateConstraints:
   detailTitle[atTop] == table[atTop] + 4.0
   detailTitle[atRight] == title[atRight]
   detailTitle[atWidth] == SidebarWidth
+  detailTitle[atHeight] == 1.5'em
   detail[atTop] == detailTitle[atBottom] + 1'em
   detail[atLeft] == detailTitle[atLeft]
   detail[atRight] == detailTitle[atRight]
   activityTitle[atTop] == detail[atBottom] + 1'em
   activityTitle[atLeft] == detailTitle[atLeft]
   activityTitle[atRight] == detailTitle[atRight]
+  activityTitle[atHeight] == 1.5'em
   activity[atTop] == activityTitle[atBottom] + 1'em
   activity[atLeft] == detailTitle[atLeft]
   activity[atRight] == detailTitle[atRight]
+  detail[atHeight] == activity[atHeight]
+  activity[atBottom] == root[atBottom] - 4'em
 
 controller.updateSelection()
 window.setContentView(root)
