@@ -6,6 +6,7 @@ import merenda/nimkit/drawing/chrome
 import merenda/nimkit/drawing/chromes/aquachrome
 import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
+import merenda/nimkit/app/documentcontrollers
 import merenda/nimkit/app/documents
 import merenda/nimkit/drawing/drawing
 import merenda/nimkit/app/dragging
@@ -49,6 +50,7 @@ export chrome
 export aquachrome
 export comboboxes
 export controls
+export documentcontrollers
 export documents
 export drawing
 export dragging

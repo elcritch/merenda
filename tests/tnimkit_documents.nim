@@ -6,11 +6,13 @@ import merenda/nimkit
 
 type
   FileDocument = ref object of Document
+  FileDocumentController = ref object of DocumentController
   DocumentDelegateSpy = ref object of Responder
 
 var
   fileEvents: seq[string]
   delegateEvents: seq[string]
+  reviewActions: seq[DocumentCloseReviewAction]
   allowDocumentClose: bool
 
 protocol FileDocumentProtocol of DocumentFileProtocol:
@@ -58,6 +60,31 @@ protocol DocumentDelegateSpyProtocol of DocumentDelegate:
 
   method documentDidChangeEdited(delegate: DocumentDelegateSpy, document: Document) =
     delegateEvents.add "edited"
+
+protocol FileDocumentControllerCreation of DocumentControllerFactory:
+  method defaultDocumentType(controller: FileDocumentController): string =
+    "txt"
+
+  method makeUntitledDocument(
+      controller: FileDocumentController, fileType: string
+  ): Document =
+    result = FileDocument()
+    FileDocument(result).initDocument(fileType = fileType)
+    discard FileDocument(result).withProtocol(FileDocumentProtocol)
+
+  method makeDocumentForFileUrl(
+      controller: FileDocumentController, fileUrl: string, fileType: string
+  ): Document =
+    result = FileDocument()
+    FileDocument(result).initDocument(fileUrl = fileUrl, fileType = fileType)
+    discard FileDocument(result).withProtocol(FileDocumentProtocol)
+
+protocol FileDocumentControllerReview of DocumentControllerReview:
+  method reviewUnsavedDocument(
+      controller: FileDocumentController, document: Document
+  ): DocumentCloseReviewAction =
+    result = reviewActions[0]
+    reviewActions.delete(0)
 
 suite "nimkit documents":
   test "document metadata synchronizes window controller display names":
@@ -182,3 +209,121 @@ suite "nimkit documents":
     check firstWindow.isClosed
     check secondWindow.isClosed
     check delegateEvents == @["shouldClose", "shouldClose", "willClose", "didClose"]
+
+  test "document controller creates opens reopens and finds documents":
+    let
+      app = newApplication()
+      controller = FileDocumentController()
+
+    fileEvents = @[]
+    controller.initDocumentController(app)
+    discard controller.withProtocol(FileDocumentControllerCreation)
+    check controller.application == app
+    check controller.nextResponder() == Responder(app)
+
+    let created = controller.newDocument(app = app)
+    check created of FileDocument
+    check created.fileType == "txt"
+    check controller.documentCount == 1
+    check controller.contains(created)
+    check created.nextResponder() == Responder(controller)
+    check app.keyWindow == created.windowControllers()[0].windowOrNil()
+    check controller.currentDocument() == created
+
+    let opened = controller.openDocument("file:///tmp/Open.txt", app = app)
+    check opened of FileDocument
+    check opened.fileUrl == "file:///tmp/Open.txt"
+    check opened.fileName == "Open.txt"
+    check fileEvents == @["read:file:///tmp/Open.txt:txt"]
+    check controller.documentCount == 2
+    check controller.documentForFileUrl("file:///tmp/Open.txt") == opened
+    check controller.documentForWindow(app.keyWindow) == opened
+    check controller.currentDocument() == opened
+    check controller.recentDocumentUrls() == @["file:///tmp/Open.txt"]
+
+    let reopened = controller.openDocument("file:///tmp/Open.txt", app = app)
+    check reopened == opened
+    check fileEvents == @["read:file:///tmp/Open.txt:txt"]
+    check controller.reopenDocument(app = app) == opened
+
+    controller.noteRecentDocumentUrl("file:///tmp/Second.txt")
+    controller.maximumRecentDocumentCount = 1
+    check controller.recentDocumentUrls() == @["file:///tmp/Second.txt"]
+    check controller.removeRecentDocumentUrl("file:///tmp/Second.txt")
+    check controller.recentDocumentCount == 0
+
+  test "document controller reviews unsaved documents before close all":
+    let
+      app = newApplication()
+      controller = FileDocumentController()
+
+    fileEvents = @[]
+    reviewActions = @[]
+    controller.initDocumentController(app)
+    discard controller.withProtocol(FileDocumentControllerCreation)
+    discard controller.withProtocol(FileDocumentControllerReview)
+
+    let
+      saved = controller.openDocument("file:///tmp/Saved.txt", app = app)
+      discardOnly = controller.newDocument(app = app)
+      cancel = controller.newDocument(app = app)
+
+    saved.documentEdited = true
+    discardOnly.documentEdited = true
+    cancel.documentEdited = true
+    reviewActions = @[dcraSave, dcraDiscardChanges, dcraCancel]
+
+    check not controller.closeAllDocuments()
+    check controller.documentCount == 3
+    check not saved.isDocumentEdited
+    check not discardOnly.isDocumentEdited
+    check cancel.isDocumentEdited
+    check fileEvents[^1] == "write:file:///tmp/Saved.txt:txt"
+
+    reviewActions = @[dcraDiscardChanges]
+    check controller.closeAllDocuments()
+    check controller.documentCount == 0
+    check saved.isClosed
+    check discardOnly.isClosed
+    check cancel.isClosed
+
+  test "document controller menu commands validate against the current document":
+    let
+      app = newApplication()
+      controller = FileDocumentController()
+      saveItem = newMenuItem("Save", actionSelector("saveDocument"))
+      revertItem = newMenuItem("Revert", actionSelector("revertDocumentToSaved"))
+      closeItem = newMenuItem("Close", actionSelector("performClose"))
+      openItem = newMenuItem("Open", actionSelector("openDocument"))
+      newItem = newMenuItem("New", actionSelector("newDocument"))
+
+    fileEvents = @[]
+    reviewActions = @[]
+    controller.initDocumentController(app)
+    discard controller.withProtocol(FileDocumentControllerCreation)
+    discard controller.withProtocol(FileDocumentControllerReview)
+
+    check newItem.validate(Responder(controller))
+    check not saveItem.validate(Responder(controller))
+    check not openItem.validate(Responder(controller))
+
+    let document = controller.openDocument("file:///tmp/Menu.txt", app = app)
+    document.documentEdited = true
+    check saveItem.validate(Responder(controller))
+    check revertItem.validate(Responder(controller))
+    check closeItem.validate(Responder(controller))
+    check openItem.validate(Responder(controller))
+
+    check saveItem.perform(Responder(controller))
+    check fileEvents[^1] == "write:file:///tmp/Menu.txt:txt"
+    check not revertItem.validate(Responder(controller))
+
+    check newItem.perform(Responder(controller))
+    check controller.documentCount == 2
+
+    let current = controller.currentDocument()
+    current.documentEdited = true
+    reviewActions = @[dcraDiscardChanges]
+    check closeItem.perform(Responder(controller))
+    check current.isClosed
+    check controller.documentCount == 1
