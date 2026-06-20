@@ -50,7 +50,7 @@ proc addDocumentRow(index: int, heading, body: string) =
   else:
     row.background = initColor(0.98, 0.96, 0.91, 1.0)
 
-  row.addSubviews(headingLabel, bodyLabel)
+  row.addSubviews(autoNames(headingLabel, bodyLabel))
   document.addSubview(row)
 
 proc scrollToTop(sender: DynamicAgent) =
@@ -144,7 +144,7 @@ addDocumentRow(
 )
 
 controls.addArrangedSubview(topButton, middleButton, bottomButton, rightButton)
-root.addSubviews(title, status, details, scrollView, controls)
+root.addSubviews(autoNames(title, status, details, scrollView, controls))
 
 title.pinEdges(toGuide = contentGuide, edges = {leLeft, leTop, leRight})
 

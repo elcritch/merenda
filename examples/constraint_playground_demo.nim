@@ -154,10 +154,12 @@ for combo in [spacingChoice, toolbarChoice, sidebarChoice, alignmentChoice]:
   combo.action = changedAction
 
 root.addSubviews(
-  title, subtitle, preview, previewTitle, previewSubtitle, toolbar, content, sidebar,
-  card, toolbarLabel, contentTitle, contentBody, sidebarTitle, sidebarBody, cardTitle,
-  cardBody, inspectorTitle, spacingLabel, spacingChoice, toolbarLabelControl,
-  toolbarChoice, sidebarLabel, sidebarChoice, alignmentLabel, alignmentChoice, summary,
+  autoNames(
+    title, subtitle, preview, previewTitle, previewSubtitle, toolbar, content, sidebar,
+    card, toolbarLabel, contentTitle, contentBody, sidebarTitle, sidebarBody, cardTitle,
+    cardBody, inspectorTitle, spacingLabel, spacingChoice, toolbarLabelControl,
+    toolbarChoice, sidebarLabel, sidebarChoice, alignmentLabel, alignmentChoice, summary,
+  )
 )
 
 activateConstraints:

@@ -54,7 +54,7 @@ button.action = runAction
 content.spacing = 12.0
 content.alignment = svaFill
 content.addArrangedSubview(title, status, button)
-root.addSubviews(menuBar, content)
+root.addSubviews(autoNames(menuBar, content))
 
 menuBar.pinEdges(toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight})
 menuBar[atHeight].equalTo(28).active = true

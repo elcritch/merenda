@@ -206,7 +206,7 @@ proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
   StackView(result.controls).distribution = svdFill
   StackView(result.controls).addArrangedSubview(topButton, middleButton, bottomButton)
   result.root.addSubviews(
-    result.title, result.status, result.scrollView, result.controls
+    autoNames(result.title, result.status, result.scrollView, result.controls)
   )
 
   result.title.pinEdges(toGuide = guide, edges = {leLeft, leTop, leRight})
@@ -417,7 +417,7 @@ suite "nimkit scroll views":
     horizontal.hasHorizontalScroller = true
     horizontal.autohidesScrollers = false
     horizontal.scrollerThickness = 10.0
-    root.addSubviews(vertical, horizontal)
+    root.addSubviews(autoNames(vertical, horizontal))
     window.setContentView(root)
 
     let
@@ -641,7 +641,7 @@ suite "nimkit scroll views":
       scrollView = newScrollView(documentView = document)
       footer = newButton("Done")
 
-    root.addSubviews(scrollView, footer)
+    root.addSubviews(autoNames(scrollView, footer))
     activate(
       scrollView[atTop].equalTo(guide[atTop]),
       scrollView[atLeft].equalTo(guide[atLeft]),
@@ -783,7 +783,7 @@ suite "nimkit scroll views":
       scrollView =
         newScrollView(frame = initRect(20, 30, 120, 80), documentView = document)
 
-    document.addSubviews(heading, button)
+    document.addSubviews(autoNames(heading, button))
     root.addSubview(scrollView)
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true
@@ -882,7 +882,7 @@ suite "nimkit scroll views":
       )
 
     row.background = initColor(0.92, 0.95, 0.99, 1.0)
-    row.addSubviews(headingLabel, bodyLabel)
+    row.addSubviews(autoNames(headingLabel, bodyLabel))
     document.addSubview(row)
     window.setContentView(fixture.root)
     fixture.root.layoutSubtreeIfNeeded()
