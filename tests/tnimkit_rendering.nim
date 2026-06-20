@@ -225,7 +225,7 @@ suite "nimkit rendering":
     appearance[srComboBox, StyleMinimumSize] = initSize(142.0, 36.0)
 
     root.appearance = appearance
-    root.addSubview(button, checkbox, field, combo)
+    root.addSubviews(button, checkbox, field, combo)
     combo.selectedIndex = 1
     button.sizeToFit()
     checkbox.sizeToFit()

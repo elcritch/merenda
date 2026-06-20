@@ -65,7 +65,7 @@ list.showsRowSeparators = true
 list.selectedIndex = 0
 list.delegate = selectionDelegate
 
-root.addSubview(title, list, detailTitle, detail)
+root.addSubviews(title, list, detailTitle, detail)
 
 title.pinEdges(
   toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),

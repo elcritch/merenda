@@ -54,7 +54,7 @@ for combo in [projectChoice, sizeChoice]:
   combo.target = target
   combo.action = changedAction
 
-root.addSubview(title, status, projectLabel, projectChoice, sizeLabel, sizeChoice)
+root.addSubviews(title, status, projectLabel, projectChoice, sizeLabel, sizeChoice)
 
 activateConstraints:
   title[atTop] == root[atTop] + 24.0
