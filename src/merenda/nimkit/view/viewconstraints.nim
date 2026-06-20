@@ -1,3 +1,5 @@
+import std/macros
+
 import pkg/kiwiberry
 
 import ../drawing/theme
@@ -672,6 +674,17 @@ proc cx*(
 
 proc cx*(constraint: LayoutConstraint): LayoutConstraint =
   constraint
+
+macro activateConstraints*(body: untyped): untyped =
+  result = newCall(ident"activate")
+  let statements =
+    if body.kind == nnkStmtList:
+      body
+    else:
+      newStmtList(body)
+  for statement in statements:
+    if statement.kind != nnkEmpty:
+      result.add newCall(ident"cx", statement)
 
 proc greaterThanOrEqualTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired

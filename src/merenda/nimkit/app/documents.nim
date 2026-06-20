@@ -418,11 +418,28 @@ proc ensureWindowControllers(document: Document) =
   for controller in controllers:
     document.addWindowController(controller)
 
+proc removeClosedWindowControllers(document: Document) =
+  if document.isNil:
+    return
+  var index = document.xWindowControllers.high
+  while index >= 0:
+    let
+      controller = document.xWindowControllers[index]
+      window =
+        if controller.isNil:
+          nil
+        else:
+          controller.windowOrNil()
+    if not window.isNil and window.isClosed:
+      discard document.removeWindowController(controller)
+    dec index
+
 proc showWindows*(
     document: Document, app: Application = nil
 ): seq[Window] {.discardable.} =
   if document.isNil:
     return @[]
+  document.removeClosedWindowControllers()
   document.ensureWindowControllers()
   if not app.isNil:
     document.setNextResponder(app)
