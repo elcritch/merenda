@@ -111,6 +111,39 @@ suite "nimkit constraints":
     check not compiles(root.contentLayoutGuide()[atFirstBaseline])
     check not compiles(root.contentLayoutGuide()[atLastBaseline])
 
+  test "activateConstraints macro wraps block expressions in cx":
+    let
+      root = newView(frame = initRect(0, 0, 320, 200))
+      title = newView()
+      subtitle = newView()
+      toolbar = newView()
+
+    root.addSubview(title, subtitle, toolbar)
+
+    activateConstraints:
+      title[atHeight] == 30.0
+      subtitle[atTop] == title[atBottom] + 4.0
+      subtitle[atLeft] == title[atLeft]
+      toolbar[atHeight] == 30.0
+
+    check title.constraints.len == 1
+    check root.constraints.len == 2
+    check toolbar.constraints.len == 1
+    check title.constraints[0].isActive
+    check root.constraints[0].isActive
+    check toolbar.constraints[0].isActive
+
+    let
+      explicitConstraint = cx(subtitle[atHeight] == 20.0)
+      explicitConstraints = @[cx(toolbar[atWidth] == 100.0)]
+    activateConstraints(explicitConstraint)
+    activateConstraints(explicitConstraints)
+
+    check subtitle.constraints.len == 1
+    check toolbar.constraints.len == 2
+    check explicitConstraint.isActive
+    check explicitConstraints[0].isActive
+
   test "content layout guides and edge pins resolve through constraints":
     let
       root = newView(frame = initRect(0, 0, 300, 200))

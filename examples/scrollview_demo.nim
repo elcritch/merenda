@@ -148,21 +148,20 @@ root.addSubview(title, status, details, scrollView, controls)
 
 title.pinEdges(toGuide = contentGuide, edges = {leLeft, leTop, leRight})
 
-activate(
-  status[atTop] == title[atBottom] + 8.0,
-  status[atLeft] == title[atLeft],
-  status[atRight] == title[atRight],
-  details[atTop] == status[atBottom] + 4.0,
-  details[atLeft] == title[atLeft],
-  details[atRight] == title[atRight],
-  scrollView[atTop] == details[atBottom] + 12.0,
-  scrollView[atLeft] == title[atLeft],
-  scrollView[atRight] == title[atRight],
-  controls[atTop] == scrollView[atBottom] + 12.0,
-  controls[atLeft] == title[atLeft],
-  controls[atRight] == title[atRight],
-  controls[atBottom] == contentGuide[atBottom],
-)
+activateConstraints:
+  status[atTop] == title[atBottom] + 8.0
+  status[atLeft] == title[atLeft]
+  status[atRight] == title[atRight]
+  details[atTop] == status[atBottom] + 4.0
+  details[atLeft] == title[atLeft]
+  details[atRight] == title[atRight]
+  scrollView[atTop] == details[atBottom] + 12.0
+  scrollView[atLeft] == title[atLeft]
+  scrollView[atRight] == title[atRight]
+  controls[atTop] == scrollView[atBottom] + 12.0
+  controls[atLeft] == title[atLeft]
+  controls[atRight] == title[atRight]
+  controls[atBottom] == contentGuide[atBottom]
 
 updateStatus()
 window.setContentView(root)

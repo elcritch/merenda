@@ -675,17 +675,6 @@ proc cx*(
 proc cx*(constraint: LayoutConstraint): LayoutConstraint =
   constraint
 
-macro activateConstraints*(body: untyped): untyped =
-  result = newCall(ident"activate")
-  let statements =
-    if body.kind == nnkStmtList:
-      body
-    else:
-      newStmtList(body)
-  for statement in statements:
-    if statement.kind != nnkEmpty:
-      result.add newCall(ident"cx", statement)
-
 proc greaterThanOrEqualTo*(
     first: LayoutDimensionAnchor, constant: float32, priority = LayoutPriorityRequired
 ): LayoutConstraint =
@@ -696,7 +685,7 @@ proc lessThanOrEqualTo*(
 ): LayoutConstraint =
   first.constraintWithConstant(lrLessThanOrEqual, constant, priority)
 
-proc activateConstraints*(constraints: openArray[LayoutConstraint])
+proc activate*(constraints: openArray[LayoutConstraint])
 
 proc edgeConstraints*(
     view: View,
@@ -732,7 +721,7 @@ proc pinEdges*(
   result = view.edgeConstraints(
     toView = toView, insets = insets, edges = edges, priority = priority
   )
-  activateConstraints(result)
+  activate(result)
 
 proc edgeConstraints*(
     view: View,
@@ -768,7 +757,7 @@ proc pinEdges*(
   result = view.edgeConstraints(
     toGuide = toGuide, insets = insets, edges = edges, priority = priority
   )
-  activateConstraints(result)
+  activate(result)
 
 proc firstItem*(constraint: LayoutConstraint): View =
   if constraint.isNil: nil else: constraint.xFirstItem
@@ -928,14 +917,6 @@ proc setConstraintsActive(
   constraint.active = active
   setConstraintsActive(rest, active)
 
-proc activateConstraints*(constraints: openArray[LayoutConstraint]) =
-  setConstraintsActive(constraints, true)
-
-proc activateConstraints*(
-    constraint: LayoutConstraint, rest: varargs[LayoutConstraint]
-) =
-  setConstraintsActive(constraint, rest, true)
-
 proc deactivateConstraints*(constraints: openArray[LayoutConstraint]) =
   setConstraintsActive(constraints, false)
 
@@ -949,6 +930,16 @@ proc activate*(constraints: openArray[LayoutConstraint]) =
 
 proc activate*(constraint: LayoutConstraint, rest: varargs[LayoutConstraint]) =
   setConstraintsActive(constraint, rest, true)
+
+macro activateConstraints*(constraints: varargs[untyped]): untyped =
+  result = newCall(ident"activate")
+  if constraints.len == 1 and constraints[0].kind == nnkStmtList:
+    for statement in constraints[0]:
+      if statement.kind != nnkEmpty:
+        result.add newCall(ident"cx", statement)
+  else:
+    for constraint in constraints:
+      result.add constraint
 
 proc deactivate*(constraints: openArray[LayoutConstraint]) =
   setConstraintsActive(constraints, false)

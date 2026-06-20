@@ -72,17 +72,16 @@ title.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-activate(
-  cx(list[atTop] == title[atBottom] + 18.0),
-  cx(list[atLeft] == title[atLeft]),
-  cx(list[atWidth] == 188.0),
-  cx(detailTitle[atTop] == list[atTop] + 4.0),
-  cx(detailTitle[atLeft] == list[atRight] + 18.0),
-  cx(detailTitle[atRight] == title[atRight]),
-  cx(detail[atTop] == detailTitle[atBottom] + 10.0),
-  cx(detail[atLeft] == detailTitle[atLeft]),
-  cx(detail[atRight] == detailTitle[atRight]),
-)
+activateConstraints:
+  list[atTop] == title[atBottom] + 18.0
+  list[atLeft] == title[atLeft]
+  list[atWidth] == 188.0
+  detailTitle[atTop] == list[atTop] + 4.0
+  detailTitle[atLeft] == list[atRight] + 18.0
+  detailTitle[atRight] == title[atRight]
+  detail[atTop] == detailTitle[atBottom] + 10.0
+  detail[atLeft] == detailTitle[atLeft]
+  detail[atRight] == detailTitle[atRight]
 
 updateDetail()
 window.setContentView(root)
