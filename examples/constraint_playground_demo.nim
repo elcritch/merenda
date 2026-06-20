@@ -113,9 +113,7 @@ proc rebuildPreviewConstraints() =
   cxs.add cx(card[atTop] == contentTitle[atBottom] + 4 * spacing)
   cxs.add cx(card[atWidth] == 240.0)
   cxs.add cx(card[atHeight] >= 108.0, priority = LayoutPriorityHigh)
-  cxs.add cx(
-    card[atBottom] == content[atBottom] - 100.0, priority = LayoutPriorityLow
-  )
+  cxs.add cx(card[atBottom] == content[atBottom] - 100.0, priority = LayoutPriorityLow)
   case alignment
   of 1:
     cxs.add cx(card[atCenterX] == content[atCenterX])
@@ -155,7 +153,7 @@ for combo in [spacingChoice, toolbarChoice, sidebarChoice, alignmentChoice]:
   combo.target = target
   combo.action = changedAction
 
-root.addSubview(
+root.addSubviews(
   title, subtitle, preview, previewTitle, previewSubtitle, toolbar, content, sidebar,
   card, toolbarLabel, contentTitle, contentBody, sidebarTitle, sidebarBody, cardTitle,
   cardBody, inspectorTitle, spacingLabel, spacingChoice, toolbarLabelControl,

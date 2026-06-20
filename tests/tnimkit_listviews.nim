@@ -347,7 +347,7 @@ suite "nimkit list views":
     listView.rowHeight = 24.0
     listView.selectionMode = lsmExtended
     listView.selectedIndex = 0
-    root.addSubview(title, listView)
+    root.addSubviews(title, listView)
     title.pinEdges(
       toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
       edges = {leLeft, leTop, leRight},

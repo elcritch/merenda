@@ -40,6 +40,12 @@ proc `identifier=`*(view: View, identifier: string) =
     return
   view.xIdentifier = identifier
 
+proc name*(view: View): string =
+  view.identifier
+
+proc `name=`*(view: View, name: string) =
+  view.identifier = name
+
 proc viewWithTag*(view: View, tag: int): View =
   if view.isNil:
     return nil
@@ -49,6 +55,19 @@ proc viewWithTag*(view: View, tag: int): View =
     let match = child.viewWithTag(tag)
     if not match.isNil:
       return match
+
+proc viewWithIdentifier*(view: View, identifier: string): View =
+  if view.isNil:
+    return nil
+  if view.xIdentifier == identifier:
+    return view
+  for child in view.xSubviews:
+    let match = child.viewWithIdentifier(identifier)
+    if not match.isNil:
+      return match
+
+proc viewNamed*(view: View, name: string): View =
+  view.viewWithIdentifier(name)
 
 proc flipped*(view: View): bool =
   view.isNil or view.xFlipped
@@ -401,6 +420,10 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
 proc newView*(frame: Rect = AutoRect): View =
   result = View()
   initViewFields(result, frame)
+
+proc newView*(name: string, frame: Rect = AutoRect): View =
+  result = newView(frame)
+  result.name = name
 
 proc handleMouse*(view: View, selector: MouseEventSelector, event: MouseEvent): bool =
   ## ``true`` means event handled and should not bubble further.

@@ -213,7 +213,7 @@ suite "nimkit text fields":
       status =
         newStatusLabel("Values: Edit me / Tab here", frame = initRect(28, 154, 320, 24))
 
-    root.addSubview(title, field, secondField, status)
+    root.addSubviews(title, field, secondField, status)
     window.setContentView(root)
 
     check window.makeFirstResponder(field)

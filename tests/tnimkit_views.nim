@@ -129,7 +129,7 @@ suite "nimkit views":
     let root = newView(frame = initRect(0, 0, 200, 160))
     let back = newView(frame = initRect(20, 20, 80, 50))
     let front = newView(frame = initRect(30, 25, 80, 50))
-    root.addSubview(back, front)
+    root.addSubviews(back, front)
 
     check root.hitTest(initPoint(35, 30)) == front
     check root.hitTest(initPoint(22, 22)) == back
@@ -263,26 +263,32 @@ suite "nimkit views":
     check not view.clipsToBounds
     check view.needsDisplay
 
-  test "view identity supports tag identifier and recursive tag lookup":
+  test "view identity supports tag names identifiers and recursive lookup":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
+      root = newView("root", frame = initRect(0, 0, 200, 160))
       child = newView(frame = initRect(20, 20, 80, 40))
-      grandchild = newView(frame = initRect(5, 5, 30, 20))
+      grandchild = newView("grandchild", frame = initRect(5, 5, 30, 20))
 
     root.tag = 1
-    root.identifier = "root"
     child.tag = 2
-    child.identifier = "child"
+    child.name = "child"
     grandchild.tag = 3
     root.addSubview(child)
     child.addSubview(grandchild)
 
     check root.tag == 1
+    check root.identifier == "root"
+    check root.name == "root"
     check child.identifier == "child"
+    check child.name == "child"
     check root.viewWithTag(1) == root
     check root.viewWithTag(2) == child
     check root.viewWithTag(3) == grandchild
     check root.viewWithTag(99).isNil
+    check root.viewWithIdentifier("root") == root
+    check root.viewWithIdentifier("child") == child
+    check root.viewNamed("grandchild") == grandchild
+    check root.viewNamed("missing").isNil
 
   test "positioned subview insertion replacement and sorting preserve hierarchy state":
     let

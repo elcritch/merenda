@@ -54,16 +54,20 @@ suite "nimkit accessibility":
 
     check not view.isAccessibilityElement()
 
+    view.name = "main.container"
+    check view.accessibilityLabel() == "main.container"
+    check view.accessibilityIdentifier() == "main.container"
+
     view.accessibilityRole = arGroup
     view.accessibilityLabel = "Container"
     view.accessibilityHelp = "Contains controls"
-    view.accessibilityIdentifier = "main.container"
+    view.accessibilityIdentifier = "main.container.explicit"
 
     check view.isAccessibilityElement()
     check view.accessibilityRole() == arGroup
     check view.accessibilityLabel() == "Container"
     check view.accessibilityHelp() == "Contains controls"
-    check view.accessibilityIdentifier() == "main.container"
+    check view.accessibilityIdentifier() == "main.container.explicit"
 
     let labelValue = view.accessibilityAttributeValue(AccessibilityAttributeLabel)
     check labelValue.kind == avString
