@@ -488,11 +488,6 @@ proc sortSubviews*(view: View, compare: proc(a, b: View): int) =
   emit view.layoutInputChanged(lirHierarchy)
   view.setNeedsDisplay(true)
 
-proc addSubviewWithDefaultIdentifier(view, child: View, defaultIdentifier: string) =
-  if not child.isNil and child.xIdentifier.len == 0 and defaultIdentifier.len > 0:
-    child.xIdentifier = defaultIdentifier
-  view.addSubview(child)
-
 type NamedSubview* = tuple[view: View, name: string]
 
 func inferredSubviewIdentifier(node: NimNode): string =
@@ -504,22 +499,24 @@ func inferredSubviewIdentifier(node: NimNode): string =
   else:
     ""
 
-macro addSubviews*(view: untyped, rest: varargs[untyped]): untyped =
-  ## Adds several subviews and gives simple named arguments a matching identifier
-  ## when the child does not already have one.
-  let
-    parent = genSym(nskLet, "parent")
-    addChild = bindSym"addSubviewWithDefaultIdentifier"
-  result = newStmtList()
-  let body = newStmtList(newLetStmt(parent, view))
+macro autoNames*(rest: varargs[untyped]): untyped =
+  ## Builds named subview tuples using each simple argument's variable name.
+  let viewType = bindSym"View"
+  result = newTree(nnkBracket)
   for child in rest:
-    body.add newCall(addChild, parent, child, newLit(child.inferredSubviewIdentifier()))
-  result.add newBlockStmt(body)
+    result.add newTree(
+      nnkTupleConstr,
+      newColonExpr(ident"view", newCall(viewType, child)),
+      newColonExpr(ident"name", newLit(child.inferredSubviewIdentifier())),
+    )
 
-proc addSubviewsWithNames*(view: View, subviews: openArray[NamedSubview]) =
-  ## Adds several subviews and assigns the provided identifiers.
+proc addSubviews*(
+    view: View, subviews: openArray[NamedSubview], override = false
+) =
+  ## Adds several subviews and assigns provided names as identifiers.
+  ## Existing identifiers are preserved unless ``override`` is true.
   for subview in subviews:
-    if not subview.view.isNil:
+    if not subview.view.isNil and (override or subview.view.xIdentifier.len == 0):
       subview.view.xIdentifier = subview.name
     view.addSubview(subview.view)
 
