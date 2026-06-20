@@ -274,29 +274,62 @@ proc `[]`*(guide: LayoutGuide, anchor: static[LayoutAttribute]): auto =
 proc `+`*(anchor: LayoutXAxisAnchor, constant: float32): LayoutXAxisAnchor =
   initXAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
 
+proc `+`*(anchor: LayoutXAxisAnchor, constant: LayoutLength): LayoutXAxisAnchor =
+  anchor + constant.resolveLayoutLength()
+
 proc `+`*(constant: float32, anchor: LayoutXAxisAnchor): LayoutXAxisAnchor =
+  anchor + constant
+
+proc `+`*(constant: LayoutLength, anchor: LayoutXAxisAnchor): LayoutXAxisAnchor =
   anchor + constant
 
 proc `-`*(anchor: LayoutXAxisAnchor, constant: float32): LayoutXAxisAnchor =
   initXAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
 
+proc `-`*(anchor: LayoutXAxisAnchor, constant: LayoutLength): LayoutXAxisAnchor =
+  anchor - constant.resolveLayoutLength()
+
 proc `+`*(anchor: LayoutYAxisAnchor, constant: float32): LayoutYAxisAnchor =
   initYAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
 
+proc `+`*(anchor: LayoutYAxisAnchor, constant: LayoutLength): LayoutYAxisAnchor =
+  anchor + constant.resolveLayoutLength()
+
 proc `+`*(constant: float32, anchor: LayoutYAxisAnchor): LayoutYAxisAnchor =
+  anchor + constant
+
+proc `+`*(constant: LayoutLength, anchor: LayoutYAxisAnchor): LayoutYAxisAnchor =
   anchor + constant
 
 proc `-`*(anchor: LayoutYAxisAnchor, constant: float32): LayoutYAxisAnchor =
   initYAxisAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
 
+proc `-`*(anchor: LayoutYAxisAnchor, constant: LayoutLength): LayoutYAxisAnchor =
+  anchor - constant.resolveLayoutLength()
+
 proc `+`*(anchor: LayoutDimensionAnchor, constant: float32): LayoutDimensionAnchor =
   initDimensionAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset + constant)
+
+proc `+`*(
+    anchor: LayoutDimensionAnchor, constant: LayoutLength
+): LayoutDimensionAnchor =
+  anchor + constant.resolveLayoutLength()
 
 proc `+`*(constant: float32, anchor: LayoutDimensionAnchor): LayoutDimensionAnchor =
   anchor + constant
 
+proc `+`*(
+    constant: LayoutLength, anchor: LayoutDimensionAnchor
+): LayoutDimensionAnchor =
+  anchor + constant
+
 proc `-`*(anchor: LayoutDimensionAnchor, constant: float32): LayoutDimensionAnchor =
   initDimensionAnchor(anchor.xItem, anchor.xAttribute, anchor.xOffset - constant)
+
+proc `-`*(
+    anchor: LayoutDimensionAnchor, constant: LayoutLength
+): LayoutDimensionAnchor =
+  anchor - constant.resolveLayoutLength()
 
 proc newLayoutConstraint*(
     firstItem: View,
