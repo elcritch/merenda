@@ -431,8 +431,9 @@ proc validate*(item: MenuItem, target: DynamicAgent): bool =
     return false
   if target.isNil:
     return false
-  let validated =
-    target.trySendLocal(validateUserInterfaceItem(), ValidationArgs(item: item))
+  let validated = target.trySendLocal(
+    validateUserInterfaceItem(), ValidationArgs(item: item, action: item.xAction)
+  )
   if validated.isSome:
     return validated.get()
   target.respondsTo(item.xAction.name)
