@@ -316,7 +316,7 @@ suite "nimkit responder":
     let target = newActionTarget(action, onCheckboxKeyAction)
     checkbox.target = target
     checkbox.action = action
-    root.addSubviews(field, checkbox)
+    root.addSubviews(autoNames(field, checkbox))
     window.setContentView(root)
 
     check window.makeFirstResponder(field)

@@ -358,9 +358,7 @@ table.moveColumn(table.columnIndex("owner"), table.columnIndex("project"))
 table.restoreState(controller.stateStore)
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 
-root.addSubviews(
-  autoNames(title, table, detailTitle, detail, activityTitle, activity)
-)
+root.addSubviews(autoNames(title, table, detailTitle, detail, activityTitle, activity))
 
 title.pinEdges(
   toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),

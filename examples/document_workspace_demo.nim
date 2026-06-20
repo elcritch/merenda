@@ -397,8 +397,10 @@ proc makeWorkspaceWindow(
     label.accessibilityElement = true
 
   root.addSubviews(
-    menuBar, title, subtitle, toolbar, table, sideTitle, activity, pasteboardTitle,
-    pasteboardInfo, accessibilityTitle, accessibilityInfo,
+    autoNames(
+      menuBar, title, subtitle, toolbar, table, sideTitle, activity, pasteboardTitle,
+      pasteboardInfo, accessibilityTitle, accessibilityInfo,
+    )
   )
 
   menuBar.pinEdges(
@@ -475,7 +477,7 @@ proc makeTextDocumentWindow(
   editor.accessibilityLabel = "Document text"
   document.editor = editor
 
-  root.addSubviews(title, subtitle, scroll)
+  root.addSubviews(autoNames(title, subtitle, scroll))
   title.pinEdges(
     toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 24.0, 0.0, 24.0)),
     edges = {leLeft, leTop, leRight},

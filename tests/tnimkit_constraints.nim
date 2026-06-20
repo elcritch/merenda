@@ -124,7 +124,7 @@ suite "nimkit constraints":
       subtitle = newView()
       toolbar = newView()
 
-    root.addSubviews(title, subtitle, toolbar)
+    root.addSubviews(autoNames(title, subtitle, toolbar))
 
     activateConstraints:
       title[atHeight] == 30.0
@@ -794,7 +794,7 @@ suite "nimkit constraints":
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
-    root.addSubviews(autoresized, button)
+    root.addSubviews(autoNames(autoresized, button))
     root.layoutSubtreeIfNeeded()
 
     let
@@ -871,7 +871,7 @@ suite "nimkit constraints":
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
-    root.addSubviews(autoresized, button)
+    root.addSubviews(autoNames(autoresized, button))
     root.layoutSubtreeIfNeeded()
 
     let
@@ -900,7 +900,7 @@ suite "nimkit constraints":
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
-    root.addSubviews(autoresized, button)
+    root.addSubviews(autoNames(autoresized, button))
     root.layoutSubtreeIfNeeded()
 
     let
@@ -929,7 +929,7 @@ suite "nimkit constraints":
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
-    root.addSubviews(autoresized, button)
+    root.addSubviews(autoNames(autoresized, button))
     root.layoutSubtreeIfNeeded()
 
     let

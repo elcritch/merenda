@@ -129,7 +129,7 @@ suite "nimkit views":
     let root = newView(frame = initRect(0, 0, 200, 160))
     let back = newView(frame = initRect(20, 20, 80, 50))
     let front = newView(frame = initRect(30, 25, 80, 50))
-    root.addSubviews(back, front)
+    root.addSubviews(autoNames(back, front))
 
     check root.hitTest(initPoint(35, 30)) == front
     check root.hitTest(initPoint(22, 22)) == back
@@ -290,37 +290,33 @@ suite "nimkit views":
     check root.viewNamed("grandchild") == grandchild
     check root.viewNamed("missing").isNil
 
-  test "addSubviews batches child views without assigning identifiers":
+  test "addSubviews assigns automatic child identifiers":
     let
       root = newView("root")
       title = newView()
       detail = newView()
       explicit = newView("explicit.name")
 
-    root.addSubviews(title, detail, explicit)
-    root.addSubviews(newView())
-
-    check title.identifier == ""
-    check title.name == ""
-    check detail.identifier == ""
-    check explicit.identifier == "explicit.name"
-    check root.viewNamed("title").isNil
-    check root.subviews[^1].identifier == ""
-
-  test "addSubviewsNamedAs assigns explicit and automatic child identifiers":
-    let
-      root = newView("root")
-      title = newView()
-      detail = newView("old.detail")
-
-    root.addSubviewsNamedAs(autoNames(title, detail))
+    root.addSubviews(autoNames(title, detail, explicit))
+    root.addSubviews(autoNames(newView()))
 
     check title.identifier == "title"
-    check detail.identifier == "old.detail"
+    check title.name == "title"
+    check detail.identifier == "detail"
+    check explicit.identifier == "explicit.name"
     check root.viewNamed("title") == title
+    check root.subviews[^1].identifier == ""
+
+  test "addSubviews override replaces existing child identifiers":
+    let
+      root = newView("root")
+      detail = newView("old.detail")
+
+    root.addSubviews(autoNames(detail))
+    check detail.identifier == "old.detail"
     check root.viewNamed("detail").isNil
 
-    root.addSubviewsNamedAs({detail: "main.detail"}, override = true)
+    root.addSubviews({detail: "main.detail"}, override = true)
 
     check detail.identifier == "main.detail"
     check root.viewNamed("main.detail") == detail
