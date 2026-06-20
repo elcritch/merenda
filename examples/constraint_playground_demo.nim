@@ -110,9 +110,10 @@ proc rebuildPreviewConstraints() =
     activeConstraints.add cx(sidebar[atWidth] == 0.0)
     activeConstraints.add cx(content[atRight] == toolbar[atRight])
 
-  activeConstraints.add cx(card[atTop] == contentTitle[atBottom] + spacing)
+  activeConstraints.add cx(card[atTop] == contentTitle[atBottom] + 4*spacing)
   activeConstraints.add cx(card[atWidth] == 240.0)
-  activeConstraints.add cx(card[atHeight] == 108.0)
+  activeConstraints.add cx(card[atBottom] == content[atBottom] - 100.0)
+  # activeConstraints.add cx(card[atHeight] == 108.0)
   case alignment
   of 1:
     activeConstraints.add cx(card[atCenterX] == content[atCenterX])
