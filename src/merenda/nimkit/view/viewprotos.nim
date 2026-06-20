@@ -488,8 +488,6 @@ proc sortSubviews*(view: View, compare: proc(a, b: View): int) =
   emit view.layoutInputChanged(lirHierarchy)
   view.setNeedsDisplay(true)
 
-proc addSubview*(view: View, first, second: View, rest: varargs[View]) =
-  view.addSubview(first)
-  view.addSubview(second)
+proc addSubviews*(view: View, rest: varargs[View]) =
   for child in rest:
     view.addSubview(child)
