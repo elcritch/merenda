@@ -187,6 +187,11 @@ application, responder, view, window, accessibility, or control/cell layers.
   window controllers; exposes protocol-backed readable/writable type and
   read/write content hooks; and owns save, save-as, revert, show-windows, and
   close lifecycle events without native document registration.
+- Added `DocumentController` to coordinate the pure Nim document layer: shared
+  controller lookup, protocol-backed document creation/opening, current
+  document lookup by URL/window, backend-neutral recent-document storage,
+  reopen flow, close-all review of edited documents, and menu validation for
+  document commands now live above the `Document` and `WindowController` layer.
 
 ## Current Verification
 
@@ -214,19 +219,6 @@ update widgets, responder state, and rendering.
    - selected range, insertion point, and editable/selectable traits
    - basic line/character geometry only after text layout exposes stable offset
      and line metrics
-
-### Documents And Controllers
-
-Add the document/window-controller layer after application, menu, and window
-semantics are stable enough to host it, keeping OS document integration behind
-future backend adapters.
-
-1. Add `DocumentController`:
-   - shared controller, new/open/reopen document flow, document lookup by
-     window/URL, close-all/review-unsaved flow, and menu validation for document
-     actions
-   - keep recent-document storage as a backend-neutral in-process model until
-     native/user-defaults persistence is owned by the backend adapter
 
 ### TableView And OutlineView
 
