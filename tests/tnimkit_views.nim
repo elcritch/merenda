@@ -290,6 +290,36 @@ suite "nimkit views":
     check root.viewNamed("grandchild") == grandchild
     check root.viewNamed("missing").isNil
 
+  test "addSubviews assigns default identifiers from child argument names":
+    let
+      root = newView("root")
+      title = newView()
+      detail = newView()
+      explicit = newView("explicit.name")
+
+    root.addSubviews(title, detail, explicit)
+    root.addSubviews(newView())
+
+    check title.identifier == "title"
+    check title.name == "title"
+    check detail.identifier == "detail"
+    check explicit.identifier == "explicit.name"
+    check root.viewNamed("title") == title
+    check root.subviews[^1].identifier == ""
+
+  test "addSubviewsWithNames assigns explicit child identifiers":
+    let
+      root = newView("root")
+      title = newView()
+      detail = newView("old.detail")
+
+    root.addSubviewsWithNames({title: "main.title", detail: "main.detail"})
+
+    check title.identifier == "main.title"
+    check detail.identifier == "main.detail"
+    check root.viewNamed("main.title") == title
+    check root.viewNamed("main.detail") == detail
+
   test "positioned subview insertion replacement and sorting preserve hierarchy state":
     let
       parent = newLifecycleSpyView(initRect(0, 0, 200, 160))

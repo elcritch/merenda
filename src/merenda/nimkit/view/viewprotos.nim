@@ -1,4 +1,4 @@
-import std/algorithm
+import std/[algorithm, macros]
 
 import ../foundation/selectors
 import ../drawing/theme
@@ -488,6 +488,38 @@ proc sortSubviews*(view: View, compare: proc(a, b: View): int) =
   emit view.layoutInputChanged(lirHierarchy)
   view.setNeedsDisplay(true)
 
-proc addSubviews*(view: View, rest: varargs[View]) =
+proc addSubviewWithDefaultIdentifier(view, child: View, defaultIdentifier: string) =
+  if not child.isNil and child.xIdentifier.len == 0 and defaultIdentifier.len > 0:
+    child.xIdentifier = defaultIdentifier
+  view.addSubview(child)
+
+type NamedSubview* = tuple[view: View, name: string]
+
+func inferredSubviewIdentifier(node: NimNode): string =
+  case node.kind
+  of nnkIdent:
+    $node
+  of nnkAccQuoted:
+    node.repr
+  else:
+    ""
+
+macro addSubviews*(view: untyped, rest: varargs[untyped]): untyped =
+  ## Adds several subviews and gives simple named arguments a matching identifier
+  ## when the child does not already have one.
+  let
+    parent = genSym(nskLet, "parent")
+    addChild = bindSym"addSubviewWithDefaultIdentifier"
+  result = newStmtList()
+  let body = newStmtList(newLetStmt(parent, view))
   for child in rest:
-    view.addSubview(child)
+    body.add newCall(addChild, parent, child, newLit(child.inferredSubviewIdentifier()))
+  result.add newBlockStmt(body)
+
+proc addSubviewsWithNames*(view: View, subviews: openArray[NamedSubview]) =
+  ## Adds several subviews and assigns the provided identifiers.
+  for subview in subviews:
+    if not subview.view.isNil:
+      subview.view.xIdentifier = subview.name
+    view.addSubview(subview.view)
+
