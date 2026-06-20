@@ -73,15 +73,15 @@ title.pinEdges(
 )
 
 activate(
-  cx(list.topAnchor == title.bottomAnchor + 18.0),
-  cx(list.leftAnchor == title.leftAnchor),
-  cx(list.widthAnchor == 188.0),
-  cx(detailTitle.topAnchor == list.topAnchor + 4.0),
-  cx(detailTitle.leftAnchor == list.rightAnchor + 18.0),
-  cx(detailTitle.rightAnchor == title.rightAnchor),
-  cx(detail.topAnchor == detailTitle.bottomAnchor + 10.0),
-  cx(detail.leftAnchor == detailTitle.leftAnchor),
-  cx(detail.rightAnchor == detailTitle.rightAnchor),
+  cx(list[anTop] == title[anBottom] + 18.0),
+  cx(list[anLeft] == title[anLeft]),
+  cx(list[anWidth] == 188.0),
+  cx(detailTitle[anTop] == list[anTop] + 4.0),
+  cx(detailTitle[anLeft] == list[anRight] + 18.0),
+  cx(detailTitle[anRight] == title[anRight]),
+  cx(detail[anTop] == detailTitle[anBottom] + 10.0),
+  cx(detail[anLeft] == detailTitle[anLeft]),
+  cx(detail[anRight] == detailTitle[anRight]),
 )
 
 updateDetail()

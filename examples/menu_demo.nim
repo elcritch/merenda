@@ -57,7 +57,7 @@ content.addArrangedSubview(title, status, button)
 root.addSubview(menuBar, content)
 
 menuBar.pinEdges(toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight})
-menuBar.heightAnchor.equalTo(28).active = true
+menuBar[anHeight].equalTo(28).active = true
 content.pinEdges(
   toGuide = root.contentLayoutGuide(initEdgeInsets(72.0, 28.0, 0.0, 28.0)),
   edges = {leLeft, leTop, leRight},

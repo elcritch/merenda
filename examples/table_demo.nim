@@ -89,8 +89,8 @@ proc updateSelection(controller: TableDemoController) =
   if columns.len > 0:
     text.add "\nColumn: " & columns.join(", ")
   if not controller.table.clickedColumn.isNil:
-    text.add "\nClicked: row " & $controller.table.clickedRow &
-      ", " & controller.table.clickedColumn.title
+    text.add "\nClicked: row " & $controller.table.clickedRow & ", " &
+      controller.table.clickedColumn.title
   controller.detail.text = text
 
 proc makeStateCell(state: string): Label =
@@ -102,8 +102,7 @@ proc onInspect(controller: TableDemoController, row: int) =
   if index in 0 ..< controller.rows.len:
     let build = controller.rows[index]
     let ownerColumn = controller.table.columnWithIdentifier("owner")
-    controller.activity.text =
-      "Inspecting: " & build.project & " (" & build.owner & ")"
+    controller.activity.text = "Inspecting: " & build.project & " (" & build.owner & ")"
     if not ownerColumn.isNil and controller.table.beginEditingCell(row, ownerColumn):
       controller.activity.text = controller.activity.text & "\nEditing owner cell"
 
@@ -367,23 +366,23 @@ title.pinEdges(
 )
 
 activate(
-  cx(title.heightAnchor == TitleHeight),
-  cx(table.topAnchor == title.bottomAnchor + 20.0),
-  cx(table.leftAnchor == title.leftAnchor),
-  cx(table.rightAnchor == detailTitle.leftAnchor - 22.0),
-  cx(table.bottomAnchor == root.bottomAnchor - 28.0),
-  cx(detailTitle.topAnchor == table.topAnchor + 4.0),
-  cx(detailTitle.rightAnchor == title.rightAnchor),
-  cx(detailTitle.widthAnchor == SidebarWidth),
-  cx(detail.topAnchor == detailTitle.bottomAnchor + 10.0),
-  cx(detail.leftAnchor == detailTitle.leftAnchor),
-  cx(detail.rightAnchor == detailTitle.rightAnchor),
-  cx(activityTitle.topAnchor == detail.bottomAnchor + 28.0),
-  cx(activityTitle.leftAnchor == detailTitle.leftAnchor),
-  cx(activityTitle.rightAnchor == detailTitle.rightAnchor),
-  cx(activity.topAnchor == activityTitle.bottomAnchor + 10.0),
-  cx(activity.leftAnchor == detailTitle.leftAnchor),
-  cx(activity.rightAnchor == detailTitle.rightAnchor),
+  cx(title[anHeight] == TitleHeight),
+  cx(table[anTop] == title[anBottom] + 20.0),
+  cx(table[anLeft] == title[anLeft]),
+  cx(table[anRight] == detailTitle[anLeft] - 22.0),
+  cx(table[anBottom] == root[anBottom] - 28.0),
+  cx(detailTitle[anTop] == table[anTop] + 4.0),
+  cx(detailTitle[anRight] == title[anRight]),
+  cx(detailTitle[anWidth] == SidebarWidth),
+  cx(detail[anTop] == detailTitle[anBottom] + 10.0),
+  cx(detail[anLeft] == detailTitle[anLeft]),
+  cx(detail[anRight] == detailTitle[anRight]),
+  cx(activityTitle[anTop] == detail[anBottom] + 28.0),
+  cx(activityTitle[anLeft] == detailTitle[anLeft]),
+  cx(activityTitle[anRight] == detailTitle[anRight]),
+  cx(activity[anTop] == activityTitle[anBottom] + 10.0),
+  cx(activity[anLeft] == detailTitle[anLeft]),
+  cx(activity[anRight] == detailTitle[anRight]),
 )
 
 controller.updateSelection()

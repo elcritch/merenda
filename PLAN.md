@@ -304,7 +304,7 @@ AppKit-style widgets.
   constant shortcut. A fuller `LayoutSize`/`LayoutLength` model should preserve
   unresolved units through anchor expressions, resolve them against the relevant
   view/theme/font context, and support offsets such as
-  `cx(label.topAnchor == field.bottomAnchor + 1'em)` without converting to
+  `cx(label[anTop] == field[anBottom] + 1'em)` without converting to
   points too early.
 
 ## Open Questions
