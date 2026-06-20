@@ -141,11 +141,10 @@ suite "nimkit grid views":
       grid = newGridView(frame = initRect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 20)
-      left = newLayoutConstraint(grid, latLeft, lrEqual, root, latLeft, constant = 20)
-      right =
-        newLayoutConstraint(grid, latRight, lrEqual, root, latRight, constant = -30)
-      top = newLayoutConstraint(grid, latTop, lrEqual, root, latTop, constant = 10)
-      height = newLayoutConstraint(grid, latHeight, constant = 40)
+      left = newLayoutConstraint(grid, atLeft, lrEqual, root, atLeft, constant = 20)
+      right = newLayoutConstraint(grid, atRight, lrEqual, root, atRight, constant = -30)
+      top = newLayoutConstraint(grid, atTop, lrEqual, root, atTop, constant = 10)
+      height = newLayoutConstraint(grid, atHeight, constant = 40)
 
     grid.autoresizingMaskConstraints = false
     grid.spacing[dcol] = 10.0

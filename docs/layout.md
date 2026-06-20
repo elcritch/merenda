@@ -55,7 +55,7 @@ The public layout API should stay close to the current model:
 ```nim
 root.addSubview(child)
 child.pinEdges(toGuide = root.contentLayoutGuide(initEdgeInsets(20.0)))
-child[anWidth].constraint(equalToConstant = 120.0)
+child[atWidth].constraint(equalToConstant = 120.0)
 ```
 
 Authored constraints should remain inspectable as `LayoutConstraint` values.
