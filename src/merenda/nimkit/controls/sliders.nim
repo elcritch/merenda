@@ -4,6 +4,7 @@ import ../accessibility/accessibility
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
+import ../drawing/chrome
 import ../drawing/drawing
 import ../drawing/theme
 import ./controls
@@ -144,26 +145,6 @@ proc newSliderCell*(): SliderCell =
   result = SliderCell()
   initSliderCellFields(result)
 
-func aquaSliderTrackFill(): Fill =
-  linear(initColor(0.68, 0.73, 0.78, 1.0), initColor(0.92, 0.95, 0.98, 1.0), fgaY)
-
-func aquaSliderFill(): Fill =
-  linear(initColor(0.08, 0.42, 0.89, 1.0), initColor(0.36, 0.78, 1.0, 1.0), fgaY)
-
-func aquaSliderKnobFill(highlighted, enabled: bool): Fill =
-  if not enabled:
-    return
-      linear(initColor(0.90, 0.91, 0.93, 1.0), initColor(0.76, 0.78, 0.82, 1.0), fgaY)
-  if highlighted:
-    return linear(
-      initColor(0.72, 0.88, 1.0, 1.0),
-      initColor(0.14, 0.50, 0.94, 1.0),
-      initColor(0.02, 0.26, 0.72, 1.0),
-      fgaY,
-      104'u8,
-    )
-  linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.78, 0.82, 0.88, 1.0), fgaY)
-
 proc sliderFocusBox(): ControlBoxStyle =
   ControlBoxStyle(
     focusRingWidth: 3.0'f32,
@@ -172,22 +153,105 @@ proc sliderFocusBox(): ControlBoxStyle =
     cornerRadius: SliderKnobSize * 0.5'f32,
   )
 
+func sliderTrackBaseFill(enabled: bool): Fill =
+  fill(initColor(0.76, 0.82, 0.88, if enabled: 1.0'f32 else: 0.60'f32))
+
+func sliderActiveTrackBaseFill(enabled: bool): Fill =
+  fill(initColor(0.13, 0.55, 0.96, if enabled: 1.0'f32 else: 0.40'f32))
+
+func sliderKnobBaseFill(highlighted, enabled: bool): Fill =
+  if highlighted and enabled:
+    fill(initColor(0.15, 0.60, 0.98, 1.0))
+  else:
+    fill(initColor(0.92, 0.94, 0.97, if enabled: 1.0'f32 else: 0.66'f32))
+
+proc sliderChromeStates(slider: Slider): set[WidgetState] =
+  result = slider.widgetStateSet()
+  if slider.cell().isHighlighted():
+    result.incl ssHighlighted
+
+proc drawSliderTrack(
+    slider: Slider, context: DrawContext, rect: Rect, part: ChromePart, fillValue: Fill
+) =
+  if rect.isEmpty:
+    return
+  let
+    frame = context.renderRectFor(rect)
+    radius = rect.size.height * 0.5'f32
+    chrome = chromeContext(
+      AquaChromeName, crSliderTrack, part, fillValue, slider.sliderChromeStates()
+    )
+    borderColor =
+      if part == cpHighlight:
+        initColor(0.02, 0.20, 0.58, 0.70)
+      else:
+        initColor(0.38, 0.46, 0.56, if slider.isEnabled(): 0.75'f32 else: 0.35'f32)
+    trackRoot = context.addRenderRectangle(
+      frame,
+      context.appearance.chromeFill(chrome),
+      borderColor,
+      1.0'f32,
+      radius,
+      @[
+        insetShadow(
+          initColor(0.0, 0.0, 0.0, if slider.isEnabled(): 0.16'f32 else: 0.06'f32),
+          y = 1.0,
+          blur = 2.0,
+        )
+      ],
+      maskContent = true,
+    )
+  context.drawChromeExtras(
+    chrome, initChromeExtras(trackRoot, frame, cornerRadius = radius)
+  )
+
+proc drawSliderKnob(slider: Slider, context: DrawContext, rect: Rect) =
+  if rect.isEmpty:
+    return
+  let
+    enabled = slider.isEnabled()
+    highlighted = slider.cell().isHighlighted()
+    frame = context.renderRectFor(rect)
+    radius = rect.size.width * 0.5'f32
+    chrome = chromeContext(
+      AquaChromeName,
+      crSliderKnob,
+      cpFace,
+      sliderKnobBaseFill(highlighted, enabled),
+      slider.sliderChromeStates(),
+    )
+    knobRoot = context.addRenderRectangle(
+      frame,
+      context.appearance.chromeFill(chrome),
+      initColor(0.36, 0.40, 0.48, if enabled: 0.92'f32 else: 0.42'f32),
+      1.0'f32,
+      radius,
+      @[
+        dropShadow(
+          initColor(0.0, 0.0, 0.0, if enabled: 0.20'f32 else: 0.08'f32),
+          y = 1.0,
+          blur = 3.0,
+        ),
+        insetShadow(
+          initColor(1.0, 1.0, 1.0, if enabled: 0.75'f32 else: 0.22'f32),
+          y = 1.0,
+          blur = 2.0,
+        ),
+      ],
+      maskContent = true,
+    )
+  context.drawChromeExtras(
+    chrome, initChromeExtras(knobRoot, frame, cornerRadius = radius)
+  )
+
 protocol DefaultSliderDrawing of ViewDrawingProtocol:
   method draw(slider: Slider, context: DrawContext) =
     let
       enabled = slider.isEnabled()
       track = slider.trackRect()
       knob = slider.knobRect()
-      radius = SliderTrackHeight * 0.5'f32
 
-    discard context.addRenderRectangle(
-      context.renderRectFor(track),
-      aquaSliderTrackFill(),
-      initColor(0.38, 0.46, 0.56, if enabled: 0.75'f32 else: 0.35'f32),
-      1.0'f32,
-      radius,
-      @[insetShadow(initColor(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
-    )
+    slider.drawSliderTrack(context, track, cpFace, sliderTrackBaseFill(enabled))
 
     let fillRect = initRect(
       track.origin.x,
@@ -196,26 +260,11 @@ protocol DefaultSliderDrawing of ViewDrawingProtocol:
       track.size.height,
     )
     if fillRect.size.width > 0.0'f32 and enabled:
-      discard context.addRenderRectangle(
-        context.renderRectFor(fillRect),
-        aquaSliderFill(),
-        initColor(0.02, 0.20, 0.58, 0.70),
-        1.0'f32,
-        radius,
+      slider.drawSliderTrack(
+        context, fillRect, cpHighlight, sliderActiveTrackBaseFill(enabled)
       )
 
-    discard context.addRenderRectangle(
-      context.renderRectFor(knob),
-      aquaSliderKnobFill(slider.cell().isHighlighted(), enabled),
-      initColor(0.36, 0.40, 0.48, if enabled: 0.92'f32 else: 0.42'f32),
-      1.0'f32,
-      SliderKnobSize * 0.5'f32,
-      @[
-        dropShadow(initColor(0.0, 0.0, 0.0, 0.20), y = 1.0, blur = 3.0),
-        insetShadow(initColor(1.0, 1.0, 1.0, 0.75), y = 1.0, blur = 2.0),
-      ],
-      maskContent = true,
-    )
+    slider.drawSliderKnob(context, knob)
 
     if slider.isFocusVisible:
       context.addFocusRing(context.renderRectFor(knob), sliderFocusBox())
