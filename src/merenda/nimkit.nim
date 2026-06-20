@@ -9,6 +9,7 @@ import merenda/nimkit/controls/controls
 import merenda/nimkit/app/documentcontrollers
 import merenda/nimkit/app/documents
 import merenda/nimkit/drawing/drawing
+import merenda/nimkit/debug/viewinspectors
 import merenda/nimkit/app/dragging
 import merenda/nimkit/drawing/images
 import merenda/nimkit/foundation/events
@@ -55,6 +56,7 @@ export controls
 export documentcontrollers
 export documents
 export drawing
+export viewinspectors
 export dragging
 export images
 export events
