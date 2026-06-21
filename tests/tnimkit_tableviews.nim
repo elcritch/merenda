@@ -921,6 +921,20 @@ suite "NimKit TableView":
     check delegate.committedEdits.len == 0
     check window.fieldEditorClient() == tableView
 
+    check window.pressKey(keyEscape)
+    check not tableView.editingState.active
+    check delegate.cancelledEdits == @["name:0"]
+    check window.firstResponder().isNil
+    let cancelledTexts = tableView.renderedTexts()
+    check cancelledTexts.containsValue("name:0")
+    check not cancelledTexts.containsValue("bad")
+
+    check tableView.beginEditingCell(0, name)
+    check tableView.editingState.active
+    check tableView.editingState.row == 0
+    check tableView.editingState.column == name
+    check window.fieldEditorClient() == tableView
+
     TextView(window.fieldEditor()).stringValue = "fixed"
     check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
     check delegate.committedEdits == @["name:0:fixed"]
@@ -931,7 +945,7 @@ suite "NimKit TableView":
 
     check tableView.cancelEditingCell()
     check not tableView.editingState.active
-    check delegate.cancelledEdits == @["state:0"]
+    check delegate.cancelledEdits == @["name:0", "state:0"]
     check window.firstResponder().isNil
 
   test "table view user edits hosted and drawn text cells render committed values":

@@ -104,7 +104,7 @@ proc finishEditing(
   if editor.isNil or editor.xClient.isNil:
     return true
   let client = editor.xClient
-  if not client.clientShouldEndEditing(editor):
+  if reason != terCancel and not client.clientShouldEndEditing(editor):
     return false
   if reason == terCancel:
     editor.stringValue = editor.xOriginalString
