@@ -30,11 +30,11 @@ proc setPanelTitle(panel: LabeledPanel, value: string) =
 let
   app = sharedApplication()
   window = newWindow("Nimkit View Inspector Demo", frame = initRect(120, 120, 940, 640))
-  inspector = newViewInspector()
 
   root = newView()
   title = newTitleLabel("View Inspector Demo")
-  status = newStatusLabel("Click any view; selection is installed by the Inspector.")
+  status =
+    newStatusLabel("Click any view to inspect frame, constraints, and accessibility.")
   canvas = newView()
   toolbar = newLabeledPanel(
     "toolbar",
@@ -132,12 +132,10 @@ activateConstraints:
   liveSwitch[atRight] == preview[atRight] - 18.0
   liveSwitch[atCenterY] == healthSlider[atCenterY]
 
-inspector.inspectedRoot = root
-inspector.selectView(toolbar)
-
 window.setContentView(root)
 app.addWindow(window)
 
 window.makeKeyAndOrderFront()
-discard showViewInspector(inspector, app)
+let inspectorPanel = showViewInspector(root, app)
+inspectorPanel.inspector.selectView(toolbar)
 app.run()
