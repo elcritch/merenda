@@ -248,6 +248,7 @@ proc bindCoreEditing(table: var KeyBindingTable) =
   table.bindKey(keyEnd, {kmShift}, moveToEndOfLineAndModifySelection())
   table.bindKey(keyTab, {}, insertTab())
   table.bindKey(keyTab, {kmShift}, insertBacktab())
+  table.bindKey(keyEscape, {}, cancelOperation())
 
 proc bindWordEditing(table: var KeyBindingTable, modifiers: set[KeyModifier]) =
   table.bindKey(keyArrowLeft, modifiers, moveWordLeft())

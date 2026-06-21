@@ -1387,17 +1387,16 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
   window.dispatchKeyCommand(target, event).handled
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
+  let target = window.keyDispatchTarget()
+  if not target.isNil and window.performKeyEquivalent(event):
+    return true
   if event.key == keyEscape:
     if not window.xOwnerWindow.isNil:
       return window.xOwnerWindow.dismissTransientSession(tdrEscape)
     if window.hasActiveTransientSession():
       return window.dismissTransientSession(tdrEscape)
-
-  let target = window.keyDispatchTarget()
   if target.isNil:
     return false
-  if window.performKeyEquivalent(event):
-    return true
   window.dispatchKeyEventInChain(target, event, keyDown()).handled
 
 proc dispatchKeyUp*(window: Window, event: events.KeyEvent): bool =
@@ -1962,7 +1961,9 @@ proc dispatchHostScroll(window: Window, event: events.ScrollEvent) =
 
 proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   if event.pressed and event.isEscape:
-    if not window.xOwnerWindow.isNil:
+    if window.dispatchKeyDown(event.event):
+      discard
+    elif not window.xOwnerWindow.isNil:
       discard window.xOwnerWindow.dismissTransientSession(tdrEscape)
     elif window.hasActiveTransientSession():
       discard window.dismissTransientSession(tdrEscape)
