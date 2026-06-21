@@ -14,6 +14,7 @@ import ../foundation/selectors
 import ../foundation/types
 import ../containers/scrollviews
 import ../containers/stackviews
+import ./selectionrings
 import ../text/textfields
 import ../view/views
 
@@ -21,6 +22,9 @@ type
   ViewInspector* = ref object of View
     xRoot: View
     xSelected: View
+    xSelectionRing: SelectionRing
+    xSelectionRingStyle: SelectionRingStyle
+    xShowsSelectionRing: bool
     xTitle: Label
     xSelection: Label
     xDetailsTitle: Label
@@ -107,6 +111,12 @@ proc hierarchySummary(root, selected: View): string =
 
 proc refresh*(inspector: ViewInspector)
 
+proc updateSelectionRing(inspector: ViewInspector, view: View) =
+  discard inspector.xSelectionRing.uninstall()
+  inspector.xSelected = view
+  if inspector.xShowsSelectionRing and not view.isNil:
+    inspector.xSelectionRing = installSelectionRing(view, inspector.xSelectionRingStyle)
+
 proc inspectedRoot*(inspector: ViewInspector): View =
   if inspector.isNil: nil else: inspector.xRoot
 
@@ -116,7 +126,7 @@ proc `inspectedRoot=`*(inspector: ViewInspector, root: View) =
   inspector.xRoot = root
   if not inspector.xSelected.isNil and
       (root.isNil or not root.containsView(inspector.xSelected)):
-    inspector.xSelected = nil
+    inspector.updateSelectionRing(nil)
   inspector.refresh()
 
 proc selectedView*(inspector: ViewInspector): View =
@@ -125,8 +135,29 @@ proc selectedView*(inspector: ViewInspector): View =
 proc selectView*(inspector: ViewInspector, view: View) =
   if inspector.isNil:
     return
-  inspector.xSelected = view
+  inspector.updateSelectionRing(view)
   inspector.refresh()
+
+proc selectionRingStyle*(inspector: ViewInspector): SelectionRingStyle =
+  if inspector.isNil:
+    initSelectionRingStyle()
+  else:
+    inspector.xSelectionRingStyle
+
+proc `selectionRingStyle=`*(inspector: ViewInspector, style: SelectionRingStyle) =
+  if inspector.isNil:
+    return
+  inspector.xSelectionRingStyle = style
+  inspector.updateSelectionRing(inspector.xSelected)
+
+proc showsSelectionRing*(inspector: ViewInspector): bool =
+  not inspector.isNil and inspector.xShowsSelectionRing
+
+proc `showsSelectionRing=`*(inspector: ViewInspector, value: bool) =
+  if inspector.isNil or inspector.xShowsSelectionRing == value:
+    return
+  inspector.xShowsSelectionRing = value
+  inspector.updateSelectionRing(inspector.xSelected)
 
 proc refresh*(inspector: ViewInspector) =
   if inspector.isNil:
@@ -223,6 +254,8 @@ proc configureInspectorStyle(inspector: ViewInspector) =
 proc newViewInspector*(root: View = nil, frame: Rect = AutoRect): ViewInspector =
   result = ViewInspector()
   initViewFields(result, frame)
+  result.xSelectionRingStyle = initSelectionRingStyle()
+  result.xShowsSelectionRing = true
   result.identifier = "viewInspector"
   result.accessibilityRole = arGroup
   result.accessibilityLabel = "View inspector"

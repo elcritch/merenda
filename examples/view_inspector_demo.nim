@@ -17,12 +17,7 @@ proc demoName(view: View): string =
   "view"
 
 proc selectDemoView(inspector: ViewInspector, status: Label, view: View) =
-  let previous = inspector.selectedView()
   inspector.selectView(view)
-  if not previous.isNil:
-    previous.setNeedsDisplay(true)
-  if not view.isNil:
-    view.setNeedsDisplay(true)
   if not status.isNil:
     status.text = "Selected: " & view.demoName
 
@@ -37,17 +32,6 @@ protocol InspectablePanelDrawing of ViewDrawingProtocol:
   method draw(panel: InspectablePanel, context: DrawContext) =
     let titleRect = initRect(14.0, 11.0, max(panel.bounds.size.width - 28.0, 0.0), 24.0)
     discard context.addText(titleRect, panel.title, panel.titleColor)
-
-    if panel.inspector.isNil or panel.inspector.selectedView() != View(panel):
-      return
-    let ring = panel.bounds.inset(initEdgeInsets(2.0'f32))
-    discard context.addRenderRectangle(
-      context.renderRectFor(ring),
-      initColor(0.0, 0.0, 0.0, 0.0),
-      initColor(0.0, 0.45, 1.0, 0.95),
-      3.0'f32,
-      8.0'f32,
-    )
 
 proc newInspectablePanel(
     inspector: ViewInspector,
