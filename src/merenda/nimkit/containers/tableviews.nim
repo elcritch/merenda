@@ -1182,11 +1182,11 @@ proc editableColumns(tableView: TableView): seq[TableColumn] =
     for column in tableView.visibleColumns():
       result.add column
 
-proc editableCellAfter(
+proc editableCellInRowAfter(
     tableView: TableView, row: int, column: TableColumn, direction: int
 ): TableEditingState =
   result = TableEditingState(row: -1)
-  if tableView.isNil or tableView.rowCount() == 0:
+  if tableView.isNil or row notin 0 ..< tableView.rowCount():
     return
   let columns = tableView.editableColumns()
   if columns.len == 0:
@@ -1198,29 +1198,14 @@ proc editableCellAfter(
       break
   if columnIndex < 0:
     columnIndex = (if direction >= 0: -1 else: columns.len)
-  let total = tableView.rowCount() * columns.len
-  var flat = row * columns.len + columnIndex
-  for _ in 0 ..< total:
-    flat += (if direction >= 0: 1 else: -1)
-    if flat < 0 or flat >= total:
+  var nextColumnIndex = columnIndex
+  while true:
+    nextColumnIndex += (if direction >= 0: 1 else: -1)
+    if nextColumnIndex < 0 or nextColumnIndex >= columns.len:
       return
-    let
-      nextRow = flat div columns.len
-      nextColumn = columns[flat mod columns.len]
-    if tableView.shouldBeginEditingCell(nextRow, nextColumn):
-      return TableEditingState(row: nextRow, column: nextColumn, active: true)
-
-proc editableCellBelow(
-    tableView: TableView, row: int, column: TableColumn
-): TableEditingState =
-  result = TableEditingState(row: -1)
-  if tableView.isNil or column.isNil:
-    return
-  if row + 1 >= tableView.rowCount():
-    return
-  for nextRow in row + 1 ..< tableView.rowCount():
-    if tableView.shouldBeginEditingCell(nextRow, column):
-      return TableEditingState(row: nextRow, column: column, active: true)
+    let nextColumn = columns[nextColumnIndex]
+    if tableView.shouldBeginEditingCell(row, nextColumn):
+      return TableEditingState(row: row, column: nextColumn, active: true)
 
 proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool =
   if tableView.isNil or not tableView.xEndedEditingCommitted:
@@ -1228,18 +1213,14 @@ proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement):
   var next = TableEditingState(row: -1)
   case movement
   of temTab:
-    next = tableView.editableCellAfter(
+    next = tableView.editableCellInRowAfter(
       tableView.xEndedEditingRow, tableView.xEndedEditingColumn, 1
     )
   of temBacktab:
-    next = tableView.editableCellAfter(
+    next = tableView.editableCellInRowAfter(
       tableView.xEndedEditingRow, tableView.xEndedEditingColumn, -1
     )
-  of temReturn:
-    next = tableView.editableCellBelow(
-      tableView.xEndedEditingRow, tableView.xEndedEditingColumn
-    )
-  of temNone:
+  of temReturn, temNone:
     discard
   if next.row < 0 or next.column.isNil:
     return false
@@ -1823,7 +1804,15 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     if not tableView.moveEditingFromEndedCell(movement):
       let owner = tableView.window()
       if owner of Window and Window(owner).firstResponder() == editor:
-        discard Window(owner).makeFirstResponder(nil)
+        case movement
+        of temTab:
+          if not Window(owner).selectKeyViewFollowingView(tableView):
+            discard Window(owner).makeFirstResponder(tableView)
+        of temBacktab:
+          if not Window(owner).selectKeyViewPrecedingView(tableView):
+            discard Window(owner).makeFirstResponder(tableView)
+        of temReturn, temNone:
+          discard Window(owner).makeFirstResponder(tableView)
 
 protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
   method beginDraggingRows(
@@ -1994,10 +1983,12 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
   method keyDown(tableView: TableView, event: KeyEvent): bool =
     if event.key == keyEnter:
       let row =
-        if tableView.clickedRow() >= 0:
+        if tableView.selectedIndex() >= 0:
+          tableView.selectedIndex()
+        elif tableView.clickedRow() >= 0:
           tableView.clickedRow()
         else:
-          tableView.selectedIndex()
+          -1
       let column =
         if not tableView.clickedColumn().isNil:
           tableView.clickedColumn()
