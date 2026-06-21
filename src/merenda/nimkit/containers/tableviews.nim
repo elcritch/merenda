@@ -1264,6 +1264,9 @@ proc drawTableCellText(
 ) =
   if rect.isEmpty:
     return
+  if tableView.xEditing.active and tableView.xEditing.row == row and
+      tableView.xEditing.column == column:
+    return
   let text = tableView.tableCellText(row, column)
   if text.len > 0:
     discard context.addText(
