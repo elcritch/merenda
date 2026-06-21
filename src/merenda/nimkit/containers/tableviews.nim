@@ -7,11 +7,15 @@ import ../drawing/drawing
 import ../foundation/events
 import ../app/dragging
 import ../app/pasteboards
+import ../app/windows
+import ../controls/controls
 import ./listviews
 import ../containers/listbasics
 import ../containers/scrollviews
 import ../foundation/selectors
 import ../drawing/theme
+import ../text/fieldeditors
+import ../text/textviews
 import ../foundation/types
 import ../view/views
 
@@ -49,6 +53,7 @@ type
     row*: int
     column*: TableColumn
     active*: bool
+    validationError*: string
 
   TableColumnAutosaveRecord* = object
     identifier*: string
@@ -84,6 +89,13 @@ type
     xAutosaveName: string
     xTableDraggingSession: DraggingSession
     xTableDropTarget: DraggingDropTarget
+    xEditingHostView: View
+    xEditingCell: Cell
+    xEditingHostIsRowView: bool
+    xCancellingFieldEditor: bool
+    xEndedEditingRow: int
+    xEndedEditingColumn: TableColumn
+    xEndedEditingCommitted: bool
     xHeaderTrackingPart: TableHeaderHitPart
     xTrackingColumn: TableColumn
     xTrackingColumnIndex: int
@@ -129,6 +141,12 @@ proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
 proc enqueueReusableCellView(tableView: TableView, identifier: string, view: View)
 proc clearTableCellSlots(tableView: TableView)
 proc syncVisibleTableCells(tableView: TableView)
+proc prepareEditingSurface(tableView: TableView): bool
+proc clearEditingSurface(tableView: TableView)
+proc validateEditingValue(tableView: TableView, value: string): bool
+proc finishCommitEditingCell(tableView: TableView, value: string): bool
+proc finishCancelEditingCell(tableView: TableView): bool
+proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool
 proc drawTableRow(
   tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
 )
@@ -173,6 +191,10 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   method didBeginEditingCell*(
     tableView: TableView, row: int, column: TableColumn
   ) {.optional.}
+
+  method validationErrorForCell*(
+    tableView: TableView, row: int, column: TableColumn, value: string
+  ): string {.optional.}
 
   method didCommitEditingCell*(
     tableView: TableView, row: int, column: TableColumn, value: string
@@ -769,6 +791,9 @@ proc `selectedColumns=`*(tableView: TableView, columns: openArray[TableColumn]) 
 proc editingState*(tableView: TableView): TableEditingState =
   tableView.xEditing
 
+proc editingValidationError*(tableView: TableView): string =
+  if tableView.isNil: "" else: tableView.xEditing.validationError
+
 proc autosaveName*(tableView: TableView): string =
   tableView.xAutosaveName
 
@@ -972,6 +997,221 @@ proc syncVisibleTableCells(tableView: TableView) =
     if not used[index] and not slot.view.isNil:
       tableView.enqueueReusableCellView(slot.column.reuseIdentifier(), slot.view)
   tableView.xCellSlots = nextSlots
+
+proc visibleCellView(tableView: TableView, row: int, column: TableColumn): View =
+  if tableView.isNil:
+    return nil
+  let index = tableView.xCellSlots.findCellSlot(row, column)
+  if index >= 0:
+    tableView.xCellSlots[index].view
+  else:
+    nil
+
+proc visibleRowView(tableView: TableView, row: int): tuple[view: View, rect: Rect] =
+  if tableView.isNil:
+    return (nil, initRect(0.0, 0.0, 0.0, 0.0))
+  for (index, rowView, rowRect) in ListView(tableView).visibleRowViews():
+    if index == row:
+      return (rowView, rowRect)
+  (nil, initRect(0.0, 0.0, 0.0, 0.0))
+
+proc prepareEditingSurface(tableView: TableView): bool =
+  if tableView.isNil or not tableView.xEditing.active:
+    return false
+  tableView.xEditingHostView = nil
+  tableView.xEditingCell = nil
+  tableView.xEditingHostIsRowView = false
+
+  ListView(tableView).scrollItemToVisible(tableView.xEditing.row)
+  tableView.syncVisibleTableCells()
+
+  let cellView =
+    tableView.visibleCellView(tableView.xEditing.row, tableView.xEditing.column)
+  if not cellView.isNil:
+    tableView.xEditingHostView = cellView
+    if cellView of Control:
+      tableView.xEditingCell = Control(cellView).cell()
+    return true
+
+  let row = tableView.visibleRowView(tableView.xEditing.row)
+  if row.view.isNil:
+    return false
+  tableView.xEditingHostView = row.view
+  tableView.xEditingHostIsRowView = true
+  true
+
+proc clearEditingSurface(tableView: TableView) =
+  if tableView.isNil:
+    return
+  tableView.xEditingHostView = nil
+  tableView.xEditingCell = nil
+  tableView.xEditingHostIsRowView = false
+
+proc fieldEditorFrameForEditing(tableView: TableView): Rect =
+  if tableView.isNil or tableView.xEditingHostView.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  if tableView.xEditingHostIsRowView:
+    let row = tableView.visibleRowView(tableView.xEditing.row)
+    let rowBounds = initRect(0.0, 0.0, row.rect.size.width, row.rect.size.height)
+    tableView.columnRect(rowBounds, tableView.xEditing.column)
+  else:
+    tableView.xEditingHostView.bounds()
+
+proc removeFieldEditorFromSurface(tableView: TableView, editor: FieldEditor) =
+  if tableView.isNil or editor.isNil:
+    return
+  if not tableView.xEditingCell.isNil:
+    tableView.xEditingCell.endEditing(editor, tableView.xEditingHostView)
+  elif editor.superview() == tableView.xEditingHostView:
+    editor.removeFromSuperview()
+
+proc installFieldEditorOnSurface(tableView: TableView, editor: FieldEditor) =
+  if tableView.isNil or editor.isNil:
+    return
+  if tableView.xEditingHostView.isNil and not tableView.prepareEditingSurface():
+    return
+  let frame = tableView.fieldEditorFrameForEditing()
+  if not tableView.xEditingCell.isNil:
+    tableView.xEditingCell.selectWithFrame(
+      frame, tableView.xEditingHostView, editor, 0, editor.textStorage().len
+    )
+  else:
+    editor.frame = frame
+    if not tableView.xEditingHostView.isNil and
+        editor.superview() != tableView.xEditingHostView:
+      tableView.xEditingHostView.addSubview(editor)
+    editor.selectedRange = initTextRange(0, editor.textStorage().len)
+
+proc validateEditingValue(tableView: TableView, value: string): bool =
+  if tableView.isNil or not tableView.xEditing.active:
+    return true
+  let hadError = tableView.xEditing.validationError.len > 0
+  tableView.xEditing.validationError = ""
+  if hadError:
+    tableView.setNeedsDisplay(true)
+  let delegate = tableView.delegate()
+  if delegate.isNil:
+    return true
+  let validation = delegate.trySendLocal(
+    validationErrorForCell(),
+    (
+      tableView: tableView,
+      row: tableView.xEditing.row,
+      column: tableView.xEditing.column,
+      value: value,
+    ),
+  )
+  if validation.isSome and validation.get().len > 0:
+    tableView.xEditing.validationError = validation.get()
+    tableView.setNeedsDisplay(true)
+    return false
+  true
+
+proc finishCommitEditingCell(tableView: TableView, value: string): bool =
+  if tableView.isNil or not tableView.xEditing.active:
+    return false
+  if not tableView.validateEditingValue(value):
+    return false
+  let editing = tableView.xEditing
+  tableView.xEndedEditingRow = editing.row
+  tableView.xEndedEditingColumn = editing.column
+  tableView.xEndedEditingCommitted = true
+  tableView.xEditing = TableEditingState(row: -1)
+  tableView.clearEditingSurface()
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(
+      didCommitEditingCell(),
+      (tableView: tableView, row: editing.row, column: editing.column, value: value),
+    )
+  tableView.setNeedsDisplay(true)
+  true
+
+proc finishCancelEditingCell(tableView: TableView): bool =
+  if tableView.isNil or not tableView.xEditing.active:
+    return false
+  let editing = tableView.xEditing
+  tableView.xEndedEditingRow = editing.row
+  tableView.xEndedEditingColumn = editing.column
+  tableView.xEndedEditingCommitted = false
+  tableView.xEditing = TableEditingState(row: -1)
+  tableView.clearEditingSurface()
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(
+      didCancelEditingCell(),
+      (tableView: tableView, row: editing.row, column: editing.column),
+    )
+  tableView.setNeedsDisplay(true)
+  true
+
+proc editableColumns(tableView: TableView): seq[TableColumn] =
+  if not tableView.isNil:
+    for column in tableView.visibleColumns():
+      result.add column
+
+proc editableCellAfter(
+    tableView: TableView, row: int, column: TableColumn, direction: int
+): TableEditingState =
+  result = TableEditingState(row: -1)
+  if tableView.isNil or tableView.rowCount() == 0:
+    return
+  let columns = tableView.editableColumns()
+  if columns.len == 0:
+    return
+  var columnIndex = -1
+  for index, current in columns:
+    if current == column:
+      columnIndex = index
+      break
+  if columnIndex < 0:
+    columnIndex = (if direction >= 0: -1 else: columns.len)
+  let total = tableView.rowCount() * columns.len
+  var flat = row * columns.len + columnIndex
+  for _ in 0 ..< total:
+    flat += (if direction >= 0: 1 else: -1)
+    if flat < 0 or flat >= total:
+      return
+    let
+      nextRow = flat div columns.len
+      nextColumn = columns[flat mod columns.len]
+    if tableView.shouldBeginEditingCell(nextRow, nextColumn):
+      return TableEditingState(row: nextRow, column: nextColumn, active: true)
+
+proc editableCellBelow(
+    tableView: TableView, row: int, column: TableColumn
+): TableEditingState =
+  result = TableEditingState(row: -1)
+  if tableView.isNil or column.isNil:
+    return
+  if row + 1 >= tableView.rowCount():
+    return
+  for nextRow in row + 1 ..< tableView.rowCount():
+    if tableView.shouldBeginEditingCell(nextRow, column):
+      return TableEditingState(row: nextRow, column: column, active: true)
+
+proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool =
+  if tableView.isNil or not tableView.xEndedEditingCommitted:
+    return false
+  var next = TableEditingState(row: -1)
+  case movement
+  of temTab:
+    next = tableView.editableCellAfter(
+      tableView.xEndedEditingRow, tableView.xEndedEditingColumn, 1
+    )
+  of temBacktab:
+    next = tableView.editableCellAfter(
+      tableView.xEndedEditingRow, tableView.xEndedEditingColumn, -1
+    )
+  of temReturn:
+    next = tableView.editableCellBelow(
+      tableView.xEndedEditingRow, tableView.xEndedEditingColumn
+    )
+  of temNone:
+    discard
+  if next.row < 0 or next.column.isNil:
+    return false
+  tableView.beginEditingCell(next.row, next.column)
 
 proc listItemStyle(
     tableView: TableView, context: DrawContext, states: set[WidgetState]
@@ -1410,42 +1650,145 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
   method beginEditingCell(tableView: TableView, row: int, column: TableColumn): bool =
     if not tableView.shouldBeginEditingCell(row, column):
       return false
+    if tableView.xEditing.active:
+      if tableView.xEditing.row == row and tableView.xEditing.column == column:
+        let owner = tableView.window()
+        if owner of Window:
+          return Window(owner).makeFirstResponder(tableView)
+        return true
+      let editor = Control(tableView).activeEditor()
+      if not editor.isNil and editor.client() == tableView:
+        if not editor.commitEditing():
+          return false
+      elif not tableView.finishCommitEditingCell(""):
+        return false
     tableView.xEditing = TableEditingState(row: row, column: column, active: true)
     tableView.selectCell(row, column)
+    discard tableView.prepareEditingSurface()
     let delegate = tableView.delegate()
     if not delegate.isNil:
       discard delegate.sendLocalIfHandled(
         didBeginEditingCell(), (tableView: tableView, row: row, column: column)
       )
+    let owner = tableView.window()
+    if owner of Window:
+      return Window(owner).makeFirstResponder(tableView)
     true
 
   method commitEditingCell(tableView: TableView, value: string): bool =
     if tableView.isNil or not tableView.xEditing.active:
       return false
-    let editing = tableView.xEditing
-    tableView.xEditing = TableEditingState(row: -1)
-    let delegate = tableView.delegate()
-    if not delegate.isNil:
-      discard delegate.sendLocalIfHandled(
-        didCommitEditingCell(),
-        (tableView: tableView, row: editing.row, column: editing.column, value: value),
-      )
-    tableView.setNeedsDisplay(true)
-    true
+    let editor = Control(tableView).activeEditor()
+    if not editor.isNil and editor.client() == tableView:
+      if value.len > 0:
+        TextView(editor).stringValue = value
+      return editor.commitEditing()
+    tableView.finishCommitEditingCell(value)
 
   method cancelEditingCell(tableView: TableView): bool =
     if tableView.isNil or not tableView.xEditing.active:
       return false
-    let editing = tableView.xEditing
-    tableView.xEditing = TableEditingState(row: -1)
-    let delegate = tableView.delegate()
-    if not delegate.isNil:
-      discard delegate.sendLocalIfHandled(
-        didCancelEditingCell(),
-        (tableView: tableView, row: editing.row, column: editing.column),
-      )
+    let editor = Control(tableView).activeEditor()
+    if not editor.isNil and editor.client() == tableView:
+      tableView.xCancellingFieldEditor = true
+      result = editor.cancelEditing()
+      tableView.xCancellingFieldEditor = false
+      if result:
+        let owner = tableView.window()
+        if owner of Window and Window(owner).firstResponder() == editor:
+          discard Window(owner).makeFirstResponder(nil)
+      return
+    tableView.finishCancelEditingCell()
+
+protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
+  method fieldEditorForClient(
+      tableView: TableView, defaultEditor: FieldEditor
+  ): FieldEditor =
+    if tableView.isNil or not tableView.xEditing.active:
+      return defaultEditor
+    if tableView.xEditingHostView.isNil:
+      discard tableView.prepareEditingSurface()
+    if not tableView.xEditingCell.isNil:
+      let editor = tableView.xEditingCell.fieldEditorForView(tableView.xEditingHostView)
+      if not editor.isNil:
+        return editor
+    defaultEditor
+
+  method usesFieldEditor(tableView: TableView, editor: FieldEditor): bool =
+    not tableView.isNil and tableView.xEditing.active
+
+  method stringForFieldEditor(tableView: TableView, editor: FieldEditor): string =
+    if tableView.isNil or not tableView.xEditing.active:
+      ""
+    else:
+      tableView.tableCellText(tableView.xEditing.row, tableView.xEditing.column)
+
+  method setStringFromFieldEditor(
+      tableView: TableView, editor: FieldEditor, value: string
+  ) =
+    discard
+
+  method didBeginEditing(tableView: TableView, editor: FieldEditor) =
+    if tableView.isNil:
+      return
+    Control(tableView).setCurrentEditor(editor)
+    tableView.installFieldEditorOnSurface(editor)
+    tableView.focused = true
+    tableView.focusVisible = editor.isFocusVisible()
     tableView.setNeedsDisplay(true)
-    true
+
+  method didChangeFocusInEditor(tableView: TableView, editor: FieldEditor) =
+    if tableView.isNil or Control(tableView).activeEditor() != editor:
+      return
+    tableView.focused = editor.isFocused()
+    tableView.focusVisible = editor.isFocusVisible()
+
+  method didChangeTextInEditor(tableView: TableView, editor: FieldEditor) =
+    if tableView.isNil or not tableView.xEditing.active:
+      return
+    if tableView.xEditing.validationError.len > 0:
+      tableView.xEditing.validationError = ""
+      tableView.setNeedsDisplay(true)
+
+  method shouldBeginEditing(tableView: TableView, editor: FieldEditor): bool =
+    not tableView.isNil and tableView.xEditing.active
+
+  method shouldEndEditing(tableView: TableView, editor: FieldEditor): bool =
+    if tableView.isNil:
+      return true
+    if tableView.xCancellingFieldEditor:
+      return true
+    tableView.validateEditingValue(TextView(editor).stringValue())
+
+  method didEndEditing(tableView: TableView, editor: FieldEditor) =
+    if tableView.isNil:
+      return
+    tableView.removeFieldEditorFromSurface(editor)
+    Control(tableView).setCurrentEditor(nil)
+    tableView.focused = false
+    tableView.focusVisible = false
+    tableView.setNeedsDisplay(true)
+
+  method didEndEditingReason(
+      tableView: TableView, editor: FieldEditor, reason: TextEditReason
+  ) =
+    if tableView.isNil:
+      return
+    case reason
+    of terCancel:
+      discard tableView.finishCancelEditingCell()
+    of terCommit, terFocusChange, terProgrammatic:
+      discard tableView.finishCommitEditingCell(TextView(editor).stringValue())
+
+  method didEndEditingMovement(
+      tableView: TableView, editor: FieldEditor, movement: TextEditMovement
+  ) =
+    if tableView.isNil:
+      return
+    if not tableView.moveEditingFromEndedCell(movement):
+      let owner = tableView.window()
+      if owner of Window and Window(owner).firstResponder() == editor:
+        discard Window(owner).makeFirstResponder(nil)
 
 protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
   method beginDraggingRows(
@@ -1559,7 +1902,18 @@ protocol DefaultTableViewDraggingDestination of DraggingDestinationProtocol:
     ListView(tableView).autoscrollDraggingInfo(info)
 
 protocol DefaultTableViewEvents of ResponderEventProtocol:
+  method mouseDown(tableView: TableView, event: MouseEvent): bool =
+    if tableView.headerMouseDown(event):
+      return true
+    let next = tableView.performNext(mouseDown, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
+
   method mouseDragged(tableView: TableView, event: MouseEvent): bool =
+    if tableView.xTrackingColumn != nil:
+      return tableView.headerMouseDragged(event)
     let session = tableView.draggingSession()
     if not session.isNil and session.state() == dssActive:
       let target = tableView.dropTargetForDraggingLocation(event.location)
@@ -1571,6 +1925,52 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
       )
       return true
     let next = tableView.performNext(mouseDragged, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
+
+  method mouseUp(tableView: TableView, event: MouseEvent): bool =
+    if tableView.xTrackingColumn != nil:
+      return tableView.headerMouseUp(event)
+    let next = tableView.performNext(mouseUp, event)
+    let handled =
+      if next.isSome:
+        next.get()
+      else:
+        false
+    if event.clickCount >= 2:
+      let
+        row = ListView(tableView).listItemIndexAtPoint(event.location)
+        column = tableView.tableColumnAtPoint(event.location)
+      if tableView.shouldBeginEditingCell(row, column):
+        return tableView.beginEditingCell(row, column)
+    handled
+
+  method mouseMoved(tableView: TableView, event: MouseEvent): bool =
+    if tableView.headerMouseMoved(event):
+      return true
+    let next = tableView.performNext(mouseMoved, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
+
+  method keyDown(tableView: TableView, event: KeyEvent): bool =
+    if event.key == keyEnter:
+      let row =
+        if tableView.clickedRow() >= 0:
+          tableView.clickedRow()
+        else:
+          tableView.selectedIndex()
+      let column =
+        if not tableView.clickedColumn().isNil:
+          tableView.clickedColumn()
+        else:
+          tableView.columnAt(0)
+      if tableView.shouldBeginEditingCell(row, column):
+        return tableView.beginEditingCell(row, column)
+    let next = tableView.performNext(keyDown, event)
     if next.isSome:
       next.get()
     else:
@@ -1672,6 +2072,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xClickedRow = -1
   tableView.xAllowsColumnSelection = false
   tableView.xEditing = TableEditingState(row: -1)
+  tableView.xEndedEditingRow = -1
   tableView.xTableDropTarget = initDraggingDropTarget()
   tableView.xTrackingColumnIndex = -1
   tableView.xReusableCellViews = initTable[string, seq[View]]()
@@ -1679,6 +2080,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   discard tableView.withProtocol(DefaultTableViewColumnBehavior)
   discard tableView.withProtocol(DefaultTableViewSelectionBehavior)
   discard tableView.withProtocol(DefaultTableViewEditingBehavior)
+  discard tableView.withProtocol(DefaultTableViewFieldEditorClient)
   discard DynamicAgent(tableView).pushMethods(DefaultTableViewEvents.init())
   discard tableView.withProtocol(DefaultTableViewDraggingBehavior)
   discard tableView.withProtocol(DefaultTableViewDraggingSource)
