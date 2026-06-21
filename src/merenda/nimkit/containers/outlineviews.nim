@@ -4,7 +4,6 @@ import sigils/core
 
 import ./listbasics
 import ./tableviews
-import ./listviews
 import ../accessibility/accessibilityprotocols
 import ../app/dragging
 import ../app/pasteboards
@@ -842,16 +841,16 @@ protocol OutlineViewStateBehavior of TableViewStateProtocol:
       TableView(outlineView).selectedColumns = columns
     outlineView.expandedItemIdentifiers = state.expandedItems
 
-protocol OutlineViewTableListDelegate of ListViewDelegate:
+protocol OutlineViewTableDelegate of TableViewDelegate:
   method drawRow(
       outlineView: OutlineView,
-      listView: ListView,
+      tableView: TableView,
       context: DrawContext,
       rect: Rect,
       row: ListRowState,
   ) =
     let emptyRow = initListRowState(row.index, "", states = row.states)
-    ListView(outlineView).drawListRow(context, rect, emptyRow)
+    TableView(outlineView).drawTableListRow(context, rect, emptyRow)
     if row.index < 0:
       return
     let rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
@@ -884,7 +883,7 @@ proc initOutlineViewFields*(outlineView: OutlineView, frame: Rect = AutoRect) =
   outlineView.xOutlineColumn = column
   TableView(outlineView).addColumn(column)
   discard outlineView.withProtocol(OutlineViewTableDataSource)
-  discard outlineView.withProtocol(OutlineViewTableListDelegate)
+  discard outlineView.withProtocol(OutlineViewTableDelegate)
   discard outlineView.withProtocol(OutlineViewDrawing)
   discard DynamicAgent(outlineView).pushMethods(OutlineViewEvents.init())
   discard outlineView.withProtocol(OutlineViewAccessibility)
