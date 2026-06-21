@@ -3,7 +3,6 @@ import std/unittest
 import sigils/core
 
 import merenda/nimkit
-import merenda/nimkit/containers/listviews
 
 type AccessibilitySpy = ref object of Agent
   notifications: seq[AccessibilityNotification]
@@ -19,7 +18,7 @@ proc rememberAccessibilityNotification(
 
 protocol AccessibilityTableSourceMethods of TableViewDataSource:
   method numberOfRows(source: AccessibilityTableSource, tableView: TableView): int =
-    1
+    2
 
   method textForCell(
       source: AccessibilityTableSource,
@@ -196,10 +195,10 @@ suite "nimkit accessibility":
     check scroll.accessibilityRole() == arScrollArea
     check scroll.accessibilityValue() == "0.0,0.0"
 
-  test "tabs lists tables and hosted table cells expose collection semantics":
+  test "tabs tables and hosted table cells expose collection semantics":
     let
       tabView = newTabView(frame = initRect(0, 0, 200, 120))
-      listView = newListView(["One", "Two"], frame = initRect(0, 0, 120, 60))
+      tableListView = newTableView(frame = initRect(0, 0, 120, 60))
       tableView = newTableView(frame = initRect(0, 0, 160, 80))
       source = newAccessibilityTableSource()
       delegate = newAccessibilityTableDelegate()
@@ -208,7 +207,12 @@ suite "nimkit accessibility":
     discard tabView.addTabViewItem(newTabViewItem("Advanced", newView()))
     discard tabView.selectTabViewItemAtIndex(1)
 
-    listView.selectedIndex = 1
+    tableListView.rowCount = 2
+    tableListView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableListView.dataSource = source
+    tableListView.delegate = delegate
+    tableListView.showsHeader = false
+    tableListView.selectedIndex = 1
 
     tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
     tableView.dataSource = source
@@ -219,21 +223,21 @@ suite "nimkit accessibility":
     check tabView.accessibilityValue() == "Advanced"
     check atSelectable in tabView.accessibilityTraits()
 
-    check listView.accessibilityRole() == arList
-    check listView.accessibilityValue() == "2"
-    check atSelectable in listView.accessibilityTraits()
+    check tableListView.accessibilityRole() == arTable
+    check tableListView.accessibilityValue() == "2"
+    check atSelectable in tableListView.accessibilityTraits()
 
     var foundSelectedRow = false
-    for (index, rowView, rect) in listView.visibleRowViews():
+    for (index, rowView, rect) in tableListView.visibleRowViews():
       if index == 1:
         check rowView.accessibilityRole() == arListItem
-        check rowView.accessibilityLabel() == "Two"
+        check rowView.accessibilityLabel() == "Name 1"
         check atSelected in rowView.accessibilityTraits()
         foundSelectedRow = true
     check foundSelectedRow
 
     check tableView.accessibilityRole() == arTable
-    check tableView.accessibilityValue() == "1"
+    check tableView.accessibilityValue() == "2"
 
     var foundCell = false
     for (index, rowView, rect) in tableView.visibleRowViews():

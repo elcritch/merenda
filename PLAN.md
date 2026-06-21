@@ -296,18 +296,13 @@ AppKit-style widgets.
   editors, list views, table views, outline views, collection views, and large
   forms should be able to build on the same clipped document-view and scrolling
   model.
-- Keep `ListView` as the simple single-column data widget. Share row
-  infrastructure with table/outline controls only when the reuse boundary is
-  proven by real table and outline behavior.
 - Stage layout work conservatively. Expand constraints through the existing
   Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
   conveniences only when controls and examples prove the need.
 - Expand layout length support beyond the current fixed-font `em` dimension
   constant shortcut. A fuller `LayoutSize`/`LayoutLength` model should preserve
   unresolved units through anchor expressions, resolve them against the relevant
-  view/theme/font context, and support offsets such as
-  `cx(label[atTop] == field[atBottom] + 1'em)` without converting to
-  points too early.
+  view/theme/font context
 
 ## Open Questions
 
