@@ -24,6 +24,10 @@ type TableEditSignalSpy = ref object of Agent
   events: seq[string]
   observedValues: seq[string]
 
+type TableSelectionSignalSpy = ref object of Agent
+  changingEvents: int
+  changedEvents: int
+
 type TableColumnUserInfo = ref object of Responder
   label: string
 
@@ -172,6 +176,21 @@ proc rememberCellEditDidCommit(
   if not spy.source.isNil and row in 0 ..< spy.source.rows.len:
     spy.observedValues.add spy.source.rows[row].fieldText(column.identifier)
 
+proc rememberTableSelectionIsChanging(
+    spy: TableSelectionSignalSpy, sender: DynamicAgent
+) {.slot.} =
+  inc spy.changingEvents
+  discard sender
+
+proc rememberTableSelectionDidChange(
+    spy: TableSelectionSignalSpy, sender: DynamicAgent
+) {.slot.} =
+  inc spy.changedEvents
+  discard sender
+
+proc newTableSelectionSignalSpy(): TableSelectionSignalSpy =
+  TableSelectionSignalSpy()
+
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
     source.rows
@@ -212,7 +231,7 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
     if row in 0 ..< delegate.rowHeights.len:
       delegate.rowHeights[row]
     else:
-      ListView(tableView).rowHeight()
+      tableView.rowHeight()
 
   method isRowEnabled(
       delegate: TableDelegateSpy, tableView: TableView, row: int
@@ -349,7 +368,7 @@ protocol EditableTableSpyDelegate of TableViewDelegate:
     if row in 0 ..< source.rows.len:
       source.rows[row].setFieldText(column.identifier, value)
       source.commits.add column.identifier & ":" & value
-      ListView(tableView).reloadData()
+      tableView.reloadData()
 
 proc newEditableTableSpy(rows: openArray[EditableTableRow]): EditableTableSpy =
   result = EditableTableSpy(rows: @rows)
@@ -625,7 +644,10 @@ suite "NimKit TableView":
     tableView.delegate = delegate
 
     var texts = tableView.renderedTexts()
-    check tableView.visibleRowSummaries().len == 2
+    let summaries: seq[TableVisibleRowSummary] = tableView.visibleRowSummaries()
+    check summaries.len == 2
+    let content: View = tableView.contentView()
+    check not content.isNil
     check tableView.hostedTableCellCount() == 4
     check texts.contains("name:0")
     check texts.contains("age:0")
@@ -635,7 +657,8 @@ suite "NimKit TableView":
     tableView.scrollRows(1)
     texts = tableView.renderedTexts()
 
-    check tableView.visibleRowSummaries()[0].index == 1
+    let scrollSummaries: seq[TableVisibleRowSummary] = tableView.visibleRowSummaries()
+    check scrollSummaries[0].index == 1
     check tableView.hostedTableCellCount() == 4
     check not texts.contains("name:0")
     check not texts.contains("age:0")
@@ -643,6 +666,29 @@ suite "NimKit TableView":
     check texts.contains("age:1")
     check texts.contains("name:2")
     check texts.contains("age:2")
+
+  test "table view selection signals are emitted from public API":
+    let
+      tableView = newTableView()
+      spy = newTableSelectionSignalSpy()
+
+    tableView.selectionMode = tsmSingle
+    tableView.rowCount = 3
+
+    tableView.connect(selectionIsChanging, spy, rememberTableSelectionIsChanging)
+    tableView.connect(selectionDidChange, spy, rememberTableSelectionDidChange)
+
+    tableView.selectedIndex = 1
+    check spy.changedEvents == 1
+    check spy.changingEvents == 1
+
+    tableView.selectedIndex = 1
+    check spy.changedEvents == 1
+    check spy.changingEvents == 1
+
+    tableView.selectedIndex = 2
+    check spy.changedEvents == 2
+    check spy.changingEvents == 2
 
   test "table row policy hooks feed inherited list row behavior":
     let
@@ -662,7 +708,7 @@ suite "NimKit TableView":
     check not tableView.rowSelectable(2)
     check tableView.rowHeightForRow(3) == 50.0'f32
 
-    tableView.selectionMode = lsmMultiple
+    tableView.selectionMode = tsmMultiple
     tableView.selectedIndexes = [0, 1, 2, 3]
     check tableView.selectedIndexes == @[0, 3]
 
@@ -692,14 +738,14 @@ suite "NimKit TableView":
     tableView.addColumn(newTableColumn("state", "State", width = 80.0))
     tableView.dataSource = source
     tableView.delegate = delegate
-    ListView(tableView).rowHeight = 28.0
+    tableView.rowHeight = 28.0
     root.addSubview(tableView)
     window.setContentView(root)
     discard buildRenders(root)
 
     check window.mouseDownAt(tableView.pointToWindow(initPoint(170.0'f32, 42.0'f32)))
     check window.mouseUpAt(tableView.pointToWindow(initPoint(170.0'f32, 42.0'f32)))
-    check ListView(tableView).selectedIndex == 1
+    check tableView.selectedIndex == 1
 
   test "table view lets interactive hosted cells consume clicks by default":
     let
@@ -717,7 +763,7 @@ suite "NimKit TableView":
     tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
     tableView.dataSource = source
     tableView.delegate = delegate
-    ListView(tableView).rowHeight = 28.0
+    tableView.rowHeight = 28.0
     root.addSubview(tableView)
     window.setContentView(root)
     discard buildRenders(root)
@@ -725,7 +771,7 @@ suite "NimKit TableView":
     let point = tableView.pointToWindow(initPoint(178.0'f32, 42.0'f32))
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
-    check ListView(tableView).selectedIndex == -1
+    check tableView.selectedIndex == -1
 
   test "table action buttons use row-local callbacks when selection does not change":
     let
@@ -741,9 +787,9 @@ suite "NimKit TableView":
     tableView.dataSource = source
     delegate.buttonColumns = @["action"]
     delegate.nonselectableRows = @[1]
-    tableView.selectionMode = lsmNone
+    tableView.selectionMode = tsmNone
     tableView.delegate = delegate
-    ListView(tableView).rowHeight = 22.0
+    tableView.rowHeight = 22.0
     root.addSubview(tableView)
     window.setContentView(root)
     discard buildRenders(root)
@@ -771,7 +817,7 @@ suite "NimKit TableView":
     tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
     tableView.dataSource = source
     tableView.delegate = delegate
-    ListView(tableView).rowHeight = 28.0
+    tableView.rowHeight = 28.0
     root.addSubview(tableView)
     window.setContentView(root)
     discard buildRenders(root)
@@ -779,9 +825,9 @@ suite "NimKit TableView":
     let point = tableView.pointToWindow(initPoint(178.0'f32, 42.0'f32))
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
-    check ListView(tableView).selectedIndex == 1
+    check tableView.selectedIndex == 1
 
-    ListView(tableView).selectedIndex = -1
+    tableView.selectedIndex = -1
     delegate.hasPolicy = false
     delegate.hasShouldTrack = true
     delegate.shouldTrackColumn = "action"
@@ -790,17 +836,17 @@ suite "NimKit TableView":
 
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
-    check ListView(tableView).selectedIndex == 1
+    check tableView.selectedIndex == 1
 
   test "table view keeps inherited row selection behavior":
     let tableView = newTableView()
 
     tableView.rowCount = 5
-    tableView.selectionMode = lsmExtended
-    ListView(tableView).selectedRange = 1 .. 3
+    tableView.selectionMode = tsmExtended
+    tableView.selectedRange = 1 .. 3
 
     check tableView.selectedIndexes == @[1, 2, 3]
-    check ListView(tableView).selectedRange == 1 .. 3
+    check tableView.selectedRange == 1 .. 3
 
   test "table view tracks selected columns clicked cell editing persistence and drag state":
     let
@@ -1274,23 +1320,23 @@ suite "NimKit TableView":
       root = newView(frame = initRect(0, 0, 360, 260))
       tableView = newTableView(frame = initRect(10, 10, 260, 224))
       delegate = newTableDelegateSpy()
-      scrollView = ListView(tableView).scrollView()
+      scrollView = tableView.scrollView()
 
     tableView.rowCount = 12
     tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
-    ListView(tableView).rowHeight = 28.0
+    tableView.rowHeight = 28.0
     delegate.disabledRows = @[11]
     tableView.delegate = delegate
-    ListView(tableView).selectedIndex = 0
+    tableView.selectedIndex = 0
     root.addSubview(tableView)
     window.setContentView(root)
 
     check window.makeFirstResponder(tableView)
     check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
     check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
-    check ListView(tableView).selectedIndex == 10
+    check tableView.selectedIndex == 10
     check scrollView.contentOffset().y == scrollView.maximumContentOffset().y
 
     check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
-    check ListView(tableView).selectedIndex == 10
+    check tableView.selectedIndex == 10
     check scrollView.contentOffset().y == scrollView.maximumContentOffset().y

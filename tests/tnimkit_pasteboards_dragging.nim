@@ -19,8 +19,8 @@ type
   DropDestination = ref object of DynamicAgent
     concluded: int
 
-  ListDropDelegate = ref object of Responder
-    proposedRow: int
+  DragTableSource = ref object of Responder
+    items: seq[string]
 
   TableDropDelegate = ref object of Responder
     proposedKind: DraggingDropTargetKind
@@ -97,15 +97,17 @@ protocol DropDestinationProtocol of DraggingDestinationProtocol:
   method concludeDragOperation(destination: DropDestination, info: DraggingInfo) =
     inc destination.concluded
 
-protocol ListDropDelegateProtocol of ListViewDelegate:
-  method listDropTargetForLocation(
-      delegate: ListDropDelegate,
-      listView: ListView,
-      location: Point,
-      proposedTarget: DraggingDropTarget,
-  ): DraggingDropTarget =
-    delegate.proposedRow = proposedTarget.row
-    initItemDropTarget("list:" & $proposedTarget.row, proposedTarget.row)
+protocol DragTableSourceMethods of TableViewDataSource:
+  method numberOfRows(source: DragTableSource, tableView: TableView): int =
+    source.items.len
+
+  method textForCell(
+      source: DragTableSource, tableView: TableView, row: int, column: TableColumn
+  ): string =
+    if row < 0 or row >= source.items.len:
+      ""
+    else:
+      source.items[row]
 
 protocol TableDropDelegateProtocol of TableViewDelegate:
   method tableDropTargetForLocation(
@@ -138,13 +140,14 @@ proc newPromisedFileSource(): PromisedFileSource =
   result = PromisedFileSource()
   discard result.withProtocol(PromisedFileSourceProtocol)
 
+proc newDragTableSource(values: openArray[string]): DragTableSource =
+  result = DragTableSource(items: @values)
+  initResponder(result)
+  discard result.withProtocol(DragTableSourceMethods)
+
 proc newDropDestination(): DropDestination =
   result = DropDestination()
   discard result.withProtocol(DropDestinationProtocol)
-
-proc newListDropDelegate(): ListDropDelegate =
-  result = ListDropDelegate(proposedRow: -1)
-  discard result.withProtocol(ListDropDelegateProtocol)
 
 proc newTableDropDelegate(): TableDropDelegate =
   result = TableDropDelegate()
@@ -220,33 +223,26 @@ suite "nimkit pasteboards and dragging":
     check item.kind == pikFile
     check item.filePath == "fallback.txt"
 
-  test "list table and outline delegates can refine drop targets":
+  test "table and outline delegates can refine drop targets":
     let
-      listView = newListView(frame = initRect(0, 0, 120, 80))
-      listDelegate = newListDropDelegate()
-
-    listView.items = ["one", "two"]
-    listView.delegate = listDelegate
-    let listTarget = listView.dropTargetForDraggingLocation(initPoint(4, 4))
-    check listDelegate.proposedRow == 0
-    check listTarget.kind == ddtItem
-    check listTarget.itemIdentifier == "list:0"
-
-    let
-      tableView = newTableView(frame = initRect(0, 0, 180, 80))
+      tableSource = newDragTableSource(["one", "two"])
+      tableView = newTableView(frame = initRect(0, 0, 120, 80))
       tableDelegate = newTableDropDelegate()
-      nameColumn = newTableColumn("name", "Name", width = 90.0)
+      nameColumn = newTableColumn("value", "Value", width = 120.0)
 
+    tableView.showsHeader = false
     tableView.rowCount = 2
     tableView.addColumn(nameColumn)
+    tableView.dataSource = tableSource
     tableView.delegate = tableDelegate
+
     let
       tableRowRect = tableView.listItemRect(0)
       tableTarget = tableView.dropTargetForDraggingLocation(
         initPoint(tableRowRect.origin.x + 8.0'f32, tableRowRect.origin.y + 4.0'f32)
       )
     check tableDelegate.proposedKind == ddtCell
-    check tableDelegate.proposedColumn == "name"
+    check tableDelegate.proposedColumn == "value"
     check tableTarget.column == "override"
 
     let

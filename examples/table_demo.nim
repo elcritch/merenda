@@ -153,7 +153,7 @@ proc sortRows(
       if direction == tsdDescending:
         result = -result
   )
-  ListView(controller.table).reloadData()
+  controller.table.reloadData()
 
 proc updateCellValue(
     controller: TableDemoController, row: int, column: TableColumn, value: string
@@ -172,7 +172,7 @@ proc updateCellValue(
     controller.rows[row].elapsed = text
   else:
     discard
-  ListView(controller.table).reloadData()
+  controller.table.reloadData()
   controller.updateSelection()
 
 proc makeActionButton(controller: TableDemoController, row: int): Button =
@@ -413,7 +413,7 @@ table.visibleRows = 8
 table.showsHeader = true
 table.tableHeaderHeight = 26.0
 table.rowHeight = 28.0
-table.selectionMode = lsmExtended
+table.selectionMode = tsmExtended
 table.allowsColumnSelection = true
 table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true

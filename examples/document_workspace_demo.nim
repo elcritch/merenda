@@ -214,7 +214,7 @@ proc updateAccessibilityInfo(document: FeatureDocument) =
 proc reloadFeatureTable(document: FeatureDocument) =
   if document.isNil or document.table.isNil:
     return
-  ListView(document.table).reloadData()
+  document.table.reloadData()
   document.updateAccessibilityInfo()
 
 proc sortRows(
@@ -264,10 +264,10 @@ proc copySummary(document: FeatureDocument) =
 proc beginTableDrag(document: FeatureDocument) =
   if document.isNil or document.table.isNil:
     return
-  var rows = ListView(document.table).selectedIndexes()
+  var rows = document.table.selectedIndexes()
   if rows.len == 0 and document.rows.len > 0:
     rows = @[0]
-    ListView(document.table).selectedIndexes = rows
+    document.table.selectedIndexes = rows
   let session = document.table.beginDraggingRows(rows, {dgoCopy, dgoMove})
   if session.isNil:
     document.updateActivity("No drag session could be created")
@@ -332,7 +332,7 @@ proc configureTable(document: FeatureDocument, table: TableView) =
   table.showsHeader = true
   table.tableHeaderHeight = 26.0
   table.rowHeight = 30.0
-  table.selectionMode = lsmExtended
+  table.selectionMode = tsmExtended
   table.allowsColumnSelection = true
   table.usesAlternatingRowBackgrounds = true
   table.showsRowSeparators = true

@@ -21,6 +21,41 @@ type NestedScrollFixture = object
 
 type OverlayDrawView = ref object of View
 
+type SingleColumnTableSource = ref object of Responder
+  rows: seq[string]
+
+protocol SingleColumnTableSourceMethods of TableViewDataSource:
+  method numberOfRows(source: SingleColumnTableSource, tableView: TableView): int =
+    source.rows.len
+
+  method textForCell(
+      source: SingleColumnTableSource,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+  ): string =
+    if row < 0 or row >= source.rows.len:
+      ""
+    else:
+      source.rows[row]
+
+func newSingleColumnTableSource(rows: openArray[string] = []): SingleColumnTableSource =
+  SingleColumnTableSource(rows: @rows)
+
+proc newSingleColumnTableView(
+    rows: openArray[string] = [], frame: nimkitTypes.Rect = AutoRect
+): TableView =
+  result = newTableView(frame = frame)
+  let source = newSingleColumnTableSource(rows)
+  result.showsHeader = false
+  result.rowCount = rows.len
+  initResponder(source)
+  discard source.withProtocol(SingleColumnTableSourceMethods)
+  result.dataSource = source
+
+  let column = newTableColumn("singleColumn", "Item", width = 110.0)
+  result.addColumn(column)
+
 const GeometryTolerance = 0.01'f32
 const OverlayDrawLevel = 75.ZLevel
 
@@ -130,8 +165,8 @@ proc scrollViewScrollerKnobRect(
       track, axis, initScrollViewport(offset.y, viewport.height, document.height)
     )
 
-proc listViewScrollerKnobRect(listView: ListView): nimkitTypes.Rect =
-  let scrollView = listView.scrollView()
+proc tableViewScrollerKnobRect(tableView: TableView): nimkitTypes.Rect =
+  let scrollView = tableView.scrollView()
   if scrollView.isNil:
     return initRect(0.0, 0.0, 0.0, 0.0)
   scrollerKnobRect(
@@ -551,38 +586,39 @@ suite "nimkit scroll views":
     check child.contentOffset() == childOffset
     check fixture.parent.contentOffset().y > 0.0'f32
 
-  test "wheel over scrollable list view stays with list scroll view":
+  test "wheel over scrollable table view stays with table scroll view":
     let
-      listView = newListView(
+      tableView = newSingleColumnTableView(
         ["One", "Two", "Three", "Four", "Five", "Six"],
         frame = initRect(20, 20, 120, 68),
       )
-      fixture = newNestedScrollFixture(listView)
+      fixture = newNestedScrollFixture(tableView)
 
-    listView.rowHeight = 20.0
+    tableView.rowHeight = 20.0
 
-    check listView.scrollView().maximumContentOffset().y > 0.0'f32
+    check tableView.scrollView().maximumContentOffset().y > 0.0'f32
     check fixture.parent.contentOffset() == initPoint(0, 0)
     check fixture.window.scrollWheelAt(
-      fixture.windowPointForDocumentChild(listView), deltaY = -2.0
+      fixture.windowPointForDocumentChild(tableView), deltaY = -2.0
     )
-    check listView.scrollView().contentOffset().y > 0.0'f32
+    check tableView.scrollView().contentOffset().y > 0.0'f32
     check fixture.parent.contentOffset() == initPoint(0, 0)
 
-  test "wheel over non-scrollable list view bubbles to parent scroll view":
+  test "wheel over non-scrollable table view bubbles to parent scroll view":
     let
-      listView = newListView(["One", "Two"], frame = initRect(20, 20, 120, 68))
-      fixture = newNestedScrollFixture(listView)
+      tableView =
+        newSingleColumnTableView(["One", "Two"], frame = initRect(20, 20, 120, 68))
+      fixture = newNestedScrollFixture(tableView)
 
-    listView.rowHeight = 20.0
+    tableView.rowHeight = 20.0
 
-    check listView.visibleItemCount() == listView.len()
-    check listView.listViewScrollerKnobRect().isEmpty
+    check tableView.visibleItemCount() == tableView.len()
+    check tableViewScrollerKnobRect(tableView).isEmpty
     check fixture.parent.contentOffset() == initPoint(0, 0)
     check fixture.window.scrollWheelAt(
-      fixture.windowPointForDocumentChild(listView), deltaY = -2.0
+      fixture.windowPointForDocumentChild(tableView), deltaY = -2.0
     )
-    check listView.firstVisibleIndex() == 0
+    check tableView.firstVisibleIndex() == 0
     check fixture.parent.contentOffset().y > 0.0'f32
 
   test "autohide scroller policy follows document size":

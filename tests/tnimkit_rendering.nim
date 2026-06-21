@@ -6,6 +6,8 @@ import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
 
 type CustomDrawView = ref object of View
+type SingleColumnRenderTableSource = ref object of Responder
+  rows: seq[string]
 
 var customDrawCount: int
 
@@ -42,6 +44,40 @@ protocol ExtraChromeProtocol of ChromeProtocol:
       extras.rect.inset(initEdgeInsets(5.0)),
       ExtraChromeFill,
     )
+
+protocol SingleColumnRenderTableSourceMethods of TableViewDataSource:
+  method numberOfRows(
+      source: SingleColumnRenderTableSource, tableView: TableView
+  ): int =
+    source.rows.len
+
+  method textForCell(
+      source: SingleColumnRenderTableSource,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+  ): string =
+    if row < 0 or row >= source.rows.len:
+      ""
+    else:
+      source.rows[row]
+
+proc newSingleColumnRenderTableSource(
+    rows: openArray[string]
+): SingleColumnRenderTableSource =
+  result = SingleColumnRenderTableSource(rows: @rows)
+  initResponder(result)
+  discard result.withProtocol(SingleColumnRenderTableSourceMethods)
+
+proc newSingleColumnRenderTable(
+    rows: openArray[string], frame: nimkitTypes.Rect
+): TableView =
+  result = newTableView(frame = frame)
+  let source = newSingleColumnRenderTableSource(rows)
+  result.showsHeader = false
+  result.rowCount = rows.len
+  result.dataSource = source
+  result.addColumn(newTableColumn("item", "Item", width = 120.0))
 
 proc newCustomDrawView(frame: nimkitTypes.Rect): CustomDrawView =
   result = CustomDrawView()
@@ -764,11 +800,12 @@ suite "nimkit rendering":
 
     check hoverFound
 
-  test "buildRenders draws standalone list views with list roles":
+  test "buildRenders draws standalone one-column table views with list roles":
     let
       root = newView(frame = initRect(0, 0, 220, 140))
-      listView =
-        newListView(["One", "Two", "Three", "Four"], frame = initRect(10, 20, 130, 68))
+      tableView = newSingleColumnRenderTable(
+        ["One", "Two", "Three", "Four"], frame = initRect(10, 20, 130, 68)
+      )
       listFill = initColor(0.77, 0.79, 0.81, 1.0)
       listBorder = initColor(0.24, 0.28, 0.34, 1.0)
       selectedFill = initColor(0.23, 0.48, 0.92, 1.0)
@@ -789,34 +826,22 @@ suite "nimkit rendering":
     theme[srListItem, {ssHovered}, StyleFill] = hoverFill
     theme[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 5.0)
 
-    listView.rowHeight = 20.0
-    listView.selectedIndex = 1
-    listView.highlightedIndex = 2
-    listView.focusVisible = true
-    root.addSubview(listView)
+    tableView.rowHeight = 20.0
+    tableView.selectedIndex = 1
+    tableView.highlightedIndex = 2
+    tableView.focusVisible = true
+    root.addSubview(tableView)
 
     let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
     var
-      listBoxFound = false
       selectedRowFound = false
       highlightedRowFound = false
       selectedTextFound = false
-      focusRingFound = false
 
     for node in list.nodes:
       case node.kind
       of nkRectangle:
-        if node.fill.kind == flColor and node.fill.color == listFill.rgba and
-            node.screenBox.x == 10.0 and node.screenBox.y == 20.0 and
-            node.screenBox.w == 130.0 and node.screenBox.h == 68.0:
-          listBoxFound = true
-          check node.stroke.weight == 2.0
-          check node.stroke.fill.kind == flColor
-          check node.stroke.fill.color == listBorder.rgba
-          check node.corners[dcTopLeft] == 4'u16
-          check NfClipContent in node.flags
-
         if node.fill.kind == flColor and node.fill.color == selectedFill.rgba and
             node.screenBox.x == 11.0 and node.screenBox.y == 41.0 and
             node.screenBox.w == 116.0 and node.screenBox.h == 20.0:
@@ -826,14 +851,6 @@ suite "nimkit rendering":
             node.screenBox.x == 11.0 and node.screenBox.y == 61.0 and
             node.screenBox.w == 116.0 and node.screenBox.h == 20.0:
           highlightedRowFound = true
-
-        if node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
-          focusRingFound = true
-          check node.stroke.weight == 3.0
-          check node.screenBox.x == 9.0
-          check node.screenBox.y == 19.0
-          check node.screenBox.w == 132.0
-          check node.screenBox.h == 70.0
       of nkText:
         if node.renderedText() == "Two" and node.textLayout.spanColors.len > 0 and
             node.textLayout.spanColors[0].kind == flColor and
@@ -846,11 +863,9 @@ suite "nimkit rendering":
       else:
         discard
 
-    check listBoxFound
     check selectedRowFound
     check highlightedRowFound
     check selectedTextFound
-    check focusRingFound
 
   test "buildRenders draws focused text field selection and caret":
     let

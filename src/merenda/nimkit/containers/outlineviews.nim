@@ -4,6 +4,7 @@ import sigils/core
 
 import ./listbasics
 import ./tableviews
+import ./listviews
 import ../accessibility/accessibilityprotocols
 import ../app/dragging
 import ../app/pasteboards

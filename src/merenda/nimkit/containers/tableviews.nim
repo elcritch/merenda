@@ -19,16 +19,26 @@ import ../text/textviews
 import ../foundation/types
 import ../view/views
 
-export listviews except visibleRowViews
-
 const
   DefaultTableColumnWidth = 120.0'f32
   DefaultTableColumnMinWidth = 24.0'f32
   DefaultTableColumnMaxWidth = 10000.0'f32
+  tsmNone* = lsmNone
+  tsmSingle* = lsmSingle
+  tsmMultiple* = lsmMultiple
+  tsmExtended* = lsmExtended
   TablePasteboardTypeRows* = "nimkit.table.rows"
   TablePasteboardTypeColumns* = "nimkit.table.columns"
 
 type
+  TableSelectionMode* = ListSelectionMode
+
+  TableVisibleRowSummary* = object
+    index*: int
+    text*: string
+    rect*: Rect
+    states*: set[WidgetState]
+
   TableColumnResizePolicy* = enum
     tcrFixed
     tcrResizable
@@ -165,6 +175,9 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
   ): string {.optional.}
 
 protocol TableViewEvents:
+  proc selectionIsChanging*(tableView: TableView, sender: DynamicAgent) {.signal.}
+  proc selectionDidChange*(tableView: TableView, sender: DynamicAgent) {.signal.}
+  proc rowWasActivated*(tableView: TableView, sender: DynamicAgent) {.signal.}
   proc cellEditDidCommit*(
     tableView: TableView,
     sender: DynamicAgent,
@@ -790,11 +803,124 @@ proc clickedColumnIndex*(tableView: TableView): int =
   else:
     tableView.columnIndex(tableView.xClickedColumn.identifier())
 
+proc rowHeight*(tableView: TableView): float32 =
+  ListView(tableView).rowHeight()
+
+proc rowHeightForRow*(tableView: TableView, row: int): float32 =
+  if tableView.isNil:
+    return 0.0'f32
+  ListView(tableView).rowHeightForRow(row)
+
+proc `rowHeight=`*(tableView: TableView, height: float32) =
+  ListView(tableView).rowHeight = height
+
+proc rowEnabled*(tableView: TableView, row: int): bool =
+  tableView.tableRowEnabled(row)
+
+proc rowSelectable*(tableView: TableView, row: int): bool =
+  tableView.tableRowSelectable(row)
+
+proc highlightedIndex*(tableView: TableView): int =
+  ListView(tableView).highlightedIndex()
+
+proc `highlightedIndex=`*(tableView: TableView, index: int) =
+  ListView(tableView).highlightedIndex = index
+
+proc reloadData*(tableView: TableView) =
+  ListView(tableView).reloadData()
+
+proc selectedIndexes*(tableView: TableView): seq[int] =
+  ListView(tableView).selectedIndexes()
+
+proc `selectedIndexes=`*(tableView: TableView, indexes: openArray[int]) =
+  ListView(tableView).selectedIndexes = indexes
+
+proc selectedRange*(tableView: TableView): Slice[int] =
+  ListView(tableView).selectedRange()
+
+proc `selectedRange=`*(tableView: TableView, selectionRange: Slice[int]) =
+  ListView(tableView).selectedRange = selectionRange
+
+proc selectedRanges*(tableView: TableView): seq[Slice[int]] =
+  ListView(tableView).selectedRanges()
+
+proc selectionMode*(tableView: TableView): TableSelectionMode =
+  ListView(tableView).selectionMode()
+
+proc `selectionMode=`*(tableView: TableView, mode: TableSelectionMode) =
+  ListView(tableView).selectionMode = mode
+
+proc visibleRows*(tableView: TableView): int =
+  ListView(tableView).visibleRows()
+
+proc `visibleRows=`*(tableView: TableView, rows: int) =
+  ListView(tableView).visibleRows = rows
+
+proc usesAlternatingRowBackgrounds*(tableView: TableView): bool =
+  ListView(tableView).usesAlternatingRowBackgrounds()
+
+proc `usesAlternatingRowBackgrounds=`*(tableView: TableView, value: bool) =
+  ListView(tableView).usesAlternatingRowBackgrounds = value
+
+proc showsRowSeparators*(tableView: TableView): bool =
+  ListView(tableView).showsRowSeparators()
+
+proc `showsRowSeparators=`*(tableView: TableView, value: bool) =
+  ListView(tableView).showsRowSeparators = value
+
+proc scrollView*(tableView: TableView): ScrollView =
+  ListView(tableView).scrollView()
+
+proc toTableVisibleRowSummary(summary: ListVisibleRowSummary): TableVisibleRowSummary =
+  TableVisibleRowSummary(
+    index: summary.index, text: summary.text, rect: summary.rect, states: summary.states
+  )
+
+proc contentView*(tableView: TableView): View =
+  ListView(tableView).contentView()
+
 proc selectedIndex*(tableView: TableView): int =
   ListView(tableView).selectedIndex()
 
 proc `selectedIndex=`*(tableView: TableView, index: int) =
   ListView(tableView).selectedIndex = index
+
+proc listItemRect*(tableView: TableView, itemIndex: int): Rect =
+  ListView(tableView).listItemRect(itemIndex)
+
+proc listItemIndexAtPoint*(tableView: TableView, point: Point): int =
+  ListView(tableView).listItemIndexAtPoint(point)
+
+proc len*(tableView: TableView): int =
+  if tableView.isNil:
+    0
+  else:
+    tableView.rowCount()
+
+proc visibleItemCount*(tableView: TableView): int =
+  ListView(tableView).visibleItemCount()
+
+proc firstVisibleIndex*(tableView: TableView): int =
+  ListView(tableView).firstVisibleIndex()
+
+proc visibleRowSummaries*(tableView: TableView): seq[TableVisibleRowSummary] =
+  for summary in ListView(tableView).visibleRowSummaries():
+    result.add summary.toTableVisibleRowSummary()
+
+iterator visibleRowViews*(
+    tableView: TableView
+): tuple[index: int, view: View, rect: Rect] =
+  if not tableView.isNil:
+    for item in ListView(tableView).visibleRowViews():
+      yield item
+
+proc scrollRows*(tableView: TableView, delta: int) =
+  ListView(tableView).scrollRows(delta)
+
+proc activateItemAtIndex*(tableView: TableView, index: int) =
+  if tableView.isNil:
+    return
+  ListView(tableView).activateItemAtIndex(index)
 
 proc allowsColumnSelection*(tableView: TableView): bool =
   (not tableView.isNil) and tableView.xAllowsColumnSelection
