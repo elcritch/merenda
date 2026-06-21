@@ -164,6 +164,15 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
     tableView: TableView, row: int, column: TableColumn
   ): string {.optional.}
 
+protocol TableViewEvents:
+  proc cellEditDidCommit*(
+    tableView: TableView,
+    sender: DynamicAgent,
+    row: int,
+    column: TableColumn,
+    value: string,
+  ) {.signal.}
+
 protocol TableViewDelegate {.selectorScope: protocol.}:
   method viewForCell*(
     tableView: TableView, row: int, column: TableColumn
@@ -1143,6 +1152,9 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
       didCommitEditingCell(),
       (tableView: tableView, row: editing.row, column: editing.column, value: value),
     )
+  emit tableView.cellEditDidCommit(
+    DynamicAgent(tableView), editing.row, editing.column, value
+  )
   tableView.clearTableCellSlots()
   tableView.setNeedsDisplay(true)
   true
