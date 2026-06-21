@@ -87,6 +87,43 @@ suite "nimkit view selection":
     check selected.isNil
     check selectionEvents == @["original:parent"]
 
+  test "view selection follows subviews added and removed after install":
+    let
+      window = newWindow("Dynamic selection", frame = initRect(0, 0, 180, 120))
+      root = newView(frame = initRect(0, 0, 180, 120))
+      container = newView("container", frame = initRect(10, 10, 120, 80))
+      child = newView("child", frame = initRect(20, 15, 40, 30))
+
+    window.setContentView(root)
+
+    var
+      selected: View
+      removed: View
+    var selection = installViewSelection(
+      root,
+      proc(view: View, event: MouseEvent) =
+        discard event
+        selected = view,
+      removalHandler = proc(view: View) =
+        removed = view,
+    )
+
+    check DynamicAgent(container).methodStack(mouseDown()).len == 0
+    root.addSubview(container)
+    check DynamicAgent(container).methodStack(mouseDown()).len == 1
+
+    container.addSubview(child)
+    check DynamicAgent(child).methodStack(mouseDown()).len == 1
+    check window.mouseDownAt(initPoint(35, 30), timestamp = 25.0)
+    check selected == child
+
+    container.removeFromSuperview()
+    check removed == container
+    check DynamicAgent(container).methodStack(mouseDown()).len == 0
+    check DynamicAgent(child).methodStack(mouseDown()).len == 0
+
+    check selection.uninstall()
+
   test "view inspector can select inspected views from mouseDown":
     let
       window = newWindow("Inspector selection", frame = initRect(0, 0, 160, 120))

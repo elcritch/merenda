@@ -45,6 +45,12 @@ type
     window*: Window
     inspector*: ViewInspector
 
+proc detach*(inspector: ViewInspector)
+
+protocol ViewInspectorWindowLifecycleSlots of WindowLifecycleEvents:
+  proc willClose(inspector: ViewInspector) {.slot.} =
+    inspector.detach()
+
 proc px(value: float32): string =
   $int(round(value))
 
@@ -127,8 +133,12 @@ proc updateViewSelection(inspector: ViewInspector) =
       discard event
       if not inspectorRef.isNil:
         inspectorRef[].selectView(view)
+    removalHandler: ViewSelectionRemovalHandler = proc(view: View) =
+      if not inspectorRef.isNil and view.containsView(inspectorRef[].xSelected):
+        inspectorRef[].selectView(nil)
 
-  inspector.xViewSelection = installViewSelection(inspector.xRoot, handler)
+  inspector.xViewSelection =
+    installViewSelection(inspector.xRoot, handler, removalHandler = removalHandler)
 
 proc updateSelectionRing(inspector: ViewInspector, view: View) =
   discard inspector.xSelectionRing.uninstall()
@@ -156,6 +166,15 @@ proc selectView*(inspector: ViewInspector, view: View) =
   if inspector.isNil:
     return
   inspector.updateSelectionRing(view)
+  inspector.refresh()
+
+proc detach*(inspector: ViewInspector) =
+  if inspector.isNil:
+    return
+  discard inspector.xViewSelection.uninstall()
+  discard inspector.xSelectionRing.uninstall()
+  inspector.xRoot = nil
+  inspector.xSelected = nil
   inspector.refresh()
 
 proc selectionRingStyle*(inspector: ViewInspector): SelectionRingStyle =
@@ -371,6 +390,7 @@ proc newViewInspectorPanel*(
       inspector
   result.window = newPanel(title, frame)
   result.window.setContentView(result.inspector)
+  result.inspector.observeProtocol(result.window, ViewInspectorWindowLifecycleSlots)
 
 proc newViewInspectorPanel*(
     root: View = nil,
@@ -380,6 +400,7 @@ proc newViewInspectorPanel*(
   result.inspector = newViewInspector(root)
   result.window = newPanel(title, frame)
   result.window.setContentView(result.inspector)
+  result.inspector.observeProtocol(result.window, ViewInspectorWindowLifecycleSlots)
 
 proc showViewInspector*(
     inspector: ViewInspector,
