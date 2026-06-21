@@ -137,6 +137,9 @@ proc typeText(window: Window, text: string): bool =
       return false
   true
 
+proc pressKey(window: Window, key: Key, modifiers: set[KeyModifier] = {}): bool =
+  window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: modifiers))
+
 func fieldText(row: EditableTableRow, identifier: string): string =
   case identifier
   of "project": row.project
@@ -348,11 +351,14 @@ protocol EditableTableSpyDelegate of TableViewDelegate:
       source.commits.add column.identifier & ":" & value
       ListView(tableView).reloadData()
 
-proc newEditableTableSpy(row: EditableTableRow): EditableTableSpy =
-  result = EditableTableSpy(rows: @[row])
+proc newEditableTableSpy(rows: openArray[EditableTableRow]): EditableTableSpy =
+  result = EditableTableSpy(rows: @rows)
   initResponder(result)
   discard result.withProtocol(EditableTableSpyDataSource)
   discard result.withProtocol(EditableTableSpyDelegate)
+
+proc newEditableTableSpy(row: EditableTableRow): EditableTableSpy =
+  newEditableTableSpy([row])
 
 proc newTableEditSignalSpy(source: EditableTableSpy): TableEditSignalSpy =
   TableEditSignalSpy(source: source)
@@ -993,6 +999,195 @@ suite "NimKit TableView":
       check not reopenedTexts.containsValue(edit.oldValue)
       check tableView.cancelEditingCell()
 
+  test "table view return commits edits and moves down the editable column":
+    let
+      window =
+        newWindow("Table return edit navigation", frame = initRect(0, 0, 560, 150))
+      root = newView(frame = initRect(0, 0, 560, 150))
+      tableView = newTableView(frame = initRect(12, 12, 500, 64))
+      source = newEditableTableSpy(
+        [
+          EditableTableRow(
+            project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
+          ),
+          EditableTableRow(
+            project: "Gamma", state: "Running", owner: "Mira", elapsed: "7m"
+          ),
+        ]
+      )
+      project = newTableColumn("project", "Project", width = 140.0)
+      state = newTableColumn("state", "State", width = 160.0, alignment = taCenter)
+      owner = newTableColumn("owner", "Owner", width = 90.0)
+      elapsed = newTableColumn("elapsed", "Elapsed", width = 70.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.addColumn(elapsed)
+    tableView.dataSource = source
+    tableView.delegate = source
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check window.doubleClickTableCell(tableView, 0, project)
+    check window.typeText("Beta")
+    check window.pressKey(keyEnter)
+    check source.rows[0].project == "Beta"
+    check tableView.editingState.active
+    check tableView.editingState.row == 1
+    check tableView.editingState.column == project
+    check TextView(window.fieldEditor()).stringValue == "Gamma"
+    check tableView.renderedTexts().containsValue("Beta")
+    check not tableView.renderedTexts().containsValue("Alpha")
+
+    check window.typeText("Delta")
+    check window.pressKey(keyEnter)
+    check source.rows[1].project == "Delta"
+    check not tableView.editingState.active
+    check window.firstResponder().isNil
+    let committedTexts = tableView.renderedTexts()
+    check committedTexts.containsValue("Beta")
+    check committedTexts.containsValue("Delta")
+    check not committedTexts.containsValue("Gamma")
+
+  test "table view tab and shift-tab commit and move across editable cells":
+    let
+      window = newWindow("Table tab edit navigation", frame = initRect(0, 0, 560, 150))
+      root = newView(frame = initRect(0, 0, 560, 150))
+      tableView = newTableView(frame = initRect(12, 12, 500, 44))
+      source = newEditableTableSpy(
+        EditableTableRow(
+          project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
+        )
+      )
+      project = newTableColumn("project", "Project", width = 140.0)
+      state = newTableColumn("state", "State", width = 160.0, alignment = taCenter)
+      owner = newTableColumn("owner", "Owner", width = 90.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.dataSource = source
+    tableView.delegate = source
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check window.doubleClickTableCell(tableView, 0, project)
+    check window.typeText("Beta")
+    check window.pressKey(keyTab)
+    check source.rows[0].project == "Beta"
+    check tableView.editingState.active
+    check tableView.editingState.row == 0
+    check tableView.editingState.column == state
+    check tableView.clickedColumn() == state
+    check TextView(window.fieldEditor()).stringValue == "Queued"
+
+    check window.typeText("Done")
+    check window.pressKey(keyTab)
+    check source.rows[0].state == "Done"
+    check tableView.editingState.active
+    check tableView.editingState.column == owner
+    check tableView.clickedColumn() == owner
+    check TextView(window.fieldEditor()).stringValue == "June"
+
+    check window.typeText("Mira")
+    check window.pressKey(keyTab)
+    check source.rows[0].owner == "Mira"
+    check not tableView.editingState.active
+    check window.firstResponder().isNil
+    let forwardTexts = tableView.renderedTexts()
+    check forwardTexts.containsValue("Beta")
+    check forwardTexts.containsValue("Done")
+    check forwardTexts.containsValue("Mira")
+    check not forwardTexts.containsValue("Alpha")
+    check not forwardTexts.containsValue("Queued")
+    check not forwardTexts.containsValue("June")
+
+    check window.doubleClickTableCell(tableView, 0, owner)
+    check window.typeText("Nova")
+    check window.pressKey(keyTab, {kmShift})
+    check source.rows[0].owner == "Nova"
+    check tableView.editingState.active
+    check tableView.editingState.column == state
+    check tableView.clickedColumn() == state
+    check TextView(window.fieldEditor()).stringValue == "Done"
+
+    check window.typeText("Blocked")
+    check window.pressKey(keyTab, {kmShift})
+    check source.rows[0].state == "Blocked"
+    check tableView.editingState.active
+    check tableView.editingState.column == project
+    check tableView.clickedColumn() == project
+    check TextView(window.fieldEditor()).stringValue == "Beta"
+
+    check window.typeText("Gamma")
+    check window.pressKey(keyTab, {kmShift})
+    check source.rows[0].project == "Gamma"
+    check not tableView.editingState.active
+    check window.firstResponder().isNil
+    let backwardTexts = tableView.renderedTexts()
+    check backwardTexts.containsValue("Gamma")
+    check backwardTexts.containsValue("Blocked")
+    check backwardTexts.containsValue("Nova")
+    check not backwardTexts.containsValue("Beta")
+    check not backwardTexts.containsValue("Done")
+    check not backwardTexts.containsValue("Mira")
+
+  test "table view escape cancels drawn and hosted cell edits":
+    let
+      window =
+        newWindow("Table escape edit cancellation", frame = initRect(0, 0, 560, 140))
+      root = newView(frame = initRect(0, 0, 560, 140))
+      tableView = newTableView(frame = initRect(12, 12, 500, 44))
+      source = newEditableTableSpy(
+        EditableTableRow(
+          project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
+        )
+      )
+      project = newTableColumn("project", "Project", width = 140.0)
+      state = newTableColumn("state", "State", width = 160.0, alignment = taCenter)
+      owner = newTableColumn("owner", "Owner", width = 90.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.dataSource = source
+    tableView.delegate = source
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check window.doubleClickTableCell(tableView, 0, owner)
+    check window.typeText("Mira")
+    check tableView.renderedTexts().containsValue("Mira")
+    check not tableView.renderedTexts().containsValue("June")
+    check window.pressKey(keyEscape)
+    check not tableView.editingState.active
+    check window.firstResponder().isNil
+    check source.rows[0].owner == "June"
+    check source.commits.len == 0
+    check tableView.renderedTexts().containsValue("June")
+    check not tableView.renderedTexts().containsValue("Mira")
+
+    check window.doubleClickTableCell(tableView, 0, state)
+    check window.typeText("Done")
+    check tableView.renderedTexts().containsValue("Done")
+    check not tableView.renderedTexts().containsValue("Queued")
+    check window.pressKey(keyEscape)
+    check not tableView.editingState.active
+    check window.firstResponder().isNil
+    check source.rows[0].state == "Queued"
+    check source.commits.len == 0
+    let restoredTexts = tableView.renderedTexts()
+    check restoredTexts.containsValue("Queued")
+    check restoredTexts.containsValue("June")
+    check not restoredTexts.containsValue("Done")
+
   test "table view edits drawn text cells and routes return down a column":
     let
       window = newWindow("Table drawn cell editing", frame = initRect(0, 0, 420, 180))
@@ -1023,6 +1218,13 @@ suite "NimKit TableView":
     check tableView.editingState.active
     check tableView.editingState.row == 1
     check tableView.editingState.column == state
+    check TextView(window.fieldEditor()).stringValue == "state:1"
+
+    TextView(window.fieldEditor()).stringValue = "last"
+    check window.pressKey(keyEnter)
+    check delegate.committedEdits == @["state:0:done", "state:1:last"]
+    check not tableView.editingState.active
+    check window.firstResponder().isNil
 
   test "table view queues hosted cell views by reuse identifier":
     let
