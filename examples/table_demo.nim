@@ -311,6 +311,21 @@ proc tableSelectionDidChange(
   if sender == DynamicAgent(controller.table):
     controller.updateSelection()
 
+proc tableCellEditDidCommit(
+    controller: TableDemoController,
+    sender: DynamicAgent,
+    row: int,
+    column: TableColumn,
+    value: string,
+) {.slot.} =
+  if sender != DynamicAgent(controller.table) or column.isNil:
+    return
+  if column.sortDirection == tsdNone:
+    return
+  controller.sortRows(column, column.sortDirection)
+  controller.activity.text =
+    "Committed " & column.title & ": " & value & "\nResorted by " & column.title
+
 proc newTableDemoController(
     table: TableView, detail, activity: Label
 ): TableDemoController =
@@ -410,6 +425,7 @@ stateColumn.hidden = true
 table.moveColumn(table.columnIndex("owner"), table.columnIndex("project"))
 table.restoreState(controller.stateStore)
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
+table.connect(cellEditDidCommit, controller, tableCellEditDidCommit)
 
 root.addSubviews(autoNames(title, table, detailTitle, detail, activityTitle, activity))
 

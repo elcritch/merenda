@@ -13,6 +13,11 @@ type EditableStateTableSpy = ref object of Responder
   values: seq[string]
   commits: seq[string]
 
+type TableEditSignalSpy = ref object of Agent
+  source: EditableStateTableSpy
+  events: seq[string]
+  observedValues: seq[string]
+
 type TableColumnUserInfo = ref object of Responder
   label: string
 
@@ -120,6 +125,17 @@ proc typeText(window: Window, text: string): bool =
     if not window.dispatchKeyDown(KeyEvent(text: $ch, keyCode: ch.ord)):
       return false
   true
+
+proc rememberCellEditDidCommit(
+    spy: TableEditSignalSpy,
+    sender: DynamicAgent,
+    row: int,
+    column: TableColumn,
+    value: string,
+) {.slot.} =
+  spy.events.add $row & ":" & column.identifier & ":" & value
+  if not spy.source.isNil and row in 0 ..< spy.source.values.len:
+    spy.observedValues.add spy.source.values[row]
 
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
@@ -305,6 +321,9 @@ proc newEditableStateTableSpy(value: string): EditableStateTableSpy =
   initResponder(result)
   discard result.withProtocol(EditableStateTableSpyDataSource)
   discard result.withProtocol(EditableStateTableSpyDelegate)
+
+proc newTableEditSignalSpy(source: EditableStateTableSpy): TableEditSignalSpy =
+  TableEditSignalSpy(source: source)
 
 proc newTableDataSourceSpy(rows: int): TableDataSourceSpy =
   result = TableDataSourceSpy(rows: rows)
@@ -884,12 +903,14 @@ suite "NimKit TableView":
       root = newView(frame = initRect(0, 0, 360, 140))
       tableView = newTableView(frame = initRect(12, 12, 220, 44))
       source = newEditableStateTableSpy("Queued")
+      editSpy = newTableEditSignalSpy(source)
       state = newTableColumn("state", "State", width = 180.0, alignment = taCenter)
 
     tableView.showsHeader = false
     tableView.addColumn(state)
     tableView.dataSource = source
     tableView.delegate = source
+    tableView.connect(cellEditDidCommit, editSpy, rememberCellEditDidCommit)
     root.addSubview(tableView)
     window.setContentView(root)
     discard buildRenders(root)
@@ -909,6 +930,8 @@ suite "NimKit TableView":
     check not tableView.editingState.active
     check source.values == @["Failed"]
     check source.commits == @["Failed"]
+    check editSpy.events == @["0:state:Failed"]
+    check editSpy.observedValues == @["Failed"]
     let committedTexts = tableView.renderedTexts()
     check committedTexts.containsValue("Failed")
     check not committedTexts.containsValue("Queued")
