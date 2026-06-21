@@ -192,10 +192,16 @@ application, responder, view, window, accessibility, or control/cell layers.
   document lookup by URL/window, backend-neutral recent-document storage,
   reopen flow, close-all review of edited documents, and menu validation for
   document commands now live above the `Document` and `WindowController` layer.
+- Connected real `TableView` editing surfaces to the protocol-backed editing
+  flow: field editors now attach to hosted control cells or drawn text cells,
+  commits and cancels route through the existing begin/commit/cancel hooks,
+  delegate-provided validation errors keep the editor active, and Tab/Return
+  navigation moves between editable cells.
 
 ## Current Verification
 
-- `nim test` passes locally on macOS with the current domain module layout.
+- `atlas-run tests` passes locally on macOS with the current domain module
+  layout.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -225,26 +231,22 @@ update widgets, responder state, and rendering.
 Continue growing the protocol-backed table and outline APIs into production
 AppKit-style widgets.
 
-1. Connect real editing surfaces:
-   - attach field editors or hosted cell editors to the protocol-backed
-     begin/commit/cancel flow, support validation errors, and route tab/return
-     navigation between editable cells
-2. Finish native-feeling header interaction:
+1. Finish native-feeling header interaction:
    - add resize cursors/tracking areas, richer sort indicator rendering,
      visible column drag insertion affordances, and autoscroll while reordering
      columns
-3. Finish drag/drop integration:
+2. Finish drag/drop integration:
    - add distinct before/after/on insertion targets for table rows, columns,
      and outline items on top of the current item/cell drop target model
    - add column-header drag insertion affordances and autoscroll while
      reordering columns
    - deepen table/outline delegate validation hooks for proposed operation,
      target, and insertion position before accepting a drop
-4. Finish persistence integration:
+3. Finish persistence integration:
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
      columns/items, and restore timing tied to window/document lifecycle
-5. Harden outline behavior on top of the new rendering path:
+4. Harden outline behavior on top of the new rendering path:
    - add richer outline keyboard navigation, selection persistence by stable
      item identity, before/after/on item insertion semantics, and optional
      delegate hooks for disclosure rendering/indent metrics

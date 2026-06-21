@@ -17,6 +17,7 @@ type TableDelegateSpy = ref object of Responder
   nonselectableRows: seq[int]
   rowHeights: seq[float32]
   hostedColumns: seq[string]
+  textFieldColumns: seq[string]
   buttonColumns: seq[string]
   policyColumn: string
   policy: CellHitPolicy
@@ -29,6 +30,8 @@ type TableDelegateSpy = ref object of Responder
   buttonActionRows: seq[int]
   sortChanges: seq[string]
   deniedEditRows: seq[int]
+  rejectedEditValues: seq[string]
+  editValidationError: string
   beganEdits: seq[string]
   committedEdits: seq[string]
   cancelledEdits: seq[string]
@@ -117,6 +120,8 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
       )
       button.action = action
       return button
+    if delegate.textFieldColumns.containsValue(column.identifier):
+      return newTextField(text)
     newLabel(text)
 
   method tableRowHeight(
@@ -169,6 +174,17 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
       delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
   ) =
     delegate.beganEdits.add column.identifier & ":" & $row
+
+  method validationErrorForCell(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ): string =
+    if delegate.rejectedEditValues.containsValue(value):
+      return delegate.editValidationError
+    ""
 
   method didCommitEditingCell(
       delegate: TableDelegateSpy,
@@ -720,6 +736,91 @@ suite "NimKit TableView":
     let targeted = columnInfo.withDropTarget(row = 1, column = state)
     check targeted.tableDropRow() == 1
     check targeted.tableDropColumn() == "state"
+
+  test "table view hosts field editors for editable cells validates and navigates":
+    let
+      window = newWindow("Table cell editing", frame = initRect(0, 0, 420, 180))
+      root = newView(frame = initRect(0, 0, 420, 180))
+      tableView = newTableView(frame = initRect(10, 10, 320, 100))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name", width = 160.0)
+      state = newTableColumn("state", "State", width = 110.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(name)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    delegate.hostedColumns = @["name"]
+    delegate.textFieldColumns = @["name"]
+    delegate.rejectedEditValues = @["bad"]
+    delegate.editValidationError = "Name cannot be bad"
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.beginEditingCell(0, name)
+    check tableView.editingState.active
+    check tableView.editingState.row == 0
+    check tableView.editingState.column == name
+    check delegate.beganEdits == @["name:0"]
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditorClient() == tableView
+    check window.fieldEditor().superview() of TextField
+    check TextView(window.fieldEditor()).stringValue == "name:0"
+
+    TextView(window.fieldEditor()).stringValue = "bad"
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check tableView.editingState.active
+    check tableView.editingState.row == 0
+    check tableView.editingValidationError == "Name cannot be bad"
+    check delegate.committedEdits.len == 0
+    check window.fieldEditorClient() == tableView
+
+    TextView(window.fieldEditor()).stringValue = "fixed"
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check delegate.committedEdits == @["name:0:fixed"]
+    check tableView.editingState.active
+    check tableView.editingState.row == 0
+    check tableView.editingState.column == state
+    check window.fieldEditorClient() == tableView
+
+    check tableView.cancelEditingCell()
+    check not tableView.editingState.active
+    check delegate.cancelledEdits == @["state:0"]
+    check window.firstResponder().isNil
+
+  test "table view edits drawn text cells and routes return down a column":
+    let
+      window = newWindow("Table drawn cell editing", frame = initRect(0, 0, 420, 180))
+      root = newView(frame = initRect(0, 0, 420, 180))
+      tableView = newTableView(frame = initRect(10, 10, 320, 100))
+      source = newTableDataSourceSpy(2)
+      delegate = newTableDelegateSpy()
+      name = newTableColumn("name", "Name", width = 160.0)
+      state = newTableColumn("state", "State", width = 110.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(name)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.beginEditingCell(0, state)
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditor().superview() != nil
+    check TextView(window.fieldEditor()).stringValue == "state:0"
+
+    TextView(window.fieldEditor()).stringValue = "done"
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check delegate.committedEdits == @["state:0:done"]
+    check tableView.editingState.active
+    check tableView.editingState.row == 1
+    check tableView.editingState.column == state
 
   test "table view queues hosted cell views by reuse identifier":
     let
