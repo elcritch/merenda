@@ -76,7 +76,7 @@ proc setPanelTitle(panel: InspectablePanel, value: string) =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit View Inspector Demo", frame = initRect(120, 120, 860, 560))
+  window = newWindow("Nimkit View Inspector Demo", frame = initRect(120, 120, 940, 640))
   inspector = newViewInspector()
 
   root = newView()
@@ -178,19 +178,19 @@ activateConstraints:
   toolbar[atTop] == canvas[atTop] + 22.0
   toolbar[atLeft] == canvas[atLeft] + 22.0
   toolbar[atRight] == canvas[atRight] - 22.0
-  toolbar[atHeight] == 54.0
-  sidebar[atTop] == toolbar[atBottom] + 18.0
+  toolbar[atHeight] == 50.0
+  sidebar[atTop] == toolbar[atBottom] + 16.0
   sidebar[atLeft] == toolbar[atLeft]
   sidebar[atWidth] == 176.0
   sidebar[atBottom] == canvas[atBottom] - 22.0
   editor[atTop] == sidebar[atTop]
   editor[atLeft] == sidebar[atRight] + 18.0
   editor[atRight] == canvas[atRight] - 22.0
-  editor[atHeight] == 154.0
-  preview[atTop] == editor[atBottom] + 18.0
+  editor[atHeight] == 132.0
+  preview[atTop] == editor[atBottom] + 16.0
   preview[atLeft] == editor[atLeft]
   preview[atRight] == card[atLeft] - 18.0
-  preview[atBottom] == timeline[atTop] - 18.0
+  preview[atBottom] == timeline[atTop] - 16.0
   card[atTop] == preview[atTop] + 10.0
   card[atRight] == editor[atRight] - 10.0
   card[atWidth] == 184.0
@@ -198,7 +198,7 @@ activateConstraints:
   timeline[atLeft] == editor[atLeft]
   timeline[atRight] == editor[atRight]
   timeline[atBottom] == sidebar[atBottom]
-  timeline[atHeight] == 92.0
+  timeline[atHeight] == 86.0
   searchField[atTop] == toolbar[atTop] + 13.0
   searchField[atLeft] == toolbar[atLeft] + 260.0
   searchField[atWidth] == 220.0
@@ -206,10 +206,10 @@ activateConstraints:
   runButton[atLeft] == searchField[atRight] + 12.0
   runButton[atWidth] == 82.0
   healthSlider[atLeft] == preview[atLeft] + 18.0
-  healthSlider[atRight] == card[atLeft] - 36.0
-  healthSlider[atBottom] == preview[atBottom] - 22.0
+  healthSlider[atRight] == liveSwitch[atLeft] - 16.0
+  healthSlider[atBottom] == preview[atBottom] - 18.0
   liveSwitch[atRight] == preview[atRight] - 18.0
-  liveSwitch[atBottom] == preview[atBottom] - 20.0
+  liveSwitch[atCenterY] == healthSlider[atCenterY]
 
 inspector.inspectedRoot = root
 inspector.selectDemoView(status, toolbar)

@@ -17,8 +17,6 @@ import ../containers/stackviews
 import ../text/textfields
 import ../view/views
 
-export windows
-
 type
   ViewInspector* = ref object of View
     xRoot: View
@@ -116,8 +114,8 @@ proc `inspectedRoot=`*(inspector: ViewInspector, root: View) =
   if inspector.isNil:
     return
   inspector.xRoot = root
-  if not inspector.xSelected.isNil and not root.isNil and
-      not root.containsView(inspector.xSelected):
+  if not inspector.xSelected.isNil and
+      (root.isNil or not root.containsView(inspector.xSelected)):
     inspector.xSelected = nil
   inspector.refresh()
 
