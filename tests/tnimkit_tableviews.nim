@@ -924,7 +924,7 @@ suite "NimKit TableView":
     check window.pressKey(keyEscape)
     check not tableView.editingState.active
     check delegate.cancelledEdits == @["name:0"]
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
     let cancelledTexts = tableView.renderedTexts()
     check cancelledTexts.containsValue("name:0")
     check not cancelledTexts.containsValue("bad")
@@ -946,7 +946,7 @@ suite "NimKit TableView":
     check tableView.cancelEditingCell()
     check not tableView.editingState.active
     check delegate.cancelledEdits == @["name:0", "state:0"]
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
 
   test "table view user edits hosted and drawn text cells render committed values":
     let
@@ -1013,7 +1013,7 @@ suite "NimKit TableView":
       check not reopenedTexts.containsValue(edit.oldValue)
       check tableView.cancelEditingCell()
 
-  test "table view return commits edits and moves down the editable column":
+  test "table view return commits edits and keeps row navigation active":
     let
       window =
         newWindow("Table return edit navigation", frame = initRect(0, 0, 560, 150))
@@ -1049,18 +1049,23 @@ suite "NimKit TableView":
     check window.typeText("Beta")
     check window.pressKey(keyEnter)
     check source.rows[0].project == "Beta"
-    check tableView.editingState.active
-    check tableView.editingState.row == 1
-    check tableView.editingState.column == project
-    check TextView(window.fieldEditor()).stringValue == "Gamma"
+    check not tableView.editingState.active
+    check window.firstResponder() == tableView
+    check tableView.selectedIndex() == 0
     check tableView.renderedTexts().containsValue("Beta")
     check not tableView.renderedTexts().containsValue("Alpha")
 
+    check window.pressKey(keyArrowDown)
+    check tableView.selectedIndex() == 1
+    check window.pressKey(keyArrowUp)
+    check tableView.selectedIndex() == 0
+
+    check tableView.beginEditingCell(1, project)
     check window.typeText("Delta")
     check window.pressKey(keyEnter)
     check source.rows[1].project == "Delta"
     check not tableView.editingState.active
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
     let committedTexts = tableView.renderedTexts()
     check committedTexts.containsValue("Beta")
     check committedTexts.containsValue("Delta")
@@ -1112,7 +1117,7 @@ suite "NimKit TableView":
     check window.pressKey(keyTab)
     check source.rows[0].owner == "Mira"
     check not tableView.editingState.active
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
     let forwardTexts = tableView.renderedTexts()
     check forwardTexts.containsValue("Beta")
     check forwardTexts.containsValue("Done")
@@ -1142,7 +1147,7 @@ suite "NimKit TableView":
     check window.pressKey(keyTab, {kmShift})
     check source.rows[0].project == "Gamma"
     check not tableView.editingState.active
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
     let backwardTexts = tableView.renderedTexts()
     check backwardTexts.containsValue("Gamma")
     check backwardTexts.containsValue("Blocked")
@@ -1182,7 +1187,7 @@ suite "NimKit TableView":
     check not tableView.renderedTexts().containsValue("June")
     check window.pressKey(keyEscape)
     check not tableView.editingState.active
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
     check source.rows[0].owner == "June"
     check source.commits.len == 0
     check tableView.renderedTexts().containsValue("June")
@@ -1194,7 +1199,7 @@ suite "NimKit TableView":
     check not tableView.renderedTexts().containsValue("Queued")
     check window.pressKey(keyEscape)
     check not tableView.editingState.active
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
     check source.rows[0].state == "Queued"
     check source.commits.len == 0
     let restoredTexts = tableView.renderedTexts()
@@ -1202,7 +1207,7 @@ suite "NimKit TableView":
     check restoredTexts.containsValue("June")
     check not restoredTexts.containsValue("Done")
 
-  test "table view edits drawn text cells and routes return down a column":
+  test "table view edits drawn text cells and returns focus to row selection":
     let
       window = newWindow("Table drawn cell editing", frame = initRect(0, 0, 420, 180))
       root = newView(frame = initRect(0, 0, 420, 180))
@@ -1229,16 +1234,22 @@ suite "NimKit TableView":
     TextView(window.fieldEditor()).stringValue = "done"
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check delegate.committedEdits == @["state:0:done"]
+    check not tableView.editingState.active
+    check window.firstResponder() == tableView
+    check tableView.selectedIndex() == 0
+
+    check window.pressKey(keyArrowDown)
+    check tableView.selectedIndex() == 1
+    check window.pressKey(keyEnter)
     check tableView.editingState.active
     check tableView.editingState.row == 1
     check tableView.editingState.column == state
-    check TextView(window.fieldEditor()).stringValue == "state:1"
 
     TextView(window.fieldEditor()).stringValue = "last"
     check window.pressKey(keyEnter)
     check delegate.committedEdits == @["state:0:done", "state:1:last"]
     check not tableView.editingState.active
-    check window.firstResponder().isNil
+    check window.firstResponder() == tableView
 
   test "table view queues hosted cell views by reuse identifier":
     let
