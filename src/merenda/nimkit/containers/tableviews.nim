@@ -139,6 +139,7 @@ proc tableCellHitPolicy(
 proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
 proc enqueueReusableCellView(tableView: TableView, identifier: string, view: View)
+proc recycleCellSlot(tableView: TableView, slot: TableCellSlot)
 proc clearTableCellSlots(tableView: TableView)
 proc syncVisibleTableCells(tableView: TableView)
 proc prepareEditingSurface(tableView: TableView): bool
@@ -683,6 +684,21 @@ proc enqueueReusableCellView(tableView: TableView, identifier: string, view: Vie
     view.removeFromSuperview()
   tableView.xReusableCellViews.mgetOrPut(identifier, @[]).add view
 
+proc recycleCellSlot(tableView: TableView, slot: TableCellSlot) =
+  if tableView.isNil or slot.view.isNil:
+    return
+  let identifier =
+    if slot.column.isNil:
+      ""
+    else:
+      slot.column.reuseIdentifier()
+  if identifier.len > 0:
+    tableView.enqueueReusableCellView(identifier, slot.view)
+  else:
+    slot.view.hidden = true
+    if slot.view.superview() != nil:
+      slot.view.removeFromSuperview()
+
 proc tableRowEnabled(tableView: TableView, row: int): bool =
   if tableView.isNil or row notin 0 ..< tableView.rowCount():
     return false
@@ -957,8 +973,7 @@ proc clearTableCellSlots(tableView: TableView) =
   if tableView.isNil:
     return
   for slot in tableView.xCellSlots:
-    if not slot.view.isNil:
-      tableView.enqueueReusableCellView(slot.column.reuseIdentifier(), slot.view)
+    tableView.recycleCellSlot(slot)
   tableView.xCellSlots.setLen(0)
 
 proc recycleVisibleCellViews*(tableView: TableView) =
@@ -994,8 +1009,8 @@ proc syncVisibleTableCells(tableView: TableView) =
         tableView.applyCellAccessibility(row, column, cellView)
         nextSlots.add TableCellSlot(row: row, column: column, view: cellView)
   for index, slot in previousSlots:
-    if not used[index] and not slot.view.isNil:
-      tableView.enqueueReusableCellView(slot.column.reuseIdentifier(), slot.view)
+    if not used[index]:
+      tableView.recycleCellSlot(slot)
   tableView.xCellSlots = nextSlots
 
 proc visibleCellView(tableView: TableView, row: int, column: TableColumn): View =
@@ -1060,6 +1075,8 @@ proc fieldEditorFrameForEditing(tableView: TableView): Rect =
 proc removeFieldEditorFromSurface(tableView: TableView, editor: FieldEditor) =
   if tableView.isNil or editor.isNil:
     return
+  if tableView.xEditingHostView of Control:
+    Control(tableView.xEditingHostView).setCurrentEditor(nil)
   if not tableView.xEditingCell.isNil:
     tableView.xEditingCell.endEditing(editor, tableView.xEditingHostView)
   elif editor.superview() == tableView.xEditingHostView:
@@ -1075,6 +1092,8 @@ proc installFieldEditorOnSurface(tableView: TableView, editor: FieldEditor) =
     tableView.xEditingCell.selectWithFrame(
       frame, tableView.xEditingHostView, editor, 0, editor.textStorage().len
     )
+    if tableView.xEditingHostView of Control:
+      Control(tableView.xEditingHostView).setCurrentEditor(editor)
   else:
     editor.frame = frame
     if not tableView.xEditingHostView.isNil and
@@ -1124,6 +1143,7 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
       didCommitEditingCell(),
       (tableView: tableView, row: editing.row, column: editing.column, value: value),
     )
+  tableView.clearTableCellSlots()
   tableView.setNeedsDisplay(true)
   true
 
