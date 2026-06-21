@@ -21,6 +21,8 @@ type
     activity: Label
     stateStore: TableViewStateStore
 
+const ValidBuildStates = ["Running", "Queued", "Blocked", "Done", "Paused"]
+
 func fieldText(row: BuildRow, identifier: string): string =
   case identifier
   of "project": row.project
@@ -28,6 +30,38 @@ func fieldText(row: BuildRow, identifier: string): string =
   of "owner": row.owner
   of "elapsed": row.elapsed
   else: ""
+
+func canonicalState(value: string): string =
+  let text = value.strip()
+  for state in ValidBuildStates:
+    if cmpIgnoreCase(text, state) == 0:
+      return state
+  text
+
+func validElapsedValue(value: string): bool =
+  let text = value.strip()
+  if text.len < 2 or text[^1] notin {'m', 'h', 'd'}:
+    return false
+  for index in 0 ..< text.high:
+    if text[index] < '0' or text[index] > '9':
+      return false
+  true
+
+func validationError(column: TableColumn, value: string): string =
+  if column.isNil:
+    return ""
+  let text = value.strip()
+  if text.len == 0:
+    return column.title & " cannot be blank"
+  case column.identifier
+  of "state":
+    if text.canonicalState() notin ValidBuildStates:
+      result = "State must be Running, Queued, Blocked, Done, or Paused"
+  of "elapsed":
+    if not text.validElapsedValue():
+      result = "Elapsed should look like 12m, 2h, or 1d"
+  else:
+    discard
 
 func demoRows(): seq[BuildRow] =
   @[
@@ -93,9 +127,10 @@ proc updateSelection(controller: TableDemoController) =
       controller.table.clickedColumn.title
   controller.detail.text = text
 
-proc makeStateCell(state: string): Label =
-  result = newStatusLabel(state)
+proc makeStateCell(state: string): TextField =
+  result = newTextField(state)
   result.alignment = taCenter
+  result.styleClasses = ["table-state-cell"]
 
 proc onInspect(controller: TableDemoController, row: int) =
   let index = row
@@ -125,15 +160,16 @@ proc updateCellValue(
 ) =
   if row notin 0 ..< controller.rows.len or column.isNil:
     return
+  let text = value.strip()
   case column.identifier
   of "project":
-    controller.rows[row].project = value
+    controller.rows[row].project = text
   of "state":
-    controller.rows[row].state = value
+    controller.rows[row].state = text.canonicalState()
   of "owner":
-    controller.rows[row].owner = value
+    controller.rows[row].owner = text
   of "elapsed":
-    controller.rows[row].elapsed = value
+    controller.rows[row].elapsed = text
   else:
     discard
   ListView(controller.table).reloadData()
@@ -214,7 +250,20 @@ protocol TableDemoDelegate of TableViewDelegate:
       row: int,
       column: TableColumn,
   ) =
-    controller.activity.text = "Editing " & column.title & " for row " & $row
+    controller.activity.text =
+      "Editing " & column.title & " for " & controller.rowAt(row).project
+
+  method validationErrorForCell(
+      controller: TableDemoController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ): string =
+    result = validationError(column, value)
+    if result.len > 0:
+      controller.activity.text =
+        "Edit rejected for " & controller.rowAt(row).project & "\n" & result
 
   method didCommitEditingCell(
       controller: TableDemoController,
@@ -224,7 +273,8 @@ protocol TableDemoDelegate of TableViewDelegate:
       value: string,
   ) =
     controller.updateCellValue(row, column, value)
-    controller.activity.text = "Committed " & column.title & ": " & value
+    let text = controller.rowAt(row).cellText(column)
+    controller.activity.text = "Committed " & column.title & ": " & text
 
   method didCancelEditingCell(
       controller: TableDemoController,
@@ -242,7 +292,10 @@ protocol TableDemoDelegate of TableViewDelegate:
       target: View,
       event: MouseEvent,
   ): CellHitPolicy =
-    if column.identifier == "action": chpSelectAndTrack else: chpDefault
+    case column.identifier
+    of "action": chpSelectAndTrack
+    of "state": chpSelectRow
+    else: chpDefault
 
   method didActivateRow(
       controller: TableDemoController, tableView: TableView, row: int

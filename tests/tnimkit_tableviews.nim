@@ -9,6 +9,10 @@ type TableDataSourceSpy = ref object of Responder
   rows: int
   textCalls: seq[string]
 
+type EditableStateTableSpy = ref object of Responder
+  values: seq[string]
+  commits: seq[string]
+
 type TableColumnUserInfo = ref object of Responder
   label: string
 
@@ -89,6 +93,33 @@ proc tableActionPoint(tableView: TableView, row: int): Point =
   initPoint(
     actionX + leftColumn.width(), rowRect.origin.y + rowRect.size.height * 0.5'f32
   )
+
+proc tableCellPoint(tableView: TableView, row: int, column: TableColumn): Point =
+  let rowRect = tableView.listItemRect(row)
+  if rowRect.isEmpty or column.isNil:
+    return tableView.pointToWindow(initPoint(0.0, 0.0))
+  var x = 0.0'f32
+  for current in tableView.columns:
+    if current == column:
+      x += current.width() * 0.5'f32
+      break
+    if not current.hidden():
+      x += current.width()
+  tableView.pointToWindow(
+    initPoint(x, rowRect.origin.y + rowRect.size.height * 0.5'f32)
+  )
+
+proc doubleClickTableCell(
+    window: Window, tableView: TableView, row: int, column: TableColumn
+): bool =
+  let point = tableView.tableCellPoint(row, column)
+  window.mouseDownAt(point, clickCount = 2) and window.mouseUpAt(point, clickCount = 2)
+
+proc typeText(window: Window, text: string): bool =
+  for ch in text:
+    if not window.dispatchKeyDown(KeyEvent(text: $ch, keyCode: ch.ord)):
+      return false
+  true
 
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
@@ -224,6 +255,56 @@ protocol TableDelegateShouldTrackSpyMethods of TableViewDelegate:
     if delegate.hasShouldTrack and column.identifier == delegate.shouldTrackColumn:
       return delegate.shouldTrackValue
     true
+
+protocol EditableStateTableSpyDataSource of TableViewDataSource:
+  method numberOfRows(source: EditableStateTableSpy, tableView: TableView): int =
+    source.values.len
+
+  method textForCell(
+      source: EditableStateTableSpy, tableView: TableView, row: int, column: TableColumn
+  ): string =
+    if row in 0 ..< source.values.len and column.identifier == "state":
+      source.values[row]
+    else:
+      ""
+
+protocol EditableStateTableSpyDelegate of TableViewDelegate:
+  method viewForCell(
+      source: EditableStateTableSpy, tableView: TableView, row: int, column: TableColumn
+  ): View =
+    if row in 0 ..< source.values.len and column.identifier == "state":
+      let field = newTextField(source.values[row])
+      field.alignment = taCenter
+      return field
+    nil
+
+  method hitPolicyForCell(
+      source: EditableStateTableSpy,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      target: View,
+      event: MouseEvent,
+  ): CellHitPolicy =
+    if column.identifier == "state": chpSelectRow else: chpDefault
+
+  method didCommitEditingCell(
+      source: EditableStateTableSpy,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ) =
+    if row in 0 ..< source.values.len and column.identifier == "state":
+      source.values[row] = value
+      source.commits.add value
+      ListView(tableView).reloadData()
+
+proc newEditableStateTableSpy(value: string): EditableStateTableSpy =
+  result = EditableStateTableSpy(values: @[value])
+  initResponder(result)
+  discard result.withProtocol(EditableStateTableSpyDataSource)
+  discard result.withProtocol(EditableStateTableSpyDelegate)
 
 proc newTableDataSourceSpy(rows: int): TableDataSourceSpy =
   result = TableDataSourceSpy(rows: rows)
@@ -769,8 +850,13 @@ suite "NimKit TableView":
     check window.fieldEditorClient() == tableView
     check window.fieldEditor().superview() of TextField
     check TextView(window.fieldEditor()).stringValue == "name:0"
+    let hostedField = TextField(window.fieldEditor().superview())
+    check hostedField.currentEditor() == window.fieldEditor()
 
     TextView(window.fieldEditor()).stringValue = "bad"
+    let editingTexts = hostedField.renderedTexts()
+    check editingTexts.containsValue("bad")
+    check not editingTexts.containsValue("name:0")
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check tableView.editingState.active
     check tableView.editingState.row == 0
@@ -790,6 +876,49 @@ suite "NimKit TableView":
     check not tableView.editingState.active
     check delegate.cancelledEdits == @["state:0"]
     check window.firstResponder().isNil
+
+  test "table view user edits hosted text cell renders and reopens committed value":
+    let
+      window =
+        newWindow("Table hosted edit integration", frame = initRect(0, 0, 360, 140))
+      root = newView(frame = initRect(0, 0, 360, 140))
+      tableView = newTableView(frame = initRect(12, 12, 220, 44))
+      source = newEditableStateTableSpy("Queued")
+      state = newTableColumn("state", "State", width = 180.0, alignment = taCenter)
+
+    tableView.showsHeader = false
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = source
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.renderedTexts().containsValue("Queued")
+    check window.doubleClickTableCell(tableView, 0, state)
+    check tableView.editingState.active
+    check window.firstResponder == window.fieldEditor()
+    check TextView(window.fieldEditor()).stringValue == "Queued"
+
+    check window.typeText("Failed")
+    let editingTexts = tableView.renderedTexts()
+    check editingTexts.containsValue("Failed")
+    check not editingTexts.containsValue("Queued")
+
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check not tableView.editingState.active
+    check source.values == @["Failed"]
+    check source.commits == @["Failed"]
+    let committedTexts = tableView.renderedTexts()
+    check committedTexts.containsValue("Failed")
+    check not committedTexts.containsValue("Queued")
+
+    check window.doubleClickTableCell(tableView, 0, state)
+    check tableView.editingState.active
+    check TextView(window.fieldEditor()).stringValue == "Failed"
+    let reopenedTexts = tableView.renderedTexts()
+    check reopenedTexts.containsValue("Failed")
+    check not reopenedTexts.containsValue("Queued")
 
   test "table view edits drawn text cells and routes return down a column":
     let
