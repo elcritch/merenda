@@ -10,11 +10,13 @@ import ../controls/comboboxes
 import ../controls/controls
 import ../controls/sliders
 import ../controls/switchbuttons
+import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
 import ../containers/scrollviews
 import ../containers/stackviews
 import ./selectionrings
+import ./viewselection
 import ../text/textfields
 import ../view/views
 
@@ -25,6 +27,8 @@ type
     xSelectionRing: SelectionRing
     xSelectionRingStyle: SelectionRingStyle
     xShowsSelectionRing: bool
+    xViewSelection: ViewSelection
+    xSelectsViewsOnMouseDown: bool
     xTitle: Label
     xSelection: Label
     xDetailsTitle: Label
@@ -110,6 +114,21 @@ proc hierarchySummary(root, selected: View): string =
   lines.join("\n")
 
 proc refresh*(inspector: ViewInspector)
+proc selectView*(inspector: ViewInspector, view: View)
+
+proc updateViewSelection(inspector: ViewInspector) =
+  discard inspector.xViewSelection.uninstall()
+  if inspector.xRoot.isNil or not inspector.xSelectsViewsOnMouseDown:
+    return
+
+  let
+    inspectorRef = inspector.unsafeWeakRef()
+    handler: ViewSelectionHandler = proc(view: View, event: MouseEvent) =
+      discard event
+      if not inspectorRef.isNil:
+        inspectorRef[].selectView(view)
+
+  inspector.xViewSelection = installViewSelection(inspector.xRoot, handler)
 
 proc updateSelectionRing(inspector: ViewInspector, view: View) =
   discard inspector.xSelectionRing.uninstall()
@@ -124,6 +143,7 @@ proc `inspectedRoot=`*(inspector: ViewInspector, root: View) =
   if inspector.isNil:
     return
   inspector.xRoot = root
+  inspector.updateViewSelection()
   if not inspector.xSelected.isNil and
       (root.isNil or not root.containsView(inspector.xSelected)):
     inspector.updateSelectionRing(nil)
@@ -158,6 +178,15 @@ proc `showsSelectionRing=`*(inspector: ViewInspector, value: bool) =
     return
   inspector.xShowsSelectionRing = value
   inspector.updateSelectionRing(inspector.xSelected)
+
+proc selectsViewsOnMouseDown*(inspector: ViewInspector): bool =
+  not inspector.isNil and inspector.xSelectsViewsOnMouseDown
+
+proc `selectsViewsOnMouseDown=`*(inspector: ViewInspector, value: bool) =
+  if inspector.isNil or inspector.xSelectsViewsOnMouseDown == value:
+    return
+  inspector.xSelectsViewsOnMouseDown = value
+  inspector.updateViewSelection()
 
 proc refresh*(inspector: ViewInspector) =
   if inspector.isNil:
@@ -256,6 +285,7 @@ proc newViewInspector*(root: View = nil, frame: Rect = AutoRect): ViewInspector 
   initViewFields(result, frame)
   result.xSelectionRingStyle = initSelectionRingStyle()
   result.xShowsSelectionRing = true
+  result.xSelectsViewsOnMouseDown = true
   result.identifier = "viewInspector"
   result.accessibilityRole = arGroup
   result.accessibilityLabel = "View inspector"
