@@ -1,48 +1,18 @@
 import merenda/nimkit
 
-import sigils/core
-import sigils/selectors
-
-type InspectablePanel = ref object of View
-  inspector: ViewInspector
-  status: Label
+type LabeledPanel = ref object of View
   title: string
   titleColor: Color
 
-proc demoName(view: View): string =
-  if view.isNil:
-    return "none"
-  if view.identifier.len > 0:
-    return view.identifier
-  "view"
-
-proc selectDemoView(inspector: ViewInspector, status: Label, view: View) =
-  inspector.selectView(view)
-  if not status.isNil:
-    status.text = "Selected: " & view.demoName
-
-protocol InspectablePanelEvents of ResponderEventProtocol:
-  method mouseDown(panel: InspectablePanel, event: MouseEvent): bool =
-    if event.button != mbPrimary:
-      return false
-    panel.inspector.selectDemoView(panel.status, View(panel))
-    true
-
-protocol InspectablePanelDrawing of ViewDrawingProtocol:
-  method draw(panel: InspectablePanel, context: DrawContext) =
+protocol LabeledPanelDrawing of ViewDrawingProtocol:
+  method draw(panel: LabeledPanel, context: DrawContext) =
     let titleRect = initRect(14.0, 11.0, max(panel.bounds.size.width - 28.0, 0.0), 24.0)
     discard context.addText(titleRect, panel.title, panel.titleColor)
 
-proc newInspectablePanel(
-    inspector: ViewInspector,
-    status: Label,
-    identifier, title: string,
-    color: Color,
-    titleColor = initColor(0.10, 0.12, 0.16),
-): InspectablePanel =
-  result = InspectablePanel(
-    inspector: inspector, status: status, title: title, titleColor: titleColor
-  )
+proc newLabeledPanel(
+    identifier, title: string, color: Color, titleColor = initColor(0.10, 0.12, 0.16)
+): LabeledPanel =
+  result = LabeledPanel(title: title, titleColor: titleColor)
   initViewFields(result)
   result.identifier = identifier
   result.background = color
@@ -51,10 +21,9 @@ proc newInspectablePanel(
   result.accessibilityLabel = title
   result.accessibilityIdentifier = identifier
   result.toolTip = "Click to inspect " & identifier
-  discard result.withProtocol(InspectablePanelEvents)
-  discard result.withProtocol(InspectablePanelDrawing)
+  discard result.withProtocol(LabeledPanelDrawing)
 
-proc setPanelTitle(panel: InspectablePanel, value: string) =
+proc setPanelTitle(panel: LabeledPanel, value: string) =
   panel.title = value
   panel.setNeedsDisplay(true)
 
@@ -65,31 +34,20 @@ let
 
   root = newView()
   title = newTitleLabel("View Inspector Demo")
-  status = newStatusLabel("Click any colored region, then watch the Inspector window.")
+  status = newStatusLabel("Click any view; selection is installed by the Inspector.")
   canvas = newView()
-  toolbar = newInspectablePanel(
-    inspector,
-    status,
+  toolbar = newLabeledPanel(
     "toolbar",
     "Navigation Toolbar",
     initColor(0.19, 0.27, 0.37),
     initColor(0.96, 0.98, 1.0),
   )
-  sidebar = newInspectablePanel(
-    inspector, status, "sidebar", "Project Sidebar", initColor(0.87, 0.92, 0.90)
-  )
-  editor = newInspectablePanel(
-    inspector, status, "editor", "Editor Surface", initColor(0.98, 0.96, 0.91)
-  )
-  preview = newInspectablePanel(
-    inspector, status, "preview", "Preview Pane", initColor(0.90, 0.93, 0.98)
-  )
-  timeline = newInspectablePanel(
-    inspector, status, "timeline", "Activity Timeline", initColor(0.95, 0.90, 0.96)
-  )
-  card = newInspectablePanel(
-    inspector, status, "card", "Floating Card", initColor(0.99, 0.78, 0.48)
-  )
+  sidebar = newLabeledPanel("sidebar", "Project Sidebar", initColor(0.87, 0.92, 0.90))
+  editor = newLabeledPanel("editor", "Editor Surface", initColor(0.98, 0.96, 0.91))
+  preview = newLabeledPanel("preview", "Preview Pane", initColor(0.90, 0.93, 0.98))
+  timeline =
+    newLabeledPanel("timeline", "Activity Timeline", initColor(0.95, 0.90, 0.96))
+  card = newLabeledPanel("card", "Floating Card", initColor(0.99, 0.78, 0.48))
   searchField = newTextField("Search project")
   runButton = newButton("Run")
   healthSlider = newSlider(0.0, 100.0, 64.0)
@@ -117,27 +75,6 @@ healthSlider.identifier = "preview.healthSlider"
 healthSlider.accessibilityLabel = "Preview health"
 liveSwitch.identifier = "preview.liveSwitch"
 liveSwitch.accessibilityLabel = "Live preview"
-
-let inspectAction = actionSelector("viewInspectorInspect")
-
-runButton.target = newActionTarget(
-  inspectAction,
-  proc(sender: DynamicAgent) =
-    inspector.selectDemoView(status, View(runButton)),
-)
-runButton.action = inspectAction
-healthSlider.target = newActionTarget(
-  inspectAction,
-  proc(sender: DynamicAgent) =
-    inspector.selectDemoView(status, View(healthSlider)),
-)
-healthSlider.action = inspectAction
-liveSwitch.target = newActionTarget(
-  inspectAction,
-  proc(sender: DynamicAgent) =
-    inspector.selectDemoView(status, View(liveSwitch)),
-)
-liveSwitch.action = inspectAction
 
 root.addSubviews(
   autoNames(
@@ -196,7 +133,7 @@ activateConstraints:
   liveSwitch[atCenterY] == healthSlider[atCenterY]
 
 inspector.inspectedRoot = root
-inspector.selectDemoView(status, toolbar)
+inspector.selectView(toolbar)
 
 window.setContentView(root)
 app.addWindow(window)
