@@ -218,6 +218,12 @@ application, responder, view, window, accessibility, or control/cell layers.
   Header rendering now routes through reusable `TableHeaderChrome` helpers so
   custom table drawing can replace chrome while reusing the structural header
   pieces.
+- Finished table drag/drop target integration: generic drag targets now carry
+  before/on/after insertion positions, table rows and header columns resolve
+  distinct insertion targets while preserving cell/item targets, table drag
+  info exposes the resolved drop position, visible row drop affordances honor
+  insertion position, and table delegates can validate and accept drops against
+  the proposed operation, target, and insertion position before completion.
 
 ## Current Verification
 
@@ -229,6 +235,10 @@ application, responder, view, window, accessibility, or control/cell layers.
   `atlas-run tests tnimkit_tableviews tnimkit_rendering tnimkit_theme`;
   examples were compile checked with
   `atlas-run tests --compile-only 'examples/*.nim'`.
+- The latest table drag/drop target integration was checked with
+  `atlas-run tests tests/tnimkit_tableviews.nim`,
+  `atlas-run tests tests/tnimkit_pasteboards_dragging.nim`, and a full
+  `atlas-run tests` run passing `32/32`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -258,12 +268,7 @@ update widgets, responder state, and rendering.
 Continue growing the protocol-backed table API into a production AppKit-style
 widget.
 
-1. Finish drag/drop integration:
-   - add distinct before/after/on insertion targets for table rows and columns
-     on top of the current item/cell drop target model
-   - deepen table delegate validation hooks for proposed operation,
-     target, and insertion position before accepting a drop
-2. Finish persistence integration:
+1. Finish persistence integration:
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
      columns, and restore timing tied to window/document lifecycle

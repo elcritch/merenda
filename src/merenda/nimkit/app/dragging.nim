@@ -30,11 +30,17 @@ type
     ddtCell
     ddtItem
 
+  DraggingDropPosition* = enum
+    ddpOn
+    ddpBefore
+    ddpAfter
+
   DraggingDropTarget* = object
     kind*: DraggingDropTargetKind
     row*: int
     column*: string
     itemIdentifier*: string
+    position*: DraggingDropPosition
     rect*: Rect
 
   DraggingItem* = object
@@ -99,17 +105,41 @@ protocol DraggingDestinationProtocol:
   method autoscrollDraggingSession*(info: DraggingInfo): bool {.optional.}
 
 proc initDraggingDropTarget*(
-    kind = ddtNone, row = -1, column = "", itemIdentifier = "", rect = AutoRect
+    kind = ddtNone,
+    row = -1,
+    column = "",
+    itemIdentifier = "",
+    rect = AutoRect,
+    position = ddpOn,
 ): DraggingDropTarget =
   DraggingDropTarget(
-    kind: kind, row: row, column: column, itemIdentifier: itemIdentifier, rect: rect
+    kind: kind,
+    row: row,
+    column: column,
+    itemIdentifier: itemIdentifier,
+    position: position,
+    rect: rect,
   )
 
-proc initRowDropTarget*(row: int, rect = AutoRect): DraggingDropTarget =
-  initDraggingDropTarget(ddtRow, row = row, rect = rect)
+proc initRowDropTarget*(
+    row: int, rect = AutoRect, position = ddpOn
+): DraggingDropTarget =
+  initDraggingDropTarget(ddtRow, row = row, rect = rect, position = position)
 
-proc initColumnDropTarget*(column: string, rect = AutoRect): DraggingDropTarget =
-  initDraggingDropTarget(ddtColumn, column = column, rect = rect)
+proc initColumnDropTarget*(
+    column: string, rect = AutoRect, position = ddpOn
+): DraggingDropTarget =
+  initDraggingDropTarget(ddtColumn, column = column, rect = rect, position = position)
+
+proc initRowInsertionDropTarget*(
+    row: int, position: DraggingDropPosition, rect = AutoRect
+): DraggingDropTarget =
+  initRowDropTarget(row, rect, position)
+
+proc initColumnInsertionDropTarget*(
+    column: string, position: DraggingDropPosition, rect = AutoRect
+): DraggingDropTarget =
+  initColumnDropTarget(column, rect, position)
 
 proc initCellDropTarget*(
     row: int, column: string, rect = AutoRect

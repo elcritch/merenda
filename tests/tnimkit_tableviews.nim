@@ -65,6 +65,8 @@ type TableDelegateSpy = ref object of Responder
   cancelledEdits: seq[string]
   dragOperation: DragOperations
   dragAccepted: bool
+  dropValidationCalls: seq[string]
+  dropAcceptCalls: seq[string]
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
   for value in indexes:
@@ -376,6 +378,36 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
   method acceptDragOperation(
       delegate: TableDelegateSpy, tableView: TableView, info: DraggingInfo
   ): bool =
+    delegate.dragAccepted
+
+  method validateDropOperation(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      info: DraggingInfo,
+      proposedOperation: DragOperations,
+      target: DraggingDropTarget,
+      position: DraggingDropPosition,
+  ): DragOperations =
+    delegate.dropValidationCalls.add(
+      $target.kind & ":" & $position & ":" & target.column & ":" & $target.row
+    )
+    if delegate.dragOperation == NoDragOperations:
+      proposedOperation
+    else:
+      delegate.dragOperation
+
+  method acceptDropOperation(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      info: DraggingInfo,
+      operation: DragOperations,
+      target: DraggingDropTarget,
+      position: DraggingDropPosition,
+  ): bool =
+    delegate.dropAcceptCalls.add(
+      $operation & ":" & $target.kind & ":" & $position & ":" & target.column & ":" &
+        $target.row
+    )
     delegate.dragAccepted
 
 protocol TableDelegateShouldTrackSpyMethods of TableViewDelegate:
@@ -1114,6 +1146,8 @@ suite "NimKit TableView":
     check info.selectedOperations == {dgoMove}
     check tableView.validateDragging(info) == {dgoCopy}
     check tableView.acceptDragging(info)
+    check delegate.dropValidationCalls == @["ddtNone:ddpOn::-1", "ddtNone:ddpOn::-1"]
+    check delegate.dropAcceptCalls == @["{dgoCopy}:ddtNone:ddpOn::-1"]
 
     let selectionState = tableView.selectionPersistenceString()
     tableView.selectedIndexes = []
@@ -1129,6 +1163,61 @@ suite "NimKit TableView":
     let targeted = columnInfo.withDropTarget(row = 1, column = state)
     check targeted.tableDropRow() == 1
     check targeted.tableDropColumn() == "state"
+    let rowTargeted = columnInfo.withDropTarget(row = 1, position = ddpBefore)
+    check rowTargeted.tableDropRow() == 1
+    check rowTargeted.tableDropPosition() == ddpBefore
+    let columnTargeted = columnInfo.withDropTarget(column = state, position = ddpAfter)
+    check columnTargeted.tableDropColumn() == "state"
+    check columnTargeted.tableDropPosition() == ddpAfter
+
+  test "table view resolves before on and after drop targets for rows and columns":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 220, 120))
+      name = newTableColumn("name", "Name", width = 120.0)
+      state = newTableColumn("state", "State", width = 80.0)
+
+    tableView.rowCount = 3
+    tableView.addColumn(name)
+    tableView.addColumn(state)
+
+    discard tableView.beginDraggingRows(@[0], {dgoMove}, DragPasteboardName)
+    let rowRect = tableView.rowItemRect(1)
+    let rowX = rowRect.origin.x + 8.0'f32
+    let rowBefore = tableView.dropTargetForDraggingLocation(
+      initPoint(rowX, rowRect.origin.y + 1.0'f32)
+    )
+    let rowOn = tableView.dropTargetForDraggingLocation(
+      initPoint(rowX, rowRect.origin.y + rowRect.size.height * 0.5'f32)
+    )
+    let rowAfter =
+      tableView.dropTargetForDraggingLocation(initPoint(rowX, rowRect.maxY - 1.0'f32))
+    check rowBefore.kind == ddtRow
+    check rowBefore.row == 1
+    check rowBefore.position == ddpBefore
+    check rowOn.kind == ddtRow
+    check rowOn.position == ddpOn
+    check rowAfter.kind == ddtRow
+    check rowAfter.position == ddpAfter
+
+    discard tableView.beginDraggingColumns(@[name], {dgoMove}, DragPasteboardName)
+    let columnRect = tableView.tableHeaderColumnRect(state)
+    let columnY = columnRect.origin.y + columnRect.size.height * 0.5'f32
+    let columnBefore = tableView.dropTargetForDraggingLocation(
+      initPoint(columnRect.origin.x + 1.0'f32, columnY)
+    )
+    let columnOn = tableView.dropTargetForDraggingLocation(
+      initPoint(columnRect.origin.x + columnRect.size.width * 0.5'f32, columnY)
+    )
+    let columnAfter = tableView.dropTargetForDraggingLocation(
+      initPoint(columnRect.maxX - 1.0'f32, columnY)
+    )
+    check columnBefore.kind == ddtColumn
+    check columnBefore.column == "state"
+    check columnBefore.position == ddpBefore
+    check columnOn.kind == ddtColumn
+    check columnOn.position == ddpOn
+    check columnAfter.kind == ddtColumn
+    check columnAfter.position == ddpAfter
 
   test "table view hosts field editors for editable cells validates and navigates":
     let
