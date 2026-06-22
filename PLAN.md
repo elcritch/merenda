@@ -18,7 +18,7 @@ Detailed layout, constraint, invalidation, and solver notes live in
 NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid containers, buttons, text fields, combo boxes,
-scroll views, list views, table views, basic text editing lifecycle, action
+scroll views, popup lists, table views, basic text editing lifecycle, action
 dispatch, AppKit-style in-process pasteboard/dragging foundations, and a pure
 Nim accessibility metadata and protocol core.
 
@@ -113,8 +113,8 @@ application, responder, view, window, accessibility, or control/cell layers.
   fields, labels, and value-change notifications, with
   `tests/tnimkit_accessibility.nim` covering the core behavior.
 - Filled out the next accessibility role/trait defaults for menus, menu items,
-  popup menu buttons, popup lists, combo boxes, tab groups, scroll areas, list
-  views, visible list rows, table views, and hosted table cells. Expanded
+  popup menu buttons, popup lists, combo boxes, tab groups, scroll areas, table
+  views, visible table rows, and hosted table cells. Expanded
   `tests/tnimkit_accessibility.nim` to cover the broader control/container
   semantics.
 - Expanded responder event coverage for key up, modifier flag changes,
@@ -197,11 +197,19 @@ application, responder, view, window, accessibility, or control/cell layers.
   commits and cancels route through the existing begin/commit/cancel hooks,
   delegate-provided validation errors keep the editor active, and Tab/Return
   navigation moves between editable cells.
+- Removed the standalone `ListView` widget and deleted
+  `src/merenda/nimkit/containers/listviews.nim`; `TableView` now owns the
+  public row/selection control surface, while `PopupListView` and
+  `listbasics.nim` remain as lightweight popup/shared row-rendering helpers.
+  The theme surface was renamed from `srListView`/`ListViewStyle`/
+  `listView.*` tokens to `srTableView`/`TableViewStyle`/`tableView.*` tokens.
 
 ## Current Verification
 
 - `atlas-run tests` passes locally on macOS with the current domain module
   layout.
+- After removing standalone `ListView`, `atlas-run tests` passed `32/32` and
+  `nim examples` compiled successfully.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -293,7 +301,7 @@ AppKit-style widgets.
   value conversion, target/action storage, highlight/tracking behavior, and
   default cell construction so controls stay thin.
 - Treat `ScrollView` as a primitive container like AppKit does. Future text
-  editors, list views, table views, outline views, collection views, and large
+  editors, table views, outline views, collection views, and large
   forms should be able to build on the same clipped document-view and scrolling
   model.
 - Stage layout work conservatively. Expand constraints through the existing
