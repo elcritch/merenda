@@ -40,6 +40,10 @@ type TableSelectionSignalSpy = ref object of Agent
 type TableColumnUserInfo = ref object of Responder
   label: string
 
+type TableStateProviderSpy = ref object of Responder
+  identifier: string
+  defaults: UserDefaults
+
 type TableDelegateSpy = ref object of Responder
   disabledRows: seq[int]
   nonselectableRows: seq[int]
@@ -422,6 +426,13 @@ protocol TableDelegateShouldTrackSpyMethods of TableViewDelegate:
       return delegate.shouldTrackValue
     true
 
+protocol TableStateProviderSpyMethods of UserDefaultsProvider:
+  method defaultsStore(provider: TableStateProviderSpy): DynamicAgent =
+    DynamicAgent(provider.defaults)
+
+  method defaultsScopeId(provider: TableStateProviderSpy): string =
+    provider.identifier
+
 protocol EditableTableSpyDataSource of TableViewDataSource:
   method numberOfRows(source: EditableTableSpy, tableView: TableView): int =
     source.rows.len
@@ -543,6 +554,11 @@ proc newTableDelegateSpy(): TableDelegateSpy =
   result = TableDelegateSpy()
   initResponder(result)
   discard result.withProtocol(TableDelegateSpyMethods)
+
+proc newTableStateProviderSpy(identifier: string): TableStateProviderSpy =
+  result = TableStateProviderSpy(identifier: identifier, defaults: newUserDefaults())
+  initResponder(result)
+  discard result.withProtocol(TableStateProviderSpyMethods)
 
 suite "NimKit TableView":
   test "table columns expose stable identifiers and mutable display properties":
@@ -719,6 +735,98 @@ suite "NimKit TableView":
     name.width = 80.0
     tableView.restoreState(store)
     check name.width > 120.0'f32
+
+  test "table state storage restores renamed columns and selected column aliases":
+    let
+      store = newTableViewStateStore()
+      oldTable = newTableView()
+      oldName = newTableColumn("fullName", "Name", width = 180.0)
+      oldAge = newTableColumn("age", "Age", width = 64.0)
+
+    oldTable.autosaveName = "people.alias"
+    oldTable.allowsColumnSelection = true
+    oldTable.addColumn(oldName)
+    oldTable.addColumn(oldAge)
+    oldTable.selectedColumns = [oldName]
+    oldName.sortDirection = tsdDescending
+    oldAge.hidden = true
+    oldTable.saveState(store)
+
+    let
+      newTable = newTableView()
+      newName = newTableColumn("name", "Name", width = 80.0)
+      newAge = newTableColumn("age", "Age", width = 40.0)
+
+    newTable.autosaveName = "people.alias"
+    newTable.allowsColumnSelection = true
+    newTable.addColumn(newAge)
+    newTable.addColumn(newName)
+    newTable.registerColumnAutosaveAlias("fullName", "name")
+    newTable.restoreState(store)
+
+    check newTable.columnAt(0) == newName
+    check newTable.columnAt(1) == newAge
+    check newName.width == oldName.width
+    check newName.sortDirection == tsdDescending
+    check newAge.hidden
+    check newTable.selectedColumns == @[newName]
+
+  test "table state saves on window close and restores from workspace scope":
+    let
+      workspaceId = "tnimkit.table.workspace.lifecycle"
+      firstWindow = newWindow("Table lifecycle save", frame = initRect(0, 0, 320, 160))
+      firstRoot = newView(frame = initRect(0, 0, 320, 160))
+      firstTable = newTableView(frame = initRect(0, 0, 240, 80))
+      firstName = newTableColumn("name", "Name", width = 90.0)
+      store = workspaceTableViewStateStore(workspaceId)
+
+    firstTable.autosaveName = "people.lifecycle"
+    firstTable.workspaceIdentifier = workspaceId
+    firstTable.addColumn(firstName)
+    firstRoot.addSubview(firstTable)
+    firstWindow.setContentView(firstRoot)
+    firstName.width = 170.0
+    firstWindow.close()
+
+    check store.hasState("people.lifecycle")
+    check store.state("people.lifecycle").columns[0].width == 170.0'f32
+
+    let
+      secondWindow =
+        newWindow("Table lifecycle restore", frame = initRect(0, 0, 320, 160))
+      secondRoot = newView(frame = initRect(0, 0, 320, 160))
+      secondTable = newTableView(frame = initRect(0, 0, 240, 80))
+      secondName = newTableColumn("name", "Name", width = 72.0)
+
+    secondTable.autosaveName = "people.lifecycle"
+    secondTable.workspaceIdentifier = workspaceId
+    secondTable.addColumn(secondName)
+    secondRoot.addSubview(secondTable)
+    secondWindow.setContentView(secondRoot)
+
+    check secondName.width == 170.0'f32
+
+  test "table state can resolve document-scoped storage from responder chain":
+    let
+      documentId = "document:file:///tmp/table-state.nim"
+      provider = newTableStateProviderSpy(documentId)
+      window = newWindow("Table document state", frame = initRect(0, 0, 320, 160))
+      root = newView(frame = initRect(0, 0, 320, 160))
+      tableView = newTableView(frame = initRect(0, 0, 240, 80))
+      column = newTableColumn("name", "Name", width = 96.0)
+
+    window.setNextResponder(provider)
+    tableView.autosaveName = "people.document"
+    tableView.stateScope = tvssDocument
+    tableView.addColumn(column)
+    root.addSubview(tableView)
+    window.setContentView(root)
+    column.width = 144.0
+    tableView.saveAutosavedState()
+
+    let store = tableViewStateStoreForDefaults(provider.defaults, documentId)
+    check store.hasState("people.document")
+    check store.state("people.document").columns[0].width == 144.0'f32
 
   test "table header column dragging previews insertion and drops at edge":
     let

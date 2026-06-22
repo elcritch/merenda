@@ -4,6 +4,7 @@ import sigils/core
 
 import ../foundation/selectors
 import ../responder/responders
+import ./userdefaults
 import ./application
 import ./windowcontrollers
 import ./windows
@@ -20,6 +21,7 @@ type Document* = ref object of Responder
   xUndoManager: DynamicAgent
   xDelegate: DynamicAgent
   xWindowControllers: seq[WindowController]
+  xUserDefaults: UserDefaults
 
 protocol DocumentFileProtocol {.selectorScope: protocol.}:
   method canReadType*(fileType: string): bool {.optional.}
@@ -61,6 +63,7 @@ protocol DocumentEvents:
 proc setDocumentEdited*(document: Document, edited: bool)
 proc displayName*(document: Document): string
 proc isDocumentEdited*(document: Document): bool
+proc userDefaults*(document: Document): UserDefaults
 proc save*(document: Document): bool {.discardable.}
 proc revert*(document: Document): bool {.discardable.}
 proc close*(document: Document): bool {.discardable.}
@@ -124,6 +127,27 @@ protocol DocumentResponderCommands of ResponderCommandDispatchProtocol:
       return none(DynamicAgent)
     some(document.xUndoManager)
 
+protocol DocumentDefaultsProvider of UserDefaultsProvider:
+  method defaultsStore(document: Document): DynamicAgent =
+    DynamicAgent(document.userDefaults())
+
+  method defaultsScopeId(document: Document): string =
+    if document.isNil:
+      return ""
+    if document.xFileUrl.len > 0:
+      return "document:file:" & document.xFileUrl
+    if document.xHasDisplayName:
+      return "document:name:" & document.xDisplayName
+    let name =
+      if document.xHasFileName:
+        document.xFileName
+      else:
+        defaultFileName(document.xFileUrl)
+    if name.len > 0:
+      "document:name:" & name
+    else:
+      "document:untitled"
+
 protocol DocumentMenuCommands of MenuCommandProtocol:
   method saveDocument(document: Document, args: ActionArgs) =
     discard document.save()
@@ -155,6 +179,7 @@ proc initDocument*(document: Document, fileUrl = "", fileType = "", fileName = "
     document.xFileName = fileName
     document.xHasFileName = true
   discard document.withProtocol(DocumentResponderCommands)
+  discard document.withProtocol(DocumentDefaultsProvider)
   discard document.withProtocol(DocumentMenuCommands)
   discard document.withProtocol(DefaultDocumentWindows)
 
@@ -276,6 +301,13 @@ proc isClosed*(document: Document): bool =
 
 proc undoManager*(document: Document): DynamicAgent =
   if document.isNil: nil else: document.xUndoManager
+
+proc userDefaults*(document: Document): UserDefaults =
+  if document.isNil:
+    return sharedUserDefaults()
+  if document.xUserDefaults.isNil:
+    document.xUserDefaults = newUserDefaults()
+  document.xUserDefaults
 
 proc setUndoManager*(document: Document, undoManager: DynamicAgent) =
   if not document.isNil:

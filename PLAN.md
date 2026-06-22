@@ -224,6 +224,12 @@ application, responder, view, window, accessibility, or control/cell layers.
   info exposes the resolved drop position, visible row drop affordances honor
   insertion position, and table delegates can validate and accept drops against
   the proposed operation, target, and insertion position before completion.
+- Finished table persistence integration: table state storage now resolves
+  through centralized application/user-defaults storage, workspace-scoped
+  stores, and document-scoped responder-chain defaults providers; documents
+  expose their own defaults store and stable scope identifiers; column rename
+  aliases migrate saved column and selected-column state; and autosaved table
+  state saves/restores with the window/view lifecycle instead of ad hoc callers.
 
 ## Current Verification
 
@@ -239,6 +245,11 @@ application, responder, view, window, accessibility, or control/cell layers.
   `atlas-run tests tests/tnimkit_tableviews.nim`,
   `atlas-run tests tests/tnimkit_pasteboards_dragging.nim`, and a full
   `atlas-run tests` run passing `32/32`.
+- The latest table persistence integration was checked with
+  `atlas-run tests tests/tnimkit_tableviews.nim`,
+  `atlas-run tests tests/tnimkit_documents.nim`,
+  `atlas-run tests tests/tnimkit_application.nim`, and
+  `atlas-run tests tests/tnimkit_outlineviews.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -262,16 +273,6 @@ update widgets, responder state, and rendering.
    - selected range, insertion point, and editable/selectable traits
    - basic line/character geometry only after text layout exposes stable offset
      and line metrics
-
-### TableView
-
-Continue growing the protocol-backed table API into a production AppKit-style
-widget.
-
-1. Finish persistence integration:
-   - back the table state storage protocol with application/user-defaults,
-     document/workspace-specific state stores, migration behavior for renamed
-     columns, and restore timing tied to window/document lifecycle
 
 ### OutlineView
 

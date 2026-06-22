@@ -8,6 +8,7 @@ import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
 import ../drawing/theme
 import ../foundation/types
+import ./userdefaults
 import ../app/windows
 
 type
@@ -48,6 +49,7 @@ type
     xLaunched: bool
     xTerminating: bool
     xModalSessions: seq[ModalSession]
+    xUserDefaults: UserDefaults
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -167,6 +169,13 @@ proc sharedApplication*(): Application =
   if sharedApplicationInstance.isNil:
     sharedApplicationInstance = newApplication()
   sharedApplicationInstance
+
+proc userDefaults*(app: Application): UserDefaults =
+  if app.isNil:
+    return sharedUserDefaults()
+  if app.xUserDefaults.isNil:
+    app.xUserDefaults = sharedUserDefaults()
+  app.xUserDefaults
 
 proc hasAppearance*(app: Application): bool =
   (not app.isNil) and app.xHasAppearance

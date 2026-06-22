@@ -305,7 +305,7 @@ proc outlineItemWithIdentifier*(
     return outlineView.xOutlineItems[index]
   outlineView.sourcedOutlineItem(identifier)
 
-proc identifierForRow*(outlineView: OutlineView, row: int): string =
+proc itemIdentifierForRow*(outlineView: OutlineView, row: int): string =
   outlineView.itemAtRow(row).identifier
 
 proc parentIdentifierForItem*(outlineView: OutlineView, identifier: string): string =
