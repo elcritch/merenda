@@ -410,6 +410,22 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     tableView: TableView, info: DraggingInfo
   ): bool {.optional.}
 
+  method validateDropOperation*(
+    tableView: TableView,
+    info: DraggingInfo,
+    proposedOperation: DragOperations,
+    target: DraggingDropTarget,
+    position: DraggingDropPosition,
+  ): DragOperations {.optional.}
+
+  method acceptDropOperation*(
+    tableView: TableView,
+    info: DraggingInfo,
+    operation: DragOperations,
+    target: DraggingDropTarget,
+    position: DraggingDropPosition,
+  ): bool {.optional.}
+
   method tableDropTargetForLocation*(
     tableView: TableView, location: Point, proposedTarget: DraggingDropTarget
   ): DraggingDropTarget {.optional.}
@@ -1986,16 +2002,38 @@ proc draggingInfo*(tableView: TableView): DraggingInfo =
     tableView.xTableDraggingSession.draggingInfo()
 
 proc withDropTarget*(
-    info: DraggingInfo, row = -1, column: TableColumn = nil
+    info: DraggingInfo, row = -1, column: TableColumn = nil, position = ddpOn
 ): DraggingInfo =
   if row >= 0 and not column.isNil:
     info.withDropTarget(initCellDropTarget(row, column.identifier()))
   elif row >= 0:
-    info.withDropTarget(initRowDropTarget(row))
+    info.withDropTarget(initRowDropTarget(row, position = position))
   elif not column.isNil:
-    info.withDropTarget(initColumnDropTarget(column.identifier()))
+    info.withDropTarget(initColumnDropTarget(column.identifier(), position = position))
   else:
     info.withDropTarget(initDraggingDropTarget())
+
+func tableDropPositionForAxis(
+    value, minValue, maxValue: float32
+): DraggingDropPosition =
+  let edge = (maxValue - minValue) * 0.25'f32
+  if value <= minValue + edge:
+    ddpBefore
+  elif value >= maxValue - edge:
+    ddpAfter
+  else:
+    ddpOn
+
+func tableDropPositionForRow(location: Point, rect: Rect): DraggingDropPosition =
+  tableDropPositionForAxis(location.y, rect.minY, rect.maxY)
+
+func tableDropPositionForColumn(location: Point, rect: Rect): DraggingDropPosition =
+  tableDropPositionForAxis(location.x, rect.minX, rect.maxX)
+
+proc draggingTableRows(tableView: TableView): bool =
+  let session = tableView.draggingSession()
+  not session.isNil and session.state() == dssActive and
+    session.pasteboard().stringForType(TablePasteboardTypeRows).len > 0
 
 proc defaultDropTargetForDraggingLocation(
     tableView: TableView, location: Point
@@ -2004,17 +2042,29 @@ proc defaultDropTargetForDraggingLocation(
     return initDraggingDropTarget()
   let
     row = tableView.rowItemIndexAtPoint(location)
-    column = tableView.tableColumnAtPoint(location)
+    headerHit = tableView.tableHeaderHitTest(location)
+    column =
+      if headerHit.part == thpNone:
+        tableView.tableColumnAtPoint(location)
+      else:
+        headerHit.column
   if row >= 0 and not column.isNil:
     let
       rowRect = tableView.rowItemRect(row)
       cellRect = tableView.columnRect(rowRect, column)
+    if tableView.draggingTableRows():
+      return initRowDropTarget(row, rowRect, tableDropPositionForRow(location, rowRect))
     return initCellDropTarget(row, column.identifier(), cellRect)
   if row >= 0:
-    return initRowDropTarget(row, tableView.rowItemRect(row))
-  if not column.isNil and tableView.tableHeaderRect().contains(location):
-    return
-      initColumnDropTarget(column.identifier(), tableView.tableHeaderColumnRect(column))
+    let rowRect = tableView.rowItemRect(row)
+    return initRowDropTarget(row, rowRect, tableDropPositionForRow(location, rowRect))
+  if not headerHit.column.isNil:
+    let columnRect = tableView.tableHeaderColumnRect(headerHit.column)
+    return initColumnDropTarget(
+      headerHit.column.identifier(),
+      columnRect,
+      tableDropPositionForColumn(location, columnRect),
+    )
   initDraggingDropTarget()
 
 proc dropTargetForDraggingLocation*(
@@ -2088,6 +2138,9 @@ proc tableDropRow*(info: DraggingInfo): int =
 
 proc tableDropColumn*(info: DraggingInfo): string =
   info.dropTarget.column
+
+proc tableDropPosition*(info: DraggingInfo): DraggingDropPosition =
+  info.dropTarget.position
 
 proc findCellSlot(slots: openArray[TableCellSlot], row: int, column: TableColumn): int =
   for index, slot in slots:
@@ -2405,12 +2458,16 @@ proc drawTableDropTarget(
     let column = tableView.columnWithIdentifier(target.column)
     if not column.isNil:
       indicatorBounds = tableView.columnRect(rect, column)
-  let indicatorRect = initRect(
-    indicatorBounds.origin.x,
-    max(indicatorBounds.maxY - 2.0'f32, indicatorBounds.minY),
-    indicatorBounds.size.width,
-    2.0,
-  )
+  let indicatorY =
+    case target.position
+    of ddpBefore:
+      indicatorBounds.minY
+    of ddpOn:
+      max(indicatorBounds.maxY - 2.0'f32, indicatorBounds.minY)
+    of ddpAfter:
+      max(indicatorBounds.maxY - 2.0'f32, indicatorBounds.minY)
+  let indicatorRect =
+    initRect(indicatorBounds.origin.x, indicatorY, indicatorBounds.size.width, 2.0)
   discard
     context.addRenderRectangle(indicatorRect, fill(initColor(0.18, 0.42, 0.88, 0.95)))
 
@@ -3471,6 +3528,18 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       return NoDragOperations
     let delegate = tableView.delegate()
     if not delegate.isNil:
+      let validated = delegate.trySendLocal(
+        validateDropOperation(),
+        (
+          tableView: tableView,
+          info: info,
+          proposedOperation: info.selectedOperations,
+          target: info.dropTarget,
+          position: info.dropTarget.position,
+        ),
+      )
+      if validated.isSome:
+        return validated.get()
       let operation = delegate.trySendLocal(
         validateDragOperation(), (tableView: tableView, info: info)
       )
@@ -3481,13 +3550,28 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
   method acceptDragging(tableView: TableView, info: DraggingInfo): bool =
     if tableView.isNil:
       return false
+    let operation = tableView.validateDragging(info)
+    if operation == NoDragOperations:
+      return false
     let delegate = tableView.delegate()
     if not delegate.isNil:
+      let acceptedDrop = delegate.trySendLocal(
+        acceptDropOperation(),
+        (
+          tableView: tableView,
+          info: info,
+          operation: operation,
+          target: info.dropTarget,
+          position: info.dropTarget.position,
+        ),
+      )
+      if acceptedDrop.isSome:
+        return acceptedDrop.get()
       let accepted =
         delegate.trySendLocal(acceptDragOperation(), (tableView: tableView, info: info))
       if accepted.isSome:
         return accepted.get()
-    info.selectedOperations != NoDragOperations
+    true
 
 protocol DefaultTableViewDraggingSource of DraggingSourceProtocol:
   method draggingSourceOperationMask(
