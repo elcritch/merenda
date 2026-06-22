@@ -2366,7 +2366,7 @@ proc naturalSize(tableView: TableView): Size =
     appearance = tableView.effectiveAppearance()
     listState = tableView.widgetStateSet()
     itemState = tableView.widgetStateSet()
-    listStyle = appearance.resolveListViewStyle(
+    listStyle = appearance.resolveTableViewStyle(
       initControlStyleContext(
         tableView.xTableRole,
         listState,
@@ -3230,7 +3230,7 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
     let
       classes = tableView.styleClasses()
       focusedState = tableView.widgetStateSet()
-      listStyle = context.appearance.resolveListViewStyle(
+      listStyle = context.appearance.resolveTableViewStyle(
         initControlStyleContext(
           tableView.xTableRole,
           focusedState,
@@ -3279,7 +3279,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xRowHeight = 22.0'f32
   tableView.xVisibleRows = 5
   tableView.xSelectionMode = tsmSingle
-  tableView.xTableRole = srListView
+  tableView.xTableRole = srTableView
   tableView.xItemRole = srListItem
   tableView.xRowCount = 0
   tableView.xShowsHeader = true

@@ -31,7 +31,7 @@ NimKit currently covers the desktop-control foundation:
 - `Application`, `Window`, `Responder`, and `View`
 - `StackView`, `FormView`, and `GridView`
 - `Control`, `Cell`, `ActionCell`, `Button`, checkbox/radio variants
-- `TextField`, `ComboBox`, `PopupListView`, and `ListView`
+- `TextField`, `ComboBox`, `PopupListView`, and `TableView`
 
 Geometry, events, key identifiers, modifiers, popup options, control state, and
 layout directions are plain Nim value types. `chroma.Color` is used directly
@@ -78,7 +78,7 @@ The theme system is the single source of drawing and measurement metrics:
 - `Appearance` provides inherited theme resolution.
 - `StyleContext` carries role, state, id, and classes.
 - Concrete style values such as `ButtonStyle`, `ChoiceButtonStyle`,
-  `TextFieldStyle`, `ComboBoxStyle`, `ListViewStyle`, and `ListItemStyle` are
+  `TextFieldStyle`, `ComboBoxStyle`, `TableViewStyle`, and `ListItemStyle` are
   what rendering and measurement consume.
 
 The default theme uses an Aqua-like control language with gradients, shadows,
@@ -220,30 +220,29 @@ Popup and list behavior shares a narrow base:
   scrolling, highlighting, activation, and close callbacks.
 - `Window` owns a transient popup/session layer with owner responder,
   optional transient window, dismissal reason, callback, and focus restoration.
-- `ListView` is the first narrow public list control. It supports local string
-  items, selector-backed row count/value data sources, delegate notifications
-  for selection, activation, visible-row drawing, row enabled policy, and row
-  selectability policy, none/single/multiple/extended selection, Shift range
-  extension, command/control discontiguous toggles, keyboard and mouse
-  navigation, wheel scrolling, intrinsic sizing, target/action activation,
-  dedicated `srListView` and `srListItem` theme roles, and shared
-  `ListRowState` row rendering.
-- `ListContentView` is the internal row document for standalone `ListView`.
-  It stays non-focusable and manually tiled by the list, keeping selection and
-  keyboard behavior on `ListView` while giving future scroll-hosted lists a
-  concrete content-view boundary.
-- Standalone `ListView` virtualizes fixed-height rows as private reusable row
-  views under `ListContentView`. Row views hold plain `ListRowState` values,
-  draw through the shared row renderer, do not participate in hit testing or
-  focus, and are retargeted from the clip-view visible rect as scrolling or
-  resizing changes the visible window.
-- `listViewDrawRow` receives row-local drawing bounds plus `ListRowState`.
-  Callers that want stock styling with small additions can call
-  `drawListRow(listView, context, rect, row)` from inside the delegate hook.
-- `listViewRowIsEnabled` feeds `ListRowState.enabled`, while
-  `listViewShouldSelectRow` controls whether mouse, keyboard, and programmatic
-  selection can include a row. Disabled rows are also treated as
-  nonselectable.
+- `TableView` owns the public row control surface. It supports selector-backed
+  row count/value data sources, delegate notifications for selection,
+  activation, visible-row drawing, row enabled policy, and row selectability
+  policy, none/single/multiple/extended selection, Shift range extension,
+  command/control discontiguous toggles, keyboard and mouse navigation, wheel
+  scrolling, intrinsic sizing, target/action activation, dedicated
+  `srTableView` and `srListItem` theme roles, and shared `ListRowState` row
+  rendering.
+- `TableContentView` is the internal row document for `TableView`. It stays
+  non-focusable and manually tiled by the table, keeping selection and keyboard
+  behavior on `TableView` while providing a concrete scroll-hosted content-view
+  boundary.
+- `TableView` virtualizes rows as private reusable row views under
+  `TableContentView`. Row views hold plain `ListRowState` values, draw through
+  the shared row renderer, do not participate in hit testing or focus, and are
+  retargeted from the clip-view visible rect as scrolling or resizing changes
+  the visible window.
+- `drawRow` receives row-local drawing bounds plus `ListRowState`. Callers that
+  want stock styling with small additions can call `drawTableListRow(tableView,
+  context, rect, row)` from inside the delegate hook.
+- `rowIsEnabled` feeds `ListRowState.enabled`, while `shouldSelectRow`
+  controls whether mouse, keyboard, and programmatic selection can include a
+  row. Disabled rows are also treated as nonselectable.
 
 The transient session layer is intentionally smaller than a full AppKit modal
 system. It gives menus, popovers, combo boxes, and future drag/tracking flows a
@@ -279,7 +278,7 @@ native window, while application tests still cover native pumping.
 - `stackviews.nim`, `formviews.nim`, `gridviews.nim`: native layout
   containers.
 - `cells.nim`, `controls.nim`, `buttons.nim`, `textfields.nim`,
-  `comboboxes.nim`, `listviews.nim`: controls, cells, popups, and list
+  `comboboxes.nim`, `tableviews.nim`: controls, cells, popups, and table
   widgets.
 - `theme.nim`: style keys, tokens, rules, appearances, resolved styles,
   insets, shadows, metrics, and default themes.

@@ -800,27 +800,27 @@ suite "nimkit rendering":
 
     check hoverFound
 
-  test "buildRenders draws standalone one-column table views with list roles":
+  test "buildRenders draws standalone one-column table views with table roles":
     let
       root = newView(frame = initRect(0, 0, 220, 140))
       tableView = newSingleColumnRenderTable(
         ["One", "Two", "Three", "Four"], frame = initRect(10, 20, 130, 68)
       )
-      listFill = initColor(0.77, 0.79, 0.81, 1.0)
-      listBorder = initColor(0.24, 0.28, 0.34, 1.0)
+      tableFill = initColor(0.77, 0.79, 0.81, 1.0)
+      tableBorder = initColor(0.24, 0.28, 0.34, 1.0)
       selectedFill = initColor(0.23, 0.48, 0.92, 1.0)
       hoverFill = initColor(0.90, 0.95, 1.0, 1.0)
       selectedText = initColor(1.0, 1.0, 1.0, 1.0)
       focusColor = initColor(0.91, 0.38, 0.18, 0.66)
 
     var theme = initTheme()
-    theme[srListView, StyleFill] = listFill
-    theme[srListView, StyleBorderColor] = listBorder
-    theme[srListView, StyleBorderWidth] = 2.0
-    theme[srListView, StyleCornerRadius] = 4.0
-    theme[srListView, StyleFocusRingWidth] = 3.0
-    theme[srListView, StyleFocusRingInset] = -1.0
-    theme[srListView, StyleFocusRingColor] = focusColor
+    theme[srTableView, StyleFill] = tableFill
+    theme[srTableView, StyleBorderColor] = tableBorder
+    theme[srTableView, StyleBorderWidth] = 2.0
+    theme[srTableView, StyleCornerRadius] = 4.0
+    theme[srTableView, StyleFocusRingWidth] = 3.0
+    theme[srTableView, StyleFocusRingInset] = -1.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
     theme[srListItem, {ssSelected}, StyleFill] = selectedFill
     theme[srListItem, {ssSelected}, StyleTextColor] = selectedText
     theme[srListItem, {ssHovered}, StyleFill] = hoverFill

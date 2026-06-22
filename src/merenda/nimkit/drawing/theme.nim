@@ -37,7 +37,7 @@ type
     srTextField
     srComboBox
     srComboBoxItem
-    srListView
+    srTableView
     srListItem
 
   StyleContext* = object
@@ -154,7 +154,7 @@ type
     minSize*: Size
     chrome*: string
 
-  ListViewStyle* = object
+  TableViewStyle* = object
     box*: ControlBoxStyle
     minSize*: Size
 
@@ -249,8 +249,8 @@ const
   ComboBoxItemSelectedHighlightedFillToken* = "comboBox.item.fill.selected.highlighted"
   ComboBoxItemTextColorToken* = "comboBox.item.text.color"
   ComboBoxItemSelectedTextColorToken* = "comboBox.item.text.color.selected"
-  ListViewFillToken* = "listView.fill"
-  ListViewBorderColorToken* = "listView.border.color"
+  TableViewFillToken* = "tableView.fill"
+  TableViewBorderColorToken* = "tableView.border.color"
   ListItemFillToken* = "list.item.fill"
   ListItemHighlightedFillToken* = "list.item.fill.highlighted"
   ListItemSelectedFillToken* = "list.item.fill.selected"
@@ -1490,8 +1490,8 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
     chrome: theme.resolveChromeName(context),
   )
 
-proc resolveListViewStyle*(theme: Theme, context: StyleContext): ListViewStyle =
-  ListViewStyle(
+proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle =
+  TableViewStyle(
     box: ControlBoxStyle(
       fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
       borderColor:
@@ -1551,10 +1551,10 @@ proc resolveComboBoxStyle*(
 ): ComboBoxStyle =
   appearance.theme.resolveComboBoxStyle(context)
 
-proc resolveListViewStyle*(
+proc resolveTableViewStyle*(
     appearance: Appearance, context: StyleContext
-): ListViewStyle =
-  appearance.theme.resolveListViewStyle(context)
+): TableViewStyle =
+  appearance.theme.resolveTableViewStyle(context)
 
 proc resolveListItemStyle*(
     appearance: Appearance, context: StyleContext
@@ -1861,8 +1861,8 @@ proc initTheme*(): Theme =
     aquaComboItemSelectedHighlightedFill()
   result[ComboBoxItemTextColorToken] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
   result[ComboBoxItemSelectedTextColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
-  result[ListViewFillToken] = styleToken(TextFieldFillToken)
-  result[ListViewBorderColorToken] = styleToken(TextFieldBorderColorToken)
+  result[TableViewFillToken] = styleToken(TextFieldFillToken)
+  result[TableViewBorderColorToken] = styleToken(TextFieldBorderColorToken)
   result[ListItemFillToken] = styleToken(ComboBoxItemFillToken)
   result[ListItemHighlightedFillToken] = styleToken(ComboBoxItemHighlightedFillToken)
   result[ListItemSelectedFillToken] = styleToken(ComboBoxItemSelectedFillToken)
@@ -2198,15 +2198,15 @@ proc initTheme*(): Theme =
   result[srComboBoxItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srComboBoxItem, StyleMinimumSize] = initSize(0.0, 22.0)
 
-  result[srListView, StyleFill] = styleToken(ListViewFillToken)
-  result[srListView, StyleBorderColor] = styleToken(ListViewBorderColorToken)
-  result[srListView, StyleBorderWidth] = 1.0
-  result[srListView, StyleCornerRadius] = 6.0
-  result[srListView, StyleMinimumSize] = initSize(120.0, 24.0)
-  result[srListView, StyleFocusRingWidth] = 3.0
-  result[srListView, StyleFocusRingInset] = 2.0
-  result[srListView, StyleFocusRingColor] = styleToken(FocusRingColorToken)
-  result[srListView, StyleBoxShadows] = aquaInsetControlShadows()
+  result[srTableView, StyleFill] = styleToken(TableViewFillToken)
+  result[srTableView, StyleBorderColor] = styleToken(TableViewBorderColorToken)
+  result[srTableView, StyleBorderWidth] = 1.0
+  result[srTableView, StyleCornerRadius] = 6.0
+  result[srTableView, StyleMinimumSize] = initSize(120.0, 24.0)
+  result[srTableView, StyleFocusRingWidth] = 3.0
+  result[srTableView, StyleFocusRingInset] = 2.0
+  result[srTableView, StyleFocusRingColor] = styleToken(FocusRingColorToken)
+  result[srTableView, StyleBoxShadows] = aquaInsetControlShadows()
 
   result.addRoleRule(
     srListItem,
