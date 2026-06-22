@@ -211,6 +211,13 @@ application, responder, view, window, accessibility, or control/cell layers.
   now use explicit row-item disabled colors, hosted table cell views inherit the
   row disabled visual state, and the `Inspect` action column no longer starts
   editing before firing the button action.
+- Finished the next table-header interaction pass: header resize handles now
+  expose cursor rects and tracking areas, sort state renders with drawn
+  indicators instead of text suffixes, and column reordering previews a visible
+  insertion marker with edge autoscroll before applying the move on mouse up.
+  Header rendering now routes through reusable `TableHeaderChrome` helpers so
+  custom table drawing can replace chrome while reusing the structural header
+  pieces.
 
 ## Current Verification
 
@@ -218,9 +225,10 @@ application, responder, view, window, accessibility, or control/cell layers.
   layout.
 - After removing standalone `ListView`, `atlas-run tests` passed `32/32` and
   `nim examples` compiled successfully.
-- The latest table row/action polish was checked with `atlas-run tests
-  tnimkit_tableviews tnimkit_rendering tnimkit_theme`; examples were compile
-  checked with `atlas-run tests --compile-only 'examples/*.nim'`.
+- The latest table row/action and header polish was checked with
+  `atlas-run tests tnimkit_tableviews tnimkit_rendering tnimkit_theme`;
+  examples were compile checked with
+  `atlas-run tests --compile-only 'examples/*.nim'`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -250,18 +258,12 @@ update widgets, responder state, and rendering.
 Continue growing the protocol-backed table API into a production AppKit-style
 widget.
 
-1. Finish native-feeling header interaction:
-   - add resize cursors/tracking areas, richer sort indicator rendering,
-     visible column drag insertion affordances, and autoscroll while reordering
-     columns
-2. Finish drag/drop integration:
+1. Finish drag/drop integration:
    - add distinct before/after/on insertion targets for table rows and columns
      on top of the current item/cell drop target model
-   - add column-header drag insertion affordances and autoscroll while
-     reordering columns
    - deepen table delegate validation hooks for proposed operation,
      target, and insertion position before accepting a drop
-3. Finish persistence integration:
+2. Finish persistence integration:
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
      columns, and restore timing tied to window/document lifecycle

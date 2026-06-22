@@ -3,6 +3,7 @@ import pkg/bumpy
 import figdraw/commons
 import figdraw/common/filltypes
 import figdraw/common/typefaces
+import figdraw/figextras
 import figdraw/fignodes
 
 import ./images
@@ -257,6 +258,11 @@ proc renderRectFor*(context: DrawContext, rect: nimkitTypes.Rect): nimkitTypes.R
     rect.size.height,
   )
 
+proc renderPointFor(context: DrawContext, point: nimkitTypes.Point): nimkitTypes.Point =
+  nimkitTypes.initPoint(
+    context.xRenderOrigin.x + point.x, context.xRenderOrigin.y + point.y
+  )
+
 proc bounds*(context: DrawContext): nimkitTypes.Rect =
   context.xBounds
 
@@ -334,6 +340,72 @@ proc addRenderRectangle*(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
     clips, maskContent, roundedCorners,
   )
+
+proc addRenderLine*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    start, stop: nimkitTypes.Point,
+    fillValue: Fill,
+    weight: float32,
+): FigIdx {.discardable.} =
+  let
+    renderedStart = context.renderPointFor(start)
+    renderedStop = context.renderPointFor(stop)
+  context.addFig(
+    layer,
+    parent,
+    figLine(
+      renderedStart.x, renderedStart.y, renderedStop.x, renderedStop.y, fillValue,
+      weight, layer,
+    ),
+  )
+
+proc addRenderLine*(
+    context: DrawContext,
+    parent: FigIdx,
+    start, stop: nimkitTypes.Point,
+    fillValue: Fill,
+    weight: float32,
+): FigIdx {.discardable.} =
+  context.addRenderLine(DefaultDrawLevel, parent, start, stop, fillValue, weight)
+
+proc addRenderLine*(
+    context: DrawContext,
+    start, stop: nimkitTypes.Point,
+    fillValue: Fill,
+    weight: float32,
+): FigIdx {.discardable.} =
+  context.addRenderLine(context.xParent, start, stop, fillValue, weight)
+
+proc addRenderCircle*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    center: nimkitTypes.Point,
+    fillValue: Fill,
+    radius: float32,
+): FigIdx {.discardable.} =
+  let renderedCenter = context.renderPointFor(center)
+  context.addFig(
+    layer,
+    parent,
+    figCircle(renderedCenter.x, renderedCenter.y, fillValue, radius, layer),
+  )
+
+proc addRenderCircle*(
+    context: DrawContext,
+    parent: FigIdx,
+    center: nimkitTypes.Point,
+    fillValue: Fill,
+    radius: float32,
+): FigIdx {.discardable.} =
+  context.addRenderCircle(DefaultDrawLevel, parent, center, fillValue, radius)
+
+proc addRenderCircle*(
+    context: DrawContext, center: nimkitTypes.Point, fillValue: Fill, radius: float32
+): FigIdx {.discardable.} =
+  context.addRenderCircle(context.xParent, center, fillValue, radius)
 
 proc addRenderTranslation*(
     context: DrawContext,

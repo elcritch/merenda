@@ -13,7 +13,10 @@ var customDrawCount: int
 
 const ExtraChromeName = "render-extra-chrome"
 
-let ExtraChromeFill = fill(initColor(0.72, 0.10, 0.48, 1.0))
+let
+  ExtraChromeFill = fill(initColor(0.72, 0.10, 0.48, 1.0))
+  CustomLineFill = fill(initColor(0.10, 0.55, 0.86, 1.0))
+  CustomCircleFill = fill(initColor(0.16, 0.70, 0.28, 1.0))
 
 type ExtraChrome = ref object of Chrome
 
@@ -28,6 +31,10 @@ protocol CustomDrawing of ViewDrawingProtocol:
     inc customDrawCount
     context.addRectangle(initRect(4, 5, 20, 10), initColor(0.8, 0.1, 0.1))
     context.addText(initRect(4, 5, 20, 10), "C", initColor(1, 1, 1))
+    context.addRenderLine(
+      initPoint(4.0, 22.0), initPoint(24.0, 30.0), CustomLineFill, 2.0
+    )
+    context.addRenderCircle(initPoint(35.0, 18.0), CustomCircleFill, 6.0)
 
 protocol ExtraChromeProtocol of ChromeProtocol:
   method drawChromeExtrasFor(
@@ -867,6 +874,38 @@ suite "nimkit rendering":
     check highlightedRowFound
     check selectedTextFound
 
+  test "buildRenders keeps table focus ring below visible headers":
+    let
+      root = newView(frame = initRect(0, 0, 220, 140))
+      tableView = newTableView(frame = initRect(10, 20, 130, 68))
+      focusColor = initColor(0.91, 0.38, 0.18, 0.66)
+
+    tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
+    tableView.focusVisible = true
+
+    var theme = initTheme()
+    theme[srTableView, StyleFocusRingWidth] = 3.0
+    theme[srTableView, StyleFocusRingInset] = -1.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
+    root.addSubview(tableView)
+
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    var
+      bodyFocusRingFound = false
+      fullTableFocusRingFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 3.0 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        if node.screenBox.h >= tableView.frame.size.height:
+          fullTableFocusRingFound = true
+        if node.screenBox.h <=
+            tableView.frame.size.height - tableView.tableHeaderHeight() + 2.0:
+          bodyFocusRingFound = true
+
+    check bodyFocusRingFound
+    check not fullTableFocusRingFound
+
   test "buildRenders draws focused text field selection and caret":
     let
       root = newView(frame = initRect(0, 0, 180, 80))
@@ -1188,6 +1227,8 @@ suite "nimkit rendering":
 
     var customRectFound = false
     var customTextFound = false
+    var customLineFound = false
+    var customCircleFound = false
     for idx in childIndex(list.nodes, customRoot):
       let node = list.nodes[int(idx)]
       if node.kind == nkRectangle and node.screenBox.x == 14.0 and
@@ -1197,6 +1238,15 @@ suite "nimkit rendering":
       if node.kind == nkText and node.screenBox.x == 14.0 and node.screenBox.y == 25.0 and
           node.screenBox.w == 20.0 and node.screenBox.h == 10.0:
         customTextFound = true
+      if node.kind == nkRectangle and node.fill == CustomLineFill and
+          abs(node.rotation) >= 10.0:
+        customLineFound = true
+      if node.kind == nkRectangle and node.fill == CustomCircleFill and
+          node.screenBox.x == 39.0 and node.screenBox.y == 32.0 and
+          node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
+        customCircleFound = true
 
     check customRectFound
     check customTextFound
+    check customLineFound
+    check customCircleFound
