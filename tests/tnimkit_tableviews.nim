@@ -1,4 +1,4 @@
-import std/[unicode, unittest]
+import std/[algorithm, sequtils, unicode, unittest]
 
 import figdraw/fignodes
 import sigils/core
@@ -15,9 +15,18 @@ type EditableTableRow = object
   owner: string
   elapsed: string
 
+type SortableTableRow = object
+  id: string
+  project: string
+  rank: string
+
 type EditableTableSpy = ref object of Responder
   rows: seq[EditableTableRow]
   commits: seq[string]
+
+type SortableTableSpy = ref object of Responder
+  rows: seq[SortableTableRow]
+  sortChanges: seq[string]
 
 type TableEditSignalSpy = ref object of Agent
   source: EditableTableSpy
@@ -144,6 +153,34 @@ proc typeText(window: Window, text: string): bool =
 proc pressKey(window: Window, key: Key, modifiers: set[KeyModifier] = {}): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: modifiers))
 
+proc clickTableCell(
+    window: Window,
+    tableView: TableView,
+    row: int,
+    column: TableColumn,
+    modifiers: set[KeyModifier] = {},
+): bool =
+  let point = tableView.tableCellPoint(row, column)
+  window.mouseDownAt(point, modifiers = modifiers) and
+    window.mouseUpAt(point, modifiers = modifiers)
+
+proc clickTableHeader(
+    window: Window,
+    tableView: TableView,
+    column: TableColumn,
+    modifiers: set[KeyModifier] = {},
+): bool =
+  let rect = tableView.tableHeaderColumnRect(column)
+  if rect.isEmpty:
+    return false
+  let point = tableView.pointToWindow(
+    initPoint(
+      rect.origin.x + rect.size.width * 0.5, rect.origin.y + rect.size.height * 0.5
+    )
+  )
+  window.mouseDownAt(point, modifiers = modifiers) and
+    window.mouseUpAt(point, modifiers = modifiers)
+
 func fieldText(row: EditableTableRow, identifier: string): string =
   case identifier
   of "project": row.project
@@ -164,6 +201,12 @@ proc setFieldText(row: var EditableTableRow, identifier, value: string) =
     row.elapsed = value
   else:
     discard
+
+func fieldText(row: SortableTableRow, identifier: string): string =
+  case identifier
+  of "project": row.project
+  of "rank": row.rank
+  else: row.id
 
 proc rememberCellEditDidCommit(
     spy: TableEditSignalSpy,
@@ -370,6 +413,51 @@ protocol EditableTableSpyDelegate of TableViewDelegate:
       source.commits.add column.identifier & ":" & value
       tableView.reloadData()
 
+protocol SortableTableSpyDataSource of TableViewDataSource:
+  method numberOfRows(source: SortableTableSpy, tableView: TableView): int =
+    source.rows.len
+
+  method textForCell(
+      source: SortableTableSpy, tableView: TableView, row: int, column: TableColumn
+  ): string =
+    if row in 0 ..< source.rows.len:
+      source.rows[row].fieldText(column.identifier)
+    else:
+      ""
+
+  method identifierForRow(
+      source: SortableTableSpy, tableView: TableView, row: int
+  ): string =
+    if row in 0 ..< source.rows.len:
+      source.rows[row].id
+    else:
+      ""
+
+  method rowForIdentifier(
+      source: SortableTableSpy, tableView: TableView, identifier: string
+  ): int =
+    for index, row in source.rows:
+      if row.id == identifier:
+        return index
+    -1
+
+protocol SortableTableSpyDelegate of TableViewDelegate:
+  method sortDescriptorsDidChange(
+      source: SortableTableSpy,
+      tableView: TableView,
+      column: TableColumn,
+      direction: TableSortDirection,
+  ) =
+    source.sortChanges.add column.identifier & ":" & $direction
+    source.rows.sort(
+      proc(left, right: SortableTableRow): int =
+        result =
+          cmp(left.fieldText(column.identifier), right.fieldText(column.identifier))
+        if direction == tsdDescending:
+          result = -result
+    )
+    tableView.reloadData()
+
 proc newEditableTableSpy(rows: openArray[EditableTableRow]): EditableTableSpy =
   result = EditableTableSpy(rows: @rows)
   initResponder(result)
@@ -378,6 +466,17 @@ proc newEditableTableSpy(rows: openArray[EditableTableRow]): EditableTableSpy =
 
 proc newEditableTableSpy(row: EditableTableRow): EditableTableSpy =
   newEditableTableSpy([row])
+
+proc newSortableTableSpy(rows: openArray[SortableTableRow]): SortableTableSpy =
+  result = SortableTableSpy(rows: @rows)
+  initResponder(result)
+  discard result.withProtocol(SortableTableSpyDataSource)
+  discard result.withProtocol(SortableTableSpyDelegate)
+
+proc selectedRowIds(source: SortableTableSpy, tableView: TableView): seq[string] =
+  for index in tableView.selectedIndexes:
+    if index in 0 ..< source.rows.len:
+      result.add source.rows[index].id
 
 proc newTableEditSignalSpy(source: EditableTableSpy): TableEditSignalSpy =
   TableEditSignalSpy(source: source)
@@ -547,6 +646,43 @@ suite "NimKit TableView":
     name.width = 80.0
     tableView.restoreState(store)
     check name.width > 120.0'f32
+
+  test "table view keeps clicked selection on row identities after header sort":
+    let
+      window = newWindow("Table sort keeps selection", frame = initRect(0, 0, 420, 180))
+      root = newView(frame = initRect(0, 0, 420, 180))
+      tableView = newTableView(frame = initRect(10, 10, 300, 140))
+      source = newSortableTableSpy(
+        [
+          SortableTableRow(id: "a", project: "Alpha", rank: "3"),
+          SortableTableRow(id: "b", project: "Bravo", rank: "1"),
+          SortableTableRow(id: "c", project: "Charlie", rank: "2"),
+          SortableTableRow(id: "d", project: "Delta", rank: "4"),
+        ]
+      )
+      project = newTableColumn("project", "Project", width = 160.0)
+      rank = newTableColumn("rank", "Rank", width = 70.0)
+
+    tableView.selectionMode = tsmExtended
+    tableView.addColumn(project)
+    tableView.addColumn(rank)
+    tableView.dataSource = source
+    tableView.delegate = source
+    tableView.rowHeight = 24.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check window.clickTableCell(tableView, 0, project)
+    check window.clickTableCell(tableView, 2, project, {kmCommand})
+    check tableView.selectedIndexes == @[0, 2]
+    check source.selectedRowIds(tableView) == @["a", "c"]
+
+    check window.clickTableHeader(tableView, rank)
+    check source.sortChanges == @["rank:tsdAscending"]
+    check source.rows.mapIt(it.id) == @["b", "c", "a", "d"]
+    check tableView.selectedIndexes == @[1, 2]
+    check source.selectedRowIds(tableView) == @["c", "a"]
 
   test "table columns move cleanly between table views":
     let

@@ -190,6 +190,15 @@ proc rowHeightForRow*(tableView: TableView, row: int): float32
 proc reloadData*(tableView: TableView)
 proc rowEnabled*(tableView: TableView, row: int): bool
 proc rowSelectable*(tableView: TableView, row: int): bool
+proc tableRowIdentifier(tableView: TableView, row: int): string
+proc tableRowIndexForIdentifier(tableView: TableView, identifier: string): int
+proc rowIdentifiersForRows(tableView: TableView, rows: openArray[int]): seq[string]
+proc applySelectionForRowIdentifiers(
+  tableView: TableView,
+  identifiers: openArray[string],
+  anchorIdentifier, leadIdentifier: string,
+)
+
 proc highlightedIndex*(tableView: TableView): int
 proc usesAlternatingRowBackgrounds*(tableView: TableView): bool
 proc selectionMode*(tableView: TableView): TableSelectionMode
@@ -270,6 +279,9 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
   method textForCell*(
     tableView: TableView, row: int, column: TableColumn
   ): string {.optional.}
+
+  method identifierForRow*(tableView: TableView, row: int): string {.optional.}
+  method rowForIdentifier*(tableView: TableView, identifier: string): int {.optional.}
 
 protocol TableViewEvents:
   proc selectionIsChanging*(tableView: TableView, sender: DynamicAgent) {.signal.}
@@ -739,6 +751,60 @@ proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
     text.get()
   else:
     ""
+
+proc tableRowIdentifier(tableView: TableView, row: int): string =
+  if tableView.isNil or row notin 0 ..< tableView.len():
+    return ""
+  let source = tableView.dataSource()
+  if source.isNil:
+    return ""
+  let identifier =
+    source.trySendLocal(identifierForRow(), (tableView: tableView, row: row))
+  if identifier.isSome:
+    identifier.get()
+  else:
+    ""
+
+proc tableRowIndexForIdentifier(tableView: TableView, identifier: string): int =
+  if tableView.isNil or identifier.len == 0:
+    return -1
+  let source = tableView.dataSource()
+  if source.isNil:
+    return -1
+  let direct = source.trySendLocal(
+    rowForIdentifier(), (tableView: tableView, identifier: identifier)
+  )
+  if direct.isSome and direct.get() in 0 ..< tableView.len():
+    return direct.get()
+  for row in 0 ..< tableView.len():
+    if tableView.tableRowIdentifier(row) == identifier:
+      return row
+  -1
+
+proc rowIdentifiersForRows(tableView: TableView, rows: openArray[int]): seq[string] =
+  for row in rows:
+    let identifier = tableView.tableRowIdentifier(row)
+    if identifier.len == 0:
+      return @[]
+    result.add identifier
+
+proc applySelectionForRowIdentifiers(
+    tableView: TableView,
+    identifiers: openArray[string],
+    anchorIdentifier, leadIdentifier: string,
+) =
+  if tableView.isNil or identifiers.len == 0:
+    return
+  var rows: seq[int]
+  for identifier in identifiers:
+    let row = tableView.tableRowIndexForIdentifier(identifier)
+    if row >= 0:
+      rows.add row
+  tableView.applySelectedIndexes(
+    rows,
+    tableView.tableRowIndexForIdentifier(anchorIdentifier),
+    tableView.tableRowIndexForIdentifier(leadIdentifier),
+  )
 
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View =
   if not tableView.validCell(row, column):
@@ -2695,6 +2761,10 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
   ) =
     if tableView.isNil or column.isNil or column.tableView() != tableView:
       return
+    let
+      selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
+      anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
+      leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
     for current in tableView.xColumns.mitems:
       if current != column and current.xSortDirection != tsdNone:
         current.xSortDirection = tsdNone
@@ -2705,6 +2775,9 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         sortDescriptorsDidChange(),
         (tableView: tableView, column: column, direction: direction),
       )
+    tableView.applySelectionForRowIdentifiers(
+      selectedIdentifiers, anchorIdentifier, leadIdentifier
+    )
 
   method headerMouseDown(tableView: TableView, event: MouseEvent): bool =
     if tableView.isNil or event.button != mbPrimary:
