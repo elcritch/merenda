@@ -1967,8 +1967,6 @@ proc dispatchHostKey(window: Window, event: HostKeyEvent) =
       discard window.xOwnerWindow.dismissTransientSession(tdrEscape)
     elif window.hasActiveTransientSession():
       discard window.dismissTransientSession(tdrEscape)
-    else:
-      window.close()
     discard window.requestNativeDisplayUpdateIfNeeded()
     return
   if event.isModifierChange:

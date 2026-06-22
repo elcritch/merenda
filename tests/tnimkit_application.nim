@@ -895,6 +895,36 @@ suite "nimkit application":
       finally:
         window.close()
 
+  test "native escape key does not close ordinary windows":
+    block nativeEscape:
+      let
+        app = newApplication()
+        window = newWindow("Nimkit Native Escape", frame = initRect(80, 80, 240, 140))
+
+      window.setContentView(newView(frame = initRect(0, 0, 240, 140)))
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      try:
+        check app.runForFrames(1) == 1
+        let nativeWindow = window.nativeWindowOrNil()
+        check not nativeWindow.isNil
+        if nativeWindow.isNil:
+          break nativeEscape
+        nativeWindow.eventsHandler.onKey(
+          siwinshim.KeyEvent(
+            window: nativeWindow, key: siwinshim.Key.escape, pressed: true
+          )
+        )
+        check not window.isClosed
+        check window.nativeReady
+        check not siwinshim.closed(nativeWindow)
+      except CatchableError:
+        skip()
+        break nativeEscape
+      finally:
+        window.close()
+
   test "native combo boxes use popup windows instead of owner-window popup drawing":
     block nativeComboPopup:
       let
