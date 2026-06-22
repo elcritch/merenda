@@ -821,10 +821,10 @@ suite "nimkit rendering":
     theme[srTableView, StyleFocusRingWidth] = 3.0
     theme[srTableView, StyleFocusRingInset] = -1.0
     theme[srTableView, StyleFocusRingColor] = focusColor
-    theme[srListItem, {ssSelected}, StyleFill] = selectedFill
-    theme[srListItem, {ssSelected}, StyleTextColor] = selectedText
-    theme[srListItem, {ssHovered}, StyleFill] = hoverFill
-    theme[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 5.0)
+    theme[srRowItem, {ssSelected}, StyleFill] = selectedFill
+    theme[srRowItem, {ssSelected}, StyleTextColor] = selectedText
+    theme[srRowItem, {ssHovered}, StyleFill] = hoverFill
+    theme[srRowItem, StyleTextInsets] = initEdgeInsets(0.0, 5.0)
 
     tableView.rowHeight = 20.0
     tableView.selectedIndex = 1

@@ -8,60 +8,60 @@ import ../foundation/events
 import ../foundation/types
 
 type
-  ListViewport* = object
+  RowViewport* = object
     rows: ScrollViewport
 
-  ListRowState* = object
+  RowState* = object
     index*: int
     text*: string
     states*: set[WidgetState]
 
-  ListRowStyle* = object
+  RowStyle* = object
     fill*: Option[Fill]
     textColor*: Option[Color]
 
 func normalizedRowHeight*(rowHeight: float32): float32 =
   max(rowHeight, 1.0'f32)
 
-func visibleListItemCount*(itemCount, maxVisibleItems: int): int =
+func visibleRowItemCount*(itemCount, maxVisibleItems: int): int =
   if itemCount <= 0:
     return 0
   min(itemCount, max(maxVisibleItems, 1))
 
-func listScrollViewport*(firstIndex, itemCount, visibleCount: int): ScrollViewport =
+func rowScrollViewport*(firstIndex, itemCount, visibleCount: int): ScrollViewport =
   result = initScrollViewport(
     firstIndex.float32, max(visibleCount, 0).float32, max(itemCount, 0).float32
   )
   result.offset = result.clampScrollOffset(result.offset)
 
 func clampFirstIndex*(firstIndex, itemCount, visibleCount: int): int =
-  listScrollViewport(firstIndex, itemCount, visibleCount).offset.int
+  rowScrollViewport(firstIndex, itemCount, visibleCount).offset.int
 
 func maxFirstIndex*(itemCount, visibleCount: int): int =
-  listScrollViewport(0, itemCount, visibleCount).maxScrollOffset().int
+  rowScrollViewport(0, itemCount, visibleCount).maxScrollOffset().int
 
-func initListViewport*(firstIndex = 0): ListViewport =
-  ListViewport(rows: initScrollViewport(firstIndex.float32, 0.0, 0.0))
+func initRowViewport*(firstIndex = 0): RowViewport =
+  RowViewport(rows: initScrollViewport(firstIndex.float32, 0.0, 0.0))
 
-func firstIndex*(viewport: ListViewport): int =
+func firstIndex*(viewport: RowViewport): int =
   max(viewport.rows.offset.int, 0)
 
-proc `firstIndex=`*(viewport: var ListViewport, firstIndex: int) =
+proc `firstIndex=`*(viewport: var RowViewport, firstIndex: int) =
   viewport.rows.offset = max(firstIndex, 0).float32
 
-proc updateRows(viewport: var ListViewport, itemCount, visibleCount: int) =
+proc updateRows(viewport: var RowViewport, itemCount, visibleCount: int) =
   viewport.rows.visibleExtent = max(visibleCount, 0).float32
   viewport.rows.contentExtent = max(itemCount, 0).float32
   viewport.rows.offset = viewport.rows.clampScrollOffset(viewport.rows.offset)
 
-func canScrollBy*(viewport: ListViewport, delta, itemCount, visibleCount: int): bool =
+func canScrollBy*(viewport: RowViewport, delta, itemCount, visibleCount: int): bool =
   if delta == 0:
     return false
-  listScrollViewport(viewport.firstIndex, itemCount, visibleCount).canScrollBy(
+  rowScrollViewport(viewport.firstIndex, itemCount, visibleCount).canScrollBy(
     delta.float32
   )
 
-proc listScrollRows*(event: ScrollEvent): int =
+proc rowScrollRows*(event: ScrollEvent): int =
   if event.deltaY < 0.0'f32:
     1
   elif event.deltaY > 0.0'f32:
@@ -69,7 +69,7 @@ proc listScrollRows*(event: ScrollEvent): int =
   else:
     0
 
-func listScrollerKnobRect*(
+func rowScrollerKnobRect*(
     container: Rect,
     firstIndex, visibleCount, itemCount: int,
     thickness = 3.0'f32,
@@ -83,17 +83,17 @@ func listScrollerKnobRect*(
     return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
 
   scrollerKnobRect(
-    track, laVertical, listScrollViewport(firstIndex, itemCount, visibleCount)
+    track, laVertical, rowScrollViewport(firstIndex, itemCount, visibleCount)
   )
 
-proc normalize*(viewport: var ListViewport, itemCount, visibleCount: int) =
+proc normalize*(viewport: var RowViewport, itemCount, visibleCount: int) =
   viewport.updateRows(itemCount, visibleCount)
 
-proc reset*(viewport: var ListViewport, firstIndex = 0) =
+proc reset*(viewport: var RowViewport, firstIndex = 0) =
   viewport.firstIndex = firstIndex
 
 proc scrollToVisible*(
-    viewport: var ListViewport, itemIndex, itemCount, visibleCount: int
+    viewport: var RowViewport, itemIndex, itemCount, visibleCount: int
 ) =
   viewport.normalize(itemCount, visibleCount)
   if itemIndex < 0 or visibleCount <= 0:
@@ -104,16 +104,16 @@ proc scrollToVisible*(
     viewport.firstIndex = itemIndex - visibleCount + 1
   viewport.normalize(itemCount, visibleCount)
 
-proc scrollBy*(viewport: var ListViewport, delta, itemCount, visibleCount: int) =
+proc scrollBy*(viewport: var RowViewport, delta, itemCount, visibleCount: int) =
   if delta == 0:
     return
   viewport.updateRows(itemCount, visibleCount)
   viewport.rows.offset = viewport.rows.scrolledBy(delta.float32)
 
-func listPopupRect*(
+func rowPopupRect*(
     bounds: Rect, itemCount, maxVisibleItems: int, rowHeight: float32
 ): Rect =
-  let visible = visibleListItemCount(itemCount, maxVisibleItems)
+  let visible = visibleRowItemCount(itemCount, maxVisibleItems)
   if visible <= 0:
     return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
   initRect(
@@ -123,7 +123,7 @@ func listPopupRect*(
     rowHeight.normalizedRowHeight() * visible.float32 + 2.0'f32,
   )
 
-func listItemRect*(
+func rowItemRect*(
     popup: Rect, firstIndex, visibleCount, itemIndex: int, rowHeight: float32
 ): Rect =
   let visibleIndex = itemIndex - firstIndex
@@ -137,7 +137,7 @@ func listItemRect*(
     height,
   )
 
-func listItemIndexAtPoint*(
+func rowItemIndexAtPoint*(
     popup: Rect,
     point: Point,
     firstIndex, visibleCount, itemCount: int,
@@ -161,19 +161,17 @@ func listItemIndexAtPoint*(
     return -1
   index
 
-func initListRowState*(
-    index: int, text: string, states: set[WidgetState] = {}
-): ListRowState =
-  ListRowState(index: index, text: text, states: states)
+func initRowState*(index: int, text: string, states: set[WidgetState] = {}): RowState =
+  RowState(index: index, text: text, states: states)
 
-func initListRowStyle*(fill = none(Fill), textColor = none(Color)): ListRowStyle =
-  ListRowStyle(fill: fill, textColor: textColor)
+func initRowStyle*(fill = none(Fill), textColor = none(Color)): RowStyle =
+  RowStyle(fill: fill, textColor: textColor)
 
-proc drawListRow*(
+proc drawRowItem*(
     context: DrawContext,
     rect: Rect,
-    row: ListRowState,
-    style: ListRowStyle,
+    row: RowState,
+    style: RowStyle,
     itemRole: StyleRole,
     id = "",
     classes: seq[string] = @[],
@@ -183,7 +181,7 @@ proc drawListRow*(
   if rect.isEmpty:
     return
   let currentParent = int16(parent) < 0
-  var itemStyle = context.appearance.resolveListItemStyle(
+  var itemStyle = context.appearance.resolveRowItemStyle(
     initControlStyleContext(itemRole, row.states, id = id, classes = classes)
   )
   if style.fill.isSome:
@@ -200,7 +198,7 @@ proc drawListRow*(
       itemStyle.box.cornerRadius,
       itemStyle.box.shadows,
     )
-    context.addText(itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color)
+    context.addText(itemStyle.rowItemTextRect(rect), row.text, itemStyle.text.color)
   else:
     discard context.addRenderRectangle(
       layer,
@@ -213,19 +211,17 @@ proc drawListRow*(
       itemStyle.box.shadows,
     )
     context.addText(
-      layer, parent, itemStyle.listItemTextRect(rect), row.text, itemStyle.text.color
+      layer, parent, itemStyle.rowItemTextRect(rect), row.text, itemStyle.text.color
     )
 
-proc drawListRow*(
+proc drawRowItem*(
     context: DrawContext,
     rect: Rect,
-    row: ListRowState,
+    row: RowState,
     itemRole: StyleRole,
     id = "",
     classes: seq[string] = @[],
     layer = DefaultDrawLevel,
     parent = (-1).FigIdx,
 ) =
-  context.drawListRow(
-    rect, row, initListRowStyle(), itemRole, id, classes, layer, parent
-  )
+  context.drawRowItem(rect, row, initRowStyle(), itemRole, id, classes, layer, parent)

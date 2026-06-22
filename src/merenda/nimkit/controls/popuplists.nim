@@ -249,12 +249,12 @@ proc styleClasses(popupList: PopupListView): seq[string] =
   popupList.data().styleClasses.valueOr(@[])
 
 proc popupListScrollRows*(event: ScrollEvent): int =
-  listScrollRows(event)
+  rowScrollRows(event)
 
 proc popupListItemRect*(
     popupList: PopupListView, popupBounds: Rect, itemIndex: int
 ): Rect =
-  listItemRect(
+  rowItemRect(
     popupBounds,
     popupList.firstIndex(),
     popupList.visibleItemCount(),
@@ -265,7 +265,7 @@ proc popupListItemRect*(
 proc popupListItemIndexAtPoint*(
     popupList: PopupListView, popupBounds: Rect, point: Point
 ): int =
-  listItemIndexAtPoint(
+  rowItemIndexAtPoint(
     popupBounds,
     point,
     popupList.firstIndex(),
@@ -275,7 +275,7 @@ proc popupListItemIndexAtPoint*(
   )
 
 proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Rect =
-  listScrollerKnobRect(
+  rowScrollerKnobRect(
     popupBounds,
     popupList.firstIndex(),
     popupList.visibleItemCount(),
@@ -364,13 +364,12 @@ proc drawPopupList*(
             if popupList.isFocused():
               rowStates.incl(ssFocused)
             rowStates
-          row =
-            initListRowState(itemIndex, popupList.itemText(itemIndex), states = states)
+          row = initRowState(itemIndex, popupList.itemText(itemIndex), states = states)
           rowStyle =
             if ssDisabled in states:
-              initListRowStyle(textColor = some(initColor(0.48, 0.49, 0.52)))
+              initRowStyle(textColor = some(initColor(0.48, 0.49, 0.52)))
             else:
-              initListRowStyle()
+              initRowStyle()
           keyEquivalentText = popupList.itemKeyEquivalentText(itemIndex)
           accessoryColor =
             if ssDisabled in states:
@@ -379,7 +378,7 @@ proc drawPopupList*(
               initColor(1.0, 1.0, 1.0)
             else:
               initColor(0.27, 0.29, 0.33)
-        context.drawListRow(
+        context.drawRowItem(
           itemRect,
           row,
           rowStyle,
@@ -499,7 +498,7 @@ proc scrollBy(popupList: PopupListView, delta: int) =
     scroll(delta)
 
 proc canScrollRows*(popupList: PopupListView, delta: int): bool =
-  initListViewport(popupList.firstIndex()).canScrollBy(
+  initRowViewport(popupList.firstIndex()).canScrollBy(
     delta, popupList.itemCount(), popupList.visibleItemCount()
   )
 

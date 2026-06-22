@@ -38,7 +38,7 @@ type
     srComboBox
     srComboBoxItem
     srTableView
-    srListItem
+    srRowItem
 
   StyleContext* = object
     role*: StyleRole
@@ -158,7 +158,7 @@ type
     box*: ControlBoxStyle
     minSize*: Size
 
-  ListItemStyle* = object
+  RowItemStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
     minSize*: Size
@@ -251,13 +251,13 @@ const
   ComboBoxItemSelectedTextColorToken* = "comboBox.item.text.color.selected"
   TableViewFillToken* = "tableView.fill"
   TableViewBorderColorToken* = "tableView.border.color"
-  ListItemFillToken* = "list.item.fill"
-  ListItemHighlightedFillToken* = "list.item.fill.highlighted"
-  ListItemSelectedFillToken* = "list.item.fill.selected"
-  ListItemSelectedHighlightedFillToken* = "list.item.fill.selected.highlighted"
-  ListItemTextColorToken* = "list.item.text.color"
-  ListItemSelectedTextColorToken* = "list.item.text.color.selected"
-  ListItemSeparatorColorToken* = "list.item.separator.color"
+  RowItemFillToken* = "rowItem.fill"
+  RowItemHighlightedFillToken* = "rowItem.fill.highlighted"
+  RowItemSelectedFillToken* = "rowItem.fill.selected"
+  RowItemSelectedHighlightedFillToken* = "rowItem.fill.selected.highlighted"
+  RowItemTextColorToken* = "rowItem.text.color"
+  RowItemSelectedTextColorToken* = "rowItem.text.color.selected"
+  RowItemSeparatorColorToken* = "rowItem.separator.color"
 
   TabPanelFillToken* = "tab.panel.fill"
   TabPanelBorderColorToken* = "tab.panel.border.color"
@@ -1507,8 +1507,8 @@ proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(120.0, 24.0)),
   )
 
-proc resolveListItemStyle*(theme: Theme, context: StyleContext): ListItemStyle =
-  ListItemStyle(
+proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
+  RowItemStyle(
     box: ControlBoxStyle(
       fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
       borderColor:
@@ -1556,10 +1556,8 @@ proc resolveTableViewStyle*(
 ): TableViewStyle =
   appearance.theme.resolveTableViewStyle(context)
 
-proc resolveListItemStyle*(
-    appearance: Appearance, context: StyleContext
-): ListItemStyle =
-  appearance.theme.resolveListItemStyle(context)
+proc resolveRowItemStyle*(appearance: Appearance, context: StyleContext): RowItemStyle =
+  appearance.theme.resolveRowItemStyle(context)
 
 func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
@@ -1599,7 +1597,7 @@ func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
     max(bounds.size.height - insets.top - insets.bottom, 0.0'f32),
   )
 
-func listItemTextRect*(style: ListItemStyle, bounds: Rect): Rect =
+func rowItemTextRect*(style: RowItemStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
 
 func controlChromeOutset*(box: ControlBoxStyle): float32 =
@@ -1863,15 +1861,14 @@ proc initTheme*(): Theme =
   result[ComboBoxItemSelectedTextColorToken] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
   result[TableViewFillToken] = styleToken(TextFieldFillToken)
   result[TableViewBorderColorToken] = styleToken(TextFieldBorderColorToken)
-  result[ListItemFillToken] = styleToken(ComboBoxItemFillToken)
-  result[ListItemHighlightedFillToken] = styleToken(ComboBoxItemHighlightedFillToken)
-  result[ListItemSelectedFillToken] = styleToken(ComboBoxItemSelectedFillToken)
-  result[ListItemSelectedHighlightedFillToken] =
+  result[RowItemFillToken] = styleToken(ComboBoxItemFillToken)
+  result[RowItemHighlightedFillToken] = styleToken(ComboBoxItemHighlightedFillToken)
+  result[RowItemSelectedFillToken] = styleToken(ComboBoxItemSelectedFillToken)
+  result[RowItemSelectedHighlightedFillToken] =
     styleToken(ComboBoxItemSelectedHighlightedFillToken)
-  result[ListItemTextColorToken] = styleToken(ComboBoxItemTextColorToken)
-  result[ListItemSelectedTextColorToken] =
-    styleToken(ComboBoxItemSelectedTextColorToken)
-  result[ListItemSeparatorColorToken] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
+  result[RowItemTextColorToken] = styleToken(ComboBoxItemTextColorToken)
+  result[RowItemSelectedTextColorToken] = styleToken(ComboBoxItemSelectedTextColorToken)
+  result[RowItemSeparatorColorToken] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
   result[TabPanelFillToken] = fill(initColor(0.98, 0.98, 0.96, 1.0))
   result[TabPanelBorderColorToken] = styleColor(initColor(0.42, 0.44, 0.48, 1.0))
   result[TabFillToken] = styleColor(initColor(0.70, 0.72, 0.76, 1.0))
@@ -2209,65 +2206,65 @@ proc initTheme*(): Theme =
   result[srTableView, StyleBoxShadows] = aquaInsetControlShadows()
 
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {},
-    styleToken(ListItemFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemTextColorToken),
+    styleToken(RowItemFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssHovered},
-    styleToken(ListItemHighlightedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemTextColorToken),
+    styleToken(RowItemHighlightedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssHighlighted},
-    styleToken(ListItemHighlightedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemTextColorToken),
+    styleToken(RowItemHighlightedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssPressed},
-    styleToken(ListItemHighlightedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemTextColorToken),
+    styleToken(RowItemHighlightedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssSelected},
-    styleToken(ListItemSelectedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemSelectedTextColorToken),
+    styleToken(RowItemSelectedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemSelectedTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssSelected, ssHovered},
-    styleToken(ListItemSelectedHighlightedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemSelectedTextColorToken),
+    styleToken(RowItemSelectedHighlightedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemSelectedTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssSelected, ssHighlighted},
-    styleToken(ListItemSelectedHighlightedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemSelectedTextColorToken),
+    styleToken(RowItemSelectedHighlightedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemSelectedTextColorToken),
   )
   result.addRoleRule(
-    srListItem,
+    srRowItem,
     {ssSelected, ssPressed},
-    styleToken(ListItemSelectedHighlightedFillToken),
-    styleToken(ListItemSeparatorColorToken),
-    styleToken(ListItemSelectedTextColorToken),
+    styleToken(RowItemSelectedHighlightedFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemSelectedTextColorToken),
   )
-  result[srListItem, StyleBorderWidth] = 0.0
-  result[srListItem, StyleCornerRadius] = 0.0
-  result[srListItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
-  result[srListItem, StyleMinimumSize] = initSize(0.0, 22.0)
+  result[srRowItem, StyleBorderWidth] = 0.0
+  result[srRowItem, StyleCornerRadius] = 0.0
+  result[srRowItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srRowItem, StyleMinimumSize] = initSize(0.0, 22.0)
   result.installThemeExtensions()
 
 proc initBannerTheme*(): Theme =
@@ -2286,7 +2283,7 @@ proc initBannerTheme*(): Theme =
   result[DisabledFillToken] = initColor(0.52, 0.50, 0.45, 1.0)
   result[DisabledTextColorToken] = initColor(0.94, 0.91, 0.86, 1.0)
   result[FocusRingColorToken] = initColor(0.31, 0.58, 0.54, 0.60)
-  result[ListItemSeparatorColorToken] = initColor(0.74, 0.70, 0.63, 1.0)
+  result[RowItemSeparatorColorToken] = initColor(0.74, 0.70, 0.63, 1.0)
   result[TabPanelFillToken] = initColor(1.0, 0.97, 0.94, 1.0)
   result[TabPanelBorderColorToken] = initColor(0.84, 0.80, 0.75, 1.0)
   result[TabFillToken] = initColor(0.86, 0.82, 0.75, 1.0)

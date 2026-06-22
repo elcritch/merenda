@@ -425,7 +425,7 @@ proc disclosureRectForRow*(outlineView: OutlineView, row: int): Rect =
   if item.identifier.len == 0 or not outlineView.isItemExpandable(item.identifier):
     return initRect(0.0, 0.0, 0.0, 0.0)
   let
-    rowRect = TableView(outlineView).listItemRect(row)
+    rowRect = TableView(outlineView).rowItemRect(row)
     level = outlineView.levelForRow(row)
     size = min(rowRect.size.height, 16.0'f32)
   initRect(
@@ -527,12 +527,12 @@ proc dropTargetForDraggingLocation*(
   if outlineView.isNil:
     return initDraggingDropTarget()
   var proposedTarget = initDraggingDropTarget()
-  let row = TableView(outlineView).listItemIndexAtPoint(location)
+  let row = TableView(outlineView).rowItemIndexAtPoint(location)
   if row >= 0:
     let item = outlineView.itemAtRow(row)
     if item.identifier.len > 0:
       proposedTarget = initItemDropTarget(
-        item.identifier, row, TableView(outlineView).listItemRect(row)
+        item.identifier, row, TableView(outlineView).rowItemRect(row)
       )
       let delegate = outlineView.outlineDelegate()
       if not delegate.isNil:
@@ -598,7 +598,7 @@ proc outlineAccessibilityElementForRow*(
     row: row,
     identifier: item.identifier,
     label: item.title,
-    frame: TableView(outlineView).listItemRect(row),
+    frame: TableView(outlineView).rowItemRect(row),
     level: outlineView.levelForRow(row),
     expanded: outlineView.isItemExpanded(item.identifier),
     selected: TableView(outlineView).selectedIndex() == row,
@@ -847,10 +847,10 @@ protocol OutlineViewTableDelegate of TableViewDelegate:
       tableView: TableView,
       context: DrawContext,
       rect: Rect,
-      row: ListRowState,
+      row: RowState,
   ) =
-    let emptyRow = initListRowState(row.index, "", states = row.states)
-    TableView(outlineView).drawTableListRow(context, rect, emptyRow)
+    let emptyRow = initRowState(row.index, "", states = row.states)
+    TableView(outlineView).drawTableRowItem(context, rect, emptyRow)
     if row.index < 0:
       return
     let rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)

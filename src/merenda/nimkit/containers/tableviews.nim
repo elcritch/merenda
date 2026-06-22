@@ -35,7 +35,7 @@ type
 
   TableRowView = ref object of View
     xTableView: TableView
-    xRow: ListRowState
+    xRow: RowState
 
   TableContentView = ref object of View
     xTableView: TableView
@@ -224,9 +224,9 @@ proc applySelectedIndexes(
 proc selectItemAtIndex(tableView: TableView, index: int)
 proc selectItemAtIndex(tableView: TableView, index: int, modifiers: set[KeyModifier])
 proc activateItemAtIndex(tableView: TableView, index: int, modifiers: set[KeyModifier])
-proc tableRowState(tableView: TableView, index: int): ListRowState
-proc drawTableListRow*(
-  tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+proc tableRowState(tableView: TableView, index: int): RowState
+proc drawTableRowItem*(
+  tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 )
 
 proc autoscrollDraggingInfo(tableView: TableView, info: DraggingInfo): bool
@@ -257,12 +257,10 @@ proc validateEditingValue(tableView: TableView, value: string): bool
 proc finishCommitEditingCell(tableView: TableView, value: string): bool
 proc finishCancelEditingCell(tableView: TableView): bool
 proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool
-proc drawTableRow(
-  tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
-)
+proc drawTableRow(tableView: TableView, context: DrawContext, rect: Rect, row: RowState)
 
 proc drawTableDropTarget(
-  tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+  tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 )
 
 proc syncTableScrollChrome(tableView: TableView)
@@ -339,7 +337,7 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   ): DraggingDropTarget {.optional.}
 
   method drawRow*(
-    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+    tableView: TableView, context: DrawContext, rect: Rect, row: RowState
   ) {.optional.}
 
 protocol TableViewEditingProtocol:
@@ -1015,9 +1013,9 @@ proc selectionContains(tableView: TableView, index: int): bool =
       return true
   false
 
-proc tableRowState(tableView: TableView, index: int): ListRowState =
+proc tableRowState(tableView: TableView, index: int): RowState =
   if tableView.isNil or index notin 0 ..< tableView.len():
-    initListRowState(-1, "", states = {})
+    initRowState(-1, "", states = {})
   else:
     var rowStates: set[WidgetState] = {}
     if not tableView.rowEnabled(index):
@@ -1032,7 +1030,7 @@ proc tableRowState(tableView: TableView, index: int): ListRowState =
       rowStates.incl(ssPressed)
     if ssFocused in tableView.widgetStateSet():
       rowStates.incl(ssFocused)
-    initListRowState(index, tableView.rowTextForSummary(index), states = rowStates)
+    initRowState(index, tableView.rowTextForSummary(index), states = rowStates)
 
 proc indexesInRange(selectionRange: Slice[int]): seq[int] =
   if selectionRange.b < selectionRange.a:
@@ -1545,7 +1543,7 @@ proc `selectedIndex=`*(tableView: TableView, index: int) =
   else:
     tableView.selectItemAtIndex(index)
 
-proc listItemRect*(tableView: TableView, itemIndex: int): Rect =
+proc rowItemRect*(tableView: TableView, itemIndex: int): Rect =
   tableView.tileTableContent()
   let contentView = tableView.contentView()
   if contentView.isNil:
@@ -1561,7 +1559,7 @@ proc listItemRect*(tableView: TableView, itemIndex: int): Rect =
   else:
     visibleRect
 
-proc listItemIndexAtPoint*(tableView: TableView, point: Point): int =
+proc rowItemIndexAtPoint*(tableView: TableView, point: Point): int =
   tableView.tileTableContent()
   let contentView = tableView.contentView()
   if contentView.isNil:
@@ -1586,7 +1584,7 @@ proc visibleItemCount*(tableView: TableView): int =
         visibleFromBounds
       else:
         tableView.visibleRows()
-  visibleListItemCount(tableView.len(), preferredRows)
+  visibleRowItemCount(tableView.len(), preferredRows)
 
 proc firstVisibleIndex*(tableView: TableView): int =
   tableView.rowIndexAtContentY(tableView.listContentOffset().y)
@@ -1729,15 +1727,15 @@ proc defaultDropTargetForDraggingLocation(
   if tableView.isNil:
     return initDraggingDropTarget()
   let
-    row = tableView.listItemIndexAtPoint(location)
+    row = tableView.rowItemIndexAtPoint(location)
     column = tableView.tableColumnAtPoint(location)
   if row >= 0 and not column.isNil:
     let
-      rowRect = tableView.listItemRect(row)
+      rowRect = tableView.rowItemRect(row)
       cellRect = tableView.columnRect(rowRect, column)
     return initCellDropTarget(row, column.identifier(), cellRect)
   if row >= 0:
-    return initRowDropTarget(row, tableView.listItemRect(row))
+    return initRowDropTarget(row, tableView.rowItemRect(row))
   if not column.isNil and tableView.tableHeaderRect().contains(location):
     return
       initColumnDropTarget(column.identifier(), tableView.tableHeaderColumnRect(column))
@@ -2069,12 +2067,12 @@ proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement):
     return false
   tableView.beginEditingCell(next.row, next.column)
 
-proc listItemStyle(
+proc rowItemStyle(
     tableView: TableView, context: DrawContext, states: set[WidgetState]
-): ListItemStyle =
-  context.appearance.resolveListItemStyle(
+): RowItemStyle =
+  context.appearance.resolveRowItemStyle(
     initControlStyleContext(
-      srListItem, states, id = tableView.styleId(), classes = tableView.styleClasses()
+      srRowItem, states, id = tableView.styleId(), classes = tableView.styleClasses()
     )
   )
 
@@ -2084,7 +2082,7 @@ proc drawTableCellText(
     row: int,
     column: TableColumn,
     rect: Rect,
-    style: ListItemStyle,
+    style: RowItemStyle,
 ) =
   if rect.isEmpty:
     return
@@ -2094,21 +2092,21 @@ proc drawTableCellText(
   let text = tableView.tableCellText(row, column)
   if text.len > 0:
     discard context.addText(
-      style.listItemTextRect(rect), text, style.text.color, column.alignment()
+      style.rowItemTextRect(rect), text, style.text.color, column.alignment()
     )
 
 proc drawTableRow(
-    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+    tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 ) =
   if tableView.isNil or context.isNil:
     return
-  let emptyRow = initListRowState(row.index, "", states = row.states)
-  tableView.drawTableListRow(context, rect, emptyRow)
+  let emptyRow = initRowState(row.index, "", states = row.states)
+  tableView.drawTableRowItem(context, rect, emptyRow)
   if row.index < 0:
     return
   let
     rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
-    style = tableView.listItemStyle(context, row.states)
+    style = tableView.rowItemStyle(context, row.states)
   for column in tableView.columns:
     if column.hidden():
       continue
@@ -2118,7 +2116,7 @@ proc drawTableRow(
   tableView.drawTableDropTarget(context, rect, row)
 
 proc drawTableDropTarget(
-    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+    tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 ) =
   if tableView.isNil or context.isNil or row.index < 0:
     return
@@ -2324,24 +2322,24 @@ proc syncVisibleRowViews(contentView: TableContentView) =
   for slot in 0 ..< needed:
     contentView.xRowViews[slot].configureRowView(rows.first + slot)
 
-proc drawTableListRow*(
-    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+proc drawTableRowItem*(
+    tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 ) =
   if tableView.isNil or context.isNil:
     return
-  var style = initListRowStyle()
+  var style = initRowStyle()
   let interactiveFillStates =
     row.states * {ssSelected, ssHovered, ssHighlighted, ssPressed}
   if ssAlternating in row.states and interactiveFillStates == {} and style.fill.isNone:
     style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
-  context.drawListRow(
+  context.drawRowItem(
     rect, row, style, tableView.xItemRole, tableView.styleId(), tableView.styleClasses()
   )
   if tableView.showsRowSeparators() and row.index >= 0 and
       row.index < tableView.len() - 1:
     let
       separatorStates: set[WidgetState] = row.states * {ssDisabled}
-      itemStyle = context.appearance.resolveListItemStyle(
+      itemStyle = context.appearance.resolveRowItemStyle(
         initControlStyleContext(
           tableView.xItemRole,
           separatorStates,
@@ -2353,7 +2351,7 @@ proc drawTableListRow*(
     discard context.addRenderRectangle(separatorRect, fill(itemStyle.box.borderColor))
 
 proc drawCustomTableRow(
-    tableView: TableView, context: DrawContext, rect: Rect, row: ListRowState
+    tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 ): bool =
   if tableView.isNil or tableView.xTableDelegate.isNil or context.isNil:
     return false
@@ -2374,7 +2372,7 @@ proc naturalSize(tableView: TableView): Size =
         classes = tableView.styleClasses(),
       )
     )
-    itemStyle = appearance.resolveListItemStyle(
+    itemStyle = appearance.resolveRowItemStyle(
       initControlStyleContext(
         tableView.xItemRole,
         itemState,
@@ -2386,7 +2384,7 @@ proc naturalSize(tableView: TableView): Size =
       if tableView.len() == 0:
         max(tableView.visibleRows(), 1)
       else:
-        visibleListItemCount(tableView.len(), tableView.visibleRows())
+        visibleRowItemCount(tableView.len(), tableView.visibleRows())
 
   var
     maxTextWidth = 0.0'f32
@@ -2478,7 +2476,7 @@ proc defaultTableViewMouseDown*(tableView: TableView, event: MouseEvent): bool =
   if owner of Window:
     discard Window(owner).makeFirstResponder(tableView)
   tableView.xTrackingItem = true
-  let index = tableView.listItemIndexAtPoint(event.location)
+  let index = tableView.rowItemIndexAtPoint(event.location)
   tableView.highlightedIndex = index
   tableView.xPressedIndex = tableView.highlightedIndex()
   tableView.invalidateTableRows()
@@ -2488,7 +2486,7 @@ proc defaultTableViewMouseDragged*(tableView: TableView, event: MouseEvent): boo
   if tableView.isNil:
     return false
   if tableView.isEnabled() and tableView.xTrackingItem:
-    let index = tableView.listItemIndexAtPoint(event.location)
+    let index = tableView.rowItemIndexAtPoint(event.location)
     tableView.highlightedIndex = index
     tableView.xPressedIndex = tableView.highlightedIndex()
     tableView.invalidateTableRows()
@@ -2500,7 +2498,7 @@ proc defaultTableViewMouseUp*(tableView: TableView, event: MouseEvent): bool =
     return false
   let index =
     if tableView.xTrackingItem:
-      tableView.listItemIndexAtPoint(event.location)
+      tableView.rowItemIndexAtPoint(event.location)
     else:
       -1
   tableView.xTrackingItem = false
@@ -2539,7 +2537,7 @@ protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
   method mouseHitPolicy(tableView: TableView, args: MouseHitPolicyArgs): CellHitPolicy =
     if tableView.isNil or not tableView.isEnabled() or args.event.button != mbPrimary:
       return chpDefault
-    let row = tableView.listItemIndexAtPoint(args.event.location)
+    let row = tableView.rowItemIndexAtPoint(args.event.location)
     if row < 0:
       return chpDefault
     let
@@ -2555,7 +2553,7 @@ protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
     if tableView.isNil or not tableView.isEnabled() or args.event.button != mbPrimary:
       return false
     let
-      row = tableView.listItemIndexAtPoint(args.event.location)
+      row = tableView.rowItemIndexAtPoint(args.event.location)
       column = tableView.tableColumnAtPoint(args.event.location)
     if row < 0:
       return false
@@ -3133,7 +3131,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     let handled = tableView.defaultTableViewMouseUp(event)
     if event.clickCount >= 2:
       let
-        row = tableView.listItemIndexAtPoint(event.location)
+        row = tableView.rowItemIndexAtPoint(event.location)
         column = tableView.tableColumnAtPoint(event.location)
       if tableView.shouldBeginEditingCell(row, column):
         return tableView.beginEditingCell(row, column)
@@ -3143,7 +3141,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     if tableView.headerMouseMoved(event):
       return true
     if tableView.isEnabled():
-      tableView.highlightedIndex = tableView.listItemIndexAtPoint(event.location)
+      tableView.highlightedIndex = tableView.rowItemIndexAtPoint(event.location)
       return true
     false
 
@@ -3280,7 +3278,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xVisibleRows = 5
   tableView.xSelectionMode = tsmSingle
   tableView.xTableRole = srTableView
-  tableView.xItemRole = srListItem
+  tableView.xItemRole = srRowItem
   tableView.xRowCount = 0
   tableView.xShowsHeader = true
   tableView.xHeaderHeight = 24.0'f32
