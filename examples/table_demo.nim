@@ -6,6 +6,7 @@ import sigils/core
 
 type
   BuildRow = object
+    id: string
     project: string
     state: string
     owner: string
@@ -66,19 +67,89 @@ func validationError(column: TableColumn, value: string): string =
 func demoRows(): seq[BuildRow] =
   @[
     BuildRow(
-      project: "Renderer Pipeline", state: "Running", owner: "Mara", elapsed: "12m"
+      id: "renderer-pipeline",
+      project: "Renderer Pipeline",
+      state: "Running",
+      owner: "Mara",
+      elapsed: "12m",
     ),
-    BuildRow(project: "Auth Gateway", state: "Queued", owner: "Iris", elapsed: "2h"),
-    BuildRow(project: "Crash Reporter", state: "Blocked", owner: "Noah", elapsed: "1d"),
-    BuildRow(project: "Asset Importer", state: "Done", owner: "Ren", elapsed: "8m"),
-    BuildRow(project: "Search Index", state: "Running", owner: "Leah", elapsed: "34m"),
-    BuildRow(project: "Telemetry", state: "Paused", owner: "Owen", elapsed: "5h"),
-    BuildRow(project: "Installer", state: "Queued", owner: "June", elapsed: "18m"),
-    BuildRow(project: "Sync Engine", state: "Done", owner: "Vik", elapsed: "42m"),
-    BuildRow(project: "Inspector", state: "Running", owner: "Nia", elapsed: "7m"),
-    BuildRow(project: "Preview Cache", state: "Queued", owner: "Sol", elapsed: "1h"),
-    BuildRow(project: "Layout Tests", state: "Done", owner: "Ari", elapsed: "24m"),
-    BuildRow(project: "Release Notes", state: "Done", owner: "Paz", elapsed: "3h"),
+    BuildRow(
+      id: "auth-gateway",
+      project: "Auth Gateway",
+      state: "Queued",
+      owner: "Iris",
+      elapsed: "2h",
+    ),
+    BuildRow(
+      id: "crash-reporter",
+      project: "Crash Reporter",
+      state: "Blocked",
+      owner: "Noah",
+      elapsed: "1d",
+    ),
+    BuildRow(
+      id: "asset-importer",
+      project: "Asset Importer",
+      state: "Done",
+      owner: "Ren",
+      elapsed: "8m",
+    ),
+    BuildRow(
+      id: "search-index",
+      project: "Search Index",
+      state: "Running",
+      owner: "Leah",
+      elapsed: "34m",
+    ),
+    BuildRow(
+      id: "telemetry",
+      project: "Telemetry",
+      state: "Paused",
+      owner: "Owen",
+      elapsed: "5h",
+    ),
+    BuildRow(
+      id: "installer",
+      project: "Installer",
+      state: "Queued",
+      owner: "June",
+      elapsed: "18m",
+    ),
+    BuildRow(
+      id: "sync-engine",
+      project: "Sync Engine",
+      state: "Done",
+      owner: "Vik",
+      elapsed: "42m",
+    ),
+    BuildRow(
+      id: "inspector",
+      project: "Inspector",
+      state: "Running",
+      owner: "Nia",
+      elapsed: "7m",
+    ),
+    BuildRow(
+      id: "preview-cache",
+      project: "Preview Cache",
+      state: "Queued",
+      owner: "Sol",
+      elapsed: "1h",
+    ),
+    BuildRow(
+      id: "layout-tests",
+      project: "Layout Tests",
+      state: "Done",
+      owner: "Ari",
+      elapsed: "24m",
+    ),
+    BuildRow(
+      id: "release-notes",
+      project: "Release Notes",
+      state: "Done",
+      owner: "Paz",
+      elapsed: "3h",
+    ),
   ]
 
 func rowAt(controller: TableDemoController, row: int): BuildRow =
@@ -197,6 +268,19 @@ protocol TableDemoDataSource of TableViewDataSource:
       column: TableColumn,
   ): string =
     controller.rowAt(row).cellText(column)
+
+  method identifierForRow(
+      controller: TableDemoController, tableView: TableView, row: int
+  ): string =
+    controller.rowAt(row).id
+
+  method rowForIdentifier(
+      controller: TableDemoController, tableView: TableView, identifier: string
+  ): int =
+    for index, row in controller.rows:
+      if row.id == identifier:
+        return index
+    -1
 
 protocol TableDemoDelegate of TableViewDelegate:
   method viewForCell(
