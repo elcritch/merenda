@@ -96,6 +96,9 @@ func cellText(row: BuildRow, column: TableColumn): string =
   of "action": "Inspect"
   else: ""
 
+func isUnavailable(row: BuildRow): bool =
+  row.state in ["Blocked", "Paused"]
+
 proc newColumnInfo(note: string): ColumnInfo =
   result = ColumnInfo(note: note)
   initResponder(result)
@@ -136,10 +139,7 @@ proc onInspect(controller: TableDemoController, row: int) =
   let index = row
   if index in 0 ..< controller.rows.len:
     let build = controller.rows[index]
-    let ownerColumn = controller.table.columnWithIdentifier("owner")
     controller.activity.text = "Inspecting: " & build.project & " (" & build.owner & ")"
-    if not ownerColumn.isNil and controller.table.beginEditingCell(row, ownerColumn):
-      controller.activity.text = controller.activity.text & "\nEditing owner cell"
 
 proc sortRows(
     controller: TableDemoController, column: TableColumn, direction: TableSortDirection
@@ -184,7 +184,7 @@ proc makeActionButton(controller: TableDemoController, row: int): Button =
       controller.onInspect(row),
   )
   result.action = action
-  result.enabled = controller.rowAt(row).state != "Paused"
+  result.enabled = not controller.rowAt(row).isUnavailable()
 
 protocol TableDemoDataSource of TableViewDataSource:
   method numberOfRows(controller: TableDemoController, tableView: TableView): int =
@@ -219,12 +219,12 @@ protocol TableDemoDelegate of TableViewDelegate:
   method isRowEnabled(
       controller: TableDemoController, tableView: TableView, row: int
   ): bool =
-    controller.rowAt(row).state != "Paused"
+    not controller.rowAt(row).isUnavailable()
 
   method shouldSelectTableRow(
       controller: TableDemoController, tableView: TableView, row: int
   ): bool =
-    controller.rowAt(row).state != "Blocked"
+    not controller.rowAt(row).isUnavailable()
 
   method sortDescriptorsDidChange(
       controller: TableDemoController,
@@ -242,7 +242,7 @@ protocol TableDemoDelegate of TableViewDelegate:
       column: TableColumn,
   ): bool =
     column.identifier in ["project", "state", "owner", "elapsed"] and
-      controller.rowAt(row).state != "Blocked"
+      not controller.rowAt(row).isUnavailable()
 
   method didBeginEditingCell(
       controller: TableDemoController,
@@ -426,6 +426,23 @@ table.moveColumn(table.columnIndex("owner"), table.columnIndex("project"))
 table.restoreState(controller.stateStore)
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 table.connect(cellEditDidCommit, controller, tableCellEditDidCommit)
+
+var tableAppearance = initAppearance()
+let
+  stateCellStyle = initStyleSelector(srTextField, classes = @["table-state-cell"])
+  disabledStateCellStyle =
+    initStyleSelector(srTextField, {ssDisabled}, classes = @["table-state-cell"])
+tableAppearance[stateCellStyle, StyleFill] = fill(initColor(0.94, 0.97, 1.0, 1.0))
+tableAppearance[stateCellStyle, StyleBorderColor] = initColor(0.68, 0.76, 0.86, 1.0)
+tableAppearance[stateCellStyle, StyleTextColor] = initColor(0.11, 0.23, 0.36, 1.0)
+tableAppearance[disabledStateCellStyle, StyleFill] =
+  fill(initColor(0.73, 0.75, 0.79, 1.0))
+tableAppearance[disabledStateCellStyle, StyleBorderColor] =
+  initColor(0.55, 0.58, 0.64, 1.0)
+tableAppearance[disabledStateCellStyle, StyleTextColor] =
+  initColor(0.28, 0.31, 0.37, 1.0)
+tableAppearance[disabledStateCellStyle, StyleBoxShadows] = newSeq[BoxShadow]()
+table.appearance = tableAppearance
 
 root.addSubviews(autoNames(title, table, detailTitle, detail, activityTitle, activity))
 
