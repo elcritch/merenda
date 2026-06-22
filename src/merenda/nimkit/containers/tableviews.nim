@@ -7,6 +7,7 @@ import ../drawing/drawing
 import ../foundation/events
 import ../app/dragging
 import ../app/pasteboards
+import ../app/userdefaults
 import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
@@ -55,6 +56,12 @@ type
     tsdNone
     tsdAscending
     tsdDescending
+
+  TableViewStateScope* = enum
+    tvssAutomatic
+    tvssApplication
+    tvssDocument
+    tvssWorkspace
 
   TableHeaderHitPart* = enum
     thpNone
@@ -149,6 +156,12 @@ type
     xAllowsColumnSelection: bool
     xEditing: TableEditingState
     xAutosaveName: string
+    xStateStorage: DynamicAgent
+    xStateScope: TableViewStateScope
+    xWorkspaceIdentifier: string
+    xHasRestoredState: bool
+    xObservedStateWindow: Window
+    xColumnAutosaveAliases: Table[string, string]
     xTableDraggingSession: DraggingSession
     xTableDropTarget: DraggingDropTarget
     xEditingHostView: View
@@ -193,6 +206,8 @@ const
   tsmSingle* = TableSelectionMode.lsmSingle
   tsmMultiple* = TableSelectionMode.lsmMultiple
   tsmExtended* = TableSelectionMode.lsmExtended
+
+const TableViewStateDefaultsPrefix = "nimkit.table.state."
 
 proc noteColumnsChanged(tableView: TableView)
 proc detachColumn(column: TableColumn)
@@ -301,6 +316,11 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool
 proc finishCancelEditingCell(tableView: TableView): bool
 proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool
 proc drawTableRow(tableView: TableView, context: DrawContext, rect: Rect, row: RowState)
+proc resolveTableViewStateStorage(tableView: TableView): DynamicAgent
+proc restoreStateIfNeeded(tableView: TableView)
+proc observeTableStateWindow(tableView: TableView, window: Window)
+proc unobserveTableStateWindow(tableView: TableView)
+proc resolveColumnAutosaveIdentifier(tableView: TableView, identifier: string): string
 
 proc drawTableDropTarget(
   tableView: TableView, context: DrawContext, rect: Rect, row: RowState
@@ -1956,7 +1976,63 @@ proc autosaveName*(tableView: TableView): string =
   tableView.xAutosaveName
 
 proc `autosaveName=`*(tableView: TableView, name: string) =
+  if tableView.isNil or tableView.xAutosaveName == name:
+    return
   tableView.xAutosaveName = name
+  tableView.xHasRestoredState = false
+
+proc stateStorage*(tableView: TableView): DynamicAgent =
+  if tableView.isNil: nil else: tableView.xStateStorage
+
+proc `stateStorage=`*(tableView: TableView, storage: DynamicAgent) =
+  if tableView.isNil or tableView.xStateStorage == storage:
+    return
+  tableView.xStateStorage = storage
+  tableView.xHasRestoredState = false
+
+proc `stateStorage=`*(tableView: TableView, storage: Responder) =
+  tableView.stateStorage = DynamicAgent(storage)
+
+proc stateScope*(tableView: TableView): TableViewStateScope =
+  if tableView.isNil: tvssAutomatic else: tableView.xStateScope
+
+proc `stateScope=`*(tableView: TableView, scope: TableViewStateScope) =
+  if tableView.isNil or tableView.xStateScope == scope:
+    return
+  tableView.xStateScope = scope
+  tableView.xHasRestoredState = false
+
+proc workspaceIdentifier*(tableView: TableView): string =
+  if tableView.isNil: "" else: tableView.xWorkspaceIdentifier
+
+proc `workspaceIdentifier=`*(tableView: TableView, identifier: string) =
+  if tableView.isNil or tableView.xWorkspaceIdentifier == identifier:
+    return
+  tableView.xWorkspaceIdentifier = identifier
+  tableView.xHasRestoredState = false
+
+proc registerColumnAutosaveAlias*(
+    tableView: TableView, oldIdentifier, newIdentifier: string
+) =
+  if tableView.isNil or oldIdentifier.len == 0 or newIdentifier.len == 0:
+    return
+  tableView.xColumnAutosaveAliases[oldIdentifier] = newIdentifier
+  tableView.xHasRestoredState = false
+
+proc clearColumnAutosaveAliases*(tableView: TableView) =
+  if tableView.isNil:
+    return
+  tableView.xColumnAutosaveAliases.clear()
+  tableView.xHasRestoredState = false
+
+proc resolveColumnAutosaveIdentifier(tableView: TableView, identifier: string): string =
+  if tableView.isNil:
+    return identifier
+  result = identifier
+  var seen: seq[string]
+  while result in tableView.xColumnAutosaveAliases and result notin seen:
+    seen.add result
+    result = tableView.xColumnAutosaveAliases[result]
 
 proc draggingSession*(tableView: TableView): DraggingSession =
   tableView.xTableDraggingSession
@@ -2551,6 +2627,114 @@ proc initTableViewState*(
     expandedItems: @expandedItems,
   )
 
+proc newTableViewStateStore*(): TableViewStateStore
+
+proc tableViewStateScopeKey(kind, identifier: string): string =
+  if identifier.len == 0:
+    kind
+  elif identifier.startsWith(kind & ":"):
+    identifier
+  else:
+    kind & ":" & identifier
+
+proc tableViewStateStoreForDefaults*(
+    defaults: UserDefaults, identifier: string
+): TableViewStateStore =
+  let resolvedDefaults =
+    if defaults.isNil:
+      sharedUserDefaults()
+    else:
+      defaults
+  let key =
+    if identifier.len == 0:
+      TableViewStateDefaultsPrefix & "application"
+    else:
+      TableViewStateDefaultsPrefix & identifier
+  let existing = resolvedDefaults.objectForKey(key)
+  if existing.isSome and existing.get() of TableViewStateStore:
+    return TableViewStateStore(existing.get())
+  result = newTableViewStateStore()
+  resolvedDefaults.setObjectForKey(key, DynamicAgent(result))
+
+proc userDefaultsTableViewStateStore*(): TableViewStateStore =
+  tableViewStateStoreForDefaults(sharedUserDefaults(), "")
+
+proc workspaceTableViewStateStore*(identifier: string): TableViewStateStore =
+  if identifier.len == 0:
+    return userDefaultsTableViewStateStore()
+  tableViewStateStoreForDefaults(
+    sharedUserDefaults(), tableViewStateScopeKey("workspace", identifier)
+  )
+
+proc documentTableViewStateStore*(identifier: string): TableViewStateStore =
+  if identifier.len == 0:
+    return userDefaultsTableViewStateStore()
+  tableViewStateStoreForDefaults(
+    sharedUserDefaults(), tableViewStateScopeKey("document", identifier)
+  )
+
+proc stateProviderForTableView(tableView: TableView): Responder =
+  var responder: Responder =
+    if tableView.isNil:
+      nil
+    else:
+      Responder(tableView)
+  while not responder.isNil:
+    if responder.trySendLocal(defaultsStore(), ()).isSome or
+        responder.trySendLocal(defaultsScopeId(), ()).isSome:
+      return responder
+    responder = responder.nextResponder()
+
+proc stateStorageFromProvider(provider: Responder): DynamicAgent =
+  if provider.isNil:
+    return nil
+  let
+    storage = provider.trySendLocal(defaultsStore(), ())
+    identifier = provider.trySendLocal(defaultsScopeId(), ())
+    scopeId =
+      if identifier.isSome:
+        identifier.get()
+      else:
+        ""
+  if storage.isSome:
+    let store = storage.get()
+    if store of TableViewStateStore:
+      return store
+    if store of UserDefaults:
+      return DynamicAgent(
+        tableViewStateStoreForDefaults(
+          UserDefaults(store), tableViewStateScopeKey("document", scopeId)
+        )
+      )
+  if scopeId.len > 0:
+    return DynamicAgent(documentTableViewStateStore(scopeId))
+
+proc resolveTableViewStateStorage(tableView: TableView): DynamicAgent =
+  if tableView.isNil:
+    return nil
+  if not tableView.xStateStorage.isNil:
+    return tableView.xStateStorage
+  case tableView.xStateScope
+  of tvssApplication:
+    DynamicAgent(userDefaultsTableViewStateStore())
+  of tvssWorkspace:
+    DynamicAgent(workspaceTableViewStateStore(tableView.xWorkspaceIdentifier))
+  of tvssDocument:
+    let storage = stateStorageFromProvider(tableView.stateProviderForTableView())
+    if storage.isNil:
+      DynamicAgent(userDefaultsTableViewStateStore())
+    else:
+      storage
+  of tvssAutomatic:
+    if tableView.xWorkspaceIdentifier.len > 0:
+      DynamicAgent(workspaceTableViewStateStore(tableView.xWorkspaceIdentifier))
+    else:
+      let storage = stateStorageFromProvider(tableView.stateProviderForTableView())
+      if storage.isNil:
+        DynamicAgent(userDefaultsTableViewStateStore())
+      else:
+        storage
+
 proc saveState*(tableView: TableView, storage: DynamicAgent) =
   if tableView.isNil or storage.isNil or tableView.autosaveName().len == 0:
     return
@@ -2569,6 +2753,18 @@ proc restoreState*(tableView: TableView, storage: DynamicAgent) =
   let state = storage.trySendLocal(loadTableViewState(), name)
   if state.isSome:
     tableView.restoreState(state.get())
+
+proc saveAutosavedState*(tableView: TableView) =
+  tableView.saveState(tableView.resolveTableViewStateStorage())
+
+proc restoreAutosavedState*(tableView: TableView) =
+  tableView.restoreState(tableView.resolveTableViewStateStorage())
+
+proc restoreStateIfNeeded(tableView: TableView) =
+  if tableView.isNil or tableView.xHasRestoredState:
+    return
+  tableView.restoreAutosavedState()
+  tableView.xHasRestoredState = true
 
 protocol TableViewStateStoreBehavior of TableViewStateStorageProtocol:
   method saveTableViewState(
@@ -2590,6 +2786,14 @@ proc newTableViewStateStore*(): TableViewStateStore =
   result = TableViewStateStore()
   result.xStates = initTable[string, TableViewState]()
   discard result.withProtocol(TableViewStateStoreBehavior)
+
+proc hasState*(store: TableViewStateStore, name: string): bool =
+  not store.isNil and name in store.xStates
+
+proc state*(store: TableViewStateStore, name: string): TableViewState =
+  if store.isNil:
+    return initTableViewState()
+  store.xStates.getOrDefault(name, initTableViewState())
 
 proc tableContentItemRect*(contentView: TableContentView, itemIndex: int): Rect =
   let tableView = contentView.tableView()
@@ -3693,14 +3897,20 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
     if tableView.isNil:
       return
     var ordered: seq[TableColumn]
+    var restored: seq[TableColumn]
     for record in records:
-      let column = tableView.columnWithIdentifier(record.identifier)
+      let resolvedIdentifier =
+        tableView.resolveColumnAutosaveIdentifier(record.identifier)
+      let column = tableView.columnWithIdentifier(resolvedIdentifier)
       if column.isNil:
+        continue
+      if column in restored:
         continue
       column.xWidth = record.width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
       column.xHidden = record.hidden
       column.xSortDirection = record.sortDirection
       ordered.add column
+      restored.add column
     for column in tableView.xColumns:
       var seen = false
       for existing in ordered:
@@ -3729,10 +3939,59 @@ protocol DefaultTableViewStateBehavior of TableViewStateProtocol:
     if tableView.allowsColumnSelection():
       var columns: seq[TableColumn]
       for identifier in state.selectedColumns:
-        let column = tableView.columnWithIdentifier(identifier)
+        let column = tableView.columnWithIdentifier(
+          tableView.resolveColumnAutosaveIdentifier(identifier)
+        )
         if not column.isNil:
           columns.add column
       tableView.selectedColumns = columns
+
+protocol TableViewStateWindowLifecycleSlots of WindowLifecycleEvents:
+  proc willClose(tableView: TableView) {.slot.} =
+    tableView.saveAutosavedState()
+
+proc unobserveTableStateWindow(tableView: TableView) =
+  if tableView.isNil or tableView.xObservedStateWindow.isNil:
+    return
+  tableView.unobserveProtocol(
+    tableView.xObservedStateWindow, TableViewStateWindowLifecycleSlots
+  )
+  tableView.xObservedStateWindow = nil
+
+proc observeTableStateWindow(tableView: TableView, window: Window) =
+  if tableView.isNil or tableView.xObservedStateWindow == window:
+    return
+  tableView.unobserveTableStateWindow()
+  if window.isNil:
+    return
+  tableView.observeProtocol(window, TableViewStateWindowLifecycleSlots)
+  tableView.xObservedStateWindow = window
+
+protocol TableViewStateViewLifecycleSlots of ViewLifecycleProtocol:
+  proc saveTableStateBeforeWindowChange(
+      tableView: TableView, window: Responder
+  ) {.slotFor: viewWillMoveToWindow.} =
+    let currentWindow =
+      if tableView.window() of Window:
+        Window(tableView.window())
+      else:
+        nil
+    if not currentWindow.isNil and DynamicAgent(currentWindow) != DynamicAgent(window):
+      tableView.saveAutosavedState()
+      tableView.unobserveTableStateWindow()
+      tableView.xHasRestoredState = false
+
+  proc restoreTableStateAfterWindowChange(
+      tableView: TableView
+  ) {.slotFor: viewDidMoveToWindow.} =
+    let currentWindow =
+      if tableView.window() of Window:
+        Window(tableView.window())
+      else:
+        nil
+    tableView.observeTableStateWindow(currentWindow)
+    if not currentWindow.isNil:
+      tableView.restoreStateIfNeeded()
 
 protocol DefaultTableViewDrawing of ViewDrawingProtocol:
   method draw(tableView: TableView, context: DrawContext) =
@@ -3806,6 +4065,8 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xEditing = TableEditingState(row: -1)
   tableView.xEndedEditingRow = -1
   tableView.xTableDropTarget = initDraggingDropTarget()
+  tableView.xStateScope = tvssAutomatic
+  tableView.xColumnAutosaveAliases = initTable[string, string]()
   tableView.xTrackingColumnIndex = -1
   tableView.xHeaderDragInsertionIndex = -1
   tableView.xReusableCellViews = initTable[string, seq[View]]()
@@ -3829,6 +4090,8 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   discard tableView.withProtocol(DefaultTableViewDraggingDestination)
   discard tableView.withProtocol(DefaultTableViewPersistenceBehavior)
   discard tableView.withProtocol(DefaultTableViewStateBehavior)
+  discard tableView.withProtocol(TableViewStateViewLifecycleSlots)
+  tableView.observeProtocol(tableView, TableViewStateViewLifecycleSlots)
   discard tableView.withProtocol(DefaultTableViewDrawing)
   discard tableView.withProtocol(DefaultTableViewAccessibility)
   tableView.applyInitialFrame(frame)
