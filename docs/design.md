@@ -78,7 +78,7 @@ The theme system is the single source of drawing and measurement metrics:
 - `Appearance` provides inherited theme resolution.
 - `StyleContext` carries role, state, id, and classes.
 - Concrete style values such as `ButtonStyle`, `ChoiceButtonStyle`,
-  `TextFieldStyle`, `ComboBoxStyle`, `TableViewStyle`, and `ListItemStyle` are
+  `TextFieldStyle`, `ComboBoxStyle`, `TableViewStyle`, and `RowItemStyle` are
   what rendering and measurement consume.
 
 The default theme uses an Aqua-like control language with gradients, shadows,
@@ -215,7 +215,7 @@ Popup and list behavior shares a narrow base:
 - Clip-view scroll position is represented by bounds origin. Core frame and
   layout-frame updates preserve existing bounds origins while updating bounds
   sizes, so scroll offsets survive normal layout passes.
-- `ListViewport` stores visible-row window state and common row geometry.
+- `RowViewport` stores visible-row window state and common row geometry.
 - `PopupListView` handles transient single-column popup drawing, row tracking,
   scrolling, highlighting, activation, and close callbacks.
 - `Window` owns a transient popup/session layer with owner responder,
@@ -226,21 +226,21 @@ Popup and list behavior shares a narrow base:
   policy, none/single/multiple/extended selection, Shift range extension,
   command/control discontiguous toggles, keyboard and mouse navigation, wheel
   scrolling, intrinsic sizing, target/action activation, dedicated
-  `srTableView` and `srListItem` theme roles, and shared `ListRowState` row
+  `srTableView` and `srRowItem` theme roles, and shared `RowState` row
   rendering.
 - `TableContentView` is the internal row document for `TableView`. It stays
   non-focusable and manually tiled by the table, keeping selection and keyboard
   behavior on `TableView` while providing a concrete scroll-hosted content-view
   boundary.
 - `TableView` virtualizes rows as private reusable row views under
-  `TableContentView`. Row views hold plain `ListRowState` values, draw through
+  `TableContentView`. Row views hold plain `RowState` values, draw through
   the shared row renderer, do not participate in hit testing or focus, and are
   retargeted from the clip-view visible rect as scrolling or resizing changes
   the visible window.
-- `drawRow` receives row-local drawing bounds plus `ListRowState`. Callers that
-  want stock styling with small additions can call `drawTableListRow(tableView,
+- `drawRow` receives row-local drawing bounds plus `RowState`. Callers that
+  want stock styling with small additions can call `drawTableRowItem(tableView,
   context, rect, row)` from inside the delegate hook.
-- `rowIsEnabled` feeds `ListRowState.enabled`, while `shouldSelectRow`
+- `rowIsEnabled` feeds `RowState.enabled`, while `shouldSelectRow`
   controls whether mouse, keyboard, and programmatic selection can include a
   row. Disabled rows are also treated as nonselectable.
 

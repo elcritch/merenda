@@ -89,7 +89,7 @@ proc hostedTableCellCount(tableView: TableView): int =
     result += rowView.subviews().len
 
 proc tableActionPoint(tableView: TableView, row: int): Point =
-  let rowRect = tableView.listItemRect(row)
+  let rowRect = tableView.rowItemRect(row)
   if rowRect.isEmpty:
     return initPoint(0.0, 0.0)
   let actionColumn = tableView.columnAt(1)
@@ -110,7 +110,7 @@ proc tableActionPoint(tableView: TableView, row: int): Point =
   )
 
 proc tableCellPoint(tableView: TableView, row: int, column: TableColumn): Point =
-  let rowRect = tableView.listItemRect(row)
+  let rowRect = tableView.rowItemRect(row)
   if rowRect.isEmpty or column.isNil:
     return tableView.pointToWindow(initPoint(0.0, 0.0))
   let columnRect = tableView.tableColumnRect(column)

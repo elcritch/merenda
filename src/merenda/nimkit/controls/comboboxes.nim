@@ -22,7 +22,7 @@ type
     xPopupHighlightedIndex: int
     xPopupWindow: Window
     xPopupPresentation: PopupPresentation
-    xPopupViewport: ListViewport
+    xPopupViewport: RowViewport
     xPopupList: PopupListView
 
   ComboBoxCell* = ref object of ActionCell
@@ -784,7 +784,7 @@ proc isButtonPressed*(comboBox: ComboBox): bool =
   not comboBox.isNil and ssPressed in comboBox.widgetStateSet()
 
 proc visibleItemCount*(comboBox: ComboBox): int =
-  visibleListItemCount(comboBox.numberOfItems(), comboBox.maxVisibleItems())
+  visibleRowItemCount(comboBox.numberOfItems(), comboBox.maxVisibleItems())
 
 proc popupItemHeight*(comboBox: ComboBox): float32 =
   max(comboBox.itemHeight(), 18.0'f32).normalizedRowHeight()
@@ -816,7 +816,7 @@ proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool =
   )
 
 proc popupRect*(comboBox: ComboBox, bounds: Rect): Rect =
-  listPopupRect(
+  rowPopupRect(
     bounds,
     comboBox.numberOfItems(),
     comboBox.maxVisibleItems(),
@@ -828,13 +828,13 @@ proc popupItemRect*(comboBox: ComboBox, bounds: Rect, itemIndex: int): Rect =
     first = comboBox.popupFirstItemIndex()
     visible = comboBox.visibleItemCount()
     popup = comboBox.popupRect(bounds)
-  listItemRect(popup, first, visible, itemIndex, comboBox.popupItemHeight())
+  rowItemRect(popup, first, visible, itemIndex, comboBox.popupItemHeight())
 
 proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int =
   let
     popup = comboBox.popupRect(bounds)
     first = comboBox.popupFirstItemIndex()
-  listItemIndexAtPoint(
+  rowItemIndexAtPoint(
     popup,
     point,
     first,
@@ -844,7 +844,7 @@ proc popupItemIndexAtPoint*(comboBox: ComboBox, bounds: Rect, point: Point): int
   )
 
 proc popupScrollerKnobRect*(comboBox: ComboBox, bounds: Rect): Rect =
-  listScrollerKnobRect(
+  rowScrollerKnobRect(
     comboBox.popupRect(bounds),
     comboBox.popupFirstItemIndex(),
     comboBox.visibleItemCount(),

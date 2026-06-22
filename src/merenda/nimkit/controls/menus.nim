@@ -44,7 +44,7 @@ type
     xPopupWindow: Window
     xPopupOpen: bool
     xHighlightedIndex: int
-    xViewport: ListViewport
+    xViewport: RowViewport
     xMaxVisibleItems: int
     xItemHeight: float32
     xPopupPresentation: PopupPresentation
@@ -605,7 +605,7 @@ proc menuItemCount(button: PopupMenuButton): int =
   button.xMenu.len
 
 proc visibleItemCount(button: PopupMenuButton): int =
-  visibleListItemCount(button.menuItemCount(), button.xMaxVisibleItems)
+  visibleRowItemCount(button.menuItemCount(), button.xMaxVisibleItems)
 
 proc popupFirstItemIndex(button: PopupMenuButton): int =
   button.xViewport.firstIndex.clampFirstIndex(

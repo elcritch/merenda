@@ -351,7 +351,7 @@ suite "nimkit comboboxes":
     check knob.origin.x > popup.origin.x
     check knob.maxX <= popup.maxX
     check knob.origin.y > popup.origin.y
-    check listScrollerKnobRect(popup, 0, 3, 3).isEmpty
+    check rowScrollerKnobRect(popup, 0, 3, 3).isEmpty
 
     check window.dispatchKeyDown(KeyEvent(key: keyPageDown, keyCode: keyPageDown.ord))
     check combo.highlightedIndex == 6

@@ -237,7 +237,7 @@ suite "nimkit pasteboards and dragging":
     tableView.delegate = tableDelegate
 
     let
-      tableRowRect = tableView.listItemRect(0)
+      tableRowRect = tableView.rowItemRect(0)
       tableTarget = tableView.dropTargetForDraggingLocation(
         initPoint(tableRowRect.origin.x + 8.0'f32, tableRowRect.origin.y + 4.0'f32)
       )
@@ -252,7 +252,7 @@ suite "nimkit pasteboards and dragging":
     outlineView.outlineItems = [initOutlineItem("root", "Root")]
     outlineView.outlineDelegate = outlineDelegate
     let
-      outlineRowRect = TableView(outlineView).listItemRect(0)
+      outlineRowRect = TableView(outlineView).rowItemRect(0)
       outlineTarget = outlineView.dropTargetForDraggingLocation(
         initPoint(outlineRowRect.origin.x + 8.0'f32, outlineRowRect.origin.y + 4.0'f32)
       )
