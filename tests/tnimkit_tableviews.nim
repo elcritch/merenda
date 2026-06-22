@@ -90,6 +90,27 @@ proc renderedTexts(view: View): seq[string] =
     if node.kind == nkText:
       result.add node.renderedText()
 
+proc renderedRectangleCount(view: View): int =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return 0
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkRectangle:
+      inc result
+
+proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
+  let
+    renders = buildRenders(view)
+    chrome = defaultTableHeaderChrome()
+  if DefaultDrawLevel notin renders:
+    return 0
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == chrome.sortIndicatorColor.rgba and
+        node.screenBox.y >= minimumY and node.screenBox.w >= 6.0 and
+        node.screenBox.h >= 1.5 and abs(node.rotation) >= 10.0:
+      inc result
+
 proc hostedTableCellCount(tableView: TableView): int =
   let content = tableView.contentView()
   if content.isNil:
@@ -607,7 +628,7 @@ suite "NimKit TableView":
 
   test "table header rendering mouse tracking and persistence adapters":
     let
-      tableView = newTableView(frame = initRect(0, 0, 300, 160))
+      tableView = newTableView(frame = initRect(12, 24, 300, 160))
       name = newTableColumn("name", "Name", width = 120.0)
       age = newTableColumn("age", "Age", width = 60.0)
       store = newTableViewStateStore()
@@ -615,6 +636,11 @@ suite "NimKit TableView":
     tableView.addColumn(name)
     tableView.addColumn(age)
     tableView.autosaveName = "people"
+
+    check tableView.trackingAreas.len == 1
+    check tableView.trackingAreas[0].rect == tableView.tableHeaderRect()
+    check tableView.cursorRects.len == 2
+    check tableView.cursorRects[0].cursor == "resizeLeftRight"
 
     var texts = tableView.renderedTexts()
     check texts.contains("Name")
@@ -630,6 +656,21 @@ suite "NimKit TableView":
       MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
     )
     check name.sortDirection == tsdAscending
+    texts = tableView.renderedTexts()
+    check texts.contains("Name")
+    check not texts.contains("Name ^")
+    check not texts.contains("Name v")
+    check tableView.renderedRectangleCount() >= 6
+    check tableView.renderedVisibleSortIndicatorCount(tableView.frame.origin.y) >= 2
+
+    check tableView.headerMouseDown(
+      MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
+    )
+    check tableView.headerMouseUp(
+      MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
+    )
+    check name.sortDirection == tsdDescending
+    check tableView.renderedVisibleSortIndicatorCount(tableView.frame.origin.y) >= 2
 
     check tableView.headerMouseDown(
       MouseEvent(location: initPoint(118.0, 10.0), button: mbPrimary)
@@ -646,6 +687,36 @@ suite "NimKit TableView":
     name.width = 80.0
     tableView.restoreState(store)
     check name.width > 120.0'f32
+
+  test "table header column dragging previews insertion and drops at edge":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 230, 140))
+      project = newTableColumn("project", "Project", width = 90.0)
+      state = newTableColumn("state", "State", width = 70.0)
+      owner = newTableColumn("owner", "Owner", width = 70.0)
+
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+
+    check tableView.headerMouseDown(
+      MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
+    )
+    check tableView.headerMouseDragged(
+      MouseEvent(location: initPoint(226.0, 10.0), button: mbPrimary)
+    )
+    let indicator = tableView.headerDragIndicator()
+    check indicator.visible
+    check indicator.index == 3
+    check indicator.rect.origin.x >= tableView.tableHeaderRect().maxX - 2.0'f32
+
+    check tableView.headerMouseUp(
+      MouseEvent(location: initPoint(226.0, 10.0), button: mbPrimary)
+    )
+    check tableView.columnAt(0) == state
+    check tableView.columnAt(1) == owner
+    check tableView.columnAt(2) == project
+    check not tableView.headerDragIndicator().visible
 
   test "table view keeps clicked selection on row identities after header sort":
     let
