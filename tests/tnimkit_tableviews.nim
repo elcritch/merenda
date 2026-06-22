@@ -826,6 +826,8 @@ suite "NimKit TableView":
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
     check tableView.selectedIndex == 1
+    check delegate.buttonActionRows == @[1]
+    check delegate.beganEdits.len == 0
 
     tableView.selectedIndex = -1
     delegate.hasPolicy = false

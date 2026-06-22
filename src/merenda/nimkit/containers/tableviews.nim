@@ -1856,6 +1856,7 @@ proc syncVisibleTableCells(tableView: TableView) =
           rowView.addSubview(cellView)
         cellView.frame = tableView.columnRect(rowBounds, column)
         cellView.hidden = false
+        cellView.setWidgetState(ssDisabled, not tableView.rowEnabled(row))
         tableView.applyCellAccessibility(row, column, cellView)
         nextSlots.add TableCellSlot(row: row, column: column, view: cellView)
   for index, slot in previousSlots:
@@ -2330,7 +2331,8 @@ proc drawTableRowItem*(
   var style = initRowStyle()
   let interactiveFillStates =
     row.states * {ssSelected, ssHovered, ssHighlighted, ssPressed}
-  if ssAlternating in row.states and interactiveFillStates == {} and style.fill.isNone:
+  if ssDisabled notin row.states and ssAlternating in row.states and
+      interactiveFillStates == {} and style.fill.isNone:
     style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
   context.drawRowItem(
     rect, row, style, tableView.xItemRole, tableView.styleId(), tableView.styleClasses()

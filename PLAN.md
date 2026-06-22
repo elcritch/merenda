@@ -203,6 +203,14 @@ application, responder, view, window, accessibility, or control/cell layers.
   `listbasics.nim` remain as lightweight popup/shared row-rendering helpers.
   The theme surface was renamed from `srListView`/`ListViewStyle`/
   `listView.*` tokens to `srTableView`/`TableViewStyle`/`tableView.*` tokens.
+- Finished the list-to-row vocabulary cleanup for the shared row primitives:
+  `ListViewport` became `RowViewport`, `ListRowState` became `RowState`,
+  `ListRowStyle` became `RowStyle`, and list-item drawing/theme names now use
+  `RowItem*`, `srRowItem`, and `drawRowItem`.
+- Polished the table demo and hosted-cell interaction path: unavailable rows
+  now use explicit row-item disabled colors, hosted table cell views inherit the
+  row disabled visual state, and the `Inspect` action column no longer starts
+  editing before firing the button action.
 
 ## Current Verification
 
@@ -210,6 +218,9 @@ application, responder, view, window, accessibility, or control/cell layers.
   layout.
 - After removing standalone `ListView`, `atlas-run tests` passed `32/32` and
   `nim examples` compiled successfully.
+- The latest table row/action polish was checked with `atlas-run tests
+  tnimkit_tableviews tnimkit_rendering tnimkit_theme`; examples were compile
+  checked with `atlas-run tests --compile-only 'examples/*.nim'`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -234,30 +245,45 @@ update widgets, responder state, and rendering.
    - basic line/character geometry only after text layout exposes stable offset
      and line metrics
 
-### TableView And OutlineView
+### TableView
 
-Continue growing the protocol-backed table and outline APIs into production
-AppKit-style widgets.
+Continue growing the protocol-backed table API into a production AppKit-style
+widget.
 
 1. Finish native-feeling header interaction:
    - add resize cursors/tracking areas, richer sort indicator rendering,
      visible column drag insertion affordances, and autoscroll while reordering
      columns
 2. Finish drag/drop integration:
-   - add distinct before/after/on insertion targets for table rows, columns,
-     and outline items on top of the current item/cell drop target model
+   - add distinct before/after/on insertion targets for table rows and columns
+     on top of the current item/cell drop target model
    - add column-header drag insertion affordances and autoscroll while
      reordering columns
-   - deepen table/outline delegate validation hooks for proposed operation,
+   - deepen table delegate validation hooks for proposed operation,
      target, and insertion position before accepting a drop
 3. Finish persistence integration:
    - back the table state storage protocol with application/user-defaults,
      document/workspace-specific state stores, migration behavior for renamed
-     columns/items, and restore timing tied to window/document lifecycle
-4. Harden outline behavior on top of the new rendering path:
+     columns, and restore timing tied to window/document lifecycle
+
+### OutlineView
+
+Continue growing the protocol-backed outline API into a production AppKit-style
+widget.
+
+1. Harden outline behavior on top of the new rendering path:
    - add richer outline keyboard navigation, selection persistence by stable
-     item identity, before/after/on item insertion semantics, and optional
-     delegate hooks for disclosure rendering/indent metrics
+     item identity, and optional delegate hooks for disclosure rendering/indent
+     metrics
+2. Finish outline drag/drop integration:
+   - add distinct before/after/on insertion targets for outline items on top of
+     the current item/cell drop target model
+   - deepen outline delegate validation hooks for proposed operation, target,
+     and insertion position before accepting a drop
+3. Finish outline persistence integration:
+   - back expansion and selection state with application/user-defaults,
+     document/workspace-specific state stores, migration behavior for renamed
+     items, and restore timing tied to window/document lifecycle
 
 
 ## Medium-Term Architecture

@@ -255,8 +255,10 @@ const
   RowItemHighlightedFillToken* = "rowItem.fill.highlighted"
   RowItemSelectedFillToken* = "rowItem.fill.selected"
   RowItemSelectedHighlightedFillToken* = "rowItem.fill.selected.highlighted"
+  RowItemDisabledFillToken* = "rowItem.fill.disabled"
   RowItemTextColorToken* = "rowItem.text.color"
   RowItemSelectedTextColorToken* = "rowItem.text.color.selected"
+  RowItemDisabledTextColorToken* = "rowItem.text.color.disabled"
   RowItemSeparatorColorToken* = "rowItem.separator.color"
 
   TabPanelFillToken* = "tab.panel.fill"
@@ -1866,8 +1868,10 @@ proc initTheme*(): Theme =
   result[RowItemSelectedFillToken] = styleToken(ComboBoxItemSelectedFillToken)
   result[RowItemSelectedHighlightedFillToken] =
     styleToken(ComboBoxItemSelectedHighlightedFillToken)
+  result[RowItemDisabledFillToken] = styleColor(initColor(0.80, 0.82, 0.86, 1.0))
   result[RowItemTextColorToken] = styleToken(ComboBoxItemTextColorToken)
   result[RowItemSelectedTextColorToken] = styleToken(ComboBoxItemSelectedTextColorToken)
+  result[RowItemDisabledTextColorToken] = styleColor(initColor(0.32, 0.35, 0.41, 1.0))
   result[RowItemSeparatorColorToken] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
   result[TabPanelFillToken] = fill(initColor(0.98, 0.98, 0.96, 1.0))
   result[TabPanelBorderColorToken] = styleColor(initColor(0.42, 0.44, 0.48, 1.0))
@@ -2232,6 +2236,13 @@ proc initTheme*(): Theme =
     styleToken(RowItemHighlightedFillToken),
     styleToken(RowItemSeparatorColorToken),
     styleToken(RowItemTextColorToken),
+  )
+  result.addRoleRule(
+    srRowItem,
+    {ssDisabled},
+    styleToken(RowItemDisabledFillToken),
+    styleToken(RowItemSeparatorColorToken),
+    styleToken(RowItemDisabledTextColorToken),
   )
   result.addRoleRule(
     srRowItem,
