@@ -731,9 +731,12 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
         style = textField.effectiveAppearance().resolveTextFieldStyle(
             textField.textFieldStyleContext(), textField.textColor()
           )
-      return initIntrinsicSize(
-        style.textFieldControlSize(textNaturalSize(textField.stringValue()))
-      )
+        textSize =
+          if textField.isEditable() or textField.isSelectable():
+            textNaturalSize("")
+          else:
+            textNaturalSize(textField.stringValue())
+      return initIntrinsicSize(style.textFieldControlSize(textSize))
 
     let style =
       initAppearance().resolveTextFieldStyle(initControlStyleContext(srTextField))

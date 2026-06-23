@@ -830,6 +830,12 @@ proc columnRect(tableView: TableView, bounds: Rect, column: TableColumn): Rect =
     x += current.width()
   initRect(bounds.origin.x, bounds.origin.y, 0.0, 0.0)
 
+proc visibleColumnWidth(tableView: TableView): float32 =
+  if tableView.isNil:
+    return 0.0'f32
+  for column in tableView.visibleColumns():
+    result += column.width()
+
 proc tableHeaderHeight*(tableView: TableView): float32 =
   if not tableView.xShowsHeader: 0.0'f32 else: tableView.xHeaderHeight
 
@@ -938,7 +944,17 @@ proc tableColumnRect*(tableView: TableView, column: TableColumn): Rect =
   tableView.columnRect(tableView.bounds(), column)
 
 proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
-  tableView.columnRect(tableView.tableHeaderRect(), column)
+  let
+    headerRect = tableView.tableHeaderRect()
+    contentOffset = tableView.listContentOffset()
+    documentWidth = max(tableView.visibleColumnWidth(), headerRect.size.width)
+    documentHeaderRect = initRect(
+      headerRect.origin.x - contentOffset.x,
+      headerRect.origin.y,
+      documentWidth,
+      headerRect.size.height,
+    )
+  tableView.columnRect(documentHeaderRect, column)
 
 proc tableHeaderHitTest*(tableView: TableView, point: Point): TableHeaderHit =
   tableView.headerHitTest(point)
@@ -1372,14 +1388,20 @@ proc tileTableContent(tableView: TableView) =
     )
   tableView.xScrollView.frame = scrollFrame
   let
-    verticalVisible = tableView.contentHeight() > scrollFrame.size.height
-    documentWidth = max(
+    contentHeight = tableView.contentHeight()
+    columnWidth = tableView.visibleColumnWidth()
+    horizontalVisible = columnWidth > scrollFrame.size.width
+    verticalHeight =
+      scrollFrame.size.height -
+      (if horizontalVisible: tableView.xScrollView.scrollerThickness()
+      else: 0.0'f32)
+    verticalVisible = contentHeight > max(verticalHeight, 0.0'f32)
+    viewportWidth =
       scrollFrame.size.width -
-        (if verticalVisible: tableView.xScrollView.scrollerThickness()
-        else: 0.0'f32),
-      0.0'f32,
-    )
-    size = initSize(documentWidth, tableView.contentHeight())
+      (if verticalVisible: tableView.xScrollView.scrollerThickness()
+      else: 0.0'f32)
+    documentWidth = max(columnWidth, max(viewportWidth, 0.0'f32))
+    size = initSize(documentWidth, contentHeight)
   tableView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
   tableView.xScrollView.tile()
   tableView.setTableContentOffset(offset, false)
@@ -3039,7 +3061,8 @@ proc naturalSize(tableView: TableView): Size =
       listStyle.minSize.width,
       max(
         itemStyle.minSize.width,
-        maxTextWidth + itemStyle.text.insets.horizontal + 2.0'f32,
+        max(tableView.visibleColumnWidth(), maxTextWidth) +
+          itemStyle.text.insets.horizontal + 2.0'f32,
       ),
     ),
     max(
@@ -3223,7 +3246,7 @@ proc initTableScrollView(tableView: TableView): ScrollView =
   initScrollViewFields(result)
   result.background = initColor(0.0, 0.0, 0.0, 0.0)
   result.clipsToBounds = true
-  result.hasHorizontalScroller = false
+  result.hasHorizontalScroller = true
   result.hasVerticalScroller = true
   result.autohidesScrollers = true
   result.scrollerThickness = 12.0'f32
@@ -3395,14 +3418,15 @@ proc drawTableHeaderCellTitle*(
     return
   let indicatorWidth =
     if column.sortDirection() == tsdNone: 0.0'f32 else: chrome.sortIndicatorWidth
+  let titleRect = initRect(
+    rect.origin.x + 8.0'f32,
+    rect.origin.y,
+    max(rect.size.width - 16.0'f32 - indicatorWidth, 0.0'f32),
+    rect.size.height,
+  )
   context.addText(
-    initRect(
-      rect.origin.x + 8.0'f32,
-      rect.origin.y,
-      max(rect.size.width - 16.0'f32 - indicatorWidth, 0.0'f32),
-      rect.size.height,
-    ),
-    column.title(),
+    titleRect,
+    clippedText(column.title(), titleRect.size.width),
     chrome.textColor,
     column.alignment(),
   )
@@ -3480,7 +3504,13 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     if column.resizePolicy() == tcrFixed:
       return
     column.width = width
+    if tableView.xEditing.active and tableView.xEditing.column == column:
+      tableView.clearEditingSurface()
+      let editor = Control(tableView).currentEditor()
+      if not editor.isNil:
+        tableView.installFieldEditorOnSurface(editor)
     tableView.syncHeaderTrackingAreas()
+    tableView.setNeedsLayout()
     tableView.setNeedsDisplay(true)
 
   method moveColumn(tableView: TableView, fromIndex, toIndex: int) =
