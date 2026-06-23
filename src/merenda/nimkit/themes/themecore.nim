@@ -37,6 +37,7 @@ type
     srTab
     srTabPanel
     srTextField
+    srTextView
     srComboBox
     srComboBoxItem
     srTableView
