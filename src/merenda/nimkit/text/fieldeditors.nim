@@ -1,4 +1,6 @@
 import ../foundation/events
+import ../themes
+import ../drawing
 import ../responder/responders
 import ../foundation/selectors
 import ./textstorage

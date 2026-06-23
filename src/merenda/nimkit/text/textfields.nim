@@ -5,15 +5,16 @@ import sigils/core
 import ../accessibility/accessibility
 import ../controls/controls
 import ../foundation/selectors
-import ../themes
 import ../foundation/events
+import ../foundation/types
+import ../app/windows
+import ../themes
+import ../drawing
+
 import ./fieldeditors
 import ./textstorage
 import ./texttypes
 import ./textviews
-import ../foundation/types
-import ../app/windows
-
 export controls
 export texttypes
 

@@ -11,7 +11,6 @@ import merenda/nimkit/debug/selectionrings
 import merenda/nimkit/debug/viewselection
 import merenda/nimkit/debug/viewinspectors
 import merenda/nimkit/app/dragging
-import merenda/nimkit/drawing/images
 import merenda/nimkit/foundation/events
 import merenda/nimkit/text/fieldeditors
 import merenda/nimkit/containers/formviews
@@ -23,7 +22,6 @@ import merenda/nimkit/controls/menus
 import merenda/nimkit/containers/outlineviews
 import merenda/nimkit/app/pasteboards
 import merenda/nimkit/controls/popuplists
-import merenda/nimkit/drawing/rendering
 import merenda/nimkit/responder/responders
 import merenda/nimkit/containers/scrollergeometry
 import merenda/nimkit/controls/sliders
@@ -49,18 +47,16 @@ export application
 export accessibility
 export buttons
 export cells
-export chrome
-export aquachrome
 export comboboxes
 export controls
 export documentcontrollers
 export documents
-export drawing
+export drawing, images, rendering
+export chrome, aquachrome
 export selectionrings
 export viewselection
 export viewinspectors
 export dragging
-export images
 export events
 export fieldeditors
 export formviews

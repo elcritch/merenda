@@ -4,12 +4,11 @@ import sigils/selectors
 
 from figdraw/figbasics import ZLevel
 
-import ../drawing
+import ../drawing/drawing
 import ./events
 import ../text/texttypes
 import ./types
 
-export drawing
 export selectors
 
 type
