@@ -772,7 +772,7 @@ proc drawAquaTabPanelExtras(
       1.0'f32,
     )
   discard context.addRenderRectangle(
-    extras.layer, extras.parent, topHighlight, fill(initColor(1.0, 1.0, 1.0, 0.52))
+    extras.layer, extras.parent, topHighlight, fill(initColor(1.0, 1.0, 1.0, 0.36))
   )
   discard context.addRenderRectangle(
     extras.layer, extras.parent, innerShade, fill(initColor(0.0, 0.0, 0.0, 0.05))
