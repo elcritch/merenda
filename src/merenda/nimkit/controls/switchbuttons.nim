@@ -17,7 +17,7 @@ const
   SwitchButtonWidth = 40'f32
   SwitchButtonHeight = 24'f32
   SwitchKnobInset = 1.7'f32
-  SwitchKnobSize = SwitchButtonHeight - SwitchKnobInset * 2.0'f32
+  SwitchKnobSizeFactor = 2.0'f32
 
 protocol SwitchButtonProtocol {.selectorScope: protocol.}:
   property on -> bool
@@ -121,16 +121,18 @@ proc switchTrackRect(switchButton: SwitchButton): Rect =
   )
 
 proc switchKnobRect(switchButton: SwitchButton, track: Rect): Rect =
-  let x =
-    if switchButton.on:
-      track.maxX - SwitchKnobInset - SwitchKnobSize
-    else:
-      track.origin.x + SwitchKnobInset
+  let
+    switchKnobSize = SwitchButtonHeight - SwitchKnobInset * SwitchKnobSizeFactor
+    x =
+      if switchButton.on:
+        track.maxX - SwitchKnobInset - switchKnobSize
+      else:
+        track.origin.x + SwitchKnobInset
   initRect(
     x,
-    track.origin.y + (track.size.height - SwitchKnobSize) * 0.5'f32,
-    SwitchKnobSize,
-    SwitchKnobSize,
+    track.origin.y + (track.size.height - switchKnobSize) * 0.5'f32,
+    switchKnobSize,
+    switchKnobSize,
   )
 
 proc drawSwitchTrack(
