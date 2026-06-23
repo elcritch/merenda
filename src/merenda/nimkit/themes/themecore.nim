@@ -252,6 +252,7 @@ const
 
   DefaultChromeName* = "default"
   AquaChromeName* = "aqua"
+  FlatTransparentChromeName* = "flat-transparent"
   LabelStyleClass* = "label"
   LabelTitleStyleClass* = "label-title"
   LabelHeadingStyleClass* = "label-heading"

@@ -230,7 +230,7 @@ proc installSynthwave83ControlStyles(theme: var Theme) =
   theme[srButton, {ssActive}, StyleBoxShadows] =
     styleToken("button.shadows.highlighted")
   theme[srButton, {ssDisabled}, StyleBoxShadows] = styleToken("button.shadows.disabled")
-  theme[srButton, StyleChrome] = styleKeyword(AquaChromeName)
+  theme[srButton, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
   theme[srSwitch, StyleFill] = synthwave83FieldFill()
   theme[srSwitch, StyleBorderColor] = initColor(0.16, 0.86, 1.0, 0.54)
@@ -256,9 +256,10 @@ proc installSynthwave83ControlStyles(theme: var Theme) =
   for role in [srCheckBox, srRadioButton]:
     theme[role, StyleFocusRingColor] = styleToken("focus.ring.color")
     theme[role, StyleBoxShadows] = synthwave83InsetShadows()
-    theme[role, StyleChrome] = styleKeyword(AquaChromeName)
+    theme[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
   theme[srTextField, StyleBoxShadows] = synthwave83InsetShadows()
+  theme[srComboBox, StyleChrome] = styleKeyword(FlatTransparentChromeName)
   theme[srComboBox, StyleBoxShadows] = synthwave83InsetShadows()
   theme[srTableView, StyleBoxShadows] = synthwave83InsetShadows()
   theme[srTableView, StyleDropIndicatorFill] = synthwave83SelectionFill()
