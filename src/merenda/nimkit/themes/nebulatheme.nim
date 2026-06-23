@@ -136,6 +136,8 @@ func nebulaKnobShadows(): seq[BoxShadow] =
   ]
 
 proc installNebulaTokens(theme: var Theme) =
+  theme[srView, StyleBackgroundColor] = initColor(0.04, 0.06, 0.12)
+
   theme["accent"] = initColor(0.10, 0.92, 1.0, 0.92)
   theme["accent.pressed"] = initColor(0.78, 0.18, 1.0, 0.82)
   theme["disabled.fill"] = nebulaDisabledFill()

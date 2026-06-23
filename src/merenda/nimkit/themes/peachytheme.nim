@@ -53,7 +53,7 @@ proc addLabelRule(
   theme[selector, StyleFocusRingInset] = 0.0
   theme[selector, StyleBoxShadows] = newSeq[BoxShadow]()
 
-func synthwave83PanelFill(): Fill =
+func peachyPanelFill(): Fill =
   linear(
     initColor(0.22, 0.23, 0.29, 0.82),
     initColor(0.28, 0.23, 0.31, 0.74),
@@ -62,7 +62,7 @@ func synthwave83PanelFill(): Fill =
     104'u8,
   )
 
-func synthwave83GlassFill(): Fill =
+func peachyGlassFill(): Fill =
   linear(
     initColor(0.33, 0.28, 0.36, 0.56),
     initColor(0.25, 0.25, 0.32, 0.46),
@@ -71,7 +71,7 @@ func synthwave83GlassFill(): Fill =
     112'u8,
   )
 
-func synthwave83GlassHotFill(): Fill =
+func peachyGlassHotFill(): Fill =
   linear(
     initColor(0.68, 0.31, 0.50, 0.68),
     initColor(0.44, 0.27, 0.44, 0.54),
@@ -80,7 +80,7 @@ func synthwave83GlassHotFill(): Fill =
     112'u8,
   )
 
-func synthwave83GlassPressedFill(): Fill =
+func peachyGlassPressedFill(): Fill =
   linear(
     initColor(0.24, 0.21, 0.28, 0.76),
     initColor(0.20, 0.18, 0.25, 0.68),
@@ -89,7 +89,7 @@ func synthwave83GlassPressedFill(): Fill =
     120'u8,
   )
 
-func synthwave83FieldFill(): Fill =
+func peachyFieldFill(): Fill =
   linear(
     initColor(0.18, 0.19, 0.25, 0.76),
     initColor(0.24, 0.21, 0.29, 0.60),
@@ -98,7 +98,7 @@ func synthwave83FieldFill(): Fill =
     96'u8,
   )
 
-func synthwave83SelectionFill(): Fill =
+func peachySelectionFill(): Fill =
   linear(
     initColor(0.72, 0.28, 0.46, 0.82),
     initColor(0.58, 0.24, 0.42, 0.74),
@@ -107,47 +107,47 @@ func synthwave83SelectionFill(): Fill =
     110'u8,
   )
 
-func synthwave83DisabledFill(): Fill =
+func peachyDisabledFill(): Fill =
   linear(initColor(0.18, 0.18, 0.23, 0.30), initColor(0.11, 0.12, 0.16, 0.24), fgaY)
 
-func synthwave83GlowShadows(): seq[BoxShadow] =
+func peachyGlowShadows(): seq[BoxShadow] =
   @[
     dropShadow(initColor(0.95, 0.35, 0.52, 0.10), y = 1.0, blur = 9.0),
     insetShadow(initColor(1.0, 0.74, 0.52, 0.18), y = 1.0, blur = 4.0),
     insetShadow(initColor(0.82, 0.24, 0.50, 0.11), y = -2.0, blur = 8.0),
   ]
 
-func synthwave83PressedShadows(): seq[BoxShadow] =
+func peachyPressedShadows(): seq[BoxShadow] =
   @[
     insetShadow(initColor(0.0, 0.0, 0.0, 0.30), y = 2.0, blur = 7.0),
     insetShadow(initColor(1.0, 0.56, 0.36, 0.12), y = -1.0, blur = 4.0),
   ]
 
-func synthwave83InsetShadows(): seq[BoxShadow] =
+func peachyInsetShadows(): seq[BoxShadow] =
   @[
     insetShadow(initColor(0.0, 0.0, 0.0, 0.34), y = 1.0, blur = 5.0),
     insetShadow(initColor(1.0, 0.64, 0.46, 0.15), y = -1.0, blur = 4.0),
   ]
 
-func synthwave83KnobShadows(): seq[BoxShadow] =
+func peachyKnobShadows(): seq[BoxShadow] =
   @[
     dropShadow(initColor(1.0, 0.34, 0.52, 0.14), y = 1.0, blur = 7.0),
     insetShadow(initColor(1.0, 0.80, 0.60, 0.24), y = 1.0, blur = 3.0),
   ]
 
-proc installSynthwave83Tokens(theme: var Theme) =
+proc installPeachyTokens(theme: var Theme) =
   theme["accent"] = initColor(0.10, 0.92, 1.0, 0.92)
   theme["accent.pressed"] = initColor(0.78, 0.18, 1.0, 0.82)
-  theme["disabled.fill"] = synthwave83DisabledFill()
+  theme["disabled.fill"] = peachyDisabledFill()
   theme["disabled.text.color"] = initColor(0.44, 0.58, 0.70, 0.66)
   theme["focus.ring.color"] = initColor(0.18, 0.92, 1.0, 0.88)
   theme["indicator.size"] = 18.0
 
-  theme["button.fill"] = synthwave83GlassFill()
-  theme["button.fill.highlighted"] = synthwave83GlassHotFill()
-  theme["button.fill.disabled"] = synthwave83DisabledFill()
-  theme["button.fill.accent"] = synthwave83GlassHotFill()
-  theme["button.fill.accent.highlighted"] = synthwave83GlassPressedFill()
+  theme["button.fill"] = peachyGlassFill()
+  theme["button.fill.highlighted"] = peachyGlassHotFill()
+  theme["button.fill.disabled"] = peachyDisabledFill()
+  theme["button.fill.accent"] = peachyGlassHotFill()
+  theme["button.fill.accent.highlighted"] = peachyGlassPressedFill()
   theme["button.text.color"] = initColor(0.82, 0.98, 1.0, 0.96)
   theme["button.text.color.disabled"] = styleToken("disabled.text.color")
   theme["button.border.color"] = initColor(0.20, 0.92, 1.0, 0.62)
@@ -156,16 +156,16 @@ proc installSynthwave83Tokens(theme: var Theme) =
   theme["button.border.color.accent"] = initColor(0.66, 0.20, 1.0, 0.78)
   theme["button.border.color.accent.highlighted"] = initColor(0.96, 0.36, 1.0, 0.88)
   theme["button.focus.ring.color"] = initColor(0.24, 0.96, 1.0, 0.86)
-  theme["button.shadows"] = synthwave83GlowShadows()
-  theme["button.shadows.highlighted"] = synthwave83PressedShadows()
+  theme["button.shadows"] = peachyGlowShadows()
+  theme["button.shadows.highlighted"] = peachyPressedShadows()
   theme["button.shadows.disabled"] = newSeq[BoxShadow]()
 
-  theme["choice.indicator.fill"] = synthwave83FieldFill()
-  theme["choice.indicator.fill.highlighted"] = synthwave83GlassFill()
-  theme["choice.indicator.fill.disabled"] = synthwave83DisabledFill()
-  theme["choice.indicator.fill.selected"] = synthwave83SelectionFill()
-  theme["choice.indicator.fill.selected.highlighted"] = synthwave83GlassHotFill()
-  theme["choice.indicator.fill.selected.disabled"] = synthwave83DisabledFill()
+  theme["choice.indicator.fill"] = peachyFieldFill()
+  theme["choice.indicator.fill.highlighted"] = peachyGlassFill()
+  theme["choice.indicator.fill.disabled"] = peachyDisabledFill()
+  theme["choice.indicator.fill.selected"] = peachySelectionFill()
+  theme["choice.indicator.fill.selected.highlighted"] = peachyGlassHotFill()
+  theme["choice.indicator.fill.selected.disabled"] = peachyDisabledFill()
   theme["choice.indicator.border.color"] = initColor(0.20, 0.92, 1.0, 0.56)
   theme["choice.indicator.border.color.selected"] = initColor(0.58, 0.96, 1.0, 0.94)
   theme["choice.indicator.border.color.highlighted"] = initColor(0.70, 0.98, 1.0, 0.82)
@@ -175,7 +175,7 @@ proc installSynthwave83Tokens(theme: var Theme) =
   theme["choice.text.color"] = initColor(0.78, 0.92, 1.0, 0.94)
   theme["choice.text.color.disabled"] = styleToken("disabled.text.color")
 
-  theme["textField.fill"] = synthwave83FieldFill()
+  theme["textField.fill"] = peachyFieldFill()
   theme["textField.border.color"] = initColor(0.18, 0.86, 1.0, 0.54)
   theme["textField.text.color"] = initColor(0.84, 0.98, 1.0, 0.96)
   theme["textField.selection.color"] = initColor(0.20, 0.88, 1.0, 0.34)
@@ -185,29 +185,29 @@ proc installSynthwave83Tokens(theme: var Theme) =
   theme["comboBox.text.color"] = styleToken("textField.text.color")
   theme["comboBox.arrow.color"] = initColor(0.42, 0.96, 1.0, 0.96)
   theme["comboBox.item.fill"] = fill(initColor(0.02, 0.06, 0.13, 0.86))
-  theme["comboBox.item.fill.highlighted"] = synthwave83GlassFill()
-  theme["comboBox.item.fill.selected"] = synthwave83SelectionFill()
-  theme["comboBox.item.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["comboBox.item.fill.highlighted"] = peachyGlassFill()
+  theme["comboBox.item.fill.selected"] = peachySelectionFill()
+  theme["comboBox.item.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["comboBox.item.text.color"] = initColor(0.78, 0.92, 1.0, 0.94)
   theme["comboBox.item.text.color.selected"] = initColor(0.94, 1.0, 1.0, 1.0)
 
-  theme["tableView.fill"] = synthwave83PanelFill()
+  theme["tableView.fill"] = peachyPanelFill()
   theme["tableView.border.color"] = initColor(0.14, 0.76, 1.0, 0.46)
   theme["rowItem.fill"] = fill(initColor(0.02, 0.06, 0.13, 0.10))
   theme["rowItem.fill.highlighted"] = fill(initColor(0.12, 0.46, 0.72, 0.26))
-  theme["rowItem.fill.selected"] = synthwave83SelectionFill()
-  theme["rowItem.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["rowItem.fill.selected"] = peachySelectionFill()
+  theme["rowItem.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["rowItem.fill.disabled"] = fill(initColor(0.08, 0.10, 0.14, 0.18))
   theme["rowItem.text.color"] = initColor(0.80, 0.94, 1.0, 0.94)
   theme["rowItem.text.color.selected"] = initColor(0.98, 1.0, 1.0, 1.0)
   theme["rowItem.text.color.disabled"] = styleToken("disabled.text.color")
   theme["rowItem.separator.color"] = initColor(0.18, 0.78, 1.0, 0.18)
 
-  theme["tab.panel.fill"] = synthwave83PanelFill()
+  theme["tab.panel.fill"] = peachyPanelFill()
   theme["tab.panel.border.color"] = initColor(0.20, 0.80, 1.0, 0.44)
   theme["tab.fill"] = fill(initColor(0.05, 0.14, 0.24, 0.42))
-  theme["tab.fill.highlighted"] = synthwave83GlassFill()
-  theme["tab.fill.selected"] = synthwave83GlassHotFill()
+  theme["tab.fill.highlighted"] = peachyGlassFill()
+  theme["tab.fill.selected"] = peachyGlassHotFill()
   theme["tab.fill.disabled"] = fill(initColor(0.08, 0.10, 0.16, 0.24))
   theme["tab.highlight.fill"] = styleFill(initColor(0.46, 1.0, 1.0, 0.30))
   theme["tab.highlight.fill.disabled"] = styleFill(initColor(0.38, 0.48, 0.56, 0.16))
@@ -219,7 +219,7 @@ proc installSynthwave83Tokens(theme: var Theme) =
   theme["tab.border.color.selected"] = initColor(0.78, 0.24, 1.0, 0.74)
   theme["tab.border.color.disabled"] = initColor(0.22, 0.34, 0.44, 0.32)
 
-proc installSynthwave83ControlStyles(theme: var Theme) =
+proc installPeachyControlStyles(theme: var Theme) =
   theme[srButton, StyleCornerRadius] = 9.0
   theme[srButton, StyleTextHighlightColor] = initColor(0.64, 1.0, 1.0, 0.28)
   theme[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.46)
@@ -232,39 +232,39 @@ proc installSynthwave83ControlStyles(theme: var Theme) =
   theme[srButton, {ssDisabled}, StyleBoxShadows] = styleToken("button.shadows.disabled")
   theme[srButton, StyleChrome] = styleKeyword(AquaChromeName)
 
-  theme[srSwitch, StyleFill] = synthwave83FieldFill()
+  theme[srSwitch, StyleFill] = peachyFieldFill()
   theme[srSwitch, StyleBorderColor] = initColor(0.16, 0.86, 1.0, 0.54)
   theme[srSwitch, StyleFocusRingColor] = styleToken("focus.ring.color")
-  theme[srSwitch, StyleBoxShadows] = synthwave83InsetShadows()
-  theme[srSwitch, StyleKnobFill] = synthwave83GlassFill()
+  theme[srSwitch, StyleBoxShadows] = peachyInsetShadows()
+  theme[srSwitch, StyleKnobFill] = peachyGlassFill()
   theme[srSwitch, StyleKnobBorderColor] = initColor(0.58, 0.96, 1.0, 0.82)
-  theme[srSwitch, StyleKnobShadows] = synthwave83KnobShadows()
-  theme[srSwitch, {ssSelected}, StyleFill] = synthwave83SelectionFill()
+  theme[srSwitch, StyleKnobShadows] = peachyKnobShadows()
+  theme[srSwitch, {ssSelected}, StyleFill] = peachySelectionFill()
   theme[srSwitch, {ssSelected}, StyleBorderColor] = initColor(0.80, 0.24, 1.0, 0.80)
-  theme[srSwitch, {ssHighlighted}, StyleKnobFill] = synthwave83GlassHotFill()
-  theme[srSwitch, {ssDisabled}, StyleFill] = synthwave83DisabledFill()
+  theme[srSwitch, {ssHighlighted}, StyleKnobFill] = peachyGlassHotFill()
+  theme[srSwitch, {ssDisabled}, StyleFill] = peachyDisabledFill()
   theme[srSwitch, {ssDisabled}, StyleBorderColor] = initColor(0.22, 0.34, 0.44, 0.34)
   theme[srSwitch, {ssDisabled}, StyleBoxShadows] = newSeq[BoxShadow]()
-  theme[srSwitch, {ssDisabled}, StyleKnobFill] = synthwave83DisabledFill()
+  theme[srSwitch, {ssDisabled}, StyleKnobFill] = peachyDisabledFill()
   theme[srSwitch, {ssDisabled}, StyleKnobBorderColor] =
     initColor(0.22, 0.34, 0.44, 0.38)
   theme[srSwitch, {ssDisabled}, StyleKnobShadows] = newSeq[BoxShadow]()
-  theme[srSwitch, {ssSelected, ssDisabled}, StyleFill] = synthwave83DisabledFill()
+  theme[srSwitch, {ssSelected, ssDisabled}, StyleFill] = peachyDisabledFill()
   theme[srSwitch, {ssSelected, ssDisabled}, StyleBorderColor] =
     initColor(0.22, 0.34, 0.44, 0.38)
 
   for role in [srCheckBox, srRadioButton]:
     theme[role, StyleFocusRingColor] = styleToken("focus.ring.color")
-    theme[role, StyleBoxShadows] = synthwave83InsetShadows()
+    theme[role, StyleBoxShadows] = peachyInsetShadows()
     theme[role, StyleChrome] = styleKeyword(AquaChromeName)
 
-  theme[srTextField, StyleBoxShadows] = synthwave83InsetShadows()
-  theme[srComboBox, StyleBoxShadows] = synthwave83InsetShadows()
-  theme[srTableView, StyleBoxShadows] = synthwave83InsetShadows()
-  theme[srTableView, StyleDropIndicatorFill] = synthwave83SelectionFill()
+  theme[srTextField, StyleBoxShadows] = peachyInsetShadows()
+  theme[srComboBox, StyleBoxShadows] = peachyInsetShadows()
+  theme[srTableView, StyleBoxShadows] = peachyInsetShadows()
+  theme[srTableView, StyleDropIndicatorFill] = peachySelectionFill()
   theme[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
 
-proc installSynthwave83Labels(theme: var Theme) =
+proc installPeachyLabels(theme: var Theme) =
   theme.addLabelRule(
     LabelStyleClass,
     fill(initColor(0.0, 0.0, 0.0, 0.0)),
@@ -316,19 +316,19 @@ proc installSynthwave83Labels(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installSynthwave83Tables(theme: var Theme) =
+proc installPeachyTables(theme: var Theme) =
   theme[srTableHeader, StyleFill] = fill(initColor(0.04, 0.14, 0.24, 0.66))
   theme[srTableHeader, StyleBorderColor] = initColor(0.16, 0.80, 1.0, 0.38)
-  theme[srTableHeader, StyleInsertionIndicatorFill] = synthwave83SelectionFill()
+  theme[srTableHeader, StyleInsertionIndicatorFill] = peachySelectionFill()
   theme[srTableHeaderCell, StyleFill] = fill(initColor(0.07, 0.18, 0.30, 0.46))
-  theme[srTableHeaderCell, {ssHovered}, StyleFill] = synthwave83GlassFill()
-  theme[srTableHeaderCell, {ssPressed}, StyleFill] = synthwave83GlassPressedFill()
+  theme[srTableHeaderCell, {ssHovered}, StyleFill] = peachyGlassFill()
+  theme[srTableHeaderCell, {ssPressed}, StyleFill] = peachyGlassPressedFill()
   theme[srTableHeaderCell, StyleBorderColor] = initColor(0.16, 0.72, 1.0, 0.34)
   theme[srTableHeaderCell, StyleTextColor] = initColor(0.78, 0.94, 1.0, 0.94)
   theme[srTableHeaderCell, StyleMarkColor] = initColor(0.66, 0.98, 1.0, 0.96)
   theme[srRowItem, StyleAlternatingFill] = fill(initColor(0.10, 0.30, 0.42, 0.10))
 
-proc installSynthwave83RetroPalette(theme: var Theme) =
+proc installPeachyRetroPalette(theme: var Theme) =
   theme["accent"] = initColor(1.0, 0.18, 0.72, 0.94)
   theme["accent.pressed"] = initColor(1.0, 0.56, 0.12, 0.90)
   theme["focus.ring.color"] = initColor(0.10, 0.98, 1.0, 0.88)
@@ -433,30 +433,30 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
   theme["disabled.text.color"] = initColor(0.55, 0.60, 0.56, 0.72)
   theme["focus.ring.color"] = initColor(1.0, 0.58, 0.34, 0.68)
 
-  theme["button.fill"] = synthwave83GlassFill()
-  theme["button.fill.highlighted"] = synthwave83GlassHotFill()
-  theme["button.fill.accent"] = synthwave83GlassHotFill()
-  theme["button.fill.accent.highlighted"] = synthwave83GlassPressedFill()
+  theme["button.fill"] = peachyGlassFill()
+  theme["button.fill.highlighted"] = peachyGlassHotFill()
+  theme["button.fill.accent"] = peachyGlassHotFill()
+  theme["button.fill.accent.highlighted"] = peachyGlassPressedFill()
   theme["button.text.color"] = initColor(1.0, 0.74, 0.50, 0.98)
   theme["button.border.color"] = initColor(1.0, 0.56, 0.38, 0.76)
   theme["button.border.color.highlighted"] = initColor(1.0, 0.72, 0.48, 0.90)
   theme["button.border.color.accent"] = initColor(1.0, 0.38, 0.62, 0.84)
   theme["button.border.color.accent.highlighted"] = initColor(1.0, 0.78, 0.42, 0.92)
   theme["button.focus.ring.color"] = styleToken("focus.ring.color")
-  theme["button.shadows"] = synthwave83GlowShadows()
-  theme["button.shadows.highlighted"] = synthwave83PressedShadows()
+  theme["button.shadows"] = peachyGlowShadows()
+  theme["button.shadows.highlighted"] = peachyPressedShadows()
 
-  theme["choice.indicator.fill"] = synthwave83FieldFill()
-  theme["choice.indicator.fill.highlighted"] = synthwave83GlassFill()
-  theme["choice.indicator.fill.selected"] = synthwave83SelectionFill()
-  theme["choice.indicator.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["choice.indicator.fill"] = peachyFieldFill()
+  theme["choice.indicator.fill.highlighted"] = peachyGlassFill()
+  theme["choice.indicator.fill.selected"] = peachySelectionFill()
+  theme["choice.indicator.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["choice.indicator.border.color"] = initColor(1.0, 0.58, 0.40, 0.74)
   theme["choice.indicator.border.color.selected"] = initColor(1.0, 0.74, 0.45, 0.92)
   theme["choice.indicator.border.color.highlighted"] = initColor(1.0, 0.70, 0.46, 0.86)
   theme["choice.mark.color"] = initColor(0.06, 0.08, 0.12, 1.0)
   theme["choice.text.color"] = initColor(1.0, 0.54, 0.78, 0.98)
 
-  theme["textField.fill"] = synthwave83FieldFill()
+  theme["textField.fill"] = peachyFieldFill()
   theme["textField.border.color"] = initColor(1.0, 0.58, 0.40, 0.72)
   theme["textField.text.color"] = initColor(1.0, 0.80, 0.64, 0.98)
   theme["textField.selection.color"] = initColor(0.94, 0.34, 0.58, 0.40)
@@ -466,18 +466,18 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
   theme["comboBox.text.color"] = styleToken("textField.text.color")
   theme["comboBox.arrow.color"] = initColor(1.0, 0.74, 0.46, 0.96)
   theme["comboBox.item.fill"] = fill(initColor(0.18, 0.19, 0.25, 0.94))
-  theme["comboBox.item.fill.highlighted"] = synthwave83GlassFill()
-  theme["comboBox.item.fill.selected"] = synthwave83SelectionFill()
-  theme["comboBox.item.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["comboBox.item.fill.highlighted"] = peachyGlassFill()
+  theme["comboBox.item.fill.selected"] = peachySelectionFill()
+  theme["comboBox.item.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["comboBox.item.text.color"] = initColor(1.0, 0.48, 0.76, 0.98)
   theme["comboBox.item.text.color.selected"] = initColor(1.0, 0.86, 0.52, 1.0)
 
-  theme["tableView.fill"] = synthwave83PanelFill()
+  theme["tableView.fill"] = peachyPanelFill()
   theme["tableView.border.color"] = initColor(1.0, 0.58, 0.40, 0.66)
   theme["rowItem.fill"] = fill(initColor(0.18, 0.19, 0.25, 0.14))
   theme["rowItem.fill.highlighted"] = fill(initColor(0.50, 0.26, 0.38, 0.38))
-  theme["rowItem.fill.selected"] = synthwave83SelectionFill()
-  theme["rowItem.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["rowItem.fill.selected"] = peachySelectionFill()
+  theme["rowItem.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["rowItem.text.color"] = initColor(1.0, 0.48, 0.76, 0.98)
   theme["rowItem.text.color.selected"] = initColor(1.0, 0.86, 0.46, 1.0)
   theme["rowItem.separator.color"] = initColor(1.0, 0.58, 0.40, 0.24)
@@ -485,8 +485,8 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
   theme["tab.panel.fill"] = styleToken("tableView.fill")
   theme["tab.panel.border.color"] = initColor(1.0, 0.58, 0.40, 0.68)
   theme["tab.fill"] = fill(initColor(0.20, 0.20, 0.27, 0.66))
-  theme["tab.fill.highlighted"] = synthwave83GlassFill()
-  theme["tab.fill.selected"] = synthwave83GlassHotFill()
+  theme["tab.fill.highlighted"] = peachyGlassFill()
+  theme["tab.fill.selected"] = peachyGlassHotFill()
   theme["tab.highlight.fill"] = styleFill(initColor(1.0, 0.78, 0.46, 0.18))
   theme["tab.text.color"] = initColor(1.0, 0.62, 0.82, 0.96)
   theme["tab.text.color.selected"] = initColor(1.0, 0.84, 0.52, 1.0)
@@ -504,15 +504,15 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
   theme[srTabPanel, StyleBorderWidth] = 1.25
   for role in [srCheckBox, srRadioButton]:
     theme[role, StyleBorderWidth] = 1.25
-    theme[role, StyleBoxShadows] = synthwave83InsetShadows()
+    theme[role, StyleBoxShadows] = peachyInsetShadows()
 
   theme[srTableHeader, StyleFill] = fill(initColor(0.28, 0.23, 0.31, 0.78))
   theme[srTableHeader, StyleBorderColor] = initColor(1.0, 0.58, 0.40, 0.70)
   theme[srTableHeader, StyleInsertionIndicatorFill] =
     styleToken("rowItem.fill.selected")
   theme[srTableHeaderCell, StyleFill] = fill(initColor(0.24, 0.22, 0.30, 0.70))
-  theme[srTableHeaderCell, {ssHovered}, StyleFill] = synthwave83GlassFill()
-  theme[srTableHeaderCell, {ssPressed}, StyleFill] = synthwave83GlassPressedFill()
+  theme[srTableHeaderCell, {ssHovered}, StyleFill] = peachyGlassFill()
+  theme[srTableHeaderCell, {ssPressed}, StyleFill] = peachyGlassPressedFill()
   theme[srTableHeaderCell, StyleBorderColor] = initColor(1.0, 0.58, 0.40, 0.62)
   theme[srTableHeaderCell, StyleTextColor] = initColor(1.0, 0.54, 0.78, 0.98)
   theme[srTableHeaderCell, StyleMarkColor] = initColor(1.0, 0.78, 0.46, 0.96)
@@ -530,7 +530,7 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
   )
   theme.addLabelRule(
     LabelTitleStyleClass,
-    synthwave83GlassFill(),
+    peachyGlassFill(),
     initColor(1.0, 0.58, 0.40, 0.62),
     1.25,
     8.0,
@@ -569,7 +569,7 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installSynthwave83ReferencePass(theme: var Theme) =
+proc installPeachyReferencePass(theme: var Theme) =
   theme[srView, StyleBackgroundColor] = initColor(0.20, 0.21, 0.27)
 
   theme["accent"] = initColor(0.88, 0.30, 0.52, 0.92)
@@ -592,27 +592,27 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
     112'u8,
   )
   theme["button.fill.accent"] = styleToken("button.fill.highlighted")
-  theme["button.fill.accent.highlighted"] = synthwave83GlassPressedFill()
+  theme["button.fill.accent.highlighted"] = peachyGlassPressedFill()
   theme["button.text.color"] = initColor(1.0, 0.74, 0.50, 0.98)
   theme["button.border.color"] = initColor(1.0, 0.58, 0.40, 0.78)
   theme["button.border.color.highlighted"] = initColor(1.0, 0.74, 0.48, 0.90)
   theme["button.border.color.accent"] = initColor(0.92, 0.32, 0.54, 0.86)
   theme["button.border.color.accent.highlighted"] = initColor(1.0, 0.78, 0.42, 0.92)
   theme["button.focus.ring.color"] = styleToken("focus.ring.color")
-  theme["button.shadows"] = synthwave83GlowShadows()
-  theme["button.shadows.highlighted"] = synthwave83PressedShadows()
+  theme["button.shadows"] = peachyGlowShadows()
+  theme["button.shadows.highlighted"] = peachyPressedShadows()
 
-  theme["choice.indicator.fill"] = synthwave83FieldFill()
-  theme["choice.indicator.fill.highlighted"] = synthwave83GlassFill()
-  theme["choice.indicator.fill.selected"] = synthwave83SelectionFill()
-  theme["choice.indicator.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["choice.indicator.fill"] = peachyFieldFill()
+  theme["choice.indicator.fill.highlighted"] = peachyGlassFill()
+  theme["choice.indicator.fill.selected"] = peachySelectionFill()
+  theme["choice.indicator.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["choice.indicator.border.color"] = initColor(1.0, 0.58, 0.40, 0.74)
   theme["choice.indicator.border.color.selected"] = initColor(1.0, 0.76, 0.44, 0.92)
   theme["choice.indicator.border.color.highlighted"] = initColor(1.0, 0.70, 0.46, 0.86)
   theme["choice.mark.color"] = initColor(0.06, 0.08, 0.12, 1.0)
   theme["choice.text.color"] = initColor(1.0, 0.52, 0.76, 0.98)
 
-  theme["textField.fill"] = synthwave83FieldFill()
+  theme["textField.fill"] = peachyFieldFill()
   theme["textField.border.color"] = initColor(1.0, 0.58, 0.40, 0.72)
   theme["textField.text.color"] = initColor(1.0, 0.80, 0.64, 0.98)
   theme["textField.selection.color"] = initColor(0.88, 0.30, 0.52, 0.40)
@@ -623,18 +623,18 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
   theme["comboBox.text.color"] = styleToken("textField.text.color")
   theme["comboBox.arrow.color"] = initColor(1.0, 0.74, 0.46, 0.96)
   theme["comboBox.item.fill"] = fill(initColor(0.18, 0.19, 0.25, 0.94))
-  theme["comboBox.item.fill.highlighted"] = synthwave83GlassFill()
-  theme["comboBox.item.fill.selected"] = synthwave83SelectionFill()
-  theme["comboBox.item.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["comboBox.item.fill.highlighted"] = peachyGlassFill()
+  theme["comboBox.item.fill.selected"] = peachySelectionFill()
+  theme["comboBox.item.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["comboBox.item.text.color"] = initColor(1.0, 0.48, 0.76, 0.98)
   theme["comboBox.item.text.color.selected"] = initColor(1.0, 0.86, 0.52, 1.0)
 
-  theme["tableView.fill"] = synthwave83PanelFill()
+  theme["tableView.fill"] = peachyPanelFill()
   theme["tableView.border.color"] = initColor(1.0, 0.58, 0.40, 0.66)
   theme["rowItem.fill"] = fill(initColor(0.18, 0.19, 0.25, 0.14))
   theme["rowItem.fill.highlighted"] = fill(initColor(0.50, 0.26, 0.38, 0.38))
-  theme["rowItem.fill.selected"] = synthwave83SelectionFill()
-  theme["rowItem.fill.selected.highlighted"] = synthwave83GlassHotFill()
+  theme["rowItem.fill.selected"] = peachySelectionFill()
+  theme["rowItem.fill.selected.highlighted"] = peachyGlassHotFill()
   theme["rowItem.text.color"] = initColor(1.0, 0.48, 0.76, 0.98)
   theme["rowItem.text.color.selected"] = initColor(1.0, 0.86, 0.46, 1.0)
   theme["rowItem.separator.color"] = initColor(1.0, 0.58, 0.40, 0.24)
@@ -642,8 +642,8 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
   theme["tab.panel.fill"] = styleToken("tableView.fill")
   theme["tab.panel.border.color"] = initColor(1.0, 0.58, 0.40, 0.68)
   theme["tab.fill"] = fill(initColor(0.20, 0.20, 0.27, 0.66))
-  theme["tab.fill.highlighted"] = synthwave83GlassFill()
-  theme["tab.fill.selected"] = synthwave83GlassHotFill()
+  theme["tab.fill.highlighted"] = peachyGlassFill()
+  theme["tab.fill.selected"] = peachyGlassHotFill()
   theme["tab.highlight.fill"] = styleFill(initColor(1.0, 0.78, 0.46, 0.18))
   theme["tab.text.color"] = initColor(1.0, 0.62, 0.82, 0.96)
   theme["tab.text.color.selected"] = initColor(1.0, 0.84, 0.52, 1.0)
@@ -661,15 +661,15 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
   theme[srTabPanel, StyleBorderWidth] = 1.25
   for role in [srCheckBox, srRadioButton]:
     theme[role, StyleBorderWidth] = 1.25
-    theme[role, StyleBoxShadows] = synthwave83InsetShadows()
+    theme[role, StyleBoxShadows] = peachyInsetShadows()
 
   theme[srTableHeader, StyleFill] = fill(initColor(0.28, 0.23, 0.31, 0.78))
   theme[srTableHeader, StyleBorderColor] = initColor(1.0, 0.58, 0.40, 0.70)
   theme[srTableHeader, StyleInsertionIndicatorFill] =
     styleToken("rowItem.fill.selected")
   theme[srTableHeaderCell, StyleFill] = fill(initColor(0.24, 0.22, 0.30, 0.70))
-  theme[srTableHeaderCell, {ssHovered}, StyleFill] = synthwave83GlassFill()
-  theme[srTableHeaderCell, {ssPressed}, StyleFill] = synthwave83GlassPressedFill()
+  theme[srTableHeaderCell, {ssHovered}, StyleFill] = peachyGlassFill()
+  theme[srTableHeaderCell, {ssPressed}, StyleFill] = peachyGlassPressedFill()
   theme[srTableHeaderCell, StyleBorderColor] = initColor(1.0, 0.58, 0.40, 0.62)
   theme[srTableHeaderCell, StyleTextColor] = initColor(1.0, 0.54, 0.78, 0.98)
   theme[srTableHeaderCell, StyleMarkColor] = initColor(1.0, 0.78, 0.46, 0.96)
@@ -687,7 +687,7 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
   )
   theme.addLabelRule(
     LabelTitleStyleClass,
-    synthwave83GlassFill(),
+    peachyGlassFill(),
     initColor(1.0, 0.58, 0.40, 0.62),
     1.25,
     8.0,
@@ -726,14 +726,15 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc initSynthwave83Theme*(): Theme =
+proc initPeachyTheme*(): Theme =
   result = initTheme()
-  result.installSynthwave83Tokens()
-  result.installSynthwave83ControlStyles()
-  result.installSynthwave83Labels()
-  result.installSynthwave83Tables()
-  result.installSynthwave83RetroPalette()
-  result.installSynthwave83ReferencePass()
+  result.installPeachyTokens()
+  result.installPeachyControlStyles()
+  result.installPeachyLabels()
+  result.installPeachyTables()
+  result.installPeachyRetroPalette()
+  result.installPeachyReferencePass()
 
-registerThemeFactory("synthwave83", initSynthwave83Theme)
-registerThemeFactory("synthwave", initSynthwave83Theme)
+registerThemeFactory("peachy", initPeachyTheme)
+registerThemeFactory("peach", initPeachyTheme)
+registerThemeFactory("peachy83", initPeachyTheme)

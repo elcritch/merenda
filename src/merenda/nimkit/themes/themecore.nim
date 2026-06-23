@@ -204,6 +204,7 @@ type
 
 const
   StyleFill* = StyleKey[Fill]("fill")
+  StyleBackgroundColor* = StyleKey[Color]("background.color")
   StyleBorderColor* = StyleKey[Color]("border.color")
   StyleBorderWidth* = StyleKey[float32]("border.width")
   StyleCornerRadius* = StyleKey[float32]("corner.radius")
