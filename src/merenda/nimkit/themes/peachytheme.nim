@@ -726,6 +726,14 @@ proc installPeachyReferencePass(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
+proc installPeachyTextReadabilityPass(theme: var Theme) =
+  theme[srTextField, StyleTextColor] = initColor(1.0, 0.80, 0.64, 0.98)
+  theme[srTextField, {ssFocused}, StyleTextColor] = initColor(1.0, 0.88, 0.72, 1.0)
+  theme[srTextField, {ssDisabled}, StyleTextColor] = styleToken("disabled.text.color")
+  theme[srTextView, StyleTextColor] = initColor(1.0, 0.80, 0.64, 0.98)
+  theme[srTextView, {ssFocused}, StyleTextColor] = initColor(1.0, 0.88, 0.72, 1.0)
+  theme[srTextView, {ssDisabled}, StyleTextColor] = styleToken("disabled.text.color")
+
 proc initPeachyTheme*(): Theme =
   result = initTheme()
   result.installPeachyTokens()
@@ -734,6 +742,7 @@ proc initPeachyTheme*(): Theme =
   result.installPeachyTables()
   result.installPeachyRetroPalette()
   result.installPeachyReferencePass()
+  result.installPeachyTextReadabilityPass()
 
 registerThemeFactory("peachy", initPeachyTheme)
 registerThemeFactory("peach", initPeachyTheme)
