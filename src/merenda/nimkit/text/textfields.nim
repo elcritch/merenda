@@ -189,16 +189,19 @@ protocol DefaultTextFieldCellEditing of CellEditingProtocol:
       return
     if controlView of TextField:
       let textField = TextField(controlView)
+      let style = textField.effectiveAppearance().resolveTextFieldStyle(
+          textField.textFieldStyleContext()
+        )
       editor.editable = textField.isEditable()
       editor.selectable = textField.isSelectable()
       editor.alignment = textField.alignment()
-      editor.textColor = textField.textColor()
-      editor.typingAttributes = defaultTextAttributes(textField.textColor())
+      editor.textColor = style.text.color
+      editor.typingAttributes = defaultTextAttributes(style.text.color)
       editor.allowsUndo = true
       if editor.textStorage().len > 0:
         editor.textStorage().setAttributes(
           initTextRange(0, editor.textStorage().len),
-          defaultTextAttributes(textField.textColor()),
+          defaultTextAttributes(style.text.color),
         )
 
   method editWithFrame(
