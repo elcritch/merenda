@@ -171,10 +171,6 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   if textView.isNil:
     return
   textView.xTextStorage.stringValue = value
-  if textView.xTextStorage.len > 0:
-    textView.xTextStorage.setAttributes(
-      initTextRange(0, textView.xTextStorage.len), textView.xTypingAttributes
-    )
   let total = textView.xTextStorage.len
   textView.xInsertionPoint = total
   textView.xSelectionAnchor = total
@@ -264,17 +260,20 @@ proc textColor*(textView: TextView): Color =
   else:
     textView
     .effectiveAppearance()
-    .resolveTextFieldStyle(initControlStyleContext(srTextField)).text.color
+    .resolveTextFieldStyle(
+      initControlStyleContext(
+        if textView.isFieldEditor: srTextField else: srTextView,
+        textView.widgetStateSet(),
+        id = textView.styleId,
+        classes = textView.styleClasses,
+      )
+    ).text.color
 
 proc `textColor=`*(textView: TextView, color: Color) =
   if textView.isNil or textView.xTextColor == color:
     return
   textView.xTextColor = color
   textView.xTypingAttributes = defaultTextAttributes(textView.textColor())
-  if textView.xTextStorage.len > 0 and not textView.richText:
-    textView.xTextStorage.setAttributes(
-      initTextRange(0, textView.xTextStorage.len), textView.xTypingAttributes
-    )
   textView.setNeedsDisplay(true)
 
 proc selectionColor*(textView: TextView): Color =
