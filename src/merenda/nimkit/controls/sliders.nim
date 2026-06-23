@@ -19,12 +19,6 @@ type
 
   SliderCell* = ref object of ActionCell
 
-const
-  SliderTrackHeight = 6.0'f32
-  SliderKnobSize = 18.0'f32
-  SliderMinWidth = 160.0'f32
-  SliderMinHeight = 24.0'f32
-
 proc normalizedRange(slider: Slider): tuple[minValue, maxValue: float32] =
   if slider.xMaxValue > slider.xMinValue:
     (slider.xMinValue, slider.xMaxValue)
@@ -53,14 +47,39 @@ proc setSliderValue(slider: Slider, value: float32, notify = false) =
   if notify:
     discard slider.sendAction()
 
-proc trackRect(slider: Slider): Rect =
+proc sliderStyleContext(slider: Slider): StyleContext =
+  if slider.isNil:
+    return initControlStyleContext(srSlider)
+  initControlStyleContext(
+    srSlider,
+    slider.widgetStateSet(),
+    id = slider.styleId,
+    classes = slider.styleClasses,
+  )
+
+proc sliderStyle(cell: SliderCell): SliderStyle =
+  let view = cell.controlView()
+  if view of Slider:
+    return
+      view.effectiveAppearance().resolveSliderStyle(Slider(view).sliderStyleContext())
+  initAppearance().resolveSliderStyle(initControlStyleContext(srSlider))
+
+proc sliderStyle(slider: Slider, context: DrawContext = nil): SliderStyle =
+  if not context.isNil:
+    return context.appearance.resolveSliderStyle(slider.sliderStyleContext())
+  slider.effectiveAppearance().resolveSliderStyle(slider.sliderStyleContext())
+
+proc trackRect(slider: Slider, style: SliderStyle): Rect =
   let bounds = slider.bounds()
   initRect(
-    bounds.origin.x + SliderKnobSize * 0.5'f32,
-    bounds.origin.y + (bounds.size.height - SliderTrackHeight) * 0.5'f32,
-    max(bounds.size.width - SliderKnobSize, 0.0'f32),
-    SliderTrackHeight,
+    bounds.origin.x + style.knobSize * 0.5'f32,
+    bounds.origin.y + (bounds.size.height - style.trackHeight) * 0.5'f32,
+    max(bounds.size.width - style.knobSize, 0.0'f32),
+    style.trackHeight,
   )
+
+proc trackRect(slider: Slider): Rect =
+  slider.trackRect(slider.sliderStyle())
 
 proc sliderFraction(slider: Slider): float32 =
   let range = slider.normalizedRange()
@@ -68,16 +87,19 @@ proc sliderFraction(slider: Slider): float32 =
     return 0.0'f32
   (slider.xValue - range.minValue) / (range.maxValue - range.minValue)
 
-proc knobRect(slider: Slider): Rect =
+proc knobRect(slider: Slider, style: SliderStyle): Rect =
   let
-    track = slider.trackRect()
+    track = slider.trackRect(style)
     centerX = track.origin.x + track.size.width * slider.sliderFraction()
   initRect(
-    centerX - SliderKnobSize * 0.5'f32,
-    slider.bounds().origin.y + (slider.bounds().size.height - SliderKnobSize) * 0.5'f32,
-    SliderKnobSize,
-    SliderKnobSize,
+    centerX - style.knobSize * 0.5'f32,
+    slider.bounds().origin.y + (slider.bounds().size.height - style.knobSize) * 0.5'f32,
+    style.knobSize,
+    style.knobSize,
   )
+
+proc knobRect(slider: Slider): Rect =
+  slider.knobRect(slider.sliderStyle())
 
 proc updateValueFromPoint(slider: Slider, point: Point, notify = true) =
   let
@@ -131,10 +153,11 @@ proc `stepValue=`*(slider: Slider, value: float32) =
 
 protocol DefaultSliderCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: SliderCell): IntrinsicSize =
-    initIntrinsicSize(SliderMinWidth, SliderMinHeight)
+    initIntrinsicSize(cell.sliderStyle().minSize)
 
   method cellSizeForBounds(cell: SliderCell, bounds: Rect): Size =
-    initSize(max(bounds.size.width, SliderMinWidth), SliderMinHeight)
+    let minSize = cell.sliderStyle().minSize
+    initSize(max(bounds.size.width, minSize.width), minSize.height)
 
 proc initSliderCellFields*(cell: SliderCell) =
   initActionCellFields(cell)
@@ -144,12 +167,12 @@ proc newSliderCell*(): SliderCell =
   result = SliderCell()
   initSliderCellFields(result)
 
-proc sliderFocusBox(): ControlBoxStyle =
+proc sliderFocusBox(style: SliderStyle): ControlBoxStyle =
   ControlBoxStyle(
     focusRingWidth: 3.0'f32,
     focusRingInset: -3.0'f32,
     focusRingColor: initColor(0.28, 0.62, 1.0, 0.80),
-    cornerRadius: SliderKnobSize * 0.5'f32,
+    cornerRadius: style.knobSize * 0.5'f32,
   )
 
 func sliderTrackBaseFill(enabled: bool): Fill =
@@ -170,7 +193,12 @@ proc sliderChromeStates(slider: Slider): set[WidgetState] =
     result.incl ssHighlighted
 
 proc drawSliderTrack(
-    slider: Slider, context: DrawContext, rect: Rect, part: ChromePart, fillValue: Fill
+    slider: Slider,
+    context: DrawContext,
+    rect: Rect,
+    part: ChromePart,
+    fillValue: Fill,
+    style: SliderStyle,
 ) =
   if rect.isEmpty:
     return
@@ -178,7 +206,7 @@ proc drawSliderTrack(
     frame = context.renderRectFor(rect)
     radius = rect.size.height * 0.5'f32
     chrome = chromeContext(
-      AquaChromeName, crSliderTrack, part, fillValue, slider.sliderChromeStates()
+      style.chrome, crSliderTrack, part, fillValue, slider.sliderChromeStates()
     )
     borderColor =
       if part == cpHighlight:
@@ -204,7 +232,9 @@ proc drawSliderTrack(
     chrome, initChromeExtras(trackRoot, frame, cornerRadius = radius)
   )
 
-proc drawSliderKnob(slider: Slider, context: DrawContext, rect: Rect) =
+proc drawSliderKnob(
+    slider: Slider, context: DrawContext, rect: Rect, style: SliderStyle
+) =
   if rect.isEmpty:
     return
   let
@@ -213,7 +243,7 @@ proc drawSliderKnob(slider: Slider, context: DrawContext, rect: Rect) =
     frame = context.renderRectFor(rect)
     radius = rect.size.width * 0.5'f32
     chrome = chromeContext(
-      AquaChromeName,
+      style.chrome,
       crSliderKnob,
       cpFace,
       sliderKnobBaseFill(highlighted, enabled),
@@ -247,10 +277,11 @@ protocol DefaultSliderDrawing of ViewDrawingProtocol:
   method draw(slider: Slider, context: DrawContext) =
     let
       enabled = slider.isEnabled()
-      track = slider.trackRect()
-      knob = slider.knobRect()
+      style = slider.sliderStyle(context)
+      track = slider.trackRect(style)
+      knob = slider.knobRect(style)
 
-    slider.drawSliderTrack(context, track, cpFace, sliderTrackBaseFill(enabled))
+    slider.drawSliderTrack(context, track, cpFace, sliderTrackBaseFill(enabled), style)
 
     let fillRect = initRect(
       track.origin.x,
@@ -260,13 +291,13 @@ protocol DefaultSliderDrawing of ViewDrawingProtocol:
     )
     if fillRect.size.width > 0.0'f32 and enabled:
       slider.drawSliderTrack(
-        context, fillRect, cpHighlight, sliderActiveTrackBaseFill(enabled)
+        context, fillRect, cpHighlight, sliderActiveTrackBaseFill(enabled), style
       )
 
-    slider.drawSliderKnob(context, knob)
+    slider.drawSliderKnob(context, knob, style)
 
     if slider.isFocusVisible:
-      context.addFocusRing(context.renderRectFor(knob), sliderFocusBox())
+      context.addFocusRing(context.renderRectFor(knob), sliderFocusBox(style))
 
 protocol DefaultSliderEvents of ResponderEventProtocol:
   method mouseDown(slider: Slider, event: MouseEvent): bool =

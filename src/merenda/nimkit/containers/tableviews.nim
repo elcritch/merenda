@@ -20,9 +20,6 @@ import ../foundation/types
 import ../view/views
 
 const
-  DefaultTableColumnWidth = 120.0'f32
-  DefaultTableColumnMinWidth = 24.0'f32
-  DefaultTableColumnMaxWidth = 10000.0'f32
   TableTypeSelectTimeout = 1.0
   TablePasteboardTypeRows* = "nimkit.table.rows"
   TablePasteboardTypeColumns* = "nimkit.table.columns"
@@ -472,9 +469,6 @@ protocol TableViewColumnProtocol:
   method headerMouseMoved*(event: MouseEvent): bool
 
 const
-  TableHeaderResizeHandleWidth = 5.0'f32
-  TableHeaderDragThreshold = 3.0'f32
-  TableHeaderAutoscrollEdge = 18.0'f32
   TableHeaderTrackingTag = 0x74001
   TableHeaderResizeCursorName = "resizeLeftRight"
 
@@ -510,17 +504,38 @@ protocol TableViewStateStorageProtocol:
   method loadTableViewState*(name: string): TableViewState {.optional.}
   method hasTableViewState*(name: string): bool {.optional.}
 
+proc tableStyleContext(tableView: TableView): StyleContext =
+  if tableView.isNil:
+    return initControlStyleContext(srTableView)
+  initControlStyleContext(
+    tableView.xTableRole,
+    tableView.widgetStateSet(),
+    id = tableView.styleId,
+    classes = tableView.styleClasses,
+  )
+
+proc tableStyle(tableView: TableView): TableViewStyle =
+  if tableView.isNil:
+    return initAppearance().resolveTableViewStyle(initControlStyleContext(srTableView))
+  tableView.effectiveAppearance().resolveTableViewStyle(tableView.tableStyleContext())
+
+proc defaultTableStyle(): TableViewStyle =
+  initAppearance().resolveTableViewStyle(initControlStyleContext(srTableView))
+
 func normalizedColumnMetric(value, fallback: float32): float32 =
   if value.isNaN:
     fallback
   else:
     max(value, 0.0'f32)
 
-func normalizedMaxWidth(value, minWidth: float32): float32 =
-  max(value.normalizedColumnMetric(DefaultTableColumnMaxWidth), minWidth)
+proc normalizedMaxWidth(value, minWidth: float32): float32 =
+  max(value.normalizedColumnMetric(defaultTableStyle().columnMaxWidth), minWidth)
 
-func normalizedWidth(value, minWidth, maxWidth: float32): float32 =
-  min(max(value.normalizedColumnMetric(DefaultTableColumnWidth), minWidth), maxWidth)
+proc normalizedWidth(value, minWidth, maxWidth: float32): float32 =
+  min(
+    max(value.normalizedColumnMetric(defaultTableStyle().columnWidth), minWidth),
+    maxWidth,
+  )
 
 proc tableView*(contentView: TableContentView): TableView =
   if contentView.isNil: nil else: contentView.xTableView
@@ -571,7 +586,7 @@ proc minWidth*(column: TableColumn): float32 =
   column.xMinWidth
 
 proc `minWidth=`*(column: TableColumn, width: float32) =
-  let nextMin = width.normalizedColumnMetric(DefaultTableColumnMinWidth)
+  let nextMin = width.normalizedColumnMetric(defaultTableStyle().columnMinWidth)
   if column.xMinWidth == nextMin:
     return
   column.xMinWidth = nextMin
@@ -675,15 +690,16 @@ proc initTableColumnFields*(
     column: TableColumn,
     identifier: string,
     title = "",
-    width = DefaultTableColumnWidth,
-    minWidth = DefaultTableColumnMinWidth,
-    maxWidth = DefaultTableColumnMaxWidth,
+    width = NaN,
+    minWidth = NaN,
+    maxWidth = NaN,
     alignment = taLeft,
     resizePolicy = tcrResizable,
 ) =
+  let style = defaultTableStyle()
   column.xIdentifier = identifier
   column.xTitle = if title.len == 0: identifier else: title
-  column.xMinWidth = minWidth.normalizedColumnMetric(DefaultTableColumnMinWidth)
+  column.xMinWidth = minWidth.normalizedColumnMetric(style.columnMinWidth)
   column.xMaxWidth = maxWidth.normalizedMaxWidth(column.xMinWidth)
   column.xWidth = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
   column.xAlignment = alignment
@@ -694,9 +710,9 @@ proc initTableColumnFields*(
 proc newTableColumn*(
     identifier: string,
     title = "",
-    width = DefaultTableColumnWidth,
-    minWidth = DefaultTableColumnMinWidth,
-    maxWidth = DefaultTableColumnMaxWidth,
+    width = NaN,
+    minWidth = NaN,
+    maxWidth = NaN,
     alignment = taLeft,
     resizePolicy = tcrResizable,
 ): TableColumn =
@@ -992,10 +1008,11 @@ proc autoscrollHeaderColumnDrag(tableView: TableView, point: Point): bool =
   let headerRect = tableView.tableHeaderRect()
   if headerRect.isEmpty:
     return false
-  if point.x <= headerRect.minX + TableHeaderAutoscrollEdge:
+  let autoscrollEdge = tableView.tableStyle().headerAutoscrollEdge
+  if point.x <= headerRect.minX + autoscrollEdge:
     tableView.setHeaderDragInsertion(0)
     return true
-  if point.x >= headerRect.maxX - TableHeaderAutoscrollEdge:
+  if point.x >= headerRect.maxX - autoscrollEdge:
     tableView.setHeaderDragInsertion(tableView.xColumns.len)
     return true
   false
@@ -1006,6 +1023,7 @@ proc resetHeaderCursorRects(tableView: TableView) =
   tableView.discardCursorRects()
   if not tableView.showsHeader():
     return
+  let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
   for column in tableView.visibleColumns():
     if column.resizePolicy() != tcrResizable:
       continue
@@ -1014,9 +1032,9 @@ proc resetHeaderCursorRects(tableView: TableView) =
       continue
     tableView.addCursorRect(
       initRect(
-        rect.maxX - TableHeaderResizeHandleWidth,
+        rect.maxX - resizeHandleWidth,
         rect.origin.y,
-        TableHeaderResizeHandleWidth * 2.0'f32,
+        resizeHandleWidth * 2.0'f32,
         rect.size.height,
       ),
       TableHeaderResizeCursorName,
@@ -3373,6 +3391,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     result = TableHeaderHit(columnIndex: -1, part: thpNone)
     if tableView.isNil or not tableView.tableHeaderRect().contains(point):
       return
+    let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
     for index, column in tableView.xColumns:
       let rect = tableView.tableHeaderColumnRect(column)
       if rect.contains(point):
@@ -3380,7 +3399,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         result.columnIndex = index
         result.rect = rect
         if column.resizePolicy() == tcrResizable and
-            point.x >= rect.maxX - TableHeaderResizeHandleWidth:
+            point.x >= rect.maxX - resizeHandleWidth:
           result.part = thpResizeHandle
         else:
           result.part = thpColumn
@@ -3454,7 +3473,8 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x,
       )
     of thpColumn:
-      if abs(event.location.x - tableView.xDragStartPoint.x) > TableHeaderDragThreshold:
+      if abs(event.location.x - tableView.xDragStartPoint.x) >
+          tableView.tableStyle().headerDragThreshold:
         tableView.xHeaderDraggingColumn = true
       if tableView.xHeaderDraggingColumn:
         if not tableView.autoscrollHeaderColumnDrag(event.location):
@@ -3476,7 +3496,8 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
       fromIndex = tableView.xTrackingColumnIndex
       moved =
         tableView.xHeaderDraggingColumn or
-        abs(event.location.x - tableView.xDragStartPoint.x) > TableHeaderDragThreshold
+        abs(event.location.x - tableView.xDragStartPoint.x) >
+        tableView.tableStyle().headerDragThreshold
       insertionIndex = tableView.xHeaderDragInsertionIndex
     tableView.xHeaderTrackingPart = thpNone
     tableView.xTrackingColumn = nil
@@ -4113,20 +4134,21 @@ protocol DefaultTableViewAccessibility of AccessibilityProtocol:
 
 proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   initControlFields(tableView, frame)
+  tableView.xTableRole = srTableView
+  let style = tableView.tableStyle()
   tableView.xSelectedIndex = -1
   tableView.xSelectedIndexes = @[]
   tableView.xSelectionAnchor = -1
   tableView.xSelectionLead = -1
   tableView.xHighlightedIndex = -1
   tableView.xPressedIndex = -1
-  tableView.xRowHeight = 22.0'f32
+  tableView.xRowHeight = style.rowHeight
   tableView.xVisibleRows = 5
   tableView.xSelectionMode = tsmSingle
-  tableView.xTableRole = srTableView
   tableView.xItemRole = srRowItem
   tableView.xRowCount = 0
   tableView.xShowsHeader = true
-  tableView.xHeaderHeight = 24.0'f32
+  tableView.xHeaderHeight = style.headerHeight
   tableView.xClickedRow = -1
   tableView.xAllowsColumnSelection = false
   tableView.xEditing = TableEditingState(row: -1)
