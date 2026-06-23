@@ -1,5 +1,5 @@
 import ./themecore
-import std/tables
+import std/[os, strutils, tables]
 import ../foundation/types
 
 proc addRoleRule(
@@ -819,8 +819,47 @@ proc initBannerTheme*(): Theme =
   result[srTableHeaderCell, StyleMarkColor] = initColor(0.16, 0.15, 0.15, 1.0)
   result[srRowItem, StyleAlternatingFill] = fill(initColor(0.98, 0.95, 0.90, 1.0))
 
+type ThemeFactory* = proc(): Theme
+
+var
+  themeFactories {.threadvar.}: Table[string, ThemeFactory]
+  themeFactoriesInitialized {.threadvar.}: bool
+
+proc normalizedThemeName(name: string): string =
+  name.strip().toLowerAscii()
+
+proc ensureThemeFactories() =
+  if themeFactoriesInitialized:
+    return
+  themeFactories = initTable[string, ThemeFactory]()
+  themeFactoriesInitialized = true
+
+proc registerThemeFactory*(name: string, factory: ThemeFactory) =
+  let key = name.normalizedThemeName()
+  if key.len == 0:
+    return
+  ensureThemeFactories()
+  themeFactories[key] = factory
+
+proc initThemeByName*(name: string): Theme =
+  let key = name.normalizedThemeName()
+  if key.len == 0 or key in ["default", "aqua", "system"]:
+    return initTheme()
+  if key == "banner":
+    return initBannerTheme()
+  ensureThemeFactories()
+  if key in themeFactories:
+    return themeFactories[key]()
+  initTheme()
+
+proc themeNameFromEnv*(): string =
+  getEnv("NIMKIT_THEME")
+
+proc initThemeFromEnv*(): Theme =
+  initThemeByName(themeNameFromEnv())
+
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)
 
 proc initAppearance*(): Appearance =
-  initAppearance(initTheme())
+  initAppearance(initThemeFromEnv())
