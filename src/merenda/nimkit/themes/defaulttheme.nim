@@ -378,6 +378,11 @@ proc initTheme*(): Theme =
   result[srSwitch, {ssSelected, ssDisabled}, StyleBorderColor] =
     initColor(0.02, 0.24, 0.62, 0.32)
 
+  result[srSlider, StyleIndicatorSize] = 6.0
+  result[srSlider, StyleKnobSize] = 18.0
+  result[srSlider, StyleMinimumSize] = initSize(160.0, 24.0)
+  result[srSlider, StyleChrome] = styleKeyword(AquaChromeName)
+
   result.addRoleRule(
     srTab,
     {},
@@ -412,6 +417,13 @@ proc initTheme*(): Theme =
   result[srTab, StyleBorderWidth] = 1.0
   result[srTab, StyleCornerRadius] = 4.0
   result[srTab, StyleTextInsets] = initEdgeInsets(1.0, 8.0)
+  result[srTab, StylePadding] = initEdgeInsets(0.0, 12.0)
+  result[srTab, StyleMinimumSize] = initSize(48.0, 24.0)
+  result[srTab, StyleMaximumSize] = initSize(180.0, 0.0)
+  result[srTab, StyleSegmentSize] = initSize(0.0, 20.0)
+  result[srTab, StyleEdgeInset] = 8.0
+  result[srTab, StyleItemGap] = 1.0
+  result[srTab, StyleOverlap] = 12.0
   result[srTab, StyleChrome] = styleKeyword(AquaChromeName)
   result[srTabPanel, StyleFill] = styleToken("tab.panel.fill")
   result[srTabPanel, StyleBorderColor] = styleToken("tab.panel.border.color")
@@ -621,6 +633,14 @@ proc initTheme*(): Theme =
   result[srTableView, StyleBorderWidth] = 1.0
   result[srTableView, StyleCornerRadius] = 6.0
   result[srTableView, StyleMinimumSize] = initSize(120.0, 24.0)
+  result[srTableView, StyleRowHeight] = 22.0
+  result[srTableView, StyleHeaderHeight] = 24.0
+  result[srTableView, StyleColumnWidth] = 120.0
+  result[srTableView, StyleColumnMinWidth] = 24.0
+  result[srTableView, StyleColumnMaxWidth] = 10000.0
+  result[srTableView, StyleResizeHandleWidth] = 5.0
+  result[srTableView, StyleDragThreshold] = 3.0
+  result[srTableView, StyleAutoscrollEdge] = 18.0
   result[srTableView, StyleFocusRingWidth] = 3.0
   result[srTableView, StyleFocusRingInset] = 2.0
   result[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")

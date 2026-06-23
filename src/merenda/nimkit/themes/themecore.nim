@@ -33,6 +33,7 @@ type
     srCheckBox
     srRadioButton
     srSwitch
+    srSlider
     srTab
     srTabPanel
     srTextField
@@ -149,6 +150,25 @@ type
     minSize*: Size
     chrome*: string
 
+  SliderStyle* = object
+    trackHeight*: float32
+    knobSize*: float32
+    minSize*: Size
+    chrome*: string
+
+  TabViewStyle* = object
+    tabHeight*: float32
+    tabSegmentHeight*: float32
+    tabMinWidth*: float32
+    tabMaxWidth*: float32
+    tabHorizontalPadding*: float32
+    tabInset*: float32
+    tabGap*: float32
+    contentBorderWidth*: float32
+    tabCornerRadius*: float32
+    panelCornerRadius*: float32
+    panelOverlap*: float32
+
   ThemeInstaller* = proc(theme: var Theme)
 
   TextFieldStyle* = object
@@ -168,6 +188,14 @@ type
   TableViewStyle* = object
     box*: ControlBoxStyle
     minSize*: Size
+    rowHeight*: float32
+    headerHeight*: float32
+    columnWidth*: float32
+    columnMinWidth*: float32
+    columnMaxWidth*: float32
+    headerResizeHandleWidth*: float32
+    headerDragThreshold*: float32
+    headerAutoscrollEdge*: float32
 
   RowItemStyle* = object
     box*: ControlBoxStyle
@@ -193,13 +221,28 @@ const
   StyleInsertionIndicatorFill* = StyleKey[Fill]("insertion.indicator.fill")
   StyleKnobFill* = StyleKey[Fill]("knob.fill")
   StyleKnobBorderColor* = StyleKey[Color]("knob.border.color")
+  StyleKnobSize* = StyleKey[float32]("knob.size")
   StyleKnobInset* = StyleKey[float32]("knob.inset")
   StyleKnobSizeFactor* = StyleKey[float32]("knob.size.factor")
   StyleKnobShadows* = StyleKey[seq[BoxShadow]]("knob.shadows")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
+  StylePadding* = StyleKey[EdgeInsets]("padding")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
   StyleWidthFactor* = StyleKey[float32]("width.factor")
+  StyleMaximumSize* = StyleKey[Size]("maximum.size")
+  StyleSegmentSize* = StyleKey[Size]("segment.size")
+  StyleEdgeInset* = StyleKey[float32]("edge.inset")
+  StyleItemGap* = StyleKey[float32]("item.gap")
+  StyleOverlap* = StyleKey[float32]("overlap")
+  StyleRowHeight* = StyleKey[float32]("row.height")
+  StyleHeaderHeight* = StyleKey[float32]("header.height")
+  StyleColumnWidth* = StyleKey[float32]("column.width")
+  StyleColumnMinWidth* = StyleKey[float32]("column.min.width")
+  StyleColumnMaxWidth* = StyleKey[float32]("column.max.width")
+  StyleResizeHandleWidth* = StyleKey[float32]("resize.handle.width")
+  StyleDragThreshold* = StyleKey[float32]("drag.threshold")
+  StyleAutoscrollEdge* = StyleKey[float32]("autoscroll.edge")
   StyleMarkColor* = StyleKey[Color]("mark.color")
   StyleMinimumSize* = StyleKey[Size]("minimum.size")
   StyleChrome* = StyleKey[string]("chrome")
@@ -1442,6 +1485,36 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
     chrome: theme.resolveChromeName(context),
   )
 
+proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
+  SliderStyle(
+    trackHeight: theme.lengthRule(context, StyleIndicatorSize, 6.0'f32),
+    knobSize: theme.lengthRule(context, StyleKnobSize, 18.0'f32),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(160.0'f32, 24.0'f32)),
+    chrome: theme.resolveChromeName(context),
+  )
+
+proc resolveTabViewStyle*(theme: Theme, context: StyleContext): TabViewStyle =
+  let
+    panelContext = initControlStyleContext(srTabPanel)
+    minSize = theme.sizeRule(context, StyleMinimumSize, initSize(48.0'f32, 24.0'f32))
+    maxSize = theme.sizeRule(context, StyleMaximumSize, initSize(180.0'f32, 0.0'f32))
+    segmentSize = theme.sizeRule(context, StyleSegmentSize, initSize(0.0'f32, 20.0'f32))
+    padding = theme.insetsRule(context, StylePadding, initEdgeInsets(0.0'f32, 12.0'f32))
+    tabHeight = max(minSize.height, 0.0'f32)
+  TabViewStyle(
+    tabHeight: tabHeight,
+    tabSegmentHeight: max(segmentSize.height, 0.0'f32),
+    tabMinWidth: max(minSize.width, 0.0'f32),
+    tabMaxWidth: max(maxSize.width, minSize.width),
+    tabHorizontalPadding: max(padding.horizontal / 2.0'f32, 0.0'f32),
+    tabInset: theme.lengthRule(context, StyleEdgeInset, 8.0'f32),
+    tabGap: theme.lengthRule(context, StyleItemGap, 1.0'f32),
+    contentBorderWidth: theme.lengthRule(panelContext, StyleBorderWidth, 1.0'f32),
+    tabCornerRadius: theme.lengthRule(context, StyleCornerRadius, 4.0'f32),
+    panelCornerRadius: theme.lengthRule(panelContext, StyleCornerRadius, 4.0'f32),
+    panelOverlap: theme.lengthRule(context, StyleOverlap, tabHeight / 2.0'f32),
+  )
+
 proc resolveTextFieldStyle*(
     theme: Theme, context: StyleContext, textColor: Color
 ): TextFieldStyle =
@@ -1510,6 +1583,14 @@ proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle
       shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
     ),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(120.0, 24.0)),
+    rowHeight: theme.lengthRule(context, StyleRowHeight, 22.0'f32),
+    headerHeight: theme.lengthRule(context, StyleHeaderHeight, 24.0'f32),
+    columnWidth: theme.lengthRule(context, StyleColumnWidth, 120.0'f32),
+    columnMinWidth: theme.lengthRule(context, StyleColumnMinWidth, 24.0'f32),
+    columnMaxWidth: theme.lengthRule(context, StyleColumnMaxWidth, 10000.0'f32),
+    headerResizeHandleWidth: theme.lengthRule(context, StyleResizeHandleWidth, 5.0'f32),
+    headerDragThreshold: theme.lengthRule(context, StyleDragThreshold, 3.0'f32),
+    headerAutoscrollEdge: theme.lengthRule(context, StyleAutoscrollEdge, 18.0'f32),
   )
 
 proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
@@ -1545,6 +1626,12 @@ proc resolveSwitchButtonStyle*(
     appearance: Appearance, context: StyleContext
 ): SwitchButtonStyle =
   appearance.theme.resolveSwitchButtonStyle(context)
+
+proc resolveSliderStyle*(appearance: Appearance, context: StyleContext): SliderStyle =
+  appearance.theme.resolveSliderStyle(context)
+
+proc resolveTabViewStyle*(appearance: Appearance, context: StyleContext): TabViewStyle =
+  appearance.theme.resolveTabViewStyle(context)
 
 proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext, textColor: Color

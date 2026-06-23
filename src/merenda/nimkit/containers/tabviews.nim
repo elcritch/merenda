@@ -15,19 +15,6 @@ import ../view/views
 
 export views
 
-const
-  DefaultTabHeight = 24.0'f32
-  DefaultTabSegmentHeight = 20.0'f32
-  DefaultTabMinWidth = 48.0'f32
-  DefaultTabMaxWidth = 180.0'f32
-  TabHorizontalPadding = 12.0'f32
-  TabInset = 8.0'f32
-  TabGap = 1.0'f32
-  ContentBorderWidth = 1.0'f32
-  TabCornerRadius = 4.0'f32
-  PanelCornerRadius = 4.0'f32
-  TabPanelOverlap = DefaultTabHeight / 2.0'f32
-
 type
   TabPosition* = enum
     tpTop
@@ -63,6 +50,11 @@ proc tabIndexAtBarPoint(tabView: TabView, point: Point): int
 proc drawTab(tabView: TabView, context: DrawContext, index: int)
 proc syncTabBarFrame(tabView: TabView)
 proc canHandleTabKeyNavigation(tabView: TabView): bool
+
+proc tabStyle(tabView: TabView): TabViewStyle =
+  if tabView.isNil:
+    return initAppearance().resolveTabViewStyle(initControlStyleContext(srTab))
+  tabView.effectiveAppearance().resolveTabViewStyle(initControlStyleContext(srTab))
 
 protocol TabViewDelegate {.selectorScope: protocol.}:
   method shouldSelectTabViewItem*(
@@ -179,23 +171,25 @@ proc `tabMode=`*(tabView: TabView, mode: TabViewMode) =
   if not tabView.xTabBar.isNil:
     tabView.xTabBar.setNeedsDisplay(true)
 
-func tabPanelOffset(mode: TabViewMode): float32 =
+func tabPanelOffset(mode: TabViewMode, style: TabViewStyle): float32 =
   case mode
   of tvmInset:
-    TabPanelOverlap
+    style.panelOverlap
   of tvmTraditional:
-    DefaultTabHeight - ContentBorderWidth
+    style.tabHeight - style.contentBorderWidth
 
-func tabBarOverlap(mode: TabViewMode): float32 =
+func tabBarOverlap(mode: TabViewMode, style: TabViewStyle): float32 =
   case mode
-  of tvmInset: TabPanelOverlap
-  of tvmTraditional: ContentBorderWidth
+  of tvmInset: style.panelOverlap
+  of tvmTraditional: style.contentBorderWidth
 
 proc contentRect*(tabView: TabView): Rect =
   if tabView.isNil:
     return
-  let bounds = tabView.bounds()
-  let panelOffset = tabView.xTabMode.tabPanelOffset()
+  let
+    bounds = tabView.bounds()
+    style = tabView.tabStyle()
+    panelOffset = tabView.xTabMode.tabPanelOffset(style)
   case tabView.xTabPosition
   of tpTop:
     initRect(
@@ -216,8 +210,10 @@ func contentViewInsets(position: TabPosition): EdgeInsets =
   of tpBottom:
     initEdgeInsets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32)
 
-func contentChromeHeight(position: TabPosition, mode: TabViewMode): float32 =
-  mode.tabPanelOffset() + position.contentViewInsets().vertical
+func contentChromeHeight(
+    position: TabPosition, mode: TabViewMode, style: TabViewStyle
+): float32 =
+  mode.tabPanelOffset(style) + position.contentViewInsets().vertical
 
 proc contentViewRect*(tabView: TabView): Rect =
   tabView.contentRect().inset(tabView.tabPosition().contentViewInsets())
@@ -225,20 +221,22 @@ proc contentViewRect*(tabView: TabView): Rect =
 proc tabBarFrame(tabView: TabView): Rect =
   if tabView.isNil:
     return
-  let bounds = tabView.bounds()
-  let overlap = tabView.xTabMode.tabBarOverlap()
+  let
+    bounds = tabView.bounds()
+    style = tabView.tabStyle()
+    overlap = tabView.xTabMode.tabBarOverlap(style)
   case tabView.xTabPosition
   of tpTop:
-    initRect(0.0, 0.0, bounds.size.width, DefaultTabHeight + ContentBorderWidth)
+    initRect(0.0, 0.0, bounds.size.width, style.tabHeight + style.contentBorderWidth)
   of tpBottom:
     initRect(
       0.0,
       tabView.contentRect().maxY - overlap,
       bounds.size.width,
-      DefaultTabHeight + ContentBorderWidth,
+      style.tabHeight + style.contentBorderWidth,
     )
 
-proc tabWidth(item: TabViewItem): float32 =
+proc tabWidth(item: TabViewItem, style: TabViewStyle): float32 =
   let textSize = textNaturalSize(
     if item.isNil:
       ""
@@ -246,51 +244,57 @@ proc tabWidth(item: TabViewItem): float32 =
       item.label()
   )
   min(
-    max(textSize.width + TabHorizontalPadding * 2.0'f32, DefaultTabMinWidth),
-    DefaultTabMaxWidth,
+    max(textSize.width + style.tabHorizontalPadding * 2.0'f32, style.tabMinWidth),
+    style.tabMaxWidth,
   )
 
-proc tabGroupWidth(tabView: TabView): float32 =
+proc tabGroupWidth(tabView: TabView, style: TabViewStyle): float32 =
   if tabView.isNil:
     return
   for item in tabView.xItems:
-    result += item.tabWidth()
+    result += item.tabWidth(style)
   if tabView.xTabMode == tvmTraditional and tabView.xItems.len > 1:
-    result += TabGap * float32(tabView.xItems.len - 1)
+    result += style.tabGap * float32(tabView.xItems.len - 1)
+
+proc tabGroupWidth(tabView: TabView): float32 =
+  tabView.tabGroupWidth(tabView.tabStyle())
 
 proc tabRectInBar(tabView: TabView, index: int): Rect =
   if tabView.isNil or index < 0 or index >= tabView.xItems.len:
     return
-  let groupWidth = tabView.tabGroupWidth()
+  let
+    style = tabView.tabStyle()
+    groupWidth = tabView.tabGroupWidth(style)
   var x =
     case tabView.xTabMode
     of tvmInset:
-      max((tabView.tabBarFrame().size.width - groupWidth) / 2.0'f32, TabInset)
+      max((tabView.tabBarFrame().size.width - groupWidth) / 2.0'f32, style.tabInset)
     of tvmTraditional:
-      TabInset
+      style.tabInset
   for itemIndex in 0 ..< index:
-    x += tabView.xItems[itemIndex].tabWidth()
+    x += tabView.xItems[itemIndex].tabWidth(style)
     if tabView.xTabMode == tvmTraditional:
-      x += TabGap
+      x += style.tabGap
 
   let
-    width = tabView.xItems[index].tabWidth()
+    width = tabView.xItems[index].tabWidth(style)
     selected = index == tabView.xSelectedIndex
+    traditionalRise = max(style.tabHeight - style.tabSegmentHeight, 0.0'f32)
   case tabView.xTabMode
   of tvmInset:
-    let y = (DefaultTabHeight - DefaultTabSegmentHeight) / 2.0'f32
-    initRect(x, y, width, DefaultTabSegmentHeight)
+    let y = traditionalRise / 2.0'f32
+    initRect(x, y, width, style.tabSegmentHeight)
   of tvmTraditional:
     let
       height =
         if selected:
-          DefaultTabHeight + ContentBorderWidth
+          style.tabHeight + style.contentBorderWidth
         else:
-          DefaultTabHeight - 4.0'f32
+          style.tabSegmentHeight
       y =
         case tabView.xTabPosition
         of tpTop:
-          if selected: 0.0'f32 else: 4.0'f32
+          if selected: 0.0'f32 else: traditionalRise
         of tpBottom:
           0.0'f32
     initRect(x, y, width, height)
@@ -577,9 +581,8 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     )
     tabBorderWidth =
       context.appearance.resolveLength(tabStyleContext, StyleBorderWidth, 1.0'f32)
-    tabCornerRadius = context.appearance.resolveLength(
-      tabStyleContext, StyleCornerRadius, TabCornerRadius
-    )
+    tabViewStyle = context.appearance.resolveTabViewStyle(tabStyleContext)
+    tabCornerRadius = tabViewStyle.tabCornerRadius
     tabTextInsets = context.appearance.resolveInsets(
       tabStyleContext, StyleTextInsets, initEdgeInsets(1.0'f32, 8.0'f32)
     )
@@ -694,11 +697,9 @@ protocol TabViewDrawing of ViewDrawingProtocol:
         panelStyleContext, StyleBorderColor, panelBorderColor()
       )
       borderWidth = context.appearance.resolveLength(
-        panelStyleContext, StyleBorderWidth, ContentBorderWidth
+        panelStyleContext, StyleBorderWidth, tabView.tabStyle().contentBorderWidth
       )
-      cornerRadius = context.appearance.resolveLength(
-        panelStyleContext, StyleCornerRadius, PanelCornerRadius
-      )
+      cornerRadius = tabView.tabStyle().panelCornerRadius
       panelChrome = chromeContext(
         context.appearance.resolveChromeName(panelStyleContext),
         crTabPanel,
@@ -723,13 +724,17 @@ protocol TabViewLayout of ViewLayoutProtocol:
     tabView.syncSelectedContent()
 
   method layoutIntrinsicContentSize(tabView: TabView): IntrinsicSize =
-    let tabWidthSum = tabView.tabGroupWidth() + TabInset * 2.0'f32
-    let contentHeight = tabView.contentIntrinsicHeight()
+    let
+      style = tabView.tabStyle()
+      tabWidthSum = tabView.tabGroupWidth(style) + style.tabInset * 2.0'f32
+      contentHeight = tabView.contentIntrinsicHeight()
     initIntrinsicSize(
       max(tabWidthSum, 160.0'f32),
       max(
         120.0'f32,
-        contentHeight + contentChromeHeight(tabView.tabPosition, tabView.xTabMode),
+        contentHeight + contentChromeHeight(
+          tabView.tabPosition, tabView.xTabMode, style
+        ),
       ),
     )
 
