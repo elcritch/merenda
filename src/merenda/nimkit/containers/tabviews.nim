@@ -22,6 +22,7 @@ const
   DefaultTabMaxWidth = 180.0'f32
   TabHorizontalPadding = 12.0'f32
   TabInset = 8.0'f32
+  TabGap = 1.0'f32
   ContentBorderWidth = 1.0'f32
   TabCornerRadius = 4.0'f32
   PanelCornerRadius = 4.0'f32
@@ -31,6 +32,10 @@ type
   TabPosition* = enum
     tpTop
     tpBottom
+
+  TabViewMode* = enum
+    tvmInset
+    tvmTraditional
 
   TabBarView = ref object of View
     xTabView: TabView
@@ -48,6 +53,7 @@ type
     xSelectedIndex: int
     xPressedIndex: int
     xTabPosition: TabPosition
+    xTabMode: TabViewMode
     xDelegate: DynamicAgent
     xTabBar: TabBarView
 
@@ -160,21 +166,47 @@ proc `tabPosition=`*(tabView: TabView, position: TabPosition) =
   tabView.setNeedsLayout()
   tabView.setNeedsDisplay(true)
 
+proc tabMode*(tabView: TabView): TabViewMode =
+  if tabView.isNil: tvmInset else: tabView.xTabMode
+
+proc `tabMode=`*(tabView: TabView, mode: TabViewMode) =
+  if tabView.isNil or tabView.xTabMode == mode:
+    return
+  tabView.xTabMode = mode
+  tabView.syncTabBarFrame()
+  tabView.setNeedsLayout()
+  tabView.setNeedsDisplay(true)
+  if not tabView.xTabBar.isNil:
+    tabView.xTabBar.setNeedsDisplay(true)
+
+func tabPanelOffset(mode: TabViewMode): float32 =
+  case mode
+  of tvmInset:
+    TabPanelOverlap
+  of tvmTraditional:
+    DefaultTabHeight - ContentBorderWidth
+
+func tabBarOverlap(mode: TabViewMode): float32 =
+  case mode
+  of tvmInset: TabPanelOverlap
+  of tvmTraditional: ContentBorderWidth
+
 proc contentRect*(tabView: TabView): Rect =
   if tabView.isNil:
     return
   let bounds = tabView.bounds()
+  let panelOffset = tabView.xTabMode.tabPanelOffset()
   case tabView.xTabPosition
   of tpTop:
     initRect(
       0.0,
-      TabPanelOverlap,
+      panelOffset,
       bounds.size.width,
-      max(bounds.size.height - TabPanelOverlap, 0.0'f32),
+      max(bounds.size.height - panelOffset, 0.0'f32),
     )
   of tpBottom:
     initRect(
-      0.0, 0.0, bounds.size.width, max(bounds.size.height - TabPanelOverlap, 0.0'f32)
+      0.0, 0.0, bounds.size.width, max(bounds.size.height - panelOffset, 0.0'f32)
     )
 
 func contentViewInsets(position: TabPosition): EdgeInsets =
@@ -184,8 +216,8 @@ func contentViewInsets(position: TabPosition): EdgeInsets =
   of tpBottom:
     initEdgeInsets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32)
 
-func contentChromeHeight(position: TabPosition): float32 =
-  TabPanelOverlap + position.contentViewInsets().vertical
+func contentChromeHeight(position: TabPosition, mode: TabViewMode): float32 =
+  mode.tabPanelOffset() + position.contentViewInsets().vertical
 
 proc contentViewRect*(tabView: TabView): Rect =
   tabView.contentRect().inset(tabView.tabPosition().contentViewInsets())
@@ -194,13 +226,14 @@ proc tabBarFrame(tabView: TabView): Rect =
   if tabView.isNil:
     return
   let bounds = tabView.bounds()
+  let overlap = tabView.xTabMode.tabBarOverlap()
   case tabView.xTabPosition
   of tpTop:
     initRect(0.0, 0.0, bounds.size.width, DefaultTabHeight + ContentBorderWidth)
   of tpBottom:
     initRect(
       0.0,
-      tabView.contentRect().maxY - TabPanelOverlap,
+      tabView.contentRect().maxY - overlap,
       bounds.size.width,
       DefaultTabHeight + ContentBorderWidth,
     )
@@ -222,19 +255,45 @@ proc tabGroupWidth(tabView: TabView): float32 =
     return
   for item in tabView.xItems:
     result += item.tabWidth()
+  if tabView.xTabMode == tvmTraditional and tabView.xItems.len > 1:
+    result += TabGap * float32(tabView.xItems.len - 1)
 
 proc tabRectInBar(tabView: TabView, index: int): Rect =
   if tabView.isNil or index < 0 or index >= tabView.xItems.len:
     return
   let groupWidth = tabView.tabGroupWidth()
-  var x = max((tabView.tabBarFrame().size.width - groupWidth) / 2.0'f32, TabInset)
+  var x =
+    case tabView.xTabMode
+    of tvmInset:
+      max((tabView.tabBarFrame().size.width - groupWidth) / 2.0'f32, TabInset)
+    of tvmTraditional:
+      TabInset
   for itemIndex in 0 ..< index:
     x += tabView.xItems[itemIndex].tabWidth()
+    if tabView.xTabMode == tvmTraditional:
+      x += TabGap
 
   let
     width = tabView.xItems[index].tabWidth()
-    y = (DefaultTabHeight - DefaultTabSegmentHeight) / 2.0'f32
-  initRect(x, y, width, DefaultTabSegmentHeight)
+    selected = index == tabView.xSelectedIndex
+  case tabView.xTabMode
+  of tvmInset:
+    let y = (DefaultTabHeight - DefaultTabSegmentHeight) / 2.0'f32
+    initRect(x, y, width, DefaultTabSegmentHeight)
+  of tvmTraditional:
+    let
+      height =
+        if selected:
+          DefaultTabHeight + ContentBorderWidth
+        else:
+          DefaultTabHeight - 4.0'f32
+      y =
+        case tabView.xTabPosition
+        of tpTop:
+          if selected: 0.0'f32 else: 4.0'f32
+        of tpBottom:
+          0.0'f32
+    initRect(x, y, width, height)
 
 proc tabRect*(tabView: TabView, index: int): Rect =
   let
@@ -473,13 +532,23 @@ func chromeEdge(position: TabPosition): ChromeEdge =
   of tpTop: ceTop
   of tpBottom: ceBottom
 
-func tabRoundedCorners(index, lastIndex: int): set[DirectionCorners] =
-  if index == 0:
-    result.incl dcTopLeft
-    result.incl dcBottomLeft
-  if index == lastIndex:
-    result.incl dcTopRight
-    result.incl dcBottomRight
+func tabRoundedCorners(
+    mode: TabViewMode, position: TabPosition, index, lastIndex: int
+): set[DirectionCorners] =
+  case mode
+  of tvmInset:
+    if index == 0:
+      result.incl dcTopLeft
+      result.incl dcBottomLeft
+    if index == lastIndex:
+      result.incl dcTopRight
+      result.incl dcBottomRight
+  of tvmTraditional:
+    case position
+    of tpTop:
+      result = {dcTopLeft, dcTopRight}
+    of tpBottom:
+      result = {dcBottomLeft, dcBottomRight}
 
 proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   let
@@ -535,15 +604,22 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     tabBorderWidth,
     tabCornerRadius,
     maskContent = true,
-    roundedCorners = tabRoundedCorners(index, tabView.xItems.high),
+    roundedCorners = tabRoundedCorners(
+      tabView.xTabMode, tabView.xTabPosition, index, tabView.xItems.high
+    ),
   )
+  let chromeEdge =
+    if tabView.xTabMode == tvmTraditional:
+      tabView.tabPosition.chromeEdge()
+    else:
+      ceNone
   context.drawChromeExtras(
     tabChrome,
     initChromeExtras(
       tabRoot,
       renderRect,
       cornerRadius = tabCornerRadius,
-      edge = ceNone,
+      edge = chromeEdge,
       seamFill = panelFillValue,
       highlightFill = tabHighlightFillValue,
     ),
@@ -651,7 +727,10 @@ protocol TabViewLayout of ViewLayoutProtocol:
     let contentHeight = tabView.contentIntrinsicHeight()
     initIntrinsicSize(
       max(tabWidthSum, 160.0'f32),
-      max(120.0'f32, contentHeight + tabView.tabPosition.contentChromeHeight()),
+      max(
+        120.0'f32,
+        contentHeight + contentChromeHeight(tabView.tabPosition, tabView.xTabMode),
+      ),
     )
 
 protocol TabViewEvents of ResponderEventProtocol:
@@ -718,6 +797,7 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   tabView.xSelectedIndex = -1
   tabView.xPressedIndex = -1
   tabView.xTabPosition = tpTop
+  tabView.xTabMode = tvmInset
   tabView.xTabBar = newTabBarView(tabView)
   tabView.background = initColor(0.94, 0.95, 0.97, 0.0)
   tabView.clipsToBounds = true
