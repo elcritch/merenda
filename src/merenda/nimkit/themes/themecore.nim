@@ -151,6 +151,9 @@ type
     chrome*: string
 
   SliderStyle* = object
+    track*: ControlBoxStyle
+    activeTrack*: ControlBoxStyle
+    knob*: ControlBoxStyle
     trackHeight*: float32
     knobSize*: float32
     minSize*: Size
@@ -1491,6 +1494,46 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
 
 proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
   SliderStyle(
+    track: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(0.76, 0.82, 0.88, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.38, 0.46, 0.56, 0.75)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      shadows: theme.shadowsRule(
+        context,
+        StyleBoxShadows,
+        @[insetShadow(initColor(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
+      ),
+    ),
+    activeTrack: ControlBoxStyle(
+      fill: theme.fillRule(
+        context, StyleHighlightFill, fill(initColor(0.13, 0.55, 0.96, 1.0))
+      ),
+      borderColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.02, 0.20, 0.58, 0.70)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      shadows: theme.shadowsRule(
+        context,
+        StyleBoxShadows,
+        @[insetShadow(initColor(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
+      ),
+    ),
+    knob: ControlBoxStyle(
+      fill:
+        theme.fillRule(context, StyleKnobFill, fill(initColor(0.92, 0.94, 0.97, 1.0))),
+      borderColor: theme.colorRule(
+        context, StyleKnobBorderColor, initColor(0.36, 0.40, 0.48, 0.92)
+      ),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      shadows: theme.shadowsRule(
+        context,
+        StyleKnobShadows,
+        @[
+          dropShadow(initColor(0.0, 0.0, 0.0, 0.20), y = 1.0, blur = 3.0),
+          insetShadow(initColor(1.0, 1.0, 1.0, 0.75), y = 1.0, blur = 2.0),
+        ],
+      ),
+    ),
     trackHeight: theme.lengthRule(context, StyleIndicatorSize, 6.0'f32),
     knobSize: theme.lengthRule(context, StyleKnobSize, 18.0'f32),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(160.0'f32, 24.0'f32)),
