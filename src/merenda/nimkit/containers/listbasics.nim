@@ -1,7 +1,7 @@
 from figdraw/fignodes import FigIdx
 import std/options
 
-import ../drawing/drawing
+import ../drawing
 import ./scrollergeometry
 import ../themes
 import ../foundation/events

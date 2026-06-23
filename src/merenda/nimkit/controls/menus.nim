@@ -4,7 +4,7 @@ import sigils/selectors
 
 import ../accessibility/accessibilityprotocols
 import ./controls
-import ../drawing/drawing
+import ../drawing
 import ../foundation/events
 import ../responder/keybindings
 import ../containers/listbasics

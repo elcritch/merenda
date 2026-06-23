@@ -6,7 +6,7 @@ import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
 import merenda/nimkit/app/documentcontrollers
 import merenda/nimkit/app/documents
-import merenda/nimkit/drawing/drawing
+import merenda/nimkit/drawing
 import merenda/nimkit/debug/selectionrings
 import merenda/nimkit/debug/viewselection
 import merenda/nimkit/debug/viewinspectors

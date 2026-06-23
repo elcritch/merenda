@@ -1,7 +1,7 @@
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
-import ../drawing/drawing
+import ../drawing
 import ./scrollergeometry
 import ../foundation/selectors
 import ../themes

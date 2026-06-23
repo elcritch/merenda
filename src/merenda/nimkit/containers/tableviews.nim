@@ -3,7 +3,7 @@ import std/[algorithm, math, options, strutils, tables, times]
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
-import ../drawing/drawing
+import ../drawing
 import ../foundation/events
 import ../app/dragging
 import ../app/pasteboards

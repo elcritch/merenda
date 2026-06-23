@@ -1,7 +1,7 @@
 import sigils/core
 
 import ../accessibility/accessibility
-import ../drawing/drawing
+import ../drawing
 import ../drawing/images
 import ../foundation/selectors
 import ../foundation/types
