@@ -34,8 +34,6 @@ proc onChanged(sender: DynamicAgent) =
 
 let target = newActionTarget(changedAction, onChanged)
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 priority.selectedIndex = 1
 color.selectedIndex = 0
 framework.selectedIndex = 3

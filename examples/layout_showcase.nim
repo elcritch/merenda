@@ -18,8 +18,6 @@ let
   runButton = newButton("Run")
   cancelButton = newButton("Cancel")
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 layout.spacing = 12.0
 layout.alignment = svaFill
 

@@ -46,8 +46,6 @@ discard mainMenu.addItem(actionsItem)
 app.mainMenu = mainMenu
 menuBar.reload()
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 button.target = runTarget
 button.action = runAction
 

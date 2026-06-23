@@ -130,8 +130,6 @@ proc onChanged(sender: DynamicAgent) =
     rebuildPreviewConstraints()
 
 let target = newActionTarget(changedAction, onChanged)
-
-root.background = initColor(0.94, 0.95, 0.97)
 preview.background = initColor(0.99, 0.99, 1.0)
 previewTitle.background = initColor(0.83, 0.90, 0.98)
 previewSubtitle.background = initColor(0.90, 0.94, 0.98)

@@ -73,7 +73,6 @@ proc scrollToRightEdge(sender: DynamicAgent) =
     scrollView.scrollToFraction(x = 1.0)
     updateStatus()
 
-root.background = initColor(0.95, 0.96, 0.98)
 document.background = initColor(1.0, 1.0, 1.0, 1.0)
 headerView.background = initColor(0.88, 0.91, 0.96, 1.0)
 cornerView.background = initColor(0.82, 0.87, 0.94, 1.0)

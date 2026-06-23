@@ -116,8 +116,6 @@ proc onChoiceChanged(sender: DynamicAgent) =
   if not sender.isNil:
     updateSummary()
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 for field in [nameField, noteField]:
   field.connect(textDidChange, field, onTextDidChange)
 

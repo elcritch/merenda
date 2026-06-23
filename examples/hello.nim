@@ -28,8 +28,6 @@ proc onCycle(sender: DynamicAgent) =
   if not sender.isNil:
     updateStatus()
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 button.buttonType = btToggle
 button.allowsMixedState = true
 button.target = newActionTarget(action, onCycle)

@@ -17,7 +17,9 @@ proc makeSwatch(width, height: int): Image =
         b = uint8(180 - int(90.0 * fx) + int(50.0 * fy))
       result[x, y] = rgba(r, g, b, 255)
 
-proc makeCard(title, detail: string, image: ImageResource, scaling: ImageScaling): StackView =
+proc makeCard(
+    title, detail: string, image: ImageResource, scaling: ImageScaling
+): StackView =
   let
     card = newStackView(laVertical)
     heading = newHeadingLabel(title)
@@ -66,7 +68,8 @@ let
   )
   namedCard = makeCard(
     "Named image",
-    namedImage.name & " / " & $namedImage.size.width.int & "x" & $namedImage.size.height.int,
+    namedImage.name & " / " & $namedImage.size.width.int & "x" &
+      $namedImage.size.height.int,
     namedImage,
     isScaleNone,
   )
@@ -82,8 +85,6 @@ let
     fileImage,
     isScaleAxesIndependently,
   )
-
-root.background = initColor(0.91, 0.93, 0.92)
 
 layout.spacing = 16.0
 layout.alignment = svaFill

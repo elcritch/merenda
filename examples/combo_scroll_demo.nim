@@ -38,8 +38,6 @@ proc onChanged(sender: DynamicAgent) =
 
 let target = newActionTarget(changedAction, onChanged)
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 projectChoice.maxVisibleItems = 5
 projectChoice.itemHeight = 22.0
 projectChoice.popupPresentation = ppInline
