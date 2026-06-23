@@ -313,6 +313,7 @@ protocol DefaultFormViewLayout of ViewLayoutProtocol:
 
 proc initFormViewFields*(formView: FormView, frame: Rect = AutoRect) =
   initViewFields(formView, frame)
+  formView.background = initColor(0.0, 0.0, 0.0, 0.0)
   formView.xSpacing[drow] = 8.0'f32
   formView.xSpacing[dcol] = 8.0'f32
   formView.xLabelAlignment = flaTrailing
