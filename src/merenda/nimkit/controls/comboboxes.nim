@@ -352,7 +352,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       arrowRect = style.comboBoxArrowRect(comboBox.bounds)
       arrowFrame = context.renderRectFor(arrowRect)
       arrowChrome =
-        chromeContext(style.chrome, crComboBox, cpArrow, style.box.fill, styleStates)
+        chromeContext(style.chrome, crComboBox, cpArrow, style.arrowFill, styleStates)
       separatorRect = initRect(
         arrowRect.origin.x,
         arrowRect.origin.y + 2.0'f32,
