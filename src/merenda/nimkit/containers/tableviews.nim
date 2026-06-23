@@ -355,6 +355,14 @@ proc drawTableHeaderSortIndicator*(
   chrome: TableHeaderChrome,
 )
 
+proc drawTableHeaderResizeHandle*(
+  tableView: TableView,
+  context: DrawContext,
+  column: TableColumn,
+  rect: Rect,
+  chrome: TableHeaderChrome,
+)
+
 proc syncTableScrollChrome(tableView: TableView)
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
@@ -3256,6 +3264,50 @@ proc drawTableHeaderSortIndicator*(
   discard context.addRenderLine(leftBase, apex, indicatorFill, lineWeight)
   discard context.addRenderLine(apex, rightBase, indicatorFill, lineWeight)
 
+proc drawTableHeaderResizeHandle*(
+    tableView: TableView,
+    context: DrawContext,
+    column: TableColumn,
+    rect: Rect,
+    chrome: TableHeaderChrome,
+) =
+  if tableView.isNil or context.isNil or column.isNil or rect.isEmpty:
+    return
+  if column.resizePolicy() != tcrResizable:
+    return
+  let
+    handleHeight = max(rect.size.height - 8.0'f32, 0.0'f32)
+    handleY = rect.origin.y + (rect.size.height - handleHeight) * 0.5'f32
+    handleColor = initColor(
+      chrome.cellBorderColor.r,
+      chrome.cellBorderColor.g,
+      chrome.cellBorderColor.b,
+      min(chrome.cellBorderColor.a, 0.72'f32),
+    )
+    softHandleColor = initColor(
+      chrome.cellBorderColor.r,
+      chrome.cellBorderColor.g,
+      chrome.cellBorderColor.b,
+      min(chrome.cellBorderColor.a, 0.32'f32),
+    )
+  if handleHeight <= 0.0'f32:
+    return
+  discard context.addRenderRectangle(
+    context.renderRectFor(initRect(rect.maxX - 1.0'f32, handleY, 1.0, handleHeight)),
+    fill(handleColor),
+  )
+  discard context.addRenderRectangle(
+    context.renderRectFor(
+      initRect(
+        rect.maxX - 3.0'f32,
+        handleY + 2.0'f32,
+        1.0,
+        max(handleHeight - 4.0'f32, 0.0'f32),
+      )
+    ),
+    fill(softHandleColor),
+  )
+
 proc drawTableHeaderInsertionIndicator*(
     tableView: TableView, context: DrawContext, chrome: TableHeaderChrome
 ) =
@@ -3369,6 +3421,7 @@ proc drawTableHeader*(
     tableView.drawTableHeaderSortIndicator(
       context, rect, column.sortDirection(), chrome
     )
+    tableView.drawTableHeaderResizeHandle(context, column, rect, chrome)
   tableView.drawTableHeaderInsertionIndicator(context, chrome)
 
 proc drawTableHeader*(tableView: TableView, context: DrawContext) =
@@ -3394,15 +3447,27 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
     for index, column in tableView.xColumns:
       let rect = tableView.tableHeaderColumnRect(column)
+      if rect.isEmpty or column.resizePolicy() != tcrResizable:
+        continue
+      let handleRect = initRect(
+        rect.maxX - resizeHandleWidth,
+        rect.origin.y,
+        resizeHandleWidth * 2.0'f32,
+        rect.size.height,
+      )
+      if handleRect.contains(point):
+        result.column = column
+        result.columnIndex = index
+        result.part = thpResizeHandle
+        result.rect = rect
+        return
+    for index, column in tableView.xColumns:
+      let rect = tableView.tableHeaderColumnRect(column)
       if rect.contains(point):
         result.column = column
         result.columnIndex = index
         result.rect = rect
-        if column.resizePolicy() == tcrResizable and
-            point.x >= rect.maxX - resizeHandleWidth:
-          result.part = thpResizeHandle
-        else:
-          result.part = thpColumn
+        result.part = thpColumn
         return
 
   method resizeColumn(tableView: TableView, column: TableColumn, width: float32) =
@@ -3411,6 +3476,8 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     if column.resizePolicy() == tcrFixed:
       return
     column.width = width
+    tableView.syncHeaderTrackingAreas()
+    tableView.setNeedsDisplay(true)
 
   method moveColumn(tableView: TableView, fromIndex, toIndex: int) =
     if tableView.isNil or fromIndex notin 0 ..< tableView.xColumns.len:
