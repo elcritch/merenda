@@ -1,9 +1,10 @@
-import ../accessibility/accessibility
 import ./controls
 import ../foundation/selectors
+import ../drawing
 import ../themes
 import ../foundation/events
 import ../foundation/types
+import ../accessibility/accessibility
 
 export controls
 

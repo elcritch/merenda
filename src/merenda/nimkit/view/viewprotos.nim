@@ -2,6 +2,7 @@ import std/[algorithm, macros]
 
 import ../foundation/selectors
 import ../themes
+import ../drawing/drawing
 import ../foundation/types
 import ./viewgeometry
 import ./viewbase

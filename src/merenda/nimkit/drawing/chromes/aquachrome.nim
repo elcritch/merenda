@@ -1,9 +1,9 @@
 import sigils/core
 import sigils/selectors
 
-import ../themecore
-import ../defaulttheme
-import ../../drawing
+import ../../themes
+import ../drawing
+import ../chrome
 import ../../foundation/types
 
 type AquaChrome = ref object of Chrome
