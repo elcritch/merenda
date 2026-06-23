@@ -285,9 +285,16 @@ proc drawPushButtonFace(
       radius,
       style.box.shadows,
       maskContent = true,
+      cornerRadii = style.box.cornerRadii,
     )
   context.drawChromeExtras(
-    chrome, initChromeExtras(buttonRoot, absoluteFrame, cornerRadius = radius)
+    chrome,
+    initChromeExtras(
+      buttonRoot,
+      absoluteFrame,
+      cornerRadius = radius,
+      cornerRadii = style.box.cornerRadii,
+    ),
   )
 
 protocol DefaultButtonDrawing of ViewDrawingProtocol:

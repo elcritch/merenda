@@ -50,6 +50,7 @@ type
     parent*: FigIdx
     rect*: Rect
     cornerRadius*: float32
+    cornerRadii*: CornerRadii
     edge*: ChromeEdge
     seamFill*: Fill
     highlightFill*: Fill
@@ -80,15 +81,22 @@ func initChromeExtras*(
     rect: Rect,
     layer = DefaultDrawLevel,
     cornerRadius = 0.0'f32,
+    cornerRadii = initCornerRadii(0.0'f32),
     edge = ceNone,
     seamFill = transparentFill(),
     highlightFill = transparentFill(),
 ): ChromeExtras =
+  let resolvedCornerRadii =
+    if cornerRadii.isZero:
+      initCornerRadii(cornerRadius)
+    else:
+      cornerRadii
   ChromeExtras(
     layer: layer,
     parent: parent,
     rect: rect,
     cornerRadius: cornerRadius,
+    cornerRadii: resolvedCornerRadii,
     edge: edge,
     seamFill: seamFill,
     highlightFill: highlightFill,

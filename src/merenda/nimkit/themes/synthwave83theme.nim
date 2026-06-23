@@ -969,7 +969,11 @@ proc installSynthwave83ReadabilityPass(theme: var Theme) =
   theme["button.border.color"] = initColor(0.96, 0.04, 1.0, 0.84)
   theme["button.border.color.highlighted"] = initColor(0.18, 0.96, 1.0, 0.92)
   theme["button.text.color"] = initColor(0.84, 0.98, 1.0, 0.98)
-  theme[srButton, StyleCornerRadius] = 6.0
+  theme[srButton, StyleCornerRadius] = 5.0
+  theme[srButton, StyleCornerRadiusTopLeft] = 5.0
+  theme[srButton, StyleCornerRadiusTopRight] = 0.0
+  theme[srButton, StyleCornerRadiusBottomLeft] = 0.0
+  theme[srButton, StyleCornerRadiusBottomRight] = 12.0
   theme[srButton, StyleBoxShadows] =
     @[
       dropShadow(initColor(0.98, 0.00, 1.0, 0.18), y = 1.0, blur = 9.0),
