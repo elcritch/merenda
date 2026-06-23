@@ -1022,6 +1022,32 @@ proc resolveColor*(
 ): Color =
   appearance.theme.resolveColor(context, key, fallback)
 
+proc resolveLength*(
+    theme: Theme, context: StyleContext, key: StyleKey[float32], fallback: float32
+): float32 =
+  theme.lengthRule(context, key, fallback)
+
+proc resolveLength*(
+    appearance: Appearance,
+    context: StyleContext,
+    key: StyleKey[float32],
+    fallback: float32,
+): float32 =
+  appearance.theme.resolveLength(context, key, fallback)
+
+proc resolveInsets*(
+    theme: Theme, context: StyleContext, key: StyleKey[EdgeInsets], fallback: EdgeInsets
+): EdgeInsets =
+  theme.insetsRule(context, key, fallback)
+
+proc resolveInsets*(
+    appearance: Appearance,
+    context: StyleContext,
+    key: StyleKey[EdgeInsets],
+    fallback: EdgeInsets,
+): EdgeInsets =
+  appearance.theme.resolveInsets(context, key, fallback)
+
 proc resolveChromeName*(theme: Theme, context: StyleContext): string =
   theme.keywordRule(context, StyleChrome, DefaultChromeName)
 
