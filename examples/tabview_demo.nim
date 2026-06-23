@@ -93,9 +93,11 @@ let
   previousButton = newButton("Previous")
   nextButton = newButton("Next")
   bottomTabs = newCheckBox("Tabs on bottom")
+  tabStyleChoice = newComboBox(["Inset", "Traditional"])
   previousAction = actionSelector("selectPreviousTab")
   nextAction = actionSelector("selectNextTab")
   positionAction = actionSelector("toggleTabPosition")
+  modeAction = actionSelector("selectTabMode")
 
 proc updateStatus() =
   let item = tabView.selectedTabViewItem()
@@ -120,6 +122,15 @@ proc toggleTabPosition(sender: DynamicAgent) =
     tabView.tabPosition = tpBottom
   else:
     tabView.tabPosition = tpTop
+  updateStatus()
+
+proc selectTabMode(sender: DynamicAgent) =
+  discard sender
+  case tabStyleChoice.indexOfSelectedItem()
+  of 1:
+    tabView.tabMode = tvmTraditional
+  else:
+    tabView.tabMode = tvmInset
   updateStatus()
 
 root.background = initColor(0.95, 0.96, 0.98)
@@ -149,8 +160,11 @@ nextButton.target = newActionTarget(nextAction, selectNext)
 nextButton.action = nextAction
 bottomTabs.target = newActionTarget(positionAction, toggleTabPosition)
 bottomTabs.action = positionAction
+tabStyleChoice.selectItemAtIndex(0)
+tabStyleChoice.target = newActionTarget(modeAction, selectTabMode)
+tabStyleChoice.action = modeAction
 
-controls.addArrangedSubview(previousButton, nextButton, bottomTabs)
+controls.addArrangedSubview(previousButton, nextButton, bottomTabs, tabStyleChoice)
 controls.addFlexibleSpacer()
 
 layout.addArrangedSubview(header, status, tabView, controls)
