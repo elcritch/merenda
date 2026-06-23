@@ -72,6 +72,7 @@ proc rectangleNode(
     clips = false,
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
+    lightMaskContent = false,
 ): Fig =
   result = Fig(
     kind: nkRectangle,
@@ -80,10 +81,10 @@ proc rectangleNode(
     corners: cornerRadii(cornerRadius, roundedCorners),
     stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
-  if maskContent:
-    result.flags.incl NfRectMaskContent
-  elif clips:
+  if maskContent or clips:
     result.flags.incl NfClipContent
+  elif lightMaskContent:
+    result.flags.incl NfRectMaskContent
   for idx in 0 ..< min(shadows.len, result.shadows.len):
     result.shadows[idx] = shadows[idx].toFigShadow()
 
@@ -296,13 +297,14 @@ proc addRenderRectangle*(
     clips = false,
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
+    lightMaskContent = false,
 ): FigIdx {.discardable.} =
   context.addFig(
     layer,
     parent,
     rectangleNode(
       rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows, clips,
-      maskContent, roundedCorners,
+      maskContent, roundedCorners, lightMaskContent,
     ),
   )
 
@@ -318,10 +320,11 @@ proc addRenderRectangle*(
     clips = false,
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
+    lightMaskContent = false,
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
     DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
-    shadows, clips, maskContent, roundedCorners,
+    shadows, clips, maskContent, roundedCorners, lightMaskContent,
   )
 
 proc addRenderRectangle*(
@@ -335,10 +338,11 @@ proc addRenderRectangle*(
     clips = false,
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
+    lightMaskContent = false,
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
-    clips, maskContent, roundedCorners,
+    clips, maskContent, roundedCorners, lightMaskContent,
   )
 
 proc addRenderLine*(
