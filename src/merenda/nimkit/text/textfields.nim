@@ -762,7 +762,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   textField.setClipsToBounds(true)
   textField.xStringValue = value
   textField.xAlignment = taLeft
-  textField.xTextColor = initColor(0.08, 0.09, 0.11)
+  textField.xTextColor = initColor(0.0, 0.0, 0.0, 0.0)
   textField.xFlags = {tfEditable, tfSelectable}
   textField.xInsertionPoint = value.runeLen
   textField.xSelectionAnchor = textField.xInsertionPoint
