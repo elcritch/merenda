@@ -438,6 +438,7 @@ proc initStackViewFields*(
     stackView: StackView, orientation = laVertical, frame: Rect = AutoRect
 ) =
   initViewFields(stackView, frame)
+  stackView.background = initColor(0.0, 0.0, 0.0, 0.0)
   stackView.xOrientation = orientation
   stackView.xSpacing = 8.0'f32
   stackView.xAlignment = svaFill
