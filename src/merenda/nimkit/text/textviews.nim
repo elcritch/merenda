@@ -270,6 +270,11 @@ proc `textColor=`*(textView: TextView, color: Color) =
   if textView.isNil or textView.xTextColor == color:
     return
   textView.xTextColor = color
+  textView.xTypingAttributes = defaultTextAttributes(textView.textColor())
+  if textView.xTextStorage.len > 0 and not textView.richText:
+    textView.xTextStorage.setAttributes(
+      initTextRange(0, textView.xTextStorage.len), textView.xTypingAttributes
+    )
   textView.setNeedsDisplay(true)
 
 proc selectionColor*(textView: TextView): Color =
@@ -458,9 +463,17 @@ proc replaceRange(
 proc displayTextStorage(textView: TextView): TextStorage =
   if textView.isNil:
     return newTextStorage()
-  result = textView.xTextStorage
-  if textView.xHasMarkedText and textView.xMarkedRange.length > 0:
+  let shouldApplyPlainTextColor = (not textView.richText) or textView.isFieldEditor
+  if shouldApplyPlainTextColor or
+      (textView.xHasMarkedText and textView.xMarkedRange.length > 0):
     result = textView.xTextStorage.copyTextStorage()
+  else:
+    result = textView.xTextStorage
+  if shouldApplyPlainTextColor and result.len > 0:
+    result.setAttributes(
+      initTextRange(0, result.len), defaultTextAttributes(textView.textColor())
+    )
+  if textView.xHasMarkedText and textView.xMarkedRange.length > 0:
     var attributes = result.attributesAt(int(textView.xMarkedRange.location))
     attributes.underline = true
     result.setAttributes(textView.xMarkedRange, attributes)

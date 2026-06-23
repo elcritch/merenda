@@ -1000,6 +1000,10 @@ proc installSynthwave83ReadabilityPass(theme: var Theme) =
       insetShadow(initColor(1.0, 0.02, 0.88, 0.12), y = -1.0, blur = 5.0),
     ]
 
+  theme[srTextField, StyleTextColor] = initColor(0.84, 0.98, 1.0, 0.98)
+  theme[srTextField, {ssFocused}, StyleTextColor] = initColor(0.90, 1.0, 1.0, 1.0)
+  theme[srTextField, {ssDisabled}, StyleTextColor] = styleToken("disabled.text.color")
+
   theme[srSlider, StyleFill] = linear(
     initColor(0.10, 0.00, 0.22, 0.90),
     initColor(0.22, 0.02, 0.38, 0.76),
