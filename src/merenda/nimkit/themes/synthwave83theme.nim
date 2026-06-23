@@ -261,6 +261,9 @@ proc installSynthwave83ControlStyles(theme: var Theme) =
   theme[srTextField, StyleBoxShadows] = synthwave83InsetShadows()
   theme[srComboBox, StyleChrome] = styleKeyword(FlatTransparentChromeName)
   theme[srComboBox, StyleBoxShadows] = synthwave83InsetShadows()
+  theme[srSlider, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+  theme[srSlider, StyleFocusRingColor] = styleToken("focus.ring.color")
+  theme[srSlider, StyleBoxShadows] = synthwave83InsetShadows()
   theme[srTableView, StyleBoxShadows] = synthwave83InsetShadows()
   theme[srTableView, StyleDropIndicatorFill] = synthwave83SelectionFill()
   theme[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
@@ -995,6 +998,37 @@ proc installSynthwave83ReadabilityPass(theme: var Theme) =
       dropShadow(initColor(0.16, 0.88, 1.0, 0.16), y = 1.0, blur = 8.0),
       insetShadow(initColor(0.34, 0.98, 1.0, 0.18), y = 1.0, blur = 3.0),
       insetShadow(initColor(1.0, 0.02, 0.88, 0.12), y = -1.0, blur = 5.0),
+    ]
+
+  theme[srSlider, StyleFill] = linear(
+    initColor(0.10, 0.00, 0.22, 0.90),
+    initColor(0.22, 0.02, 0.38, 0.76),
+    initColor(0.03, 0.14, 0.32, 0.82),
+    fgaY,
+    104'u8,
+  )
+  theme[srSlider, StyleHighlightFill] = linear(
+    initColor(1.0, 0.06, 0.88, 0.90),
+    initColor(0.42, 0.04, 0.92, 0.78),
+    initColor(0.08, 0.92, 1.0, 0.64),
+    fgaDiagTLBR,
+    108'u8,
+  )
+  theme[srSlider, StyleKnobFill] = linear(
+    initColor(0.34, 0.02, 0.50, 0.92),
+    initColor(0.18, 0.00, 0.34, 0.86),
+    initColor(0.04, 0.60, 0.82, 0.54),
+    fgaDiagTLBR,
+    112'u8,
+  )
+  theme[srSlider, StyleBorderColor] = initColor(0.92, 0.05, 1.0, 0.76)
+  theme[srSlider, StyleFocusRingColor] = initColor(0.16, 0.94, 1.0, 0.84)
+  theme[srSlider, StyleKnobBorderColor] = initColor(0.24, 0.96, 1.0, 0.92)
+  theme[srSlider, StyleKnobShadows] =
+    @[
+      dropShadow(initColor(1.0, 0.00, 0.88, 0.22), y = 1.0, blur = 7.0),
+      insetShadow(initColor(0.30, 0.96, 1.0, 0.24), y = 1.0, blur = 3.0),
+      insetShadow(initColor(0.0, 0.0, 0.0, 0.30), y = -1.0, blur = 3.0),
     ]
 
   theme[srComboBox, StyleIndicatorFill] = linear(

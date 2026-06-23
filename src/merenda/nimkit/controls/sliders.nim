@@ -175,18 +175,6 @@ proc sliderFocusBox(style: SliderStyle): ControlBoxStyle =
     cornerRadius: style.knobSize * 0.5'f32,
   )
 
-func sliderTrackBaseFill(enabled: bool): Fill =
-  fill(initColor(0.76, 0.82, 0.88, if enabled: 1.0'f32 else: 0.60'f32))
-
-func sliderActiveTrackBaseFill(enabled: bool): Fill =
-  fill(initColor(0.13, 0.55, 0.96, if enabled: 1.0'f32 else: 0.40'f32))
-
-func sliderKnobBaseFill(highlighted, enabled: bool): Fill =
-  if highlighted and enabled:
-    fill(initColor(0.15, 0.60, 0.98, 1.0))
-  else:
-    fill(initColor(0.92, 0.94, 0.97, if enabled: 1.0'f32 else: 0.66'f32))
-
 proc sliderChromeStates(slider: Slider): set[WidgetState] =
   result = slider.widgetStateSet()
   if slider.cell().isHighlighted():
@@ -197,7 +185,6 @@ proc drawSliderTrack(
     context: DrawContext,
     rect: Rect,
     part: ChromePart,
-    fillValue: Fill,
     style: SliderStyle,
 ) =
   if rect.isEmpty:
@@ -205,27 +192,17 @@ proc drawSliderTrack(
   let
     frame = context.renderRectFor(rect)
     radius = rect.size.height * 0.5'f32
+    box = if part == cpHighlight: style.activeTrack else: style.track
     chrome = chromeContext(
-      style.chrome, crSliderTrack, part, fillValue, slider.sliderChromeStates()
+      style.chrome, crSliderTrack, part, box.fill, slider.sliderChromeStates()
     )
-    borderColor =
-      if part == cpHighlight:
-        initColor(0.02, 0.20, 0.58, 0.70)
-      else:
-        initColor(0.38, 0.46, 0.56, if slider.isEnabled(): 0.75'f32 else: 0.35'f32)
     trackRoot = context.addRenderRectangle(
       frame,
       context.appearance.chromeFill(chrome),
-      borderColor,
-      1.0'f32,
+      box.borderColor,
+      box.borderWidth,
       radius,
-      @[
-        insetShadow(
-          initColor(0.0, 0.0, 0.0, if slider.isEnabled(): 0.16'f32 else: 0.06'f32),
-          y = 1.0,
-          blur = 2.0,
-        )
-      ],
+      box.shadows,
       lightMaskContent = true,
     )
   context.drawChromeExtras(
@@ -238,35 +215,18 @@ proc drawSliderKnob(
   if rect.isEmpty:
     return
   let
-    enabled = slider.isEnabled()
-    highlighted = slider.cell().isHighlighted()
     frame = context.renderRectFor(rect)
     radius = rect.size.width * 0.5'f32
     chrome = chromeContext(
-      style.chrome,
-      crSliderKnob,
-      cpFace,
-      sliderKnobBaseFill(highlighted, enabled),
-      slider.sliderChromeStates(),
+      style.chrome, crSliderKnob, cpFace, style.knob.fill, slider.sliderChromeStates()
     )
     knobRoot = context.addRenderRectangle(
       frame,
       context.appearance.chromeFill(chrome),
-      initColor(0.36, 0.40, 0.48, if enabled: 0.92'f32 else: 0.42'f32),
-      1.0'f32,
+      style.knob.borderColor,
+      style.knob.borderWidth,
       radius,
-      @[
-        dropShadow(
-          initColor(0.0, 0.0, 0.0, if enabled: 0.20'f32 else: 0.08'f32),
-          y = 1.0,
-          blur = 3.0,
-        ),
-        insetShadow(
-          initColor(1.0, 1.0, 1.0, if enabled: 0.75'f32 else: 0.22'f32),
-          y = 1.0,
-          blur = 2.0,
-        ),
-      ],
+      style.knob.shadows,
       lightMaskContent = true,
     )
   context.drawChromeExtras(
@@ -281,7 +241,7 @@ protocol DefaultSliderDrawing of ViewDrawingProtocol:
       track = slider.trackRect(style)
       knob = slider.knobRect(style)
 
-    slider.drawSliderTrack(context, track, cpFace, sliderTrackBaseFill(enabled), style)
+    slider.drawSliderTrack(context, track, cpFace, style)
 
     let fillRect = initRect(
       track.origin.x,
@@ -290,9 +250,7 @@ protocol DefaultSliderDrawing of ViewDrawingProtocol:
       track.size.height,
     )
     if fillRect.size.width > 0.0'f32 and enabled:
-      slider.drawSliderTrack(
-        context, fillRect, cpHighlight, sliderActiveTrackBaseFill(enabled), style
-      )
+      slider.drawSliderTrack(context, fillRect, cpHighlight, style)
 
     slider.drawSliderKnob(context, knob, style)
 
