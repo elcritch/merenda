@@ -44,13 +44,19 @@ proc defaultFont(size: float32): FigFont =
 
 const AllCorners = {dcTopLeft, dcTopRight, dcBottomLeft, dcBottomRight}
 
-proc cornerRadii(
+proc uniformCornerRadii(
     radius: float32, roundedCorners: set[DirectionCorners] = AllCorners
 ): array[DirectionCorners, uint16] =
   let clamped = max(radius, 0.0'f32)
   for corner in DirectionCorners:
     if corner in roundedCorners:
       result[corner] = clamped.round().uint16
+
+proc figCornerRadii(radii: CornerRadii): array[DirectionCorners, uint16] =
+  result[dcTopLeft] = radii.topLeft.round().uint16
+  result[dcTopRight] = radii.topRight.round().uint16
+  result[dcBottomLeft] = radii.bottomLeft.round().uint16
+  result[dcBottomRight] = radii.bottomRight.round().uint16
 
 proc toFigShadow(shadow: BoxShadow): RenderShadow =
   RenderShadow(
@@ -73,12 +79,17 @@ proc rectangleNode(
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
     lightMaskContent = false,
+    cornerRadii = initCornerRadii(0.0'f32),
 ): Fig =
   result = Fig(
     kind: nkRectangle,
     screenBox: rect.toFigRect,
     fill: fillValue,
-    corners: cornerRadii(cornerRadius, roundedCorners),
+    corners:
+      if cornerRadii.isZero:
+        uniformCornerRadii(cornerRadius, roundedCorners)
+      else:
+        cornerRadii.figCornerRadii(),
     stroke: RenderStroke(weight: strokeWidth, fill: fill(strokeColor.rgba)),
   )
   if maskContent or clips:
@@ -298,13 +309,14 @@ proc addRenderRectangle*(
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
     lightMaskContent = false,
+    cornerRadii = initCornerRadii(0.0'f32),
 ): FigIdx {.discardable.} =
   context.addFig(
     layer,
     parent,
     rectangleNode(
       rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows, clips,
-      maskContent, roundedCorners, lightMaskContent,
+      maskContent, roundedCorners, lightMaskContent, cornerRadii,
     ),
   )
 
@@ -321,10 +333,11 @@ proc addRenderRectangle*(
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
     lightMaskContent = false,
+    cornerRadii = initCornerRadii(0.0'f32),
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
     DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
-    shadows, clips, maskContent, roundedCorners, lightMaskContent,
+    shadows, clips, maskContent, roundedCorners, lightMaskContent, cornerRadii,
   )
 
 proc addRenderRectangle*(
@@ -339,10 +352,11 @@ proc addRenderRectangle*(
     maskContent = false,
     roundedCorners: set[DirectionCorners] = AllCorners,
     lightMaskContent = false,
+    cornerRadii = initCornerRadii(0.0'f32),
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
-    clips, maskContent, roundedCorners, lightMaskContent,
+    clips, maskContent, roundedCorners, lightMaskContent, cornerRadii,
   )
 
 proc addRenderLine*(
@@ -510,6 +524,7 @@ proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBox
     box.focusRingColor,
     box.focusRingWidth,
     max(box.cornerRadius - box.focusRingInset, 0.0'f32),
+    cornerRadii = box.cornerRadii.inset(box.focusRingInset),
   )
 
 proc addComboBoxArrow*(

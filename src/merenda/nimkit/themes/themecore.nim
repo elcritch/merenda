@@ -15,6 +15,12 @@ type
     bottom*: float32
     right*: float32
 
+  CornerRadii* = object
+    topLeft*: float32
+    topRight*: float32
+    bottomLeft*: float32
+    bottomRight*: float32
+
   BoxShadowKind* = enum
     bskDrop
     bskInset
@@ -117,6 +123,7 @@ type
     borderColor*: Color
     borderWidth*: float32
     cornerRadius*: float32
+    cornerRadii*: CornerRadii
     focusRingWidth*: float32
     focusRingInset*: float32
     focusRingColor*: Color
@@ -214,6 +221,10 @@ const
   StyleBorderColor* = StyleKey[Color]("border.color")
   StyleBorderWidth* = StyleKey[float32]("border.width")
   StyleCornerRadius* = StyleKey[float32]("corner.radius")
+  StyleCornerRadiusTopLeft* = StyleKey[float32]("corner.radius.topLeft")
+  StyleCornerRadiusTopRight* = StyleKey[float32]("corner.radius.topRight")
+  StyleCornerRadiusBottomLeft* = StyleKey[float32]("corner.radius.bottomLeft")
+  StyleCornerRadiusBottomRight* = StyleKey[float32]("corner.radius.bottomRight")
   StyleFocusRingWidth* = StyleKey[float32]("focus.ring.width")
   StyleFocusRingInset* = StyleKey[float32]("focus.ring.inset")
   StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
@@ -274,6 +285,31 @@ func initEdgeInsets*(vertical, horizontal: float32): EdgeInsets =
 
 func initEdgeInsets*(all: float32): EdgeInsets =
   initEdgeInsets(all, all, all, all)
+
+func initCornerRadii*(
+    topLeft, topRight, bottomLeft, bottomRight: float32
+): CornerRadii =
+  CornerRadii(
+    topLeft: max(topLeft, 0.0'f32),
+    topRight: max(topRight, 0.0'f32),
+    bottomLeft: max(bottomLeft, 0.0'f32),
+    bottomRight: max(bottomRight, 0.0'f32),
+  )
+
+func initCornerRadii*(all: float32): CornerRadii =
+  initCornerRadii(all, all, all, all)
+
+func isZero*(radii: CornerRadii): bool =
+  radii.topLeft == 0.0'f32 and radii.topRight == 0.0'f32 and radii.bottomLeft == 0.0'f32 and
+    radii.bottomRight == 0.0'f32
+
+func inset*(radii: CornerRadii, amount: float32): CornerRadii =
+  initCornerRadii(
+    max(radii.topLeft - amount, 0.0'f32),
+    max(radii.topRight - amount, 0.0'f32),
+    max(radii.bottomLeft - amount, 0.0'f32),
+    max(radii.bottomRight - amount, 0.0'f32),
+  )
 
 func horizontal*(insets: EdgeInsets): float32 =
   insets.left + insets.right
@@ -1401,14 +1437,26 @@ proc `[]=`*(
 proc `[]`*[T](appearance: Appearance, role: StyleRole, key: StyleKey[T]): StyleValue =
   appearance.theme[role, key]
 
+proc cornerRadiiRule(
+    theme: Theme, context: StyleContext, fallback: float32
+): CornerRadii =
+  initCornerRadii(
+    theme.lengthRule(context, StyleCornerRadiusTopLeft, fallback),
+    theme.lengthRule(context, StyleCornerRadiusTopRight, fallback),
+    theme.lengthRule(context, StyleCornerRadiusBottomLeft, fallback),
+    theme.lengthRule(context, StyleCornerRadiusBottomRight, fallback),
+  )
+
 proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
+  let cornerRadius = theme.lengthRule(context, StyleCornerRadius, 14.0)
   ButtonStyle(
     box: ControlBoxStyle(
       fill: theme.fillRule(context, StyleFill, fill(initColor(0.20, 0.48, 0.86, 1.0))),
       borderColor:
         theme.colorRule(context, StyleBorderColor, initColor(0.10, 0.25, 0.46, 1.0)),
       borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 14.0),
+      cornerRadius: cornerRadius,
+      cornerRadii: theme.cornerRadiiRule(context, cornerRadius),
       focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
       focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
       focusRingColor:

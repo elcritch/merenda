@@ -211,7 +211,8 @@ proc drawFlatButtonExtras(
 
   let
     innerChrome = chrome.withPart(cpInnerFace)
-    innerRadius = max(radius - FlatInset, 1.0'f32)
+    innerRadius = max(radius - FlatInset, 0.0'f32)
+    innerRadii = extras.cornerRadii.inset(FlatInset)
     innerRoot = context.addRenderRectangle(
       extras.layer,
       extras.parent,
@@ -233,6 +234,7 @@ proc drawFlatButtonExtras(
         ),
       ],
       lightMaskContent = true,
+      cornerRadii = innerRadii,
     )
     topGloss = initRect(
       inner.origin.x, inner.origin.y, inner.size.width, inner.size.height * 0.30'f32
@@ -251,6 +253,7 @@ proc drawFlatButtonExtras(
     initColor(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
+    cornerRadii = innerRadii,
   )
   discard context.addRenderRectangle(
     extras.layer,
@@ -260,6 +263,7 @@ proc drawFlatButtonExtras(
     initColor(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
+    cornerRadii = innerRadii,
   )
 
 proc drawFlatChoiceExtras(
@@ -303,6 +307,7 @@ proc drawFlatChoiceExtras(
 
   let
     inset = if chrome.isSelected: 1.2'f32 else: 1.4'f32
+    glossRadii = extras.cornerRadii.inset(inset)
     gloss = initRect(
       extras.rect.origin.x + inset,
       extras.rect.origin.y + inset,
@@ -318,7 +323,8 @@ proc drawFlatChoiceExtras(
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
     initColor(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
-    max(extras.cornerRadius - inset, 1.0'f32),
+    max(extras.cornerRadius - inset, 0.0'f32),
+    cornerRadii = glossRadii,
   )
 
 proc drawFlatComboFaceExtras(
@@ -344,13 +350,15 @@ proc drawFlatComboFaceExtras(
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
     initColor(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
-    max(extras.cornerRadius - 1.0'f32, 1.0'f32),
+    max(extras.cornerRadius - 1.0'f32, 0.0'f32),
+    cornerRadii = extras.cornerRadii.inset(1.0'f32),
   )
   discard context.addRenderRectangle(
     extras.layer,
     extras.parent,
     lowerWash,
     context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
+    cornerRadii = extras.cornerRadii,
   )
 
 proc drawFlatComboArrowExtras(
