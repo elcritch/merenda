@@ -155,6 +155,23 @@ func aquaInsetControlShadows(): seq[BoxShadow] =
     insetShadow(initColor(1.0, 1.0, 1.0, 0.80), y = -1.0, blur = 2.0),
   ]
 
+func aquaSwitchTrackShadows(enabled: bool): seq[BoxShadow] =
+  @[
+    insetShadow(
+      initColor(0.0, 0.0, 0.0, if enabled: 0.14'f32 else: 0.05'f32), y = 1.0, blur = 2.0
+    )
+  ]
+
+func aquaSwitchKnobShadows(enabled: bool): seq[BoxShadow] =
+  @[
+    dropShadow(
+      initColor(0.0, 0.0, 0.0, if enabled: 0.22'f32 else: 0.08'f32), y = 1.0, blur = 3.0
+    ),
+    insetShadow(
+      initColor(1.0, 1.0, 1.0, if enabled: 0.82'f32 else: 0.26'f32), y = 1.0, blur = 2.0
+    ),
+  ]
+
 proc initTheme*(): Theme =
   result.tokens = newStyleTokenStore()
   result.chromes = initTable[string, Chrome]()
@@ -217,7 +234,8 @@ proc initTheme*(): Theme =
   result["comboBox.item.fill.selected.highlighted"] =
     aquaComboItemSelectedHighlightedFill()
   result["comboBox.item.text.color"] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
-  result["comboBox.item.text.color.selected"] = styleColor(initColor(1.0, 1.0, 1.0, 1.0))
+  result["comboBox.item.text.color.selected"] =
+    styleColor(initColor(1.0, 1.0, 1.0, 1.0))
   result["tableView.fill"] = styleToken("textField.fill")
   result["tableView.border.color"] = styleToken("textField.border.color")
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
@@ -227,7 +245,8 @@ proc initTheme*(): Theme =
     styleToken("comboBox.item.fill.selected.highlighted")
   result["rowItem.fill.disabled"] = styleColor(initColor(0.80, 0.82, 0.86, 1.0))
   result["rowItem.text.color"] = styleToken("comboBox.item.text.color")
-  result["rowItem.text.color.selected"] = styleToken("comboBox.item.text.color.selected")
+  result["rowItem.text.color.selected"] =
+    styleToken("comboBox.item.text.color.selected")
   result["rowItem.text.color.disabled"] = styleColor(initColor(0.32, 0.35, 0.41, 1.0))
   result["rowItem.separator.color"] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
   result["tab.panel.fill"] = fill(initColor(0.98, 0.98, 0.96, 1.0))
@@ -322,6 +341,37 @@ proc initTheme*(): Theme =
   result[srButton, {ssDisabled}, StyleTextHighlightColor] =
     initColor(1.0, 1.0, 1.0, 0.16)
   result[srButton, {ssDisabled}, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.08)
+
+  result[srSwitch, StyleFill] = fill(initColor(0.72, 0.78, 0.84, 1.0))
+  result[srSwitch, StyleBorderColor] = initColor(0.38, 0.45, 0.53, 0.70)
+  result[srSwitch, StyleBorderWidth] = 1.0
+  result[srSwitch, StyleFocusRingWidth] = 3.0
+  result[srSwitch, StyleFocusRingInset] = -3.0
+  result[srSwitch, StyleFocusRingColor] = initColor(0.28, 0.62, 1.0, 0.80)
+  result[srSwitch, StyleBoxShadows] = aquaSwitchTrackShadows(enabled = true)
+  result[srSwitch, StyleKnobFill] = fill(initColor(0.96, 0.97, 0.99, 1.0))
+  result[srSwitch, StyleKnobBorderColor] = initColor(0.32, 0.36, 0.44, 0.78)
+  result[srSwitch, StyleKnobShadows] = aquaSwitchKnobShadows(enabled = true)
+  result[srSwitch, StyleMinimumSize] = initSize(40.0, 24.0)
+  result[srSwitch, StyleChrome] = styleKeyword(AquaChromeName)
+  result[srSwitch, {ssSelected}, StyleFill] = fill(initColor(0.08, 0.54, 0.96, 1.0))
+  result[srSwitch, {ssSelected}, StyleBorderColor] = initColor(0.02, 0.24, 0.62, 0.70)
+  result[srSwitch, {ssHighlighted}, StyleKnobFill] =
+    fill(initColor(0.91, 0.97, 1.0, 1.0))
+  result[srSwitch, {ssDisabled}, StyleFill] = fill(initColor(0.72, 0.78, 0.84, 0.42))
+  result[srSwitch, {ssDisabled}, StyleBorderColor] = initColor(0.38, 0.45, 0.53, 0.32)
+  result[srSwitch, {ssDisabled}, StyleBoxShadows] =
+    aquaSwitchTrackShadows(enabled = false)
+  result[srSwitch, {ssDisabled}, StyleKnobFill] =
+    fill(initColor(0.96, 0.97, 0.99, 0.68))
+  result[srSwitch, {ssDisabled}, StyleKnobBorderColor] =
+    initColor(0.32, 0.36, 0.44, 0.34)
+  result[srSwitch, {ssDisabled}, StyleKnobShadows] =
+    aquaSwitchKnobShadows(enabled = false)
+  result[srSwitch, {ssSelected, ssDisabled}, StyleFill] =
+    fill(initColor(0.08, 0.54, 0.96, 0.42))
+  result[srSwitch, {ssSelected, ssDisabled}, StyleBorderColor] =
+    initColor(0.02, 0.24, 0.62, 0.32)
 
   result.addRoleRule(
     srTab,
@@ -565,6 +615,20 @@ proc initTheme*(): Theme =
   result[srTableView, StyleFocusRingInset] = 2.0
   result[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
   result[srTableView, StyleBoxShadows] = aquaInsetControlShadows()
+  result[srTableView, StyleDropIndicatorFill] = fill(initColor(0.18, 0.42, 0.88, 0.95))
+
+  result[srTableHeader, StyleFill] = fill(initColor(0.88, 0.90, 0.94, 1.0))
+  result[srTableHeader, StyleBorderColor] = initColor(0.60, 0.64, 0.70, 1.0)
+  result[srTableHeader, StyleInsertionIndicatorFill] =
+    fill(initColor(0.16, 0.36, 0.84, 0.95))
+  result[srTableHeaderCell, StyleFill] = fill(initColor(0.90, 0.92, 0.96, 1.0))
+  result[srTableHeaderCell, {ssHovered}, StyleFill] =
+    fill(initColor(0.84, 0.88, 0.95, 1.0))
+  result[srTableHeaderCell, {ssPressed}, StyleFill] =
+    fill(initColor(0.76, 0.82, 0.91, 1.0))
+  result[srTableHeaderCell, StyleBorderColor] = initColor(0.62, 0.66, 0.72, 1.0)
+  result[srTableHeaderCell, StyleTextColor] = initColor(0.14, 0.18, 0.25, 1.0)
+  result[srTableHeaderCell, StyleMarkColor] = initColor(0.12, 0.20, 0.34, 0.95)
 
   result.addRoleRule(
     srRowItem,
@@ -633,6 +697,7 @@ proc initTheme*(): Theme =
   result[srRowItem, StyleCornerRadius] = 0.0
   result[srRowItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srRowItem, StyleMinimumSize] = initSize(0.0, 22.0)
+  result[srRowItem, StyleAlternatingFill] = fill(initColor(0.96, 0.97, 0.99, 1.0))
   result.installThemeExtensions()
 
 proc initBannerTheme*(): Theme =
@@ -709,6 +774,20 @@ proc initBannerTheme*(): Theme =
   result["comboBox.item.fill.selected.highlighted"] = initColor(0.19, 0.38, 0.35, 1.0)
   result["comboBox.item.text.color"] = initColor(0.11, 0.10, 0.10, 1.0)
   result["comboBox.item.text.color.selected"] = initColor(1.0, 0.97, 0.94, 1.0)
+  result[srTableView, StyleDropIndicatorFill] = fill(initColor(0.31, 0.58, 0.54, 0.95))
+  result[srTableHeader, StyleFill] = fill(initColor(0.86, 0.82, 0.75, 1.0))
+  result[srTableHeader, StyleBorderColor] = initColor(0.74, 0.70, 0.63, 1.0)
+  result[srTableHeader, StyleInsertionIndicatorFill] =
+    fill(initColor(0.31, 0.58, 0.54, 0.95))
+  result[srTableHeaderCell, StyleFill] = fill(initColor(0.90, 0.86, 0.78, 1.0))
+  result[srTableHeaderCell, {ssHovered}, StyleFill] =
+    fill(initColor(0.98, 0.93, 0.84, 1.0))
+  result[srTableHeaderCell, {ssPressed}, StyleFill] =
+    fill(initColor(0.78, 0.70, 0.62, 1.0))
+  result[srTableHeaderCell, StyleBorderColor] = initColor(0.74, 0.70, 0.63, 1.0)
+  result[srTableHeaderCell, StyleTextColor] = initColor(0.11, 0.10, 0.10, 1.0)
+  result[srTableHeaderCell, StyleMarkColor] = initColor(0.16, 0.15, 0.15, 1.0)
+  result[srRowItem, StyleAlternatingFill] = fill(initColor(0.98, 0.95, 0.90, 1.0))
 
 proc initAppearance*(theme: Theme): Appearance =
   Appearance(theme: theme.clone)

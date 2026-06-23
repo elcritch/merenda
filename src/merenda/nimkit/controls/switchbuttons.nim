@@ -101,27 +101,6 @@ protocol DefaultSwitchButtonControl of SwitchButtonProtocol:
   method setOn(switchButton: SwitchButton, on: bool) =
     switchButton.state = (if on: bsOn else: bsOff)
 
-proc switchFocusBox(): ControlBoxStyle =
-  ControlBoxStyle(
-    focusRingWidth: 3.0'f32,
-    focusRingInset: -3.0'f32,
-    focusRingColor: initColor(0.28, 0.62, 1.0, 0.80),
-    cornerRadius: SwitchButtonHeight * 0.5'f32,
-  )
-
-func switchTrackBaseFill(on, enabled: bool): Fill =
-  let alpha = if enabled: 1.0'f32 else: 0.42'f32
-  if on:
-    fill(initColor(0.08, 0.54, 0.96, alpha))
-  else:
-    fill(initColor(0.72, 0.78, 0.84, alpha))
-
-func switchKnobBaseFill(highlighted, enabled: bool): Fill =
-  if highlighted and enabled:
-    fill(initColor(0.91, 0.97, 1.0, 1.0))
-  else:
-    fill(initColor(0.96, 0.97, 0.99, if enabled: 1.0'f32 else: 0.68'f32))
-
 proc switchChromeStates(switchButton: SwitchButton): set[WidgetState] =
   result = switchButton.widgetStateSet()
   if switchButton.on:
@@ -154,78 +133,59 @@ proc switchKnobRect(switchButton: SwitchButton, track: Rect): Rect =
     SwitchKnobSize,
   )
 
-proc drawSwitchTrack(switchButton: SwitchButton, context: DrawContext, rect: Rect) =
+proc drawSwitchTrack(
+    switchButton: SwitchButton,
+    context: DrawContext,
+    rect: Rect,
+    style: SwitchButtonStyle,
+    states: set[WidgetState],
+) =
   if rect.isEmpty:
     return
   let
-    enabled = switchButton.isEnabled()
     selected = switchButton.on
     frame = context.renderRectFor(rect)
     radius = rect.size.height * 0.5'f32
     chrome = chromeContext(
-      AquaChromeName,
+      style.chrome,
       crSliderTrack,
       if selected: cpHighlight else: cpFace,
-      switchTrackBaseFill(selected, enabled),
-      switchButton.switchChromeStates(),
+      style.track.fill,
+      states,
     )
-    borderColor =
-      if selected:
-        initColor(0.02, 0.24, 0.62, if enabled: 0.70'f32 else: 0.32'f32)
-      else:
-        initColor(0.38, 0.45, 0.53, if enabled: 0.70'f32 else: 0.32'f32)
     trackRoot = context.addRenderRectangle(
       frame,
       context.appearance.chromeFill(chrome),
-      borderColor,
-      1.0'f32,
+      style.track.borderColor,
+      style.track.borderWidth,
       radius,
-      @[
-        insetShadow(
-          initColor(0.0, 0.0, 0.0, if enabled: 0.14'f32 else: 0.05'f32),
-          y = 1.0,
-          blur = 2.0,
-        )
-      ],
+      style.track.shadows,
       maskContent = true,
     )
   context.drawChromeExtras(
     chrome, initChromeExtras(trackRoot, frame, cornerRadius = radius)
   )
 
-proc drawSwitchKnob(switchButton: SwitchButton, context: DrawContext, rect: Rect) =
+proc drawSwitchKnob(
+    switchButton: SwitchButton,
+    context: DrawContext,
+    rect: Rect,
+    style: SwitchButtonStyle,
+    states: set[WidgetState],
+) =
   if rect.isEmpty:
     return
   let
-    enabled = switchButton.isEnabled()
-    highlighted = switchButton.highlighted
     frame = context.renderRectFor(rect)
     radius = rect.size.width * 0.5'f32
-    chrome = chromeContext(
-      AquaChromeName,
-      crSliderKnob,
-      cpFace,
-      switchKnobBaseFill(highlighted, enabled),
-      switchButton.switchChromeStates(),
-    )
+    chrome = chromeContext(style.chrome, crSliderKnob, cpFace, style.knob.fill, states)
     knobRoot = context.addRenderRectangle(
       frame,
       context.appearance.chromeFill(chrome),
-      initColor(0.32, 0.36, 0.44, if enabled: 0.78'f32 else: 0.34'f32),
-      1.0'f32,
+      style.knob.borderColor,
+      style.knob.borderWidth,
       radius,
-      @[
-        dropShadow(
-          initColor(0.0, 0.0, 0.0, if enabled: 0.22'f32 else: 0.08'f32),
-          y = 1.0,
-          blur = 3.0,
-        ),
-        insetShadow(
-          initColor(1.0, 1.0, 1.0, if enabled: 0.82'f32 else: 0.26'f32),
-          y = 1.0,
-          blur = 2.0,
-        ),
-      ],
+      style.knob.shadows,
       maskContent = true,
     )
   context.drawChromeExtras(
@@ -240,11 +200,23 @@ proc switchButtonPerformClick(switchButton: SwitchButton, args: ActionArgs) =
 
 protocol DefaultSwitchButtonDrawing of ViewDrawingProtocol:
   method draw(switchButton: SwitchButton, context: DrawContext) =
-    let track = switchButton.switchTrackRect()
-    switchButton.drawSwitchTrack(context, track)
-    switchButton.drawSwitchKnob(context, switchButton.switchKnobRect(track))
+    let
+      states = switchButton.switchChromeStates()
+      style = context.appearance.resolveSwitchButtonStyle(
+        initControlStyleContext(
+          srSwitch,
+          states,
+          id = switchButton.styleId,
+          classes = switchButton.styleClasses,
+        )
+      )
+      track = switchButton.switchTrackRect()
+    switchButton.drawSwitchTrack(context, track, style, states)
+    switchButton.drawSwitchKnob(
+      context, switchButton.switchKnobRect(track), style, states
+    )
     if switchButton.isFocusVisible:
-      context.addFocusRing(context.renderRectFor(track), switchFocusBox())
+      context.addFocusRing(context.renderRectFor(track), style.track)
 
 protocol DefaultSwitchButtonEvents of ResponderEventProtocol:
   method mouseDown(switchButton: SwitchButton, event: MouseEvent): bool =

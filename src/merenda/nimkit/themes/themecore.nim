@@ -32,12 +32,15 @@ type
     srButton
     srCheckBox
     srRadioButton
+    srSwitch
     srTab
     srTabPanel
     srTextField
     srComboBox
     srComboBoxItem
     srTableView
+    srTableHeader
+    srTableHeaderCell
     srRowItem
 
   StyleContext* = object
@@ -138,6 +141,12 @@ type
     minSize*: Size
     chrome*: string
 
+  SwitchButtonStyle* = object
+    track*: ControlBoxStyle
+    knob*: ControlBoxStyle
+    minSize*: Size
+    chrome*: string
+
   ThemeInstaller* = proc(theme: var Theme)
 
   TextFieldStyle* = object
@@ -177,6 +186,12 @@ const
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
   StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
+  StyleAlternatingFill* = StyleKey[Fill]("alternating.fill")
+  StyleDropIndicatorFill* = StyleKey[Fill]("drop.indicator.fill")
+  StyleInsertionIndicatorFill* = StyleKey[Fill]("insertion.indicator.fill")
+  StyleKnobFill* = StyleKey[Fill]("knob.fill")
+  StyleKnobBorderColor* = StyleKey[Color]("knob.border.color")
+  StyleKnobShadows* = StyleKey[seq[BoxShadow]]("knob.shadows")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
@@ -1354,6 +1369,34 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
     chrome: theme.resolveChromeName(context),
   )
 
+proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButtonStyle =
+  SwitchButtonStyle(
+    track: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(0.72, 0.78, 0.84, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.38, 0.45, 0.53, 0.70)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 12.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, -3.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.28, 0.62, 1.0, 0.80)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    knob: ControlBoxStyle(
+      fill:
+        theme.fillRule(context, StyleKnobFill, fill(initColor(0.96, 0.97, 0.99, 1.0))),
+      borderColor: theme.colorRule(
+        context, StyleKnobBorderColor, initColor(0.32, 0.36, 0.44, 0.78)
+      ),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 10.3),
+      shadows: theme.shadowsRule(context, StyleKnobShadows, @[]),
+    ),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(40.0, 24.0)),
+    chrome: theme.resolveChromeName(context),
+  )
+
 proc resolveTextFieldStyle*(
     theme: Theme, context: StyleContext, textColor: Color
 ): TextFieldStyle =
@@ -1452,6 +1495,11 @@ proc resolveChoiceButtonStyle*(
     appearance: Appearance, context: StyleContext
 ): ChoiceButtonStyle =
   appearance.theme.resolveChoiceButtonStyle(context)
+
+proc resolveSwitchButtonStyle*(
+    appearance: Appearance, context: StyleContext
+): SwitchButtonStyle =
+  appearance.theme.resolveSwitchButtonStyle(context)
 
 proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext, textColor: Color

@@ -828,6 +828,62 @@ proc defaultTableHeaderChrome*(): TableHeaderChrome =
     cornerRadius: 1.5'f32,
   )
 
+proc tableHeaderChrome(tableView: TableView, context: DrawContext): TableHeaderChrome =
+  result = defaultTableHeaderChrome()
+  if tableView.isNil or context.isNil:
+    return
+  let
+    tableStates = tableView.widgetStateSet()
+    tableId = tableView.styleId()
+    tableClasses = tableView.styleClasses()
+    headerContext = initControlStyleContext(
+      srTableHeader, tableStates, id = tableId, classes = tableClasses
+    )
+    cellContext = initControlStyleContext(
+      srTableHeaderCell, tableStates, id = tableId, classes = tableClasses
+    )
+    hoveredCellContext = initControlStyleContext(
+      srTableHeaderCell, tableStates + {ssHovered}, id = tableId, classes = tableClasses
+    )
+    pressedCellContext = initControlStyleContext(
+      srTableHeaderCell, tableStates + {ssPressed}, id = tableId, classes = tableClasses
+    )
+
+  result.headerFill = context.appearance.resolveFill(headerContext, result.headerFill)
+  result.headerBorderColor = context.appearance.resolveColor(
+    headerContext, StyleBorderColor, result.headerBorderColor
+  )
+  result.insertionIndicatorFill = context.appearance.resolveFill(
+    headerContext, result.insertionIndicatorFill, StyleInsertionIndicatorFill
+  )
+  result.cellFill = context.appearance.resolveFill(cellContext, result.cellFill)
+  result.hoveredCellFill =
+    context.appearance.resolveFill(hoveredCellContext, result.hoveredCellFill)
+  result.pressedCellFill =
+    context.appearance.resolveFill(pressedCellContext, result.pressedCellFill)
+  result.cellBorderColor = context.appearance.resolveColor(
+    cellContext, StyleBorderColor, result.cellBorderColor
+  )
+  result.textColor =
+    context.appearance.resolveColor(cellContext, StyleTextColor, result.textColor)
+  result.sortIndicatorColor = context.appearance.resolveColor(
+    cellContext, StyleMarkColor, result.sortIndicatorColor
+  )
+
+proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
+  if tableView.isNil or context.isNil:
+    return fill(initColor(0.18, 0.42, 0.88, 0.95))
+  context.appearance.resolveFill(
+    initControlStyleContext(
+      tableView.xTableRole,
+      tableView.widgetStateSet(),
+      id = tableView.styleId(),
+      classes = tableView.styleClasses(),
+    ),
+    fill(initColor(0.18, 0.42, 0.88, 0.95)),
+    StyleDropIndicatorFill,
+  )
+
 proc `tableHeaderHeight=`*(tableView: TableView, height: float32) =
   let nextHeight = max(height, 0.0'f32)
   if tableView.xHeaderHeight == nextHeight:
@@ -2545,7 +2601,7 @@ proc drawTableDropTarget(
   let indicatorRect =
     initRect(indicatorBounds.origin.x, indicatorY, indicatorBounds.size.width, 2.0)
   discard
-    context.addRenderRectangle(indicatorRect, fill(initColor(0.18, 0.42, 0.88, 0.95)))
+    context.addRenderRectangle(indicatorRect, tableView.tableDropIndicatorFill(context))
 
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
@@ -2871,7 +2927,18 @@ proc drawTableRowItem*(
     row.states * {ssSelected, ssHovered, ssHighlighted, ssPressed}
   if ssDisabled notin row.states and ssAlternating in row.states and
       interactiveFillStates == {} and style.fill.isNone:
-    style.fill = some(fill(initColor(0.96, 0.97, 0.99, 1.0)))
+    style.fill = some(
+      context.appearance.resolveFill(
+        initControlStyleContext(
+          tableView.xItemRole,
+          row.states,
+          id = tableView.styleId(),
+          classes = tableView.styleClasses(),
+        ),
+        fill(initColor(0.96, 0.97, 0.99, 1.0)),
+        StyleAlternatingFill,
+      )
+    )
   context.drawRowItem(
     rect, row, style, tableView.xItemRole, tableView.styleId(), tableView.styleClasses()
   )
@@ -3287,7 +3354,7 @@ proc drawTableHeader*(
   tableView.drawTableHeaderInsertionIndicator(context, chrome)
 
 proc drawTableHeader*(tableView: TableView, context: DrawContext) =
-  tableView.drawTableHeader(context, defaultTableHeaderChrome())
+  tableView.drawTableHeader(context, tableView.tableHeaderChrome(context))
 
 protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
   method columnAtPoint(tableView: TableView, point: Point): TableColumn =
