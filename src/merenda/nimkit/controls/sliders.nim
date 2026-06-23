@@ -6,7 +6,7 @@ import ../foundation/selectors
 import ../foundation/types
 import ../drawing/chrome
 import ../drawing/drawing
-import ../drawing/theme
+import ../themes
 import ./controls
 
 export controls

@@ -1,7 +1,7 @@
 import std/[algorithm, macros]
 
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ./viewgeometry
 import ./viewbase

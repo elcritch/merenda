@@ -7,7 +7,7 @@ import figdraw/figextras
 import figdraw/fignodes
 
 import ./images
-import ./theme
+import ../themes
 import ../text/textstorage
 import ../text/texttypes
 import ../foundation/types as nimkitTypes

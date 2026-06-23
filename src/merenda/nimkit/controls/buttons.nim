@@ -2,7 +2,7 @@ import ../accessibility/accessibility
 import ./controls
 import ../drawing/chrome
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/events
 import ../foundation/types
 

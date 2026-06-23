@@ -12,7 +12,7 @@ import ../drawing/rendering as nimkitRendering
 import ../foundation/events
 import ../text/fieldeditors
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ../view/views
 

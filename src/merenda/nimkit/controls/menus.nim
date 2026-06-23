@@ -12,7 +12,7 @@ import ../containers/listbasics
 import ./popuplists
 import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ../app/windows
 

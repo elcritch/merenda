@@ -1,5 +1,5 @@
 import ../responder/responders
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 
 from figdraw/fignodes import Renders

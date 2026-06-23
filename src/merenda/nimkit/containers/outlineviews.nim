@@ -8,7 +8,7 @@ import ../accessibility/accessibilityprotocols
 import ../app/dragging
 import ../app/pasteboards
 import ../drawing/drawing
-import ../drawing/theme
+import ../themes
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types

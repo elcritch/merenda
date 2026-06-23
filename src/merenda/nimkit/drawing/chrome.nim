@@ -7,7 +7,7 @@ import sigils/core
 import sigils/selectors
 
 import ./drawing
-import ./theme
+import ../themes
 import ../foundation/types
 
 type

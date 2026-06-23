@@ -1,7 +1,7 @@
 import sigils/selectors
 
 import ../drawing/drawing
-import ../drawing/theme
+import ../themes
 import ../foundation/selectors as nimkitSelectors
 import ../foundation/types
 import ../view/views

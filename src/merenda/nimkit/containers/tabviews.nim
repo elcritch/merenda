@@ -10,7 +10,7 @@ import ../drawing/chrome
 import ../drawing/drawing
 import ../foundation/events
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ../view/views
 

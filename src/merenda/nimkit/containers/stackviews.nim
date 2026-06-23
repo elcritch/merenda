@@ -1,7 +1,7 @@
 import sigils/core
 
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ../view/viewgeometry
 import ../view/views

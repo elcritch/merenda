@@ -3,7 +3,7 @@ import std/options
 import sigils/core
 
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ./viewbase
 
