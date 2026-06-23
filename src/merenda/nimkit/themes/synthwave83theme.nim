@@ -839,6 +839,18 @@ proc installSynthwave83VaporwavePass(theme: var Theme) =
     104'u8,
   )
   theme["tableView.border.color"] = initColor(0.88, 0.04, 1.0, 0.78)
+  theme["scrollView.fill"] = styleToken("tableView.fill")
+  theme["scrollView.border.color"] = styleToken("tableView.border.color")
+  theme["scroller.track.fill"] = fill(initColor(0.06, 0.00, 0.16, 0.32))
+  theme["scroller.track.border.color"] = initColor(0.20, 0.94, 1.0, 0.34)
+  theme["scroller.knob.fill"] = linear(
+    initColor(1.0, 0.06, 0.88, 0.78),
+    initColor(0.46, 0.04, 0.92, 0.58),
+    initColor(0.12, 0.86, 1.0, 0.42),
+    fgaDiagTLBR,
+    108'u8,
+  )
+  theme["scroller.knob.border.color"] = initColor(0.28, 0.98, 1.0, 0.86)
   theme["rowItem.fill"] = fill(initColor(0.06, 0.00, 0.16, 0.18))
   theme["rowItem.fill.highlighted"] = fill(initColor(0.44, 0.04, 0.62, 0.40))
   theme["rowItem.fill.selected"] = styleToken("choice.indicator.fill.selected")
@@ -864,6 +876,22 @@ proc installSynthwave83VaporwavePass(theme: var Theme) =
   theme[srTextField, StyleBorderWidth] = 1.35
   theme[srComboBox, StyleBorderWidth] = 1.35
   theme[srTableView, StyleBorderWidth] = 1.35
+  theme[srScrollView, StyleFill] = styleToken("scrollView.fill")
+  theme[srScrollView, StyleBorderColor] = styleToken("scrollView.border.color")
+  theme[srScrollView, StyleBorderWidth] = 1.35
+  theme[srScrollView, StyleCornerRadius] = 5.0
+  theme[srScrollView, StyleBoxShadows] = theme[srTextField, StyleBoxShadows]
+  theme[srScroller, StyleFill] = styleToken("scroller.track.fill")
+  theme[srScroller, StyleBorderColor] = styleToken("scroller.track.border.color")
+  theme[srScroller, StyleKnobFill] = styleToken("scroller.knob.fill")
+  theme[srScroller, StyleKnobBorderColor] = styleToken("scroller.knob.border.color")
+  theme[srScroller, StyleBorderWidth] = 1.0
+  theme[srScroller, StyleCornerRadius] = 4.0
+  theme[srScroller, StyleKnobShadows] =
+    @[
+      dropShadow(initColor(1.0, 0.05, 0.92, 0.22), y = 1.0, blur = 7.0),
+      insetShadow(initColor(0.28, 0.98, 1.0, 0.18), y = 1.0, blur = 3.0),
+    ]
   theme[srTab, StyleBorderWidth] = 1.35
   theme[srTabPanel, StyleBorderWidth] = 1.35
   theme[srButton, StyleTextHighlightColor] = initColor(0.20, 0.94, 1.0, 0.16)

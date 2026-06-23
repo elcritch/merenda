@@ -474,6 +474,18 @@ proc installPeachyRetroPalette(theme: var Theme) =
 
   theme["tableView.fill"] = peachyPanelFill()
   theme["tableView.border.color"] = initColor(1.0, 0.58, 0.40, 0.66)
+  theme["scrollView.fill"] = styleToken("tableView.fill")
+  theme["scrollView.border.color"] = styleToken("tableView.border.color")
+  theme["scroller.track.fill"] = fill(initColor(0.18, 0.19, 0.25, 0.34))
+  theme["scroller.track.border.color"] = initColor(1.0, 0.58, 0.40, 0.34)
+  theme["scroller.knob.fill"] = linear(
+    initColor(0.94, 0.34, 0.58, 0.78),
+    initColor(0.62, 0.30, 0.48, 0.60),
+    initColor(1.0, 0.60, 0.40, 0.44),
+    fgaDiagTLBR,
+    108'u8,
+  )
+  theme["scroller.knob.border.color"] = initColor(1.0, 0.74, 0.46, 0.84)
   theme["rowItem.fill"] = fill(initColor(0.18, 0.19, 0.25, 0.14))
   theme["rowItem.fill.highlighted"] = fill(initColor(0.50, 0.26, 0.38, 0.38))
   theme["rowItem.fill.selected"] = peachySelectionFill()
@@ -500,6 +512,22 @@ proc installPeachyRetroPalette(theme: var Theme) =
   theme[srTextField, StyleBorderWidth] = 1.25
   theme[srComboBox, StyleBorderWidth] = 1.25
   theme[srTableView, StyleBorderWidth] = 1.25
+  theme[srScrollView, StyleFill] = styleToken("scrollView.fill")
+  theme[srScrollView, StyleBorderColor] = styleToken("scrollView.border.color")
+  theme[srScrollView, StyleBorderWidth] = 1.25
+  theme[srScrollView, StyleCornerRadius] = 5.0
+  theme[srScrollView, StyleBoxShadows] = peachyInsetShadows()
+  theme[srScroller, StyleFill] = styleToken("scroller.track.fill")
+  theme[srScroller, StyleBorderColor] = styleToken("scroller.track.border.color")
+  theme[srScroller, StyleKnobFill] = styleToken("scroller.knob.fill")
+  theme[srScroller, StyleKnobBorderColor] = styleToken("scroller.knob.border.color")
+  theme[srScroller, StyleBorderWidth] = 1.0
+  theme[srScroller, StyleCornerRadius] = 4.0
+  theme[srScroller, StyleKnobShadows] =
+    @[
+      dropShadow(initColor(1.0, 0.34, 0.52, 0.20), y = 1.0, blur = 7.0),
+      insetShadow(initColor(1.0, 0.78, 0.52, 0.22), y = 1.0, blur = 3.0),
+    ]
   theme[srTab, StyleBorderWidth] = 1.25
   theme[srTabPanel, StyleBorderWidth] = 1.25
   for role in [srCheckBox, srRadioButton]:

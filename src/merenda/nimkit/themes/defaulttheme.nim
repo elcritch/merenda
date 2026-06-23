@@ -239,6 +239,12 @@ proc initTheme*(): Theme =
     styleColor(initColor(1.0, 1.0, 1.0, 1.0))
   result["tableView.fill"] = styleToken("textField.fill")
   result["tableView.border.color"] = styleToken("textField.border.color")
+  result["scrollView.fill"] = styleToken("tableView.fill")
+  result["scrollView.border.color"] = styleToken("tableView.border.color")
+  result["scroller.track.fill"] = styleFill(initColor(0.88, 0.90, 0.94, 0.70))
+  result["scroller.track.border.color"] = styleColor(initColor(0.67, 0.71, 0.78, 0.80))
+  result["scroller.knob.fill"] = styleFill(initColor(0.36, 0.42, 0.50, 0.65))
+  result["scroller.knob.border.color"] = styleColor(initColor(0.24, 0.29, 0.36, 0.50))
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
   result["rowItem.fill.highlighted"] = styleToken("comboBox.item.fill.highlighted")
   result["rowItem.fill.selected"] = styleToken("comboBox.item.fill.selected")
@@ -649,6 +655,18 @@ proc initTheme*(): Theme =
   result[srTableView, StyleBoxShadows] = aquaInsetControlShadows()
   result[srTableView, StyleDropIndicatorFill] = fill(initColor(0.18, 0.42, 0.88, 0.95))
 
+  result[srScrollView, StyleFill] = styleToken("scrollView.fill")
+  result[srScrollView, StyleBorderColor] = styleToken("scrollView.border.color")
+  result[srScrollView, StyleBorderWidth] = 1.0
+  result[srScrollView, StyleCornerRadius] = 0.0
+
+  result[srScroller, StyleFill] = styleToken("scroller.track.fill")
+  result[srScroller, StyleBorderColor] = styleToken("scroller.track.border.color")
+  result[srScroller, StyleKnobFill] = styleToken("scroller.knob.fill")
+  result[srScroller, StyleKnobBorderColor] = styleToken("scroller.knob.border.color")
+  result[srScroller, StyleBorderWidth] = 1.0
+  result[srScroller, StyleCornerRadius] = 3.0
+
   result[srTableHeader, StyleFill] = fill(initColor(0.88, 0.90, 0.94, 1.0))
   result[srTableHeader, StyleBorderColor] = initColor(0.60, 0.64, 0.70, 1.0)
   result[srTableHeader, StyleInsertionIndicatorFill] =
@@ -795,6 +813,12 @@ proc initBannerTheme*(): Theme =
 
   result["textField.fill"] = initColor(1.0, 0.97, 0.94, 1.0)
   result["textField.border.color"] = initColor(0.84, 0.80, 0.75, 1.0)
+  result["scrollView.fill"] = styleToken("tableView.fill")
+  result["scrollView.border.color"] = initColor(0.74, 0.70, 0.63, 1.0)
+  result["scroller.track.fill"] = initColor(0.86, 0.82, 0.75, 0.70)
+  result["scroller.track.border.color"] = initColor(0.66, 0.61, 0.54, 0.80)
+  result["scroller.knob.fill"] = initColor(0.54, 0.49, 0.42, 0.68)
+  result["scroller.knob.border.color"] = initColor(0.40, 0.34, 0.28, 0.70)
   result["textField.text.color"] = initColor(0.11, 0.10, 0.10, 1.0)
   result["textField.selection.color"] = initColor(0.31, 0.58, 0.54, 0.32)
 
