@@ -93,10 +93,12 @@ let
   previousButton = newButton("Previous")
   nextButton = newButton("Next")
   bottomTabs = newCheckBox("Tabs on bottom")
+  dragTabs = newCheckBox("Drag tabs")
   tabStyleChoice = newComboBox(["Inset", "Traditional"])
   previousAction = actionSelector("selectPreviousTab")
   nextAction = actionSelector("selectNextTab")
   positionAction = actionSelector("toggleTabPosition")
+  dragAction = actionSelector("toggleTabDragging")
   modeAction = actionSelector("selectTabMode")
 
 proc updateStatus() =
@@ -122,6 +124,11 @@ proc toggleTabPosition(sender: DynamicAgent) =
     tabView.tabPosition = tpBottom
   else:
     tabView.tabPosition = tpTop
+  updateStatus()
+
+proc toggleTabDragging(sender: DynamicAgent) =
+  discard sender
+  tabView.allowsTabDragging = dragTabs.state == bsOn
   updateStatus()
 
 proc selectTabMode(sender: DynamicAgent) =
@@ -160,11 +167,17 @@ nextButton.target = newActionTarget(nextAction, selectNext)
 nextButton.action = nextAction
 bottomTabs.target = newActionTarget(positionAction, toggleTabPosition)
 bottomTabs.action = positionAction
+dragTabs.state = bsOn
+tabView.allowsTabDragging = true
+dragTabs.target = newActionTarget(dragAction, toggleTabDragging)
+dragTabs.action = dragAction
 tabStyleChoice.selectItemAtIndex(0)
 tabStyleChoice.target = newActionTarget(modeAction, selectTabMode)
 tabStyleChoice.action = modeAction
 
-controls.addArrangedSubview(previousButton, nextButton, bottomTabs, tabStyleChoice)
+controls.addArrangedSubview(
+  previousButton, nextButton, bottomTabs, dragTabs, tabStyleChoice
+)
 controls.addFlexibleSpacer()
 
 layout.addArrangedSubview(header, status, tabView, controls)
