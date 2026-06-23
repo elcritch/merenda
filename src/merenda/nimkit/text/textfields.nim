@@ -639,9 +639,8 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
 
     let
       textRect = style.textFieldTextRect(textField.bounds)
-      layout = textLayout(
-        textRect, textField.stringValue, style.text.color, textField.alignment
-      )
+      textValue = clippedText(textField.stringValue, textRect.size.width)
+      layout = textLayout(textRect, textValue, style.text.color, textField.alignment)
       selectedRange = textField.selectedRange
     if textField.isEditing and selectedRange.length > 0:
       discard context.addSelectedText(

@@ -2579,8 +2579,12 @@ proc drawTableCellText(
     return
   let text = tableView.tableCellText(row, column)
   if text.len > 0:
+    let textRect = style.rowItemTextRect(rect)
     discard context.addText(
-      style.rowItemTextRect(rect), text, style.text.color, column.alignment()
+      textRect,
+      clippedText(text, textRect.size.width),
+      style.text.color,
+      column.alignment(),
     )
 
 proc drawTableRow(
