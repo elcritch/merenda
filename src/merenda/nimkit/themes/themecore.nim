@@ -1,0 +1,1646 @@
+import std/tables
+
+import figdraw/common/filltypes
+from pkg/chroma import rgba
+from sigils/selectors import DynamicAgent
+
+import ../foundation/types
+
+export filltypes
+
+type
+  EdgeInsets* = object
+    top*: float32
+    left*: float32
+    bottom*: float32
+    right*: float32
+
+  BoxShadowKind* = enum
+    bskDrop
+    bskInset
+
+  BoxShadow* = object
+    kind*: BoxShadowKind
+    color*: Color
+    x*: float32
+    y*: float32
+    blur*: float32
+    spread*: float32
+
+  StyleRole* = enum
+    srView
+    srButton
+    srCheckBox
+    srRadioButton
+    srTab
+    srTabPanel
+    srTextField
+    srComboBox
+    srComboBoxItem
+    srTableView
+    srRowItem
+
+  StyleContext* = object
+    role*: StyleRole
+    states*: set[WidgetState]
+    id*: string
+    classes*: seq[string]
+
+  StyleSelector* = object
+    role*: StyleRole
+    states*: set[WidgetState]
+    id*: string
+    classes*: seq[string]
+
+  StyleValueKind* = enum
+    svMissing
+    svColor
+    svFill
+    svLength
+    svSize
+    svInsets
+    svShadows
+    svToken
+    svKeyword
+
+  StyleValue* = object
+    case kind*: StyleValueKind
+    of svMissing:
+      discard
+    of svColor:
+      color*: Color
+    of svFill:
+      fill*: Fill
+    of svLength:
+      length*: float32
+    of svSize:
+      size*: Size
+    of svInsets:
+      insets*: EdgeInsets
+    of svShadows:
+      shadows*: seq[BoxShadow]
+    of svToken:
+      token*: string
+    of svKeyword:
+      keyword*: string
+
+  StyleTokenStore* = ref object
+    parent*: StyleTokenStore
+    values*: Table[string, StyleValue]
+
+  StyleKey*[T] = distinct string
+
+  StylePatch* = ref object
+    values*: Table[string, StyleValue]
+
+  StyleRule* = object
+    selector*: StyleSelector
+    patch*: StylePatch
+
+  Chrome* = ref object of DynamicAgent
+
+  Theme* = object
+    tokens*: StyleTokenStore
+    rules*: seq[StyleRule]
+    chromes*: Table[string, Chrome]
+
+  Appearance* = object
+    theme*: Theme
+
+  ControlBoxStyle* = object
+    fill*: Fill
+    borderColor*: Color
+    borderWidth*: float32
+    cornerRadius*: float32
+    focusRingWidth*: float32
+    focusRingInset*: float32
+    focusRingColor*: Color
+    shadows*: seq[BoxShadow]
+
+  TextStyle* = object
+    color*: Color
+    insets*: EdgeInsets
+
+  ButtonStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    textHighlightColor*: Color
+    textShadowColor*: Color
+    minSize*: Size
+    chrome*: string
+
+  ChoiceButtonStyle* = object
+    indicator*: ControlBoxStyle
+    markColor*: Color
+    text*: TextStyle
+    indicatorSize*: float32
+    indicatorSpacing*: float32
+    minSize*: Size
+    chrome*: string
+
+  ThemeInstaller* = proc(theme: var Theme)
+
+  TextFieldStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    selectionColor*: Color
+    minSize*: Size
+
+  ComboBoxStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    arrowWidth*: float32
+    arrowColor*: Color
+    minSize*: Size
+    chrome*: string
+
+  TableViewStyle* = object
+    box*: ControlBoxStyle
+    minSize*: Size
+
+  RowItemStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    minSize*: Size
+
+const
+  StyleFill* = StyleKey[Fill]("fill")
+  StyleBorderColor* = StyleKey[Color]("border.color")
+  StyleBorderWidth* = StyleKey[float32]("border.width")
+  StyleCornerRadius* = StyleKey[float32]("corner.radius")
+  StyleFocusRingWidth* = StyleKey[float32]("focus.ring.width")
+  StyleFocusRingInset* = StyleKey[float32]("focus.ring.inset")
+  StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
+  StyleBoxShadows* = StyleKey[seq[BoxShadow]]("box.shadows")
+  StyleTextColor* = StyleKey[Color]("text.color")
+  StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
+  StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
+  StyleSelectionColor* = StyleKey[Color]("selection.color")
+  StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
+  StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
+  StyleIndicatorSize* = StyleKey[float32]("indicator.size")
+  StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
+  StyleMarkColor* = StyleKey[Color]("mark.color")
+  StyleMinimumSize* = StyleKey[Size]("minimum.size")
+  StyleChrome* = StyleKey[string]("chrome")
+
+  DefaultChromeName* = "default"
+  AquaChromeName* = "aqua"
+
+  AccentToken* = "accent"
+  AccentPressedToken* = "accent.pressed"
+  DisabledFillToken* = "disabled.fill"
+  DisabledTextColorToken* = "disabled.text.color"
+  FocusRingColorToken* = "focus.ring.color"
+
+  ButtonFillToken* = "button.fill"
+  ButtonHighlightedFillToken* = "button.fill.highlighted"
+  ButtonDisabledFillToken* = "button.fill.disabled"
+  ButtonAccentFillToken* = "button.fill.accent"
+  ButtonAccentHighlightedFillToken* = "button.fill.accent.highlighted"
+  ButtonTextColorToken* = "button.text.color"
+  ButtonDisabledTextColorToken* = "button.text.color.disabled"
+  ButtonBorderColorToken* = "button.border.color"
+  ButtonHighlightedBorderColorToken* = "button.border.color.highlighted"
+  ButtonDisabledBorderColorToken* = "button.border.color.disabled"
+  ButtonAccentBorderColorToken* = "button.border.color.accent"
+  ButtonAccentHighlightedBorderColorToken* = "button.border.color.accent.highlighted"
+  ButtonFocusRingColorToken* = "button.focus.ring.color"
+  ButtonShadowsToken* = "button.shadows"
+  ButtonHighlightedShadowsToken* = "button.shadows.highlighted"
+  ButtonDisabledShadowsToken* = "button.shadows.disabled"
+
+  ChoiceIndicatorFillToken* = "choice.indicator.fill"
+  ChoiceIndicatorHighlightedFillToken* = "choice.indicator.fill.highlighted"
+  ChoiceIndicatorDisabledFillToken* = "choice.indicator.fill.disabled"
+  ChoiceIndicatorSelectedFillToken* = "choice.indicator.fill.selected"
+  ChoiceIndicatorSelectedHighlightedFillToken* =
+    "choice.indicator.fill.selected.highlighted"
+  ChoiceIndicatorSelectedDisabledFillToken* = "choice.indicator.fill.selected.disabled"
+  ChoiceIndicatorBorderColorToken* = "choice.indicator.border.color"
+  ChoiceIndicatorSelectedBorderColorToken* = "choice.indicator.border.color.selected"
+  ChoiceIndicatorHighlightedBorderColorToken* =
+    "choice.indicator.border.color.highlighted"
+  ChoiceIndicatorDisabledBorderColorToken* = "choice.indicator.border.color.disabled"
+  ChoiceMarkColorToken* = "choice.mark.color"
+  ChoiceDisabledMarkColorToken* = "choice.mark.color.disabled"
+  ChoiceTextColorToken* = "choice.text.color"
+  ChoiceDisabledTextColorToken* = "choice.text.color.disabled"
+
+  TextFieldFillToken* = "textField.fill"
+  TextFieldBorderColorToken* = "textField.border.color"
+  TextFieldTextColorToken* = "textField.text.color"
+  TextFieldSelectionColorToken* = "textField.selection.color"
+
+  LabelStyleClass* = "label"
+  LabelTitleStyleClass* = "label-title"
+  LabelHeadingStyleClass* = "label-heading"
+  LabelStatusStyleClass* = "label-status"
+  LabelFormStyleClass* = "label-form"
+
+  ComboBoxFillToken* = "comboBox.fill"
+  ComboBoxBorderColorToken* = "comboBox.border.color"
+  ComboBoxOpenBorderColorToken* = "comboBox.border.color.open"
+  ComboBoxTextColorToken* = "comboBox.text.color"
+  ComboBoxArrowColorToken* = "comboBox.arrow.color"
+  ComboBoxItemFillToken* = "comboBox.item.fill"
+  ComboBoxItemHighlightedFillToken* = "comboBox.item.fill.highlighted"
+  ComboBoxItemSelectedFillToken* = "comboBox.item.fill.selected"
+  ComboBoxItemSelectedHighlightedFillToken* = "comboBox.item.fill.selected.highlighted"
+  ComboBoxItemTextColorToken* = "comboBox.item.text.color"
+  ComboBoxItemSelectedTextColorToken* = "comboBox.item.text.color.selected"
+  TableViewFillToken* = "tableView.fill"
+  TableViewBorderColorToken* = "tableView.border.color"
+  RowItemFillToken* = "rowItem.fill"
+  RowItemHighlightedFillToken* = "rowItem.fill.highlighted"
+  RowItemSelectedFillToken* = "rowItem.fill.selected"
+  RowItemSelectedHighlightedFillToken* = "rowItem.fill.selected.highlighted"
+  RowItemDisabledFillToken* = "rowItem.fill.disabled"
+  RowItemTextColorToken* = "rowItem.text.color"
+  RowItemSelectedTextColorToken* = "rowItem.text.color.selected"
+  RowItemDisabledTextColorToken* = "rowItem.text.color.disabled"
+  RowItemSeparatorColorToken* = "rowItem.separator.color"
+
+  TabPanelFillToken* = "tab.panel.fill"
+  TabPanelBorderColorToken* = "tab.panel.border.color"
+  TabFillToken* = "tab.fill"
+  TabHighlightedFillToken* = "tab.fill.highlighted"
+  TabSelectedFillToken* = "tab.fill.selected"
+  TabDisabledFillToken* = "tab.fill.disabled"
+  TabHighlightFillToken* = "tab.highlight.fill"
+  TabDisabledHighlightFillToken* = "tab.highlight.fill.disabled"
+  TabTextColorToken* = "tab.text.color"
+  TabSelectedTextColorToken* = "tab.text.color.selected"
+  TabDisabledTextColorToken* = "tab.text.color.disabled"
+  TabBorderColorToken* = "tab.border.color"
+  TabHighlightedBorderColorToken* = "tab.border.color.highlighted"
+  TabSelectedBorderColorToken* = "tab.border.color.selected"
+  TabDisabledBorderColorToken* = "tab.border.color.disabled"
+
+var themeInstallers {.threadvar.}: seq[ThemeInstaller]
+
+func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
+  EdgeInsets(top: top, left: left, bottom: bottom, right: right)
+
+func initEdgeInsets*(vertical, horizontal: float32): EdgeInsets =
+  initEdgeInsets(vertical, horizontal, vertical, horizontal)
+
+func initEdgeInsets*(all: float32): EdgeInsets =
+  initEdgeInsets(all, all, all, all)
+
+func horizontal*(insets: EdgeInsets): float32 =
+  insets.left + insets.right
+
+func vertical*(insets: EdgeInsets): float32 =
+  insets.top + insets.bottom
+
+func fill*(color: Color): Fill =
+  filltypes.fill(color.rgba)
+
+func linear*(start, stop: Color, axis: FillGradientAxis): Fill =
+  filltypes.linear(start.rgba, stop.rgba, axis)
+
+func linear*(start, mid, stop: Color, axis: FillGradientAxis, midPos = 128'u8): Fill =
+  filltypes.linear(start.rgba, mid.rgba, stop.rgba, axis, midPos)
+
+func initBoxShadow*(
+    kind: BoxShadowKind,
+    color: Color,
+    x = 0.0'f32,
+    y = 0.0'f32,
+    blur = 0.0'f32,
+    spread = 0.0'f32,
+): BoxShadow =
+  BoxShadow(kind: kind, color: color, x: x, y: y, blur: blur, spread: spread)
+
+func dropShadow*(
+    color: Color, x = 0.0'f32, y = 1.0'f32, blur = 3.0'f32, spread = 0.0'f32
+): BoxShadow =
+  initBoxShadow(bskDrop, color, x, y, blur, spread)
+
+func insetShadow*(
+    color: Color, x = 0.0'f32, y = 1.0'f32, blur = 2.0'f32, spread = 0.0'f32
+): BoxShadow =
+  initBoxShadow(bskInset, color, x, y, blur, spread)
+
+func missingStyleValue*(): StyleValue =
+  StyleValue(kind: svMissing)
+
+func styleColor*(color: Color): StyleValue =
+  StyleValue(kind: svColor, color: color)
+
+func styleFill*(fill: Fill): StyleValue =
+  StyleValue(kind: svFill, fill: fill)
+
+func styleFill*(color: Color): StyleValue =
+  styleFill(fill(color))
+
+func styleLength*(length: float32): StyleValue =
+  StyleValue(kind: svLength, length: length)
+
+func styleSize*(size: Size): StyleValue =
+  StyleValue(
+    kind: svSize,
+    size: Size(width: max(size.width, 0.0'f32), height: max(size.height, 0.0'f32)),
+  )
+
+func styleInsets*(insets: EdgeInsets): StyleValue =
+  StyleValue(kind: svInsets, insets: insets)
+
+func styleShadows*(shadows: openArray[BoxShadow]): StyleValue =
+  StyleValue(kind: svShadows, shadows: @shadows)
+
+func styleToken*(name: string): StyleValue =
+  StyleValue(kind: svToken, token: name)
+
+func styleKeyword*(keyword: string): StyleValue =
+  StyleValue(kind: svKeyword, keyword: keyword)
+
+func styleKey*[T](name: string): StyleKey[T] =
+  StyleKey[T](name)
+
+func keyName*[T](key: StyleKey[T]): string =
+  string(key)
+
+func initStyleSelector*(
+    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
+): StyleSelector =
+  StyleSelector(role: role, states: states, id: id, classes: classes)
+
+func initStyleContext*(
+    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
+): StyleContext =
+  StyleContext(role: role, states: states, id: id, classes: classes)
+
+func initControlStyleContext*(
+    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
+): StyleContext =
+  initStyleContext(role, states, id, classes)
+
+func inset*(rect: Rect, insets: EdgeInsets): Rect =
+  initRect(
+    rect.origin.x + insets.left,
+    rect.origin.y + insets.top,
+    rect.size.width - insets.left - insets.right,
+    rect.size.height - insets.top - insets.bottom,
+  )
+
+proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
+  StyleTokenStore(parent: parent, values: initTable[string, StyleValue]())
+
+proc newStylePatch*(): StylePatch =
+  StylePatch(values: initTable[string, StyleValue]())
+
+proc clone*(tokens: StyleTokenStore): StyleTokenStore =
+  if tokens.isNil:
+    return
+  result = newStyleTokenStore(tokens.parent.clone)
+  result.values = tokens.values
+
+proc clone*(patch: StylePatch): StylePatch =
+  if patch.isNil:
+    return
+  result = newStylePatch()
+  result.values = patch.values
+
+proc clone*(theme: Theme): Theme =
+  result.tokens = theme.tokens.clone
+  for rule in theme.rules:
+    result.rules.add StyleRule(selector: rule.selector, patch: rule.patch.clone)
+  result.chromes = theme.chromes
+
+proc registerThemeInstaller*(installer: ThemeInstaller) =
+  themeInstallers.add installer
+
+proc installThemeExtensions*(theme: var Theme) =
+  for installer in themeInstallers:
+    installer(theme)
+
+proc installChrome*(theme: var Theme, name: string, chrome: Chrome) =
+  if name.len == 0:
+    return
+  if chrome.isNil:
+    if name in theme.chromes:
+      theme.chromes.del(name)
+  else:
+    theme.chromes[name] = chrome
+
+proc hasChrome*(theme: Theme, name: string): bool =
+  name in theme.chromes
+
+proc chrome*(theme: Theme, name: string): Chrome =
+  if name in theme.chromes:
+    return theme.chromes[name]
+
+proc installChrome*(appearance: var Appearance, name: string, chrome: Chrome) =
+  appearance.theme.installChrome(name, chrome)
+
+proc hasChrome*(appearance: Appearance, name: string): bool =
+  appearance.theme.hasChrome(name)
+
+proc chrome*(appearance: Appearance, name: string): Chrome =
+  appearance.theme.chrome(name)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: StyleValue) =
+  tokens.values[name] = value
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: Color) =
+  tokens[name] = styleColor(value)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: Fill) =
+  tokens[name] = styleFill(value)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: float32) =
+  tokens[name] = styleLength(value)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: float) =
+  tokens[name] = styleLength(value.float32)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: Size) =
+  tokens[name] = styleSize(value)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
+  tokens[name] = styleInsets(value)
+
+proc `[]=`*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) =
+  tokens[name] = styleShadows(value)
+
+proc `[]=`*(theme: var Theme, name: string, value: StyleValue) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: Color) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: Fill) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: float32) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: float) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: Size) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: EdgeInsets) =
+  theme.tokens[name] = value
+
+proc `[]=`*(theme: var Theme, name: string, value: openArray[BoxShadow]) =
+  theme.tokens[name] = value
+
+proc lookupToken(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
+  var current = tokens
+  while not current.isNil:
+    if current.values.hasKey(name):
+      value = current.values[name]
+      return true
+    current = current.parent
+
+proc resolveToken*(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
+  var
+    currentName = name
+    currentValue: StyleValue
+  for depth in 0 ..< 16:
+    if not tokens.lookupToken(currentName, currentValue):
+      value = missingStyleValue()
+      return false
+    if currentValue.kind != svToken:
+      value = currentValue
+      return true
+    currentName = currentValue.token
+  value = missingStyleValue()
+
+proc resolveValue*(
+    tokens: StyleTokenStore, input: StyleValue, value: var StyleValue
+): bool =
+  if input.kind == svToken:
+    tokens.resolveToken(input.token, value)
+  elif input.kind == svMissing:
+    value = missingStyleValue()
+    false
+  else:
+    value = input
+    true
+
+proc setStyle*(patch: StylePatch, key: string, value: StyleValue) =
+  patch.values[key] = value
+
+proc setStyle*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
+  patch.setStyle(key.keyName, value)
+
+proc setStyle*(patch: StylePatch, key: StyleKey[Color], value: Color) =
+  patch.setStyle(key, styleColor(value))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[Fill], value: Fill) =
+  patch.setStyle(key, styleFill(value))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float32) =
+  patch.setStyle(key, styleLength(value))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float) =
+  patch.setStyle(key, styleLength(value.float32))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[Size], value: Size) =
+  patch.setStyle(key, styleSize(value))
+
+proc setStyle*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
+  patch.setStyle(key, styleInsets(value))
+
+proc setStyle*(
+    patch: StylePatch, key: StyleKey[seq[BoxShadow]], value: openArray[BoxShadow]
+) =
+  patch.setStyle(key, styleShadows(value))
+
+proc `[]=`*(patch: StylePatch, key: string, value: StyleValue) =
+  patch.setStyle(key, value)
+
+proc `[]=`*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[Color], value: Color) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[Fill], value: Fill) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[float32], value: float32) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[float32], value: float) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[Size], value: Size) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
+  patch.setStyle(key, value)
+
+proc `[]=`*(
+    patch: StylePatch, key: StyleKey[seq[BoxShadow]], value: openArray[BoxShadow]
+) =
+  patch.setStyle(key, value)
+
+proc getStyle*(patch: StylePatch, key: string, value: var StyleValue): bool =
+  if patch.values.hasKey(key):
+    value = patch.values[key]
+    return true
+
+proc getStyle*[T](patch: StylePatch, key: StyleKey[T], value: var StyleValue): bool =
+  patch.getStyle(key.keyName, value)
+
+func matches*(selector: StyleSelector, context: StyleContext): bool =
+  if selector.role != context.role:
+    return false
+  if not (selector.states <= context.states):
+    return false
+  if selector.id.len > 0 and selector.id != context.id:
+    return false
+  for class in selector.classes:
+    if class notin context.classes:
+      return false
+  true
+
+proc stylePatch*(theme: var Theme, selector: StyleSelector): StylePatch =
+  for rule in theme.rules:
+    if rule.selector == selector:
+      return rule.patch
+  result = newStylePatch()
+  theme.rules.add StyleRule(selector: selector, patch: result)
+
+proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
+  for rule in theme.rules:
+    if rule.selector == selector:
+      return rule.patch
+
+proc addRule*(theme: var Theme, selector: StyleSelector, patch: StylePatch) =
+  theme.rules.add StyleRule(selector: selector, patch: patch)
+
+proc setStyle*[T](
+    theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Fill], value: Fill
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+
+proc setStyle*[T](
+    theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Color], value: Color) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Fill], value: Fill) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Size], value: Size) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme, role: StyleRole, key: StyleKey[EdgeInsets], value: EdgeInsets
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*[T](
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Color],
+    value: Color,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Fill],
+    value: Fill,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[float32],
+    value: float32,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Size],
+    value: Size,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[float32],
+    value: float,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc setStyle*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(initStyleSelector(role, states), key, value)
+
+proc `[]=`*[T](
+    theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Fill], value: Fill
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    selector: StyleSelector,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(selector, key, value)
+
+proc `[]=`*[T](theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Color], value: Color) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Fill], value: Fill) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float32) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Size], value: Size) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var Theme, role: StyleRole, key: StyleKey[EdgeInsets], value: EdgeInsets
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*[T](
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Color],
+    value: Color,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Fill],
+    value: Fill,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[float32],
+    value: float32,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[float32],
+    value: float,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Size],
+    value: Size,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]=`*(
+    theme: var Theme,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  theme.setStyle(role, states, key, value)
+
+proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
+  let patch = theme.stylePatch(initStyleSelector(role))
+  if patch.isNil or not patch.getStyle(key, result):
+    result = missingStyleValue()
+
+proc ruleValue(
+    theme: Theme, context: StyleContext, key: string, fallback: StyleValue
+): StyleValue =
+  result = fallback
+  for rule in theme.rules:
+    if rule.selector.matches(context):
+      var value: StyleValue
+      if rule.patch.getStyle(key, value):
+        var resolved: StyleValue
+        if theme.tokens.resolveValue(value, resolved):
+          result = resolved
+        elif value.kind != svToken:
+          result = value
+
+proc colorRule(
+    theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
+): Color =
+  let value = theme.ruleValue(context, key.keyName, styleColor(fallback))
+  case value.kind
+  of svColor:
+    value.color
+  of svFill:
+    value.fill.centerColor()
+  else:
+    fallback
+
+proc fillRule(
+    theme: Theme, context: StyleContext, key: StyleKey[Fill], fallback: Fill
+): Fill =
+  let value = theme.ruleValue(context, key.keyName, styleFill(fallback))
+  case value.kind
+  of svFill:
+    value.fill
+  of svColor:
+    fill(value.color)
+  else:
+    fallback
+
+proc lengthRule(
+    theme: Theme, context: StyleContext, key: StyleKey[float32], fallback: float32
+): float32 =
+  let value = theme.ruleValue(context, key.keyName, styleLength(fallback))
+  if value.kind == svLength: value.length else: fallback
+
+proc sizeRule(
+    theme: Theme, context: StyleContext, key: StyleKey[Size], fallback: Size
+): Size =
+  let value = theme.ruleValue(context, key.keyName, styleSize(fallback))
+  if value.kind == svSize: value.size else: fallback
+
+proc insetsRule(
+    theme: Theme, context: StyleContext, key: StyleKey[EdgeInsets], fallback: EdgeInsets
+): EdgeInsets =
+  let value = theme.ruleValue(context, key.keyName, styleInsets(fallback))
+  if value.kind == svInsets: value.insets else: fallback
+
+proc shadowsRule(
+    theme: Theme,
+    context: StyleContext,
+    key: StyleKey[seq[BoxShadow]],
+    fallback: seq[BoxShadow],
+): seq[BoxShadow] =
+  let value = theme.ruleValue(context, key.keyName, styleShadows(fallback))
+  if value.kind == svShadows: value.shadows else: fallback
+
+proc keywordRule(
+    theme: Theme, context: StyleContext, key: StyleKey[string], fallback: string
+): string =
+  let value = theme.ruleValue(context, key.keyName, styleKeyword(fallback))
+  if value.kind == svKeyword: value.keyword else: fallback
+
+proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
+  if theme.tokens.isNil:
+    return fallback
+  if not theme.tokens.resolveToken(name, result):
+    result = fallback
+
+proc colorToken*(theme: Theme, name: string, fallback: Color): Color =
+  let value = theme.styleValue(name, styleColor(fallback))
+  case value.kind
+  of svColor:
+    value.color
+  of svFill:
+    value.fill.centerColor()
+  else:
+    fallback
+
+proc fillToken*(theme: Theme, name: string, fallback: Fill): Fill =
+  let value = theme.styleValue(name, styleFill(fallback))
+  case value.kind
+  of svFill:
+    value.fill
+  of svColor:
+    fill(value.color)
+  else:
+    fallback
+
+proc lengthToken*(theme: Theme, name: string, fallback: float32): float32 =
+  let value = theme.styleValue(name, styleLength(fallback))
+  if value.kind == svLength: value.length else: fallback
+
+proc sizeToken*(theme: Theme, name: string, fallback: Size): Size =
+  let value = theme.styleValue(name, styleSize(fallback))
+  if value.kind == svSize: value.size else: fallback
+
+proc insetsToken*(theme: Theme, name: string, fallback: EdgeInsets): EdgeInsets =
+  let value = theme.styleValue(name, styleInsets(fallback))
+  if value.kind == svInsets: value.insets else: fallback
+
+proc shadowsToken*(
+    theme: Theme, name: string, fallback: seq[BoxShadow]
+): seq[BoxShadow] =
+  let value = theme.styleValue(name, styleShadows(fallback))
+  if value.kind == svShadows: value.shadows else: fallback
+
+proc styleValue*(
+    appearance: Appearance, name: string, fallback: StyleValue
+): StyleValue =
+  appearance.theme.styleValue(name, fallback)
+
+proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
+  appearance.theme.colorToken(name, fallback)
+
+proc fillToken*(appearance: Appearance, name: string, fallback: Fill): Fill =
+  appearance.theme.fillToken(name, fallback)
+
+proc lengthToken*(appearance: Appearance, name: string, fallback: float32): float32 =
+  appearance.theme.lengthToken(name, fallback)
+
+proc sizeToken*(appearance: Appearance, name: string, fallback: Size): Size =
+  appearance.theme.sizeToken(name, fallback)
+
+proc insetsToken*(
+    appearance: Appearance, name: string, fallback: EdgeInsets
+): EdgeInsets =
+  appearance.theme.insetsToken(name, fallback)
+
+proc shadowsToken*(
+    appearance: Appearance, name: string, fallback: seq[BoxShadow]
+): seq[BoxShadow] =
+  appearance.theme.shadowsToken(name, fallback)
+
+proc resolveFill*(
+    theme: Theme, context: StyleContext, fallback: Fill, key = StyleFill
+): Fill =
+  theme.fillRule(context, key, fallback)
+
+proc resolveFill*(
+    appearance: Appearance, context: StyleContext, fallback: Fill, key = StyleFill
+): Fill =
+  appearance.theme.resolveFill(context, fallback, key)
+
+proc resolveColor*(
+    theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
+): Color =
+  theme.colorRule(context, key, fallback)
+
+proc resolveColor*(
+    appearance: Appearance, context: StyleContext, key: StyleKey[Color], fallback: Color
+): Color =
+  appearance.theme.resolveColor(context, key, fallback)
+
+proc resolveChromeName*(theme: Theme, context: StyleContext): string =
+  theme.keywordRule(context, StyleChrome, DefaultChromeName)
+
+proc resolveChromeName*(appearance: Appearance, context: StyleContext): string =
+  appearance.theme.resolveChromeName(context)
+
+proc setStyle*[T](
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Color],
+    value: Color,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Fill],
+    value: Fill,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float32,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Size],
+    value: Size,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.theme.setStyle(selector, key, value)
+
+proc setStyle*[T](
+    appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Color], value: Color
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Fill], value: Fill
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Size], value: Size
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc setStyle*(
+    appearance: var Appearance,
+    role: StyleRole,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.theme.setStyle(role, key, value)
+
+proc `[]=`*[T](
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Color],
+    value: Color,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Fill],
+    value: Fill,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float32,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[Size],
+    value: Size,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    selector: StyleSelector,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.theme[selector, key] = value
+
+proc `[]=`*[T](
+    appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Color], value: Color
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Fill], value: Fill
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance, role: StyleRole, key: StyleKey[Size], value: Size
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.setStyle(role, key, value)
+
+proc `[]=`*[T](
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[T],
+    value: StyleValue,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Color],
+    value: Color,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Fill],
+    value: Fill,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[float32],
+    value: float32,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[float32],
+    value: float,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[Size],
+    value: Size,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]=`*(
+    appearance: var Appearance,
+    role: StyleRole,
+    states: set[WidgetState],
+    key: StyleKey[seq[BoxShadow]],
+    value: openArray[BoxShadow],
+) =
+  appearance.theme[role, states, key] = value
+
+proc `[]`*[T](appearance: Appearance, role: StyleRole, key: StyleKey[T]): StyleValue =
+  appearance.theme[role, key]
+
+proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
+  ButtonStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(0.20, 0.48, 0.86, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.10, 0.25, 0.46, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 14.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    ),
+    textHighlightColor:
+      theme.colorRule(context, StyleTextHighlightColor, initColor(0.0, 0.0, 0.0, 0.0)),
+    textShadowColor:
+      theme.colorRule(context, StyleTextShadowColor, initColor(0.0, 0.0, 0.0, 0.0)),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 32.0)),
+    chrome: theme.resolveChromeName(context),
+  )
+
+proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
+  ChoiceButtonStyle(
+    indicator: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.50, 0.55, 0.62, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    markColor: theme.colorRule(context, StyleMarkColor, initColor(1.0, 1.0, 1.0, 1.0)),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 2.0)),
+    ),
+    indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
+    indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 18.0)),
+    chrome: theme.resolveChromeName(context),
+  )
+
+proc resolveTextFieldStyle*(
+    theme: Theme, context: StyleContext, textColor: Color
+): TextFieldStyle =
+  TextFieldStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, textColor),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
+    ),
+    selectionColor:
+      theme.colorRule(context, StyleSelectionColor, initColor(0.22, 0.46, 0.84, 0.32)),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
+  )
+
+proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
+  theme.resolveTextFieldStyle(context, initColor(0.08, 0.09, 0.11, 1.0))
+
+proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
+  ComboBoxStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    ),
+    arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
+    arrowColor:
+      theme.colorRule(context, StyleMarkColor, initColor(0.20, 0.22, 0.26, 1.0)),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(90.0, 24.0)),
+    chrome: theme.resolveChromeName(context),
+  )
+
+proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle =
+  TableViewStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(120.0, 24.0)),
+  )
+
+proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
+  RowItemStyle(
+    box: ControlBoxStyle(
+      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+      borderColor:
+        theme.colorRule(context, StyleBorderColor, initColor(0.0, 0.0, 0.0, 0.0)),
+      borderWidth: theme.lengthRule(context, StyleBorderWidth, 0.0),
+      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 0.0),
+      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 0.0),
+      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 0.0),
+      focusRingColor:
+        theme.colorRule(context, StyleFocusRingColor, initColor(0.0, 0.0, 0.0, 0.0)),
+      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
+    ),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 22.0)),
+  )
+
+proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
+  appearance.theme.resolveButtonStyle(context)
+
+proc resolveChoiceButtonStyle*(
+    appearance: Appearance, context: StyleContext
+): ChoiceButtonStyle =
+  appearance.theme.resolveChoiceButtonStyle(context)
+
+proc resolveTextFieldStyle*(
+    appearance: Appearance, context: StyleContext, textColor: Color
+): TextFieldStyle =
+  appearance.theme.resolveTextFieldStyle(context, textColor)
+
+proc resolveTextFieldStyle*(
+    appearance: Appearance, context: StyleContext
+): TextFieldStyle =
+  appearance.theme.resolveTextFieldStyle(context)
+
+proc resolveComboBoxStyle*(
+    appearance: Appearance, context: StyleContext
+): ComboBoxStyle =
+  appearance.theme.resolveComboBoxStyle(context)
+
+proc resolveTableViewStyle*(
+    appearance: Appearance, context: StyleContext
+): TableViewStyle =
+  appearance.theme.resolveTableViewStyle(context)
+
+proc resolveRowItemStyle*(appearance: Appearance, context: StyleContext): RowItemStyle =
+  appearance.theme.resolveRowItemStyle(context)
+
+func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
+  bounds.inset(style.text.insets)
+
+func choiceIndicatorRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
+  let
+    size = max(style.indicatorSize, 0.0'f32)
+    x = bounds.origin.x + style.text.insets.left
+    y = bounds.origin.y + max((bounds.size.height - size) / 2.0'f32, 0.0'f32)
+  initRect(x, y, size, size)
+
+func choiceTextRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
+  let indicator = style.choiceIndicatorRect(bounds)
+  initRect(
+    indicator.maxX + style.indicatorSpacing,
+    bounds.origin.y + style.text.insets.top,
+    bounds.size.width - style.text.insets.left - style.text.insets.right -
+      style.indicatorSize - style.indicatorSpacing,
+    bounds.size.height - style.text.insets.top - style.text.insets.bottom,
+  )
+
+func textFieldTextRect*(style: TextFieldStyle, bounds: Rect): Rect =
+  bounds.inset(style.text.insets)
+
+func comboBoxArrowRect*(style: ComboBoxStyle, bounds: Rect): Rect =
+  let arrowWidth = min(max(style.arrowWidth, 0.0'f32), bounds.size.width)
+  initRect(bounds.maxX - arrowWidth, bounds.origin.y, arrowWidth, bounds.size.height)
+
+func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
+  let
+    arrow = style.comboBoxArrowRect(bounds)
+    insets = style.text.insets
+  initRect(
+    bounds.origin.x + insets.left,
+    bounds.origin.y + insets.top,
+    max(bounds.size.width - insets.left - insets.right - arrow.size.width, 0.0'f32),
+    max(bounds.size.height - insets.top - insets.bottom, 0.0'f32),
+  )
+
+func rowItemTextRect*(style: RowItemStyle, bounds: Rect): Rect =
+  bounds.inset(style.text.insets)
+
+func controlChromeOutset*(box: ControlBoxStyle): float32 =
+  max(-box.focusRingInset, 0.0'f32)
+
+func controlChromeWidth*(box: ControlBoxStyle): float32 =
+  box.borderWidth * 2.0'f32 + box.controlChromeOutset() * 2.0'f32
+
+func controlChromeHeight*(box: ControlBoxStyle): float32 =
+  box.controlChromeWidth()
+
+func controlSizeWithChrome*(
+    contentSize: Size, insets: EdgeInsets, box: ControlBoxStyle, minSize: Size
+): Size =
+  initSize(
+    max(minSize.width, contentSize.width + insets.horizontal + box.controlChromeWidth()),
+    max(
+      minSize.height, contentSize.height + insets.vertical + box.controlChromeHeight()
+    ),
+  )
+
+func buttonControlSize*(style: ButtonStyle, titleSize: Size): Size =
+  controlSizeWithChrome(titleSize, style.text.insets, style.box, style.minSize)
+
+func choiceControlSize*(style: ChoiceButtonStyle, titleSize: Size): Size =
+  let
+    indicatorChrome = style.indicator.controlChromeWidth()
+    indicatorWidth = style.indicatorSize + indicatorChrome
+    indicatorHeight = style.indicatorSize + style.indicator.controlChromeHeight()
+    contentWidth = indicatorWidth + style.indicatorSpacing + titleSize.width
+    contentHeight = max(indicatorHeight, titleSize.height)
+  controlSizeWithChrome(
+    initSize(contentWidth, contentHeight),
+    style.text.insets,
+    style.indicator,
+    style.minSize,
+  )
+
+func textFieldControlSize*(style: TextFieldStyle, textSize: Size): Size =
+  controlSizeWithChrome(textSize, style.text.insets, style.box, style.minSize)
+
+func comboBoxControlSize*(style: ComboBoxStyle, textSize: Size): Size =
+  let contentSize = initSize(textSize.width + style.arrowWidth, textSize.height)
+  controlSizeWithChrome(contentSize, style.text.insets, style.box, style.minSize)
