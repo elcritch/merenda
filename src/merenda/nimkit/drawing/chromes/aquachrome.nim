@@ -434,6 +434,28 @@ proc drawAquaButtonExtras(
       inner.size.width,
       inner.size.height * 0.64'f32,
     )
+    glowWidth = max(inner.size.width - 2.0'f32, 0.0'f32)
+    topGlow =
+      initRect(inner.origin.x + 1.0'f32, inner.origin.y + 1.0'f32, glowWidth, 1.0'f32)
+    waistGlow = initRect(
+      inner.origin.x + 1.0'f32,
+      inner.origin.y + inner.size.height * 0.50'f32,
+      glowWidth,
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    innerRoot,
+    topGlow,
+    transparentFill(),
+    shadows = [
+      dropShadow(
+        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.22 else: 0.08),
+        y = 0.8,
+        blur = 3.0,
+      )
+    ],
+  )
   discard context.addRenderRectangle(
     extras.layer,
     innerRoot,
@@ -451,6 +473,24 @@ proc drawAquaButtonExtras(
     initColor(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    innerRoot,
+    waistGlow,
+    transparentFill(),
+    shadows = [
+      dropShadow(
+        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.08 else: 0.03),
+        y = 0.5,
+        blur = 4.0,
+      ),
+      dropShadow(
+        initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.05 else: 0.02),
+        y = 2.0,
+        blur = 5.0,
+      ),
+    ],
   )
 
 proc drawAquaChoiceExtras(
