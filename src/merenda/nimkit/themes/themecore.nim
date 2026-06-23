@@ -144,6 +144,8 @@ type
   SwitchButtonStyle* = object
     track*: ControlBoxStyle
     knob*: ControlBoxStyle
+    knobInset*: float32
+    knobSizeFactor*: float32
     minSize*: Size
     chrome*: string
 
@@ -191,6 +193,8 @@ const
   StyleInsertionIndicatorFill* = StyleKey[Fill]("insertion.indicator.fill")
   StyleKnobFill* = StyleKey[Fill]("knob.fill")
   StyleKnobBorderColor* = StyleKey[Color]("knob.border.color")
+  StyleKnobInset* = StyleKey[float32]("knob.inset")
+  StyleKnobSizeFactor* = StyleKey[float32]("knob.size.factor")
   StyleKnobShadows* = StyleKey[seq[BoxShadow]]("knob.shadows")
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
@@ -1393,6 +1397,8 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
       cornerRadius: theme.lengthRule(context, StyleCornerRadius, 10.3),
       shadows: theme.shadowsRule(context, StyleKnobShadows, @[]),
     ),
+    knobInset: theme.lengthRule(context, StyleKnobInset, 1.7),
+    knobSizeFactor: theme.lengthRule(context, StyleKnobSizeFactor, 2.0),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(40.0, 24.0)),
     chrome: theme.resolveChromeName(context),
   )
