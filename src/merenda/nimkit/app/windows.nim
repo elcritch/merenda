@@ -714,9 +714,17 @@ proc setContentView*(window: Window, view: View) =
 
   window.xContentView = view
   window.clearMouseState()
+  if not view.isNil:
+    view.setFrame(
+      initRect(0.0, 0.0, window.xFrame.size.width, window.xFrame.size.height)
+    )
+    view.setNeedsLayout()
+    view.setNeedsDisplaySubtree()
   if window.xAutorecalculatesKeyViewLoop:
     window.recalculateKeyViewLoop()
   emit window.didSetContentView(oldContent)
+  if not window.xHostWindow.isNil:
+    window.requestNativeDisplayUpdate()
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title

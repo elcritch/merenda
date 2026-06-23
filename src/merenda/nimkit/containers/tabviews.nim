@@ -25,6 +25,7 @@ const
   ContentBorderWidth = 1.0'f32
   TabCornerRadius = 4.0'f32
   PanelCornerRadius = 4.0'f32
+  TabPanelOverlap = DefaultTabHeight / 2.0'f32
 
 type
   TabPosition* = enum
@@ -167,16 +168,13 @@ proc contentRect*(tabView: TabView): Rect =
   of tpTop:
     initRect(
       0.0,
-      DefaultTabHeight - ContentBorderWidth,
+      TabPanelOverlap,
       bounds.size.width,
-      max(bounds.size.height - DefaultTabHeight + ContentBorderWidth, 0.0'f32),
+      max(bounds.size.height - TabPanelOverlap, 0.0'f32),
     )
   of tpBottom:
     initRect(
-      0.0,
-      0.0,
-      bounds.size.width,
-      max(bounds.size.height - DefaultTabHeight + ContentBorderWidth, 0.0'f32),
+      0.0, 0.0, bounds.size.width, max(bounds.size.height - TabPanelOverlap, 0.0'f32)
     )
 
 func contentViewInsets(position: TabPosition): EdgeInsets =
@@ -187,7 +185,7 @@ func contentViewInsets(position: TabPosition): EdgeInsets =
     initEdgeInsets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32)
 
 func contentChromeHeight(position: TabPosition): float32 =
-  DefaultTabHeight - ContentBorderWidth + position.contentViewInsets().vertical
+  TabPanelOverlap + position.contentViewInsets().vertical
 
 proc contentViewRect*(tabView: TabView): Rect =
   tabView.contentRect().inset(tabView.tabPosition().contentViewInsets())
@@ -202,7 +200,7 @@ proc tabBarFrame(tabView: TabView): Rect =
   of tpBottom:
     initRect(
       0.0,
-      tabView.contentRect().maxY - ContentBorderWidth,
+      tabView.contentRect().maxY - TabPanelOverlap,
       bounds.size.width,
       DefaultTabHeight + ContentBorderWidth,
     )
@@ -536,6 +534,7 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     tabBorderValue,
     tabBorderWidth,
     tabCornerRadius,
+    maskContent = true,
     roundedCorners = tabRoundedCorners(index, tabView.xItems.high),
   )
   context.drawChromeExtras(
