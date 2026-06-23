@@ -21,8 +21,6 @@ proc updateOnChange(textField: TextField, sender: DynamicAgent) {.slot.} =
 
 field.connect(textDidChange, field, updateOnChange)
 secondField.connect(textDidChange, secondField, updateOnChange)
-
-root.background = initColor(0.95, 0.96, 0.98)
 layout.spacing = 10.0
 layout.alignment = svaFill
 layout.addArrangedSubview(title, field, secondField, status)

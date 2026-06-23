@@ -30,8 +30,6 @@ proc onChanged(sender: DynamicAgent) =
     updateStatus()
 
 let target = newActionTarget(changedAction, onChanged)
-
-root.background = initColor(0.95, 0.96, 0.98)
 sync.allowsMixedState = true
 sync.state = bsMixed
 

@@ -54,7 +54,6 @@ let
   liveSwitch = newSwitchButton(true)
 
 root.identifier = "root"
-root.background = initColor(0.94, 0.95, 0.97)
 root.accessibilityRole = arGroup
 root.accessibilityLabel = "Demo root"
 canvas.background = initColor(0.99, 0.995, 1.0)

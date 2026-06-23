@@ -445,8 +445,6 @@ let
   activity = newStatusLabel("No row activated")
   controller = newTableDemoController(table, detail, activity)
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 let
   projectColumn =
     newTableColumn("project", "Project", width = ProjectColumnWidth, minWidth = 150.0)

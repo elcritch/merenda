@@ -20,8 +20,6 @@ let
   cancelButton = newButton("Cancel")
   saveButton = newButton("Save")
 
-root.background = initColor(0.95, 0.96, 0.98)
-
 themeChoice.selectedIndex = 0
 nameLabel.huggingPriority[dcol] = LayoutPriorityHigh
 emailLabel.huggingPriority[dcol] = LayoutPriorityHigh

@@ -375,8 +375,6 @@ proc makeWorkspaceWindow(
       controller.currentFeatureDocument().updateAccessibilityInfo()
     closeButton = makeButton("Close All", CloseAllAction) do(sender: DynamicAgent):
       discard controller.closeAllDocuments()
-
-  root.background = initColor(0.95, 0.96, 0.98)
   document.table = table
   document.subtitle = subtitle
   document.activity = activity
@@ -469,8 +467,6 @@ proc makeTextDocumentWindow(
     subtitle = newStatusLabel(document.documentSubtitle())
     editor = newTextView(document.documentText(), frame = initRect(0, 0, 560.0, 660.0))
     scroll = newScrollView(documentView = editor)
-
-  root.background = initColor(0.97, 0.98, 0.99)
   scroll.borderType = svbLineBorder
   scroll.hasVerticalScroller = true
   scroll.autohidesScrollers = true

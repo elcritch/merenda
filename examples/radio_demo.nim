@@ -32,8 +32,6 @@ proc onChanged(sender: DynamicAgent) =
     updateStatus()
 
 let target = newActionTarget(changedAction, onChanged)
-
-root.background = initColor(0.95, 0.96, 0.98)
 medium.state = bsOn
 
 for radio in [small, medium, large]:
