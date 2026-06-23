@@ -140,7 +140,6 @@ proc selectTabMode(sender: DynamicAgent) =
     tabView.tabMode = tvmInset
   updateStatus()
 
-root.background = initColor(0.95, 0.96, 0.98)
 layout.spacing = 12.0
 layout.alignment = svaFill
 layout.edgeInsets = initEdgeInsets(22.0, 24.0)

@@ -50,8 +50,16 @@ proc beginDraw(
     parent, viewParent, contentOrigin, view.bounds, view.visibleRect, appearance
   )
 
-proc viewBackgroundFill(view: View): types.Color =
-  let color = view.backgroundColor
+proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): types.Color =
+  var color = view.backgroundColor
+  if isRoot and color.a <= 0.0'f32:
+    color = appearance.resolveColor(
+      initControlStyleContext(
+        srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
+      ),
+      StyleBackgroundColor,
+      initColor(0.94, 0.95, 0.97, 1.0),
+    )
   initColor(color.r, color.g, color.b, color.a * view.alphaValue)
 
 proc renderViewInto(
@@ -70,6 +78,7 @@ proc renderViewInto(
     appearance = view.resolvedAppearance(inheritedAppearance)
     level = view.trySendLocal(drawLevel()).get(DefaultDrawLevel)
     parentedInCurrentLayer = parent != (-1).FigIdx and level == parentLevel
+    isRoot = parent == (-1).FigIdx
     inheritedTranslation = if parentedInCurrentLayer: ZeroPoint else: activeTranslation
     absoluteFrame = view.renderFrameRect(parentOrigin, inheritedTranslation)
     baseTranslation = if parentedInCurrentLayer: activeTranslation else: ZeroPoint
@@ -82,7 +91,7 @@ proc renderViewInto(
       level,
       nodeParent,
       absoluteFrame,
-      view.viewBackgroundFill(),
+      view.viewBackgroundFill(appearance, isRoot),
       shadows = view.shadow,
       clips = view.clipsToBounds,
     )

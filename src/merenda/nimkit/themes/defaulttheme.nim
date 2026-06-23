@@ -266,6 +266,8 @@ proc initTheme*(): Theme =
   result["tab.border.color.selected"] = styleColor(initColor(0.24, 0.44, 0.72, 1.0))
   result["tab.border.color.disabled"] = styleColor(initColor(0.65, 0.67, 0.70, 1.0))
 
+  result[srView, StyleBackgroundColor] = initColor(0.95, 0.96, 0.98)
+
   result.addRoleRule(
     srButton,
     {},
