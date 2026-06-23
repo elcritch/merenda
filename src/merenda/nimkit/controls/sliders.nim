@@ -198,7 +198,7 @@ proc drawSliderTrack(
           blur = 2.0,
         )
       ],
-      maskContent = true,
+      lightMaskContent = true,
     )
   context.drawChromeExtras(
     chrome, initChromeExtras(trackRoot, frame, cornerRadius = radius)
@@ -237,7 +237,7 @@ proc drawSliderKnob(slider: Slider, context: DrawContext, rect: Rect) =
           blur = 2.0,
         ),
       ],
-      maskContent = true,
+      lightMaskContent = true,
     )
   context.drawChromeExtras(
     chrome, initChromeExtras(knobRoot, frame, cornerRadius = radius)

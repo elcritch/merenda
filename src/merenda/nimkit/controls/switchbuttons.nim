@@ -190,7 +190,7 @@ proc drawSwitchTrack(
       style.track.borderWidth,
       radius,
       style.track.shadows,
-      maskContent = true,
+      lightMaskContent = true,
     )
   context.drawChromeExtras(
     chrome, initChromeExtras(trackRoot, frame, cornerRadius = radius)
@@ -216,7 +216,7 @@ proc drawSwitchKnob(
       style.knob.borderWidth,
       radius,
       style.knob.shadows,
-      maskContent = true,
+      lightMaskContent = true,
     )
   context.drawChromeExtras(
     chrome, initChromeExtras(knobRoot, frame, cornerRadius = radius)

@@ -184,6 +184,7 @@ proc sizeToFit*(control: Control) =
 
 proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)
+  control.background = initColor(0.0, 0.0, 0.0, 0.0)
   control.setHuggingPriority(LayoutPriorityRequired, laVertical)
   control.installCellForwarding()
   control.setCell(

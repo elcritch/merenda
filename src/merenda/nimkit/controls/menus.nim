@@ -1070,7 +1070,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
           style.box.borderWidth,
           style.box.cornerRadius,
           style.box.shadows,
-          maskContent = true,
+          lightMaskContent = true,
         )
       context.drawChromeExtras(
         faceChrome,

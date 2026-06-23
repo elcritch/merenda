@@ -321,11 +321,11 @@ func aquaTabFaceFill(chrome: ChromeContext): Fill =
     )
   elif ssSelected in chrome.states:
     linear(
-      base.lightenColor(0.24'f32, 1.0'f32),
-      base.lightenColor(0.03'f32, 1.0'f32),
-      base.darkenColor(0.16'f32, 1.0'f32),
+      base.lightenColor(0.72'f32, 1.0'f32),
+      base.lightenColor(0.36'f32, 1.0'f32),
+      base.darkenColor(0.04'f32, 1.0'f32),
       fgaY,
-      96'u8,
+      112'u8,
     )
   elif chrome.isPressed:
     linear(
@@ -333,12 +333,30 @@ func aquaTabFaceFill(chrome: ChromeContext): Fill =
     )
   else:
     linear(
-      base.lightenColor(0.58'f32, 1.0'f32),
-      base.lightenColor(0.12'f32, 1.0'f32),
-      base.darkenColor(0.10'f32, 1.0'f32),
+      base.lightenColor(0.80'f32, 1.0'f32),
+      base.lightenColor(0.34'f32, 1.0'f32),
+      base.darkenColor(0.05'f32, 1.0'f32),
       fgaY,
-      118'u8,
+      112'u8,
     )
+
+func aquaTabInnerFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if chrome.isSelected:
+    return linear(
+      base.lightenColor(0.88'f32, 0.98'f32),
+      base.lightenColor(0.46'f32, 0.98'f32),
+      base.darkenColor(0.03'f32, 0.98'f32),
+      fgaY,
+      116'u8,
+    )
+  linear(
+    base.lightenColor(0.96'f32, 0.98'f32),
+    base.lightenColor(0.54'f32, 0.98'f32),
+    base.darkenColor(0.08'f32, 0.98'f32),
+    fgaY,
+    112'u8,
+  )
 
 func aquaTabPanelFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -405,75 +423,34 @@ proc drawAquaButtonExtras(
       0.0'f32,
       innerRadius,
       aquaButtonInnerShadows(chrome.baseFill, chrome.isEnabled),
-      maskContent = true,
+      lightMaskContent = true,
     )
     topGloss = initRect(
-      inner.origin.x - 4.0'f32,
-      inner.origin.y,
-      inner.size.width + 8.0'f32,
-      inner.size.height * 0.62'f32,
+      inner.origin.x, inner.origin.y, inner.size.width, inner.size.height * 0.62'f32
     )
     lowerWash = initRect(
-      inner.origin.x - 4.0'f32,
+      inner.origin.x,
       inner.origin.y + inner.size.height * 0.36'f32,
-      inner.size.width + 8.0'f32,
+      inner.size.width,
       inner.size.height * 0.64'f32,
     )
-    topGlow = initRect(
-      inner.origin.x - 8.0'f32,
-      inner.origin.y + 1.0'f32,
-      inner.size.width + 16.0'f32,
-      1.0'f32,
-    )
-    waistGlow = initRect(
-      inner.origin.x - 8.0'f32,
-      inner.origin.y + inner.size.height * 0.49'f32,
-      inner.size.width + 16.0'f32,
-      1.0'f32,
-    )
-
-  discard context.addRenderRectangle(
-    extras.layer,
-    innerRoot,
-    topGlow,
-    transparentFill(),
-    shadows = [
-      dropShadow(
-        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.46 else: 0.16),
-        y = 1.2,
-        blur = 5.0,
-      )
-    ],
-  )
   discard context.addRenderRectangle(
     extras.layer,
     innerRoot,
     topGloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    innerRadius,
   )
   discard context.addRenderRectangle(
     extras.layer,
     innerRoot,
     lowerWash,
     context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
-  )
-  discard context.addRenderRectangle(
-    extras.layer,
-    innerRoot,
-    waistGlow,
-    transparentFill(),
-    shadows = [
-      dropShadow(
-        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.16 else: 0.06),
-        y = 0.8,
-        blur = 7.0,
-      ),
-      dropShadow(
-        initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.08 else: 0.03),
-        y = 4.0,
-        blur = 8.0,
-      ),
-    ],
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    innerRadius,
   )
 
 proc drawAquaChoiceExtras(
@@ -496,7 +473,7 @@ proc drawAquaChoiceExtras(
         0.5'f32,
         innerRadius,
         aquaRadioInnerShadows(chrome),
-        maskContent = true,
+        lightMaskContent = true,
       )
       glossWidth =
         if chrome.isSelected:
@@ -690,33 +667,35 @@ proc drawAquaTabExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
   let
-    gloss = initRect(
-      extras.rect.origin.x + 1.0'f32,
-      extras.rect.origin.y + 1.0'f32,
-      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
-      max(extras.rect.size.height * 0.42'f32, 1.0'f32),
-    )
-    bottomShade = initRect(
-      extras.rect.origin.x + 1.0'f32,
-      extras.rect.maxY - 2.0'f32,
-      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
-      1.0'f32,
-    )
-  discard context.addRenderRectangle(
+    inset = 2.0'f32
+    inner = extras.rect.inset(initEdgeInsets(inset))
+    innerRadius = max(extras.cornerRadius - inset, 1.0'f32)
+  if inner.isEmpty:
+    return
+
+  let innerRoot = context.addRenderRectangle(
     extras.layer,
     extras.parent,
-    gloss,
-    context.appearance.chromeFill(chrome.withPart(cpHighlight, extras.highlightFill)),
-    initColor(0.0, 0.0, 0.0, 0.0),
-    0.0'f32,
-    max(extras.cornerRadius - 1.0'f32, 1.0'f32),
+    inner,
+    context.appearance.chromeFill(chrome.withPart(cpInnerFace)),
+    initColor(1.0, 1.0, 1.0, if chrome.isSelected: 0.22 else: 0.42),
+    0.45'f32,
+    innerRadius,
+    [
+      insetShadow(
+        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.36 else: 0.14),
+        y = 1.0,
+        blur = 4.0,
+      ),
+      insetShadow(
+        initColor(0.0, 0.0, 0.0, if chrome.isSelected: 0.08 else: 0.07),
+        y = -1.0,
+        blur = 5.0,
+      ),
+    ],
+    lightMaskContent = true,
   )
-  discard context.addRenderRectangle(
-    extras.layer,
-    extras.parent,
-    bottomShade,
-    fill(initColor(0.0, 0.0, 0.0, if chrome.isSelected: 0.18 else: 0.07)),
-  )
+  discard innerRoot
 
   if extras.edge == ceNone:
     return
@@ -824,6 +803,8 @@ protocol AquaChromeProtocol of ChromeProtocol:
       case context.part
       of cpFace:
         aquaTabFaceFill(context)
+      of cpInnerFace:
+        aquaTabInnerFill(context)
       of cpHighlight:
         context.baseFill
       of cpSeam:
