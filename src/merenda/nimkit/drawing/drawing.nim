@@ -1,3 +1,5 @@
+import std/unicode
+
 import pkg/bumpy
 
 import figdraw/commons
@@ -18,6 +20,7 @@ export images
 const
   DefaultDrawLevel* = 50.ZLevel
   PopupDrawLevel* = 100.ZLevel
+  TextEllipsis = "…"
 
 type DrawContext* = ref object
   xRenders: Renders
@@ -166,6 +169,37 @@ proc textNaturalSize*(text: string): nimkitTypes.Size =
       wrap = false,
     )
   initSize(max(layout.bounding.w, layout.maxSize.x), lineHeight)
+
+proc runePrefix(text: string, count: int): string =
+  var index = 0
+  for rune in text.runes:
+    if index >= count:
+      break
+    result.add rune.toUTF8()
+    inc index
+
+proc clippedText*(text: string, width: float32): string =
+  if text.len == 0 or width <= 0.0'f32:
+    return ""
+  if text.textNaturalSize().width <= width:
+    return text
+  let ellipsisWidth = TextEllipsis.textNaturalSize().width
+  if ellipsisWidth > width:
+    return ""
+
+  var
+    low = 0
+    high = text.runeLen()
+  while low < high:
+    let middle = (low + high + 1) div 2
+    if (text.runePrefix(middle) & TextEllipsis).textNaturalSize().width <= width:
+      low = middle
+    else:
+      high = middle - 1
+  if low == 0:
+    TextEllipsis
+  else:
+    text.runePrefix(low) & TextEllipsis
 
 proc textNode(
     rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
