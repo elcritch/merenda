@@ -50,17 +50,17 @@ proc beginDraw(
     parent, viewParent, contentOrigin, view.bounds, view.visibleRect, appearance
   )
 
-proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): types.Color =
+proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
   var color = view.backgroundColor
   if isRoot and color.a <= 0.0'f32:
-    color = appearance.resolveColor(
-      initControlStyleContext(
-        srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
-      ),
-      StyleBackgroundColor,
-      initColor(0.94, 0.95, 0.97, 1.0),
+    let context = initControlStyleContext(
+      srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
     )
-  initColor(color.r, color.g, color.b, color.a * view.alphaValue)
+    let fallbackColor = appearance.resolveColor(
+      context, StyleBackgroundColor, initColor(0.94, 0.95, 0.97, 1.0)
+    )
+    return appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
+  fill(initColor(color.r, color.g, color.b, color.a * view.alphaValue))
 
 proc renderViewInto(
     context: DrawContext,

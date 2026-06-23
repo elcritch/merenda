@@ -230,7 +230,7 @@ proc installPeachyControlStyles(theme: var Theme) =
   theme[srButton, {ssActive}, StyleBoxShadows] =
     styleToken("button.shadows.highlighted")
   theme[srButton, {ssDisabled}, StyleBoxShadows] = styleToken("button.shadows.disabled")
-  theme[srButton, StyleChrome] = styleKeyword(AquaChromeName)
+  theme[srButton, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
   theme[srSwitch, StyleFill] = peachyFieldFill()
   theme[srSwitch, StyleBorderColor] = initColor(0.16, 0.86, 1.0, 0.54)
@@ -256,7 +256,7 @@ proc installPeachyControlStyles(theme: var Theme) =
   for role in [srCheckBox, srRadioButton]:
     theme[role, StyleFocusRingColor] = styleToken("focus.ring.color")
     theme[role, StyleBoxShadows] = peachyInsetShadows()
-    theme[role, StyleChrome] = styleKeyword(AquaChromeName)
+    theme[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
   theme[srTextField, StyleBoxShadows] = peachyInsetShadows()
   theme[srComboBox, StyleBoxShadows] = peachyInsetShadows()
