@@ -4,7 +4,7 @@ import std/options
 
 import ../accessibility/accessibilityprotocols
 import ./controls
-import ../drawing/drawing
+import ../drawing
 import ../containers/listbasics
 import ../foundation/selectors
 import ../themes

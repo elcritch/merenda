@@ -2,7 +2,7 @@ import std/unicode
 
 import sigils/core
 
-import ../drawing/drawing
+import ../drawing
 import ../foundation/events
 import ../app/pasteboards
 import ../foundation/selectors

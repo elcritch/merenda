@@ -1,6 +1,6 @@
 from figdraw/common/fonttypes import GlyphArrangement
 
-import ../drawing/drawing
+import ../drawing
 import ./textstorage
 import ./texttypes
 import ../themes

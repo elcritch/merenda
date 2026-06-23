@@ -4,7 +4,7 @@ import ../accessibility/accessibility
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
-import ../drawing/drawing
+import ../drawing
 import ../themes
 import ./controls
 

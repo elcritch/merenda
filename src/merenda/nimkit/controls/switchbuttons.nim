@@ -1,5 +1,5 @@
 import ../accessibility/accessibility
-import ../drawing/drawing
+import ../drawing
 import ../themes
 import ../foundation/events
 import ../foundation/selectors

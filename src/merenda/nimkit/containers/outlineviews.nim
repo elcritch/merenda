@@ -7,7 +7,7 @@ import ./tableviews
 import ../accessibility/accessibilityprotocols
 import ../app/dragging
 import ../app/pasteboards
-import ../drawing/drawing
+import ../drawing
 import ../themes
 import ../foundation/events
 import ../foundation/selectors

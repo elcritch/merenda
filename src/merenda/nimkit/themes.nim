@@ -1,6 +1,6 @@
 
 import themes/themecore
 import themes/defaulttheme
-import themes/chrome
+import themes/chromes/aquachrome
 
-export themecore, chrome, defaulttheme
+export themecore, defaulttheme, aquachrome
