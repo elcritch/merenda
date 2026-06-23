@@ -734,6 +734,43 @@ proc installPeachyTextReadabilityPass(theme: var Theme) =
   theme[srTextView, {ssFocused}, StyleTextColor] = initColor(1.0, 0.88, 0.72, 1.0)
   theme[srTextView, {ssDisabled}, StyleTextColor] = styleToken("disabled.text.color")
 
+  theme[srSlider, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+  theme[srSlider, StyleFill] = linear(
+    initColor(0.20, 0.21, 0.27, 0.88),
+    initColor(0.34, 0.25, 0.34, 0.72),
+    initColor(0.16, 0.18, 0.24, 0.86),
+    fgaY,
+    104'u8,
+  )
+  theme[srSlider, StyleHighlightFill] = linear(
+    initColor(0.94, 0.34, 0.58, 0.86),
+    initColor(0.68, 0.30, 0.48, 0.76),
+    initColor(1.0, 0.58, 0.36, 0.62),
+    fgaDiagTLBR,
+    108'u8,
+  )
+  theme[srSlider, StyleKnobFill] = linear(
+    initColor(0.52, 0.27, 0.40, 0.88),
+    initColor(0.34, 0.25, 0.34, 0.80),
+    initColor(0.82, 0.44, 0.34, 0.58),
+    fgaDiagTLBR,
+    112'u8,
+  )
+  theme[srSlider, StyleBorderColor] = initColor(1.0, 0.58, 0.40, 0.78)
+  theme[srSlider, StyleFocusRingColor] = initColor(1.0, 0.74, 0.46, 0.84)
+  theme[srSlider, StyleKnobBorderColor] = initColor(1.0, 0.74, 0.46, 0.92)
+  theme[srSlider, StyleBoxShadows] =
+    @[
+      insetShadow(initColor(0.0, 0.0, 0.0, 0.30), y = 1.0, blur = 4.0),
+      insetShadow(initColor(1.0, 0.68, 0.44, 0.14), y = -1.0, blur = 4.0),
+    ]
+  theme[srSlider, StyleKnobShadows] =
+    @[
+      dropShadow(initColor(1.0, 0.34, 0.52, 0.20), y = 1.0, blur = 7.0),
+      insetShadow(initColor(1.0, 0.78, 0.52, 0.24), y = 1.0, blur = 3.0),
+      insetShadow(initColor(0.0, 0.0, 0.0, 0.26), y = -1.0, blur = 3.0),
+    ]
+
 proc initPeachyTheme*(): Theme =
   result = initTheme()
   result.installPeachyTokens()
