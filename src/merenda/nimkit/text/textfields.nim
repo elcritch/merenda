@@ -90,7 +90,12 @@ protocol TextFieldProtocol from TextField:
     textField.setNeedsDisplay(true)
 
   method textColor(textField: TextField): Color =
-    textField.xTextColor
+    if textField.xTextColor.a > 0.0:
+      return textField.xTextColor
+
+    textField
+    .effectiveAppearance()
+    .resolveTextFieldStyle(textField.textFieldStyleContext()).text.color
 
   method setTextColor(textField: TextField, color: Color) =
     if textField.xTextColor == color:

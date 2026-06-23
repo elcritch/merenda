@@ -181,6 +181,7 @@ type
     box*: ControlBoxStyle
     text*: TextStyle
     arrowWidth*: float32
+    arrowFill*: Fill
     arrowColor*: Color
     minSize*: Size
     chrome*: string
@@ -218,6 +219,7 @@ const
   StyleSelectionColor* = StyleKey[Color]("selection.color")
   StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
   StyleAlternatingFill* = StyleKey[Fill]("alternating.fill")
+  StyleIndicatorFill* = StyleKey[Fill]("indicator.fill")
   StyleDropIndicatorFill* = StyleKey[Fill]("drop.indicator.fill")
   StyleInsertionIndicatorFill* = StyleKey[Fill]("insertion.indicator.fill")
   StyleKnobFill* = StyleKey[Fill]("knob.fill")
@@ -1563,6 +1565,11 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
       insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
     ),
     arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
+    arrowFill: theme.fillRule(
+      context,
+      StyleIndicatorFill,
+      theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
+    ),
     arrowColor:
       theme.colorRule(context, StyleMarkColor, initColor(0.20, 0.22, 0.26, 1.0)),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(90.0, 24.0)),
