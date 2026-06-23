@@ -78,11 +78,30 @@ func normalizedInsets(insets: EdgeInsets): EdgeInsets =
 proc contentOffset*(scrollView: ScrollView): Point
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect
 proc verticalScrollerRect*(scrollView: ScrollView): Rect
-proc drawScroller*(context: DrawContext, track, knob: Rect)
+proc drawScroller*(context: DrawContext, track, knob: Rect, style: ScrollViewStyle)
 
 proc documentRect*(clipView: ClipView): Rect
 proc lineScroll*(scrollView: ScrollView, axis: LayoutAxis): float32
 proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView)
+
+proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
+  initControlStyleContext(
+    srScrollView,
+    scrollView.widgetStateSet(),
+    id = scrollView.styleId(),
+    classes = scrollView.styleClasses(),
+  )
+
+proc scrollerStyleContext(scroller: Scroller): StyleContext =
+  if scroller.isNil or scroller.xScrollView.isNil:
+    initControlStyleContext(srScroller)
+  else:
+    initControlStyleContext(
+      srScroller,
+      scroller.widgetStateSet(),
+      id = scroller.xScrollView.styleId(),
+      classes = scroller.xScrollView.styleClasses(),
+    )
 
 protocol DefaultScrollViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(scrollView: ScrollView): AccessibilityRole =
@@ -773,23 +792,29 @@ proc scrollerKnobRect*(scroller: Scroller): Rect =
       track, laVertical, initScrollViewport(offset.y, viewport.height, document.height)
     )
 
-proc drawScroller*(context: DrawContext, track, knob: Rect) =
+proc drawScroller*(context: DrawContext, track, knob: Rect, style: ScrollViewStyle) =
   if track.isEmpty:
     return
+  let trackBox = style.scrollerTrack
   discard context.addRenderRectangle(
     context.renderRectFor(track),
-    fill(initColor(0.88, 0.90, 0.94, 0.70)),
-    initColor(0.67, 0.71, 0.78, 0.80),
-    1.0'f32,
-    3.0'f32,
+    trackBox.fill,
+    trackBox.borderColor,
+    trackBox.borderWidth,
+    trackBox.cornerRadius,
+    trackBox.shadows,
+    cornerRadii = trackBox.cornerRadii,
   )
   if not knob.isEmpty:
+    let knobBox = style.scrollerKnob
     discard context.addRenderRectangle(
       context.renderRectFor(knob.inset(initEdgeInsets(2.0))),
-      fill(initColor(0.36, 0.42, 0.50, 0.65)),
-      initColor(0.24, 0.29, 0.36, 0.50),
-      1.0'f32,
-      3.0'f32,
+      knobBox.fill,
+      knobBox.borderColor,
+      knobBox.borderWidth,
+      knobBox.cornerRadius,
+      knobBox.shadows,
+      cornerRadii = knobBox.cornerRadii.inset(2.0),
     )
 
 proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32) =
@@ -844,37 +869,42 @@ protocol DefaultScrollViewLayout of ViewLayoutProtocol:
 
 protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
   method draw(scrollView: ScrollView, context: DrawContext) =
-    if scrollView.drawsBackground():
+    let
+      style =
+        context.appearance.resolveScrollViewStyle(scrollView.scrollViewStyleContext())
+      borderWidth =
+        case scrollView.borderType()
+        of svbNoBorder: 0.0'f32
+        of svbLineBorder, svbBezelBorder: style.box.borderWidth
+      borderColor =
+        if borderWidth > 0.0'f32:
+          style.box.borderColor
+        else:
+          initColor(0.0, 0.0, 0.0, 0.0)
+      fillStyle =
+        if scrollView.drawsBackground():
+          style.box.fill
+        else:
+          fill(initColor(0.0, 0.0, 0.0, 0.0))
+
+    if scrollView.drawsBackground() or borderWidth > 0.0'f32:
       discard context.addRenderRectangle(
         context.renderRectFor(context.bounds),
-        fill(scrollView.backgroundColor()),
-        initColor(0.0, 0.0, 0.0, 0.0),
-        0.0'f32,
-        0.0'f32,
-      )
-    case scrollView.borderType()
-    of svbNoBorder:
-      discard
-    of svbLineBorder:
-      discard context.addRenderRectangle(
-        context.renderRectFor(context.bounds),
-        fill(initColor(0.0, 0.0, 0.0, 0.0)),
-        initColor(0.55, 0.58, 0.64, 1.0),
-        1.0'f32,
-        0.0'f32,
-      )
-    of svbBezelBorder:
-      discard context.addRenderRectangle(
-        context.renderRectFor(context.bounds),
-        fill(initColor(0.0, 0.0, 0.0, 0.0)),
-        initColor(0.38, 0.42, 0.48, 1.0),
-        2.0'f32,
-        3.0'f32,
+        fillStyle,
+        borderColor,
+        borderWidth,
+        style.box.cornerRadius,
+        style.box.shadows,
+        cornerRadii = style.box.cornerRadii,
       )
 
 protocol DefaultScrollerDrawing of ViewDrawingProtocol:
   method draw(scroller: Scroller, context: DrawContext) =
-    context.drawScroller(scroller.scrollerTrackRect(), scroller.scrollerKnobRect())
+    let style =
+      context.appearance.resolveScrollViewStyle(scroller.scrollerStyleContext())
+    context.drawScroller(
+      scroller.scrollerTrackRect(), scroller.scrollerKnobRect(), style
+    )
 
 protocol DefaultScrollerEvents of ResponderEventProtocol:
   method mouseDown(scroller: Scroller, event: MouseEvent): bool =

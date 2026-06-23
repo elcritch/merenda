@@ -3245,6 +3245,7 @@ proc initTableScrollView(tableView: TableView): ScrollView =
   result = ScrollView()
   initScrollViewFields(result)
   result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.drawsBackground = false
   result.clipsToBounds = true
   result.hasHorizontalScroller = true
   result.hasVerticalScroller = true

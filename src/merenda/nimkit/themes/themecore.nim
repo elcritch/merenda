@@ -35,6 +35,8 @@ type
 
   StyleRole* = enum
     srView
+    srScrollView
+    srScroller
     srButton
     srCheckBox
     srRadioButton
@@ -128,6 +130,11 @@ type
     focusRingInset*: float32
     focusRingColor*: Color
     shadows*: seq[BoxShadow]
+
+  ScrollViewStyle* = object
+    box*: ControlBoxStyle
+    scrollerTrack*: ControlBoxStyle
+    scrollerKnob*: ControlBoxStyle
 
   TextStyle* = object
     color*: Color
@@ -624,6 +631,14 @@ func matches*(selector: StyleSelector, context: StyleContext): bool =
       return false
   true
 
+func specificity(selector: StyleSelector): int =
+  result = selector.classes.len * 100
+  for state in selector.states:
+    discard state
+    result += 1
+  if selector.id.len > 0:
+    result += 10000
+
 proc stylePatch*(theme: var Theme, selector: StyleSelector): StylePatch =
   for rule in theme.rules:
     if rule.selector == selector:
@@ -952,15 +967,20 @@ proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
 ): StyleValue =
   result = fallback
+  var bestSpecificity = -1
   for rule in theme.rules:
     if rule.selector.matches(context):
       var value: StyleValue
       if rule.patch.getStyle(key, value):
-        var resolved: StyleValue
-        if theme.tokens.resolveValue(value, resolved):
-          result = resolved
-        elif value.kind != svToken:
-          result = value
+        let ruleSpecificity = rule.selector.specificity()
+        if ruleSpecificity >= bestSpecificity:
+          var resolved: StyleValue
+          if theme.tokens.resolveValue(value, resolved):
+            result = resolved
+            bestSpecificity = ruleSpecificity
+          elif value.kind != svToken:
+            result = value
+            bestSpecificity = ruleSpecificity
 
 proc colorRule(
     theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
@@ -1447,21 +1467,85 @@ proc cornerRadiiRule(
     theme.lengthRule(context, StyleCornerRadiusBottomRight, fallback),
   )
 
+proc resolveControlBoxStyle(
+    theme: Theme,
+    context: StyleContext,
+    fillFallback: Fill,
+    borderColorFallback: Color,
+    borderWidthFallback = 1.0'f32,
+    cornerRadiusFallback = 6.0'f32,
+    focusRingWidthFallback = 3.0'f32,
+    focusRingInsetFallback = 2.0'f32,
+    focusRingColorFallback = initColor(0.24, 0.48, 0.92, 0.58),
+    fillKey: StyleKey[Fill] = StyleFill,
+    borderColorKey: StyleKey[Color] = StyleBorderColor,
+    shadowKey: StyleKey[seq[BoxShadow]] = StyleBoxShadows,
+    shadowsFallback: seq[BoxShadow] = @[],
+): ControlBoxStyle =
+  let cornerRadius = theme.lengthRule(context, StyleCornerRadius, cornerRadiusFallback)
+  ControlBoxStyle(
+    fill: theme.fillRule(context, fillKey, fillFallback),
+    borderColor: theme.colorRule(context, borderColorKey, borderColorFallback),
+    borderWidth: theme.lengthRule(context, StyleBorderWidth, borderWidthFallback),
+    cornerRadius: cornerRadius,
+    cornerRadii: theme.cornerRadiiRule(context, cornerRadius),
+    focusRingWidth:
+      theme.lengthRule(context, StyleFocusRingWidth, focusRingWidthFallback),
+    focusRingInset:
+      theme.lengthRule(context, StyleFocusRingInset, focusRingInsetFallback),
+    focusRingColor:
+      theme.colorRule(context, StyleFocusRingColor, focusRingColorFallback),
+    shadows: theme.shadowsRule(context, shadowKey, shadowsFallback),
+  )
+
+proc resolveScrollViewStyle*(theme: Theme, context: StyleContext): ScrollViewStyle =
+  let scrollerContext =
+    if context.role == srScroller:
+      context
+    else:
+      initControlStyleContext(
+        srScroller, context.states, id = context.id, classes = context.classes
+      )
+  ScrollViewStyle(
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.98, 0.985, 0.995, 1.0)),
+      initColor(0.55, 0.58, 0.64, 1.0),
+      cornerRadiusFallback = 0.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
+    ),
+    scrollerTrack: theme.resolveControlBoxStyle(
+      scrollerContext,
+      fill(initColor(0.88, 0.90, 0.94, 0.70)),
+      initColor(0.67, 0.71, 0.78, 0.80),
+      cornerRadiusFallback = 3.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
+    ),
+    scrollerKnob: theme.resolveControlBoxStyle(
+      scrollerContext,
+      fill(initColor(0.36, 0.42, 0.50, 0.65)),
+      initColor(0.24, 0.29, 0.36, 0.50),
+      cornerRadiusFallback = 3.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
+      fillKey = StyleKnobFill,
+      borderColorKey = StyleKnobBorderColor,
+      shadowKey = StyleKnobShadows,
+    ),
+  )
+
 proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
-  let cornerRadius = theme.lengthRule(context, StyleCornerRadius, 14.0)
   ButtonStyle(
-    box: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(0.20, 0.48, 0.86, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.10, 0.25, 0.46, 1.0)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: cornerRadius,
-      cornerRadii: theme.cornerRadiiRule(context, cornerRadius),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.20, 0.48, 0.86, 1.0)),
+      initColor(0.10, 0.25, 0.46, 1.0),
+      cornerRadiusFallback = 14.0,
     ),
     text: TextStyle(
       color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
@@ -1477,17 +1561,11 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
 
 proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButtonStyle =
   ChoiceButtonStyle(
-    indicator: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.50, 0.55, 0.62, 1.0)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    indicator: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(1.0, 1.0, 1.0, 1.0)),
+      initColor(0.50, 0.55, 0.62, 1.0),
+      cornerRadiusFallback = 6.0,
     ),
     markColor: theme.colorRule(context, StyleMarkColor, initColor(1.0, 1.0, 1.0, 1.0)),
     text: TextStyle(
@@ -1514,27 +1592,22 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
       if configuredSize.height > 0.0'f32: configuredSize.height else: indicatorSize,
     )
   SwitchButtonStyle(
-    track: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(0.72, 0.78, 0.84, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.38, 0.45, 0.53, 0.70)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 12.0),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, -3.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.28, 0.62, 1.0, 0.80)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    track: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.72, 0.78, 0.84, 1.0)),
+      initColor(0.38, 0.45, 0.53, 0.70),
+      cornerRadiusFallback = 12.0,
+      focusRingInsetFallback = -3.0,
+      focusRingColorFallback = initColor(0.28, 0.62, 1.0, 0.80),
     ),
-    knob: ControlBoxStyle(
-      fill:
-        theme.fillRule(context, StyleKnobFill, fill(initColor(0.96, 0.97, 0.99, 1.0))),
-      borderColor: theme.colorRule(
-        context, StyleKnobBorderColor, initColor(0.32, 0.36, 0.44, 0.78)
-      ),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 10.3),
-      shadows: theme.shadowsRule(context, StyleKnobShadows, @[]),
+    knob: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.96, 0.97, 0.99, 1.0)),
+      initColor(0.32, 0.36, 0.44, 0.78),
+      cornerRadiusFallback = 10.3,
+      fillKey = StyleKnobFill,
+      borderColorKey = StyleKnobBorderColor,
+      shadowKey = StyleKnobShadows,
     ),
     knobInset: theme.lengthRule(context, StyleKnobInset, 1.7),
     knobSizeFactor: theme.lengthRule(context, StyleKnobSizeFactor, 2.0),
@@ -1544,45 +1617,37 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
 
 proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
   SliderStyle(
-    track: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(0.76, 0.82, 0.88, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.38, 0.46, 0.56, 0.75)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      shadows: theme.shadowsRule(
-        context,
-        StyleBoxShadows,
+    track: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.76, 0.82, 0.88, 1.0)),
+      initColor(0.38, 0.46, 0.56, 0.75),
+      cornerRadiusFallback = 3.0,
+      shadowsFallback =
         @[insetShadow(initColor(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
-      ),
     ),
-    activeTrack: ControlBoxStyle(
-      fill: theme.fillRule(
-        context, StyleHighlightFill, fill(initColor(0.13, 0.55, 0.96, 1.0))
-      ),
-      borderColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.02, 0.20, 0.58, 0.70)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      shadows: theme.shadowsRule(
-        context,
-        StyleBoxShadows,
+    activeTrack: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.13, 0.55, 0.96, 1.0)),
+      initColor(0.02, 0.20, 0.58, 0.70),
+      cornerRadiusFallback = 3.0,
+      fillKey = StyleHighlightFill,
+      borderColorKey = StyleFocusRingColor,
+      shadowsFallback =
         @[insetShadow(initColor(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
-      ),
     ),
-    knob: ControlBoxStyle(
-      fill:
-        theme.fillRule(context, StyleKnobFill, fill(initColor(0.92, 0.94, 0.97, 1.0))),
-      borderColor: theme.colorRule(
-        context, StyleKnobBorderColor, initColor(0.36, 0.40, 0.48, 0.92)
-      ),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      shadows: theme.shadowsRule(
-        context,
-        StyleKnobShadows,
+    knob: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.92, 0.94, 0.97, 1.0)),
+      initColor(0.36, 0.40, 0.48, 0.92),
+      cornerRadiusFallback = 9.0,
+      fillKey = StyleKnobFill,
+      borderColorKey = StyleKnobBorderColor,
+      shadowKey = StyleKnobShadows,
+      shadowsFallback =
         @[
           dropShadow(initColor(0.0, 0.0, 0.0, 0.20), y = 1.0, blur = 3.0),
           insetShadow(initColor(1.0, 1.0, 1.0, 0.75), y = 1.0, blur = 2.0),
         ],
-      ),
     ),
     trackHeight: theme.lengthRule(context, StyleIndicatorSize, 6.0'f32),
     knobSize: theme.lengthRule(context, StyleKnobSize, 18.0'f32),
@@ -1616,17 +1681,11 @@ proc resolveTextFieldStyle*(
     theme: Theme, context: StyleContext, textColor: Color
 ): TextFieldStyle =
   TextFieldStyle(
-    box: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(1.0, 1.0, 1.0, 1.0)),
+      initColor(0.72, 0.75, 0.80, 1.0),
+      cornerRadiusFallback = 6.0,
     ),
     text: TextStyle(
       color: theme.colorRule(context, StyleTextColor, textColor),
@@ -1642,17 +1701,11 @@ proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle
 
 proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
   ComboBoxStyle(
-    box: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(1.0, 1.0, 1.0, 1.0)),
+      initColor(0.72, 0.75, 0.80, 1.0),
+      cornerRadiusFallback = 6.0,
     ),
     text: TextStyle(
       color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
@@ -1672,17 +1725,11 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
 
 proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle =
   TableViewStyle(
-    box: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.72, 0.75, 0.80, 1.0)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 1.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 6.0),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 3.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 2.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.24, 0.48, 0.92, 0.58)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(1.0, 1.0, 1.0, 1.0)),
+      initColor(0.72, 0.75, 0.80, 1.0),
+      cornerRadiusFallback = 6.0,
     ),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(120.0, 24.0)),
     rowHeight: theme.lengthRule(context, StyleRowHeight, 22.0'f32),
@@ -1697,17 +1744,15 @@ proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle
 
 proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
   RowItemStyle(
-    box: ControlBoxStyle(
-      fill: theme.fillRule(context, StyleFill, fill(initColor(1.0, 1.0, 1.0, 1.0))),
-      borderColor:
-        theme.colorRule(context, StyleBorderColor, initColor(0.0, 0.0, 0.0, 0.0)),
-      borderWidth: theme.lengthRule(context, StyleBorderWidth, 0.0),
-      cornerRadius: theme.lengthRule(context, StyleCornerRadius, 0.0),
-      focusRingWidth: theme.lengthRule(context, StyleFocusRingWidth, 0.0),
-      focusRingInset: theme.lengthRule(context, StyleFocusRingInset, 0.0),
-      focusRingColor:
-        theme.colorRule(context, StyleFocusRingColor, initColor(0.0, 0.0, 0.0, 0.0)),
-      shadows: theme.shadowsRule(context, StyleBoxShadows, @[]),
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(1.0, 1.0, 1.0, 1.0)),
+      initColor(0.0, 0.0, 0.0, 0.0),
+      borderWidthFallback = 0.0,
+      cornerRadiusFallback = 0.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
     ),
     text: TextStyle(
       color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
@@ -1715,6 +1760,11 @@ proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
     ),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 22.0)),
   )
+
+proc resolveScrollViewStyle*(
+    appearance: Appearance, context: StyleContext
+): ScrollViewStyle =
+  appearance.theme.resolveScrollViewStyle(context)
 
 proc resolveButtonStyle*(appearance: Appearance, context: StyleContext): ButtonStyle =
   appearance.theme.resolveButtonStyle(context)
