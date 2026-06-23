@@ -6,7 +6,6 @@ from figdraw/figbasics import
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
-import ../drawing/chrome
 import ../drawing/drawing
 import ../foundation/events
 import ../foundation/selectors

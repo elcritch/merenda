@@ -1,7 +1,6 @@
 import sigils/core
 import sigils/selectors
 
-import ../../drawing/chrome
 import ../../drawing/drawing
 import ../themecore
 import ../defaulttheme

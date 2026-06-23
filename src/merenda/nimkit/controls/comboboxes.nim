@@ -3,7 +3,6 @@ import std/options
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
-import ../drawing/chrome
 import ./controls
 import ../containers/listbasics
 import ./popuplists

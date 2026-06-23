@@ -3,7 +3,6 @@ import std/options
 import sigils/selectors
 
 import ../accessibility/accessibilityprotocols
-import ../drawing/chrome
 import ./controls
 import ../drawing/drawing
 import ../foundation/events

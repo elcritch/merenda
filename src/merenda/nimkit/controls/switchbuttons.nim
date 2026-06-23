@@ -1,5 +1,4 @@
 import ../accessibility/accessibility
-import ../drawing/chrome
 import ../drawing/drawing
 import ../themes
 import ../foundation/events

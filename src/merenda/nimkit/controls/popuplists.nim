@@ -3,7 +3,6 @@ from figdraw/fignodes import FigIdx
 import std/options
 
 import ../accessibility/accessibilityprotocols
-import ../drawing/chrome
 import ./controls
 import ../drawing/drawing
 import ../containers/listbasics

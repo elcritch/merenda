@@ -1,6 +1,5 @@
 import ../accessibility/accessibility
 import ./controls
-import ../drawing/chrome
 import ../foundation/selectors
 import ../themes
 import ../foundation/events

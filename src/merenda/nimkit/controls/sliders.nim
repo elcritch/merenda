@@ -4,7 +4,6 @@ import ../accessibility/accessibility
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
-import ../drawing/chrome
 import ../drawing/drawing
 import ../themes
 import ./controls

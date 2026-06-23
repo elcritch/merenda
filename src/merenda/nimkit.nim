@@ -2,8 +2,6 @@ import merenda/nimkit/app/application
 import merenda/nimkit/accessibility/accessibility
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/controls/cells
-import merenda/nimkit/drawing/chrome
-import merenda/nimkit/themes/chromes/aquachrome
 import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
 import merenda/nimkit/app/documentcontrollers
