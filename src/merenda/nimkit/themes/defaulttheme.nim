@@ -250,20 +250,20 @@ proc initTheme*(): Theme =
     styleToken("comboBox.item.text.color.selected")
   result["rowItem.text.color.disabled"] = styleColor(initColor(0.32, 0.35, 0.41, 1.0))
   result["rowItem.separator.color"] = styleColor(initColor(0.86, 0.88, 0.91, 1.0))
-  result["tab.panel.fill"] = fill(initColor(0.98, 0.98, 0.96, 1.0))
-  result["tab.panel.border.color"] = styleColor(initColor(0.42, 0.44, 0.48, 1.0))
-  result["tab.fill"] = styleColor(initColor(0.70, 0.72, 0.76, 1.0))
-  result["tab.fill.highlighted"] = styleColor(initColor(0.58, 0.61, 0.66, 1.0))
-  result["tab.fill.selected"] = styleToken("tab.panel.fill")
+  result["tab.panel.fill"] = styleColor(initColor(0.82, 0.82, 0.80, 1.0))
+  result["tab.panel.border.color"] = styleColor(initColor(0.66, 0.67, 0.66, 1.0))
+  result["tab.fill"] = styleColor(initColor(0.91, 0.91, 0.89, 1.0))
+  result["tab.fill.highlighted"] = styleColor(initColor(0.72, 0.74, 0.76, 1.0))
+  result["tab.fill.selected"] = styleColor(initColor(0.47, 0.48, 0.49, 1.0))
   result["tab.fill.disabled"] = styleColor(initColor(0.78, 0.80, 0.84, 1.0))
-  result["tab.highlight.fill"] = styleFill(initColor(1.0, 1.0, 1.0, 0.68))
+  result["tab.highlight.fill"] = styleFill(initColor(1.0, 1.0, 1.0, 0.52))
   result["tab.highlight.fill.disabled"] = styleFill(initColor(1.0, 1.0, 1.0, 0.30))
   result["tab.text.color"] = styleColor(initColor(0.14, 0.15, 0.18, 1.0))
-  result["tab.text.color.selected"] = styleColor(initColor(0.07, 0.08, 0.10, 1.0))
+  result["tab.text.color.selected"] = styleColor(initColor(1.0, 1.0, 1.0, 0.96))
   result["tab.text.color.disabled"] = styleColor(initColor(0.48, 0.50, 0.54, 1.0))
-  result["tab.border.color"] = styleColor(initColor(0.55, 0.57, 0.62, 1.0))
+  result["tab.border.color"] = styleColor(initColor(0.49, 0.50, 0.50, 1.0))
   result["tab.border.color.highlighted"] = styleColor(initColor(0.43, 0.45, 0.50, 1.0))
-  result["tab.border.color.selected"] = styleToken("tab.panel.border.color")
+  result["tab.border.color.selected"] = styleColor(initColor(0.32, 0.33, 0.34, 1.0))
   result["tab.border.color.disabled"] = styleColor(initColor(0.65, 0.67, 0.70, 1.0))
 
   result.addRoleRule(
@@ -409,9 +409,14 @@ proc initTheme*(): Theme =
   result[srTab, StyleHighlightFill] = styleToken("tab.highlight.fill")
   result[srTab, {ssDisabled}, StyleHighlightFill] =
     styleToken("tab.highlight.fill.disabled")
+  result[srTab, StyleBorderWidth] = 1.0
+  result[srTab, StyleCornerRadius] = 4.0
+  result[srTab, StyleTextInsets] = initEdgeInsets(1.0, 8.0)
   result[srTab, StyleChrome] = styleKeyword(AquaChromeName)
   result[srTabPanel, StyleFill] = styleToken("tab.panel.fill")
   result[srTabPanel, StyleBorderColor] = styleToken("tab.panel.border.color")
+  result[srTabPanel, StyleBorderWidth] = 1.0
+  result[srTabPanel, StyleCornerRadius] = 4.0
   result[srTabPanel, StyleChrome] = styleKeyword(AquaChromeName)
 
   for role in [srCheckBox, srRadioButton]:

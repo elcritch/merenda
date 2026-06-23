@@ -321,9 +321,9 @@ func aquaTabFaceFill(chrome: ChromeContext): Fill =
     )
   elif ssSelected in chrome.states:
     linear(
-      base.lightenColor(0.70'f32, 1.0'f32),
-      base.lightenColor(0.32'f32, 1.0'f32),
-      base,
+      base.lightenColor(0.24'f32, 1.0'f32),
+      base.lightenColor(0.03'f32, 1.0'f32),
+      base.darkenColor(0.16'f32, 1.0'f32),
       fgaY,
       96'u8,
     )
@@ -333,8 +333,18 @@ func aquaTabFaceFill(chrome: ChromeContext): Fill =
     )
   else:
     linear(
-      base.lightenColor(0.36'f32, 1.0'f32), base.darkenColor(0.16'f32, 1.0'f32), fgaY
+      base.lightenColor(0.58'f32, 1.0'f32),
+      base.lightenColor(0.12'f32, 1.0'f32),
+      base.darkenColor(0.10'f32, 1.0'f32),
+      fgaY,
+      118'u8,
     )
+
+func aquaTabPanelFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  linear(
+    base.lightenColor(0.16'f32, 1.0'f32), base.darkenColor(0.05'f32, 1.0'f32), fgaY
+  )
 
 func chromeEdgeHighlightRect(edge: ChromeEdge, rect: Rect): Rect =
   case edge
@@ -679,6 +689,35 @@ proc drawAquaSliderKnobExtras(
 proc drawAquaTabExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
+  let
+    gloss = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.origin.y + 1.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      max(extras.rect.size.height * 0.42'f32, 1.0'f32),
+    )
+    bottomShade = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.maxY - 2.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    gloss,
+    context.appearance.chromeFill(chrome.withPart(cpHighlight, extras.highlightFill)),
+    initColor(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    max(extras.cornerRadius - 1.0'f32, 1.0'f32),
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    bottomShade,
+    fill(initColor(0.0, 0.0, 0.0, if chrome.isSelected: 0.18 else: 0.07)),
+  )
+
   if extras.edge == ceNone:
     return
 
@@ -695,6 +734,30 @@ proc drawAquaTabExtras(
       chromeEdgeSeamRect(extras.edge, extras.rect),
       context.appearance.chromeFill(chrome.withPart(cpSeam, extras.seamFill)),
     )
+
+proc drawAquaTabPanelExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  discard chrome
+  let
+    topHighlight = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.origin.y + 1.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    innerShade = initRect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.maxY - 2.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer, extras.parent, topHighlight, fill(initColor(1.0, 1.0, 1.0, 0.52))
+  )
+  discard context.addRenderRectangle(
+    extras.layer, extras.parent, innerShade, fill(initColor(0.0, 0.0, 0.0, 0.05))
+  )
 
 protocol AquaChromeProtocol of ChromeProtocol:
   method chromeFillFor(chrome: AquaChrome, context: ChromeContext): Fill =
@@ -767,6 +830,12 @@ protocol AquaChromeProtocol of ChromeProtocol:
         context.baseFill
       else:
         context.baseFill
+    of crTabPanel:
+      case context.part
+      of cpFace:
+        aquaTabPanelFaceFill(context)
+      else:
+        context.baseFill
     else:
       context.baseFill
 
@@ -804,6 +873,9 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crTab:
       if chromeContext.part == cpFace:
         context.drawAquaTabExtras(chromeContext, extras)
+    of crTabPanel:
+      if chromeContext.part == cpFace:
+        context.drawAquaTabPanelExtras(chromeContext, extras)
     else:
       discard
 

@@ -16,14 +16,15 @@ import ../view/views
 export views
 
 const
-  DefaultTabHeight = 28.0'f32
-  DefaultTabMinWidth = 72.0'f32
+  DefaultTabHeight = 24.0'f32
+  DefaultTabSegmentHeight = 20.0'f32
+  DefaultTabMinWidth = 48.0'f32
   DefaultTabMaxWidth = 180.0'f32
-  TabHorizontalPadding = 14.0'f32
+  TabHorizontalPadding = 12.0'f32
   TabInset = 8.0'f32
-  TabGap = 1.0'f32
   ContentBorderWidth = 1.0'f32
-  TabCornerRadius = 6.0'f32
+  TabCornerRadius = 4.0'f32
+  PanelCornerRadius = 4.0'f32
 
 type
   TabPosition* = enum
@@ -218,23 +219,24 @@ proc tabWidth(item: TabViewItem): float32 =
     DefaultTabMaxWidth,
   )
 
+proc tabGroupWidth(tabView: TabView): float32 =
+  if tabView.isNil:
+    return
+  for item in tabView.xItems:
+    result += item.tabWidth()
+
 proc tabRectInBar(tabView: TabView, index: int): Rect =
   if tabView.isNil or index < 0 or index >= tabView.xItems.len:
     return
-  var x = TabInset
+  let groupWidth = tabView.tabGroupWidth()
+  var x = max((tabView.tabBarFrame().size.width - groupWidth) / 2.0'f32, TabInset)
   for itemIndex in 0 ..< index:
-    x += tabView.xItems[itemIndex].tabWidth() + TabGap
+    x += tabView.xItems[itemIndex].tabWidth()
 
   let
-    selected = index == tabView.xSelectedIndex
     width = tabView.xItems[index].tabWidth()
-    height =
-      if selected:
-        DefaultTabHeight + ContentBorderWidth
-      else:
-        DefaultTabHeight - 4.0'f32
-    y = if selected: 0.0'f32 else: 4.0'f32
-  initRect(x, y, width, height)
+    y = (DefaultTabHeight - DefaultTabSegmentHeight) / 2.0'f32
+  initRect(x, y, width, DefaultTabSegmentHeight)
 
 proc tabRect*(tabView: TabView, index: int): Rect =
   let
@@ -437,13 +439,8 @@ proc removeTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
 proc removeTabViewItem*(tabView: TabView, item: TabViewItem): bool {.discardable.} =
   tabView.removeTabViewItemAtIndex(tabView.indexOfTabViewItem(item))
 
-proc tabTextRect(rect: Rect): Rect =
-  initRect(
-    rect.origin.x + 8.0'f32,
-    rect.origin.y + 1.0'f32,
-    max(rect.size.width - 16.0'f32, 0.0'f32),
-    max(rect.size.height - 4.0'f32, 0.0'f32),
-  )
+proc tabTextRect(rect: Rect, insets: EdgeInsets): Rect =
+  rect.inset(insets)
 
 func panelFillColor(): Color =
   initColor(0.98, 0.98, 0.96)
@@ -478,12 +475,13 @@ func chromeEdge(position: TabPosition): ChromeEdge =
   of tpTop: ceTop
   of tpBottom: ceBottom
 
-func tabRoundedCorners(position: TabPosition): set[DirectionCorners] =
-  case position
-  of tpTop:
-    {dcTopLeft, dcTopRight}
-  of tpBottom:
-    {dcBottomLeft, dcBottomRight}
+func tabRoundedCorners(index, lastIndex: int): set[DirectionCorners] =
+  if index == 0:
+    result.incl dcTopLeft
+    result.incl dcBottomLeft
+  if index == lastIndex:
+    result.incl dcTopRight
+    result.incl dcBottomRight
 
 proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   let
@@ -510,6 +508,14 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     tabBorderValue = context.appearance.resolveColor(
       tabStyleContext, StyleBorderColor, tabBorderColor(selected, enabled)
     )
+    tabBorderWidth =
+      context.appearance.resolveLength(tabStyleContext, StyleBorderWidth, 1.0'f32)
+    tabCornerRadius = context.appearance.resolveLength(
+      tabStyleContext, StyleCornerRadius, TabCornerRadius
+    )
+    tabTextInsets = context.appearance.resolveInsets(
+      tabStyleContext, StyleTextInsets, initEdgeInsets(1.0'f32, 8.0'f32)
+    )
     tabTextValue = context.appearance.resolveColor(
       tabStyleContext, StyleTextColor, tabTextColor(enabled, selected)
     )
@@ -528,22 +534,24 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     renderRect,
     context.appearance.chromeFill(tabChrome),
     tabBorderValue,
-    1.0'f32,
-    TabCornerRadius,
-    roundedCorners = tabView.tabPosition.tabRoundedCorners(),
+    tabBorderWidth,
+    tabCornerRadius,
+    roundedCorners = tabRoundedCorners(index, tabView.xItems.high),
   )
   context.drawChromeExtras(
     tabChrome,
     initChromeExtras(
       tabRoot,
       renderRect,
-      cornerRadius = TabCornerRadius,
-      edge = tabView.tabPosition.chromeEdge(),
+      cornerRadius = tabCornerRadius,
+      edge = ceNone,
       seamFill = panelFillValue,
       highlightFill = tabHighlightFillValue,
     ),
   )
-  context.addText(rect.tabTextRect(), item.label(), tabTextValue, alignment = taCenter)
+  context.addText(
+    rect.tabTextRect(tabTextInsets), item.label(), tabTextValue, alignment = taCenter
+  )
   if selected and tabView.isFocusVisible:
     discard context.addRenderRectangle(
       context.renderRectFor(rect.inset(initEdgeInsets(3.0'f32))),
@@ -610,12 +618,28 @@ protocol TabViewDrawing of ViewDrawingProtocol:
       borderColor = context.appearance.resolveColor(
         panelStyleContext, StyleBorderColor, panelBorderColor()
       )
-    discard context.addRenderRectangle(
-      context.renderRectFor(content),
-      fillValue,
-      borderColor,
-      ContentBorderWidth,
-      4.0'f32,
+      borderWidth = context.appearance.resolveLength(
+        panelStyleContext, StyleBorderWidth, ContentBorderWidth
+      )
+      cornerRadius = context.appearance.resolveLength(
+        panelStyleContext, StyleCornerRadius, PanelCornerRadius
+      )
+      panelChrome = chromeContext(
+        context.appearance.resolveChromeName(panelStyleContext),
+        crTabPanel,
+        cpFace,
+        fillValue,
+      )
+      renderRect = context.renderRectFor(content)
+      panelRoot = context.addRenderRectangle(
+        renderRect,
+        context.appearance.chromeFill(panelChrome),
+        borderColor,
+        borderWidth,
+        cornerRadius,
+      )
+    context.drawChromeExtras(
+      panelChrome, initChromeExtras(panelRoot, renderRect, cornerRadius = cornerRadius)
     )
 
 protocol TabViewLayout of ViewLayoutProtocol:
@@ -624,9 +648,7 @@ protocol TabViewLayout of ViewLayoutProtocol:
     tabView.syncSelectedContent()
 
   method layoutIntrinsicContentSize(tabView: TabView): IntrinsicSize =
-    var tabWidthSum = TabInset * 2.0'f32
-    for item in tabView.xItems:
-      tabWidthSum += item.tabWidth() + TabGap
+    let tabWidthSum = tabView.tabGroupWidth() + TabInset * 2.0'f32
     let contentHeight = tabView.contentIntrinsicHeight()
     initIntrinsicSize(
       max(tabWidthSum, 160.0'f32),
