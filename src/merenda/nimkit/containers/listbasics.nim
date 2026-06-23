@@ -3,7 +3,7 @@ import std/options
 
 import ../drawing/drawing
 import ./scrollergeometry
-import ../drawing/theme
+import ../themes
 import ../foundation/events
 import ../foundation/types
 

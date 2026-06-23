@@ -9,7 +9,7 @@ import ../foundation/selectors
 import ./textlayout
 import ./textstorage
 import ./texttypes
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ../view/views
 

@@ -13,7 +13,7 @@ import ../controls/controls
 import ../containers/listbasics
 import ../containers/scrollviews
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../text/fieldeditors
 import ../text/textviews
 import ../foundation/types

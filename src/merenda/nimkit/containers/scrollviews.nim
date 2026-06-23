@@ -4,7 +4,7 @@ import ../accessibility/accessibilityprotocols
 import ../drawing/drawing
 import ./scrollergeometry
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/events
 import ../foundation/types
 import ../view/viewgeometry

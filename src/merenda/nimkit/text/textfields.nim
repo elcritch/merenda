@@ -5,7 +5,7 @@ import sigils/core
 import ../accessibility/accessibility
 import ../controls/controls
 import ../foundation/selectors
-import ../drawing/theme
+import ../themes
 import ../foundation/events
 import ./fieldeditors
 import ./textstorage

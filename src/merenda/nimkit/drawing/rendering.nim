@@ -5,7 +5,7 @@ import figdraw/fignodes
 
 import ./drawing
 import ../foundation/selectors
-import ./theme
+import ../themes
 import ../foundation/types
 import ../view/views
 

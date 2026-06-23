@@ -6,7 +6,7 @@ import ../foundation/events
 import ../controls/menus
 import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 import ./userdefaults
 import ../app/windows

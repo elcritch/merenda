@@ -5,7 +5,7 @@ import ../foundation/selectors
 import ../foundation/types
 import ./viewconstraints
 import ../foundation/events
-import ../drawing/theme
+import ../themes
 import ./viewgeometry
 import ./viewprotos
 import ./viewbase

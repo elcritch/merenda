@@ -237,7 +237,7 @@ suite "nimkit theme":
       baseStyle = theme.resolveButtonStyle(initControlStyleContext(srButton))
       overrideFill = initColor(0.67, 0.18, 0.22, 1.0)
 
-    firstAppearance.theme[ButtonFillToken] = overrideFill
+    firstAppearance.theme["button.fill"] = overrideFill
     firstAppearance[srButton, StyleCornerRadius] = 11.0
 
     check firstAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==

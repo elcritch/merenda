@@ -3,7 +3,7 @@ import merenda/nimkit/accessibility/accessibility
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/controls/cells
 import merenda/nimkit/drawing/chrome
-import merenda/nimkit/drawing/chromes/aquachrome
+import merenda/nimkit/themes/chromes/aquachrome
 import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
 import merenda/nimkit/app/documentcontrollers
@@ -40,7 +40,7 @@ import merenda/nimkit/text/textlayout
 import merenda/nimkit/text/textstorage
 import merenda/nimkit/text/texttypes
 import merenda/nimkit/text/textviews
-import merenda/nimkit/drawing/theme
+import merenda/nimkit/themes
 import merenda/nimkit/foundation/types
 import merenda/nimkit/app/userdefaults
 import merenda/nimkit/view/views
@@ -89,7 +89,7 @@ export textlayout
 export textstorage
 export texttypes
 export textviews
-export theme
+export themes
 export types
 export userdefaults
 export views

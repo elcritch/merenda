@@ -3,7 +3,7 @@ from figdraw/common/fonttypes import GlyphArrangement
 import ../drawing/drawing
 import ./textstorage
 import ./texttypes
-import ../drawing/theme
+import ../themes
 import ../foundation/types
 
 type
