@@ -180,6 +180,7 @@ proc initTheme*(): Theme =
   result["disabled.fill"] = styleColor(initColor(0.64, 0.68, 0.74, 1.0))
   result["disabled.text.color"] = styleColor(initColor(0.90, 0.92, 0.95, 1.0))
   result["focus.ring.color"] = styleColor(initColor(0.34, 0.66, 1.0, 0.72))
+  result["indicator.size"] = 18.0
 
   result["button.fill"] = aquaButtonFill()
   result["button.fill.highlighted"] = aquaButtonPressedFill()
@@ -354,7 +355,9 @@ proc initTheme*(): Theme =
   result[srSwitch, StyleKnobInset] = 1.7
   result[srSwitch, StyleKnobSizeFactor] = 2.0
   result[srSwitch, StyleKnobShadows] = aquaSwitchKnobShadows(enabled = true)
-  result[srSwitch, StyleMinimumSize] = initSize(40.0, 24.0)
+  result[srSwitch, StyleIndicatorSize] = styleToken("indicator.size")
+  result[srSwitch, StyleWidthFactor] = 1.67
+  result[srSwitch, StyleMinimumSize] = initSize(0.0, 0.0)
   result[srSwitch, StyleChrome] = styleKeyword(AquaChromeName)
   result[srSwitch, {ssSelected}, StyleFill] = fill(initColor(0.08, 0.54, 0.96, 1.0))
   result[srSwitch, {ssSelected}, StyleBorderColor] = initColor(0.02, 0.24, 0.62, 0.70)
@@ -467,7 +470,7 @@ proc initTheme*(): Theme =
       styleToken("choice.mark.color.disabled"),
       styleToken("choice.text.color.disabled"),
     )
-    result[role, StyleIndicatorSize] = 16.0
+    result[role, StyleIndicatorSize] = styleToken("indicator.size")
     result[role, StyleBorderWidth] = 1.0
     result[role, StyleCornerRadius] = radius
     result[role, StyleIndicatorSpacing] = 7.0

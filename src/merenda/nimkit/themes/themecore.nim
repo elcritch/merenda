@@ -199,6 +199,7 @@ const
   StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
   StyleIndicatorSize* = StyleKey[float32]("indicator.size")
   StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
+  StyleWidthFactor* = StyleKey[float32]("width.factor")
   StyleMarkColor* = StyleKey[Color]("mark.color")
   StyleMinimumSize* = StyleKey[Size]("minimum.size")
   StyleChrome* = StyleKey[string]("chrome")
@@ -1374,6 +1375,18 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
   )
 
 proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButtonStyle =
+  let
+    indicatorSize = theme.lengthRule(context, StyleIndicatorSize, 24.0)
+    widthFactor = theme.lengthRule(context, StyleWidthFactor, 1.67)
+    configuredSize =
+      theme.sizeRule(context, StyleMinimumSize, initSize(0.0, indicatorSize))
+    minSize = initSize(
+      if configuredSize.width > 0.0'f32:
+        configuredSize.width
+      else:
+        indicatorSize * widthFactor,
+      if configuredSize.height > 0.0'f32: configuredSize.height else: indicatorSize,
+    )
   SwitchButtonStyle(
     track: ControlBoxStyle(
       fill: theme.fillRule(context, StyleFill, fill(initColor(0.72, 0.78, 0.84, 1.0))),
@@ -1399,7 +1412,7 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
     ),
     knobInset: theme.lengthRule(context, StyleKnobInset, 1.7),
     knobSizeFactor: theme.lengthRule(context, StyleKnobSizeFactor, 2.0),
-    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(40.0, 24.0)),
+    minSize: minSize,
     chrome: theme.resolveChromeName(context),
   )
 
