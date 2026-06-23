@@ -732,6 +732,13 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
 
 proc installSynthwave83VaporwavePass(theme: var Theme) =
   theme[srView, StyleBackgroundColor] = initColor(0.08, 0.00, 0.16)
+  theme[srView, StyleBackgroundFill] = linear(
+    initColor(0.08, 0.00, 0.16, 1.0),
+    initColor(0.13, 0.01, 0.24, 1.0),
+    initColor(0.02, 0.00, 0.10, 1.0),
+    fgaDiagTLBR,
+    98'u8,
+  )
   theme["accent"] = initColor(1.0, 0.08, 0.86, 0.94)
   theme["accent.pressed"] = initColor(0.12, 0.86, 1.0, 0.90)
   theme["disabled.text.color"] = initColor(0.45, 0.36, 0.58, 0.72)
