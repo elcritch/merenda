@@ -351,6 +351,8 @@ proc initTheme*(): Theme =
   result[srSwitch, StyleBoxShadows] = aquaSwitchTrackShadows(enabled = true)
   result[srSwitch, StyleKnobFill] = fill(initColor(0.96, 0.97, 0.99, 1.0))
   result[srSwitch, StyleKnobBorderColor] = initColor(0.32, 0.36, 0.44, 0.78)
+  result[srSwitch, StyleKnobInset] = 1.7
+  result[srSwitch, StyleKnobSizeFactor] = 2.0
   result[srSwitch, StyleKnobShadows] = aquaSwitchKnobShadows(enabled = true)
   result[srSwitch, StyleMinimumSize] = initSize(40.0, 24.0)
   result[srSwitch, StyleChrome] = styleKeyword(AquaChromeName)

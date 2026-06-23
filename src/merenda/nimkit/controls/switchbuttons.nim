@@ -13,14 +13,11 @@ type
 
   SwitchButtonCell* = ref object of ActionCell
 
-const
-  SwitchButtonWidth = 40'f32
-  SwitchButtonHeight = 24'f32
-  SwitchKnobInset = 1.7'f32
-  SwitchKnobSizeFactor = 2.0'f32
-
 protocol SwitchButtonProtocol {.selectorScope: protocol.}:
   property on -> bool
+
+proc switchButtonCell*(switchButton: SwitchButton): SwitchButtonCell
+proc highlighted*(switchButton: SwitchButton): bool
 
 func normalizedSwitchState(state: ButtonState): ButtonState =
   if state == bsOn: bsOn else: bsOff
@@ -40,12 +37,49 @@ proc setSwitchCellState(cell: SwitchButtonCell, state: ButtonState) =
     Cell(cell).setState(nextState)
   cell.syncSwitchWidgetState()
 
+proc switchChromeStates(switchButton: SwitchButton): set[WidgetState] =
+  result = switchButton.widgetStateSet()
+  if switchButton.on:
+    result.incl ssSelected
+  if switchButton.highlighted:
+    result.incl ssHighlighted
+
+proc switchStyleContext(switchButton: SwitchButton): StyleContext =
+  if switchButton.isNil:
+    return initControlStyleContext(srSwitch)
+  initControlStyleContext(
+    srSwitch,
+    switchButton.switchChromeStates(),
+    id = switchButton.styleId,
+    classes = switchButton.styleClasses,
+  )
+
+proc switchStyle(cell: SwitchButtonCell): SwitchButtonStyle =
+  let view = cell.controlView()
+  if view of SwitchButton:
+    return view.effectiveAppearance().resolveSwitchButtonStyle(
+        SwitchButton(view).switchStyleContext()
+      )
+  initAppearance().resolveSwitchButtonStyle(initControlStyleContext(srSwitch))
+
+proc switchStyle(switchButton: SwitchButton, context: DrawContext): SwitchButtonStyle =
+  if not context.isNil:
+    return
+      context.appearance.resolveSwitchButtonStyle(switchButton.switchStyleContext())
+  switchButton.effectiveAppearance().resolveSwitchButtonStyle(
+    switchButton.switchStyleContext()
+  )
+
+func switchSize(style: SwitchButtonStyle): Size =
+  initSize(max(style.minSize.width, 0.0'f32), max(style.minSize.height, 0.0'f32))
+
 protocol DefaultSwitchButtonCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: SwitchButtonCell): IntrinsicSize =
-    initIntrinsicSize(SwitchButtonWidth, SwitchButtonHeight)
+    initIntrinsicSize(cell.switchStyle().switchSize())
 
   method cellSizeForBounds(cell: SwitchButtonCell, bounds: Rect): Size =
-    initSize(max(bounds.size.width, SwitchButtonWidth), SwitchButtonHeight)
+    let size = cell.switchStyle().switchSize()
+    initSize(max(bounds.size.width, size.width), size.height)
 
 proc initSwitchButtonCellFields*(cell: SwitchButtonCell) =
   initActionCellFields(cell)
@@ -101,18 +135,12 @@ protocol DefaultSwitchButtonControl of SwitchButtonProtocol:
   method setOn(switchButton: SwitchButton, on: bool) =
     switchButton.state = (if on: bsOn else: bsOff)
 
-proc switchChromeStates(switchButton: SwitchButton): set[WidgetState] =
-  result = switchButton.widgetStateSet()
-  if switchButton.on:
-    result.incl ssSelected
-  if switchButton.highlighted:
-    result.incl ssHighlighted
-
-proc switchTrackRect(switchButton: SwitchButton): Rect =
+proc switchTrackRect(switchButton: SwitchButton, style: SwitchButtonStyle): Rect =
   let
     bounds = switchButton.bounds()
-    width = min(bounds.size.width, SwitchButtonWidth)
-    height = min(bounds.size.height, SwitchButtonHeight)
+    size = style.switchSize()
+    width = min(bounds.size.width, size.width)
+    height = min(bounds.size.height, size.height)
   initRect(
     bounds.origin.x + (bounds.size.width - width) * 0.5'f32,
     bounds.origin.y + (bounds.size.height - height) * 0.5'f32,
@@ -120,19 +148,19 @@ proc switchTrackRect(switchButton: SwitchButton): Rect =
     height,
   )
 
-proc switchKnobRect(switchButton: SwitchButton, track: Rect): Rect =
+proc switchKnobRect(
+    switchButton: SwitchButton, track: Rect, style: SwitchButtonStyle
+): Rect =
   let
-    switchKnobSize = SwitchButtonHeight - SwitchKnobInset * SwitchKnobSizeFactor
+    knobInset = max(style.knobInset, 0.0'f32)
+    knobSize = max(track.size.height - knobInset * style.knobSizeFactor, 0.0'f32)
     x =
       if switchButton.on:
-        track.maxX - SwitchKnobInset - switchKnobSize
+        track.maxX - knobInset - knobSize
       else:
-        track.origin.x + SwitchKnobInset
+        track.origin.x + knobInset
   initRect(
-    x,
-    track.origin.y + (track.size.height - switchKnobSize) * 0.5'f32,
-    switchKnobSize,
-    switchKnobSize,
+    x, track.origin.y + (track.size.height - knobSize) * 0.5'f32, knobSize, knobSize
   )
 
 proc drawSwitchTrack(
@@ -204,18 +232,11 @@ protocol DefaultSwitchButtonDrawing of ViewDrawingProtocol:
   method draw(switchButton: SwitchButton, context: DrawContext) =
     let
       states = switchButton.switchChromeStates()
-      style = context.appearance.resolveSwitchButtonStyle(
-        initControlStyleContext(
-          srSwitch,
-          states,
-          id = switchButton.styleId,
-          classes = switchButton.styleClasses,
-        )
-      )
-      track = switchButton.switchTrackRect()
+      style = switchButton.switchStyle(context)
+      track = switchButton.switchTrackRect(style)
     switchButton.drawSwitchTrack(context, track, style, states)
     switchButton.drawSwitchKnob(
-      context, switchButton.switchKnobRect(track), style, states
+      context, switchButton.switchKnobRect(track, style), style, states
     )
     if switchButton.isFocusVisible:
       context.addFocusRing(context.renderRectFor(track), style.track)
