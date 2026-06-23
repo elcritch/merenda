@@ -265,6 +265,9 @@ proc mixedMarkRect(rect: Rect): Rect =
 func offsetRect(rect: Rect, dx, dy: float32): Rect =
   initRect(rect.origin.x + dx, rect.origin.y + dy, rect.size.width, rect.size.height)
 
+proc checkmarkTextRect(rect: Rect): Rect =
+  rect.offsetRect(0.0'f32, -1.0'f32).inset(initEdgeInsets(-1.0'f32))
+
 proc drawPushButtonFace(
     context: DrawContext,
     absoluteFrame: Rect,
@@ -326,11 +329,18 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       )
       if selected:
         if button.buttonType == btCheckBox and button.state == bsOn:
+          let markRect = indicatorRect.checkmarkTextRect()
           context.addText(
-            indicatorRect, CheckboxCheckmark, style.markColor, alignment = taCenter
+            markRect, CheckboxCheckmark, style.markColor, alignment = taCenter
           )
           context.addText(
-            indicatorRect.offsetRect(0.35'f32, 0.0'f32),
+            markRect.offsetRect(0.45'f32, 0.0'f32),
+            CheckboxCheckmark,
+            style.markColor,
+            alignment = taCenter,
+          )
+          context.addText(
+            markRect.offsetRect(0.0'f32, -0.35'f32),
             CheckboxCheckmark,
             style.markColor,
             alignment = taCenter,
