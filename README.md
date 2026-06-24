@@ -2,26 +2,23 @@
 
 <img width="2172" height="724" alt="merenda-github-banner-robot-chocolate" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
 
-Merenda is a Nim-native UI toolkit built on FigDraw for drawing and `siwin` for
-native windows and events.
+Merenda is an OpenStep-based GUI written in pure Nim. It uses [FigDraw](https://github.com/elcritch/figdraw/) for fast 2d rendering with shadows and gloss. It uses [siwin](https://github.com/levovix0/siwin) for cross platform windowing and events. Currently aims to support MacOS, FreeBSD, Linux, and Windows.
 
-The main public module is `merenda/nimkit`. NimKit is designed around plain Nim
-objects, Cocoa-style responder/action patterns, and a small theme system that can
-grow toward richer query-based styling later.
+The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](https://github.com/elcritch/sigils) which provides *selectors* fast Objective-C style fast dynamic runtime methods and protocols, along with QT style *signals & slots*. It uses Sigil's *selectors* to build Cocoa-style responder/action patterns with support for signals & slots bus events as well. Nimkit provides theme and chrome system designed to allow high levels of customization. 
 
 ## Why Try It?
 
 - **Native Nim API**: windows, views, controls, geometry, colors, events, and
-  theme data are plain Nim types.
+  theme data are Nim objects enhanced with dynamic protocols.
 - **FigDraw rendering**: controls render into a FigDraw tree, making drawing
   testable and portable across supported FigDraw backends.
-- **Cocoa-inspired interaction model**: target/action, responders, first
-  responder, key-view tabbing, focus rings, and platform key bindings are built
-  in.
+- **OpenStep based interaction model**: target/action, responders, first
+  responder, key-view tabbing, focus rings, and platform key bindings are built in.
 - **Useful controls already work**: buttons, toggle buttons, checkboxes, radio
   buttons, text fields, and combo boxes.
-- **Custom drawing is direct**: views can provide their own draw hook and render
-  into a `DrawContext`.
+- **Custom Chrome and Themeing**: built in controls use themes and chrome modules to allow rich first class theming.
+- **Custom drawing is direct**: views can provide their own draw hook and render into a `DrawContext`.
+- **Cassowary Base Constraint Engine**: [kiwiberry](https://github.com/elcritch/kiwiberry) is a full port of Kiwi C++ Cassowary engine. Nimkit provides convenient DSL on top for easy layout designs.
 
 ## Install
 
