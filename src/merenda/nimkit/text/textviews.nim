@@ -53,6 +53,7 @@ type
     xUndoStack: seq[TextUndoRecord]
     xRedoStack: seq[TextUndoRecord]
     xApplyingUndo: bool
+    xSelectingWithMouse: bool
 
 proc syncLayout(textView: TextView)
 proc clearMarkedText(textView: TextView)
@@ -838,7 +839,19 @@ protocol DefaultTextViewDrawing of ViewDrawingProtocol:
 protocol DefaultTextViewEvents of ResponderEventProtocol:
   method mouseDown(textView: TextView, event: MouseEvent): bool =
     if event.button == mbPrimary and (textView.editable or textView.selectable):
+      textView.xSelectingWithMouse = true
       textView.setCursor(textView.textIndexAtPoint(event.location))
+      return true
+
+  method mouseDragged(textView: TextView, event: MouseEvent): bool =
+    if event.button == mbPrimary and textView.xSelectingWithMouse and
+        (textView.editable or textView.selectable):
+      textView.setCursor(textView.textIndexAtPoint(event.location), extending = true)
+      return true
+
+  method mouseUp(textView: TextView, event: MouseEvent): bool =
+    if event.button == mbPrimary and textView.xSelectingWithMouse:
+      textView.xSelectingWithMouse = false
       return true
 
   method keyDown(textView: TextView, event: KeyEvent): bool =

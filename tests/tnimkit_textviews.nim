@@ -12,6 +12,10 @@ type TestPasteboardProvider = ref object of DynamicAgent
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextGeometryEpsilon
 
+proc caretPoint(textView: TextView, index: int): Point =
+  let caret = textView.layoutManager().caretRect(index)
+  initPoint(caret.origin.x, caret.origin.y + caret.size.height * 0.5'f32)
+
 protocol TestPasteboardProviderProtocol of PasteboardProviderProtocol:
   method pasteboardTypes(
       provider: TestPasteboardProvider, pasteboard: Pasteboard
@@ -296,6 +300,53 @@ suite "nimkit text views":
         secondLineStart.origin.y + secondLineStart.size.height * 0.5'f32,
       )
     ) > 5
+
+  test "text view mouse drag selects text from the mouse down anchor":
+    let textView = newTextView("abcdef", frame = initRect(0, 0, 240, 80))
+
+    check textView.mouseDown(
+      MouseEvent(location: textView.caretPoint(1), button: mbPrimary)
+    )
+    check textView.mouseDragged(
+      MouseEvent(location: textView.caretPoint(4), button: mbPrimary)
+    )
+    check textView.selectedRange == initTextRange(1, 3)
+    check textView.selectionAnchor == 1
+    check textView.insertionPoint == 4
+    check textView.mouseUp(
+      MouseEvent(location: textView.caretPoint(4), button: mbPrimary)
+    )
+
+  test "text view reverse mouse drag keeps a normalized selected range":
+    let textView = newTextView("abcdef", frame = initRect(0, 0, 240, 80))
+
+    check textView.mouseDown(
+      MouseEvent(location: textView.caretPoint(4), button: mbPrimary)
+    )
+    check textView.mouseDragged(
+      MouseEvent(location: textView.caretPoint(1), button: mbPrimary)
+    )
+    check textView.selectedRange == initTextRange(1, 3)
+    check textView.selectionAnchor == 4
+    check textView.insertionPoint == 1
+    check textView.mouseUp(
+      MouseEvent(location: textView.caretPoint(1), button: mbPrimary)
+    )
+
+  test "text view mouse drag beyond a line end selects to that visual line end":
+    let textView = newTextView("Title\nSecond", frame = initRect(0, 0, 240, 120))
+    let
+      firstLineStart = textView.caretPoint(0)
+      firstLineEnd = textView.layoutManager().caretRect(5)
+      dragPoint = initPoint(
+        firstLineEnd.origin.x + 80.0'f32,
+        firstLineEnd.origin.y + firstLineEnd.size.height * 0.5'f32,
+      )
+
+    check textView.mouseDown(MouseEvent(location: firstLineStart, button: mbPrimary))
+    check textView.mouseDragged(MouseEvent(location: dragPoint, button: mbPrimary))
+    check textView.selectedRange == initTextRange(0, 5)
+    check textView.mouseUp(MouseEvent(location: dragPoint, button: mbPrimary))
 
   test "text view up and down commands move between visual lines":
     let textView = newTextView("abc\ndef\nghi", frame = initRect(0, 0, 200, 120))
