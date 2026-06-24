@@ -78,6 +78,10 @@ jobs:
       run: |
         atlas-run tests --jobs:2 --only-errors
 
+    - name: Build Integration Tests
+      run: |
+        atlas-run tests --jobs:2 --only-errors "tests/integration*.nim"
+
   examples:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
