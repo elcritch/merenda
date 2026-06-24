@@ -172,7 +172,8 @@ jobs:
       env:
         NIMFLAGS: "-d:figdraw.vulkan=off"
       run: |
-        nim test
+        atlas-run tests
+        # nim test
 
     - name: Build Examples
       if: runner.os == 'Windows'
