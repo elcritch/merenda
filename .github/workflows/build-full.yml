@@ -76,9 +76,9 @@ jobs:
 
     - name: Build Tests
       run: |
-        atlas-run tests
+        atlas-run tests --only-errors
 
     - name: Build Examples
       run: |
-        atlas-run tests --compile-only "examples/*.nim"
+        atlas-run tests --compile-only "examples/*.nim" --only-errors
 
