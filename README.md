@@ -2,9 +2,9 @@
 
 <img width="2172" height="724" alt="merenda-github-banner-robot-chocolate" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
 
-Merenda is an OpenStep-based GUI written in pure Nim. It uses [FigDraw](https://github.com/elcritch/figdraw/) for fast 2d rendering with shadows and gloss. It uses [siwin](https://github.com/levovix0/siwin) for cross platform windowing and events. Currently aims to support MacOS, FreeBSD, Linux, and Windows.
+Merenda is an OpenStep-based GUI written in pure Nim. It uses [FigDraw](https://github.com/elcritch/figdraw/) for fast 2d rendering with shadows and gloss. It uses [siwin](https://github.com/levovix0/siwin) for cross-platform windowing and events. It currently aims to support macOS, FreeBSD, Linux, and Windows.
 
-The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](https://github.com/elcritch/sigils) which provides *selectors* fast Objective-C style fast dynamic runtime methods and protocols, along with QT style *signals & slots*. It uses Sigil's *selectors* to build Cocoa-style responder/action patterns with support for signals & slots bus events as well. Nimkit provides theme and chrome system designed to allow high levels of customization. 
+The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](https://github.com/elcritch/sigils), which provides Objective-C-style dynamic selectors and protocols along with Qt-style signals and slots. NimKit uses selectors to build Cocoa-style responder/action patterns, while signals and slots cover observable control events. It also provides a theme and chrome system for high levels of customization.
 
 ## Why Try It?
 
@@ -15,8 +15,10 @@ The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](h
 - **OpenStep based interaction model**: target/action, responders, first
   responder, key-view tabbing, focus rings, and platform key bindings are built in.
 - **Useful controls already work**: buttons, toggle buttons, checkboxes, radio
-  buttons, text fields, and combo boxes.
-- **Custom Chrome and Themeing**: built in controls use themes and chrome modules to allow rich first class theming.
+  buttons, text fields, combo boxes, sliders, switches, scroll views, tabs, and
+  tables.
+- **Custom chrome and theming**: built-in controls use theme rules and chrome
+  modules to support first-class visual customization.
 - **Custom drawing is direct**: views can provide their own draw hook and render into a `DrawContext`.
 - **Cassowary Base Constraint Engine**: [kiwiberry](https://github.com/elcritch/kiwiberry) is a full port of Kiwi C++ Cassowary engine. Nimkit provides convenient DSL on top for easy layout designs.
 
@@ -42,10 +44,11 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow(100, 100, 320, 220, "Counter")
-  root = newView(0, 0, 320, 220)
-  label = newTextField(36, 46, 240, 28, "Clicked 0 times")
-  button = newButton(36, 98, 140, 34, "Click")
+  window = newWindow("Counter", frame = initRect(100, 100, 320, 220))
+  root = newView()
+  layout = newStackView(laVertical)
+  label = newStatusLabel("Clicked 0 times")
+  button = newButton("Click")
   clickAction = actionSelector("counterClicked")
 
 var clicks = 0
@@ -53,15 +56,21 @@ var clicks = 0
 proc onClick(sender: DynamicAgent) =
   if not sender.isNil:
     inc clicks
-    label.setStringValue("Clicked " & $clicks & " times")
+    label.text = "Clicked " & $clicks & " times"
 
-label.setEditable(false)
-label.setSelectable(false)
-button.setTarget(newActionTarget(clickAction, onClick))
-button.setAction(clickAction)
+button.target = newActionTarget(clickAction, onClick)
+button.action = clickAction
 
-root.addSubview(label)
-root.addSubview(button)
+layout.spacing = 12.0
+layout.alignment = svaFill
+layout.addArrangedSubview(label, button)
+
+root.addSubview(layout)
+layout.pinEdges(
+  toGuide = root.contentLayoutGuide(initEdgeInsets(44.0, 44.0, 0.0, 44.0)),
+  edges = {leLeft, leTop, leRight},
+)
+
 window.setContentView(root)
 discard window.selectNextKeyView()
 app.addWindow(window)
@@ -73,21 +82,20 @@ app.run()
 Save that as a Nim file and run it with:
 
 ```sh
-nim r counter.nim
+nim r examples/quick_start.nim
 ```
 
 ## Controls
 
-NimKit currently includes:
+NimKit ships the core controls needed for desktop-style interfaces:
 
-- `newWindow`, `newView`
-- `newTextField`
-- `newButton`
-- `newCheckBox`
-- `newRadioButton`
-- `newComboBox`
+- Windows and views: `newWindow`, `newView`, `newStackView`, `newScrollView`
+- Text: `newTextField`, `newLabel`, `newTitleLabel`, `newStatusLabel`
+- Buttons and choices: `newButton`, `newCheckBox`, `newRadioButton`
+- Value controls: `newComboBox`, `newSlider`, `newSwitchButton`
+- Containers: `newTabView`, `newTableView`, `newGridView`, `newFormView`
 
-Controls use target/action for user commands:
+Controls use Cocoa-style target/action for commands:
 
 ```nim
 let action = actionSelector("saveClicked")
@@ -96,16 +104,40 @@ proc save(sender: DynamicAgent) =
   if not sender.isNil:
     echo "save"
 
-button.setTarget(newActionTarget(action, save))
-button.setAction(action)
+button.target = newActionTarget(action, save)
+button.action = action
 ```
 
 Buttons can behave as push, toggle, checkbox, or radio controls:
 
 ```nim
-button.setButtonType(btToggle)
-button.setAllowsMixedState(true)
+let toggle = newButton("Enable Sync")
+toggle.buttonType = btToggle
+toggle.allowsMixedState = true
+toggle.state = bsOn
 ```
+
+Controls that expose continuous state can also emit signals:
+
+```nim
+let volume = newSlider(0.0, 100.0, 42.0)
+let label = newStatusLabel("Volume: 42")
+
+volume.connect(
+  actionDidSend,
+  volume,
+  proc(slider: Slider, sender: DynamicAgent) {.slot.} =
+    discard sender
+    label.text = "Volume: " & $slider.value.int,
+)
+```
+
+For larger examples, see:
+
+- `examples/controls_showcase.nim`
+- `examples/preferences_demo.nim`
+- `examples/table_demo.nim`
+- `examples/tabview_demo.nim`
 
 ## Keyboard And Focus
 
@@ -134,8 +166,8 @@ appearance.setStyle(titleStyle, StyleFill, initColor(0.88, 0.92, 0.98))
 appearance.setStyle(titleStyle, StyleTextColor, initColor(0.09, 0.14, 0.26))
 appearance.setStyle(titleStyle, StyleCornerRadius, 6.0)
 
-title.setStyleClasses(["title"])
-root.setAppearance(appearance)
+title.styleClasses = ["title"]
+root.appearance = appearance
 ```
 
 Appearance inherits through the app, window, and view hierarchy, so local
@@ -165,24 +197,28 @@ proc drawBadge(context: DrawContext) =
 Run the combined controls demo:
 
 ```sh
-nim r examples/nimkit_controls_showcase.nim
+nim r examples/controls_showcase.nim
 ```
 
 Other focused examples:
 
 ```sh
-nim r examples/nimkit_hello.nim
-nim r examples/nimkit_button_counter.nim
-nim r examples/nimkit_textfield_demo.nim
-nim r examples/nimkit_checkbox_demo.nim
-nim r examples/nimkit_radio_demo.nim
-nim r examples/nimkit_combobox_demo.nim
+nim r examples/quick_start.nim
+nim r examples/hello.nim
+nim r examples/button_counter.nim
+nim r examples/textfield_demo.nim
+nim r examples/checkbox_demo.nim
+nim r examples/radio_demo.nim
+nim r examples/combobox_demo.nim
+nim r examples/tabview_demo.nim
+nim r examples/table_demo.nim
+nim r examples/preferences_demo.nim
 ```
 
 ## Tests
 
-Run the NimKit test suite and compile the NimKit examples:
+Run the NimKit test suite through Atlas:
 
 ```sh
-nim test
+atlas-run tests
 ```
