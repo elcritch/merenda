@@ -4,8 +4,6 @@ import sigils/core
 import sigils/selectors
 
 type
-  PreferencePageView = ref object of View
-
   PreferenceRow = object
     name: string
     area: string
@@ -17,7 +15,6 @@ type
     status: Label
 
 const
-  PreferencePageMinHeight = 210.0'f32
   PreferenceButtonRowHeight = 44.0'f32
   PreferenceButtonBottomGap = PreferenceButtonRowHeight * 1.5'f32
 
@@ -81,17 +78,8 @@ proc newPreferencesController(): PreferencesController =
   )
   initResponder(result)
 
-protocol PreferencePageLayout of ViewLayoutProtocol:
-  method layoutIntrinsicContentSize(page: PreferencePageView): IntrinsicSize =
-    initIntrinsicSize(680.0'f32, PreferencePageMinHeight)
-
-proc newPreferencePageView(): PreferencePageView =
-  result = PreferencePageView()
-  initViewFields(result)
-  discard result.withProtocol(PreferencePageLayout)
-
 proc makeTabPage(): tuple[view: View, stack: StackView] =
-  result.view = newPreferencePageView()
+  result.view = newView()
   result.stack = newStackView(laVertical)
   result.stack.spacing = 12.0
   result.stack.alignment = svaFill
