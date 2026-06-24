@@ -137,10 +137,53 @@ proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
     let
       caret = manager.caretRect(nextIndex)
       lineHeight = max(caret.size.height, DefaultFontSize)
-    if point.y >= caret.origin.y and point.y < caret.origin.y + lineHeight:
+      caretY = caret.origin.y - manager.xLayoutRect.origin.y
+    if point.y >= caretY and point.y < caretY + lineHeight:
       return nextIndex
 
   -1
+
+proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
+  if manager.isNil or manager.xTextStorage.isNil:
+    return -1
+
+  let total = manager.xTextStorage.stringValue().runeLen
+  var firstIndex = -1
+  var lastIndex = -1
+  var closestIndex = -1
+  var minX = high(float32)
+  var maxX = -high(float32)
+  var closestDistance = high(float32)
+
+  for index in 0 .. total:
+    let
+      caret = manager.caretRect(index)
+      lineHeight = max(caret.size.height, DefaultFontSize)
+      caretX = caret.origin.x - manager.xLayoutRect.origin.x
+      caretY = caret.origin.y - manager.xLayoutRect.origin.y
+
+    if point.y < caretY or point.y >= caretY + lineHeight:
+      continue
+
+    if firstIndex < 0 or index < firstIndex:
+      firstIndex = index
+    if index > lastIndex:
+      lastIndex = index
+    minX = min(minX, caretX)
+    maxX = max(maxX, caretX)
+
+    let distance = abs(point.x - caretX)
+    if distance < closestDistance:
+      closestDistance = distance
+      closestIndex = index
+
+  if closestIndex < 0:
+    return -1
+  if point.x <= minX:
+    return firstIndex
+  if point.x >= maxX:
+    return lastIndex
+  closestIndex
 
 proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
   if manager.isNil:
@@ -152,4 +195,9 @@ proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
   let emptyLineIndex = manager.emptyLineIndexAtPoint(localPoint)
   if emptyLineIndex >= 0:
     return emptyLineIndex
-  manager.xLayout.nearestSourceRuneForCaretPoint(vec2(localPoint.x, localPoint.y))
+  let lineBoundedIndex = manager.lineBoundedIndexAtPoint(localPoint)
+  if lineBoundedIndex >= 0:
+    return lineBoundedIndex
+  let nearest =
+    manager.xLayout.nearestSourceRuneForCaretPoint(vec2(localPoint.x, localPoint.y))
+  max(0, min(nearest, manager.xTextStorage.len))
