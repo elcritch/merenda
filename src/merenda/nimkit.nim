@@ -14,6 +14,7 @@ import merenda/nimkit/debug/viewinspectors
 import merenda/nimkit/app/dragging
 import merenda/nimkit/foundation/events
 import merenda/nimkit/text/fieldeditors
+import merenda/nimkit/text/texteditors
 import merenda/nimkit/containers/formviews
 import merenda/nimkit/containers/gridviews
 import merenda/nimkit/view/imageviews
@@ -61,6 +62,7 @@ export viewinspectors
 export dragging
 export events
 export fieldeditors
+export texteditors
 export formviews
 export gridviews
 export imageviews

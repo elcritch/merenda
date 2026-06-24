@@ -114,6 +114,7 @@ type
     arCheckBox = "checkBox"
     arRadioButton = "radioButton"
     arTextField = "textField"
+    arTextArea = "textArea"
     arList = "list"
     arListItem = "listItem"
     arTable = "table"

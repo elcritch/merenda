@@ -2,10 +2,15 @@ import std/unittest
 
 import merenda/nimkit
 
+const TextGeometryEpsilon = 0.01'f32
+
 type TestPasteboardProvider = ref object of DynamicAgent
   text: string
   clearCount: int
   writtenText: seq[string]
+
+proc checkClose(actual, expected: float32) =
+  check abs(actual - expected) <= TextGeometryEpsilon
 
 protocol TestPasteboardProviderProtocol of PasteboardProviderProtocol:
   method pasteboardTypes(
@@ -190,6 +195,113 @@ suite "nimkit text views":
     discard textView.send(insertTab(), ActionArgs(sender: DynamicAgent(textView)))
     check textView.stringValue == "a\n\tb"
     check textView.selectedRange == initTextRange(3, 0)
+
+  test "text view caret after newline starts on the next visual line":
+    let
+      textRect = initRect(0, 0, 200, 100)
+      layout = textLayout(textRect, newTextStorage("A\nB"), taLeft, wrap = false)
+      firstLineStart = caretRect(textRect, layout, 0)
+      firstLineEnd = caretRect(textRect, layout, 1)
+      afterNewline = caretRect(textRect, layout, 2)
+
+    checkClose(afterNewline.origin.x, firstLineStart.origin.x)
+    check afterNewline.origin.y > firstLineEnd.origin.y
+
+  test "text view caret supports blank lines between newline characters":
+    let
+      textRect = initRect(0, 0, 200, 140)
+      layout = textLayout(textRect, newTextStorage("A\n\nB"), taLeft, wrap = false)
+      firstLineStart = caretRect(textRect, layout, 0)
+      firstLineEnd = caretRect(textRect, layout, 1)
+      blankLineStart = caretRect(textRect, layout, 2)
+      finalLineStart = caretRect(textRect, layout, 3)
+
+    checkClose(blankLineStart.origin.x, firstLineStart.origin.x)
+    checkClose(finalLineStart.origin.x, firstLineStart.origin.x)
+    check blankLineStart.origin.y > firstLineEnd.origin.y
+    check finalLineStart.origin.y > blankLineStart.origin.y
+
+  test "text view hit testing line starts returns indexes after newlines":
+    let manager = newTextLayoutManager(
+      newTextStorage("A\nB"),
+      initTextContainer(initSize(200, 100), initEdgeInsets(0.0), wraps = false),
+    )
+    let afterNewline = manager.caretRect(2)
+
+    check manager.textIndexAtPoint(
+      initPoint(
+        afterNewline.origin.x + 0.5'f32,
+        afterNewline.origin.y + afterNewline.size.height * 0.5'f32,
+      )
+    ) == 2
+
+  test "text view hit testing blank lines returns newline boundary indexes":
+    let manager = newTextLayoutManager(
+      newTextStorage("A\n\nB"),
+      initTextContainer(initSize(200, 140), initEdgeInsets(0.0), wraps = false),
+    )
+    let
+      blankLineStart = manager.caretRect(2)
+      finalLineStart = manager.caretRect(3)
+
+    check manager.textIndexAtPoint(
+      initPoint(
+        blankLineStart.origin.x + 0.5'f32,
+        blankLineStart.origin.y + blankLineStart.size.height * 0.5'f32,
+      )
+    ) == 2
+    check manager.textIndexAtPoint(
+      initPoint(
+        finalLineStart.origin.x + 0.5'f32,
+        finalLineStart.origin.y + finalLineStart.size.height * 0.5'f32,
+      )
+    ) == 3
+    check manager.textIndexAtPoint(
+      initPoint(
+        blankLineStart.origin.x + 0.5'f32,
+        max(blankLineStart.origin.y, finalLineStart.origin.y - 1.0'f32),
+      )
+    ) == 2
+
+  test "text view up and down commands move between visual lines":
+    let textView = newTextView("abc\ndef\nghi", frame = initRect(0, 0, 200, 120))
+
+    textView.selectedRange = initTextRange(1, 0)
+    discard textView.send(moveDown(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(5, 0)
+
+    discard textView.send(moveDown(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(9, 0)
+
+    discard textView.send(moveUp(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(5, 0)
+
+  test "text view up and down commands move through blank lines":
+    let textView = newTextView("ab\n\ncd", frame = initRect(0, 0, 200, 120))
+
+    textView.selectedRange = initTextRange(1, 0)
+    discard textView.send(moveDown(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(3, 0)
+
+    discard textView.send(moveDown(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(4, 0)
+
+    discard textView.send(moveUp(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(3, 0)
+
+  test "text view shift up and down extends selection":
+    let textView = newTextView("abc\ndef", frame = initRect(0, 0, 200, 90))
+
+    textView.selectedRange = initTextRange(1, 0)
+    discard textView.send(
+      moveDownAndModifySelection(), ActionArgs(sender: DynamicAgent(textView))
+    )
+    check textView.selectedRange == initTextRange(1, 4)
+
+    discard textView.send(
+      moveUpAndModifySelection(), ActionArgs(sender: DynamicAgent(textView))
+    )
+    check textView.selectedRange == initTextRange(1, 0)
 
   test "field editor ignoring commands insert literal newline and tab":
     let editor = newFieldEditor()
