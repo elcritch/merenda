@@ -134,9 +134,14 @@ let
   title = newTitleLabel("Preferences")
   status = newStatusLabel("Adjust preferences to update this summary.")
   tabView = newTabView()
-  buttonRow = newStackView(laHorizontal)
   resetButton = newButton("Reset")
   applyButton = newButton("Apply")
+  buttonBox = newDialogButtonBox(
+    [
+      initDialogButtonSpec(resetButton, dbrReset),
+      initDialogButtonSpec(applyButton, dbrApply),
+    ]
+  )
 
 controller.status = status
 
@@ -404,13 +409,7 @@ emailField.connect(textDidChange, emailField, preferenceTextChanged)
 accentSlider.connect(actionDidSend, accentSlider, preferenceSliderChanged)
 cacheSlider.connect(actionDidSend, cacheSlider, preferenceSliderChanged)
 
-buttonRow.spacing = 10.0
-buttonRow.alignment = svaCenter
-buttonRow.distribution = svdNatural
-buttonRow.addFlexibleSpacer()
-buttonRow.addArrangedSubview(resetButton, applyButton)
-
-root.addSubviews(autoNames(title, status, tabView, buttonRow))
+root.addSubviews(autoNames(title, status, tabView, buttonBox))
 title.pinEdges(toGuide = contentGuide, edges = {leLeft, leTop, leRight})
 activateConstraints:
   status[atTop] == title[atBottom] + 10.0
@@ -419,11 +418,11 @@ activateConstraints:
   tabView[atTop] == status[atBottom] + 14.0
   tabView[atLeft] == title[atLeft]
   tabView[atRight] == title[atRight]
-  tabView[atBottom] == buttonRow[atTop] - 12.0
-  buttonRow[atLeft] == title[atLeft]
-  buttonRow[atRight] == title[atRight]
-  buttonRow[atHeight] == PreferenceButtonRowHeight
-  buttonRow[atBottom] == contentGuide[atBottom] - PreferenceButtonBottomGap
+  tabView[atBottom] == buttonBox[atTop] - 12.0
+  buttonBox[atLeft] == title[atLeft]
+  buttonBox[atRight] == title[atRight]
+  buttonBox[atHeight] == PreferenceButtonRowHeight
+  buttonBox[atBottom] == contentGuide[atBottom] - PreferenceButtonBottomGap
 
 updateSummary()
 window.setContentView(root)
