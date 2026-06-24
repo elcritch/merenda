@@ -76,7 +76,7 @@ jobs:
 
     - name: Build Tests
       run: |
-        atlas-run tests --only-errors
+        atlas-run tests --jobs:2 --only-errors
 
   examples:
     runs-on: ${{ matrix.os }}
@@ -147,4 +147,4 @@ jobs:
 
     - name: Compile Examples
       run: |
-        atlas-run tests --compile-only --only-errors "examples/*.nim"
+        atlas-run tests --jobs:2 --compile-only --only-errors "examples/*.nim"
