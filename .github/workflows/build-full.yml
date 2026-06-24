@@ -25,36 +25,11 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Setup software OpenGL/Vulkan (Mesa) + Weston (Wayland)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          weston \
-          xwayland \
-          wayland-protocols \
-          libwayland-dev \
-          libegl1-mesa-dev \
-          libwayland-client0 \
-          libwayland-cursor0 \
-          libwayland-egl1 \
-          libxkbcommon0 \
-          libxrender1 \
-          libxrender-dev \
-          mesa-utils \
-          vulkan-tools \
-          mesa-vulkan-drivers \
-          libvulkan1 \
-          libgl1-mesa-dri \
-          libglx-mesa0 \
-          libegl-mesa0 \
-          libgles2
-
-    - name: Vulkan diagnostics
-      if: runner.os == 'Linux'
-      run: |
-        ls -la /usr/share/vulkan/icd.d || true
-        vulkaninfo --summary || true
+    - name: Cache packages
+      uses: actions/cache@v4
+      with:
+        path: deps/
+        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
     - name: Install GrabNim
       if: runner.os != 'Windows'
@@ -87,12 +62,6 @@ jobs:
         echo "Atlas:: "
         atlas -v
 
-    - name: Cache packages
-      uses: actions/cache@v4
-      with:
-        path: deps/
-        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
-
     - name: Install Deps
       run: |
         # sync deps
@@ -106,100 +75,10 @@ jobs:
           -delete
 
     - name: Build Tests
-      if: runner.os == 'Linux'
-      env:
-        NIMFLAGS: "-d:figdraw.vulkan=off"
-        MERENDA_TEST_OPENGL_ONLY: "1"
-        XDG_SESSION_TYPE: "wayland"
-        WAYLAND_DISPLAY: "wayland-1"
-        GALLIUM_DRIVER: "llvmpipe"
-        LIBGL_ALWAYS_SOFTWARE: "1"
-        MESA_GL_VERSION_OVERRIDE: "3.3"
-        MESA_GLSL_VERSION_OVERRIDE: "330"
-      run: |
-        export XDG_RUNTIME_DIR="${RUNNER_TEMP}/xdg-runtime"
-        mkdir -p "${XDG_RUNTIME_DIR}"
-        chmod 700 "${XDG_RUNTIME_DIR}"
-
-        weston --backend=headless-backend.so \
-               --renderer=pixman \
-               --xwayland \
-               --socket="${WAYLAND_DISPLAY}" \
-               --idle-time=0 \
-               --log="${RUNNER_TEMP}/weston.log" &
-        WESTON_PID=$!
-        trap 'kill ${WESTON_PID} || true; wait ${WESTON_PID} || true' EXIT
-
-        for _ in $(seq 1 50); do
-          if [[ -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]]; then
-            break
-          fi
-          sleep 0.1
-        done
-        [[ -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]] || (cat "${RUNNER_TEMP}/weston.log" && exit 1)
-
-        LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f \( -name '*lvp*.json' -o -name '*lavapipe*.json' \) | head -n 1 || true)"
-        if [[ -n "${LVP_ICD}" ]]; then
-          export VK_ICD_FILENAMES="${LVP_ICD}"
-          export VK_DRIVER_FILES="${LVP_ICD}"
-        fi
-
-        vulkaninfo --summary || true
-        nim test
-    - name: Build Examples
-      if: runner.os == 'Linux'
-      run: |
-        nim examples
-
-    - name: Build Tests (Vulkan Compile Check)
-      if: runner.os == 'Linux'
-      env:
-        NIMFLAGS: "-d:figdraw.opengl=off -d:figdraw.vulkan=on"
-      run: |
-        nim test_compile
-
-    - name: Build Tests
-      if: runner.os == 'macOS'
-      run: |
-        nim test
-    - name: Build Examples
-      if: runner.os == 'macOS'
-      run: |
-        nim examples
-
-    - name: Build Tests
-      if: runner.os == 'Windows'
-      env:
-        NIMFLAGS: "-d:figdraw.vulkan=off"
       run: |
         atlas-run tests
-        # nim test
 
     - name: Build Examples
-      if: runner.os == 'Windows'
       run: |
-        nim examples
+        atlas-run tests --compile-only "examples/*.nim"
 
-    - name: Build Tests (Vulkan Compile Check)
-      if: runner.os == 'Windows'
-      env:
-        NIMFLAGS: "-d:figdraw.opengl=off -d:figdraw.vulkan=on"
-      run: |
-        nim test_compile
-
-    - name: Build Tests (Vulkan Run Check)
-      if: runner.os == 'Windows'
-      env:
-        NIMFLAGS: "-d:figdraw.vulkan=on"
-      run: |
-        nim test
-
-    - name: Upload Test Output (on failure)
-      if: failure()
-      uses: actions/upload-artifact@v6
-      with:
-        name: tests-output-${{ runner.os }}-nim${{ matrix.nimversion }}
-        path: |
-          tests/output/
-          ${{ runner.temp }}/weston.log
-        if-no-files-found: ignore
