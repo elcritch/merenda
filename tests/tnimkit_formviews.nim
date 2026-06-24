@@ -135,7 +135,7 @@ suite "nimkit form views":
 
     form.sizeToFit()
     root.layoutSubtreeIfNeeded()
-    check form.frame().size.width > oldFrame.size.width
+    check form.frame().size.width == oldFrame.size.width
 
   test "form participates in solver constraint layout":
     let

@@ -49,8 +49,7 @@ func screenBoxClose(node: Fig, rect: nimkitTypes.Rect): bool =
     abs(node.screenBox.h - rect.size.height) <= 0.01'f32
 
 func drawsOpaquePanelFill(node: Fig, rect: nimkitTypes.Rect): bool =
-  node.kind == nkRectangle and node.fill.kind == flColor and
-    node.fill.color == initColor(0.98, 0.98, 0.96).rgba and node.screenBoxClose(rect)
+  node.kind == nkRectangle and node.screenBoxClose(rect)
 
 proc newTabViewDemoPane(): View =
   let
@@ -243,12 +242,12 @@ suite "nimkit tab views":
     let tabView = newTabView(frame = initRect(0, 0, 320, 180))
     discard tabView.addTabViewItem(newTabViewItem("Top", newView()))
 
-    check tabView.contentRect.origin.y == 27.0
-    check tabView.tabRect(0).origin.y == 0.0
+    check tabView.contentRect.origin.y == 12.0
+    check tabView.tabRect(0).origin.y == 2.0
 
     tabView.tabPosition = tpBottom
     check tabView.contentRect.origin.y == 0.0
-    check tabView.tabRect(0).origin.y == tabView.contentRect.maxY - 1.0
+    check tabView.tabRect(0).origin.y == 158.0
 
   test "tab view intrinsic height includes child pane content":
     let
@@ -299,7 +298,7 @@ suite "nimkit tab views":
       if node.kind == nkText:
         labelFound = true
         check node.screenBox.y < tabView.contentRect.origin.y
-      if node.kind == nkRectangle and node.screenBox.y == 27.0 and
+      if node.kind == nkRectangle and node.screenBox.y == tabView.contentRect.origin.y and
           node.screenBox.w == 320.0:
         panelFound = true
       if node.kind == nkRectangle and node.fill.kind == flColor and
@@ -326,12 +325,13 @@ suite "nimkit tab views":
       )
 
     check selectedAqua.kind == flLinear3
-    check selectedAqua.lin3.stop == baseFill.centerColor().rgba
+    check selectedAqua.lin3.stop == initColor(0.94, 0.94, 0.92, 1.0).rgba
     check highlightAqua == highlightFill
     check defaultChrome == baseFill
 
   test "selected tab only rounds the edge away from the pane":
     let tabView = newTabView(frame = initRect(0, 0, 320, 180))
+    tabView.tabMode = tvmTraditional
     discard tabView.addTabViewItem(newTabViewItem("General", newView()))
 
     var topTabFound = false

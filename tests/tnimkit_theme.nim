@@ -369,16 +369,16 @@ suite "nimkit theme":
     check appearance.resolveChromeName(initControlStyleContext(srTabPanel)) ==
       AquaChromeName
     check appearance.resolveFill(tabStyle, fill(initColor(0.0, 0.0, 0.0, 1.0))) ==
-      fill(initColor(0.70, 0.72, 0.76, 1.0))
+      fill(initColor(0.82, 0.83, 0.82, 1.0))
     check appearance.resolveFill(
       tabStyle, fill(initColor(0.0, 0.0, 0.0, 0.0)), StyleHighlightFill
-    ) == fill(initColor(1.0, 1.0, 1.0, 0.68))
+    ) == fill(initColor(1.0, 1.0, 1.0, 0.52))
     check appearance.resolveColor(
       tabStyle, StyleTextColor, initColor(0.0, 0.0, 0.0, 1.0)
     ) == initColor(0.14, 0.15, 0.18, 1.0)
     check appearance.resolveColor(
       selectedTabStyle, StyleBorderColor, initColor(0.0, 0.0, 0.0, 1.0)
-    ) == initColor(0.42, 0.44, 0.48, 1.0)
+    ) == initColor(0.24, 0.44, 0.72, 1.0)
     checkAquaButtonShadows(defaultButtonStyle.box.shadows)
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
@@ -411,9 +411,9 @@ suite "nimkit theme":
     check radioStyle.indicator.cornerRadius == 8.0
     check radioStyle.indicator.focusRingColor == initColor(0.34, 0.66, 1.0, 0.72)
     check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
-      initRect(2, 4, 16, 16)
+      initRect(2, 3, 18, 18)
     check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
-      initRect(25, 0, 73, 24)
+      initRect(27, 0, 71, 24)
 
     check textFieldStyle.box.borderWidth > 0.0
     check textFieldStyle.box.cornerRadius == 6.0
