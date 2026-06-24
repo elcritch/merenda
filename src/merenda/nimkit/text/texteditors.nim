@@ -30,6 +30,7 @@ type TextEditor* = ref object of View
 const
   DefaultTextEditorWidth = 320.0'f32
   DefaultTextEditorHeight = 160.0'f32
+  DefaultTextEditorMeasureWidth = 100000.0'f32
   DefaultTextEditorMeasureHeight = 100000.0'f32
 
 proc updateTextEditorLayout(editor: TextEditor)
@@ -222,26 +223,47 @@ proc selectAllText*(editor: TextEditor) =
   if not editor.isNil:
     editor.xTextView.selectAllText()
 
-proc textDocumentHeight(editor: TextEditor, width, viewportHeight: float32): float32 =
-  if editor.isNil or editor.xTextView.isNil:
-    return viewportHeight
-
+proc measuredTextLayout(editor: TextEditor, width: float32): auto =
   let
     insets = editor.xTextInsets
     measuringWidth = max(width, insets.horizontal + 1.0'f32)
     measuringRect =
       initRect(0.0, 0.0, measuringWidth, DefaultTextEditorMeasureHeight).inset(insets)
-    layout = textLayout(
-      measuringRect,
-      editor.xTextView.textStorage(),
-      editor.xTextView.alignment(),
-      editor.xWraps,
-    )
+  textLayout(
+    measuringRect,
+    editor.xTextView.textStorage(),
+    editor.xTextView.alignment(),
+    editor.xWraps,
+  )
+
+proc textDocumentSize(
+    editor: TextEditor, viewportWidth, viewportHeight: float32
+): Size =
+  if editor.isNil or editor.xTextView.isNil:
+    return initSize(viewportWidth, viewportHeight)
+
+  let
+    insets = editor.xTextInsets
+    width = if editor.xWraps: viewportWidth else: DefaultTextEditorMeasureWidth
+    layout = editor.measuredTextLayout(width)
+    textWidth =
+      if layout.selectionRects.len > 0:
+        layout.bounding.w + insets.horizontal
+      else:
+        insets.horizontal + 1.0'f32
     textHeight =
       if layout.selectionRects.len > 0: layout.bounding.h else: DefaultFontSize
-  max(
-    max(textHeight + insets.vertical, viewportHeight),
-    editor.xMinimumDocumentSize.height,
+    documentWidth =
+      if editor.xWraps:
+        viewportWidth
+      else:
+        max(max(textWidth, viewportWidth), editor.xMinimumDocumentSize.width)
+  initSize(
+    documentWidth,
+    max(
+      max(textHeight + insets.vertical, viewportHeight),
+      editor.xMinimumDocumentSize.height,
+    ),
   )
 
 proc updateTextEditorLayout(editor: TextEditor) =
@@ -252,18 +274,12 @@ proc updateTextEditorLayout(editor: TextEditor) =
     bounds = editor.bounds()
     viewportWidth = max(bounds.size.width, 0.0'f32)
     viewportHeight = max(bounds.size.height, 0.0'f32)
-    documentWidth =
-      if editor.xWraps:
-        viewportWidth
-      else:
-        max(viewportWidth, editor.xMinimumDocumentSize.width)
-    documentHeight = editor.textDocumentHeight(documentWidth, viewportHeight)
+    documentSize = editor.textDocumentSize(viewportWidth, viewportHeight)
 
   editor.xScrollView.frame = bounds
-  editor.xTextView.frame = initRect(0.0, 0.0, documentWidth, documentHeight)
-  editor.xTextView.textContainer = initTextContainer(
-    initSize(documentWidth, documentHeight), editor.xTextInsets, editor.xWraps
-  )
+  editor.xTextView.frame = initRect(0.0, 0.0, documentSize.width, documentSize.height)
+  editor.xTextView.textContainer =
+    initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
 
 protocol DefaultTextEditorLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(editor: TextEditor): IntrinsicSize =
