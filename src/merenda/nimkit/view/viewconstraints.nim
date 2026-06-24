@@ -1068,11 +1068,14 @@ proc collectConstraintItems(state: var LayoutSolveState, owner: View) =
   for child in owner.xSubviews:
     state.collectConstraintItems(child)
 
+proc addSolverConstraint(
+  state: var LayoutSolveState, constraint: Constraint, priority = LayoutPriorityRequired
+)
+
 proc addStay(
     state: var LayoutSolveState, variable: Variable, value: float32, strength: Strength
 ) =
-  state.solver.addEditVariable(variable, strength)
-  state.solver.suggestValue(variable, value.solverValue)
+  state.addSolverConstraint(eq(variable, value.solverValue).withStrength(strength))
 
 proc addGeometryStays(state: var LayoutSolveState, root: View) =
   for solverView in state.items:
