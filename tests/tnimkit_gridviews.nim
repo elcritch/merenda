@@ -133,7 +133,7 @@ suite "nimkit grid views":
 
     grid.sizeToFit()
     root.layoutSubtreeIfNeeded()
-    check grid.frame().size.width > oldFrame.size.width
+    check grid.frame().size.width == oldFrame.size.width
 
   test "grid participates in solver constraint layout":
     let

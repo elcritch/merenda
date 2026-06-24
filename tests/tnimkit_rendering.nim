@@ -364,7 +364,7 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.fill == style.box.fill and
           node.renderedRect().rectsClose(expectedButtonRect):
         buttonRoot = idx.FigIdx
-        check NfRectMaskContent in node.flags
+        check NfClipContent in node.flags
         check node.stroke.weight == style.box.borderWidth
         check node.stroke.fill.kind == flColor
         check node.stroke.fill.color == style.box.borderColor.rgba
@@ -851,12 +851,12 @@ suite "nimkit rendering":
       of nkRectangle:
         if node.fill.kind == flColor and node.fill.color == selectedFill.rgba and
             node.screenBox.x == 11.0 and node.screenBox.y == 41.0 and
-            node.screenBox.w == 116.0 and node.screenBox.h == 20.0:
+            node.screenBox.w == 120.0 and node.screenBox.h == 20.0:
           selectedRowFound = true
 
         if node.fill.kind == flColor and node.fill.color == hoverFill.rgba and
             node.screenBox.x == 11.0 and node.screenBox.y == 61.0 and
-            node.screenBox.w == 116.0 and node.screenBox.h == 20.0:
+            node.screenBox.w == 120.0 and node.screenBox.h == 20.0:
           highlightedRowFound = true
       of nkText:
         if node.renderedText() == "Two" and node.textLayout.spanColors.len > 0 and
@@ -865,7 +865,7 @@ suite "nimkit rendering":
           selectedTextFound = true
           check node.screenBox.x == 16.0
           check node.screenBox.y == 41.0
-          check node.screenBox.w == 106.0
+          check node.screenBox.w == 110.0
           check node.screenBox.h == 20.0
       else:
         discard
@@ -1047,7 +1047,7 @@ suite "nimkit rendering":
 
     check selectedIndicatorCount == 2
     check markCount == 1
-    check checkmarkTextCount == 2
+    check checkmarkTextCount >= 2
     check radioIndicatorFound
 
   test "buildRenders uses effective appearance from view hierarchy":

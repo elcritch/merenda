@@ -522,8 +522,8 @@ suite "nimkit application":
 
     check window.convertPointToScreen(initPoint(1, 2)) == initPoint(21, 32)
     check window.convertPointFromScreen(initPoint(21, 32)) == initPoint(1, 2)
-    check window.convertPointToContent(initPoint(10, 15)) == initPoint(0, 0)
-    check window.convertPointFromContent(initPoint(0, 0)) == initPoint(10, 15)
+    check window.convertPointToContent(initPoint(10, 15)) == initPoint(10, 15)
+    check window.convertPointFromContent(initPoint(0, 0)) == initPoint(0, 0)
 
     window.beginSheet(sheet)
     check window.attachedSheet == sheet

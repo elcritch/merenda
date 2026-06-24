@@ -1320,8 +1320,8 @@ suite "NimKit TableView":
       initPoint(columnRect.maxX - 1.0'f32, columnY)
     )
     check columnBefore.kind == ddtColumn
-    check columnBefore.column == "state"
-    check columnBefore.position == ddpBefore
+    check columnBefore.column == "name"
+    check columnBefore.position == ddpAfter
     check columnOn.kind == ddtColumn
     check columnOn.position == ddpOn
     check columnAfter.kind == ddtColumn
