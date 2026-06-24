@@ -1146,6 +1146,52 @@ proc installSynthwave83ReadabilityPass(theme: var Theme) =
         insetShadow(initColor(0.0, 0.0, 0.0, 0.24), y = -1.0, blur = 3.2),
       ]
 
+  theme["tab.fill"] = linear(
+    initColor(0.10, 0.00, 0.24, 0.92),
+    initColor(0.22, 0.01, 0.40, 0.78),
+    initColor(0.02, 0.16, 0.34, 0.44),
+    fgaDiagTLBR,
+    112'u8,
+  )
+  theme["tab.fill.highlighted"] = linear(
+    initColor(0.28, 0.02, 0.52, 0.94),
+    initColor(0.48, 0.03, 0.70, 0.78),
+    initColor(0.04, 0.58, 0.86, 0.42),
+    fgaDiagTLBR,
+    112'u8,
+  )
+  theme["tab.fill.selected"] = linear(
+    initColor(0.96, 0.04, 0.90, 0.90),
+    initColor(0.46, 0.02, 0.86, 0.82),
+    initColor(0.08, 0.86, 1.0, 0.50),
+    fgaDiagTLBR,
+    116'u8,
+  )
+  theme["tab.fill.disabled"] = fill(initColor(0.08, 0.00, 0.16, 0.46))
+  theme["tab.highlight.fill"] = styleFill(initColor(0.20, 0.96, 1.0, 0.20))
+  theme["tab.highlight.fill.disabled"] = styleFill(initColor(0.42, 0.30, 0.56, 0.12))
+  theme["tab.text.color"] = initColor(0.78, 0.96, 1.0, 0.96)
+  theme["tab.text.color.selected"] = initColor(1.0, 0.90, 0.28, 1.0)
+  theme["tab.text.color.disabled"] = styleToken("disabled.text.color")
+  theme["tab.border.color"] = initColor(0.90, 0.04, 1.0, 0.84)
+  theme["tab.border.color.highlighted"] = initColor(0.20, 0.96, 1.0, 0.92)
+  theme["tab.border.color.selected"] = initColor(1.0, 0.10, 0.92, 0.98)
+  theme["tab.border.color.disabled"] = initColor(0.34, 0.18, 0.48, 0.38)
+  theme[srTab, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+  theme[srTab, StyleBoxShadows] =
+    @[
+      dropShadow(initColor(0.96, 0.00, 1.0, 0.16), y = 1.0, blur = 7.0),
+      insetShadow(initColor(0.28, 0.96, 1.0, 0.18), y = 1.0, blur = 2.8),
+      insetShadow(initColor(1.0, 0.00, 0.92, 0.10), y = -1.0, blur = 4.0),
+    ]
+  theme[srTab, {ssSelected}, StyleBoxShadows] =
+    @[
+      dropShadow(initColor(1.0, 0.00, 0.92, 0.24), y = 1.0, blur = 8.0),
+      insetShadow(initColor(1.0, 0.90, 0.32, 0.20), y = 1.0, blur = 3.0),
+      insetShadow(initColor(0.20, 0.96, 1.0, 0.16), y = -1.0, blur = 4.0),
+    ]
+  theme[srTabPanel, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+
 proc initSynthwave83Theme*(): Theme =
   result = initTheme()
   result.installSynthwave83Tokens()
