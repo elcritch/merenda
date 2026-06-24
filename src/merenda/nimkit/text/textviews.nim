@@ -329,7 +329,12 @@ proc updateTypingAttributesForSelection(textView: TextView) =
     total = textView.xTextStorage.len
     anchor = clampIndex(total, textView.xSelectionAnchor)
     cursor = clampIndex(total, textView.xInsertionPoint)
-    index = max(0, min(min(anchor, cursor), total - 1))
+    selectedStart = min(anchor, cursor)
+    index =
+      if anchor == cursor and cursor > 0:
+        min(cursor - 1, total - 1)
+      else:
+        max(0, min(selectedStart, total - 1))
   textView.xTypingAttributes = textView.xTextStorage.attributesAt(index)
 
 proc textViewSelectedRange(textView: TextView): TextRange =
@@ -755,15 +760,37 @@ proc moveWordRightText*(textView: TextView, extending = false) =
     textView.textViewStringValue().nextWordBoundary(textView.xInsertionPoint), extending
   )
 
+proc currentVisualLineBounds(textView: TextView): tuple[first, last: int] =
+  result = (first: textView.xInsertionPoint, last: textView.xInsertionPoint)
+  textView.updateTextContainer()
+  let
+    caret = textView.xLayoutManager.caretRect(textView.xInsertionPoint)
+    caretY = caret.origin.y + caret.size.height * 0.5'f32
+    total = textView.xTextStorage.len
+  var found = false
+
+  for index in 0 .. total:
+    let
+      candidate = textView.xLayoutManager.caretRect(index)
+      lineHeight = max(candidate.size.height, DefaultFontSize)
+    if caretY < candidate.origin.y or caretY >= candidate.origin.y + lineHeight:
+      continue
+    if not found:
+      result = (first: index, last: index)
+      found = true
+    else:
+      result.first = min(result.first, index)
+      result.last = max(result.last, index)
+
 proc moveToBeginningOfLineText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
     return
-  textView.setCursor(0, extending)
+  textView.setCursor(textView.currentVisualLineBounds().first, extending)
 
 proc moveToEndOfLineText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
     return
-  textView.setCursor(textView.xTextStorage.len, extending)
+  textView.setCursor(textView.currentVisualLineBounds().last, extending)
 
 proc updateTextContainer(textView: TextView) =
   if textView.isNil:

@@ -96,6 +96,18 @@ suite "nimkit text views":
     check textView.stringValue == "aZbc"
     check textView.textStorage().attributesAt(1) == accent
 
+  test "text view insertion at styled run end inherits previous attributes":
+    let
+      textView = newTextView("Title\nBody", frame = initRect(0, 0, 200, 80))
+      titleAttributes = defaultTextAttributes(initColor(0.95, 0.42, 0.78), 18.0)
+
+    textView.textStorage().setAttributes(initTextRange(0, 5), titleAttributes)
+    textView.selectedRange = initTextRange(5, 0)
+    textView.insertTextValue("!")
+
+    check textView.stringValue == "Title!\nBody"
+    check textView.textStorage().attributesAt(5) == titleAttributes
+
   test "text view marked text replaces selection and commits through insert text":
     let textView = newTextView("abcd", frame = initRect(0, 0, 160, 24))
 
@@ -262,6 +274,28 @@ suite "nimkit text views":
         max(blankLineStart.origin.y, finalLineStart.origin.y - 1.0'f32),
       )
     ) == 2
+
+  test "text view hit testing beyond line end clamps to that visual line":
+    let manager = newTextLayoutManager(
+      newTextStorage("Title\nSecond"),
+      initTextContainer(initSize(240, 120), initEdgeInsets(8.0), wraps = false),
+    )
+    let
+      firstLineEnd = manager.caretRect(5)
+      secondLineStart = manager.caretRect(6)
+
+    check manager.textIndexAtPoint(
+      initPoint(
+        firstLineEnd.origin.x + 80.0'f32,
+        firstLineEnd.origin.y + firstLineEnd.size.height * 0.5'f32,
+      )
+    ) == 5
+    check manager.textIndexAtPoint(
+      initPoint(
+        secondLineStart.origin.x + 80.0'f32,
+        secondLineStart.origin.y + secondLineStart.size.height * 0.5'f32,
+      )
+    ) > 5
 
   test "text view up and down commands move between visual lines":
     let textView = newTextView("abc\ndef\nghi", frame = initRect(0, 0, 200, 120))
