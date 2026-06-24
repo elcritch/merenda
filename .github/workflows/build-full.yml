@@ -130,8 +130,8 @@ jobs:
           - '2.2.10'
         os:
           - macos-latest
-          # - ubuntu-latest
-          # - windows-2022
+          - ubuntu-latest
+          - windows-2022
     steps:
     - uses: actions/checkout@v5
 
