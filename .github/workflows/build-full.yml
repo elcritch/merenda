@@ -22,6 +22,16 @@ jobs:
           - macos-latest
           - ubuntu-latest
           # - windows-2022
+        display:
+          - none
+        exclude:
+          - os: ubuntu-24.04
+            display: none
+        include:
+          - os: ubuntu-24.04
+            display: x11
+          # - os: ubuntu-24.04
+          #   display: wayland
     steps:
     - uses: actions/checkout@v5
 
@@ -50,6 +60,30 @@ jobs:
       uses: jiro4989/setup-nim-action@v2
       with:
         nim-version: ${{ matrix.nimversion }}
+
+    - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
+      if: runner.os == 'Linux' && matrix.display == 'x11'
+      timeout-minutes: 15
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          xvfb \
+          libx11-xcb-dev \
+          libxcb1-dev \
+          libxcursor-dev \
+          libxkbcommon-dev \
+          libxrender-dev \
+          libgl1-mesa-dev \
+          libgles2-mesa-dev \
+          libegl1-mesa-dev \
+          mesa-utils \
+          vulkan-tools \
+          mesa-vulkan-drivers \
+          libvulkan1 \
+          libgl1-mesa-dri \
+          libglx-mesa0 \
+          libegl-mesa0 \
+          libgles2
 
     - name: Install Atlas
       run: |
