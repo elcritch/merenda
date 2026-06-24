@@ -246,6 +246,12 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
   method moveRight(editor: FieldEditor, args: ActionArgs) =
     editor.moveRightText()
 
+  method moveUp(editor: FieldEditor, args: ActionArgs) =
+    editor.moveUpText()
+
+  method moveDown(editor: FieldEditor, args: ActionArgs) =
+    editor.moveDownText()
+
   method moveWordLeft(editor: FieldEditor, args: ActionArgs) =
     editor.moveWordLeftText()
 
@@ -263,6 +269,12 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
 
   method moveRightAndModifySelection(editor: FieldEditor, args: ActionArgs) =
     editor.moveRightText(extending = true)
+
+  method moveUpAndModifySelection(editor: FieldEditor, args: ActionArgs) =
+    editor.moveUpText(extending = true)
+
+  method moveDownAndModifySelection(editor: FieldEditor, args: ActionArgs) =
+    editor.moveDownText(extending = true)
 
   method moveWordLeftAndModifySelection(editor: FieldEditor, args: ActionArgs) =
     editor.moveWordLeftText(extending = true)

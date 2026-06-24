@@ -1,4 +1,7 @@
-from figdraw/common/fonttypes import GlyphArrangement
+import std/unicode
+
+from figdraw/common/fonttypes import GlyphArrangement, nearestSourceRuneForCaretPoint
+from pkg/vmath import vec2
 
 import ../drawing
 import ./textstorage
@@ -119,6 +122,26 @@ proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
       rect.h,
     )
 
+proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
+  if manager.isNil or manager.xTextStorage.isNil:
+    return -1
+
+  let runes = manager.xTextStorage.stringValue().toRunes()
+  for index, rune in runes:
+    if rune != Rune('\n'):
+      continue
+    let nextIndex = index + 1
+    if nextIndex < runes.len and runes[nextIndex] != Rune('\n'):
+      continue
+
+    let
+      caret = manager.caretRect(nextIndex)
+      lineHeight = max(caret.size.height, DefaultFontSize)
+    if point.y >= caret.origin.y and point.y < caret.origin.y + lineHeight:
+      return nextIndex
+
+  -1
+
 proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
   if manager.isNil:
     return 0
@@ -126,10 +149,7 @@ proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
   let localPoint = initPoint(
     point.x - manager.xLayoutRect.origin.x, point.y - manager.xLayoutRect.origin.y
   )
-  for index, rect in manager.xLayout.selectionRects:
-    if localPoint.y >= rect.y and localPoint.y < rect.y + rect.h:
-      if localPoint.x < rect.x + rect.w * 0.5'f32:
-        return index
-      if localPoint.x < rect.x + rect.w:
-        return index + 1
-  manager.xTextStorage.len
+  let emptyLineIndex = manager.emptyLineIndexAtPoint(localPoint)
+  if emptyLineIndex >= 0:
+    return emptyLineIndex
+  manager.xLayout.nearestSourceRuneForCaretPoint(vec2(localPoint.x, localPoint.y))

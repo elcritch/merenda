@@ -4,6 +4,7 @@ import pkg/bumpy
 
 import figdraw/commons
 import figdraw/common/filltypes
+import figdraw/common/fonttypes
 import figdraw/common/typefaces
 import figdraw/figextras
 import figdraw/fignodes
@@ -150,7 +151,7 @@ proc textLayout*(
     rect.toFigRect,
     spans,
     hAlign = alignment.toFontHorizontal,
-    vAlign = Middle,
+    vAlign = Top,
     minContent = false,
     wrap = wrap,
   )
@@ -241,6 +242,19 @@ proc caretRect*(
     textRect: nimkitTypes.Rect, layout: GlyphArrangement, insertionPoint: int
 ): nimkitTypes.Rect =
   let index = max(insertionPoint, 0)
+  let carets = layout.caretPositionsFor(index)
+  if carets.len > 0:
+    var caret = carets[0]
+    for candidate in carets:
+      if candidate.lineIndex > caret.lineIndex:
+        caret = candidate
+    return initRect(
+      textRect.origin.x + caret.rect.x,
+      textRect.origin.y + caret.rect.y,
+      1.0,
+      caret.rect.h,
+    )
+
   if layout.selectionRects.len > 0:
     let rect =
       if index <= 0:

@@ -2,6 +2,7 @@ import std/unicode
 
 import sigils/core
 
+import ../accessibility/accessibility
 import ../drawing
 import ../foundation/events
 import ../app/pasteboards
@@ -61,6 +62,7 @@ proc textViewSelectedRange(textView: TextView): TextRange
 proc setTextViewSelectedRange(textView: TextView, value: TextRange)
 proc textViewInsertionPoint(textView: TextView): int
 proc textViewSelectionAnchor(textView: TextView): int
+proc updateTextContainer(textView: TextView)
 proc setCursor*(textView: TextView, index: int, extending = false)
 proc selectAllText*(textView: TextView)
 proc replaceSelectedText*(textView: TextView, insertion: string)
@@ -81,10 +83,15 @@ proc deleteWordBackwardText*(textView: TextView)
 proc deleteWordForwardText*(textView: TextView)
 proc moveLeftText*(textView: TextView, extending = false)
 proc moveRightText*(textView: TextView, extending = false)
+proc moveUpText*(textView: TextView, extending = false)
+proc moveDownText*(textView: TextView, extending = false)
 proc moveWordLeftText*(textView: TextView, extending = false)
 proc moveWordRightText*(textView: TextView, extending = false)
 proc moveToBeginningOfLineText*(textView: TextView, extending = false)
 proc moveToEndOfLineText*(textView: TextView, extending = false)
+
+protocol TextViewEvents:
+  proc textDidChange*(textView: TextView, sender: DynamicAgent) {.signal.}
 
 proc isControlInput(rune: Rune): bool =
   let code = rune.int
@@ -178,6 +185,7 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
+  emit textView.textDidChange(DynamicAgent(textView))
 
 proc editable*(textView: TextView): bool =
   (not textView.isNil) and tvEditable in textView.xFlags
@@ -422,6 +430,7 @@ proc finishTextMutation(textView: TextView) =
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
+  emit textView.textDidChange(DynamicAgent(textView))
 
 proc replaceRange(
     textView: TextView,
@@ -705,6 +714,32 @@ proc moveRightText*(textView: TextView, extending = false) =
   else:
     textView.setCursor(textView.xInsertionPoint + 1, extending)
 
+proc moveVerticalText(textView: TextView, direction: int, extending = false) =
+  if textView.isNil or (not textView.editable and not textView.selectable):
+    return
+
+  let selected = textView.currentSelection()
+  if selected.stop > selected.start and not extending:
+    textView.setCursor(if direction < 0: selected.start else: selected.stop)
+    return
+
+  textView.updateTextContainer()
+  let
+    caret = textView.xLayoutManager.caretRect(textView.xInsertionPoint)
+    lineHeight = max(caret.size.height, DefaultFontSize)
+    target = initPoint(
+      caret.origin.x,
+      caret.origin.y + caret.size.height * 0.5'f32 + float32(direction) * lineHeight,
+    )
+    index = textView.xLayoutManager.textIndexAtPoint(target)
+  textView.setCursor(index, extending)
+
+proc moveUpText*(textView: TextView, extending = false) =
+  textView.moveVerticalText(-1, extending)
+
+proc moveDownText*(textView: TextView, extending = false) =
+  textView.moveVerticalText(1, extending)
+
 proc moveWordLeftText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
     return
@@ -744,23 +779,25 @@ proc textIndexAtPoint*(textView: TextView, point: Point): int =
 
 proc drawTextViewContents*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
-  let layout = textLayout(
-    textView.bounds,
-    textView.displayTextStorage(),
-    textView.alignment(),
-    textView.xTextContainer.wraps,
-  )
+  let
+    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+    layout = textLayout(
+      textRect,
+      textView.displayTextStorage(),
+      textView.alignment(),
+      textView.xTextContainer.wraps,
+    )
   let selected = textView.textViewSelectedRange()
   if selected.length > 0:
     discard context.addSelectedText(
-      textView.bounds,
+      textRect,
       layout,
       int(selected.location),
       int(selected.length),
       textView.selectionColor(),
     )
   else:
-    discard context.addText(textView.bounds, layout)
+    discard context.addText(textRect, layout)
   if textView.editable and selected.length == 0 and textView.isFocused:
     context.addRectangle(
       textView.xLayoutManager.caretRect(textView.textViewInsertionPoint()),
@@ -835,6 +872,12 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
   method moveRight(textView: TextView, args: ActionArgs) =
     textView.moveRightText()
 
+  method moveUp(textView: TextView, args: ActionArgs) =
+    textView.moveUpText()
+
+  method moveDown(textView: TextView, args: ActionArgs) =
+    textView.moveDownText()
+
   method moveWordLeft(textView: TextView, args: ActionArgs) =
     textView.moveWordLeftText()
 
@@ -852,6 +895,12 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
 
   method moveRightAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveRightText(extending = true)
+
+  method moveUpAndModifySelection(textView: TextView, args: ActionArgs) =
+    textView.moveUpText(extending = true)
+
+  method moveDownAndModifySelection(textView: TextView, args: ActionArgs) =
+    textView.moveDownText(extending = true)
 
   method moveWordLeftAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveWordLeftText(extending = true)
@@ -881,6 +930,31 @@ protocol DefaultTextViewKeyCommands of KeyViewCommandProtocol:
   method insertTabIgnoringFieldEditor(textView: TextView, args: ActionArgs) =
     textView.insertTextValue("\t")
 
+protocol DefaultTextViewAccessibility of AccessibilityProtocol:
+  method accessibilityRole(textView: TextView): AccessibilityRole =
+    arTextArea
+
+  method accessibilityLabel(textView: TextView): string =
+    if textView.xAccessibilityLabel.len > 0:
+      textView.xAccessibilityLabel
+    else:
+      textView.identifier()
+
+  method accessibilityValue(textView: TextView): string =
+    textView.stringValue()
+
+  method accessibilityTraits(textView: TextView): AccessibilityTraits =
+    result = textView.xAccessibilityTraits
+    if textView.focused():
+      result.incl atFocused
+    if textView.editable():
+      result.incl atEditable
+    if textView.selectable():
+      result.incl atSelectable
+
+  method isAccessibilityElement(textView: TextView): bool =
+    true
+
 proc initTextViewFields*(
     textView: TextView,
     value = "",
@@ -906,6 +980,7 @@ proc initTextViewFields*(
     discard textView.withProtocol(DefaultTextViewInput)
     discard textView.withProtocol(DefaultTextViewCommands)
     discard textView.withProtocol(DefaultTextViewKeyCommands)
+    discard textView.withProtocol(DefaultTextViewAccessibility)
   textView.applyInitialFrame(frame)
 
 proc newTextView*(value = "", frame: Rect = AutoRect): TextView =
