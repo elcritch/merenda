@@ -1081,10 +1081,10 @@ proc addGeometryStays(state: var LayoutSolveState, root: View) =
   for solverView in state.items:
     if solverView.item != root:
       let rect = solverView.item.alignmentRect()
-      state.addStay(solverView.left, rect.minX, Weak)
-      state.addStay(solverView.top, rect.minY, Weak)
       state.addStay(solverView.width, rect.size.width, Weak)
       state.addStay(solverView.height, rect.size.height, Weak)
+      state.addStay(solverView.left, rect.minX, Weak)
+      state.addStay(solverView.top, rect.minY, Weak)
 
 proc expressionFor(solverView: SolverView, attribute: LayoutAttribute): Expression =
   case attribute
@@ -1470,10 +1470,10 @@ proc applyConstraintsForSubtree*(view: View) =
   state.collectSolverViews(view)
   state.collectConstraintItems(view)
   state.addRootGeometryConstraints(view)
-  state.addGeometryStays(view)
   state.addNonNegativeSizeConstraints()
-  state.refreshGeneratedLayoutInputs(view)
   state.addOwnedConstraints(view)
+  state.refreshGeneratedLayoutInputs(view)
+  state.addGeometryStays(view)
   state.solver.updateVariables()
   state.applySolvedFrames()
   state.refreshAutoresizingStates()

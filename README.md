@@ -87,6 +87,17 @@ Save that as a Nim file and run it with:
 nim r examples/quick_start.nim
 ```
 
+Merenda apps automatically use the native window content scale. To force a
+specific UI scale for development or display debugging, set `UISCALE` or
+`NIMKIT_UISCALE`:
+
+```sh
+UISCALE=1.5 nim r examples/quick_start.nim
+```
+
+`NIMKIT_UISCALE` and `MERENDA_UISCALE` take priority over `UISCALE`, and
+FigDraw's legacy `HDI` variable remains a fallback.
+
 ## Controls
 
 NimKit ships the core controls needed for desktop-style interfaces:
