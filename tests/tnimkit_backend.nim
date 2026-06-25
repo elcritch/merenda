@@ -28,6 +28,7 @@ suite "nimkit backend":
       proc() =
         putEnv(nimkitBackend.NimKitUiScaleEnv, "1.25")
         putEnv(nimkitBackend.MerendaUiScaleEnv, "1.5")
+        putEnv(nimkitBackend.UiScaleEnv, "1.75")
         putEnv(nimkitBackend.FigDrawLegacyUiScaleEnv, "2.0")
 
         let override = nimkitBackend.uiScaleOverrideFromEnv()
@@ -36,10 +37,11 @@ suite "nimkit backend":
         check abs(override.get().scale - 1.25'f32) < 0.0001'f32
     )
 
-  test "ui scale override falls back through Merenda and legacy env vars":
+  test "ui scale override falls back through Merenda, UISCALE, and legacy env vars":
     withCleanUiScaleEnv(
       proc() =
         putEnv(nimkitBackend.MerendaUiScaleEnv, "1.5")
+        putEnv(nimkitBackend.UiScaleEnv, "1.75")
         putEnv(nimkitBackend.FigDrawLegacyUiScaleEnv, "2.0")
 
         var override = nimkitBackend.uiScaleOverrideFromEnv()
@@ -48,6 +50,12 @@ suite "nimkit backend":
         check abs(override.get().scale - 1.5'f32) < 0.0001'f32
 
         delEnv(nimkitBackend.MerendaUiScaleEnv)
+        override = nimkitBackend.uiScaleOverrideFromEnv()
+        check override.isSome
+        check override.get().envName == nimkitBackend.UiScaleEnv
+        check abs(override.get().scale - 1.75'f32) < 0.0001'f32
+
+        delEnv(nimkitBackend.UiScaleEnv)
         override = nimkitBackend.uiScaleOverrideFromEnv()
         check override.isSome
         check override.get().envName == nimkitBackend.FigDrawLegacyUiScaleEnv

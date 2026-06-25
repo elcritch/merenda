@@ -1,4 +1,4 @@
-import std/[options, os, strutils, tables, times]
+import std/[math, options, os, strutils, tables, times]
 
 from figdraw/common/shared import setFigUiScale
 import figdraw/figrender as figrender
@@ -42,6 +42,8 @@ type
     xOwnerKey: pointer
     xRenderRequested: bool
     xRenderCount: Natural
+    xHasUiScaleOverride: bool
+    xUiScaleOverride: float32
 
   NativePasteboardProvider = ref object of DynamicAgent
     xHost: HostWindow
@@ -60,10 +62,12 @@ var
 
 const NativeImagePngType = "image/png"
 const
+  UiScaleEnv* = "UISCALE"
   NimKitUiScaleEnv* = "NIMKIT_UISCALE"
   MerendaUiScaleEnv* = "MERENDA_UISCALE"
   FigDrawLegacyUiScaleEnv* = "HDI"
-  UiScaleEnvVars* = [NimKitUiScaleEnv, MerendaUiScaleEnv, FigDrawLegacyUiScaleEnv]
+  UiScaleEnvVars* =
+    [NimKitUiScaleEnv, MerendaUiScaleEnv, UiScaleEnv, FigDrawLegacyUiScaleEnv]
 
 type UiScaleOverride* = object
   envName*: string
@@ -86,12 +90,25 @@ proc uiScaleOverrideFromEnv*(): Option[UiScaleOverride] =
     return some(UiScaleOverride(envName: envName, scale: scale))
   none(UiScaleOverride)
 
-proc configureHostUiScale(window: siwinshim.Window): bool =
-  let override = uiScaleOverrideFromEnv()
+proc nativePixels(value: float32, scale: float32): int32 =
+  max((max(value, 1.0'f32) * scale).round().int32, 1)
+
+proc nativeWindowSize(frameSize: Size, override: Option[UiScaleOverride]): IVec2 =
+  let scale =
+    if override.isSome:
+      override.get().scale
+    else:
+      1.0'f32
+  ivec2(nativePixels(frameSize.width, scale), nativePixels(frameSize.height, scale))
+
+proc configureHostUiScale(host: HostWindow, override: Option[UiScaleOverride]) =
   if override.isSome:
-    setFigUiScale(override.get().scale)
-    return false
-  window.configureUiScale()
+    host.xHasUiScaleOverride = true
+    host.xUiScaleOverride = override.get().scale
+    host.xAutoScale = false
+    setFigUiScale(host.xUiScaleOverride)
+  elif not host.xNativeWindow.isNil:
+    host.xAutoScale = host.xNativeWindow.configureUiScale()
 
 proc nativeWindowKey(nativeWindow: siwinshim.Window): pointer =
   cast[pointer](nativeWindow)
@@ -509,14 +526,26 @@ proc rawInputToLogical*(rawPos: Vec2, inputSize: IVec2, logicalSize: Vec2): Vec2
     rawPos.y * logicalSize.y / inputSize.y.float32,
   )
 
-proc nativeMousePoint(window: siwinshim.Window): Point =
+proc hostLogicalSize(host: HostWindow, window: siwinshim.Window): Vec2 =
+  if window.isNil:
+    return vec2(0.0'f32, 0.0'f32)
+  if not host.isNil and host.xHasUiScaleOverride:
+    let backing = window.backingSize()
+    return vec2(
+      backing.x.float32 / host.xUiScaleOverride,
+      backing.y.float32 / host.xUiScaleOverride,
+    )
+  window.logicalSize()
+
+proc nativeMousePoint(host: HostWindow, window: siwinshim.Window): Point =
   # siwin mouse.pos is reported in window.size coordinates, which may lag
   # backingSize on Cocoa until resize/backing notifications are delivered.
-  let pos = rawInputToLogical(window.mouse.pos, window.size(), window.logicalSize())
+  let pos =
+    rawInputToLogical(window.mouse.pos, window.size(), host.hostLogicalSize(window))
   initPoint(pos.x.float32, pos.y.float32)
 
-proc nativeMousePoint(window: siwinshim.Window, rawPos: Vec2): Point =
-  let pos = rawInputToLogical(rawPos, window.size(), window.logicalSize())
+proc nativeMousePoint(host: HostWindow, window: siwinshim.Window, rawPos: Vec2): Point =
+  let pos = rawInputToLogical(rawPos, window.size(), host.hostLogicalSize(window))
   initPoint(pos.x.float32, pos.y.float32)
 
 proc nativeModifiers(window: siwinshim.Window): set[events.KeyModifier] =
@@ -560,12 +589,20 @@ proc requestRender*(host: HostWindow) =
     host.xNativeWindow.redraw()
 
 proc contentScale*(host: HostWindow): float32 =
+  if host.isNil:
+    return 1.0'f32
+  if host.xHasUiScaleOverride:
+    return host.xUiScaleOverride
   if not host.isReady:
     return 1.0'f32
   max(host.xNativeWindow.contentScale(), 1.0'f32)
 
 proc refreshContentScale*(host: HostWindow) =
-  if host.isReady:
+  if host.isNil:
+    return
+  if host.xHasUiScaleOverride:
+    setFigUiScale(host.xUiScaleOverride)
+  elif host.isReady:
     host.xNativeWindow.refreshUiScale(host.xAutoScale)
 
 proc markClosed(host: HostWindow, notify: bool) =
@@ -581,6 +618,13 @@ proc markClosed(host: HostWindow, notify: bool) =
 proc logicalSize*(host: HostWindow, fallback: Size): Size =
   if not host.isReady:
     return initSize(max(fallback.width, 1.0'f32), max(fallback.height, 1.0'f32))
+
+  if host.xHasUiScaleOverride:
+    let nativeSize = host.xNativeWindow.backingSize()
+    return initSize(
+      max(nativeSize.x.float32 / host.xUiScaleOverride, 1.0'f32),
+      max(nativeSize.y.float32 / host.xUiScaleOverride, 1.0'f32),
+    )
 
   let nativeSize = host.xNativeWindow.logicalSize()
   if nativeSize.x <= 0.0'f32 or nativeSize.y <= 0.0'f32:
@@ -622,7 +666,7 @@ proc dispatchMouseButton(host: HostWindow, event: siwinshim.MouseButtonEvent) =
     return
   host.xCallbacks.onMouseButton(
     events.MouseEvent(
-      location: nativeMousePoint(nativeWindow),
+      location: host.nativeMousePoint(nativeWindow),
       button: event.button.toNimkitMouseButton,
       clickCount: 0,
       modifiers: nativeWindow.nativeModifiers,
@@ -640,7 +684,7 @@ proc dispatchMouseMove(host: HostWindow, event: siwinshim.MouseMoveEvent) =
     nativeWindow.mouse.pressed != {}
   host.xCallbacks.onMouseMove(
     events.MouseEvent(
-      location: nativeMousePoint(nativeWindow, event.pos),
+      location: host.nativeMousePoint(nativeWindow, event.pos),
       button: nativeWindow.activeMouseButton,
       clickCount: 0,
       modifiers: nativeWindow.nativeModifiers,
@@ -655,7 +699,7 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
     return
   host.xCallbacks.onScroll(
     events.ScrollEvent(
-      location: nativeMousePoint(nativeWindow),
+      location: host.nativeMousePoint(nativeWindow),
       deltaX: event.deltaX.float32,
       deltaY: event.delta.float32,
       phase: sepChanged,
@@ -707,7 +751,7 @@ proc installEventHandlers(host: HostWindow) =
       let nativeWindow = if event.window.isNil: host.xNativeWindow else: event.window
       if nativeWindow.isNil:
         return
-      nativeWindow.refreshUiScale(host.xAutoScale)
+      host.refreshContentScale()
       if not host.xCallbacks.onResize.isNil:
         host.xCallbacks.onResize()
       if not host.xCallbacks.onRender.isNil:
@@ -759,13 +803,14 @@ proc installEventHandlers(host: HostWindow) =
 proc createHostWindow*(
     frame: Rect, title: string, callbacks: HostWindowCallbacks
 ): HostWindow =
-  let size =
-    ivec2(max(frame.size.width, 1.0'f32).int32, max(frame.size.height, 1.0'f32).int32)
+  let
+    scaleOverride = uiScaleOverrideFromEnv()
+    size = nativeWindowSize(frame.size, scaleOverride)
   result = HostWindow(xCallbacks: callbacks)
   result.xNativeWindow =
     siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
   result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
-  result.xAutoScale = result.xNativeWindow.configureHostUiScale()
+  result.configureHostUiScale(scaleOverride)
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
@@ -786,11 +831,17 @@ proc createPopupHostWindow*(
   if not owner.isReady:
     return nil
 
+  let scaleOverride =
+    if owner.xHasUiScaleOverride:
+      some(UiScaleOverride(scale: owner.xUiScaleOverride))
+    else:
+      none(UiScaleOverride)
+
   result = HostWindow(xCallbacks: callbacks)
   result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
       owner.xNativeWindow, placement, grab = true
     )
-  result.xAutoScale = result.xNativeWindow.configureHostUiScale()
+  result.configureHostUiScale(scaleOverride)
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )

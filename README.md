@@ -88,14 +88,15 @@ nim r examples/quick_start.nim
 ```
 
 Merenda apps automatically use the native window content scale. To force a
-specific UI scale for development or display debugging, set `NIMKIT_UISCALE`:
+specific UI scale for development or display debugging, set `UISCALE` or
+`NIMKIT_UISCALE`:
 
 ```sh
-NIMKIT_UISCALE=1.5 nim r examples/quick_start.nim
+UISCALE=1.5 nim r examples/quick_start.nim
 ```
 
-`MERENDA_UISCALE` is also accepted as an alias, and FigDraw's legacy `HDI`
-variable remains a fallback.
+`NIMKIT_UISCALE` and `MERENDA_UISCALE` take priority over `UISCALE`, and
+FigDraw's legacy `HDI` variable remains a fallback.
 
 ## Controls
 
