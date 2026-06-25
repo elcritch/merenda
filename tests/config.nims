@@ -1,2 +1,4 @@
 --path:
   "../src"
+--define:
+  "figdraw.vulkanReadback"
