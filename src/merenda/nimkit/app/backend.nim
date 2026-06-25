@@ -93,13 +93,14 @@ proc uiScaleOverrideFromEnv*(): Option[UiScaleOverride] =
 proc nativePixels(value: float32, scale: float32): int32 =
   max((max(value, 1.0'f32) * scale).round().int32, 1)
 
-proc nativeWindowSize(frameSize: Size, override: Option[UiScaleOverride]): IVec2 =
-  let scale =
-    if override.isSome:
-      override.get().scale
-    else:
-      1.0'f32
+proc nativeWindowSize(frameSize: Size, scale: float32): IVec2 =
   ivec2(nativePixels(frameSize.width, scale), nativePixels(frameSize.height, scale))
+
+proc overrideScale(override: Option[UiScaleOverride]): float32 =
+  if override.isSome:
+    override.get().scale
+  else:
+    1.0'f32
 
 proc configureHostUiScale(host: HostWindow, override: Option[UiScaleOverride]) =
   if override.isSome:
@@ -109,6 +110,29 @@ proc configureHostUiScale(host: HostWindow, override: Option[UiScaleOverride]) =
     setFigUiScale(host.xUiScaleOverride)
   elif not host.xNativeWindow.isNil:
     host.xAutoScale = host.xNativeWindow.configureUiScale()
+
+proc configuredUiScale(host: HostWindow): float32 =
+  if host.isNil:
+    return 1.0'f32
+  if host.xHasUiScaleOverride:
+    return host.xUiScaleOverride
+  if host.xNativeWindow.isNil:
+    return 1.0'f32
+  max(host.xNativeWindow.contentScale(), 1.0'f32)
+
+proc usesScaledBackingSize(host: HostWindow, window: siwinshim.Window): bool =
+  if host.isNil or window.isNil:
+    return false
+  if host.xHasUiScaleOverride:
+    return true
+  let scale = host.configuredUiScale()
+  scale != 1.0'f32 and not window.inputUsesBackingPixels()
+
+proc logicalSizeForBacking(host: HostWindow, window: siwinshim.Window): Vec2 =
+  let
+    scale = host.configuredUiScale()
+    backing = window.backingSize()
+  vec2(backing.x.float32 / scale, backing.y.float32 / scale)
 
 proc nativeWindowKey(nativeWindow: siwinshim.Window): pointer =
   cast[pointer](nativeWindow)
@@ -529,12 +553,8 @@ proc rawInputToLogical*(rawPos: Vec2, inputSize: IVec2, logicalSize: Vec2): Vec2
 proc hostLogicalSize(host: HostWindow, window: siwinshim.Window): Vec2 =
   if window.isNil:
     return vec2(0.0'f32, 0.0'f32)
-  if not host.isNil and host.xHasUiScaleOverride:
-    let backing = window.backingSize()
-    return vec2(
-      backing.x.float32 / host.xUiScaleOverride,
-      backing.y.float32 / host.xUiScaleOverride,
-    )
+  if host.usesScaledBackingSize(window):
+    return host.logicalSizeForBacking(window)
   window.logicalSize()
 
 proc nativeMousePoint(host: HostWindow, window: siwinshim.Window): Point =
@@ -619,12 +639,9 @@ proc logicalSize*(host: HostWindow, fallback: Size): Size =
   if not host.isReady:
     return initSize(max(fallback.width, 1.0'f32), max(fallback.height, 1.0'f32))
 
-  if host.xHasUiScaleOverride:
-    let nativeSize = host.xNativeWindow.backingSize()
-    return initSize(
-      max(nativeSize.x.float32 / host.xUiScaleOverride, 1.0'f32),
-      max(nativeSize.y.float32 / host.xUiScaleOverride, 1.0'f32),
-    )
+  if host.usesScaledBackingSize(host.xNativeWindow):
+    let nativeSize = host.logicalSizeForBacking(host.xNativeWindow)
+    return initSize(max(nativeSize.x, 1.0'f32), max(nativeSize.y, 1.0'f32))
 
   let nativeSize = host.xNativeWindow.logicalSize()
   if nativeSize.x <= 0.0'f32 or nativeSize.y <= 0.0'f32:
@@ -805,12 +822,14 @@ proc createHostWindow*(
 ): HostWindow =
   let
     scaleOverride = uiScaleOverrideFromEnv()
-    size = nativeWindowSize(frame.size, scaleOverride)
+    size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
   result = HostWindow(xCallbacks: callbacks)
   result.xNativeWindow =
     siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
   result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
   result.configureHostUiScale(scaleOverride)
+  if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
+    result.xNativeWindow.size = nativeWindowSize(frame.size, result.configuredUiScale())
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
