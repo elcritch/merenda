@@ -1,5 +1,6 @@
-import std/[strutils, tables, times]
+import std/[options, os, strutils, tables, times]
 
+from figdraw/common/shared import setFigUiScale
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
@@ -58,11 +59,39 @@ var
   nativePasteboardProvider {.threadvar.}: NativePasteboardProvider
 
 const NativeImagePngType = "image/png"
+const
+  NimKitUiScaleEnv* = "NIMKIT_UISCALE"
+  MerendaUiScaleEnv* = "MERENDA_UISCALE"
+  FigDrawLegacyUiScaleEnv* = "HDI"
+  UiScaleEnvVars* = [NimKitUiScaleEnv, MerendaUiScaleEnv, FigDrawLegacyUiScaleEnv]
+
+type UiScaleOverride* = object
+  envName*: string
+  scale*: float32
 
 proc ensureHostRegistry() =
   if not hostWindowsReady:
     hostWindows = initTable[pointer, HostWindow]()
     hostWindowsReady = true
+
+proc uiScaleOverrideFromEnv*(): Option[UiScaleOverride] =
+  for envName in UiScaleEnvVars:
+    let value = getEnv(envName).strip()
+    if value.len == 0:
+      continue
+    let scale = value.parseFloat().float32
+    if scale <= 0.0'f32 or scale != scale or scale > float32.high:
+      let message = envName & " must be a finite number greater than zero"
+      raise newException(ValueError, message)
+    return some(UiScaleOverride(envName: envName, scale: scale))
+  none(UiScaleOverride)
+
+proc configureHostUiScale(window: siwinshim.Window): bool =
+  let override = uiScaleOverrideFromEnv()
+  if override.isSome:
+    setFigUiScale(override.get().scale)
+    return false
+  window.configureUiScale()
 
 proc nativeWindowKey(nativeWindow: siwinshim.Window): pointer =
   cast[pointer](nativeWindow)
@@ -736,7 +765,7 @@ proc createHostWindow*(
   result.xNativeWindow =
     siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
   result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
-  result.xAutoScale = result.xNativeWindow.configureUiScale()
+  result.xAutoScale = result.xNativeWindow.configureHostUiScale()
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
@@ -761,7 +790,7 @@ proc createPopupHostWindow*(
   result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
       owner.xNativeWindow, placement, grab = true
     )
-  result.xAutoScale = result.xNativeWindow.configureUiScale()
+  result.xAutoScale = result.xNativeWindow.configureHostUiScale()
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
