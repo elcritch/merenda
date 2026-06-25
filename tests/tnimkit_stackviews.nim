@@ -224,6 +224,31 @@ suite "nimkit stack views":
     check first.frame() == initRect(0.0, 0.0, 125.0, 40.0)
     check second.frame() == initRect(135.0, 0.0, 115.0, 40.0)
 
+  test "top pinned stack with real controls resolves intrinsic height":
+    let
+      root = newView(frame = initRect(0, 0, 720, 360))
+      stack = newStackView(laVertical)
+      title = newTitleLabel("Hello from KNutella/nimkit")
+      subtitle = newLabel("Pure Nim responder/action dispatch with plain widget state")
+      status = newStatusLabel("Button state: Off (click to cycle)")
+      button = newButton("Cycle State (Off)")
+
+    stack.spacing = 12.0
+    stack.alignment = svaFill
+    stack.addArrangedSubview(title, subtitle, status, button)
+    root.addSubview(stack)
+    stack.pinEdges(
+      toGuide = root.contentLayoutGuide(initEdgeInsets(28.0, 28.0, 0.0, 28.0)),
+      edges = {leLeft, leTop, leRight},
+    )
+
+    root.layoutSubtreeIfNeeded()
+
+    check stack.frame().origin == initPoint(28.0, 28.0)
+    check stack.frame().size.width == 664.0
+    check stack.frame().size.height > 0.0
+    check button.frame().size.height > 0.0
+
   test "removing a subview removes it from arranged layout":
     let
       stack = newStackView(laHorizontal, frame = initRect(0, 0, 100, 20))
