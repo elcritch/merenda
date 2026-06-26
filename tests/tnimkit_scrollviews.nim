@@ -433,6 +433,26 @@ suite "nimkit scroll views":
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
 
+  test "shift scroll wheel maps vertical wheel movement to horizontal scroll":
+    let
+      window = newWindow("Shift ScrollView", frame = initRect(0, 0, 220, 160))
+      root = newView(frame = initRect(0, 0, 220, 160))
+      document = newView(frame = initRect(0, 0, 300, 260))
+      scrollView =
+        newScrollView(frame = initRect(10, 10, 100, 80), documentView = document)
+
+    scrollView.horizontalLineScroll = 12.0
+    scrollView.verticalLineScroll = 10.0
+    root.addSubview(scrollView)
+    window.setContentView(root)
+
+    check window.scrollWheelAt(initPoint(20, 20), deltaY = -2.0, modifiers = {kmShift})
+    check scrollView.contentOffset() == initPoint(24, 0)
+
+    scrollView.contentOffset = initPoint(0, 0)
+    check window.scrollWheelAt(initPoint(20, 20), deltaY = -2.0)
+    check scrollView.contentOffset() == initPoint(0, 20)
+
   test "scroller gutter clicks page content along axis":
     let
       window = newWindow("Scroller gutter", frame = initRect(0, 0, 260, 220))
