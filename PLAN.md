@@ -256,6 +256,54 @@ application, responder, view, window, accessibility, or control/cell layers.
 
 ## Near-Term Work
 
+### OpenStep Compatibility Widgets
+
+Add the next missing OpenStep/AppKit-style widgets in an order that hardens
+shared control, cell, layout, responder, drawing, and accessibility behavior
+instead of producing isolated one-off controls.
+
+Recommended implementation order:
+
+1. `Box` / group box / separator
+   - Add titled and untitled box styles, separator-line variants, border/title
+     drawing, intrinsic sizing, and accessibility grouping semantics.
+   - Use this as the small first pass to shake out theme metrics for titled
+     containers and old-style OpenStep preferences panes.
+2. `SplitView`
+   - Add horizontal and vertical panes, divider tracking, min/max pane
+     constraints, collapsible panes, live resize behavior, and autosave hooks.
+   - This should become the primitive for source-list/detail, inspector, and
+     editor layouts.
+3. `ProgressIndicator`
+   - Add determinate bars and indeterminate spinner/bar modes.
+   - Use it to exercise timer/animation invalidation, value accessibility, and
+     disabled/active appearance.
+4. `Stepper`
+   - Add min/max/increment/wrap behavior, press-and-hold repeat tracking, value
+     formatting hooks, and target/action dispatch.
+   - Pair with text fields in examples to test AppKit-style value editing.
+5. `Browser`
+   - Add the classic NeXT/OpenStep column browser on top of scroll/table row
+     primitives: dynamic column loading, column selection, keyboard navigation,
+     and path/item identity.
+   - This is the highest-signal compatibility widget, but it should follow
+     `SplitView` and the smaller controls so shared scrolling and layout paths
+     are already stable.
+6. `Matrix`
+   - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
+     selection modes, keyboard movement, and cell reuse.
+   - Use this to further harden the control/cell split.
+7. `ColorWell`
+   - Add color swatch rendering, target/action on color changes, pasteboard
+     color payload integration, and drag affordances.
+   - Stage a full color panel separately after the well and panel/session
+     contracts are stronger.
+8. Panels and dialogs
+   - Continue from the existing modal/session work toward `Panel`, `Alert`,
+     `OpenPanel`, and `SavePanel` compatibility.
+   - Native bridges can come later; first keep the pure Nim modal, sheet,
+     responder, and document-controller contracts stable.
+
 ### Accessibility Core
 
 Keep accessibility backend-neutral and driven by the same state mutations that
