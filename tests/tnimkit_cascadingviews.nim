@@ -5,16 +5,16 @@ import sigils/core
 import merenda/nimkit
 
 type
-  MillerColumnSourceSpy = ref object of Responder
-    items: seq[MillerColumnItem]
+  CascadingSourceSpy = ref object of Responder
+    items: seq[CascadingItem]
 
-  MillerColumnDelegateSpy = ref object of Responder
+  CascadingDelegateSpy = ref object of Responder
     denied: seq[string]
     selected: seq[string]
     activated: seq[string]
     heights: seq[float32]
 
-  MillerColumnSignalSpy = ref object of Responder
+  CascadingSignalSpy = ref object of Responder
     changing: int
     changed: int
     activated: int
@@ -26,17 +26,17 @@ proc containsValue(values: openArray[string], value: string): bool =
       return true
   false
 
-protocol MillerColumnSourceSpyMethods of MillerColumnDataSource:
-  method millerColumnNumberOfChildren(
-      source: MillerColumnSourceSpy, view: MillerColumnView, parentIdentifier: string
+protocol CascadingSourceSpyMethods of CascadingDataSource:
+  method cascadingNumberOfChildren(
+      source: CascadingSourceSpy, view: CascadingView, parentIdentifier: string
   ): int =
     for item in source.items:
       if item.parentIdentifier == parentIdentifier:
         inc result
 
-  method millerColumnChildIdentifier(
-      source: MillerColumnSourceSpy,
-      view: MillerColumnView,
+  method cascadingChildIdentifier(
+      source: CascadingSourceSpy,
+      view: CascadingView,
       parentIdentifier: string,
       index: int,
   ): string =
@@ -47,17 +47,17 @@ protocol MillerColumnSourceSpyMethods of MillerColumnDataSource:
           return item.identifier
         inc current
 
-  method millerColumnItem(
-      source: MillerColumnSourceSpy, view: MillerColumnView, identifier: string
-  ): MillerColumnItem =
+  method cascadingItem(
+      source: CascadingSourceSpy, view: CascadingView, identifier: string
+  ): CascadingItem =
     for item in source.items:
       if item.identifier == identifier:
         return item
 
-protocol MillerColumnDelegateSpyMethods of MillerColumnDelegate:
-  method shouldSelectMillerColumnItem(
-      delegate: MillerColumnDelegateSpy,
-      view: MillerColumnView,
+protocol CascadingDelegateSpyMethods of CascadingDelegate:
+  method shouldSelectCascadingItem(
+      delegate: CascadingDelegateSpy,
+      view: CascadingView,
       column: int,
       row: int,
       identifier: string,
@@ -67,9 +67,9 @@ protocol MillerColumnDelegateSpyMethods of MillerColumnDelegate:
     discard row
     not delegate.denied.containsValue(identifier)
 
-  method didSelectMillerColumnItem(
-      delegate: MillerColumnDelegateSpy,
-      view: MillerColumnView,
+  method didSelectCascadingItem(
+      delegate: CascadingDelegateSpy,
+      view: CascadingView,
       column: int,
       row: int,
       identifier: string,
@@ -77,9 +77,9 @@ protocol MillerColumnDelegateSpyMethods of MillerColumnDelegate:
     discard view
     delegate.selected.add $column & ":" & $row & ":" & identifier
 
-  method didActivateMillerColumnItem(
-      delegate: MillerColumnDelegateSpy,
-      view: MillerColumnView,
+  method didActivateCascadingItem(
+      delegate: CascadingDelegateSpy,
+      view: CascadingView,
       column: int,
       row: int,
       identifier: string,
@@ -87,8 +87,8 @@ protocol MillerColumnDelegateSpyMethods of MillerColumnDelegate:
     discard view
     delegate.activated.add $column & ":" & $row & ":" & identifier
 
-  method rowHeightForMillerColumn(
-      delegate: MillerColumnDelegateSpy, view: MillerColumnView, column: int
+  method rowHeightForCascadingColumn(
+      delegate: CascadingDelegateSpy, view: CascadingView, column: int
   ): float32 =
     discard view
     if column in 0 ..< delegate.heights.len:
@@ -96,47 +96,45 @@ protocol MillerColumnDelegateSpyMethods of MillerColumnDelegate:
     else:
       18.0'f32
 
-protocol MillerColumnSignalSpyEvents from MillerColumnSignalSpy:
-  includes MillerColumnEvents
+protocol CascadingSignalSpyEvents from CascadingSignalSpy:
+  includes CascadingEvents
 
-  proc selectionIsChanging(spy: MillerColumnSignalSpy, sender: DynamicAgent) {.slot.} =
+  proc selectionIsChanging(spy: CascadingSignalSpy, sender: DynamicAgent) {.slot.} =
     inc spy.changing
     spy.lastSender = sender
 
-  proc selectionDidChange(spy: MillerColumnSignalSpy, sender: DynamicAgent) {.slot.} =
+  proc selectionDidChange(spy: CascadingSignalSpy, sender: DynamicAgent) {.slot.} =
     inc spy.changed
     spy.lastSender = sender
 
-  proc itemWasActivated(spy: MillerColumnSignalSpy, sender: DynamicAgent) {.slot.} =
+  proc itemWasActivated(spy: CascadingSignalSpy, sender: DynamicAgent) {.slot.} =
     inc spy.activated
     spy.lastSender = sender
 
-proc newMillerColumnSourceSpy(
-    items: openArray[MillerColumnItem]
-): MillerColumnSourceSpy =
-  result = MillerColumnSourceSpy(items: @items)
+proc newCascadingSourceSpy(items: openArray[CascadingItem]): CascadingSourceSpy =
+  result = CascadingSourceSpy(items: @items)
   initResponder(result)
-  discard result.withProtocol(MillerColumnSourceSpyMethods)
+  discard result.withProtocol(CascadingSourceSpyMethods)
 
-proc newMillerColumnDelegateSpy(): MillerColumnDelegateSpy =
-  result = MillerColumnDelegateSpy()
+proc newCascadingDelegateSpy(): CascadingDelegateSpy =
+  result = CascadingDelegateSpy()
   initResponder(result)
-  discard result.withProtocol(MillerColumnDelegateSpyMethods)
+  discard result.withProtocol(CascadingDelegateSpyMethods)
 
-proc newMillerColumnSignalSpy(): MillerColumnSignalSpy =
-  result = MillerColumnSignalSpy()
+proc newCascadingSignalSpy(): CascadingSignalSpy =
+  result = CascadingSignalSpy()
   initResponder(result)
   result = result.withProto()
 
-suite "NimKit MillerColumnView":
-  test "view flattens path selections into Miller columns":
-    let view = newMillerColumnView(frame = initRect(0, 0, 360, 160))
-    view.millerColumnItems = [
-      initMillerColumnItem("project", "Project"),
-      initMillerColumnItem("notes", "Notes", leaf = true),
-      initMillerColumnItem("src", "src", parentIdentifier = "project"),
-      initMillerColumnItem("tests", "tests", parentIdentifier = "project", leaf = true),
-      initMillerColumnItem("main", "main.nim", parentIdentifier = "src", leaf = true),
+suite "NimKit CascadingView":
+  test "view flattens path selections into cascading columns":
+    let view = newCascadingView(frame = initRect(0, 0, 360, 160))
+    view.cascadingItems = [
+      initCascadingItem("project", "Project"),
+      initCascadingItem("notes", "Notes", leaf = true),
+      initCascadingItem("src", "src", parentIdentifier = "project"),
+      initCascadingItem("tests", "tests", parentIdentifier = "project", leaf = true),
+      initCascadingItem("main", "main.nim", parentIdentifier = "src", leaf = true),
     ]
 
     check view.columnCount == 1
@@ -174,25 +172,25 @@ suite "NimKit MillerColumnView":
 
   test "view data source delegate events and reload protocols":
     let
-      view = newMillerColumnView(frame = initRect(0, 0, 360, 160))
-      source = newMillerColumnSourceSpy(
+      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+      source = newCascadingSourceSpy(
         [
-          initMillerColumnItem("root", "Root"),
-          initMillerColumnItem("blocked", "Blocked", leaf = true),
-          initMillerColumnItem("child", "Child", parentIdentifier = "root", leaf = true),
+          initCascadingItem("root", "Root"),
+          initCascadingItem("blocked", "Blocked", leaf = true),
+          initCascadingItem("child", "Child", parentIdentifier = "root", leaf = true),
         ]
       )
-      delegate = newMillerColumnDelegateSpy()
-      signals = newMillerColumnSignalSpy()
+      delegate = newCascadingDelegateSpy()
+      signals = newCascadingSignalSpy()
 
     delegate.denied = @["blocked"]
     delegate.heights = @[22.0'f32, 24.0'f32]
     view.dataSource = source
     view.delegate = delegate
-    signals.observeProtocol(view, MillerColumnEvents)
+    signals.observeProtocol(view, CascadingEvents)
 
-    check view.conformsTo(MillerColumnSelectionProtocol)
-    check view.conformsTo(MillerColumnReloadProtocol)
+    check view.conformsTo(CascadingSelectionProtocol)
+    check view.conformsTo(CascadingReloadProtocol)
     check view.childrenForParent("").len == 2
     check view.tableViewForColumn(0).rowHeightForRow(0) == 22.0'f32
 

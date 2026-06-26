@@ -5,16 +5,16 @@ import merenda/nimkit
 import sigils/core
 
 type
-  MillerColumnDemoNode = object
-    item: MillerColumnItem
+  CascadingDemoNode = object
+    item: CascadingItem
     kind: string
     owner: string
     status: string
     detail: string
 
-  MillerColumnDemoController = ref object of Responder
-    nodes: seq[MillerColumnDemoNode]
-    millerColumnView: MillerColumnView
+  CascadingDemoController = ref object of Responder
+    nodes: seq[CascadingDemoNode]
+    cascadingView: CascadingView
     title: Label
     metadata: Label
     detail: Label
@@ -23,16 +23,16 @@ type
 proc initNode(
     identifier, title, parentIdentifier, kind, owner, status, detail: string,
     leaf = false,
-): MillerColumnDemoNode =
-  MillerColumnDemoNode(
-    item: initMillerColumnItem(identifier, title, parentIdentifier, leaf),
+): CascadingDemoNode =
+  CascadingDemoNode(
+    item: initCascadingItem(identifier, title, parentIdentifier, leaf),
     kind: kind,
     owner: owner,
     status: status,
     detail: detail,
   )
 
-proc demoNodes(): seq[MillerColumnDemoNode] =
+proc demoNodes(): seq[CascadingDemoNode] =
   @[
     initNode(
       "apps", "Applications", "", "Workspace", "Application", "Ready",
@@ -87,16 +87,16 @@ proc demoNodes(): seq[MillerColumnDemoNode] =
     initNode(
       "container-layer", "Containers", "framework", "Framework Area", "Container",
       "Active",
-      "Stack, form, grid, tab, split, scroll, table, outline, box, and Miller-column views.",
+      "Stack, form, grid, tab, split, scroll, table, outline, box, and CascadingView presets.",
     ),
     initNode(
-      "miller-column-view",
-      "MillerColumnView",
+      "cascading-view",
+      "CascadingView",
       "container-layer",
       "Widget",
       "Containers",
       "New",
-      "Miller-column view backed by MillerColumnDataSource and MillerColumnDelegate protocols.",
+      "CascadingView using the Miller Column preset from initCascadingMillerColumn(), backed by CascadingDataSource and CascadingDelegate protocols.",
       leaf = true,
     ),
     initNode(
@@ -142,21 +142,21 @@ proc demoNodes(): seq[MillerColumnDemoNode] =
   ]
 
 proc nodeForIdentifier(
-    controller: MillerColumnDemoController, identifier: string
-): MillerColumnDemoNode =
+    controller: CascadingDemoController, identifier: string
+): CascadingDemoNode =
   for node in controller.nodes:
     if node.item.identifier == identifier:
       return node
 
 proc childNodes(
-    controller: MillerColumnDemoController, parentIdentifier: string
-): seq[MillerColumnDemoNode] =
+    controller: CascadingDemoController, parentIdentifier: string
+): seq[CascadingDemoNode] =
   for node in controller.nodes:
     if node.item.parentIdentifier == parentIdentifier:
       result.add node
 
-proc selectedTrail(controller: MillerColumnDemoController): string =
-  let path = controller.millerColumnView.selectedPath()
+proc selectedTrail(controller: CascadingDemoController): string =
+  let path = controller.cascadingView.selectedPath()
   if path.len == 0:
     return "No selection"
   var titles: seq[string]
@@ -166,10 +166,10 @@ proc selectedTrail(controller: MillerColumnDemoController): string =
       titles.add node.item.title
   titles.join(" / ")
 
-proc updateDetail(controller: MillerColumnDemoController, identifier: string) =
+proc updateDetail(controller: CascadingDemoController, identifier: string) =
   let node = controller.nodeForIdentifier(identifier)
   if node.item.identifier.len == 0:
-    controller.title.text = "NimKit MillerColumnView"
+    controller.title.text = "NimKit CascadingView"
     controller.metadata.text = "No item selected"
     controller.detail.text = ""
     return
@@ -180,18 +180,16 @@ proc updateDetail(controller: MillerColumnDemoController, identifier: string) =
     controller.selectedTrail()
   controller.detail.text = node.detail
 
-protocol MillerColumnDemoDataSource of MillerColumnDataSource:
-  method millerColumnNumberOfChildren(
-      controller: MillerColumnDemoController,
-      view: MillerColumnView,
-      parentIdentifier: string,
+protocol CascadingDemoDataSource of CascadingDataSource:
+  method cascadingNumberOfChildren(
+      controller: CascadingDemoController, view: CascadingView, parentIdentifier: string
   ): int =
     discard view
     controller.childNodes(parentIdentifier).len
 
-  method millerColumnChildIdentifier(
-      controller: MillerColumnDemoController,
-      view: MillerColumnView,
+  method cascadingChildIdentifier(
+      controller: CascadingDemoController,
+      view: CascadingView,
       parentIdentifier: string,
       index: int,
   ): string =
@@ -200,16 +198,16 @@ protocol MillerColumnDemoDataSource of MillerColumnDataSource:
     if index in 0 ..< children.len:
       result = children[index].item.identifier
 
-  method millerColumnItem(
-      controller: MillerColumnDemoController, view: MillerColumnView, identifier: string
-  ): MillerColumnItem =
+  method cascadingItem(
+      controller: CascadingDemoController, view: CascadingView, identifier: string
+  ): CascadingItem =
     discard view
     controller.nodeForIdentifier(identifier).item
 
-protocol MillerColumnDemoDelegate of MillerColumnDelegate:
-  method didSelectMillerColumnItem(
-      controller: MillerColumnDemoController,
-      view: MillerColumnView,
+protocol CascadingDemoDelegate of CascadingDelegate:
+  method didSelectCascadingItem(
+      controller: CascadingDemoController,
+      view: CascadingView,
       column: int,
       row: int,
       identifier: string,
@@ -220,9 +218,9 @@ protocol MillerColumnDemoDelegate of MillerColumnDelegate:
     controller.updateDetail(identifier)
     controller.activity.text = "Selected " & controller.selectedTrail()
 
-  method didActivateMillerColumnItem(
-      controller: MillerColumnDemoController,
-      view: MillerColumnView,
+  method didActivateCascadingItem(
+      controller: CascadingDemoController,
+      view: CascadingView,
       column: int,
       row: int,
       identifier: string,
@@ -234,29 +232,28 @@ protocol MillerColumnDemoDelegate of MillerColumnDelegate:
     if node.item.identifier.len > 0:
       controller.activity.text = "Activated " & node.item.title
 
-proc newMillerColumnDemoController(): MillerColumnDemoController =
-  result = MillerColumnDemoController(nodes: demoNodes())
+proc newCascadingDemoController(): CascadingDemoController =
+  result = CascadingDemoController(nodes: demoNodes())
   initResponder(result)
-  discard result.withProtocol(MillerColumnDemoDataSource)
-  discard result.withProtocol(MillerColumnDemoDelegate)
+  discard result.withProtocol(CascadingDemoDataSource)
+  discard result.withProtocol(CascadingDemoDelegate)
 
 let
   app = sharedApplication()
-  window =
-    newWindow("NimKit MillerColumnView Demo", frame = initRect(140, 120, 760, 420))
+  window = newWindow("NimKit CascadingView Demo", frame = initRect(140, 120, 760, 420))
   root = newView()
   split = newSplitView(laHorizontal)
   detailPane = newStackView(laVertical)
-  controller = newMillerColumnDemoController()
+  controller = newCascadingDemoController()
 
-controller.millerColumnView = newMillerColumnView()
-controller.millerColumnView.columnWidth = 170.0
-controller.millerColumnView.minColumnWidth = 120.0
-controller.millerColumnView.dataSource = controller
-controller.millerColumnView.delegate = controller
-controller.millerColumnView.accessibilityLabel = "NimKit MillerColumnView Demo"
+controller.cascadingView = newCascadingView()
+controller.cascadingView.columnWidth = 170.0
+controller.cascadingView.minColumnWidth = 120.0
+controller.cascadingView.dataSource = controller
+controller.cascadingView.delegate = controller
+controller.cascadingView.accessibilityLabel = "NimKit CascadingView Demo"
 
-controller.title = newTitleLabel("NimKit MillerColumnView")
+controller.title = newTitleLabel("NimKit CascadingView")
 controller.metadata = newStatusLabel("No item selected")
 controller.detail = newStatusLabel("")
 controller.activity = newStatusLabel("Ready")
@@ -274,7 +271,7 @@ detailPane.addArrangedSubview(
   controller.activity,
 )
 
-split.addPane(controller.millerColumnView, minSize = 260.0)
+split.addPane(controller.cascadingView, minSize = 260.0)
 split.addPane(detailPane, minSize = 240.0)
 split.setPositionOfDivider(0, 380.0)
 
@@ -284,9 +281,9 @@ split.pinEdges(
   edges = {leLeft, leTop, leRight, leBottom},
 )
 
-controller.millerColumnView.selectedPath =
-  @["framework", "container-layer", "miller-column-view"]
-controller.updateDetail("miller-column-view")
+controller.cascadingView.selectedPath =
+  @["framework", "container-layer", "cascading-view"]
+controller.updateDetail("cascading-view")
 
 window.minSize = initSize(560.0, 320.0)
 window.setContentView(root)

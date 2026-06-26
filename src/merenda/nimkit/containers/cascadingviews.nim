@@ -15,21 +15,21 @@ import ./tableviews
 export controls, scrollviews, tableviews
 
 type
-  MillerColumnItem* = object
+  CascadingItem* = object
     identifier*: string
     parentIdentifier*: string
     title*: string
     leaf*: bool
 
-  MillerColumnSelection* = object
+  CascadingSelection* = object
     column*: int
     row*: int
     identifier*: string
     title*: string
     leaf*: bool
 
-  MillerColumnView* = ref object of Control
-    xItems: seq[MillerColumnItem]
+  CascadingView* = ref object of Control
+    xItems: seq[CascadingItem]
     xDataSource: DynamicAgent
     xDelegate: DynamicAgent
     xColumns: seq[TableView]
@@ -41,130 +41,130 @@ type
     xSyncingColumnSelection: bool
 
 const
-  MillerColumnDefaultColumnWidth = 160.0'f32
-  MillerColumnDefaultMinColumnWidth = 72.0'f32
-  MillerColumnDefaultColumnSpacing = 1.0'f32
+  CascadingDefaultColumnWidth = 160.0'f32
+  CascadingDefaultMinColumnWidth = 72.0'f32
+  CascadingDefaultColumnSpacing = 1.0'f32
 
-proc reloadData*(view: MillerColumnView)
-proc selectItem*(view: MillerColumnView, column, row: int)
-proc selectedItem*(view: MillerColumnView): MillerColumnSelection
-proc tableViewForColumn*(view: MillerColumnView, column: int): TableView
-proc columnForTableView(view: MillerColumnView, tableView: TableView): int
-proc millerColumnItemWithIdentifier*(
-  view: MillerColumnView, identifier: string
-): MillerColumnItem
+proc reloadData*(view: CascadingView)
+proc selectItem*(view: CascadingView, column, row: int)
+proc selectedItem*(view: CascadingView): CascadingSelection
+proc tableViewForColumn*(view: CascadingView, column: int): TableView
+proc columnForTableView(view: CascadingView, tableView: TableView): int
+proc cascadingItemWithIdentifier*(
+  view: CascadingView, identifier: string
+): CascadingItem
 
 proc childrenForParent*(
-  view: MillerColumnView, parentIdentifier: string
-): seq[MillerColumnItem]
+  view: CascadingView, parentIdentifier: string
+): seq[CascadingItem]
 
-proc itemHasChildren*(view: MillerColumnView, identifier: string): bool
-proc applySelectedPath(view: MillerColumnView, path: openArray[string])
+proc itemHasChildren*(view: CascadingView, identifier: string): bool
+proc applySelectedPath(view: CascadingView, path: openArray[string])
 
-protocol MillerColumnDataSource {.selectorScope: protocol.}:
-  method millerColumnNumberOfChildren*(
-    view: MillerColumnView, parentIdentifier: string
+protocol CascadingDataSource {.selectorScope: protocol.}:
+  method cascadingNumberOfChildren*(
+    view: CascadingView, parentIdentifier: string
   ): int {.optional.}
 
-  method millerColumnChildIdentifier*(
-    view: MillerColumnView, parentIdentifier: string, index: int
+  method cascadingChildIdentifier*(
+    view: CascadingView, parentIdentifier: string, index: int
   ): string {.optional.}
 
-  method millerColumnItem*(
-    view: MillerColumnView, identifier: string
-  ): MillerColumnItem {.optional.}
+  method cascadingItem*(
+    view: CascadingView, identifier: string
+  ): CascadingItem {.optional.}
 
-  method titleForMillerColumnItem*(
-    view: MillerColumnView, identifier: string
+  method cascadingItemTitle*(
+    view: CascadingView, identifier: string
   ): string {.optional.}
 
-  method isLeafMillerColumnItem*(
-    view: MillerColumnView, identifier: string
+  method isLeafCascadingItem*(
+    view: CascadingView, identifier: string
   ): bool {.optional.}
 
-protocol MillerColumnDelegate {.selectorScope: protocol.}:
-  method shouldSelectMillerColumnItem*(
-    view: MillerColumnView, column: int, row: int, identifier: string
+protocol CascadingDelegate {.selectorScope: protocol.}:
+  method shouldSelectCascadingItem*(
+    view: CascadingView, column: int, row: int, identifier: string
   ): bool {.optional.}
 
-  method didSelectMillerColumnItem*(
-    view: MillerColumnView, column: int, row: int, identifier: string
+  method didSelectCascadingItem*(
+    view: CascadingView, column: int, row: int, identifier: string
   ) {.optional.}
 
-  method didActivateMillerColumnItem*(
-    view: MillerColumnView, column: int, row: int, identifier: string
+  method didActivateCascadingItem*(
+    view: CascadingView, column: int, row: int, identifier: string
   ) {.optional.}
 
-  method rowHeightForMillerColumn*(
-    view: MillerColumnView, column: int
+  method rowHeightForCascadingColumn*(
+    view: CascadingView, column: int
   ): float32 {.optional.}
 
-protocol MillerColumnEvents:
-  proc selectionIsChanging*(view: MillerColumnView, sender: DynamicAgent) {.signal.}
-  proc selectionDidChange*(view: MillerColumnView, sender: DynamicAgent) {.signal.}
-  proc itemWasActivated*(view: MillerColumnView, sender: DynamicAgent) {.signal.}
+protocol CascadingEvents:
+  proc selectionIsChanging*(view: CascadingView, sender: DynamicAgent) {.signal.}
+  proc selectionDidChange*(view: CascadingView, sender: DynamicAgent) {.signal.}
+  proc itemWasActivated*(view: CascadingView, sender: DynamicAgent) {.signal.}
 
-protocol MillerColumnSelectionProtocol:
-  method millerColumnSelectedPath*(): seq[string]
-  method setMillerColumnSelectedPath*(path: seq[string])
-  method selectMillerColumnItem*(column, row: int)
-  method millerColumnSelection*(): MillerColumnSelection
+protocol CascadingSelectionProtocol:
+  method selectionPath*(): seq[string]
+  method setSelectionPath*(path: seq[string])
+  method selectItemAt*(column, row: int)
+  method currentSelection*(): CascadingSelection
 
-protocol MillerColumnReloadProtocol:
-  method reloadMillerColumnData*()
-  method reloadMillerColumn*(column: int)
+protocol CascadingReloadProtocol:
+  method reloadViewData*()
+  method reloadViewColumn*(column: int)
 
-proc initMillerColumnItem*(
+proc initCascadingItem*(
     identifier: string, title: string, parentIdentifier = "", leaf = false
-): MillerColumnItem =
-  MillerColumnItem(
+): CascadingItem =
+  CascadingItem(
     identifier: identifier, parentIdentifier: parentIdentifier, title: title, leaf: leaf
   )
 
-proc dataSource*(view: MillerColumnView): DynamicAgent =
+proc dataSource*(view: CascadingView): DynamicAgent =
   if view.isNil: nil else: view.xDataSource
 
-proc `dataSource=`*(view: MillerColumnView, dataSource: DynamicAgent) =
+proc `dataSource=`*(view: CascadingView, dataSource: DynamicAgent) =
   if view.isNil or view.xDataSource == dataSource:
     return
   if not dataSource.isNil:
-    discard dataSource.adopt(MillerColumnDataSource)
+    discard dataSource.adopt(CascadingDataSource)
   view.xDataSource = dataSource
   view.reloadData()
 
-proc `dataSource=`*(view: MillerColumnView, dataSource: Responder) =
+proc `dataSource=`*(view: CascadingView, dataSource: Responder) =
   view.dataSource = DynamicAgent(dataSource)
 
-proc delegate*(view: MillerColumnView): DynamicAgent =
+proc delegate*(view: CascadingView): DynamicAgent =
   if view.isNil: nil else: view.xDelegate
 
-proc `delegate=`*(view: MillerColumnView, delegate: DynamicAgent) =
+proc `delegate=`*(view: CascadingView, delegate: DynamicAgent) =
   if view.isNil or view.xDelegate == delegate:
     return
   if not delegate.isNil:
-    discard delegate.adopt(MillerColumnDelegate)
+    discard delegate.adopt(CascadingDelegate)
   view.xDelegate = delegate
   view.reloadData()
 
-proc `delegate=`*(view: MillerColumnView, delegate: Responder) =
+proc `delegate=`*(view: CascadingView, delegate: Responder) =
   view.delegate = DynamicAgent(delegate)
 
-proc millerColumnItems*(view: MillerColumnView): seq[MillerColumnItem] =
+proc cascadingItems*(view: CascadingView): seq[CascadingItem] =
   if view.isNil:
     @[]
   else:
     view.xItems
 
-proc `millerColumnItems=`*(view: MillerColumnView, items: openArray[MillerColumnItem]) =
+proc `cascadingItems=`*(view: CascadingView, items: openArray[CascadingItem]) =
   if view.isNil:
     return
   view.xItems = @items
   view.reloadData()
 
-proc columnWidth*(view: MillerColumnView): float32 =
+proc columnWidth*(view: CascadingView): float32 =
   if view.isNil: 0.0'f32 else: view.xColumnWidth
 
-proc `columnWidth=`*(view: MillerColumnView, width: float32) =
+proc `columnWidth=`*(view: CascadingView, width: float32) =
   if view.isNil:
     return
   let nextWidth = max(width, view.xMinColumnWidth)
@@ -174,10 +174,10 @@ proc `columnWidth=`*(view: MillerColumnView, width: float32) =
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
-proc minColumnWidth*(view: MillerColumnView): float32 =
+proc minColumnWidth*(view: CascadingView): float32 =
   if view.isNil: 0.0'f32 else: view.xMinColumnWidth
 
-proc `minColumnWidth=`*(view: MillerColumnView, width: float32) =
+proc `minColumnWidth=`*(view: CascadingView, width: float32) =
   if view.isNil:
     return
   let nextWidth = max(width, 1.0'f32)
@@ -188,10 +188,10 @@ proc `minColumnWidth=`*(view: MillerColumnView, width: float32) =
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
-proc columnSpacing*(view: MillerColumnView): float32 =
+proc columnSpacing*(view: CascadingView): float32 =
   if view.isNil: 0.0'f32 else: view.xColumnSpacing
 
-proc `columnSpacing=`*(view: MillerColumnView, spacing: float32) =
+proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
   if view.isNil:
     return
   let nextSpacing = max(spacing, 0.0'f32)
@@ -201,10 +201,10 @@ proc `columnSpacing=`*(view: MillerColumnView, spacing: float32) =
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
-proc showsColumnHeaders*(view: MillerColumnView): bool =
+proc showsColumnHeaders*(view: CascadingView): bool =
   (not view.isNil) and view.xShowsColumnHeaders
 
-proc `showsColumnHeaders=`*(view: MillerColumnView, shows: bool) =
+proc `showsColumnHeaders=`*(view: CascadingView, shows: bool) =
   if view.isNil or view.xShowsColumnHeaders == shows:
     return
   view.xShowsColumnHeaders = shows
@@ -213,16 +213,16 @@ proc `showsColumnHeaders=`*(view: MillerColumnView, shows: bool) =
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
-proc columnCount*(view: MillerColumnView): int =
+proc columnCount*(view: CascadingView): int =
   if view.isNil: 0 else: view.xColumns.len
 
-proc tableViewForColumn*(view: MillerColumnView, column: int): TableView =
+proc tableViewForColumn*(view: CascadingView, column: int): TableView =
   if view.isNil or column notin 0 ..< view.xColumns.len:
     nil
   else:
     view.xColumns[column]
 
-proc columnForTableView(view: MillerColumnView, tableView: TableView): int =
+proc columnForTableView(view: CascadingView, tableView: TableView): int =
   if view.isNil:
     return -1
   for index, column in view.xColumns:
@@ -231,48 +231,47 @@ proc columnForTableView(view: MillerColumnView, tableView: TableView): int =
   -1
 
 proc localItemWithIdentifier(
-    view: MillerColumnView, identifier: string
-): tuple[found: bool, item: MillerColumnItem] =
+    view: CascadingView, identifier: string
+): tuple[found: bool, item: CascadingItem] =
   if view.isNil:
     return
   for item in view.xItems:
     if item.identifier == identifier:
       return (true, item)
 
-proc millerColumnItemWithIdentifier*(
-    view: MillerColumnView, identifier: string
-): MillerColumnItem =
+proc cascadingItemWithIdentifier*(
+    view: CascadingView, identifier: string
+): CascadingItem =
   if view.isNil or identifier.len == 0:
     return
   let source = view.dataSource()
   if not source.isNil:
     let item =
-      source.trySendLocal(millerColumnItem(), (view: view, identifier: identifier))
+      source.trySendLocal(cascadingItem(), (view: view, identifier: identifier))
     if item.isSome:
       result = item.get()
       if result.identifier.len == 0:
         result.identifier = identifier
       if result.title.len == 0:
         let title = source.trySendLocal(
-          titleForMillerColumnItem(), (view: view, identifier: identifier)
+          cascadingItemTitle(), (view: view, identifier: identifier)
         )
         if title.isSome:
           result.title = title.get()
       if result.title.len == 0:
         result.title = result.identifier
       return
-    let title = source.trySendLocal(
-      titleForMillerColumnItem(), (view: view, identifier: identifier)
-    )
+    let title =
+      source.trySendLocal(cascadingItemTitle(), (view: view, identifier: identifier))
     if title.isSome:
-      return initMillerColumnItem(identifier, title.get())
+      return initCascadingItem(identifier, title.get())
   let local = view.localItemWithIdentifier(identifier)
   if local.found:
     local.item
   else:
-    initMillerColumnItem(identifier, identifier, leaf = true)
+    initCascadingItem(identifier, identifier, leaf = true)
 
-proc parentIdentifierForColumn(view: MillerColumnView, column: int): string =
+proc parentIdentifierForColumn(view: CascadingView, column: int): string =
   if view.isNil or column <= 0:
     return ""
   if column - 1 in 0 ..< view.xSelectedPath.len:
@@ -281,24 +280,24 @@ proc parentIdentifierForColumn(view: MillerColumnView, column: int): string =
     ""
 
 proc childrenForParent*(
-    view: MillerColumnView, parentIdentifier: string
-): seq[MillerColumnItem] =
+    view: CascadingView, parentIdentifier: string
+): seq[CascadingItem] =
   if view.isNil:
     return @[]
   let source = view.dataSource()
   if not source.isNil:
     let count = source.trySendLocal(
-      millerColumnNumberOfChildren(), (view: view, parentIdentifier: parentIdentifier)
+      cascadingNumberOfChildren(), (view: view, parentIdentifier: parentIdentifier)
     )
     if count.isSome:
       for index in 0 ..< max(count.get(), 0):
         let identifier = source.trySendLocal(
-          millerColumnChildIdentifier(),
+          cascadingChildIdentifier(),
           (view: view, parentIdentifier: parentIdentifier, index: index),
         )
         if identifier.isNone or identifier.get().len == 0:
           continue
-        var item = view.millerColumnItemWithIdentifier(identifier.get())
+        var item = view.cascadingItemWithIdentifier(identifier.get())
         if item.parentIdentifier.len == 0 and parentIdentifier.len > 0:
           item.parentIdentifier = parentIdentifier
         result.add item
@@ -307,19 +306,18 @@ proc childrenForParent*(
     if item.parentIdentifier == parentIdentifier:
       result.add item
 
-proc itemHasChildren*(view: MillerColumnView, identifier: string): bool =
+proc itemHasChildren*(view: CascadingView, identifier: string): bool =
   if view.isNil or identifier.len == 0:
     return false
   let source = view.dataSource()
   if not source.isNil:
     let count = source.trySendLocal(
-      millerColumnNumberOfChildren(), (view: view, parentIdentifier: identifier)
+      cascadingNumberOfChildren(), (view: view, parentIdentifier: identifier)
     )
     if count.isSome:
       return count.get() > 0
-    let leaf = source.trySendLocal(
-      isLeafMillerColumnItem(), (view: view, identifier: identifier)
-    )
+    let leaf =
+      source.trySendLocal(isLeafCascadingItem(), (view: view, identifier: identifier))
     if leaf.isSome:
       return not leaf.get()
   for item in view.xItems:
@@ -327,13 +325,13 @@ proc itemHasChildren*(view: MillerColumnView, identifier: string): bool =
       return true
   false
 
-proc millerColumnItemIsLeaf(view: MillerColumnView, item: MillerColumnItem): bool =
+proc cascadingItemIsLeaf(view: CascadingView, item: CascadingItem): bool =
   if item.identifier.len == 0:
     return true
   let source = view.dataSource()
   if not source.isNil:
     let leaf = source.trySendLocal(
-      isLeafMillerColumnItem(), (view: view, identifier: item.identifier)
+      isLeafCascadingItem(), (view: view, identifier: item.identifier)
     )
     if leaf.isSome:
       return leaf.get()
@@ -341,8 +339,8 @@ proc millerColumnItemIsLeaf(view: MillerColumnView, item: MillerColumnItem): boo
     return true
   not view.itemHasChildren(item.identifier)
 
-proc millerColumnRowForIdentifier(
-    view: MillerColumnView, parentIdentifier, identifier: string
+proc cascadingRowForIdentifier(
+    view: CascadingView, parentIdentifier, identifier: string
 ): int =
   if view.isNil or identifier.len == 0:
     return -1
@@ -351,50 +349,50 @@ proc millerColumnRowForIdentifier(
       return index
   -1
 
-proc itemForColumnRow(view: MillerColumnView, column, row: int): MillerColumnItem =
+proc itemForColumnRow(view: CascadingView, column, row: int): CascadingItem =
   if view.isNil or row < 0:
     return
   let children = view.childrenForParent(view.parentIdentifierForColumn(column))
   if row in 0 ..< children.len:
     result = children[row]
 
-proc titleForItem(view: MillerColumnView, item: MillerColumnItem): string =
+proc titleForItem(view: CascadingView, item: CascadingItem): string =
   if item.title.len > 0: item.title else: item.identifier
 
 proc selectionFor(
-    view: MillerColumnView, column, row: int, item: MillerColumnItem
-): MillerColumnSelection =
-  MillerColumnSelection(
+    view: CascadingView, column, row: int, item: CascadingItem
+): CascadingSelection =
+  CascadingSelection(
     column: column,
     row: row,
     identifier: item.identifier,
     title: view.titleForItem(item),
-    leaf: view.millerColumnItemIsLeaf(item),
+    leaf: view.cascadingItemIsLeaf(item),
   )
 
-proc selectedPath*(view: MillerColumnView): seq[string] =
+proc selectedPath*(view: CascadingView): seq[string] =
   if view.isNil:
     @[]
   else:
     view.xSelectedPath
 
-proc `selectedPath=`*(view: MillerColumnView, path: openArray[string]) =
+proc `selectedPath=`*(view: CascadingView, path: openArray[string]) =
   if view.isNil:
     return
   view.applySelectedPath(path)
 
-proc selectedItem*(view: MillerColumnView): MillerColumnSelection =
+proc selectedItem*(view: CascadingView): CascadingSelection =
   if view.isNil or view.xSelectedPath.len == 0:
-    return MillerColumnSelection(column: -1, row: -1)
+    return CascadingSelection(column: -1, row: -1)
   let
     column = view.xSelectedPath.high
     identifier = view.xSelectedPath[^1]
     parent = view.parentIdentifierForColumn(column)
-    row = view.millerColumnRowForIdentifier(parent, identifier)
-    item = view.millerColumnItemWithIdentifier(identifier)
+    row = view.cascadingRowForIdentifier(parent, identifier)
+    item = view.cascadingItemWithIdentifier(identifier)
   view.selectionFor(column, row, item)
 
-proc desiredColumnCount(view: MillerColumnView): int =
+proc desiredColumnCount(view: CascadingView): int =
   if view.isNil or view.xSelectedPath.len == 0:
     return 1
   let selected = view.xSelectedPath[^1]
@@ -403,7 +401,7 @@ proc desiredColumnCount(view: MillerColumnView): int =
   else:
     view.xSelectedPath.len
 
-proc syncMillerColumnLayout(view: MillerColumnView) =
+proc syncCascadingLayout(view: CascadingView) =
   if view.isNil:
     return
   let bounds = view.bounds()
@@ -419,7 +417,7 @@ proc syncMillerColumnLayout(view: MillerColumnView) =
     if index < view.xColumns.high:
       x += view.xColumnSpacing
 
-proc updateColumnSelections(view: MillerColumnView) =
+proc updateColumnSelections(view: CascadingView) =
   if view.isNil:
     return
   view.xSyncingColumnSelection = true
@@ -427,7 +425,7 @@ proc updateColumnSelections(view: MillerColumnView) =
     for columnIndex, tableView in view.xColumns:
       tableView.reloadData()
       if columnIndex in 0 ..< view.xSelectedPath.len:
-        let row = view.millerColumnRowForIdentifier(
+        let row = view.cascadingRowForIdentifier(
           view.parentIdentifierForColumn(columnIndex), view.xSelectedPath[columnIndex]
         )
         tableView.selectedIndex = row
@@ -436,7 +434,7 @@ proc updateColumnSelections(view: MillerColumnView) =
   finally:
     view.xSyncingColumnSelection = false
 
-proc initMillerColumnTableView(view: MillerColumnView): TableView =
+proc initCascadingTableView(view: CascadingView): TableView =
   result = newTableView()
   result.showsHeader = view.xShowsColumnHeaders
   result.usesAlternatingRowBackgrounds = false
@@ -450,7 +448,7 @@ proc initMillerColumnTableView(view: MillerColumnView): TableView =
   result.autoresizingMaskConstraints = false
   result.setAcceptsFirstResponder(true)
 
-proc syncMillerColumnColumns(view: MillerColumnView) =
+proc syncCascadingColumns(view: CascadingView) =
   if view.isNil:
     return
   let needed = view.desiredColumnCount()
@@ -460,19 +458,19 @@ proc syncMillerColumnColumns(view: MillerColumnView) =
     if not tableView.isNil:
       tableView.removeFromSuperview()
   while view.xColumns.len < needed:
-    let tableView = view.initMillerColumnTableView()
+    let tableView = view.initCascadingTableView()
     view.xColumns.add tableView
     view.addSubview(tableView)
-  view.syncMillerColumnLayout()
+  view.syncCascadingLayout()
   view.updateColumnSelections()
 
-proc pruneSelectedPath(view: MillerColumnView) =
+proc pruneSelectedPath(view: CascadingView) =
   if view.isNil:
     return
   var parent = ""
   var nextPath: seq[string]
   for identifier in view.xSelectedPath:
-    let row = view.millerColumnRowForIdentifier(parent, identifier)
+    let row = view.cascadingRowForIdentifier(parent, identifier)
     if row < 0:
       break
     nextPath.add identifier
@@ -481,9 +479,7 @@ proc pruneSelectedPath(view: MillerColumnView) =
     parent = identifier
   view.xSelectedPath = nextPath
 
-proc normalizedSelectedPath(
-    view: MillerColumnView, path: openArray[string]
-): seq[string] =
+proc normalizedSelectedPath(view: CascadingView, path: openArray[string]): seq[string] =
   if view.isNil:
     return @[]
   let oldPath = view.xSelectedPath
@@ -492,7 +488,7 @@ proc normalizedSelectedPath(
   result = view.xSelectedPath
   view.xSelectedPath = oldPath
 
-proc applySelectedPath(view: MillerColumnView, path: openArray[string]) =
+proc applySelectedPath(view: CascadingView, path: openArray[string]) =
   if view.isNil:
     return
   let nextPath = view.normalizedSelectedPath(path)
@@ -501,25 +497,25 @@ proc applySelectedPath(view: MillerColumnView, path: openArray[string]) =
     return
   emit view.selectionIsChanging(DynamicAgent(view))
   view.xSelectedPath = nextPath
-  view.syncMillerColumnColumns()
+  view.syncCascadingColumns()
   emit view.selectionDidChange(DynamicAgent(view))
 
-proc reloadData*(view: MillerColumnView) =
+proc reloadData*(view: CascadingView) =
   if view.isNil:
     return
   view.pruneSelectedPath()
-  view.syncMillerColumnColumns()
+  view.syncCascadingColumns()
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
-proc reloadColumn*(view: MillerColumnView, column: int) =
+proc reloadColumn*(view: CascadingView, column: int) =
   if view.isNil or column < 0:
     return
   if column < view.xSelectedPath.len:
     view.xSelectedPath.setLen(column)
   view.reloadData()
 
-proc selectItem*(view: MillerColumnView, column, row: int) =
+proc selectItem*(view: CascadingView, column, row: int) =
   if view.isNil or column < 0:
     return
   let item = view.itemForColumnRow(column, row)
@@ -528,7 +524,7 @@ proc selectItem*(view: MillerColumnView, column, row: int) =
   let delegate = view.delegate()
   if not delegate.isNil:
     let allowed = delegate.trySendLocal(
-      shouldSelectMillerColumnItem(),
+      shouldSelectCascadingItem(),
       (view: view, column: column, row: row, identifier: item.identifier),
     )
     if allowed.isSome and not allowed.get():
@@ -552,15 +548,15 @@ proc selectItem*(view: MillerColumnView, column, row: int) =
 
   emit view.selectionIsChanging(DynamicAgent(view))
   view.xSelectedPath = nextPath
-  view.syncMillerColumnColumns()
+  view.syncCascadingColumns()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
-      didSelectMillerColumnItem(),
+      didSelectCascadingItem(),
       (view: view, column: column, row: row, identifier: item.identifier),
     )
   emit view.selectionDidChange(DynamicAgent(view))
 
-proc activateMillerColumnItem(view: MillerColumnView, column, row: int) =
+proc activateCascadingItem(view: CascadingView, column, row: int) =
   if view.isNil or column < 0 or row < 0:
     return
   let item = view.itemForColumnRow(column, row)
@@ -570,21 +566,21 @@ proc activateMillerColumnItem(view: MillerColumnView, column, row: int) =
   let delegate = view.delegate()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
-      didActivateMillerColumnItem(),
+      didActivateCascadingItem(),
       (view: view, column: column, row: row, identifier: item.identifier),
     )
   emit view.itemWasActivated(DynamicAgent(view))
   discard view.sendAction()
 
-protocol MillerColumnTableDataSource of TableViewDataSource:
-  method numberOfRows(view: MillerColumnView, tableView: TableView): int =
+protocol CascadingTableDataSource of TableViewDataSource:
+  method numberOfRows(view: CascadingView, tableView: TableView): int =
     let column = view.columnForTableView(tableView)
     if column < 0:
       return 0
     view.childrenForParent(view.parentIdentifierForColumn(column)).len
 
   method textForCell(
-      view: MillerColumnView, tableView: TableView, row: int, column: TableColumn
+      view: CascadingView, tableView: TableView, row: int, column: TableColumn
   ): string =
     discard column
     let columnIndex = view.columnForTableView(tableView)
@@ -592,40 +588,37 @@ protocol MillerColumnTableDataSource of TableViewDataSource:
       return ""
     view.titleForItem(view.itemForColumnRow(columnIndex, row))
 
-  method identifierForRow(
-      view: MillerColumnView, tableView: TableView, row: int
-  ): string =
+  method identifierForRow(view: CascadingView, tableView: TableView, row: int): string =
     let columnIndex = view.columnForTableView(tableView)
     if columnIndex < 0:
       return ""
     view.itemForColumnRow(columnIndex, row).identifier
 
   method rowForIdentifier(
-      view: MillerColumnView, tableView: TableView, identifier: string
+      view: CascadingView, tableView: TableView, identifier: string
   ): int =
     let columnIndex = view.columnForTableView(tableView)
     if columnIndex < 0:
       return -1
-    view.millerColumnRowForIdentifier(
+    view.cascadingRowForIdentifier(
       view.parentIdentifierForColumn(columnIndex), identifier
     )
 
-protocol MillerColumnTableDelegate of TableViewDelegate:
-  method tableRowHeight(
-      view: MillerColumnView, tableView: TableView, row: int
-  ): float32 =
+protocol CascadingTableDelegate of TableViewDelegate:
+  method tableRowHeight(view: CascadingView, tableView: TableView, row: int): float32 =
     discard row
     let column = view.columnForTableView(tableView)
     let delegate = view.delegate()
     if column >= 0 and not delegate.isNil:
-      let height =
-        delegate.trySendLocal(rowHeightForMillerColumn(), (view: view, column: column))
+      let height = delegate.trySendLocal(
+        rowHeightForCascadingColumn(), (view: view, column: column)
+      )
       if height.isSome:
         return height.get()
     tableView.rowHeight()
 
   method shouldSelectTableRow(
-      view: MillerColumnView, tableView: TableView, row: int
+      view: CascadingView, tableView: TableView, row: int
   ): bool =
     let column = view.columnForTableView(tableView)
     if column < 0:
@@ -637,7 +630,7 @@ protocol MillerColumnTableDelegate of TableViewDelegate:
     if delegate.isNil:
       return true
     let allowed = delegate.trySendLocal(
-      shouldSelectMillerColumnItem(),
+      shouldSelectCascadingItem(),
       (view: view, column: column, row: row, identifier: item.identifier),
     )
     if allowed.isSome:
@@ -645,17 +638,17 @@ protocol MillerColumnTableDelegate of TableViewDelegate:
     else:
       true
 
-  method didSelectTableRow(view: MillerColumnView, tableView: TableView, row: int) =
+  method didSelectTableRow(view: CascadingView, tableView: TableView, row: int) =
     if view.xSyncingColumnSelection:
       return
     view.selectItem(view.columnForTableView(tableView), row)
 
-  method didActivateRow(view: MillerColumnView, tableView: TableView, row: int) =
+  method didActivateRow(view: CascadingView, tableView: TableView, row: int) =
     let column = view.columnForTableView(tableView)
-    view.activateMillerColumnItem(column, row)
+    view.activateCascadingItem(column, row)
 
-protocol MillerColumnViewLayout of ViewLayoutProtocol:
-  method layoutIntrinsicContentSize(view: MillerColumnView): IntrinsicSize =
+protocol CascadingViewLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: CascadingView): IntrinsicSize =
     let
       count = max(view.columnCount(), 1)
       width =
@@ -664,34 +657,34 @@ protocol MillerColumnViewLayout of ViewLayoutProtocol:
       height = max(view.tableViewForColumn(0).rowHeight() * 5.0'f32, 96.0'f32)
     initIntrinsicSize(initSize(width, height))
 
-  method layoutSubviews(view: MillerColumnView) =
-    view.syncMillerColumnLayout()
+  method layoutSubviews(view: CascadingView) =
+    view.syncCascadingLayout()
 
-protocol MillerColumnSelectionBehavior of MillerColumnSelectionProtocol:
-  method millerColumnSelectedPath(view: MillerColumnView): seq[string] =
+protocol CascadingSelectionBehavior of CascadingSelectionProtocol:
+  method selectionPath(view: CascadingView): seq[string] =
     if view.isNil:
       @[]
     else:
       view.xSelectedPath
 
-  method setMillerColumnSelectedPath(view: MillerColumnView, path: seq[string]) =
+  method setSelectionPath(view: CascadingView, path: seq[string]) =
     view.applySelectedPath(path)
 
-  method selectMillerColumnItem(view: MillerColumnView, column, row: int) =
+  method selectItemAt(view: CascadingView, column, row: int) =
     view.selectItem(column, row)
 
-  method millerColumnSelection(view: MillerColumnView): MillerColumnSelection =
+  method currentSelection(view: CascadingView): CascadingSelection =
     selectedItem(view)
 
-protocol MillerColumnReloadBehavior of MillerColumnReloadProtocol:
-  method reloadMillerColumnData(view: MillerColumnView) =
+protocol CascadingReloadBehavior of CascadingReloadProtocol:
+  method reloadViewData(view: CascadingView) =
     reloadData(view)
 
-  method reloadMillerColumn(view: MillerColumnView, column: int) =
+  method reloadViewColumn(view: CascadingView, column: int) =
     reloadColumn(view, column)
 
-protocol MillerColumnDrawing of ViewDrawingProtocol:
-  method draw(view: MillerColumnView, context: DrawContext) =
+protocol CascadingDrawing of ViewDrawingProtocol:
+  method draw(view: CascadingView, context: DrawContext) =
     if view.isNil or context.isNil or view.bounds().isEmpty:
       return
     let style = context.appearance.resolveTableViewStyle(
@@ -714,48 +707,48 @@ protocol MillerColumnDrawing of ViewDrawingProtocol:
     if view.isFocusVisible():
       context.addFocusRing(context.renderRectFor(view.bounds()), style.box)
 
-protocol MillerColumnAccessibility of AccessibilityProtocol:
-  method accessibilityRole(view: MillerColumnView): AccessibilityRole =
+protocol CascadingAccessibility of AccessibilityProtocol:
+  method accessibilityRole(view: CascadingView): AccessibilityRole =
     arGroup
 
-  method accessibilityLabel(view: MillerColumnView): string =
-    if view.xAccessibilityLabel.len > 0:
-      view.xAccessibilityLabel
-    else:
-      "MillerColumnView"
+  method accessibilityLabel(view: CascadingView): string =
+    if view.xAccessibilityLabel.len > 0: view.xAccessibilityLabel else: "CascadingView"
 
-  method accessibilityValue(view: MillerColumnView): string =
+  method accessibilityValue(view: CascadingView): string =
     view.selectedPath().join("/")
 
-  method accessibilityTraits(view: MillerColumnView): AccessibilityTraits =
+  method accessibilityTraits(view: CascadingView): AccessibilityTraits =
     result = view.xAccessibilityTraits + {atSelectable}
     if ssDisabled in view.xWidgetStates:
       result.incl atDisabled
     if view.focused():
       result.incl atFocused
 
-  method isAccessibilityElement(view: MillerColumnView): bool =
+  method isAccessibilityElement(view: CascadingView): bool =
     true
 
-proc initMillerColumnViewFields*(view: MillerColumnView, frame: Rect = AutoRect) =
+proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   initControlFields(view, frame)
   view.background = initColor(0.0, 0.0, 0.0, 0.0)
   view.clipsToBounds = true
-  view.xColumnWidth = MillerColumnDefaultColumnWidth
-  view.xMinColumnWidth = MillerColumnDefaultMinColumnWidth
-  view.xColumnSpacing = MillerColumnDefaultColumnSpacing
+  view.xColumnWidth = CascadingDefaultColumnWidth
+  view.xMinColumnWidth = CascadingDefaultMinColumnWidth
+  view.xColumnSpacing = CascadingDefaultColumnSpacing
   view.xShowsColumnHeaders = false
   view.setAcceptsFirstResponder(false)
-  discard view.withProtocol(MillerColumnTableDataSource)
-  discard view.withProtocol(MillerColumnTableDelegate)
-  discard view.withProtocol(MillerColumnViewLayout)
-  discard view.withProtocol(MillerColumnSelectionBehavior)
-  discard view.withProtocol(MillerColumnReloadBehavior)
-  discard view.withProtocol(MillerColumnDrawing)
-  discard view.withProtocol(MillerColumnAccessibility)
-  view.syncMillerColumnColumns()
+  discard view.withProtocol(CascadingTableDataSource)
+  discard view.withProtocol(CascadingTableDelegate)
+  discard view.withProtocol(CascadingViewLayout)
+  discard view.withProtocol(CascadingSelectionBehavior)
+  discard view.withProtocol(CascadingReloadBehavior)
+  discard view.withProtocol(CascadingDrawing)
+  discard view.withProtocol(CascadingAccessibility)
+  view.syncCascadingColumns()
   view.applyInitialFrame(frame)
 
-proc newMillerColumnView*(frame: Rect = AutoRect): MillerColumnView =
-  result = MillerColumnView()
-  initMillerColumnViewFields(result, frame)
+proc initCascadingMillerColumn*(frame: Rect = AutoRect): CascadingView =
+  result = CascadingView()
+  result.initCascadingMillerColumn(frame)
+
+proc newCascadingView*(frame: Rect = AutoRect): CascadingView =
+  result = initCascadingMillerColumn(frame)
