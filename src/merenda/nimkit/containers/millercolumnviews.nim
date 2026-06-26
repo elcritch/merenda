@@ -50,8 +50,14 @@ proc selectItem*(view: MillerColumnView, column, row: int)
 proc selectedItem*(view: MillerColumnView): MillerColumnSelection
 proc tableViewForColumn*(view: MillerColumnView, column: int): TableView
 proc columnForTableView(view: MillerColumnView, tableView: TableView): int
-proc millerColumnItemWithIdentifier*(view: MillerColumnView, identifier: string): MillerColumnItem
-proc childrenForParent*(view: MillerColumnView, parentIdentifier: string): seq[MillerColumnItem]
+proc millerColumnItemWithIdentifier*(
+  view: MillerColumnView, identifier: string
+): MillerColumnItem
+
+proc childrenForParent*(
+  view: MillerColumnView, parentIdentifier: string
+): seq[MillerColumnItem]
+
 proc itemHasChildren*(view: MillerColumnView, identifier: string): bool
 proc applySelectedPath(view: MillerColumnView, path: openArray[string])
 
@@ -64,11 +70,17 @@ protocol MillerColumnDataSource {.selectorScope: protocol.}:
     view: MillerColumnView, parentIdentifier: string, index: int
   ): string {.optional.}
 
-  method millerColumnItem*(view: MillerColumnView, identifier: string): MillerColumnItem {.optional.}
+  method millerColumnItem*(
+    view: MillerColumnView, identifier: string
+  ): MillerColumnItem {.optional.}
 
-  method titleForMillerColumnItem*(view: MillerColumnView, identifier: string): string {.optional.}
+  method titleForMillerColumnItem*(
+    view: MillerColumnView, identifier: string
+  ): string {.optional.}
 
-  method isLeafMillerColumnItem*(view: MillerColumnView, identifier: string): bool {.optional.}
+  method isLeafMillerColumnItem*(
+    view: MillerColumnView, identifier: string
+  ): bool {.optional.}
 
 protocol MillerColumnDelegate {.selectorScope: protocol.}:
   method shouldSelectMillerColumnItem*(
@@ -83,7 +95,9 @@ protocol MillerColumnDelegate {.selectorScope: protocol.}:
     view: MillerColumnView, column: int, row: int, identifier: string
   ) {.optional.}
 
-  method rowHeightForMillerColumn*(view: MillerColumnView, column: int): float32 {.optional.}
+  method rowHeightForMillerColumn*(
+    view: MillerColumnView, column: int
+  ): float32 {.optional.}
 
 protocol MillerColumnEvents:
   proc selectionIsChanging*(view: MillerColumnView, sender: DynamicAgent) {.signal.}
@@ -225,7 +239,9 @@ proc localItemWithIdentifier(
     if item.identifier == identifier:
       return (true, item)
 
-proc millerColumnItemWithIdentifier*(view: MillerColumnView, identifier: string): MillerColumnItem =
+proc millerColumnItemWithIdentifier*(
+    view: MillerColumnView, identifier: string
+): MillerColumnItem =
   if view.isNil or identifier.len == 0:
     return
   let source = view.dataSource()
@@ -264,7 +280,9 @@ proc parentIdentifierForColumn(view: MillerColumnView, column: int): string =
   else:
     ""
 
-proc childrenForParent*(view: MillerColumnView, parentIdentifier: string): seq[MillerColumnItem] =
+proc childrenForParent*(
+    view: MillerColumnView, parentIdentifier: string
+): seq[MillerColumnItem] =
   if view.isNil:
     return @[]
   let source = view.dataSource()
@@ -410,8 +428,7 @@ proc updateColumnSelections(view: MillerColumnView) =
       tableView.reloadData()
       if columnIndex in 0 ..< view.xSelectedPath.len:
         let row = view.millerColumnRowForIdentifier(
-          view.parentIdentifierForColumn(columnIndex),
-          view.xSelectedPath[columnIndex],
+          view.parentIdentifierForColumn(columnIndex), view.xSelectedPath[columnIndex]
         )
         tableView.selectedIndex = row
       else:
@@ -419,7 +436,7 @@ proc updateColumnSelections(view: MillerColumnView) =
   finally:
     view.xSyncingColumnSelection = false
 
-proc initMillerColumnColumn(view: MillerColumnView): TableView =
+proc initMillerColumnTableView(view: MillerColumnView): TableView =
   result = newTableView()
   result.showsHeader = view.xShowsColumnHeaders
   result.usesAlternatingRowBackgrounds = false
@@ -443,7 +460,7 @@ proc syncMillerColumnColumns(view: MillerColumnView) =
     if not tableView.isNil:
       tableView.removeFromSuperview()
   while view.xColumns.len < needed:
-    let tableView = view.initMillerColumnColumn()
+    let tableView = view.initMillerColumnTableView()
     view.xColumns.add tableView
     view.addSubview(tableView)
   view.syncMillerColumnLayout()
@@ -464,7 +481,9 @@ proc pruneSelectedPath(view: MillerColumnView) =
     parent = identifier
   view.xSelectedPath = nextPath
 
-proc normalizedSelectedPath(view: MillerColumnView, path: openArray[string]): seq[string] =
+proc normalizedSelectedPath(
+    view: MillerColumnView, path: openArray[string]
+): seq[string] =
   if view.isNil:
     return @[]
   let oldPath = view.xSelectedPath
@@ -573,7 +592,9 @@ protocol MillerColumnTableDataSource of TableViewDataSource:
       return ""
     view.titleForItem(view.itemForColumnRow(columnIndex, row))
 
-  method identifierForRow(view: MillerColumnView, tableView: TableView, row: int): string =
+  method identifierForRow(
+      view: MillerColumnView, tableView: TableView, row: int
+  ): string =
     let columnIndex = view.columnForTableView(tableView)
     if columnIndex < 0:
       return ""
@@ -590,19 +611,22 @@ protocol MillerColumnTableDataSource of TableViewDataSource:
     )
 
 protocol MillerColumnTableDelegate of TableViewDelegate:
-  method tableRowHeight(view: MillerColumnView, tableView: TableView, row: int): float32 =
+  method tableRowHeight(
+      view: MillerColumnView, tableView: TableView, row: int
+  ): float32 =
     discard row
     let column = view.columnForTableView(tableView)
     let delegate = view.delegate()
     if column >= 0 and not delegate.isNil:
-      let height = delegate.trySendLocal(
-        rowHeightForMillerColumn(), (view: view, column: column)
-      )
+      let height =
+        delegate.trySendLocal(rowHeightForMillerColumn(), (view: view, column: column))
       if height.isSome:
         return height.get()
     tableView.rowHeight()
 
-  method shouldSelectTableRow(view: MillerColumnView, tableView: TableView, row: int): bool =
+  method shouldSelectTableRow(
+      view: MillerColumnView, tableView: TableView, row: int
+  ): bool =
     let column = view.columnForTableView(tableView)
     if column < 0:
       return false
@@ -695,7 +719,10 @@ protocol MillerColumnAccessibility of AccessibilityProtocol:
     arGroup
 
   method accessibilityLabel(view: MillerColumnView): string =
-    if view.xAccessibilityLabel.len > 0: view.xAccessibilityLabel else: "MillerColumnView"
+    if view.xAccessibilityLabel.len > 0:
+      view.xAccessibilityLabel
+    else:
+      "MillerColumnView"
 
   method accessibilityValue(view: MillerColumnView): string =
     view.selectedPath().join("/")

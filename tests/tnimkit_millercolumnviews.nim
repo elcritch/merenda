@@ -35,7 +35,10 @@ protocol MillerColumnSourceSpyMethods of MillerColumnDataSource:
         inc result
 
   method millerColumnChildIdentifier(
-      source: MillerColumnSourceSpy, view: MillerColumnView, parentIdentifier: string, index: int
+      source: MillerColumnSourceSpy,
+      view: MillerColumnView,
+      parentIdentifier: string,
+      index: int,
   ): string =
     var current = 0
     for item in source.items:
@@ -108,7 +111,9 @@ protocol MillerColumnSignalSpyEvents from MillerColumnSignalSpy:
     inc spy.activated
     spy.lastSender = sender
 
-proc newMillerColumnSourceSpy(items: openArray[MillerColumnItem]): MillerColumnSourceSpy =
+proc newMillerColumnSourceSpy(
+    items: openArray[MillerColumnItem]
+): MillerColumnSourceSpy =
   result = MillerColumnSourceSpy(items: @items)
   initResponder(result)
   discard result.withProtocol(MillerColumnSourceSpyMethods)
