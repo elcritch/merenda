@@ -119,99 +119,135 @@ proc progressIndicatorCell*(indicator: ProgressIndicator): ProgressIndicatorCell
   if controlCell of ProgressIndicatorCell:
     return ProgressIndicatorCell(controlCell)
 
-proc value*(indicator: ProgressIndicator): float32 =
-  if indicator.isNil: 0.0'f32 else: indicator.xValue
+protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
+  property value -> float32
+  property minValue -> float32
+  property maxValue -> float32
+  property indeterminate -> bool
+  property displayedWhenStopped -> bool
+  property progressIndicatorStyle -> ProgressIndicatorStyle
+  property animationPhase -> float32
+
+  method value(indicator: ProgressIndicator): float32 =
+    if indicator.isNil: 0.0'f32 else: indicator.xValue
+
+  method setValue(indicator: ProgressIndicator, value: float32) =
+    indicator.setProgressValue(value)
+
+  method minValue(indicator: ProgressIndicator): float32 =
+    if indicator.isNil: 0.0'f32 else: indicator.xMinValue
+
+  method setMinValue(indicator: ProgressIndicator, value: float32) =
+    if indicator.isNil or indicator.xMinValue == value:
+      return
+    indicator.xMinValue = value
+    indicator.setProgressValue(indicator.xValue)
+    indicator.setNeedsDisplay(true)
+
+  method maxValue(indicator: ProgressIndicator): float32 =
+    if indicator.isNil: 0.0'f32 else: indicator.xMaxValue
+
+  method setMaxValue(indicator: ProgressIndicator, value: float32) =
+    if indicator.isNil or indicator.xMaxValue == value:
+      return
+    indicator.xMaxValue = value
+    indicator.setProgressValue(indicator.xValue)
+    indicator.setNeedsDisplay(true)
+
+  method indeterminate(indicator: ProgressIndicator): bool =
+    (not indicator.isNil) and indicator.xIndeterminate
+
+  method setIndeterminate(indicator: ProgressIndicator, value: bool) =
+    if indicator.isNil or indicator.xIndeterminate == value:
+      return
+    indicator.xIndeterminate = value
+    indicator.setNeedsDisplay(true)
+    indicator.postAccessibilityNotification(anValueChanged)
+
+  method animating*(indicator: ProgressIndicator): bool =
+    (not indicator.isNil) and indicator.xAnimating
+
+  method displayedWhenStopped(indicator: ProgressIndicator): bool =
+    indicator.isNil or indicator.xDisplayedWhenStopped
+
+  method setDisplayedWhenStopped(indicator: ProgressIndicator, value: bool) =
+    if indicator.isNil or indicator.xDisplayedWhenStopped == value:
+      return
+    indicator.xDisplayedWhenStopped = value
+    indicator.setNeedsDisplay(true)
+
+  method progressIndicatorStyle(indicator: ProgressIndicator): ProgressIndicatorStyle =
+    if indicator.isNil: pisBar else: indicator.xStyle
+
+  method setProgressIndicatorStyle(
+      indicator: ProgressIndicator, style: ProgressIndicatorStyle
+  ) =
+    if indicator.isNil or indicator.xStyle == style:
+      return
+    indicator.xStyle = style
+    indicator.invalidateIntrinsicContentSize()
+    indicator.setNeedsDisplay(true)
+
+  method animationPhase(indicator: ProgressIndicator): float32 =
+    if indicator.isNil: 0.0'f32 else: indicator.xAnimationPhase
+
+  method setAnimationPhase(indicator: ProgressIndicator, phase: float32) =
+    if indicator.isNil:
+      return
+    let nextPhase = phase - floor(phase)
+    if indicator.xAnimationPhase == nextPhase:
+      return
+    indicator.xAnimationPhase = nextPhase
+    indicator.setNeedsDisplay(true)
+
+  method startAnimation*(indicator: ProgressIndicator) =
+    if indicator.isNil or indicator.xAnimating:
+      return
+    indicator.xAnimating = true
+    indicator.setWidgetState(ssActive, true)
+    indicator.setNeedsDisplay(true)
+
+  method stopAnimation*(indicator: ProgressIndicator) =
+    if indicator.isNil or not indicator.xAnimating:
+      return
+    indicator.xAnimating = false
+    indicator.setWidgetState(ssActive, false)
+    indicator.setNeedsDisplay(true)
+
+  method stepAnimation*(indicator: ProgressIndicator) =
+    if not indicator.isNil:
+      indicator.setAnimationPhase(indicator.animationPhase + 1.0'f32 / 12.0'f32)
+
+  method incrementBy*(indicator: ProgressIndicator, amount: float32) =
+    if not indicator.isNil:
+      indicator.setValue(indicator.value + amount)
+
+proc stepAnimation*(indicator: ProgressIndicator, delta: float32) =
+  if not indicator.isNil:
+    indicator.setAnimationPhase(indicator.animationPhase + delta)
 
 proc `value=`*(indicator: ProgressIndicator, value: float32) =
-  indicator.setProgressValue(value)
-
-proc minValue*(indicator: ProgressIndicator): float32 =
-  if indicator.isNil: 0.0'f32 else: indicator.xMinValue
+  indicator.setValue(value)
 
 proc `minValue=`*(indicator: ProgressIndicator, value: float32) =
-  if indicator.isNil or indicator.xMinValue == value:
-    return
-  indicator.xMinValue = value
-  indicator.setProgressValue(indicator.xValue)
-  indicator.setNeedsDisplay(true)
-
-proc maxValue*(indicator: ProgressIndicator): float32 =
-  if indicator.isNil: 0.0'f32 else: indicator.xMaxValue
+  indicator.setMinValue(value)
 
 proc `maxValue=`*(indicator: ProgressIndicator, value: float32) =
-  if indicator.isNil or indicator.xMaxValue == value:
-    return
-  indicator.xMaxValue = value
-  indicator.setProgressValue(indicator.xValue)
-  indicator.setNeedsDisplay(true)
-
-proc indeterminate*(indicator: ProgressIndicator): bool =
-  (not indicator.isNil) and indicator.xIndeterminate
+  indicator.setMaxValue(value)
 
 proc `indeterminate=`*(indicator: ProgressIndicator, value: bool) =
-  if indicator.isNil or indicator.xIndeterminate == value:
-    return
-  indicator.xIndeterminate = value
-  indicator.setNeedsDisplay(true)
-  indicator.postAccessibilityNotification(anValueChanged)
-
-proc animating*(indicator: ProgressIndicator): bool =
-  (not indicator.isNil) and indicator.xAnimating
-
-proc displayedWhenStopped*(indicator: ProgressIndicator): bool =
-  indicator.isNil or indicator.xDisplayedWhenStopped
+  indicator.setIndeterminate(value)
 
 proc `displayedWhenStopped=`*(indicator: ProgressIndicator, value: bool) =
-  if indicator.isNil or indicator.xDisplayedWhenStopped == value:
-    return
-  indicator.xDisplayedWhenStopped = value
-  indicator.setNeedsDisplay(true)
-
-proc progressIndicatorStyle*(indicator: ProgressIndicator): ProgressIndicatorStyle =
-  if indicator.isNil: pisBar else: indicator.xStyle
+  indicator.setDisplayedWhenStopped(value)
 
 proc `progressIndicatorStyle=`*(
     indicator: ProgressIndicator, style: ProgressIndicatorStyle
 ) =
-  if indicator.isNil or indicator.xStyle == style:
-    return
-  indicator.xStyle = style
-  indicator.invalidateIntrinsicContentSize()
-  indicator.setNeedsDisplay(true)
-
-proc animationPhase*(indicator: ProgressIndicator): float32 =
-  if indicator.isNil: 0.0'f32 else: indicator.xAnimationPhase
+  indicator.setProgressIndicatorStyle(style)
 
 proc `animationPhase=`*(indicator: ProgressIndicator, phase: float32) =
-  if indicator.isNil:
-    return
-  let nextPhase = phase - floor(phase)
-  if indicator.xAnimationPhase == nextPhase:
-    return
-  indicator.xAnimationPhase = nextPhase
-  indicator.setNeedsDisplay(true)
-
-proc startAnimation*(indicator: ProgressIndicator) =
-  if indicator.isNil or indicator.xAnimating:
-    return
-  indicator.xAnimating = true
-  indicator.setWidgetState(ssActive, true)
-  indicator.setNeedsDisplay(true)
-
-proc stopAnimation*(indicator: ProgressIndicator) =
-  if indicator.isNil or not indicator.xAnimating:
-    return
-  indicator.xAnimating = false
-  indicator.setWidgetState(ssActive, false)
-  indicator.setNeedsDisplay(true)
-
-proc stepAnimation*(indicator: ProgressIndicator, delta = 1.0'f32 / 12.0'f32) =
-  if not indicator.isNil:
-    indicator.animationPhase = indicator.animationPhase + delta
-
-proc incrementBy*(indicator: ProgressIndicator, amount: float32) =
-  if not indicator.isNil:
-    indicator.value = indicator.value + amount
+  indicator.setAnimationPhase(phase)
 
 protocol DefaultProgressIndicatorCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ProgressIndicatorCell): IntrinsicSize =
@@ -379,6 +415,7 @@ proc initProgressIndicatorFields*(
   indicator.xStyle = pisBar
   indicator.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   indicator.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
+  discard indicator.withProto()
   discard indicator.withProtocol(DefaultProgressIndicatorDrawing)
   discard indicator.withProtocol(DefaultProgressIndicatorAccessibility)
   indicator.applyInitialFrame(frame)

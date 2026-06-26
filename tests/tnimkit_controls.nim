@@ -173,8 +173,20 @@ suite "nimkit controls":
   test "progress indicator clamps values and exposes display state":
     let indicator = newProgressIndicator(0.0, 100.0, 25.0)
 
+    check indicator.conformsTo(ProgressProtocol)
     check indicator.progressIndicatorCell() == ProgressIndicatorCell(indicator.cell())
     check indicator.value == 25.0
+
+    let swizzledValue: DynamicMethod = proc(
+        self: DynamicAgent, invocation: var Invocation
+    ) =
+      check ProgressIndicator(self) == indicator
+      invocation.setResult(42.0'f32)
+
+    indicator.replaceMethod(value(), swizzledValue)
+    check indicator.value == 42.0
+    indicator.removeMethod(value())
+
     indicator.value = 140.0
     check indicator.value == 100.0
     indicator.value = -20.0
