@@ -14,7 +14,7 @@ type
 
   MillerColumnDemoController = ref object of Responder
     nodes: seq[MillerColumnDemoNode]
-    view: MillerColumnView
+    millerColumnView: MillerColumnView
     title: Label
     metadata: Label
     detail: Label
@@ -87,10 +87,10 @@ proc demoNodes(): seq[MillerColumnDemoNode] =
     initNode(
       "container-layer", "Containers", "framework", "Framework Area", "Container",
       "Active",
-      "Stack, form, grid, tab, split, scroll, table, outline, box, and view views.",
+      "Stack, form, grid, tab, split, scroll, table, outline, box, and Miller-column views.",
     ),
     initNode(
-      "view-widget",
+      "miller-column-view",
       "MillerColumnView",
       "container-layer",
       "Widget",
@@ -156,7 +156,7 @@ proc childNodes(
       result.add node
 
 proc selectedTrail(controller: MillerColumnDemoController): string =
-  let path = controller.view.selectedPath()
+  let path = controller.millerColumnView.selectedPath()
   if path.len == 0:
     return "No selection"
   var titles: seq[string]
@@ -182,7 +182,9 @@ proc updateDetail(controller: MillerColumnDemoController, identifier: string) =
 
 protocol MillerColumnDemoDataSource of MillerColumnDataSource:
   method millerColumnNumberOfChildren(
-      controller: MillerColumnDemoController, view: MillerColumnView, parentIdentifier: string
+      controller: MillerColumnDemoController,
+      view: MillerColumnView,
+      parentIdentifier: string,
   ): int =
     discard view
     controller.childNodes(parentIdentifier).len
@@ -240,18 +242,19 @@ proc newMillerColumnDemoController(): MillerColumnDemoController =
 
 let
   app = sharedApplication()
-  window = newWindow("NimKit MillerColumnView Demo", frame = initRect(140, 120, 760, 420))
+  window =
+    newWindow("NimKit MillerColumnView Demo", frame = initRect(140, 120, 760, 420))
   root = newView()
   split = newSplitView(laHorizontal)
   detailPane = newStackView(laVertical)
   controller = newMillerColumnDemoController()
 
-controller.view = newMillerColumnView()
-controller.view.columnWidth = 170.0
-controller.view.minColumnWidth = 120.0
-controller.view.dataSource = controller
-controller.view.delegate = controller
-controller.view.accessibilityLabel = "NimKit MillerColumnView Demo"
+controller.millerColumnView = newMillerColumnView()
+controller.millerColumnView.columnWidth = 170.0
+controller.millerColumnView.minColumnWidth = 120.0
+controller.millerColumnView.dataSource = controller
+controller.millerColumnView.delegate = controller
+controller.millerColumnView.accessibilityLabel = "NimKit MillerColumnView Demo"
 
 controller.title = newTitleLabel("NimKit MillerColumnView")
 controller.metadata = newStatusLabel("No item selected")
@@ -271,7 +274,7 @@ detailPane.addArrangedSubview(
   controller.activity,
 )
 
-split.addPane(controller.view, minSize = 260.0)
+split.addPane(controller.millerColumnView, minSize = 260.0)
 split.addPane(detailPane, minSize = 240.0)
 split.setPositionOfDivider(0, 380.0)
 
@@ -281,8 +284,9 @@ split.pinEdges(
   edges = {leLeft, leTop, leRight, leBottom},
 )
 
-controller.view.selectedPath = @["framework", "container-layer", "view-widget"]
-controller.updateDetail("view-widget")
+controller.millerColumnView.selectedPath =
+  @["framework", "container-layer", "miller-column-view"]
+controller.updateDetail("miller-column-view")
 
 window.minSize = initSize(560.0, 320.0)
 window.setContentView(root)

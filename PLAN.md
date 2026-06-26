@@ -292,7 +292,7 @@ Recommended implementation order:
      formatting hooks, and target/action dispatch.
    - Pair with text fields in examples to test AppKit-style value editing.
 3. `MillerColumnView`
-   - Add the classic NeXT/OpenStep column browser on top of scroll/table row
+   - Add the classic NeXT/OpenStep Miller-column view on top of scroll/table row
      primitives: dynamic column loading, column selection, keyboard navigation,
      and path/item identity.
    - This is the highest-signal compatibility widget, but it should follow the
