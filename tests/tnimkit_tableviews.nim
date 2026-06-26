@@ -1766,6 +1766,37 @@ suite "NimKit TableView":
     let reused = tableView.dequeueReusableCellView("text-cell")
     check not reused.isNil
 
+  test "table view row navigation preserves horizontal scroll offset":
+    let
+      window = newWindow("Table row scroll x offset", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      tableView = newTableView(frame = initRect(10, 10, 100, 72))
+      scrollView = tableView.scrollView()
+
+    tableView.showsHeader = false
+    tableView.rowCount = 12
+    tableView.rowHeight = 24.0
+    tableView.addColumn(newTableColumn("project", "Project", width = 180.0))
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    scrollView.contentOffset = initPoint(12.0, 0.0)
+    check scrollView.contentOffset().x == 12.0'f32
+
+    tableView.selectedIndex = 0
+    check scrollView.contentOffset().x == 12.0'f32
+
+    tableView.selectedIndex = 1
+    check scrollView.contentOffset().x == 12.0'f32
+
+    tableView.scrollRows(1)
+    check scrollView.contentOffset().x == 12.0'f32
+
+    check window.makeFirstResponder(tableView)
+    check window.pressKey(keyPageDown)
+    check scrollView.contentOffset().x == 12.0'f32
+
   test "table view pages to scroll edge when trailing rows are disabled":
     let
       window =

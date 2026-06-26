@@ -26,6 +26,9 @@ proc containsValue(values: openArray[string], value: string): bool =
       return true
   false
 
+proc pressKey(window: Window, key: Key, modifiers: set[KeyModifier] = {}): bool =
+  window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: modifiers))
+
 protocol CascadingSourceSpyMethods of CascadingDataSource:
   method cascadingNumberOfChildren(
       source: CascadingSourceSpy, view: CascadingView, parentIdentifier: string
@@ -142,6 +145,14 @@ suite "NimKit CascadingView":
     check view.tableViewForColumn(0).tableCellText(
       0, view.tableViewForColumn(0).columnAt(0)
     ) == "Project"
+    check view.tableViewForColumn(0).scrollView().contentOffset().x == 0.0'f32
+    check not view.tableViewForColumn(0).shouldBeginEditingCell(
+      0, view.tableViewForColumn(0).columnAt(0)
+    )
+    check not view.tableViewForColumn(0).beginEditingCell(
+      0, view.tableViewForColumn(0).columnAt(0)
+    )
+    check not view.tableViewForColumn(0).editingState.active
 
     view.selectItem(0, 0)
     check view.selectedPath == @["project"]
@@ -149,11 +160,13 @@ suite "NimKit CascadingView":
     check view.selectedItem.leaf == false
     check view.columnCount == 2
     check view.tableViewForColumn(1).rowCount == 2
+    check view.tableViewForColumn(0).scrollView().contentOffset().x == 0.0'f32
 
     view.tableViewForColumn(0).selectedIndex = 1
     check view.selectedPath == @["notes"]
     check view.selectedItem.identifier == "notes"
     check view.columnCount == 1
+    check view.tableViewForColumn(0).scrollView().contentOffset().x == 0.0'f32
 
     view.selectItem(0, 0)
     check view.selectedPath == @["project"]
@@ -217,3 +230,35 @@ suite "NimKit CascadingView":
 
     view.selectedPath = @["root", "missing"]
     check view.selectedPath == @["root"]
+
+  test "left and right arrows move focus between visible columns":
+    let
+      window = newWindow("Cascading keyboard", frame = initRect(0, 0, 360, 160))
+      root = newView(frame = initRect(0, 0, 360, 160))
+      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+
+    view.cascadingItems = [
+      initCascadingItem("project", "Project"),
+      initCascadingItem("src", "src", parentIdentifier = "project"),
+      initCascadingItem("main", "main.nim", parentIdentifier = "src", leaf = true),
+    ]
+    root.addSubview(view)
+    window.setContentView(root)
+
+    view.selectItem(0, 0)
+    check view.columnCount == 2
+    let
+      firstColumn = view.tableViewForColumn(0)
+      secondColumn = view.tableViewForColumn(1)
+
+    check window.makeFirstResponder(firstColumn)
+    check window.firstResponder == firstColumn
+    check window.pressKey(keyArrowRight)
+    check window.firstResponder == secondColumn
+    check secondColumn.selectedIndex == 0
+    check view.selectedPath == @["project", "src"]
+    check view.columnCount == 3
+    check window.pressKey(keyArrowLeft)
+    check window.firstResponder == firstColumn
+    check not window.pressKey(keyArrowLeft)
+    check window.firstResponder == firstColumn
