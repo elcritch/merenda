@@ -170,6 +170,41 @@ suite "nimkit controls":
     check window.mouseUpAt(initPoint(200, 22))
     check not slider.cell().isHighlighted()
 
+  test "progress indicator clamps values and exposes display state":
+    let indicator = newProgressIndicator(0.0, 100.0, 25.0)
+
+    check indicator.progressIndicatorCell() == ProgressIndicatorCell(indicator.cell())
+    check indicator.value == 25.0
+    indicator.value = 140.0
+    check indicator.value == 100.0
+    indicator.value = -20.0
+    check indicator.value == 0.0
+
+    indicator.incrementBy(12.5)
+    check indicator.value == 12.5
+    indicator.minValue = 20.0
+    check indicator.value == 20.0
+
+    check not indicator.indeterminate
+    indicator.indeterminate = true
+    check indicator.indeterminate
+    check indicator.accessibilityRole() == arProgressIndicator
+    check indicator.accessibilityValue() == "indeterminate"
+
+    check not indicator.animating
+    indicator.startAnimation()
+    check indicator.animating
+    check ssActive in indicator.widgetStateSet()
+    indicator.stepAnimation(0.25)
+    check indicator.animationPhase == 0.25
+    indicator.stopAnimation()
+    check not indicator.animating
+    check ssActive notin indicator.widgetStateSet()
+
+    indicator.progressIndicatorStyle = pisSpinning
+    check indicator.intrinsicContentSize().width ==
+      indicator.intrinsicContentSize().height
+
   test "control action signal can be used without a target":
     let
       slider = newSlider(0.0, 1.0, 0.0)

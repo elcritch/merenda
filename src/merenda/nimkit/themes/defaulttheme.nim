@@ -415,6 +415,10 @@ proc initTheme*(): Theme =
   result[srSlider, StyleKnobSize] = 18.0
   result[srSlider, StyleMinimumSize] = initSize(160.0, 24.0)
   result[srSlider, StyleChrome] = styleKeyword(AquaChromeName)
+  result[srProgressIndicator, StyleIndicatorSize] = 6.0
+  result[srProgressIndicator, StyleKnobSize] = 18.0
+  result[srProgressIndicator, StyleMinimumSize] = initSize(160.0, 24.0)
+  result[srProgressIndicator, StyleChrome] = styleKeyword(AquaChromeName)
 
   result.addRoleRule(
     srTab,

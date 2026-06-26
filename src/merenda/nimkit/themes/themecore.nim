@@ -43,6 +43,7 @@ type
     srRadioButton
     srSwitch
     srSlider
+    srProgressIndicator
     srTab
     srTabPanel
     srTextField
@@ -1673,6 +1674,9 @@ proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
     chrome: theme.resolveChromeName(context),
   )
 
+proc resolveProgressIndicatorStyle*(theme: Theme, context: StyleContext): SliderStyle =
+  theme.resolveSliderStyle(context)
+
 proc resolveTabViewStyle*(theme: Theme, context: StyleContext): TabViewStyle =
   let
     panelContext = initControlStyleContext(srTabPanel)
@@ -1837,6 +1841,11 @@ proc resolveSwitchButtonStyle*(
 
 proc resolveSliderStyle*(appearance: Appearance, context: StyleContext): SliderStyle =
   appearance.theme.resolveSliderStyle(context)
+
+proc resolveProgressIndicatorStyle*(
+    appearance: Appearance, context: StyleContext
+): SliderStyle =
+  appearance.theme.resolveProgressIndicatorStyle(context)
 
 proc resolveTabViewStyle*(appearance: Appearance, context: StyleContext): TabViewStyle =
   appearance.theme.resolveTabViewStyle(context)
