@@ -35,6 +35,7 @@ type
 
   StyleRole* = enum
     srView
+    srBox
     srScrollView
     srScroller
     srButton
@@ -221,6 +222,15 @@ type
     text*: TextStyle
     minSize*: Size
 
+  BoxStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    contentInsets*: EdgeInsets
+    titleHeight*: float32
+    titleGap*: float32
+    separatorThickness*: float32
+    minSize*: Size
+
 const
   StyleFill* = StyleKey[Fill]("fill")
   StyleBackgroundColor* = StyleKey[Color]("background.color")
@@ -269,6 +279,9 @@ const
   StyleResizeHandleWidth* = StyleKey[float32]("resize.handle.width")
   StyleDragThreshold* = StyleKey[float32]("drag.threshold")
   StyleAutoscrollEdge* = StyleKey[float32]("autoscroll.edge")
+  StyleTitleHeight* = StyleKey[float32]("title.height")
+  StyleTitleGap* = StyleKey[float32]("title.gap")
+  StyleSeparatorThickness* = StyleKey[float32]("separator.thickness")
   StyleMarkColor* = StyleKey[Color]("mark.color")
   StyleMinimumSize* = StyleKey[Size]("minimum.size")
   StyleChrome* = StyleKey[string]("chrome")
@@ -1761,6 +1774,29 @@ proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 22.0)),
   )
 
+proc resolveBoxStyle*(theme: Theme, context: StyleContext): BoxStyle =
+  BoxStyle(
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.0, 0.0, 0.0, 0.0)),
+      initColor(0.60, 0.64, 0.70, 1.0),
+      borderWidthFallback = 1.0,
+      cornerRadiusFallback = 4.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
+    ),
+    text: TextStyle(
+      color: theme.colorRule(context, StyleTextColor, initColor(0.12, 0.14, 0.18, 1.0)),
+      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    ),
+    contentInsets: theme.insetsRule(context, StylePadding, initEdgeInsets(14.0, 12.0)),
+    titleHeight: theme.lengthRule(context, StyleTitleHeight, 18.0'f32),
+    titleGap: theme.lengthRule(context, StyleTitleGap, 4.0'f32),
+    separatorThickness: theme.lengthRule(context, StyleSeparatorThickness, 1.0'f32),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 0.0)),
+  )
+
 proc resolveScrollViewStyle*(
     appearance: Appearance, context: StyleContext
 ): ScrollViewStyle =
@@ -1808,6 +1844,9 @@ proc resolveTableViewStyle*(
 proc resolveRowItemStyle*(appearance: Appearance, context: StyleContext): RowItemStyle =
   appearance.theme.resolveRowItemStyle(context)
 
+proc resolveBoxStyle*(appearance: Appearance, context: StyleContext): BoxStyle =
+  appearance.theme.resolveBoxStyle(context)
+
 func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
 
@@ -1849,6 +1888,22 @@ func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
 func rowItemTextRect*(style: RowItemStyle, bounds: Rect): Rect =
   bounds.inset(style.text.insets)
 
+func boxTitleBandHeight*(
+    style: BoxStyle, hasTitle: bool, titleHeight = 0.0'f32
+): float32 =
+  if not hasTitle:
+    0.0'f32
+  else:
+    max(style.titleHeight, titleHeight) + max(style.titleGap, 0.0'f32)
+
+func boxContentRect*(
+    style: BoxStyle, bounds: Rect, hasTitle: bool, titleHeight = 0.0'f32
+): Rect =
+  result = bounds.inset(style.contentInsets)
+  let titleBand = style.boxTitleBandHeight(hasTitle, titleHeight)
+  result.origin.y += titleBand
+  result.size.height = max(result.size.height - titleBand, 0.0'f32)
+
 func controlChromeOutset*(box: ControlBoxStyle): float32 =
   max(-box.focusRingInset, 0.0'f32)
 
@@ -1865,6 +1920,28 @@ func controlSizeWithChrome*(
     max(minSize.width, contentSize.width + insets.horizontal + box.controlChromeWidth()),
     max(
       minSize.height, contentSize.height + insets.vertical + box.controlChromeHeight()
+    ),
+  )
+
+func boxControlSize*(
+    style: BoxStyle, contentSize, titleSize: Size, hasTitle: bool
+): Size =
+  initSize(
+    max(
+      style.minSize.width,
+      max(
+        contentSize.width,
+        if hasTitle:
+          titleSize.width + style.text.insets.horizontal
+        else:
+          0.0'f32,
+      ) + style.contentInsets.horizontal + style.box.controlChromeWidth(),
+    ),
+    max(
+      style.minSize.height,
+      contentSize.height + style.contentInsets.vertical +
+        style.boxTitleBandHeight(hasTitle, titleSize.height) +
+        style.box.controlChromeHeight(),
     ),
   )
 

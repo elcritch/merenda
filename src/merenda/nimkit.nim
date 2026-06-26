@@ -1,5 +1,6 @@
 import merenda/nimkit/app/application
 import merenda/nimkit/accessibility/accessibility
+import merenda/nimkit/containers/boxes
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/controls/cells
 import merenda/nimkit/controls/comboboxes
@@ -47,6 +48,7 @@ import merenda/nimkit/app/windows
 
 export application
 export accessibility
+export boxes
 export buttons
 export cells
 export comboboxes

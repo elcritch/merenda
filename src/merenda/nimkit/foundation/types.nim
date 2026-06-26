@@ -132,6 +132,7 @@ type
     arScrollArea = "scrollArea"
     arTabGroup = "tabGroup"
     arTab = "tab"
+    arSeparator = "separator"
 
   AccessibilityTrait* = enum
     atButton = "button"
