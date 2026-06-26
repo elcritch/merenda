@@ -476,6 +476,13 @@ proc focusColumn(view: CascadingView, column: int): bool =
   else:
     false
 
+proc clearSelectionFromColumn(view: CascadingView, column: int) =
+  if view.isNil or column < 0 or view.xSelectedPath.len <= column:
+    return
+  var nextPath = view.xSelectedPath
+  nextPath.setLen(column)
+  view.applySelectedPath(nextPath)
+
 proc focusColumnRelative(view: CascadingView, delta: int): bool =
   if view.isNil or delta == 0:
     return false
@@ -491,6 +498,8 @@ proc focusColumnRelative(view: CascadingView, delta: int): bool =
     if not nextTableView.isNil and nextTableView.selectedIndex() < 0 and
         nextTableView.rowCount() > 0:
       view.selectItem(nextColumn, 0)
+  elif delta < 0:
+    view.clearSelectionFromColumn(column)
   view.focusColumn(nextColumn)
 
 proc syncCascadingColumns(view: CascadingView) =
