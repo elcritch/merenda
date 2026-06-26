@@ -12,7 +12,6 @@
   cpp
 --debugger:
   native
-
 --stacktrace:
   off
 --define:
