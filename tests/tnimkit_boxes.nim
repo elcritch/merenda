@@ -218,7 +218,7 @@ suite "nimkit boxes":
     check intrinsic.height == 83.0
 
     box.layoutSubtreeIfNeeded()
-    check box.contentRect() == initRect(12.0, 35.0, 172.0, 71.0)
+    check box.contentRect() == initRect(14.0, 37.0, 168.0, 67.0)
     check content.frame() == box.contentRect()
 
   test "content subviews are hosted inside the content view":

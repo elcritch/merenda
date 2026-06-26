@@ -1896,16 +1896,20 @@ func boxTitleBandHeight*(
   else:
     max(style.titleHeight, titleHeight) + max(style.titleGap, 0.0'f32)
 
+func controlChromeOutset*(box: ControlBoxStyle): float32 =
+  max(-box.focusRingInset, 0.0'f32)
+
 func boxContentRect*(
     style: BoxStyle, bounds: Rect, hasTitle: bool, titleHeight = 0.0'f32
 ): Rect =
+  let chromeEdge = style.box.borderWidth + style.box.controlChromeOutset()
   result = bounds.inset(style.contentInsets)
+  result.origin.x += chromeEdge
+  result.size.width = max(result.size.width - chromeEdge * 2.0'f32, 0.0'f32)
   let titleBand = style.boxTitleBandHeight(hasTitle, titleHeight)
-  result.origin.y += titleBand
-  result.size.height = max(result.size.height - titleBand, 0.0'f32)
-
-func controlChromeOutset*(box: ControlBoxStyle): float32 =
-  max(-box.focusRingInset, 0.0'f32)
+  result.origin.y += titleBand + chromeEdge
+  result.size.height =
+    max(result.size.height - titleBand - chromeEdge * 2.0'f32, 0.0'f32)
 
 func controlChromeWidth*(box: ControlBoxStyle): float32 =
   box.borderWidth * 2.0'f32 + box.controlChromeOutset() * 2.0'f32

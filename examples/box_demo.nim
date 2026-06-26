@@ -141,7 +141,7 @@ layout.pinEdges(
 let
   minimumWindowHeight = layout
     .resolvedIntrinsicContentSize()
-    .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height
+    .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height + 50
   window = newWindow(
     "NimKit Box Demo", frame = initRect(150, 130, DemoWindowWidth, minimumWindowHeight)
   )
