@@ -1,5 +1,6 @@
 import std/[algorithm, math, options, strutils, tables, times]
 
+from figdraw/fignodes import FigIdx
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
@@ -4237,13 +4238,22 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
     tableView.drawTableHeader(context)
     if ssFocusVisible in focusedState:
       let headerHeight = tableView.tableHeaderHeight()
+      let visibleBounds = tableView.visibleRect()
       var focusRect = tableView.bounds()
       focusRect.origin.y += headerHeight
       focusRect.size.height = max(focusRect.size.height - headerHeight, 0.0'f32)
-      if not focusRect.isEmpty:
+      if not focusRect.intersection(visibleBounds).isEmpty:
+        let focusClip = context.addRenderRectangle(
+          FocusRingDrawLevel,
+          (-1).FigIdx,
+          tableView.rectToWindow(visibleBounds),
+          fill(initColor(0.0, 0.0, 0.0, 0.0)),
+          clips = true,
+        )
         context.addFocusRing(
           FocusRingDrawLevel,
-          context.renderRectFor(focusRect),
+          focusClip,
+          tableView.rectToWindow(focusRect),
           tableFocusRingBox(listStyle.box),
         )
 

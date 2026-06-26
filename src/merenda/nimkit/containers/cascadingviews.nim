@@ -34,6 +34,8 @@ type
     xItems: seq[CascadingItem]
     xDataSource: DynamicAgent
     xDelegate: DynamicAgent
+    xScrollView: ScrollView
+    xColumnContainer: View
     xColumns: seq[TableView]
     xSelectedPath: seq[string]
     xColumnWidth: float32
@@ -46,10 +48,12 @@ const
   CascadingDefaultColumnWidth = 160.0'f32
   CascadingDefaultMinColumnWidth = 72.0'f32
   CascadingDefaultColumnSpacing = 1.0'f32
+  CascadingColumnEdgeInset = 1.0'f32
 
 proc reloadData*(view: CascadingView)
 proc selectItem*(view: CascadingView, column, row: int)
 proc selectedItem*(view: CascadingView): CascadingSelection
+proc scrollView*(view: CascadingView): ScrollView
 proc tableViewForColumn*(view: CascadingView, column: int): TableView
 proc columnForTableView(view: CascadingView, tableView: TableView): int
 proc cascadingItemWithIdentifier*(
@@ -63,6 +67,7 @@ proc childrenForParent*(
 proc itemHasChildren*(view: CascadingView, identifier: string): bool
 proc applySelectedPath(view: CascadingView, path: openArray[string])
 proc focusColumnRelative(view: CascadingView, delta: int): bool
+proc scrollColumnToVisible(view: CascadingView, column: int)
 
 protocol CascadingDataSource {.selectorScope: protocol.}:
   method cascadingNumberOfChildren*(
@@ -218,6 +223,9 @@ proc `showsColumnHeaders=`*(view: CascadingView, shows: bool) =
 
 proc columnCount*(view: CascadingView): int =
   if view.isNil: 0 else: view.xColumns.len
+
+proc scrollView*(view: CascadingView): ScrollView =
+  if view.isNil: nil else: view.xScrollView
 
 proc tableViewForColumn*(view: CascadingView, column: int): TableView =
   if view.isNil or column notin 0 ..< view.xColumns.len:
@@ -404,21 +412,58 @@ proc desiredColumnCount(view: CascadingView): int =
   else:
     view.xSelectedPath.len
 
+proc columnsContentWidth(view: CascadingView): float32 =
+  if view.isNil or view.xColumns.len == 0:
+    return 0.0'f32
+  let
+    count = view.xColumns.len
+    columnWidth = max(view.xColumnWidth, view.xMinColumnWidth)
+    spacing = view.xColumnSpacing * max(count - 1, 0).float32
+  columnWidth * count.float32 + spacing
+
 proc syncCascadingLayout(view: CascadingView) =
   if view.isNil:
     return
   let bounds = view.bounds()
+  if view.xScrollView.isNil or view.xColumnContainer.isNil:
+    return
+  let
+    contentWidth = view.columnsContentWidth()
+    documentWidth = max(contentWidth, bounds.size.width)
+    oldOffset = view.xScrollView.contentOffset()
+  view.xScrollView.frame = bounds
+  view.xColumnContainer.frame =
+    initRect(0.0'f32, 0.0'f32, documentWidth, bounds.size.height)
+  view.xScrollView.tile()
+  let
+    viewport = view.xScrollView.viewportSize()
+    columnWidth = max(view.xColumnWidth, view.xMinColumnWidth)
+    documentHeight = viewport.height
+  view.xColumnContainer.frame =
+    initRect(0.0'f32, 0.0'f32, max(contentWidth, viewport.width), documentHeight)
+  if view.xColumns.len == 0:
+    view.xScrollView.tile()
+    view.xScrollView.contentOffset = oldOffset
+    return
   var x = 0.0'f32
   for index, tableView in view.xColumns:
-    let remaining = max(bounds.size.width - x, view.xMinColumnWidth)
-    let width = min(max(view.xColumnWidth, view.xMinColumnWidth), remaining)
-    tableView.frame = initRect(x, 0.0'f32, width, bounds.size.height)
+    tableView.frame = initRect(x, 0.0'f32, columnWidth, documentHeight)
     let column = tableView.columnAt(0)
     if not column.isNil:
-      column.width = max(width, view.xMinColumnWidth)
-    x += width
+      column.width = max(columnWidth - CascadingColumnEdgeInset * 2.0'f32, 0.0'f32)
+    x += columnWidth
     if index < view.xColumns.high:
       x += view.xColumnSpacing
+  view.xScrollView.tile()
+  view.xScrollView.contentOffset = oldOffset
+
+proc scrollColumnToVisible(view: CascadingView, column: int) =
+  if view.isNil or view.xScrollView.isNil or column notin 0 ..< view.xColumns.len:
+    return
+  let tableView = view.xColumns[column]
+  if tableView.isNil or tableView.frame().isEmpty:
+    return
+  discard view.xScrollView.scrollRectToVisible(tableView.frame())
 
 proc updateColumnSelections(view: CascadingView) =
   if view.isNil:
@@ -471,10 +516,12 @@ proc focusColumn(view: CascadingView, column: int): bool =
   if tableView.isNil:
     return false
   let owner = tableView.window()
-  if owner of Window:
-    Window(owner).makeFirstResponder(tableView)
-  else:
-    false
+  result =
+    if owner of Window:
+      Window(owner).makeFirstResponder(tableView)
+    else:
+      false
+  view.scrollColumnToVisible(column)
 
 proc clearSelectionFromColumn(view: CascadingView, column: int) =
   if view.isNil or column < 0 or view.xSelectedPath.len <= column:
@@ -514,7 +561,8 @@ proc syncCascadingColumns(view: CascadingView) =
   while view.xColumns.len < needed:
     let tableView = view.initCascadingTableView()
     view.xColumns.add tableView
-    view.addSubview(tableView)
+    if not view.xColumnContainer.isNil:
+      view.xColumnContainer.addSubview(tableView)
   view.syncCascadingLayout()
   view.updateColumnSelections()
 
@@ -552,6 +600,7 @@ proc applySelectedPath(view: CascadingView, path: openArray[string]) =
   emit view.selectionIsChanging(DynamicAgent(view))
   view.xSelectedPath = nextPath
   view.syncCascadingColumns()
+  view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
   emit view.selectionDidChange(DynamicAgent(view))
 
 proc reloadData*(view: CascadingView) =
@@ -559,6 +608,7 @@ proc reloadData*(view: CascadingView) =
     return
   view.pruneSelectedPath()
   view.syncCascadingColumns()
+  view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
@@ -603,6 +653,7 @@ proc selectItem*(view: CascadingView, column, row: int) =
   emit view.selectionIsChanging(DynamicAgent(view))
   view.xSelectedPath = nextPath
   view.syncCascadingColumns()
+  view.scrollColumnToVisible(min(column + 1, view.xColumns.high))
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
       didSelectCascadingItem(),
@@ -810,6 +861,15 @@ proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   view.xMinColumnWidth = CascadingDefaultMinColumnWidth
   view.xColumnSpacing = CascadingDefaultColumnSpacing
   view.xShowsColumnHeaders = false
+  view.xColumnContainer = newView()
+  view.xColumnContainer.autoresizingMaskConstraints = false
+  view.xScrollView = newScrollView(documentView = view.xColumnContainer)
+  view.xScrollView.drawsBackground = false
+  view.xScrollView.hasHorizontalScroller = true
+  view.xScrollView.hasVerticalScroller = false
+  view.xScrollView.horizontalLineScroll = view.xColumnWidth
+  view.xScrollView.autoresizingMaskConstraints = false
+  view.addSubview(view.xScrollView)
   view.setAcceptsFirstResponder(false)
   discard view.withProtocol(CascadingTableDataSource)
   discard view.withProtocol(CascadingTableDelegate)

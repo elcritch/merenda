@@ -706,6 +706,7 @@ suite "nimkit application":
     check browser.selectedPath == @["project"]
     check browser.columnCount == 2
     check firstColumn.scrollView().contentOffset().x == 0.0'f32
+    check browser.scrollView().contentOffset().x == 0.0'f32
 
     let projectTextX = window.renderedTextX("Project")
     check projectTextX >= 0.0'f32
@@ -729,12 +730,14 @@ suite "nimkit application":
     check secondColumn.selectedIndex == 0
     check browser.selectedPath == @["project", "src"]
     check browser.columnCount == 3
+    check browser.scrollView().contentOffset().x > 0.0'f32
 
     check window.pressKey(keyArrowLeft)
     check window.firstResponder == firstColumn
     check secondColumn.selectedIndex == -1
     check browser.selectedPath == @["project"]
     check browser.columnCount == 2
+    check browser.scrollView().contentOffset().x == 0.0'f32
 
     check window.doubleClickTableRow(firstColumn, 0)
     check not firstColumn.editingState.active

@@ -775,7 +775,6 @@ suite "nimkit scroll views":
     var
       scrollViewNodeIndex = -1
       clipViewNodeIndex = -1
-      scrollTransformIndex = -1
       childNodeFound = false
       childNodeIndex = -1
       verticalScrollerIndex = -1
@@ -790,15 +789,12 @@ suite "nimkit scroll views":
           node.screenBox.x == 20.0 and node.screenBox.y == 30.0 and
           node.screenBox.w == 88.0 and node.screenBox.h == 58.0:
         clipViewNodeIndex = idx
-      if node.kind == nkTransform and node.transform.translation.x == -40.0 and
-          node.transform.translation.y == -30.0:
-        scrollTransformIndex = idx
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == initColor(0.2, 0.4, 0.7, 1.0).rgba:
         childNodeFound = true
         childNodeIndex = idx
-        check node.screenBox.x == 80.0
-        check node.screenBox.y == 80.0
+        check node.screenBox.x == 40.0
+        check node.screenBox.y == 50.0
         check node.screenBox.w == 30.0
         check node.screenBox.h == 20.0
       if verticalScrollerIndex < 0 and node.kind == nkRectangle and
@@ -812,15 +808,12 @@ suite "nimkit scroll views":
 
     check scrollViewNodeIndex >= 0
     check clipViewNodeIndex >= 0
-    check scrollTransformIndex >= 0
     check childNodeFound
     check verticalScrollerIndex >= 0
     check horizontalScrollerIndex >= 0
     check nodes.nodes[clipViewNodeIndex].parent.int == scrollViewNodeIndex
-    check nodes.nodes[scrollTransformIndex].parent.int == clipViewNodeIndex
     check nodes.nodes[verticalScrollerIndex].parent.int == scrollViewNodeIndex
     check nodes.nodes[horizontalScrollerIndex].parent.int == scrollViewNodeIndex
-    check nodes.hasAncestor(childNodeIndex, scrollTransformIndex)
     check nodes.hasAncestor(childNodeIndex, clipViewNodeIndex)
 
     let childVisibility = renders.figVisibility(DefaultDrawLevel, childNodeIndex.FigIdx)
@@ -860,8 +853,8 @@ suite "nimkit scroll views":
       renders = buildRenders(root)
       nodes = renders[DefaultDrawLevel]
       scrollWindowOffset = scrollView.contentOffset()
-      expectedHeadingRenderRect = initRect(80, 80, 100, 20)
-      expectedButtonRenderRect = initRect(80, 120, 100, 26)
+      expectedHeadingRenderRect = initRect(40, 50, 100, 20)
+      expectedButtonRenderRect = initRect(40, 90, 100, 26)
       headingScrolledWindowRect = heading.rectToWindow(heading.bounds())
       buttonScrolledWindowRect = button.rectToWindow(button.bounds())
       headingChromeIndex =
@@ -875,7 +868,7 @@ suite "nimkit scroll views":
     check headingChromeIndex >= 0
     check buttonChromeIndex >= 0
 
-  test "scrolled non-default draw level descendant uses active translation":
+  test "scrolled non-default draw level descendant uses render-space coordinates":
     let
       root = newView(frame = initRect(0, 0, 220, 160))
       document = newView(frame = initRect(0, 0, 260, 220))
@@ -900,13 +893,7 @@ suite "nimkit scroll views":
         expectedOverlayRenderRect, fill(initColor(0.6, 0.2, 0.8, 1.0).rgba)
       )
 
-    var scrollTransformIndex = -1
-    for idx, node in defaultNodes.nodes:
-      if node.kind == nkTransform and node.transform.translation.x == -40.0 and
-          node.transform.translation.y == -30.0:
-        scrollTransformIndex = idx
-
-    check scrollTransformIndex >= 0
+    discard defaultNodes
     check OverlayDrawLevel in renders
     check overlayIndex >= 0
     if overlayIndex >= 0:

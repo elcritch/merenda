@@ -903,6 +903,14 @@ suite "nimkit rendering":
     for node in list.nodes:
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        check node.parent != (-1).FigIdx
+        let clipNode = list.nodes[int(node.parent)]
+        check clipNode.kind == nkRectangle
+        check NfClipContent in clipNode.flags
+        check clipNode.screenBox.x == 10.0
+        check clipNode.screenBox.y == 20.0
+        check clipNode.screenBox.w == 130.0
+        check clipNode.screenBox.h == 68.0
         if node.screenBox.h >= tableView.frame.size.height:
           fullTableFocusRingFound = true
         if node.screenBox.h <=
@@ -940,10 +948,93 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.stroke.weight == 4.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
+        check node.parent != (-1).FigIdx
+        let clipNode = list.nodes[int(node.parent)]
+        check clipNode.kind == nkRectangle
+        check NfClipContent in clipNode.flags
+        check clipNode.screenBox.x == 10.0
+        check clipNode.screenBox.y == 20.0
+        check clipNode.screenBox.w == 130.0
+        check clipNode.screenBox.h == 68.0
         check node.screenBox.x == 12.0
         check node.screenBox.y == 22.0
         check node.screenBox.w == 126.0
         check node.screenBox.h == 64.0
+
+    check focusRingFound
+
+  test "buildRenders clips table focus ring to visible ancestor bounds":
+    let
+      root = newView(frame = initRect(0, 0, 140, 100))
+      clipView = newView(frame = initRect(10, 20, 80, 70))
+      tableView = newTableView(frame = initRect(60, 0, 80, 60))
+      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+
+    tableView.addColumn(newTableColumn("value", "Value", width = 70.0))
+    tableView.showsHeader = false
+    tableView.focusVisible = true
+    clipView.clipsToBounds = true
+    clipView.addSubview(tableView)
+    root.addSubview(clipView)
+
+    var theme = initTheme()
+    theme[srTableView, StyleFocusRingWidth] = 3.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
+
+    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    var focusRingFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 3.0 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        focusRingFound = true
+        check node.parent != (-1).FigIdx
+        let clipNode = list.nodes[int(node.parent)]
+        check clipNode.kind == nkRectangle
+        check NfClipContent in clipNode.flags
+        check clipNode.screenBox.x == 70.0
+        check clipNode.screenBox.y == 20.0
+        check clipNode.screenBox.w == 20.0
+        check clipNode.screenBox.h == 60.0
+
+    check focusRingFound
+
+  test "buildRenders keeps scrolled table focus ring in scroll coordinates":
+    let
+      root = newView(frame = initRect(0, 0, 220, 130))
+      document = newView(frame = initRect(0, 0, 320, 100))
+      tableView = newTableView(frame = initRect(60, 0, 90, 60))
+      scrollView =
+        newScrollView(frame = initRect(20, 20, 120, 80), documentView = document)
+      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+
+    tableView.addColumn(newTableColumn("value", "Value", width = 80.0))
+    tableView.showsHeader = false
+    tableView.focusVisible = true
+    document.addSubview(tableView)
+    root.addSubview(scrollView)
+    scrollView.hasHorizontalScroller = true
+    scrollView.contentOffset = initPoint(40, 0)
+
+    var theme = initTheme()
+    theme[srTableView, StyleFocusRingWidth] = 3.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
+
+    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    var focusRingFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 3.0 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        focusRingFound = true
+        check node.parent != (-1).FigIdx
+        let clipNode = list.nodes[int(node.parent)]
+        check clipNode.kind == nkRectangle
+        check NfClipContent in clipNode.flags
+        check clipNode.screenBox.x == 40.0
+        check clipNode.screenBox.y == 20.0
+        check clipNode.screenBox.w == 90.0
+        check clipNode.screenBox.h == 60.0
 
     check focusRingFound
 
@@ -1192,24 +1283,15 @@ suite "nimkit rendering":
     check list.nodes[int(rootIdx)].screenBox.h == 80.0
     check NfClipContent notin list.nodes[int(rootIdx)].flags
 
-    var transformIdx = (-1).FigIdx
-    for idx in childIndex(list.nodes, rootIdx):
-      if list.nodes[int(idx)].kind == nkTransform:
-        transformIdx = idx
-
-    check transformIdx != (-1).FigIdx
-    check list.nodes[int(transformIdx)].transform.translation.x == -10.0
-    check list.nodes[int(transformIdx)].transform.translation.y == -20.0
-
     var childIdx = (-1).FigIdx
-    for idx in childIndex(list.nodes, transformIdx):
+    for idx in childIndex(list.nodes, rootIdx):
       if list.nodes[int(idx)].kind == nkRectangle:
         childIdx = idx
 
     check childIdx != (-1).FigIdx
-    check list.nodes[int(childIdx)].parent == transformIdx
-    check list.nodes[int(childIdx)].screenBox.x == 90.0
-    check list.nodes[int(childIdx)].screenBox.y == 90.0
+    check list.nodes[int(childIdx)].parent == rootIdx
+    check list.nodes[int(childIdx)].screenBox.x == 80.0
+    check list.nodes[int(childIdx)].screenBox.y == 70.0
     check list.nodes[int(childIdx)].screenBox.w == 50.0
     check list.nodes[int(childIdx)].screenBox.h == 40.0
     check NfClipContent notin list.nodes[int(childIdx)].flags
@@ -1230,19 +1312,14 @@ suite "nimkit rendering":
 
     check NfClipContent in list.nodes[int(rootIdx)].flags
 
-    var transformIdx = (-1).FigIdx
-    for idx in childIndex(list.nodes, rootIdx):
-      if list.nodes[int(idx)].kind == nkTransform:
-        transformIdx = idx
-
-    check transformIdx != (-1).FigIdx
-
     var childIdx = (-1).FigIdx
-    for idx in childIndex(list.nodes, transformIdx):
+    for idx in childIndex(list.nodes, rootIdx):
       if list.nodes[int(idx)].kind == nkRectangle:
         childIdx = idx
 
     check childIdx != (-1).FigIdx
+    check list.nodes[int(childIdx)].screenBox.x == 80.0
+    check list.nodes[int(childIdx)].screenBox.y == 70.0
     check NfClipContent in list.nodes[int(childIdx)].flags
 
   test "buildRenders calls selector-backed custom drawing":
