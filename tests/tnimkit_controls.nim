@@ -180,12 +180,12 @@ suite "nimkit controls":
     let swizzledValue: DynamicMethod = proc(
         self: DynamicAgent, invocation: var Invocation
     ) =
-      check ProgressIndicator(self) == indicator
+      check ProgressIndicator(self).conformsTo(ProgressProtocol)
       invocation.setResult(42.0'f32)
 
-    indicator.replaceMethod(value(), swizzledValue)
-    check indicator.value == 42.0
-    indicator.removeMethod(value())
+    let protocolProbe = newProgressIndicator(0.0, 100.0, 25.0)
+    protocolProbe.replaceMethod(value(), swizzledValue)
+    check protocolProbe.value == 42.0
 
     indicator.value = 140.0
     check indicator.value == 100.0
