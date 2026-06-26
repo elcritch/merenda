@@ -291,10 +291,10 @@ Recommended implementation order:
    - Add min/max/increment/wrap behavior, press-and-hold repeat tracking, value
      formatting hooks, and target/action dispatch.
    - Pair with text fields in examples to test AppKit-style value editing.
-3. `MillerColumnView`
-   - Add the classic NeXT/OpenStep Miller-column view on top of scroll/table row
-     primitives: dynamic column loading, column selection, keyboard navigation,
-     and path/item identity.
+3. `CascadingView`
+   - Add CascadingView with an `initCascadingMillerColumn()` Miller Column
+     preset on top of scroll/table row primitives: dynamic column loading,
+     column selection, keyboard navigation, and path/item identity.
    - This is the highest-signal compatibility widget, but it should follow the
      smaller controls so shared scrolling and layout paths are already stable.
 4. `Matrix`
