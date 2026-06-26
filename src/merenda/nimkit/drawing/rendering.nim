@@ -15,7 +15,6 @@ type RenderPlacement = object
   rootRect: types.Rect
   contentOrigin: types.Point
   contentParent: FigIdx
-  activeTranslation: types.Point
 
 proc addPoints(a, b: types.Point): types.Point =
   initPoint(a.x + b.x, a.y + b.y)
@@ -26,16 +25,11 @@ proc offsetPoint(point, offset: types.Point): types.Point =
 proc boundsTranslation(bounds: types.Rect): types.Point =
   initPoint(-bounds.origin.x, -bounds.origin.y)
 
-proc hasTranslation(translation: types.Point): bool =
-  translation.x != 0.0'f32 or translation.y != 0.0'f32
-
-proc renderFrameRect(
-    view: View, parentOrigin, inheritedTranslation: types.Point
-): types.Rect =
+proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
   let
     frame = view.frame()
     bounds = view.bounds()
-    origin = parentOrigin.offsetPoint(frame.origin).offsetPoint(inheritedTranslation)
+    origin = parentOrigin.offsetPoint(frame.origin)
   initRect(origin, bounds.size)
 
 proc beginDraw(
@@ -69,7 +63,6 @@ proc renderViewInto(
     parent = (-1).FigIdx,
     parentLevel = DefaultDrawLevel,
     parentOrigin = ZeroPoint,
-    activeTranslation = ZeroPoint,
 ) =
   if view.visibleRect.isEmpty:
     return
@@ -79,9 +72,7 @@ proc renderViewInto(
     level = view.trySendLocal(drawLevel()).get(DefaultDrawLevel)
     parentedInCurrentLayer = parent != (-1).FigIdx and level == parentLevel
     isRoot = parent == (-1).FigIdx
-    inheritedTranslation = if parentedInCurrentLayer: ZeroPoint else: activeTranslation
-    absoluteFrame = view.renderFrameRect(parentOrigin, inheritedTranslation)
-    baseTranslation = if parentedInCurrentLayer: activeTranslation else: ZeroPoint
+    absoluteFrame = view.renderFrameRect(parentOrigin)
     nodeParent =
       if parent == (-1).FigIdx or parentedInCurrentLayer:
         parent
@@ -95,17 +86,11 @@ proc renderViewInto(
       shadows = view.shadow,
       clips = view.clipsToBounds,
     )
-    translation = view.bounds().boundsTranslation()
   var placement = RenderPlacement(
     rootRect: absoluteFrame,
-    contentOrigin: absoluteFrame.origin,
+    contentOrigin: absoluteFrame.origin.addPoints(view.bounds().boundsTranslation()),
     contentParent: rootIdx,
-    activeTranslation: baseTranslation,
   )
-  if translation.hasTranslation():
-    placement.contentParent =
-      context.addRenderTranslation(level, rootIdx, placement.rootRect, translation)
-    placement.activeTranslation = placement.activeTranslation.addPoints(translation)
 
   context.beginDraw(
     view, placement.contentParent, nodeParent, placement.contentOrigin, appearance
@@ -115,7 +100,7 @@ proc renderViewInto(
   for child in view.subviews:
     renderViewInto(
       context, child, appearance, placement.contentParent, level,
-      placement.contentOrigin, placement.activeTranslation,
+      placement.contentOrigin,
     )
 
 proc emptyRenders(): Renders =

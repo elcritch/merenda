@@ -1,5 +1,6 @@
-import std/[unittest]
+import std/[tables, unicode, unittest]
 
+from figdraw/fignodes import Fig, RenderList, NfClipContent, nkRectangle, nkText
 import sigils/core
 
 import merenda/nimkit
@@ -28,6 +29,32 @@ proc containsValue(values: openArray[string], value: string): bool =
 
 proc pressKey(window: Window, key: Key, modifiers: set[KeyModifier] = {}): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: modifiers))
+
+func nearlyEqual(a, b: float32): bool =
+  abs(a - b) <= 0.01'f32
+
+func screenBoxClose(node: Fig, rect: Rect): bool =
+  abs(node.screenBox.x.float32 - rect.origin.x) <= 0.01'f32 and
+    abs(node.screenBox.y.float32 - rect.origin.y) <= 0.01'f32 and
+    abs(node.screenBox.w.float32 - rect.size.width) <= 0.01'f32 and
+    abs(node.screenBox.h.float32 - rect.size.height) <= 0.01'f32
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+proc clippedRectX(list: RenderList, rect: Rect): float32 =
+  result = -1.0'f32
+  for node in list.nodes:
+    if node.kind == nkRectangle and NfClipContent in node.flags and
+        node.screenBoxClose(rect):
+      return node.screenBox.x.float32
+
+proc textNodeX(list: RenderList, text: string): float32 =
+  result = -1.0'f32
+  for node in list.nodes:
+    if node.kind == nkText and node.renderedText() == text:
+      return node.screenBox.x.float32
 
 protocol CascadingSourceSpyMethods of CascadingDataSource:
   method cascadingNumberOfChildren(
@@ -231,6 +258,81 @@ suite "NimKit CascadingView":
     view.selectedPath = @["root", "missing"]
     check view.selectedPath == @["root"]
 
+  test "columns overflow into horizontal scroll content":
+    let
+      root = newView(frame = initRect(0, 0, 380, 120))
+      view = newCascadingView(frame = initRect(0, 0, 380, 120))
+
+    view.columnWidth = 170.0
+    view.minColumnWidth = 120.0
+    view.cascadingItems = [
+      initCascadingItem("root", "Root"),
+      initCascadingItem("child", "Child", parentIdentifier = "root"),
+      initCascadingItem(
+        "grandchild", "Grandchild", parentIdentifier = "child", leaf = true
+      ),
+    ]
+    root.addSubview(view)
+    view.selectItem(0, 0)
+    view.selectItem(1, 0)
+    discard buildRenders(root)
+
+    check view.columnCount == 3
+    check view.scrollView().hasHorizontalScroller
+    check view.scrollView().documentView().frame.size.width > view.bounds().size.width
+    check view.scrollView().maximumContentOffset().x > 0.0'f32
+    check view.tableViewForColumn(0).frame.size.width == view.columnWidth()
+    check view.tableViewForColumn(2).frame().maxX > view.bounds().maxX
+
+    for columnIndex in 0 ..< view.columnCount:
+      let
+        tableView = view.tableViewForColumn(columnIndex)
+        column = tableView.columnAt(0)
+        viewportWidth = tableView.scrollView().viewportSize().width
+
+      check column.width() == viewportWidth
+      check tableView.contentView().frame.size.width == viewportWidth
+
+  test "horizontal scroll moves column chrome and row text together":
+    let
+      root = newView(frame = initRect(0, 0, 300, 120))
+      view = newCascadingView(frame = initRect(0, 0, 300, 120))
+
+    view.columnWidth = 170.0
+    view.cascadingItems = [
+      initCascadingItem("root", "Root"),
+      initCascadingItem("child", "Child", parentIdentifier = "root"),
+      initCascadingItem(
+        "grandchild", "Grandchild", parentIdentifier = "child", leaf = true
+      ),
+    ]
+    root.addSubview(view)
+    view.selectItem(0, 0)
+    view.selectItem(1, 0)
+    discard buildRenders(root)
+
+    proc renderPositions(offset: float32): tuple[columnX, textX: float32] =
+      view.scrollView().contentOffset = initPoint(offset, 0.0)
+      let renders = buildRenders(root)
+      let
+        list = renders.layers[DefaultDrawLevel]
+        tableView = view.tableViewForColumn(0)
+        columnRect = tableView.rectToWindow(tableView.bounds())
+      result.columnX = list.clippedRectX(columnRect)
+      result.textX = list.textNodeX("Root")
+
+    let
+      first = renderPositions(40.0)
+      second = renderPositions(70.0)
+
+    check first.columnX >= -1000.0'f32
+    check first.textX >= -1000.0'f32
+    check second.columnX >= -1000.0'f32
+    check second.textX >= -1000.0'f32
+    check (second.columnX - first.columnX).nearlyEqual(-30.0)
+    check (second.textX - first.textX).nearlyEqual(-30.0)
+    check (first.textX - first.columnX).nearlyEqual(second.textX - second.columnX)
+
   test "left and right arrows move focus between visible columns":
     let
       window = newWindow("Cascading keyboard", frame = initRect(0, 0, 360, 160))
@@ -258,10 +360,12 @@ suite "NimKit CascadingView":
     check secondColumn.selectedIndex == 0
     check view.selectedPath == @["project", "src"]
     check view.columnCount == 3
+    check view.scrollView().contentOffset().x > 0.0'f32
     check window.pressKey(keyArrowLeft)
     check window.firstResponder == firstColumn
     check secondColumn.selectedIndex == -1
     check view.selectedPath == @["project"]
     check view.columnCount == 2
+    check view.scrollView().contentOffset().x == 0.0'f32
     check not window.pressKey(keyArrowLeft)
     check window.firstResponder == firstColumn
