@@ -18,9 +18,10 @@ Detailed layout, constraint, invalidation, and solver notes live in
 NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid containers, buttons, text fields, combo boxes,
-scroll views, popup lists, table views, basic text editing lifecycle, action
-dispatch, AppKit-style in-process pasteboard/dragging foundations, and a pure
-Nim accessibility metadata and protocol core.
+box/group containers, scroll views, popup lists, table views, outline views,
+basic text editing lifecycle, action dispatch, pure Nim panel/dialog shells,
+document-controller infrastructure, AppKit-style in-process pasteboard/dragging
+foundations, and a pure Nim accessibility metadata and protocol core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -29,11 +30,11 @@ The source tree is now organized around domain modules under
 directly when they need a narrower surface.
 
 The next work should move NimKit toward the OpenSTEP/AppKit framework shape:
-stabilize the remaining native/backend edges around application, window, and
-semantic accessibility behavior, then add richer graphics-resource, document,
-table, and outline systems. Avoid adding
-widget-local special cases where AppKit solves the behavior through the
-application, responder, view, window, accessibility, or control/cell layers.
+stabilize the remaining native/backend edges around application, window,
+document, table/outline, and semantic accessibility behavior, then fill in the
+next compatibility widgets. Avoid adding widget-local special cases where AppKit
+solves the behavior through the application, responder, view, window,
+accessibility, or control/cell layers.
 
 ## Recently Completed
 
@@ -230,6 +231,13 @@ application, responder, view, window, accessibility, or control/cell layers.
   expose their own defaults store and stable scope identifiers; column rename
   aliases migrate saved column and selected-column state; and autosaved table
   state saves/restores with the window/view lifecycle instead of ad hoc callers.
+- Added `Box` / group box / separator support with titled and untitled group
+  boxes, separator-line variants, themed border/title/metric drawing, intrinsic
+  sizing, content hosting, grouping/separator accessibility semantics, and
+  `examples/box_demo.nim` coverage.
+- Added the first pure Nim panel/dialog shells on top of the modal/session
+  model: `Panel`, `Alert`, `OpenPanel`, and `SavePanel` construction plus modal
+  and sheet entry points. Native panel bridges remain a later backend task.
 
 ## Current Verification
 
@@ -250,6 +258,8 @@ application, responder, view, window, accessibility, or control/cell layers.
   `atlas-run tests tests/tnimkit_documents.nim`,
   `atlas-run tests tests/tnimkit_application.nim`, and
   `atlas-run tests tests/tnimkit_outlineviews.nim`.
+- The current box and pure Nim panel/dialog shell coverage lives in
+  `tests/tnimkit_boxes.nim` and `tests/integration_application.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -264,43 +274,41 @@ instead of producing isolated one-off controls.
 
 Recommended implementation order:
 
-1. `Box` / group box / separator
-   - Add titled and untitled box styles, separator-line variants, border/title
-     drawing, intrinsic sizing, and accessibility grouping semantics.
-   - Use this as the small first pass to shake out theme metrics for titled
-     containers and old-style OpenStep preferences panes.
-2. `SplitView`
+1. `SplitView`
    - Add horizontal and vertical panes, divider tracking, min/max pane
      constraints, collapsible panes, live resize behavior, and autosave hooks.
-   - This should become the primitive for source-list/detail, inspector, and
-     editor layouts.
-3. `ProgressIndicator`
+   - This should become the primitive for source-list/detail, inspector, editor,
+     browser, and document-workspace layouts.
+   - Reuse the table state-storage/autosave path where practical so divider
+     positions can persist by window, workspace, or document scope.
+2. `ProgressIndicator`
    - Add determinate bars and indeterminate spinner/bar modes.
    - Use it to exercise timer/animation invalidation, value accessibility, and
      disabled/active appearance.
-4. `Stepper`
+3. `Stepper`
    - Add min/max/increment/wrap behavior, press-and-hold repeat tracking, value
      formatting hooks, and target/action dispatch.
    - Pair with text fields in examples to test AppKit-style value editing.
-5. `Browser`
+4. `Browser`
    - Add the classic NeXT/OpenStep column browser on top of scroll/table row
      primitives: dynamic column loading, column selection, keyboard navigation,
      and path/item identity.
    - This is the highest-signal compatibility widget, but it should follow
      `SplitView` and the smaller controls so shared scrolling and layout paths
      are already stable.
-6. `Matrix`
+5. `Matrix`
    - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
      selection modes, keyboard movement, and cell reuse.
    - Use this to further harden the control/cell split.
-7. `ColorWell`
+6. `ColorWell`
    - Add color swatch rendering, target/action on color changes, pasteboard
      color payload integration, and drag affordances.
    - Stage a full color panel separately after the well and panel/session
      contracts are stronger.
-8. Panels and dialogs
-   - Continue from the existing modal/session work toward `Panel`, `Alert`,
-     `OpenPanel`, and `SavePanel` compatibility.
+7. Panels and dialogs hardening
+   - Expand the existing pure Nim `Panel`, `Alert`, `OpenPanel`, and `SavePanel`
+     shells into real reusable views with buttons, accessory views, result
+     mapping, file-type validation, and document-controller integration.
    - Native bridges can come later; first keep the pure Nim modal, sheet,
      responder, and document-controller contracts stable.
 
@@ -327,19 +335,24 @@ update widgets, responder state, and rendering.
 Continue growing the protocol-backed outline API into a production AppKit-style
 widget.
 
-1. Harden outline behavior on top of the new rendering path:
-   - add richer outline keyboard navigation, selection persistence by stable
-     item identity, and optional delegate hooks for disclosure rendering/indent
-     metrics
-2. Finish outline drag/drop integration:
-   - add distinct before/after/on insertion targets for outline items on top of
+1. Harden outline behavior on top of the current disclosure rendering path:
+   - add richer outline keyboard navigation, multi-selection behavior aligned
+     with `TableView`, type-ahead/find-style selection, and optional delegate
+     hooks for disclosure rendering and indent metrics
+2. Finish identity-based persistence:
+   - persist selection by stable item identity instead of only visible row
+     indexes
+   - add migration behavior for renamed/moved items
+   - verify expansion and selection autosave restore timing through the same
+     application, workspace, document, and window lifecycle paths used by table
+     state storage
+3. Finish outline drag/drop integration beyond the baseline item target:
+   - add distinct before/on/after insertion targets for outline items on top of
      the current item/cell drop target model
-   - deepen outline delegate validation hooks for proposed operation, target,
-     and insertion position before accepting a drop
-3. Finish outline persistence integration:
-   - back expansion and selection state with application/user-defaults,
-     document/workspace-specific state stores, migration behavior for renamed
-     items, and restore timing tied to window/document lifecycle
+   - render insertion affordances that distinguish parent-child drops from
+     before/after sibling insertion
+   - deepen outline delegate validation and acceptance hooks for proposed
+     operation, target, and insertion position before completing a drop
 
 
 ## Medium-Term Architecture
