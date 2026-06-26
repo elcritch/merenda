@@ -516,6 +516,12 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
     scrollView.contentOffset = nextOffset
 
 proc scrollWheelDelta*(scrollView: ScrollView, event: ScrollEvent): Point =
+  if kmShift in event.modifiers and event.deltaY != 0.0'f32:
+    return initPoint(
+      (if event.deltaX != 0.0'f32: event.deltaX
+      else: -event.deltaY) * scrollView.xLineScroll[laHorizontal],
+      0.0'f32,
+    )
   initPoint(
     event.deltaX * scrollView.xLineScroll[laHorizontal],
     -event.deltaY * scrollView.xLineScroll[laVertical],
