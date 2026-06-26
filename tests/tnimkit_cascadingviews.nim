@@ -56,6 +56,21 @@ proc textNodeX(list: RenderList, text: string): float32 =
     if node.kind == nkText and node.renderedText() == text:
       return node.screenBox.x.float32
 
+proc rightTriangleBarCount(list: RenderList, rowRect: Rect): int =
+  for node in list.nodes:
+    if node.kind != nkRectangle:
+      continue
+    let
+      box = node.screenBox
+      x = box.x.float32
+      y = box.y.float32
+      width = box.w.float32
+      height = box.h.float32
+    if width.nearlyEqual(1.0'f32) and height >= 2.0'f32 and height <= 8.0'f32 and
+        x >= rowRect.maxX - 18.0'f32 and x <= rowRect.maxX - 4.0'f32 and
+        y >= rowRect.origin.y and y + height <= rowRect.maxY:
+      inc result
+
 protocol CascadingSourceSpyMethods of CascadingDataSource:
   method cascadingNumberOfChildren(
       source: CascadingSourceSpy, view: CascadingView, parentIdentifier: string
@@ -332,6 +347,30 @@ suite "NimKit CascadingView":
     check (second.columnX - first.columnX).nearlyEqual(-30.0)
     check (second.textX - first.textX).nearlyEqual(-30.0)
     check (first.textX - first.columnX).nearlyEqual(second.textX - second.columnX)
+
+  test "rows with children render right disclosure arrows":
+    let
+      root = newView(frame = initRect(0, 0, 220, 120))
+      view = newCascadingView(frame = initRect(0, 0, 220, 120))
+
+    view.columnWidth = 180.0
+    view.cascadingItems = [
+      initCascadingItem("parent", "Parent"),
+      initCascadingItem("leaf", "Leaf", leaf = true),
+      initCascadingItem("child", "Child", parentIdentifier = "parent", leaf = true),
+    ]
+    root.addSubview(view)
+    discard buildRenders(root)
+
+    let
+      renders = buildRenders(root)
+      list = renders.layers[DefaultDrawLevel]
+      tableView = view.tableViewForColumn(0)
+      parentRow = tableView.rectToWindow(tableView.rowItemRect(0))
+      leafRow = tableView.rectToWindow(tableView.rowItemRect(1))
+
+    check list.rightTriangleBarCount(parentRow) == 3
+    check list.rightTriangleBarCount(leafRow) == 0
 
   test "left and right arrows move focus between visible columns":
     let
