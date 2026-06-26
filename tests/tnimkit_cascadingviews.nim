@@ -260,5 +260,8 @@ suite "NimKit CascadingView":
     check view.columnCount == 3
     check window.pressKey(keyArrowLeft)
     check window.firstResponder == firstColumn
+    check secondColumn.selectedIndex == -1
+    check view.selectedPath == @["project"]
+    check view.columnCount == 2
     check not window.pressKey(keyArrowLeft)
     check window.firstResponder == firstColumn

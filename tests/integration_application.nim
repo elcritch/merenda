@@ -732,6 +732,9 @@ suite "nimkit application":
 
     check window.pressKey(keyArrowLeft)
     check window.firstResponder == firstColumn
+    check secondColumn.selectedIndex == -1
+    check browser.selectedPath == @["project"]
+    check browser.columnCount == 2
 
     check window.doubleClickTableRow(firstColumn, 0)
     check not firstColumn.editingState.active
