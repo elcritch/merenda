@@ -28,6 +28,7 @@ import merenda/nimkit/controls/popuplists
 import merenda/nimkit/responder/responders
 import merenda/nimkit/containers/scrollergeometry
 import merenda/nimkit/controls/sliders
+import merenda/nimkit/containers/splitviews
 import merenda/nimkit/controls/switchbuttons
 import merenda/nimkit/foundation/selectors
 import merenda/nimkit/containers/stackviews
@@ -78,6 +79,7 @@ export rendering
 export responders
 export scrollergeometry
 export sliders
+export splitviews
 export switchbuttons
 export selectors
 export stackviews

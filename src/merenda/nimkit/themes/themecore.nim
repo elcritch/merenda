@@ -49,6 +49,7 @@ type
     srTextView
     srComboBox
     srComboBoxItem
+    srSplitView
     srTableView
     srTableHeader
     srTableHeaderCell
@@ -216,6 +217,10 @@ type
     headerResizeHandleWidth*: float32
     headerDragThreshold*: float32
     headerAutoscrollEdge*: float32
+
+  SplitViewStyle* = object
+    divider*: ControlBoxStyle
+    dividerThickness*: float32
 
   RowItemStyle* = object
     box*: ControlBoxStyle
@@ -1755,6 +1760,21 @@ proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle
     headerAutoscrollEdge: theme.lengthRule(context, StyleAutoscrollEdge, 18.0'f32),
   )
 
+proc resolveSplitViewStyle*(theme: Theme, context: StyleContext): SplitViewStyle =
+  SplitViewStyle(
+    divider: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.84, 0.86, 0.90, 1.0)),
+      initColor(0.58, 0.62, 0.68, 1.0),
+      borderWidthFallback = 1.0,
+      cornerRadiusFallback = 2.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
+    ),
+    dividerThickness: theme.lengthRule(context, StyleSeparatorThickness, 6.0'f32),
+  )
+
 proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
   RowItemStyle(
     box: theme.resolveControlBoxStyle(
@@ -1840,6 +1860,11 @@ proc resolveTableViewStyle*(
     appearance: Appearance, context: StyleContext
 ): TableViewStyle =
   appearance.theme.resolveTableViewStyle(context)
+
+proc resolveSplitViewStyle*(
+    appearance: Appearance, context: StyleContext
+): SplitViewStyle =
+  appearance.theme.resolveSplitViewStyle(context)
 
 proc resolveRowItemStyle*(appearance: Appearance, context: StyleContext): RowItemStyle =
   appearance.theme.resolveRowItemStyle(context)
