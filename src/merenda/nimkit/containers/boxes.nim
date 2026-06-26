@@ -120,64 +120,88 @@ proc naturalSeparatorSize(box: Box): IntrinsicSize =
   of laVertical:
     initIntrinsicSize(thickness, NoIntrinsicMetric)
 
+protocol BoxProtocol {.selectorScope: protocol.} from Box:
+  property boxTitle -> string
+  property boxKind -> BoxKind
+  property separatorAxis -> LayoutAxis
+  property contentView -> View
+
+  method boxTitle(box: Box): string =
+    if box.isNil: "" else: box.xTitle
+
+  method setBoxTitle(box: Box, title: string) =
+    if box.isNil or box.xTitle == title:
+      return
+    box.xTitle = title
+    box.invalidateBoxMetrics()
+
+  method boxKind(box: Box): BoxKind =
+    if box.isNil: bkGroup else: box.xKind
+
+  method setBoxKind(box: Box, kind: BoxKind) =
+    if box.isNil or box.xKind == kind:
+      return
+    box.xKind = kind
+    box.invalidateBoxMetrics()
+
+  method separatorAxis(box: Box): LayoutAxis =
+    if box.isNil: laHorizontal else: box.xSeparatorAxis
+
+  method setSeparatorAxis(box: Box, axis: LayoutAxis) =
+    if box.isNil or box.xSeparatorAxis == axis:
+      return
+    box.xSeparatorAxis = axis
+    box.invalidateBoxMetrics()
+
+  method contentView(box: Box): View =
+    if box.isNil: nil else: box.xContentView
+
+  method setContentView(box: Box, contentView: View) =
+    if box.isNil:
+      return
+    if not contentView.isNil and box.xContentView == contentView:
+      return
+
+    let oldContent = box.xContentView
+    if not oldContent.isNil and oldContent.superview == box:
+      oldContent.removeFromSuperview()
+
+    box.xContentView =
+      if contentView.isNil:
+        newView(frame = initRect(0.0, 0.0, 0.0, 0.0))
+      else:
+        contentView
+    box.xContentView.background = initColor(0.0, 0.0, 0.0, 0.0)
+    box.xContentView.autoresizingMaskConstraints = false
+    if box.xContentView.superview != box:
+      box.addSubview(box.xContentView)
+    box.invalidateBoxMetrics()
+
+  method addContentSubview*(box: Box, child: View) =
+    if box.isNil or child.isNil:
+      return
+    if box.xContentView.isNil:
+      box.setContentView(nil)
+    box.xContentView.addSubview(child)
+    box.invalidateBoxMetrics()
+
 proc title*(box: Box): string =
-  if box.isNil: "" else: box.xTitle
+  if box.isNil:
+    ""
+  else:
+    box.boxTitle()
 
 proc `title=`*(box: Box, title: string) =
-  if box.isNil or box.xTitle == title:
-    return
-  box.xTitle = title
-  box.invalidateBoxMetrics()
-
-proc boxKind*(box: Box): BoxKind =
-  if box.isNil: bkGroup else: box.xKind
+  box.setBoxTitle(title)
 
 proc `boxKind=`*(box: Box, kind: BoxKind) =
-  if box.isNil or box.xKind == kind:
-    return
-  box.xKind = kind
-  box.invalidateBoxMetrics()
-
-proc separatorAxis*(box: Box): LayoutAxis =
-  if box.isNil: laHorizontal else: box.xSeparatorAxis
+  box.setBoxKind(kind)
 
 proc `separatorAxis=`*(box: Box, axis: LayoutAxis) =
-  if box.isNil or box.xSeparatorAxis == axis:
-    return
-  box.xSeparatorAxis = axis
-  box.invalidateBoxMetrics()
-
-proc contentView*(box: Box): View =
-  if box.isNil: nil else: box.xContentView
+  box.setSeparatorAxis(axis)
 
 proc `contentView=`*(box: Box, contentView: View) =
-  if box.isNil:
-    return
-  if not contentView.isNil and box.xContentView == contentView:
-    return
-
-  let oldContent = box.xContentView
-  if not oldContent.isNil and oldContent.superview == box:
-    oldContent.removeFromSuperview()
-
-  box.xContentView =
-    if contentView.isNil:
-      newView(frame = initRect(0.0, 0.0, 0.0, 0.0))
-    else:
-      contentView
-  box.xContentView.background = initColor(0.0, 0.0, 0.0, 0.0)
-  box.xContentView.autoresizingMaskConstraints = false
-  if box.xContentView.superview != box:
-    box.addSubview(box.xContentView)
-  box.invalidateBoxMetrics()
-
-proc addContentSubview*(box: Box, child: View) =
-  if box.isNil or child.isNil:
-    return
-  if box.xContentView.isNil:
-    box.contentView = nil
-  box.xContentView.addSubview(child)
-  box.invalidateBoxMetrics()
+  box.setContentView(contentView)
 
 proc intrinsicContentSize*(box: Box): IntrinsicSize =
   if box.isNil:
@@ -318,12 +342,13 @@ proc initBoxFields*(
   box.xTitle = title
   box.xKind = kind
   box.xSeparatorAxis = separatorAxis
+  discard box.withProto()
   discard box.withProtocol(DefaultBoxLayout)
   discard box.withProtocol(DefaultBoxDrawing)
   discard box.withProtocol(DefaultBoxAccessibility)
   discard box.withProtocol(BoxLifecycleSlots)
   box.observeProtocol(box, BoxLifecycleSlots)
-  box.contentView = nil
+  box.setContentView(nil)
   box.applyInitialFrame(frame)
 
 proc newBox*(title = "", frame: Rect = AutoRect): Box =

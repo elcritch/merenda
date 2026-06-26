@@ -132,48 +132,62 @@ proc invalidateSplitViewLayout(splitView: SplitView) =
   splitView.setNeedsLayout()
   splitView.setNeedsDisplay(true)
 
-proc paneIndex*(splitView: SplitView, pane: View): int =
-  if splitView.isNil or pane.isNil:
-    return -1
-  for index, current in splitView.xPanes:
-    if current.view == pane:
-      return index
-  -1
+protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
+  property splitAxis -> LayoutAxis
+  property dividerThickness -> float32
+  property autosaveName -> string
 
-proc paneCount*(splitView: SplitView): int =
-  if splitView.isNil: 0 else: splitView.xPanes.len
+  method paneIndex*(splitView: SplitView, pane: View): int =
+    if splitView.isNil or pane.isNil:
+      return -1
+    for index, current in splitView.xPanes:
+      if current.view == pane:
+        return index
+    -1
 
-proc panes*(splitView: SplitView): seq[View] =
-  if splitView.isNil:
-    return @[]
-  for pane in splitView.xPanes:
-    result.add pane.view
+  method paneCount*(splitView: SplitView): int =
+    if splitView.isNil: 0 else: splitView.xPanes.len
 
-proc splitAxis*(splitView: SplitView): LayoutAxis =
-  if splitView.isNil: laHorizontal else: splitView.xAxis
+  method panes*(splitView: SplitView): seq[View] =
+    if splitView.isNil:
+      return @[]
+    for pane in splitView.xPanes:
+      result.add pane.view
+
+  method splitAxis(splitView: SplitView): LayoutAxis =
+    if splitView.isNil: laHorizontal else: splitView.xAxis
+
+  method setSplitAxis(splitView: SplitView, axis: LayoutAxis) =
+    if splitView.isNil or splitView.xAxis == axis:
+      return
+    splitView.xAxis = axis
+    splitView.invalidateSplitViewLayout()
+
+  method dividerThickness(splitView: SplitView): float32 =
+    if splitView.isNil: 0.0'f32 else: splitView.xDividerThickness
+
+  method setDividerThickness(splitView: SplitView, value: float32) =
+    if splitView.isNil or splitView.xDividerThickness == value:
+      return
+    splitView.xDividerThickness = max(value, 0.0'f32)
+    splitView.invalidateSplitViewLayout()
+
+  method autosaveName(splitView: SplitView): string =
+    if splitView.isNil: "" else: splitView.xAutosaveName
+
+  method setAutosaveName(splitView: SplitView, name: string) =
+    if splitView.isNil or splitView.xAutosaveName == name:
+      return
+    splitView.xAutosaveName = name
 
 proc `splitAxis=`*(splitView: SplitView, axis: LayoutAxis) =
-  if splitView.isNil or splitView.xAxis == axis:
-    return
-  splitView.xAxis = axis
-  splitView.invalidateSplitViewLayout()
-
-proc dividerThickness*(splitView: SplitView): float32 =
-  if splitView.isNil: 0.0'f32 else: splitView.xDividerThickness
+  splitView.setSplitAxis(axis)
 
 proc `dividerThickness=`*(splitView: SplitView, value: float32) =
-  if splitView.isNil or splitView.xDividerThickness == value:
-    return
-  splitView.xDividerThickness = max(value, 0.0'f32)
-  splitView.invalidateSplitViewLayout()
-
-proc autosaveName*(splitView: SplitView): string =
-  if splitView.isNil: "" else: splitView.xAutosaveName
+  splitView.setDividerThickness(value)
 
 proc `autosaveName=`*(splitView: SplitView, name: string) =
-  if splitView.isNil or splitView.xAutosaveName == name:
-    return
-  splitView.xAutosaveName = name
+  splitView.setAutosaveName(name)
 
 proc paneMinSize*(splitView: SplitView, index: int): float32 =
   if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
@@ -757,6 +771,7 @@ proc initSplitViewFields*(
   splitView.background = initColor(0.0, 0.0, 0.0, 0.0)
   splitView.xAxis = axis
   splitView.xDragDivider = -1
+  discard splitView.withProto()
   discard splitView.withProtocol(DefaultSplitViewLayout)
   discard splitView.withProtocol(DefaultSplitViewDrawing)
   discard DynamicAgent(splitView).pushMethods(DefaultSplitViewEvents.init())

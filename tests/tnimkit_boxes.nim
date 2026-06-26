@@ -2,6 +2,9 @@ import std/[unicode, unittest]
 
 import figdraw/fignodes
 
+import sigils/core
+import sigils/selectors
+
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
 
@@ -198,6 +201,23 @@ proc clickView(window: Window, view: View): bool =
   window.clickAt(point)
 
 suite "nimkit boxes":
+  test "box protocol exposes selector-backed properties":
+    let box = newBox("Original")
+
+    check box.conformsTo(BoxProtocol)
+    check box.boxTitle == "Original"
+    check box.title == "Original"
+
+    let swizzledTitle: DynamicMethod = proc(
+        self: DynamicAgent, invocation: var Invocation
+    ) =
+      check Box(self) == box
+      invocation.setResult("Swizzled")
+
+    box.replaceMethod(boxTitle(), swizzledTitle)
+    check box.boxTitle == "Swizzled"
+    check box.title == "Swizzled"
+
   test "group boxes compute intrinsic size from title content and theme metrics":
     var appearance = initAppearance()
     appearance[srBox, StylePadding] = initEdgeInsets(10.0, 12.0, 14.0, 16.0)

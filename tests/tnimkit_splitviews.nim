@@ -2,6 +2,9 @@ import std/unittest
 
 import figdraw/fignodes
 
+import sigils/core
+import sigils/selectors
+
 import merenda/nimkit
 
 type FixedIntrinsicView = ref object of View
@@ -19,6 +22,21 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit split views":
+  test "split view protocol exposes selector-backed properties":
+    let splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 200.0, 100.0))
+
+    check splitView.conformsTo(SplitViewProtocol)
+    check splitView.splitAxis == laHorizontal
+
+    let swizzledAxis: DynamicMethod = proc(
+        self: DynamicAgent, invocation: var Invocation
+    ) =
+      check SplitView(self) == splitView
+      invocation.setResult(laVertical)
+
+    splitView.replaceMethod(splitAxis(), swizzledAxis)
+    check splitView.splitAxis == laVertical
+
   test "horizontal split view lays out panes and divider cursor rects":
     let
       splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 120.0))
