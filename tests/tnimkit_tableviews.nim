@@ -58,6 +58,7 @@ type TableDelegateSpy = ref object of Responder
   shouldTrackValue: bool
   hasShouldTrack: bool
   viewCalls: seq[string]
+  selectedRows: seq[int]
   activatedRows: seq[int]
   buttonActionRows: seq[int]
   sortChanges: seq[string]
@@ -312,6 +313,9 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
       delegate: TableDelegateSpy, tableView: TableView, row: int
   ): bool =
     not delegate.nonselectableRows.containsIndex(row)
+
+  method didSelectTableRow(delegate: TableDelegateSpy, tableView: TableView, row: int) =
+    delegate.selectedRows.add row
 
   method hitPolicyForCell(
       delegate: TableDelegateSpy,
@@ -1063,6 +1067,22 @@ suite "NimKit TableView":
     tableView.selectedIndex = 2
     check spy.changedEvents == 2
     check spy.changingEvents == 2
+
+  test "table view selection delegate is notified from public API":
+    let
+      tableView = newTableView()
+      delegate = newTableDelegateSpy()
+
+    tableView.selectionMode = tsmSingle
+    tableView.rowCount = 3
+    tableView.delegate = delegate
+
+    tableView.selectedIndex = 1
+    tableView.selectedIndex = 1
+    tableView.selectedIndex = 2
+    tableView.selectedIndex = -1
+
+    check delegate.selectedRows == @[1, 2]
 
   test "table row policy hooks feed inherited list row behavior":
     let

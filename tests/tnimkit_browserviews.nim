@@ -147,6 +147,15 @@ suite "NimKit Browser":
     check browser.columnCount == 2
     check browser.tableViewForColumn(1).rowCount == 2
 
+    browser.tableViewForColumn(0).selectedIndex = 1
+    check browser.selectedPath == @["notes"]
+    check browser.selectedItem.identifier == "notes"
+    check browser.columnCount == 1
+
+    browser.selectItem(0, 0)
+    check browser.selectedPath == @["project"]
+    check browser.columnCount == 2
+
     browser.selectItem(1, 0)
     check browser.selectedPath == @["project", "src"]
     check browser.columnCount == 3

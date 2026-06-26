@@ -394,6 +394,7 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
   method tableRowHeight*(tableView: TableView, row: int): float32 {.optional.}
   method isRowEnabled*(tableView: TableView, row: int): bool {.optional.}
   method shouldSelectTableRow*(tableView: TableView, row: int): bool {.optional.}
+  method didSelectTableRow*(tableView: TableView, row: int) {.optional.}
   method shouldTrackCell*(
     tableView: TableView, row: int, column: TableColumn, target: View
   ): bool {.optional.}
@@ -1559,6 +1560,12 @@ proc applySelectedIndexes(
     tableView.scrollItemToVisible(nextLead)
   tableView.invalidateTableRows()
   emit tableView.selectionDidChange(DynamicAgent(tableView))
+  if nextSelected >= 0:
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      discard delegate.sendLocalIfHandled(
+        didSelectTableRow(), (tableView: tableView, row: nextSelected)
+      )
 
 proc selectItemAtIndex(tableView: TableView, index: int) =
   if tableView.isNil or tableView.xSelectionMode == tsmNone:
@@ -4216,7 +4223,9 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       focusRect.origin.y += headerHeight
       focusRect.size.height = max(focusRect.size.height - headerHeight, 0.0'f32)
       if not focusRect.isEmpty:
-        context.addFocusRing(context.renderRectFor(focusRect), listStyle.box)
+        context.addFocusRing(
+          FocusRingDrawLevel, context.renderRectFor(focusRect), listStyle.box
+        )
 
 protocol DefaultTableViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(tableView: TableView): AccessibilityRole =

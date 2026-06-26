@@ -889,7 +889,8 @@ suite "nimkit rendering":
     theme[srTableView, StyleFocusRingColor] = focusColor
     root.addSubview(tableView)
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let renders = buildRenders(root, initAppearance(theme))
+    let list = renders[FocusRingDrawLevel]
     var
       bodyFocusRingFound = false
       fullTableFocusRingFound = false
@@ -905,6 +906,11 @@ suite "nimkit rendering":
 
     check bodyFocusRingFound
     check not fullTableFocusRingFound
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 3.0 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        fail()
 
   test "buildRenders draws focused text field selection and caret":
     let

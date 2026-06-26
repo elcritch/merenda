@@ -20,6 +20,7 @@ export images
 
 const
   DefaultDrawLevel* = 50.ZLevel
+  FocusRingDrawLevel* = 90.ZLevel
   PopupDrawLevel* = 100.ZLevel
   TextEllipsis = "…"
 
@@ -557,15 +558,20 @@ proc addSelectedText*(
   node.selectTextNode(selectedLocation, selectedLength, selectionColor)
   context.addFig(node)
 
-proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBoxStyle) =
+proc addFocusRing*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    box: ControlBoxStyle,
+) =
   if box.focusRingWidth <= 0.0'f32:
     return
   let ringRect = rect.inset(initEdgeInsets(box.focusRingInset))
   if ringRect.isEmpty:
     return
-  let parent =
-    if box.focusRingInset < 0.0'f32: context.xViewParent else: context.xParent
   discard context.addRenderRectangle(
+    layer,
     parent,
     ringRect,
     initColor(0.0, 0.0, 0.0, 0.0),
@@ -574,6 +580,16 @@ proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBox
     max(box.cornerRadius - box.focusRingInset, 0.0'f32),
     cornerRadii = box.cornerRadii.inset(box.focusRingInset),
   )
+
+proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBoxStyle) =
+  let parent =
+    if box.focusRingInset < 0.0'f32: context.xViewParent else: context.xParent
+  context.addFocusRing(DefaultDrawLevel, parent, rect, box)
+
+proc addFocusRing*(
+    context: DrawContext, layer: ZLevel, rect: nimkitTypes.Rect, box: ControlBoxStyle
+) =
+  context.addFocusRing(layer, (-1).FigIdx, rect, box)
 
 proc addComboBoxArrow*(
     context: DrawContext,
