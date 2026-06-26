@@ -11,6 +11,7 @@ import ../foundation/selectors
 import ../foundation/types
 import ../themes
 import ../view/views
+import ./listbasics
 import ./scrollviews
 import ./tableviews
 
@@ -49,6 +50,9 @@ const
   CascadingDefaultMinColumnWidth = 72.0'f32
   CascadingDefaultColumnSpacing = 1.0'f32
   CascadingColumnEdgeInset = 1.0'f32
+  CascadingChildArrowWidth = 10.0'f32
+  CascadingChildArrowRightInset = 8.0'f32
+  CascadingChildArrowTextGap = 6.0'f32
 
 proc reloadData*(view: CascadingView)
 proc selectItem*(view: CascadingView, column, row: int)
@@ -677,6 +681,77 @@ proc activateCascadingItem(view: CascadingView, column, row: int) =
   emit view.itemWasActivated(DynamicAgent(view))
   discard view.sendAction()
 
+proc cascadingRowItemStyle(
+    tableView: TableView, context: DrawContext, states: set[WidgetState]
+): RowItemStyle =
+  context.appearance.resolveRowItemStyle(
+    initControlStyleContext(
+      srRowItem, states, id = tableView.styleId(), classes = tableView.styleClasses()
+    )
+  )
+
+proc cascadingChildArrowRect(rowBounds: Rect): Rect =
+  let width = min(CascadingChildArrowWidth, rowBounds.size.width)
+  initRect(
+    rowBounds.maxX - CascadingChildArrowRightInset - width,
+    rowBounds.origin.y,
+    width,
+    rowBounds.size.height,
+  )
+
+proc drawCascadingChildArrow(context: DrawContext, rect: Rect, color: Color) =
+  if context.isNil or rect.isEmpty:
+    return
+  let
+    centerX = rect.origin.x + rect.size.width * 0.5'f32
+    centerY = rect.origin.y + rect.size.height * 0.5'f32
+  for index in 0 .. 2:
+    let height = 7.0'f32 - index.float32 * 2.0'f32
+    discard context.addRenderRectangle(
+      context.renderRectFor(
+        initRect(
+          centerX - 1.0'f32 + index.float32, centerY - height * 0.5'f32, 1.0'f32, height
+        )
+      ),
+      fill(color),
+    )
+
+proc drawCascadingRowText(
+    tableView: TableView,
+    context: DrawContext,
+    rowBounds: Rect,
+    text: string,
+    style: RowItemStyle,
+    reservesArrowSpace: bool,
+) =
+  if text.len == 0:
+    return
+  var textRect = style.rowItemTextRect(rowBounds)
+  if reservesArrowSpace:
+    let maxTextX = max(
+      textRect.origin.x,
+      rowBounds.maxX - CascadingChildArrowRightInset - CascadingChildArrowWidth -
+        CascadingChildArrowTextGap,
+    )
+    textRect.size.width = min(textRect.size.width, maxTextX - textRect.origin.x)
+  if textRect.isEmpty:
+    return
+  let textRoot = context.addRenderRectangle(
+    context.renderRectFor(textRect), fill(initColor(0.0, 0.0, 0.0, 0.0)), clips = true
+  )
+  let column = tableView.columnAt(0)
+  discard context.addText(
+    DefaultDrawLevel,
+    textRoot,
+    textRect,
+    clippedText(text, textRect.size.width),
+    style.text.color,
+    if column.isNil:
+      taLeft
+    else:
+      column.alignment(),
+  )
+
 protocol CascadingTableDataSource of TableViewDataSource:
   method numberOfRows(view: CascadingView, tableView: TableView): int =
     let column = view.columnForTableView(tableView)
@@ -710,6 +785,34 @@ protocol CascadingTableDataSource of TableViewDataSource:
     )
 
 protocol CascadingTableDelegate of TableViewDelegate:
+  method drawRow(
+      view: CascadingView,
+      tableView: TableView,
+      context: DrawContext,
+      rect: Rect,
+      row: RowState,
+  ) =
+    let emptyRow = initRowState(row.index, "", states = row.states)
+    tableView.drawTableRowItem(context, rect, emptyRow)
+    if row.index < 0:
+      return
+    let
+      column = view.columnForTableView(tableView)
+      rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
+      style = tableView.cascadingRowItemStyle(context, row.states)
+    if column < 0:
+      return
+    let
+      item = view.itemForColumnRow(column, row.index)
+      hasChildren = view.itemHasChildren(item.identifier)
+    tableView.drawCascadingRowText(
+      context, rowBounds, view.titleForItem(item), style, hasChildren
+    )
+    if hasChildren:
+      context.drawCascadingChildArrow(
+        rowBounds.cascadingChildArrowRect(), style.text.color
+      )
+
   method tableRowHeight(view: CascadingView, tableView: TableView, row: int): float32 =
     discard row
     let column = view.columnForTableView(tableView)
