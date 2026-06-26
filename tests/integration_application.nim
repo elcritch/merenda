@@ -10,6 +10,40 @@ proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
     result.add(rune)
 
+proc pressKey(window: Window, key: Key, modifiers: set[KeyModifier] = {}): bool =
+  window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: modifiers))
+
+proc rowPoint(tableView: TableView, row: int): Point =
+  let rowRect = tableView.rowItemRect(row)
+  if rowRect.isEmpty:
+    return tableView.pointToWindow(initPoint(0.0, 0.0))
+  var x = rowRect.origin.x + min(12.0'f32, rowRect.size.width * 0.5'f32)
+  let column = tableView.columnAt(0)
+  if not column.isNil:
+    let columnRect = tableView.tableColumnRect(column)
+    if not columnRect.isEmpty:
+      x = columnRect.origin.x + min(12.0'f32, columnRect.size.width * 0.5'f32)
+  tableView.pointToWindow(
+    initPoint(x, rowRect.origin.y + rowRect.size.height * 0.5'f32)
+  )
+
+proc clickTableRow(window: Window, tableView: TableView, row: int): bool =
+  let point = tableView.rowPoint(row)
+  window.mouseDownAt(point) and window.mouseUpAt(point)
+
+proc doubleClickTableRow(window: Window, tableView: TableView, row: int): bool =
+  let point = tableView.rowPoint(row)
+  window.mouseDownAt(point, clickCount = 2) and window.mouseUpAt(point, clickCount = 2)
+
+proc renderedTextX(window: Window, text: string): float32 =
+  let renders = window.buildRenders()
+  if DefaultDrawLevel notin renders.layers:
+    return -1.0'f32
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText and node.renderedText() == text:
+      return node.screenBox.x
+  -1.0'f32
+
 type WindowHookObserver = ref object of Agent
 
 type
@@ -647,6 +681,62 @@ suite "nimkit application":
     check child.dispatchPopupKeyDown(KeyEvent(key: keyEnter))
     check actionCount == 1
     check not button.popupOpen
+
+  test "cascading view moves through columns from user input":
+    let
+      window = newWindow("Cascading Input", frame = initRect(0, 0, 420, 220))
+      root = newView(frame = initRect(0, 0, 420, 220))
+      browser = newCascadingView(frame = initRect(10, 10, 360, 160))
+
+    browser.cascadingItems = [
+      initCascadingItem("project", "Project"),
+      initCascadingItem("notes", "Notes", leaf = true),
+      initCascadingItem("src", "src", parentIdentifier = "project"),
+      initCascadingItem("tests", "tests", parentIdentifier = "project", leaf = true),
+      initCascadingItem("main", "main.nim", parentIdentifier = "src", leaf = true),
+    ]
+    root.addSubview(browser)
+    window.setContentView(root)
+    discard window.buildRenders()
+
+    let firstColumn = browser.tableViewForColumn(0)
+    check window.clickTableRow(firstColumn, 0)
+    check window.firstResponder == firstColumn
+    check firstColumn.selectedIndex == 0
+    check browser.selectedPath == @["project"]
+    check browser.columnCount == 2
+    check firstColumn.scrollView().contentOffset().x == 0.0'f32
+
+    let projectTextX = window.renderedTextX("Project")
+    check projectTextX >= 0.0'f32
+    check window.pressKey(keyArrowDown)
+    check firstColumn.selectedIndex == 1
+    check browser.selectedPath == @["notes"]
+    check browser.columnCount == 1
+    check firstColumn.scrollView().contentOffset().x == 0.0'f32
+    check window.renderedTextX("Project") == projectTextX
+
+    check window.pressKey(keyArrowUp)
+    check firstColumn.selectedIndex == 0
+    check browser.selectedPath == @["project"]
+    check browser.columnCount == 2
+    check firstColumn.scrollView().contentOffset().x == 0.0'f32
+    check window.renderedTextX("Project") == projectTextX
+
+    let secondColumn = browser.tableViewForColumn(1)
+    check window.pressKey(keyArrowRight)
+    check window.firstResponder == secondColumn
+    check secondColumn.selectedIndex == 0
+    check browser.selectedPath == @["project", "src"]
+    check browser.columnCount == 3
+
+    check window.pressKey(keyArrowLeft)
+    check window.firstResponder == firstColumn
+
+    check window.doubleClickTableRow(firstColumn, 0)
+    check not firstColumn.editingState.active
+    check window.pressKey(keyEnter)
+    check not firstColumn.editingState.active
 
   test "menu bar presents top-level menu submenus":
     let

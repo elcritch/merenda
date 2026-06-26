@@ -1421,9 +1421,11 @@ proc scrollContentRectToVisible(tableView: TableView, rect: Rect) =
 proc scrollItemToVisible(tableView: TableView, itemIndex: int) =
   if tableView.isNil or itemIndex < 0 or itemIndex >= tableView.len():
     return
-  tableView.scrollContentRectToVisible(
-    tableView.xContentView.tableContentItemRect(itemIndex)
-  )
+  var rect = tableView.xContentView.tableContentItemRect(itemIndex)
+  let offset = tableView.listContentOffset()
+  rect.origin.x = offset.x
+  rect.size.width = tableView.viewportSize().width
+  tableView.scrollContentRectToVisible(rect)
 
 proc selectionContains(tableView: TableView, index: int): bool =
   for selectedIndex in tableView.xSelectedIndexes:
@@ -1757,9 +1759,13 @@ proc pageSelection(tableView: TableView, deltaPages: int, extend = false) =
   if scrollView.isNil:
     return
   if target >= tableView.len():
-    tableView.setTableContentOffset(scrollView.maximumContentOffset(), true)
+    let
+      currentOffset = scrollView.contentOffset()
+      maximumOffset = scrollView.maximumContentOffset()
+    tableView.setTableContentOffset(initPoint(currentOffset.x, maximumOffset.y), true)
   elif target < 0:
-    tableView.setTableContentOffset(initPoint(0.0'f32, 0.0'f32), true)
+    let currentOffset = scrollView.contentOffset()
+    tableView.setTableContentOffset(initPoint(currentOffset.x, 0.0'f32), true)
 
 proc autoscrollDraggingInfo(tableView: TableView, info: DraggingInfo): bool =
   if tableView.isNil or tableView.scrollView().isNil:
@@ -2051,8 +2057,9 @@ proc scrollRows*(tableView: TableView, delta: int) =
     return
   let oldFirst = tableView.firstVisibleIndex()
   let nextFirst = max(oldFirst + delta, 0)
+  let offset = tableView.listContentOffset()
   tableView.setTableContentOffset(
-    initPoint(0.0'f32, tableView.rowOffset(nextFirst)), false
+    initPoint(offset.x, tableView.rowOffset(nextFirst)), false
   )
   if tableView.firstVisibleIndex() != oldFirst:
     tableView.invalidateTableRows()
@@ -2611,7 +2618,12 @@ proc drawTableCellText(
   let text = tableView.tableCellText(row, column)
   if text.len > 0:
     let textRect = style.rowItemTextRect(rect)
+    let textRoot = context.addRenderRectangle(
+      context.renderRectFor(textRect), fill(initColor(0.0, 0.0, 0.0, 0.0)), clips = true
+    )
     discard context.addText(
+      DefaultDrawLevel,
+      textRoot,
       textRect,
       clippedText(text, textRect.size.width),
       style.text.color,

@@ -867,6 +867,11 @@ suite "nimkit rendering":
           check node.screenBox.y == 41.0
           check node.screenBox.w == 110.0
           check node.screenBox.h == 20.0
+          check node.parent != (-1).FigIdx
+          let clipNode = list.nodes[int(node.parent)]
+          check clipNode.kind == nkRectangle
+          check NfClipContent in clipNode.flags
+          check clipNode.screenBox == node.screenBox
       else:
         discard
 

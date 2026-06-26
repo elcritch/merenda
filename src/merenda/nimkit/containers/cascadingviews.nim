@@ -3,8 +3,10 @@ import std/[options, strutils]
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
+import ../app/windows
 import ../controls/controls
 import ../drawing
+import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
 import ../themes
@@ -60,6 +62,7 @@ proc childrenForParent*(
 
 proc itemHasChildren*(view: CascadingView, identifier: string): bool
 proc applySelectedPath(view: CascadingView, path: openArray[string])
+proc focusColumnRelative(view: CascadingView, delta: int): bool
 
 protocol CascadingDataSource {.selectorScope: protocol.}:
   method cascadingNumberOfChildren*(
@@ -448,6 +451,48 @@ proc initCascadingTableView(view: CascadingView): TableView =
   result.autoresizingMaskConstraints = false
   result.setAcceptsFirstResponder(true)
 
+proc focusedColumnTable(view: CascadingView): TableView =
+  if view.isNil:
+    return nil
+  let owner = view.window()
+  if not (owner of Window):
+    return nil
+  let responder = Window(owner).firstResponder()
+  if responder of TableView:
+    let tableView = TableView(responder)
+    if view.columnForTableView(tableView) >= 0:
+      return tableView
+  nil
+
+proc focusColumn(view: CascadingView, column: int): bool =
+  if view.isNil or column notin 0 ..< view.xColumns.len:
+    return false
+  let tableView = view.xColumns[column]
+  if tableView.isNil:
+    return false
+  let owner = tableView.window()
+  if owner of Window:
+    Window(owner).makeFirstResponder(tableView)
+  else:
+    false
+
+proc focusColumnRelative(view: CascadingView, delta: int): bool =
+  if view.isNil or delta == 0:
+    return false
+  let tableView = view.focusedColumnTable()
+  if tableView.isNil:
+    return false
+  let column = view.columnForTableView(tableView)
+  let nextColumn = column + delta
+  if nextColumn notin 0 ..< view.xColumns.len:
+    return false
+  if delta > 0:
+    let nextTableView = view.tableViewForColumn(nextColumn)
+    if not nextTableView.isNil and nextTableView.selectedIndex() < 0 and
+        nextTableView.rowCount() > 0:
+      view.selectItem(nextColumn, 0)
+  view.focusColumn(nextColumn)
+
 proc syncCascadingColumns(view: CascadingView) =
   if view.isNil:
     return
@@ -647,6 +692,27 @@ protocol CascadingTableDelegate of TableViewDelegate:
     let column = view.columnForTableView(tableView)
     view.activateCascadingItem(column, row)
 
+  method shouldEditCell(
+      view: CascadingView, tableView: TableView, row: int, column: TableColumn
+  ): bool =
+    discard view
+    discard tableView
+    discard row
+    discard column
+    false
+
+protocol CascadingViewKeyEvents of ResponderEventProtocol:
+  method keyDown(view: CascadingView, event: KeyEvent): bool =
+    if event.modifiers != {}:
+      return false
+    case event.key
+    of keyArrowLeft:
+      view.focusColumnRelative(-1)
+    of keyArrowRight:
+      view.focusColumnRelative(1)
+    else:
+      false
+
 protocol CascadingViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: CascadingView): IntrinsicSize =
     let
@@ -741,6 +807,7 @@ proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   discard view.withProtocol(CascadingViewLayout)
   discard view.withProtocol(CascadingSelectionBehavior)
   discard view.withProtocol(CascadingReloadBehavior)
+  discard view.withProtocol(CascadingViewKeyEvents)
   discard view.withProtocol(CascadingDrawing)
   discard view.withProtocol(CascadingAccessibility)
   view.syncCascadingColumns()
