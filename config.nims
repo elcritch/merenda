@@ -8,8 +8,19 @@
   arc
 --define:
   release
+--mangle:
+  cpp
 --debugger:
   native
+
+--stacktrace:
+  off
+--define:
+  nimStackTraceOverride
+switch("import", "libbacktrace")
+when defined(freebsd):
+  --define:
+    libbacktraceUseSystemLibs
 
 import std/strutils
 import std/os

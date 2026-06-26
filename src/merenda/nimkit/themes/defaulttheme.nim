@@ -241,6 +241,9 @@ proc initTheme*(): Theme =
   result["tableView.border.color"] = styleToken("textField.border.color")
   result["scrollView.fill"] = styleToken("tableView.fill")
   result["scrollView.border.color"] = styleToken("tableView.border.color")
+  result["box.fill"] = styleColor(initColor(0.0, 0.0, 0.0, 0.0))
+  result["box.border.color"] = styleColor(initColor(0.61, 0.65, 0.72, 1.0))
+  result["box.text.color"] = styleColor(initColor(0.12, 0.15, 0.20, 1.0))
   result["scroller.track.fill"] = styleFill(initColor(0.88, 0.90, 0.94, 0.70))
   result["scroller.track.border.color"] = styleColor(initColor(0.67, 0.71, 0.78, 0.80))
   result["scroller.knob.fill"] = styleFill(initColor(0.36, 0.42, 0.50, 0.65))
@@ -273,6 +276,25 @@ proc initTheme*(): Theme =
   result["tab.border.color.disabled"] = styleColor(initColor(0.65, 0.67, 0.70, 1.0))
 
   result[srView, StyleBackgroundColor] = initColor(0.95, 0.96, 0.98)
+
+  result.addRoleRule(
+    srBox,
+    {},
+    styleToken("box.fill"),
+    styleToken("box.border.color"),
+    styleToken("box.text.color"),
+  )
+  result[srBox, StyleBorderWidth] = 1.0
+  result[srBox, StyleCornerRadius] = 5.0
+  result[srBox, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
+  result[srBox, StylePadding] = initEdgeInsets(14.0, 12.0)
+  result[srBox, StyleTitleHeight] = 18.0
+  result[srBox, StyleTitleGap] = 4.0
+  result[srBox, StyleSeparatorThickness] = 1.0
+  result[srBox, StyleMinimumSize] = initSize(0.0, 0.0)
+  result[srBox, StyleFocusRingWidth] = 0.0
+  result[srBox, StyleFocusRingInset] = 0.0
+  result[srBox, StyleBoxShadows] = newSeq[BoxShadow]()
 
   result.addRoleRule(
     srButton,
