@@ -238,6 +238,11 @@ accessibility, or control/cell layers.
 - Added the first pure Nim panel/dialog shells on top of the modal/session
   model: `Panel`, `Alert`, `OpenPanel`, and `SavePanel` construction plus modal
   and sheet entry points. Native panel bridges remain a later backend task.
+- Added `SplitView` as a resizable container primitive with horizontal and
+  vertical pane arrangements, themed dividers, divider hit testing and drag
+  tracking, cursor rects, min/max pane constraints, collapsible panes,
+  accessibility child flattening, backend-neutral state capture/restore, and
+  `examples/splitview_demo.nim` coverage.
 
 ## Current Verification
 
@@ -260,6 +265,10 @@ accessibility, or control/cell layers.
   `atlas-run tests tests/tnimkit_outlineviews.nim`.
 - The current box and pure Nim panel/dialog shell coverage lives in
   `tests/tnimkit_boxes.nim` and `tests/integration_application.nim`.
+- The first `SplitView` pass was checked with
+  `atlas-run tests tests/tnimkit_splitviews.nim tests/tnimkit_theme.nim tests/tnimkit_rendering.nim`,
+  `atlas-run tests --compile-only examples/splitview_demo.nim`, and a full
+  `atlas-run tests` run passing `35/35`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -274,38 +283,30 @@ instead of producing isolated one-off controls.
 
 Recommended implementation order:
 
-1. `SplitView`
-   - Add horizontal and vertical panes, divider tracking, min/max pane
-     constraints, collapsible panes, live resize behavior, and autosave hooks.
-   - This should become the primitive for source-list/detail, inspector, editor,
-     browser, and document-workspace layouts.
-   - Reuse the table state-storage/autosave path where practical so divider
-     positions can persist by window, workspace, or document scope.
-2. `ProgressIndicator`
+1. `ProgressIndicator`
    - Add determinate bars and indeterminate spinner/bar modes.
    - Use it to exercise timer/animation invalidation, value accessibility, and
      disabled/active appearance.
-3. `Stepper`
+2. `Stepper`
    - Add min/max/increment/wrap behavior, press-and-hold repeat tracking, value
      formatting hooks, and target/action dispatch.
    - Pair with text fields in examples to test AppKit-style value editing.
-4. `Browser`
+3. `Browser`
    - Add the classic NeXT/OpenStep column browser on top of scroll/table row
      primitives: dynamic column loading, column selection, keyboard navigation,
      and path/item identity.
-   - This is the highest-signal compatibility widget, but it should follow
-     `SplitView` and the smaller controls so shared scrolling and layout paths
-     are already stable.
-5. `Matrix`
+   - This is the highest-signal compatibility widget, but it should follow the
+     smaller controls so shared scrolling and layout paths are already stable.
+4. `Matrix`
    - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
      selection modes, keyboard movement, and cell reuse.
    - Use this to further harden the control/cell split.
-6. `ColorWell`
+5. `ColorWell`
    - Add color swatch rendering, target/action on color changes, pasteboard
      color payload integration, and drag affordances.
    - Stage a full color panel separately after the well and panel/session
      contracts are stronger.
-7. Panels and dialogs hardening
+6. Panels and dialogs hardening
    - Expand the existing pure Nim `Panel`, `Alert`, `OpenPanel`, and `SavePanel`
      shells into real reusable views with buttons, accessory views, result
      mapping, file-type validation, and document-controller integration.

@@ -248,6 +248,9 @@ proc initTheme*(): Theme =
   result["scroller.track.border.color"] = styleColor(initColor(0.67, 0.71, 0.78, 0.80))
   result["scroller.knob.fill"] = styleFill(initColor(0.36, 0.42, 0.50, 0.65))
   result["scroller.knob.border.color"] = styleColor(initColor(0.24, 0.29, 0.36, 0.50))
+  result["splitView.divider.fill"] = styleFill(initColor(0.84, 0.86, 0.90, 1.0))
+  result["splitView.divider.border.color"] =
+    styleColor(initColor(0.58, 0.62, 0.68, 1.0))
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
   result["rowItem.fill.highlighted"] = styleToken("comboBox.item.fill.highlighted")
   result["rowItem.fill.selected"] = styleToken("comboBox.item.fill.selected")
@@ -688,6 +691,15 @@ proc initTheme*(): Theme =
   result[srScroller, StyleKnobBorderColor] = styleToken("scroller.knob.border.color")
   result[srScroller, StyleBorderWidth] = 1.0
   result[srScroller, StyleCornerRadius] = 3.0
+
+  result[srSplitView, StyleFill] = styleToken("splitView.divider.fill")
+  result[srSplitView, StyleBorderColor] = styleToken("splitView.divider.border.color")
+  result[srSplitView, StyleBorderWidth] = 1.0
+  result[srSplitView, StyleCornerRadius] = 2.0
+  result[srSplitView, StyleSeparatorThickness] = 6.0
+  result[srSplitView, StyleFocusRingWidth] = 0.0
+  result[srSplitView, StyleFocusRingInset] = 0.0
+  result[srSplitView, StyleBoxShadows] = newSeq[BoxShadow]()
 
   result[srTableHeader, StyleFill] = fill(initColor(0.88, 0.90, 0.94, 1.0))
   result[srTableHeader, StyleBorderColor] = initColor(0.60, 0.64, 0.70, 1.0)

@@ -106,7 +106,7 @@ NimKit ships the core controls needed for desktop-style interfaces:
 - Text: `newTextField`, `newLabel`, `newTitleLabel`, `newStatusLabel`
 - Buttons and choices: `newButton`, `newCheckBox`, `newRadioButton`
 - Value controls: `newComboBox`, `newSlider`, `newSwitchButton`
-- Containers: `newBox`, `newGroupBox`, `newSeparatorBox`, `newTabView`, `newTableView`, `newGridView`, `newFormView`
+- Containers: `newBox`, `newGroupBox`, `newSeparatorBox`, `newSplitView`, `newTabView`, `newTableView`, `newGridView`, `newFormView`
 
 Controls use Cocoa-style target/action for commands:
 
@@ -224,6 +224,7 @@ nim r examples/checkbox_demo.nim
 nim r examples/radio_demo.nim
 nim r examples/combobox_demo.nim
 nim r examples/box_demo.nim
+nim r examples/splitview_demo.nim
 nim r examples/tabview_demo.nim
 nim r examples/table_demo.nim
 nim r examples/preferences_demo.nim
