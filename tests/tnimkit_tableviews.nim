@@ -1014,6 +1014,33 @@ suite "NimKit TableView":
     check texts.contains("name:2")
     check texts.contains("age:2")
 
+  test "table view reloadData refreshes hosted cell views from updated data":
+    let
+      tableView = newTableView(frame = initRect(0, 0, 320, 46))
+      source = newEditableTableSpy(
+        EditableTableRow(
+          project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
+        )
+      )
+      project = newTableColumn("project", "Project", width = 160.0)
+      state = newTableColumn("state", "State", width = 100.0, alignment = taCenter)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = source
+
+    let initialTexts = tableView.renderedTexts()
+    check initialTexts.containsValue("Queued")
+
+    source.rows[0].state = "Running"
+    tableView.reloadData()
+
+    let updatedTexts = tableView.renderedTexts()
+    check updatedTexts.containsValue("Running")
+    check not updatedTexts.containsValue("Queued")
+
   test "table view selection signals are emitted from public API":
     let
       tableView = newTableView()

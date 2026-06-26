@@ -3,6 +3,7 @@ import std/[algorithm, strutils]
 import merenda/nimkit
 
 import sigils/core
+import sigils/selectors as dynamicSelectors
 
 type
   BuildRow = object
@@ -21,6 +22,7 @@ type
     detail: Label
     activity: Label
     stateStore: TableViewStateStore
+    contextRows: seq[int]
 
 const ValidBuildStates = ["Running", "Queued", "Blocked", "Done", "Paused"]
 
@@ -410,6 +412,71 @@ proc tableCellEditDidCommit(
   controller.activity.text =
     "Committed " & column.title & ": " & value & "\nResorted by " & column.title
 
+proc actionRows(controller: TableDemoController): seq[int] =
+  if controller.contextRows.len > 0:
+    controller.contextRows
+  else:
+    controller.table.selectedIndexes
+
+proc updateContextRows(controller: TableDemoController, event: MouseEvent) =
+  controller.contextRows = @[]
+  let row = controller.table.rowItemIndexAtPoint(event.location)
+  if row notin 0 ..< controller.rows.len:
+    return
+  if row in controller.table.selectedIndexes:
+    controller.contextRows = controller.table.selectedIndexes
+  else:
+    controller.contextRows = @[row]
+    let column = controller.table.columnAtPoint(event.location)
+    if not column.isNil and controller.table.rowSelectable(row):
+      controller.table.selectCell(row, column)
+
+proc installContextRowTracking(controller: TableDemoController) =
+  let wrapper: dynamicSelectors.AroundMethod = proc(
+      self: DynamicAgent,
+      invocation: var dynamicSelectors.Invocation,
+      next: dynamicSelectors.DynamicMethod,
+  ) =
+    let event = invocation.argsAs(MouseEvent)
+    if event.button == mbSecondary:
+      controller.updateContextRows(event)
+    if not next.isNil:
+      next(self, invocation)
+    elif not invocation.handled:
+      invocation.setResult(false)
+
+  discard DynamicAgent(controller.table).pushMethod(rightMouseDown(), wrapper)
+
+proc inspectSelected(controller: TableDemoController, sender: DynamicAgent) =
+  discard sender
+  let rows = controller.actionRows()
+  let row =
+    if rows.len > 0:
+      rows[0]
+    else:
+      -1
+  if row < 0:
+    controller.activity.text = "No selected or clicked row to inspect"
+    return
+  controller.onInspect(row)
+  controller.contextRows = @[]
+
+proc markSelectedState(controller: TableDemoController, state: string) =
+  let rows = controller.actionRows()
+  if rows.len == 0:
+    controller.activity.text = "No selected or clicked rows to update"
+    return
+  var changed = 0
+  for row in rows:
+    if row in 0 ..< controller.rows.len:
+      controller.rows[row].state = state
+      inc changed
+  controller.table.reloadData()
+  controller.table.selectedIndexes = rows
+  controller.updateSelection()
+  controller.activity.text = "Marked " & $changed & " row(s) " & state
+  controller.contextRows = @[]
+
 proc newTableDemoController(
     table: TableView, detail, activity: Label
 ): TableDemoController =
@@ -444,6 +511,9 @@ let
   activityTitle = newHeadingLabel("Activation")
   activity = newStatusLabel("No row activated")
   controller = newTableDemoController(table, detail, activity)
+  inspectContextAction = actionSelector("tableContextInspect")
+  markRunningContextAction = actionSelector("tableContextMarkRunning")
+  markDoneContextAction = actionSelector("tableContextMarkDone")
 
 let
   projectColumn =
@@ -508,6 +578,36 @@ table.moveColumn(table.columnIndex("owner"), table.columnIndex("project"))
 table.restoreState(controller.stateStore)
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 table.connect(cellEditDidCommit, controller, tableCellEditDidCommit)
+controller.installContextRowTracking()
+
+let
+  tableContextMenu = newMenu("Table Context")
+  inspectContextItem = newMenuItem("Inspect Selection", inspectContextAction)
+  runningContextItem = newMenuItem("Mark Running", markRunningContextAction)
+  doneContextItem = newMenuItem("Mark Done", markDoneContextAction)
+
+inspectContextItem.target = newActionTarget(
+  inspectContextAction,
+  proc(sender: DynamicAgent) =
+    controller.inspectSelected(sender),
+)
+runningContextItem.target = newActionTarget(
+  markRunningContextAction,
+  proc(sender: DynamicAgent) =
+    discard sender
+    controller.markSelectedState("Running"),
+)
+doneContextItem.target = newActionTarget(
+  markDoneContextAction,
+  proc(sender: DynamicAgent) =
+    discard sender
+    controller.markSelectedState("Done"),
+)
+discard tableContextMenu.addItem(inspectContextItem)
+discard tableContextMenu.addSeparator()
+discard tableContextMenu.addItem(runningContextItem)
+discard tableContextMenu.addItem(doneContextItem)
+table.menu = tableContextMenu
 
 var tableAppearance = initAppearance()
 let

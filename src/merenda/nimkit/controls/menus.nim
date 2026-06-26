@@ -42,6 +42,10 @@ type
     xPopupList: PopupListView
     xPopupWindow: Window
     xPopupOpen: bool
+    xRestoreResponder: Responder
+    xActionStartResponder: Responder
+    xUsesCustomRestoreResponder: bool
+    xRemoveFromSuperviewOnClose: bool
     xHighlightedIndex: int
     xViewport: RowViewport
     xMaxVisibleItems: int
@@ -70,6 +74,11 @@ proc closeChildPopup(button: PopupMenuButton)
 proc openSubmenuPopup(button: PopupMenuButton, index: int)
 proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool
+proc menu*(view: View): Menu
+proc `menu=`*(view: View, menu: Menu)
+proc popUpContextMenu*(
+  menu: Menu, view: View, event: MouseEvent
+): PopupMenuButton {.discardable.}
 
 protocol MenuProtocol {.selectorScope: protocol.} from Menu:
   method openMenu*(menu: Menu) =
@@ -186,6 +195,13 @@ protocol MenuBarAccessibility of AccessibilityProtocol:
 
   method isAccessibilityElement(menuBar: MenuBar): bool =
     true
+
+protocol ViewContextMenuEvents of ResponderEventProtocol:
+  method rightMouseDown(view: View, event: MouseEvent): bool =
+    let next = view.trySendNext(rightMouseDown(), event)
+    if next.isSome and next.get():
+      return true
+    not view.menu().popUpContextMenu(view, event).isNil
 
 proc open*(menu: Menu) =
   menu.openMenu()
@@ -342,6 +358,25 @@ proc userInfo*(item: MenuItem): DynamicAgent =
 proc `userInfo=`*(item: MenuItem, value: DynamicAgent) =
   if not item.isNil:
     item.xUserInfo = value
+
+proc menu*(view: View): Menu =
+  if view.isNil or view.xContextMenu.isNil or not (view.xContextMenu of Menu):
+    return nil
+  Menu(view.xContextMenu)
+
+proc `menu=`*(view: View, menu: Menu) =
+  if view.isNil or view.xContextMenu == Responder(menu):
+    return
+  if not view.xContextMenu.isNil and view.xContextMenu.nextResponder() == Responder(
+    view
+  ):
+    view.xContextMenu.clearNextResponder()
+  view.xContextMenu = Responder(menu)
+  if not menu.isNil:
+    menu.setNextResponder(view)
+    if not view.xContextMenuHandlerInstalled:
+      discard view.pushMethods(ViewContextMenuEvents.init())
+      view.xContextMenuHandlerInstalled = true
 
 proc title*(menu: Menu): string =
   if menu.isNil: "" else: menu.xTitle
@@ -761,6 +796,16 @@ proc scrollPopupRows(button: PopupMenuButton, delta: int) =
   if button.popupFirstItemIndex() != oldFirst:
     button.setPopupNeedsDisplay()
 
+proc actionStartResponder(button: PopupMenuButton): Responder =
+  let root = button.rootPopup()
+  if not root.isNil and not root.xActionStartResponder.isNil:
+    return root.xActionStartResponder
+  let owner = button.ownerWindow()
+  if owner.isNil or owner.firstResponder().isNil:
+    Responder(button)
+  else:
+    owner.firstResponder()
+
 proc activateItem(button: PopupMenuButton, index: int) =
   let item = button.menuItem(index)
   if item.isNil or item.isSeparatorItem() or not item.enabled():
@@ -768,13 +813,7 @@ proc activateItem(button: PopupMenuButton, index: int) =
   if not item.submenu().isNil:
     button.openSubmenuPopup(index)
     return
-  let owner = button.ownerWindow()
-  let start =
-    if owner.isNil or owner.firstResponder().isNil:
-      Responder(button)
-    else:
-      owner.firstResponder()
-  discard item.perform(start, DynamicAgent(button))
+  discard item.perform(button.actionStartResponder(), DynamicAgent(button))
   let root = button.rootPopup()
   if root.isNil:
     button.closePopup()
@@ -938,12 +977,18 @@ proc beginPopupSession(button: PopupMenuButton) =
   if owner.isNil:
     return
   let transient = if button.xPopupWindow.isNil: nil else: button.xPopupWindow
+  let restore =
+    if button.xUsesCustomRestoreResponder:
+      button.xRestoreResponder
+    else:
+      Responder(button)
   owner.beginTransientSession(
     owner = Responder(button.popupList()),
     transientWindow = transient,
-    restoreResponder = Responder(button),
+    restoreResponder = restore,
     onDismiss = proc(reason: DismissReason) =
       button.dismissPopupFromSession(reason),
+    restoreCurrentResponderIfNil = not button.xUsesCustomRestoreResponder,
   )
 
 proc endPopupSession(button: PopupMenuButton) =
@@ -1048,6 +1093,8 @@ proc closePopupImpl(button: PopupMenuButton) =
   button.noteMenuBarPopupClosed()
   button.setWidgetState(ssOpen, false)
   button.setNeedsDisplay(true)
+  if button.xRemoveFromSuperviewOnClose and not button.superview().isNil:
+    button.removeFromSuperview()
 
 protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
   method draw(button: PopupMenuButton, context: DrawContext) =
@@ -1227,6 +1274,45 @@ proc newPullDownButton*(
 ): PopupMenuButton =
   result = newPopupMenuButton(title, menu, frame)
   result.addStyleClass("pullDown")
+
+proc popUpContextMenu*(
+    menu: Menu, view: View, event: MouseEvent
+): PopupMenuButton {.discardable.} =
+  if menu.isNil or menu.len == 0 or view.isNil:
+    return nil
+  let ownerResponder = view.window()
+  if not (ownerResponder of Window):
+    return nil
+  let owner = Window(ownerResponder)
+  let content = owner.contentView()
+  if content.isNil:
+    return nil
+
+  let
+    windowPoint = view.pointToWindow(event.location)
+    contentPoint = owner.convertPointToContent(windowPoint)
+    anchorFrame = initRect(contentPoint.x, contentPoint.y, 0.0'f32, 0.0'f32)
+
+  result = newPopupMenuButton(menu.title(), menu, anchorFrame)
+  menu.setNextResponder(view)
+  result.hidden = true
+  result.xRestoreResponder = owner.firstResponder()
+  result.xActionStartResponder = Responder(view)
+  result.xUsesCustomRestoreResponder = true
+  result.xRemoveFromSuperviewOnClose = true
+  content.addSubview(result)
+  discard owner.makeFirstResponder(result, focusVisible = false)
+  result.openPopup()
+  if not result.popupOpen():
+    result.removeFromSuperview()
+    result = nil
+
+proc popUpContextMenu*(
+    menu: Menu, view: View, point: Point
+): PopupMenuButton {.discardable.} =
+  menu.popUpContextMenu(
+    view, MouseEvent(location: point, button: mbSecondary, clickCount: 1)
+  )
 
 proc submenuCascadeFrame(button: PopupMenuButton, index: int): Rect =
   let

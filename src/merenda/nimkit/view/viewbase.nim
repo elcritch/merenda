@@ -171,6 +171,8 @@ type
     xCursorRects*: seq[ViewCursorRect]
     xTrackingAreas*: seq[ViewTrackingArea]
     xRegisteredDraggedTypes*: seq[string]
+    xContextMenu*: Responder
+    xContextMenuHandlerInstalled*: bool
     xCachedRenders*: Renders
     xCachedAppearance*: Appearance
     xHasCachedRenders*: bool

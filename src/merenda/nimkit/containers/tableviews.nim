@@ -1835,6 +1835,7 @@ proc `highlightedIndex=`*(tableView: TableView, index: int) =
 
 proc reloadData*(tableView: TableView) =
   let oldFirst = tableView.firstVisibleIndex()
+  tableView.clearTableCellSlots()
   tableView.invalidateRowHeightCache()
   if tableView.xSelectionMode == tsmSingle and tableView.xSelectedIndexes.len > 0 and
       tableView.len() > 0:

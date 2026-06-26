@@ -59,6 +59,9 @@ let
   choiceAction = actionSelector("showcaseChoiceChanged")
   radioAction = actionSelector("showcaseRadioChanged")
   comboAction = actionSelector("showcaseComboChanged")
+  contextToggleAction = actionSelector("showcaseContextToggleButton")
+  contextDownloadsAction = actionSelector("showcaseContextToggleDownloads")
+  resetAction = actionSelector("showcaseResetControls")
 
 var pushCount = 0
 
@@ -115,6 +118,62 @@ proc onToggle(sender: DynamicAgent) =
 proc onChoiceChanged(sender: DynamicAgent) =
   if not sender.isNil:
     updateSummary()
+
+proc cycleToggleButton(sender: DynamicAgent) =
+  discard sender
+  case toggleButton.state
+  of bsOff:
+    toggleButton.state = bsOn
+  of bsOn:
+    toggleButton.state = bsMixed
+  of bsMixed:
+    toggleButton.state = bsOff
+  updateToggleTitle()
+  updateSummary()
+
+proc toggleDownloads(sender: DynamicAgent) =
+  discard sender
+  downloads.state = if downloads.state == bsOn: bsOff else: bsOn
+  updateSummary()
+
+proc resetControls(sender: DynamicAgent) =
+  discard sender
+  nameField.stringValue = "Ada"
+  noteField.stringValue = "Building UI"
+  pushCount = 0
+  actionCountLabel.text = "Push count: 0"
+  toggleButton.state = bsOff
+  downloads.state = bsOff
+  notifications.state = bsOff
+  sync.state = bsMixed
+  small.state = bsOff
+  medium.state = bsOn
+  large.state = bsOff
+  priority.selectedIndex = 1
+  color.selectedIndex = 0
+  volumeSlider.value = 42.0
+  powerSwitch.state = bsOn
+  updateToggleTitle()
+  updateVolumeLabel(volumeSlider)
+  updatePowerSwitchLabel(powerSwitch)
+  updateSummary()
+
+let
+  contextMenu = newMenu("Controls Context")
+  contextPushItem = newMenuItem("Push", pushAction)
+  contextToggleItem = newMenuItem("Cycle Toggle", contextToggleAction)
+  contextDownloadsItem = newMenuItem("Toggle Downloads", contextDownloadsAction)
+  contextResetItem = newMenuItem("Reset Controls", resetAction)
+
+contextPushItem.target = newActionTarget(pushAction, onPush)
+contextToggleItem.target = newActionTarget(contextToggleAction, cycleToggleButton)
+contextDownloadsItem.target = newActionTarget(contextDownloadsAction, toggleDownloads)
+contextResetItem.target = newActionTarget(resetAction, resetControls)
+discard contextMenu.addItem(contextPushItem)
+discard contextMenu.addItem(contextToggleItem)
+discard contextMenu.addItem(contextDownloadsItem)
+discard contextMenu.addSeparator()
+discard contextMenu.addItem(contextResetItem)
 
 for field in [nameField, noteField]:
   field.connect(textDidChange, field, onTextDidChange)
@@ -201,6 +260,7 @@ bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
 layout.addArrangedSubview(title, bodyRow, summary)
 
 root.addSubview(layout)
+root.menu = contextMenu
 layout.pinEdges(
   toGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
   edges = {leLeft, leTop, leRight},
