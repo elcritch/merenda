@@ -24,6 +24,7 @@ import merenda/nimkit/containers/listbasics
 import merenda/nimkit/controls/menus
 import merenda/nimkit/containers/outlineviews
 import merenda/nimkit/app/pasteboards
+import merenda/nimkit/controls/progressindicators
 import merenda/nimkit/controls/popuplists
 import merenda/nimkit/responder/responders
 import merenda/nimkit/containers/scrollergeometry
@@ -74,6 +75,7 @@ export listbasics
 export menus
 export outlineviews
 export pasteboards
+export progressindicators
 export popuplists
 export rendering
 export responders

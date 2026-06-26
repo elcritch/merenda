@@ -129,6 +129,7 @@ type
     arPopupButton = "popupButton"
     arComboBox = "comboBox"
     arSlider = "slider"
+    arProgressIndicator = "progressIndicator"
     arScrollArea = "scrollArea"
     arTabGroup = "tabGroup"
     arTab = "tab"
