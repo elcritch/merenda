@@ -364,6 +364,7 @@ proc drawTableHeaderResizeHandle*(
 )
 
 proc syncTableScrollChrome(tableView: TableView)
+proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
   method numberOfRows*(tableView: TableView): int {.optional.}
@@ -2663,6 +2664,11 @@ proc drawTableDropTarget(
   discard
     context.addRenderRectangle(indicatorRect, tableView.tableDropIndicatorFill(context))
 
+proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle =
+  result = box
+  if result.focusRingInset > 0.0'f32:
+    result.focusRingInset = min(result.focusRingInset, result.focusRingWidth * 0.5'f32)
+
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
     return
@@ -4224,7 +4230,9 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       focusRect.size.height = max(focusRect.size.height - headerHeight, 0.0'f32)
       if not focusRect.isEmpty:
         context.addFocusRing(
-          FocusRingDrawLevel, context.renderRectFor(focusRect), listStyle.box
+          FocusRingDrawLevel,
+          context.renderRectFor(focusRect),
+          tableFocusRingBox(listStyle.box),
         )
 
 protocol DefaultTableViewAccessibility of AccessibilityProtocol:
