@@ -5,16 +5,16 @@ import merenda/nimkit
 import sigils/core
 
 type
-  BrowserDemoNode = object
-    item: BrowserItem
+  MillerColumnDemoNode = object
+    item: MillerColumnItem
     kind: string
     owner: string
     status: string
     detail: string
 
-  BrowserDemoController = ref object of Responder
-    nodes: seq[BrowserDemoNode]
-    browser: Browser
+  MillerColumnDemoController = ref object of Responder
+    nodes: seq[MillerColumnDemoNode]
+    view: MillerColumnView
     title: Label
     metadata: Label
     detail: Label
@@ -23,16 +23,16 @@ type
 proc initNode(
     identifier, title, parentIdentifier, kind, owner, status, detail: string,
     leaf = false,
-): BrowserDemoNode =
-  BrowserDemoNode(
-    item: initBrowserItem(identifier, title, parentIdentifier, leaf),
+): MillerColumnDemoNode =
+  MillerColumnDemoNode(
+    item: initMillerColumnItem(identifier, title, parentIdentifier, leaf),
     kind: kind,
     owner: owner,
     status: status,
     detail: detail,
   )
 
-proc demoNodes(): seq[BrowserDemoNode] =
+proc demoNodes(): seq[MillerColumnDemoNode] =
   @[
     initNode(
       "apps", "Applications", "", "Workspace", "Application", "Ready",
@@ -87,16 +87,16 @@ proc demoNodes(): seq[BrowserDemoNode] =
     initNode(
       "container-layer", "Containers", "framework", "Framework Area", "Container",
       "Active",
-      "Stack, form, grid, tab, split, scroll, table, outline, box, and browser views.",
+      "Stack, form, grid, tab, split, scroll, table, outline, box, and view views.",
     ),
     initNode(
-      "browser-widget",
-      "Browser",
+      "view-widget",
+      "MillerColumnView",
       "container-layer",
       "Widget",
       "Containers",
       "New",
-      "Miller-column browser backed by BrowserDataSource and BrowserDelegate protocols.",
+      "Miller-column view backed by MillerColumnDataSource and MillerColumnDelegate protocols.",
       leaf = true,
     ),
     initNode(
@@ -142,21 +142,21 @@ proc demoNodes(): seq[BrowserDemoNode] =
   ]
 
 proc nodeForIdentifier(
-    controller: BrowserDemoController, identifier: string
-): BrowserDemoNode =
+    controller: MillerColumnDemoController, identifier: string
+): MillerColumnDemoNode =
   for node in controller.nodes:
     if node.item.identifier == identifier:
       return node
 
 proc childNodes(
-    controller: BrowserDemoController, parentIdentifier: string
-): seq[BrowserDemoNode] =
+    controller: MillerColumnDemoController, parentIdentifier: string
+): seq[MillerColumnDemoNode] =
   for node in controller.nodes:
     if node.item.parentIdentifier == parentIdentifier:
       result.add node
 
-proc selectedTrail(controller: BrowserDemoController): string =
-  let path = controller.browser.selectedPath()
+proc selectedTrail(controller: MillerColumnDemoController): string =
+  let path = controller.view.selectedPath()
   if path.len == 0:
     return "No selection"
   var titles: seq[string]
@@ -166,10 +166,10 @@ proc selectedTrail(controller: BrowserDemoController): string =
       titles.add node.item.title
   titles.join(" / ")
 
-proc updateDetail(controller: BrowserDemoController, identifier: string) =
+proc updateDetail(controller: MillerColumnDemoController, identifier: string) =
   let node = controller.nodeForIdentifier(identifier)
   if node.item.identifier.len == 0:
-    controller.title.text = "NimKit Browser"
+    controller.title.text = "NimKit MillerColumnView"
     controller.metadata.text = "No item selected"
     controller.detail.text = ""
     return
@@ -180,80 +180,80 @@ proc updateDetail(controller: BrowserDemoController, identifier: string) =
     controller.selectedTrail()
   controller.detail.text = node.detail
 
-protocol BrowserDemoDataSource of BrowserDataSource:
-  method browserNumberOfChildren(
-      controller: BrowserDemoController, browser: Browser, parentIdentifier: string
+protocol MillerColumnDemoDataSource of MillerColumnDataSource:
+  method millerColumnNumberOfChildren(
+      controller: MillerColumnDemoController, view: MillerColumnView, parentIdentifier: string
   ): int =
-    discard browser
+    discard view
     controller.childNodes(parentIdentifier).len
 
-  method browserChildIdentifier(
-      controller: BrowserDemoController,
-      browser: Browser,
+  method millerColumnChildIdentifier(
+      controller: MillerColumnDemoController,
+      view: MillerColumnView,
       parentIdentifier: string,
       index: int,
   ): string =
-    discard browser
+    discard view
     let children = controller.childNodes(parentIdentifier)
     if index in 0 ..< children.len:
       result = children[index].item.identifier
 
-  method browserItem(
-      controller: BrowserDemoController, browser: Browser, identifier: string
-  ): BrowserItem =
-    discard browser
+  method millerColumnItem(
+      controller: MillerColumnDemoController, view: MillerColumnView, identifier: string
+  ): MillerColumnItem =
+    discard view
     controller.nodeForIdentifier(identifier).item
 
-protocol BrowserDemoDelegate of BrowserDelegate:
-  method didSelectBrowserItem(
-      controller: BrowserDemoController,
-      browser: Browser,
+protocol MillerColumnDemoDelegate of MillerColumnDelegate:
+  method didSelectMillerColumnItem(
+      controller: MillerColumnDemoController,
+      view: MillerColumnView,
       column: int,
       row: int,
       identifier: string,
   ) =
-    discard browser
+    discard view
     discard column
     discard row
     controller.updateDetail(identifier)
     controller.activity.text = "Selected " & controller.selectedTrail()
 
-  method didActivateBrowserItem(
-      controller: BrowserDemoController,
-      browser: Browser,
+  method didActivateMillerColumnItem(
+      controller: MillerColumnDemoController,
+      view: MillerColumnView,
       column: int,
       row: int,
       identifier: string,
   ) =
-    discard browser
+    discard view
     discard column
     discard row
     let node = controller.nodeForIdentifier(identifier)
     if node.item.identifier.len > 0:
       controller.activity.text = "Activated " & node.item.title
 
-proc newBrowserDemoController(): BrowserDemoController =
-  result = BrowserDemoController(nodes: demoNodes())
+proc newMillerColumnDemoController(): MillerColumnDemoController =
+  result = MillerColumnDemoController(nodes: demoNodes())
   initResponder(result)
-  discard result.withProtocol(BrowserDemoDataSource)
-  discard result.withProtocol(BrowserDemoDelegate)
+  discard result.withProtocol(MillerColumnDemoDataSource)
+  discard result.withProtocol(MillerColumnDemoDelegate)
 
 let
   app = sharedApplication()
-  window = newWindow("NimKit Browser Demo", frame = initRect(140, 120, 760, 420))
+  window = newWindow("NimKit MillerColumnView Demo", frame = initRect(140, 120, 760, 420))
   root = newView()
   split = newSplitView(laHorizontal)
   detailPane = newStackView(laVertical)
-  controller = newBrowserDemoController()
+  controller = newMillerColumnDemoController()
 
-controller.browser = newBrowser()
-controller.browser.columnWidth = 170.0
-controller.browser.minColumnWidth = 120.0
-controller.browser.dataSource = controller
-controller.browser.delegate = controller
-controller.browser.accessibilityLabel = "NimKit Browser Demo"
+controller.view = newMillerColumnView()
+controller.view.columnWidth = 170.0
+controller.view.minColumnWidth = 120.0
+controller.view.dataSource = controller
+controller.view.delegate = controller
+controller.view.accessibilityLabel = "NimKit MillerColumnView Demo"
 
-controller.title = newTitleLabel("NimKit Browser")
+controller.title = newTitleLabel("NimKit MillerColumnView")
 controller.metadata = newStatusLabel("No item selected")
 controller.detail = newStatusLabel("")
 controller.activity = newStatusLabel("Ready")
@@ -271,7 +271,7 @@ detailPane.addArrangedSubview(
   controller.activity,
 )
 
-split.addPane(controller.browser, minSize = 260.0)
+split.addPane(controller.view, minSize = 260.0)
 split.addPane(detailPane, minSize = 240.0)
 split.setPositionOfDivider(0, 380.0)
 
@@ -281,8 +281,8 @@ split.pinEdges(
   edges = {leLeft, leTop, leRight, leBottom},
 )
 
-controller.browser.selectedPath = @["framework", "container-layer", "browser-widget"]
-controller.updateDetail("browser-widget")
+controller.view.selectedPath = @["framework", "container-layer", "view-widget"]
+controller.updateDetail("view-widget")
 
 window.minSize = initSize(560.0, 320.0)
 window.setContentView(root)

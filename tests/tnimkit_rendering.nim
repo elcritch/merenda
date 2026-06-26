@@ -912,6 +912,36 @@ suite "nimkit rendering":
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         fail()
 
+  test "buildRenders clamps no-header table focus ring to stroke edge":
+    let
+      root = newView(frame = initRect(0, 0, 180, 120))
+      tableView = newTableView(frame = initRect(10, 20, 130, 68))
+      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+
+    tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
+    tableView.showsHeader = false
+    tableView.focusVisible = true
+
+    var theme = initTheme()
+    theme[srTableView, StyleFocusRingWidth] = 4.0
+    theme[srTableView, StyleFocusRingInset] = 12.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
+    root.addSubview(tableView)
+
+    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    var focusRingFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 4.0 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        focusRingFound = true
+        check node.screenBox.x == 12.0
+        check node.screenBox.y == 22.0
+        check node.screenBox.w == 126.0
+        check node.screenBox.h == 64.0
+
+    check focusRingFound
+
   test "buildRenders draws focused text field selection and caret":
     let
       root = newView(frame = initRect(0, 0, 180, 80))
