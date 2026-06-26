@@ -18,6 +18,9 @@ let
   actionsItem = newMenuItem("Actions")
   runItem = newMenuItem("Run Menu Action", runAction, "r", {kmCommand})
   resetItem = newMenuItem("Reset Count", resetAction, "0", {kmCommand})
+  contextMenu = newMenu("Menu Demo Context")
+  contextRunItem = newMenuItem("Run Menu Action", runAction)
+  contextResetItem = newMenuItem("Reset Count", resetAction)
 
 var actionCount = 0
 
@@ -38,11 +41,16 @@ let
 
 runItem.target = runTarget
 resetItem.target = resetTarget
+contextRunItem.target = runTarget
+contextResetItem.target = resetTarget
 actionsItem.submenu = actionsMenu
 discard actionsMenu.addItem(runItem)
 discard actionsMenu.addSeparator()
 discard actionsMenu.addItem(resetItem)
 discard mainMenu.addItem(actionsItem)
+discard contextMenu.addItem(contextRunItem)
+discard contextMenu.addSeparator()
+discard contextMenu.addItem(contextResetItem)
 app.mainMenu = mainMenu
 menuBar.reload()
 
@@ -53,6 +61,7 @@ content.spacing = 12.0
 content.alignment = svaFill
 content.addArrangedSubview(title, status, button)
 root.addSubviews(autoNames(menuBar, content))
+root.menu = contextMenu
 
 menuBar.pinEdges(toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight})
 menuBar[atHeight].equalTo(28).active = true

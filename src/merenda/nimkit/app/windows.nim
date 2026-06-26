@@ -240,6 +240,7 @@ proc beginTransientSession*(
   transientWindow: Window = nil,
   restoreResponder: Responder = nil,
   onDismiss: TransientDismissHandler = nil,
+  restoreCurrentResponderIfNil = true,
 )
 
 proc dismissTransientSession*(
@@ -1192,8 +1193,7 @@ proc restoreTransientFocus(window: Window, session: TransientSession) =
     return
   if restoreWindow.isVisible:
     restoreWindow.makeKeyAndOrderFront()
-  if not session.restoreResponder.isNil:
-    discard restoreWindow.makeFirstResponder(session.restoreResponder)
+  discard restoreWindow.makeFirstResponder(session.restoreResponder)
 
 proc finishTransientSession(
     window: Window, reason: DismissReason, notifyDismiss: bool
@@ -1223,6 +1223,7 @@ proc beginTransientSession*(
     transientWindow: Window = nil,
     restoreResponder: Responder = nil,
     onDismiss: TransientDismissHandler = nil,
+    restoreCurrentResponderIfNil = true,
 ) =
   if window.xTransientSession.active:
     let session = window.xTransientSession
@@ -1230,7 +1231,10 @@ proc beginTransientSession*(
       discard window.dismissTransientSession(tdrProgrammatic)
 
   let resolvedRestore =
-    if restoreResponder.isNil: window.xFirstResponder else: restoreResponder
+    if restoreCurrentResponderIfNil and restoreResponder.isNil:
+      window.xFirstResponder
+    else:
+      restoreResponder
   if not transientWindow.isNil:
     window.attachAuxiliaryWindow(transientWindow)
   window.xTransientSession = TransientSession(

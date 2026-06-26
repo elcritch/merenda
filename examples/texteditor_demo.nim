@@ -40,6 +40,7 @@ let
   insetAction = actionSelector("selectTextInset")
   tintAction = actionSelector("styleSelection")
   resetAction = actionSelector("resetTextEditor")
+  contextWrapAction = actionSelector("contextToggleTextWrap")
 
 proc updateSummary() =
   let selected = editor.selectedRange()
@@ -96,12 +97,32 @@ proc resetText(sender: DynamicAgent) =
   discard sender
   resetDocument()
 
+proc toggleWrapFromMenu(sender: DynamicAgent) =
+  discard sender
+  wrapCheck.state = if wrapCheck.state == bsOn: bsOff else: bsOn
+  toggleWrap(sender)
+
+let
+  contextMenu = newMenu("Text Editor Context")
+  contextStyleItem = newMenuItem("Style Selection", tintAction)
+  contextWrapItem = newMenuItem("Toggle Wrap", contextWrapAction)
+  contextResetItem = newMenuItem("Reset Text", resetAction)
+
+contextStyleItem.target = newActionTarget(tintAction, styleSelection)
+contextWrapItem.target = newActionTarget(contextWrapAction, toggleWrapFromMenu)
+contextResetItem.target = newActionTarget(resetAction, resetText)
+discard contextMenu.addItem(contextStyleItem)
+discard contextMenu.addItem(contextWrapItem)
+discard contextMenu.addSeparator()
+discard contextMenu.addItem(contextResetItem)
+
 layout.spacing = 12.0
 layout.alignment = svaFill
 layout.edgeInsets = initEdgeInsets(22.0, 24.0)
 
 editor.wraps = true
 editor.richText = true
+editor.menu = contextMenu
 editor.minimumDocumentSize = initSize(640.0, 280.0)
 editor.setHuggingPriority(LayoutPriorityLow, laVertical)
 editor.setCompressionPriority(LayoutPriorityRequired, laVertical)
