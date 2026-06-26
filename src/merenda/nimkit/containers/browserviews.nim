@@ -38,6 +38,7 @@ type
     xColumnSpacing: float32
     xMinColumnWidth: float32
     xShowsColumnHeaders: bool
+    xSyncingColumnSelection: bool
 
 const
   BrowserDefaultColumnWidth = 160.0'f32
@@ -48,9 +49,11 @@ proc reloadData*(browser: Browser)
 proc selectItem*(browser: Browser, column, row: int)
 proc selectedItem*(browser: Browser): BrowserSelection
 proc tableViewForColumn*(browser: Browser, column: int): TableView
+proc columnForTableView(browser: Browser, tableView: TableView): int
 proc browserItemWithIdentifier*(browser: Browser, identifier: string): BrowserItem
 proc childrenForParent*(browser: Browser, parentIdentifier: string): seq[BrowserItem]
 proc itemHasChildren*(browser: Browser, identifier: string): bool
+proc applySelectedPath(browser: Browser, path: openArray[string])
 
 protocol BrowserDataSource {.selectorScope: protocol.}:
   method browserNumberOfChildren*(
@@ -88,8 +91,8 @@ protocol BrowserEvents:
   proc itemWasActivated*(browser: Browser, sender: DynamicAgent) {.signal.}
 
 protocol BrowserSelectionProtocol:
-  method selectedPath*(): seq[string]
-  method setSelectedPath*(path: seq[string])
+  method browserSelectedPath*(): seq[string]
+  method setBrowserSelectedPath*(path: seq[string])
   method selectBrowserItem*(column, row: int)
   method browserSelection*(): BrowserSelection
 
@@ -360,7 +363,7 @@ proc selectedPath*(browser: Browser): seq[string] =
 proc `selectedPath=`*(browser: Browser, path: openArray[string]) =
   if browser.isNil:
     return
-  browser.setSelectedPath(@path)
+  browser.applySelectedPath(path)
 
 proc selectedItem*(browser: Browser): BrowserSelection =
   if browser.isNil or browser.xSelectedPath.len == 0:
@@ -401,16 +404,20 @@ proc syncBrowserLayout(browser: Browser) =
 proc updateColumnSelections(browser: Browser) =
   if browser.isNil:
     return
-  for columnIndex, tableView in browser.xColumns:
-    tableView.reloadData()
-    if columnIndex in 0 ..< browser.xSelectedPath.len:
-      let row = browser.browserRowForIdentifier(
-        browser.parentIdentifierForColumn(columnIndex),
-        browser.xSelectedPath[columnIndex],
-      )
-      tableView.selectedIndex = row
-    else:
-      tableView.selectedIndex = -1
+  browser.xSyncingColumnSelection = true
+  try:
+    for columnIndex, tableView in browser.xColumns:
+      tableView.reloadData()
+      if columnIndex in 0 ..< browser.xSelectedPath.len:
+        let row = browser.browserRowForIdentifier(
+          browser.parentIdentifierForColumn(columnIndex),
+          browser.xSelectedPath[columnIndex],
+        )
+        tableView.selectedIndex = row
+      else:
+        tableView.selectedIndex = -1
+  finally:
+    browser.xSyncingColumnSelection = false
 
 proc initBrowserColumn(browser: Browser): TableView =
   result = newTableView()
@@ -465,6 +472,18 @@ proc normalizedSelectedPath(browser: Browser, path: openArray[string]): seq[stri
   browser.pruneSelectedPath()
   result = browser.xSelectedPath
   browser.xSelectedPath = oldPath
+
+proc applySelectedPath(browser: Browser, path: openArray[string]) =
+  if browser.isNil:
+    return
+  let nextPath = browser.normalizedSelectedPath(path)
+  if browser.xSelectedPath == nextPath:
+    browser.updateColumnSelections()
+    return
+  emit browser.selectionIsChanging(DynamicAgent(browser))
+  browser.xSelectedPath = nextPath
+  browser.syncBrowserColumns()
+  emit browser.selectionDidChange(DynamicAgent(browser))
 
 proc reloadData*(browser: Browser) =
   if browser.isNil:
@@ -602,6 +621,11 @@ protocol BrowserTableDelegate of TableViewDelegate:
     else:
       true
 
+  method didSelectTableRow(browser: Browser, tableView: TableView, row: int) =
+    if browser.xSyncingColumnSelection:
+      return
+    browser.selectItem(browser.columnForTableView(tableView), row)
+
   method didActivateRow(browser: Browser, tableView: TableView, row: int) =
     let column = browser.columnForTableView(tableView)
     browser.activateBrowserItem(column, row)
@@ -620,23 +644,14 @@ protocol BrowserViewLayout of ViewLayoutProtocol:
     browser.syncBrowserLayout()
 
 protocol BrowserSelectionBehavior of BrowserSelectionProtocol:
-  method selectedPath(browser: Browser): seq[string] =
+  method browserSelectedPath(browser: Browser): seq[string] =
     if browser.isNil:
       @[]
     else:
       browser.xSelectedPath
 
-  method setSelectedPath(browser: Browser, path: seq[string]) =
-    if browser.isNil:
-      return
-    let nextPath = browser.normalizedSelectedPath(path)
-    if browser.xSelectedPath == nextPath:
-      browser.updateColumnSelections()
-      return
-    emit browser.selectionIsChanging(DynamicAgent(browser))
-    browser.xSelectedPath = nextPath
-    browser.syncBrowserColumns()
-    emit browser.selectionDidChange(DynamicAgent(browser))
+  method setBrowserSelectedPath(browser: Browser, path: seq[string]) =
+    browser.applySelectedPath(path)
 
   method selectBrowserItem(browser: Browser, column, row: int) =
     browser.selectItem(column, row)
