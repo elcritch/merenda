@@ -260,13 +260,8 @@ proc stepperCellSize(cell: StepperCell): Size =
       view.effectiveAppearance()
   let style = appearance.resolveButtonStyle(controlStyle(srStepper))
   let contentSize = textNaturalSize("+", style.text)
-  initSize(
-    max(
-      style.minSize.width,
-      (contentSize.width + style.text.insets.horizontal + 8.0'f32) * 2.0'f32,
-    ),
-    style.minSize.height,
-  )
+  let textWidth = contentSize.width * 2.0'f32 + style.text.insets.horizontal
+  initSize(max(style.minSize.width, textWidth), style.minSize.height)
 
 protocol DefaultStepperCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: StepperCell): IntrinsicSize =
