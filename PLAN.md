@@ -17,11 +17,13 @@ Detailed layout, constraint, invalidation, and solver notes live in
 
 NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
-constraints, stack/form/grid containers, buttons, text fields, combo boxes,
-box/group containers, scroll views, popup lists, table views, outline views,
-basic text editing lifecycle, action dispatch, pure Nim panel/dialog shells,
-document-controller infrastructure, AppKit-style in-process pasteboard/dragging
-foundations, and a pure Nim accessibility metadata and protocol core.
+constraints, stack/form/grid/tab/split containers, buttons, switch/radio
+buttons, sliders, progress indicators, text fields, combo boxes, box/group
+containers, scroll views, popup lists, table views, outline views, cascading
+column views, basic text editing lifecycle, action dispatch, pure Nim
+panel/dialog shells, document-controller infrastructure, AppKit-style in-process
+pasteboard/dragging foundations, and a pure Nim accessibility metadata and
+protocol core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -243,6 +245,23 @@ accessibility, or control/cell layers.
   tracking, cursor rects, min/max pane constraints, collapsible panes,
   accessibility child flattening, backend-neutral state capture/restore, and
   `examples/splitview_demo.nim` coverage.
+- Added `ProgressIndicator` with determinate bars, indeterminate bar/spinner
+  modes, start/stop/step animation state, displayed-when-stopped policy,
+  themed progress chrome, intrinsic sizing, value-change accessibility
+  notifications, and `examples/progress_indicator_demo.nim` coverage.
+- Added `Slider` as a value/action control with min/max/step clamping,
+  mouse-drag and keyboard adjustment, themed track/knob/focus rendering,
+  target/action dispatch, accessibility value semantics, and coverage in the
+  controls, preferences, and inspector examples.
+- Added `CascadingView` with a Miller Column preset on top of scroll/table row
+  primitives: item/path identity, static item and protocol-backed data sources,
+  delegate selection/activation hooks, keyboard navigation, column reloads,
+  cascading-specific theme roles, accessibility semantics, and
+  `examples/cascading_demo.nim` plus `tests/tnimkit_cascadingviews.nim`
+  coverage.
+- Added `DialogButtonBox` for dialog/action rows: standard button roles,
+  platform-style role ordering, alignment policy, spacing, spacer management,
+  and reusable button lookup for panel and preferences-style views.
 
 ## Current Verification
 
@@ -269,6 +288,10 @@ accessibility, or control/cell layers.
   `atlas-run tests tests/tnimkit_splitviews.nim tests/tnimkit_theme.nim tests/tnimkit_rendering.nim`,
   `atlas-run tests --compile-only examples/splitview_demo.nim`, and a full
   `atlas-run tests` run passing `35/35`.
+- The new slider/progress/cascading widget coverage lives in
+  `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
+  `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
+  `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -283,35 +306,30 @@ instead of producing isolated one-off controls.
 
 Recommended implementation order:
 
-1. `ProgressIndicator`
-   - Add determinate bars and indeterminate spinner/bar modes.
-   - Use it to exercise timer/animation invalidation, value accessibility, and
-     disabled/active appearance.
-2. `Stepper`
+1. `Stepper`
    - Add min/max/increment/wrap behavior, press-and-hold repeat tracking, value
      formatting hooks, and target/action dispatch.
    - Pair with text fields in examples to test AppKit-style value editing.
-3. `CascadingView`
-   - Add CascadingView with an `initCascadingMillerColumn()` Miller Column
-     preset on top of scroll/table row primitives: dynamic column loading,
-     column selection, keyboard navigation, and path/item identity.
-   - This is the highest-signal compatibility widget, but it should follow the
-     smaller controls so shared scrolling and layout paths are already stable.
-4. `Matrix`
+2. `Matrix`
    - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
      selection modes, keyboard movement, and cell reuse.
    - Use this to further harden the control/cell split.
-5. `ColorWell`
+3. `ColorWell`
    - Add color swatch rendering, target/action on color changes, pasteboard
      color payload integration, and drag affordances.
    - Stage a full color panel separately after the well and panel/session
      contracts are stronger.
-6. Panels and dialogs hardening
+4. Panels and dialogs hardening
    - Expand the existing pure Nim `Panel`, `Alert`, `OpenPanel`, and `SavePanel`
      shells into real reusable views with buttons, accessory views, result
      mapping, file-type validation, and document-controller integration.
    - Native bridges can come later; first keep the pure Nim modal, sheet,
      responder, and document-controller contracts stable.
+5. CascadingView hardening
+   - Keep the new Miller Column implementation aligned with table/scroll
+     behavior as those primitives evolve: richer column keyboard movement,
+     persisted selection paths, drag/drop between hierarchy levels, and optional
+     custom row/detail rendering hooks.
 
 ### Accessibility Core
 
