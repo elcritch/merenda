@@ -98,6 +98,19 @@ UISCALE=1.5 nim r examples/quick_start.nim
 `NIMKIT_UISCALE` and `MERENDA_UISCALE` take priority over `UISCALE`, and
 FigDraw's legacy `HDI` variable remains a fallback.
 
+To override the default UI font from the command line, set `NIMKIT_FONT` to a
+bundled font name, system font name, or font file path. Set
+`NIMKIT_FONT_SIZE` to override the default font size used by text and `em`
+layout lengths:
+
+```sh
+NIMKIT_FONT=HackNerdFont-Regular.ttf NIMKIT_FONT_SIZE=15 nim r examples/quick_start.nim
+```
+
+`NIMKIT_FONT` and `NIMKIT_FONT_SIZE` take priority over `MERENDA_FONT` and
+`MERENDA_FONT_SIZE`. If the font override cannot be resolved, NimKit falls back
+to its bundled default font list.
+
 ## Controls
 
 NimKit ships the core controls needed for desktop-style interfaces:

@@ -1,9 +1,45 @@
-import std/unittest
+import std/[options, os, unittest]
 
 from figdraw/common/fonttypes import GlyphArrangement
 
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
+import merenda/nimkit/text/texttypes
+
+type EnvSnapshot = object
+  name: string
+  existed: bool
+  value: string
+
+proc withCleanFontEnv(body: proc() {.closure.}) =
+  var snapshot: seq[EnvSnapshot]
+  for name in FontEnvVars:
+    snapshot.add EnvSnapshot(name: name, existed: existsEnv(name), value: getEnv(name))
+    delEnv(name)
+
+  try:
+    body()
+  finally:
+    for item in snapshot:
+      if item.existed:
+        putEnv(item.name, item.value)
+      else:
+        delEnv(item.name)
+
+proc withCleanFontSizeEnv(body: proc() {.closure.}) =
+  var snapshot: seq[EnvSnapshot]
+  for name in FontSizeEnvVars:
+    snapshot.add EnvSnapshot(name: name, existed: existsEnv(name), value: getEnv(name))
+    delEnv(name)
+
+  try:
+    body()
+  finally:
+    for item in snapshot:
+      if item.existed:
+        putEnv(item.name, item.value)
+      else:
+        delEnv(item.name)
 
 proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   if layout.selectionRects.len == 0:
@@ -23,6 +59,68 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   (minX, minY, maxX - minX, maxY - minY)
 
 suite "nimkit font layout":
+  test "default typeface request uses font env override before bundled fallback":
+    withCleanFontEnv(
+      proc() =
+        putEnv(MerendaFontEnv, "Ubuntu.ttf")
+        putEnv(NimKitFontEnv, "  HackNerdFont-Regular.ttf  ")
+
+        let request = defaultTypefaceRequest()
+        check request.name == "HackNerdFont-Regular.ttf"
+        check request.fallbackNames ==
+          @[DefaultTypefaceName, "Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+    )
+
+  test "default typeface request ignores empty font env values":
+    withCleanFontEnv(
+      proc() =
+        putEnv(NimKitFontEnv, " ")
+        putEnv(MerendaFontEnv, "Ubuntu.ttf")
+
+        let override = fontOverrideFromEnv()
+        check override.isSome
+        check override.get().envName == MerendaFontEnv
+        check override.get().name == "Ubuntu.ttf"
+    )
+
+  test "default font size uses env override precedence":
+    withCleanFontSizeEnv(
+      proc() =
+        putEnv(MerendaFontSizeEnv, "15.5")
+        putEnv(NimKitFontSizeEnv, " 18 ")
+
+        let override = fontSizeOverrideFromEnv()
+        check override.isSome
+        check override.get().envName == NimKitFontSizeEnv
+        check abs(defaultFontSize() - 18.0'f32) < 0.0001'f32
+    )
+
+  test "default font size ignores empty values and rejects non-positive values":
+    withCleanFontSizeEnv(
+      proc() =
+        putEnv(NimKitFontSizeEnv, " ")
+        putEnv(MerendaFontSizeEnv, "15.5")
+
+        let override = fontSizeOverrideFromEnv()
+        check override.isSome
+        check override.get().envName == MerendaFontSizeEnv
+        check abs(defaultFontSize() - 15.5'f32) < 0.0001'f32
+
+        putEnv(NimKitFontSizeEnv, "0")
+        expect ValueError:
+          discard defaultFontSize()
+    )
+
+  test "default font size feeds text attributes and em layout lengths":
+    withCleanFontSizeEnv(
+      proc() =
+        putEnv(NimKitFontSizeEnv, "18")
+
+        check defaultTextAttributes().fontSize == 18.0'f32
+        check defaultTextAttributes(fontSize = 15.0'f32).fontSize == 15.0'f32
+        check em(2.0'f32).resolveLayoutLength() == 36.0'f32
+    )
+
   test "centered label layout reports content bounds as local dimensions":
     let
       textRect = initRect(12.0, 0.0, 640.0, 28.0)
@@ -35,5 +133,5 @@ suite "nimkit font layout":
     check abs(layout.bounding.x - content.x) <= 0.01
     check abs(layout.bounding.y - content.y) <= 0.01
     check abs(layout.bounding.w - content.w) <= 0.01
-    check abs(layout.bounding.h - content.h) <= DefaultFontSize
+    check abs(layout.bounding.h - content.h) <= defaultFontSize()
     check layout.bounding.x + layout.bounding.w <= textRect.size.width + 0.01

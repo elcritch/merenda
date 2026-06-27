@@ -732,7 +732,7 @@ proc moveVerticalText(textView: TextView, direction: int, extending = false) =
   textView.updateTextContainer()
   let
     caret = textView.xLayoutManager.caretRect(textView.xInsertionPoint)
-    lineHeight = max(caret.size.height, DefaultFontSize)
+    lineHeight = max(caret.size.height, defaultFontSize())
     target = initPoint(
       caret.origin.x,
       caret.origin.y + caret.size.height * 0.5'f32 + float32(direction) * lineHeight,
@@ -773,7 +773,7 @@ proc currentVisualLineBounds(textView: TextView): tuple[first, last: int] =
   for index in 0 .. total:
     let
       candidate = textView.xLayoutManager.caretRect(index)
-      lineHeight = max(candidate.size.height, DefaultFontSize)
+      lineHeight = max(candidate.size.height, defaultFontSize())
     if caretY < candidate.origin.y or caretY >= candidate.origin.y + lineHeight:
       continue
     if not found:

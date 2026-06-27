@@ -96,12 +96,12 @@ suite "nimkit constraints":
     check offsetRight.firstAttribute == atRight
     check offsetRight.secondAttribute == atRight
     check offsetRight.constant == -8.0'f32
-    check offsetTopEm.constant == DefaultFontSize
-    check offsetLeftEm.constant == 0.5'f32 * DefaultFontSize
-    check offsetRightEm.constant == -0.25'f32 * DefaultFontSize
+    check offsetTopEm.constant == defaultFontSize()
+    check offsetLeftEm.constant == 0.5'f32 * defaultFontSize()
+    check offsetRightEm.constant == -0.25'f32 * defaultFontSize()
     check emMinWidth.relation == lrGreaterThanOrEqual
     check emMinWidth.secondItem.isNil
-    check emMinWidth.constant == 20.0'f32 * DefaultFontSize
+    check emMinWidth.constant == 20.0'f32 * defaultFontSize()
     check minWidth.relation == lrGreaterThanOrEqual
     check minWidth.multiplier == 0.5'f32
     check maxHeight.relation == lrLessThanOrEqual
@@ -139,8 +139,8 @@ suite "nimkit constraints":
     check toolbar.constraints.len == 1
     check title.constraints[0].isActive
     check root.constraints[0].isActive
-    check root.constraints[2].constant == DefaultFontSize
-    check root.constraints[3].constant == 4.0'f32 * DefaultFontSize
+    check root.constraints[2].constant == defaultFontSize()
+    check root.constraints[3].constant == 4.0'f32 * defaultFontSize()
     check root.constraints[3].priority == LayoutPriorityLow
     check toolbar.constraints[0].isActive
 

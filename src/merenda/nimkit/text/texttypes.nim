@@ -61,7 +61,12 @@ func textRange*(selection: TextSelection): TextRange =
     stop = max(int(selection.anchor), int(selection.cursor))
   initTextRange(start, stop - start)
 
-func defaultTextAttributes*(
-    color = initColor(0.08, 0.09, 0.11, 1.0), fontSize = DefaultFontSize
+proc defaultTextAttributes*(
+    color = initColor(0.08, 0.09, 0.11, 1.0), fontSize = AutoMetric
 ): TextAttributes =
-  TextAttributes(foregroundColor: color, fontSize: max(fontSize, 1.0'f32))
+  let resolvedFontSize =
+    if fontSize.isAutoMetric:
+      defaultFontSize()
+    else:
+      fontSize
+  TextAttributes(foregroundColor: color, fontSize: max(resolvedFontSize, 1.0'f32))

@@ -1,4 +1,4 @@
-import std/[math, parseutils]
+import std/[math, options, os, parseutils, strutils]
 
 import pkg/chroma
 
@@ -189,10 +189,36 @@ const
   LayoutPriorityHigh* = LayoutPriority(750.0'f32)
   LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
   DefaultFontSize* = 13.0'f32
+  NimKitFontSizeEnv* = "NIMKIT_FONT_SIZE"
+  MerendaFontSizeEnv* = "MERENDA_FONT_SIZE"
+  FontSizeEnvVars* = [NimKitFontSizeEnv, MerendaFontSizeEnv]
+
+type FontSizeOverride* = object
+  envName*: string
+  size*: float32
 
 func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
 func `<=`*(a, b: LayoutPriority): bool {.borrow.}
+
+proc fontSizeOverrideFromEnv*(): Option[FontSizeOverride] =
+  for envName in FontSizeEnvVars:
+    let value = getEnv(envName).strip()
+    if value.len == 0:
+      continue
+    let size = value.parseFloat().float32
+    if size <= 0.0'f32 or size != size or size > float32.high:
+      let message = envName & " must be a finite number greater than zero"
+      raise newException(ValueError, message)
+    return some(FontSizeOverride(envName: envName, size: size))
+  none(FontSizeOverride)
+
+proc defaultFontSize*(): float32 =
+  let override = fontSizeOverrideFromEnv()
+  if override.isSome:
+    override.get().size
+  else:
+    DefaultFontSize
 
 func layoutAxis*(direction: Direction): LayoutAxis =
   case direction
@@ -219,7 +245,7 @@ proc `'em`*(raw: string): LayoutLength =
     return em(0.0'f32)
   em(value.float32)
 
-func resolveLayoutLength*(length: LayoutLength, fontSize = DefaultFontSize): float32 =
+proc resolveLayoutLength*(length: LayoutLength, fontSize = defaultFontSize()): float32 =
   case length.kind
   of llPoints:
     length.value

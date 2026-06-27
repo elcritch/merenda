@@ -252,7 +252,10 @@ proc textDocumentSize(
       else:
         insets.horizontal + 1.0'f32
     textHeight =
-      if layout.selectionRects.len > 0: layout.bounding.h else: DefaultFontSize
+      if layout.selectionRects.len > 0:
+        layout.bounding.h
+      else:
+        defaultFontSize()
     documentWidth =
       if editor.xWraps:
         viewportWidth
