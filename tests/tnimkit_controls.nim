@@ -126,6 +126,27 @@ suite "nimkit controls":
     check window.mouseUpAt(initPoint(24, 72))
     check actionCount == 1
 
+  test "button hover state follows mouse movement":
+    let
+      window = newWindow("Button hover", frame = initRect(0, 0, 240, 180))
+      root = newView(frame = initRect(0, 0, 240, 180))
+      button = newButton("Hover", frame = initRect(16, 64, 120, 36))
+
+    root.addSubview(button)
+    window.setContentView(root)
+
+    check not button.hovered
+    check not button.isHighlighted
+    check window.mouseMovedAt(initPoint(24, 72))
+    check button.hovered
+    check ssHovered in button.widgetStateSet()
+    check not button.isHighlighted
+
+    check window.mouseMovedAt(initPoint(200, 150))
+    check not button.hovered
+    check ssHovered notin button.widgetStateSet()
+    check not button.isHighlighted
+
   test "slider clamps, steps, and sends actions while tracking":
     let slider = newSlider(0.0, 100.0, 25.0, frame = initRect(10, 10, 200, 24))
     slider.stepValue = 10.0
