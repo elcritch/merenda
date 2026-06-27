@@ -31,14 +31,14 @@ The source tree is now organized around domain modules under
 `merenda/nimkit`; internal code and tests should import the domain modules
 directly when they need a narrower surface.
 
-The first animation core model is now in place. The next implementation should
-extend it with typed interpolation methods, easing, a deterministic scheduler,
-and Sigils `threadSelectors`/timer delivery for a portable clock before the
-next compatibility widgets. Keep animation extension points on methods,
-protocols, and selector dispatch rather than public callback hooks. Widget
-mutation should stay routed through existing NimKit setters so layout, display
-invalidation, responder state, and accessibility notifications remain the
-single source of truth.
+The first animation core model and interpolation/timing pass are now in place.
+The next implementation should extend animation with a deterministic scheduler
+and Sigils `threadSelectors`/timer delivery for a portable clock before the next
+compatibility widgets. Keep animation extension points on methods, protocols,
+and selector dispatch rather than public callback hooks. Widget mutation should
+stay routed through existing NimKit setters so layout, display invalidation,
+responder state, and accessibility notifications remain the single source of
+truth.
 
 ## Recently Completed
 
@@ -271,6 +271,11 @@ single source of truth.
   progress/value signals, progress marks, protocol-backed duration/state/time
   hooks, group duration calculation, method-based value interpolation, and
   selector-based property dispatch.
+- Added interpolation and timing support for animation values: `AnimationTiming`
+  with linear, ease-in, ease-out, ease-in-out, cubic Bezier, and spring timing
+  functions; overridable adjusted-progress and typed interpolation methods; and
+  concrete `float32`, `Point`, `Size`, `Rect`, and `Color` value animation
+  support.
 
 ## Current Verification
 
@@ -301,7 +306,7 @@ single source of truth.
   `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
   `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
   `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
-- The first animation core model pass is covered by
+- The first animation core and interpolation/timing passes are covered by
   `tests/tnimkit_animations.nim`; umbrella export fallout was checked with
   `atlas-run tests nimkit_controls`.
 - GitHub Actions is currently blocked before runner startup by account billing
@@ -318,14 +323,7 @@ Sigils' selector-thread timers without exposing raw thread work to widgets.
 
 Remaining implementation order:
 
-1. Interpolation and timing
-   - Add typed interpolation methods for `float32`, `Point`, `Size`, `Rect`,
-     `Color`, and any small value types needed by existing controls.
-   - Add easing curves for linear, ease-in, ease-out, ease-in-out, cubic
-     Bezier, and a first spring curve. Keep custom method overrides, protocol
-     implementations, and easing hooks open so applications can supply
-     domain-specific motion later.
-2. Scheduler and threading
+1. Scheduler and threading
    - Add an `AnimationScheduler` with a deterministic manual tick path for unit
      tests.
    - Add a Sigils clock adapter backed by `SigilSelectorThread` and a repeating
@@ -334,19 +332,19 @@ Remaining implementation order:
      Sigils signals/slots or local scheduler polling.
    - Prefer a future backend/vsync frame callback when available, with
      selector-thread timers as the portable fallback.
-3. Property animation surfaces
+2. Property animation surfaces
    - Start with `View.frame`, `View.bounds`, `View.alpha`, `ScrollView`
      `contentOffset`, `ProgressIndicator.value`, and split/cascading column
      positions where existing setters already express the needed side effects.
    - On every animation tick, write through the normal public mutation proc and
      let existing layout/display/accessibility invalidation run naturally.
-4. Cocoa-style transaction sugar
+3. Cocoa-style transaction sugar
    - Add an explicit API first, then a Nim template layer for transaction-style
      usage such as `animationGroup(duration = 180.ms, curve = acEaseInOut):`.
    - Inside a transaction, capture old/new animatable property values and build
      property animations; outside a transaction, property assignments remain
      immediate.
-5. Examples and verification
+4. Examples and verification
    - Add focused tests for manual scheduler progression, easing/interpolation,
      group timing, pause/resume/stop, progress marks, threaded timer delivery,
      and selector-applied property invalidation.

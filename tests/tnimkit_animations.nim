@@ -1,4 +1,4 @@
-import std/[times, unittest]
+import std/[math, times, unittest]
 
 import sigils/core
 
@@ -51,6 +51,9 @@ proc rememberMark(spy: AnimationSignalSpy, mark: float32) {.slot.} =
 
 proc rememberValue(spy: AnimationSignalSpy, value: float32) {.slot.} =
   spy.values.add value
+
+template checkClose(actual, expected: float32) =
+  check abs(actual - expected) <= 0.0001'f32
 
 suite "NimKit animations":
   test "animation exposes observable lifecycle state and signals":
@@ -125,6 +128,82 @@ suite "NimKit animations":
 
     check animation.currentValue{} == 15.0'f32
     check spy.values[^1] == 15.0'f32
+
+  test "timing curves adjust interpolation progress":
+    checkClose(linearTiming().easedProgress(0.5'f32), 0.5'f32)
+    checkClose(easeInTiming().easedProgress(0.5'f32), 0.25'f32)
+    checkClose(easeOutTiming().easedProgress(0.5'f32), 0.75'f32)
+    checkClose(easeInOutTiming().easedProgress(0.25'f32), 0.125'f32)
+    checkClose(
+      cubicBezierTiming(initPoint(0.0'f32, 0.0'f32), initPoint(1.0'f32, 1.0'f32))
+      .easedProgress(0.5'f32),
+      0.5'f32,
+    )
+
+    let spring = springTiming(response = 0.45'f32, dampingRatio = 0.75'f32)
+    check spring.easedProgress(0.0'f32) == 0.0'f32
+    check spring.easedProgress(1.0'f32) == 1.0'f32
+    check spring.easedProgress(0.5'f32) > 0.0'f32
+
+    let animation = newValueAnimation[float32](
+      0.0'f32, 100.0'f32, duration = initDuration(milliseconds = 100)
+    )
+    animation.timing = easeInTiming()
+    animation.start()
+    animation.setProgress(0.5'f32)
+    checkClose(animation.currentValue{}, 25.0'f32)
+
+    animation.timing = easeOutTiming()
+    animation.setProgress(0.25'f32)
+    checkClose(animation.currentValue{}, 43.75'f32)
+
+    animation.curve = acEaseInOut
+    check animation.curve == acEaseInOut
+
+  test "typed value animations interpolate geometry and colors":
+    let pointAnimation = newValueAnimation[Point](
+      initPoint(0.0'f32, 10.0'f32),
+      initPoint(10.0'f32, 30.0'f32),
+      duration = initDuration(milliseconds = 100),
+    )
+    pointAnimation.start()
+    pointAnimation.setProgress(0.5'f32)
+    checkClose(pointAnimation.currentValue{}.x, 5.0'f32)
+    checkClose(pointAnimation.currentValue{}.y, 20.0'f32)
+
+    let sizeAnimation = newValueAnimation[Size](
+      initSize(20.0'f32, 40.0'f32),
+      initSize(60.0'f32, 100.0'f32),
+      duration = initDuration(milliseconds = 100),
+    )
+    sizeAnimation.start()
+    sizeAnimation.setProgress(0.25'f32)
+    checkClose(sizeAnimation.currentValue{}.width, 30.0'f32)
+    checkClose(sizeAnimation.currentValue{}.height, 55.0'f32)
+
+    let rectAnimation = newValueAnimation[Rect](
+      initRect(0.0'f32, 10.0'f32, 100.0'f32, 50.0'f32),
+      initRect(20.0'f32, 30.0'f32, 140.0'f32, 90.0'f32),
+      duration = initDuration(milliseconds = 100),
+    )
+    rectAnimation.start()
+    rectAnimation.setProgress(0.5'f32)
+    checkClose(rectAnimation.currentValue{}.origin.x, 10.0'f32)
+    checkClose(rectAnimation.currentValue{}.origin.y, 20.0'f32)
+    checkClose(rectAnimation.currentValue{}.size.width, 120.0'f32)
+    checkClose(rectAnimation.currentValue{}.size.height, 70.0'f32)
+
+    let colorAnimation = newValueAnimation[Color](
+      initColor(0.0'f32, 0.25'f32, 0.5'f32, 0.75'f32),
+      initColor(1.0'f32, 0.75'f32, 0.0'f32, 0.25'f32),
+      duration = initDuration(milliseconds = 100),
+    )
+    colorAnimation.start()
+    colorAnimation.setProgress(0.5'f32)
+    checkClose(colorAnimation.currentValue{}.r, 0.5'f32)
+    checkClose(colorAnimation.currentValue{}.g, 0.5'f32)
+    checkClose(colorAnimation.currentValue{}.b, 0.25'f32)
+    checkClose(colorAnimation.currentValue{}.a, 0.5'f32)
 
   test "property animation applies values through its selector":
     let
