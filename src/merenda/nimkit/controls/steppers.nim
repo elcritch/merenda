@@ -1,4 +1,4 @@
-import std/strutils
+import std/[strutils, times]
 
 import ../accessibility/accessibility
 import ../drawing
@@ -32,6 +32,16 @@ type
     xValueFormatter: StepperValueFormatter
 
   StepperCell* = ref object of ActionCell
+
+const
+  StepperInitialRepeatDelaySeconds* = 0.35
+  StepperRepeatIntervalSeconds* = 0.08
+
+proc repeatTimestamp(timestamp: float): float =
+  if timestamp > 0.0:
+    timestamp
+  else:
+    epochTime()
 
 func stepperRange(stepper: Stepper): tuple[minValue, maxValue: float32] =
   if stepper.xMaxValue > stepper.xMinValue:
@@ -106,11 +116,12 @@ proc beginRepeat*(
 ): bool =
   if stepper.isNil or part == spNone:
     return false
+  let now = repeatTimestamp(timestamp)
   stepper.xPressedPart = part
   stepper.xRepeatPart = part
   stepper.xRepeatCount = 1
-  stepper.xRepeatStartedAt = timestamp
-  stepper.xLastRepeatAt = timestamp
+  stepper.xRepeatStartedAt = now
+  stepper.xLastRepeatAt = now
   stepper.setNeedsDisplay(true)
   stepper.performPart(part, notify)
 
@@ -118,9 +129,25 @@ proc continueRepeat*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
   if stepper.isNil or stepper.xRepeatPart == spNone or
       stepper.xPressedPart != stepper.xRepeatPart:
     return false
+  let now = repeatTimestamp(timestamp)
   inc stepper.xRepeatCount
-  stepper.xLastRepeatAt = timestamp
+  stepper.xLastRepeatAt = now
   stepper.performPart(stepper.xRepeatPart, notify)
+
+proc repeatTick*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
+  if stepper.isNil or stepper.xRepeatPart == spNone or
+      stepper.xPressedPart != stepper.xRepeatPart:
+    return false
+  let
+    now = repeatTimestamp(timestamp)
+    delay =
+      if stepper.xRepeatCount <= 1:
+        StepperInitialRepeatDelaySeconds
+      else:
+        StepperRepeatIntervalSeconds
+  if now - stepper.xLastRepeatAt < delay:
+    return false
+  stepper.continueRepeat(now, notify)
 
 proc endRepeat*(stepper: Stepper) =
   if stepper.isNil:
@@ -373,6 +400,17 @@ protocol DefaultStepperEvents of ResponderEventProtocol:
       let part = stepper.partAtPoint(event.location)
       stepper.xPressedPart = if part == stepper.xRepeatPart: part else: spNone
       stepper.setNeedsDisplay(true)
+      return true
+
+  method mouseTrackingTick(stepper: Stepper, event: MouseEvent): bool =
+    if stepper.isEnabled() and event.button == mbPrimary and stepper.repeatActive():
+      let part = stepper.partAtPoint(event.location)
+      let pressedPart = if part == stepper.xRepeatPart: part else: spNone
+      if stepper.xPressedPart != pressedPart:
+        stepper.xPressedPart = pressedPart
+        stepper.setNeedsDisplay(true)
+      if pressedPart != spNone:
+        discard stepper.repeatTick(event.timestamp)
       return true
 
   method mouseUp(stepper: Stepper, event: MouseEvent): bool =
