@@ -24,6 +24,7 @@ import merenda/nimkit/containers/gridviews
 import merenda/nimkit/view/imageviews
 import merenda/nimkit/responder/keybindings
 import merenda/nimkit/containers/listbasics
+import merenda/nimkit/controls/matrices
 import merenda/nimkit/controls/menus
 import merenda/nimkit/containers/outlineviews
 import merenda/nimkit/app/panels
@@ -80,6 +81,7 @@ export gridviews
 export imageviews
 export keybindings
 export listbasics
+export matrices
 export menus
 export outlineviews
 export panels
