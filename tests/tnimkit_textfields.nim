@@ -7,6 +7,8 @@ import sigils/core
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
 
+const TextFieldGeometryEpsilon = 0.5'f32
+
 type CustomEditorTextFieldCell = ref object of TextFieldCell
   editor: FieldEditor
 
@@ -73,6 +75,9 @@ proc renderedRect(node: Fig): nimkitTypes.Rect =
 proc containsRect(outer, inner: nimkitTypes.Rect): bool =
   inner.minX >= outer.minX - 0.01'f32 and inner.minY >= outer.minY - 0.01'f32 and
     inner.maxX <= outer.maxX + 0.01'f32 and inner.maxY <= outer.maxY + 0.01'f32
+
+proc checkClose(actual, expected: float32) =
+  check abs(actual - expected) <= TextFieldGeometryEpsilon
 
 proc nodeRenderedInView(node: Fig, view: View): bool =
   view.rectToWindow(view.bounds).containsRect(node.renderedRect())
@@ -220,6 +225,37 @@ suite "nimkit text fields":
     check window.dispatchKeyDown(KeyEvent(text: "y", key: keyY, keyCode: keyY.ord))
     check field.stringValue == "Xy"
     check field.selectedRange == initTextRange(2, 0)
+
+  test "field editor keeps caret aligned with passive text field text":
+    let
+      window = newWindow("Text alignment", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("Edit me", frame = initRect(10, 10, 140, 30))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    let
+      style = field.effectiveAppearance().resolveTextFieldStyle(
+          controlStyle(srTextField), field.textColor()
+        )
+      passiveTextRect = style.textFieldTextRect(field.bounds)
+      passiveLayout =
+        textLayout(passiveTextRect, field.stringValue(), style.text, field.alignment())
+      passiveCaret = caretRect(passiveTextRect, passiveLayout, 0)
+
+    check window.makeFirstResponder(field)
+    discard window.buildRenders()
+
+    let
+      editor = window.fieldEditor()
+      activeCaret = editor.layoutManager().caretRect(0)
+      activeCaretX = editor.frame().origin.x + activeCaret.origin.x
+      activeCaretY = editor.frame().origin.y + activeCaret.origin.y
+
+    check editor.textContainer().insets.top > 0.0'f32
+    checkClose(activeCaretX, passiveCaret.origin.x)
+    checkClose(activeCaretY, passiveCaret.origin.y)
 
   test "window-backed field editor renders live text before blur":
     let
