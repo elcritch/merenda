@@ -189,3 +189,51 @@ suite "nimkit matrix":
     check matrix.leadIndex == 1
     check matrix.selectedIndex == -1
     check resetCount == 1
+
+  test "demo stack leaves intrinsic matrix rows inside the content bounds":
+    let
+      root = newView(frame = initRect(0, 0, 520, 420))
+      layout = newStackView(laVertical)
+      title = newTitleLabel("Matrix")
+      status = newStatusLabel("Package: Standard / Features: None / Last command: None")
+      packageLabel = newHeadingLabel("Package")
+      featureLabel = newHeadingLabel("Features")
+      commandLabel = newHeadingLabel("Commands")
+      packageMatrix = newRadioMatrix(["Standard", "Pro", "Enterprise"])
+      featureMatrix = newCheckMatrix(
+        ["Autosave", "Diagnostics", "Cloud Sync", "Beta Tools"], columns = 2
+      )
+      commandMatrix = newButtonMatrix(["Apply", "Reset", "Inspect"], columns = 3)
+
+    packageMatrix.cellSize = initSize(180.0, 24.0)
+    featureMatrix.cellSize = initSize(140.0, 24.0)
+    commandMatrix.cellSize = initSize(90.0, 28.0)
+
+    layout.spacing = 9.0
+    layout.alignment = svaFill
+    layout.addArrangedSubview(
+      title, status, packageLabel, packageMatrix, featureLabel, featureMatrix,
+      commandLabel, commandMatrix,
+    )
+    root.addSubview(layout)
+    layout.pinEdges(
+      toGuide = root.contentLayoutGuide(insets(24.0, 28.0, 24.0, 28.0)),
+      edges = {leLeft, leTop, leRight},
+    )
+
+    root.layoutSubtreeIfNeeded()
+
+    let
+      intrinsic = layout.intrinsicContentSize()
+      contentBottom = root.bounds().maxY - 24.0
+
+    check intrinsic.hasHeight
+    check layout.frame().origin == initPoint(28.0, 24.0)
+    check layout.frame().size.width == 464.0
+    check abs(layout.frame().size.height - intrinsic.height) <= 0.001'f32
+    check layout.frame().maxY <= contentBottom + 0.001'f32
+    check commandMatrix.frame().maxY <= layout.bounds().maxY + 0.001'f32
+    check commandMatrix.frame().size.height >= 28.0
+    check layout.frame().origin.y + commandMatrix.frame().maxY <=
+      contentBottom + 0.001'f32
+    check commandMatrix.cellFrameAt(0, 0).maxY <= commandMatrix.bounds().maxY

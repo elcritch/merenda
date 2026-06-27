@@ -47,6 +47,7 @@ proc buttonCellStates(
   result.excl ssDisabled
   result.excl ssHighlighted
   result.excl ssSelected
+  result.excl ssActive
   result.excl ssPressed
   if (not owner.isNil and ssDisabled in owner.widgetStateSet()) or
       not cells.isEnabled(cell):

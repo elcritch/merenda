@@ -1072,6 +1072,46 @@ suite "nimkit rendering":
 
     check activeFillFound
 
+  test "matrix button cells do not inherit active state from the matrix":
+    let
+      root = newView(frame = initRect(0, 0, 240, 80))
+      matrix = newButtonMatrix(
+        ["Apply", "Reset", "Inspect"], columns = 3, frame = initRect(10, 20, 180, 28)
+      )
+      baseFill = initColor(0.1, 0.1, 0.1, 1.0)
+      activeFill = initColor(0.8, 0.2, 0.1, 1.0)
+      pressedFill = initColor(0.1, 0.2, 0.8, 1.0)
+
+    matrix.cellSize = initSize(50.0, 24.0)
+    matrix.active = true
+    matrix.cellAtIndex(1).setHighlighted(true)
+
+    var theme = initTheme()
+    theme[srButton, StyleFill] = baseFill
+    theme[srButton, {ssActive}, StyleFill] = activeFill
+    theme[srButton, {ssHighlighted}, StyleFill] = pressedFill
+    theme[srButton, {ssPressed}, StyleFill] = pressedFill
+
+    root.addSubview(matrix)
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+
+    var
+      baseCount = 0
+      activeCount = 0
+      pressedCount = 0
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor:
+        if node.fill.color == baseFill.rgba:
+          inc baseCount
+        elif node.fill.color == activeFill.rgba:
+          inc activeCount
+        elif node.fill.color == pressedFill.rgba:
+          inc pressedCount
+
+    check baseCount >= 2
+    check activeCount == 0
+    check pressedCount == 1
+
   test "buildRenders draws focus visible control rings":
     let
       root = newView(frame = initRect(0, 0, 140, 80))
