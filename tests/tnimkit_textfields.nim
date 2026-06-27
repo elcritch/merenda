@@ -178,6 +178,24 @@ suite "nimkit text fields":
     check title.styleClasses == @[LabelStyleClass, LabelFormStyleClass]
     check title.alignment == taRight
 
+  test "multiline labels measure and stack to multiple lines":
+    let
+      root = newView(frame = initRect(0, 0, 240, 120))
+      stack = newStackView(laVertical, frame = initRect(0, 0, 220, 120))
+      single = newStatusLabel("Kind / Owner / Status")
+      multi = newStatusLabel("Kind / Owner / Status\nSelected / Trail")
+      singleHeight = single.intrinsicContentSize().height
+
+    stack.spacing = 0.0
+    stack.addArrangedSubview(single, multi)
+    root.addSubview(stack)
+    root.layoutSubtreeIfNeeded()
+
+    check multi.intrinsicContentSize().height > singleHeight
+    check singleHeight < 40.0'f32
+    check multi.intrinsicContentSize().height < 70.0'f32
+    check multi.frame().size.height > single.frame().size.height
+
   test "first responder text input replaces the current selection":
     let
       window = newWindow("Text input", frame = initRect(0, 0, 240, 120))

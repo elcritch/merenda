@@ -162,15 +162,24 @@ proc textNaturalSize*(text: string): nimkitTypes.Size =
     font = defaultFont(DefaultFontSize)
     style = fs(font, fill(initColor(0.0, 0.0, 0.0, 1.0).rgba))
     lineHeight = max(DefaultFontSize, getLineHeightImpl(font))
+    lineCount = block:
+      var count = 1
+      for ch in text:
+        if ch == '\n':
+          inc count
+      count
     layout = typeset(
-      bumpy.rect(0.0, 0.0, 10000.0, max(lineHeight, 100.0'f32)),
+      bumpy.rect(0.0, 0.0, 10000.0, max(lineHeight * lineCount.float32, 100.0'f32)),
       [(style, text)],
       hAlign = Left,
       vAlign = Top,
       minContent = false,
       wrap = false,
     )
-  initSize(max(layout.bounding.w, layout.maxSize.x), lineHeight)
+  initSize(
+    max(layout.bounding.w, layout.maxSize.x),
+    max(lineHeight * lineCount.float32, layout.bounding.h),
+  )
 
 proc runePrefix(text: string, count: int): string =
   var index = 0
