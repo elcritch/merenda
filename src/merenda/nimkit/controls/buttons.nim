@@ -1,15 +1,20 @@
 import ./controls
+import ../app/animations
+import ../app/windows
 import ../foundation/selectors
 import ../drawing
 import ../themes
 import ../foundation/events
 import ../foundation/types
 import ../accessibility/accessibility
+from pkg/chroma import ColorRGBA
 
 export controls
 
 type
   Button* = ref object of Control
+    xHoverProgress: float32
+    xHoverAnimation: Animation
 
   ButtonCell* = ref object of ActionCell
     xTitle: string
@@ -17,6 +22,7 @@ type
     xButtonType: ButtonType
 
 const CheckboxCheckmark = "✓"
+const ButtonHoverAnimationMs = 120
 
 proc updateButtonLayoutPriorities(cell: ButtonCell) =
   let view = cell.controlView()
@@ -52,6 +58,25 @@ protocol ButtonProtocol {.selectorScope: protocol.}:
 
   method isHighlighted*(): bool
   method setHighlighted*(highlighted: bool)
+
+protocol ButtonHoverProtocol {.selectorScope: protocol.}:
+  property hoverProgress -> float32
+
+func clampUnit(value: float32): float32 =
+  min(max(value, 0.0'f32), 1.0'f32)
+
+protocol DefaultButtonHover of ButtonHoverProtocol:
+  method hoverProgress(button: Button): float32 =
+    if button.isNil: 0.0'f32 else: button.xHoverProgress
+
+  method setHoverProgress(button: Button, progress: float32) =
+    if button.isNil:
+      return
+    let normalized = progress.clampUnit()
+    if abs(button.xHoverProgress - normalized) <= 0.0001'f32:
+      return
+    button.xHoverProgress = normalized
+    button.setNeedsDisplay(true)
 
 proc buttonTextSize(cell: ButtonCell, style: TextStyle): Size =
   result = textNaturalSize(cell.title(), style)
@@ -176,6 +201,39 @@ proc `highlighted=`*(button: Button, highlighted: bool) =
   if not button.isNil:
     button.setHighlighted(highlighted)
 
+proc stopHoverAnimation(button: Button) =
+  if button.isNil or button.xHoverAnimation.isNil:
+    return
+  let owner = button.window()
+  if owner of Window:
+    discard Window(owner).stopAnimation(button.xHoverAnimation)
+  else:
+    button.xHoverAnimation.stop()
+  button.xHoverAnimation = nil
+
+proc animateHoverProgress(button: Button, progress: float32) =
+  if button.isNil:
+    return
+  let target = progress.clampUnit()
+  button.stopHoverAnimation()
+  if abs(button.hoverProgress() - target) <= 0.0001'f32:
+    return
+
+  let animation = newPropertyAnimation[float32](
+    DynamicAgent(button),
+    setHoverProgress(),
+    button.hoverProgress(),
+    target,
+    duration = initDuration(milliseconds = ButtonHoverAnimationMs),
+  )
+  animation.timing = easeOutTiming()
+  button.xHoverAnimation = Animation(animation)
+  let owner = button.window()
+  if owner of Window:
+    discard Window(owner).startAnimation(button.xHoverAnimation)
+  else:
+    button.setHoverProgress(target)
+
 proc clearRadioSiblings(button: Button) =
   let parent = button.superview
   if parent.isNil:
@@ -263,6 +321,95 @@ proc mixedMarkRect(rect: Rect): Rect =
 
 func offsetRect(rect: Rect, dx, dy: float32): Rect =
   initRect(rect.origin.x + dx, rect.origin.y + dy, rect.size.width, rect.size.height)
+
+func mixFloat(a, b, progress: float32): float32 =
+  a + (b - a) * progress.clampUnit()
+
+func mixColor(a, b: Color, progress: float32): Color =
+  initColor(
+    mixFloat(a.r, b.r, progress),
+    mixFloat(a.g, b.g, progress),
+    mixFloat(a.b, b.b, progress),
+    mixFloat(a.a, b.a, progress),
+  )
+
+func rgbaColor(color: ColorRGBA): Color =
+  initColor(
+    color.r.float32 / 255.0'f32,
+    color.g.float32 / 255.0'f32,
+    color.b.float32 / 255.0'f32,
+    color.a.float32 / 255.0'f32,
+  )
+
+func mixFill(a, b: Fill, progress: float32): Fill =
+  if a.kind == b.kind:
+    case a.kind
+    of flColor:
+      return fill(mixColor(a.color.rgbaColor(), b.color.rgbaColor(), progress))
+    of flLinear2:
+      if a.lin2.axis == b.lin2.axis:
+        return linear(
+          mixColor(a.lin2.start.rgbaColor(), b.lin2.start.rgbaColor(), progress),
+          mixColor(a.lin2.stop.rgbaColor(), b.lin2.stop.rgbaColor(), progress),
+          a.lin2.axis,
+        )
+    of flLinear3:
+      if a.lin3.axis == b.lin3.axis and a.lin3.midPos == b.lin3.midPos:
+        return linear(
+          mixColor(a.lin3.start.rgbaColor(), b.lin3.start.rgbaColor(), progress),
+          mixColor(a.lin3.mid.rgbaColor(), b.lin3.mid.rgbaColor(), progress),
+          mixColor(a.lin3.stop.rgbaColor(), b.lin3.stop.rgbaColor(), progress),
+          a.lin3.axis,
+          a.lin3.midPos,
+        )
+  fill(mixColor(a.centerColor(), b.centerColor(), progress))
+
+func canAnimateHover(states: set[WidgetState]): bool =
+  ssDisabled notin states and ssHighlighted notin states and ssActive notin states and
+    ssPressed notin states
+
+func mixButtonStyle(
+    baseStyle, hoverStyle: ButtonStyle, progress: float32
+): ButtonStyle =
+  let normalized = progress.clampUnit()
+  if normalized <= 0.0'f32:
+    return baseStyle
+  if normalized >= 1.0'f32:
+    return hoverStyle
+  result = baseStyle
+  result.box.fill = mixFill(baseStyle.box.fill, hoverStyle.box.fill, normalized)
+  result.box.borderColor =
+    mixColor(baseStyle.box.borderColor, hoverStyle.box.borderColor, normalized)
+
+proc pushButtonStyle(
+    button: Button, appearance: Appearance, states: set[WidgetState]
+): ButtonStyle =
+  if not states.canAnimateHover():
+    return appearance.resolveButtonStyle(
+      controlStyle(srButton, states, id = button.styleId, classes = button.styleClasses)
+    )
+
+  var baseStates = states
+  baseStates.excl ssHovered
+  var hoverStates = baseStates
+  hoverStates.incl ssHovered
+
+  let
+    progress = button.hoverProgress()
+    baseStyle = appearance.resolveButtonStyle(
+      controlStyle(
+        srButton, baseStates, id = button.styleId, classes = button.styleClasses
+      )
+    )
+  if progress <= 0.0'f32:
+    return baseStyle
+
+  let hoverStyle = appearance.resolveButtonStyle(
+    controlStyle(
+      srButton, hoverStates, id = button.styleId, classes = button.styleClasses
+    )
+  )
+  mixButtonStyle(baseStyle, hoverStyle, progress)
 
 proc checkmarkTextRect(rect: Rect): Rect =
   rect.offsetRect(0.0'f32, -1.0'f32).inset(insets(-1.0'f32))
@@ -377,12 +524,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       context.addText(style.choiceTextRect(button.bounds), button.title, style.text)
     else:
       let states = button.widgetStateSet()
-
-      let style = context.appearance.resolveButtonStyle(
-        controlStyle(
-          srButton, states, id = button.styleId, classes = button.styleClasses
-        )
-      )
+      let style = button.pushButtonStyle(context.appearance, states)
       context.drawPushButtonFace(absoluteFrame, style, states)
       if button.isFocusVisible:
         context.addFocusRing(absoluteFrame, style.box)
@@ -415,10 +557,16 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseEntered(button: Button, event: MouseEvent): bool =
-    button.isEnabled()
+    discard event
+    if button.isEnabled():
+      button.animateHoverProgress(1.0'f32)
+      return true
 
   method mouseExited(button: Button, event: MouseEvent): bool =
-    button.isEnabled()
+    discard event
+    if button.isEnabled():
+      button.animateHoverProgress(0.0'f32)
+      return true
 
   method mouseDown(button: Button, event: MouseEvent): bool =
     if button.isEnabled and event.button == mbPrimary:
@@ -450,6 +598,7 @@ proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect)
   initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
   button.setAcceptsFirstResponder(true)
+  discard button.withProtocol(DefaultButtonHover)
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)
   discard button.withProtocol(DefaultButtonAction)

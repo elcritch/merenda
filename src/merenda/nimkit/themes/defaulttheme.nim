@@ -66,13 +66,13 @@ func highlightedButtonShadows(): seq[BoxShadow] =
   ]
 
 func aquaButtonFill(): Fill =
-  linear(initColor(0.48, 0.48, 0.47, 1.0), initColor(0.93, 0.93, 0.92, 1.0), fgaY)
+  linear(initColor(0.48, 0.54, 0.64, 1.0), initColor(0.94, 0.97, 1.0, 1.0), fgaY)
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    initColor(0.53, 0.54, 0.55, 1.0),
-    initColor(0.72, 0.74, 0.77, 1.0),
-    initColor(0.55, 0.57, 0.61, 1.0),
+    initColor(0.34, 0.52, 0.78, 1.0),
+    initColor(0.58, 0.74, 0.96, 1.0),
+    initColor(0.36, 0.56, 0.84, 1.0),
     fgaY,
     112'u8,
   )
@@ -197,9 +197,9 @@ proc initTheme*(): Theme =
   result["button.fill.accent.highlighted"] = aquaAccentButtonPressedFill()
   result["button.text.color"] = styleColor(initColor(0.08, 0.08, 0.07, 0.95))
   result["button.text.color.disabled"] = styleToken("disabled.text.color")
-  result["button.border.color"] = styleColor(initColor(0.39, 0.39, 0.38, 0.84))
+  result["button.border.color"] = styleColor(initColor(0.30, 0.40, 0.55, 0.84))
   result["button.border.color.highlighted"] =
-    styleColor(initColor(0.30, 0.31, 0.33, 0.92))
+    styleColor(initColor(0.18, 0.34, 0.62, 0.94))
   result["button.border.color.disabled"] = styleColor(initColor(0.52, 0.57, 0.64, 1.0))
   result["button.border.color.accent"] = styleColor(initColor(0.01, 0.11, 0.49, 1.0))
   result["button.border.color.accent.highlighted"] =
