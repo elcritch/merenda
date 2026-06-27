@@ -261,7 +261,7 @@ controller.activity = newStatusLabel("Ready")
 detailPane.spacing = 12.0
 detailPane.alignment = svaFill
 detailPane.distribution = svdNatural
-detailPane.edgeInsets = initEdgeInsets(18.0)
+detailPane.edgeInsets = insets(18.0)
 detailPane.addArrangedSubview(
   controller.title,
   controller.metadata,
@@ -277,7 +277,7 @@ split.setPositionOfDivider(0, 380.0)
 
 root.addSubview(split)
 split.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(18.0)),
+  toGuide = root.contentLayoutGuide(insets(18.0)),
   edges = {leLeft, leTop, leRight, leBottom},
 )
 

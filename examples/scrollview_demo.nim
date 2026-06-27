@@ -6,7 +6,7 @@ let
   app = sharedApplication()
   window = newWindow("Nimkit Scroll View", frame = initRect(180, 160, 520, 380))
   root = newView()
-  contentGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 22.0, 24.0))
+  contentGuide = root.contentLayoutGuide(insets(22.0, 24.0, 22.0, 24.0))
   title = newTitleLabel("Scroll View")
   status = newStatusLabel("")
   details = newStatusLabel("")
@@ -87,7 +87,7 @@ scrollView.horizontalPageScroll = 180.0
 scrollView.verticalPageScroll = 140.0
 scrollView.borderType = svbLineBorder
 scrollView.drawsBackground = true
-scrollView.scrollerInsets = initEdgeInsets(4.0, 4.0, 4.0, 4.0)
+scrollView.scrollerInsets = insets(4.0, 4.0, 4.0, 4.0)
 scrollView.horizontalHeaderView = headerView
 scrollView.cornerView = cornerView
 scrollView.setRulerPlaceholder(

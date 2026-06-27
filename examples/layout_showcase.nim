@@ -21,7 +21,7 @@ let
 layout.spacing = 12.0
 layout.alignment = svaFill
 
-form.edgeInsets = initEdgeInsets(12.0, 14.0)
+form.edgeInsets = insets(12.0, 14.0)
 form.spacing[dcol] = 12.0
 form.spacing[drow] = 10.0
 form.minFieldWidth = 180.0
@@ -46,7 +46,7 @@ layout.addArrangedSubview(title, form, actionRow)
 
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 24.0, 0.0, 24.0)),
+  toGuide = root.contentLayoutGuide(insets(24.0, 24.0, 0.0, 24.0)),
   edges = {leLeft, leTop, leRight},
 )
 

@@ -27,7 +27,7 @@ layout.addArrangedSubview(label, button)
 
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(44.0, 44.0, 0.0, 44.0)),
+  toGuide = root.contentLayoutGuide(insets(44.0, 44.0, 0.0, 44.0)),
   edges = {leLeft, leTop, leRight},
 )
 

@@ -24,7 +24,7 @@ proc newTabDemoDelegate(status: TextField): TabDemoDelegate =
 proc paneStack(): StackView =
   result = newStackView(laVertical)
   result.background = initColor(0.98, 0.98, 0.96, 0.0)
-  result.edgeInsets = initEdgeInsets(18.0, 20.0)
+  result.edgeInsets = insets(18.0, 20.0)
   result.spacing = 12.0
   result.alignment = svaFill
 
@@ -54,7 +54,7 @@ proc editorPane(): View =
     wrapPopup = newComboBox(["None", "Word", "Character"])
     spaces = newCheckBox("Show invisible characters")
 
-  form.edgeInsets = initEdgeInsets(0.0)
+  form.edgeInsets = insets(0.0)
   form.spacing[dcol] = 12.0
   form.spacing[drow] = 10.0
   form.minFieldWidth = 220.0
@@ -142,7 +142,7 @@ proc selectTabMode(sender: DynamicAgent) =
 
 layout.spacing = 12.0
 layout.alignment = svaFill
-layout.edgeInsets = initEdgeInsets(22.0, 24.0)
+layout.edgeInsets = insets(22.0, 24.0)
 
 controls.spacing = 8.0
 controls.alignment = svaCenter

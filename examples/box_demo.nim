@@ -134,12 +134,13 @@ resetButton.action = resetAction
 layout.addArrangedSubview(title, status, connectionBox, summaryBox, splitBox)
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
+  toGuide = root.contentLayoutGuide(insets(22.0, 24.0, 0.0, 24.0)),
   edges = {leLeft, leTop, leRight},
 )
 
 let
-  minimumWindowHeight = layout
+  minimumWindowHeight =
+    layout
     .resolvedIntrinsicContentSize()
     .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height + 50
   window = newWindow(

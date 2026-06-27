@@ -86,7 +86,7 @@ proc makeTabPage(): tuple[view: View, stack: StackView] =
   result.stack.distribution = svdNatural
   result.view.addSubview(result.stack)
   discard result.stack.pinEdges(
-    toGuide = result.view.contentLayoutGuide(initEdgeInsets(18.0, 20.0, 18.0, 20.0)),
+    toGuide = result.view.contentLayoutGuide(insets(18.0, 20.0, 18.0, 20.0)),
     edges = {leLeft, leTop, leRight, leBottom},
   )
 
@@ -129,7 +129,7 @@ let
   app = sharedApplication()
   window = newWindow("NimKit Preferences Demo", frame = initRect(120, 90, 810, 544))
   root = newView()
-  contentGuide = root.contentLayoutGuide(initEdgeInsets(26.0, 32.0, 24.0, 32.0))
+  contentGuide = root.contentLayoutGuide(insets(26.0, 32.0, 24.0, 32.0))
   controller = newPreferencesController()
   title = newTitleLabel("Preferences")
   status = newStatusLabel("Adjust preferences to update this summary.")
