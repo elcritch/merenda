@@ -8,6 +8,17 @@ import ../foundation/types
 import ./viewbase
 
 type
+  LayoutResolutionOperation = enum
+    lroIntrinsicContentSize
+    lroSizeThatFits
+    lroFrameResolution
+
+  LayoutResolutionFrame = object
+    view: View
+    operation: LayoutResolutionOperation
+
+  LayoutResolutionDefect* = object of Defect
+
   ViewLayoutPriorityKind = enum
     vlpkHugging
     vlpkCompression
@@ -15,6 +26,76 @@ type
   ViewLayoutPriority* = object
     xView: View
     xKind: ViewLayoutPriorityKind
+
+const MaxLayoutResolutionDepth = 128
+
+var layoutResolutionStack {.threadvar.}: seq[LayoutResolutionFrame]
+
+func operationName(operation: LayoutResolutionOperation): string =
+  case operation
+  of lroIntrinsicContentSize: "intrinsicContentSize"
+  of lroSizeThatFits: "sizeThatFits"
+  of lroFrameResolution: "frameResolution"
+
+proc layoutDebugName(view: View): string =
+  if view.isNil:
+    return "nil"
+  result = "View"
+  if view.xIdentifier.len > 0:
+    result.add "(" & view.xIdentifier & ")"
+  else:
+    result.add "(frame=" & $view.xFrame & ")"
+
+proc layoutResolutionStackMessage(
+    nextView: View, nextOperation: LayoutResolutionOperation
+): string =
+  for frame in layoutResolutionStack:
+    if result.len > 0:
+      result.add " -> "
+    result.add frame.operation.operationName() & "(" & frame.view.layoutDebugName() & ")"
+  if result.len > 0:
+    result.add " -> "
+  result.add nextOperation.operationName() & "(" & nextView.layoutDebugName() & ")"
+
+proc enterLayoutResolution(view: View, operation: LayoutResolutionOperation) =
+  if view.isNil:
+    return
+  for frame in layoutResolutionStack:
+    if frame.view == view and frame.operation == operation:
+      raise newException(
+        LayoutResolutionDefect,
+        "NimKit layout resolution cycle while resolving " & operation.operationName() &
+          " for " & view.layoutDebugName() & ": " &
+          layoutResolutionStackMessage(view, operation),
+      )
+  if layoutResolutionStack.len >= MaxLayoutResolutionDepth:
+    raise newException(
+      LayoutResolutionDefect,
+      "NimKit layout resolution exceeded " & $MaxLayoutResolutionDepth &
+        " nested sizing operations: " & layoutResolutionStackMessage(view, operation),
+    )
+  layoutResolutionStack.add LayoutResolutionFrame(view: view, operation: operation)
+
+proc leaveLayoutResolution(view: View, operation: LayoutResolutionOperation) =
+  if view.isNil:
+    return
+  if layoutResolutionStack.len == 0:
+    return
+  let frame = layoutResolutionStack[^1]
+  if frame.view == view and frame.operation == operation:
+    layoutResolutionStack.setLen(layoutResolutionStack.len - 1)
+  else:
+    layoutResolutionStack.setLen(0)
+
+template withLayoutResolutionGuard(
+    view: View, operation: LayoutResolutionOperation, body: untyped
+): untyped =
+  block:
+    enterLayoutResolution(view, operation)
+    try:
+      body
+    finally:
+      leaveLayoutResolution(view, operation)
 
 proc pointFromView*(view: View, point: Point, fromView: View): Point
 proc pointToView*(view: View, point: Point, toView: View): Point
@@ -277,19 +358,21 @@ proc intrinsicContentSize*(view: View): IntrinsicSize =
   NoIntrinsicContentSize
 
 proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
-  let measured = view.performOptional(layoutIntrinsicContentSize(), ())
-  if measured.isSome:
-    return measured.get()
-  view.intrinsicContentSize()
+  withLayoutResolutionGuard(view, lroIntrinsicContentSize):
+    let measured = view.trySendLocal(layoutIntrinsicContentSize(), ())
+    if measured.isSome:
+      return measured.get()
+    view.intrinsicContentSize()
 
 proc sizeThatFits*(view: View, proposedSize: FittingSize): Size =
-  let
-    intrinsicSize = view.resolvedIntrinsicContentSize()
-    fallbackSize = initSize(
-      if proposedSize.hasWidth: proposedSize.width else: view.xBounds.size.width,
-      if proposedSize.hasHeight: proposedSize.height else: view.xBounds.size.height,
-    )
-  intrinsicSize.resolveIntrinsicSize(fallbackSize).constrainSize(proposedSize)
+  withLayoutResolutionGuard(view, lroSizeThatFits):
+    let
+      intrinsicSize = view.resolvedIntrinsicContentSize()
+      fallbackSize = initSize(
+        if proposedSize.hasWidth: proposedSize.width else: view.xBounds.size.width,
+        if proposedSize.hasHeight: proposedSize.height else: view.xBounds.size.height,
+      )
+    intrinsicSize.resolveIntrinsicSize(fallbackSize).constrainSize(proposedSize)
 
 proc sizeThatFits*(view: View): Size =
   view.sizeThatFits(UnconstrainedFittingSize)
@@ -298,14 +381,15 @@ proc sizeThatFits*(view: View, proposedSize: Size): Size =
   view.sizeThatFits(initFittingSize(proposedSize))
 
 proc resolvedFrame*(view: View, frame: Rect): Rect =
-  let
-    fallbackSize =
-      if frame.size.hasAutoMetric:
-        view.sizeThatFits(UnconstrainedFittingSize)
-      else:
-        view.xFrame.size
-    fallback = initRect(view.xFrame.origin, fallbackSize)
-  frame.resolveAutoRect(fallback)
+  withLayoutResolutionGuard(view, lroFrameResolution):
+    let
+      fallbackSize =
+        if frame.size.hasAutoMetric:
+          view.sizeThatFits(UnconstrainedFittingSize)
+        else:
+          view.xFrame.size
+      fallback = initRect(view.xFrame.origin, fallbackSize)
+    frame.resolveAutoRect(fallback)
 
 proc applyInitialFrame*(view: View, frame: Rect) =
   if view.isNil or not frame.hasAutoMetric:

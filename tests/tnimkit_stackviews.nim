@@ -249,6 +249,26 @@ suite "nimkit stack views":
     check stack.frame().size.height > 0.0
     check button.frame().size.height > 0.0
 
+  test "plain arranged views use their own fallback size":
+    let
+      stack = newStackView(laVertical, frame = initRect(0, 0, 240, 120))
+      stage = newView(frame = initRect(0.0, 0.0, 180.0, 50.0))
+      buttonRow = newStackView(laHorizontal)
+
+    buttonRow.distribution = svdFillEqually
+    buttonRow.addArrangedSubview(newButton("One"), newButton("Two"))
+    stack.addArrangedSubview(stage, buttonRow)
+
+    let intrinsic = stack.intrinsicContentSize()
+    check intrinsic.hasWidth
+    check intrinsic.hasHeight
+    check intrinsic.width >= 180.0
+    check intrinsic.height > 50.0
+
+    stack.layoutSubtreeIfNeeded()
+    check stage.frame().size.height > 0.0
+    check buttonRow.frame().size.height > 0.0
+
   test "removing a subview removes it from arranged layout":
     let
       stack = newStackView(laHorizontal, frame = initRect(0, 0, 100, 20))

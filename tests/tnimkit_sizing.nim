@@ -2,6 +2,18 @@ import std/unittest
 
 import merenda/nimkit
 
+type CyclicIntrinsicView = ref object of View
+
+protocol CyclicIntrinsicLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: CyclicIntrinsicView): IntrinsicSize =
+    initIntrinsicSize(view.sizeThatFits())
+
+proc newCyclicIntrinsicView(): CyclicIntrinsicView =
+  result = CyclicIntrinsicView()
+  initViewFields(result, initRect(0.0, 0.0, 10.0, 10.0))
+  result.name = "cyclic"
+  discard result.withProtocol(CyclicIntrinsicLayout)
+
 suite "nimkit sizing":
   test "plain views expose no intrinsic metric and preserve frame on sizeToFit":
     let view = newView(frame = initRect(10, 20, 80, 30))
@@ -16,6 +28,12 @@ suite "nimkit sizing":
 
     view.sizeToFit()
     check view.frame() == initialFrame
+
+  test "cyclic intrinsic sizing fails with a layout resolution defect":
+    let view = newCyclicIntrinsicView()
+
+    expect LayoutResolutionDefect:
+      discard view.sizeThatFits()
 
   test "button sizeToFit uses cell intrinsic size and preserves origin":
     let button = newButton("Resize", frame = initRect(10, 20, 12, 10))
