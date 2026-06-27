@@ -383,6 +383,7 @@ proc initTheme*(): Theme =
   result[srButton, {ssDisabled}, StyleTextHighlightColor] =
     initColor(1.0, 1.0, 1.0, 0.16)
   result[srButton, {ssDisabled}, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.08)
+  result[srStepper, StyleMinimumSize] = initSize(61.6, 24.0)
 
   result[srSwitch, StyleFill] = fill(initColor(0.72, 0.78, 0.84, 1.0))
   result[srSwitch, StyleBorderColor] = initColor(0.38, 0.45, 0.53, 0.70)
