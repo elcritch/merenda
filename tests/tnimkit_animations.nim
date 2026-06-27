@@ -19,9 +19,23 @@ type
   AnimationTarget = ref object of DynamicAgent
     floatValue: float32
 
+  FixedIntrinsicView = ref object of View
+    naturalSize: Size
+
 protocol AnimationTargetProtocol from AnimationTarget:
   method setAnimatedFloat*(target: AnimationTarget, value: float32) =
     target.floatValue = value
+
+protocol FixedIntrinsicLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
+    initIntrinsicSize(view.naturalSize)
+
+proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
+  result = FixedIntrinsicView()
+  initViewFields(result, initRect(0.0, 0.0, width, height))
+  result.naturalSize = initSize(width, height)
+  result.autoresizingMaskConstraints = false
+  discard result.withProtocol(FixedIntrinsicLayout)
 
 proc rememberStarted(spy: AnimationSignalSpy) {.slot.} =
   inc spy.startedCount
@@ -220,6 +234,107 @@ suite "NimKit animations":
     animation.start()
     animation.setProgress(0.25)
     check target.floatValue == 0.25'f32
+
+  test "property animation helpers route view geometry and alpha through setters":
+    let
+      scheduler = newAnimationScheduler()
+      view = newView(frame = initRect(0.0, 0.0, 100.0, 40.0))
+      frameAnimation = newFrameAnimation(
+        view,
+        initRect(10.0, 20.0, 140.0, 80.0),
+        duration = initDuration(milliseconds = 100),
+      )
+
+    view.clearNeedsDisplayTree()
+    check view.conformsTo(ViewAnimProtocol)
+    check scheduler.startAnimation(frameAnimation)
+    check scheduler.tick(initDuration(milliseconds = 50)) == 1
+    check view.frame() == initRect(5.0, 10.0, 120.0, 60.0)
+    check view.bounds().size == initSize(120.0, 60.0)
+    check view.needsDisplay()
+
+    let boundsAnimation = newBoundsAnimation(
+      view,
+      initRect(20.0, 30.0, 120.0, 60.0),
+      duration = initDuration(milliseconds = 100),
+    )
+    boundsAnimation.start()
+    boundsAnimation.setProgress(0.5)
+    check view.bounds() == initRect(10.0, 15.0, 120.0, 60.0)
+
+    let alphaAnimation =
+      newAlphaValueAnimation(view, 0.2'f32, duration = initDuration(milliseconds = 100))
+    alphaAnimation.start()
+    alphaAnimation.setProgress(0.5)
+    checkClose(view.alphaValue(), 0.6'f32)
+
+  test "property animation helpers route scroll and progress setters":
+    let
+      document = newView(frame = initRect(0.0, 0.0, 320.0, 240.0))
+      scrollView =
+        newScrollView(frame = initRect(0.0, 0.0, 120.0, 80.0), documentView = document)
+
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidePolicy = sapNever
+    scrollView.tile()
+
+    let offsetAnimation = newContentOffsetAnimation(
+      scrollView, initPoint(40.0, 60.0), duration = initDuration(milliseconds = 100)
+    )
+    offsetAnimation.start()
+    offsetAnimation.setProgress(0.5)
+    check scrollView.conformsTo(ScrollAnimProtocol)
+    check scrollView.contentOffset() == initPoint(20.0, 30.0)
+    check scrollView.clipView().bounds().origin == initPoint(20.0, 30.0)
+
+    let
+      indicator = newProgressIndicator(0.0, 100.0, 25.0)
+      valueAnimation = newProgressValueAnimation(
+        indicator, 125.0'f32, duration = initDuration(milliseconds = 100)
+      )
+
+    valueAnimation.start()
+    valueAnimation.setProgress(0.5)
+    check indicator.conformsTo(ProgressAnimProtocol)
+    checkClose(indicator.value(), 75.0'f32)
+    valueAnimation.setProgress(1.0)
+    checkClose(indicator.value(), 100.0'f32)
+
+  test "property animation helpers route split and cascading setters":
+    let
+      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      left = newFixedIntrinsicView(80.0, 40.0)
+      right = newFixedIntrinsicView(90.0, 40.0)
+
+    splitView.addPane(left)
+    splitView.addPane(right)
+    splitView.layoutSubtreeIfNeeded()
+
+    let dividerAnimation = newSplitDividerPositionAnimation(
+      splitView, 0, 210.0'f32, duration = initDuration(milliseconds = 100)
+    )
+    dividerAnimation.start()
+    dividerAnimation.setProgress(0.5)
+    splitView.layoutSubtreeIfNeeded()
+    checkClose(splitView.positionOfDivider(0), 180.0'f32)
+    checkClose(left.frame().size.width, 180.0'f32)
+
+    let cascadingView = newCascadingView(initRect(0.0, 0.0, 400.0, 160.0))
+    let widthAnimation = newCascadingColumnWidthAnimation(
+      cascadingView, 240.0'f32, duration = initDuration(milliseconds = 100)
+    )
+    widthAnimation.start()
+    widthAnimation.setProgress(0.5)
+    check cascadingView.conformsTo(CascadeAnimProtocol)
+    checkClose(cascadingView.columnWidth(), 200.0'f32)
+
+    let spacingAnimation = newCascadingColumnSpacingAnimation(
+      cascadingView, 5.0'f32, duration = initDuration(milliseconds = 100)
+    )
+    spacingAnimation.start()
+    spacingAnimation.setProgress(0.5)
+    checkClose(cascadingView.columnSpacing(), 3.0'f32)
 
   test "manual scheduler ticks running animations deterministically":
     let
