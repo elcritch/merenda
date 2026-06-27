@@ -26,6 +26,7 @@ import merenda/nimkit/responder/keybindings
 import merenda/nimkit/containers/listbasics
 import merenda/nimkit/controls/matrices
 import merenda/nimkit/controls/menus
+import merenda/nimkit/text/monotextviews
 import merenda/nimkit/containers/outlineviews
 import merenda/nimkit/app/panels
 import merenda/nimkit/app/pasteboards
@@ -83,6 +84,7 @@ export keybindings
 export listbasics
 export matrices
 export menus
+export monotextviews
 export outlineviews
 export panels
 export pasteboards
