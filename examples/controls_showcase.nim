@@ -1,3 +1,5 @@
+import std/strutils
+
 import merenda/nimkit
 
 import sigils/core
@@ -50,6 +52,10 @@ let
   sliderTitle = newHeadingLabel("Slider")
   volumeSlider = newSlider(0.0, 100.0, 42.0)
   volumeLabel = newStatusLabel("")
+  stepperTitle = newHeadingLabel("Stepper")
+  countRow = newStackView(laHorizontal)
+  countField = newTextField("")
+  countStepper = newStepper(0.0, 12.0, 2.0, increment = 1.0)
   switchTitle = newHeadingLabel("Switch Button")
   powerSwitch = newSwitchButton(true)
   powerSwitchLabel = newStatusLabel("")
@@ -59,6 +65,7 @@ let
   choiceAction = actionSelector("showcaseChoiceChanged")
   radioAction = actionSelector("showcaseRadioChanged")
   comboAction = actionSelector("showcaseComboChanged")
+  stepperAction = actionSelector("showcaseStepperChanged")
   contextToggleAction = actionSelector("showcaseContextToggleButton")
   contextDownloadsAction = actionSelector("showcaseContextToggleDownloads")
   resetAction = actionSelector("showcaseResetControls")
@@ -80,8 +87,8 @@ proc updateSummary() =
     nameField.stringValue & " / " & noteField.stringValue & " / Toggle: " &
     toggleButton.state.stateName & " / Downloads: " & downloads.state.stateName &
     " / Size: " & selectedSize() & " / Priority: " & priority.stringValue & " / Color: " &
-    color.stringValue & " / Volume: " & $int(volumeSlider.value) & " / Power: " &
-    powerSwitch.state.stateName
+    color.stringValue & " / Volume: " & $int(volumeSlider.value) & " / Count: " &
+    countStepper.formattedValue & " / Power: " & powerSwitch.state.stateName
 
 proc updateToggleTitle() =
   toggleButton.title = "Toggle " & toggleButton.state.stateName
@@ -91,6 +98,22 @@ proc updateVolumeLabel(slider: Slider) {.slot.} =
 
 proc updateSliderSummary(slider: Slider, sender: DynamicAgent) {.slot.} =
   updateSummary()
+
+proc syncCountField() =
+  countField.text = countStepper.formattedValue
+
+proc parseCountField() =
+  try:
+    countStepper.value = parseFloat(countField.stringValue).float32
+    syncCountField()
+  except ValueError:
+    discard
+  updateSummary()
+
+proc onStepperChanged(sender: DynamicAgent) =
+  if sender == DynamicAgent(countStepper):
+    syncCountField()
+    updateSummary()
 
 proc updatePowerSwitchLabel(switchButton: SwitchButton) {.slot.} =
   powerSwitchLabel.text = "Power: " & switchButton.state.stateName
@@ -102,7 +125,10 @@ proc updatePowerSwitchSummary(
 
 proc onTextDidChange(field: TextField, sender: DynamicAgent) {.slot.} =
   if sender == DynamicAgent(field):
-    updateSummary()
+    if field == countField:
+      parseCountField()
+    else:
+      updateSummary()
 
 proc onPush(sender: DynamicAgent) =
   if not sender.isNil:
@@ -152,9 +178,11 @@ proc resetControls(sender: DynamicAgent) =
   priority.selectedIndex = 1
   color.selectedIndex = 0
   volumeSlider.value = 42.0
+  countStepper.value = 2.0
   powerSwitch.state = bsOn
   updateToggleTitle()
   updateVolumeLabel(volumeSlider)
+  syncCountField()
   updatePowerSwitchLabel(powerSwitch)
   updateSummary()
 
@@ -175,7 +203,7 @@ discard contextMenu.addItem(contextDownloadsItem)
 discard contextMenu.addSeparator()
 discard contextMenu.addItem(contextResetItem)
 
-for field in [nameField, noteField]:
+for field in [nameField, noteField, countField]:
   field.connect(textDidChange, field, onTextDidChange)
 
 pushButton.target = newActionTarget(pushAction, onPush)
@@ -216,6 +244,11 @@ volumeSlider.connect(
   actionDidSend, volumeSlider, updateVolumeLabel, acceptVoidSlot = true
 )
 
+countStepper.valueFormatter = proc(value: float32): string =
+  $int(value)
+countStepper.target = newActionTarget(stepperAction, onStepperChanged)
+countStepper.action = stepperAction
+
 powerSwitch.connect(actionDidSend, powerSwitch, updatePowerSwitchSummary)
 powerSwitch.connect(
   actionDidSend, powerSwitch, updatePowerSwitchLabel, acceptVoidSlot = true
@@ -238,11 +271,17 @@ switchRow.spacing = 10.0
 switchRow.alignment = svaCenter
 switchRow.distribution = svdNatural
 
+countRow.spacing = 6.0
+countRow.alignment = svaCenter
+countField.setHuggingPriority(LayoutPriorityLow, laHorizontal)
+countStepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
+
 buttonRow.spacing = 8.0
 buttonRow.alignment = svaFill
 buttonRow.distribution = svdFillEqually
 
 buttonRow.addArrangedSubview(pushButton, toggleButton)
+countRow.addArrangedSubview(countField, countStepper)
 inputColumn.addArrangedSubview(
   inputTitle, nameField, noteField, actionTitle, buttonRow, actionCountLabel
 )
@@ -252,8 +291,8 @@ choiceColumn.addArrangedSubview(
 )
 choiceColumn.addFlexibleSpacer()
 popupColumn.addArrangedSubview(
-  popupTitle, priority, color, sliderTitle, volumeSlider, volumeLabel, switchTitle,
-  switchRow,
+  popupTitle, priority, color, sliderTitle, volumeSlider, volumeLabel, stepperTitle,
+  countRow, switchTitle, switchRow,
 )
 switchRow.addArrangedSubview(powerSwitch, powerSwitchLabel)
 bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
@@ -268,6 +307,7 @@ layout.pinEdges(
 
 updateToggleTitle()
 updateVolumeLabel(volumeSlider)
+syncCountField()
 updatePowerSwitchLabel(powerSwitch)
 updateSummary()
 window.setContentView(root)

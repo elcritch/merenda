@@ -170,6 +170,106 @@ suite "nimkit controls":
     check window.mouseUpAt(initPoint(200, 22))
     check not slider.cell().isHighlighted()
 
+  test "stepper clamps, wraps, formats values, and dispatches actions":
+    let
+      stepper = newStepper(0.0, 10.0, 4.0, increment = 2.0)
+      action = actionSelector("stepperAction")
+      spy = ControlActionSpy()
+
+    var actionCount = 0
+    proc onStep(sender: DynamicAgent) =
+      check sender == DynamicAgent(stepper)
+      spy.events.add "target"
+      inc actionCount
+
+    stepper.connect(actionDidSend, spy, rememberActionDidSend)
+    stepper.target = newActionTarget(action, onStep)
+    stepper.action = action
+
+    check stepper.value == 4.0
+    check stepper.incrementValue()
+    check stepper.value == 6.0
+    check actionCount == 1
+    check spy.events == @["target", "signal"]
+    check spy.lastSender == DynamicAgent(stepper)
+
+    check stepper.decrementValue()
+    check stepper.value == 4.0
+    stepper.value = 99.0
+    check stepper.value == 10.0
+    check not stepper.incrementValue()
+    check actionCount == 2
+
+    stepper.wraps = true
+    check stepper.incrementValue()
+    check stepper.value == 0.0
+    check stepper.decrementValue()
+    check stepper.value == 10.0
+
+    stepper.valueFormatter = proc(value: float32): string =
+      $int(value) & " units"
+    check stepper.formattedValue == "10 units"
+    check stepper.accessibilityValue() == "10 units"
+
+    stepper.increment = -1.0
+    check stepper.increment == 0.0
+    check not stepper.incrementValue()
+
+  test "stepper mouse and keyboard tracking maintains repeat state":
+    let
+      window = newWindow("Stepper tracking", frame = initRect(0, 0, 120, 80))
+      root = newView(frame = initRect(0, 0, 120, 80))
+      stepper =
+        newStepper(0.0, 10.0, 4.0, increment = 2.0, frame = initRect(10, 10, 28, 32))
+      action = actionSelector("stepperTrackingAction")
+
+    var actionCount = 0
+    proc onStep(sender: DynamicAgent) =
+      check sender == DynamicAgent(stepper)
+      inc actionCount
+
+    stepper.target = newActionTarget(action, onStep)
+    stepper.action = action
+    root.addSubview(stepper)
+    window.setContentView(root)
+
+    check stepper.partAtPoint(initPoint(14.0, 6.0)) == spIncrement
+    check stepper.partAtPoint(initPoint(14.0, 24.0)) == spDecrement
+
+    check window.mouseDownAt(initPoint(24, 18), timestamp = 10.0)
+    check stepper.value == 6.0
+    check stepper.pressedPart == spIncrement
+    check stepper.repeatPart == spIncrement
+    check stepper.repeatActive()
+    check stepper.repeatCount == 1
+    check stepper.repeatStartedAt == 10.0
+    check actionCount == 1
+
+    check window.mouseDraggedAt(initPoint(80, 70), timestamp = 10.2)
+    check stepper.pressedPart == spNone
+    check not stepper.continueRepeat(timestamp = 10.4)
+    check actionCount == 1
+
+    check window.mouseDraggedAt(initPoint(24, 18), timestamp = 10.6)
+    check stepper.pressedPart == spIncrement
+    check stepper.continueRepeat(timestamp = 10.8)
+    check stepper.value == 8.0
+    check stepper.repeatCount == 2
+    check stepper.lastRepeatAt == 10.8
+    check actionCount == 2
+
+    check window.mouseUpAt(initPoint(24, 18), timestamp = 11.0)
+    check stepper.pressedPart == spNone
+    check stepper.repeatPart == spNone
+    check not stepper.repeatActive()
+    check stepper.repeatCount == 2
+
+    check window.makeFirstResponder(stepper)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check stepper.value == 6.0
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+    check stepper.value == 8.0
+
   test "progress indicator clamps values and exposes display state":
     let indicator = newProgressIndicator(0.0, 100.0, 25.0)
 
