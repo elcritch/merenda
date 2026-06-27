@@ -134,6 +134,8 @@ type
     xMouseActiveView: View
     xMouseHoverView: View
     xMousePolicyStopResponder: Responder
+    xMouseTrackingEvent: MouseEvent
+    xHasMouseTrackingEvent: bool
     xMomentumScrollTarget: View
     xMomentumScrollContentPoint: Point
     xMouseClickCount: int
@@ -703,6 +705,8 @@ proc clearMouseState(window: Window) =
   window.xMouseCaptureView = nil
   window.xMouseActiveView = nil
   window.xMouseHoverView = nil
+  window.xMouseTrackingEvent = MouseEvent()
+  window.xHasMouseTrackingEvent = false
   window.xMouseClickCount = 0
   window.xLastClickView = nil
   window.xHasLastClick = false
@@ -1774,14 +1778,19 @@ proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool
     result = dispatch.handled
     if dispatch.handled and dispatch.responder of View:
       window.setMouseActiveView(View(dispatch.responder))
+      window.xMouseTrackingEvent = dispatchEvent
+      window.xHasMouseTrackingEvent = true
     else:
       window.setMouseActiveView(nil)
+      window.xHasMouseTrackingEvent = false
   else:
     let dispatch = window.dispatchMouseEventInChain(
       target, contentPoint, dispatchEvent, selector, stopBefore
     )
     result = dispatch.handled
     window.setMouseActiveView(nil)
+    window.xMouseTrackingEvent = MouseEvent()
+    window.xHasMouseTrackingEvent = false
     window.xMouseClickCount = 0
 
 proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool =
@@ -1814,6 +1823,9 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
     result = window.dispatchMouseEventInChain(
       target, contentPoint, event, selector, window.xMousePolicyStopResponder
     ).handled
+    if result:
+      window.xMouseTrackingEvent = event
+      window.xHasMouseTrackingEvent = true
   else:
     result =
       window.dispatchMouseEventInChain(target, contentPoint, event, mouseMoved()).handled or
@@ -1991,6 +2003,41 @@ proc mouseDraggedAt*(
     dragging = true,
   )
 
+proc dispatchMouseTrackingTick(window: Window, timestamp = 0.0): bool =
+  if window.isNil or window.xContentView.isNil or window.xMouseCaptureView.isNil or
+      window.xMouseActiveView.isNil or not window.xHasMouseTrackingEvent:
+    return false
+  var event = window.xMouseTrackingEvent
+  event.timestamp = eventTimestamp(timestamp)
+  let contentPoint = window.contentPoint(event.location)
+
+  window.dispatchMouseEventInChain(
+    window.xMouseCaptureView,
+    contentPoint,
+    event,
+    mouseTrackingTick(),
+    window.xMousePolicyStopResponder,
+  ).handled
+
+proc mouseTrackingTickAt*(
+    window: Window,
+    point: Point,
+    button = mbPrimary,
+    modifiers: set[KeyModifier] = {},
+    timestamp = 0.0,
+): bool =
+  if window.isNil or window.xMouseCaptureView.isNil:
+    return false
+  window.xMouseTrackingEvent = MouseEvent(
+    location: point,
+    button: button,
+    clickCount: max(window.xMouseClickCount, 1),
+    modifiers: modifiers,
+    timestamp: eventTimestamp(timestamp),
+  )
+  window.xHasMouseTrackingEvent = true
+  window.dispatchMouseTrackingTick(timestamp)
+
 proc dispatchHostMouseButton(window: Window, event: MouseEvent, pressed: bool) =
   discard window.dispatchMouseButton(event, pressed)
   discard window.requestNativeDisplayUpdateIfNeeded()
@@ -2098,6 +2145,8 @@ proc pumpNativeWindowFrame*(window: Window) =
   discard window.requestNativeDisplayUpdateIfNeeded()
   if window.xHostWindow.isReady:
     window.xHostWindow.pump()
+  if window.dispatchMouseTrackingTick():
+    discard window.requestNativeDisplayUpdateIfNeeded()
   var idx = 0
   while idx < window.xAuxiliaryWindows.len:
     let auxiliary = window.xAuxiliaryWindows[idx]

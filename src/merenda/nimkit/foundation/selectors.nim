@@ -78,6 +78,7 @@ protocol ResponderEventProtocol:
   method mouseExited*(event: MouseEvent): bool {.optional.}
   method mouseMoved*(event: MouseEvent): bool {.optional.}
   method mouseDragged*(event: MouseEvent): bool {.optional.}
+  method mouseTrackingTick*(event: MouseEvent): bool {.optional.}
   method cursorUpdate*(event: MouseEvent): bool {.optional.}
   method updateTrackingAreas*(event: MouseEvent): bool {.optional.}
   method wantsForwardedScrollEvents*(event: ScrollEvent): bool {.optional.}

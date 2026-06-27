@@ -247,30 +247,43 @@ suite "nimkit controls":
     check stepper.repeatStartedAt == 10.0
     check actionCount == 1
 
-    check window.mouseDraggedAt(initPoint(80, 70), timestamp = 10.2)
-    check stepper.pressedPart == spNone
-    check not stepper.continueRepeat(timestamp = 10.4)
+    check window.mouseTrackingTickAt(initPoint(49, 21), timestamp = 10.2)
+    check stepper.value == 6.0
+    check stepper.repeatCount == 1
     check actionCount == 1
+
+    check window.mouseTrackingTickAt(initPoint(49, 21), timestamp = 10.36)
+    check stepper.value == 8.0
+    check stepper.repeatCount == 2
+    check stepper.lastRepeatAt == 10.36
+    check actionCount == 2
+
+    check window.mouseDraggedAt(initPoint(80, 70), timestamp = 10.4)
+    check stepper.pressedPart == spNone
+    check window.mouseTrackingTickAt(initPoint(80, 70), timestamp = 10.5)
+    check stepper.value == 8.0
+    check stepper.repeatCount == 2
+    check actionCount == 2
 
     check window.mouseDraggedAt(initPoint(49, 21), timestamp = 10.6)
     check stepper.pressedPart == spIncrement
-    check stepper.continueRepeat(timestamp = 10.8)
-    check stepper.value == 8.0
-    check stepper.repeatCount == 2
-    check stepper.lastRepeatAt == 10.8
-    check actionCount == 2
+    check window.mouseTrackingTickAt(initPoint(49, 21), timestamp = 10.6)
+    check stepper.value == 10.0
+    check stepper.repeatCount == 3
+    check stepper.lastRepeatAt == 10.6
+    check actionCount == 3
 
     check window.mouseUpAt(initPoint(49, 21), timestamp = 11.0)
     check stepper.pressedPart == spNone
     check stepper.repeatPart == spNone
     check not stepper.repeatActive()
-    check stepper.repeatCount == 2
+    check stepper.repeatCount == 3
 
     check window.makeFirstResponder(stepper)
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
-    check stepper.value == 6.0
-    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
     check stepper.value == 8.0
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+    check stepper.value == 10.0
 
   test "progress indicator clamps values and exposes display state":
     let indicator = newProgressIndicator(0.0, 100.0, 25.0)
