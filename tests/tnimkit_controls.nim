@@ -132,20 +132,40 @@ suite "nimkit controls":
       root = newView(frame = initRect(0, 0, 240, 180))
       button = newButton("Hover", frame = initRect(16, 64, 120, 36))
 
-    root.addSubview(button)
-    window.setContentView(root)
+    window.animationScheduler().clearAnimations()
+    window.stopAnimationClock()
 
-    check not button.hovered
-    check not button.isHighlighted
-    check window.mouseMovedAt(initPoint(24, 72))
-    check button.hovered
-    check ssHovered in button.widgetStateSet()
-    check not button.isHighlighted
+    try:
+      root.addSubview(button)
+      window.setContentView(root)
 
-    check window.mouseMovedAt(initPoint(200, 150))
-    check not button.hovered
-    check ssHovered notin button.widgetStateSet()
-    check not button.isHighlighted
+      check not button.hovered
+      check not button.isHighlighted
+      check button.hoverProgress == 0.0'f32
+      check window.mouseMovedAt(initPoint(24, 72))
+      check button.hovered
+      check ssHovered in button.widgetStateSet()
+      check not button.isHighlighted
+      check button.hoverProgress == 0.0'f32
+      check window.animationScheduler().animationCount == 1
+
+      check window.animationScheduler().tick(60.ms) == 1
+      check button.hoverProgress > 0.0'f32
+      check button.hoverProgress < 1.0'f32
+      check window.animationScheduler().tick(60.ms) == 1
+      check button.hoverProgress == 1.0'f32
+      check window.animationScheduler().animationCount == 0
+
+      check window.mouseMovedAt(initPoint(200, 150))
+      check not button.hovered
+      check ssHovered notin button.widgetStateSet()
+      check not button.isHighlighted
+      check window.animationScheduler().animationCount == 1
+      check window.animationScheduler().tick(120.ms) == 1
+      check button.hoverProgress == 0.0'f32
+    finally:
+      window.animationScheduler().clearAnimations()
+      window.stopAnimationClock()
 
   test "slider clamps, steps, and sends actions while tracking":
     let slider = newSlider(0.0, 100.0, 25.0, frame = initRect(10, 10, 200, 24))

@@ -7,6 +7,7 @@ import sigils/core
 
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
+import ./animations
 import ../responder/keybindings
 import ../drawing/rendering as nimkitRendering
 import ../foundation/events
@@ -121,6 +122,8 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xHostWindow: HostWindow
+    xAnimationScheduler: AnimationScheduler
+    xAnimationClock: AnimationSchedulerClock
     xOwnerWindow: Window
     xAuxiliaryWindows: seq[Window]
     xSheet: Window
@@ -284,6 +287,16 @@ proc newPopupWindow*(
 proc needsDisplayUpdate*(window: Window): bool
 proc requestNativeDisplayUpdate*(window: Window)
 proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
+proc animationScheduler*(window: Window): AnimationScheduler
+proc animationClock*(window: Window): AnimationSchedulerClock
+proc startAnimationClock*(window: Window)
+proc stopAnimationClock*(window: Window)
+proc startAnimation*(window: Window, animation: Animation): bool {.discardable.}
+proc stopAnimation*(
+  window: Window, animation: Animation, finished = false
+): bool {.discardable.}
+
+proc drainAnimations*(window: Window): int {.discardable.}
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc dispatchKeyEventInChain(
@@ -1040,6 +1053,56 @@ proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.} =
     window.requestNativeDisplayUpdate()
     return true
   false
+
+proc animationScheduler*(window: Window): AnimationScheduler =
+  if window.isNil:
+    return nil
+  if window.xAnimationScheduler.isNil:
+    window.xAnimationScheduler = newAnimationScheduler()
+  window.xAnimationScheduler
+
+proc animationClock*(window: Window): AnimationSchedulerClock =
+  if window.isNil:
+    return nil
+  if window.xAnimationClock.isNil:
+    window.xAnimationClock = newAnimationSchedulerClock()
+  window.xAnimationClock
+
+proc startAnimationClock*(window: Window) =
+  if window.isNil:
+    return
+  let clock = window.animationClock()
+  if not clock.isNil and not clock.isRunning:
+    clock.start()
+
+proc stopAnimationClock*(window: Window) =
+  if window.isNil or window.xAnimationClock.isNil:
+    return
+  window.xAnimationClock.stop()
+
+proc startAnimation*(window: Window, animation: Animation): bool {.discardable.} =
+  let scheduler = window.animationScheduler()
+  if scheduler.isNil:
+    return false
+  result = scheduler.startAnimation(animation)
+  if result and scheduler.animationCount > 0:
+    window.startAnimationClock()
+
+proc stopAnimation*(
+    window: Window, animation: Animation, finished = false
+): bool {.discardable.} =
+  if window.isNil or window.xAnimationScheduler.isNil:
+    return false
+  result = window.xAnimationScheduler.stopAnimation(animation, finished)
+  if window.xAnimationScheduler.animationCount == 0:
+    window.stopAnimationClock()
+
+proc drainAnimations*(window: Window): int {.discardable.} =
+  if window.isNil or window.xAnimationScheduler.isNil or window.xAnimationClock.isNil:
+    return 0
+  result = window.xAnimationScheduler.drain(window.xAnimationClock)
+  if window.xAnimationScheduler.animationCount == 0:
+    window.stopAnimationClock()
 
 proc isClosed*(window: Window): bool =
   window.isNil or window.xClosed
@@ -2080,6 +2143,7 @@ proc dispatchHostFocusChanged(window: Window, focused: bool) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc markHostClosed(window: Window) =
+  window.stopAnimationClock()
   window.xClosed = true
   window.xVisibleRequested = false
   window.xMiniaturized = false
@@ -2142,6 +2206,8 @@ proc pumpNativeWindowFrame*(window: Window) =
   if window.isNil or not window.xVisibleRequested or window.xClosed:
     return
   window.ensureNativeWindow()
+  if window.drainAnimations() > 0:
+    discard window.requestNativeDisplayUpdateIfNeeded()
   discard window.requestNativeDisplayUpdateIfNeeded()
   if window.xHostWindow.isReady:
     window.xHostWindow.pump()
