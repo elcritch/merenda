@@ -26,6 +26,7 @@ import merenda/nimkit/responder/keybindings
 import merenda/nimkit/containers/listbasics
 import merenda/nimkit/controls/menus
 import merenda/nimkit/containers/outlineviews
+import merenda/nimkit/app/panels
 import merenda/nimkit/app/pasteboards
 import merenda/nimkit/controls/progressindicators
 import merenda/nimkit/controls/popuplists
@@ -80,6 +81,7 @@ export keybindings
 export listbasics
 export menus
 export outlineviews
+export panels
 export pasteboards
 export progressindicators
 export popuplists

@@ -280,6 +280,69 @@ suite "nimkit documents":
     check not secondWindow.isClosed
     check app.keyWindow == secondWindow
 
+  test "document controller integrates open and save panels":
+    let
+      app = newApplication()
+      controller = FileDocumentController()
+
+    fileEvents = @[]
+    controller.initDocumentController(app)
+    discard controller.withProtocol(FileDocumentControllerCreation)
+
+    let openPanel = newOpenPanel()
+    openPanel.allowedFileTypes = @["txt"]
+    openPanel.selectUrl("file:///tmp/Panel.txt")
+    controller.openPanel = openPanel
+    check controller.openPanel == openPanel
+
+    let opened = controller.openDocumentWithPanel(openPanel, app)
+    check opened of FileDocument
+    check opened.fileUrl == "file:///tmp/Panel.txt"
+    check opened.fileType == "txt"
+    check fileEvents == @["read:file:///tmp/Panel.txt:txt"]
+
+    openPanel.selectUrl("file:///tmp/Panel.png")
+    check controller.openDocumentWithPanel(openPanel, app).isNil
+    check fileEvents == @["read:file:///tmp/Panel.txt:txt"]
+
+    let
+      openItem = newMenuItem("Open", actionSelector("openDocument"))
+      saveItem = newMenuItem("Save", actionSelector("saveDocument"))
+
+    openPanel.selectUrl("file:///tmp/MenuOpen.txt")
+    check openItem.validate(Responder(controller))
+    check openItem.perform(Responder(controller))
+    check fileEvents[^1] == "read:file:///tmp/MenuOpen.txt:txt"
+
+    let created = controller.newDocument(app = app)
+    created.documentEdited = true
+
+    let savePanel = newSavePanel()
+    savePanel.directoryUrl = "file:///tmp"
+    savePanel.allowedFileTypes = @["md"]
+    savePanel.nameFieldStringValue = "Panel"
+    controller.savePanel = savePanel
+    check controller.savePanel == savePanel
+
+    check controller.saveDocumentWithPanel(created, savePanel, app)
+    check created.fileUrl == "file:///tmp/Panel.md"
+    check created.fileType == "md"
+    check fileEvents[^1] == "write:file:///tmp/Panel.md:md"
+    check controller.recentDocumentUrls()[0] == "file:///tmp/Panel.md"
+
+    let untitled = controller.newDocument(app = app)
+    untitled.documentEdited = true
+    savePanel.allowedFileTypes = @["txt"]
+    savePanel.nameFieldStringValue = "MenuSave"
+    check saveItem.validate(Responder(controller))
+    check saveItem.perform(Responder(controller))
+    check untitled.fileUrl == "file:///tmp/MenuSave.txt"
+    check untitled.fileType == "txt"
+    check fileEvents[^1] == "write:file:///tmp/MenuSave.txt:txt"
+
+    savePanel.nameFieldStringValue = "Bad.png"
+    check not savePanel.validateSelection()
+
   test "document controller reviews unsaved documents before close all":
     let
       app = newApplication()
