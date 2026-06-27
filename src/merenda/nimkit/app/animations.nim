@@ -1,6 +1,8 @@
 import std/[algorithm, math, times]
 
 import sigils/reactive
+import sigils/threadProxies
+import sigils/threadSelectors
 
 import ../foundation/selectors
 import ../foundation/types
@@ -37,6 +39,22 @@ type
     springDampingRatio*: float32
 
   AnimationSetterSelector*[T] = Selector[T, EmptyArgs]
+
+  AnimationScheduler* = ref object of DynamicAgent
+    xAnimations: seq[Animation]
+    xElapsed: Duration
+    xFrameInterval: Duration
+
+  AnimationClockTicker = ref object of AgentActor
+    xFrameInterval: Duration
+
+  AnimationSchedulerClock* = ref object of Agent
+    xFrameInterval: Duration
+    xThread: SigilSelectorThreadPtr
+    xOwnsThread: bool
+    xTimer: SigilTimer
+    xTicker: AgentProxy[AnimationClockTicker]
+    xPendingDeltas: seq[Duration]
 
   Animation* = ref object of DynamicAgent
     xDuration: Duration
@@ -80,6 +98,9 @@ proc stateChanged*(
 proc progressChanged*(animation: Animation, progress: float32) {.signal.}
 proc progressMarkReached*(animation: Animation, mark: float32) {.signal.}
 proc valueChanged*[T](animation: ValueAnimation[T], value: T) {.signal.}
+proc schedulerTicked*(scheduler: AnimationScheduler, delta: Duration) {.signal.}
+proc clockTickQueued*(clock: AnimationSchedulerClock, delta: Duration) {.signal.}
+proc clockTicked(ticker: AnimationClockTicker, delta: Duration) {.signal.}
 
 func clampProgress(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
@@ -244,6 +265,17 @@ proc rawProgress(animation: Animation): float32 =
     0.0'f32
   else:
     animation.progress{}
+
+proc emitClockTick(ticker: AnimationClockTicker) {.slot.} =
+  if ticker.isNil:
+    return
+  emit ticker.clockTicked(ticker.xFrameInterval)
+
+proc queueClockTick(clock: AnimationSchedulerClock, delta: Duration) {.slot.} =
+  if clock.isNil:
+    return
+  clock.xPendingDeltas.add(delta)
+  emit clock.clockTickQueued(delta)
 
 proc resetDeliveredMarks(animation: Animation) =
   animation.xDeliveredMarks.setLen(animation.xProgressMarks.len)
@@ -600,6 +632,26 @@ proc `loopCount=`*(animation: Animation, loopCount: int) =
   if not animation.isNil:
     animation.xLoopCount = loopCount
 
+proc progressAtTime(animation: Animation, currentTime: Duration): float32 =
+  if animation.isNil:
+    return 0.0'f32
+  let durationNs = animation.duration().inNanoseconds
+  if durationNs <= 0:
+    return if animation.xDirection == adBackward: 0.0'f32 else: 1.0'f32
+
+  let
+    elapsedNs = max(currentTime.inNanoseconds, 0)
+    totalNs = animation.totalDuration().inNanoseconds
+  if totalNs >= 0 and elapsedNs >= totalNs:
+    return if animation.xDirection == adBackward: 0.0'f32 else: 1.0'f32
+
+  let loopNs = elapsedNs mod durationNs
+  let forwardProgress = clampProgress(loopNs.float32 / durationNs.float32)
+  if animation.xDirection == adBackward:
+    1.0'f32 - forwardProgress
+  else:
+    forwardProgress
+
 proc direction*(animation: Animation): AnimationDirection =
   if animation.isNil: adForward else: animation.xDirection
 
@@ -739,15 +791,15 @@ proc setCurrentTime*(animation: Animation, currentTime: Duration) =
   if animation.isNil:
     return
   let previousProgress = animation.rawProgress()
-  let duration = animation.duration()
+  let totalDuration = animation.totalDuration()
   let nextTime =
-    if duration.inNanoseconds >= 0 and currentTime > duration:
-      duration
+    if totalDuration.inNanoseconds >= 0 and currentTime > totalDuration:
+      totalDuration
     elif currentTime.inNanoseconds < 0:
       initDuration()
     else:
       currentTime
-  let nextProgress = nextTime.durationRatio(duration)
+  let nextProgress = animation.progressAtTime(nextTime)
   animation.progress <- nextProgress
   animation.currentTime <- nextTime
   animation.emitProgressMarks(previousProgress, nextProgress)
@@ -793,6 +845,228 @@ proc stop*(animation: Animation, finished = false) =
   emit animation.stopped(finished)
   if finished:
     emit animation.finished()
+
+proc initAnimationSchedulerFields*(
+    scheduler: AnimationScheduler, frameInterval = initDuration(milliseconds = 16)
+) =
+  if scheduler.isNil:
+    return
+  scheduler.xFrameInterval =
+    if frameInterval.inNanoseconds <= 0:
+      initDuration(milliseconds = 16)
+    else:
+      frameInterval
+  scheduler.xElapsed = initDuration()
+
+proc newAnimationScheduler*(
+    frameInterval = initDuration(milliseconds = 16)
+): AnimationScheduler =
+  result = AnimationScheduler()
+  initAnimationSchedulerFields(result, frameInterval)
+
+proc frameInterval*(scheduler: AnimationScheduler): Duration =
+  if scheduler.isNil:
+    initDuration(milliseconds = 16)
+  else:
+    scheduler.xFrameInterval
+
+proc `frameInterval=`*(scheduler: AnimationScheduler, interval: Duration) =
+  if scheduler.isNil:
+    return
+  scheduler.xFrameInterval =
+    if interval.inNanoseconds <= 0:
+      initDuration(milliseconds = 16)
+    else:
+      interval
+
+proc elapsed*(scheduler: AnimationScheduler): Duration =
+  if scheduler.isNil:
+    initDuration()
+  else:
+    scheduler.xElapsed
+
+proc scheduledAnimations*(scheduler: AnimationScheduler): seq[Animation] =
+  if scheduler.isNil:
+    @[]
+  else:
+    scheduler.xAnimations
+
+proc animationCount*(scheduler: AnimationScheduler): int =
+  if scheduler.isNil: 0 else: scheduler.xAnimations.len
+
+proc containsAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
+  if scheduler.isNil or animation.isNil:
+    return false
+  for scheduled in scheduler.xAnimations:
+    if scheduled == animation:
+      return true
+
+proc addAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
+  if scheduler.isNil or animation.isNil or scheduler.containsAnimation(animation):
+    return false
+  scheduler.xAnimations.add(animation)
+  true
+
+proc removeAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
+  if scheduler.isNil or animation.isNil:
+    return false
+  for index, scheduled in scheduler.xAnimations:
+    if scheduled == animation:
+      scheduler.xAnimations.delete(index)
+      return true
+
+proc clearAnimations*(scheduler: AnimationScheduler) =
+  if not scheduler.isNil:
+    scheduler.xAnimations.setLen(0)
+
+proc startAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
+  if scheduler.isNil or animation.isNil:
+    return false
+  discard scheduler.addAnimation(animation)
+  animation.start()
+  true
+
+proc stopAnimation*(
+    scheduler: AnimationScheduler, animation: Animation, finished = false
+): bool =
+  if scheduler.isNil or animation.isNil:
+    return false
+  animation.stop(finished)
+  scheduler.removeAnimation(animation)
+
+proc tick*(scheduler: AnimationScheduler, delta: Duration): int {.discardable.} =
+  if scheduler.isNil or delta.inNanoseconds <= 0:
+    return 0
+
+  scheduler.xElapsed = scheduler.xElapsed + delta
+  var index = 0
+  while index < scheduler.xAnimations.len:
+    let animation = scheduler.xAnimations[index]
+    if animation.isNil or animation.isStopped:
+      scheduler.xAnimations.delete(index)
+      continue
+    if not animation.isRunning:
+      inc index
+      continue
+
+    let
+      totalDuration = animation.totalDuration()
+      nextTime = animation.rawCurrentTime() + delta
+    if totalDuration.inNanoseconds == 0:
+      animation.stop(finished = true)
+      scheduler.xAnimations.delete(index)
+    elif totalDuration.inNanoseconds >= 0 and nextTime >= totalDuration:
+      animation.setCurrentTime(totalDuration)
+      animation.stop(finished = true)
+      scheduler.xAnimations.delete(index)
+    else:
+      animation.setCurrentTime(nextTime)
+      inc index
+    inc result
+
+  emit scheduler.schedulerTicked(delta)
+
+proc tick*(scheduler: AnimationScheduler): int {.discardable.} =
+  scheduler.tick(scheduler.frameInterval)
+
+proc initAnimationSchedulerClockFields*(
+    clock: AnimationSchedulerClock, frameInterval = initDuration(milliseconds = 16)
+) =
+  if clock.isNil:
+    return
+  clock.xFrameInterval =
+    if frameInterval.inNanoseconds <= 0:
+      initDuration(milliseconds = 16)
+    else:
+      frameInterval
+
+proc newAnimationSchedulerClock*(
+    frameInterval = initDuration(milliseconds = 16)
+): AnimationSchedulerClock =
+  result = AnimationSchedulerClock()
+  initAnimationSchedulerClockFields(result, frameInterval)
+
+proc frameInterval*(clock: AnimationSchedulerClock): Duration =
+  if clock.isNil:
+    initDuration(milliseconds = 16)
+  else:
+    clock.xFrameInterval
+
+proc `frameInterval=`*(clock: AnimationSchedulerClock, interval: Duration) =
+  if clock.isNil:
+    return
+  clock.xFrameInterval =
+    if interval.inNanoseconds <= 0:
+      initDuration(milliseconds = 16)
+    else:
+      interval
+
+proc isRunning*(clock: AnimationSchedulerClock): bool =
+  not clock.isNil and not clock.xTimer.isNil
+
+proc pendingTickCount*(clock: AnimationSchedulerClock): int =
+  if clock.isNil: 0 else: clock.xPendingDeltas.len
+
+proc takePendingDeltas*(clock: AnimationSchedulerClock): seq[Duration] =
+  if clock.isNil:
+    return @[]
+  result = clock.xPendingDeltas
+  clock.xPendingDeltas.setLen(0)
+
+proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
+  if clock.isNil:
+    return 0
+  if not hasLocalSigilThread():
+    setLocalSigilThread(newSigilSelectorThread())
+  getCurrentSigilThread().pollAll(NonBlocking)
+
+proc start*(clock: AnimationSchedulerClock, thread: SigilSelectorThreadPtr = nil) =
+  if clock.isNil or clock.isRunning:
+    return
+  if not hasLocalSigilThread():
+    setLocalSigilThread(newSigilSelectorThread())
+
+  if thread.isNil:
+    clock.xThread = newSigilSelectorThread()
+    clock.xOwnsThread = true
+    clock.xThread.start()
+  else:
+    clock.xThread = thread
+    clock.xOwnsThread = false
+
+  var ticker = AnimationClockTicker(xFrameInterval: clock.xFrameInterval)
+  clock.xTicker = ticker.moveToThread(clock.xThread)
+  clock.xTimer = newSigilTimer(clock.xFrameInterval)
+  connectThreaded(
+    clock.xTimer, timeout, clock.xTicker, AnimationClockTicker.emitClockTick()
+  )
+  connectThreaded(
+    clock.xTicker, clockTicked, clock, AnimationSchedulerClock.queueClockTick()
+  )
+  clock.xTimer.start(clock.xThread)
+
+proc stop*(clock: AnimationSchedulerClock) =
+  if clock.isNil or clock.xTimer.isNil:
+    return
+  if not clock.xThread.isNil:
+    clock.xTimer.cancel(clock.xThread)
+  if clock.xOwnsThread and not clock.xThread.isNil:
+    clock.xThread.stop()
+    clock.xThread.join()
+  clock.xTimer = nil
+  clock.xTicker = nil
+  clock.xThread = nil
+  clock.xOwnsThread = false
+
+proc drain*(
+    scheduler: AnimationScheduler, clock: AnimationSchedulerClock
+): int {.discardable.} =
+  if scheduler.isNil or clock.isNil:
+    return 0
+  discard clock.pollQueuedTicks()
+  for delta in clock.takePendingDeltas():
+    discard scheduler.tick(delta)
+    inc result
 
 proc addAnimation*(group: AnimationGroup, animation: Animation) =
   if group.isNil or animation.isNil:
