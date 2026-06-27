@@ -1,4 +1,4 @@
-import std/unicode
+import std/[options, os, unicode]
 
 import pkg/bumpy
 
@@ -22,6 +22,11 @@ const
   DefaultDrawLevel* = 50.ZLevel
   FocusRingDrawLevel* = 90.ZLevel
   PopupDrawLevel* = 100.ZLevel
+  NimKitFontEnv* = "NIMKIT_FONT"
+  MerendaFontEnv* = "MERENDA_FONT"
+  FontEnvVars* = [NimKitFontEnv, MerendaFontEnv]
+  DefaultTypefaceName* = "IBMPlexSans-Regular.ttf"
+  DefaultTypefaceFallbackNames* = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
   TextEllipsis = "…"
 
 type DrawContext* = ref object
@@ -34,16 +39,48 @@ type DrawContext* = ref object
   xAppearance: Appearance
 
 var defaultTypefaceId {.threadvar.}: TypefaceId
+var defaultTypefaceKey {.threadvar.}: string
 var defaultTypefaceReady {.threadvar.}: bool
+
+type FontOverride* = object
+  envName*: string
+  name*: string
+
+proc fontOverrideFromEnv*(): Option[FontOverride] =
+  for envName in FontEnvVars:
+    let value = getEnv(envName).strip()
+    if value.len == 0:
+      continue
+    return some(FontOverride(envName: envName, name: value))
+  none(FontOverride)
+
+proc defaultTypefaceRequest*(): tuple[name: string, fallbackNames: seq[string]] =
+  let override = fontOverrideFromEnv()
+  if override.isSome:
+    result.name = override.get().name
+    result.fallbackNames.add DefaultTypefaceName
+  else:
+    result.name = DefaultTypefaceName
+  result.fallbackNames.add DefaultTypefaceFallbackNames
+
+proc defaultTypefaceCacheKey(
+    request: tuple[name: string, fallbackNames: seq[string]]
+): string =
+  result = request.name
+  for fallbackName in request.fallbackNames:
+    result.add '\0'
+    result.add fallbackName
 
 proc toFigRect(rect: nimkitTypes.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
 proc defaultFont(size: float32): FigFont =
-  if not defaultTypefaceReady:
-    defaultTypefaceId = loadTypeface(
-      "IBMPlexSans-Regular.ttf", ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
-    )
+  let
+    request = defaultTypefaceRequest()
+    cacheKey = request.defaultTypefaceCacheKey()
+  if not defaultTypefaceReady or defaultTypefaceKey != cacheKey:
+    defaultTypefaceId = loadTypeface(request.name, request.fallbackNames)
+    defaultTypefaceKey = cacheKey
     defaultTypefaceReady = true
   defaultTypefaceId.fontWithSize(size)
 
@@ -121,7 +158,7 @@ proc textLayout*(
     rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
 ): GlyphArrangement =
   let
-    font = defaultFont(DefaultFontSize)
+    font = defaultFont(defaultFontSize())
     style = fs(font, fill(color.rgba))
   typeset(
     rect.toFigRect,
@@ -159,9 +196,10 @@ proc textLayout*(
 
 proc textNaturalSize*(text: string): nimkitTypes.Size =
   let
-    font = defaultFont(DefaultFontSize)
+    fontSize = defaultFontSize()
+    font = defaultFont(fontSize)
     style = fs(font, fill(initColor(0.0, 0.0, 0.0, 1.0).rgba))
-    lineHeight = max(DefaultFontSize, getLineHeightImpl(font))
+    lineHeight = max(fontSize, getLineHeightImpl(font))
     lineCount = block:
       var count = 1
       for ch in text:
@@ -279,8 +317,9 @@ proc caretRect*(
     return initRect(textRect.origin.x + x, textRect.origin.y + rect.y, 1.0, rect.h)
 
   let
-    font = defaultFont(DefaultFontSize)
-    lineHeight = max(DefaultFontSize, getLineHeightImpl(font))
+    fontSize = defaultFontSize()
+    font = defaultFont(fontSize)
+    lineHeight = max(fontSize, getLineHeightImpl(font))
   initRect(
     textRect.origin.x,
     textRect.origin.y + max((textRect.size.height - lineHeight) / 2.0'f32, 0.0),

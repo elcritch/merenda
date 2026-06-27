@@ -102,7 +102,7 @@ proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
 
 proc caretRect*(manager: TextLayoutManager, insertionPoint: int): Rect =
   if manager.isNil:
-    return initRect(0.0, 0.0, 1.0, DefaultFontSize)
+    return initRect(0.0, 0.0, 1.0, defaultFontSize())
   manager.ensureLayout()
   caretRect(manager.xLayoutRect, manager.xLayout, insertionPoint)
 
@@ -136,7 +136,7 @@ proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
 
     let
       caret = manager.caretRect(nextIndex)
-      lineHeight = max(caret.size.height, DefaultFontSize)
+      lineHeight = max(caret.size.height, defaultFontSize())
       caretY = caret.origin.y - manager.xLayoutRect.origin.y
     if point.y >= caretY and point.y < caretY + lineHeight:
       return nextIndex
@@ -158,7 +158,7 @@ proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   for index in 0 .. total:
     let
       caret = manager.caretRect(index)
-      lineHeight = max(caret.size.height, DefaultFontSize)
+      lineHeight = max(caret.size.height, defaultFontSize())
       caretX = caret.origin.x - manager.xLayoutRect.origin.x
       caretY = caret.origin.y - manager.xLayoutRect.origin.y
 
