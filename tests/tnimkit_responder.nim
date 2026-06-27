@@ -2,8 +2,8 @@ import std/[options, unittest]
 
 import sigils/selectors
 
-import merenda/nimkit except performKeyEquivalent
-import merenda/nimkit/app/windows as nimkitWindows
+import merenda/nimkit except performKeyEquivalent, undoManager
+from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManager
 
 type TrackingSpyView = ref object of View
   xName: string
@@ -778,8 +778,7 @@ suite "nimkit responder":
     resetTracking()
 
     check window.makeFirstResponder(child)
-    check nimkitWindows.performKeyEquivalent(
-      window,
+    check window.dispatchKeyDown(
       KeyEvent(key: keyF12, keyCode: keyF12.ord, modifiers: {kmCommand})
     )
 
