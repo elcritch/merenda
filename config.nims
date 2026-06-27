@@ -18,9 +18,9 @@ when defined(feature.merenda.libbacktrace):
   --define:
     nimStackTraceOverride
   switch("import", "libbacktrace")
-when defined(freebsd):
-  --define:
-    libbacktraceUseSystemLibs
+  when defined(freebsd):
+    --define:
+      libbacktraceUseSystemLibs
 
 import std/strutils
 import std/os
