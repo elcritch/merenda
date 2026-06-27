@@ -31,14 +31,14 @@ The source tree is now organized around domain modules under
 `merenda/nimkit`; internal code and tests should import the domain modules
 directly when they need a narrower surface.
 
-The first animation core model, interpolation/timing pass, deterministic
-scheduler/threading pass, and selector-backed property animation surfaces are
-now in place. The next implementation should add transaction-style sugar on top
-of the explicit animation constructors. Keep animation extension points on
-methods, protocols, and selector dispatch rather than public callback hooks.
-Widget mutation should stay routed through existing NimKit setters so layout,
-display invalidation, responder state, and accessibility notifications remain
-the single source of truth.
+The first animation core is now in place through interpolation/timing,
+deterministic scheduler/threading, selector-backed property animation surfaces,
+Cocoa-style transaction sugar, application run-loop draining, and focused
+examples. Keep future animation extension points on methods, protocols, and
+selector dispatch rather than public callback hooks. Widget mutation should stay
+routed through existing NimKit setters so layout, display invalidation,
+responder state, and accessibility notifications remain the single source of
+truth.
 
 ## Recently Completed
 
@@ -287,6 +287,12 @@ the single source of truth.
   `contentOffset`, `ProgressIndicator.value`, `SplitView` divider positions,
   and cascading column metrics now have helper constructors that attach narrow
   animation protocols and write through the existing public setters.
+- Finished the animation transaction and examples pass: explicit animation
+  transactions and the `animationGroup` template capture setter-backed property
+  changes, `Application` owns and drains an animation scheduler/clock during
+  run-loop frames, `examples/progress_indicator_demo.nim` now uses the shared
+  scheduler, and `examples/animation_demo.nim` covers property animation,
+  parallel/sequential groups, and transaction sugar.
 
 ## Current Verification
 
@@ -319,36 +325,26 @@ the single source of truth.
   `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
 - The first animation core, interpolation/timing, scheduler/threading, and
   property animation surface passes are covered by
-  `tests/tnimkit_animations.nim`; umbrella export fallout was checked with
-  `atlas-run tests nimkit_controls`.
+  `tests/tnimkit_animations.nim`; umbrella export and affected widget fallout
+  were checked with
+  `atlas-run tests nimkit_controls nimkit_splitviews nimkit_cascadingviews`.
+- The completed animation transaction/examples pass was checked with
+  `atlas-run tests tnimkit_animations`,
+  `atlas-run tests --compile-only 'examples/*.nim'`, and a full
+  `atlas-run tests` run passing `37/37`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
 
 ## Near-Term Work
 
-### Animation Core (Next)
+### Animation Core (Completed)
 
-Add a backend-neutral animation system before the next widget pass. The design
-should use Qt's composable API shape, Cocoa/AppKit's transaction ergonomics, and
-Sigils' selector-thread timers without exposing raw thread work to widgets.
-
-Remaining implementation order:
-
-1. Cocoa-style transaction sugar
-   - Add an explicit API first, then a Nim template layer for transaction-style
-     usage such as `animationGroup(duration = 180.ms, curve = acEaseInOut):`.
-   - Inside a transaction, capture old/new animatable property values and build
-     property animations; outside a transaction, property assignments remain
-     immediate.
-2. Examples and verification
-   - Add focused tests for manual scheduler progression, easing/interpolation,
-     group timing, pause/resume/stop, progress marks, threaded timer delivery,
-     and selector-applied property invalidation.
-   - Update `examples/progress_indicator_demo.nim` to use the scheduler instead
-     of manual `stepAnimation`, then add a compact `examples/animation_demo.nim`
-     covering property animation, parallel/sequential groups, and transaction
-     sugar.
+The backend-neutral animation pass is in place through Qt-style composable
+animation objects, Cocoa/AppKit-style transaction ergonomics, and Sigils
+selector-thread timer delivery without exposing raw thread work to widgets.
+Continue hardening animation behavior as later widgets and examples prove the
+need.
 
 ### OpenStep Compatibility Widgets
 

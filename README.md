@@ -240,6 +240,8 @@ nim r examples/radio_demo.nim
 nim r examples/combobox_demo.nim
 nim r examples/box_demo.nim
 nim r examples/splitview_demo.nim
+nim r examples/progress_indicator_demo.nim
+nim r examples/animation_demo.nim
 nim r examples/tabview_demo.nim
 nim r examples/table_demo.nim
 nim r examples/preferences_demo.nim

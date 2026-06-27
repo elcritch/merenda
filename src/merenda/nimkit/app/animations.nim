@@ -86,6 +86,17 @@ type
 
   PauseAnimation* = ref object of Animation
 
+  AnimationTransactionEntry = object
+    target: DynamicAgent
+    selector: SigilName
+    animation: Animation
+
+  AnimationTransaction* = ref object of DynamicAgent
+    xDuration: Duration
+    xTiming: AnimationTiming
+    xGroup: ParallelAnimationGroup
+    xEntries: seq[AnimationTransactionEntry]
+
 proc started*(animation: Animation) {.signal.}
 proc paused*(animation: Animation) {.signal.}
 proc resumed*(animation: Animation) {.signal.}
@@ -101,6 +112,10 @@ proc valueChanged*[T](animation: ValueAnimation[T], value: T) {.signal.}
 proc schedulerTicked*(scheduler: AnimationScheduler, delta: Duration) {.signal.}
 proc clockTickQueued*(clock: AnimationSchedulerClock, delta: Duration) {.signal.}
 proc clockTicked(ticker: AnimationClockTicker, delta: Duration) {.signal.}
+
+var
+  animationTransactionStack {.threadvar.}: seq[AnimationTransaction]
+  animationTransactionApplyDepth {.threadvar.}: int
 
 func clampProgress(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
@@ -248,6 +263,188 @@ func durationRatio(value, total: Duration): float32 =
 func durationAtProgress(total: Duration, progress: float32): Duration =
   initDuration(nanoseconds = int64(total.inNanoseconds.float64 * progress.float64))
 
+func ms*(milliseconds: SomeInteger): Duration =
+  initDuration(milliseconds = milliseconds.int64)
+
+proc newPropertyAnimation*[T](
+  target: DynamicAgent,
+  setter: AnimationSetterSelector[T],
+  startValue, endValue: T,
+  duration = initDuration(milliseconds = 250),
+): PropertyAnimation[T]
+
+proc newParallelAnimationGroup*(
+  children: openArray[Animation] = []
+): ParallelAnimationGroup
+
+proc currentAnimationTransaction*(): AnimationTransaction =
+  if animationTransactionStack.len == 0:
+    nil
+  else:
+    animationTransactionStack[^1]
+
+proc isCapturingAnimationTransactions*(): bool =
+  animationTransactionStack.len > 0 and animationTransactionApplyDepth == 0
+
+template withoutAnimationTransactionCapture(body: untyped): untyped =
+  inc animationTransactionApplyDepth
+  try:
+    body
+  finally:
+    dec animationTransactionApplyDepth
+
+proc removeTransactionEntry(transaction: AnimationTransaction, index: int) =
+  if transaction.isNil or index < 0 or index >= transaction.xEntries.len:
+    return
+  let animation = transaction.xEntries[index].animation
+  transaction.xEntries.delete(index)
+  if not transaction.xGroup.isNil:
+    for childIndex, child in transaction.xGroup.children:
+      if child == animation:
+        transaction.xGroup.children.delete(childIndex)
+        break
+
+proc registerTransactionAnimation(
+    transaction: AnimationTransaction,
+    target: DynamicAgent,
+    selector: SigilName,
+    animation: Animation,
+) =
+  if transaction.isNil or animation.isNil:
+    return
+  for index, entry in transaction.xEntries:
+    if entry.target == target and entry.selector == selector:
+      transaction.xEntries[index].animation = animation
+      if not transaction.xGroup.isNil:
+        for childIndex, child in transaction.xGroup.children:
+          if child == entry.animation:
+            transaction.xGroup.children[childIndex] = animation
+            return
+      break
+  transaction.xEntries.add(
+    AnimationTransactionEntry(target: target, selector: selector, animation: animation)
+  )
+  if not transaction.xGroup.isNil:
+    transaction.xGroup.children.add(animation)
+
+proc newAnimationTransaction*(
+    duration = initDuration(milliseconds = 250), timing = linearTiming()
+): AnimationTransaction =
+  result = AnimationTransaction(
+    xDuration: duration, xTiming: timing, xGroup: newParallelAnimationGroup()
+  )
+
+proc newAnimationTransaction*(
+    duration: Duration, curve: AnimationCurve
+): AnimationTransaction =
+  newAnimationTransaction(duration, initAnimationTiming(curve))
+
+proc duration*(transaction: AnimationTransaction): Duration =
+  if transaction.isNil:
+    initDuration()
+  else:
+    transaction.xDuration
+
+proc timing*(transaction: AnimationTransaction): AnimationTiming =
+  if transaction.isNil:
+    linearTiming()
+  else:
+    transaction.xTiming
+
+proc animationGroup*(transaction: AnimationTransaction): ParallelAnimationGroup =
+  if transaction.isNil: nil else: transaction.xGroup
+
+proc animationCount*(transaction: AnimationTransaction): int =
+  if transaction.isNil or transaction.xGroup.isNil:
+    0
+  else:
+    transaction.xGroup.children.len
+
+proc addTransactionAnimation*(
+    transaction: AnimationTransaction, animation: Animation
+): bool {.discardable.} =
+  if transaction.isNil or animation.isNil:
+    return false
+  transaction.xGroup.children.add(animation)
+  true
+
+proc beginAnimationTransaction*(transaction: AnimationTransaction) =
+  if transaction.isNil:
+    return
+  animationTransactionStack.add(transaction)
+
+proc beginAnimationTransaction*(
+    duration = initDuration(milliseconds = 250), timing = linearTiming()
+): AnimationTransaction {.discardable.} =
+  result = newAnimationTransaction(duration, timing)
+  beginAnimationTransaction(result)
+
+proc beginAnimationTransaction*(
+    duration: Duration, curve: AnimationCurve
+): AnimationTransaction {.discardable.} =
+  result = newAnimationTransaction(duration, curve)
+  beginAnimationTransaction(result)
+
+proc cancelAnimationTransaction*(): AnimationTransaction {.discardable.} =
+  if animationTransactionStack.len == 0:
+    return nil
+  result = animationTransactionStack.pop()
+
+proc commitAnimationTransaction*(): ParallelAnimationGroup {.discardable.} =
+  let transaction = cancelAnimationTransaction()
+  if transaction.isNil:
+    return nil
+  result = transaction.xGroup
+  let parent = currentAnimationTransaction()
+  if not parent.isNil and not result.isNil:
+    discard parent.addTransactionAnimation(result)
+
+proc recordPropertyAnimation*[T](
+    target: DynamicAgent, setter: AnimationSetterSelector[T], startValue, endValue: T
+): bool {.discardable.} =
+  let transaction = currentAnimationTransaction()
+  if transaction.isNil or target.isNil or not isCapturingAnimationTransactions():
+    return false
+  let selector = selectorName(setter)
+  for index, entry in transaction.xEntries:
+    if entry.target == target and entry.selector == selector:
+      if entry.animation of PropertyAnimation[T]:
+        let animation = PropertyAnimation[T](entry.animation)
+        when compiles(animation.startValue == endValue):
+          if animation.startValue == endValue:
+            transaction.removeTransactionEntry(index)
+            return true
+        animation.endValue = endValue
+        animation.xDuration = transaction.xDuration
+        animation.xTiming = transaction.xTiming
+        return true
+      transaction.removeTransactionEntry(index)
+      break
+
+  when compiles(startValue == endValue):
+    if startValue == endValue:
+      return true
+
+  let animation =
+    newPropertyAnimation[T](target, setter, startValue, endValue, transaction.xDuration)
+  animation.xTiming = transaction.xTiming
+  transaction.registerTransactionAnimation(target, selector, animation)
+  true
+
+template animationGroup*(
+    duration: Duration = initDuration(milliseconds = 250),
+    curve: AnimationCurve = acLinear,
+    body: untyped,
+): ParallelAnimationGroup =
+  block:
+    discard beginAnimationTransaction(duration, curve)
+    try:
+      body
+      commitAnimationTransaction()
+    except:
+      discard cancelAnimationTransaction()
+      raise
+
 proc rawState(animation: Animation): AnimationState =
   if animation.isNil or animation.state.isNil:
     asStopped
@@ -376,27 +573,34 @@ method applyValue*(animation: ValueAnimation[Color]) =
 method applyValue*(animation: PropertyAnimation[float32]) =
   procCall ValueAnimation[float32](animation).applyValue()
   if not animation.target.isNil:
-    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+    withoutAnimationTransactionCapture:
+      discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
 
 method applyValue*(animation: PropertyAnimation[Point]) =
   procCall ValueAnimation[Point](animation).applyValue()
   if not animation.target.isNil:
-    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+    withoutAnimationTransactionCapture:
+      discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
 
 method applyValue*(animation: PropertyAnimation[Size]) =
   procCall ValueAnimation[Size](animation).applyValue()
   if not animation.target.isNil:
-    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+    withoutAnimationTransactionCapture:
+      discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
 
 method applyValue*(animation: PropertyAnimation[Rect]) =
   procCall ValueAnimation[Rect](animation).applyValue()
   if not animation.target.isNil:
-    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+    withoutAnimationTransactionCapture:
+      discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
 
 method applyValue*(animation: PropertyAnimation[Color]) =
   procCall ValueAnimation[Color](animation).applyValue()
   if not animation.target.isNil:
-    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+    withoutAnimationTransactionCapture:
+      discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+
+proc setCurrentTime*(animation: Animation, currentTime: Duration)
 
 protocol AnimationProtocol {.selectorScope: protocol.} from Animation:
   method updateCurrentTime*(animation: Animation, currentTime: Duration) =
@@ -482,7 +686,19 @@ protocol ColorPropertyAnimationProtocol of AnimationProtocol:
     discard currentTime
     animation.applyValue()
 
+proc boundedChildTime(child: Animation, currentTime: Duration): Duration =
+  if child.isNil or currentTime.inNanoseconds <= 0:
+    return initDuration()
+  let total = child.totalDuration()
+  if total.inNanoseconds >= 0 and currentTime > total: total else: currentTime
+
 protocol ParallelAnimationGroupProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: ParallelAnimationGroup, currentTime: Duration) =
+    if animation.isNil:
+      return
+    for child in animation.children:
+      child.setCurrentTime(child.boundedChildTime(currentTime))
+
   method naturalDuration*(animation: ParallelAnimationGroup): Duration =
     if animation.isNil:
       return initDuration()
@@ -495,6 +711,21 @@ protocol ParallelAnimationGroupProtocol of AnimationProtocol:
         result = childDuration
 
 protocol SequentialAnimationGroupProtocol of AnimationProtocol:
+  method updateCurrentTime*(
+      animation: SequentialAnimationGroup, currentTime: Duration
+  ) =
+    if animation.isNil:
+      return
+    var remaining = currentTime
+    for child in animation.children:
+      if child.isNil:
+        continue
+      child.setCurrentTime(child.boundedChildTime(remaining))
+      let childDuration = child.totalDuration()
+      if childDuration.inNanoseconds < 0:
+        break
+      remaining = remaining - childDuration
+
   method naturalDuration*(animation: SequentialAnimationGroup): Duration =
     if animation.isNil:
       return initDuration()

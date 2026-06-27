@@ -3,6 +3,7 @@ import std/[strutils]
 import sigils/core
 
 import ../accessibility/accessibility
+import ../app/animations
 import ../drawing
 import ../foundation/events
 import ../foundation/selectors
@@ -34,6 +35,10 @@ type
     xDragDivider: int
     xDragStartMain: float32
     xDragInitialFractions: seq[float32]
+
+  SplitDividerTransactionTarget = ref object of DynamicAgent
+    splitView: SplitView
+    dividerIndex: int
 
 const
   SplitViewDefaultDividerThickness = 6.0'f32
@@ -131,6 +136,18 @@ proc invalidateSplitViewLayout(splitView: SplitView) =
   splitView.invalidateContainerMetrics()
   splitView.setNeedsLayout()
   splitView.setNeedsDisplay(true)
+
+proc setPositionOfDivider*(splitView: SplitView, dividerIndex: int, position: float32)
+
+protocol SplitDividerTransactionAnimProtocol:
+  method animSplitDividerPosition*(position: float32)
+
+protocol SplitDividerTransactionAnim of SplitDividerTransactionAnimProtocol:
+  method animSplitDividerPosition(
+      target: SplitDividerTransactionTarget, position: float32
+  ) =
+    if not target.splitView.isNil:
+      target.splitView.setPositionOfDivider(target.dividerIndex, position)
 
 protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
   property splitAxis -> LayoutAxis
@@ -552,6 +569,14 @@ proc setPositionOfDivider*(splitView: SplitView, dividerIndex: int, position: fl
     current += lengths[index]
     if index < dividerIndex:
       current += splitView.effectiveDividerThickness()
+  if abs(position - current) <= SplitViewEpsilon:
+    return
+  let target =
+    SplitDividerTransactionTarget(splitView: splitView, dividerIndex: dividerIndex)
+  discard target.withProtocol(SplitDividerTransactionAnim)
+  discard recordPropertyAnimation(
+    DynamicAgent(target), animSplitDividerPosition(), current, position
+  )
   splitView.redistributeDelta(visible, lengths, dividerIndex, position - current)
   splitView.saveFractionsFromLengths(visible, lengths)
   splitView.invalidateSplitViewLayout()

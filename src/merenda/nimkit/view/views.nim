@@ -1,5 +1,6 @@
 import sigils/core
 
+import ../app/animations
 import ../responder/responders
 import ../foundation/selectors
 import ../foundation/types
@@ -23,6 +24,15 @@ export viewgeometry except
   unobserveSuperviewGeometry, invalidateLayoutItemGeometry, ViewLayoutInputSlots,
   ViewSuperviewGeometrySlots
 export viewprotos except ViewSuperviewLifecycleSlots
+
+proc `alphaValue=`*(view: View, alphaValue: float32)
+
+protocol ViewAlphaTransactionAnimProtocol:
+  method animAlphaValue*(alphaValue: float32)
+
+protocol ViewAlphaTransactionAnim of ViewAlphaTransactionAnimProtocol:
+  method animAlphaValue(view: View, alphaValue: float32) =
+    view.alphaValue = alphaValue
 
 proc tag*(view: View): int =
   if view.isNil: 0 else: view.xTag
@@ -100,6 +110,10 @@ proc `alphaValue=`*(view: View, alphaValue: float32) =
   let normalized = min(max(alphaValue, 0.0'f32), 1.0'f32)
   if view.xAlphaValue == normalized:
     return
+  discard view.withProtocol(ViewAlphaTransactionAnim)
+  discard recordPropertyAnimation(
+    DynamicAgent(view), animAlphaValue(), view.xAlphaValue, normalized
+  )
   view.xAlphaValue = normalized
   view.setNeedsDisplaySubtree()
 
