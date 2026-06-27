@@ -45,7 +45,7 @@ updateStatus()
 
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
+  toGuide = root.contentLayoutGuide(insets(24.0, 28.0, 0.0, 28.0)),
   edges = {leLeft, leTop, leRight},
 )
 

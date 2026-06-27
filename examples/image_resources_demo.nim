@@ -98,7 +98,7 @@ layout.addArrangedSubview(title, subtitle, gallery)
 
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 24.0, 0.0, 24.0)),
+  toGuide = root.contentLayoutGuide(insets(24.0, 24.0, 0.0, 24.0)),
   edges = {leLeft, leTop, leRight},
 )
 

@@ -83,7 +83,7 @@ mainSplit.setPositionOfDivider(0, 180.0)
 
 root.addSubview(mainSplit)
 mainSplit.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(18.0)),
+  toGuide = root.contentLayoutGuide(insets(18.0)),
   edges = {leLeft, leTop, leRight, leBottom},
 )
 

@@ -28,7 +28,7 @@ themeLabel.huggingPriority[dcol] = LayoutPriorityHigh
 layout.spacing = 14.0
 layout.alignment = svaFill
 
-grid.edgeInsets = initEdgeInsets(12.0, 14.0)
+grid.edgeInsets = insets(12.0, 14.0)
 grid.spacing[dcol] = 12.0
 grid.spacing[drow] = 10.0
 grid.alignment[drow] = gaCenter
@@ -51,7 +51,7 @@ layout.addArrangedSubview(title, grid, actionRow)
 
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
+  toGuide = root.contentLayoutGuide(insets(24.0, 28.0, 0.0, 28.0)),
   edges = {leLeft, leTop, leRight},
 )
 

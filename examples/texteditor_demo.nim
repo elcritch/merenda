@@ -52,11 +52,11 @@ proc updateSummary() =
 proc applyInsetChoice() =
   case insetChoice.indexOfSelectedItem()
   of 0:
-    editor.textInsets = initEdgeInsets(3.0, 5.0, 3.0, 5.0)
+    editor.textInsets = insets(3.0, 5.0, 3.0, 5.0)
   of 2:
-    editor.textInsets = initEdgeInsets(14.0, 18.0, 14.0, 18.0)
+    editor.textInsets = insets(14.0, 18.0, 14.0, 18.0)
   else:
-    editor.textInsets = initEdgeInsets(6.0, 7.0, 6.0, 7.0)
+    editor.textInsets = insets(6.0, 7.0, 6.0, 7.0)
 
 proc resetDocument() =
   editor.attributedText = makeIntroStorage()
@@ -118,7 +118,7 @@ discard contextMenu.addItem(contextResetItem)
 
 layout.spacing = 12.0
 layout.alignment = svaFill
-layout.edgeInsets = initEdgeInsets(22.0, 24.0)
+layout.edgeInsets = insets(22.0, 24.0)
 
 editor.wraps = true
 editor.richText = true
@@ -156,7 +156,7 @@ layout.addArrangedSubview(header, summary, editor, controls)
 layout.addFlexibleSpacer()
 root.addSubview(layout)
 discard layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(0.0)),
+  toGuide = root.contentLayoutGuide(insets(0.0)),
   edges = {leLeft, leTop, leRight, leBottom},
 )
 

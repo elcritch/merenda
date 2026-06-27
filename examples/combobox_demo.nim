@@ -45,7 +45,7 @@ for combo in [priority, color, framework]:
 
 layout.spacing = 10.0
 layout.alignment = svaFill
-form.edgeInsets = initEdgeInsets(0.0)
+form.edgeInsets = insets(0.0)
 form.spacing[dcol] = 12.0
 form.spacing[drow] = 10.0
 form.minFieldWidth = 180.0
@@ -57,7 +57,7 @@ updateStatus()
 
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 28.0, 0.0, 28.0)),
+  toGuide = root.contentLayoutGuide(insets(24.0, 28.0, 0.0, 28.0)),
   edges = {leLeft, leTop, leRight},
 )
 

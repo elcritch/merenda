@@ -406,7 +406,7 @@ proc makeWorkspaceWindow(
   )
   menuBar[atHeight].equalTo(28.0).active = true
   title.pinEdges(
-    toGuide = root.contentLayoutGuide(initEdgeInsets(46.0, 26.0, 0.0, 26.0)),
+    toGuide = root.contentLayoutGuide(insets(46.0, 26.0, 0.0, 26.0)),
     edges = {leLeft, leTop, leRight},
   )
   activateConstraints:
@@ -475,7 +475,7 @@ proc makeTextDocumentWindow(
 
   root.addSubviews(autoNames(title, subtitle, scroll))
   title.pinEdges(
-    toGuide = root.contentLayoutGuide(initEdgeInsets(24.0, 24.0, 0.0, 24.0)),
+    toGuide = root.contentLayoutGuide(insets(24.0, 24.0, 0.0, 24.0)),
     edges = {leLeft, leTop, leRight},
   )
   activateConstraints:
