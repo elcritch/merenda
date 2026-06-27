@@ -44,7 +44,7 @@ proc textEditorTextDidChange(editor: TextEditor, sender: DynamicAgent) {.slot.} 
   emit editor.textDidChange(DynamicAgent(editor))
 
 func normalizedTextInsets(insets: EdgeInsets): EdgeInsets =
-  initEdgeInsets(
+  insets(
     max(insets.top, 0.0'f32),
     max(insets.left, 0.0'f32),
     max(insets.bottom, 0.0'f32),
@@ -62,7 +62,7 @@ proc scrollView*(editor: TextEditor): ScrollView =
 
 proc textInsets*(editor: TextEditor): EdgeInsets =
   if editor.isNil:
-    initEdgeInsets(0.0)
+    insets(0.0)
   else:
     editor.xTextInsets
 
@@ -476,7 +476,7 @@ proc initTextEditorFields*(
 ) =
   initViewFields(editor, frame)
   editor.background = initColor(0.0, 0.0, 0.0, 0.0)
-  editor.xTextInsets = initEdgeInsets(6.0, 7.0, 6.0, 7.0)
+  editor.xTextInsets = insets(6.0, 7.0, 6.0, 7.0)
   editor.xWraps = wraps
   editor.xMinimumDocumentSize =
     initSize(DefaultTextEditorWidth, DefaultTextEditorHeight)

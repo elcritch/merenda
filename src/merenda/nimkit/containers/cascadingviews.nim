@@ -795,9 +795,7 @@ proc cascadingRowItemStyle(
       else:
         view.styleClasses()
   context.appearance.resolveRowItemStyle(
-    initControlStyleContext(
-      srCascadingRowItem, states, id = styleId, classes = styleClasses
-    )
+    controlStyle(srCascadingRowItem, states, id = styleId, classes = styleClasses)
   )
 
 proc cascadingChildArrowRect(rowBounds: Rect): Rect =
@@ -1028,7 +1026,7 @@ protocol CascadingDrawing of ViewDrawingProtocol:
       return
     view.syncCascadingStyle()
     let style = context.appearance.resolveTableViewStyle(
-      initControlStyleContext(
+      controlStyle(
         srCascadingView,
         view.widgetStateSet(),
         id = view.styleId(),

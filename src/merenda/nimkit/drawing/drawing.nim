@@ -165,9 +165,7 @@ proc textLayout*(
   textLayout(
     rect,
     text,
-    initAppearance().resolveTextStyle(
-      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
-    ),
+    initAppearance().resolveTextStyle(controlStyle(srTextField), color, insets(0.0)),
     alignment,
   )
 
@@ -207,9 +205,7 @@ proc textLayout*(
     rect,
     storage,
     initAppearance().resolveTextStyle(
-      initControlStyleContext(srTextView),
-      initColor(0.08, 0.09, 0.11, 1.0),
-      initEdgeInsets(0.0),
+      controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
     ),
     alignment,
     wrap,
@@ -243,9 +239,7 @@ proc textNaturalSize*(text: string, style: TextStyle): nimkitTypes.Size =
 proc textNaturalSize*(text: string): nimkitTypes.Size =
   text.textNaturalSize(
     initAppearance().resolveTextStyle(
-      initControlStyleContext(srTextField),
-      initColor(0.08, 0.09, 0.11, 1.0),
-      initEdgeInsets(0.0),
+      controlStyle(srTextField), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
     )
   )
 
@@ -284,9 +278,7 @@ proc clippedText*(text: string, width: float32): string =
   text.clippedText(
     width,
     initAppearance().resolveTextStyle(
-      initControlStyleContext(srTextField),
-      initColor(0.08, 0.09, 0.11, 1.0),
-      initEdgeInsets(0.0),
+      controlStyle(srTextField), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
     ),
   )
 
@@ -305,9 +297,7 @@ proc textNode(
   textNode(
     rect,
     text,
-    initAppearance().resolveTextStyle(
-      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
-    ),
+    initAppearance().resolveTextStyle(controlStyle(srTextField), color, insets(0.0)),
     alignment,
   )
 
@@ -615,9 +605,7 @@ proc addText*(
   context.addText(
     rect,
     text,
-    context.appearance.resolveTextStyle(
-      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
-    ),
+    context.appearance.resolveTextStyle(controlStyle(srTextField), color, insets(0.0)),
     alignment,
   )
 
@@ -648,9 +636,7 @@ proc addText*(
     parent,
     rect,
     text,
-    context.appearance.resolveTextStyle(
-      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
-    ),
+    context.appearance.resolveTextStyle(controlStyle(srTextField), color, insets(0.0)),
     alignment,
   )
 
@@ -703,7 +689,7 @@ proc addFocusRing*(
 ) =
   if box.focusRingWidth <= 0.0'f32:
     return
-  let ringRect = rect.inset(initEdgeInsets(box.focusRingInset))
+  let ringRect = rect.inset(insets(box.focusRingInset))
   if ringRect.isEmpty:
     return
   discard context.addRenderRectangle(

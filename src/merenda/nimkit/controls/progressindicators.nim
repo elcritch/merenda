@@ -54,8 +54,8 @@ proc setProgressValue(indicator: ProgressIndicator, value: float32) =
 
 proc progressStyleContext(indicator: ProgressIndicator): StyleContext =
   if indicator.isNil:
-    return initControlStyleContext(srProgressIndicator)
-  initControlStyleContext(
+    return controlStyle(srProgressIndicator)
+  controlStyle(
     srProgressIndicator,
     indicator.widgetStateSet(),
     id = indicator.styleId,
@@ -68,9 +68,7 @@ proc progressStyle(cell: ProgressIndicatorCell): SliderStyle =
     return view.effectiveAppearance().resolveProgressIndicatorStyle(
         ProgressIndicator(view).progressStyleContext()
       )
-  initAppearance().resolveProgressIndicatorStyle(
-    initControlStyleContext(srProgressIndicator)
-  )
+  initAppearance().resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
 
 proc progressStyle(
     indicator: ProgressIndicator, context: DrawContext = nil

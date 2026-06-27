@@ -60,7 +60,7 @@ proc newTabViewDemoPane(): View =
     button = newButton("Reset Warnings")
 
   stack.background = initColor(0.98, 0.98, 0.96, 0.0)
-  stack.edgeInsets = initEdgeInsets(18.0, 20.0)
+  stack.edgeInsets = insets(18.0, 20.0)
   stack.spacing = 12.0
   stack.alignment = svaFill
 
@@ -84,7 +84,7 @@ proc newTabViewDemoFixture(): TabViewDemoFixture =
   root.background = initColor(0.95, 0.96, 0.98)
   layout.spacing = 12.0
   layout.alignment = svaFill
-  layout.edgeInsets = initEdgeInsets(22.0, 24.0)
+  layout.edgeInsets = insets(22.0, 24.0)
 
   controls.spacing = 8.0
   controls.alignment = svaCenter
@@ -254,7 +254,7 @@ suite "nimkit tab views":
       tabView = newTabView(frame = initRect(0, 0, 320, 180))
       pane = newStackView(laVertical)
 
-    pane.edgeInsets = initEdgeInsets(18.0, 20.0)
+    pane.edgeInsets = insets(18.0, 20.0)
     pane.spacing = 12.0
     pane.alignment = svaFill
     pane.addArrangedSubview(newHeadingLabel("Account"))

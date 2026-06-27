@@ -297,8 +297,8 @@ proc initTheme*(): Theme =
   )
   result[srBox, StyleBorderWidth] = 1.0
   result[srBox, StyleCornerRadius] = 5.0
-  result[srBox, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
-  result[srBox, StylePadding] = initEdgeInsets(14.0, 12.0)
+  result[srBox, StyleTextInsets] = insets(0.0, 8.0)
+  result[srBox, StylePadding] = insets(14.0, 12.0)
   result[srBox, StyleTitleHeight] = 18.0
   result[srBox, StyleTitleGap] = 4.0
   result[srBox, StyleSeparatorThickness] = 1.0
@@ -365,7 +365,7 @@ proc initTheme*(): Theme =
   )
   result[srButton, StyleBorderWidth] = 1.0
   result[srButton, StyleCornerRadius] = 14.0
-  result[srButton, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
+  result[srButton, StyleTextInsets] = insets(0.0, 8.0)
   result[srButton, StyleTextHighlightColor] = initColor(1.0, 1.0, 1.0, 0.42)
   result[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.20)
   result[srButton, StyleMinimumSize] = initSize(0.0, 32.0)
@@ -461,8 +461,8 @@ proc initTheme*(): Theme =
     styleToken("tab.highlight.fill.disabled")
   result[srTab, StyleBorderWidth] = 1.0
   result[srTab, StyleCornerRadius] = 4.0
-  result[srTab, StyleTextInsets] = initEdgeInsets(1.0, 8.0)
-  result[srTab, StylePadding] = initEdgeInsets(0.0, 12.0)
+  result[srTab, StyleTextInsets] = insets(1.0, 8.0)
+  result[srTab, StylePadding] = insets(0.0, 12.0)
   result[srTab, StyleMinimumSize] = initSize(48.0, 24.0)
   result[srTab, StyleMaximumSize] = initSize(180.0, 0.0)
   result[srTab, StyleSegmentSize] = initSize(0.0, 20.0)
@@ -536,7 +536,7 @@ proc initTheme*(): Theme =
     result[role, StyleBorderWidth] = 1.0
     result[role, StyleCornerRadius] = radius
     result[role, StyleIndicatorSpacing] = 7.0
-    result[role, StyleTextInsets] = initEdgeInsets(0.0, 2.0)
+    result[role, StyleTextInsets] = insets(0.0, 2.0)
     result[role, StyleMinimumSize] = initSize(0.0, 20.0)
     result[role, StyleFocusRingWidth] = 3.0
     result[role, StyleFocusRingInset] = 2.0
@@ -548,7 +548,7 @@ proc initTheme*(): Theme =
   result[srTextField, StyleBorderColor] = styleToken("textField.border.color")
   result[srTextField, StyleBorderWidth] = 1.0
   result[srTextField, StyleCornerRadius] = 6.0
-  result[srTextField, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srTextField, StyleTextInsets] = insets(0.0, 6.0)
   result[srTextField, StyleMinimumSize] = initSize(80.0, 24.0)
   result[srTextField, StyleSelectionColor] = styleToken("textField.selection.color")
   result[srTextField, StyleFocusRingWidth] = 3.0
@@ -563,7 +563,7 @@ proc initTheme*(): Theme =
     0.0,
     0.0,
     initColor(0.09, 0.12, 0.18, 1.0),
-    initEdgeInsets(0.0),
+    insets(0.0),
     initSize(0.0, 18.0),
   )
   result.addLabelRule(
@@ -573,7 +573,7 @@ proc initTheme*(): Theme =
     1.0,
     6.0,
     initColor(0.09, 0.14, 0.26, 1.0),
-    initEdgeInsets(0.0, 12.0),
+    insets(0.0, 12.0),
     initSize(0.0, 28.0),
   )
   result.addLabelRule(
@@ -583,7 +583,7 @@ proc initTheme*(): Theme =
     1.0,
     5.0,
     initColor(0.10, 0.18, 0.32, 1.0),
-    initEdgeInsets(0.0, 10.0),
+    insets(0.0, 10.0),
     initSize(0.0, 24.0),
   )
   result.addLabelRule(
@@ -593,7 +593,7 @@ proc initTheme*(): Theme =
     1.0,
     6.0,
     initColor(0.09, 0.27, 0.18, 1.0),
-    initEdgeInsets(0.0, 10.0),
+    insets(0.0, 10.0),
     initSize(0.0, 24.0),
   )
   result.addLabelRule(
@@ -603,7 +603,7 @@ proc initTheme*(): Theme =
     0.0,
     0.0,
     initColor(0.10, 0.14, 0.22, 1.0),
-    initEdgeInsets(0.0, 2.0),
+    insets(0.0, 2.0),
     initSize(0.0, 18.0),
   )
 
@@ -630,7 +630,7 @@ proc initTheme*(): Theme =
   )
   result[srComboBox, StyleBorderWidth] = 1.0
   result[srComboBox, StyleCornerRadius] = 6.0
-  result[srComboBox, StyleTextInsets] = initEdgeInsets(0.0, 8.0)
+  result[srComboBox, StyleTextInsets] = insets(0.0, 8.0)
   result[srComboBox, StyleFocusRingWidth] = 3.0
   result[srComboBox, StyleFocusRingInset] = -2.0
   result[srComboBox, StyleFocusRingColor] = styleToken("focus.ring.color")
@@ -670,7 +670,7 @@ proc initTheme*(): Theme =
   )
   result[srComboBoxItem, StyleBorderWidth] = 0.0
   result[srComboBoxItem, StyleCornerRadius] = 0.0
-  result[srComboBoxItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srComboBoxItem, StyleTextInsets] = insets(0.0, 6.0)
   result[srComboBoxItem, StyleMinimumSize] = initSize(0.0, 22.0)
 
   result[srTableView, StyleFill] = styleToken("tableView.fill")
@@ -824,7 +824,7 @@ proc initTheme*(): Theme =
   )
   result[srRowItem, StyleBorderWidth] = 0.0
   result[srRowItem, StyleCornerRadius] = 0.0
-  result[srRowItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srRowItem, StyleTextInsets] = insets(0.0, 6.0)
   result[srRowItem, StyleMinimumSize] = initSize(0.0, 22.0)
   result[srRowItem, StyleAlternatingFill] = fill(initColor(0.96, 0.97, 0.99, 1.0))
   result.addRoleRule(
@@ -892,7 +892,7 @@ proc initTheme*(): Theme =
   )
   result[srCascadingRowItem, StyleBorderWidth] = 0.0
   result[srCascadingRowItem, StyleCornerRadius] = 0.0
-  result[srCascadingRowItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srCascadingRowItem, StyleTextInsets] = insets(0.0, 6.0)
   result[srCascadingRowItem, StyleMinimumSize] = initSize(0.0, 22.0)
   result[srCascadingRowItem, StyleAlternatingFill] =
     fill(initColor(0.96, 0.97, 0.99, 1.0))

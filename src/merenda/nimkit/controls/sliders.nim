@@ -49,8 +49,8 @@ proc setSliderValue(slider: Slider, value: float32, notify = false) =
 
 proc sliderStyleContext(slider: Slider): StyleContext =
   if slider.isNil:
-    return initControlStyleContext(srSlider)
-  initControlStyleContext(
+    return controlStyle(srSlider)
+  controlStyle(
     srSlider,
     slider.widgetStateSet(),
     id = slider.styleId,
@@ -62,7 +62,7 @@ proc sliderStyle(cell: SliderCell): SliderStyle =
   if view of Slider:
     return
       view.effectiveAppearance().resolveSliderStyle(Slider(view).sliderStyleContext())
-  initAppearance().resolveSliderStyle(initControlStyleContext(srSlider))
+  initAppearance().resolveSliderStyle(controlStyle(srSlider))
 
 proc sliderStyle(slider: Slider, context: DrawContext = nil): SliderStyle =
   if not context.isNil:

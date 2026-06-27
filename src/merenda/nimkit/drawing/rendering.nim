@@ -47,7 +47,7 @@ proc beginDraw(
 proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
   var color = view.backgroundColor
   if isRoot and color.a <= 0.0'f32:
-    let context = initControlStyleContext(
+    let context = controlStyle(
       srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
     )
     let fallbackColor = appearance.resolveColor(

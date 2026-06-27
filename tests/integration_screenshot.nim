@@ -263,7 +263,7 @@ suite "nimkit screenshot":
     layout.addArrangedSubview(title, subtitle, status, button)
     root.addSubview(layout)
     layout.pinEdges(
-      toGuide = root.contentLayoutGuide(initEdgeInsets(28.0, 28.0, 0.0, 28.0)),
+      toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
       edges = {leLeft, leTop, leRight},
     )
     window.setContentView(root)
@@ -329,7 +329,7 @@ suite "nimkit screenshot":
       layout.addArrangedSubview(title, subtitle, status, button)
       root.addSubview(layout)
       layout.pinEdges(
-        toGuide = root.contentLayoutGuide(initEdgeInsets(28.0, 28.0, 0.0, 28.0)),
+        toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
         edges = {leLeft, leTop, leRight},
       )
       window.setContentView(root)
@@ -408,7 +408,7 @@ suite "nimkit screenshot":
     layout.addArrangedSubview(title, subtitle, status, button)
     root.addSubview(layout)
     layout.pinEdges(
-      toGuide = root.contentLayoutGuide(initEdgeInsets(28.0, 28.0, 0.0, 28.0)),
+      toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
       edges = {leLeft, leTop, leRight},
     )
     window.setContentView(root)

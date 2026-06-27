@@ -1103,7 +1103,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
     if not isPullDown:
       let
         style = context.appearance.resolveComboBoxStyle(
-          initControlStyleContext(
+          controlStyle(
             srComboBox, states, id = button.styleId, classes = button.styleClasses
           )
         )
@@ -1187,12 +1187,10 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
       4.0'f32,
     )
     context.addText(
-      button.bounds.inset(initEdgeInsets(6.0, 10.0, 2.0, 10.0)),
+      button.bounds.inset(insets(6.0, 10.0, 2.0, 10.0)),
       button.title(),
       context.appearance.resolveTextStyle(
-        initControlStyleContext(srComboBox),
-        initColor(0.08, 0.09, 0.11),
-        initEdgeInsets(0.0),
+        controlStyle(srComboBox), initColor(0.08, 0.09, 0.11), insets(0.0)
       ),
     )
 

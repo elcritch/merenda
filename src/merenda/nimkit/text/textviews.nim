@@ -270,7 +270,7 @@ proc textColor*(textView: TextView): Color =
     textView
     .effectiveAppearance()
     .resolveTextFieldStyle(
-      initControlStyleContext(
+      controlStyle(
         if textView.isFieldEditor: srTextField else: srTextView,
         textView.widgetStateSet(),
         id = textView.styleId,
@@ -281,20 +281,18 @@ proc textColor*(textView: TextView): Color =
 proc textStyle(textView: TextView): TextStyle =
   if textView.isNil:
     return initAppearance().resolveTextStyle(
-        initControlStyleContext(srTextView),
-        initColor(0.08, 0.09, 0.11),
-        initEdgeInsets(0.0),
+        controlStyle(srTextView), initColor(0.08, 0.09, 0.11), insets(0.0)
       )
   let role = if textView.isFieldEditor: srTextField else: srTextView
   result = textView.effectiveAppearance().resolveTextStyle(
-      initControlStyleContext(
+      controlStyle(
         role,
         textView.widgetStateSet(),
         id = textView.styleId,
         classes = textView.styleClasses,
       ),
       initColor(0.08, 0.09, 0.11),
-      initEdgeInsets(0.0),
+      insets(0.0),
     )
   if textView.xTextColor.a > 0.0:
     result.color = textView.xTextColor

@@ -55,7 +55,7 @@ suite "nimkit selection rings":
         strokeColor = strokeColor,
         lineWidth = 5.0,
         cornerRadius = 6.0,
-        insets = initEdgeInsets(2.0),
+        insets = insets(2.0),
       )
 
     root.addSubview(selected)

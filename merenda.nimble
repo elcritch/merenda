@@ -11,7 +11,7 @@ requires "msgpack4nim"
 requires "chronicles"
 requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.20.0"
 requires "gh:elcritch/kiwiberry"
-requires "siwin#00690f2a"
+requires "siwin#063fc0f"
 requires "sigils >= 0.24.0"
 requires "libbacktrace"
 

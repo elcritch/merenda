@@ -78,9 +78,9 @@ func normalizedThickness(value: float32): float32 =
 
 proc splitViewStyleContext(splitView: SplitView): StyleContext =
   if splitView.isNil:
-    initControlStyleContext(srSplitView)
+    controlStyle(srSplitView)
   else:
-    initControlStyleContext(
+    controlStyle(
       srSplitView,
       splitView.widgetStateSet(),
       id = splitView.styleId,

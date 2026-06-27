@@ -159,10 +159,10 @@ suite "nimkit constraints":
     let
       root = newView(frame = initRect(0, 0, 300, 200))
       child = newView(frame = initRect(0, 0, 10, 10))
-      guide = root.contentLayoutGuide(initEdgeInsets(10.0, 20.0, 30.0, 40.0))
+      guide = root.contentLayoutGuide(insets(10.0, 20.0, 30.0, 40.0))
 
     check guide.owningView == root
-    check guide.insets == initEdgeInsets(10.0, 20.0, 30.0, 40.0)
+    check guide.insets == insets(10.0, 20.0, 30.0, 40.0)
     check guide[atLeft].offset == 20.0'f32
     check guide[atRight].offset == -40.0'f32
     check guide[atTop].offset == 10.0'f32
@@ -194,7 +194,7 @@ suite "nimkit constraints":
     root.addSubview(child)
     let constraints = child.edgeConstraints(
       toView = root,
-      insets = initEdgeInsets(12.0, 18.0, 24.0, 30.0),
+      insets = insets(12.0, 18.0, 24.0, 30.0),
       edges = {leLeft, leTop, leRight},
     )
     check constraints.len == 3
@@ -598,14 +598,14 @@ suite "nimkit constraints":
   test "layout item geometry exposes alignment rect and baseline hooks":
     let view = newView(frame = initRect(10, 20, 100, 50))
 
-    check view.alignmentInsets == initEdgeInsets(0.0)
+    check view.alignmentInsets == insets(0.0)
     check view.alignmentRect == view.frame()
     check view.alignmentRectForFrame(view.frame()) == view.frame()
     check view.frameForAlignmentRect(view.alignmentRect()) == view.frame()
     check view.lastBaselineOffset == 0.0'f32
     check view.firstBaselineOffset == 0.0'f32
 
-    view.alignmentInsets = initEdgeInsets(2.0, 4.0, 6.0, 8.0)
+    view.alignmentInsets = insets(2.0, 4.0, 6.0, 8.0)
     view.lastBaselineOffset = 7.0'f32
     view.firstBaselineOffset = 9.0'f32
 
@@ -675,7 +675,7 @@ suite "nimkit constraints":
     check root.needsUpdateConstraints
 
     root.layoutSubtreeIfNeeded()
-    left.alignmentInsets = initEdgeInsets(1.0)
+    left.alignmentInsets = insets(1.0)
     check left.needsUpdateConstraints
     check root.needsUpdateConstraints
 

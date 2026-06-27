@@ -34,7 +34,7 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
     var states: set[WidgetState] = button.widgetStateSet()
     if Cell(cell).state() in {bsOn, bsMixed}:
       states.incl ssSelected
-    return initControlStyleContext(
+    return controlStyle(
       role, states = states, id = button.styleId, classes = button.styleClasses
     )
   var states: set[WidgetState] = {}
@@ -42,7 +42,7 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
     states.incl ssDisabled
   if cell.state in {bsOn, bsMixed}:
     states.incl ssSelected
-  initControlStyleContext(role, states = states)
+  controlStyle(role, states = states)
 
 protocol ButtonProtocol {.selectorScope: protocol.}:
   property title -> string
@@ -248,7 +248,7 @@ proc choiceChromeRole(button: Button): ChromeRole =
 
 proc selectedMarkRect(rect: Rect): Rect =
   let inset = max(rect.size.width * 0.33'f32, 3.0'f32)
-  rect.inset(initEdgeInsets(inset))
+  rect.inset(insets(inset))
 
 proc mixedMarkRect(rect: Rect): Rect =
   let
@@ -265,7 +265,7 @@ func offsetRect(rect: Rect, dx, dy: float32): Rect =
   initRect(rect.origin.x + dx, rect.origin.y + dy, rect.size.width, rect.size.height)
 
 proc checkmarkTextRect(rect: Rect): Rect =
-  rect.offsetRect(0.0'f32, -1.0'f32).inset(initEdgeInsets(-1.0'f32))
+  rect.offsetRect(0.0'f32, -1.0'f32).inset(insets(-1.0'f32))
 
 proc drawPushButtonFace(
     context: DrawContext,
@@ -307,9 +307,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         states.incl ssSelected
 
       let style = context.appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(
-          role, states, id = button.styleId, classes = button.styleClasses
-        )
+        controlStyle(role, states, id = button.styleId, classes = button.styleClasses)
       )
       let indicatorRect = style.choiceIndicatorRect(button.bounds)
       let
@@ -381,7 +379,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       let states = button.widgetStateSet()
 
       let style = context.appearance.resolveButtonStyle(
-        initControlStyleContext(
+        controlStyle(
           srButton, states, id = button.styleId, classes = button.styleClasses
         )
       )

@@ -205,7 +205,7 @@ proc drawFlatButtonExtras(
 ) =
   let
     radius = extras.cornerRadius
-    inner = extras.rect.inset(initEdgeInsets(FlatInset))
+    inner = extras.rect.inset(insets(FlatInset))
   if inner.isEmpty:
     return
 
@@ -272,7 +272,7 @@ proc drawFlatChoiceExtras(
   if chrome.isRadioChoice:
     let
       innerInset = if chrome.isSelected: 1.6'f32 else: 2.0'f32
-      inner = extras.rect.inset(initEdgeInsets(innerInset))
+      inner = extras.rect.inset(insets(innerInset))
       innerRadius = max(min(inner.size.width, inner.size.height) / 2.0'f32, 1.0'f32)
     if inner.isEmpty:
       return

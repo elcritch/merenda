@@ -46,10 +46,7 @@ protocol ExtraChromeProtocol of ChromeProtocol:
     discard chrome
     discard chromeContext
     discard context.addRenderRectangle(
-      extras.layer,
-      extras.parent,
-      extras.rect.inset(initEdgeInsets(5.0)),
-      ExtraChromeFill,
+      extras.layer, extras.parent, extras.rect.inset(insets(5.0)), ExtraChromeFill
     )
 
 protocol SingleColumnRenderTableSourceMethods of TableViewDataSource:
@@ -184,13 +181,13 @@ suite "nimkit rendering":
     theme[srButton, StyleBorderColor] = buttonBorder
     theme[srButton, StyleBorderWidth] = 3.0
     theme[srButton, StyleCornerRadius] = 6.0
-    theme[srButton, StyleTextInsets] = initEdgeInsets(1.0, 9.0)
+    theme[srButton, StyleTextInsets] = insets(1.0, 9.0)
     theme[srButton, StyleBoxShadows] = buttonShadows
     theme[srTextField, StyleFill] = fieldFill
     theme[srTextField, StyleBorderColor] = fieldBorder
     theme[srTextField, StyleBorderWidth] = 2.0
     theme[srTextField, StyleCornerRadius] = 5.0
-    theme[srTextField, StyleTextInsets] = initEdgeInsets(2.0, 7.0)
+    theme[srTextField, StyleTextInsets] = insets(2.0, 7.0)
 
     root.addSubview(field)
     root.addSubview(button)
@@ -254,16 +251,16 @@ suite "nimkit rendering":
       checkFill = initColor(0.64, 0.22, 0.17, 1.0)
 
     var appearance = initAppearance()
-    appearance[srButton, StyleTextInsets] = initEdgeInsets(5.0, 18.0, 7.0, 22.0)
+    appearance[srButton, StyleTextInsets] = insets(5.0, 18.0, 7.0, 22.0)
     appearance[srButton, StyleMinimumSize] = initSize(0.0, 46.0)
     appearance[srCheckBox, StyleFill] = checkFill
     appearance[srCheckBox, StyleChrome] = styleKeyword(DefaultChromeName)
     appearance[srCheckBox, StyleIndicatorSize] = 20.0
     appearance[srCheckBox, StyleIndicatorSpacing] = 11.0
-    appearance[srCheckBox, StyleTextInsets] = initEdgeInsets(3.0, 8.0, 5.0, 10.0)
-    appearance[srTextField, StyleTextInsets] = initEdgeInsets(4.0, 16.0, 6.0, 14.0)
+    appearance[srCheckBox, StyleTextInsets] = insets(3.0, 8.0, 5.0, 10.0)
+    appearance[srTextField, StyleTextInsets] = insets(4.0, 16.0, 6.0, 14.0)
     appearance[srTextField, StyleMinimumSize] = initSize(116.0, 36.0)
-    appearance[srComboBox, StyleTextInsets] = initEdgeInsets(4.0, 15.0, 6.0, 13.0)
+    appearance[srComboBox, StyleTextInsets] = insets(4.0, 15.0, 6.0, 13.0)
     appearance[srComboBox, StyleIndicatorSize] = 32.0
     appearance[srComboBox, StyleMinimumSize] = initSize(142.0, 36.0)
 
@@ -277,25 +274,19 @@ suite "nimkit rendering":
 
     let
       buttonStyle = button.effectiveAppearance().resolveButtonStyle(
-          initControlStyleContext(
-            srButton, id = button.styleId, classes = button.styleClasses
-          )
+          controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
         )
       checkStyle = checkbox.effectiveAppearance().resolveChoiceButtonStyle(
-          initControlStyleContext(
+          controlStyle(
             srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses
           )
         )
       fieldStyle = field.effectiveAppearance().resolveTextFieldStyle(
-          initControlStyleContext(
-            srTextField, id = field.styleId, classes = field.styleClasses
-          ),
+          controlStyle(srTextField, id = field.styleId, classes = field.styleClasses),
           field.textColor(),
         )
       comboStyle = combo.effectiveAppearance().resolveComboBoxStyle(
-          initControlStyleContext(
-            srComboBox, id = combo.styleId, classes = combo.styleClasses
-          )
+          controlStyle(srComboBox, id = combo.styleId, classes = combo.styleClasses)
         )
       expectedButtonText =
         button.rectToWindow(buttonStyle.buttonTextRect(button.bounds))
@@ -351,9 +342,7 @@ suite "nimkit rendering":
 
     let
       style = button.effectiveAppearance().resolveButtonStyle(
-          initControlStyleContext(
-            srButton, id = button.styleId, classes = button.styleClasses
-          )
+          controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
         )
       expectedButtonRect = button.rectToWindow(button.bounds)
       expectedTextRect = button.rectToWindow(style.buttonTextRect(button.bounds))
@@ -413,9 +402,7 @@ suite "nimkit rendering":
 
     let
       style = initAppearance(theme).resolveButtonStyle(
-          initControlStyleContext(
-            srButton, id = button.styleId, classes = button.styleClasses
-          )
+          controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
         )
       expectedButtonRect = button.rectToWindow(button.bounds)
       list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
@@ -458,7 +445,7 @@ suite "nimkit rendering":
     let
       list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
       expectedExtraRect =
-        specialButton.rectToWindow(specialButton.bounds).inset(initEdgeInsets(5.0))
+        specialButton.rectToWindow(specialButton.bounds).inset(insets(5.0))
 
     var extraFound = false
     for node in list.nodes:
@@ -491,16 +478,14 @@ suite "nimkit rendering":
     let
       appearance = initAppearance(theme)
       checkStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(
-          srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses
-        )
+        controlStyle(srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses)
       )
       expectedChoiceExtra = checkbox
         .rectToWindow(checkStyle.choiceIndicatorRect(checkbox.bounds))
-        .inset(initEdgeInsets(5.0))
-      expectedComboExtra = combo.rectToWindow(combo.bounds).inset(initEdgeInsets(5.0))
+        .inset(insets(5.0))
+      expectedComboExtra = combo.rectToWindow(combo.bounds).inset(insets(5.0))
       expectedPopupExtra =
-        combo.rectToWindow(combo.popupRect(combo.bounds)).inset(initEdgeInsets(5.0))
+        combo.rectToWindow(combo.popupRect(combo.bounds)).inset(insets(5.0))
       renders = buildRenders(root, appearance)
 
     var
@@ -537,16 +522,14 @@ suite "nimkit rendering":
 
     let
       appearance = initAppearance(initTheme())
-      checkStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(srCheckBox, {ssSelected})
-      )
-      radioStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(srRadioButton, {ssSelected})
-      )
+      checkStyle =
+        appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      radioStyle =
+        appearance.resolveChoiceButtonStyle(controlStyle(srRadioButton, {ssSelected}))
       checkboxIndicator =
         checkbox.rectToWindow(checkStyle.choiceIndicatorRect(checkbox.bounds))
       radioIndicator = radio.rectToWindow(radioStyle.choiceIndicatorRect(radio.bounds))
-      radioInner = radioIndicator.inset(initEdgeInsets(1.6))
+      radioInner = radioIndicator.inset(insets(1.6))
       radioGlossWidth = max(radioInner.size.width * 0.52'f32, 1.0'f32)
       radioGloss = initRect(
         radioInner.origin.x + (radioInner.size.width - radioGlossWidth) / 2.0'f32,
@@ -831,7 +814,7 @@ suite "nimkit rendering":
     theme[srRowItem, {ssSelected}, StyleFill] = selectedFill
     theme[srRowItem, {ssSelected}, StyleTextColor] = selectedText
     theme[srRowItem, {ssHovered}, StyleFill] = hoverFill
-    theme[srRowItem, StyleTextInsets] = initEdgeInsets(0.0, 5.0)
+    theme[srRowItem, StyleTextInsets] = insets(0.0, 5.0)
 
     tableView.rowHeight = 20.0
     tableView.selectedIndex = 1
@@ -1139,7 +1122,7 @@ suite "nimkit rendering":
       theme[role, StyleIndicatorSize] = 12.0
       theme[role, StyleCornerRadius] = if role == srRadioButton: 6.0 else: 3.0
       theme[role, StyleIndicatorSpacing] = 5.0
-      theme[role, StyleTextInsets] = initEdgeInsets(0.0, 3.0)
+      theme[role, StyleTextInsets] = insets(0.0, 3.0)
 
     checkbox.setState(bsOn)
     radio.setState(bsOn)

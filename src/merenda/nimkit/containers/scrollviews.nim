@@ -70,7 +70,7 @@ func normalizedRulerThickness(value: float32): float32 =
   max(value, 0.0'f32)
 
 func normalizedInsets(insets: EdgeInsets): EdgeInsets =
-  initEdgeInsets(
+  insets(
     max(insets.top, 0.0'f32),
     max(insets.left, 0.0'f32),
     max(insets.bottom, 0.0'f32),
@@ -89,7 +89,7 @@ proc lineScroll*(scrollView: ScrollView, axis: LayoutAxis): float32
 proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView)
 
 proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
-  initControlStyleContext(
+  controlStyle(
     scrollView.scrollViewRole(),
     scrollView.widgetStateSet(),
     id = scrollView.styleId(),
@@ -98,9 +98,9 @@ proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
 
 proc scrollerStyleContext(scroller: Scroller): StyleContext =
   if scroller.isNil or scroller.xScrollView.isNil:
-    initControlStyleContext(srScroller)
+    controlStyle(srScroller)
   else:
-    initControlStyleContext(
+    controlStyle(
       scroller.xScrollView.scrollerRole(),
       scroller.widgetStateSet(),
       id = scroller.xScrollView.styleId(),
@@ -839,7 +839,7 @@ proc drawScroller*(context: DrawContext, track, knob: Rect, style: ScrollViewSty
   if not knob.isEmpty:
     let knobBox = style.scrollerKnob
     discard context.addRenderRectangle(
-      context.renderRectFor(knob.inset(initEdgeInsets(2.0))),
+      context.renderRectFor(knob.inset(insets(2.0))),
       knobBox.fill,
       knobBox.borderColor,
       knobBox.borderWidth,
@@ -1013,7 +1013,7 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   scrollView.xBorderType = svbNoBorder
   scrollView.xScrollViewRole = srScrollView
   scrollView.xScrollerRole = srScroller
-  scrollView.xScrollerInsets = initEdgeInsets(0.0)
+  scrollView.xScrollerInsets = insets(0.0)
   scrollView.xDynamicScrolling = true
   scrollView.xClipView = initClipView(scrollView, scrollView.bounds())
   scrollView.xScroller[laHorizontal] = initScroller(scrollView, laHorizontal)

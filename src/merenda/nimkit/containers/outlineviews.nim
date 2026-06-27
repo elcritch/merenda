@@ -631,7 +631,7 @@ proc drawDisclosureAffordance(
         initColor(0.74, 0.80, 0.90, 1.0)
       else:
         initColor(0.0, 0.0, 0.0, 0.0)
-    shell = rect.inset(initEdgeInsets(2.0'f32))
+    shell = rect.inset(insets(2.0'f32))
   discard context.addRenderRectangle(
     context.renderRectFor(shell),
     fill(shellFill),
@@ -717,9 +717,7 @@ proc drawOutlineRowText(
       text = outlineView.outlineCellText(row, column)
       textRect = outlineView.outlineTextRectForCell(row, column, rowBounds)
       textStyle = context.appearance.resolveTextStyle(
-        initControlStyleContext(srRowItem),
-        initColor(0.14, 0.18, 0.25, 1.0),
-        initEdgeInsets(0.0),
+        controlStyle(srRowItem), initColor(0.14, 0.18, 0.25, 1.0), insets(0.0)
       )
     if text.len > 0 and not textRect.isEmpty:
       discard context.addText(textRect, text, textStyle, column.alignment())

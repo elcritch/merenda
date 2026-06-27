@@ -40,7 +40,9 @@ suite "nimkit scroll views":
     scrollView.verticalLineScroll = 11
     clipView.scrollToPoint(initPoint(20, 20))
 
-    check clipView.autoscroll(MouseEvent(location: initPoint(118, 78), button: mbPrimary))
+    check clipView.autoscroll(
+      MouseEvent(location: initPoint(118, 78), button: mbPrimary)
+    )
     check scrollView.contentOffset() == initPoint(27, 31)
 
   test "scroll view exposes scroll increments and chrome policy":
@@ -57,7 +59,7 @@ suite "nimkit scroll views":
     scrollView.verticalPageScroll = 60
     scrollView.borderType = svbLineBorder
     scrollView.drawsBackground = false
-    scrollView.scrollerInsets = initEdgeInsets(2, 3, 4, 5)
+    scrollView.scrollerInsets = insets(2, 3, 4, 5)
     scrollView.horizontalHeaderView = horizontalHeader
     scrollView.verticalHeaderView = verticalHeader
     scrollView.cornerView = corner
@@ -72,7 +74,7 @@ suite "nimkit scroll views":
     check scrollView.verticalPageScroll() == 60
     check scrollView.borderType() == svbLineBorder
     check not scrollView.drawsBackground()
-    check scrollView.scrollerInsets() == initEdgeInsets(2, 3, 4, 5)
+    check scrollView.scrollerInsets() == insets(2, 3, 4, 5)
     check scrollView.horizontalHeaderView() == horizontalHeader
     check scrollView.verticalHeaderView() == verticalHeader
     check scrollView.cornerView() == corner

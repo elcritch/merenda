@@ -325,7 +325,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
     let absoluteFrame = context.renderRectFor(comboBox.bounds)
     let styleStates = comboBox.widgetStateSet()
     let style = context.appearance.resolveComboBoxStyle(
-      initControlStyleContext(
+      controlStyle(
         srComboBox, styleStates, id = comboBox.styleId, classes = comboBox.styleClasses
       )
     )
@@ -567,7 +567,7 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.invalidateControlMetrics()
 
 proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
-  initControlStyleContext(
+  controlStyle(
     srComboBox,
     comboBox.widgetStateSet(),
     id = comboBox.styleId,
@@ -604,7 +604,7 @@ protocol DefaultComboBoxCellMeasurement of CellMeasurementProtocol:
         if view of ComboBox:
           ComboBox(view).comboBoxStyleContext()
         else:
-          initControlStyleContext(srComboBox)
+          controlStyle(srComboBox)
       style = appearance.resolveComboBoxStyle(context)
     initIntrinsicSize(
       style.comboBoxControlSize(cell.comboBoxMeasuredTextSize(style.text))

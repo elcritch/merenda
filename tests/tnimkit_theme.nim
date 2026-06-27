@@ -87,9 +87,10 @@ proc newCustomFillChrome(): Chrome =
 
 suite "nimkit theme":
   test "edge insets shrink rectangles without negative sizes":
-    check initRect(10, 20, 100, 50).inset(initEdgeInsets(2, 4, 6, 8)) ==
-      initRect(14, 22, 88, 42)
-    check initRect(0, 0, 10, 10).inset(initEdgeInsets(8)) == initRect(8, 8, 0, 0)
+    check initRect(10, 20, 100, 50).inset(insets(2, 4, 6, 8)) == initRect(
+      14, 22, 88, 42
+    )
+    check initRect(0, 0, 10, 10).inset(insets(8)) == initRect(8, 8, 0, 0)
 
   test "style selectors match role state id and classes":
     let context = initStyleContext(
@@ -113,14 +114,13 @@ suite "nimkit theme":
       fallback = initColor(0.0, 0.0, 0.0, 1.0)
       broadText = initColor(0.12, 0.13, 0.14, 1.0)
       highlightedText = initColor(0.82, 0.40, 0.12, 1.0)
-      highlightedContext = initControlStyleContext(srButton, {ssHighlighted})
+      highlightedContext = controlStyle(srButton, {ssHighlighted})
 
     theme[srButton, {ssHighlighted}, StyleTextColor] = highlightedText
     theme[srButton, StyleTextColor] = broadText
 
-    check theme.resolveColor(
-      initControlStyleContext(srButton), StyleTextColor, fallback
-    ) == broadText
+    check theme.resolveColor(controlStyle(srButton), StyleTextColor, fallback) ==
+      broadText
     check theme.resolveColor(highlightedContext, StyleTextColor, fallback) ==
       highlightedText
 
@@ -130,7 +130,7 @@ suite "nimkit theme":
       fallback = initColor(0.0, 0.0, 0.0, 1.0)
       pressedText = initColor(0.16, 0.38, 0.82, 1.0)
       highlightedPressedText = initColor(0.90, 0.24, 0.74, 1.0)
-      context = initControlStyleContext(srButton, {ssHighlighted, ssPressed})
+      context = controlStyle(srButton, {ssHighlighted, ssPressed})
 
     theme[srButton, {ssHighlighted, ssPressed}, StyleTextColor] = highlightedPressedText
     theme[srButton, {ssPressed}, StyleTextColor] = pressedText
@@ -143,7 +143,7 @@ suite "nimkit theme":
       fallback = initColor(0.0, 0.0, 0.0, 1.0)
       firstText = initColor(0.18, 0.24, 0.30, 1.0)
       secondText = initColor(0.44, 0.52, 0.62, 1.0)
-      context = initControlStyleContext(srButton, {ssHighlighted, ssPressed})
+      context = controlStyle(srButton, {ssHighlighted, ssPressed})
 
     theme[srButton, {ssHighlighted}, StyleTextColor] = firstText
     theme[srButton, {ssPressed}, StyleTextColor] = secondText
@@ -151,7 +151,7 @@ suite "nimkit theme":
     check theme.resolveColor(context, StyleTextColor, fallback) == secondText
 
   test "style context stores role and control states":
-    let context = initControlStyleContext(
+    let context = controlStyle(
       srButton,
       {
         ssDisabled, ssHighlighted, ssHovered, ssActive, ssFocused, ssFocusVisible,
@@ -177,8 +177,8 @@ suite "nimkit theme":
 
     let
       appearance = initAppearance(theme)
-      normalContext = initControlStyleContext(srButton)
-      specialContext = initControlStyleContext(srButton, id = "special")
+      normalContext = controlStyle(srButton)
+      specialContext = controlStyle(srButton, id = "special")
       baseFill = fill(initColor(0.12, 0.20, 0.34, 1.0))
 
     check appearance.hasChrome(CustomChromeName)
@@ -197,7 +197,7 @@ suite "nimkit theme":
       child = newStyleTokenStore(parent)
       accent = initColor(0.7, 0.2, 0.3, 1.0)
       minSize = initSize(24.0, 18.0)
-      padding = initEdgeInsets(1, 2, 3, 4)
+      padding = insets(1, 2, 3, 4)
       shadows = @[dropShadow(initColor(0, 0, 0, 0.25), y = 2.0, blur = 4.0)]
 
     parent["accent"] = accent
@@ -216,7 +216,7 @@ suite "nimkit theme":
     check appearance.colorToken("nested.accent", initColor(0, 0, 0, 1)) == accent
     check appearance.lengthToken("space", 0.0) == 6.0
     check appearance.sizeToken("minimum.size", initSize(0, 0)) == minSize
-    check appearance.insetsToken("padding", initEdgeInsets(0)) == padding
+    check appearance.insetsToken("padding", insets(0)) == padding
     check appearance.shadowsToken("shadow", @[]) == shadows
     check appearance.colorToken("missing", accent) == accent
 
@@ -229,7 +229,7 @@ suite "nimkit theme":
       buttonHighlight = initColor(0.95, 0.96, 0.97, 0.44)
       buttonShadow = initColor(0.04, 0.05, 0.06, 0.22)
       buttonMinimum = initSize(72.0, 32.0)
-      buttonInsets = initEdgeInsets(2.0, 10.0)
+      buttonInsets = insets(2.0, 10.0)
       buttonShadows =
         @[
           dropShadow(initColor(0, 0, 0, 0.35), y = 2.0, blur = 5.0),
@@ -250,9 +250,9 @@ suite "nimkit theme":
     appearance[srTextField, StyleBorderWidth] = 4.0
 
     let
-      buttonStyle = appearance.resolveButtonStyle(initControlStyleContext(srButton))
+      buttonStyle = appearance.resolveButtonStyle(controlStyle(srButton))
       textFieldStyle = appearance.resolveTextFieldStyle(
-        initControlStyleContext(srTextField), initColor(0.1, 0.1, 0.1, 1.0)
+        controlStyle(srTextField), initColor(0.1, 0.1, 0.1, 1.0)
       )
 
     check buttonStyle.box.fill == buttonFill
@@ -277,78 +277,63 @@ suite "nimkit theme":
       secondAppearance = initAppearance(theme)
 
     let
-      baseStyle = theme.resolveButtonStyle(initControlStyleContext(srButton))
+      baseStyle = theme.resolveButtonStyle(controlStyle(srButton))
       overrideFill = initColor(0.67, 0.18, 0.22, 1.0)
 
     firstAppearance.theme["button.fill"] = overrideFill
     firstAppearance[srButton, StyleCornerRadius] = 11.0
 
-    check firstAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
+    check firstAppearance.resolveButtonStyle(controlStyle(srButton)).box.fill ==
       overrideFill
-    check firstAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.cornerRadius ==
+    check firstAppearance.resolveButtonStyle(controlStyle(srButton)).box.cornerRadius ==
       11.0
-    check secondAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
+    check secondAppearance.resolveButtonStyle(controlStyle(srButton)).box.fill ==
       baseStyle.box.fill
-    check secondAppearance.resolveButtonStyle(initControlStyleContext(srButton)).box.cornerRadius ==
+    check secondAppearance.resolveButtonStyle(controlStyle(srButton)).box.cornerRadius ==
       baseStyle.box.cornerRadius
-    check theme.resolveButtonStyle(initControlStyleContext(srButton)).box.fill ==
-      baseStyle.box.fill
-    check theme.resolveButtonStyle(initControlStyleContext(srButton)).box.cornerRadius ==
+    check theme.resolveButtonStyle(controlStyle(srButton)).box.fill == baseStyle.box.fill
+    check theme.resolveButtonStyle(controlStyle(srButton)).box.cornerRadius ==
       baseStyle.box.cornerRadius
 
   test "default theme exposes resolved button and text field styles":
     let theme = initTheme()
     let
       appearance = initAppearance(theme)
-      defaultButtonStyle =
-        appearance.resolveButtonStyle(initControlStyleContext(srButton))
-      buttonStyle = appearance.resolveButtonStyle(
-        initControlStyleContext(srButton, {ssHighlighted})
-      )
+      defaultButtonStyle = appearance.resolveButtonStyle(controlStyle(srButton))
+      buttonStyle =
+        appearance.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
       accentButtonStyle =
-        appearance.resolveButtonStyle(initControlStyleContext(srButton, {ssAccent}))
-      accentHighlightedButtonStyle = appearance.resolveButtonStyle(
-        initControlStyleContext(srButton, {ssAccent, ssHighlighted})
-      )
-      checkBoxStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(srCheckBox, {ssSelected})
-      )
-      radioStyle = appearance.resolveChoiceButtonStyle(
-        initControlStyleContext(srRadioButton, {ssSelected})
-      )
+        appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
+      accentHighlightedButtonStyle =
+        appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent, ssHighlighted}))
+      checkBoxStyle =
+        appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      radioStyle =
+        appearance.resolveChoiceButtonStyle(controlStyle(srRadioButton, {ssSelected}))
       textFieldStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
+        controlStyle(srTextField), initColor(0.2, 0.3, 0.4, 1.0)
       )
       bodyLabelStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(srTextField, classes = @[LabelStyleClass])
+        controlStyle(srTextField, classes = @[LabelStyleClass])
       )
       titleLabelStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(
-          srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass]
-        )
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass])
       )
       headingLabelStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(
-          srTextField, classes = @[LabelStyleClass, LabelHeadingStyleClass]
-        )
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelHeadingStyleClass])
       )
       statusLabelStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(
-          srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass]
-        )
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass])
       )
       formLabelStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(
-          srTextField, classes = @[LabelStyleClass, LabelFormStyleClass]
-        )
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelFormStyleClass])
       )
       comboBoxStyle =
-        appearance.resolveComboBoxStyle(initControlStyleContext(srComboBox, {ssOpen}))
-      comboBoxItemStyle = appearance.resolveTextFieldStyle(
-        initControlStyleContext(srComboBoxItem, {ssSelected})
-      )
-      tabStyle = initControlStyleContext(srTab)
-      selectedTabStyle = initControlStyleContext(srTab, {ssSelected})
+        appearance.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
+      comboBoxItemStyle =
+        appearance.resolveTextFieldStyle(controlStyle(srComboBoxItem, {ssSelected}))
+      tabStyle = controlStyle(srTab)
+      selectedTabStyle = controlStyle(srTab, {ssSelected})
 
     check appearance.theme.rules.len == theme.rules.len
     check theme.tokens != nil
@@ -365,9 +350,8 @@ suite "nimkit theme":
     check checkBoxStyle.chrome == AquaChromeName
     check radioStyle.chrome == AquaChromeName
     check comboBoxStyle.chrome == AquaChromeName
-    check appearance.resolveChromeName(initControlStyleContext(srTab)) == AquaChromeName
-    check appearance.resolveChromeName(initControlStyleContext(srTabPanel)) ==
-      AquaChromeName
+    check appearance.resolveChromeName(controlStyle(srTab)) == AquaChromeName
+    check appearance.resolveChromeName(controlStyle(srTabPanel)) == AquaChromeName
     check appearance.resolveFill(tabStyle, fill(initColor(0.0, 0.0, 0.0, 1.0))) ==
       fill(initColor(0.82, 0.83, 0.82, 1.0))
     check appearance.resolveFill(
@@ -394,7 +378,7 @@ suite "nimkit theme":
     check buttonStyle.text.color == initColor(0.08, 0.08, 0.07, 0.95)
     check defaultButtonStyle.textHighlightColor == initColor(1.0, 1.0, 1.0, 0.42)
     check defaultButtonStyle.textShadowColor == initColor(0.0, 0.0, 0.0, 0.20)
-    check theme.resolveButtonStyle(initControlStyleContext(srButton, {ssDisabled})).textHighlightColor ==
+    check theme.resolveButtonStyle(controlStyle(srButton, {ssDisabled})).textHighlightColor ==
       initColor(1.0, 1.0, 1.0, 0.16)
     check accentButtonStyle.text.color == initColor(0.08, 0.08, 0.07, 0.95)
     check buttonStyle.minSize == initSize(0.0, 32.0)
@@ -434,7 +418,7 @@ suite "nimkit theme":
     check bodyLabelStyle.minSize == initSize(0.0, 18.0)
     check titleLabelStyle.box.borderWidth == 1.0
     check titleLabelStyle.box.cornerRadius == 6.0
-    check titleLabelStyle.text.insets == initEdgeInsets(0.0, 12.0)
+    check titleLabelStyle.text.insets == insets(0.0, 12.0)
     check titleLabelStyle.minSize == initSize(0.0, 28.0)
     check headingLabelStyle.box.cornerRadius == 5.0
     check headingLabelStyle.minSize == initSize(0.0, 24.0)
@@ -459,19 +443,17 @@ suite "nimkit theme":
   test "banner theme exposes generated banner palette as an opt-in theme":
     let
       theme = initBannerTheme()
-      buttonStyle = theme.resolveButtonStyle(initControlStyleContext(srButton))
+      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
       highlightedButtonStyle =
-        theme.resolveButtonStyle(initControlStyleContext(srButton, {ssHighlighted}))
-      checkBoxStyle = theme.resolveChoiceButtonStyle(
-        initControlStyleContext(srCheckBox, {ssSelected})
-      )
-      textFieldStyle = theme.resolveTextFieldStyle(initControlStyleContext(srTextField))
-      comboBoxStyle =
-        theme.resolveComboBoxStyle(initControlStyleContext(srComboBox, {ssOpen}))
+        theme.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
+      checkBoxStyle =
+        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
+      comboBoxStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
       comboBoxItemStyle = theme.resolveTextFieldStyle(
-        initControlStyleContext(srComboBoxItem, {ssSelected, ssHovered})
+        controlStyle(srComboBoxItem, {ssSelected, ssHovered})
       )
-      tabStyle = initControlStyleContext(srTab)
+      tabStyle = controlStyle(srTab)
 
     check buttonStyle.box.fill == initColor(0.89, 0.38, 0.21, 1.0)
     check highlightedButtonStyle.box.fill == initColor(0.62, 0.24, 0.14, 1.0)

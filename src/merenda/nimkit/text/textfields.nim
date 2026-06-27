@@ -621,7 +621,7 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
     let states: set[WidgetState] = textField.widgetStateSet()
 
     let style = context.appearance.resolveTextFieldStyle(
-      initControlStyleContext(
+      controlStyle(
         srTextField, states, id = textField.styleId, classes = textField.styleClasses
       ),
       textField.textColor,
@@ -681,7 +681,7 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
 
 proc textFieldStyleContext(textField: TextField): StyleContext =
   let states: set[WidgetState] = textField.widgetStateSet()
-  initControlStyleContext(
+  controlStyle(
     srTextField, states, id = textField.styleId, classes = textField.styleClasses
   )
 
@@ -739,8 +739,7 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
             textNaturalSize(textField.stringValue(), style.text)
       return initIntrinsicSize(style.textFieldControlSize(textSize))
 
-    let style =
-      initAppearance().resolveTextFieldStyle(initControlStyleContext(srTextField))
+    let style = initAppearance().resolveTextFieldStyle(controlStyle(srTextField))
     initIntrinsicSize(style.textFieldControlSize(textNaturalSize("", style.text)))
 
   method cellSizeForBounds(cell: TextFieldCell, bounds: Rect): Size =

@@ -27,7 +27,7 @@ suite "nimkit form views":
 
     form.spacing[dcol] = 8.0
     form.spacing[drow] = 5.0
-    form.edgeInsets = initEdgeInsets(1.0, 2.0, 3.0, 4.0)
+    form.edgeInsets = insets(1.0, 2.0, 3.0, 4.0)
     form.addRow(shortLabel, nameField)
     form.addRow(longLabel, roleField)
 

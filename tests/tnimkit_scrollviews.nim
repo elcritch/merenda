@@ -227,7 +227,7 @@ proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
   result.controls = newStackView(laHorizontal)
 
   let
-    guide = result.root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 22.0, 24.0))
+    guide = result.root.contentLayoutGuide(insets(22.0, 24.0, 22.0, 24.0))
     topButton = newButton("Top")
     middleButton = newButton("Middle")
     bottomButton = newButton("Bottom")
@@ -692,7 +692,7 @@ suite "nimkit scroll views":
   test "scroll view resizes with constraint layout":
     let
       root = newView(frame = initRect(0, 0, 260, 180))
-      guide = root.contentLayoutGuide(initEdgeInsets(12.0))
+      guide = root.contentLayoutGuide(insets(12.0))
       document = newView(frame = initRect(0, 0, 420, 360))
       scrollView = newScrollView(documentView = document)
       footer = newButton("Done")
@@ -840,15 +840,13 @@ suite "nimkit scroll views":
 
     let
       headingStyle = heading.effectiveAppearance().resolveTextFieldStyle(
-          initControlStyleContext(
+          controlStyle(
             srTextField, id = heading.styleId, classes = heading.styleClasses
           ),
           heading.textColor(),
         )
       buttonStyle = button.effectiveAppearance().resolveButtonStyle(
-          initControlStyleContext(
-            srButton, id = button.styleId, classes = button.styleClasses
-          )
+          controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
         )
       renders = buildRenders(root)
       nodes = renders[DefaultDrawLevel]

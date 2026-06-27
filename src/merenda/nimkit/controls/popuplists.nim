@@ -301,7 +301,7 @@ proc drawPopupList*(
     classes = popupList.styleClasses()
     appearance = context.appearance()
     popupStyle = appearance.resolveComboBoxStyle(
-      initControlStyleContext(
+      controlStyle(
         popupList.xPopupRole, states, id = popupList.styleId(), classes = classes
       )
     )
@@ -378,11 +378,11 @@ proc drawPopupList*(
             else:
               initColor(0.27, 0.29, 0.33)
           accessoryStyle = context.appearance.resolveTextStyle(
-            initControlStyleContext(
+            controlStyle(
               popupList.xItemRole, states, id = popupList.styleId(), classes = classes
             ),
             accessoryColor,
-            initEdgeInsets(0.0),
+            insets(0.0),
           )
         context.drawRowItem(
           itemRect,

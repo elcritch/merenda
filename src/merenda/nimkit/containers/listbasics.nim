@@ -182,7 +182,7 @@ proc drawRowItem*(
     return
   let currentParent = int16(parent) < 0
   var itemStyle = context.appearance.resolveRowItemStyle(
-    initControlStyleContext(itemRole, row.states, id = id, classes = classes)
+    controlStyle(itemRole, row.states, id = id, classes = classes)
   )
   if style.fill.isSome:
     itemStyle.box.fill = style.fill.get()
