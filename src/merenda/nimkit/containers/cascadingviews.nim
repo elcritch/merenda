@@ -72,6 +72,7 @@ proc itemHasChildren*(view: CascadingView, identifier: string): bool
 proc applySelectedPath(view: CascadingView, path: openArray[string])
 proc focusColumnRelative(view: CascadingView, delta: int): bool
 proc scrollColumnToVisible(view: CascadingView, column: int)
+proc syncCascadingStyle(view: CascadingView)
 
 protocol CascadingDataSource {.selectorScope: protocol.}:
   method cascadingNumberOfChildren*(
@@ -237,6 +238,58 @@ proc tableViewForColumn*(view: CascadingView, column: int): TableView =
   else:
     view.xColumns[column]
 
+protocol CascadingViewProtocol {.selectorScope: protocol.} from CascadingView:
+  property cascadingSelectionPath -> seq[string]
+  property cascadingColumnWidth -> float32
+  property cascadingMinColumnWidth -> float32
+  property cascadingColumnSpacing -> float32
+  property cascadingShowsHeaders -> bool
+
+  method cascadingSelectionPath(view: CascadingView): seq[string] =
+    if view.isNil:
+      @[]
+    else:
+      view.xSelectedPath
+
+  method setCascadingSelectionPath(view: CascadingView, path: seq[string]) =
+    view.applySelectedPath(path)
+
+  method cascadingColumnWidth(view: CascadingView): float32 =
+    if view.isNil: 0.0'f32 else: view.xColumnWidth
+
+  method setCascadingColumnWidth(view: CascadingView, width: float32) =
+    view.columnWidth = width
+
+  method cascadingMinColumnWidth(view: CascadingView): float32 =
+    if view.isNil: 0.0'f32 else: view.xMinColumnWidth
+
+  method setCascadingMinColumnWidth(view: CascadingView, width: float32) =
+    view.minColumnWidth = width
+
+  method cascadingColumnSpacing(view: CascadingView): float32 =
+    if view.isNil: 0.0'f32 else: view.xColumnSpacing
+
+  method setCascadingColumnSpacing(view: CascadingView, spacing: float32) =
+    view.columnSpacing = spacing
+
+  method cascadingShowsHeaders(view: CascadingView): bool =
+    (not view.isNil) and view.xShowsColumnHeaders
+
+  method setCascadingShowsHeaders(view: CascadingView, shows: bool) =
+    view.showsColumnHeaders = shows
+
+  method cascadeScrollView*(view: CascadingView): ScrollView =
+    if view.isNil: nil else: view.xScrollView
+
+  method cascadeColumnCount*(view: CascadingView): int =
+    if view.isNil: 0 else: view.xColumns.len
+
+  method cascadeTableForColumn*(view: CascadingView, column: int): TableView =
+    if view.isNil or column notin 0 ..< view.xColumns.len:
+      nil
+    else:
+      view.xColumns[column]
+
 proc columnForTableView(view: CascadingView, tableView: TableView): int =
   if view.isNil:
     return -1
@@ -374,6 +427,46 @@ proc itemForColumnRow(view: CascadingView, column, row: int): CascadingItem =
 proc titleForItem(view: CascadingView, item: CascadingItem): string =
   if item.title.len > 0: item.title else: item.identifier
 
+proc syncCascadingColumnStyle(view: CascadingView, tableView: TableView) =
+  if view.isNil or tableView.isNil:
+    return
+  let transparent = initColor(0.0, 0.0, 0.0, 0.0)
+  let
+    styleId = view.styleId()
+    styleClasses = view.styleClasses()
+  tableView.tableRole = srCascadingColumn
+  tableView.rowItemRole = srCascadingRowItem
+  tableView.styleId = styleId
+  tableView.styleClasses = styleClasses
+  if not tableView.scrollView().isNil:
+    let scrollView = tableView.scrollView()
+    scrollView.scrollViewRole = srCascadingScrollView
+    scrollView.scrollerRole = srCascadingScroller
+    scrollView.styleId = styleId
+    scrollView.styleClasses = styleClasses
+    scrollView.background = transparent
+
+proc syncCascadingStyle(view: CascadingView) =
+  if view.isNil:
+    return
+  let transparent = initColor(0.0, 0.0, 0.0, 0.0)
+  let
+    styleId = view.styleId()
+    styleClasses = view.styleClasses()
+  if not view.xScrollView.isNil:
+    view.xScrollView.scrollViewRole = srCascadingScrollView
+    view.xScrollView.scrollerRole = srCascadingScroller
+    view.xScrollView.styleId = styleId
+    view.xScrollView.styleClasses = styleClasses
+    view.xScrollView.drawsBackground = false
+    view.xScrollView.background = transparent
+  if not view.xColumnContainer.isNil:
+    view.xColumnContainer.styleId = styleId
+    view.xColumnContainer.styleClasses = styleClasses
+    view.xColumnContainer.background = transparent
+  for tableView in view.xColumns:
+    view.syncCascadingColumnStyle(tableView)
+
 proc selectionFor(
     view: CascadingView, column, row: int, item: CascadingItem
 ): CascadingSelection =
@@ -428,6 +521,7 @@ proc columnsContentWidth(view: CascadingView): float32 =
 proc syncCascadingLayout(view: CascadingView) =
   if view.isNil:
     return
+  view.syncCascadingStyle()
   let bounds = view.bounds()
   if view.xScrollView.isNil or view.xColumnContainer.isNil:
     return
@@ -488,6 +582,7 @@ proc updateColumnSelections(view: CascadingView) =
 
 proc initCascadingTableView(view: CascadingView): TableView =
   result = newTableView()
+  view.syncCascadingColumnStyle(result)
   result.showsHeader = view.xShowsColumnHeaders
   result.usesAlternatingRowBackgrounds = false
   result.selectionMode = tsmSingle
@@ -567,6 +662,7 @@ proc syncCascadingColumns(view: CascadingView) =
     view.xColumns.add tableView
     if not view.xColumnContainer.isNil:
       view.xColumnContainer.addSubview(tableView)
+  view.syncCascadingStyle()
   view.syncCascadingLayout()
   view.updateColumnSelections()
 
@@ -682,11 +778,25 @@ proc activateCascadingItem(view: CascadingView, column, row: int) =
   discard view.sendAction()
 
 proc cascadingRowItemStyle(
-    tableView: TableView, context: DrawContext, states: set[WidgetState]
+    view: CascadingView,
+    tableView: TableView,
+    context: DrawContext,
+    states: set[WidgetState],
 ): RowItemStyle =
+  let
+    styleId =
+      if view.isNil:
+        tableView.styleId()
+      else:
+        view.styleId()
+    styleClasses =
+      if view.isNil:
+        tableView.styleClasses()
+      else:
+        view.styleClasses()
   context.appearance.resolveRowItemStyle(
     initControlStyleContext(
-      srRowItem, states, id = tableView.styleId(), classes = tableView.styleClasses()
+      srCascadingRowItem, states, id = styleId, classes = styleClasses
     )
   )
 
@@ -799,7 +909,7 @@ protocol CascadingTableDelegate of TableViewDelegate:
     let
       column = view.columnForTableView(tableView)
       rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
-      style = tableView.cascadingRowItemStyle(context, row.states)
+      style = view.cascadingRowItemStyle(tableView, context, row.states)
     if column < 0:
       return
     let
@@ -916,9 +1026,10 @@ protocol CascadingDrawing of ViewDrawingProtocol:
   method draw(view: CascadingView, context: DrawContext) =
     if view.isNil or context.isNil or view.bounds().isEmpty:
       return
+    view.syncCascadingStyle()
     let style = context.appearance.resolveTableViewStyle(
       initControlStyleContext(
-        srTableView,
+        srCascadingView,
         view.widgetStateSet(),
         id = view.styleId(),
         classes = view.styleClasses(),
@@ -974,6 +1085,7 @@ proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   view.xScrollView.autoresizingMaskConstraints = false
   view.addSubview(view.xScrollView)
   view.setAcceptsFirstResponder(false)
+  discard view.withProto()
   discard view.withProtocol(CascadingTableDataSource)
   discard view.withProtocol(CascadingTableDelegate)
   discard view.withProtocol(CascadingViewLayout)

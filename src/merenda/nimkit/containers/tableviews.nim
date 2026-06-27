@@ -533,6 +533,26 @@ proc tableStyle(tableView: TableView): TableViewStyle =
 proc defaultTableStyle(): TableViewStyle =
   initAppearance().resolveTableViewStyle(initControlStyleContext(srTableView))
 
+proc tableRole*(tableView: TableView): StyleRole =
+  if tableView.isNil: srTableView else: tableView.xTableRole
+
+proc `tableRole=`*(tableView: TableView, role: StyleRole) =
+  if tableView.isNil or tableView.xTableRole == role:
+    return
+  tableView.xTableRole = role
+  tableView.invalidateIntrinsicContentSize()
+  tableView.setNeedsDisplay(true)
+
+proc rowItemRole*(tableView: TableView): StyleRole =
+  if tableView.isNil: srRowItem else: tableView.xItemRole
+
+proc `rowItemRole=`*(tableView: TableView, role: StyleRole) =
+  if tableView.isNil or tableView.xItemRole == role:
+    return
+  tableView.xItemRole = role
+  tableView.invalidateIntrinsicContentSize()
+  tableView.invalidateTableRows()
+
 func normalizedColumnMetric(value, fallback: float32): float32 =
   if value.isNaN:
     fallback

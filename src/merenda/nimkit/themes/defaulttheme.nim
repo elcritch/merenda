@@ -683,11 +683,35 @@ proc initTheme*(): Theme =
   result[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
   result[srTableView, StyleBoxShadows] = aquaInsetControlShadows()
   result[srTableView, StyleDropIndicatorFill] = fill(initColor(0.18, 0.42, 0.88, 0.95))
+  for role in [srCascadingView, srCascadingColumn]:
+    result[role, StyleFill] = styleToken("tableView.fill")
+    result[role, StyleBorderColor] = styleToken("tableView.border.color")
+    result[role, StyleBorderWidth] = 1.0
+    result[role, StyleCornerRadius] = 6.0
+    result[role, StyleMinimumSize] = initSize(120.0, 24.0)
+    result[role, StyleRowHeight] = 22.0
+    result[role, StyleHeaderHeight] = 24.0
+    result[role, StyleColumnWidth] = 120.0
+    result[role, StyleColumnMinWidth] = 24.0
+    result[role, StyleColumnMaxWidth] = 10000.0
+    result[role, StyleResizeHandleWidth] = 5.0
+    result[role, StyleDragThreshold] = 3.0
+    result[role, StyleAutoscrollEdge] = 18.0
+    result[role, StyleFocusRingWidth] = 3.0
+    result[role, StyleFocusRingInset] = 2.0
+    result[role, StyleFocusRingColor] = styleToken("focus.ring.color")
+    result[role, StyleBoxShadows] = aquaInsetControlShadows()
+    result[role, StyleDropIndicatorFill] = fill(initColor(0.18, 0.42, 0.88, 0.95))
 
   result[srScrollView, StyleFill] = styleToken("scrollView.fill")
   result[srScrollView, StyleBorderColor] = styleToken("scrollView.border.color")
   result[srScrollView, StyleBorderWidth] = 1.0
   result[srScrollView, StyleCornerRadius] = 0.0
+
+  result[srCascadingScrollView, StyleFill] = styleToken("tableView.fill")
+  result[srCascadingScrollView, StyleBorderColor] = styleToken("tableView.border.color")
+  result[srCascadingScrollView, StyleBorderWidth] = 0.0
+  result[srCascadingScrollView, StyleCornerRadius] = 0.0
 
   result[srScroller, StyleFill] = styleToken("scroller.track.fill")
   result[srScroller, StyleBorderColor] = styleToken("scroller.track.border.color")
@@ -695,6 +719,15 @@ proc initTheme*(): Theme =
   result[srScroller, StyleKnobBorderColor] = styleToken("scroller.knob.border.color")
   result[srScroller, StyleBorderWidth] = 1.0
   result[srScroller, StyleCornerRadius] = 3.0
+
+  result[srCascadingScroller, StyleFill] = styleToken("tableView.fill")
+  result[srCascadingScroller, StyleBorderColor] =
+    styleToken("scroller.track.border.color")
+  result[srCascadingScroller, StyleKnobFill] = styleToken("scroller.knob.fill")
+  result[srCascadingScroller, StyleKnobBorderColor] =
+    styleToken("scroller.knob.border.color")
+  result[srCascadingScroller, StyleBorderWidth] = 0.0
+  result[srCascadingScroller, StyleCornerRadius] = 0.0
 
   result[srSplitView, StyleFill] = styleToken("splitView.divider.fill")
   result[srSplitView, StyleBorderColor] = styleToken("splitView.divider.border.color")
@@ -786,6 +819,75 @@ proc initTheme*(): Theme =
   result[srRowItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
   result[srRowItem, StyleMinimumSize] = initSize(0.0, 22.0)
   result[srRowItem, StyleAlternatingFill] = fill(initColor(0.96, 0.97, 0.99, 1.0))
+  result.addRoleRule(
+    srCascadingRowItem,
+    {},
+    styleToken("rowItem.fill"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssHovered},
+    styleToken("rowItem.fill.highlighted"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssHighlighted},
+    styleToken("rowItem.fill.highlighted"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssPressed},
+    styleToken("rowItem.fill.highlighted"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssDisabled},
+    styleToken("rowItem.fill.disabled"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color.disabled"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssSelected},
+    styleToken("rowItem.fill.selected"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color.selected"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssSelected, ssHovered},
+    styleToken("rowItem.fill.selected.highlighted"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color.selected"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssSelected, ssHighlighted},
+    styleToken("rowItem.fill.selected.highlighted"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color.selected"),
+  )
+  result.addRoleRule(
+    srCascadingRowItem,
+    {ssSelected, ssPressed},
+    styleToken("rowItem.fill.selected.highlighted"),
+    styleToken("rowItem.separator.color"),
+    styleToken("rowItem.text.color.selected"),
+  )
+  result[srCascadingRowItem, StyleBorderWidth] = 0.0
+  result[srCascadingRowItem, StyleCornerRadius] = 0.0
+  result[srCascadingRowItem, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+  result[srCascadingRowItem, StyleMinimumSize] = initSize(0.0, 22.0)
+  result[srCascadingRowItem, StyleAlternatingFill] =
+    fill(initColor(0.96, 0.97, 0.99, 1.0))
   result.installThemeExtensions()
 
 proc initBannerTheme*(): Theme =

@@ -52,9 +52,14 @@ type
     srComboBoxItem
     srSplitView
     srTableView
+    srCascadingView
+    srCascadingColumn
+    srCascadingScrollView
+    srCascadingScroller
     srTableHeader
     srTableHeaderCell
     srRowItem
+    srCascadingRowItem
 
   StyleContext* = object
     role*: StyleRole
@@ -1519,7 +1524,7 @@ proc resolveControlBoxStyle(
 
 proc resolveScrollViewStyle*(theme: Theme, context: StyleContext): ScrollViewStyle =
   let scrollerContext =
-    if context.role == srScroller:
+    if context.role in {srScroller, srCascadingScroller}:
       context
     else:
       initControlStyleContext(
