@@ -1,4 +1,5 @@
 import ./controls
+from ./cells import nil
 import ../app/animations
 import ../app/windows
 import ../foundation/selectors
@@ -33,19 +34,49 @@ proc updateButtonLayoutPriorities(cell: ButtonCell) =
     else:
       button.setHuggingPriority(LayoutPriorityLow, laHorizontal)
 
+proc buttonCellStates(
+    cell: ButtonCell, owner: View, includeFocus = true
+): set[WidgetState] =
+  if not owner.isNil:
+    result = owner.widgetStateSet()
+  if not includeFocus:
+    result.excl ssFocused
+    result.excl ssFocusVisible
+  if not (owner of Button):
+    result.excl ssHovered
+  result.excl ssDisabled
+  result.excl ssHighlighted
+  result.excl ssSelected
+  result.excl ssPressed
+  if (not owner.isNil and ssDisabled in owner.widgetStateSet()) or
+      not cells.isEnabled(cell):
+    result.incl ssDisabled
+  if cell.isHighlighted():
+    result.incl ssHighlighted
+    result.incl ssPressed
+  if Cell(cell).state() in {bsOn, bsMixed}:
+    result.incl ssSelected
+
+proc buttonStyleContext(
+    cell: ButtonCell, role: StyleRole, owner: View, states: set[WidgetState]
+): StyleContext =
+  if not owner.isNil:
+    return controlStyle(
+      role, states = states, id = owner.styleId, classes = owner.styleClasses
+    )
+  controlStyle(role, states = states)
+
 proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
   let view = cell.controlView()
-  if view of Button:
-    let button = Button(view)
-    var states: set[WidgetState] = button.widgetStateSet()
-    if Cell(cell).state() in {bsOn, bsMixed}:
-      states.incl ssSelected
-    return controlStyle(
-      role, states = states, id = button.styleId, classes = button.styleClasses
-    )
+  if not view.isNil:
+    let states = cell.buttonCellStates(view)
+    return cell.buttonStyleContext(role, view, states)
   var states: set[WidgetState] = {}
   if not cell.isEnabled:
     states.incl ssDisabled
+  if cell.isHighlighted:
+    states.incl ssHighlighted
+    states.incl ssPressed
   if cell.state in {bsOn, bsMixed}:
     states.incl ssSelected
   controlStyle(role, states = states)
@@ -160,6 +191,18 @@ proc initButtonCellFields*(cell: ButtonCell, title: string) =
 proc newButtonCell*(title = "Button"): ButtonCell =
   result = ButtonCell()
   initButtonCellFields(result, title)
+
+proc copyButtonCell*(cell: ButtonCell): ButtonCell =
+  if cell.isNil:
+    return newButtonCell()
+  result = newButtonCell(cell.title())
+  result.setButtonType(cell.buttonType())
+  result.setAllowsMixedState(cell.allowsMixedState())
+  result.setState(cell.state())
+  cells.setEnabled(result, cells.isEnabled(cell))
+  result.setTarget(cell.target())
+  result.setAction(cell.action())
+  result.xReservedTitles = cell.xReservedTitles
 
 proc buttonCell*(button: Button): ButtonCell =
   let controlCell = button.cell()
@@ -298,11 +341,23 @@ protocol DefaultButtonAccessibility of AccessibilityProtocol:
     button.buttonPerformClick(ActionArgs(sender: button))
     true
 
+func choiceRole(buttonType: ButtonType): StyleRole =
+  if buttonType == btRadio: srRadioButton else: srCheckBox
+
 proc choiceRole(button: Button): StyleRole =
-  if button.buttonType == btRadio: srRadioButton else: srCheckBox
+  button.buttonType.choiceRole()
+
+proc choiceRole(cell: ButtonCell): StyleRole =
+  cell.buttonType().choiceRole()
+
+func choiceChromeRole(buttonType: ButtonType): ChromeRole =
+  if buttonType == btRadio: crRadioIndicator else: crCheckBoxIndicator
 
 proc choiceChromeRole(button: Button): ChromeRole =
-  if button.buttonType == btRadio: crRadioIndicator else: crCheckBoxIndicator
+  button.buttonType.choiceChromeRole()
+
+proc choiceChromeRole(cell: ButtonCell): ChromeRole =
+  cell.buttonType().choiceChromeRole()
 
 proc selectedMarkRect(rect: Rect): Rect =
   let inset = max(rect.size.width * 0.33'f32, 3.0'f32)
@@ -442,6 +497,146 @@ proc drawPushButtonFace(
       cornerRadii = style.box.cornerRadii,
     ),
   )
+
+proc drawChoiceButtonCell*(
+    context: DrawContext,
+    cell: ButtonCell,
+    owner: View,
+    rect: Rect,
+    focusVisible = false,
+) =
+  if cell.isNil:
+    return
+  let
+    role = cell.choiceRole()
+    selected = cell.state() in {bsOn, bsMixed}
+    states = cell.buttonCellStates(owner, includeFocus = focusVisible)
+    style = context.appearance.resolveChoiceButtonStyle(
+      cell.buttonStyleContext(role, owner, states)
+    )
+    indicatorRect = style.choiceIndicatorRect(rect)
+    indicatorFrame = context.renderRectFor(indicatorRect)
+    indicatorChrome = chromeContext(
+      style.chrome, cell.choiceChromeRole(), cpFace, style.indicator.fill, states
+    )
+
+  let indicatorRoot = context.addRenderRectangle(
+    indicatorFrame,
+    context.appearance.chromeFill(indicatorChrome),
+    style.indicator.borderColor,
+    style.indicator.borderWidth,
+    style.indicator.cornerRadius,
+    style.indicator.shadows,
+    maskContent = true,
+  )
+  context.drawChromeExtras(
+    indicatorChrome,
+    initChromeExtras(
+      indicatorRoot, indicatorFrame, cornerRadius = style.indicator.cornerRadius
+    ),
+  )
+  if selected:
+    if cell.buttonType() == btCheckBox and cell.state() == bsOn:
+      let
+        markRect = indicatorRect.checkmarkTextRect()
+        markTextStyle = TextStyle(
+          color: style.markColor,
+          insets: style.text.insets,
+          fontName: style.text.fontName,
+          fontSize: style.text.fontSize,
+        )
+      context.addText(markRect, CheckboxCheckmark, markTextStyle, alignment = taCenter)
+      context.addText(
+        markRect.offsetRect(0.45'f32, 0.0'f32),
+        CheckboxCheckmark,
+        markTextStyle,
+        alignment = taCenter,
+      )
+      context.addText(
+        markRect.offsetRect(0.0'f32, -0.35'f32),
+        CheckboxCheckmark,
+        markTextStyle,
+        alignment = taCenter,
+      )
+    else:
+      let markRect =
+        if cell.state() == bsMixed and cell.buttonType() == btCheckBox:
+          indicatorRect.mixedMarkRect()
+        else:
+          indicatorRect.selectedMarkRect()
+      discard context.addRenderRectangle(
+        context.renderRectFor(markRect),
+        style.markColor,
+        style.markColor,
+        0.0'f32,
+        if cell.buttonType() == btRadio:
+          markRect.size.width / 2.0'f32
+        else:
+          1.0'f32,
+      )
+  if focusVisible:
+    context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
+  context.addText(style.choiceTextRect(rect), cell.title(), style.text)
+
+proc drawPushButtonCell*(
+    context: DrawContext,
+    cell: ButtonCell,
+    owner: View,
+    rect: Rect,
+    focusVisible = false,
+) =
+  if cell.isNil:
+    return
+  let
+    states = cell.buttonCellStates(owner, includeFocus = focusVisible)
+    style = context.appearance.resolveButtonStyle(
+      cell.buttonStyleContext(srButton, owner, states)
+    )
+    absoluteFrame = context.renderRectFor(rect)
+  context.drawPushButtonFace(absoluteFrame, style, states)
+  if focusVisible:
+    context.addFocusRing(absoluteFrame, style.box)
+
+  let textRect = style.buttonTextRect(rect)
+  if style.textHighlightColor.a > 0.0:
+    context.addText(
+      textRect.offsetRect(0.0, 1.0),
+      cell.title(),
+      TextStyle(
+        color: style.textHighlightColor,
+        insets: style.text.insets,
+        fontName: style.text.fontName,
+        fontSize: style.text.fontSize,
+      ),
+      alignment = taCenter,
+    )
+  if style.textShadowColor.a > 0.0:
+    context.addText(
+      textRect.offsetRect(0.0, -0.6'f32),
+      cell.title(),
+      TextStyle(
+        color: style.textShadowColor,
+        insets: style.text.insets,
+        fontName: style.text.fontName,
+        fontSize: style.text.fontSize,
+      ),
+      alignment = taCenter,
+    )
+  context.addText(textRect, cell.title(), style.text, alignment = taCenter)
+
+proc drawButtonCell*(
+    context: DrawContext,
+    cell: ButtonCell,
+    owner: View,
+    rect: Rect,
+    focusVisible = false,
+) =
+  if cell.isNil:
+    return
+  if cell.buttonType() in {btCheckBox, btRadio}:
+    context.drawChoiceButtonCell(cell, owner, rect, focusVisible)
+  else:
+    context.drawPushButtonCell(cell, owner, rect, focusVisible)
 
 protocol DefaultButtonDrawing of ViewDrawingProtocol:
   method draw(button: Button, context: DrawContext) =

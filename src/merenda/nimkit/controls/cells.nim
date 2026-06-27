@@ -16,6 +16,7 @@ type
     xState: ButtonState
     xAllowsMixedState: bool
     xSendsActionOnEndEditing: bool
+    xMirrorsControlViewState: bool
 
   ActionCell* = ref object of Cell
     xTarget: DynamicAgent
@@ -113,6 +114,7 @@ proc updateControlView*(cell: Cell) =
 
 proc initCellFields*(cell: Cell) =
   cell.xEnabled = true
+  cell.xMirrorsControlViewState = true
   discard cell.withProtocol(DefaultCellMeasurement)
   discard cell.withProtocol(DefaultCellEditing)
 
@@ -142,43 +144,56 @@ proc setControlView*(cell: Cell, view: View) =
     else:
       view.unsafeWeakRef()
   oldView.invalidateViewCellMetrics()
-  if not view.isNil:
+  if not view.isNil and cell.xMirrorsControlViewState:
     view.setWidgetState(ssDisabled, not cell.xEnabled)
     view.setWidgetState(ssHighlighted, cell.xHighlighted)
   cell.invalidateControlMetrics()
+
+proc mirrorsControlViewState*(cell: Cell): bool =
+  (not cell.isNil) and cell.xMirrorsControlViewState
+
+proc setMirrorsControlViewState*(cell: Cell, value: bool) =
+  if cell.isNil or cell.xMirrorsControlViewState == value:
+    return
+  cell.xMirrorsControlViewState = value
+  let view = cell.controlView()
+  if not view.isNil and value:
+    view.setWidgetState(ssDisabled, not cell.xEnabled)
+    view.setWidgetState(ssHighlighted, cell.xHighlighted)
 
 proc isEnabled*(cell: Cell): bool =
   if cell.isNil:
     return false
   let view = cell.controlView()
-  if not view.isNil:
-    return ssDisabled notin view.widgetStateSet()
-  cell.xEnabled
+  result = cell.xEnabled
+  if result and cell.xMirrorsControlViewState and not view.isNil:
+    result = ssDisabled notin view.widgetStateSet()
 
 proc setEnabled*(cell: Cell, enabled: bool) =
+  if cell.isNil:
+    return
   let oldEnabled = cell.isEnabled()
   if cell.xEnabled == enabled and oldEnabled == enabled:
     return
   cell.xEnabled = enabled
   let view = cell.controlView()
-  if not view.isNil:
+  if not view.isNil and cell.xMirrorsControlViewState:
     view.setWidgetState(ssDisabled, not enabled)
   elif oldEnabled != enabled:
     cell.invalidateControlMetrics()
 
 proc isHighlighted*(cell: Cell): bool =
-  let view = cell.controlView()
-  if not view.isNil:
-    return ssHighlighted in view.widgetStateSet()
-  cell.xHighlighted
+  (not cell.isNil) and cell.xHighlighted
 
 proc setHighlighted*(cell: Cell, highlighted: bool) =
+  if cell.isNil:
+    return
   let oldHighlighted = cell.isHighlighted()
   if cell.xHighlighted == highlighted and oldHighlighted == highlighted:
     return
   cell.xHighlighted = highlighted
   let view = cell.controlView()
-  if not view.isNil:
+  if not view.isNil and cell.xMirrorsControlViewState:
     view.setWidgetState(ssHighlighted, highlighted)
   elif oldHighlighted != highlighted:
     cell.invalidateControlMetrics()
