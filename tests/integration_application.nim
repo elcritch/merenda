@@ -583,6 +583,80 @@ suite "nimkit application":
     check openPanel.canChooseFiles
     check savePanel.window.title == "Save"
 
+  test "panels build reusable pure Nim views and validate selections":
+    let
+      alert = newAlert(
+        "Replace file?", "This cannot be undone.", asWarning, ["Replace", "Cancel"]
+      )
+      accessory = newView(frame = initRect(0, 0, 40, 20))
+
+    var alertResponse = -1
+    alert.setAccessoryView(accessory)
+    check alert.setButtonResponse(0, 42)
+    alert.prepareForModal(
+      proc(response: int) =
+        alertResponse = response
+    )
+
+    check alert.contentView() == alert.window.contentView
+    check accessory.superview() != nil
+    check alert.buttonViews.len == 2
+    check Button(alert.buttonViews[0]).title == "Replace"
+    check Button(alert.buttonViews[0]).tryToPerform(
+      performClick(), DynamicAgent(alert.buttonViews[0])
+    )
+    check alert.response == 42
+    check alertResponse == 42
+
+    let openPanel = newOpenPanel()
+    openPanel.allowedFileTypes = @["txt", "md"]
+    openPanel.selectUrl("file:///tmp/Notes.txt")
+    check openPanel.validateSelection()
+    check openPanel.contentView() == openPanel.window.contentView
+    check openPanel.buttonViews.len == 2
+    check Button(openPanel.buttonViews[0]).enabled
+
+    openPanel.selectUrl("file:///tmp/Image.png")
+    check not openPanel.validateSelection()
+    discard openPanel.rebuildOpenPanelView()
+    check not Button(openPanel.buttonViews[0]).enabled
+    TextField(openPanel.urlField).text = "file:///tmp/Fixed.md"
+    check Button(openPanel.buttonViews[0]).enabled
+
+    openPanel.selectUrls(["file:///tmp/A.txt", "file:///tmp/B.md"])
+    check not openPanel.validateSelection()
+    openPanel.allowsMultipleSelection = true
+    check openPanel.validateSelection()
+
+    let savePanel = newSavePanel()
+    savePanel.directoryUrl = "file:///tmp"
+    savePanel.allowedFileTypes = @["md"]
+    savePanel.nameFieldStringValue = "Report"
+    check savePanel.selectedFileType() == "md"
+    check savePanel.selectedUrl() == "file:///tmp/Report.md"
+    check savePanel.validateSelection()
+    check savePanel.contentView() == savePanel.window.contentView
+    check savePanel.buttonViews.len == 2
+    check Button(savePanel.buttonViews[0]).enabled
+
+    TextField(savePanel.nameField).text = "Report.txt"
+    check not savePanel.validateSelection()
+    discard savePanel.rebuildSavePanelView()
+    check not Button(savePanel.buttonViews[0]).enabled
+    TextField(savePanel.nameField).text = "Report"
+    check Button(savePanel.buttonViews[0]).enabled
+
+    var saveResponse = -1
+    savePanel.prepareForModal(
+      proc(response: int) =
+        saveResponse = response
+    )
+    check Button(savePanel.buttonViews[0]).tryToPerform(
+      performClick(), DynamicAgent(savePanel.buttonViews[0])
+    )
+    check savePanel.response == PanelResponseOk
+    check saveResponse == PanelResponseOk
+
   test "popup menu button opens menu popup and activates items":
     let
       window = newWindow("Popup Menu", frame = initRect(0, 0, 320, 180))

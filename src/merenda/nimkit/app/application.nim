@@ -10,6 +10,7 @@ import ../themes
 import ../foundation/types
 import ./userdefaults
 import ./animations
+import ./panels
 import ../app/windows
 
 type
@@ -667,16 +668,28 @@ proc runModalSheet*(app: Application, parentWindow: Window, sheet: Window): int 
 proc runModal*(app: Application, alert: Alert): int =
   if alert.isNil:
     return 0
+  alert.prepareForModal(
+    proc(response: int) =
+      app.stopModal(response)
+  )
   app.runModalForWindow(alert.window)
 
 proc runModal*(app: Application, panel: OpenPanel): int =
   if panel.isNil:
     return 0
+  panel.prepareForModal(
+    proc(response: int) =
+      app.stopModal(response)
+  )
   app.runModalForWindow(panel.window)
 
 proc runModal*(app: Application, panel: SavePanel): int =
   if panel.isNil:
     return 0
+  panel.prepareForModal(
+    proc(response: int) =
+      app.stopModal(response)
+  )
   app.runModalForWindow(panel.window)
 
 proc beginModalSheet*(
@@ -684,6 +697,10 @@ proc beginModalSheet*(
 ): ModalSession =
   if alert.isNil:
     return nil
+  alert.prepareForModal(
+    proc(response: int) =
+      app.stopModal(response)
+  )
   app.beginModalSheet(parentWindow, alert.window)
 
 proc beginModalSheet*(
@@ -691,6 +708,10 @@ proc beginModalSheet*(
 ): ModalSession =
   if panel.isNil:
     return nil
+  panel.prepareForModal(
+    proc(response: int) =
+      app.stopModal(response)
+  )
   app.beginModalSheet(parentWindow, panel.window)
 
 proc beginModalSheet*(
@@ -698,6 +719,10 @@ proc beginModalSheet*(
 ): ModalSession =
   if panel.isNil:
     return nil
+  panel.prepareForModal(
+    proc(response: int) =
+      app.stopModal(response)
+  )
   app.beginModalSheet(parentWindow, panel.window)
 
 proc runModal*(alert: Alert, app = sharedApplication()): int =
@@ -724,6 +749,8 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
     return 0
+  let wasRunning = app.xRunning
+  var keepRunning = wasRunning
   app.xRunning = true
   while app.xRunning:
     discard app.drainAnimations()
@@ -753,9 +780,11 @@ proc runForFrames*(app: Application, frames: Natural): int =
     if result >= frames.int:
       break
     if activeWindows == 0:
+      keepRunning = false
       break
     sleep(8)
-  app.xRunning = false
+  if app.xRunning:
+    app.xRunning = keepRunning
 
 proc run*(app: Application) =
   app.xRunning = true

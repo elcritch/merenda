@@ -338,14 +338,6 @@ truth.
 
 ## Near-Term Work
 
-### Animation Core (Completed)
-
-The backend-neutral animation pass is in place through Qt-style composable
-animation objects, Cocoa/AppKit-style transaction ergonomics, and Sigils
-selector-thread timer delivery without exposing raw thread work to widgets.
-Continue hardening animation behavior as later widgets and examples prove the
-need.
-
 ### OpenStep Compatibility Widgets
 
 After the remaining animation transaction and example passes land, add the next

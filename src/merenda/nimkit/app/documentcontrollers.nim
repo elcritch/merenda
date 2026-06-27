@@ -6,6 +6,7 @@ import ../foundation/selectors
 import ../responder/responders
 import ./application
 import ./documents except newDocument
+import ./panels
 import ./windowcontrollers
 import ./windows
 
@@ -20,6 +21,8 @@ type
     xDocuments: seq[Document]
     xRecentDocumentUrls: seq[string]
     xMaximumRecentDocumentCount: Natural
+    xOpenPanel: OpenPanel
+    xSavePanel: SavePanel
 
 const DefaultMaximumRecentDocumentCount* = 10
 
@@ -56,6 +59,10 @@ proc sharedDocumentController*(): DocumentController
 proc setSharedDocumentController*(controller: DocumentController)
 
 proc currentDocument*(controller: DocumentController): Document
+proc openPanel*(controller: DocumentController): OpenPanel
+proc `openPanel=`*(controller: DocumentController, panel: OpenPanel)
+proc savePanel*(controller: DocumentController): SavePanel
+proc `savePanel=`*(controller: DocumentController, panel: SavePanel)
 proc noteRecentDocumentUrl*(controller: DocumentController, fileUrl: string)
 proc createDocumentImpl(
   controller: DocumentController, fileType: string, app: Application
@@ -68,6 +75,17 @@ proc openDocumentImpl(
 proc reopenDocumentImpl(
   controller: DocumentController, fileUrl: string, app: Application
 ): Document {.discardable.}
+
+proc openDocumentWithPanel*(
+  controller: DocumentController, panel: OpenPanel = nil, app: Application = nil
+): Document {.discardable.}
+
+proc saveDocumentWithPanel*(
+  controller: DocumentController,
+  document: Document,
+  panel: SavePanel = nil,
+  app: Application = nil,
+): bool {.discardable.}
 
 proc closeDocumentImpl(
   controller: DocumentController, document: Document, reviewUnsaved: bool
@@ -167,21 +185,30 @@ protocol DocumentControllerMenuCommands of MenuCommandProtocol:
     discard controller.createDocumentImpl("", nil)
 
   method openDocument(controller: DocumentController, args: ActionArgs) =
-    discard controller.reopenDocumentImpl("", nil)
+    if not controller.xOpenPanel.isNil:
+      discard controller.openDocumentWithPanel(controller.xOpenPanel, nil)
+    else:
+      discard controller.reopenDocumentImpl("", nil)
 
   method saveDocument(controller: DocumentController, args: ActionArgs) =
     let document = controller.currentDocument()
     if not document.isNil:
-      discard document.save()
       if document.fileUrl.len > 0:
-        controller.noteRecentDocumentUrl(document.fileUrl)
+        discard document.save()
+        if document.fileUrl.len > 0:
+          controller.noteRecentDocumentUrl(document.fileUrl)
+      else:
+        discard controller.saveDocumentWithPanel(document, controller.xSavePanel, nil)
 
   method saveDocumentAs(controller: DocumentController, args: ActionArgs) =
     let document = controller.currentDocument()
     if not document.isNil:
-      discard document.save()
-      if document.fileUrl.len > 0:
-        controller.noteRecentDocumentUrl(document.fileUrl)
+      if not controller.xSavePanel.isNil:
+        discard controller.saveDocumentWithPanel(document, controller.xSavePanel, nil)
+      else:
+        discard document.save()
+        if document.fileUrl.len > 0:
+          controller.noteRecentDocumentUrl(document.fileUrl)
 
   method revertDocumentToSaved(controller: DocumentController, args: ActionArgs) =
     let document = controller.currentDocument()
@@ -199,9 +226,26 @@ protocol DocumentControllerMenuValidation of UserInterfaceValidations:
     if args.action.name == "newDocument":
       return true
     if args.action.name == "openDocument":
-      return not controller.isNil and controller.xRecentDocumentUrls.len > 0
-    if args.action.name == "saveDocument" or args.action.name == "saveDocumentAs":
-      return not document.isNil and document.fileUrl.len > 0
+      return
+        not controller.isNil and (
+          controller.xRecentDocumentUrls.len > 0 or (
+            not controller.xOpenPanel.isNil and controller.xOpenPanel.validateSelection()
+          )
+        )
+    if args.action.name == "saveDocument":
+      return
+        not document.isNil and (
+          document.fileUrl.len > 0 or (
+            not controller.xSavePanel.isNil and controller.xSavePanel.validateSelection()
+          )
+        )
+    if args.action.name == "saveDocumentAs":
+      return
+        not document.isNil and (
+          document.fileUrl.len > 0 or (
+            not controller.xSavePanel.isNil and controller.xSavePanel.validateSelection()
+          )
+        )
     if args.action.name == "revertDocumentToSaved":
       return
         not document.isNil and document.fileUrl.len > 0 and document.isDocumentEdited()
@@ -298,6 +342,28 @@ proc currentDocument*(controller: DocumentController): Document =
       return
   if controller.xDocuments.len > 0:
     result = controller.xDocuments[^1]
+
+proc openPanel*(controller: DocumentController): OpenPanel =
+  if controller.isNil:
+    return nil
+  if controller.xOpenPanel.isNil:
+    controller.xOpenPanel = newOpenPanel()
+  controller.xOpenPanel
+
+proc `openPanel=`*(controller: DocumentController, panel: OpenPanel) =
+  if not controller.isNil:
+    controller.xOpenPanel = panel
+
+proc savePanel*(controller: DocumentController): SavePanel =
+  if controller.isNil:
+    return nil
+  if controller.xSavePanel.isNil:
+    controller.xSavePanel = newSavePanel()
+  controller.xSavePanel
+
+proc `savePanel=`*(controller: DocumentController, panel: SavePanel) =
+  if not controller.isNil:
+    controller.xSavePanel = panel
 
 proc recentDocumentUrls*(controller: DocumentController): lent seq[string] =
   controller.xRecentDocumentUrls
@@ -400,6 +466,54 @@ proc reopenDocumentImpl(
   if resolvedUrl.len == 0:
     return nil
   result = controller.openDocumentImpl(resolvedUrl, "", app)
+
+proc openDocumentWithPanel*(
+    controller: DocumentController, panel: OpenPanel, app: Application
+): Document {.discardable.} =
+  if controller.isNil:
+    return nil
+  let resolvedPanel =
+    if panel.isNil:
+      controller.openPanel()
+    else:
+      panel
+  if resolvedPanel.isNil or not resolvedPanel.validateSelection():
+    return nil
+
+  for fileUrl in resolvedPanel.selectedUrls():
+    let document = controller.openDocumentImpl(fileUrl, fileUrl.fileTypeForUrl(), app)
+    if result.isNil:
+      result = document
+
+proc saveDocumentWithPanel*(
+    controller: DocumentController,
+    document: Document,
+    panel: SavePanel,
+    app: Application,
+): bool {.discardable.} =
+  discard app
+  if controller.isNil:
+    return false
+  let target =
+    if document.isNil:
+      controller.currentDocument()
+    else:
+      document
+  if target.isNil:
+    return false
+
+  let resolvedPanel =
+    if panel.isNil:
+      controller.savePanel()
+    else:
+      panel
+  if resolvedPanel.isNil or not resolvedPanel.validateSelection():
+    return false
+
+  let fileUrl = resolvedPanel.selectedUrl()
+  result = target.saveAs(fileUrl, resolvedPanel.selectedFileType())
+  if result:
+    controller.noteRecentDocumentUrl(fileUrl)
 
 proc newDocument*(
     controller: DocumentController, fileType = "", app: Application = nil

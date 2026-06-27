@@ -45,21 +45,44 @@ type
     informativeText*: string
     style*: AlertStyle
     buttons*: seq[string]
+    buttonResponses*: seq[int]
+    buttonViews*: seq[View]
+    accessoryView*: View
+    contentView*: View
+    response*: int
+    responseHandler*: proc(response: int) {.closure.}
     window*: Window
 
   OpenPanel* = ref object of Responder
     window*: Window
     directoryUrl*: string
+    message*: string
+    prompt*: string
     allowedFileTypes*: seq[string]
+    selectedUrls*: seq[string]
     allowsMultipleSelection*: bool
     canChooseFiles*: bool
     canChooseDirectories*: bool
+    accessoryView*: View
+    contentView*: View
+    urlField*: View
+    buttonViews*: seq[View]
+    response*: int
+    responseHandler*: proc(response: int) {.closure.}
 
   SavePanel* = ref object of Responder
     window*: Window
     directoryUrl*: string
+    message*: string
+    prompt*: string
     nameFieldStringValue*: string
     allowedFileTypes*: seq[string]
+    accessoryView*: View
+    contentView*: View
+    nameField*: View
+    buttonViews*: seq[View]
+    response*: int
+    responseHandler*: proc(response: int) {.closure.}
 
   DismissReason* = enum
     tdrProgrammatic
@@ -338,17 +361,26 @@ proc newAlert*(
     window: newPanel(messageText, initRect(100, 100, 360, 160)),
   )
   initResponder(result)
-  for button in buttons:
+  for index, button in buttons:
     result.buttons.add button
+    result.buttonResponses.add(
+      if index == 0:
+        1
+      else:
+        index + 1
+    )
 
 proc newOpenPanel*(): OpenPanel =
   result = OpenPanel(
-    window: newPanel("Open", initRect(100, 100, 520, 360)), canChooseFiles: true
+    window: newPanel("Open", initRect(100, 100, 520, 360)),
+    prompt: "Open",
+    canChooseFiles: true,
   )
   initResponder(result)
 
 proc newSavePanel*(): SavePanel =
-  result = SavePanel(window: newPanel("Save", initRect(100, 100, 520, 280)))
+  result =
+    SavePanel(window: newPanel("Save", initRect(100, 100, 520, 280)), prompt: "Save")
   initResponder(result)
 
 proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
