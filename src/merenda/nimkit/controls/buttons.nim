@@ -40,21 +40,15 @@ proc buttonCellStates(
   if not owner.isNil:
     result = owner.widgetStateSet()
   if not includeFocus:
-    result.excl ssFocused
-    result.excl ssFocusVisible
+    result.excl {ssFocused, ssFocusVisible}
   if not (owner of Button):
     result.excl ssHovered
-  result.excl ssDisabled
-  result.excl ssHighlighted
-  result.excl ssSelected
-  result.excl ssActive
-  result.excl ssPressed
+  result.excl {ssDisabled, ssHighlighted, ssSelected, ssActive, ssPressed}
   if (not owner.isNil and ssDisabled in owner.widgetStateSet()) or
       not cells.isEnabled(cell):
     result.incl ssDisabled
   if cell.isHighlighted():
-    result.incl ssHighlighted
-    result.incl ssPressed
+    result.incl {ssHighlighted, ssPressed}
   if Cell(cell).state() in {bsOn, bsMixed}:
     result.incl ssSelected
 
@@ -76,8 +70,7 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
   if not cell.isEnabled:
     states.incl ssDisabled
   if cell.isHighlighted:
-    states.incl ssHighlighted
-    states.incl ssPressed
+    states.incl {ssHighlighted, ssPressed}
   if cell.state in {bsOn, bsMixed}:
     states.incl ssSelected
   controlStyle(role, states = states)
