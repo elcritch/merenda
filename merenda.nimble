@@ -13,7 +13,9 @@ requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.20.0"
 requires "gh:elcritch/kiwiberry"
 requires "siwin#063fc0f"
 requires "sigils >= 0.24.0"
-requires "libbacktrace"
+
+feature "libbacktrace":
+  requires "libbacktrace"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

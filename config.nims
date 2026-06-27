@@ -12,11 +12,12 @@
   cpp
 --debugger:
   native
---stacktrace:
-  off
---define:
-  nimStackTraceOverride
-switch("import", "libbacktrace")
+when defined(feature.merenda.libbacktrace):
+  --stacktrace:
+    off
+  --define:
+    nimStackTraceOverride
+  switch("import", "libbacktrace")
 when defined(freebsd):
   --define:
     libbacktraceUseSystemLibs
