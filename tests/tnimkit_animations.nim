@@ -1,4 +1,4 @@
-import std/[math, times, unittest]
+import std/[math, os, times, unittest]
 
 import sigils/core
 
@@ -220,6 +220,99 @@ suite "NimKit animations":
     animation.start()
     animation.setProgress(0.25)
     check target.floatValue == 0.25'f32
+
+  test "manual scheduler ticks running animations deterministically":
+    let
+      scheduler = newAnimationScheduler(frameInterval = initDuration(milliseconds = 20))
+      animation = newValueAnimation[float32](
+        0.0'f32, 1.0'f32, duration = initDuration(milliseconds = 100)
+      )
+
+    check scheduler.startAnimation(animation)
+    check scheduler.animationCount == 1
+
+    check scheduler.tick(initDuration(milliseconds = 40)) == 1
+    check animation.currentTime{} == initDuration(milliseconds = 40)
+    checkClose(animation.currentValue{}, 0.4'f32)
+
+    animation.pause()
+    check scheduler.tick(initDuration(milliseconds = 20)) == 0
+    check animation.currentTime{} == initDuration(milliseconds = 40)
+    check scheduler.animationCount == 1
+
+    animation.resume()
+    check scheduler.tick(initDuration(milliseconds = 60)) == 1
+    check animation.state{} == asStopped
+    check animation.progress{} == 1.0'f32
+    check scheduler.animationCount == 0
+
+  test "manual scheduler advances repeated animations over total duration":
+    let
+      scheduler = newAnimationScheduler()
+      animation = newValueAnimation[float32](
+        0.0'f32, 10.0'f32, duration = initDuration(milliseconds = 100)
+      )
+
+    animation.loopCount = 2
+    check scheduler.startAnimation(animation)
+
+    check scheduler.tick(initDuration(milliseconds = 150)) == 1
+    check animation.currentTime{} == initDuration(milliseconds = 150)
+    checkClose(animation.progress{}, 0.5'f32)
+    checkClose(animation.currentValue{}, 5.0'f32)
+    check scheduler.animationCount == 1
+
+    check scheduler.tick(initDuration(milliseconds = 50)) == 1
+    check animation.currentTime{} == initDuration(milliseconds = 200)
+    check animation.progress{} == 1.0'f32
+    check animation.state{} == asStopped
+    check scheduler.animationCount == 0
+
+  test "manual scheduler uses protocol natural duration for groups":
+    let
+      scheduler = newAnimationScheduler()
+      short = newAnimation(duration = initDuration(milliseconds = 100))
+      long = newAnimation(duration = initDuration(milliseconds = 200))
+      group = newParallelAnimationGroup([short, long])
+
+    check scheduler.startAnimation(group)
+
+    check scheduler.tick(initDuration(milliseconds = 100)) == 1
+    check group.currentTime{} == initDuration(milliseconds = 100)
+    checkClose(group.progress{}, 0.5'f32)
+    check group.state{} == asRunning
+
+    check scheduler.tick(initDuration(milliseconds = 100)) == 1
+    check group.currentTime{} == initDuration(milliseconds = 200)
+    check group.progress{} == 1.0'f32
+    check group.state{} == asStopped
+    check scheduler.animationCount == 0
+
+  test "selector clock queues ticks and scheduler drains them locally":
+    let
+      scheduler = newAnimationScheduler(frameInterval = initDuration(milliseconds = 2))
+      animation = newValueAnimation[float32](
+        0.0'f32, 1.0'f32, duration = initDuration(milliseconds = 20)
+      )
+      clock = newAnimationSchedulerClock(frameInterval = initDuration(milliseconds = 2))
+
+    check scheduler.startAnimation(animation)
+    clock.start()
+    try:
+      for _ in 0 ..< 50:
+        discard clock.pollQueuedTicks()
+        if clock.pendingTickCount > 0:
+          break
+        sleep(2)
+
+      check clock.pendingTickCount > 0
+      check animation.currentTime{} == initDuration()
+
+      let drained = scheduler.drain(clock)
+      check drained > 0
+      check animation.currentTime{}.inNanoseconds > 0
+    finally:
+      clock.stop()
 
   test "animation groups report natural duration from children":
     let
