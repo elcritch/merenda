@@ -20,8 +20,8 @@ application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid/tab/split containers, buttons, switch/radio
 buttons, sliders, progress indicators, text fields, combo boxes, box/group
 containers, scroll views, popup lists, table views, outline views, cascading
-column views, basic text editing lifecycle, action dispatch, pure Nim
-panel/dialog shells, document-controller infrastructure, AppKit-style in-process
+column views, basic text editing lifecycle, action dispatch, reusable pure Nim
+panel/dialog views, document-controller infrastructure, AppKit-style in-process
 pasteboard/dragging foundations, and a pure Nim accessibility metadata and
 protocol core.
 
@@ -39,6 +39,11 @@ selector dispatch rather than public callback hooks. Widget mutation should stay
 routed through existing NimKit setters so layout, display invalidation,
 responder state, and accessibility notifications remain the single source of
 truth.
+
+The pure Nim panel/dialog contracts are now reusable enough to support modal
+and sheet workflows before native bridges land: alert button response mapping,
+accessory views, open/save validation, live panel button validation, and
+document-controller open/save integration are covered in tests and examples.
 
 ## Recently Completed
 
@@ -242,6 +247,15 @@ truth.
 - Added the first pure Nim panel/dialog shells on top of the modal/session
   model: `Panel`, `Alert`, `OpenPanel`, and `SavePanel` construction plus modal
   and sheet entry points. Native panel bridges remain a later backend task.
+- Hardened the pure Nim panel/dialog layer into reusable views: `Alert`,
+  `OpenPanel`, and `SavePanel` now build real content views with action buttons,
+  accessory views, response mapping, live file-type validation, selected URL
+  helpers, and modal preparation hooks; `DocumentController` owns configurable
+  open/save panels and can route panel selections through document open/save
+  flows; `Application.runForFrames` now preserves an already-running outer app
+  loop so nested modal pumps do not close demos after a panel action; and
+  `examples/panel_demo.nim` exercises both direct panels and
+  document-controller-backed panels.
 - Added `SplitView` as a resizable container primitive with horizontal and
   vertical pane arrangements, themed dividers, divider hit testing and drag
   tracking, cursor rects, min/max pane constraints, collapsible panes,
@@ -313,8 +327,9 @@ truth.
   `atlas-run tests tests/tnimkit_documents.nim`,
   `atlas-run tests tests/tnimkit_application.nim`, and
   `atlas-run tests tests/tnimkit_outlineviews.nim`.
-- The current box and pure Nim panel/dialog shell coverage lives in
-  `tests/tnimkit_boxes.nim` and `tests/integration_application.nim`.
+- The current box and pure Nim panel/dialog coverage lives in
+  `tests/tnimkit_boxes.nim`, `tests/integration_application.nim`,
+  `tests/tnimkit_documents.nim`, and `examples/panel_demo.nim`.
 - The first `SplitView` pass was checked with
   `atlas-run tests tests/tnimkit_splitviews.nim tests/tnimkit_theme.nim tests/tnimkit_rendering.nim`,
   `atlas-run tests --compile-only examples/splitview_demo.nim`, and a full
@@ -332,6 +347,11 @@ truth.
   `atlas-run tests tnimkit_animations`,
   `atlas-run tests --compile-only 'examples/*.nim'`, and a full
   `atlas-run tests` run passing `37/37`.
+- The panel/dialog hardening pass was checked with
+  `nim c examples/panel_demo.nim`, `nim r tests/integration_application.nim`,
+  `atlas-run tests nimkit_documents.nim`,
+  `atlas-run tests nimkit_animations.nim`, and a full `atlas-run tests` run
+  passing `37/37`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -340,10 +360,10 @@ truth.
 
 ### OpenStep Compatibility Widgets
 
-After the remaining animation transaction and example passes land, add the next
-missing OpenStep/AppKit-style widgets in an order that hardens shared control,
-cell, layout, responder, drawing, accessibility, and animation behavior instead
-of producing isolated one-off controls.
+With the first animation and pure Nim panel/dialog hardening passes landed, add
+the next missing OpenStep/AppKit-style widgets in an order that hardens shared
+control, cell, layout, responder, drawing, accessibility, and animation behavior
+instead of producing isolated one-off controls.
 
 Recommended implementation order:
 
@@ -358,15 +378,9 @@ Recommended implementation order:
 3. `ColorWell`
    - Add color swatch rendering, target/action on color changes, pasteboard
      color payload integration, and drag affordances.
-   - Stage a full color panel separately after the well and panel/session
-     contracts are stronger.
-4. Panels and dialogs hardening
-   - Expand the existing pure Nim `Panel`, `Alert`, `OpenPanel`, and `SavePanel`
-     shells into real reusable views with buttons, accessory views, result
-     mapping, file-type validation, and document-controller integration.
-   - Native bridges can come later; first keep the pure Nim modal, sheet,
-     responder, and document-controller contracts stable.
-5. CascadingView hardening
+   - Stage a full color panel separately after the color well proves the
+     pasteboard, target/action, and modal accessory-view contracts.
+4. CascadingView hardening
    - Keep the new Miller Column implementation aligned with table/scroll
      behavior as those primitives evolve: richer column keyboard movement,
      persisted selection paths, drag/drop between hierarchy levels, and optional
