@@ -187,6 +187,7 @@ suite "nimkit controls":
     stepper.action = action
 
     check stepper.value == 4.0
+    check stepper.intrinsicContentSize().height == 24.0
     check stepper.incrementValue()
     check stepper.value == 6.0
     check actionCount == 1
@@ -220,7 +221,7 @@ suite "nimkit controls":
       window = newWindow("Stepper tracking", frame = initRect(0, 0, 120, 80))
       root = newView(frame = initRect(0, 0, 120, 80))
       stepper =
-        newStepper(0.0, 10.0, 4.0, increment = 2.0, frame = initRect(10, 10, 28, 32))
+        newStepper(0.0, 10.0, 4.0, increment = 2.0, frame = initRect(10, 10, 56, 24))
       action = actionSelector("stepperTrackingAction")
 
     var actionCount = 0
@@ -233,10 +234,10 @@ suite "nimkit controls":
     root.addSubview(stepper)
     window.setContentView(root)
 
-    check stepper.partAtPoint(initPoint(14.0, 6.0)) == spIncrement
-    check stepper.partAtPoint(initPoint(14.0, 24.0)) == spDecrement
+    check stepper.partAtPoint(initPoint(14.0, 12.0)) == spDecrement
+    check stepper.partAtPoint(initPoint(42.0, 12.0)) == spIncrement
 
-    check window.mouseDownAt(initPoint(24, 18), timestamp = 10.0)
+    check window.mouseDownAt(initPoint(52, 22), timestamp = 10.0)
     check stepper.value == 6.0
     check stepper.pressedPart == spIncrement
     check stepper.repeatPart == spIncrement
@@ -250,7 +251,7 @@ suite "nimkit controls":
     check not stepper.continueRepeat(timestamp = 10.4)
     check actionCount == 1
 
-    check window.mouseDraggedAt(initPoint(24, 18), timestamp = 10.6)
+    check window.mouseDraggedAt(initPoint(52, 22), timestamp = 10.6)
     check stepper.pressedPart == spIncrement
     check stepper.continueRepeat(timestamp = 10.8)
     check stepper.value == 8.0
@@ -258,7 +259,7 @@ suite "nimkit controls":
     check stepper.lastRepeatAt == 10.8
     check actionCount == 2
 
-    check window.mouseUpAt(initPoint(24, 18), timestamp = 11.0)
+    check window.mouseUpAt(initPoint(52, 22), timestamp = 11.0)
     check stepper.pressedPart == spNone
     check stepper.repeatPart == spNone
     check not stepper.repeatActive()

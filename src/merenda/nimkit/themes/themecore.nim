@@ -39,6 +39,7 @@ type
     srScrollView
     srScroller
     srButton
+    srStepper
     srCheckBox
     srRadioButton
     srSwitch
@@ -667,6 +668,11 @@ func specificity(selector: StyleSelector): int =
   if selector.id.len > 0:
     result += 10000
 
+func inheritedStyleRole(role: StyleRole): StyleRole =
+  case role
+  of srStepper: srButton
+  else: role
+
 proc stylePatch*(theme: var Theme, selector: StyleSelector): StylePatch =
   for rule in theme.rules:
     if rule.selector == selector:
@@ -997,10 +1003,10 @@ proc ruleValue(
   result = fallback
   var bestSpecificity = -1
   for rule in theme.rules:
-    if rule.selector.matches(context):
+    template applyRule(matchContext: StyleContext, roleRank: int) =
       var value: StyleValue
-      if rule.patch.getStyle(key, value):
-        let ruleSpecificity = rule.selector.specificity()
+      if rule.selector.matches(matchContext) and rule.patch.getStyle(key, value):
+        let ruleSpecificity = rule.selector.specificity() * 10 + roleRank
         if ruleSpecificity >= bestSpecificity:
           var resolved: StyleValue
           if theme.tokens.resolveValue(value, resolved):
@@ -1009,6 +1015,13 @@ proc ruleValue(
           elif value.kind != svToken:
             result = value
             bestSpecificity = ruleSpecificity
+
+    let inheritedRole = context.role.inheritedStyleRole()
+    if inheritedRole != context.role:
+      var inheritedContext = context
+      inheritedContext.role = inheritedRole
+      applyRule(inheritedContext, 0)
+    applyRule(context, 1)
 
 proc colorRule(
     theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color

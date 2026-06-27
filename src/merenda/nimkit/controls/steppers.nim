@@ -212,18 +212,18 @@ proc formattedValue*(stepper: Stepper): string =
   else:
     stepper.formatValue(stepper.xValue)
 
-func incrementPartRect(bounds: Rect): Rect =
+func decrementPartRect(bounds: Rect): Rect =
   initRect(
-    bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height * 0.5'f32
+    bounds.origin.x, bounds.origin.y, bounds.size.width * 0.5'f32, bounds.size.height
   )
 
-func decrementPartRect(bounds: Rect): Rect =
-  let topHeight = bounds.size.height * 0.5'f32
+func incrementPartRect(bounds: Rect): Rect =
+  let leftWidth = bounds.size.width * 0.5'f32
   initRect(
-    bounds.origin.x,
-    bounds.origin.y + topHeight,
-    bounds.size.width,
-    bounds.size.height - topHeight,
+    bounds.origin.x + leftWidth,
+    bounds.origin.y,
+    bounds.size.width - leftWidth,
+    bounds.size.height,
   )
 
 proc partRect*(stepper: Stepper, part: StepperPart): Rect =
@@ -249,7 +249,7 @@ proc partAtPoint*(stepper: Stepper, point: Point): StepperPart =
     spNone
 
 proc stepperStyleContext(stepper: Stepper, states: set[WidgetState]): StyleContext =
-  controlStyle(srButton, states, id = stepper.styleId, classes = stepper.styleClasses)
+  controlStyle(srStepper, states, id = stepper.styleId, classes = stepper.styleClasses)
 
 proc stepperCellSize(cell: StepperCell): Size =
   let view = cell.controlView()
@@ -258,11 +258,14 @@ proc stepperCellSize(cell: StepperCell): Size =
       initAppearance()
     else:
       view.effectiveAppearance()
-  let style = appearance.resolveButtonStyle(controlStyle(srButton))
+  let style = appearance.resolveButtonStyle(controlStyle(srStepper))
   let contentSize = textNaturalSize("+", style.text)
   initSize(
-    max(24.0'f32, contentSize.width + style.text.insets.horizontal + 8.0'f32),
-    max(28.0'f32, style.minSize.height),
+    max(
+      style.minSize.width,
+      (contentSize.width + style.text.insets.horizontal + 8.0'f32) * 2.0'f32,
+    ),
+    style.minSize.height,
   )
 
 protocol DefaultStepperCellMeasurement of CellMeasurementProtocol:
@@ -296,40 +299,57 @@ proc drawStepperSegment(
     states = stepper.stepperSegmentStates(part)
     style = context.appearance.resolveButtonStyle(stepper.stepperStyleContext(states))
     rect = stepper.partRect(part)
-    frame = context.renderRectFor(rect)
-    radius = min(style.box.cornerRadius, max(rect.size.height * 0.4'f32, 2.0'f32))
-    chrome = chromeContext(style.chrome, crButton, cpFace, style.box.fill, states)
-    root = context.addRenderRectangle(
-      frame,
-      context.appearance.chromeFill(chrome),
-      style.box.borderColor,
-      style.box.borderWidth,
-      radius,
-      style.box.shadows,
-      maskContent = true,
+    textStyle = TextStyle(
+      color: style.text.color,
+      insets: insets(0.0),
+      fontName: style.text.fontName,
+      fontSize: max(style.text.fontSize, min(22.0'f32, rect.size.height - 6.0'f32)),
     )
-  context.drawChromeExtras(chrome, initChromeExtras(root, frame, cornerRadius = radius))
-
-  let textStyle = TextStyle(
-    color: style.text.color,
-    insets: insets(0.0),
-    fontName: style.text.fontName,
-    fontSize: min(style.text.fontSize, max(9.0'f32, rect.size.height - 4.0'f32)),
-  )
   context.addText(rect, label, textStyle, alignment = taCenter)
 
 protocol DefaultStepperDrawing of ViewDrawingProtocol:
   method draw(stepper: Stepper, context: DrawContext) =
-    stepper.drawStepperSegment(context, spIncrement, "+")
-    stepper.drawStepperSegment(context, spDecrement, "-")
-
     let
       bounds = stepper.bounds()
-      separatorY = bounds.origin.y + bounds.size.height * 0.5'f32 - 0.5'f32
       style = context.appearance.resolveButtonStyle(
         stepper.stepperStyleContext(stepper.widgetStateSet())
       )
-      separator = initRect(bounds.origin.x, separatorY, bounds.size.width, 1.0'f32)
+      frame = context.renderRectFor(bounds)
+      radius = min(style.box.cornerRadius, max(bounds.size.height * 0.5'f32, 2.0'f32))
+      chrome = chromeContext(
+        style.chrome, crButton, cpFace, style.box.fill, stepper.widgetStateSet()
+      )
+      root = context.addRenderRectangle(
+        frame,
+        context.appearance.chromeFill(chrome),
+        style.box.borderColor,
+        style.box.borderWidth,
+        radius,
+        style.box.shadows,
+        maskContent = true,
+      )
+    context.drawChromeExtras(
+      chrome, initChromeExtras(root, frame, cornerRadius = radius)
+    )
+
+    if stepper.xPressedPart != spNone:
+      let
+        pressedStates = stepper.stepperSegmentStates(stepper.xPressedPart)
+        pressedStyle = context.appearance.resolveButtonStyle(
+          stepper.stepperStyleContext(pressedStates)
+        )
+        pressedChrome = chromeContext(
+          pressedStyle.chrome, crButton, cpFace, pressedStyle.box.fill, pressedStates
+        )
+      discard context.addRenderRectangle(
+        root,
+        context.renderRectFor(stepper.partRect(stepper.xPressedPart)),
+        context.appearance.chromeFill(pressedChrome),
+      )
+
+    let
+      separatorX = bounds.origin.x + bounds.size.width * 0.5'f32 - 0.5'f32
+      separator = initRect(separatorX, bounds.origin.y, 1.0'f32, bounds.size.height)
     discard context.addRenderRectangle(
       context.renderRectFor(separator),
       style.box.borderColor,
@@ -337,6 +357,9 @@ protocol DefaultStepperDrawing of ViewDrawingProtocol:
       0.0'f32,
       0.0'f32,
     )
+
+    stepper.drawStepperSegment(context, spDecrement, "-")
+    stepper.drawStepperSegment(context, spIncrement, "+")
 
     if stepper.isFocusVisible:
       context.addFocusRing(context.renderRectFor(bounds), style.box)
