@@ -18,7 +18,7 @@ Detailed layout, constraint, invalidation, and solver notes live in
 NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid/tab/split containers, buttons, switch/radio
-buttons, sliders, progress indicators, text fields, combo boxes, box/group
+buttons, sliders, steppers, progress indicators, text fields, combo boxes, box/group
 containers, scroll views, popup lists, table views, outline views, cascading
 column views, basic text editing lifecycle, action dispatch, reusable pure Nim
 panel/dialog views, document-controller infrastructure, AppKit-style in-process
@@ -269,6 +269,12 @@ document-controller open/save integration are covered in tests and examples.
   mouse-drag and keyboard adjustment, themed track/knob/focus rendering,
   target/action dispatch, accessibility value semantics, and coverage in the
   controls, preferences, and inspector examples.
+- Added `Stepper` as a compact value/action control with min/max/increment
+  clamping, optional wrapping, deterministic press-and-hold repeat state,
+  formatter hooks, mouse and keyboard adjustment, target/action dispatch,
+  accessibility increment/decrement actions, and a text-field-paired
+  `examples/stepper_demo.nim`; `examples/controls_showcase.nim` now includes a
+  compact text-field/stepper pairing too.
 - Added `CascadingView` with a Miller Column preset on top of scroll/table row
   primitives: item/path identity, static item and protocol-backed data sources,
   delegate selection/activation hooks, keyboard navigation, column reloads,
@@ -338,6 +344,9 @@ document-controller open/save integration are covered in tests and examples.
   `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
   `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
   `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
+- The Stepper pass was checked with `atlas-run tests nimkit_controls.nim`,
+  `nim c examples/stepper_demo.nim`, and
+  `nim c examples/controls_showcase.nim`.
 - The first animation core, interpolation/timing, scheduler/threading, and
   property animation surface passes are covered by
   `tests/tnimkit_animations.nim`; umbrella export and affected widget fallout
@@ -360,27 +369,23 @@ document-controller open/save integration are covered in tests and examples.
 
 ### OpenStep Compatibility Widgets
 
-With the first animation and pure Nim panel/dialog hardening passes landed, add
-the next missing OpenStep/AppKit-style widgets in an order that hardens shared
-control, cell, layout, responder, drawing, accessibility, and animation behavior
-instead of producing isolated one-off controls.
+With the first animation, pure Nim panel/dialog hardening, and Stepper passes
+landed, add the next missing OpenStep/AppKit-style widgets in an order that
+hardens shared control, cell, layout, responder, drawing, accessibility, and
+animation behavior instead of producing isolated one-off controls.
 
 Recommended implementation order:
 
-1. `Stepper`
-   - Add min/max/increment/wrap behavior, press-and-hold repeat tracking, value
-     formatting hooks, and target/action dispatch.
-   - Pair with text fields in examples to test AppKit-style value editing.
-2. `Matrix`
+1. `Matrix`
    - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
      selection modes, keyboard movement, and cell reuse.
    - Use this to further harden the control/cell split.
-3. `ColorWell`
+2. `ColorWell`
    - Add color swatch rendering, target/action on color changes, pasteboard
      color payload integration, and drag affordances.
    - Stage a full color panel separately after the color well proves the
      pasteboard, target/action, and modal accessory-view contracts.
-4. CascadingView hardening
+3. CascadingView hardening
    - Keep the new Miller Column implementation aligned with table/scroll
      behavior as those primitives evolve: richer column keyboard movement,
      persisted selection paths, drag/drop between hierarchy levels, and optional
