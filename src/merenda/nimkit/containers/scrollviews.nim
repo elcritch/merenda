@@ -1,5 +1,6 @@
 import sigils/core
 
+import ../app/animations
 import ../accessibility/accessibilityprotocols
 import ../drawing
 import ./scrollergeometry
@@ -78,6 +79,7 @@ func normalizedInsets(insets: EdgeInsets): EdgeInsets =
   )
 
 proc contentOffset*(scrollView: ScrollView): Point
+proc `contentOffset=`*(scrollView: ScrollView, offset: Point)
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect
 proc verticalScrollerRect*(scrollView: ScrollView): Rect
 proc drawScroller*(context: DrawContext, track, knob: Rect, style: ScrollViewStyle)
@@ -106,6 +108,13 @@ proc scrollerStyleContext(scroller: Scroller): StyleContext =
       id = scroller.xScrollView.styleId(),
       classes = scroller.xScrollView.styleClasses(),
     )
+
+protocol ScrollTransactionAnimProtocol:
+  method animContentOffset*(offset: Point)
+
+protocol ScrollTransactionAnim of ScrollTransactionAnimProtocol:
+  method animContentOffset(scrollView: ScrollView, offset: Point) =
+    scrollView.contentOffset = offset
 
 protocol DefaultScrollViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(scrollView: ScrollView): AccessibilityRole =
@@ -482,6 +491,13 @@ proc contentOffset*(scrollView: ScrollView): Point =
 proc `contentOffset=`*(scrollView: ScrollView, offset: Point) =
   scrollView.tile()
   let nextOffset = scrollView.clampContentOffset(offset)
+  let oldOffset = scrollView.contentOffset()
+  if oldOffset == nextOffset:
+    return
+  discard scrollView.withProtocol(ScrollTransactionAnim)
+  discard recordPropertyAnimation(
+    DynamicAgent(scrollView), animContentOffset(), oldOffset, nextOffset
+  )
   scrollView.xClipView.scrollToPoint(nextOffset)
 
 proc scrollTo*(scrollView: ScrollView, offset: Point) =

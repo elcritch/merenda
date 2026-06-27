@@ -1,5 +1,6 @@
 import std/math
 
+import ../app/animations
 import ../accessibility/accessibility
 import ../drawing
 import ../foundation/selectors
@@ -130,7 +131,15 @@ protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
     if indicator.isNil: 0.0'f32 else: indicator.xValue
 
   method setValue(indicator: ProgressIndicator, value: float32) =
-    indicator.setProgressValue(value)
+    if indicator.isNil:
+      return
+    let nextValue = indicator.normalizedValue(value)
+    if indicator.xValue == nextValue:
+      return
+    discard recordPropertyAnimation(
+      DynamicAgent(indicator), setValue(), indicator.xValue, nextValue
+    )
+    indicator.setProgressValue(nextValue)
 
   method minValue(indicator: ProgressIndicator): float32 =
     if indicator.isNil: 0.0'f32 else: indicator.xMinValue

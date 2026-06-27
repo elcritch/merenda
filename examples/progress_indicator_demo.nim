@@ -21,41 +21,69 @@ let
   toggleAction = actionSelector("progressToggle")
   resetAction = actionSelector("progressReset")
 
+var indeterminateAnimation: Animation
+
 proc updateStatus() =
   status.text =
     "Determinate: " & $int(determinate.value) & "%   Indeterminate: " &
     (if indeterminateBar.animating: "running" else: "stopped")
 
-proc updateAnimationFrame() =
-  indeterminateBar.stepAnimation()
-  spinner.stepAnimation()
+proc newPhaseAnimation(indicator: ProgressIndicator): PropertyAnimation[float32] =
+  result = newPropertyAnimation[float32](
+    DynamicAgent(indicator),
+    setAnimationPhase(),
+    indicator.animationPhase,
+    indicator.animationPhase + 1.0'f32,
+    duration = 900.ms,
+  )
+  result.loopCount = -1
+
+proc startIndeterminateAnimation() =
+  if not indeterminateAnimation.isNil:
+    discard app.stopAnimation(indeterminateAnimation)
+  indeterminateAnimation = newParallelAnimationGroup(
+    [
+      Animation(indeterminateBar.newPhaseAnimation()),
+      Animation(spinner.newPhaseAnimation()),
+    ]
+  )
+  discard app.startAnimation(indeterminateAnimation)
+
+proc stopIndeterminateAnimation() =
+  if indeterminateAnimation.isNil:
+    return
+  discard app.stopAnimation(indeterminateAnimation)
+  indeterminateAnimation = nil
 
 proc onAdvance(sender: DynamicAgent) =
   discard sender
   determinate.incrementBy(10.0)
   if determinate.value >= determinate.maxValue:
     determinate.value = determinate.minValue
-  updateAnimationFrame()
   updateStatus()
 
 proc onToggle(sender: DynamicAgent) =
   discard sender
   if indeterminateBar.animating:
+    stopIndeterminateAnimation()
     indeterminateBar.stopAnimation()
     spinner.stopAnimation()
     toggleButton.title = "Start"
   else:
     indeterminateBar.startAnimation()
     spinner.startAnimation()
+    startIndeterminateAnimation()
     toggleButton.title = "Stop"
-  updateAnimationFrame()
   updateStatus()
 
 proc onReset(sender: DynamicAgent) =
   discard sender
+  stopIndeterminateAnimation()
   determinate.value = 35.0
   indeterminateBar.animationPhase = 0.0
   spinner.animationPhase = 0.0
+  if indeterminateBar.animating:
+    startIndeterminateAnimation()
   updateStatus()
 
 indeterminateBar.indeterminate = true

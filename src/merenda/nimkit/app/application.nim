@@ -9,6 +9,7 @@ import ../foundation/selectors as nimkitSelectors
 import ../themes
 import ../foundation/types
 import ./userdefaults
+import ./animations
 import ../app/windows
 
 type
@@ -50,6 +51,8 @@ type
     xTerminating: bool
     xModalSessions: seq[ModalSession]
     xUserDefaults: UserDefaults
+    xAnimationScheduler: AnimationScheduler
+    xAnimationClock: AnimationSchedulerClock
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -67,6 +70,7 @@ proc updateWindowsMenu*(app: Application)
 proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
+proc drainAnimations*(app: Application): int {.discardable.}
 proc setKeyWindow*(app: Application, window: Window)
 proc setMainWindow*(app: Application, window: Window)
 proc noteWindowOrderedFront(app: Application, window: Window)
@@ -176,6 +180,56 @@ proc userDefaults*(app: Application): UserDefaults =
   if app.xUserDefaults.isNil:
     app.xUserDefaults = sharedUserDefaults()
   app.xUserDefaults
+
+proc animationScheduler*(app: Application): AnimationScheduler =
+  if app.isNil:
+    return nil
+  if app.xAnimationScheduler.isNil:
+    app.xAnimationScheduler = newAnimationScheduler()
+  app.xAnimationScheduler
+
+proc animationClock*(app: Application): AnimationSchedulerClock =
+  if app.isNil:
+    return nil
+  if app.xAnimationClock.isNil:
+    app.xAnimationClock = newAnimationSchedulerClock()
+  app.xAnimationClock
+
+proc startAnimationClock*(app: Application) =
+  if app.isNil:
+    return
+  let clock = app.animationClock()
+  if not clock.isNil and not clock.isRunning:
+    clock.start()
+
+proc stopAnimationClock*(app: Application) =
+  if app.isNil or app.xAnimationClock.isNil:
+    return
+  app.xAnimationClock.stop()
+
+proc startAnimation*(app: Application, animation: Animation): bool {.discardable.} =
+  let scheduler = app.animationScheduler()
+  if scheduler.isNil:
+    return false
+  result = scheduler.startAnimation(animation)
+  if result and scheduler.animationCount > 0:
+    app.startAnimationClock()
+
+proc stopAnimation*(
+    app: Application, animation: Animation, finished = false
+): bool {.discardable.} =
+  if app.isNil or app.xAnimationScheduler.isNil:
+    return false
+  result = app.xAnimationScheduler.stopAnimation(animation, finished)
+  if app.xAnimationScheduler.animationCount == 0:
+    app.stopAnimationClock()
+
+proc drainAnimations*(app: Application): int {.discardable.} =
+  if app.isNil or app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
+    return 0
+  result = app.xAnimationScheduler.drain(app.xAnimationClock)
+  if app.xAnimationScheduler.animationCount == 0:
+    app.stopAnimationClock()
 
 proc hasAppearance*(app: Application): bool =
   (not app.isNil) and app.xHasAppearance
@@ -672,6 +726,7 @@ proc runForFrames*(app: Application, frames: Natural): int =
     return 0
   app.xRunning = true
   while app.xRunning:
+    discard app.drainAnimations()
     var activeWindows = 0
     var removedWindow = false
     var idx = 0
@@ -705,6 +760,7 @@ proc runForFrames*(app: Application, frames: Natural): int =
 proc run*(app: Application) =
   app.xRunning = true
   while app.xRunning:
+    discard app.drainAnimations()
     var activeWindows = 0
     var removedWindow = false
     var idx = 0
@@ -731,6 +787,7 @@ proc run*(app: Application) =
       break
     sleep(8)
   app.xRunning = false
+  app.stopAnimationClock()
 
 proc stop*(app: Application) =
   app.xRunning = false

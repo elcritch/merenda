@@ -3,6 +3,7 @@ import std/[options, strutils]
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
+import ../app/animations
 import ../app/windows
 import ../controls/controls
 import ../drawing
@@ -73,6 +74,9 @@ proc applySelectedPath(view: CascadingView, path: openArray[string])
 proc focusColumnRelative(view: CascadingView, delta: int): bool
 proc scrollColumnToVisible(view: CascadingView, column: int)
 proc syncCascadingStyle(view: CascadingView)
+proc `columnWidth=`*(view: CascadingView, width: float32)
+proc `minColumnWidth=`*(view: CascadingView, width: float32)
+proc `columnSpacing=`*(view: CascadingView, spacing: float32)
 
 protocol CascadingDataSource {.selectorScope: protocol.}:
   method cascadingNumberOfChildren*(
@@ -126,6 +130,21 @@ protocol CascadingSelectionProtocol:
 protocol CascadingReloadProtocol:
   method reloadViewData*()
   method reloadViewColumn*(column: int)
+
+protocol CascadingTransactionAnimProtocol:
+  method animColumnWidthValue*(width: float32)
+  method animMinColumnWidthValue*(width: float32)
+  method animColumnSpacingValue*(spacing: float32)
+
+protocol CascadingTransactionAnim of CascadingTransactionAnimProtocol:
+  method animColumnWidthValue(view: CascadingView, width: float32) =
+    view.columnWidth = width
+
+  method animMinColumnWidthValue(view: CascadingView, width: float32) =
+    view.minColumnWidth = width
+
+  method animColumnSpacingValue(view: CascadingView, spacing: float32) =
+    view.columnSpacing = spacing
 
 proc initCascadingItem*(
     identifier: string, title: string, parentIdentifier = "", leaf = false
@@ -183,6 +202,10 @@ proc `columnWidth=`*(view: CascadingView, width: float32) =
   let nextWidth = max(width, view.xMinColumnWidth)
   if view.xColumnWidth == nextWidth:
     return
+  discard view.withProtocol(CascadingTransactionAnim)
+  discard recordPropertyAnimation(
+    DynamicAgent(view), animColumnWidthValue(), view.xColumnWidth, nextWidth
+  )
   view.xColumnWidth = nextWidth
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
@@ -196,6 +219,10 @@ proc `minColumnWidth=`*(view: CascadingView, width: float32) =
   let nextWidth = max(width, 1.0'f32)
   if view.xMinColumnWidth == nextWidth:
     return
+  discard view.withProtocol(CascadingTransactionAnim)
+  discard recordPropertyAnimation(
+    DynamicAgent(view), animMinColumnWidthValue(), view.xMinColumnWidth, nextWidth
+  )
   view.xMinColumnWidth = nextWidth
   view.xColumnWidth = max(view.xColumnWidth, nextWidth)
   view.setNeedsLayout()
@@ -210,6 +237,10 @@ proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
   let nextSpacing = max(spacing, 0.0'f32)
   if view.xColumnSpacing == nextSpacing:
     return
+  discard view.withProtocol(CascadingTransactionAnim)
+  discard recordPropertyAnimation(
+    DynamicAgent(view), animColumnSpacingValue(), view.xColumnSpacing, nextSpacing
+  )
   view.xColumnSpacing = nextSpacing
   view.setNeedsLayout()
   view.setNeedsDisplay(true)

@@ -1,5 +1,6 @@
 import std/[algorithm, macros]
 
+import ../app/animations
 import ../foundation/selectors
 import ../themes
 import ../drawing/drawing
@@ -26,6 +27,8 @@ protocol ViewProtocol from View:
       self.autoresizingMaskConstraints = false
     if self.xFrame == nextFrame:
       return
+    discard
+      recordPropertyAnimation(DynamicAgent(self), setFrame(), self.xFrame, nextFrame)
     self.xFrame = nextFrame
     self.xBounds = initRect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)
@@ -39,6 +42,8 @@ protocol ViewProtocol from View:
   method setBounds(self: View, bounds: Rect) =
     if self.xBounds == bounds:
       return
+    discard
+      recordPropertyAnimation(DynamicAgent(self), setBounds(), self.xBounds, bounds)
     self.xBounds = initRect(bounds.origin, bounds.size)
     emit self.layoutInputChanged(lirBounds)
     emit self.geometryDidChange()

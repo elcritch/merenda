@@ -429,6 +429,86 @@ suite "NimKit animations":
     finally:
       clock.stop()
 
+  test "application drains scheduler clock ticks during run loop frames":
+    let
+      app = newApplication()
+      view = newView(frame = initRect(0.0, 0.0, 100.0, 40.0))
+      animation =
+        newFrameAnimation(view, initRect(20.0, 10.0, 140.0, 60.0), duration = 20.ms)
+
+    app.animationClock().frameInterval = 2.ms
+    check app.startAnimation(animation)
+    try:
+      for _ in 0 ..< 50:
+        discard app.animationClock().pollQueuedTicks()
+        if app.animationClock().pendingTickCount > 0:
+          break
+        sleep(2)
+
+      check app.animationClock().pendingTickCount > 0
+      check app.runForFrames(1) == 1
+      check animation.currentTime{}.inNanoseconds > 0
+      check view.frame() != initRect(0.0, 0.0, 100.0, 40.0)
+    finally:
+      discard app.stopAnimation(animation)
+      app.stopAnimationClock()
+
+  test "transaction template captures view property assignments":
+    let
+      scheduler = newAnimationScheduler()
+      view = newView(frame = initRect(0.0, 0.0, 100.0, 40.0))
+
+    let group = animationGroup(duration = 100.ms, curve = acEaseInOut):
+      view.frame = initRect(10.0, 20.0, 140.0, 80.0)
+      view.alphaValue = 0.5'f32
+      view.alphaValue = 0.25'f32
+
+    check group.children.len == 2
+    check view.frame() == initRect(10.0, 20.0, 140.0, 80.0)
+    checkClose(view.alphaValue(), 0.25'f32)
+
+    check scheduler.startAnimation(group)
+    check view.frame() == initRect(0.0, 0.0, 100.0, 40.0)
+    checkClose(view.alphaValue(), 1.0'f32)
+
+    check scheduler.tick(50.ms) == 1
+    check view.frame() == initRect(5.0, 10.0, 120.0, 60.0)
+    checkClose(view.alphaValue(), 0.625'f32)
+
+    check scheduler.tick(50.ms) == 1
+    check view.frame() == initRect(10.0, 20.0, 140.0, 80.0)
+    checkClose(view.alphaValue(), 0.25'f32)
+
+  test "explicit transactions capture control and scroll mutations":
+    let
+      scheduler = newAnimationScheduler()
+      indicator = newProgressIndicator(0.0, 100.0, 25.0)
+      document = newView(frame = initRect(0.0, 0.0, 320.0, 240.0))
+      scrollView =
+        newScrollView(frame = initRect(0.0, 0.0, 120.0, 80.0), documentView = document)
+
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidePolicy = sapNever
+    scrollView.tile()
+
+    discard beginAnimationTransaction(duration = 100.ms, timing = linearTiming())
+    indicator.value = 75.0'f32
+    scrollView.contentOffset = initPoint(40.0, 60.0)
+    let group = commitAnimationTransaction()
+
+    check group.children.len == 2
+    checkClose(indicator.value(), 75.0'f32)
+    check scrollView.contentOffset() == initPoint(40.0, 60.0)
+
+    check scheduler.startAnimation(group)
+    checkClose(indicator.value(), 25.0'f32)
+    check scrollView.contentOffset() == initPoint(0.0, 0.0)
+
+    check scheduler.tick(50.ms) == 1
+    checkClose(indicator.value(), 50.0'f32)
+    check scrollView.contentOffset() == initPoint(20.0, 30.0)
+
   test "animation groups report natural duration from children":
     let
       short = newAnimation(duration = initDuration(milliseconds = 100))
