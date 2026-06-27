@@ -31,14 +31,14 @@ The source tree is now organized around domain modules under
 `merenda/nimkit`; internal code and tests should import the domain modules
 directly when they need a narrower surface.
 
-The first animation core model, interpolation/timing pass, and deterministic
-scheduler/threading pass are now in place. The next implementation should add
-property animation surfaces that write through existing NimKit setters before
-adding transaction-style sugar. Keep animation extension points on methods,
-protocols, and selector dispatch rather than public callback hooks. Widget
-mutation should stay routed through existing NimKit setters so layout, display
-invalidation, responder state, and accessibility notifications remain the
-single source of truth.
+The first animation core model, interpolation/timing pass, deterministic
+scheduler/threading pass, and selector-backed property animation surfaces are
+now in place. The next implementation should add transaction-style sugar on top
+of the explicit animation constructors. Keep animation extension points on
+methods, protocols, and selector dispatch rather than public callback hooks.
+Widget mutation should stay routed through existing NimKit setters so layout,
+display invalidation, responder state, and accessibility notifications remain
+the single source of truth.
 
 ## Recently Completed
 
@@ -282,6 +282,11 @@ single source of truth.
   `AnimationSchedulerClock` bridges a Sigils `threadSelectors` timer through a
   moved ticker actor so selector threads only queue frame deltas while local
   scheduler draining performs NimKit mutations on the caller/UI thread.
+- Added property animation surfaces on top of the selector-backed animation
+  core: `View.frame`, `View.bounds`, `View.alphaValue`, `ScrollView`
+  `contentOffset`, `ProgressIndicator.value`, `SplitView` divider positions,
+  and cascading column metrics now have helper constructors that attach narrow
+  animation protocols and write through the existing public setters.
 
 ## Current Verification
 
@@ -312,9 +317,10 @@ single source of truth.
   `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
   `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
   `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
-- The first animation core, interpolation/timing, and scheduler/threading
-  passes are covered by `tests/tnimkit_animations.nim`; umbrella export fallout
-  was checked with `atlas-run tests nimkit_controls`.
+- The first animation core, interpolation/timing, scheduler/threading, and
+  property animation surface passes are covered by
+  `tests/tnimkit_animations.nim`; umbrella export fallout was checked with
+  `atlas-run tests nimkit_controls`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -329,19 +335,13 @@ Sigils' selector-thread timers without exposing raw thread work to widgets.
 
 Remaining implementation order:
 
-1. Property animation surfaces
-   - Start with `View.frame`, `View.bounds`, `View.alpha`, `ScrollView`
-     `contentOffset`, `ProgressIndicator.value`, and split/cascading column
-     positions where existing setters already express the needed side effects.
-   - On every animation tick, write through the normal public mutation proc and
-     let existing layout/display/accessibility invalidation run naturally.
-2. Cocoa-style transaction sugar
+1. Cocoa-style transaction sugar
    - Add an explicit API first, then a Nim template layer for transaction-style
      usage such as `animationGroup(duration = 180.ms, curve = acEaseInOut):`.
    - Inside a transaction, capture old/new animatable property values and build
      property animations; outside a transaction, property assignments remain
      immediate.
-3. Examples and verification
+2. Examples and verification
    - Add focused tests for manual scheduler progression, easing/interpolation,
      group timing, pause/resume/stop, progress marks, threaded timer delivery,
      and selector-applied property invalidation.
@@ -352,10 +352,10 @@ Remaining implementation order:
 
 ### OpenStep Compatibility Widgets
 
-After the remaining animation property-surface, transaction, and example passes
-land, add the next missing OpenStep/AppKit-style widgets in an order that
-hardens shared control, cell, layout, responder, drawing, accessibility, and
-animation behavior instead of producing isolated one-off controls.
+After the remaining animation transaction and example passes land, add the next
+missing OpenStep/AppKit-style widgets in an order that hardens shared control,
+cell, layout, responder, drawing, accessibility, and animation behavior instead
+of producing isolated one-off controls.
 
 Recommended implementation order:
 
