@@ -815,10 +815,21 @@ proc moveToEndOfLineText*(textView: TextView, extending = false) =
     return
   textView.setCursor(textView.currentVisualLineBounds().last, extending)
 
+proc updateFieldEditorInsets(textView: TextView) =
+  if textView.isNil or not textView.isFieldEditor:
+    return
+  let
+    lineHeight = textNaturalSize("", textView.textStyle()).height
+    extraHeight = max(textView.bounds.size.height - lineHeight, 0.0'f32)
+    topInset = extraHeight / 2.0'f32
+  textView.xTextContainer.insets.top = topInset
+  textView.xTextContainer.insets.bottom = extraHeight - topInset
+
 proc updateTextContainer(textView: TextView) =
   if textView.isNil:
     return
   textView.xTextContainer.size = textView.bounds.size
+  textView.updateFieldEditorInsets()
   textView.syncLayout()
 
 proc textIndexAtPoint*(textView: TextView, point: Point): int =
