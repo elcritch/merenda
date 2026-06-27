@@ -24,7 +24,7 @@ func initSelectionRingStyle*(
     fillColor = initColor(0.0, 0.0, 0.0, 0.0),
     lineWidth = 3.0'f32,
     cornerRadius = 8.0'f32,
-    insets = initEdgeInsets(2.0'f32),
+    insets = insets(2.0'f32),
 ): SelectionRingStyle =
   SelectionRingStyle(
     fillColor: fillColor,

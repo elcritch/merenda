@@ -325,7 +325,7 @@ suite "nimkit text fields":
 
     root.addSubview(layout)
     layout.pinEdges(
-      toGuide = root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
+      toGuide = root.contentLayoutGuide(insets(22.0, 24.0, 0.0, 24.0)),
       edges = {leLeft, leTop, leRight},
     )
     window.setContentView(root)

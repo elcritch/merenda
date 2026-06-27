@@ -136,7 +136,7 @@ suite "nimkit sizing":
     let base = button.intrinsicContentSize()
 
     var appearance = initAppearance()
-    appearance[srButton, StyleTextInsets] = initEdgeInsets(0.0, 24.0)
+    appearance[srButton, StyleTextInsets] = insets(0.0, 24.0)
     appearance[srButton, StyleMinimumSize] = initSize(0.0, 40.0)
     button.appearance = appearance
 
@@ -146,9 +146,7 @@ suite "nimkit sizing":
 
     button.sizeToFit()
     let style = button.effectiveAppearance().resolveButtonStyle(
-        initControlStyleContext(
-          srButton, id = button.styleId, classes = button.styleClasses
-        )
+        controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
       )
     check style.buttonTextRect(button.bounds()).size.width >=
       textNaturalSize("Pad").width
@@ -182,14 +180,14 @@ suite "nimkit sizing":
     combo.needsLayout = false
 
     var appearance = initAppearance()
-    appearance[srButton, StyleTextInsets] = initEdgeInsets(6.0, 26.0)
+    appearance[srButton, StyleTextInsets] = insets(6.0, 26.0)
     appearance[srButton, StyleMinimumSize] = initSize(0.0, 48.0)
     appearance[srCheckBox, StyleIndicatorSize] = 28.0
     appearance[srCheckBox, StyleIndicatorSpacing] = 14.0
-    appearance[srCheckBox, StyleTextInsets] = initEdgeInsets(4.0, 10.0)
-    appearance[srTextField, StyleTextInsets] = initEdgeInsets(5.0, 22.0)
+    appearance[srCheckBox, StyleTextInsets] = insets(4.0, 10.0)
+    appearance[srTextField, StyleTextInsets] = insets(5.0, 22.0)
     appearance[srTextField, StyleMinimumSize] = initSize(120.0, 38.0)
-    appearance[srComboBox, StyleTextInsets] = initEdgeInsets(4.0, 18.0)
+    appearance[srComboBox, StyleTextInsets] = insets(4.0, 18.0)
     appearance[srComboBox, StyleIndicatorSize] = 34.0
     appearance[srComboBox, StyleMinimumSize] = initSize(140.0, 36.0)
     root.appearance = appearance

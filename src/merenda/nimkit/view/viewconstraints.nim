@@ -200,10 +200,10 @@ proc owningView*(guide: LayoutGuide): View =
 proc insets*(guide: LayoutGuide): EdgeInsets =
   guide.xInsets
 
-proc initLayoutGuide*(owningView: View, insets = initEdgeInsets(0.0)): LayoutGuide =
+proc initLayoutGuide*(owningView: View, insets = insets(0.0)): LayoutGuide =
   LayoutGuide(xOwningView: owningView, xInsets: insets)
 
-proc contentLayoutGuide*(view: View, insets = initEdgeInsets(0.0)): LayoutGuide =
+proc contentLayoutGuide*(view: View, insets = insets(0.0)): LayoutGuide =
   initLayoutGuide(view, insets)
 
 proc initXAxisAnchor(
@@ -723,7 +723,7 @@ proc activate*(constraints: openArray[LayoutConstraint])
 proc edgeConstraints*(
     view: View,
     toView: View,
-    insets = initEdgeInsets(0.0),
+    insets = insets(0.0),
     edges = AllLayoutEdges,
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
@@ -747,7 +747,7 @@ proc edgeConstraints*(
 proc pinEdges*(
     view: View,
     toView: View,
-    insets = initEdgeInsets(0.0),
+    insets = insets(0.0),
     edges = AllLayoutEdges,
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] {.discardable.} =
@@ -759,7 +759,7 @@ proc pinEdges*(
 proc edgeConstraints*(
     view: View,
     toGuide: LayoutGuide,
-    insets = initEdgeInsets(0.0),
+    insets = insets(0.0),
     edges = AllLayoutEdges,
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] =
@@ -783,7 +783,7 @@ proc edgeConstraints*(
 proc pinEdges*(
     view: View,
     toGuide: LayoutGuide,
-    insets = initEdgeInsets(0.0),
+    insets = insets(0.0),
     edges = AllLayoutEdges,
     priority = LayoutPriorityRequired,
 ): seq[LayoutConstraint] {.discardable.} =

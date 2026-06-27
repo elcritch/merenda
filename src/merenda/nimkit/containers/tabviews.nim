@@ -58,8 +58,8 @@ proc canHandleTabKeyNavigation(tabView: TabView): bool
 
 proc tabStyle(tabView: TabView): TabViewStyle =
   if tabView.isNil:
-    return initAppearance().resolveTabViewStyle(initControlStyleContext(srTab))
-  tabView.effectiveAppearance().resolveTabViewStyle(initControlStyleContext(srTab))
+    return initAppearance().resolveTabViewStyle(controlStyle(srTab))
+  tabView.effectiveAppearance().resolveTabViewStyle(controlStyle(srTab))
 
 protocol TabViewDelegate {.selectorScope: protocol.}:
   method shouldSelectTabViewItem*(
@@ -224,9 +224,9 @@ proc contentRect*(tabView: TabView): Rect =
 func contentViewInsets(position: TabPosition): EdgeInsets =
   case position
   of tpTop:
-    initEdgeInsets(18.0'f32, 16.0'f32, 14.0'f32, 16.0'f32)
+    insets(18.0'f32, 16.0'f32, 14.0'f32, 16.0'f32)
   of tpBottom:
-    initEdgeInsets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32)
+    insets(14.0'f32, 16.0'f32, 18.0'f32, 16.0'f32)
 
 func contentChromeHeight(
     position: TabPosition, mode: TabViewMode, style: TabViewStyle
@@ -279,9 +279,7 @@ proc tabGroupWidth(tabView: TabView, style: TabViewStyle): float32 =
   if tabView.isNil:
     return
   let textStyle = tabView.effectiveAppearance().resolveTextStyle(
-      initControlStyleContext(srTab),
-      tabTextColor(enabled = true, selected = false),
-      initEdgeInsets(0.0),
+      controlStyle(srTab), tabTextColor(enabled = true, selected = false), insets(0.0)
     )
   for item in tabView.xItems:
     result += item.tabWidth(style, textStyle)
@@ -297,9 +295,7 @@ proc tabRectInBar(tabView: TabView, index: int): Rect =
   let
     style = tabView.tabStyle()
     textStyle = tabView.effectiveAppearance().resolveTextStyle(
-        initControlStyleContext(srTab),
-        tabTextColor(enabled = true, selected = false),
-        initEdgeInsets(0.0),
+        controlStyle(srTab), tabTextColor(enabled = true, selected = false), insets(0.0)
       )
     groupWidth = tabView.tabGroupWidth(style)
   var x =
@@ -630,9 +626,9 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     states.incl ssDisabled
 
   let
-    panelStyleContext = initControlStyleContext(srTabPanel)
+    panelStyleContext = controlStyle(srTabPanel)
     panelFillValue = context.appearance.resolveFill(panelStyleContext, panelFill())
-    tabStyleContext = initControlStyleContext(srTab, states)
+    tabStyleContext = controlStyle(srTab, states)
     tabFillValue = context.appearance.resolveFill(tabStyleContext, panelFillValue)
     tabBorderValue = context.appearance.resolveColor(
       tabStyleContext, StyleBorderColor, tabBorderColor(selected, enabled)
@@ -642,7 +638,7 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     tabViewStyle = context.appearance.resolveTabViewStyle(tabStyleContext)
     tabCornerRadius = tabViewStyle.tabCornerRadius
     tabTextInsets = context.appearance.resolveInsets(
-      tabStyleContext, StyleTextInsets, initEdgeInsets(1.0'f32, 8.0'f32)
+      tabStyleContext, StyleTextInsets, insets(1.0'f32, 8.0'f32)
     )
     tabTextValue = context.appearance.resolveColor(
       tabStyleContext, StyleTextColor, tabTextColor(enabled, selected)
@@ -692,7 +688,7 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   )
   if selected and tabView.isFocusVisible:
     discard context.addRenderRectangle(
-      context.renderRectFor(rect.inset(initEdgeInsets(3.0'f32))),
+      context.renderRectFor(rect.inset(insets(3.0'f32))),
       initColor(0.0, 0.0, 0.0, 0.0),
       initColor(0.25, 0.45, 0.90),
       1.0'f32,
@@ -770,7 +766,7 @@ protocol TabViewDrawing of ViewDrawingProtocol:
   method draw(tabView: TabView, context: DrawContext) =
     let
       content = tabView.contentRect()
-      panelStyleContext = initControlStyleContext(srTabPanel)
+      panelStyleContext = controlStyle(srTabPanel)
       fillValue = context.appearance.resolveFill(panelStyleContext, panelFill())
       borderColor = context.appearance.resolveColor(
         panelStyleContext, StyleBorderColor, panelBorderColor()

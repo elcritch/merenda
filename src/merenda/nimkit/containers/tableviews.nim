@@ -517,8 +517,8 @@ protocol TableViewStateStorageProtocol:
 
 proc tableStyleContext(tableView: TableView): StyleContext =
   if tableView.isNil:
-    return initControlStyleContext(srTableView)
-  initControlStyleContext(
+    return controlStyle(srTableView)
+  controlStyle(
     tableView.xTableRole,
     tableView.widgetStateSet(),
     id = tableView.styleId,
@@ -527,11 +527,11 @@ proc tableStyleContext(tableView: TableView): StyleContext =
 
 proc tableStyle(tableView: TableView): TableViewStyle =
   if tableView.isNil:
-    return initAppearance().resolveTableViewStyle(initControlStyleContext(srTableView))
+    return initAppearance().resolveTableViewStyle(controlStyle(srTableView))
   tableView.effectiveAppearance().resolveTableViewStyle(tableView.tableStyleContext())
 
 proc defaultTableStyle(): TableViewStyle =
-  initAppearance().resolveTableViewStyle(initControlStyleContext(srTableView))
+  initAppearance().resolveTableViewStyle(controlStyle(srTableView))
 
 proc tableRole*(tableView: TableView): StyleRole =
   if tableView.isNil: srTableView else: tableView.xTableRole
@@ -889,16 +889,14 @@ proc tableHeaderChrome(tableView: TableView, context: DrawContext): TableHeaderC
     tableStates = tableView.widgetStateSet()
     tableId = tableView.styleId()
     tableClasses = tableView.styleClasses()
-    headerContext = initControlStyleContext(
-      srTableHeader, tableStates, id = tableId, classes = tableClasses
-    )
-    cellContext = initControlStyleContext(
-      srTableHeaderCell, tableStates, id = tableId, classes = tableClasses
-    )
-    hoveredCellContext = initControlStyleContext(
+    headerContext =
+      controlStyle(srTableHeader, tableStates, id = tableId, classes = tableClasses)
+    cellContext =
+      controlStyle(srTableHeaderCell, tableStates, id = tableId, classes = tableClasses)
+    hoveredCellContext = controlStyle(
       srTableHeaderCell, tableStates + {ssHovered}, id = tableId, classes = tableClasses
     )
-    pressedCellContext = initControlStyleContext(
+    pressedCellContext = controlStyle(
       srTableHeaderCell, tableStates + {ssPressed}, id = tableId, classes = tableClasses
     )
 
@@ -927,7 +925,7 @@ proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
   if tableView.isNil or context.isNil:
     return fill(initColor(0.18, 0.42, 0.88, 0.95))
   context.appearance.resolveFill(
-    initControlStyleContext(
+    controlStyle(
       tableView.xTableRole,
       tableView.widgetStateSet(),
       id = tableView.styleId(),
@@ -2618,7 +2616,7 @@ proc rowItemStyle(
     tableView: TableView, context: DrawContext, states: set[WidgetState]
 ): RowItemStyle =
   context.appearance.resolveRowItemStyle(
-    initControlStyleContext(
+    controlStyle(
       srRowItem, states, id = tableView.styleId(), classes = tableView.styleClasses()
     )
   )
@@ -2718,8 +2716,7 @@ proc syncTableScrollChrome(tableView: TableView) =
   let scrollView = tableView.scrollView()
   if scrollView.isNil:
     return
-  scrollView.scrollerInsets =
-    initEdgeInsets(tableView.tableHeaderHeight(), 0.0, 0.0, 0.0)
+  scrollView.scrollerInsets = insets(tableView.tableHeaderHeight(), 0.0, 0.0, 0.0)
 
 proc detachColumn(column: TableColumn) =
   if column.isNil or column.xTableView.isNil:
@@ -3028,7 +3025,7 @@ proc drawTableRowItem*(
       interactiveFillStates == {} and style.fill.isNone:
     style.fill = some(
       context.appearance.resolveFill(
-        initControlStyleContext(
+        controlStyle(
           tableView.xItemRole,
           row.states,
           id = tableView.styleId(),
@@ -3046,7 +3043,7 @@ proc drawTableRowItem*(
     let
       separatorStates: set[WidgetState] = row.states * {ssDisabled}
       itemStyle = context.appearance.resolveRowItemStyle(
-        initControlStyleContext(
+        controlStyle(
           tableView.xItemRole,
           separatorStates,
           id = tableView.styleId(),
@@ -3071,7 +3068,7 @@ proc naturalSize(tableView: TableView): Size =
     listState = tableView.widgetStateSet()
     itemState = tableView.widgetStateSet()
     listStyle = appearance.resolveTableViewStyle(
-      initControlStyleContext(
+      controlStyle(
         tableView.xTableRole,
         listState,
         id = tableView.styleId(),
@@ -3079,7 +3076,7 @@ proc naturalSize(tableView: TableView): Size =
       )
     )
     itemStyle = appearance.resolveRowItemStyle(
-      initControlStyleContext(
+      controlStyle(
         tableView.xItemRole,
         itemState,
         id = tableView.styleId(),
@@ -3095,9 +3092,8 @@ proc naturalSize(tableView: TableView): Size =
   var
     maxTextWidth = 0.0'f32
     naturalHeight = 0.0'f32
-  let summaryTextStyle = tableView
-    .effectiveAppearance()
-    .resolveRowItemStyle(initControlStyleContext(srRowItem)).text
+  let summaryTextStyle =
+    tableView.effectiveAppearance().resolveRowItemStyle(controlStyle(srRowItem)).text
   for index in 0 ..< tableView.len():
     maxTextWidth = max(
       maxTextWidth,
@@ -3483,13 +3479,11 @@ proc drawTableHeaderCellTitle*(
       column.title(),
       titleRect.size.width,
       context.appearance.resolveTextStyle(
-        initControlStyleContext(srTableHeaderCell),
-        chrome.textColor,
-        initEdgeInsets(0.0),
+        controlStyle(srTableHeaderCell), chrome.textColor, insets(0.0)
       ),
     ),
     context.appearance.resolveTextStyle(
-      initControlStyleContext(srTableHeaderCell), chrome.textColor, initEdgeInsets(0.0)
+      controlStyle(srTableHeaderCell), chrome.textColor, insets(0.0)
     ),
     column.alignment(),
   )
@@ -4254,7 +4248,7 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       classes = tableView.styleClasses()
       focusedState = tableView.widgetStateSet()
       listStyle = context.appearance.resolveTableViewStyle(
-        initControlStyleContext(
+        controlStyle(
           tableView.xTableRole,
           focusedState,
           id = tableView.styleId(),

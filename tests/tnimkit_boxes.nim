@@ -164,7 +164,7 @@ proc newBoxDemoLayoutFixture(): BoxDemoLayoutFixture =
   )
   result.root.addSubview(result.layout)
   result.layout.pinEdges(
-    toGuide = result.root.contentLayoutGuide(initEdgeInsets(22.0, 24.0, 0.0, 24.0)),
+    toGuide = result.root.contentLayoutGuide(insets(22.0, 24.0, 0.0, 24.0)),
     edges = {leLeft, leTop, leRight},
   )
   result.updateBoxDemoStatus()
@@ -220,11 +220,11 @@ suite "nimkit boxes":
 
   test "group boxes compute intrinsic size from title content and theme metrics":
     var appearance = initAppearance()
-    appearance[srBox, StylePadding] = initEdgeInsets(10.0, 12.0, 14.0, 16.0)
+    appearance[srBox, StylePadding] = insets(10.0, 12.0, 14.0, 16.0)
     appearance[srBox, StyleTitleHeight] = 20.0
     appearance[srBox, StyleTitleGap] = 5.0
     appearance[srBox, StyleBorderWidth] = 2.0
-    appearance[srBox, StyleTextInsets] = initEdgeInsets(0.0, 6.0)
+    appearance[srBox, StyleTextInsets] = insets(0.0, 6.0)
 
     let
       box = newBox("Options", frame = initRect(0.0, 0.0, 200.0, 120.0))

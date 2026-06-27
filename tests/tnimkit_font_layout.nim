@@ -67,9 +67,7 @@ suite "nimkit font layout":
         putEnv(NimKitFontEnv, "  HackNerdFont-Regular.ttf  ")
 
         let style = initAppearance().resolveTextStyle(
-            initControlStyleContext(srTextField),
-            initColor(0.0, 0.0, 0.0),
-            initEdgeInsets(0.0),
+            controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
           )
         check style.fontName == "HackNerdFont-Regular.ttf"
     )
@@ -86,9 +84,7 @@ suite "nimkit font layout":
         check override.get().name == "Ubuntu.ttf"
 
         let style = initAppearance().resolveTextStyle(
-            initControlStyleContext(srTextField),
-            initColor(0.0, 0.0, 0.0),
-            initEdgeInsets(0.0),
+            controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
           )
         check style.fontName == "Ubuntu.ttf"
     )
@@ -137,9 +133,7 @@ suite "nimkit font layout":
         putEnv(NimKitFontSizeEnv, "18")
 
         let style = initAppearance().resolveTextStyle(
-            initControlStyleContext(srTextField),
-            initColor(0.0, 0.0, 0.0),
-            initEdgeInsets(0.0),
+            controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
           )
         check style.fontSize == 18.0'f32
         check textNaturalSize("wide", style).height >= 18.0'f32

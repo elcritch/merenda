@@ -27,7 +27,7 @@ suite "nimkit grid views":
 
     grid.spacing[dcol] = 5.0
     grid.spacing[drow] = 7.0
-    grid.edgeInsets = initEdgeInsets(1.0, 2.0, 3.0, 4.0)
+    grid.edgeInsets = insets(1.0, 2.0, 3.0, 4.0)
     grid.addSubview(first, row = 0, col = 0)
     grid.addSubview(second, row = 0, col = 1)
     grid.addSubview(third, row = 1, col = 0)

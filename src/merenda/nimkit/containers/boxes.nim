@@ -32,9 +32,9 @@ proc invalidateBoxMetrics(box: Box) =
 
 proc boxStyleContext(box: Box): StyleContext =
   if box.isNil:
-    initControlStyleContext(srBox)
+    controlStyle(srBox)
   else:
-    initControlStyleContext(
+    controlStyle(
       srBox, box.widgetStateSet(), id = box.styleId, classes = box.styleClasses
     )
 

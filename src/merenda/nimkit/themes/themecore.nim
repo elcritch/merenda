@@ -312,14 +312,14 @@ const
 
 var themeInstallers {.threadvar.}: seq[ThemeInstaller]
 
-func initEdgeInsets*(top, left, bottom, right: float32): EdgeInsets =
+func insets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
 
-func initEdgeInsets*(vertical, horizontal: float32): EdgeInsets =
-  initEdgeInsets(vertical, horizontal, vertical, horizontal)
+func insets*(vertical, horizontal: float32): EdgeInsets =
+  insets(vertical, horizontal, vertical, horizontal)
 
-func initEdgeInsets*(all: float32): EdgeInsets =
-  initEdgeInsets(all, all, all, all)
+func insets*(all: float32): EdgeInsets =
+  insets(all, all, all, all)
 
 func initCornerRadii*(
     topLeft, topRight, bottomLeft, bottomRight: float32
@@ -430,7 +430,7 @@ func initStyleContext*(
 ): StyleContext =
   StyleContext(role: role, states: states, id: id, classes: classes)
 
-func initControlStyleContext*(
+func controlStyle*(
     role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
 ): StyleContext =
   initStyleContext(role, states, id, classes)
@@ -1552,7 +1552,7 @@ proc resolveScrollViewStyle*(theme: Theme, context: StyleContext): ScrollViewSty
     if context.role in {srScroller, srCascadingScroller}:
       context
     else:
-      initControlStyleContext(
+      controlStyle(
         srScroller, context.states, id = context.id, classes = context.classes
       )
   ScrollViewStyle(
@@ -1596,9 +1596,8 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       initColor(0.10, 0.25, 0.46, 1.0),
       cornerRadiusFallback = 14.0,
     ),
-    text: theme.resolveTextStyle(
-      context, initColor(1.0, 1.0, 1.0, 1.0), initEdgeInsets(0.0, 8.0)
-    ),
+    text:
+      theme.resolveTextStyle(context, initColor(1.0, 1.0, 1.0, 1.0), insets(0.0, 8.0)),
     textHighlightColor:
       theme.colorRule(context, StyleTextHighlightColor, initColor(0.0, 0.0, 0.0, 0.0)),
     textShadowColor:
@@ -1617,7 +1616,7 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
     ),
     markColor: theme.colorRule(context, StyleMarkColor, initColor(1.0, 1.0, 1.0, 1.0)),
     text: theme.resolveTextStyle(
-      context, initColor(0.08, 0.09, 0.11, 1.0), initEdgeInsets(0.0, 2.0)
+      context, initColor(0.08, 0.09, 0.11, 1.0), insets(0.0, 2.0)
     ),
     indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
     indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
@@ -1707,11 +1706,11 @@ proc resolveProgressIndicatorStyle*(theme: Theme, context: StyleContext): Slider
 
 proc resolveTabViewStyle*(theme: Theme, context: StyleContext): TabViewStyle =
   let
-    panelContext = initControlStyleContext(srTabPanel)
+    panelContext = controlStyle(srTabPanel)
     minSize = theme.sizeRule(context, StyleMinimumSize, initSize(48.0'f32, 24.0'f32))
     maxSize = theme.sizeRule(context, StyleMaximumSize, initSize(180.0'f32, 0.0'f32))
     segmentSize = theme.sizeRule(context, StyleSegmentSize, initSize(0.0'f32, 20.0'f32))
-    padding = theme.insetsRule(context, StylePadding, initEdgeInsets(0.0'f32, 12.0'f32))
+    padding = theme.insetsRule(context, StylePadding, insets(0.0'f32, 12.0'f32))
     tabHeight = max(minSize.height, 0.0'f32)
   TabViewStyle(
     tabHeight: tabHeight,
@@ -1737,7 +1736,7 @@ proc resolveTextFieldStyle*(
       initColor(0.72, 0.75, 0.80, 1.0),
       cornerRadiusFallback = 6.0,
     ),
-    text: theme.resolveTextStyle(context, textColor, initEdgeInsets(0.0, 6.0)),
+    text: theme.resolveTextStyle(context, textColor, insets(0.0, 6.0)),
     selectionColor:
       theme.colorRule(context, StyleSelectionColor, initColor(0.22, 0.46, 0.84, 0.32)),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
@@ -1755,7 +1754,7 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
       cornerRadiusFallback = 6.0,
     ),
     text: theme.resolveTextStyle(
-      context, initColor(0.08, 0.09, 0.11, 1.0), initEdgeInsets(0.0, 8.0)
+      context, initColor(0.08, 0.09, 0.11, 1.0), insets(0.0, 8.0)
     ),
     arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
     arrowFill: theme.fillRule(
@@ -1816,7 +1815,7 @@ proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
       focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
     ),
     text: theme.resolveTextStyle(
-      context, initColor(0.08, 0.09, 0.11, 1.0), initEdgeInsets(0.0, 6.0)
+      context, initColor(0.08, 0.09, 0.11, 1.0), insets(0.0, 6.0)
     ),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 22.0)),
   )
@@ -1834,9 +1833,9 @@ proc resolveBoxStyle*(theme: Theme, context: StyleContext): BoxStyle =
       focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
     ),
     text: theme.resolveTextStyle(
-      context, initColor(0.12, 0.14, 0.18, 1.0), initEdgeInsets(0.0, 8.0)
+      context, initColor(0.12, 0.14, 0.18, 1.0), insets(0.0, 8.0)
     ),
-    contentInsets: theme.insetsRule(context, StylePadding, initEdgeInsets(14.0, 12.0)),
+    contentInsets: theme.insetsRule(context, StylePadding, insets(14.0, 12.0)),
     titleHeight: theme.lengthRule(context, StyleTitleHeight, 18.0'f32),
     titleGap: theme.lengthRule(context, StyleTitleGap, 4.0'f32),
     separatorThickness: theme.lengthRule(context, StyleSeparatorThickness, 1.0'f32),

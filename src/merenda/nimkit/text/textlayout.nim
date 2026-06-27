@@ -25,7 +25,7 @@ type
     xHasLayout: bool
 
 func initTextContainer*(
-    size = initSize(0.0, 0.0), insets = initEdgeInsets(0.0), wraps = false
+    size = initSize(0.0, 0.0), insets = insets(0.0), wraps = false
 ): TextContainer =
   TextContainer(size: size, insets: insets, wraps: wraps)
 
@@ -35,9 +35,7 @@ proc initTextLayoutManagerFields*(
     container = initTextContainer(),
     alignment = taLeft,
     style = initAppearance().resolveTextStyle(
-        initControlStyleContext(srTextView),
-        initColor(0.08, 0.09, 0.11, 1.0),
-        initEdgeInsets(0.0),
+        controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
       ),
 ) =
   manager.xTextStorage = storage
@@ -50,9 +48,7 @@ proc newTextLayoutManager*(
     container = initTextContainer(),
     alignment = taLeft,
     style = initAppearance().resolveTextStyle(
-        initControlStyleContext(srTextView),
-        initColor(0.08, 0.09, 0.11, 1.0),
-        initEdgeInsets(0.0),
+        controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
       ),
 ): TextLayoutManager =
   result = TextLayoutManager()
@@ -86,9 +82,7 @@ proc `textContainer=`*(manager: TextLayoutManager, container: TextContainer) =
 proc textStyle*(manager: TextLayoutManager): TextStyle =
   if manager.isNil:
     initAppearance().resolveTextStyle(
-      initControlStyleContext(srTextView),
-      initColor(0.08, 0.09, 0.11, 1.0),
-      initEdgeInsets(0.0),
+      controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
     )
   else:
     manager.xTextStyle

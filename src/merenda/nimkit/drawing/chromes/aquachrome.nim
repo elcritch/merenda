@@ -381,7 +381,7 @@ proc drawAquaButtonExtras(
 ) =
   let
     radius = extras.cornerRadius
-    inner = extras.rect.inset(initEdgeInsets(AquaButtonInset))
+    inner = extras.rect.inset(insets(AquaButtonInset))
   if inner.isEmpty:
     return
 
@@ -473,7 +473,7 @@ proc drawAquaChoiceExtras(
   if chrome.isRadioChoice:
     let
       innerInset = if chrome.isSelected: 1.6'f32 else: 2.0'f32
-      inner = extras.rect.inset(initEdgeInsets(innerInset))
+      inner = extras.rect.inset(insets(innerInset))
       innerRadius = max(min(inner.size.width, inner.size.height) / 2.0'f32, 1.0'f32)
     if inner.isEmpty:
       return
@@ -682,7 +682,7 @@ proc drawAquaTabExtras(
 ) =
   let
     inset = 2.0'f32
-    inner = extras.rect.inset(initEdgeInsets(inset))
+    inner = extras.rect.inset(insets(inset))
     innerRadius = max(extras.cornerRadius - inset, 1.0'f32)
   if inner.isEmpty:
     return

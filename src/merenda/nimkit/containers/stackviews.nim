@@ -37,7 +37,7 @@ func normalizedSpacing(value: float32): float32 =
   max(value, 0.0'f32)
 
 func normalizedInsets(insets: EdgeInsets): EdgeInsets =
-  initEdgeInsets(
+  insets(
     max(insets.top, 0.0'f32),
     max(insets.left, 0.0'f32),
     max(insets.bottom, 0.0'f32),
@@ -347,7 +347,7 @@ proc `spacing=`*(stackView: StackView, spacing: float32) =
 
 proc edgeInsets*(stackView: StackView): EdgeInsets =
   if stackView.isNil:
-    initEdgeInsets(0.0)
+    insets(0.0)
   else:
     stackView.xEdgeInsets
 

@@ -240,7 +240,7 @@ suite "nimkit text views":
   test "text view hit testing line starts returns indexes after newlines":
     let manager = newTextLayoutManager(
       newTextStorage("A\nB"),
-      initTextContainer(initSize(200, 100), initEdgeInsets(0.0), wraps = false),
+      initTextContainer(initSize(200, 100), insets(0.0), wraps = false),
     )
     let afterNewline = manager.caretRect(2)
 
@@ -254,7 +254,7 @@ suite "nimkit text views":
   test "text view hit testing blank lines returns newline boundary indexes":
     let manager = newTextLayoutManager(
       newTextStorage("A\n\nB"),
-      initTextContainer(initSize(200, 140), initEdgeInsets(0.0), wraps = false),
+      initTextContainer(initSize(200, 140), insets(0.0), wraps = false),
     )
     let
       blankLineStart = manager.caretRect(2)
@@ -282,7 +282,7 @@ suite "nimkit text views":
   test "text view hit testing beyond line end clamps to that visual line":
     let manager = newTextLayoutManager(
       newTextStorage("Title\nSecond"),
-      initTextContainer(initSize(240, 120), initEdgeInsets(8.0), wraps = false),
+      initTextContainer(initSize(240, 120), insets(8.0), wraps = false),
     )
     let
       firstLineEnd = manager.caretRect(5)

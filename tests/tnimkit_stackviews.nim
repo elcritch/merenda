@@ -25,7 +25,7 @@ suite "nimkit stack views":
       third = newFixedIntrinsicView(10, 12)
 
     stack.spacing = 6.0
-    stack.edgeInsets = initEdgeInsets(2.0, 3.0, 4.0, 5.0)
+    stack.edgeInsets = insets(2.0, 3.0, 4.0, 5.0)
     stack.addArrangedSubview(first, second, third)
 
     check stack.arrangedSubviews == @[View(first), View(second), View(third)]
@@ -46,7 +46,7 @@ suite "nimkit stack views":
       second = newFixedIntrinsicView(30, 32)
 
     stack.spacing = 5.0
-    stack.edgeInsets = initEdgeInsets(1.0, 2.0, 3.0, 4.0)
+    stack.edgeInsets = insets(1.0, 2.0, 3.0, 4.0)
     stack.addArrangedSubview(first)
     stack.addArrangedSubview(second)
 
@@ -238,7 +238,7 @@ suite "nimkit stack views":
     stack.addArrangedSubview(title, subtitle, status, button)
     root.addSubview(stack)
     stack.pinEdges(
-      toGuide = root.contentLayoutGuide(initEdgeInsets(28.0, 28.0, 0.0, 28.0)),
+      toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
       edges = {leLeft, leTop, leRight},
     )
 

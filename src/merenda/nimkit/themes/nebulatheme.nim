@@ -274,7 +274,7 @@ proc installNebulaLabels(theme: var Theme) =
     0.0,
     0.0,
     initColor(0.78, 0.92, 1.0, 0.92),
-    initEdgeInsets(0.0),
+    insets(0.0),
     initSize(0.0, 18.0),
   )
   theme.addLabelRule(
@@ -284,7 +284,7 @@ proc installNebulaLabels(theme: var Theme) =
     1.0,
     8.0,
     initColor(0.84, 0.98, 1.0, 0.96),
-    initEdgeInsets(0.0, 12.0),
+    insets(0.0, 12.0),
     initSize(0.0, 28.0),
   )
   theme.addLabelRule(
@@ -294,7 +294,7 @@ proc installNebulaLabels(theme: var Theme) =
     1.0,
     6.0,
     initColor(0.76, 0.96, 1.0, 0.96),
-    initEdgeInsets(0.0, 10.0),
+    insets(0.0, 10.0),
     initSize(0.0, 24.0),
   )
   theme.addLabelRule(
@@ -304,7 +304,7 @@ proc installNebulaLabels(theme: var Theme) =
     1.0,
     6.0,
     initColor(0.74, 1.0, 0.92, 0.94),
-    initEdgeInsets(0.0, 10.0),
+    insets(0.0, 10.0),
     initSize(0.0, 24.0),
   )
   theme.addLabelRule(
@@ -314,7 +314,7 @@ proc installNebulaLabels(theme: var Theme) =
     0.0,
     0.0,
     initColor(0.58, 0.82, 0.94, 0.86),
-    initEdgeInsets(0.0, 2.0),
+    insets(0.0, 2.0),
     initSize(0.0, 18.0),
   )
 

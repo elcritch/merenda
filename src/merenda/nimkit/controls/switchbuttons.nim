@@ -46,8 +46,8 @@ proc switchChromeStates(switchButton: SwitchButton): set[WidgetState] =
 
 proc switchStyleContext(switchButton: SwitchButton): StyleContext =
   if switchButton.isNil:
-    return initControlStyleContext(srSwitch)
-  initControlStyleContext(
+    return controlStyle(srSwitch)
+  controlStyle(
     srSwitch,
     switchButton.switchChromeStates(),
     id = switchButton.styleId,
@@ -60,7 +60,7 @@ proc switchStyle(cell: SwitchButtonCell): SwitchButtonStyle =
     return view.effectiveAppearance().resolveSwitchButtonStyle(
         SwitchButton(view).switchStyleContext()
       )
-  initAppearance().resolveSwitchButtonStyle(initControlStyleContext(srSwitch))
+  initAppearance().resolveSwitchButtonStyle(controlStyle(srSwitch))
 
 proc switchStyle(switchButton: SwitchButton, context: DrawContext): SwitchButtonStyle =
   if not context.isNil:

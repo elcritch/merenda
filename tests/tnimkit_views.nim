@@ -187,7 +187,7 @@ suite "nimkit views":
     app.setAppearance(appAppearance)
 
     let appStyle =
-      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+      child.effectiveAppearance().resolveButtonStyle(controlStyle(srButton))
     check appStyle.box.fill == appFill
 
     root.setNeedsDisplay(false)
@@ -199,7 +199,7 @@ suite "nimkit views":
     window.setAppearance(windowAppearance)
 
     let inheritedStyle =
-      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+      child.effectiveAppearance().resolveButtonStyle(controlStyle(srButton))
     check inheritedStyle.box.fill == windowFill
     check root.needsDisplay
     check child.needsDisplay
@@ -213,14 +213,14 @@ suite "nimkit views":
     root.appearance = rootAppearance
 
     let rootStyle =
-      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+      child.effectiveAppearance().resolveButtonStyle(controlStyle(srButton))
     check rootStyle.box.fill == rootFill
     check root.needsDisplay
     check child.needsDisplay
 
     root.clearAppearance()
     let clearedStyle =
-      child.effectiveAppearance().resolveButtonStyle(initControlStyleContext(srButton))
+      child.effectiveAppearance().resolveButtonStyle(controlStyle(srButton))
     check clearedStyle.box.fill == windowFill
 
   test "style identity is stored on views and invalidates display":
