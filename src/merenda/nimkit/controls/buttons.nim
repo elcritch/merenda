@@ -414,6 +414,12 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       context.addText(textRect, button.title, style.text, alignment = taCenter)
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
+  method mouseEntered(button: Button, event: MouseEvent): bool =
+    button.isEnabled()
+
+  method mouseExited(button: Button, event: MouseEvent): bool =
+    button.isEnabled()
+
   method mouseDown(button: Button, event: MouseEvent): bool =
     if button.isEnabled and event.button == mbPrimary:
       button.setHighlighted(true)

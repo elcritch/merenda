@@ -300,14 +300,23 @@ suite "nimkit theme":
     let
       appearance = initAppearance(theme)
       defaultButtonStyle = appearance.resolveButtonStyle(controlStyle(srButton))
+      hoveredButtonStyle =
+        appearance.resolveButtonStyle(controlStyle(srButton, {ssHovered}))
       buttonStyle =
         appearance.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
       accentButtonStyle =
         appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
+      accentHoveredButtonStyle =
+        appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent, ssHovered}))
       accentHighlightedButtonStyle =
         appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent, ssHighlighted}))
       checkBoxStyle =
         appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      checkBoxHoverStyle =
+        appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssHovered}))
+      checkBoxSelectedHoverStyle = appearance.resolveChoiceButtonStyle(
+        controlStyle(srCheckBox, {ssSelected, ssHovered})
+      )
       radioStyle =
         appearance.resolveChoiceButtonStyle(controlStyle(srRadioButton, {ssSelected}))
       textFieldStyle = theme.resolveTextFieldStyle(
@@ -366,11 +375,15 @@ suite "nimkit theme":
     checkAquaButtonShadows(defaultButtonStyle.box.shadows)
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
+    check hoveredButtonStyle.box.fill == aquaButtonPressedFill()
     check buttonStyle.box.fill == aquaButtonPressedFill()
     check accentButtonStyle.box.fill == aquaAccentButtonFill()
+    check accentHoveredButtonStyle.box.fill == aquaAccentButtonPressedFill()
     check accentHighlightedButtonStyle.box.fill == aquaAccentButtonPressedFill()
+    check hoveredButtonStyle.box.borderColor == initColor(0.30, 0.31, 0.33, 0.92)
     check buttonStyle.box.borderColor == initColor(0.30, 0.31, 0.33, 0.92)
     check accentButtonStyle.box.borderColor == initColor(0.01, 0.11, 0.49, 1.0)
+    check accentHoveredButtonStyle.box.borderColor == initColor(0.0, 0.07, 0.32, 1.0)
     check accentHighlightedButtonStyle.box.borderColor == initColor(
       0.0, 0.07, 0.32, 1.0
     )
@@ -387,6 +400,12 @@ suite "nimkit theme":
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
     check checkBoxStyle.minSize == initSize(0.0, 20.0)
+    check checkBoxHoverStyle.indicator.fill ==
+      appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssHighlighted})).indicator.fill
+    check checkBoxSelectedHoverStyle.indicator.fill ==
+      appearance.resolveChoiceButtonStyle(
+        controlStyle(srCheckBox, {ssSelected, ssHighlighted})
+      ).indicator.fill
     check checkBoxStyle.indicator.fill == aquaChoiceSelectedFill()
     check checkBoxStyle.indicator.borderColor == initColor(0.0, 0.32, 0.75, 0.96)
     check checkBoxStyle.indicator.cornerRadius == 3.0

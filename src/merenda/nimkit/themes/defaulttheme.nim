@@ -316,6 +316,13 @@ proc initTheme*(): Theme =
   )
   result.addRoleRule(
     srButton,
+    {ssHovered},
+    styleToken("button.fill.highlighted"),
+    styleToken("button.border.color.highlighted"),
+    styleToken("button.text.color"),
+  )
+  result.addRoleRule(
+    srButton,
     {ssHighlighted},
     styleToken("button.fill.highlighted"),
     styleToken("button.border.color.highlighted"),
@@ -340,6 +347,13 @@ proc initTheme*(): Theme =
     {ssAccent},
     styleToken("button.fill.accent"),
     styleToken("button.border.color.accent"),
+    styleToken("button.text.color"),
+  )
+  result.addRoleRule(
+    srButton,
+    {ssAccent, ssHovered},
+    styleToken("button.fill.accent.highlighted"),
+    styleToken("button.border.color.accent.highlighted"),
     styleToken("button.text.color"),
   )
   result.addRoleRule(
@@ -495,6 +509,14 @@ proc initTheme*(): Theme =
     )
     result.addChoiceRule(
       role,
+      {ssHovered},
+      styleToken("choice.indicator.fill.highlighted"),
+      styleToken("choice.indicator.border.color.highlighted"),
+      styleToken("choice.mark.color"),
+      styleToken("choice.text.color"),
+    )
+    result.addChoiceRule(
+      role,
       {ssHighlighted},
       styleToken("choice.indicator.fill.highlighted"),
       styleToken("choice.indicator.border.color.highlighted"),
@@ -505,6 +527,14 @@ proc initTheme*(): Theme =
       role,
       {ssSelected},
       styleToken("choice.indicator.fill.selected"),
+      selectedBorder,
+      styleToken("choice.mark.color"),
+      styleToken("choice.text.color"),
+    )
+    result.addChoiceRule(
+      role,
+      {ssSelected, ssHovered},
+      styleToken("choice.indicator.fill.selected.highlighted"),
       selectedBorder,
       styleToken("choice.mark.color"),
       styleToken("choice.text.color"),
