@@ -31,13 +31,14 @@ The source tree is now organized around domain modules under
 `merenda/nimkit`; internal code and tests should import the domain modules
 directly when they need a narrower surface.
 
-The next implementation should add a first-class animation core before the next
-compatibility widgets. The animation model should combine Qt-style explicit
-animation objects and groups, Cocoa-style animation transactions and implicit
-property capture, and Sigils `threadSelectors`/timer delivery for a portable
-clock. Keep widget mutation routed through existing NimKit setters so layout,
-display invalidation, responder state, and accessibility notifications remain
-the single source of truth.
+The first animation core model is now in place. The next implementation should
+extend it with typed interpolation methods, easing, a deterministic scheduler,
+and Sigils `threadSelectors`/timer delivery for a portable clock before the
+next compatibility widgets. Keep animation extension points on methods,
+protocols, and selector dispatch rather than public callback hooks. Widget
+mutation should stay routed through existing NimKit setters so layout, display
+invalidation, responder state, and accessibility notifications remain the
+single source of truth.
 
 ## Recently Completed
 
@@ -263,6 +264,13 @@ the single source of truth.
 - Added `DialogButtonBox` for dialog/action rows: standard button roles,
   platform-style role ordering, alignment policy, spacing, spacer management,
   and reusable button lookup for panel and preferences-style views.
+- Added the initial animation core model: `Animation`,
+  `ValueAnimation[T]`, `PropertyAnimation[T]`, `AnimationGroup`,
+  `ParallelAnimationGroup`, `SequentialAnimationGroup`, and `PauseAnimation`
+  with Sigil-backed state/current-time/progress/value fields, lifecycle and
+  progress/value signals, progress marks, protocol-backed duration/state/time
+  hooks, group duration calculation, method-based value interpolation, and
+  selector-based property dispatch.
 
 ## Current Verification
 
@@ -293,6 +301,9 @@ the single source of truth.
   `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
   `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
   `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
+- The first animation core model pass is covered by
+  `tests/tnimkit_animations.nim`; umbrella export fallout was checked with
+  `atlas-run tests nimkit_controls`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -305,24 +316,16 @@ Add a backend-neutral animation system before the next widget pass. The design
 should use Qt's composable API shape, Cocoa/AppKit's transaction ergonomics, and
 Sigils' selector-thread timers without exposing raw thread work to widgets.
 
-Recommended implementation order:
+Remaining implementation order:
 
-1. Core animation model
-   - Add `Animation`, `ValueAnimation[T]`, `PropertyAnimation[T]`,
-     `AnimationGroup`, `ParallelAnimationGroup`, `SequentialAnimationGroup`,
-     and `PauseAnimation` under the NimKit app/runtime boundary.
-   - Model `state`, `currentTime`, `progress`, and value output with `Sigil`
-     fields because those are genuinely observable animation state. Keep normal
-     widget state as plain fields and write through existing setter procs.
-   - Include start, stop, pause, resume, direction, loop count, duration,
-     progress marks, completion, and finished/state/value-changed signals.
-2. Interpolation and timing
-   - Add typed interpolators for `float32`, `Point`, `Size`, `Rect`, `Color`,
-     and any small value types needed by existing controls.
+1. Interpolation and timing
+   - Add typed interpolation methods for `float32`, `Point`, `Size`, `Rect`,
+     `Color`, and any small value types needed by existing controls.
    - Add easing curves for linear, ease-in, ease-out, ease-in-out, cubic
-     Bezier, and a first spring curve. Keep custom interpolator and easing hooks
-     open so applications can supply domain-specific motion later.
-3. Scheduler and threading
+     Bezier, and a first spring curve. Keep custom method overrides, protocol
+     implementations, and easing hooks open so applications can supply
+     domain-specific motion later.
+2. Scheduler and threading
    - Add an `AnimationScheduler` with a deterministic manual tick path for unit
      tests.
    - Add a Sigils clock adapter backed by `SigilSelectorThread` and a repeating
@@ -331,22 +334,22 @@ Recommended implementation order:
      Sigils signals/slots or local scheduler polling.
    - Prefer a future backend/vsync frame callback when available, with
      selector-thread timers as the portable fallback.
-4. Property animation surfaces
+3. Property animation surfaces
    - Start with `View.frame`, `View.bounds`, `View.alpha`, `ScrollView`
      `contentOffset`, `ProgressIndicator.value`, and split/cascading column
      positions where existing setters already express the needed side effects.
    - On every animation tick, write through the normal public mutation proc and
      let existing layout/display/accessibility invalidation run naturally.
-5. Cocoa-style transaction sugar
+4. Cocoa-style transaction sugar
    - Add an explicit API first, then a Nim template layer for transaction-style
      usage such as `animationGroup(duration = 180.ms, curve = acEaseInOut):`.
    - Inside a transaction, capture old/new animatable property values and build
      property animations; outside a transaction, property assignments remain
      immediate.
-6. Examples and verification
+5. Examples and verification
    - Add focused tests for manual scheduler progression, easing/interpolation,
      group timing, pause/resume/stop, progress marks, threaded timer delivery,
-     and setter-side invalidation.
+     and selector-applied property invalidation.
    - Update `examples/progress_indicator_demo.nim` to use the scheduler instead
      of manual `stepAnimation`, then add a compact `examples/animation_demo.nim`
      covering property animation, parallel/sequential groups, and transaction
@@ -354,10 +357,11 @@ Recommended implementation order:
 
 ### OpenStep Compatibility Widgets
 
-After the animation core lands, add the next missing OpenStep/AppKit-style
-widgets in an order that hardens shared control, cell, layout, responder,
-drawing, accessibility, and animation behavior instead of producing isolated
-one-off controls.
+After the remaining animation timing, scheduler, property-surface, and
+transaction passes land, add the next missing OpenStep/AppKit-style widgets in
+an order that hardens shared control, cell, layout, responder, drawing,
+accessibility, and animation behavior instead of producing isolated one-off
+controls.
 
 Recommended implementation order:
 
