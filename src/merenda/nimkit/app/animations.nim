@@ -3,6 +3,7 @@ import std/[algorithm, math, times]
 import sigils/reactive
 
 import ../foundation/selectors
+import ../foundation/types
 
 export reactive
 
@@ -28,6 +29,13 @@ type
     adpKeepWhenStopped
     adpDeleteWhenStopped
 
+  AnimationTiming* = object
+    curve*: AnimationCurve
+    controlPoint1*: Point
+    controlPoint2*: Point
+    springResponse*: float32
+    springDampingRatio*: float32
+
   AnimationSetterSelector*[T] = Selector[T, EmptyArgs]
 
   Animation* = ref object of DynamicAgent
@@ -35,6 +43,7 @@ type
     xLoopCount: int
     xDirection: AnimationDirection
     xDeletionPolicy: AnimationDeletionPolicy
+    xTiming: AnimationTiming
     xProgressMarks: seq[float32]
     xDeliveredMarks: seq[bool]
     state*: Sigil[AnimationState]
@@ -74,6 +83,140 @@ proc valueChanged*[T](animation: ValueAnimation[T], value: T) {.signal.}
 
 func clampProgress(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
+
+func lerp(a, b, progress: float32): float32 =
+  a + (b - a) * progress
+
+func lerpPoint(a, b: Point, progress: float32): Point =
+  initPoint(lerp(a.x, b.x, progress), lerp(a.y, b.y, progress))
+
+func lerpSize(a, b: Size, progress: float32): Size =
+  initSize(lerp(a.width, b.width, progress), lerp(a.height, b.height, progress))
+
+func lerpRect(a, b: Rect, progress: float32): Rect =
+  initRect(lerpPoint(a.origin, b.origin, progress), lerpSize(a.size, b.size, progress))
+
+func lerpColor(a, b: Color, progress: float32): Color =
+  initColor(
+    lerp(a.r, b.r, progress),
+    lerp(a.g, b.g, progress),
+    lerp(a.b, b.b, progress),
+    lerp(a.a, b.a, progress),
+  )
+
+func initAnimationTiming*(
+    curve = acLinear,
+    controlPoint1 = initPoint(0.25'f32, 0.1'f32),
+    controlPoint2 = initPoint(0.25'f32, 1.0'f32),
+    springResponse = 0.45'f32,
+    springDampingRatio = 0.75'f32,
+): AnimationTiming =
+  AnimationTiming(
+    curve: curve,
+    controlPoint1: controlPoint1,
+    controlPoint2: controlPoint2,
+    springResponse: max(springResponse, 0.001'f32),
+    springDampingRatio: max(springDampingRatio, 0.0'f32),
+  )
+
+func linearTiming*(): AnimationTiming =
+  initAnimationTiming(
+    acLinear, initPoint(0.0'f32, 0.0'f32), initPoint(1.0'f32, 1.0'f32)
+  )
+
+func easeInTiming*(): AnimationTiming =
+  initAnimationTiming(acEaseIn)
+
+func easeOutTiming*(): AnimationTiming =
+  initAnimationTiming(acEaseOut)
+
+func easeInOutTiming*(): AnimationTiming =
+  initAnimationTiming(acEaseInOut)
+
+func cubicBezierTiming*(controlPoint1, controlPoint2: Point): AnimationTiming =
+  initAnimationTiming(
+    acCubicBezier,
+    initPoint(controlPoint1.x.clampProgress(), controlPoint1.y),
+    initPoint(controlPoint2.x.clampProgress(), controlPoint2.y),
+  )
+
+func springTiming*(response = 0.45'f32, dampingRatio = 0.75'f32): AnimationTiming =
+  initAnimationTiming(
+    acSpring, springResponse = response, springDampingRatio = dampingRatio
+  )
+
+func cubicBezierCoordinate(t, p1, p2: float32): float32 =
+  let
+    u = 1.0'f32 - t
+    tt = t * t
+    uu = u * u
+  3.0'f32 * uu * t * p1 + 3.0'f32 * u * tt * p2 + tt * t
+
+func cubicBezierDerivative(t, p1, p2: float32): float32 =
+  let u = 1.0'f32 - t
+  3.0'f32 * u * u * p1 + 6.0'f32 * u * t * (p2 - p1) + 3.0'f32 * t * t * (1.0'f32 - p2)
+
+func cubicBezierProgress(timing: AnimationTiming, progress: float32): float32 =
+  var t = progress.clampProgress()
+  let
+    x1 = timing.controlPoint1.x.clampProgress()
+    y1 = timing.controlPoint1.y
+    x2 = timing.controlPoint2.x.clampProgress()
+    y2 = timing.controlPoint2.y
+
+  for _ in 0 ..< 8:
+    let
+      x = cubicBezierCoordinate(t, x1, x2) - progress
+      derivative = cubicBezierDerivative(t, x1, x2)
+    if abs(x) < 0.00001'f32 or abs(derivative) < 0.00001'f32:
+      break
+    t = (t - x / derivative).clampProgress()
+
+  cubicBezierCoordinate(t, y1, y2)
+
+func springProgress(timing: AnimationTiming, progress: float32): float32 =
+  let t = progress.clampProgress()
+  if t <= 0.0'f32:
+    return 0.0'f32
+  if t >= 1.0'f32:
+    return 1.0'f32
+
+  let
+    response = max(timing.springResponse.float64, 0.001)
+    dampingRatio = max(timing.springDampingRatio.float64, 0.0)
+    omega = 2.0 * PI / response
+    time = t.float64
+  var value: float64
+  if dampingRatio < 1.0:
+    let
+      damped = omega * sqrt(max(1.0 - dampingRatio * dampingRatio, 0.000001))
+      envelope = exp(-dampingRatio * omega * time)
+      correction = dampingRatio / sqrt(max(1.0 - dampingRatio * dampingRatio, 0.000001))
+    value = 1.0 - envelope * (cos(damped * time) + correction * sin(damped * time))
+  elif abs(dampingRatio - 1.0) <= 0.000001:
+    value = 1.0 - exp(-omega * time) * (1.0 + omega * time)
+  else:
+    value = 1.0 - exp(-(omega / dampingRatio) * time)
+  value.float32
+
+func easedProgress*(timing: AnimationTiming, progress: float32): float32 =
+  let t = progress.clampProgress()
+  case timing.curve
+  of acLinear:
+    t
+  of acEaseIn:
+    t * t
+  of acEaseOut:
+    1.0'f32 - (1.0'f32 - t) * (1.0'f32 - t)
+  of acEaseInOut:
+    if t < 0.5'f32:
+      2.0'f32 * t * t
+    else:
+      1.0'f32 - pow(-2.0'f32 * t + 2.0'f32, 2.0'f32) / 2.0'f32
+  of acCubicBezier:
+    timing.cubicBezierProgress(t)
+  of acSpring:
+    timing.springProgress(t)
 
 func durationRatio(value, total: Duration): float32 =
   let totalNs = total.inNanoseconds
@@ -129,20 +272,54 @@ proc setAnimationState(animation: Animation, nextState: AnimationState) =
 method applyValue*(animation: Animation) {.base.} =
   discard
 
+method adjustedProgress*(animation: Animation, progress: float32): float32 {.base.} =
+  if animation.isNil:
+    progress.clampProgress()
+  else:
+    animation.xTiming.easedProgress(progress)
+
 func steppedValue[T](animation: ValueAnimation[T], progress: float32): T =
   if progress >= 1.0'f32: animation.endValue else: animation.startValue
 
 method interpolatedValue*(
     animation: ValueAnimation[float32], progress: float32
-): float32 =
-  animation.startValue + (animation.endValue - animation.startValue) * progress
+): float32 {.base.} =
+  lerp(animation.startValue, animation.endValue, progress)
+
+method interpolatedValue*(
+    animation: ValueAnimation[Point], progress: float32
+): Point {.base.} =
+  lerpPoint(animation.startValue, animation.endValue, progress)
+
+method interpolatedValue*(
+    animation: ValueAnimation[Size], progress: float32
+): Size {.base.} =
+  lerpSize(animation.startValue, animation.endValue, progress)
+
+method interpolatedValue*(
+    animation: ValueAnimation[Rect], progress: float32
+): Rect {.base.} =
+  lerpRect(animation.startValue, animation.endValue, progress)
+
+method interpolatedValue*(
+    animation: ValueAnimation[Color], progress: float32
+): Color {.base.} =
+  lerpColor(animation.startValue, animation.endValue, progress)
 
 proc updateCurrentValue[T](animation: ValueAnimation[T]) =
   if animation.isNil or animation.currentValue.isNil:
     return
-  let progress = animation.rawProgress()
+  let progress = animation.adjustedProgress(animation.rawProgress())
   let nextValue =
     when T is float32:
+      animation.interpolatedValue(progress)
+    elif T is Point:
+      animation.interpolatedValue(progress)
+    elif T is Size:
+      animation.interpolatedValue(progress)
+    elif T is Rect:
+      animation.interpolatedValue(progress)
+    elif T is Color:
       animation.interpolatedValue(progress)
     else:
       animation.steppedValue(progress)
@@ -152,8 +329,40 @@ proc updateCurrentValue[T](animation: ValueAnimation[T]) =
 method applyValue*(animation: ValueAnimation[float32]) =
   animation.updateCurrentValue()
 
+method applyValue*(animation: ValueAnimation[Point]) =
+  animation.updateCurrentValue()
+
+method applyValue*(animation: ValueAnimation[Size]) =
+  animation.updateCurrentValue()
+
+method applyValue*(animation: ValueAnimation[Rect]) =
+  animation.updateCurrentValue()
+
+method applyValue*(animation: ValueAnimation[Color]) =
+  animation.updateCurrentValue()
+
 method applyValue*(animation: PropertyAnimation[float32]) =
   procCall ValueAnimation[float32](animation).applyValue()
+  if not animation.target.isNil:
+    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+
+method applyValue*(animation: PropertyAnimation[Point]) =
+  procCall ValueAnimation[Point](animation).applyValue()
+  if not animation.target.isNil:
+    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+
+method applyValue*(animation: PropertyAnimation[Size]) =
+  procCall ValueAnimation[Size](animation).applyValue()
+  if not animation.target.isNil:
+    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+
+method applyValue*(animation: PropertyAnimation[Rect]) =
+  procCall ValueAnimation[Rect](animation).applyValue()
+  if not animation.target.isNil:
+    discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
+
+method applyValue*(animation: PropertyAnimation[Color]) =
+  procCall ValueAnimation[Color](animation).applyValue()
   if not animation.target.isNil:
     discard animation.target.sendIfHandled(animation.setter, animation.currentValue{})
 
@@ -190,9 +399,53 @@ protocol FloatValueAnimationProtocol of AnimationProtocol:
     discard currentTime
     animation.applyValue()
 
+protocol PointValueAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: ValueAnimation[Point], currentTime: Duration) =
+    discard currentTime
+    animation.applyValue()
+
+protocol SizeValueAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: ValueAnimation[Size], currentTime: Duration) =
+    discard currentTime
+    animation.applyValue()
+
+protocol RectValueAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: ValueAnimation[Rect], currentTime: Duration) =
+    discard currentTime
+    animation.applyValue()
+
+protocol ColorValueAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: ValueAnimation[Color], currentTime: Duration) =
+    discard currentTime
+    animation.applyValue()
+
 protocol FloatPropertyAnimationProtocol of AnimationProtocol:
   method updateCurrentTime*(
       animation: PropertyAnimation[float32], currentTime: Duration
+  ) =
+    discard currentTime
+    animation.applyValue()
+
+protocol PointPropertyAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(
+      animation: PropertyAnimation[Point], currentTime: Duration
+  ) =
+    discard currentTime
+    animation.applyValue()
+
+protocol SizePropertyAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: PropertyAnimation[Size], currentTime: Duration) =
+    discard currentTime
+    animation.applyValue()
+
+protocol RectPropertyAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(animation: PropertyAnimation[Rect], currentTime: Duration) =
+    discard currentTime
+    animation.applyValue()
+
+protocol ColorPropertyAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime*(
+      animation: PropertyAnimation[Color], currentTime: Duration
   ) =
     discard currentTime
     animation.applyValue()
@@ -232,6 +485,7 @@ proc initAnimationFields*(
   animation.xLoopCount = loopCount
   animation.xDirection = direction
   animation.xDeletionPolicy = adpKeepWhenStopped
+  animation.xTiming = linearTiming()
   animation.state = newSigil(asStopped)
   animation.currentTime = newSigil(initDuration())
   animation.progress = newSigil(0.0'f32)
@@ -256,6 +510,14 @@ proc initValueAnimationFields*[T](
   animation.currentValue = newSigil(startValue)
   when T is float32:
     discard animation.withProtocol(FloatValueAnimationProtocol)
+  elif T is Point:
+    discard animation.withProtocol(PointValueAnimationProtocol)
+  elif T is Size:
+    discard animation.withProtocol(SizeValueAnimationProtocol)
+  elif T is Rect:
+    discard animation.withProtocol(RectValueAnimationProtocol)
+  elif T is Color:
+    discard animation.withProtocol(ColorValueAnimationProtocol)
 
 proc newValueAnimation*[T](
     startValue, endValue: T, duration = initDuration(milliseconds = 250)
@@ -277,6 +539,14 @@ proc initPropertyAnimationFields*[T](
   animation.setter = setter
   when T is float32:
     discard animation.withProtocol(FloatPropertyAnimationProtocol)
+  elif T is Point:
+    discard animation.withProtocol(PointPropertyAnimationProtocol)
+  elif T is Size:
+    discard animation.withProtocol(SizePropertyAnimationProtocol)
+  elif T is Rect:
+    discard animation.withProtocol(RectPropertyAnimationProtocol)
+  elif T is Color:
+    discard animation.withProtocol(ColorPropertyAnimationProtocol)
 
 proc newPropertyAnimation*[T](
     target: DynamicAgent,
@@ -343,6 +613,33 @@ proc deletionPolicy*(animation: Animation): AnimationDeletionPolicy =
 proc `deletionPolicy=`*(animation: Animation, deletionPolicy: AnimationDeletionPolicy) =
   if not animation.isNil:
     animation.xDeletionPolicy = deletionPolicy
+
+proc timing*(animation: Animation): AnimationTiming =
+  if animation.isNil:
+    linearTiming()
+  else:
+    animation.xTiming
+
+proc `timing=`*(animation: Animation, timing: AnimationTiming) =
+  if not animation.isNil:
+    animation.xTiming = timing
+
+proc curve*(animation: Animation): AnimationCurve =
+  animation.timing.curve
+
+proc `curve=`*(animation: Animation, curve: AnimationCurve) =
+  if not animation.isNil:
+    animation.xTiming.curve = curve
+
+proc setCubicBezierTiming*(animation: Animation, controlPoint1, controlPoint2: Point) =
+  if not animation.isNil:
+    animation.xTiming = cubicBezierTiming(controlPoint1, controlPoint2)
+
+proc setSpringTiming*(
+    animation: Animation, response = 0.45'f32, dampingRatio = 0.75'f32
+) =
+  if not animation.isNil:
+    animation.xTiming = springTiming(response, dampingRatio)
 
 proc isRunning*(animation: Animation): bool =
   animation.rawState() == asRunning
