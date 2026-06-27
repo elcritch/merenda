@@ -18,12 +18,12 @@ Detailed layout, constraint, invalidation, and solver notes live in
 NimKit has the core desktop-control slice in place: views, responders, windows,
 application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid/tab/split containers, buttons, switch/radio
-buttons, sliders, steppers, progress indicators, text fields, combo boxes, box/group
-containers, scroll views, popup lists, table views, outline views, cascading
-column views, basic text editing lifecycle, action dispatch, reusable pure Nim
-panel/dialog views, document-controller infrastructure, AppKit-style in-process
-pasteboard/dragging foundations, and a pure Nim accessibility metadata and
-protocol core.
+buttons, sliders, steppers, progress indicators, text fields, combo boxes,
+box/group containers, scroll views, popup lists, table views, outline views,
+cascading column views, basic text editing lifecycle, action dispatch, reusable
+pure Nim panel/dialog views, document-controller infrastructure, AppKit-style
+in-process pasteboard/dragging foundations, and a pure Nim accessibility
+metadata and protocol core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -47,272 +47,52 @@ document-controller open/save integration are covered in tests and examples.
 
 ## Recently Completed
 
-- Reorganized NimKit into domain subdirectories and removed the old empty
-  top-level module forwarders. The `merenda/nimkit` umbrella remains the
-  compatibility import for users.
-- Removed the leftover `src/merenda/nimkit/chromes/aquachrome.nim`
-  compatibility shim; Aqua chrome now lives only at
-  `src/merenda/nimkit/drawing/chromes/aquachrome.nim`.
-- Added image resources on top of FigDraw: pixel/data/file construction, named
-  image registration, cache policy storage, pasteboard image storage, image
-  drawing nodes, and `ImageView` with intrinsic sizing and accessibility
-  semantics.
-- Expanded `ClipView` and `ScrollView` parity: clipped document ownership,
-  constrained `scrollToPoint`, autoscroll, document/visible rect helpers,
-  clip-view background policy, reflected scroll notifications, per-axis
-  line/page scrolling, border/background policy, scroller insets, header/corner
-  chrome, ruler placeholders, dynamic scrolling storage, and explicit scroller
-  autohide policy. Updated `examples/scrollview_demo.nim` to exercise the new
-  chrome and scrolling APIs.
-- Expanded `TableView` and added initial `OutlineView`: table columns now carry
-  hidden/sort/reuse metadata, header hit testing and resize/reorder/sort request
-  helpers are in place, table selection tracks clicked row/column and selected
-  columns, editable-cell begin/commit/cancel state is modeled with delegate
-  hooks, column autosave records serialize table-owned column state, drag-info
-  value objects and validation/acceptance hooks are staged, and `OutlineView`
-  flattens expandable items into table rows with outline-column disclosure
-  text, row/item mapping, and expansion/collapse APIs.
-- Hardened the table/outline model toward AppKit-style behavior: table header
-  cells now render and track hover/pressed, resize, reorder, and sort
-  interactions; editing, column/header behavior, selection, dragging,
-  persistence, and state capture/restore route through overridable table
-  protocols while preserving typed public procs; hosted cell views have a reuse
-  queue; table state snapshots can save/restore column state and selections
-  through a backend-neutral state storage protocol; drag payloads integrate with
-  named pasteboards; and `OutlineView` now has data-source/delegate protocols,
-  disclosure hit testing, keyboard toggling, expansion persistence, and item
-  drag helpers.
-- Finished the latest table/outline API cleanup: table behavior and state
-  protocols no longer pass the table view back into table-owned methods, state
-  save/restore flows through the protocol surface without compatibility
-  wrappers, and public selection/resize/editing/persistence procs delegate
-  through those protocols consistently.
-- Expanded `OutlineView` rendering and semantics with dedicated disclosure
-  affordances instead of text prefixes, mouse down/up disclosure tracking,
-  richer item identity helpers, expansion state capture/restore through the
-  shared table state protocol, and accessibility roles/actions for outline rows
-  and disclosure controls.
-- Updated `examples/table_demo.nim` to use real table headers instead of fake
-  temporary label headers, and constrained the title/table layout so the table
-  resizes with the window without unstable vertical stretching.
-- Refreshed `examples/table_demo.nim` to exercise the newer `TableView` feature
-  surface: selected columns, clicked-cell metadata, sort callbacks, editable
-  cell callbacks, state save/restore, hidden/fixed/reusable columns, and
-  explicit list-view reload dispatch where selector names overlap.
-- Expanded pasteboard and dragging foundations toward the OpenStep/AppKit
-  shape: pasteboards now use generic item storage with named/unique registry
-  lookup, change counts, release semantics, typed declarations, owner/lazy
-  item callbacks, strings, text storage, data blobs, property lists, URLs/files,
-  colors, font descriptors, and images; dragging now has generic operations as
-  a set, pasteboard-backed drag items, drag sessions, source/destination
-  protocols, lifecycle hooks, promised-file item staging, control/list/table
-  hooks, table row/column payload helpers, and outline item dragging routed
-  through the shared `DraggingSession`/`DraggingInfo` path.
-- Hardened pasteboard and dragging integration: backend pasteboard providers now
-  bridge host-supported text, file, URL, data, and image payloads while
-  retaining typed in-process storage for colors/fonts and higher-level NimKit
-  items; provider change counts and global release hooks are surfaced through
-  the generic pasteboard API; promised-file drags now materialize through source
-  callbacks with a pure Nim fallback; and list/table/outline drag sessions have
-  delegate-refined drop targets, visible drop affordances, and active-session
-  autoscroll/update dispatch.
-- Added a pure Nim accessibility core: roles, traits, notifications, typed
-  attribute values, default view metadata, ignored/element state, flattened
-  accessibility children, settable attribute helpers, and action dispatch.
-- Added built-in accessibility semantics for views, buttons, checkboxes, text
-  fields, labels, and value-change notifications, with
-  `tests/tnimkit_accessibility.nim` covering the core behavior.
-- Filled out the next accessibility role/trait defaults for menus, menu items,
-  popup menu buttons, popup lists, combo boxes, tab groups, scroll areas, table
-  views, visible table rows, and hosted table cells. Expanded
-  `tests/tnimkit_accessibility.nim` to cover the broader control/container
-  semantics.
-- Expanded responder event coverage for key up, modifier flag changes,
-  right/other mouse events, scroll phases, help requests, and cursor/tracking
-  events.
-- Added responder-chain command/action helpers for `performKeyEquivalent`,
-  `tryToPerform`, `doCommandBySelector`, valid requestor lookup, and
-  undo-manager lookup.
-- Broadened selector coverage for text movement/editing, menu commands, and
-  collection-like controls.
-- Made the event return contract explicit: handlers return whether they
-  consumed an event/action, unhandled events continue through `nextResponder`,
-  and controls may apply policy before forwarding.
-- Updated tests and design notes for the responder contract.
-- Added core `NSView` parity APIs for identity and hierarchy management:
-  `tag`, `identifier`, recursive tag lookup, positioned/indexed subview
-  insertion, replacement, sorting, and lifecycle-preserving hierarchy updates.
-- Added flipped coordinate conversion support while preserving NimKit's
-  existing y-down default, plus view-level focus-ring type, alpha, and shadow
-  properties.
-- Wired view alpha and shadows into render construction for view background
-  nodes.
-- Added view tracking affordance storage for cursor rects, tracking areas,
-  tooltips, drag type registration, and a default autoscroll hook.
-- Added OpenSTEP-style menu infrastructure: `Menu`, `MenuItem`, application
-  `mainMenu`/`windowsMenu`, responder-chain validation, key-equivalent dispatch,
-  delegate update/open/close hooks, submenu/separator/key-equivalent rendering,
-  and a menu demo.
-- Added popup menu presentation infrastructure with inline/window popup policy,
-  a `PopupMenuButton`, popup list rows for menu items, separator rows, submenu
-  indicators, key-equivalent columns, menu-bar pull-down buttons, and hover/open
-  highlighting.
-- Added overridable menu protocols for menu lifecycle, menu key-equivalent
-  dispatch, popup menu open/close, and menu bar reload while preserving the
-  typed public proc API.
-- Strengthened `Application` with current-event, key/main-window,
-  active/running/hidden state, launch/activation/hide/termination delegate
-  lifecycle, termination reply flow, main-menu key-equivalent dispatch, and
-  first-class modal sessions.
-- Strengthened `Window` with style masks, levels, key/main roles, delegates,
-  min/max sizes, resize increments, autosave names, initial/future first
-  responder hooks, richer screen/window/view coordinate conversion, transient
-  popup sessions, and sheet attachment lifecycle.
-- Finished the pure Nim menu-tracking path with cascading submenu popups,
-  menu-bar hover switching across open top-level menus, keyboard navigation,
-  first-enabled-item selection, separator/disabled skipping, checked/mixed state
-  rendering, and disabled item rendering/activation behavior.
-- Integrated application `windowsMenu` population and validation with the main
-  menu model, including order-front actions and checked main-window state.
-- Built modal sessions and sheet presentation on the application/window model,
-  including app-modal and window-modal modes, visible attached sheet windows,
-  modal result propagation, alert/open/save panel entry points, and termination
-  deferral while a modal session is active.
-- Added application/window integration for programmatic activation, key/main
-  transitions, hide/unhide window restore, frame autosave helpers, and window
-  menu refresh when windows are added, removed, activated, or closed.
-- Finished Application And Window Hardening: window menu commands now validate
-  and dispatch through protocol-backed `performClose`, `performMiniaturize`,
-  and `performZoom` actions without a selector-level `close` special case;
-  application/window state tracks ordered windows, key/main transitions,
-  order-front/back/out, miniaturize/zoom state, modal blocking queries,
-  termination replies, and backend-neutral frame autosave boundaries.
-- Added `WindowController` as the first document-controller layer: it owns and
-  lazily loads windows, preserves a `window -> controller -> app` responder
-  chain, controls showing/closing, synchronizes document-driven titles through
-  protocol hooks, and bridges window delegate callbacks into controller
-  delegates/events while preserving preexisting window delegates.
-- Added `Document` as the next document-controller layer: it tracks file
-  URL/name/type metadata, display names, edited state, undo-manager lookup, and
-  window controllers; exposes protocol-backed readable/writable type and
-  read/write content hooks; and owns save, save-as, revert, show-windows, and
-  close lifecycle events without native document registration.
-- Added `DocumentController` to coordinate the pure Nim document layer: shared
-  controller lookup, protocol-backed document creation/opening, current
-  document lookup by URL/window, backend-neutral recent-document storage,
-  reopen flow, close-all review of edited documents, and menu validation for
-  document commands now live above the `Document` and `WindowController` layer.
-- Connected real `TableView` editing surfaces to the protocol-backed editing
-  flow: field editors now attach to hosted control cells or drawn text cells,
-  commits and cancels route through the existing begin/commit/cancel hooks,
-  delegate-provided validation errors keep the editor active, and Tab/Return
-  navigation moves between editable cells.
-- Removed the standalone `ListView` widget and deleted
-  `src/merenda/nimkit/containers/listviews.nim`; `TableView` now owns the
-  public row/selection control surface, while `PopupListView` and
-  `listbasics.nim` remain as lightweight popup/shared row-rendering helpers.
-  The theme surface was renamed from `srListView`/`ListViewStyle`/
-  `listView.*` tokens to `srTableView`/`TableViewStyle`/`tableView.*` tokens.
-- Finished the list-to-row vocabulary cleanup for the shared row primitives:
-  `ListViewport` became `RowViewport`, `ListRowState` became `RowState`,
-  `ListRowStyle` became `RowStyle`, and list-item drawing/theme names now use
-  `RowItem*`, `srRowItem`, and `drawRowItem`.
-- Polished the table demo and hosted-cell interaction path: unavailable rows
-  now use explicit row-item disabled colors, hosted table cell views inherit the
-  row disabled visual state, and the `Inspect` action column no longer starts
-  editing before firing the button action.
-- Finished the next table-header interaction pass: header resize handles now
-  expose cursor rects and tracking areas, sort state renders with drawn
-  indicators instead of text suffixes, and column reordering previews a visible
-  insertion marker with edge autoscroll before applying the move on mouse up.
-  Header rendering now routes through reusable `TableHeaderChrome` helpers so
-  custom table drawing can replace chrome while reusing the structural header
-  pieces.
-- Finished table drag/drop target integration: generic drag targets now carry
-  before/on/after insertion positions, table rows and header columns resolve
-  distinct insertion targets while preserving cell/item targets, table drag
-  info exposes the resolved drop position, visible row drop affordances honor
-  insertion position, and table delegates can validate and accept drops against
-  the proposed operation, target, and insertion position before completion.
-- Finished table persistence integration: table state storage now resolves
-  through centralized application/user-defaults storage, workspace-scoped
-  stores, and document-scoped responder-chain defaults providers; documents
-  expose their own defaults store and stable scope identifiers; column rename
-  aliases migrate saved column and selected-column state; and autosaved table
-  state saves/restores with the window/view lifecycle instead of ad hoc callers.
-- Added `Box` / group box / separator support with titled and untitled group
-  boxes, separator-line variants, themed border/title/metric drawing, intrinsic
-  sizing, content hosting, grouping/separator accessibility semantics, and
-  `examples/box_demo.nim` coverage.
-- Added the first pure Nim panel/dialog shells on top of the modal/session
-  model: `Panel`, `Alert`, `OpenPanel`, and `SavePanel` construction plus modal
-  and sheet entry points. Native panel bridges remain a later backend task.
-- Hardened the pure Nim panel/dialog layer into reusable views: `Alert`,
-  `OpenPanel`, and `SavePanel` now build real content views with action buttons,
-  accessory views, response mapping, live file-type validation, selected URL
-  helpers, and modal preparation hooks; `DocumentController` owns configurable
-  open/save panels and can route panel selections through document open/save
-  flows; `Application.runForFrames` now preserves an already-running outer app
-  loop so nested modal pumps do not close demos after a panel action; and
-  `examples/panel_demo.nim` exercises both direct panels and
-  document-controller-backed panels.
-- Added `SplitView` as a resizable container primitive with horizontal and
-  vertical pane arrangements, themed dividers, divider hit testing and drag
-  tracking, cursor rects, min/max pane constraints, collapsible panes,
-  accessibility child flattening, backend-neutral state capture/restore, and
-  `examples/splitview_demo.nim` coverage.
-- Added `ProgressIndicator` with determinate bars, indeterminate bar/spinner
-  modes, start/stop/step animation state, displayed-when-stopped policy,
-  themed progress chrome, intrinsic sizing, value-change accessibility
-  notifications, and `examples/progress_indicator_demo.nim` coverage.
-- Added `Slider` as a value/action control with min/max/step clamping,
-  mouse-drag and keyboard adjustment, themed track/knob/focus rendering,
-  target/action dispatch, accessibility value semantics, and coverage in the
-  controls, preferences, and inspector examples.
-- Added `Stepper` as a compact value/action control with min/max/increment
-  clamping, optional wrapping, deterministic press-and-hold repeat state,
-  formatter hooks, mouse and keyboard adjustment, target/action dispatch,
-  accessibility increment/decrement actions, and a text-field-paired
-  `examples/stepper_demo.nim`; `examples/controls_showcase.nim` now includes a
-  compact text-field/stepper pairing too.
-- Added `CascadingView` with a Miller Column preset on top of scroll/table row
-  primitives: item/path identity, static item and protocol-backed data sources,
-  delegate selection/activation hooks, keyboard navigation, column reloads,
-  cascading-specific theme roles, accessibility semantics, and
-  `examples/cascading_demo.nim` plus `tests/tnimkit_cascadingviews.nim`
-  coverage.
-- Added `DialogButtonBox` for dialog/action rows: standard button roles,
-  platform-style role ordering, alignment policy, spacing, spacer management,
-  and reusable button lookup for panel and preferences-style views.
-- Added the initial animation core model: `Animation`,
-  `ValueAnimation[T]`, `PropertyAnimation[T]`, `AnimationGroup`,
-  `ParallelAnimationGroup`, `SequentialAnimationGroup`, and `PauseAnimation`
-  with Sigil-backed state/current-time/progress/value fields, lifecycle and
-  progress/value signals, progress marks, protocol-backed duration/state/time
-  hooks, group duration calculation, method-based value interpolation, and
-  selector-based property dispatch.
-- Added interpolation and timing support for animation values: `AnimationTiming`
-  with linear, ease-in, ease-out, ease-in-out, cubic Bezier, and spring timing
-  functions; overridable adjusted-progress and typed interpolation methods; and
-  concrete `float32`, `Point`, `Size`, `Rect`, and `Color` value animation
-  support.
-- Added scheduler and threading support for animations: `AnimationScheduler`
-  provides deterministic manual ticking, loop-aware total-duration progression,
-  pause/resume/stop handling, completion cleanup, and scheduler tick signals;
-  `AnimationSchedulerClock` bridges a Sigils `threadSelectors` timer through a
-  moved ticker actor so selector threads only queue frame deltas while local
-  scheduler draining performs NimKit mutations on the caller/UI thread.
-- Added property animation surfaces on top of the selector-backed animation
-  core: `View.frame`, `View.bounds`, `View.alphaValue`, `ScrollView`
-  `contentOffset`, `ProgressIndicator.value`, `SplitView` divider positions,
-  and cascading column metrics now have helper constructors that attach narrow
-  animation protocols and write through the existing public setters.
-- Finished the animation transaction and examples pass: explicit animation
-  transactions and the `animationGroup` template capture setter-backed property
-  changes, `Application` owns and drains an animation scheduler/clock during
-  run-loop frames, `examples/progress_indicator_demo.nim` now uses the shared
-  scheduler, and `examples/animation_demo.nim` covers property animation,
-  parallel/sequential groups, and transaction sugar.
+- Reorganized NimKit under domain subdirectories while keeping
+  `merenda/nimkit` as the stable umbrella import; completed the drawing/chrome
+  split, image resources, view geometry/parity APIs, render alpha/shadow
+  support, and tracking affordance storage.
+- Hardened the responder, command, action, selector, application, window, menu,
+  popup, modal, and sheet layers into a coherent pure Nim AppKit-style runtime:
+  key/mouse/scroll/help events have explicit handled/unhandled contracts,
+  responder-chain command dispatch is selector-backed, menus and popup menus are
+  interactive, and application/window state now covers key/main transitions,
+  modal blocking, activation, hide/unhide, autosave, and window-menu updates.
+- Built the document/controller stack above the pure Nim window/application
+  model: `WindowController`, `Document`, and `DocumentController` now manage
+  window ownership, file metadata, edited state, recent documents, open/reopen,
+  save/revert/close flows, responder-chain integration, and backend-neutral
+  document defaults.
+- Expanded core containers and shared primitives: `ScrollView`/`ClipView`,
+  `Box`, `SplitView`, form/grid/stack support, table row primitives, popup
+  lists, and the list-to-row vocabulary cleanup are in place with themed
+  rendering, intrinsic sizing, layout integration, and example coverage.
+- Matured `TableView`, `OutlineView`, and `CascadingView` around protocols
+  instead of ad hoc callbacks: headers, sorting, resizing, reordering, hosted
+  cells, field-editor-backed editing, state persistence, drag/drop targets,
+  disclosure affordances, keyboard behavior, and accessibility semantics are
+  covered by focused tests and demos.
+- Added backend-neutral pasteboard and dragging foundations with typed item
+  storage, named/unique pasteboards, lazy providers, strings/text/data/property
+  lists/URLs/files/colors/fonts/images, drag sessions, promised-file staging,
+  backend bridges for host-supported payloads, autoscroll/update dispatch, and
+  table/outline/list integration.
+- Added the pure Nim accessibility core and expanded built-in semantics across
+  views, buttons, checkboxes, text fields, labels, menus, popup controls,
+  combo boxes, tabs, scroll areas, table rows/cells, outline rows/disclosure
+  controls, progress indicators, sliders, switches, and steppers.
+- Filled out the current desktop control set: buttons, checkboxes, radio
+  buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
+  progress indicators, sliders, steppers, dialog button boxes, group boxes, and
+  image views now route state through NimKit setters, target/action dispatch,
+  rendering invalidation, layout metrics, and accessibility notifications.
+- Hardened reusable pure Nim panel/dialog contracts: `Alert`, `OpenPanel`, and
+  `SavePanel` now build modal and sheet content with buttons, accessory views,
+  response mapping, file-type validation, selected URL helpers, modal
+  preparation hooks, document-controller integration, and demo coverage.
+- Added the first animation layer: value/property animations, groups, timing
+  curves, scheduler/clock plumbing, transaction sugar, selector-backed property
+  dispatch, setter-routed mutation, and demos for progress indicators and
+  animation workflows.
 
 ## Current Verification
 
