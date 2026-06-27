@@ -198,7 +198,7 @@ proc drawRowItem*(
       itemStyle.box.cornerRadius,
       itemStyle.box.shadows,
     )
-    context.addText(itemStyle.rowItemTextRect(rect), row.text, itemStyle.text.color)
+    context.addText(itemStyle.rowItemTextRect(rect), row.text, itemStyle.text)
   else:
     discard context.addRenderRectangle(
       layer,
@@ -211,7 +211,7 @@ proc drawRowItem*(
       itemStyle.box.shadows,
     )
     context.addText(
-      layer, parent, itemStyle.rowItemTextRect(rect), row.text, itemStyle.text.color
+      layer, parent, itemStyle.rowItemTextRect(rect), row.text, itemStyle.text
     )
 
 proc drawRowItem*(

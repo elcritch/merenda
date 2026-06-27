@@ -1156,9 +1156,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         context.appearance.chromeFill(separatorChrome),
       )
       context.addComboBoxDoubleArrow(arrowRoot, arrowFrame, style.arrowColor)
-      context.addText(
-        style.comboBoxTextRect(button.bounds), button.title(), style.text.color
-      )
+      context.addText(style.comboBoxTextRect(button.bounds), button.title(), style.text)
       return
 
     let fillColor =
@@ -1191,7 +1189,11 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
     context.addText(
       button.bounds.inset(initEdgeInsets(6.0, 10.0, 2.0, 10.0)),
       button.title(),
-      initColor(0.08, 0.09, 0.11),
+      context.appearance.resolveTextStyle(
+        initControlStyleContext(srComboBox),
+        initColor(0.08, 0.09, 0.11),
+        initEdgeInsets(0.0),
+      ),
     )
 
 protocol PopupMenuButtonEvents of ResponderEventProtocol:

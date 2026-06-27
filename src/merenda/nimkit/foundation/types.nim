@@ -189,9 +189,17 @@ const
   LayoutPriorityHigh* = LayoutPriority(750.0'f32)
   LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
   DefaultFontSize* = 13.0'f32
+  DefaultFontName* = "IBMPlexSans-Regular.ttf"
+  NimKitFontEnv* = "NIMKIT_FONT"
+  MerendaFontEnv* = "MERENDA_FONT"
+  FontEnvVars* = [NimKitFontEnv, MerendaFontEnv]
   NimKitFontSizeEnv* = "NIMKIT_FONT_SIZE"
   MerendaFontSizeEnv* = "MERENDA_FONT_SIZE"
   FontSizeEnvVars* = [NimKitFontSizeEnv, MerendaFontSizeEnv]
+
+type FontOverride* = object
+  envName*: string
+  name*: string
 
 type FontSizeOverride* = object
   envName*: string
@@ -200,6 +208,21 @@ type FontSizeOverride* = object
 func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
 func `<=`*(a, b: LayoutPriority): bool {.borrow.}
+
+proc fontOverrideFromEnv*(): Option[FontOverride] =
+  for envName in FontEnvVars:
+    let value = getEnv(envName).strip()
+    if value.len == 0:
+      continue
+    return some(FontOverride(envName: envName, name: value))
+  none(FontOverride)
+
+proc defaultFontName*(): string =
+  let override = fontOverrideFromEnv()
+  if override.isSome:
+    override.get().name
+  else:
+    DefaultFontName
 
 proc fontSizeOverrideFromEnv*(): Option[FontSizeOverride] =
   for envName in FontSizeEnvVars:

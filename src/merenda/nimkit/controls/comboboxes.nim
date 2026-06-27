@@ -379,7 +379,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
     )
     context.addComboBoxArrow(arrowRoot, arrowFrame, style.arrowColor)
     context.addText(
-      style.comboBoxTextRect(comboBox.bounds), comboBox.stringValue, style.text.color
+      style.comboBoxTextRect(comboBox.bounds), comboBox.stringValue, style.text
     )
 
     if comboBox.usesInlinePopup:
@@ -574,20 +574,20 @@ proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
     classes = comboBox.styleClasses,
   )
 
-proc comboBoxMeasuredTextSize(cell: ComboBoxCell): Size =
+proc comboBoxMeasuredTextSize(cell: ComboBoxCell, style: TextStyle): Size =
   let view = cell.controlView()
   if view of ComboBox:
     let comboBox = ComboBox(view)
-    result = textNaturalSize(comboBox.stringValue())
+    result = textNaturalSize(comboBox.stringValue(), style)
     for idx in 0 ..< comboBox.numberOfItems():
-      let itemSize = textNaturalSize(comboBox.itemAtIndex(idx))
+      let itemSize = textNaturalSize(comboBox.itemAtIndex(idx), style)
       result.width = max(result.width, itemSize.width)
       result.height = max(result.height, itemSize.height)
     return
 
-  result = textNaturalSize(cell.cellStringValue())
+  result = textNaturalSize(cell.cellStringValue(), style)
   for item in cell.xItems:
-    let itemSize = textNaturalSize(item)
+    let itemSize = textNaturalSize(item, style)
     result.width = max(result.width, itemSize.width)
     result.height = max(result.height, itemSize.height)
 
@@ -606,7 +606,9 @@ protocol DefaultComboBoxCellMeasurement of CellMeasurementProtocol:
         else:
           initControlStyleContext(srComboBox)
       style = appearance.resolveComboBoxStyle(context)
-    initIntrinsicSize(style.comboBoxControlSize(cell.comboBoxMeasuredTextSize()))
+    initIntrinsicSize(
+      style.comboBoxControlSize(cell.comboBoxMeasuredTextSize(style.text))
+    )
 
   method cellSizeForBounds(cell: ComboBoxCell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)

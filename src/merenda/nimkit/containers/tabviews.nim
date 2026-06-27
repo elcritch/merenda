@@ -254,12 +254,21 @@ proc tabBarFrame(tabView: TabView): Rect =
       style.tabHeight + style.contentBorderWidth,
     )
 
-proc tabWidth(item: TabViewItem, style: TabViewStyle): float32 =
+func tabTextColor(enabled, selected: bool): Color =
+  if not enabled:
+    initColor(0.48, 0.50, 0.54)
+  elif selected:
+    initColor(0.07, 0.08, 0.10)
+  else:
+    initColor(0.14, 0.15, 0.18)
+
+proc tabWidth(item: TabViewItem, style: TabViewStyle, textStyle: TextStyle): float32 =
   let textSize = textNaturalSize(
     if item.isNil:
       ""
     else:
-      item.label()
+      item.label(),
+    textStyle,
   )
   min(
     max(textSize.width + style.tabHorizontalPadding * 2.0'f32, style.tabMinWidth),
@@ -269,8 +278,13 @@ proc tabWidth(item: TabViewItem, style: TabViewStyle): float32 =
 proc tabGroupWidth(tabView: TabView, style: TabViewStyle): float32 =
   if tabView.isNil:
     return
+  let textStyle = tabView.effectiveAppearance().resolveTextStyle(
+      initControlStyleContext(srTab),
+      tabTextColor(enabled = true, selected = false),
+      initEdgeInsets(0.0),
+    )
   for item in tabView.xItems:
-    result += item.tabWidth(style)
+    result += item.tabWidth(style, textStyle)
   if tabView.xTabMode == tvmTraditional and tabView.xItems.len > 1:
     result += style.tabGap * float32(tabView.xItems.len - 1)
 
@@ -282,6 +296,11 @@ proc tabRectInBar(tabView: TabView, index: int): Rect =
     return
   let
     style = tabView.tabStyle()
+    textStyle = tabView.effectiveAppearance().resolveTextStyle(
+        initControlStyleContext(srTab),
+        tabTextColor(enabled = true, selected = false),
+        initEdgeInsets(0.0),
+      )
     groupWidth = tabView.tabGroupWidth(style)
   var x =
     case tabView.xTabMode
@@ -290,12 +309,12 @@ proc tabRectInBar(tabView: TabView, index: int): Rect =
     of tvmTraditional:
       style.tabInset
   for itemIndex in 0 ..< index:
-    x += tabView.xItems[itemIndex].tabWidth(style)
+    x += tabView.xItems[itemIndex].tabWidth(style, textStyle)
     if tabView.xTabMode == tvmTraditional:
       x += style.tabGap
 
   let
-    width = tabView.xItems[index].tabWidth(style)
+    width = tabView.xItems[index].tabWidth(style, textStyle)
     selected = index == tabView.xSelectedIndex
     traditionalRise = max(style.tabHeight - style.tabSegmentHeight, 0.0'f32)
   case tabView.xTabMode
@@ -567,14 +586,6 @@ func tabBorderColor(selected, enabled: bool): Color =
   else:
     initColor(0.65, 0.67, 0.70)
 
-func tabTextColor(enabled, selected: bool): Color =
-  if not enabled:
-    initColor(0.48, 0.50, 0.54)
-  elif selected:
-    initColor(0.07, 0.08, 0.10)
-  else:
-    initColor(0.14, 0.15, 0.18)
-
 func tabHighlightFill(enabled: bool): Fill =
   fill(initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30))
 
@@ -636,6 +647,8 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     tabTextValue = context.appearance.resolveColor(
       tabStyleContext, StyleTextColor, tabTextColor(enabled, selected)
     )
+    tabTextStyle =
+      context.appearance.resolveTextStyle(tabStyleContext, tabTextValue, tabTextInsets)
     tabHighlightFillValue = context.appearance.resolveFill(
       tabStyleContext, tabHighlightFill(enabled), StyleHighlightFill
     )
@@ -675,7 +688,7 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     ),
   )
   context.addText(
-    rect.tabTextRect(tabTextInsets), item.label(), tabTextValue, alignment = taCenter
+    rect.tabTextRect(tabTextInsets), item.label(), tabTextStyle, alignment = taCenter
   )
   if selected and tabView.isFocusVisible:
     discard context.addRenderRectangle(

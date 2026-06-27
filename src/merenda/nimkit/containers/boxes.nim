@@ -50,7 +50,8 @@ proc boxTitleSize(box: Box): Size =
   if box.isNil or box.xKind == bkSeparator or box.xTitle.len == 0:
     initSize(0.0, 0.0)
   else:
-    textNaturalSize(box.xTitle)
+    let style = box.resolvedBoxStyle()
+    textNaturalSize(box.xTitle, style.text)
 
 proc boxHasTitle(box: Box): bool =
   not box.isNil and box.xKind == bkGroup and box.xTitle.len > 0
@@ -270,9 +271,9 @@ proc drawGroupBox(box: Box, context: DrawContext, style: BoxStyle) =
         ),
         textHeight,
       )
-      titleText = clippedText(box.xTitle, textRect.size.width)
+      titleText = clippedText(box.xTitle, textRect.size.width, style.text)
     if titleText.len > 0 and not textRect.isEmpty:
-      context.addText(textRect, titleText, style.text.color)
+      context.addText(textRect, titleText, style.text)
 
 protocol DefaultBoxLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(box: Box): IntrinsicSize =

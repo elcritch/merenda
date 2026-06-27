@@ -377,6 +377,13 @@ proc drawPopupList*(
               initColor(1.0, 1.0, 1.0)
             else:
               initColor(0.27, 0.29, 0.33)
+          accessoryStyle = context.appearance.resolveTextStyle(
+            initControlStyleContext(
+              popupList.xItemRole, states, id = popupList.styleId(), classes = classes
+            ),
+            accessoryColor,
+            initEdgeInsets(0.0),
+          )
         context.drawRowItem(
           itemRect,
           row,
@@ -401,7 +408,7 @@ proc drawPopupList*(
               max(itemRect.size.height - 5.0'f32, 0.0'f32),
             ),
             if popupList.itemState(itemIndex) == bsOn: "✓" else: "-",
-            accessoryColor,
+            accessoryStyle,
             taCenter,
           )
         if keyEquivalentText.len > 0:
@@ -415,7 +422,7 @@ proc drawPopupList*(
               max(itemRect.size.height - 5.0'f32, 0.0'f32),
             ),
             keyEquivalentText,
-            accessoryColor,
+            accessoryStyle,
             taRight,
           )
         if popupList.itemHasSubmenu(itemIndex):
@@ -429,7 +436,7 @@ proc drawPopupList*(
               max(itemRect.size.height - 5.0'f32, 0.0'f32),
             ),
             ">",
-            accessoryColor,
+            accessoryStyle,
             taRight,
           )
 
