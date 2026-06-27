@@ -49,6 +49,8 @@ type
     xPageScroll: array[LayoutAxis, float32]
     xBorderType: ScrollViewBorderType
     xDrawsBackground: bool
+    xScrollViewRole: StyleRole
+    xScrollerRole: StyleRole
     xScrollerInsets: EdgeInsets
     xHeaderView: array[LayoutAxis, View]
     xCornerView: View
@@ -79,6 +81,8 @@ proc contentOffset*(scrollView: ScrollView): Point
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect
 proc verticalScrollerRect*(scrollView: ScrollView): Rect
 proc drawScroller*(context: DrawContext, track, knob: Rect, style: ScrollViewStyle)
+proc scrollViewRole*(scrollView: ScrollView): StyleRole
+proc scrollerRole*(scrollView: ScrollView): StyleRole
 
 proc documentRect*(clipView: ClipView): Rect
 proc lineScroll*(scrollView: ScrollView, axis: LayoutAxis): float32
@@ -86,7 +90,7 @@ proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView)
 
 proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
   initControlStyleContext(
-    srScrollView,
+    scrollView.scrollViewRole(),
     scrollView.widgetStateSet(),
     id = scrollView.styleId(),
     classes = scrollView.styleClasses(),
@@ -97,7 +101,7 @@ proc scrollerStyleContext(scroller: Scroller): StyleContext =
     initControlStyleContext(srScroller)
   else:
     initControlStyleContext(
-      srScroller,
+      scroller.xScrollView.scrollerRole(),
       scroller.widgetStateSet(),
       id = scroller.xScrollView.styleId(),
       classes = scroller.xScrollView.styleClasses(),
@@ -681,6 +685,27 @@ proc `drawsBackground=`*(scrollView: ScrollView, value: bool) =
   scrollView.xDrawsBackground = value
   scrollView.setNeedsDisplay(true)
 
+proc scrollViewRole*(scrollView: ScrollView): StyleRole =
+  if scrollView.isNil: srScrollView else: scrollView.xScrollViewRole
+
+proc `scrollViewRole=`*(scrollView: ScrollView, role: StyleRole) =
+  if scrollView.isNil or scrollView.xScrollViewRole == role:
+    return
+  scrollView.xScrollViewRole = role
+  scrollView.setNeedsDisplay(true)
+
+proc scrollerRole*(scrollView: ScrollView): StyleRole =
+  if scrollView.isNil: srScroller else: scrollView.xScrollerRole
+
+proc `scrollerRole=`*(scrollView: ScrollView, role: StyleRole) =
+  if scrollView.isNil or scrollView.xScrollerRole == role:
+    return
+  scrollView.xScrollerRole = role
+  scrollView.setNeedsDisplay(true)
+  for scroller in scrollView.xScroller:
+    if not scroller.isNil:
+      scroller.setNeedsDisplay(true)
+
 proc scrollerInsets*(scrollView: ScrollView): EdgeInsets =
   scrollView.xScrollerInsets
 
@@ -986,6 +1011,8 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   scrollView.xPageScroll[laHorizontal] = 0.0'f32
   scrollView.xPageScroll[laVertical] = 0.0'f32
   scrollView.xBorderType = svbNoBorder
+  scrollView.xScrollViewRole = srScrollView
+  scrollView.xScrollerRole = srScroller
   scrollView.xScrollerInsets = initEdgeInsets(0.0)
   scrollView.xDynamicScrolling = true
   scrollView.xClipView = initClipView(scrollView, scrollView.bounds())

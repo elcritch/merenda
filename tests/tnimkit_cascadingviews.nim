@@ -1,6 +1,8 @@
 import std/[tables, unicode, unittest]
 
-from figdraw/fignodes import Fig, RenderList, NfClipContent, nkRectangle, nkText
+from figdraw/fignodes import
+  Fig, RenderList, NfClipContent, flColor, nkRectangle, nkText
+from pkg/chroma import rgba
 import sigils/core
 
 import merenda/nimkit
@@ -55,6 +57,13 @@ proc textNodeX(list: RenderList, text: string): float32 =
   for node in list.nodes:
     if node.kind == nkText and node.renderedText() == text:
       return node.screenBox.x.float32
+
+proc hasFilledRect(list: RenderList, rect: Rect, color: Color): bool =
+  for node in list.nodes:
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == color.rgba and node.screenBoxClose(rect):
+      return true
+  false
 
 proc rightTriangleBarCount(list: RenderList, rowRect: Rect): int =
   for node in list.nodes:
@@ -244,6 +253,7 @@ suite "NimKit CascadingView":
     view.delegate = delegate
     signals.observeProtocol(view, CascadingEvents)
 
+    check view.conformsTo(CascadingViewProtocol)
     check view.conformsTo(CascadingSelectionProtocol)
     check view.conformsTo(CascadingReloadProtocol)
     check view.childrenForParent("").len == 2
@@ -347,6 +357,86 @@ suite "NimKit CascadingView":
     check (second.columnX - first.columnX).nearlyEqual(-30.0)
     check (second.textX - first.textX).nearlyEqual(-30.0)
     check (first.textX - first.columnX).nearlyEqual(second.textX - second.columnX)
+
+  test "theming uses cascading roles for surface columns and rows":
+    let
+      root = newView(frame = initRect(0, 0, 260, 120))
+      view = newCascadingView(frame = initRect(0, 0, 260, 120))
+      surfaceFill = initColor(0.11, 0.02, 0.18, 1.0)
+      columnFill = initColor(0.25, 0.14, 0.34, 1.0)
+      scrollerFill = initColor(0.10, 0.03, 0.14, 1.0)
+      selectedFill = initColor(0.80, 0.10, 0.72, 1.0)
+      selectedText = initColor(0.94, 0.98, 1.0, 1.0)
+
+    var theme = initTheme()
+    theme[initStyleSelector(srCascadingView, classes = @["project-browser"]), StyleFill] =
+      surfaceFill
+
+    theme[
+      initStyleSelector(srCascadingColumn, classes = @["project-browser"]), StyleFill
+    ] = columnFill
+
+    theme[
+      initStyleSelector(srCascadingScroller, classes = @["project-browser"]), StyleFill
+    ] = scrollerFill
+
+    theme[
+      initStyleSelector(
+        srCascadingRowItem, {ssSelected}, classes = @["project-browser"]
+      ),
+      StyleFill,
+    ] = selectedFill
+
+    theme[
+      initStyleSelector(
+        srCascadingRowItem, {ssSelected}, classes = @["project-browser"]
+      ),
+      StyleTextColor,
+    ] = selectedText
+
+    view.columnWidth = 120.0
+    view.styleClasses = @["project-browser"]
+    view.cascadingItems = [
+      initCascadingItem("parent", "Parent"),
+      initCascadingItem("leaf", "Leaf", leaf = true),
+      initCascadingItem("child", "Child", parentIdentifier = "parent", leaf = true),
+    ]
+    root.addSubview(view)
+    view.selectItem(0, 0)
+    let firstColumn = view.tableViewForColumn(0)
+    firstColumn.scrollView().autohidesScrollers = false
+
+    let
+      renders = buildRenders(root, initAppearance(theme))
+      list = renders.layers[DefaultDrawLevel]
+      surfaceRect = view.rectToWindow(view.bounds())
+      firstColumnRect = firstColumn.rectToWindow(firstColumn.bounds())
+      selectedRow = firstColumn.rectToWindow(firstColumn.rowItemRect(0))
+      scrollerRect = firstColumn.scrollView().rectToWindow(
+          firstColumn.scrollView().verticalScrollerRect()
+        )
+      transparent = initColor(0.0, 0.0, 0.0, 0.0)
+
+    check firstColumn.tableRole == srCascadingColumn
+    check firstColumn.rowItemRole == srCascadingRowItem
+    check firstColumn.scrollView().scrollViewRole == srCascadingScrollView
+    check firstColumn.scrollView().scrollerRole == srCascadingScroller
+    check view.cascadeScrollView().background() == transparent
+    check firstColumn.scrollView().background() == transparent
+    check firstColumn.styleClasses() == @["project-browser"]
+    check list.hasFilledRect(surfaceRect, surfaceFill)
+    check list.hasFilledRect(firstColumnRect, columnFill)
+    check list.hasFilledRect(scrollerRect, scrollerFill)
+    check list.hasFilledRect(selectedRow, selectedFill)
+
+    var selectedTextFound = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "Parent" and
+          node.textLayout.spanColors.len > 0 and
+          node.textLayout.spanColors[0].kind == flColor and
+          node.textLayout.spanColors[0].color == selectedText.rgba:
+        selectedTextFound = true
+    check selectedTextFound
 
   test "rows with children render right disclosure arrows":
     let
