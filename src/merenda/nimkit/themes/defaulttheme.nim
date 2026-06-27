@@ -172,9 +172,17 @@ func aquaSwitchKnobShadows(enabled: bool): seq[BoxShadow] =
     ),
   ]
 
+const TextStyleRoles = [
+  srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srComboBox,
+  srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
+]
+
 proc initTheme*(): Theme =
   result.tokens = newStyleTokenStore()
   result.chromes = initTable[string, Chrome]()
+  for role in TextStyleRoles:
+    result[role, StyleFontName] = styleKeyword(defaultFontName())
+    result[role, StyleFontSize] = defaultFontSize()
   result["accent"] = styleColor(initColor(0.10, 0.48, 0.96, 1.0))
   result["accent.pressed"] = styleColor(initColor(0.02, 0.25, 0.70, 1.0))
   result["disabled.fill"] = styleColor(initColor(0.64, 0.68, 0.74, 1.0))

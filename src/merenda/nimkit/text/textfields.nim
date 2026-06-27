@@ -196,12 +196,13 @@ protocol DefaultTextFieldCellEditing of CellEditingProtocol:
       editor.selectable = textField.isSelectable()
       editor.alignment = textField.alignment()
       editor.textColor = style.text.color
-      editor.typingAttributes = defaultTextAttributes(style.text.color)
+      editor.typingAttributes =
+        defaultTextAttributes(style.text.color, style.text.fontSize)
       editor.allowsUndo = true
       if editor.textStorage().len > 0:
         editor.textStorage().setAttributes(
           initTextRange(0, editor.textStorage().len),
-          defaultTextAttributes(style.text.color),
+          defaultTextAttributes(style.text.color, style.text.fontSize),
         )
 
   method editWithFrame(
@@ -639,8 +640,8 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
 
     let
       textRect = style.textFieldTextRect(textField.bounds)
-      textValue = clippedText(textField.stringValue, textRect.size.width)
-      layout = textLayout(textRect, textValue, style.text.color, textField.alignment)
+      textValue = clippedText(textField.stringValue, textRect.size.width, style.text)
+      layout = textLayout(textRect, textValue, style.text, textField.alignment)
       selectedRange = textField.selectedRange
     if textField.isEditing and selectedRange.length > 0:
       discard context.addSelectedText(
@@ -733,14 +734,14 @@ protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
           )
         textSize =
           if textField.isEditable() or textField.isSelectable():
-            textNaturalSize("")
+            textNaturalSize("", style.text)
           else:
-            textNaturalSize(textField.stringValue())
+            textNaturalSize(textField.stringValue(), style.text)
       return initIntrinsicSize(style.textFieldControlSize(textSize))
 
     let style =
       initAppearance().resolveTextFieldStyle(initControlStyleContext(srTextField))
-    initIntrinsicSize(style.textFieldControlSize(textNaturalSize("")))
+    initIntrinsicSize(style.textFieldControlSize(textNaturalSize("", style.text)))
 
   method cellSizeForBounds(cell: TextFieldCell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)

@@ -53,10 +53,10 @@ protocol ButtonProtocol {.selectorScope: protocol.}:
   method isHighlighted*(): bool
   method setHighlighted*(highlighted: bool)
 
-proc buttonTextSize(cell: ButtonCell): Size =
-  result = textNaturalSize(cell.title())
+proc buttonTextSize(cell: ButtonCell, style: TextStyle): Size =
+  result = textNaturalSize(cell.title(), style)
   for title in cell.xReservedTitles:
-    let titleSize = textNaturalSize(title)
+    let titleSize = textNaturalSize(title, style)
     result.width = max(result.width, titleSize.width)
     result.height = max(result.height, titleSize.height)
 
@@ -105,7 +105,6 @@ protocol DefaultButtonCell of ButtonProtocol:
 protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ButtonCell): IntrinsicSize =
     let
-      textSize = cell.buttonTextSize()
       view = cell.controlView()
       appearance =
         if view.isNil:
@@ -118,10 +117,10 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
           if cell.buttonType() == btRadio: srRadioButton else: srCheckBox
         )
       )
-      return initIntrinsicSize(style.choiceControlSize(textSize))
+      return initIntrinsicSize(style.choiceControlSize(cell.buttonTextSize(style.text)))
 
     let style = appearance.resolveButtonStyle(cell.buttonStyleContext(srButton))
-    initIntrinsicSize(style.buttonControlSize(textSize))
+    initIntrinsicSize(style.buttonControlSize(cell.buttonTextSize(style.text)))
 
   method cellSizeForBounds(cell: ButtonCell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
@@ -336,20 +335,27 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       )
       if selected:
         if button.buttonType == btCheckBox and button.state == bsOn:
-          let markRect = indicatorRect.checkmarkTextRect()
+          let
+            markRect = indicatorRect.checkmarkTextRect()
+            markTextStyle = TextStyle(
+              color: style.markColor,
+              insets: style.text.insets,
+              fontName: style.text.fontName,
+              fontSize: style.text.fontSize,
+            )
           context.addText(
-            markRect, CheckboxCheckmark, style.markColor, alignment = taCenter
+            markRect, CheckboxCheckmark, markTextStyle, alignment = taCenter
           )
           context.addText(
             markRect.offsetRect(0.45'f32, 0.0'f32),
             CheckboxCheckmark,
-            style.markColor,
+            markTextStyle,
             alignment = taCenter,
           )
           context.addText(
             markRect.offsetRect(0.0'f32, -0.35'f32),
             CheckboxCheckmark,
-            style.markColor,
+            markTextStyle,
             alignment = taCenter,
           )
         else:
@@ -370,9 +376,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
           )
       if button.isFocusVisible:
         context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
-      context.addText(
-        style.choiceTextRect(button.bounds), button.title, style.text.color
-      )
+      context.addText(style.choiceTextRect(button.bounds), button.title, style.text)
     else:
       let states = button.widgetStateSet()
 
@@ -389,17 +393,27 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         context.addText(
           textRect.offsetRect(0.0, 1.0),
           button.title,
-          style.textHighlightColor,
+          TextStyle(
+            color: style.textHighlightColor,
+            insets: style.text.insets,
+            fontName: style.text.fontName,
+            fontSize: style.text.fontSize,
+          ),
           alignment = taCenter,
         )
       if style.textShadowColor.a > 0.0:
         context.addText(
           textRect.offsetRect(0.0, -0.6'f32),
           button.title,
-          style.textShadowColor,
+          TextStyle(
+            color: style.textShadowColor,
+            insets: style.text.insets,
+            fontName: style.text.fontName,
+            fontSize: style.text.fontSize,
+          ),
           alignment = taCenter,
         )
-      context.addText(textRect, button.title, style.text.color, alignment = taCenter)
+      context.addText(textRect, button.title, style.text, alignment = taCenter)
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseDown(button: Button, event: MouseEvent): bool =

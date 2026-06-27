@@ -4,6 +4,7 @@ from figdraw/common/fonttypes import GlyphArrangement
 
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
+import merenda/nimkit/themes
 import merenda/nimkit/text/texttypes
 
 type EnvSnapshot = object
@@ -59,19 +60,21 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   (minX, minY, maxX - minX, maxY - minY)
 
 suite "nimkit font layout":
-  test "default typeface request uses font env override before bundled fallback":
+  test "theme text style uses font env override precedence":
     withCleanFontEnv(
       proc() =
         putEnv(MerendaFontEnv, "Ubuntu.ttf")
         putEnv(NimKitFontEnv, "  HackNerdFont-Regular.ttf  ")
 
-        let request = defaultTypefaceRequest()
-        check request.name == "HackNerdFont-Regular.ttf"
-        check request.fallbackNames ==
-          @[DefaultTypefaceName, "Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+        let style = initAppearance().resolveTextStyle(
+            initControlStyleContext(srTextField),
+            initColor(0.0, 0.0, 0.0),
+            initEdgeInsets(0.0),
+          )
+        check style.fontName == "HackNerdFont-Regular.ttf"
     )
 
-  test "default typeface request ignores empty font env values":
+  test "font env override ignores empty values":
     withCleanFontEnv(
       proc() =
         putEnv(NimKitFontEnv, " ")
@@ -81,6 +84,13 @@ suite "nimkit font layout":
         check override.isSome
         check override.get().envName == MerendaFontEnv
         check override.get().name == "Ubuntu.ttf"
+
+        let style = initAppearance().resolveTextStyle(
+            initControlStyleContext(srTextField),
+            initColor(0.0, 0.0, 0.0),
+            initEdgeInsets(0.0),
+          )
+        check style.fontName == "Ubuntu.ttf"
     )
 
   test "default font size uses env override precedence":
@@ -119,6 +129,20 @@ suite "nimkit font layout":
         check defaultTextAttributes().fontSize == 18.0'f32
         check defaultTextAttributes(fontSize = 15.0'f32).fontSize == 15.0'f32
         check em(2.0'f32).resolveLayoutLength() == 36.0'f32
+    )
+
+  test "theme text style exposes font size to layout":
+    withCleanFontSizeEnv(
+      proc() =
+        putEnv(NimKitFontSizeEnv, "18")
+
+        let style = initAppearance().resolveTextStyle(
+            initControlStyleContext(srTextField),
+            initColor(0.0, 0.0, 0.0),
+            initEdgeInsets(0.0),
+          )
+        check style.fontSize == 18.0'f32
+        check textNaturalSize("wide", style).height >= 18.0'f32
     )
 
   test "centered label layout reports content bounds as local dimensions":

@@ -147,6 +147,8 @@ type
   TextStyle* = object
     color*: Color
     insets*: EdgeInsets
+    fontName*: string
+    fontSize*: float32
 
   ButtonStyle* = object
     box*: ControlBoxStyle
@@ -258,6 +260,8 @@ const
   StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
   StyleBoxShadows* = StyleKey[seq[BoxShadow]]("box.shadows")
   StyleTextColor* = StyleKey[Color]("text.color")
+  StyleFontName* = StyleKey[string]("font.name")
+  StyleFontSize* = StyleKey[float32]("font.size")
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
@@ -1186,6 +1190,27 @@ proc resolveChromeName*(theme: Theme, context: StyleContext): string =
 proc resolveChromeName*(appearance: Appearance, context: StyleContext): string =
   appearance.theme.resolveChromeName(context)
 
+proc resolveTextStyle*(
+    theme: Theme,
+    context: StyleContext,
+    colorFallback: Color,
+    insetsFallback: EdgeInsets,
+): TextStyle =
+  TextStyle(
+    color: theme.colorRule(context, StyleTextColor, colorFallback),
+    insets: theme.insetsRule(context, StyleTextInsets, insetsFallback),
+    fontName: theme.keywordRule(context, StyleFontName, defaultFontName()),
+    fontSize: max(theme.lengthRule(context, StyleFontSize, defaultFontSize()), 1.0'f32),
+  )
+
+proc resolveTextStyle*(
+    appearance: Appearance,
+    context: StyleContext,
+    colorFallback: Color,
+    insetsFallback: EdgeInsets,
+): TextStyle =
+  appearance.theme.resolveTextStyle(context, colorFallback, insetsFallback)
+
 proc setStyle*[T](
     appearance: var Appearance,
     selector: StyleSelector,
@@ -1571,9 +1596,8 @@ proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
       initColor(0.10, 0.25, 0.46, 1.0),
       cornerRadiusFallback = 14.0,
     ),
-    text: TextStyle(
-      color: theme.colorRule(context, StyleTextColor, initColor(1.0, 1.0, 1.0, 1.0)),
-      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    text: theme.resolveTextStyle(
+      context, initColor(1.0, 1.0, 1.0, 1.0), initEdgeInsets(0.0, 8.0)
     ),
     textHighlightColor:
       theme.colorRule(context, StyleTextHighlightColor, initColor(0.0, 0.0, 0.0, 0.0)),
@@ -1592,9 +1616,8 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
       cornerRadiusFallback = 6.0,
     ),
     markColor: theme.colorRule(context, StyleMarkColor, initColor(1.0, 1.0, 1.0, 1.0)),
-    text: TextStyle(
-      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
-      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 2.0)),
+    text: theme.resolveTextStyle(
+      context, initColor(0.08, 0.09, 0.11, 1.0), initEdgeInsets(0.0, 2.0)
     ),
     indicatorSize: theme.lengthRule(context, StyleIndicatorSize, 14.0),
     indicatorSpacing: theme.lengthRule(context, StyleIndicatorSpacing, 7.0),
@@ -1714,10 +1737,7 @@ proc resolveTextFieldStyle*(
       initColor(0.72, 0.75, 0.80, 1.0),
       cornerRadiusFallback = 6.0,
     ),
-    text: TextStyle(
-      color: theme.colorRule(context, StyleTextColor, textColor),
-      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
-    ),
+    text: theme.resolveTextStyle(context, textColor, initEdgeInsets(0.0, 6.0)),
     selectionColor:
       theme.colorRule(context, StyleSelectionColor, initColor(0.22, 0.46, 0.84, 0.32)),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
@@ -1734,9 +1754,8 @@ proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
       initColor(0.72, 0.75, 0.80, 1.0),
       cornerRadiusFallback = 6.0,
     ),
-    text: TextStyle(
-      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
-      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    text: theme.resolveTextStyle(
+      context, initColor(0.08, 0.09, 0.11, 1.0), initEdgeInsets(0.0, 8.0)
     ),
     arrowWidth: theme.lengthRule(context, StyleIndicatorSize, 24.0),
     arrowFill: theme.fillRule(
@@ -1796,9 +1815,8 @@ proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =
       focusRingInsetFallback = 0.0,
       focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
     ),
-    text: TextStyle(
-      color: theme.colorRule(context, StyleTextColor, initColor(0.08, 0.09, 0.11, 1.0)),
-      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 6.0)),
+    text: theme.resolveTextStyle(
+      context, initColor(0.08, 0.09, 0.11, 1.0), initEdgeInsets(0.0, 6.0)
     ),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(0.0, 22.0)),
   )
@@ -1815,9 +1833,8 @@ proc resolveBoxStyle*(theme: Theme, context: StyleContext): BoxStyle =
       focusRingInsetFallback = 0.0,
       focusRingColorFallback = initColor(0.0, 0.0, 0.0, 0.0),
     ),
-    text: TextStyle(
-      color: theme.colorRule(context, StyleTextColor, initColor(0.12, 0.14, 0.18, 1.0)),
-      insets: theme.insetsRule(context, StyleTextInsets, initEdgeInsets(0.0, 8.0)),
+    text: theme.resolveTextStyle(
+      context, initColor(0.12, 0.14, 0.18, 1.0), initEdgeInsets(0.0, 8.0)
     ),
     contentInsets: theme.insetsRule(context, StylePadding, initEdgeInsets(14.0, 12.0)),
     titleHeight: theme.lengthRule(context, StyleTitleHeight, 18.0'f32),

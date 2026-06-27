@@ -18,6 +18,7 @@ type
   TextLayoutManager* = ref object
     xTextStorage: TextStorage
     xTextContainer: TextContainer
+    xTextStyle: TextStyle
     xAlignment: TextAlignment
     xLayout: GlyphArrangement
     xLayoutRect: Rect
@@ -33,16 +34,29 @@ proc initTextLayoutManagerFields*(
     storage: TextStorage = nil,
     container = initTextContainer(),
     alignment = taLeft,
+    style = initAppearance().resolveTextStyle(
+        initControlStyleContext(srTextView),
+        initColor(0.08, 0.09, 0.11, 1.0),
+        initEdgeInsets(0.0),
+      ),
 ) =
   manager.xTextStorage = storage
   manager.xTextContainer = container
+  manager.xTextStyle = style
   manager.xAlignment = alignment
 
 proc newTextLayoutManager*(
-    storage: TextStorage = nil, container = initTextContainer(), alignment = taLeft
+    storage: TextStorage = nil,
+    container = initTextContainer(),
+    alignment = taLeft,
+    style = initAppearance().resolveTextStyle(
+        initControlStyleContext(srTextView),
+        initColor(0.08, 0.09, 0.11, 1.0),
+        initEdgeInsets(0.0),
+      ),
 ): TextLayoutManager =
   result = TextLayoutManager()
-  initTextLayoutManagerFields(result, storage, container, alignment)
+  initTextLayoutManagerFields(result, storage, container, alignment, style)
 
 proc invalidateLayout*(manager: TextLayoutManager) =
   if not manager.isNil:
@@ -69,6 +83,22 @@ proc `textContainer=`*(manager: TextLayoutManager, container: TextContainer) =
   manager.xTextContainer = container
   manager.invalidateLayout()
 
+proc textStyle*(manager: TextLayoutManager): TextStyle =
+  if manager.isNil:
+    initAppearance().resolveTextStyle(
+      initControlStyleContext(srTextView),
+      initColor(0.08, 0.09, 0.11, 1.0),
+      initEdgeInsets(0.0),
+    )
+  else:
+    manager.xTextStyle
+
+proc `textStyle=`*(manager: TextLayoutManager, style: TextStyle) =
+  if manager.isNil or manager.xTextStyle == style:
+    return
+  manager.xTextStyle = style
+  manager.invalidateLayout()
+
 proc alignment*(manager: TextLayoutManager): TextAlignment =
   if manager.isNil: taLeft else: manager.xAlignment
 
@@ -90,7 +120,8 @@ proc ensureLayout(manager: TextLayoutManager) =
   let rect = manager.layoutRect()
   manager.xLayoutRect = rect
   manager.xLayout = textLayout(
-    rect, manager.xTextStorage, manager.xAlignment, manager.xTextContainer.wraps
+    rect, manager.xTextStorage, manager.xTextStyle, manager.xAlignment,
+    manager.xTextContainer.wraps,
   )
   manager.xHasLayout = true
 

@@ -716,10 +716,13 @@ proc drawOutlineRowText(
     let
       text = outlineView.outlineCellText(row, column)
       textRect = outlineView.outlineTextRectForCell(row, column, rowBounds)
-    if text.len > 0 and not textRect.isEmpty:
-      discard context.addText(
-        textRect, text, initColor(0.14, 0.18, 0.25, 1.0), column.alignment()
+      textStyle = context.appearance.resolveTextStyle(
+        initControlStyleContext(srRowItem),
+        initColor(0.14, 0.18, 0.25, 1.0),
+        initEdgeInsets(0.0),
       )
+    if text.len > 0 and not textRect.isEmpty:
+      discard context.addText(textRect, text, textStyle, column.alignment())
 
 proc drawOutlineDropTarget(
     outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect

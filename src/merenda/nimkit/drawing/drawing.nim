@@ -1,4 +1,4 @@
-import std/[options, os, unicode]
+import std/unicode
 
 import pkg/bumpy
 
@@ -22,10 +22,6 @@ const
   DefaultDrawLevel* = 50.ZLevel
   FocusRingDrawLevel* = 90.ZLevel
   PopupDrawLevel* = 100.ZLevel
-  NimKitFontEnv* = "NIMKIT_FONT"
-  MerendaFontEnv* = "MERENDA_FONT"
-  FontEnvVars* = [NimKitFontEnv, MerendaFontEnv]
-  DefaultTypefaceName* = "IBMPlexSans-Regular.ttf"
   DefaultTypefaceFallbackNames* = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
   TextEllipsis = "…"
 
@@ -42,25 +38,16 @@ var defaultTypefaceId {.threadvar.}: TypefaceId
 var defaultTypefaceKey {.threadvar.}: string
 var defaultTypefaceReady {.threadvar.}: bool
 
-type FontOverride* = object
-  envName*: string
-  name*: string
-
-proc fontOverrideFromEnv*(): Option[FontOverride] =
-  for envName in FontEnvVars:
-    let value = getEnv(envName).strip()
-    if value.len == 0:
-      continue
-    return some(FontOverride(envName: envName, name: value))
-  none(FontOverride)
-
-proc defaultTypefaceRequest*(): tuple[name: string, fallbackNames: seq[string]] =
-  let override = fontOverrideFromEnv()
-  if override.isSome:
-    result.name = override.get().name
-    result.fallbackNames.add DefaultTypefaceName
-  else:
-    result.name = DefaultTypefaceName
+proc defaultTypefaceRequest(
+    fontName = defaultFontName()
+): tuple[name: string, fallbackNames: seq[string]] =
+  result.name =
+    if fontName.len > 0:
+      fontName
+    else:
+      defaultFontName()
+  if result.name != DefaultFontName:
+    result.fallbackNames.add DefaultFontName
   result.fallbackNames.add DefaultTypefaceFallbackNames
 
 proc defaultTypefaceCacheKey(
@@ -74,15 +61,18 @@ proc defaultTypefaceCacheKey(
 proc toFigRect(rect: nimkitTypes.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
-proc defaultFont(size: float32): FigFont =
+proc defaultFont(size: float32, fontName = defaultFontName()): FigFont =
   let
-    request = defaultTypefaceRequest()
+    request = defaultTypefaceRequest(fontName)
     cacheKey = request.defaultTypefaceCacheKey()
   if not defaultTypefaceReady or defaultTypefaceKey != cacheKey:
     defaultTypefaceId = loadTypeface(request.name, request.fallbackNames)
     defaultTypefaceKey = cacheKey
     defaultTypefaceReady = true
   defaultTypefaceId.fontWithSize(size)
+
+proc fontFor(style: TextStyle): FigFont =
+  defaultFont(style.fontSize, style.fontName)
 
 const AllCorners = {dcTopLeft, dcTopRight, dcBottomLeft, dcBottomRight}
 
@@ -155,14 +145,14 @@ proc toFontHorizontal(alignment: TextAlignment): FontHorizontal =
   of taRight: Right
 
 proc textLayout*(
-    rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
+    rect: nimkitTypes.Rect, text: string, style: TextStyle, alignment = taLeft
 ): GlyphArrangement =
   let
-    font = defaultFont(defaultFontSize())
-    style = fs(font, fill(color.rgba))
+    font = style.fontFor()
+    fontStyle = fs(font, fill(style.color.rgba))
   typeset(
     rect.toFigRect,
-    [(style, text)],
+    [(fontStyle, text)],
     hAlign = alignment.toFontHorizontal,
     vAlign = Middle,
     minContent = false,
@@ -170,18 +160,34 @@ proc textLayout*(
   )
 
 proc textLayout*(
-    rect: nimkitTypes.Rect, storage: TextStorage, alignment = taLeft, wrap = false
+    rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
+): GlyphArrangement =
+  textLayout(
+    rect,
+    text,
+    initAppearance().resolveTextStyle(
+      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
+    ),
+    alignment,
+  )
+
+proc textLayout*(
+    rect: nimkitTypes.Rect,
+    storage: TextStorage,
+    style: TextStyle,
+    alignment = taLeft,
+    wrap = false,
 ): GlyphArrangement =
   var spans: seq[(FontStyle, string)]
   if storage.isNil or storage.len == 0:
-    let attributes = defaultTextAttributes()
-    var font = defaultFont(attributes.fontSize)
+    let attributes = defaultTextAttributes(style.color, style.fontSize)
+    var font = defaultFont(attributes.fontSize, style.fontName)
     font.underline = attributes.underline
     font.strikethrough = attributes.strikethrough
-    spans.add((fs(font, fill(attributes.foregroundColor.rgba)), ""))
+    spans.add((fs(font, fill(style.color.rgba)), ""))
   else:
     for (attributes, text) in storage.styledRuns:
-      var font = defaultFont(attributes.fontSize)
+      var font = defaultFont(attributes.fontSize, style.fontName)
       font.underline = attributes.underline
       font.strikethrough = attributes.strikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
@@ -194,10 +200,25 @@ proc textLayout*(
     wrap = wrap,
   )
 
-proc textNaturalSize*(text: string): nimkitTypes.Size =
+proc textLayout*(
+    rect: nimkitTypes.Rect, storage: TextStorage, alignment = taLeft, wrap = false
+): GlyphArrangement =
+  textLayout(
+    rect,
+    storage,
+    initAppearance().resolveTextStyle(
+      initControlStyleContext(srTextView),
+      initColor(0.08, 0.09, 0.11, 1.0),
+      initEdgeInsets(0.0),
+    ),
+    alignment,
+    wrap,
+  )
+
+proc textNaturalSize*(text: string, style: TextStyle): nimkitTypes.Size =
   let
-    fontSize = defaultFontSize()
-    font = defaultFont(fontSize)
+    fontSize = style.fontSize
+    font = style.fontFor()
     style = fs(font, fill(initColor(0.0, 0.0, 0.0, 1.0).rgba))
     lineHeight = max(fontSize, getLineHeightImpl(font))
     lineCount = block:
@@ -219,6 +240,15 @@ proc textNaturalSize*(text: string): nimkitTypes.Size =
     max(lineHeight * lineCount.float32, layout.bounding.h),
   )
 
+proc textNaturalSize*(text: string): nimkitTypes.Size =
+  text.textNaturalSize(
+    initAppearance().resolveTextStyle(
+      initControlStyleContext(srTextField),
+      initColor(0.08, 0.09, 0.11, 1.0),
+      initEdgeInsets(0.0),
+    )
+  )
+
 proc runePrefix(text: string, count: int): string =
   var index = 0
   for rune in text.runes:
@@ -227,12 +257,12 @@ proc runePrefix(text: string, count: int): string =
     result.add rune.toUTF8()
     inc index
 
-proc clippedText*(text: string, width: float32): string =
+proc clippedText*(text: string, width: float32, style: TextStyle): string =
   if text.len == 0 or width <= 0.0'f32:
     return ""
-  if text.textNaturalSize().width <= width:
+  if text.textNaturalSize(style).width <= width:
     return text
-  let ellipsisWidth = TextEllipsis.textNaturalSize().width
+  let ellipsisWidth = TextEllipsis.textNaturalSize(style).width
   if ellipsisWidth > width:
     return ""
 
@@ -241,7 +271,7 @@ proc clippedText*(text: string, width: float32): string =
     high = text.runeLen()
   while low < high:
     let middle = (low + high + 1) div 2
-    if (text.runePrefix(middle) & TextEllipsis).textNaturalSize().width <= width:
+    if (text.runePrefix(middle) & TextEllipsis).textNaturalSize(style).width <= width:
       low = middle
     else:
       high = middle - 1
@@ -250,13 +280,35 @@ proc clippedText*(text: string, width: float32): string =
   else:
     text.runePrefix(low) & TextEllipsis
 
+proc clippedText*(text: string, width: float32): string =
+  text.clippedText(
+    width,
+    initAppearance().resolveTextStyle(
+      initControlStyleContext(srTextField),
+      initColor(0.08, 0.09, 0.11, 1.0),
+      initEdgeInsets(0.0),
+    ),
+  )
+
 proc textNode(
-    rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
+    rect: nimkitTypes.Rect, text: string, style: TextStyle, alignment = taLeft
 ): Fig =
   Fig(
     kind: nkText,
     screenBox: rect.toFigRect,
-    textLayout: textLayout(rect, text, color, alignment),
+    textLayout: textLayout(rect, text, style, alignment),
+  )
+
+proc textNode(
+    rect: nimkitTypes.Rect, text: string, color: nimkitTypes.Color, alignment = taLeft
+): Fig =
+  textNode(
+    rect,
+    text,
+    initAppearance().resolveTextStyle(
+      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
+    ),
+    alignment,
   )
 
 proc textNode(rect: nimkitTypes.Rect, layout: GlyphArrangement): Fig =
@@ -548,10 +600,39 @@ proc addText*(
     context: DrawContext,
     rect: nimkitTypes.Rect,
     text: string,
+    style: TextStyle,
+    alignment = taLeft,
+): FigIdx {.discardable.} =
+  context.addFig(textNode(context.renderRectFor(rect), text, style, alignment))
+
+proc addText*(
+    context: DrawContext,
+    rect: nimkitTypes.Rect,
+    text: string,
     color: nimkitTypes.Color,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
-  context.addFig(textNode(context.renderRectFor(rect), text, color, alignment))
+  context.addText(
+    rect,
+    text,
+    context.appearance.resolveTextStyle(
+      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
+    ),
+    alignment,
+  )
+
+proc addText*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    text: string,
+    style: TextStyle,
+    alignment = taLeft,
+): FigIdx {.discardable.} =
+  context.addFig(
+    layer, parent, textNode(context.renderRectFor(rect), text, style, alignment)
+  )
 
 proc addText*(
     context: DrawContext,
@@ -562,8 +643,15 @@ proc addText*(
     color: nimkitTypes.Color,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
-  context.addFig(
-    layer, parent, textNode(context.renderRectFor(rect), text, color, alignment)
+  context.addText(
+    layer,
+    parent,
+    rect,
+    text,
+    context.appearance.resolveTextStyle(
+      initControlStyleContext(srTextField), color, initEdgeInsets(0.0)
+    ),
+    alignment,
   )
 
 proc addText*(

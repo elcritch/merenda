@@ -854,8 +854,8 @@ proc drawCascadingRowText(
     DefaultDrawLevel,
     textRoot,
     textRect,
-    clippedText(text, textRect.size.width),
-    style.text.color,
+    clippedText(text, textRect.size.width, style.text),
+    style.text,
     if column.isNil:
       taLeft
     else:

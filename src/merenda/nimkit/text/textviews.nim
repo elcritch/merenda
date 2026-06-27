@@ -278,11 +278,33 @@ proc textColor*(textView: TextView): Color =
       )
     ).text.color
 
+proc textStyle(textView: TextView): TextStyle =
+  if textView.isNil:
+    return initAppearance().resolveTextStyle(
+        initControlStyleContext(srTextView),
+        initColor(0.08, 0.09, 0.11),
+        initEdgeInsets(0.0),
+      )
+  let role = if textView.isFieldEditor: srTextField else: srTextView
+  result = textView.effectiveAppearance().resolveTextStyle(
+      initControlStyleContext(
+        role,
+        textView.widgetStateSet(),
+        id = textView.styleId,
+        classes = textView.styleClasses,
+      ),
+      initColor(0.08, 0.09, 0.11),
+      initEdgeInsets(0.0),
+    )
+  if textView.xTextColor.a > 0.0:
+    result.color = textView.xTextColor
+
 proc `textColor=`*(textView: TextView, color: Color) =
   if textView.isNil or textView.xTextColor == color:
     return
   textView.xTextColor = color
-  textView.xTypingAttributes = defaultTextAttributes(textView.textColor())
+  let style = textView.textStyle()
+  textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
   textView.setNeedsDisplay(true)
 
 proc selectionColor*(textView: TextView): Color =
@@ -484,8 +506,9 @@ proc displayTextStorage(textView: TextView): TextStorage =
   else:
     result = textView.xTextStorage
   if shouldApplyPlainTextColor and result.len > 0:
+    let style = textView.textStyle()
     result.setAttributes(
-      initTextRange(0, result.len), defaultTextAttributes(textView.textColor())
+      initTextRange(0, result.len), defaultTextAttributes(style.color, style.fontSize)
     )
   if textView.xHasMarkedText and textView.xMarkedRange.length > 0:
     var attributes = result.attributesAt(int(textView.xMarkedRange.location))
@@ -497,6 +520,7 @@ proc syncLayout(textView: TextView) =
     return
   textView.xLayoutManager.textStorage = textView.xTextStorage
   textView.xLayoutManager.textContainer = textView.xTextContainer
+  textView.xLayoutManager.textStyle = textView.textStyle()
   textView.xLayoutManager.alignment = textView.xAlignment
   textView.xLayoutManager.invalidateLayout()
 
@@ -812,6 +836,7 @@ proc drawTextViewContents*(textView: TextView, context: DrawContext) =
     layout = textLayout(
       textRect,
       textView.displayTextStorage(),
+      textView.textStyle(),
       textView.alignment(),
       textView.xTextContainer.wraps,
     )
@@ -1012,7 +1037,7 @@ proc initTextViewFields*(
   textView.xSelectionAnchor = textView.xInsertionPoint
   textView.xTextColor = initColor(0.0, 0.0, 0.0, 0.0)
   textView.xSelectionColor = initColor(0.24, 0.56, 1.0, 0.34)
-  textView.xTypingAttributes = defaultTextAttributes(textView.xTextColor)
+  textView.xTypingAttributes = defaultTextAttributes()
   textView.setAcceptsFirstResponder(true)
   if installDefaultProtocols:
     discard textView.withProtocol(DefaultTextViewDrawing)

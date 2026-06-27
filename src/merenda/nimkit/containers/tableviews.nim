@@ -2646,8 +2646,8 @@ proc drawTableCellText(
       DefaultDrawLevel,
       textRoot,
       textRect,
-      clippedText(text, textRect.size.width),
-      style.text.color,
+      clippedText(text, textRect.size.width, style.text),
+      style.text,
       column.alignment(),
     )
 
@@ -3095,9 +3095,14 @@ proc naturalSize(tableView: TableView): Size =
   var
     maxTextWidth = 0.0'f32
     naturalHeight = 0.0'f32
+  let summaryTextStyle = tableView
+    .effectiveAppearance()
+    .resolveRowItemStyle(initControlStyleContext(srRowItem)).text
   for index in 0 ..< tableView.len():
-    maxTextWidth =
-      max(maxTextWidth, textNaturalSize(tableView.rowTextForSummary(index)).width)
+    maxTextWidth = max(
+      maxTextWidth,
+      textNaturalSize(tableView.rowTextForSummary(index), summaryTextStyle).width,
+    )
     if index < rowCount:
       naturalHeight += tableView.rowHeightForRow(index)
   if tableView.len() == 0:
@@ -3474,8 +3479,18 @@ proc drawTableHeaderCellTitle*(
   )
   context.addText(
     titleRect,
-    clippedText(column.title(), titleRect.size.width),
-    chrome.textColor,
+    clippedText(
+      column.title(),
+      titleRect.size.width,
+      context.appearance.resolveTextStyle(
+        initControlStyleContext(srTableHeaderCell),
+        chrome.textColor,
+        initEdgeInsets(0.0),
+      ),
+    ),
+    context.appearance.resolveTextStyle(
+      initControlStyleContext(srTableHeaderCell), chrome.textColor, initEdgeInsets(0.0)
+    ),
     column.alignment(),
   )
 
