@@ -21,9 +21,10 @@ constraints, stack/form/grid/tab/split containers, buttons, switch/radio
 buttons, sliders, steppers, progress indicators, text fields, combo boxes,
 box/group containers, scroll views, popup lists, table views, outline views,
 cascading column views, basic text editing lifecycle, action dispatch, reusable
-pure Nim panel/dialog views, document-controller infrastructure, AppKit-style
-in-process pasteboard/dragging foundations, and a pure Nim accessibility
-metadata and protocol core.
+pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
+monospace text view/editor with raw event policy controls, document-controller
+infrastructure, AppKit-style in-process pasteboard/dragging foundations, and a
+pure Nim accessibility metadata and protocol core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -93,6 +94,14 @@ document-controller open/save integration are covered in tests and examples.
   curves, scheduler/clock plumbing, transaction sugar, selector-backed property
   dispatch, setter-routed mutation, and demos for progress indicators and
   animation workflows.
+- Added legacy `NSMatrix`-style button cell grids with radio/check/button
+  modes, cell reuse, keyboard movement, selection behavior, target/action
+  dispatch, intrinsic sizing, rendering, accessibility semantics, and
+  `examples/matrix_demo.nim` coverage.
+- Added the first `MonoTextView`/`MonoTextEditor` pass: themed chrome-backed
+  monospace rendering, visible-row culling, grid/cell APIs, editable cursor
+  behavior, raw key/mouse/scroll forwarding and capture policies, host-style
+  text input dispatch, and an interactive `examples/monotext_demo.nim`.
 
 ## Current Verification
 
@@ -127,6 +136,16 @@ document-controller open/save integration are covered in tests and examples.
 - The Stepper pass was checked with `atlas-run tests nimkit_controls.nim`,
   `nim c examples/stepper_demo.nim`, and
   `nim c examples/controls_showcase.nim`.
+- The Matrix pass was checked with `atlas-run tests nimkit_matrix.nim` and the
+  full `atlas-run tests` suite; demo behavior lives in
+  `examples/matrix_demo.nim`.
+- The MonoText pass was checked with
+  `nim check src/merenda/nimkit/text/monotextviews.nim`,
+  `nim check src/merenda/nimkit/app/windows.nim`,
+  `nim c examples/monotext_demo.nim`,
+  `atlas-run tests nimkit_monotextviews.nim`,
+  `atlas-run tests nimkit_responder.nim nimkit_textviews.nim nimkit_textfields.nim nimkit_monotextviews.nim`,
+  and a full `atlas-run tests` run passing `39/39`.
 - The first animation core, interpolation/timing, scheduler/threading, and
   property animation surface passes are covered by
   `tests/tnimkit_animations.nim`; umbrella export and affected widget fallout
@@ -149,23 +168,20 @@ document-controller open/save integration are covered in tests and examples.
 
 ### OpenStep Compatibility Widgets
 
-With the first animation, pure Nim panel/dialog hardening, and Stepper passes
-landed, add the next missing OpenStep/AppKit-style widgets in an order that
-hardens shared control, cell, layout, responder, drawing, accessibility, and
-animation behavior instead of producing isolated one-off controls.
+With the first animation, pure Nim panel/dialog hardening, Stepper, Matrix, and
+MonoText passes landed, add the next missing OpenStep/AppKit-style widgets in
+an order that hardens shared control, cell, layout, responder, drawing,
+accessibility, and animation behavior instead of producing isolated one-off
+controls.
 
 Recommended implementation order:
 
-1. `Matrix`
-   - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
-     selection modes, keyboard movement, and cell reuse.
-   - Use this to further harden the control/cell split.
-2. `ColorWell`
+1. `ColorWell`
    - Add color swatch rendering, target/action on color changes, pasteboard
      color payload integration, and drag affordances.
    - Stage a full color panel separately after the color well proves the
      pasteboard, target/action, and modal accessory-view contracts.
-3. CascadingView hardening
+2. CascadingView hardening
    - Keep the new Miller Column implementation aligned with table/scroll
      behavior as those primitives evolve: richer column keyboard movement,
      persisted selection paths, drag/drop between hierarchy levels, and optional
