@@ -3,9 +3,10 @@ import std/[algorithm, hashes, options, unicode]
 import sigils/core
 
 from figdraw/common/fonttypes import
-  CaretInside, CaretLeading, CaretTrailing, GlyphArrangement, GlyphFont,
-  TextCaretAffinity, caretPositionsFor, glyphIndexAt, glyphRangeFor,
-  nearestSourceRuneForCaretPoint, selectionRectsFor, sourceRuneRangeAt
+  CaretInside, CaretLeading, CaretTrailing, GlyphArrangement, GlyphSourceRange,
+  TextCaretAffinity, caretPositionsFor, glyphCount, glyphFont, glyphIndexAt,
+  glyphRangeFor, glyphRect, glyphSourceRange, layoutContentSize, lineGlyphRanges,
+  nearestSourceRuneForCaretPoint, selectionRectsFor, sourceRuneCount, sourceRuneRangeAt
 from pkg/vmath import vec2, x, y
 
 import ../drawing
@@ -373,48 +374,14 @@ func sourceSlice(range: TextRange): Slice[int] =
     return 0 .. -1
   int(range.location) .. range.maxIndex - 1
 
-func sourceLength(layout: GlyphArrangement): int =
-  if layout.sourceRunes.len > 0: layout.sourceRunes.len else: layout.runes.len
+func toContainerRect(rect: auto, layoutRect: Rect): Rect =
+  initRect(layoutRect.origin.x + rect.x, layoutRect.origin.y + rect.y, rect.w, rect.h)
 
-func glyphCount(layout: GlyphArrangement): int =
-  if layout.arrangedGlyphs.len > 0: layout.arrangedGlyphs.len else: layout.runes.len
-
-func glyphRect(layout: GlyphArrangement, glyphIndex: int): Rect =
-  if glyphIndex < 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  if layout.arrangedGlyphs.len > 0:
-    if glyphIndex < layout.arrangedGlyphs.len:
-      let rect = layout.arrangedGlyphs[glyphIndex].rect
-      return initRect(rect.x, rect.y, rect.w, rect.h)
-  elif glyphIndex < layout.selectionRects.len:
-    let rect = layout.selectionRects[glyphIndex]
-    return initRect(rect.x, rect.y, rect.w, rect.h)
-  initRect(0.0, 0.0, 0.0, 0.0)
+func toTextRange(source: GlyphSourceRange): TextRange =
+  initTextRange(source.runeStart, max(source.runeEnd - source.runeStart, 0))
 
 func sourceRangeForGlyph(layout: GlyphArrangement, glyphIndex: int): TextRange =
-  if glyphIndex < 0:
-    return initTextRange(0, 0)
-  if layout.arrangedGlyphs.len > 0 and glyphIndex < layout.arrangedGlyphs.len:
-    let source = layout.arrangedGlyphs[glyphIndex].source
-    return initTextRange(source.runeStart, source.runeEnd - source.runeStart)
-  if glyphIndex < layout.runes.len:
-    return initTextRange(glyphIndex, 1)
-  initTextRange(0, 0)
-
-func fontForGlyph(layout: GlyphArrangement, glyphIndex: int): GlyphFont =
-  for fontIndex, span in layout.spans:
-    if glyphIndex in span and fontIndex < layout.fonts.len:
-      return layout.fonts[fontIndex]
-  if layout.fonts.len > 0:
-    return layout.fonts[0]
-
-func normalizedGlyphLine(layout: GlyphArrangement, line: Slice[int]): Slice[int] =
-  let count = layout.glyphCount()
-  if count == 0:
-    return 0 .. -1
-  result = max(line.a, 0) .. min(line.b, count - 1)
-  if result.a > result.b:
-    result = 0 .. -1
+  layout.glyphSourceRange(glyphIndex).toTextRange()
 
 func textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRange =
   if line.a > line.b:
@@ -425,11 +392,10 @@ func textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRang
     stop = 0
   for glyphIndex in line:
     let source = layout.sourceRangeForGlyph(glyphIndex)
-    if source.length == 0:
-      continue
-    start = min(start, int(source.location))
-    stop = max(stop, source.maxIndex)
-    found = true
+    if source.length > 0:
+      start = min(start, int(source.location))
+      stop = max(stop, source.maxIndex)
+      found = true
   if found:
     initTextRange(start, stop - start)
   else:
@@ -596,14 +562,6 @@ proc glyphCount*(manager: TextLayoutManager): Natural =
   manager.updateLayout()
   manager.xLayout.glyphCount().Natural
 
-proc containerRect(rect: Rect, layoutRect: Rect): Rect =
-  initRect(
-    layoutRect.origin.x + rect.origin.x,
-    layoutRect.origin.y + rect.origin.y,
-    rect.size.width,
-    rect.size.height,
-  )
-
 proc lineFragment(
     manager: TextLayoutManager, visualIndex: int, line: Slice[int], lineCount: int
 ): TextLineFragment =
@@ -611,7 +569,11 @@ proc lineFragment(
     layout = manager.xLayout
     textRange = layout.textRangeForGlyphLine(line)
     glyphRange = initGlyphRange(line.a, line.b - line.a + 1)
-    sourceRunes = if layout.sourceRunes.len > 0: layout.sourceRunes else: layout.runes
+    sourceRunes =
+      if manager.xTextStorage.isNil:
+        @[]
+      else:
+        manager.xTextStorage.stringValue().toRunes()
     hardBreak = containsHardBreak(sourceRunes, textRange)
     wrapped =
       manager.xTextContainer.wraps and not hardBreak and visualIndex < lineCount - 1
@@ -624,15 +586,15 @@ proc lineFragment(
 
   for glyphIndex in line:
     let
-      glyphRect = layout.glyphRect(glyphIndex).containerRect(manager.xLayoutRect)
-      font = layout.fontForGlyph(glyphIndex)
-    if not glyphRect.isEmpty:
+      glyphBounds = layout.glyphRect(glyphIndex).toContainerRect(manager.xLayoutRect)
+      font = layout.glyphFont(glyphIndex)
+    if not glyphBounds.isEmpty:
       if hasUsedRect:
-        usedRect = usedRect.union(glyphRect)
+        usedRect = usedRect.union(glyphBounds)
       else:
-        usedRect = glyphRect
+        usedRect = glyphBounds
         hasUsedRect = true
-    lineHeight = max(lineHeight, max(font.lineHeight, glyphRect.size.height))
+    lineHeight = max(lineHeight, max(font.lineHeight, glyphBounds.size.height))
     baselineOffset = max(baselineOffset, font.descentAdj)
 
   if lineHeight <= 0.0'f32:
@@ -712,14 +674,11 @@ proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment] =
     result.add manager.emptyLineFragment(0, 0)
     return
 
-  var lines = manager.xLayout.lines
-  if lines.len == 0:
-    lines.add 0 .. count - 1
+  let lines = manager.xLayout.lineGlyphRanges()
 
   for visualIndex, rawLine in lines:
-    let line = manager.xLayout.normalizedGlyphLine(rawLine)
-    if line.a <= line.b:
-      result.add manager.lineFragment(visualIndex, line, lines.len)
+    if rawLine.a <= rawLine.b:
+      result.add manager.lineFragment(visualIndex, rawLine, lines.len)
 
   if not manager.xTextStorage.isNil:
     var index = 0
@@ -769,9 +728,10 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
   if not hasUsedRect:
     result.usedRect = initRect(result.containerRect.origin, initSize(0.0, 0.0))
 
+  let layoutContentSize = manager.xLayout.layoutContentSize()
   var
-    contentWidth = max(manager.xLayout.maxSize.x, manager.xLayout.bounding.w)
-    contentHeight = max(manager.xLayout.maxSize.y, manager.xLayout.bounding.h)
+    contentWidth = layoutContentSize.x
+    contentHeight = layoutContentSize.y
   if hasUsedRect:
     contentWidth = max(contentWidth, result.usedRect.size.width)
     contentHeight =
@@ -803,7 +763,7 @@ proc emptyGlyphRangeForTextIndex(
 ): GlyphRange =
   if sourceIndex <= 0:
     return initGlyphRange(0, 0)
-  if sourceIndex >= manager.xLayout.sourceLength:
+  if sourceIndex >= manager.xLayout.sourceRuneCount():
     return initGlyphRange(count, 0)
 
   for glyphIndex in 0 ..< count:
@@ -818,7 +778,7 @@ proc glyphRangeForTextRange*(manager: TextLayoutManager, range: TextRange): Glyp
   manager.updateLayout()
   let
     count = manager.xLayout.glyphCount()
-    clamped = clampTextRange(manager.xLayout.sourceLength, range)
+    clamped = clampTextRange(manager.xLayout.sourceRuneCount(), range)
   if clamped.length == 0 or count == 0:
     return manager.emptyGlyphRangeForTextIndex(int(clamped.location), count)
 
@@ -837,7 +797,7 @@ proc textRangeForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Tex
     stop = max(start, min(range.maxIndex, count))
   if range.length == 0:
     if start >= count:
-      return initTextRange(manager.xLayout.sourceLength, 0)
+      return initTextRange(manager.xLayout.sourceRuneCount(), 0)
     return initTextRange(int(manager.xLayout.sourceRangeForGlyph(start).location), 0)
 
   var
@@ -1011,7 +971,7 @@ proc caretPositions*(
     return
   manager.updateLayout()
   let
-    sourceCount = manager.xLayout.sourceLength
+    sourceCount = manager.xLayout.sourceRuneCount()
     index = max(0, min(insertionPoint, sourceCount))
   for caret in manager.xLayout.caretPositionsFor(index):
     result.add TextCaretPosition(
@@ -1043,14 +1003,9 @@ proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Re
   if manager.isNil or range.length == 0:
     return @[]
   manager.updateLayout()
-  let clamped = clampTextRange(manager.xLayout.sourceLength, range)
+  let clamped = clampTextRange(manager.xLayout.sourceRuneCount(), range)
   for rect in manager.xLayout.selectionRectsFor(clamped.sourceSlice):
-    result.add initRect(
-      manager.xLayoutRect.origin.x + rect.x,
-      manager.xLayoutRect.origin.y + rect.y,
-      rect.w,
-      rect.h,
-    )
+    result.add rect.toContainerRect(manager.xLayoutRect)
 
 proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
   if manager.isNil:
@@ -1095,7 +1050,8 @@ proc boundsForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Rect =
     start = max(0, min(range.location.toInt, count))
     stop = max(start, min(range.maxIndex, count))
   for glyphIndex in start ..< stop:
-    let rect = manager.xLayout.glyphRect(glyphIndex).containerRect(manager.xLayoutRect)
+    let rect =
+      manager.xLayout.glyphRect(glyphIndex).toContainerRect(manager.xLayoutRect)
     if result.isEmpty:
       result = rect
     else:

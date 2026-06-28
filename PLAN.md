@@ -110,6 +110,11 @@ document-controller open/save integration are covered in tests and examples.
   will/did-edit signals, and layout invalidation/completion/geometry signals
   now provide AppKit-like semantic APIs with Sigils/Qt-style notification
   delivery.
+- Reworked the FigDraw bridge behind the `TextLayoutManager` protocols:
+  `GlyphArrangement` glyph/source ranges, visual lines, caret positions,
+  merged selection bands, glyph metrics, and content sizing now map into
+  NimKit records through narrow value-query helpers without leaking backend
+  records into text view, field, or accessibility APIs.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -162,15 +167,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-4. Rework the FigDraw bridge behind those protocols:
-   - map FigDraw `GlyphArrangement.lines`, glyph/source ranges, caret positions,
-     and merged selection bands into NimKit records
-   - prefer FigDraw's source-range selection helpers over direct indexing into
-     `selectionRects`, so wrapped lines, clusters, and future bidi shaping stay
-     coherent
-   - add small FigDraw exports only where needed for line fragment metrics,
-     glyph count, glyph rects, and line indexes; do not leak backend-specific
-     records into text view, field, or accessibility APIs
 5. Migrate consumers onto the new contract:
    - update `TextView` and `TextField` selection drawing, keyboard movement,
      mouse hit-testing, field-editor geometry, and accessibility text geometry

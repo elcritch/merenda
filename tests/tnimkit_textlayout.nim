@@ -286,6 +286,41 @@ suite "nimkit text layout":
     check snapshot.lineFragments.len > 1
     check foundWrapped
 
+  test "wrapped selections return merged visual line bands":
+    let storage = newTextStorage("one two three four five six")
+    let manager = newTextLayoutManager(
+      storage, initTextContainer(initSize(36.0, 160.0), insets(0.0), wraps = true)
+    )
+    let
+      snapshot = manager.layoutSnapshot()
+      selection = manager.selectionRects(initTextRange(0, storage.len))
+
+    check snapshot.lineFragments.len > 1
+    check selection.len == snapshot.lineFragments.len
+    check selection.len < int(snapshot.glyphCount)
+    for index, rect in selection:
+      check rect.size.width > 0.0
+      check rect.size.height > 0.0
+      check rect.origin.y >= snapshot.lineFragments[index].fragmentRect.origin.y
+
+  test "caret positions preserve wrapped visual line indexes":
+    let manager = newTextLayoutManager(
+      newTextStorage("one two three four five six"),
+      initTextContainer(initSize(36.0, 160.0), insets(0.0), wraps = true),
+    )
+    let
+      snapshot = manager.layoutSnapshot()
+      lastLine = snapshot.lineFragments[^1]
+      positions = manager.caretPositions(int(lastLine.textRange.location))
+
+    var foundLine = false
+    for position in positions:
+      if position.lineIndex == lastLine.lineIndex:
+        foundLine = true
+        check position.rect.origin.y >= lastLine.fragmentRect.origin.y
+        check position.rect.origin.y <= lastLine.fragmentRect.maxY
+    check foundLine
+
   test "layout snapshot includes an empty visual line for empty text":
     let manager = newTextLayoutManager(
       newTextStorage(""),
