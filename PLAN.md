@@ -99,6 +99,11 @@ document-controller open/save integration are covered in tests and examples.
   indexes, line fragments, and layout snapshots now expose container-local
   metrics, hard-break/wrap metadata, glyph counts, used rects, and content size
   for tests and diagnostics.
+- Added the first `TextLayoutManager` query layer: layout cache lifecycle,
+  counts/bounds/content metrics, text-to-glyph mapping, point hit-testing,
+  visual line fragment lookup/ranges/iteration, caret positions, selection
+  rects, text bounds, character rects, and glyph bounds now share one
+  container-local contract.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -151,21 +156,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-2. Add the query API surface on `TextLayoutManager`:
-   - `updateLayout`, `invalidateLayout`, `invalidateLayout(range:)`, and
-     `hasValidLayout` as the canonical cache lifecycle
-   - `glyphCount`, `lineCount`, `usedRect`, `contentSize`, and `layoutBounds`
-   - text/glyph mapping helpers: `glyphRangeForTextRange`,
-     `textRangeForGlyphRange`, `glyphIndexAtPoint`, `textIndexAtPoint`, and
-     `textRangeAtPoint`
-   - visual-line helpers: `lineFragment(index)`,
-     `lineFragmentForTextIndex`, `lineFragmentForGlyphIndex`,
-     `lineFragmentsForTextRange`, `lineRangeForTextRange`, and iterators over
-     all line fragments
-   - geometry helpers: `caretRect`, `caretPositions`, `selectionRects`,
-     `firstRectForTextRange`, `textRangeBounds`, `characterRect`, and
-     `boundsForGlyphRange`, all in container-local coordinates with view/window
-     conversion left to callers
 3. Introduce protocols around the manager instead of callback fields:
    - `TextLayoutManagerProtocol` for overridable layout lifecycle and query
      methods used by controls and accessibility; default implementation remains
