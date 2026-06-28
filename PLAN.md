@@ -137,26 +137,9 @@ document-controller open/save integration are covered in tests and examples.
 
 ## Near-Term Work
 
-### OpenStep Compatibility Widgets
+### TextLayoutManager
 
-With the first animation, pure Nim panel/dialog hardening, Stepper, Matrix, and
-MonoText passes landed, add the next missing OpenStep/AppKit-style widgets in
-an order that hardens shared control, cell, layout, responder, drawing,
-accessibility, and animation behavior instead of producing isolated one-off
-controls.
 
-Recommended implementation order:
-
-1. `ColorWell`
-   - Add color swatch rendering, target/action on color changes, pasteboard
-     color payload integration, and drag affordances.
-   - Stage a full color panel separately after the color well proves the
-     pasteboard, target/action, and modal accessory-view contracts.
-2. CascadingView hardening
-   - Keep the new Miller Column implementation aligned with table/scroll
-     behavior as those primitives evolve: richer column keyboard movement,
-     persisted selection paths, drag/drop between hierarchy levels, and optional
-     custom row/detail rendering hooks.
 
 ### OutlineView
 
