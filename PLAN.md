@@ -139,6 +139,14 @@ document-controller open/save integration are covered in tests and examples.
   edit/query helpers; and text transfer/pasteboard contracts cover plain text,
   attributed text, RTF, RTFD-style package payloads, HTML fragments, URLs, and
   file promises.
+- Brought `TextStorage` closer to `NSTextStorage` while keeping NimKit's
+  Qt-style event path: `beginEditing`/`endEditing`, edited masks/ranges,
+  change-in-length tracking, coalesced `processEditing`, value/attribute
+  change signals, delegate-backed attribute fixing and font fallback hooks,
+  paragraph-range expansion, lazy materialization, and multiple layout-manager
+  observers now share one deterministic storage signal contract. One-way
+  storage and layout notifications now use Sigils signals/slots, while selector
+  protocols stay focused on pull inputs and overridable decisions.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -191,18 +199,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-9. Bring `TextStorage` close to `NSTextStorage` behavior:
-   - add `beginEditing`/`endEditing`, edited masks for characters vs
-     attributes, edited range/change-in-length tracking, and coalesced
-     `processEditing` dispatch
-   - add `TextStorageDelegateProtocol` and Sigils signals matching the Cocoa
-     notification order: will process editing, did process editing, and storage
-     value/attribute changes after mutation has committed
-   - support attribute fixing hooks, paragraph-range expansion, font fallback
-     fixing, and optional lazy backing storage for very large documents
-   - allow multiple layout managers to observe one storage instance while
-     preserving deterministic invalidation and avoiding view-specific storage
-     callbacks
 10. Expand `TextContainer` toward `NSTextContainer` parity:
    - support container size tracking, line fragment padding, width/height tracks
      text view flags, maximum number of lines, line break mode, and exclusion

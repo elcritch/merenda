@@ -1,6 +1,116 @@
 import std/unittest
 
+import sigils/core
+
 import merenda/nimkit
+
+type
+  StorageEventSpy = ref object of DynamicAgent
+    events: seq[string]
+    lastEdit: TextStorageEdit
+    willEdits: int
+    didEdits: int
+    willProcess: int
+    didProcess: int
+    valueChanges: int
+    attributeChanges: int
+
+  StorageDelegateSpy = ref object of DynamicAgent
+    shouldFixCount: int
+    fallbackCount: int
+    lastRange: TextRange
+    fallbackSize: float32
+
+  LazyStorageProvider = ref object of DynamicAgent
+    text: string
+    runs: seq[TextAttributeRun]
+    stringRequests: int
+    runRequests: int
+
+protocol StorageEventSpySlots from StorageEventSpy:
+  includes TextStorageEditingEvents
+
+  proc willEdit(spy: StorageEventSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.willEdits
+    spy.lastEdit = edit
+    spy.events.add "willEdit"
+
+  proc didEdit(spy: StorageEventSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.didEdits
+    spy.lastEdit = edit
+    spy.events.add "didEdit"
+
+  proc storageWillProcessEditing(spy: StorageEventSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.willProcess
+    spy.lastEdit = edit
+    spy.events.add "willProcess"
+
+  proc storageDidProcessEditing(spy: StorageEventSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.didProcess
+    spy.lastEdit = edit
+    spy.events.add "didProcess"
+
+  proc storageValueDidChange(spy: StorageEventSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.valueChanges
+    spy.lastEdit = edit
+    spy.events.add "value"
+
+  proc storageAttributesDidChange(
+      spy: StorageEventSpy, edit: TextStorageEdit
+  ) {.slot.} =
+    inc spy.attributeChanges
+    spy.lastEdit = edit
+    spy.events.add "attributes"
+
+protocol StorageDelegateSpyProtocol of TextStorageDelegateProtocol:
+  method textStorageShouldFixAttributes(
+      spy: StorageDelegateSpy, storage: TextStorage, range: TextRange
+  ): bool =
+    discard storage
+    inc spy.shouldFixCount
+    spy.lastRange = range
+    true
+
+  method textStorageResolveFontFallback(
+      spy: StorageDelegateSpy,
+      storage: TextStorage,
+      range: TextRange,
+      attributes: TextAttributes,
+  ): TextAttributes =
+    discard storage
+    inc spy.fallbackCount
+    spy.lastRange = range
+    result = attributes
+    result.fontSize = spy.fallbackSize
+
+protocol LazyStorageProviderProtocol of TextStorageLazyProviderProtocol:
+  method lazyTextStorageString(
+      provider: LazyStorageProvider, storage: TextStorage
+  ): string =
+    discard storage
+    inc provider.stringRequests
+    provider.text
+
+  method lazyTextStorageRuns(
+      provider: LazyStorageProvider, storage: TextStorage
+  ): seq[TextAttributeRun] =
+    discard storage
+    inc provider.runRequests
+    provider.runs
+
+proc newStorageEventSpy(): StorageEventSpy =
+  result = StorageEventSpy()
+  discard result.withProto()
+
+proc newStorageDelegateSpy(fallbackSize: float32): StorageDelegateSpy =
+  result = StorageDelegateSpy(fallbackSize: fallbackSize)
+  discard result.withProtocol(StorageDelegateSpyProtocol)
+
+proc newLazyStorageProvider(
+    text: string, runs: openArray[TextAttributeRun] = []
+): LazyStorageProvider =
+  result = LazyStorageProvider(text: text, runs: @runs)
+  discard result.withProtocol(LazyStorageProviderProtocol)
 
 suite "nimkit text storage":
   test "text storage replaces text and preserves surrounding attribute runs":
@@ -109,3 +219,64 @@ suite "nimkit text storage":
     copy.removeAttributes(initTextRange(0, copy.len))
     check copy.attributesAtIndex(1) == defaultTextAttributes()
     check storage.attributesAtIndex(1) == accent
+
+  test "process editing coalesces batched changes through signals":
+    let
+      storage = newTextStorage("abcdef")
+      spy = newStorageEventSpy()
+      accent = defaultTextAttributes(initColor(0.3, 0.4, 0.9), 15.0)
+
+    spy.observeProtocol(storage, TextStorageEditingEvents)
+    storage.beginEditing()
+    storage.replace(initTextRange(1, 2), "XYZ")
+    storage.setAttributes(initTextRange(2, 2), accent)
+
+    check spy.willEdits == 2
+    check spy.didEdits == 2
+    check spy.didProcess == 0
+    check spy.valueChanges == 0
+    check spy.attributeChanges == 0
+    check storage.hasPendingEdit
+
+    storage.endEditing()
+
+    check spy.willProcess == 1
+    check spy.didProcess == 1
+    check spy.valueChanges == 1
+    check spy.attributeChanges == 1
+    check not storage.hasPendingEdit
+    check storage.editedMask == {tseCharacters, tseAttributes}
+    check storage.changeInLength == 1
+    check spy.events[^4 .. ^1] == @["willProcess", "didProcess", "value", "attributes"]
+
+  test "attribute fixing expands to paragraph ranges and resolves fallback fonts":
+    let
+      storage = newTextStorage("one\ntwo\nthree")
+      delegate = newStorageDelegateSpy(17.0)
+    var attributes = defaultTextAttributes(initColor(0.5, 0.1, 0.1), 13.0)
+    attributes.fontSize = 0.0
+
+    storage.delegate = DynamicAgent(delegate)
+    storage.setAttributes(initTextRange(5, 1), attributes)
+
+    check delegate.shouldFixCount == 1
+    check delegate.fallbackCount == 3
+    check storage.attributesAt(5).fontSize == 17.0
+    check storage.paragraphRangeForRange(initTextRange(5, 1)) == initTextRange(4, 4)
+
+  test "lazy text storage materializes through provider on first query":
+    let
+      accent = defaultTextAttributes(initColor(0.2, 0.6, 0.4), 14.0)
+      provider = newLazyStorageProvider(
+        "lazy", [TextAttributeRun(range: initTextRange(0, 4), attributes: accent)]
+      )
+      storage = newLazyTextStorage(DynamicAgent(provider))
+
+    check not storage.isMaterialized()
+    check provider.stringRequests == 0
+    check storage.len == 4
+    check storage.isMaterialized()
+    check provider.stringRequests == 1
+    check provider.runRequests == 1
+    check storage.stringValue == "lazy"
+    check storage.attributesAt(0) == accent

@@ -1086,44 +1086,24 @@ protocol DefaultTextViewLayoutClient of TextLayoutClientProtocol:
     discard manager
     if textView.isNil: taLeft else: textView.xAlignment
 
-  method layoutInvalidated(
-      textView: TextView, manager: TextLayoutManager, ranges: seq[TextRange]
-  ) =
-    discard manager
+protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
+  proc layoutDidInvalidate(textView: TextView, ranges: seq[TextRange]) {.slot.} =
     discard ranges
     if not textView.isNil:
       textView.setNeedsDisplay(true)
 
-  method layoutCompleted(
-      textView: TextView, manager: TextLayoutManager, snapshot: TextLayoutSnapshot
-  ) =
-    discard textView
-    discard manager
-    discard snapshot
-
-  method geometryChanged(
+  proc layoutGeometryDidChange(
       textView: TextView,
-      manager: TextLayoutManager,
       oldUsedRect: Rect,
       oldContentSize: Size,
       snapshot: TextLayoutSnapshot,
-  ) =
-    discard manager
+  ) {.slot.} =
     discard oldUsedRect
     discard oldContentSize
     discard snapshot
     if not textView.isNil:
       textView.invalidateIntrinsicContentSize()
       textView.setNeedsDisplay(true)
-
-  method contentSizeChanged(
-      textView: TextView, manager: TextLayoutManager, oldSize, newSize: Size
-  ) =
-    discard manager
-    discard oldSize
-    discard newSize
-    if not textView.isNil:
-      textView.invalidateIntrinsicContentSize()
 
 protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(textView: TextView): AccessibilityRole =
@@ -1227,7 +1207,9 @@ proc initTextViewFields*(
   textView.xTypingAttributes = defaultTextAttributes()
   textView.setAcceptsFirstResponder(true)
   discard textView.withProtocol(DefaultTextViewLayoutClient)
+  discard textView.withProtocol(DefaultTextViewLayoutEventSlots)
   discard textView.withProtocol(DefaultTextViewAccessibility)
+  textView.observeProtocol(textView.xLayoutManager, TextLayoutEvents)
   textView.xLayoutManager.layoutClient = DynamicAgent(textView)
   if installDefaultProtocols:
     discard textView.withProtocol(DefaultTextViewDrawing)

@@ -87,39 +87,27 @@ protocol LayoutClientSpyProtocol of TextLayoutClientProtocol:
     discard manager
     spy.alignment
 
-  method layoutInvalidated(
-      spy: LayoutClientSpy, manager: TextLayoutManager, ranges: seq[TextRange]
-  ) =
-    discard manager
+protocol LayoutClientSpyEvents from LayoutClientSpy:
+  includes TextLayoutEvents
+
+  proc layoutDidInvalidate(spy: LayoutClientSpy, ranges: seq[TextRange]) {.slot.} =
     discard ranges
     inc spy.invalidations
 
-  method layoutCompleted(
-      spy: LayoutClientSpy, manager: TextLayoutManager, snapshot: TextLayoutSnapshot
-  ) =
-    discard manager
+  proc layoutDidComplete(spy: LayoutClientSpy, snapshot: TextLayoutSnapshot) {.slot.} =
     discard snapshot
     inc spy.completions
 
-  method geometryChanged(
+  proc layoutGeometryDidChange(
       spy: LayoutClientSpy,
-      manager: TextLayoutManager,
       oldUsedRect: Rect,
       oldContentSize: Size,
       snapshot: TextLayoutSnapshot,
-  ) =
-    discard manager
+  ) {.slot.} =
     discard oldUsedRect
     discard oldContentSize
     discard snapshot
     inc spy.geometryChanges
-
-  method contentSizeChanged(
-      spy: LayoutClientSpy, manager: TextLayoutManager, oldSize, newSize: Size
-  ) =
-    discard manager
-    discard oldSize
-    discard newSize
     inc spy.contentChanges
 
 func contractLayoutRect(container: TextContainer): Rect =
@@ -314,6 +302,7 @@ proc newLayoutClientSpy(
     storage: TextStorage, container: TextContainer, alignment = taLeft
 ): LayoutClientSpy =
   result = LayoutClientSpy(storage: storage, container: container, alignment: alignment)
+  discard result.withProto()
   discard result.withProtocol(LayoutClientSpyProtocol)
 
 proc newContractBackend(charWidth = 10.0'f32, lineHeight = 12.0'f32): ContractBackend =
@@ -367,6 +356,41 @@ suite "nimkit text layout":
     check manager.hasValidLayout()
     check spy.completions == 2
 
+  test "batched storage edits invalidate multiple layout managers once":
+    let
+      storage = newTextStorage("Shared storage")
+      managerA = newTextLayoutManager(
+        storage, initTextContainer(initSize(180.0, 80.0), insets(0.0))
+      )
+      managerB = newTextLayoutManager(
+        storage, initTextContainer(initSize(120.0, 80.0), insets(0.0))
+      )
+      spyA = newTextLayoutSignalSpy()
+      spyB = newTextLayoutSignalSpy()
+
+    spyA.observeProtocol(managerA, TextLayoutEvents)
+    spyB.observeProtocol(managerB, TextLayoutEvents)
+    managerA.updateLayout()
+    managerB.updateLayout()
+    check managerA.hasValidLayout()
+    check managerB.hasValidLayout()
+
+    storage.beginEditing()
+    storage.replace(initTextRange(0, 6), "Updated")
+    storage.setAttributes(
+      initTextRange(0, 7), defaultTextAttributes(initColor(0.4, 0.2, 0.8), 15.0)
+    )
+    check managerA.hasValidLayout()
+    check managerB.hasValidLayout()
+
+    storage.endEditing()
+    check not managerA.hasValidLayout()
+    check not managerB.hasValidLayout()
+    check spyA.invalidations == 1
+    check spyB.invalidations == 1
+    check spyA.lastRanges[^1] == initTextRange(0, 7)
+    check spyB.lastRanges[^1] == initTextRange(0, 7)
+
   test "figdraw text typesetter implements backend protocol":
     let
       storage = newTextStorage("Backend")
@@ -389,7 +413,7 @@ suite "nimkit text layout":
     check layout.snapshot.lineFragments.len > 0
     checkClose(layout.snapshot.containerRect.origin.x, 2.0)
 
-  test "layout client protocol supplies inputs and receives layout hooks":
+  test "layout client protocol supplies inputs and observes layout hooks":
     let
       client = newLayoutClientSpy(
         newTextStorage("Client text"),
@@ -397,6 +421,7 @@ suite "nimkit text layout":
       )
       manager = newTextLayoutManager()
 
+    client.observeProtocol(manager, TextLayoutEvents)
     manager.layoutClient = DynamicAgent(client)
     check client.conformsTo(TextLayoutClientProtocol)
 

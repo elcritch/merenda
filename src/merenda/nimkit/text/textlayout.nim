@@ -148,24 +148,6 @@ protocol TextLayoutClientProtocol {.selectorScope: protocol.}:
   method textLayoutContainer*(manager: TextLayoutManager): TextContainer {.optional.}
   method textLayoutStyle*(manager: TextLayoutManager): TextStyle {.optional.}
   method textLayoutAlignment*(manager: TextLayoutManager): TextAlignment {.optional.}
-  method layoutInvalidated*(
-    manager: TextLayoutManager, ranges: seq[TextRange]
-  ) {.optional.}
-
-  method layoutCompleted*(
-    manager: TextLayoutManager, snapshot: TextLayoutSnapshot
-  ) {.optional.}
-
-  method geometryChanged*(
-    manager: TextLayoutManager,
-    oldUsedRect: Rect,
-    oldContentSize: Size,
-    snapshot: TextLayoutSnapshot,
-  ) {.optional.}
-
-  method contentSizeChanged*(
-    manager: TextLayoutManager, oldSize, newSize: Size
-  ) {.optional.}
 
 protocol TextLayoutManagerProtocol {.selectorScope: protocol.} from TextLayoutManager:
   method lmUpdate*(manager: TextLayoutManager) =
@@ -193,7 +175,9 @@ protocol TextLayoutManagerProtocol {.selectorScope: protocol.} from TextLayoutMa
     manager.defaultTextIndexAtPoint(point)
 
 protocol TextLayoutStorageEditingSlots of TextStorageEditingEvents:
-  proc didEdit(manager: TextLayoutManager, edit: TextStorageEdit) {.slot.} =
+  proc storageDidProcessEditing(
+      manager: TextLayoutManager, edit: TextStorageEdit
+  ) {.slot.} =
     if not manager.isNil:
       manager.defaultInvalidateLayout(edit.range)
 
@@ -422,17 +406,9 @@ func toTextCaretPositionKind(affinity: TextCaretAffinity): TextCaretPositionKind
 
 proc notifyLayoutInvalidated(manager: TextLayoutManager, ranges: seq[TextRange]) =
   emit manager.layoutDidInvalidate(ranges)
-  if not manager.xClient.isNil:
-    discard manager.xClient.sendLocalIfHandled(
-      layoutInvalidated(), (manager: manager, ranges: ranges)
-    )
 
 proc notifyLayoutCompleted(manager: TextLayoutManager, snapshot: TextLayoutSnapshot) =
   emit manager.layoutDidComplete(snapshot)
-  if not manager.xClient.isNil:
-    discard manager.xClient.sendLocalIfHandled(
-      layoutCompleted(), (manager: manager, snapshot: snapshot)
-    )
 
 proc notifyLayoutGeometryChanged(
     manager: TextLayoutManager,
@@ -441,22 +417,6 @@ proc notifyLayoutGeometryChanged(
     snapshot: TextLayoutSnapshot,
 ) =
   emit manager.layoutGeometryDidChange(oldUsedRect, oldContentSize, snapshot)
-  if manager.xClient.isNil:
-    return
-  discard manager.xClient.sendLocalIfHandled(
-    geometryChanged(),
-    (
-      manager: manager,
-      oldUsedRect: oldUsedRect,
-      oldContentSize: oldContentSize,
-      snapshot: snapshot,
-    ),
-  )
-  if oldContentSize != snapshot.contentSize:
-    discard manager.xClient.sendLocalIfHandled(
-      contentSizeChanged(),
-      (manager: manager, oldSize: oldContentSize, newSize: snapshot.contentSize),
-    )
 
 proc applyClientInputs(manager: TextLayoutManager) =
   if manager.isNil or manager.xClient.isNil:
