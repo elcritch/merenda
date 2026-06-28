@@ -106,60 +106,18 @@ document-controller open/save integration are covered in tests and examples.
 ## Current Verification
 
 - `atlas-run tests` passes locally on macOS with the current domain module
-  layout.
-- After removing standalone `ListView`, `atlas-run tests` passed `32/32` and
-  `nim examples` compiled successfully.
-- The latest table row/action and header polish was checked with
-  `atlas-run tests tnimkit_tableviews tnimkit_rendering tnimkit_theme`;
-  examples were compile checked with
-  `atlas-run tests --compile-only 'examples/*.nim'`.
-- The latest table drag/drop target integration was checked with
-  `atlas-run tests tests/tnimkit_tableviews.nim`,
-  `atlas-run tests tests/tnimkit_pasteboards_dragging.nim`, and a full
-  `atlas-run tests` run passing `32/32`.
-- The latest table persistence integration was checked with
-  `atlas-run tests tests/tnimkit_tableviews.nim`,
-  `atlas-run tests tests/tnimkit_documents.nim`,
-  `atlas-run tests tests/tnimkit_application.nim`, and
-  `atlas-run tests tests/tnimkit_outlineviews.nim`.
-- The current box and pure Nim panel/dialog coverage lives in
-  `tests/tnimkit_boxes.nim`, `tests/integration_application.nim`,
-  `tests/tnimkit_documents.nim`, and `examples/panel_demo.nim`.
-- The first `SplitView` pass was checked with
-  `atlas-run tests tests/tnimkit_splitviews.nim tests/tnimkit_theme.nim tests/tnimkit_rendering.nim`,
-  `atlas-run tests --compile-only examples/splitview_demo.nim`, and a full
-  `atlas-run tests` run passing `35/35`.
-- The new slider/progress/cascading widget coverage lives in
-  `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
-  `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
-  `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
-- The Stepper pass was checked with `atlas-run tests nimkit_controls.nim`,
-  `nim c examples/stepper_demo.nim`, and
-  `nim c examples/controls_showcase.nim`.
-- The Matrix pass was checked with `atlas-run tests nimkit_matrix.nim` and the
-  full `atlas-run tests` suite; demo behavior lives in
-  `examples/matrix_demo.nim`.
-- The MonoText pass was checked with
-  `nim check src/merenda/nimkit/text/monotextviews.nim`,
-  `nim check src/merenda/nimkit/app/windows.nim`,
-  `nim c examples/monotext_demo.nim`,
-  `atlas-run tests nimkit_monotextviews.nim`,
-  `atlas-run tests nimkit_responder.nim nimkit_textviews.nim nimkit_textfields.nim nimkit_monotextviews.nim`,
-  and a full `atlas-run tests` run passing `39/39`.
-- The first animation core, interpolation/timing, scheduler/threading, and
-  property animation surface passes are covered by
-  `tests/tnimkit_animations.nim`; umbrella export and affected widget fallout
-  were checked with
-  `atlas-run tests nimkit_controls nimkit_splitviews nimkit_cascadingviews`.
-- The completed animation transaction/examples pass was checked with
-  `atlas-run tests tnimkit_animations`,
-  `atlas-run tests --compile-only 'examples/*.nim'`, and a full
-  `atlas-run tests` run passing `37/37`.
-- The panel/dialog hardening pass was checked with
-  `nim c examples/panel_demo.nim`, `nim r tests/integration_application.nim`,
-  `atlas-run tests nimkit_documents.nim`,
-  `atlas-run tests nimkit_animations.nim`, and a full `atlas-run tests` run
-  passing `37/37`.
+  layout; the latest full run passed `39/39`.
+- Focused suites cover the main widget/runtime seams:
+  `tests/tnimkit_controls.nim`, `tests/tnimkit_matrix.nim`,
+  `tests/tnimkit_monotextviews.nim`, `tests/tnimkit_tableviews.nim`,
+  `tests/tnimkit_outlineviews.nim`, `tests/tnimkit_documents.nim`,
+  `tests/tnimkit_animations.nim`, `tests/tnimkit_rendering.nim`, and
+  `tests/tnimkit_accessibility.nim`.
+- Demo coverage for recently completed work lives in
+  `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
+  `examples/matrix_demo.nim`, `examples/monotext_demo.nim`,
+  `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`, and
+  `examples/controls_showcase.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
@@ -192,9 +150,16 @@ Recommended implementation order:
 Keep accessibility backend-neutral and driven by the same state mutations that
 update widgets, responder state, and rendering.
 
-1. Route focus, selection, enabled-state, expanded/collapsed, and value-change
-   notifications from the same mutation procs that already update rendering or
-   responder state.
+1. Route accessibility notifications from canonical semantic state-transition
+   procs, matching Cocoa's model for custom controls:
+   - focus changes, selection model updates, value setters, and row
+     expand/collapse toggles should post after state is committed and only
+     when semantic state actually changes
+   - enabled-state mutations should update accessibility attributes from the
+     same `setEnabled` path; only post a platform-specific broader
+     notification when a backend adapter requires one
+   - drawing and layout should not emit accessibility notifications; they
+     should consume already-committed semantic state
 2. Add semantic traversal helpers:
    - ordered accessibility descendants
    - role/action validation helpers for tests and future backend bridges
