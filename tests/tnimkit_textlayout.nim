@@ -14,14 +14,26 @@ type
 
   TextLayoutSignalSpy = ref object of DynamicAgent
     invalidations: int
+    semanticInvalidations: int
     containerChanges: int
     containerInvalidations: int
     completions: int
     geometryChanges: int
     lastRanges: seq[TextRange]
+    lastInvalidations: seq[TextLayoutInvalidation]
     lastContainers: seq[TextContainer]
     lastContainerIndex: TextContainerIndex
     lastSnapshot: TextLayoutSnapshot
+
+  TextLayoutDelegateSpy = ref object of DynamicAgent
+    allowGlyphGeneration: bool
+    hyphenate: bool
+    shouldGenerateCalls: int
+    lineSpacing: float32
+    paragraphBefore: float32
+    paragraphAfter: float32
+    completionCount: int
+    temporaryRuns: seq[TextAttributeRun]
 
   LayoutClientSpy = ref object of DynamicAgent
     storage: TextStorage
@@ -55,6 +67,12 @@ protocol TextLayoutSignalSpyEvents from TextLayoutSignalSpy:
     inc spy.invalidations
     spy.lastRanges = ranges
 
+  proc textLayoutDidInvalidate(
+      spy: TextLayoutSignalSpy, invalidations: seq[TextLayoutInvalidation]
+  ) {.slot.} =
+    inc spy.semanticInvalidations
+    spy.lastInvalidations = invalidations
+
   proc containersDidChange(
       spy: TextLayoutSignalSpy, containers: seq[TextContainer]
   ) {.slot.} =
@@ -84,6 +102,65 @@ protocol TextLayoutSignalSpyEvents from TextLayoutSignalSpy:
     discard oldContentSize
     inc spy.geometryChanges
     spy.lastSnapshot = snapshot
+
+protocol TextLayoutDelegateSpyProtocol of TextLayoutDelegateProtocol:
+  method shouldGenerateGlyphs(
+      spy: TextLayoutDelegateSpy, manager: TextLayoutManager, range: TextRange
+  ): bool =
+    discard manager
+    discard range
+    inc spy.shouldGenerateCalls
+    spy.allowGlyphGeneration
+
+  method lineSpacingAfterGlyph(
+      spy: TextLayoutDelegateSpy, manager: TextLayoutManager, glyphIndex: GlyphIndex
+  ): float32 =
+    discard manager
+    discard glyphIndex
+    spy.lineSpacing
+
+  method paragraphSpacingBeforeGlyph(
+      spy: TextLayoutDelegateSpy, manager: TextLayoutManager, glyphIndex: GlyphIndex
+  ): float32 =
+    discard manager
+    discard glyphIndex
+    spy.paragraphBefore
+
+  method paragraphSpacingAfterGlyph(
+      spy: TextLayoutDelegateSpy, manager: TextLayoutManager, glyphIndex: GlyphIndex
+  ): float32 =
+    discard manager
+    discard glyphIndex
+    spy.paragraphAfter
+
+  method shouldHyphenateText(
+      spy: TextLayoutDelegateSpy,
+      manager: TextLayoutManager,
+      range: TextRange,
+      word: string,
+  ): bool =
+    discard manager
+    discard range
+    discard word
+    spy.hyphenate
+
+  method layoutDidFinish(
+      spy: TextLayoutDelegateSpy,
+      manager: TextLayoutManager,
+      snapshot: TextLayoutSnapshot,
+  ) =
+    discard manager
+    discard snapshot
+    inc spy.completionCount
+
+  method tempAttributesForRange(
+      spy: TextLayoutDelegateSpy, manager: TextLayoutManager, range: TextRange
+  ): seq[TextAttributeRun] =
+    discard manager
+    for run in spy.temporaryRuns:
+      if int(run.range.location) < range.maxIndex and
+          int(range.location) < run.range.maxIndex:
+        result.add run
 
 protocol LayoutClientSpyProtocol of TextLayoutClientProtocol:
   method textLayoutStorage(
@@ -394,6 +471,10 @@ proc newTextStorageSignalSpy(): TextStorageSignalSpy =
 proc newTextLayoutSignalSpy(): TextLayoutSignalSpy =
   result = TextLayoutSignalSpy()
   discard result.withProto()
+
+proc newTextLayoutDelegateSpy(): TextLayoutDelegateSpy =
+  result = TextLayoutDelegateSpy(allowGlyphGeneration: true)
+  discard result.withProtocol(TextLayoutDelegateSpyProtocol)
 
 proc newLayoutClientSpy(
     storage: TextStorage, container: TextContainer, alignment = taLeft
@@ -947,6 +1028,149 @@ suite "nimkit text layout":
     check not emptyFirstRect.isEmpty
     check not textBounds.isEmpty
     check not glyphBounds.isEmpty
+
+  test "glyph generation exposes mappings properties and bounding queries":
+    let manager = newTextLayoutManager(
+      newTextStorage("A B\nC"),
+      initTextContainer(initSize(220.0, 100.0), insets(4.0), wraps = false),
+    )
+    let
+      glyphs = manager.generatedGlyphsForTextRange(initTextRange(0, 5))
+      spaceGlyph = manager.glyphIndexForTextIndex(1)
+      newlineGlyph = manager.glyphIndexForTextIndex(3)
+      firstGlyph = manager.glyphInfo(0)
+      firstBounds = manager.boundingRectForGlyphRange(initGlyphRange(0, 1))
+      hitRange = manager.glyphRangeForBoundingRect(firstBounds)
+      lineRect = manager.lineFragmentRectForGlyphAtIndex(0)
+      usedLineRect = manager.usedRectForLineFragmentAtIndex(0)
+      extra = manager.extraLineFragment()
+
+    check glyphs.len == int(manager.numberOfGlyphs())
+    check firstGlyph.isSome
+    check firstGlyph.get().textRange == initTextRange(0, 1)
+    check firstGlyph.get().bounds == firstBounds
+    check spaceGlyph.isSome
+    check gpElastic in manager.glyphProperties(spaceGlyph.get())
+    check newlineGlyph.isSome
+    check gpControl in manager.glyphProperties(newlineGlyph.get())
+    check manager.textIndexForGlyphIndex(0).toInt == 0
+    check manager.characterIndexForGlyphIndex(0).toInt == 0
+    check manager.glyphIndexForCharacterIndex(0).isSome
+    check hitRange.length >= 1
+    check lineRect.size.height > 0.0
+    check usedLineRect.size.height > 0.0
+    check extra.fragmentRect.size.height > 0.0
+    check manager.extraLineFragmentRect() == extra.fragmentRect
+    check manager.extraLineFragmentUsedRect() == extra.usedRect
+
+    manager.setGlyphProperties(initGlyphRange(0, 1), {gpAttachment})
+    check manager.glyphProperties(initGlyphIndex(0)) == {gpAttachment}
+    check manager.glyphPropertyRuns().len == 1
+    manager.removeGlyphProperties(initGlyphRange(0, 1))
+    check manager.glyphPropertyRuns().len == 0
+
+  test "temporary attributes and invalidation APIs are observable":
+    let
+      storage = newTextStorage("Invalidate me")
+      backend = newContractBackend()
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(180.0, 60.0), insets(0.0))
+      )
+      spy = newTextLayoutSignalSpy()
+      tempAttributes = defaultTextAttributes(initColor(0.9, 0.1, 0.2), 16.0)
+
+    manager.textLayoutBackend = backend
+    spy.observeProtocol(manager, TextLayoutEvents)
+    discard manager.layoutSnapshot()
+    check manager.hasValidLayout()
+
+    manager.setTemporaryAttributes(initTextRange(0, 4), tempAttributes)
+    check manager.hasValidLayout()
+    check spy.semanticInvalidations == 1
+    check spy.lastInvalidations[^1].kind == tlikDisplay
+    check manager.temporaryAttributeRuns(initTextRange(0, 4)).len == 1
+    check manager.temporaryAttributesAt(1).foregroundColor ==
+      tempAttributes.foregroundColor
+
+    manager.invalidateCharacters(initTextRange(1, 3))
+    check not manager.hasValidLayout()
+    check spy.lastInvalidations[^1].kind == tlikCharacters
+    discard manager.layoutSnapshot()
+    check backend.requests[^1].invalidations[^1].kind == tlikCharacters
+    check backend.requests[^1].invalidatedRanges[^1] == initTextRange(1, 3)
+
+    manager.invalidateGlyphs(initGlyphRange(0, 2))
+    check not manager.hasValidLayout()
+    check spy.lastInvalidations[^1].kind == tlikGlyphs
+    discard manager.layoutSnapshot()
+    check backend.requests[^1].invalidations[^1].kind == tlikGlyphs
+    check backend.requests[^1].invalidatedGlyphRanges[^1] == initGlyphRange(0, 2)
+
+    manager.invalidateLayoutForCharacterRange(initTextRange(0, storage.len))
+    check spy.lastInvalidations[^1].kind == tlikLayout
+
+    manager.removeTemporaryAttributes(initTextRange(0, 4))
+    check manager.temporaryAttributeRuns(initTextRange(0, 4)).len == 0
+
+  test "layout delegate hooks generation metrics hyphenation and temporary runs":
+    let
+      delegate = newTextLayoutDelegateSpy()
+      delegateAttributes = defaultTextAttributes(initColor(0.1, 0.2, 0.9), 14.0)
+      manager = newTextLayoutManager(
+        newTextStorage("Delegate text"),
+        initTextContainer(initSize(220.0, 90.0), insets(3.0), wraps = false),
+      )
+
+    delegate.hyphenate = true
+    delegate.lineSpacing = 2.0
+    delegate.paragraphBefore = 1.0
+    delegate.paragraphAfter = 3.0
+    delegate.temporaryRuns =
+      @[TextAttributeRun(range: initTextRange(0, 3), attributes: delegateAttributes)]
+    manager.delegate = DynamicAgent(delegate)
+
+    discard manager.layoutSnapshot()
+    check delegate.completionCount == 1
+    check manager.shouldHyphenate(initTextRange(0, 8), "Delegate")
+    check manager.temporaryAttributeRuns(initTextRange(0, 3)).len == 1
+    check manager.temporaryAttributesAt(1).foregroundColor ==
+      delegateAttributes.foregroundColor
+
+    let metrics = manager.lineFragmentMetrics(0)
+    check metrics.isSome
+    checkClose(metrics.get().lineSpacing, 2.0)
+    checkClose(metrics.get().paragraphSpacingBefore, 1.0)
+    checkClose(metrics.get().paragraphSpacingAfter, 3.0)
+    checkClose(metrics.get().fragment.leading, 6.0)
+
+    delegate.allowGlyphGeneration = false
+    check manager.generatedGlyphsForTextRange(initTextRange(0, 4)).len == 0
+    check delegate.shouldGenerateCalls >= 1
+
+    delegate.allowGlyphGeneration = true
+    check manager.generatedGlyphsForTextRange(initTextRange(0, 4)).len > 0
+
+  test "background and non-contiguous layout flags are explicit first-pass switches":
+    let manager = newTextLayoutManager(
+      newTextStorage("Background"),
+      initTextContainer(initSize(180.0, 60.0), insets(0.0)),
+    )
+
+    check not manager.usesBackgroundLayout()
+    check not manager.allowsNonContiguousLayout()
+    check not manager.hasNonContiguousLayout()
+
+    manager.usesBackgroundLayout = true
+    manager.allowsNonContiguousLayout = true
+    manager.invalidateLayout(initTextRange(0, 4))
+    manager.requestBackgroundLayout()
+
+    check manager.usesBackgroundLayout()
+    check manager.allowsNonContiguousLayout()
+    check manager.hasValidLayout()
+    manager.updateLayoutForTextRange(initTextRange(0, 4))
+    manager.updateLayoutForGlyphRange(initGlyphRange(0, 2))
+    manager.updateLayoutForContainer(initTextContainerIndex(0))
 
   test "figdraw snapshots hit-test blank and trailing hard-break lines":
     let

@@ -9,6 +9,24 @@ type TestPasteboardProvider = ref object of DynamicAgent
   clearCount: int
   writtenText: seq[string]
 
+type TextViewDelegateSpy = ref object of DynamicAgent
+  allowBegin: bool
+  allowChange: bool
+  beginRequests: int
+  didBegin: int
+  didEnd: int
+  shouldChanges: int
+  didChanges: int
+  selections: seq[seq[TextRange]]
+  completions: seq[string]
+  clickedLinks: seq[string]
+  validation: bool
+  hasValidation: bool
+
+type TextViewCheckerSpy = ref object of DynamicAgent
+  checkingResults: seq[TextCheckingResult]
+  dataResults: seq[TextCheckingResult]
+
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextGeometryEpsilon
 
@@ -47,6 +65,93 @@ protocol TestPasteboardProviderProtocol of PasteboardProviderProtocol:
 proc newTestPasteboardProvider(text = ""): TestPasteboardProvider =
   result = TestPasteboardProvider(text: text)
   discard result.withProtocol(TestPasteboardProviderProtocol)
+
+protocol TextViewDelegateSpyProtocol of TextViewDelegateProtocol:
+  method tvShouldBeginEdit(spy: TextViewDelegateSpy, textView: TextView): bool =
+    discard textView
+    inc spy.beginRequests
+    spy.allowBegin
+
+  method tvDidBeginEdit(spy: TextViewDelegateSpy, textView: TextView) =
+    discard textView
+    inc spy.didBegin
+
+  method tvDidEndEdit(spy: TextViewDelegateSpy, textView: TextView) =
+    discard textView
+    inc spy.didEnd
+
+  method tvShouldChange(
+      spy: TextViewDelegateSpy,
+      textView: TextView,
+      range: TextRange,
+      replacement: TextStorage,
+  ): bool =
+    discard textView
+    discard range
+    discard replacement
+    inc spy.shouldChanges
+    spy.allowChange
+
+  method tvDidChange(spy: TextViewDelegateSpy, textView: TextView, range: TextRange) =
+    discard textView
+    discard range
+    inc spy.didChanges
+
+  method tvSelectionChanged(
+      spy: TextViewDelegateSpy, textView: TextView, ranges: seq[TextRange]
+  ) =
+    discard textView
+    spy.selections.add ranges
+
+  method tvCompletions(
+      spy: TextViewDelegateSpy, textView: TextView, prefix: string, range: TextRange
+  ): seq[string] =
+    discard textView
+    discard prefix
+    discard range
+    spy.completions
+
+  method tvClickedLink(
+      spy: TextViewDelegateSpy, textView: TextView, link: string, range: TextRange
+  ): bool =
+    discard textView
+    discard range
+    spy.clickedLinks.add link
+    true
+
+  method tvValidateCommand(
+      spy: TextViewDelegateSpy, textView: TextView, action: ActionSelector
+  ): bool =
+    discard textView
+    discard action
+    if spy.hasValidation:
+      return spy.validation
+    false
+
+protocol TextViewCheckerSpyProtocol of TextViewCheckingProtocol:
+  method tvCheckingResults(
+      spy: TextViewCheckerSpy, textView: TextView, range: TextRange
+  ): seq[TextCheckingResult] =
+    discard textView
+    discard range
+    spy.checkingResults
+
+  method tvDataDetections(
+      spy: TextViewCheckerSpy, textView: TextView, range: TextRange
+  ): seq[TextCheckingResult] =
+    discard textView
+    discard range
+    spy.dataResults
+
+proc newTextViewDelegateSpy(
+    allowBegin = true, allowChange = true
+): TextViewDelegateSpy =
+  result = TextViewDelegateSpy(allowBegin: allowBegin, allowChange: allowChange)
+  discard result.withProtocol(TextViewDelegateSpyProtocol)
+
+proc newTextViewCheckerSpy(): TextViewCheckerSpy =
+  result = TextViewCheckerSpy()
+  discard result.withProtocol(TextViewCheckerSpyProtocol)
 
 suite "nimkit text views":
   test "text view inserts and replaces selected text":
@@ -145,6 +250,168 @@ suite "nimkit text views":
     check textView.redoText()
     check textView.stringValue == "abcd"
     check textView.selectedRange == initTextRange(4, 0)
+
+  test "text view delegate gates edits and receives lifecycle callbacks":
+    let
+      textView = newTextView("ab", frame = initRect(0, 0, 160, 24))
+      delegate = newTextViewDelegateSpy(allowBegin = true, allowChange = false)
+
+    textView.delegate = DynamicAgent(delegate)
+    textView.selectedRange = initTextRange(2, 0)
+    textView.insertTextValue("x")
+
+    check textView.stringValue == "ab"
+    check delegate.beginRequests == 1
+    check delegate.didBegin == 1
+    check delegate.shouldChanges == 1
+    check delegate.didChanges == 0
+
+    delegate.allowChange = true
+    textView.insertTextValue("x")
+    textView.endEditing()
+
+    check textView.stringValue == "abx"
+    check delegate.didChanges == 1
+    check delegate.didEnd == 1
+
+  test "text view supports multiple and rectangular selection hooks":
+    let textView = newTextView("alpha\nbeta\ngamma", frame = initRect(0, 0, 240, 120))
+
+    textView.selectionGranularity = tsgWord
+    textView.selectRange(1, textView.selectionGranularity)
+    check textView.selectedRange == initTextRange(0, 5)
+
+    textView.allowsMultipleSelectedRanges = true
+    textView.selectedRanges = @[initTextRange(0, 5), initTextRange(6, 4)]
+    check textView.selectedRanges.len == 2
+
+    textView.allowsRectangularSelection = true
+    let rectSelection = textView.setRectangularSelection(
+      textView.caretPoint(0), initPoint(200.0, textView.caretPoint(11).y)
+    )
+    check rectSelection.ranges.len >= 2
+    textView.allowsRectangularSelection = false
+    check textView.rectangularSelection.ranges.len == 0
+
+  test "text view smart insert substitution and undo grouping are reusable":
+    let textView = newTextView("helloworld", frame = initRect(0, 0, 180, 24))
+
+    textView.smartInsertDeleteEnabled = true
+    textView.selectedRange = initTextRange(5, 0)
+    textView.insertTextValue("big")
+    check textView.stringValue == "hello big world"
+
+    textView.stringValue = ""
+    textView.substitutionOptions = {tsoSmartDashes}
+    textView.insertTextValue("--")
+    check textView.stringValue == "\226\128\148"
+
+    textView.stringValue = ""
+    textView.smartInsertDeleteEnabled = false
+    textView.substitutionOptions = {}
+    textView.beginUndoGrouping()
+    textView.insertTextValue("a")
+    textView.insertTextValue("b")
+    textView.endUndoGrouping()
+    check textView.stringValue == "ab"
+    check textView.undoText()
+    check textView.stringValue == ""
+
+  test "text view find indicators checking and completion use pure contracts":
+    let
+      textView = newTextView(
+        "alpha beta alpha https://example.test", frame = initRect(0, 0, 260, 80)
+      )
+      replaceView = newTextView("one two one", frame = initRect(0, 0, 200, 40))
+      checker = newTextViewCheckerSpy()
+      delegate = newTextViewDelegateSpy()
+
+    let found = textView.showFindIndicators("alpha")
+    check found == @[initTextRange(0, 5), initTextRange(11, 5)]
+    check textView.findIndicators.len == 2
+
+    check replaceView.replaceFirstText("one", "1")
+    check replaceView.stringValue == "1 two one"
+    check replaceView.replaceAllText("one", "1") == 1
+    check replaceView.stringValue == "1 two 1"
+
+    checker.checkingResults =
+      @[initTextCheckingResult(tckSpelling, initTextRange(6, 4), "spelling")]
+    textView.textChecker = DynamicAgent(checker)
+    textView.substitutionOptions = {tsoDataDetection}
+    let checks = textView.checkText()
+    textView.applyTextCheckingResults(checks)
+
+    check checks.len == 2
+    check textView.textStorage().attributesAt(6).underline
+    check textView.textStorage().attributesAt(17).link == "https://example.test"
+
+    textView.stringValue = "alp"
+    textView.selectedRange = initTextRange(3, 0)
+    delegate.completions = @["alphabet"]
+    textView.delegate = DynamicAgent(delegate)
+    let panel = textView.completeText()
+    check panel.visible
+    check textView.acceptCompletion()
+    check textView.stringValue == "alphabet"
+
+  test "text view exposes caret selection and paragraph editing attributes":
+    let
+      textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+      selectedAttributes = defaultTextAttributes(initColor(1.0, 1.0, 1.0, 1.0), 14.0)
+      caretColor = initColor(0.9, 0.1, 0.2, 1.0)
+      tabStop = initTextTabStop(48.0)
+    var paragraph = initTextParagraphStyle(tabStops = [tabStop])
+
+    paragraph.lineSpacing = 2.0
+    textView.selectedTextAttributes = selectedAttributes
+    textView.insertionPointColor = caretColor
+    textView.insertionPointVisible = false
+    textView.insertionPointBlinkPeriod = 0.25
+    textView.markedTextAttributes = selectedAttributes
+    textView.setParagraphStyle(initTextRange(0, 3), paragraph)
+    textView.defaultParagraphStyle = paragraph
+    textView.usesRuler = true
+    textView.rulerVisible = true
+
+    check textView.selectedTextAttributes == selectedAttributes
+    check textView.insertionPointColor == caretColor
+    check not textView.insertionPointVisible
+    check textView.insertionPointBlinkPeriod == 0.25'f32
+    check textView.markedTextAttributes == selectedAttributes
+    check textView.paragraphStyleAt(1).tabStops.len == 1
+    check textView.typingAttributes.paragraphStyle == paragraph
+    check textView.rulerVisible
+
+    textView.usesRuler = false
+    check not textView.rulerVisible
+
+  test "text view validates commands and dispatches clicked links":
+    let
+      textView = newTextView("link", frame = initRect(0, 0, 160, 24))
+      delegate = newTextViewDelegateSpy()
+    var attributes = textView.textStorage().attributesAt(0)
+
+    check not textView.validateTextCommand(actionSelector("copy"))
+    textView.selectedRange = initTextRange(0, 4)
+    check textView.validateTextCommand(actionSelector("copy"))
+    check textView.validateTextCommand(actionSelector("cut"))
+
+    textView.selectedRange = initTextRange(4, 0)
+    textView.insertTextValue("!")
+    check textView.validateTextCommand(actionSelector("undo"))
+
+    attributes.link = "https://example.test"
+    textView.textStorage().setAttributes(initTextRange(0, 4), attributes)
+    textView.delegate = DynamicAgent(delegate)
+    check textView.clickTextAtPoint(textView.caretPoint(1))
+    check delegate.clickedLinks == @["https://example.test"]
+
+    delegate.hasValidation = true
+    delegate.validation = false
+    check not textView.validateTextCommand(actionSelector("paste"))
+    delegate.validation = true
+    check textView.validateTextCommand(actionSelector("paste"))
 
   test "text view copy cut and paste use the general pasteboard":
     let

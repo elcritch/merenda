@@ -154,6 +154,24 @@ document-controller open/save integration are covered in tests and examples.
   multiple containers with container indexes in line fragments, caret positions,
   snapshots, and semantic hit-test results, plus container replacement and
   invalidation signals for paged, column, and flowed text models.
+- Expanded `TextLayoutManager` toward `NSLayoutManager`/TextKit 2 parity while
+  keeping NimKit names primary: glyph generation now exposes `TextGlyph`
+  records, glyph properties, character/glyph mapping helpers, bounding rect
+  queries, line-fragment rect/used-rect metrics, extra line fragments,
+  temporary rendering attributes, typed character/glyph/layout/display/container
+  invalidation payloads, delegate hooks for glyph generation, spacing,
+  hyphenation, completion, and temporary attributes, explicit background and
+  non-contiguous layout switches, partial-layout entry points, and Cocoa-shaped
+  aliases layered over the Nim-native API.
+- Brought `TextView` closer to `NSTextView` behavior while keeping the surface
+  pure Nim: selection affinity/granularity, multiple and rectangular selection
+  hooks, selected/marked text overlays, insertion-point color/visibility/blink
+  policy, find indicators, checking results, optional data detection, spelling
+  and grammar underline application, delegate protocols for edit lifecycle,
+  text changes, selection, clicked links/attachments, completions, and command
+  validation, undo grouping, smart insert/delete, quote/dash substitution,
+  find/replace helpers, completion panels, and paragraph/tab-stop editing now
+  share the existing storage/layout contracts.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -207,33 +225,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-11. Expand `TextLayoutManager` toward `NSLayoutManager`/TextKit 2 parity:
-   - add glyph generation and glyph property APIs, character-to-glyph and
-     glyph-to-character mappings, glyph ranges for bounding rects, bounding
-     rects for glyph ranges, line fragment rect/used rect queries, extra line
-     fragment metrics, and temporary attributes
-   - add invalidation APIs for characters, glyphs, layout, display, and
-     containers, keeping range invalidation observable and testable
-   - add delegate/protocol hooks for should-generate-glyphs, line spacing,
-     paragraph spacing, hyphenation decisions, layout completion, and temporary
-     rendering attributes
-   - support background layout, optional non-contiguous layout, and partial
-     relayout once the deterministic single-container path is well covered
-   - keep Cocoa selector-compatible aliases as a compatibility layer over
-     NimKit names rather than making Objective-C naming the primary Nim API
-12. Bring `TextView` close to `NSTextView` behavior:
-   - add selection affinity/granularity, rectangular selection hooks, multiple
-     selected ranges if needed for compatibility, typing attributes, selected
-     text attributes, insertion point color/blink policy, marked text rendering,
-     find indicators, and spelling/grammar underline attributes
-   - add delegate/protocol hooks for should/did begin editing, should/did
-     change text, selection changes, clicked links/attachments, completions,
-     menu validation, and command validation
-   - support undo grouping, smart insert/delete, quote/dash/link substitution,
-     data detectors as optional text checking hooks, find/replace, spell check,
-     grammar check, and completion panels as reusable pure Nim contracts
-   - add ruler/tab-stop and paragraph-style editing hooks without making rulers
-     mandatory for simple text fields
 13. Harden input, command, and field-editor parity:
    - complete `NSTextInputClient`-style marked text, selected range,
      attributed substring, valid attributes for marked text, first rect for
