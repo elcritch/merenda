@@ -316,6 +316,8 @@ proc stringValue*(view: MonoTextView): string =
 proc `stringValue=`*(view: MonoTextView, value: string) =
   if view.isNil:
     return
+  if view.stringValue() == value:
+    return
   view.xLines.setLen(0)
   for lineText in value.splitMonoLines():
     view.xLines.add MonoTextLine(cells: lineText.textToCells())
@@ -325,6 +327,7 @@ proc `stringValue=`*(view: MonoTextView, value: string) =
   view.xCursorColumn = 0
   view.clampCursor()
   view.invalidateTextGeometry()
+  view.postAccessibilityNotification(anValueChanged)
 
 proc lines*(view: MonoTextView): seq[string] =
   if view.isNil:
@@ -335,6 +338,7 @@ proc lines*(view: MonoTextView): seq[string] =
 proc setLines*(view: MonoTextView, lines: openArray[string]) =
   if view.isNil:
     return
+  let previousValue = view.stringValue()
   view.xLines.setLen(0)
   for line in lines:
     view.xLines.add MonoTextLine(cells: line.textToCells())
@@ -342,6 +346,8 @@ proc setLines*(view: MonoTextView, lines: openArray[string]) =
     view.xLines.add MonoTextLine()
   view.clampCursor()
   view.invalidateTextGeometry()
+  if view.stringValue() != previousValue:
+    view.postAccessibilityNotification(anValueChanged)
 
 proc lineCount*(view: MonoTextView): int =
   if view.isNil: 0 else: view.xLines.len
@@ -366,13 +372,17 @@ proc setCell*(view: MonoTextView, row, column: int, cell: MonoTextCell) =
   if view.isNil or row < 0 or column < 0:
     return
   view.ensureColumn(row, column)
+  if view.xLines[row].cells[column] == cell:
+    return
   view.xLines[row].cells[column] = cell
   view.clampCursor()
   view.invalidateTextGeometry()
+  view.postAccessibilityNotification(anValueChanged)
 
 proc setGridSize*(view: MonoTextView, rows, columns: int) =
   if view.isNil:
     return
+  let previousValue = view.stringValue()
   let
     nextRows = max(rows, 0)
     nextColumns = max(columns, 0)
@@ -386,6 +396,8 @@ proc setGridSize*(view: MonoTextView, rows, columns: int) =
     view.xLines.add MonoTextLine()
   view.clampCursor()
   view.invalidateTextGeometry()
+  if view.stringValue() != previousValue:
+    view.postAccessibilityNotification(anValueChanged)
 
 proc replaceCells*(
     view: MonoTextView, row, column: int, cells: openArray[MonoTextCell]
@@ -393,18 +405,28 @@ proc replaceCells*(
   if view.isNil or row < 0 or column < 0 or cells.len == 0:
     return
   view.ensureColumn(row, column + cells.len - 1)
+  var changed = false
   for index, cell in cells:
-    view.xLines[row].cells[column + index] = cell
+    let target = column + index
+    if view.xLines[row].cells[target] != cell:
+      view.xLines[row].cells[target] = cell
+      changed = true
+  if not changed:
+    return
   view.clampCursor()
   view.invalidateTextGeometry()
+  view.postAccessibilityNotification(anValueChanged)
 
 proc setLine*(view: MonoTextView, row: int, text: string) =
   if view.isNil or row < 0:
     return
   view.ensureLine(row)
+  if view.xLines[row].lineToString() == text:
+    return
   view.xLines[row].cells = text.textToCells()
   view.clampCursor()
   view.invalidateTextGeometry()
+  view.postAccessibilityNotification(anValueChanged)
 
 proc scrollCells*(view: MonoTextView, top, bottom, left, right, rows, columns: int) =
   if view.isNil or rows == 0 and columns == 0:
@@ -415,19 +437,26 @@ proc scrollCells*(view: MonoTextView, top, bottom, left, right, rows, columns: i
     leftCol = max(left, 0)
     rightCol = max(right, leftCol)
     oldLines = view.xLines
+  var changed = false
   for row in topRow ..< bottomRow:
     view.ensureColumn(row, max(rightCol - 1, 0))
     for column in leftCol ..< rightCol:
       let
         srcRow = row + rows
         srcColumn = column + columns
-      if srcRow >= topRow and srcRow < bottomRow and srcRow >= 0 and
-          srcRow < oldLines.len and srcColumn >= leftCol and srcColumn < rightCol and
-          srcColumn < oldLines[srcRow].cells.len:
-        view.xLines[row].cells[column] = oldLines[srcRow].cells[srcColumn]
-      else:
-        view.xLines[row].cells[column] = initMonoTextCell()
-  view.invalidateTextGeometry()
+      let nextCell =
+        if srcRow >= topRow and srcRow < bottomRow and srcRow >= 0 and
+            srcRow < oldLines.len and srcColumn >= leftCol and srcColumn < rightCol and
+            srcColumn < oldLines[srcRow].cells.len:
+          oldLines[srcRow].cells[srcColumn]
+        else:
+          initMonoTextCell()
+      if view.xLines[row].cells[column] != nextCell:
+        view.xLines[row].cells[column] = nextCell
+        changed = true
+  if changed:
+    view.invalidateTextGeometry()
+    view.postAccessibilityNotification(anValueChanged)
 
 proc editable*(view: MonoTextView): bool =
   (not view.isNil) and view.xEditable
@@ -804,7 +833,7 @@ func isControlInput(rune: Rune): bool =
   let code = rune.int
   code < 32 or (code >= 127 and code <= 159)
 
-proc insertRune(view: MonoTextView, rune: Rune) =
+proc insertRune(view: MonoTextView, rune: Rune): bool =
   if rune == Rune('\n'):
     let
       row = view.xCursorRow
@@ -814,30 +843,35 @@ proc insertRune(view: MonoTextView, rune: Rune) =
     view.xLines.insert(MonoTextLine(cells: tail), row + 1)
     view.xCursorRow = row + 1
     view.xCursorColumn = 0
-    return
+    return true
 
   if rune == Rune('\t'):
     let spaces = view.xTabWidth - (view.xCursorColumn mod view.xTabWidth)
     for _ in 0 ..< max(spaces, 1):
-      view.insertRune(Rune(' '))
+      result = view.insertRune(Rune(' ')) or result
     return
 
   if rune.isControlInput():
-    return
+    return false
 
   let row = view.xCursorRow
   view.xLines[row].cells.insert(initMonoTextCell(rune), view.xCursorColumn)
   inc view.xCursorColumn
+  true
 
 proc insertTextAtCursor(view: MonoTextView, text: string) =
+  var changed = false
   for rune in text.runes:
-    view.insertRune(rune)
-  view.invalidateTextGeometry()
+    changed = view.insertRune(rune) or changed
+  if changed:
+    view.invalidateTextGeometry()
+    view.postAccessibilityNotification(anValueChanged)
 
-proc deleteBackward(view: MonoTextView) =
+proc deleteBackward(view: MonoTextView): bool =
   if view.xCursorColumn > 0:
     view.xLines[view.xCursorRow].cells.delete(view.xCursorColumn - 1)
     dec view.xCursorColumn
+    result = true
   elif view.xCursorRow > 0:
     let
       row = view.xCursorRow
@@ -847,17 +881,24 @@ proc deleteBackward(view: MonoTextView) =
     view.xLines.delete(row)
     view.xCursorRow = row - 1
     view.xCursorColumn = previousLen
-  view.invalidateTextGeometry()
+    result = true
+  if result:
+    view.invalidateTextGeometry()
+    view.postAccessibilityNotification(anValueChanged)
 
-proc deleteForward(view: MonoTextView) =
+proc deleteForward(view: MonoTextView): bool =
   let row = view.xCursorRow
   if view.xCursorColumn < view.xLines[row].cells.len:
     view.xLines[row].cells.delete(view.xCursorColumn)
+    result = true
   elif row + 1 < view.xLines.len:
     let next = view.xLines[row + 1].cells
     view.xLines[row].cells.add next
     view.xLines.delete(row + 1)
-  view.invalidateTextGeometry()
+    result = true
+  if result:
+    view.invalidateTextGeometry()
+    view.postAccessibilityNotification(anValueChanged)
 
 proc moveCursorHorizontal(view: MonoTextView, delta: int) =
   if delta < 0:
@@ -903,10 +944,10 @@ proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
     view.setNeedsDisplay(true)
     true
   of keyBackspace:
-    view.deleteBackward()
+    discard view.deleteBackward()
     true
   of keyDelete:
-    view.deleteForward()
+    discard view.deleteForward()
     true
   of keyEnter:
     view.insertTextAtCursor("\n")

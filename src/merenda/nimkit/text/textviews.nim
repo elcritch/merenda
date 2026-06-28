@@ -140,6 +140,7 @@ proc textStorage*(textView: TextView): TextStorage =
 proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   if textView.isNil:
     return
+  let previousValue = textView.textViewStringValue()
   textView.xTextStorage =
     if storage.isNil:
       newTextStorage()
@@ -152,6 +153,8 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   textView.clearMarkedText()
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
+  if textView.textViewStringValue() != previousValue:
+    textView.postAccessibilityNotification(anValueChanged)
 
 proc layoutManager*(textView: TextView): TextLayoutManager =
   if textView.isNil: nil else: textView.xLayoutManager
@@ -178,6 +181,8 @@ proc textViewStringValue(textView: TextView): string =
 proc setTextViewStringValue(textView: TextView, value: string) =
   if textView.isNil:
     return
+  if textView.textViewStringValue() == value:
+    return
   textView.xTextStorage.stringValue = value
   let total = textView.xTextStorage.len
   textView.xInsertionPoint = total
@@ -187,6 +192,7 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
   emit textView.textDidChange(DynamicAgent(textView))
+  textView.postAccessibilityNotification(anValueChanged)
 
 proc editable*(textView: TextView): bool =
   (not textView.isNil) and tvEditable in textView.xFlags
@@ -452,11 +458,13 @@ proc recordUndo(
   )
   textView.xRedoStack.setLen(0)
 
-proc finishTextMutation(textView: TextView) =
+proc finishTextMutation(textView: TextView, valueChanged = true) =
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
   textView.setNeedsDisplay(true)
   emit textView.textDidChange(DynamicAgent(textView))
+  if valueChanged:
+    textView.postAccessibilityNotification(anValueChanged)
 
 proc replaceRange(
     textView: TextView,
@@ -469,6 +477,7 @@ proc replaceRange(
     return
   let
     before = textView.xTextStorage.copyTextStorage()
+    beforeValue = before.stringValue()
     beforeSelection = textView.textViewSelectedRange()
     clamped = textView.clampedRange(range)
     insertedLength = inserted.len
@@ -478,7 +487,7 @@ proc replaceRange(
   if clearMark:
     textView.clearMarkedText()
   textView.setSelection(nextSelection)
-  textView.finishTextMutation()
+  textView.finishTextMutation(textView.textViewStringValue() != beforeValue)
   if record:
     textView.recordUndo(before, beforeSelection, textView.textViewSelectedRange())
 

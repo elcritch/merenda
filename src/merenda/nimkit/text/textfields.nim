@@ -400,6 +400,8 @@ proc setEditedString(
   textField.setNeedsDisplay(true)
   if changed and notify:
     emit textField.textDidChange(DynamicAgent(textField))
+  if changed:
+    textField.postAccessibilityNotification(anValueChanged)
 
 proc selectAllText(textField: TextField) =
   textField.xSelectionAnchor = 0

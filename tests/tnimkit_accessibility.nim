@@ -145,6 +145,152 @@ suite "nimkit accessibility":
     view.accessibilityValue = "ready"
     check spy.notifications == @[anValueChanged]
 
+  test "focus changes post after responder state changes":
+    let
+      window = newWindow("Focus Accessibility", frame = initRect(0, 0, 160, 100))
+      root = newView(frame = initRect(0, 0, 160, 100))
+      button = newButton("Focus", frame = initRect(10, 10, 80, 28))
+      spy = AccessibilitySpy()
+
+    root.addSubview(button)
+    window.setContentView(root)
+    button.connect(
+      accessibilityNotificationPosted, spy, rememberAccessibilityNotification
+    )
+
+    check window.makeFirstResponder(button)
+    check button.focused()
+    check spy.notifications == @[anFocusedUIElementChanged]
+
+    check window.makeFirstResponder(button)
+    discard buildRenders(root)
+    check spy.notifications == @[anFocusedUIElementChanged]
+
+  test "enabled mutations update attributes without notification":
+    let
+      button = newButton("Run")
+      spy = AccessibilitySpy()
+
+    button.connect(
+      accessibilityNotificationPosted, spy, rememberAccessibilityNotification
+    )
+
+    let enabledBefore =
+      button.accessibilityAttributeValue(AccessibilityAttributeEnabled)
+    check enabledBefore.kind == avBool
+    check enabledBefore.boolValue
+
+    button.enabled = false
+
+    let enabledAfter = button.accessibilityAttributeValue(AccessibilityAttributeEnabled)
+    check enabledAfter.kind == avBool
+    check not enabledAfter.boolValue
+    discard buildRenders(button)
+    check spy.notifications == newSeq[AccessibilityNotification]()
+
+  test "selection model mutations post accessibility notifications":
+    let
+      tableView = newTableView()
+      tabView = newTabView()
+      comboBox = newComboBox(["Low", "High"])
+      tableSpy = AccessibilitySpy()
+      tabSpy = AccessibilitySpy()
+      comboSpy = AccessibilitySpy()
+
+    tableView.selectionMode = tsmSingle
+    tableView.rowCount = 3
+    tableView.connect(
+      accessibilityNotificationPosted, tableSpy, rememberAccessibilityNotification
+    )
+    tableView.selectedIndex = 1
+    tableView.selectedIndex = 1
+    discard buildRenders(tableView)
+    check tableSpy.notifications == @[anSelectionChanged]
+    check tableView.selectedIndex == 1
+
+    discard tabView.addTabViewItem(newTabViewItem("General", newView()))
+    discard tabView.addTabViewItem(newTabViewItem("Advanced", newView()))
+    tabView.connect(
+      accessibilityNotificationPosted, tabSpy, rememberAccessibilityNotification
+    )
+    discard tabView.selectTabViewItemAtIndex(1)
+    discard tabView.selectTabViewItemAtIndex(1)
+    discard buildRenders(tabView)
+    check tabSpy.notifications == @[anSelectionChanged]
+    check tabView.accessibilityValue() == "Advanced"
+
+    comboBox.connect(
+      accessibilityNotificationPosted, comboSpy, rememberAccessibilityNotification
+    )
+    comboBox.selectedIndex = 1
+    comboBox.selectedIndex = 1
+    comboBox.selectedIndex = -1
+    check comboSpy.notifications == @[anSelectionChanged, anSelectionChanged]
+    check comboBox.selectedIndex == -1
+
+  test "expanded and collapsed mutations post accessibility notifications":
+    let
+      outlineView = newOutlineView()
+      splitView = newSplitView(laHorizontal, initRect(0, 0, 200, 80))
+      leftPane = newView()
+      rightPane = newView()
+      outlineSpy = AccessibilitySpy()
+      splitSpy = AccessibilitySpy()
+
+    outlineView.outlineItems = [
+      initOutlineItem("project", "Project", expandable = true),
+      initOutlineItem("src", "src", parentIdentifier = "project"),
+    ]
+    outlineView.connect(
+      accessibilityNotificationPosted, outlineSpy, rememberAccessibilityNotification
+    )
+    outlineView.expandItem("project")
+    outlineView.expandItem("project")
+    outlineView.collapseItem("project")
+    discard buildRenders(outlineView)
+    check outlineSpy.notifications == @[anExpandedChanged, anExpandedChanged]
+
+    splitView.addPane(leftPane, collapsible = true)
+    splitView.addPane(rightPane)
+    splitView.connect(
+      accessibilityNotificationPosted, splitSpy, rememberAccessibilityNotification
+    )
+    splitView.setPaneCollapsed(0, true)
+    splitView.setPaneCollapsed(0, true)
+    splitView.setPaneCollapsed(0, false)
+    discard buildRenders(splitView)
+    check splitSpy.notifications == @[anExpandedChanged, anExpandedChanged]
+
+  test "text value setters post accessibility value notifications":
+    let
+      field = newTextField("A")
+      textView = newTextView("A")
+      monoText = newMonoTextEditor("A")
+      fieldSpy = AccessibilitySpy()
+      textViewSpy = AccessibilitySpy()
+      monoTextSpy = AccessibilitySpy()
+
+    field.connect(
+      accessibilityNotificationPosted, fieldSpy, rememberAccessibilityNotification
+    )
+    textView.connect(
+      accessibilityNotificationPosted, textViewSpy, rememberAccessibilityNotification
+    )
+    monoText.connect(
+      accessibilityNotificationPosted, monoTextSpy, rememberAccessibilityNotification
+    )
+
+    field.text = "B"
+    field.text = "B"
+    textView.stringValue = "B"
+    textView.stringValue = "B"
+    monoText.stringValue = "B"
+    monoText.stringValue = "B"
+
+    check fieldSpy.notifications == @[anValueChanged]
+    check textViewSpy.notifications == @[anValueChanged]
+    check monoTextSpy.notifications == @[anValueChanged]
+
   test "menus and popup controls expose accessibility semantics":
     let
       menu = newMenu("Actions")

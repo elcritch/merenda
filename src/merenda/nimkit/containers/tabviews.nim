@@ -467,6 +467,7 @@ proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
   tabView.xSelectedIndex = index
   tabView.syncSelectedContent()
   tabView.didSelect(item)
+  tabView.postAccessibilityNotification(anSelectionChanged)
   true
 
 proc `selectedIndex=`*(tabView: TabView, index: int) =
