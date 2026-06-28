@@ -1728,6 +1728,14 @@ proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchRes
       return
     responder = responder.nextResponder()
 
+proc dispatchTextInput*(window: Window, text: string): bool =
+  if window.isNil or text.len == 0:
+    return false
+  let target = window.keyDispatchTarget()
+  if target.isNil:
+    return false
+  dispatchTextInputInChain(target, text).handled
+
 proc updateHoverView(
     window: Window, target: View, contentPoint: Point, event: MouseEvent
 ): bool =
@@ -2132,9 +2140,7 @@ proc dispatchHostKey(window: Window, event: HostKeyEvent) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostTextInput(window: Window, text: string) =
-  if text.len == 0:
-    return
-  discard dispatchTextInputInChain(window.keyDispatchTarget(), text)
+  discard window.dispatchTextInput(text)
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostFocusChanged(window: Window, focused: bool) =

@@ -8,6 +8,12 @@ proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
     result.add $rune
 
+proc clickView(window: Window, view: View): bool =
+  let bounds = view.bounds()
+  window.clickAt(
+    view.pointToWindow(initPoint(bounds.size.width / 2.0, bounds.size.height / 2.0))
+  )
+
 suite "nimkit mono text views":
   test "plain text API stores lines and exposes grid cells":
     let view = newMonoTextViewer("alpha\nbeta")
@@ -118,6 +124,94 @@ suite "nimkit mono text views":
     let point = view.pointToWindow(initPoint(view.padding + 2.0, view.padding + 2.0))
     check window.mouseDownAt(point)
     check forwarded == @[mtreKeyDown, mtreKeyDown]
+
+  test "raw event policy checkboxes drive synthesized user input":
+    let
+      window = newWindow("Mono policy controls", frame = initRect(0, 0, 420, 180))
+      root = newView(frame = initRect(0, 0, 420, 180))
+      forwardKeys = newCheckBox("Forward key events", frame = initRect(10, 10, 140, 28))
+      captureKeys =
+        newCheckBox("Capture key events", frame = initRect(155, 10, 140, 28))
+      forwardMouse =
+        newCheckBox("Forward mouse events", frame = initRect(300, 10, 110, 28))
+      editor = newMonoTextEditor("abc", frame = initRect(10, 55, 240, 90))
+      policyAction = actionSelector("monoTextPolicyCheckboxChanged")
+
+    proc applyPolicy() =
+      var
+        forwarded: MonoTextRawEventKinds = {}
+        captured: MonoTextRawEventKinds = {}
+      if forwardKeys.state == bsOn:
+        forwarded = forwarded + {mtreKeyDown, mtreFlagsChanged}
+      if captureKeys.state == bsOn:
+        captured = captured + {mtreKeyDown, mtreFlagsChanged}
+      if forwardMouse.state == bsOn:
+        forwarded =
+          forwarded + {mtreMouseDown, mtreMouseDragged, mtreMouseUp, mtreScrollWheel}
+      editor.rawEventPolicy = initMonoTextRawEventPolicy(
+        forwardedEvents = forwarded, capturedEvents = captured
+      )
+
+    let policyTarget = newActionTarget(policyAction) do(sender: DynamicAgent):
+      discard sender
+      applyPolicy()
+      let owner = editor.window()
+      if owner of Window:
+        discard Window(owner).makeFirstResponder(editor)
+
+    var forwarded: seq[MonoTextRawEventKind]
+    editor.rawEventHandler = proc(event: MonoTextRawEvent): bool =
+      forwarded.add event.kind
+      false
+
+    forwardKeys.state = bsOn
+    forwardMouse.state = bsOff
+    for checkbox in [forwardKeys, captureKeys, forwardMouse]:
+      checkbox.target = policyTarget
+      checkbox.action = policyAction
+      root.addSubview(checkbox)
+    root.addSubview(editor)
+    window.setContentView(root)
+    applyPolicy()
+    check window.makeFirstResponder(editor)
+
+    editor.setCursorPosition(0, 0)
+    check window.dispatchKeyDown(KeyEvent(text: "Z", key: keyZ, keyCode: keyZ.ord))
+    check window.dispatchTextInput("Z")
+    check forwarded == @[mtreKeyDown]
+    check editor.stringValue == "Zabc"
+
+    check window.clickView(captureKeys)
+    check captureKeys.state == bsOn
+    check window.firstResponder == editor
+    check window.dispatchKeyDown(KeyEvent(key: keyY, keyCode: keyY.ord))
+    check window.dispatchTextInput("Y")
+    check forwarded == @[mtreKeyDown, mtreKeyDown]
+    check editor.stringValue == "Zabc"
+
+    check window.clickView(captureKeys)
+    check captureKeys.state == bsOff
+    discard window.dispatchKeyDown(KeyEvent(key: keyX, keyCode: keyX.ord))
+    check window.dispatchTextInput("X")
+    check forwarded == @[mtreKeyDown, mtreKeyDown, mtreKeyDown]
+    check editor.stringValue == "ZXabc"
+
+    check window.clickView(forwardKeys)
+    check forwardKeys.state == bsOff
+    discard window.dispatchKeyDown(KeyEvent(key: keyQ, keyCode: keyQ.ord))
+    check window.dispatchTextInput("Q")
+    check forwarded == @[mtreKeyDown, mtreKeyDown, mtreKeyDown]
+    check editor.stringValue == "ZXQabc"
+
+    let editorPoint =
+      editor.pointToWindow(initPoint(editor.padding + 2.0, editor.padding + 2.0))
+    check window.mouseDownAt(editorPoint)
+    check forwarded == @[mtreKeyDown, mtreKeyDown, mtreKeyDown]
+
+    check window.clickView(forwardMouse)
+    check forwardMouse.state == bsOn
+    check window.mouseDownAt(editorPoint)
+    check forwarded == @[mtreKeyDown, mtreKeyDown, mtreKeyDown, mtreMouseDown]
 
   test "theme drives mono text chrome surface":
     let

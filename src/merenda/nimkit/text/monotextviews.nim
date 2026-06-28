@@ -77,6 +77,7 @@ type
     xForwardedRawEvents: MonoTextRawEventKinds
     xCapturedRawEvents: MonoTextRawEventKinds
     xRawEventHandler: MonoTextRawEventHandler
+    xSuppressNextTextInput: bool
     xCursorRow: int
     xCursorColumn: int
     xCursorVisible: bool
@@ -1106,12 +1107,24 @@ protocol DefaultMonoTextViewEvents of ResponderEventProtocol:
     view.forwardRawEvent(view.makeRawEvent(event))
 
   method keyDown(view: MonoTextView, event: KeyEvent): bool =
+    view.xSuppressNextTextInput = false
     if view.forwardRawEvent(view.makeRawEvent(mtreKeyDown, event)):
+      view.xSuppressNextTextInput = true
       return true
-    view.xEditable and view.handleEditorKey(event)
+    result = view.xEditable and view.handleEditorKey(event)
+    if result and event.text.len > 0:
+      view.xSuppressNextTextInput = true
 
   method flagsChanged(view: MonoTextView, event: KeyEvent): bool =
     view.forwardRawEvent(view.makeRawEvent(mtreFlagsChanged, event))
+
+protocol DefaultMonoTextViewInput of TextInputProtocol:
+  method insertText(view: MonoTextView, text: string) =
+    if view.xSuppressNextTextInput or mtreKeyDown in view.xCapturedRawEvents:
+      view.xSuppressNextTextInput = false
+      return
+    if view.xEditable and text.len > 0:
+      view.insertTextAtCursor(text)
 
 protocol DefaultMonoTextViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(view: MonoTextView): AccessibilityRole =
@@ -1145,6 +1158,7 @@ proc initMonoTextViewFields*(
   discard view.withProtocol(DefaultMonoTextViewDrawing)
   discard view.withProtocol(DefaultMonoTextViewLayout)
   discard view.withProtocol(DefaultMonoTextViewEvents)
+  discard view.withProtocol(DefaultMonoTextViewInput)
   discard view.withProtocol(DefaultMonoTextViewAccessibility)
   view.setAcceptsFirstResponder(editable)
   view.stringValue = value
