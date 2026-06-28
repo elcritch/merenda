@@ -87,6 +87,63 @@ suite "nimkit mono text views":
     check forwarded[1].column == 0
     check forwarded[1].input == "<2-LeftMouse><0,0>"
 
+  test "raw event policy controls forwarding and capture separately":
+    let
+      window = newWindow("Mono raw policy", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      view = newMonoTextEditor("abcdef", frame = initRect(0, 0, 200, 90))
+
+    var forwarded: seq[MonoTextRawEventKind]
+    view.rawEventPolicy = initMonoTextRawEventPolicy(
+      forwardedEvents = {mtreKeyDown}, capturedEvents = {mtreKeyDown}
+    )
+    view.rawEventHandler = proc(event: MonoTextRawEvent): bool =
+      forwarded.add event.kind
+      false
+
+    root.addSubview(view)
+    window.setContentView(root)
+    check window.makeFirstResponder(view)
+
+    view.setCursorPosition(0, 0)
+    check window.dispatchKeyDown(KeyEvent(text: "Z", key: keyZ))
+    check forwarded == @[mtreKeyDown]
+    check view.stringValue == "abcdef"
+
+    view.capturedRawEvents = {}
+    check window.dispatchKeyDown(KeyEvent(text: "Y", key: keyY))
+    check forwarded == @[mtreKeyDown, mtreKeyDown]
+    check view.stringValue == "Yabcdef"
+
+    let point = view.pointToWindow(initPoint(view.padding + 2.0, view.padding + 2.0))
+    check window.mouseDownAt(point)
+    check forwarded == @[mtreKeyDown, mtreKeyDown]
+
+  test "theme drives mono text chrome surface":
+    let
+      surfaceFill = initColor(0.12, 0.16, 0.20, 1.0)
+      surfaceBorder = initColor(0.70, 0.80, 0.90, 1.0)
+      view = newMonoTextViewer("theme", frame = initRect(0, 0, 220, 80))
+    var theme = initTheme()
+    theme[srMonoTextView, StyleFill] = fill(surfaceFill)
+    theme[srMonoTextView, StyleBorderColor] = surfaceBorder
+    theme[srMonoTextView, StyleBorderWidth] = 2.0
+    theme[srMonoTextView, StyleCornerRadius] = 5.0
+    theme[srMonoTextView, StyleChrome] = styleKeyword(DefaultChromeName)
+
+    let list = buildRenders(view, initAppearance(theme))[DefaultDrawLevel]
+
+    var foundSurface = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == surfaceFill.rgba:
+        foundSurface = true
+        check node.stroke.weight == 2.0
+        check node.stroke.fill.kind == flColor
+        check node.stroke.fill.color == surfaceBorder.rgba
+
+    check foundSurface
+
   test "rendering only emits visible monospace rows":
     var lines: seq[string]
     for index in 0 ..< 80:

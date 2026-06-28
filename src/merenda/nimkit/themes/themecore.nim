@@ -49,6 +49,7 @@ type
     srTabPanel
     srTextField
     srTextView
+    srMonoTextView
     srComboBox
     srComboBoxItem
     srSplitView
@@ -206,6 +207,13 @@ type
     selectionColor*: Color
     minSize*: Size
 
+  MonoTextStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    cursorColor*: Color
+    minSize*: Size
+    chrome*: string
+
   ComboBoxStyle* = object
     box*: ControlBoxStyle
     text*: TextStyle
@@ -266,6 +274,7 @@ const
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
+  StyleCursorColor* = StyleKey[Color]("cursor.color")
   StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
   StyleAlternatingFill* = StyleKey[Fill]("alternating.fill")
   StyleIndicatorFill* = StyleKey[Fill]("indicator.fill")
@@ -1758,6 +1767,21 @@ proc resolveTextFieldStyle*(
 proc resolveTextFieldStyle*(theme: Theme, context: StyleContext): TextFieldStyle =
   theme.resolveTextFieldStyle(context, initColor(0.08, 0.09, 0.11, 1.0))
 
+proc resolveMonoTextStyle*(theme: Theme, context: StyleContext): MonoTextStyle =
+  MonoTextStyle(
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(initColor(0.98, 0.985, 0.995, 1.0)),
+      initColor(0.72, 0.75, 0.80, 1.0),
+      cornerRadiusFallback = 6.0,
+    ),
+    text: theme.resolveTextStyle(context, initColor(0.08, 0.09, 0.11, 1.0), insets(6.0)),
+    cursorColor:
+      theme.colorRule(context, StyleCursorColor, initColor(0.08, 0.45, 0.95, 0.45)),
+    minSize: theme.sizeRule(context, StyleMinimumSize, initSize(80.0, 24.0)),
+    chrome: theme.resolveChromeName(context),
+  )
+
 proc resolveComboBoxStyle*(theme: Theme, context: StyleContext): ComboBoxStyle =
   ComboBoxStyle(
     box: theme.resolveControlBoxStyle(
@@ -1893,6 +1917,11 @@ proc resolveTextFieldStyle*(
     appearance: Appearance, context: StyleContext
 ): TextFieldStyle =
   appearance.theme.resolveTextFieldStyle(context)
+
+proc resolveMonoTextStyle*(
+    appearance: Appearance, context: StyleContext
+): MonoTextStyle =
+  appearance.theme.resolveMonoTextStyle(context)
 
 proc resolveComboBoxStyle*(
     appearance: Appearance, context: StyleContext

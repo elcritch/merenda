@@ -47,6 +47,8 @@ type
     mtreKeyDown
     mtreFlagsChanged
 
+  MonoTextRawEventKinds* = set[MonoTextRawEventKind]
+
   MonoTextRawEvent* = object
     row*: int
     column*: int
@@ -61,6 +63,10 @@ type
 
   MonoTextRawEventHandler* = proc(event: MonoTextRawEvent): bool {.closure.}
 
+  MonoTextRawEventPolicy* = object
+    forwardedEvents*: MonoTextRawEventKinds
+    capturedEvents*: MonoTextRawEventKinds
+
   MonoTextLine = object
     cells: seq[MonoTextCell]
 
@@ -68,7 +74,8 @@ type
     xLines: seq[MonoTextLine]
     xMaxColumns: int
     xEditable: bool
-    xForwardsRawEvents: bool
+    xForwardedRawEvents: MonoTextRawEventKinds
+    xCapturedRawEvents: MonoTextRawEventKinds
     xRawEventHandler: MonoTextRawEventHandler
     xCursorRow: int
     xCursorColumn: int
@@ -84,9 +91,22 @@ type
     xFontReady: bool
     xCachedFontName: string
 
+const AllMonoTextRawEvents* = {
+  mtreMouseDown, mtreMouseDragged, mtreMouseUp, mtreScrollWheel, mtreKeyDown,
+  mtreFlagsChanged,
+}
+
 var monoTypefaceId {.threadvar.}: TypefaceId
 var monoTypefaceKey {.threadvar.}: string
 var monoTypefaceReady {.threadvar.}: bool
+
+func initMonoTextRawEventPolicy*(
+    forwardedEvents: MonoTextRawEventKinds = AllMonoTextRawEvents,
+    capturedEvents: MonoTextRawEventKinds = {},
+): MonoTextRawEventPolicy =
+  MonoTextRawEventPolicy(
+    forwardedEvents: forwardedEvents + capturedEvents, capturedEvents: capturedEvents
+  )
 
 func initMonoTextCell*(
     text = " ",
@@ -235,12 +255,48 @@ proc monoTextMetrics*(view: MonoTextView): MonoTextMetrics =
     cellWidth: max(advance, 1.0'f32), lineHeight: max(lineHeight, font.size)
   )
 
+proc monoTextStyleContext(view: MonoTextView): StyleContext =
+  if view.isNil:
+    return controlStyle(srMonoTextView)
+  controlStyle(
+    srMonoTextView,
+    view.widgetStateSet(),
+    id = view.styleId,
+    classes = view.styleClasses,
+  )
+
+proc monoTextStyle(view: MonoTextView): MonoTextStyle =
+  if view.isNil:
+    return initAppearance().resolveMonoTextStyle(controlStyle(srMonoTextView))
+  view.effectiveAppearance().resolveMonoTextStyle(view.monoTextStyleContext())
+
+proc monoTextInsets(view: MonoTextView, style: MonoTextStyle): EdgeInsets =
+  if not view.isNil and view.xPadding >= 0.0'f32:
+    return insets(view.xPadding)
+  style.text.insets
+
+proc resolvedTextColor(view: MonoTextView, style: MonoTextStyle): nimkitTypes.Color =
+  if not view.isNil and view.xTextColor.a > 0.0'f32:
+    view.xTextColor
+  else:
+    style.text.color
+
+proc resolvedCursorColor(view: MonoTextView, style: MonoTextStyle): nimkitTypes.Color =
+  if not view.isNil and view.xCursorColor.a > 0.0'f32:
+    view.xCursorColor
+  else:
+    style.cursorColor
+
 proc rowColumnAtPoint*(
     view: MonoTextView, point: nimkitTypes.Point
 ): tuple[row, column: int] =
-  let metrics = view.monoTextMetrics()
-  result.row = int(floor(max(point.y - view.xPadding, 0.0'f32) / metrics.lineHeight))
-  result.column = int(floor(max(point.x - view.xPadding, 0.0'f32) / metrics.cellWidth))
+  let
+    metrics = view.monoTextMetrics()
+    style = view.monoTextStyle()
+    textInsets = view.monoTextInsets(style)
+  result.row = int(floor(max(point.y - textInsets.top, 0.0'f32) / metrics.lineHeight))
+  result.column =
+    int(floor(max(point.x - textInsets.left, 0.0'f32) / metrics.cellWidth))
   if view.xLines.len > 0:
     result.row = result.row.clampIndex(0, view.xLines.high)
     result.column = result.column.clampIndex(0, view.xLines[result.row].cells.len)
@@ -379,16 +435,65 @@ proc `editable=`*(view: MonoTextView, editable: bool) =
   if view.isNil or view.xEditable == editable:
     return
   view.xEditable = editable
-  view.setAcceptsFirstResponder(editable or view.xForwardsRawEvents)
+  view.setAcceptsFirstResponder(editable or view.xForwardedRawEvents != {})
 
 proc forwardsRawEvents*(view: MonoTextView): bool =
-  (not view.isNil) and view.xForwardsRawEvents
+  (not view.isNil) and view.xForwardedRawEvents != {}
 
 proc `forwardsRawEvents=`*(view: MonoTextView, value: bool) =
-  if view.isNil or view.xForwardsRawEvents == value:
+  if view.isNil:
     return
-  view.xForwardsRawEvents = value
-  view.setAcceptsFirstResponder(view.xEditable or value)
+  if value:
+    if view.xForwardedRawEvents == AllMonoTextRawEvents:
+      return
+    view.xForwardedRawEvents = AllMonoTextRawEvents
+  else:
+    if view.xForwardedRawEvents == {} and view.xCapturedRawEvents == {}:
+      return
+    view.xForwardedRawEvents = {}
+    view.xCapturedRawEvents = {}
+  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+
+proc rawEventPolicy*(view: MonoTextView): MonoTextRawEventPolicy =
+  if view.isNil:
+    initMonoTextRawEventPolicy(forwardedEvents = {}, capturedEvents = {})
+  else:
+    MonoTextRawEventPolicy(
+      forwardedEvents: view.xForwardedRawEvents, capturedEvents: view.xCapturedRawEvents
+    )
+
+proc `rawEventPolicy=`*(view: MonoTextView, policy: MonoTextRawEventPolicy) =
+  if view.isNil:
+    return
+  view.xForwardedRawEvents = policy.forwardedEvents + policy.capturedEvents
+  view.xCapturedRawEvents = policy.capturedEvents
+  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+
+proc forwardedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
+  if view.isNil:
+    {}
+  else:
+    view.xForwardedRawEvents
+
+proc `forwardedRawEvents=`*(view: MonoTextView, events: MonoTextRawEventKinds) =
+  if view.isNil:
+    return
+  view.xForwardedRawEvents = events
+  view.xCapturedRawEvents = view.xCapturedRawEvents * events
+  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+
+proc capturedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
+  if view.isNil:
+    {}
+  else:
+    view.xCapturedRawEvents
+
+proc `capturedRawEvents=`*(view: MonoTextView, events: MonoTextRawEventKinds) =
+  if view.isNil:
+    return
+  view.xCapturedRawEvents = events
+  view.xForwardedRawEvents = view.xForwardedRawEvents + events
+  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
 
 proc rawEventHandler*(view: MonoTextView): MonoTextRawEventHandler =
   if view.isNil: nil else: view.xRawEventHandler
@@ -397,8 +502,8 @@ proc `rawEventHandler=`*(view: MonoTextView, handler: MonoTextRawEventHandler) =
   if view.isNil:
     return
   view.xRawEventHandler = handler
-  if not handler.isNil:
-    view.forwardsRawEvents = true
+  if not handler.isNil and view.xForwardedRawEvents == {}:
+    view.forwardedRawEvents = AllMonoTextRawEvents
 
 proc cursorRow*(view: MonoTextView): int =
   if view.isNil: 0 else: view.xCursorRow
@@ -443,8 +548,10 @@ proc `tabWidth=`*(view: MonoTextView, width: int) =
 proc textColor*(view: MonoTextView): nimkitTypes.Color =
   if view.isNil:
     initColor(0.08, 0.09, 0.11, 1.0)
-  else:
+  elif view.xTextColor.a > 0.0'f32:
     view.xTextColor
+  else:
+    view.monoTextStyle().text.color
 
 proc `textColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.isNil or view.xTextColor == color:
@@ -455,8 +562,10 @@ proc `textColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
 proc cursorColor*(view: MonoTextView): nimkitTypes.Color =
   if view.isNil:
     initColor(0.08, 0.45, 0.95, 0.72)
-  else:
+  elif view.xCursorColor.a > 0.0'f32:
     view.xCursorColor
+  else:
+    view.monoTextStyle().cursorColor
 
 proc `cursorColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.isNil or view.xCursorColor == color:
@@ -487,10 +596,15 @@ proc `fontSize=`*(view: MonoTextView, size: float32) =
   view.invalidateTextGeometry()
 
 proc padding*(view: MonoTextView): float32 =
-  if view.isNil: DefaultMonoPadding else: view.xPadding
+  if view.isNil:
+    DefaultMonoPadding
+  elif view.xPadding >= 0.0'f32:
+    view.xPadding
+  else:
+    view.monoTextInsets(view.monoTextStyle()).left
 
 proc `padding=`*(view: MonoTextView, padding: float32) =
-  let normalized = max(padding, 0.0'f32)
+  let normalized = if padding < 0.0'f32: -1.0'f32 else: padding
   if view.isNil or view.xPadding == normalized:
     return
   view.xPadding = normalized
@@ -679,8 +793,11 @@ proc makeRawEvent(
     )
 
 proc forwardRawEvent(view: MonoTextView, event: MonoTextRawEvent): bool =
-  view.xForwardsRawEvents and not view.xRawEventHandler.isNil and
-    view.xRawEventHandler(event)
+  if event.kind notin view.xForwardedRawEvents:
+    return false
+  if not view.xRawEventHandler.isNil and view.xRawEventHandler(event):
+    return true
+  event.kind in view.xCapturedRawEvents
 
 func isControlInput(rune: Rune): bool =
   let code = rune.int
@@ -804,17 +921,22 @@ proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
       false
 
 proc cellRect(
-    view: MonoTextView, row, column: int, metrics: MonoTextMetrics
+    view: MonoTextView,
+    row, column: int,
+    metrics: MonoTextMetrics,
+    textInsets: EdgeInsets,
 ): nimkitTypes.Rect =
   initRect(
-    view.xPadding + column.float32 * metrics.cellWidth,
-    view.xPadding + row.float32 * metrics.lineHeight,
+    textInsets.left + column.float32 * metrics.cellWidth,
+    textInsets.top + row.float32 * metrics.lineHeight,
     metrics.cellWidth,
     metrics.lineHeight,
   )
 
-proc cursorRect(view: MonoTextView, metrics: MonoTextMetrics): nimkitTypes.Rect =
-  result = view.cellRect(view.xCursorRow, view.xCursorColumn, metrics)
+proc cursorRect(
+    view: MonoTextView, metrics: MonoTextMetrics, textInsets: EdgeInsets
+): nimkitTypes.Rect =
+  result = view.cellRect(view.xCursorRow, view.xCursorColumn, metrics, textInsets)
   case view.xCursorStyle
   of mtcBlock:
     discard
@@ -831,6 +953,7 @@ proc drawRun(
     font: FigFont,
     row, startColumn, endColumn: int,
     metrics: MonoTextMetrics,
+    textInsets: EdgeInsets,
     defaultTextColor: nimkitTypes.Color,
 ) =
   if endColumn <= startColumn:
@@ -840,8 +963,8 @@ proc drawRun(
     firstCell = line.cells[startColumn]
     foregroundColor = firstCell.foreground(defaultTextColor)
     runRect = initRect(
-      view.xPadding + startColumn.float32 * metrics.cellWidth,
-      view.xPadding + row.float32 * metrics.lineHeight,
+      textInsets.left + startColumn.float32 * metrics.cellWidth,
+      textInsets.top + row.float32 * metrics.lineHeight,
       (endColumn - startColumn).float32 * metrics.cellWidth,
       metrics.lineHeight,
     )
@@ -859,27 +982,66 @@ proc drawRun(
   let layout = placeGlyphs(fs(font, fill(foregroundColor.rgba)), glyphs, GlyphTopLeft)
   discard context.addText(runRect, layout)
 
+proc drawMonoTextSurface(
+    view: MonoTextView, context: DrawContext, style: MonoTextStyle
+) =
+  if view.isNil or context.bounds().isEmpty:
+    return
+  let
+    states = view.widgetStateSet()
+    frame = context.renderRectFor(context.bounds())
+    chrome = chromeContext(style.chrome, crPopupList, cpFace, style.box.fill, states)
+    surfaceRoot = context.addRenderRectangle(
+      frame,
+      context.appearance.chromeFill(chrome),
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      style.box.shadows,
+      maskContent = true,
+      cornerRadii = style.box.cornerRadii,
+    )
+  context.drawChromeExtras(
+    chrome,
+    initChromeExtras(
+      surfaceRoot,
+      frame,
+      cornerRadius = style.box.cornerRadius,
+      cornerRadii = style.box.cornerRadii,
+    ),
+  )
+  if view.isFocusVisible():
+    context.addFocusRing(frame, style.box)
+
 proc drawMonoText(view: MonoTextView, context: DrawContext) =
   if view.isNil or view.xLines.len == 0:
     return
   let
+    style = context.appearance.resolveMonoTextStyle(view.monoTextStyleContext())
+    textInsets = view.monoTextInsets(style)
+    textColor = view.resolvedTextColor(style)
+    cursorColor = view.resolvedCursorColor(style)
     metrics = view.monoTextMetrics()
     font = view.monoFont()
     visible = context.visibleRect()
     rowStart = max(
-      int(floor(max(visible.origin.y - view.xPadding, 0.0'f32) / metrics.lineHeight)), 0
+      int(floor(max(visible.origin.y - textInsets.top, 0.0'f32) / metrics.lineHeight)),
+      0,
     )
     rowStop = min(
-      int(ceil(max(visible.maxY - view.xPadding, 0.0'f32) / metrics.lineHeight)),
+      int(ceil(max(visible.maxY - textInsets.top, 0.0'f32) / metrics.lineHeight)),
       view.xLines.len,
     )
     colStart = max(
-      int(floor(max(visible.origin.x - view.xPadding, 0.0'f32) / metrics.cellWidth)), 0
+      int(floor(max(visible.origin.x - textInsets.left, 0.0'f32) / metrics.cellWidth)),
+      0,
     )
     colStop = max(
-      int(ceil(max(visible.maxX - view.xPadding, 0.0'f32) / metrics.cellWidth)),
+      int(ceil(max(visible.maxX - textInsets.left, 0.0'f32) / metrics.cellWidth)),
       colStart,
     )
+
+  view.drawMonoTextSurface(context, style)
 
   for row in rowStart ..< rowStop:
     let line = view.xLines[row]
@@ -889,18 +1051,28 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
       let startColumn = column
       inc column
       while column < lastColumn and
-          line.cells[startColumn].sameRunStyle(line.cells[column], view.xTextColor):
+          line.cells[startColumn].sameRunStyle(line.cells[column], textColor):
         inc column
-      view.drawRun(context, font, row, startColumn, column, metrics, view.xTextColor)
+      view.drawRun(
+        context, font, row, startColumn, column, metrics, textInsets, textColor
+      )
 
   if view.xCursorVisible and view.isFocused():
-    discard context.addRectangle(view.cursorRect(metrics), fill(view.xCursorColor.rgba))
+    discard
+      context.addRectangle(view.cursorRect(metrics, textInsets), fill(cursorColor.rgba))
 
 proc monoTextIntrinsicSize(view: MonoTextView): IntrinsicSize =
-  let metrics = view.monoTextMetrics()
+  let
+    style = view.monoTextStyle()
+    textInsets = view.monoTextInsets(style)
+    metrics = view.monoTextMetrics()
+    contentSize = initSize(
+      max(view.xMaxColumns, 1).float32 * metrics.cellWidth,
+      max(view.xLines.len, 1).float32 * metrics.lineHeight,
+    )
   initIntrinsicSize(
-    view.xPadding * 2.0'f32 + max(view.xMaxColumns, 1).float32 * metrics.cellWidth,
-    view.xPadding * 2.0'f32 + max(view.xLines.len, 1).float32 * metrics.lineHeight,
+    max(style.minSize.width, textInsets.horizontal + contentSize.width),
+    max(style.minSize.height, textInsets.vertical + contentSize.height),
   )
 
 protocol DefaultMonoTextViewDrawing of ViewDrawingProtocol:
@@ -964,12 +1136,12 @@ proc initMonoTextViewFields*(
   view.xCursorVisible = true
   view.xCursorStyle = mtcBlock
   view.xTabWidth = DefaultMonoTabWidth
-  view.xPadding = DefaultMonoPadding
+  view.xPadding = -1.0'f32
   view.xFontName = DefaultMonoFontName
   view.xFontSize = defaultFontSize()
-  view.xTextColor = initColor(0.08, 0.09, 0.11, 1.0)
-  view.xCursorColor = initColor(0.08, 0.45, 0.95, 0.45)
-  view.backgroundColor = initColor(0.98, 0.985, 0.995, 1.0)
+  view.xTextColor = initColor(0.0, 0.0, 0.0, 0.0)
+  view.xCursorColor = initColor(0.0, 0.0, 0.0, 0.0)
+  view.backgroundColor = initColor(0.0, 0.0, 0.0, 0.0)
   discard view.withProtocol(DefaultMonoTextViewDrawing)
   discard view.withProtocol(DefaultMonoTextViewLayout)
   discard view.withProtocol(DefaultMonoTextViewEvents)
