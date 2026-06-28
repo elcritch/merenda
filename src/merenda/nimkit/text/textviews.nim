@@ -1226,15 +1226,15 @@ proc initTextViewFields*(
   textView.xSelectionColor = initColor(0.24, 0.56, 1.0, 0.34)
   textView.xTypingAttributes = defaultTextAttributes()
   textView.setAcceptsFirstResponder(true)
+  discard textView.withProtocol(DefaultTextViewLayoutClient)
+  discard textView.withProtocol(DefaultTextViewAccessibility)
+  textView.xLayoutManager.layoutClient = DynamicAgent(textView)
   if installDefaultProtocols:
     discard textView.withProtocol(DefaultTextViewDrawing)
     discard textView.withProtocol(DefaultTextViewEvents)
     discard textView.withProtocol(DefaultTextViewInput)
     discard textView.withProtocol(DefaultTextViewCommands)
     discard textView.withProtocol(DefaultTextViewKeyCommands)
-    discard textView.withProtocol(DefaultTextViewLayoutClient)
-    discard textView.withProtocol(DefaultTextViewAccessibility)
-    textView.xLayoutManager.layoutClient = DynamicAgent(textView)
   textView.applyInitialFrame(frame)
 
 proc newTextView*(value = "", frame: Rect = AutoRect): TextView =

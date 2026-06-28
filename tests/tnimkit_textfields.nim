@@ -79,6 +79,12 @@ proc containsRect(outer, inner: nimkitTypes.Rect): bool =
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextFieldGeometryEpsilon
 
+proc checkRectClose(actual, expected: nimkitTypes.Rect) =
+  checkClose(actual.origin.x, expected.origin.x)
+  checkClose(actual.origin.y, expected.origin.y)
+  checkClose(actual.size.width, expected.size.width)
+  checkClose(actual.size.height, expected.size.height)
+
 proc nodeRenderedInView(node: Fig, view: View): bool =
   view.rectToWindow(view.bounds).containsRect(node.renderedRect())
 
@@ -258,6 +264,53 @@ suite "nimkit text fields":
     check editor.textContainer().insets.top > 0.0'f32
     checkClose(activeCaretX, passiveCaret.origin.x)
     checkClose(activeCaretY, passiveCaret.origin.y)
+
+  test "field editor text rect and accessibility geometry do not shift on focus":
+    let
+      window = newWindow("Text geometry", frame = initRect(0, 0, 260, 140))
+      root = newView(frame = initRect(0, 0, 260, 140))
+      field = newTextField("Offset text", frame = initRect(14, 18, 168, 34))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    let
+      passiveTextRect = field.layoutManager().layoutBounds()
+      passiveTextRectInWindow = field.rectToWindow(passiveTextRect)
+      passiveChar = field.accessibilityBoundsForCharacter(0)
+      passiveLine = field.accessibilityBoundsForLine(0)
+
+    check passiveTextRect.origin.x > 0.0'f32
+    check passiveTextRectInWindow.containsRect(passiveChar)
+    check passiveTextRectInWindow.containsRect(passiveLine)
+    check passiveLine.containsRect(passiveChar)
+
+    check window.makeFirstResponder(field)
+    discard window.buildRenders()
+
+    let
+      editor = window.fieldEditor()
+      activeChar = field.accessibilityBoundsForCharacter(0)
+      activeLine = field.accessibilityBoundsForLine(0)
+
+    checkRectClose(editor.frame(), passiveTextRect)
+    check editor.textContainer().insets.top > 0.0'f32
+    check passiveTextRectInWindow.containsRect(activeChar)
+    check passiveTextRectInWindow.containsRect(activeLine)
+    check not activeChar.isEmpty
+    check not activeLine.isEmpty
+    check field.accessibilityCharacterIndexAtPoint(
+      initPoint(
+        passiveChar.origin.x + passiveChar.size.width * 0.5'f32,
+        passiveChar.origin.y + passiveChar.size.height * 0.5'f32,
+      )
+    ) == 0
+    check field.accessibilityCharacterIndexAtPoint(
+      initPoint(
+        activeChar.origin.x + activeChar.size.width * 0.5'f32,
+        activeChar.origin.y + activeChar.size.height * 0.5'f32,
+      )
+    ) == 0
 
   test "window-backed field editor renders live text before blur":
     let

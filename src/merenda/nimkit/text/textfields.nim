@@ -240,6 +240,7 @@ protocol DefaultTextFieldCellEditing of CellEditingProtocol:
       return
     cell.setUpFieldEditorAttributes(editor, controlView)
     editor.frame = frame
+    editor.bounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
     if not controlView.isNil and editor.superview() != controlView:
       controlView.addSubview(editor)
 
@@ -451,7 +452,9 @@ proc layoutFieldEditor(textField: TextField) =
   let editor = textField.activeFieldEditor()
   if editor.isNil:
     return
-  editor.frame = textField.fieldEditorFrame()
+  let frame = textField.fieldEditorFrame()
+  editor.frame = frame
+  editor.bounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
 
 proc runesOf(text: string): seq[Rune] =
   for rune in text.runes:

@@ -1,4 +1,4 @@
-import std/[options, unittest]
+import std/[hashes, options, unicode, unittest]
 
 import sigils/core
 
@@ -27,6 +27,11 @@ type
     completions: int
     geometryChanges: int
     contentChanges: int
+
+  ContractBackend = ref object of TextLayoutBackend
+    charWidth: float32
+    lineHeight: float32
+    requests: seq[TextLayoutRequest]
 
 protocol TextStorageSignalSpyEvents from TextStorageSignalSpy:
   includes TextStorageEditingEvents
@@ -117,6 +122,178 @@ protocol LayoutClientSpyProtocol of TextLayoutClientProtocol:
     discard newSize
     inc spy.contentChanges
 
+func contractLayoutRect(container: TextContainer): Rect =
+  initRect(0.0, 0.0, container.size.width, container.size.height).inset(
+    container.insets
+  )
+
+proc addContractFragment(
+    fragments: var seq[TextLineFragment],
+    lineIndex: var int,
+    glyphIndex: var int,
+    maxUsedWidth: var float32,
+    layoutRect: Rect,
+    charWidth, lineHeight: float32,
+    start, length: int,
+    hardBreak, wrapped: bool,
+) =
+  let
+    usedLength =
+      if hardBreak and length > 0:
+        length - 1
+      else:
+        length
+    lineY = layoutRect.origin.y + lineIndex.float32 * lineHeight
+    usedWidth = usedLength.float32 * charWidth
+    fragmentRect =
+      initRect(layoutRect.origin.x, lineY, layoutRect.size.width, lineHeight)
+    usedRect = initRect(layoutRect.origin.x, lineY, usedWidth, lineHeight)
+  fragments.add TextLineFragment(
+    lineIndex: initTextLineIndex(lineIndex),
+    glyphRange: initGlyphRange(glyphIndex, length),
+    textRange: initTextRange(start, length),
+    fragmentRect: fragmentRect,
+    usedRect: usedRect,
+    baseline: lineY + lineHeight * 0.75'f32,
+    ascent: lineHeight * 0.75'f32,
+    descent: lineHeight * 0.25'f32,
+    leading: 0.0'f32,
+    hardBreak: hardBreak,
+    wrapped: wrapped,
+  )
+  glyphIndex += length
+  maxUsedWidth = max(maxUsedWidth, usedWidth)
+  inc lineIndex
+
+proc contractSnapshot(
+    backend: ContractBackend, request: TextLayoutRequest
+): TextLayoutSnapshot =
+  let
+    text =
+      if request.storage.isNil:
+        ""
+      else:
+        request.storage.stringValue()
+    runes = text.toRunes()
+    layoutRect = request.container.contractLayoutRect()
+    wraps = request.wraps or request.container.wraps
+    maxChars =
+      if wraps:
+        max(1, int(layoutRect.size.width / max(backend.charWidth, 1.0'f32)))
+      else:
+        max(runes.len, 1)
+
+  result.textHash = hash(text)
+  result.layoutHash = hash(
+    text & "|" & $layoutRect.size.width & "|" & $layoutRect.size.height & "|" & $wraps
+  )
+  result.containerRect = layoutRect
+  result.glyphCount = runes.len.Natural
+
+  var
+    lineIndex = 0
+    glyphIndex = 0
+    maxUsedWidth = 0.0'f32
+    fragments: seq[TextLineFragment]
+
+  if runes.len == 0:
+    addContractFragment(
+      fragments,
+      lineIndex,
+      glyphIndex,
+      maxUsedWidth,
+      layoutRect,
+      backend.charWidth,
+      backend.lineHeight,
+      0,
+      0,
+      hardBreak = false,
+      wrapped = false,
+    )
+  else:
+    var sourceStart = 0
+    while sourceStart < runes.len:
+      var lineEnd = sourceStart
+      while lineEnd < runes.len and runes[lineEnd] != Rune('\n'):
+        inc lineEnd
+      let
+        hasBreak = lineEnd < runes.len and runes[lineEnd] == Rune('\n')
+        contentLength = lineEnd - sourceStart
+
+      if contentLength == 0:
+        addContractFragment(
+          fragments,
+          lineIndex,
+          glyphIndex,
+          maxUsedWidth,
+          layoutRect,
+          backend.charWidth,
+          backend.lineHeight,
+          sourceStart,
+          if hasBreak: 1 else: 0,
+          hardBreak = hasBreak,
+          wrapped = false,
+        )
+      else:
+        var chunkStart = sourceStart
+        while chunkStart < lineEnd:
+          let
+            remaining = lineEnd - chunkStart
+            take =
+              if wraps:
+                min(maxChars, remaining)
+              else:
+                remaining
+            chunkEnd = chunkStart + take
+            lastChunk = chunkEnd == lineEnd
+            length = take + (if lastChunk and hasBreak: 1 else: 0)
+          addContractFragment(
+            fragments,
+            lineIndex,
+            glyphIndex,
+            maxUsedWidth,
+            layoutRect,
+            backend.charWidth,
+            backend.lineHeight,
+            chunkStart,
+            length,
+            hardBreak = lastChunk and hasBreak,
+            wrapped = wraps and not lastChunk,
+          )
+          chunkStart = chunkEnd
+
+      if not hasBreak:
+        break
+      sourceStart = lineEnd + 1
+      if sourceStart == runes.len:
+        addContractFragment(
+          fragments,
+          lineIndex,
+          glyphIndex,
+          maxUsedWidth,
+          layoutRect,
+          backend.charWidth,
+          backend.lineHeight,
+          sourceStart,
+          0,
+          hardBreak = false,
+          wrapped = false,
+        )
+        break
+
+  result.lineFragments = fragments
+  result.usedRect = initRect(
+    layoutRect.origin, initSize(maxUsedWidth, lineIndex.float32 * backend.lineHeight)
+  )
+  result.contentSize = result.usedRect.size
+
+protocol ContractBackendProtocol of TextLayoutBackendProtocol:
+  method layoutText(
+      backend: ContractBackend, request: TextLayoutRequest
+  ): TextLayoutResult =
+    backend.requests.add request
+    TextLayoutResult(snapshot: backend.contractSnapshot(request))
+
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextLayoutEpsilon
 
@@ -138,6 +315,10 @@ proc newLayoutClientSpy(
 ): LayoutClientSpy =
   result = LayoutClientSpy(storage: storage, container: container, alignment: alignment)
   discard result.withProtocol(LayoutClientSpyProtocol)
+
+proc newContractBackend(charWidth = 10.0'f32, lineHeight = 12.0'f32): ContractBackend =
+  result = ContractBackend(charWidth: charWidth, lineHeight: lineHeight)
+  discard result.withProtocol(ContractBackendProtocol)
 
 suite "nimkit text layout":
   test "text storage editing protocol emits mutation signals":
@@ -231,6 +412,79 @@ suite "nimkit text layout":
     discard manager.layoutSnapshot()
     check client.invalidations == 2
     check client.completions == 2
+
+  test "backend-free snapshots preserve empty hard-break wrapped and trailing lines":
+    let emptyBackend = newContractBackend()
+    let emptyManager = newTextLayoutManager(
+      newTextStorage(""),
+      initTextContainer(initSize(80.0, 40.0), insets(2.0), wraps = true),
+    )
+    emptyManager.textLayoutBackend = emptyBackend
+
+    let emptySnapshot = emptyManager.layoutSnapshot()
+    check emptyBackend.requests.len == 1
+    check emptySnapshot.glyphCount == 0
+    check emptySnapshot.containerRect == initRect(2.0, 2.0, 76.0, 36.0)
+    check emptySnapshot.lineFragments.len == 1
+    check emptySnapshot.lineFragments[0].textRange == initTextRange(0, 0)
+    check emptySnapshot.lineFragments[0].glyphRange == initGlyphRange(0, 0)
+
+    let
+      storage = newTextStorage("A\nBCDE\n")
+      backend = newContractBackend(charWidth = 10.0, lineHeight = 12.0)
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(20.0, 80.0), insets(0.0), wraps = true)
+      )
+    manager.textLayoutBackend = backend
+
+    let snapshot = manager.layoutSnapshot()
+    check backend.requests.len == 1
+    check snapshot.glyphCount == storage.len.Natural
+    check snapshot.lineFragments.len == 4
+    check snapshot.lineFragments[0].textRange == initTextRange(0, 2)
+    check snapshot.lineFragments[0].hardBreak
+    check not snapshot.lineFragments[0].wrapped
+    check snapshot.lineFragments[1].textRange == initTextRange(2, 2)
+    check snapshot.lineFragments[1].wrapped
+    check not snapshot.lineFragments[1].hardBreak
+    check snapshot.lineFragments[2].textRange == initTextRange(4, 3)
+    check snapshot.lineFragments[2].hardBreak
+    check not snapshot.lineFragments[2].wrapped
+    check snapshot.lineFragments[3].textRange == initTextRange(storage.len, 0)
+    check snapshot.lineFragments[3].glyphRange.isEmpty
+    check snapshot.contentSize == initSize(20.0, 48.0)
+
+  test "backend-free layout requests carry text and attribute invalidations":
+    let
+      storage = newTextStorage("Alpha")
+      backend = newContractBackend()
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(120.0, 40.0), insets(0.0))
+      )
+      spy = newTextLayoutSignalSpy()
+
+    manager.textLayoutBackend = backend
+    spy.observeProtocol(manager, TextLayoutEvents)
+    discard manager.layoutSnapshot()
+    check manager.hasValidLayout()
+
+    storage.replace(initTextRange(1, 2), "ZZ")
+    check not manager.hasValidLayout()
+    check spy.invalidations == 1
+    check spy.lastRanges[^1] == initTextRange(1, 2)
+    discard manager.layoutSnapshot()
+    check backend.requests[^1].invalidatedRanges[^1] == initTextRange(1, 2)
+    check backend.requests[^1].storage.stringValue() == "AZZha"
+
+    storage.setAttributes(
+      initTextRange(0, 3), defaultTextAttributes(initColor(0.8, 0.1, 0.2), 15.0)
+    )
+    check not manager.hasValidLayout()
+    check spy.invalidations == 2
+    check spy.lastRanges[^1] == initTextRange(0, 3)
+    discard manager.layoutSnapshot()
+    check backend.requests[^1].invalidatedRanges[^1] == initTextRange(0, 3)
+    check manager.hasValidLayout()
 
   test "layout snapshot exposes typed glyph and line fragments":
     let manager = newTextLayoutManager(
@@ -462,3 +716,66 @@ suite "nimkit text layout":
     check not emptyFirstRect.isEmpty
     check not textBounds.isEmpty
     check not glyphBounds.isEmpty
+
+  test "figdraw snapshots hit-test blank and trailing hard-break lines":
+    let
+      storage = newTextStorage("A\n\nB\n")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(120.0, 120.0), insets(4.0), wraps = false)
+      )
+      snapshot = manager.layoutSnapshot()
+      blank = manager.lineFragmentForTextIndex(2)
+      trailing = manager.lineFragmentForTextIndex(storage.len)
+
+    check snapshot.lineFragments.len >= 4
+    check blank.isSome
+    check blank.get().textRange.location == 2
+    check blank.get().hardBreak
+    check trailing.isSome
+    check trailing.get().textRange == initTextRange(storage.len, 0)
+
+    let
+      blankRect = blank.get().fragmentRect
+      trailingRect = trailing.get().fragmentRect
+    check manager.textIndexAtPoint(
+      initPoint(blankRect.origin.x + 1.0, blankRect.origin.y + 1.0)
+    ) == 2
+    check manager.textIndexAtPoint(
+      initPoint(trailingRect.origin.x + 1.0, trailingRect.origin.y + 1.0)
+    ) == storage.len
+
+  test "figdraw wrapped selection caret affinity and range round trips stay coherent":
+    let
+      storage = newTextStorage("one two three four five six")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(38.0, 180.0), insets(0.0), wraps = true)
+      )
+      range = initTextRange(4, 16)
+      fragments = manager.lineFragmentsForTextRange(range)
+      lineRange = manager.lineRangeForTextRange(range)
+      selection = manager.selectionRects(range)
+
+    check fragments.len >= 2
+    check lineRange.length == fragments.len.Natural
+    check selection.len == fragments.len
+
+    for fragment in fragments:
+      if fragment.glyphRange.isEmpty:
+        continue
+      let
+        roundTrip = manager.textRangeForGlyphRange(fragment.glyphRange)
+        glyphRoundTrip = manager.glyphRangeForTextRange(roundTrip)
+      check int(roundTrip.location) <= fragment.textRange.maxIndex
+      check roundTrip.maxIndex >= int(fragment.textRange.location)
+      check not glyphRoundTrip.isEmpty
+
+    let
+      wrappedBoundary = fragments[1].textRange.location
+      positions = manager.caretPositions(int(wrappedBoundary))
+    var foundBoundaryLine = false
+    for position in positions:
+      check position.textIndex.toInt == int(wrappedBoundary)
+      check position.rect.size.height > 0.0
+      if position.lineIndex == fragments[1].lineIndex:
+        foundBoundaryLine = true
+    check foundBoundaryLine

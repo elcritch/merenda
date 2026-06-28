@@ -120,6 +120,12 @@ document-controller open/save integration are covered in tests and examples.
   field-editor geometry, and accessibility text geometry now query committed
   layout-manager state, while MonoText exposes matching fixed-grid geometry
   helper names for shared accessibility expectations.
+- Locked down the first `TextLayoutManager` contract tests: backend-free
+  snapshots now cover empty text, hard breaks, wrapping, trailing lines, and
+  text/attribute invalidation requests, while deterministic FigDraw-backed
+  tests cover wrapped selections, caret affinity, point hit-testing,
+  glyph/text range round trips, field-editor text rect offsets, and
+  accessibility line geometry.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -172,15 +178,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-6. Test the contract before broadening scope:
-   - add backend-free tests for empty text, hard line breaks, wrapped visual
-     lines, trailing newlines, selection across wraps, caret affinity,
-     point-to-text hit-testing, glyph/text range round trips, and invalidation
-     after text and attribute edits
-   - add focused tests for field-editor text rect offsets and accessibility line
-     bounds so text does not shift between display and editing states
-   - keep tests centered on the pure Nim layout contract and deterministic
-     FigDraw-backed snapshots
 7. Defer from the first implementation milestone until the core contract is
    proven:
    - multiple text containers, exclusion paths, attachments, non-contiguous
@@ -191,8 +188,7 @@ private except for diagnostics.
      paragraph styles, tab stops, line break modes, writing direction, baseline
      offset, kerning, ligatures, expansion, background color, shadows, links,
      underline/strikethrough styles, and attachment attributes
-   - add mutable attributed string APIs that keep NimKit's rune-indexed ranges
-     canonical while leaving room for optional UTF-16 compatibility adapters
+   - add mutable attributed string APIs that keep NimKit's rune-indexed ranges canonical
    - define import/export and pasteboard contracts for plain text, attributed
      text, RTF, RTFD-style attachment packages, HTML fragments, URLs, and file
      promises without putting platform-specific types in the core text modules
