@@ -233,7 +233,7 @@ func containsHardBreak(runes: openArray[Rune], range: TextRange): bool =
     return true
   stop < runes.len and runes[stop] == Rune('\n')
 
-proc ensureLayout(manager: TextLayoutManager) =
+proc updateLayout(manager: TextLayoutManager) =
   if manager.isNil or manager.xHasLayout:
     return
   let rect = manager.layoutRect()
@@ -247,7 +247,7 @@ proc ensureLayout(manager: TextLayoutManager) =
 proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
   if manager.isNil:
     return GlyphArrangement()
-  manager.ensureLayout()
+  manager.updateLayout()
   manager.xLayout
 
 proc containerRect(rect: Rect, layoutRect: Rect): Rect =
@@ -358,7 +358,7 @@ proc reindexLineFragments(fragments: var seq[TextLineFragment]) =
 proc lineFragments*(manager: TextLayoutManager): seq[TextLineFragment] =
   if manager.isNil:
     return
-  manager.ensureLayout()
+  manager.updateLayout()
 
   let count = manager.xLayout.glyphCount()
   if count == 0:
@@ -387,7 +387,7 @@ proc lineFragments*(manager: TextLayoutManager): seq[TextLineFragment] =
 proc layoutSnapshot*(manager: TextLayoutManager): TextLayoutSnapshot =
   if manager.isNil:
     return
-  manager.ensureLayout()
+  manager.updateLayout()
   result.textHash =
     if manager.xTextStorage.isNil:
       hash("")
@@ -425,13 +425,13 @@ proc layoutSnapshot*(manager: TextLayoutManager): TextLayoutSnapshot =
 proc caretRect*(manager: TextLayoutManager, insertionPoint: int): Rect =
   if manager.isNil:
     return initRect(0.0, 0.0, 1.0, defaultFontSize())
-  manager.ensureLayout()
+  manager.updateLayout()
   caretRect(manager.xLayoutRect, manager.xLayout, insertionPoint)
 
 proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
   if manager.isNil or range.length == 0:
     return @[]
-  manager.ensureLayout()
+  manager.updateLayout()
   let
     first = max(0, min(int(range.location), manager.xLayout.selectionRects.len))
     last = max(first, min(range.maxIndex, manager.xLayout.selectionRects.len))
@@ -571,7 +571,7 @@ proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
 proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
   if manager.isNil:
     return 0
-  manager.ensureLayout()
+  manager.updateLayout()
   let localPoint = initPoint(
     point.x - manager.xLayoutRect.origin.x, point.y - manager.xLayoutRect.origin.y
   )

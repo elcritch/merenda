@@ -151,19 +151,8 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-1. Completed: define the public layout value model:
-   - keep `TextRange` rune-indexed as the canonical NimKit text coordinate, and
-     add explicit `GlyphIndex`, `GlyphRange`, `TextLineIndex`, and
-     `TextLineFragment` records so glyph, text, and visual-line coordinates are
-     not mixed accidentally
-   - make `TextLineFragment` carry visual line index, glyph range, source text
-     range, full fragment rect, used rect, baseline, ascent/descent/leading,
-     hard-break vs wrapped-line metadata, and container-local coordinates
-   - add `TextLayoutSnapshot` or equivalent immutable query record for tests and
-     diagnostics: text hash/version, container rect, line fragments, glyph count,
-     used rect, and content size
 2. Add the query API surface on `TextLayoutManager`:
-   - `ensureLayout`, `invalidateLayout`, `invalidateLayout(range:)`, and
+   - `updateLayout`, `invalidateLayout`, `invalidateLayout(range:)`, and
      `hasValidLayout` as the canonical cache lifecycle
    - `glyphCount`, `lineCount`, `usedRect`, `contentSize`, and `layoutBounds`
    - text/glyph mapping helpers: `glyphRangeForTextRange`,
