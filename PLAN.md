@@ -126,6 +126,19 @@ document-controller open/save integration are covered in tests and examples.
   tests cover wrapped selections, caret affinity, point hit-testing,
   glyph/text range round trips, field-editor text rect offsets, and
   accessibility line geometry.
+- Drew the first text-layout milestone boundary: multiple text containers,
+  exclusion paths, attachment layout, non-contiguous layout, full Cocoa
+  `NSLayoutManager` compatibility aliases, and advanced bidi/grapheme
+  navigation are explicitly deferred until the core single-container contract
+  is proven.
+- Added the first Cocoa/TextKit-compatible text model layer without native
+  bridge types: richer `TextAttributes` now cover paragraph styles, tab stops,
+  line breaking, writing direction, baseline/kerning/ligature/expansion
+  fields, backgrounds, shadows, links, decorations, and attachment metadata;
+  `TextStorage` exposes mutable attributed-string aliases and rune-indexed
+  edit/query helpers; and text transfer/pasteboard contracts cover plain text,
+  attributed text, RTF, RTFD-style package payloads, HTML fragments, URLs, and
+  file promises.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -178,20 +191,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-7. Defer from the first implementation milestone until the core contract is
-   proven:
-   - multiple text containers, exclusion paths, attachments, non-contiguous
-     layout, full Cocoa `NSLayoutManager` compatibility aliases, and advanced
-     bidi/grapheme navigation
-8. Add the Cocoa/TextKit text model compatibility layer:
-   - expand `TextAttributes` into a fuller attributed-string model with
-     paragraph styles, tab stops, line break modes, writing direction, baseline
-     offset, kerning, ligatures, expansion, background color, shadows, links,
-     underline/strikethrough styles, and attachment attributes
-   - add mutable attributed string APIs that keep NimKit's rune-indexed ranges canonical
-   - define import/export and pasteboard contracts for plain text, attributed
-     text, RTF, RTFD-style attachment packages, HTML fragments, URLs, and file
-     promises without putting platform-specific types in the core text modules
 9. Bring `TextStorage` close to `NSTextStorage` behavior:
    - add `beginEditing`/`endEditing`, edited masks for characters vs
      attributes, edited range/change-in-length tracking, and coalesced

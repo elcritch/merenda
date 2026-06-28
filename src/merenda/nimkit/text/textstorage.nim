@@ -21,6 +21,9 @@ type
     xStringValue: string
     xRuns: seq[TextAttributeRun]
 
+  AttributedString* = TextStorage
+  MutableAttributedString* = TextStorage
+
 func initTextStorageEdit*(
     range: TextRange,
     replacementLength: int,
@@ -97,12 +100,20 @@ proc newTextStorage*(value = "", attributes = defaultTextAttributes()): TextStor
   result = TextStorage()
   initTextStorageFields(result, value, attributes)
 
+proc newAttributedString*(
+    value = "", attributes = defaultTextAttributes()
+): MutableAttributedString =
+  newTextStorage(value, attributes)
+
 proc copyTextStorage*(storage: TextStorage): TextStorage =
   result = newTextStorage()
   if storage.isNil:
     return
   result.xStringValue = storage.xStringValue
   result.xRuns = storage.xRuns
+
+proc mutableCopy*(storage: AttributedString): MutableAttributedString =
+  storage.copyTextStorage()
 
 proc sliceTextStorage*(storage: TextStorage, range: TextRange): TextStorage =
   result = newTextStorage()
@@ -125,6 +136,11 @@ proc sliceTextStorage*(storage: TextStorage, range: TextRange): TextStorage =
         attributes: run.attributes,
       )
   result.normalizeRuns()
+
+proc attributedSubstring*(
+    storage: AttributedString, range: TextRange
+): AttributedString =
+  storage.sliceTextStorage(range)
 
 proc stringValue*(storage: TextStorage): string =
   if storage.isNil: "" else: storage.xStringValue
@@ -169,15 +185,19 @@ proc attributesAt*(storage: TextStorage, index: int): TextAttributes =
       return run.attributes
   defaultTextAttributes()
 
+proc attributesAtIndex*(storage: AttributedString, index: int): TextAttributes =
+  storage.attributesAt(index)
+
+proc attributeRuns*(storage: AttributedString): seq[TextAttributeRun] =
+  if not storage.isNil:
+    return storage.xRuns
+
 proc replace*(
     storage: TextStorage,
     range: TextRange,
     text: string,
     attributes = defaultTextAttributes(),
 ) =
-  if storage.isNil:
-    return
-
   let
     total = storage.len
     clamped = clampTextRange(total, range)
@@ -224,11 +244,17 @@ proc replace*(
   storage.normalizeRuns()
   storage.notifyDidEdit(edit)
 
+proc replaceCharacters*(
+    storage: MutableAttributedString,
+    range: TextRange,
+    text: string,
+    attributes = defaultTextAttributes(),
+) =
+  storage.replace(range, text, attributes)
+
 proc setAttributes*(
     storage: TextStorage, range: TextRange, attributes: TextAttributes
 ) =
-  if storage.isNil:
-    return
   let
     total = storage.len
     clamped = clampTextRange(total, range)
@@ -264,9 +290,29 @@ proc setAttributes*(
   storage.normalizeRuns()
   storage.notifyDidEdit(edit)
 
+proc setAttributesForRange*(
+    storage: MutableAttributedString, range: TextRange, attributes: TextAttributes
+) =
+  storage.setAttributes(range, attributes)
+
+proc addAttributes*(
+    storage: MutableAttributedString, range: TextRange, attributes: TextAttributes
+) =
+  storage.setAttributes(range, attributes)
+
+proc removeAttributes*(storage: MutableAttributedString, range: TextRange) =
+  storage.setAttributes(range, defaultTextAttributes())
+
+proc setParagraphStyle*(
+    storage: MutableAttributedString,
+    range: TextRange,
+    paragraphStyle: TextParagraphStyle,
+) =
+  var attributes = storage.attributesAt(int(range.location))
+  attributes.paragraphStyle = paragraphStyle
+  storage.setAttributes(range, attributes)
+
 proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
-  if storage.isNil:
-    return
   if inserted.isNil:
     storage.replace(range, "")
     return
@@ -279,6 +325,16 @@ proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
       initTextRange(start + int(run.range.location), int(run.range.length)),
       run.attributes,
     )
+
+proc replaceCharacters*(
+    storage: MutableAttributedString, range: TextRange, inserted: AttributedString
+) =
+  storage.replace(range, inserted)
+
+proc insertAttributedString*(
+    storage: MutableAttributedString, index: int, inserted: AttributedString
+) =
+  storage.replace(initTextRange(index, 0), inserted)
 
 iterator runs*(storage: TextStorage): TextAttributeRun =
   if not storage.isNil:

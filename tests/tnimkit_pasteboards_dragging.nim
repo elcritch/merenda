@@ -191,6 +191,41 @@ suite "nimkit pasteboards and dragging":
     check provider.releaseCount == 1
     check provider.clearCount == 0
 
+  test "text transfer contracts map to pasteboard payloads":
+    let contracts = pasteboardTextContracts()
+
+    check contracts.len == 7
+    check pasteboardTypeForTextFormat(ttfPlainText) == PasteboardTypePlainText
+    check pasteboardTypeForTextFormat(ttfAttributedText) == PasteboardTypeAttributedText
+    check pasteboardTextContract(ttfRTF).pasteboardType == PasteboardTypeRTF
+    check pasteboardTextContract(ttfRTFD).allowsAttachments
+    check textTransferContract(ttfHTML).preservesAttributes
+
+  test "pasteboards store text interchange formats without platform objects":
+    let pasteboard = newPasteboard("text-transfer")
+    var attributes = defaultTextAttributes(initColor(0.1, 0.2, 0.3), 14.0)
+    attributes.link = "https://example.com"
+    attributes.underlineStyle = tldsSingle
+    let attributed = newAttributedString("link", attributes)
+
+    check pasteboard.setPlainText("plain")
+    check pasteboard.setAttributedString(attributed)
+    check pasteboard.setRtfData("{\\rtf1 link}")
+    check pasteboard.setRtfdData("rtfd-package-bytes")
+    check pasteboard.setHtml("<a href=\"https://example.com\">link</a>")
+    check pasteboard.setUrl(PasteboardTypeUrl, "https://example.com")
+    check pasteboard.setFile(PasteboardTypeFilePromise, "export.txt")
+
+    check pasteboard.plainText == "plain"
+    check pasteboard.attributedString().stringValue == "link"
+    check pasteboard.attributedString().attributesAtIndex(0).link ==
+      "https://example.com"
+    check pasteboard.rtfData == "{\\rtf1 link}"
+    check pasteboard.rtfdData == "rtfd-package-bytes"
+    check pasteboard.html == "<a href=\"https://example.com\">link</a>"
+    check pasteboard.urlForType(PasteboardTypeUrl) == "https://example.com"
+    check pasteboard.fileForType(PasteboardTypeFilePromise) == "export.txt"
+
   test "promised file drag sessions call sources after accepted drops":
     let
       source = newPromisedFileSource()
