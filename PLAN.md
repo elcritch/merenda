@@ -216,10 +216,90 @@ private except for diagnostics.
      bounds so text does not shift between display and editing states
    - keep native bridge tests out of this layer; adapters should consume the
      same protocol-backed snapshots later
-7. Defer until the core contract is proven:
+7. Defer from the first implementation milestone until the core contract is
+   proven:
    - multiple text containers, exclusion paths, attachments, non-contiguous
      layout, full Cocoa `NSLayoutManager` compatibility aliases, UTF-16 adapter
      indexes for native AppKit bridges, and advanced bidi/grapheme navigation
+8. Add the Cocoa/TextKit text model compatibility layer:
+   - expand `TextAttributes` into a fuller attributed-string model with
+     paragraph styles, tab stops, line break modes, writing direction, baseline
+     offset, kerning, ligatures, expansion, background color, shadows, links,
+     underline/strikethrough styles, and attachment attributes
+   - add mutable attributed string APIs that keep NimKit's rune-indexed ranges
+     canonical while providing a UTF-16 range adapter for Cocoa bridge parity
+   - define import/export and pasteboard contracts for plain text, attributed
+     text, RTF, RTFD-style attachment packages, HTML fragments, URLs, and file
+     promises without putting platform types in the core text modules
+9. Bring `TextStorage` close to `NSTextStorage` behavior:
+   - add `beginEditing`/`endEditing`, edited masks for characters vs
+     attributes, edited range/change-in-length tracking, and coalesced
+     `processEditing` dispatch
+   - add `TextStorageDelegateProtocol` and Sigils signals matching the Cocoa
+     notification order: will process editing, did process editing, and storage
+     value/attribute changes after mutation has committed
+   - support attribute fixing hooks, paragraph-range expansion, font fallback
+     fixing, and optional lazy backing storage for very large documents
+   - allow multiple layout managers to observe one storage instance while
+     preserving deterministic invalidation and avoiding view-specific storage
+     callbacks
+10. Expand `TextContainer` toward `NSTextContainer` parity:
+   - support container size tracking, line fragment padding, width/height tracks
+     text view flags, maximum number of lines, line break mode, and exclusion
+     paths
+   - add multiple text containers per layout manager for paged, column, and
+     flowed text layouts, with explicit container indexes in line fragments and
+     hit-testing results
+   - expose container replacement and invalidation hooks so scroll views,
+     print/page layout, and future native text containers can share the same
+     model
+11. Expand `TextLayoutManager` toward `NSLayoutManager`/TextKit 1 parity:
+   - add glyph generation and glyph property APIs, character-to-glyph and
+     glyph-to-character mappings, glyph ranges for bounding rects, bounding
+     rects for glyph ranges, line fragment rect/used rect queries, extra line
+     fragment metrics, and temporary attributes
+   - add invalidation APIs for characters, glyphs, layout, display, and
+     containers, keeping range invalidation observable and testable
+   - add delegate/protocol hooks for should-generate-glyphs, line spacing,
+     paragraph spacing, hyphenation decisions, layout completion, and temporary
+     rendering attributes
+   - support background layout, optional non-contiguous layout, and partial
+     relayout once the deterministic single-container path is well covered
+   - keep Cocoa selector-compatible aliases as a bridge layer over NimKit names
+     rather than making Objective-C naming the primary Nim API
+12. Bring `TextView` close to `NSTextView` behavior:
+   - add selection affinity/granularity, rectangular selection hooks, multiple
+     selected ranges if needed for compatibility, typing attributes, selected
+     text attributes, insertion point color/blink policy, marked text rendering,
+     find indicators, and spelling/grammar underline attributes
+   - add delegate/protocol hooks for should/did begin editing, should/did
+     change text, selection changes, clicked links/attachments, completions,
+     menu validation, and command validation
+   - support undo grouping, smart insert/delete, quote/dash/link substitution,
+     data detectors as optional text checking hooks, find/replace, spell check,
+     grammar check, and completion panels as reusable pure Nim contracts
+   - add ruler/tab-stop and paragraph-style editing hooks without making rulers
+     mandatory for simple text fields
+13. Harden input, command, and field-editor parity:
+   - complete `NSTextInputClient`-style marked text, selected range,
+     attributed substring, valid attributes for marked text, first rect for
+     character range, character index for point, and IME command dispatch
+   - route key bindings through selector-backed commands so Cocoa-style
+     movement/editing selectors, responder-chain validation, and Qt-style
+     signal observers can coexist
+   - keep the shared field editor model for text fields, table cells, outline
+     cells, combo boxes, and form controls, with visible tests for geometry and
+     selection stability
+14. Add rich editing integrations expected by Cocoa text users:
+   - drag/drop selected text and attachments, services-style selected text
+     requests, contextual menus, link opening, attachment cells/views, image
+     attachments, file promises, and document-controller save/open integration
+   - add accessibility text parameterized attributes needed by native bridges:
+     attributed string for range, range for line, range for position, bounds for
+     range, visible character range, selected ranges, insertion point line, and
+     shared text-marker adapters where the backend requires them
+   - add print/page layout hooks, pagination containers, ruler metrics, and
+     snapshot tests for layout stability across display scale and font changes
 
 
 ### OutlineView
