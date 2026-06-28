@@ -139,6 +139,87 @@ document-controller open/save integration are covered in tests and examples.
 
 ### TextLayoutManager
 
+Turn the current FigDraw-backed helper into the stable text layout contract used
+by `TextView`, `TextField`, accessibility, selection drawing, hit-testing, and
+future native/backend bridges. Do this as a NimKit API first, not as a full
+`NSLayoutManager` clone: expose plain Nim value records and protocol methods
+over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
+private except for diagnostics.
+
+1. Define the public layout value model:
+   - keep `TextRange` rune-indexed as the canonical NimKit text coordinate, and
+     add explicit `GlyphIndex`, `GlyphRange`, `TextLineIndex`, and
+     `TextLineFragment` records so glyph, text, and visual-line coordinates are
+     not mixed accidentally
+   - make `TextLineFragment` carry visual line index, glyph range, source text
+     range, full fragment rect, used rect, baseline, ascent/descent/leading,
+     hard-break vs wrapped-line metadata, and container-local coordinates
+   - add `TextLayoutSnapshot` or equivalent immutable query record for tests and
+     diagnostics: text hash/version, container rect, line fragments, glyph count,
+     used rect, and content size
+2. Add the query API surface on `TextLayoutManager`:
+   - `ensureLayout`, `invalidateLayout`, `invalidateLayout(range:)`, and
+     `hasValidLayout` as the canonical cache lifecycle
+   - `glyphCount`, `lineCount`, `usedRect`, `contentSize`, and `layoutBounds`
+   - text/glyph mapping helpers: `glyphRangeForTextRange`,
+     `textRangeForGlyphRange`, `glyphIndexAtPoint`, `textIndexAtPoint`, and
+     `textRangeAtPoint`
+   - visual-line helpers: `lineFragment(index)`,
+     `lineFragmentForTextIndex`, `lineFragmentForGlyphIndex`,
+     `lineFragmentsForTextRange`, `lineRangeForTextRange`, and iterators over
+     all line fragments
+   - geometry helpers: `caretRect`, `caretPositions`, `selectionRects`,
+     `firstRectForTextRange`, `textRangeBounds`, `characterRect`, and
+     `boundsForGlyphRange`, all in container-local coordinates with view/window
+     conversion left to callers
+3. Introduce protocols around the manager instead of callback fields:
+   - `TextLayoutManagerProtocol` for overridable layout lifecycle and query
+     methods used by controls and accessibility; default implementation remains
+     FigDraw-backed
+   - `TextLayoutBackendProtocol` or `TextTypesetterProtocol` for the shaping and
+     line-breaking backend: given `TextStorage`, `TextContainer`, `TextStyle`,
+     alignment, wrapping, and invalidated ranges, produce a layout snapshot
+   - `TextLayoutClientProtocol` for views that own layout inputs:
+     storage/container/style/alignment accessors, layout-invalidated hooks,
+     geometry-changed hooks, and content-size change handling
+   - `TextStorageEditingProtocol` plus Sigils signals for storage mutation:
+     `willEdit`, `didEdit`, edited range, replacement length, text delta, and
+     attribute-only vs character edits, so managers can invalidate ranges without
+     every text view manually calling `syncLayout`
+   - `TextLayoutEvents` signals for `layoutDidInvalidate`,
+     `layoutDidComplete`, and `layoutGeometryDidChange`, keeping notification
+     delivery Qt-style and composable while the semantic API stays AppKit-like
+4. Rework the FigDraw bridge behind those protocols:
+   - map FigDraw `GlyphArrangement.lines`, glyph/source ranges, caret positions,
+     and merged selection bands into NimKit records
+   - prefer FigDraw's source-range selection helpers over direct indexing into
+     `selectionRects`, so wrapped lines, clusters, and future bidi shaping stay
+     coherent
+   - add small FigDraw exports only where needed for line fragment metrics,
+     glyph count, glyph rects, and line indexes; do not leak backend-specific
+     records into text view, field, or accessibility APIs
+5. Migrate consumers onto the new contract:
+   - update `TextView` and `TextField` selection drawing, keyboard movement,
+     mouse hit-testing, field-editor geometry, and accessibility text geometry
+     to query `TextLayoutManager`
+   - keep `MonoTextView` on its fixed-grid layout path, but mirror the same text
+     geometry protocol names where useful so accessibility and tests can share
+     expectations
+   - make drawing and accessibility consume committed layout state; they should
+     not trigger semantic notifications
+6. Test the contract before broadening scope:
+   - add backend-free tests for empty text, hard line breaks, wrapped visual
+     lines, trailing newlines, selection across wraps, caret affinity,
+     point-to-text hit-testing, glyph/text range round trips, and invalidation
+     after text and attribute edits
+   - add focused tests for field-editor text rect offsets and accessibility line
+     bounds so text does not shift between display and editing states
+   - keep native bridge tests out of this layer; adapters should consume the
+     same protocol-backed snapshots later
+7. Defer until the core contract is proven:
+   - multiple text containers, exclusion paths, attachments, non-contiguous
+     layout, full Cocoa `NSLayoutManager` compatibility aliases, UTF-16 adapter
+     indexes for native AppKit bridges, and advanced bidi/grapheme navigation
 
 
 ### OutlineView
