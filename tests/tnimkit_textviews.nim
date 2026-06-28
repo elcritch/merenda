@@ -27,12 +27,22 @@ type TextViewCheckerSpy = ref object of DynamicAgent
   checkingResults: seq[TextCheckingResult]
   dataResults: seq[TextCheckingResult]
 
+type TextCommandSpy = ref object of DynamicAgent
+  selectors: seq[string]
+  handled: seq[bool]
+
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextGeometryEpsilon
 
 proc caretPoint(textView: TextView, index: int): Point =
   let caret = textView.layoutManager().caretRect(index)
   initPoint(caret.origin.x, caret.origin.y + caret.size.height * 0.5'f32)
+
+proc rememberTextCommand(
+    spy: TextCommandSpy, selector: CommandSelector, handled: bool
+) {.slot.} =
+  spy.selectors.add $selector.name
+  spy.handled.add handled
 
 protocol TestPasteboardProviderProtocol of PasteboardProviderProtocol:
   method pasteboardTypes(
@@ -235,6 +245,39 @@ suite "nimkit text views":
     check textView.undoText()
     check textView.stringValue == "abcd"
     check textView.selectedRange == initTextRange(1, 2)
+
+  test "text view exposes text input client marked text geometry":
+    let
+      textView = newTextView("abcd", frame = initRect(12, 18, 180, 48))
+      accent = defaultTextAttributes(initColor(0.1, 0.3, 0.8), 14.0)
+
+    textView.textStorage().setAttributes(initTextRange(1, 2), accent)
+    textView.selectedRange = initTextRange(1, 2)
+    textView.setMarkedTextValue("XY", initTextRange(1, 0), initTextRange(0, 0))
+
+    let
+      substring = textView.attributedSubstringForRange(initTextRange(1, 2))
+      firstRect = textView.firstRectForCharacterRange(initTextRange(1, 1))
+      index = textView.characterIndexForPoint(
+        initPoint(
+          firstRect.origin.x + firstRect.size.width * 0.5'f32,
+          firstRect.origin.y + firstRect.size.height * 0.5'f32,
+        )
+      )
+
+    check textView.hasMarkedText
+    check textView.markedRange == initTextRange(1, 2)
+    check textView.selectedRange == initTextRange(2, 0)
+    check textView.send(textInputHasMarkedText(), ()) == true
+    check textView.send(textInputSelectedRange(), ()) == initTextRange(2, 0)
+    check substring.stringValue() == "XY"
+    check textView
+    .send(textInputAttributedSubstringForRange(), initTextRange(1, 2))
+    .stringValue() == "XY"
+    check substring.attributesAt(0).foregroundColor == accent.foregroundColor
+    check "foregroundColor" in textView.validAttributesForMarkedText()
+    check not firstRect.isEmpty
+    check index == 1
 
   test "text view undo and redo restore text and selection":
     let textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
@@ -478,6 +521,51 @@ suite "nimkit text views":
     discard textView.send(insertTab(), ActionArgs(sender: DynamicAgent(textView)))
     check textView.stringValue == "a\n\tb"
     check textView.selectedRange == initTextRange(3, 0)
+
+  test "text view dispatches key bindings and IME commands through selectors":
+    let
+      window = newWindow("Text command dispatch", frame = initRect(0, 0, 260, 120))
+      root = newView(frame = initRect(0, 0, 260, 120))
+      textView = newTextView("alpha\nbeta", frame = initRect(12, 12, 180, 80))
+      spy = TextCommandSpy()
+
+    textView.connect(textCommandDispatched, spy, rememberTextCommand)
+    root.addSubview(textView)
+    window.setContentView(root)
+    window.setKeyBindingProfile(kbpMacOS)
+
+    textView.selectedRange = initTextRange(textView.textStorage().len, 0)
+    check window.makeFirstResponder(textView)
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord, modifiers: {kmCommand})
+    )
+    check textView.selectedRange == initTextRange(0, 0)
+
+    doCommandBySelector(
+      Responder(textView), moveToEndOfDocument(), DynamicAgent(textView)
+    )
+    check textView.selectedRange == initTextRange(textView.textStorage().len, 0)
+    check spy.selectors[^2] == "moveToBeginningOfDocument"
+    check spy.selectors[^1] == "moveToEndOfDocument"
+    check spy.handled[^2] and spy.handled[^1]
+
+  test "text view line deletion and document movement selectors work":
+    let textView = newTextView("alpha\nbeta", frame = initRect(0, 0, 180, 80))
+
+    textView.selectedRange = initTextRange(8, 0)
+    discard textView.send(
+      deleteToBeginningOfLine(), ActionArgs(sender: DynamicAgent(textView))
+    )
+    check textView.stringValue == "alpha\nta"
+    check textView.selectedRange == initTextRange(6, 0)
+
+    discard textView.send(
+      insertParagraphSeparator(), ActionArgs(sender: DynamicAgent(textView))
+    )
+    check textView.stringValue == "alpha\n\nta"
+    discard
+      textView.send(moveToEndOfDocument(), ActionArgs(sender: DynamicAgent(textView)))
+    check textView.selectedRange == initTextRange(textView.textStorage().len, 0)
 
   test "text view caret after newline starts on the next visual line":
     let

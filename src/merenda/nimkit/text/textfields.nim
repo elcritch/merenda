@@ -589,6 +589,27 @@ proc deleteWordForwardText(textField: TextField) =
   let value = current.runeSubStr(0, selected.start) & current.runeSubStr(cursor)
   textField.setEditedString(value, selected.start, selected.start)
 
+proc deleteToBeginningOfLineText(textField: TextField) =
+  if textField.isNil or not textField.isEditable():
+    return
+  let selected = textField.currentSelection()
+  if selected.stop > selected.start:
+    textField.replaceSelectedText("")
+    return
+  if selected.start > 0:
+    textField.setEditedString(textField.xStringValue.runeSubStr(selected.start), 0, 0)
+
+proc deleteToEndOfLineText(textField: TextField) =
+  if textField.isNil or not textField.isEditable():
+    return
+  let selected = textField.currentSelection()
+  if selected.stop > selected.start:
+    textField.replaceSelectedText("")
+    return
+  if selected.start < textField.runeCount:
+    let value = textField.xStringValue.runeSubStr(0, selected.start)
+    textField.setEditedString(value, selected.start, selected.start)
+
 proc text*(textField: TextField): string =
   textField.stringValue()
 
@@ -624,6 +645,85 @@ proc editing*(textField: TextField): bool =
 proc `selectedRange=`*(textField: TextField, value: TextRange) =
   textField.setSelectedRange(value)
 
+method textFieldInputHasMarkedText(textField: TextField): bool {.selector.} =
+  discard textField
+  false
+
+method textFieldInputMarkedRange(textField: TextField): TextRange {.selector.} =
+  discard textField
+  initTextRange(0, 0)
+
+method textFieldInputSelectedRange(textField: TextField): TextRange {.selector.} =
+  if textField.isNil:
+    return initTextRange(0, 0)
+  let editor = textField.activeFieldEditor()
+  if not editor.isNil:
+    return textviews.selectedRange(TextView(editor))
+  let
+    start = min(textField.xSelectionAnchor, textField.xInsertionPoint)
+    stop = max(textField.xSelectionAnchor, textField.xInsertionPoint)
+  initTextRange(start, stop - start)
+
+method textFieldInputAttributedSubstringForRange(
+    textField: TextField, range: TextRange
+): AttributedString {.selector.} =
+  if textField.isNil:
+    return newTextStorage()
+  discard textField.layoutManager()
+  textField.xLayoutStorage.sliceTextStorage(range)
+
+method textFieldInputValidAttributesForMarkedText(
+    textField: TextField
+): seq[string] {.selector.} =
+  discard textField
+  @ValidMarkedTextAttributes
+
+method textFieldInputFirstRectForCharacterRange(
+    textField: TextField, range: TextRange
+): Rect {.selector.} =
+  if textField.isNil:
+    return initRect(0, 0, 0, 0)
+  let clamped = initTextRange(
+    min(int(range.location), textField.runeCount),
+    min(int(range.length), max(textField.runeCount - int(range.location), 0)),
+  )
+  if clamped.length > 0:
+    let rects = textField.layoutManager().selectionRects(clamped)
+    if rects.len > 0:
+      return textField.rectToWindow(rects[0])
+  textField.rectToWindow(textField.layoutManager().characterRect(int(clamped.location)))
+
+method textFieldInputCharacterIndexForPoint(
+    textField: TextField, point: Point
+): int {.selector.} =
+  if textField.isNil:
+    return -1
+  textField.layoutManager().textIndexAtPoint(textField.pointFromWindow(point))
+
+proc installTextFieldInputClientMethods(textField: TextField) =
+  if textField.isNil:
+    return
+  discard
+    textField.addMethod(selectors.textInputHasMarkedText, textFieldInputHasMarkedText)
+  discard textField.addMethod(selectors.textInputMarkedRange, textFieldInputMarkedRange)
+  discard
+    textField.addMethod(selectors.textInputSelectedRange, textFieldInputSelectedRange)
+  discard textField.addMethod(
+    selectors.textInputAttributedSubstringForRange,
+    textFieldInputAttributedSubstringForRange,
+  )
+  discard textField.addMethod(
+    selectors.textInputValidAttributesForMarkedText,
+    textFieldInputValidAttributesForMarkedText,
+  )
+  discard textField.addMethod(
+    selectors.textInputFirstRectForCharacterRange,
+    textFieldInputFirstRectForCharacterRange,
+  )
+  discard textField.addMethod(
+    selectors.textInputCharacterIndexForPoint, textFieldInputCharacterIndexForPoint
+  )
+
 protocol DefaultTextFieldInput of TextInputProtocol:
   method insertText(textField: TextField, text: string) =
     if textField.isEditable() and text.isInsertableText:
@@ -647,6 +747,12 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
 
   method deleteWordForward(textField: TextField, args: ActionArgs) =
     textField.deleteWordForwardText()
+
+  method deleteToBeginningOfLine(textField: TextField, args: ActionArgs) =
+    textField.deleteToBeginningOfLineText()
+
+  method deleteToEndOfLine(textField: TextField, args: ActionArgs) =
+    textField.deleteToEndOfLineText()
 
   method moveLeft(textField: TextField, args: ActionArgs) =
     if not textField.isEditable() and not textField.isSelectable():
@@ -684,6 +790,12 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
     else:
       textField.setCursor(textField.xStringValue.nextWordBoundary(selected.stop))
 
+  method moveWordBackward(textField: TextField, args: ActionArgs) =
+    textField.moveWordLeft(args)
+
+  method moveWordForward(textField: TextField, args: ActionArgs) =
+    textField.moveWordRight(args)
+
   method moveToBeginningOfLine(textField: TextField, args: ActionArgs) =
     if textField.isEditable() or textField.isSelectable():
       textField.setCursor(0)
@@ -691,6 +803,12 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
   method moveToEndOfLine(textField: TextField, args: ActionArgs) =
     if textField.isEditable() or textField.isSelectable():
       textField.setCursor(textField.runeCount)
+
+  method moveToBeginningOfDocument(textField: TextField, args: ActionArgs) =
+    textField.moveToBeginningOfLine(args)
+
+  method moveToEndOfDocument(textField: TextField, args: ActionArgs) =
+    textField.moveToEndOfLine(args)
 
   method moveLeftAndModifySelection(textField: TextField, args: ActionArgs) =
     if textField.isEditable() or textField.isSelectable():
@@ -714,6 +832,12 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
         extending = true,
       )
 
+  method moveWordBackwardAndModifySelection(textField: TextField, args: ActionArgs) =
+    textField.moveWordLeftAndModifySelection(args)
+
+  method moveWordForwardAndModifySelection(textField: TextField, args: ActionArgs) =
+    textField.moveWordRightAndModifySelection(args)
+
   method moveToBeginningOfLineAndModifySelection(
       textField: TextField, args: ActionArgs
   ) =
@@ -723,6 +847,14 @@ protocol DefaultTextFieldCommands of TextEditingCommandProtocol:
   method moveToEndOfLineAndModifySelection(textField: TextField, args: ActionArgs) =
     if textField.isEditable() or textField.isSelectable():
       textField.setCursor(textField.runeCount, extending = true)
+
+  method moveToBeginningOfDocumentAndModifySelection(
+      textField: TextField, args: ActionArgs
+  ) =
+    textField.moveToBeginningOfLineAndModifySelection(args)
+
+  method moveToEndOfDocumentAndModifySelection(textField: TextField, args: ActionArgs) =
+    textField.moveToEndOfLineAndModifySelection(args)
 
 protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
@@ -965,6 +1097,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   discard textField.withProtocol(DefaultTextFieldEvents)
   discard textField.withProtocol(DefaultTextFieldLayout)
   discard textField.withProtocol(DefaultTextFieldAccessibility)
+  textField.installTextFieldInputClientMethods()
   textField.applyInitialFrame(frame)
 
 proc newTextField*(value = "", frame: Rect = AutoRect): TextField =

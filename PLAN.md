@@ -172,6 +172,13 @@ document-controller open/save integration are covered in tests and examples.
   validation, undo grouping, smart insert/delete, quote/dash substitution,
   find/replace helpers, completion panels, and paragraph/tab-stop editing now
   share the existing storage/layout contracts.
+- Hardened text input, command, and field-editor parity: TextView/TextField/
+  TextEditor now expose NSTextInputClient-style marked-text, selected-range,
+  attributed-substring, marked-attribute, first-rect, and point-to-index query
+  contracts; keybindings and IME command dispatch route through selector-backed
+  responder command validation with Sigils command observers; and the shared
+  field editor keeps text-field and hosted-cell geometry/selection stable while
+  edits sync back to clients.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -225,16 +232,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-13. Harden input, command, and field-editor parity:
-   - complete `NSTextInputClient`-style marked text, selected range,
-     attributed substring, valid attributes for marked text, first rect for
-     character range, character index for point, and IME command dispatch
-   - route key bindings through selector-backed commands so Cocoa-style
-     movement/editing selectors, responder-chain validation, and Qt-style
-     signal observers can coexist
-   - keep the shared field editor model for text fields, table cells, outline
-     cells, combo boxes, and form controls, with visible tests for geometry and
-     selection stability
 14. Add rich editing integrations expected by Cocoa text users:
    - drag/drop selected text and attachments, services-style selected text
      requests, contextual menus, link opening, attachment cells/views, image

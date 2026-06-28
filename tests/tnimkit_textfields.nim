@@ -312,6 +312,52 @@ suite "nimkit text fields":
       )
     ) == 0
 
+  test "field editor exposes text input client geometry and command dispatch":
+    let
+      window = newWindow("Field editor input client", frame = initRect(0, 0, 260, 140))
+      root = newView(frame = initRect(0, 0, 260, 140))
+      field = newTextField("abcdef", frame = initRect(14, 18, 168, 34))
+      spy = TextFieldChangeSpy()
+
+    field.connect(textDidChange, spy, rememberTextFieldChange)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let
+      editor = window.fieldEditor()
+      textView = TextView(editor)
+      textRectInWindow = field.rectToWindow(field.layoutManager().layoutBounds())
+
+    textView.selectedRange = initTextRange(3, 0)
+    let
+      substring = textView.attributedSubstringForRange(initTextRange(1, 2))
+      firstRect = textView.firstRectForCharacterRange(initTextRange(3, 1))
+      hitIndex = textView.characterIndexForPoint(
+        initPoint(
+          firstRect.origin.x + firstRect.size.width * 0.5'f32,
+          firstRect.origin.y + firstRect.size.height * 0.5'f32,
+        )
+      )
+
+    check editor.superview == field
+    check textRectInWindow.containsRect(firstRect)
+    check substring.stringValue() == "bc"
+    check hitIndex == 3
+    check not textView.hasMarkedText
+    check textView.markedRange == initTextRange(0, 0)
+    check "fontSize" in textView.validAttributesForMarkedText()
+
+    doCommandBySelector(
+      Responder(editor), deleteToBeginningOfLine(), DynamicAgent(editor)
+    )
+
+    check field.stringValue == "def"
+    check field.selectedRange == initTextRange(0, 0)
+    check field.currentEditor == editor
+    check window.firstResponder == editor
+    check spy.changeCount == 1
+
   test "window-backed field editor renders live text before blur":
     let
       window = newWindow("Text field render", frame = initRect(0, 0, 420, 220))

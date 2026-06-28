@@ -138,6 +138,7 @@ proc setTextViewSelectedRange(textView: TextView, value: TextRange)
 proc textViewInsertionPoint(textView: TextView): int
 proc textViewSelectionAnchor(textView: TextView): int
 proc updateTextContainer(textView: TextView)
+proc currentVisualLineBounds(textView: TextView): tuple[first, last: int]
 proc clampedRange(textView: TextView, range: TextRange): TextRange
 proc setCursor*(textView: TextView, index: int, extending = false)
 proc selectAllText*(textView: TextView)
@@ -157,6 +158,10 @@ proc deleteBackwardText*(textView: TextView)
 proc deleteForwardText*(textView: TextView)
 proc deleteWordBackwardText*(textView: TextView)
 proc deleteWordForwardText*(textView: TextView)
+proc deleteToBeginningOfLineText*(textView: TextView)
+proc deleteToEndOfLineText*(textView: TextView)
+proc insertLineBreakText*(textView: TextView)
+proc insertParagraphSeparatorText*(textView: TextView)
 proc moveLeftText*(textView: TextView, extending = false)
 proc moveRightText*(textView: TextView, extending = false)
 proc moveUpText*(textView: TextView, extending = false)
@@ -165,6 +170,19 @@ proc moveWordLeftText*(textView: TextView, extending = false)
 proc moveWordRightText*(textView: TextView, extending = false)
 proc moveToBeginningOfLineText*(textView: TextView, extending = false)
 proc moveToEndOfLineText*(textView: TextView, extending = false)
+proc moveToBeginningOfDocumentText*(textView: TextView, extending = false)
+proc moveToEndOfDocumentText*(textView: TextView, extending = false)
+proc attributedSubstringForRange*(
+  textView: TextView, range: TextRange
+): AttributedString
+
+proc validAttributesForMarkedText*(textView: TextView): seq[string]
+proc firstRectForCharacterRange*(textView: TextView, range: TextRange): Rect
+proc characterIndexForPoint*(textView: TextView, point: Point): int
+proc performTextInputCommand*(
+  textView: TextView, selector: CommandSelector, sender: DynamicAgent = nil
+): bool
+
 proc textIndexAtPoint*(textView: TextView, point: Point): int
 proc selectionRects*(textView: TextView, range: TextRange): seq[Rect]
 proc characterRect*(textView: TextView, index: int): Rect
@@ -192,6 +210,9 @@ protocol TextViewEvents:
   proc textWillChange*(textView: TextView, range: TextRange) {.signal.}
   proc textDidChange*(textView: TextView, sender: DynamicAgent) {.signal.}
   proc textSelectionDidChange*(textView: TextView, ranges: seq[TextRange]) {.signal.}
+  proc textCommandDispatched*(
+    textView: TextView, selector: CommandSelector, handled: bool
+  ) {.signal.}
 
   proc textEditingDidBegin*(textView: TextView) {.signal.}
   proc textEditingDidEnd*(textView: TextView) {.signal.}
@@ -268,6 +289,12 @@ proc shouldInsertText(event: KeyEvent): bool =
 
 proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
+
+const ValidMarkedTextAttributes* = [
+  "foregroundColor", "fontSize", "paragraphStyle", "baselineOffset", "kerning",
+  "ligatureLevel", "expansion", "backgroundColor", "shadow", "link", "underlineStyle",
+  "strikethroughStyle", "attachment", "underline", "strikethrough",
+]
 
 proc initTextCheckingResult*(
     kind: TextCheckingKind,
@@ -761,6 +788,32 @@ proc markedRange*(textView: TextView): TextRange =
     textView.xMarkedRange
   else:
     initTextRange(0, 0)
+
+proc attributedSubstringForRange*(
+    textView: TextView, range: TextRange
+): AttributedString =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return newTextStorage()
+  textView.xTextStorage.sliceTextStorage(textView.clampedRange(range))
+
+proc validAttributesForMarkedText*(textView: TextView): seq[string] =
+  discard textView
+  @ValidMarkedTextAttributes
+
+proc firstRectForCharacterRange*(textView: TextView, range: TextRange): Rect =
+  if textView.isNil:
+    return initRect(0, 0, 0, 0)
+  let clamped = textView.clampedRange(range)
+  if clamped.length > 0:
+    let rects = textView.selectionRects(clamped)
+    if rects.len > 0:
+      return textView.rectToWindow(rects[0])
+  textView.rectToWindow(textView.characterRect(int(clamped.location)))
+
+proc characterIndexForPoint*(textView: TextView, point: Point): int =
+  if textView.isNil:
+    return -1
+  textView.textIndexAtPoint(textView.pointFromWindow(point))
 
 proc textViewInsertionPoint(textView: TextView): int =
   if textView.isNil: 0 else: textView.xInsertionPoint
@@ -1711,6 +1764,42 @@ proc deleteWordForwardText*(textView: TextView) =
         textView.xTypingAttributes,
       )
 
+proc deleteToBeginningOfLineText*(textView: TextView) =
+  if textView.isNil or not textView.editable:
+    return
+  let selected = textView.currentSelection()
+  if selected.stop > selected.start:
+    textView.replaceSelectedText("")
+    return
+  let first = textView.currentVisualLineBounds().first
+  if first < selected.start:
+    textView.replaceRange(
+      initTextRange(first, selected.start - first), "", textView.xTypingAttributes
+    )
+
+proc deleteToEndOfLineText*(textView: TextView) =
+  if textView.isNil or not textView.editable:
+    return
+  let selected = textView.currentSelection()
+  if selected.stop > selected.start:
+    textView.replaceSelectedText("")
+    return
+  let last = textView.currentVisualLineBounds().last
+  if last > selected.start:
+    textView.replaceRange(
+      initTextRange(selected.start, last - selected.start),
+      "",
+      textView.xTypingAttributes,
+    )
+
+proc insertLineBreakText*(textView: TextView) =
+  if not textView.isNil:
+    textView.insertTextValue("\n")
+
+proc insertParagraphSeparatorText*(textView: TextView) =
+  if not textView.isNil:
+    textView.insertTextValue("\n")
+
 proc moveLeftText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
     return
@@ -1797,6 +1886,16 @@ proc moveToEndOfLineText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
     return
   textView.setCursor(textView.currentVisualLineBounds().last, extending)
+
+proc moveToBeginningOfDocumentText*(textView: TextView, extending = false) =
+  if textView.isNil or (not textView.editable and not textView.selectable):
+    return
+  textView.setCursor(0, extending)
+
+proc moveToEndOfDocumentText*(textView: TextView, extending = false) =
+  if textView.isNil or (not textView.editable and not textView.selectable):
+    return
+  textView.setCursor(textView.xTextStorage.len, extending)
 
 proc updateFieldEditorInsets(textView: TextView) =
   if textView.isNil or not textView.isFieldEditor:
@@ -1916,24 +2015,50 @@ proc validateTextCommand*(textView: TextView, action: ActionSelector): bool =
   of "redo":
     textView.allowsUndo and textView.xRedoStack.len > 0
   of "deleteBackward", "deleteForward", "deleteWordBackward", "deleteWordForward",
-      "insertText", "insertNewline", "insertTab", "insertBacktab",
-      "insertNewlineIgnoringFieldEditor", "insertTabIgnoringFieldEditor":
+      "deleteToBeginningOfLine", "deleteToEndOfLine", "insertText", "insertLineBreak",
+      "insertParagraphSeparator", "insertNewlineIgnoringFieldEditor",
+      "insertTabIgnoringFieldEditor":
     textView.editable
+  of "insertNewline", "insertTab", "insertBacktab":
+    textView.editable or textView.isFieldEditor
   of "selectText", "selectAll", "moveLeft", "moveRight", "moveUp", "moveDown",
-      "moveWordLeft", "moveWordRight", "moveToBeginningOfLine", "moveToEndOfLine",
-      "moveLeftAndModifySelection", "moveRightAndModifySelection",
-      "moveUpAndModifySelection", "moveDownAndModifySelection",
-      "moveWordLeftAndModifySelection", "moveWordRightAndModifySelection",
-      "moveToBeginningOfLineAndModifySelection", "moveToEndOfLineAndModifySelection":
+      "moveWordLeft", "moveWordRight", "moveWordBackward", "moveWordForward",
+      "moveToBeginningOfLine", "moveToEndOfLine", "moveToBeginningOfDocument",
+      "moveToEndOfDocument", "moveLeftAndModifySelection",
+      "moveRightAndModifySelection", "moveUpAndModifySelection",
+      "moveDownAndModifySelection", "moveWordLeftAndModifySelection",
+      "moveWordRightAndModifySelection", "moveWordBackwardAndModifySelection",
+      "moveWordForwardAndModifySelection", "moveToBeginningOfLineAndModifySelection",
+      "moveToEndOfLineAndModifySelection",
+      "moveToBeginningOfDocumentAndModifySelection",
+      "moveToEndOfDocumentAndModifySelection":
     textView.editable or textView.selectable
   of "complete":
     textView.editable
   else:
     textView.respondsTo(action.name)
 
+proc performTextInputCommand*(
+    textView: TextView, selector: CommandSelector, sender: DynamicAgent = nil
+): bool =
+  if textView.isNil:
+    return false
+  let effectiveSender =
+    if sender.isNil:
+      DynamicAgent(textView)
+    else:
+      sender
+  if textView.validateTextCommand(selector):
+    result = textView.sendLocalIfHandled(selector, ActionArgs(sender: effectiveSender))
+  emit textView.textCommandDispatched(selector, result)
+
 protocol DefaultTextViewValidation of UserInterfaceValidations:
   method validateUserInterfaceItem(textView: TextView, args: ValidationArgs): bool =
     textView.validateTextCommand(args.action)
+
+protocol DefaultTextViewCommandDispatch of ResponderCommandDispatchProtocol:
+  method dispatchCommand(textView: TextView, args: TryToPerformArgs): bool =
+    textView.performTextInputCommand(args.selector, args.sender)
 
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method draw(textView: TextView, context: DrawContext) =
@@ -1967,6 +2092,74 @@ protocol DefaultTextViewEvents of ResponderEventProtocol:
     if textView.editable and event.shouldInsertText():
       textView.insertTextValue(event.text)
       return true
+
+method textViewInputHasMarkedText(textView: TextView): bool {.selector.} =
+  (not textView.isNil) and textView.xHasMarkedText
+
+method textViewInputMarkedRange(textView: TextView): TextRange {.selector.} =
+  if not textView.isNil and textView.xHasMarkedText:
+    textView.xMarkedRange
+  else:
+    initTextRange(0, 0)
+
+method textViewInputSelectedRange(textView: TextView): TextRange {.selector.} =
+  textView.textViewSelectedRange()
+
+method textViewInputAttributedSubstringForRange(
+    textView: TextView, range: TextRange
+): AttributedString {.selector.} =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return newTextStorage()
+  textView.xTextStorage.sliceTextStorage(textView.clampedRange(range))
+
+method textViewInputValidAttributesForMarkedText(
+    textView: TextView
+): seq[string] {.selector.} =
+  discard textView
+  @ValidMarkedTextAttributes
+
+method textViewInputFirstRectForCharacterRange(
+    textView: TextView, range: TextRange
+): Rect {.selector.} =
+  if textView.isNil:
+    return initRect(0, 0, 0, 0)
+  let clamped = textView.clampedRange(range)
+  if clamped.length > 0:
+    let rects = textView.selectionRects(clamped)
+    if rects.len > 0:
+      return textView.rectToWindow(rects[0])
+  textView.rectToWindow(textView.characterRect(int(clamped.location)))
+
+method textViewInputCharacterIndexForPoint(
+    textView: TextView, point: Point
+): int {.selector.} =
+  if textView.isNil:
+    return -1
+  textView.textIndexAtPoint(textView.pointFromWindow(point))
+
+proc installTextInputClientMethods(textView: TextView) =
+  if textView.isNil:
+    return
+  discard
+    textView.addMethod(selectors.textInputHasMarkedText, textViewInputHasMarkedText)
+  discard textView.addMethod(selectors.textInputMarkedRange, textViewInputMarkedRange)
+  discard
+    textView.addMethod(selectors.textInputSelectedRange, textViewInputSelectedRange)
+  discard textView.addMethod(
+    selectors.textInputAttributedSubstringForRange,
+    textViewInputAttributedSubstringForRange,
+  )
+  discard textView.addMethod(
+    selectors.textInputValidAttributesForMarkedText,
+    textViewInputValidAttributesForMarkedText,
+  )
+  discard textView.addMethod(
+    selectors.textInputFirstRectForCharacterRange,
+    textViewInputFirstRectForCharacterRange,
+  )
+  discard textView.addMethod(
+    selectors.textInputCharacterIndexForPoint, textViewInputCharacterIndexForPoint
+  )
 
 protocol DefaultTextViewInput of TextInputProtocol:
   method insertText(textView: TextView, text: string) =
@@ -2015,6 +2208,18 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
   method deleteWordForward(textView: TextView, args: ActionArgs) =
     textView.deleteWordForwardText()
 
+  method deleteToBeginningOfLine(textView: TextView, args: ActionArgs) =
+    textView.deleteToBeginningOfLineText()
+
+  method deleteToEndOfLine(textView: TextView, args: ActionArgs) =
+    textView.deleteToEndOfLineText()
+
+  method insertLineBreak(textView: TextView, args: ActionArgs) =
+    textView.insertLineBreakText()
+
+  method insertParagraphSeparator(textView: TextView, args: ActionArgs) =
+    textView.insertParagraphSeparatorText()
+
   method moveLeft(textView: TextView, args: ActionArgs) =
     textView.moveLeftText()
 
@@ -2033,11 +2238,23 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
   method moveWordRight(textView: TextView, args: ActionArgs) =
     textView.moveWordRightText()
 
+  method moveWordBackward(textView: TextView, args: ActionArgs) =
+    textView.moveWordLeftText()
+
+  method moveWordForward(textView: TextView, args: ActionArgs) =
+    textView.moveWordRightText()
+
   method moveToBeginningOfLine(textView: TextView, args: ActionArgs) =
     textView.moveToBeginningOfLineText()
 
   method moveToEndOfLine(textView: TextView, args: ActionArgs) =
     textView.moveToEndOfLineText()
+
+  method moveToBeginningOfDocument(textView: TextView, args: ActionArgs) =
+    textView.moveToBeginningOfDocumentText()
+
+  method moveToEndOfDocument(textView: TextView, args: ActionArgs) =
+    textView.moveToEndOfDocumentText()
 
   method moveLeftAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveLeftText(extending = true)
@@ -2057,11 +2274,25 @@ protocol DefaultTextViewCommands of TextEditingCommandProtocol:
   method moveWordRightAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveWordRightText(extending = true)
 
+  method moveWordBackwardAndModifySelection(textView: TextView, args: ActionArgs) =
+    textView.moveWordLeftText(extending = true)
+
+  method moveWordForwardAndModifySelection(textView: TextView, args: ActionArgs) =
+    textView.moveWordRightText(extending = true)
+
   method moveToBeginningOfLineAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveToBeginningOfLineText(extending = true)
 
   method moveToEndOfLineAndModifySelection(textView: TextView, args: ActionArgs) =
     textView.moveToEndOfLineText(extending = true)
+
+  method moveToBeginningOfDocumentAndModifySelection(
+      textView: TextView, args: ActionArgs
+  ) =
+    textView.moveToBeginningOfDocumentText(extending = true)
+
+  method moveToEndOfDocumentAndModifySelection(textView: TextView, args: ActionArgs) =
+    textView.moveToEndOfDocumentText(extending = true)
 
 protocol DefaultTextViewKeyCommands of KeyViewCommandProtocol:
   method insertNewline(textView: TextView, args: ActionArgs) =
@@ -2265,6 +2496,8 @@ proc initTextViewFields*(
   discard textView.withProtocol(DefaultTextViewLayoutClient)
   discard textView.withProtocol(DefaultTextViewLayoutEventSlots)
   discard textView.withProtocol(DefaultTextViewAccessibility)
+  discard textView.withProtocol(DefaultTextViewCommandDispatch)
+  textView.installTextInputClientMethods()
   textView.observeProtocol(textView.xLayoutManager, TextLayoutEvents)
   textView.xLayoutManager.layoutClient = DynamicAgent(textView)
   if installDefaultProtocols:

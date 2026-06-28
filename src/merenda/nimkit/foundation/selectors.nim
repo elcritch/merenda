@@ -7,6 +7,7 @@ from figdraw/figbasics import ZLevel
 import ../drawing/drawing
 import ./events
 import ../text/texttypes
+import ../text/textstorage
 import ./types
 
 export selectors
@@ -89,6 +90,7 @@ protocol ResponderEventProtocol:
   method helpRequested*(event: MouseEvent): bool {.optional.}
 
 protocol ResponderCommandDispatchProtocol:
+  method dispatchCommand*(args: TryToPerformArgs): bool {.optional.}
   method performKeyEquivalent*(event: KeyEvent): bool {.optional.}
   method validRequestorForSendType*(
     args: ValidRequestorArgs
@@ -130,6 +132,16 @@ protocol TextInputProtocol:
   ) {.optional.}
 
   method unmarkText*() {.optional.}
+  method textInputHasMarkedText*(): bool {.optional.}
+  method textInputMarkedRange*(): TextRange {.optional.}
+  method textInputSelectedRange*(): TextRange {.optional.}
+  method textInputAttributedSubstringForRange*(
+    range: TextRange
+  ): AttributedString {.optional.}
+
+  method textInputValidAttributesForMarkedText*(): seq[string] {.optional.}
+  method textInputFirstRectForCharacterRange*(range: TextRange): Rect {.optional.}
+  method textInputCharacterIndexForPoint*(point: Point): int {.optional.}
 
 protocol TextEditingCommandProtocol:
   method selectText*(args: ActionArgs) {.optional.}
