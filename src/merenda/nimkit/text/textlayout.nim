@@ -19,6 +19,7 @@ import ../foundation/types
 type
   GlyphIndex* = distinct Natural
   TextLineIndex* = distinct Natural
+  TextContainerIndex* = distinct Natural
 
   GlyphRange* = object
     location*: GlyphIndex
@@ -37,11 +38,13 @@ type
     textIndex*: TextIndex
     glyphIndex*: Option[GlyphIndex]
     lineIndex*: TextLineIndex
+    containerIndex*: TextContainerIndex
     kind*: TextCaretPositionKind
     rect*: Rect
 
   TextLineFragment* = object
     lineIndex*: TextLineIndex
+    containerIndex*: TextContainerIndex
     glyphRange*: GlyphRange
     textRange*: TextRange
     fragmentRect*: Rect
@@ -57,15 +60,32 @@ type
     textHash*: Hash
     layoutHash*: Hash
     containerRect*: Rect
+    containers*: seq[TextContainer]
+    containerRects*: seq[Rect]
     lineFragments*: seq[TextLineFragment]
     glyphCount*: Natural
     usedRect*: Rect
     contentSize*: Size
 
   TextContainer* = object
+    origin*: Point
     size*: Size
     insets*: EdgeInsets
+    lineFragmentPadding*: float32
+    widthTracksTextView*: bool
+    heightTracksTextView*: bool
+    maximumNumberOfLines*: Natural
+    lineBreakMode*: TextLineBreakMode
     wraps*: bool
+    exclusionPaths*: seq[Rect]
+
+  TextHitTestResult* = object
+    point*: Point
+    textIndex*: TextIndex
+    textRange*: TextRange
+    glyphIndex*: Option[GlyphIndex]
+    lineIndex*: Option[TextLineIndex]
+    containerIndex*: Option[TextContainerIndex]
 
   TextLayoutBackend* = ref object of DynamicAgent
 
@@ -74,10 +94,12 @@ type
   TextLayoutRequest* = object
     storage*: TextStorage
     container*: TextContainer
+    containers*: seq[TextContainer]
     style*: TextStyle
     alignment*: TextAlignment
     wraps*: bool
     invalidatedRanges*: seq[TextRange]
+    invalidatedContainers*: seq[TextContainerIndex]
 
   TextLayoutResult* = object
     snapshot*: TextLayoutSnapshot
@@ -86,6 +108,7 @@ type
   TextLayoutManager* = ref object of DynamicAgent
     xTextStorage: TextStorage
     xTextContainer: TextContainer
+    xTextContainers: seq[TextContainer]
     xTextStyle: TextStyle
     xAlignment: TextAlignment
     xBackend: TextLayoutBackend
@@ -94,15 +117,19 @@ type
     xLayoutRect: Rect
     xSnapshot: TextLayoutSnapshot
     xInvalidatedRanges: seq[TextRange]
+    xInvalidatedContainers: seq[TextContainerIndex]
     xHasLayout: bool
 
 proc `==`*(a, b: GlyphIndex): bool {.borrow.}
 proc `$`*(index: GlyphIndex): string {.borrow.}
 proc `==`*(a, b: TextLineIndex): bool {.borrow.}
 proc `$`*(index: TextLineIndex): string {.borrow.}
+proc `==`*(a, b: TextContainerIndex): bool {.borrow.}
+proc `$`*(index: TextContainerIndex): string {.borrow.}
 
 proc defaultUpdateLayout(manager: TextLayoutManager)
 proc defaultInvalidateLayout(manager: TextLayoutManager, range: TextRange)
+proc defaultInvalidateContainer(manager: TextLayoutManager, index: TextContainerIndex)
 proc defaultHasValidLayout(manager: TextLayoutManager): bool
 proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment]
 proc defaultLayoutSnapshot(manager: TextLayoutManager): TextLayoutSnapshot
@@ -115,6 +142,14 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult
 protocol TextLayoutEvents:
   proc layoutDidInvalidate*(
     manager: TextLayoutManager, ranges: seq[TextRange]
+  ) {.signal.}
+
+  proc containersDidChange*(
+    manager: TextLayoutManager, containers: seq[TextContainer]
+  ) {.signal.}
+
+  proc containerDidInvalidate*(
+    manager: TextLayoutManager, index: TextContainerIndex, container: TextContainer
   ) {.signal.}
 
   proc layoutDidComplete*(
@@ -146,6 +181,10 @@ protocol FigDrawTextTypesetterProtocol of TextLayoutBackendProtocol:
 protocol TextLayoutClientProtocol {.selectorScope: protocol.}:
   method textLayoutStorage*(manager: TextLayoutManager): TextStorage {.optional.}
   method textLayoutContainer*(manager: TextLayoutManager): TextContainer {.optional.}
+  method textLayoutContainers*(
+    manager: TextLayoutManager
+  ): seq[TextContainer] {.optional.}
+
   method textLayoutStyle*(manager: TextLayoutManager): TextStyle {.optional.}
   method textLayoutAlignment*(manager: TextLayoutManager): TextAlignment {.optional.}
 
@@ -155,6 +194,9 @@ protocol TextLayoutManagerProtocol {.selectorScope: protocol.} from TextLayoutMa
 
   method lmInvalidate*(manager: TextLayoutManager, range: TextRange) =
     manager.defaultInvalidateLayout(range)
+
+  method lmInvalidateContainer*(manager: TextLayoutManager, index: TextContainerIndex) =
+    manager.defaultInvalidateContainer(index)
 
   method lmHasLayout*(manager: TextLayoutManager): bool =
     manager.defaultHasValidLayout()
@@ -211,15 +253,251 @@ func maxIndex*(range: TextLineRange): int =
 func isEmpty*(range: TextLineRange): bool =
   range.length == 0
 
-func initTextContainer*(
-    size = initSize(0.0, 0.0), insets = insets(0.0), wraps = false
-): TextContainer =
-  TextContainer(size: size, insets: insets, wraps: wraps)
+func initTextContainerIndex*(value: int): TextContainerIndex =
+  TextContainerIndex(max(value, 0).Natural)
 
-func layoutRect(container: TextContainer): Rect =
-  initRect(0.0, 0.0, container.size.width, container.size.height).inset(
-    container.insets
+func toInt*(index: TextContainerIndex): int =
+  system.int(Natural(index))
+
+proc initTextContainer*(
+    size = initSize(0.0, 0.0),
+    insets = insets(0.0),
+    wraps = false,
+    origin = initPoint(0.0, 0.0),
+    lineFragmentPadding = 0.0'f32,
+    widthTracksTextView = false,
+    heightTracksTextView = false,
+    maximumNumberOfLines = 0,
+    lineBreakMode = tlbmClipping,
+    exclusionPaths: openArray[Rect] = [],
+): TextContainer =
+  TextContainer(
+    origin: origin,
+    size: size,
+    insets: insets,
+    lineFragmentPadding: max(lineFragmentPadding, 0.0'f32),
+    widthTracksTextView: widthTracksTextView,
+    heightTracksTextView: heightTracksTextView,
+    maximumNumberOfLines: max(maximumNumberOfLines, 0).Natural,
+    lineBreakMode:
+      if wraps and lineBreakMode == tlbmClipping: tlbmWordWrapping else: lineBreakMode,
+    wraps: wraps,
+    exclusionPaths: @exclusionPaths,
   )
+
+func frame*(container: TextContainer): Rect =
+  initRect(container.origin, container.size)
+
+func layoutRect*(container: TextContainer): Rect =
+  let
+    rect = container.frame().inset(container.insets)
+    padding = max(container.lineFragmentPadding, 0.0'f32)
+  initRect(
+    rect.origin.x + padding,
+    rect.origin.y,
+    max(rect.size.width - padding * 2.0'f32, 0.0'f32),
+    rect.size.height,
+  )
+
+func wrapsText*(container: TextContainer): bool =
+  container.wraps or container.lineBreakMode in {tlbmWordWrapping, tlbmCharWrapping}
+
+func effectiveLineFragmentRect*(container: TextContainer, proposed: Rect): Rect =
+  result = proposed
+  for exclusion in container.exclusionPaths:
+    let hit = result.intersection(exclusion)
+    if hit.isEmpty:
+      discard
+    elif hit.origin.x <= result.origin.x:
+      let shift = min(hit.size.width, result.size.width)
+      result.origin.x += shift
+      result.size.width = max(result.size.width - shift, 0.0'f32)
+    elif hit.maxX >= result.maxX:
+      result.size.width = max(hit.origin.x - result.origin.x, 0.0'f32)
+    else:
+      let
+        leftWidth = max(hit.origin.x - result.origin.x, 0.0'f32)
+        rightOrigin = hit.maxX
+        rightWidth = max(result.maxX - rightOrigin, 0.0'f32)
+      if rightWidth > leftWidth:
+        result.origin.x = rightOrigin
+        result.size.width = rightWidth
+      else:
+        result.size.width = leftWidth
+
+func effectiveContainers(
+    primary: TextContainer, containers: openArray[TextContainer]
+): seq[TextContainer] =
+  if containers.len == 0:
+    @[primary]
+  else:
+    @containers
+
+proc effectiveContainers(manager: TextLayoutManager): seq[TextContainer] =
+  if manager.isNil:
+    @[initTextContainer()]
+  else:
+    effectiveContainers(manager.xTextContainer, manager.xTextContainers)
+
+func effectiveContainers(request: TextLayoutRequest): seq[TextContainer] =
+  effectiveContainers(request.container, request.containers)
+
+func layoutRects(containers: openArray[TextContainer]): seq[Rect] =
+  for container in containers:
+    result.add container.layoutRect()
+
+func unionRects(rects: openArray[Rect]): Rect =
+  var hasRect = false
+  for rect in rects:
+    if not hasRect:
+      result = rect
+      hasRect = true
+    elif not rect.isEmpty:
+      result = result.union(rect)
+
+func virtualLayoutRect(containers: openArray[TextContainer]): Rect =
+  if containers.len == 0:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  if containers.len == 1:
+    return containers[0].layoutRect()
+
+  var
+    width = 0.0'f32
+    height = 0.0'f32
+  for container in containers:
+    let rect = container.layoutRect()
+    width = max(width, rect.size.width)
+    height += max(rect.size.height, 0.0'f32)
+  initRect(0.0, 0.0, width, height)
+
+func virtualContainerRect(containers: openArray[TextContainer], index: int): Rect =
+  if containers.len == 0:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let clamped = max(0, min(index, containers.len - 1))
+  if containers.len == 1:
+    return containers[0].layoutRect()
+
+  var y = 0.0'f32
+  for containerIndex, container in containers:
+    let rect = container.layoutRect()
+    if containerIndex == clamped:
+      return initRect(0.0, y, rect.size.width, rect.size.height)
+    y += max(rect.size.height, 0.0'f32)
+  initRect(0.0, y, 0.0, 0.0)
+
+func containerIndexForVirtualY(
+    containers: openArray[TextContainer], y: float32
+): TextContainerIndex =
+  if containers.len <= 1:
+    return initTextContainerIndex(0)
+
+  var top = 0.0'f32
+  for index, container in containers:
+    let height = max(container.layoutRect().size.height, 0.0'f32)
+    if y >= top and y < top + height:
+      return initTextContainerIndex(index)
+    top += height
+  if y < 0.0'f32:
+    initTextContainerIndex(0)
+  else:
+    initTextContainerIndex(containers.len - 1)
+
+func containerIndexForVirtualRect(
+    containers: openArray[TextContainer], rect: Rect
+): TextContainerIndex =
+  containerIndexForVirtualY(containers, rect.origin.y + rect.size.height * 0.5'f32)
+
+func actualRectForVirtualRect(containers: openArray[TextContainer], rect: Rect): Rect =
+  if containers.len <= 1:
+    return rect
+  let
+    index = containerIndexForVirtualRect(containers, rect).toInt
+    virtualRect = containers.virtualContainerRect(index)
+    actualRect = containers[index].layoutRect()
+  initRect(
+    actualRect.origin.x + rect.origin.x - virtualRect.origin.x,
+    actualRect.origin.y + rect.origin.y - virtualRect.origin.y,
+    rect.size.width,
+    rect.size.height,
+  )
+
+proc actualRectForVirtualRect(manager: TextLayoutManager, rect: Rect): Rect =
+  manager.effectiveContainers().actualRectForVirtualRect(rect)
+
+func nearestContainerIndexAtPoint(
+    containers: openArray[TextContainer], point: Point
+): int =
+  if containers.len == 0:
+    return 0
+  var
+    bestIndex = 0
+    bestDistance = high(float32)
+  for index, container in containers:
+    let rect = container.layoutRect()
+    if rect.contains(point):
+      return index
+    let
+      dx =
+        if point.x < rect.minX:
+          rect.minX - point.x
+        elif point.x > rect.maxX:
+          point.x - rect.maxX
+        else:
+          0.0'f32
+      dy =
+        if point.y < rect.minY:
+          rect.minY - point.y
+        elif point.y > rect.maxY:
+          point.y - rect.maxY
+        else:
+          0.0'f32
+      distance = dx * dx + dy * dy
+    if distance < bestDistance:
+      bestDistance = distance
+      bestIndex = index
+  bestIndex
+
+func virtualPointForActualPoint(
+    containers: openArray[TextContainer], point: Point
+): Point =
+  if containers.len <= 1:
+    return point
+  let
+    index = containers.nearestContainerIndexAtPoint(point)
+    actualRect = containers[index].layoutRect()
+    virtualRect = containers.virtualContainerRect(index)
+  initPoint(
+    virtualRect.origin.x + point.x - actualRect.origin.x,
+    virtualRect.origin.y + point.y - actualRect.origin.y,
+  )
+
+proc localLayoutPoint(manager: TextLayoutManager, point: Point): Point =
+  let virtualPoint = manager.effectiveContainers().virtualPointForActualPoint(point)
+  initPoint(
+    virtualPoint.x - manager.xLayoutRect.origin.x,
+    virtualPoint.y - manager.xLayoutRect.origin.y,
+  )
+
+proc virtualCaretRect(manager: TextLayoutManager, insertionPoint: int): Rect =
+  caretRect(manager.xLayoutRect, manager.xLayout, insertionPoint)
+
+func anyContainerWraps(containers: openArray[TextContainer]): bool =
+  for container in containers:
+    if container.wrapsText:
+      return true
+
+func enforceLineLimits(
+    fragments: seq[TextLineFragment], containers: openArray[TextContainer]
+): seq[TextLineFragment] =
+  if containers.len == 0:
+    return fragments
+  var counts = newSeq[int](containers.len)
+  for fragment in fragments:
+    let index = max(0, min(fragment.containerIndex.toInt, containers.len - 1))
+    if containers[index].maximumNumberOfLines == 0 or
+        counts[index] < int(containers[index].maximumNumberOfLines):
+      result.add fragment
+      inc counts[index]
 
 proc newFigDrawTextTypesetter*(): FigDrawTextTypesetter =
   result = FigDrawTextTypesetter()
@@ -301,10 +579,78 @@ proc textContainer*(manager: TextLayoutManager): TextContainer =
 proc `textContainer=`*(manager: TextLayoutManager, container: TextContainer) =
   if manager.isNil:
     return
-  if manager.xTextContainer == container:
+  if manager.xTextContainers.len == 0 and manager.xTextContainer == container:
     return
   manager.xTextContainer = container
+  manager.xTextContainers.setLen(0)
+  emit manager.containersDidChange(manager.effectiveContainers())
   manager.invalidateLayout()
+
+proc textContainers*(manager: TextLayoutManager): seq[TextContainer] =
+  if manager.isNil:
+    @[]
+  else:
+    manager.effectiveContainers()
+
+proc `textContainers=`*(manager: TextLayoutManager, containers: seq[TextContainer]) =
+  if manager.isNil:
+    return
+  let normalized =
+    if containers.len == 0:
+      @[initTextContainer()]
+    else:
+      containers
+  if manager.effectiveContainers() == normalized:
+    return
+  manager.xTextContainer = normalized[0]
+  manager.xTextContainers = normalized
+  emit manager.containersDidChange(normalized)
+  manager.invalidateLayout()
+
+proc addTextContainer*(manager: TextLayoutManager, container: TextContainer) =
+  if manager.isNil:
+    return
+  var containers = manager.effectiveContainers()
+  containers.add container
+  manager.textContainers = containers
+
+proc insertTextContainer*(
+    manager: TextLayoutManager, index: int, container: TextContainer
+) =
+  if manager.isNil:
+    return
+  var containers = manager.effectiveContainers()
+  containers.insert(container, max(0, min(index, containers.len)))
+  manager.textContainers = containers
+
+proc replaceTextContainer*(
+    manager: TextLayoutManager, index: TextContainerIndex, container: TextContainer
+) =
+  if manager.isNil:
+    return
+  var containers = manager.effectiveContainers()
+  let position = index.toInt
+  if position < 0 or position >= containers.len:
+    return
+  if containers[position] == container:
+    return
+  containers[position] = container
+  manager.textContainers = containers
+  manager.lmInvalidateContainer(index)
+
+proc removeTextContainer*(manager: TextLayoutManager, index: TextContainerIndex) =
+  if manager.isNil:
+    return
+  var containers = manager.effectiveContainers()
+  let position = index.toInt
+  if position < 0 or position >= containers.len:
+    return
+  containers.delete(position)
+  manager.textContainers = containers
+
+proc invalidateTextContainer*(manager: TextLayoutManager, index: TextContainerIndex) =
+  if not manager.isNil:
+    manager.lmInvalidateContainer(index)
 
 proc textStyle*(manager: TextLayoutManager): TextStyle =
   if manager.isNil:
@@ -404,20 +750,6 @@ func toTextCaretPositionKind(affinity: TextCaretAffinity): TextCaretPositionKind
   of CaretInside: tcpInside
   of CaretTrailing: tcpTrailing
 
-proc notifyLayoutInvalidated(manager: TextLayoutManager, ranges: seq[TextRange]) =
-  emit manager.layoutDidInvalidate(ranges)
-
-proc notifyLayoutCompleted(manager: TextLayoutManager, snapshot: TextLayoutSnapshot) =
-  emit manager.layoutDidComplete(snapshot)
-
-proc notifyLayoutGeometryChanged(
-    manager: TextLayoutManager,
-    oldUsedRect: Rect,
-    oldContentSize: Size,
-    snapshot: TextLayoutSnapshot,
-) =
-  emit manager.layoutGeometryDidChange(oldUsedRect, oldContentSize, snapshot)
-
 proc applyClientInputs(manager: TextLayoutManager) =
   if manager.isNil or manager.xClient.isNil:
     return
@@ -427,10 +759,22 @@ proc applyClientInputs(manager: TextLayoutManager) =
     manager.xTextStorage = storage.get()
     manager.observeTextStorage(manager.xTextStorage)
     manager.xHasLayout = false
-  let container = manager.xClient.trySendLocal(textLayoutContainer(), manager)
-  if container.isSome and container.get() != manager.xTextContainer:
-    manager.xTextContainer = container.get()
-    manager.xHasLayout = false
+
+  let containers = manager.xClient.trySendLocal(textLayoutContainers(), manager)
+  if containers.isSome and containers.get().len > 0:
+    let supplied = containers.get()
+    if supplied != manager.effectiveContainers():
+      manager.xTextContainer = supplied[0]
+      manager.xTextContainers = supplied
+      manager.xHasLayout = false
+  else:
+    let container = manager.xClient.trySendLocal(textLayoutContainer(), manager)
+    if container.isSome and
+        (manager.xTextContainers.len > 0 or container.get() != manager.xTextContainer):
+      manager.xTextContainer = container.get()
+      manager.xTextContainers.setLen(0)
+      manager.xHasLayout = false
+
   let style = manager.xClient.trySendLocal(textLayoutStyle(), manager)
   if style.isSome and style.get() != manager.xTextStyle:
     manager.xTextStyle = style.get()
@@ -441,13 +785,16 @@ proc applyClientInputs(manager: TextLayoutManager) =
     manager.xHasLayout = false
 
 proc layoutRequest(manager: TextLayoutManager): TextLayoutRequest =
+  let containers = manager.effectiveContainers()
   TextLayoutRequest(
     storage: manager.xTextStorage,
-    container: manager.xTextContainer,
+    container: containers[0],
+    containers: containers,
     style: manager.xTextStyle,
     alignment: manager.xAlignment,
-    wraps: manager.xTextContainer.wraps,
+    wraps: containers.anyContainerWraps(),
     invalidatedRanges: manager.xInvalidatedRanges,
+    invalidatedContainers: manager.xInvalidatedContainers,
   )
 
 proc defaultInvalidateLayout(manager: TextLayoutManager, range: TextRange) =
@@ -455,7 +802,19 @@ proc defaultInvalidateLayout(manager: TextLayoutManager, range: TextRange) =
     return
   manager.xInvalidatedRanges.add range
   manager.xHasLayout = false
-  manager.notifyLayoutInvalidated(manager.xInvalidatedRanges)
+  emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
+
+proc defaultInvalidateContainer(manager: TextLayoutManager, index: TextContainerIndex) =
+  if manager.isNil:
+    return
+  let containers = manager.effectiveContainers()
+  if containers.len == 0:
+    return
+  let position = max(0, min(index.toInt, containers.len - 1))
+  let clamped = initTextContainerIndex(position)
+  manager.xInvalidatedContainers.add clamped
+  manager.xHasLayout = false
+  emit manager.containerDidInvalidate(clamped, containers[position])
 
 proc defaultHasValidLayout(manager: TextLayoutManager): bool =
   not manager.isNil and manager.xHasLayout
@@ -470,32 +829,38 @@ proc defaultUpdateLayout(manager: TextLayoutManager) =
     manager.xBackend = newFigDrawTextTypesetter()
 
   let
+    request = manager.layoutRequest()
     oldSnapshot = manager.xSnapshot
     oldUsedRect = oldSnapshot.usedRect
     oldContentSize = oldSnapshot.contentSize
-    layout = manager.xBackend.layoutText(manager.layoutRequest())
+    layout = manager.xBackend.layoutText(request)
   manager.xLayout = layout.arrangement
-  manager.xLayoutRect = layout.snapshot.containerRect
+  manager.xLayoutRect = request.effectiveContainers().virtualLayoutRect()
   manager.xSnapshot = layout.snapshot
   manager.xHasLayout = true
   manager.xInvalidatedRanges.setLen(0)
+  manager.xInvalidatedContainers.setLen(0)
 
-  manager.notifyLayoutCompleted(manager.xSnapshot)
+  emit manager.layoutDidComplete(manager.xSnapshot)
   if oldUsedRect != manager.xSnapshot.usedRect or
       oldContentSize != manager.xSnapshot.contentSize:
-    manager.notifyLayoutGeometryChanged(oldUsedRect, oldContentSize, manager.xSnapshot)
+    emit manager.layoutGeometryDidChange(oldUsedRect, oldContentSize, manager.xSnapshot)
 
 proc updateLayout*(manager: TextLayoutManager) =
   if not manager.isNil:
     manager.lmUpdate()
 
 proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
-  let rect = request.container.layoutRect()
+  let
+    containers = request.effectiveContainers()
+    rect = containers.virtualLayoutRect()
+    wraps = request.wraps or containers.anyContainerWraps()
   result.arrangement =
-    textLayout(rect, request.storage, request.style, request.alignment, request.wraps)
+    textLayout(rect, request.storage, request.style, request.alignment, wraps)
   let manager = TextLayoutManager(
     xTextStorage: request.storage,
-    xTextContainer: request.container,
+    xTextContainer: containers[0],
+    xTextContainers: containers,
     xTextStyle: request.style,
     xAlignment: request.alignment,
     xLayout: result.arrangement,
@@ -514,7 +879,7 @@ proc layoutBounds*(manager: TextLayoutManager): Rect =
   if manager.isNil:
     return initRect(0.0, 0.0, 0.0, 0.0)
   manager.updateLayout()
-  manager.xLayoutRect
+  manager.xSnapshot.containerRect
 
 proc glyphCount*(manager: TextLayoutManager): Natural =
   if manager.isNil:
@@ -526,6 +891,7 @@ proc lineFragment(
     manager: TextLayoutManager, visualIndex: int, line: Slice[int], lineCount: int
 ): TextLineFragment =
   let
+    containers = manager.effectiveContainers()
     layout = manager.xLayout
     textRange = layout.textRangeForGlyphLine(line)
     glyphRange = initGlyphRange(line.a, line.b - line.a + 1)
@@ -535,11 +901,9 @@ proc lineFragment(
       else:
         manager.xTextStorage.stringValue().toRunes()
     hardBreak = containsHardBreak(sourceRunes, textRange)
-    wrapped =
-      manager.xTextContainer.wraps and not hardBreak and visualIndex < lineCount - 1
 
   var
-    usedRect = initRect(0.0, 0.0, 0.0, 0.0)
+    virtualUsedRect = initRect(0.0, 0.0, 0.0, 0.0)
     hasUsedRect = false
     lineHeight = 0.0'f32
     baselineOffset = 0.0'f32
@@ -550,11 +914,11 @@ proc lineFragment(
       font = layout.glyphFont(glyphIndex)
     if not glyphBounds.isEmpty:
       if hasUsedRect:
-        usedRect = usedRect.union(glyphBounds)
+        virtualUsedRect = virtualUsedRect.union(glyphBounds)
       else:
-        usedRect = glyphBounds
+        virtualUsedRect = glyphBounds
         hasUsedRect = true
-    lineHeight = max(lineHeight, max(font.lineHeight, glyphBounds.size.height))
+    lineHeight = max(lineHeight, max(font.lineHeight, virtualUsedRect.size.height))
     baselineOffset = max(baselineOffset, font.descentAdj)
 
   if lineHeight <= 0.0'f32:
@@ -562,17 +926,30 @@ proc lineFragment(
   if baselineOffset <= 0.0'f32:
     baselineOffset = min(lineHeight, lineHeight * 0.8'f32)
 
-  let lineTop = if hasUsedRect: usedRect.origin.y else: manager.xLayoutRect.origin.y
-  let fragmentRect = initRect(
-    manager.xLayoutRect.origin.x,
-    lineTop,
-    manager.xLayoutRect.size.width,
-    max(lineHeight, usedRect.size.height),
-  )
+  let
+    lineTop =
+      if hasUsedRect: virtualUsedRect.origin.y else: manager.xLayoutRect.origin.y
+    containerIndex = containers.containerIndexForVirtualY(lineTop)
+    container = containers[containerIndex.toInt]
+    virtualContainer = containers.virtualContainerRect(containerIndex.toInt)
+    virtualFragmentRect = initRect(
+      virtualContainer.origin.x,
+      lineTop,
+      virtualContainer.size.width,
+      max(lineHeight, virtualUsedRect.size.height),
+    )
+    fragmentRect = manager.actualRectForVirtualRect(virtualFragmentRect)
+    usedRect =
+      if hasUsedRect:
+        manager.actualRectForVirtualRect(virtualUsedRect)
+      else:
+        initRect(fragmentRect.origin, initSize(0.0, fragmentRect.size.height))
+    wrapped = container.wrapsText and not hardBreak and visualIndex < lineCount - 1
   let ascent = min(max(baselineOffset, 0.0'f32), fragmentRect.size.height)
 
   TextLineFragment(
     lineIndex: initTextLineIndex(visualIndex),
+    containerIndex: containerIndex,
     glyphRange: glyphRange,
     textRange: textRange,
     fragmentRect: fragmentRect,
@@ -589,15 +966,19 @@ proc emptyLineFragment(
     manager: TextLayoutManager, visualIndex: int, sourceIndex: int
 ): TextLineFragment =
   let
-    caret = caretRect(manager.xLayoutRect, manager.xLayout, sourceIndex)
+    containers = manager.effectiveContainers()
+    caret = manager.virtualCaretRect(sourceIndex)
     lineHeight = max(caret.size.height, defaultFontSize())
-  let fragmentRect = initRect(
-    manager.xLayoutRect.origin.x, caret.origin.y, manager.xLayoutRect.size.width,
-    lineHeight,
-  )
+    containerIndex = containers.containerIndexForVirtualY(caret.origin.y)
+    virtualContainer = containers.virtualContainerRect(containerIndex.toInt)
+    virtualFragmentRect = initRect(
+      virtualContainer.origin.x, caret.origin.y, virtualContainer.size.width, lineHeight
+    )
+    fragmentRect = manager.actualRectForVirtualRect(virtualFragmentRect)
   let ascent = min(lineHeight, lineHeight * 0.8'f32)
   TextLineFragment(
     lineIndex: initTextLineIndex(visualIndex),
+    containerIndex: containerIndex,
     glyphRange: initGlyphRange(0, 0),
     textRange: initTextRange(sourceIndex, 0),
     fragmentRect: fragmentRect,
@@ -616,7 +997,9 @@ func startsAtTextIndex(fragments: openArray[TextLineFragment], index: int): bool
 proc reindexLineFragments(fragments: var seq[TextLineFragment]) =
   fragments.sort(
     proc(a, b: TextLineFragment): int =
-      result = cmp(a.fragmentRect.origin.y, b.fragmentRect.origin.y)
+      result = cmp(a.containerIndex.toInt, b.containerIndex.toInt)
+      if result == 0:
+        result = cmp(a.fragmentRect.origin.y, b.fragmentRect.origin.y)
       if result == 0:
         result = cmp(a.fragmentRect.origin.x, b.fragmentRect.origin.x)
   )
@@ -632,6 +1015,7 @@ proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment] =
   let count = manager.xLayout.glyphCount()
   if count == 0:
     result.add manager.emptyLineFragment(0, 0)
+    result = result.enforceLineLimits(manager.effectiveContainers())
     return
 
   let lines = manager.xLayout.lineGlyphRanges()
@@ -648,6 +1032,7 @@ proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment] =
         if not result.startsAtTextIndex(nextIndex):
           result.add manager.emptyLineFragment(result.len, nextIndex)
       inc index
+  result = result.enforceLineLimits(manager.effectiveContainers())
   result.reindexLineFragments()
 
 proc lineFragments*(manager: TextLayoutManager): seq[TextLineFragment] =
@@ -671,8 +1056,11 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
       hash("")
     else:
       hash(manager.xTextStorage.stringValue())
+  let containers = manager.effectiveContainers()
   result.layoutHash = manager.xLayout.contentHash
-  result.containerRect = manager.xLayoutRect
+  result.containers = containers
+  result.containerRects = containers.layoutRects()
+  result.containerRect = result.containerRects.unionRects()
   result.glyphCount = manager.xLayout.glyphCount().Natural
   result.lineFragments = manager.defaultLineFragments()
 
@@ -696,9 +1084,11 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
     contentWidth = max(contentWidth, result.usedRect.size.width)
     contentHeight =
       max(contentHeight, result.usedRect.maxY - result.containerRect.origin.y)
-  elif result.lineFragments.len > 0:
-    contentHeight =
-      max(contentHeight, result.lineFragments[^1].fragmentRect.size.height)
+  if result.lineFragments.len > 0:
+    contentHeight = max(
+      contentHeight,
+      result.lineFragments[^1].fragmentRect.maxY - result.containerRect.origin.y,
+    )
   result.contentSize = initSize(max(contentWidth, 0.0'f32), max(contentHeight, 0.0'f32))
 
 proc defaultLayoutSnapshot(manager: TextLayoutManager): TextLayoutSnapshot =
@@ -779,9 +1169,7 @@ proc glyphIndexAtPoint*(manager: TextLayoutManager, point: Point): Option[GlyphI
   if manager.isNil:
     return none(GlyphIndex)
   manager.updateLayout()
-  let localPoint = initPoint(
-    point.x - manager.xLayoutRect.origin.x, point.y - manager.xLayoutRect.origin.y
-  )
+  let localPoint = manager.localLayoutPoint(point)
   let glyphIndex = manager.xLayout.glyphIndexAt(vec2(localPoint.x, localPoint.y))
   if glyphIndex < 0:
     none(GlyphIndex)
@@ -794,9 +1182,7 @@ proc textRangeAtPoint*(manager: TextLayoutManager, point: Point): TextRange =
   if manager.isNil:
     return initTextRange(0, 0)
   manager.updateLayout()
-  let localPoint = initPoint(
-    point.x - manager.xLayoutRect.origin.x, point.y - manager.xLayoutRect.origin.y
-  )
+  let localPoint = manager.localLayoutPoint(point)
   let sourceRange = manager.xLayout.sourceRuneRangeAt(vec2(localPoint.x, localPoint.y))
   if sourceRange.a <= sourceRange.b:
     return initTextRange(sourceRange.a, sourceRange.b - sourceRange.a + 1)
@@ -916,7 +1302,7 @@ proc defaultCaretRect(manager: TextLayoutManager, insertionPoint: int): Rect =
   if manager.isNil:
     return initRect(0.0, 0.0, 1.0, defaultFontSize())
   manager.updateLayout()
-  caretRect(manager.xLayoutRect, manager.xLayout, insertionPoint)
+  manager.actualRectForVirtualRect(manager.virtualCaretRect(insertionPoint))
 
 proc caretRect*(manager: TextLayoutManager, insertionPoint: int): Rect =
   if manager.isNil:
@@ -933,7 +1319,16 @@ proc caretPositions*(
   let
     sourceCount = manager.xLayout.sourceRuneCount()
     index = max(0, min(insertionPoint, sourceCount))
+    containers = manager.effectiveContainers()
   for caret in manager.xLayout.caretPositionsFor(index):
+    let
+      virtualRect = initRect(
+        manager.xLayoutRect.origin.x + caret.rect.x,
+        manager.xLayoutRect.origin.y + caret.rect.y,
+        caret.rect.w,
+        caret.rect.h,
+      )
+      containerIndex = containers.containerIndexForVirtualRect(virtualRect)
     result.add TextCaretPosition(
       textIndex: initTextIndex(caret.sourceRune),
       glyphIndex:
@@ -942,21 +1337,20 @@ proc caretPositions*(
         else:
           none(GlyphIndex),
       lineIndex: initTextLineIndex(caret.lineIndex),
+      containerIndex: containerIndex,
       kind: caret.affinity.toTextCaretPositionKind(),
-      rect: initRect(
-        manager.xLayoutRect.origin.x + caret.rect.x,
-        manager.xLayoutRect.origin.y + caret.rect.y,
-        caret.rect.w,
-        caret.rect.h,
-      ),
+      rect: manager.actualRectForVirtualRect(virtualRect),
     )
   if result.len == 0:
+    let rect = manager.caretRect(index)
     result.add TextCaretPosition(
       textIndex: initTextIndex(index),
       glyphIndex: none(GlyphIndex),
       lineIndex: initTextLineIndex(0),
+      containerIndex:
+        containers.containerIndexForVirtualRect(manager.virtualCaretRect(index)),
       kind: tcpInside,
-      rect: manager.caretRect(index),
+      rect: rect,
     )
 
 proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Rect] =
@@ -965,7 +1359,9 @@ proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Re
   manager.updateLayout()
   let clamped = clampTextRange(manager.xLayout.sourceRuneCount(), range)
   for rect in manager.xLayout.selectionRectsFor(clamped.sourceSlice):
-    result.add rect.toContainerRect(manager.xLayoutRect)
+    result.add manager.actualRectForVirtualRect(
+      rect.toContainerRect(manager.xLayoutRect)
+    )
 
 proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
   if manager.isNil:
@@ -1010,8 +1406,9 @@ proc boundsForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Rect =
     start = max(0, min(range.location.toInt, count))
     stop = max(start, min(range.maxIndex, count))
   for glyphIndex in start ..< stop:
-    let rect =
+    let rect = manager.actualRectForVirtualRect(
       manager.xLayout.glyphRect(glyphIndex).toContainerRect(manager.xLayoutRect)
+    )
     if result.isEmpty:
       result = rect
     else:
@@ -1074,7 +1471,7 @@ proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
       continue
 
     let
-      caret = manager.caretRect(nextIndex)
+      caret = manager.virtualCaretRect(nextIndex)
       lineHeight = max(caret.size.height, defaultFontSize())
       caretY = caret.origin.y - manager.xLayoutRect.origin.y
     if point.y >= caretY and point.y < caretY + lineHeight:
@@ -1096,7 +1493,7 @@ proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
 
   for index in 0 .. total:
     let
-      caret = manager.caretRect(index)
+      caret = manager.virtualCaretRect(index)
       lineHeight = max(caret.size.height, defaultFontSize())
       caretX = caret.origin.x - manager.xLayoutRect.origin.x
       caretY = caret.origin.y - manager.xLayoutRect.origin.y
@@ -1128,9 +1525,7 @@ proc defaultTextIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   if manager.isNil:
     return 0
   manager.updateLayout()
-  let localPoint = initPoint(
-    point.x - manager.xLayoutRect.origin.x, point.y - manager.xLayoutRect.origin.y
-  )
+  let localPoint = manager.localLayoutPoint(point)
   let emptyLineIndex = manager.emptyLineIndexAtPoint(localPoint)
   if emptyLineIndex >= 0:
     return emptyLineIndex
@@ -1146,3 +1541,39 @@ proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
     0
   else:
     manager.lmTextIndexAtPoint(point)
+
+proc containerIndexAtPoint*(
+    manager: TextLayoutManager, point: Point
+): Option[TextContainerIndex] =
+  if manager.isNil:
+    return none(TextContainerIndex)
+  let containers = manager.effectiveContainers()
+  for index, container in containers:
+    if container.layoutRect().contains(point):
+      return some(initTextContainerIndex(index))
+  none(TextContainerIndex)
+
+proc textHitTestAtPoint*(manager: TextLayoutManager, point: Point): TextHitTestResult =
+  result.point = point
+  if manager.isNil:
+    result.textIndex = initTextIndex(0)
+    result.textRange = initTextRange(0, 0)
+    result.glyphIndex = none(GlyphIndex)
+    result.lineIndex = none(TextLineIndex)
+    result.containerIndex = none(TextContainerIndex)
+    return
+
+  let
+    index = manager.textIndexAtPoint(point)
+    fragment = manager.lineFragmentForTextIndex(index)
+  result.textIndex = initTextIndex(index)
+  result.textRange = manager.textRangeAtPoint(point)
+  result.glyphIndex = manager.glyphIndexAtPoint(point)
+  result.containerIndex = manager.containerIndexAtPoint(point)
+  if result.containerIndex.isNone and fragment.isSome:
+    result.containerIndex = some(fragment.get().containerIndex)
+  result.lineIndex =
+    if fragment.isSome:
+      some(fragment.get().lineIndex)
+    else:
+      none(TextLineIndex)

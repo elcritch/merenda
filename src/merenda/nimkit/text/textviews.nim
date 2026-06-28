@@ -860,7 +860,10 @@ proc updateFieldEditorInsets(textView: TextView) =
 proc updateTextContainer(textView: TextView) =
   if textView.isNil:
     return
-  textView.xTextContainer.size = textView.bounds.size
+  if textView.xTextContainer.widthTracksTextView:
+    textView.xTextContainer.size.width = textView.bounds.size.width
+  if textView.xTextContainer.heightTracksTextView:
+    textView.xTextContainer.size.height = textView.bounds.size.height
   textView.updateFieldEditorInsets()
   textView.syncLayout()
 
@@ -1092,6 +1095,23 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
     if not textView.isNil:
       textView.setNeedsDisplay(true)
 
+  proc containersDidChange(
+      textView: TextView, containers: seq[TextContainer]
+  ) {.slot.} =
+    discard containers
+    if not textView.isNil:
+      textView.invalidateIntrinsicContentSize()
+      textView.setNeedsDisplay(true)
+
+  proc containerDidInvalidate(
+      textView: TextView, index: TextContainerIndex, container: TextContainer
+  ) {.slot.} =
+    discard index
+    discard container
+    if not textView.isNil:
+      textView.invalidateIntrinsicContentSize()
+      textView.setNeedsDisplay(true)
+
   proc layoutGeometryDidChange(
       textView: TextView,
       oldUsedRect: Rect,
@@ -1195,7 +1215,8 @@ proc initTextViewFields*(
 ) =
   initViewFields(textView, frame)
   textView.xTextStorage = newTextStorage(value)
-  textView.xTextContainer = initTextContainer()
+  textView.xTextContainer =
+    initTextContainer(widthTracksTextView = true, heightTracksTextView = true)
   textView.xLayoutManager =
     newTextLayoutManager(textView.xTextStorage, textView.xTextContainer)
   textView.xFlags = {tvEditable, tvSelectable, tvRichText, tvAllowsUndo}

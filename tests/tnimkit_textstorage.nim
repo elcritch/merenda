@@ -27,6 +27,9 @@ type
     stringRequests: int
     runRequests: int
 
+  DispatchRecorder = ref object of DynamicAgent
+    dispatches: seq[string]
+
 protocol StorageEventSpySlots from StorageEventSpy:
   includes TextStorageEditingEvents
 
@@ -98,6 +101,21 @@ protocol LazyStorageProviderProtocol of TextStorageLazyProviderProtocol:
     inc provider.runRequests
     provider.runs
 
+protocol DispatchRecorderProtocol from DispatchRecorder:
+  method recordDispatch*(recorder: DispatchRecorder, name: string) =
+    recorder.dispatches.add name
+
+protocol RecordingTextStorageDispatchProtocol of TextStorageEditDispatchProtocol:
+  method dispatchWillEdit(storage: TextStorage, edit: TextStorageEdit) =
+    if not storage.delegate.isNil:
+      discard storage.delegate.trySendLocal(recordDispatch(), "dispatchWillEdit")
+    emit storage.willEdit(edit)
+
+  method dispatchDidEdit(storage: TextStorage, edit: TextStorageEdit) =
+    if not storage.delegate.isNil:
+      discard storage.delegate.trySendLocal(recordDispatch(), "dispatchDidEdit")
+    emit storage.didEdit(edit)
+
 proc newStorageEventSpy(): StorageEventSpy =
   result = StorageEventSpy()
   discard result.withProto()
@@ -111,6 +129,15 @@ proc newLazyStorageProvider(
 ): LazyStorageProvider =
   result = LazyStorageProvider(text: text, runs: @runs)
   discard result.withProtocol(LazyStorageProviderProtocol)
+
+proc newDispatchRecorder(): DispatchRecorder =
+  result = DispatchRecorder()
+  discard result.withProto()
+
+proc newDispatchingTextStorage(value: string, recorder: DispatchRecorder): TextStorage =
+  result = newTextStorage(value)
+  result.delegate = DynamicAgent(recorder)
+  discard result.withProtocol(RecordingTextStorageDispatchProtocol)
 
 suite "nimkit text storage":
   test "text storage replaces text and preserves surrounding attribute runs":
@@ -248,6 +275,23 @@ suite "nimkit text storage":
     check storage.editedMask == {tseCharacters, tseAttributes}
     check storage.changeInLength == 1
     check spy.events[^4 .. ^1] == @["willProcess", "didProcess", "value", "attributes"]
+
+  test "edit dispatch protocol can intercept delivery before signals":
+    let
+      recorder = newDispatchRecorder()
+      storage = newDispatchingTextStorage("abc", recorder)
+      spy = newStorageEventSpy()
+
+    spy.observeProtocol(storage, TextStorageEditingEvents)
+    check storage.conformsTo(TextStorageEditDispatchProtocol)
+
+    storage.replace(initTextRange(1, 1), "Z")
+
+    check storage.stringValue == "aZc"
+    check recorder.dispatches[0] == "dispatchWillEdit"
+    check recorder.dispatches[1] == "dispatchDidEdit"
+    check spy.events[0] == "willEdit"
+    check spy.events[1] == "didEdit"
 
   test "attribute fixing expands to paragraph ranges and resolves fallback fonts":
     let

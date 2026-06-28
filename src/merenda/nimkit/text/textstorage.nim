@@ -49,6 +49,10 @@ func initTextStorageEdit*(
     kinds: kinds,
   )
 
+## Signal/slot observer surface for committed text storage edit lifecycle events.
+## Mutation code should route delivery through TextStorageEditDispatchProtocol
+## so external editor bridges can coalesce, suppress, mirror, or instrument
+## notifications before observers receive them.
 protocol TextStorageEditingEvents:
   proc willEdit*(storage: TextStorage, edit: TextStorageEdit) {.signal.}
   proc didEdit*(storage: TextStorage, edit: TextStorageEdit) {.signal.}
@@ -80,23 +84,27 @@ protocol TextStorageLazyProviderProtocol:
   method lazyTextStorageString*(storage: TextStorage): string {.optional.}
   method lazyTextStorageRuns*(storage: TextStorage): seq[TextAttributeRun] {.optional.}
 
-protocol TextStorageEditingProtocol {.selectorScope: protocol.} from TextStorage:
-  method notifyWillEdit*(storage: TextStorage, edit: TextStorageEdit) =
+## Overridable edit event delivery path used by TextStorage mutation procs.
+## Backends may override these methods to bridge, coalesce, suppress, or
+## instrument edits, then emit TextStorageEditingEvents when observers should
+## receive them.
+protocol TextStorageEditDispatchProtocol {.selectorScope: protocol.} from TextStorage:
+  method dispatchWillEdit*(storage: TextStorage, edit: TextStorageEdit) =
     emit storage.willEdit(edit)
 
-  method notifyDidEdit*(storage: TextStorage, edit: TextStorageEdit) =
+  method dispatchDidEdit*(storage: TextStorage, edit: TextStorageEdit) =
     emit storage.didEdit(edit)
 
-  method notifyValueChange*(storage: TextStorage, edit: TextStorageEdit) =
+  method dispatchValue*(storage: TextStorage, edit: TextStorageEdit) =
     emit storage.storageValueDidChange(edit)
 
-  method notifyAttrsChange*(storage: TextStorage, edit: TextStorageEdit) =
+  method dispatchAttrs*(storage: TextStorage, edit: TextStorageEdit) =
     emit storage.storageAttributesDidChange(edit)
 
-  method notifyWillProcess*(storage: TextStorage, edit: TextStorageEdit) =
+  method dispatchWillProc*(storage: TextStorage, edit: TextStorageEdit) =
     emit storage.storageWillProcessEditing(edit)
 
-  method notifyDidProcess*(storage: TextStorage, edit: TextStorageEdit) =
+  method dispatchDidProc*(storage: TextStorage, edit: TextStorageEdit) =
     emit storage.storageDidProcessEditing(edit)
 
 func clampTextRange(total: int, range: TextRange): TextRange =
@@ -161,7 +169,7 @@ proc isMaterialized*(storage: TextStorage): bool =
 proc notifyCommittedEdit(storage: TextStorage, edit: TextStorageEdit) =
   if storage.isNil:
     return
-  storage.notifyDidEdit(edit)
+  storage.dispatchDidEdit(edit)
   if storage.xHasPendingEdit:
     storage.xPendingEdit = coalesceEdits(storage.xPendingEdit, edit)
   else:
@@ -347,14 +355,14 @@ proc processEditing*(storage: TextStorage) =
   storage.xLastProcessedEdit = edit
   storage.xHasLastProcessedEdit = true
 
-  storage.notifyWillProcess(edit)
+  storage.dispatchWillProc(edit)
   if tseAttributes in edit.kinds:
     storage.fixAttributesInRange(edit.range)
-  storage.notifyDidProcess(edit)
+  storage.dispatchDidProc(edit)
   if tseCharacters in edit.kinds:
-    storage.notifyValueChange(edit)
+    storage.dispatchValue(edit)
   if tseAttributes in edit.kinds:
-    storage.notifyAttrsChange(edit)
+    storage.dispatchAttrs(edit)
 
   storage.xProcessingEditing = false
   if storage.xEditingDepth == 0 and storage.xHasPendingEdit:
@@ -443,7 +451,7 @@ proc `stringValue=`*(storage: TextStorage, value: string) =
     value.runeLen - oldLength,
     {tseCharacters, tseAttributes},
   )
-  storage.notifyWillEdit(edit)
+  storage.dispatchWillEdit(edit)
   storage.xStringValue = value
   storage.xRuns.setLen(0)
   if value.runeLen > 0:
@@ -507,7 +515,7 @@ proc replace*(
     current = storage.xStringValue
     edit = initTextStorageEdit(clamped, insertedLength, delta, {tseCharacters})
 
-  storage.notifyWillEdit(edit)
+  storage.dispatchWillEdit(edit)
   storage.xStringValue =
     current.runeSubStr(0, replaceStart) & text & current.runeSubStr(replaceStop)
 
@@ -566,7 +574,7 @@ proc setAttributes*(
     return
   let edit = initTextStorageEdit(clamped, int(clamped.length), 0, {tseAttributes})
 
-  storage.notifyWillEdit(edit)
+  storage.dispatchWillEdit(edit)
   var nextRuns: seq[TextAttributeRun]
   for run in storage.xRuns:
     let

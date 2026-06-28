@@ -126,11 +126,10 @@ document-controller open/save integration are covered in tests and examples.
   tests cover wrapped selections, caret affinity, point hit-testing,
   glyph/text range round trips, field-editor text rect offsets, and
   accessibility line geometry.
-- Drew the first text-layout milestone boundary: multiple text containers,
-  exclusion paths, attachment layout, non-contiguous layout, full Cocoa
-  `NSLayoutManager` compatibility aliases, and advanced bidi/grapheme
-  navigation are explicitly deferred until the core single-container contract
-  is proven.
+- Drew the first text-layout milestone boundary: attachment layout,
+  non-contiguous layout, full Cocoa `NSLayoutManager` compatibility aliases,
+  and advanced bidi/grapheme navigation are explicitly deferred until the core
+  layout contract is proven.
 - Added the first Cocoa/TextKit-compatible text model layer without native
   bridge types: richer `TextAttributes` now cover paragraph styles, tab stops,
   line breaking, writing direction, baseline/kerning/ligature/expansion
@@ -147,6 +146,12 @@ document-controller open/save integration are covered in tests and examples.
   observers now share one deterministic storage signal contract. One-way
   storage and layout notifications now use Sigils signals/slots, while selector
   protocols stay focused on pull inputs and overridable decisions.
+- Expanded `TextContainer` toward `NSTextContainer` parity: containers now carry
+  origin, size, line fragment padding, width/height tracking flags, maximum line
+  counts, line break modes, and exclusion rects; `TextLayoutManager` supports
+  multiple containers with container indexes in line fragments, caret positions,
+  snapshots, and semantic hit-test results, plus container replacement and
+  invalidation signals for paged, column, and flowed text models.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -199,15 +204,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-10. Expand `TextContainer` toward `NSTextContainer` parity:
-   - support container size tracking, line fragment padding, width/height tracks
-     text view flags, maximum number of lines, line break mode, and exclusion
-     paths
-   - add multiple text containers per layout manager for paged, column, and
-     flowed text layouts, with explicit container indexes in line fragments and
-     hit-testing results
-   - expose container replacement and invalidation hooks so scroll views,
-     print/page layout, and multi-container text views can share the same model
 11. Expand `TextLayoutManager` toward `NSLayoutManager`/TextKit 2 parity:
    - add glyph generation and glyph property APIs, character-to-glyph and
      glyph-to-character mappings, glyph ranges for bounding rects, bounding

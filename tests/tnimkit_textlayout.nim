@@ -14,9 +14,13 @@ type
 
   TextLayoutSignalSpy = ref object of DynamicAgent
     invalidations: int
+    containerChanges: int
+    containerInvalidations: int
     completions: int
     geometryChanges: int
     lastRanges: seq[TextRange]
+    lastContainers: seq[TextContainer]
+    lastContainerIndex: TextContainerIndex
     lastSnapshot: TextLayoutSnapshot
 
   LayoutClientSpy = ref object of DynamicAgent
@@ -50,6 +54,19 @@ protocol TextLayoutSignalSpyEvents from TextLayoutSignalSpy:
   proc layoutDidInvalidate(spy: TextLayoutSignalSpy, ranges: seq[TextRange]) {.slot.} =
     inc spy.invalidations
     spy.lastRanges = ranges
+
+  proc containersDidChange(
+      spy: TextLayoutSignalSpy, containers: seq[TextContainer]
+  ) {.slot.} =
+    inc spy.containerChanges
+    spy.lastContainers = containers
+
+  proc containerDidInvalidate(
+      spy: TextLayoutSignalSpy, index: TextContainerIndex, container: TextContainer
+  ) {.slot.} =
+    discard container
+    inc spy.containerInvalidations
+    spy.lastContainerIndex = index
 
   proc layoutDidComplete(
       spy: TextLayoutSignalSpy, snapshot: TextLayoutSnapshot
@@ -111,9 +128,71 @@ protocol LayoutClientSpyEvents from LayoutClientSpy:
     inc spy.contentChanges
 
 func contractLayoutRect(container: TextContainer): Rect =
-  initRect(0.0, 0.0, container.size.width, container.size.height).inset(
-    container.insets
-  )
+  container.layoutRect()
+
+func contractContainers(request: TextLayoutRequest): seq[TextContainer] =
+  if request.containers.len == 0:
+    @[request.container]
+  else:
+    request.containers
+
+func contractUnionRects(rects: openArray[Rect]): Rect =
+  var hasRect = false
+  for rect in rects:
+    if not hasRect:
+      result = rect
+      hasRect = true
+    else:
+      result = result.union(rect)
+
+func contractLineCapacity(container: TextContainer, lineHeight: float32): int =
+  if container.maximumNumberOfLines > 0:
+    return int(container.maximumNumberOfLines)
+  let height = container.contractLayoutRect().size.height
+  if height <= 0.0'f32:
+    high(int)
+  else:
+    max(1, int(height / max(lineHeight, 1.0'f32)))
+
+proc mapContractFragmentsToContainers(
+    fragments: seq[TextLineFragment],
+    containers: openArray[TextContainer],
+    lineHeight: float32,
+): seq[TextLineFragment] =
+  if containers.len == 0:
+    return fragments
+
+  var
+    containerIndex = 0
+    lineInContainer = 0
+  for fragment in fragments:
+    while containerIndex < containers.len:
+      let capacity = containers[containerIndex].contractLineCapacity(lineHeight)
+      if lineInContainer < capacity:
+        break
+      inc containerIndex
+      lineInContainer = 0
+    if containerIndex >= containers.len:
+      break
+
+    let
+      layoutRect = containers[containerIndex].contractLayoutRect()
+      lineY = layoutRect.origin.y + lineInContainer.float32 * lineHeight
+    var mapped = fragment
+    mapped.containerIndex = initTextContainerIndex(containerIndex)
+    mapped.fragmentRect =
+      initRect(layoutRect.origin.x, lineY, layoutRect.size.width, lineHeight)
+    mapped.usedRect = initRect(
+      layoutRect.origin.x,
+      lineY,
+      min(fragment.usedRect.size.width, layoutRect.size.width),
+      lineHeight,
+    )
+    mapped.baseline = lineY + lineHeight * 0.75'f32
+    mapped.ascent = lineHeight * 0.75'f32
+    mapped.descent = lineHeight * 0.25'f32
+    result.add mapped
+    inc lineInContainer
 
 proc addContractFragment(
     fragments: var seq[TextLineFragment],
@@ -138,6 +217,7 @@ proc addContractFragment(
     usedRect = initRect(layoutRect.origin.x, lineY, usedWidth, lineHeight)
   fragments.add TextLineFragment(
     lineIndex: initTextLineIndex(lineIndex),
+    containerIndex: initTextContainerIndex(0),
     glyphRange: initGlyphRange(glyphIndex, length),
     textRange: initTextRange(start, length),
     fragmentRect: fragmentRect,
@@ -162,9 +242,10 @@ proc contractSnapshot(
         ""
       else:
         request.storage.stringValue()
+    containers = request.contractContainers()
     runes = text.toRunes()
-    layoutRect = request.container.contractLayoutRect()
-    wraps = request.wraps or request.container.wraps
+    layoutRect = containers[0].contractLayoutRect()
+    wraps = request.wraps or containers[0].wrapsText
     maxChars =
       if wraps:
         max(1, int(layoutRect.size.width / max(backend.charWidth, 1.0'f32)))
@@ -173,9 +254,13 @@ proc contractSnapshot(
 
   result.textHash = hash(text)
   result.layoutHash = hash(
-    text & "|" & $layoutRect.size.width & "|" & $layoutRect.size.height & "|" & $wraps
+    text & "|" & $layoutRect.size.width & "|" & $layoutRect.size.height & "|" &
+      $containers.len & "|" & $wraps
   )
-  result.containerRect = layoutRect
+  result.containers = containers
+  for container in containers:
+    result.containerRects.add container.contractLayoutRect()
+  result.containerRect = result.containerRects.contractUnionRects()
   result.glyphCount = runes.len.Natural
 
   var
@@ -269,11 +354,23 @@ proc contractSnapshot(
         )
         break
 
-  result.lineFragments = fragments
-  result.usedRect = initRect(
-    layoutRect.origin, initSize(maxUsedWidth, lineIndex.float32 * backend.lineHeight)
-  )
-  result.contentSize = result.usedRect.size
+  result.lineFragments =
+    fragments.mapContractFragmentsToContainers(containers, backend.lineHeight)
+
+  var hasUsedRect = false
+  for fragment in result.lineFragments:
+    if not fragment.usedRect.isEmpty:
+      if hasUsedRect:
+        result.usedRect = result.usedRect.union(fragment.usedRect)
+      else:
+        result.usedRect = fragment.usedRect
+        hasUsedRect = true
+  if not hasUsedRect:
+    result.usedRect = initRect(result.containerRect.origin, initSize(0.0, 0.0))
+  var fragmentRect = result.usedRect
+  for fragment in result.lineFragments:
+    fragmentRect = fragmentRect.union(fragment.fragmentRect)
+  result.contentSize = fragmentRect.size
 
 protocol ContractBackendProtocol of TextLayoutBackendProtocol:
   method layoutText(
@@ -316,7 +413,7 @@ suite "nimkit text layout":
       spy = newTextStorageSignalSpy()
 
     spy.observeProtocol(storage, TextStorageEditingEvents)
-    check storage.conformsTo(TextStorageEditingProtocol)
+    check storage.conformsTo(TextStorageEditDispatchProtocol)
 
     storage.replace(initTextRange(1, 2), "zz")
     check spy.willCount == 1
@@ -412,6 +509,115 @@ suite "nimkit text layout":
     check layout.snapshot.glyphCount > 0
     check layout.snapshot.lineFragments.len > 0
     checkClose(layout.snapshot.containerRect.origin.x, 2.0)
+
+  test "text containers expose padding tracking limits and exclusions":
+    let container = initTextContainer(
+      initSize(120.0, 60.0),
+      insets(2.0, 4.0, 6.0, 8.0),
+      wraps = true,
+      origin = initPoint(10.0, 20.0),
+      lineFragmentPadding = 3.0,
+      widthTracksTextView = true,
+      heightTracksTextView = true,
+      maximumNumberOfLines = 2,
+      lineBreakMode = tlbmCharWrapping,
+      exclusionPaths = [initRect(20.0, 22.0, 20.0, 12.0)],
+    )
+    let
+      layoutRect = container.layoutRect()
+      effective = container.effectiveLineFragmentRect(
+        initRect(layoutRect.origin.x, layoutRect.origin.y, 60.0, 12.0)
+      )
+
+    checkClose(layoutRect.origin.x, 17.0)
+    checkClose(layoutRect.origin.y, 22.0)
+    checkClose(layoutRect.size.width, 102.0)
+    checkClose(layoutRect.size.height, 52.0)
+    check container.wrapsText
+    check container.widthTracksTextView
+    check container.heightTracksTextView
+    check container.maximumNumberOfLines == 2
+    check container.lineBreakMode == tlbmCharWrapping
+    checkClose(effective.origin.x, 40.0)
+    checkClose(effective.size.width, 37.0)
+
+  test "layout manager replaces and invalidates text containers":
+    let
+      storage = newTextStorage("Alpha\nBeta\nGamma")
+      first = initTextContainer(initSize(120.0, 24.0), insets(0.0))
+      second = initTextContainer(
+        initSize(120.0, 24.0), insets(0.0), origin = initPoint(150.0, 0.0)
+      )
+      replacement = initTextContainer(
+        initSize(140.0, 24.0), insets(1.0), origin = initPoint(150.0, 0.0)
+      )
+      backend = newContractBackend()
+      manager = newTextLayoutManager(storage, first)
+      spy = newTextLayoutSignalSpy()
+
+    manager.textLayoutBackend = backend
+    spy.observeProtocol(manager, TextLayoutEvents)
+    manager.textContainers = @[first, second]
+    check spy.containerChanges == 1
+    check spy.lastContainers.len == 2
+    discard manager.layoutSnapshot()
+
+    manager.replaceTextContainer(initTextContainerIndex(1), replacement)
+    check spy.containerChanges == 2
+    check spy.containerInvalidations == 1
+    check spy.lastContainerIndex == initTextContainerIndex(1)
+    check not manager.hasValidLayout()
+
+    discard manager.layoutSnapshot()
+    check backend.requests[^1].containers.len == 2
+    check backend.requests[^1].invalidatedContainers[^1] == initTextContainerIndex(1)
+
+  test "backend-free snapshots assign multi-container line indexes":
+    let
+      storage = newTextStorage("A\nB\nC\nD")
+      first =
+        initTextContainer(initSize(100.0, 24.0), insets(0.0), maximumNumberOfLines = 1)
+      second = initTextContainer(
+        initSize(100.0, 48.0),
+        insets(0.0),
+        origin = initPoint(140.0, 0.0),
+        maximumNumberOfLines = 2,
+      )
+      backend = newContractBackend(charWidth = 10.0, lineHeight = 12.0)
+      manager = newTextLayoutManager(storage, first)
+
+    manager.textLayoutBackend = backend
+    manager.textContainers = @[first, second]
+    let snapshot = manager.layoutSnapshot()
+
+    check backend.requests[^1].containers.len == 2
+    check snapshot.containers.len == 2
+    check snapshot.containerRects.len == 2
+    check snapshot.lineFragments.len == 3
+    check snapshot.lineFragments[0].containerIndex == initTextContainerIndex(0)
+    check snapshot.lineFragments[1].containerIndex == initTextContainerIndex(1)
+    check snapshot.lineFragments[2].containerIndex == initTextContainerIndex(1)
+    check snapshot.lineFragments[0].lineIndex.toInt == 0
+    check snapshot.lineFragments[1].lineIndex.toInt == 1
+    check snapshot.lineFragments[2].lineIndex.toInt == 2
+
+  test "text hit testing reports container indexes":
+    let
+      first = initTextContainer(initSize(160.0, 80.0), insets(4.0))
+      second = initTextContainer(
+        initSize(160.0, 80.0), insets(4.0), origin = initPoint(220.0, 0.0)
+      )
+      manager = newTextLayoutManager(newTextStorage("Alpha Beta"), first)
+
+    manager.textContainers = @[first, second]
+    let
+      firstHit = manager.textHitTestAtPoint(initPoint(8.0, 8.0))
+      secondHit = manager.textHitTestAtPoint(initPoint(224.0, 8.0))
+
+    check firstHit.containerIndex == some(initTextContainerIndex(0))
+    check secondHit.containerIndex == some(initTextContainerIndex(1))
+    check firstHit.lineIndex.isSome
+    check firstHit.textIndex.toInt >= 0
 
   test "layout client protocol supplies inputs and observes layout hooks":
     let
