@@ -106,7 +106,7 @@ document-controller open/save integration are covered in tests and examples.
   container-local contract.
 - Introduced the protocol-backed `TextLayoutManager` layer: manager lifecycle
   and query methods, the FigDraw-backed `TextLayoutBackendProtocol`,
-  `TextLayoutClientProtocol` owner hooks, `TextStorageEditingProtocol`
+  `TextLayoutClientProtocol` owner hooks, `TextStorageEditingEvents`
   will/did-edit signals, and layout invalidation/completion/geometry signals
   now provide AppKit-like semantic APIs with Sigils/Qt-style notification
   delivery.
@@ -143,9 +143,11 @@ document-controller open/save integration are covered in tests and examples.
   change-in-length tracking, coalesced `processEditing`, value/attribute
   change signals, delegate-backed attribute fixing and font fallback hooks,
   paragraph-range expansion, lazy materialization, and multiple layout-manager
-  observers now share one deterministic storage signal contract. One-way
-  storage and layout notifications now use Sigils signals/slots, while selector
-  protocols stay focused on pull inputs and overridable decisions.
+  observers now share one deterministic storage signal contract.
+  `TextStorageEditDispatchProtocol` is the explicit overridable delivery seam
+  for external editor bridges, coalescing, suppression, mirroring, and
+  instrumentation before `TextStorageEditingEvents` observers receive signals;
+  layout notifications now emit directly through Sigils signals.
 - Expanded `TextContainer` toward `NSTextContainer` parity: containers now carry
   origin, size, line fragment padding, width/height tracking flags, maximum line
   counts, line break modes, and exclusion rects; `TextLayoutManager` supports
@@ -183,7 +185,8 @@ document-controller open/save integration are covered in tests and examples.
   `tests/tnimkit_monotextviews.nim`, `tests/tnimkit_tableviews.nim`,
   `tests/tnimkit_outlineviews.nim`, `tests/tnimkit_documents.nim`,
   `tests/tnimkit_animations.nim`, `tests/tnimkit_rendering.nim`,
-  `tests/tnimkit_accessibility.nim`, and `tests/tnimkit_textlayout.nim`.
+  `tests/tnimkit_accessibility.nim`, `tests/tnimkit_textstorage.nim`, and
+  `tests/tnimkit_textlayout.nim`.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/monotext_demo.nim`,
