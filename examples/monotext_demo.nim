@@ -10,11 +10,11 @@ let
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Mono Text")
-  status = newStatusLabel("Raw: None")
+  status = newStatusLabel("Policy: keys forwarded; mouse forwarded")
   controls = newStackView(laHorizontal)
-  forwardKeys = newCheckBox("Forward keys")
-  captureKeys = newCheckBox("Capture keys")
-  forwardMouse = newCheckBox("Forward mouse")
+  forwardKeys = newCheckBox("Forward key events")
+  captureKeys = newCheckBox("Capture key events")
+  forwardMouse = newCheckBox("Forward mouse events")
   editor = newMonoTextEditor(
     """
 proc renderVisibleRows(view: MonoTextView) =
@@ -23,7 +23,8 @@ proc renderVisibleRows(view: MonoTextView) =
     drawRowRuns(row, metrics)
 
 # This editor is a flat monospace grid.
-# It forwards raw key, mouse, and scroll events before local editing.
+# Forwarded events are reported here before local editing.
+# Captured key events are reported here and then swallowed.
 """.strip(),
     frame = initRect(0, 0, 980, 920),
   )
@@ -31,9 +32,32 @@ proc renderVisibleRows(view: MonoTextView) =
   policyAction = actionSelector("monoTextPolicyChanged")
 
 proc describe(event: MonoTextRawEvent): string =
-  let handling =
-    if event.kind in editor.capturedRawEvents: " captured" else: " pass-through"
-  $event.kind & handling & " " & event.input & " @ " & $event.row & "," & $event.column
+  let handling = if event.kind in editor.capturedRawEvents: "captured" else: "forwarded"
+  let effect =
+    if event.kind in {mtreKeyDown, mtreFlagsChanged}:
+      if event.kind in editor.capturedRawEvents: "editor blocked" else: "editor edits"
+    else:
+      "view handles normally"
+  "Raw: " & $event.kind & " " & handling & " (" & effect & ") " & event.input & " @ " &
+    $event.row & "," & $event.column
+
+proc policySummary(): string =
+  let keyMode =
+    if captureKeys.state == bsOn:
+      "keys captured"
+    elif forwardKeys.state == bsOn:
+      "keys forwarded"
+    else:
+      "keys local"
+  let mouseMode = if forwardMouse.state == bsOn: "mouse forwarded" else: "mouse local"
+  let typingMode =
+    if captureKeys.state == bsOn:
+      "typing will not change text"
+    elif forwardKeys.state == bsOn:
+      "typing reports raw events and edits"
+    else:
+      "typing edits without raw reports"
+  "Policy: " & keyMode & "; " & mouseMode & "; " & typingMode
 
 proc applyPolicy() =
   var
@@ -52,10 +76,13 @@ proc applyPolicy() =
 proc changePolicy(sender: DynamicAgent) =
   discard sender
   applyPolicy()
-  status.text = "Raw: policy updated"
+  status.text = policySummary()
+  let owner = editor.window()
+  if owner of Window:
+    discard Window(owner).makeFirstResponder(editor)
 
 editor.rawEventHandler = proc(event: MonoTextRawEvent): bool =
-  status.text = "Raw: " & event.describe()
+  status.text = event.describe()
   false
 
 editor.fontSize = 14.0
@@ -67,6 +94,7 @@ for checkbox in [forwardKeys, captureKeys, forwardMouse]:
   checkbox.target = policyTarget
   checkbox.action = policyAction
 applyPolicy()
+status.text = policySummary()
 
 scroll.hasHorizontalScroller = true
 scroll.hasVerticalScroller = true
