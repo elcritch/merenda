@@ -42,6 +42,8 @@ type
     xFlags: TextFieldFlags
     xInsertionPoint: int
     xSelectionAnchor: int
+    xLayoutStorage: TextStorage
+    xLayoutManager: TextLayoutManager
 
   Label* = ref object of TextField
     xLabelStyle: LabelStyle
@@ -54,6 +56,9 @@ proc selectAllText(textField: TextField)
 proc activeFieldEditor(textField: TextField): FieldEditor
 proc layoutFieldEditor(textField: TextField)
 proc textFieldStyleContext(textField: TextField): StyleContext
+proc textFieldStyle(textField: TextField): TextFieldStyle
+proc syncLayout(textField: TextField)
+proc syncLayout(textField: TextField, style: TextFieldStyle)
 
 func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
   initAccessibilityTextRange(int(range.location), int(range.length))
@@ -373,11 +378,74 @@ proc activeFieldEditor(textField: TextField): FieldEditor =
 proc currentEditor*(textField: TextField): FieldEditor =
   currentEditor(Control(textField))
 
-proc fieldEditorFrame(textField: TextField): Rect =
-  let style = textField.effectiveAppearance().resolveTextFieldStyle(
-      textField.textFieldStyleContext(), textField.textColor()
+proc textFieldStyle(textField: TextField): TextFieldStyle =
+  if textField.isNil:
+    return initAppearance().resolveTextFieldStyle(controlStyle(srTextField))
+  textField.effectiveAppearance().resolveTextFieldStyle(
+    textField.textFieldStyleContext(), textField.textColor()
+  )
+
+func textFieldTextContainer(bounds, textRect: Rect): TextContainer =
+  let textInsets = insets(
+    textRect.origin.y,
+    textRect.origin.x,
+    max(bounds.size.height - textRect.maxY, 0.0'f32),
+    max(bounds.size.width - textRect.maxX, 0.0'f32),
+  )
+  initTextContainer(bounds.size, textInsets)
+
+proc hasUniformAttributes(storage: TextStorage, attributes: TextAttributes): bool =
+  if storage.isNil:
+    return false
+  if storage.len == 0:
+    return true
+  var covered = 0
+  for run in storage.runs:
+    if run.attributes != attributes:
+      return false
+    covered += int(run.range.length)
+  covered == storage.len
+
+proc syncLayout(textField: TextField, style: TextFieldStyle) =
+  if textField.isNil:
+    return
+  let
+    textRect = style.textFieldTextRect(textField.bounds)
+    attributes = defaultTextAttributes(style.text.color, style.text.fontSize)
+  if textField.xLayoutStorage.isNil:
+    textField.xLayoutStorage = newTextStorage(textField.xStringValue, attributes)
+  elif textField.xLayoutStorage.stringValue() != textField.xStringValue:
+    textField.xLayoutStorage.stringValue = textField.xStringValue
+  if textField.xLayoutStorage.len > 0 and
+      not textField.xLayoutStorage.hasUniformAttributes(attributes):
+    textField.xLayoutStorage.setAttributes(
+      initTextRange(0, textField.xLayoutStorage.len), attributes
     )
-  style.textFieldTextRect(textField.bounds)
+
+  if textField.xLayoutManager.isNil:
+    textField.xLayoutManager = newTextLayoutManager(textField.xLayoutStorage)
+  textField.xLayoutManager.textStorage = textField.xLayoutStorage
+  textField.xLayoutManager.textContainer =
+    textFieldTextContainer(textField.bounds, textRect)
+  textField.xLayoutManager.textStyle = style.text
+  textField.xLayoutManager.alignment = textField.xAlignment
+
+proc syncLayout(textField: TextField) =
+  if textField.isNil:
+    return
+  textField.syncLayout(textField.textFieldStyle())
+
+proc layoutManager*(textField: TextField): TextLayoutManager =
+  if textField.isNil:
+    return nil
+  textField.syncLayout()
+  textField.xLayoutManager
+
+proc fieldEditorFrame(textField: TextField): Rect =
+  if textField.isNil:
+    initRect(0, 0, 0, 0)
+  else:
+    textField.layoutManager().layoutBounds()
 
 proc layoutFieldEditor(textField: TextField) =
   let editor = textField.activeFieldEditor()
@@ -676,25 +744,21 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
     if not editor.isNil:
       return
 
+    textField.syncLayout(style)
     let
-      textRect = style.textFieldTextRect(textField.bounds)
+      manager = textField.xLayoutManager
+      textRect = manager.layoutBounds()
       textValue = clippedText(textField.stringValue, textRect.size.width, style.text)
       layout = textLayout(textRect, textValue, style.text, textField.alignment)
       selectedRange = textField.selectedRange
     if textField.isEditing and selectedRange.length > 0:
-      discard context.addSelectedText(
-        textRect,
-        layout,
-        int(selectedRange.location),
-        int(selectedRange.length),
-        style.selectionColor,
-      )
-    else:
-      discard context.addText(textRect, layout)
+      for rect in manager.selectionRects(selectedRange):
+        discard context.addRectangle(rect, style.selectionColor)
+    discard context.addText(textRect, layout)
 
     if textField.isEditing and textField.isEditable and selectedRange.length == 0:
       context.addRectangle(
-        textRect.caretRect(layout, textField.insertionPoint), style.text.color
+        manager.caretRect(textField.insertionPoint), style.text.color
       )
 
 protocol DefaultTextFieldEvents of ResponderEventProtocol:
@@ -723,30 +787,9 @@ proc textFieldStyleContext(textField: TextField): StyleContext =
     srTextField, states, id = textField.styleId, classes = textField.styleClasses
   )
 
-proc accessibilityLayoutManager(textField: TextField): TextLayoutManager =
-  if textField.isNil:
-    return newTextLayoutManager()
-  let
-    style = textField.effectiveAppearance().resolveTextFieldStyle(
-        textField.textFieldStyleContext(), textField.textColor()
-      )
-    textRect = style.textFieldTextRect(textField.bounds)
-    textInsets = insets(
-      textRect.origin.y,
-      textRect.origin.x,
-      max(textField.bounds.size.height - textRect.maxY, 0.0'f32),
-      max(textField.bounds.size.width - textRect.maxX, 0.0'f32),
-    )
-    container = initTextContainer(textField.bounds.size, textInsets)
-  newTextLayoutManager(
-    newTextStorage(textField.stringValue()),
-    container,
-    textField.alignment(),
-    style.text,
-  )
-
 protocol DefaultTextFieldLayout of ViewLayoutProtocol:
   method layoutSubviews(textField: TextField) =
+    textField.syncLayout()
     textField.layoutFieldEditor()
 
 protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
@@ -824,8 +867,7 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityBoundsForTextRange(range)
-    let manager = textField.accessibilityLayoutManager()
-    for rect in manager.selectionRects(range.toTextRange()):
+    for rect in textField.layoutManager().selectionRects(range.toTextRange()):
       result.add textField.rectToWindow(rect)
 
   method accessibilityBoundsForCharacter(textField: TextField, index: int): Rect =
@@ -834,7 +876,7 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityBoundsForCharacter(index)
-    textField.rectToWindow(textField.accessibilityLayoutManager().characterRect(index))
+    textField.rectToWindow(textField.layoutManager().characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(textField: TextField, point: Point): int =
     if textField.isNil:
@@ -842,26 +884,24 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityCharacterIndexAtPoint(point)
-    textField.accessibilityLayoutManager().textIndexAtPoint(
-      textField.pointFromWindow(point)
-    )
+    textField.layoutManager().textIndexAtPoint(textField.pointFromWindow(point))
 
   method accessibilityLineRange(
       textField: TextField, line: int
   ): AccessibilityTextRange =
-    if textField.isNil or line != 0:
+    if textField.isNil:
       return initAccessibilityTextRange(0, 0)
-    textField.accessibilityLayoutManager().lineRange(line).toAccessibilityTextRange()
+    textField.layoutManager().lineRange(line).toAccessibilityTextRange()
 
   method accessibilityLineForCharacter(textField: TextField, index: int): int =
     if textField.isNil:
       return -1
-    textField.accessibilityLayoutManager().lineForIndex(index)
+    textField.layoutManager().lineForIndex(index)
 
   method accessibilityBoundsForLine(textField: TextField, line: int): Rect =
-    if textField.isNil or line != 0:
+    if textField.isNil:
       return initRect(0, 0, 0, 0)
-    textField.rectToWindow(textField.accessibilityLayoutManager().lineBounds(line))
+    textField.rectToWindow(textField.layoutManager().lineBounds(line))
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: TextFieldCell): IntrinsicSize =
@@ -911,6 +951,8 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   textField.xFlags = {tfEditable, tfSelectable}
   textField.xInsertionPoint = value.runeLen
   textField.xSelectionAnchor = textField.xInsertionPoint
+  textField.xLayoutStorage = newTextStorage(value)
+  textField.xLayoutManager = newTextLayoutManager(textField.xLayoutStorage)
   textField.setAcceptsFirstResponder(true)
   discard textField.withProto()
   discard textField.withProtocol(DefaultTextFieldInput)

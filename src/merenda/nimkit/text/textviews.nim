@@ -90,6 +90,11 @@ proc moveWordLeftText*(textView: TextView, extending = false)
 proc moveWordRightText*(textView: TextView, extending = false)
 proc moveToBeginningOfLineText*(textView: TextView, extending = false)
 proc moveToEndOfLineText*(textView: TextView, extending = false)
+proc selectionRects*(textView: TextView, range: TextRange): seq[Rect]
+proc characterRect*(textView: TextView, index: int): Rect
+proc lineRange*(textView: TextView, line: int): TextRange
+proc lineForIndex*(textView: TextView, index: int): int
+proc lineBounds*(textView: TextView, line: int): Rect
 
 func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
   initAccessibilityTextRange(int(range.location), int(range.length))
@@ -817,24 +822,20 @@ proc moveWordRightText*(textView: TextView, extending = false) =
 proc currentVisualLineBounds(textView: TextView): tuple[first, last: int] =
   result = (first: textView.xInsertionPoint, last: textView.xInsertionPoint)
   textView.updateTextContainer()
-  let
-    caret = textView.xLayoutManager.caretRect(textView.xInsertionPoint)
-    caretY = caret.origin.y + caret.size.height * 0.5'f32
-    total = textView.xTextStorage.len
-  var found = false
+  let fragment =
+    textView.xLayoutManager.lineFragmentForTextIndex(textView.xInsertionPoint)
+  if fragment.isNone:
+    return
 
-  for index in 0 .. total:
-    let
-      candidate = textView.xLayoutManager.caretRect(index)
-      lineHeight = max(candidate.size.height, defaultFontSize())
-    if caretY < candidate.origin.y or caretY >= candidate.origin.y + lineHeight:
-      continue
-    if not found:
-      result = (first: index, last: index)
-      found = true
-    else:
-      result.first = min(result.first, index)
-      result.last = max(result.last, index)
+  let
+    line = fragment.get()
+    runes = textView.textViewStringValue().toRunes()
+  result.first = int(line.textRange.location)
+  result.last = line.textRange.maxIndex
+  if line.hardBreak and result.last > result.first and result.last - 1 < runes.len and
+      runes[result.last - 1] == Rune('\n'):
+    dec result.last
+  result.last = max(result.first, result.last)
 
 proc moveToBeginningOfLineText*(textView: TextView, extending = false) =
   if textView.isNil or (not textView.editable and not textView.selectable):
@@ -869,6 +870,36 @@ proc textIndexAtPoint*(textView: TextView, point: Point): int =
   textView.updateTextContainer()
   textView.xLayoutManager.textIndexAtPoint(point)
 
+proc selectionRects*(textView: TextView, range: TextRange): seq[Rect] =
+  if textView.isNil:
+    return
+  textView.updateTextContainer()
+  textView.xLayoutManager.selectionRects(range)
+
+proc characterRect*(textView: TextView, index: int): Rect =
+  if textView.isNil:
+    return initRect(0, 0, 0, 0)
+  textView.updateTextContainer()
+  textView.xLayoutManager.characterRect(index)
+
+proc lineRange*(textView: TextView, line: int): TextRange =
+  if textView.isNil:
+    return initTextRange(0, 0)
+  textView.updateTextContainer()
+  textView.xLayoutManager.lineRange(line)
+
+proc lineForIndex*(textView: TextView, index: int): int =
+  if textView.isNil:
+    return -1
+  textView.updateTextContainer()
+  textView.xLayoutManager.lineForIndex(index)
+
+proc lineBounds*(textView: TextView, line: int): Rect =
+  if textView.isNil:
+    return initRect(0, 0, 0, 0)
+  textView.updateTextContainer()
+  textView.xLayoutManager.lineBounds(line)
+
 proc drawTextViewContents*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
   let
@@ -882,15 +913,9 @@ proc drawTextViewContents*(textView: TextView, context: DrawContext) =
     )
   let selected = textView.textViewSelectedRange()
   if selected.length > 0:
-    discard context.addSelectedText(
-      textRect,
-      layout,
-      int(selected.location),
-      int(selected.length),
-      textView.selectionColor(),
-    )
-  else:
-    discard context.addText(textRect, layout)
+    for rect in textView.xLayoutManager.selectionRects(selected):
+      discard context.addRectangle(rect, textView.selectionColor())
+  discard context.addText(textRect, layout)
   if textView.editable and selected.length == 0 and textView.isFocused:
     context.addRectangle(
       textView.xLayoutManager.caretRect(textView.textViewInsertionPoint()),
@@ -1153,38 +1178,34 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   ): seq[Rect] =
     if textView.isNil:
       return
-    textView.updateTextContainer()
-    for rect in textView.xLayoutManager.selectionRects(range.toTextRange()):
+    for rect in textView.selectionRects(range.toTextRange()):
       result.add textView.rectToWindow(rect)
 
   method accessibilityBoundsForCharacter(textView: TextView, index: int): Rect =
     if textView.isNil:
       return initRect(0, 0, 0, 0)
-    textView.updateTextContainer()
-    textView.rectToWindow(textView.xLayoutManager.characterRect(index))
+    textView.rectToWindow(textView.characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(textView: TextView, point: Point): int =
     if textView.isNil:
       return -1
-    textView.updateTextContainer()
-    textView.xLayoutManager.textIndexAtPoint(textView.pointFromWindow(point))
+    textView.textIndexAtPoint(textView.pointFromWindow(point))
 
   method accessibilityLineRange(textView: TextView, line: int): AccessibilityTextRange =
     if textView.isNil:
       return initAccessibilityTextRange(0, 0)
-    textView.xLayoutManager.lineRange(line).toAccessibilityTextRange()
+    textView.lineRange(line).toAccessibilityTextRange()
 
   method accessibilityLineForCharacter(textView: TextView, index: int): int =
     if textView.isNil:
       -1
     else:
-      textView.xLayoutManager.lineForIndex(index)
+      textView.lineForIndex(index)
 
   method accessibilityBoundsForLine(textView: TextView, line: int): Rect =
     if textView.isNil:
       return initRect(0, 0, 0, 0)
-    textView.updateTextContainer()
-    textView.rectToWindow(textView.xLayoutManager.lineBounds(line))
+    textView.rectToWindow(textView.lineBounds(line))
 
 proc initTextViewFields*(
     textView: TextView,

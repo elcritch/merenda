@@ -14,8 +14,10 @@ import ../foundation/selectors
 import ../foundation/types as nimkitTypes
 import ../themes
 import ../view/views
+import ./texttypes
 
 export views
+export texttypes
 
 const
   DefaultMonoFontName* = "HackNerdFont-Regular.ttf"
@@ -91,6 +93,12 @@ type
     xTypefaceId: TypefaceId
     xFontReady: bool
     xCachedFontName: string
+
+func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
+  initAccessibilityTextRange(int(range.location), int(range.length))
+
+func toTextRange(range: AccessibilityTextRange): TextRange =
+  initTextRange(int(range.location), int(range.length))
 
 const AllMonoTextRawEvents* = {
   mtreMouseDown, mtreMouseDragged, mtreMouseUp, mtreScrollWheel, mtreKeyDown,
@@ -1067,6 +1075,84 @@ proc cursorRect(
     result.origin.y += metrics.lineHeight - height
     result.size.height = height
 
+proc selectedRange*(view: MonoTextView): TextRange =
+  if view.isNil:
+    return initTextRange(0, 0)
+  initTextRange(view.cursorTextIndex(), 0)
+
+proc insertionPoint*(view: MonoTextView): int =
+  if view.isNil:
+    0
+  else:
+    view.cursorTextIndex()
+
+proc characterRect*(view: MonoTextView, index: int): nimkitTypes.Rect =
+  if view.isNil or index < 0 or index >= view.textLength():
+    return initRect(0, 0, 0, 0)
+  let
+    position = view.rowColumnForTextIndex(index)
+    metrics = view.monoTextMetrics()
+    style = view.monoTextStyle()
+    textInsets = view.monoTextInsets(style)
+  view.cellRect(position.row, position.column, metrics, textInsets)
+
+proc selectionRects*(view: MonoTextView, range: TextRange): seq[nimkitTypes.Rect] =
+  if view.isNil or range.length == 0:
+    return
+  let
+    start = max(0, min(int(range.location), view.textLength()))
+    stop = max(start, min(range.maxIndex, view.textLength()))
+  var
+    activeRow = -1
+    activeRect = initRect(0, 0, 0, 0)
+  for index in start ..< stop:
+    let
+      position = view.rowColumnForTextIndex(index)
+      rect = view.characterRect(index)
+    if not rect.isEmpty:
+      if position.row == activeRow:
+        activeRect = activeRect.union(rect)
+      else:
+        if activeRow >= 0:
+          result.add activeRect
+        activeRow = position.row
+        activeRect = rect
+  if activeRow >= 0:
+    result.add activeRect
+
+proc textIndexAtPoint*(view: MonoTextView, point: nimkitTypes.Point): int =
+  if view.isNil:
+    return 0
+  let position = view.rowColumnAtPoint(point)
+  view.textIndexForRowColumn(position.row, position.column)
+
+proc lineRange*(view: MonoTextView, line: int): TextRange =
+  if view.isNil or line < 0 or line >= view.xLines.len:
+    return initTextRange(0, 0)
+  initTextRange(
+    view.textIndexForRowColumn(line, 0), view.xLines[line].lineToString().runeLen
+  )
+
+proc lineForIndex*(view: MonoTextView, index: int): int =
+  if view.isNil:
+    return -1
+  view.rowColumnForTextIndex(index).row
+
+proc lineBounds*(view: MonoTextView, line: int): nimkitTypes.Rect =
+  if view.isNil or line < 0 or line >= view.xLines.len:
+    return initRect(0, 0, 0, 0)
+  let
+    metrics = view.monoTextMetrics()
+    style = view.monoTextStyle()
+    textInsets = view.monoTextInsets(style)
+    width = max(view.xLines[line].cells.len, 1).float32 * metrics.cellWidth
+  initRect(
+    textInsets.left,
+    textInsets.top + line.float32 * metrics.lineHeight,
+    width,
+    metrics.lineHeight,
+  )
+
 proc drawRun(
     view: MonoTextView,
     context: DrawContext,
@@ -1267,8 +1353,7 @@ protocol DefaultMonoTextViewAccessibility of AccessibilityProtocol:
     view.textLength()
 
   method accessibilitySelectedTextRange(view: MonoTextView): AccessibilityTextRange =
-    let index = view.cursorTextIndex()
-    initAccessibilityTextRange(index, 0)
+    view.selectedRange().toAccessibilityTextRange()
 
   method setAccessibilitySelectedTextRange(
       view: MonoTextView, range: AccessibilityTextRange
@@ -1280,7 +1365,7 @@ protocol DefaultMonoTextViewAccessibility of AccessibilityProtocol:
     true
 
   method accessibilityInsertionPoint(view: MonoTextView): int =
-    view.cursorTextIndex()
+    view.insertionPoint()
 
   method setAccessibilityInsertionPoint(view: MonoTextView, index: int): bool =
     if view.isNil or not view.xEditable:
@@ -1294,60 +1379,37 @@ protocol DefaultMonoTextViewAccessibility of AccessibilityProtocol:
   ): seq[nimkitTypes.Rect] =
     if view.isNil:
       return
-    let stop = min(range.maxIndex, view.textLength())
-    for index in int(range.location) ..< stop:
-      let rect = view.accessibilityBoundsForCharacter(index)
-      if not rect.isEmpty:
-        result.add rect
+    for rect in view.selectionRects(range.toTextRange()):
+      result.add view.rectToWindow(rect)
 
   method accessibilityBoundsForCharacter(
       view: MonoTextView, index: int
   ): nimkitTypes.Rect =
     if view.isNil or index < 0 or index >= view.textLength():
       return initRect(0, 0, 0, 0)
-    let
-      position = view.rowColumnForTextIndex(index)
-      metrics = view.monoTextMetrics()
-      style = view.monoTextStyle()
-      textInsets = view.monoTextInsets(style)
-    view.rectToWindow(view.cellRect(position.row, position.column, metrics, textInsets))
+    view.rectToWindow(view.characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(
       view: MonoTextView, point: nimkitTypes.Point
   ): int =
     if view.isNil:
       return -1
-    let position = view.rowColumnAtPoint(view.pointFromWindow(point))
-    view.textIndexForRowColumn(position.row, position.column)
+    view.textIndexAtPoint(view.pointFromWindow(point))
 
   method accessibilityLineRange(view: MonoTextView, line: int): AccessibilityTextRange =
     if view.isNil or line < 0 or line >= view.xLines.len:
       return initAccessibilityTextRange(0, 0)
-    initAccessibilityTextRange(
-      view.textIndexForRowColumn(line, 0), view.xLines[line].lineToString().runeLen
-    )
+    view.lineRange(line).toAccessibilityTextRange()
 
   method accessibilityLineForCharacter(view: MonoTextView, index: int): int =
     if view.isNil:
       return -1
-    view.rowColumnForTextIndex(index).row
+    view.lineForIndex(index)
 
   method accessibilityBoundsForLine(view: MonoTextView, line: int): nimkitTypes.Rect =
     if view.isNil or line < 0 or line >= view.xLines.len:
       return initRect(0, 0, 0, 0)
-    let
-      metrics = view.monoTextMetrics()
-      style = view.monoTextStyle()
-      textInsets = view.monoTextInsets(style)
-      width = max(view.xLines[line].cells.len, 1).float32 * metrics.cellWidth
-    view.rectToWindow(
-      initRect(
-        textInsets.left,
-        textInsets.top + line.float32 * metrics.lineHeight,
-        width,
-        metrics.lineHeight,
-      )
-    )
+    view.rectToWindow(view.lineBounds(line))
 
 proc initMonoTextViewFields*(
     view: MonoTextView, value = "", frame: nimkitTypes.Rect = AutoRect, editable = false

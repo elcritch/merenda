@@ -88,9 +88,11 @@ proc renderedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
         node.nodeRenderedInView(view):
       return true
 
-proc renderedSelectedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
+proc renderedSelectionInView(nodes: openArray[Fig], view: View): bool =
   for node in nodes:
-    if node.kind == nkText and NfSelectText in node.flags and node.renderedText() == text and
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == initColor(0.24, 0.56, 1.0, 0.34).rgba and
+        node.screenBox.w > 1.0 and node.screenBox.h > 0.0 and
         node.nodeRenderedInView(view):
       return true
 
@@ -272,7 +274,7 @@ suite "nimkit text fields":
 
     check window.makeFirstResponder(field)
     let focusedNodes = window.buildRenders()[DefaultDrawLevel].nodes
-    check focusedNodes.renderedSelectedTextInView(field, "Edit me")
+    check focusedNodes.renderedSelectionInView(field)
     check focusedNodes.renderedFocusRingInView(field)
     check focusedNodes.renderedFocusRingOutsetsView(field)
 

@@ -1033,9 +1033,9 @@ suite "nimkit rendering":
     let selectionRenders = buildRenders(root)
     var selectionFound = false
     for node in selectionRenders[DefaultDrawLevel].nodes:
-      if node.kind == nkText and NfSelectText in node.flags and node.fill.kind == flColor and
+      if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == initColor(0.24, 0.56, 1.0, 0.34).rgba and
-          node.selectionRange.a == 1'i16 and node.selectionRange.b == 2'i16:
+          node.screenBox.w > 1.0 and node.screenBox.h > 0.0:
         selectionFound = true
 
     field.setSelectedRange(initTextRange(3, 0))

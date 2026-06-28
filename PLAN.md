@@ -115,6 +115,11 @@ document-controller open/save integration are covered in tests and examples.
   merged selection bands, glyph metrics, and content sizing now map into
   NimKit records through narrow value-query helpers without leaking backend
   records into text view, field, or accessibility APIs.
+- Migrated text consumers onto the `TextLayoutManager` contract: TextView and
+  TextField selection drawing, caret/line movement, mouse hit-testing,
+  field-editor geometry, and accessibility text geometry now query committed
+  layout-manager state, while MonoText exposes matching fixed-grid geometry
+  helper names for shared accessibility expectations.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -167,15 +172,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-5. Migrate consumers onto the new contract:
-   - update `TextView` and `TextField` selection drawing, keyboard movement,
-     mouse hit-testing, field-editor geometry, and accessibility text geometry
-     to query `TextLayoutManager`
-   - keep `MonoTextView` on its fixed-grid layout path, but mirror the same text
-     geometry protocol names where useful so accessibility and tests can share
-     expectations
-   - make drawing and accessibility consume committed layout state; they should
-     not trigger semantic notifications
 6. Test the contract before broadening scope:
    - add backend-free tests for empty text, hard line breaks, wrapped visual
      lines, trailing newlines, selection across wraps, caret affinity,
@@ -221,7 +217,7 @@ private except for diagnostics.
      hit-testing results
    - expose container replacement and invalidation hooks so scroll views,
      print/page layout, and multi-container text views can share the same model
-11. Expand `TextLayoutManager` toward `NSLayoutManager`/TextKit 1 parity:
+11. Expand `TextLayoutManager` toward `NSLayoutManager`/TextKit 2 parity:
    - add glyph generation and glyph property APIs, character-to-glyph and
      glyph-to-character mappings, glyph ranges for bounding rects, bounding
      rects for glyph ranges, line fragment rect/used rect queries, extra line
