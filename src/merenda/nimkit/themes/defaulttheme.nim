@@ -173,8 +173,8 @@ func aquaSwitchKnobShadows(enabled: bool): seq[BoxShadow] =
   ]
 
 const TextStyleRoles = [
-  srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srComboBox,
-  srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
+  srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srMonoTextView,
+  srComboBox, srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
 ]
 
 proc initTheme*(): Theme =
@@ -232,6 +232,10 @@ proc initTheme*(): Theme =
   result["textField.border.color"] = styleColor(initColor(0.56, 0.64, 0.76, 1.0))
   result["textField.text.color"] = styleColor(initColor(0.08, 0.09, 0.11, 1.0))
   result["textField.selection.color"] = styleColor(initColor(0.24, 0.56, 1.0, 0.34))
+  result["monoText.fill"] = styleToken("textField.fill")
+  result["monoText.border.color"] = styleToken("textField.border.color")
+  result["monoText.text.color"] = styleToken("textField.text.color")
+  result["monoText.cursor.color"] = styleColor(initColor(0.08, 0.45, 0.95, 0.45))
   result["comboBox.fill"] = styleToken("textField.fill")
   result["comboBox.border.color"] = styleToken("textField.border.color")
   result["comboBox.border.color.open"] = styleColor(initColor(0.12, 0.42, 0.86, 1.0))
@@ -586,6 +590,20 @@ proc initTheme*(): Theme =
   result[srTextField, StyleFocusRingInset] = -2.0
   result[srTextField, StyleFocusRingColor] = styleToken("focus.ring.color")
   result[srTextField, StyleBoxShadows] = aquaInsetControlShadows()
+
+  result[srMonoTextView, StyleFill] = styleToken("monoText.fill")
+  result[srMonoTextView, StyleBorderColor] = styleToken("monoText.border.color")
+  result[srMonoTextView, StyleBorderWidth] = 1.0
+  result[srMonoTextView, StyleCornerRadius] = 6.0
+  result[srMonoTextView, StyleTextColor] = styleToken("monoText.text.color")
+  result[srMonoTextView, StyleTextInsets] = insets(6.0)
+  result[srMonoTextView, StyleCursorColor] = styleToken("monoText.cursor.color")
+  result[srMonoTextView, StyleMinimumSize] = initSize(80.0, 24.0)
+  result[srMonoTextView, StyleFocusRingWidth] = 3.0
+  result[srMonoTextView, StyleFocusRingInset] = -2.0
+  result[srMonoTextView, StyleFocusRingColor] = styleToken("focus.ring.color")
+  result[srMonoTextView, StyleBoxShadows] = aquaInsetControlShadows()
+  result[srMonoTextView, StyleChrome] = styleKeyword(AquaChromeName)
 
   result.addLabelRule(
     LabelStyleClass,
