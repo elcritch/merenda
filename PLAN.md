@@ -94,6 +94,11 @@ document-controller open/save integration are covered in tests and examples.
   monospace text views: selected ranges, insertion points, character counts,
   editable/selectable traits, selection-change notifications, character and
   range bounds, line ranges/bounds, and point-to-character lookup.
+- Defined the first public `TextLayoutManager` value model: rune-indexed
+  `TextRange` remains canonical, while typed glyph indexes/ranges, visual line
+  indexes, line fragments, and layout snapshots now expose container-local
+  metrics, hard-break/wrap metadata, glyph counts, used rects, and content size
+  for tests and diagnostics.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -119,13 +124,13 @@ document-controller open/save integration are covered in tests and examples.
 ## Current Verification
 
 - `atlas-run tests` passes locally on macOS with the current domain module
-  layout; the latest full run passed `39/39`.
+  layout; the latest full run passed `40/40`.
 - Focused suites cover the main widget/runtime seams:
   `tests/tnimkit_controls.nim`, `tests/tnimkit_matrix.nim`,
   `tests/tnimkit_monotextviews.nim`, `tests/tnimkit_tableviews.nim`,
   `tests/tnimkit_outlineviews.nim`, `tests/tnimkit_documents.nim`,
-  `tests/tnimkit_animations.nim`, `tests/tnimkit_rendering.nim`, and
-  `tests/tnimkit_accessibility.nim`.
+  `tests/tnimkit_animations.nim`, `tests/tnimkit_rendering.nim`,
+  `tests/tnimkit_accessibility.nim`, and `tests/tnimkit_textlayout.nim`.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/monotext_demo.nim`,
@@ -146,7 +151,7 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-1. Define the public layout value model:
+1. Completed: define the public layout value model:
    - keep `TextRange` rune-indexed as the canonical NimKit text coordinate, and
      add explicit `GlyphIndex`, `GlyphRange`, `TextLineIndex`, and
      `TextLineFragment` records so glyph, text, and visual-line coordinates are
