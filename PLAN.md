@@ -141,7 +141,7 @@ document-controller open/save integration are covered in tests and examples.
 
 Turn the current FigDraw-backed helper into the stable text layout contract used
 by `TextView`, `TextField`, accessibility, selection drawing, hit-testing, and
-future native/backend bridges. Do this as a NimKit API first, not as a full
+future text backends. Do this as a NimKit API first, not as a full
 `NSLayoutManager` clone: expose plain Nim value records and protocol methods
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
@@ -214,23 +214,23 @@ private except for diagnostics.
      after text and attribute edits
    - add focused tests for field-editor text rect offsets and accessibility line
      bounds so text does not shift between display and editing states
-   - keep native bridge tests out of this layer; adapters should consume the
-     same protocol-backed snapshots later
+   - keep tests centered on the pure Nim layout contract and deterministic
+     FigDraw-backed snapshots
 7. Defer from the first implementation milestone until the core contract is
    proven:
    - multiple text containers, exclusion paths, attachments, non-contiguous
-     layout, full Cocoa `NSLayoutManager` compatibility aliases, UTF-16 adapter
-     indexes for native AppKit bridges, and advanced bidi/grapheme navigation
+     layout, full Cocoa `NSLayoutManager` compatibility aliases, and advanced
+     bidi/grapheme navigation
 8. Add the Cocoa/TextKit text model compatibility layer:
    - expand `TextAttributes` into a fuller attributed-string model with
      paragraph styles, tab stops, line break modes, writing direction, baseline
      offset, kerning, ligatures, expansion, background color, shadows, links,
      underline/strikethrough styles, and attachment attributes
    - add mutable attributed string APIs that keep NimKit's rune-indexed ranges
-     canonical while providing a UTF-16 range adapter for Cocoa bridge parity
+     canonical while leaving room for optional UTF-16 compatibility adapters
    - define import/export and pasteboard contracts for plain text, attributed
      text, RTF, RTFD-style attachment packages, HTML fragments, URLs, and file
-     promises without putting platform types in the core text modules
+     promises without putting platform-specific types in the core text modules
 9. Bring `TextStorage` close to `NSTextStorage` behavior:
    - add `beginEditing`/`endEditing`, edited masks for characters vs
      attributes, edited range/change-in-length tracking, and coalesced
@@ -251,8 +251,7 @@ private except for diagnostics.
      flowed text layouts, with explicit container indexes in line fragments and
      hit-testing results
    - expose container replacement and invalidation hooks so scroll views,
-     print/page layout, and future native text containers can share the same
-     model
+     print/page layout, and multi-container text views can share the same model
 11. Expand `TextLayoutManager` toward `NSLayoutManager`/TextKit 1 parity:
    - add glyph generation and glyph property APIs, character-to-glyph and
      glyph-to-character mappings, glyph ranges for bounding rects, bounding
@@ -265,8 +264,8 @@ private except for diagnostics.
      rendering attributes
    - support background layout, optional non-contiguous layout, and partial
      relayout once the deterministic single-container path is well covered
-   - keep Cocoa selector-compatible aliases as a bridge layer over NimKit names
-     rather than making Objective-C naming the primary Nim API
+   - keep Cocoa selector-compatible aliases as a compatibility layer over
+     NimKit names rather than making Objective-C naming the primary Nim API
 12. Bring `TextView` close to `NSTextView` behavior:
    - add selection affinity/granularity, rectangular selection hooks, multiple
      selected ranges if needed for compatibility, typing attributes, selected
@@ -294,10 +293,9 @@ private except for diagnostics.
    - drag/drop selected text and attachments, services-style selected text
      requests, contextual menus, link opening, attachment cells/views, image
      attachments, file promises, and document-controller save/open integration
-   - add accessibility text parameterized attributes needed by native bridges:
-     attributed string for range, range for line, range for position, bounds for
-     range, visible character range, selected ranges, insertion point line, and
-     shared text-marker adapters where the backend requires them
+   - add accessibility text parameterized attributes: attributed string for
+     range, range for line, range for position, bounds for range, visible
+     character range, selected ranges, and insertion point line
    - add print/page layout hooks, pagination containers, ruler metrics, and
      snapshot tests for layout stability across display scale and font changes
 
