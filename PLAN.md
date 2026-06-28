@@ -104,6 +104,12 @@ document-controller open/save integration are covered in tests and examples.
   visual line fragment lookup/ranges/iteration, caret positions, selection
   rects, text bounds, character rects, and glyph bounds now share one
   container-local contract.
+- Introduced the protocol-backed `TextLayoutManager` layer: manager lifecycle
+  and query methods, the FigDraw-backed `TextLayoutBackendProtocol`,
+  `TextLayoutClientProtocol` owner hooks, `TextStorageEditingProtocol`
+  will/did-edit signals, and layout invalidation/completion/geometry signals
+  now provide AppKit-like semantic APIs with Sigils/Qt-style notification
+  delivery.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -156,23 +162,6 @@ future text backends. Do this as a NimKit API first, not as a full
 over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
 private except for diagnostics.
 
-3. Introduce protocols around the manager instead of callback fields:
-   - `TextLayoutManagerProtocol` for overridable layout lifecycle and query
-     methods used by controls and accessibility; default implementation remains
-     FigDraw-backed
-   - `TextLayoutBackendProtocol` or `TextTypesetterProtocol` for the shaping and
-     line-breaking backend: given `TextStorage`, `TextContainer`, `TextStyle`,
-     alignment, wrapping, and invalidated ranges, produce a layout snapshot
-   - `TextLayoutClientProtocol` for views that own layout inputs:
-     storage/container/style/alignment accessors, layout-invalidated hooks,
-     geometry-changed hooks, and content-size change handling
-   - `TextStorageEditingProtocol` plus Sigils signals for storage mutation:
-     `willEdit`, `didEdit`, edited range, replacement length, text delta, and
-     attribute-only vs character edits, so managers can invalidate ranges without
-     every text view manually calling `syncLayout`
-   - `TextLayoutEvents` signals for `layoutDidInvalidate`,
-     `layoutDidComplete`, and `layoutGeometryDidChange`, keeping notification
-     delivery Qt-style and composable while the semantic API stays AppKit-like
 4. Rework the FigDraw bridge behind those protocols:
    - map FigDraw `GlyphArrangement.lines`, glyph/source ranges, caret positions,
      and merged selection bands into NimKit records

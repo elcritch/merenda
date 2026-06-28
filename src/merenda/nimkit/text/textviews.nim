@@ -548,7 +548,6 @@ proc syncLayout(textView: TextView) =
   textView.xLayoutManager.textContainer = textView.xTextContainer
   textView.xLayoutManager.textStyle = textView.textStyle()
   textView.xLayoutManager.alignment = textView.xAlignment
-  textView.xLayoutManager.invalidateLayout()
 
 proc setCursor*(textView: TextView, index: int, extending = false) =
   if textView.isNil:
@@ -1036,6 +1035,71 @@ protocol DefaultTextViewKeyCommands of KeyViewCommandProtocol:
   method insertTabIgnoringFieldEditor(textView: TextView, args: ActionArgs) =
     textView.insertTextValue("\t")
 
+protocol DefaultTextViewLayoutClient of TextLayoutClientProtocol:
+  method textLayoutStorage(
+      textView: TextView, manager: TextLayoutManager
+  ): TextStorage =
+    discard manager
+    if textView.isNil: nil else: textView.xTextStorage
+
+  method textLayoutContainer(
+      textView: TextView, manager: TextLayoutManager
+  ): TextContainer =
+    discard manager
+    if textView.isNil:
+      initTextContainer()
+    else:
+      textView.xTextContainer
+
+  method textLayoutStyle(textView: TextView, manager: TextLayoutManager): TextStyle =
+    discard manager
+    textView.textStyle()
+
+  method textLayoutAlignment(
+      textView: TextView, manager: TextLayoutManager
+  ): TextAlignment =
+    discard manager
+    if textView.isNil: taLeft else: textView.xAlignment
+
+  method layoutInvalidated(
+      textView: TextView, manager: TextLayoutManager, ranges: seq[TextRange]
+  ) =
+    discard manager
+    discard ranges
+    if not textView.isNil:
+      textView.setNeedsDisplay(true)
+
+  method layoutCompleted(
+      textView: TextView, manager: TextLayoutManager, snapshot: TextLayoutSnapshot
+  ) =
+    discard textView
+    discard manager
+    discard snapshot
+
+  method geometryChanged(
+      textView: TextView,
+      manager: TextLayoutManager,
+      oldUsedRect: Rect,
+      oldContentSize: Size,
+      snapshot: TextLayoutSnapshot,
+  ) =
+    discard manager
+    discard oldUsedRect
+    discard oldContentSize
+    discard snapshot
+    if not textView.isNil:
+      textView.invalidateIntrinsicContentSize()
+      textView.setNeedsDisplay(true)
+
+  method contentSizeChanged(
+      textView: TextView, manager: TextLayoutManager, oldSize, newSize: Size
+  ) =
+    discard manager
+    discard oldSize
+    discard newSize
+    if not textView.isNil:
+      textView.invalidateIntrinsicContentSize()
+
 protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(textView: TextView): AccessibilityRole =
     arTextArea
@@ -1147,7 +1211,9 @@ proc initTextViewFields*(
     discard textView.withProtocol(DefaultTextViewInput)
     discard textView.withProtocol(DefaultTextViewCommands)
     discard textView.withProtocol(DefaultTextViewKeyCommands)
+    discard textView.withProtocol(DefaultTextViewLayoutClient)
     discard textView.withProtocol(DefaultTextViewAccessibility)
+    textView.xLayoutManager.layoutClient = DynamicAgent(textView)
   textView.applyInitialFrame(frame)
 
 proc newTextView*(value = "", frame: Rect = AutoRect): TextView =

@@ -1,8 +1,121 @@
 import std/[options, unittest]
 
+import sigils/core
+
 import merenda/nimkit
 
 const TextLayoutEpsilon = 0.01'f32
+
+type
+  TextStorageSignalSpy = ref object of DynamicAgent
+    willCount: int
+    didCount: int
+    lastEdit: TextStorageEdit
+
+  TextLayoutSignalSpy = ref object of DynamicAgent
+    invalidations: int
+    completions: int
+    geometryChanges: int
+    lastRanges: seq[TextRange]
+    lastSnapshot: TextLayoutSnapshot
+
+  LayoutClientSpy = ref object of DynamicAgent
+    storage: TextStorage
+    container: TextContainer
+    alignment: TextAlignment
+    invalidations: int
+    completions: int
+    geometryChanges: int
+    contentChanges: int
+
+protocol TextStorageSignalSpyEvents from TextStorageSignalSpy:
+  includes TextStorageEditingEvents
+
+  proc willEdit(spy: TextStorageSignalSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.willCount
+    spy.lastEdit = edit
+
+  proc didEdit(spy: TextStorageSignalSpy, edit: TextStorageEdit) {.slot.} =
+    inc spy.didCount
+    spy.lastEdit = edit
+
+protocol TextLayoutSignalSpyEvents from TextLayoutSignalSpy:
+  includes TextLayoutEvents
+
+  proc layoutDidInvalidate(spy: TextLayoutSignalSpy, ranges: seq[TextRange]) {.slot.} =
+    inc spy.invalidations
+    spy.lastRanges = ranges
+
+  proc layoutDidComplete(
+      spy: TextLayoutSignalSpy, snapshot: TextLayoutSnapshot
+  ) {.slot.} =
+    inc spy.completions
+    spy.lastSnapshot = snapshot
+
+  proc layoutGeometryDidChange(
+      spy: TextLayoutSignalSpy,
+      oldUsedRect: Rect,
+      oldContentSize: Size,
+      snapshot: TextLayoutSnapshot,
+  ) {.slot.} =
+    discard oldUsedRect
+    discard oldContentSize
+    inc spy.geometryChanges
+    spy.lastSnapshot = snapshot
+
+protocol LayoutClientSpyProtocol of TextLayoutClientProtocol:
+  method textLayoutStorage(
+      spy: LayoutClientSpy, manager: TextLayoutManager
+  ): TextStorage =
+    discard manager
+    spy.storage
+
+  method textLayoutContainer(
+      spy: LayoutClientSpy, manager: TextLayoutManager
+  ): TextContainer =
+    discard manager
+    spy.container
+
+  method textLayoutAlignment(
+      spy: LayoutClientSpy, manager: TextLayoutManager
+  ): TextAlignment =
+    discard manager
+    spy.alignment
+
+  method layoutInvalidated(
+      spy: LayoutClientSpy, manager: TextLayoutManager, ranges: seq[TextRange]
+  ) =
+    discard manager
+    discard ranges
+    inc spy.invalidations
+
+  method layoutCompleted(
+      spy: LayoutClientSpy, manager: TextLayoutManager, snapshot: TextLayoutSnapshot
+  ) =
+    discard manager
+    discard snapshot
+    inc spy.completions
+
+  method geometryChanged(
+      spy: LayoutClientSpy,
+      manager: TextLayoutManager,
+      oldUsedRect: Rect,
+      oldContentSize: Size,
+      snapshot: TextLayoutSnapshot,
+  ) =
+    discard manager
+    discard oldUsedRect
+    discard oldContentSize
+    discard snapshot
+    inc spy.geometryChanges
+
+  method contentSizeChanged(
+      spy: LayoutClientSpy, manager: TextLayoutManager, oldSize, newSize: Size
+  ) =
+    discard manager
+    discard oldSize
+    discard newSize
+    inc spy.contentChanges
 
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextLayoutEpsilon
@@ -12,7 +125,113 @@ proc hasLineStart(snapshot: TextLayoutSnapshot, index: int): bool =
     if int(fragment.textRange.location) == index:
       return true
 
+proc newTextStorageSignalSpy(): TextStorageSignalSpy =
+  result = TextStorageSignalSpy()
+  discard result.withProto()
+
+proc newTextLayoutSignalSpy(): TextLayoutSignalSpy =
+  result = TextLayoutSignalSpy()
+  discard result.withProto()
+
+proc newLayoutClientSpy(
+    storage: TextStorage, container: TextContainer, alignment = taLeft
+): LayoutClientSpy =
+  result = LayoutClientSpy(storage: storage, container: container, alignment: alignment)
+  discard result.withProtocol(LayoutClientSpyProtocol)
+
 suite "nimkit text layout":
+  test "text storage editing protocol emits mutation signals":
+    let
+      storage = newTextStorage("Alpha")
+      spy = newTextStorageSignalSpy()
+
+    spy.observeProtocol(storage, TextStorageEditingEvents)
+    check storage.conformsTo(TextStorageEditingProtocol)
+
+    storage.replace(initTextRange(1, 2), "zz")
+    check spy.willCount == 1
+    check spy.didCount == 1
+    check spy.lastEdit.range == initTextRange(1, 2)
+    check spy.lastEdit.replacementLength == 2
+    check spy.lastEdit.textDelta == 0
+    check spy.lastEdit.kinds == {tseCharacters}
+
+    storage.setAttributes(
+      initTextRange(0, 1), defaultTextAttributes(initColor(1.0, 0.0, 0.0), 13.0)
+    )
+    check spy.willCount == 2
+    check spy.didCount == 2
+    check spy.lastEdit.kinds == {tseAttributes}
+
+  test "storage edits invalidate layout through manager slots":
+    let
+      storage = newTextStorage("Alpha Beta")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(180.0, 80.0), insets(0.0))
+      )
+      spy = newTextLayoutSignalSpy()
+
+    spy.observeProtocol(manager, TextLayoutEvents)
+    check manager.conformsTo(TextLayoutManagerProtocol)
+    manager.updateLayout()
+    check manager.hasValidLayout()
+    check spy.completions == 1
+
+    storage.replace(initTextRange(1, 3), "XYZ")
+    check not manager.hasValidLayout()
+    check spy.invalidations == 1
+    check spy.lastRanges[^1] == initTextRange(1, 3)
+
+    manager.updateLayout()
+    check manager.hasValidLayout()
+    check spy.completions == 2
+
+  test "figdraw text typesetter implements backend protocol":
+    let
+      storage = newTextStorage("Backend")
+      container = initTextContainer(initSize(160.0, 60.0), insets(2.0))
+      style = newTextLayoutManager(storage, container).textStyle()
+      backend = newFigDrawTextTypesetter()
+      layout = backend.layoutText(
+        TextLayoutRequest(
+          storage: storage,
+          container: container,
+          style: style,
+          alignment: taLeft,
+          wraps: false,
+          invalidatedRanges: @[initTextRange(0, storage.len)],
+        )
+      )
+
+    check backend.conformsTo(TextLayoutBackendProtocol)
+    check layout.snapshot.glyphCount > 0
+    check layout.snapshot.lineFragments.len > 0
+    checkClose(layout.snapshot.containerRect.origin.x, 2.0)
+
+  test "layout client protocol supplies inputs and receives layout hooks":
+    let
+      client = newLayoutClientSpy(
+        newTextStorage("Client text"),
+        initTextContainer(initSize(120.0, 60.0), insets(1.0), wraps = true),
+      )
+      manager = newTextLayoutManager()
+
+    manager.layoutClient = DynamicAgent(client)
+    check client.conformsTo(TextLayoutClientProtocol)
+
+    let snapshot = manager.layoutSnapshot()
+    check snapshot.glyphCount > 0
+    check client.invalidations == 1
+    check client.completions == 1
+    check client.geometryChanges == 1
+    check client.contentChanges == 1
+
+    client.storage.replace(initTextRange(0, 6), "Updated")
+    check not manager.hasValidLayout()
+    discard manager.layoutSnapshot()
+    check client.invalidations == 2
+    check client.completions == 2
+
   test "layout snapshot exposes typed glyph and line fragments":
     let manager = newTextLayoutManager(
       newTextStorage("Alpha\nBeta"),

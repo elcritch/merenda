@@ -1,10 +1,49 @@
 import std/[algorithm, unicode]
 
+import sigils/core
+import sigils/selectors
 import ./texttypes
 
-type TextStorage* = ref object
-  xStringValue: string
-  xRuns: seq[TextAttributeRun]
+type
+  TextStorageEditKind* = enum
+    tseCharacters
+    tseAttributes
+
+  TextStorageEditKinds* = set[TextStorageEditKind]
+
+  TextStorageEdit* = object
+    range*: TextRange
+    replacementLength*: Natural
+    textDelta*: int
+    kinds*: TextStorageEditKinds
+
+  TextStorage* = ref object of DynamicAgent
+    xStringValue: string
+    xRuns: seq[TextAttributeRun]
+
+func initTextStorageEdit*(
+    range: TextRange,
+    replacementLength: int,
+    textDelta: int,
+    kinds: TextStorageEditKinds,
+): TextStorageEdit =
+  TextStorageEdit(
+    range: range,
+    replacementLength: max(replacementLength, 0).Natural,
+    textDelta: textDelta,
+    kinds: kinds,
+  )
+
+protocol TextStorageEditingEvents:
+  proc willEdit*(storage: TextStorage, edit: TextStorageEdit) {.signal.}
+  proc didEdit*(storage: TextStorage, edit: TextStorageEdit) {.signal.}
+
+protocol TextStorageEditingProtocol {.selectorScope: protocol.} from TextStorage:
+  method notifyWillEdit*(storage: TextStorage, edit: TextStorageEdit) =
+    emit storage.willEdit(edit)
+
+  method notifyDidEdit*(storage: TextStorage, edit: TextStorageEdit) =
+    emit storage.didEdit(edit)
 
 func clampTextRange(total: int, range: TextRange): TextRange =
   let
@@ -46,6 +85,7 @@ proc normalizeRuns(storage: TextStorage) =
 proc initTextStorageFields*(
     storage: TextStorage, value = "", attributes = defaultTextAttributes()
 ) =
+  discard storage.withProto()
   storage.xStringValue = value
   storage.xRuns.setLen(0)
   if value.runeLen > 0:
@@ -92,12 +132,21 @@ proc stringValue*(storage: TextStorage): string =
 proc `stringValue=`*(storage: TextStorage, value: string) =
   if storage.isNil:
     return
+  let oldLength = storage.xStringValue.runeLen
+  let edit = initTextStorageEdit(
+    initTextRange(0, oldLength),
+    value.runeLen,
+    value.runeLen - oldLength,
+    {tseCharacters, tseAttributes},
+  )
+  storage.notifyWillEdit(edit)
   storage.xStringValue = value
   storage.xRuns.setLen(0)
   if value.runeLen > 0:
     storage.xRuns.add TextAttributeRun(
       range: initTextRange(0, value.runeLen), attributes: defaultTextAttributes()
     )
+  storage.notifyDidEdit(edit)
 
 proc len*(storage: TextStorage): int =
   if storage.isNil: 0 else: storage.xStringValue.runeLen
@@ -137,7 +186,9 @@ proc replace*(
     insertedLength = text.runeLen
     delta = insertedLength - int(clamped.length)
     current = storage.xStringValue
+    edit = initTextStorageEdit(clamped, insertedLength, delta, {tseCharacters})
 
+  storage.notifyWillEdit(edit)
   storage.xStringValue =
     current.runeSubStr(0, replaceStart) & text & current.runeSubStr(replaceStop)
 
@@ -171,6 +222,7 @@ proc replace*(
     )
   storage.xRuns = nextRuns
   storage.normalizeRuns()
+  storage.notifyDidEdit(edit)
 
 proc setAttributes*(
     storage: TextStorage, range: TextRange, attributes: TextAttributes
@@ -184,7 +236,9 @@ proc setAttributes*(
     stop = clamped.maxIndex
   if clamped.length == 0:
     return
+  let edit = initTextStorageEdit(clamped, int(clamped.length), 0, {tseAttributes})
 
+  storage.notifyWillEdit(edit)
   var nextRuns: seq[TextAttributeRun]
   for run in storage.xRuns:
     let
@@ -208,6 +262,7 @@ proc setAttributes*(
         )
   storage.xRuns = nextRuns
   storage.normalizeRuns()
+  storage.notifyDidEdit(edit)
 
 proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
   if storage.isNil:
