@@ -2,7 +2,7 @@
 
 <img width="2172" height="724" alt="merenda-github-banner-robot-chocolate" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
 
-Merenda is an OpenStep-based GUI written in pure Nim. It uses [FigDraw](https://github.com/elcritch/figdraw/) for fast 2d rendering with shadows and gloss. It uses [siwin](https://github.com/levovix0/siwin) for cross-platform windowing and events. It currently aims to support macOS, FreeBSD, Linux, and Windows.
+Merenda aims to be a full featured modern and dynamic GUI based on Cocoa and OpenStep written in pure Nim! It uses [FigDraw](https://github.com/elcritch/figdraw/) for fast 2d rendering with shadows and gloss. It uses [siwin](https://github.com/levovix0/siwin) for cross-platform windowing and events. It currently aims to support macOS, FreeBSD, Linux, and Windows.
 
 The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](https://github.com/elcritch/sigils), which provides Objective-C-style dynamic selectors and protocols along with Qt-style signals and slots. NimKit uses selectors to build Cocoa-style responder/action patterns, while signals and slots cover observable control events. It also provides a theme and chrome system for high levels of customization.
 
@@ -10,18 +10,17 @@ The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](h
 
 ## Why Try It?
 
-- **Native Nim API**: windows, views, controls, geometry, colors, events, and
-  theme data are Nim objects enhanced with dynamic protocols.
-- **FigDraw rendering**: controls render into a FigDraw tree, making drawing
-  testable and portable across supported FigDraw backends.
-- **OpenStep based interaction model**: target/action, responders, first
-  responder, key-view tabbing, focus rings, and platform key bindings are built in.
+- **Native Nim**: The power and elegance of Cocoa and OpenStep, but implemented purely in Nim a modern high level systems language.
 - **Useful controls already work**: buttons, toggle buttons, checkboxes, radio
   buttons, text fields, combo boxes, sliders, switches, scroll views, tabs, and
   tables.
 - **Custom chrome and theming**: built-in controls use theme rules and chrome
   modules to support first-class visual customization.
+- **SOpenStep based interaction model**: target/action, responders, first
+  responder, key-view tabbing, focus rings, and platform key bindings are built in.
 - **Custom drawing is direct**: views can provide their own draw hook and render into a `DrawContext`.
+- **FigDraw rendering**: controls render into a FigDraw tree, making drawing
+  testable and portable across supported FigDraw backends.
 - **Cassowary Base Constraint Engine**: [kiwiberry](https://github.com/elcritch/kiwiberry) is a full port of Kiwi C++ Cassowary engine. Nimkit provides convenient DSL on top for easy layout designs.
 
 ## Install
