@@ -55,6 +55,27 @@ proc activeFieldEditor(textField: TextField): FieldEditor
 proc layoutFieldEditor(textField: TextField)
 proc textFieldStyleContext(textField: TextField): StyleContext
 
+func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
+  initAccessibilityTextRange(int(range.location), int(range.length))
+
+func toTextRange(range: AccessibilityTextRange): TextRange =
+  initTextRange(int(range.location), int(range.length))
+
+proc currentAccessibilitySelection(textField: TextField): TextRange =
+  if textField.isNil:
+    return initTextRange(0, 0)
+  let editor = textField.activeFieldEditor()
+  if not editor.isNil:
+    return textviews.selectedRange(TextView(editor))
+  let
+    start = min(textField.xSelectionAnchor, textField.xInsertionPoint)
+    stop = max(textField.xSelectionAnchor, textField.xInsertionPoint)
+  initTextRange(start, stop - start)
+
+proc postSelectionChanged(textField: TextField, before: TextRange) =
+  if not textField.isNil and textField.currentAccessibilitySelection() != before:
+    textField.postAccessibilityNotification(anSelectionChanged)
+
 protocol TextFieldEvents:
   proc textDidChange*(textField: TextField, sender: DynamicAgent) {.signal.}
 
@@ -142,6 +163,7 @@ protocol TextFieldProtocol from TextField:
     initTextRange(start, stop - start)
 
   method setSelectedRange(textField: TextField, value: TextRange) =
+    let previousSelection = textField.selectedRange()
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       textviews.setSelectedRange(TextView(editor), value)
@@ -152,6 +174,7 @@ protocol TextFieldProtocol from TextField:
     textField.xSelectionAnchor = start
     textField.xInsertionPoint = start + length
     textField.setNeedsDisplay(true)
+    textField.postSelectionChanged(previousSelection)
 
   method insertionPoint*(textField: TextField): int =
     let editor = textField.activeFieldEditor()
@@ -260,6 +283,7 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
     textField.isEnabled and (textField.isEditable() or textField.isSelectable())
 
   method didBeginEditing(textField: TextField, editor: FieldEditor) =
+    let previousSelection = textField.selectedRange()
     textField.setCurrentEditor(editor)
     textField.xFlags.incl(tfEditing)
     textField.focused = true
@@ -268,6 +292,7 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
       textField.fieldEditorFrame(), textField, editor, 0, editor.textStorage().len
     )
     textField.setNeedsDisplay(true)
+    textField.postSelectionChanged(previousSelection)
 
   method didChangeFocusInEditor(textField: TextField, editor: FieldEditor) =
     if editor == textField.activeFieldEditor():
@@ -381,16 +406,22 @@ proc nextWordBoundary(text: string, index: int): int =
     inc result
 
 proc setCursor(textField: TextField, index: int, extending = false) =
+  if textField.isNil:
+    return
+  let previousSelection = textField.selectedRange()
   let cursor = clampIndex(textField.runeCount, index)
   textField.xInsertionPoint = cursor
   if not extending:
     textField.xSelectionAnchor = cursor
   textField.setNeedsDisplay(true)
+  textField.postSelectionChanged(previousSelection)
 
 proc setEditedString(
     textField: TextField, value: string, cursor: int, anchor: int, notify = true
 ) =
-  let changed = textField.xStringValue != value
+  let
+    changed = textField.xStringValue != value
+    previousSelection = textField.selectedRange()
   textField.xStringValue = value
   let total = textField.runeCount
   textField.xInsertionPoint = clampIndex(total, cursor)
@@ -402,11 +433,16 @@ proc setEditedString(
     emit textField.textDidChange(DynamicAgent(textField))
   if changed:
     textField.postAccessibilityNotification(anValueChanged)
+  textField.postSelectionChanged(previousSelection)
 
 proc selectAllText(textField: TextField) =
+  if textField.isNil:
+    return
+  let previousSelection = textField.selectedRange()
   textField.xSelectionAnchor = 0
   textField.xInsertionPoint = textField.runeCount
   textField.setNeedsDisplay(true)
+  textField.postSelectionChanged(previousSelection)
 
 proc replaceSelectedText(textField: TextField, insertion: string) =
   if textField.isNil or not textField.isEditable():
@@ -687,6 +723,28 @@ proc textFieldStyleContext(textField: TextField): StyleContext =
     srTextField, states, id = textField.styleId, classes = textField.styleClasses
   )
 
+proc accessibilityLayoutManager(textField: TextField): TextLayoutManager =
+  if textField.isNil:
+    return newTextLayoutManager()
+  let
+    style = textField.effectiveAppearance().resolveTextFieldStyle(
+        textField.textFieldStyleContext(), textField.textColor()
+      )
+    textRect = style.textFieldTextRect(textField.bounds)
+    textInsets = insets(
+      textRect.origin.y,
+      textRect.origin.x,
+      max(textField.bounds.size.height - textRect.maxY, 0.0'f32),
+      max(textField.bounds.size.width - textRect.maxX, 0.0'f32),
+    )
+    container = initTextContainer(textField.bounds.size, textInsets)
+  newTextLayoutManager(
+    newTextStorage(textField.stringValue()),
+    container,
+    textField.alignment(),
+    style.text,
+  )
+
 protocol DefaultTextFieldLayout of ViewLayoutProtocol:
   method layoutSubviews(textField: TextField) =
     textField.layoutFieldEditor()
@@ -724,6 +782,86 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
 
   method isAccessibilityElement(textField: TextField): bool =
     true
+
+  method accessibilityTextLength(textField: TextField): int =
+    if textField.isNil:
+      return 0
+    if textField of Label:
+      textField.stringValue().runeLen
+    else:
+      textField.stringValue().runeLen
+
+  method accessibilitySelectedTextRange(textField: TextField): AccessibilityTextRange =
+    if textField of Label:
+      return initAccessibilityTextRange(0, 0)
+    textField.selectedRange().toAccessibilityTextRange()
+
+  method setAccessibilitySelectedTextRange(
+      textField: TextField, range: AccessibilityTextRange
+  ): bool =
+    if textField.isNil or (not textField.isEditable() and not textField.isSelectable()):
+      return false
+    textField.setSelectedRange(range.toTextRange())
+    true
+
+  method accessibilityInsertionPoint(textField: TextField): int =
+    if textField of Label:
+      0
+    else:
+      textField.insertionPoint()
+
+  method setAccessibilityInsertionPoint(textField: TextField, index: int): bool =
+    if textField.isNil or (not textField.isEditable() and not textField.isSelectable()):
+      return false
+    textField.setCursor(index)
+    true
+
+  method accessibilityBoundsForTextRange(
+      textField: TextField, range: AccessibilityTextRange
+  ): seq[Rect] =
+    if textField.isNil:
+      return
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return TextView(editor).accessibilityBoundsForTextRange(range)
+    let manager = textField.accessibilityLayoutManager()
+    for rect in manager.selectionRects(range.toTextRange()):
+      result.add textField.rectToWindow(rect)
+
+  method accessibilityBoundsForCharacter(textField: TextField, index: int): Rect =
+    if textField.isNil:
+      return initRect(0, 0, 0, 0)
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return TextView(editor).accessibilityBoundsForCharacter(index)
+    textField.rectToWindow(textField.accessibilityLayoutManager().characterRect(index))
+
+  method accessibilityCharacterIndexAtPoint(textField: TextField, point: Point): int =
+    if textField.isNil:
+      return -1
+    let editor = textField.activeFieldEditor()
+    if not editor.isNil:
+      return TextView(editor).accessibilityCharacterIndexAtPoint(point)
+    textField.accessibilityLayoutManager().textIndexAtPoint(
+      textField.pointFromWindow(point)
+    )
+
+  method accessibilityLineRange(
+      textField: TextField, line: int
+  ): AccessibilityTextRange =
+    if textField.isNil or line != 0:
+      return initAccessibilityTextRange(0, 0)
+    textField.accessibilityLayoutManager().lineRange(line).toAccessibilityTextRange()
+
+  method accessibilityLineForCharacter(textField: TextField, index: int): int =
+    if textField.isNil:
+      return -1
+    textField.accessibilityLayoutManager().lineForIndex(index)
+
+  method accessibilityBoundsForLine(textField: TextField, line: int): Rect =
+    if textField.isNil or line != 0:
+      return initRect(0, 0, 0, 0)
+    textField.rectToWindow(textField.accessibilityLayoutManager().lineBounds(line))
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: TextFieldCell): IntrinsicSize =

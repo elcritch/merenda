@@ -24,7 +24,8 @@ cascading column views, basic text editing lifecycle, action dispatch, reusable
 pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
 monospace text view/editor with raw event policy controls, document-controller
 infrastructure, AppKit-style in-process pasteboard/dragging foundations, and a
-pure Nim accessibility metadata and protocol core.
+pure Nim accessibility metadata, notification, traversal, validation, and text
+semantics core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -81,6 +82,18 @@ document-controller open/save integration are covered in tests and examples.
   views, buttons, checkboxes, text fields, labels, menus, popup controls,
   combo boxes, tabs, scroll areas, table rows/cells, outline rows/disclosure
   controls, progress indicators, sliders, switches, and steppers.
+- Routed accessibility notifications from committed semantic state transitions:
+  focus, selection, value, and expand/collapse changes now post through the
+  existing Sigils accessibility signal after state changes, while enabled-state
+  mutations update attributes without noisy notifications and drawing/layout
+  remain notification-free.
+- Added backend-neutral semantic accessibility traversal helpers: ordered
+  descendants/elements, stable element-at-point hit-testing, role/action support
+  checks, and validation result helpers for tests and future native bridges.
+- Added richer text accessibility hooks for text fields, text views, and
+  monospace text views: selected ranges, insertion points, character counts,
+  editable/selectable traits, selection-change notifications, character and
+  range bounds, line ranges/bounds, and point-to-character lookup.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -144,31 +157,6 @@ Recommended implementation order:
      behavior as those primitives evolve: richer column keyboard movement,
      persisted selection paths, drag/drop between hierarchy levels, and optional
      custom row/detail rendering hooks.
-
-### Accessibility Core
-
-Keep accessibility backend-neutral and driven by the same state mutations that
-update widgets, responder state, and rendering.
-
-1. Route accessibility notifications from canonical semantic state-transition
-   procs, matching Cocoa's model for custom controls:
-   - focus changes, selection model updates, value setters, and row
-     expand/collapse toggles should post after state is committed and only
-     when semantic state actually changes
-   - enabled-state mutations should update accessibility attributes from the
-     same `setEnabled` path; only post a platform-specific broader
-     notification when a backend adapter requires one
-   - drawing and layout should not emit accessibility notifications; they
-     should consume already-committed semantic state
-2. Add semantic traversal helpers:
-   - ordered accessibility descendants
-   - role/action validation helpers for tests and future backend bridges
-   - accessibility element at point once inspection or native hit-testing needs
-     a stable semantic hit-test contract
-3. Add richer text accessibility hooks:
-   - selected range, insertion point, and editable/selectable traits
-   - basic line/character geometry only after text layout exposes stable offset
-     and line metrics
 
 ### OutlineView
 

@@ -147,6 +147,67 @@ proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
       rect.h,
     )
 
+proc textRangeBounds*(manager: TextLayoutManager, range: TextRange): Rect =
+  for rect in manager.selectionRects(range):
+    if result.isEmpty:
+      result = rect
+    else:
+      result = result.union(rect)
+
+proc characterRect*(manager: TextLayoutManager, index: int): Rect =
+  if manager.isNil or manager.xTextStorage.isNil:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let total = manager.xTextStorage.len
+  if index < 0 or index >= total:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  result = manager.textRangeBounds(initTextRange(index, 1))
+  if result.isEmpty:
+    result = manager.caretRect(index)
+
+proc lineRange*(manager: TextLayoutManager, line: int): TextRange =
+  if manager.isNil or manager.xTextStorage.isNil or line < 0:
+    return initTextRange(0, 0)
+  let text = manager.xTextStorage.stringValue()
+  var
+    currentLine = 0
+    start = 0
+    index = 0
+  for rune in text.runes:
+    if currentLine == line and rune == Rune('\n'):
+      return initTextRange(start, index - start)
+    if rune == Rune('\n'):
+      inc currentLine
+      start = index + 1
+    inc index
+  if currentLine == line:
+    return initTextRange(start, index - start)
+  initTextRange(0, 0)
+
+proc lineForIndex*(manager: TextLayoutManager, index: int): int =
+  if manager.isNil or manager.xTextStorage.isNil:
+    return -1
+  let
+    total = manager.xTextStorage.len
+    target = max(0, min(index, total))
+  result = 0
+  var current = 0
+  for rune in manager.xTextStorage.stringValue().runes:
+    if current >= target:
+      return
+    if rune == Rune('\n'):
+      inc result
+    inc current
+
+proc lineBounds*(manager: TextLayoutManager, line: int): Rect =
+  if manager.isNil or manager.xTextStorage.isNil or line < 0:
+    return initRect(0.0, 0.0, 0.0, 0.0)
+  let range = manager.lineRange(line)
+  if range.length > 0:
+    return manager.textRangeBounds(range)
+  if line == manager.lineForIndex(int(range.location)):
+    return manager.caretRect(int(range.location))
+  initRect(0.0, 0.0, 0.0, 0.0)
+
 proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   if manager.isNil or manager.xTextStorage.isNil:
     return -1

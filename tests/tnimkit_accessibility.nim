@@ -91,6 +91,58 @@ suite "nimkit accessibility":
     check root.accessibilityChildren() == @[group]
     check group.accessibilityChildren() == @[View(button)]
 
+  test "accessibility traversal orders descendants and hit-tests semantic elements":
+    let
+      root = newView(frame = initRect(0, 0, 240, 160))
+      group = newView(frame = initRect(10, 10, 120, 80))
+      button = newButton("Apply", frame = initRect(4, 4, 80, 28))
+      checkbox = newCheckBox("Include", frame = initRect(150, 12, 80, 24))
+
+    group.addSubview(button)
+    root.addSubview(group)
+    root.addSubview(checkbox)
+
+    check root.orderedAccessibilityDescendants() == @[View(button), View(checkbox)]
+
+    group.accessibilityLabel = "Group"
+    check root.orderedAccessibilityDescendants() ==
+      @[group, View(button), View(checkbox)]
+
+    var iterated: seq[View]
+    for element in root.accessibilityDescendants():
+      iterated.add element
+    check iterated == @[group, View(button), View(checkbox)]
+
+    check root.accessibilityElementAtPoint(initPoint(16, 16)) == View(button)
+    check root.accessibilityElementAtPoint(initPoint(112, 72)) == group
+    check root.accessibilityElementAtPoint(initPoint(154, 16)) == View(checkbox)
+    check root.accessibilityElementAtPoint(initPoint(230, 150)).isNil
+
+  test "accessibility validation helpers cover roles actions and trees":
+    let
+      root = newView(frame = initRect(0, 0, 160, 80))
+      button = newButton("Run", frame = initRect(10, 10, 80, 28))
+
+    button.identifier = "run"
+    root.addSubview(button)
+
+    check button.accessibilityHasRole(arButton)
+    check button.accessibilityHasRole([arButton, arCheckBox])
+    check button.accessibilitySupportsAction(AccessibilityActionPress)
+    check button.validateAccessibilityElement().passed()
+    check button.validateAccessibilityRole(arButton).passed()
+    check button.validateAccessibilityActions([AccessibilityActionPress]).passed()
+    check root.validateAccessibilityTree().passed()
+
+    let wrongRole = button.validateAccessibilityRole(arCheckBox)
+    check not wrongRole.passed()
+    check wrongRole.errors.len == 1
+
+    let missingAction =
+      button.validateAccessibilityActions([AccessibilityActionIncrement])
+    check not missingAction.passed()
+    check missingAction.errors.len == 1
+
   test "buttons provide role label value traits and press action":
     var actionCount = 0
     let
@@ -132,6 +184,63 @@ suite "nimkit accessibility":
     check label.accessibilityLabel() == "Title"
     check label.accessibilityValue() == ""
     check atHeader in label.accessibilityTraits()
+
+  test "text accessibility exposes ranges insertion points and geometry":
+    let
+      field = newTextField("abcdef", frame = initRect(0, 0, 180, 28))
+      textView = newTextView("one\ntwo", frame = initRect(0, 40, 220, 90))
+      monoText = newMonoTextEditor("ab\ncd", frame = initRect(0, 150, 220, 90))
+
+    field.selectedRange = initTextRange(1, 2)
+    check field.accessibilityTextLength() == 6
+    check field.accessibilitySelectedTextRange() == initAccessibilityTextRange(1, 2)
+    check field.accessibilityInsertionPoint() == 3
+    check atEditable in field.accessibilityTraits()
+    check atSelectable in field.accessibilityTraits()
+
+    let fieldRange =
+      field.accessibilityAttributeValue(AccessibilityAttributeSelectedTextRange)
+    check fieldRange.kind == avTextRange
+    check fieldRange.textRangeValue == initAccessibilityTextRange(1, 2)
+
+    check field.accessibilitySetAttributeValue(
+      AccessibilityAttributeSelectedTextRange,
+      initAccessibilityValue(initAccessibilityTextRange(0, 1)),
+    )
+    check field.selectedRange == initTextRange(0, 1)
+    check field.accessibilitySetAttributeValue(
+      AccessibilityAttributeInsertionPoint, initAccessibilityValue(2)
+    )
+    check field.accessibilityInsertionPoint() == 2
+
+    let fieldCharRect = field.accessibilityBoundsForCharacter(1)
+    check not fieldCharRect.isEmpty
+    check field.accessibilityBoundsForTextRange(initAccessibilityTextRange(0, 2)).len > 0
+    check field.accessibilityCharacterIndexAtPoint(
+      initPoint(fieldCharRect.origin.x + 0.5'f32, fieldCharRect.origin.y + 0.5'f32)
+    ) >= 0
+
+    textView.selectedRange = initTextRange(2, 3)
+    check textView.accessibilityTextLength() == 7
+    check textView.accessibilitySelectedTextRange() == initAccessibilityTextRange(2, 3)
+    check textView.accessibilityLineRange(1) == initAccessibilityTextRange(4, 3)
+    check textView.accessibilityLineForCharacter(5) == 1
+    check not textView.accessibilityBoundsForCharacter(1).isEmpty
+    check not textView.accessibilityBoundsForLine(1).isEmpty
+
+    monoText.setCursorPosition(1, 1)
+    check monoText.accessibilityTextLength() == 5
+    check monoText.accessibilitySelectedTextRange() == initAccessibilityTextRange(4, 0)
+    check monoText.accessibilityInsertionPoint() == 4
+    check monoText.accessibilityLineRange(1) == initAccessibilityTextRange(3, 2)
+    check monoText.accessibilityLineForCharacter(4) == 1
+    check atEditable in monoText.accessibilityTraits()
+    check atSelectable in monoText.accessibilityTraits()
+    let monoCharRect = monoText.accessibilityBoundsForCharacter(4)
+    check not monoCharRect.isEmpty
+    check monoText.accessibilityCharacterIndexAtPoint(
+      initPoint(monoCharRect.origin.x + 0.5'f32, monoCharRect.origin.y + 0.5'f32)
+    ) == 4
 
   test "accessibility value changes emit notifications":
     let
@@ -227,6 +336,36 @@ suite "nimkit accessibility":
     comboBox.selectedIndex = -1
     check comboSpy.notifications == @[anSelectionChanged, anSelectionChanged]
     check comboBox.selectedIndex == -1
+
+  test "text selection mutations post accessibility notifications":
+    let
+      field = newTextField("abc")
+      textView = newTextView("abc")
+      monoText = newMonoTextEditor("abc")
+      fieldSpy = AccessibilitySpy()
+      textViewSpy = AccessibilitySpy()
+      monoTextSpy = AccessibilitySpy()
+
+    field.connect(
+      accessibilityNotificationPosted, fieldSpy, rememberAccessibilityNotification
+    )
+    textView.connect(
+      accessibilityNotificationPosted, textViewSpy, rememberAccessibilityNotification
+    )
+    monoText.connect(
+      accessibilityNotificationPosted, monoTextSpy, rememberAccessibilityNotification
+    )
+
+    field.selectedRange = initTextRange(1, 1)
+    field.selectedRange = initTextRange(1, 1)
+    textView.selectedRange = initTextRange(1, 1)
+    textView.selectedRange = initTextRange(1, 1)
+    monoText.setCursorPosition(0, 1)
+    monoText.setCursorPosition(0, 1)
+
+    check fieldSpy.notifications == @[anSelectionChanged]
+    check textViewSpy.notifications == @[anSelectionChanged]
+    check monoTextSpy.notifications == @[anSelectionChanged]
 
   test "expanded and collapsed mutations post accessibility notifications":
     let

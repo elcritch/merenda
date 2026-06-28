@@ -91,6 +91,16 @@ proc moveWordRightText*(textView: TextView, extending = false)
 proc moveToBeginningOfLineText*(textView: TextView, extending = false)
 proc moveToEndOfLineText*(textView: TextView, extending = false)
 
+func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
+  initAccessibilityTextRange(int(range.location), int(range.length))
+
+func toTextRange(range: AccessibilityTextRange): TextRange =
+  initTextRange(int(range.location), int(range.length))
+
+proc postSelectionChanged(textView: TextView, before: TextRange) =
+  if not textView.isNil and textView.textViewSelectedRange() != before:
+    textView.postAccessibilityNotification(anSelectionChanged)
+
 protocol TextViewEvents:
   proc textDidChange*(textView: TextView, sender: DynamicAgent) {.signal.}
 
@@ -140,7 +150,9 @@ proc textStorage*(textView: TextView): TextStorage =
 proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   if textView.isNil:
     return
-  let previousValue = textView.textViewStringValue()
+  let
+    previousValue = textView.textViewStringValue()
+    previousSelection = textView.textViewSelectedRange()
   textView.xTextStorage =
     if storage.isNil:
       newTextStorage()
@@ -155,6 +167,7 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   textView.setNeedsDisplay(true)
   if textView.textViewStringValue() != previousValue:
     textView.postAccessibilityNotification(anValueChanged)
+  textView.postSelectionChanged(previousSelection)
 
 proc layoutManager*(textView: TextView): TextLayoutManager =
   if textView.isNil: nil else: textView.xLayoutManager
@@ -183,6 +196,7 @@ proc setTextViewStringValue(textView: TextView, value: string) =
     return
   if textView.textViewStringValue() == value:
     return
+  let previousSelection = textView.textViewSelectedRange()
   textView.xTextStorage.stringValue = value
   let total = textView.xTextStorage.len
   textView.xInsertionPoint = total
@@ -193,6 +207,7 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   textView.setNeedsDisplay(true)
   emit textView.textDidChange(DynamicAgent(textView))
   textView.postAccessibilityNotification(anValueChanged)
+  textView.postSelectionChanged(previousSelection)
 
 proc editable*(textView: TextView): bool =
   (not textView.isNil) and tvEditable in textView.xFlags
@@ -375,6 +390,7 @@ proc textViewSelectedRange(textView: TextView): TextRange =
 proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
   if textView.isNil:
     return
+  let previousSelection = textView.textViewSelectedRange()
   let
     total = textView.xTextStorage.len
     start = max(0, min(int(value.location), total))
@@ -383,6 +399,7 @@ proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
   textView.xInsertionPoint = start + length
   textView.updateTypingAttributesForSelection()
   textView.setNeedsDisplay(true)
+  textView.postSelectionChanged(previousSelection)
 
 proc stringValue*(textView: TextView): string =
   textView.textViewStringValue()
@@ -426,10 +443,12 @@ proc clampedRange(textView: TextView, range: TextRange): TextRange =
   initTextRange(start, length)
 
 proc setSelection(textView: TextView, range: TextRange) =
+  let previousSelection = textView.textViewSelectedRange()
   let clamped = textView.clampedRange(range)
   textView.xSelectionAnchor = int(clamped.location)
   textView.xInsertionPoint = clamped.maxIndex
   textView.updateTypingAttributesForSelection()
+  textView.postSelectionChanged(previousSelection)
 
 proc clearMarkedText(textView: TextView) =
   if textView.isNil:
@@ -534,20 +553,24 @@ proc syncLayout(textView: TextView) =
 proc setCursor*(textView: TextView, index: int, extending = false) =
   if textView.isNil:
     return
+  let previousSelection = textView.textViewSelectedRange()
   let cursor = clampIndex(textView.xTextStorage.len, index)
   textView.xInsertionPoint = cursor
   if not extending:
     textView.xSelectionAnchor = cursor
   textView.updateTypingAttributesForSelection()
   textView.setNeedsDisplay(true)
+  textView.postSelectionChanged(previousSelection)
 
 proc selectAllText*(textView: TextView) =
   if textView.isNil:
     return
+  let previousSelection = textView.textViewSelectedRange()
   textView.xSelectionAnchor = 0
   textView.xInsertionPoint = textView.xTextStorage.len
   textView.updateTypingAttributesForSelection()
   textView.setNeedsDisplay(true)
+  textView.postSelectionChanged(previousSelection)
 
 proc replaceSelectedText*(textView: TextView, insertion: string) =
   if textView.isNil or not textView.editable:
@@ -1037,6 +1060,67 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
 
   method isAccessibilityElement(textView: TextView): bool =
     true
+
+  method accessibilityTextLength(textView: TextView): int =
+    if textView.isNil or textView.xTextStorage.isNil: 0 else: textView.xTextStorage.len
+
+  method accessibilitySelectedTextRange(textView: TextView): AccessibilityTextRange =
+    textView.textViewSelectedRange().toAccessibilityTextRange()
+
+  method setAccessibilitySelectedTextRange(
+      textView: TextView, range: AccessibilityTextRange
+  ): bool =
+    if textView.isNil or (not textView.editable() and not textView.selectable()):
+      return false
+    textView.setTextViewSelectedRange(range.toTextRange())
+    true
+
+  method accessibilityInsertionPoint(textView: TextView): int =
+    textView.textViewInsertionPoint()
+
+  method setAccessibilityInsertionPoint(textView: TextView, index: int): bool =
+    if textView.isNil or (not textView.editable() and not textView.selectable()):
+      return false
+    textView.setCursor(index)
+    true
+
+  method accessibilityBoundsForTextRange(
+      textView: TextView, range: AccessibilityTextRange
+  ): seq[Rect] =
+    if textView.isNil:
+      return
+    textView.updateTextContainer()
+    for rect in textView.xLayoutManager.selectionRects(range.toTextRange()):
+      result.add textView.rectToWindow(rect)
+
+  method accessibilityBoundsForCharacter(textView: TextView, index: int): Rect =
+    if textView.isNil:
+      return initRect(0, 0, 0, 0)
+    textView.updateTextContainer()
+    textView.rectToWindow(textView.xLayoutManager.characterRect(index))
+
+  method accessibilityCharacterIndexAtPoint(textView: TextView, point: Point): int =
+    if textView.isNil:
+      return -1
+    textView.updateTextContainer()
+    textView.xLayoutManager.textIndexAtPoint(textView.pointFromWindow(point))
+
+  method accessibilityLineRange(textView: TextView, line: int): AccessibilityTextRange =
+    if textView.isNil:
+      return initAccessibilityTextRange(0, 0)
+    textView.xLayoutManager.lineRange(line).toAccessibilityTextRange()
+
+  method accessibilityLineForCharacter(textView: TextView, index: int): int =
+    if textView.isNil:
+      -1
+    else:
+      textView.xLayoutManager.lineForIndex(index)
+
+  method accessibilityBoundsForLine(textView: TextView, line: int): Rect =
+    if textView.isNil:
+      return initRect(0, 0, 0, 0)
+    textView.updateTextContainer()
+    textView.rectToWindow(textView.xLayoutManager.lineBounds(line))
 
 proc initTextViewFields*(
     textView: TextView,
