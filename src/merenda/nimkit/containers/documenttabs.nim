@@ -33,6 +33,8 @@ type
     xModified: bool
     xStyle: DocumentTabStyle
     xAccentColor: Color
+    xStyleId: string
+    xStyleClasses: seq[string]
     xUserInfo: DynamicAgent
 
   DocumentTabHitPart = enum
@@ -63,7 +65,6 @@ const
   DocumentTabCompactHeight = 24.0'f32
   DocumentTabBarHeight = 34.0'f32
   DocumentTabButtonWidth = 24.0'f32
-  DocumentTabGap = 4.0'f32
   DocumentTabMinWidth = 86.0'f32
   DocumentTabMaxWidth = 190.0'f32
   DocumentTabCompactMinWidth = 62.0'f32
@@ -216,6 +217,23 @@ proc `accentColor=`*(item: DocumentTabItem, color: Color) =
   if not item.isNil:
     item.xAccentColor = color
 
+proc styleId*(item: DocumentTabItem): string =
+  if item.isNil: "" else: item.xStyleId
+
+proc `styleId=`*(item: DocumentTabItem, id: string) =
+  if not item.isNil:
+    item.xStyleId = id
+
+proc styleClasses*(item: DocumentTabItem): seq[string] =
+  if item.isNil:
+    @[]
+  else:
+    item.xStyleClasses
+
+proc `styleClasses=`*(item: DocumentTabItem, classes: openArray[string]) =
+  if not item.isNil:
+    item.xStyleClasses = @classes
+
 proc userInfo*(item: DocumentTabItem): DynamicAgent =
   if item.isNil: nil else: item.xUserInfo
 
@@ -321,6 +339,82 @@ proc `lineScroll=`*(tabs: DocumentTabs, value: float32) =
   if not tabs.isNil:
     tabs.xLineScroll = max(value, 1.0'f32)
 
+proc documentTabAppearance(tabs: DocumentTabs): Appearance =
+  if tabs.isNil:
+    initAppearance()
+  else:
+    tabs.effectiveAppearance()
+
+proc mergedStyleClasses(
+    tabs: DocumentTabs, item: DocumentTabItem = nil, extra: openArray[string] = []
+): seq[string] =
+  if not tabs.isNil:
+    result.add tabs.styleClasses()
+  if not item.isNil:
+    result.add item.styleClasses()
+  for class in extra:
+    result.add class
+
+proc documentTabStyleContext(
+    tabs: DocumentTabs, item: DocumentTabItem, states: set[WidgetState] = {}
+): StyleContext =
+  var effectiveStates = states
+  if not tabs.isNil:
+    effectiveStates = effectiveStates + tabs.widgetStateSet()
+  let id =
+    if not item.isNil and item.styleId().len > 0:
+      item.styleId()
+    elif tabs.isNil:
+      ""
+    else:
+      tabs.styleId()
+  controlStyle(
+    srDocumentTab, effectiveStates, id = id, classes = tabs.mergedStyleClasses(item)
+  )
+
+proc documentTabBarStyleContext(
+    tabs: DocumentTabs, states: set[WidgetState] = {}
+): StyleContext =
+  var effectiveStates = states
+  if not tabs.isNil:
+    effectiveStates = effectiveStates + tabs.widgetStateSet()
+  controlStyle(
+    srDocumentTabBar,
+    effectiveStates,
+    id =
+      if tabs.isNil:
+        ""
+      else:
+        tabs.styleId(),
+    classes = tabs.mergedStyleClasses(),
+  )
+
+proc documentTabButtonStyleContext(
+    tabs: DocumentTabs, states: set[WidgetState] = {}, classes: openArray[string] = []
+): StyleContext =
+  var effectiveStates = states
+  if not tabs.isNil:
+    effectiveStates = effectiveStates + tabs.widgetStateSet()
+  controlStyle(
+    srDocumentTabButton,
+    effectiveStates,
+    id =
+      if tabs.isNil:
+        ""
+      else:
+        tabs.styleId(),
+    classes = tabs.mergedStyleClasses(extra = classes),
+  )
+
+proc documentTabViewStyle(tabs: DocumentTabs, appearance: Appearance): TabViewStyle =
+  appearance.resolveTabViewStyle(tabs.documentTabStyleContext(nil))
+
+proc documentTabViewStyle(tabs: DocumentTabs): TabViewStyle =
+  tabs.documentTabViewStyle(tabs.documentTabAppearance())
+
+proc documentTabGap(tabs: DocumentTabs): float32 =
+  max(tabs.documentTabViewStyle().tabGap, 0.0'f32)
+
 func effectiveStyle(tabs: DocumentTabs, item: DocumentTabItem): DocumentTabStyle =
   if not item.isNil and item.xStyle != dtsAutomatic:
     item.xStyle
@@ -329,25 +423,42 @@ func effectiveStyle(tabs: DocumentTabs, item: DocumentTabItem): DocumentTabStyle
   else:
     tabs.xDefaultTabStyle
 
-func tabHeight(style: DocumentTabStyle): float32 =
-  case style
-  of dtsCompact: DocumentTabCompactHeight
-  else: DocumentTabHeight
-
-func tabWidthBounds(style: DocumentTabStyle): tuple[minWidth, maxWidth: float32] =
+func tabHeight(style: DocumentTabStyle, viewStyle: TabViewStyle): float32 =
+  let themedHeight =
+    if viewStyle.tabHeight > 0.0'f32: viewStyle.tabHeight else: DocumentTabHeight
   case style
   of dtsCompact:
-    (DocumentTabCompactMinWidth, DocumentTabCompactMaxWidth)
+    min(themedHeight, DocumentTabCompactHeight)
   else:
-    (DocumentTabMinWidth, DocumentTabMaxWidth)
+    themedHeight
 
-proc tabTextStyle(tabs: DocumentTabs, color: Color): TextStyle =
-  let appearance =
-    if tabs.isNil:
-      initAppearance()
-    else:
-      tabs.effectiveAppearance()
-  appearance.resolveTextStyle(controlStyle(srTab), color, insets(0.0))
+func tabWidthBounds(
+    style: DocumentTabStyle, viewStyle: TabViewStyle
+): tuple[minWidth, maxWidth: float32] =
+  let
+    fallback =
+      case style
+      of dtsCompact:
+        (minWidth: DocumentTabCompactMinWidth, maxWidth: DocumentTabCompactMaxWidth)
+      else:
+        (minWidth: DocumentTabMinWidth, maxWidth: DocumentTabMaxWidth)
+    minWidth =
+      if viewStyle.tabMinWidth > 0.0'f32: viewStyle.tabMinWidth else: fallback.minWidth
+    maxWidth =
+      if viewStyle.tabMaxWidth >= minWidth: viewStyle.tabMaxWidth else: fallback.maxWidth
+  case style
+  of dtsCompact:
+    (
+      minWidth: min(minWidth, DocumentTabCompactMinWidth),
+      maxWidth: min(maxWidth, DocumentTabCompactMaxWidth),
+    )
+  else:
+    (minWidth: minWidth, maxWidth: max(maxWidth, minWidth))
+
+proc tabTextStyle(
+    appearance: Appearance, styleContext: StyleContext, color: Color
+): TextStyle =
+  appearance.resolveTextStyle(styleContext, color, insets(0.0))
 
 func documentTabTextColor(enabled, selected: bool): Color =
   if not enabled:
@@ -361,9 +472,16 @@ proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
   if item.isNil:
     return DocumentTabMinWidth
   let
+    appearance = tabs.documentTabAppearance()
     style = tabs.effectiveStyle(item)
-    bounds = style.tabWidthBounds()
-    titleWidth = min(item.title().len.float32 * 7.0'f32, bounds.maxWidth)
+    styleContext = tabs.documentTabStyleContext(item)
+    viewStyle = appearance.resolveTabViewStyle(styleContext)
+    bounds = style.tabWidthBounds(viewStyle)
+    textStyle = appearance.tabTextStyle(
+      styleContext, documentTabTextColor(item.enabled(), selected = false)
+    )
+    titleWidth = min(textNaturalSize(item.title(), textStyle).width, bounds.maxWidth)
+    horizontalInset = max(viewStyle.tabHorizontalPadding, 0.0'f32)
     closeWidth =
       if tabs.allowsClosing() and item.closeable():
         DocumentTabCloseWidth + 6.0'f32
@@ -372,7 +490,7 @@ proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
     modifiedWidth = if item.modified(): 9.0'f32 else: 0.0'f32
   min(
     max(
-      titleWidth + DocumentTabHorizontalInset * 2.0'f32 + closeWidth + modifiedWidth,
+      titleWidth + horizontalInset * 2.0'f32 + closeWidth + modifiedWidth,
       bounds.minWidth,
     ),
     bounds.maxWidth,
@@ -383,7 +501,7 @@ proc contentWidth*(tabs: DocumentTabs): float32 =
     return 0.0'f32
   for index, item in tabs.xItems:
     if index > 0:
-      result += DocumentTabGap
+      result += tabs.documentTabGap()
     result += tabs.documentTabWidth(item)
 
 proc contentOverflowsFrame(tabs: DocumentTabs): bool =
@@ -446,12 +564,13 @@ proc contentTabRect(tabs: DocumentTabs, index: int): Rect =
   if tabs.isNil or index < 0 or index >= tabs.xItems.len:
     return
   var x = 0.0'f32
+  let gap = tabs.documentTabGap()
   for itemIndex in 0 ..< index:
-    x += tabs.documentTabWidth(tabs.xItems[itemIndex]) + DocumentTabGap
+    x += tabs.documentTabWidth(tabs.xItems[itemIndex]) + gap
   let
     item = tabs.xItems[index]
     style = tabs.effectiveStyle(item)
-    height = style.tabHeight()
+    height = style.tabHeight(tabs.documentTabViewStyle())
     y = max((tabs.bounds().size.height - height) / 2.0'f32, 0.0'f32)
   initRect(x, y, tabs.documentTabWidth(item), height)
 
@@ -782,6 +901,9 @@ func tabCornerRadius(style: DocumentTabStyle): float32 =
   of dtsUnderline: 0.0'f32
   else: 7.0'f32
 
+func tabHighlightFill(enabled: bool): Fill =
+  fill(initColor(1.0, 1.0, 1.0, if enabled: 0.46 else: 0.20))
+
 proc drawCloseButton(
     tabs: DocumentTabs,
     context: DrawContext,
@@ -791,7 +913,15 @@ proc drawCloseButton(
 ) =
   if rect.isEmpty:
     return
+  var states: set[WidgetState]
+  if selected:
+    states.incl ssSelected
+  if pressed:
+    states.incl ssHighlighted
+    states.incl ssPressed
   let
+    styleContext =
+      tabs.documentTabButtonStyleContext(states, classes = ["document-tab-close"])
     fillColor =
       if pressed:
         initColor(0.52, 0.56, 0.62, 0.85)
@@ -804,16 +934,37 @@ proc drawCloseButton(
         initColor(0.12, 0.14, 0.18, 1.0)
       else:
         initColor(0.22, 0.24, 0.30, 1.0)
-    markStyle = tabs.tabTextStyle(textColor)
+    fillValue = context.appearance.resolveFill(styleContext, fill(fillColor))
+    borderColor = context.appearance.resolveColor(
+      styleContext, StyleBorderColor, initColor(0.0, 0.0, 0.0, 0.0)
+    )
+    borderWidth =
+      context.appearance.resolveLength(styleContext, StyleBorderWidth, 0.0'f32)
+    radius = rect.size.width / 2.0'f32
+    chrome = chromeContext(
+      context.appearance.resolveChromeName(styleContext),
+      crButton,
+      cpFace,
+      fillValue,
+      states,
+    )
+    markColor = context.appearance.resolveColor(styleContext, StyleMarkColor, textColor)
+    markStyle = context.appearance.tabTextStyle(styleContext, markColor)
     markRect = initRect(
       rect.origin.x, rect.origin.y - 0.5'f32, rect.size.width, rect.size.height
     )
-  discard context.addRenderRectangle(
-    DefaultDrawLevel,
-    parent,
-    context.renderRectFor(rect),
-    fill(fillColor),
-    cornerRadius = rect.size.width / 2.0'f32,
+    renderRect = context.renderRectFor(rect)
+    buttonRoot = context.addRenderRectangle(
+      DefaultDrawLevel,
+      parent,
+      renderRect,
+      context.appearance.chromeFill(chrome),
+      borderColor,
+      borderWidth,
+      radius,
+    )
+  context.drawChromeExtras(
+    chrome, initChromeExtras(buttonRoot, renderRect, cornerRadius = radius)
   )
   context.addText(
     DefaultDrawLevel, parent, markRect, "×", markStyle, alignment = taCenter
@@ -833,22 +984,63 @@ proc drawDocumentTab(
   let
     selected = index == tabs.xSelectedIndex
     pressed = index == tabs.xPressedIndex and tabs.xPressedPart == dthTab
+  var states: set[WidgetState]
+  if selected:
+    states.incl ssSelected
+  if pressed:
+    states.incl ssHighlighted
+    states.incl ssPressed
+  if not item.enabled():
+    states.incl ssDisabled
+
+  let
+    styleContext = tabs.documentTabStyleContext(item, states)
     textColor = documentTabTextColor(item.enabled(), selected)
-    tabTextStyle = tabs.tabTextStyle(textColor)
-    fillColor = tabFillColor(style, selected, pressed)
-    borderColor = tabBorderColor(style, selected)
-    borderWidth = if style == dtsUnderline: 0.0'f32 else: 1.0'f32
-    radius = min(style.tabCornerRadius(), rect.size.height / 2.0'f32)
+    tabTextStyle = context.appearance.tabTextStyle(styleContext, textColor)
+    fillFallback = fill(tabFillColor(style, selected, pressed))
+    fillValue = context.appearance.resolveFill(styleContext, fillFallback)
+    borderColor = context.appearance.resolveColor(
+      styleContext, StyleBorderColor, tabBorderColor(style, selected)
+    )
+    borderWidth =
+      if style == dtsUnderline:
+        0.0'f32
+      else:
+        context.appearance.resolveLength(styleContext, StyleBorderWidth, 1.0'f32)
+    radius = min(
+      context.appearance.resolveLength(
+        styleContext, StyleCornerRadius, style.tabCornerRadius()
+      ),
+      rect.size.height / 2.0'f32,
+    )
+    highlightFill = context.appearance.resolveFill(
+      styleContext, tabHighlightFill(item.enabled()), StyleHighlightFill
+    )
+    chrome = chromeContext(
+      context.appearance.resolveChromeName(styleContext),
+      crTab,
+      cpFace,
+      fillValue,
+      states,
+    )
 
   if style != dtsUnderline:
-    discard context.addRenderRectangle(
+    let renderRect = context.renderRectFor(rect)
+    let tabRoot = context.addRenderRectangle(
       DefaultDrawLevel,
       parent,
-      context.renderRectFor(rect),
-      fill(fillColor),
+      renderRect,
+      context.appearance.chromeFill(chrome),
       borderColor,
       borderWidth,
       radius,
+      maskContent = true,
+    )
+    context.drawChromeExtras(
+      chrome,
+      initChromeExtras(
+        tabRoot, renderRect, cornerRadius = radius, highlightFill = highlightFill
+      ),
     )
 
   let accentRect =
@@ -874,18 +1066,17 @@ proc drawDocumentTab(
   let
     close = tabs.closeRect(index)
     modifiedWidth = if item.modified(): 8.0'f32 else: 0.0'f32
+    textInsets = tabTextStyle.insets
+    textLeftInset = max(textInsets.left, DocumentTabHorizontalInset)
     textRightInset =
       if close.isEmpty:
-        DocumentTabHorizontalInset
+        max(textInsets.right, DocumentTabHorizontalInset)
       else:
-        DocumentTabCloseWidth + 14.0'f32
+        DocumentTabCloseWidth + max(textInsets.right, 14.0'f32)
     textRect = initRect(
-      rect.origin.x + DocumentTabHorizontalInset + modifiedWidth,
+      rect.origin.x + textLeftInset + modifiedWidth,
       rect.origin.y,
-      max(
-        rect.size.width - DocumentTabHorizontalInset - textRightInset - modifiedWidth,
-        0.0'f32,
-      ),
+      max(rect.size.width - textLeftInset - textRightInset - modifiedWidth, 0.0'f32),
       rect.size.height,
     )
 
@@ -915,13 +1106,22 @@ proc drawScrollButton(
   let rect = tabs.scrollButtonRect(button)
   if rect.isEmpty:
     return
+  let enabled =
+    case button
+    of dtsbPrevious:
+      tabs.xScrollOffset > 0.01'f32
+    of dtsbNext:
+      tabs.xScrollOffset < tabs.maximumScrollOffset() - 0.01'f32
+  var states: set[WidgetState]
+  if pressed and enabled:
+    states.incl ssHighlighted
+    states.incl ssPressed
+  if not enabled:
+    states.incl ssDisabled
   let
-    enabled =
-      case button
-      of dtsbPrevious:
-        tabs.xScrollOffset > 0.01'f32
-      of dtsbNext:
-        tabs.xScrollOffset < tabs.maximumScrollOffset() - 0.01'f32
+    styleContext = tabs.documentTabButtonStyleContext(
+      states, classes = ["document-tab-scroll-button"]
+    )
     fillColor =
       if pressed and enabled:
         initColor(0.70, 0.74, 0.82, 1.0)
@@ -937,10 +1137,33 @@ proc drawScrollButton(
       case button
       of dtsbPrevious: "<"
       of dtsbNext: ">"
-  discard context.addRenderRectangle(
-    context.renderRectFor(rect), fill(fillColor), borderColor, 1.0'f32, 5.0'f32
+    fillValue = context.appearance.resolveFill(styleContext, fill(fillColor))
+    resolvedBorderColor =
+      context.appearance.resolveColor(styleContext, StyleBorderColor, borderColor)
+    borderWidth =
+      context.appearance.resolveLength(styleContext, StyleBorderWidth, 1.0'f32)
+    radius = context.appearance.resolveLength(styleContext, StyleCornerRadius, 5.0'f32)
+    markColor = context.appearance.resolveColor(styleContext, StyleMarkColor, textColor)
+    markStyle = context.appearance.tabTextStyle(styleContext, markColor)
+    chrome = chromeContext(
+      context.appearance.resolveChromeName(styleContext),
+      crButton,
+      cpFace,
+      fillValue,
+      states,
+    )
+    renderRect = context.renderRectFor(rect)
+    buttonRoot = context.addRenderRectangle(
+      renderRect,
+      context.appearance.chromeFill(chrome),
+      resolvedBorderColor,
+      borderWidth,
+      radius,
+    )
+  context.drawChromeExtras(
+    chrome, initChromeExtras(buttonRoot, renderRect, cornerRadius = radius)
   )
-  context.addText(rect, label, tabs.tabTextStyle(textColor), alignment = taCenter)
+  context.addText(rect, label, markStyle, alignment = taCenter)
 
 proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
   if not tabs.xShowsHorizontalScroller or not tabs.hasOverflow():
@@ -950,6 +1173,14 @@ proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
     return
   let
     maxOffset = tabs.maximumScrollOffset()
+    scrollStyle = context.appearance.resolveScrollViewStyle(
+      controlStyle(
+        srScroller,
+        tabs.widgetStateSet(),
+        id = tabs.styleId(),
+        classes = tabs.styleClasses(),
+      )
+    )
     track = initRect(
       viewport.origin.x,
       tabs.bounds().maxY - DocumentTabScrollerHeight,
@@ -965,23 +1196,47 @@ proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
         track.origin.x + (track.size.width - thumbWidth) * tabs.xScrollOffset / maxOffset
     thumb = initRect(thumbX, track.origin.y, thumbWidth, track.size.height)
   discard context.addRenderRectangle(
-    context.renderRectFor(track), fill(initColor(0.60, 0.64, 0.72, 0.25))
+    context.renderRectFor(track),
+    scrollStyle.scrollerTrack.fill,
+    scrollStyle.scrollerTrack.borderColor,
+    scrollStyle.scrollerTrack.borderWidth,
+    min(scrollStyle.scrollerTrack.cornerRadius, track.size.height / 2.0'f32),
   )
   discard context.addRenderRectangle(
     context.renderRectFor(thumb),
-    fill(initColor(0.38, 0.44, 0.54, 0.70)),
-    cornerRadius = 2.0'f32,
+    scrollStyle.scrollerKnob.fill,
+    scrollStyle.scrollerKnob.borderColor,
+    scrollStyle.scrollerKnob.borderWidth,
+    min(scrollStyle.scrollerKnob.cornerRadius, thumb.size.height / 2.0'f32),
   )
 
 protocol DocumentTabsDrawing of ViewDrawingProtocol:
   method draw(tabs: DocumentTabs, context: DrawContext) =
-    let bounds = tabs.bounds()
-    discard context.addRenderRectangle(
-      context.renderRectFor(bounds),
-      fill(barFillColor()),
-      initColor(0.58, 0.62, 0.70, 1.0),
-      1.0'f32,
-      6.0'f32,
+    let
+      bounds = tabs.bounds()
+      barContext = tabs.documentTabBarStyleContext()
+      barFill = context.appearance.resolveFill(barContext, fill(barFillColor()))
+      barBorderColor = context.appearance.resolveColor(
+        barContext, StyleBorderColor, initColor(0.58, 0.62, 0.70, 1.0)
+      )
+      barBorderWidth =
+        context.appearance.resolveLength(barContext, StyleBorderWidth, 1.0'f32)
+      barCornerRadius =
+        context.appearance.resolveLength(barContext, StyleCornerRadius, 6.0'f32)
+      barChrome = chromeContext(
+        context.appearance.resolveChromeName(barContext), crTabPanel, cpFace, barFill
+      )
+      barRenderRect = context.renderRectFor(bounds)
+      barRoot = context.addRenderRectangle(
+        barRenderRect,
+        context.appearance.chromeFill(barChrome),
+        barBorderColor,
+        barBorderWidth,
+        barCornerRadius,
+      )
+    context.drawChromeExtras(
+      barChrome,
+      initChromeExtras(barRoot, barRenderRect, cornerRadius = barCornerRadius),
     )
     let viewport = tabs.tabViewportRect()
     let clipRoot = context.addRenderRectangle(
@@ -1114,7 +1369,11 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
 
 protocol DocumentTabsLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(tabs: DocumentTabs): IntrinsicSize =
-    initIntrinsicSize(max(tabs.contentWidth(), 180.0'f32), DocumentTabBarHeight)
+    let viewStyle = tabs.documentTabViewStyle()
+    initIntrinsicSize(
+      max(tabs.contentWidth(), 180.0'f32),
+      max(DocumentTabBarHeight, viewStyle.tabHeight + 4.0'f32),
+    )
 
 protocol DocumentTabsAccessibility of AccessibilityProtocol:
   method accessibilityRole(tabs: DocumentTabs): AccessibilityRole =

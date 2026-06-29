@@ -138,7 +138,6 @@ demo.styleChoice = styleChoice
 tabs.delegate = demo
 demo.observeProtocol(tabs, DocumentTabsEvents)
 
-root.background = initColor(0.94, 0.95, 0.97)
 layout.spacing = 12.0
 layout.alignment = svaFill
 layout.edgeInsets = insets(22.0, 24.0)

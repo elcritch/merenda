@@ -37,6 +37,17 @@ type
     lastToIndex: int
     lastOffset: float32
 
+  DocumentTabChromeSpy = ref object of Chrome
+
+const DocumentTabChromeName = "document-tabs-test-chrome"
+
+let
+  DocumentTabChromeFill = fill(initColor(0.18, 0.62, 0.92, 1.0))
+  DocumentTabBarChromeFill = fill(initColor(0.12, 0.16, 0.24, 1.0))
+  DocumentTabButtonChromeFill = fill(initColor(0.72, 0.20, 0.50, 1.0))
+  DocumentTabButtonThemeFill = fill(initColor(0.22, 0.48, 0.74, 1.0))
+  SpecialDocumentTabFill = fill(initColor(0.92, 0.80, 0.22, 1.0))
+
 protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
   method shouldSelectDocumentTab(
       spy: DocumentTabDelegateSpy, tabs: DocumentTabs, item: DocumentTabItem
@@ -143,6 +154,19 @@ protocol DocumentTabSignalSpyEvents from DocumentTabSignalSpy:
     inc spy.scrollCount
     spy.lastOffset = offset
 
+protocol DocumentTabChromeSpyMethods of ChromeProtocol:
+  method chromeFillFor(chrome: DocumentTabChromeSpy, context: ChromeContext): Fill =
+    discard chrome
+    case context.role
+    of crTab:
+      if ssSelected in context.states: DocumentTabChromeFill else: context.baseFill
+    of crTabPanel:
+      DocumentTabBarChromeFill
+    of crButton:
+      DocumentTabButtonChromeFill
+    else:
+      context.baseFill
+
 proc newDelegateSpy(): DocumentTabDelegateSpy =
   result = DocumentTabDelegateSpy(denyMoveTo: -1)
   initResponder(result)
@@ -153,9 +177,26 @@ proc newSignalSpy(): DocumentTabSignalSpy =
   initResponder(result)
   result = result.withProto()
 
+proc newDocumentTabChromeSpy(): Chrome =
+  let chrome = DocumentTabChromeSpy()
+  discard chrome.withProtocol(DocumentTabChromeSpyMethods)
+  Chrome(chrome)
+
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
     result.add rune
+
+proc renderedRect(node: Fig): nimkitTypes.Rect =
+  nimkitTypes.initRect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
+
+proc rectsClose(left, right: nimkitTypes.Rect): bool =
+  abs(left.origin.x - right.origin.x) <= 0.01'f32 and
+    abs(left.origin.y - right.origin.y) <= 0.01'f32 and
+    abs(left.size.width - right.size.width) <= 0.01'f32 and
+    abs(left.size.height - right.size.height) <= 0.01'f32
 
 func center(rect: nimkitTypes.Rect): nimkitTypes.Point =
   initPoint(
@@ -337,3 +378,78 @@ suite "nimkit document tabs":
     check nextFound
     check closeSymbolFound
     check not closeTextFound
+
+  test "document tab scroll buttons inherit tab theme fill":
+    let tabs = newDocumentTabs(frame = initRect(0, 0, 210, 34))
+    for index in 0 .. 4:
+      discard tabs.addDocumentTabItem(newDocumentTabItem("Document " & $index))
+    tabs.scrollOffset = 10.0'f32
+
+    var theme = initTheme()
+    theme[srTab, StyleChrome] = styleKeyword(DefaultChromeName)
+    theme[srTab, StyleFill] = DocumentTabButtonThemeFill
+
+    let
+      renders = buildRenders(tabs, initAppearance(theme))
+      previousRect = tabs.scrollButtonRect(dtsbPrevious)
+      nextRect = tabs.scrollButtonRect(dtsbNext)
+    var
+      previousButtonFound = false
+      nextButtonFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill == DocumentTabButtonThemeFill:
+        if node.renderedRect().rectsClose(previousRect):
+          previousButtonFound = true
+        elif node.renderedRect().rectsClose(nextRect):
+          nextButtonFound = true
+
+    check previousButtonFound
+    check nextButtonFound
+
+  test "document tabs resolve document tab theme roles and chrome":
+    let
+      tabs = newDocumentTabs(frame = initRect(0, 0, 360, 34))
+      first = newDocumentTabItem("Primary", "primary")
+      special = newDocumentTabItem("Special", "special")
+      defaultAppearance = initAppearance()
+
+    check defaultAppearance.resolveChromeName(controlStyle(srDocumentTab)) ==
+      defaultAppearance.resolveChromeName(controlStyle(srTab))
+    check defaultAppearance.resolveChromeName(controlStyle(srDocumentTabBar)) ==
+      defaultAppearance.resolveChromeName(controlStyle(srTabPanel))
+
+    special.styleId = "special-doc"
+    discard tabs.addDocumentTabItem(first)
+    discard tabs.addDocumentTabItem(special)
+
+    var theme = initTheme()
+    theme.installChrome(DocumentTabChromeName, newDocumentTabChromeSpy())
+    theme[srDocumentTab, StyleChrome] = styleKeyword(DocumentTabChromeName)
+    theme[srDocumentTabBar, StyleChrome] = styleKeyword(DocumentTabChromeName)
+    theme[srDocumentTabButton, StyleChrome] = styleKeyword(DocumentTabChromeName)
+    theme[initStyleSelector(srDocumentTab, id = "special-doc"), StyleFill] =
+      SpecialDocumentTabFill
+
+    let renders = buildRenders(tabs, initAppearance(theme))
+    var
+      selectedChromeFound = false
+      specialFillFound = false
+      barChromeFound = false
+      buttonChromeFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle:
+        if node.fill == DocumentTabChromeFill:
+          selectedChromeFound = true
+        elif node.fill == SpecialDocumentTabFill:
+          specialFillFound = true
+        elif node.fill == DocumentTabBarChromeFill:
+          barChromeFound = true
+        elif node.fill == DocumentTabButtonChromeFill:
+          buttonChromeFound = true
+
+    check selectedChromeFound
+    check specialFillFound
+    check barChromeFound
+    check buttonChromeFound

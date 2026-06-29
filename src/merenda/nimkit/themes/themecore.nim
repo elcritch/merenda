@@ -47,6 +47,9 @@ type
     srProgressIndicator
     srTab
     srTabPanel
+    srDocumentTab
+    srDocumentTabBar
+    srDocumentTabButton
     srTextField
     srTextView
     srMonoTextView
@@ -680,6 +683,8 @@ func specificity(selector: StyleSelector): int =
 func inheritedStyleRole(role: StyleRole): StyleRole =
   case role
   of srStepper: srButton
+  of srDocumentTab, srDocumentTabButton: srTab
+  of srDocumentTabBar: srTabPanel
   else: role
 
 proc stylePatch*(theme: var Theme, selector: StyleSelector): StylePatch =
