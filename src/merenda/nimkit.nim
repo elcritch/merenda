@@ -52,6 +52,7 @@ import merenda/nimkit/text/textviewintegrations
 import merenda/nimkit/text/textviews
 import merenda/nimkit/themes
 import merenda/nimkit/foundation/types
+import merenda/nimkit/foundation/undomanagers
 import merenda/nimkit/app/userdefaults
 import merenda/nimkit/view/views
 import merenda/nimkit/app/windowcontrollers
@@ -113,6 +114,7 @@ export textviewintegrations
 export textviews
 export themes
 export types
+export undomanagers
 export userdefaults
 export views
 export windowcontrollers

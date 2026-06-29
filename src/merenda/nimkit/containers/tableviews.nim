@@ -18,6 +18,7 @@ import ../themes
 import ../text/fieldeditors
 import ../text/textviews
 import ../foundation/types
+import ../foundation/undomanagers
 import ../view/views
 
 const
@@ -210,6 +211,7 @@ const TableViewStateDefaultsPrefix = "nimkit.table.state."
 proc noteColumnsChanged(tableView: TableView)
 proc detachColumn(column: TableColumn)
 proc removeColumnAtIndex(tableView: TableView, index: int)
+proc removeColumnAt*(tableView: TableView, index: int)
 proc resolvedRowCount(tableView: TableView): int
 proc tableRowEnabled(tableView: TableView, row: int): bool
 proc tableRowSelectable(tableView: TableView, row: int): bool
@@ -1573,6 +1575,14 @@ proc applySelectedIndexes(
     if nextLead >= 0:
       tableView.scrollItemToVisible(nextLead)
     return
+  let beforeIndexes = tableView.xSelectedIndexes
+  tableView.findUndoManager().registerSelectionChange(
+    proc(indexes: seq[int]) =
+      tableView.selectedIndexes = indexes,
+    beforeIndexes,
+    nextIndexes,
+    "Change Selection",
+  )
   emit tableView.selectionIsChanging(DynamicAgent(tableView))
   tableView.xSelectedIndexes = nextIndexes
   tableView.syncSelectedIndex()
@@ -2737,6 +2747,12 @@ proc insertColumn*(tableView: TableView, column: TableColumn, index: int) =
   elif not column.tableView().isNil:
     column.detachColumn()
   let boundedIndex = max(0, min(index, tableView.xColumns.len))
+  tableView.findUndoManager().registerCollectionInsert(
+    proc(index: int) =
+      tableView.removeColumnAt(index),
+    boundedIndex,
+    "Insert Column",
+  )
   column.xTableView = tableView
   tableView.xColumns.insert(column, boundedIndex)
   tableView.noteColumnsChanged()
@@ -2749,6 +2765,13 @@ proc removeColumnAtIndex(tableView: TableView, index: int) =
   if tableView.isNil or index notin 0 ..< tableView.xColumns.len:
     return
   let column = tableView.xColumns[index]
+  tableView.findUndoManager().registerCollectionRemove(
+    proc(index: int, column: TableColumn) =
+      tableView.insertColumn(column, index),
+    index,
+    column,
+    "Remove Column",
+  )
   tableView.xColumns.delete(index)
   if not column.isNil:
     column.xTableView = nil
@@ -3578,6 +3601,13 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     if fromIndex == boundedTo:
       return
     let column = tableView.xColumns[fromIndex]
+    tableView.findUndoManager().registerCollectionMove(
+      proc(fromIndex, toIndex: int) =
+        tableView.moveColumn(fromIndex, toIndex),
+      fromIndex,
+      boundedTo,
+      "Move Column",
+    )
     tableView.xColumns.delete(fromIndex)
     tableView.xColumns.insert(column, boundedTo)
     tableView.noteColumnsChanged()

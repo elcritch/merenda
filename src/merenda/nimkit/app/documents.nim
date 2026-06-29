@@ -3,6 +3,7 @@ import std/[options, os, strutils]
 import sigils/core
 
 import ../foundation/selectors
+import ../foundation/undomanagers
 import ../responder/responders
 import ./userdefaults
 import ./application
@@ -18,7 +19,7 @@ type Document* = ref object of Responder
   xHasDisplayName: bool
   xDocumentEdited: bool
   xClosed: bool
-  xUndoManager: DynamicAgent
+  xUndoManager: UndoManager
   xDelegate: DynamicAgent
   xWindowControllers: seq[WindowController]
   xUserDefaults: UserDefaults
@@ -63,11 +64,14 @@ protocol DocumentEvents:
 proc setDocumentEdited*(document: Document, edited: bool)
 proc displayName*(document: Document): string
 proc isDocumentEdited*(document: Document): bool
+proc undoManagerFor*(document: Document): UndoManager
+proc setUndoManager*(document: Document, undoManager: UndoManager)
 proc userDefaults*(document: Document): UserDefaults
 proc save*(document: Document): bool {.discardable.}
 proc revert*(document: Document): bool {.discardable.}
 proc close*(document: Document): bool {.discardable.}
 proc syncWindowControllerTitles(document: Document)
+proc setDocumentEditedFromUndoManager(document: Document, edited: bool)
 
 proc filePathFromUrl(fileUrl: string): string =
   result = fileUrl
@@ -122,10 +126,10 @@ proc documentShouldCloseNow(document: Document): bool =
   document.trySendLocal(documentShouldClose(), document).get(true)
 
 protocol DocumentResponderCommands of ResponderCommandDispatchProtocol:
-  method undoManager(document: Document): Option[DynamicAgent] =
-    if document.isNil or document.xUndoManager.isNil:
-      return none(DynamicAgent)
-    some(document.xUndoManager)
+  method undoManager(document: Document): Option[UndoManager] =
+    if document.isNil:
+      return none(UndoManager)
+    some(document.undoManagerFor())
 
 protocol DocumentDefaultsProvider of UserDefaultsProvider:
   method defaultsStore(document: Document): DynamicAgent =
@@ -288,6 +292,19 @@ proc documentEdited*(document: Document): bool =
   document.isDocumentEdited()
 
 proc setDocumentEdited*(document: Document, edited: bool) =
+  if document.isNil:
+    return
+  if edited:
+    if not document.xUndoManager.isNil and document.xUndoManager.isAtCleanState():
+      document.xUndoManager.clearCleanState()
+  elif not document.xUndoManager.isNil:
+    document.xUndoManager.markCleanState()
+  if document.xDocumentEdited == edited:
+    return
+  document.xDocumentEdited = edited
+  document.notifyDocumentEditedChanged()
+
+proc setDocumentEditedFromUndoManager(document: Document, edited: bool) =
   if document.isNil or document.xDocumentEdited == edited:
     return
   document.xDocumentEdited = edited
@@ -299,8 +316,12 @@ proc `documentEdited=`*(document: Document, edited: bool) =
 proc isClosed*(document: Document): bool =
   (not document.isNil) and document.xClosed
 
-proc undoManager*(document: Document): DynamicAgent =
-  if document.isNil: nil else: document.xUndoManager
+proc undoManagerFor*(document: Document): UndoManager =
+  if document.isNil:
+    return nil
+  if document.xUndoManager.isNil:
+    document.setUndoManager(newUndoManager())
+  document.xUndoManager
 
 proc userDefaults*(document: Document): UserDefaults =
   if document.isNil:
@@ -309,15 +330,22 @@ proc userDefaults*(document: Document): UserDefaults =
     document.xUserDefaults = newUserDefaults()
   document.xUserDefaults
 
-proc setUndoManager*(document: Document, undoManager: DynamicAgent) =
-  if not document.isNil:
-    document.xUndoManager = undoManager
+proc setUndoManager*(document: Document, undoManager: UndoManager) =
+  if document.isNil or document.xUndoManager == undoManager:
+    return
+  if not document.xUndoManager.isNil:
+    document.xUndoManager.onStateChanged = nil
+  document.xUndoManager = undoManager
+  if not undoManager.isNil:
+    undoManager.onStateChanged = proc(manager: UndoManager) =
+      document.setDocumentEditedFromUndoManager(not manager.isAtCleanState())
+    if document.xDocumentEdited:
+      undoManager.clearCleanState()
+    else:
+      undoManager.markCleanState()
 
-proc `undoManager=`*(document: Document, undoManager: DynamicAgent) =
+proc `undoManager=`*(document: Document, undoManager: UndoManager) =
   document.setUndoManager(undoManager)
-
-proc `undoManager=`*(document: Document, undoManager: Responder) =
-  document.setUndoManager(DynamicAgent(undoManager))
 
 proc windowControllers*(document: Document): lent seq[WindowController] =
   document.xWindowControllers

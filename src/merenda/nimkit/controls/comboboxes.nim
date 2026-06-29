@@ -10,6 +10,7 @@ import ../themes
 import ../drawing
 import ../foundation/events
 import ../foundation/types
+import ../foundation/undomanagers
 import ../app/windows
 
 import ./controls
@@ -240,6 +241,14 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       value = comboBox.itemAtIndex(index)
     if cell.xSelectedIndex == index and cell.xStringValue == value:
       return
+    let oldValue = cell.xStringValue
+    comboBox.findUndoManager().registerValueChange(
+      proc(value: string) =
+        comboBox.setComboBoxStringValue(value),
+      oldValue,
+      value,
+      "Change Choice",
+    )
     cell.xSelectedIndex = index
     cell.xStringValue = value
     cell.invalidateControlMetrics()
@@ -249,6 +258,14 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     let cell = comboBox.comboBoxCell()
     if cell.xSelectedIndex < 0 and cell.xStringValue.len == 0:
       return
+    let oldValue = cell.xStringValue
+    comboBox.findUndoManager().registerValueChange(
+      proc(value: string) =
+        comboBox.setComboBoxStringValue(value),
+      oldValue,
+      "",
+      "Change Choice",
+    )
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
     comboBox.highlightedIndex = -1
@@ -256,17 +273,51 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     comboBox.postAccessibilityNotification(anSelectionChanged)
 
   method addItem*(comboBox: ComboBox, value: string) =
+    let index = comboBox.comboBoxCell().cellNumberOfItems()
+    comboBox.findUndoManager().registerCollectionInsert(
+      proc(index: int) =
+        comboBox.removeItemAtIndex(index),
+      index,
+      "Insert Choice",
+    )
     comboBox.comboBoxCell().cellAddItem(value)
 
   method insertItem*(comboBox: ComboBox, value: string, index: int) =
+    let boundedIndex = max(0, min(index, comboBox.comboBoxCell().cellNumberOfItems()))
+    comboBox.findUndoManager().registerCollectionInsert(
+      proc(index: int) =
+        comboBox.removeItemAtIndex(index),
+      boundedIndex,
+      "Insert Choice",
+    )
     comboBox.comboBoxCell().cellInsertItem(value, index)
 
   method removeItemAtIndex*(comboBox: ComboBox, index: int) =
+    if index >= 0 and index < comboBox.comboBoxCell().cellNumberOfItems():
+      let value = comboBox.comboBoxCell().cellItemAtIndex(index)
+      comboBox.findUndoManager().registerCollectionRemove(
+        proc(index: int, value: string) =
+          comboBox.insertItem(value, index),
+        index,
+        value,
+        "Remove Choice",
+      )
     comboBox.comboBoxCell().cellRemoveItemAtIndex(index)
     if comboBox.numberOfItems() == 0:
       comboBox.closePopup()
 
   method removeAllItems*(comboBox: ComboBox) =
+    let
+      cell = comboBox.comboBoxCell()
+      values = cell.xItems
+      oldValue = cell.xStringValue
+    if values.len > 0 or oldValue.len > 0:
+      comboBox.findUndoManager().registerUndo(
+        proc() =
+          comboBox.addItems(values)
+          comboBox.setComboBoxStringValue(oldValue),
+        "Remove Choices",
+      )
     comboBox.comboBoxCell().cellRemoveAllItems()
     comboBox.closePopup()
 
@@ -621,6 +672,14 @@ proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
     index = comboBox.indexOfItem(value)
   if cell.xStringValue == value and cell.xSelectedIndex == index:
     return
+  let oldValue = cell.xStringValue
+  comboBox.findUndoManager().registerValueChange(
+    proc(value: string) =
+      comboBox.setComboBoxStringValue(value),
+    oldValue,
+    value,
+    "Change Choice",
+  )
   cell.xStringValue = value
   cell.xSelectedIndex = index
   cell.invalidateControlMetrics()

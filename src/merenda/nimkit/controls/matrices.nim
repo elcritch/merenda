@@ -7,6 +7,7 @@ import ../drawing
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
+import ../foundation/undomanagers
 import ../text/fieldeditors
 import ./buttons except isEnabled, setEnabled
 import ./controls as controlbase
@@ -87,12 +88,50 @@ func columnForIndex(matrix: Matrix, index: int): int =
   else:
     index mod matrix.xColumns
 
+proc clearSelectionStates(matrix: Matrix, exceptIndex = -1)
+proc emitSelectionChangedIfNeeded(matrix: Matrix, before: seq[int])
+
 proc selectedIndexes*(matrix: Matrix): seq[int] =
   if matrix.isNil:
     return
   for index, cell in matrix.xCells:
     if not cell.isNil and cell.state() in {bsOn, bsMixed}:
       result.add index
+
+proc `selectedIndexes=`*(matrix: Matrix, indexes: openArray[int]) =
+  if matrix.isNil:
+    return
+  var nextIndexes: seq[int]
+  for index in indexes:
+    if matrix.validIndex(index) and not matrix.xCells[index].isNil and
+        index notin nextIndexes:
+      case matrix.xSelectionMode
+      of msmNone, msmMultiple:
+        nextIndexes.add index
+      of msmRadio, msmSingle:
+        if nextIndexes.len == 0:
+          nextIndexes.add index
+  let before = matrix.selectedIndexes()
+  if before == nextIndexes:
+    return
+  matrix.findUndoManager().registerSelectionChange(
+    proc(indexes: seq[int]) =
+      matrix.selectedIndexes = indexes,
+    before,
+    nextIndexes,
+    "Change Selection",
+  )
+  matrix.clearSelectionStates()
+  for index in nextIndexes:
+    matrix.xCells[index].setState(bsOn)
+  matrix.xSelectedIndex =
+    if nextIndexes.len == 0:
+      -1
+    else:
+      nextIndexes[0]
+  matrix.xLeadIndex = matrix.xSelectedIndex
+  matrix.emitSelectionChangedIfNeeded(before)
+  matrix.invalidateMatrix()
 
 proc sendMatrixAction(matrix: Matrix): bool
 
@@ -393,11 +432,7 @@ proc selectCellAtIndex*(matrix: Matrix, index: int, notify = false): bool =
 proc deselectAll*(matrix: Matrix) =
   if matrix.isNil:
     return
-  let before = matrix.selectedIndexes()
-  matrix.clearSelectionStates()
-  matrix.xSelectedIndex = -1
-  matrix.emitSelectionChangedIfNeeded(before)
-  matrix.invalidateMatrix()
+  matrix.selectedIndexes = @[]
 
 proc cellNaturalSize(matrix: Matrix, cell: ButtonCell): Size =
   if cell.isNil:

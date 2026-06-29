@@ -5,6 +5,7 @@ import sigils/selectors
 from figdraw/figbasics import ZLevel
 
 import ../drawing/drawing
+import ./undomanagers
 import ./events
 import ../text/texttypes
 import ../text/textstorage
@@ -56,7 +57,7 @@ type
   ScrollEventForwardingSelector* = Selector[ScrollEvent, bool]
   KeyEquivalentSelector* = Selector[KeyEvent, bool]
   ValidRequestorSelector* = Selector[ValidRequestorArgs, Option[DynamicAgent]]
-  UndoManagerSelector* = Selector[EmptyArgs, Option[DynamicAgent]]
+  UndoManagerSelector* = Selector[EmptyArgs, Option[UndoManager]]
 
   TryToPerformArgs* = object
     selector*: CommandSelector
@@ -96,7 +97,7 @@ protocol ResponderCommandDispatchProtocol:
     args: ValidRequestorArgs
   ): Option[DynamicAgent] {.optional.}
 
-  method undoManager*(): Option[DynamicAgent] {.optional.}
+  method undoManager*(): Option[UndoManager] {.optional.}
 
 protocol MouseHitPolicyProtocol:
   method mouseHitPolicy*(args: MouseHitPolicyArgs): CellHitPolicy {.optional.}

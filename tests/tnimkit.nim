@@ -35,6 +35,7 @@ import nimkit/textstorage
 import nimkit/textviews
 import nimkit/theme
 import nimkit/types
+import nimkit/undomanagers
 import nimkit/viewinspectors
 import nimkit/views
 import nimkit/viewselection

@@ -139,7 +139,7 @@ suite "nimkit documents":
   test "document file hooks drive read save save-as revert and undo lookup":
     let
       document = FileDocument()
-      manager = newResponder()
+      manager = newUndoManager()
       delegate = DocumentDelegateSpy()
 
     fileEvents = @[]
@@ -150,7 +150,7 @@ suite "nimkit documents":
     document.delegate = delegate
     document.undoManager = manager
 
-    check document.findUndoManager() == DynamicAgent(manager)
+    check document.findUndoManager() == manager
     check document.readFromFileUrl("file:///tmp/Read.txt", "txt")
     check document.fileUrl == "file:///tmp/Read.txt"
     check document.fileName == "Read.txt"

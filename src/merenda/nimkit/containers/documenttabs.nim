@@ -7,6 +7,7 @@ import ../drawing
 import ../foundation/events
 import ../foundation/selectors
 import ../foundation/types
+import ../foundation/undomanagers
 import ../responder/responders
 import ../themes
 import ../view/views
@@ -131,6 +132,11 @@ proc maximumScrollOffset*(tabs: DocumentTabs): float32
 proc tabViewportRect*(tabs: DocumentTabs): Rect
 proc documentTabRect*(tabs: DocumentTabs, index: int): Rect
 proc documentTabIndexAtPoint*(tabs: DocumentTabs, point: Point): int
+proc insertDocumentTabItem*(
+  tabs: DocumentTabs, item: DocumentTabItem, index: Natural
+): DocumentTabItem {.discardable.}
+
+proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.}
 proc moveDocumentTabItem*(
   tabs: DocumentTabs, fromIndex, toIndex: int
 ): bool {.discardable.}
@@ -712,6 +718,13 @@ proc addDocumentTabItem*(
 ): DocumentTabItem {.discardable.} =
   if tabs.isNil or item.isNil:
     return nil
+  let index = tabs.xItems.len
+  tabs.findUndoManager().registerCollectionInsert(
+    proc(index: int) =
+      discard tabs.removeDocumentTabAtIndex(index),
+    index,
+    "Insert Tab",
+  )
   tabs.xItems.add item
   if tabs.xSelectedIndex < 0 and item.enabled():
     tabs.xSelectedIndex = tabs.xItems.high
@@ -726,6 +739,12 @@ proc insertDocumentTabItem*(
   if tabs.isNil or item.isNil:
     return nil
   let boundedIndex = min(index.int, tabs.xItems.len)
+  tabs.findUndoManager().registerCollectionInsert(
+    proc(index: int) =
+      discard tabs.removeDocumentTabAtIndex(index),
+    boundedIndex,
+    "Insert Tab",
+  )
   tabs.xItems.insert(item, boundedIndex)
   if tabs.xSelectedIndex >= boundedIndex:
     inc tabs.xSelectedIndex
@@ -737,6 +756,14 @@ proc insertDocumentTabItem*(
 proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
   if tabs.isNil or index < 0 or index >= tabs.xItems.len:
     return false
+  let item = tabs.xItems[index]
+  tabs.findUndoManager().registerCollectionRemove(
+    proc(index: int, item: DocumentTabItem) =
+      discard tabs.insertDocumentTabItem(item, index.Natural),
+    index,
+    item,
+    "Remove Tab",
+  )
   tabs.xItems.delete(index)
   tabs.xSelectedIndex = tabs.selectedItemAfterRemoval(index)
   tabs.xPressedIndex = -1
@@ -787,6 +814,13 @@ proc moveDocumentTabItem*(tabs: DocumentTabs, fromIndex, toIndex: int): bool =
   if not tabs.shouldMove(item, fromIndex, boundedIndex):
     return false
 
+  tabs.findUndoManager().registerCollectionMove(
+    proc(fromIndex, toIndex: int) =
+      discard tabs.moveDocumentTabItem(fromIndex, toIndex),
+    fromIndex,
+    boundedIndex,
+    "Move Tab",
+  )
   emit tabs.documentTabWillMove(item, fromIndex, boundedIndex)
   let selectedItem = tabs.selectedDocumentTabItem()
   tabs.xItems.delete(fromIndex)

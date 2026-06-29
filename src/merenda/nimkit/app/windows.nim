@@ -15,6 +15,7 @@ import ../text/fieldeditors
 import ../foundation/selectors
 import ../themes
 import ../foundation/types
+import ../foundation/undomanagers
 import ../view/views
 
 type
@@ -150,6 +151,7 @@ type
     xHasLastClick: bool
     xVisibleRequested: bool
     xClosed: bool
+    xUndoManager: UndoManager
 
   TransientSession = object
     active: bool
@@ -256,6 +258,8 @@ proc canClose*(window: Window): bool
 proc canMiniaturize*(window: Window): bool
 proc canZoom*(window: Window): bool
 proc validateWindowCommand*(window: Window, selector: ActionSelector): Option[bool]
+proc undoManagerFor*(window: Window): UndoManager
+proc setUndoManager*(window: Window, undoManager: UndoManager)
 proc miniaturize*(window: Window)
 proc deminiaturize*(window: Window)
 proc zoom*(window: Window)
@@ -333,6 +337,12 @@ protocol DefaultWindowCommands of MenuCommandProtocol:
   method performZoom(window: Window, args: ActionArgs) =
     window.zoom()
 
+protocol DefaultWindowResponderCommands of ResponderCommandDispatchProtocol:
+  method undoManager(window: Window): Option[UndoManager] =
+    if window.isNil:
+      return none(UndoManager)
+    some(window.undoManagerFor())
+
 protocol DefaultWindowValidations of UserInterfaceValidations:
   method validateUserInterfaceItem(window: Window, args: ValidationArgs): bool =
     let validation = window.validateWindowCommand(args.action)
@@ -356,6 +366,7 @@ proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): 
   initResponder(result)
   discard result.withProtocol(DefaultWindowKeyViewCommands)
   discard result.withProtocol(DefaultWindowCommands)
+  discard result.withProtocol(DefaultWindowResponderCommands)
   discard result.withProtocol(DefaultWindowValidations)
 
 proc newPanel*(title = "Panel", frame: Rect = defaultWindowFrame()): Panel =
@@ -473,6 +484,20 @@ proc `delegate=`*(window: Window, delegate: DynamicAgent) =
 
 proc `delegate=`*(window: Window, delegate: Responder) =
   window.delegate = DynamicAgent(delegate)
+
+proc undoManagerFor*(window: Window): UndoManager =
+  if window.isNil:
+    return nil
+  if window.xUndoManager.isNil:
+    window.xUndoManager = newUndoManager()
+  window.xUndoManager
+
+proc setUndoManager*(window: Window, undoManager: UndoManager) =
+  if not window.isNil:
+    window.xUndoManager = undoManager
+
+proc `undoManager=`*(window: Window, undoManager: UndoManager) =
+  window.setUndoManager(undoManager)
 
 proc contentView*(window: Window): View =
   window.xContentView

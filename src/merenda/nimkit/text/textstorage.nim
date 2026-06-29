@@ -2,6 +2,7 @@ import std/[algorithm, options, unicode]
 
 import sigils/core
 import sigils/selectors
+import ../foundation/undomanagers
 import ../foundation/types
 import ./texttypes
 
@@ -25,6 +26,7 @@ type
     xRuns: seq[TextAttributeRun]
     xDelegate: DynamicAgent
     xLazyProvider: DynamicAgent
+    xUndoManager: UndoManager
     xMaterialized: bool
     xEditingDepth: Natural
     xProcessingEditing: bool
@@ -129,6 +131,7 @@ func coalesceEdits(a, b: TextStorageEdit): TextStorageEdit =
 proc materialize*(storage: TextStorage)
 proc processEditing*(storage: TextStorage)
 proc fixAttributesInRange*(storage: TextStorage, range: TextRange)
+proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: string)
 
 proc hasPendingEdit*(storage: TextStorage): bool =
   not storage.isNil and storage.xHasPendingEdit
@@ -153,6 +156,13 @@ proc delegate*(storage: TextStorage): DynamicAgent =
 proc `delegate=`*(storage: TextStorage, delegate: DynamicAgent) =
   if not storage.isNil:
     storage.xDelegate = delegate
+
+proc undoManager*(storage: TextStorage): UndoManager =
+  if storage.isNil: nil else: storage.xUndoManager
+
+proc `undoManager=`*(storage: TextStorage, undoManager: UndoManager) =
+  if not storage.isNil:
+    storage.xUndoManager = undoManager
 
 proc lazyProvider*(storage: TextStorage): DynamicAgent =
   if storage.isNil: nil else: storage.xLazyProvider
@@ -403,6 +413,42 @@ proc copyTextStorage*(storage: TextStorage): TextStorage =
   result.xRuns = storage.xRuns
   result.xMaterialized = true
 
+proc registerSnapshotUndo(
+    storage: TextStorage, snapshot: TextStorage, actionName: string
+) =
+  let manager = storage.undoManager()
+  if manager.isNil or snapshot.isNil:
+    return
+  let undoSnapshot = snapshot.copyTextStorage()
+  manager.registerUndo(
+    proc() =
+      storage.applySnapshot(undoSnapshot, actionName),
+    actionName,
+  )
+
+proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: string) =
+  if storage.isNil or snapshot.isNil:
+    return
+  storage.materialize()
+  snapshot.materialize()
+  let
+    before = storage.copyTextStorage()
+    oldLength = storage.xStringValue.runeLen
+    newLength = snapshot.xStringValue.runeLen
+    edit = initTextStorageEdit(
+      initTextRange(0, oldLength),
+      newLength,
+      newLength - oldLength,
+      {tseCharacters, tseAttributes},
+    )
+  storage.registerSnapshotUndo(before, actionName)
+  storage.dispatchWillEdit(edit)
+  storage.xStringValue = snapshot.xStringValue
+  storage.xRuns = snapshot.xRuns
+  storage.xMaterialized = true
+  storage.normalizeRuns()
+  storage.notifyCommittedEdit(edit)
+
 proc mutableCopy*(storage: AttributedString): MutableAttributedString =
   storage.copyTextStorage()
 
@@ -444,6 +490,7 @@ proc `stringValue=`*(storage: TextStorage, value: string) =
   if storage.isNil:
     return
   storage.materialize()
+  let before = storage.copyTextStorage()
   let oldLength = storage.xStringValue.runeLen
   let edit = initTextStorageEdit(
     initTextRange(0, oldLength),
@@ -451,6 +498,7 @@ proc `stringValue=`*(storage: TextStorage, value: string) =
     value.runeLen - oldLength,
     {tseCharacters, tseAttributes},
   )
+  storage.registerSnapshotUndo(before, "Set Text")
   storage.dispatchWillEdit(edit)
   storage.xStringValue = value
   storage.xRuns.setLen(0)
@@ -514,7 +562,9 @@ proc replace*(
     delta = insertedLength - int(clamped.length)
     current = storage.xStringValue
     edit = initTextStorageEdit(clamped, insertedLength, delta, {tseCharacters})
+    before = storage.copyTextStorage()
 
+  storage.registerSnapshotUndo(before, "Edit Text")
   storage.dispatchWillEdit(edit)
   storage.xStringValue =
     current.runeSubStr(0, replaceStart) & text & current.runeSubStr(replaceStop)
@@ -572,8 +622,10 @@ proc setAttributes*(
     stop = clamped.maxIndex
   if clamped.length == 0:
     return
+  let before = storage.copyTextStorage()
   let edit = initTextStorageEdit(clamped, int(clamped.length), 0, {tseAttributes})
 
+  storage.registerSnapshotUndo(before, "Set Attributes")
   storage.dispatchWillEdit(edit)
   var nextRuns: seq[TextAttributeRun]
   for run in storage.xRuns:

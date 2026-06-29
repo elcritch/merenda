@@ -4,6 +4,7 @@ import sigils/selectors as dynamicSelectors
 
 import ../foundation/events
 import ../foundation/selectors
+import ../foundation/undomanagers
 
 type Responder* = ref object of DynamicAgent
   xAcceptsFirstResponder: bool
@@ -112,7 +113,7 @@ proc findValidRequestorForSendType*(
       return requestor.get().get()
     current = current.nextResponder()
 
-proc findUndoManager*(responder: Responder): DynamicAgent =
+proc findUndoManager*(responder: Responder): UndoManager =
   var current = responder
   while not current.isNil:
     let manager = current.trySendLocal(undoManager(), ())

@@ -7,7 +7,7 @@ from merenda/nimkit/foundation/selectors import performKeyEquivalent, undoManage
 
 type TrackingSpyView = ref object of View
   xName: string
-  xUndoManager: DynamicAgent
+  xUndoManager: UndoManager
 
 type FocusSpyView = ref object of View
   xName: string
@@ -162,9 +162,9 @@ protocol TrackingSpyResponderCommands of ResponderCommandDispatchProtocol:
     else:
       none(DynamicAgent)
 
-  method undoManager(spy: TrackingSpyView): Option[DynamicAgent] =
+  method undoManager(spy: TrackingSpyView): Option[UndoManager] =
     if spy.xUndoManager.isNil:
-      none(DynamicAgent)
+      none(UndoManager)
     else:
       some(spy.xUndoManager)
 
@@ -787,17 +787,17 @@ suite "nimkit responder":
 
   test "valid requestor and undo manager lookup walk responder chain":
     let
-      manager = newResponder()
+      manager = newUndoManager()
       parent = newTrackingSpyView("parent", initRect(10, 10, 100, 80))
       child = newView(frame = initRect(20, 15, 30, 20))
 
-    parent.xUndoManager = DynamicAgent(manager)
+    parent.xUndoManager = manager
     parent.addSubview(child)
 
     check child.findValidRequestorForSendType(PasteboardTypeString, "") ==
       DynamicAgent(parent)
     check child.findValidRequestorForSendType("missing.type", "") == nil
-    check child.findUndoManager() == DynamicAgent(manager)
+    check child.findUndoManager() == manager
 
   test "window scroll dispatch hit-tests and converts local coordinates":
     let
