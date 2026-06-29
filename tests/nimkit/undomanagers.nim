@@ -1,6 +1,16 @@
 import std/unittest
 
+import sigils/core
+
 import merenda/nimkit
+
+type UndoStateSpy = ref object of Agent
+  changeCount: int
+  cleanStates: seq[bool]
+
+proc rememberUndoState(spy: UndoStateSpy, manager: UndoManager) {.slot.} =
+  inc spy.changeCount
+  spy.cleanStates.add manager.isAtCleanState()
 
 suite "nimkit undo managers":
   test "groups nested commands, names actions, and invalidates redo branches":
@@ -15,7 +25,6 @@ suite "nimkit undo managers":
         proc(value: string) =
           assignValue(value),
         before,
-        next,
         "Set Value",
       )
       value = next
@@ -84,7 +93,6 @@ suite "nimkit undo managers":
         proc(value: int) =
           assignValue(value),
         before,
-        next,
         "Set Number",
       )
       value = next
@@ -109,7 +117,6 @@ suite "nimkit undo managers":
         proc(value: int) =
           assignNumber(value),
         before,
-        next,
         "Set Number",
       )
       number = next
@@ -177,3 +184,26 @@ suite "nimkit undo managers":
     check document.isDocumentEdited
     check manager.performUndo()
     check tabs[0] == first
+
+  test "state change signal fans out to observers":
+    let
+      manager = newUndoManager()
+      firstSpy = UndoStateSpy()
+      secondSpy = UndoStateSpy()
+
+    manager.connect(stateDidChange, firstSpy, rememberUndoState)
+    manager.connect(stateDidChange, secondSpy, rememberUndoState)
+
+    manager.registerUndo(
+      proc() =
+        discard,
+      "No Op",
+    )
+    check firstSpy.changeCount == 1
+    check secondSpy.changeCount == 1
+
+    manager.disconnect(stateDidChange, firstSpy, rememberUndoState)
+    manager.markCleanState()
+    check firstSpy.changeCount == 1
+    check secondSpy.changeCount == 2
+    check secondSpy.cleanStates[^1]

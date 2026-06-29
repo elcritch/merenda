@@ -97,6 +97,7 @@ protocol ResponderCommandDispatchProtocol:
     args: ValidRequestorArgs
   ): Option[DynamicAgent] {.optional.}
 
+protocol UndoManagerProvider:
   method undoManager*(): Option[UndoManager] {.optional.}
 
 protocol MouseHitPolicyProtocol:

@@ -337,7 +337,7 @@ protocol DefaultWindowCommands of MenuCommandProtocol:
   method performZoom(window: Window, args: ActionArgs) =
     window.zoom()
 
-protocol DefaultWindowResponderCommands of ResponderCommandDispatchProtocol:
+protocol DefaultWindowUndoManagerProvider of UndoManagerProvider:
   method undoManager(window: Window): Option[UndoManager] =
     if window.isNil:
       return none(UndoManager)
@@ -366,7 +366,7 @@ proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): 
   initResponder(result)
   discard result.withProtocol(DefaultWindowKeyViewCommands)
   discard result.withProtocol(DefaultWindowCommands)
-  discard result.withProtocol(DefaultWindowResponderCommands)
+  discard result.withProtocol(DefaultWindowUndoManagerProvider)
   discard result.withProtocol(DefaultWindowValidations)
 
 proc newPanel*(title = "Panel", frame: Rect = defaultWindowFrame()): Panel =

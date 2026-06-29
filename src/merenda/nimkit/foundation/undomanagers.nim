@@ -3,7 +3,6 @@ import sigils/selectors
 
 type
   UndoOperation* = proc() {.closure.}
-  UndoStateChangedProc* = proc(manager: UndoManager) {.closure.}
 
   UndoValueApplyProc*[T] = proc(value: T) {.closure.}
   UndoCollectionIndexProc* = proc(index: int) {.closure.}
@@ -49,14 +48,16 @@ type
     xBranchSerial: int
     xCleanBranchSerial: int
     xHasCleanState: bool
-    xOnStateChanged: UndoStateChangedProc
+
+protocol UndoManagerEvents:
+  proc stateDidChange*(manager: UndoManager, sender: UndoManager) {.signal.}
 
 func undoStackEntry(group: UndoGroup): UndoStackEntry =
   UndoStackEntry(actionName: group.actionName, commandCount: group.commands.len.Natural)
 
 proc notifyStateChanged(manager: UndoManager) =
-  if not manager.isNil and not manager.xOnStateChanged.isNil:
-    manager.xOnStateChanged(manager)
+  if not manager.isNil:
+    emit manager.stateDidChange(manager)
 
 proc addCommand(group: var UndoGroup, command: sink UndoCommand) =
   if command.actionName.len > 0 and group.actionName.len == 0:
@@ -98,13 +99,6 @@ proc commitEndedGroup(manager: UndoManager, group: sink UndoGroup) =
 
 proc newUndoManager*(): UndoManager =
   result = UndoManager(xHasCleanState: true)
-
-proc onStateChanged*(manager: UndoManager): UndoStateChangedProc =
-  if manager.isNil: nil else: manager.xOnStateChanged
-
-proc `onStateChanged=`*(manager: UndoManager, handler: UndoStateChangedProc) =
-  if not manager.isNil:
-    manager.xOnStateChanged = handler
 
 proc isUndoing*(manager: UndoManager): bool =
   not manager.isNil and manager.xIsUndoing
@@ -210,12 +204,8 @@ proc registerUndo*(manager: UndoManager, operation: UndoOperation, actionName = 
     manager.commitNormalGroup(group)
 
 proc registerValueChange*[T](
-    manager: UndoManager,
-    apply: UndoValueApplyProc[T],
-    oldValue, newValue: T,
-    actionName = "",
+    manager: UndoManager, apply: UndoValueApplyProc[T], oldValue: T, actionName = ""
 ) =
-  discard newValue
   manager.registerUndo(
     proc() =
       apply(oldValue),
@@ -230,17 +220,14 @@ proc setUndoableValue*[T](
 ): bool {.discardable.} =
   if currentValue == newValue:
     return false
-  manager.registerValueChange(apply, currentValue, newValue, actionName)
+  manager.registerValueChange(apply, currentValue, actionName)
   apply(newValue)
   true
 
 proc registerSelectionChange*[T](
-    manager: UndoManager,
-    apply: UndoValueApplyProc[T],
-    oldSelection, newSelection: T,
-    actionName = "",
+    manager: UndoManager, apply: UndoValueApplyProc[T], oldSelection: T, actionName = ""
 ) =
-  manager.registerValueChange(apply, oldSelection, newSelection, actionName)
+  manager.registerValueChange(apply, oldSelection, actionName)
 
 proc registerCollectionInsert*(
     manager: UndoManager, removeAt: UndoCollectionIndexProc, index: int, actionName = ""

@@ -246,7 +246,6 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       proc(value: string) =
         comboBox.setComboBoxStringValue(value),
       oldValue,
-      value,
       "Change Choice",
     )
     cell.xSelectedIndex = index
@@ -263,7 +262,6 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       proc(value: string) =
         comboBox.setComboBoxStringValue(value),
       oldValue,
-      "",
       "Change Choice",
     )
     cell.xSelectedIndex = -1
@@ -677,7 +675,6 @@ proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
     proc(value: string) =
       comboBox.setComboBoxStringValue(value),
     oldValue,
-    value,
     "Change Choice",
   )
   cell.xStringValue = value

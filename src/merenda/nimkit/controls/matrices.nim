@@ -118,7 +118,6 @@ proc `selectedIndexes=`*(matrix: Matrix, indexes: openArray[int]) =
     proc(indexes: seq[int]) =
       matrix.selectedIndexes = indexes,
     before,
-    nextIndexes,
     "Change Selection",
   )
   matrix.clearSelectionStates()

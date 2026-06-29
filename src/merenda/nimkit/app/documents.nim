@@ -125,7 +125,7 @@ proc documentShouldCloseNow(document: Document): bool =
       return allowed.get()
   document.trySendLocal(documentShouldClose(), document).get(true)
 
-protocol DocumentResponderCommands of ResponderCommandDispatchProtocol:
+protocol DocumentUndoManagerProvider of UndoManagerProvider:
   method undoManager(document: Document): Option[UndoManager] =
     if document.isNil:
       return none(UndoManager)
@@ -182,7 +182,7 @@ proc initDocument*(document: Document, fileUrl = "", fileType = "", fileName = "
   if fileName.len > 0:
     document.xFileName = fileName
     document.xHasFileName = true
-  discard document.withProtocol(DocumentResponderCommands)
+  discard document.withProtocol(DocumentUndoManagerProvider)
   discard document.withProtocol(DocumentDefaultsProvider)
   discard document.withProtocol(DocumentMenuCommands)
   discard document.withProtocol(DefaultDocumentWindows)
@@ -330,15 +330,21 @@ proc userDefaults*(document: Document): UserDefaults =
     document.xUserDefaults = newUserDefaults()
   document.xUserDefaults
 
+proc undoManagerStateDidChange(document: Document, manager: UndoManager) {.slot.} =
+  if document.isNil or document.xUndoManager != manager:
+    return
+  document.setDocumentEditedFromUndoManager(not manager.isAtCleanState())
+
 proc setUndoManager*(document: Document, undoManager: UndoManager) =
   if document.isNil or document.xUndoManager == undoManager:
     return
   if not document.xUndoManager.isNil:
-    document.xUndoManager.onStateChanged = nil
+    document.xUndoManager.disconnect(
+      stateDidChange, document, undoManagerStateDidChange
+    )
   document.xUndoManager = undoManager
   if not undoManager.isNil:
-    undoManager.onStateChanged = proc(manager: UndoManager) =
-      document.setDocumentEditedFromUndoManager(not manager.isAtCleanState())
+    undoManager.connect(stateDidChange, document, undoManagerStateDidChange)
     if document.xDocumentEdited:
       undoManager.clearCleanState()
     else:

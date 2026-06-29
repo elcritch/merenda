@@ -1580,7 +1580,6 @@ proc applySelectedIndexes(
     proc(indexes: seq[int]) =
       tableView.selectedIndexes = indexes,
     beforeIndexes,
-    nextIndexes,
     "Change Selection",
   )
   emit tableView.selectionIsChanging(DynamicAgent(tableView))

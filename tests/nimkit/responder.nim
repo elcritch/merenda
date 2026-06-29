@@ -162,6 +162,7 @@ protocol TrackingSpyResponderCommands of ResponderCommandDispatchProtocol:
     else:
       none(DynamicAgent)
 
+protocol TrackingSpyUndoManagerProvider of UndoManagerProvider:
   method undoManager(spy: TrackingSpyView): Option[UndoManager] =
     if spy.xUndoManager.isNil:
       none(UndoManager)
@@ -197,6 +198,7 @@ proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
   discard result.withProtocol(TrackingSpyEvents)
   discard result.withProtocol(TrackingSpyCommands)
   discard result.withProtocol(TrackingSpyResponderCommands)
+  discard result.withProtocol(TrackingSpyUndoManagerProvider)
 
 proc newFocusSpyView(name: string, frame: Rect): FocusSpyView =
   result = FocusSpyView(xName: name)
