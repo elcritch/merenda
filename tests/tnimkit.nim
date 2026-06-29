@@ -20,6 +20,7 @@ import nimkit/pasteboards_dragging
 import nimkit/rendering
 import nimkit/responder
 import nimkit/scrollviews
+import nimkit/scrollviews2
 import nimkit/selectionrings
 import nimkit/sizing
 import nimkit/splitviews
