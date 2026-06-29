@@ -5,21 +5,51 @@ import std/unicode
 import sigils/core
 import sigils/selectors
 
-proc makeIntroStorage(): TextStorage =
-  result = newTextStorage(
+const
+  IntroText =
     "NimKit Text Editor\n\n" &
-      "This is a multi-line editor built like Cocoa: a scroll view owns a text view document.\n\n" &
-      "It supports selection, undo, pasteboard rich text, wrapping, insets, and attributed runs. Try editing this text, toggling wrapping, and changing the highlighted range."
+    "This is a multi-line editor built like Cocoa: a scroll view owns a text view document.\n\n" &
+    "It supports selection, undo, pasteboard rich text, wrapping, insets, and attributed runs. Try editing this text, toggling wrapping, and changing the highlighted range."
+  TitleText = "NimKit Text Editor"
+  LinkText = "view document."
+  LeadText = "It supports"
+  EmphasisText = "attributed runs"
+
+proc runeIndexOf(text, needle: string): int =
+  let
+    total = text.runeLen
+    length = needle.runeLen
+  if length == 0:
+    return 0
+  if length > total:
+    return -1
+  for index in 0 .. total - length:
+    if text.runeSubStr(index, length) == needle:
+      return index
+  -1
+
+proc textRangeOf(text, needle: string): TextRange =
+  let start = runeIndexOf(text, needle)
+  doAssert start >= 0, "missing text editor demo fragment: " & needle
+  initTextRange(start, needle.runeLen)
+
+proc makeIntroStorage(): TextStorage =
+  result = newTextStorage(IntroText)
+  result.setAttributes(
+    textRangeOf(IntroText, TitleText),
+    defaultTextAttributes(initColor(0.95, 0.42, 0.78, 1.0), 18.0),
   )
   result.setAttributes(
-    initTextRange(0, 18), defaultTextAttributes(initColor(0.95, 0.42, 0.78, 1.0), 18.0)
+    textRangeOf(IntroText, LinkText),
+    defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0),
   )
   result.setAttributes(
-    initTextRange(95, 31), defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0)
+    textRangeOf(IntroText, LeadText),
+    defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0),
   )
   var emphasis = defaultTextAttributes(initColor(0.95, 0.56, 0.24, 1.0), 13.0)
   emphasis.underline = true
-  result.setAttributes(initTextRange(183, 15), emphasis)
+  result.setAttributes(textRangeOf(IntroText, EmphasisText), emphasis)
 
 let
   app = sharedApplication()
