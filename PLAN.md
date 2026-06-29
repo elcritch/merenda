@@ -223,52 +223,351 @@ document-controller open/save integration are covered in tests and examples.
 
 ## Near-Term Work
 
-### TextLayoutManager
+### Undo Manager Architecture
 
-Turn the current FigDraw-backed helper into the stable text layout contract used
-by `TextView`, `TextField`, accessibility, selection drawing, hit-testing, and
-future text backends. Do this as a NimKit API first, not as a full
-`NSLayoutManager` clone: expose plain Nim value records and protocol methods
-over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
-private except for diagnostics.
+Add a cross-cutting undo manager that works for documents, windows, responders,
+text storage, model-backed controls, and future controller layers. Treat undo as
+an application architecture service, not only as text-edit history.
 
-14. Add rich editing integrations expected by Cocoa text users:
-   - drag/drop selected text and attachments, services-style selected text
-     requests, contextual menus, link opening, attachment cells/views, image
-     attachments, file promises, and document-controller save/open integration
-   - add accessibility text parameterized attributes: attributed string for
-     range, range for line, range for position, bounds for range, visible
-     character range, selected ranges, and insertion point line
-   - add print/page layout hooks, pagination containers, ruler metrics, and
-     snapshot tests for layout stability across display scale and font changes
+1. Define the undo transaction model:
+   - add undo grouping, redo grouping, action names, nesting behavior, and
+     explicit discard/clear semantics
+   - expose a responder/document/window lookup path so controls can find the
+     active undo manager without global mutable state
+2. Route model mutations through undoable commands:
+   - support value changes, collection insert/remove/move, selection-affecting
+     edits, and document dirty-state integration
+   - make text storage, table/outline models, choice controls, and document tabs
+     able to register inverse operations through one API
+3. Add verification and diagnostics:
+   - test grouping, redo invalidation, document edited-state changes, nested
+     undo registration, and disabled undo scopes
+   - expose lightweight debug summaries for undo stacks without leaking internal
+     command storage
 
+### Object Values, Formatting, and Validation
 
-### OutlineView
+Create the shared object-value layer needed by model-backed controls. This should
+cover display conversion, parse/writeback, validation errors, empty/nil handling,
+and typed values without forcing every widget to invent its own `string` bridge.
 
-Continue growing the protocol-backed outline API into a production AppKit-style
-widget.
+1. Define a common object-value representation:
+   - represent strings, numbers, booleans, dates/times, colors, images,
+     attributed text, links, dynamic agents, nil/empty, and validation failures
+     as plain Nim records or enums
+   - keep conversion helpers explicit so required lookups fail clearly and
+     optional lookups can return `Option`
+2. Add formatter/parser protocols:
+   - format object values for labels, text fields, table cells, combo boxes,
+     menus, sliders, steppers, and form rows
+   - parse edited text back into typed values with structured validation errors
+3. Connect validation to controls:
+   - route invalid edits through existing delegate/event surfaces before
+     writeback
+   - expose validation state for drawing, accessibility, field editors, and
+     document dirty-state decisions
 
-1. Harden outline behavior on top of the current disclosure rendering path:
-   - add richer outline keyboard navigation, multi-selection behavior aligned
-     with `TableView`, type-ahead/find-style selection, and optional delegate
-     hooks for disclosure rendering and indent metrics
-2. Finish identity-based persistence:
-   - persist selection by stable item identity instead of only visible row
-     indexes
-   - add migration behavior for renamed/moved items
-   - verify expansion and selection autosave restore timing through the same
-     application, workspace, document, and window lifecycle paths used by table
-     state storage
-3. Finish outline drag/drop integration beyond the baseline item target:
+### Controller and Bindings Layer
+
+Add Nim-native controller/adaptor objects that sit between application models and
+widgets. Do not clone Cocoa Bindings literally; provide the useful architecture:
+object, array, tree, selection, sorting, filtering, and observation controllers.
+
+1. Define model controller roles:
+   - add object, array, tree, and selection controllers with plain value query
+     APIs and identity-aware mutation helpers
+   - keep controller objects as `ref object` only where shared identity,
+     observation, or external model lifetime is part of the contract
+2. Bridge controllers to model-backed widgets:
+   - feed table, outline, cascading, combo, menu, document-tab, matrix, and future
+     collection views through shared adapter protocols
+   - centralize sort/filter/selection state instead of duplicating that logic in
+     every control
+3. Provide focused examples:
+   - add small examples for array-backed tables, tree-backed browsers, document
+     tabs, and choice controls using the same controller vocabulary
+
+### Notification Center and Observation
+
+Add a typed notification layer for broadcast lifecycle and model events that are
+too broad for direct Sigils signal wiring. Sigils remains the local signal path;
+the notification center should cover app/window/document/model announcements and
+future native bridge interop.
+
+1. Define typed notification records:
+   - include sender, notification name/kind, optional represented object, and
+     small typed payload records instead of unstructured dictionaries
+   - provide observer tokens and deterministic unregister behavior
+2. Route major lifecycle events through notifications:
+   - application activation, window key/main changes, document lifecycle,
+     defaults changes, appearance changes, undo changes, selection changes, and
+     model mutation batches
+3. Keep direct and broadcast observation separate:
+   - use direct Sigils signals for owner-to-child and delegate-style paths
+   - use notifications for cross-cutting observers, diagnostics, and native
+     adapter boundaries
+
+### ViewController Architecture
+
+Add a `ViewController` layer for view construction, lifecycle, represented
+objects, validation, and responder participation. This should complement
+`WindowController` and `DocumentController`, not replace view subclasses or plain
+view composition.
+
+1. Define controller lifecycle:
+   - load/build view, view loaded, will/did appear, will/did disappear,
+     represented-object changes, teardown, and child-controller containment
+   - keep backend/native handles out of the controller public contract
+2. Integrate with responder and validation paths:
+   - allow view controllers to participate in command validation, target/action,
+     undo-manager lookup, and represented-object routing
+   - make window/document controllers able to own and swap view controllers
+3. Add examples and tests:
+   - cover document-backed content views, reusable panel content, split/sidebar
+     compositions, and controller teardown without stale signal observers
+
+### CollectionView
+
+Add a true model-backed collection view for reusable item views. `GridView` stays
+a layout container; `CollectionView` should cover repeated content such as icon
+grids, galleries, source lists, and custom item presentations.
+
+1. Share model vocabulary with table/tree work:
+   - item identifiers, object values, selection identity, sort/filter adapters,
+     reusable item views, supplementary views, and incremental updates
+   - keep layout strategy separate from item storage so list, grid, wrapped, and
+     custom layouts can evolve independently
+2. Define item view lifecycle:
+   - dequeue/reuse item views, configure from object values, prepare for reuse,
+     apply selection/highlight/focus state, and update accessibility metadata
+3. Add selection, drag/drop, and updates:
+   - identity-backed selection, batch insert/remove/move/reload, autoscroll,
+     drag payload writers, and model-aware drop targets
+
+### TableView Model Backing
+
+Move `TableView` from an index-and-text callback surface toward a fully
+model-backed table while keeping existing data-source/delegate users working.
+The table should still own view identity, columns, selection state, visible row
+views, reuse pools, editing surfaces, drag/drop feedback, and persistence; row
+records and mutations should live in an explicit model/data-source boundary.
+
+1. Define the model-facing value contract:
+   - add typed row identity and cell value records that can represent strings,
+     numbers, booleans, attributed text, images, colors, links, and opaque
+     dynamic agents without leaking widget state into model storage
+   - keep row data as plain Nim values where possible; use `ref object` only for
+     identity-bearing model controllers, adapter objects, or external stores
+   - provide required and optional lookup paths for row identifiers, row indexes,
+     and column identifiers so missing rows are explicit instead of silently
+     becoming empty strings
+2. Expand `TableViewDataSource` beyond `numberOfRows`/`textForCell`:
+   - add object-value reads and writeback hooks alongside the existing text hook
+   - keep `textForCell` as a compatibility/default formatting path over object
+     values
+   - move commit semantics toward the data source while retaining delegate/event
+     notifications for validation, observation, and UI policy
+3. Add an optional concrete table model adapter:
+   - provide a small NimKit-owned adapter for common seq-backed tables with
+     stable row identifiers, column descriptors, mutable cell values, sorting,
+     and row insertion/removal/move helpers
+   - make the adapter useful for examples and tests without requiring every
+     application to copy its data into a NimKit-owned store
+4. Make row identity the default for state preservation:
+   - persist selected rows by stable row identifier when the data source provides
+     identities, with index fallback only for legacy/local row-count tables
+   - preserve selection, anchor, lead, editing position, and visible scroll row
+     across sorting, filtering, reloads, and model mutations
+   - add migration behavior for renamed row identifiers where callers provide an
+     alias map or resolver
+5. Add incremental model-update APIs:
+   - introduce row reload/insert/remove/move operations that update cached row
+     heights, visible cell slots, selection, accessibility notifications, and
+     scroll position without forcing a full `reloadData`
+   - add batch update begin/end hooks so multiple model mutations produce one
+     coherent display, accessibility, and selection change sequence
+   - keep `reloadData` as the coarse invalidation path for unknown or external
+     model changes
+6. Deepen model-backed sorting, filtering, editing, and drag/drop:
+   - represent sort descriptors separately from column header chrome, and let
+     the model/data source apply them before the table restores identity-based
+     state
+   - route editing validation through delegate policy, then write accepted values
+     through the data-source/model mutation hook
+   - move row drag payloads from index strings toward row identity/object writers,
+     while preserving the current index pasteboard type for compatibility
+7. Lock the behavior down with focused tests and examples:
+   - add tests for object values, writeback, seq-backed models, identity
+     persistence, sorted/filtered selection restore, incremental row updates,
+     and compatibility with existing `textForCell` data sources
+   - update table examples to show both lightweight data-source usage and the
+     model-backed adapter path
+   - document which responsibilities belong to the table, the data source, the
+     delegate, and an optional model adapter
+
+### CascadingView Model Backing
+
+Move `CascadingView` toward a Browser-style tree model without making each
+column own its own independent row storage. The selected path, visible columns,
+and child lookups should be identity-backed across reloads and model mutations.
+
+1. Share the tree-item vocabulary with future outline work:
+   - define stable item identifiers, parent identifiers, display values, leaf
+     state, optional icons, and opaque model payloads as plain value records
+   - keep the existing `CascadingDataSource` compatibility path while adding
+     object-value and item-identity lookups
+2. Preserve selection by path identity:
+   - restore selected paths by identifiers instead of column/row indexes
+   - preserve focused column, visible column scroll, and activated item state
+     after reloads, sorting, or filtering
+3. Add incremental tree update hooks:
+   - reload a parent, insert/remove/move children, and collapse invalid paths
+     without forcing a full column rebuild
+   - make accessibility notifications describe item/path changes instead of only
+     table-row changes inside generated columns
+
+### ComboBox Choice Model Backing
+
+Make `ComboBox` and related choice popups use a small option model instead of a
+string-only list. The control should own editing, popup presentation, highlight,
+and selection UI state; the data source or optional adapter should own option
+records.
+
+1. Expand option values beyond strings:
+   - add option identifiers, display text, object value, enabled/hidden state,
+     separators, optional icon/image, tooltip, and search text
+   - keep existing string item APIs as compatibility sugar over display text
+2. Persist and restore selection by option identity:
+   - use identifiers for selected/highlighted options when available, with index
+     fallback for legacy string lists
+   - make editable combo boxes distinguish typed text from selected object value
+3. Add a reusable option-list adapter:
+   - provide seq-backed option storage for tests/examples and simple apps
+   - support filtered suggestions, type-ahead lookup, and popup row reloads
+     without coupling `PopupListView` itself to model ownership
+
+### Menu Item Model Backing
+
+Back dynamic menus, popup buttons, and menu-like choice lists with a command/item
+model. `PopupListView` should remain a presentation primitive; model ownership
+belongs above it in menu and popup controls.
+
+1. Define a shared menu item record:
+   - identifier, title, subtitle/key equivalent, state, enabled/hidden,
+     separator, submenu children, image, target/action selector, represented
+     object, and validation metadata
+   - keep menu item records as plain values unless a menu bridge needs identity
+     for native handles
+2. Route validation through model updates:
+   - let responder-chain validation update enabled/state/title metadata before a
+     menu opens
+   - support dynamic child generation for document/window/recent-items menus
+     without rebuilding unrelated menu state
+3. Share accessibility and pasteboard semantics:
+   - expose menu hierarchy and item actions from the model record
+   - make popup/menu presentation reuse the same item model where practical
+
+### DocumentTabs Model Backing
+
+Tie `DocumentTabs` to document/window identity instead of treating tab items as
+the durable source of truth. The tab bar should render and manipulate a document
+tab model owned by the document/window controller layer.
+
+1. Add document-backed tab item identity:
+   - map tab identifiers to document/window/controller objects through a narrow
+     represented-object hook
+   - derive title, modified state, closeability, enabled state, style, accent
+     color, and tooltip from the model when available
+2. Preserve ordering and selection by document identity:
+   - persist selected tab and tab order by stable document/window identifiers
+   - keep drag reordering as a model mutation with delegate veto/notification
+     hooks
+3. Align close and activation flows with document ownership:
+   - route close requests through document-controller validation
+   - update tab state from document edited/title changes without rebuilding the
+     whole tab bar
+
+### Matrix Item Model Backing
+
+Keep `Matrix` useful as an `NSMatrix`-style cell grid, but add an optional item
+model for dynamic grids of choices. This should be lower-risk and smaller than
+the collection/tree model work.
+
+1. Add optional cell item descriptors:
+   - identifier, title, state, enabled, tag/value, tooltip, image, and action
+     metadata
+   - keep direct `ButtonCell` ownership for legacy/manual matrix construction
+2. Preserve selection by item identity:
+   - expose selected item identifiers alongside selected indexes
+   - keep radio/single/multiple selection modes consistent when items are
+     inserted, removed, or reordered
+3. Add adapter and tests for dynamic choices:
+   - support seq-backed item grids and fixed row/column projection
+   - verify keyboard movement, action dispatch, and accessibility still work when
+     cells are generated from model items
+
+### OutlineView Model Backing
+
+Finish `OutlineView` last, after `TableView` and `CascadingView` establish the
+shared row/object value and tree-item contracts. Outline should remain a
+specialized table/tree presentation over a model, not a separate competing model
+system.
+
+1. Layer outline item data on the shared tree model:
+   - reuse stable identifiers, parent-child lookup, item display values, leaf or
+     expandable state, and opaque represented objects
+   - keep existing `OutlineItem` and `OutlineViewDataSource` APIs as a
+     compatibility path
+2. Finish identity-based expansion and selection:
+   - persist expanded items, selected rows, anchor/lead, and visible scroll row
+     by stable item identity instead of visible row index
+   - add migration behavior for renamed/moved items through aliases or resolver
+     callbacks
+3. Add incremental outline updates:
+   - reload, insert, remove, and move children under a parent while preserving
+     expansion, selection, row heights, hosted cells, and accessibility
+     notifications
+   - distinguish model mutations from purely visual disclosure toggles
+4. Deepen outline drag/drop integration:
    - add distinct before/on/after insertion targets for outline items on top of
      the current item/cell drop target model
    - render insertion affordances that distinguish parent-child drops from
      before/after sibling insertion
-   - deepen outline delegate validation and acceptance hooks for proposed
-     operation, target, and insertion position before completing a drop
+   - validate and accept drops through model-aware delegate/data-source hooks
 
 
 ## Medium-Term Architecture
+
+### Resource-Backed UI Construction
+
+Add a Nim-native resource construction layer for UI assets and declarative
+structure without committing to Cocoa nib/storyboard compatibility. The goal is
+repeatable loading, inspection, and backend bridging for menus, windows, panels,
+images, key bindings, and themes.
+
+- Define stable resource records for view/controller trees, menus, commands,
+  images, localized strings, key bindings, and theme fragments.
+- Keep loaded resources as plain Nim data until they are instantiated into
+  identity-bearing views, controls, windows, or controllers.
+- Add validation and diagnostics for missing identifiers, selector mismatches,
+  unavailable assets, and incompatible resource versions.
+- Leave room for future native nib/storyboard or GNUstep resource bridge layers
+  without exposing platform resource types in core NimKit APIs.
+
+### Workspace and Services Layer
+
+Add a backend-neutral workspace/service boundary for app-to-system integration.
+This should gather file, URL, service-request, app activation, and promised-file
+handoff behavior under one architecture instead of scattering it across panels,
+documents, pasteboards, and native adapters.
+
+- Add workspace operations for opening URLs/files, revealing files, launching or
+  activating apps where supported, and querying common system locations.
+- Route Services-style selected text, selected files, pasteboard requests, and
+  promised-file completions through typed service request/response records.
+- Integrate recent documents, document-controller open/save flows, pasteboard
+  promises, and drag/drop file handoff without making any backend mandatory.
+- Keep platform-specific workspace capabilities behind explicit feature checks.
 
 ### Native Integration
 
@@ -319,6 +618,25 @@ widget.
   constant shortcut. A fuller `LayoutSize`/`LayoutLength` model should preserve
   unresolved units through anchor expressions, resolve them against the relevant
   view/theme/font context
+
+## Long-Term Architecture
+
+### Printing and Page Layout
+
+Treat printing and page layout as a long-term architecture track. The immediate
+goal is to avoid painting NimKit into a corner; full print operation, native
+print panels, and paginated rendering can land after text, table, document, and
+native backend contracts are stable.
+
+- Define page setup records, printable content ranges, pagination containers,
+  margins, paper sizes, scale modes, headers/footers, and print job metadata as
+  backend-neutral value types.
+- Make text layout, table/collection layouts, image views, and custom drawing
+  able to produce page-fragment geometry without depending on a live window.
+- Add document-controller hooks for page setup, print preview, print operation
+  validation, and edited-state-safe print flows.
+- Defer native print panel bridges and platform spooler integration until the
+  pure Nim pagination and render snapshot contracts are testable.
 
 ## Open Questions
 

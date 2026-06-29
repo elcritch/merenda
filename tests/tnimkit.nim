@@ -7,6 +7,7 @@ import nimkit/comboboxes
 import nimkit/constraints
 import nimkit/controls
 import nimkit/documents
+import nimkit/documenttabs
 import nimkit/font_layout
 import nimkit/formviews
 import nimkit/gridviews

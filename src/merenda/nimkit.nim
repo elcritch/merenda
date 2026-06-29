@@ -9,6 +9,7 @@ import merenda/nimkit/controls/cells
 import merenda/nimkit/controls/comboboxes
 import merenda/nimkit/controls/controls
 import merenda/nimkit/controls/dialogbuttonboxes
+import merenda/nimkit/containers/documenttabs
 import merenda/nimkit/app/documentcontrollers
 import merenda/nimkit/app/documents
 import merenda/nimkit/drawing
@@ -67,6 +68,7 @@ export cells
 export comboboxes
 export controls
 export dialogbuttonboxes
+export documenttabs
 export documentcontrollers
 export documents
 export drawing, images, rendering
