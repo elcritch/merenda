@@ -8,6 +8,7 @@ import combo_scroll_demo
 import combobox_demo
 import constraint_playground_demo
 import controls_showcase
+import documenttabs_demo
 import document_workspace_demo
 import grid_preferences
 import hello
