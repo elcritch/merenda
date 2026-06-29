@@ -1,64 +1,22 @@
-import std/[unicode, unittest]
+import std/[strutils, unicode, unittest]
 
 import figdraw/common/fontglyphs
 import figdraw/fignodes
 
 import merenda/nimkit
 
-const
-  IntroText =
-    "NimKit Text Editor\n\n" &
-    "This is a multi-line editor built like Cocoa: a scroll view owns a text view document.\n\n" &
-    "It supports selection, undo, pasteboard rich text, wrapping, insets, and attributed runs. Try editing this text, toggling wrapping, and changing the highlighted range."
-  TitleText = "NimKit Text Editor"
-  LinkText = "view document."
-  LeadText = "It supports"
-  EmphasisText = "attributed runs"
+import ../../examples/texteditor_demo
 
 let
   TitleColor = initColor(0.95, 0.42, 0.78, 1.0).rgba
   LinkColor = initColor(0.1, 0.58, 0.95, 1.0).rgba
+  LeadColor = initColor(0.1, 0.58, 0.95, 1.0).rgba
   EmphasisColor = initColor(0.95, 0.56, 0.24, 1.0).rgba
-
-proc runeIndexOf(text, needle: string): int =
-  let
-    total = text.runeLen
-    length = needle.runeLen
-  if length == 0:
-    return 0
-  if length > total:
-    return -1
-  for index in 0 .. total - length:
-    if text.runeSubStr(index, length) == needle:
-      return index
-  -1
+  AttachmentColor = initColor(0.58, 0.27, 0.85, 1.0).rgba
 
 proc demoSourceRange(needle: string): Slice[int] =
-  let start = runeIndexOf(IntroText, needle)
-  doAssert start >= 0, "missing demo text fragment: " & needle
-  start .. start + needle.runeLen - 1
-
-proc demoTextRange(needle: string): TextRange =
-  let source = demoSourceRange(needle)
-  initTextRange(source.a, source.b - source.a + 1)
-
-proc makeIntroStorage(): TextStorage =
-  result = newTextStorage(IntroText)
-  result.setAttributes(
-    demoTextRange(TitleText),
-    defaultTextAttributes(initColor(0.95, 0.42, 0.78, 1.0), 18.0),
-  )
-  result.setAttributes(
-    demoTextRange(LinkText),
-    defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0),
-  )
-  result.setAttributes(
-    demoTextRange(LeadText),
-    defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0),
-  )
-  var emphasis = defaultTextAttributes(initColor(0.95, 0.56, 0.24, 1.0), 13.0)
-  emphasis.underline = true
-  result.setAttributes(demoTextRange(EmphasisText), emphasis)
+  let range = demoTextRange(needle)
+  int(range.location) .. int(range.location + range.length - 1)
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -80,65 +38,43 @@ proc textNodeForDemo(nodes: openArray[Fig]): tuple[found: bool, node: Fig] =
       return (true, node)
   (false, Fig(kind: nkText))
 
-proc buildTextEditorDemoWindow(): Window =
+proc layoutDemo(demo: TextEditorDemo) =
+  discard demo.window.buildRenders()
+
+proc centerPoint(view: View): Point =
+  let bounds = view.bounds()
+  initPoint(bounds.size.width / 2.0'f32, bounds.size.height / 2.0'f32)
+
+proc windowPointFor(demo: TextEditorDemo, view: View, localPoint: Point): Point =
+  demo.root.pointFromView(localPoint, view)
+
+proc clickView(demo: TextEditorDemo, view: View): bool =
+  demo.layoutDemo()
+  let point = demo.windowPointFor(view, view.centerPoint())
+  result = demo.window.clickAt(point)
+
+proc clickComboItem(demo: TextEditorDemo, index: int): bool =
+  demo.layoutDemo()
+  let combo = demo.insetChoice
+  if not demo.window.clickAt(demo.windowPointFor(combo, combo.centerPoint())):
+    return false
+  if not combo.popupOpen():
+    return false
   let
-    window = newWindow("NimKit Text Editor Demo", frame = initRect(130, 110, 720, 520))
-    root = newView()
-    layout = newStackView(laVertical)
-    header = newTitleLabel("Text Editor Demo")
-    summary =
-      newStatusLabel("Characters: 275 / Selection: 0:0 / Wrap: true / Rich text: true")
-    editor = newTextEditor(frame = initRect(0, 0, 640, 280))
-    controls = newStackView(laHorizontal)
-    wrapCheck = newCheckBox("Wrap text")
-    richCheck = newCheckBox("Rich text")
-    insetChoice = newComboBox(["Compact inset", "Cocoa inset", "Roomy inset"])
-    tintButton = newButton("Style Selection")
-    resetButton = newButton("Reset Text")
-
-  layout.spacing = 12.0
-  layout.alignment = svaFill
-  layout.edgeInsets = insets(22.0, 24.0)
-
-  editor.wraps = true
-  editor.richText = true
-  editor.minimumDocumentSize = initSize(640.0, 280.0)
-  editor.setHuggingPriority(LayoutPriorityLow, laVertical)
-  editor.setCompressionPriority(LayoutPriorityRequired, laVertical)
-  editor.attributedText = makeIntroStorage()
-  editor.selectedRange = initTextRange(0, 0)
-
-  wrapCheck.state = bsOn
-  richCheck.state = bsOn
-  insetChoice.selectItemAtIndex(1)
-
-  controls.spacing = 8.0
-  controls.alignment = svaCenter
-  controls.distribution = svdNatural
-  controls.setHuggingPriority(LayoutPriorityRequired, laVertical)
-  controls.setCompressionPriority(LayoutPriorityRequired, laVertical)
-
-  controls.addArrangedSubview(
-    wrapCheck, richCheck, insetChoice, tintButton, resetButton
-  )
-  controls.addFlexibleSpacer()
-  layout.addArrangedSubview(header, summary, editor, controls)
-  layout.addFlexibleSpacer()
-  root.addSubview(layout)
-  discard layout.pinEdges(
-    toGuide = root.contentLayoutGuide(insets(0.0)),
-    edges = {leLeft, leTop, leRight, leBottom},
-  )
-
-  window.setContentView(root)
-  discard window.makeFirstResponder(editor)
-  window
+    itemRect = combo.popupItemRect(combo.bounds(), index)
+    itemPoint = initPoint(
+      itemRect.origin.x + itemRect.size.width / 2.0'f32,
+      itemRect.origin.y + itemRect.size.height / 2.0'f32,
+    )
+    windowPoint = demo.windowPointFor(combo, itemPoint)
+  discard demo.window.mouseDownAt(windowPoint)
+  result = demo.window.mouseUpAt(windowPoint)
 
 suite "nimkit text editors":
   test "text editor demo rich text reaches FigDraw glyph fills":
     let
-      window = buildTextEditorDemoWindow()
-      nodes = window.buildRenders()[DefaultDrawLevel].nodes
+      demo = newTextEditorDemo(newApplication())
+      nodes = demo.window.buildRenders()[DefaultDrawLevel].nodes
       found = nodes.textNodeForDemo()
 
     check found.found
@@ -156,10 +92,80 @@ suite "nimkit text editors":
       check link.total == LinkText.runeLen
       check link.matched == link.total
 
-      let lead = node.hasFill(demoSourceRange(LeadText), LinkColor)
+      let lead = node.hasFill(demoSourceRange(LeadText), LeadColor)
       check lead.total == LeadText.runeLen
       check lead.matched == lead.total
 
       let emphasis = node.hasFill(demoSourceRange(EmphasisText), EmphasisColor)
       check emphasis.total == EmphasisText.runeLen
       check emphasis.matched == emphasis.total
+
+      let attachment = node.hasFill(demoSourceRange(AttachmentText), AttachmentColor)
+      check attachment.total == AttachmentText.runeLen
+      check attachment.matched == attachment.total
+
+  test "text editor demo editing controls dispatch from user mouse events":
+    let demo = newTextEditorDemo(newApplication())
+
+    check demo.summary.text.contains("Wrap: true")
+    check demo.summary.text.contains("Rich text: true")
+
+    check demo.clickView(demo.wrapCheck)
+    check demo.wrapCheck.state == bsOff
+    check not demo.editor.wraps
+    check demo.summary.text.contains("Wrap: false")
+
+    check demo.clickView(demo.richCheck)
+    check demo.richCheck.state == bsOff
+    check not demo.editor.richText
+    check demo.summary.text.contains("Rich text: false")
+
+    check demo.clickComboItem(2)
+    check demo.insetChoice.indexOfSelectedItem() == 2
+    check demo.editor.textInsets == insets(14.0, 18.0, 14.0, 18.0)
+
+    demo.selectDemoRange(EmphasisText)
+    let selected = demo.editor.selectedRange()
+    check demo.clickView(demo.tintButton)
+    let styled = demo.editor.textStorage().attributesAt(int(selected.location))
+    check styled.foregroundColor == initColor(0.0, 0.85, 0.95, 1.0)
+    check styled.underline
+
+    check demo.clickView(demo.resetButton)
+    check demo.editor.stringValue() == IntroText
+    check demo.editor.selectedRange() == initTextRange(0, 0)
+    check demo.featureStatus.text.startsWith("Ready:")
+
+  test "text editor demo feature buttons dispatch from user mouse events":
+    let demo = newTextEditorDemo(newApplication())
+
+    check demo.clickView(demo.serviceButton)
+    check demo.textDelegate.serviceCount == 1
+    check demo.editor.stringValue().contains("IT SUPPORTS")
+    check demo.featureStatus.text.startsWith("Service 1:")
+
+    check demo.clickView(demo.copyButton)
+    check not demo.lastPasteboard.isNil
+    check PasteboardTypeString in demo.lastPasteboard.types()
+    check PasteboardTypeTextStorage in demo.lastPasteboard.types()
+    check demo.featureStatus.text.startsWith("Pasteboard:")
+
+    check demo.clickView(demo.dragButton)
+    check not demo.lastDraggingSession.isNil
+    check demo.lastDraggingSession.items().len > 0
+    check demo.lastDraggingSession.promisedFileItems().len > 0
+    check demo.featureStatus.text.contains("promises:")
+
+    check demo.clickView(demo.linkButton)
+    check demo.editor.selectedRange() == demoTextRange(LinkText)
+    check demo.featureStatus.text.startsWith("Opened link:")
+
+    check demo.clickView(demo.pagesButton)
+    check demo.featureStatus.text.startsWith("Pages:")
+    check demo.featureStatus.text.contains("visible:")
+    check demo.featureStatus.text.contains("line:")
+
+    check demo.clickView(demo.documentButton)
+    check demo.editor.selectedRange() == demoTextRange(AttachmentText)
+    check demo.lastOpenedDocument == demo.attachmentDocument
+    check demo.featureStatus.text == "Document hook: " & AttachmentUrl
