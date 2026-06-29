@@ -180,14 +180,14 @@ proc textLayout*(
   if storage.isNil or storage.len == 0:
     let attributes = defaultTextAttributes(style.color, style.fontSize)
     var font = defaultFont(attributes.fontSize, style.fontName)
-    font.underline = attributes.underline
-    font.strikethrough = attributes.strikethrough
+    font.underline = attributes.hasUnderline
+    font.strikethrough = attributes.hasStrikethrough
     spans.add((fs(font, fill(style.color.rgba)), ""))
   else:
     for (attributes, text) in storage.styledRuns:
       var font = defaultFont(attributes.fontSize, style.fontName)
-      font.underline = attributes.underline
-      font.strikethrough = attributes.strikethrough
+      font.underline = attributes.hasUnderline
+      font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
   typeset(
     rect.toFigRect,

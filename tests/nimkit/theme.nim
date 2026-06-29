@@ -1,4 +1,4 @@
-import std/unittest
+import std/[os, unittest]
 
 import sigils/core
 
@@ -85,7 +85,30 @@ proc newCustomFillChrome(): Chrome =
   discard chrome.withProtocol(CustomFillChromeProtocol)
   Chrome(chrome)
 
+proc withCleanThemeEnv(body: proc() {.closure.}) =
+  let
+    existed = existsEnv(NimKitThemeEnv)
+    value = getEnv(NimKitThemeEnv)
+  delEnv(NimKitThemeEnv)
+  try:
+    body()
+  finally:
+    if existed:
+      putEnv(NimKitThemeEnv, value)
+    else:
+      delEnv(NimKitThemeEnv)
+
 suite "nimkit theme":
+  test "NimKit theme env obeys override ignore flag":
+    withCleanThemeEnv(
+      proc() =
+        putEnv(NimKitThemeEnv, "banner")
+        when defined(nimkitIgnoreEnvOverrides):
+          check themeNameFromEnv() == ""
+        else:
+          check themeNameFromEnv() == "banner"
+    )
+
   test "edge insets shrink rectangles without negative sizes":
     check initRect(10, 20, 100, 50).inset(insets(2, 4, 6, 8)) == initRect(
       14, 22, 88, 42

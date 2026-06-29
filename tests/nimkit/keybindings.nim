@@ -64,6 +64,9 @@ suite "nimkit key bindings":
     .commandFor(KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmControl}))
     .get() == moveToEndOfLine()
     check bindings
+    .commandFor(KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmControl}))
+    .get() == deleteToEndOfLine()
+    check bindings
     .commandFor(
       KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmOption})
     )
@@ -82,9 +85,26 @@ suite "nimkit key bindings":
     .get() == moveWordRightAndModifySelection()
     check bindings
     .commandFor(
+      KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord, modifiers: {kmCommand})
+    )
+    .get() == moveToBeginningOfDocument()
+    check bindings
+    .commandFor(
+      KeyEvent(
+        key: keyArrowDown, keyCode: keyArrowDown.ord, modifiers: {kmCommand, kmShift}
+      )
+    )
+    .get() == moveToEndOfDocumentAndModifySelection()
+    check bindings
+    .commandFor(
       KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmOption})
     )
     .get() == deleteWordBackward()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmCommand})
+    )
+    .get() == deleteToBeginningOfLine()
     check bindings
     .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmCommand}))
     .get() == selectAll()
@@ -142,6 +162,14 @@ suite "nimkit key bindings":
       KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmControl})
     )
     .get() == deleteWordBackward()
+    check bindings
+    .commandFor(KeyEvent(key: keyHome, keyCode: keyHome.ord, modifiers: {kmControl}))
+    .get() == moveToBeginningOfDocument()
+    check bindings
+    .commandFor(
+      KeyEvent(key: keyEnd, keyCode: keyEnd.ord, modifiers: {kmShift, kmControl})
+    )
+    .get() == moveToEndOfDocumentAndModifySelection()
 
   test "linux and bsd key binding profile includes platform text shortcuts":
     let bindings = initLinuxBsdKeyBindings()
@@ -177,6 +205,9 @@ suite "nimkit key bindings":
       KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmOption})
     )
     .get() == moveWordLeft()
+    check bindings
+    .commandFor(KeyEvent(key: keyHome, keyCode: keyHome.ord, modifiers: {kmControl}))
+    .get() == moveToBeginningOfDocument()
 
   test "windows can switch key binding profiles at runtime":
     let window = newWindow("Key profile", frame = initRect(0, 0, 120, 80))

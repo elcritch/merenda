@@ -69,7 +69,10 @@ suite "nimkit font layout":
         let style = initAppearance().resolveTextStyle(
             controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
           )
-        check style.fontName == "HackNerdFont-Regular.ttf"
+        when defined(nimkitIgnoreEnvOverrides):
+          check style.fontName == "Ubuntu.ttf"
+        else:
+          check style.fontName == "HackNerdFont-Regular.ttf"
     )
 
   test "font env override ignores empty values":
@@ -97,8 +100,12 @@ suite "nimkit font layout":
 
         let override = fontSizeOverrideFromEnv()
         check override.isSome
-        check override.get().envName == NimKitFontSizeEnv
-        check abs(defaultFontSize() - 18.0'f32) < 0.0001'f32
+        when defined(nimkitIgnoreEnvOverrides):
+          check override.get().envName == MerendaFontSizeEnv
+          check abs(defaultFontSize() - 15.5'f32) < 0.0001'f32
+        else:
+          check override.get().envName == NimKitFontSizeEnv
+          check abs(defaultFontSize() - 18.0'f32) < 0.0001'f32
     )
 
   test "default font size ignores empty values and rejects non-positive values":
@@ -113,14 +120,18 @@ suite "nimkit font layout":
         check abs(defaultFontSize() - 15.5'f32) < 0.0001'f32
 
         putEnv(NimKitFontSizeEnv, "0")
-        expect ValueError:
-          discard defaultFontSize()
+        when defined(nimkitIgnoreEnvOverrides):
+          check abs(defaultFontSize() - 15.5'f32) < 0.0001'f32
+        else:
+          expect ValueError:
+            discard defaultFontSize()
     )
 
   test "default font size feeds text attributes and em layout lengths":
     withCleanFontSizeEnv(
       proc() =
-        putEnv(NimKitFontSizeEnv, "18")
+        putEnv(NimKitFontSizeEnv, "24")
+        putEnv(MerendaFontSizeEnv, "18")
 
         check defaultTextAttributes().fontSize == 18.0'f32
         check defaultTextAttributes(fontSize = 15.0'f32).fontSize == 15.0'f32
@@ -130,7 +141,8 @@ suite "nimkit font layout":
   test "theme text style exposes font size to layout":
     withCleanFontSizeEnv(
       proc() =
-        putEnv(NimKitFontSizeEnv, "18")
+        putEnv(NimKitFontSizeEnv, "24")
+        putEnv(MerendaFontSizeEnv, "18")
 
         let style = initAppearance().resolveTextStyle(
             controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)

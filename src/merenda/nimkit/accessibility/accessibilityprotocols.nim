@@ -22,6 +22,17 @@ const
   AccessibilityAttributeParent* = "parent"
   AccessibilityAttributeChildren* = "children"
   AccessibilityAttributeWindow* = "window"
+  AccessibilityAttributeNumberOfCharacters* = "numberOfCharacters"
+  AccessibilityAttributeSelectedTextRange* = "selectedTextRange"
+  AccessibilityAttributeSelectedTextRanges* = "selectedTextRanges"
+  AccessibilityAttributeVisibleCharacterRange* = "visibleCharacterRange"
+  AccessibilityAttributeInsertionPoint* = "insertionPoint"
+  AccessibilityAttributeInsertionPointLine* = "insertionPointLine"
+  AccessibilityParameterizedAttributeAttributedStringForRange* =
+    "attributedStringForRange"
+  AccessibilityParameterizedAttributeRangeForLine* = "rangeForLine"
+  AccessibilityParameterizedAttributeRangeForPosition* = "rangeForPosition"
+  AccessibilityParameterizedAttributeBoundsForRange* = "boundsForRange"
 
   AccessibilityActionPress* = "press"
   AccessibilityActionIncrement* = "increment"
@@ -41,6 +52,10 @@ type
     avRect
     avView
     avViews
+    avTextRange
+    avTextRanges
+    avRects
+    avAttributedString
 
   AccessibilityValue* = object
     case kind*: AccessibilityValueKind
@@ -60,6 +75,33 @@ type
       viewValue*: View
     of avViews:
       viewValues*: seq[View]
+    of avTextRange:
+      textRangeValue*: AccessibilityTextRange
+    of avTextRanges:
+      textRangeValues*: seq[AccessibilityTextRange]
+    of avRects:
+      rectValues*: seq[Rect]
+    of avAttributedString:
+      attributedStringValue*: AccessibilityAttributedString
+
+  AccessibilityValidationResult* = object
+    errors*: seq[string]
+
+  AccessibilityTextRange* = object
+    location*: Natural
+    length*: Natural
+
+  AccessibilityTextAttribute* = object
+    name*: string
+    value*: string
+
+  AccessibilityTextAttributeRun* = object
+    range*: AccessibilityTextRange
+    attributes*: seq[AccessibilityTextAttribute]
+
+  AccessibilityAttributedString* = object
+    stringValue*: string
+    runs*: seq[AccessibilityTextAttributeRun]
 
 func initAccessibilityValue*(): AccessibilityValue =
   AccessibilityValue(kind: avNone)
@@ -84,6 +126,45 @@ func initAccessibilityValue*(value: View): AccessibilityValue =
 
 func initAccessibilityValue*(value: openArray[View]): AccessibilityValue =
   AccessibilityValue(kind: avViews, viewValues: @value)
+
+func initAccessibilityTextRange*(location, length: int): AccessibilityTextRange =
+  AccessibilityTextRange(
+    location: max(location, 0).Natural, length: max(length, 0).Natural
+  )
+
+func maxIndex*(range: AccessibilityTextRange): int =
+  int(range.location) + int(range.length)
+
+func isEmpty*(range: AccessibilityTextRange): bool =
+  range.length == 0
+
+func initAccessibilityValue*(value: AccessibilityTextRange): AccessibilityValue =
+  AccessibilityValue(kind: avTextRange, textRangeValue: value)
+
+func initAccessibilityValue*(
+    value: openArray[AccessibilityTextRange]
+): AccessibilityValue =
+  AccessibilityValue(kind: avTextRanges, textRangeValues: @value)
+
+func initAccessibilityValue*(value: openArray[Rect]): AccessibilityValue =
+  AccessibilityValue(kind: avRects, rectValues: @value)
+
+func initAccessibilityTextAttribute*(name, value: string): AccessibilityTextAttribute =
+  AccessibilityTextAttribute(name: name, value: value)
+
+func initAccessibilityTextAttributeRun*(
+    range: AccessibilityTextRange,
+    attributes: openArray[AccessibilityTextAttribute] = [],
+): AccessibilityTextAttributeRun =
+  AccessibilityTextAttributeRun(range: range, attributes: @attributes)
+
+func initAccessibilityAttributedString*(
+    stringValue = "", runs: openArray[AccessibilityTextAttributeRun] = []
+): AccessibilityAttributedString =
+  AccessibilityAttributedString(stringValue: stringValue, runs: @runs)
+
+func initAccessibilityValue*(value: AccessibilityAttributedString): AccessibilityValue =
+  AccessibilityValue(kind: avAttributedString, attributedStringValue: value)
 
 proc hasHiddenAncestor(view: View): bool =
   var current = view
@@ -130,6 +211,31 @@ protocol AccessibilityProtocol:
   method accessibilitySetAttributeValue*(
     attribute: string, value: AccessibilityValue
   ): bool {.optional.}
+
+  method accessibilityTextLength*(): int {.optional.}
+  method accessibilitySelectedTextRange*(): AccessibilityTextRange {.optional.}
+  method accessibilitySelectedTextRanges*(): seq[AccessibilityTextRange] {.optional.}
+  method accessibilityVisibleCharacterRange*(): AccessibilityTextRange {.optional.}
+  method setAccessibilitySelectedTextRange*(
+    range: AccessibilityTextRange
+  ): bool {.optional.}
+
+  method accessibilityInsertionPoint*(): int {.optional.}
+  method accessibilityInsertionPointLine*(): int {.optional.}
+  method setAccessibilityInsertionPoint*(index: int): bool {.optional.}
+  method accessibilityAttributedStringForRange*(
+    range: AccessibilityTextRange
+  ): AccessibilityAttributedString {.optional.}
+
+  method accessibilityBoundsForTextRange*(
+    range: AccessibilityTextRange
+  ): seq[Rect] {.optional.}
+
+  method accessibilityBoundsForCharacter*(index: int): Rect {.optional.}
+  method accessibilityCharacterIndexAtPoint*(point: Point): int {.optional.}
+  method accessibilityLineRange*(line: int): AccessibilityTextRange {.optional.}
+  method accessibilityLineForCharacter*(index: int): int {.optional.}
+  method accessibilityBoundsForLine*(line: int): Rect {.optional.}
 
   method accessibilityActionNames*(): seq[string] {.optional.}
   method accessibilityActionDescription*(action: string): string {.optional.}
@@ -237,6 +343,13 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
         AccessibilityAttributeFrame, AccessibilityAttributeParent,
         AccessibilityAttributeChildren, AccessibilityAttributeWindow,
       ]
+    if view.accessibilityRole() in {arTextField, arTextArea, arStaticText}:
+      result.add AccessibilityAttributeNumberOfCharacters
+      result.add AccessibilityAttributeSelectedTextRange
+      result.add AccessibilityAttributeSelectedTextRanges
+      result.add AccessibilityAttributeVisibleCharacterRange
+      result.add AccessibilityAttributeInsertionPoint
+      result.add AccessibilityAttributeInsertionPointLine
 
   method accessibilityAttributeValue*(
       view: View, attribute: string
@@ -264,34 +377,119 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       initAccessibilityValue(view.accessibilityParent())
     of AccessibilityAttributeChildren:
       initAccessibilityValue(view.accessibilityChildren())
+    of AccessibilityAttributeNumberOfCharacters:
+      initAccessibilityValue(view.accessibilityTextLength())
+    of AccessibilityAttributeSelectedTextRange:
+      initAccessibilityValue(view.accessibilitySelectedTextRange())
+    of AccessibilityAttributeSelectedTextRanges:
+      initAccessibilityValue(view.accessibilitySelectedTextRanges())
+    of AccessibilityAttributeVisibleCharacterRange:
+      initAccessibilityValue(view.accessibilityVisibleCharacterRange())
+    of AccessibilityAttributeInsertionPoint:
+      initAccessibilityValue(view.accessibilityInsertionPoint())
+    of AccessibilityAttributeInsertionPointLine:
+      initAccessibilityValue(view.accessibilityInsertionPointLine())
     else:
       initAccessibilityValue()
 
   method accessibilityIsAttributeSettable*(view: View, attribute: string): bool =
-    attribute == AccessibilityAttributeLabel or attribute == AccessibilityAttributeValue or
-      attribute == AccessibilityAttributeHelp or
-      attribute == AccessibilityAttributeIdentifier
+    if attribute == AccessibilityAttributeLabel or
+        attribute == AccessibilityAttributeValue or
+        attribute == AccessibilityAttributeHelp or
+        attribute == AccessibilityAttributeIdentifier:
+      return true
+    if attribute == AccessibilityAttributeSelectedTextRange or
+        attribute == AccessibilityAttributeInsertionPoint:
+      let traits = view.accessibilityTraits()
+      return atEditable in traits or atSelectable in traits
+    false
 
   method accessibilitySetAttributeValue*(
       view: View, attribute: string, value: AccessibilityValue
   ): bool =
-    if value.kind != avString:
-      return false
     case attribute
     of AccessibilityAttributeLabel:
+      if value.kind != avString:
+        return false
       view.accessibilityLabel = value.stringValue
       true
     of AccessibilityAttributeValue:
+      if value.kind != avString:
+        return false
       view.accessibilityValue = value.stringValue
       true
     of AccessibilityAttributeHelp:
+      if value.kind != avString:
+        return false
       view.accessibilityHelp = value.stringValue
       true
     of AccessibilityAttributeIdentifier:
+      if value.kind != avString:
+        return false
       view.accessibilityIdentifier = value.stringValue
       true
+    of AccessibilityAttributeSelectedTextRange:
+      if value.kind != avTextRange:
+        return false
+      view.setAccessibilitySelectedTextRange(value.textRangeValue)
+    of AccessibilityAttributeInsertionPoint:
+      if value.kind != avInt:
+        return false
+      view.setAccessibilityInsertionPoint(value.intValue)
     else:
       false
+
+  method accessibilityTextLength*(view: View): int =
+    0
+
+  method accessibilitySelectedTextRange*(view: View): AccessibilityTextRange =
+    initAccessibilityTextRange(0, 0)
+
+  method accessibilitySelectedTextRanges*(view: View): seq[AccessibilityTextRange] =
+    @[view.accessibilitySelectedTextRange()]
+
+  method accessibilityVisibleCharacterRange*(view: View): AccessibilityTextRange =
+    initAccessibilityTextRange(0, view.accessibilityTextLength())
+
+  method setAccessibilitySelectedTextRange*(
+      view: View, range: AccessibilityTextRange
+  ): bool =
+    false
+
+  method accessibilityInsertionPoint*(view: View): int =
+    0
+
+  method accessibilityInsertionPointLine*(view: View): int =
+    view.accessibilityLineForCharacter(view.accessibilityInsertionPoint())
+
+  method setAccessibilityInsertionPoint*(view: View, index: int): bool =
+    false
+
+  method accessibilityAttributedStringForRange*(
+      view: View, range: AccessibilityTextRange
+  ): AccessibilityAttributedString =
+    discard range
+    initAccessibilityAttributedString()
+
+  method accessibilityBoundsForTextRange*(
+      view: View, range: AccessibilityTextRange
+  ): seq[Rect] =
+    @[]
+
+  method accessibilityBoundsForCharacter*(view: View, index: int): Rect =
+    initRect(0, 0, 0, 0)
+
+  method accessibilityCharacterIndexAtPoint*(view: View, point: Point): int =
+    -1
+
+  method accessibilityLineRange*(view: View, line: int): AccessibilityTextRange =
+    initAccessibilityTextRange(0, 0)
+
+  method accessibilityLineForCharacter*(view: View, index: int): int =
+    -1
+
+  method accessibilityBoundsForLine*(view: View, line: int): Rect =
+    initRect(0, 0, 0, 0)
 
   method accessibilityActionNames*(view: View): seq[string] =
     @[]
@@ -320,6 +518,134 @@ proc accessibilityChildrenForView(view: View): seq[View] =
       result.add child
     else:
       result.add child.accessibilityChildren()
+
+proc addValidationError(
+    validation: var AccessibilityValidationResult, view: View, message: string
+) =
+  if view.isNil:
+    validation.errors.add "<nil>: " & message
+    return
+  let identifier = view.accessibilityIdentifier()
+  if identifier.len > 0:
+    validation.errors.add identifier & ": " & message
+  else:
+    validation.errors.add $view.accessibilityRole() & ": " & message
+
+func passed*(validation: AccessibilityValidationResult): bool =
+  validation.errors.len == 0
+
+proc accessibilityHasRole*(view: View, role: AccessibilityRole): bool =
+  not view.isNil and view.accessibilityRole() == role
+
+proc accessibilityHasRole*(view: View, roles: openArray[AccessibilityRole]): bool =
+  if view.isNil:
+    return false
+  let role = view.accessibilityRole()
+  for expected in roles:
+    if role == expected:
+      return true
+
+proc accessibilitySupportsAction*(view: View, action: string): bool =
+  if view.isNil or action.len == 0:
+    return false
+  for available in view.accessibilityActionNames():
+    if available == action:
+      return true
+
+proc validateAccessibilityElement*(view: View): AccessibilityValidationResult =
+  if view.isNil:
+    result.addValidationError(view, "missing accessibility element")
+    return
+  if view.isAccessibilityIgnored():
+    result.addValidationError(view, "accessibility element is ignored")
+    return
+  if not view.isAccessibilityElement():
+    result.addValidationError(view, "view is not an accessibility element")
+  if view.accessibilityRole() == arUnknown:
+    result.addValidationError(view, "accessibility role is unknown")
+  var seenActions: seq[string]
+  for action in view.accessibilityActionNames():
+    if action.len == 0:
+      result.addValidationError(view, "accessibility action is empty")
+      continue
+    for seen in seenActions:
+      if seen == action:
+        result.addValidationError(view, "duplicate accessibility action: " & action)
+    seenActions.add action
+
+proc validateAccessibilityRole*(
+    view: View, expected: AccessibilityRole
+): AccessibilityValidationResult =
+  if view.isNil:
+    result.addValidationError(view, "missing accessibility element")
+    return
+  result = view.validateAccessibilityElement()
+  if view.accessibilityRole() != expected:
+    result.addValidationError(
+      view,
+      "expected accessibility role " & $expected & ", got " & $view.accessibilityRole(),
+    )
+
+proc validateAccessibilityRole*(
+    view: View, expected: openArray[AccessibilityRole]
+): AccessibilityValidationResult =
+  if view.isNil:
+    result.addValidationError(view, "missing accessibility element")
+    return
+  result = view.validateAccessibilityElement()
+  if not view.accessibilityHasRole(expected):
+    var message = "expected one of accessibility roles"
+    for role in expected:
+      message.add " " & $role
+    message.add ", got " & $view.accessibilityRole()
+    result.addValidationError(view, message)
+
+proc validateAccessibilityActions*(
+    view: View, requiredActions: openArray[string]
+): AccessibilityValidationResult =
+  if view.isNil:
+    result.addValidationError(view, "missing accessibility element")
+    return
+  result = view.validateAccessibilityElement()
+  for action in requiredActions:
+    if not view.accessibilitySupportsAction(action):
+      result.addValidationError(view, "missing accessibility action: " & action)
+
+proc addOrderedAccessibilityElements(
+    result: var seq[View], view: View, includeSelf: bool
+) =
+  if view.isNil or view.isAccessibilityIgnored():
+    return
+  if includeSelf and view.isAccessibilityElement():
+    result.add view
+  for child in view.accessibilityChildren():
+    result.addOrderedAccessibilityElements(child, includeSelf = true)
+
+proc orderedAccessibilityElements*(view: View, includeRoot = false): seq[View] =
+  result.addOrderedAccessibilityElements(view, includeRoot)
+
+proc orderedAccessibilityDescendants*(view: View): seq[View] =
+  view.orderedAccessibilityElements(includeRoot = false)
+
+iterator accessibilityDescendants*(view: View): View =
+  for element in view.orderedAccessibilityDescendants():
+    yield element
+
+proc validateAccessibilityTree*(view: View): AccessibilityValidationResult =
+  for element in view.orderedAccessibilityElements(includeRoot = true):
+    let validation = element.validateAccessibilityElement()
+    result.errors.add validation.errors
+
+proc accessibilityElementAtPoint*(view: View, point: Point): View =
+  if view.isNil or view.isAccessibilityIgnored():
+    return nil
+  let children = view.accessibilityChildren()
+  for index in countdown(children.high, 0):
+    let hit = children[index].accessibilityElementAtPoint(point)
+    if not hit.isNil:
+      return hit
+  if view.isAccessibilityElement() and view.accessibilityFrame().contains(point):
+    return view
 
 proc postAccessibilityNotification*(
     view: View, notification: AccessibilityNotification

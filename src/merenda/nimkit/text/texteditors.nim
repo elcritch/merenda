@@ -311,6 +311,74 @@ protocol DefaultTextEditorView of ViewProtocol:
   method canBecomeKeyView(editor: TextEditor): bool =
     not editor.xTextView.isNil and editor.xTextView.canBecomeKeyView()
 
+method textEditorInputHasMarkedText(editor: TextEditor): bool {.selector.} =
+  (not editor.xTextView.isNil) and textviews.hasMarkedText(editor.xTextView)
+
+method textEditorInputMarkedRange(editor: TextEditor): TextRange {.selector.} =
+  if editor.xTextView.isNil:
+    initTextRange(0, 0)
+  else:
+    textviews.markedRange(editor.xTextView)
+
+method textEditorInputSelectedRange(editor: TextEditor): TextRange {.selector.} =
+  if editor.xTextView.isNil:
+    initTextRange(0, 0)
+  else:
+    textviews.selectedRange(editor.xTextView)
+
+method textEditorInputAttributedSubstringForRange(
+    editor: TextEditor, range: TextRange
+): AttributedString {.selector.} =
+  if editor.xTextView.isNil:
+    return newTextStorage()
+  textviews.attributedSubstringForRange(editor.xTextView, range)
+
+method textEditorInputValidAttributesForMarkedText(
+    editor: TextEditor
+): seq[string] {.selector.} =
+  if editor.xTextView.isNil:
+    @ValidMarkedTextAttributes
+  else:
+    textviews.validAttributesForMarkedText(editor.xTextView)
+
+method textEditorInputFirstRectForCharacterRange(
+    editor: TextEditor, range: TextRange
+): Rect {.selector.} =
+  if editor.xTextView.isNil:
+    return initRect(0, 0, 0, 0)
+  textviews.firstRectForCharacterRange(editor.xTextView, range)
+
+method textEditorInputCharacterIndexForPoint(
+    editor: TextEditor, point: Point
+): int {.selector.} =
+  if editor.xTextView.isNil:
+    return -1
+  textviews.characterIndexForPoint(editor.xTextView, point)
+
+proc installTextEditorInputClientMethods(editor: TextEditor) =
+  if editor.isNil:
+    return
+  discard
+    editor.addMethod(selectors.textInputHasMarkedText, textEditorInputHasMarkedText)
+  discard editor.addMethod(selectors.textInputMarkedRange, textEditorInputMarkedRange)
+  discard
+    editor.addMethod(selectors.textInputSelectedRange, textEditorInputSelectedRange)
+  discard editor.addMethod(
+    selectors.textInputAttributedSubstringForRange,
+    textEditorInputAttributedSubstringForRange,
+  )
+  discard editor.addMethod(
+    selectors.textInputValidAttributesForMarkedText,
+    textEditorInputValidAttributesForMarkedText,
+  )
+  discard editor.addMethod(
+    selectors.textInputFirstRectForCharacterRange,
+    textEditorInputFirstRectForCharacterRange,
+  )
+  discard editor.addMethod(
+    selectors.textInputCharacterIndexForPoint, textEditorInputCharacterIndexForPoint
+  )
+
 protocol DefaultTextEditorInput of TextInputProtocol:
   method insertText(editor: TextEditor, text: string) =
     if not editor.xTextView.isNil:
@@ -369,6 +437,22 @@ protocol DefaultTextEditorCommands of TextEditingCommandProtocol:
     if not editor.xTextView.isNil:
       editor.xTextView.deleteWordForwardText()
 
+  method deleteToBeginningOfLine(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.deleteToBeginningOfLineText()
+
+  method deleteToEndOfLine(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.deleteToEndOfLineText()
+
+  method insertLineBreak(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.insertLineBreakText()
+
+  method insertParagraphSeparator(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.insertParagraphSeparatorText()
+
   method moveLeft(editor: TextEditor, args: ActionArgs) =
     if not editor.xTextView.isNil:
       editor.xTextView.moveLeftText()
@@ -393,6 +477,14 @@ protocol DefaultTextEditorCommands of TextEditingCommandProtocol:
     if not editor.xTextView.isNil:
       editor.xTextView.moveWordRightText()
 
+  method moveWordBackward(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveWordLeftText()
+
+  method moveWordForward(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveWordRightText()
+
   method moveToBeginningOfLine(editor: TextEditor, args: ActionArgs) =
     if not editor.xTextView.isNil:
       editor.xTextView.moveToBeginningOfLineText()
@@ -400,6 +492,14 @@ protocol DefaultTextEditorCommands of TextEditingCommandProtocol:
   method moveToEndOfLine(editor: TextEditor, args: ActionArgs) =
     if not editor.xTextView.isNil:
       editor.xTextView.moveToEndOfLineText()
+
+  method moveToBeginningOfDocument(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveToBeginningOfDocumentText()
+
+  method moveToEndOfDocument(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveToEndOfDocumentText()
 
   method moveLeftAndModifySelection(editor: TextEditor, args: ActionArgs) =
     if not editor.xTextView.isNil:
@@ -425,6 +525,14 @@ protocol DefaultTextEditorCommands of TextEditingCommandProtocol:
     if not editor.xTextView.isNil:
       editor.xTextView.moveWordRightText(extending = true)
 
+  method moveWordBackwardAndModifySelection(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveWordLeftText(extending = true)
+
+  method moveWordForwardAndModifySelection(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveWordRightText(extending = true)
+
   method moveToBeginningOfLineAndModifySelection(editor: TextEditor, args: ActionArgs) =
     if not editor.xTextView.isNil:
       editor.xTextView.moveToBeginningOfLineText(extending = true)
@@ -432,6 +540,16 @@ protocol DefaultTextEditorCommands of TextEditingCommandProtocol:
   method moveToEndOfLineAndModifySelection(editor: TextEditor, args: ActionArgs) =
     if not editor.xTextView.isNil:
       editor.xTextView.moveToEndOfLineText(extending = true)
+
+  method moveToBeginningOfDocumentAndModifySelection(
+      editor: TextEditor, args: ActionArgs
+  ) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveToBeginningOfDocumentText(extending = true)
+
+  method moveToEndOfDocumentAndModifySelection(editor: TextEditor, args: ActionArgs) =
+    if not editor.xTextView.isNil:
+      editor.xTextView.moveToEndOfDocumentText(extending = true)
 
 protocol DefaultTextEditorKeyCommands of KeyViewCommandProtocol:
   method insertNewline(editor: TextEditor, args: ActionArgs) =
@@ -500,6 +618,7 @@ proc initTextEditorFields*(
   discard editor.withProtocol(DefaultTextEditorCommands)
   discard editor.withProtocol(DefaultTextEditorKeyCommands)
   discard editor.withProtocol(DefaultTextEditorAccessibility)
+  editor.installTextEditorInputClientMethods()
   editor.applyInitialFrame(frame)
   editor.updateTextEditorLayout()
 

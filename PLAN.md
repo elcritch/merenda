@@ -21,9 +21,11 @@ constraints, stack/form/grid/tab/split containers, buttons, switch/radio
 buttons, sliders, steppers, progress indicators, text fields, combo boxes,
 box/group containers, scroll views, popup lists, table views, outline views,
 cascading column views, basic text editing lifecycle, action dispatch, reusable
-pure Nim panel/dialog views, document-controller infrastructure, AppKit-style
-in-process pasteboard/dragging foundations, and a pure Nim accessibility
-metadata and protocol core.
+pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
+monospace text view/editor with raw event policy controls, document-controller
+infrastructure, AppKit-style in-process pasteboard/dragging foundations, and a
+pure Nim accessibility metadata, notification, traversal, validation, and text
+semantics core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -80,6 +82,103 @@ document-controller open/save integration are covered in tests and examples.
   views, buttons, checkboxes, text fields, labels, menus, popup controls,
   combo boxes, tabs, scroll areas, table rows/cells, outline rows/disclosure
   controls, progress indicators, sliders, switches, and steppers.
+- Routed accessibility notifications from committed semantic state transitions:
+  focus, selection, value, and expand/collapse changes now post through the
+  existing Sigils accessibility signal after state changes, while enabled-state
+  mutations update attributes without noisy notifications and drawing/layout
+  remain notification-free.
+- Added backend-neutral semantic accessibility traversal helpers: ordered
+  descendants/elements, stable element-at-point hit-testing, role/action support
+  checks, and validation result helpers for tests and future native bridges.
+- Added richer text accessibility hooks for text fields, text views, and
+  monospace text views: selected ranges, insertion points, character counts,
+  editable/selectable traits, selection-change notifications, character and
+  range bounds, line ranges/bounds, and point-to-character lookup.
+- Defined the first public `TextLayoutManager` value model: rune-indexed
+  `TextRange` remains canonical, while typed glyph indexes/ranges, visual line
+  indexes, line fragments, and layout snapshots now expose container-local
+  metrics, hard-break/wrap metadata, glyph counts, used rects, and content size
+  for tests and diagnostics.
+- Added the first `TextLayoutManager` query layer: layout cache lifecycle,
+  counts/bounds/content metrics, text-to-glyph mapping, point hit-testing,
+  visual line fragment lookup/ranges/iteration, caret positions, selection
+  rects, text bounds, character rects, and glyph bounds now share one
+  container-local contract.
+- Introduced the protocol-backed `TextLayoutManager` layer: manager lifecycle
+  and query methods, the FigDraw-backed `TextLayoutBackendProtocol`,
+  `TextLayoutClientProtocol` owner hooks, `TextStorageEditingEvents`
+  will/did-edit signals, and layout invalidation/completion/geometry signals
+  now provide AppKit-like semantic APIs with Sigils/Qt-style notification
+  delivery.
+- Reworked the FigDraw bridge behind the `TextLayoutManager` protocols:
+  `GlyphArrangement` glyph/source ranges, visual lines, caret positions,
+  merged selection bands, glyph metrics, and content sizing now map into
+  NimKit records through narrow value-query helpers without leaking backend
+  records into text view, field, or accessibility APIs.
+- Migrated text consumers onto the `TextLayoutManager` contract: TextView and
+  TextField selection drawing, caret/line movement, mouse hit-testing,
+  field-editor geometry, and accessibility text geometry now query committed
+  layout-manager state, while MonoText exposes matching fixed-grid geometry
+  helper names for shared accessibility expectations.
+- Locked down the first `TextLayoutManager` contract tests: backend-free
+  snapshots now cover empty text, hard breaks, wrapping, trailing lines, and
+  text/attribute invalidation requests, while deterministic FigDraw-backed
+  tests cover wrapped selections, caret affinity, point hit-testing,
+  glyph/text range round trips, field-editor text rect offsets, and
+  accessibility line geometry.
+- Drew the first text-layout milestone boundary: attachment layout,
+  non-contiguous layout, full Cocoa `NSLayoutManager` compatibility aliases,
+  and advanced bidi/grapheme navigation are explicitly deferred until the core
+  layout contract is proven.
+- Added the first Cocoa/TextKit-compatible text model layer without native
+  bridge types: richer `TextAttributes` now cover paragraph styles, tab stops,
+  line breaking, writing direction, baseline/kerning/ligature/expansion
+  fields, backgrounds, shadows, links, decorations, and attachment metadata;
+  `TextStorage` exposes mutable attributed-string aliases and rune-indexed
+  edit/query helpers; and text transfer/pasteboard contracts cover plain text,
+  attributed text, RTF, RTFD-style package payloads, HTML fragments, URLs, and
+  file promises.
+- Brought `TextStorage` closer to `NSTextStorage` while keeping NimKit's
+  Qt-style event path: `beginEditing`/`endEditing`, edited masks/ranges,
+  change-in-length tracking, coalesced `processEditing`, value/attribute
+  change signals, delegate-backed attribute fixing and font fallback hooks,
+  paragraph-range expansion, lazy materialization, and multiple layout-manager
+  observers now share one deterministic storage signal contract.
+  `TextStorageEditDispatchProtocol` is the explicit overridable delivery seam
+  for external editor bridges, coalescing, suppression, mirroring, and
+  instrumentation before `TextStorageEditingEvents` observers receive signals;
+  layout notifications now emit directly through Sigils signals.
+- Expanded `TextContainer` toward `NSTextContainer` parity: containers now carry
+  origin, size, line fragment padding, width/height tracking flags, maximum line
+  counts, line break modes, and exclusion rects; `TextLayoutManager` supports
+  multiple containers with container indexes in line fragments, caret positions,
+  snapshots, and semantic hit-test results, plus container replacement and
+  invalidation signals for paged, column, and flowed text models.
+- Expanded `TextLayoutManager` toward `NSLayoutManager`/TextKit 2 parity while
+  keeping NimKit names primary: glyph generation now exposes `TextGlyph`
+  records, glyph properties, character/glyph mapping helpers, bounding rect
+  queries, line-fragment rect/used-rect metrics, extra line fragments,
+  temporary rendering attributes, typed character/glyph/layout/display/container
+  invalidation payloads, delegate hooks for glyph generation, spacing,
+  hyphenation, completion, and temporary attributes, explicit background and
+  non-contiguous layout switches, partial-layout entry points, and Cocoa-shaped
+  aliases layered over the Nim-native API.
+- Brought `TextView` closer to `NSTextView` behavior while keeping the surface
+  pure Nim: selection affinity/granularity, multiple and rectangular selection
+  hooks, selected/marked text overlays, insertion-point color/visibility/blink
+  policy, find indicators, checking results, optional data detection, spelling
+  and grammar underline application, delegate protocols for edit lifecycle,
+  text changes, selection, clicked links/attachments, completions, and command
+  validation, undo grouping, smart insert/delete, quote/dash substitution,
+  find/replace helpers, completion panels, and paragraph/tab-stop editing now
+  share the existing storage/layout contracts.
+- Hardened text input, command, and field-editor parity: TextView/TextField/
+  TextEditor now expose NSTextInputClient-style marked-text, selected-range,
+  attributed-substring, marked-attribute, first-rect, and point-to-index query
+  contracts; keybindings and IME command dispatch route through selector-backed
+  responder command validation with Sigils command observers; and the shared
+  field editor keeps text-field and hosted-cell geometry/selection stable while
+  edits sync back to clients.
 - Filled out the current desktop control set: buttons, checkboxes, radio
   buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
   progress indicators, sliders, steppers, dialog button boxes, group boxes, and
@@ -93,101 +192,56 @@ document-controller open/save integration are covered in tests and examples.
   curves, scheduler/clock plumbing, transaction sugar, selector-backed property
   dispatch, setter-routed mutation, and demos for progress indicators and
   animation workflows.
+- Added legacy `NSMatrix`-style button cell grids with radio/check/button
+  modes, cell reuse, keyboard movement, selection behavior, target/action
+  dispatch, intrinsic sizing, rendering, accessibility semantics, and
+  `examples/matrix_demo.nim` coverage.
+- Added the first `MonoTextView`/`MonoTextEditor` pass: themed chrome-backed
+  monospace rendering, visible-row culling, grid/cell APIs, editable cursor
+  behavior, raw key/mouse/scroll forwarding and capture policies, host-style
+  text input dispatch, and an interactive `examples/monotext_demo.nim`.
 
 ## Current Verification
 
 - `atlas-run tests` passes locally on macOS with the current domain module
-  layout.
-- After removing standalone `ListView`, `atlas-run tests` passed `32/32` and
-  `nim examples` compiled successfully.
-- The latest table row/action and header polish was checked with
-  `atlas-run tests tnimkit_tableviews tnimkit_rendering tnimkit_theme`;
-  examples were compile checked with
-  `atlas-run tests --compile-only 'examples/*.nim'`.
-- The latest table drag/drop target integration was checked with
-  `atlas-run tests tests/tnimkit_tableviews.nim`,
-  `atlas-run tests tests/tnimkit_pasteboards_dragging.nim`, and a full
-  `atlas-run tests` run passing `32/32`.
-- The latest table persistence integration was checked with
-  `atlas-run tests tests/tnimkit_tableviews.nim`,
-  `atlas-run tests tests/tnimkit_documents.nim`,
-  `atlas-run tests tests/tnimkit_application.nim`, and
-  `atlas-run tests tests/tnimkit_outlineviews.nim`.
-- The current box and pure Nim panel/dialog coverage lives in
-  `tests/tnimkit_boxes.nim`, `tests/integration_application.nim`,
-  `tests/tnimkit_documents.nim`, and `examples/panel_demo.nim`.
-- The first `SplitView` pass was checked with
-  `atlas-run tests tests/tnimkit_splitviews.nim tests/tnimkit_theme.nim tests/tnimkit_rendering.nim`,
-  `atlas-run tests --compile-only examples/splitview_demo.nim`, and a full
-  `atlas-run tests` run passing `35/35`.
-- The new slider/progress/cascading widget coverage lives in
-  `tests/tnimkit_controls.nim`, `tests/tnimkit_cascadingviews.nim`,
-  `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`,
-  `examples/controls_showcase.nim`, and `examples/preferences_demo.nim`.
-- The Stepper pass was checked with `atlas-run tests nimkit_controls.nim`,
-  `nim c examples/stepper_demo.nim`, and
-  `nim c examples/controls_showcase.nim`.
-- The first animation core, interpolation/timing, scheduler/threading, and
-  property animation surface passes are covered by
-  `tests/tnimkit_animations.nim`; umbrella export and affected widget fallout
-  were checked with
-  `atlas-run tests nimkit_controls nimkit_splitviews nimkit_cascadingviews`.
-- The completed animation transaction/examples pass was checked with
-  `atlas-run tests tnimkit_animations`,
-  `atlas-run tests --compile-only 'examples/*.nim'`, and a full
-  `atlas-run tests` run passing `37/37`.
-- The panel/dialog hardening pass was checked with
-  `nim c examples/panel_demo.nim`, `nim r tests/integration_application.nim`,
-  `atlas-run tests nimkit_documents.nim`,
-  `atlas-run tests nimkit_animations.nim`, and a full `atlas-run tests` run
-  passing `37/37`.
+  layout; the latest full run passed `40/40`.
+- Focused suites cover the main widget/runtime seams:
+  `tests/tnimkit_controls.nim`, `tests/tnimkit_matrix.nim`,
+  `tests/tnimkit_monotextviews.nim`, `tests/tnimkit_tableviews.nim`,
+  `tests/tnimkit_outlineviews.nim`, `tests/tnimkit_documents.nim`,
+  `tests/tnimkit_animations.nim`, `tests/tnimkit_rendering.nim`,
+  `tests/tnimkit_accessibility.nim`, `tests/tnimkit_textstorage.nim`, and
+  `tests/tnimkit_textlayout.nim`.
+- Demo coverage for recently completed work lives in
+  `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
+  `examples/matrix_demo.nim`, `examples/monotext_demo.nim`,
+  `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`, and
+  `examples/controls_showcase.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
 
 ## Near-Term Work
 
-### OpenStep Compatibility Widgets
+### TextLayoutManager
 
-With the first animation, pure Nim panel/dialog hardening, and Stepper passes
-landed, add the next missing OpenStep/AppKit-style widgets in an order that
-hardens shared control, cell, layout, responder, drawing, accessibility, and
-animation behavior instead of producing isolated one-off controls.
+Turn the current FigDraw-backed helper into the stable text layout contract used
+by `TextView`, `TextField`, accessibility, selection drawing, hit-testing, and
+future text backends. Do this as a NimKit API first, not as a full
+`NSLayoutManager` clone: expose plain Nim value records and protocol methods
+over rune-indexed `TextRange`/`TextIndex`, while keeping FigDraw placement data
+private except for diagnostics.
 
-Recommended implementation order:
+14. Add rich editing integrations expected by Cocoa text users:
+   - drag/drop selected text and attachments, services-style selected text
+     requests, contextual menus, link opening, attachment cells/views, image
+     attachments, file promises, and document-controller save/open integration
+   - add accessibility text parameterized attributes: attributed string for
+     range, range for line, range for position, bounds for range, visible
+     character range, selected ranges, and insertion point line
+   - add print/page layout hooks, pagination containers, ruler metrics, and
+     snapshot tests for layout stability across display scale and font changes
 
-1. `Matrix`
-   - Add legacy `NSMatrix`-style cell grids for radio/check/button cells,
-     selection modes, keyboard movement, and cell reuse.
-   - Use this to further harden the control/cell split.
-2. `ColorWell`
-   - Add color swatch rendering, target/action on color changes, pasteboard
-     color payload integration, and drag affordances.
-   - Stage a full color panel separately after the color well proves the
-     pasteboard, target/action, and modal accessory-view contracts.
-3. CascadingView hardening
-   - Keep the new Miller Column implementation aligned with table/scroll
-     behavior as those primitives evolve: richer column keyboard movement,
-     persisted selection paths, drag/drop between hierarchy levels, and optional
-     custom row/detail rendering hooks.
-
-### Accessibility Core
-
-Keep accessibility backend-neutral and driven by the same state mutations that
-update widgets, responder state, and rendering.
-
-1. Route focus, selection, enabled-state, expanded/collapsed, and value-change
-   notifications from the same mutation procs that already update rendering or
-   responder state.
-2. Add semantic traversal helpers:
-   - ordered accessibility descendants
-   - role/action validation helpers for tests and future backend bridges
-   - accessibility element at point once inspection or native hit-testing needs
-     a stable semantic hit-test contract
-3. Add richer text accessibility hooks:
-   - selected range, insertion point, and editable/selectable traits
-   - basic line/character geometry only after text layout exposes stable offset
-     and line metrics
 
 ### OutlineView
 

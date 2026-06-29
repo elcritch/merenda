@@ -63,11 +63,14 @@ var
 const NativeImagePngType = "image/png"
 const
   UiScaleEnv* = "UISCALE"
-  NimKitUiScaleEnv* = "NIMKIT_UISCALE"
+  NimKitUiScaleEnv* = "NIMKIT_UI_SCALE"
+  NimKitCompactUiScaleEnv* = "NIMKIT_UISCALE"
   MerendaUiScaleEnv* = "MERENDA_UISCALE"
   FigDrawLegacyUiScaleEnv* = "HDI"
-  UiScaleEnvVars* =
-    [NimKitUiScaleEnv, MerendaUiScaleEnv, UiScaleEnv, FigDrawLegacyUiScaleEnv]
+  UiScaleEnvVars* = [
+    NimKitUiScaleEnv, NimKitCompactUiScaleEnv, MerendaUiScaleEnv, UiScaleEnv,
+    FigDrawLegacyUiScaleEnv,
+  ]
 
 type UiScaleOverride* = object
   envName*: string
@@ -80,6 +83,8 @@ proc ensureHostRegistry() =
 
 proc uiScaleOverrideFromEnv*(): Option[UiScaleOverride] =
   for envName in UiScaleEnvVars:
+    if not envOverrideAllowed(envName):
+      continue
     let value = getEnv(envName).strip()
     if value.len == 0:
       continue

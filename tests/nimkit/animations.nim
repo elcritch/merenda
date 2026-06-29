@@ -69,6 +69,22 @@ proc rememberValue(spy: AnimationSignalSpy, value: float32) {.slot.} =
 template checkClose(actual, expected: float32) =
   check abs(actual - expected) <= 0.0001'f32
 
+proc openFileDescriptorCount(): int =
+  when defined(posix):
+    let fdDir =
+      if dirExists("/proc/self/fd"):
+        "/proc/self/fd"
+      elif dirExists("/dev/fd"):
+        "/dev/fd"
+      else:
+        ""
+    if fdDir.len == 0:
+      return -1
+    for _ in walkDir(fdDir):
+      inc result
+  else:
+    -1
+
 suite "NimKit animations":
   test "animation exposes observable lifecycle state and signals":
     let
@@ -452,6 +468,37 @@ suite "NimKit animations":
     finally:
       discard app.stopAnimation(animation)
       app.stopAnimationClock()
+
+  test "repeated selector clock lifetimes do not leak selector file descriptors":
+    let before = openFileDescriptorCount()
+    for _ in 0 ..< 12:
+      let clock = newAnimationSchedulerClock(frameInterval = 2.ms)
+      clock.start()
+      clock.stop()
+    let after = openFileDescriptorCount()
+
+    if before >= 0 and after >= 0:
+      check after <= before + 1
+
+  test "shared selector clock remains alive until all clock users stop":
+    let
+      first = newAnimationSchedulerClock(frameInterval = 2.ms)
+      second = newAnimationSchedulerClock(frameInterval = 2.ms)
+
+    first.start()
+    second.start()
+    try:
+      first.stop()
+      for _ in 0 ..< 50:
+        discard second.pollQueuedTicks()
+        if second.pendingTickCount > 0:
+          break
+        sleep(2)
+
+      check second.pendingTickCount > 0
+    finally:
+      first.stop()
+      second.stop()
 
   test "transaction template captures view property assignments":
     let

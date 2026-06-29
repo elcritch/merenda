@@ -5,6 +5,7 @@ import sigils/selectors
 import ../drawing/images
 import ../foundation/types
 import ../text/textstorage
+import ../text/texttypes
 
 type
   PasteboardItemKind* = enum
@@ -93,6 +94,14 @@ type
     kind*: string
     item*: PasteboardItem
 
+  PasteboardTextContract* = object
+    format*: TextTransferFormat
+    pasteboardType*: string
+    mimeType*: string
+    fileExtensions*: seq[string]
+    preservesAttributes*: bool
+    allowsAttachments*: bool
+
 const
   GeneralPasteboardName* = "NSGeneralPboard"
   DragPasteboardName* = "NSDragPboard"
@@ -110,6 +119,12 @@ const
   PasteboardTypeFont* = "public.font"
   PasteboardTypeImage* = "public.image"
   PasteboardTypePromisedFile* = "com.apple.pasteboard.promised-file-url"
+  PasteboardTypePlainText* = PasteboardTypeString
+  PasteboardTypeAttributedText* = PasteboardTypeTextStorage
+  PasteboardTypeRTF* = "public.rtf"
+  PasteboardTypeRTFD* = "com.apple.rtfd"
+  PasteboardTypeHTML* = "public.html"
+  PasteboardTypeFilePromise* = PasteboardTypePromisedFile
 
 protocol PasteboardProviderProtocol:
   method pasteboardTypes*(pasteboard: Pasteboard): seq[string] {.optional.}
@@ -169,6 +184,36 @@ proc initPasteboardFontDescriptor*(
     name = "", family = "", size = 0.0'f32, traits: openArray[string] = []
 ): PasteboardFontDescriptor =
   PasteboardFontDescriptor(name: name, family: family, size: size, traits: @traits)
+
+proc initPasteboardTextContract*(
+    format: TextTransferFormat, pasteboardType: string
+): PasteboardTextContract =
+  let contract = textTransferContract(format)
+  PasteboardTextContract(
+    format: format,
+    pasteboardType: pasteboardType,
+    mimeType: contract.mimeType,
+    fileExtensions: contract.fileExtensions,
+    preservesAttributes: contract.preservesAttributes,
+    allowsAttachments: contract.allowsAttachments,
+  )
+
+proc pasteboardTypeForTextFormat*(format: TextTransferFormat): string =
+  case format
+  of ttfPlainText: PasteboardTypePlainText
+  of ttfAttributedText: PasteboardTypeAttributedText
+  of ttfRTF: PasteboardTypeRTF
+  of ttfRTFD: PasteboardTypeRTFD
+  of ttfHTML: PasteboardTypeHTML
+  of ttfURL: PasteboardTypeUrl
+  of ttfFilePromise: PasteboardTypeFilePromise
+
+proc pasteboardTextContract*(format: TextTransferFormat): PasteboardTextContract =
+  initPasteboardTextContract(format, pasteboardTypeForTextFormat(format))
+
+proc pasteboardTextContracts*(): seq[PasteboardTextContract] =
+  for format in TextTransferFormat:
+    result.add pasteboardTextContract(format)
 
 proc initPasteboardStringItem*(value: string): PasteboardItem =
   PasteboardItem(kind: pikString, stringValue: value)
@@ -433,6 +478,12 @@ proc stringForType*(pasteboard: Pasteboard, kind: string): string =
   if item.kind == pikString:
     return item.stringValue
 
+proc setPlainText*(pasteboard: Pasteboard, value: string): bool =
+  pasteboard.setString(PasteboardTypePlainText, value)
+
+proc plainText*(pasteboard: Pasteboard): string =
+  pasteboard.stringForType(PasteboardTypePlainText)
+
 proc setTextStorage*(pasteboard: Pasteboard, kind: string, storage: TextStorage): bool =
   pasteboard.setItem(kind, initPasteboardTextStorageItem(storage))
 
@@ -441,6 +492,12 @@ proc textStorageForType*(pasteboard: Pasteboard, kind: string): TextStorage =
   if item.kind == pikTextStorage:
     return item.textStorage.copyTextStorage()
 
+proc setAttributedString*(pasteboard: Pasteboard, storage: AttributedString): bool =
+  pasteboard.setTextStorage(PasteboardTypeAttributedText, storage)
+
+proc attributedString*(pasteboard: Pasteboard): AttributedString =
+  pasteboard.textStorageForType(PasteboardTypeAttributedText)
+
 proc setData*(pasteboard: Pasteboard, kind, data: string): bool =
   pasteboard.setItem(kind, initPasteboardDataItem(data))
 
@@ -448,6 +505,24 @@ proc dataForType*(pasteboard: Pasteboard, kind: string): string =
   let item = pasteboard.itemForType(kind)
   if item.kind == pikData:
     return item.data
+
+proc setRtfData*(pasteboard: Pasteboard, data: string): bool =
+  pasteboard.setData(PasteboardTypeRTF, data)
+
+proc rtfData*(pasteboard: Pasteboard): string =
+  pasteboard.dataForType(PasteboardTypeRTF)
+
+proc setRtfdData*(pasteboard: Pasteboard, data: string): bool =
+  pasteboard.setData(PasteboardTypeRTFD, data)
+
+proc rtfdData*(pasteboard: Pasteboard): string =
+  pasteboard.dataForType(PasteboardTypeRTFD)
+
+proc setHtml*(pasteboard: Pasteboard, html: string): bool =
+  pasteboard.setString(PasteboardTypeHTML, html)
+
+proc html*(pasteboard: Pasteboard): string =
+  pasteboard.stringForType(PasteboardTypeHTML)
 
 proc setPropertyList*(
     pasteboard: Pasteboard, kind: string, propertyList: openArray[PasteboardProperty]

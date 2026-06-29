@@ -1582,6 +1582,7 @@ proc applySelectedIndexes(
     tableView.scrollItemToVisible(nextLead)
   tableView.invalidateTableRows()
   emit tableView.selectionDidChange(DynamicAgent(tableView))
+  tableView.postAccessibilityNotification(anSelectionChanged)
   if nextSelected >= 0:
     let delegate = tableView.delegate()
     if not delegate.isNil:
@@ -3703,12 +3704,19 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
   method selectCell(tableView: TableView, row: int, column: TableColumn) =
     if not tableView.shouldSelectCell(row, column):
       return
-    tableView.selectedIndex = row
+    let previousSelectedIndexes = tableView.xSelectedIndexes
+    let previousSelectedColumns = tableView.xSelectedColumns
     if tableView.xAllowsColumnSelection:
       tableView.xSelectedColumns = @[column]
+    tableView.selectedIndex = row
     tableView.xClickedRow = row
     tableView.xClickedColumn = column
     tableView.setNeedsDisplay(true)
+    if tableView.xAllowsColumnSelection and
+        previousSelectedColumns != tableView.xSelectedColumns and
+        previousSelectedIndexes == tableView.xSelectedIndexes:
+      emit tableView.selectionDidChange(DynamicAgent(tableView))
+      tableView.postAccessibilityNotification(anSelectionChanged)
 
   method setSelectedColumns(tableView: TableView, columns: seq[TableColumn]) =
     if tableView.isNil or not tableView.xAllowsColumnSelection:
@@ -3723,8 +3731,12 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
           seen = true
       if not seen:
         next.add column
+    if tableView.xSelectedColumns == next:
+      return
     tableView.xSelectedColumns = next
     tableView.setNeedsDisplay(true)
+    emit tableView.selectionDidChange(DynamicAgent(tableView))
+    tableView.postAccessibilityNotification(anSelectionChanged)
 
   method selectionPersistenceString(tableView: TableView): string =
     var first = true

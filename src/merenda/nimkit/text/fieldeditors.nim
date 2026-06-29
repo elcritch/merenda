@@ -240,6 +240,22 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
     editor.deleteWordForwardText()
     editor.notifyClientChanged()
 
+  method deleteToBeginningOfLine(editor: FieldEditor, args: ActionArgs) =
+    editor.deleteToBeginningOfLineText()
+    editor.notifyClientChanged()
+
+  method deleteToEndOfLine(editor: FieldEditor, args: ActionArgs) =
+    editor.deleteToEndOfLineText()
+    editor.notifyClientChanged()
+
+  method insertLineBreak(editor: FieldEditor, args: ActionArgs) =
+    editor.insertLineBreakText()
+    editor.notifyClientChanged()
+
+  method insertParagraphSeparator(editor: FieldEditor, args: ActionArgs) =
+    editor.insertParagraphSeparatorText()
+    editor.notifyClientChanged()
+
   method moveLeft(editor: FieldEditor, args: ActionArgs) =
     editor.moveLeftText()
 
@@ -258,11 +274,23 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
   method moveWordRight(editor: FieldEditor, args: ActionArgs) =
     editor.moveWordRightText()
 
+  method moveWordBackward(editor: FieldEditor, args: ActionArgs) =
+    editor.moveWordLeftText()
+
+  method moveWordForward(editor: FieldEditor, args: ActionArgs) =
+    editor.moveWordRightText()
+
   method moveToBeginningOfLine(editor: FieldEditor, args: ActionArgs) =
     editor.moveToBeginningOfLineText()
 
   method moveToEndOfLine(editor: FieldEditor, args: ActionArgs) =
     editor.moveToEndOfLineText()
+
+  method moveToBeginningOfDocument(editor: FieldEditor, args: ActionArgs) =
+    editor.moveToBeginningOfDocumentText()
+
+  method moveToEndOfDocument(editor: FieldEditor, args: ActionArgs) =
+    editor.moveToEndOfDocumentText()
 
   method moveLeftAndModifySelection(editor: FieldEditor, args: ActionArgs) =
     editor.moveLeftText(extending = true)
@@ -282,6 +310,12 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
   method moveWordRightAndModifySelection(editor: FieldEditor, args: ActionArgs) =
     editor.moveWordRightText(extending = true)
 
+  method moveWordBackwardAndModifySelection(editor: FieldEditor, args: ActionArgs) =
+    editor.moveWordLeftText(extending = true)
+
+  method moveWordForwardAndModifySelection(editor: FieldEditor, args: ActionArgs) =
+    editor.moveWordRightText(extending = true)
+
   method moveToBeginningOfLineAndModifySelection(
       editor: FieldEditor, args: ActionArgs
   ) =
@@ -289,6 +323,14 @@ protocol DefaultFieldEditorCommands of TextEditingCommandProtocol:
 
   method moveToEndOfLineAndModifySelection(editor: FieldEditor, args: ActionArgs) =
     editor.moveToEndOfLineText(extending = true)
+
+  method moveToBeginningOfDocumentAndModifySelection(
+      editor: FieldEditor, args: ActionArgs
+  ) =
+    editor.moveToBeginningOfDocumentText(extending = true)
+
+  method moveToEndOfDocumentAndModifySelection(editor: FieldEditor, args: ActionArgs) =
+    editor.moveToEndOfDocumentText(extending = true)
 
 protocol DefaultFieldEditorKeyCommands of KeyViewCommandProtocol:
   method insertNewline(editor: FieldEditor, args: ActionArgs) =

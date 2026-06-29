@@ -1075,8 +1075,12 @@ proc initThemeByName*(name: string): Theme =
     return themeFactories[key]()
   initTheme()
 
+const NimKitThemeEnv* = "NIMKIT_THEME"
+
 proc themeNameFromEnv*(): string =
-  getEnv("NIMKIT_THEME")
+  if not envOverrideAllowed(NimKitThemeEnv):
+    return ""
+  getEnv(NimKitThemeEnv)
 
 proc initThemeFromEnv*(): Theme =
   initThemeByName(themeNameFromEnv())
