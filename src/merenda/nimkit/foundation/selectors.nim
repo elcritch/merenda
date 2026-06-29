@@ -207,6 +207,7 @@ protocol MenuCommandProtocol:
   method saveDocumentAs*(args: ActionArgs) {.optional.}
   method revertDocumentToSaved*(args: ActionArgs) {.optional.}
   method printDocument*(args: ActionArgs) {.optional.}
+  method openLink*(args: ActionArgs) {.optional.}
   method performClose*(args: ActionArgs) {.optional.}
   method performMiniaturize*(args: ActionArgs) {.optional.}
   method performZoom*(args: ActionArgs) {.optional.}

@@ -1,8 +1,9 @@
-import std/[options, strutils, unicode]
+import std/[math, options, strutils, unicode]
 
 import sigils/core
 
 import ../accessibility/accessibility
+import ../app/dragging
 import ../drawing
 import ../foundation/events
 import ../app/pasteboards
@@ -82,6 +83,70 @@ type
     selectedIndex*: int
     visible*: bool
 
+  TextServiceRequest* = object
+    range*: TextRange
+    selectedRanges*: seq[TextRange]
+    stringValue*: string
+    attributedString*: TextStorage
+
+  TextServiceResponse* = object
+    handled*: bool
+    replacementRange*: TextRange
+    replacement*: TextStorage
+
+  TextAttachmentCell* = object
+    attachment*: TextAttachment
+    range*: TextRange
+    frame*: Rect
+
+  TextAttachmentPresentation* = object
+    attachment*: TextAttachment
+    range*: TextRange
+    frame*: Rect
+    cell*: TextAttachmentCell
+    view*: View
+
+  TextPageLayoutOptions* = object
+    pageSize*: Size
+    contentInsets*: EdgeInsets
+    firstPageNumber*: Natural
+    displayScale*: float32
+
+  TextPageFragment* = object
+    pageIndex*: Natural
+    pageNumber*: Natural
+    containerIndex*: TextContainerIndex
+    textRange*: TextRange
+    pageRect*: Rect
+    contentRect*: Rect
+    usedRect*: Rect
+    lineFragments*: seq[TextLineFragment]
+
+  TextRulerMetrics* = object
+    range*: TextRange
+    paragraphStyle*: TextParagraphStyle
+    rulerRect*: Rect
+    firstLineHeadIndent*: float32
+    headIndent*: float32
+    tailIndent*: float32
+    tabStops*: seq[TextTabStop]
+
+  TextLayoutStabilityOptions* = object
+    displayScale*: float32
+    fontSize*: float32
+    pageOptions*: TextPageLayoutOptions
+
+  TextLayoutStabilitySnapshot* = object
+    textHash*: int
+    layoutHash*: int
+    displayScale*: float32
+    fontSize*: float32
+    containerRect*: Rect
+    usedRect*: Rect
+    contentSize*: Size
+    lineFragments*: seq[TextLineFragment]
+    pageFragments*: seq[TextPageFragment]
+
   TextView* = ref object of View
     xTextStorage: TextStorage
     xTextContainer: TextContainer
@@ -128,6 +193,7 @@ type
     xHasGroupedUndo: bool
     xApplyingUndo: bool
     xSelectingWithMouse: bool
+    xDraggingSession: DraggingSession
 
 proc syncLayout(textView: TextView)
 proc clearMarkedText(textView: TextView)
@@ -243,6 +309,18 @@ protocol TextViewDelegateProtocol:
   method tvValidateCommand*(
     textView: TextView, action: ActionSelector
   ): bool {.optional.}
+
+  method tvPerformService*(
+    textView: TextView, request: TextServiceRequest
+  ): TextServiceResponse {.optional.}
+
+  method tvAttachmentView*(
+    textView: TextView, attachment: TextAttachment, range: TextRange, frame: Rect
+  ): View {.optional.}
+
+  method tvAttachmentCell*(
+    textView: TextView, attachment: TextAttachment, range: TextRange, frame: Rect
+  ): TextAttachmentCell {.optional.}
 
 protocol TextViewCheckingProtocol:
   method tvCheckingResults*(
@@ -1423,6 +1501,404 @@ proc acceptCompletion*(textView: TextView, index = -1): bool =
   textView.dismissCompletionPanel()
   true
 
+func overlapRange(a, b: TextRange): TextRange =
+  let
+    start = max(int(a.location), int(b.location))
+    stop = min(a.maxIndex, b.maxIndex)
+  initTextRange(start, max(stop - start, 0))
+
+func unionRange(a, b: TextRange): TextRange =
+  if a.length == 0:
+    return b
+  if b.length == 0:
+    return a
+  let
+    start = min(int(a.location), int(b.location))
+    stop = max(a.maxIndex, b.maxIndex)
+  initTextRange(start, stop - start)
+
+func nonEmptyRanges(ranges: openArray[TextRange]): seq[TextRange] =
+  for range in ranges:
+    if range.length > 0:
+      result.add range
+
+func escapedHtml(text: string): string =
+  for ch in text:
+    case ch
+    of '&':
+      result.add "&amp;"
+    of '<':
+      result.add "&lt;"
+    of '>':
+      result.add "&gt;"
+    of '"':
+      result.add "&quot;"
+    else:
+      result.add ch
+
+func escapedRtf(text: string): string =
+  for ch in text:
+    case ch
+    of '\\':
+      result.add "\\\\"
+    of '{':
+      result.add "\\{"
+    of '}':
+      result.add "\\}"
+    of '\n':
+      result.add "\\par "
+    else:
+      result.add ch
+
+func roundToScale(value, scale: float32): float32 =
+  if scale <= 0.0'f32:
+    value
+  else:
+    round(value * scale) / scale
+
+func roundRectToScale(rect: Rect, scale: float32): Rect =
+  if rect.isEmpty or scale <= 0.0'f32:
+    return rect
+  initRect(
+    rect.origin.x.roundToScale(scale),
+    rect.origin.y.roundToScale(scale),
+    rect.size.width.roundToScale(scale),
+    rect.size.height.roundToScale(scale),
+  )
+
+func roundLineFragmentToScale(
+    fragment: TextLineFragment, scale: float32
+): TextLineFragment =
+  result = fragment
+  result.fragmentRect = result.fragmentRect.roundRectToScale(scale)
+  result.usedRect = result.usedRect.roundRectToScale(scale)
+  result.baseline = result.baseline.roundToScale(scale)
+  result.ascent = result.ascent.roundToScale(scale)
+  result.descent = result.descent.roundToScale(scale)
+  result.leading = result.leading.roundToScale(scale)
+
+proc unionRects(rects: openArray[Rect]): Rect =
+  for rect in rects:
+    if rect.isEmpty:
+      continue
+    if result.isEmpty:
+      result = rect
+    else:
+      result = result.union(rect)
+
+proc selectedTextRangesForTransfer(textView: TextView): seq[TextRange] =
+  if textView.isNil:
+    return
+  result = textView.selectedRanges().nonEmptyRanges()
+  if result.len == 0:
+    let selected = textView.textViewSelectedRange()
+    if selected.length > 0:
+      result.add selected
+
+proc selectedTextStorage*(textView: TextView): TextStorage =
+  result = newTextStorage()
+  if textView.isNil or textView.xTextStorage.isNil:
+    return
+  for range in textView.selectedTextRangesForTransfer():
+    result.replace(
+      initTextRange(result.len, 0), textView.xTextStorage.sliceTextStorage(range)
+    )
+
+proc selectedText*(textView: TextView): string =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return ""
+  for range in textView.selectedTextRangesForTransfer():
+    result.add textView.xTextStorage.substring(range)
+
+proc selectedTextServiceRequest*(textView: TextView): TextServiceRequest =
+  if textView.isNil:
+    return
+  let selected = textView.textViewSelectedRange()
+  TextServiceRequest(
+    range: selected,
+    selectedRanges: textView.selectedRanges(),
+    stringValue: textView.selectedText(),
+    attributedString: textView.selectedTextStorage(),
+  )
+
+proc performSelectedTextService*(textView: TextView): TextServiceResponse =
+  if textView.isNil or textView.xDelegate.isNil:
+    return
+  let request = textView.selectedTextServiceRequest()
+  result = textView.xDelegate
+    .trySendLocal(tvPerformService(), (textView: textView, request: request))
+    .get(TextServiceResponse())
+  if result.handled and not result.replacement.isNil and textView.editable:
+    let replacementRange =
+      if result.replacementRange.length > 0:
+        textView.clampedRange(result.replacementRange)
+      else:
+        textView.clampedRange(request.range)
+    if textView.shouldChangeText(replacementRange, result.replacement):
+      textView.replaceRange(replacementRange, result.replacement)
+
+proc firstSelectedLink(textView: TextView): tuple[link: string, range: TextRange] =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return
+  for selected in textView.selectedTextRangesForTransfer():
+    for run in textView.xTextStorage.runs:
+      let overlap = run.range.overlapRange(selected)
+      if overlap.length > 0 and run.attributes.hasLink:
+        return (run.attributes.link, overlap)
+
+proc selectedAttachmentPresentations*(
+    textView: TextView
+): seq[TextAttachmentPresentation] =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return
+  for selected in textView.selectedTextRangesForTransfer():
+    for run in textView.xTextStorage.runs:
+      let overlap = run.range.overlapRange(selected)
+      if overlap.length == 0 or not run.attributes.hasAttachment:
+        continue
+      let rect = textView.selectionRects(overlap).unionRects()
+      let frame =
+        if rect.isEmpty:
+          textView.characterRect(int(overlap.location))
+        else:
+          rect
+      let delegateView =
+        if textView.xDelegate.isNil:
+          nil
+        else:
+          textView.xDelegate
+          .trySendLocal(
+            tvAttachmentView(),
+            (
+              textView: textView,
+              attachment: run.attributes.attachment,
+              range: overlap,
+              frame: frame,
+            ),
+          )
+          .get(nil)
+      let delegateCell =
+        if textView.xDelegate.isNil:
+          TextAttachmentCell()
+        else:
+          textView.xDelegate
+          .trySendLocal(
+            tvAttachmentCell(),
+            (
+              textView: textView,
+              attachment: run.attributes.attachment,
+              range: overlap,
+              frame: frame,
+            ),
+          )
+          .get(TextAttachmentCell())
+      let cell =
+        if delegateCell.attachment.identifier.len > 0 or
+            delegateCell.attachment.contentType.len > 0 or
+            delegateCell.attachment.fileName.len > 0 or
+            delegateCell.attachment.fileUrl.len > 0:
+          delegateCell
+        else:
+          TextAttachmentCell(
+            attachment: run.attributes.attachment, range: overlap, frame: frame
+          )
+      result.add TextAttachmentPresentation(
+        attachment: run.attributes.attachment,
+        range: overlap,
+        frame: frame,
+        cell: cell,
+        view: delegateView,
+      )
+
+proc attachmentPresentations*(textView: TextView): seq[TextAttachmentPresentation] =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return
+  for run in textView.xTextStorage.runs:
+    if not run.attributes.hasAttachment:
+      continue
+    let rect = textView.selectionRects(run.range).unionRects()
+    let frame =
+      if rect.isEmpty:
+        textView.characterRect(int(run.range.location))
+      else:
+        rect
+    result.add TextAttachmentPresentation(
+      attachment: run.attributes.attachment,
+      range: run.range,
+      frame: frame,
+      cell: TextAttachmentCell(
+        attachment: run.attributes.attachment, range: run.range, frame: frame
+      ),
+    )
+
+func isImageAttachment*(attachment: TextAttachment): bool =
+  let
+    contentType = attachment.contentType.toLowerAscii()
+    name = attachment.fileName.toLowerAscii()
+  contentType.startsWith("image/") or name.endsWith(".png") or name.endsWith(".jpg") or
+    name.endsWith(".jpeg") or name.endsWith(".gif") or name.endsWith(".webp") or
+    name.endsWith(".tif") or name.endsWith(".tiff")
+
+func promisedFileName*(attachment: TextAttachment): string =
+  if attachment.fileName.len > 0:
+    attachment.fileName
+  elif attachment.fileUrl.len > 0:
+    attachment.fileUrl
+  else:
+    ""
+
+proc selectedImageAttachments*(textView: TextView): seq[TextAttachmentPresentation] =
+  for presentation in textView.selectedAttachmentPresentations():
+    if presentation.attachment.isImageAttachment():
+      result.add presentation
+
+proc selectedFilePromiseAttachments*(
+    textView: TextView
+): seq[TextAttachmentPresentation] =
+  for presentation in textView.selectedAttachmentPresentations():
+    if presentation.attachment.promisedFileName().len > 0:
+      result.add presentation
+
+proc writeSelectionToPasteboard*(
+    textView: TextView,
+    pasteboard: Pasteboard,
+    formats: openArray[TextTransferFormat] =
+      [ttfAttributedText, ttfPlainText, ttfURL, ttfFilePromise],
+): bool =
+  if textView.isNil or pasteboard.isNil or not textView.selectable:
+    return false
+  let ranges = textView.selectedTextRangesForTransfer()
+  if ranges.len == 0:
+    return false
+
+  var types: seq[string]
+  for format in formats:
+    let pasteboardType = pasteboardTypeForTextFormat(format)
+    if pasteboardType.len > 0 and pasteboardType notin types:
+      types.add pasteboardType
+  if PasteboardTypeString notin types:
+    types.add PasteboardTypeString
+  if PasteboardTypeTextStorage notin types:
+    types.add PasteboardTypeTextStorage
+  pasteboard.declareTypes(types)
+
+  let
+    text = textView.selectedText()
+    storage = textView.selectedTextStorage()
+  for format in formats:
+    case format
+    of ttfPlainText:
+      discard pasteboard.setPlainText(text)
+      discard pasteboard.setString(PasteboardTypeString, text)
+    of ttfAttributedText:
+      discard pasteboard.setAttributedString(storage)
+      discard pasteboard.setTextStorage(PasteboardTypeTextStorage, storage)
+    of ttfRTF:
+      discard pasteboard.setRtfData("{\\rtf1 " & text.escapedRtf() & "}")
+    of ttfRTFD:
+      discard pasteboard.setRtfdData("NimKit-RTFD\n" & text)
+    of ttfHTML:
+      discard pasteboard.setHtml("<pre>" & text.escapedHtml() & "</pre>")
+    of ttfURL:
+      let link = textView.firstSelectedLink()
+      if link.link.len > 0:
+        discard pasteboard.setUrl(PasteboardTypeUrl, link.link)
+    of ttfFilePromise:
+      for presentation in textView.selectedFilePromiseAttachments():
+        let fileName = presentation.attachment.promisedFileName()
+        if fileName.len > 0:
+          discard pasteboard.setFile(PasteboardTypeFilePromise, fileName)
+          break
+  true
+
+proc insertTextFromPasteboard*(textView: TextView, pasteboard: Pasteboard): bool =
+  if textView.isNil or pasteboard.isNil or not textView.editable:
+    return false
+  let selected =
+    if textView.xHasMarkedText:
+      textView.xMarkedRange
+    else:
+      textView.textViewSelectedRange()
+  let kind =
+    pasteboard.availableTypeFromArray([PasteboardTypeTextStorage, PasteboardTypeString])
+  case kind
+  of PasteboardTypeTextStorage:
+    let storage = pasteboard.textStorageForType(PasteboardTypeTextStorage)
+    if storage.isNil:
+      return false
+    textView.replaceRange(selected, storage)
+    true
+  of PasteboardTypeString:
+    textView.insertTextValue(pasteboard.stringForType(PasteboardTypeString))
+    true
+  else:
+    false
+
+proc selectedTextDraggingItems*(textView: TextView): seq[DraggingItem] =
+  if textView.isNil or textView.selectedTextRangesForTransfer().len == 0:
+    return
+  let
+    storage = textView.selectedTextStorage()
+    text = textView.selectedText()
+    frame = textView.selectionRects(textView.textViewSelectedRange()).unionRects()
+  if storage.len > 0:
+    result.add initDraggingItem(
+      PasteboardTypeTextStorage, initPasteboardTextStorageItem(storage), frame
+    )
+    result.add initDraggingItem(
+      PasteboardTypeString, initPasteboardStringItem(text), frame
+    )
+  let link = textView.firstSelectedLink()
+  if link.link.len > 0:
+    result.add initDraggingItem(
+      PasteboardTypeUrl,
+      initPasteboardUrlItem(link.link),
+      textView.selectionRects(link.range).unionRects(),
+    )
+  for presentation in textView.selectedFilePromiseAttachments():
+    let
+      fileName = presentation.attachment.promisedFileName()
+      item =
+        if presentation.attachment.fileUrl.len > 0:
+          initPasteboardFileItem(presentation.attachment.fileUrl)
+        else:
+          initPasteboardFileItem(fileName)
+    if fileName.len > 0:
+      result.add initPromisedFileDraggingItem(fileName, item, presentation.frame)
+
+proc beginDraggingSelectedText*(
+    textView: TextView,
+    allowedOperations: DragOperations = {dgoCopy, dgoMove},
+    pasteboardName = DragPasteboardName,
+): DraggingSession =
+  if textView.isNil or not textView.selectable:
+    return nil
+  let items = textView.selectedTextDraggingItems()
+  if items.len == 0:
+    return nil
+  result = beginDraggingSession(
+    DynamicAgent(textView), items, allowedOperations, pasteboardName
+  )
+  textView.xDraggingSession = result
+
+proc acceptsTextDrop*(textView: TextView, info: DraggingInfo): DragOperations =
+  if textView.isNil or not textView.editable or info.pasteboard.isNil:
+    return NoDragOperations
+  let accepted = info.pasteboard.availableTypeFromArray(
+    [PasteboardTypeTextStorage, PasteboardTypeString]
+  )
+  if accepted.len == 0:
+    NoDragOperations
+  else:
+    info.allowedOperations * {dgoCopy, dgoMove}
+
+proc performTextDrop*(textView: TextView, info: DraggingInfo): bool =
+  if textView.acceptsTextDrop(info) == NoDragOperations:
+    return false
+  if not info.location.hasAutoMetric:
+    textView.setCursor(textView.textIndexAtPoint(info.location))
+  textView.insertTextFromPasteboard(info.pasteboard)
+
 proc linkRangeAtIndex(textView: TextView, index: int, link: string): TextRange =
   if textView.isNil or link.len == 0:
     return initTextRange(index, 0)
@@ -1453,6 +1929,74 @@ proc attachmentRangeAtIndex(
     inc stop
   initTextRange(start, stop - start)
 
+proc linkAtIndex*(
+    textView: TextView, index: int
+): tuple[link: string, range: TextRange] =
+  if textView.isNil or index < 0 or index >= textView.xTextStorage.len:
+    return
+  let attributes = textView.xTextStorage.attributesAt(index)
+  if attributes.hasLink:
+    result = (attributes.link, textView.linkRangeAtIndex(index, attributes.link))
+
+proc linkAtPoint*(
+    textView: TextView, point: Point
+): tuple[link: string, range: TextRange] =
+  if textView.isNil:
+    return
+  textView.linkAtIndex(textView.textIndexAtPoint(point))
+
+proc attachmentAtIndex*(
+    textView: TextView, index: int
+): tuple[attachment: TextAttachment, range: TextRange] =
+  if textView.isNil or index < 0 or index >= textView.xTextStorage.len:
+    return
+  let attributes = textView.xTextStorage.attributesAt(index)
+  if attributes.hasAttachment:
+    result = (
+      attributes.attachment,
+      textView.attachmentRangeAtIndex(index, attributes.attachment),
+    )
+
+proc attachmentAtPoint*(
+    textView: TextView, point: Point
+): tuple[attachment: TextAttachment, range: TextRange] =
+  if textView.isNil:
+    return
+  textView.attachmentAtIndex(textView.textIndexAtPoint(point))
+
+proc openLinkAtIndex*(textView: TextView, index: int): bool =
+  if textView.isNil:
+    return false
+  let link = textView.linkAtIndex(index)
+  if link.link.len == 0:
+    return false
+  if textView.xDelegate.isNil:
+    return true
+
+  textView.xDelegate
+  .trySendLocal(
+    tvClickedLink(), (textView: textView, link: link.link, range: link.range)
+  )
+  .get(true)
+
+proc openLinkAtPoint*(textView: TextView, point: Point): bool =
+  if textView.isNil:
+    return false
+  textView.openLinkAtIndex(textView.textIndexAtPoint(point))
+
+proc activeLinkForCommand(textView: TextView): tuple[link: string, range: TextRange] =
+  if textView.isNil:
+    return
+  let selected = textView.textViewSelectedRange()
+  if selected.length > 0:
+    result = textView.linkAtIndex(int(selected.location))
+    if result.link.len > 0:
+      return
+  let insertionPoint = textView.textViewInsertionPoint()
+  result = textView.linkAtIndex(insertionPoint)
+  if result.link.len == 0 and insertionPoint > 0:
+    result = textView.linkAtIndex(insertionPoint - 1)
+
 proc clickTextAtPoint*(textView: TextView, point: Point): bool =
   if textView.isNil:
     return false
@@ -1461,14 +2005,7 @@ proc clickTextAtPoint*(textView: TextView, point: Point): bool =
     return false
   let attributes = textView.xTextStorage.attributesAt(index)
   if attributes.hasLink:
-    let range = textView.linkRangeAtIndex(index, attributes.link)
-    if textView.xDelegate.isNil:
-      return true
-    return textView.xDelegate
-      .trySendLocal(
-        tvClickedLink(), (textView: textView, link: attributes.link, range: range)
-      )
-      .get(true)
+    return textView.openLinkAtIndex(index)
   if attributes.hasAttachment:
     let range = textView.attachmentRangeAtIndex(index, attributes.attachment)
     if textView.xDelegate.isNil:
@@ -1642,18 +2179,10 @@ proc unmarkMarkedText*(textView: TextView) =
 proc copyText*(textView: TextView): bool =
   if textView.isNil or not textView.selectable:
     return false
-  let selected = textView.textViewSelectedRange()
-  if selected.length == 0:
-    return false
-  let pasteboard = generalPasteboard()
-  pasteboard.declareTypes([PasteboardTypeTextStorage, PasteboardTypeString])
-  discard pasteboard.setTextStorage(
-    PasteboardTypeTextStorage, textView.xTextStorage.sliceTextStorage(selected)
+  textView.writeSelectionToPasteboard(
+    generalPasteboard(),
+    [ttfAttributedText, ttfPlainText, ttfRTF, ttfHTML, ttfURL, ttfFilePromise],
   )
-  discard pasteboard.setString(
-    PasteboardTypeString, textView.xTextStorage.substring(selected)
-  )
-  true
 
 proc cutText*(textView: TextView): bool =
   if textView.isNil or not textView.editable or not textView.copyText():
@@ -1664,28 +2193,7 @@ proc cutText*(textView: TextView): bool =
 proc pasteText*(textView: TextView): bool =
   if textView.isNil or not textView.editable:
     return false
-  let
-    pasteboard = generalPasteboard()
-    kind = pasteboard.availableTypeFromArray(
-      [PasteboardTypeTextStorage, PasteboardTypeString]
-    )
-  case kind
-  of PasteboardTypeTextStorage:
-    let storage = pasteboard.textStorageForType(PasteboardTypeTextStorage)
-    if storage.isNil:
-      return false
-    let selected =
-      if textView.xHasMarkedText:
-        textView.xMarkedRange
-      else:
-        textView.textViewSelectedRange()
-    textView.replaceRange(selected, storage)
-    true
-  of PasteboardTypeString:
-    textView.insertTextValue(pasteboard.stringForType(PasteboardTypeString))
-    true
-  else:
-    false
+  textView.insertTextFromPasteboard(generalPasteboard())
 
 proc applyUndoRecord(textView: TextView, storage: TextStorage, selection: TextRange) =
   textView.xApplyingUndo = true
@@ -1953,6 +2461,214 @@ proc lineBounds*(textView: TextView, line: int): Rect =
   textView.updateTextContainer()
   textView.xLayoutManager.lineBounds(line)
 
+proc initTextPageLayoutOptions*(
+    pageSize = initSize(612.0, 792.0),
+    contentInsets = insets(72.0),
+    firstPageNumber = 1,
+    displayScale = 1.0'f32,
+): TextPageLayoutOptions =
+  TextPageLayoutOptions(
+    pageSize: initSize(max(pageSize.width, 1.0'f32), max(pageSize.height, 1.0'f32)),
+    contentInsets: contentInsets,
+    firstPageNumber: max(firstPageNumber, 0).Natural,
+    displayScale: max(displayScale, 0.0'f32),
+  )
+
+proc normalizedPageOptions(
+    textView: TextView, options: TextPageLayoutOptions
+): TextPageLayoutOptions =
+  result = options
+  if result.pageSize.width <= 0.0'f32 or result.pageSize.width.isAutoMetric:
+    result.pageSize.width =
+      if textView.isNil:
+        612.0'f32
+      else:
+        max(textView.bounds.size.width, 1.0'f32)
+  if result.pageSize.height <= 0.0'f32 or result.pageSize.height.isAutoMetric:
+    result.pageSize.height =
+      if textView.isNil:
+        792.0'f32
+      else:
+        max(textView.bounds.size.height, 1.0'f32)
+  if result.firstPageNumber == 0:
+    result.firstPageNumber = 1
+  if result.displayScale <= 0.0'f32:
+    result.displayScale = 1.0'f32
+
+proc pageContentRect(options: TextPageLayoutOptions, pageIndex: int): Rect =
+  initRect(
+    0.0'f32,
+    float32(pageIndex) * options.pageSize.height,
+    options.pageSize.width,
+    options.pageSize.height,
+  )
+  .inset(options.contentInsets)
+
+proc addLineToPage(
+    pages: var seq[TextPageFragment],
+    pageIndex: int,
+    options: TextPageLayoutOptions,
+    fragment: TextLineFragment,
+) =
+  while pages.len <= pageIndex:
+    let next = pages.len
+    let
+      pageRect = initRect(
+        0.0'f32,
+        float32(next) * options.pageSize.height,
+        options.pageSize.width,
+        options.pageSize.height,
+      )
+      contentRect = options.pageContentRect(next)
+    pages.add TextPageFragment(
+      pageIndex: next.Natural,
+      pageNumber: options.firstPageNumber + next.Natural,
+      containerIndex: fragment.containerIndex,
+      pageRect: pageRect.roundRectToScale(options.displayScale),
+      contentRect: contentRect.roundRectToScale(options.displayScale),
+    )
+  var page = pages[pageIndex]
+  let rounded = fragment.roundLineFragmentToScale(options.displayScale)
+  page.lineFragments.add rounded
+  page.textRange = page.textRange.unionRange(rounded.textRange)
+  if page.usedRect.isEmpty:
+    page.usedRect = rounded.usedRect
+  else:
+    page.usedRect = page.usedRect.union(rounded.usedRect)
+  page.usedRect = page.usedRect.roundRectToScale(options.displayScale)
+  pages[pageIndex] = page
+
+proc paginateLineFragments(
+    fragments: openArray[TextLineFragment],
+    originY: float32,
+    options: TextPageLayoutOptions,
+): seq[TextPageFragment] =
+  let contentHeight =
+    max(options.pageSize.height - options.contentInsets.vertical, 1.0'f32)
+  for fragment in fragments:
+    let pageIndex =
+      max(0, int(floor((fragment.fragmentRect.origin.y - originY) / contentHeight)))
+    result.addLineToPage(pageIndex, options, fragment)
+
+proc paginateTextView*(
+    textView: TextView, options = initTextPageLayoutOptions()
+): seq[TextPageFragment] =
+  if textView.isNil:
+    return
+  textView.updateTextContainer()
+  let
+    resolved = textView.normalizedPageOptions(options)
+    snapshot = textView.xLayoutManager.layoutSnapshot()
+  result = paginateLineFragments(
+    snapshot.lineFragments, snapshot.containerRect.origin.y, resolved
+  )
+  if result.len == 0:
+    let emptyFragment = textView.xLayoutManager.extraLineFragment()
+    result.addLineToPage(0, resolved, emptyFragment)
+
+proc rulerMetrics*(textView: TextView, range: TextRange): TextRulerMetrics =
+  if textView.isNil:
+    return
+  let
+    clamped = textView.clampedRange(range)
+    style = textView.paragraphStyleAt(int(clamped.location))
+    rulerHeight = max(defaultFontSize() * 1.5'f32, 18.0'f32)
+  TextRulerMetrics(
+    range: clamped,
+    paragraphStyle: style,
+    rulerRect: initRect(
+      textView.bounds.origin.x, textView.bounds.origin.y, textView.bounds.size.width,
+      rulerHeight,
+    ),
+    firstLineHeadIndent: style.firstLineHeadIndent,
+    headIndent: style.headIndent,
+    tailIndent: style.tailIndent,
+    tabStops: style.tabStops,
+  )
+
+proc visibleCharacterRange*(textView: TextView): TextRange =
+  if textView.isNil or textView.xTextStorage.isNil:
+    return initTextRange(0, 0)
+  textView.updateTextContainer()
+  let visible = textView.bounds
+  var hasVisible = false
+  for fragment in textView.xLayoutManager.lineFragments():
+    if fragment.fragmentRect.intersection(visible).isEmpty:
+      continue
+    if hasVisible:
+      result = result.unionRange(fragment.textRange)
+    else:
+      result = fragment.textRange
+      hasVisible = true
+  if not hasVisible:
+    result = initTextRange(0, textView.xTextStorage.len)
+
+proc copyStorageForSnapshot(storage: TextStorage, fontSize: float32): TextStorage =
+  result =
+    if storage.isNil:
+      newTextStorage()
+    else:
+      storage.copyTextStorage()
+  if fontSize <= 0.0'f32:
+    return
+  let runs = result.attributeRuns()
+  result.beginEditing()
+  for run in runs:
+    var attributes = run.attributes
+    attributes.fontSize = fontSize
+    result.setAttributes(run.range, attributes)
+  result.endEditing()
+
+proc layoutStabilitySnapshot*(
+    textView: TextView, options: TextLayoutStabilityOptions
+): TextLayoutStabilitySnapshot =
+  if textView.isNil:
+    return
+  textView.updateTextContainer()
+  let
+    scale =
+      if options.displayScale > 0.0'f32:
+        options.displayScale
+      elif options.pageOptions.displayScale > 0.0'f32:
+        options.pageOptions.displayScale
+      else:
+        1.0'f32
+    storage = textView.xTextStorage.copyStorageForSnapshot(options.fontSize)
+    container = textView.xTextContainer
+    manager = newTextLayoutManager(storage, container)
+  var style = textView.textStyle()
+  if options.fontSize > 0.0'f32:
+    style.fontSize = options.fontSize
+  manager.textStyle = style
+  manager.alignment = textView.xAlignment
+  let
+    snapshot = manager.layoutSnapshot()
+    pageOptions = textView.normalizedPageOptions(
+      TextPageLayoutOptions(
+        pageSize: options.pageOptions.pageSize,
+        contentInsets: options.pageOptions.contentInsets,
+        firstPageNumber: options.pageOptions.firstPageNumber,
+        displayScale: scale,
+      )
+    )
+  result = TextLayoutStabilitySnapshot(
+    textHash: int(snapshot.textHash),
+    layoutHash: int(snapshot.layoutHash),
+    displayScale: scale,
+    fontSize: style.fontSize,
+    containerRect: snapshot.containerRect.roundRectToScale(scale),
+    usedRect: snapshot.usedRect.roundRectToScale(scale),
+    contentSize: initSize(
+      snapshot.contentSize.width.roundToScale(scale),
+      snapshot.contentSize.height.roundToScale(scale),
+    ),
+    pageFragments: paginateLineFragments(
+      snapshot.lineFragments, snapshot.containerRect.origin.y, pageOptions
+    ),
+  )
+  for fragment in snapshot.lineFragments:
+    result.lineFragments.add fragment.roundLineFragmentToScale(scale)
+
 proc drawTextViewContents*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
   let
@@ -2035,6 +2751,8 @@ proc validateTextCommand*(textView: TextView, action: ActionSelector): bool =
     textView.editable or textView.selectable
   of "complete":
     textView.editable
+  of "openLink":
+    textView.activeLinkForCommand().link.len > 0
   else:
     textView.respondsTo(action.name)
 
@@ -2093,6 +2811,42 @@ protocol DefaultTextViewEvents of ResponderEventProtocol:
       textView.insertTextValue(event.text)
       return true
 
+protocol DefaultTextViewDraggingSource of DraggingSourceProtocol:
+  method draggingSourceOperationMask(
+      textView: TextView, info: DraggingInfo
+  ): DragOperations =
+    if textView.isNil:
+      NoDragOperations
+    else:
+      info.allowedOperations * {dgoCopy, dgoMove}
+
+  method draggingSessionEnded(textView: TextView, info: DraggingInfo) =
+    if not textView.isNil and textView.xDraggingSession == info.session:
+      textView.xDraggingSession = nil
+
+  method writePromisedFile(
+      textView: TextView, request: DraggingPromisedFileRequest
+  ): bool =
+    discard textView
+    if request.item.pasteboardItem.kind != pikNone:
+      return request.session.pasteboard().setItem(
+          PasteboardTypePromisedFile, request.item.pasteboardItem
+        )
+    false
+
+protocol DefaultTextViewDraggingDestination of DraggingDestinationProtocol:
+  method draggingEntered(textView: TextView, info: DraggingInfo): DragOperations =
+    textView.acceptsTextDrop(info)
+
+  method draggingUpdated(textView: TextView, info: DraggingInfo): DragOperations =
+    textView.acceptsTextDrop(info)
+
+  method prepareForDragOperation(textView: TextView, info: DraggingInfo): bool =
+    textView.acceptsTextDrop(info) != NoDragOperations
+
+  method performDragOperation(textView: TextView, info: DraggingInfo): bool =
+    textView.performTextDrop(info)
+
 method textViewInputHasMarkedText(textView: TextView): bool {.selector.} =
   (not textView.isNil) and textView.xHasMarkedText
 
@@ -2137,6 +2891,12 @@ method textViewInputCharacterIndexForPoint(
     return -1
   textView.textIndexAtPoint(textView.pointFromWindow(point))
 
+method textViewOpenLinkCommand(textView: TextView, args: ActionArgs) {.selector.} =
+  discard args
+  let link = textView.activeLinkForCommand()
+  if link.link.len > 0:
+    discard textView.openLinkAtIndex(int(link.range.location))
+
 proc installTextInputClientMethods(textView: TextView) =
   if textView.isNil:
     return
@@ -2160,6 +2920,7 @@ proc installTextInputClientMethods(textView: TextView) =
   discard textView.addMethod(
     selectors.textInputCharacterIndexForPoint, textViewInputCharacterIndexForPoint
   )
+  discard textView.addMethod(selectors.openLink, textViewOpenLinkCommand)
 
 protocol DefaultTextViewInput of TextInputProtocol:
   method insertText(textView: TextView, text: string) =
@@ -2311,6 +3072,12 @@ protocol DefaultTextViewKeyCommands of KeyViewCommandProtocol:
     textView.insertTextValue("\t")
 
 protocol DefaultTextViewMenuCommands of MenuCommandProtocol:
+  method openLink(textView: TextView, args: ActionArgs) =
+    discard args
+    let link = textView.activeLinkForCommand()
+    if link.link.len > 0:
+      discard textView.openLinkAtIndex(int(link.range.location))
+
   method complete(textView: TextView, args: ActionArgs) =
     discard args
     let panel = textView.completeText()
@@ -2379,6 +3146,58 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
       textView.invalidateIntrinsicContentSize()
       textView.setNeedsDisplay(true)
 
+func accessibilityColorValue(color: Color): string =
+  $color.r & "," & $color.g & "," & $color.b & "," & $color.a
+
+func accessibilityAttributesFor(
+    attributes: TextAttributes
+): seq[AccessibilityTextAttribute] =
+  result.add initAccessibilityTextAttribute(
+    "foregroundColor", attributes.foregroundColor.accessibilityColorValue()
+  )
+  result.add initAccessibilityTextAttribute("fontSize", $attributes.fontSize)
+  if attributes.hasBackgroundColor:
+    result.add initAccessibilityTextAttribute(
+      "backgroundColor", attributes.backgroundColor.accessibilityColorValue()
+    )
+  if attributes.hasLink:
+    result.add initAccessibilityTextAttribute("link", attributes.link)
+  if attributes.hasAttachment:
+    if attributes.attachment.identifier.len > 0:
+      result.add initAccessibilityTextAttribute(
+        "attachmentIdentifier", attributes.attachment.identifier
+      )
+    if attributes.attachment.fileName.len > 0:
+      result.add initAccessibilityTextAttribute(
+        "attachmentFileName", attributes.attachment.fileName
+      )
+    if attributes.attachment.contentType.len > 0:
+      result.add initAccessibilityTextAttribute(
+        "attachmentContentType", attributes.attachment.contentType
+      )
+  if attributes.hasUnderline:
+    result.add initAccessibilityTextAttribute("underline", $attributes.underlineStyle)
+  if attributes.hasStrikethrough:
+    result.add initAccessibilityTextAttribute(
+      "strikethrough", $attributes.strikethroughStyle
+    )
+
+proc accessibilityAttributedText(
+    storage: TextStorage, range: TextRange
+): AccessibilityAttributedString =
+  if storage.isNil:
+    return initAccessibilityAttributedString()
+  let
+    start = max(0, min(int(range.location), storage.len))
+    clamped = initTextRange(start, max(0, min(int(range.length), storage.len - start)))
+    slice = storage.sliceTextStorage(clamped)
+  var runs: seq[AccessibilityTextAttributeRun]
+  for run in slice.runs:
+    runs.add initAccessibilityTextAttributeRun(
+      run.range.toAccessibilityTextRange(), accessibilityAttributesFor(run.attributes)
+    )
+  initAccessibilityAttributedString(slice.stringValue(), runs)
+
 protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(textView: TextView): AccessibilityRole =
     arTextArea
@@ -2410,6 +3229,22 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilitySelectedTextRange(textView: TextView): AccessibilityTextRange =
     textView.textViewSelectedRange().toAccessibilityTextRange()
 
+  method accessibilitySelectedTextRanges(
+      textView: TextView
+  ): seq[AccessibilityTextRange] =
+    if textView.isNil:
+      return @[]
+    for range in textView.selectedRanges():
+      result.add range.toAccessibilityTextRange()
+
+  method accessibilityVisibleCharacterRange(
+      textView: TextView
+  ): AccessibilityTextRange =
+    if textView.isNil:
+      initAccessibilityTextRange(0, 0)
+    else:
+      textView.visibleCharacterRange().toAccessibilityTextRange()
+
   method setAccessibilitySelectedTextRange(
       textView: TextView, range: AccessibilityTextRange
   ): bool =
@@ -2421,11 +3256,24 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilityInsertionPoint(textView: TextView): int =
     textView.textViewInsertionPoint()
 
+  method accessibilityInsertionPointLine(textView: TextView): int =
+    if textView.isNil:
+      -1
+    else:
+      textView.lineForIndex(textView.textViewInsertionPoint())
+
   method setAccessibilityInsertionPoint(textView: TextView, index: int): bool =
     if textView.isNil or (not textView.editable() and not textView.selectable()):
       return false
     textView.setCursor(index)
     true
+
+  method accessibilityAttributedStringForRange(
+      textView: TextView, range: AccessibilityTextRange
+  ): AccessibilityAttributedString =
+    if textView.isNil:
+      return initAccessibilityAttributedString()
+    textView.xTextStorage.accessibilityAttributedText(range.toTextRange())
 
   method accessibilityBoundsForTextRange(
       textView: TextView, range: AccessibilityTextRange
@@ -2497,7 +3345,15 @@ proc initTextViewFields*(
   discard textView.withProtocol(DefaultTextViewLayoutEventSlots)
   discard textView.withProtocol(DefaultTextViewAccessibility)
   discard textView.withProtocol(DefaultTextViewCommandDispatch)
+  discard textView.withProtocol(DefaultTextViewDraggingSource)
+  discard textView.withProtocol(DefaultTextViewDraggingDestination)
   textView.installTextInputClientMethods()
+  textView.registerForDraggedTypes(
+    [
+      PasteboardTypeTextStorage, PasteboardTypeAttributedText, PasteboardTypeString,
+      PasteboardTypePlainText,
+    ]
+  )
   textView.observeProtocol(textView.xLayoutManager, TextLayoutEvents)
   textView.xLayoutManager.layoutClient = DynamicAgent(textView)
   if installDefaultProtocols:

@@ -24,7 +24,15 @@ const
   AccessibilityAttributeWindow* = "window"
   AccessibilityAttributeNumberOfCharacters* = "numberOfCharacters"
   AccessibilityAttributeSelectedTextRange* = "selectedTextRange"
+  AccessibilityAttributeSelectedTextRanges* = "selectedTextRanges"
+  AccessibilityAttributeVisibleCharacterRange* = "visibleCharacterRange"
   AccessibilityAttributeInsertionPoint* = "insertionPoint"
+  AccessibilityAttributeInsertionPointLine* = "insertionPointLine"
+  AccessibilityParameterizedAttributeAttributedStringForRange* =
+    "attributedStringForRange"
+  AccessibilityParameterizedAttributeRangeForLine* = "rangeForLine"
+  AccessibilityParameterizedAttributeRangeForPosition* = "rangeForPosition"
+  AccessibilityParameterizedAttributeBoundsForRange* = "boundsForRange"
 
   AccessibilityActionPress* = "press"
   AccessibilityActionIncrement* = "increment"
@@ -45,6 +53,9 @@ type
     avView
     avViews
     avTextRange
+    avTextRanges
+    avRects
+    avAttributedString
 
   AccessibilityValue* = object
     case kind*: AccessibilityValueKind
@@ -66,6 +77,12 @@ type
       viewValues*: seq[View]
     of avTextRange:
       textRangeValue*: AccessibilityTextRange
+    of avTextRanges:
+      textRangeValues*: seq[AccessibilityTextRange]
+    of avRects:
+      rectValues*: seq[Rect]
+    of avAttributedString:
+      attributedStringValue*: AccessibilityAttributedString
 
   AccessibilityValidationResult* = object
     errors*: seq[string]
@@ -73,6 +90,18 @@ type
   AccessibilityTextRange* = object
     location*: Natural
     length*: Natural
+
+  AccessibilityTextAttribute* = object
+    name*: string
+    value*: string
+
+  AccessibilityTextAttributeRun* = object
+    range*: AccessibilityTextRange
+    attributes*: seq[AccessibilityTextAttribute]
+
+  AccessibilityAttributedString* = object
+    stringValue*: string
+    runs*: seq[AccessibilityTextAttributeRun]
 
 func initAccessibilityValue*(): AccessibilityValue =
   AccessibilityValue(kind: avNone)
@@ -111,6 +140,31 @@ func isEmpty*(range: AccessibilityTextRange): bool =
 
 func initAccessibilityValue*(value: AccessibilityTextRange): AccessibilityValue =
   AccessibilityValue(kind: avTextRange, textRangeValue: value)
+
+func initAccessibilityValue*(
+    value: openArray[AccessibilityTextRange]
+): AccessibilityValue =
+  AccessibilityValue(kind: avTextRanges, textRangeValues: @value)
+
+func initAccessibilityValue*(value: openArray[Rect]): AccessibilityValue =
+  AccessibilityValue(kind: avRects, rectValues: @value)
+
+func initAccessibilityTextAttribute*(name, value: string): AccessibilityTextAttribute =
+  AccessibilityTextAttribute(name: name, value: value)
+
+func initAccessibilityTextAttributeRun*(
+    range: AccessibilityTextRange,
+    attributes: openArray[AccessibilityTextAttribute] = [],
+): AccessibilityTextAttributeRun =
+  AccessibilityTextAttributeRun(range: range, attributes: @attributes)
+
+func initAccessibilityAttributedString*(
+    stringValue = "", runs: openArray[AccessibilityTextAttributeRun] = []
+): AccessibilityAttributedString =
+  AccessibilityAttributedString(stringValue: stringValue, runs: @runs)
+
+func initAccessibilityValue*(value: AccessibilityAttributedString): AccessibilityValue =
+  AccessibilityValue(kind: avAttributedString, attributedStringValue: value)
 
 proc hasHiddenAncestor(view: View): bool =
   var current = view
@@ -160,12 +214,19 @@ protocol AccessibilityProtocol:
 
   method accessibilityTextLength*(): int {.optional.}
   method accessibilitySelectedTextRange*(): AccessibilityTextRange {.optional.}
+  method accessibilitySelectedTextRanges*(): seq[AccessibilityTextRange] {.optional.}
+  method accessibilityVisibleCharacterRange*(): AccessibilityTextRange {.optional.}
   method setAccessibilitySelectedTextRange*(
     range: AccessibilityTextRange
   ): bool {.optional.}
 
   method accessibilityInsertionPoint*(): int {.optional.}
+  method accessibilityInsertionPointLine*(): int {.optional.}
   method setAccessibilityInsertionPoint*(index: int): bool {.optional.}
+  method accessibilityAttributedStringForRange*(
+    range: AccessibilityTextRange
+  ): AccessibilityAttributedString {.optional.}
+
   method accessibilityBoundsForTextRange*(
     range: AccessibilityTextRange
   ): seq[Rect] {.optional.}
@@ -285,7 +346,10 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     if view.accessibilityRole() in {arTextField, arTextArea, arStaticText}:
       result.add AccessibilityAttributeNumberOfCharacters
       result.add AccessibilityAttributeSelectedTextRange
+      result.add AccessibilityAttributeSelectedTextRanges
+      result.add AccessibilityAttributeVisibleCharacterRange
       result.add AccessibilityAttributeInsertionPoint
+      result.add AccessibilityAttributeInsertionPointLine
 
   method accessibilityAttributeValue*(
       view: View, attribute: string
@@ -317,8 +381,14 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       initAccessibilityValue(view.accessibilityTextLength())
     of AccessibilityAttributeSelectedTextRange:
       initAccessibilityValue(view.accessibilitySelectedTextRange())
+    of AccessibilityAttributeSelectedTextRanges:
+      initAccessibilityValue(view.accessibilitySelectedTextRanges())
+    of AccessibilityAttributeVisibleCharacterRange:
+      initAccessibilityValue(view.accessibilityVisibleCharacterRange())
     of AccessibilityAttributeInsertionPoint:
       initAccessibilityValue(view.accessibilityInsertionPoint())
+    of AccessibilityAttributeInsertionPointLine:
+      initAccessibilityValue(view.accessibilityInsertionPointLine())
     else:
       initAccessibilityValue()
 
@@ -375,6 +445,12 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
   method accessibilitySelectedTextRange*(view: View): AccessibilityTextRange =
     initAccessibilityTextRange(0, 0)
 
+  method accessibilitySelectedTextRanges*(view: View): seq[AccessibilityTextRange] =
+    @[view.accessibilitySelectedTextRange()]
+
+  method accessibilityVisibleCharacterRange*(view: View): AccessibilityTextRange =
+    initAccessibilityTextRange(0, view.accessibilityTextLength())
+
   method setAccessibilitySelectedTextRange*(
       view: View, range: AccessibilityTextRange
   ): bool =
@@ -383,8 +459,17 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
   method accessibilityInsertionPoint*(view: View): int =
     0
 
+  method accessibilityInsertionPointLine*(view: View): int =
+    view.accessibilityLineForCharacter(view.accessibilityInsertionPoint())
+
   method setAccessibilityInsertionPoint*(view: View, index: int): bool =
     false
+
+  method accessibilityAttributedStringForRange*(
+      view: View, range: AccessibilityTextRange
+  ): AccessibilityAttributedString =
+    discard range
+    initAccessibilityAttributedString()
 
   method accessibilityBoundsForTextRange*(
       view: View, range: AccessibilityTextRange

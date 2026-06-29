@@ -47,6 +47,7 @@ import merenda/nimkit/text/textfields
 import merenda/nimkit/text/textlayout
 import merenda/nimkit/text/textstorage
 import merenda/nimkit/text/texttypes
+import merenda/nimkit/text/textviewintegrations
 import merenda/nimkit/text/textviews
 import merenda/nimkit/themes
 import merenda/nimkit/foundation/types
@@ -106,6 +107,7 @@ export textfields
 export textlayout
 export textstorage
 export texttypes
+export textviewintegrations
 export textviews
 export themes
 export types

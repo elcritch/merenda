@@ -1,4 +1,4 @@
-import std/unittest
+import std/[sequtils, strutils, unittest]
 
 import merenda/nimkit
 
@@ -22,6 +22,8 @@ type TextViewDelegateSpy = ref object of DynamicAgent
   clickedLinks: seq[string]
   validation: bool
   hasValidation: bool
+  serviceRequests: seq[TextServiceRequest]
+  serviceResponse: TextServiceResponse
 
 type TextViewCheckerSpy = ref object of DynamicAgent
   checkingResults: seq[TextCheckingResult]
@@ -137,6 +139,13 @@ protocol TextViewDelegateSpyProtocol of TextViewDelegateProtocol:
     if spy.hasValidation:
       return spy.validation
     false
+
+  method tvPerformService(
+      spy: TextViewDelegateSpy, textView: TextView, request: TextServiceRequest
+  ): TextServiceResponse =
+    discard textView
+    spy.serviceRequests.add request
+    spy.serviceResponse
 
 protocol TextViewCheckerSpyProtocol of TextViewCheckingProtocol:
   method tvCheckingResults(
@@ -429,6 +438,85 @@ suite "nimkit text views":
     textView.usesRuler = false
     check not textView.rulerVisible
 
+  test "text view exposes accessibility parameterized text attributes":
+    let textView = newTextView("Title\nBody", frame = initRect(0, 0, 220, 90))
+    var attributes = textView.textStorage().attributesAt(0)
+    attributes.link = "https://example.test"
+    attributes.fontSize = 18.0
+    textView.textStorage().setAttributes(initTextRange(0, 5), attributes)
+    textView.allowsMultipleSelectedRanges = true
+    textView.selectedRanges = @[initTextRange(0, 5), initTextRange(6, 4)]
+
+    let
+      selectedRanges = textView.accessibilitySelectedTextRanges()
+      visibleRange = textView.accessibilityVisibleCharacterRange()
+      attributed =
+        textView.accessibilityAttributedStringForRange(initAccessibilityTextRange(0, 5))
+      rangeValue =
+        textView.accessibilityAttributeValue(AccessibilityAttributeSelectedTextRanges)
+      visibleValue = textView.accessibilityAttributeValue(
+        AccessibilityAttributeVisibleCharacterRange
+      )
+      insertionLine =
+        textView.accessibilityAttributeValue(AccessibilityAttributeInsertionPointLine)
+
+    check selectedRanges ==
+      @[initAccessibilityTextRange(0, 5), initAccessibilityTextRange(6, 4)]
+    check visibleRange.length > 0
+    check attributed.stringValue == "Title"
+    check attributed.runs.len == 1
+    check attributed.runs[0].attributes.anyIt(
+      it.name == "link" and it.value == "https://example.test"
+    )
+    check rangeValue.kind == avTextRanges
+    check visibleValue.kind == avTextRange
+    check insertionLine.kind == avInt
+    check insertionLine.intValue == textView.lineForIndex(5)
+
+  test "text view pagination ruler and stability snapshots are deterministic":
+    let textView =
+      newTextView("One\nTwo\nThree\nFour\nFive", frame = initRect(0, 0, 140, 80))
+    let tabStop = initTextTabStop(42.0)
+    var paragraph = initTextParagraphStyle(tabStops = [tabStop])
+    paragraph.firstLineHeadIndent = 12.0
+    paragraph.headIndent = 8.0
+    textView.setParagraphStyle(initTextRange(0, textView.textStorage().len), paragraph)
+
+    let
+      pageOptions = initTextPageLayoutOptions(
+        pageSize = initSize(200.0, 36.0),
+        contentInsets = insets(0.0),
+        firstPageNumber = 1,
+        displayScale = 1.0,
+      )
+      pages = textView.paginateTextView(pageOptions)
+      ruler = textView.rulerMetrics(initTextRange(0, 3))
+      scaleOne = textView.layoutStabilitySnapshot(
+        TextLayoutStabilityOptions(
+          displayScale: 1.0, fontSize: 12.0, pageOptions: pageOptions
+        )
+      )
+      scaleTwo = textView.layoutStabilitySnapshot(
+        TextLayoutStabilityOptions(
+          displayScale: 2.0, fontSize: 12.0, pageOptions: pageOptions
+        )
+      )
+      largerFont = textView.layoutStabilitySnapshot(
+        TextLayoutStabilityOptions(
+          displayScale: 1.0, fontSize: 18.0, pageOptions: pageOptions
+        )
+      )
+
+    check pages.len >= 2
+    check pages[0].pageNumber == 1
+    check pages[0].lineFragments.len > 0
+    check ruler.firstLineHeadIndent == 12.0'f32
+    check ruler.headIndent == 8.0'f32
+    check ruler.tabStops == @[tabStop]
+    check scaleOne.lineFragments.len == scaleTwo.lineFragments.len
+    check scaleOne.lineFragments[0].textRange == scaleTwo.lineFragments[0].textRange
+    check largerFont.contentSize.height >= scaleOne.contentSize.height
+
   test "text view validates commands and dispatches clicked links":
     let
       textView = newTextView("link", frame = initRect(0, 0, 160, 24))
@@ -446,6 +534,8 @@ suite "nimkit text views":
 
     attributes.link = "https://example.test"
     textView.textStorage().setAttributes(initTextRange(0, 4), attributes)
+    delegate.hasValidation = true
+    delegate.validation = true
     textView.delegate = DynamicAgent(delegate)
     check textView.clickTextAtPoint(textView.caretPoint(1))
     check delegate.clickedLinks == @["https://example.test"]
@@ -476,6 +566,115 @@ suite "nimkit text views":
     check source.cutText()
     check source.stringValue == "ad"
     check source.selectedRange == initTextRange(1, 0)
+
+  test "text view services can replace selected attributed text":
+    let
+      textView = newTextView("abcdef", frame = initRect(0, 0, 180, 40))
+      delegate = newTextViewDelegateSpy()
+      replacementAttributes = defaultTextAttributes(initColor(0.7, 0.1, 0.2), 13.0)
+
+    delegate.serviceResponse = TextServiceResponse(
+      handled: true,
+      replacementRange: initTextRange(1, 3),
+      replacement: newAttributedString("XYZ", replacementAttributes),
+    )
+    textView.delegate = DynamicAgent(delegate)
+    textView.selectedRange = initTextRange(1, 3)
+
+    let response = textView.performSelectedTextService()
+
+    check response.handled
+    check delegate.serviceRequests.len == 1
+    check delegate.serviceRequests[0].stringValue == "bcd"
+    check delegate.serviceRequests[0].attributedString.stringValue == "bcd"
+    check textView.stringValue == "aXYZef"
+    check textView.textStorage().attributesAt(1).foregroundColor ==
+      replacementAttributes.foregroundColor
+
+  test "text view rich transfer dragging and attachments use pure contracts":
+    let
+      source = newTextView("link image end", frame = initRect(0, 0, 260, 80))
+      target = newTextView("drop", frame = initRect(0, 0, 260, 80))
+      pasteboard = pasteboardWithUniqueName()
+
+    var linkAttributes = source.textStorage().attributesAt(0)
+    linkAttributes.link = "https://example.test"
+    linkAttributes.underlineStyle = tldsSingle
+    source.textStorage().setAttributes(initTextRange(0, 4), linkAttributes)
+
+    var imageAttributes = source.textStorage().attributesAt(5)
+    imageAttributes.attachment = initTextAttachment(
+      identifier = "image-1",
+      contentType = "image/png",
+      fileName = "image.png",
+      fileUrl = "file:///tmp/image.png",
+    )
+    source.textStorage().setAttributes(initTextRange(5, 5), imageAttributes)
+    source.selectedRange = initTextRange(0, source.textStorage().len)
+
+    check source.writeSelectionToPasteboard(
+      pasteboard, [ttfPlainText, ttfAttributedText, ttfHTML, ttfURL, ttfFilePromise]
+    )
+    check pasteboard.stringForType(PasteboardTypeString) == "link image end"
+    check pasteboard.attributedString().attributesAt(0).link == "https://example.test"
+    check pasteboard.html().contains("link image end")
+    check pasteboard.urlForType(PasteboardTypeUrl) == "https://example.test"
+    check pasteboard.fileForType(PasteboardTypeFilePromise) == "image.png"
+
+    let
+      attachments = source.selectedAttachmentPresentations()
+      images = source.selectedImageAttachments()
+      promised = source.selectedFilePromiseAttachments()
+    check attachments.len == 1
+    check attachments[0].cell.attachment.identifier == "image-1"
+    check images.len == 1
+    check promised.len == 1
+
+    let session = source.beginDraggingSelectedText(
+      {dgoCopy}, pasteboardWithUniqueName().pasteboardName()
+    )
+    check not session.isNil
+    check session.items().len >= 3
+    check session.promisedFileItems().len == 1
+
+    target.selectedRange = initTextRange(target.textStorage().len, 0)
+    check session.performDraggingOperation(DynamicAgent(target), target.caretPoint(4))
+    check target.stringValue == "droplink image end"
+
+  test "text view contextual menu routes open link through selector commands":
+    let
+      textView = newTextView("link", frame = initRect(0, 0, 180, 40))
+      delegate = newTextViewDelegateSpy()
+    var attributes = textView.textStorage().attributesAt(0)
+    attributes.link = "https://example.test"
+    textView.textStorage().setAttributes(initTextRange(0, 4), attributes)
+    delegate.hasValidation = true
+    delegate.validation = true
+    textView.delegate = DynamicAgent(delegate)
+
+    let
+      menu = textView.contextualMenuForText(textView.caretPoint(1))
+      item = menu[0]
+
+    check item.title == "Open Link"
+    check item.validate(Responder(textView))
+    check item.perform(Responder(textView))
+    check delegate.clickedLinks == @["https://example.test"]
+
+  test "text view document controller helper opens attachment documents":
+    let
+      app = newApplication()
+      controller = newDocumentController(app)
+      document = newDocument("file:///tmp/image.png", "png")
+      attachment = initTextAttachment(
+        identifier = "image-1",
+        contentType = "image/png",
+        fileName = "image.png",
+        fileUrl = "file:///tmp/image.png",
+      )
+
+    controller.addDocument(document)
+    check controller.openAttachmentDocument(attachment, app) == document
 
   test "general pasteboard is named and can sync string data through a provider":
     let
