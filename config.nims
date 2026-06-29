@@ -43,12 +43,6 @@ proc nimFileStemHasPrefix(file, prefix: string): bool =
   let (_, stem, ext) = splitFile(file)
   ext == ".nim" and stem.startsWith(prefix)
 
-proc isDefaultTest(file: string): bool =
-  file.nimFileStemHasPrefix("t")
-
-proc isDefaultExample(file: string): bool =
-  file.nimFileStemHasPrefix("nimkit_")
-
 proc downloadReference(url, outputFile: string) =
   exec("mkdir -p " & parentDir(outputFile).quoteShell())
   exec(
@@ -80,12 +74,20 @@ task test, "run unit test":
     if platformArg != "":
       echo "Running platform args: ", platformArg
     for file in listFiles("tests"):
-      if isDefaultTest(file):
+      if file.nimFileStemHasPrefix("t"):
+        nimExec("r", file, platform = platformArg)
+
+task integration, "run integration tests":
+  for platformArg in platforms():
+    if platformArg != "":
+      echo "Running platform args: ", platformArg
+    for file in listFiles("tests"):
+      if file.nimFileStemHasPrefix("t"):
         nimExec("r", file, platform = platformArg)
 
 task test_compile, "compile unit tests without running":
   for file in listFiles("tests"):
-    if nimFileStemHasPrefix(file, "t"):
+    if file.nimFileStemHasPrefix("nimkit_"):
       nimExec("c", file)
 
 task examples, "compile examples":
