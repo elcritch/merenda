@@ -23,9 +23,9 @@ box/group containers, scroll views, popup lists, table views, outline views,
 cascading column views, basic text editing lifecycle, action dispatch, reusable
 pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
 monospace text view/editor with raw event policy controls, document-controller
-infrastructure, AppKit-style in-process pasteboard/dragging foundations, and a
-pure Nim accessibility metadata, notification, traversal, validation, and text
-semantics core.
+infrastructure, a responder-discovered undo-manager service, AppKit-style
+in-process pasteboard/dragging foundations, and a pure Nim accessibility
+metadata, notification, traversal, validation, and text semantics core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -64,6 +64,14 @@ document-controller open/save integration are covered in tests and examples.
   window ownership, file metadata, edited state, recent documents, open/reopen,
   save/revert/close flows, responder-chain integration, and backend-neutral
   document defaults.
+- Added the cross-cutting `UndoManager` architecture as a NimKit service rather
+  than text-only history: grouped/nested undo transactions, redo replay, action
+  names, discard/clear APIs, disabled registration scopes, clean-state tracking,
+  and debug summaries are in place; documents and windows provide undo managers
+  through the responder chain via `UndoManagerProvider`; documents track edited
+  state from undo clean-state signals; and text storage, table selection/columns,
+  combo choices, matrix selection, and document tabs register inverse operations
+  through shared value, selection, and collection helpers.
 - Expanded core containers and shared primitives: `ScrollView`/`ClipView`,
   `Box`, `SplitView`, form/grid/stack support, table row primitives, popup
   lists, and the list-to-row vocabulary cleanup are in place with themed
@@ -204,14 +212,12 @@ document-controller open/save integration are covered in tests and examples.
 ## Current Verification
 
 - `atlas-run tests` passes locally on macOS with the current domain module
-  layout; the latest full run passed `40/40`.
-- Focused suites cover the main widget/runtime seams:
-  `tests/tnimkit_controls.nim`, `tests/tnimkit_matrix.nim`,
-  `tests/tnimkit_monotextviews.nim`, `tests/tnimkit_tableviews.nim`,
-  `tests/tnimkit_outlineviews.nim`, `tests/tnimkit_documents.nim`,
-  `tests/tnimkit_animations.nim`, `tests/tnimkit_rendering.nim`,
-  `tests/tnimkit_accessibility.nim`, `tests/tnimkit_textstorage.nim`, and
-  `tests/tnimkit_textlayout.nim`.
+  layout; the latest full run passed `2/2`.
+- Focused NimKit coverage lives under `tests/nimkit/*.nim` and is aggregated
+  by `tests/tnimkit.nim`; current modules cover controls, matrix,
+  monospace text views, tables, outlines, documents, animations, rendering,
+  accessibility, text storage/layout/views, pasteboards/dragging, document tabs,
+  undo managers, responders, windows/controllers, constraints, and themes.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/monotext_demo.nim`,
@@ -222,28 +228,6 @@ document-controller open/save integration are covered in tests and examples.
   the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### Undo Manager Architecture
-
-Add a cross-cutting undo manager that works for documents, windows, responders,
-text storage, model-backed controls, and future controller layers. Treat undo as
-an application architecture service, not only as text-edit history.
-
-1. Define the undo transaction model:
-   - add undo grouping, redo grouping, action names, nesting behavior, and
-     explicit discard/clear semantics
-   - expose a responder/document/window lookup path so controls can find the
-     active undo manager without global mutable state
-2. Route model mutations through undoable commands:
-   - support value changes, collection insert/remove/move, selection-affecting
-     edits, and document dirty-state integration
-   - make text storage, table/outline models, choice controls, and document tabs
-     able to register inverse operations through one API
-3. Add verification and diagnostics:
-   - test grouping, redo invalidation, document edited-state changes, nested
-     undo registration, and disabled undo scopes
-   - expose lightweight debug summaries for undo stacks without leaking internal
-     command storage
 
 ### Object Values, Formatting, and Validation
 
