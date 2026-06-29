@@ -150,6 +150,7 @@ type
     xAccessibilityHelp*: string
     xAccessibilityIdentifier*: string
     xAccessibilityTraits*: AccessibilityTraits
+    xValidationMessage*: string
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
     xAutoresizingMask*: AutoresizingMask

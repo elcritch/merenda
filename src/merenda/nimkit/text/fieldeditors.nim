@@ -2,6 +2,7 @@ import ../foundation/events
 import ../themes
 import ../drawing
 import ../responder/responders
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ./textstorage
 import ./texttypes
@@ -33,8 +34,24 @@ protocol FieldEditorClient {.selectorScope: protocol.}:
     editor: FieldEditor, movement: TextEditMovement
   ) {.optional.}
 
+  method validationErrorForEditor*(
+    editor: FieldEditor
+  ): ObjectValidationError {.optional.}
+
 proc client*(editor: FieldEditor): Responder =
   if editor.isNil: nil else: editor.xClient
+
+proc validationError*(editor: FieldEditor): ObjectValidationError =
+  if editor.isNil or editor.client().isNil:
+    return initObjectValidationError()
+  let error = editor.client().trySendLocal(validationErrorForEditor(), editor)
+  if error.isSome:
+    error.get()
+  else:
+    initObjectValidationError()
+
+proc hasValidationError*(editor: FieldEditor): bool =
+  editor.validationError().failed()
 
 proc wantsFieldEditor*(client: Responder, editor: FieldEditor): bool =
   if client.isNil:
@@ -42,7 +59,9 @@ proc wantsFieldEditor*(client: Responder, editor: FieldEditor): bool =
   let wants = client.trySendLocal(usesFieldEditor(), editor)
   wants.isSome and wants.get()
 
-proc fieldEditorForClient*(client: Responder, defaultEditor: FieldEditor): FieldEditor =
+proc fieldEditorForResponder*(
+    client: Responder, defaultEditor: FieldEditor
+): FieldEditor =
   if client.isNil:
     return defaultEditor
   let editor = client.trySendLocal(fieldEditorForClient(), defaultEditor)
@@ -91,6 +110,8 @@ proc notifyClientChanged(editor: FieldEditor) =
 proc validateEditing*(editor: FieldEditor): bool =
   if editor.isNil or editor.client().isNil:
     return true
+  if not editor.client().clientShouldEndEditing(editor):
+    return false
   editor.notifyClientChanged()
   result = true
 

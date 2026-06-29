@@ -1,16 +1,18 @@
 import sigils/core
 
 import ./cells
+import ../accessibility/accessibility
 import ../app/dragging
 import ../app/pasteboards
 import ../text/fieldeditors
 import ../foundation/events
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/types
 import ../view/views
 import ../app/windows
 
-export cells, views
+export cells, objectvalues, views
 
 type
   Control* = ref object of View
@@ -19,6 +21,11 @@ type
     xAction: ActionSelector
     xCurrentEditor: FieldEditor
     xDraggingSession: DraggingSession
+    xObjectValue: ObjectValue
+    xObjectValueFormatter: DynamicAgent
+    xObjectFormatContext: ObjectFormatContext
+    xObjectParseContext: ObjectParseContext
+    xValidationError: ObjectValidationError
 
   ActionProc* = proc(sender: DynamicAgent) {.closure.}
 
@@ -27,6 +34,28 @@ type
 
 protocol ControlEvents:
   proc actionDidSend*(control: Control, sender: DynamicAgent) {.signal.}
+  proc objectValueDidChange*(
+    control: Control, sender: DynamicAgent, value: ObjectValue
+  ) {.signal.}
+
+  proc validationDidChange*(
+    control: Control, sender: DynamicAgent, error: ObjectValidationError
+  ) {.signal.}
+
+  proc invalidObjectValueEdit*(
+    control: Control, sender: DynamicAgent, error: ObjectValidationError
+  ) {.signal.}
+
+protocol ControlValueHooks {.selectorScope: protocol.}:
+  method validateValue*(
+    control: Control, value: ObjectValue
+  ): ObjectValidationError {.optional.}
+
+  method shouldCommitValue*(control: Control, value: ObjectValue): bool {.optional.}
+
+  method didFailValue*(control: Control, error: ObjectValidationError) {.optional.}
+
+  method didCommitValue*(control: Control, value: ObjectValue) {.optional.}
 
 proc cell*(control: Control): Cell
 proc setCell*(control: Control, cell: Cell)
@@ -36,6 +65,13 @@ proc setCurrentEditor*(control: Control, editor: FieldEditor)
 proc target*(control: Control): DynamicAgent
 proc action*(control: Control): ActionSelector
 proc draggingSession*(control: Control): DraggingSession
+proc clearValidationError*(control: Control)
+proc setValidationError*(control: Control, error: ObjectValidationError)
+proc hasValidationError*(control: Control): bool
+proc validationError*(control: Control): ObjectValidationError
+proc rejectObjectValueEdit*(control: Control, error: ObjectValidationError): bool
+proc setObjectValue*(control: Control, value: ObjectValue, notify = false)
+proc validateObjectValueForWriteback*(control: Control, value: ObjectValue): bool
 
 proc controlIntrinsicContentSize(control: Control): IntrinsicSize =
   let controlCell = control.cell()
@@ -185,6 +221,9 @@ proc sizeToFit*(control: Control) =
 proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)
   control.background = initColor(0.0, 0.0, 0.0, 0.0)
+  control.xObjectValue = emptyObjectValue()
+  control.xObjectFormatContext = initObjectFormatContext()
+  control.xObjectParseContext = initObjectParseContext()
   control.setHuggingPriority(LayoutPriorityRequired, laVertical)
   control.installCellForwarding()
   control.setCell(
@@ -263,6 +302,201 @@ proc `action=`*(control: Control, action: ActionSelector) =
 
 proc draggingSession*(control: Control): DraggingSession =
   if control.isNil: nil else: control.xDraggingSession
+
+proc objectValue*(control: Control): ObjectValue =
+  if control.isNil:
+    nilObjectValue()
+  else:
+    control.xObjectValue
+
+proc objectValueFormatter*(control: Control): DynamicAgent =
+  if control.isNil: nil else: control.xObjectValueFormatter
+
+proc `objectValueFormatter=`*(control: Control, formatter: DynamicAgent) =
+  if not control.isNil:
+    control.xObjectValueFormatter = formatter
+
+proc `objectValueFormatter=`*(control: Control, formatter: Responder) =
+  control.objectValueFormatter = DynamicAgent(formatter)
+
+proc objectFormatContext*(control: Control): ObjectFormatContext =
+  if control.isNil:
+    initObjectFormatContext()
+  else:
+    control.xObjectFormatContext
+
+proc `objectFormatContext=`*(control: Control, context: ObjectFormatContext) =
+  if not control.isNil:
+    control.xObjectFormatContext = context
+
+proc objectParseContext*(control: Control): ObjectParseContext =
+  if control.isNil:
+    initObjectParseContext()
+  else:
+    control.xObjectParseContext
+
+proc `objectParseContext=`*(control: Control, context: ObjectParseContext) =
+  if not control.isNil:
+    control.xObjectParseContext = context
+
+proc formatObjectValue*(
+    control: Control, value: ObjectValue, role = ovrDefault
+): string =
+  if control.isNil:
+    return value.formatObjectValue(initObjectFormatContext(role = role))
+  let context = control.xObjectFormatContext.withRole(role)
+  control.xObjectValueFormatter.formatObjectValue(value, context)
+
+proc formattedObjectValue*(control: Control, role = ovrDefault): string =
+  if control.isNil:
+    return ""
+  control.formatObjectValue(control.xObjectValue, role)
+
+proc parseEditedObjectValue*(
+    control: Control, text: string, role = ovrTextField
+): ObjectParseResult =
+  if control.isNil:
+    return parseObjectValue(text, initObjectParseContext(role = role))
+  let context = control.xObjectParseContext.withRole(role)
+  control.xObjectValueFormatter.parseObjectValue(text, context)
+
+proc validationError*(control: Control): ObjectValidationError =
+  if control.isNil:
+    initObjectValidationError()
+  else:
+    control.xValidationError
+
+proc hasValidationError*(control: Control): bool =
+  not control.validationError().valid()
+
+proc setValidationError*(control: Control, error: ObjectValidationError) =
+  if control.isNil:
+    return
+  let wasInvalid = control.hasValidationError()
+  control.xValidationError = error
+  let message =
+    if error.failed():
+      error.displayMessage()
+    else:
+      ""
+  View(control).validationMessage = message
+  let isInvalid = control.hasValidationError()
+  if wasInvalid != isInvalid or error.message.len > 0:
+    control.postAccessibilityNotification(anValueChanged)
+  emit control.validationDidChange(DynamicAgent(control), error)
+
+proc clearValidationError*(control: Control) =
+  control.setValidationError(initObjectValidationError())
+
+proc sendValueFailure(control: Control, error: ObjectValidationError) =
+  let target = control.target()
+  if not target.isNil:
+    discard target.sendLocalIfHandled(didFailValue(), (control: control, error: error))
+  discard DynamicAgent(control).sendLocalIfHandled(
+      didFailValue(), (control: control, error: error)
+    )
+
+proc sendValueCommit(control: Control, value: ObjectValue) =
+  let target = control.target()
+  if not target.isNil:
+    discard
+      target.sendLocalIfHandled(didCommitValue(), (control: control, value: value))
+  discard DynamicAgent(control).sendLocalIfHandled(
+      didCommitValue(), (control: control, value: value)
+    )
+
+proc rejectObjectValueEdit*(control: Control, error: ObjectValidationError): bool =
+  if control.isNil:
+    return false
+  control.setValidationError(error)
+  control.sendValueFailure(error)
+  emit control.invalidObjectValueEdit(DynamicAgent(control), error)
+  false
+
+proc validateWithTarget(
+    target: DynamicAgent, control: Control, value: ObjectValue
+): ObjectValidationError =
+  if target.isNil:
+    return initObjectValidationError()
+  let error = target.trySendLocal(validateValue(), (control: control, value: value))
+  if error.isSome:
+    return error.get()
+  initObjectValidationError()
+
+proc shouldCommitWithTarget(
+    target: DynamicAgent, control: Control, value: ObjectValue
+): Option[bool] =
+  if target.isNil:
+    return none(bool)
+  target.trySendLocal(shouldCommitValue(), (control: control, value: value))
+
+proc validateObjectValueForWriteback*(control: Control, value: ObjectValue): bool =
+  if control.isNil:
+    return false
+  if value.kind == ovValidationFailure:
+    return control.rejectObjectValueEdit(value.validationError)
+
+  let target = control.target()
+  let targetError = validateWithTarget(target, control, value)
+  if targetError.failed():
+    return control.rejectObjectValueEdit(targetError)
+
+  let selfError = validateWithTarget(DynamicAgent(control), control, value)
+  if selfError.failed():
+    return control.rejectObjectValueEdit(selfError)
+
+  let targetAllowed = shouldCommitWithTarget(target, control, value)
+  if targetAllowed.isSome and not targetAllowed.get():
+    return control.rejectObjectValueEdit(
+      initObjectValidationError(
+        oveRejected,
+        message = "Value was rejected",
+        expectedKind = value.kind,
+        actualKind = value.kind,
+      )
+    )
+
+  let selfAllowed = shouldCommitWithTarget(DynamicAgent(control), control, value)
+  if selfAllowed.isSome and not selfAllowed.get():
+    return control.rejectObjectValueEdit(
+      initObjectValidationError(
+        oveRejected,
+        message = "Value was rejected",
+        expectedKind = value.kind,
+        actualKind = value.kind,
+      )
+    )
+
+  control.clearValidationError()
+  true
+
+proc setObjectValue*(control: Control, value: ObjectValue, notify = false) =
+  if control.isNil:
+    return
+  let changed = control.xObjectValue != value
+  control.xObjectValue = value
+  control.clearValidationError()
+  if changed:
+    emit control.objectValueDidChange(DynamicAgent(control), value)
+    control.sendValueCommit(value)
+    if notify:
+      discard control.sendAction()
+
+proc `objectValue=`*(control: Control, value: ObjectValue) =
+  control.setObjectValue(value)
+
+proc commitEditedObjectText*(
+    control: Control, text: string, role = ovrTextField, notify = false
+): bool =
+  if control.isNil:
+    return false
+  let parsed = control.parseEditedObjectValue(text, role)
+  if parsed.failed():
+    return control.rejectObjectValueEdit(parsed.error)
+  if not control.validateObjectValueForWriteback(parsed.value):
+    return false
+  control.setObjectValue(parsed.value, notify)
+  true
 
 proc beginDraggingItems*(
     control: Control,

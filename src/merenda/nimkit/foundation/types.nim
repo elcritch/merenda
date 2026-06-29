@@ -97,6 +97,7 @@ type
     ssAlternating
     ssPressed
     ssAccent
+    ssInvalid
 
   ButtonType* = enum
     btMomentary
@@ -148,6 +149,7 @@ type
     atSelectable = "selectable"
     atModal = "modal"
     atUpdatesFrequently = "updatesFrequently"
+    atInvalid = "invalid"
 
   AccessibilityTraits* = set[AccessibilityTrait]
 

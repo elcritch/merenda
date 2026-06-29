@@ -42,6 +42,7 @@ proc setSliderValue(slider: Slider, value: float32, notify = false) =
   if slider.xValue == nextValue:
     return
   slider.xValue = nextValue
+  Control(slider).setObjectValue(toObjectValue(nextValue))
   slider.setNeedsDisplay(true)
   slider.postAccessibilityNotification(anValueChanged)
   if notify:
@@ -118,6 +119,24 @@ proc value*(slider: Slider): float32 =
 
 proc `value=`*(slider: Slider, value: float32) =
   slider.setSliderValue(value)
+
+proc setObjectValue*(slider: Slider, value: ObjectValue, notify = false) =
+  if slider.isNil:
+    return
+  try:
+    slider.setSliderValue(value.requireNumber().float32, notify)
+  except ObjectValueError:
+    discard Control(slider).rejectObjectValueEdit(
+        initObjectValidationError(
+          oveTypeMismatch,
+          message = getCurrentExceptionMsg(),
+          expectedKind = ovFloat,
+          actualKind = value.kind,
+        )
+      )
+
+proc `objectValue=`*(slider: Slider, value: ObjectValue) =
+  slider.setObjectValue(value)
 
 proc minValue*(slider: Slider): float32 =
   if slider.isNil: 0.0'f32 else: slider.xMinValue
@@ -326,6 +345,9 @@ proc initSliderFields*(
   slider.xMaxValue = maxValue
   slider.xStepValue = 0.0'f32
   slider.xValue = slider.normalizedValue(value)
+  Control(slider).objectParseContext =
+    initObjectParseContext(expectedKind = ovFloat, role = ovrSlider)
+  Control(slider).setObjectValue(toObjectValue(slider.xValue))
   slider.setAcceptsFirstResponder(true)
   slider.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   slider.setCompressionPriority(LayoutPriorityHigh, laHorizontal)

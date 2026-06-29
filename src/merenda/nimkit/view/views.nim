@@ -254,6 +254,18 @@ proc setWidgetState*(view: View, state: WidgetState, value: bool) =
     view.xWidgetStates.excl state
   view.setNeedsDisplay(true)
 
+proc validationMessage*(view: View): string =
+  if view.isNil: "" else: view.xValidationMessage
+
+proc `validationMessage=`*(view: View, message: string) =
+  if view.isNil or view.xValidationMessage == message:
+    return
+  view.xValidationMessage = message
+  view.setWidgetState(ssInvalid, message.len > 0)
+
+proc hasValidationError*(view: View): bool =
+  (not view.isNil) and ssInvalid in view.xWidgetStates
+
 proc isHovered*(view: View): bool =
   ssHovered in view.xWidgetStates
 

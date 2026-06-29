@@ -14,6 +14,8 @@ const
   AccessibilityAttributeLabel* = "label"
   AccessibilityAttributeValue* = "value"
   AccessibilityAttributeHelp* = "help"
+  AccessibilityAttributeInvalid* = "invalid"
+  AccessibilityAttributeValidationError* = "validationError"
   AccessibilityAttributeIdentifier* = "identifier"
   AccessibilityAttributeEnabled* = "enabled"
   AccessibilityAttributeFocused* = "focused"
@@ -310,6 +312,8 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       result.incl atFocused
     if ssSelected in view.xWidgetStates:
       result.incl atSelected
+    if ssInvalid in view.xWidgetStates:
+      result.incl atInvalid
 
   method setAccessibilityTraits(view: View, traits: AccessibilityTraits) =
     if not view.isNil:
@@ -338,6 +342,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       @[
         AccessibilityAttributeRole, AccessibilityAttributeLabel,
         AccessibilityAttributeValue, AccessibilityAttributeHelp,
+        AccessibilityAttributeInvalid, AccessibilityAttributeValidationError,
         AccessibilityAttributeIdentifier, AccessibilityAttributeEnabled,
         AccessibilityAttributeFocused, AccessibilityAttributeSelected,
         AccessibilityAttributeFrame, AccessibilityAttributeParent,
@@ -363,6 +368,10 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       initAccessibilityValue(view.accessibilityValue())
     of AccessibilityAttributeHelp:
       initAccessibilityValue(view.accessibilityHelp())
+    of AccessibilityAttributeInvalid:
+      initAccessibilityValue(ssInvalid in view.xWidgetStates)
+    of AccessibilityAttributeValidationError:
+      initAccessibilityValue(view.xValidationMessage)
     of AccessibilityAttributeIdentifier:
       initAccessibilityValue(view.accessibilityIdentifier())
     of AccessibilityAttributeEnabled:

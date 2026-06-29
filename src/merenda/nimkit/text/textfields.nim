@@ -4,6 +4,7 @@ import sigils/core
 
 import ../accessibility/accessibility
 import ../controls/controls
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/events
 import ../foundation/types
@@ -59,6 +60,8 @@ proc textFieldStyleContext(textField: TextField): StyleContext
 proc textFieldStyle(textField: TextField): TextFieldStyle
 proc syncLayout(textField: TextField)
 proc syncLayout(textField: TextField, style: TextFieldStyle)
+proc validateEditedObjectText(textField: TextField, value: string): bool
+proc commitEditedObjectText(textField: TextField, value: string, cursor, anchor: int)
 
 func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
   initAccessibilityTextRange(int(range.location), int(range.length))
@@ -98,10 +101,12 @@ protocol TextFieldProtocol from TextField:
 
   method setStringValue(textField: TextField, value: string) =
     if textField.xStringValue == value:
+      Control(textField).setObjectValue(toObjectValue(value))
       return
     let cursor = min(textField.xInsertionPoint, value.runeLen)
     let anchor = min(textField.xSelectionAnchor, value.runeLen)
     textField.setEditedString(value, cursor, anchor)
+    Control(textField).setObjectValue(toObjectValue(value))
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       textviews.setStringValue(TextView(editor), value)
@@ -281,6 +286,7 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
       textviews.selectionAnchor(TextView(editor)),
       notify = true,
     )
+    Control(textField).clearValidationError()
 
   method didChangeTextInEditor(textField: TextField, editor: FieldEditor) =
     textField.setNeedsDisplay(true)
@@ -306,10 +312,10 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
       textField.focusVisible = editor.isFocusVisible()
 
   method shouldEndEditing(textField: TextField, editor: FieldEditor): bool =
-    true
+    textField.validateEditedObjectText(textviews.stringValue(TextView(editor)))
 
   method didEndEditing(textField: TextField, editor: FieldEditor) =
-    textField.setEditedString(
+    textField.commitEditedObjectText(
       textviews.stringValue(TextView(editor)),
       textviews.insertionPoint(TextView(editor)),
       textviews.selectionAnchor(TextView(editor)),
@@ -320,6 +326,11 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
     textField.focused = false
     textField.focusVisible = false
     textField.setNeedsDisplay(true)
+
+  method validationErrorForEditor(
+      textField: TextField, editor: FieldEditor
+  ): ObjectValidationError =
+    Control(textField).validationError()
 
   method didEndEditingMovement(
       textField: TextField, editor: FieldEditor, movement: TextEditMovement
@@ -378,6 +389,37 @@ proc activeFieldEditor(textField: TextField): FieldEditor =
 
 proc currentEditor*(textField: TextField): FieldEditor =
   currentEditor(Control(textField))
+
+proc validateEditedObjectText(textField: TextField, value: string): bool =
+  if textField.isNil:
+    return true
+  let parsed = Control(textField).parseEditedObjectValue(value, ovrTextField)
+  if parsed.failed():
+    return Control(textField).rejectObjectValueEdit(parsed.error)
+  Control(textField).validateObjectValueForWriteback(parsed.value)
+
+proc commitEditedObjectText(textField: TextField, value: string, cursor, anchor: int) =
+  if textField.isNil:
+    return
+  let committed = Control(textField).commitEditedObjectText(value, ovrTextField)
+  let displayValue =
+    if committed:
+      Control(textField).formattedObjectValue(ovrTextField)
+    else:
+      value
+  textField.setEditedString(displayValue, cursor, anchor)
+
+proc setObjectValue*(textField: TextField, value: ObjectValue, notify = false) =
+  if textField.isNil:
+    return
+  Control(textField).setObjectValue(value, notify)
+  let displayValue = Control(textField).formattedObjectValue(ovrTextField)
+  let cursor = min(textField.xInsertionPoint, displayValue.runeLen)
+  let anchor = min(textField.xSelectionAnchor, displayValue.runeLen)
+  textField.setEditedString(displayValue, cursor, anchor)
+
+proc `objectValue=`*(textField: TextField, value: ObjectValue) =
+  textField.setObjectValue(value)
 
 proc textFieldStyle(textField: TextField): TextFieldStyle =
   if textField.isNil:
@@ -1088,6 +1130,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   textField.xSelectionAnchor = textField.xInsertionPoint
   textField.xLayoutStorage = newTextStorage(value)
   textField.xLayoutManager = newTextLayoutManager(textField.xLayoutStorage)
+  Control(textField).setObjectValue(toObjectValue(value))
   textField.setAcceptsFirstResponder(true)
   discard textField.withProto()
   discard textField.withProtocol(DefaultTextFieldInput)

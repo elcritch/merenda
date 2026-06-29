@@ -13,6 +13,7 @@ import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
 import ../containers/scrollviews
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ../themes
 import ../text/fieldeditors
@@ -100,6 +101,8 @@ type
     column*: TableColumn
     active*: bool
     validationError*: string
+    validation*: ObjectValidationError
+    objectValue*: ObjectValue
 
   TableColumnAutosaveRecord* = object
     identifier*: string
@@ -302,6 +305,10 @@ proc defaultTableViewMouseUp*(tableView: TableView, event: MouseEvent): bool
 proc defaultTableViewKeyDown*(tableView: TableView, event: KeyEvent): bool
 
 proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
+proc tableCellObjectValue*(
+  tableView: TableView, row: int, column: TableColumn
+): ObjectValue
+
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
 proc rowCount*(tableView: TableView): int
 proc columnAt*(tableView: TableView, index: int): TableColumn
@@ -312,6 +319,7 @@ proc syncVisibleTableCells(tableView: TableView)
 proc prepareEditingSurface(tableView: TableView): bool
 proc clearEditingSurface(tableView: TableView)
 proc validateEditingValue(tableView: TableView, value: string): bool
+proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseResult
 proc finishCommitEditingCell(tableView: TableView, value: string): bool
 proc finishCancelEditingCell(tableView: TableView): bool
 proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool
@@ -375,6 +383,10 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
     tableView: TableView, row: int, column: TableColumn
   ): string {.optional.}
 
+  method objectValueForCell*(
+    tableView: TableView, row: int, column: TableColumn
+  ): ObjectValue {.optional.}
+
   method identifierForRow*(tableView: TableView, row: int): string {.optional.}
   method rowForIdentifier*(tableView: TableView, identifier: string): int {.optional.}
 
@@ -388,6 +400,14 @@ protocol TableViewEvents:
     row: int,
     column: TableColumn,
     value: string,
+  ) {.signal.}
+
+  proc cellObjectValueDidCommit*(
+    tableView: TableView,
+    sender: DynamicAgent,
+    row: int,
+    column: TableColumn,
+    value: ObjectValue,
   ) {.signal.}
 
 protocol TableViewDelegate {.selectorScope: protocol.}:
@@ -424,8 +444,20 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     tableView: TableView, row: int, column: TableColumn, value: string
   ): string {.optional.}
 
+  method parseObjectValueForCell*(
+    tableView: TableView, row: int, column: TableColumn, value: string
+  ): ObjectParseResult {.optional.}
+
+  method validationErrorForObjectValue*(
+    tableView: TableView, row: int, column: TableColumn, value: ObjectValue
+  ): ObjectValidationError {.optional.}
+
   method didCommitEditingCell*(
     tableView: TableView, row: int, column: TableColumn, value: string
+  ) {.optional.}
+
+  method didCommitEditingObjectValue*(
+    tableView: TableView, row: int, column: TableColumn, value: ObjectValue
   ) {.optional.}
 
   method didCancelEditingCell*(
@@ -1112,12 +1144,37 @@ proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
   let source = tableView.dataSource()
   if source.isNil:
     return ""
+  let value = source.trySendLocal(
+    objectValueForCell(), (tableView: tableView, row: row, column: column)
+  )
+  if value.isSome:
+    return Control(tableView).formatObjectValue(value.get(), ovrTableCell)
   let text =
     source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
   if text.isSome:
     text.get()
   else:
     ""
+
+proc tableCellObjectValue*(
+    tableView: TableView, row: int, column: TableColumn
+): ObjectValue =
+  if not tableView.validCell(row, column):
+    return nilObjectValue()
+  let source = tableView.dataSource()
+  if source.isNil:
+    return emptyObjectValue()
+  let value = source.trySendLocal(
+    objectValueForCell(), (tableView: tableView, row: row, column: column)
+  )
+  if value.isSome:
+    return value.get()
+  let text =
+    source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
+  if text.isSome:
+    toObjectValue(text.get())
+  else:
+    emptyObjectValue()
 
 proc tableRowIdentifier(tableView: TableView, row: int): string =
   if tableView.isNil or row notin 0 ..< tableView.len():
@@ -2121,6 +2178,12 @@ proc editingState*(tableView: TableView): TableEditingState =
 proc editingValidationError*(tableView: TableView): string =
   if tableView.isNil: "" else: tableView.xEditing.validationError
 
+proc editingValidation*(tableView: TableView): ObjectValidationError =
+  if tableView.isNil:
+    initObjectValidationError()
+  else:
+    tableView.xEditing.validation
+
 proc autosaveName*(tableView: TableView): string =
   tableView.xAutosaveName
 
@@ -2506,15 +2569,52 @@ proc installFieldEditorOnSurface(tableView: TableView, editor: FieldEditor) =
       tableView.xEditingHostView.addSubview(editor)
     editor.selectedRange = initTextRange(0, editor.textStorage().len)
 
+proc setEditingValidation(tableView: TableView, error: ObjectValidationError) =
+  if tableView.isNil or not tableView.xEditing.active:
+    return
+  let hadError = tableView.xEditing.validation.failed()
+  tableView.xEditing.validation = error
+  tableView.xEditing.validationError =
+    if error.failed():
+      error.displayMessage()
+    else:
+      ""
+  if error.failed():
+    Control(tableView).setValidationError(error)
+  else:
+    Control(tableView).clearValidationError()
+  if hadError or error.failed():
+    tableView.setNeedsDisplay(true)
+
+proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseResult =
+  if tableView.isNil or not tableView.xEditing.active:
+    return initObjectParseResult(toObjectValue(value))
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    let parsed = delegate.trySendLocal(
+      parseObjectValueForCell(),
+      (
+        tableView: tableView,
+        row: tableView.xEditing.row,
+        column: tableView.xEditing.column,
+        value: value,
+      ),
+    )
+    if parsed.isSome:
+      return parsed.get()
+  Control(tableView).parseEditedObjectValue(value, ovrTableCell)
+
 proc validateEditingValue(tableView: TableView, value: string): bool =
   if tableView.isNil or not tableView.xEditing.active:
     return true
-  let hadError = tableView.xEditing.validationError.len > 0
-  tableView.xEditing.validationError = ""
-  if hadError:
-    tableView.setNeedsDisplay(true)
+  tableView.setEditingValidation(initObjectValidationError())
+  let parsed = tableView.parseEditingObjectValue(value)
+  if parsed.failed():
+    tableView.setEditingValidation(parsed.error)
+    return false
   let delegate = tableView.delegate()
   if delegate.isNil:
+    tableView.xEditing.objectValue = parsed.value
     return true
   let validation = delegate.trySendLocal(
     validationErrorForCell(),
@@ -2526,9 +2626,29 @@ proc validateEditingValue(tableView: TableView, value: string): bool =
     ),
   )
   if validation.isSome and validation.get().len > 0:
-    tableView.xEditing.validationError = validation.get()
-    tableView.setNeedsDisplay(true)
+    tableView.setEditingValidation(
+      initObjectValidationError(
+        oveCustom,
+        message = validation.get(),
+        input = value,
+        expectedKind = parsed.value.kind,
+        actualKind = parsed.value.kind,
+      )
+    )
     return false
+  let objectValidation = delegate.trySendLocal(
+    validationErrorForObjectValue(),
+    (
+      tableView: tableView,
+      row: tableView.xEditing.row,
+      column: tableView.xEditing.column,
+      value: parsed.value,
+    ),
+  )
+  if objectValidation.isSome and objectValidation.get().failed():
+    tableView.setEditingValidation(objectValidation.get())
+    return false
+  tableView.xEditing.objectValue = parsed.value
   true
 
 proc finishCommitEditingCell(tableView: TableView, value: string): bool =
@@ -2537,6 +2657,7 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
   if not tableView.validateEditingValue(value):
     return false
   let editing = tableView.xEditing
+  let objectValue = editing.objectValue
   tableView.xEndedEditingRow = editing.row
   tableView.xEndedEditingColumn = editing.column
   tableView.xEndedEditingCommitted = true
@@ -2548,9 +2669,22 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
       didCommitEditingCell(),
       (tableView: tableView, row: editing.row, column: editing.column, value: value),
     )
+    discard delegate.sendLocalIfHandled(
+      didCommitEditingObjectValue(),
+      (
+        tableView: tableView,
+        row: editing.row,
+        column: editing.column,
+        value: objectValue,
+      ),
+    )
   emit tableView.cellEditDidCommit(
     DynamicAgent(tableView), editing.row, editing.column, value
   )
+  emit tableView.cellObjectValueDidCommit(
+    DynamicAgent(tableView), editing.row, editing.column, objectValue
+  )
+  Control(tableView).clearValidationError()
   tableView.clearTableCellSlots()
   tableView.setNeedsDisplay(true)
   true
@@ -2563,6 +2697,7 @@ proc finishCancelEditingCell(tableView: TableView): bool =
   tableView.xEndedEditingColumn = editing.column
   tableView.xEndedEditingCommitted = false
   tableView.xEditing = TableEditingState(row: -1)
+  Control(tableView).clearValidationError()
   tableView.clearEditingSurface()
   let delegate = tableView.delegate()
   if not delegate.isNil:
@@ -3909,9 +4044,8 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
   method didChangeTextInEditor(tableView: TableView, editor: FieldEditor) =
     if tableView.isNil or not tableView.xEditing.active:
       return
-    if tableView.xEditing.validationError.len > 0:
-      tableView.xEditing.validationError = ""
-      tableView.setNeedsDisplay(true)
+    if tableView.xEditing.validation.failed():
+      tableView.setEditingValidation(initObjectValidationError())
 
   method shouldBeginEditing(tableView: TableView, editor: FieldEditor): bool =
     not tableView.isNil and tableView.xEditing.active
@@ -3922,6 +4056,11 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     if tableView.xCancellingFieldEditor:
       return true
     tableView.validateEditingValue(TextView(editor).stringValue())
+
+  method validationErrorForEditor(
+      tableView: TableView, editor: FieldEditor
+  ): ObjectValidationError =
+    tableView.editingValidation()
 
   method didEndEditing(tableView: TableView, editor: FieldEditor) =
     if tableView.isNil:

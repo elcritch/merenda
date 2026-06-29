@@ -80,6 +80,7 @@ proc setStepperValue(stepper: Stepper, value: float32, notify = false): bool =
   if stepper.xValue == nextValue:
     return false
   stepper.xValue = nextValue
+  Control(stepper).setObjectValue(toObjectValue(nextValue))
   stepper.setNeedsDisplay(true)
   stepper.postAccessibilityNotification(anValueChanged)
   if notify:
@@ -164,6 +165,24 @@ proc value*(stepper: Stepper): float32 =
 proc `value=`*(stepper: Stepper, value: float32) =
   discard stepper.setStepperValue(value)
 
+proc setObjectValue*(stepper: Stepper, value: ObjectValue, notify = false) =
+  if stepper.isNil:
+    return
+  try:
+    discard stepper.setStepperValue(value.requireNumber().float32, notify)
+  except ObjectValueError:
+    discard Control(stepper).rejectObjectValueEdit(
+        initObjectValidationError(
+          oveTypeMismatch,
+          message = getCurrentExceptionMsg(),
+          expectedKind = ovFloat,
+          actualKind = value.kind,
+        )
+      )
+
+proc `objectValue=`*(stepper: Stepper, value: ObjectValue) =
+  stepper.setObjectValue(value)
+
 proc minValue*(stepper: Stepper): float32 =
   if stepper.isNil: 0.0'f32 else: stepper.xMinValue
 
@@ -231,6 +250,8 @@ proc `valueFormatter=`*(stepper: Stepper, formatter: StepperValueFormatter) =
 proc formatValue*(stepper: Stepper, value: float32): string =
   if not stepper.isNil and not stepper.xValueFormatter.isNil:
     return stepper.xValueFormatter(value)
+  if not stepper.isNil:
+    return Control(stepper).formatObjectValue(toObjectValue(value), ovrStepper)
   defaultStepperValueFormat(value)
 
 proc formattedValue*(stepper: Stepper): string =
@@ -480,6 +501,9 @@ proc initStepperFields*(
   stepper.xMaxValue = maxValue
   stepper.xIncrement = max(increment, 0.0'f32)
   stepper.xValue = stepper.clampedValue(value)
+  Control(stepper).objectParseContext =
+    initObjectParseContext(expectedKind = ovFloat, role = ovrStepper)
+  Control(stepper).setObjectValue(toObjectValue(stepper.xValue))
   stepper.setAcceptsFirstResponder(true)
   stepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
   stepper.setCompressionPriority(LayoutPriorityHigh, laHorizontal)

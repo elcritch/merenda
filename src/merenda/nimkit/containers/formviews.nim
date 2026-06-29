@@ -1,6 +1,7 @@
 import sigils/core
 
 import ../foundation/selectors
+import ../foundation/objectvalues
 import ../themes
 import ../foundation/types
 import ../view/viewgeometry
@@ -202,6 +203,9 @@ proc rows*(formView: FormView): seq[FormRow] =
     @[]
   else:
     formView.xRows
+
+proc formRowDisplayText*(value: ObjectValue, formatter: DynamicAgent = nil): string =
+  formatter.formatObjectValue(value, initObjectFormatContext(role = ovrFormRow))
 
 proc spacing*(formView: FormView): FormSpacing =
   FormSpacing(xFormView: formView)

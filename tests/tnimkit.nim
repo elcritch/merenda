@@ -16,6 +16,7 @@ import nimkit/keybindings
 import nimkit/matrix
 import nimkit/menus
 import nimkit/monotextviews
+import nimkit/objectvalues
 import nimkit/outlineviews
 import nimkit/pasteboards_dragging
 import nimkit/rendering

@@ -27,6 +27,7 @@ type
     xSubmenu: Menu
     xSeparator: bool
     xTag: int
+    xObjectValue: ObjectValue
     xRepresentedObject: DynamicAgent
     xUserInfo: DynamicAgent
 
@@ -237,6 +238,7 @@ proc newMenuItem*(
     modifiers: set[KeyModifier] = {},
 ): MenuItem =
   result = MenuItem(xTitle: title, xAction: action, xEnabled: true)
+  result.xObjectValue = toObjectValue(title)
   initResponder(result)
   if keyEquivalent.len > 0:
     result.xKeyEquivalent = initKeyStroke(keyEquivalent, modifiers)
@@ -248,12 +250,39 @@ proc separatorMenuItem*(): MenuItem =
   result.xSeparator = true
   result.xEnabled = false
 
+proc newMenuItem*(
+    value: ObjectValue,
+    action: ActionSelector = ActionSelector(),
+    keyEquivalent = "",
+    modifiers: set[KeyModifier] = {},
+): MenuItem =
+  result = newMenuItem(
+    value.formatObjectValue(initObjectFormatContext(role = ovrMenu)),
+    action,
+    keyEquivalent,
+    modifiers,
+  )
+  result.xObjectValue = value
+
 proc title*(item: MenuItem): string =
   if item.isNil: "" else: item.xTitle
 
 proc `title=`*(item: MenuItem, title: string) =
   if not item.isNil:
     item.xTitle = title
+    item.xObjectValue = toObjectValue(title)
+
+proc objectValue*(item: MenuItem): ObjectValue =
+  if item.isNil:
+    nilObjectValue()
+  else:
+    item.xObjectValue
+
+proc `objectValue=`*(item: MenuItem, value: ObjectValue) =
+  if item.isNil:
+    return
+  item.xObjectValue = value
+  item.xTitle = value.formatObjectValue(initObjectFormatContext(role = ovrMenu))
 
 proc action*(item: MenuItem): ActionSelector =
   if item.isNil:

@@ -29,11 +29,16 @@ type
 
   ComboBoxCell* = ref object of ActionCell
     xItems: seq[string]
+    xObjectItems: seq[ObjectValue]
     xStringValue: string
     xSelectedIndex: int
     xEditable: bool
     xMaxVisibleItems: int
     xItemHeight: float32
+
+  ComboBoxStoredItem = object
+    title: string
+    objectValue: ObjectValue
 
 proc comboBoxCell*(comboBox: ComboBox): ComboBoxCell
 proc dataSource*(comboBox: ComboBox): DynamicAgent
@@ -69,6 +74,10 @@ proc updatePopupPresentation(comboBox: ComboBox)
 proc popupListData(comboBox: ComboBox): PopupListData
 proc popupListActions(comboBox: ComboBox): PopupListActions
 proc popupList(comboBox: ComboBox): PopupListView
+proc itemObjectValueAtIndex*(comboBox: ComboBox, index: int): ObjectValue
+proc insertStoredItem(
+  comboBox: ComboBox, title: string, objectValue: ObjectValue, index: int
+)
 
 proc cellStringValue(cell: ComboBoxCell): string
 proc setCellSelectedIndex(cell: ComboBoxCell, index: int)
@@ -80,14 +89,20 @@ proc cellIsEditable(cell: ComboBoxCell): bool
 proc setCellEditable(cell: ComboBoxCell, editable: bool)
 proc cellNumberOfItems(cell: ComboBoxCell): int
 proc cellItemAtIndex(cell: ComboBoxCell, index: int): string
-proc cellAddItem(cell: ComboBoxCell, value: string)
-proc cellInsertItem(cell: ComboBoxCell, value: string, index: int)
+proc cellObjectValueAtIndex(cell: ComboBoxCell, index: int): ObjectValue
+proc cellInsertItem(
+  cell: ComboBoxCell, value: string, objectValue: ObjectValue, index: int
+)
+
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int)
 proc cellRemoveAllItems(cell: ComboBoxCell)
 
 protocol ComboBoxDataSource {.selectorScope: protocol.}:
   method itemCount*(comboBox: ComboBox): int {.optional.}
   method objectValueAtIndex*(comboBox: ComboBox, index: int): string {.optional.}
+  method typedObjectValueAtIndex*(
+    comboBox: ComboBox, index: int
+  ): ObjectValue {.optional.}
 
 protocol ComboBoxEvents:
   proc selectionIsChanging*(comboBox: ComboBox, sender: DynamicAgent) {.signal.}
@@ -213,6 +228,11 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       return ""
     let source = comboBox.dataSource()
     if not source.isNil:
+      let typedItem = source.trySendLocal(
+        typedObjectValueAtIndex(), (comboBox: comboBox, index: index)
+      )
+      if typedItem.isSome:
+        return Control(comboBox).formatObjectValue(typedItem.get(), ovrComboBox)
       let item =
         source.trySendLocal(objectValueAtIndex(), (comboBox: comboBox, index: index))
       if item.isSome:
@@ -240,6 +260,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       cell = comboBox.comboBoxCell()
       value = comboBox.itemAtIndex(index)
     if cell.xSelectedIndex == index and cell.xStringValue == value:
+      Control(comboBox).setObjectValue(comboBox.itemObjectValueAtIndex(index))
       return
     let oldValue = cell.xStringValue
     comboBox.findUndoManager().registerValueChange(
@@ -250,6 +271,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     )
     cell.xSelectedIndex = index
     cell.xStringValue = value
+    Control(comboBox).setObjectValue(comboBox.itemObjectValueAtIndex(index))
     cell.invalidateControlMetrics()
     comboBox.postAccessibilityNotification(anSelectionChanged)
 
@@ -266,41 +288,40 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     )
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
+    Control(comboBox).setObjectValue(emptyObjectValue())
     comboBox.highlightedIndex = -1
     cell.invalidateControlMetrics()
     comboBox.postAccessibilityNotification(anSelectionChanged)
 
   method addItem*(comboBox: ComboBox, value: string) =
-    let index = comboBox.comboBoxCell().cellNumberOfItems()
-    comboBox.findUndoManager().registerCollectionInsert(
-      proc(index: int) =
-        comboBox.removeItemAtIndex(index),
-      index,
-      "Insert Choice",
+    comboBox.insertStoredItem(
+      value, toObjectValue(value), comboBox.comboBoxCell().cellNumberOfItems()
     )
-    comboBox.comboBoxCell().cellAddItem(value)
 
   method insertItem*(comboBox: ComboBox, value: string, index: int) =
-    let boundedIndex = max(0, min(index, comboBox.comboBoxCell().cellNumberOfItems()))
-    comboBox.findUndoManager().registerCollectionInsert(
-      proc(index: int) =
-        comboBox.removeItemAtIndex(index),
-      boundedIndex,
-      "Insert Choice",
-    )
-    comboBox.comboBoxCell().cellInsertItem(value, index)
+    comboBox.insertStoredItem(value, toObjectValue(value), index)
 
   method removeItemAtIndex*(comboBox: ComboBox, index: int) =
     if index >= 0 and index < comboBox.comboBoxCell().cellNumberOfItems():
-      let value = comboBox.comboBoxCell().cellItemAtIndex(index)
+      let item = ComboBoxStoredItem(
+        title: comboBox.comboBoxCell().cellItemAtIndex(index),
+        objectValue: comboBox.comboBoxCell().cellObjectValueAtIndex(index),
+      )
       comboBox.findUndoManager().registerCollectionRemove(
-        proc(index: int, value: string) =
-          comboBox.insertItem(value, index),
+        proc(index: int, item: ComboBoxStoredItem) =
+          comboBox.insertStoredItem(item.title, item.objectValue, index),
         index,
-        value,
+        item,
         "Remove Choice",
       )
     comboBox.comboBoxCell().cellRemoveItemAtIndex(index)
+    let selected = comboBox.indexOfSelectedItem()
+    Control(comboBox).setObjectValue(
+      if selected >= 0:
+        comboBox.itemObjectValueAtIndex(selected)
+      else:
+        emptyObjectValue()
+    )
     if comboBox.numberOfItems() == 0:
       comboBox.closePopup()
 
@@ -308,15 +329,23 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     let
       cell = comboBox.comboBoxCell()
       values = cell.xItems
+      objectValues = cell.xObjectItems
       oldValue = cell.xStringValue
     if values.len > 0 or oldValue.len > 0:
       comboBox.findUndoManager().registerUndo(
         proc() =
-          comboBox.addItems(values)
+          for idx, value in values:
+            let objectValue =
+              if idx < objectValues.len:
+                objectValues[idx]
+              else:
+                toObjectValue(value)
+            comboBox.insertStoredItem(value, objectValue, idx)
           comboBox.setComboBoxStringValue(oldValue),
         "Remove Choices",
       )
     comboBox.comboBoxCell().cellRemoveAllItems()
+    Control(comboBox).setObjectValue(emptyObjectValue())
     comboBox.closePopup()
 
   method activateItemAtIndex*(comboBox: ComboBox, index: int) =
@@ -587,13 +616,20 @@ proc cellItemAtIndex(cell: ComboBoxCell, index: int): string =
     return ""
   cell.xItems[index]
 
-proc cellAddItem(cell: ComboBoxCell, value: string) =
-  cell.xItems.add value
-  cell.invalidateControlMetrics()
+proc cellObjectValueAtIndex(cell: ComboBoxCell, index: int): ObjectValue =
+  if cell.isNil or index < 0 or index >= cell.xItems.len:
+    return nilObjectValue()
+  if index < cell.xObjectItems.len:
+    cell.xObjectItems[index]
+  else:
+    toObjectValue(cell.xItems[index])
 
-proc cellInsertItem(cell: ComboBoxCell, value: string, index: int) =
+proc cellInsertItem(
+    cell: ComboBoxCell, value: string, objectValue: ObjectValue, index: int
+) =
   let boundedIndex = max(0, min(index, cell.xItems.len))
   cell.xItems.insert(value, boundedIndex)
+  cell.xObjectItems.insert(objectValue, boundedIndex)
   if cell.xSelectedIndex >= boundedIndex:
     inc cell.xSelectedIndex
   cell.invalidateControlMetrics()
@@ -602,6 +638,8 @@ proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
   if cell.isNil or index < 0 or index >= cell.xItems.len:
     return
   cell.xItems.delete(index)
+  if index < cell.xObjectItems.len:
+    cell.xObjectItems.delete(index)
   if cell.xItems.len == 0:
     cell.xSelectedIndex = -1
     cell.xStringValue = ""
@@ -613,6 +651,7 @@ proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
 
 proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.xItems.setLen(0)
+  cell.xObjectItems.setLen(0)
   cell.xStringValue = ""
   cell.xSelectedIndex = -1
   cell.invalidateControlMetrics()
@@ -679,6 +718,7 @@ proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
   )
   cell.xStringValue = value
   cell.xSelectedIndex = index
+  Control(comboBox).setObjectValue(toObjectValue(value))
   cell.invalidateControlMetrics()
 
 proc comboBoxStringValueMethod(self: DynamicAgent, invocation: var Invocation) =
@@ -763,6 +803,35 @@ proc `dataSource=`*(comboBox: ComboBox, dataSource: DynamicAgent) =
 
 proc `dataSource=`*(comboBox: ComboBox, dataSource: Responder) =
   comboBox.dataSource = DynamicAgent(dataSource)
+
+proc insertStoredItem(
+    comboBox: ComboBox, title: string, objectValue: ObjectValue, index: int
+) =
+  if comboBox.isNil:
+    return
+  let boundedIndex = max(0, min(index, comboBox.comboBoxCell().cellNumberOfItems()))
+  comboBox.findUndoManager().registerCollectionInsert(
+    proc(index: int) =
+      comboBox.removeItemAtIndex(index),
+    boundedIndex,
+    "Insert Choice",
+  )
+  comboBox.comboBoxCell().cellInsertItem(title, objectValue, boundedIndex)
+
+proc itemObjectValueAtIndex*(comboBox: ComboBox, index: int): ObjectValue =
+  if comboBox.isNil or index < 0 or index >= comboBox.numberOfItems():
+    return nilObjectValue()
+  let source = comboBox.dataSource()
+  if not source.isNil:
+    let typedItem =
+      source.trySendLocal(typedObjectValueAtIndex(), (comboBox: comboBox, index: index))
+    if typedItem.isSome:
+      return typedItem.get()
+    let textItem =
+      source.trySendLocal(objectValueAtIndex(), (comboBox: comboBox, index: index))
+    if textItem.isSome:
+      return toObjectValue(textItem.get())
+  comboBox.comboBoxCell().cellObjectValueAtIndex(index)
 
 proc highlightedIndex*(comboBox: ComboBox): int =
   comboBox.xPopupHighlightedIndex
@@ -1094,6 +1163,22 @@ proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int) =
   comboBox.movePopupHighlightTo(target)
 
 proc addItems*(comboBox: ComboBox, values: openArray[string]) =
+  for value in values:
+    comboBox.addItem(value)
+
+proc addItem*(comboBox: ComboBox, value: ObjectValue) =
+  comboBox.insertStoredItem(
+    Control(comboBox).formatObjectValue(value, ovrComboBox),
+    value,
+    comboBox.comboBoxCell().cellNumberOfItems(),
+  )
+
+proc insertItem*(comboBox: ComboBox, value: ObjectValue, index: int) =
+  comboBox.insertStoredItem(
+    Control(comboBox).formatObjectValue(value, ovrComboBox), value, index
+  )
+
+proc addItems*(comboBox: ComboBox, values: openArray[ObjectValue]) =
   for value in values:
     comboBox.addItem(value)
 

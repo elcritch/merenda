@@ -869,7 +869,7 @@ proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
     return responder
   let defaultEditor = window.fieldEditor()
   if responder.wantsFieldEditor(defaultEditor):
-    let editor = responder.fieldEditorForClient(defaultEditor)
+    let editor = responder.fieldEditorForResponder(defaultEditor)
     if not editor.isNil:
       if editor.superview().isNil:
         editor.setNextResponder(window)
