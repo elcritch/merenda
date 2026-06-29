@@ -360,6 +360,7 @@ proc expandItem*(outlineView: OutlineView, identifier: string) =
     discard delegate.sendLocalIfHandled(
       didExpandItem(), (outlineView: outlineView, identifier: identifier)
     )
+  outlineView.postAccessibilityNotification(anExpandedChanged)
 
 proc collapseItem*(outlineView: OutlineView, identifier: string) =
   if outlineView.isNil:
@@ -383,6 +384,7 @@ proc collapseItem*(outlineView: OutlineView, identifier: string) =
     discard delegate.sendLocalIfHandled(
       didCollapseItem(), (outlineView: outlineView, identifier: identifier)
     )
+  outlineView.postAccessibilityNotification(anExpandedChanged)
 
 proc toggleItem*(outlineView: OutlineView, identifier: string) =
   if outlineView.isItemExpanded(identifier):
@@ -401,8 +403,12 @@ proc `expandedItemIdentifiers=`*(
 ) =
   if outlineView.isNil:
     return
+  let previous = outlineView.xExpanded
   outlineView.xExpanded = @identifiers
+  if outlineView.xExpanded == previous:
+    return
   TableView(outlineView).reloadData()
+  outlineView.postAccessibilityNotification(anExpandedChanged)
 
 proc expansionPersistenceString*(outlineView: OutlineView): string =
   if outlineView.isNil:

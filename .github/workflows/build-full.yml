@@ -186,4 +186,5 @@ jobs:
 
     - name: Compile Examples
       run: |
-        atlas-run tests --jobs:2 --compile-only --only-errors "examples/*.nim"
+        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
+

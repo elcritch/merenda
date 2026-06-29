@@ -79,6 +79,12 @@ proc containsRect(outer, inner: nimkitTypes.Rect): bool =
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextFieldGeometryEpsilon
 
+proc checkRectClose(actual, expected: nimkitTypes.Rect) =
+  checkClose(actual.origin.x, expected.origin.x)
+  checkClose(actual.origin.y, expected.origin.y)
+  checkClose(actual.size.width, expected.size.width)
+  checkClose(actual.size.height, expected.size.height)
+
 proc nodeRenderedInView(node: Fig, view: View): bool =
   view.rectToWindow(view.bounds).containsRect(node.renderedRect())
 
@@ -88,9 +94,11 @@ proc renderedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
         node.nodeRenderedInView(view):
       return true
 
-proc renderedSelectedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
+proc renderedSelectionInView(nodes: openArray[Fig], view: View): bool =
   for node in nodes:
-    if node.kind == nkText and NfSelectText in node.flags and node.renderedText() == text and
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == initColor(0.24, 0.56, 1.0, 0.34).rgba and
+        node.screenBox.w > 1.0 and node.screenBox.h > 0.0 and
         node.nodeRenderedInView(view):
       return true
 
@@ -257,6 +265,99 @@ suite "nimkit text fields":
     checkClose(activeCaretX, passiveCaret.origin.x)
     checkClose(activeCaretY, passiveCaret.origin.y)
 
+  test "field editor text rect and accessibility geometry do not shift on focus":
+    let
+      window = newWindow("Text geometry", frame = initRect(0, 0, 260, 140))
+      root = newView(frame = initRect(0, 0, 260, 140))
+      field = newTextField("Offset text", frame = initRect(14, 18, 168, 34))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    let
+      passiveTextRect = field.layoutManager().layoutBounds()
+      passiveTextRectInWindow = field.rectToWindow(passiveTextRect)
+      passiveChar = field.accessibilityBoundsForCharacter(0)
+      passiveLine = field.accessibilityBoundsForLine(0)
+
+    check passiveTextRect.origin.x > 0.0'f32
+    check passiveTextRectInWindow.containsRect(passiveChar)
+    check passiveTextRectInWindow.containsRect(passiveLine)
+    check passiveLine.containsRect(passiveChar)
+
+    check window.makeFirstResponder(field)
+    discard window.buildRenders()
+
+    let
+      editor = window.fieldEditor()
+      activeChar = field.accessibilityBoundsForCharacter(0)
+      activeLine = field.accessibilityBoundsForLine(0)
+
+    checkRectClose(editor.frame(), passiveTextRect)
+    check editor.textContainer().insets.top > 0.0'f32
+    check passiveTextRectInWindow.containsRect(activeChar)
+    check passiveTextRectInWindow.containsRect(activeLine)
+    check not activeChar.isEmpty
+    check not activeLine.isEmpty
+    check field.accessibilityCharacterIndexAtPoint(
+      initPoint(
+        passiveChar.origin.x + passiveChar.size.width * 0.5'f32,
+        passiveChar.origin.y + passiveChar.size.height * 0.5'f32,
+      )
+    ) == 0
+    check field.accessibilityCharacterIndexAtPoint(
+      initPoint(
+        activeChar.origin.x + activeChar.size.width * 0.5'f32,
+        activeChar.origin.y + activeChar.size.height * 0.5'f32,
+      )
+    ) == 0
+
+  test "field editor exposes text input client geometry and command dispatch":
+    let
+      window = newWindow("Field editor input client", frame = initRect(0, 0, 260, 140))
+      root = newView(frame = initRect(0, 0, 260, 140))
+      field = newTextField("abcdef", frame = initRect(14, 18, 168, 34))
+      spy = TextFieldChangeSpy()
+
+    field.connect(textDidChange, spy, rememberTextFieldChange)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let
+      editor = window.fieldEditor()
+      textView = TextView(editor)
+      textRectInWindow = field.rectToWindow(field.layoutManager().layoutBounds())
+
+    textView.selectedRange = initTextRange(3, 0)
+    let
+      substring = textView.attributedSubstringForRange(initTextRange(1, 2))
+      firstRect = textView.firstRectForCharacterRange(initTextRange(3, 1))
+      hitIndex = textView.characterIndexForPoint(
+        initPoint(
+          firstRect.origin.x + firstRect.size.width * 0.5'f32,
+          firstRect.origin.y + firstRect.size.height * 0.5'f32,
+        )
+      )
+
+    check editor.superview == field
+    check textRectInWindow.containsRect(firstRect)
+    check substring.stringValue() == "bc"
+    check hitIndex == 3
+    check not textView.hasMarkedText
+    check textView.markedRange == initTextRange(0, 0)
+    check "fontSize" in textView.validAttributesForMarkedText()
+
+    doCommandBySelector(
+      Responder(editor), deleteToBeginningOfLine(), DynamicAgent(editor)
+    )
+
+    check field.stringValue == "def"
+    check field.selectedRange == initTextRange(0, 0)
+    check field.currentEditor == editor
+    check window.firstResponder == editor
+    check spy.changeCount == 1
+
   test "window-backed field editor renders live text before blur":
     let
       window = newWindow("Text field render", frame = initRect(0, 0, 420, 220))
@@ -272,7 +373,7 @@ suite "nimkit text fields":
 
     check window.makeFirstResponder(field)
     let focusedNodes = window.buildRenders()[DefaultDrawLevel].nodes
-    check focusedNodes.renderedSelectedTextInView(field, "Edit me")
+    check focusedNodes.renderedSelectionInView(field)
     check focusedNodes.renderedFocusRingInView(field)
     check focusedNodes.renderedFocusRingOutsetsView(field)
 

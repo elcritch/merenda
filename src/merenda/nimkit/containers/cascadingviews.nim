@@ -733,6 +733,7 @@ proc applySelectedPath(view: CascadingView, path: openArray[string]) =
   view.syncCascadingColumns()
   view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
   emit view.selectionDidChange(DynamicAgent(view))
+  view.postAccessibilityNotification(anSelectionChanged)
 
 proc reloadData*(view: CascadingView) =
   if view.isNil:
@@ -791,6 +792,7 @@ proc selectItem*(view: CascadingView, column, row: int) =
       (view: view, column: column, row: row, identifier: item.identifier),
     )
   emit view.selectionDidChange(DynamicAgent(view))
+  view.postAccessibilityNotification(anSelectionChanged)
 
 proc activateCascadingItem(view: CascadingView, column, row: int) =
   if view.isNil or column < 0 or row < 0:

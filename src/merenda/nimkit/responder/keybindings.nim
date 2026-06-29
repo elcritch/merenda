@@ -270,6 +270,14 @@ proc bindLineEditing(table: var KeyBindingTable, modifiers: set[KeyModifier]) =
     keyArrowRight, modifiers + {kmShift}, moveToEndOfLineAndModifySelection()
   )
 
+proc bindDocumentEditing(table: var KeyBindingTable, modifiers: set[KeyModifier]) =
+  table.bindKey(keyHome, modifiers, moveToBeginningOfDocument())
+  table.bindKey(keyEnd, modifiers, moveToEndOfDocument())
+  table.bindKey(
+    keyHome, modifiers + {kmShift}, moveToBeginningOfDocumentAndModifySelection()
+  )
+  table.bindKey(keyEnd, modifiers + {kmShift}, moveToEndOfDocumentAndModifySelection())
+
 proc bindMacOSEditing(table: var KeyBindingTable) =
   table.bindKey(keyA, {kmControl}, moveToBeginningOfLine())
   table.bindKey(keyE, {kmControl}, moveToEndOfLine())
@@ -277,10 +285,20 @@ proc bindMacOSEditing(table: var KeyBindingTable) =
   table.bindKey(keyF, {kmControl}, moveRight())
   table.bindKey(keyH, {kmControl}, deleteBackward())
   table.bindKey(keyD, {kmControl}, deleteForward())
+  table.bindKey(keyK, {kmControl}, deleteToEndOfLine())
   table.bindWordEditing({kmOption})
   table.bindLineEditing({kmCommand})
+  table.bindKey(keyArrowUp, {kmCommand}, moveToBeginningOfDocument())
+  table.bindKey(keyArrowDown, {kmCommand}, moveToEndOfDocument())
+  table.bindKey(
+    keyArrowUp, {kmCommand, kmShift}, moveToBeginningOfDocumentAndModifySelection()
+  )
+  table.bindKey(
+    keyArrowDown, {kmCommand, kmShift}, moveToEndOfDocumentAndModifySelection()
+  )
   table.bindKey(keyBackspace, {kmOption}, deleteWordBackward())
   table.bindKey(keyDelete, {kmOption}, deleteWordForward())
+  table.bindKey(keyBackspace, {kmCommand}, deleteToBeginningOfLine())
   table.bindKey(keyA, {kmCommand}, selectAll())
   table.bindKey(keyC, {kmCommand}, copy())
   table.bindKey(keyX, {kmCommand}, cut())
@@ -290,12 +308,7 @@ proc bindMacOSEditing(table: var KeyBindingTable) =
 
 proc bindWindowsEditing(table: var KeyBindingTable) =
   table.bindWordEditing({kmControl})
-  table.bindKey(keyHome, {kmControl}, moveToBeginningOfLine())
-  table.bindKey(keyEnd, {kmControl}, moveToEndOfLine())
-  table.bindKey(
-    keyHome, {kmShift, kmControl}, moveToBeginningOfLineAndModifySelection()
-  )
-  table.bindKey(keyEnd, {kmShift, kmControl}, moveToEndOfLineAndModifySelection())
+  table.bindDocumentEditing({kmControl})
   table.bindKey(keyBackspace, {kmControl}, deleteWordBackward())
   table.bindKey(keyDelete, {kmControl}, deleteWordForward())
   table.bindKey(keyA, {kmControl}, selectAll())
@@ -308,6 +321,7 @@ proc bindWindowsEditing(table: var KeyBindingTable) =
 proc bindLinuxBsdEditing(table: var KeyBindingTable) =
   table.bindWordEditing({kmControl})
   table.bindWordEditing({kmOption})
+  table.bindDocumentEditing({kmControl})
   table.bindKey(keyE, {kmControl}, moveToEndOfLine())
   table.bindKey(keyBackspace, {kmControl}, deleteWordBackward())
   table.bindKey(keyDelete, {kmControl}, deleteWordForward())

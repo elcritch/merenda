@@ -257,6 +257,7 @@ proc setPaneCollapsed*(splitView: SplitView, index: int, collapsed: bool) =
     return
   splitView.xPanes[index].collapsed = collapsed
   splitView.invalidateSplitViewLayout()
+  splitView.postAccessibilityNotification(anExpandedChanged)
 
 proc collapsed*(splitView: SplitView, index: int): bool =
   splitView.isPaneCollapsed(index)
@@ -596,6 +597,7 @@ proc captureState*(splitView: SplitView): SplitViewState =
 proc restoreState*(splitView: SplitView, state: SplitViewState) =
   if splitView.isNil:
     return
+  let previousCollapsed = splitView.captureState().collapsed
   for index in 0 ..< splitView.xPanes.len:
     if index < state.fractions.len:
       splitView.xPanes[index].fraction = state.fractions[index].normalizedFraction()
@@ -603,6 +605,8 @@ proc restoreState*(splitView: SplitView, state: SplitViewState) =
       splitView.xPanes[index].collapsed =
         state.collapsed[index] and splitView.xPanes[index].collapsible
   splitView.invalidateSplitViewLayout()
+  if splitView.captureState().collapsed != previousCollapsed:
+    splitView.postAccessibilityNotification(anExpandedChanged)
 
 proc autosaveString*(state: SplitViewState): string =
   var parts: seq[string]

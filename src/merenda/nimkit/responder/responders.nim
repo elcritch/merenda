@@ -39,6 +39,9 @@ protocol ResponderProtocol from Responder:
     discard
 
   method tryToPerform*(self: Responder, args: TryToPerformArgs): bool =
+    let routed = self.trySendLocal(dispatchCommand(), args)
+    if routed.isSome:
+      return routed.get()
     self.sendLocalIfHandled(args.selector, ActionArgs(sender: args.sender))
 
   method doCommandBySelector*(self: Responder, selector: CommandSelector) =

@@ -243,6 +243,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     cell.xSelectedIndex = index
     cell.xStringValue = value
     cell.invalidateControlMetrics()
+    comboBox.postAccessibilityNotification(anSelectionChanged)
 
   method deselectItem*(comboBox: ComboBox) =
     let cell = comboBox.comboBoxCell()
@@ -252,6 +253,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     cell.xStringValue = ""
     comboBox.highlightedIndex = -1
     cell.invalidateControlMetrics()
+    comboBox.postAccessibilityNotification(anSelectionChanged)
 
   method addItem*(comboBox: ComboBox, value: string) =
     comboBox.comboBoxCell().cellAddItem(value)

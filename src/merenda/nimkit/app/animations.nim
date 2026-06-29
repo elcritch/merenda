@@ -1,4 +1,4 @@
-import std/[algorithm, math, times]
+import std/[algorithm, locks, math, times]
 
 import sigils/reactive
 import sigils/threadProxies
@@ -52,6 +52,7 @@ type
     xFrameInterval: Duration
     xThread: SigilSelectorThreadPtr
     xOwnsThread: bool
+    xUsesSharedThread: bool
     xTimer: SigilTimer
     xTicker: AgentProxy[AnimationClockTicker]
     xPendingDeltas: seq[Duration]
@@ -116,6 +117,11 @@ proc clockTicked(ticker: AnimationClockTicker, delta: Duration) {.signal.}
 var
   animationTransactionStack {.threadvar.}: seq[AnimationTransaction]
   animationTransactionApplyDepth {.threadvar.}: int
+  sharedAnimationThreadLock: Lock
+  sharedAnimationThread: SigilSelectorThreadPtr
+  sharedAnimationThreadUseCount: int
+
+sharedAnimationThreadLock.initLock()
 
 func clampProgress(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
@@ -1244,26 +1250,51 @@ proc takePendingDeltas*(clock: AnimationSchedulerClock): seq[Duration] =
   result = clock.xPendingDeltas
   clock.xPendingDeltas.setLen(0)
 
+proc ensureLocalAnimationDispatchThread() =
+  if not hasLocalSigilThread():
+    discard getCurrentSigilThread()
+
+proc acquireSharedAnimationThread(): SigilSelectorThreadPtr =
+  withLock sharedAnimationThreadLock:
+    if sharedAnimationThread.isNil:
+      sharedAnimationThread = newSigilSelectorThread()
+      sharedAnimationThread.start()
+    inc sharedAnimationThreadUseCount
+    result = sharedAnimationThread
+
+proc releaseSharedAnimationThread(thread: SigilSelectorThreadPtr) =
+  var toStop: SigilSelectorThreadPtr
+  withLock sharedAnimationThreadLock:
+    if not thread.isNil and thread == sharedAnimationThread:
+      if sharedAnimationThreadUseCount > 0:
+        dec sharedAnimationThreadUseCount
+      if sharedAnimationThreadUseCount == 0:
+        toStop = sharedAnimationThread
+        sharedAnimationThread = nil
+  if not toStop.isNil:
+    toStop.stop()
+    toStop.join()
+    toStop.closeSelectorThread()
+
 proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
   if clock.isNil:
     return 0
-  if not hasLocalSigilThread():
-    setLocalSigilThread(newSigilSelectorThread())
+  ensureLocalAnimationDispatchThread()
   getCurrentSigilThread().pollAll(NonBlocking)
 
 proc start*(clock: AnimationSchedulerClock, thread: SigilSelectorThreadPtr = nil) =
   if clock.isNil or clock.isRunning:
     return
-  if not hasLocalSigilThread():
-    setLocalSigilThread(newSigilSelectorThread())
+  ensureLocalAnimationDispatchThread()
 
   if thread.isNil:
-    clock.xThread = newSigilSelectorThread()
-    clock.xOwnsThread = true
-    clock.xThread.start()
+    clock.xThread = acquireSharedAnimationThread()
+    clock.xOwnsThread = false
+    clock.xUsesSharedThread = true
   else:
     clock.xThread = thread
     clock.xOwnsThread = false
+    clock.xUsesSharedThread = false
 
   var ticker = AnimationClockTicker(xFrameInterval: clock.xFrameInterval)
   clock.xTicker = ticker.moveToThread(clock.xThread)
@@ -1281,13 +1312,17 @@ proc stop*(clock: AnimationSchedulerClock) =
     return
   if not clock.xThread.isNil:
     clock.xTimer.cancel(clock.xThread)
+  if clock.xUsesSharedThread and not clock.xThread.isNil:
+    releaseSharedAnimationThread(clock.xThread)
   if clock.xOwnsThread and not clock.xThread.isNil:
     clock.xThread.stop()
     clock.xThread.join()
+    clock.xThread.closeSelectorThread()
   clock.xTimer = nil
   clock.xTicker = nil
   clock.xThread = nil
   clock.xOwnsThread = false
+  clock.xUsesSharedThread = false
 
 proc drain*(
     scheduler: AnimationScheduler, clock: AnimationSchedulerClock
