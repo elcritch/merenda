@@ -44,7 +44,7 @@ proc nimFileStemHasPrefix(file, prefix: string): bool =
   ext == ".nim" and stem.startsWith(prefix)
 
 proc isDefaultTest(file: string): bool =
-  file.nimFileStemHasPrefix("tnimkit_")
+  file.nimFileStemHasPrefix("t")
 
 proc isDefaultExample(file: string): bool =
   file.nimFileStemHasPrefix("nimkit_")
