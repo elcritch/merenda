@@ -1,29 +1,63 @@
 import merenda/nimkit
 
-let
-  app = sharedApplication()
-  window = newWindow("NimKit Model Controllers", frame = initRect(120, 120, 820, 620))
-  root = newView(frame = initRect(0, 0, 820, 620))
+import sigils/selectors
+
+type ModelControllersDemo* = ref object
+  app*: Application
+  window*: Window
+  root*: View
+  status*: Label
+  buildController*: ArrayController
+  tableView*: TableView
+  treeController*: TreeController
+  browser*: CascadingView
+  tabController*: ArrayController
+  tabs*: DocumentTabs
+  choiceController*: ArrayController
+  comboBox*: ComboBox
+  menu*: Menu
+  popup*: PopupMenuButton
+  matrix*: Matrix
 
 proc field(key: string, value: ObjectValue): ModelField =
   initModelField(key, value)
 
-let
-  title = newTitleLabel("Model Controllers", frame = initRect(24, 20, 360, 28))
-  tableHeading =
-    newHeadingLabel("Array-backed table", frame = initRect(24, 58, 240, 22))
-  treeHeading =
-    newHeadingLabel("Tree-backed browser", frame = initRect(420, 58, 240, 22))
-  tabsHeading = newHeadingLabel("Document tabs", frame = initRect(24, 282, 240, 22))
-  choicesHeading =
-    newHeadingLabel("Choice controls", frame = initRect(24, 374, 240, 22))
-  status = newStatusLabel(
-    "Tables, browsers, tabs, menus, combos, and matrices share ModelItem values.",
-    frame = initRect(390, 22, 390, 22),
-  )
+proc updateStatus*(demo: ModelControllersDemo, message: string) =
+  if not demo.isNil and not demo.status.isNil:
+    demo.status.text = message
 
-let
-  buildController = newArrayController(
+proc choiceTitle(demo: ModelControllersDemo, sender: DynamicAgent): string =
+  if sender == DynamicAgent(demo.comboBox):
+    return demo.comboBox.stringValue()
+  if sender == DynamicAgent(demo.matrix):
+    let cell = demo.matrix.cellAtIndex(demo.matrix.leadIndex())
+    if not cell.isNil:
+      return cell.title()
+  if sender == DynamicAgent(demo.popup):
+    let index = demo.popup.highlightedIndex()
+    if index >= 0 and index < demo.menu.len:
+      return demo.menu[index.Natural].title()
+  if not sender.isNil and sender of MenuItem:
+    return MenuItem(sender).title()
+  ""
+
+proc configureChoiceActions(demo: ModelControllersDemo) =
+  let action = actionSelector("modelControllerChoiceChanged")
+  let target = newActionTarget(action) do(sender: DynamicAgent):
+    let title = demo.choiceTitle(sender)
+    if title.len > 0:
+      demo.updateStatus("Choice: " & title)
+  demo.comboBox.target = target
+  demo.comboBox.action = action
+  demo.matrix.target = target
+  demo.matrix.action = action
+  for item in demo.menu.items():
+    if not item.isSeparatorItem():
+      item.target = target
+      item.action = action
+
+proc newBuildController(): ArrayController =
+  newArrayController(
     [
       initModelItem(
         "renderer",
@@ -59,12 +93,9 @@ let
       initModelColumn("owner", "Owner", "owner", 82.0),
     ],
   )
-  tableView = newTableView(frame = initRect(24, 86, 360, 170))
 
-bindTableView(tableView, buildController)
-
-let
-  treeController = newTreeController(
+proc newTreeControllerForDemo(): TreeController =
+  newTreeController(
     [
       initModelTreeItem(initModelItem("apps", objectValue = toObjectValue("Apps"))),
       initModelTreeItem(
@@ -92,12 +123,9 @@ let
       ),
     ]
   )
-  browser = newCascadingView(frame = initRect(420, 86, 360, 170))
 
-bindCascadingView(browser, treeController)
-
-let
-  tabController = newArrayController(
+proc newTabController(): ArrayController =
+  newArrayController(
     [
       initModelItem("plan", title = "Project Plan", objectValue = toObjectValue("Plan")),
       initModelItem(
@@ -108,13 +136,9 @@ let
       ),
     ]
   )
-  tabs = newDocumentTabs(frame = initRect(24, 312, 756, 34))
 
-syncDocumentTabs(tabs, tabController)
-discard tabs.selectDocumentTabAtIndex(0)
-
-let
-  choiceController = newArrayController(
+proc newChoiceController(): ArrayController =
+  newArrayController(
     [
       initModelItem("low", objectValue = toObjectValue("Low")),
       initModelItem("medium", objectValue = toObjectValue("Medium")),
@@ -125,32 +149,72 @@ let
       ),
     ]
   )
-  comboBox = newComboBox(frame = initRect(24, 404, 180, 26))
-  menu = newMenu("Priority")
-  popup = newPopupMenuButton("Priority", menu, frame = initRect(224, 404, 150, 26))
-  matrix = newButtonMatrix([], columns = 3, frame = initRect(404, 398, 310, 62))
 
-bindComboBox(comboBox, choiceController)
-comboBox.selectedIndex = 1
-syncMenu(menu, choiceController)
-syncMatrix(matrix, choiceController, columns = 3)
+proc newModelControllersDemo*(app = newApplication()): ModelControllersDemo =
+  result = ModelControllersDemo(app: app)
+  result.window =
+    newWindow("NimKit Model Controllers", frame = initRect(120, 120, 820, 620))
+  result.root = newView(frame = initRect(0, 0, 820, 620))
+  result.status = newStatusLabel(
+    "Tables, browsers, tabs, menus, combos, and matrices share ModelItem values.",
+    frame = initRect(390, 22, 390, 22),
+  )
+  result.buildController = newBuildController()
+  result.tableView = newTableView(frame = initRect(24, 86, 360, 170))
+  result.treeController = newTreeControllerForDemo()
+  result.browser = newCascadingView(frame = initRect(420, 86, 360, 170))
+  result.tabController = newTabController()
+  result.tabs = newDocumentTabs(frame = initRect(24, 312, 756, 34))
+  result.choiceController = newChoiceController()
+  result.comboBox = newComboBox(frame = initRect(24, 404, 180, 26))
+  result.menu = newMenu("Priority")
+  result.popup =
+    newPopupMenuButton("Priority", result.menu, frame = initRect(224, 404, 150, 26))
+  result.matrix = newButtonMatrix([], columns = 3, frame = initRect(404, 398, 310, 62))
 
-root.addSubview(title)
-root.addSubview(status)
-root.addSubview(tableHeading)
-root.addSubview(treeHeading)
-root.addSubview(tabsHeading)
-root.addSubview(choicesHeading)
-root.addSubview(tableView)
-root.addSubview(browser)
-root.addSubview(tabs)
-root.addSubview(comboBox)
-root.addSubview(popup)
-root.addSubview(matrix)
+  bindTableView(result.tableView, result.buildController)
+  bindCascadingView(result.browser, result.treeController)
+  syncDocumentTabs(result.tabs, result.tabController)
+  discard result.tabs.selectDocumentTabAtIndex(0)
+  bindComboBox(result.comboBox, result.choiceController)
+  result.comboBox.selectedIndex = 1
+  syncMenu(result.menu, result.choiceController)
+  syncMatrix(result.matrix, result.choiceController, columns = 3)
+  result.configureChoiceActions()
 
-window.setContentView(root)
-discard window.selectNextKeyView()
-app.addWindow(window)
+  result.root.addSubview(
+    newTitleLabel("Model Controllers", frame = initRect(24, 20, 360, 28))
+  )
+  result.root.addSubview(result.status)
+  result.root.addSubview(
+    newHeadingLabel("Array-backed table", frame = initRect(24, 58, 240, 22))
+  )
+  result.root.addSubview(
+    newHeadingLabel("Tree-backed browser", frame = initRect(420, 58, 240, 22))
+  )
+  result.root.addSubview(
+    newHeadingLabel("Document tabs", frame = initRect(24, 282, 240, 22))
+  )
+  result.root.addSubview(
+    newHeadingLabel("Choice controls", frame = initRect(24, 374, 240, 22))
+  )
+  result.root.addSubview(result.tableView)
+  result.root.addSubview(result.browser)
+  result.root.addSubview(result.tabs)
+  result.root.addSubview(result.comboBox)
+  result.root.addSubview(result.popup)
+  result.root.addSubview(result.matrix)
 
-window.makeKeyAndOrderFront()
-app.run()
+  result.window.setContentView(result.root)
+  discard result.window.selectNextKeyView()
+
+proc showModelControllersDemo*(demo: ModelControllersDemo) =
+  if demo.isNil:
+    return
+  demo.app.addWindow(demo.window)
+  demo.window.makeKeyAndOrderFront()
+
+when isMainModule:
+  let demo = newModelControllersDemo(sharedApplication())
+  demo.showModelControllersDemo()
+  demo.app.run()

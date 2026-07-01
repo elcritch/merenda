@@ -2,6 +2,100 @@ import std/[options, unittest]
 
 import merenda/nimkit
 
+import ../../examples/modelcontrollers_demo
+
+func center(rect: Rect): Point =
+  initPoint(
+    rect.origin.x + rect.size.width / 2.0'f32,
+    rect.origin.y + rect.size.height / 2.0'f32,
+  )
+
+func keyForChar(ch: char): Key =
+  let normalized =
+    if ch in 'A' .. 'Z':
+      char(ch.ord - 'A'.ord + 'a'.ord)
+    else:
+      ch
+  if normalized in 'a' .. 'z':
+    Key(keyA.ord + normalized.ord - 'a'.ord)
+  else:
+    keyUnknown
+
+proc typeText(window: Window, text: string): bool =
+  for ch in text:
+    let key = keyForChar(ch)
+    if not window.dispatchKeyDown(KeyEvent(text: $ch, key: key, keyCode: key.ord)):
+      return false
+  true
+
+proc clickTableHeader(window: Window, tableView: TableView, column: TableColumn): bool =
+  let rect = tableView.tableHeaderColumnRect(column)
+  if rect.isEmpty:
+    return false
+  window.clickAt(tableView.pointToWindow(rect.center()))
+
+proc tableCellPoint(tableView: TableView, row: int, column: TableColumn): Point =
+  let
+    rowRect = tableView.rowItemRect(row)
+    columnRect = tableView.tableColumnRect(column)
+  tableView.pointToWindow(
+    initPoint(
+      columnRect.origin.x + columnRect.size.width / 2.0'f32,
+      rowRect.origin.y + rowRect.size.height / 2.0'f32,
+    )
+  )
+
+proc clickTableCell(
+    window: Window, tableView: TableView, row: int, column: TableColumn
+): bool =
+  window.clickAt(tableView.tableCellPoint(row, column))
+
+proc doubleClickTableCell(
+    window: Window, tableView: TableView, row: int, column: TableColumn
+): bool =
+  let point = tableView.tableCellPoint(row, column)
+  window.mouseDownAt(point, clickCount = 2) and window.mouseUpAt(point, clickCount = 2)
+
+proc clickDocumentTab(window: Window, tabs: DocumentTabs, index: int): bool =
+  let rect = tabs.documentTabRect(index)
+  if rect.isEmpty:
+    return false
+  window.clickAt(tabs.pointToWindow(rect.center()))
+
+proc clickComboItem(window: Window, comboBox: ComboBox, index: int): bool =
+  discard window.buildRenders()
+  if not window.clickAt(comboBox.pointToWindow(comboBox.bounds().center())):
+    return false
+  if not comboBox.popupOpen():
+    return false
+  let itemRect = comboBox.popupItemRect(comboBox.bounds(), index)
+  window.clickAt(comboBox.pointToWindow(itemRect.center()))
+
+proc popupListIn(root: View): PopupListView =
+  for child in root.subviews():
+    if child of PopupListView:
+      return PopupListView(child)
+
+proc clickPopupMenuItem(
+    window: Window, root: View, button: PopupMenuButton, index: int
+): bool =
+  discard window.buildRenders()
+  if not window.clickAt(button.pointToWindow(button.bounds().center())):
+    return false
+  if not button.popupOpen():
+    return false
+  let popupList = root.popupListIn()
+  if popupList.isNil:
+    return false
+  let itemRect = popupList.popupListItemRect(popupList.bounds(), index)
+  window.clickAt(popupList.pointToWindow(itemRect.center()))
+
+proc clickMatrixCell(window: Window, matrix: Matrix, index: int): bool =
+  let rect = matrix.cellFrameAtIndex(index)
+  if rect.isEmpty:
+    return false
+  window.clickAt(matrix.pointToWindow(rect.center()))
+
 proc personItems(): seq[ModelItem] =
   @[
     initModelItem(
@@ -175,3 +269,64 @@ suite "nimkit model controllers":
     check matrix.cellAtIndex(1).title == "Second"
     check not Cell(matrix.cellAtIndex(1)).isEnabled()
     check matrix.cellAtIndex(2).title == ""
+
+suite "nimkit model controller demo":
+  test "table sorting selection and editing work through user events":
+    let
+      demo = newModelControllersDemo()
+      project = demo.tableView.columnWithIdentifier("project")
+      owner = demo.tableView.columnWithIdentifier("owner")
+
+    discard demo.window.buildRenders()
+    check demo.tableView.tableCellText(0, project) == "Renderer"
+
+    check demo.window.clickTableHeader(demo.tableView, project)
+    check project.sortDirection == tsdAscending
+    check demo.buildController.sortDescriptors ==
+      [initModelSortDescriptor("project", msdAscending)]
+    check demo.tableView.tableCellText(0, project) == "Documentation"
+
+    check demo.window.clickTableHeader(demo.tableView, project)
+    check project.sortDirection == tsdDescending
+    check demo.buildController.sortDescriptors ==
+      [initModelSortDescriptor("project", msdDescending)]
+    check demo.tableView.tableCellText(0, project) == "Sync Engine"
+
+    check demo.window.clickTableCell(demo.tableView, 0, project)
+    check demo.buildController.selectionController().selectedIdentifier == "sync"
+
+    check demo.window.doubleClickTableCell(demo.tableView, 0, owner)
+    check demo.window.firstResponder() == demo.window.fieldEditor()
+    check demo.window.typeText("Nia")
+    check demo.window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check demo.buildController.valueForItem("sync", "owner").requireString() == "Nia"
+    check demo.tableView.tableCellText(0, owner) == "Nia"
+
+  test "browser tabs choices popup menu and matrix work through user events":
+    let demo = newModelControllersDemo()
+
+    discard demo.window.buildRenders()
+    let firstColumn = demo.browser.tableViewForColumn(0)
+    check demo.window.clickTableCell(firstColumn, 0, firstColumn.columnAt(0))
+    check demo.browser.selectedPath() == @["apps"]
+
+    discard demo.window.buildRenders()
+    let secondColumn = demo.browser.tableViewForColumn(1)
+    check demo.window.clickTableCell(secondColumn, 1, secondColumn.columnAt(0))
+    check demo.browser.selectedPath() == @["apps", "preferences"]
+
+    check demo.window.clickDocumentTab(demo.tabs, 1)
+    check demo.tabs.selectedDocumentTabItem().identifier == "budget"
+
+    check demo.window.clickComboItem(demo.comboBox, 2)
+    check demo.comboBox.stringValue == "High"
+    check demo.comboBox.objectValue.requireString() == "High"
+    check demo.status.text == "Choice: High"
+
+    check demo.window.clickPopupMenuItem(demo.root, demo.popup, 4)
+    check not demo.popup.popupOpen()
+    check demo.status.text == "Choice: Custom..."
+
+    check demo.window.clickMatrixCell(demo.matrix, 2)
+    check demo.matrix.leadIndex == 2
+    check demo.status.text == "Choice: High"

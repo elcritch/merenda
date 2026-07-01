@@ -639,6 +639,22 @@ protocol ArrayControllerTableDelegate of TableViewDelegate:
     if item.identifier.len > 0:
       controller.setValue(item.identifier, controller.columnKey(column), value)
 
+  method sortDescriptorsDidChange(
+      controller: ArrayController,
+      tableView: TableView,
+      column: TableColumn,
+      direction: TableSortDirection,
+  ) =
+    if direction == tsdNone:
+      controller.sortDescriptors = []
+    else:
+      let modelDirection =
+        if direction == tsdDescending: msdDescending else: msdAscending
+      controller.sortDescriptors =
+        [initModelSortDescriptor(controller.columnKey(column), modelDirection)]
+    tableView.setNeedsLayout()
+    tableView.setNeedsDisplay(true)
+
 protocol ArrayControllerComboDataSource of ComboBoxDataSource:
   method itemCount(controller: ArrayController, comboBox: ComboBox): int =
     controller.len()
