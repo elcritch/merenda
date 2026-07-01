@@ -23,11 +23,12 @@ box/group containers, scroll views, popup lists, table views, outline views,
 cascading column views, basic text editing lifecycle, action dispatch, reusable
 pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
 monospace text view/editor with raw event policy controls, document-controller
-infrastructure, a responder-discovered undo-manager service, AppKit-style
-in-process pasteboard/dragging foundations, a shared object-value formatting,
-parsing, writeback, and validation layer for model-backed controls, and a pure
-Nim accessibility metadata, notification, traversal, validation, and text
-semantics core.
+infrastructure, Nim-native object/array/tree/selection model controllers and
+widget binding adapters, a responder-discovered undo-manager service,
+AppKit-style in-process pasteboard/dragging foundations, a shared object-value
+formatting, parsing, writeback, and validation layer for model-backed controls,
+and a pure Nim accessibility metadata, notification, traversal, validation, and
+text semantics core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -201,6 +202,13 @@ document-controller open/save integration are covered in tests and examples.
   and edited-text parse/writeback; text fields, table cells, combo boxes, menus,
   sliders, steppers, and form rows now share typed value conversion and
   structured validation state instead of each inventing its own string bridge.
+- Added the first controller and bindings layer for model-backed widgets:
+  `ObjectController`, `ArrayController`, `TreeController`, and
+  `SelectionController` now expose Nim-native identity, value, sort/filter, and
+  mutation APIs over `ModelItem`/`ModelColumn`/`ModelTreeItem` records. Shared
+  adapter protocols now feed table, outline, cascading, combo, menu,
+  document-tab, and matrix controls from the same object-value model vocabulary,
+  including typed table editing/writeback and structured parse validation.
 - Hardened reusable pure Nim panel/dialog contracts: `Alert`, `OpenPanel`, and
   `SavePanel` now build modal and sheet content with buttons, accessory views,
   response mapping, file-type validation, selected URL helpers, modal
@@ -226,38 +234,18 @@ document-controller open/save integration are covered in tests and examples.
   by `tests/tnimkit.nim`; current modules cover controls, matrix,
   monospace text views, tables, outlines, documents, animations, rendering,
   accessibility, text storage/layout/views, pasteboards/dragging, document tabs,
-  undo managers, object values, responders, windows/controllers, constraints,
-  and themes.
+  undo managers, object values, model controllers, responders,
+  windows/controllers, constraints, and themes.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
-  `examples/matrix_demo.nim`, `examples/monotext_demo.nim`,
-  `examples/progress_indicator_demo.nim`, `examples/cascading_demo.nim`, and
-  `examples/controls_showcase.nim`.
+  `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
+  `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
+  `examples/cascading_demo.nim`, and `examples/controls_showcase.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### Controller and Bindings Layer
-
-Add Nim-native controller/adaptor objects that sit between application models and
-widgets. Do not clone Cocoa Bindings literally; provide the useful architecture:
-object, array, tree, selection, sorting, filtering, and observation controllers.
-
-1. Define model controller roles:
-   - add object, array, tree, and selection controllers with plain value query
-     APIs and identity-aware mutation helpers
-   - keep controller objects as `ref object` only where shared identity,
-     observation, or external model lifetime is part of the contract
-2. Bridge controllers to model-backed widgets:
-   - feed table, outline, cascading, combo, menu, document-tab, matrix, and future
-     collection views through shared adapter protocols
-   - centralize sort/filter/selection state instead of duplicating that logic in
-     every control
-3. Provide focused examples:
-   - add small examples for array-backed tables, tree-backed browsers, document
-     tabs, and choice controls using the same controller vocabulary
 
 ### Notification Center and Observation
 

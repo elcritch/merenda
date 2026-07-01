@@ -15,6 +15,7 @@ import nimkit/images
 import nimkit/keybindings
 import nimkit/matrix
 import nimkit/menus
+import nimkit/modelcontrollers
 import nimkit/monotextviews
 import nimkit/objectvalues
 import nimkit/outlineviews
