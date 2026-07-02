@@ -1,6 +1,8 @@
 import sigils/core
 import sigils/selectors
 
+import ./notifications
+
 type
   UndoOperation* = proc() {.closure.}
 
@@ -58,6 +60,31 @@ func undoStackEntry(group: UndoGroup): UndoStackEntry =
 proc notifyStateChanged(manager: UndoManager) =
   if not manager.isNil:
     emit manager.stateDidChange(manager)
+    postNotification(
+      nkUndoStateDidChange,
+      sender = DynamicAgent(manager),
+      payload = initUndoNotificationPayload(
+        undoCount = manager.xUndoStack.len.Natural,
+        redoCount = manager.xRedoStack.len.Natural,
+        groupingDepth = manager.xGroupStack.len.Natural,
+        disabledDepth = manager.xDisabledDepth,
+        undoing = manager.xIsUndoing,
+        redoing = manager.xIsRedoing,
+        clean =
+          manager.xHasCleanState and manager.xChangeIndex == manager.xCleanIndex and
+          manager.xBranchSerial == manager.xCleanBranchSerial,
+        nextUndoActionName =
+          if manager.xUndoStack.len > 0:
+            manager.xUndoStack[^1].actionName
+          else:
+            "",
+        nextRedoActionName =
+          if manager.xRedoStack.len > 0:
+            manager.xRedoStack[^1].actionName
+          else:
+            "",
+      ),
+    )
 
 proc addCommand(group: var UndoGroup, command: sink UndoCommand) =
   if command.actionName.len > 0 and group.actionName.len == 0:

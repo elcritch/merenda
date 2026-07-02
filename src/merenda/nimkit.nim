@@ -29,6 +29,7 @@ import merenda/nimkit/controls/matrices
 import merenda/nimkit/controls/menus
 import merenda/nimkit/app/modelcontrollers
 import merenda/nimkit/text/monotextviews
+import merenda/nimkit/foundation/notifications
 import merenda/nimkit/foundation/objectvalues
 import merenda/nimkit/containers/outlineviews
 import merenda/nimkit/app/panels
@@ -92,6 +93,7 @@ export matrices
 export menus
 export modelcontrollers
 export monotextviews
+export notifications
 export objectvalues
 export outlineviews
 export panels

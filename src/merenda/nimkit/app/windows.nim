@@ -11,6 +11,7 @@ import ./animations
 import ../responder/keybindings
 import ../drawing/rendering as nimkitRendering
 import ../foundation/events
+import ../foundation/notifications
 import ../text/fieldeditors
 import ../foundation/selectors
 import ../themes
@@ -254,6 +255,8 @@ proc effectivePopupPresentation*(window: Window): PopupPresentation
 proc close*(window: Window)
 proc setKeyWindow*(window: Window, value: bool)
 proc setMainWindow*(window: Window, value: bool)
+proc postWindowNotification(window: Window, kind: NotificationKind)
+proc postWindowAppearanceNotification(window: Window)
 proc canClose*(window: Window): bool
 proc canMiniaturize*(window: Window): bool
 proc canZoom*(window: Window): bool
@@ -712,6 +715,7 @@ proc setAppearance*(window: Window, appearance: Appearance) =
   window.xHasAppearance = true
   window.propagateAppearance()
   emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+  window.postWindowAppearanceNotification()
 
 proc clearAppearance*(window: Window) =
   if window.isNil or not window.xHasAppearance:
@@ -720,6 +724,7 @@ proc clearAppearance*(window: Window) =
   window.xHasAppearance = false
   window.propagateAppearance()
   emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+  window.postWindowAppearanceNotification()
 
 proc setInheritedAppearance*(window: Window, appearance: Appearance) =
   window.xInheritedAppearance = appearance
@@ -727,6 +732,7 @@ proc setInheritedAppearance*(window: Window, appearance: Appearance) =
   if not window.xHasAppearance:
     window.propagateAppearance()
     emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+    window.postWindowAppearanceNotification()
 
 proc clearInheritedAppearance*(window: Window) =
   window.xInheritedAppearance = Appearance()
@@ -734,6 +740,7 @@ proc clearInheritedAppearance*(window: Window) =
   if not window.xHasAppearance:
     window.propagateAppearance()
     emit window.didChangeEffectiveAppearance(window.effectiveAppearance())
+    window.postWindowAppearanceNotification()
 
 proc clearMouseState(window: Window) =
   if not window.xMouseActiveView.isNil:
@@ -1142,6 +1149,34 @@ proc sendWindowDelegate[A](
   if not window.isNil and not window.xDelegate.isNil:
     discard window.xDelegate.sendLocalIfHandled(selector, ensureMove args)
 
+proc windowNotificationPayload(window: Window): NotificationPayload =
+  if window.isNil:
+    return initWindowNotificationPayload()
+  initWindowNotificationPayload(
+    keyWindow = window.xIsKeyWindow,
+    mainWindow = window.xIsMainWindow,
+    visible = window.xVisibleRequested,
+    closed = window.xClosed,
+  )
+
+proc postWindowNotification(window: Window, kind: NotificationKind) =
+  if window.isNil:
+    return
+  postNotification(
+    kind, sender = DynamicAgent(window), payload = window.windowNotificationPayload()
+  )
+
+proc postWindowAppearanceNotification(window: Window) =
+  if window.isNil:
+    return
+  postNotification(
+    nkWindowAppearanceDidChange,
+    sender = DynamicAgent(window),
+    payload = initAppearanceNotificationPayload(
+      atkWindow, window.effectiveAppearance(), window.xHasAppearance
+    ),
+  )
+
 proc notifyApplication(window: Window, selectorName: string) =
   if window.isNil:
     return
@@ -1159,9 +1194,11 @@ proc setKeyWindow*(window: Window, value: bool) =
   if value:
     window.sendWindowDelegate(windowDidBecomeKey(), window)
     emit window.didBecomeKeyWindow()
+    window.postWindowNotification(nkWindowDidBecomeKey)
   else:
     window.sendWindowDelegate(windowDidResignKey(), window)
     emit window.didResignKeyWindow()
+    window.postWindowNotification(nkWindowDidResignKey)
 
 proc setMainWindow*(window: Window, value: bool) =
   if window.isNil or window.xIsMainWindow == value:
@@ -1170,9 +1207,11 @@ proc setMainWindow*(window: Window, value: bool) =
   if value:
     window.sendWindowDelegate(windowDidBecomeMain(), window)
     emit window.didBecomeMainWindow()
+    window.postWindowNotification(nkWindowDidBecomeMain)
   else:
     window.sendWindowDelegate(windowDidResignMain(), window)
     emit window.didResignMainWindow()
+    window.postWindowNotification(nkWindowDidResignMain)
 
 proc canClose*(window: Window): bool =
   (not window.isNil) and not window.xClosed and wsmClosable in window.xStyleMask
@@ -1392,6 +1431,7 @@ proc close*(window: Window) =
     return
   window.sendWindowDelegate(windowWillClose(), window)
   emit window.willClose()
+  window.postWindowNotification(nkWindowWillClose)
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
   discard window.saveFrameUsingName()
@@ -1418,6 +1458,7 @@ proc close*(window: Window) =
   if notifyPopupDone:
     window.xOnPopupDone()
   emit window.didClose()
+  window.postWindowNotification(nkWindowDidClose)
   window.sendWindowDelegate(windowDidClose(), window)
   window.notifyApplication(WindowDidCloseSelector)
 

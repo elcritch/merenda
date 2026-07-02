@@ -11,6 +11,7 @@ import ../controls/comboboxes
 import ../controls/controls
 import ../controls/matrices
 import ../controls/menus
+import ../foundation/notifications
 import ../foundation/objectvalues
 import ../foundation/types
 import ../responder/responders
@@ -105,6 +106,82 @@ proc raiseModelControllerError(message: string) {.noinline, noreturn.} =
 
 proc installArrayControllerProtocols(controller: ArrayController)
 proc installTreeControllerProtocols(controller: TreeController)
+
+proc postSelectionNotification(controller: SelectionController) =
+  doAssert not controller.isNil
+  postNotification(
+    nkSelectionDidChange,
+    sender = DynamicAgent(controller),
+    payload = initSelectionNotificationPayload(
+      sckModel,
+      selectedIdentifiers = controller.xSelectedIdentifiers,
+      anchorIdentifier = controller.xAnchorIdentifier,
+      leadIdentifier = controller.xLeadIdentifier,
+      selectedIndex = if controller.xSelectedIdentifiers.len > 0: 0 else: -1,
+    ),
+  )
+
+proc notifySelectionControllerDidChange(controller: SelectionController) =
+  doAssert not controller.isNil
+  emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  controller.postSelectionNotification()
+
+proc notifyObjectControllerDidChange(
+    controller: ObjectController,
+    mutation = mmkItemChanged,
+    keys: openArray[string] = [],
+) =
+  doAssert not controller.isNil
+  emit controller.objectControllerDidChange(DynamicAgent(controller))
+  var identifiers: seq[string]
+  if controller.xItem.identifier.len > 0:
+    identifiers.add controller.xItem.identifier
+  postNotification(
+    nkModelMutationDidChange,
+    sender = DynamicAgent(controller),
+    representedObject = controller.xItem.representedObject,
+    payload = initModelNotificationPayload(
+      mutation, identifiers = identifiers, keys = keys, count = 1
+    ),
+  )
+
+proc notifyArrayControllerDidChange(
+    controller: ArrayController,
+    mutation = mmkItemsChanged,
+    identifiers: openArray[string] = [],
+    keys: openArray[string] = [],
+    index = -1,
+) =
+  doAssert not controller.isNil
+  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  postNotification(
+    nkModelMutationDidChange,
+    sender = DynamicAgent(controller),
+    payload = initModelNotificationPayload(
+      mutation,
+      identifiers = identifiers,
+      keys = keys,
+      index = index,
+      count = controller.xItems.len.Natural,
+    ),
+  )
+
+proc notifyTreeControllerDidChange(
+    controller: TreeController, identifiers: openArray[string] = [], index = -1
+) =
+  if controller.isNil:
+    return
+  emit controller.treeControllerDidChange(DynamicAgent(controller))
+  postNotification(
+    nkModelMutationDidChange,
+    sender = DynamicAgent(controller),
+    payload = initModelNotificationPayload(
+      mmkTreeChanged,
+      identifiers = identifiers,
+      index = index,
+      count = controller.xItems.len.Natural,
+    ),
+  )
 
 func initModelField*(key: string, value: ObjectValue): ModelField =
   ModelField(key: key, value: value)
@@ -239,7 +316,7 @@ proc `mode=`*(controller: SelectionController, mode: ModelSelectionMode) =
   controller.xMode = mode
   if mode in {mselNone, mselSingle} and controller.xSelectedIdentifiers.len > 1:
     controller.xSelectedIdentifiers.setLen(if mode == mselNone: 0 else: 1)
-  emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  controller.notifySelectionControllerDidChange()
 
 proc selectedIdentifiers*(controller: SelectionController): seq[string] =
   if controller.isNil:
@@ -293,7 +370,7 @@ proc setSelectedIdentifiers*(
       next[^1]
     else:
       ""
-  emit controller.selectionControllerDidChange(DynamicAgent(controller))
+  controller.notifySelectionControllerDidChange()
 
 proc clearSelection*(controller: SelectionController) =
   controller.setSelectedIdentifiers([])
@@ -345,7 +422,7 @@ proc `item=`*(controller: ObjectController, item: ModelItem) =
   if controller.isNil:
     return
   controller.xItem = item
-  emit controller.objectControllerDidChange(DynamicAgent(controller))
+  controller.notifyObjectControllerDidChange(mmkItemChanged)
 
 proc objectValue*(controller: ObjectController): ObjectValue =
   if controller.isNil:
@@ -357,7 +434,7 @@ proc `objectValue=`*(controller: ObjectController, value: ObjectValue) =
   if controller.isNil:
     return
   controller.xItem.objectValue = value
-  emit controller.objectControllerDidChange(DynamicAgent(controller))
+  controller.notifyObjectControllerDidChange(mmkObjectValueChanged)
 
 proc value*(controller: ObjectController, key: string): ObjectValue =
   if controller.isNil:
@@ -368,7 +445,7 @@ proc setValue*(controller: ObjectController, key: string, value: ObjectValue) =
   if controller.isNil:
     return
   controller.xItem.setValue(key, value)
-  emit controller.objectControllerDidChange(DynamicAgent(controller))
+  controller.notifyObjectControllerDidChange(mmkValueChanged, keys = [key])
 
 proc sourceIndexOfIdentifier(controller: ArrayController, identifier: string): int =
   if controller.isNil:
@@ -438,7 +515,7 @@ proc `columns=`*(controller: ArrayController, columns: openArray[ModelColumn]) =
   if controller.isNil:
     return
   controller.xColumns = @columns
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  controller.notifyArrayControllerDidChange(mmkColumnsChanged)
 
 proc sortDescriptors*(controller: ArrayController): seq[ModelSortDescriptor] =
   if controller.isNil:
@@ -452,7 +529,7 @@ proc `sortDescriptors=`*(
   if controller.isNil:
     return
   controller.xSortDescriptors = @descriptors
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  controller.notifyArrayControllerDidChange(mmkSortChanged)
 
 proc filter*(controller: ArrayController): ModelFilter =
   if controller.isNil: nil else: controller.xFilter
@@ -461,7 +538,7 @@ proc `filter=`*(controller: ArrayController, filter: ModelFilter) =
   if controller.isNil:
     return
   controller.xFilter = filter
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  controller.notifyArrayControllerDidChange(mmkFilterChanged)
 
 proc itemAt*(controller: ArrayController, index: int): ModelItem =
   let sourceIndex = controller.arrangedSourceIndex(index)
@@ -500,15 +577,26 @@ proc addItem*(controller: ArrayController, item: ModelItem) =
   if item.identifier.len > 0 and controller.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
   controller.xItems.add item
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  var identifiers: seq[string]
+  if item.identifier.len > 0:
+    identifiers.add item.identifier
+  controller.notifyArrayControllerDidChange(
+    mmkItemsChanged, identifiers = identifiers, index = controller.xItems.high
+  )
 
 proc insertItem*(controller: ArrayController, item: ModelItem, index: int) =
   if controller.isNil:
     return
   if item.identifier.len > 0 and controller.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
-  controller.xItems.insert(item, max(0, min(index, controller.xItems.len)))
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  let insertIndex = max(0, min(index, controller.xItems.len))
+  controller.xItems.insert(item, insertIndex)
+  var identifiers: seq[string]
+  if item.identifier.len > 0:
+    identifiers.add item.identifier
+  controller.notifyArrayControllerDidChange(
+    mmkItemsChanged, identifiers = identifiers, index = insertIndex
+  )
 
 proc removeItem*(
     controller: ArrayController, identifier: string
@@ -518,7 +606,9 @@ proc removeItem*(
     return false
   controller.xItems.delete(index)
   controller.xSelection.deselectIdentifier(identifier)
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  controller.notifyArrayControllerDidChange(
+    mmkItemsChanged, identifiers = [identifier], index = index
+  )
   true
 
 proc moveItem*(controller: ArrayController, identifier: string, toIndex: int): bool =
@@ -527,8 +617,11 @@ proc moveItem*(controller: ArrayController, identifier: string, toIndex: int): b
     return false
   let item = controller.xItems[index]
   controller.xItems.delete(index)
-  controller.xItems.insert(item, max(0, min(toIndex, controller.xItems.len)))
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  let insertIndex = max(0, min(toIndex, controller.xItems.len))
+  controller.xItems.insert(item, insertIndex)
+  controller.notifyArrayControllerDidChange(
+    mmkItemsChanged, identifiers = [identifier], index = insertIndex
+  )
   true
 
 proc valueForItem*(
@@ -543,7 +636,9 @@ proc setValue*(
   if index < 0:
     raiseModelControllerError("unknown model item identifier: " & identifier)
   controller.xItems[index].setValue(key, value)
-  emit controller.arrayControllerDidChange(DynamicAgent(controller))
+  controller.notifyArrayControllerDidChange(
+    mmkValueChanged, identifiers = [identifier], keys = [key], index = index
+  )
 
 proc tableColumnIdentifier(column: ModelColumn): string =
   if column.identifier.len > 0: column.identifier else: column.valueKey
@@ -767,7 +862,12 @@ proc addItem*(controller: TreeController, item: ModelTreeItem) =
       controller.treeIndexOfIdentifier(item.item.identifier) >= 0:
     raiseModelControllerError("duplicate tree item identifier: " & item.item.identifier)
   controller.xItems.add item
-  emit controller.treeControllerDidChange(DynamicAgent(controller))
+  var identifiers: seq[string]
+  if item.item.identifier.len > 0:
+    identifiers.add item.item.identifier
+  controller.notifyTreeControllerDidChange(
+    identifiers = identifiers, index = controller.xItems.high
+  )
 
 proc removeItem*(controller: TreeController, identifier: string): bool {.discardable.} =
   let index = controller.treeIndexOfIdentifier(identifier)
@@ -780,7 +880,9 @@ proc removeItem*(controller: TreeController, identifier: string): bool {.discard
   if currentIndex >= 0:
     controller.xItems.delete(currentIndex)
   controller.xSelection.deselectIdentifier(identifier)
-  emit controller.treeControllerDidChange(DynamicAgent(controller))
+  controller.notifyTreeControllerDidChange(
+    identifiers = [identifier], index = currentIndex
+  )
   true
 
 proc moveItem*(
@@ -800,8 +902,11 @@ proc moveItem*(
         insertIndex = currentIndex
         break
       inc siblingCount
-  controller.xItems.insert(item, max(0, min(insertIndex, controller.xItems.len)))
-  emit controller.treeControllerDidChange(DynamicAgent(controller))
+  let targetIndex = max(0, min(insertIndex, controller.xItems.len))
+  controller.xItems.insert(item, targetIndex)
+  controller.notifyTreeControllerDidChange(
+    identifiers = [identifier], index = targetIndex
+  )
   true
 
 proc hasChildren*(controller: TreeController, identifier: string): bool =

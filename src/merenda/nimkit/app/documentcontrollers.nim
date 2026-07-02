@@ -2,6 +2,7 @@ import std/options
 
 import sigils/core
 
+import ../foundation/notifications
 import ../foundation/selectors
 import ../responder/responders
 import ./application
@@ -99,6 +100,28 @@ proc effectiveApplication(
   if not controller.isNil:
     return controller.xApplication
 
+proc postNotification(
+    controller: DocumentController, kind: NotificationKind, document: Document = nil
+) =
+  if controller.isNil:
+    return
+  notifications.postNotification(
+    kind,
+    sender = DynamicAgent(controller),
+    representedObject = DynamicAgent(document),
+    payload =
+      if document.isNil:
+        initNotificationPayload()
+      else:
+        initDocumentNotificationPayload(
+          fileUrl = document.fileUrl(),
+          fileType = document.fileType(),
+          displayName = document.displayName(),
+          edited = document.isDocumentEdited(),
+          closed = document.isClosed(),
+        ),
+  )
+
 proc defaultType(controller: DocumentController, fileType: string): string =
   if fileType.len > 0:
     return fileType
@@ -119,6 +142,7 @@ proc includeDocument(controller: DocumentController, document: Document) =
         controller.setNextResponder(controller.xApplication)
     document.setNextResponder(controller)
   emit controller.didAddDocument(document)
+  controller.postNotification(nkDocControllerDidAddDocument, document)
 
 proc removeDocumentAt(controller: DocumentController, index: int): Document =
   result = controller.xDocuments[index]
@@ -130,6 +154,7 @@ proc removeDocumentAt(controller: DocumentController, index: int): Document =
     else:
       result.setNextResponder(next)
   emit controller.didRemoveDocument(result)
+  controller.postNotification(nkDocControllerDidRemoveDocument, result)
 
 proc trimRecentDocuments(controller: DocumentController) =
   if controller.isNil:
@@ -138,10 +163,12 @@ proc trimRecentDocuments(controller: DocumentController) =
     if controller.xRecentDocumentUrls.len > 0:
       controller.xRecentDocumentUrls.setLen(0)
       emit controller.didChangeRecentDocuments()
+      controller.postNotification(nkDocControllerDidChangeRecentDocuments)
     return
   if controller.xRecentDocumentUrls.len > controller.xMaximumRecentDocumentCount:
     controller.xRecentDocumentUrls.setLen(controller.xMaximumRecentDocumentCount)
     emit controller.didChangeRecentDocuments()
+    controller.postNotification(nkDocControllerDidChangeRecentDocuments)
 
 proc reviewDocumentForClose(controller: DocumentController, document: Document): bool =
   if controller.isNil or document.isNil or not document.isDocumentEdited():
@@ -392,6 +419,7 @@ proc noteRecentDocumentUrl*(controller: DocumentController, fileUrl: string) =
   controller.xRecentDocumentUrls.insert(fileUrl, 0)
   controller.trimRecentDocuments()
   emit controller.didChangeRecentDocuments()
+  controller.postNotification(nkDocControllerDidChangeRecentDocuments)
 
 proc removeRecentDocumentUrl*(
     controller: DocumentController, fileUrl: string
@@ -403,6 +431,7 @@ proc removeRecentDocumentUrl*(
     return false
   controller.xRecentDocumentUrls.delete(existing)
   emit controller.didChangeRecentDocuments()
+  controller.postNotification(nkDocControllerDidChangeRecentDocuments)
   true
 
 proc clearRecentDocuments*(controller: DocumentController) =
@@ -410,6 +439,7 @@ proc clearRecentDocuments*(controller: DocumentController) =
     return
   controller.xRecentDocumentUrls.setLen(0)
   emit controller.didChangeRecentDocuments()
+  controller.postNotification(nkDocControllerDidChangeRecentDocuments)
 
 proc createDocumentImpl(
     controller: DocumentController, fileType: string, app: Application
@@ -426,6 +456,7 @@ proc createDocumentImpl(
   discard result.showWindows(controller.effectiveApplication(app))
   result.setNextResponder(controller)
   emit controller.didCreateDocument(result)
+  controller.postNotification(nkDocControllerDidCreateDocument, result)
 
 proc openDocumentImpl(
     controller: DocumentController, fileUrl: string, fileType: string, app: Application
@@ -438,6 +469,7 @@ proc openDocumentImpl(
     result.setNextResponder(controller)
     controller.noteRecentDocumentUrl(fileUrl)
     emit controller.didReopenDocument(result)
+    controller.postNotification(nkDocControllerDidReopenDocument, result)
     return
   let resolvedType = controller.defaultType(fileType)
   let document = controller
@@ -450,6 +482,7 @@ proc openDocumentImpl(
   document.setNextResponder(controller)
   result = document
   emit controller.didOpenDocument(result)
+  controller.postNotification(nkDocControllerDidOpenDocument, result)
 
 proc reopenDocumentImpl(
     controller: DocumentController, fileUrl: string, app: Application

@@ -2,6 +2,7 @@ import std/[options, os, strutils]
 
 import sigils/core
 
+import ../foundation/notifications
 import ../foundation/selectors
 import ../foundation/undomanagers
 import ../responder/responders
@@ -107,14 +108,31 @@ proc sendDocumentDelegate(document: Document, selector: Selector[Document, Empty
   if not document.isNil and not document.xDelegate.isNil:
     discard document.xDelegate.sendLocalIfHandled(selector, document)
 
+proc postNotification(document: Document, kind: NotificationKind, fileUrl = "") =
+  if document.isNil:
+    return
+  notifications.postNotification(
+    kind,
+    sender = DynamicAgent(document),
+    payload = initDocumentNotificationPayload(
+      fileUrl = if fileUrl.len > 0: fileUrl else: document.xFileUrl,
+      fileType = document.xFileType,
+      displayName = document.displayName(),
+      edited = document.xDocumentEdited,
+      closed = document.xClosed,
+    ),
+  )
+
 proc notifyDisplayNameChanged(document: Document) =
   document.sendDocumentDelegate(documentDidChangeName())
   emit document.didChangeDisplayName(document.displayName())
+  document.postNotification(nkDocumentDidChangeDisplayName)
   document.syncWindowControllerTitles()
 
 proc notifyDocumentEditedChanged(document: Document) =
   document.sendDocumentDelegate(documentDidChangeEdited())
   emit document.didChangeDocumentEdited(document.isDocumentEdited())
+  document.postNotification(nkDocumentDidChangeEdited)
 
 proc documentShouldCloseNow(document: Document): bool =
   if document.isNil:
@@ -451,20 +469,24 @@ proc save*(document: Document): bool {.discardable.} =
     return false
   document.sendDocumentDelegate(documentWillSave())
   emit document.willSaveDocument(document.xFileUrl)
+  document.postNotification(nkDocumentWillSave)
   result = document.writeToFileUrl(document.xFileUrl, document.xFileType)
   if result:
     document.sendDocumentDelegate(documentDidSave())
     emit document.didSaveDocument(document.xFileUrl)
+    document.postNotification(nkDocumentDidSave)
 
 proc saveAs*(document: Document, fileUrl: string, fileType = ""): bool {.discardable.} =
   if document.isNil or fileUrl.len == 0:
     return false
   document.sendDocumentDelegate(documentWillSave())
   emit document.willSaveDocument(fileUrl)
+  document.postNotification(nkDocumentWillSave, fileUrl)
   result = document.writeToFileUrl(fileUrl, fileType)
   if result:
     document.sendDocumentDelegate(documentDidSave())
     emit document.didSaveDocument(fileUrl)
+    document.postNotification(nkDocumentDidSave)
 
 proc revert*(document: Document): bool {.discardable.} =
   if document.isNil or document.xFileUrl.len == 0:
@@ -472,10 +494,12 @@ proc revert*(document: Document): bool {.discardable.} =
   let fileUrl = document.xFileUrl
   document.sendDocumentDelegate(documentWillRevert())
   emit document.willRevertDocument(fileUrl)
+  document.postNotification(nkDocumentWillRevert)
   result = document.readFromFileUrl(fileUrl, document.xFileType)
   if result:
     document.sendDocumentDelegate(documentDidRevert())
     emit document.didRevertDocument(fileUrl)
+    document.postNotification(nkDocumentDidRevert)
 
 proc ensureWindowControllers(document: Document) =
   if document.isNil or document.xWindowControllers.len > 0:
@@ -528,10 +552,12 @@ proc close*(document: Document): bool {.discardable.} =
     return false
   document.sendDocumentDelegate(documentWillClose())
   emit document.willCloseDocument()
+  document.postNotification(nkDocumentWillClose)
   for controller in document.xWindowControllers:
     if not controller.close():
       return false
   document.xClosed = true
   document.sendDocumentDelegate(documentDidClose())
   emit document.didCloseDocument()
+  document.postNotification(nkDocumentDidClose)
   true

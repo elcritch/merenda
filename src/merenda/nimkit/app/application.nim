@@ -3,6 +3,7 @@ import std/[options, os]
 import sigils/selectors
 
 import ../foundation/events
+import ../foundation/notifications
 import ../controls/menus
 import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
@@ -412,8 +413,31 @@ proc sendDelegate(app: Application, selector: Selector[DynamicAgent, EmptyArgs])
   if not app.isNil and not app.xDelegate.isNil:
     discard app.xDelegate.sendLocalIfHandled(selector, DynamicAgent(app))
 
+proc postApplicationNotification(app: Application, kind: NotificationKind) =
+  if app.isNil:
+    return
+  postNotification(
+    kind,
+    sender = DynamicAgent(app),
+    payload = initApplicationNotificationPayload(
+      active = app.xActive, hidden = app.xHidden, terminating = app.xTerminating
+    ),
+  )
+
+proc postApplicationAppearanceNotification(app: Application) =
+  if app.isNil:
+    return
+  postNotification(
+    nkApplicationAppearanceDidChange,
+    sender = DynamicAgent(app),
+    payload = initAppearanceNotificationPayload(
+      atkApplication, app.effectiveAppearance(), app.xHasAppearance
+    ),
+  )
+
 proc willFinishLaunching*(app: Application) =
   app.sendDelegate(appWillFinishLaunching())
+  app.postApplicationNotification(nkApplicationWillFinishLaunching)
 
 proc finishLaunching*(app: Application) =
   if app.isNil or app.xLaunched:
@@ -421,23 +445,27 @@ proc finishLaunching*(app: Application) =
   app.willFinishLaunching()
   app.xLaunched = true
   app.sendDelegate(appDidFinishLaunching())
+  app.postApplicationNotification(nkApplicationDidFinishLaunching)
 
 proc activate*(app: Application) =
   if app.isNil or app.xActive:
     return
   app.xActive = true
   app.sendDelegate(appDidBecomeActive())
+  app.postApplicationNotification(nkApplicationDidBecomeActive)
 
 proc deactivate*(app: Application) =
   if app.isNil or not app.xActive:
     return
   app.xActive = false
   app.sendDelegate(appDidResignActive())
+  app.postApplicationNotification(nkApplicationDidResignActive)
 
 proc hide*(app: Application) =
   if app.isNil or app.xHidden:
     return
   app.sendDelegate(appWillHide())
+  app.postApplicationNotification(nkApplicationWillHide)
   app.xHidden = true
   app.xHiddenWindows.setLen(0)
   for window in app.xWindows:
@@ -446,11 +474,13 @@ proc hide*(app: Application) =
         app.xHiddenWindows.add window
       window.orderOut()
   app.sendDelegate(appDidHide())
+  app.postApplicationNotification(nkApplicationDidHide)
 
 proc unhide*(app: Application) =
   if app.isNil or not app.xHidden:
     return
   app.sendDelegate(appWillUnhide())
+  app.postApplicationNotification(nkApplicationWillUnhide)
   app.xHidden = false
   for window in app.xHiddenWindows:
     if not window.isNil and not window.isClosed:
@@ -459,6 +489,7 @@ proc unhide*(app: Application) =
     app.xKeyWindow.makeKeyAndOrderFront()
   app.xHiddenWindows.setLen(0)
   app.sendDelegate(appDidUnhide())
+  app.postApplicationNotification(nkApplicationDidUnhide)
 
 proc replyToApplicationShouldTerminate*(app: Application, shouldTerminate: bool) =
   if app.isNil:
@@ -466,6 +497,7 @@ proc replyToApplicationShouldTerminate*(app: Application, shouldTerminate: bool)
   if shouldTerminate:
     app.xTerminating = true
     app.sendDelegate(appWillTerminate())
+    app.postApplicationNotification(nkApplicationWillTerminate)
     app.stop()
   else:
     app.xTerminating = false
@@ -497,6 +529,7 @@ proc setAppearance*(app: Application, appearance: Appearance) =
   app.xAppearance = appearance
   app.xHasAppearance = true
   app.propagateAppearance()
+  app.postApplicationAppearanceNotification()
 
 proc clearAppearance*(app: Application) =
   if app.isNil or not app.xHasAppearance:
@@ -504,6 +537,7 @@ proc clearAppearance*(app: Application) =
   app.xAppearance = Appearance()
   app.xHasAppearance = false
   app.propagateAppearance()
+  app.postApplicationAppearanceNotification()
 
 proc clearMenuItems(menu: Menu) =
   if menu.isNil:

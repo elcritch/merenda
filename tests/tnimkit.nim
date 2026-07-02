@@ -17,6 +17,7 @@ import nimkit/matrix
 import nimkit/menus
 import nimkit/modelcontrollers
 import nimkit/monotextviews
+import nimkit/notifications
 import nimkit/objectvalues
 import nimkit/outlineviews
 import nimkit/pasteboards_dragging

@@ -27,8 +27,9 @@ infrastructure, Nim-native object/array/tree/selection model controllers and
 widget binding adapters, a responder-discovered undo-manager service,
 AppKit-style in-process pasteboard/dragging foundations, a shared object-value
 formatting, parsing, writeback, and validation layer for model-backed controls,
-and a pure Nim accessibility metadata, notification, traversal, validation, and
-text semantics core.
+a typed notification center for broad app/window/document/defaults/undo/
+selection/model broadcasts, and a pure Nim accessibility metadata,
+notification, traversal, validation, and text semantics core.
 
 The source tree is now organized around domain modules under
 `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
@@ -209,6 +210,12 @@ document-controller open/save integration are covered in tests and examples.
   adapter protocols now feed table, outline, cascading, combo, menu,
   document-tab, and matrix controls from the same object-value model vocabulary,
   including typed table editing/writeback and structured parse validation.
+- Added the typed notification center for cross-cutting observation:
+  `NotificationKind`, `Notification`, observer tokens, typed payload records,
+  and the Sigils-backed `notificationPosted` signal now cover application,
+  window, document, document-controller, defaults, appearance, undo, selection,
+  and model-mutation broadcasts while keeping direct owner/delegate wiring on
+  local Sigils signals.
 - Hardened reusable pure Nim panel/dialog contracts: `Alert`, `OpenPanel`, and
   `SavePanel` now build modal and sheet content with buttons, accessory views,
   response mapping, file-type validation, selected URL helpers, modal
@@ -234,7 +241,7 @@ document-controller open/save integration are covered in tests and examples.
   by `tests/tnimkit.nim`; current modules cover controls, matrix,
   monospace text views, tables, outlines, documents, animations, rendering,
   accessibility, text storage/layout/views, pasteboards/dragging, document tabs,
-  undo managers, object values, model controllers, responders,
+  undo managers, object values, model controllers, notifications, responders,
   windows/controllers, constraints, and themes.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
@@ -246,26 +253,6 @@ document-controller open/save integration are covered in tests and examples.
   the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### Notification Center and Observation
-
-Add a typed notification layer for broadcast lifecycle and model events that are
-too broad for direct Sigils signal wiring. Sigils remains the local signal path;
-the notification center should cover app/window/document/model announcements and
-future native bridge interop.
-
-1. Define typed notification records:
-   - include sender, notification name/kind, optional represented object, and
-     small typed payload records instead of unstructured dictionaries
-   - provide observer tokens and deterministic unregister behavior
-2. Route major lifecycle events through notifications:
-   - application activation, window key/main changes, document lifecycle,
-     defaults changes, appearance changes, undo changes, selection changes, and
-     model mutation batches
-3. Keep direct and broadcast observation separate:
-   - use direct Sigils signals for owner-to-child and delegate-style paths
-   - use notifications for cross-cutting observers, diagnostics, and native
-     adapter boundaries
 
 ### ViewController Architecture
 
