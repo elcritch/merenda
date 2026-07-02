@@ -40,6 +40,7 @@ import nimkit/theme
 import nimkit/types
 import nimkit/undomanagers
 import nimkit/viewinspectors
+import nimkit/viewcontrollers
 import nimkit/views
 import nimkit/viewselection
 import nimkit/windowcontrollers

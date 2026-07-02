@@ -57,6 +57,7 @@ import merenda/nimkit/themes
 import merenda/nimkit/foundation/types
 import merenda/nimkit/foundation/undomanagers
 import merenda/nimkit/app/userdefaults
+import merenda/nimkit/app/viewcontrollers
 import merenda/nimkit/view/views
 import merenda/nimkit/app/windowcontrollers
 import merenda/nimkit/app/windows
@@ -122,6 +123,7 @@ export themes
 export types
 export undomanagers
 export userdefaults
+export viewcontrollers
 export views
 export windowcontrollers
 export windows

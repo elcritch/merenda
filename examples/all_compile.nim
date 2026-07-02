@@ -31,3 +31,4 @@ import tabview_demo
 import texteditor_demo
 import textfield_demo
 import view_inspector_demo
+import viewcontroller_demo

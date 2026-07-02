@@ -8,6 +8,7 @@ import ../foundation/undomanagers
 import ../responder/responders
 import ./userdefaults
 import ./application
+import ./viewcontrollers
 import ./windowcontrollers
 import ./windows
 
@@ -389,6 +390,9 @@ proc addWindowController*(document: Document, controller: WindowController) =
     return
   document.xWindowControllers.add controller
   controller.documentDisplayName = document.displayName()
+  let viewController = controller.viewController()
+  if not viewController.isNil and viewController.representedObject().isNil:
+    viewController.representedObject = DynamicAgent(document)
   let forwardedNext = controller.nextResponder()
   if forwardedNext != Responder(document):
     if document.nextResponder().isNil and not forwardedNext.isNil:

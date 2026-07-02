@@ -5,10 +5,12 @@ import sigils/core
 import ../foundation/selectors
 import ../responder/responders
 import ./application
+import ./viewcontrollers
 import ./windows
 
 type WindowController* = ref object of Responder
   xWindow: Window
+  xViewController: ViewController
   xForwardedWindowDelegate: DynamicAgent
   xForwardedNextResponder: Responder
   xDelegate: DynamicAgent
@@ -40,6 +42,7 @@ protocol WindowControllerEvents:
   proc didSyncWindowTitle*(controller: WindowController, title: string) {.signal.}
 
 proc setWindow*(controller: WindowController, window: Window)
+proc setViewController*(controller: WindowController, viewController: ViewController)
 proc synchronizeWindowTitle*(controller: WindowController)
 
 protocol DefaultWindowControllerLoading of WindowControllerLoading:
@@ -100,6 +103,27 @@ proc notifyDidSynchronizeWindowTitle(controller: WindowController, title: string
   controller.sendControllerDelegate(controllerDidSyncTitle())
   emit controller.didSyncWindowTitle(title)
 
+proc setViewControllerVisible(controller: WindowController, visible: bool) =
+  if controller.isNil or controller.xViewController.isNil:
+    return
+  if visible:
+    if not controller.xViewController.isViewVisible():
+      controller.xViewController.viewWillAppear()
+      controller.xViewController.viewDidAppear()
+  elif controller.xViewController.isViewVisible():
+    controller.xViewController.viewWillDisappear()
+    controller.xViewController.viewDidDisappear()
+
+proc installViewControllerContent(controller: WindowController) =
+  if controller.isNil or controller.xWindow.isNil or controller.xViewController.isNil:
+    return
+  let view = controller.xViewController.view()
+  if controller.xWindow.contentView() != view:
+    controller.xWindow.setContentView(view)
+  if not view.isNil:
+    view.setNextResponder(controller.xViewController)
+  controller.xViewController.setNextResponder(controller.xWindow)
+
 proc controllerShouldCloseWindow(controller: WindowController): bool =
   if controller.isNil or controller.xDelegate.isNil:
     return true
@@ -125,10 +149,14 @@ protocol WindowControllerWindowDelegateBridge of WindowDelegateProtocol:
 
   method windowWillClose(controller: WindowController, window: Window) =
     controller.forwardWindowDelegate(windowWillClose(), window)
+    if not controller.xViewController.isNil:
+      controller.xViewController.viewWillDisappear()
     controller.notifyWillCloseWindow(window)
 
   method windowDidClose(controller: WindowController, window: Window) =
     controller.forwardWindowDelegate(windowDidClose(), window)
+    if not controller.xViewController.isNil:
+      controller.xViewController.viewDidDisappear()
     controller.notifyDidCloseWindow(window)
 
   method windowDidBecomeKey(controller: WindowController, window: Window) =
@@ -220,17 +248,66 @@ proc isWindowLoaded*(controller: WindowController): bool =
 proc windowOrNil*(controller: WindowController): Window =
   if controller.isNil: nil else: controller.xWindow
 
+proc viewController*(controller: WindowController): ViewController =
+  if controller.isNil: nil else: controller.xViewController
+
+proc contentViewController*(controller: WindowController): ViewController =
+  controller.viewController()
+
 proc setWindow*(controller: WindowController, window: Window) =
   if controller.isNil or controller.xWindow == window:
     return
+  let oldWindow = controller.xWindow
+  if not oldWindow.isNil and not controller.xViewController.isNil:
+    if controller.xViewController.isViewVisible():
+      controller.xViewController.viewWillDisappear()
+      controller.xViewController.viewDidDisappear()
+    let view = controller.xViewController.viewOrNil()
+    if not view.isNil and oldWindow.contentView() == view:
+      oldWindow.setContentView(nil)
   controller.detachWindow()
   controller.xWindow = window
   if not window.isNil:
     controller.attachWindow(window)
     controller.synchronizeWindowTitle()
+    controller.installViewControllerContent()
+    if window.isVisible():
+      controller.setViewControllerVisible(true)
 
 proc `window=`*(controller: WindowController, window: Window) =
   controller.setWindow(window)
+
+proc setViewController*(controller: WindowController, viewController: ViewController) =
+  if controller.isNil or controller.xViewController == viewController:
+    return
+  let oldController = controller.xViewController
+  if not oldController.isNil:
+    if oldController.isViewVisible():
+      oldController.viewWillDisappear()
+      oldController.viewDidDisappear()
+    let oldView = oldController.viewOrNil()
+    if not controller.xWindow.isNil and not oldView.isNil and
+        controller.xWindow.contentView() == oldView:
+      controller.xWindow.setContentView(nil)
+    if oldController.nextResponder() == Responder(controller.xWindow) or
+        oldController.nextResponder() == Responder(controller):
+      oldController.clearNextResponder()
+  controller.xViewController = viewController
+  if not viewController.isNil:
+    if controller.xWindow.isNil:
+      viewController.setNextResponder(controller)
+    else:
+      controller.installViewControllerContent()
+      if controller.xWindow.isVisible():
+        controller.setViewControllerVisible(true)
+
+proc `viewController=`*(controller: WindowController, viewController: ViewController) =
+  controller.setViewController(viewController)
+
+proc `contentViewController=`*(
+    controller: WindowController, viewController: ViewController
+) =
+  controller.setViewController(viewController)
 
 proc documentDisplayName*(controller: WindowController): string =
   if controller.isNil: "" else: controller.xDocumentDisplayName
@@ -301,8 +378,16 @@ proc showWindow*(
   result = controller.controlledWindow()
   if result.isNil:
     return nil
+  controller.installViewControllerContent()
+  let shouldAppear =
+    not controller.xViewController.isNil and
+    not controller.xViewController.isViewVisible()
   controller.notifyWillShowWindow(result)
+  if shouldAppear:
+    controller.xViewController.viewWillAppear()
   result.makeKeyAndOrderFront()
+  if shouldAppear:
+    controller.xViewController.viewDidAppear()
   controller.notifyDidShowWindow(result)
 
 proc showWindow*(
@@ -311,6 +396,10 @@ proc showWindow*(
   result = controller.controlledWindow()
   if result.isNil:
     return nil
+  controller.installViewControllerContent()
+  let shouldAppear =
+    not controller.xViewController.isNil and
+    not controller.xViewController.isViewVisible()
   if not app.isNil:
     app.addWindow(result)
     let forwardedNextResponder = result.nextResponder()
@@ -319,10 +408,14 @@ proc showWindow*(
     controller.setNextResponder(app)
     result.setNextResponder(controller)
   controller.notifyWillShowWindow(result)
+  if shouldAppear:
+    controller.xViewController.viewWillAppear()
   if app.isNil:
     result.makeKeyAndOrderFront()
   else:
     app.activateWindow(result)
+  if shouldAppear:
+    controller.xViewController.viewDidAppear()
   controller.notifyDidShowWindow(result)
 
 proc close*(controller: WindowController): bool {.discardable.} =

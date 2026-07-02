@@ -24,7 +24,8 @@ cascading column views, basic text editing lifecycle, action dispatch, reusable
 pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
 monospace text view/editor with raw event policy controls, document-controller
 infrastructure, Nim-native object/array/tree/selection model controllers and
-widget binding adapters, a responder-discovered undo-manager service,
+widget binding adapters, view-controller content ownership and containment, a
+responder-discovered undo-manager service,
 AppKit-style in-process pasteboard/dragging foundations, a shared object-value
 formatting, parsing, writeback, and validation layer for model-backed controls,
 a typed notification center for broad app/window/document/defaults/undo/
@@ -216,6 +217,12 @@ document-controller open/save integration are covered in tests and examples.
   window, document, document-controller, defaults, appearance, undo, selection,
   and model-mutation broadcasts while keeping direct owner/delegate wiring on
   local Sigils signals.
+- Added the first `ViewController` architecture: controllers now lazily build
+  views through selector-backed loading protocols, emit Sigils lifecycle
+  signals, carry represented objects and optional undo managers, participate in
+  responder validation/target-action routing, support child-controller
+  containment, and can be owned/swapped by `WindowController` while documents
+  seed document-backed content controllers with represented objects.
 - Hardened reusable pure Nim panel/dialog contracts: `Alert`, `OpenPanel`, and
   `SavePanel` now build modal and sheet content with buttons, accessory views,
   response mapping, file-type validation, selected URL helpers, modal
@@ -242,36 +249,18 @@ document-controller open/save integration are covered in tests and examples.
   monospace text views, tables, outlines, documents, animations, rendering,
   accessibility, text storage/layout/views, pasteboards/dragging, document tabs,
   undo managers, object values, model controllers, notifications, responders,
-  windows/controllers, constraints, and themes.
+  view controllers, windows/controllers, constraints, and themes.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
   `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
-  `examples/cascading_demo.nim`, and `examples/controls_showcase.nim`.
+  `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`, and
+  `examples/controls_showcase.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### ViewController Architecture
-
-Add a `ViewController` layer for view construction, lifecycle, represented
-objects, validation, and responder participation. This should complement
-`WindowController` and `DocumentController`, not replace view subclasses or plain
-view composition.
-
-1. Define controller lifecycle:
-   - load/build view, view loaded, will/did appear, will/did disappear,
-     represented-object changes, teardown, and child-controller containment
-   - keep backend/native handles out of the controller public contract
-2. Integrate with responder and validation paths:
-   - allow view controllers to participate in command validation, target/action,
-     undo-manager lookup, and represented-object routing
-   - make window/document controllers able to own and swap view controllers
-3. Add examples and tests:
-   - cover document-backed content views, reusable panel content, split/sidebar
-     compositions, and controller teardown without stale signal observers
 
 ### CollectionView
 
