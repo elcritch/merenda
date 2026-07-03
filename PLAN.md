@@ -53,7 +53,7 @@ accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
 Model-backed widget work should now reuse the contracts proven by `TableView`,
-`CollectionView`, `CascadingView`, and `ComboBox`: stable identifiers,
+`CollectionView`, `CascadingView`, `ComboBox`, and menus: stable identifiers,
 `ObjectValue` conversion, controller adapters, incremental update records, and
 model-mutation notifications. The next controls should build on that vocabulary
 instead of adding parallel storage models.
@@ -242,6 +242,13 @@ instead of adding parallel storage models.
   `ComboBoxOptionList` data-source adapter with filtering, type-ahead lookup,
   popup separator/disabled-row semantics, and `ArrayController` option-record
   binding with selection writeback.
+- Implemented menu item model backing around plain `MenuItemModel` records,
+  item identifiers, subtitle/key-equivalent metadata, object values, enabled/
+  hidden/separator/image/state/action/target/represented-object fields,
+  submenu child records, model-to-`MenuItem` bridge generation, data-source
+  reload hooks, validation writeback into model records before popup opening,
+  identifier-based menu activation signals, and `ArrayController` menu/popup
+  binding with selection writeback.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -290,27 +297,6 @@ instead of adding parallel storage models.
   `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
 
 ## Near-Term Work
-
-### Menu Item Model Backing
-
-Back dynamic menus, popup buttons, and menu-like choice lists with a command/item
-model. `PopupListView` should remain a presentation primitive; model ownership
-belongs above it in menu and popup controls.
-
-1. Define a shared menu item record:
-   - identifier, title, subtitle/key equivalent, state, enabled/hidden,
-     separator, submenu children, image, target/action selector, represented
-     object, and validation metadata
-   - keep menu item records as plain values unless a menu bridge needs identity
-     for native handles
-2. Route validation through model updates:
-   - let responder-chain validation update enabled/state/title metadata before a
-     menu opens
-   - support dynamic child generation for document/window/recent-items menus
-     without rebuilding unrelated menu state
-3. Share accessibility and pasteboard semantics:
-   - expose menu hierarchy and item actions from the model record
-   - make popup/menu presentation reuse the same item model where practical
 
 ### DocumentTabs Model Backing
 

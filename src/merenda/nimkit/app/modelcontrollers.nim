@@ -797,6 +797,7 @@ protocol ArrayControllerComboDataSource of ComboBoxDataSource:
 
 protocol ArrayControllerComboEvents from ArrayController:
   includes ComboBoxEvents
+  includes MenuEvents
 
   proc selectionDidChange(controller: ArrayController, sender: DynamicAgent) {.slot.} =
     if sender of ComboBox:
@@ -806,6 +807,41 @@ protocol ArrayControllerComboEvents from ArrayController:
         controller.xSelection.setSelectedIdentifiers([identifier])
       else:
         controller.xSelection.clearSelection()
+
+  proc menuItemDidActivate(
+      controller: ArrayController, sender: DynamicAgent, identifier: string
+  ) {.slot.} =
+    discard sender
+    if identifier.len > 0:
+      controller.xSelection.setSelectedIdentifiers([identifier])
+    else:
+      controller.xSelection.clearSelection()
+
+proc menuItemModelForArrayItem(item: ModelItem): MenuItemModel =
+  initMenuItemModel(
+    identifier = item.identifier,
+    title = item.displayTitle(ovrMenu),
+    objectValue = item.objectValue,
+    enabled = item.enabled,
+    hidden = item.hidden,
+    separator = item.separator,
+    representedObject = item.representedObject,
+    validates = false,
+  )
+
+protocol ArrayControllerMenuDataSource of MenuDataSource:
+  method menuItemCount(controller: ArrayController, menu: Menu): int =
+    controller.len()
+
+  method menuItemModelAtIndex(
+      controller: ArrayController, menu: Menu, index: int
+  ): MenuItemModel =
+    controller.itemAt(index).menuItemModelForArrayItem()
+
+  method indexOfMenuItemModelIdentifier(
+      controller: ArrayController, menu: Menu, identifier: string
+  ): int =
+    controller.indexOfIdentifier(identifier)
 
 protocol ArrayControllerCollectionDataSource of CollectionViewDataSource:
   method numberOfCollectionItems(
@@ -849,6 +885,7 @@ proc installArrayControllerProtocols(controller: ArrayController) =
   discard controller.withProtocol(ArrayControllerTableDataSource)
   discard controller.withProtocol(ArrayControllerTableDelegate)
   discard controller.withProtocol(ArrayControllerComboDataSource)
+  discard controller.withProtocol(ArrayControllerMenuDataSource)
   discard controller.withProtocol(ArrayControllerCollectionDataSource)
   discard controller.withProtocol(ArrayControllerCollectionDelegate)
 
@@ -878,6 +915,21 @@ proc bindComboBox*(comboBox: ComboBox, controller: ArrayController) =
     comboBox.selectedOptionIdentifier = controller.xSelection.selectedIdentifier()
     controller.observeProtocol(comboBox, ComboBoxEvents)
   comboboxes.reloadData(comboBox)
+
+proc bindMenu*(menu: Menu, controller: ArrayController) =
+  if menu.isNil:
+    return
+  menu.dataSource = controller
+  if not controller.isNil:
+    controller.observeProtocol(menu, MenuEvents)
+  menus.reloadData(menu)
+
+proc bindPopupMenuButton*(button: PopupMenuButton, controller: ArrayController) =
+  if button.isNil:
+    return
+  if button.menu().isNil:
+    button.menu = newMenu(button.title())
+  bindMenu(button.menu(), controller)
 
 proc bindCollectionView*(collectionView: CollectionView, controller: ArrayController) =
   if collectionView.isNil:
@@ -1136,22 +1188,14 @@ proc bindCascadingView*(view: CascadingView, controller: TreeController) =
 proc syncMenu*(menu: Menu, controller: ArrayController) =
   if menu.isNil:
     return
-  var existing: seq[MenuItem]
-  for index in 0 ..< menu.len():
-    existing.add menu[index.Natural]
-  for index in countdown(existing.len - 1, 0):
-    discard menu.removeItem(existing[index])
+  menu.dataSource = DynamicAgent(nil)
   if controller.isNil:
+    menu.itemModels = []
     return
+  var models: seq[MenuItemModel]
   for index in 0 ..< controller.len():
-    let item = controller.itemAt(index)
-    if item.separator:
-      discard menu.addSeparator()
-    else:
-      let menuItem = menu.addItem(newMenuItem(item.objectValue))
-      menuItem.title = item.displayTitle(ovrMenu)
-      menuItem.enabled = item.enabled
-      menuItem.representedObject = item.representedObject
+    models.add controller.itemAt(index).menuItemModelForArrayItem()
+  menu.itemModels = models
 
 proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   if tabs.isNil:

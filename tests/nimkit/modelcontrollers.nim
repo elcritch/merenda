@@ -242,6 +242,10 @@ suite "nimkit model controllers":
       )
       comboBox = newComboBox()
       menu = newMenu("Choices")
+      boundMenu = newMenu("Bound Choices")
+      window = newWindow("Bound popup", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      popup = newPopupMenuButton("Bound", boundMenu, initRect(8, 8, 90, 24))
       tabs = newDocumentTabs()
       matrix = newButtonMatrix([], columns = 2)
 
@@ -261,12 +265,31 @@ suite "nimkit model controllers":
     syncMenu(menu, controller)
     check menu.len == 3
     check menu[0.Natural].title == "One"
+    check menu[0.Natural].identifier == "one"
+    check menu[0.Natural].objectValue.requireString() == "One"
     check menu[1.Natural].title == "Second"
+    check menu[1.Natural].identifier == "two"
     check not menu[1.Natural].enabled
     check menu[2.Natural].isSeparatorItem()
+    check menu.itemModels[1].identifier == "two"
+    check menu.indexOfMenuItemIdentifier("two") == 1
+
+    bindMenu(boundMenu, controller)
+    check boundMenu.len == 3
+    check boundMenu[0.Natural].identifier == "one"
+    controller.addItem(initModelItem("three", objectValue = toObjectValue("Three")))
+    boundMenu.reloadData()
+    check boundMenu.len == 4
+    check boundMenu[3.Natural].identifier == "three"
+    bindPopupMenuButton(popup, controller)
+    popup.popupPresentation = ppInline
+    root.addSubview(popup)
+    window.setContentView(root)
+    check window.clickPopupMenuItem(root, popup, 3)
+    check controller.selectionController().selectedIdentifier == "three"
 
     syncDocumentTabs(tabs, controller)
-    check tabs.len == 2
+    check tabs.len == 3
     check tabs[0.Natural].identifier == "one"
     check tabs[1.Natural].title == "Second"
     check not tabs[1.Natural].enabled
