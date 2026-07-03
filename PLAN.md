@@ -52,6 +52,12 @@ and sheet workflows before native bridges land: alert button response mapping,
 accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
+Model-backed widget work should now reuse the contracts proven by `TableView`,
+`CollectionView`, and `CascadingView`: stable identifiers, `ObjectValue`
+conversion, controller adapters, incremental update records, and model-mutation
+notifications. The next controls should build on that vocabulary instead of
+adding parallel storage models.
+
 ## Recently Completed
 
 - Reorganized NimKit under domain subdirectories while keeping
@@ -223,6 +229,12 @@ document-controller open/save integration are covered in tests and examples.
   targets. `ArrayController` can now bind collection views using the same
   sorted/filtered `ModelItem` vocabulary as tables, combo boxes, menus, tabs,
   and matrices.
+- Implemented `CascadingView` model backing around stable `CascadingItem`
+  identifiers, parent identifiers, display/object values, leaf/hidden/image
+  metadata, represented objects, identity-backed selected paths, data-source
+  and delegate hooks, incremental tree insert/remove/move/reload updates,
+  batched update signals, model-mutation notifications, table-column row
+  adapters, and `TreeController` binding coverage.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -258,8 +270,8 @@ document-controller open/save integration are covered in tests and examples.
   layout; the latest full run passed `2/2`.
 - Focused NimKit coverage lives under `tests/nimkit/*.nim` and is aggregated
   by `tests/tnimkit.nim`; current modules cover controls, matrix,
-  monospace text views, tables, outlines, collection views, documents,
-  animations, rendering, accessibility, text storage/layout/views,
+  monospace text views, tables, outlines, cascading views, collection views,
+  documents, animations, rendering, accessibility, text storage/layout/views,
   pasteboards/dragging, document tabs, undo managers, object values, model
   controllers, notifications, responders, view controllers, windows/controllers,
   constraints, and themes.
@@ -269,32 +281,8 @@ document-controller open/save integration are covered in tests and examples.
   `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
   `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`,
   `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
-- GitHub Actions is currently blocked before runner startup by account billing
-  or spending-limit state, not by a Nim build or test failure. Rerun CI after
-  the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### CascadingView Model Backing
-
-Move `CascadingView` toward a Browser-style tree model without making each
-column own its own independent row storage. The selected path, visible columns,
-and child lookups should be identity-backed across reloads and model mutations.
-
-1. Share the tree-item vocabulary with future outline work:
-   - define stable item identifiers, parent identifiers, display values, leaf
-     state, optional icons, and opaque model payloads as plain value records
-   - keep the existing `CascadingDataSource` compatibility path while adding
-     object-value and item-identity lookups
-2. Preserve selection by path identity:
-   - restore selected paths by identifiers instead of column/row indexes
-   - preserve focused column, visible column scroll, and activated item state
-     after reloads, sorting, or filtering
-3. Add incremental tree update hooks:
-   - reload a parent, insert/remove/move children, and collapse invalid paths
-     without forcing a full column rebuild
-   - make accessibility notifications describe item/path changes instead of only
-     table-row changes inside generated columns
 
 ### ComboBox Choice Model Backing
 
@@ -378,10 +366,9 @@ the collection/tree model work.
 
 ### OutlineView Model Backing
 
-Finish `OutlineView` last, after `TableView` and `CascadingView` establish the
-shared row/object value and tree-item contracts. Outline should remain a
-specialized table/tree presentation over a model, not a separate competing model
-system.
+Use the existing `TableView` and `CascadingView` model work as the constraints
+for `OutlineView` model backing. Outline should remain a specialized table/tree
+presentation over a model, not a separate competing model system.
 
 1. Layer outline item data on the shared tree model:
    - reuse stable identifiers, parent-child lookup, item display values, leaf or
