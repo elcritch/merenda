@@ -2,6 +2,17 @@ import std/[math, options, os, parseutils, strutils]
 
 import pkg/chroma
 
+when not defined(sigilsSigilNameString) and not defined(nimdoc):
+  {.
+    error:
+      "NimKit requires -d:sigilsSigilNameString " &
+      "(or --define:sigilsSigilNameString)."
+  .}
+
+when not defined(gcArc) and not defined(gcOrc) and not defined(gcAtomicArc) and
+    not defined(nimdoc):
+  {.error: "NimKit requires --mm:arc, --mm:orc, or --mm:atomicArc".}
+
 type
   Point* = object
     x*: float32
