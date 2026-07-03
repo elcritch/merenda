@@ -25,9 +25,13 @@ import ../view/views
 const
   TableTypeSelectTimeout = 1.0
   TablePasteboardTypeRows* = "nimkit.table.rows"
+  TablePasteboardTypeRowIdentifiers* = "nimkit.table.row-identifiers"
   TablePasteboardTypeColumns* = "nimkit.table.columns"
+  TableSelectionIdentityPrefix = "ids:"
 
 type
+  TableModelError* = object of KeyError
+
   TableSelectionMode* = enum
     lsmNone
     lsmSingle
@@ -56,6 +60,52 @@ type
     tsdNone
     tsdAscending
     tsdDescending
+
+  TableRowUpdateKind* = enum
+    trukInsert
+    trukRemove
+    trukMove
+    trukReload
+
+  TableRowUpdate* = object
+    kind*: TableRowUpdateKind
+    indexes*: seq[int]
+    fromIndex*: int
+    toIndex*: int
+    identifiers*: seq[string]
+
+  TableCellValue* = object
+    columnIdentifier*: string
+    value*: ObjectValue
+
+  TableRowValue* = object
+    identifier*: string
+    objectValue*: ObjectValue
+    cells*: seq[TableCellValue]
+    enabled*: bool
+    hidden*: bool
+    representedObject*: DynamicAgent
+
+  TableModelColumn* = object
+    identifier*: string
+    title*: string
+    valueKey*: string
+    width*: float32
+    hidden*: bool
+
+  TableModelSortDescriptor* = object
+    columnIdentifier*: string
+    direction*: TableSortDirection
+
+  TableModelFilter* = proc(row: TableRowValue): bool {.closure.}
+
+  TableRowIdentifierResolver* = proc(identifier: string): string {.closure.}
+
+  TableModel* = ref object of DynamicAgent
+    xRows: seq[TableRowValue]
+    xColumns: seq[TableModelColumn]
+    xSortDescriptors: seq[TableModelSortDescriptor]
+    xFilter: TableModelFilter
 
   TableViewStateScope* = enum
     tvssAutomatic
@@ -113,6 +163,7 @@ type
   TableViewState* = object
     columns*: seq[TableColumnAutosaveRecord]
     selectedRows*: seq[int]
+    selectedRowIdentifiers*: seq[string]
     selectedColumns*: seq[string]
     expandedItems*: seq[string]
 
@@ -164,6 +215,10 @@ type
     xHasRestoredState: bool
     xObservedStateWindow: Window
     xColumnAutosaveAliases: Table[string, string]
+    xRowIdentifierAliases: Table[string, string]
+    xRowIdentifierResolver: TableRowIdentifierResolver
+    xBatchUpdateDepth: int
+    xPendingRowUpdates: seq[TableRowUpdate]
     xTableDraggingSession: DraggingSession
     xTableDropTarget: DraggingDropTarget
     xEditingHostView: View
@@ -233,8 +288,8 @@ proc rowHeightForRow*(tableView: TableView, row: int): float32
 proc reloadData*(tableView: TableView)
 proc rowEnabled*(tableView: TableView, row: int): bool
 proc rowSelectable*(tableView: TableView, row: int): bool
-proc tableRowIdentifier(tableView: TableView, row: int): string
-proc tableRowIndexForIdentifier(tableView: TableView, identifier: string): int
+proc tableRowIdentifier*(tableView: TableView, row: int): string
+proc tableRowIndexForIdentifier*(tableView: TableView, identifier: string): int
 proc rowIdentifiersForRows(tableView: TableView, rows: openArray[int]): seq[string]
 proc applySelectionForRowIdentifiers(
   tableView: TableView,
@@ -309,6 +364,10 @@ proc tableCellObjectValue*(
   tableView: TableView, row: int, column: TableColumn
 ): ObjectValue
 
+proc writeTableCellObjectValue*(
+  tableView: TableView, row: int, column: TableColumn, value: ObjectValue
+): bool
+
 proc tableCellView*(tableView: TableView, row: int, column: TableColumn): View
 proc rowCount*(tableView: TableView): int
 proc columnAt*(tableView: TableView, index: int): TableColumn
@@ -377,6 +436,126 @@ proc drawTableHeaderResizeHandle*(
 proc syncTableScrollChrome(tableView: TableView)
 proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle
 
+proc raiseTableModelError(message: string) {.noinline, noreturn.} =
+  raise newException(TableModelError, message)
+
+proc installTableModelProtocols(model: TableModel)
+
+func initTableCellValue*(columnIdentifier: string, value: ObjectValue): TableCellValue =
+  TableCellValue(columnIdentifier: columnIdentifier, value: value)
+
+proc initTableRowValue*(
+    identifier = "",
+    objectValue = emptyObjectValue(),
+    cells: openArray[TableCellValue] = [],
+    enabled = true,
+    hidden = false,
+    representedObject: DynamicAgent = nil,
+): TableRowValue =
+  TableRowValue(
+    identifier: identifier,
+    objectValue: objectValue,
+    cells: @cells,
+    enabled: enabled,
+    hidden: hidden,
+    representedObject: representedObject,
+  )
+
+func initTableModelColumn*(
+    identifier: string, title = "", valueKey = "", width = 120.0'f32, hidden = false
+): TableModelColumn =
+  TableModelColumn(
+    identifier: identifier,
+    title: title,
+    valueKey: valueKey,
+    width: width,
+    hidden: hidden,
+  )
+
+func initTableModelSortDescriptor*(
+    columnIdentifier: string, direction = tsdAscending
+): TableModelSortDescriptor =
+  TableModelSortDescriptor(columnIdentifier: columnIdentifier, direction: direction)
+
+func defaultTableRowUpdate(
+    kind: TableRowUpdateKind,
+    indexes: openArray[int] = [],
+    identifiers: openArray[string] = [],
+    fromIndex = -1,
+    toIndex = -1,
+): TableRowUpdate =
+  TableRowUpdate(
+    kind: kind,
+    indexes: @indexes,
+    fromIndex: fromIndex,
+    toIndex: toIndex,
+    identifiers: @identifiers,
+  )
+
+func initTableRowInsertUpdate*(
+    indexes: openArray[int], identifiers: openArray[string] = []
+): TableRowUpdate =
+  defaultTableRowUpdate(trukInsert, indexes, identifiers)
+
+func initTableRowRemoveUpdate*(
+    indexes: openArray[int], identifiers: openArray[string] = []
+): TableRowUpdate =
+  defaultTableRowUpdate(trukRemove, indexes, identifiers)
+
+func initTableRowReloadUpdate*(
+    indexes: openArray[int], identifiers: openArray[string] = []
+): TableRowUpdate =
+  defaultTableRowUpdate(trukReload, indexes, identifiers)
+
+func initTableRowMoveUpdate*(
+    fromIndex, toIndex: int, identifiers: openArray[string] = []
+): TableRowUpdate =
+  defaultTableRowUpdate(
+    trukMove, identifiers = identifiers, fromIndex = fromIndex, toIndex = toIndex
+  )
+
+func findCellIndex(row: TableRowValue, columnIdentifier: string): int =
+  for index, cell in row.cells:
+    if cell.columnIdentifier == columnIdentifier:
+      return index
+  -1
+
+func hasValue*(row: TableRowValue, columnIdentifier: string): bool =
+  columnIdentifier.len == 0 or row.findCellIndex(columnIdentifier) >= 0
+
+func getValue*(row: TableRowValue, columnIdentifier = ""): Option[ObjectValue] =
+  if columnIdentifier.len == 0:
+    return some(row.objectValue)
+  let index = row.findCellIndex(columnIdentifier)
+  if index >= 0:
+    some(row.cells[index].value)
+  else:
+    none(ObjectValue)
+
+proc value*(
+    row: TableRowValue, columnIdentifier = ""
+): ObjectValue {.raises: [TableModelError].} =
+  let found = row.getValue(columnIdentifier)
+  if found.isSome:
+    return found.get()
+  raiseTableModelError("unknown table cell column identifier: " & columnIdentifier)
+
+proc `[]`*(row: TableRowValue, columnIdentifier: string): ObjectValue =
+  row.value(columnIdentifier)
+
+proc setValue*(row: var TableRowValue, columnIdentifier: string, value: ObjectValue) =
+  if columnIdentifier.len == 0:
+    row.objectValue = value
+    return
+  let index = row.findCellIndex(columnIdentifier)
+  if index >= 0:
+    row.cells[index].value = value
+  else:
+    row.cells.add initTableCellValue(columnIdentifier, value)
+
+proc `[]=`*(row: var TableRowValue, columnIdentifier: string, value: ObjectValue) =
+  row.setValue(columnIdentifier, value)
+
 protocol TableViewDataSource {.selectorScope: protocol.}:
   method numberOfRows*(tableView: TableView): int {.optional.}
   method textForCell*(
@@ -386,6 +565,10 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
   method objectValueForCell*(
     tableView: TableView, row: int, column: TableColumn
   ): ObjectValue {.optional.}
+
+  method setObjectValueForCell*(
+    tableView: TableView, row: int, column: TableColumn, value: ObjectValue
+  ): bool {.optional.}
 
   method identifierForRow*(tableView: TableView, row: int): string {.optional.}
   method rowForIdentifier*(tableView: TableView, identifier: string): int {.optional.}
@@ -408,6 +591,10 @@ protocol TableViewEvents:
     row: int,
     column: TableColumn,
     value: ObjectValue,
+  ) {.signal.}
+
+  proc tableRowsDidUpdate*(
+    tableView: TableView, sender: DynamicAgent, updates: seq[TableRowUpdate]
   ) {.signal.}
 
 protocol TableViewDelegate {.selectorScope: protocol.}:
@@ -548,6 +735,340 @@ protocol TableViewStateStorageProtocol:
   method saveTableViewState*(name: string, state: TableViewState) {.optional.}
   method loadTableViewState*(name: string): TableViewState {.optional.}
   method hasTableViewState*(name: string): bool {.optional.}
+
+func tableModelColumnIdentifier(column: TableModelColumn): string =
+  if column.identifier.len > 0: column.identifier else: column.valueKey
+
+func tableModelColumnTitle(column: TableModelColumn): string =
+  if column.title.len > 0:
+    column.title
+  elif column.identifier.len > 0:
+    column.identifier
+  else:
+    column.valueKey
+
+proc tableModelColumnKey(model: TableModel, column: TableColumn): string =
+  if column.isNil:
+    return ""
+  let identifier = column.xIdentifier
+  if not model.isNil:
+    for modelColumn in model.xColumns:
+      if modelColumn.tableModelColumnIdentifier() == identifier:
+        if modelColumn.valueKey.len > 0:
+          return modelColumn.valueKey
+        return modelColumn.tableModelColumnIdentifier()
+  identifier
+
+proc compareTableObjectValues(a, b: ObjectValue): int =
+  case a.kind
+  of ovInt:
+    if b.kind == ovInt:
+      return cmp(a.intValue, b.intValue)
+    if b.kind == ovFloat:
+      return cmp(a.intValue.float, b.floatValue)
+  of ovFloat:
+    if b.kind == ovFloat:
+      return cmp(a.floatValue, b.floatValue)
+    if b.kind == ovInt:
+      return cmp(a.floatValue, b.intValue.float)
+  of ovString:
+    if b.kind == ovString:
+      return cmp(a.text, b.text)
+  of ovBool:
+    if b.kind == ovBool:
+      return cmp(a.boolValue, b.boolValue)
+  else:
+    discard
+  cmp(a.formatObjectValue(), b.formatObjectValue())
+
+proc compareTableRows(
+    a, b: TableRowValue, descriptors: openArray[TableModelSortDescriptor]
+): int =
+  for descriptor in descriptors:
+    if descriptor.direction == tsdNone:
+      continue
+    let
+      left = a.getValue(descriptor.columnIdentifier).get(emptyObjectValue())
+      right = b.getValue(descriptor.columnIdentifier).get(emptyObjectValue())
+    result = compareTableObjectValues(left, right)
+    if result != 0:
+      if descriptor.direction == tsdDescending:
+        result = -result
+      return
+
+proc sourceIndexOfIdentifier(model: TableModel, identifier: string): int =
+  if model.isNil or identifier.len == 0:
+    return -1
+  for index, row in model.xRows:
+    if row.identifier == identifier:
+      return index
+  -1
+
+proc arrangedSourceIndexes(model: TableModel): seq[int] =
+  if model.isNil:
+    return
+  for index, row in model.xRows:
+    if row.hidden:
+      continue
+    if not model.xFilter.isNil and not model.xFilter(row):
+      continue
+    result.add index
+  if model.xSortDescriptors.len > 0:
+    result.sort(
+      proc(a, b: int): int =
+        compareTableRows(model.xRows[a], model.xRows[b], model.xSortDescriptors)
+    )
+
+proc arrangedSourceIndex(model: TableModel, index: int): int =
+  let indexes = model.arrangedSourceIndexes()
+  if index in 0 ..< indexes.len:
+    indexes[index]
+  else:
+    -1
+
+proc initTableModelFields*(
+    model: TableModel,
+    rows: openArray[TableRowValue] = [],
+    columns: openArray[TableModelColumn] = [],
+) =
+  model.xRows = @rows
+  model.xColumns = @columns
+  model.installTableModelProtocols()
+
+proc newTableModel*(
+    rows: openArray[TableRowValue] = [], columns: openArray[TableModelColumn] = []
+): TableModel =
+  result = TableModel()
+  result.initTableModelFields(rows, columns)
+
+proc len*(model: TableModel): int =
+  model.arrangedSourceIndexes().len
+
+proc sourceLen*(model: TableModel): int =
+  if model.isNil: 0 else: model.xRows.len
+
+proc rows*(model: TableModel): seq[TableRowValue] =
+  if model.isNil:
+    @[]
+  else:
+    model.xRows
+
+proc `rows=`*(model: TableModel, rows: openArray[TableRowValue]) =
+  if not model.isNil:
+    model.xRows = @rows
+
+proc arrangedRows*(model: TableModel): seq[TableRowValue] =
+  for index in model.arrangedSourceIndexes():
+    result.add model.xRows[index]
+
+proc columns*(model: TableModel): seq[TableModelColumn] =
+  if model.isNil:
+    @[]
+  else:
+    model.xColumns
+
+proc `columns=`*(model: TableModel, columns: openArray[TableModelColumn]) =
+  if not model.isNil:
+    model.xColumns = @columns
+
+proc sortDescriptors*(model: TableModel): seq[TableModelSortDescriptor] =
+  if model.isNil:
+    @[]
+  else:
+    model.xSortDescriptors
+
+proc `sortDescriptors=`*(
+    model: TableModel, descriptors: openArray[TableModelSortDescriptor]
+) =
+  if not model.isNil:
+    model.xSortDescriptors = @descriptors
+
+proc filter*(model: TableModel): TableModelFilter =
+  if model.isNil: nil else: model.xFilter
+
+proc `filter=`*(model: TableModel, filter: TableModelFilter) =
+  if not model.isNil:
+    model.xFilter = filter
+
+proc getRowAt*(model: TableModel, index: int): Option[TableRowValue] =
+  let sourceIndex = model.arrangedSourceIndex(index)
+  if sourceIndex >= 0:
+    some(model.xRows[sourceIndex])
+  else:
+    none(TableRowValue)
+
+proc rowAt*(model: TableModel, index: int): TableRowValue =
+  let found = model.getRowAt(index)
+  if found.isSome:
+    return found.get()
+  initTableRowValue()
+
+proc getRowWithIdentifier*(
+    model: TableModel, identifier: string
+): Option[TableRowValue] =
+  let index = model.sourceIndexOfIdentifier(identifier)
+  if index >= 0:
+    some(model.xRows[index])
+  else:
+    none(TableRowValue)
+
+proc rowWithIdentifier*(
+    model: TableModel, identifier: string
+): TableRowValue {.raises: [TableModelError].} =
+  let found = model.getRowWithIdentifier(identifier)
+  if found.isSome:
+    return found.get()
+  raiseTableModelError("unknown table row identifier: " & identifier)
+
+proc indexOfIdentifier*(model: TableModel, identifier: string): int =
+  let indexes = model.arrangedSourceIndexes()
+  for arrangedIndex, sourceIndex in indexes:
+    if model.xRows[sourceIndex].identifier == identifier:
+      return arrangedIndex
+  -1
+
+proc addRow*(model: TableModel, row: TableRowValue) =
+  if model.isNil:
+    return
+  if row.identifier.len > 0 and model.sourceIndexOfIdentifier(row.identifier) >= 0:
+    raiseTableModelError("duplicate table row identifier: " & row.identifier)
+  model.xRows.add row
+
+proc insertRow*(model: TableModel, row: TableRowValue, index: int) =
+  if model.isNil:
+    return
+  if row.identifier.len > 0 and model.sourceIndexOfIdentifier(row.identifier) >= 0:
+    raiseTableModelError("duplicate table row identifier: " & row.identifier)
+  let insertIndex = max(0, min(index, model.xRows.len))
+  model.xRows.insert(row, insertIndex)
+
+proc removeRow*(model: TableModel, identifier: string): bool {.discardable.} =
+  let index = model.sourceIndexOfIdentifier(identifier)
+  if index < 0:
+    return false
+  model.xRows.delete(index)
+  true
+
+proc moveRow*(model: TableModel, identifier: string, toIndex: int): bool =
+  let index = model.sourceIndexOfIdentifier(identifier)
+  if index < 0:
+    return false
+  let row = model.xRows[index]
+  model.xRows.delete(index)
+  let insertIndex = max(0, min(toIndex, model.xRows.len))
+  model.xRows.insert(row, insertIndex)
+  true
+
+proc valueForRow*(
+    model: TableModel, identifier, columnIdentifier: string
+): ObjectValue {.raises: [TableModelError].} =
+  model.rowWithIdentifier(identifier).value(columnIdentifier)
+
+proc setValue*(
+    model: TableModel, identifier, columnIdentifier: string, value: ObjectValue
+) =
+  let index = model.sourceIndexOfIdentifier(identifier)
+  if index < 0:
+    raiseTableModelError("unknown table row identifier: " & identifier)
+  model.xRows[index].setValue(columnIdentifier, value)
+
+proc objectValueForTableModelCell(
+    model: TableModel, row: int, column: TableColumn
+): ObjectValue =
+  let rowValue = model.rowAt(row)
+  rowValue.getValue(model.tableModelColumnKey(column)).get(rowValue.objectValue)
+
+proc setObjectValueForTableModelCell(
+    model: TableModel, row: int, column: TableColumn, value: ObjectValue
+): bool =
+  let sourceIndex = model.arrangedSourceIndex(row)
+  if sourceIndex < 0:
+    return false
+  model.xRows[sourceIndex].setValue(model.tableModelColumnKey(column), value)
+  true
+
+proc parseTableModelCellValue(
+    model: TableModel,
+    tableView: TableView,
+    row: int,
+    column: TableColumn,
+    value: string,
+): ObjectParseResult =
+  let current = model.objectValueForTableModelCell(row, column)
+  let expectedKind = if current.kind in {ovNil, ovEmpty}: ovString else: current.kind
+  let context =
+    Control(tableView).objectParseContext.expecting(expectedKind).withRole(ovrTableCell)
+  Control(tableView).objectValueFormatter.parseObjectValue(value, context)
+
+protocol TableModelTableDataSource of TableViewDataSource:
+  method numberOfRows(model: TableModel, tableView: TableView): int =
+    discard tableView
+    model.len()
+
+  method objectValueForCell(
+      model: TableModel, tableView: TableView, row: int, column: TableColumn
+  ): ObjectValue =
+    discard tableView
+    model.objectValueForTableModelCell(row, column)
+
+  method textForCell(
+      model: TableModel, tableView: TableView, row: int, column: TableColumn
+  ): string =
+    let value = model.objectValueForTableModelCell(row, column)
+    Control(tableView).formatObjectValue(value, ovrTableCell)
+
+  method setObjectValueForCell(
+      model: TableModel,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: ObjectValue,
+  ): bool =
+    discard tableView
+    model.setObjectValueForTableModelCell(row, column, value)
+
+  method identifierForRow(model: TableModel, tableView: TableView, row: int): string =
+    discard tableView
+    model.rowAt(row).identifier
+
+  method rowForIdentifier(
+      model: TableModel, tableView: TableView, identifier: string
+  ): int =
+    discard tableView
+    model.indexOfIdentifier(identifier)
+
+protocol TableModelTableDelegate of TableViewDelegate:
+  method isRowEnabled(model: TableModel, tableView: TableView, row: int): bool =
+    discard tableView
+    model.rowAt(row).enabled
+
+  method parseObjectValueForCell(
+      model: TableModel,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ): ObjectParseResult =
+    model.parseTableModelCellValue(tableView, row, column, value)
+
+  method sortDescriptorsDidChange(
+      model: TableModel,
+      tableView: TableView,
+      column: TableColumn,
+      direction: TableSortDirection,
+  ) =
+    if direction == tsdNone:
+      model.sortDescriptors = []
+    else:
+      model.sortDescriptors =
+        [initTableModelSortDescriptor(model.tableModelColumnKey(column), direction)]
+    tableView.reloadData()
+
+proc installTableModelProtocols(model: TableModel) =
+  if model.isNil:
+    return
+  discard model.withProtocol(TableModelTableDataSource)
+  discard model.withProtocol(TableModelTableDelegate)
 
 proc tableStyleContext(tableView: TableView): StyleContext =
   if tableView.isNil:
@@ -1176,7 +1697,24 @@ proc tableCellObjectValue*(
   else:
     emptyObjectValue()
 
-proc tableRowIdentifier(tableView: TableView, row: int): string =
+proc writeTableCellObjectValue*(
+    tableView: TableView, row: int, column: TableColumn, value: ObjectValue
+): bool =
+  if not tableView.validCell(row, column):
+    return false
+  let source = tableView.dataSource()
+  if source.isNil:
+    return true
+  let written = source.trySendLocal(
+    setObjectValueForCell(),
+    (tableView: tableView, row: row, column: column, value: value),
+  )
+  if written.isSome:
+    written.get()
+  else:
+    true
+
+proc tableRowIdentifier*(tableView: TableView, row: int): string =
   if tableView.isNil or row notin 0 ..< tableView.len():
     return ""
   let source = tableView.dataSource()
@@ -1189,7 +1727,7 @@ proc tableRowIdentifier(tableView: TableView, row: int): string =
   else:
     ""
 
-proc tableRowIndexForIdentifier(tableView: TableView, identifier: string): int =
+proc directTableRowIndexForIdentifier(tableView: TableView, identifier: string): int =
   if tableView.isNil or identifier.len == 0:
     return -1
   let source = tableView.dataSource()
@@ -1204,6 +1742,79 @@ proc tableRowIndexForIdentifier(tableView: TableView, identifier: string): int =
     if tableView.tableRowIdentifier(row) == identifier:
       return row
   -1
+
+proc resolveTableRowIdentifier(tableView: TableView, identifier: string): string =
+  if tableView.isNil or identifier.len == 0:
+    return ""
+  if tableView.directTableRowIndexForIdentifier(identifier) >= 0:
+    return identifier
+  if identifier in tableView.xRowIdentifierAliases:
+    let aliased = tableView.xRowIdentifierAliases[identifier]
+    if tableView.directTableRowIndexForIdentifier(aliased) >= 0:
+      return aliased
+  if not tableView.xRowIdentifierResolver.isNil:
+    let resolved = tableView.xRowIdentifierResolver(identifier)
+    if tableView.directTableRowIndexForIdentifier(resolved) >= 0:
+      return resolved
+  ""
+
+proc tableRowIndexForIdentifier*(tableView: TableView, identifier: string): int =
+  let resolved = tableView.resolveTableRowIdentifier(identifier)
+  if resolved.len == 0:
+    -1
+  else:
+    tableView.directTableRowIndexForIdentifier(resolved)
+
+proc getTableRowIdentifier*(tableView: TableView, row: int): Option[string] =
+  let identifier = tableView.tableRowIdentifier(row)
+  if identifier.len > 0:
+    some(identifier)
+  else:
+    none(string)
+
+proc requireTableRowIdentifier*(tableView: TableView, row: int): string =
+  let identifier = tableView.tableRowIdentifier(row)
+  if identifier.len > 0:
+    return identifier
+  raiseTableModelError("missing table row identifier at row: " & $row)
+
+proc getTableRowIndexForIdentifier*(
+    tableView: TableView, identifier: string
+): Option[int] =
+  let row = tableView.tableRowIndexForIdentifier(identifier)
+  if row >= 0:
+    some(row)
+  else:
+    none(int)
+
+proc requireTableRowIndexForIdentifier*(tableView: TableView, identifier: string): int =
+  let row = tableView.tableRowIndexForIdentifier(identifier)
+  if row >= 0:
+    return row
+  raiseTableModelError("unknown table row identifier: " & identifier)
+
+proc setRowIdentifierAlias*(
+    tableView: TableView, oldIdentifier, newIdentifier: string
+) =
+  if tableView.isNil or oldIdentifier.len == 0:
+    return
+  if newIdentifier.len == 0:
+    tableView.xRowIdentifierAliases.del(oldIdentifier)
+  else:
+    tableView.xRowIdentifierAliases[oldIdentifier] = newIdentifier
+
+proc clearRowIdentifierAliases*(tableView: TableView) =
+  if not tableView.isNil:
+    tableView.xRowIdentifierAliases.clear()
+
+proc rowIdentifierResolver*(tableView: TableView): TableRowIdentifierResolver =
+  if tableView.isNil: nil else: tableView.xRowIdentifierResolver
+
+proc `rowIdentifierResolver=`*(
+    tableView: TableView, resolver: TableRowIdentifierResolver
+) =
+  if not tableView.isNil:
+    tableView.xRowIdentifierResolver = resolver
 
 proc rowIdentifiersForRows(tableView: TableView, rows: openArray[int]): seq[string] =
   for row in rows:
@@ -1935,29 +2546,59 @@ proc `highlightedIndex=`*(tableView: TableView, index: int) =
 
 proc reloadData*(tableView: TableView) =
   let oldFirst = tableView.firstVisibleIndex()
+  let
+    oldFirstIdentifier = tableView.tableRowIdentifier(oldFirst)
+    selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
+    anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
+    leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+    editingIdentifier =
+      if tableView.xEditing.active:
+        tableView.tableRowIdentifier(tableView.xEditing.row)
+      else:
+        ""
   tableView.clearTableCellSlots()
   tableView.invalidateRowHeightCache()
-  if tableView.xSelectionMode == tsmSingle and tableView.xSelectedIndexes.len > 0 and
-      tableView.len() > 0:
-    tableView.xSelectedIndexes[0] =
-      min(max(tableView.xSelectedIndexes[0], -1), tableView.len() - 1)
-  if tableView.xSelectionMode == tsmSingle and
-      tableView.xSelectedIndex >= tableView.len() and tableView.len() > 0:
-    tableView.xSelectedIndex = tableView.len() - 1
-  if tableView.xSelectedIndexes.len == 0 and tableView.xSelectedIndex >= 0:
-    tableView.xSelectedIndexes.add tableView.xSelectedIndex
-  tableView.xSelectedIndexes = tableView.normalizeSelection(tableView.xSelectedIndexes)
-  tableView.syncSelectedIndex()
-  tableView.syncSelectionCursor()
+  if selectedIdentifiers.len > 0:
+    tableView.applySelectionForRowIdentifiers(
+      selectedIdentifiers, anchorIdentifier, leadIdentifier
+    )
+  else:
+    if tableView.xSelectionMode == tsmSingle and tableView.xSelectedIndexes.len > 0 and
+        tableView.len() > 0:
+      tableView.xSelectedIndexes[0] =
+        min(max(tableView.xSelectedIndexes[0], -1), tableView.len() - 1)
+    if tableView.xSelectionMode == tsmSingle and
+        tableView.xSelectedIndex >= tableView.len() and tableView.len() > 0:
+      tableView.xSelectedIndex = tableView.len() - 1
+    if tableView.xSelectedIndexes.len == 0 and tableView.xSelectedIndex >= 0:
+      tableView.xSelectedIndexes.add tableView.xSelectedIndex
+    tableView.xSelectedIndexes =
+      tableView.normalizeSelection(tableView.xSelectedIndexes)
+    tableView.syncSelectedIndex()
+    tableView.syncSelectionCursor()
 
   if not tableView.rowEnabled(tableView.xHighlightedIndex):
     tableView.xHighlightedIndex = -1
   if not tableView.rowEnabled(tableView.xPressedIndex):
     tableView.xPressedIndex = -1
+  if tableView.xEditing.active and editingIdentifier.len > 0:
+    let editingRow = tableView.tableRowIndexForIdentifier(editingIdentifier)
+    if editingRow >= 0:
+      tableView.xEditing.row = editingRow
+    else:
+      tableView.xEditing = TableEditingState(row: -1)
+      Control(tableView).clearValidationError()
+      tableView.clearEditingSurface()
   tableView.tileTableContent()
+  let restoredFirst =
+    if oldFirstIdentifier.len > 0:
+      let row = tableView.tableRowIndexForIdentifier(oldFirstIdentifier)
+      if row >= 0: row else: oldFirst
+    else:
+      oldFirst
   tableView.setTableContentOffset(
     initPoint(
-      0.0'f32, tableView.rowOffset(min(oldFirst, tableView.maxFirstVisibleIndex()))
+      0.0'f32, tableView.rowOffset(min(restoredFirst, tableView.maxFirstVisibleIndex()))
     ),
     false,
   )
@@ -1965,6 +2606,83 @@ proc reloadData*(tableView: TableView) =
     tableView.scrollItemToVisible(tableView.xSelectedIndex)
   tableView.invalidateIntrinsicContentSize()
   tableView.invalidateTableRows()
+
+proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdate]) =
+  if tableView.isNil or updates.len == 0:
+    return
+  let
+    selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
+    anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
+    leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+    editingIdentifier =
+      if tableView.xEditing.active:
+        tableView.tableRowIdentifier(tableView.xEditing.row)
+      else:
+        ""
+  tableView.clearTableCellSlots()
+  tableView.invalidateRowHeightCache()
+  tableView.tileTableContent()
+  if selectedIdentifiers.len > 0:
+    tableView.applySelectionForRowIdentifiers(
+      selectedIdentifiers, anchorIdentifier, leadIdentifier
+    )
+  else:
+    tableView.xSelectedIndexes =
+      tableView.normalizeSelection(tableView.xSelectedIndexes)
+    tableView.syncSelectedIndex()
+    tableView.syncSelectionCursor()
+  if tableView.xEditing.active and editingIdentifier.len > 0:
+    let editingRow = tableView.tableRowIndexForIdentifier(editingIdentifier)
+    if editingRow >= 0:
+      tableView.xEditing.row = editingRow
+  if tableView.xEditing.active and
+      not tableView.validCell(tableView.xEditing.row, tableView.xEditing.column):
+    tableView.xEditing = TableEditingState(row: -1)
+    Control(tableView).clearValidationError()
+    tableView.clearEditingSurface()
+  tableView.invalidateIntrinsicContentSize()
+  tableView.invalidateTableRows()
+  emit tableView.tableRowsDidUpdate(DynamicAgent(tableView), @updates)
+
+proc beginTableUpdates*(tableView: TableView) =
+  if not tableView.isNil:
+    inc tableView.xBatchUpdateDepth
+
+proc endTableUpdates*(tableView: TableView) =
+  if tableView.isNil or tableView.xBatchUpdateDepth <= 0:
+    return
+  dec tableView.xBatchUpdateDepth
+  if tableView.xBatchUpdateDepth == 0 and tableView.xPendingRowUpdates.len > 0:
+    let updates = tableView.xPendingRowUpdates
+    tableView.xPendingRowUpdates.setLen(0)
+    tableView.flushTableRowUpdates(updates)
+
+proc applyTableRowUpdates*(tableView: TableView, updates: openArray[TableRowUpdate]) =
+  if tableView.isNil or updates.len == 0:
+    return
+  if tableView.xBatchUpdateDepth > 0:
+    for update in updates:
+      tableView.xPendingRowUpdates.add update
+    return
+  tableView.flushTableRowUpdates(updates)
+
+proc insertRowsAtIndexes*(
+    tableView: TableView, indexes: openArray[int], identifiers: openArray[string] = []
+) =
+  tableView.applyTableRowUpdates([initTableRowInsertUpdate(indexes, identifiers)])
+
+proc removeRowsAtIndexes*(
+    tableView: TableView, indexes: openArray[int], identifiers: openArray[string] = []
+) =
+  tableView.applyTableRowUpdates([initTableRowRemoveUpdate(indexes, identifiers)])
+
+proc reloadRowsAtIndexes*(
+    tableView: TableView, indexes: openArray[int], identifiers: openArray[string] = []
+) =
+  tableView.applyTableRowUpdates([initTableRowReloadUpdate(indexes, identifiers)])
+
+proc moveRow*(tableView: TableView, fromIndex, toIndex: int) =
+  tableView.applyTableRowUpdates([initTableRowMoveUpdate(fromIndex, toIndex)])
 
 proc selectedIndexes*(tableView: TableView): seq[int] =
   tableView.xSelectedIndexes
@@ -2418,6 +3136,9 @@ proc parseIdentifiers(value: string): seq[string] =
 proc tableDraggingRows*(info: DraggingInfo): seq[int] =
   parseRowIndexes(info.pasteboard.stringForType(TablePasteboardTypeRows))
 
+proc tableDraggingRowIdentifiers*(info: DraggingInfo): seq[string] =
+  parseIdentifiers(info.pasteboard.stringForType(TablePasteboardTypeRowIdentifiers))
+
 proc tableDraggingColumns*(info: DraggingInfo): seq[string] =
   parseIdentifiers(info.pasteboard.stringForType(TablePasteboardTypeColumns))
 
@@ -2658,6 +3379,17 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
     return false
   let editing = tableView.xEditing
   let objectValue = editing.objectValue
+  if not tableView.writeTableCellObjectValue(editing.row, editing.column, objectValue):
+    tableView.setEditingValidation(
+      initObjectValidationError(
+        oveRejected,
+        message = "Cell value was rejected by the data source",
+        input = value,
+        expectedKind = objectValue.kind,
+        actualKind = objectValue.kind,
+      )
+    )
+    return false
   tableView.xEndedEditingRow = editing.row
   tableView.xEndedEditingColumn = editing.column
   tableView.xEndedEditingCommitted = true
@@ -2924,15 +3656,44 @@ proc removeColumn*(tableView: TableView, column: TableColumn) =
 proc removeColumn*(tableView: TableView, identifier: string) =
   tableView.removeColumnAtIndex(tableView.columnIndex(identifier))
 
+proc bindTableModel*(tableView: TableView, model: TableModel) =
+  if tableView.isNil:
+    return
+  if model.isNil:
+    tableView.dataSource = DynamicAgent(nil)
+    tableView.delegate = DynamicAgent(nil)
+    return
+  model.installTableModelProtocols()
+  for modelColumn in model.columns():
+    let identifier = modelColumn.tableModelColumnIdentifier()
+    if identifier.len == 0:
+      continue
+    var column = tableView.columnWithIdentifier(identifier)
+    if column.isNil:
+      column = newTableColumn(
+        identifier, modelColumn.tableModelColumnTitle(), width = modelColumn.width
+      )
+      tableView.addColumn(column)
+    else:
+      column.title = modelColumn.tableModelColumnTitle()
+      if modelColumn.width > 0.0'f32:
+        column.width = modelColumn.width
+    column.hidden = modelColumn.hidden
+  tableView.dataSource = DynamicAgent(model)
+  tableView.delegate = DynamicAgent(model)
+  tableView.reloadData()
+
 proc initTableViewState*(
     columns: openArray[TableColumnAutosaveRecord] = [],
     selectedRows: openArray[int] = [],
     selectedColumns: openArray[string] = [],
     expandedItems: openArray[string] = [],
+    selectedRowIdentifiers: openArray[string] = [],
 ): TableViewState =
   TableViewState(
     columns: @columns,
     selectedRows: @selectedRows,
+    selectedRowIdentifiers: @selectedRowIdentifiers,
     selectedColumns: @selectedColumns,
     expandedItems: @expandedItems,
   )
@@ -3903,6 +4664,10 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
     tableView.postAccessibilityNotification(anSelectionChanged)
 
   method selectionPersistenceString(tableView: TableView): string =
+    let selectedIdentifiers =
+      tableView.rowIdentifiersForRows(tableView.selectedIndexes())
+    if selectedIdentifiers.len > 0:
+      return TableSelectionIdentityPrefix & joinIdentifiers(selectedIdentifiers)
     var first = true
     for row in tableView.selectedIndexes():
       if not first:
@@ -3911,6 +4676,18 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
       first = false
 
   method restoreSelectionPersistenceString(tableView: TableView, value: string) =
+    if value.startsWith(TableSelectionIdentityPrefix):
+      let payload =
+        if value.len > TableSelectionIdentityPrefix.len:
+          value[TableSelectionIdentityPrefix.len .. ^1]
+        else:
+          ""
+      let identifiers = parseIdentifiers(payload)
+      if identifiers.len == 0:
+        tableView.selectedIndexes = []
+      else:
+        tableView.applySelectionForRowIdentifiers(identifiers, "", "")
+      return
     var rows: seq[int]
     var token = ""
     for ch in value:
@@ -4116,15 +4893,19 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
     if validRows.len == 0:
       return nil
     let payload = joinRowIndexes(validRows)
-    result = beginDraggingSession(
-      DynamicAgent(tableView),
-      [
+    var items =
+      @[
         initDraggingItem(TablePasteboardTypeRows, initPasteboardStringItem(payload)),
         initDraggingItem(PasteboardTypeString, initPasteboardStringItem(payload)),
-      ],
-      operations,
-      pasteboardName,
-    )
+      ]
+    let identifiers = tableView.rowIdentifiersForRows(validRows)
+    if identifiers.len > 0:
+      items.add initDraggingItem(
+        TablePasteboardTypeRowIdentifiers,
+        initPasteboardStringItem(joinIdentifiers(identifiers)),
+      )
+    result =
+      beginDraggingSession(DynamicAgent(tableView), items, operations, pasteboardName)
     tableView.xTableDraggingSession = result
 
   method beginDraggingColumns(
@@ -4353,15 +5134,31 @@ protocol DefaultTableViewStateBehavior of TableViewStateProtocol:
     for column in tableView.selectedColumns():
       if not column.isNil:
         selectedColumns.add column.identifier()
+    let selectedRowIdentifiers =
+      tableView.rowIdentifiersForRows(tableView.selectedIndexes())
     initTableViewState(
-      tableView.columnAutosaveRecords(), tableView.selectedIndexes(), selectedColumns
+      tableView.columnAutosaveRecords(),
+      tableView.selectedIndexes(),
+      selectedColumns,
+      selectedRowIdentifiers = selectedRowIdentifiers,
     )
 
   method restoreState(tableView: TableView, state: TableViewState) =
     if tableView.isNil:
       return
     tableView.restoreColumnAutosaveRecords(state.columns)
-    tableView.selectedIndexes = state.selectedRows
+    if state.selectedRowIdentifiers.len > 0:
+      var hasRestoredRow = false
+      for identifier in state.selectedRowIdentifiers:
+        if tableView.tableRowIndexForIdentifier(identifier) >= 0:
+          hasRestoredRow = true
+          break
+      if hasRestoredRow:
+        tableView.applySelectionForRowIdentifiers(state.selectedRowIdentifiers, "", "")
+      else:
+        tableView.selectedIndexes = state.selectedRows
+    else:
+      tableView.selectedIndexes = state.selectedRows
     if tableView.allowsColumnSelection():
       var columns: seq[TableColumn]
       for identifier in state.selectedColumns:
@@ -4507,6 +5304,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xTableDropTarget = initDraggingDropTarget()
   tableView.xStateScope = tvssAutomatic
   tableView.xColumnAutosaveAliases = initTable[string, string]()
+  tableView.xRowIdentifierAliases = initTable[string, string]()
   tableView.xTrackingColumnIndex = -1
   tableView.xHeaderDragInsertionIndex = -1
   tableView.xReusableCellViews = initTable[string, seq[View]]()

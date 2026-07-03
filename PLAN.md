@@ -86,6 +86,10 @@ document-controller open/save integration are covered in tests and examples.
   cells, field-editor-backed editing, state persistence, drag/drop targets,
   disclosure affordances, keyboard behavior, and accessibility semantics are
   covered by focused tests and demos.
+- Added `TableView` model backing: typed row/cell value records, explicit
+  row-identifier lookups, data-source object-value writeback, a seq-backed
+  `TableModel` adapter, ID-first selection persistence with alias/resolver
+  migration, batched row-update signals, and row-identifier drag payloads.
 - Added backend-neutral pasteboard and dragging foundations with typed item
   storage, named/unique pasteboards, lazy providers, strings/text/data/property
   lists/URLs/files/colors/fonts/images, drag sessions, promised-file staging,
@@ -270,67 +274,6 @@ document-controller open/save integration are covered in tests and examples.
   the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### TableView Model Backing
-
-Move `TableView` from an index-and-text callback surface toward a fully
-model-backed table while keeping existing data-source/delegate users working.
-The table should still own view identity, columns, selection state, visible row
-views, reuse pools, editing surfaces, drag/drop feedback, and persistence; row
-records and mutations should live in an explicit model/data-source boundary.
-
-1. Define the model-facing value contract:
-   - add typed row identity and cell value records that can represent strings,
-     numbers, booleans, attributed text, images, colors, links, and opaque
-     dynamic agents without leaking widget state into model storage
-   - keep row data as plain Nim values where possible; use `ref object` only for
-     identity-bearing model controllers, adapter objects, or external stores
-   - provide required and optional lookup paths for row identifiers, row indexes,
-     and column identifiers so missing rows are explicit instead of silently
-     becoming empty strings
-2. Expand `TableViewDataSource` beyond `numberOfRows`/`textForCell`:
-   - add object-value reads and writeback hooks alongside the existing text hook
-   - keep `textForCell` as a compatibility/default formatting path over object
-     values
-   - move commit semantics toward the data source while retaining delegate/event
-     notifications for validation, observation, and UI policy
-3. Add an optional concrete table model adapter:
-   - provide a small NimKit-owned adapter for common seq-backed tables with
-     stable row identifiers, column descriptors, mutable cell values, sorting,
-     and row insertion/removal/move helpers
-   - make the adapter useful for examples and tests without requiring every
-     application to copy its data into a NimKit-owned store
-4. Make row identity the default for state preservation:
-   - persist selected rows by stable row identifier when the data source provides
-     identities, with index fallback only for legacy/local row-count tables
-   - preserve selection, anchor, lead, editing position, and visible scroll row
-     across sorting, filtering, reloads, and model mutations
-   - add migration behavior for renamed row identifiers where callers provide an
-     alias map or resolver
-5. Add incremental model-update APIs:
-   - introduce row reload/insert/remove/move operations that update cached row
-     heights, visible cell slots, selection, accessibility notifications, and
-     scroll position without forcing a full `reloadData`
-   - add batch update begin/end hooks so multiple model mutations produce one
-     coherent display, accessibility, and selection change sequence
-   - keep `reloadData` as the coarse invalidation path for unknown or external
-     model changes
-6. Deepen model-backed sorting, filtering, editing, and drag/drop:
-   - represent sort descriptors separately from column header chrome, and let
-     the model/data source apply them before the table restores identity-based
-     state
-   - route editing validation through delegate policy, then write accepted values
-     through the data-source/model mutation hook
-   - move row drag payloads from index strings toward row identity/object writers,
-     while preserving the current index pasteboard type for compatibility
-7. Lock the behavior down with focused tests and examples:
-   - add tests for object values, writeback, seq-backed models, identity
-     persistence, sorted/filtered selection restore, incremental row updates,
-     and compatibility with existing `textForCell` data sources
-   - update table examples to show both lightweight data-source usage and the
-     model-backed adapter path
-   - document which responsibilities belong to the table, the data source, the
-     delegate, and an optional model adapter
 
 ### CascadingView Model Backing
 

@@ -700,6 +700,20 @@ protocol ArrayControllerTableDataSource of TableViewDataSource:
   ): ObjectValue =
     controller.objectValueForArrayCell(row, column)
 
+  method setObjectValueForCell(
+      controller: ArrayController,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: ObjectValue,
+  ): bool =
+    discard tableView
+    let item = controller.itemAt(row)
+    if item.identifier.len == 0:
+      return false
+    controller.setValue(item.identifier, controller.columnKey(column), value)
+    true
+
   method textForCell(
       controller: ArrayController, tableView: TableView, row: int, column: TableColumn
   ): string =
@@ -731,17 +745,6 @@ protocol ArrayControllerTableDelegate of TableViewDelegate:
       value: string,
   ): ObjectParseResult =
     controller.parseArrayCellValue(tableView, row, column, value)
-
-  method didCommitEditingObjectValue(
-      controller: ArrayController,
-      tableView: TableView,
-      row: int,
-      column: TableColumn,
-      value: ObjectValue,
-  ) =
-    let item = controller.itemAt(row)
-    if item.identifier.len > 0:
-      controller.setValue(item.identifier, controller.columnKey(column), value)
 
   method sortDescriptorsDidChange(
       controller: ArrayController,

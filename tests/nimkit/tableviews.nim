@@ -1,4 +1,4 @@
-import std/[algorithm, sequtils, unicode, unittest]
+import std/[algorithm, options, sequtils, unicode, unittest]
 
 import figdraw/fignodes
 import sigils/core
@@ -36,6 +36,9 @@ type TableEditSignalSpy = ref object of Agent
 type TableSelectionSignalSpy = ref object of Agent
   changingEvents: int
   changedEvents: int
+
+type TableUpdateSignalSpy = ref object of Agent
+  updateKinds: seq[TableRowUpdateKind]
 
 type TableColumnUserInfo = ref object of Responder
   label: string
@@ -124,6 +127,12 @@ proc hostedTableCellCount(tableView: TableView): int =
     return 0
   for rowView in content.subviews():
     result += rowView.subviews().len
+
+proc selectedTableRowIdentifiers(tableView: TableView): seq[string] =
+  for index in tableView.selectedIndexes:
+    let identifier = tableView.tableRowIdentifier(index)
+    if identifier.len > 0:
+      result.add identifier
 
 proc tableActionPoint(tableView: TableView, row: int): Point =
   let rowRect = tableView.rowItemRect(row)
@@ -236,6 +245,43 @@ func fieldText(row: SortableTableRow, identifier: string): string =
   of "rank": row.rank
   else: row.id
 
+proc tableModelRows(): seq[TableRowValue] =
+  @[
+    initTableRowValue(
+      "ada",
+      objectValue = toObjectValue("Ada"),
+      cells = [
+        initTableCellValue("name", toObjectValue("Ada")),
+        initTableCellValue("score", toObjectValue(31)),
+        initTableCellValue("active", toObjectValue(true)),
+      ],
+    ),
+    initTableRowValue(
+      "grace",
+      objectValue = toObjectValue("Grace"),
+      cells = [
+        initTableCellValue("name", toObjectValue("Grace")),
+        initTableCellValue("score", toObjectValue(45)),
+        initTableCellValue("active", toObjectValue(true)),
+      ],
+    ),
+    initTableRowValue(
+      "alan",
+      objectValue = toObjectValue("Alan"),
+      cells = [
+        initTableCellValue("name", toObjectValue("Alan")),
+        initTableCellValue("score", toObjectValue(27)),
+        initTableCellValue("active", toObjectValue(false)),
+      ],
+    ),
+  ]
+
+proc tableModelColumns(): seq[TableModelColumn] =
+  @[
+    initTableModelColumn("name", "Name", "name", 120.0),
+    initTableModelColumn("score", "Score", "score", 64.0),
+  ]
+
 proc rememberCellEditDidCommit(
     spy: TableEditSignalSpy,
     sender: DynamicAgent,
@@ -259,8 +305,18 @@ proc rememberTableSelectionDidChange(
   inc spy.changedEvents
   discard sender
 
+proc rememberTableRowsDidUpdate(
+    spy: TableUpdateSignalSpy, sender: DynamicAgent, updates: seq[TableRowUpdate]
+) {.slot.} =
+  discard sender
+  for update in updates:
+    spy.updateKinds.add update.kind
+
 proc newTableSelectionSignalSpy(): TableSelectionSignalSpy =
   TableSelectionSignalSpy()
+
+proc newTableUpdateSignalSpy(): TableUpdateSignalSpy =
+  TableUpdateSignalSpy()
 
 protocol TableDataSourceSpyMethods of TableViewDataSource:
   method numberOfRows(source: TableDataSourceSpy, tableView: TableView): int =
@@ -898,6 +954,99 @@ suite "NimKit TableView":
     check source.rows.mapIt(it.id) == @["b", "c", "a", "d"]
     check tableView.selectedIndexes == @[1, 2]
     check source.selectedRowIds(tableView) == @["c", "a"]
+
+  test "table model adapter backs typed object values and editing writeback":
+    let
+      model = newTableModel(tableModelRows(), tableModelColumns())
+      tableView = newTableView()
+
+    tableView.bindTableModel(model)
+    let
+      nameColumn = tableView.columnWithIdentifier("name")
+      scoreColumn = tableView.columnWithIdentifier("score")
+
+    check tableView.columnCount == 2
+    check tableView.rowCount == 3
+    check not nameColumn.isNil
+    check not scoreColumn.isNil
+    check tableView.requireTableRowIdentifier(0) == "ada"
+    check tableView.requireTableRowIndexForIdentifier("alan") == 2
+    check tableView.getTableRowIndexForIdentifier("missing").isNone
+    expect TableModelError:
+      discard tableView.requireTableRowIdentifier(99)
+
+    check tableView.tableCellText(1, nameColumn) == "Grace"
+    check tableView.tableCellObjectValue(0, scoreColumn).requireInt() == 31
+
+    check tableView.beginEditingCell(0, scoreColumn)
+    check tableView.commitEditingCell("32")
+    check model.valueForRow("ada", "score").requireInt() == 32
+
+    check tableView.beginEditingCell(0, scoreColumn)
+    check not tableView.commitEditingCell("not an int")
+    check tableView.editingState.active
+    check tableView.editingValidation().kind == oveParseFailed
+    check model.valueForRow("ada", "score").requireInt() == 32
+    check tableView.cancelEditingCell()
+
+    tableView.selectedIndexes = [0]
+    tableView.requestSort(scoreColumn, tsdDescending)
+    check model.sortDescriptors ==
+      @[initTableModelSortDescriptor("score", tsdDescending)]
+    check tableView.tableRowIdentifier(0) == "grace"
+    check tableView.selectedIndexes == @[1]
+    check tableView.selectedTableRowIdentifiers() == @["ada"]
+
+  test "table view persists row identities drags identifiers and batches row updates":
+    let
+      model = newTableModel(tableModelRows(), tableModelColumns())
+      tableView = newTableView()
+      signals = newTableUpdateSignalSpy()
+
+    tableView.bindTableModel(model)
+    tableView.selectionMode = tsmExtended
+    tableView.selectedIndexes = [0, 2]
+
+    let selectionState = tableView.selectionPersistenceString()
+    check selectionState == "ids:ada,alan"
+
+    var rows = model.rows()
+    rows[0].identifier = "ada-lovelace"
+    model.rows = rows
+    tableView.setRowIdentifierAlias("ada", "ada-lovelace")
+    tableView.selectedIndexes = []
+    tableView.restoreSelectionPersistenceString(selectionState)
+    check tableView.selectedTableRowIdentifiers() == @["ada-lovelace", "alan"]
+
+    let drag = tableView.beginDraggingRows(
+      tableView.selectedIndexes(), {dgoCopy}, DragPasteboardName
+    )
+    check not drag.isNil
+    let info = drag.draggingInfo()
+    check info.tableDraggingRows() == @[0, 2]
+    check info.tableDraggingRowIdentifiers() == @["ada-lovelace", "alan"]
+
+    tableView.connect(tableRowsDidUpdate, signals, rememberTableRowsDidUpdate)
+    model.addRow(
+      initTableRowValue(
+        "edith",
+        objectValue = toObjectValue("Edith"),
+        cells = [
+          initTableCellValue("name", toObjectValue("Edith")),
+          initTableCellValue("score", toObjectValue(38)),
+        ],
+      )
+    )
+
+    tableView.beginTableUpdates()
+    tableView.insertRowsAtIndexes([3], ["edith"])
+    tableView.reloadRowsAtIndexes([1], ["grace"])
+    tableView.moveRow(3, 1)
+    tableView.removeRowsAtIndexes([0], ["ada-lovelace"])
+    check signals.updateKinds == newSeq[TableRowUpdateKind]()
+
+    tableView.endTableUpdates()
+    check signals.updateKinds == @[trukInsert, trukReload, trukMove, trukRemove]
 
   test "table columns move cleanly between table views":
     let
