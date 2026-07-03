@@ -53,10 +53,10 @@ accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
 Model-backed widget work should now reuse the contracts proven by `TableView`,
-`CollectionView`, `CascadingView`, `ComboBox`, and menus: stable identifiers,
-`ObjectValue` conversion, controller adapters, incremental update records, and
-model-mutation notifications. The next controls should build on that vocabulary
-instead of adding parallel storage models.
+`CollectionView`, `CascadingView`, `ComboBox`, menus, and `DocumentTabs`:
+stable identifiers, `ObjectValue` conversion, controller adapters, incremental
+update records, and model-mutation notifications. The next controls should
+build on that vocabulary instead of adding parallel storage models.
 
 ## Recently Completed
 
@@ -249,6 +249,13 @@ instead of adding parallel storage models.
   reload hooks, validation writeback into model records before popup opening,
   identifier-based menu activation signals, and `ArrayController` menu/popup
   binding with selection writeback.
+- Implemented `DocumentTabs` model backing around plain `DocumentTabModel`
+  records, stable document/tab identifiers, object values, hidden/closeable/
+  modified/enabled/style/accent/tooltip metadata, represented document/object
+  hooks, data-source reloads, identifier-backed selection and order state,
+  model-aware add/remove/move operations, `ArrayController` tab binding with
+  selection writeback, and `DocumentController` tab binding that routes close
+  requests through document ownership.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -297,26 +304,6 @@ instead of adding parallel storage models.
   `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
 
 ## Near-Term Work
-
-### DocumentTabs Model Backing
-
-Tie `DocumentTabs` to document/window identity instead of treating tab items as
-the durable source of truth. The tab bar should render and manipulate a document
-tab model owned by the document/window controller layer.
-
-1. Add document-backed tab item identity:
-   - map tab identifiers to document/window/controller objects through a narrow
-     represented-object hook
-   - derive title, modified state, closeability, enabled state, style, accent
-     color, and tooltip from the model when available
-2. Preserve ordering and selection by document identity:
-   - persist selected tab and tab order by stable document/window identifiers
-   - keep drag reordering as a model mutation with delegate veto/notification
-     hooks
-3. Align close and activation flows with document ownership:
-   - route close requests through document-controller validation
-   - update tab state from document edited/title changes without rebuilding the
-     whole tab bar
 
 ### Matrix Item Model Backing
 

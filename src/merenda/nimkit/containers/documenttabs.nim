@@ -5,6 +5,7 @@ import sigils/core
 import ../accessibility/accessibilityprotocols
 import ../drawing
 import ../foundation/events
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/types
 import ../foundation/undomanagers
@@ -34,9 +35,32 @@ type
     xModified: bool
     xStyle: DocumentTabStyle
     xAccentColor: Color
+    xObjectValue: ObjectValue
+    xRepresentedObject: DynamicAgent
+    xToolTip: string
     xStyleId: string
     xStyleClasses: seq[string]
     xUserInfo: DynamicAgent
+
+  DocumentTabModel* = object
+    identifier*: string
+    title*: string
+    objectValue*: ObjectValue
+    enabled*: bool
+    hidden*: bool
+    closeable*: bool
+    modified*: bool
+    style*: DocumentTabStyle
+    accentColor*: Color
+    styleId*: string
+    styleClasses*: seq[string]
+    tooltip*: string
+    representedObject*: DynamicAgent
+    userInfo*: DynamicAgent
+
+  DocumentTabsState* = object
+    selectedIdentifier*: string
+    orderedIdentifiers*: seq[string]
 
   DocumentTabHitPart = enum
     dthNone
@@ -47,6 +71,8 @@ type
 
   DocumentTabs* = ref object of View
     xItems: seq[DocumentTabItem]
+    xTabModels: seq[DocumentTabModel]
+    xUsesTabModels: bool
     xSelectedIndex: int
     xPressedIndex: int
     xPressedPart: DocumentTabHitPart
@@ -59,6 +85,7 @@ type
     xDefaultTabStyle: DocumentTabStyle
     xScrollOffset: float32
     xLineScroll: float32
+    xDataSource: DynamicAgent
     xDelegate: DynamicAgent
 
 const
@@ -99,6 +126,13 @@ protocol DocumentTabsDelegate {.selectorScope: protocol.}:
     tabs: DocumentTabs, item: DocumentTabItem, fromIndex: int, toIndex: int
   ) {.optional.}
 
+protocol DocumentTabsDataSource {.selectorScope: protocol.}:
+  method documentTabCount*(tabs: DocumentTabs): int
+
+  method documentTabModelAtIndex*(tabs: DocumentTabs, index: int): DocumentTabModel
+
+  method indexOfDocumentTabModelIdentifier*(tabs: DocumentTabs, identifier: string): int
+
 protocol DocumentTabsEvents:
   proc documentTabSelectionIsChanging*(
     tabs: DocumentTabs, sender: DynamicAgent
@@ -127,6 +161,7 @@ protocol DocumentTabsEvents:
   proc documentTabsDidScroll*(tabs: DocumentTabs, offset: float32) {.signal.}
 
 proc reloadDocumentTabs*(tabs: DocumentTabs)
+proc reloadData*(tabs: DocumentTabs)
 proc clampScrollOffset(tabs: DocumentTabs, offset: float32): float32
 proc maximumScrollOffset*(tabs: DocumentTabs): float32
 proc tabViewportRect*(tabs: DocumentTabs): Rect
@@ -136,12 +171,20 @@ proc insertDocumentTabItem*(
   tabs: DocumentTabs, item: DocumentTabItem, index: Natural
 ): DocumentTabItem {.discardable.}
 
+proc documentTabModels*(tabs: DocumentTabs): seq[DocumentTabModel]
+proc `documentTabModels=`*(tabs: DocumentTabs, models: openArray[DocumentTabModel])
 proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.}
 proc moveDocumentTabItem*(
   tabs: DocumentTabs, fromIndex, toIndex: int
 ): bool {.discardable.}
 
 proc selectDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.}
+proc selectedDocumentTabItem*(tabs: DocumentTabs): DocumentTabItem
+proc indexOfDocumentTabIdentifier*(tabs: DocumentTabs, identifier: string): int
+proc selectDocumentTabWithIdentifier*(
+  tabs: DocumentTabs, identifier: string
+): bool {.discardable.}
+
 proc drawDocumentTab(
   tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int
 )
@@ -159,6 +202,7 @@ proc initDocumentTabItemFields*(
   item.xCloseable = closeable
   item.xStyle = style
   item.xAccentColor = initColor(0.20, 0.45, 0.92, 1.0)
+  item.xObjectValue = emptyObjectValue()
 
 proc initDocumentTabItem*(
     title = "Untitled", identifier = "", closeable = true, style = dtsAutomatic
@@ -170,6 +214,71 @@ proc newDocumentTabItem*(
     title = "Untitled", identifier = "", closeable = true, style = dtsAutomatic
 ): DocumentTabItem =
   initDocumentTabItem(title, identifier, closeable, style)
+
+proc initDocumentTabModel*(
+    identifier = "",
+    title = "Untitled",
+    objectValue = emptyObjectValue(),
+    enabled = true,
+    hidden = false,
+    closeable = true,
+    modified = false,
+    style = dtsAutomatic,
+    accentColor = initColor(0.20, 0.45, 0.92, 1.0),
+    styleId = "",
+    styleClasses: openArray[string] = [],
+    tooltip = "",
+    representedObject: DynamicAgent = nil,
+    userInfo: DynamicAgent = nil,
+): DocumentTabModel =
+  DocumentTabModel(
+    identifier: identifier,
+    title: title,
+    objectValue: objectValue,
+    enabled: enabled,
+    hidden: hidden,
+    closeable: closeable,
+    modified: modified,
+    style: style,
+    accentColor: accentColor,
+    styleId: styleId,
+    styleClasses: @styleClasses,
+    tooltip: tooltip,
+    representedObject: representedObject,
+    userInfo: userInfo,
+  )
+
+proc newDocumentTabItem*(model: DocumentTabModel): DocumentTabItem =
+  result =
+    newDocumentTabItem(model.title, model.identifier, model.closeable, model.style)
+  result.xEnabled = model.enabled
+  result.xModified = model.modified
+  result.xAccentColor = model.accentColor
+  result.xObjectValue = model.objectValue
+  result.xRepresentedObject = model.representedObject
+  result.xToolTip = model.tooltip
+  result.xStyleId = model.styleId
+  result.xStyleClasses = model.styleClasses
+  result.xUserInfo = model.userInfo
+
+proc documentTabModel*(item: DocumentTabItem): DocumentTabModel =
+  if item.isNil:
+    return initDocumentTabModel()
+  initDocumentTabModel(
+    identifier = item.xIdentifier,
+    title = item.xTitle,
+    objectValue = item.xObjectValue,
+    enabled = item.xEnabled,
+    closeable = item.xCloseable,
+    modified = item.xModified,
+    style = item.xStyle,
+    accentColor = item.xAccentColor,
+    styleId = item.xStyleId,
+    styleClasses = item.xStyleClasses,
+    tooltip = item.xToolTip,
+    representedObject = item.xRepresentedObject,
+    userInfo = item.xUserInfo,
+  )
 
 proc identifier*(item: DocumentTabItem): string =
   if item.isNil: "" else: item.xIdentifier
@@ -223,6 +332,33 @@ proc `accentColor=`*(item: DocumentTabItem, color: Color) =
   if not item.isNil:
     item.xAccentColor = color
 
+proc objectValue*(item: DocumentTabItem): ObjectValue =
+  if item.isNil:
+    emptyObjectValue()
+  else:
+    item.xObjectValue
+
+proc `objectValue=`*(item: DocumentTabItem, value: ObjectValue) =
+  if not item.isNil:
+    item.xObjectValue = value
+
+proc representedObject*(item: DocumentTabItem): DynamicAgent =
+  if item.isNil: nil else: item.xRepresentedObject
+
+proc `representedObject=`*(item: DocumentTabItem, representedObject: DynamicAgent) =
+  if not item.isNil:
+    item.xRepresentedObject = representedObject
+
+proc `representedObject=`*(item: DocumentTabItem, representedObject: Responder) =
+  item.representedObject = DynamicAgent(representedObject)
+
+proc toolTip*(item: DocumentTabItem): string =
+  if item.isNil: "" else: item.xToolTip
+
+proc `toolTip=`*(item: DocumentTabItem, tooltip: string) =
+  if not item.isNil:
+    item.xToolTip = tooltip
+
 proc styleId*(item: DocumentTabItem): string =
   if item.isNil: "" else: item.xStyleId
 
@@ -266,11 +402,35 @@ proc `delegate=`*(tabs: DocumentTabs, delegate: DynamicAgent) =
 proc `delegate=`*(tabs: DocumentTabs, delegate: Responder) =
   tabs.delegate = DynamicAgent(delegate)
 
+proc dataSource*(tabs: DocumentTabs): DynamicAgent =
+  if tabs.isNil: nil else: tabs.xDataSource
+
+proc `dataSource=`*(tabs: DocumentTabs, dataSource: DynamicAgent) =
+  if tabs.isNil or tabs.xDataSource == dataSource:
+    return
+  if not dataSource.isNil:
+    discard dataSource.adopt(DocumentTabsDataSource)
+  tabs.xDataSource = dataSource
+  tabs.reloadData()
+
+proc `dataSource=`*(tabs: DocumentTabs, dataSource: Responder) =
+  tabs.dataSource = DynamicAgent(dataSource)
+
 proc selectedIndex*(tabs: DocumentTabs): int =
   if tabs.isNil: -1 else: tabs.xSelectedIndex
 
 proc `selectedIndex=`*(tabs: DocumentTabs, index: int) =
   discard tabs.selectDocumentTabAtIndex(index)
+
+proc selectedDocumentTabIdentifier*(tabs: DocumentTabs): string =
+  let item = tabs.selectedDocumentTabItem()
+  if item.isNil:
+    ""
+  else:
+    item.identifier()
+
+proc `selectedDocumentTabIdentifier=`*(tabs: DocumentTabs, identifier: string) =
+  discard tabs.selectDocumentTabWithIdentifier(identifier)
 
 proc selectedDocumentTabItem*(tabs: DocumentTabs): DocumentTabItem =
   if tabs.isNil or tabs.xSelectedIndex < 0 or tabs.xSelectedIndex >= tabs.xItems.len:
@@ -621,10 +781,193 @@ proc scrollTabToVisible(tabs: DocumentTabs, index: int) =
   elif contentRect.maxX > visibleStop:
     tabs.scrollOffset = contentRect.maxX - viewport.size.width
 
+proc documentTabIdentifiers*(tabs: DocumentTabs): seq[string] =
+  if tabs.isNil:
+    return
+  for item in tabs.xItems:
+    if not item.isNil and item.identifier().len > 0:
+      result.add item.identifier()
+
+proc documentTabModels*(tabs: DocumentTabs): seq[DocumentTabModel] =
+  if tabs.isNil:
+    return
+  if tabs.xUsesTabModels:
+    return tabs.xTabModels
+  for item in tabs.xItems:
+    result.add item.documentTabModel()
+
+proc clearDocumentTabItems(tabs: DocumentTabs) =
+  if not tabs.isNil:
+    tabs.xItems.setLen(0)
+
+proc firstEnabledDocumentTabIndex(tabs: DocumentTabs): int =
+  if tabs.isNil:
+    return -1
+  for index, item in tabs.xItems:
+    if not item.isNil and item.enabled():
+      return index
+  -1
+
+proc restoreDocumentTabSelection(tabs: DocumentTabs, identifier: string) =
+  if tabs.isNil:
+    return
+  var nextIndex = -1
+  if identifier.len > 0:
+    for index, item in tabs.xItems:
+      if not item.isNil and item.identifier() == identifier and item.enabled():
+        nextIndex = index
+        break
+  if nextIndex < 0 and tabs.xSelectedIndex in 0 ..< tabs.xItems.len and
+      tabs.xItems[tabs.xSelectedIndex].enabled():
+    nextIndex = tabs.xSelectedIndex
+  if nextIndex < 0:
+    nextIndex = tabs.firstEnabledDocumentTabIndex()
+  tabs.xSelectedIndex = nextIndex
+  if nextIndex >= 0:
+    tabs.scrollTabToVisible(nextIndex)
+
+proc rebuildDocumentTabItemsFromModels(tabs: DocumentTabs, selectedIdentifier = "") =
+  if tabs.isNil:
+    return
+  let selection =
+    if selectedIdentifier.len > 0:
+      selectedIdentifier
+    else:
+      tabs.selectedDocumentTabIdentifier()
+  tabs.clearDocumentTabItems()
+  for model in tabs.xTabModels:
+    if not model.hidden:
+      tabs.xItems.add newDocumentTabItem(model)
+  tabs.restoreDocumentTabSelection(selection)
+  tabs.reloadDocumentTabs()
+
+proc `documentTabModels=`*(tabs: DocumentTabs, models: openArray[DocumentTabModel]) =
+  if tabs.isNil:
+    return
+  let selected = tabs.selectedDocumentTabIdentifier()
+  tabs.xTabModels = @models
+  tabs.xUsesTabModels = true
+  tabs.rebuildDocumentTabItemsFromModels(selected)
+
+proc reloadData*(tabs: DocumentTabs) =
+  if tabs.isNil:
+    return
+  if tabs.xDataSource.isNil:
+    if tabs.xUsesTabModels:
+      tabs.rebuildDocumentTabItemsFromModels()
+    return
+
+  let count = tabs.xDataSource.trySendLocal(documentTabCount(), tabs)
+  if count.isNone:
+    return
+  let selected = tabs.selectedDocumentTabIdentifier()
+  var models: seq[DocumentTabModel]
+  for index in 0 ..< count.get():
+    let model = tabs.xDataSource.trySendLocal(
+      documentTabModelAtIndex(), (tabs: tabs, index: index)
+    )
+    if model.isSome:
+      models.add model.get()
+  tabs.xTabModels = models
+  tabs.xUsesTabModels = true
+  tabs.rebuildDocumentTabItemsFromModels(selected)
+
 proc indexOfDocumentTabItem*(tabs: DocumentTabs, item: DocumentTabItem): int =
   if tabs.isNil or item.isNil:
     return -1
   tabs.xItems.find(item)
+
+proc indexOfDocumentTabIdentifier*(tabs: DocumentTabs, identifier: string): int =
+  if tabs.isNil or identifier.len == 0:
+    return -1
+  if not tabs.xDataSource.isNil:
+    let found = tabs.xDataSource.trySendLocal(
+      indexOfDocumentTabModelIdentifier(), (tabs: tabs, identifier: identifier)
+    )
+    if found.isSome:
+      return found.get()
+  for index, item in tabs.xItems:
+    if not item.isNil and item.identifier() == identifier:
+      return index
+  -1
+
+proc documentTabItemWithIdentifier*(
+    tabs: DocumentTabs, identifier: string
+): DocumentTabItem =
+  let index = tabs.indexOfDocumentTabIdentifier(identifier)
+  if index >= 0 and index < tabs.xItems.len:
+    tabs.xItems[index]
+  else:
+    nil
+
+proc visibleModelIndex(tabs: DocumentTabs, visibleIndex: int): int =
+  if tabs.isNil or visibleIndex < 0:
+    return -1
+  var current = 0
+  for index, model in tabs.xTabModels:
+    if not model.hidden:
+      if current == visibleIndex:
+        return index
+      inc current
+  -1
+
+proc indexOfModelIdentifier(tabs: DocumentTabs, identifier: string): int =
+  if tabs.isNil or identifier.len == 0:
+    return -1
+  for index, model in tabs.xTabModels:
+    if model.identifier == identifier:
+      return index
+  -1
+
+proc captureState*(tabs: DocumentTabs): DocumentTabsState =
+  if tabs.isNil:
+    return
+  DocumentTabsState(
+    selectedIdentifier: tabs.selectedDocumentTabIdentifier(),
+    orderedIdentifiers: tabs.documentTabIdentifiers(),
+  )
+
+proc reorderDocumentTabItems(tabs: DocumentTabs, identifiers: openArray[string]) =
+  if tabs.isNil or identifiers.len == 0:
+    return
+  var ordered: seq[DocumentTabItem]
+  for identifier in identifiers:
+    let index = tabs.indexOfDocumentTabIdentifier(identifier)
+    if index >= 0:
+      let item = tabs.xItems[index]
+      if not item.isNil and item notin ordered:
+        ordered.add item
+  for item in tabs.xItems:
+    if item notin ordered:
+      ordered.add item
+  tabs.xItems = ordered
+
+proc reorderDocumentTabModels(tabs: DocumentTabs, identifiers: openArray[string]) =
+  if tabs.isNil or identifiers.len == 0:
+    return
+  var
+    ordered: seq[DocumentTabModel]
+    used: seq[int]
+  for identifier in identifiers:
+    let index = tabs.indexOfModelIdentifier(identifier)
+    if index >= 0 and index notin used:
+      ordered.add tabs.xTabModels[index]
+      used.add index
+  for index, model in tabs.xTabModels:
+    if index notin used:
+      ordered.add model
+  tabs.xTabModels = ordered
+
+proc restoreState*(tabs: DocumentTabs, state: DocumentTabsState) =
+  if tabs.isNil:
+    return
+  if tabs.xUsesTabModels:
+    tabs.reorderDocumentTabModels(state.orderedIdentifiers)
+    tabs.rebuildDocumentTabItemsFromModels(state.selectedIdentifier)
+  else:
+    tabs.reorderDocumentTabItems(state.orderedIdentifiers)
+    tabs.restoreDocumentTabSelection(state.selectedIdentifier)
+    tabs.reloadDocumentTabs()
 
 proc selectedItemAfterRemoval(tabs: DocumentTabs, removedIndex: int): int =
   if tabs.xItems.len == 0:
@@ -713,6 +1056,11 @@ proc selectDocumentTab*(
 ): bool {.discardable.} =
   tabs.selectDocumentTabAtIndex(tabs.indexOfDocumentTabItem(item))
 
+proc selectDocumentTabWithIdentifier*(
+    tabs: DocumentTabs, identifier: string
+): bool {.discardable.} =
+  tabs.selectDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
+
 proc addDocumentTabItem*(
     tabs: DocumentTabs, item: DocumentTabItem
 ): DocumentTabItem {.discardable.} =
@@ -725,6 +1073,8 @@ proc addDocumentTabItem*(
     index,
     "Insert Tab",
   )
+  if tabs.xUsesTabModels:
+    tabs.xTabModels.add item.documentTabModel()
   tabs.xItems.add item
   if tabs.xSelectedIndex < 0 and item.enabled():
     tabs.xSelectedIndex = tabs.xItems.high
@@ -732,6 +1082,19 @@ proc addDocumentTabItem*(
   if tabs.xSelectedIndex == tabs.xItems.high:
     tabs.scrollTabToVisible(tabs.xSelectedIndex)
   item
+
+proc addDocumentTabItem*(
+    tabs: DocumentTabs, model: DocumentTabModel
+): DocumentTabItem {.discardable.} =
+  if tabs.isNil:
+    return nil
+  tabs.xUsesTabModels = true
+  tabs.xTabModels.add model
+  tabs.rebuildDocumentTabItemsFromModels()
+  if model.identifier.len > 0:
+    return tabs.documentTabItemWithIdentifier(model.identifier)
+  if not model.hidden:
+    return tabs.xItems[^1]
 
 proc insertDocumentTabItem*(
     tabs: DocumentTabs, item: DocumentTabItem, index: Natural
@@ -745,6 +1108,10 @@ proc insertDocumentTabItem*(
     boundedIndex,
     "Insert Tab",
   )
+  if tabs.xUsesTabModels:
+    let visibleIndex = tabs.visibleModelIndex(boundedIndex)
+    let modelIndex = if visibleIndex >= 0: visibleIndex else: tabs.xTabModels.len
+    tabs.xTabModels.insert(item.documentTabModel(), modelIndex)
   tabs.xItems.insert(item, boundedIndex)
   if tabs.xSelectedIndex >= boundedIndex:
     inc tabs.xSelectedIndex
@@ -752,6 +1119,21 @@ proc insertDocumentTabItem*(
     tabs.xSelectedIndex = boundedIndex
   tabs.reloadDocumentTabs()
   item
+
+proc insertDocumentTabItem*(
+    tabs: DocumentTabs, model: DocumentTabModel, index: Natural
+): DocumentTabItem {.discardable.} =
+  if tabs.isNil:
+    return nil
+  tabs.xUsesTabModels = true
+  let modelIndex = max(0, min(index.int, tabs.xTabModels.len))
+  tabs.xTabModels.insert(model, modelIndex)
+  tabs.rebuildDocumentTabItemsFromModels()
+  if model.identifier.len > 0:
+    return tabs.documentTabItemWithIdentifier(model.identifier)
+  if not model.hidden:
+    let visibleIndex = max(0, min(index.int, tabs.xItems.high))
+    return tabs.xItems[visibleIndex]
 
 proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
   if tabs.isNil or index < 0 or index >= tabs.xItems.len:
@@ -764,6 +1146,14 @@ proc removeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardab
     item,
     "Remove Tab",
   )
+  if tabs.xUsesTabModels:
+    let modelIndex =
+      if item.identifier().len > 0:
+        tabs.indexOfModelIdentifier(item.identifier())
+      else:
+        tabs.visibleModelIndex(index)
+    if modelIndex >= 0:
+      tabs.xTabModels.delete(modelIndex)
   tabs.xItems.delete(index)
   tabs.xSelectedIndex = tabs.selectedItemAfterRemoval(index)
   tabs.xPressedIndex = -1
@@ -777,6 +1167,11 @@ proc removeDocumentTab*(
     tabs: DocumentTabs, item: DocumentTabItem
 ): bool {.discardable.} =
   tabs.removeDocumentTabAtIndex(tabs.indexOfDocumentTabItem(item))
+
+proc removeDocumentTabWithIdentifier*(
+    tabs: DocumentTabs, identifier: string
+): bool {.discardable.} =
+  tabs.removeDocumentTabAtIndex(tabs.indexOfDocumentTabIdentifier(identifier))
 
 proc closeDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
   if tabs.isNil or index < 0 or index >= tabs.xItems.len:
@@ -798,6 +1193,8 @@ proc closeDocumentTab*(
 proc removeAllDocumentTabs*(tabs: DocumentTabs) =
   if tabs.isNil:
     return
+  tabs.xTabModels.setLen(0)
+  tabs.xUsesTabModels = false
   tabs.xItems.setLen(0)
   tabs.xSelectedIndex = -1
   tabs.xPressedIndex = -1
@@ -823,6 +1220,18 @@ proc moveDocumentTabItem*(tabs: DocumentTabs, fromIndex, toIndex: int): bool =
   )
   emit tabs.documentTabWillMove(item, fromIndex, boundedIndex)
   let selectedItem = tabs.selectedDocumentTabItem()
+  if tabs.xUsesTabModels:
+    let
+      fromModelIndex =
+        if item.identifier().len > 0:
+          tabs.indexOfModelIdentifier(item.identifier())
+        else:
+          tabs.visibleModelIndex(fromIndex)
+      toModelIndex = tabs.visibleModelIndex(boundedIndex)
+    if fromModelIndex >= 0 and toModelIndex >= 0:
+      let model = tabs.xTabModels[fromModelIndex]
+      tabs.xTabModels.delete(fromModelIndex)
+      tabs.xTabModels.insert(model, max(0, min(toModelIndex, tabs.xTabModels.len)))
   tabs.xItems.delete(fromIndex)
   tabs.xItems.insert(item, boundedIndex)
   tabs.xSelectedIndex = tabs.indexOfDocumentTabItem(selectedItem)

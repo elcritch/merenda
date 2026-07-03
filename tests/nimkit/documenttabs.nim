@@ -37,6 +37,9 @@ type
     lastToIndex: int
     lastOffset: float32
 
+  DocumentTabModelDataSourceSpy = ref object of Responder
+    models: seq[DocumentTabModel]
+
   DocumentTabChromeSpy = ref object of Chrome
 
 const DocumentTabChromeName = "document-tabs-test-chrome"
@@ -104,6 +107,29 @@ protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
     spy.lastItem = item
     spy.lastFromIndex = fromIndex
     spy.lastToIndex = toIndex
+
+protocol DocumentTabModelDataSourceSpyMethods of DocumentTabsDataSource:
+  method documentTabCount(spy: DocumentTabModelDataSourceSpy, tabs: DocumentTabs): int =
+    discard tabs
+    spy.models.len
+
+  method documentTabModelAtIndex(
+      spy: DocumentTabModelDataSourceSpy, tabs: DocumentTabs, index: int
+  ): DocumentTabModel =
+    discard tabs
+    spy.models[index]
+
+  method indexOfDocumentTabModelIdentifier(
+      spy: DocumentTabModelDataSourceSpy, tabs: DocumentTabs, identifier: string
+  ): int =
+    discard tabs
+    var visibleIndex = 0
+    for model in spy.models:
+      if not model.hidden:
+        if model.identifier == identifier:
+          return visibleIndex
+        inc visibleIndex
+    -1
 
 protocol DocumentTabSignalSpyEvents from DocumentTabSignalSpy:
   includes DocumentTabsEvents
@@ -177,6 +203,13 @@ proc newSignalSpy(): DocumentTabSignalSpy =
   initResponder(result)
   result = result.withProto()
 
+proc newModelDataSourceSpy(
+    models: openArray[DocumentTabModel]
+): DocumentTabModelDataSourceSpy =
+  result = DocumentTabModelDataSourceSpy(models: @models)
+  initResponder(result)
+  discard result.withProtocol(DocumentTabModelDataSourceSpyMethods)
+
 proc newDocumentTabChromeSpy(): Chrome =
   let chrome = DocumentTabChromeSpy()
   discard chrome.withProtocol(DocumentTabChromeSpyMethods)
@@ -205,6 +238,91 @@ func center(rect: nimkitTypes.Rect): nimkitTypes.Point =
   )
 
 suite "nimkit document tabs":
+  test "document tab models back metadata identity selection and ordering":
+    let
+      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      represented = newResponder()
+      accent = initColor(0.80, 0.12, 0.36, 1.0)
+
+    tabs.documentTabModels = [
+      initDocumentTabModel(
+        "doc-a",
+        "Alpha",
+        objectValue = toObjectValue("alpha"),
+        modified = true,
+        style = dtsUnderline,
+        accentColor = accent,
+        tooltip = "Alpha document",
+        representedObject = DynamicAgent(represented),
+      ),
+      initDocumentTabModel("hidden", "Hidden", hidden = true),
+      initDocumentTabModel("doc-b", "Beta", enabled = false, closeable = false),
+    ]
+
+    check tabs.len == 2
+    check tabs.documentTabModels.len == 3
+    check tabs.documentTabIdentifiers() == @["doc-a", "doc-b"]
+    check tabs[0.Natural].identifier == "doc-a"
+    check tabs[0.Natural].objectValue.requireString() == "alpha"
+    check tabs[0.Natural].modified
+    check tabs[0.Natural].style == dtsUnderline
+    check tabs[0.Natural].accentColor == accent
+    check tabs[0.Natural].toolTip == "Alpha document"
+    check tabs[0.Natural].representedObject == DynamicAgent(represented)
+    check tabs.documentTabItemWithIdentifier("hidden").isNil
+    check tabs.indexOfDocumentTabIdentifier("doc-b") == 1
+    check tabs.selectedDocumentTabIdentifier == "doc-a"
+    check not tabs.selectDocumentTabWithIdentifier("doc-b")
+
+    discard tabs.addDocumentTabItem(initDocumentTabModel("doc-c", "Gamma"))
+    check tabs.selectDocumentTabWithIdentifier("doc-c")
+    let state = tabs.captureState()
+    check state.selectedIdentifier == "doc-c"
+    check state.orderedIdentifiers == @["doc-a", "doc-b", "doc-c"]
+
+    check tabs.moveDocumentTabItem(2, 0)
+    check tabs.documentTabIdentifiers() == @["doc-c", "doc-a", "doc-b"]
+    check tabs.documentTabModels[0].identifier == "doc-c"
+
+    tabs.restoreState(state)
+    check tabs.documentTabIdentifiers() == @["doc-a", "doc-b", "doc-c"]
+    check tabs.selectedDocumentTabIdentifier == "doc-c"
+
+    check tabs.removeDocumentTabWithIdentifier("doc-a")
+    check tabs.documentTabItemWithIdentifier("doc-a").isNil
+    for model in tabs.documentTabModels:
+      check model.identifier != "doc-a"
+
+  test "document tab data sources reload and preserve selected identifiers":
+    let
+      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      source = newModelDataSourceSpy(
+        [
+          initDocumentTabModel("draft", "Draft"),
+          initDocumentTabModel("published", "Published"),
+          initDocumentTabModel("archived", "Archived", hidden = true),
+        ]
+      )
+
+    tabs.dataSource = source
+    check tabs.len == 2
+    check tabs.documentTabIdentifiers() == @["draft", "published"]
+    check tabs.indexOfDocumentTabIdentifier("published") == 1
+    check tabs.selectDocumentTabWithIdentifier("published")
+
+    source.models =
+      @[
+        initDocumentTabModel("published", "Published Updated"),
+        initDocumentTabModel("draft", "Draft"),
+        initDocumentTabModel("archived", "Archived", hidden = true),
+      ]
+    tabs.reloadData()
+
+    check tabs.len == 2
+    check tabs[0.Natural].title == "Published Updated"
+    check tabs.selectedDocumentTabIdentifier == "published"
+    check tabs.selectedIndex == 0
+
   test "document tabs expose dynamic items and selectable styles":
     let
       tabs = newDocumentTabs(frame = initRect(0, 0, 360, 34))

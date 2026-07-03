@@ -468,11 +468,8 @@ proc sortedVisibleIndexes(controller: ArrayController): seq[int] =
   if controller.isNil:
     return
   for index, item in controller.xItems:
-    if item.hidden:
-      continue
-    if not controller.xFilter.isNil and not controller.xFilter(item):
-      continue
-    result.add index
+    if not item.hidden and (controller.xFilter.isNil or controller.xFilter(item)):
+      result.add index
   if controller.xSortDescriptors.len > 0:
     result.sort(
       proc(a, b: int): int =
@@ -797,12 +794,23 @@ protocol ArrayControllerComboDataSource of ComboBoxDataSource:
 
 protocol ArrayControllerComboEvents from ArrayController:
   includes ComboBoxEvents
+  includes DocumentTabsEvents
   includes MenuEvents
 
   proc selectionDidChange(controller: ArrayController, sender: DynamicAgent) {.slot.} =
     if sender of ComboBox:
       let comboBox = ComboBox(sender)
       let identifier = comboBox.selectedOptionIdentifier()
+      if identifier.len > 0:
+        controller.xSelection.setSelectedIdentifiers([identifier])
+    else:
+      controller.xSelection.clearSelection()
+
+  proc documentTabSelectionDidChange(
+      controller: ArrayController, sender: DynamicAgent
+  ) {.slot.} =
+    if sender of DocumentTabs:
+      let identifier = DocumentTabs(sender).selectedDocumentTabIdentifier()
       if identifier.len > 0:
         controller.xSelection.setSelectedIdentifiers([identifier])
       else:
@@ -842,6 +850,95 @@ protocol ArrayControllerMenuDataSource of MenuDataSource:
       controller: ArrayController, menu: Menu, identifier: string
   ): int =
     controller.indexOfIdentifier(identifier)
+
+func documentTabStyleFromValue(value: ObjectValue): DocumentTabStyle =
+  case value.kind
+  of ovString:
+    case value.text
+    of "rounded": dtsRounded
+    of "pill": dtsPill
+    of "underline": dtsUnderline
+    of "compact": dtsCompact
+    else: dtsAutomatic
+  of ovInt:
+    if value.intValue in dtsAutomatic.ord .. dtsCompact.ord:
+      DocumentTabStyle(value.intValue)
+    else:
+      dtsAutomatic
+  else:
+    dtsAutomatic
+
+proc modelBoolField(item: ModelItem, key: string, fallback: bool): bool =
+  let value = item.getValue(key)
+  if value.isSome and value.get().kind == ovBool:
+    value.get().boolValue
+  else:
+    fallback
+
+proc modelStringField(item: ModelItem, key: string): string =
+  let value = item.getValue(key)
+  if value.isSome and value.get().kind == ovString:
+    value.get().text
+  else:
+    ""
+
+proc modelColorField(item: ModelItem, key: string, fallback: Color): Color =
+  let value = item.getValue(key)
+  if value.isSome and value.get().kind == ovColor:
+    value.get().colorValue
+  else:
+    fallback
+
+proc documentTabModelForArrayItem(item: ModelItem): DocumentTabModel =
+  let accentColor = initColor(0.20, 0.45, 0.92, 1.0)
+  initDocumentTabModel(
+    identifier = item.identifier,
+    title = item.displayTitle(ovrLabel),
+    objectValue = item.objectValue,
+    enabled = item.enabled,
+    hidden = item.hidden or item.separator,
+    closeable = item.modelBoolField("closeable", true),
+    modified = item.modelBoolField("modified", false),
+    style =
+      item.getValue("tabStyle").get(emptyObjectValue()).documentTabStyleFromValue(),
+    accentColor = item.modelColorField("accentColor", accentColor),
+    styleId = item.modelStringField("styleId"),
+    styleClasses =
+      if item.modelStringField("styleClass").len > 0:
+        @[item.modelStringField("styleClass")]
+      else:
+        @[],
+    tooltip = item.modelStringField("tooltip"),
+    representedObject = item.representedObject,
+  )
+
+proc indexOfArrayDocumentTabIdentifier(
+    controller: ArrayController, identifier: string
+): int =
+  if controller.isNil or identifier.len == 0:
+    return -1
+  var visibleIndex = 0
+  for index in 0 ..< controller.len():
+    let model = controller.itemAt(index).documentTabModelForArrayItem()
+    if not model.hidden:
+      if model.identifier == identifier:
+        return visibleIndex
+      inc visibleIndex
+  -1
+
+protocol ArrayControllerDocumentTabsDataSource of DocumentTabsDataSource:
+  method documentTabCount(controller: ArrayController, tabs: DocumentTabs): int =
+    controller.len()
+
+  method documentTabModelAtIndex(
+      controller: ArrayController, tabs: DocumentTabs, index: int
+  ): DocumentTabModel =
+    controller.itemAt(index).documentTabModelForArrayItem()
+
+  method indexOfDocumentTabModelIdentifier(
+      controller: ArrayController, tabs: DocumentTabs, identifier: string
+  ): int =
+    controller.indexOfArrayDocumentTabIdentifier(identifier)
 
 protocol ArrayControllerCollectionDataSource of CollectionViewDataSource:
   method numberOfCollectionItems(
@@ -886,6 +983,7 @@ proc installArrayControllerProtocols(controller: ArrayController) =
   discard controller.withProtocol(ArrayControllerTableDelegate)
   discard controller.withProtocol(ArrayControllerComboDataSource)
   discard controller.withProtocol(ArrayControllerMenuDataSource)
+  discard controller.withProtocol(ArrayControllerDocumentTabsDataSource)
   discard controller.withProtocol(ArrayControllerCollectionDataSource)
   discard controller.withProtocol(ArrayControllerCollectionDelegate)
 
@@ -895,14 +993,13 @@ proc bindTableView*(tableView: TableView, controller: ArrayController) =
   if not controller.isNil:
     for column in controller.xColumns:
       let identifier = column.tableColumnIdentifier()
-      if identifier.len == 0 or tableView.containsColumn(identifier):
-        continue
-      let tableColumn =
-        if column.width > 0.0'f32:
-          newTableColumn(identifier, column.tableColumnTitle(), width = column.width)
-        else:
-          newTableColumn(identifier, column.tableColumnTitle())
-      tableView.addColumn(tableColumn)
+      if identifier.len > 0 and not tableView.containsColumn(identifier):
+        let tableColumn =
+          if column.width > 0.0'f32:
+            newTableColumn(identifier, column.tableColumnTitle(), width = column.width)
+          else:
+            newTableColumn(identifier, column.tableColumnTitle())
+        tableView.addColumn(tableColumn)
   tableView.dataSource = controller
   tableView.delegate = controller
   tableviews.reloadData(tableView)
@@ -923,6 +1020,15 @@ proc bindMenu*(menu: Menu, controller: ArrayController) =
   if not controller.isNil:
     controller.observeProtocol(menu, MenuEvents)
   menus.reloadData(menu)
+
+proc bindDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
+  if tabs.isNil:
+    return
+  tabs.dataSource = controller
+  if not controller.isNil:
+    tabs.selectedDocumentTabIdentifier = controller.xSelection.selectedIdentifier()
+    controller.observeProtocol(tabs, DocumentTabsEvents)
+  documenttabs.reloadData(tabs)
 
 proc bindPopupMenuButton*(button: PopupMenuButton, controller: ArrayController) =
   if button.isNil:
@@ -1200,19 +1306,14 @@ proc syncMenu*(menu: Menu, controller: ArrayController) =
 proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   if tabs.isNil:
     return
+  tabs.dataSource = DynamicAgent(nil)
   tabs.removeAllDocumentTabs()
   if controller.isNil:
     return
+  var models: seq[DocumentTabModel]
   for index in 0 ..< controller.len():
-    let item = controller.itemAt(index)
-    if item.separator:
-      continue
-    let tab = newDocumentTabItem(
-      item.displayTitle(ovrLabel), identifier = item.identifier, closeable = true
-    )
-    tab.enabled = item.enabled
-    tab.userInfo = item.representedObject
-    discard tabs.addDocumentTabItem(tab)
+    models.add controller.itemAt(index).documentTabModelForArrayItem()
+  tabs.documentTabModels = models
 
 proc syncMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
   if matrix.isNil:

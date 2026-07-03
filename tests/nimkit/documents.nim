@@ -96,6 +96,7 @@ suite "nimkit documents":
 
     document.setNextResponder(app)
     check document.fileUrl == "file:///tmp/Spec.nim"
+    check document.documentIdentifier == "file:file:///tmp/Spec.nim"
     check document.fileName == "Spec.nim"
     check document.fileType == "nim"
     check document.displayName == "Spec.nim"
@@ -114,12 +115,47 @@ suite "nimkit documents":
     check controller.documentDisplayName == "Spec.nim"
 
     document.fileUrl = "file:///tmp/Renamed.nim"
+    check document.documentIdentifier == "file:file:///tmp/Renamed.nim"
     check document.fileName == "Renamed.nim"
     check document.displayName == "Renamed.nim"
     check controller.documentDisplayName == "Renamed.nim"
 
     check document.removeWindowController(controller)
     check controller.nextResponder() == Responder(app)
+
+  test "document controller backs document tabs by document identity":
+    let
+      controller = newDocumentController()
+      first = newDocument("file:///tmp/One.txt")
+      second = newDocument()
+      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+
+    second.displayName = "Scratch"
+    second.documentEdited = true
+    controller.addDocument(first)
+    controller.addDocument(second)
+    bindDocumentTabs(tabs, controller)
+
+    check first.documentIdentifier == "file:file:///tmp/One.txt"
+    check second.documentIdentifier.len > 0
+    check second.documentIdentifier != first.documentIdentifier
+    check tabs.len == 2
+    check tabs[0.Natural].identifier == first.documentIdentifier
+    check tabs[0.Natural].representedObject == DynamicAgent(first)
+    check tabs[1.Natural].identifier == second.documentIdentifier
+    check tabs[1.Natural].title == "Scratch"
+    check tabs[1.Natural].modified
+    check tabs.selectedDocumentTabIdentifier == second.documentIdentifier
+
+    check not tabs.closeDocumentTabAtIndex(1)
+    check controller.documentCount == 2
+    check tabs.len == 2
+
+    second.documentEdited = false
+    check not tabs.closeDocumentTabAtIndex(1)
+    check controller.documentCount == 1
+    check tabs.len == 1
+    check tabs[0.Natural].identifier == first.documentIdentifier
 
   test "document creates and shows window controllers through the responder chain":
     let

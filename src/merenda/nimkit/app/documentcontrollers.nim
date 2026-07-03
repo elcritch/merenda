@@ -2,7 +2,9 @@ import std/options
 
 import sigils/core
 
+import ../containers/documenttabs
 import ../foundation/notifications
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ../responder/responders
 import ./application
@@ -209,6 +211,73 @@ protocol DefaultDocumentControllerReview of DocumentControllerReview:
   ): DocumentCloseReviewAction =
     dcraCancel
 
+proc documentIndexOfIdentifier(
+    controller: DocumentController, identifier: string
+): int =
+  if controller.isNil or identifier.len == 0:
+    return -1
+  for index, document in controller.xDocuments:
+    if not document.isNil and document.documentIdentifier() == identifier:
+      return index
+  -1
+
+proc documentTabModelForDocument(document: Document): DocumentTabModel =
+  if document.isNil:
+    return initDocumentTabModel()
+  initDocumentTabModel(
+    identifier = document.documentIdentifier(),
+    title = document.displayName(),
+    objectValue = toObjectValue(DynamicAgent(document)),
+    modified = document.isDocumentEdited(),
+    closeable = true,
+    tooltip = document.fileUrl(),
+    representedObject = DynamicAgent(document),
+  )
+
+protocol DocumentControllerDocumentTabsDataSource of DocumentTabsDataSource:
+  method documentTabCount(controller: DocumentController, tabs: DocumentTabs): int =
+    discard tabs
+    if controller.isNil: 0 else: controller.xDocuments.len
+
+  method documentTabModelAtIndex(
+      controller: DocumentController, tabs: DocumentTabs, index: int
+  ): DocumentTabModel =
+    discard tabs
+    if not controller.isNil and index in 0 ..< controller.xDocuments.len:
+      controller.xDocuments[index].documentTabModelForDocument()
+    else:
+      initDocumentTabModel()
+
+  method indexOfDocumentTabModelIdentifier(
+      controller: DocumentController, tabs: DocumentTabs, identifier: string
+  ): int =
+    controller.documentIndexOfIdentifier(identifier)
+
+protocol DocumentControllerDocumentTabsDelegate of DocumentTabsDelegate:
+  method didSelectDocumentTab(
+      controller: DocumentController, tabs: DocumentTabs, item: DocumentTabItem
+  ) =
+    discard tabs
+    let represented = item.representedObject()
+    if represented of Document:
+      discard Document(represented).showWindows(controller.effectiveApplication(nil))
+
+  method shouldCloseDocumentTab(
+      controller: DocumentController,
+      tabs: DocumentTabs,
+      item: DocumentTabItem,
+      index: int,
+  ): bool =
+    discard index
+    let represented = item.representedObject()
+    if represented of Document:
+      let document = Document(represented)
+      if not controller.isNil and document in controller.xDocuments:
+        if controller.closeDocumentImpl(document, reviewUnsaved = true):
+          tabs.reloadData()
+        return false
+    true
+
 protocol DocumentControllerMenuCommands of MenuCommandProtocol:
   method newDocument(controller: DocumentController, args: ActionArgs) =
     discard controller.createDocumentImpl("", nil)
@@ -293,6 +362,8 @@ proc initDocumentController*(controller: DocumentController, app: Application = 
     controller.setNextResponder(app)
   discard controller.withProtocol(DefaultDocumentControllerCreation)
   discard controller.withProtocol(DefaultDocumentControllerReview)
+  discard controller.withProtocol(DocumentControllerDocumentTabsDataSource)
+  discard controller.withProtocol(DocumentControllerDocumentTabsDelegate)
   discard controller.withProtocol(DocumentControllerMenuCommands)
   discard controller.withProtocol(DocumentControllerMenuValidation)
 
@@ -326,6 +397,16 @@ proc documentCount*(controller: DocumentController): int =
 
 proc contains*(controller: DocumentController, document: Document): bool =
   not controller.isNil and document in controller.xDocuments
+
+proc bindDocumentTabs*(tabs: DocumentTabs, controller: DocumentController) =
+  if tabs.isNil:
+    return
+  tabs.dataSource = controller
+  tabs.delegate = controller
+  let current = controller.currentDocument()
+  if not current.isNil:
+    tabs.selectedDocumentTabIdentifier = current.documentIdentifier()
+  documenttabs.reloadData(tabs)
 
 proc addDocument*(controller: DocumentController, document: Document) =
   controller.includeDocument(document)

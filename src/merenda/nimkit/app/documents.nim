@@ -13,6 +13,7 @@ import ./windowcontrollers
 import ./windows
 
 type Document* = ref object of Responder
+  xDocumentIdentifier: string
   xFileUrl: string
   xFileName: string
   xHasFileName: bool
@@ -74,6 +75,12 @@ proc revert*(document: Document): bool {.discardable.}
 proc close*(document: Document): bool {.discardable.}
 proc syncWindowControllerTitles(document: Document)
 proc setDocumentEditedFromUndoManager(document: Document, edited: bool)
+
+var nextDocumentIdentifierValue = 0
+
+proc nextDocumentIdentifier(): string =
+  inc nextDocumentIdentifierValue
+  "document:" & $nextDocumentIdentifierValue
 
 proc filePathFromUrl(fileUrl: string): string =
   result = fileUrl
@@ -194,6 +201,7 @@ proc initDocument*(document: Document, fileUrl = "", fileType = "", fileName = "
   if document.isNil:
     return
   initResponder(document)
+  document.xDocumentIdentifier = nextDocumentIdentifier()
   document.xFileUrl = fileUrl
   document.xFileType =
     if fileType.len > 0:
@@ -224,6 +232,14 @@ proc `delegate=`*(document: Document, delegate: Responder) =
 
 proc fileUrl*(document: Document): string =
   if document.isNil: "" else: document.xFileUrl
+
+proc documentIdentifier*(document: Document): string =
+  if document.isNil:
+    return ""
+  if document.xFileUrl.len > 0:
+    "file:" & document.xFileUrl
+  else:
+    document.xDocumentIdentifier
 
 proc setFileUrl*(document: Document, fileUrl: string) =
   if document.isNil or document.xFileUrl == fileUrl:

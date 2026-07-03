@@ -235,7 +235,16 @@ suite "nimkit model controllers":
         [
           initModelItem("one", objectValue = toObjectValue("One")),
           initModelItem(
-            "two", objectValue = toObjectValue("Two"), title = "Second", enabled = false
+            "two",
+            objectValue = toObjectValue("Two"),
+            title = "Second",
+            fields = [
+              initModelField("modified", toObjectValue(true)),
+              initModelField("closeable", toObjectValue(false)),
+              initModelField("tooltip", toObjectValue("Second tab")),
+              initModelField("tabStyle", toObjectValue("compact")),
+            ],
+            enabled = false,
           ),
           initModelItem("separator", separator = true),
         ]
@@ -247,6 +256,7 @@ suite "nimkit model controllers":
       root = newView(frame = initRect(0, 0, 240, 120))
       popup = newPopupMenuButton("Bound", boundMenu, initRect(8, 8, 90, 24))
       tabs = newDocumentTabs()
+      boundTabs = newDocumentTabs()
       matrix = newButtonMatrix([], columns = 2)
 
     bindComboBox(comboBox, controller)
@@ -290,9 +300,22 @@ suite "nimkit model controllers":
 
     syncDocumentTabs(tabs, controller)
     check tabs.len == 3
+    check tabs.documentTabModels.len == 4
     check tabs[0.Natural].identifier == "one"
     check tabs[1.Natural].title == "Second"
+    check tabs[2.Natural].identifier == "three"
+    check tabs[1.Natural].modified
+    check not tabs[1.Natural].closeable
+    check tabs[1.Natural].toolTip == "Second tab"
+    check tabs[1.Natural].style == dtsCompact
     check not tabs[1.Natural].enabled
+    check tabs.documentTabModels[2].hidden
+
+    bindDocumentTabs(boundTabs, controller)
+    check boundTabs.len == 3
+    check boundTabs[2.Natural].identifier == "three"
+    check boundTabs.selectDocumentTabWithIdentifier("three")
+    check controller.selectionController().selectedIdentifier == "three"
 
     syncMatrix(matrix, controller, columns = 2)
     check matrix.len == 4
