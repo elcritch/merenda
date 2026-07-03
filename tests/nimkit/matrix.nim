@@ -8,11 +8,44 @@ type MatrixSelectionSpy = ref object of Agent
   changeCount: int
   lastSender: DynamicAgent
 
+type MatrixModelDataSourceSpy = ref object of Responder
+  models: seq[MatrixItemModel]
+
 proc rememberMatrixSelectionDidChange(
     spy: MatrixSelectionSpy, sender: DynamicAgent
 ) {.slot.} =
   inc spy.changeCount
   spy.lastSender = sender
+
+protocol MatrixModelDataSourceSpyMethods of MatrixDataSource:
+  method matrixItemCount(spy: MatrixModelDataSourceSpy, matrix: Matrix): int =
+    discard matrix
+    spy.models.len
+
+  method matrixItemModelAtIndex(
+      spy: MatrixModelDataSourceSpy, matrix: Matrix, index: int
+  ): MatrixItemModel =
+    discard matrix
+    spy.models[index]
+
+  method indexOfMatrixItemModelIdentifier(
+      spy: MatrixModelDataSourceSpy, matrix: Matrix, identifier: string
+  ): int =
+    discard matrix
+    var visibleIndex = 0
+    for model in spy.models:
+      if not model.hidden:
+        if model.identifier == identifier:
+          return visibleIndex
+        inc visibleIndex
+    -1
+
+proc newMatrixModelDataSourceSpy(
+    models: openArray[MatrixItemModel]
+): MatrixModelDataSourceSpy =
+  result = MatrixModelDataSourceSpy(models: @models)
+  initResponder(result)
+  discard result.withProtocol(MatrixModelDataSourceSpyMethods)
 
 proc center(rect: Rect): Point =
   initPoint(
@@ -24,6 +57,124 @@ proc clickCell(window: Window, matrix: Matrix, row, column: int): bool =
   window.mouseDownAt(point) and window.mouseUpAt(point)
 
 suite "nimkit matrix":
+  test "matrix item models back metadata identity selection and ordering":
+    let matrix = newCheckMatrix([], columns = 2)
+
+    matrix.matrixItemModels = [
+      initMatrixItemModel(
+        "one",
+        "One",
+        objectValue = toObjectValue(1),
+        state = bsOn,
+        tag = 7,
+        tooltip = "First choice",
+      ),
+      initMatrixItemModel("hidden", "Hidden", hidden = true),
+      initMatrixItemModel("two", "Two", enabled = false),
+      initMatrixItemModel("three", "Three", state = bsOn),
+    ]
+
+    check matrix.len == 4
+    check matrix.rows == 2
+    check matrix.columns == 2
+    check matrix.matrixItemModels.len == 4
+    check matrix.matrixItemIdentifiers() == @["one", "two", "three"]
+    check matrix.cellAtIndex(0).title == "One"
+    check matrix.cellAtIndex(0).state == bsOn
+    check matrix.cellAtIndex(1).title == "Two"
+    check not Cell(matrix.cellAtIndex(1)).isEnabled()
+    check matrix.cellAtIndex(2).title == "Three"
+    check matrix.cellAtIndex(3).title == ""
+    check not Cell(matrix.cellAtIndex(3)).isEnabled()
+
+    let first = matrix.matrixItemAtIndex(0)
+    check first.identifier == "one"
+    check first.objectValue.requireInt() == 1
+    check first.tag == 7
+    check first.tooltip == "First choice"
+    check matrix.indexOfMatrixItemIdentifier("hidden") == -1
+    check matrix.indexOfMatrixItemIdentifier("three") == 2
+    check matrix.selectedItemIdentifiers() == @["one", "three"]
+
+    matrix.selectedItemIdentifiers = ["three"]
+    check matrix.selectedIndexes() == @[2]
+    check matrix.matrixItemModels[0].state == bsOff
+    check matrix.matrixItemModels[3].state == bsOn
+
+    discard matrix.insertMatrixItem(initMatrixItemModel("zero", "Zero"), 0)
+    check matrix.matrixItemIdentifiers() == @["zero", "one", "two", "three"]
+    check matrix.selectedItemIdentifiers() == @["three"]
+    check matrix.indexOfMatrixItemIdentifier("three") == 3
+
+    check matrix.moveMatrixItemWithIdentifier("three", 0)
+    check matrix.matrixItemIdentifiers() == @["three", "zero", "one", "two"]
+    check matrix.selectedItemIdentifier() == "three"
+    check matrix.selectedIndex == 0
+
+    check matrix.removeMatrixItemWithIdentifier("three")
+    check matrix.selectedItemIdentifiers() == newSeq[string]()
+    for model in matrix.matrixItemModels:
+      check model.identifier != "three"
+
+  test "matrix item data sources reload and preserve selected identifiers":
+    let
+      matrix = newRadioMatrix([], columns = 2)
+      source = newMatrixModelDataSourceSpy(
+        [
+          initMatrixItemModel("draft", "Draft"),
+          initMatrixItemModel("published", "Published"),
+          initMatrixItemModel("archived", "Archived", hidden = true),
+        ]
+      )
+
+    matrix.dataSource = source
+    check matrix.len == 2
+    check matrix.matrixItemIdentifiers() == @["draft", "published"]
+    check matrix.indexOfMatrixItemIdentifier("published") == 1
+    check matrix.selectMatrixItemWithIdentifier("published")
+
+    source.models =
+      @[
+        initMatrixItemModel("published", "Published Updated"),
+        initMatrixItemModel("draft", "Draft"),
+        initMatrixItemModel("archived", "Archived", hidden = true),
+      ]
+    matrix.reloadData()
+
+    check matrix.len == 2
+    check matrix.cellAtIndex(0).title == "Published Updated"
+    check matrix.selectedItemIdentifier() == "published"
+    check matrix.selectedIndex == 0
+
+  test "matrix item model actions dispatch from generated cells":
+    let
+      window = newWindow("Matrix model actions", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      matrix = newButtonMatrix([], columns = 2, frame = initRect(10, 10, 180, 30))
+      resetAction = actionSelector("matrixModelResetAction")
+
+    var resetCount = 0
+    proc onReset(sender: DynamicAgent) =
+      check sender == DynamicAgent(matrix)
+      inc resetCount
+
+    matrix.matrixItemModels = [
+      initMatrixItemModel("apply", "Apply"),
+      initMatrixItemModel(
+        "reset",
+        "Reset",
+        action = resetAction,
+        target = newActionTarget(resetAction, onReset),
+      ),
+    ]
+    root.addSubview(matrix)
+    window.setContentView(root)
+
+    check window.clickCell(matrix, 0, 1)
+    check matrix.leadIndex == 1
+    check matrix.selectedItemIdentifier() == ""
+    check resetCount == 1
+
   test "radio matrix selects one cell and dispatches from the matrix":
     let
       window = newWindow("Matrix radio", frame = initRect(0, 0, 240, 180))

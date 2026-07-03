@@ -53,7 +53,8 @@ accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
 Model-backed widget work should now reuse the contracts proven by `TableView`,
-`CollectionView`, `CascadingView`, `ComboBox`, menus, and `DocumentTabs`:
+`CollectionView`, `CascadingView`, `ComboBox`, menus, `DocumentTabs`, and
+`Matrix`:
 stable identifiers, `ObjectValue` conversion, controller adapters, incremental
 update records, and model-mutation notifications. The next controls should
 build on that vocabulary instead of adding parallel storage models.
@@ -256,6 +257,12 @@ build on that vocabulary instead of adding parallel storage models.
   model-aware add/remove/move operations, `ArrayController` tab binding with
   selection writeback, and `DocumentController` tab binding that routes close
   requests through document ownership.
+- Implemented `Matrix` item model backing around plain `MatrixItemModel`
+  records, stable item identifiers, object values, enabled/hidden/state/tag/
+  tooltip/image/action metadata, data-source reloads, fixed column projection,
+  identifier-backed selection, model-aware insert/remove/reorder operations,
+  generated `ButtonCell` action dispatch, and `ArrayController` matrix binding
+  with selection writeback.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -304,25 +311,6 @@ build on that vocabulary instead of adding parallel storage models.
   `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
 
 ## Near-Term Work
-
-### Matrix Item Model Backing
-
-Keep `Matrix` useful as an `NSMatrix`-style cell grid, but add an optional item
-model for dynamic grids of choices. This should be lower-risk and smaller than
-the collection/tree model work.
-
-1. Add optional cell item descriptors:
-   - identifier, title, state, enabled, tag/value, tooltip, image, and action
-     metadata
-   - keep direct `ButtonCell` ownership for legacy/manual matrix construction
-2. Preserve selection by item identity:
-   - expose selected item identifiers alongside selected indexes
-   - keep radio/single/multiple selection modes consistent when items are
-     inserted, removed, or reordered
-3. Add adapter and tests for dynamic choices:
-   - support seq-backed item grids and fixed row/column projection
-   - verify keyboard movement, action dispatch, and accessibility still work when
-     cells are generated from model items
 
 ### OutlineView Model Backing
 

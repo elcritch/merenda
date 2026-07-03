@@ -12,6 +12,7 @@ import ../controls/comboboxes
 import ../controls/controls
 import ../controls/matrices
 import ../controls/menus
+import ../drawing/images
 import ../foundation/notifications
 import ../foundation/objectvalues
 import ../foundation/types
@@ -795,6 +796,7 @@ protocol ArrayControllerComboDataSource of ComboBoxDataSource:
 protocol ArrayControllerComboEvents from ArrayController:
   includes ComboBoxEvents
   includes DocumentTabsEvents
+  includes MatrixEvents
   includes MenuEvents
 
   proc selectionDidChange(controller: ArrayController, sender: DynamicAgent) {.slot.} =
@@ -803,6 +805,12 @@ protocol ArrayControllerComboEvents from ArrayController:
       let identifier = comboBox.selectedOptionIdentifier()
       if identifier.len > 0:
         controller.xSelection.setSelectedIdentifiers([identifier])
+    elif sender of Matrix:
+      let identifiers = Matrix(sender).selectedItemIdentifiers()
+      if identifiers.len > 0:
+        controller.xSelection.setSelectedIdentifiers(identifiers)
+      else:
+        controller.xSelection.clearSelection()
     else:
       controller.xSelection.clearSelection()
 
@@ -882,12 +890,50 @@ proc modelStringField(item: ModelItem, key: string): string =
   else:
     ""
 
+proc modelIntField(item: ModelItem, key: string, fallback: int): int =
+  let value = item.getValue(key)
+  if value.isSome and value.get().kind == ovInt:
+    value.get().intValue
+  else:
+    fallback
+
 proc modelColorField(item: ModelItem, key: string, fallback: Color): Color =
   let value = item.getValue(key)
   if value.isSome and value.get().kind == ovColor:
     value.get().colorValue
   else:
     fallback
+
+proc modelImageField(item: ModelItem, key: string): ImageResource =
+  let value = item.getValue(key)
+  if value.isSome and value.get().kind == ovImage:
+    value.get().imageValue.resource
+  else:
+    nil
+
+proc matrixItemModelForArrayItem(
+    controller: ArrayController, item: ModelItem, selectionMode: MatrixSelectionMode
+): MatrixItemModel =
+  initMatrixItemModel(
+    identifier = item.identifier,
+    title =
+      if item.separator:
+        ""
+      else:
+        item.displayTitle(ovrLabel),
+    objectValue = item.objectValue,
+    state =
+      if selectionMode != msmNone and controller.xSelection.isSelected(item.identifier):
+        bsOn
+      else:
+        bsOff,
+    enabled = item.enabled and not item.separator,
+    hidden = item.hidden,
+    tag = item.modelIntField("tag", 0),
+    tooltip = item.modelStringField("tooltip"),
+    image = item.modelImageField("image"),
+    representedObject = item.representedObject,
+  )
 
 proc documentTabModelForArrayItem(item: ModelItem): DocumentTabModel =
   let accentColor = initColor(0.20, 0.45, 0.92, 1.0)
@@ -940,6 +986,24 @@ protocol ArrayControllerDocumentTabsDataSource of DocumentTabsDataSource:
   ): int =
     controller.indexOfArrayDocumentTabIdentifier(identifier)
 
+protocol ArrayControllerMatrixDataSource of MatrixDataSource:
+  method matrixItemCount(controller: ArrayController, matrix: Matrix): int =
+    discard matrix
+    controller.len()
+
+  method matrixItemModelAtIndex(
+      controller: ArrayController, matrix: Matrix, index: int
+  ): MatrixItemModel =
+    controller.matrixItemModelForArrayItem(
+      controller.itemAt(index), matrix.selectionMode()
+    )
+
+  method indexOfMatrixItemModelIdentifier(
+      controller: ArrayController, matrix: Matrix, identifier: string
+  ): int =
+    discard matrix
+    controller.indexOfIdentifier(identifier)
+
 protocol ArrayControllerCollectionDataSource of CollectionViewDataSource:
   method numberOfCollectionItems(
       controller: ArrayController, collectionView: CollectionView
@@ -984,6 +1048,7 @@ proc installArrayControllerProtocols(controller: ArrayController) =
   discard controller.withProtocol(ArrayControllerComboDataSource)
   discard controller.withProtocol(ArrayControllerMenuDataSource)
   discard controller.withProtocol(ArrayControllerDocumentTabsDataSource)
+  discard controller.withProtocol(ArrayControllerMatrixDataSource)
   discard controller.withProtocol(ArrayControllerCollectionDataSource)
   discard controller.withProtocol(ArrayControllerCollectionDelegate)
 
@@ -1029,6 +1094,22 @@ proc bindDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
     tabs.selectedDocumentTabIdentifier = controller.xSelection.selectedIdentifier()
     controller.observeProtocol(tabs, DocumentTabsEvents)
   documenttabs.reloadData(tabs)
+
+proc bindMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
+  if matrix.isNil:
+    return
+  if not controller.isNil:
+    matrix.selectionMode =
+      case controller.xSelection.mode()
+      of mselNone: msmNone
+      of mselSingle: msmRadio
+      of mselMultiple: msmMultiple
+  matrix.renewRowsColumns(0, max(columns, 1))
+  matrix.dataSource = controller
+  if not controller.isNil:
+    matrix.selectedItemIdentifiers = controller.xSelection.selectedIdentifiers()
+    controller.observeProtocol(matrix, MatrixEvents)
+  matrices.reloadData(matrix)
 
 proc bindPopupMenuButton*(button: PopupMenuButton, controller: ArrayController) =
   if button.isNil:
@@ -1318,24 +1399,15 @@ proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
 proc syncMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
   if matrix.isNil:
     return
-  let count =
-    if controller.isNil:
-      0
-    else:
-      controller.len()
   let columnCount = max(columns, 1)
-  let rowCount =
-    if count == 0:
-      0
-    else:
-      (count + columnCount - 1) div columnCount
-  matrix.renewRowsColumns(rowCount, columnCount)
-  for index in 0 ..< matrix.len():
-    let cell = matrix.cellAtIndex(index)
-    if index < count:
-      let item = controller.itemAt(index)
-      cell.setTitle(item.displayTitle(ovrLabel))
-      cell.setEnabled(item.enabled and not item.separator)
-    else:
-      cell.setTitle("")
-      cell.setEnabled(false)
+  matrix.dataSource = DynamicAgent(nil)
+  matrix.renewRowsColumns(0, columnCount)
+  if controller.isNil:
+    matrix.matrixItemModels = []
+    return
+  var models: seq[MatrixItemModel]
+  for index in 0 ..< controller.len():
+    models.add controller.matrixItemModelForArrayItem(
+      controller.itemAt(index), matrix.selectionMode()
+    )
+  matrix.matrixItemModels = models

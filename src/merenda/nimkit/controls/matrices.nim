@@ -5,9 +5,11 @@ import ../accessibility/accessibility
 import ../app/windows except sendAction
 import ../drawing
 import ../foundation/events
+import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/types
 import ../foundation/undomanagers
+import ../responder/responders
 import ../text/fieldeditors
 import ./buttons except isEnabled, setEnabled
 import ./controls as controlbase
@@ -22,10 +24,28 @@ type
     msmSingle
     msmMultiple
 
+  MatrixItemModel* = object
+    identifier*: string
+    title*: string
+    objectValue*: ObjectValue
+    state*: ButtonState
+    enabled*: bool
+    hidden*: bool
+    tag*: int
+    tooltip*: string
+    image*: ImageResource
+    action*: ActionSelector
+    target*: DynamicAgent
+    representedObject*: DynamicAgent
+    userInfo*: DynamicAgent
+
   Matrix* = ref object of Control
     xRows: int
     xColumns: int
     xCells: seq[ButtonCell]
+    xItemModels: seq[MatrixItemModel]
+    xUsesItemModels: bool
+    xDataSource: DynamicAgent
     xPrototype: ButtonCell
     xSelectionMode: MatrixSelectionMode
     xCellSize: Size
@@ -33,6 +53,13 @@ type
     xHighlightedIndex: int
     xLeadIndex: int
     xSelectedIndex: int
+
+protocol MatrixDataSource {.selectorScope: protocol.}:
+  method matrixItemCount*(matrix: Matrix): int
+
+  method matrixItemModelAtIndex*(matrix: Matrix, index: int): MatrixItemModel
+
+  method indexOfMatrixItemModelIdentifier*(matrix: Matrix, identifier: string): int
 
 protocol MatrixEvents:
   proc selectionDidChange*(matrix: Matrix, sender: DynamicAgent) {.signal.}
@@ -90,6 +117,180 @@ func columnForIndex(matrix: Matrix, index: int): int =
 
 proc clearSelectionStates(matrix: Matrix, exceptIndex = -1)
 proc emitSelectionChangedIfNeeded(matrix: Matrix, before: seq[int])
+proc firstSelectedIndex(matrix: Matrix): int
+proc normalizeLeadAndSelection(matrix: Matrix)
+proc configureCells(matrix: Matrix, rows, columns: int, prototype: ButtonCell)
+proc syncMatrixModelSelectionStates(matrix: Matrix)
+
+proc reloadData*(matrix: Matrix)
+proc selectedItemIdentifiers*(matrix: Matrix): seq[string]
+proc `selectedItemIdentifiers=`*(matrix: Matrix, identifiers: openArray[string])
+proc matrixItemModels*(matrix: Matrix): seq[MatrixItemModel]
+proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel])
+proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int
+
+proc initMatrixItemModel*(
+    identifier = "",
+    title = "",
+    objectValue = emptyObjectValue(),
+    state = bsOff,
+    enabled = true,
+    hidden = false,
+    tag = 0,
+    tooltip = "",
+    image: ImageResource = nil,
+    action: ActionSelector = ActionSelector(),
+    target: DynamicAgent = nil,
+    representedObject: DynamicAgent = nil,
+    userInfo: DynamicAgent = nil,
+): MatrixItemModel =
+  MatrixItemModel(
+    identifier: identifier,
+    title: title,
+    objectValue: objectValue,
+    state: state,
+    enabled: enabled,
+    hidden: hidden,
+    tag: tag,
+    tooltip: tooltip,
+    image: image,
+    action: action,
+    target: target,
+    representedObject: representedObject,
+    userInfo: userInfo,
+  )
+
+proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
+  if cell.isNil:
+    return initMatrixItemModel()
+  initMatrixItemModel(
+    title = cell.title(),
+    state = cell.state(),
+    enabled = cells.isEnabled(cell),
+    action = cell.action(),
+    target = cell.target(),
+  )
+
+proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
+  if matrix.isNil or visibleIndex < 0:
+    return -1
+  var current = 0
+  for index, model in matrix.xItemModels:
+    if not model.hidden:
+      if current == visibleIndex:
+        return index
+      inc current
+  -1
+
+proc visibleIndexForModelIndex(matrix: Matrix, modelIndex: int): int =
+  if matrix.isNil or modelIndex < 0:
+    return -1
+  var current = 0
+  for index, model in matrix.xItemModels:
+    if not model.hidden:
+      if index == modelIndex:
+        return current
+      inc current
+  -1
+
+proc visibleItemCount(matrix: Matrix): int =
+  if matrix.isNil:
+    return 0
+  for model in matrix.xItemModels:
+    if not model.hidden:
+      inc result
+
+proc backingIndexOfMatrixItemIdentifier(matrix: Matrix, identifier: string): int =
+  if matrix.isNil or identifier.len == 0:
+    return -1
+  for index, model in matrix.xItemModels:
+    if model.identifier == identifier:
+      return index
+  -1
+
+proc identifiersToSet(identifiers: openArray[string]): seq[string] =
+  for identifier in identifiers:
+    if identifier.len > 0 and identifier notin result:
+      result.add identifier
+
+proc selectedStateForModel(
+    matrix: Matrix, model: MatrixItemModel, selectedIdentifiers: openArray[string]
+): ButtonState =
+  if selectedIdentifiers.len > 0 and model.identifier.len > 0:
+    if model.identifier in selectedIdentifiers: bsOn else: bsOff
+  else:
+    model.state
+
+proc applyMatrixItemModelToCell(
+    matrix: Matrix,
+    cell: ButtonCell,
+    model: MatrixItemModel,
+    selectedIdentifiers: openArray[string] = [],
+) =
+  if cell.isNil:
+    return
+  cell.setTitle(model.title)
+  cell.setState(matrix.selectedStateForModel(model, selectedIdentifiers))
+  cells.setEnabled(cell, model.enabled)
+  cell.setTarget(model.target)
+  cell.setAction(model.action)
+
+proc clearMatrixItemCell(cell: ButtonCell) =
+  if cell.isNil:
+    return
+  cell.setTitle("")
+  cell.setState(bsOff)
+  cells.setEnabled(cell, false)
+  cell.setTarget(nil)
+  cell.setAction(ActionSelector())
+
+proc normalizeModelBackedCellSelection(matrix: Matrix) =
+  if matrix.isNil:
+    return
+  if matrix.xSelectionMode in {msmRadio, msmSingle}:
+    let selected = matrix.firstSelectedIndex()
+    for index, cell in matrix.xCells:
+      if not cell.isNil and index != selected:
+        cell.setState(bsOff)
+    matrix.xSelectedIndex = selected
+  else:
+    matrix.xSelectedIndex = matrix.firstSelectedIndex()
+  matrix.normalizeLeadAndSelection()
+
+proc syncMatrixModelSelectionStates(matrix: Matrix) =
+  if matrix.isNil or not matrix.xUsesItemModels:
+    return
+  for visibleIndex in 0 ..< matrix.xCells.len:
+    let modelIndex = matrix.modelIndexForVisibleIndex(visibleIndex)
+    if modelIndex >= 0:
+      let cell = matrix.xCells[visibleIndex]
+      matrix.xItemModels[modelIndex].state =
+        if cell.isNil:
+          bsOff
+        else:
+          cell.state()
+
+proc rebuildMatrixCellsFromModels(
+    matrix: Matrix, selectedIdentifiers: openArray[string] = []
+) =
+  if matrix.isNil:
+    return
+  let
+    selected = selectedIdentifiers.identifiersToSet()
+    count = matrix.visibleItemCount()
+    columnCount = matrix.xColumns.normalizedColumns()
+    rowCount = count.gridRows(columnCount)
+  matrix.configureCells(rowCount, columnCount, matrix.xPrototype)
+  var visibleIndex = 0
+  for model in matrix.xItemModels:
+    if not model.hidden:
+      matrix.applyMatrixItemModelToCell(matrix.xCells[visibleIndex], model, selected)
+      inc visibleIndex
+  for index in visibleIndex ..< matrix.xCells.len:
+    clearMatrixItemCell(matrix.xCells[index])
+  matrix.normalizeModelBackedCellSelection()
+  matrix.syncMatrixModelSelectionStates()
+  matrix.invalidateMatrix()
 
 proc selectedIndexes*(matrix: Matrix): seq[int] =
   if matrix.isNil:
@@ -129,6 +330,7 @@ proc `selectedIndexes=`*(matrix: Matrix, indexes: openArray[int]) =
     else:
       nextIndexes[0]
   matrix.xLeadIndex = matrix.xSelectedIndex
+  matrix.syncMatrixModelSelectionStates()
   matrix.emitSelectionChangedIfNeeded(before)
   matrix.invalidateMatrix()
 
@@ -241,6 +443,7 @@ proc `selectionMode=`*(matrix: Matrix, mode: MatrixSelectionMode) =
         cell.setState(bsOff)
     matrix.xSelectedIndex = selected
   matrix.normalizeLeadAndSelection()
+  matrix.syncMatrixModelSelectionStates()
   matrix.invalidateMatrix()
 
 proc cellSize*(matrix: Matrix): Size =
@@ -312,7 +515,218 @@ proc prototypeCell*(matrix: Matrix): ButtonCell =
 proc renewRowsColumns*(
     matrix: Matrix, rows, columns: int, prototype: ButtonCell = nil
 ) =
-  matrix.configureCells(rows, columns, prototype)
+  if matrix.isNil:
+    return
+  if matrix.xUsesItemModels:
+    let selected = matrix.selectedItemIdentifiers()
+    if not prototype.isNil:
+      matrix.xPrototype = prototype.copyButtonCell()
+      matrix.xPrototype.setControlView(nil)
+    elif matrix.xPrototype.isNil:
+      matrix.xPrototype = newButtonCell()
+    matrix.xColumns = columns.normalizedColumns()
+    matrix.rebuildMatrixCellsFromModels(selected)
+  else:
+    matrix.configureCells(rows, columns, prototype)
+
+proc dataSource*(matrix: Matrix): DynamicAgent =
+  if matrix.isNil: nil else: matrix.xDataSource
+
+proc `dataSource=`*(matrix: Matrix, dataSource: DynamicAgent) =
+  if matrix.isNil or matrix.xDataSource == dataSource:
+    return
+  if not dataSource.isNil:
+    discard dataSource.adopt(MatrixDataSource)
+  matrix.xDataSource = dataSource
+  matrix.reloadData()
+
+proc `dataSource=`*(matrix: Matrix, dataSource: Responder) =
+  matrix.dataSource = DynamicAgent(dataSource)
+
+proc matrixItemIdentifiers*(matrix: Matrix): seq[string] =
+  if matrix.isNil:
+    return
+  if matrix.xUsesItemModels:
+    for model in matrix.xItemModels:
+      if not model.hidden and model.identifier.len > 0:
+        result.add model.identifier
+
+proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
+  if matrix.isNil:
+    return initMatrixItemModel()
+  if matrix.xUsesItemModels:
+    let modelIndex = matrix.modelIndexForVisibleIndex(index)
+    if modelIndex >= 0:
+      result = matrix.xItemModels[modelIndex]
+      let cell = matrix.cellAtIndex(index)
+      if not cell.isNil:
+        result.title = cell.title()
+        result.state = cell.state()
+        result.enabled = cells.isEnabled(cell)
+        result.action = cell.action()
+        result.target = cell.target()
+      return
+  matrix.cellAtIndex(index).matrixItemModel()
+
+proc matrixItemModels*(matrix: Matrix): seq[MatrixItemModel] =
+  if matrix.isNil:
+    return
+  if matrix.xUsesItemModels:
+    matrix.syncMatrixModelSelectionStates()
+    return matrix.xItemModels
+  for cell in matrix.xCells:
+    result.add cell.matrixItemModel()
+
+proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel]) =
+  if matrix.isNil:
+    return
+  let selected = matrix.selectedItemIdentifiers()
+  matrix.xDataSource = nil
+  matrix.xItemModels = @models
+  matrix.xUsesItemModels = true
+  matrix.rebuildMatrixCellsFromModels(selected)
+
+proc reloadData*(matrix: Matrix) =
+  if matrix.isNil:
+    return
+  if matrix.xDataSource.isNil:
+    if matrix.xUsesItemModels:
+      matrix.rebuildMatrixCellsFromModels(matrix.selectedItemIdentifiers())
+    return
+
+  let count = matrix.xDataSource.trySendLocal(matrixItemCount(), matrix)
+  if count.isNone:
+    return
+  let selected = matrix.selectedItemIdentifiers()
+  var models: seq[MatrixItemModel]
+  for index in 0 ..< count.get():
+    let model = matrix.xDataSource.trySendLocal(
+      matrixItemModelAtIndex(), (matrix: matrix, index: index)
+    )
+    if model.isSome:
+      models.add model.get()
+  matrix.xItemModels = models
+  matrix.xUsesItemModels = true
+  matrix.rebuildMatrixCellsFromModels(selected)
+
+proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int =
+  if matrix.isNil or identifier.len == 0:
+    return -1
+  if not matrix.xDataSource.isNil:
+    let found = matrix.xDataSource.trySendLocal(
+      indexOfMatrixItemModelIdentifier(), (matrix: matrix, identifier: identifier)
+    )
+    if found.isSome:
+      return found.get()
+  if matrix.xUsesItemModels:
+    var visibleIndex = 0
+    for model in matrix.xItemModels:
+      if not model.hidden:
+        if model.identifier == identifier:
+          return visibleIndex
+        inc visibleIndex
+  -1
+
+proc selectedItemIdentifiers*(matrix: Matrix): seq[string] =
+  if matrix.isNil:
+    return
+  for index in matrix.selectedIndexes():
+    let model = matrix.matrixItemAtIndex(index)
+    if model.identifier.len > 0 and model.identifier notin result:
+      result.add model.identifier
+
+proc selectedItemIdentifier*(matrix: Matrix): string =
+  let identifiers = matrix.selectedItemIdentifiers()
+  if identifiers.len > 0:
+    identifiers[0]
+  else:
+    ""
+
+proc `selectedItemIdentifiers=`*(matrix: Matrix, identifiers: openArray[string]) =
+  if matrix.isNil:
+    return
+  var indexes: seq[int]
+  for identifier in identifiers:
+    let index = matrix.indexOfMatrixItemIdentifier(identifier)
+    if index >= 0 and index notin indexes:
+      indexes.add index
+  matrix.selectedIndexes = indexes
+
+proc `selectedItemIdentifier=`*(matrix: Matrix, identifier: string) =
+  if identifier.len > 0:
+    matrix.selectedItemIdentifiers = [identifier]
+  else:
+    matrix.selectedItemIdentifiers = []
+
+proc addMatrixItem*(
+    matrix: Matrix, model: MatrixItemModel
+): ButtonCell {.discardable.} =
+  if matrix.isNil:
+    return nil
+  let selected = matrix.selectedItemIdentifiers()
+  matrix.xUsesItemModels = true
+  matrix.xItemModels.add model
+  matrix.rebuildMatrixCellsFromModels(selected)
+  if model.identifier.len > 0:
+    return matrix.cellAtIndex(matrix.indexOfMatrixItemIdentifier(model.identifier))
+  if not model.hidden:
+    return matrix.cellAtIndex(matrix.visibleIndexForModelIndex(matrix.xItemModels.high))
+
+proc insertMatrixItem*(
+    matrix: Matrix, model: MatrixItemModel, index: Natural
+): ButtonCell {.discardable.} =
+  if matrix.isNil:
+    return nil
+  let
+    selected = matrix.selectedItemIdentifiers()
+    modelIndex = max(0, min(index.int, matrix.xItemModels.len))
+  matrix.xUsesItemModels = true
+  matrix.xItemModels.insert(model, modelIndex)
+  matrix.rebuildMatrixCellsFromModels(selected)
+  if model.identifier.len > 0:
+    return matrix.cellAtIndex(matrix.indexOfMatrixItemIdentifier(model.identifier))
+  if not model.hidden:
+    return matrix.cellAtIndex(matrix.visibleIndexForModelIndex(modelIndex))
+
+proc removeMatrixItemWithIdentifier*(
+    matrix: Matrix, identifier: string
+): bool {.discardable.} =
+  let modelIndex = matrix.backingIndexOfMatrixItemIdentifier(identifier)
+  if modelIndex < 0:
+    return false
+  var selected = matrix.selectedItemIdentifiers()
+  let selectedIndex = selected.find(identifier)
+  if selectedIndex >= 0:
+    selected.delete(selectedIndex)
+  matrix.xItemModels.delete(modelIndex)
+  matrix.xUsesItemModels = true
+  matrix.rebuildMatrixCellsFromModels(selected)
+  true
+
+proc removeAllMatrixItems*(matrix: Matrix) =
+  if matrix.isNil:
+    return
+  matrix.xItemModels.setLen(0)
+  matrix.xUsesItemModels = true
+  matrix.rebuildMatrixCellsFromModels()
+
+proc moveMatrixItem*(matrix: Matrix, fromIndex, toIndex: int): bool {.discardable.} =
+  if matrix.isNil or fromIndex < 0 or fromIndex >= matrix.xItemModels.len:
+    return false
+  let
+    selected = matrix.selectedItemIdentifiers()
+    item = matrix.xItemModels[fromIndex]
+  matrix.xItemModels.delete(fromIndex)
+  let insertIndex = max(0, min(toIndex, matrix.xItemModels.len))
+  matrix.xItemModels.insert(item, insertIndex)
+  matrix.xUsesItemModels = true
+  matrix.rebuildMatrixCellsFromModels(selected)
+  true
+
+proc moveMatrixItemWithIdentifier*(
+    matrix: Matrix, identifier: string, toIndex: int
+): bool {.discardable.} =
+  matrix.moveMatrixItem(matrix.backingIndexOfMatrixItemIdentifier(identifier), toIndex)
 
 proc selectedIndex*(matrix: Matrix): int =
   if matrix.isNil:
@@ -416,6 +830,7 @@ proc selectIndex(matrix: Matrix, index: int, notify = false): bool =
       else:
         matrix.firstSelectedIndex()
 
+  matrix.syncMatrixModelSelectionStates()
   matrix.emitSelectionChangedIfNeeded(before)
   matrix.setNeedsDisplay(true)
   if notify:
@@ -427,6 +842,15 @@ proc selectCellAt*(matrix: Matrix, row, column: int, notify = false): bool =
 
 proc selectCellAtIndex*(matrix: Matrix, index: int, notify = false): bool =
   matrix.selectIndex(index, notify)
+
+proc selectMatrixItemWithIdentifier*(
+    matrix: Matrix, identifier: string, notify = false
+): bool {.discardable.} =
+  let index = matrix.indexOfMatrixItemIdentifier(identifier)
+  if index >= 0:
+    matrix.selectCellAtIndex(index, notify)
+  else:
+    false
 
 proc deselectAll*(matrix: Matrix) =
   if matrix.isNil:

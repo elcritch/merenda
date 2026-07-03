@@ -258,6 +258,7 @@ suite "nimkit model controllers":
       tabs = newDocumentTabs()
       boundTabs = newDocumentTabs()
       matrix = newButtonMatrix([], columns = 2)
+      boundMatrix = newRadioMatrix([], columns = 2)
 
     bindComboBox(comboBox, controller)
     check comboBox.numberOfItems == 3
@@ -323,6 +324,18 @@ suite "nimkit model controllers":
     check matrix.cellAtIndex(1).title == "Second"
     check not Cell(matrix.cellAtIndex(1)).isEnabled()
     check matrix.cellAtIndex(2).title == ""
+    check matrix.matrixItemModels.len == 4
+    check matrix.matrixItemModels[1].identifier == "two"
+    check matrix.matrixItemModels[2].identifier == "separator"
+    check not matrix.matrixItemModels[2].enabled
+    check matrix.indexOfMatrixItemIdentifier("three") == 3
+
+    bindMatrix(boundMatrix, controller, columns = 2)
+    check boundMatrix.len == 4
+    check boundMatrix.selectedItemIdentifier() == "three"
+    check boundMatrix.indexOfMatrixItemIdentifier("three") == 3
+    check boundMatrix.selectCellAtIndex(0)
+    check controller.selectionController().selectedIdentifier == "one"
 
 suite "nimkit model controller demo":
   test "table sorting selection and editing work through user events":
