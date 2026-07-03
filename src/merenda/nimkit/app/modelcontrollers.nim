@@ -658,6 +658,11 @@ proc tableColumnTitle(column: ModelColumn): string =
   else:
     column.valueKey
 
+proc tableCellValuesForModelFields(fields: openArray[ModelField]): seq[TableCellValue] =
+  for field in fields:
+    if field.key.len > 0:
+      result.add initTableCellValue(field.key, field.value)
+
 proc columnKey(controller: ArrayController, column: TableColumn): string =
   if column.isNil:
     return ""
@@ -1274,16 +1279,37 @@ protocol TreeControllerOutlineDataSource of OutlineViewDataSource:
   method outlineItem(
       controller: TreeController, outlineView: OutlineView, identifier: string
   ): OutlineItem =
+    discard outlineView
     let treeItem = controller.getTreeItemWithIdentifier(identifier)
     if treeItem.isNone:
       return OutlineItem()
     let item = treeItem.get()
+    let leaf = controller.isLeaf(item.item.identifier)
     OutlineItem(
       identifier: item.item.identifier,
       parentIdentifier: item.parentIdentifier,
       title: item.item.displayTitle(ovrTableCell),
-      expandable: not controller.isLeaf(item.item.identifier),
+      objectValue: item.item.objectValue,
+      cells: tableCellValuesForModelFields(item.item.fields),
+      enabled: item.item.enabled,
+      hidden: item.item.hidden,
+      expandable: not leaf,
+      leaf: leaf,
+      image: item.item.modelImageField("image"),
+      tooltip: item.item.modelStringField("tooltip"),
+      representedObject: item.item.representedObject,
     )
+
+protocol TreeControllerOutlineEvents from TreeController:
+  includes TableViewEvents
+
+  proc selectionDidChange(controller: TreeController, sender: DynamicAgent) {.slot.} =
+    if sender of OutlineView:
+      let identifiers = OutlineView(sender).selectedItemIdentifiers()
+      if identifiers.len > 0:
+        controller.xSelection.setSelectedIdentifiers(identifiers)
+      else:
+        controller.xSelection.clearSelection()
 
 protocol TreeControllerCascadingDataSource of CascadingDataSource:
   method cascadingNumberOfChildren(
@@ -1348,13 +1374,32 @@ protocol TreeControllerCascadingDataSource of CascadingDataSource:
     -1
 
 proc installTreeControllerProtocols(controller: TreeController) =
+  discard controller.withProto()
   discard controller.withProtocol(TreeControllerOutlineDataSource)
   discard controller.withProtocol(TreeControllerCascadingDataSource)
 
 proc bindOutlineView*(outlineView: OutlineView, controller: TreeController) =
   if outlineView.isNil:
     return
+  let oldController = outlineView.outlineDataSource()
+  if oldController of TreeController:
+    TreeController(oldController).disconnect(
+      treeControllerDidChange, outlineView, outlineModelDidChange
+    )
+    TreeController(oldController).unobserveProtocol(outlineView, TableViewEvents)
+  if not controller.isNil:
+    controller.disconnect(treeControllerDidChange, outlineView, outlineModelDidChange)
+  if not controller.isNil:
+    TableView(outlineView).selectionMode =
+      case controller.xSelection.mode()
+      of mselNone: tsmNone
+      of mselSingle: tsmSingle
+      of mselMultiple: tsmMultiple
   outlineView.outlineDataSource = controller
+  if not controller.isNil:
+    outlineView.selectedItemIdentifiers = controller.xSelection.selectedIdentifiers()
+    controller.observeProtocol(outlineView, TableViewEvents)
+    controller.connect(treeControllerDidChange, outlineView, outlineModelDidChange)
   tableviews.reloadData(TableView(outlineView))
 
 proc bindCascadingView*(view: CascadingView, controller: TreeController) =

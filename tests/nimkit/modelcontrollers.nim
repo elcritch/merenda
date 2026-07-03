@@ -211,6 +211,7 @@ suite "nimkit model controllers":
         ]
       )
       outlineView = newOutlineView()
+      statusColumn = newTableColumn("status", "Status", width = 80.0)
       cascadingView = newCascadingView()
 
     check controller.childCount() == 1
@@ -219,13 +220,39 @@ suite "nimkit model controllers":
     check not controller.isLeaf("root")
     check controller.isLeaf("child")
 
+    outlineView.addColumn(statusColumn)
+    controller.selectionController().selectIdentifier("root")
     bindOutlineView(outlineView, controller)
     check outlineView.outlineItemWithIdentifier("root").title == "Root"
+    check outlineView.outlineItemWithIdentifier("root").objectValue.requireString() ==
+      "Root"
     check outlineView.childIdentifiersForItem("") == @["root"]
+    check outlineView.selectedItemIdentifier() == "root"
+
+    outlineView.expandItem("root")
+    outlineView.selectedItemIdentifier = "child"
+    check controller.selectionController().selectedIdentifier == "child"
+
+    controller.addItem(
+      initModelTreeItem(
+        initModelItem(
+          "second",
+          objectValue = toObjectValue("Second"),
+          fields = [initModelField("status", toObjectValue("ready"))],
+        ),
+        parentIdentifier = "root",
+        leaf = true,
+      )
+    )
+    check outlineView.childIdentifiersForItem("root") == @["child", "second"]
+    check outlineView.rowForItem("second") >= 0
+    check outlineView
+    .tableCellObjectValue(outlineView.rowForItem("second"), statusColumn)
+    .requireString() == "ready"
 
     bindCascadingView(cascadingView, controller)
     let rootChildren = cascadingView.childrenForParent("root")
-    check rootChildren.len == 1
+    check rootChildren.len == 2
     check rootChildren[0].identifier == "child"
     check rootChildren[0].title == "Child"
 

@@ -119,14 +119,84 @@ suite "NimKit OutlineView":
     check customColumn.tableView == TableView(outlineView)
     check outlineView.columnWithIdentifier("name") == customColumn
 
+  test "outline items expose model values metadata identity and mutation":
+    let
+      outlineView = newOutlineView()
+      statusColumn = newTableColumn("status", "Status", width = 90.0)
+      represented = newResponder()
+
+    outlineView.addColumn(statusColumn)
+    outlineView.outlineItems = [
+      initOutlineItem(
+        "root",
+        "Root",
+        expandable = true,
+        objectValue = toObjectValue("root-value"),
+        cells = [initTableCellValue("status", toObjectValue("open"))],
+        representedObject = DynamicAgent(represented),
+      ),
+      initOutlineItem("hidden", "Hidden", parentIdentifier = "root", hidden = true),
+      initOutlineItem(
+        "disabled", "Disabled", parentIdentifier = "root", enabled = false
+      ),
+      initOutlineItem(
+        "child",
+        "Child",
+        parentIdentifier = "root",
+        cells = [initTableCellValue("status", toObjectValue(2))],
+      ),
+    ]
+
+    check outlineView.rowCount == 1
+    check outlineView.objectValueForItem("root").requireString() == "root-value"
+    check outlineView.valueForItem("root", "status").requireString() == "open"
+    check outlineView.representedObjectForItem("root") == DynamicAgent(represented)
+    check outlineView.outlineItemIdentifiers() ==
+      @["root", "hidden", "disabled", "child"]
+
+    outlineView.expandItem("root")
+    check outlineView.childIdentifiersForItem("root") == @["disabled", "child"]
+    check outlineView.rowCount == 3
+    check outlineView.tableRowIdentifier(2) == "child"
+    check outlineView.tableRowIndexForIdentifier("child") == 2
+    check outlineView.tableCellText(0, outlineView.outlineColumn()) == "Root"
+    check outlineView.tableCellObjectValue(2, statusColumn).requireInt() == 2
+    check outlineView.tableCellText(2, statusColumn) == "2"
+    check not outlineView.rowEnabled(1)
+
+    outlineView.selectedItemIdentifier = "child"
+    let state = outlineView.captureState()
+    check state.selectedRowIdentifiers == @["child"]
+    check outlineView.selectedItemIdentifier == "child"
+
+    check outlineView.insertOutlineChild(initOutlineItem("first", "First"), "root", 0)
+    check outlineView.childIdentifiersForItem("root") == @["first", "disabled", "child"]
+    check outlineView.selectedItemIdentifier == "child"
+    check outlineView.rowForItem("child") == 3
+
+    check outlineView.writeTableCellObjectValue(3, statusColumn, toObjectValue(3))
+    check outlineView.valueForItem("child", "status").requireInt() == 3
+
+    outlineView.selectedItemIdentifier = ""
+    outlineView.restoreState(state)
+    check outlineView.selectedItemIdentifier == "child"
+
+    check outlineView.removeOutlineItemWithIdentifier("disabled")
+    check outlineView.childIdentifiersForItem("root") == @["first", "child"]
+    check outlineView.moveOutlineItem("child", "", 1)
+    check outlineView.parentIdentifierForItem("child") == ""
+    check outlineView.rowForItem("child") == 2
+
   test "outline data source delegate disclosure keyboard persistence and dragging":
     let
       outlineView = newOutlineView(frame = initRect(0, 0, 320, 180))
-      source = newOutlineSourceSpy([
-        initOutlineItem("root", "Root", expandable = true),
-        initOutlineItem("child", "Child", parentIdentifier = "root"),
-        initOutlineItem("blocked", "Blocked", expandable = true),
-      ])
+      source = newOutlineSourceSpy(
+        [
+          initOutlineItem("root", "Root", expandable = true),
+          initOutlineItem("child", "Child", parentIdentifier = "root"),
+          initOutlineItem("blocked", "Blocked", expandable = true),
+        ]
+      )
       delegate = newOutlineDelegateSpy()
 
     delegate.deniedExpand = @["blocked"]
@@ -144,8 +214,11 @@ suite "NimKit OutlineView":
     check outlineView.disclosureRectForRow(0).size.width > 0.0'f32
 
     let disclosure = outlineView.disclosureRectForRow(0)
-    let disclosurePoint = initPoint(disclosure.origin.x + 1.0, disclosure.origin.y + 1.0)
-    check outlineView.mouseDown(MouseEvent(button: mbPrimary, location: disclosurePoint))
+    let disclosurePoint =
+      initPoint(disclosure.origin.x + 1.0, disclosure.origin.y + 1.0)
+    check outlineView.mouseDown(
+      MouseEvent(button: mbPrimary, location: disclosurePoint)
+    )
     check outlineView.isItemExpanded("root")
     check outlineView.mouseUp(MouseEvent(button: mbPrimary, location: disclosurePoint))
     check not outlineView.isItemExpanded("root")
@@ -157,7 +230,9 @@ suite "NimKit OutlineView":
     check delegate.collapsed == @["root", "root"]
 
     outlineView.selectedIndex = 0
-    check outlineView.handleOutlineKey(KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord))
+    check outlineView.handleOutlineKey(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+    )
     check outlineView.isItemExpanded("root")
 
     let state = outlineView.expansionPersistenceString()

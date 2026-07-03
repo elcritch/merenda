@@ -53,8 +53,8 @@ accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
 Model-backed widget work should now reuse the contracts proven by `TableView`,
-`CollectionView`, `CascadingView`, `ComboBox`, menus, `DocumentTabs`, and
-`Matrix`:
+`OutlineView`, `CollectionView`, `CascadingView`, `ComboBox`, menus,
+`DocumentTabs`, and `Matrix`:
 stable identifiers, `ObjectValue` conversion, controller adapters, incremental
 update records, and model-mutation notifications. The next controls should
 build on that vocabulary instead of adding parallel storage models.
@@ -263,6 +263,12 @@ build on that vocabulary instead of adding parallel storage models.
   identifier-backed selection, model-aware insert/remove/reorder operations,
   generated `ButtonCell` action dispatch, and `ArrayController` matrix binding
   with selection writeback.
+- Implemented `OutlineView` model backing around expanded `OutlineItem`
+  records, stable item identifiers, parent/child lookup, object and column
+  values, enabled/hidden/leaf/image/tooltip/represented-object metadata,
+  identifier-backed expansion and selection state, local insert/remove/move
+  mutation helpers, table object-value read/write integration, and
+  `TreeController` binding with model-change reloads and selection writeback.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -312,37 +318,6 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Near-Term Work
 
-### OutlineView Model Backing
-
-Use the existing `TableView` and `CascadingView` model work as the constraints
-for `OutlineView` model backing. Outline should remain a specialized table/tree
-presentation over a model, not a separate competing model system.
-
-1. Layer outline item data on the shared tree model:
-   - reuse stable identifiers, parent-child lookup, item display values, leaf or
-     expandable state, and opaque represented objects
-   - keep existing `OutlineItem` and `OutlineViewDataSource` APIs as a
-     compatibility path
-2. Finish identity-based expansion and selection:
-   - persist expanded items, selected rows, anchor/lead, and visible scroll row
-     by stable item identity instead of visible row index
-   - add migration behavior for renamed/moved items through aliases or resolver
-     callbacks
-3. Add incremental outline updates:
-   - reload, insert, remove, and move children under a parent while preserving
-     expansion, selection, row heights, hosted cells, and accessibility
-     notifications
-   - distinguish model mutations from purely visual disclosure toggles
-4. Deepen outline drag/drop integration:
-   - add distinct before/on/after insertion targets for outline items on top of
-     the current item/cell drop target model
-   - render insertion affordances that distinguish parent-child drops from
-     before/after sibling insertion
-   - validate and accept drops through model-aware delegate/data-source hooks
-
-
-## Medium-Term Architecture
-
 ### Resource-Backed UI Construction
 
 Add a Nim-native resource construction layer for UI assets and declarative
@@ -358,6 +333,9 @@ images, key bindings, and themes.
   unavailable assets, and incompatible resource versions.
 - Leave room for future native nib/storyboard or GNUstep resource bridge layers
   without exposing platform resource types in core NimKit APIs.
+
+
+## Medium-Term Architecture
 
 ### Workspace and Services Layer
 
