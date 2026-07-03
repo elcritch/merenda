@@ -249,6 +249,14 @@ suite "nimkit model controllers":
     check comboBox.numberOfItems == 3
     check comboBox.itemAtIndex(0) == "One"
     check comboBox.itemObjectValueAtIndex(1).requireString() == "Two"
+    check comboBox.optionIdentifierAtIndex(0) == "one"
+    check comboBox.optionIdentifierAtIndex(1) == "two"
+    check not comboBox.optionIsEnabledAtIndex(1)
+    check comboBox.optionIsSeparatorAtIndex(2)
+
+    comboBox.activateItemAtIndex(0)
+    check comboBox.selectedOptionIdentifier() == "one"
+    check controller.selectionController().selectedIdentifier == "one"
 
     syncMenu(menu, controller)
     check menu.len == 3

@@ -114,6 +114,110 @@ suite "nimkit comboboxes":
     check actionCount == 1
     check actionSender == DynamicAgent(combo)
 
+  test "combo box stores rich options and preserves selected identity":
+    let combo = newComboBox(frame = initRect(0, 0, 140, 26))
+
+    combo.addOption(initComboBoxOption("low", "Low", toObjectValue(1)))
+    combo.addOption(
+      initComboBoxOption("hidden", "Hidden", toObjectValue(2), hidden = true)
+    )
+    combo.addOption(initComboBoxOption("separator", separator = true))
+    combo.addOption(
+      initComboBoxOption(
+        "high",
+        "High",
+        toObjectValue(3),
+        enabled = false,
+        tooltip = "Unavailable",
+        searchText = "maximum",
+      )
+    )
+
+    check combo.numberOfItems == 3
+    check combo.optionIdentifierAtIndex(0) == "low"
+    check combo.indexOfOptionIdentifier("hidden") == -1
+    check combo.optionIsSeparatorAtIndex(1)
+    check not combo.optionIsEnabledAtIndex(2)
+    check combo.optionAtIndex(2).tooltip == "Unavailable"
+    check combo.itemObjectValueAtIndex(0).requireInt() == 1
+
+    combo.selectOptionWithIdentifier("low")
+    check combo.selectedOptionIdentifier() == "low"
+    check combo.indexOfSelectedItem() == 0
+    check combo.stringValue == "Low"
+    check combo.objectValue.requireInt() == 1
+
+    combo.insertOption(initComboBoxOption("tiny", "Tiny", toObjectValue(0)), 0)
+    check combo.selectedOptionIdentifier() == "low"
+    check combo.indexOfSelectedItem() == 1
+    check combo.objectValue.requireInt() == 1
+
+    combo.text = "Low"
+    check combo.indexOfSelectedItem() == 1
+    check combo.selectedOptionIdentifier() == ""
+    check combo.objectValue.requireString() == "Low"
+
+  test "combo option list adapter filters and type-ahead uses search text":
+    let
+      window = newWindow("Combo options", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      combo = newComboBox(frame = initRect(10, 10, 140, 24))
+      options = newComboBoxOptionList(
+        [
+          initComboBoxOption("apple", "Apple", searchText = "fruit red"),
+          initComboBoxOption("banana", "Banana", searchText = "fruit yellow"),
+          initComboBoxOption("apricot", "Apricot", searchText = "fruit orange"),
+          initComboBoxOption("hidden", "Hidden", hidden = true),
+        ]
+      )
+
+    combo.editable = false
+    combo.dataSource = options
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    check combo.numberOfItems == 3
+    combo.optionFilterText = "ap"
+    check options.filterText == "ap"
+    check combo.numberOfItems == 2
+    check combo.itemAtIndex(0) == "Apple"
+    check combo.itemAtIndex(1) == "Apricot"
+    check combo.indexOfOptionIdentifier("banana") == -1
+
+    combo.optionFilterText = ""
+    check window.makeFirstResponder(combo)
+    check window.dispatchKeyDown(KeyEvent(text: "y", key: keyY, keyCode: keyY.ord))
+    check combo.selectedOptionIdentifier() == "banana"
+    check combo.stringValue == "Banana"
+
+  test "disabled and separator combo options are not activated":
+    let
+      window = newWindow("Combo disabled options", frame = initRect(0, 0, 240, 160))
+      root = newView(frame = initRect(0, 0, 240, 160))
+      combo = newComboBox(frame = initRect(10, 10, 140, 24))
+
+    combo.addOption(initComboBoxOption("one", "One"))
+    combo.addOption(initComboBoxOption("separator", separator = true))
+    combo.addOption(initComboBoxOption("two", "Two", enabled = false))
+    combo.addOption(initComboBoxOption("three", "Three"))
+    root.addSubview(combo)
+    window.setContentView(root)
+
+    combo.activateItemAtIndex(1)
+    check combo.selectedOptionIdentifier() == ""
+    combo.activateItemAtIndex(2)
+    check combo.selectedOptionIdentifier() == ""
+
+    check window.makeFirstResponder(combo)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.popupOpen
+    check combo.highlightedIndex == 0
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check combo.highlightedIndex == 3
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check combo.selectedOptionIdentifier() == "three"
+    check combo.stringValue == "Three"
+
   test "mouse opens popup and selects clicked item":
     let
       window = newWindow("Combo mouse", frame = initRect(0, 0, 240, 160))

@@ -766,6 +766,25 @@ protocol ArrayControllerComboDataSource of ComboBoxDataSource:
   method itemCount(controller: ArrayController, comboBox: ComboBox): int =
     controller.len()
 
+  method comboBoxOptionAtIndex(
+      controller: ArrayController, comboBox: ComboBox, index: int
+  ): ComboBoxOption =
+    let item = controller.itemAt(index)
+    initComboBoxOption(
+      identifier = item.identifier,
+      displayText = item.displayTitle(ovrComboBox),
+      objectValue = item.objectValue,
+      enabled = item.enabled,
+      hidden = item.hidden,
+      separator = item.separator,
+      representedObject = item.representedObject,
+    )
+
+  method indexOfComboBoxOptionIdentifier(
+      controller: ArrayController, comboBox: ComboBox, identifier: string
+  ): int =
+    controller.indexOfIdentifier(identifier)
+
   method typedObjectValueAtIndex(
       controller: ArrayController, comboBox: ComboBox, index: int
   ): ObjectValue =
@@ -775,6 +794,18 @@ protocol ArrayControllerComboDataSource of ComboBoxDataSource:
       controller: ArrayController, comboBox: ComboBox, index: int
   ): string =
     controller.itemAt(index).displayTitle(ovrComboBox)
+
+protocol ArrayControllerComboEvents from ArrayController:
+  includes ComboBoxEvents
+
+  proc selectionDidChange(controller: ArrayController, sender: DynamicAgent) {.slot.} =
+    if sender of ComboBox:
+      let comboBox = ComboBox(sender)
+      let identifier = comboBox.selectedOptionIdentifier()
+      if identifier.len > 0:
+        controller.xSelection.setSelectedIdentifiers([identifier])
+      else:
+        controller.xSelection.clearSelection()
 
 protocol ArrayControllerCollectionDataSource of CollectionViewDataSource:
   method numberOfCollectionItems(
@@ -814,6 +845,7 @@ protocol ArrayControllerCollectionDelegate of CollectionViewDelegate:
     controller.xSelection.setSelectedIdentifiers(collectionView.selectedIdentifiers())
 
 proc installArrayControllerProtocols(controller: ArrayController) =
+  discard controller.withProto()
   discard controller.withProtocol(ArrayControllerTableDataSource)
   discard controller.withProtocol(ArrayControllerTableDelegate)
   discard controller.withProtocol(ArrayControllerComboDataSource)
@@ -842,6 +874,9 @@ proc bindComboBox*(comboBox: ComboBox, controller: ArrayController) =
   if comboBox.isNil:
     return
   comboBox.dataSource = controller
+  if not controller.isNil:
+    comboBox.selectedOptionIdentifier = controller.xSelection.selectedIdentifier()
+    controller.observeProtocol(comboBox, ComboBoxEvents)
   comboboxes.reloadData(comboBox)
 
 proc bindCollectionView*(collectionView: CollectionView, controller: ArrayController) =

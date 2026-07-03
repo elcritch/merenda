@@ -53,10 +53,10 @@ accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
 Model-backed widget work should now reuse the contracts proven by `TableView`,
-`CollectionView`, and `CascadingView`: stable identifiers, `ObjectValue`
-conversion, controller adapters, incremental update records, and model-mutation
-notifications. The next controls should build on that vocabulary instead of
-adding parallel storage models.
+`CollectionView`, `CascadingView`, and `ComboBox`: stable identifiers,
+`ObjectValue` conversion, controller adapters, incremental update records, and
+model-mutation notifications. The next controls should build on that vocabulary
+instead of adding parallel storage models.
 
 ## Recently Completed
 
@@ -235,6 +235,13 @@ adding parallel storage models.
   and delegate hooks, incremental tree insert/remove/move/reload updates,
   batched update signals, model-mutation notifications, table-column row
   adapters, and `TreeController` binding coverage.
+- Implemented `ComboBox` choice model backing around plain `ComboBoxOption`
+  records, option identifiers, display text, object values, enabled/hidden/
+  separator/image/tooltip/search metadata, identity-backed selected and
+  highlighted options, old string-item compatibility APIs, a seq-backed
+  `ComboBoxOptionList` data-source adapter with filtering, type-ahead lookup,
+  popup separator/disabled-row semantics, and `ArrayController` option-record
+  binding with selection writeback.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -283,26 +290,6 @@ adding parallel storage models.
   `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
 
 ## Near-Term Work
-
-### ComboBox Choice Model Backing
-
-Make `ComboBox` and related choice popups use a small option model instead of a
-string-only list. The control should own editing, popup presentation, highlight,
-and selection UI state; the data source or optional adapter should own option
-records.
-
-1. Expand option values beyond strings:
-   - add option identifiers, display text, object value, enabled/hidden state,
-     separators, optional icon/image, tooltip, and search text
-   - keep existing string item APIs as compatibility sugar over display text
-2. Persist and restore selection by option identity:
-   - use identifiers for selected/highlighted options when available, with index
-     fallback for legacy string lists
-   - make editable combo boxes distinguish typed text from selected object value
-3. Add a reusable option-list adapter:
-   - provide seq-backed option storage for tests/examples and simple apps
-   - support filtered suggestions, type-ahead lookup, and popup row reloads
-     without coupling `PopupListView` itself to model ownership
 
 ### Menu Item Model Backing
 
