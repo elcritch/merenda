@@ -75,6 +75,11 @@ type TableDelegateSpy = ref object of Responder
   dragAccepted: bool
   dropValidationCalls: seq[string]
   dropAcceptCalls: seq[string]
+  hasReorderPolicy: bool
+  reorderAllowed: bool
+  reorderAccepted: bool
+  reorderValidationCalls: seq[string]
+  reorderPerformCalls: seq[string]
 
 proc containsIndex(indexes: openArray[int], index: int): bool =
   for value in indexes:
@@ -87,6 +92,13 @@ proc containsValue(values: openArray[string], value: string): bool =
     if item == value:
       return true
   false
+
+proc dropTargetSummary(rows: openArray[int], target: DraggingDropTarget): string =
+  for index, row in rows:
+    if index > 0:
+      result.add ","
+    result.add $row
+  result.add ":" & $target.kind & ":" & $target.position & ":" & $target.row
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -473,6 +485,25 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
         $target.row
     )
     delegate.dragAccepted
+
+  method shouldReorderRows(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      rows: seq[int],
+      target: DraggingDropTarget,
+  ): bool =
+    delegate.reorderValidationCalls.add dropTargetSummary(rows, target)
+    if delegate.hasReorderPolicy: delegate.reorderAllowed else: true
+
+protocol TableDelegateReorderPerformSpyMethods of TableViewDelegate:
+  method performRowReorder(
+      delegate: TableDelegateSpy,
+      tableView: TableView,
+      rows: seq[int],
+      target: DraggingDropTarget,
+  ): bool =
+    delegate.reorderPerformCalls.add dropTargetSummary(rows, target)
+    delegate.reorderAccepted
 
 protocol TableDelegateShouldTrackSpyMethods of TableViewDelegate:
   method shouldTrackCell(
@@ -1047,6 +1078,84 @@ suite "NimKit TableView":
 
     tableView.endTableUpdates()
     check signals.updateKinds == @[trukInsert, trukReload, trukMove, trukRemove]
+
+  test "table view reorders table model rows when enabled":
+    let
+      model = newTableModel(tableModelRows(), tableModelColumns())
+      tableView = newTableView()
+
+    tableView.bindTableModel(model)
+    tableView.selectionMode = tsmExtended
+    tableView.selectedIndexes = [0, 2]
+
+    check not tableView.reorderRows([0], initRowInsertionDropTarget(2, ddpBefore))
+    check model.arrangedRows().mapIt(it.identifier) == @["ada", "grace", "alan"]
+
+    tableView.allowsRowReordering = true
+    check not tableView.reorderRows([0], initRowInsertionDropTarget(0, ddpBefore))
+    check tableView.reorderRows([0], initRowInsertionDropTarget(2, ddpBefore))
+    check model.arrangedRows().mapIt(it.identifier) == @["grace", "ada", "alan"]
+    check tableView.selectedIndexes == @[1, 2]
+    check tableView.selectedTableRowIdentifiers() == @["ada", "alan"]
+
+  test "table row reordering uses delegate approval and override hooks":
+    let
+      model = newTableModel(tableModelRows(), tableModelColumns())
+      tableView = newTableView()
+      delegate = newTableDelegateSpy()
+      target = initRowInsertionDropTarget(2, ddpBefore)
+
+    tableView.bindTableModel(model)
+    tableView.delegate = delegate
+    tableView.allowsRowReordering = true
+    delegate.hasReorderPolicy = true
+    delegate.reorderAllowed = false
+
+    check not tableView.reorderRows([0], target)
+    check model.arrangedRows().mapIt(it.identifier) == @["ada", "grace", "alan"]
+    check delegate.reorderValidationCalls == @["0:ddtRow:ddpBefore:2"]
+
+    delegate.hasReorderPolicy = false
+    delegate.reorderAccepted = true
+    discard delegate.withProtocol(TableDelegateReorderPerformSpyMethods)
+
+    check tableView.reorderRows([0], target)
+    check model.arrangedRows().mapIt(it.identifier) == @["ada", "grace", "alan"]
+    check delegate.reorderPerformCalls == @["0:ddtRow:ddpBefore:2"]
+
+  test "table view starts and commits row reordering from mouse drag":
+    let
+      window = newWindow("Table row drag reorder", frame = initRect(0, 0, 360, 180))
+      root = newView(frame = initRect(0, 0, 360, 180))
+      tableView = newTableView(frame = initRect(10, 10, 260, 100))
+      model = newTableModel(tableModelRows(), tableModelColumns())
+
+    tableView.showsHeader = false
+    tableView.bindTableModel(model)
+    tableView.allowsRowReordering = true
+    tableView.rowHeight = 24.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let
+      firstRow = tableView.rowItemRect(0)
+      secondRow = tableView.rowItemRect(1)
+      start = tableView.pointToWindow(
+        initPoint(firstRow.origin.x + 8.0'f32, firstRow.origin.y + 12.0'f32)
+      )
+      drop = tableView.pointToWindow(
+        initPoint(secondRow.origin.x + 8.0'f32, secondRow.maxY - 1.0'f32)
+      )
+
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(drop)
+    check not tableView.draggingSession().isNil
+    check tableView.currentDropTarget().kind == ddtRow
+    check window.mouseUpAt(drop)
+    check tableView.draggingSession().isNil
+    check model.arrangedRows().mapIt(it.identifier) == @["grace", "ada", "alan"]
+    check tableView.selectedTableRowIdentifiers() == @["ada"]
 
   test "table columns move cleanly between table views":
     let

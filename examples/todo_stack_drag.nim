@@ -95,7 +95,7 @@ proc newTodoItem(title: string): TodoItemView =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Todo Demo", frame = initRect(120, 120, 420, 420))
+  window = newWindow("Nimkit Todo Stack Drag", frame = initRect(120, 120, 420, 420))
   root = newView()
   layout = newStackView(laVertical)
   inputRow = newStackView(laHorizontal)
@@ -106,9 +106,9 @@ let
   addButton = newButton("Add")
   clearButton = newButton("Clear Done")
   status = newStatusLabel("0 items")
-  addAction = actionSelector("todoAddItem")
-  clearAction = actionSelector("todoClearDone")
-  toggleAction = actionSelector("todoToggleItem")
+  addAction = actionSelector("todoStackDragAddItem")
+  clearAction = actionSelector("todoStackDragClearDone")
+  toggleAction = actionSelector("todoStackDragToggleItem")
 
 var todos: seq[TodoItemView]
 

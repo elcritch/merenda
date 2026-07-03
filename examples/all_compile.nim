@@ -31,6 +31,8 @@ import table_demo
 import tabview_demo
 import texteditor_demo
 import textfield_demo
-import todo_demo
+import todo_basic
+import todo_stack_drag
+import todo_table
 import view_inspector_demo
 import viewcontroller_demo

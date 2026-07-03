@@ -234,6 +234,9 @@ type
     xHeaderDragInsertionIndex: int
     xHeaderDragInsertionRect: Rect
     xHeaderDraggingColumn: bool
+    xAllowsRowReordering: bool
+    xRowDragStartIndex: int
+    xRowDragStartPoint: Point
     xDragStartPoint: Point
     xDragStartWidth: float32
 
@@ -315,6 +318,11 @@ proc setTableContentOffset(tableView: TableView, offset: Point, invalidate: bool
 proc scrollItemToVisible(tableView: TableView, itemIndex: int)
 proc selectedIndex*(tableView: TableView): int
 proc len*(tableView: TableView): int
+proc allowsRowReordering*(tableView: TableView): bool
+proc reorderRows*(
+  tableView: TableView, rows: openArray[int], target: DraggingDropTarget
+): bool
+
 proc visibleItemCount*(tableView: TableView): int
 proc firstVisibleIndex*(tableView: TableView): int
 proc scrollRows*(tableView: TableView, delta: int)
@@ -337,6 +345,13 @@ proc drawTableRowItem*(
 )
 
 proc autoscrollDraggingInfo(tableView: TableView, info: DraggingInfo): bool
+proc normalizedReorderRows(tableView: TableView, rows: openArray[int]): seq[int]
+proc insertionIndexForDropTarget(tableView: TableView, target: DraggingDropTarget): int
+proc canReorderRows(
+  tableView: TableView, rows: openArray[int], target: DraggingDropTarget
+): bool
+
+proc updateTableDropTarget(tableView: TableView, target: DraggingDropTarget)
 proc tableHeaderHeight*(tableView: TableView): float32
 proc defaultTableHeaderChrome*(): TableHeaderChrome
 proc headerDragIndicator*(tableView: TableView): TableHeaderDragIndicator
@@ -679,6 +694,14 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     tableView: TableView, location: Point, proposedTarget: DraggingDropTarget
   ): DraggingDropTarget {.optional.}
 
+  method shouldReorderRows*(
+    tableView: TableView, rows: seq[int], target: DraggingDropTarget
+  ): bool {.optional.}
+
+  method performRowReorder*(
+    tableView: TableView, rows: seq[int], target: DraggingDropTarget
+  ): bool {.optional.}
+
   method drawRow*(
     tableView: TableView, context: DrawContext, rect: Rect, row: RowState
   ) {.optional.}
@@ -722,6 +745,7 @@ protocol TableViewDraggingProtocol:
 
   method validateDragging*(info: DraggingInfo): DragOperations
   method acceptDragging*(info: DraggingInfo): bool
+  method reorderTableRows*(rows: seq[int], target: DraggingDropTarget): bool
 
 protocol TableViewPersistenceProtocol:
   method columnAutosaveRecords*(): seq[TableColumnAutosaveRecord]
@@ -2769,6 +2793,17 @@ proc `showsRowSeparators=`*(tableView: TableView, value: bool) =
   tableView.xShowsRowSeparators = value
   tableView.invalidateTableRows()
 
+proc allowsRowReordering*(tableView: TableView): bool =
+  (not tableView.isNil) and tableView.xAllowsRowReordering
+
+proc `allowsRowReordering=`*(tableView: TableView, value: bool) =
+  if tableView.isNil or tableView.xAllowsRowReordering == value:
+    return
+  tableView.xAllowsRowReordering = value
+  if not value:
+    tableView.xRowDragStartIndex = -1
+    tableView.updateTableDropTarget(initDraggingDropTarget())
+
 proc selectedIndex*(tableView: TableView): int =
   tableView.xSelectedIndex
 
@@ -3134,12 +3169,18 @@ proc parseIdentifiers(value: string): seq[string] =
       result.add identifier
 
 proc tableDraggingRows*(info: DraggingInfo): seq[int] =
+  if info.pasteboard.isNil:
+    return @[]
   parseRowIndexes(info.pasteboard.stringForType(TablePasteboardTypeRows))
 
 proc tableDraggingRowIdentifiers*(info: DraggingInfo): seq[string] =
+  if info.pasteboard.isNil:
+    return @[]
   parseIdentifiers(info.pasteboard.stringForType(TablePasteboardTypeRowIdentifiers))
 
 proc tableDraggingColumns*(info: DraggingInfo): seq[string] =
+  if info.pasteboard.isNil:
+    return @[]
   parseIdentifiers(info.pasteboard.stringForType(TablePasteboardTypeColumns))
 
 proc tableDropRow*(info: DraggingInfo): int =
@@ -3150,6 +3191,164 @@ proc tableDropColumn*(info: DraggingInfo): string =
 
 proc tableDropPosition*(info: DraggingInfo): DraggingDropPosition =
   info.dropTarget.position
+
+proc normalizedReorderRows(tableView: TableView, rows: openArray[int]): seq[int] =
+  if tableView.isNil:
+    return
+  for row in rows:
+    if row in 0 ..< tableView.len() and row notin result:
+      result.add row
+  result.sort()
+
+func adjustedReorderInsertionIndex(rows: openArray[int], insertionIndex: int): int =
+  result = max(insertionIndex, 0)
+  for row in rows:
+    if row < insertionIndex:
+      dec result
+  result = max(result, 0)
+
+func rowsAreContiguous(rows: openArray[int]): bool =
+  if rows.len <= 1:
+    return true
+  for index in 1 ..< rows.len:
+    if rows[index] != rows[index - 1] + 1:
+      return false
+  true
+
+func reorderWouldChange(rows: openArray[int], adjustedInsertionIndex: int): bool =
+  rows.len > 0 and not (rows.rowsAreContiguous() and adjustedInsertionIndex == rows[0])
+
+proc insertionIndexForDropTarget(
+    tableView: TableView, target: DraggingDropTarget
+): int =
+  if tableView.isNil or target.kind != ddtRow:
+    return -1
+  let row = max(0, min(target.row, tableView.len()))
+  case target.position
+  of ddpAfter:
+    min(row + 1, tableView.len())
+  of ddpOn, ddpBefore:
+    row
+
+proc canReorderRows(
+    tableView: TableView, rows: openArray[int], target: DraggingDropTarget
+): bool =
+  if tableView.isNil or not tableView.allowsRowReordering():
+    return false
+  let normalizedRows = tableView.normalizedReorderRows(rows)
+  if normalizedRows.len == 0:
+    return false
+  let insertionIndex = tableView.insertionIndexForDropTarget(target)
+  if insertionIndex < 0:
+    return false
+  let adjustedIndex = adjustedReorderInsertionIndex(normalizedRows, insertionIndex)
+  if not normalizedRows.reorderWouldChange(adjustedIndex):
+    return false
+
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    let allowed = delegate.trySendLocal(
+      shouldReorderRows(), (tableView: tableView, rows: normalizedRows, target: target)
+    )
+    if allowed.isSome:
+      return allowed.get()
+  true
+
+proc canReorderTableModelRows(model: TableModel): bool =
+  not model.isNil and model.xSortDescriptors.len == 0 and model.xFilter.isNil and
+    model.len() == model.sourceLen()
+
+proc reorderTableModelRows(
+    tableView: TableView,
+    model: TableModel,
+    rows: openArray[int],
+    target: DraggingDropTarget,
+): bool =
+  if tableView.isNil or not model.canReorderTableModelRows():
+    return false
+  let normalizedRows = tableView.normalizedReorderRows(rows)
+  if not tableView.canReorderRows(normalizedRows, target):
+    return false
+
+  let
+    insertionIndex = tableView.insertionIndexForDropTarget(target)
+    adjustedIndex = adjustedReorderInsertionIndex(normalizedRows, insertionIndex)
+    selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
+    anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
+    leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+
+  var
+    nextRows = model.rows()
+    movingRows: seq[TableRowValue]
+  for row in normalizedRows:
+    movingRows.add nextRows[row]
+  for index in countdown(normalizedRows.high, 0):
+    nextRows.delete(normalizedRows[index])
+  for index, row in movingRows:
+    nextRows.insert(row, adjustedIndex + index)
+
+  model.rows = nextRows
+  tableView.xSelectedIndexes.setLen(0)
+  tableView.xSelectedIndex = -1
+  tableView.xSelectionAnchor = -1
+  tableView.xSelectionLead = -1
+  tableView.reloadData()
+  if selectedIdentifiers.len > 0:
+    tableView.applySelectionForRowIdentifiers(
+      selectedIdentifiers, anchorIdentifier, leadIdentifier
+    )
+  else:
+    var nextSelection: seq[int]
+    for index in 0 ..< movingRows.len:
+      nextSelection.add adjustedIndex + index
+    tableView.selectedIndexes = nextSelection
+  true
+
+proc defaultReorderRows(
+    tableView: TableView, rows: openArray[int], target: DraggingDropTarget
+): bool =
+  if tableView.isNil:
+    return false
+  let normalizedRows = tableView.normalizedReorderRows(rows)
+  if not tableView.canReorderRows(normalizedRows, target):
+    return false
+
+  let delegate = tableView.delegate()
+  if not delegate.isNil:
+    let performed = delegate.trySendLocal(
+      performRowReorder(), (tableView: tableView, rows: normalizedRows, target: target)
+    )
+    if performed.isSome:
+      return performed.get()
+
+  let source = tableView.dataSource()
+  if source of TableModel:
+    return tableView.reorderTableModelRows(TableModel(source), normalizedRows, target)
+  false
+
+proc reorderRows*(
+    tableView: TableView, rows: openArray[int], target: DraggingDropTarget
+): bool =
+  if tableView.isNil:
+    return false
+  let reordered =
+    tableView.trySendLocal(reorderTableRows(), (rows: @rows, target: target))
+  if reordered.isSome:
+    reordered.get()
+  else:
+    false
+
+proc isInternalTableRowDrag(tableView: TableView, info: DraggingInfo): bool =
+  not tableView.isNil and info.source == DynamicAgent(tableView) and
+    info.tableDraggingRows().len > 0
+
+proc isTableRowReorderDrag(tableView: TableView, info: DraggingInfo): bool =
+  tableView.isInternalTableRowDrag(info) and tableView.allowsRowReordering() and
+    info.dropTarget.kind == ddtRow
+
+proc canAcceptTableRowReorder(tableView: TableView, info: DraggingInfo): bool =
+  tableView.isTableRowReorderDrag(info) and dgoMove in info.allowedOperations and
+    tableView.canReorderRows(info.tableDraggingRows(), info.dropTarget)
 
 proc findCellSlot(slots: openArray[TableCellSlot], row: int, column: TableColumn): int =
   for index, slot in slots:
@@ -4096,6 +4295,101 @@ protocol DefaultTableViewLayout of ViewLayoutProtocol:
   method layoutSubviews(tableView: TableView) =
     tableView.tileTableContent()
 
+func hasExceededDragThreshold(startPoint, location: Point, threshold: float32): bool =
+  max(abs(location.x - startPoint.x), abs(location.y - startPoint.y)) >= threshold
+
+proc clearRowDragState(tableView: TableView) =
+  if tableView.isNil:
+    return
+  tableView.xRowDragStartIndex = -1
+  tableView.xRowDragStartPoint = initPoint(0.0, 0.0)
+
+proc rowReorderDragRows(tableView: TableView): seq[int] =
+  if tableView.isNil or tableView.xRowDragStartIndex < 0:
+    return
+  if tableView.selectionMode() != tsmNone and
+      tableView.selectionContains(tableView.xRowDragStartIndex):
+    tableView.selectedIndexes()
+  else:
+    @[tableView.xRowDragStartIndex]
+
+proc shouldBeginRowReorderDrag(tableView: TableView, event: MouseEvent): bool =
+  if tableView.isNil or not tableView.isEnabled() or event.button != mbPrimary:
+    return false
+  if not tableView.allowsRowReordering() or not tableView.xTrackingItem:
+    return false
+  if tableView.xRowDragStartIndex < 0 or
+      not tableView.rowEnabled(tableView.xRowDragStartIndex):
+    return false
+  if tableView.selectionMode() != tsmNone and
+      not tableView.rowSelectable(tableView.xRowDragStartIndex):
+    return false
+  tableView.xRowDragStartPoint.hasExceededDragThreshold(
+    event.location, tableView.tableStyle().headerDragThreshold
+  )
+
+proc tryBeginRowReorderDrag(tableView: TableView, event: MouseEvent): bool =
+  if tableView.isNil or not tableView.shouldBeginRowReorderDrag(event):
+    return false
+  if tableView.selectionMode() != tsmNone and
+      not tableView.selectionContains(tableView.xRowDragStartIndex):
+    tableView.selectItemAtIndex(tableView.xRowDragStartIndex)
+
+  let rows = tableView.normalizedReorderRows(tableView.rowReorderDragRows())
+  if rows.len == 0:
+    return false
+
+  let session = tableView.beginDraggingRows(rows, {dgoMove}, DragPasteboardName)
+  if session.isNil:
+    return false
+
+  let target = tableView.dropTargetForDraggingLocation(event.location)
+  tableView.xTrackingItem = false
+  tableView.highlightedIndex = -1
+  tableView.xPressedIndex = -1
+  tableView.updateTableDropTarget(target)
+  discard
+    updateDraggingSession(session, event.location, DynamicAgent(tableView), target)
+  discard
+    autoscrollDraggingSession(session, event.location, DynamicAgent(tableView), target)
+  true
+
+proc updateActiveTableDrag(tableView: TableView, event: MouseEvent): bool =
+  if tableView.isNil:
+    return false
+  let session = tableView.draggingSession()
+  if session.isNil or session.state() != dssActive:
+    return false
+  let target = tableView.dropTargetForDraggingLocation(event.location)
+  tableView.updateTableDropTarget(target)
+  discard
+    updateDraggingSession(session, event.location, DynamicAgent(tableView), target)
+  discard
+    autoscrollDraggingSession(session, event.location, DynamicAgent(tableView), target)
+  true
+
+proc performActiveTableDrag(tableView: TableView, event: MouseEvent): bool =
+  if tableView.isNil:
+    return false
+  let session = tableView.draggingSession()
+  if session.isNil or session.state() != dssActive:
+    return false
+
+  let target = tableView.dropTargetForDraggingLocation(event.location)
+  tableView.updateTableDropTarget(target)
+  discard
+    updateDraggingSession(session, event.location, DynamicAgent(tableView), target)
+  let performed =
+    performDraggingOperation(session, DynamicAgent(tableView), event.location, target)
+  if performed:
+    session.endDraggingSession(session.selectedOperations())
+  else:
+    session.cancelDraggingSession()
+  tableView.xTrackingItem = false
+  tableView.xPressedIndex = -1
+  tableView.clearRowDragState()
+  true
+
 proc defaultTableViewMouseDown*(tableView: TableView, event: MouseEvent): bool =
   if tableView.isNil or not tableView.isEnabled() or event.button != mbPrimary:
     return false
@@ -4106,12 +4400,16 @@ proc defaultTableViewMouseDown*(tableView: TableView, event: MouseEvent): bool =
   let index = tableView.rowItemIndexAtPoint(event.location)
   tableView.highlightedIndex = index
   tableView.xPressedIndex = tableView.highlightedIndex()
+  tableView.xRowDragStartIndex = index
+  tableView.xRowDragStartPoint = event.location
   tableView.invalidateTableRows()
   true
 
 proc defaultTableViewMouseDragged*(tableView: TableView, event: MouseEvent): bool =
   if tableView.isNil:
     return false
+  if tableView.tryBeginRowReorderDrag(event):
+    return true
   if tableView.isEnabled() and tableView.xTrackingItem:
     let index = tableView.rowItemIndexAtPoint(event.location)
     tableView.highlightedIndex = index
@@ -4130,6 +4428,7 @@ proc defaultTableViewMouseUp*(tableView: TableView, event: MouseEvent): bool =
       -1
   tableView.xTrackingItem = false
   tableView.xPressedIndex = -1
+  tableView.clearRowDragState()
   if index >= 0:
     tableView.activateItemAtIndex(index, event.modifiers)
   tableView.setNeedsDisplay(true)
@@ -4934,9 +5233,23 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
     )
     tableView.xTableDraggingSession = result
 
+  method reorderTableRows(
+      tableView: TableView, rows: seq[int], target: DraggingDropTarget
+  ): bool =
+    tableView.defaultReorderRows(rows, target)
+
   method validateDragging(tableView: TableView, info: DraggingInfo): DragOperations =
     if tableView.isNil:
       return NoDragOperations
+    let
+      isRowReorder = tableView.isTableRowReorderDrag(info)
+      rowReorderOperation =
+        if tableView.canAcceptTableRowReorder(info):
+          {dgoMove}
+        else:
+          NoDragOperations
+      proposedOperation =
+        if isRowReorder: rowReorderOperation else: info.selectedOperations
     let delegate = tableView.delegate()
     if not delegate.isNil:
       let validated = delegate.trySendLocal(
@@ -4944,18 +5257,26 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
         (
           tableView: tableView,
           info: info,
-          proposedOperation: info.selectedOperations,
+          proposedOperation: proposedOperation,
           target: info.dropTarget,
           position: info.dropTarget.position,
         ),
       )
       if validated.isSome:
+        if isRowReorder:
+          return validated.get() * rowReorderOperation
         return validated.get()
+      if isRowReorder:
+        return rowReorderOperation
       let operation = delegate.trySendLocal(
         validateDragOperation(), (tableView: tableView, info: info)
       )
       if operation.isSome:
+        if isRowReorder:
+          return operation.get() * rowReorderOperation
         return operation.get()
+    if isRowReorder:
+      return rowReorderOperation
     info.selectedOperations
 
   method acceptDragging(tableView: TableView, info: DraggingInfo): bool =
@@ -4964,6 +5285,10 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
     let operation = tableView.validateDragging(info)
     if operation == NoDragOperations:
       return false
+    if tableView.isTableRowReorderDrag(info):
+      return
+        dgoMove in operation and
+        tableView.reorderRows(info.tableDraggingRows(), info.dropTarget)
     let delegate = tableView.delegate()
     if not delegate.isNil:
       let acceptedDrop = delegate.trySendLocal(
@@ -5038,21 +5363,15 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
   method mouseDragged(tableView: TableView, event: MouseEvent): bool =
     if tableView.xTrackingColumn != nil:
       return tableView.headerMouseDragged(event)
-    let session = tableView.draggingSession()
-    if not session.isNil and session.state() == dssActive:
-      let target = tableView.dropTargetForDraggingLocation(event.location)
-      tableView.updateTableDropTarget(target)
-      discard
-        updateDraggingSession(session, event.location, DynamicAgent(tableView), target)
-      discard autoscrollDraggingSession(
-        session, event.location, DynamicAgent(tableView), target
-      )
+    if tableView.updateActiveTableDrag(event):
       return true
     tableView.defaultTableViewMouseDragged(event)
 
   method mouseUp(tableView: TableView, event: MouseEvent): bool =
     if tableView.xTrackingColumn != nil:
       return tableView.headerMouseUp(event)
+    if tableView.performActiveTableDrag(event):
+      return true
     let handled = tableView.defaultTableViewMouseUp(event)
     if event.clickCount >= 2:
       let
