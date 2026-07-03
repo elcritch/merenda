@@ -4,6 +4,7 @@ import merenda/nimkit/app/animations
 import merenda/nimkit/app/animationproperties
 import merenda/nimkit/containers/boxes
 import merenda/nimkit/containers/cascadingviews
+import merenda/nimkit/containers/collectionviews
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/controls/cells
 import merenda/nimkit/controls/comboboxes
@@ -68,6 +69,7 @@ export animations
 export animationproperties
 export boxes
 export cascadingviews
+export collectionviews
 export buttons
 export cells
 export comboboxes

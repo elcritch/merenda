@@ -4,6 +4,7 @@ import sigils/core
 import sigils/selectors
 
 import ../containers/cascadingviews
+import ../containers/collectionviews
 import ../containers/documenttabs
 import ../containers/outlineviews
 import ../containers/tableviews
@@ -772,10 +773,49 @@ protocol ArrayControllerComboDataSource of ComboBoxDataSource:
   ): string =
     controller.itemAt(index).displayTitle(ovrComboBox)
 
+protocol ArrayControllerCollectionDataSource of CollectionViewDataSource:
+  method numberOfCollectionItems(
+      controller: ArrayController, collectionView: CollectionView
+  ): int =
+    controller.len()
+
+  method identifierForCollectionItem(
+      controller: ArrayController, collectionView: CollectionView, index: int
+  ): string =
+    controller.itemAt(index).identifier
+
+  method indexForCollectionItemIdentifier(
+      controller: ArrayController, collectionView: CollectionView, identifier: string
+  ): int =
+    controller.indexOfIdentifier(identifier)
+
+  method objectValueForCollectionItem(
+      controller: ArrayController, collectionView: CollectionView, index: int
+  ): ObjectValue =
+    controller.itemAt(index).objectValue
+
+  method textForCollectionItem(
+      controller: ArrayController, collectionView: CollectionView, index: int
+  ): string =
+    controller.itemAt(index).displayTitle(ovrLabel)
+
+protocol ArrayControllerCollectionDelegate of CollectionViewDelegate:
+  method didSelectCollectionItem(
+      controller: ArrayController,
+      collectionView: CollectionView,
+      index: int,
+      identifier: string,
+  ) =
+    discard index
+    discard identifier
+    controller.xSelection.setSelectedIdentifiers(collectionView.selectedIdentifiers())
+
 proc installArrayControllerProtocols(controller: ArrayController) =
   discard controller.withProtocol(ArrayControllerTableDataSource)
   discard controller.withProtocol(ArrayControllerTableDelegate)
   discard controller.withProtocol(ArrayControllerComboDataSource)
+  discard controller.withProtocol(ArrayControllerCollectionDataSource)
+  discard controller.withProtocol(ArrayControllerCollectionDelegate)
 
 proc bindTableView*(tableView: TableView, controller: ArrayController) =
   if tableView.isNil:
@@ -800,6 +840,20 @@ proc bindComboBox*(comboBox: ComboBox, controller: ArrayController) =
     return
   comboBox.dataSource = controller
   comboboxes.reloadData(comboBox)
+
+proc bindCollectionView*(collectionView: CollectionView, controller: ArrayController) =
+  if collectionView.isNil:
+    return
+  collectionView.dataSource = DynamicAgent(controller)
+  collectionView.delegate = DynamicAgent(controller)
+  if not controller.isNil:
+    collectionView.selectionMode =
+      case controller.xSelection.mode()
+      of mselNone: csmNone
+      of mselSingle: csmSingle
+      of mselMultiple: csmMultiple
+    collectionView.selectedIdentifiers = controller.xSelection.selectedIdentifiers()
+  collectionviews.reloadData(collectionView)
 
 proc initTreeControllerFields(
     controller: TreeController, items: openArray[ModelTreeItem] = []

@@ -6,6 +6,7 @@ import cascading_demo
 import checkbox_demo
 import combo_scroll_demo
 import combobox_demo
+import collectionview_demo
 import constraint_playground_demo
 import controls_showcase
 import documenttabs_demo

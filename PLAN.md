@@ -20,12 +20,12 @@ application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
 constraints, stack/form/grid/tab/split containers, buttons, switch/radio
 buttons, sliders, steppers, progress indicators, text fields, combo boxes,
 box/group containers, scroll views, popup lists, table views, outline views,
-cascading column views, basic text editing lifecycle, action dispatch, reusable
-pure Nim panel/dialog views, matrix cell grids, a themed high-throughput
-monospace text view/editor with raw event policy controls, document-controller
-infrastructure, Nim-native object/array/tree/selection model controllers and
-widget binding adapters, view-controller content ownership and containment, a
-responder-discovered undo-manager service,
+cascading column views, collection views, basic text editing lifecycle, action
+dispatch, reusable pure Nim panel/dialog views, matrix cell grids, a themed
+high-throughput monospace text view/editor with raw event policy controls,
+document-controller infrastructure, Nim-native object/array/tree/selection
+model controllers and widget binding adapters, view-controller content ownership
+and containment, a responder-discovered undo-manager service,
 AppKit-style in-process pasteboard/dragging foundations, a shared object-value
 formatting, parsing, writeback, and validation layer for model-backed controls,
 a typed notification center for broad app/window/document/defaults/undo/
@@ -211,6 +211,14 @@ document-controller open/save integration are covered in tests and examples.
   adapter protocols now feed table, outline, cascading, combo, menu,
   document-tab, and matrix controls from the same object-value model vocabulary,
   including typed table editing/writeback and structured parse validation.
+- Added model-backed `CollectionView` for reusable repeated-content views:
+  layout strategies stay separate from item storage, while data-source and
+  delegate protocols cover stable item identifiers, object values, identity
+  selection, reusable item/supplementary views, item state/accessibility,
+  incremental insert/remove/move/reload updates, and model-aware drag/drop
+  targets. `ArrayController` can now bind collection views using the same
+  sorted/filtered `ModelItem` vocabulary as tables, combo boxes, menus, tabs,
+  and matrices.
 - Added the typed notification center for cross-cutting observation:
   `NotificationKind`, `Notification`, observer tokens, typed payload records,
   and the Sigils-backed `notificationPosted` signal now cover application,
@@ -246,39 +254,22 @@ document-controller open/save integration are covered in tests and examples.
   layout; the latest full run passed `2/2`.
 - Focused NimKit coverage lives under `tests/nimkit/*.nim` and is aggregated
   by `tests/tnimkit.nim`; current modules cover controls, matrix,
-  monospace text views, tables, outlines, documents, animations, rendering,
-  accessibility, text storage/layout/views, pasteboards/dragging, document tabs,
-  undo managers, object values, model controllers, notifications, responders,
-  view controllers, windows/controllers, constraints, and themes.
+  monospace text views, tables, outlines, collection views, documents,
+  animations, rendering, accessibility, text storage/layout/views,
+  pasteboards/dragging, document tabs, undo managers, object values, model
+  controllers, notifications, responders, view controllers, windows/controllers,
+  constraints, and themes.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
   `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
-  `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`, and
-  `examples/controls_showcase.nim`.
+  `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`,
+  `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
 - GitHub Actions is currently blocked before runner startup by account billing
   or spending-limit state, not by a Nim build or test failure. Rerun CI after
   the GitHub account issue is cleared.
 
 ## Near-Term Work
-
-### CollectionView
-
-Add a true model-backed collection view for reusable item views. `GridView` stays
-a layout container; `CollectionView` should cover repeated content such as icon
-grids, galleries, source lists, and custom item presentations.
-
-1. Share model vocabulary with table/tree work:
-   - item identifiers, object values, selection identity, sort/filter adapters,
-     reusable item views, supplementary views, and incremental updates
-   - keep layout strategy separate from item storage so list, grid, wrapped, and
-     custom layouts can evolve independently
-2. Define item view lifecycle:
-   - dequeue/reuse item views, configure from object values, prepare for reuse,
-     apply selection/highlight/focus state, and update accessibility metadata
-3. Add selection, drag/drop, and updates:
-   - identity-backed selection, batch insert/remove/move/reload, autoscroll,
-     drag payload writers, and model-aware drop targets
 
 ### TableView Model Backing
 
