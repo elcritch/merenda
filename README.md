@@ -275,7 +275,7 @@ nim r examples/controls_showcase.nim
 
 Current examples are mirrored by `examples/all_compile.nim`:
 
-- Basics: `quick_start`, `hello`, `button_counter`, `button_demo`, `controls_showcase`
+- Basics: `quick_start`, `hello`, `button_counter`, `button_demo`, `todo_demo`, `controls_showcase`
 - Controls: `textfield_demo`, `checkbox_demo`, `radio_demo`, `combobox_demo`, `combo_scroll_demo`, `stepper_demo`, `progress_indicator_demo`
 - Layout and containers: `box_demo`, `splitview_demo`, `scrollview_demo`, `tabview_demo`, `layout_showcase`, `constraint_playground_demo`, `grid_preferences`
 - Data and models: `table_demo`, `cascading_demo`, `collectionview_demo`, `documenttabs_demo`, `matrix_demo`, `menu_demo`, `modelcontrollers_demo`
