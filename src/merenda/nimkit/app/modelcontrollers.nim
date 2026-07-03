@@ -1036,7 +1036,9 @@ protocol TreeControllerCascadingDataSource of CascadingDataSource:
       identifier: item.item.identifier,
       parentIdentifier: item.parentIdentifier,
       title: item.item.displayTitle(ovrComboBox),
+      objectValue: item.item.objectValue,
       leaf: controller.isLeaf(item.item.identifier),
+      representedObject: item.item.representedObject,
     )
 
   method cascadingItemTitle(
@@ -1048,6 +1050,28 @@ protocol TreeControllerCascadingDataSource of CascadingDataSource:
       controller: TreeController, view: CascadingView, identifier: string
   ): bool =
     controller.isLeaf(identifier)
+
+  method objectValueForCascadingItem(
+      controller: TreeController, view: CascadingView, identifier: string
+  ): ObjectValue =
+    discard view
+    let item = controller.getTreeItemWithIdentifier(identifier)
+    if item.isSome:
+      item.get().item.objectValue
+    else:
+      nilObjectValue()
+
+  method indexOfCascadingChildIdentifier(
+      controller: TreeController,
+      view: CascadingView,
+      parentIdentifier: string,
+      identifier: string,
+  ): int =
+    discard view
+    for index, childIdentifier in controller.childIdentifiers(parentIdentifier):
+      if childIdentifier == identifier:
+        return index
+    -1
 
 proc installTreeControllerProtocols(controller: TreeController) =
   discard controller.withProtocol(TreeControllerOutlineDataSource)
@@ -1062,7 +1086,16 @@ proc bindOutlineView*(outlineView: OutlineView, controller: TreeController) =
 proc bindCascadingView*(view: CascadingView, controller: TreeController) =
   if view.isNil:
     return
+  let oldController = view.dataSource()
+  if oldController of TreeController:
+    TreeController(oldController).disconnect(
+      treeControllerDidChange, view, cascadingModelDidChange
+    )
+  if not controller.isNil:
+    controller.disconnect(treeControllerDidChange, view, cascadingModelDidChange)
   view.dataSource = controller
+  if not controller.isNil:
+    controller.connect(treeControllerDidChange, view, cascadingModelDidChange)
   cascadingviews.reloadData(view)
 
 proc syncMenu*(menu: Menu, controller: ArrayController) =

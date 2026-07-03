@@ -21,7 +21,11 @@ type
     changing: int
     changed: int
     activated: int
+    updates: seq[CascadingTreeUpdate]
     lastSender: DynamicAgent
+
+  CascadingNotificationSpy = ref object of Responder
+    notifications: seq[Notification]
 
 proc containsValue(values: openArray[string], value: string): bool =
   for item in values:
@@ -165,6 +169,17 @@ protocol CascadingSignalSpyEvents from CascadingSignalSpy:
     inc spy.activated
     spy.lastSender = sender
 
+  proc cascadingItemsDidUpdate(
+      spy: CascadingSignalSpy, sender: DynamicAgent, updates: seq[CascadingTreeUpdate]
+  ) {.slot.} =
+    spy.updates = updates
+    spy.lastSender = sender
+
+proc rememberCascadingNotification(
+    spy: CascadingNotificationSpy, notification: Notification
+) {.slot.} =
+  spy.notifications.add notification
+
 proc newCascadingSourceSpy(items: openArray[CascadingItem]): CascadingSourceSpy =
   result = CascadingSourceSpy(items: @items)
   initResponder(result)
@@ -177,6 +192,11 @@ proc newCascadingDelegateSpy(): CascadingDelegateSpy =
 
 proc newCascadingSignalSpy(): CascadingSignalSpy =
   result = CascadingSignalSpy()
+  initResponder(result)
+  result = result.withProto()
+
+proc newCascadingNotificationSpy(): CascadingNotificationSpy =
+  result = CascadingNotificationSpy()
   initResponder(result)
   result = result.withProto()
 
@@ -282,6 +302,109 @@ suite "NimKit CascadingView":
 
     view.selectedPath = @["root", "missing"]
     check view.selectedPath == @["root"]
+
+  test "model items expose object values hidden state notifications and updates":
+    let
+      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+      signals = newCascadingSignalSpy()
+      notificationSpy = newCascadingNotificationSpy()
+      center = sharedNotificationCenter()
+
+    signals.observeProtocol(view, CascadingEvents)
+    center.connect(notificationPosted, notificationSpy, rememberCascadingNotification)
+    try:
+      view.cascadingItems = [
+        initCascadingItem("root", objectValue = toObjectValue("Root")),
+        initCascadingItem("hidden", "Hidden", hidden = true),
+        initCascadingItem(
+          "child",
+          parentIdentifier = "root",
+          objectValue = toObjectValue(42),
+          leaf = true,
+        ),
+      ]
+
+      let firstColumn = view.tableViewForColumn(0)
+      check firstColumn.rowCount == 1
+      check firstColumn.tableCellText(0, firstColumn.columnAt(0)) == "Root"
+      check firstColumn.tableCellObjectValue(0, firstColumn.columnAt(0)).requireString() ==
+        "Root"
+      check view.cascadingItemObjectValue("child").requireInt() == 42
+
+      view.selectItem(0, 0)
+      check view.selectedPath == @["root"]
+      check view.columnCount == 2
+      check notificationSpy.notifications[^1].kind == nkSelectionDidChange
+      check notificationSpy.notifications[^1].sender == DynamicAgent(view)
+      check notificationSpy.notifications[^1].payload.selection.change == sckCascading
+      check notificationSpy.notifications[^1].payload.selection.selectedIdentifiers ==
+        @["root"]
+
+      view.insertCascadingItems(
+        "root",
+        1,
+        [
+          initCascadingItem(
+            "second", objectValue = toObjectValue("Second"), leaf = true
+          )
+        ],
+      )
+      check view.tableViewForColumn(1).rowCount == 2
+      check signals.updates.len == 1
+      check signals.updates[0].kind == ctukInsert
+      check signals.updates[0].parentIdentifier == "root"
+      check signals.updates[0].identifiers == @["second"]
+      check notificationSpy.notifications[^1].kind == nkModelMutationDidChange
+      check notificationSpy.notifications[^1].payload.model.mutation == mmkTreeChanged
+      check notificationSpy.notifications[^1].payload.model.identifiers == @["second"]
+
+      view.selectItem(1, 0)
+      check view.selectedPath == @["root", "child"]
+      check view.removeCascadingItem("child")
+      check view.selectedPath == @["root"]
+      check view.tableViewForColumn(1).rowCount == 1
+      check signals.updates[0].kind == ctukRemove
+      check signals.updates[0].identifiers == @["child"]
+      check signals.changed >= 3
+    finally:
+      center.disconnect(
+        notificationPosted, notificationSpy, rememberCascadingNotification
+      )
+
+  test "tree controller binding refreshes cascading columns by item identity":
+    let
+      controller = newTreeController(
+        [
+          initModelTreeItem(initModelItem("root", objectValue = toObjectValue("Root"))),
+          initModelTreeItem(
+            initModelItem("child", objectValue = toObjectValue("Child")),
+            parentIdentifier = "root",
+            leaf = true,
+          ),
+        ]
+      )
+      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+
+    bindCascadingView(view, controller)
+    view.selectItem(0, 0)
+    view.selectItem(1, 0)
+    check view.selectedPath == @["root", "child"]
+    check view.cascadingItemObjectValue("child").requireString() == "Child"
+
+    controller.addItem(
+      initModelTreeItem(
+        initModelItem("second", objectValue = toObjectValue("Second")),
+        parentIdentifier = "root",
+        leaf = true,
+      )
+    )
+    check view.tableViewForColumn(1).rowCount == 2
+    check view.indexOfChildIdentifier("root", "second") == 1
+    check view.cascadingItemObjectValue("second").requireString() == "Second"
+
+    check controller.removeItem("child")
+    check view.selectedPath == @["root"]
+    check view.tableViewForColumn(1).rowCount == 1
 
   test "columns overflow into horizontal scroll content":
     let
