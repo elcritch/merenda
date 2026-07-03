@@ -12,6 +12,11 @@
   cpp
 --debugger:
   native
+--define:
+  sigilsClosures
+--define:
+  sigilsSigilNameString
+
 when defined(feature.merenda.libbacktrace):
   --stacktrace:
     off
