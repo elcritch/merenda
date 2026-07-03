@@ -7,7 +7,7 @@ import pkg/pixie/fonts
 import pkg/vmath
 
 import ../accessibility/accessibilityprotocols
-import ../app/windows
+from ../app/windows import Window, makeFirstResponder
 import ../drawing
 import ../foundation/events
 import ../foundation/selectors
@@ -1323,6 +1323,16 @@ protocol DefaultMonoTextViewEvents of ResponderEventProtocol:
   method flagsChanged(view: MonoTextView, event: KeyEvent): bool =
     view.forwardRawEvent(view.makeRawEvent(mtreFlagsChanged, event))
 
+protocol DefaultMonoTextViewKeyEquivalents of ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(view: MonoTextView, event: KeyEvent): bool =
+    if mtreKeyDown notin view.xCapturedRawEvents:
+      return false
+    view.xSuppressNextTextInput = false
+    if view.forwardRawEvent(view.makeRawEvent(mtreKeyDown, event)):
+      view.xSuppressNextTextInput = true
+      return true
+    false
+
 protocol DefaultMonoTextViewInput of TextInputProtocol:
   method insertText(view: MonoTextView, text: string) =
     if view.xSuppressNextTextInput or mtreKeyDown in view.xCapturedRawEvents:
@@ -1428,6 +1438,7 @@ proc initMonoTextViewFields*(
   discard view.withProtocol(DefaultMonoTextViewDrawing)
   discard view.withProtocol(DefaultMonoTextViewLayout)
   discard view.withProtocol(DefaultMonoTextViewEvents)
+  discard view.withProtocol(DefaultMonoTextViewKeyEquivalents)
   discard view.withProtocol(DefaultMonoTextViewInput)
   discard view.withProtocol(DefaultMonoTextViewAccessibility)
   view.setAcceptsFirstResponder(editable)

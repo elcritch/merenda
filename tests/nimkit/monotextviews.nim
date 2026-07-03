@@ -213,6 +213,31 @@ suite "nimkit mono text views":
     check window.mouseDownAt(editorPoint)
     check forwarded == @[mtreKeyDown, mtreKeyDown, mtreKeyDown, mtreMouseDown]
 
+  test "captured raw tab key bypasses key view navigation":
+    let
+      window = newWindow("Mono raw tab", frame = initRect(0, 0, 260, 120))
+      root = newView(frame = initRect(0, 0, 260, 120))
+      view = newMonoTextEditor("abcdef", frame = initRect(0, 0, 160, 80))
+      next = newButton("Next", frame = initRect(170, 0, 70, 28))
+
+    var forwarded: seq[string]
+    view.rawEventPolicy = initMonoTextRawEventPolicy(
+      forwardedEvents = {mtreKeyDown}, capturedEvents = {mtreKeyDown}
+    )
+    view.rawEventHandler = proc(event: MonoTextRawEvent): bool =
+      forwarded.add event.input
+      false
+
+    root.addSubview(view)
+    root.addSubview(next)
+    window.setContentView(root)
+    check window.makeFirstResponder(view)
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check forwarded == @["<Tab>"]
+    check window.firstResponder() == view
+    check view.stringValue == "abcdef"
+
   test "theme drives mono text chrome surface":
     let
       surfaceFill = initColor(0.12, 0.16, 0.20, 1.0)
