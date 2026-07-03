@@ -736,10 +736,14 @@ proc comboBoxSetEditableMethod(self: DynamicAgent, invocation: var Invocation) =
   invocation.setResult(())
 
 proc installComboBoxTextSelectors(comboBox: ComboBox) =
-  discard comboBox.replaceMethod(stringValue(), comboBoxStringValueMethod)
-  discard comboBox.replaceMethod(setStringValue(), comboBoxSetStringValueMethod)
-  discard comboBox.replaceMethod(isEditable(), comboBoxIsEditableMethod)
-  discard comboBox.replaceMethod(setEditable(), comboBoxSetEditableMethod)
+  discard
+    comboBox.replaceMethod(stringValue(), DynamicMethod(comboBoxStringValueMethod))
+  discard comboBox.replaceMethod(
+    setStringValue(), DynamicMethod(comboBoxSetStringValueMethod)
+  )
+  discard comboBox.replaceMethod(isEditable(), DynamicMethod(comboBoxIsEditableMethod))
+  discard
+    comboBox.replaceMethod(setEditable(), DynamicMethod(comboBoxSetEditableMethod))
 
 proc initComboBoxCellFields*(cell: ComboBoxCell) =
   initActionCellFields(cell)

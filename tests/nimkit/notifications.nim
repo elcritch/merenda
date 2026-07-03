@@ -63,6 +63,7 @@ suite "nimkit notifications":
       center = newNotificationCenter()
       sender = newUserDefaults()
       signalSpy = NotificationSignalSpy()
+      routeSpy = NotificationSignalSpy()
 
     var
       allKinds: seq[NotificationKind]
@@ -90,30 +91,41 @@ suite "nimkit notifications":
     let undoNameToken =
       center.observeName(notificationName(nkUndoStateDidChange), recordUndoName)
     let senderToken = center.addObserver(recordSender, sender = DynamicAgent(sender))
+    let routeToken = center.connectNotification(
+      nkDefaultsDidChange,
+      routeSpy,
+      rememberNotification,
+      filterSender = DynamicAgent(sender),
+    )
 
-    center.post(
+    emit center.notificationReceived(
       initNotification(
         nkDefaultsDidChange,
         sender = DynamicAgent(sender),
         payload = initDefaultsNotificationPayload(dckSet, "theme", DynamicAgent(sender)),
       )
     )
-    center.post(initNotification(nkUndoStateDidChange))
+    emit center.notificationReceived(initNotification(nkUndoStateDidChange))
 
     check signalSpy.notifications.notificationKinds() ==
       @[nkDefaultsDidChange, nkUndoStateDidChange]
+    check routeSpy.notifications.notificationKinds() == @[nkDefaultsDidChange]
     check allKinds == @[nkDefaultsDidChange, nkUndoStateDidChange]
     check defaultsKinds == @[nkDefaultsDidChange]
     check undoNames == @[notificationName(nkUndoStateDidChange)]
     check senderMatches == 1
-    check center.observerCount() == 4
+    check center.observerCount() == 5
 
     check defaultsToken.unregister()
     check not defaultsToken.isRegistered()
 
-    center.post(initNotification(nkDefaultsDidChange, sender = DynamicAgent(sender)))
+    emit center.notificationReceived(
+      initNotification(nkDefaultsDidChange, sender = DynamicAgent(sender))
+    )
     check allKinds == @[nkDefaultsDidChange, nkUndoStateDidChange, nkDefaultsDidChange]
     check defaultsKinds == @[nkDefaultsDidChange]
+    check routeSpy.notifications.notificationKinds() ==
+      @[nkDefaultsDidChange, nkDefaultsDidChange]
     check senderMatches == 2
 
     var selfRemovingCount = 0
@@ -126,14 +138,15 @@ suite "nimkit notifications":
 
     selfRemovingToken = center.observe(nkDefaultsDidChange, recordAndRemove)
 
-    center.post(initNotification(nkDefaultsDidChange))
-    center.post(initNotification(nkDefaultsDidChange))
+    emit center.notificationReceived(initNotification(nkDefaultsDidChange))
+    emit center.notificationReceived(initNotification(nkDefaultsDidChange))
     check selfRemovingCount == 1
     check not selfRemovingToken.isRegistered()
 
     check allToken.unregister()
     check undoNameToken.unregister()
     check senderToken.unregister()
+    check routeToken.unregister()
 
   test "lifecycle defaults undo selection and model events post typed payloads":
     let center = sharedNotificationCenter()

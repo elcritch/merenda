@@ -105,21 +105,23 @@ proc postNotification(
 ) =
   if controller.isNil:
     return
-  notifications.postNotification(
-    kind,
-    sender = DynamicAgent(controller),
-    representedObject = DynamicAgent(document),
-    payload =
-      if document.isNil:
-        initNotificationPayload()
-      else:
-        initDocumentNotificationPayload(
-          fileUrl = document.fileUrl(),
-          fileType = document.fileType(),
-          displayName = document.displayName(),
-          edited = document.isDocumentEdited(),
-          closed = document.isClosed(),
-        ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      kind,
+      sender = DynamicAgent(controller),
+      representedObject = DynamicAgent(document),
+      payload =
+        if document.isNil:
+          initNotificationPayload()
+        else:
+          initDocumentNotificationPayload(
+            fileUrl = document.fileUrl(),
+            fileType = document.fileType(),
+            displayName = document.displayName(),
+            edited = document.isDocumentEdited(),
+            closed = document.isClosed(),
+          ),
+    )
   )
 
 proc defaultType(controller: DocumentController, fileType: string): string =

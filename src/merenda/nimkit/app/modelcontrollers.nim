@@ -109,16 +109,18 @@ proc installTreeControllerProtocols(controller: TreeController)
 
 proc postSelectionNotification(controller: SelectionController) =
   doAssert not controller.isNil
-  postNotification(
-    nkSelectionDidChange,
-    sender = DynamicAgent(controller),
-    payload = initSelectionNotificationPayload(
-      sckModel,
-      selectedIdentifiers = controller.xSelectedIdentifiers,
-      anchorIdentifier = controller.xAnchorIdentifier,
-      leadIdentifier = controller.xLeadIdentifier,
-      selectedIndex = if controller.xSelectedIdentifiers.len > 0: 0 else: -1,
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkSelectionDidChange,
+      sender = DynamicAgent(controller),
+      payload = initSelectionNotificationPayload(
+        sckModel,
+        selectedIdentifiers = controller.xSelectedIdentifiers,
+        anchorIdentifier = controller.xAnchorIdentifier,
+        leadIdentifier = controller.xLeadIdentifier,
+        selectedIndex = if controller.xSelectedIdentifiers.len > 0: 0 else: -1,
+      ),
+    )
   )
 
 proc notifySelectionControllerDidChange(controller: SelectionController) =
@@ -136,13 +138,15 @@ proc notifyObjectControllerDidChange(
   var identifiers: seq[string]
   if controller.xItem.identifier.len > 0:
     identifiers.add controller.xItem.identifier
-  postNotification(
-    nkModelMutationDidChange,
-    sender = DynamicAgent(controller),
-    representedObject = controller.xItem.representedObject,
-    payload = initModelNotificationPayload(
-      mutation, identifiers = identifiers, keys = keys, count = 1
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkModelMutationDidChange,
+      sender = DynamicAgent(controller),
+      representedObject = controller.xItem.representedObject,
+      payload = initModelNotificationPayload(
+        mutation, identifiers = identifiers, keys = keys, count = 1
+      ),
+    )
   )
 
 proc notifyArrayControllerDidChange(
@@ -154,16 +158,18 @@ proc notifyArrayControllerDidChange(
 ) =
   doAssert not controller.isNil
   emit controller.arrayControllerDidChange(DynamicAgent(controller))
-  postNotification(
-    nkModelMutationDidChange,
-    sender = DynamicAgent(controller),
-    payload = initModelNotificationPayload(
-      mutation,
-      identifiers = identifiers,
-      keys = keys,
-      index = index,
-      count = controller.xItems.len.Natural,
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkModelMutationDidChange,
+      sender = DynamicAgent(controller),
+      payload = initModelNotificationPayload(
+        mutation,
+        identifiers = identifiers,
+        keys = keys,
+        index = index,
+        count = controller.xItems.len.Natural,
+      ),
+    )
   )
 
 proc notifyTreeControllerDidChange(
@@ -172,15 +178,17 @@ proc notifyTreeControllerDidChange(
   if controller.isNil:
     return
   emit controller.treeControllerDidChange(DynamicAgent(controller))
-  postNotification(
-    nkModelMutationDidChange,
-    sender = DynamicAgent(controller),
-    payload = initModelNotificationPayload(
-      mmkTreeChanged,
-      identifiers = identifiers,
-      index = index,
-      count = controller.xItems.len.Natural,
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkModelMutationDidChange,
+      sender = DynamicAgent(controller),
+      payload = initModelNotificationPayload(
+        mmkTreeChanged,
+        identifiers = identifiers,
+        index = index,
+        count = controller.xItems.len.Natural,
+      ),
+    )
   )
 
 func initModelField*(key: string, value: ObjectValue): ModelField =

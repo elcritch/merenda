@@ -170,8 +170,20 @@ type
 
   NotificationObserver* = proc(notification: Notification) {.closure.}
 
+  NotificationObserverAgent = ref object of DynamicAgent
+    observer: NotificationObserver
+
+  NotificationRoute* = ref object of DynamicAgent
+    xId: Natural
+    xKind: Option[NotificationKind]
+    xName: string
+    xSender: DynamicAgent
+    xRepresentedObject: DynamicAgent
+    xActive: bool
+    xObserverAgent: NotificationObserverAgent
+
   NotificationCenter* = ref object of DynamicAgent
-    xObservers: seq[NotificationObserverEntry]
+    xRoutes: seq[NotificationRoute]
     xNextObserverId: Natural
     xPostingDepth: Natural
     xNeedsCompaction: bool
@@ -179,19 +191,20 @@ type
   NotificationObserverToken* = object
     id*: Natural
     center: NotificationCenter
-
-  NotificationObserverEntry = object
-    token: NotificationObserverToken
-    kind: Option[NotificationKind]
-    name: string
-    sender: DynamicAgent
-    representedObject: DynamicAgent
-    active: bool
-    observer: NotificationObserver
+    route: NotificationRoute
 
 protocol NotificationCenterEvents:
+  proc notificationReceived*(
+    center: NotificationCenter, notification: Notification
+  ) {.signal.}
+
   proc notificationPosted*(
     center: NotificationCenter, notification: Notification
+  ) {.signal.}
+
+protocol NotificationRouteEvents:
+  proc notificationMatched*(
+    route: NotificationRoute, notification: Notification
   ) {.signal.}
 
 var sharedNotificationCenterInstance {.threadvar.}: NotificationCenter
@@ -413,35 +426,104 @@ func initNotification*(
     payload: payload,
   )
 
+proc deliverObservedNotification(
+    agent: NotificationObserverAgent, notification: Notification
+) {.slot.} =
+  if not agent.isNil and not agent.observer.isNil:
+    agent.observer(notification)
+
+proc disconnectRoute(route: NotificationRoute) =
+  if route.isNil:
+    return
+  var index = route.subcriptions.high
+  while index >= 0:
+    let entry = route.subcriptions[index]
+    route.delSubscription(entry.signal, entry.subscription)
+    dec index
+  route.xObserverAgent = nil
+
+proc compactInactive(center: NotificationCenter) =
+  if center.isNil or center.xPostingDepth > 0:
+    return
+  var index = center.xRoutes.high
+  while index >= 0:
+    let route = center.xRoutes[index]
+    if route.isNil or not route.xActive:
+      route.disconnectRoute()
+      center.xRoutes.delete(index)
+    dec index
+  center.xNeedsCompaction = false
+
+proc matches(route: NotificationRoute, notification: Notification): bool =
+  if route.isNil or not route.xActive:
+    return false
+  if route.xKind.isSome and route.xKind.get() != notification.kind:
+    return false
+  if route.xName.len > 0 and route.xName != notification.name:
+    return false
+  if not route.xSender.isNil and route.xSender != notification.sender:
+    return false
+  if not route.xRepresentedObject.isNil and
+      route.xRepresentedObject != notification.representedObject:
+    return false
+  true
+
+proc forwardNotification(center: NotificationCenter, notification: Notification) =
+  if center.isNil:
+    return
+  var delivered = notification
+  if delivered.name.len == 0:
+    delivered.name = notificationName(delivered.kind)
+  emit center.notificationPosted(delivered)
+  inc center.xPostingDepth
+  let limit = center.xRoutes.len
+  try:
+    var index = 0
+    while index < limit:
+      if index < center.xRoutes.len:
+        let route = center.xRoutes[index]
+        if route.matches(delivered):
+          emit route.notificationMatched(delivered)
+      inc index
+  finally:
+    dec center.xPostingDepth
+    if center.xPostingDepth == 0 and center.xNeedsCompaction:
+      center.compactInactive()
+
+proc receiveNotification*(
+    center: NotificationCenter, notification: Notification
+) {.slot.} =
+  center.forwardNotification(notification)
+
 proc newNotificationCenter*(): NotificationCenter =
-  NotificationCenter()
+  result = NotificationCenter()
+  result.connect(notificationReceived, result, receiveNotification)
 
 proc sharedNotificationCenter*(): NotificationCenter =
   if sharedNotificationCenterInstance.isNil:
     sharedNotificationCenterInstance = newNotificationCenter()
   sharedNotificationCenterInstance
 
-proc compactInactive(center: NotificationCenter) =
-  if center.isNil or center.xPostingDepth > 0:
+proc addRoute*(
+    center: NotificationCenter,
+    kind = none(NotificationKind),
+    name = "",
+    sender: DynamicAgent = nil,
+    representedObject: DynamicAgent = nil,
+): NotificationObserverToken =
+  if center.isNil:
     return
-  var index = center.xObservers.high
-  while index >= 0:
-    if not center.xObservers[index].active:
-      center.xObservers.delete(index)
-    dec index
-  center.xNeedsCompaction = false
-
-proc matches(entry: NotificationObserverEntry, notification: Notification): bool =
-  if entry.kind.isSome and entry.kind.get() != notification.kind:
-    return false
-  if entry.name.len > 0 and entry.name != notification.name:
-    return false
-  if not entry.sender.isNil and entry.sender != notification.sender:
-    return false
-  if not entry.representedObject.isNil and
-      entry.representedObject != notification.representedObject:
-    return false
-  true
+  inc center.xNextObserverId
+  let route = NotificationRoute(
+    xId: center.xNextObserverId,
+    xKind: kind,
+    xName: name,
+    xSender: sender,
+    xRepresentedObject: representedObject,
+    xActive: true,
+  )
+  center.xRoutes.add route
+  NotificationObserverToken(id: route.xId, center: center, route: route)
 
 proc addObserver*(
     center: NotificationCenter,
@@ -453,16 +535,12 @@ proc addObserver*(
 ): NotificationObserverToken =
   if center.isNil or observer.isNil:
     return
-  inc center.xNextObserverId
-  result = NotificationObserverToken(id: center.xNextObserverId, center: center)
-  center.xObservers.add NotificationObserverEntry(
-    token: result,
-    kind: kind,
-    name: name,
-    sender: sender,
-    representedObject: representedObject,
-    active: true,
-    observer: observer,
+  result = center.addRoute(kind, name, sender, representedObject)
+  if result.route.isNil:
+    return
+  result.route.xObserverAgent = NotificationObserverAgent(observer: observer)
+  result.route.connect(
+    notificationMatched, result.route.xObserverAgent, deliverObservedNotification
   )
 
 proc observe*(
@@ -496,15 +574,65 @@ proc observeName*(
     representedObject = representedObject,
   )
 
+proc route*(token: NotificationObserverToken): NotificationRoute =
+  token.route
+
+template connectNotification*(
+    center: NotificationCenter,
+    target: Agent,
+    slot: untyped,
+    filterSender: DynamicAgent = nil,
+    filterRepresentedObject: DynamicAgent = nil,
+): NotificationObserverToken =
+  block:
+    let token = center.addRoute(
+      sender = filterSender, representedObject = filterRepresentedObject
+    )
+    if not token.route.isNil:
+      token.route.connect(notificationMatched, target, slot)
+    token
+
+template connectNotification*(
+    center: NotificationCenter,
+    kind: NotificationKind,
+    target: Agent,
+    slot: untyped,
+    filterSender: DynamicAgent = nil,
+    filterRepresentedObject: DynamicAgent = nil,
+): NotificationObserverToken =
+  block:
+    let token = center.addRoute(
+      some(kind), sender = filterSender, representedObject = filterRepresentedObject
+    )
+    if not token.route.isNil:
+      token.route.connect(notificationMatched, target, slot)
+    token
+
+template connectNotificationName*(
+    center: NotificationCenter,
+    name: string,
+    target: Agent,
+    slot: untyped,
+    filterSender: DynamicAgent = nil,
+    filterRepresentedObject: DynamicAgent = nil,
+): NotificationObserverToken =
+  block:
+    let token = center.addRoute(
+      name = name, sender = filterSender, representedObject = filterRepresentedObject
+    )
+    if not token.route.isNil:
+      token.route.connect(notificationMatched, target, slot)
+    token
+
 proc removeObserver*(
     center: NotificationCenter, token: NotificationObserverToken
 ): bool {.discardable.} =
   if center.isNil or token.center != center or token.id == 0:
     return false
-  for index, entry in center.xObservers:
-    if entry.active and entry.token.id == token.id:
-      center.xObservers[index].active = false
-      center.xObservers[index].observer = nil
+  for route in center.xRoutes:
+    if not route.isNil and route.xActive and route.xId == token.id and
+        route == token.route:
+      route.xActive = false
       result = true
       break
   if result:
@@ -521,8 +649,9 @@ proc unregister*(token: NotificationObserverToken): bool {.discardable.} =
 proc isRegistered*(center: NotificationCenter, token: NotificationObserverToken): bool =
   if center.isNil or token.center != center or token.id == 0:
     return false
-  for entry in center.xObservers:
-    if entry.active and entry.token.id == token.id:
+  for route in center.xRoutes:
+    if not route.isNil and route.xActive and route.xId == token.id and
+        route == token.route:
       return true
 
 proc isRegistered*(token: NotificationObserverToken): bool =
@@ -531,31 +660,14 @@ proc isRegistered*(token: NotificationObserverToken): bool =
 proc observerCount*(center: NotificationCenter): Natural =
   if center.isNil:
     return 0
-  for entry in center.xObservers:
-    if entry.active:
+  for route in center.xRoutes:
+    if not route.isNil and route.xActive:
       inc result
 
 proc post*(center: NotificationCenter, notification: Notification) =
   if center.isNil:
     return
-  var delivered = notification
-  if delivered.name.len == 0:
-    delivered.name = notificationName(delivered.kind)
-  emit center.notificationPosted(delivered)
-  inc center.xPostingDepth
-  let limit = center.xObservers.len
-  try:
-    var index = 0
-    while index < limit:
-      if index < center.xObservers.len:
-        let entry = center.xObservers[index]
-        if entry.active and not entry.observer.isNil and entry.matches(delivered):
-          entry.observer(delivered)
-      inc index
-  finally:
-    dec center.xPostingDepth
-    if center.xPostingDepth == 0 and center.xNeedsCompaction:
-      center.compactInactive()
+  emit center.notificationReceived(notification)
 
 proc postNotification*(
     kind: NotificationKind,
@@ -564,6 +676,6 @@ proc postNotification*(
     payload = initNotificationPayload(),
     name = "",
 ) =
-  sharedNotificationCenter().post(
+  emit sharedNotificationCenter().notificationReceived(
     initNotification(kind, sender, representedObject, payload, name)
   )

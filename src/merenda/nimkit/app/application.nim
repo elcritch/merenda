@@ -416,23 +416,27 @@ proc sendDelegate(app: Application, selector: Selector[DynamicAgent, EmptyArgs])
 proc postApplicationNotification(app: Application, kind: NotificationKind) =
   if app.isNil:
     return
-  postNotification(
-    kind,
-    sender = DynamicAgent(app),
-    payload = initApplicationNotificationPayload(
-      active = app.xActive, hidden = app.xHidden, terminating = app.xTerminating
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      kind,
+      sender = DynamicAgent(app),
+      payload = initApplicationNotificationPayload(
+        active = app.xActive, hidden = app.xHidden, terminating = app.xTerminating
+      ),
+    )
   )
 
 proc postApplicationAppearanceNotification(app: Application) =
   if app.isNil:
     return
-  postNotification(
-    nkApplicationAppearanceDidChange,
-    sender = DynamicAgent(app),
-    payload = initAppearanceNotificationPayload(
-      atkApplication, app.effectiveAppearance(), app.xHasAppearance
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkApplicationAppearanceDidChange,
+      sender = DynamicAgent(app),
+      payload = initAppearanceNotificationPayload(
+        atkApplication, app.effectiveAppearance(), app.xHasAppearance
+      ),
+    )
   )
 
 proc willFinishLaunching*(app: Application) =

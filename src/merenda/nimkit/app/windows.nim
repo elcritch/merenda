@@ -1162,19 +1162,23 @@ proc windowNotificationPayload(window: Window): NotificationPayload =
 proc postWindowNotification(window: Window, kind: NotificationKind) =
   if window.isNil:
     return
-  postNotification(
-    kind, sender = DynamicAgent(window), payload = window.windowNotificationPayload()
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      kind, sender = DynamicAgent(window), payload = window.windowNotificationPayload()
+    )
   )
 
 proc postWindowAppearanceNotification(window: Window) =
   if window.isNil:
     return
-  postNotification(
-    nkWindowAppearanceDidChange,
-    sender = DynamicAgent(window),
-    payload = initAppearanceNotificationPayload(
-      atkWindow, window.effectiveAppearance(), window.xHasAppearance
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkWindowAppearanceDidChange,
+      sender = DynamicAgent(window),
+      payload = initAppearanceNotificationPayload(
+        atkWindow, window.effectiveAppearance(), window.xHasAppearance
+      ),
+    )
   )
 
 proc notifyApplication(window: Window, selectorName: string) =

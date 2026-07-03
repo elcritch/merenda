@@ -1,5 +1,6 @@
 import std/[options, tables]
 
+import sigils/core
 import sigils/selectors
 
 import ../foundation/notifications
@@ -40,34 +41,42 @@ proc setObjectForKey*(defaults: UserDefaults, key: string, value: DynamicAgent) 
     return
   if value.isNil:
     defaults.xObjects.del(key)
-    postNotification(
-      nkDefaultsDidChange,
-      sender = DynamicAgent(defaults),
-      payload = initDefaultsNotificationPayload(dckRemove, key),
+    emit sharedNotificationCenter().notificationReceived(
+      initNotification(
+        nkDefaultsDidChange,
+        sender = DynamicAgent(defaults),
+        payload = initDefaultsNotificationPayload(dckRemove, key),
+      )
     )
   else:
     defaults.xObjects[key] = value
-    postNotification(
-      nkDefaultsDidChange,
-      sender = DynamicAgent(defaults),
-      representedObject = value,
-      payload = initDefaultsNotificationPayload(dckSet, key, value),
+    emit sharedNotificationCenter().notificationReceived(
+      initNotification(
+        nkDefaultsDidChange,
+        sender = DynamicAgent(defaults),
+        representedObject = value,
+        payload = initDefaultsNotificationPayload(dckSet, key, value),
+      )
     )
 
 proc removeObjectForKey*(defaults: UserDefaults, key: string) =
   if not defaults.isNil and key in defaults.xObjects:
     defaults.xObjects.del(key)
-    postNotification(
-      nkDefaultsDidChange,
-      sender = DynamicAgent(defaults),
-      payload = initDefaultsNotificationPayload(dckRemove, key),
+    emit sharedNotificationCenter().notificationReceived(
+      initNotification(
+        nkDefaultsDidChange,
+        sender = DynamicAgent(defaults),
+        payload = initDefaultsNotificationPayload(dckRemove, key),
+      )
     )
 
 proc clear*(defaults: UserDefaults) =
   if not defaults.isNil and defaults.xObjects.len > 0:
     defaults.xObjects.clear()
-    postNotification(
-      nkDefaultsDidChange,
-      sender = DynamicAgent(defaults),
-      payload = initDefaultsNotificationPayload(dckClear),
+    emit sharedNotificationCenter().notificationReceived(
+      initNotification(
+        nkDefaultsDidChange,
+        sender = DynamicAgent(defaults),
+        payload = initDefaultsNotificationPayload(dckClear),
+      )
     )

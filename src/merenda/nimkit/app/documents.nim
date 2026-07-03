@@ -112,16 +112,18 @@ proc sendDocumentDelegate(document: Document, selector: Selector[Document, Empty
 proc postNotification(document: Document, kind: NotificationKind, fileUrl = "") =
   if document.isNil:
     return
-  notifications.postNotification(
-    kind,
-    sender = DynamicAgent(document),
-    payload = initDocumentNotificationPayload(
-      fileUrl = if fileUrl.len > 0: fileUrl else: document.xFileUrl,
-      fileType = document.xFileType,
-      displayName = document.displayName(),
-      edited = document.xDocumentEdited,
-      closed = document.xClosed,
-    ),
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      kind,
+      sender = DynamicAgent(document),
+      payload = initDocumentNotificationPayload(
+        fileUrl = if fileUrl.len > 0: fileUrl else: document.xFileUrl,
+        fileType = document.xFileType,
+        displayName = document.displayName(),
+        edited = document.xDocumentEdited,
+        closed = document.xClosed,
+      ),
+    )
   )
 
 proc notifyDisplayNameChanged(document: Document) =
