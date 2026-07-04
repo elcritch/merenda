@@ -7,6 +7,7 @@ import ../foundation/types
 import ../drawing
 import ../themes
 import ./controls
+from pkg/chroma import ColorRGBA
 
 export controls
 
@@ -194,6 +195,54 @@ proc sliderFocusBox(style: SliderStyle): ControlBoxStyle =
     cornerRadius: style.knobSize * 0.5'f32,
   )
 
+func clampUnit(value: float32): float32 =
+  min(max(value, 0.0'f32), 1.0'f32)
+
+func mixFloat(a, b, progress: float32): float32 =
+  a + (b - a) * progress.clampUnit()
+
+func mixColor(a, b: Color, progress: float32): Color =
+  color(
+    mixFloat(a.r, b.r, progress),
+    mixFloat(a.g, b.g, progress),
+    mixFloat(a.b, b.b, progress),
+    mixFloat(a.a, b.a, progress),
+  )
+
+func rgbaColor(value: ColorRGBA): Color =
+  color(
+    value.r.float32 / 255.0'f32,
+    value.g.float32 / 255.0'f32,
+    value.b.float32 / 255.0'f32,
+    value.a.float32 / 255.0'f32,
+  )
+
+func mixFill(a, b: Fill, progress: float32): Fill =
+  if a.kind == b.kind:
+    case a.kind
+    of flColor:
+      return fill(mixColor(a.color.rgbaColor(), b.color.rgbaColor(), progress))
+    of flLinear2:
+      if a.lin2.axis == b.lin2.axis:
+        return linear(
+          mixColor(a.lin2.start.rgbaColor(), b.lin2.start.rgbaColor(), progress),
+          mixColor(a.lin2.stop.rgbaColor(), b.lin2.stop.rgbaColor(), progress),
+          a.lin2.axis,
+        )
+    of flLinear3:
+      if a.lin3.axis == b.lin3.axis and a.lin3.midPos == b.lin3.midPos:
+        return linear(
+          mixColor(a.lin3.start.rgbaColor(), b.lin3.start.rgbaColor(), progress),
+          mixColor(a.lin3.mid.rgbaColor(), b.lin3.mid.rgbaColor(), progress),
+          mixColor(a.lin3.stop.rgbaColor(), b.lin3.stop.rgbaColor(), progress),
+          a.lin3.axis,
+          a.lin3.midPos,
+        )
+  fill(mixColor(a.centerColor(), b.centerColor(), progress))
+
+proc sliderKnobFill(slider: Slider, style: SliderStyle): Fill =
+  mixFill(style.knob.fill, style.activeTrack.fill, slider.sliderFraction())
+
 proc sliderChromeStates(slider: Slider): set[WidgetState] =
   result = slider.widgetStateSet()
   if slider.cell().isHighlighted():
@@ -237,7 +286,11 @@ proc drawSliderKnob(
     frame = context.renderRectFor(rect)
     radius = rect.size.width * 0.5'f32
     chrome = chromeContext(
-      style.chrome, crSliderKnob, cpFace, style.knob.fill, slider.sliderChromeStates()
+      style.chrome,
+      crSliderKnob,
+      cpFace,
+      slider.sliderKnobFill(style),
+      slider.sliderChromeStates(),
     )
   context.drawChromeBacking(
     chrome, initChromeExtras(context.renderParent(), frame, cornerRadius = radius)

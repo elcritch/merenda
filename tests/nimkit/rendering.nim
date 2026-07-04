@@ -402,6 +402,37 @@ suite "nimkit rendering":
     check fieldTextFound
     check comboTextFound
 
+  test "slider thumb fill blends from knob fill toward active fill":
+    let
+      root = newView(frame = rect(0, 0, 180, 80))
+      slider = newSlider(0.0, 100.0, 25.0, frame = rect(20, 20, 120, 30))
+      knobFill = fill(color(0.20, 0.40, 0.60, 0.80))
+      activeFill = fill(color(0.80, 0.20, 0.40, 1.00))
+      expectedKnobFill = fill(color(0.35, 0.35, 0.55, 0.85))
+      expectedKnobRect = rect(45.0, 25.0, 20.0, 20.0)
+
+    var theme = initTheme()
+    theme[srSlider, StyleChrome] = styleKeyword(DefaultChromeName)
+    theme[srSlider, StyleKnobSize] = 20.0
+    theme[srSlider, StyleIndicatorSize] = 6.0
+    theme[srSlider, StyleKnobFill] = knobFill
+    theme[srSlider, StyleHighlightFill] = activeFill
+    theme[srSlider, StyleKnobBorderColor] = color(0.0, 0.0, 0.0, 0.0)
+    theme[srSlider, StyleKnobShadows] = newSeq[BoxShadow]()
+
+    root.addSubview(slider)
+
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+
+    var knobFound = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill == expectedKnobFill and
+          node.renderedRect().rectsClose(expectedKnobRect):
+        knobFound = true
+        check node.corners[dcTopLeft] == 10'u16
+
+    check knobFound
+
   test "buildRenders draws Aqua push button layers":
     let
       root = newView(frame = rect(0, 0, 180, 90))
