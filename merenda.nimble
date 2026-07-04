@@ -1,4 +1,4 @@
-version       = "0.5.0"
+version       = "0.5.1"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -16,6 +16,9 @@ requires "sigils >= 0.24.3"
 
 feature "libbacktrace":
   requires "libbacktrace"
+
+feature "uirelays":
+  requires "gh:nim-lang/uirelays"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
