@@ -3,6 +3,13 @@ import std/unittest
 import merenda/nimkit
 
 suite "nimkit value types":
+  test "HTML color parser is re-exported for apps":
+    let parsed = parseHtmlColor("#336699")
+    check abs(parsed.r - 0.2'f32) < 0.001'f32
+    check abs(parsed.g - 0.4'f32) < 0.001'f32
+    check abs(parsed.b - 0.6'f32) < 0.001'f32
+    check parsed.a == 1.0'f32
+
   test "rect uses bumpy storage with origin and size compatibility accessors":
     let rect = rect(10, 20, -5, 30)
     check rect.origin == initPoint(10, 20)

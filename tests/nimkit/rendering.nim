@@ -21,10 +21,10 @@ let
 type ExtraChrome = ref object of Chrome
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 1.0), color(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+  linear(color(0.48, 0.91, 1.0, 0.90), color(0.0, 0.49, 0.93, 0.90), fgaDiagTLBR)
 
 func aquaRadioShellFill(): Fill =
-  linear(color(0.99, 0.99, 0.98, 1.0), color(0.65, 0.66, 0.64, 1.0), fgaY)
+  linear(color(0.99, 0.99, 0.98, 0.90), color(0.65, 0.66, 0.64, 0.90), fgaY)
 
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
@@ -415,6 +415,7 @@ suite "nimkit rendering":
           node.renderedRect().rectsClose(expectedButtonRect):
         buttonRoot = idx.FigIdx
         check NfClipContent in node.flags
+        check node.fill.centerColor().a <= 0.62'f32
         check node.stroke.weight == style.box.borderWidth
         check node.stroke.fill.kind == flColor
         check node.stroke.fill.color == style.box.borderColor.rgba
@@ -427,6 +428,7 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and NfRectMaskContent in node.flags and
           node.fill.kind == flLinear2:
         innerRoot = idx
+        check node.fill.centerColor().a <= 0.28'f32
 
     check innerRoot != (-1).FigIdx
 
@@ -436,6 +438,7 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.fill.kind == flLinear2 and
           node.fill.lin2.start.a > 0'u8 and node.fill.lin2.stop.a == 0'u8:
         glossFound = true
+        check node.fill.lin2.start.a <= 78'u8
 
     var
       okTextLayerCount = 0
@@ -749,9 +752,9 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and
           node.fill ==
           linear(
-            color(0.20, 0.57, 0.98, 1.0),
-            color(0.03, 0.33, 0.82, 1.0),
-            color(0.01, 0.18, 0.58, 1.0),
+            color(0.20, 0.57, 0.98, 0.92),
+            color(0.03, 0.33, 0.82, 0.92),
+            color(0.01, 0.18, 0.58, 0.92),
             fgaY,
             104'u8,
           ) and node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and

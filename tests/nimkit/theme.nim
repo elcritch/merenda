@@ -31,60 +31,60 @@ proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
 
 func aquaButtonFill(): Fill =
   linear(
-    color(0.88, 0.98, 1.0, 1.0),
-    color(0.24, 0.70, 1.0, 1.0),
-    color(0.0, 0.36, 0.92, 1.0),
+    color(0.88, 0.98, 1.0, 0.60),
+    color(0.24, 0.70, 1.0, 0.60),
+    color(0.0, 0.36, 0.92, 0.60),
     fgaY,
     112'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.18, 0.58, 0.96, 1.0),
-    color(0.0, 0.34, 0.86, 1.0),
-    color(0.0, 0.17, 0.58, 1.0),
+    color(0.18, 0.58, 0.96, 0.66),
+    color(0.0, 0.34, 0.86, 0.66),
+    color(0.0, 0.17, 0.58, 0.66),
     fgaY,
     104'u8,
   )
 
 func aquaAccentButtonFill(): Fill =
   linear(
-    color(0.96, 1.0, 1.0, 1.0),
-    color(0.34, 0.77, 1.0, 1.0),
-    color(0.0, 0.42, 0.98, 1.0),
+    color(0.96, 1.0, 1.0, 0.60),
+    color(0.34, 0.77, 1.0, 0.60),
+    color(0.0, 0.42, 0.98, 0.60),
     fgaY,
     112'u8,
   )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.12, 0.52, 0.96, 1.0),
-    color(0.0, 0.28, 0.78, 1.0),
-    color(0.0, 0.11, 0.46, 1.0),
+    color(0.12, 0.52, 0.96, 0.66),
+    color(0.0, 0.28, 0.78, 0.66),
+    color(0.0, 0.11, 0.46, 0.66),
     fgaY,
     104'u8,
   )
 
 func aquaWindowBackgroundFill(): Fill =
   linear(
-    color(0.96, 0.98, 1.0, 1.0),
-    color(0.90, 0.95, 1.0, 1.0),
-    color(0.82, 0.90, 0.98, 1.0),
+    color(0.97, 0.97, 0.96, 1.0),
+    color(0.93, 0.93, 0.92, 1.0),
+    color(0.88, 0.88, 0.87, 1.0),
     fgaY,
     104'u8,
   )
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 1.0), color(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+  linear(color(0.48, 0.91, 1.0, 0.90), color(0.0, 0.49, 0.93, 0.90), fgaDiagTLBR)
 
 func aquaTextFieldFill(): Fill =
-  linear(color(1.0, 1.0, 1.0, 1.0), color(0.90, 0.96, 1.0, 1.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.84), color(0.90, 0.96, 1.0, 0.84), fgaY)
 
 func aquaComboItemSelectedFill(): Fill =
   linear(
-    color(0.45, 0.75, 1.0, 1.0),
-    color(0.10, 0.45, 0.95, 1.0),
-    color(0.02, 0.26, 0.76, 1.0),
+    color(0.45, 0.75, 1.0, 0.90),
+    color(0.10, 0.45, 0.95, 0.90),
+    color(0.02, 0.26, 0.76, 0.90),
     fgaY,
     104'u8,
   )
@@ -409,16 +409,16 @@ suite "nimkit theme":
     ) == aquaWindowBackgroundFill()
     check appearance.resolveColor(
       viewStyle, StyleBackgroundPinstripeHighlightColor, color(0.0, 0.0, 0.0, 0.0)
-    ) == color(1.0, 1.0, 1.0, 0.36)
+    ) == color(0.96, 0.96, 0.96, 1.0)
     check appearance.resolveColor(
       viewStyle, StyleBackgroundPinstripeColor, color(0.0, 0.0, 0.0, 0.0)
-    ) == color(0.46, 0.58, 0.76, 0.18)
+    ) == color(0.62, 0.62, 0.62, 0.18)
     check appearance.resolveLength(viewStyle, StyleBackgroundPinstripePeriod, 0.0'f32) ==
-      4.0'f32
+      2.0'f32
     check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 0.0'f32) ==
-      1.0'f32
+      2.0'f32
     check appearance.resolveFill(tabStyle, fill(color(0.0, 0.0, 0.0, 1.0))) ==
-      fill(color(0.84, 0.90, 0.98, 1.0))
+      fill(color(0.84, 0.90, 0.98, 0.86))
     check appearance.resolveFill(
       tabStyle, fill(color(0.0, 0.0, 0.0, 0.0)), StyleHighlightFill
     ) == fill(color(1.0, 1.0, 1.0, 0.52))
@@ -430,6 +430,7 @@ suite "nimkit theme":
     checkAquaButtonShadows(defaultButtonStyle.box.shadows)
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
+    check defaultButtonStyle.box.fill.centerColor().a < 1.0'f32
     check hoveredButtonStyle.box.fill == aquaButtonPressedFill()
     check buttonStyle.box.fill == aquaButtonPressedFill()
     check accentButtonStyle.box.fill == aquaAccentButtonFill()
@@ -473,6 +474,7 @@ suite "nimkit theme":
     check textFieldStyle.box.cornerRadius == 6.0
     check textFieldStyle.box.focusRingWidth > 0.0
     check textFieldStyle.box.fill == aquaTextFieldFill()
+    check textFieldStyle.box.fill.centerColor().a < 1.0'f32
     check textFieldStyle.box.borderColor == color(0.48, 0.63, 0.84, 1.0)
     check textFieldStyle.box.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
     check textFieldStyle.text.color == color(0.2, 0.3, 0.4, 1.0)

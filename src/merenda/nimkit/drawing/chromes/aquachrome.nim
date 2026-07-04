@@ -55,23 +55,26 @@ func darkenColor(color: Color, amount: float32, alpha: float32): Color =
   let mix = 1.0'f32 - amount.clampUnit
   color(color.r * mix, color.g * mix, color.b * mix, alpha.clampUnit)
 
+func scaledAlpha(color: Color, alpha: float32): float32 =
+  (color.a * alpha).clampUnit
+
 func aquaButtonFaceFill(fillValue: Fill, enabled: bool): Fill =
   let
     base = fillValue.centerColor()
     topMix = 0.82'f32
     bottomMix = 0.46'f32
-    alpha = if enabled: 0.92'f32 else: 0.58'f32
+    alpha = base.scaledAlpha(if enabled: 0.42'f32 else: 0.26'f32)
   linear(base.lightenColor(topMix, alpha), base.lightenColor(bottomMix, alpha), fgaY)
 
 func aquaButtonLowerWash(fillValue: Fill, enabled: bool): Fill =
   let
     base = fillValue.centerColor()
-    alpha = if not enabled: 0.10'f32 else: 0.22'f32
+    alpha = base.scaledAlpha(if not enabled: 0.06'f32 else: 0.14'f32)
     tint = base.darkenColor(0.15'f32, alpha)
   linear(color(1.0, 1.0, 1.0, 0.0), tint, fgaY)
 
 func aquaButtonGlossFill(enabled: bool): Fill =
-  let alpha = if enabled: 0.62'f32 else: 0.24'f32
+  let alpha = if enabled: 0.30'f32 else: 0.12'f32
   linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaButtonInnerShadows(fillValue: Fill, enabled: bool): seq[BoxShadow] =
@@ -82,17 +85,23 @@ func aquaButtonInnerShadows(fillValue: Fill, enabled: bool): seq[BoxShadow] =
     insetShadow(color(0.0, 0.0, 0.0, darkAlpha), y = -2.0, blur = 7.0),
   ]
 
-func aquaRadioShellFill(enabled: bool): Fill =
-  if enabled:
-    return linear(color(0.99, 0.99, 0.98, 1.0), color(0.65, 0.66, 0.64, 1.0), fgaY)
-  linear(color(0.90, 0.91, 0.93, 0.62), color(0.76, 0.78, 0.82, 0.62), fgaY)
+func aquaRadioShellFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if chrome.isEnabled:
+    let alpha = base.scaledAlpha(1.0'f32)
+    return linear(color(0.99, 0.99, 0.98, alpha), color(0.65, 0.66, 0.64, alpha), fgaY)
+  let alpha = base.scaledAlpha(0.62'f32)
+  linear(color(0.90, 0.91, 0.93, alpha), color(0.76, 0.78, 0.82, alpha), fgaY)
 
 func aquaRadioInnerFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
   if chrome.isSelected:
     return chrome.baseFill
   if chrome.isEnabled:
-    return linear(color(1.0, 1.0, 1.0, 1.0), color(0.92, 0.92, 0.91, 1.0), fgaY)
-  linear(color(0.94, 0.95, 0.96, 0.62), color(0.82, 0.84, 0.88, 0.62), fgaY)
+    let alpha = base.scaledAlpha(1.0'f32)
+    return linear(color(1.0, 1.0, 1.0, alpha), color(0.92, 0.92, 0.91, alpha), fgaY)
+  let alpha = base.scaledAlpha(0.62'f32)
+  linear(color(0.94, 0.95, 0.96, alpha), color(0.82, 0.84, 0.88, alpha), fgaY)
 
 func aquaRadioInnerBorderColor(chrome: ChromeContext): Color =
   if chrome.isSelected and chrome.isEnabled:
@@ -120,49 +129,59 @@ func aquaRadioInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
 
 func aquaChoiceFaceFill(chrome: ChromeContext): Fill =
   if chrome.isRadioChoice:
-    return aquaRadioShellFill(chrome.isEnabled)
+    return aquaRadioShellFill(chrome)
   chrome.baseFill
 
 func aquaChoiceGlossFill(chrome: ChromeContext): Fill =
-  let topAlpha =
-    if not chrome.isEnabled:
-      0.24'f32
-    elif chrome.isSelected:
-      0.56'f32
-    else:
-      0.70'f32
+  let
+    base = chrome.baseFill.centerColor()
+    topAlpha = base.scaledAlpha(
+      if not chrome.isEnabled:
+        0.24'f32
+      elif chrome.isSelected:
+        0.56'f32
+      else:
+        0.70'f32
+    )
   linear(color(1.0, 1.0, 1.0, topAlpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaComboFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.18'f32, 0.62'f32), base.darkenColor(0.04'f32, 0.62'f32), fgaY
+      base.lightenColor(0.18'f32, base.scaledAlpha(0.62'f32)),
+      base.darkenColor(0.04'f32, base.scaledAlpha(0.62'f32)),
+      fgaY,
     )
   if chrome.isPressed or chrome.isOpen:
+    let alpha = base.scaledAlpha(1.0'f32)
     return linear(
-      base.lightenColor(0.70'f32, 1.0'f32),
-      base.lightenColor(0.18'f32, 1.0'f32),
-      base.darkenColor(0.18'f32, 1.0'f32),
+      base.lightenColor(0.70'f32, alpha),
+      base.lightenColor(0.18'f32, alpha),
+      base.darkenColor(0.18'f32, alpha),
       fgaY,
       104'u8,
     )
+  let alpha = base.scaledAlpha(1.0'f32)
   linear(
-    base.lightenColor(0.86'f32, 1.0'f32),
-    base.lightenColor(0.42'f32, 1.0'f32),
-    base.darkenColor(0.12'f32, 1.0'f32),
+    base.lightenColor(0.86'f32, alpha),
+    base.lightenColor(0.42'f32, alpha),
+    base.darkenColor(0.12'f32, alpha),
     fgaY,
     92'u8,
   )
 
 func aquaComboGlossFill(chrome: ChromeContext): Fill =
-  let alpha =
-    if not chrome.isEnabled:
-      0.20'f32
-    elif chrome.isPressed or chrome.isOpen:
-      0.42'f32
-    else:
-      0.58'f32
+  let
+    base = chrome.baseFill.centerColor()
+    alpha = base.scaledAlpha(
+      if not chrome.isEnabled:
+        0.20'f32
+      elif chrome.isPressed or chrome.isOpen:
+        0.42'f32
+      else:
+        0.58'f32
+    )
   linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaComboLowerWash(chrome: ChromeContext): Fill =
@@ -175,23 +194,29 @@ func aquaComboLowerWash(chrome: ChromeContext): Fill =
         0.20'f32
       else:
         0.14'f32
-  linear(color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.18'f32, alpha), fgaY)
+  linear(
+    color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.18'f32, base.scaledAlpha(alpha)), fgaY
+  )
 
 func aquaComboArrowFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
-    return linear(color(0.82, 0.84, 0.86, 0.78), color(0.62, 0.65, 0.68, 0.78), fgaY)
+    let alpha = base.scaledAlpha(0.78'f32)
+    return linear(color(0.82, 0.84, 0.86, alpha), color(0.62, 0.65, 0.68, alpha), fgaY)
   if chrome.isPressed or chrome.isOpen:
+    let alpha = base.scaledAlpha(1.0'f32)
     return linear(
-      color(0.62, 0.84, 1.0, 1.0),
-      color(0.08, 0.48, 0.94, 1.0),
-      color(0.0, 0.25, 0.70, 1.0),
+      color(0.62, 0.84, 1.0, alpha),
+      color(0.08, 0.48, 0.94, alpha),
+      color(0.0, 0.25, 0.70, alpha),
       fgaY,
       104'u8,
     )
+  let alpha = base.scaledAlpha(1.0'f32)
   linear(
-    color(0.50, 0.90, 1.0, 1.0),
-    color(0.15, 0.67, 0.98, 1.0),
-    color(0.0, 0.44, 0.88, 1.0),
+    color(0.50, 0.90, 1.0, alpha),
+    color(0.15, 0.67, 0.98, alpha),
+    color(0.0, 0.44, 0.88, alpha),
     fgaY,
     104'u8,
   )
@@ -205,22 +230,26 @@ func aquaSliderTrackFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.32'f32, 0.50'f32), base.lightenColor(0.64'f32, 0.50'f32), fgaY
+      base.lightenColor(0.32'f32, base.scaledAlpha(0.50'f32)),
+      base.lightenColor(0.64'f32, base.scaledAlpha(0.50'f32)),
+      fgaY,
     )
-  linear(
-    base.darkenColor(0.18'f32, 0.92'f32), base.lightenColor(0.36'f32, 0.92'f32), fgaY
-  )
+  let alpha = base.scaledAlpha(0.92'f32)
+  linear(base.darkenColor(0.18'f32, alpha), base.lightenColor(0.36'f32, alpha), fgaY)
 
 func aquaSliderTrackHighlightFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.52'f32, 0.34'f32), base.lightenColor(0.76'f32, 0.34'f32), fgaY
+      base.lightenColor(0.52'f32, base.scaledAlpha(0.34'f32)),
+      base.lightenColor(0.76'f32, base.scaledAlpha(0.34'f32)),
+      fgaY,
     )
+  let alpha = base.scaledAlpha(1.0'f32)
   linear(
-    base.lightenColor(0.54'f32, 1.0'f32),
-    base.lightenColor(0.18'f32, 1.0'f32),
-    base.darkenColor(0.10'f32, 1.0'f32),
+    base.lightenColor(0.54'f32, alpha),
+    base.lightenColor(0.18'f32, alpha),
+    base.darkenColor(0.10'f32, alpha),
     fgaY,
     106'u8,
   )
@@ -229,32 +258,39 @@ func aquaSliderKnobFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.42'f32, 0.68'f32), base.darkenColor(0.06'f32, 0.68'f32), fgaY
+      base.lightenColor(0.42'f32, base.scaledAlpha(0.68'f32)),
+      base.darkenColor(0.06'f32, base.scaledAlpha(0.68'f32)),
+      fgaY,
     )
   if chrome.isPressed:
+    let alpha = base.scaledAlpha(1.0'f32)
     return linear(
-      base.lightenColor(0.58'f32, 1.0'f32),
-      base.lightenColor(0.18'f32, 1.0'f32),
-      base.darkenColor(0.22'f32, 1.0'f32),
+      base.lightenColor(0.58'f32, alpha),
+      base.lightenColor(0.18'f32, alpha),
+      base.darkenColor(0.22'f32, alpha),
       fgaY,
       104'u8,
     )
+  let alpha = base.scaledAlpha(1.0'f32)
   linear(
-    base.lightenColor(0.98'f32, 1.0'f32),
-    base.lightenColor(0.48'f32, 1.0'f32),
-    base.darkenColor(0.10'f32, 1.0'f32),
+    base.lightenColor(0.98'f32, alpha),
+    base.lightenColor(0.48'f32, alpha),
+    base.darkenColor(0.10'f32, alpha),
     fgaY,
     102'u8,
   )
 
 func aquaSliderKnobGlossFill(chrome: ChromeContext): Fill =
-  let alpha =
-    if not chrome.isEnabled:
-      0.18'f32
-    elif chrome.isPressed:
-      0.44'f32
-    else:
-      0.62'f32
+  let
+    base = chrome.baseFill.centerColor()
+    alpha = base.scaledAlpha(
+      if not chrome.isEnabled:
+        0.18'f32
+      elif chrome.isPressed:
+        0.44'f32
+      else:
+        0.62'f32
+    )
   linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaSliderKnobLowerWash(chrome: ChromeContext): Fill =
@@ -267,41 +303,44 @@ func aquaSliderKnobLowerWash(chrome: ChromeContext): Fill =
         0.20'f32
       else:
         0.14'f32
-  linear(color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.22'f32, alpha), fgaY)
+  linear(
+    color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.22'f32, base.scaledAlpha(alpha)), fgaY
+  )
 
 func aquaPopupListFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.18'f32, 0.88'f32), base.darkenColor(0.02'f32, 0.88'f32), fgaY
+      base.lightenColor(0.18'f32, base.scaledAlpha(0.88'f32)),
+      base.darkenColor(0.02'f32, base.scaledAlpha(0.88'f32)),
+      fgaY,
     )
-  linear(
-    base.lightenColor(0.88'f32, 1.0'f32), base.lightenColor(0.24'f32, 1.0'f32), fgaY
-  )
+  let alpha = base.scaledAlpha(1.0'f32)
+  linear(base.lightenColor(0.88'f32, alpha), base.lightenColor(0.24'f32, alpha), fgaY)
 
 func aquaTabFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
-    linear(
-      base.lightenColor(0.24'f32, 0.95'f32), base.darkenColor(0.04'f32, 0.95'f32), fgaY
-    )
+    let alpha = base.scaledAlpha(0.95'f32)
+    linear(base.lightenColor(0.24'f32, alpha), base.darkenColor(0.04'f32, alpha), fgaY)
   elif ssSelected in chrome.states:
+    let alpha = base.scaledAlpha(1.0'f32)
     linear(
-      base.lightenColor(0.72'f32, 1.0'f32),
-      base.lightenColor(0.36'f32, 1.0'f32),
-      base.darkenColor(0.04'f32, 1.0'f32),
+      base.lightenColor(0.72'f32, alpha),
+      base.lightenColor(0.36'f32, alpha),
+      base.darkenColor(0.04'f32, alpha),
       fgaY,
       112'u8,
     )
   elif chrome.isPressed:
-    linear(
-      base.lightenColor(0.12'f32, 1.0'f32), base.darkenColor(0.18'f32, 1.0'f32), fgaY
-    )
+    let alpha = base.scaledAlpha(1.0'f32)
+    linear(base.lightenColor(0.12'f32, alpha), base.darkenColor(0.18'f32, alpha), fgaY)
   else:
+    let alpha = base.scaledAlpha(1.0'f32)
     linear(
-      base.lightenColor(0.80'f32, 1.0'f32),
-      base.lightenColor(0.34'f32, 1.0'f32),
-      base.darkenColor(0.05'f32, 1.0'f32),
+      base.lightenColor(0.80'f32, alpha),
+      base.lightenColor(0.34'f32, alpha),
+      base.darkenColor(0.05'f32, alpha),
       fgaY,
       112'u8,
     )
@@ -309,26 +348,27 @@ func aquaTabFaceFill(chrome: ChromeContext): Fill =
 func aquaTabInnerFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if chrome.isSelected:
+    let alpha = base.scaledAlpha(0.98'f32)
     return linear(
-      base.lightenColor(0.88'f32, 0.98'f32),
-      base.lightenColor(0.46'f32, 0.98'f32),
-      base.darkenColor(0.03'f32, 0.98'f32),
+      base.lightenColor(0.88'f32, alpha),
+      base.lightenColor(0.46'f32, alpha),
+      base.darkenColor(0.03'f32, alpha),
       fgaY,
       116'u8,
     )
+  let alpha = base.scaledAlpha(0.98'f32)
   linear(
-    base.lightenColor(0.96'f32, 0.98'f32),
-    base.lightenColor(0.54'f32, 0.98'f32),
-    base.darkenColor(0.08'f32, 0.98'f32),
+    base.lightenColor(0.96'f32, alpha),
+    base.lightenColor(0.54'f32, alpha),
+    base.darkenColor(0.08'f32, alpha),
     fgaY,
     112'u8,
   )
 
 func aquaTabPanelFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
-  linear(
-    base.lightenColor(0.16'f32, 1.0'f32), base.darkenColor(0.05'f32, 1.0'f32), fgaY
-  )
+  let alpha = base.scaledAlpha(1.0'f32)
+  linear(base.lightenColor(0.16'f32, alpha), base.darkenColor(0.05'f32, alpha), fgaY)
 
 func chromeEdgeHighlightRect(edge: ChromeEdge, rect: Rect): Rect =
   case edge

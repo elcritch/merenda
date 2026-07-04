@@ -1,3 +1,5 @@
+import pkg/chroma
+
 import merenda/nimkit/app/application
 import merenda/nimkit/accessibility/accessibility
 import merenda/nimkit/app/animations
@@ -64,6 +66,7 @@ import merenda/nimkit/app/windowcontrollers
 import merenda/nimkit/app/windows
 
 export application
+export chroma
 export accessibility
 export animations
 export animationproperties

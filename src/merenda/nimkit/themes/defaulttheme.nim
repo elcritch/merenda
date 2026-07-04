@@ -67,90 +67,90 @@ func highlightedButtonShadows(): seq[BoxShadow] =
 
 func aquaButtonFill(): Fill =
   linear(
-    color(0.88, 0.98, 1.0, 1.0),
-    color(0.24, 0.70, 1.0, 1.0),
-    color(0.0, 0.36, 0.92, 1.0),
+    color(0.88, 0.98, 1.0, 0.60),
+    color(0.24, 0.70, 1.0, 0.60),
+    color(0.0, 0.36, 0.92, 0.60),
     fgaY,
     112'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.18, 0.58, 0.96, 1.0),
-    color(0.0, 0.34, 0.86, 1.0),
-    color(0.0, 0.17, 0.58, 1.0),
+    color(0.18, 0.58, 0.96, 0.66),
+    color(0.0, 0.34, 0.86, 0.66),
+    color(0.0, 0.17, 0.58, 0.66),
     fgaY,
     104'u8,
   )
 
 func aquaAccentButtonFill(): Fill =
   linear(
-    color(0.96, 1.0, 1.0, 1.0),
-    color(0.34, 0.77, 1.0, 1.0),
-    color(0.0, 0.42, 0.98, 1.0),
+    color(0.96, 1.0, 1.0, 0.60),
+    color(0.34, 0.77, 1.0, 0.60),
+    color(0.0, 0.42, 0.98, 0.60),
     fgaY,
     112'u8,
   )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.12, 0.52, 0.96, 1.0),
-    color(0.0, 0.28, 0.78, 1.0),
-    color(0.0, 0.11, 0.46, 1.0),
+    color(0.12, 0.52, 0.96, 0.66),
+    color(0.0, 0.28, 0.78, 0.66),
+    color(0.0, 0.11, 0.46, 0.66),
     fgaY,
     104'u8,
   )
 
 func aquaWindowBackgroundFill(): Fill =
   linear(
-    color(0.96, 0.98, 1.0, 1.0),
-    color(0.90, 0.95, 1.0, 1.0),
-    color(0.82, 0.90, 0.98, 1.0),
+    color(0.97, 0.97, 0.96, 1.0),
+    color(0.93, 0.93, 0.92, 1.0),
+    color(0.88, 0.88, 0.87, 1.0),
     fgaY,
     104'u8,
   )
 
 func aquaButtonDisabledFill(): Fill =
-  linear(color(0.90, 0.91, 0.93, 1.0), color(0.76, 0.78, 0.82, 1.0), fgaY)
+  linear(color(0.90, 0.91, 0.93, 0.56), color(0.76, 0.78, 0.82, 0.56), fgaY)
 
 func aquaChoiceFill(): Fill =
-  linear(color(1.0, 1.0, 0.99, 1.0), color(0.84, 0.85, 0.83, 1.0), fgaY)
+  linear(color(1.0, 1.0, 0.99, 0.86), color(0.84, 0.85, 0.83, 0.86), fgaY)
 
 func aquaChoiceHighlightedFill(): Fill =
-  linear(color(1.0, 1.0, 1.0, 1.0), color(0.78, 0.90, 1.0, 1.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.90), color(0.78, 0.90, 1.0, 0.90), fgaY)
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 1.0), color(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+  linear(color(0.48, 0.91, 1.0, 0.90), color(0.0, 0.49, 0.93, 0.90), fgaDiagTLBR)
 
 func aquaChoiceSelectedHighlightedFill(): Fill =
   linear(
-    color(0.45, 0.80, 1.0, 1.0),
-    color(0.0, 0.32, 0.86, 1.0),
-    color(0.0, 0.18, 0.58, 1.0),
+    color(0.45, 0.80, 1.0, 0.92),
+    color(0.0, 0.32, 0.86, 0.92),
+    color(0.0, 0.18, 0.58, 0.92),
     fgaY,
     104'u8,
   )
 
 func aquaTextFieldFill(): Fill =
-  linear(color(1.0, 1.0, 1.0, 1.0), color(0.90, 0.96, 1.0, 1.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.84), color(0.90, 0.96, 1.0, 0.84), fgaY)
 
 func aquaComboItemHighlightFill(): Fill =
-  linear(color(0.90, 0.96, 1.0, 1.0), color(0.72, 0.87, 1.0, 1.0), fgaY)
+  linear(color(0.90, 0.96, 1.0, 0.88), color(0.72, 0.87, 1.0, 0.88), fgaY)
 
 func aquaComboItemSelectedFill(): Fill =
   linear(
-    color(0.45, 0.75, 1.0, 1.0),
-    color(0.10, 0.45, 0.95, 1.0),
-    color(0.02, 0.26, 0.76, 1.0),
+    color(0.45, 0.75, 1.0, 0.90),
+    color(0.10, 0.45, 0.95, 0.90),
+    color(0.02, 0.26, 0.76, 0.90),
     fgaY,
     104'u8,
   )
 
 func aquaComboItemSelectedHighlightedFill(): Fill =
   linear(
-    color(0.20, 0.57, 0.98, 1.0),
-    color(0.03, 0.33, 0.82, 1.0),
-    color(0.01, 0.18, 0.58, 1.0),
+    color(0.20, 0.57, 0.98, 0.92),
+    color(0.03, 0.33, 0.82, 0.92),
+    color(0.01, 0.18, 0.58, 0.92),
     fgaY,
     104'u8,
   )
@@ -262,7 +262,7 @@ proc initTheme*(): Theme =
   result["comboBox.text.color"] = styleToken("textField.text.color")
   result["comboBox.arrow.color"] = styleColor(color(0.0, 0.12, 0.34, 1.0))
   result["comboBox.arrow.fill"] = aquaAccentButtonFill()
-  result["comboBox.item.fill"] = fill(color(1.0, 1.0, 1.0, 1.0))
+  result["comboBox.item.fill"] = fill(color(1.0, 1.0, 1.0, 0.88))
   result["comboBox.item.fill.highlighted"] = aquaComboItemHighlightFill()
   result["comboBox.item.fill.selected"] = aquaComboItemSelectedFill()
   result["comboBox.item.fill.selected.highlighted"] =
@@ -280,25 +280,25 @@ proc initTheme*(): Theme =
   result["scroller.track.border.color"] = styleColor(color(0.57, 0.68, 0.84, 0.86))
   result["scroller.knob.fill"] = styleFill(color(0.34, 0.58, 0.86, 0.72))
   result["scroller.knob.border.color"] = styleColor(color(0.10, 0.28, 0.58, 0.58))
-  result["splitView.divider.fill"] = styleFill(color(0.83, 0.89, 0.97, 1.0))
+  result["splitView.divider.fill"] = styleFill(color(0.83, 0.89, 0.97, 0.86))
   result["splitView.divider.border.color"] = styleColor(color(0.52, 0.64, 0.82, 1.0))
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
   result["rowItem.fill.highlighted"] = styleToken("comboBox.item.fill.highlighted")
   result["rowItem.fill.selected"] = styleToken("comboBox.item.fill.selected")
   result["rowItem.fill.selected.highlighted"] =
     styleToken("comboBox.item.fill.selected.highlighted")
-  result["rowItem.fill.disabled"] = styleColor(color(0.80, 0.82, 0.86, 1.0))
+  result["rowItem.fill.disabled"] = styleColor(color(0.80, 0.82, 0.86, 0.56))
   result["rowItem.text.color"] = styleToken("comboBox.item.text.color")
   result["rowItem.text.color.selected"] =
     styleToken("comboBox.item.text.color.selected")
   result["rowItem.text.color.disabled"] = styleColor(color(0.32, 0.35, 0.41, 1.0))
   result["rowItem.separator.color"] = styleColor(color(0.86, 0.88, 0.91, 1.0))
-  result["tab.panel.fill"] = styleColor(color(0.88, 0.94, 1.0, 1.0))
+  result["tab.panel.fill"] = styleColor(color(0.88, 0.94, 1.0, 0.88))
   result["tab.panel.border.color"] = styleColor(color(0.56, 0.70, 0.88, 1.0))
-  result["tab.fill"] = styleColor(color(0.84, 0.90, 0.98, 1.0))
-  result["tab.fill.highlighted"] = styleColor(color(0.72, 0.80, 0.90, 1.0))
-  result["tab.fill.selected"] = styleColor(color(0.72, 0.86, 1.0, 1.0))
-  result["tab.fill.disabled"] = styleColor(color(0.78, 0.80, 0.84, 1.0))
+  result["tab.fill"] = styleColor(color(0.84, 0.90, 0.98, 0.86))
+  result["tab.fill.highlighted"] = styleColor(color(0.72, 0.80, 0.90, 0.88))
+  result["tab.fill.selected"] = styleColor(color(0.72, 0.86, 1.0, 0.90))
+  result["tab.fill.disabled"] = styleColor(color(0.78, 0.80, 0.84, 0.56))
   result["tab.highlight.fill"] = styleFill(color(1.0, 1.0, 1.0, 0.52))
   result["tab.highlight.fill.disabled"] = styleFill(color(1.0, 1.0, 1.0, 0.30))
   result["tab.text.color"] = styleColor(color(0.14, 0.15, 0.18, 1.0))
@@ -309,12 +309,12 @@ proc initTheme*(): Theme =
   result["tab.border.color.selected"] = styleColor(color(0.14, 0.40, 0.82, 1.0))
   result["tab.border.color.disabled"] = styleColor(color(0.65, 0.67, 0.70, 1.0))
 
-  result[srView, StyleBackgroundColor] = color(0.90, 0.95, 1.0)
+  result[srView, StyleBackgroundColor] = color(0.93, 0.93, 0.92)
   result[srView, StyleBackgroundFill] = aquaWindowBackgroundFill()
-  result[srView, StyleBackgroundPinstripeHighlightColor] = color(1.0, 1.0, 1.0, 0.36)
-  result[srView, StyleBackgroundPinstripeColor] = color(0.46, 0.58, 0.76, 0.18)
-  result[srView, StyleBackgroundPinstripePeriod] = 4.0
-  result[srView, StyleBackgroundPinstripeHeight] = 1.0
+  result[srView, StyleBackgroundPinstripeHighlightColor] = color(0.96, 0.96, 0.96, 1.0)
+  result[srView, StyleBackgroundPinstripeColor] = color(0.62, 0.62, 0.62, 0.18)
+  result[srView, StyleBackgroundPinstripePeriod] = 2.0
+  result[srView, StyleBackgroundPinstripeHeight] = 2.0
 
   result.addRoleRule(
     srBox,
@@ -426,14 +426,14 @@ proc initTheme*(): Theme =
   result[srButton, {ssDisabled}, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.08)
   result[srStepper, StyleMinimumSize] = initSize(52.0, 23.0)
 
-  result[srSwitch, StyleFill] = fill(color(0.72, 0.78, 0.84, 1.0))
+  result[srSwitch, StyleFill] = fill(color(0.72, 0.78, 0.84, 0.82))
   result[srSwitch, StyleBorderColor] = color(0.38, 0.45, 0.53, 0.70)
   result[srSwitch, StyleBorderWidth] = 1.0
   result[srSwitch, StyleFocusRingWidth] = 3.0
   result[srSwitch, StyleFocusRingInset] = -3.0
   result[srSwitch, StyleFocusRingColor] = color(0.28, 0.62, 1.0, 0.80)
   result[srSwitch, StyleBoxShadows] = aquaSwitchTrackShadows(enabled = true)
-  result[srSwitch, StyleKnobFill] = fill(color(0.96, 0.97, 0.99, 1.0))
+  result[srSwitch, StyleKnobFill] = fill(color(0.96, 0.97, 0.99, 0.90))
   result[srSwitch, StyleKnobBorderColor] = color(0.32, 0.36, 0.44, 0.78)
   result[srSwitch, StyleKnobInset] = 1.7
   result[srSwitch, StyleKnobSizeFactor] = 2.0
@@ -442,9 +442,9 @@ proc initTheme*(): Theme =
   result[srSwitch, StyleWidthFactor] = 1.67
   result[srSwitch, StyleMinimumSize] = initSize(0.0, 0.0)
   result[srSwitch, StyleChrome] = styleKeyword(AquaChromeName)
-  result[srSwitch, {ssSelected}, StyleFill] = fill(color(0.08, 0.54, 0.96, 1.0))
+  result[srSwitch, {ssSelected}, StyleFill] = fill(color(0.08, 0.54, 0.96, 0.88))
   result[srSwitch, {ssSelected}, StyleBorderColor] = color(0.02, 0.24, 0.62, 0.70)
-  result[srSwitch, {ssHighlighted}, StyleKnobFill] = fill(color(0.91, 0.97, 1.0, 1.0))
+  result[srSwitch, {ssHighlighted}, StyleKnobFill] = fill(color(0.91, 0.97, 1.0, 0.92))
   result[srSwitch, {ssDisabled}, StyleFill] = fill(color(0.72, 0.78, 0.84, 0.42))
   result[srSwitch, {ssDisabled}, StyleBorderColor] = color(0.38, 0.45, 0.53, 0.32)
   result[srSwitch, {ssDisabled}, StyleBoxShadows] =
@@ -461,7 +461,7 @@ proc initTheme*(): Theme =
   result[srSlider, StyleIndicatorSize] = 6.0
   result[srSlider, StyleKnobSize] = 18.0
   result[srSlider, StyleMinimumSize] = initSize(160.0, 24.0)
-  result[srSlider, StyleFill] = fill(color(0.76, 0.84, 0.94, 1.0))
+  result[srSlider, StyleFill] = fill(color(0.76, 0.84, 0.94, 0.82))
   result[srSlider, StyleHighlightFill] = aquaAccentButtonFill()
   result[srSlider, StyleBorderColor] = color(0.38, 0.52, 0.70, 0.78)
   result[srSlider, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
@@ -471,7 +471,7 @@ proc initTheme*(): Theme =
   result[srProgressIndicator, StyleIndicatorSize] = 6.0
   result[srProgressIndicator, StyleKnobSize] = 18.0
   result[srProgressIndicator, StyleMinimumSize] = initSize(160.0, 24.0)
-  result[srProgressIndicator, StyleFill] = fill(color(0.76, 0.84, 0.94, 1.0))
+  result[srProgressIndicator, StyleFill] = fill(color(0.76, 0.84, 0.94, 0.82))
   result[srProgressIndicator, StyleHighlightFill] = aquaAccentButtonFill()
   result[srProgressIndicator, StyleBorderColor] = color(0.38, 0.52, 0.70, 0.78)
   result[srProgressIndicator, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
@@ -649,7 +649,7 @@ proc initTheme*(): Theme =
   )
   result.addLabelRule(
     LabelTitleStyleClass,
-    linear(color(0.94, 0.98, 1.0, 1.0), color(0.84, 0.91, 0.98, 1.0), fgaY),
+    linear(color(0.94, 0.98, 1.0, 0.86), color(0.84, 0.91, 0.98, 0.86), fgaY),
     color(0.62, 0.70, 0.84, 1.0),
     1.0,
     6.0,
@@ -659,7 +659,7 @@ proc initTheme*(): Theme =
   )
   result.addLabelRule(
     LabelHeadingStyleClass,
-    linear(color(0.90, 0.95, 1.0, 1.0), color(0.78, 0.86, 0.96, 1.0), fgaY),
+    linear(color(0.90, 0.95, 1.0, 0.86), color(0.78, 0.86, 0.96, 0.86), fgaY),
     color(0.74, 0.82, 0.93, 1.0),
     1.0,
     5.0,
@@ -669,7 +669,7 @@ proc initTheme*(): Theme =
   )
   result.addLabelRule(
     LabelStatusStyleClass,
-    linear(color(0.94, 0.99, 0.95, 1.0), color(0.84, 0.94, 0.87, 1.0), fgaY),
+    linear(color(0.94, 0.99, 0.95, 0.86), color(0.84, 0.94, 0.87, 0.86), fgaY),
     color(0.68, 0.82, 0.72, 1.0),
     1.0,
     6.0,
@@ -828,13 +828,15 @@ proc initTheme*(): Theme =
   result[srSplitView, StyleFocusRingInset] = 0.0
   result[srSplitView, StyleBoxShadows] = newSeq[BoxShadow]()
 
-  result[srTableHeader, StyleFill] = fill(color(0.88, 0.90, 0.94, 1.0))
+  result[srTableHeader, StyleFill] = fill(color(0.88, 0.90, 0.94, 0.84))
   result[srTableHeader, StyleBorderColor] = color(0.60, 0.64, 0.70, 1.0)
   result[srTableHeader, StyleInsertionIndicatorFill] =
     fill(color(0.16, 0.36, 0.84, 0.95))
-  result[srTableHeaderCell, StyleFill] = fill(color(0.90, 0.92, 0.96, 1.0))
-  result[srTableHeaderCell, {ssHovered}, StyleFill] = fill(color(0.84, 0.88, 0.95, 1.0))
-  result[srTableHeaderCell, {ssPressed}, StyleFill] = fill(color(0.76, 0.82, 0.91, 1.0))
+  result[srTableHeaderCell, StyleFill] = fill(color(0.90, 0.92, 0.96, 0.86))
+  result[srTableHeaderCell, {ssHovered}, StyleFill] =
+    fill(color(0.84, 0.88, 0.95, 0.88))
+  result[srTableHeaderCell, {ssPressed}, StyleFill] =
+    fill(color(0.76, 0.82, 0.91, 0.90))
   result[srTableHeaderCell, StyleBorderColor] = color(0.62, 0.66, 0.72, 1.0)
   result[srTableHeaderCell, StyleTextColor] = color(0.14, 0.18, 0.25, 1.0)
   result[srTableHeaderCell, StyleMarkColor] = color(0.12, 0.20, 0.34, 0.95)
