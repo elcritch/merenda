@@ -32,6 +32,7 @@ const
   DefaultTextEditorHeight = 160.0'f32
   DefaultTextEditorMeasureWidth = 100000.0'f32
   DefaultTextEditorMeasureHeight = 100000.0'f32
+  TextEditorLayoutEpsilon = 0.001'f32
 
 proc updateTextEditorLayout(editor: TextEditor)
 
@@ -269,20 +270,36 @@ proc textDocumentSize(
     ),
   )
 
+func closeEnough(left, right: Size): bool =
+  abs(left.width - right.width) <= TextEditorLayoutEpsilon and
+    abs(left.height - right.height) <= TextEditorLayoutEpsilon
+
+proc applyTextDocumentSize(editor: TextEditor, documentSize: Size) =
+  editor.xTextView.frame = rect(0.0, 0.0, documentSize.width, documentSize.height)
+  editor.xTextView.textContainer =
+    initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
+  editor.xScrollView.tile()
+
 proc updateTextEditorLayout(editor: TextEditor) =
   if editor.isNil or editor.xScrollView.isNil or editor.xTextView.isNil:
     return
 
   let
     bounds = editor.bounds()
-    viewportWidth = max(bounds.size.width, 0.0'f32)
-    viewportHeight = max(bounds.size.height, 0.0'f32)
-    documentSize = editor.textDocumentSize(viewportWidth, viewportHeight)
+    fallbackViewport =
+      initSize(max(bounds.size.width, 0.0'f32), max(bounds.size.height, 0.0'f32))
 
   editor.xScrollView.frame = bounds
-  editor.xTextView.frame = rect(0.0, 0.0, documentSize.width, documentSize.height)
-  editor.xTextView.textContainer =
-    initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
+  var documentSize =
+    editor.textDocumentSize(fallbackViewport.width, fallbackViewport.height)
+  for _ in 0 ..< 4:
+    editor.applyTextDocumentSize(documentSize)
+    let viewport = editor.xScrollView.viewportSize()
+    let nextSize = editor.textDocumentSize(viewport.width, viewport.height)
+    if nextSize.closeEnough(documentSize):
+      return
+    documentSize = nextSize
+  editor.applyTextDocumentSize(documentSize)
 
 protocol DefaultTextEditorLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(editor: TextEditor): IntrinsicSize =

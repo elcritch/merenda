@@ -92,6 +92,8 @@ for control in [Control(toggleNumbers), Control(nimButton), Control(markdownButt
 
 controls.spacing = 8.0
 controls.alignment = svaLeading
+controls.setHuggingPriority(LayoutPriorityRequired, laVertical)
+controls.setCompressionPriority(LayoutPriorityRequired, laVertical)
 controls.addArrangedSubview(toggleNumbers, nimButton, markdownButton)
 
 layout.spacing = 10.0

@@ -71,6 +71,22 @@ proc clickComboItem(demo: TextEditorDemo, index: int): bool =
   result = demo.window.mouseUpAt(windowPoint)
 
 suite "nimkit text editors":
+  test "nowrap editor sizes document to chrome-adjusted viewport":
+    let
+      editor =
+        newTextEditor("short\n".repeat(40), frame = rect(0, 0, 360, 120), wraps = false)
+      gutter = newView(frame = rect(0, 0, 52, 1))
+      scroll = editor.scrollView()
+
+    scroll.verticalHeaderView = gutter
+    editor.minimumDocumentSize = initSize(0, 0)
+    editor.layoutSubtreeIfNeeded()
+
+    check not scroll.verticalScrollerRect().isEmpty
+    check scroll.horizontalScrollerRect().isEmpty
+    check abs(scroll.maximumContentOffset().x) <= 0.001'f32
+    check abs(scroll.documentSize().width - scroll.viewportSize().width) <= 0.001'f32
+
   test "text editor demo rich text reaches FigDraw glyph fills":
     let
       demo = newTextEditorDemo(newApplication())

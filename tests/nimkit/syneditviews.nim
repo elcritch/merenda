@@ -37,6 +37,17 @@ proc answer*(): int =
     check editor.textEditor().textStorage().attributesAt(0).foregroundColor ==
       editor.theme().foreground[SynEditTokenClass.Keyword]
 
+  test "widget keeps short lines fitted to gutter-adjusted viewport":
+    let
+      editor = newSynEditView("short\n".repeat(40), frame = rect(0, 0, 520, 120))
+      scroll = editor.scrollView()
+
+    editor.layoutSubtreeIfNeeded()
+
+    check not scroll.verticalScrollerRect().isEmpty
+    check scroll.horizontalScrollerRect().isEmpty
+    check abs(scroll.maximumContentOffset().x) <= 0.001'f32
+
   test "widget restyles text replacements and language changes":
     let editor = newSynEditView("let value = 1")
 
