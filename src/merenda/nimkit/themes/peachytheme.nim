@@ -598,6 +598,7 @@ proc installPeachyRetroPalette(theme: var Theme) =
 
 proc installPeachyReferencePass(theme: var Theme) =
   theme[srView, StyleBackgroundColor] = color(0.20, 0.21, 0.27)
+  theme[srView, StyleBackgroundFill] = fill(color(0.20, 0.21, 0.27, 1.0))
 
   theme["accent"] = color(0.88, 0.30, 0.52, 0.92)
   theme["accent.pressed"] = color(1.0, 0.62, 0.36, 0.88)
@@ -807,6 +808,7 @@ proc initPeachyTheme*(): Theme =
   result.installPeachyRetroPalette()
   result.installPeachyReferencePass()
   result.installPeachyTextReadabilityPass()
+  result.clearBackgroundPinstripes()
 
 registerThemeFactory("peachy", initPeachyTheme)
 registerThemeFactory("peach", initPeachyTheme)

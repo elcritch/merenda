@@ -31,7 +31,7 @@ proc viewBackgroundStyleContext(view: View): StyleContext =
   )
 
 proc usesThemedRootBackground(view: View, isRoot: bool): bool =
-  isRoot and view.backgroundColor.a <= 0.0'f32
+  isRoot and view.usesThemedRootBackground() and view.backgroundColor.a <= 0.0'f32
 
 proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
   let

@@ -193,6 +193,15 @@ func aquaSwitchKnobShadows(enabled: bool): seq[BoxShadow] =
     ),
   ]
 
+proc clearBackgroundPinstripes*(theme: var Theme, selector: StyleSelector) =
+  theme[selector, StyleBackgroundPinstripeHighlightColor] = color(0.0, 0.0, 0.0, 0.0)
+  theme[selector, StyleBackgroundPinstripeColor] = color(0.0, 0.0, 0.0, 0.0)
+  theme[selector, StyleBackgroundPinstripePeriod] = 0.0
+  theme[selector, StyleBackgroundPinstripeHeight] = 0.0
+
+proc clearBackgroundPinstripes*(theme: var Theme) =
+  theme.clearBackgroundPinstripes(initStyleSelector(srView))
+
 const TextStyleRoles = [
   srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srMonoTextView,
   srComboBox, srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,

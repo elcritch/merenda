@@ -1201,6 +1201,7 @@ proc initSynthwave83Theme*(): Theme =
   result.installSynthwave83ReferencePass()
   result.installSynthwave83VaporwavePass()
   result.installSynthwave83ReadabilityPass()
+  result.clearBackgroundPinstripes()
 
 registerThemeFactory("synthwave83", initSynthwave83Theme)
 registerThemeFactory("synthwave", initSynthwave83Theme)

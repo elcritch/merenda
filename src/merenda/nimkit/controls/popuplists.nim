@@ -318,6 +318,7 @@ proc drawPopupList*(
       popupStyle.box.cornerRadius,
       popupStyle.box.shadows,
       maskContent = true,
+      cornerRadii = popupStyle.box.cornerRadii,
     )
     first = popupList.firstIndex()
     visible = popupList.visibleItemCount()
@@ -326,7 +327,11 @@ proc drawPopupList*(
   context.drawChromeExtras(
     popupChrome,
     initChromeExtras(
-      popupRoot, popupFrame, layer = layer, cornerRadius = popupStyle.box.cornerRadius
+      popupRoot,
+      popupFrame,
+      layer = layer,
+      cornerRadius = popupStyle.box.cornerRadius,
+      cornerRadii = popupStyle.box.cornerRadii,
     ),
   )
 
@@ -534,6 +539,7 @@ proc initPopupListViewFields*(
   initViewFields(popupList, frame)
   popupList.xPopupRole = srComboBox
   popupList.xItemRole = srComboBoxItem
+  popupList.usesThemedRootBackground = false
   popupList.configure(data, actions)
   popupList.setAcceptsFirstResponder(true)
   discard popupList.withProtocol(DefaultPopupListDrawing)

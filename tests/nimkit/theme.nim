@@ -29,6 +29,22 @@ proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
   check hasLightInset
   check hasDarkInset
 
+proc checkRootPinstripesDisabled(theme: Theme) =
+  let
+    appearance = initAppearance(theme)
+    viewStyle = controlStyle(srView)
+
+  check appearance.resolveColor(
+    viewStyle, StyleBackgroundPinstripeHighlightColor, color(1.0, 1.0, 1.0, 1.0)
+  ) == color(0.0, 0.0, 0.0, 0.0)
+  check appearance.resolveColor(
+    viewStyle, StyleBackgroundPinstripeColor, color(1.0, 1.0, 1.0, 1.0)
+  ) == color(0.0, 0.0, 0.0, 0.0)
+  check appearance.resolveLength(viewStyle, StyleBackgroundPinstripePeriod, 1.0'f32) ==
+    0.0'f32
+  check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 1.0'f32) ==
+    0.0'f32
+
 func aquaButtonFill(): Fill =
   linear(
     color(0.0, 0.25, 0.72, 0.55),
@@ -522,6 +538,10 @@ suite "nimkit theme":
     check highlightedStyle.textHighlightColor.brightness <
       highlightedStyle.text.color.brightness
     check highlightedStyle.textHighlightColor.a <= 0.20'f32
+
+  test "peachy and synthwave themes do not inherit Aqua root pinstripes":
+    checkRootPinstripesDisabled(initPeachyTheme())
+    checkRootPinstripesDisabled(initSynthwave83Theme())
 
   test "banner theme exposes generated banner palette as an opt-in theme":
     let

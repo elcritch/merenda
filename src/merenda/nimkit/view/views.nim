@@ -438,6 +438,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xCompressionPriority[laHorizontal] = LayoutPriorityHigh
   view.xCompressionPriority[laVertical] = LayoutPriorityHigh
   view.xBackgroundColor = color(0.0, 0.0, 0.0, 0.0)
+  view.xUsesThemedRootBackground = true
   discard view.withProto()
   discard view.withProtocol(DefaultViewResponder)
   discard view.withProtocol(DefaultAccessibilityProtocol)

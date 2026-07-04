@@ -334,6 +334,15 @@ proc `background=`*(view: View, color: Color) =
 proc `backgroundColor=`*(view: View, color: Color) =
   view.setBackgroundColor(color)
 
+proc usesThemedRootBackground*(view: View): bool =
+  (not view.isNil) and view.xUsesThemedRootBackground
+
+proc `usesThemedRootBackground=`*(view: View, enabled: bool) =
+  if view.isNil or view.xUsesThemedRootBackground == enabled:
+    return
+  view.xUsesThemedRootBackground = enabled
+  view.setNeedsDisplay(true)
+
 proc `clipsToBounds=`*(view: View, clipsToBounds: bool) =
   view.setClipsToBounds(clipsToBounds)
 

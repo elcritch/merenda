@@ -130,6 +130,7 @@ type
     xNeedsDisplay*: bool
     xInvalidRects*: seq[Rect]
     xBackgroundColor*: Color
+    xUsesThemedRootBackground*: bool
     xClipsToBounds*: bool
     xFocusRingType*: FocusRingType
     xAlphaValue*: float32

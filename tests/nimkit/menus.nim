@@ -1,5 +1,6 @@
 import std/unittest
 
+import figdraw/fignodes
 import sigils/selectors
 
 import merenda/nimkit
@@ -73,8 +74,35 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
 
 suite "nimkit menus":
   test "popup list keeps transparent view backing behind rounded chrome":
-    let popup = newPopupListView()
+    let popup = newPopupListView(frame = rect(0, 0, 120, 60))
     check popup.background() == color(0.0, 0.0, 0.0, 0.0)
+    check not popup.usesThemedRootBackground()
+
+    let
+      list = buildRenders(popup, initAppearance(initTheme()))[PopupDrawLevel]
+      rootIdx = list.rootIds[0]
+      rootNode = list.nodes[int(rootIdx)]
+
+    check rootNode.fill.kind == flColor
+    check rootNode.fill.color == color(0.0, 0.0, 0.0, 0.0).rgba
+
+    var
+      inheritedPinstripeFound = false
+      clippedPopupChromeFound = false
+
+    for idx, node in list.nodes:
+      if node.kind == nkRectangle:
+        if node.fill.kind == flColor and
+            node.fill.color in
+            [color(0.96, 0.96, 0.96, 1.0).rgba, color(0.62, 0.62, 0.62, 0.18).rgba]:
+          inheritedPinstripeFound = true
+        if idx != int(rootIdx) and node.screenBox.x == 0.0 and node.screenBox.y == 0.0 and
+            node.screenBox.w == 120.0 and node.screenBox.h == 60.0 and
+            NfClipContent in node.flags:
+          clippedPopupChromeFound = true
+
+    check not inheritedPinstripeFound
+    check clippedPopupChromeFound
 
   test "menu item models back identifiers hidden rows submenus and validation":
     let
