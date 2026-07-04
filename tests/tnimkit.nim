@@ -41,7 +41,6 @@ import nimkit/textviews
 import nimkit/theme
 import nimkit/types
 import nimkit/undomanagers
-import nimkit/uirelaysviews
 import nimkit/viewinspectors
 import nimkit/viewcontrollers
 import nimkit/views

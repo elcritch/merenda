@@ -655,6 +655,20 @@ suite "nimkit theme":
       highlightedStyle.text.color.brightness
     check highlightedStyle.textHighlightColor.a <= 0.20'f32
 
+  test "peachy combo boxes use peach chrome instead of Aqua colors":
+    let
+      theme = initPeachyTheme()
+      comboStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox))
+      openStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
+      arrowColor = comboStyle.arrowFill.centerColor()
+
+    check comboStyle.chrome == FlatTransparentChromeName
+    check openStyle.chrome == FlatTransparentChromeName
+    check comboStyle.box.fill != aquaComboBoxFill()
+    check comboStyle.arrowFill != aquaComboArrowFill()
+    check arrowColor.r > arrowColor.g
+    check arrowColor.r >= arrowColor.b
+
   test "peachy and synthwave themes do not inherit Aqua root pinstripes":
     checkRootPinstripesDisabled(initPeachyTheme())
     checkRootPinstripesDisabled(initSynthwave83Theme())

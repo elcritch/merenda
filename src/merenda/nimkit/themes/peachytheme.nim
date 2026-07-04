@@ -107,6 +107,15 @@ func peachySelectionFill(): Fill =
     110'u8,
   )
 
+func peachyComboArrowFill(): Fill =
+  linear(
+    color(0.52, 0.27, 0.40, 0.88),
+    color(0.34, 0.25, 0.34, 0.80),
+    color(0.82, 0.44, 0.34, 0.58),
+    fgaDiagTLBR,
+    112'u8,
+  )
+
 func peachyDisabledFill(): Fill =
   linear(color(0.18, 0.18, 0.23, 0.30), color(0.11, 0.12, 0.16, 0.24), fgaY)
 
@@ -183,6 +192,7 @@ proc installPeachyTokens(theme: var Theme) =
   theme["comboBox.border.color"] = styleToken("textField.border.color")
   theme["comboBox.border.color.open"] = color(0.78, 0.24, 1.0, 0.86)
   theme["comboBox.text.color"] = styleToken("textField.text.color")
+  theme["comboBox.arrow.fill"] = peachyComboArrowFill()
   theme["comboBox.arrow.color"] = color(0.42, 0.96, 1.0, 0.96)
   theme["comboBox.item.fill"] = fill(color(0.02, 0.06, 0.13, 0.86))
   theme["comboBox.item.fill.highlighted"] = peachyGlassFill()
@@ -258,6 +268,7 @@ proc installPeachyControlStyles(theme: var Theme) =
     theme[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
   theme[srTextField, StyleBoxShadows] = peachyInsetShadows()
+  theme[srComboBox, StyleChrome] = styleKeyword(FlatTransparentChromeName)
   theme[srComboBox, StyleBoxShadows] = peachyInsetShadows()
   theme[srTableView, StyleBoxShadows] = peachyInsetShadows()
   theme[srTableView, StyleDropIndicatorFill] = peachySelectionFill()
