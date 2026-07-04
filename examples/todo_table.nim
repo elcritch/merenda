@@ -192,10 +192,14 @@ inputRow.addArrangedSubview(input, addButton)
 buttonRow.addArrangedSubview(clearButton)
 layout.addArrangedSubview(title, inputRow, table, buttonRow, status)
 
+table.setHuggingPriority(LayoutPriorityLow, laVertical)
+inputRow.setHuggingPriority(LayoutPriorityHigh, laVertical)
+buttonRow.setHuggingPriority(LayoutPriorityHigh, laVertical)
+
 root.addSubview(layout)
 layout.pinEdges(
-  toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
-  edges = {leLeft, leTop, leRight},
+  toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 28.0, 28.0)),
+  edges = {leLeft, leTop, leRight, leBottom},
 )
 
 for item in ["Write release notes", "Tag v0.4.0", "Try the demo"]:
