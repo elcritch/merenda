@@ -538,7 +538,6 @@ proc initPopupListViewFields*(
   popupList.xPopupRole = srComboBox
   popupList.xItemRole = srComboBoxItem
   popupList.configure(data, actions)
-  popupList.setBackgroundColor(initColor(1.0, 1.0, 1.0, 1.0))
   popupList.setAcceptsFirstResponder(true)
   discard popupList.withProtocol(DefaultPopupListDrawing)
   discard popupList.withProtocol(DefaultPopupListEvents)

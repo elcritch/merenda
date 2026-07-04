@@ -1015,7 +1015,7 @@ proc initClipView(scrollView: ScrollView, frame: Rect): ClipView =
 
 proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   initViewFields(scrollView, frame)
-  scrollView.background = initColor(0.98, 0.985, 0.995, 1.0)
+  scrollView.background = initColor(0.0, 0.0, 0.0, 0.0)
   scrollView.clipsToBounds = true
   scrollView.xDrawsBackground = true
   scrollView.xHasScroller[laHorizontal] = false

@@ -1,6 +1,6 @@
 import std/[math, options, os, strutils, tables, times]
 
-from figdraw/common/shared import setFigUiScale
+from figdraw/common/shared import clearColor, setFigUiScale
 import figdraw/figrender as figrender
 from figdraw/fignodes import Renders
 import figdraw/windowing/siwinshim as siwinshim
@@ -8,10 +8,17 @@ import pkg/pixie/fileformats/png
 import siwin/clipboards as siwinClipboards
 import sigils/selectors
 
+when defined(macosx):
+  import darwin/app_kit/[nscolor, nswindow]
+  import darwin/objc/runtime
+
 import ../drawing/images
 import ../foundation/types
 import ../foundation/events
 import ./pasteboards
+
+when defined(macosx):
+  proc setOpaque(window: NSWindow, opaque: BOOL) {.objc: "setOpaque:".}
 
 type
   HostKeyEvent* = object
@@ -44,6 +51,7 @@ type
     xRenderCount: Natural
     xHasUiScaleOverride: bool
     xUiScaleOverride: float32
+    xTransparent: bool
 
   NativePasteboardProvider = ref object of DynamicAgent
     xHost: HostWindow
@@ -671,9 +679,29 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   host.refreshContentScale()
   let size = vec2(logicalSize.width, logicalSize.height)
   host.xRenderer.beginFrame()
-  host.xRenderer.renderFrame(renders, size)
+  if host.xTransparent:
+    host.xRenderer.renderFrame(renders, size, clearColor = clearColor)
+  else:
+    host.xRenderer.renderFrame(renders, size)
   host.xRenderer.endFrame()
   inc host.xRenderCount
+
+proc configureTransparentPresentation(host: HostWindow) =
+  if host.isNil or not host.xTransparent or host.xRenderer.isNil:
+    return
+  when defined(macosx):
+    if host.xNativeWindow of siwinshim.WindowCocoa:
+      let nativeWindow =
+        cast[NSWindow](siwinshim.WindowCocoa(host.xNativeWindow).nativeWindowHandle())
+      if not nativeWindow.isNil:
+        nativeWindow.setOpaque(false)
+        nativeWindow.setBackgroundColor(NSColor.clearColor())
+    when compiles(host.xRenderer.backendState.metalLayer.layer):
+      if not host.xRenderer.backendState.metalLayer.layer.isNil:
+        host.xRenderer.backendState.metalLayer.setOpaque(false)
+    when compiles(host.xRenderer.backendState.vulkanMetalLayer.layer):
+      if not host.xRenderer.backendState.vulkanMetalLayer.layer.isNil:
+        host.xRenderer.backendState.vulkanMetalLayer.setOpaque(false)
 
 proc close*(host: HostWindow) =
   let nativeWindow = host.xNativeWindow
@@ -839,6 +867,7 @@ proc createHostWindow*(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
   result.xRenderer.setupBackend(result.xNativeWindow)
+  result.configureTransparentPresentation()
   result.registerHost()
   result.installNativeClipboardBridge()
   result.installEventHandlers()
@@ -861,15 +890,16 @@ proc createPopupHostWindow*(
     else:
       none(UiScaleOverride)
 
-  result = HostWindow(xCallbacks: callbacks)
+  result = HostWindow(xCallbacks: callbacks, xTransparent: true)
   result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
-      owner.xNativeWindow, placement, grab = true
+      owner.xNativeWindow, placement, transparent = true, grab = true
     )
   result.configureHostUiScale(scaleOverride)
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
   result.xRenderer.setupBackend(result.xNativeWindow)
+  result.configureTransparentPresentation()
   result.registerHost()
   result.installEventHandlers()
   result.xNativeWindow.firstStep(makeVisible = true)
