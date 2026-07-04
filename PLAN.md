@@ -318,6 +318,39 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Near-Term Work
 
+### Tweaks
+
+- Make the default theme use macos x acqua blue for buttons instead of grey
+
+- Fix clipboard: 
+
+Yes, probably worth fixing in Merenda too.
+
+  The core issue is that Pasteboard.itemForType()/plainText() can
+  return an already-materialized local xItems[kind] before asking the
+  provider again. For a native pasteboard provider, that means
+  external clipboard changes can be hidden by stale local cache.
+  changeCount() exists, but the pasteboard cache does not appear to
+  invalidate local items when the provider’s backing clipboard
+  changes.
+
+  A good Merenda-level fix would be:
+
+  - Track the last observed provider change count on Pasteboard.
+  - Before types(), availableTypeFromArray(), itemForType(), and
+    string/data helpers, compare current provider change count with
+    the cached one.
+
+  - If it changed, clear xItems, xTypes, and probably xOwner, then
+    sync provider types again.
+
+  - Make the native provider’s pasteboardChangeCount actually reflect
+    external clipboard changes. On macOS that can map to
+    NSPasteboard.changeCount; on other backends it may need a best-
+    effort counter updated from clipboard change events or type
+    changes.
+
+
 ### Resource-Backed UI Construction
 
 Add a Nim-native resource construction layer for UI assets and declarative

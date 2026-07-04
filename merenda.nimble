@@ -18,7 +18,7 @@ feature "libbacktrace":
   requires "libbacktrace"
 
 feature "uirelays":
-  requires "gh:nim-lang/uirelays"
+  requires "gh:nim-lang/uirelays#688dd44"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
