@@ -175,6 +175,15 @@ func aquaComboArrowFill(): Fill =
     104'u8,
   )
 
+func aquaScrollerTrackFill(): Fill =
+  linear(
+    rgbaColor(255, 255, 255, 118),
+    rgbaColor(225, 238, 249, 96),
+    rgbaColor(183, 204, 225, 88),
+    fgaY,
+    116'u8,
+  )
+
 func aquaInsetControlShadows(): seq[BoxShadow] =
   @[
     dropShadow(rgbaColor(0, 0, 0, 24), y = 1.2, blur = 3.2),
@@ -203,6 +212,20 @@ func aquaKnobShadows(): seq[BoxShadow] =
     insetShadow(rgbaColor(255, 255, 255, 162), y = 1.0, blur = 2.4),
     insetShadow(rgbaColor(0, 44, 122, 38), y = -1.0, blur = 3.0),
     insetShadow(rgbaColor(0, 72, 160, 22), x = 1.0, blur = 3.0),
+  ]
+
+func aquaScrollerTrackShadows(): seq[BoxShadow] =
+  @[
+    insetShadow(rgbaColor(255, 255, 255, 102), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(0, 42, 112, 28), y = -1.0, blur = 3.0),
+  ]
+
+func aquaScrollerKnobShadows(): seq[BoxShadow] =
+  @[
+    dropShadow(rgbaColor(0, 0, 0, 32), y = 1.0, blur = 2.8),
+    insetShadow(rgbaColor(255, 255, 255, 78), y = 1.0, blur = 2.2),
+    insetShadow(rgbaColor(0, 44, 122, 32), y = -1.0, blur = 3.0),
+    insetShadow(rgbaColor(0, 68, 160, 24), x = 1.0, blur = 3.2),
   ]
 
 func aquaSwitchTrackShadows(enabled: bool): seq[BoxShadow] =
@@ -314,10 +337,12 @@ proc initTheme*(): Theme =
   result["box.fill"] = styleColor(color(0.0, 0.0, 0.0, 0.0))
   result["box.border.color"] = styleColor(color(0.61, 0.65, 0.72, 1.0))
   result["box.text.color"] = styleColor(color(0.12, 0.15, 0.20, 1.0))
-  result["scroller.track.fill"] = styleFill(color(0.84, 0.89, 0.96, 0.73))
-  result["scroller.track.border.color"] = styleColor(color(0.57, 0.68, 0.84, 0.86))
-  result["scroller.knob.fill"] = styleFill(color(0.34, 0.58, 0.86, 0.67))
-  result["scroller.knob.border.color"] = styleColor(color(0.10, 0.28, 0.58, 0.58))
+  result["scroller.track.fill"] = aquaScrollerTrackFill()
+  result["scroller.track.border.color"] = styleColor(rgbaColor(78, 108, 155, 138))
+  result["scroller.track.shadows"] = aquaScrollerTrackShadows()
+  result["scroller.knob.fill"] = aquaButtonFill()
+  result["scroller.knob.border.color"] = styleColor(rgbaColor(30, 80, 180, 150))
+  result["scroller.knob.shadows"] = aquaScrollerKnobShadows()
   result["splitView.divider.fill"] = styleFill(color(0.83, 0.89, 0.97, 0.81))
   result["splitView.divider.border.color"] = styleColor(color(0.52, 0.64, 0.82, 1.0))
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
@@ -847,17 +872,21 @@ proc initTheme*(): Theme =
   result[srScroller, StyleBorderColor] = styleToken("scroller.track.border.color")
   result[srScroller, StyleKnobFill] = styleToken("scroller.knob.fill")
   result[srScroller, StyleKnobBorderColor] = styleToken("scroller.knob.border.color")
-  result[srScroller, StyleBorderWidth] = 1.0
-  result[srScroller, StyleCornerRadius] = 3.0
+  result[srScroller, StyleBorderWidth] = 0.7
+  result[srScroller, StyleCornerRadius] = 6.0
+  result[srScroller, StyleBoxShadows] = styleToken("scroller.track.shadows")
+  result[srScroller, StyleKnobShadows] = styleToken("scroller.knob.shadows")
 
-  result[srCascadingScroller, StyleFill] = styleToken("tableView.fill")
+  result[srCascadingScroller, StyleFill] = styleToken("scroller.track.fill")
   result[srCascadingScroller, StyleBorderColor] =
     styleToken("scroller.track.border.color")
   result[srCascadingScroller, StyleKnobFill] = styleToken("scroller.knob.fill")
   result[srCascadingScroller, StyleKnobBorderColor] =
     styleToken("scroller.knob.border.color")
-  result[srCascadingScroller, StyleBorderWidth] = 0.0
-  result[srCascadingScroller, StyleCornerRadius] = 0.0
+  result[srCascadingScroller, StyleBorderWidth] = 0.7
+  result[srCascadingScroller, StyleCornerRadius] = 6.0
+  result[srCascadingScroller, StyleBoxShadows] = styleToken("scroller.track.shadows")
+  result[srCascadingScroller, StyleKnobShadows] = styleToken("scroller.knob.shadows")
 
   result[srSplitView, StyleFill] = styleToken("splitView.divider.fill")
   result[srSplitView, StyleBorderColor] = styleToken("splitView.divider.border.color")

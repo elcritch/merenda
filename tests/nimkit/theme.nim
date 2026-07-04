@@ -97,6 +97,29 @@ func aquaComboArrowFill(): Fill =
     104'u8,
   )
 
+func aquaScrollerTrackFill(): Fill =
+  linear(
+    rgbaColor(255, 255, 255, 118),
+    rgbaColor(225, 238, 249, 96),
+    rgbaColor(183, 204, 225, 88),
+    fgaY,
+    116'u8,
+  )
+
+func aquaScrollerTrackShadows(): seq[BoxShadow] =
+  @[
+    insetShadow(rgbaColor(255, 255, 255, 102), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(0, 42, 112, 28), y = -1.0, blur = 3.0),
+  ]
+
+func aquaScrollerKnobShadows(): seq[BoxShadow] =
+  @[
+    dropShadow(rgbaColor(0, 0, 0, 32), y = 1.0, blur = 2.8),
+    insetShadow(rgbaColor(255, 255, 255, 78), y = 1.0, blur = 2.2),
+    insetShadow(rgbaColor(0, 44, 122, 32), y = -1.0, blur = 3.0),
+    insetShadow(rgbaColor(0, 68, 160, 24), x = 1.0, blur = 3.2),
+  ]
+
 const CustomChromeName = "custom-widget-chrome"
 
 let CustomChromeFill = fill(color(0.42, 0.10, 0.74, 1.0))
@@ -391,6 +414,9 @@ suite "nimkit theme":
         appearance.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
       comboBoxItemStyle =
         appearance.resolveTextFieldStyle(controlStyle(srComboBoxItem, {ssSelected}))
+      scrollViewStyle = appearance.resolveScrollViewStyle(controlStyle(srScroller))
+      cascadingScrollViewStyle =
+        appearance.resolveScrollViewStyle(controlStyle(srCascadingScroller))
       viewStyle = controlStyle(srView)
       tabStyle = controlStyle(srTab)
       selectedTabStyle = controlStyle(srTab, {ssSelected})
@@ -518,6 +544,20 @@ suite "nimkit theme":
     check comboBoxItemStyle.box.fill == aquaComboItemSelectedFill()
     check comboBoxItemStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
     check comboBoxItemStyle.minSize == initSize(0.0, 22.0)
+
+    check scrollViewStyle.scrollerTrack.fill == aquaScrollerTrackFill()
+    check scrollViewStyle.scrollerTrack.fill.centerColor().a < 1.0'f32
+    check scrollViewStyle.scrollerTrack.borderColor == rgbaColor(78, 108, 155, 138)
+    check scrollViewStyle.scrollerTrack.borderWidth == 0.7'f32
+    check scrollViewStyle.scrollerTrack.cornerRadius == 6.0
+    check scrollViewStyle.scrollerTrack.shadows == aquaScrollerTrackShadows()
+    check scrollViewStyle.scrollerKnob.fill == aquaButtonFill()
+    check scrollViewStyle.scrollerKnob.borderColor == rgbaColor(30, 80, 180, 150)
+    check scrollViewStyle.scrollerKnob.cornerRadius == 6.0
+    check scrollViewStyle.scrollerKnob.shadows == aquaScrollerKnobShadows()
+    check cascadingScrollViewStyle.scrollerTrack.fill == aquaScrollerTrackFill()
+    check cascadingScrollViewStyle.scrollerKnob.fill == aquaButtonFill()
+    check cascadingScrollViewStyle.scrollerKnob.shadows == aquaScrollerKnobShadows()
 
   test "peachy highlighted buttons keep contrast with peach text":
     let
