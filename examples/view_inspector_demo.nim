@@ -127,10 +127,7 @@ activateConstraints:
   liveSwitch[atRight] == preview[atRight] - 18.0
   liveSwitch[atCenterY] == healthSlider[atCenterY]
 
-window.setContentView(root)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
+discard app.showWindow(window, root)
 let inspectorPanel = showViewInspector(root, app)
 inspectorPanel.inspector.selectView(toolbar)
 app.run()

@@ -352,9 +352,4 @@ activateConstraints:
   activityLabel[atBottom] == outline[atBottom]
 
 controller.updateSelection()
-window.setContentView(root)
-discard window.makeFirstResponder(outline)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, outline)

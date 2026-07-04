@@ -32,9 +32,4 @@ layout.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-window.setContentView(root)
-discard window.makeFirstResponder(field)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, field)

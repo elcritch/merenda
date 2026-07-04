@@ -456,10 +456,8 @@ proc newTextEditorDemo*(
 proc showTextEditorDemo*(demo: TextEditorDemo) =
   if demo.isNil:
     return
-  demo.app.addWindow(demo.window)
-  demo.window.makeKeyAndOrderFront()
+  discard demo.app.showWindow(demo.window, demo.root, demo.editor)
 
 when isMainModule:
   let demo = newTextEditorDemo()
-  demo.showTextEditorDemo()
-  demo.app.run()
+  demo.app.runWindow(demo.window, demo.root, demo.editor)

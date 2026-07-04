@@ -77,9 +77,4 @@ activateConstraints:
   sizeChoice[atWidth] == projectChoice[atWidth]
 
 updateStatus()
-window.setContentView(root)
-discard window.makeFirstResponder(projectChoice)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, projectChoice)

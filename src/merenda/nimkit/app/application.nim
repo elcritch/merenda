@@ -9,6 +9,7 @@ import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
 import ../themes
 import ../foundation/types
+import ../view/views
 import ./userdefaults
 import ./animations
 import ./panels
@@ -72,6 +73,7 @@ proc updateWindowsMenu*(app: Application)
 proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
+proc run*(app: Application)
 proc drainAnimations*(app: Application): int {.discardable.}
 proc setKeyWindow*(app: Application, window: Window)
 proc setMainWindow*(app: Application, window: Window)
@@ -575,6 +577,27 @@ proc activateWindow*(app: Application, window: Window) =
   app.setMainWindow(window)
   app.setKeyWindow(window)
   app.updateWindowsMenu()
+
+proc showWindow*(
+    app: Application, window: Window, contentView: View, firstResponder: Responder = nil
+): Window {.discardable.} =
+  if app.isNil or window.isNil:
+    return nil
+  window.setContentView(contentView)
+  if firstResponder.isNil:
+    discard window.selectNextKeyView()
+  else:
+    discard window.makeFirstResponder(firstResponder)
+  app.activateWindow(window)
+  window
+
+proc runWindow*(
+    app: Application, window: Window, contentView: View, firstResponder: Responder = nil
+) =
+  if app.isNil:
+    return
+  discard app.showWindow(window, contentView, firstResponder)
+  app.run()
 
 proc addWindow*(app: Application, window: Window) =
   if app.isNil or window.isNil:

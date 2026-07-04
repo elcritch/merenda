@@ -654,9 +654,4 @@ activateConstraints:
   activity[atBottom] == root[atBottom] - 4'em
 
 controller.updateSelection()
-window.setContentView(root)
-discard window.makeFirstResponder(table)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, table)

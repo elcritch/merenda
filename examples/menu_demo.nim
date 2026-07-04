@@ -70,9 +70,4 @@ content.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-window.setContentView(root)
-discard window.selectNextKeyView()
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root)

@@ -113,9 +113,4 @@ layout.pinEdges(
   edges = {leLeft, leTop, leRight, leBottom},
 )
 
-window.setContentView(root)
-discard window.makeFirstResponder(editor)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, editor)

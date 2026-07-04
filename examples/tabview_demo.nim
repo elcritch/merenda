@@ -195,9 +195,4 @@ let
   )
 
 window.minSize = initSize(DemoWindowWidth, minimumWindowHeight)
-window.setContentView(root)
-discard window.makeFirstResponder(tabView)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, tabView)

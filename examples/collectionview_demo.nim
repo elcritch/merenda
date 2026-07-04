@@ -85,10 +85,8 @@ proc newCollectionViewDemo*(app = newApplication()): CollectionViewDemo =
 proc showCollectionViewDemo*(demo: CollectionViewDemo) =
   if demo.isNil:
     return
-  demo.app.addWindow(demo.window)
-  demo.window.makeKeyAndOrderFront()
+  discard demo.app.showWindow(demo.window, demo.root)
 
 when isMainModule:
   let demo = newCollectionViewDemo(sharedApplication())
-  demo.showCollectionViewDemo()
-  demo.app.run()
+  demo.app.runWindow(demo.window, demo.root)

@@ -280,6 +280,42 @@ suite "nimkit application":
     check actionCount == 1
     check actionSender == DynamicAgent(button)
 
+  test "showWindow installs content selects key view and activates window":
+    let
+      app = newApplication()
+      window = newWindow("Show Window", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      focusView = newView(frame = rect(20, 20, 120, 32))
+
+    focusView.setAcceptsFirstResponder(true)
+    root.addSubview(focusView)
+
+    check app.showWindow(window, root) == window
+    check window.contentView == root
+    check window.firstResponder == Responder(focusView)
+    check window.isVisible
+    check window.isKeyWindow
+    check window.isMainWindow
+    check app.keyWindow == window
+    check app.mainWindow == window
+    check app.windows.len == 1
+
+    let
+      explicitWindow = newWindow("Explicit Focus", frame = rect(0, 0, 240, 160))
+      explicitRoot = newView(frame = rect(0, 0, 240, 160))
+      firstView = newView(frame = rect(20, 20, 80, 32))
+      explicitFocus = newView(frame = rect(20, 64, 80, 32))
+
+    firstView.setAcceptsFirstResponder(true)
+    explicitFocus.setAcceptsFirstResponder(true)
+    explicitRoot.addSubview(firstView)
+    explicitRoot.addSubview(explicitFocus)
+
+    check app.showWindow(explicitWindow, explicitRoot, explicitFocus) == explicitWindow
+    check explicitWindow.firstResponder == Responder(explicitFocus)
+    check app.keyWindow == explicitWindow
+    check app.windows.len == 2
+
   test "window key commands continue through application delegate":
     let
       app = newApplication()

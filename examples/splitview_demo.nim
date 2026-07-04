@@ -88,8 +88,4 @@ mainSplit.pinEdges(
 )
 
 window.minSize = initSize(520.0, 320.0)
-window.setContentView(root)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root)

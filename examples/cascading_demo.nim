@@ -286,9 +286,4 @@ controller.cascadingView.selectedPath =
 controller.updateDetail("cascading-view")
 
 window.minSize = initSize(560.0, 320.0)
-window.setContentView(root)
-discard window.selectNextKeyView()
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root)

@@ -203,10 +203,8 @@ proc newModelControllersDemo*(app = newApplication()): ModelControllersDemo =
 proc showModelControllersDemo*(demo: ModelControllersDemo) =
   if demo.isNil:
     return
-  demo.app.addWindow(demo.window)
-  demo.window.makeKeyAndOrderFront()
+  discard demo.app.showWindow(demo.window, demo.root)
 
 when isMainModule:
   let demo = newModelControllersDemo(sharedApplication())
-  demo.showModelControllersDemo()
-  demo.app.run()
+  demo.app.runWindow(demo.window, demo.root)

@@ -425,7 +425,4 @@ activateConstraints:
   buttonBox[atBottom] == contentGuide[atBottom] - PreferenceButtonBottomGap
 
 updateSummary()
-window.setContentView(root)
-app.addWindow(window)
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root)

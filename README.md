@@ -76,12 +76,7 @@ layout.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-window.setContentView(root)
-discard window.selectNextKeyView()
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root)
 ```
 
 The same example lives in `examples/quick_start.nim` and can be run with:
@@ -89,6 +84,11 @@ The same example lives in `examples/quick_start.nim` and can be run with:
 ```sh
 nim r examples/quick_start.nim
 ```
+
+Use `app.showWindow(window, root)` instead when you want to install and show a
+window without entering the application run loop. Pass an initial responder as
+the third argument, such as `app.runWindow(window, root, textField)`, when a
+specific control should receive focus first.
 
 Merenda apps automatically use the native window content scale. To force a
 specific UI scale for development or display debugging, set `UISCALE` or

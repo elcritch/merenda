@@ -110,9 +110,4 @@ layout.pinEdges(
 for item in ["Write release notes", "Tag v0.4.0", "Try the demo"]:
   addTodo(item)
 
-window.setContentView(root)
-discard window.makeFirstResponder(input)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, input)

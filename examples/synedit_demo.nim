@@ -108,8 +108,4 @@ layout.pinEdges(
 )
 
 refreshStatus()
-window.setContentView(root)
-discard window.makeFirstResponder(editor.textEditor)
-app.addWindow(window)
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, editor.textEditor)

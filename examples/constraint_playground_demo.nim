@@ -233,9 +233,4 @@ activateConstraints:
 
 rebuildPreviewConstraints()
 
-window.setContentView(root)
-discard window.makeFirstResponder(spacingChoice)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, spacingChoice)

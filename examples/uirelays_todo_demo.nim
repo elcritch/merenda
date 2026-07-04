@@ -623,8 +623,4 @@ let
   window = newWindow("UIRelays Todo", frame = nimkitTypes.rect(160, 120, 760, 560))
   todo = newTodoRelaysView()
 
-window.setContentView(todo)
-discard window.makeFirstResponder(todo)
-app.addWindow(window)
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, todo, todo)

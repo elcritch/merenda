@@ -115,9 +115,4 @@ layout.pinEdges(
 )
 
 syncFields()
-window.setContentView(root)
-discard window.makeFirstResponder(quantityField)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, quantityField)

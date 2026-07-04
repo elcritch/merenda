@@ -149,9 +149,4 @@ let
 
 window.minSize = initSize(DemoWindowWidth, minimumWindowHeight)
 updateStatus(nil)
-window.setContentView(root)
-discard window.makeFirstResponder(serverField)
-app.addWindow(window)
-
-window.makeKeyAndOrderFront()
-app.run()
+app.runWindow(window, root, serverField)
