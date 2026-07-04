@@ -395,6 +395,9 @@ proc renderList*(context: DrawContext): RenderList =
     return context.xRenders.layers[DefaultDrawLevel]
   RenderList()
 
+proc renderParent*(context: DrawContext): FigIdx =
+  context.xParent
+
 proc renders*(context: DrawContext): Renders =
   context.xRenders
 

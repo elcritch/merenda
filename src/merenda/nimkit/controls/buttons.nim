@@ -24,6 +24,7 @@ type
 
 const CheckboxCheckmark = "✓"
 const ButtonHoverAnimationMs = 120
+const DefaultAquaButtonCornerRadius = 14.0'f32
 
 proc updateButtonLayoutPriorities(cell: ButtonCell) =
   let view = cell.controlView()
@@ -463,6 +464,31 @@ proc pushButtonStyle(
 proc checkmarkTextRect(rect: Rect): Rect =
   rect.offsetRect(0.0'f32, -1.0'f32).inset(insets(-1.0'f32))
 
+func buttonFaceRadius(style: ButtonStyle, absoluteFrame: Rect): float32 =
+  result = style.box.cornerRadius
+  let halfHeight = absoluteFrame.size.height / 2.0'f32
+  let hasUniformRadius =
+    style.box.cornerRadii.topLeft == style.box.cornerRadius and
+    style.box.cornerRadii.topRight == style.box.cornerRadius and
+    style.box.cornerRadii.bottomLeft == style.box.cornerRadius and
+    style.box.cornerRadii.bottomRight == style.box.cornerRadius
+  if style.chrome == AquaChromeName and hasUniformRadius and (
+    abs(style.box.cornerRadius - DefaultAquaButtonCornerRadius) <= 0.001'f32 or
+    style.box.cornerRadius >= halfHeight
+  ):
+    result = halfHeight
+
+func buttonFaceCornerRadii(style: ButtonStyle, radius: float32): CornerRadii =
+  if radius != style.box.cornerRadius:
+    initCornerRadii(radius)
+  else:
+    style.box.cornerRadii
+
+func buttonFaceBox(style: ButtonStyle, absoluteFrame: Rect): ControlBoxStyle =
+  result = style.box
+  result.cornerRadius = style.buttonFaceRadius(absoluteFrame)
+  result.cornerRadii = style.buttonFaceCornerRadii(result.cornerRadius)
+
 proc drawPushButtonFace(
     context: DrawContext,
     absoluteFrame: Rect,
@@ -471,24 +497,33 @@ proc drawPushButtonFace(
 ) =
   let chrome = chromeContext(style.chrome, crButton, cpFace, style.box.fill, states)
   let
-    radius = style.box.cornerRadius
-    buttonRoot = context.addRenderRectangle(
+    isAqua = style.chrome == AquaChromeName
+    radius = style.buttonFaceRadius(absoluteFrame)
+    cornerRadii = style.buttonFaceCornerRadii(radius)
+  context.drawChromeBacking(
+    chrome,
+    initChromeExtras(
+      context.renderParent(),
       absoluteFrame,
-      context.appearance.chromeFill(chrome),
-      style.box.borderColor,
-      style.box.borderWidth,
-      radius,
-      style.box.shadows,
-      maskContent = true,
-      cornerRadii = style.box.cornerRadii,
-    )
+      cornerRadius = radius,
+      cornerRadii = cornerRadii,
+    ),
+  )
+  let buttonRoot = context.addRenderRectangle(
+    absoluteFrame,
+    context.appearance.chromeFill(chrome),
+    style.box.borderColor,
+    style.box.borderWidth,
+    radius,
+    style.box.shadows,
+    maskContent = not isAqua,
+    lightMaskContent = isAqua,
+    cornerRadii = cornerRadii,
+  )
   context.drawChromeExtras(
     chrome,
     initChromeExtras(
-      buttonRoot,
-      absoluteFrame,
-      cornerRadius = radius,
-      cornerRadii = style.box.cornerRadii,
+      buttonRoot, absoluteFrame, cornerRadius = radius, cornerRadii = cornerRadii
     ),
   )
 
@@ -592,7 +627,7 @@ proc drawPushButtonCell*(
     absoluteFrame = context.renderRectFor(rect)
   context.drawPushButtonFace(absoluteFrame, style, states)
   if focusVisible:
-    context.addFocusRing(absoluteFrame, style.box)
+    context.addFocusRing(absoluteFrame, style.buttonFaceBox(absoluteFrame))
 
   let textRect = style.buttonTextRect(rect)
   let title = cell.title().clippedText(textRect.size.width, style.text)
@@ -723,7 +758,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       let style = button.pushButtonStyle(context.appearance, states)
       context.drawPushButtonFace(absoluteFrame, style, states)
       if button.isFocusVisible:
-        context.addFocusRing(absoluteFrame, style.box)
+        context.addFocusRing(absoluteFrame, style.buttonFaceBox(absoluteFrame))
       let textRect = style.buttonTextRect(button.bounds)
       let title = button.title.clippedText(textRect.size.width, style.text)
       if style.textHighlightColor.a > 0.0:

@@ -60,6 +60,10 @@ var fallbackDefaultChrome {.threadvar.}: Chrome
 protocol ChromeProtocol:
   method chromeFillFor*(context: ChromeContext): Fill {.optional.}
 
+  method drawChromeBackingFor*(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+  ) {.optional.}
+
   method drawChromeExtrasFor*(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
   ) {.optional.}
@@ -147,6 +151,13 @@ proc drawChromeExtras*(
 ) =
   discard context.appearance.resolveChrome(chrome.name).sendLocalIfHandled(
       drawChromeExtrasFor(), (context: context, chrome: chrome, extras: extras)
+    )
+
+proc drawChromeBacking*(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  discard context.appearance.resolveChrome(chrome.name).sendLocalIfHandled(
+      drawChromeBackingFor(), (context: context, chrome: chrome, extras: extras)
     )
 
 proc installDefaultChrome(theme: var Theme) =

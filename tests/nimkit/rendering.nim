@@ -20,11 +20,19 @@ let
 
 type ExtraChrome = ref object of Chrome
 
+func rgbaColor(r, g, b, a: int): Color =
+  color(
+    r.float32 / 255.0'f32,
+    g.float32 / 255.0'f32,
+    b.float32 / 255.0'f32,
+    a.float32 / 255.0'f32,
+  )
+
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.18, 0.58, 0.92, 0.85), color(0.0, 0.28, 0.76, 0.85), fgaDiagTLBR)
+  linear(rgbaColor(122, 232, 255, 255), rgbaColor(0, 124, 238, 255), fgaDiagTLBR)
 
 func aquaRadioShellFill(): Fill =
-  linear(color(0.99, 0.99, 0.98, 0.85), color(0.65, 0.66, 0.64, 0.85), fgaY)
+  linear(rgbaColor(253, 253, 250, 255), rgbaColor(166, 168, 164, 255), fgaY)
 
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
@@ -406,29 +414,50 @@ suite "nimkit rendering":
           controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
         )
       expectedButtonRect = button.rectToWindow(button.bounds)
+      expectedShadowRect = rect(
+        expectedButtonRect.origin.x,
+        expectedButtonRect.origin.y + 1.5'f32,
+        expectedButtonRect.size.width,
+        expectedButtonRect.size.height,
+      )
       expectedTextRect = button.rectToWindow(style.buttonTextRect(button.bounds))
       list = buildRenders(root)[DefaultDrawLevel]
 
-    var buttonRoot = (-1).FigIdx
+    var
+      buttonBackingFound = false
+      buttonRoot = (-1).FigIdx
     for idx, node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == rgbaColor(0, 0, 0, 54).rgba and
+          node.renderedRect().rectsClose(expectedShadowRect):
+        buttonBackingFound = true
+        check node.corners[dcTopLeft] == 16'u16
+        check node.shadows[0].style == DropShadow
+        check node.shadows[0].fill.kind == flColor
+        check node.shadows[0].fill.color == rgbaColor(0, 0, 0, 58).rgba
+        check node.shadows[0].y == 1.8'f32
+        check node.shadows[0].blur == 5.8'f32
       if node.kind == nkRectangle and node.fill == style.box.fill and
           node.renderedRect().rectsClose(expectedButtonRect):
         buttonRoot = idx.FigIdx
-        check NfClipContent in node.flags
+        check NfRectMaskContent in node.flags
+        check NfClipContent notin node.flags
         check node.fill.centerColor().a <= 0.57'f32
         check node.stroke.weight == style.box.borderWidth
         check node.stroke.fill.kind == flColor
         check node.stroke.fill.color == style.box.borderColor.rgba
+        check node.corners[dcTopLeft] == 16'u16
 
+    check buttonBackingFound
     check buttonRoot != (-1).FigIdx
 
     var innerRoot = (-1).FigIdx
     for idx in childIndex(list.nodes, buttonRoot):
       let node = list.nodes[int(idx)]
       if node.kind == nkRectangle and NfRectMaskContent in node.flags and
-          node.fill.kind == flLinear2:
+          node.fill.kind == flLinear3:
         innerRoot = idx
-        check node.fill.centerColor().a <= 0.22'f32
+        check node.fill.centerColor().a <= 0.48'f32
 
     check innerRoot != (-1).FigIdx
 
@@ -438,7 +467,7 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.fill.kind == flLinear2 and
           node.fill.lin2.start.a > 0'u8 and node.fill.lin2.stop.a == 0'u8:
         glossFound = true
-        check node.fill.lin2.start.a <= 65'u8
+        check node.fill.lin2.start.a <= 40'u8
 
     var
       okTextLayerCount = 0
@@ -798,8 +827,8 @@ suite "nimkit rendering":
           node.screenBox.y == 28.0 and node.screenBox.w == 180.0 and
           node.screenBox.h == 74.0 and node.stroke.weight == 1.0:
         panelFound = true
-        check node.corners[dcTopLeft] == 6'u16
-        check node.corners[dcTopRight] == 6'u16
+        check node.corners[dcTopLeft] == 12'u16
+        check node.corners[dcTopRight] == 12'u16
       if node.kind == nkRectangle and node.screenBox.x == 19.0 and
           node.screenBox.y == 65.0 and node.screenBox.w == 162.0 and
           node.screenBox.h == 1.0:

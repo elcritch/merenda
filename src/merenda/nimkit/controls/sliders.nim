@@ -239,15 +239,18 @@ proc drawSliderKnob(
     chrome = chromeContext(
       style.chrome, crSliderKnob, cpFace, style.knob.fill, slider.sliderChromeStates()
     )
-    knobRoot = context.addRenderRectangle(
-      frame,
-      context.appearance.chromeFill(chrome),
-      style.knob.borderColor,
-      style.knob.borderWidth,
-      radius,
-      style.knob.shadows,
-      lightMaskContent = true,
-    )
+  context.drawChromeBacking(
+    chrome, initChromeExtras(context.renderParent(), frame, cornerRadius = radius)
+  )
+  let knobRoot = context.addRenderRectangle(
+    frame,
+    context.appearance.chromeFill(chrome),
+    style.knob.borderColor,
+    style.knob.borderWidth,
+    radius,
+    style.knob.shadows,
+    lightMaskContent = true,
+  )
   context.drawChromeExtras(
     chrome, initChromeExtras(knobRoot, frame, cornerRadius = radius)
   )

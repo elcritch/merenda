@@ -207,15 +207,18 @@ proc drawSwitchKnob(
     frame = context.renderRectFor(rect)
     radius = rect.size.width * 0.5'f32
     chrome = chromeContext(style.chrome, crSliderKnob, cpFace, style.knob.fill, states)
-    knobRoot = context.addRenderRectangle(
-      frame,
-      context.appearance.chromeFill(chrome),
-      style.knob.borderColor,
-      style.knob.borderWidth,
-      radius,
-      style.knob.shadows,
-      lightMaskContent = true,
-    )
+  context.drawChromeBacking(
+    chrome, initChromeExtras(context.renderParent(), frame, cornerRadius = radius)
+  )
+  let knobRoot = context.addRenderRectangle(
+    frame,
+    context.appearance.chromeFill(chrome),
+    style.knob.borderColor,
+    style.knob.borderWidth,
+    radius,
+    style.knob.shadows,
+    lightMaskContent = true,
+  )
   context.drawChromeExtras(
     chrome, initChromeExtras(knobRoot, frame, cornerRadius = radius)
   )

@@ -279,6 +279,7 @@ countStepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
 buttonRow.spacing = 8.0
 buttonRow.alignment = svaFill
 buttonRow.distribution = svdFillEqually
+buttonRow.setHuggingPriority(LayoutPriorityHigh, laVertical)
 
 buttonRow.addArrangedSubview(pushButton, toggleButton)
 countRow.addArrangedSubview(countField, countStepper)

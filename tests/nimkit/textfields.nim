@@ -79,6 +79,12 @@ proc containsRect(outer, inner: nimkitTypes.Rect): bool =
 proc checkClose(actual, expected: float32) =
   check abs(actual - expected) <= TextFieldGeometryEpsilon
 
+func center(rect: nimkitTypes.Rect): nimkitTypes.Point =
+  initPoint(
+    rect.origin.x + rect.size.width / 2.0'f32,
+    rect.origin.y + rect.size.height / 2.0'f32,
+  )
+
 proc checkRectClose(actual, expected: nimkitTypes.Rect) =
   checkClose(actual.origin.x, expected.origin.x)
   checkClose(actual.origin.y, expected.origin.y)
@@ -694,7 +700,9 @@ suite "nimkit text fields":
     root.addSubview(field)
     window.setContentView(root)
 
-    check window.mouseDownAt(initPoint(20, 20))
+    check window.mouseDownAt(
+      field.pointToWindow(field.layoutManager().characterRect(1).center())
+    )
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
     check field.currentEditor == window.fieldEditor()
@@ -710,7 +718,9 @@ suite "nimkit text fields":
     check field.isFocusVisible
     check window.fieldEditor().isFocusVisible
 
-    check window.mouseDownAt(initPoint(30, 20))
+    check window.mouseDownAt(
+      field.pointToWindow(field.layoutManager().characterRect(2).center())
+    )
     check window.firstResponder == window.fieldEditor()
     check window.fieldEditorClient() == field
     check field.currentEditor == window.fieldEditor()

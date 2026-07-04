@@ -1549,18 +1549,33 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         absoluteFrame = context.renderRectFor(button.bounds)
         faceChrome =
           chromeContext(style.chrome, crComboBox, cpFace, style.box.fill, states)
-        faceRoot = context.addRenderRectangle(
+      context.drawChromeBacking(
+        faceChrome,
+        initChromeExtras(
+          context.renderParent(),
           absoluteFrame,
-          context.appearance.chromeFill(faceChrome),
-          style.box.borderColor,
-          style.box.borderWidth,
-          style.box.cornerRadius,
-          style.box.shadows,
-          lightMaskContent = true,
-        )
+          cornerRadius = style.box.cornerRadius,
+          cornerRadii = style.box.cornerRadii,
+        ),
+      )
+      let faceRoot = context.addRenderRectangle(
+        absoluteFrame,
+        context.appearance.chromeFill(faceChrome),
+        style.box.borderColor,
+        style.box.borderWidth,
+        style.box.cornerRadius,
+        style.box.shadows,
+        lightMaskContent = true,
+        cornerRadii = style.box.cornerRadii,
+      )
       context.drawChromeExtras(
         faceChrome,
-        initChromeExtras(faceRoot, absoluteFrame, cornerRadius = style.box.cornerRadius),
+        initChromeExtras(
+          faceRoot,
+          absoluteFrame,
+          cornerRadius = style.box.cornerRadius,
+          cornerRadii = style.box.cornerRadii,
+        ),
       )
       if button.isFocusVisible:
         context.addFocusRing(absoluteFrame, style.box)
@@ -1569,7 +1584,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         arrowRect = style.comboBoxArrowRect(button.bounds)
         arrowFrame = context.renderRectFor(arrowRect)
         arrowChrome =
-          chromeContext(style.chrome, crComboBox, cpArrow, style.box.fill, states)
+          chromeContext(style.chrome, crComboBox, cpArrow, style.arrowFill, states)
         separatorRect = rect(
           arrowRect.origin.x,
           arrowRect.origin.y + 2.0'f32,

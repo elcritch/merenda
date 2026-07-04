@@ -813,6 +813,15 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
     let comboChrome =
       chromeContext(style.chrome, crComboBox, cpFace, style.box.fill, styleStates)
 
+    context.drawChromeBacking(
+      comboChrome,
+      initChromeExtras(
+        context.renderParent(),
+        absoluteFrame,
+        cornerRadius = style.box.cornerRadius,
+        cornerRadii = style.box.cornerRadii,
+      ),
+    )
     let comboRoot = context.addRenderRectangle(
       absoluteFrame,
       context.appearance.chromeFill(comboChrome),
@@ -821,10 +830,16 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       style.box.cornerRadius,
       style.box.shadows,
       lightMaskContent = true,
+      cornerRadii = style.box.cornerRadii,
     )
     context.drawChromeExtras(
       comboChrome,
-      initChromeExtras(comboRoot, absoluteFrame, cornerRadius = style.box.cornerRadius),
+      initChromeExtras(
+        comboRoot,
+        absoluteFrame,
+        cornerRadius = style.box.cornerRadius,
+        cornerRadii = style.box.cornerRadii,
+      ),
     )
     if comboBox.isFocusVisible:
       context.addFocusRing(absoluteFrame, style.box)
