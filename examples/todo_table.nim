@@ -26,12 +26,7 @@ proc updateStatus(controller: TodoTableController) =
       inc completed
 
   let total = controller.model.sourceLen()
-  if total == 0:
-    controller.status.text = "0 items"
-  elif completed == 1:
-    controller.status.text = "1 of " & $total & " done"
-  else:
-    controller.status.text = $completed & " of " & $total & " done"
+  controller.status.text = $completed & " of " & $total & " done"
 
 proc toggleTodo(controller: TodoTableController, identifier: string) =
   if controller.isNil or controller.model.isNil or controller.table.isNil:
