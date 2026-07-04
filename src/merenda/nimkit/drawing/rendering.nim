@@ -51,10 +51,10 @@ proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill 
       srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
     )
     let fallbackColor = appearance.resolveColor(
-      context, StyleBackgroundColor, initColor(0.94, 0.95, 0.97, 1.0)
+      context, StyleBackgroundColor, color(0.94, 0.95, 0.97, 1.0)
     )
     return appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
-  fill(initColor(color.r, color.g, color.b, color.a * view.alphaValue))
+  fill(color(color.r, color.g, color.b, color.a * view.alphaValue))
 
 proc renderViewInto(
     context: DrawContext,

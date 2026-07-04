@@ -143,8 +143,8 @@ suite "nimkit text storage":
   test "text storage replaces text and preserves surrounding attribute runs":
     let
       storage = newTextStorage("abcdef")
-      red = defaultTextAttributes(initColor(1.0, 0.0, 0.0))
-      blue = defaultTextAttributes(initColor(0.0, 0.0, 1.0))
+      red = defaultTextAttributes(color(1.0, 0.0, 0.0))
+      blue = defaultTextAttributes(color(0.0, 0.0, 1.0))
 
     storage.setAttributes(initTextRange(0, 3), red)
     storage.replace(initTextRange(2, 2), "XYZ", blue)
@@ -168,7 +168,7 @@ suite "nimkit text storage":
   test "adjacent equal attribute runs are normalized":
     let
       storage = newTextStorage("abcd")
-      accent = defaultTextAttributes(initColor(0.2, 0.4, 0.8))
+      accent = defaultTextAttributes(color(0.2, 0.4, 0.8))
 
     storage.setAttributes(initTextRange(0, 2), accent)
     storage.setAttributes(initTextRange(2, 2), accent)
@@ -181,7 +181,7 @@ suite "nimkit text storage":
     check count == 1
 
   test "rich text attributes preserve TextKit-style value fields":
-    var attributes = defaultTextAttributes(initColor(0.1, 0.2, 0.3), 14.0)
+    var attributes = defaultTextAttributes(color(0.1, 0.2, 0.3), 14.0)
     attributes.paragraphStyle = initTextParagraphStyle(
       alignment = taRight,
       firstLineHeadIndent = 8.0,
@@ -197,9 +197,9 @@ suite "nimkit text storage":
     attributes.kerning = 0.75
     attributes.ligatureLevel = tllAll
     attributes.expansion = 0.2
-    attributes.backgroundColor = initColor(1.0, 0.9, 0.2, 1.0)
+    attributes.backgroundColor = color(1.0, 0.9, 0.2, 1.0)
     attributes.shadow =
-      initTextShadow(initColor(0.0, 0.0, 0.0, 0.35), initSize(1.0, 2.0), 3.0)
+      initTextShadow(color(0.0, 0.0, 0.0, 0.35), initSize(1.0, 2.0), 3.0)
     attributes.link = "https://example.com"
     attributes.underlineStyle = tldsSingle
     attributes.strikethroughStyle = tldsDouble
@@ -226,8 +226,8 @@ suite "nimkit text storage":
   test "mutable attributed string APIs use rune-indexed ranges":
     let
       storage = newAttributedString("ałpha")
-      accent = defaultTextAttributes(initColor(0.8, 0.1, 0.2), 16.0)
-      blue = defaultTextAttributes(initColor(0.0, 0.2, 1.0), 12.0)
+      accent = defaultTextAttributes(color(0.8, 0.1, 0.2), 16.0)
+      blue = defaultTextAttributes(color(0.0, 0.2, 1.0), 12.0)
 
     storage.replaceCharacters(initTextRange(1, 1), "L", accent)
     storage.insertAttributedString(2, newAttributedString("ZZ", blue))
@@ -251,7 +251,7 @@ suite "nimkit text storage":
     let
       storage = newTextStorage("abcdef")
       spy = newStorageEventSpy()
-      accent = defaultTextAttributes(initColor(0.3, 0.4, 0.9), 15.0)
+      accent = defaultTextAttributes(color(0.3, 0.4, 0.9), 15.0)
 
     spy.observeProtocol(storage, TextStorageEditingEvents)
     storage.beginEditing()
@@ -297,7 +297,7 @@ suite "nimkit text storage":
     let
       storage = newTextStorage("one\ntwo\nthree")
       delegate = newStorageDelegateSpy(17.0)
-    var attributes = defaultTextAttributes(initColor(0.5, 0.1, 0.1), 13.0)
+    var attributes = defaultTextAttributes(color(0.5, 0.1, 0.1), 13.0)
     attributes.fontSize = 0.0
 
     storage.delegate = DynamicAgent(delegate)
@@ -310,7 +310,7 @@ suite "nimkit text storage":
 
   test "lazy text storage materializes through provider on first query":
     let
-      accent = defaultTextAttributes(initColor(0.2, 0.6, 0.4), 14.0)
+      accent = defaultTextAttributes(color(0.2, 0.6, 0.4), 14.0)
       provider = newLazyStorageProvider(
         "lazy", [TextAttributeRun(range: initTextRange(0, 4), attributes: accent)]
       )

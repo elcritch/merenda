@@ -119,8 +119,8 @@ func initMonoTextRawEventPolicy*(
 
 func initMonoTextCell*(
     text = " ",
-    foregroundColor = initColor(0.0, 0.0, 0.0, 1.0),
-    backgroundColor = initColor(0.0, 0.0, 0.0, 0.0),
+    foregroundColor = color(0.0, 0.0, 0.0, 1.0),
+    backgroundColor = color(0.0, 0.0, 0.0, 0.0),
     hasForegroundColor = false,
     hasBackgroundColor = false,
 ): MonoTextCell =
@@ -134,8 +134,8 @@ func initMonoTextCell*(
 
 func initMonoTextCell*(
     rune: Rune,
-    foregroundColor = initColor(0.0, 0.0, 0.0, 1.0),
-    backgroundColor = initColor(0.0, 0.0, 0.0, 0.0),
+    foregroundColor = color(0.0, 0.0, 0.0, 1.0),
+    backgroundColor = color(0.0, 0.0, 0.0, 0.0),
     hasForegroundColor = false,
     hasBackgroundColor = false,
 ): MonoTextCell =
@@ -146,7 +146,7 @@ func initMonoTextCell*(
 func styledMonoTextCell*(
     text: string,
     foregroundColor: nimkitTypes.Color,
-    backgroundColor = initColor(0.0, 0.0, 0.0, 0.0),
+    backgroundColor = color(0.0, 0.0, 0.0, 0.0),
     hasBackgroundColor = false,
 ): MonoTextCell =
   initMonoTextCell(
@@ -649,7 +649,7 @@ proc `tabWidth=`*(view: MonoTextView, width: int) =
 
 proc textColor*(view: MonoTextView): nimkitTypes.Color =
   if view.isNil:
-    initColor(0.08, 0.09, 0.11, 1.0)
+    color(0.08, 0.09, 0.11, 1.0)
   elif view.xTextColor.a > 0.0'f32:
     view.xTextColor
   else:
@@ -663,7 +663,7 @@ proc `textColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
 
 proc cursorColor*(view: MonoTextView): nimkitTypes.Color =
   if view.isNil:
-    initColor(0.08, 0.45, 0.95, 0.72)
+    color(0.08, 0.45, 0.95, 0.72)
   elif view.xCursorColor.a > 0.0'f32:
     view.xCursorColor
   else:
@@ -1432,9 +1432,9 @@ proc initMonoTextViewFields*(
   view.xPadding = -1.0'f32
   view.xFontName = DefaultMonoFontName
   view.xFontSize = defaultFontSize()
-  view.xTextColor = initColor(0.0, 0.0, 0.0, 0.0)
-  view.xCursorColor = initColor(0.0, 0.0, 0.0, 0.0)
-  view.backgroundColor = initColor(0.0, 0.0, 0.0, 0.0)
+  view.xTextColor = color(0.0, 0.0, 0.0, 0.0)
+  view.xCursorColor = color(0.0, 0.0, 0.0, 0.0)
+  view.backgroundColor = color(0.0, 0.0, 0.0, 0.0)
   discard view.withProtocol(DefaultMonoTextViewDrawing)
   discard view.withProtocol(DefaultMonoTextViewLayout)
   discard view.withProtocol(DefaultMonoTextViewEvents)

@@ -20,8 +20,8 @@ type
     xInstalled: bool
 
 func initSelectionRingStyle*(
-    strokeColor = initColor(0.0, 0.45, 1.0, 0.95),
-    fillColor = initColor(0.0, 0.0, 0.0, 0.0),
+    strokeColor = color(0.0, 0.45, 1.0, 0.95),
+    fillColor = color(0.0, 0.0, 0.0, 0.0),
     lineWidth = 3.0'f32,
     cornerRadius = 8.0'f32,
     insets = insets(2.0'f32),

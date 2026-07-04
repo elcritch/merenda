@@ -59,7 +59,7 @@ proc newTabViewDemoPane(): View =
     option = newCheckBox("Open recent documents on launch")
     button = newButton("Reset Warnings")
 
-  stack.background = initColor(0.98, 0.98, 0.96, 0.0)
+  stack.background = color(0.98, 0.98, 0.96, 0.0)
   stack.edgeInsets = insets(18.0, 20.0)
   stack.spacing = 12.0
   stack.alignment = svaFill
@@ -81,7 +81,7 @@ proc newTabViewDemoFixture(): TabViewDemoFixture =
     controls = newStackView(laHorizontal)
     disabledItem = newTabViewItem("Disabled", newStackView(laVertical), "disabled")
 
-  root.background = initColor(0.95, 0.96, 0.98)
+  root.background = color(0.95, 0.96, 0.98)
   layout.spacing = 12.0
   layout.alignment = svaFill
   layout.edgeInsets = insets(22.0, 24.0)
@@ -285,7 +285,7 @@ suite "nimkit tab views":
       content = newView()
       item = newTabViewItem("General", content)
 
-    content.background = initColor(0.20, 0.40, 0.80)
+    content.background = color(0.20, 0.40, 0.80)
     discard tabView.addTabViewItem(item)
 
     let renders = buildRenders(tabView)
@@ -302,7 +302,7 @@ suite "nimkit tab views":
           node.screenBox.w == 320.0:
         panelFound = true
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.20, 0.40, 0.80).rgba:
+          node.fill.color == color(0.20, 0.40, 0.80).rgba:
         contentFound = true
 
     check labelFound
@@ -312,8 +312,8 @@ suite "nimkit tab views":
   test "tab face fill comes from selected chrome":
     let
       appearance = initAppearance()
-      baseFill = fill(initColor(0.98, 0.98, 0.96, 1.0))
-      highlightFill = fill(initColor(0.82, 0.84, 0.88, 0.73))
+      baseFill = fill(color(0.98, 0.98, 0.96, 1.0))
+      highlightFill = fill(color(0.82, 0.84, 0.88, 0.73))
       selectedAqua = appearance.chromeFill(
         chromeContext(AquaChromeName, crTab, cpFace, baseFill, {ssSelected})
       )
@@ -325,7 +325,7 @@ suite "nimkit tab views":
       )
 
     check selectedAqua.kind == flLinear3
-    check selectedAqua.lin3.stop == initColor(0.94, 0.94, 0.92, 1.0).rgba
+    check selectedAqua.lin3.stop == color(0.94, 0.94, 0.92, 1.0).rgba
     check highlightAqua == highlightFill
     check defaultChrome == baseFill
 

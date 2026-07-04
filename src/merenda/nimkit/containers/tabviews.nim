@@ -256,11 +256,11 @@ proc tabBarFrame(tabView: TabView): Rect =
 
 func tabTextColor(enabled, selected: bool): Color =
   if not enabled:
-    initColor(0.48, 0.50, 0.54)
+    color(0.48, 0.50, 0.54)
   elif selected:
-    initColor(0.07, 0.08, 0.10)
+    color(0.07, 0.08, 0.10)
   else:
-    initColor(0.14, 0.15, 0.18)
+    color(0.14, 0.15, 0.18)
 
 proc tabWidth(item: TabViewItem, style: TabViewStyle, textStyle: TextStyle): float32 =
   let textSize = textNaturalSize(
@@ -567,24 +567,24 @@ proc tabTextRect(rect: Rect, insets: EdgeInsets): Rect =
   rect.inset(insets)
 
 func panelFillColor(): Color =
-  initColor(0.98, 0.98, 0.96)
+  color(0.98, 0.98, 0.96)
 
 func panelFill(): Fill =
   fill(panelFillColor())
 
 func panelBorderColor(): Color =
-  initColor(0.42, 0.44, 0.48)
+  color(0.42, 0.44, 0.48)
 
 func tabBorderColor(selected, enabled: bool): Color =
   if selected:
     panelBorderColor()
   elif enabled:
-    initColor(0.55, 0.57, 0.62)
+    color(0.55, 0.57, 0.62)
   else:
-    initColor(0.65, 0.67, 0.70)
+    color(0.65, 0.67, 0.70)
 
 func tabHighlightFill(enabled: bool): Fill =
-  fill(initColor(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30))
+  fill(color(1.0, 1.0, 1.0, if enabled: 0.68 else: 0.30))
 
 func chromeEdge(position: TabPosition): ChromeEdge =
   case position
@@ -690,8 +690,8 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
   if selected and tabView.isFocusVisible:
     discard context.addRenderRectangle(
       context.renderRectFor(rect.inset(insets(3.0'f32))),
-      initColor(0.0, 0.0, 0.0, 0.0),
-      initColor(0.25, 0.45, 0.90),
+      color(0.0, 0.0, 0.0, 0.0),
+      color(0.25, 0.45, 0.90),
       1.0'f32,
       3.0'f32,
     )
@@ -865,7 +865,7 @@ proc canHandleTabKeyNavigation(tabView: TabView): bool =
 proc newTabBarView(tabView: TabView): TabBarView =
   result = TabBarView(xTabView: tabView)
   initViewFields(result)
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.0, 0.0, 0.0, 0.0)
   discard result.withProtocol(TabBarDrawing)
   discard result.withProtocol(TabBarEvents)
 
@@ -880,7 +880,7 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   tabView.xTabPosition = tpTop
   tabView.xTabMode = tvmInset
   tabView.xTabBar = newTabBarView(tabView)
-  tabView.background = initColor(0.94, 0.95, 0.97, 0.0)
+  tabView.background = color(0.94, 0.95, 0.97, 0.0)
   tabView.clipsToBounds = true
   tabView.setAcceptsFirstResponder(true)
   discard tabView.withProto()

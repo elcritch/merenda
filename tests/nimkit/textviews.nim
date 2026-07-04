@@ -201,7 +201,7 @@ suite "nimkit text views":
   test "text view keeps attributed storage":
     let
       textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
-      accent = defaultTextAttributes(initColor(0.9, 0.1, 0.1))
+      accent = defaultTextAttributes(color(0.9, 0.1, 0.1))
 
     textView.textStorage().setAttributes(initTextRange(0, 3), accent)
     textView.selectedRange = initTextRange(1, 1)
@@ -214,7 +214,7 @@ suite "nimkit text views":
     let
       textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
       accent = TextAttributes(
-        foregroundColor: initColor(0.2, 0.4, 0.8), fontSize: 15.0, underline: true
+        foregroundColor: color(0.2, 0.4, 0.8), fontSize: 15.0, underline: true
       )
 
     textView.selectedRange = initTextRange(1, 0)
@@ -227,7 +227,7 @@ suite "nimkit text views":
   test "text view insertion at styled run end inherits previous attributes":
     let
       textView = newTextView("Title\nBody", frame = initRect(0, 0, 200, 80))
-      titleAttributes = defaultTextAttributes(initColor(0.95, 0.42, 0.78), 18.0)
+      titleAttributes = defaultTextAttributes(color(0.95, 0.42, 0.78), 18.0)
 
     textView.textStorage().setAttributes(initTextRange(0, 5), titleAttributes)
     textView.selectedRange = initTextRange(5, 0)
@@ -258,7 +258,7 @@ suite "nimkit text views":
   test "text view exposes text input client marked text geometry":
     let
       textView = newTextView("abcd", frame = initRect(12, 18, 180, 48))
-      accent = defaultTextAttributes(initColor(0.1, 0.3, 0.8), 14.0)
+      accent = defaultTextAttributes(color(0.1, 0.3, 0.8), 14.0)
 
     textView.textStorage().setAttributes(initTextRange(1, 2), accent)
     textView.selectedRange = initTextRange(1, 2)
@@ -410,8 +410,8 @@ suite "nimkit text views":
   test "text view exposes caret selection and paragraph editing attributes":
     let
       textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
-      selectedAttributes = defaultTextAttributes(initColor(1.0, 1.0, 1.0, 1.0), 14.0)
-      caretColor = initColor(0.9, 0.1, 0.2, 1.0)
+      selectedAttributes = defaultTextAttributes(color(1.0, 1.0, 1.0, 1.0), 14.0)
+      caretColor = color(0.9, 0.1, 0.2, 1.0)
       tabStop = initTextTabStop(48.0)
     var paragraph = initTextParagraphStyle(tabStops = [tabStop])
 
@@ -571,7 +571,7 @@ suite "nimkit text views":
     let
       textView = newTextView("abcdef", frame = initRect(0, 0, 180, 40))
       delegate = newTextViewDelegateSpy()
-      replacementAttributes = defaultTextAttributes(initColor(0.7, 0.1, 0.2), 13.0)
+      replacementAttributes = defaultTextAttributes(color(0.7, 0.1, 0.2), 13.0)
 
     delegate.serviceResponse = TextServiceResponse(
       handled: true,

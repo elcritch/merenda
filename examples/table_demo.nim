@@ -614,15 +614,12 @@ let
   stateCellStyle = initStyleSelector(srTextField, classes = @["table-state-cell"])
   disabledStateCellStyle =
     initStyleSelector(srTextField, {ssDisabled}, classes = @["table-state-cell"])
-tableAppearance[stateCellStyle, StyleFill] = fill(initColor(0.94, 0.97, 1.0, 1.0))
-tableAppearance[stateCellStyle, StyleBorderColor] = initColor(0.68, 0.76, 0.86, 1.0)
-tableAppearance[stateCellStyle, StyleTextColor] = initColor(0.11, 0.23, 0.36, 1.0)
-tableAppearance[disabledStateCellStyle, StyleFill] =
-  fill(initColor(0.73, 0.75, 0.79, 1.0))
-tableAppearance[disabledStateCellStyle, StyleBorderColor] =
-  initColor(0.55, 0.58, 0.64, 1.0)
-tableAppearance[disabledStateCellStyle, StyleTextColor] =
-  initColor(0.28, 0.31, 0.37, 1.0)
+tableAppearance[stateCellStyle, StyleFill] = fill(color(0.94, 0.97, 1.0, 1.0))
+tableAppearance[stateCellStyle, StyleBorderColor] = color(0.68, 0.76, 0.86, 1.0)
+tableAppearance[stateCellStyle, StyleTextColor] = color(0.11, 0.23, 0.36, 1.0)
+tableAppearance[disabledStateCellStyle, StyleFill] = fill(color(0.73, 0.75, 0.79, 1.0))
+tableAppearance[disabledStateCellStyle, StyleBorderColor] = color(0.55, 0.58, 0.64, 1.0)
+tableAppearance[disabledStateCellStyle, StyleTextColor] = color(0.28, 0.31, 0.37, 1.0)
 tableAppearance[disabledStateCellStyle, StyleBoxShadows] = newSeq[BoxShadow]()
 table.appearance = tableAppearance
 

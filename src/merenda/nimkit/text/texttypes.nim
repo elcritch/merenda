@@ -239,9 +239,7 @@ proc initTextParagraphStyle*(
   )
 
 func initTextShadow*(
-    color = initColor(0.0, 0.0, 0.0, 0.0),
-    offset = initSize(0.0, 0.0),
-    blurRadius = 0.0'f32,
+    color = color(0.0, 0.0, 0.0, 0.0), offset = initSize(0.0, 0.0), blurRadius = 0.0'f32
 ): TextShadow =
   TextShadow(color: color, offset: offset, blurRadius: max(blurRadius, 0.0'f32))
 
@@ -263,7 +261,7 @@ proc initTextAttachment*(
   )
 
 proc defaultTextAttributes*(
-    color = initColor(0.08, 0.09, 0.11, 1.0), fontSize = AutoMetric
+    color = color(0.08, 0.09, 0.11, 1.0), fontSize = AutoMetric
 ): TextAttributes =
   let resolvedFontSize =
     if fontSize.isAutoMetric:

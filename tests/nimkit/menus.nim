@@ -74,7 +74,7 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
 suite "nimkit menus":
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView()
-    check popup.background() == initColor(0.0, 0.0, 0.0, 0.0)
+    check popup.background() == color(0.0, 0.0, 0.0, 0.0)
 
   test "menu item models back identifiers hidden rows submenus and validation":
     let

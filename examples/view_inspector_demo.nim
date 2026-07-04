@@ -10,7 +10,7 @@ protocol LabeledPanelDrawing of ViewDrawingProtocol:
     discard context.addText(titleRect, panel.title, panel.titleColor)
 
 proc newLabeledPanel(
-    identifier, title: string, color: Color, titleColor = initColor(0.10, 0.12, 0.16)
+    identifier, title: string, color: Color, titleColor = color(0.10, 0.12, 0.16)
 ): LabeledPanel =
   result = LabeledPanel(title: title, titleColor: titleColor)
   initViewFields(result)
@@ -37,17 +37,13 @@ let
     newStatusLabel("Click any view to inspect frame, constraints, and accessibility.")
   canvas = newView()
   toolbar = newLabeledPanel(
-    "toolbar",
-    "Navigation Toolbar",
-    initColor(0.19, 0.27, 0.37),
-    initColor(0.96, 0.98, 1.0),
+    "toolbar", "Navigation Toolbar", color(0.19, 0.27, 0.37), color(0.96, 0.98, 1.0)
   )
-  sidebar = newLabeledPanel("sidebar", "Project Sidebar", initColor(0.87, 0.92, 0.90))
-  editor = newLabeledPanel("editor", "Editor Surface", initColor(0.98, 0.96, 0.91))
-  preview = newLabeledPanel("preview", "Preview Pane", initColor(0.90, 0.93, 0.98))
-  timeline =
-    newLabeledPanel("timeline", "Activity Timeline", initColor(0.95, 0.90, 0.96))
-  card = newLabeledPanel("card", "Floating Card", initColor(0.99, 0.78, 0.48))
+  sidebar = newLabeledPanel("sidebar", "Project Sidebar", color(0.87, 0.92, 0.90))
+  editor = newLabeledPanel("editor", "Editor Surface", color(0.98, 0.96, 0.91))
+  preview = newLabeledPanel("preview", "Preview Pane", color(0.90, 0.93, 0.98))
+  timeline = newLabeledPanel("timeline", "Activity Timeline", color(0.95, 0.90, 0.96))
+  card = newLabeledPanel("card", "Floating Card", color(0.99, 0.78, 0.48))
   searchField = newTextField("Search project")
   runButton = newButton("Run")
   healthSlider = newSlider(0.0, 100.0, 64.0)
@@ -56,10 +52,10 @@ let
 root.identifier = "root"
 root.accessibilityRole = arGroup
 root.accessibilityLabel = "Demo root"
-canvas.background = initColor(0.99, 0.995, 1.0)
+canvas.background = color(0.99, 0.995, 1.0)
 canvas.accessibilityRole = arGroup
 canvas.accessibilityLabel = "Demo canvas"
-status.background = initColor(0.92, 0.98, 0.93, 1.0)
+status.background = color(0.92, 0.98, 0.93, 1.0)
 status.accessibilityElement = true
 toolbar.setPanelTitle("Navigation Toolbar   search / run / live")
 editor.setPanelTitle("Editor Surface   document.workspace.nim")

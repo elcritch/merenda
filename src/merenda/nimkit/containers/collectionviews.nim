@@ -920,7 +920,7 @@ proc initCollectionItemViewFields*(
   itemView.xReuseIdentifier = reuseIdentifier
   itemView.xItemIndex = -1
   itemView.xObjectValue = emptyObjectValue()
-  itemView.background = initColor(0.0, 0.0, 0.0, 0.0)
+  itemView.background = color(0.0, 0.0, 0.0, 0.0)
   itemView.autoresizingMaskConstraints = false
   itemView.clipsToBounds = true
   itemView.installDefaultCollectionItemProtocols()
@@ -967,7 +967,7 @@ proc initCollectionSupplementaryViewFields*(
   view.xKind = kind
   view.xReuseIdentifier = reuseIdentifier
   view.xElementIdentifier = elementIdentifier
-  view.background = initColor(0.0, 0.0, 0.0, 0.0)
+  view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.installDefaultCollectionSupplementaryProtocols()
 
@@ -996,7 +996,7 @@ proc collectionView*(view: CollectionSupplementaryView): CollectionView =
 
 proc initCollectionBaseChild(view: View, clipsToBounds: bool) =
   initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
-  view.background = initColor(0.0, 0.0, 0.0, 0.0)
+  view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
   view.setAcceptsFirstResponder(false)
@@ -1010,7 +1010,7 @@ proc initCollectionContentView(collectionView: CollectionView): CollectionConten
 proc initCollectionScrollView(collectionView: CollectionView): ScrollView =
   result = ScrollView()
   initScrollViewFields(result)
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.0, 0.0, 0.0, 0.0)
   result.drawsBackground = false
   result.clipsToBounds = true
   result.hasHorizontalScroller = true

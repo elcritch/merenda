@@ -172,7 +172,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
         newView(frame = initRect(0.0, 0.0, 0.0, 0.0))
       else:
         contentView
-    box.xContentView.background = initColor(0.0, 0.0, 0.0, 0.0)
+    box.xContentView.background = color(0.0, 0.0, 0.0, 0.0)
     box.xContentView.autoresizingMaskConstraints = false
     if box.xContentView.superview != box:
       box.addSubview(box.xContentView)
@@ -339,7 +339,7 @@ proc initBoxFields*(
     separatorAxis = laHorizontal,
 ) =
   initViewFields(box, frame)
-  box.background = initColor(0.0, 0.0, 0.0, 0.0)
+  box.background = color(0.0, 0.0, 0.0, 0.0)
   box.xTitle = title
   box.xKind = kind
   box.xSeparatorAxis = separatorAxis

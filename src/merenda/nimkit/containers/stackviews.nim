@@ -100,7 +100,7 @@ proc newFlexibleSpacer*(axis = laVertical, frame: Rect = AutoRect): View =
   initViewFields(spacer, frame)
   discard spacer.withProtocol(FlexibleSpacerLayout)
   result = spacer
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.0, 0.0, 0.0, 0.0)
   result.setHuggingPriority(LayoutPriorityLow, axis)
   result.setCompressionPriority(LayoutPriorityLow, axis)
   result.setHuggingPriority(LayoutPriorityRequired, axis.crossAxis)
@@ -441,7 +441,7 @@ proc initStackViewFields*(
     stackView: StackView, orientation = laVertical, frame: Rect = AutoRect
 ) =
   initViewFields(stackView, frame)
-  stackView.background = initColor(0.0, 0.0, 0.0, 0.0)
+  stackView.background = color(0.0, 0.0, 0.0, 0.0)
   stackView.xOrientation = orientation
   stackView.xSpacing = 8.0'f32
   stackView.xAlignment = svaFill

@@ -23,7 +23,7 @@ proc newTabDemoDelegate(status: TextField): TabDemoDelegate =
 
 proc paneStack(): StackView =
   result = newStackView(laVertical)
-  result.background = initColor(0.98, 0.98, 0.96, 0.0)
+  result.background = color(0.98, 0.98, 0.96, 0.0)
   result.edgeInsets = insets(18.0, 20.0)
   result.spacing = 12.0
   result.alignment = svaFill

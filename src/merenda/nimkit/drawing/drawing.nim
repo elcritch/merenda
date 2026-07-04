@@ -103,7 +103,7 @@ proc toFigShadow(shadow: BoxShadow): RenderShadow =
 proc rectangleNode(
     rect: nimkitTypes.Rect,
     fillValue: Fill,
-    strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
+    strokeColor = color(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
@@ -205,7 +205,7 @@ proc textLayout*(
     rect,
     storage,
     initAppearance().resolveTextStyle(
-      controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
+      controlStyle(srTextView), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
     ),
     alignment,
     wrap,
@@ -215,7 +215,7 @@ proc textNaturalSize*(text: string, style: TextStyle): nimkitTypes.Size =
   let
     fontSize = style.fontSize
     font = style.fontFor()
-    style = fs(font, fill(initColor(0.0, 0.0, 0.0, 1.0).rgba))
+    style = fs(font, fill(color(0.0, 0.0, 0.0, 1.0).rgba))
     lineHeight = max(fontSize, getLineHeightImpl(font))
     lineCount = block:
       var count = 1
@@ -239,7 +239,7 @@ proc textNaturalSize*(text: string, style: TextStyle): nimkitTypes.Size =
 proc textNaturalSize*(text: string): nimkitTypes.Size =
   text.textNaturalSize(
     initAppearance().resolveTextStyle(
-      controlStyle(srTextField), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
+      controlStyle(srTextField), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
     )
   )
 
@@ -278,7 +278,7 @@ proc clippedText*(text: string, width: float32): string =
   text.clippedText(
     width,
     initAppearance().resolveTextStyle(
-      controlStyle(srTextField), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
+      controlStyle(srTextField), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
     ),
   )
 
@@ -440,7 +440,7 @@ proc addRenderRectangle*(
     parent: FigIdx,
     rect: nimkitTypes.Rect,
     fillValue: Fill,
-    strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
+    strokeColor = color(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
@@ -464,7 +464,7 @@ proc addRenderRectangle*(
     parent: FigIdx,
     rect: nimkitTypes.Rect,
     fillValue: Fill,
-    strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
+    strokeColor = color(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
@@ -483,7 +483,7 @@ proc addRenderRectangle*(
     context: DrawContext,
     rect: nimkitTypes.Rect,
     fillValue: Fill,
-    strokeColor = initColor(0.0, 0.0, 0.0, 0.0),
+    strokeColor = color(0.0, 0.0, 0.0, 0.0),
     strokeWidth = 0.0'f32,
     cornerRadius = 0.0'f32,
     shadows: openArray[BoxShadow] = [],
@@ -649,7 +649,7 @@ proc addImage*(
     context: DrawContext,
     rect: nimkitTypes.Rect,
     image: ImageResource,
-    tint = initColor(1.0, 1.0, 1.0, 1.0),
+    tint = color(1.0, 1.0, 1.0, 1.0),
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
@@ -661,7 +661,7 @@ proc addImage*(
     parent: FigIdx,
     rect: nimkitTypes.Rect,
     image: ImageResource,
-    tint = initColor(1.0, 1.0, 1.0, 1.0),
+    tint = color(1.0, 1.0, 1.0, 1.0),
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
@@ -696,7 +696,7 @@ proc addFocusRing*(
     layer,
     parent,
     ringRect,
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     box.focusRingColor,
     box.focusRingWidth,
     max(box.cornerRadius - box.focusRingInset, 0.0'f32),

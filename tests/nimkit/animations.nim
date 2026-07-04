@@ -224,8 +224,8 @@ suite "NimKit animations":
     checkClose(rectAnimation.currentValue{}.size.height, 70.0'f32)
 
     let colorAnimation = newValueAnimation[Color](
-      initColor(0.0'f32, 0.25'f32, 0.5'f32, 0.75'f32),
-      initColor(1.0'f32, 0.75'f32, 0.0'f32, 0.25'f32),
+      color(0.0'f32, 0.25'f32, 0.5'f32, 0.75'f32),
+      color(1.0'f32, 0.75'f32, 0.0'f32, 0.25'f32),
       duration = initDuration(milliseconds = 100),
     )
     colorAnimation.start()

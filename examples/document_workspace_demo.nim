@@ -253,7 +253,7 @@ proc copySummary(document: FeatureDocument) =
       initPasteboardProperty("edited", document.isDocumentEdited()),
     ],
   )
-  discard pasteboard.setColor(PasteboardTypeColor, initColor(0.12, 0.32, 0.58, 1.0))
+  discard pasteboard.setColor(PasteboardTypeColor, color(0.12, 0.32, 0.58, 1.0))
   discard pasteboard.setFont(
     PasteboardTypeFont,
     initPasteboardFontDescriptor("IBMPlexSans-Regular", "IBM Plex Sans", 13.0),

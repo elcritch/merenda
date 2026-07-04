@@ -624,7 +624,7 @@ proc initTextLayoutManagerFields*(
     container = initTextContainer(),
     alignment = taLeft,
     style = initAppearance().resolveTextStyle(
-        controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
+        controlStyle(srTextView), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
       ),
 ) =
   discard manager.withProto()
@@ -641,7 +641,7 @@ proc newTextLayoutManager*(
     container = initTextContainer(),
     alignment = taLeft,
     style = initAppearance().resolveTextStyle(
-        controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
+        controlStyle(srTextView), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
       ),
 ): TextLayoutManager =
   result = TextLayoutManager()
@@ -756,7 +756,7 @@ proc invalidateTextContainer*(manager: TextLayoutManager, index: TextContainerIn
 proc textStyle*(manager: TextLayoutManager): TextStyle =
   if manager.isNil:
     initAppearance().resolveTextStyle(
-      controlStyle(srTextView), initColor(0.08, 0.09, 0.11, 1.0), insets(0.0)
+      controlStyle(srTextView), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
     )
   else:
     manager.xTextStyle

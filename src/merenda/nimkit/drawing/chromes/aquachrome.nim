@@ -13,7 +13,7 @@ const AquaButtonInset = 2.5'f32
 var fallbackAquaChrome {.threadvar.}: Chrome
 
 func transparentFill(): Fill =
-  fill(initColor(0.0, 0.0, 0.0, 0.0))
+  fill(color(0.0, 0.0, 0.0, 0.0))
 
 func withPart(chrome: ChromeContext, part: ChromePart): ChromeContext =
   result = chrome
@@ -44,7 +44,7 @@ func clampUnit(value: float32): float32 =
 
 func lightenColor(color: Color, amount: float32, alpha: float32): Color =
   let mix = amount.clampUnit
-  initColor(
+  color(
     color.r + (1.0'f32 - color.r) * mix,
     color.g + (1.0'f32 - color.g) * mix,
     color.b + (1.0'f32 - color.b) * mix,
@@ -53,7 +53,7 @@ func lightenColor(color: Color, amount: float32, alpha: float32): Color =
 
 func darkenColor(color: Color, amount: float32, alpha: float32): Color =
   let mix = 1.0'f32 - amount.clampUnit
-  initColor(color.r * mix, color.g * mix, color.b * mix, alpha.clampUnit)
+  color(color.r * mix, color.g * mix, color.b * mix, alpha.clampUnit)
 
 func aquaButtonFaceFill(fillValue: Fill, enabled: bool): Fill =
   let
@@ -68,60 +68,53 @@ func aquaButtonLowerWash(fillValue: Fill, enabled: bool): Fill =
     base = fillValue.centerColor()
     alpha = if not enabled: 0.10'f32 else: 0.22'f32
     tint = base.darkenColor(0.15'f32, alpha)
-  linear(initColor(1.0, 1.0, 1.0, 0.0), tint, fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.0), tint, fgaY)
 
 func aquaButtonGlossFill(enabled: bool): Fill =
   let alpha = if enabled: 0.62'f32 else: 0.24'f32
-  linear(initColor(1.0, 1.0, 1.0, alpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaButtonInnerShadows(fillValue: Fill, enabled: bool): seq[BoxShadow] =
   discard fillValue
   let darkAlpha = if enabled: 0.10'f32 else: 0.08'f32
   @[
-    insetShadow(
-      initColor(1.0, 1.0, 1.0, if enabled: 0.38 else: 0.14), y = 2.0, blur = 7.0
-    ),
-    insetShadow(initColor(0.0, 0.0, 0.0, darkAlpha), y = -2.0, blur = 7.0),
+    insetShadow(color(1.0, 1.0, 1.0, if enabled: 0.38 else: 0.14), y = 2.0, blur = 7.0),
+    insetShadow(color(0.0, 0.0, 0.0, darkAlpha), y = -2.0, blur = 7.0),
   ]
 
 func aquaRadioShellFill(enabled: bool): Fill =
   if enabled:
-    return
-      linear(initColor(0.99, 0.99, 0.98, 1.0), initColor(0.65, 0.66, 0.64, 1.0), fgaY)
-  linear(initColor(0.90, 0.91, 0.93, 0.62), initColor(0.76, 0.78, 0.82, 0.62), fgaY)
+    return linear(color(0.99, 0.99, 0.98, 1.0), color(0.65, 0.66, 0.64, 1.0), fgaY)
+  linear(color(0.90, 0.91, 0.93, 0.62), color(0.76, 0.78, 0.82, 0.62), fgaY)
 
 func aquaRadioInnerFill(chrome: ChromeContext): Fill =
   if chrome.isSelected:
     return chrome.baseFill
   if chrome.isEnabled:
-    return linear(initColor(1.0, 1.0, 1.0, 1.0), initColor(0.92, 0.92, 0.91, 1.0), fgaY)
-  linear(initColor(0.94, 0.95, 0.96, 0.62), initColor(0.82, 0.84, 0.88, 0.62), fgaY)
+    return linear(color(1.0, 1.0, 1.0, 1.0), color(0.92, 0.92, 0.91, 1.0), fgaY)
+  linear(color(0.94, 0.95, 0.96, 0.62), color(0.82, 0.84, 0.88, 0.62), fgaY)
 
 func aquaRadioInnerBorderColor(chrome: ChromeContext): Color =
   if chrome.isSelected and chrome.isEnabled:
-    return initColor(0.0, 0.32, 0.75, 0.96)
+    return color(0.0, 0.32, 0.75, 0.96)
   if chrome.isEnabled:
-    return initColor(0.79, 0.80, 0.78, 0.78)
-  initColor(0.62, 0.66, 0.72, 0.42)
+    return color(0.79, 0.80, 0.78, 0.78)
+  color(0.62, 0.66, 0.72, 0.42)
 
 func aquaRadioInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
   if chrome.isSelected and chrome.isEnabled:
     return
       @[
-        insetShadow(initColor(0.0, 0.23, 0.56, 0.34), y = 1.0, blur = 2.8),
-        insetShadow(initColor(1.0, 1.0, 1.0, 0.32), x = -1.0, y = -1.0, blur = 2.8),
-        insetShadow(initColor(0.0, 0.20, 0.47, 0.18), x = 1.0, blur = 3.8),
+        insetShadow(color(0.0, 0.23, 0.56, 0.34), y = 1.0, blur = 2.8),
+        insetShadow(color(1.0, 1.0, 1.0, 0.32), x = -1.0, y = -1.0, blur = 2.8),
+        insetShadow(color(0.0, 0.20, 0.47, 0.18), x = 1.0, blur = 3.8),
       ]
   @[
     insetShadow(
-      initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.12 else: 0.05),
-      y = 1.0,
-      blur = 2.4,
+      color(0.0, 0.0, 0.0, if chrome.isEnabled: 0.12 else: 0.05), y = 1.0, blur = 2.4
     ),
     insetShadow(
-      initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.46 else: 0.18),
-      y = -1.0,
-      blur = 2.0,
+      color(1.0, 1.0, 1.0, if chrome.isEnabled: 0.46 else: 0.18), y = -1.0, blur = 2.0
     ),
   ]
 
@@ -138,7 +131,7 @@ func aquaChoiceGlossFill(chrome: ChromeContext): Fill =
       0.56'f32
     else:
       0.70'f32
-  linear(initColor(1.0, 1.0, 1.0, topAlpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, topAlpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaComboFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -170,7 +163,7 @@ func aquaComboGlossFill(chrome: ChromeContext): Fill =
       0.42'f32
     else:
       0.58'f32
-  linear(initColor(1.0, 1.0, 1.0, alpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaComboLowerWash(chrome: ChromeContext): Fill =
   let
@@ -182,32 +175,31 @@ func aquaComboLowerWash(chrome: ChromeContext): Fill =
         0.20'f32
       else:
         0.14'f32
-  linear(initColor(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.18'f32, alpha), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.18'f32, alpha), fgaY)
 
 func aquaComboArrowFill(chrome: ChromeContext): Fill =
   if not chrome.isEnabled:
-    return
-      linear(initColor(0.82, 0.84, 0.86, 0.78), initColor(0.62, 0.65, 0.68, 0.78), fgaY)
+    return linear(color(0.82, 0.84, 0.86, 0.78), color(0.62, 0.65, 0.68, 0.78), fgaY)
   if chrome.isPressed or chrome.isOpen:
     return linear(
-      initColor(0.62, 0.84, 1.0, 1.0),
-      initColor(0.08, 0.48, 0.94, 1.0),
-      initColor(0.0, 0.25, 0.70, 1.0),
+      color(0.62, 0.84, 1.0, 1.0),
+      color(0.08, 0.48, 0.94, 1.0),
+      color(0.0, 0.25, 0.70, 1.0),
       fgaY,
       104'u8,
     )
   linear(
-    initColor(0.50, 0.90, 1.0, 1.0),
-    initColor(0.15, 0.67, 0.98, 1.0),
-    initColor(0.0, 0.44, 0.88, 1.0),
+    color(0.50, 0.90, 1.0, 1.0),
+    color(0.15, 0.67, 0.98, 1.0),
+    color(0.0, 0.44, 0.88, 1.0),
     fgaY,
     104'u8,
   )
 
 func aquaComboSeparatorFill(chrome: ChromeContext): Fill =
   if not chrome.isEnabled:
-    return fill(initColor(0.50, 0.54, 0.58, 0.52))
-  linear(initColor(0.0, 0.34, 0.78, 0.72), initColor(0.0, 0.18, 0.52, 0.88), fgaY)
+    return fill(color(0.50, 0.54, 0.58, 0.52))
+  linear(color(0.0, 0.34, 0.78, 0.72), color(0.0, 0.18, 0.52, 0.88), fgaY)
 
 func aquaSliderTrackFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -263,7 +255,7 @@ func aquaSliderKnobGlossFill(chrome: ChromeContext): Fill =
       0.44'f32
     else:
       0.62'f32
-  linear(initColor(1.0, 1.0, 1.0, alpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaSliderKnobLowerWash(chrome: ChromeContext): Fill =
   let
@@ -275,7 +267,7 @@ func aquaSliderKnobLowerWash(chrome: ChromeContext): Fill =
         0.20'f32
       else:
         0.14'f32
-  linear(initColor(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.22'f32, alpha), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.22'f32, alpha), fgaY)
 
 func aquaPopupListFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -393,7 +385,7 @@ proc drawAquaButtonExtras(
       extras.parent,
       inner,
       context.appearance.chromeFill(innerChrome),
-      initColor(0.0, 0.0, 0.0, 0.0),
+      color(0.0, 0.0, 0.0, 0.0),
       0.0'f32,
       innerRadius,
       aquaButtonInnerShadows(chrome.baseFill, chrome.isEnabled),
@@ -424,9 +416,7 @@ proc drawAquaButtonExtras(
     transparentFill(),
     shadows = [
       dropShadow(
-        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.22 else: 0.08),
-        y = 0.8,
-        blur = 3.0,
+        color(1.0, 1.0, 1.0, if chrome.isEnabled: 0.22 else: 0.08), y = 0.8, blur = 3.0
       )
     ],
   )
@@ -435,7 +425,7 @@ proc drawAquaButtonExtras(
     innerRoot,
     topGloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
   )
@@ -444,7 +434,7 @@ proc drawAquaButtonExtras(
     innerRoot,
     lowerWash,
     context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
   )
@@ -455,14 +445,10 @@ proc drawAquaButtonExtras(
     transparentFill(),
     shadows = [
       dropShadow(
-        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.08 else: 0.03),
-        y = 0.5,
-        blur = 4.0,
+        color(1.0, 1.0, 1.0, if chrome.isEnabled: 0.08 else: 0.03), y = 0.5, blur = 4.0
       ),
       dropShadow(
-        initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.05 else: 0.02),
-        y = 2.0,
-        blur = 5.0,
+        color(0.0, 0.0, 0.0, if chrome.isEnabled: 0.05 else: 0.02), y = 2.0, blur = 5.0
       ),
     ],
   )
@@ -511,7 +497,7 @@ proc drawAquaChoiceExtras(
         innerRoot,
         innerGloss,
         context.appearance.chromeFill(chrome.withPart(cpGloss)),
-        initColor(0.0, 0.0, 0.0, 0.0),
+        color(0.0, 0.0, 0.0, 0.0),
         0.0'f32,
         max(innerRadius - 2.0'f32, 1.0'f32),
       )
@@ -532,7 +518,7 @@ proc drawAquaChoiceExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     max(extras.cornerRadius - inset, 1.0'f32),
   )
@@ -558,7 +544,7 @@ proc drawAquaComboFaceExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     max(extras.cornerRadius - 1.0'f32, 1.0'f32),
   )
@@ -583,7 +569,7 @@ proc drawAquaComboArrowExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     1.4'f32,
   )
@@ -605,10 +591,10 @@ proc drawAquaPopupListExtras(
       1.0'f32,
     )
   discard context.addRenderRectangle(
-    extras.layer, extras.parent, topHighlight, fill(initColor(1.0, 1.0, 1.0, 0.62))
+    extras.layer, extras.parent, topHighlight, fill(color(1.0, 1.0, 1.0, 0.62))
   )
   discard context.addRenderRectangle(
-    extras.layer, extras.parent, bottomShade, fill(initColor(0.0, 0.0, 0.0, 0.08))
+    extras.layer, extras.parent, bottomShade, fill(color(0.0, 0.0, 0.0, 0.08))
   )
 
 proc drawAquaSliderTrackExtras(
@@ -631,13 +617,13 @@ proc drawAquaSliderTrackExtras(
     extras.layer,
     extras.parent,
     topHighlight,
-    fill(initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.34 else: 0.14)),
+    fill(color(1.0, 1.0, 1.0, if chrome.isEnabled: 0.34 else: 0.14)),
   )
   discard context.addRenderRectangle(
     extras.layer,
     extras.parent,
     bottomShade,
-    fill(initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.10 else: 0.04)),
+    fill(color(0.0, 0.0, 0.0, if chrome.isEnabled: 0.10 else: 0.04)),
   )
 
 proc drawAquaSliderKnobExtras(
@@ -663,7 +649,7 @@ proc drawAquaSliderKnobExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     radius,
   )
@@ -672,7 +658,7 @@ proc drawAquaSliderKnobExtras(
     extras.parent,
     lowerWash,
     context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     radius,
   )
@@ -692,17 +678,15 @@ proc drawAquaTabExtras(
     extras.parent,
     inner,
     context.appearance.chromeFill(chrome.withPart(cpInnerFace)),
-    initColor(1.0, 1.0, 1.0, if chrome.isSelected: 0.22 else: 0.42),
+    color(1.0, 1.0, 1.0, if chrome.isSelected: 0.22 else: 0.42),
     0.45'f32,
     innerRadius,
     [
       insetShadow(
-        initColor(1.0, 1.0, 1.0, if chrome.isEnabled: 0.36 else: 0.14),
-        y = 1.0,
-        blur = 4.0,
+        color(1.0, 1.0, 1.0, if chrome.isEnabled: 0.36 else: 0.14), y = 1.0, blur = 4.0
       ),
       insetShadow(
-        initColor(0.0, 0.0, 0.0, if chrome.isSelected: 0.08 else: 0.07),
+        color(0.0, 0.0, 0.0, if chrome.isSelected: 0.08 else: 0.07),
         y = -1.0,
         blur = 5.0,
       ),
@@ -746,10 +730,10 @@ proc drawAquaTabPanelExtras(
       1.0'f32,
     )
   discard context.addRenderRectangle(
-    extras.layer, extras.parent, topHighlight, fill(initColor(1.0, 1.0, 1.0, 0.36))
+    extras.layer, extras.parent, topHighlight, fill(color(1.0, 1.0, 1.0, 0.36))
   )
   discard context.addRenderRectangle(
-    extras.layer, extras.parent, innerShade, fill(initColor(0.0, 0.0, 0.0, 0.05))
+    extras.layer, extras.parent, innerShade, fill(color(0.0, 0.0, 0.0, 0.05))
   )
 
 protocol AquaChromeProtocol of ChromeProtocol:

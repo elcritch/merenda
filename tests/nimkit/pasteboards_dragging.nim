@@ -164,7 +164,7 @@ suite "nimkit pasteboards and dragging":
       writer = newPasteboard("typed-writer")
       reader = newPasteboard("typed-reader")
       font = initPasteboardFontDescriptor("Menlo", "Menlo", 13.0, ["monospace"])
-      color = initColor(0.2, 0.4, 0.7, 1.0)
+      color = color(0.2, 0.4, 0.7, 1.0)
       image = newImageResource(testImage(3, 2), name = "provider-image")
 
     writer.provider = provider
@@ -203,7 +203,7 @@ suite "nimkit pasteboards and dragging":
 
   test "pasteboards store text interchange formats without platform objects":
     let pasteboard = newPasteboard("text-transfer")
-    var attributes = defaultTextAttributes(initColor(0.1, 0.2, 0.3), 14.0)
+    var attributes = defaultTextAttributes(color(0.1, 0.2, 0.3), 14.0)
     attributes.link = "https://example.com"
     attributes.underlineStyle = tldsSingle
     let attributed = newAttributedString("link", attributes)

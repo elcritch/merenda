@@ -350,7 +350,7 @@ protocol DefaultClipViewDrawing of ViewDrawingProtocol:
       discard context.addRenderRectangle(
         context.renderRectFor(context.bounds),
         fill(clipView.backgroundColor()),
-        initColor(0.0, 0.0, 0.0, 0.0),
+        color(0.0, 0.0, 0.0, 0.0),
         0.0'f32,
         0.0'f32,
       )
@@ -927,12 +927,12 @@ protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
         if borderWidth > 0.0'f32:
           style.box.borderColor
         else:
-          initColor(0.0, 0.0, 0.0, 0.0)
+          color(0.0, 0.0, 0.0, 0.0)
       fillStyle =
         if scrollView.drawsBackground():
           style.box.fill
         else:
-          fill(initColor(0.0, 0.0, 0.0, 0.0))
+          fill(color(0.0, 0.0, 0.0, 0.0))
 
     if scrollView.drawsBackground() or borderWidth > 0.0'f32:
       discard context.addRenderRectangle(
@@ -996,7 +996,7 @@ protocol DefaultScrollViewEvents of ResponderEventProtocol:
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()
   initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.0, 0.0, 0.0, 0.0)
   result.hidden = true
   result.xScrollView = scrollView
   result.xAxis = axis
@@ -1006,7 +1006,7 @@ proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
 proc initClipView(scrollView: ScrollView, frame: Rect): ClipView =
   result = ClipView()
   initViewFields(result, frame)
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.0, 0.0, 0.0, 0.0)
   result.clipsToBounds = true
   result.xScrollView = scrollView
   result.xDrawsBackground = false
@@ -1015,7 +1015,7 @@ proc initClipView(scrollView: ScrollView, frame: Rect): ClipView =
 
 proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   initViewFields(scrollView, frame)
-  scrollView.background = initColor(0.0, 0.0, 0.0, 0.0)
+  scrollView.background = color(0.0, 0.0, 0.0, 0.0)
   scrollView.clipsToBounds = true
   scrollView.xDrawsBackground = true
   scrollView.xHasScroller[laHorizontal] = false

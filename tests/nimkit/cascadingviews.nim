@@ -478,11 +478,11 @@ suite "NimKit CascadingView":
     let
       root = newView(frame = initRect(0, 0, 260, 120))
       view = newCascadingView(frame = initRect(0, 0, 260, 120))
-      surfaceFill = initColor(0.11, 0.02, 0.18, 1.0)
-      columnFill = initColor(0.25, 0.14, 0.34, 1.0)
-      scrollerFill = initColor(0.10, 0.03, 0.14, 1.0)
-      selectedFill = initColor(0.80, 0.10, 0.72, 1.0)
-      selectedText = initColor(0.94, 0.98, 1.0, 1.0)
+      surfaceFill = color(0.11, 0.02, 0.18, 1.0)
+      columnFill = color(0.25, 0.14, 0.34, 1.0)
+      scrollerFill = color(0.10, 0.03, 0.14, 1.0)
+      selectedFill = color(0.80, 0.10, 0.72, 1.0)
+      selectedText = color(0.94, 0.98, 1.0, 1.0)
 
     var theme = initTheme()
     theme[initStyleSelector(srCascadingView, classes = @["project-browser"]), StyleFill] =
@@ -531,7 +531,7 @@ suite "NimKit CascadingView":
       scrollerRect = firstColumn.scrollView().rectToWindow(
           firstColumn.scrollView().verticalScrollerRect()
         )
-      transparent = initColor(0.0, 0.0, 0.0, 0.0)
+      transparent = color(0.0, 0.0, 0.0, 0.0)
 
     check firstColumn.tableRole == srCascadingColumn
     check firstColumn.rowItemRole == srCascadingRowItem

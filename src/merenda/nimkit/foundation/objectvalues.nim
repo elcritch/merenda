@@ -698,7 +698,7 @@ func parseColorValue(input: string, color: var Color): bool =
   a = 255
   if input.len == 9 and not parseHexByte(input, 7, a):
     return false
-  color = initColor(
+  color = color(
     r.float32 / 255.0'f32,
     g.float32 / 255.0'f32,
     b.float32 / 255.0'f32,

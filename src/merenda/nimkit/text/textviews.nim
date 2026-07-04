@@ -630,7 +630,7 @@ proc `alignment=`*(textView: TextView, alignment: TextAlignment) =
 
 proc textColor*(textView: TextView): Color =
   if textView.isNil:
-    initColor(0.08, 0.09, 0.11)
+    color(0.08, 0.09, 0.11)
   elif textView.xTextColor.a > 0.0:
     textView.xTextColor
   else:
@@ -648,7 +648,7 @@ proc textColor*(textView: TextView): Color =
 proc textStyle(textView: TextView): TextStyle =
   if textView.isNil:
     return initAppearance().resolveTextStyle(
-        controlStyle(srTextView), initColor(0.08, 0.09, 0.11), insets(0.0)
+        controlStyle(srTextView), color(0.08, 0.09, 0.11), insets(0.0)
       )
   let role = if textView.isFieldEditor: srTextField else: srTextView
   result = textView.effectiveAppearance().resolveTextStyle(
@@ -658,7 +658,7 @@ proc textStyle(textView: TextView): TextStyle =
         id = textView.styleId,
         classes = textView.styleClasses,
       ),
-      initColor(0.08, 0.09, 0.11),
+      color(0.08, 0.09, 0.11),
       insets(0.0),
     )
   if textView.xTextColor.a > 0.0:
@@ -674,7 +674,7 @@ proc `textColor=`*(textView: TextView, color: Color) =
 
 proc selectionColor*(textView: TextView): Color =
   if textView.isNil:
-    initColor(0.24, 0.56, 1.0, 0.34)
+    color(0.24, 0.56, 1.0, 0.34)
   else:
     textView.xSelectionColor
 
@@ -686,7 +686,7 @@ proc `selectionColor=`*(textView: TextView, color: Color) =
 
 proc selectedTextAttributes*(textView: TextView): TextAttributes =
   if textView.isNil or not textView.xHasSelectedTextAttributes:
-    defaultTextAttributes(initColor(1.0, 1.0, 1.0, 1.0))
+    defaultTextAttributes(color(1.0, 1.0, 1.0, 1.0))
   else:
     textView.xSelectedTextAttributes
 
@@ -716,7 +716,7 @@ proc `typingAttributes=`*(textView: TextView, attributes: TextAttributes) =
 
 proc insertionPointColor*(textView: TextView): Color =
   if textView.isNil:
-    initColor(0.08, 0.09, 0.11, 1.0)
+    color(0.08, 0.09, 0.11, 1.0)
   elif textView.xInsertionPointColor.a > 0.0:
     textView.xInsertionPointColor
   else:
@@ -1299,7 +1299,7 @@ proc preparedInsertion(
 proc setFindIndicators*(
     textView: TextView,
     ranges: openArray[TextRange],
-    color = initColor(1.0, 0.82, 0.24, 0.45),
+    color = color(1.0, 0.82, 0.24, 0.45),
 ) =
   if textView.isNil:
     return
@@ -3340,11 +3340,10 @@ proc initTextViewFields*(
   textView.xSelectionAffinity = taDownstream
   textView.xSelectionGranularity = tsgCharacter
   textView.xSelectedRanges = @[initTextRange(textView.xInsertionPoint, 0)]
-  textView.xTextColor = initColor(0.0, 0.0, 0.0, 0.0)
-  textView.xSelectionColor = initColor(0.24, 0.56, 1.0, 0.34)
+  textView.xTextColor = color(0.0, 0.0, 0.0, 0.0)
+  textView.xSelectionColor = color(0.24, 0.56, 1.0, 0.34)
   textView.xTypingAttributes = defaultTextAttributes()
-  textView.xSelectedTextAttributes =
-    defaultTextAttributes(initColor(1.0, 1.0, 1.0, 1.0))
+  textView.xSelectedTextAttributes = defaultTextAttributes(color(1.0, 1.0, 1.0, 1.0))
   textView.xInsertionPointVisible = true
   textView.xInsertionPointBlinkPeriod = 1.0'f32
   textView.xMarkedTextAttributes = defaultTextAttributes()

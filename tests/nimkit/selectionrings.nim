@@ -12,7 +12,7 @@ var ringDrawCount: int
 protocol RingBaseDrawing of ViewDrawingProtocol:
   method draw(view: RingDrawView, context: DrawContext) =
     inc ringDrawCount
-    context.addRectangle(initRect(4, 5, 20, 10), initColor(0.8, 0.1, 0.1))
+    context.addRectangle(initRect(4, 5, 20, 10), color(0.8, 0.1, 0.1))
 
 proc newRingDrawView(frame: nimkitTypes.Rect): RingDrawView =
   result = RingDrawView()
@@ -50,7 +50,7 @@ suite "nimkit selection rings":
     let
       root = newView(frame = initRect(0, 0, 100, 80))
       selected = newRingDrawView(initRect(10, 20, 50, 40))
-      strokeColor = initColor(0.9, 0.15, 0.2, 1.0)
+      strokeColor = color(0.9, 0.15, 0.2, 1.0)
       style = initSelectionRingStyle(
         strokeColor = strokeColor,
         lineWidth = 5.0,

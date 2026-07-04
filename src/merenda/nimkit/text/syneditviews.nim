@@ -130,7 +130,7 @@ const
   ]
 
 func rgb(r, g, b: int): Color =
-  initColor(r.float32 / 255.0'f32, g.float32 / 255.0'f32, b.float32 / 255.0'f32, 1.0)
+  color(r.float32 / 255.0'f32, g.float32 / 255.0'f32, b.float32 / 255.0'f32, 1.0)
 
 func catppuccinMochaSynEditTheme*(): SynEditTheme =
   let base = rgb(205, 214, 244)
@@ -601,7 +601,7 @@ proc applySynEditTheme(view: SynEditView) =
     scroll = view.xEditor.scrollView()
     baseAttributes = view.textAttributes(SynEditTokenClass.None)
   view.background = view.xTheme.background
-  view.xEditor.background = initColor(0.0, 0.0, 0.0, 0.0)
+  view.xEditor.background = color(0.0, 0.0, 0.0, 0.0)
   view.xEditor.textInsets = insets(8.0'f32, 10.0'f32, 8.0'f32, 10.0'f32)
   view.xEditor.textColor = view.xTheme.foreground[SynEditTokenClass.None]
   view.xEditor.selectionColor = view.xTheme.selectionBackground

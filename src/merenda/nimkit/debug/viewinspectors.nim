@@ -279,25 +279,25 @@ proc configureInspectorActions(inspector: ViewInspector) =
     proc(sender: DynamicAgent) =
       case inspector.xColorChoice.selectedIndex
       of 1:
-        inspector.setSelectedBackground(initColor(0.82, 0.91, 0.99))
+        inspector.setSelectedBackground(color(0.82, 0.91, 0.99))
       of 2:
-        inspector.setSelectedBackground(initColor(0.82, 0.94, 0.87))
+        inspector.setSelectedBackground(color(0.82, 0.94, 0.87))
       of 3:
-        inspector.setSelectedBackground(initColor(1.0, 0.78, 0.48))
+        inspector.setSelectedBackground(color(1.0, 0.78, 0.48))
       of 4:
-        inspector.setSelectedBackground(initColor(0.96, 0.82, 0.90))
+        inspector.setSelectedBackground(color(0.96, 0.82, 0.90))
       else:
-        inspector.setSelectedBackground(initColor(0.86, 0.88, 0.91)),
+        inspector.setSelectedBackground(color(0.86, 0.88, 0.91)),
   )
   inspector.xColorChoice.action = colorAction
 
 proc configureInspectorStyle(inspector: ViewInspector) =
-  inspector.background = initColor(0.94, 0.95, 0.97)
+  inspector.background = color(0.94, 0.95, 0.97)
   for label in [inspector.xSelection, inspector.xCommandStatus]:
-    label.background = initColor(0.92, 0.98, 0.93, 1.0)
+    label.background = color(0.92, 0.98, 0.93, 1.0)
     label.accessibilityElement = true
-  inspector.xDetails.background = initColor(0.99, 0.99, 1.0)
-  inspector.xHierarchy.background = initColor(0.99, 0.99, 1.0)
+  inspector.xDetails.background = color(0.99, 0.99, 1.0)
+  inspector.xHierarchy.background = color(0.99, 0.99, 1.0)
 
 proc newViewInspector*(root: View = nil, frame: Rect = AutoRect): ViewInspector =
   result = ViewInspector()

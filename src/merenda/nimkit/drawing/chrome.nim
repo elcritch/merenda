@@ -65,7 +65,7 @@ protocol ChromeProtocol:
   ) {.optional.}
 
 func transparentFill(): Fill =
-  fill(initColor(0.0, 0.0, 0.0, 0.0))
+  fill(color(0.0, 0.0, 0.0, 0.0))
 
 func chromeContext*(
     name: string,

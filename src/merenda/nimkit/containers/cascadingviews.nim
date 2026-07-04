@@ -634,7 +634,7 @@ proc titleForItem(view: CascadingView, item: CascadingItem): string =
 proc syncCascadingColumnStyle(view: CascadingView, tableView: TableView) =
   if view.isNil or tableView.isNil:
     return
-  let transparent = initColor(0.0, 0.0, 0.0, 0.0)
+  let transparent = color(0.0, 0.0, 0.0, 0.0)
   let
     styleId = view.styleId()
     styleClasses = view.styleClasses()
@@ -653,7 +653,7 @@ proc syncCascadingColumnStyle(view: CascadingView, tableView: TableView) =
 proc syncCascadingStyle(view: CascadingView) =
   if view.isNil:
     return
-  let transparent = initColor(0.0, 0.0, 0.0, 0.0)
+  let transparent = color(0.0, 0.0, 0.0, 0.0)
   let
     styleId = view.styleId()
     styleClasses = view.styleClasses()
@@ -1381,7 +1381,7 @@ proc drawCascadingRowText(
   if textRect.isEmpty:
     return
   let textRoot = context.addRenderRectangle(
-    context.renderRectFor(textRect), fill(initColor(0.0, 0.0, 0.0, 0.0)), clips = true
+    context.renderRectFor(textRect), fill(color(0.0, 0.0, 0.0, 0.0)), clips = true
   )
   let column = tableView.columnAt(0)
   discard context.addText(
@@ -1619,7 +1619,7 @@ protocol CascadingAccessibility of AccessibilityProtocol:
 
 proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   initControlFields(view, frame)
-  view.background = initColor(0.0, 0.0, 0.0, 0.0)
+  view.background = color(0.0, 0.0, 0.0, 0.0)
   view.clipsToBounds = true
   view.xColumnWidth = CascadingDefaultColumnWidth
   view.xMinColumnWidth = CascadingDefaultMinColumnWidth

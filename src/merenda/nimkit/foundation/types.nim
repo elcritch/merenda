@@ -1,6 +1,7 @@
 import std/[math, options, os, parseutils, strutils]
 
 import pkg/chroma
+export chroma
 
 when not defined(sigilsSigilNameString) and not defined(nimdoc):
   {.
@@ -33,8 +34,6 @@ type
   Rect* = object
     origin*: Point
     size*: Size
-
-  Color* = chroma.Color
 
   LayoutAxis* = enum
     laHorizontal
@@ -414,9 +413,6 @@ proc initRect*(
 
 proc initRect*(origin: Point, size: Size): Rect =
   Rect(origin: origin, size: initSize(size.width, size.height))
-
-proc initColor*(r, g, b: float32, a = 1.0'f32): Color =
-  chroma.color(r, g, b, a)
 
 proc minX*(rect: Rect): float32 =
   rect.origin.x

@@ -1161,7 +1161,7 @@ proc contentView*(tableView: TableView): TableContentView =
 
 proc initTableBaseChild(view: View, clipsToBounds: bool) =
   initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
-  view.background = initColor(0.0, 0.0, 0.0, 0.0)
+  view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
   view.setAcceptsFirstResponder(false)
@@ -1443,15 +1443,15 @@ proc tableHeaderHeight*(tableView: TableView): float32 =
 
 proc defaultTableHeaderChrome*(): TableHeaderChrome =
   TableHeaderChrome(
-    headerFill: fill(initColor(0.88, 0.90, 0.94, 1.0)),
-    headerBorderColor: initColor(0.60, 0.64, 0.70, 1.0),
-    cellFill: fill(initColor(0.90, 0.92, 0.96, 1.0)),
-    hoveredCellFill: fill(initColor(0.84, 0.88, 0.95, 1.0)),
-    pressedCellFill: fill(initColor(0.76, 0.82, 0.91, 1.0)),
-    cellBorderColor: initColor(0.62, 0.66, 0.72, 1.0),
-    textColor: initColor(0.14, 0.18, 0.25, 1.0),
-    sortIndicatorColor: initColor(0.12, 0.20, 0.34, 0.95),
-    insertionIndicatorFill: fill(initColor(0.16, 0.36, 0.84, 0.95)),
+    headerFill: fill(color(0.88, 0.90, 0.94, 1.0)),
+    headerBorderColor: color(0.60, 0.64, 0.70, 1.0),
+    cellFill: fill(color(0.90, 0.92, 0.96, 1.0)),
+    hoveredCellFill: fill(color(0.84, 0.88, 0.95, 1.0)),
+    pressedCellFill: fill(color(0.76, 0.82, 0.91, 1.0)),
+    cellBorderColor: color(0.62, 0.66, 0.72, 1.0),
+    textColor: color(0.14, 0.18, 0.25, 1.0),
+    sortIndicatorColor: color(0.12, 0.20, 0.34, 0.95),
+    insertionIndicatorFill: fill(color(0.16, 0.36, 0.84, 0.95)),
     borderWidth: 1.0'f32,
     sortIndicatorWidth: 24.0'f32,
     insertionWidth: 3.0'f32,
@@ -1502,7 +1502,7 @@ proc tableHeaderChrome(tableView: TableView, context: DrawContext): TableHeaderC
 
 proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
   if tableView.isNil or context.isNil:
-    return fill(initColor(0.18, 0.42, 0.88, 0.95))
+    return fill(color(0.18, 0.42, 0.88, 0.95))
   context.appearance.resolveFill(
     controlStyle(
       tableView.xTableRole,
@@ -1510,7 +1510,7 @@ proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
       id = tableView.styleId(),
       classes = tableView.styleClasses(),
     ),
-    fill(initColor(0.18, 0.42, 0.88, 0.95)),
+    fill(color(0.18, 0.42, 0.88, 0.95)),
     StyleDropIndicatorFill,
   )
 
@@ -3718,7 +3718,7 @@ proc drawTableCellText(
   if text.len > 0:
     let textRect = style.rowItemTextRect(rect)
     let textRoot = context.addRenderRectangle(
-      context.renderRectFor(textRect), fill(initColor(0.0, 0.0, 0.0, 0.0)), clips = true
+      context.renderRectFor(textRect), fill(color(0.0, 0.0, 0.0, 0.0)), clips = true
     )
     discard context.addText(
       DefaultDrawLevel,
@@ -4177,7 +4177,7 @@ proc drawTableRowItem*(
           id = tableView.styleId(),
           classes = tableView.styleClasses(),
         ),
-        fill(initColor(0.96, 0.97, 0.99, 1.0)),
+        fill(color(0.96, 0.97, 0.99, 1.0)),
         StyleAlternatingFill,
       )
     )
@@ -4538,7 +4538,7 @@ proc initTableContentView(tableView: TableView): TableContentView =
 proc initTableScrollView(tableView: TableView): ScrollView =
   result = ScrollView()
   initScrollViewFields(result)
-  result.background = initColor(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.0, 0.0, 0.0, 0.0)
   result.drawsBackground = false
   result.clipsToBounds = true
   result.hasHorizontalScroller = true
@@ -4600,13 +4600,13 @@ proc drawTableHeaderResizeHandle*(
   let
     handleHeight = max(rect.size.height - 8.0'f32, 0.0'f32)
     handleY = rect.origin.y + (rect.size.height - handleHeight) * 0.5'f32
-    handleColor = initColor(
+    handleColor = color(
       chrome.cellBorderColor.r,
       chrome.cellBorderColor.g,
       chrome.cellBorderColor.b,
       min(chrome.cellBorderColor.a, 0.72'f32),
     )
-    softHandleColor = initColor(
+    softHandleColor = color(
       chrome.cellBorderColor.r,
       chrome.cellBorderColor.g,
       chrome.cellBorderColor.b,
@@ -5600,7 +5600,7 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
           FocusRingDrawLevel,
           (-1).FigIdx,
           tableView.rectToWindow(visibleBounds),
-          fill(initColor(0.0, 0.0, 0.0, 0.0)),
+          fill(color(0.0, 0.0, 0.0, 0.0)),
           clips = true,
         )
         context.addFocusRing(

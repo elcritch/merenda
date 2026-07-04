@@ -14,23 +14,23 @@ var customDrawCount: int
 const ExtraChromeName = "render-extra-chrome"
 
 let
-  ExtraChromeFill = fill(initColor(0.72, 0.10, 0.48, 1.0))
-  CustomLineFill = fill(initColor(0.10, 0.55, 0.86, 1.0))
-  CustomCircleFill = fill(initColor(0.16, 0.70, 0.28, 1.0))
+  ExtraChromeFill = fill(color(0.72, 0.10, 0.48, 1.0))
+  CustomLineFill = fill(color(0.10, 0.55, 0.86, 1.0))
+  CustomCircleFill = fill(color(0.16, 0.70, 0.28, 1.0))
 
 type ExtraChrome = ref object of Chrome
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(initColor(0.48, 0.91, 1.0, 1.0), initColor(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
+  linear(color(0.48, 0.91, 1.0, 1.0), color(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
 
 func aquaRadioShellFill(): Fill =
-  linear(initColor(0.99, 0.99, 0.98, 1.0), initColor(0.65, 0.66, 0.64, 1.0), fgaY)
+  linear(color(0.99, 0.99, 0.98, 1.0), color(0.65, 0.66, 0.64, 1.0), fgaY)
 
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
     inc customDrawCount
-    context.addRectangle(initRect(4, 5, 20, 10), initColor(0.8, 0.1, 0.1))
-    context.addText(initRect(4, 5, 20, 10), "C", initColor(1, 1, 1))
+    context.addRectangle(initRect(4, 5, 20, 10), color(0.8, 0.1, 0.1))
+    context.addText(initRect(4, 5, 20, 10), "C", color(1, 1, 1))
     context.addRenderLine(
       initPoint(4.0, 22.0), initPoint(24.0, 30.0), CustomLineFill, 2.0
     )
@@ -112,7 +112,7 @@ proc rectsClose(left, right: nimkitTypes.Rect): bool =
 suite "nimkit rendering":
   test "buildRenders emits root, text field, and button nodes":
     let root = newView(frame = initRect(0, 0, 320, 200))
-    root.setBackgroundColor(initColor(1, 1, 1))
+    root.setBackgroundColor(color(1, 1, 1))
     root.addSubview(newTextField("Ready", frame = initRect(16, 16, 180, 32)))
     root.addSubview(newButton("Click", frame = initRect(16, 64, 120, 36)))
 
@@ -140,9 +140,9 @@ suite "nimkit rendering":
   test "buildRenders applies view alpha and shadow to view background node":
     let
       root = newView(frame = initRect(0, 0, 120, 80))
-      shadow = dropShadow(initColor(0, 0, 0, 0.4), y = 3.0, blur = 7.0)
+      shadow = dropShadow(color(0, 0, 0, 0.4), y = 3.0, blur = 7.0)
 
-    root.backgroundColor = initColor(0.2, 0.4, 0.6, 0.8)
+    root.backgroundColor = color(0.2, 0.4, 0.6, 0.8)
     root.alphaValue = 0.5
     root.shadow = [shadow]
 
@@ -152,10 +152,10 @@ suite "nimkit rendering":
     let node = list.nodes[list.rootIds[0].int]
     check node.kind == nkRectangle
     check node.fill.kind == flColor
-    check node.fill.color == initColor(0.2, 0.4, 0.6, 0.4).rgba
+    check node.fill.color == color(0.2, 0.4, 0.6, 0.4).rgba
     check node.shadows[0].style == DropShadow
     check node.shadows[0].fill.kind == flColor
-    check node.shadows[0].fill.color == initColor(0, 0, 0, 0.4).rgba
+    check node.shadows[0].fill.color == color(0, 0, 0, 0.4).rgba
     check node.shadows[0].y == 3.0
     check node.shadows[0].blur == 7.0
 
@@ -166,14 +166,14 @@ suite "nimkit rendering":
       button = newButton("Button", frame = initRect(10, 60, 80, 24))
 
     let
-      buttonFill = initColor(0.31, 0.42, 0.53, 1.0)
-      buttonBorder = initColor(0.11, 0.12, 0.13, 1.0)
-      fieldFill = initColor(0.91, 0.92, 0.93, 1.0)
-      fieldBorder = initColor(0.21, 0.22, 0.23, 1.0)
+      buttonFill = color(0.31, 0.42, 0.53, 1.0)
+      buttonBorder = color(0.11, 0.12, 0.13, 1.0)
+      fieldFill = color(0.91, 0.92, 0.93, 1.0)
+      fieldBorder = color(0.21, 0.22, 0.23, 1.0)
       buttonShadows =
         @[
-          dropShadow(initColor(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
-          insetShadow(initColor(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
+          dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
+          insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
         ]
 
     var theme = initTheme()
@@ -211,12 +211,12 @@ suite "nimkit rendering":
         check node.corners[dcTopLeft] == 6'u16
         check node.shadows[0].style == DropShadow
         check node.shadows[0].fill.kind == flColor
-        check node.shadows[0].fill.color == initColor(0, 0, 0, 0.40).rgba
+        check node.shadows[0].fill.color == color(0, 0, 0, 0.40).rgba
         check node.shadows[0].y == 2.0
         check node.shadows[0].blur == 5.0
         check node.shadows[1].style == InnerShadow
         check node.shadows[1].fill.kind == flColor
-        check node.shadows[1].fill.color == initColor(1, 1, 1, 0.20).rgba
+        check node.shadows[1].fill.color == color(1, 1, 1, 0.20).rgba
         check node.shadows[1].y == -1.0
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
@@ -248,7 +248,7 @@ suite "nimkit rendering":
       field = newTextField("Field", frame = initRect(12, 104, 20, 10))
       combo =
         newComboBox(["Short", "Longest metric item"], frame = initRect(12, 148, 20, 10))
-      checkFill = initColor(0.64, 0.22, 0.17, 1.0)
+      checkFill = color(0.64, 0.22, 0.17, 1.0)
 
     var appearance = initAppearance()
     appearance[srButton, StyleTextInsets] = insets(5.0, 18.0, 7.0, 22.0)
@@ -396,8 +396,8 @@ suite "nimkit rendering":
 
     var theme = initTheme()
     theme[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
-    theme[srButton, StyleTextHighlightColor] = initColor(0.0, 0.0, 0.0, 0.0)
-    theme[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.0)
+    theme[srButton, StyleTextHighlightColor] = color(0.0, 0.0, 0.0, 0.0)
+    theme[srButton, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.0)
     root.addSubview(button)
 
     let
@@ -552,7 +552,7 @@ suite "nimkit rendering":
           checkboxAccentFound = true
           check node.fill == aquaChoiceSelectedFill()
           check node.stroke.fill.kind == flColor
-          check node.stroke.fill.color == initColor(0.0, 0.32, 0.75, 0.96).rgba
+          check node.stroke.fill.color == color(0.0, 0.32, 0.75, 0.96).rgba
         if nodeRect.rectsClose(radioIndicator):
           radioShellFound = true
           check node.fill == aquaRadioShellFill()
@@ -560,7 +560,7 @@ suite "nimkit rendering":
           radioInnerAccentFound = true
           check node.fill == aquaChoiceSelectedFill()
           check node.stroke.fill.kind == flColor
-          check node.stroke.fill.color == initColor(0.0, 0.32, 0.75, 0.96).rgba
+          check node.stroke.fill.color == color(0.0, 0.32, 0.75, 0.96).rgba
         if nodeRect.rectsClose(radioGloss):
           radioGlossFound = true
           check nodeRect.size.width < radioInner.size.width * 0.60'f32
@@ -646,7 +646,7 @@ suite "nimkit rendering":
         popupInBaseLayer = true
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.10, 0.16, 0.26, 1.0).rgba and
+          node.fill.color == color(0.10, 0.16, 0.26, 1.0).rgba and
           node.screenBox.h == 1.0:
         if node.screenBox.y == 32.0:
           arrowTopWidth = node.screenBox.w
@@ -665,9 +665,9 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and
           node.fill ==
           linear(
-            initColor(0.20, 0.57, 0.98, 1.0),
-            initColor(0.03, 0.33, 0.82, 1.0),
-            initColor(0.01, 0.18, 0.58, 1.0),
+            color(0.20, 0.57, 0.98, 1.0),
+            color(0.03, 0.33, 0.82, 1.0),
+            color(0.01, 0.18, 0.58, 1.0),
             fgaY,
             104'u8,
           ) and node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and
@@ -783,7 +783,7 @@ suite "nimkit rendering":
     for node in renders[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle and node.screenBox.y == 2.0 and
           node.screenBox.h == 24.0 and node.fill.kind == flColor and
-          node.fill.color == initColor(0.76, 0.81, 0.91).rgba:
+          node.fill.color == color(0.76, 0.81, 0.91).rgba:
         hoverFound = true
         check node.stroke.weight == 1.0
         check node.corners[dcTopLeft] == 4'u16
@@ -796,12 +796,12 @@ suite "nimkit rendering":
       tableView = newSingleColumnRenderTable(
         ["One", "Two", "Three", "Four"], frame = initRect(10, 20, 130, 68)
       )
-      tableFill = initColor(0.77, 0.79, 0.81, 1.0)
-      tableBorder = initColor(0.24, 0.28, 0.34, 1.0)
-      selectedFill = initColor(0.23, 0.48, 0.92, 1.0)
-      hoverFill = initColor(0.90, 0.95, 1.0, 1.0)
-      selectedText = initColor(1.0, 1.0, 1.0, 1.0)
-      focusColor = initColor(0.91, 0.38, 0.18, 0.66)
+      tableFill = color(0.77, 0.79, 0.81, 1.0)
+      tableBorder = color(0.24, 0.28, 0.34, 1.0)
+      selectedFill = color(0.23, 0.48, 0.92, 1.0)
+      hoverFill = color(0.90, 0.95, 1.0, 1.0)
+      selectedText = color(1.0, 1.0, 1.0, 1.0)
+      focusColor = color(0.91, 0.38, 0.18, 0.66)
 
     var theme = initTheme()
     theme[srTableView, StyleFill] = tableFill
@@ -866,7 +866,7 @@ suite "nimkit rendering":
     let
       root = newView(frame = initRect(0, 0, 220, 140))
       tableView = newTableView(frame = initRect(10, 20, 130, 68))
-      focusColor = initColor(0.91, 0.38, 0.18, 0.66)
+      focusColor = color(0.91, 0.38, 0.18, 0.66)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
     tableView.focusVisible = true
@@ -912,7 +912,7 @@ suite "nimkit rendering":
     let
       root = newView(frame = initRect(0, 0, 180, 120))
       tableView = newTableView(frame = initRect(10, 20, 130, 68))
-      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+      focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
     tableView.showsHeader = false
@@ -951,7 +951,7 @@ suite "nimkit rendering":
       root = newView(frame = initRect(0, 0, 140, 100))
       clipView = newView(frame = initRect(10, 20, 80, 70))
       tableView = newTableView(frame = initRect(60, 0, 80, 60))
-      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+      focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 70.0))
     tableView.showsHeader = false
@@ -989,7 +989,7 @@ suite "nimkit rendering":
       tableView = newTableView(frame = initRect(60, 0, 90, 60))
       scrollView =
         newScrollView(frame = initRect(20, 20, 120, 80), documentView = document)
-      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+      focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 80.0))
     tableView.showsHeader = false
@@ -1034,8 +1034,8 @@ suite "nimkit rendering":
     var selectionFound = false
     for node in selectionRenders[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.24, 0.56, 1.0, 0.34).rgba and
-          node.screenBox.w > 1.0 and node.screenBox.h > 0.0:
+          node.fill.color == color(0.24, 0.56, 1.0, 0.34).rgba and node.screenBox.w > 1.0 and
+          node.screenBox.h > 0.0:
         selectionFound = true
 
     field.setSelectedRange(initTextRange(3, 0))
@@ -1054,9 +1054,9 @@ suite "nimkit rendering":
       root = newView(frame = initRect(0, 0, 140, 80))
       button = newButton("Button", frame = initRect(10, 20, 80, 24))
 
-    let activeFill = initColor(0.8, 0.2, 0.1, 1.0)
+    let activeFill = color(0.8, 0.2, 0.1, 1.0)
     var theme = initTheme()
-    theme[srButton, StyleFill] = initColor(0.1, 0.1, 0.1, 1.0)
+    theme[srButton, StyleFill] = color(0.1, 0.1, 0.1, 1.0)
     theme[srButton, {ssActive}, StyleFill] = activeFill
 
     root.addSubview(button)
@@ -1078,9 +1078,9 @@ suite "nimkit rendering":
       matrix = newButtonMatrix(
         ["Apply", "Reset", "Inspect"], columns = 3, frame = initRect(10, 20, 180, 28)
       )
-      baseFill = initColor(0.1, 0.1, 0.1, 1.0)
-      activeFill = initColor(0.8, 0.2, 0.1, 1.0)
-      pressedFill = initColor(0.1, 0.2, 0.8, 1.0)
+      baseFill = color(0.1, 0.1, 0.1, 1.0)
+      activeFill = color(0.8, 0.2, 0.1, 1.0)
+      pressedFill = color(0.1, 0.2, 0.8, 1.0)
 
     matrix.cellSize = initSize(50.0, 24.0)
     matrix.active = true
@@ -1116,7 +1116,7 @@ suite "nimkit rendering":
     let
       root = newView(frame = initRect(0, 0, 140, 80))
       button = newButton("Button", frame = initRect(10, 20, 80, 24))
-      focusColor = initColor(0.24, 0.48, 0.92, 0.58)
+      focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     var theme = initTheme()
     theme[srButton, StyleFocusRingWidth] = 4.0
@@ -1151,8 +1151,8 @@ suite "nimkit rendering":
       radio = newRadioButton("Radio", frame = initRect(10, 56, 120, 24))
 
     let
-      selectedFill = initColor(0.23, 0.45, 0.67, 1.0)
-      markFill = initColor(0.91, 0.82, 0.13, 1.0)
+      selectedFill = color(0.23, 0.45, 0.67, 1.0)
+      markFill = color(0.91, 0.82, 0.13, 1.0)
 
     var theme = initTheme()
     for role in [srCheckBox, srRadioButton]:
@@ -1209,8 +1209,8 @@ suite "nimkit rendering":
     let
       root = newView(frame = initRect(0, 0, 140, 80))
       button = newButton("Button", frame = initRect(10, 20, 80, 24))
-      rootFill = initColor(0.2, 0.3, 0.4, 1.0)
-      buttonFill = initColor(0.7, 0.1, 0.2, 1.0)
+      rootFill = color(0.2, 0.3, 0.4, 1.0)
+      buttonFill = color(0.7, 0.1, 0.2, 1.0)
 
     var rootAppearance = initAppearance()
     rootAppearance[srButton, StyleFill] = rootFill
@@ -1283,7 +1283,7 @@ suite "nimkit rendering":
     check customDrawCount == 2
 
     var theme = initTheme()
-    theme[srView, StyleFill] = initColor(0.1, 0.2, 0.3, 1.0)
+    theme[srView, StyleFill] = color(0.1, 0.2, 0.3, 1.0)
     let themedRenders = buildRenders(root, initAppearance(theme))
     check themedRenders != invalidatedRenders
     check customDrawCount == 3

@@ -1177,7 +1177,7 @@ suite "NimKit TableView":
 
     let
       chrome = defaultTableHeaderChrome()
-      indicatorFill = fill(initColor(0.18, 0.42, 0.88, 0.95))
+      indicatorFill = fill(color(0.18, 0.42, 0.88, 0.95))
       targetRect = tableView.rectToWindow(tableView.rowItemRect(1))
       indicatorY = targetRect.maxY - chrome.insertionWidth
       capY = indicatorY + (chrome.insertionWidth - chrome.insertionCapWidth) * 0.5'f32

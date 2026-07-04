@@ -46,9 +46,9 @@ proc addDocumentRow(index: int, heading, body: string) =
     bodyLabel = newStatusLabel(body, frame = initRect(12, 30, 500, 18))
 
   if index mod 2 == 0:
-    row.background = initColor(0.92, 0.95, 0.99, 1.0)
+    row.background = color(0.92, 0.95, 0.99, 1.0)
   else:
-    row.background = initColor(0.98, 0.96, 0.91, 1.0)
+    row.background = color(0.98, 0.96, 0.91, 1.0)
 
   row.addSubviews(autoNames(headingLabel, bodyLabel))
   document.addSubview(row)
@@ -73,9 +73,9 @@ proc scrollToRightEdge(sender: DynamicAgent) =
     scrollView.scrollToFraction(x = 1.0)
     updateStatus()
 
-document.background = initColor(1.0, 1.0, 1.0, 1.0)
-headerView.background = initColor(0.88, 0.91, 0.96, 1.0)
-cornerView.background = initColor(0.82, 0.87, 0.94, 1.0)
+document.background = color(1.0, 1.0, 1.0, 1.0)
+headerView.background = color(0.88, 0.91, 0.96, 1.0)
+cornerView.background = color(0.82, 0.87, 0.94, 1.0)
 
 scrollView.documentView = document
 scrollView.hasHorizontalScroller = true

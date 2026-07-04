@@ -968,18 +968,18 @@ proc drawDisclosureAffordance(
     item = outlineView.itemAtRow(row)
     pressed = row == outlineView.xPressedDisclosureRow
     expanded = outlineView.isItemExpanded(item.identifier)
-    color = initColor(0.22, 0.26, 0.32, 1.0)
+    color = color(0.22, 0.26, 0.32, 1.0)
     borderAlpha = if pressed: 1.0'f32 else: 0.42'f32
     shellFill =
       if pressed:
-        initColor(0.74, 0.80, 0.90, 1.0)
+        color(0.74, 0.80, 0.90, 1.0)
       else:
-        initColor(0.0, 0.0, 0.0, 0.0)
+        color(0.0, 0.0, 0.0, 0.0)
     shell = rect.inset(insets(2.0'f32))
   discard context.addRenderRectangle(
     context.renderRectFor(shell),
     fill(shellFill),
-    initColor(0.48, 0.54, 0.64, borderAlpha),
+    color(0.48, 0.54, 0.64, borderAlpha),
     if pressed: 1.0'f32 else: 0.6'f32,
     3.0'f32,
   )
@@ -1061,7 +1061,7 @@ proc drawOutlineRowText(
       text = outlineView.outlineCellText(row, column)
       textRect = outlineView.outlineTextRectForCell(row, column, rowBounds)
       textStyle = context.appearance.resolveTextStyle(
-        controlStyle(srRowItem), initColor(0.14, 0.18, 0.25, 1.0), insets(0.0)
+        controlStyle(srRowItem), color(0.14, 0.18, 0.25, 1.0), insets(0.0)
       )
     if text.len > 0 and not textRect.isEmpty:
       discard context.addText(textRect, text, textStyle, column.alignment())
@@ -1080,8 +1080,7 @@ proc drawOutlineDropTarget(
     rowBounds.size.width,
     2.0,
   )
-  discard
-    context.addRenderRectangle(indicatorRect, fill(initColor(0.18, 0.42, 0.88, 0.95)))
+  discard context.addRenderRectangle(indicatorRect, fill(color(0.18, 0.42, 0.88, 0.95)))
 
 protocol OutlineViewDrawing of ViewDrawingProtocol:
   method draw(outlineView: OutlineView, context: DrawContext) =
@@ -1089,8 +1088,8 @@ protocol OutlineViewDrawing of ViewDrawingProtocol:
       return
     discard context.addRenderRectangle(
       context.renderRectFor(outlineView.bounds()),
-      fill(initColor(0.98, 0.985, 0.995, 1.0)),
-      initColor(0.66, 0.68, 0.73, 1.0),
+      fill(color(0.98, 0.985, 0.995, 1.0)),
+      color(0.66, 0.68, 0.73, 1.0),
       1.0'f32,
       0.0'f32,
       clips = true,

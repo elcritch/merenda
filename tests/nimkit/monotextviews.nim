@@ -31,12 +31,12 @@ suite "nimkit mono text views":
       1,
       1,
       [
-        styledMonoTextCell("X", initColor(0.9, 0.1, 0.1)),
-        styledMonoTextCell("Y", initColor(0.9, 0.1, 0.1)),
+        styledMonoTextCell("X", color(0.9, 0.1, 0.1)),
+        styledMonoTextCell("Y", color(0.9, 0.1, 0.1)),
       ],
     )
     check view.cellAt(1, 1).text == "X"
-    check view.cellAt(1, 2).foregroundColor == initColor(0.9, 0.1, 0.1)
+    check view.cellAt(1, 2).foregroundColor == color(0.9, 0.1, 0.1)
 
   test "editor handles cursor movement insertion and deletion":
     let
@@ -240,8 +240,8 @@ suite "nimkit mono text views":
 
   test "theme drives mono text chrome surface":
     let
-      surfaceFill = initColor(0.12, 0.16, 0.20, 1.0)
-      surfaceBorder = initColor(0.70, 0.80, 0.90, 1.0)
+      surfaceFill = color(0.12, 0.16, 0.20, 1.0)
+      surfaceBorder = color(0.70, 0.80, 0.90, 1.0)
       view = newMonoTextViewer("theme", frame = initRect(0, 0, 220, 80))
     var theme = initTheme()
     theme[srMonoTextView, StyleFill] = fill(surfaceFill)

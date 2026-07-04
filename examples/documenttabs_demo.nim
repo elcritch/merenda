@@ -55,13 +55,13 @@ proc newDemoTab(title, identifier: string, style: DocumentTabStyle): DocumentTab
   result.style = style
   case style
   of dtsPill:
-    result.accentColor = initColor(0.10, 0.58, 0.95, 1.0)
+    result.accentColor = color(0.10, 0.58, 0.95, 1.0)
   of dtsUnderline:
-    result.accentColor = initColor(0.95, 0.42, 0.78, 1.0)
+    result.accentColor = color(0.95, 0.42, 0.78, 1.0)
   of dtsCompact:
-    result.accentColor = initColor(0.25, 0.66, 0.42, 1.0)
+    result.accentColor = color(0.25, 0.66, 0.42, 1.0)
   else:
-    result.accentColor = initColor(0.95, 0.56, 0.24, 1.0)
+    result.accentColor = color(0.95, 0.56, 0.24, 1.0)
 
 proc selectedStyle(demo: DocumentTabsDemo): DocumentTabStyle =
   case demo.styleChoice.indexOfSelectedItem()

@@ -375,7 +375,7 @@ func mixFloat(a, b, progress: float32): float32 =
   a + (b - a) * progress.clampUnit()
 
 func mixColor(a, b: Color, progress: float32): Color =
-  initColor(
+  color(
     mixFloat(a.r, b.r, progress),
     mixFloat(a.g, b.g, progress),
     mixFloat(a.b, b.b, progress),
@@ -383,7 +383,7 @@ func mixColor(a, b: Color, progress: float32): Color =
   )
 
 func rgbaColor(color: ColorRGBA): Color =
-  initColor(
+  color(
     color.r.float32 / 255.0'f32,
     color.g.float32 / 255.0'f32,
     color.b.float32 / 255.0'f32,

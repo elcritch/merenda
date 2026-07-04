@@ -29,12 +29,12 @@ proc makeCard(
   card.spacing = 8.0
   card.alignment = svaFill
   card.distribution = svdNatural
-  card.background = initColor(0.99, 0.985, 0.955)
+  card.background = color(0.99, 0.985, 0.955)
 
-  imageView.backgroundColor = initColor(0.13, 0.15, 0.18)
+  imageView.backgroundColor = color(0.13, 0.15, 0.18)
   imageView.setImageScaling(scaling)
   imageView.setImageAlignment(iaCenter)
-  imageView.setImageTint(initColor(1.0, 1.0, 1.0, 1.0))
+  imageView.setImageTint(color(1.0, 1.0, 1.0, 1.0))
 
   card.addArrangedSubview(heading, imageView, caption)
   card

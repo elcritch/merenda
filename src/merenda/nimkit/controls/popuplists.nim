@@ -344,10 +344,7 @@ proc drawPopupList*(
           1.0'f32,
         )
         discard context.addRenderRectangle(
-          layer,
-          popupRoot,
-          context.renderRectFor(line),
-          fill(initColor(0.68, 0.69, 0.71)),
+          layer, popupRoot, context.renderRectFor(line), fill(color(0.68, 0.69, 0.71))
         )
       else:
         let itemEnabled = popupList.isEnabled() and popupList.itemIsEnabled(itemIndex)
@@ -366,17 +363,17 @@ proc drawPopupList*(
           row = initRowState(itemIndex, popupList.itemText(itemIndex), states = states)
           rowStyle =
             if ssDisabled in states:
-              initRowStyle(textColor = some(initColor(0.48, 0.49, 0.52)))
+              initRowStyle(textColor = some(color(0.48, 0.49, 0.52)))
             else:
               initRowStyle()
           keyEquivalentText = popupList.itemKeyEquivalentText(itemIndex)
           accessoryColor =
             if ssDisabled in states:
-              initColor(0.52, 0.53, 0.56)
+              color(0.52, 0.53, 0.56)
             elif ssHovered in states:
-              initColor(1.0, 1.0, 1.0)
+              color(1.0, 1.0, 1.0)
             else:
-              initColor(0.27, 0.29, 0.33)
+              color(0.27, 0.29, 0.33)
           accessoryStyle = context.appearance.resolveTextStyle(
             controlStyle(
               popupList.xItemRole, states, id = popupList.styleId(), classes = classes
@@ -446,8 +443,8 @@ proc drawPopupList*(
       layer,
       popupRoot,
       context.renderRectFor(knobRect),
-      fill(initColor(0.10, 0.18, 0.30, 0.34)),
-      initColor(0.0, 0.0, 0.0, 0.0),
+      fill(color(0.10, 0.18, 0.30, 0.34)),
+      color(0.0, 0.0, 0.0, 0.0),
       0.0'f32,
       2.0'f32,
     )

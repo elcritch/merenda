@@ -8,11 +8,11 @@ import merenda/nimkit
 import ../../examples/texteditor_demo
 
 let
-  TitleColor = initColor(0.95, 0.42, 0.78, 1.0).rgba
-  LinkColor = initColor(0.1, 0.58, 0.95, 1.0).rgba
-  LeadColor = initColor(0.1, 0.58, 0.95, 1.0).rgba
-  EmphasisColor = initColor(0.95, 0.56, 0.24, 1.0).rgba
-  AttachmentColor = initColor(0.58, 0.27, 0.85, 1.0).rgba
+  TitleColor = color(0.95, 0.42, 0.78, 1.0).rgba
+  LinkColor = color(0.1, 0.58, 0.95, 1.0).rgba
+  LeadColor = color(0.1, 0.58, 0.95, 1.0).rgba
+  EmphasisColor = color(0.95, 0.56, 0.24, 1.0).rgba
+  AttachmentColor = color(0.58, 0.27, 0.85, 1.0).rgba
 
 proc demoSourceRange(needle: string): Slice[int] =
   let range = demoTextRange(needle)
@@ -128,7 +128,7 @@ suite "nimkit text editors":
     let selected = demo.editor.selectedRange()
     check demo.clickView(demo.tintButton)
     let styled = demo.editor.textStorage().attributesAt(int(selected.location))
-    check styled.foregroundColor == initColor(0.0, 0.85, 0.95, 1.0)
+    check styled.foregroundColor == color(0.0, 0.85, 0.95, 1.0)
     check styled.underline
 
     check demo.clickView(demo.resetButton)

@@ -67,7 +67,7 @@ suite "nimkit font layout":
         putEnv(NimKitFontEnv, "  HackNerdFont-Regular.ttf  ")
 
         let style = initAppearance().resolveTextStyle(
-            controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
+            controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
           )
         when defined(nimkitIgnoreEnvOverrides):
           check style.fontName == "Ubuntu.ttf"
@@ -87,7 +87,7 @@ suite "nimkit font layout":
         check override.get().name == "Ubuntu.ttf"
 
         let style = initAppearance().resolveTextStyle(
-            controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
+            controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
           )
         check style.fontName == "Ubuntu.ttf"
     )
@@ -145,7 +145,7 @@ suite "nimkit font layout":
         putEnv(MerendaFontSizeEnv, "18")
 
         let style = initAppearance().resolveTextStyle(
-            controlStyle(srTextField), initColor(0.0, 0.0, 0.0), insets(0.0)
+            controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
           )
         check style.fontSize == 18.0'f32
         check textNaturalSize("wide", style).height >= 18.0'f32
@@ -155,7 +155,7 @@ suite "nimkit font layout":
     let
       textRect = initRect(12.0, 0.0, 640.0, 28.0)
       layout = textLayout(
-        textRect, "Hello from KNutella/nimkit", initColor(0.09, 0.14, 0.26), taCenter
+        textRect, "Hello from KNutella/nimkit", color(0.09, 0.14, 0.26), taCenter
       )
       content = layout.selectionBounds()
 

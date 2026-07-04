@@ -165,7 +165,7 @@ suite "nimkit views":
     root.needsDisplay = false
     child.needsDisplay = false
 
-    child.background = initColor(1, 0, 0)
+    child.background = color(1, 0, 0)
 
     check child.needsDisplay
     check root.needsDisplay
@@ -182,7 +182,7 @@ suite "nimkit views":
     app.addWindow(window)
 
     var appAppearance = initAppearance()
-    let appFill = initColor(0.1, 0.2, 0.3, 1.0)
+    let appFill = color(0.1, 0.2, 0.3, 1.0)
     appAppearance[srButton, StyleFill] = appFill
     app.setAppearance(appAppearance)
 
@@ -194,7 +194,7 @@ suite "nimkit views":
     child.setNeedsDisplay(false)
 
     var windowAppearance = initAppearance()
-    let windowFill = initColor(0.4, 0.5, 0.6, 1.0)
+    let windowFill = color(0.4, 0.5, 0.6, 1.0)
     windowAppearance[srButton, StyleFill] = windowFill
     window.setAppearance(windowAppearance)
 
@@ -208,7 +208,7 @@ suite "nimkit views":
     child.setNeedsDisplay(false)
 
     var rootAppearance = initAppearance()
-    let rootFill = initColor(0.7, 0.2, 0.1, 1.0)
+    let rootFill = color(0.7, 0.2, 0.1, 1.0)
     rootAppearance[srButton, StyleFill] = rootFill
     root.appearance = rootAppearance
 
@@ -715,7 +715,7 @@ suite "nimkit views":
 
   test "focus alpha and shadow attributes invalidate display":
     let view = newView(frame = initRect(0, 0, 100, 80))
-    let shadow = dropShadow(initColor(0, 0, 0, 0.25), 0, 2, 6, 0)
+    let shadow = dropShadow(color(0, 0, 0, 0.25), 0, 2, 6, 0)
 
     check view.focusRingType == frtDefault
     check view.alphaValue == 1.0'f32

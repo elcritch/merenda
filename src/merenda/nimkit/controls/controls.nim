@@ -220,7 +220,7 @@ proc sizeToFit*(control: Control) =
 
 proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)
-  control.background = initColor(0.0, 0.0, 0.0, 0.0)
+  control.background = color(0.0, 0.0, 0.0, 0.0)
   control.xObjectValue = emptyObjectValue()
   control.xObjectFormatContext = initObjectFormatContext()
   control.xObjectParseContext = initObjectParseContext()

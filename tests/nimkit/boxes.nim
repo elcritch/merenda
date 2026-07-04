@@ -271,8 +271,8 @@ suite "nimkit boxes":
       box = newBox("Network", frame = initRect(0.0, 0.0, 180.0, 90.0))
       separator = newSeparatorBox(laVertical, frame = initRect(0.0, 0.0, 12.0, 80.0))
       root = newView(frame = initRect(0.0, 0.0, 220.0, 120.0))
-      fillColor = initColor(0.91, 0.93, 0.96, 1.0)
-      borderColor = initColor(0.21, 0.29, 0.37, 1.0)
+      fillColor = color(0.91, 0.93, 0.96, 1.0)
+      borderColor = color(0.21, 0.29, 0.37, 1.0)
 
     var appearance = initAppearance()
     appearance[srBox, StyleFill] = fillColor

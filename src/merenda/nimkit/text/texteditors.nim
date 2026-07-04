@@ -183,7 +183,7 @@ proc `alignment=`*(editor: TextEditor, alignment: TextAlignment) =
 
 proc textColor*(editor: TextEditor): Color =
   if editor.isNil:
-    initColor(0.08, 0.09, 0.11, 1.0)
+    color(0.08, 0.09, 0.11, 1.0)
   else:
     editor.xTextView.textColor()
 
@@ -193,7 +193,7 @@ proc `textColor=`*(editor: TextEditor, color: Color) =
 
 proc selectionColor*(editor: TextEditor): Color =
   if editor.isNil:
-    initColor(0.24, 0.56, 1.0, 0.34)
+    color(0.24, 0.56, 1.0, 0.34)
   else:
     editor.xTextView.selectionColor()
 
@@ -593,7 +593,7 @@ proc initTextEditorFields*(
     wraps = true,
 ) =
   initViewFields(editor, frame)
-  editor.background = initColor(0.0, 0.0, 0.0, 0.0)
+  editor.background = color(0.0, 0.0, 0.0, 0.0)
   editor.xTextInsets = insets(6.0, 7.0, 6.0, 7.0)
   editor.xWraps = wraps
   editor.xMinimumDocumentSize =

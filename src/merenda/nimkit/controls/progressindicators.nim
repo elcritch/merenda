@@ -345,7 +345,7 @@ proc drawIndeterminateBar(
 
 proc spinnerColor(style: SliderStyle, alpha: float32): Color =
   let color = style.activeTrack.borderColor
-  initColor(color.r, color.g, color.b, color.a * alpha)
+  color(color.r, color.g, color.b, color.a * alpha)
 
 proc drawSpinner(
     indicator: ProgressIndicator, context: DrawContext, rect: Rect, style: SliderStyle

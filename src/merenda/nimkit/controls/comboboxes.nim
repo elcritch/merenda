@@ -847,7 +847,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       comboRoot,
       arrowFrame,
       context.appearance.chromeFill(arrowChrome),
-      initColor(0.0, 0.0, 0.0, 0.0),
+      color(0.0, 0.0, 0.0, 0.0),
       0.0'f32,
     )
     context.drawChromeExtras(

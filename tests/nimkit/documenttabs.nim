@@ -45,11 +45,11 @@ type
 const DocumentTabChromeName = "document-tabs-test-chrome"
 
 let
-  DocumentTabChromeFill = fill(initColor(0.18, 0.62, 0.92, 1.0))
-  DocumentTabBarChromeFill = fill(initColor(0.12, 0.16, 0.24, 1.0))
-  DocumentTabButtonChromeFill = fill(initColor(0.72, 0.20, 0.50, 1.0))
-  DocumentTabButtonThemeFill = fill(initColor(0.22, 0.48, 0.74, 1.0))
-  SpecialDocumentTabFill = fill(initColor(0.92, 0.80, 0.22, 1.0))
+  DocumentTabChromeFill = fill(color(0.18, 0.62, 0.92, 1.0))
+  DocumentTabBarChromeFill = fill(color(0.12, 0.16, 0.24, 1.0))
+  DocumentTabButtonChromeFill = fill(color(0.72, 0.20, 0.50, 1.0))
+  DocumentTabButtonThemeFill = fill(color(0.22, 0.48, 0.74, 1.0))
+  SpecialDocumentTabFill = fill(color(0.92, 0.80, 0.22, 1.0))
 
 protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
   method shouldSelectDocumentTab(
@@ -242,7 +242,7 @@ suite "nimkit document tabs":
     let
       tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
       represented = newResponder()
-      accent = initColor(0.80, 0.12, 0.36, 1.0)
+      accent = color(0.80, 0.12, 0.36, 1.0)
 
     tabs.documentTabModels = [
       initDocumentTabModel(

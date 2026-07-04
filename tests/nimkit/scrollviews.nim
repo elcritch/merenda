@@ -762,7 +762,7 @@ suite "nimkit scroll views":
       scrollView =
         newScrollView(frame = initRect(20, 30, 100, 70), documentView = document)
 
-    child.background = initColor(0.2, 0.4, 0.7, 1.0)
+    child.background = color(0.2, 0.4, 0.7, 1.0)
     document.addSubview(child)
     root.addSubview(scrollView)
     scrollView.hasHorizontalScroller = true
@@ -790,7 +790,7 @@ suite "nimkit scroll views":
           node.screenBox.w == 88.0 and node.screenBox.h == 58.0:
         clipViewNodeIndex = idx
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.2, 0.4, 0.7, 1.0).rgba:
+          node.fill.color == color(0.2, 0.4, 0.7, 1.0).rgba:
         childNodeFound = true
         childNodeIndex = idx
         check node.screenBox.x == 40.0
@@ -874,7 +874,7 @@ suite "nimkit scroll views":
       scrollView =
         newScrollView(frame = initRect(20, 30, 120, 80), documentView = document)
 
-    overlay.background = initColor(0.6, 0.2, 0.8, 1.0)
+    overlay.background = color(0.6, 0.2, 0.8, 1.0)
     document.addSubview(overlay)
     root.addSubview(scrollView)
     scrollView.hasHorizontalScroller = true
@@ -888,7 +888,7 @@ suite "nimkit scroll views":
       expectedOverlayRenderRect = initRect(40, 50, 30, 20)
       expectedOverlayVisibleRect = initRect(40, 50, 30, 20)
       overlayIndex = overlayNodes.findRectNode(
-        expectedOverlayRenderRect, fill(initColor(0.6, 0.2, 0.8, 1.0).rgba)
+        expectedOverlayRenderRect, fill(color(0.6, 0.2, 0.8, 1.0).rgba)
       )
 
     discard defaultNodes
@@ -922,7 +922,7 @@ suite "nimkit scroll views":
         "The document is larger than the viewport.", frame = initRect(12, 30, 500, 18)
       )
 
-    row.background = initColor(0.92, 0.95, 0.99, 1.0)
+    row.background = color(0.92, 0.95, 0.99, 1.0)
     row.addSubviews(autoNames(headingLabel, bodyLabel))
     document.addSubview(row)
     window.setContentView(fixture.root)

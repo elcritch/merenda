@@ -797,7 +797,7 @@ proc initSplitViewFields*(
     splitView: SplitView, axis = laHorizontal, frame: Rect = AutoRect
 ) =
   initViewFields(splitView, frame)
-  splitView.background = initColor(0.0, 0.0, 0.0, 0.0)
+  splitView.background = color(0.0, 0.0, 0.0, 0.0)
   splitView.xAxis = axis
   splitView.xDragDivider = -1
   discard splitView.withProto()

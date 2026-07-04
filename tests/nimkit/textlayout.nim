@@ -505,7 +505,7 @@ suite "nimkit text layout":
     check spy.lastEdit.kinds == {tseCharacters}
 
     storage.setAttributes(
-      initTextRange(0, 1), defaultTextAttributes(initColor(1.0, 0.0, 0.0), 13.0)
+      initTextRange(0, 1), defaultTextAttributes(color(1.0, 0.0, 0.0), 13.0)
     )
     check spy.willCount == 2
     check spy.didCount == 2
@@ -556,7 +556,7 @@ suite "nimkit text layout":
     storage.beginEditing()
     storage.replace(initTextRange(0, 6), "Updated")
     storage.setAttributes(
-      initTextRange(0, 7), defaultTextAttributes(initColor(0.4, 0.2, 0.8), 15.0)
+      initTextRange(0, 7), defaultTextAttributes(color(0.4, 0.2, 0.8), 15.0)
     )
     check managerA.hasValidLayout()
     check managerB.hasValidLayout()
@@ -789,7 +789,7 @@ suite "nimkit text layout":
     check backend.requests[^1].storage.stringValue() == "AZZha"
 
     storage.setAttributes(
-      initTextRange(0, 3), defaultTextAttributes(initColor(0.8, 0.1, 0.2), 15.0)
+      initTextRange(0, 3), defaultTextAttributes(color(0.8, 0.1, 0.2), 15.0)
     )
     check not manager.hasValidLayout()
     check spy.invalidations == 2
@@ -1077,7 +1077,7 @@ suite "nimkit text layout":
         storage, initTextContainer(initSize(180.0, 60.0), insets(0.0))
       )
       spy = newTextLayoutSignalSpy()
-      tempAttributes = defaultTextAttributes(initColor(0.9, 0.1, 0.2), 16.0)
+      tempAttributes = defaultTextAttributes(color(0.9, 0.1, 0.2), 16.0)
 
     manager.textLayoutBackend = backend
     spy.observeProtocol(manager, TextLayoutEvents)
@@ -1115,7 +1115,7 @@ suite "nimkit text layout":
   test "layout delegate hooks generation metrics hyphenation and temporary runs":
     let
       delegate = newTextLayoutDelegateSpy()
-      delegateAttributes = defaultTextAttributes(initColor(0.1, 0.2, 0.9), 14.0)
+      delegateAttributes = defaultTextAttributes(color(0.1, 0.2, 0.9), 14.0)
       manager = newTextLayoutManager(
         newTextStorage("Delegate text"),
         initTextContainer(initSize(220.0, 90.0), insets(3.0), wraps = false),

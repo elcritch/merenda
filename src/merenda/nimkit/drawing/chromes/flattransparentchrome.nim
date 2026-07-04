@@ -36,7 +36,7 @@ func clampUnit(value: float32): float32 =
 
 func lightenColor(color: Color, amount: float32, alpha: float32): Color =
   let mix = amount.clampUnit
-  initColor(
+  color(
     color.r + (1.0'f32 - color.r) * mix,
     color.g + (1.0'f32 - color.g) * mix,
     color.b + (1.0'f32 - color.b) * mix,
@@ -45,7 +45,7 @@ func lightenColor(color: Color, amount: float32, alpha: float32): Color =
 
 func darkenColor(color: Color, amount: float32, alpha: float32): Color =
   let mix = 1.0'f32 - amount.clampUnit
-  initColor(color.r * mix, color.g * mix, color.b * mix, alpha.clampUnit)
+  color(color.r * mix, color.g * mix, color.b * mix, alpha.clampUnit)
 
 func flatFaceFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -99,7 +99,7 @@ func flatGlossFill(chrome: ChromeContext): Fill =
       0.16'f32
     else:
       0.20'f32
-  linear(initColor(1.0, 1.0, 1.0, alpha), initColor(1.0, 1.0, 1.0, 0.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func flatLowerWashFill(chrome: ChromeContext): Fill =
   let
@@ -111,7 +111,7 @@ func flatLowerWashFill(chrome: ChromeContext): Fill =
         0.10'f32
       else:
         0.07'f32
-  linear(initColor(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.26'f32, alpha), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.0), base.darkenColor(0.26'f32, alpha), fgaY)
 
 func flatRadioShellFill(chrome: ChromeContext): Fill =
   flatFaceFill(chrome)
@@ -134,28 +134,24 @@ func flatRadioInnerFill(chrome: ChromeContext): Fill =
 
 func flatRadioInnerBorderColor(chrome: ChromeContext): Color =
   if chrome.isSelected and chrome.isEnabled:
-    return initColor(1.0, 0.30, 0.92, 0.88)
+    return color(1.0, 0.30, 0.92, 0.88)
   if chrome.isEnabled:
-    return initColor(0.24, 0.94, 1.0, 0.72)
-  initColor(0.36, 0.42, 0.58, 0.40)
+    return color(0.24, 0.94, 1.0, 0.72)
+  color(0.36, 0.42, 0.58, 0.40)
 
 func flatRadioInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
   if chrome.isSelected and chrome.isEnabled:
     return
       @[
-        insetShadow(initColor(0.0, 0.0, 0.0, 0.26), y = 1.0, blur = 2.8),
-        insetShadow(initColor(0.30, 0.96, 1.0, 0.20), y = -1.0, blur = 2.6),
+        insetShadow(color(0.0, 0.0, 0.0, 0.26), y = 1.0, blur = 2.8),
+        insetShadow(color(0.30, 0.96, 1.0, 0.20), y = -1.0, blur = 2.6),
       ]
   @[
     insetShadow(
-      initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.18 else: 0.06),
-      y = 1.0,
-      blur = 2.4,
+      color(0.0, 0.0, 0.0, if chrome.isEnabled: 0.18 else: 0.06), y = 1.0, blur = 2.4
     ),
     insetShadow(
-      initColor(0.28, 0.96, 1.0, if chrome.isEnabled: 0.16 else: 0.06),
-      y = -1.0,
-      blur = 2.0,
+      color(0.28, 0.96, 1.0, if chrome.isEnabled: 0.16 else: 0.06), y = -1.0, blur = 2.0
     ),
   ]
 
@@ -183,8 +179,8 @@ func flatComboArrowFill(chrome: ChromeContext): Fill =
 
 func flatComboSeparatorFill(chrome: ChromeContext): Fill =
   if not chrome.isEnabled:
-    return fill(initColor(0.36, 0.42, 0.58, 0.34))
-  linear(initColor(0.18, 0.92, 1.0, 0.44), initColor(1.0, 0.08, 0.92, 0.36), fgaY)
+    return fill(color(0.36, 0.42, 0.58, 0.34))
+  linear(color(0.18, 0.92, 1.0, 0.44), color(1.0, 0.08, 0.92, 0.36), fgaY)
 
 func flatSliderHighlightFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
@@ -218,17 +214,17 @@ proc drawFlatButtonExtras(
       extras.parent,
       inner,
       context.appearance.chromeFill(innerChrome),
-      initColor(0.0, 0.0, 0.0, 0.0),
+      color(0.0, 0.0, 0.0, 0.0),
       0.0'f32,
       innerRadius,
       [
         insetShadow(
-          initColor(0.32, 0.96, 1.0, if chrome.isEnabled: 0.14 else: 0.04),
+          color(0.32, 0.96, 1.0, if chrome.isEnabled: 0.14 else: 0.04),
           y = 1.0,
           blur = 3.0,
         ),
         insetShadow(
-          initColor(0.0, 0.0, 0.0, if chrome.isEnabled: 0.20 else: 0.06),
+          color(0.0, 0.0, 0.0, if chrome.isEnabled: 0.20 else: 0.06),
           y = -1.0,
           blur = 4.0,
         ),
@@ -250,7 +246,7 @@ proc drawFlatButtonExtras(
     innerRoot,
     topGloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
     cornerRadii = innerRadii,
@@ -260,7 +256,7 @@ proc drawFlatButtonExtras(
     innerRoot,
     lowerWash,
     context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     innerRadius,
     cornerRadii = innerRadii,
@@ -299,7 +295,7 @@ proc drawFlatChoiceExtras(
         innerRoot,
         innerGloss,
         context.appearance.chromeFill(chrome.withPart(cpGloss)),
-        initColor(0.0, 0.0, 0.0, 0.0),
+        color(0.0, 0.0, 0.0, 0.0),
         0.0'f32,
         max(innerRadius - 2.0'f32, 1.0'f32),
       )
@@ -321,7 +317,7 @@ proc drawFlatChoiceExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     max(extras.cornerRadius - inset, 0.0'f32),
     cornerRadii = glossRadii,
@@ -348,7 +344,7 @@ proc drawFlatComboFaceExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     max(extras.cornerRadius - 1.0'f32, 0.0'f32),
     cornerRadii = extras.cornerRadii.inset(1.0'f32),
@@ -375,7 +371,7 @@ proc drawFlatComboArrowExtras(
     extras.parent,
     gloss,
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
-    initColor(0.0, 0.0, 0.0, 0.0),
+    color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     1.4'f32,
   )
@@ -393,7 +389,7 @@ proc drawFlatSimpleHighlight(
     extras.layer,
     extras.parent,
     topHighlight,
-    fill(initColor(0.32, 0.96, 1.0, if chrome.isEnabled: 0.16 else: 0.05)),
+    fill(color(0.32, 0.96, 1.0, if chrome.isEnabled: 0.16 else: 0.05)),
   )
 
 protocol FlatTransparentChromeProtocol of ChromeProtocol:

@@ -84,28 +84,24 @@ proc demoTextRange*(needle: string): TextRange =
 proc makeIntroStorage*(): TextStorage =
   result = newTextStorage(IntroText)
   result.setAttributes(
-    demoTextRange(TitleText),
-    defaultTextAttributes(initColor(0.95, 0.42, 0.78, 1.0), 18.0),
+    demoTextRange(TitleText), defaultTextAttributes(color(0.95, 0.42, 0.78, 1.0), 18.0)
   )
   result.setAttributes(
-    demoTextRange(LinkText),
-    defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0),
+    demoTextRange(LinkText), defaultTextAttributes(color(0.1, 0.58, 0.95, 1.0), 13.0)
   )
   result.setAttributes(
-    demoTextRange(LeadText),
-    defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0),
+    demoTextRange(LeadText), defaultTextAttributes(color(0.1, 0.58, 0.95, 1.0), 13.0)
   )
-  var emphasis = defaultTextAttributes(initColor(0.95, 0.56, 0.24, 1.0), 13.0)
+  var emphasis = defaultTextAttributes(color(0.95, 0.56, 0.24, 1.0), 13.0)
   emphasis.underline = true
   result.setAttributes(demoTextRange(EmphasisText), emphasis)
 
-  var linkAttributes = defaultTextAttributes(initColor(0.1, 0.58, 0.95, 1.0), 13.0)
+  var linkAttributes = defaultTextAttributes(color(0.1, 0.58, 0.95, 1.0), 13.0)
   linkAttributes.link = "https://github.com/nim-lang/Nim"
   linkAttributes.underlineStyle = tldsSingle
   result.setAttributes(demoTextRange(LinkText), linkAttributes)
 
-  var attachmentAttributes =
-    defaultTextAttributes(initColor(0.58, 0.27, 0.85, 1.0), 13.0)
+  var attachmentAttributes = defaultTextAttributes(color(0.58, 0.27, 0.85, 1.0), 13.0)
   attachmentAttributes.attachment = initTextAttachment(
     identifier = "demo-image",
     contentType = "image/png",
@@ -113,7 +109,7 @@ proc makeIntroStorage*(): TextStorage =
     fileUrl = AttachmentUrl,
     size = initSize(96.0, 64.0),
   )
-  attachmentAttributes.backgroundColor = initColor(0.58, 0.27, 0.85, 0.1)
+  attachmentAttributes.backgroundColor = color(0.58, 0.27, 0.85, 0.1)
   result.setAttributes(demoTextRange(AttachmentText), attachmentAttributes)
 
 proc setStatus(delegate: DemoTextDelegate, message: string) =
@@ -135,7 +131,7 @@ protocol DemoTextDelegateProtocol of TextViewDelegateProtocol:
     inc delegate.serviceCount
     if request.stringValue.len == 0:
       return TextServiceResponse()
-    var attributes = defaultTextAttributes(initColor(0.0, 0.62, 0.7, 1.0), 14.0)
+    var attributes = defaultTextAttributes(color(0.0, 0.62, 0.7, 1.0), 14.0)
     attributes.underline = true
     delegate.setStatus(
       "Service " & $delegate.serviceCount & ": " & request.stringValue.toUpperAscii()
@@ -217,7 +213,7 @@ proc styleSelection(demo: TextEditorDemo, sender: DynamicAgent) =
   let selected = demo.editor.selectedRange()
   if selected.length == 0:
     return
-  var attributes = defaultTextAttributes(initColor(0.0, 0.85, 0.95, 1.0), 14.0)
+  var attributes = defaultTextAttributes(color(0.0, 0.85, 0.95, 1.0), 14.0)
   attributes.underline = true
   demo.editor.setAttributes(selected, attributes)
   demo.updateSummary()

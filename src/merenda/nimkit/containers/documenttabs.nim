@@ -201,7 +201,7 @@ proc initDocumentTabItemFields*(
   item.xEnabled = true
   item.xCloseable = closeable
   item.xStyle = style
-  item.xAccentColor = initColor(0.20, 0.45, 0.92, 1.0)
+  item.xAccentColor = color(0.20, 0.45, 0.92, 1.0)
   item.xObjectValue = emptyObjectValue()
 
 proc initDocumentTabItem*(
@@ -224,7 +224,7 @@ proc initDocumentTabModel*(
     closeable = true,
     modified = false,
     style = dtsAutomatic,
-    accentColor = initColor(0.20, 0.45, 0.92, 1.0),
+    accentColor = color(0.20, 0.45, 0.92, 1.0),
     styleId = "",
     styleClasses: openArray[string] = [],
     tooltip = "",
@@ -324,7 +324,7 @@ proc `style=`*(item: DocumentTabItem, style: DocumentTabStyle) =
 
 proc accentColor*(item: DocumentTabItem): Color =
   if item.isNil:
-    initColor(0.20, 0.45, 0.92, 1.0)
+    color(0.20, 0.45, 0.92, 1.0)
   else:
     item.xAccentColor
 
@@ -628,11 +628,11 @@ proc tabTextStyle(
 
 func documentTabTextColor(enabled, selected: bool): Color =
   if not enabled:
-    initColor(0.50, 0.52, 0.56, 1.0)
+    color(0.50, 0.52, 0.56, 1.0)
   elif selected:
-    initColor(0.07, 0.08, 0.10, 1.0)
+    color(0.07, 0.08, 0.10, 1.0)
   else:
-    initColor(0.18, 0.20, 0.25, 1.0)
+    color(0.18, 0.20, 0.25, 1.0)
 
 proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
   if item.isNil:
@@ -1303,39 +1303,39 @@ proc hitPart(
     result = (dthTab, index)
 
 func barFillColor(): Color =
-  initColor(0.88, 0.90, 0.94, 1.0)
+  color(0.88, 0.90, 0.94, 1.0)
 
 func selectedFillColor(style: DocumentTabStyle): Color =
   case style
   of dtsPill:
-    initColor(0.98, 0.98, 0.96, 1.0)
+    color(0.98, 0.98, 0.96, 1.0)
   of dtsUnderline:
-    initColor(0.0, 0.0, 0.0, 0.0)
+    color(0.0, 0.0, 0.0, 0.0)
   of dtsCompact:
-    initColor(0.95, 0.96, 0.98, 1.0)
+    color(0.95, 0.96, 0.98, 1.0)
   else:
-    initColor(0.98, 0.98, 0.96, 1.0)
+    color(0.98, 0.98, 0.96, 1.0)
 
 func tabFillColor(style: DocumentTabStyle, selected, pressed: bool): Color =
   if selected:
     return style.selectedFillColor()
   if pressed:
-    return initColor(0.78, 0.82, 0.88, 1.0)
+    return color(0.78, 0.82, 0.88, 1.0)
   case style
   of dtsUnderline:
-    initColor(0.0, 0.0, 0.0, 0.0)
+    color(0.0, 0.0, 0.0, 0.0)
   of dtsCompact:
-    initColor(0.82, 0.85, 0.90, 0.95)
+    color(0.82, 0.85, 0.90, 0.95)
   else:
-    initColor(0.84, 0.87, 0.92, 0.95)
+    color(0.84, 0.87, 0.92, 0.95)
 
 func tabBorderColor(style: DocumentTabStyle, selected: bool): Color =
   if style == dtsUnderline:
-    initColor(0.0, 0.0, 0.0, 0.0)
+    color(0.0, 0.0, 0.0, 0.0)
   elif selected:
-    initColor(0.42, 0.46, 0.54, 1.0)
+    color(0.42, 0.46, 0.54, 1.0)
   else:
-    initColor(0.62, 0.66, 0.74, 1.0)
+    color(0.62, 0.66, 0.74, 1.0)
 
 func tabCornerRadius(style: DocumentTabStyle): float32 =
   case style
@@ -1345,7 +1345,7 @@ func tabCornerRadius(style: DocumentTabStyle): float32 =
   else: 7.0'f32
 
 func tabHighlightFill(enabled: bool): Fill =
-  fill(initColor(1.0, 1.0, 1.0, if enabled: 0.46 else: 0.20))
+  fill(color(1.0, 1.0, 1.0, if enabled: 0.46 else: 0.20))
 
 proc drawCloseButton(
     tabs: DocumentTabs,
@@ -1367,19 +1367,19 @@ proc drawCloseButton(
       tabs.documentTabButtonStyleContext(states, classes = ["document-tab-close"])
     fillColor =
       if pressed:
-        initColor(0.52, 0.56, 0.62, 0.85)
+        color(0.52, 0.56, 0.62, 0.85)
       elif selected:
-        initColor(0.72, 0.76, 0.82, 0.70)
+        color(0.72, 0.76, 0.82, 0.70)
       else:
-        initColor(0.64, 0.68, 0.74, 0.50)
+        color(0.64, 0.68, 0.74, 0.50)
     textColor =
       if selected:
-        initColor(0.12, 0.14, 0.18, 1.0)
+        color(0.12, 0.14, 0.18, 1.0)
       else:
-        initColor(0.22, 0.24, 0.30, 1.0)
+        color(0.22, 0.24, 0.30, 1.0)
     fillValue = context.appearance.resolveFill(styleContext, fill(fillColor))
     borderColor = context.appearance.resolveColor(
-      styleContext, StyleBorderColor, initColor(0.0, 0.0, 0.0, 0.0)
+      styleContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
     )
     borderWidth =
       context.appearance.resolveLength(styleContext, StyleBorderWidth, 0.0'f32)
@@ -1567,15 +1567,15 @@ proc drawScrollButton(
     )
     fillColor =
       if pressed and enabled:
-        initColor(0.70, 0.74, 0.82, 1.0)
+        color(0.70, 0.74, 0.82, 1.0)
       else:
-        initColor(0.82, 0.85, 0.90, 1.0)
-    borderColor = initColor(0.58, 0.62, 0.70, 1.0)
+        color(0.82, 0.85, 0.90, 1.0)
+    borderColor = color(0.58, 0.62, 0.70, 1.0)
     textColor =
       if enabled:
-        initColor(0.12, 0.14, 0.18, 1.0)
+        color(0.12, 0.14, 0.18, 1.0)
       else:
-        initColor(0.52, 0.55, 0.62, 1.0)
+        color(0.52, 0.55, 0.62, 1.0)
     label =
       case button
       of dtsbPrevious: "<"
@@ -1660,7 +1660,7 @@ protocol DocumentTabsDrawing of ViewDrawingProtocol:
       barContext = tabs.documentTabBarStyleContext()
       barFill = context.appearance.resolveFill(barContext, fill(barFillColor()))
       barBorderColor = context.appearance.resolveColor(
-        barContext, StyleBorderColor, initColor(0.58, 0.62, 0.70, 1.0)
+        barContext, StyleBorderColor, color(0.58, 0.62, 0.70, 1.0)
       )
       barBorderWidth =
         context.appearance.resolveLength(barContext, StyleBorderWidth, 1.0'f32)
@@ -1684,7 +1684,7 @@ protocol DocumentTabsDrawing of ViewDrawingProtocol:
     let viewport = tabs.tabViewportRect()
     let clipRoot = context.addRenderRectangle(
       context.renderRectFor(viewport),
-      fill(initColor(0.0, 0.0, 0.0, 0.0)),
+      fill(color(0.0, 0.0, 0.0, 0.0)),
       maskContent = true,
     )
     for index in 0 ..< tabs.xItems.len:
@@ -1848,7 +1848,7 @@ proc initDocumentTabsFields*(tabs: DocumentTabs, frame: Rect = AutoRect) =
   tabs.xShowsHorizontalScroller = false
   tabs.xDefaultTabStyle = dtsRounded
   tabs.xLineScroll = DocumentTabDefaultLineScroll
-  tabs.background = initColor(0.0, 0.0, 0.0, 0.0)
+  tabs.background = color(0.0, 0.0, 0.0, 0.0)
   tabs.clipsToBounds = true
   tabs.setAcceptsFirstResponder(true)
   discard tabs.withProtocol(DocumentTabsDrawing)

@@ -103,9 +103,8 @@ proc renderedTextInView(nodes: openArray[Fig], view: View, text: string): bool =
 proc renderedSelectionInView(nodes: openArray[Fig], view: View): bool =
   for node in nodes:
     if node.kind == nkRectangle and node.fill.kind == flColor and
-        node.fill.color == initColor(0.24, 0.56, 1.0, 0.34).rgba and
-        node.screenBox.w > 1.0 and node.screenBox.h > 0.0 and
-        node.nodeRenderedInView(view):
+        node.fill.color == color(0.24, 0.56, 1.0, 0.34).rgba and node.screenBox.w > 1.0 and
+        node.screenBox.h > 0.0 and node.nodeRenderedInView(view):
       return true
 
 proc renderedCaretInView(
@@ -149,7 +148,7 @@ proc renderedOpaqueBackgroundForView(nodes: openArray[Fig], view: View): bool =
   let viewRect = view.rectToWindow(view.bounds)
   for node in nodes:
     if node.kind == nkRectangle and node.fill.kind == flColor and
-        node.fill.color != initColor(0.0, 0.0, 0.0, 0.0).rgba and
+        node.fill.color != color(0.0, 0.0, 0.0, 0.0).rgba and
         node.renderedRect() == viewRect:
       return true
 
@@ -450,7 +449,7 @@ suite "nimkit text fields":
       priority = newComboBox(["Low", "Medium", "High"])
       color = newComboBox(["Red", "Green", "Blue"])
 
-    root.background = initColor(0.95, 0.96, 0.98)
+    root.background = color(0.95, 0.96, 0.98)
     layout.spacing = 16.0
     layout.alignment = svaFill
     bodyRow.spacing = 28.0
@@ -728,7 +727,7 @@ suite "nimkit text fields":
       field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
       inspector = newViewInspector(root)
       ringStyle = initSelectionRingStyle(
-        strokeColor = initColor(0.95, 0.12, 0.35, 1.0),
+        strokeColor = color(0.95, 0.12, 0.35, 1.0),
         lineWidth = 5.0'f32,
         cornerRadius = 6.0'f32,
         insets = insets(2.0'f32),

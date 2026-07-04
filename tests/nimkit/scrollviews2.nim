@@ -15,7 +15,7 @@ proc newScrollFixture(): tuple[scrollView: ScrollView, document: View] =
 suite "nimkit scroll views":
   test "scroll view paints chrome over transparent view backing":
     let fixture = newScrollFixture()
-    check fixture.scrollView.background() == initColor(0.0, 0.0, 0.0, 0.0)
+    check fixture.scrollView.background() == color(0.0, 0.0, 0.0, 0.0)
     check fixture.scrollView.drawsBackground()
 
   test "clip views expose document geometry and constrain scroll points":

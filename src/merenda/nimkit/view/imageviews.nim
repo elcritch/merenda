@@ -172,8 +172,8 @@ proc initImageViewFields*(
   imageView.xImage = image
   imageView.xScaling = isScaleProportionallyDown
   imageView.xAlignment = iaCenter
-  imageView.xTint = initColor(1.0, 1.0, 1.0, 1.0)
-  imageView.backgroundColor = initColor(0.0, 0.0, 0.0, 0.0)
+  imageView.xTint = color(1.0, 1.0, 1.0, 1.0)
+  imageView.backgroundColor = color(0.0, 0.0, 0.0, 0.0)
   imageView.accessibilityElement = true
   discard imageView.withProto()
   discard imageView.withProtocol(ImageViewDrawing)

@@ -1583,7 +1583,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
           faceRoot,
           arrowFrame,
           context.appearance.chromeFill(arrowChrome),
-          initColor(0.0, 0.0, 0.0, 0.0),
+          color(0.0, 0.0, 0.0, 0.0),
           0.0'f32,
         )
       context.drawChromeExtras(
@@ -1600,24 +1600,24 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
 
     let fillColor =
       if isPullDown and (ssOpen in states or ssActive in states):
-        initColor(0.58, 0.66, 0.82)
+        color(0.58, 0.66, 0.82)
       elif isPullDown and ssHovered in states:
-        initColor(0.76, 0.81, 0.91)
+        color(0.76, 0.81, 0.91)
       elif ssOpen in states or ssActive in states:
-        initColor(0.78, 0.84, 0.96)
+        color(0.78, 0.84, 0.96)
       elif ssHovered in states:
-        initColor(0.88, 0.91, 0.97)
+        color(0.88, 0.91, 0.97)
       else:
-        initColor(0.0, 0.0, 0.0, 0.0)
+        color(0.0, 0.0, 0.0, 0.0)
     let borderColor =
       if isPullDown and (ssOpen in states or ssActive in states):
-        initColor(0.30, 0.36, 0.48)
+        color(0.30, 0.36, 0.48)
       elif isPullDown and ssHovered in states:
-        initColor(0.45, 0.50, 0.62)
+        color(0.45, 0.50, 0.62)
       elif ssOpen in states or ssHovered in states:
-        initColor(0.50, 0.54, 0.62)
+        color(0.50, 0.54, 0.62)
       else:
-        initColor(0.0, 0.0, 0.0, 0.0)
+        color(0.0, 0.0, 0.0, 0.0)
     discard context.addRenderRectangle(
       context.renderRectFor(button.bounds),
       fill(fillColor),
@@ -1629,7 +1629,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
       button.bounds.inset(insets(6.0, 10.0, 2.0, 10.0)),
       button.title(),
       context.appearance.resolveTextStyle(
-        controlStyle(srComboBox), initColor(0.08, 0.09, 0.11), insets(0.0)
+        controlStyle(srComboBox), color(0.08, 0.09, 0.11), insets(0.0)
       ),
     )
 
@@ -1693,7 +1693,7 @@ proc initPopupMenuButtonFields*(
   button.xHighlightedIndex = -1
   button.xChildPopupOwnerIndex = -1
   button.xPopupPresentation = ppAutomatic
-  button.background = initColor(0.0, 0.0, 0.0, 0.0)
+  button.background = color(0.0, 0.0, 0.0, 0.0)
   button.menu = menu
   button.setAcceptsFirstResponder(true)
   discard button.withProto()
@@ -1888,7 +1888,7 @@ protocol MenuBarDrawing of ViewDrawingProtocol:
       return
     discard context.addRenderRectangle(
       initRect(0.0'f32, bounds.maxY - 1.0'f32, bounds.size.width, 1.0'f32),
-      fill(initColor(0.76, 0.78, 0.82)),
+      fill(color(0.76, 0.78, 0.82)),
     )
 
 protocol MenuBarLayout of ViewLayoutProtocol:
@@ -1900,7 +1900,7 @@ protocol MenuBarLayout of ViewLayoutProtocol:
 
 proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRect) =
   initViewFields(menuBar, frame)
-  menuBar.background = initColor(0.91, 0.92, 0.94)
+  menuBar.background = color(0.91, 0.92, 0.94)
   discard menuBar.withProto()
   discard menuBar.withProtocol(MenuBarDrawing)
   discard menuBar.withProtocol(MenuBarLayout)

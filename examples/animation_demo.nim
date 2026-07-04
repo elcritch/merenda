@@ -84,10 +84,10 @@ proc playTransactionAnimation(sender: DynamicAgent) =
     tile.alphaValue = 0.35'f32
   play(group, "Transaction group")
 
-stage.background = initColor(0.92, 0.93, 0.95, 1.0)
+stage.background = color(0.92, 0.93, 0.95, 1.0)
 stage.clipsToBounds = true
-tile.background = initColor(0.22, 0.48, 0.86, 1.0)
-tile.shadow = [dropShadow(initColor(0.0, 0.0, 0.0, 0.24), 0.0, 8.0, 18.0)]
+tile.background = color(0.22, 0.48, 0.86, 1.0)
+tile.shadow = [dropShadow(color(0.0, 0.0, 0.0, 0.24), 0.0, 8.0, 18.0)]
 stage.addSubview(tile)
 
 propertyButton.target = newActionTarget(propertyAction, playPropertyAnimation)

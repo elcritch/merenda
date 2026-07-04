@@ -872,7 +872,7 @@ suite "nimkit application":
     var hoverFound = false
     for node in renders[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == initColor(0.76, 0.81, 0.91).rgba:
+          node.fill.color == color(0.76, 0.81, 0.91).rgba:
         hoverFound = true
 
     check hoverFound
@@ -1026,7 +1026,7 @@ suite "nimkit application":
         check not window.requestNativeDisplayUpdateIfNeeded()
 
         let before = window.nativeRenderCount()
-        child.background = initColor(1, 0, 0)
+        child.background = color(1, 0, 0)
         check root.needsDisplayUpdateInSubtree()
         check window.requestNativeDisplayUpdateIfNeeded()
         check window.nativeRenderRequested()

@@ -130,17 +130,17 @@ proc onChanged(sender: DynamicAgent) =
     rebuildPreviewConstraints()
 
 let target = newActionTarget(changedAction, onChanged)
-preview.background = initColor(0.99, 0.99, 1.0)
-previewTitle.background = initColor(0.83, 0.90, 0.98)
-previewSubtitle.background = initColor(0.90, 0.94, 0.98)
-toolbar.background = initColor(0.17, 0.27, 0.36)
-content.background = initColor(0.96, 0.93, 0.87)
-sidebar.background = initColor(0.88, 0.92, 0.89)
-card.background = initColor(0.99, 0.78, 0.50)
+preview.background = color(0.99, 0.99, 1.0)
+previewTitle.background = color(0.83, 0.90, 0.98)
+previewSubtitle.background = color(0.90, 0.94, 0.98)
+toolbar.background = color(0.17, 0.27, 0.36)
+content.background = color(0.96, 0.93, 0.87)
+sidebar.background = color(0.88, 0.92, 0.89)
+card.background = color(0.99, 0.78, 0.50)
 
-toolbarLabel.textColor = initColor(1.0, 1.0, 1.0)
-cardTitle.textColor = initColor(0.10, 0.08, 0.06)
-cardBody.textColor = initColor(0.12, 0.10, 0.08)
+toolbarLabel.textColor = color(1.0, 1.0, 1.0)
+cardTitle.textColor = color(0.10, 0.08, 0.06)
+cardBody.textColor = color(0.12, 0.10, 0.08)
 
 spacingChoice.selectedIndex = 2
 toolbarChoice.selectedIndex = 1
