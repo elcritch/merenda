@@ -30,6 +30,7 @@ import nimkit/selectionrings
 import nimkit/sizing
 import nimkit/splitviews
 import nimkit/stackviews
+import nimkit/syneditviews
 import nimkit/tableviews
 import nimkit/tabviews
 import nimkit/texteditors
