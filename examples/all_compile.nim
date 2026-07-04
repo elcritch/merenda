@@ -19,6 +19,7 @@ import matrix_demo
 import menu_demo
 import modelcontrollers_demo
 import monotext_demo
+import outline_demo
 import panel_demo
 import preferences_demo
 import progress_indicator_demo

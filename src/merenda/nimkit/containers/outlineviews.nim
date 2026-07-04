@@ -1035,10 +1035,10 @@ proc outlineColumnRectForRow(
     x += current.width()
   rect(0.0, 0.0, 0.0, 0.0)
 
-proc outlineTextRectForCell(
-    outlineView: OutlineView, row: int, column: TableColumn, rowBounds: Rect
+proc outlineTextRectForCellFrame(
+    outlineView: OutlineView, row: int, column: TableColumn, cellFrame: Rect
 ): Rect =
-  result = outlineView.outlineColumnRectForRow(column, rowBounds)
+  result = cellFrame
   if result.isEmpty:
     return
   if column == outlineView.outlineColumn():
@@ -1049,22 +1049,31 @@ proc outlineTextRectForCell(
     result.x += 6.0'f32
     result.w = max(result.w - 12.0'f32, 0.0'f32)
 
+proc outlineTextRectForCell(
+    outlineView: OutlineView, row: int, column: TableColumn, rowBounds: Rect
+): Rect =
+  outlineView.outlineTextRectForCellFrame(
+    row, column, outlineView.outlineColumnRectForRow(column, rowBounds)
+  )
+
 proc drawOutlineRowText(
     outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect
 ) =
   if outlineView.isNil or context.isNil or row < 0:
     return
+  let editing = TableView(outlineView).editingState()
   for column in TableView(outlineView).columns():
-    if column.hidden():
-      continue
-    let
-      text = outlineView.outlineCellText(row, column)
-      textRect = outlineView.outlineTextRectForCell(row, column, rowBounds)
-      textStyle = context.appearance.resolveTextStyle(
-        controlStyle(srRowItem), color(0.14, 0.18, 0.25, 1.0), insets(0.0)
-      )
-    if text.len > 0 and not textRect.isEmpty:
-      discard context.addText(textRect, text, textStyle, column.alignment())
+    let isEditingCell =
+      editing.active and editing.row == row and editing.column == column
+    if not column.hidden() and not isEditingCell:
+      let
+        text = outlineView.outlineCellText(row, column)
+        textRect = outlineView.outlineTextRectForCell(row, column, rowBounds)
+        textStyle = context.appearance.resolveTextStyle(
+          controlStyle(srRowItem), color(0.14, 0.18, 0.25, 1.0), insets(0.0)
+        )
+      if text.len > 0 and not textRect.isEmpty:
+        discard context.addText(textRect, text, textStyle, column.alignment())
 
 proc drawOutlineDropTarget(
     outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect
@@ -1086,17 +1095,41 @@ protocol OutlineViewDrawing of ViewDrawingProtocol:
   method draw(outlineView: OutlineView, context: DrawContext) =
     if outlineView.isNil or context.isNil or outlineView.bounds().isEmpty:
       return
+    let
+      tableView = TableView(outlineView)
+      style = context.appearance.resolveTableViewStyle(
+        controlStyle(
+          tableView.tableRole(),
+          outlineView.widgetStateSet(),
+          id = outlineView.styleId(),
+          classes = outlineView.styleClasses(),
+        )
+      )
     discard context.addRenderRectangle(
       context.renderRectFor(outlineView.bounds()),
-      fill(color(0.98, 0.985, 0.995, 1.0)),
-      color(0.66, 0.68, 0.73, 1.0),
-      1.0'f32,
-      0.0'f32,
+      style.box.fill,
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      style.box.shadows,
       clips = true,
     )
-    TableView(outlineView).drawTableHeader(context)
+    tableView.drawTableHeader(context)
 
 protocol OutlineViewEvents of ResponderEventProtocol:
+  method keyDown(outlineView: OutlineView, event: KeyEvent): bool =
+    case event.key
+    of keyArrowLeft, keyArrowRight:
+      if outlineView.handleOutlineKey(event):
+        return true
+    else:
+      discard
+    let next = outlineView.performNext(keyDown, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
+
   method mouseDown(outlineView: OutlineView, event: MouseEvent): bool =
     if outlineView.disclosureMouseDown(event):
       return true
@@ -1195,6 +1228,16 @@ protocol OutlineViewTableDelegate of TableViewDelegate:
   method isRowEnabled(outlineView: OutlineView, tableView: TableView, row: int): bool =
     discard tableView
     outlineView.itemAtRow(row).enabled
+
+  method fieldEditorFrameForCell(
+      outlineView: OutlineView,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      proposedFrame: Rect,
+  ): Rect =
+    discard tableView
+    outlineView.outlineTextRectForCellFrame(row, column, proposedFrame)
 
   method parseObjectValueForCell(
       outlineView: OutlineView,

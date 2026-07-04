@@ -642,6 +642,10 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     tableView: TableView, row: int, column: TableColumn
   ) {.optional.}
 
+  method fieldEditorFrameForCell*(
+    tableView: TableView, row: int, column: TableColumn, proposedFrame: Rect
+  ): Rect {.optional.}
+
   method validationErrorForCell*(
     tableView: TableView, row: int, column: TableColumn, value: string
   ): string {.optional.}
@@ -3460,13 +3464,48 @@ proc fieldEditorFrameForEditing(tableView: TableView): Rect =
   if tableView.xEditingHostIsRowView:
     let row = tableView.visibleRowView(tableView.xEditing.row)
     let rowBounds = rect(0.0, 0.0, row.rect.size.width, row.rect.size.height)
-    tableView.columnRect(rowBounds, tableView.xEditing.column)
-  else:
-    tableView.xEditingHostView.bounds()
+    let cellFrame = tableView.columnRect(rowBounds, tableView.xEditing.column)
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      let frame = delegate.trySendLocal(
+        fieldEditorFrameForCell(),
+        (
+          tableView: tableView,
+          row: tableView.xEditing.row,
+          column: tableView.xEditing.column,
+          proposedFrame: cellFrame,
+        ),
+      )
+      if frame.isSome:
+        return frame.get()
+    let style = tableView.effectiveAppearance().resolveRowItemStyle(
+        controlStyle(
+          tableView.xItemRole,
+          tableView.widgetStateSet(),
+          id = tableView.styleId(),
+          classes = tableView.styleClasses(),
+        )
+      )
+    return style.rowItemTextRect(cellFrame)
+  tableView.xEditingHostView.bounds()
+
+proc fieldEditorTextStyleForEditing(tableView: TableView): TextStyle =
+  if tableView.isNil:
+    return initAppearance().resolveRowItemStyle(controlStyle(srRowItem)).text
+  let style = tableView.effectiveAppearance().resolveRowItemStyle(
+      controlStyle(
+        tableView.xItemRole,
+        tableView.widgetStateSet(),
+        id = tableView.styleId(),
+        classes = tableView.styleClasses(),
+      )
+    )
+  style.text
 
 proc removeFieldEditorFromSurface(tableView: TableView, editor: FieldEditor) =
   if tableView.isNil or editor.isNil:
     return
+  TextView(editor).clearTextStyleOverride()
   if tableView.xEditingHostView of Control:
     Control(tableView.xEditingHostView).setCurrentEditor(nil)
   if not tableView.xEditingCell.isNil:
@@ -3487,7 +3526,11 @@ proc installFieldEditorOnSurface(tableView: TableView, editor: FieldEditor) =
     if tableView.xEditingHostView of Control:
       Control(tableView.xEditingHostView).setCurrentEditor(editor)
   else:
+    let textView = TextView(editor)
+    textView.setTextStyleOverride(tableView.fieldEditorTextStyleForEditing())
+    textView.alignment = tableView.xEditing.column.alignment()
     editor.frame = frame
+    editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
     if not tableView.xEditingHostView.isNil and
         editor.superview() != tableView.xEditingHostView:
       tableView.xEditingHostView.addSubview(editor)

@@ -164,9 +164,11 @@ type
     xAllowsRectangularSelection: bool
     xRectangularSelection: TextRectSelection
     xTextColor: Color
+    xTextStyleOverride: TextStyle
     xSelectionColor: Color
     xTypingAttributes: TextAttributes
     xSelectedTextAttributes: TextAttributes
+    xHasTextStyleOverride: bool
     xHasSelectedTextAttributes: bool
     xInsertionPointColor: Color
     xInsertionPointVisible: bool
@@ -650,6 +652,11 @@ proc textStyle(textView: TextView): TextStyle =
     return initAppearance().resolveTextStyle(
         controlStyle(srTextView), color(0.08, 0.09, 0.11), insets(0.0)
       )
+  if textView.xHasTextStyleOverride:
+    result = textView.xTextStyleOverride
+    if textView.xTextColor.a > 0.0:
+      result.color = textView.xTextColor
+    return
   let role = if textView.isFieldEditor: srTextField else: srTextView
   result = textView.effectiveAppearance().resolveTextStyle(
       controlStyle(
@@ -663,6 +670,24 @@ proc textStyle(textView: TextView): TextStyle =
     )
   if textView.xTextColor.a > 0.0:
     result.color = textView.xTextColor
+
+proc setTextStyleOverride*(textView: TextView, style: TextStyle) =
+  if textView.isNil:
+    return
+  textView.xTextStyleOverride = style
+  textView.xHasTextStyleOverride = true
+  textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
+  textView.syncLayout()
+  textView.setNeedsDisplay(true)
+
+proc clearTextStyleOverride*(textView: TextView) =
+  if textView.isNil or not textView.xHasTextStyleOverride:
+    return
+  textView.xHasTextStyleOverride = false
+  let style = textView.textStyle()
+  textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
+  textView.syncLayout()
+  textView.setNeedsDisplay(true)
 
 proc `textColor=`*(textView: TextView, color: Color) =
   if textView.isNil or textView.xTextColor == color:

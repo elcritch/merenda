@@ -1,5 +1,6 @@
-import std/[strutils, unittest]
+import std/[unicode, unittest]
 
+import figdraw/fignodes
 import sigils/core
 
 import merenda/nimkit
@@ -17,6 +18,30 @@ proc containsValue(values: openArray[string], value: string): bool =
     if item == value:
       return true
   false
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add rune
+
+proc countRenderedText(view: View, text: string): int =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return 0
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText and node.renderedText() == text:
+      inc result
+
+func rectsClose(left, right: Rect): bool =
+  abs(left.origin.x - right.origin.x) <= 0.01'f32 and
+    abs(left.origin.y - right.origin.y) <= 0.01'f32 and
+    abs(left.size.width - right.size.width) <= 0.01'f32 and
+    abs(left.size.height - right.size.height) <= 0.01'f32
+
+proc renderedRect(node: Fig): Rect =
+  rect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
 
 protocol OutlineSourceSpyMethods of OutlineViewDataSource:
   method numberOfChildren(
@@ -108,6 +133,62 @@ suite "NimKit OutlineView":
     check outlineView.rowCount == 2
     check outlineView.isItemExpanded("src")
     check outlineView.rowForItem("main") == -1
+
+  test "left and right arrow keys expand and collapse selected outline rows":
+    let outlineView = newOutlineView()
+
+    outlineView.outlineItems = [
+      initOutlineItem("root", "Root", expandable = true),
+      initOutlineItem("child", "Child", parentIdentifier = "root"),
+    ]
+    outlineView.selectedIndex = 0
+
+    check outlineView.keyDown(KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord))
+    check outlineView.isItemExpanded("root")
+    check outlineView.rowCount == 2
+
+    check outlineView.keyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    check not outlineView.isItemExpanded("root")
+    check outlineView.rowCount == 1
+
+  test "outline view renders the table view theme surface":
+    let
+      outlineView = newOutlineView(frame = rect(0, 0, 180, 72))
+      surfaceFill = fill(color(0.18, 0.08, 0.28, 1.0))
+      borderColor = color(0.82, 0.36, 0.92, 1.0)
+
+    outlineView.styleClasses = @["project-outline"]
+
+    var theme = initTheme()
+    theme[initStyleSelector(srTableView, classes = @["project-outline"]), StyleFill] =
+      surfaceFill
+
+    theme[
+      initStyleSelector(srTableView, classes = @["project-outline"]), StyleBorderColor
+    ] = borderColor
+
+    theme[
+      initStyleSelector(srTableView, classes = @["project-outline"]), StyleBorderWidth
+    ] = 2.0'f32
+
+    theme[
+      initStyleSelector(srTableView, classes = @["project-outline"]), StyleCornerRadius
+    ] = 5.0'f32
+
+    let renders = buildRenders(outlineView, initAppearance(theme))
+    check DefaultDrawLevel in renders
+
+    var surfaceFound = false
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill == surfaceFill and
+          node.renderedRect().rectsClose(outlineView.bounds()):
+        surfaceFound = true
+        check node.stroke.weight == 2.0'f32
+        check node.stroke.fill.kind == flColor
+        check node.stroke.fill.color == borderColor.rgba
+        check node.corners[dcTopLeft] == 5'u16
+
+    check surfaceFound
 
   test "outline column can be replaced and remains a table column":
     let
@@ -256,3 +337,46 @@ suite "NimKit OutlineView":
     let info = drag.draggingInfo()
     check info.tableDraggingRows() == @[1]
     check info.selectedOperations == {dgoCopy}
+
+  test "outline drawn cell field editor aligns with indented row text":
+    let
+      window = newWindow("Outline field editor", frame = rect(0, 0, 380, 160))
+      root = newView(frame = rect(0, 0, 380, 160))
+      outlineView = newOutlineView(frame = rect(10, 10, 320, 96))
+      statusColumn = newTableColumn("status", "Status", width = 90.0)
+
+    outlineView.showsHeader = false
+    outlineView.rowHeight = 28.0
+    outlineView.outlineColumn().title = "Name"
+    outlineView.outlineColumn().width = 180.0
+    outlineView.addColumn(statusColumn)
+    outlineView.outlineItems = [
+      initOutlineItem("root", "Root", expandable = true),
+      initOutlineItem(
+        "child",
+        "Child",
+        parentIdentifier = "root",
+        cells = [tableCell("status", toObj("Active"))],
+      ),
+    ]
+    outlineView.expandItem("root")
+
+    root.addSubview(outlineView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let childRow = outlineView.rowForItem("child")
+    check childRow == 1
+    check outlineView.beginEditingCell(childRow, outlineView.outlineColumn())
+    check window.fieldEditor().superview() != nil
+
+    let
+      indent = outlineView.levelForRow(childRow).float32 * 16.0'f32 + 24.0'f32
+      expectedFrame = rect(
+        indent,
+        0.0'f32,
+        outlineView.outlineColumn().width() - indent - 6.0'f32,
+        28.0'f32,
+      )
+    check window.fieldEditor().frame().rectsClose(expectedFrame)
+    check root.countRenderedText("Child") == 1
