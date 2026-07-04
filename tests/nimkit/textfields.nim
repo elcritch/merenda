@@ -847,6 +847,42 @@ suite "nimkit text fields":
     check not field.isFocused
     check window.firstResponder != window.fieldEditor()
 
+  test "return action can refocus text field and keep caret blinking":
+    let
+      window = newWindow("Text return refocus", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      action = actionSelector("textFieldReturnRefocusAction")
+
+    var actionCount = 0
+
+    proc onReturn(sender: DynamicAgent) =
+      check sender == DynamicAgent(field)
+      inc actionCount
+      field.text = ""
+      discard window.makeFirstResponder(field)
+
+    field.target = newActionTarget(action, onReturn)
+    field.action = action
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    let editor = window.fieldEditor()
+    check actionCount == 1
+    check field.isEditing
+    check field.currentEditor == editor
+    check window.firstResponder == editor
+    check window.fieldEditorClient() == field
+    check editor.superview == field
+    check editor.stringValue == ""
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+
+    check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
+    check not editor.insertionPointVisible
+
   test "validateEditing syncs field editor text without ending editing":
     let
       window = newWindow("Validate editing", frame = initRect(0, 0, 240, 120))

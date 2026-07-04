@@ -358,7 +358,8 @@ protocol DefaultTextFieldFieldEditorClient of FieldEditorClient:
           discard ownerWindow.makeFirstResponder(nil)
     of temReturn:
       discard textField.sendAction()
-      if not ownerWindow.isNil and ownerWindow.firstResponder() == editor:
+      if not ownerWindow.isNil and ownerWindow.firstResponder() == editor and
+          editor.client().isNil:
         discard ownerWindow.makeFirstResponder(nil)
     of temNone:
       if textField.textFieldCell().sendsActionOnEndEditing():

@@ -613,9 +613,9 @@ proc installPeachyReferencePass(theme: var Theme) =
     112'u8,
   )
   theme["button.fill.highlighted"] = linear(
-    initColor(0.52, 0.27, 0.40, 0.74),
-    initColor(0.40, 0.25, 0.36, 0.62),
-    initColor(0.72, 0.40, 0.28, 0.42),
+    initColor(0.42, 0.22, 0.34, 0.78),
+    initColor(0.32, 0.22, 0.32, 0.68),
+    initColor(0.58, 0.32, 0.24, 0.48),
     fgaY,
     112'u8,
   )
@@ -680,7 +680,7 @@ proc installPeachyReferencePass(theme: var Theme) =
   theme["tab.border.color.selected"] = initColor(1.0, 0.78, 0.46, 0.94)
 
   theme[srButton, StyleBorderWidth] = 1.25
-  theme[srButton, StyleTextHighlightColor] = initColor(1.0, 0.76, 0.52, 0.16)
+  theme[srButton, StyleTextHighlightColor] = initColor(0.38, 0.18, 0.14, 0.20)
   theme[srButton, StyleTextShadowColor] = initColor(0.0, 0.0, 0.0, 0.34)
   theme[srTextField, StyleBorderWidth] = 1.25
   theme[srComboBox, StyleBorderWidth] = 1.25

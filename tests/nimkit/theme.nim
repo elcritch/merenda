@@ -482,6 +482,19 @@ suite "nimkit theme":
     check comboBoxItemStyle.text.color == initColor(1.0, 1.0, 1.0, 1.0)
     check comboBoxItemStyle.minSize == initSize(0.0, 22.0)
 
+  test "peachy highlighted buttons keep contrast with peach text":
+    let
+      theme = initPeachyTheme()
+      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
+      highlightedStyle =
+        theme.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
+
+    check highlightedStyle.box.fill.centerColor().brightness <
+      buttonStyle.text.color.brightness
+    check highlightedStyle.textHighlightColor.brightness <
+      highlightedStyle.text.color.brightness
+    check highlightedStyle.textHighlightColor.a <= 0.20'f32
+
   test "banner theme exposes generated banner palette as an opt-in theme":
     let
       theme = initBannerTheme()
