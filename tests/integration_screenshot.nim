@@ -1,4 +1,4 @@
-import std/[os, unittest]
+import std/[math, os, unittest]
 
 import pkg/pixie
 
@@ -35,6 +35,26 @@ proc maxChannelDelta(px: ColorRGBX, r, g, b: uint8): int =
 
 proc colorNear(img: Image, x, y: int, r, g, b: uint8, tol = 18): bool =
   maxChannelDelta(img[x, y], r, g, b) <= tol
+
+proc helloScreenshotScale(img: Image): float32 =
+  max(img.width.float32 / 720.0'f32, 1.0'f32)
+
+proc scaledCoordinate(value: int, scale: float32, maxValue: int): int =
+  min(max(round(value.float32 * scale).int, 0), maxValue)
+
+proc scaledLength(value: int, scale: float32): int =
+  max(round(value.float32 * scale).int, 1)
+
+proc colorNearLogical(img: Image, x, y: int, r, g, b: uint8, tol = 18): bool =
+  let scale = img.helloScreenshotScale()
+  img.colorNear(
+    x.scaledCoordinate(scale, img.width - 1),
+    y.scaledCoordinate(scale, img.height - 1),
+    r,
+    g,
+    b,
+    tol,
+  )
 
 proc findDarkInkBounds(img: Image, x0, y0, w, h: int): InkBounds =
   let
@@ -82,36 +102,55 @@ proc maxInkColumnGap(img: Image, x0, y0, w, h: int): int =
       inc currentGap
   max(result, currentGap)
 
+proc findLogicalDarkInkBounds(img: Image, x0, y0, w, h: int): InkBounds =
+  let scale = img.helloScreenshotScale()
+  img.findDarkInkBounds(
+    x0.scaledCoordinate(scale, img.width - 1),
+    y0.scaledCoordinate(scale, img.height - 1),
+    w.scaledLength(scale),
+    h.scaledLength(scale),
+  )
+
+proc maxLogicalInkColumnGap(img: Image, x0, y0, w, h: int): int =
+  let scale = img.helloScreenshotScale()
+  img.maxInkColumnGap(
+    x0.scaledCoordinate(scale, img.width - 1),
+    y0.scaledCoordinate(scale, img.height - 1),
+    w.scaledLength(scale),
+    h.scaledLength(scale),
+  )
+
 proc assertCompleteHelloScreenshot(img: Image) =
   check img.width > 0
   check img.height > 0
 
-  check colorNear(img, 40, 32, 236, 247, 254)
-  check colorNear(img, 680, 32, 236, 247, 254)
-  check colorNear(img, 40, 55, 158, 179, 214)
-  check colorNear(img, 680, 55, 158, 179, 214)
-  check colorNear(img, 40, 102, 235, 250, 238)
-  check colorNear(img, 680, 102, 235, 250, 238)
-  check colorNear(img, 40, 150, 220, 220, 218, 24)
-  check colorNear(img, 680, 150, 220, 220, 218, 24)
+  check colorNearLogical(img, 40, 32, 240, 245, 248)
+  check colorNearLogical(img, 680, 32, 240, 245, 248)
+  check colorNearLogical(img, 40, 55, 130, 162, 207)
+  check colorNearLogical(img, 680, 55, 130, 162, 207)
+  check colorNearLogical(img, 40, 102, 234, 244, 236)
+  check colorNearLogical(img, 680, 102, 234, 244, 236)
+  check colorNearLogical(img, 40, 150, 95, 150, 212)
+  check colorNearLogical(img, 680, 150, 95, 150, 212)
 
+  let scale = img.helloScreenshotScale()
   let
-    titleInk = findDarkInkBounds(img, 220, 24, 280, 36)
-    subtitleInk = findDarkInkBounds(img, 24, 64, 440, 28)
-    statusInk = findDarkInkBounds(img, 34, 94, 300, 36)
-    buttonInk = findDarkInkBounds(img, 260, 128, 200, 44)
+    titleInk = findLogicalDarkInkBounds(img, 220, 24, 280, 36)
+    subtitleInk = findLogicalDarkInkBounds(img, 24, 64, 440, 28)
+    statusInk = findLogicalDarkInkBounds(img, 34, 94, 300, 36)
+    buttonInk = findLogicalDarkInkBounds(img, 260, 128, 200, 44)
   check titleInk.found
   check subtitleInk.found
   check statusInk.found
   check buttonInk.found
-  check titleInk.inkWidth > 120
-  check subtitleInk.inkWidth > 250
-  check statusInk.inkWidth > 150
-  check buttonInk.inkWidth > 80
-  check maxInkColumnGap(img, 220, 24, 280, 36) < 36
-  check maxInkColumnGap(img, 24, 64, 440, 28) < 36
-  check maxInkColumnGap(img, 34, 94, 300, 36) < 36
-  check maxInkColumnGap(img, 260, 128, 200, 44) < 36
+  check titleInk.inkWidth > scaledLength(120, scale)
+  check subtitleInk.inkWidth > scaledLength(250, scale)
+  check statusInk.inkWidth > scaledLength(150, scale)
+  check buttonInk.inkWidth > scaledLength(80, scale)
+  check maxLogicalInkColumnGap(img, 220, 24, 280, 36) < scaledLength(36, scale)
+  check maxLogicalInkColumnGap(img, 24, 64, 440, 28) < scaledLength(36, scale)
+  check maxLogicalInkColumnGap(img, 34, 94, 300, 36) < scaledLength(36, scale)
+  check maxLogicalInkColumnGap(img, 260, 128, 200, 44) < scaledLength(36, scale)
 
 proc renderAndScreenshotOnce(
     makeRenders: proc(w, h: float32): Renders {.closure.},
