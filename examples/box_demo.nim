@@ -144,7 +144,7 @@ let
     .resolvedIntrinsicContentSize()
     .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height + 50
   window = newWindow(
-    "NimKit Box Demo", frame = initRect(150, 130, DemoWindowWidth, minimumWindowHeight)
+    "NimKit Box Demo", frame = rect(150, 130, DemoWindowWidth, minimumWindowHeight)
   )
 
 window.minSize = initSize(DemoWindowWidth, minimumWindowHeight)

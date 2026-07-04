@@ -387,13 +387,13 @@ proc initTextContainer*(
   )
 
 func frame*(container: TextContainer): Rect =
-  initRect(container.origin, container.size)
+  rect(container.origin, container.size)
 
 func layoutRect*(container: TextContainer): Rect =
   let
     rect = container.frame().inset(container.insets)
     padding = max(container.lineFragmentPadding, 0.0'f32)
-  initRect(
+  rect(
     rect.origin.x + padding,
     rect.origin.y,
     max(rect.size.width - padding * 2.0'f32, 0.0'f32),
@@ -411,20 +411,20 @@ func effectiveLineFragmentRect*(container: TextContainer, proposed: Rect): Rect 
       discard
     elif hit.origin.x <= result.origin.x:
       let shift = min(hit.size.width, result.size.width)
-      result.origin.x += shift
-      result.size.width = max(result.size.width - shift, 0.0'f32)
+      result.x += shift
+      result.w = max(result.w - shift, 0.0'f32)
     elif hit.maxX >= result.maxX:
-      result.size.width = max(hit.origin.x - result.origin.x, 0.0'f32)
+      result.w = max(hit.origin.x - result.origin.x, 0.0'f32)
     else:
       let
         leftWidth = max(hit.origin.x - result.origin.x, 0.0'f32)
         rightOrigin = hit.maxX
         rightWidth = max(result.maxX - rightOrigin, 0.0'f32)
       if rightWidth > leftWidth:
-        result.origin.x = rightOrigin
-        result.size.width = rightWidth
+        result.x = rightOrigin
+        result.w = rightWidth
       else:
-        result.size.width = leftWidth
+        result.w = leftWidth
 
 func effectiveContainers(
     primary: TextContainer, containers: openArray[TextContainer]
@@ -458,7 +458,7 @@ func unionRects(rects: openArray[Rect]): Rect =
 
 func virtualLayoutRect(containers: openArray[TextContainer]): Rect =
   if containers.len == 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   if containers.len == 1:
     return containers[0].layoutRect()
 
@@ -469,11 +469,11 @@ func virtualLayoutRect(containers: openArray[TextContainer]): Rect =
     let rect = container.layoutRect()
     width = max(width, rect.size.width)
     height += max(rect.size.height, 0.0'f32)
-  initRect(0.0, 0.0, width, height)
+  rect(0.0, 0.0, width, height)
 
 func virtualContainerRect(containers: openArray[TextContainer], index: int): Rect =
   if containers.len == 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let clamped = max(0, min(index, containers.len - 1))
   if containers.len == 1:
     return containers[0].layoutRect()
@@ -482,9 +482,9 @@ func virtualContainerRect(containers: openArray[TextContainer], index: int): Rec
   for containerIndex, container in containers:
     let rect = container.layoutRect()
     if containerIndex == clamped:
-      return initRect(0.0, y, rect.size.width, rect.size.height)
+      return rect(0.0, y, rect.size.width, rect.size.height)
     y += max(rect.size.height, 0.0'f32)
-  initRect(0.0, y, 0.0, 0.0)
+  rect(0.0, y, 0.0, 0.0)
 
 func containerIndexForVirtualY(
     containers: openArray[TextContainer], y: float32
@@ -515,7 +515,7 @@ func actualRectForVirtualRect(containers: openArray[TextContainer], rect: Rect):
     index = containerIndexForVirtualRect(containers, rect).toInt
     virtualRect = containers.virtualContainerRect(index)
     actualRect = containers[index].layoutRect()
-  initRect(
+  rect(
     actualRect.origin.x + rect.origin.x - virtualRect.origin.x,
     actualRect.origin.y + rect.origin.y - virtualRect.origin.y,
     rect.size.width,
@@ -877,7 +877,7 @@ func sourceSlice(range: TextRange): Slice[int] =
   int(range.location) .. range.maxIndex - 1
 
 func toContainerRect(rect: auto, layoutRect: Rect): Rect =
-  initRect(layoutRect.origin.x + rect.x, layoutRect.origin.y + rect.y, rect.w, rect.h)
+  rect(layoutRect.origin.x + rect.x, layoutRect.origin.y + rect.y, rect.w, rect.h)
 
 func toTextRange(source: GlyphSourceRange): TextRange =
   initTextRange(source.runeStart, max(source.runeEnd - source.runeStart, 0))
@@ -1200,7 +1200,7 @@ proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
 
 proc layoutBounds*(manager: TextLayoutManager): Rect =
   if manager.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   manager.updateLayout()
   manager.xSnapshot.containerRect
 
@@ -1226,7 +1226,7 @@ proc lineFragment(
     hardBreak = containsHardBreak(sourceRunes, textRange)
 
   var
-    virtualUsedRect = initRect(0.0, 0.0, 0.0, 0.0)
+    virtualUsedRect = rect(0.0, 0.0, 0.0, 0.0)
     hasUsedRect = false
     lineHeight = 0.0'f32
     baselineOffset = 0.0'f32
@@ -1255,7 +1255,7 @@ proc lineFragment(
     containerIndex = containers.containerIndexForVirtualY(lineTop)
     container = containers[containerIndex.toInt]
     virtualContainer = containers.virtualContainerRect(containerIndex.toInt)
-    virtualFragmentRect = initRect(
+    virtualFragmentRect = rect(
       virtualContainer.origin.x,
       lineTop,
       virtualContainer.size.width,
@@ -1266,7 +1266,7 @@ proc lineFragment(
       if hasUsedRect:
         manager.actualRectForVirtualRect(virtualUsedRect)
       else:
-        initRect(fragmentRect.origin, initSize(0.0, fragmentRect.size.height))
+        rect(fragmentRect.origin, initSize(0.0, fragmentRect.size.height))
     wrapped = container.wrapsText and not hardBreak and visualIndex < lineCount - 1
   let
     ascent = min(max(baselineOffset, 0.0'f32), fragmentRect.size.height)
@@ -1299,7 +1299,7 @@ proc emptyLineFragment(
     lineHeight = max(caret.size.height, defaultFontSize())
     containerIndex = containers.containerIndexForVirtualY(caret.origin.y)
     virtualContainer = containers.virtualContainerRect(containerIndex.toInt)
-    virtualFragmentRect = initRect(
+    virtualFragmentRect = rect(
       virtualContainer.origin.x, caret.origin.y, virtualContainer.size.width, lineHeight
     )
     fragmentRect = manager.actualRectForVirtualRect(virtualFragmentRect)
@@ -1316,7 +1316,7 @@ proc emptyLineFragment(
     glyphRange: initGlyphRange(0, 0),
     textRange: initTextRange(sourceIndex, 0),
     fragmentRect: fragmentRect,
-    usedRect: initRect(fragmentRect.origin, initSize(0.0, lineHeight)),
+    usedRect: rect(fragmentRect.origin, initSize(0.0, lineHeight)),
     baseline: fragmentRect.origin.y + ascent,
     ascent: ascent,
     descent: max(lineHeight - ascent, 0.0'f32),
@@ -1408,7 +1408,7 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
         hasUsedRect = true
 
   if not hasUsedRect:
-    result.usedRect = initRect(result.containerRect.origin, initSize(0.0, 0.0))
+    result.usedRect = rect(result.containerRect.origin, initSize(0.0, 0.0))
 
   let layoutContentSize = manager.xLayout.layoutContentSize()
   var
@@ -1817,13 +1817,13 @@ proc lineRangeForTextRange*(
 
 proc defaultCaretRect(manager: TextLayoutManager, insertionPoint: int): Rect =
   if manager.isNil:
-    return initRect(0.0, 0.0, 1.0, defaultFontSize())
+    return rect(0.0, 0.0, 1.0, defaultFontSize())
   manager.updateLayout()
   manager.actualRectForVirtualRect(manager.virtualCaretRect(insertionPoint))
 
 proc caretRect*(manager: TextLayoutManager, insertionPoint: int): Rect =
   if manager.isNil:
-    initRect(0.0, 0.0, 1.0, defaultFontSize())
+    rect(0.0, 0.0, 1.0, defaultFontSize())
   else:
     manager.lmCaretRect(insertionPoint)
 
@@ -1839,7 +1839,7 @@ proc caretPositions*(
     containers = manager.effectiveContainers()
   for caret in manager.xLayout.caretPositionsFor(index):
     let
-      virtualRect = initRect(
+      virtualRect = rect(
         manager.xLayoutRect.origin.x + caret.rect.x,
         manager.xLayoutRect.origin.y + caret.rect.y,
         caret.rect.w,
@@ -1888,7 +1888,7 @@ proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
 
 proc firstRectForTextRange*(manager: TextLayoutManager, range: TextRange): Rect =
   if manager.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   if range.length == 0:
     return manager.caretRect(int(range.location))
   let rects = manager.selectionRects(range)
@@ -2011,17 +2011,17 @@ proc removeTemporaryAttributes*(manager: TextLayoutManager, range: TextRange) =
 
 proc characterRect*(manager: TextLayoutManager, index: int): Rect =
   if manager.isNil or manager.xTextStorage.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let total = manager.xTextStorage.len
   if index < 0 or index >= total:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   result = manager.textRangeBounds(initTextRange(index, 1))
   if result.isEmpty:
     result = manager.caretRect(index)
 
 proc boundsForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Rect =
   if manager.isNil or range.length == 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   manager.updateLayout()
   let
     count = manager.xLayout.glyphCount()
@@ -2075,11 +2075,11 @@ proc lineFragmentRectForGlyphIndex*(
   if fragment.isSome:
     fragment.get().fragmentRect
   else:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
 
 proc lineFragmentRectForGlyphIndex*(manager: TextLayoutManager, index: int): Rect =
   if index < 0:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     manager.lineFragmentRectForGlyphIndex(initGlyphIndex(index))
 
@@ -2090,13 +2090,13 @@ proc usedRectForLineFragmentAtGlyphIndex*(
   if fragment.isSome:
     fragment.get().usedRect
   else:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
 
 proc usedRectForLineFragmentAtGlyphIndex*(
     manager: TextLayoutManager, index: int
 ): Rect =
   if index < 0:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     manager.usedRectForLineFragmentAtGlyphIndex(initGlyphIndex(index))
 
@@ -2198,7 +2198,7 @@ proc usedRectForTextContainer*(
     manager: TextLayoutManager, index: TextContainerIndex
 ): Rect =
   if manager.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   for fragment in manager.lineFragments():
     if fragment.containerIndex == index:
       if result.isEmpty:
@@ -2252,13 +2252,13 @@ proc lineForIndex*(manager: TextLayoutManager, index: int): int =
 
 proc lineBounds*(manager: TextLayoutManager, line: int): Rect =
   if manager.isNil or manager.xTextStorage.isNil or line < 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let range = manager.lineRange(line)
   if range.length > 0:
     return manager.textRangeBounds(range)
   if line == manager.lineForIndex(int(range.location)):
     return manager.caretRect(int(range.location))
-  initRect(0.0, 0.0, 0.0, 0.0)
+  rect(0.0, 0.0, 0.0, 0.0)
 
 proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   if manager.isNil or manager.xTextStorage.isNil:

@@ -47,7 +47,7 @@ proc newComboDelegate(): ComboDelegate =
 
 suite "nimkit comboboxes":
   test "combo box stores local items and syncs selected string":
-    let combo = newComboBox(["Small", "Medium"], frame = initRect(0, 0, 140, 26))
+    let combo = newComboBox(["Small", "Medium"], frame = rect(0, 0, 140, 26))
 
     check combo.conformsTo(ComboBoxProtocol)
     check combo.numberOfItems == 2
@@ -82,7 +82,7 @@ suite "nimkit comboboxes":
 
   test "combo box resolves items from data source and emits activation signal":
     let
-      combo = newComboBox(frame = initRect(0, 0, 140, 26))
+      combo = newComboBox(frame = rect(0, 0, 140, 26))
       source = newComboDataSource(["Red", "Green", "Blue"])
       delegate = newComboDelegate()
       action = actionSelector("comboSelectionChanged")
@@ -115,7 +115,7 @@ suite "nimkit comboboxes":
     check actionSender == DynamicAgent(combo)
 
   test "combo box stores rich options and preserves selected identity":
-    let combo = newComboBox(frame = initRect(0, 0, 140, 26))
+    let combo = newComboBox(frame = rect(0, 0, 140, 26))
 
     combo.addOption(initComboBoxOption("low", "Low", toObj(1)))
     combo.addOption(initComboBoxOption("hidden", "Hidden", toObj(2), hidden = true))
@@ -157,9 +157,9 @@ suite "nimkit comboboxes":
 
   test "combo option list adapter filters and type-ahead uses search text":
     let
-      window = newWindow("Combo options", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      combo = newComboBox(frame = initRect(10, 10, 140, 24))
+      window = newWindow("Combo options", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      combo = newComboBox(frame = rect(10, 10, 140, 24))
       options = newComboBoxOptionList(
         [
           initComboBoxOption("apple", "Apple", searchText = "fruit red"),
@@ -190,9 +190,9 @@ suite "nimkit comboboxes":
 
   test "disabled and separator combo options are not activated":
     let
-      window = newWindow("Combo disabled options", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      combo = newComboBox(frame = initRect(10, 10, 140, 24))
+      window = newWindow("Combo disabled options", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      combo = newComboBox(frame = rect(10, 10, 140, 24))
 
     combo.addOption(initComboBoxOption("one", "One"))
     combo.addOption(initComboBoxOption("separator", separator = true))
@@ -218,9 +218,9 @@ suite "nimkit comboboxes":
 
   test "mouse opens popup and selects clicked item":
     let
-      window = newWindow("Combo mouse", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
+      window = newWindow("Combo mouse", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      combo = newComboBox(["Low", "Medium", "High"], frame = rect(10, 10, 120, 24))
 
     combo.itemHeight = 20.0
     root.addSubview(combo)
@@ -242,9 +242,9 @@ suite "nimkit comboboxes":
 
   test "popup presentation can force inline or window rendering":
     let
-      window = newWindow("Combo popup presentation", frame = initRect(0, 0, 220, 150))
-      root = newView(frame = initRect(0, 0, 220, 150))
-      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 20, 120, 26))
+      window = newWindow("Combo popup presentation", frame = rect(0, 0, 220, 150))
+      root = newView(frame = rect(0, 0, 220, 150))
+      combo = newComboBox(["Low", "Medium", "High"], frame = rect(10, 20, 120, 26))
 
     root.addSubview(combo)
     window.setContentView(root)
@@ -273,11 +273,10 @@ suite "nimkit comboboxes":
 
   test "open popup wins hit testing over overlapping sibling controls":
     let
-      window = newWindow("Combo popup", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
-      priority =
-        newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 140, 24))
-      color = newComboBox(["Red", "Green", "Blue"], frame = initRect(10, 48, 140, 24))
+      window = newWindow("Combo popup", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
+      priority = newComboBox(["Low", "Medium", "High"], frame = rect(10, 10, 140, 24))
+      color = newComboBox(["Red", "Green", "Blue"], frame = rect(10, 48, 140, 24))
 
     priority.itemHeight = 20.0
     color.itemHeight = 20.0
@@ -304,9 +303,9 @@ suite "nimkit comboboxes":
 
   test "keyboard opens navigates confirms and cancels popup":
     let
-      window = newWindow("Combo keys", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
+      window = newWindow("Combo keys", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      combo = newComboBox(["Low", "Medium", "High"], frame = rect(10, 10, 120, 24))
       action = actionSelector("comboKeyboardChanged")
 
     var actionCount = 0
@@ -343,9 +342,9 @@ suite "nimkit comboboxes":
 
   test "inline popup session handles escape and outside click dismissal":
     let
-      window = newWindow("Combo transient", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      combo = newComboBox(["Low", "Medium", "High"], frame = initRect(10, 10, 120, 24))
+      window = newWindow("Combo transient", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      combo = newComboBox(["Low", "Medium", "High"], frame = rect(10, 10, 120, 24))
 
     combo.popupPresentation = ppInline
     root.addSubview(combo)
@@ -374,11 +373,11 @@ suite "nimkit comboboxes":
 
   test "keyboard navigation scrolls popup rows into view":
     let
-      window = newWindow("Combo scroll keys", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
+      window = newWindow("Combo scroll keys", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
       combo = newComboBox(
         ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
-        frame = initRect(10, 10, 120, 24),
+        frame = rect(10, 10, 120, 24),
       )
 
     combo.popupPresentation = ppInline
@@ -422,11 +421,11 @@ suite "nimkit comboboxes":
 
   test "popup page home and end keys move highlight through row windows":
     let
-      window = newWindow("Combo page keys", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
+      window = newWindow("Combo page keys", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
       combo = newComboBox(
         ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"],
-        frame = initRect(10, 10, 120, 24),
+        frame = rect(10, 10, 120, 24),
       )
 
     combo.popupPresentation = ppInline
@@ -473,10 +472,10 @@ suite "nimkit comboboxes":
 
   test "popup border hover keeps keyboard highlight without selection signal noise":
     let
-      window = newWindow("Combo hover border", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
+      window = newWindow("Combo hover border", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
       combo =
-        newComboBox(["One", "Two", "Three", "Four"], frame = initRect(10, 10, 120, 24))
+        newComboBox(["One", "Two", "Three", "Four"], frame = rect(10, 10, 120, 24))
       delegate = newComboDelegate()
 
     combo.popupPresentation = ppInline
@@ -504,11 +503,10 @@ suite "nimkit comboboxes":
 
   test "mouse wheel scrolls open inline popup viewport":
     let
-      window = newWindow("Combo wheel", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
+      window = newWindow("Combo wheel", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
       combo = newComboBox(
-        ["One", "Two", "Three", "Four", "Five", "Six"],
-        frame = initRect(10, 10, 120, 24),
+        ["One", "Two", "Three", "Four", "Five", "Six"], frame = rect(10, 10, 120, 24)
       )
 
     combo.popupPresentation = ppInline

@@ -40,9 +40,9 @@ suite "nimkit mono text views":
 
   test "editor handles cursor movement insertion and deletion":
     let
-      window = newWindow("Mono editor", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      editor = newMonoTextEditor("abc\ndef", frame = initRect(0, 0, 200, 90))
+      window = newWindow("Mono editor", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      editor = newMonoTextEditor("abc\ndef", frame = rect(0, 0, 200, 90))
 
     root.addSubview(editor)
     window.setContentView(root)
@@ -66,9 +66,9 @@ suite "nimkit mono text views":
 
   test "raw event forwarding can consume key and mouse input":
     let
-      window = newWindow("Mono raw", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      view = newMonoTextEditor("abcdef", frame = initRect(0, 0, 200, 90))
+      window = newWindow("Mono raw", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      view = newMonoTextEditor("abcdef", frame = rect(0, 0, 200, 90))
 
     var forwarded: seq[MonoTextRawEvent]
     view.rawEventHandler = proc(event: MonoTextRawEvent): bool =
@@ -95,9 +95,9 @@ suite "nimkit mono text views":
 
   test "raw event policy controls forwarding and capture separately":
     let
-      window = newWindow("Mono raw policy", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      view = newMonoTextEditor("abcdef", frame = initRect(0, 0, 200, 90))
+      window = newWindow("Mono raw policy", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      view = newMonoTextEditor("abcdef", frame = rect(0, 0, 200, 90))
 
     var forwarded: seq[MonoTextRawEventKind]
     view.rawEventPolicy = initMonoTextRawEventPolicy(
@@ -127,14 +127,12 @@ suite "nimkit mono text views":
 
   test "raw event policy checkboxes drive synthesized user input":
     let
-      window = newWindow("Mono policy controls", frame = initRect(0, 0, 420, 180))
-      root = newView(frame = initRect(0, 0, 420, 180))
-      forwardKeys = newCheckBox("Forward key events", frame = initRect(10, 10, 140, 28))
-      captureKeys =
-        newCheckBox("Capture key events", frame = initRect(155, 10, 140, 28))
-      forwardMouse =
-        newCheckBox("Forward mouse events", frame = initRect(300, 10, 110, 28))
-      editor = newMonoTextEditor("abc", frame = initRect(10, 55, 240, 90))
+      window = newWindow("Mono policy controls", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      forwardKeys = newCheckBox("Forward key events", frame = rect(10, 10, 140, 28))
+      captureKeys = newCheckBox("Capture key events", frame = rect(155, 10, 140, 28))
+      forwardMouse = newCheckBox("Forward mouse events", frame = rect(300, 10, 110, 28))
+      editor = newMonoTextEditor("abc", frame = rect(10, 55, 240, 90))
       policyAction = actionSelector("monoTextPolicyCheckboxChanged")
 
     proc applyPolicy() =
@@ -215,10 +213,10 @@ suite "nimkit mono text views":
 
   test "captured raw tab key bypasses key view navigation":
     let
-      window = newWindow("Mono raw tab", frame = initRect(0, 0, 260, 120))
-      root = newView(frame = initRect(0, 0, 260, 120))
-      view = newMonoTextEditor("abcdef", frame = initRect(0, 0, 160, 80))
-      next = newButton("Next", frame = initRect(170, 0, 70, 28))
+      window = newWindow("Mono raw tab", frame = rect(0, 0, 260, 120))
+      root = newView(frame = rect(0, 0, 260, 120))
+      view = newMonoTextEditor("abcdef", frame = rect(0, 0, 160, 80))
+      next = newButton("Next", frame = rect(170, 0, 70, 28))
 
     var forwarded: seq[string]
     view.rawEventPolicy = initMonoTextRawEventPolicy(
@@ -242,7 +240,7 @@ suite "nimkit mono text views":
     let
       surfaceFill = color(0.12, 0.16, 0.20, 1.0)
       surfaceBorder = color(0.70, 0.80, 0.90, 1.0)
-      view = newMonoTextViewer("theme", frame = initRect(0, 0, 220, 80))
+      view = newMonoTextViewer("theme", frame = rect(0, 0, 220, 80))
     var theme = initTheme()
     theme[srMonoTextView, StyleFill] = fill(surfaceFill)
     theme[srMonoTextView, StyleBorderColor] = surfaceBorder
@@ -268,9 +266,9 @@ suite "nimkit mono text views":
     for index in 0 ..< 80:
       lines.add "line" & $index
 
-    let view = newMonoTextViewer(lines.join("\n"), frame = initRect(0, 0, 260, 90))
+    let view = newMonoTextViewer(lines.join("\n"), frame = rect(0, 0, 260, 90))
     let metrics = view.monoTextMetrics()
-    view.bounds = initRect(0, view.padding + metrics.lineHeight * 30.0'f32, 260, 90)
+    view.bounds = rect(0, view.padding + metrics.lineHeight * 30.0'f32, 260, 90)
 
     let list = buildRenders(view)[DefaultDrawLevel]
 

@@ -13,7 +13,7 @@ proc stateName(state: ButtonState): string =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Controls Showcase", frame = initRect(140, 140, 760, 500))
+  window = newWindow("Nimkit Controls Showcase", frame = rect(140, 140, 760, 500))
   root = newView()
 
   layout = newStackView(laVertical)

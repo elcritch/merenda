@@ -232,10 +232,10 @@ proc drawFlatButtonExtras(
       lightMaskContent = true,
       cornerRadii = innerRadii,
     )
-    topGloss = initRect(
+    topGloss = rect(
       inner.origin.x, inner.origin.y, inner.size.width, inner.size.height * 0.30'f32
     )
-    lowerWash = initRect(
+    lowerWash = rect(
       inner.origin.x,
       inner.origin.y + inner.size.height * 0.46'f32,
       inner.size.width,
@@ -283,7 +283,7 @@ proc drawFlatChoiceExtras(
       flatRadioInnerShadows(chrome),
       lightMaskContent = true,
     )
-    let innerGloss = initRect(
+    let innerGloss = rect(
       inner.origin.x + 2.0'f32,
       inner.origin.y + 1.0'f32,
       max(inner.size.width - 4.0'f32, 0.0'f32),
@@ -304,7 +304,7 @@ proc drawFlatChoiceExtras(
   let
     inset = if chrome.isSelected: 1.2'f32 else: 1.4'f32
     glossRadii = extras.cornerRadii.inset(inset)
-    gloss = initRect(
+    gloss = rect(
       extras.rect.origin.x + inset,
       extras.rect.origin.y + inset,
       max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
@@ -327,13 +327,13 @@ proc drawFlatComboFaceExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
   let
-    gloss = initRect(
+    gloss = rect(
       extras.rect.origin.x + 2.0'f32,
       extras.rect.origin.y + 1.0'f32,
       max(extras.rect.size.width - 4.0'f32, 0.0'f32),
       max(extras.rect.size.height * 0.22'f32, 1.0'f32),
     )
-    lowerWash = initRect(
+    lowerWash = rect(
       extras.rect.origin.x,
       extras.rect.origin.y + extras.rect.size.height * 0.52'f32,
       extras.rect.size.width,
@@ -360,7 +360,7 @@ proc drawFlatComboFaceExtras(
 proc drawFlatComboArrowExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
-  let gloss = initRect(
+  let gloss = rect(
     extras.rect.origin.x + 2.0'f32,
     extras.rect.origin.y + 1.0'f32,
     max(extras.rect.size.width - 4.0'f32, 0.0'f32),
@@ -379,7 +379,7 @@ proc drawFlatComboArrowExtras(
 proc drawFlatSimpleHighlight(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
-  let topHighlight = initRect(
+  let topHighlight = rect(
     extras.rect.origin.x + 1.0'f32,
     extras.rect.origin.y + 1.0'f32,
     max(extras.rect.size.width - 2.0'f32, 0.0'f32),

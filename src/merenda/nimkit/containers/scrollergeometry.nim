@@ -65,7 +65,7 @@ func scrollerTrackRect*(
     safeInset = max(inset, 0.0'f32)
     safeThickness = max(thickness, 0.0'f32)
   if container.isEmpty or safeThickness <= 0.0'f32:
-    return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
+    return rect(container.origin.x, container.origin.y, 0.0, 0.0)
 
   case axis
   of laHorizontal:
@@ -74,8 +74,8 @@ func scrollerTrackRect*(
       height =
         min(safeThickness, max(container.size.height - safeInset * 2.0'f32, 0.0'f32))
     if width <= 0.0'f32 or height <= 0.0'f32:
-      return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
-    initRect(
+      return rect(container.origin.x, container.origin.y, 0.0, 0.0)
+    rect(
       container.origin.x + safeInset, container.maxY - safeInset - height, width, height
     )
   of laVertical:
@@ -84,8 +84,8 @@ func scrollerTrackRect*(
         min(safeThickness, max(container.size.width - safeInset * 2.0'f32, 0.0'f32))
       height = max(container.size.height - safeInset * 2.0'f32, 0.0'f32)
     if width <= 0.0'f32 or height <= 0.0'f32:
-      return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
-    initRect(
+      return rect(container.origin.x, container.origin.y, 0.0, 0.0)
+    rect(
       container.maxX - safeInset - width, container.origin.y + safeInset, width, height
     )
 
@@ -108,9 +108,9 @@ func scrollerKnobRect*(track: Rect, axis: LayoutAxis, viewport: ScrollViewport):
           max(trackExtent - length, 0.0'f32)
   case axis
   of laHorizontal:
-    initRect(track.origin.x + offset, track.origin.y, length, track.size.height)
+    rect(track.origin.x + offset, track.origin.y, length, track.size.height)
   of laVertical:
-    initRect(track.origin.x, track.origin.y + offset, track.size.width, length)
+    rect(track.origin.x, track.origin.y + offset, track.size.width, length)
 
 func contentOffsetForScrollerKnobOrigin*(
     track: Rect, knob: Rect, axis: LayoutAxis, maxOffset, knobOrigin: float32

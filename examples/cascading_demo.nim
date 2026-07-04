@@ -240,7 +240,7 @@ proc newCascadingDemoController(): CascadingDemoController =
 
 let
   app = sharedApplication()
-  window = newWindow("NimKit CascadingView Demo", frame = initRect(140, 120, 760, 420))
+  window = newWindow("NimKit CascadingView Demo", frame = rect(140, 120, 760, 420))
   root = newView()
   split = newSplitView(laHorizontal)
   detailPane = newStackView(laVertical)

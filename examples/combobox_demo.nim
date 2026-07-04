@@ -4,7 +4,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit ComboBox Demo", frame = initRect(160, 160, 420, 240))
+  window = newWindow("Nimkit ComboBox Demo", frame = rect(160, 160, 420, 240))
   root = newView()
   layout = newStackView(laVertical)
   form = newFormView()

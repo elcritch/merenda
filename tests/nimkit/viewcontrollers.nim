@@ -18,7 +18,7 @@ var
 protocol LoadingViewControllerProtocol of ViewControllerLoading:
   method makeView(controller: LoadingViewController): View =
     lifecycleEvents.add "makeView"
-    newView("loaded", frame = initRect(0, 0, 120, 80))
+    newView("loaded", frame = rect(0, 0, 120, 80))
 
 protocol CommandViewControllerProtocol of MenuCommandProtocol:
   method complete(controller: CommandViewController, args: ActionArgs) =
@@ -131,8 +131,8 @@ suite "nimkit view controllers":
 
   test "child containment restores responder routing and tears down owned views":
     let
-      parent = newViewController(newView("parent", frame = initRect(0, 0, 200, 120)))
-      child = newViewController(newView("child", frame = initRect(0, 0, 80, 40)))
+      parent = newViewController(newView("parent", frame = rect(0, 0, 200, 120)))
+      child = newViewController(newView("child", frame = rect(0, 0, 80, 40)))
       delegate = ViewControllerDelegateSpy()
 
     lifecycleEvents = @[]
@@ -165,15 +165,15 @@ suite "nimkit view controllers":
   test "window controllers install swap and detach content view controllers":
     let
       app = newApplication()
-      window = newWindow("Content", frame = initRect(0, 0, 240, 160))
+      window = newWindow("Content", frame = rect(0, 0, 240, 160))
       controller = newWindowController(window)
       first = CommandViewController()
-      second = newViewController(newView("second", frame = initRect(0, 0, 160, 100)))
+      second = newViewController(newView("second", frame = rect(0, 0, 160, 100)))
       manager = newUndoManager()
 
     lifecycleEvents = @[]
     commandEvents = @[]
-    first.initViewController(newView("first", frame = initRect(0, 0, 160, 100)))
+    first.initViewController(newView("first", frame = rect(0, 0, 160, 100)))
     discard first.withProtocol(CommandViewControllerProtocol)
     first.undoManager = manager
     controller.viewController = first

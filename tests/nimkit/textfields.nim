@@ -67,7 +67,7 @@ proc renderedText(node: Fig): string =
     result.add(rune)
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
-  nimkitTypes.initRect(
+  nimkitTypes.rect(
     node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
     node.screenBox.h.float32,
   )
@@ -154,7 +154,7 @@ proc renderedOpaqueBackgroundForView(nodes: openArray[Fig], view: View): bool =
 
 suite "nimkit text fields":
   test "text fields default to editable selectable first-responder controls":
-    let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
+    let field = newTextField("abc", frame = rect(0, 0, 120, 24))
 
     check field.isEditable
     check field.isSelectable
@@ -209,8 +209,8 @@ suite "nimkit text fields":
 
   test "multiline labels measure and stack to multiple lines":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      stack = newStackView(laVertical, frame = initRect(0, 0, 220, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      stack = newStackView(laVertical, frame = rect(0, 0, 220, 120))
       single = newStatusLabel("Kind / Owner / Status")
       multi = newStatusLabel("Kind / Owner / Status\nSelected / Trail")
       singleHeight = single.intrinsicContentSize().height
@@ -227,9 +227,9 @@ suite "nimkit text fields":
 
   test "first responder text input replaces the current selection":
     let
-      window = newWindow("Text input", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text input", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abc", frame = rect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -252,9 +252,9 @@ suite "nimkit text fields":
 
   test "field editor keeps caret aligned with passive text field text":
     let
-      window = newWindow("Text alignment", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("Edit me", frame = initRect(10, 10, 140, 30))
+      window = newWindow("Text alignment", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("Edit me", frame = rect(10, 10, 140, 30))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -283,9 +283,9 @@ suite "nimkit text fields":
 
   test "field editor text rect and accessibility geometry do not shift on focus":
     let
-      window = newWindow("Text geometry", frame = initRect(0, 0, 260, 140))
-      root = newView(frame = initRect(0, 0, 260, 140))
-      field = newTextField("Offset text", frame = initRect(14, 18, 168, 34))
+      window = newWindow("Text geometry", frame = rect(0, 0, 260, 140))
+      root = newView(frame = rect(0, 0, 260, 140))
+      field = newTextField("Offset text", frame = rect(14, 18, 168, 34))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -330,9 +330,9 @@ suite "nimkit text fields":
 
   test "field editor exposes text input client geometry and command dispatch":
     let
-      window = newWindow("Field editor input client", frame = initRect(0, 0, 260, 140))
-      root = newView(frame = initRect(0, 0, 260, 140))
-      field = newTextField("abcdef", frame = initRect(14, 18, 168, 34))
+      window = newWindow("Field editor input client", frame = rect(0, 0, 260, 140))
+      root = newView(frame = rect(0, 0, 260, 140))
+      field = newTextField("abcdef", frame = rect(14, 18, 168, 34))
       spy = TextFieldChangeSpy()
 
     field.connect(textDidChange, spy, rememberTextFieldChange)
@@ -376,13 +376,13 @@ suite "nimkit text fields":
 
   test "window-backed field editor renders live text before blur":
     let
-      window = newWindow("Text field render", frame = initRect(0, 0, 420, 220))
-      root = newView(frame = initRect(0, 0, 420, 220))
-      title = newTitleLabel("Text Field", frame = initRect(28, 24, 240, 28))
-      field = newTextField("Edit me", frame = initRect(28, 70, 240, 30))
-      secondField = newTextField("Tab here", frame = initRect(28, 112, 240, 30))
+      window = newWindow("Text field render", frame = rect(0, 0, 420, 220))
+      root = newView(frame = rect(0, 0, 420, 220))
+      title = newTitleLabel("Text Field", frame = rect(28, 24, 240, 28))
+      field = newTextField("Edit me", frame = rect(28, 70, 240, 30))
+      secondField = newTextField("Tab here", frame = rect(28, 112, 240, 30))
       status =
-        newStatusLabel("Values: Edit me / Tab here", frame = initRect(28, 154, 320, 24))
+        newStatusLabel("Values: Edit me / Tab here", frame = rect(28, 154, 320, 24))
 
     root.addSubviews(autoNames(title, field, secondField, status))
     window.setContentView(root)
@@ -402,9 +402,9 @@ suite "nimkit text fields":
 
   test "field editor does not paint an opaque background over text field chrome":
     let
-      window = newWindow("Field editor chrome", frame = initRect(0, 0, 420, 180))
-      root = newView(frame = initRect(0, 0, 420, 180))
-      field = newTextField("Edit me", frame = initRect(28, 44, 240, 30))
+      window = newWindow("Field editor chrome", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      field = newTextField("Edit me", frame = rect(28, 44, 240, 30))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -420,7 +420,7 @@ suite "nimkit text fields":
 
   test "tabbing through field editor keeps constrained showcase layout stretched":
     let
-      window = newWindow("Controls Showcase", frame = initRect(0, 0, 760, 500))
+      window = newWindow("Controls Showcase", frame = rect(0, 0, 760, 500))
       root = newView()
       layout = newStackView(laVertical)
       bodyRow = newStackView(laHorizontal)
@@ -483,7 +483,7 @@ suite "nimkit text fields":
     )
     window.setContentView(root)
     check window.makeFirstResponder(nameField)
-    root.frame = initRect(0, 0, 760, 500)
+    root.frame = rect(0, 0, 760, 500)
 
     discard window.buildRenders()
     let stretchedWidth = layout.frame.size.width
@@ -509,7 +509,7 @@ suite "nimkit text fields":
     check summary.frame.size.width == stretchedWidth
 
   test "insertText respects text field editability":
-    let field = newTextField("abc", frame = initRect(0, 0, 120, 24))
+    let field = newTextField("abc", frame = rect(0, 0, 120, 24))
 
     field.editable = false
     discard field.send(insertText(), "x")
@@ -523,9 +523,9 @@ suite "nimkit text fields":
 
   test "default edit commands move and delete text":
     let
-      window = newWindow("Text commands", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text commands", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = rect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -554,9 +554,9 @@ suite "nimkit text fields":
 
   test "macOS profile moves and deletes by word":
     let
-      window = newWindow("Text word commands", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("one two three", frame = initRect(10, 10, 180, 24))
+      window = newWindow("Text word commands", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("one two three", frame = rect(10, 10, 180, 24))
 
     window.setKeyBindingProfile(kbpMacOS)
     root.addSubview(field)
@@ -595,9 +595,9 @@ suite "nimkit text fields":
 
   test "windows profile uses control arrows for word movement":
     let
-      window = newWindow("Text windows word commands", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("one two", frame = initRect(10, 10, 180, 24))
+      window = newWindow("Text windows word commands", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("one two", frame = rect(10, 10, 180, 24))
 
     window.setKeyBindingProfile(kbpWindows)
     root.addSubview(field)
@@ -619,9 +619,9 @@ suite "nimkit text fields":
 
   test "control character text input after command shortcuts is ignored":
     let
-      window = newWindow("Text control input", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abcdef", frame = initRect(10, 10, 180, 24))
+      window = newWindow("Text control input", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = rect(10, 10, 180, 24))
 
     window.setKeyBindingProfile(kbpMacOS)
     root.addSubview(field)
@@ -640,9 +640,9 @@ suite "nimkit text fields":
 
   test "select all shortcut selects and replaces the full value":
     let
-      window = newWindow("Text select all", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text select all", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = rect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -663,9 +663,9 @@ suite "nimkit text fields":
       pasteboard = generalPasteboard()
       previousProvider = pasteboard.provider
       provider = newTextFieldPasteboardProvider("clip")
-      window = newWindow("Text paste", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("az", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text paste", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("az", frame = rect(10, 10, 140, 24))
 
     pasteboard.provider = nil
     pasteboard.clearContents()
@@ -687,9 +687,9 @@ suite "nimkit text fields":
 
   test "mouse down focuses text field and places caret at clicked position":
     let
-      window = newWindow("Text mouse", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text mouse", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = rect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -722,9 +722,9 @@ suite "nimkit text fields":
 
   test "first click selects text field shows selection ring and starts cursor blink":
     let
-      window = newWindow("Text click selection", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text click selection", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = rect(10, 10, 140, 24))
       inspector = newViewInspector(root)
       ringStyle = initSelectionRingStyle(
         strokeColor = color(0.95, 0.12, 0.35, 1.0),
@@ -758,10 +758,10 @@ suite "nimkit text fields":
 
   test "tab focus starts text field cursor blink":
     let
-      window = newWindow("Text tab blink", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      button = newButton("Before", frame = initRect(10, 10, 80, 28))
-      field = newTextField("abcdef", frame = initRect(100, 10, 120, 24))
+      window = newWindow("Text tab blink", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      button = newButton("Before", frame = rect(10, 10, 80, 28))
+      field = newTextField("abcdef", frame = rect(100, 10, 120, 24))
 
     root.addSubview(button)
     root.addSubview(field)
@@ -787,9 +787,9 @@ suite "nimkit text fields":
 
   test "direct text field mouse down focuses and blinks field editor caret":
     let
-      window = newWindow("Direct text mouse", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Direct text mouse", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = rect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -819,9 +819,9 @@ suite "nimkit text fields":
 
   test "return ends field editor editing and sends text field action":
     let
-      window = newWindow("Text return", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text return", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abc", frame = rect(10, 10, 140, 24))
       action = actionSelector("textFieldReturnAction")
 
     var actionCount = 0
@@ -848,9 +848,9 @@ suite "nimkit text fields":
 
   test "return action can refocus text field and keep caret blinking":
     let
-      window = newWindow("Text return refocus", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Text return refocus", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abc", frame = rect(10, 10, 140, 24))
       action = actionSelector("textFieldReturnRefocusAction")
 
     var actionCount = 0
@@ -884,9 +884,9 @@ suite "nimkit text fields":
 
   test "validateEditing syncs field editor text without ending editing":
     let
-      window = newWindow("Validate editing", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Validate editing", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abc", frame = rect(10, 10, 140, 24))
       spy = TextFieldChangeSpy()
 
     field.connect(textDidChange, spy, rememberTextFieldChange)
@@ -907,9 +907,9 @@ suite "nimkit text fields":
 
   test "abortEditing cancels field editor text and clears first responder":
     let
-      window = newWindow("Abort editing", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Abort editing", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abc", frame = rect(10, 10, 140, 24))
 
     root.addSubview(field)
     window.setContentView(root)
@@ -926,10 +926,10 @@ suite "nimkit text fields":
 
   test "sendsActionOnEndEditing sends action before tab key-view movement":
     let
-      window = newWindow("End editing action", frame = initRect(0, 0, 260, 120))
-      root = newView(frame = initRect(0, 0, 260, 120))
-      first = newTextField("one", frame = initRect(10, 10, 100, 24))
-      second = newTextField("two", frame = initRect(10, 44, 100, 24))
+      window = newWindow("End editing action", frame = rect(0, 0, 260, 120))
+      root = newView(frame = rect(0, 0, 260, 120))
+      first = newTextField("one", frame = rect(10, 10, 100, 24))
+      second = newTextField("two", frame = rect(10, 44, 100, 24))
       action = actionSelector("textFieldEndEditingAction")
 
     var actionCount = 0
@@ -952,9 +952,9 @@ suite "nimkit text fields":
 
   test "text field cells can provide a custom field editor":
     let
-      window = newWindow("Custom editor", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("abc", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Custom editor", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("abc", frame = rect(10, 10, 140, 24))
       customEditor = newFieldEditor()
       customCell = newCustomEditorTextFieldCell(customEditor)
 

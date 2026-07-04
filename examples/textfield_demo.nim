@@ -4,7 +4,7 @@ import sigils/core
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Text Field Demo", frame = initRect(150, 150, 420, 220))
+  window = newWindow("Nimkit Text Field Demo", frame = rect(150, 150, 420, 220))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Text Field")

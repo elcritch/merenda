@@ -6,7 +6,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Mono Text Demo", frame = initRect(160, 140, 760, 520))
+  window = newWindow("Nimkit Mono Text Demo", frame = rect(160, 140, 760, 520))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Mono Text")
@@ -26,7 +26,7 @@ proc renderVisibleRows(view: MonoTextView) =
 # Forwarded events are reported here before local editing.
 # Captured key events are reported here and then swallowed.
 """.strip(),
-    frame = initRect(0, 0, 980, 920),
+    frame = rect(0, 0, 980, 920),
   )
   scroll = newScrollView(documentView = editor)
   policyAction = actionSelector("monoTextPolicyChanged")
@@ -98,7 +98,7 @@ status.text = policySummary()
 
 scroll.hasHorizontalScroller = true
 scroll.hasVerticalScroller = true
-scroll.frame = initRect(0, 0, 704, 360)
+scroll.frame = rect(0, 0, 704, 360)
 
 layout.spacing = 10.0
 layout.alignment = svaFill

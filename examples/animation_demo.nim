@@ -4,14 +4,14 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Animation Demo", frame = initRect(120, 120, 560, 360))
+  window = newWindow("Nimkit Animation Demo", frame = rect(120, 120, 560, 360))
   root = newView()
   layout = newStackView(laVertical)
   buttonRow = newStackView(laHorizontal)
   title = newTitleLabel("Animations")
   status = newStatusLabel("Ready")
-  stage = newView(frame = initRect(0.0, 0.0, 480.0, 150.0))
-  tile = newView(frame = initRect(20.0, 40.0, 90.0, 70.0))
+  stage = newView(frame = rect(0.0, 0.0, 480.0, 150.0))
+  tile = newView(frame = rect(20.0, 40.0, 90.0, 70.0))
   propertyButton = newButton("Property")
   sequenceButton = newButton("Sequence")
   transactionButton = newButton("Transaction")
@@ -22,9 +22,9 @@ let
   resetAction = actionSelector("animationReset")
 
 const
-  TileHome = initRect(20.0'f32, 40.0'f32, 90.0'f32, 70.0'f32)
-  TileFar = initRect(330.0'f32, 28.0'f32, 120.0'f32, 94.0'f32)
-  TileHigh = initRect(180.0'f32, 14.0'f32, 110.0'f32, 84.0'f32)
+  TileHome = rect(20.0'f32, 40.0'f32, 90.0'f32, 70.0'f32)
+  TileFar = rect(330.0'f32, 28.0'f32, 120.0'f32, 94.0'f32)
+  TileHigh = rect(180.0'f32, 14.0'f32, 110.0'f32, 84.0'f32)
 
 var runningAnimation: Animation
 

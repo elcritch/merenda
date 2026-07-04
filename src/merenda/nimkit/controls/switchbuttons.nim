@@ -141,7 +141,7 @@ proc switchTrackRect(switchButton: SwitchButton, style: SwitchButtonStyle): Rect
     size = style.switchSize()
     width = min(bounds.size.width, size.width)
     height = min(bounds.size.height, size.height)
-  initRect(
+  rect(
     bounds.origin.x + (bounds.size.width - width) * 0.5'f32,
     bounds.origin.y + (bounds.size.height - height) * 0.5'f32,
     width,
@@ -159,9 +159,7 @@ proc switchKnobRect(
         track.maxX - knobInset - knobSize
       else:
         track.origin.x + knobInset
-  initRect(
-    x, track.origin.y + (track.size.height - knobSize) * 0.5'f32, knobSize, knobSize
-  )
+  rect(x, track.origin.y + (track.size.height - knobSize) * 0.5'f32, knobSize, knobSize)
 
 proc drawSwitchTrack(
     switchButton: SwitchButton,

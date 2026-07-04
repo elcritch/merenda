@@ -153,7 +153,7 @@ suite "nimkit font layout":
 
   test "centered label layout reports content bounds as local dimensions":
     let
-      textRect = initRect(12.0, 0.0, 640.0, 28.0)
+      textRect = rect(12.0, 0.0, 640.0, 28.0)
       layout = textLayout(
         textRect, "Hello from KNutella/nimkit", color(0.09, 0.14, 0.26), taCenter
       )

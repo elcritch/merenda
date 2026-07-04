@@ -2,7 +2,7 @@ import merenda/nimkit
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Layout Showcase", frame = initRect(180, 160, 540, 300))
+  window = newWindow("Nimkit Layout Showcase", frame = rect(180, 160, 540, 300))
   root = newView()
 
   title = newTitleLabel("Intrinsic, Stack, and Constraint Layout")

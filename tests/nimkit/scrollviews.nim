@@ -89,7 +89,7 @@ proc hasAncestor(list: RenderList, nodeIndex, ancestorIndex: int): bool =
     current = list.nodes[current].parent.int
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
-  initRect(
+  rect(
     node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
     node.screenBox.h.float32,
   )
@@ -168,7 +168,7 @@ proc scrollViewScrollerKnobRect(
 proc tableViewScrollerKnobRect(tableView: TableView): nimkitTypes.Rect =
   let scrollView = tableView.scrollView()
   if scrollView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   scrollerKnobRect(
     scrollView.verticalScrollerRect(),
     laVertical,
@@ -188,7 +188,7 @@ proc checkScrollViewResizeInvariants(scrollView: ScrollView) =
     maximumOffset = scrollView.maximumContentOffset()
 
   checkRectNearlyEqual(contentView.frame(), viewport)
-  checkRectNearlyEqual(contentView.bounds(), initRect(offset, viewport.size))
+  checkRectNearlyEqual(contentView.bounds(), rect(offset, viewport.size))
   check offset.x >= 0.0'f32
   check offset.y >= 0.0'f32
   check offset.x <= maximumOffset.x + GeometryTolerance
@@ -223,7 +223,7 @@ proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
   result.title = newTitleLabel("Scroll View")
   result.status = newStatusLabel("")
   result.scrollView =
-    newScrollView(documentView = newView(frame = initRect(0, 0, 620, 620)))
+    newScrollView(documentView = newView(frame = rect(0, 0, 620, 620)))
   result.controls = newStackView(laHorizontal)
 
   let
@@ -290,11 +290,11 @@ proc checkDemoScrollerVisibility(fixture: ScrollResizeFixture) =
     check not fixture.scrollView.verticalScrollerRect().isEmpty
 
 proc newNestedScrollFixture(child: View): NestedScrollFixture =
-  result.window = newWindow("Nested scroll", frame = initRect(0, 0, 260, 200))
-  result.root = newView(frame = initRect(0, 0, 260, 200))
-  result.document = newView(frame = initRect(0, 0, 420, 420))
+  result.window = newWindow("Nested scroll", frame = rect(0, 0, 260, 200))
+  result.root = newView(frame = rect(0, 0, 260, 200))
+  result.document = newView(frame = rect(0, 0, 420, 420))
   result.parent =
-    newScrollView(frame = initRect(10, 10, 160, 120), documentView = result.document)
+    newScrollView(frame = rect(10, 10, 160, 120), documentView = result.document)
 
   result.parent.hasVerticalScroller = true
   result.parent.autohidesScrollers = true
@@ -313,9 +313,8 @@ proc windowPointForDocumentChild(fixture: NestedScrollFixture, child: View): Poi
 suite "nimkit scroll views":
   test "scroll view owns a clipped content view and document view":
     let
-      document = newView(frame = initRect(0, 0, 320, 220))
-      scrollView =
-        newScrollView(frame = initRect(10, 12, 120, 80), documentView = document)
+      document = newView(frame = rect(0, 0, 320, 220))
+      scrollView = newScrollView(frame = rect(10, 12, 120, 80), documentView = document)
 
     check scrollView.contentView() != nil
     check View(scrollView.clipView()) == scrollView.contentView()
@@ -332,7 +331,7 @@ suite "nimkit scroll views":
     check scrollView.contentOffset() == initPoint(0, 0)
 
   test "axis scroller API mirrors horizontal and vertical wrappers":
-    let scrollView = newScrollView(frame = initRect(0, 0, 120, 80))
+    let scrollView = newScrollView(frame = rect(0, 0, 120, 80))
 
     check not scrollView.hasScroller(laHorizontal)
     check not scrollView.hasScroller(laVertical)
@@ -353,9 +352,8 @@ suite "nimkit scroll views":
 
   test "content offset clamps to document and viewport bounds":
     let
-      document = newView(frame = initRect(0, 0, 300, 210))
-      scrollView =
-        newScrollView(frame = initRect(0, 0, 100, 70), documentView = document)
+      document = newView(frame = rect(0, 0, 300, 210))
+      scrollView = newScrollView(frame = rect(0, 0, 100, 70), documentView = document)
 
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true
@@ -372,15 +370,13 @@ suite "nimkit scroll views":
 
     scrollView.contentOffset = initPoint(-10, -20)
     check scrollView.contentOffset() == initPoint(0, 0)
-    scrollView.clipView().bounds =
-      initRect(initPoint(50, 20), scrollView.viewportSize())
+    scrollView.clipView().bounds = rect(initPoint(50, 20), scrollView.viewportSize())
     check scrollView.contentOffset() == initPoint(50, 20)
 
   test "fraction scrolling is stable from top and bottom":
     let
-      document = newView(frame = initRect(0, 0, 300, 210))
-      scrollView =
-        newScrollView(frame = initRect(0, 0, 100, 70), documentView = document)
+      document = newView(frame = rect(0, 0, 300, 210))
+      scrollView = newScrollView(frame = rect(0, 0, 100, 70), documentView = document)
 
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true
@@ -412,11 +408,10 @@ suite "nimkit scroll views":
 
   test "scroll wheel and scroll rect update content offset":
     let
-      window = newWindow("ScrollView", frame = initRect(0, 0, 220, 160))
-      root = newView(frame = initRect(0, 0, 220, 160))
-      document = newView(frame = initRect(0, 0, 300, 260))
-      scrollView =
-        newScrollView(frame = initRect(10, 10, 100, 80), documentView = document)
+      window = newWindow("ScrollView", frame = rect(0, 0, 220, 160))
+      root = newView(frame = rect(0, 0, 220, 160))
+      document = newView(frame = rect(0, 0, 300, 260))
+      scrollView = newScrollView(frame = rect(10, 10, 100, 80), documentView = document)
 
     scrollView.lineScroll = 10.0
     root.addSubview(scrollView)
@@ -425,21 +420,20 @@ suite "nimkit scroll views":
     check window.scrollWheelAt(initPoint(20, 20), deltaY = -2.0)
     check scrollView.contentOffset() == initPoint(0, 20)
 
-    check scrollView.scrollRectToVisible(initRect(160, 150, 40, 40))
+    check scrollView.scrollRectToVisible(rect(160, 150, 40, 40))
     check scrollView.contentOffset().x > 0.0
     check scrollView.contentOffset().y > 20.0
 
-    let visible = initRect(scrollView.contentOffset(), scrollView.viewportSize())
+    let visible = rect(scrollView.contentOffset(), scrollView.viewportSize())
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
 
   test "shift scroll wheel maps vertical wheel movement to horizontal scroll":
     let
-      window = newWindow("Shift ScrollView", frame = initRect(0, 0, 220, 160))
-      root = newView(frame = initRect(0, 0, 220, 160))
-      document = newView(frame = initRect(0, 0, 300, 260))
-      scrollView =
-        newScrollView(frame = initRect(10, 10, 100, 80), documentView = document)
+      window = newWindow("Shift ScrollView", frame = rect(0, 0, 220, 160))
+      root = newView(frame = rect(0, 0, 220, 160))
+      document = newView(frame = rect(0, 0, 300, 260))
+      scrollView = newScrollView(frame = rect(10, 10, 100, 80), documentView = document)
 
     scrollView.horizontalLineScroll = 12.0
     scrollView.verticalLineScroll = 10.0
@@ -455,16 +449,14 @@ suite "nimkit scroll views":
 
   test "scroller gutter clicks page content along axis":
     let
-      window = newWindow("Scroller gutter", frame = initRect(0, 0, 260, 220))
-      root = newView(frame = initRect(0, 0, 260, 220))
-      verticalDocument = newView(frame = initRect(0, 0, 80, 260))
-      vertical = newScrollView(
-        frame = initRect(10, 10, 100, 80), documentView = verticalDocument
-      )
-      horizontalDocument = newView(frame = initRect(0, 0, 320, 70))
-      horizontal = newScrollView(
-        frame = initRect(10, 120, 100, 80), documentView = horizontalDocument
-      )
+      window = newWindow("Scroller gutter", frame = rect(0, 0, 260, 220))
+      root = newView(frame = rect(0, 0, 260, 220))
+      verticalDocument = newView(frame = rect(0, 0, 80, 260))
+      vertical =
+        newScrollView(frame = rect(10, 10, 100, 80), documentView = verticalDocument)
+      horizontalDocument = newView(frame = rect(0, 0, 320, 70))
+      horizontal =
+        newScrollView(frame = rect(10, 120, 100, 80), documentView = horizontalDocument)
 
     vertical.hasVerticalScroller = true
     vertical.autohidesScrollers = false
@@ -510,11 +502,10 @@ suite "nimkit scroll views":
 
   test "scroller knob drag maps track movement to content offset":
     let
-      window = newWindow("Scroller drag", frame = initRect(0, 0, 220, 160))
-      root = newView(frame = initRect(0, 0, 220, 160))
-      document = newView(frame = initRect(0, 0, 80, 260))
-      scrollView =
-        newScrollView(frame = initRect(10, 10, 100, 80), documentView = document)
+      window = newWindow("Scroller drag", frame = rect(0, 0, 220, 160))
+      root = newView(frame = rect(0, 0, 220, 160))
+      document = newView(frame = rect(0, 0, 80, 260))
+      scrollView = newScrollView(frame = rect(10, 10, 100, 80), documentView = document)
 
     scrollView.hasVerticalScroller = true
     scrollView.autohidesScrollers = false
@@ -549,9 +540,8 @@ suite "nimkit scroll views":
 
   test "wheel over scrollable nested scroll view stays with child":
     let
-      childDocument = newView(frame = initRect(0, 0, 100, 260))
-      child =
-        newScrollView(frame = initRect(20, 20, 100, 80), documentView = childDocument)
+      childDocument = newView(frame = rect(0, 0, 100, 260))
+      child = newScrollView(frame = rect(20, 20, 100, 80), documentView = childDocument)
       fixture = newNestedScrollFixture(child)
 
     child.hasVerticalScroller = true
@@ -568,9 +558,8 @@ suite "nimkit scroll views":
 
   test "wheel over non-scrollable nested scroll view bubbles to parent":
     let
-      childDocument = newView(frame = initRect(0, 0, 60, 40))
-      child =
-        newScrollView(frame = initRect(20, 20, 100, 80), documentView = childDocument)
+      childDocument = newView(frame = rect(0, 0, 60, 40))
+      child = newScrollView(frame = rect(20, 20, 100, 80), documentView = childDocument)
       fixture = newNestedScrollFixture(child)
 
     child.hasVerticalScroller = true
@@ -587,9 +576,8 @@ suite "nimkit scroll views":
 
   test "wheel past nested scroll view end bubbles to parent":
     let
-      childDocument = newView(frame = initRect(0, 0, 100, 260))
-      child =
-        newScrollView(frame = initRect(20, 20, 100, 80), documentView = childDocument)
+      childDocument = newView(frame = rect(0, 0, 100, 260))
+      child = newScrollView(frame = rect(20, 20, 100, 80), documentView = childDocument)
       fixture = newNestedScrollFixture(child)
 
     child.hasVerticalScroller = true
@@ -609,8 +597,7 @@ suite "nimkit scroll views":
   test "wheel over scrollable table view stays with table scroll view":
     let
       tableView = newSingleColumnTableView(
-        ["One", "Two", "Three", "Four", "Five", "Six"],
-        frame = initRect(20, 20, 120, 68),
+        ["One", "Two", "Three", "Four", "Five", "Six"], frame = rect(20, 20, 120, 68)
       )
       fixture = newNestedScrollFixture(tableView)
 
@@ -627,7 +614,7 @@ suite "nimkit scroll views":
   test "wheel over non-scrollable table view bubbles to parent scroll view":
     let
       tableView =
-        newSingleColumnTableView(["One", "Two"], frame = initRect(20, 20, 120, 68))
+        newSingleColumnTableView(["One", "Two"], frame = rect(20, 20, 120, 68))
       fixture = newNestedScrollFixture(tableView)
 
     tableView.rowHeight = 20.0
@@ -643,9 +630,8 @@ suite "nimkit scroll views":
 
   test "autohide scroller policy follows document size":
     let
-      document = newView(frame = initRect(0, 0, 80, 60))
-      scrollView =
-        newScrollView(frame = initRect(0, 0, 100, 80), documentView = document)
+      document = newView(frame = rect(0, 0, 80, 60))
+      scrollView = newScrollView(frame = rect(0, 0, 100, 80), documentView = document)
 
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true
@@ -654,7 +640,7 @@ suite "nimkit scroll views":
     check scrollView.horizontalScrollerRect().isEmpty
     check scrollView.verticalScrollerRect().isEmpty
 
-    document.frame = initRect(0, 0, 160, 120)
+    document.frame = rect(0, 0, 160, 120)
     scrollView.tile()
 
     check not scrollView.horizontalScrollerRect().isEmpty
@@ -662,9 +648,8 @@ suite "nimkit scroll views":
 
   test "direct frame resize retiles viewport and scroller geometry":
     let
-      document = newView(frame = initRect(0, 0, 620, 620))
-      scrollView =
-        newScrollView(frame = initRect(0, 0, 240, 160), documentView = document)
+      document = newView(frame = rect(0, 0, 620, 620))
+      scrollView = newScrollView(frame = rect(0, 0, 240, 160), documentView = document)
 
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true
@@ -676,14 +661,14 @@ suite "nimkit scroll views":
     check not scrollView.horizontalScrollerRect().isEmpty
     check not scrollView.verticalScrollerRect().isEmpty
 
-    scrollView.frame = initRect(0, 0, 760, 680)
+    scrollView.frame = rect(0, 0, 760, 680)
     scrollView.layoutSubtreeIfNeeded()
     checkScrollViewResizeInvariants(scrollView)
     check scrollView.contentOffset() == initPoint(0, 0)
     check scrollView.horizontalScrollerRect().isEmpty
     check scrollView.verticalScrollerRect().isEmpty
 
-    scrollView.frame = initRect(0, 0, 260, 180)
+    scrollView.frame = rect(0, 0, 260, 180)
     scrollView.layoutSubtreeIfNeeded()
     checkScrollViewResizeInvariants(scrollView)
     check not scrollView.horizontalScrollerRect().isEmpty
@@ -691,9 +676,9 @@ suite "nimkit scroll views":
 
   test "scroll view resizes with constraint layout":
     let
-      root = newView(frame = initRect(0, 0, 260, 180))
+      root = newView(frame = rect(0, 0, 260, 180))
       guide = root.contentLayoutGuide(insets(12.0))
-      document = newView(frame = initRect(0, 0, 420, 360))
+      document = newView(frame = rect(0, 0, 420, 360))
       scrollView = newScrollView(documentView = document)
       footer = newButton("Done")
 
@@ -711,14 +696,14 @@ suite "nimkit scroll views":
     root.layoutSubtreeIfNeeded()
     let firstFrame = scrollView.frame()
 
-    root.frame = initRect(0, 0, 340, 260)
+    root.frame = rect(0, 0, 340, 260)
     root.layoutSubtreeIfNeeded()
 
     check scrollView.frame().size.width > firstFrame.size.width
     check scrollView.frame().size.height > firstFrame.size.height
 
   test "scroll view viewport remains coherent across repeated grow shrink layout":
-    let fixture = newScrollResizeFixture(initRect(0, 0, 520, 380))
+    let fixture = newScrollResizeFixture(rect(0, 0, 520, 380))
 
     fixture.root.layoutSubtreeIfNeeded()
     fixture.scrollView.scrollTo(fixture.scrollView.maximumContentOffset())
@@ -734,21 +719,21 @@ suite "nimkit scroll views":
       initSize(300, 220),
       initSize(520, 380),
     ]:
-      fixture.root.frame = initRect(0, 0, size.width, size.height)
+      fixture.root.frame = rect(0, 0, size.width, size.height)
       fixture.root.layoutSubtreeIfNeeded()
       checkHeaderVisible(fixture)
       checkScrollViewResizeInvariants(fixture.scrollView)
       checkDemoScrollerVisibility(fixture)
 
   test "large scroll document does not push header out of constrained viewport":
-    let fixture = newScrollResizeFixture(initRect(0, 0, 520, 380))
+    let fixture = newScrollResizeFixture(rect(0, 0, 520, 380))
 
     fixture.root.layoutSubtreeIfNeeded()
     checkHeaderVisible(fixture)
     checkScrollViewResizeInvariants(fixture.scrollView)
     checkDemoScrollerVisibility(fixture)
 
-    fixture.root.frame = initRect(0, 0, 360, 260)
+    fixture.root.frame = rect(0, 0, 360, 260)
     fixture.root.layoutSubtreeIfNeeded()
     checkHeaderVisible(fixture)
     checkScrollViewResizeInvariants(fixture.scrollView)
@@ -756,11 +741,10 @@ suite "nimkit scroll views":
 
   test "buildRenders clips scroll content and offsets document rendering":
     let
-      root = newView(frame = initRect(0, 0, 180, 140))
-      document = newView(frame = initRect(0, 0, 240, 180))
-      child = newView(frame = initRect(60, 50, 30, 20))
-      scrollView =
-        newScrollView(frame = initRect(20, 30, 100, 70), documentView = document)
+      root = newView(frame = rect(0, 0, 180, 140))
+      document = newView(frame = rect(0, 0, 240, 180))
+      child = newView(frame = rect(60, 50, 30, 20))
+      scrollView = newScrollView(frame = rect(20, 30, 100, 70), documentView = document)
 
     child.background = color(0.2, 0.4, 0.7, 1.0)
     document.addSubview(child)
@@ -825,12 +809,11 @@ suite "nimkit scroll views":
 
   test "scrolled document controls draw chrome in render space":
     let
-      root = newView(frame = initRect(0, 0, 220, 160))
-      document = newView(frame = initRect(0, 0, 260, 220))
-      heading = newHeadingLabel("Heading", frame = initRect(60, 50, 100, 20))
-      button = newButton("Press", frame = initRect(60, 90, 100, 26))
-      scrollView =
-        newScrollView(frame = initRect(20, 30, 120, 80), documentView = document)
+      root = newView(frame = rect(0, 0, 220, 160))
+      document = newView(frame = rect(0, 0, 260, 220))
+      heading = newHeadingLabel("Heading", frame = rect(60, 50, 100, 20))
+      button = newButton("Press", frame = rect(60, 90, 100, 26))
+      scrollView = newScrollView(frame = rect(20, 30, 120, 80), documentView = document)
 
     document.addSubviews(autoNames(heading, button))
     root.addSubview(scrollView)
@@ -851,8 +834,8 @@ suite "nimkit scroll views":
       renders = buildRenders(root)
       nodes = renders[DefaultDrawLevel]
       scrollWindowOffset = scrollView.contentOffset()
-      expectedHeadingRenderRect = initRect(40, 50, 100, 20)
-      expectedButtonRenderRect = initRect(40, 90, 100, 26)
+      expectedHeadingRenderRect = rect(40, 50, 100, 20)
+      expectedButtonRenderRect = rect(40, 90, 100, 26)
       headingScrolledWindowRect = heading.rectToWindow(heading.bounds())
       buttonScrolledWindowRect = button.rectToWindow(button.bounds())
       headingChromeIndex =
@@ -861,18 +844,17 @@ suite "nimkit scroll views":
         nodes.findRectNode(expectedButtonRenderRect, buttonStyle.box.fill)
 
     check scrollWindowOffset == initPoint(40, 30)
-    checkRectNearlyEqual(headingScrolledWindowRect, initRect(40, 50, 100, 20))
-    checkRectNearlyEqual(buttonScrolledWindowRect, initRect(40, 90, 100, 26))
+    checkRectNearlyEqual(headingScrolledWindowRect, rect(40, 50, 100, 20))
+    checkRectNearlyEqual(buttonScrolledWindowRect, rect(40, 90, 100, 26))
     check headingChromeIndex >= 0
     check buttonChromeIndex >= 0
 
   test "scrolled non-default draw level descendant uses render-space coordinates":
     let
-      root = newView(frame = initRect(0, 0, 220, 160))
-      document = newView(frame = initRect(0, 0, 260, 220))
-      overlay = newOverlayDrawView(initRect(60, 50, 30, 20))
-      scrollView =
-        newScrollView(frame = initRect(20, 30, 120, 80), documentView = document)
+      root = newView(frame = rect(0, 0, 220, 160))
+      document = newView(frame = rect(0, 0, 260, 220))
+      overlay = newOverlayDrawView(rect(60, 50, 30, 20))
+      scrollView = newScrollView(frame = rect(20, 30, 120, 80), documentView = document)
 
     overlay.background = color(0.6, 0.2, 0.8, 1.0)
     document.addSubview(overlay)
@@ -885,8 +867,8 @@ suite "nimkit scroll views":
       renders = buildRenders(root)
       defaultNodes = renders[DefaultDrawLevel]
       overlayNodes = renders[OverlayDrawLevel]
-      expectedOverlayRenderRect = initRect(40, 50, 30, 20)
-      expectedOverlayVisibleRect = initRect(40, 50, 30, 20)
+      expectedOverlayRenderRect = rect(40, 50, 30, 20)
+      expectedOverlayVisibleRect = rect(40, 50, 30, 20)
       overlayIndex = overlayNodes.findRectNode(
         expectedOverlayRenderRect, fill(color(0.6, 0.2, 0.8, 1.0).rgba)
       )
@@ -912,14 +894,13 @@ suite "nimkit scroll views":
 
   test "horizontal scroll renders scrollers above demo document content":
     let
-      window = newWindow("Scroll render", frame = initRect(0, 0, 420, 340))
-      fixture = newScrollResizeFixture(initRect(0, 0, 420, 340))
+      window = newWindow("Scroll render", frame = rect(0, 0, 420, 340))
+      fixture = newScrollResizeFixture(rect(0, 0, 420, 340))
       document = fixture.scrollView.documentView()
-      row = newView(frame = initRect(22, 22, 540, 56))
-      headingLabel =
-        newHeadingLabel("Document Header", frame = initRect(12, 7, 220, 20))
+      row = newView(frame = rect(22, 22, 540, 56))
+      headingLabel = newHeadingLabel("Document Header", frame = rect(12, 7, 220, 20))
       bodyLabel = newStatusLabel(
-        "The document is larger than the viewport.", frame = initRect(12, 30, 500, 18)
+        "The document is larger than the viewport.", frame = rect(12, 30, 500, 18)
       )
 
     row.background = color(0.92, 0.95, 0.99, 1.0)

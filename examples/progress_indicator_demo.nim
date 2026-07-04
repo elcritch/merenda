@@ -4,8 +4,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window =
-    newWindow("Nimkit Progress Indicator Demo", frame = initRect(120, 120, 460, 280))
+  window = newWindow("Nimkit Progress Indicator Demo", frame = rect(120, 120, 460, 280))
   root = newView()
   layout = newStackView(laVertical)
   buttonRow = newStackView(laHorizontal)

@@ -25,7 +25,7 @@ proc answer*(): int =
     check source.tokenAt("3.5") == SynEditTokenClass.FloatNumber
 
   test "widget installs embedded editor and line number gutter":
-    let editor = newSynEditView("proc answer = 42\n", frame = initRect(0, 0, 420, 220))
+    let editor = newSynEditView("proc answer = 42\n", frame = rect(0, 0, 420, 220))
 
     check editor.textEditor() != nil
     check editor.textView() != nil

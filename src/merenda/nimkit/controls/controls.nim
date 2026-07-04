@@ -198,7 +198,7 @@ proc sizeThatFits*(control: Control, proposedSize: FittingSize): Size =
   if not proposedSize.hasWidth and not proposedSize.hasHeight:
     return naturalSize
 
-  let fittingBounds = initRect(
+  let fittingBounds = rect(
     0.0,
     0.0,
     if proposedSize.hasWidth: proposedSize.width else: naturalSize.width,
@@ -214,9 +214,7 @@ proc sizeThatFits*(control: Control, proposedSize: Size): Size =
 
 proc sizeToFit*(control: Control) =
   let frame = control.frame()
-  control.setFrame(
-    initRect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize))
-  )
+  control.setFrame(rect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize)))
 
 proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)

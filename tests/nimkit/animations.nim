@@ -32,7 +32,7 @@ protocol FixedIntrinsicLayout of ViewLayoutProtocol:
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
-  initViewFields(result, initRect(0.0, 0.0, width, height))
+  initViewFields(result, rect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
@@ -212,8 +212,8 @@ suite "NimKit animations":
     checkClose(sizeAnimation.currentValue{}.height, 55.0'f32)
 
     let rectAnimation = newValueAnimation[Rect](
-      initRect(0.0'f32, 10.0'f32, 100.0'f32, 50.0'f32),
-      initRect(20.0'f32, 30.0'f32, 140.0'f32, 90.0'f32),
+      rect(0.0'f32, 10.0'f32, 100.0'f32, 50.0'f32),
+      rect(20.0'f32, 30.0'f32, 140.0'f32, 90.0'f32),
       duration = initDuration(milliseconds = 100),
     )
     rectAnimation.start()
@@ -254,29 +254,25 @@ suite "NimKit animations":
   test "property animation helpers route view geometry and alpha through setters":
     let
       scheduler = newAnimationScheduler()
-      view = newView(frame = initRect(0.0, 0.0, 100.0, 40.0))
+      view = newView(frame = rect(0.0, 0.0, 100.0, 40.0))
       frameAnimation = newFrameAnimation(
-        view,
-        initRect(10.0, 20.0, 140.0, 80.0),
-        duration = initDuration(milliseconds = 100),
+        view, rect(10.0, 20.0, 140.0, 80.0), duration = initDuration(milliseconds = 100)
       )
 
     view.clearNeedsDisplayTree()
     check view.conformsTo(ViewAnimProtocol)
     check scheduler.startAnimation(frameAnimation)
     check scheduler.tick(initDuration(milliseconds = 50)) == 1
-    check view.frame() == initRect(5.0, 10.0, 120.0, 60.0)
+    check view.frame() == rect(5.0, 10.0, 120.0, 60.0)
     check view.bounds().size == initSize(120.0, 60.0)
     check view.needsDisplay()
 
     let boundsAnimation = newBoundsAnimation(
-      view,
-      initRect(20.0, 30.0, 120.0, 60.0),
-      duration = initDuration(milliseconds = 100),
+      view, rect(20.0, 30.0, 120.0, 60.0), duration = initDuration(milliseconds = 100)
     )
     boundsAnimation.start()
     boundsAnimation.setProgress(0.5)
-    check view.bounds() == initRect(10.0, 15.0, 120.0, 60.0)
+    check view.bounds() == rect(10.0, 15.0, 120.0, 60.0)
 
     let alphaAnimation =
       newAlphaValueAnimation(view, 0.2'f32, duration = initDuration(milliseconds = 100))
@@ -286,9 +282,9 @@ suite "NimKit animations":
 
   test "property animation helpers route scroll and progress setters":
     let
-      document = newView(frame = initRect(0.0, 0.0, 320.0, 240.0))
+      document = newView(frame = rect(0.0, 0.0, 320.0, 240.0))
       scrollView =
-        newScrollView(frame = initRect(0.0, 0.0, 120.0, 80.0), documentView = document)
+        newScrollView(frame = rect(0.0, 0.0, 120.0, 80.0), documentView = document)
 
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true
@@ -319,7 +315,7 @@ suite "NimKit animations":
 
   test "property animation helpers route split and cascading setters":
     let
-      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
@@ -336,7 +332,7 @@ suite "NimKit animations":
     checkClose(splitView.positionOfDivider(0), 180.0'f32)
     checkClose(left.frame().size.width, 180.0'f32)
 
-    let cascadingView = newCascadingView(initRect(0.0, 0.0, 400.0, 160.0))
+    let cascadingView = newCascadingView(rect(0.0, 0.0, 400.0, 160.0))
     let widthAnimation = newCascadingColumnWidthAnimation(
       cascadingView, 240.0'f32, duration = initDuration(milliseconds = 100)
     )
@@ -448,9 +444,9 @@ suite "NimKit animations":
   test "application drains scheduler clock ticks during run loop frames":
     let
       app = newApplication()
-      view = newView(frame = initRect(0.0, 0.0, 100.0, 40.0))
+      view = newView(frame = rect(0.0, 0.0, 100.0, 40.0))
       animation =
-        newFrameAnimation(view, initRect(20.0, 10.0, 140.0, 60.0), duration = 20.ms)
+        newFrameAnimation(view, rect(20.0, 10.0, 140.0, 60.0), duration = 20.ms)
 
     app.animationClock().frameInterval = 2.ms
     check app.startAnimation(animation)
@@ -464,7 +460,7 @@ suite "NimKit animations":
       check app.animationClock().pendingTickCount > 0
       check app.runForFrames(1) == 1
       check animation.currentTime{}.inNanoseconds > 0
-      check view.frame() != initRect(0.0, 0.0, 100.0, 40.0)
+      check view.frame() != rect(0.0, 0.0, 100.0, 40.0)
     finally:
       discard app.stopAnimation(animation)
       app.stopAnimationClock()
@@ -503,36 +499,36 @@ suite "NimKit animations":
   test "transaction template captures view property assignments":
     let
       scheduler = newAnimationScheduler()
-      view = newView(frame = initRect(0.0, 0.0, 100.0, 40.0))
+      view = newView(frame = rect(0.0, 0.0, 100.0, 40.0))
 
     let group = animationGroup(duration = 100.ms, curve = acEaseInOut):
-      view.frame = initRect(10.0, 20.0, 140.0, 80.0)
+      view.frame = rect(10.0, 20.0, 140.0, 80.0)
       view.alphaValue = 0.5'f32
       view.alphaValue = 0.25'f32
 
     check group.children.len == 2
-    check view.frame() == initRect(10.0, 20.0, 140.0, 80.0)
+    check view.frame() == rect(10.0, 20.0, 140.0, 80.0)
     checkClose(view.alphaValue(), 0.25'f32)
 
     check scheduler.startAnimation(group)
-    check view.frame() == initRect(0.0, 0.0, 100.0, 40.0)
+    check view.frame() == rect(0.0, 0.0, 100.0, 40.0)
     checkClose(view.alphaValue(), 1.0'f32)
 
     check scheduler.tick(50.ms) == 1
-    check view.frame() == initRect(5.0, 10.0, 120.0, 60.0)
+    check view.frame() == rect(5.0, 10.0, 120.0, 60.0)
     checkClose(view.alphaValue(), 0.625'f32)
 
     check scheduler.tick(50.ms) == 1
-    check view.frame() == initRect(10.0, 20.0, 140.0, 80.0)
+    check view.frame() == rect(10.0, 20.0, 140.0, 80.0)
     checkClose(view.alphaValue(), 0.25'f32)
 
   test "explicit transactions capture control and scroll mutations":
     let
       scheduler = newAnimationScheduler()
       indicator = newProgressIndicator(0.0, 100.0, 25.0)
-      document = newView(frame = initRect(0.0, 0.0, 320.0, 240.0))
+      document = newView(frame = rect(0.0, 0.0, 320.0, 240.0))
       scrollView =
-        newScrollView(frame = initRect(0.0, 0.0, 120.0, 80.0), documentView = document)
+        newScrollView(frame = rect(0.0, 0.0, 120.0, 80.0), documentView = document)
 
     scrollView.hasHorizontalScroller = true
     scrollView.hasVerticalScroller = true

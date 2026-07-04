@@ -337,7 +337,7 @@ proc drawPopupList*(
     else:
       let itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
       if popupList.itemIsSeparator(itemIndex):
-        let line = initRect(
+        let line = rect(
           itemRect.origin.x + 8.0'f32,
           itemRect.origin.y + itemRect.size.height / 2.0'f32,
           max(itemRect.size.width - 16.0'f32, 0.0'f32),
@@ -398,7 +398,7 @@ proc drawPopupList*(
           context.addText(
             layer,
             popupRoot,
-            initRect(
+            rect(
               itemRect.origin.x + 7.0'f32,
               itemRect.origin.y + 3.0'f32,
               12.0'f32,
@@ -412,7 +412,7 @@ proc drawPopupList*(
           context.addText(
             layer,
             popupRoot,
-            initRect(
+            rect(
               itemRect.maxX - 86.0'f32,
               itemRect.origin.y + 3.0'f32,
               74.0'f32,
@@ -426,7 +426,7 @@ proc drawPopupList*(
           context.addText(
             layer,
             popupRoot,
-            initRect(
+            rect(
               itemRect.maxX - 18.0'f32,
               itemRect.origin.y + 3.0'f32,
               10.0'f32,

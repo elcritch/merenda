@@ -1,6 +1,8 @@
 import std/[math, options, os, parseutils, strutils]
 
+import pkg/bumpy
 import pkg/chroma
+export bumpy
 export chroma
 
 when not defined(sigilsSigilNameString) and not defined(nimdoc):
@@ -30,10 +32,6 @@ type
   FittingSize* = object
     width*: float32
     height*: float32
-
-  Rect* = object
-    origin*: Point
-    size*: Size
 
   LayoutAxis* = enum
     laHorizontal
@@ -189,7 +187,7 @@ const
   AutoMetric* = NaN.float32
   AutoPoint* = Point(x: AutoMetric, y: AutoMetric)
   AutoSize* = Size(width: AutoMetric, height: AutoMetric)
-  AutoRect* = Rect(origin: AutoPoint, size: AutoSize)
+  AutoRect* = Rect(x: AutoMetric, y: AutoMetric, w: AutoMetric, h: AutoMetric)
   LayoutAttributeBaseline* = atLastBaseline
   NoIntrinsicMetric* = -1.0'f32
   NoIntrinsicContentSize* =
@@ -324,7 +322,8 @@ func hasAutoMetric*(size: Size): bool =
   size.width.isAutoMetric or size.height.isAutoMetric
 
 func hasAutoMetric*(rect: Rect): bool =
-  rect.origin.hasAutoMetric or rect.size.hasAutoMetric
+  rect.x.isAutoMetric or rect.y.isAutoMetric or rect.w.isAutoMetric or
+    rect.h.isAutoMetric
 
 func hasWidth*(size: Size): bool =
   not size.width.isAutoMetric
@@ -345,9 +344,11 @@ func resolveAutoSize*(size, fallback: Size): Size =
   )
 
 func resolveAutoRect*(rect, fallback: Rect): Rect =
-  Rect(
-    origin: rect.origin.resolveAutoPoint(fallback.origin),
-    size: rect.size.resolveAutoSize(fallback.size),
+  bumpy.rect(
+    if rect.x.isAutoMetric: fallback.x else: rect.x,
+    if rect.y.isAutoMetric: fallback.y else: rect.y,
+    if rect.w.isAutoMetric: fallback.w else: rect.w,
+    if rect.h.isAutoMetric: fallback.h else: rect.h,
   )
 
 func initIntrinsicSize*(
@@ -406,25 +407,34 @@ func initLayoutPriority*(value: float32): LayoutPriority =
 func priorityValue*(priority: LayoutPriority): float32 =
   float32(priority)
 
-proc initRect*(
-    x = AutoMetric, y = AutoMetric, width = AutoMetric, height = AutoMetric
-): Rect =
-  Rect(origin: initPoint(x, y), size: initSize(width, height))
+func origin*(rect: Rect): Point =
+  Point(x: rect.x, y: rect.y)
 
-proc initRect*(origin: Point, size: Size): Rect =
-  Rect(origin: origin, size: initSize(size.width, size.height))
+func `origin=`*(rect: var Rect, origin: Point) =
+  rect.x = origin.x
+  rect.y = origin.y
+
+func size*(rect: Rect): Size =
+  Size(width: rect.w, height: rect.h)
+
+func `size=`*(rect: var Rect, size: Size) =
+  rect.w = size.width
+  rect.h = size.height
+
+proc rect*(origin: Point, size: Size): Rect =
+  bumpy.rect(origin.x, origin.y, size.width, size.height)
 
 proc minX*(rect: Rect): float32 =
-  rect.origin.x
+  rect.x
 
 proc minY*(rect: Rect): float32 =
-  rect.origin.y
+  rect.y
 
 proc maxX*(rect: Rect): float32 =
-  rect.origin.x + rect.size.width
+  rect.x + rect.w
 
 proc maxY*(rect: Rect): float32 =
-  rect.origin.y + rect.size.height
+  rect.y + rect.h
 
 proc contains*(rect: Rect, point: Point): bool =
   point.x >= rect.minX and point.y >= rect.minY and point.x < rect.maxX and
@@ -434,10 +444,10 @@ proc offset*(point: Point, dx, dy: float32): Point =
   initPoint(point.x + dx, point.y + dy)
 
 proc localPoint*(point: Point, frame: Rect): Point =
-  initPoint(point.x - frame.origin.x, point.y - frame.origin.y)
+  initPoint(point.x - frame.x, point.y - frame.y)
 
 proc isEmpty*(rect: Rect): bool =
-  rect.size.width <= 0.0'f32 or rect.size.height <= 0.0'f32
+  rect.w <= 0.0'f32 or rect.h <= 0.0'f32
 
 proc intersection*(a, b: Rect): Rect =
   let
@@ -446,8 +456,8 @@ proc intersection*(a, b: Rect): Rect =
     x2 = min(a.maxX, b.maxX)
     y2 = min(a.maxY, b.maxY)
   if x2 <= x1 or y2 <= y1:
-    return initRect(x1, y1, 0.0, 0.0)
-  initRect(x1, y1, x2 - x1, y2 - y1)
+    return rect(x1, y1, 0.0, 0.0)
+  rect(x1, y1, x2 - x1, y2 - y1)
 
 proc union*(a, b: Rect): Rect =
   if a.isEmpty:
@@ -459,4 +469,4 @@ proc union*(a, b: Rect): Rect =
     y1 = min(a.minY, b.minY)
     x2 = max(a.maxX, b.maxX)
     y2 = max(a.maxY, b.maxY)
-  initRect(x1, y1, x2 - x1, y2 - y1)
+  rect(x1, y1, x2 - x1, y2 - y1)

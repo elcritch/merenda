@@ -361,7 +361,7 @@ proc mixedMarkRect(rect: Rect): Rect =
   let
     height = max(rect.size.height * 0.16'f32, 2.0'f32)
     inset = max(rect.size.width * 0.24'f32, 3.0'f32)
-  initRect(
+  rect(
     rect.origin.x + inset,
     rect.origin.y + (rect.size.height - height) / 2.0'f32,
     rect.size.width - inset * 2.0'f32,
@@ -369,7 +369,7 @@ proc mixedMarkRect(rect: Rect): Rect =
   )
 
 func offsetRect(rect: Rect, dx, dy: float32): Rect =
-  initRect(rect.origin.x + dx, rect.origin.y + dy, rect.size.width, rect.size.height)
+  rect(rect.origin.x + dx, rect.origin.y + dy, rect.size.width, rect.size.height)
 
 func mixFloat(a, b, progress: float32): float32 =
   a + (b - a) * progress.clampUnit()

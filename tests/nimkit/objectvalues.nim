@@ -99,9 +99,9 @@ suite "nimkit object values":
 
   test "text field invalid typed edits do not overwrite object value":
     let
-      window = newWindow("Typed text field", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      field = newTextField("", frame = initRect(10, 10, 140, 24))
+      window = newWindow("Typed text field", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("", frame = rect(10, 10, 140, 24))
 
     field.objectParseContext =
       initObjectParseContext(expectedKind = ovInt, emptyPolicy = oepInvalid)

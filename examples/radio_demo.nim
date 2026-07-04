@@ -4,7 +4,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Radio Demo", frame = initRect(140, 140, 400, 260))
+  window = newWindow("Nimkit Radio Demo", frame = rect(140, 140, 400, 260))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Radio Buttons")

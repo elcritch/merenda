@@ -16,8 +16,7 @@ proc selectedFloat(combo: ComboBox, values: openArray[float32]): float32 =
 
 let
   app = sharedApplication()
-  window =
-    newWindow("Nimkit Constraint Playground", frame = initRect(140, 130, 900, 520))
+  window = newWindow("Nimkit Constraint Playground", frame = rect(140, 130, 900, 520))
   root = newView()
 
   title = newTitleLabel("Constraint Playground")

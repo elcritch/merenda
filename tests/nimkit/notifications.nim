@@ -165,7 +165,7 @@ suite "nimkit notifications":
     appearance[srButton, StyleCornerRadius] = 5.0'f32
     app.setAppearance(appearance)
 
-    let window = newWindow("Notifications", frame = initRect(0, 0, 320, 180))
+    let window = newWindow("Notifications", frame = rect(0, 0, 320, 180))
     app.addWindow(window)
     window.setAppearance(appearance)
     window.close()

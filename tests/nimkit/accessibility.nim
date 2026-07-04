@@ -49,7 +49,7 @@ proc newAccessibilityTableDelegate(): AccessibilityTableDelegate =
 
 suite "nimkit accessibility":
   test "views expose explicit accessibility metadata and attributes":
-    let view = newView(frame = initRect(10, 20, 80, 24))
+    let view = newView(frame = rect(10, 20, 80, 24))
 
     check not view.isAccessibilityElement()
 
@@ -74,13 +74,13 @@ suite "nimkit accessibility":
 
     let frameValue = view.accessibilityAttributeValue(AccessibilityAttributeFrame)
     check frameValue.kind == avRect
-    check frameValue.rectValue == initRect(10, 20, 80, 24)
+    check frameValue.rectValue == rect(10, 20, 80, 24)
 
   test "accessibility children flatten non-element containers":
     let
-      root = newView(frame = initRect(0, 0, 200, 120))
-      group = newView(frame = initRect(10, 10, 180, 80))
-      button = newButton("Apply", frame = initRect(4, 4, 80, 28))
+      root = newView(frame = rect(0, 0, 200, 120))
+      group = newView(frame = rect(10, 10, 180, 80))
+      button = newButton("Apply", frame = rect(4, 4, 80, 28))
 
     group.addSubview(button)
     root.addSubview(group)
@@ -93,10 +93,10 @@ suite "nimkit accessibility":
 
   test "accessibility traversal orders descendants and hit-tests semantic elements":
     let
-      root = newView(frame = initRect(0, 0, 240, 160))
-      group = newView(frame = initRect(10, 10, 120, 80))
-      button = newButton("Apply", frame = initRect(4, 4, 80, 28))
-      checkbox = newCheckBox("Include", frame = initRect(150, 12, 80, 24))
+      root = newView(frame = rect(0, 0, 240, 160))
+      group = newView(frame = rect(10, 10, 120, 80))
+      button = newButton("Apply", frame = rect(4, 4, 80, 28))
+      checkbox = newCheckBox("Include", frame = rect(150, 12, 80, 24))
 
     group.addSubview(button)
     root.addSubview(group)
@@ -120,8 +120,8 @@ suite "nimkit accessibility":
 
   test "accessibility validation helpers cover roles actions and trees":
     let
-      root = newView(frame = initRect(0, 0, 160, 80))
-      button = newButton("Run", frame = initRect(10, 10, 80, 28))
+      root = newView(frame = rect(0, 0, 160, 80))
+      button = newButton("Run", frame = rect(10, 10, 80, 28))
 
     button.identifier = "run"
     root.addSubview(button)
@@ -146,7 +146,7 @@ suite "nimkit accessibility":
   test "buttons provide role label value traits and press action":
     var actionCount = 0
     let
-      button = newCheckBox("Enabled", frame = initRect(0, 0, 120, 24))
+      button = newCheckBox("Enabled", frame = rect(0, 0, 120, 24))
       action = actionSelector("accessibilityPress")
 
     proc onPress(sender: DynamicAgent) =
@@ -169,7 +169,7 @@ suite "nimkit accessibility":
 
   test "text fields and labels expose text semantics":
     let
-      field = newTextField("abc", frame = initRect(0, 0, 120, 24))
+      field = newTextField("abc", frame = rect(0, 0, 120, 24))
       label = newHeadingLabel("Title")
 
     field.identifier = "name"
@@ -187,9 +187,9 @@ suite "nimkit accessibility":
 
   test "text accessibility exposes ranges insertion points and geometry":
     let
-      field = newTextField("abcdef", frame = initRect(0, 0, 180, 28))
-      textView = newTextView("one\ntwo", frame = initRect(0, 40, 220, 90))
-      monoText = newMonoTextEditor("ab\ncd", frame = initRect(0, 150, 220, 90))
+      field = newTextField("abcdef", frame = rect(0, 0, 180, 28))
+      textView = newTextView("one\ntwo", frame = rect(0, 40, 220, 90))
+      monoText = newMonoTextEditor("ab\ncd", frame = rect(0, 150, 220, 90))
 
     field.selectedRange = initTextRange(1, 2)
     check field.accessibilityTextLength() == 6
@@ -256,9 +256,9 @@ suite "nimkit accessibility":
 
   test "focus changes post after responder state changes":
     let
-      window = newWindow("Focus Accessibility", frame = initRect(0, 0, 160, 100))
-      root = newView(frame = initRect(0, 0, 160, 100))
-      button = newButton("Focus", frame = initRect(10, 10, 80, 28))
+      window = newWindow("Focus Accessibility", frame = rect(0, 0, 160, 100))
+      root = newView(frame = rect(0, 0, 160, 100))
+      button = newButton("Focus", frame = rect(10, 10, 80, 28))
       spy = AccessibilitySpy()
 
     root.addSubview(button)
@@ -370,7 +370,7 @@ suite "nimkit accessibility":
   test "expanded and collapsed mutations post accessibility notifications":
     let
       outlineView = newOutlineView()
-      splitView = newSplitView(laHorizontal, initRect(0, 0, 200, 80))
+      splitView = newSplitView(laHorizontal, rect(0, 0, 200, 80))
       leftPane = newView()
       rightPane = newView()
       outlineSpy = AccessibilitySpy()
@@ -460,8 +460,8 @@ suite "nimkit accessibility":
         )
       )
       scroll = newScrollView(
-        frame = initRect(0, 0, 120, 80),
-        documentView = newView(frame = initRect(0, 0, 240, 160)),
+        frame = rect(0, 0, 120, 80),
+        documentView = newView(frame = rect(0, 0, 240, 160)),
       )
 
     combo.identifier = "priority"
@@ -482,9 +482,9 @@ suite "nimkit accessibility":
 
   test "tabs tables and hosted table cells expose collection semantics":
     let
-      tabView = newTabView(frame = initRect(0, 0, 200, 120))
-      tableListView = newTableView(frame = initRect(0, 0, 120, 60))
-      tableView = newTableView(frame = initRect(0, 0, 160, 80))
+      tabView = newTabView(frame = rect(0, 0, 200, 120))
+      tableListView = newTableView(frame = rect(0, 0, 120, 60))
+      tableView = newTableView(frame = rect(0, 0, 160, 80))
       source = newAccessibilityTableSource()
       delegate = newAccessibilityTableDelegate()
 

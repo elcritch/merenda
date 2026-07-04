@@ -14,8 +14,8 @@ proc record(spy: LayoutInvalidationSpy, reason: LayoutInvalidationReason) {.slot
 suite "nimkit constraints":
   test "layout constraints store Cocoa-shaped relation data":
     let
-      view = newView(frame = initRect(0, 0, 100, 80))
-      peer = newView(frame = initRect(10, 10, 40, 20))
+      view = newView(frame = rect(0, 0, 100, 80))
+      peer = newView(frame = rect(10, 10, 40, 20))
       constraint = newLayoutConstraint(
         view,
         atWidth,
@@ -43,8 +43,8 @@ suite "nimkit constraints":
 
   test "layout anchors create Cocoa-shaped constraints":
     let
-      root = newView(frame = initRect(0, 0, 320, 200))
-      child = newView(frame = initRect(0, 0, 40, 20))
+      root = newView(frame = rect(0, 0, 320, 200))
+      child = newView(frame = rect(0, 0, 40, 20))
       left = child[atLeft].equalTo(root[atLeft], constant = 18.0'f32)
       centerY = child[atCenterY].equalTo(root[atCenterY])
       width = child[atWidth].equalTo(96.0'f32)
@@ -119,7 +119,7 @@ suite "nimkit constraints":
 
   test "activateConstraints macro wraps block expressions in cx":
     let
-      root = newView(frame = initRect(0, 0, 320, 200))
+      root = newView(frame = rect(0, 0, 320, 200))
       title = newView()
       subtitle = newView()
       toolbar = newView()
@@ -157,8 +157,8 @@ suite "nimkit constraints":
 
   test "content layout guides and edge pins resolve through constraints":
     let
-      root = newView(frame = initRect(0, 0, 300, 200))
-      child = newView(frame = initRect(0, 0, 10, 10))
+      root = newView(frame = rect(0, 0, 300, 200))
+      child = newView(frame = rect(0, 0, 10, 10))
       guide = root.contentLayoutGuide(insets(10.0, 20.0, 30.0, 40.0))
 
     check guide.owningView == root
@@ -177,7 +177,7 @@ suite "nimkit constraints":
       check constraint.active
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(20, 10, 240, 160)
+    check child.frame() == rect(20, 10, 240, 160)
     var foundUserSummary = false
     for summary in root.constraintsAffectingLayout():
       if summary.source == lisUser:
@@ -188,8 +188,8 @@ suite "nimkit constraints":
 
   test "edge constraints can build an inactive subset":
     let
-      root = newView(frame = initRect(0, 0, 300, 200))
-      child = newView(frame = initRect(0, 0, 10, 30))
+      root = newView(frame = rect(0, 0, 300, 200))
+      child = newView(frame = rect(0, 0, 10, 30))
 
     root.addSubview(child)
     let constraints = child.edgeConstraints(
@@ -205,11 +205,11 @@ suite "nimkit constraints":
     activate(constraints)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(18, 12, 252, 30)
+    check child.frame() == rect(18, 12, 252, 30)
 
   test "unary constraints activate on their first item":
     let
-      view = newView(frame = initRect(0, 0, 100, 80))
+      view = newView(frame = rect(0, 0, 100, 80))
       width = newLayoutConstraint(view, atWidth, constant = 120.0'f32)
 
     view.layoutSubtreeIfNeeded()
@@ -233,9 +233,9 @@ suite "nimkit constraints":
 
   test "two-item constraints activate on the nearest common view":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      left = newView(frame = initRect(0, 0, 80, 40))
-      right = newView(frame = initRect(100, 0, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      left = newView(frame = rect(0, 0, 80, 40))
+      right = newView(frame = rect(100, 0, 80, 40))
 
     root.addSubview(left)
     root.addSubview(right)
@@ -259,8 +259,8 @@ suite "nimkit constraints":
 
   test "active constraint changes invalidate owning view lifecycle":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 20, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 20, 80, 40))
       width = newLayoutConstraint(child, atWidth, constant = 80.0'f32)
 
     root.addSubview(child)
@@ -286,7 +286,7 @@ suite "nimkit constraints":
     check child.needsLayout
 
   test "autoresizing mask stores Cocoa bridge state":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
 
     check view.autoresizingMask == {}
     check view.autoresizingMaskConstraints
@@ -312,8 +312,8 @@ suite "nimkit constraints":
 
   test "autoresizing changes invalidate child and container constraints":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 20, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 20, 80, 40))
 
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
@@ -334,14 +334,14 @@ suite "nimkit constraints":
     check child.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    root.setFrame(initRect(0, 0, 300, 180))
+    root.setFrame(rect(0, 0, 300, 180))
     check root.needsUpdateConstraints
     check root.needsLayout
     check not child.needsUpdateConstraints
 
     child.autoresizingMaskConstraints = true
     root.layoutSubtreeIfNeeded()
-    root.setBounds(initRect(0, 0, 320, 200))
+    root.setBounds(rect(0, 0, 320, 200))
     check root.needsUpdateConstraints
     check root.needsLayout
     check child.needsUpdateConstraints
@@ -349,8 +349,8 @@ suite "nimkit constraints":
 
   test "autoresizing state separates reference refresh from input rebuild":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 20, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 20, 80, 40))
 
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
@@ -359,7 +359,7 @@ suite "nimkit constraints":
     check not child.xAutoresizingState.referenceDirty
     check not child.xAutoresizingState.inputsDirty
 
-    root.frame = initRect(0, 0, 300, 180)
+    root.frame = rect(0, 0, 300, 180)
     check child.xAutoresizingState.hasReference
     check child.xAutoresizingState.referenceSuperviewRect == oldSuperviewReference
     check not child.xAutoresizingState.referenceDirty
@@ -370,7 +370,7 @@ suite "nimkit constraints":
     check not child.xAutoresizingState.referenceDirty
     check not child.xAutoresizingState.inputsDirty
 
-    child.frame = initRect(30, 25, 90, 45)
+    child.frame = rect(30, 25, 90, 45)
     check child.xAutoresizingState.referenceRect == child.alignmentRect()
     check not child.xAutoresizingState.referenceDirty
     check not child.xAutoresizingState.inputsDirty
@@ -382,9 +382,9 @@ suite "nimkit constraints":
 
   test "superview geometry observations follow moved views":
     let
-      first = newView(frame = initRect(0, 0, 240, 120))
-      second = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 20, 80, 40))
+      first = newView(frame = rect(0, 0, 240, 120))
+      second = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 20, 80, 40))
 
     first.addSubview(child)
     first.layoutSubtreeIfNeeded()
@@ -395,70 +395,70 @@ suite "nimkit constraints":
     second.layoutSubtreeIfNeeded()
     check not child.needsUpdateConstraints
 
-    first.frame = initRect(0, 0, 280, 140)
+    first.frame = rect(0, 0, 280, 140)
     check not child.needsUpdateConstraints
 
-    second.frame = initRect(0, 0, 300, 160)
+    second.frame = rect(0, 0, 300, 160)
     check child.needsUpdateConstraints
     check child.xAutoresizingState.inputsDirty
 
   test "generated autoresizing constraints preserve default origin and size":
     let
-      root = newView(frame = initRect(0, 0, 200, 100))
-      child = newView(frame = initRect(20, 10, 80, 30))
+      root = newView(frame = rect(0, 0, 200, 100))
+      child = newView(frame = rect(20, 10, 80, 30))
 
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
-    root.frame = initRect(0, 0, 300, 160)
+    root.frame = rect(0, 0, 300, 160)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(20, 10, 80, 30)
+    check child.frame() == rect(20, 10, 80, 30)
 
   test "generated autoresizing constraints resize sizable dimensions":
     let
-      root = newView(frame = initRect(0, 0, 200, 100))
-      child = newView(frame = initRect(20, 10, 80, 30))
+      root = newView(frame = rect(0, 0, 200, 100))
+      child = newView(frame = rect(20, 10, 80, 30))
 
     root.addSubview(child)
     child.autoresizingMask = {cxWidthSizable, cxHeightSizable}
     root.layoutSubtreeIfNeeded()
-    root.frame = initRect(0, 0, 300, 160)
+    root.frame = rect(0, 0, 300, 160)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(20, 10, 180, 90)
+    check child.frame() == rect(20, 10, 180, 90)
 
   test "generated autoresizing constraints move flexible minimum margins":
     let
-      root = newView(frame = initRect(0, 0, 200, 100))
-      child = newView(frame = initRect(20, 10, 80, 30))
+      root = newView(frame = rect(0, 0, 200, 100))
+      child = newView(frame = rect(20, 10, 80, 30))
 
     root.addSubview(child)
     child.autoresizingMask = {cxMinXMargin, cxMinYMargin}
     root.layoutSubtreeIfNeeded()
-    root.frame = initRect(0, 0, 300, 160)
+    root.frame = rect(0, 0, 300, 160)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(120, 70, 80, 30)
+    check child.frame() == rect(120, 70, 80, 30)
 
   test "explicit constraints take precedence over autoresizing masks":
     let
-      root = newView(frame = initRect(0, 0, 200, 100))
-      child = newView(frame = initRect(20, 10, 80, 30))
+      root = newView(frame = rect(0, 0, 200, 100))
+      child = newView(frame = rect(20, 10, 80, 30))
       width = newLayoutConstraint(child, atWidth, constant = 50.0)
 
     root.addSubview(child)
     child.autoresizingMask = {cxWidthSizable}
     activate(width)
     root.layoutSubtreeIfNeeded()
-    root.frame = initRect(0, 0, 300, 100)
+    root.frame = rect(0, 0, 300, 100)
     root.layoutSubtreeIfNeeded()
 
     check child.frame().size.width == 50.0'f32
 
   test "solver applies constant sizes":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(10, 12, 20, 10))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(10, 12, 20, 10))
       width = newLayoutConstraint(child, atWidth, constant = 96.0'f32)
       height = newLayoutConstraint(child, atHeight, constant = 28.0'f32)
 
@@ -466,14 +466,14 @@ suite "nimkit constraints":
     activate(width, height)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(10, 12, 96, 28)
+    check child.frame() == rect(10, 12, 96, 28)
     check not child.needsUpdateConstraints
     check not child.needsLayout
 
   test "solver applies superview edge pins":
     let
-      root = newView(frame = initRect(0, 0, 300, 200))
-      child = newView(frame = initRect(0, 0, 20, 10))
+      root = newView(frame = rect(0, 0, 300, 200))
+      child = newView(frame = rect(0, 0, 20, 10))
       left = newLayoutConstraint(child, atLeft, lrEqual, root, atLeft, constant = 20.0)
       top = newLayoutConstraint(child, atTop, lrEqual, root, atTop, constant = 15.0)
       right =
@@ -485,12 +485,12 @@ suite "nimkit constraints":
     activate(left, top, right, bottom)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(20, 15, 250, 160)
+    check child.frame() == rect(20, 15, 250, 160)
 
   test "solver applies superview centers":
     let
-      root = newView(frame = initRect(0, 0, 300, 200))
-      child = newView(frame = initRect(0, 0, 10, 10))
+      root = newView(frame = rect(0, 0, 300, 200))
+      child = newView(frame = rect(0, 0, 10, 10))
       width = newLayoutConstraint(child, atWidth, constant = 50.0)
       height = newLayoutConstraint(child, atHeight, constant = 20.0)
       centerX = newLayoutConstraint(child, atCenterX, lrEqual, root, atCenterX)
@@ -500,12 +500,12 @@ suite "nimkit constraints":
     activate(width, height, centerX, centerY)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(125, 90, 50, 20)
+    check child.frame() == rect(125, 90, 50, 20)
 
   test "solver keeps subtree root geometry fixed":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(0, 0, 20, 10))
+      root = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(0, 0, 20, 10))
       left = newLayoutConstraint(child, atLeft, lrEqual, root, atLeft)
       right = newLayoutConstraint(child, atRight, lrEqual, root, atRight)
       width = newLayoutConstraint(child, atWidth, constant = 160.0)
@@ -514,13 +514,13 @@ suite "nimkit constraints":
     activate(left, right, width)
     root.layoutSubtreeIfNeeded()
 
-    check root.frame() == initRect(0, 0, 100, 80)
-    check child.frame() == initRect(0, 0, 100, 10)
+    check root.frame() == rect(0, 0, 100, 80)
+    check child.frame() == rect(0, 0, 100, 10)
 
   test "translates false lets intrinsic size participate in layout":
     let
-      root = newView(frame = initRect(0, 0, 300, 120))
-      button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
+      root = newView(frame = rect(0, 0, 300, 120))
+      button = newButton("Intrinsic", frame = rect(10, 10, 1, 1))
 
     root.addSubview(button)
     button.autoresizingMaskConstraints = false
@@ -532,8 +532,8 @@ suite "nimkit constraints":
 
   test "constraint participants use intrinsic size with autoresizing enabled":
     let
-      root = newView(frame = initRect(0, 0, 300, 120))
-      button = newButton("Intrinsic", frame = initRect(1, 1, 1, 1))
+      root = newView(frame = rect(0, 0, 300, 120))
+      button = newButton("Intrinsic", frame = rect(1, 1, 1, 1))
       left = newLayoutConstraint(button, atLeft, lrEqual, root, atLeft, constant = 10.0)
       top = newLayoutConstraint(button, atTop, lrEqual, root, atTop, constant = 12.0)
 
@@ -548,23 +548,23 @@ suite "nimkit constraints":
 
   test "subtree solver ignores constraints that reference outside views":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(10, 10, 20, 10))
-      external = newView(frame = initRect(200, 0, 80, 40))
+      root = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(10, 10, 20, 10))
+      external = newView(frame = rect(200, 0, 80, 40))
       outside = newLayoutConstraint(child, atRight, lrEqual, external, atLeft)
 
     root.addSubview(child)
     child.addConstraint(outside)
     root.layoutSubtreeIfNeeded()
 
-    check child.frame() == initRect(10, 10, 20, 10)
-    check external.frame() == initRect(200, 0, 80, 40)
+    check child.frame() == rect(10, 10, 20, 10)
+    check external.frame() == rect(200, 0, 80, 40)
 
   test "solver applies sibling constraints":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      left = newView(frame = initRect(0, 0, 80, 40))
-      right = newView(frame = initRect(100, 0, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      left = newView(frame = rect(0, 0, 80, 40))
+      right = newView(frame = rect(100, 0, 80, 40))
       rightPin =
         newLayoutConstraint(right, atLeft, lrEqual, root, atLeft, constant = 100.0)
       spacing = newLayoutConstraint(left, atRight, lrEqual, right, atLeft)
@@ -576,12 +576,12 @@ suite "nimkit constraints":
 
     check left.frame().maxX == right.frame().minX
     check left.frame().size == initSize(80, 40)
-    check right.frame() == initRect(100, 0, 80, 40)
+    check right.frame() == rect(100, 0, 80, 40)
 
   test "solver honors stronger soft constraints":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(0, 0, 40, 20))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(0, 0, 40, 20))
       low = newLayoutConstraint(
         child, atWidth, lrEqual, nil, constant = 160.0, priority = LayoutPriorityLow
       )
@@ -596,7 +596,7 @@ suite "nimkit constraints":
     check child.frame().size == initSize(90, 20)
 
   test "layout item geometry exposes alignment rect and baseline hooks":
-    let view = newView(frame = initRect(10, 20, 100, 50))
+    let view = newView(frame = rect(10, 20, 100, 50))
 
     check view.alignmentInsets == insets(0.0)
     check view.alignmentRect == view.frame()
@@ -610,7 +610,7 @@ suite "nimkit constraints":
     view.firstBaselineOffset = 9.0'f32
 
     let alignmentRect = view.alignmentRect()
-    check alignmentRect == initRect(14, 22, 88, 42)
+    check alignmentRect == rect(14, 22, 88, 42)
     check view.frameForAlignmentRect(alignmentRect) == view.frame()
     check view.layoutValue(atLeft) == 14.0'f32
     check view.layoutValue(atLeading) == 14.0'f32
@@ -626,15 +626,15 @@ suite "nimkit constraints":
     check view.layoutValue(atLastBaseline) == 57.0'f32
     check view.layoutValue(atNotAnAttribute) == 0.0'f32
 
-    view.alignmentRect = initRect(20, 30, 60, 30)
-    check view.frame() == initRect(16, 28, 72, 38)
-    check view.alignmentRect() == initRect(20, 30, 60, 30)
+    view.alignmentRect = rect(20, 30, 60, 30)
+    check view.frame() == rect(16, 28, 72, 38)
+    check view.alignmentRect() == rect(20, 30, 60, 30)
 
   test "layout item geometry invalidation follows frame and priority changes":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      left = newView(frame = initRect(0, 0, 80, 40))
-      right = newView(frame = initRect(100, 0, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      left = newView(frame = rect(0, 0, 80, 40))
+      right = newView(frame = rect(100, 0, 80, 40))
       spacing = newLayoutConstraint(left, atRight, lrEqual, right, atLeft)
 
     root.addSubview(left)
@@ -646,7 +646,7 @@ suite "nimkit constraints":
     check not root.needsLayout
     check not left.needsLayout
 
-    left.frame = initRect(4, 5, 90, 44)
+    left.frame = rect(4, 5, 90, 44)
     check left.needsUpdateConstraints
     check left.needsLayout
     check root.needsUpdateConstraints
@@ -691,8 +691,8 @@ suite "nimkit constraints":
 
   test "layout item geometry invalidation follows hierarchy changes":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 20, 80, 40))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 20, 80, 40))
 
     root.layoutSubtreeIfNeeded()
     root.addSubview(child)
@@ -710,13 +710,13 @@ suite "nimkit constraints":
 
   test "layout invalidation signal bus notifies subscribers and dirty sources":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
       spy = LayoutInvalidationSpy()
 
     root.connect(layoutInputChanged, spy, record)
     root.layoutSubtreeIfNeeded()
 
-    root.frame = initRect(0, 0, 260, 120)
+    root.frame = rect(0, 0, 260, 120)
     check spy.reasons.len == 1
     check spy.reasons[0] == lirFrame
     check lisAutoresizingMask in root.layoutInputDirtySources()
@@ -730,13 +730,13 @@ suite "nimkit constraints":
 
   test "layout invalidation signal bus aggregates descendant dirty sources":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 10, 80, 30))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 10, 80, 30))
 
     root.addSubview(child)
     root.layoutSubtreeIfNeeded()
 
-    child.frame = initRect(24, 14, 90, 34)
+    child.frame = rect(24, 14, 90, 34)
     check lisAutoresizingMask in root.xLayoutInputCache.aggregateDirtySources
     check not root.xLayoutInputCache.aggregateStructureDirty
 
@@ -746,14 +746,14 @@ suite "nimkit constraints":
     check not root.xLayoutInputCache.aggregateStructureDirty
 
     root.layoutSubtreeIfNeeded()
-    root.addSubview(newView(frame = initRect(0, 0, 10, 10)))
+    root.addSubview(newView(frame = rect(0, 0, 10, 10)))
     check lisContainer in root.xLayoutInputCache.aggregateDirtySources
     check root.xLayoutInputCache.aggregateStructureDirty
 
   test "generated layout summary exposes internal autoresizing equations":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      child = newView(frame = initRect(20, 10, 80, 30))
+      root = newView(frame = rect(0, 0, 240, 120))
+      child = newView(frame = rect(20, 10, 80, 30))
 
     child.autoresizingMask = {cxWidthSizable, cxHeightSizable}
     root.addSubview(child)
@@ -770,8 +770,8 @@ suite "nimkit constraints":
 
   test "generated layout summary exposes intrinsic equations":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      button = newButton("Intrinsic", frame = initRect(10, 10, 1, 1))
+      root = newView(frame = rect(0, 0, 240, 120))
+      button = newButton("Intrinsic", frame = rect(10, 10, 1, 1))
 
     button.autoresizingMaskConstraints = false
     root.addSubview(button)
@@ -788,9 +788,9 @@ suite "nimkit constraints":
 
   test "generated layout cache rebuilds dirty source buckets":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      autoresized = newView(frame = initRect(20, 10, 80, 30))
-      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+      root = newView(frame = rect(0, 0, 240, 120))
+      autoresized = newView(frame = rect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = rect(10, 60, 1, 1))
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
@@ -808,7 +808,7 @@ suite "nimkit constraints":
     check initialAutoresizingGeneration > 0
     check initialIntrinsicGeneration > 0
 
-    root.frame = initRect(0, 0, 300, 120)
+    root.frame = rect(0, 0, 300, 120)
     root.layoutSubtreeIfNeeded()
 
     let
@@ -831,9 +831,9 @@ suite "nimkit constraints":
 
   test "container metric invalidation rebuilds intrinsic source bucket":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      stack = newStackView(frame = initRect(10, 10, 120, 40))
-      button = newButton("Stack", frame = initRect(0, 0, 1, 1))
+      root = newView(frame = rect(0, 0, 240, 120))
+      stack = newStackView(frame = rect(10, 10, 120, 40))
+      button = newButton("Stack", frame = rect(0, 0, 1, 1))
 
     stack.autoresizingMaskConstraints = false
     stack.addArrangedSubview(button)
@@ -865,9 +865,9 @@ suite "nimkit constraints":
 
   test "generated layout cache rebuilds all source buckets for structural changes":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      autoresized = newView(frame = initRect(20, 10, 80, 30))
-      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+      root = newView(frame = rect(0, 0, 240, 120))
+      autoresized = newView(frame = rect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = rect(10, 60, 1, 1))
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
@@ -882,7 +882,7 @@ suite "nimkit constraints":
       initialContainerGeneration =
         root.xLayoutInputCache.sourceGenerations[lisContainer]
 
-    root.addSubview(newView(frame = initRect(0, 0, 10, 10)))
+    root.addSubview(newView(frame = rect(0, 0, 10, 10)))
     root.layoutSubtreeIfNeeded()
 
     check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==
@@ -894,9 +894,9 @@ suite "nimkit constraints":
 
   test "generated layout cache rebuilds all source buckets for user constraints":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      autoresized = newView(frame = initRect(20, 10, 80, 30))
-      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+      root = newView(frame = rect(0, 0, 240, 120))
+      autoresized = newView(frame = rect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = rect(10, 60, 1, 1))
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
@@ -923,9 +923,9 @@ suite "nimkit constraints":
 
   test "display invalidation does not rebuild generated source buckets":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      autoresized = newView(frame = initRect(20, 10, 80, 30))
-      button = newButton("Intrinsic", frame = initRect(10, 60, 1, 1))
+      root = newView(frame = rect(0, 0, 240, 120))
+      autoresized = newView(frame = rect(20, 10, 80, 30))
+      button = newButton("Intrinsic", frame = rect(10, 60, 1, 1))
 
     autoresized.autoresizingMask = {cxWidthSizable}
     button.autoresizingMaskConstraints = false
@@ -952,9 +952,9 @@ suite "nimkit constraints":
 
   test "explicit storage can move constraints between views":
     let
-      firstOwner = newView(frame = initRect(0, 0, 100, 80))
-      secondOwner = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(0, 0, 40, 20))
+      firstOwner = newView(frame = rect(0, 0, 100, 80))
+      secondOwner = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(0, 0, 40, 20))
       width = newLayoutConstraint(child, atWidth, constant = 40.0'f32)
       height = newLayoutConstraint(child, atHeight, constant = 20.0'f32)
 

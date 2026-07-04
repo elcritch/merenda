@@ -10,7 +10,7 @@ proc stateName(state: ButtonState): string =
 
 let
   app = sharedApplication()
-  window = newWindow("KNutella Nimkit Hello", frame = initRect(120, 120, 720, 360))
+  window = newWindow("KNutella Nimkit Hello", frame = rect(120, 120, 720, 360))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Hello from KNutella/nimkit")

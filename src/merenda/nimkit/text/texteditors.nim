@@ -228,7 +228,7 @@ proc measuredTextLayout(editor: TextEditor, width: float32): auto =
     insets = editor.xTextInsets
     measuringWidth = max(width, insets.horizontal + 1.0'f32)
     measuringRect =
-      initRect(0.0, 0.0, measuringWidth, DefaultTextEditorMeasureHeight).inset(insets)
+      rect(0.0, 0.0, measuringWidth, DefaultTextEditorMeasureHeight).inset(insets)
   textLayout(
     measuringRect,
     editor.xTextView.textStorage(),
@@ -280,7 +280,7 @@ proc updateTextEditorLayout(editor: TextEditor) =
     documentSize = editor.textDocumentSize(viewportWidth, viewportHeight)
 
   editor.xScrollView.frame = bounds
-  editor.xTextView.frame = initRect(0.0, 0.0, documentSize.width, documentSize.height)
+  editor.xTextView.frame = rect(0.0, 0.0, documentSize.width, documentSize.height)
   editor.xTextView.textContainer =
     initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
 
@@ -345,7 +345,7 @@ method textEditorInputFirstRectForCharacterRange(
     editor: TextEditor, range: TextRange
 ): Rect {.selector.} =
   if editor.xTextView.isNil:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   textviews.firstRectForCharacterRange(editor.xTextView, range)
 
 method textEditorInputCharacterIndexForPoint(

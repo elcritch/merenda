@@ -116,19 +116,19 @@ proc newConstraintSpyView(name: string, frame: Rect): ConstraintSpyView =
 
 suite "nimkit views":
   test "frame changes preserve bounds origin":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
 
-    view.bounds = initRect(20, 30, 100, 80)
-    view.frame = initRect(10, 15, 120, 90)
-    check view.bounds == initRect(20, 30, 120, 90)
+    view.bounds = rect(20, 30, 100, 80)
+    view.frame = rect(10, 15, 120, 90)
+    check view.bounds == rect(20, 30, 120, 90)
 
-    view.applyLayoutFrame(initRect(12, 18, 130, 95))
-    check view.bounds == initRect(20, 30, 130, 95)
+    view.applyLayoutFrame(rect(12, 18, 130, 95))
+    check view.bounds == rect(20, 30, 130, 95)
 
   test "subviews participate in hit testing from front to back":
-    let root = newView(frame = initRect(0, 0, 200, 160))
-    let back = newView(frame = initRect(20, 20, 80, 50))
-    let front = newView(frame = initRect(30, 25, 80, 50))
+    let root = newView(frame = rect(0, 0, 200, 160))
+    let back = newView(frame = rect(20, 20, 80, 50))
+    let front = newView(frame = rect(30, 25, 80, 50))
     root.addSubviews(autoNames(back, front))
 
     check root.hitTest(initPoint(35, 30)) == front
@@ -137,8 +137,8 @@ suite "nimkit views":
     check root.hitTest(initPoint(220, 159)).isNil
 
   test "hidden views do not hit test":
-    let root = newView(frame = initRect(0, 0, 200, 160))
-    let child = newView(frame = initRect(20, 20, 80, 50))
+    let root = newView(frame = rect(0, 0, 200, 160))
+    let child = newView(frame = rect(20, 20, 80, 50))
     root.addSubview(child)
     child.hidden = true
 
@@ -146,9 +146,9 @@ suite "nimkit views":
 
   test "unclipped subviews can hit test outside parent bounds":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
-      parent = newView(frame = initRect(20, 20, 40, 40))
-      child = newView(frame = initRect(50, 0, 40, 40))
+      root = newView(frame = rect(0, 0, 200, 160))
+      parent = newView(frame = rect(20, 20, 40, 40))
+      child = newView(frame = rect(50, 0, 40, 40))
 
     root.addSubview(parent)
     parent.addSubview(child)
@@ -159,8 +159,8 @@ suite "nimkit views":
     check root.hitTest(initPoint(85, 30)) == root
 
   test "child invalidation propagates to parent":
-    let root = newView(frame = initRect(0, 0, 200, 160))
-    let child = newView(frame = initRect(20, 20, 80, 50))
+    let root = newView(frame = rect(0, 0, 200, 160))
+    let child = newView(frame = rect(20, 20, 80, 50))
     root.addSubview(child)
     root.needsDisplay = false
     child.needsDisplay = false
@@ -173,9 +173,9 @@ suite "nimkit views":
   test "appearance inherits from application window and view":
     let
       app = newApplication()
-      window = newWindow("Appearance", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      child = newView(frame = initRect(10, 10, 80, 40))
+      window = newWindow("Appearance", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      child = newView(frame = rect(10, 10, 80, 40))
 
     root.addSubview(child)
     window.setContentView(root)
@@ -224,7 +224,7 @@ suite "nimkit views":
     check clearedStyle.box.fill == windowFill
 
   test "style identity is stored on views and invalidates display":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
     view.needsDisplay = false
 
     view.styleId = "primary"
@@ -249,7 +249,7 @@ suite "nimkit views":
     check view.needsDisplay
 
   test "clipsToBounds defaults off and invalidates display":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
 
     check not view.clipsToBounds
 
@@ -265,9 +265,9 @@ suite "nimkit views":
 
   test "view identity supports tag names identifiers and recursive lookup":
     let
-      root = newView("root", frame = initRect(0, 0, 200, 160))
-      child = newView(frame = initRect(20, 20, 80, 40))
-      grandchild = newView("grandchild", frame = initRect(5, 5, 30, 20))
+      root = newView("root", frame = rect(0, 0, 200, 160))
+      child = newView(frame = rect(20, 20, 80, 40))
+      grandchild = newView("grandchild", frame = rect(5, 5, 30, 20))
 
     root.tag = 1
     child.tag = 2
@@ -323,11 +323,11 @@ suite "nimkit views":
 
   test "positioned subview insertion replacement and sorting preserve hierarchy state":
     let
-      parent = newLifecycleSpyView(initRect(0, 0, 200, 160))
-      first = newLifecycleSpyView(initRect(0, 0, 10, 10))
-      second = newLifecycleSpyView(initRect(0, 0, 10, 10))
-      third = newLifecycleSpyView(initRect(0, 0, 10, 10))
-      replacement = newLifecycleSpyView(initRect(0, 0, 10, 10))
+      parent = newLifecycleSpyView(rect(0, 0, 200, 160))
+      first = newLifecycleSpyView(rect(0, 0, 10, 10))
+      second = newLifecycleSpyView(rect(0, 0, 10, 10))
+      third = newLifecycleSpyView(rect(0, 0, 10, 10))
+      replacement = newLifecycleSpyView(rect(0, 0, 10, 10))
 
     first.tag = 30
     second.tag = 10
@@ -355,8 +355,8 @@ suite "nimkit views":
 
   test "layout lifecycle runs selector hooks before display cleanup":
     let
-      root = newLayoutSpyView(initRect(0, 0, 200, 160))
-      child = newLayoutSpyView(initRect(20, 30, 80, 40))
+      root = newLayoutSpyView(rect(0, 0, 200, 160))
+      child = newLayoutSpyView(rect(20, 30, 80, 40))
 
     root.addSubview(child)
     root.events.setLen(0)
@@ -371,15 +371,15 @@ suite "nimkit views":
     check not root.needsLayout
     check not child.needsLayout
 
-    root.frame = initRect(0, 0, 220, 180)
+    root.frame = rect(0, 0, 220, 180)
     check root.needsLayout
     root.finishDisplaySubtree()
     check not root.needsDisplay
 
   test "display update predicate includes display layout and constraints":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
-      child = newView(frame = initRect(20, 20, 80, 40))
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newView(frame = rect(20, 20, 80, 40))
 
     root.addSubview(child)
     discard root.prepareDisplaySubtree()
@@ -403,8 +403,8 @@ suite "nimkit views":
 
   test "constraint update lifecycle runs before layout":
     let
-      root = newConstraintSpyView("root", initRect(0, 0, 200, 160))
-      child = newConstraintSpyView("child", initRect(20, 30, 80, 40))
+      root = newConstraintSpyView("root", rect(0, 0, 200, 160))
+      child = newConstraintSpyView("child", rect(20, 30, 80, 40))
 
     root.addSubview(child)
     root.needsLayout = false
@@ -443,7 +443,7 @@ suite "nimkit views":
     check not child.needsLayout
 
   test "setNeedsUpdateConstraints ignores false like AppKit":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
 
     check not view.needsUpdateConstraints
     view.setNeedsUpdateConstraints(false)
@@ -453,37 +453,37 @@ suite "nimkit views":
     check view.needsUpdateConstraints
 
   test "setNeedsDisplayInRect clips and unions dirty rects":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
     view.setNeedsDisplay(false)
 
-    view.setNeedsDisplayInRect(initRect(10, 10, 20, 20))
+    view.setNeedsDisplayInRect(rect(10, 10, 20, 20))
     check view.needsDisplay
-    check view.invalidRects == @[initRect(10, 10, 20, 20)]
-    check view.invalidRect == initRect(10, 10, 20, 20)
+    check view.invalidRects == @[rect(10, 10, 20, 20)]
+    check view.invalidRect == rect(10, 10, 20, 20)
 
-    view.setNeedsDisplayInRect(initRect(25, 25, 50, 30))
-    check view.invalidRects == @[initRect(10, 10, 65, 45)]
-    check view.invalidRect == initRect(10, 10, 65, 45)
+    view.setNeedsDisplayInRect(rect(25, 25, 50, 30))
+    check view.invalidRects == @[rect(10, 10, 65, 45)]
+    check view.invalidRect == rect(10, 10, 65, 45)
 
-    view.setNeedsDisplayInRect(initRect(-10, -10, 20, 20))
-    check view.invalidRects == @[initRect(0, 0, 75, 55)]
+    view.setNeedsDisplayInRect(rect(-10, -10, 20, 20))
+    check view.invalidRects == @[rect(0, 0, 75, 55)]
 
   test "visibleRect only clips through clipping ancestors":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(80, 60, 50, 40))
-      grandchild = newView(frame = initRect(10, 10, 30, 30))
+      root = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(80, 60, 50, 40))
+      grandchild = newView(frame = rect(10, 10, 30, 30))
 
     root.addSubview(child)
     child.addSubview(grandchild)
 
-    check root.visibleRect == initRect(0, 0, 100, 80)
-    check child.visibleRect == initRect(0, 0, 50, 40)
-    check grandchild.visibleRect == initRect(0, 0, 30, 30)
+    check root.visibleRect == rect(0, 0, 100, 80)
+    check child.visibleRect == rect(0, 0, 50, 40)
+    check grandchild.visibleRect == rect(0, 0, 30, 30)
 
     root.clipsToBounds = true
-    check child.visibleRect == initRect(0, 0, 20, 20)
-    check grandchild.visibleRect == initRect(0, 0, 10, 10)
+    check child.visibleRect == rect(0, 0, 20, 20)
+    check grandchild.visibleRect == rect(0, 0, 10, 10)
 
     root.hidden = true
     check root.visibleRect.isEmpty
@@ -492,45 +492,45 @@ suite "nimkit views":
 
   test "setNeedsDisplayInRect clips to effective visibleRect":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(80, 60, 50, 40))
+      root = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(80, 60, 50, 40))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
 
-    child.setNeedsDisplayInRect(initRect(0, 0, 50, 40))
+    child.setNeedsDisplayInRect(rect(0, 0, 50, 40))
 
-    check child.invalidRects == @[initRect(0, 0, 50, 40)]
-    check root.invalidRects == @[initRect(80, 60, 20, 20)]
+    check child.invalidRects == @[rect(0, 0, 50, 40)]
+    check root.invalidRects == @[rect(80, 60, 20, 20)]
 
     root.clipsToBounds = true
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
 
-    child.setNeedsDisplayInRect(initRect(0, 0, 50, 40))
+    child.setNeedsDisplayInRect(rect(0, 0, 50, 40))
 
-    check child.invalidRects == @[initRect(0, 0, 20, 20)]
-    check root.invalidRects == @[initRect(80, 60, 20, 20)]
+    check child.invalidRects == @[rect(0, 0, 20, 20)]
+    check root.invalidRects == @[rect(80, 60, 20, 20)]
 
   test "child invalid rect propagates to parent coordinates":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
-      child = newView(frame = initRect(20, 30, 80, 50))
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newView(frame = rect(20, 30, 80, 50))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
 
-    child.setNeedsDisplayInRect(initRect(5, 6, 10, 11))
+    child.setNeedsDisplayInRect(rect(5, 6, 10, 11))
 
-    check child.invalidRects == @[initRect(5, 6, 10, 11)]
-    check root.invalidRects == @[initRect(25, 36, 10, 11)]
+    check child.invalidRects == @[rect(5, 6, 10, 11)]
+    check root.invalidRects == @[rect(25, 36, 10, 11)]
 
   test "whole-view invalidation propagates as child frame":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
-      child = newView(frame = initRect(20, 30, 80, 50))
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newView(frame = rect(20, 30, 80, 50))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
@@ -538,15 +538,15 @@ suite "nimkit views":
 
     child.setNeedsDisplay(true)
 
-    check child.invalidRects == @[initRect(0, 0, 80, 50)]
-    check root.invalidRects == @[initRect(20, 30, 80, 50)]
+    check child.invalidRects == @[rect(0, 0, 80, 50)]
+    check root.invalidRects == @[rect(20, 30, 80, 50)]
 
   test "coordinate conversion covers hierarchy, siblings, and rectangles":
     let
-      root = newView(frame = initRect(0, 0, 300, 240))
-      child = newView(frame = initRect(20, 30, 100, 80))
-      sibling = newView(frame = initRect(150, 40, 70, 60))
-      grandchild = newView(frame = initRect(5, 7, 30, 20))
+      root = newView(frame = rect(0, 0, 300, 240))
+      child = newView(frame = rect(20, 30, 100, 80))
+      sibling = newView(frame = rect(150, 40, 70, 60))
+      grandchild = newView(frame = rect(5, 7, 30, 20))
 
     root.addSubview(child)
     root.addSubview(sibling)
@@ -558,16 +558,16 @@ suite "nimkit views":
     check sibling.pointFromView(initPoint(3, 4), child) == initPoint(-127, -6)
     check grandchild.pointToView(initPoint(1, 2), root) == initPoint(26, 39)
 
-    check root.rectFromView(initRect(1, 2, 10, 11), child) == initRect(21, 32, 10, 11)
-    check child.rectFromView(initRect(21, 32, 10, 11), root) == initRect(1, 2, 10, 11)
+    check root.rectFromView(rect(1, 2, 10, 11), child) == rect(21, 32, 10, 11)
+    check child.rectFromView(rect(21, 32, 10, 11), root) == rect(1, 2, 10, 11)
 
   test "coordinate conversion honors non-zero bounds origins":
     let
-      root = newView(frame = initRect(0, 0, 300, 240))
-      child = newView(frame = initRect(30, 40, 100, 80))
+      root = newView(frame = rect(0, 0, 300, 240))
+      child = newView(frame = rect(30, 40, 100, 80))
 
-    root.setBounds(initRect(10, 20, 300, 240))
-    child.setBounds(initRect(5, 6, 100, 80))
+    root.setBounds(rect(10, 20, 300, 240))
+    child.setBounds(rect(5, 6, 100, 80))
     root.addSubview(child)
 
     check child.pointFromView(initPoint(30, 40), root) == initPoint(5, 6)
@@ -577,8 +577,8 @@ suite "nimkit views":
 
   test "coordinate conversion supports unflipped y-up local coordinates":
     let
-      root = newView(frame = initRect(0, 0, 300, 240))
-      child = newView(frame = initRect(10, 20, 100, 80))
+      root = newView(frame = rect(0, 0, 300, 240))
+      child = newView(frame = rect(10, 20, 100, 80))
 
     root.addSubview(child)
 
@@ -590,14 +590,14 @@ suite "nimkit views":
     check not child.flipped
     check child.pointToWindow(initPoint(0, 0)) == initPoint(10, 100)
     check child.pointFromWindow(initPoint(10, 100)) == initPoint(0, 0)
-    check child.rectToWindow(initRect(0, 0, 10, 10)) == initRect(10, 90, 10, 10)
-    check child.rectFromWindow(initRect(10, 90, 10, 10)) == initRect(0, 0, 10, 10)
+    check child.rectToWindow(rect(0, 0, 10, 10)) == rect(10, 90, 10, 10)
+    check child.rectFromWindow(rect(10, 90, 10, 10)) == rect(0, 0, 10, 10)
 
   test "coordinate conversion updates after reparenting":
     let
-      firstRoot = newView(frame = initRect(0, 0, 200, 160))
-      secondRoot = newView(frame = initRect(10, 15, 200, 160))
-      child = newView(frame = initRect(20, 30, 80, 40))
+      firstRoot = newView(frame = rect(0, 0, 200, 160))
+      secondRoot = newView(frame = rect(10, 15, 200, 160))
+      child = newView(frame = rect(20, 30, 80, 40))
 
     firstRoot.addSubview(child)
     check child.pointToWindow(initPoint(0, 0)) == initPoint(20, 30)
@@ -608,8 +608,8 @@ suite "nimkit views":
 
   test "add and remove subview route selector-backed lifecycle hooks":
     let
-      parent = newLifecycleSpyView(initRect(0, 0, 200, 160))
-      child = newLifecycleSpyView(initRect(20, 30, 80, 40))
+      parent = newLifecycleSpyView(rect(0, 0, 200, 160))
+      child = newLifecycleSpyView(rect(20, 30, 80, 40))
 
     parent.addSubview(child)
 
@@ -633,10 +633,10 @@ suite "nimkit views":
 
   test "content view changes route window lifecycle through descendants":
     let
-      window = newWindow("Lifecycle", frame = initRect(0, 0, 240, 160))
-      root = newLifecycleSpyView(initRect(0, 0, 240, 160))
-      child = newLifecycleSpyView(initRect(20, 30, 80, 40))
-      replacement = newLifecycleSpyView(initRect(0, 0, 240, 160))
+      window = newWindow("Lifecycle", frame = rect(0, 0, 240, 160))
+      root = newLifecycleSpyView(rect(0, 0, 240, 160))
+      child = newLifecycleSpyView(rect(20, 30, 80, 40))
+      replacement = newLifecycleSpyView(rect(0, 0, 240, 160))
 
     root.addSubview(child)
     root.events.setLen(0)
@@ -669,9 +669,9 @@ suite "nimkit views":
 
   test "content view replacement clears first responder from removed subtree":
     let
-      window = newWindow("First responder cleanup", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      button = newButton("Action", frame = initRect(20, 30, 80, 30))
+      window = newWindow("First responder cleanup", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      button = newButton("Action", frame = rect(20, 30, 80, 30))
 
     root.addSubview(button)
     window.setContentView(root)
@@ -679,26 +679,26 @@ suite "nimkit views":
     check window.makeFirstResponder(button)
     check window.firstResponder == button
 
-    window.setContentView(newView(frame = initRect(0, 0, 240, 160)))
+    window.setContentView(newView(frame = rect(0, 0, 240, 160)))
 
     check window.firstResponder.isNil
 
   test "window coordinate helpers convert through content view frames and bounds":
-    let content = newView(frame = initRect(10, 15, 240, 180))
-    content.setBounds(initRect(5, 7, 240, 180))
+    let content = newView(frame = rect(10, 15, 240, 180))
+    content.setBounds(rect(5, 7, 240, 180))
 
     check content.pointToWindow(initPoint(5, 7)) == initPoint(10, 15)
     check content.pointFromWindow(initPoint(10, 15)) == initPoint(5, 7)
-    check content.rectToWindow(initRect(5, 7, 20, 30)) == initRect(10, 15, 20, 30)
-    check content.rectFromWindow(initRect(10, 15, 20, 30)) == initRect(5, 7, 20, 30)
+    check content.rectToWindow(rect(5, 7, 20, 30)) == rect(10, 15, 20, 30)
+    check content.rectFromWindow(rect(10, 15, 20, 30)) == rect(5, 7, 20, 30)
 
   test "hit testing and mouse dispatch use conversion helpers":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
-      child = newMouseSpyView(initRect(30, 40, 80, 50))
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newMouseSpyView(rect(30, 40, 80, 50))
 
-    root.setBounds(initRect(10, 20, 200, 160))
-    child.setBounds(initRect(5, 6, 80, 50))
+    root.setBounds(rect(10, 20, 200, 160))
+    child.setBounds(rect(5, 6, 80, 50))
     root.addSubview(child)
 
     spyMouseDownPoint = initPoint(0, 0)
@@ -714,7 +714,7 @@ suite "nimkit views":
     check spyMouseUpCount == 1
 
   test "focus alpha and shadow attributes invalidate display":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
     let shadow = dropShadow(color(0, 0, 0, 0.25), 0, 2, 6, 0)
 
     check view.focusRingType == frtDefault
@@ -741,9 +741,9 @@ suite "nimkit views":
     check view.needsDisplay
 
   test "tracking cursor tooltip and drag metadata are stored explicitly":
-    let view = newView(frame = initRect(0, 0, 100, 80))
+    let view = newView(frame = rect(0, 0, 100, 80))
     let area = ViewTrackingArea(
-      rect: initRect(0, 0, 30, 20),
+      rect: rect(0, 0, 30, 20),
       options: {vtoMouseEnteredAndExited, vtoMouseMoved},
       tag: 42,
       owner: Responder(view),
@@ -752,9 +752,9 @@ suite "nimkit views":
     view.toolTip = "Details"
     check view.toolTip == "Details"
 
-    view.addCursorRect(initRect(0, 0, 10, 10), "pointingHand")
+    view.addCursorRect(rect(0, 0, 10, 10), "pointingHand")
     check view.cursorRects ==
-      @[ViewCursorRect(rect: initRect(0, 0, 10, 10), cursor: "pointingHand")]
+      @[ViewCursorRect(rect: rect(0, 0, 10, 10), cursor: "pointingHand")]
     view.discardCursorRects()
     check view.cursorRects.len == 0
 

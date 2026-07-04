@@ -25,9 +25,9 @@ proc newSelectionSpyView(
 suite "nimkit view selection":
   test "view selection wraps mouseDown after the original handler":
     let
-      window = newWindow("Selection wrapper", frame = initRect(0, 0, 120, 100))
-      root = newView(frame = initRect(0, 0, 120, 100))
-      child = newSelectionSpyView("child", initRect(10, 10, 60, 40), true)
+      window = newWindow("Selection wrapper", frame = rect(0, 0, 120, 100))
+      root = newView(frame = rect(0, 0, 120, 100))
+      child = newSelectionSpyView("child", rect(10, 10, 60, 40), true)
 
     root.addSubview(child)
     window.setContentView(root)
@@ -56,10 +56,10 @@ suite "nimkit view selection":
 
   test "view selection consumes otherwise unhandled child clicks":
     let
-      window = newWindow("Selection consumes", frame = initRect(0, 0, 160, 120))
-      root = newView(frame = initRect(0, 0, 160, 120))
-      parent = newSelectionSpyView("parent", initRect(10, 10, 120, 80), true)
-      child = newView("child", frame = initRect(20, 15, 40, 30))
+      window = newWindow("Selection consumes", frame = rect(0, 0, 160, 120))
+      root = newView(frame = rect(0, 0, 160, 120))
+      parent = newSelectionSpyView("parent", rect(10, 10, 120, 80), true)
+      child = newView("child", frame = rect(20, 15, 40, 30))
 
     parent.addSubview(child)
     root.addSubview(parent)
@@ -89,10 +89,10 @@ suite "nimkit view selection":
 
   test "view selection follows subviews added and removed after install":
     let
-      window = newWindow("Dynamic selection", frame = initRect(0, 0, 180, 120))
-      root = newView(frame = initRect(0, 0, 180, 120))
-      container = newView("container", frame = initRect(10, 10, 120, 80))
-      child = newView("child", frame = initRect(20, 15, 40, 30))
+      window = newWindow("Dynamic selection", frame = rect(0, 0, 180, 120))
+      root = newView(frame = rect(0, 0, 180, 120))
+      container = newView("container", frame = rect(10, 10, 120, 80))
+      child = newView("child", frame = rect(20, 15, 40, 30))
 
     window.setContentView(root)
 
@@ -126,9 +126,9 @@ suite "nimkit view selection":
 
   test "view inspector can select inspected views from mouseDown":
     let
-      window = newWindow("Inspector selection", frame = initRect(0, 0, 160, 120))
-      root = newView(frame = initRect(0, 0, 160, 120))
-      child = newView("child", frame = initRect(20, 20, 50, 35))
+      window = newWindow("Inspector selection", frame = rect(0, 0, 160, 120))
+      root = newView(frame = rect(0, 0, 160, 120))
+      child = newView("child", frame = rect(20, 20, 50, 35))
 
     root.addSubview(child)
     window.setContentView(root)

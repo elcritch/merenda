@@ -30,7 +30,7 @@ protocol ViewProtocol from View:
     discard
       recordPropertyAnimation(DynamicAgent(self), setFrame(), self.xFrame, nextFrame)
     self.xFrame = nextFrame
-    self.xBounds = initRect(self.xBounds.origin, nextFrame.size)
+    self.xBounds = rect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)
     self.refreshAutoresizingReference()
     emit self.geometryDidChange()
@@ -44,7 +44,7 @@ protocol ViewProtocol from View:
       return
     discard
       recordPropertyAnimation(DynamicAgent(self), setBounds(), self.xBounds, bounds)
-    self.xBounds = initRect(bounds.origin, bounds.size)
+    self.xBounds = rect(bounds.origin, bounds.size)
     emit self.layoutInputChanged(lirBounds)
     emit self.geometryDidChange()
     self.setNeedsDisplay(true)
@@ -82,7 +82,7 @@ protocol ViewProtocol from View:
 
   method invalidRect*(self: View): Rect =
     if not self.xNeedsDisplay:
-      return initRect(0.0, 0.0, 0.0, 0.0)
+      return rect(0.0, 0.0, 0.0, 0.0)
     if self.xInvalidRects.len == 0:
       return self.visibleRect()
     result = self.xInvalidRects[0]
@@ -516,13 +516,10 @@ macro autoNames*(rest: varargs[untyped]): untyped =
       newColonExpr(ident"name", newLit(child.inferredSubviewIdentifier())),
     )
 
-proc addSubviews*(
-    view: View, subviews: openArray[NamedSubview], override = false
-) =
+proc addSubviews*(view: View, subviews: openArray[NamedSubview], override = false) =
   ## Adds several subviews and assigns provided names as identifiers.
   ## Existing identifiers are preserved unless ``override`` is true.
   for subview in subviews:
     if not subview.view.isNil and (override or subview.view.xIdentifier.len == 0):
       subview.view.xIdentifier = subview.name
     view.addSubview(subview.view)
-

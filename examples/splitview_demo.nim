@@ -17,7 +17,7 @@ proc titledPane(title: string, controls: openArray[View]): Box =
 
 let
   app = sharedApplication()
-  window = newWindow("NimKit Split View Demo", frame = initRect(160, 140, 780, 460))
+  window = newWindow("NimKit Split View Demo", frame = rect(160, 140, 780, 460))
   root = newView()
 
   mainSplit = newSplitView(laHorizontal)

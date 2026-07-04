@@ -107,9 +107,9 @@ proc makeFieldRow(labelText: string, control: View): StackView =
 proc addScrollDocumentRow(document: View, index: int, heading, detail: string) =
   let
     y = 12.0'f32 + index.float32 * 54.0'f32
-    row = newView(frame = initRect(12, y, 520, 44))
-    title = newHeadingLabel(heading, frame = initRect(12, 4, 220, 18))
-    body = newStatusLabel(detail, frame = initRect(12, 24, 460, 16))
+    row = newView(frame = rect(12, y, 520, 44))
+    title = newHeadingLabel(heading, frame = rect(12, 4, 220, 18))
+    body = newStatusLabel(detail, frame = rect(12, 24, 460, 16))
   row.addSubviews(autoNames(title, body))
   document.addSubview(row)
 
@@ -127,7 +127,7 @@ protocol PreferenceTableDataSource of TableViewDataSource:
 
 let
   app = sharedApplication()
-  window = newWindow("NimKit Preferences Demo", frame = initRect(120, 90, 810, 544))
+  window = newWindow("NimKit Preferences Demo", frame = rect(120, 90, 810, 544))
   root = newView()
   contentGuide = root.contentLayoutGuide(insets(26.0, 32.0, 24.0, 32.0))
   controller = newPreferencesController()
@@ -211,9 +211,9 @@ let syncSwitch = newSwitchButton(true)
 let intervalChoice = newComboBox(["5 minutes", "15 minutes", "Hourly", "Manual"])
 let cacheSlider = newSlider(1.0, 12.0, 4.0)
 let cacheValue = newStatusLabel("Offline cache: 4 GB")
-let syncDocument = newView(frame = initRect(0, 0, 560, 390))
+let syncDocument = newView(frame = rect(0, 0, 560, 390))
 let syncScrollView =
-  newScrollView(frame = initRect(0, 0, 560, 170), documentView = syncDocument)
+  newScrollView(frame = rect(0, 0, 560, 170), documentView = syncDocument)
 
 intervalChoice.selectItemAtIndex(1)
 cacheSlider.stepValue = 1.0
@@ -254,7 +254,7 @@ accountsPage.stack.addFlexibleSpacer()
 
 let advancedPage = makeTabPage()
 let tableSection = makeSection("Advanced Settings")
-let preferencesTable = newTableView(frame = initRect(0, 0, 760, 230))
+let preferencesTable = newTableView(frame = rect(0, 0, 760, 230))
 let advancedHint = newStatusLabel(
   "Resize columns, scroll horizontally, and select rows to inspect themed table chrome."
 )

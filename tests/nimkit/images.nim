@@ -54,8 +54,8 @@ suite "nimkit image resources":
   test "image views expose intrinsic size accessibility and render image nodes":
     let
       image = newImageResource(testImage(12, 6), name = "logo")
-      root = newView(frame = initRect(0, 0, 80, 40))
-      imageView = newImageView(image, frame = initRect(10, 8, 40, 20))
+      root = newView(frame = rect(0, 0, 80, 40))
+      imageView = newImageView(image, frame = rect(10, 8, 40, 20))
 
     root.addSubview(imageView)
 

@@ -17,7 +17,7 @@ protocol FixedIntrinsicLayout of ViewLayoutProtocol:
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
-  initViewFields(result, initRect(0.0, 0.0, width, height))
+  initViewFields(result, rect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
@@ -87,7 +87,7 @@ proc newBoxDemoLayoutFixture(): BoxDemoLayoutFixture =
     resetButton = newButton("Reset")
 
   result.window =
-    newWindow("NimKit Box Demo", frame = initRect(0, 0, DemoWindowWidth, 360.0))
+    newWindow("NimKit Box Demo", frame = rect(0, 0, DemoWindowWidth, 360.0))
   result.root = newView()
   result.layout = newStackView(laVertical)
   result.status = newStatusLabel(
@@ -227,7 +227,7 @@ suite "nimkit boxes":
     appearance[srBox, StyleTextInsets] = insets(0.0, 6.0)
 
     let
-      box = newBox("Options", frame = initRect(0.0, 0.0, 200.0, 120.0))
+      box = newBox("Options", frame = rect(0.0, 0.0, 200.0, 120.0))
       content = newFixedIntrinsicView(80.0, 30.0)
 
     box.appearance = appearance
@@ -238,12 +238,12 @@ suite "nimkit boxes":
     check intrinsic.height == 83.0
 
     box.layoutSubtreeIfNeeded()
-    check box.contentRect() == initRect(14.0, 37.0, 168.0, 67.0)
+    check box.contentRect() == rect(14.0, 37.0, 168.0, 67.0)
     check content.frame() == box.contentRect()
 
   test "content subviews are hosted inside the content view":
     let
-      box = newBox("Host", frame = initRect(0.0, 0.0, 160.0, 90.0))
+      box = newBox("Host", frame = rect(0.0, 0.0, 160.0, 90.0))
       child = newFixedIntrinsicView(20.0, 10.0)
 
     box.addContentSubview(child)
@@ -268,9 +268,9 @@ suite "nimkit boxes":
 
   test "box rendering uses theme fill border title and separator metrics":
     let
-      box = newBox("Network", frame = initRect(0.0, 0.0, 180.0, 90.0))
-      separator = newSeparatorBox(laVertical, frame = initRect(0.0, 0.0, 12.0, 80.0))
-      root = newView(frame = initRect(0.0, 0.0, 220.0, 120.0))
+      box = newBox("Network", frame = rect(0.0, 0.0, 180.0, 90.0))
+      separator = newSeparatorBox(laVertical, frame = rect(0.0, 0.0, 12.0, 80.0))
+      root = newView(frame = rect(0.0, 0.0, 220.0, 120.0))
       fillColor = color(0.91, 0.93, 0.96, 1.0)
       borderColor = color(0.21, 0.29, 0.37, 1.0)
 

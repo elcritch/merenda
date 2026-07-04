@@ -4,8 +4,8 @@ import merenda/nimkit
 
 proc newScrollFixture(): tuple[scrollView: ScrollView, document: View] =
   let
-    document = newView(frame = initRect(0, 0, 320, 240))
-    scrollView = newScrollView(frame = initRect(0, 0, 120, 80), documentView = document)
+    document = newView(frame = rect(0, 0, 320, 240))
+    scrollView = newScrollView(frame = rect(0, 0, 120, 80), documentView = document)
   scrollView.hasHorizontalScroller = true
   scrollView.hasVerticalScroller = true
   scrollView.autohidePolicy = sapNever
@@ -25,7 +25,7 @@ suite "nimkit scroll views":
       clipView = scrollView.clipView()
 
     check clipView.documentView() == fixture.document
-    check clipView.documentRect() == initRect(0, 0, 320, 240)
+    check clipView.documentRect() == rect(0, 0, 320, 240)
     check clipView.documentVisibleRect().origin == initPoint(0, 0)
 
     check clipView.constrainScrollPoint(initPoint(-20, -10)) == initPoint(0, 0)
@@ -54,9 +54,9 @@ suite "nimkit scroll views":
     let
       fixture = newScrollFixture()
       scrollView = fixture.scrollView
-      horizontalHeader = newView(frame = initRect(0, 0, 50, 16))
-      verticalHeader = newView(frame = initRect(0, 0, 16, 50))
-      corner = newView(frame = initRect(0, 0, 16, 16))
+      horizontalHeader = newView(frame = rect(0, 0, 50, 16))
+      verticalHeader = newView(frame = rect(0, 0, 16, 50))
+      corner = newView(frame = rect(0, 0, 16, 16))
 
     scrollView.horizontalLineScroll = 3
     scrollView.verticalLineScroll = 9

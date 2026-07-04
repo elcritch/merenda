@@ -180,10 +180,10 @@ protocol WindowDelegateSpyProtocol of WindowDelegateProtocol:
 suite "nimkit application":
   test "window protocols observe and veto core window behavior":
     let
-      window = newWindow("Window hooks", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      replacement = newView(frame = initRect(0, 0, 240, 160))
-      button = newButton("Focus", frame = initRect(16, 16, 90, 32))
+      window = newWindow("Window hooks", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      replacement = newView(frame = rect(0, 0, 240, 160))
+      button = newButton("Focus", frame = rect(16, 16, 90, 32))
       observer = WindowHookObserver()
 
     windowHookEvents = @[]
@@ -256,9 +256,9 @@ suite "nimkit application":
   test "nil-target actions dispatch through window app and app delegate":
     let
       app = newApplication()
-      window = newWindow("Action chain", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      button = newButton("Run", frame = initRect(20, 20, 90, 32))
+      window = newWindow("Action chain", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      button = newButton("Run", frame = rect(20, 20, 90, 32))
       action = actionSelector("appDelegateAction")
 
     var
@@ -283,9 +283,9 @@ suite "nimkit application":
   test "window key commands continue through application delegate":
     let
       app = newApplication()
-      window = newWindow("Command chain", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      child = newView(frame = initRect(20, 20, 80, 32))
+      window = newWindow("Command chain", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      child = newView(frame = rect(20, 20, 80, 32))
       action = actionSelector("appDelegateCommand")
 
     var
@@ -313,13 +313,13 @@ suite "nimkit application":
   test "main menu validates items and dispatches key equivalents through action chain":
     let
       app = newApplication()
-      window = newWindow("Menu dispatch", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
+      window = newWindow("Menu dispatch", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
       target = MenuSpyTarget()
       menu = newMenu("Main")
       item = newMenuItem("Do Thing", actionSelector("menuSpyAction"), "d", {kmCommand})
 
-    initViewFields(target, initRect(10, 10, 80, 30))
+    initViewFields(target, rect(10, 10, 80, 30))
     discard target.withProtocol(MenuSpyActions)
     discard target.withProtocol(MenuSpyValidation)
     target.setAcceptsFirstResponder(true)
@@ -356,7 +356,7 @@ suite "nimkit application":
     let
       app = newApplication()
       delegate = AppDelegateSpy()
-      window = newWindow("Modal", frame = initRect(0, 0, 240, 160))
+      window = newWindow("Modal", frame = rect(0, 0, 240, 160))
 
     initResponder(delegate)
     discard delegate.withProtocol(AppDelegateSpyProtocol)
@@ -396,9 +396,9 @@ suite "nimkit application":
   test "application keeps ordered windows and hands off key main state":
     let
       app = newApplication()
-      first = newWindow("First", frame = initRect(0, 0, 240, 160))
-      second = newWindow("Second", frame = initRect(20, 20, 240, 160))
-      third = newWindow("Third", frame = initRect(40, 40, 240, 160))
+      first = newWindow("First", frame = rect(0, 0, 240, 160))
+      second = newWindow("Second", frame = rect(20, 20, 240, 160))
+      third = newWindow("Third", frame = rect(40, 40, 240, 160))
 
     app.addWindow(first)
     app.addWindow(second)
@@ -446,7 +446,7 @@ suite "nimkit application":
   test "window commands validate style and update pure state":
     let
       app = newApplication()
-      window = newWindow("Commands", frame = initRect(0, 0, 240, 160))
+      window = newWindow("Commands", frame = rect(0, 0, 240, 160))
       closeItem = newMenuItem("Close", actionSelector("performClose"))
       miniaturizeItem = newMenuItem("Minimize", actionSelector("performMiniaturize"))
       zoomItem = newMenuItem("Zoom", actionSelector("performZoom"))
@@ -488,9 +488,9 @@ suite "nimkit application":
     let
       app = newApplication()
       delegate = AppDelegateSpy()
-      first = newWindow("First", frame = initRect(0, 0, 240, 160))
-      second = newWindow("Second", frame = initRect(20, 20, 240, 160))
-      sheet = newPanel("Sheet", frame = initRect(40, 40, 200, 120))
+      first = newWindow("First", frame = rect(0, 0, 240, 160))
+      second = newWindow("Second", frame = rect(20, 20, 240, 160))
+      sheet = newPanel("Sheet", frame = rect(40, 40, 200, 120))
 
     initResponder(delegate)
     discard delegate.withProtocol(AppDelegateSpyProtocol)
@@ -524,10 +524,10 @@ suite "nimkit application":
 
   test "window roles metadata delegates coordinates and sheets":
     let
-      window = newWindow("Owner", frame = initRect(20, 30, 240, 160))
-      sheet = newPanel("Sheet", frame = initRect(40, 50, 180, 120))
+      window = newWindow("Owner", frame = rect(20, 30, 240, 160))
+      sheet = newPanel("Sheet", frame = rect(40, 50, 180, 120))
       delegate = WindowDelegateSpy()
-      content = newView(frame = initRect(10, 15, 100, 80))
+      content = newView(frame = rect(10, 15, 100, 80))
 
     initResponder(delegate)
     discard delegate.withProtocol(WindowDelegateSpyProtocol)
@@ -588,7 +588,7 @@ suite "nimkit application":
       alert = newAlert(
         "Replace file?", "This cannot be undone.", asWarning, ["Replace", "Cancel"]
       )
-      accessory = newView(frame = initRect(0, 0, 40, 20))
+      accessory = newView(frame = rect(0, 0, 40, 20))
 
     var alertResponse = -1
     alert.setAccessoryView(accessory)
@@ -659,13 +659,13 @@ suite "nimkit application":
 
   test "popup menu button opens menu popup and activates items":
     let
-      window = newWindow("Popup Menu", frame = initRect(0, 0, 320, 180))
-      root = newView(frame = initRect(0, 0, 320, 180))
-      bar = newView(frame = initRect(0, 0, 320, 28))
+      window = newWindow("Popup Menu", frame = rect(0, 0, 320, 180))
+      root = newView(frame = rect(0, 0, 320, 180))
+      bar = newView(frame = rect(0, 0, 320, 28))
       menu = newMenu("Actions")
       action = actionSelector("popupMenuAction")
       item = newMenuItem("Run", action)
-      button = newPopupMenuButton("Actions", menu, initRect(8, 2, 80, 24))
+      button = newPopupMenuButton("Actions", menu, rect(8, 2, 80, 24))
 
     var actionCount = 0
 
@@ -690,8 +690,8 @@ suite "nimkit application":
 
   test "popup menus skip disabled rows render states and navigate submenus":
     let
-      window = newWindow("Popup Menu Keyboard", frame = initRect(0, 0, 360, 220))
-      root = newView(frame = initRect(0, 0, 360, 220))
+      window = newWindow("Popup Menu Keyboard", frame = rect(0, 0, 360, 220))
+      root = newView(frame = rect(0, 0, 360, 220))
       menu = newMenu("Actions")
       submenu = newMenu("More")
       disabled = newMenuItem("Disabled", actionSelector("disabledAction"))
@@ -700,7 +700,7 @@ suite "nimkit application":
       more = newMenuItem("More")
       leafAction = actionSelector("leafMenuAction")
       leaf = newMenuItem("Leaf", leafAction)
-      button = newPopupMenuButton("Actions", menu, initRect(8, 2, 90, 24))
+      button = newPopupMenuButton("Actions", menu, rect(8, 2, 90, 24))
 
     var actionCount = 0
 
@@ -758,9 +758,9 @@ suite "nimkit application":
 
   test "cascading view moves through columns from user input":
     let
-      window = newWindow("Cascading Input", frame = initRect(0, 0, 420, 220))
-      root = newView(frame = initRect(0, 0, 420, 220))
-      browser = newCascadingView(frame = initRect(10, 10, 360, 160))
+      window = newWindow("Cascading Input", frame = rect(0, 0, 420, 220))
+      root = newView(frame = rect(0, 0, 420, 220))
+      browser = newCascadingView(frame = rect(10, 10, 360, 160))
 
     browser.cascadingItems = [
       initCascadingItem("project", "Project"),
@@ -820,14 +820,14 @@ suite "nimkit application":
 
   test "menu bar presents top-level menu submenus":
     let
-      window = newWindow("Menu Bar", frame = initRect(0, 0, 320, 180))
-      root = newView(frame = initRect(0, 0, 320, 180))
+      window = newWindow("Menu Bar", frame = rect(0, 0, 320, 180))
+      root = newView(frame = rect(0, 0, 320, 180))
       mainMenu = newMenu("Main")
       actionsMenu = newMenu("Actions")
       actionsItem = newMenuItem("Actions")
       action = actionSelector("menuBarAction")
       item = newMenuItem("Run", action)
-      menuBar = newMenuBar(mainMenu, initRect(0, 0, 320, 28))
+      menuBar = newMenuBar(mainMenu, rect(0, 0, 320, 28))
 
     var actionCount = 0
 
@@ -852,12 +852,12 @@ suite "nimkit application":
 
   test "menu bar highlights top-level items on mouse hover":
     let
-      window = newWindow("Menu Bar Hover", frame = initRect(0, 0, 320, 180))
-      root = newView(frame = initRect(0, 0, 320, 180))
+      window = newWindow("Menu Bar Hover", frame = rect(0, 0, 320, 180))
+      root = newView(frame = rect(0, 0, 320, 180))
       mainMenu = newMenu("Main")
       actionsMenu = newMenu("Actions")
       actionsItem = newMenuItem("Actions")
-      menuBar = newMenuBar(mainMenu, initRect(0, 0, 320, 28))
+      menuBar = newMenuBar(mainMenu, rect(0, 0, 320, 28))
 
     actionsItem.submenu = actionsMenu
     discard mainMenu.addItem(actionsItem)
@@ -879,14 +879,14 @@ suite "nimkit application":
 
   test "menu bar hover switches the open top-level menu":
     let
-      window = newWindow("Menu Bar Switch", frame = initRect(0, 0, 360, 180))
-      root = newView(frame = initRect(0, 0, 360, 180))
+      window = newWindow("Menu Bar Switch", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
       mainMenu = newMenu("Main")
       actionsMenu = newMenu("Actions")
       editMenu = newMenu("Edit")
       actionsItem = newMenuItem("Actions")
       editItem = newMenuItem("Edit")
-      menuBar = newMenuBar(mainMenu, initRect(0, 0, 360, 28))
+      menuBar = newMenuBar(mainMenu, rect(0, 0, 360, 28))
 
     actionsItem.submenu = actionsMenu
     editItem.submenu = editMenu
@@ -914,9 +914,9 @@ suite "nimkit application":
   test "windows menu modal sheets hide restore and autosave integrate with app":
     let
       app = newApplication()
-      first = newWindow("First", frame = initRect(10, 20, 240, 160))
-      second = newWindow("Second", frame = initRect(30, 40, 260, 180))
-      sheet = newPanel("Sheet", frame = initRect(40, 50, 180, 120))
+      first = newWindow("First", frame = rect(10, 20, 240, 160))
+      second = newWindow("Second", frame = rect(30, 40, 260, 180))
+      sheet = newPanel("Sheet", frame = rect(40, 50, 180, 120))
       windowsMenu = newMenu("Window")
 
     app.addWindow(first)
@@ -958,11 +958,11 @@ suite "nimkit application":
     check app.modalSession.isNil
 
     first.frameAutosaveName = "tnimkit-application-first"
-    first.frame = initRect(70, 80, 300, 210)
+    first.frame = rect(70, 80, 300, 210)
     check first.saveFrameUsingName()
-    let restored = newWindow("Restored", frame = initRect(0, 0, 120, 90))
+    let restored = newWindow("Restored", frame = rect(0, 0, 120, 90))
     restored.frameAutosaveName = "tnimkit-application-first"
-    check restored.frame == initRect(70, 80, 300, 210)
+    check restored.frame == rect(70, 80, 300, 210)
     check removeSavedFrameForName("tnimkit-application-first")
 
   test "raw mouse input converts from reported input size to logical size":
@@ -983,10 +983,10 @@ suite "nimkit application":
     block nativeRun:
       let
         app = newApplication()
-        window = newWindow("Nimkit Native Test", frame = initRect(80, 80, 240, 140))
-        root = newView(frame = initRect(0, 0, 240, 140))
+        window = newWindow("Nimkit Native Test", frame = rect(80, 80, 240, 140))
+        root = newView(frame = rect(0, 0, 240, 140))
 
-      root.addSubview(newTextField("Native window", frame = initRect(16, 16, 180, 32)))
+      root.addSubview(newTextField("Native window", frame = rect(16, 16, 180, 32)))
       window.setContentView(root)
       app.addWindow(window)
 
@@ -1009,9 +1009,9 @@ suite "nimkit application":
       let
         app = newApplication()
         window =
-          newWindow("Nimkit Native Render Request", frame = initRect(80, 80, 240, 140))
-        root = newView(frame = initRect(0, 0, 240, 140))
-        child = newView(frame = initRect(16, 16, 80, 40))
+          newWindow("Nimkit Native Render Request", frame = rect(80, 80, 240, 140))
+        root = newView(frame = rect(0, 0, 240, 140))
+        child = newView(frame = rect(16, 16, 80, 40))
 
       root.addSubview(child)
       window.setContentView(root)
@@ -1044,9 +1044,9 @@ suite "nimkit application":
     block nativeClose:
       let
         app = newApplication()
-        window = newWindow("Nimkit Native Close", frame = initRect(80, 80, 240, 140))
+        window = newWindow("Nimkit Native Close", frame = rect(80, 80, 240, 140))
 
-      window.setContentView(newView(frame = initRect(0, 0, 240, 140)))
+      window.setContentView(newView(frame = rect(0, 0, 240, 140)))
       app.addWindow(window)
       window.makeKeyAndOrderFront()
 
@@ -1069,9 +1069,9 @@ suite "nimkit application":
     block nativeEscape:
       let
         app = newApplication()
-        window = newWindow("Nimkit Native Escape", frame = initRect(80, 80, 240, 140))
+        window = newWindow("Nimkit Native Escape", frame = rect(80, 80, 240, 140))
 
-      window.setContentView(newView(frame = initRect(0, 0, 240, 140)))
+      window.setContentView(newView(frame = rect(0, 0, 240, 140)))
       app.addWindow(window)
       window.makeKeyAndOrderFront()
 
@@ -1099,12 +1099,10 @@ suite "nimkit application":
     block nativeComboPopup:
       let
         app = newApplication()
-        window =
-          newWindow("Nimkit Native Combo Popup", frame = initRect(80, 80, 260, 160))
-        root = newView(frame = initRect(0, 0, 260, 160))
-        combo =
-          newComboBox(["Low", "Medium", "High"], frame = initRect(16, 16, 140, 24))
-        other = newComboBox(["Red", "Green", "Blue"], frame = initRect(16, 58, 140, 24))
+        window = newWindow("Nimkit Native Combo Popup", frame = rect(80, 80, 260, 160))
+        root = newView(frame = rect(0, 0, 260, 160))
+        combo = newComboBox(["Low", "Medium", "High"], frame = rect(16, 16, 140, 24))
+        other = newComboBox(["Red", "Green", "Blue"], frame = rect(16, 58, 140, 24))
 
       root.addSubview(combo)
       root.addSubview(other)
@@ -1171,11 +1169,9 @@ suite "nimkit application":
     block nativeInlineComboPopup:
       let
         app = newApplication()
-        window =
-          newWindow("Nimkit Inline Combo Popup", frame = initRect(80, 80, 260, 160))
-        root = newView(frame = initRect(0, 0, 260, 160))
-        combo =
-          newComboBox(["Low", "Medium", "High"], frame = initRect(16, 16, 140, 24))
+        window = newWindow("Nimkit Inline Combo Popup", frame = rect(80, 80, 260, 160))
+        root = newView(frame = rect(0, 0, 260, 160))
+        combo = newComboBox(["Low", "Medium", "High"], frame = rect(16, 16, 140, 24))
 
       window.setPopupPresentation(ppInline)
       root.addSubview(combo)

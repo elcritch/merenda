@@ -258,8 +258,8 @@ proc mapContractFragmentsToContainers(
     var mapped = fragment
     mapped.containerIndex = initTextContainerIndex(containerIndex)
     mapped.fragmentRect =
-      initRect(layoutRect.origin.x, lineY, layoutRect.size.width, lineHeight)
-    mapped.usedRect = initRect(
+      rect(layoutRect.origin.x, lineY, layoutRect.size.width, lineHeight)
+    mapped.usedRect = rect(
       layoutRect.origin.x,
       lineY,
       min(fragment.usedRect.size.width, layoutRect.size.width),
@@ -289,9 +289,8 @@ proc addContractFragment(
         length
     lineY = layoutRect.origin.y + lineIndex.float32 * lineHeight
     usedWidth = usedLength.float32 * charWidth
-    fragmentRect =
-      initRect(layoutRect.origin.x, lineY, layoutRect.size.width, lineHeight)
-    usedRect = initRect(layoutRect.origin.x, lineY, usedWidth, lineHeight)
+    fragmentRect = rect(layoutRect.origin.x, lineY, layoutRect.size.width, lineHeight)
+    usedRect = rect(layoutRect.origin.x, lineY, usedWidth, lineHeight)
   fragments.add TextLineFragment(
     lineIndex: initTextLineIndex(lineIndex),
     containerIndex: initTextContainerIndex(0),
@@ -443,7 +442,7 @@ proc contractSnapshot(
         result.usedRect = fragment.usedRect
         hasUsedRect = true
   if not hasUsedRect:
-    result.usedRect = initRect(result.containerRect.origin, initSize(0.0, 0.0))
+    result.usedRect = rect(result.containerRect.origin, initSize(0.0, 0.0))
   var fragmentRect = result.usedRect
   for fragment in result.lineFragments:
     fragmentRect = fragmentRect.union(fragment.fragmentRect)
@@ -602,12 +601,12 @@ suite "nimkit text layout":
       heightTracksTextView = true,
       maximumNumberOfLines = 2,
       lineBreakMode = tlbmCharWrapping,
-      exclusionPaths = [initRect(20.0, 22.0, 20.0, 12.0)],
+      exclusionPaths = [rect(20.0, 22.0, 20.0, 12.0)],
     )
     let
       layoutRect = container.layoutRect()
       effective = container.effectiveLineFragmentRect(
-        initRect(layoutRect.origin.x, layoutRect.origin.y, 60.0, 12.0)
+        rect(layoutRect.origin.x, layoutRect.origin.y, 60.0, 12.0)
       )
 
     checkClose(layoutRect.origin.x, 17.0)
@@ -736,7 +735,7 @@ suite "nimkit text layout":
     let emptySnapshot = emptyManager.layoutSnapshot()
     check emptyBackend.requests.len == 1
     check emptySnapshot.glyphCount == 0
-    check emptySnapshot.containerRect == initRect(2.0, 2.0, 76.0, 36.0)
+    check emptySnapshot.containerRect == rect(2.0, 2.0, 76.0, 36.0)
     check emptySnapshot.lineFragments.len == 1
     check emptySnapshot.lineFragments[0].textRange == initTextRange(0, 0)
     check emptySnapshot.lineFragments[0].glyphRange == initGlyphRange(0, 0)

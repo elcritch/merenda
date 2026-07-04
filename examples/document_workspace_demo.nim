@@ -308,7 +308,7 @@ proc cascadeFrame(
     else:
       min(max(controller.documentCount() - 1, 0), 8)
   let offset = 28.0'f32 * index.float32
-  initRect(120.0 + offset, 120.0 + offset, width, height)
+  rect(120.0 + offset, 120.0 + offset, width, height)
 
 proc makeButton(
     title: string, action: string, callback: proc(sender: DynamicAgent)
@@ -346,7 +346,7 @@ proc makeWorkspaceWindow(
   result = newWindow("NimKit Document Workspace", frame = controller.cascadeFrame())
   let
     root = newView()
-    menuBar = newMenuBar(app.mainMenu(), initRect(0, 0, 980, 28))
+    menuBar = newMenuBar(app.mainMenu(), rect(0, 0, 980, 28))
     title = newTitleLabel(document.displayName())
     subtitle = newStatusLabel(document.documentSubtitle())
     toolbar = newStackView(laHorizontal)
@@ -465,7 +465,7 @@ proc makeTextDocumentWindow(
     root = newView()
     title = newTitleLabel(document.displayName())
     subtitle = newStatusLabel(document.documentSubtitle())
-    editor = newTextView(document.documentText(), frame = initRect(0, 0, 560.0, 660.0))
+    editor = newTextView(document.documentText(), frame = rect(0, 0, 560.0, 660.0))
     scroll = newScrollView(documentView = editor)
   scroll.borderType = svbLineBorder
   scroll.hasVerticalScroller = true

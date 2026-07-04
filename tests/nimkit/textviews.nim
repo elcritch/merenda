@@ -174,7 +174,7 @@ proc newTextViewCheckerSpy(): TextViewCheckerSpy =
 
 suite "nimkit text views":
   test "text view inserts and replaces selected text":
-    let textView = newTextView("abcdef", frame = initRect(0, 0, 160, 24))
+    let textView = newTextView("abcdef", frame = rect(0, 0, 160, 24))
 
     textView.selectedRange = initTextRange(2, 2)
     discard textView.send(insertText(), "XY")
@@ -183,7 +183,7 @@ suite "nimkit text views":
     check textView.selectedRange == initTextRange(4, 0)
 
   test "text view delete and movement commands update selection":
-    let textView = newTextView("one two", frame = initRect(0, 0, 160, 24))
+    let textView = newTextView("one two", frame = rect(0, 0, 160, 24))
 
     textView.selectedRange = initTextRange(7, 0)
     discard textView.send(moveWordLeft(), ActionArgs(sender: DynamicAgent(textView)))
@@ -200,7 +200,7 @@ suite "nimkit text views":
 
   test "text view keeps attributed storage":
     let
-      textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+      textView = newTextView("abc", frame = rect(0, 0, 160, 24))
       accent = defaultTextAttributes(color(0.9, 0.1, 0.1))
 
     textView.textStorage().setAttributes(initTextRange(0, 3), accent)
@@ -212,7 +212,7 @@ suite "nimkit text views":
 
   test "text view uses explicit typing attributes for inserted text":
     let
-      textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+      textView = newTextView("abc", frame = rect(0, 0, 160, 24))
       accent = TextAttributes(
         foregroundColor: color(0.2, 0.4, 0.8), fontSize: 15.0, underline: true
       )
@@ -226,7 +226,7 @@ suite "nimkit text views":
 
   test "text view insertion at styled run end inherits previous attributes":
     let
-      textView = newTextView("Title\nBody", frame = initRect(0, 0, 200, 80))
+      textView = newTextView("Title\nBody", frame = rect(0, 0, 200, 80))
       titleAttributes = defaultTextAttributes(color(0.95, 0.42, 0.78), 18.0)
 
     textView.textStorage().setAttributes(initTextRange(0, 5), titleAttributes)
@@ -237,7 +237,7 @@ suite "nimkit text views":
     check textView.textStorage().attributesAt(5) == titleAttributes
 
   test "text view marked text replaces selection and commits through insert text":
-    let textView = newTextView("abcd", frame = initRect(0, 0, 160, 24))
+    let textView = newTextView("abcd", frame = rect(0, 0, 160, 24))
 
     textView.selectedRange = initTextRange(1, 2)
     textView.setMarkedTextValue("XY", initTextRange(1, 0), initTextRange(0, 0))
@@ -257,7 +257,7 @@ suite "nimkit text views":
 
   test "text view exposes text input client marked text geometry":
     let
-      textView = newTextView("abcd", frame = initRect(12, 18, 180, 48))
+      textView = newTextView("abcd", frame = rect(12, 18, 180, 48))
       accent = defaultTextAttributes(color(0.1, 0.3, 0.8), 14.0)
 
     textView.textStorage().setAttributes(initTextRange(1, 2), accent)
@@ -289,7 +289,7 @@ suite "nimkit text views":
     check index == 1
 
   test "text view undo and redo restore text and selection":
-    let textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+    let textView = newTextView("abc", frame = rect(0, 0, 160, 24))
 
     textView.selectedRange = initTextRange(3, 0)
     textView.insertTextValue("d")
@@ -305,7 +305,7 @@ suite "nimkit text views":
 
   test "text view delegate gates edits and receives lifecycle callbacks":
     let
-      textView = newTextView("ab", frame = initRect(0, 0, 160, 24))
+      textView = newTextView("ab", frame = rect(0, 0, 160, 24))
       delegate = newTextViewDelegateSpy(allowBegin = true, allowChange = false)
 
     textView.delegate = DynamicAgent(delegate)
@@ -327,7 +327,7 @@ suite "nimkit text views":
     check delegate.didEnd == 1
 
   test "text view supports multiple and rectangular selection hooks":
-    let textView = newTextView("alpha\nbeta\ngamma", frame = initRect(0, 0, 240, 120))
+    let textView = newTextView("alpha\nbeta\ngamma", frame = rect(0, 0, 240, 120))
 
     textView.selectionGranularity = tsgWord
     textView.selectRange(1, textView.selectionGranularity)
@@ -346,7 +346,7 @@ suite "nimkit text views":
     check textView.rectangularSelection.ranges.len == 0
 
   test "text view smart insert substitution and undo grouping are reusable":
-    let textView = newTextView("helloworld", frame = initRect(0, 0, 180, 24))
+    let textView = newTextView("helloworld", frame = rect(0, 0, 180, 24))
 
     textView.smartInsertDeleteEnabled = true
     textView.selectedRange = initTextRange(5, 0)
@@ -372,9 +372,9 @@ suite "nimkit text views":
   test "text view find indicators checking and completion use pure contracts":
     let
       textView = newTextView(
-        "alpha beta alpha https://example.test", frame = initRect(0, 0, 260, 80)
+        "alpha beta alpha https://example.test", frame = rect(0, 0, 260, 80)
       )
-      replaceView = newTextView("one two one", frame = initRect(0, 0, 200, 40))
+      replaceView = newTextView("one two one", frame = rect(0, 0, 200, 40))
       checker = newTextViewCheckerSpy()
       delegate = newTextViewDelegateSpy()
 
@@ -409,7 +409,7 @@ suite "nimkit text views":
 
   test "text view exposes caret selection and paragraph editing attributes":
     let
-      textView = newTextView("abc", frame = initRect(0, 0, 160, 24))
+      textView = newTextView("abc", frame = rect(0, 0, 160, 24))
       selectedAttributes = defaultTextAttributes(color(1.0, 1.0, 1.0, 1.0), 14.0)
       caretColor = color(0.9, 0.1, 0.2, 1.0)
       tabStop = initTextTabStop(48.0)
@@ -439,7 +439,7 @@ suite "nimkit text views":
     check not textView.rulerVisible
 
   test "text view exposes accessibility parameterized text attributes":
-    let textView = newTextView("Title\nBody", frame = initRect(0, 0, 220, 90))
+    let textView = newTextView("Title\nBody", frame = rect(0, 0, 220, 90))
     var attributes = textView.textStorage().attributesAt(0)
     attributes.link = "https://example.test"
     attributes.fontSize = 18.0
@@ -475,7 +475,7 @@ suite "nimkit text views":
 
   test "text view pagination ruler and stability snapshots are deterministic":
     let textView =
-      newTextView("One\nTwo\nThree\nFour\nFive", frame = initRect(0, 0, 140, 80))
+      newTextView("One\nTwo\nThree\nFour\nFive", frame = rect(0, 0, 140, 80))
     let tabStop = initTextTabStop(42.0)
     var paragraph = initTextParagraphStyle(tabStops = [tabStop])
     paragraph.firstLineHeadIndent = 12.0
@@ -519,7 +519,7 @@ suite "nimkit text views":
 
   test "text view validates commands and dispatches clicked links":
     let
-      textView = newTextView("link", frame = initRect(0, 0, 160, 24))
+      textView = newTextView("link", frame = rect(0, 0, 160, 24))
       delegate = newTextViewDelegateSpy()
     var attributes = textView.textStorage().attributesAt(0)
 
@@ -549,8 +549,8 @@ suite "nimkit text views":
   test "text view copy cut and paste use the general pasteboard":
     let
       pasteboard = generalPasteboard()
-      source = newTextView("abcd", frame = initRect(0, 0, 160, 24))
-      target = newTextView("zz", frame = initRect(0, 0, 160, 24))
+      source = newTextView("abcd", frame = rect(0, 0, 160, 24))
+      target = newTextView("zz", frame = rect(0, 0, 160, 24))
 
     pasteboard.clearContents()
     source.selectedRange = initTextRange(1, 2)
@@ -569,7 +569,7 @@ suite "nimkit text views":
 
   test "text view services can replace selected attributed text":
     let
-      textView = newTextView("abcdef", frame = initRect(0, 0, 180, 40))
+      textView = newTextView("abcdef", frame = rect(0, 0, 180, 40))
       delegate = newTextViewDelegateSpy()
       replacementAttributes = defaultTextAttributes(color(0.7, 0.1, 0.2), 13.0)
 
@@ -593,8 +593,8 @@ suite "nimkit text views":
 
   test "text view rich transfer dragging and attachments use pure contracts":
     let
-      source = newTextView("link image end", frame = initRect(0, 0, 260, 80))
-      target = newTextView("drop", frame = initRect(0, 0, 260, 80))
+      source = newTextView("link image end", frame = rect(0, 0, 260, 80))
+      target = newTextView("drop", frame = rect(0, 0, 260, 80))
       pasteboard = pasteboardWithUniqueName()
 
     var linkAttributes = source.textStorage().attributesAt(0)
@@ -643,7 +643,7 @@ suite "nimkit text views":
 
   test "text view contextual menu routes open link through selector commands":
     let
-      textView = newTextView("link", frame = initRect(0, 0, 180, 40))
+      textView = newTextView("link", frame = rect(0, 0, 180, 40))
       delegate = newTextViewDelegateSpy()
     var attributes = textView.textStorage().attributesAt(0)
     attributes.link = "https://example.test"
@@ -681,8 +681,8 @@ suite "nimkit text views":
       pasteboard = generalPasteboard()
       previousProvider = pasteboard.provider
       provider = newTestPasteboardProvider()
-      target = newTextView("zz", frame = initRect(0, 0, 160, 24))
-      source = newTextView("abcd", frame = initRect(0, 0, 160, 24))
+      target = newTextView("zz", frame = rect(0, 0, 160, 24))
+      source = newTextView("abcd", frame = rect(0, 0, 160, 24))
 
     pasteboard.provider = nil
     pasteboard.clearContents()
@@ -710,7 +710,7 @@ suite "nimkit text views":
     pasteboard.provider = previousProvider
 
   test "text view newline and tab commands insert text":
-    let textView = newTextView("ab", frame = initRect(0, 0, 160, 24))
+    let textView = newTextView("ab", frame = rect(0, 0, 160, 24))
 
     textView.selectedRange = initTextRange(1, 0)
     discard textView.send(insertNewline(), ActionArgs(sender: DynamicAgent(textView)))
@@ -723,9 +723,9 @@ suite "nimkit text views":
 
   test "text view dispatches key bindings and IME commands through selectors":
     let
-      window = newWindow("Text command dispatch", frame = initRect(0, 0, 260, 120))
-      root = newView(frame = initRect(0, 0, 260, 120))
-      textView = newTextView("alpha\nbeta", frame = initRect(12, 12, 180, 80))
+      window = newWindow("Text command dispatch", frame = rect(0, 0, 260, 120))
+      root = newView(frame = rect(0, 0, 260, 120))
+      textView = newTextView("alpha\nbeta", frame = rect(12, 12, 180, 80))
       spy = TextCommandSpy()
 
     textView.connect(textCommandDispatched, spy, rememberTextCommand)
@@ -749,7 +749,7 @@ suite "nimkit text views":
     check spy.handled[^2] and spy.handled[^1]
 
   test "text view line deletion and document movement selectors work":
-    let textView = newTextView("alpha\nbeta", frame = initRect(0, 0, 180, 80))
+    let textView = newTextView("alpha\nbeta", frame = rect(0, 0, 180, 80))
 
     textView.selectedRange = initTextRange(8, 0)
     discard textView.send(
@@ -768,7 +768,7 @@ suite "nimkit text views":
 
   test "text view caret after newline starts on the next visual line":
     let
-      textRect = initRect(0, 0, 200, 100)
+      textRect = rect(0, 0, 200, 100)
       layout = textLayout(textRect, newTextStorage("A\nB"), taLeft, wrap = false)
       firstLineStart = caretRect(textRect, layout, 0)
       firstLineEnd = caretRect(textRect, layout, 1)
@@ -779,7 +779,7 @@ suite "nimkit text views":
 
   test "text view caret supports blank lines between newline characters":
     let
-      textRect = initRect(0, 0, 200, 140)
+      textRect = rect(0, 0, 200, 140)
       layout = textLayout(textRect, newTextStorage("A\n\nB"), taLeft, wrap = false)
       firstLineStart = caretRect(textRect, layout, 0)
       firstLineEnd = caretRect(textRect, layout, 1)
@@ -856,7 +856,7 @@ suite "nimkit text views":
     ) > 5
 
   test "text view mouse drag selects text from the mouse down anchor":
-    let textView = newTextView("abcdef", frame = initRect(0, 0, 240, 80))
+    let textView = newTextView("abcdef", frame = rect(0, 0, 240, 80))
 
     check textView.mouseDown(
       MouseEvent(location: textView.caretPoint(1), button: mbPrimary)
@@ -872,7 +872,7 @@ suite "nimkit text views":
     )
 
   test "text view reverse mouse drag keeps a normalized selected range":
-    let textView = newTextView("abcdef", frame = initRect(0, 0, 240, 80))
+    let textView = newTextView("abcdef", frame = rect(0, 0, 240, 80))
 
     check textView.mouseDown(
       MouseEvent(location: textView.caretPoint(4), button: mbPrimary)
@@ -888,7 +888,7 @@ suite "nimkit text views":
     )
 
   test "text view mouse drag beyond a line end selects to that visual line end":
-    let textView = newTextView("Title\nSecond", frame = initRect(0, 0, 240, 120))
+    let textView = newTextView("Title\nSecond", frame = rect(0, 0, 240, 120))
     let
       firstLineStart = textView.caretPoint(0)
       firstLineEnd = textView.layoutManager().caretRect(5)
@@ -903,7 +903,7 @@ suite "nimkit text views":
     check textView.mouseUp(MouseEvent(location: dragPoint, button: mbPrimary))
 
   test "text view up and down commands move between visual lines":
-    let textView = newTextView("abc\ndef\nghi", frame = initRect(0, 0, 200, 120))
+    let textView = newTextView("abc\ndef\nghi", frame = rect(0, 0, 200, 120))
 
     textView.selectedRange = initTextRange(1, 0)
     discard textView.send(moveDown(), ActionArgs(sender: DynamicAgent(textView)))
@@ -916,7 +916,7 @@ suite "nimkit text views":
     check textView.selectedRange == initTextRange(5, 0)
 
   test "text view up and down commands move through blank lines":
-    let textView = newTextView("ab\n\ncd", frame = initRect(0, 0, 200, 120))
+    let textView = newTextView("ab\n\ncd", frame = rect(0, 0, 200, 120))
 
     textView.selectedRange = initTextRange(1, 0)
     discard textView.send(moveDown(), ActionArgs(sender: DynamicAgent(textView)))
@@ -929,7 +929,7 @@ suite "nimkit text views":
     check textView.selectedRange == initTextRange(3, 0)
 
   test "text view shift up and down extends selection":
-    let textView = newTextView("abc\ndef", frame = initRect(0, 0, 200, 90))
+    let textView = newTextView("abc\ndef", frame = rect(0, 0, 200, 90))
 
     textView.selectedRange = initTextRange(1, 0)
     discard textView.send(

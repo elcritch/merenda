@@ -327,7 +327,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
 
   method accessibilityFrame*(view: View): Rect =
     if view.isNil:
-      initRect(0, 0, 0, 0)
+      rect(0, 0, 0, 0)
     else:
       view.rectToWindow(view.xBounds)
 
@@ -486,7 +486,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     @[]
 
   method accessibilityBoundsForCharacter*(view: View, index: int): Rect =
-    initRect(0, 0, 0, 0)
+    rect(0, 0, 0, 0)
 
   method accessibilityCharacterIndexAtPoint*(view: View, point: Point): int =
     -1
@@ -498,7 +498,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     -1
 
   method accessibilityBoundsForLine*(view: View, line: int): Rect =
-    initRect(0, 0, 0, 0)
+    rect(0, 0, 0, 0)
 
   method accessibilityActionNames*(view: View): seq[string] =
     @[]

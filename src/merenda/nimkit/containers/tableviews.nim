@@ -1160,7 +1160,7 @@ proc contentView*(tableView: TableView): TableContentView =
   if tableView.isNil: nil else: tableView.xContentView
 
 proc initTableBaseChild(view: View, clipsToBounds: bool) =
-  initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
+  initViewFields(view, rect(0.0, 0.0, 0.0, 0.0))
   view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
@@ -1421,16 +1421,16 @@ iterator visibleColumns*(tableView: TableView): TableColumn =
 
 proc columnRect(tableView: TableView, bounds: Rect, column: TableColumn): Rect =
   if tableView.isNil or column.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   var x = bounds.origin.x
   for current in tableView.xColumns:
     if current.hidden():
       continue
     if current == column:
       let width = min(current.width(), max(bounds.maxX - x, 0.0'f32))
-      return initRect(x, bounds.origin.y, width, bounds.size.height)
+      return rect(x, bounds.origin.y, width, bounds.size.height)
     x += current.width()
-  initRect(bounds.origin.x, bounds.origin.y, 0.0, 0.0)
+  rect(bounds.origin.x, bounds.origin.y, 0.0, 0.0)
 
 proc visibleColumnWidth(tableView: TableView): float32 =
   if tableView.isNil:
@@ -1532,8 +1532,8 @@ proc `showsHeader=`*(tableView: TableView, value: bool) =
 
 proc tableHeaderRect*(tableView: TableView): Rect =
   if not tableView.showsHeader():
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  initRect(
+    return rect(0.0, 0.0, 0.0, 0.0)
+  rect(
     1.0'f32,
     1.0'f32,
     max(tableView.bounds().size.width - 2.0'f32, 0.0'f32),
@@ -1548,7 +1548,7 @@ proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
     headerRect = tableView.tableHeaderRect()
     contentOffset = tableView.listContentOffset()
     documentWidth = max(tableView.visibleColumnWidth(), headerRect.size.width)
-    documentHeaderRect = initRect(
+    documentHeaderRect = rect(
       headerRect.origin.x - contentOffset.x,
       headerRect.origin.y,
       documentWidth,
@@ -1588,10 +1588,10 @@ proc headerInsertionIndexAtPoint(tableView: TableView, point: Point): int =
 
 proc headerInsertionRectForIndex(tableView: TableView, index: int): Rect =
   if tableView.isNil or index < 0 or tableView.xColumns.len == 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let headerRect = tableView.tableHeaderRect()
   if headerRect.isEmpty:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   var x = headerRect.origin.x
   if index >= tableView.xColumns.len:
     for column in tableView.xColumns:
@@ -1611,13 +1611,13 @@ proc headerInsertionRectForIndex(tableView: TableView, index: int): Rect =
       x = rect.maxX
     if not found:
       x = min(x, headerRect.maxX)
-  initRect(x - 1.0'f32, headerRect.origin.y, 3.0'f32, headerRect.size.height)
+  rect(x - 1.0'f32, headerRect.origin.y, 3.0'f32, headerRect.size.height)
 
 proc clearHeaderDragInsertion(tableView: TableView) =
   if tableView.isNil:
     return
   tableView.xHeaderDragInsertionIndex = -1
-  tableView.xHeaderDragInsertionRect = initRect(0.0, 0.0, 0.0, 0.0)
+  tableView.xHeaderDragInsertionRect = rect(0.0, 0.0, 0.0, 0.0)
 
 proc setHeaderDragInsertion(tableView: TableView, index: int) =
   if tableView.isNil:
@@ -1655,7 +1655,7 @@ proc resetHeaderCursorRects(tableView: TableView) =
     if rect.isEmpty:
       continue
     tableView.addCursorRect(
-      initRect(
+      rect(
         rect.maxX - resizeHandleWidth,
         rect.origin.y,
         resizeHandleWidth * 2.0'f32,
@@ -2095,7 +2095,7 @@ proc tileTableContent(tableView: TableView) =
     return
   let
     offset = tableView.listContentOffset()
-    scrollFrame = initRect(
+    scrollFrame = rect(
       1.0'f32,
       1.0'f32,
       max(tableView.bounds().size.width - 2.0'f32, 0.0'f32),
@@ -2117,7 +2117,7 @@ proc tileTableContent(tableView: TableView) =
       else: 0.0'f32)
     documentWidth = max(columnWidth, max(viewportWidth, 0.0'f32))
     size = initSize(documentWidth, contentHeight)
-  tableView.xContentView.frame = initRect(0.0'f32, 0.0'f32, size.width, size.height)
+  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, size.width, size.height)
   tableView.xScrollView.tile()
   tableView.setTableContentOffset(offset, false)
 
@@ -2136,8 +2136,8 @@ proc scrollItemToVisible(tableView: TableView, itemIndex: int) =
     return
   var rect = tableView.xContentView.tableContentItemRect(itemIndex)
   let offset = tableView.listContentOffset()
-  rect.origin.x = offset.x
-  rect.size.width = tableView.viewportSize().width
+  rect.x = offset.x
+  rect.w = tableView.viewportSize().width
   tableView.scrollContentRectToVisible(rect)
 
 proc selectionContains(tableView: TableView, index: int): bool =
@@ -2817,15 +2817,15 @@ proc rowItemRect*(tableView: TableView, itemIndex: int): Rect =
   tableView.tileTableContent()
   let contentView = tableView.contentView()
   if contentView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let contentRect = contentView.tableContentItemRect(itemIndex)
   if contentRect.isEmpty:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let visibleRect =
     contentView.rectToView(contentRect, tableView).intersection(tableView.bounds())
   if visibleRect.size.height < tableView.rowHeightForRow(itemIndex) or
       visibleRect.isEmpty:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     visibleRect
 
@@ -3381,7 +3381,7 @@ proc syncVisibleTableCells(tableView: TableView) =
     nextSlots: seq[TableCellSlot]
     used = newSeq[bool](previousSlots.len)
   for (row, rowView, rowRect) in tableView.visibleRowViews():
-    let rowBounds = initRect(0.0, 0.0, rowRect.size.width, rowRect.size.height)
+    let rowBounds = rect(0.0, 0.0, rowRect.size.width, rowRect.size.height)
     for column in tableView.columns:
       if column.hidden():
         continue
@@ -3416,11 +3416,11 @@ proc visibleCellView(tableView: TableView, row: int, column: TableColumn): View 
 
 proc visibleRowView(tableView: TableView, row: int): tuple[view: View, rect: Rect] =
   if tableView.isNil:
-    return (nil, initRect(0.0, 0.0, 0.0, 0.0))
+    return (nil, rect(0.0, 0.0, 0.0, 0.0))
   for (index, rowView, rowRect) in tableView.visibleRowViews():
     if index == row:
       return (rowView, rowRect)
-  (nil, initRect(0.0, 0.0, 0.0, 0.0))
+  (nil, rect(0.0, 0.0, 0.0, 0.0))
 
 proc prepareEditingSurface(tableView: TableView): bool =
   if tableView.isNil or not tableView.xEditing.active:
@@ -3456,10 +3456,10 @@ proc clearEditingSurface(tableView: TableView) =
 
 proc fieldEditorFrameForEditing(tableView: TableView): Rect =
   if tableView.isNil or tableView.xEditingHostView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   if tableView.xEditingHostIsRowView:
     let row = tableView.visibleRowView(tableView.xEditing.row)
-    let rowBounds = initRect(0.0, 0.0, row.rect.size.width, row.rect.size.height)
+    let rowBounds = rect(0.0, 0.0, row.rect.size.width, row.rect.size.height)
     tableView.columnRect(rowBounds, tableView.xEditing.column)
   else:
     tableView.xEditingHostView.bounds()
@@ -3739,7 +3739,7 @@ proc drawTableRow(
   if row.index < 0:
     return
   let
-    rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
+    rowBounds = rect(0.0, 0.0, rect.size.width, rect.size.height)
     style = tableView.rowItemStyle(context, row.states)
   for column in tableView.columns:
     if column.hidden():
@@ -3769,10 +3769,10 @@ proc drawHorizontalTableDropIndicator(
         rect.minY
       of ddpOn, ddpAfter:
         max(rect.maxY - thickness, rect.minY)
-    lineRect = initRect(rect.origin.x, lineY, rect.size.width, thickness)
+    lineRect = rect(rect.origin.x, lineY, rect.size.width, thickness)
     capY = lineY + (thickness - capHeight) * 0.5'f32
-    leftCap = initRect(rect.origin.x, capY, capWidth, capHeight)
-    rightCap = initRect(rect.maxX - capWidth, capY, capWidth, capHeight)
+    leftCap = rect(rect.origin.x, capY, capWidth, capHeight)
+    rightCap = rect(rect.maxX - capWidth, capY, capWidth, capHeight)
 
   discard context.addRenderRectangle(
     context.renderRectFor(lineRect), indicatorFill, cornerRadius = chrome.cornerRadius
@@ -4096,8 +4096,8 @@ proc state*(store: TableViewStateStore, name: string): TableViewState =
 proc tableContentItemRect*(contentView: TableContentView, itemIndex: int): Rect =
   let tableView = contentView.tableView()
   if contentView.isNil or tableView.isNil or itemIndex notin 0 ..< tableView.len():
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  initRect(
+    return rect(0.0, 0.0, 0.0, 0.0)
+  rect(
     0.0'f32,
     tableView.rowOffset(itemIndex),
     max(contentView.bounds().size.width, 0.0'f32),
@@ -4196,7 +4196,7 @@ proc drawTableRowItem*(
           classes = tableView.styleClasses(),
         )
       )
-      separatorRect = initRect(rect.origin.x, rect.maxY - 1.0'f32, rect.size.width, 1.0)
+      separatorRect = rect(rect.origin.x, rect.maxY - 1.0'f32, rect.size.width, 1.0)
     discard context.addRenderRectangle(separatorRect, fill(itemStyle.box.borderColor))
 
 proc drawCustomTableRow(
@@ -4615,12 +4615,12 @@ proc drawTableHeaderResizeHandle*(
   if handleHeight <= 0.0'f32:
     return
   discard context.addRenderRectangle(
-    context.renderRectFor(initRect(rect.maxX - 1.0'f32, handleY, 1.0, handleHeight)),
+    context.renderRectFor(rect(rect.maxX - 1.0'f32, handleY, 1.0, handleHeight)),
     fill(handleColor),
   )
   discard context.addRenderRectangle(
     context.renderRectFor(
-      initRect(
+      rect(
         rect.maxX - 3.0'f32,
         handleY + 2.0'f32,
         1.0,
@@ -4641,7 +4641,7 @@ proc drawTableHeaderInsertionIndicator*(
   let
     rect = indicator.rect
     insertionRect =
-      initRect(rect.origin.x, rect.origin.y, chrome.insertionWidth, rect.size.height)
+      rect(rect.origin.x, rect.origin.y, chrome.insertionWidth, rect.size.height)
   discard context.addRenderRectangle(
     context.renderRectFor(insertionRect),
     chrome.insertionIndicatorFill,
@@ -4649,7 +4649,7 @@ proc drawTableHeaderInsertionIndicator*(
   )
   discard context.addRenderRectangle(
     context.renderRectFor(
-      initRect(
+      rect(
         rect.origin.x - (chrome.insertionCapWidth - chrome.insertionWidth) * 0.5'f32,
         rect.origin.y,
         chrome.insertionCapWidth,
@@ -4661,7 +4661,7 @@ proc drawTableHeaderInsertionIndicator*(
   )
   discard context.addRenderRectangle(
     context.renderRectFor(
-      initRect(
+      rect(
         rect.origin.x - (chrome.insertionCapWidth - chrome.insertionWidth) * 0.5'f32,
         rect.maxY - chrome.insertionCapHeight,
         chrome.insertionCapWidth,
@@ -4713,7 +4713,7 @@ proc drawTableHeaderCellTitle*(
     return
   let indicatorWidth =
     if column.sortDirection() == tsdNone: 0.0'f32 else: chrome.sortIndicatorWidth
-  let titleRect = initRect(
+  let titleRect = rect(
     rect.origin.x + 8.0'f32,
     rect.origin.y,
     max(rect.size.width - 16.0'f32 - indicatorWidth, 0.0'f32),
@@ -4780,7 +4780,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
       let rect = tableView.tableHeaderColumnRect(column)
       if rect.isEmpty or column.resizePolicy() != tcrResizable:
         continue
-      let handleRect = initRect(
+      let handleRect = rect(
         rect.maxX - resizeHandleWidth,
         rect.origin.y,
         resizeHandleWidth * 2.0'f32,
@@ -5593,8 +5593,8 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       let headerHeight = tableView.tableHeaderHeight()
       let visibleBounds = tableView.visibleRect()
       var focusRect = tableView.bounds()
-      focusRect.origin.y += headerHeight
-      focusRect.size.height = max(focusRect.size.height - headerHeight, 0.0'f32)
+      focusRect.y += headerHeight
+      focusRect.h = max(focusRect.h - headerHeight, 0.0'f32)
       if not focusRect.intersection(visibleBounds).isEmpty:
         let focusClip = context.addRenderRectangle(
           FocusRingDrawLevel,

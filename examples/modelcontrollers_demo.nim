@@ -145,24 +145,24 @@ proc newChoiceController(): ArrayController =
 proc newModelControllersDemo*(app = newApplication()): ModelControllersDemo =
   result = ModelControllersDemo(app: app)
   result.window =
-    newWindow("NimKit Model Controllers", frame = initRect(120, 120, 820, 620))
-  result.root = newView(frame = initRect(0, 0, 820, 620))
+    newWindow("NimKit Model Controllers", frame = rect(120, 120, 820, 620))
+  result.root = newView(frame = rect(0, 0, 820, 620))
   result.status = newStatusLabel(
     "Tables, browsers, tabs, menus, combos, and matrices share ModelItem values.",
-    frame = initRect(390, 22, 390, 22),
+    frame = rect(390, 22, 390, 22),
   )
   result.buildController = newBuildController()
-  result.tableView = newTableView(frame = initRect(24, 86, 360, 170))
+  result.tableView = newTableView(frame = rect(24, 86, 360, 170))
   result.treeController = newTreeControllerForDemo()
-  result.browser = newCascadingView(frame = initRect(420, 86, 360, 170))
+  result.browser = newCascadingView(frame = rect(420, 86, 360, 170))
   result.tabController = newTabController()
-  result.tabs = newDocumentTabs(frame = initRect(24, 312, 756, 34))
+  result.tabs = newDocumentTabs(frame = rect(24, 312, 756, 34))
   result.choiceController = newChoiceController()
-  result.comboBox = newComboBox(frame = initRect(24, 404, 180, 26))
+  result.comboBox = newComboBox(frame = rect(24, 404, 180, 26))
   result.menu = newMenu("Priority")
   result.popup =
-    newPopupMenuButton("Priority", result.menu, frame = initRect(224, 404, 150, 26))
-  result.matrix = newButtonMatrix([], columns = 3, frame = initRect(404, 398, 310, 62))
+    newPopupMenuButton("Priority", result.menu, frame = rect(224, 404, 150, 26))
+  result.matrix = newButtonMatrix([], columns = 3, frame = rect(404, 398, 310, 62))
 
   bindTableView(result.tableView, result.buildController)
   bindCascadingView(result.browser, result.treeController)
@@ -175,20 +175,20 @@ proc newModelControllersDemo*(app = newApplication()): ModelControllersDemo =
   result.configureChoiceActions()
 
   result.root.addSubview(
-    newTitleLabel("Model Controllers", frame = initRect(24, 20, 360, 28))
+    newTitleLabel("Model Controllers", frame = rect(24, 20, 360, 28))
   )
   result.root.addSubview(result.status)
   result.root.addSubview(
-    newHeadingLabel("Array-backed table", frame = initRect(24, 58, 240, 22))
+    newHeadingLabel("Array-backed table", frame = rect(24, 58, 240, 22))
   )
   result.root.addSubview(
-    newHeadingLabel("Tree-backed browser", frame = initRect(420, 58, 240, 22))
+    newHeadingLabel("Tree-backed browser", frame = rect(420, 58, 240, 22))
   )
   result.root.addSubview(
-    newHeadingLabel("Document tabs", frame = initRect(24, 282, 240, 22))
+    newHeadingLabel("Document tabs", frame = rect(24, 282, 240, 22))
   )
   result.root.addSubview(
-    newHeadingLabel("Choice controls", frame = initRect(24, 374, 240, 22))
+    newHeadingLabel("Choice controls", frame = rect(24, 374, 240, 22))
   )
   result.root.addSubview(result.tableView)
   result.root.addSubview(result.browser)

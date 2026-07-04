@@ -4,7 +4,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Button Counter", frame = initRect(100, 100, 300, 300))
+  window = newWindow("Nimkit Button Counter", frame = rect(100, 100, 300, 300))
   root = newView()
   layout = newStackView(laVertical)
   button1 = newButton("button1")

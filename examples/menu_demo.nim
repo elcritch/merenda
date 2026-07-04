@@ -4,8 +4,8 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Menu Demo", frame = initRect(120, 120, 520, 300))
-  root = newView(frame = initRect(0, 0, 520, 300))
+  window = newWindow("Nimkit Menu Demo", frame = rect(120, 120, 520, 300))
+  root = newView(frame = rect(0, 0, 520, 300))
   content = newStackView(laVertical)
   title = newTitleLabel("Menu Demo")
   status = newStatusLabel("Menu action count: 0")
@@ -13,7 +13,7 @@ let
   runAction = actionSelector("runMenuDemoAction")
   resetAction = actionSelector("resetMenuDemoAction")
   mainMenu = newMenu("Main")
-  menuBar = newMenuBar(mainMenu, initRect(0, 0, 520, 28))
+  menuBar = newMenuBar(mainMenu, rect(0, 0, 520, 28))
   actionsMenu = newMenu("Actions")
   actionsItem = newMenuItem("Actions")
   runItem = newMenuItem("Run Menu Action", runAction, "r", {kmCommand})

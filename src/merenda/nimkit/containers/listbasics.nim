@@ -76,11 +76,11 @@ func rowScrollerKnobRect*(
     inset = 3.0'f32,
 ): Rect =
   if container.isEmpty or visibleCount <= 0 or not itemCount > visibleCount.max(0):
-    return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
+    return rect(container.origin.x, container.origin.y, 0.0, 0.0)
 
   let track = scrollerTrackRect(container, laVertical, thickness, inset)
   if track.isEmpty:
-    return initRect(container.origin.x, container.origin.y, 0.0, 0.0)
+    return rect(container.origin.x, container.origin.y, 0.0, 0.0)
 
   scrollerKnobRect(
     track, laVertical, rowScrollViewport(firstIndex, itemCount, visibleCount)
@@ -115,8 +115,8 @@ func rowPopupRect*(
 ): Rect =
   let visible = visibleRowItemCount(itemCount, maxVisibleItems)
   if visible <= 0:
-    return initRect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
-  initRect(
+    return rect(bounds.origin.x, bounds.maxY, 0.0, 0.0)
+  rect(
     bounds.origin.x,
     bounds.maxY,
     bounds.size.width,
@@ -128,9 +128,9 @@ func rowItemRect*(
 ): Rect =
   let visibleIndex = itemIndex - firstIndex
   if visibleIndex < 0 or visibleIndex >= visibleCount:
-    return initRect(popup.origin.x, popup.origin.y, 0.0, 0.0)
+    return rect(popup.origin.x, popup.origin.y, 0.0, 0.0)
   let height = rowHeight.normalizedRowHeight()
-  initRect(
+  rect(
     popup.origin.x + 1.0'f32,
     popup.origin.y + 1.0'f32 + visibleIndex.float32 * height,
     max(popup.size.width - 2.0'f32, 0.0'f32),
@@ -143,7 +143,7 @@ func rowItemIndexAtPoint*(
     firstIndex, visibleCount, itemCount: int,
     rowHeight: float32,
 ): int =
-  let content = initRect(
+  let content = rect(
     popup.origin.x + 1.0'f32,
     popup.origin.y + 1.0'f32,
     max(popup.size.width - 2.0'f32, 0.0'f32),

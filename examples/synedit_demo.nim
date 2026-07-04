@@ -38,7 +38,7 @@ when isMainModule:
 
 let
   app = sharedApplication()
-  window = newWindow("SynEdit Demo", frame = initRect(180, 120, 900, 640))
+  window = newWindow("SynEdit Demo", frame = rect(180, 120, 900, 640))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("SynEdit")

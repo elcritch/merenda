@@ -23,7 +23,7 @@ proc makeCard(
   let
     card = newStackView(laVertical)
     heading = newHeadingLabel(title)
-    imageView = newImageView(image, frame = initRect(0, 0, 168, 112))
+    imageView = newImageView(image, frame = rect(0, 0, 168, 112))
     caption = newStatusLabel(detail)
 
   card.spacing = 8.0
@@ -58,7 +58,7 @@ let pastedImage = pasteboard.imageForType(PasteboardTypeImage)
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Image Resources", frame = initRect(160, 150, 760, 420))
+  window = newWindow("Nimkit Image Resources", frame = rect(160, 150, 760, 420))
   root = newView()
   layout = newStackView(laVertical)
   gallery = newStackView(laHorizontal)

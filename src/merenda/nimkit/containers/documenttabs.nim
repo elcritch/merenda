@@ -682,9 +682,9 @@ proc scrollButtonRect*(tabs: DocumentTabs, button: DocumentTabScrollButton): Rec
   let bounds = tabs.bounds()
   case button
   of dtsbPrevious:
-    initRect(0.0, 0.0, DocumentTabButtonWidth, bounds.size.height)
+    rect(0.0, 0.0, DocumentTabButtonWidth, bounds.size.height)
   of dtsbNext:
-    initRect(
+    rect(
       max(bounds.size.width - DocumentTabButtonWidth, 0.0'f32),
       0.0,
       min(DocumentTabButtonWidth, bounds.size.width),
@@ -701,7 +701,7 @@ proc tabViewportRect*(tabs: DocumentTabs): Rect =
         DocumentTabButtonWidth
       else:
         0.0'f32
-  initRect(
+  rect(
     buttonInset,
     0.0,
     max(bounds.size.width - buttonInset * 2.0'f32, 0.0'f32),
@@ -738,7 +738,7 @@ proc contentTabRect(tabs: DocumentTabs, index: int): Rect =
     style = tabs.effectiveStyle(item)
     height = style.tabHeight(tabs.documentTabViewStyle())
     y = max((tabs.bounds().size.height - height) / 2.0'f32, 0.0'f32)
-  initRect(x, y, tabs.documentTabWidth(item), height)
+  rect(x, y, tabs.documentTabWidth(item), height)
 
 proc documentTabRect*(tabs: DocumentTabs, index: int): Rect =
   if tabs.isNil:
@@ -746,7 +746,7 @@ proc documentTabRect*(tabs: DocumentTabs, index: int): Rect =
   let
     viewport = tabs.tabViewportRect()
     contentRect = tabs.contentTabRect(index)
-  initRect(
+  rect(
     viewport.origin.x + contentRect.origin.x - tabs.xScrollOffset,
     contentRect.origin.y,
     contentRect.size.width,
@@ -761,7 +761,7 @@ proc closeRect(tabs: DocumentTabs, index: int): Rect =
     rect = tabs.documentTabRect(index)
   if not tabs.allowsClosing() or not item.closeable() or rect.size.width < 44.0'f32:
     return
-  initRect(
+  rect(
     rect.maxX - DocumentTabCloseWidth - 7.0'f32,
     rect.origin.y + max((rect.size.height - DocumentTabCloseWidth) / 2.0'f32, 0.0),
     DocumentTabCloseWidth,
@@ -1393,9 +1393,8 @@ proc drawCloseButton(
     )
     markColor = context.appearance.resolveColor(styleContext, StyleMarkColor, textColor)
     markStyle = context.appearance.tabTextStyle(styleContext, markColor)
-    markRect = initRect(
-      rect.origin.x, rect.origin.y - 0.5'f32, rect.size.width, rect.size.height
-    )
+    markRect =
+      rect(rect.origin.x, rect.origin.y - 0.5'f32, rect.size.width, rect.size.height)
     renderRect = context.renderRectFor(rect)
     buttonRoot = context.addRenderRectangle(
       DefaultDrawLevel,
@@ -1489,14 +1488,14 @@ proc drawDocumentTab(
   let accentRect =
     case style
     of dtsUnderline:
-      initRect(
+      rect(
         rect.origin.x + 8.0'f32,
         rect.maxY - 3.0'f32,
         rect.size.width - 16.0'f32,
         3.0'f32,
       )
     else:
-      initRect(rect.origin.x, rect.origin.y, 4.0'f32, rect.size.height)
+      rect(rect.origin.x, rect.origin.y, 4.0'f32, rect.size.height)
   if selected or item.modified() or style == dtsUnderline:
     discard context.addRenderRectangle(
       DefaultDrawLevel,
@@ -1516,7 +1515,7 @@ proc drawDocumentTab(
         max(textInsets.right, DocumentTabHorizontalInset)
       else:
         DocumentTabCloseWidth + max(textInsets.right, 14.0'f32)
-    textRect = initRect(
+    textRect = rect(
       rect.origin.x + textLeftInset + modifiedWidth,
       rect.origin.y,
       max(rect.size.width - textLeftInset - textRightInset - modifiedWidth, 0.0'f32),
@@ -1624,7 +1623,7 @@ proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
         classes = tabs.styleClasses(),
       )
     )
-    track = initRect(
+    track = rect(
       viewport.origin.x,
       tabs.bounds().maxY - DocumentTabScrollerHeight,
       viewport.size.width,
@@ -1637,7 +1636,7 @@ proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
         track.origin.x
       else:
         track.origin.x + (track.size.width - thumbWidth) * tabs.xScrollOffset / maxOffset
-    thumb = initRect(thumbX, track.origin.y, thumbWidth, track.size.height)
+    thumb = rect(thumbX, track.origin.y, thumbWidth, track.size.height)
   discard context.addRenderRectangle(
     context.renderRectFor(track),
     scrollStyle.scrollerTrack.fill,

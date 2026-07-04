@@ -229,7 +229,7 @@ proc viewportSize*(scrollView: ScrollView): Size =
   initSize(width, height)
 
 proc viewportRect*(scrollView: ScrollView): Rect =
-  initRect(
+  rect(
     initPoint(
       scrollView.xScrollerInsets.left + scrollView.headerChromeThickness(laVertical),
       scrollView.xScrollerInsets.top + scrollView.headerChromeThickness(laHorizontal),
@@ -278,7 +278,7 @@ proc documentView*(clipView: ClipView): View =
 proc documentRect*(clipView: ClipView): Rect =
   let document = clipView.documentView()
   if document.isNil:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     document.frame()
 
@@ -315,7 +315,7 @@ proc scrollToPoint*(clipView: ClipView, point: Point) =
     return
   let
     nextPoint = clipView.constrainScrollPoint(point)
-    nextBounds = initRect(nextPoint, clipView.bounds().size)
+    nextBounds = rect(nextPoint, clipView.bounds().size)
   if clipView.bounds() == nextBounds:
     return
   clipView.bounds = nextBounds
@@ -357,11 +357,10 @@ protocol DefaultClipViewDrawing of ViewDrawingProtocol:
 
 protocol DefaultClipViewGeometry of ViewProtocol:
   method setBounds(clipView: ClipView, bounds: Rect) =
-    let constrained =
-      initRect(clipView.constrainScrollPoint(bounds.origin), bounds.size)
+    let constrained = rect(clipView.constrainScrollPoint(bounds.origin), bounds.size)
     if clipView.xBounds == constrained:
       return
-    clipView.xBounds = initRect(constrained.origin, constrained.size)
+    clipView.xBounds = rect(constrained.origin, constrained.size)
     emit clipView.layoutInputChanged(lirBounds)
     emit clipView.geometryDidChange()
     clipView.setNeedsDisplay(true)
@@ -375,31 +374,27 @@ proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
 
 proc horizontalHeaderRect(scrollView: ScrollView): Rect =
   if scrollView.isNil or scrollView.xHeaderView[laHorizontal].isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     viewport = scrollView.viewportRect()
     height = scrollView.headerChromeThickness(laHorizontal)
   if height <= 0.0'f32:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  initRect(
-    viewport.origin.x, scrollView.xScrollerInsets.top, viewport.size.width, height
-  )
+    return rect(0.0, 0.0, 0.0, 0.0)
+  rect(viewport.origin.x, scrollView.xScrollerInsets.top, viewport.size.width, height)
 
 proc verticalHeaderRect(scrollView: ScrollView): Rect =
   if scrollView.isNil or scrollView.xHeaderView[laVertical].isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     viewport = scrollView.viewportRect()
     width = scrollView.headerChromeThickness(laVertical)
   if width <= 0.0'f32:
-    return initRect(0.0, 0.0, 0.0, 0.0)
-  initRect(
-    scrollView.xScrollerInsets.left, viewport.origin.y, width, viewport.size.height
-  )
+    return rect(0.0, 0.0, 0.0, 0.0)
+  rect(scrollView.xScrollerInsets.left, viewport.origin.y, width, viewport.size.height)
 
 proc cornerViewRect(scrollView: ScrollView): Rect =
   if scrollView.isNil or scrollView.xCornerView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     visibleAxes = scrollView.visibleScrollerAxes()
     viewport = scrollView.viewportRect()
@@ -411,27 +406,27 @@ proc cornerViewRect(scrollView: ScrollView): Rect =
       if laHorizontal in visibleAxes: scrollView.xScrollerThickness else: 0.0'f32
 
   if horizontalHeaderHeight > 0.0'f32 and scrollerWidth > 0.0'f32:
-    return initRect(
+    return rect(
       viewport.origin.x + viewport.size.width,
       scrollView.xScrollerInsets.top,
       scrollerWidth,
       horizontalHeaderHeight,
     )
   if verticalHeaderWidth > 0.0'f32 and scrollerHeight > 0.0'f32:
-    return initRect(
+    return rect(
       scrollView.xScrollerInsets.left,
       viewport.origin.y + viewport.size.height,
       verticalHeaderWidth,
       scrollerHeight,
     )
   if scrollerWidth > 0.0'f32 and scrollerHeight > 0.0'f32:
-    return initRect(
+    return rect(
       viewport.origin.x + viewport.size.width,
       viewport.origin.y + viewport.size.height,
       scrollerWidth,
       scrollerHeight,
     )
-  initRect(0.0, 0.0, 0.0, 0.0)
+  rect(0.0, 0.0, 0.0, 0.0)
 
 proc applyChromeFrame(view: View, frame: Rect) =
   if view.isNil:
@@ -517,7 +512,7 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
   let
     currentOffset = scrollView.contentOffset()
     viewportSize = scrollView.viewportSize()
-    viewport = initRect(currentOffset, viewportSize)
+    viewport = rect(currentOffset, viewportSize)
   var nextOffset = currentOffset
 
   if rect.minX < viewport.minX:
@@ -796,9 +791,9 @@ proc `dynamicScrolling=`*(scrollView: ScrollView, value: bool) =
 
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
   if scrollView.isNil or laHorizontal notin scrollView.visibleScrollerAxes():
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let viewport = scrollView.viewportRect()
-  initRect(
+  rect(
     viewport.origin.x,
     viewport.origin.y + viewport.size.height,
     viewport.size.width,
@@ -807,9 +802,9 @@ proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
 
 proc verticalScrollerRect*(scrollView: ScrollView): Rect =
   if scrollView.isNil or laVertical notin scrollView.visibleScrollerAxes():
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let viewport = scrollView.viewportRect()
-  initRect(
+  rect(
     viewport.origin.x + viewport.size.width,
     viewport.origin.y,
     scrollView.xScrollerThickness,
@@ -821,7 +816,7 @@ proc scrollerTrackRect*(scroller: Scroller): Rect =
 
 proc scrollerKnobRect*(scroller: Scroller): Rect =
   if scroller.isNil or scroller.xScrollView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     track = scroller.scrollerTrackRect()
     scrollView = scroller.xScrollView
@@ -995,7 +990,7 @@ protocol DefaultScrollViewEvents of ResponderEventProtocol:
 
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()
-  initViewFields(result, initRect(0.0, 0.0, 0.0, 0.0))
+  initViewFields(result, rect(0.0, 0.0, 0.0, 0.0))
   result.background = color(0.0, 0.0, 0.0, 0.0)
   result.hidden = true
   result.xScrollView = scrollView

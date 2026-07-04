@@ -239,7 +239,7 @@ proc modelItems(): seq[ModelItem] =
 suite "nimkit collection views":
   test "collection view lays out model items and reuses item views":
     let
-      collectionView = newCollectionView(frame = initRect(0, 0, 260, 140))
+      collectionView = newCollectionView(frame = rect(0, 0, 260, 140))
       layout = newCollectionViewLayout(
         clkGrid,
         itemSize = initSize(60.0, 40.0),
@@ -264,8 +264,8 @@ suite "nimkit collection views":
     discard buildRenders(collectionView)
 
     check collectionView.len == 5
-    check collectionView.collectionItemRect(0) == initRect(10.0, 10.0, 60.0, 40.0)
-    check collectionView.collectionItemRect(4) == initRect(75.0, 56.0, 60.0, 40.0)
+    check collectionView.collectionItemRect(0) == rect(10.0, 10.0, 60.0, 40.0)
+    check collectionView.collectionItemRect(4) == rect(75.0, 56.0, 60.0, 40.0)
     check collectionView.collectionItemIndexAtPoint(initPoint(20.0, 20.0)) == 0
     check collectionView.collectionItemText(2) == "Gamma"
     check collectionView.visibleItemViews().len == 5
@@ -298,9 +298,9 @@ suite "nimkit collection views":
 
   test "collection selection activation and keyboard navigation use user events":
     let
-      window = newWindow("Collection selection", frame = initRect(0, 0, 320, 180))
-      root = newView(frame = initRect(0, 0, 320, 180))
-      collectionView = newCollectionView(frame = initRect(10, 10, 280, 120))
+      window = newWindow("Collection selection", frame = rect(0, 0, 320, 180))
+      root = newView(frame = rect(0, 0, 320, 180))
+      collectionView = newCollectionView(frame = rect(10, 10, 280, 120))
       layout = newCollectionViewLayout(
         clkGrid,
         itemSize = initSize(70.0, 36.0),
@@ -353,7 +353,7 @@ suite "nimkit collection views":
   test "array controller binds collection item values and preserves selected identities":
     let
       controller = newArrayController(modelItems())
-      collectionView = newCollectionView(frame = initRect(0, 0, 260, 120))
+      collectionView = newCollectionView(frame = rect(0, 0, 260, 120))
 
     bindCollectionView(collectionView, controller)
     discard buildRenders(collectionView)
@@ -375,7 +375,7 @@ suite "nimkit collection views":
 
   test "collection updates and drag drop expose model-aware item targets":
     let
-      collectionView = newCollectionView(frame = initRect(0, 0, 260, 120))
+      collectionView = newCollectionView(frame = rect(0, 0, 260, 120))
       layout = newCollectionViewLayout(
         clkWrapped,
         itemSize = initSize(72.0, 36.0),

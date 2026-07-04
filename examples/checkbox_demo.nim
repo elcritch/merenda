@@ -10,7 +10,7 @@ proc stateName(state: ButtonState): string =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Checkbox Demo", frame = initRect(120, 120, 440, 280))
+  window = newWindow("Nimkit Checkbox Demo", frame = rect(120, 120, 440, 280))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Checkboxes")

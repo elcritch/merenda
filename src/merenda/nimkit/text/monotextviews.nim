@@ -1054,7 +1054,7 @@ proc cellRect(
     metrics: MonoTextMetrics,
     textInsets: EdgeInsets,
 ): nimkitTypes.Rect =
-  initRect(
+  rect(
     textInsets.left + column.float32 * metrics.cellWidth,
     textInsets.top + row.float32 * metrics.lineHeight,
     metrics.cellWidth,
@@ -1069,11 +1069,11 @@ proc cursorRect(
   of mtcBlock:
     discard
   of mtcVertical:
-    result.size.width = max(1.0'f32, metrics.cellWidth * 0.12'f32)
+    result.w = max(1.0'f32, metrics.cellWidth * 0.12'f32)
   of mtcUnderline:
     let height = max(1.0'f32, metrics.lineHeight * 0.12'f32)
-    result.origin.y += metrics.lineHeight - height
-    result.size.height = height
+    result.y += metrics.lineHeight - height
+    result.h = height
 
 proc selectedRange*(view: MonoTextView): TextRange =
   if view.isNil:
@@ -1088,7 +1088,7 @@ proc insertionPoint*(view: MonoTextView): int =
 
 proc characterRect*(view: MonoTextView, index: int): nimkitTypes.Rect =
   if view.isNil or index < 0 or index >= view.textLength():
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   let
     position = view.rowColumnForTextIndex(index)
     metrics = view.monoTextMetrics()
@@ -1104,7 +1104,7 @@ proc selectionRects*(view: MonoTextView, range: TextRange): seq[nimkitTypes.Rect
     stop = max(start, min(range.maxIndex, view.textLength()))
   var
     activeRow = -1
-    activeRect = initRect(0, 0, 0, 0)
+    activeRect = rect(0, 0, 0, 0)
   for index in start ..< stop:
     let
       position = view.rowColumnForTextIndex(index)
@@ -1140,13 +1140,13 @@ proc lineForIndex*(view: MonoTextView, index: int): int =
 
 proc lineBounds*(view: MonoTextView, line: int): nimkitTypes.Rect =
   if view.isNil or line < 0 or line >= view.xLines.len:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   let
     metrics = view.monoTextMetrics()
     style = view.monoTextStyle()
     textInsets = view.monoTextInsets(style)
     width = max(view.xLines[line].cells.len, 1).float32 * metrics.cellWidth
-  initRect(
+  rect(
     textInsets.left,
     textInsets.top + line.float32 * metrics.lineHeight,
     width,
@@ -1168,7 +1168,7 @@ proc drawRun(
     line = view.xLines[row]
     firstCell = line.cells[startColumn]
     foregroundColor = firstCell.foreground(defaultTextColor)
-    runRect = initRect(
+    runRect = rect(
       textInsets.left + startColumn.float32 * metrics.cellWidth,
       textInsets.top + row.float32 * metrics.lineHeight,
       (endColumn - startColumn).float32 * metrics.cellWidth,
@@ -1396,7 +1396,7 @@ protocol DefaultMonoTextViewAccessibility of AccessibilityProtocol:
       view: MonoTextView, index: int
   ): nimkitTypes.Rect =
     if view.isNil or index < 0 or index >= view.textLength():
-      return initRect(0, 0, 0, 0)
+      return rect(0, 0, 0, 0)
     view.rectToWindow(view.characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(
@@ -1418,7 +1418,7 @@ protocol DefaultMonoTextViewAccessibility of AccessibilityProtocol:
 
   method accessibilityBoundsForLine(view: MonoTextView, line: int): nimkitTypes.Rect =
     if view.isNil or line < 0 or line >= view.xLines.len:
-      return initRect(0, 0, 0, 0)
+      return rect(0, 0, 0, 0)
     view.rectToWindow(view.lineBounds(line))
 
 proc initMonoTextViewFields*(

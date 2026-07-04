@@ -202,7 +202,7 @@ proc newCascadingNotificationSpy(): CascadingNotificationSpy =
 
 suite "NimKit CascadingView":
   test "view flattens path selections into cascading columns":
-    let view = newCascadingView(frame = initRect(0, 0, 360, 160))
+    let view = newCascadingView(frame = rect(0, 0, 360, 160))
     view.cascadingItems = [
       initCascadingItem("project", "Project"),
       initCascadingItem("notes", "Notes", leaf = true),
@@ -256,7 +256,7 @@ suite "NimKit CascadingView":
 
   test "view data source delegate events and reload protocols":
     let
-      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+      view = newCascadingView(frame = rect(0, 0, 360, 160))
       source = newCascadingSourceSpy(
         [
           initCascadingItem("root", "Root"),
@@ -305,7 +305,7 @@ suite "NimKit CascadingView":
 
   test "model items expose object values hidden state notifications and updates":
     let
-      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+      view = newCascadingView(frame = rect(0, 0, 360, 160))
       signals = newCascadingSignalSpy()
       notificationSpy = newCascadingNotificationSpy()
       center = sharedNotificationCenter()
@@ -376,7 +376,7 @@ suite "NimKit CascadingView":
           ),
         ]
       )
-      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+      view = newCascadingView(frame = rect(0, 0, 360, 160))
 
     bindCascadingView(view, controller)
     view.selectItem(0, 0)
@@ -401,8 +401,8 @@ suite "NimKit CascadingView":
 
   test "columns overflow into horizontal scroll content":
     let
-      root = newView(frame = initRect(0, 0, 380, 120))
-      view = newCascadingView(frame = initRect(0, 0, 380, 120))
+      root = newView(frame = rect(0, 0, 380, 120))
+      view = newCascadingView(frame = rect(0, 0, 380, 120))
 
     view.columnWidth = 170.0
     view.minColumnWidth = 120.0
@@ -436,8 +436,8 @@ suite "NimKit CascadingView":
 
   test "horizontal scroll moves column chrome and row text together":
     let
-      root = newView(frame = initRect(0, 0, 300, 120))
-      view = newCascadingView(frame = initRect(0, 0, 300, 120))
+      root = newView(frame = rect(0, 0, 300, 120))
+      view = newCascadingView(frame = rect(0, 0, 300, 120))
 
     view.columnWidth = 170.0
     view.cascadingItems = [
@@ -476,8 +476,8 @@ suite "NimKit CascadingView":
 
   test "theming uses cascading roles for surface columns and rows":
     let
-      root = newView(frame = initRect(0, 0, 260, 120))
-      view = newCascadingView(frame = initRect(0, 0, 260, 120))
+      root = newView(frame = rect(0, 0, 260, 120))
+      view = newCascadingView(frame = rect(0, 0, 260, 120))
       surfaceFill = color(0.11, 0.02, 0.18, 1.0)
       columnFill = color(0.25, 0.14, 0.34, 1.0)
       scrollerFill = color(0.10, 0.03, 0.14, 1.0)
@@ -556,8 +556,8 @@ suite "NimKit CascadingView":
 
   test "rows with children render right disclosure arrows":
     let
-      root = newView(frame = initRect(0, 0, 220, 120))
-      view = newCascadingView(frame = initRect(0, 0, 220, 120))
+      root = newView(frame = rect(0, 0, 220, 120))
+      view = newCascadingView(frame = rect(0, 0, 220, 120))
 
     view.columnWidth = 180.0
     view.cascadingItems = [
@@ -580,9 +580,9 @@ suite "NimKit CascadingView":
 
   test "left and right arrows move focus between visible columns":
     let
-      window = newWindow("Cascading keyboard", frame = initRect(0, 0, 360, 160))
-      root = newView(frame = initRect(0, 0, 360, 160))
-      view = newCascadingView(frame = initRect(0, 0, 360, 160))
+      window = newWindow("Cascading keyboard", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      view = newCascadingView(frame = rect(0, 0, 360, 160))
 
     view.cascadingItems = [
       initCascadingItem("project", "Project"),

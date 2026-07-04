@@ -4,7 +4,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Combo Scroll Demo", frame = initRect(180, 160, 520, 360))
+  window = newWindow("Nimkit Combo Scroll Demo", frame = rect(180, 160, 520, 360))
   root = newView()
 
   title = newTitleLabel("Scrollable Combo Box")

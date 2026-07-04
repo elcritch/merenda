@@ -585,7 +585,7 @@ proc updateGutter(view: SynEditView) =
   if view.xShowLineNumbers:
     let width = view.effectiveLineNumberWidth()
     view.xGutter.frame =
-      initRect(0.0'f32, 0.0'f32, width, max(view.bounds().size.height, 1.0'f32))
+      rect(0.0'f32, 0.0'f32, width, max(view.bounds().size.height, 1.0'f32))
     if scroll.verticalHeaderView() != View(view.xGutter):
       scroll.verticalHeaderView = View(view.xGutter)
   elif scroll.verticalHeaderView() == View(view.xGutter):
@@ -678,7 +678,7 @@ protocol DefaultSynEditGutterDrawing of ViewDrawingProtocol:
       1.0'f32,
     )
     for line in firstLine ..< lastLine:
-      let lineRect = initRect(
+      let lineRect = rect(
         bounds.minX,
         line.float32 * lineHeight - offset.y,
         max(bounds.size.width - 8.0'f32, 0.0'f32),
@@ -687,9 +687,7 @@ protocol DefaultSynEditGutterDrawing of ViewDrawingProtocol:
       discard context.addText(lineRect, $(line + 1), textStyle, taRight)
 
 proc initSynEditGutterFields(gutter: SynEditGutterView, owner: SynEditView) =
-  initViewFields(
-    gutter, initRect(0.0'f32, 0.0'f32, DefaultSynEditLineNumberWidth, 1.0'f32)
-  )
+  initViewFields(gutter, rect(0.0'f32, 0.0'f32, DefaultSynEditLineNumberWidth, 1.0'f32))
   gutter.xOwner = owner
   gutter.background = owner.xTheme.background
   discard gutter.withProtocol(DefaultSynEditGutterDrawing)

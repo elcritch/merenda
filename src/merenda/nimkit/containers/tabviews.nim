@@ -210,16 +210,14 @@ proc contentRect*(tabView: TabView): Rect =
     panelOffset = tabView.xTabMode.tabPanelOffset(style)
   case tabView.xTabPosition
   of tpTop:
-    initRect(
+    rect(
       0.0,
       panelOffset,
       bounds.size.width,
       max(bounds.size.height - panelOffset, 0.0'f32),
     )
   of tpBottom:
-    initRect(
-      0.0, 0.0, bounds.size.width, max(bounds.size.height - panelOffset, 0.0'f32)
-    )
+    rect(0.0, 0.0, bounds.size.width, max(bounds.size.height - panelOffset, 0.0'f32))
 
 func contentViewInsets(position: TabPosition): EdgeInsets =
   case position
@@ -245,9 +243,9 @@ proc tabBarFrame(tabView: TabView): Rect =
     overlap = tabView.xTabMode.tabBarOverlap(style)
   case tabView.xTabPosition
   of tpTop:
-    initRect(0.0, 0.0, bounds.size.width, style.tabHeight + style.contentBorderWidth)
+    rect(0.0, 0.0, bounds.size.width, style.tabHeight + style.contentBorderWidth)
   of tpBottom:
-    initRect(
+    rect(
       0.0,
       tabView.contentRect().maxY - overlap,
       bounds.size.width,
@@ -316,7 +314,7 @@ proc tabRectInBar(tabView: TabView, index: int): Rect =
   case tabView.xTabMode
   of tvmInset:
     let y = traditionalRise / 2.0'f32
-    initRect(x, y, width, style.tabSegmentHeight)
+    rect(x, y, width, style.tabSegmentHeight)
   of tvmTraditional:
     let
       height =
@@ -330,13 +328,13 @@ proc tabRectInBar(tabView: TabView, index: int): Rect =
           if selected: 0.0'f32 else: traditionalRise
         of tpBottom:
           0.0'f32
-    initRect(x, y, width, height)
+    rect(x, y, width, height)
 
 proc tabRect*(tabView: TabView, index: int): Rect =
   let
     barFrame = tabView.tabBarFrame()
     localRect = tabView.tabRectInBar(index)
-  initRect(
+  rect(
     barFrame.origin.x + localRect.origin.x,
     barFrame.origin.y + localRect.origin.y,
     localRect.size.width,

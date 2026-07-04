@@ -148,9 +148,9 @@ suite "nimkit matrix":
 
   test "matrix item model actions dispatch from generated cells":
     let
-      window = newWindow("Matrix model actions", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      matrix = newButtonMatrix([], columns = 2, frame = initRect(10, 10, 180, 30))
+      window = newWindow("Matrix model actions", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      matrix = newButtonMatrix([], columns = 2, frame = rect(10, 10, 180, 30))
       resetAction = actionSelector("matrixModelResetAction")
 
     var resetCount = 0
@@ -177,10 +177,10 @@ suite "nimkit matrix":
 
   test "radio matrix selects one cell and dispatches from the matrix":
     let
-      window = newWindow("Matrix radio", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
+      window = newWindow("Matrix radio", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
       matrix =
-        newRadioMatrix(["Small", "Medium", "Large"], frame = initRect(10, 10, 160, 90))
+        newRadioMatrix(["Small", "Medium", "Large"], frame = rect(10, 10, 160, 90))
       action = actionSelector("matrixRadioAction")
       spy = MatrixSelectionSpy()
 
@@ -218,11 +218,10 @@ suite "nimkit matrix":
 
   test "check matrix moves the lead cell with keys and toggles with space":
     let
-      window = newWindow("Matrix keys", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      matrix = newCheckMatrix(
-        ["A", "B", "C", "D"], columns = 2, frame = initRect(10, 10, 180, 60)
-      )
+      window = newWindow("Matrix keys", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      matrix =
+        newCheckMatrix(["A", "B", "C", "D"], columns = 2, frame = rect(10, 10, 180, 60))
       action = actionSelector("matrixCheckAction")
 
     var actionCount = 0
@@ -318,11 +317,10 @@ suite "nimkit matrix":
 
   test "momentary button matrix uses the lead cell for per-cell actions":
     let
-      window = newWindow("Matrix buttons", frame = initRect(0, 0, 240, 120))
-      root = newView(frame = initRect(0, 0, 240, 120))
-      matrix = newButtonMatrix(
-        ["Apply", "Reset"], columns = 2, frame = initRect(10, 10, 180, 30)
-      )
+      window = newWindow("Matrix buttons", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      matrix =
+        newButtonMatrix(["Apply", "Reset"], columns = 2, frame = rect(10, 10, 180, 30))
       resetAction = actionSelector("matrixResetAction")
 
     var resetCount = 0
@@ -343,7 +341,7 @@ suite "nimkit matrix":
 
   test "demo stack leaves intrinsic matrix rows inside the content bounds":
     let
-      root = newView(frame = initRect(0, 0, 520, 420))
+      root = newView(frame = rect(0, 0, 520, 420))
       layout = newStackView(laVertical)
       title = newTitleLabel("Matrix")
       status = newStatusLabel("Package: Standard / Features: None / Last command: None")

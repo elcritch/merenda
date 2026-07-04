@@ -6,7 +6,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Matrix Demo", frame = initRect(160, 140, 520, 420))
+  window = newWindow("Nimkit Matrix Demo", frame = rect(160, 140, 520, 420))
   root = newView()
   layout = newStackView(laVertical)
   title = newTitleLabel("Matrix")

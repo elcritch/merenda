@@ -11,7 +11,7 @@ protocol FixedIntrinsicLayout of ViewLayoutProtocol:
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
-  initViewFields(result, initRect(0.0, 0.0, width, height))
+  initViewFields(result, rect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
@@ -19,7 +19,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
 suite "nimkit form views":
   test "intrinsic size uses max label and field columns with spacing and insets":
     let
-      form = newFormView(frame = initRect(0, 0, 1, 1))
+      form = newFormView(frame = rect(0, 0, 1, 1))
       shortLabel = newFixedIntrinsicView(40, 12)
       longLabel = newFixedIntrinsicView(60, 14)
       nameField = newFixedIntrinsicView(100, 20)
@@ -40,14 +40,14 @@ suite "nimkit form views":
     form.layoutSubtreeIfNeeded()
 
     check form.frame().size == initSize(174.0, 59.0)
-    check shortLabel.frame() == initRect(22.0, 5.0, 40.0, 12.0)
-    check nameField.frame() == initRect(70.0, 1.0, 100.0, 20.0)
-    check longLabel.frame() == initRect(2.0, 34.0, 60.0, 14.0)
-    check roleField.frame() == initRect(70.0, 26.0, 100.0, 30.0)
+    check shortLabel.frame() == rect(22.0, 5.0, 40.0, 12.0)
+    check nameField.frame() == rect(70.0, 1.0, 100.0, 20.0)
+    check longLabel.frame() == rect(2.0, 34.0, 60.0, 14.0)
+    check roleField.frame() == rect(70.0, 26.0, 100.0, 30.0)
 
   test "field column stretches while labels keep natural width":
     let
-      form = newFormView(frame = initRect(0, 0, 240, 48))
+      form = newFormView(frame = rect(0, 0, 240, 48))
       label = newFixedIntrinsicView(48, 14)
       field = newFixedIntrinsicView(80, 20)
 
@@ -55,12 +55,12 @@ suite "nimkit form views":
     form.addRow(label, field)
     form.layoutSubtreeIfNeeded()
 
-    check label.frame() == initRect(0.0, 3.0, 48.0, 14.0)
-    check field.frame() == initRect(60.0, 0.0, 180.0, 20.0)
+    check label.frame() == rect(0.0, 3.0, 48.0, 14.0)
+    check field.frame() == rect(60.0, 0.0, 180.0, 20.0)
 
   test "leading labels and fill row alignment are supported":
     let
-      form = newFormView(frame = initRect(0, 0, 180, 40))
+      form = newFormView(frame = rect(0, 0, 180, 40))
       label = newFixedIntrinsicView(36, 12)
       field = newFixedIntrinsicView(90, 20)
 
@@ -70,12 +70,12 @@ suite "nimkit form views":
     form.addRow(label, field)
     form.layoutSubtreeIfNeeded()
 
-    check label.frame() == initRect(0.0, 0.0, 36.0, 20.0)
-    check field.frame() == initRect(46.0, 0.0, 134.0, 20.0)
+    check label.frame() == rect(0.0, 0.0, 36.0, 20.0)
+    check field.frame() == rect(46.0, 0.0, 134.0, 20.0)
 
   test "minimum field width participates in intrinsic and layout sizing":
     let
-      form = newFormView(frame = initRect(0, 0, 1, 1))
+      form = newFormView(frame = rect(0, 0, 1, 1))
       label = newFixedIntrinsicView(30, 10)
       field = newFixedIntrinsicView(20, 12)
 
@@ -90,7 +90,7 @@ suite "nimkit form views":
 
   test "hidden rows are omitted from intrinsic size and layout":
     let
-      form = newFormView(frame = initRect(0, 0, 1, 1))
+      form = newFormView(frame = rect(0, 0, 1, 1))
       visibleLabel = newFixedIntrinsicView(30, 10)
       visibleField = newFixedIntrinsicView(80, 20)
       hiddenLabel = newFixedIntrinsicView(100, 10)
@@ -106,14 +106,14 @@ suite "nimkit form views":
     form.sizeToFit()
     form.layoutSubtreeIfNeeded()
     check visibleField.frame().size.width == 80.0
-    check hiddenField.frame() == initRect(0.0, 0.0, 120.0, 20.0)
+    check hiddenField.frame() == rect(0.0, 0.0, 120.0, 20.0)
 
   test "field content changes invalidate form and parent lazily":
     let
-      root = newView(frame = initRect(0, 0, 300, 120))
-      form = newFormView(frame = initRect(10, 10, 1, 1))
-      label = newTextField("Name", frame = initRect(0, 0, 1, 1))
-      field = newTextField("Ada", frame = initRect(0, 0, 1, 1))
+      root = newView(frame = rect(0, 0, 300, 120))
+      form = newFormView(frame = rect(10, 10, 1, 1))
+      label = newTextField("Name", frame = rect(0, 0, 1, 1))
+      field = newTextField("Ada", frame = rect(0, 0, 1, 1))
 
     label.editable = false
     label.selectable = false
@@ -139,8 +139,8 @@ suite "nimkit form views":
 
   test "form participates in solver constraint layout":
     let
-      root = newView(frame = initRect(0, 0, 320, 120))
-      form = newFormView(frame = initRect(0, 0, 1, 1))
+      root = newView(frame = rect(0, 0, 320, 120))
+      form = newFormView(frame = rect(0, 0, 1, 1))
       label = newFixedIntrinsicView(50, 12)
       field = newFixedIntrinsicView(80, 20)
       left = newLayoutConstraint(form, atLeft, lrEqual, root, atLeft, constant = 20)
@@ -155,13 +155,13 @@ suite "nimkit form views":
     activateConstraints([left, right, top, height])
     root.layoutSubtreeIfNeeded()
 
-    check form.frame() == initRect(20.0, 10.0, 270.0, 40.0)
-    check label.frame() == initRect(0.0, 4.0, 50.0, 12.0)
-    check field.frame() == initRect(60.0, 0.0, 210.0, 20.0)
+    check form.frame() == rect(20.0, 10.0, 270.0, 40.0)
+    check label.frame() == rect(0.0, 4.0, 50.0, 12.0)
+    check field.frame() == rect(60.0, 0.0, 210.0, 20.0)
 
   test "removing a row subview removes the row":
     let
-      form = newFormView(frame = initRect(0, 0, 120, 40))
+      form = newFormView(frame = rect(0, 0, 120, 40))
       label = newFixedIntrinsicView(30, 10)
       field = newFixedIntrinsicView(80, 20)
 

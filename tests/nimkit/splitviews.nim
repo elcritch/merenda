@@ -16,14 +16,14 @@ protocol FixedIntrinsicLayout of ViewLayoutProtocol:
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
-  initViewFields(result, initRect(0.0, 0.0, width, height))
+  initViewFields(result, rect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit split views":
   test "split view protocol exposes selector-backed properties":
-    let splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 200.0, 100.0))
+    let splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 200.0, 100.0))
 
     check splitView.conformsTo(SplitViewProtocol)
     check splitView.splitAxis == laHorizontal
@@ -39,7 +39,7 @@ suite "nimkit split views":
 
   test "horizontal split view lays out panes and divider cursor rects":
     let
-      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 120.0))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 120.0))
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 50.0)
 
@@ -47,15 +47,15 @@ suite "nimkit split views":
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
 
-    check left.frame() == initRect(0.0, 0.0, 150.0, 120.0)
-    check splitView.dividerRect(0) == initRect(150.0, 0.0, 6.0, 120.0)
-    check right.frame() == initRect(156.0, 0.0, 150.0, 120.0)
+    check left.frame() == rect(0.0, 0.0, 150.0, 120.0)
+    check splitView.dividerRect(0) == rect(150.0, 0.0, 6.0, 120.0)
+    check right.frame() == rect(156.0, 0.0, 150.0, 120.0)
     check splitView.cursorRects().len == 1
     check splitView.cursorRects()[0].cursor == "resize-left-right"
 
   test "vertical split view uses vertical axis and natural size":
     let
-      splitView = newSplitView(laVertical, initRect(0.0, 0.0, 200.0, 206.0))
+      splitView = newSplitView(laVertical, rect(0.0, 0.0, 200.0, 206.0))
       top = newFixedIntrinsicView(80.0, 40.0)
       bottom = newFixedIntrinsicView(90.0, 50.0)
 
@@ -63,15 +63,15 @@ suite "nimkit split views":
     splitView.addPane(bottom)
     splitView.layoutSubtreeIfNeeded()
 
-    check top.frame() == initRect(0.0, 0.0, 200.0, 100.0)
-    check splitView.dividerRect(0) == initRect(0.0, 100.0, 200.0, 6.0)
-    check bottom.frame() == initRect(0.0, 106.0, 200.0, 100.0)
+    check top.frame() == rect(0.0, 0.0, 200.0, 100.0)
+    check splitView.dividerRect(0) == rect(0.0, 100.0, 200.0, 6.0)
+    check bottom.frame() == rect(0.0, 106.0, 200.0, 100.0)
     check splitView.intrinsicContentSize() == initIntrinsicSize(90.0, 96.0)
     check splitView.cursorRects()[0].cursor == "resize-up-down"
 
   test "divider movement honors adjacent pane min and max sizes":
     let
-      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
@@ -92,7 +92,7 @@ suite "nimkit split views":
 
   test "dragging divider uses mouse-down size snapshot":
     let
-      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
@@ -122,7 +122,7 @@ suite "nimkit split views":
 
   test "collapsible panes are removed from layout and accessibility":
     let
-      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
@@ -135,15 +135,15 @@ suite "nimkit split views":
 
     check splitView.isPaneCollapsed(0)
     check left.frame().size.width == 0.0
-    check right.frame() == initRect(0.0, 0.0, 306.0, 100.0)
+    check right.frame() == rect(0.0, 0.0, 306.0, 100.0)
     check splitView.accessibilityChildren() == @[View(right)]
 
   test "split view state captures fractions and collapsed panes":
     let
-      first = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      first = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       a = newFixedIntrinsicView(80.0, 40.0)
       b = newFixedIntrinsicView(90.0, 40.0)
-      second = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      second = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       c = newFixedIntrinsicView(80.0, 40.0)
       d = newFixedIntrinsicView(90.0, 40.0)
 
@@ -165,7 +165,7 @@ suite "nimkit split views":
 
   test "split view renders themed dividers":
     let
-      splitView = newSplitView(laHorizontal, initRect(0.0, 0.0, 306.0, 100.0))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 

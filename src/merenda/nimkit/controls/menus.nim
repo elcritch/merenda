@@ -1086,11 +1086,11 @@ proc popupSize(button: PopupMenuButton): Size =
 proc popupFrameInSuperview(button: PopupMenuButton): Rect =
   let size = button.popupSize()
   if button.xUsesCascadeFrame:
-    return initRect(
+    return rect(
       button.xCascadeFrame.origin.x, button.xCascadeFrame.origin.y, size.width,
       size.height,
     )
-  initRect(button.frame.origin.x, button.frame.maxY, size.width, size.height)
+  rect(button.frame.origin.x, button.frame.maxY, size.width, size.height)
 
 proc rootPopup(button: PopupMenuButton): PopupMenuButton =
   result = button
@@ -1454,7 +1454,7 @@ proc openPopupWindow(button: PopupMenuButton) =
     size = button.popupSize()
     popupWindow = owner.newPopupWindow(anchorFrame, size, button.title & " Menu")
     popupView = button.popupList()
-  popupView.frame = initRect(0.0, 0.0, size.width, size.height)
+  popupView.frame = rect(0.0, 0.0, size.width, size.height)
   popupWindow.setContentView(popupView)
   popupWindow.setPopupDoneHandler(
     proc() =
@@ -1570,7 +1570,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         arrowFrame = context.renderRectFor(arrowRect)
         arrowChrome =
           chromeContext(style.chrome, crComboBox, cpArrow, style.box.fill, states)
-        separatorRect = initRect(
+        separatorRect = rect(
           arrowRect.origin.x,
           arrowRect.origin.y + 2.0'f32,
           1.0'f32,
@@ -1730,7 +1730,7 @@ proc popUpContextMenu*(
   let
     windowPoint = view.pointToWindow(event.location)
     contentPoint = owner.convertPointToContent(windowPoint)
-    anchorFrame = initRect(contentPoint.x, contentPoint.y, 0.0'f32, 0.0'f32)
+    anchorFrame = rect(contentPoint.x, contentPoint.y, 0.0'f32, 0.0'f32)
 
   result = newPopupMenuButton(menu.title(), menu, anchorFrame)
   menu.setNextResponder(view)
@@ -1757,7 +1757,7 @@ proc submenuCascadeFrame(button: PopupMenuButton, index: int): Rect =
   let
     parentList = button.popupList()
     itemRect = parentList.popupListItemRect(parentList.bounds(), index)
-  initRect(
+  rect(
     max(itemRect.maxX - 1.0'f32, 0.0'f32),
     itemRect.origin.y,
     180.0'f32,
@@ -1877,7 +1877,7 @@ proc tileMenuBarItems(menuBar: MenuBar) =
         button.title = item.title()
         button.menu = item.submenu()
         button.enabled = not item.submenu().isNil
-        button.frame = initRect(x, buttonY, width, buttonHeight)
+        button.frame = rect(x, buttonY, width, buttonHeight)
         x += width + menuBarItemGap()
       inc buttonIndex
 
@@ -1887,7 +1887,7 @@ protocol MenuBarDrawing of ViewDrawingProtocol:
     if bounds.isEmpty:
       return
     discard context.addRenderRectangle(
-      initRect(0.0'f32, bounds.maxY - 1.0'f32, bounds.size.width, 1.0'f32),
+      rect(0.0'f32, bounds.maxY - 1.0'f32, bounds.size.width, 1.0'f32),
       fill(color(0.76, 0.78, 0.82)),
     )
 

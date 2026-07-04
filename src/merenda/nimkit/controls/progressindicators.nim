@@ -85,7 +85,7 @@ proc barTrackRect(indicator: ProgressIndicator, style: SliderStyle): Rect =
   let
     bounds = indicator.bounds()
     height = min(bounds.size.height, max(style.trackHeight, 1.0'f32))
-  initRect(
+  rect(
     bounds.origin.x,
     bounds.origin.y + (bounds.size.height - height) * 0.5'f32,
     bounds.size.width,
@@ -99,7 +99,7 @@ proc spinnerRect(indicator: ProgressIndicator, style: SliderStyle): Rect =
       min(bounds.size.width, bounds.size.height),
       max(style.minSize.height, style.knobSize),
     )
-  initRect(
+  rect(
     bounds.origin.x + (bounds.size.width - side) * 0.5'f32,
     bounds.origin.y + (bounds.size.height - side) * 0.5'f32,
     side,
@@ -309,7 +309,7 @@ proc drawProgressTrack(
 proc drawDeterminateBar(
     indicator: ProgressIndicator, context: DrawContext, track: Rect, style: SliderStyle
 ) =
-  let fillRect = initRect(
+  let fillRect = rect(
     track.origin.x,
     track.origin.y,
     track.size.width * indicator.progressFraction(),
@@ -337,7 +337,7 @@ proc drawIndeterminateBar(
   if x2 > x1:
     indicator.drawProgressTrack(
       context,
-      initRect(x1, track.origin.y, x2 - x1, track.size.height),
+      rect(x1, track.origin.y, x2 - x1, track.size.height),
       cpHighlight,
       style.activeTrack,
       style,

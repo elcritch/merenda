@@ -214,7 +214,7 @@ let
     .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height + 80.0'f32
   window = newWindow(
     "NimKit Document Tabs Demo",
-    frame = initRect(160, 160, DemoWindowWidth, minimumWindowHeight),
+    frame = rect(160, 160, DemoWindowWidth, minimumWindowHeight),
   )
 
 window.minSize = initSize(520.0, minimumWindowHeight)

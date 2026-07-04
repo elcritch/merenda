@@ -71,9 +71,9 @@ func initSplitRect(
 ): Rect =
   case axis
   of laHorizontal:
-    initRect(mainOrigin, crossOrigin, mainLength, crossLength)
+    rect(mainOrigin, crossOrigin, mainLength, crossLength)
   of laVertical:
-    initRect(crossOrigin, mainOrigin, crossLength, mainLength)
+    rect(crossOrigin, mainOrigin, crossLength, mainLength)
 
 func normalizedFraction(value: float32): float32 =
   if value < 0.0'f32: 0.0'f32 else: value
@@ -534,13 +534,13 @@ proc layoutSplitViewPanes(splitView: SplitView) =
 
 proc dividerRect*(splitView: SplitView, dividerIndex: int): Rect =
   if splitView.isNil or dividerIndex < 0:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     visible = splitView.visiblePaneIndexes()
     availableLength = splitView.availablePaneLength()
     lengths = splitView.constrainedPaneLengths(visible, availableLength)
   if dividerIndex >= visible.len - 1:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
 
   var cursor = splitView.bounds().mainOrigin(splitView.xAxis)
   for index in 0 .. dividerIndex:
@@ -690,14 +690,14 @@ proc drawSplitViewDividers(splitView: SplitView, context: DrawContext) =
       markInset = max((style.dividerThickness - markLength) / 2.0'f32, 0.0'f32)
       markRect =
         if splitView.xAxis == laHorizontal:
-          initRect(
+          rect(
             rect.origin.x + markInset,
             rect.origin.y + 4.0'f32,
             markLength,
             max(rect.size.height - 8.0'f32, 0.0'f32),
           )
         else:
-          initRect(
+          rect(
             rect.origin.x + 4.0'f32,
             rect.origin.y + markInset,
             max(rect.size.width - 8.0'f32, 0.0'f32),

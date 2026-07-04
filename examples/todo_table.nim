@@ -134,7 +134,7 @@ proc newTodoTableController(
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Todo Table", frame = initRect(120, 120, 460, 420))
+  window = newWindow("Nimkit Todo Table", frame = rect(120, 120, 460, 420))
   root = newView()
   layout = newStackView(laVertical)
   inputRow = newStackView(laHorizontal)

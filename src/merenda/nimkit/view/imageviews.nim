@@ -38,7 +38,7 @@ proc imageRectForBounds(
     bounds: Rect, imageSize: Size, scaling: ImageScaling, alignment: ImageAlignment
 ): Rect =
   if imageSize.width <= 0.0'f32 or imageSize.height <= 0.0'f32 or bounds.isEmpty:
-    return initRect(bounds.origin, initSize(0.0, 0.0))
+    return rect(bounds.origin, initSize(0.0, 0.0))
 
   var drawSize = imageSize
   case scaling
@@ -73,7 +73,7 @@ proc imageRectForBounds(
     else:
       bounds.origin.y + (bounds.size.height - drawSize.height) / 2.0'f32
 
-  initRect(x, y, drawSize.width, drawSize.height)
+  rect(x, y, drawSize.width, drawSize.height)
 
 protocol ImageViewProtocol from ImageView:
   property image -> ImageResource

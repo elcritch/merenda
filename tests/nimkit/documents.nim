@@ -91,8 +91,7 @@ suite "nimkit documents":
     let
       app = newApplication()
       document = newDocument("file:///tmp/Spec.nim")
-      controller =
-        newWindowController(newWindow("Raw", frame = initRect(0, 0, 240, 160)))
+      controller = newWindowController(newWindow("Raw", frame = rect(0, 0, 240, 160)))
 
     document.setNextResponder(app)
     check document.fileUrl == "file:///tmp/Spec.nim"
@@ -128,7 +127,7 @@ suite "nimkit documents":
       controller = newDocumentController()
       first = newDocument("file:///tmp/One.txt")
       second = newDocument()
-      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
 
     second.displayName = "Scratch"
     second.documentEdited = true
@@ -224,8 +223,8 @@ suite "nimkit documents":
     let
       document = newDocument()
       delegate = DocumentDelegateSpy()
-      firstWindow = newWindow("One", frame = initRect(0, 0, 240, 160))
-      secondWindow = newWindow("Two", frame = initRect(20, 20, 240, 160))
+      firstWindow = newWindow("One", frame = rect(0, 0, 240, 160))
+      secondWindow = newWindow("Two", frame = rect(20, 20, 240, 160))
 
     delegateEvents = @[]
     allowDocumentClose = false

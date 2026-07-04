@@ -68,7 +68,7 @@ proc newDemoDocumentController(app: Application): DemoDocumentController =
 let
   app = sharedApplication()
   controller = newDemoDocumentController(app)
-  window = newWindow("Nimkit Panel Demo", frame = initRect(120, 120, 620, 360))
+  window = newWindow("Nimkit Panel Demo", frame = rect(120, 120, 620, 360))
   root = newView()
   layout = newStackView(laVertical)
   directRow = newStackView(laHorizontal)

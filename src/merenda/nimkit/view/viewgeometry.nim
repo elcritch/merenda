@@ -246,7 +246,7 @@ proc alignmentRectForFrame*(view: View, frame: Rect): Rect =
 
 proc frameForAlignmentRect*(view: View, alignmentRect: Rect): Rect =
   let insets = view.alignmentInsets()
-  initRect(
+  rect(
     alignmentRect.origin.x - insets.left,
     alignmentRect.origin.y - insets.top,
     alignmentRect.size.width + insets.horizontal,
@@ -279,7 +279,7 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   if view.isNil or view.xFrame == frame:
     return
   view.xFrame = frame
-  view.xBounds = initRect(view.xBounds.origin, frame.size)
+  view.xBounds = rect(view.xBounds.origin, frame.size)
   view.xNeedsLayout = true
   view.xNeedsDisplay = true
   view.xInvalidRects.setLen(0)
@@ -388,7 +388,7 @@ proc resolvedFrame*(view: View, frame: Rect): Rect =
           view.sizeThatFits(UnconstrainedFittingSize)
         else:
           view.xFrame.size
-      fallback = initRect(view.xFrame.origin, fallbackSize)
+      fallback = rect(view.xFrame.origin, fallbackSize)
     frame.resolveAutoRect(fallback)
 
 proc applyInitialFrame*(view: View, frame: Rect) =
@@ -402,7 +402,7 @@ proc sizeToFit*(view: View) =
   let
     frame = view.xFrame
     fittingSize = view.sizeThatFits(UnconstrainedFittingSize)
-    nextFrame = initRect(frame.origin, fittingSize)
+    nextFrame = rect(frame.origin, fittingSize)
   view.applyLayoutFrame(nextFrame, lfoAuthored)
 
 proc invalidateIntrinsicContentSize*(view: View) =
@@ -568,7 +568,7 @@ proc pointFromView*(view: View, point: Point, fromView: View): Point =
   view.pointFromWindow(fromView.pointToWindow(point))
 
 proc rectFromCorners(p0, p1: Point): Rect =
-  initRect(min(p0.x, p1.x), min(p0.y, p1.y), abs(p1.x - p0.x), abs(p1.y - p0.y))
+  rect(min(p0.x, p1.x), min(p0.y, p1.y), abs(p1.x - p0.x), abs(p1.y - p0.y))
 
 proc rectToWindow*(view: View, rect: Rect): Rect =
   let

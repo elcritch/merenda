@@ -887,7 +887,7 @@ proc validAttributesForMarkedText*(textView: TextView): seq[string] =
 
 proc firstRectForCharacterRange*(textView: TextView, range: TextRange): Rect =
   if textView.isNil:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   let clamped = textView.clampedRange(range)
   if clamped.length > 0:
     let rects = textView.selectionRects(clamped)
@@ -1021,7 +1021,7 @@ proc setRectangularSelection*(
     y0 = min(anchor.y, focus.y)
     x1 = max(anchor.x, focus.x)
     y1 = max(anchor.y, focus.y)
-    bounds = initRect(x0, y0, x1 - x0, y1 - y0)
+    bounds = rect(x0, y0, x1 - x0, y1 - y0)
   var ranges: seq[TextRange]
   textView.updateTextContainer()
   for fragment in textView.xLayoutManager.lineFragments():
@@ -1569,7 +1569,7 @@ func roundToScale(value, scale: float32): float32 =
 func roundRectToScale(rect: Rect, scale: float32): Rect =
   if rect.isEmpty or scale <= 0.0'f32:
     return rect
-  initRect(
+  rect(
     rect.origin.x.roundToScale(scale),
     rect.origin.y.roundToScale(scale),
     rect.size.width.roundToScale(scale),
@@ -2451,7 +2451,7 @@ proc selectionRects*(textView: TextView, range: TextRange): seq[Rect] =
 
 proc characterRect*(textView: TextView, index: int): Rect =
   if textView.isNil:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   textView.updateTextContainer()
   textView.xLayoutManager.characterRect(index)
 
@@ -2469,7 +2469,7 @@ proc lineForIndex*(textView: TextView, index: int): int =
 
 proc lineBounds*(textView: TextView, line: int): Rect =
   if textView.isNil:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   textView.updateTextContainer()
   textView.xLayoutManager.lineBounds(line)
 
@@ -2508,7 +2508,7 @@ proc normalizedPageOptions(
     result.displayScale = 1.0'f32
 
 proc pageContentRect(options: TextPageLayoutOptions, pageIndex: int): Rect =
-  initRect(
+  rect(
     0.0'f32,
     float32(pageIndex) * options.pageSize.height,
     options.pageSize.width,
@@ -2525,7 +2525,7 @@ proc addLineToPage(
   while pages.len <= pageIndex:
     let next = pages.len
     let
-      pageRect = initRect(
+      pageRect = rect(
         0.0'f32,
         float32(next) * options.pageSize.height,
         options.pageSize.width,
@@ -2588,7 +2588,7 @@ proc rulerMetrics*(textView: TextView, range: TextRange): TextRulerMetrics =
   TextRulerMetrics(
     range: clamped,
     paragraphStyle: style,
-    rulerRect: initRect(
+    rulerRect: rect(
       textView.bounds.origin.x, textView.bounds.origin.y, textView.bounds.size.width,
       rulerHeight,
     ),
@@ -2888,7 +2888,7 @@ method textViewInputFirstRectForCharacterRange(
     textView: TextView, range: TextRange
 ): Rect {.selector.} =
   if textView.isNil:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   let clamped = textView.clampedRange(range)
   if clamped.length > 0:
     let rects = textView.selectionRects(clamped)
@@ -3297,7 +3297,7 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
 
   method accessibilityBoundsForCharacter(textView: TextView, index: int): Rect =
     if textView.isNil:
-      return initRect(0, 0, 0, 0)
+      return rect(0, 0, 0, 0)
     textView.rectToWindow(textView.characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(textView: TextView, point: Point): int =
@@ -3318,7 +3318,7 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
 
   method accessibilityBoundsForLine(textView: TextView, line: int): Rect =
     if textView.isNil:
-      return initRect(0, 0, 0, 0)
+      return rect(0, 0, 0, 0)
     textView.rectToWindow(textView.lineBounds(line))
 
 proc initTextViewFields*(

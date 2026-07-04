@@ -38,9 +38,9 @@ suite "nimkit view inspectors":
 
   test "view inspector follows dynamic inspected subviews":
     let
-      window = newWindow("Inspector dynamic", frame = initRect(0, 0, 180, 120))
-      root = newView(frame = initRect(0, 0, 180, 120))
-      child = newView("lateChild", frame = initRect(20, 20, 60, 40))
+      window = newWindow("Inspector dynamic", frame = rect(0, 0, 180, 120))
+      root = newView(frame = rect(0, 0, 180, 120))
+      child = newView("lateChild", frame = rect(20, 20, 60, 40))
       inspector = newViewInspector(root)
 
     window.setContentView(root)

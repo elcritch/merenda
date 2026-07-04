@@ -72,7 +72,7 @@ proc sliderStyle(slider: Slider, context: DrawContext = nil): SliderStyle =
 
 proc trackRect(slider: Slider, style: SliderStyle): Rect =
   let bounds = slider.bounds()
-  initRect(
+  rect(
     bounds.origin.x + style.knobSize * 0.5'f32,
     bounds.origin.y + (bounds.size.height - style.trackHeight) * 0.5'f32,
     max(bounds.size.width - style.knobSize, 0.0'f32),
@@ -92,7 +92,7 @@ proc knobRect(slider: Slider, style: SliderStyle): Rect =
   let
     track = slider.trackRect(style)
     centerX = track.origin.x + track.size.width * slider.sliderFraction()
-  initRect(
+  rect(
     centerX - style.knobSize * 0.5'f32,
     slider.bounds().origin.y + (slider.bounds().size.height - style.knobSize) * 0.5'f32,
     style.knobSize,
@@ -262,7 +262,7 @@ protocol DefaultSliderDrawing of ViewDrawingProtocol:
 
     slider.drawSliderTrack(context, track, cpFace, style)
 
-    let fillRect = initRect(
+    let fillRect = rect(
       track.origin.x,
       track.origin.y,
       track.size.width * slider.sliderFraction(),

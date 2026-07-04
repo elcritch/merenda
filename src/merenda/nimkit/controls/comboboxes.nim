@@ -834,7 +834,7 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       arrowFrame = context.renderRectFor(arrowRect)
       arrowChrome =
         chromeContext(style.chrome, crComboBox, cpArrow, style.arrowFill, styleStates)
-      separatorRect = initRect(
+      separatorRect = rect(
         arrowRect.origin.x,
         arrowRect.origin.y + 2.0'f32,
         1.0'f32,
@@ -1571,7 +1571,7 @@ proc openPopupWindow(comboBox: ComboBox) =
     popupWindow = owner.newPopupWindow(anchorFrame, size, "ComboBox Popup")
     popupView = comboBox.popupList()
 
-  popupView.setFrame(initRect(0.0, 0.0, size.width, size.height))
+  popupView.setFrame(rect(0.0, 0.0, size.width, size.height))
   popupWindow.setContentView(popupView)
   popupWindow.setPopupDoneHandler(
     proc() =

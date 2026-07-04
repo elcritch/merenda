@@ -110,10 +110,8 @@ suite "nimkit theme":
     )
 
   test "edge insets shrink rectangles without negative sizes":
-    check initRect(10, 20, 100, 50).inset(insets(2, 4, 6, 8)) == initRect(
-      14, 22, 88, 42
-    )
-    check initRect(0, 0, 10, 10).inset(insets(8)) == initRect(8, 8, 0, 0)
+    check rect(10, 20, 100, 50).inset(insets(2, 4, 6, 8)) == rect(14, 22, 88, 42)
+    check rect(0, 0, 10, 10).inset(insets(8)) == rect(8, 8, 0, 0)
 
   test "style selectors match role state id and classes":
     let context = initStyleContext(
@@ -415,7 +413,7 @@ suite "nimkit theme":
       color(1.0, 1.0, 1.0, 0.16)
     check accentButtonStyle.text.color == color(0.08, 0.08, 0.07, 0.95)
     check buttonStyle.minSize == initSize(0.0, 32.0)
-    check buttonStyle.buttonTextRect(initRect(0, 0, 100, 30)) == initRect(8, 0, 84, 30)
+    check buttonStyle.buttonTextRect(rect(0, 0, 100, 30)) == rect(8, 0, 84, 30)
 
     check checkBoxStyle.indicatorSize > 0.0
     check checkBoxStyle.indicatorSpacing > 0.0
@@ -433,10 +431,8 @@ suite "nimkit theme":
     check radioStyle.indicator.borderColor == color(0.42, 0.50, 0.62, 1.0)
     check radioStyle.indicator.cornerRadius == 8.0
     check radioStyle.indicator.focusRingColor == color(0.34, 0.66, 1.0, 0.72)
-    check checkBoxStyle.choiceIndicatorRect(initRect(0, 0, 100, 24)) ==
-      initRect(2, 3, 18, 18)
-    check checkBoxStyle.choiceTextRect(initRect(0, 0, 100, 24)) ==
-      initRect(27, 0, 71, 24)
+    check checkBoxStyle.choiceIndicatorRect(rect(0, 0, 100, 24)) == rect(2, 3, 18, 18)
+    check checkBoxStyle.choiceTextRect(rect(0, 0, 100, 24)) == rect(27, 0, 71, 24)
 
     check textFieldStyle.box.borderWidth > 0.0
     check textFieldStyle.box.cornerRadius == 6.0
@@ -447,8 +443,7 @@ suite "nimkit theme":
     check textFieldStyle.text.color == color(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.selectionColor == color(0.24, 0.56, 1.0, 0.34)
     check textFieldStyle.minSize == initSize(80.0, 24.0)
-    check textFieldStyle.textFieldTextRect(initRect(0, 0, 100, 30)) ==
-      initRect(6, 0, 88, 30)
+    check textFieldStyle.textFieldTextRect(rect(0, 0, 100, 30)) == rect(6, 0, 88, 30)
 
     check bodyLabelStyle.box.fill.centerColor().a == 0.0
     check bodyLabelStyle.box.borderWidth == 0.0
@@ -471,10 +466,8 @@ suite "nimkit theme":
     check comboBoxStyle.minSize == initSize(90.0, 24.0)
     check comboBoxStyle.arrowWidth == 24.0
     check comboBoxStyle.arrowColor == color(0.10, 0.16, 0.26, 1.0)
-    check comboBoxStyle.comboBoxArrowRect(initRect(0, 0, 100, 28)) ==
-      initRect(76, 0, 24, 28)
-    check comboBoxStyle.comboBoxTextRect(initRect(0, 0, 100, 28)) ==
-      initRect(8, 0, 60, 28)
+    check comboBoxStyle.comboBoxArrowRect(rect(0, 0, 100, 28)) == rect(76, 0, 24, 28)
+    check comboBoxStyle.comboBoxTextRect(rect(0, 0, 100, 28)) == rect(8, 0, 60, 28)
     check comboBoxItemStyle.box.fill == aquaComboItemSelectedFill()
     check comboBoxItemStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
     check comboBoxItemStyle.minSize == initSize(0.0, 22.0)

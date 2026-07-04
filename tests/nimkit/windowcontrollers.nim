@@ -19,7 +19,7 @@ var
 protocol LoadingControllerProtocol of WindowControllerLoading:
   method makeWindow(controller: LoadingController): Window =
     loadingEvents.add "makeWindow"
-    newWindow("Loaded", frame = initRect(0, 0, 240, 160))
+    newWindow("Loaded", frame = rect(0, 0, 240, 160))
 
   method titleForDisplayName(
       controller: LoadingController, displayName: string
@@ -121,9 +121,9 @@ suite "nimkit window controllers":
   test "showWindow integrates owned windows with application ordering":
     let
       app = newApplication()
-      other = newWindow("Other", frame = initRect(20, 20, 240, 160))
+      other = newWindow("Other", frame = rect(20, 20, 240, 160))
       controller =
-        newWindowController(newWindow("Document", frame = initRect(0, 0, 240, 160)))
+        newWindowController(newWindow("Document", frame = rect(0, 0, 240, 160)))
 
     app.addWindow(other)
     let window = controller.showWindow(app)
@@ -146,7 +146,7 @@ suite "nimkit window controllers":
 
   test "window controller bridges close delegates and vetoes":
     let
-      window = newWindow("Closable", frame = initRect(0, 0, 240, 160))
+      window = newWindow("Closable", frame = rect(0, 0, 240, 160))
       legacyDelegate = LegacyWindowDelegateSpy()
       controllerDelegate = ControllerDelegateSpy()
 

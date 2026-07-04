@@ -56,12 +56,11 @@ proc updateStatus(demo: CollectionViewDemo) =
 
 proc newCollectionViewDemo*(app = newApplication()): CollectionViewDemo =
   result = CollectionViewDemo(app: app)
-  result.window =
-    newWindow("NimKit Collection View", frame = initRect(140, 140, 520, 340))
-  result.root = newView(frame = initRect(0, 0, 520, 340))
-  result.status = newStatusLabel("No item selected", frame = initRect(24, 294, 460, 22))
+  result.window = newWindow("NimKit Collection View", frame = rect(140, 140, 520, 340))
+  result.root = newView(frame = rect(0, 0, 520, 340))
+  result.status = newStatusLabel("No item selected", frame = rect(24, 294, 460, 22))
   result.controller = newArrayController(demoItems())
-  result.collectionView = newCollectionView(frame = initRect(24, 64, 470, 210))
+  result.collectionView = newCollectionView(frame = rect(24, 64, 470, 210))
   result.collectionView.collectionLayout = newCollectionViewLayout(
     clkWrapped,
     itemSize = initSize(120.0, 64.0),
@@ -80,7 +79,7 @@ proc newCollectionViewDemo*(app = newApplication()): CollectionViewDemo =
   result.collectionView.action = action
 
   result.root.addSubview(
-    newTitleLabel("Collection View", frame = initRect(24, 20, 300, 28))
+    newTitleLabel("Collection View", frame = rect(24, 20, 300, 28))
   )
   result.root.addSubview(result.collectionView)
   result.root.addSubview(result.status)

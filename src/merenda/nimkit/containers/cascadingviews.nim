@@ -788,21 +788,21 @@ proc syncCascadingLayout(view: CascadingView) =
     oldOffset = view.xScrollView.contentOffset()
   view.xScrollView.frame = bounds
   view.xColumnContainer.frame =
-    initRect(0.0'f32, 0.0'f32, documentWidth, bounds.size.height)
+    rect(0.0'f32, 0.0'f32, documentWidth, bounds.size.height)
   view.xScrollView.tile()
   let
     viewport = view.xScrollView.viewportSize()
     columnWidth = max(view.xColumnWidth, view.xMinColumnWidth)
     documentHeight = viewport.height
   view.xColumnContainer.frame =
-    initRect(0.0'f32, 0.0'f32, max(contentWidth, viewport.width), documentHeight)
+    rect(0.0'f32, 0.0'f32, max(contentWidth, viewport.width), documentHeight)
   if view.xColumns.len == 0:
     view.xScrollView.tile()
     view.xScrollView.contentOffset = oldOffset
     return
   var x = 0.0'f32
   for index, tableView in view.xColumns:
-    tableView.frame = initRect(x, 0.0'f32, columnWidth, documentHeight)
+    tableView.frame = rect(x, 0.0'f32, columnWidth, documentHeight)
     let column = tableView.columnAt(0)
     if not column.isNil:
       column.width = max(columnWidth - CascadingColumnEdgeInset * 2.0'f32, 0.0'f32)
@@ -1336,7 +1336,7 @@ proc cascadingRowItemStyle(
 
 proc cascadingChildArrowRect(rowBounds: Rect): Rect =
   let width = min(CascadingChildArrowWidth, rowBounds.size.width)
-  initRect(
+  rect(
     rowBounds.maxX - CascadingChildArrowRightInset - width,
     rowBounds.origin.y,
     width,
@@ -1353,7 +1353,7 @@ proc drawCascadingChildArrow(context: DrawContext, rect: Rect, color: Color) =
     let height = 7.0'f32 - index.float32 * 2.0'f32
     discard context.addRenderRectangle(
       context.renderRectFor(
-        initRect(
+        rect(
           centerX - 1.0'f32 + index.float32, centerY - height * 0.5'f32, 1.0'f32, height
         )
       ),
@@ -1377,7 +1377,7 @@ proc drawCascadingRowText(
       rowBounds.maxX - CascadingChildArrowRightInset - CascadingChildArrowWidth -
         CascadingChildArrowTextGap,
     )
-    textRect.size.width = min(textRect.size.width, maxTextX - textRect.origin.x)
+    textRect.w = min(textRect.w, maxTextX - textRect.x)
   if textRect.isEmpty:
     return
   let textRoot = context.addRenderRectangle(
@@ -1454,7 +1454,7 @@ protocol CascadingTableDelegate of TableViewDelegate:
       return
     let
       column = view.columnForTableView(tableView)
-      rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
+      rowBounds = rect(0.0, 0.0, rect.size.width, rect.size.height)
       style = view.cascadingRowItemStyle(tableView, context, row.states)
     if column < 0:
       return

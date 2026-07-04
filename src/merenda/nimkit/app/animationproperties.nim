@@ -73,13 +73,13 @@ proc applyTiming[T](animation: PropertyAnimation[T], timing: AnimationTiming) =
 
 proc currentFrame(view: View): Rect =
   if view.isNil:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     view.frame()
 
 proc currentBounds(view: View): Rect =
   if view.isNil:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     view.bounds()
 

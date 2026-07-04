@@ -10,13 +10,13 @@ protocol CyclicIntrinsicLayout of ViewLayoutProtocol:
 
 proc newCyclicIntrinsicView(): CyclicIntrinsicView =
   result = CyclicIntrinsicView()
-  initViewFields(result, initRect(0.0, 0.0, 10.0, 10.0))
+  initViewFields(result, rect(0.0, 0.0, 10.0, 10.0))
   result.name = "cyclic"
   discard result.withProtocol(CyclicIntrinsicLayout)
 
 suite "nimkit sizing":
   test "plain views expose no intrinsic metric and preserve frame on sizeToFit":
-    let view = newView(frame = initRect(10, 20, 80, 30))
+    let view = newView(frame = rect(10, 20, 80, 30))
     let initialFrame = view.frame()
 
     check view.intrinsicContentSize() == NoIntrinsicContentSize
@@ -36,7 +36,7 @@ suite "nimkit sizing":
       discard view.sizeThatFits()
 
   test "button sizeToFit uses cell intrinsic size and preserves origin":
-    let button = newButton("Resize", frame = initRect(10, 20, 12, 10))
+    let button = newButton("Resize", frame = rect(10, 20, 12, 10))
     let natural = button.intrinsicContentSize()
 
     check natural.hasWidth
@@ -51,13 +51,13 @@ suite "nimkit sizing":
   test "auto frame metrics resolve from intrinsic content":
     let
       plain = newView()
-      button = newButton("Auto", frame = initRect(10, 20))
-      field = newTextField("Height", frame = initRect(4, 5, 120))
-      explicit = newButton("Explicit", frame = initRect(1, 2, 30, 10))
+      button = newButton("Auto", frame = rect(10, 20, AutoMetric, AutoMetric))
+      field = newTextField("Height", frame = rect(4, 5, 120, AutoMetric))
+      explicit = newButton("Explicit", frame = rect(1, 2, 30, 10))
 
     check AutoMetric.isAutoMetric
     check initSize().hasAutoMetric
-    check plain.frame() == initRect(0, 0, 0, 0)
+    check plain.frame() == rect(0, 0, 0, 0)
     check not plain.autoresizingMaskConstraints
 
     let buttonNatural =
@@ -67,16 +67,16 @@ suite "nimkit sizing":
     check not button.autoresizingMaskConstraints
 
     let fieldNatural = field.intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
-    check field.frame() == initRect(4, 5, 120, fieldNatural.height)
+    check field.frame() == rect(4, 5, 120, fieldNatural.height)
     check not field.autoresizingMaskConstraints
 
-    check explicit.frame() == initRect(1, 2, 30, 10)
+    check explicit.frame() == rect(1, 2, 30, 10)
     check explicit.autoresizingMaskConstraints
 
   test "content changes invalidate parent layout without mutating frames":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
-      button = newButton("Go", frame = initRect(10, 10, 48, 24))
+      root = newView(frame = rect(0, 0, 240, 120))
+      button = newButton("Go", frame = rect(10, 10, 48, 24))
 
     root.addSubview(button)
     root.layoutSubtreeIfNeeded()
@@ -115,8 +115,8 @@ suite "nimkit sizing":
 
   test "choice controls include indicators and hug horizontally":
     let
-      checkbox = newCheckBox("Enabled", frame = initRect(0, 0, 20, 18))
-      radio = newRadioButton("Option", frame = initRect(0, 0, 20, 18))
+      checkbox = newCheckBox("Enabled", frame = rect(0, 0, 20, 18))
+      radio = newRadioButton("Option", frame = rect(0, 0, 20, 18))
       textSize = textNaturalSize("Enabled")
 
     check checkbox.huggingPriority[dcol] == LayoutPriorityHigh
@@ -126,8 +126,8 @@ suite "nimkit sizing":
 
   test "text fields and combo boxes measure text and chrome":
     let
-      field = newTextField("Name", frame = initRect(0, 0, 10, 10))
-      combo = newComboBox(["Short", "Much longer item"], frame = initRect(0, 0, 10, 10))
+      field = newTextField("Name", frame = rect(0, 0, 10, 10))
+      combo = newComboBox(["Short", "Much longer item"], frame = rect(0, 0, 10, 10))
 
     check field.huggingPriority[dcol] == LayoutPriorityLow
     check field.intrinsicContentSize().width >= 80.0
@@ -140,9 +140,9 @@ suite "nimkit sizing":
 
   test "undersized fitting proposals preserve natural control sizes":
     let
-      button = newButton("Long button title", frame = initRect(0, 0, 10, 10))
-      field = newTextField("Long field value", frame = initRect(0, 0, 10, 10))
-      combo = newComboBox(["Long combo item"], frame = initRect(0, 0, 10, 10))
+      button = newButton("Long button title", frame = rect(0, 0, 10, 10))
+      field = newTextField("Long field value", frame = rect(0, 0, 10, 10))
+      combo = newComboBox(["Long combo item"], frame = rect(0, 0, 10, 10))
       proposed = initFittingSize(4.0, 4.0)
 
     check button.sizeThatFits(proposed) == button.sizeThatFits()
@@ -150,7 +150,7 @@ suite "nimkit sizing":
     check combo.sizeThatFits(proposed) == combo.sizeThatFits()
 
   test "theme metrics affect measurement and agree with text rects":
-    let button = newButton("Pad", frame = initRect(0, 0, 10, 10))
+    let button = newButton("Pad", frame = rect(0, 0, 10, 10))
     let base = button.intrinsicContentSize()
 
     var appearance = initAppearance()
@@ -171,7 +171,7 @@ suite "nimkit sizing":
 
   test "theme metric changes invalidate container layout for controls":
     let
-      root = newView(frame = initRect(0, 0, 360, 220))
+      root = newView(frame = rect(0, 0, 360, 220))
       stack = newStackView(laVertical)
       button = newButton("Metric")
       checkbox = newCheckBox("Choice")
@@ -224,7 +224,7 @@ suite "nimkit sizing":
 
   test "replacing a control cell detaches the old cell":
     let
-      root = newView(frame = initRect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
       button = newButton("Old")
       oldCell = button.buttonCell()
       nextCell = newButtonCell("New")

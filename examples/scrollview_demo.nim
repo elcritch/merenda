@@ -4,19 +4,19 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Scroll View", frame = initRect(180, 160, 520, 380))
+  window = newWindow("Nimkit Scroll View", frame = rect(180, 160, 520, 380))
   root = newView()
   contentGuide = root.contentLayoutGuide(insets(22.0, 24.0, 22.0, 24.0))
   title = newTitleLabel("Scroll View")
   status = newStatusLabel("")
   details = newStatusLabel("")
   scrollView = newScrollView()
-  document = newView(frame = initRect(0, 0, 760, 660))
+  document = newView(frame = rect(0, 0, 760, 660))
   headerView = newStatusLabel(
     "  Document header view - scroller insets, border, background, and headers are owned by ScrollView",
-    frame = initRect(0, 0, 760, 24),
+    frame = rect(0, 0, 760, 24),
   )
-  cornerView = newStatusLabel("Corner", frame = initRect(0, 0, 72, 24))
+  cornerView = newStatusLabel("Corner", frame = rect(0, 0, 72, 24))
   controls = newStackView(laHorizontal)
   topButton = newButton("Top")
   middleButton = newButton("Middle")
@@ -41,9 +41,9 @@ proc updateStatus() =
 proc addDocumentRow(index: int, heading, body: string) =
   let
     y = 22.0'f32 + index.float32 * 70.0'f32
-    row = newView(frame = initRect(22, y, 540, 56))
-    headingLabel = newHeadingLabel(heading, frame = initRect(12, 7, 220, 20))
-    bodyLabel = newStatusLabel(body, frame = initRect(12, 30, 500, 18))
+    row = newView(frame = rect(22, y, 540, 56))
+    headingLabel = newHeadingLabel(heading, frame = rect(12, 7, 220, 20))
+    bodyLabel = newStatusLabel(body, frame = rect(12, 30, 500, 18))
 
   if index mod 2 == 0:
     row.background = color(0.92, 0.95, 0.99, 1.0)

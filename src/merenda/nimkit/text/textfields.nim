@@ -245,7 +245,7 @@ protocol DefaultTextFieldCellEditing of CellEditingProtocol:
       return
     cell.setUpFieldEditorAttributes(editor, controlView)
     editor.frame = frame
-    editor.bounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+    editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
     if not controlView.isNil and editor.superview() != controlView:
       controlView.addSubview(editor)
 
@@ -487,7 +487,7 @@ proc layoutManager*(textField: TextField): TextLayoutManager =
 
 proc fieldEditorFrame(textField: TextField): Rect =
   if textField.isNil:
-    initRect(0, 0, 0, 0)
+    rect(0, 0, 0, 0)
   else:
     textField.layoutManager().layoutBounds()
 
@@ -497,7 +497,7 @@ proc layoutFieldEditor(textField: TextField) =
     return
   let frame = textField.fieldEditorFrame()
   editor.frame = frame
-  editor.bounds = initRect(0.0, 0.0, frame.size.width, frame.size.height)
+  editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
 
 proc runesOf(text: string): seq[Rune] =
   for rune in text.runes:
@@ -725,7 +725,7 @@ method textFieldInputFirstRectForCharacterRange(
     textField: TextField, range: TextRange
 ): Rect {.selector.} =
   if textField.isNil:
-    return initRect(0, 0, 0, 0)
+    return rect(0, 0, 0, 0)
   let clamped = initTextRange(
     min(int(range.location), textField.runeCount),
     min(int(range.length), max(textField.runeCount - int(range.location), 0)),
@@ -1053,7 +1053,7 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
 
   method accessibilityBoundsForCharacter(textField: TextField, index: int): Rect =
     if textField.isNil:
-      return initRect(0, 0, 0, 0)
+      return rect(0, 0, 0, 0)
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityBoundsForCharacter(index)
@@ -1081,7 +1081,7 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
 
   method accessibilityBoundsForLine(textField: TextField, line: int): Rect =
     if textField.isNil:
-      return initRect(0, 0, 0, 0)
+      return rect(0, 0, 0, 0)
     textField.rectToWindow(textField.layoutManager().lineBounds(line))
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:

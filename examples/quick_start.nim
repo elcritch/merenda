@@ -4,7 +4,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Counter", frame = initRect(100, 100, 320, 220))
+  window = newWindow("Counter", frame = rect(100, 100, 320, 220))
   root = newView()
   layout = newStackView(laVertical)
   label = newStatusLabel("Clicked 0 times")

@@ -333,40 +333,40 @@ func aquaTabPanelFaceFill(chrome: ChromeContext): Fill =
 func chromeEdgeHighlightRect(edge: ChromeEdge, rect: Rect): Rect =
   case edge
   of ceTop:
-    initRect(
+    rect(
       rect.origin.x + 4.0'f32,
       rect.origin.y + 1.0'f32,
       max(rect.size.width - 8.0'f32, 0.0'f32),
       1.0'f32,
     )
   of ceBottom:
-    initRect(
+    rect(
       rect.origin.x + 4.0'f32,
       rect.maxY - 2.0'f32,
       max(rect.size.width - 8.0'f32, 0.0'f32),
       1.0'f32,
     )
   of ceNone:
-    initRect(rect.origin.x, rect.origin.y, 0.0'f32, 0.0'f32)
+    rect(rect.origin.x, rect.origin.y, 0.0'f32, 0.0'f32)
 
 func chromeEdgeSeamRect(edge: ChromeEdge, rect: Rect): Rect =
   case edge
   of ceTop:
-    initRect(
+    rect(
       rect.origin.x + 1.0'f32,
       rect.maxY - 1.0'f32,
       max(rect.size.width - 2.0'f32, 0.0'f32),
       2.0'f32,
     )
   of ceBottom:
-    initRect(
+    rect(
       rect.origin.x + 1.0'f32,
       rect.origin.y,
       max(rect.size.width - 2.0'f32, 0.0'f32),
       2.0'f32,
     )
   of ceNone:
-    initRect(rect.origin.x, rect.origin.y, 0.0'f32, 0.0'f32)
+    rect(rect.origin.x, rect.origin.y, 0.0'f32, 0.0'f32)
 
 proc drawAquaButtonExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
@@ -391,10 +391,10 @@ proc drawAquaButtonExtras(
       aquaButtonInnerShadows(chrome.baseFill, chrome.isEnabled),
       lightMaskContent = true,
     )
-    topGloss = initRect(
+    topGloss = rect(
       inner.origin.x, inner.origin.y, inner.size.width, inner.size.height * 0.62'f32
     )
-    lowerWash = initRect(
+    lowerWash = rect(
       inner.origin.x,
       inner.origin.y + inner.size.height * 0.36'f32,
       inner.size.width,
@@ -402,8 +402,8 @@ proc drawAquaButtonExtras(
     )
     glowWidth = max(inner.size.width - 2.0'f32, 0.0'f32)
     topGlow =
-      initRect(inner.origin.x + 1.0'f32, inner.origin.y + 1.0'f32, glowWidth, 1.0'f32)
-    waistGlow = initRect(
+      rect(inner.origin.x + 1.0'f32, inner.origin.y + 1.0'f32, glowWidth, 1.0'f32)
+    waistGlow = rect(
       inner.origin.x + 1.0'f32,
       inner.origin.y + inner.size.height * 0.50'f32,
       glowWidth,
@@ -485,7 +485,7 @@ proc drawAquaChoiceExtras(
           max(inner.size.height * 0.18'f32, 1.0'f32)
         else:
           max(inner.size.height * 0.22'f32, 1.0'f32)
-      innerGloss = initRect(
+      innerGloss = rect(
         inner.origin.x + (inner.size.width - glossWidth) / 2.0'f32,
         inner.origin.y + 1.0'f32,
         glossWidth,
@@ -505,7 +505,7 @@ proc drawAquaChoiceExtras(
 
   let
     inset = if ssSelected in chrome.states: 1.2'f32 else: 1.4'f32
-    gloss = initRect(
+    gloss = rect(
       extras.rect.origin.x + inset,
       extras.rect.origin.y + inset,
       max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
@@ -527,13 +527,13 @@ proc drawAquaComboFaceExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
   let
-    gloss = initRect(
+    gloss = rect(
       extras.rect.origin.x + 2.0'f32,
       extras.rect.origin.y + 1.0'f32,
       max(extras.rect.size.width - 4.0'f32, 0.0'f32),
       max(extras.rect.size.height * 0.32'f32, 1.0'f32),
     )
-    lowerWash = initRect(
+    lowerWash = rect(
       extras.rect.origin.x,
       extras.rect.origin.y + extras.rect.size.height * 0.48'f32,
       extras.rect.size.width,
@@ -558,7 +558,7 @@ proc drawAquaComboFaceExtras(
 proc drawAquaComboArrowExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
-  let gloss = initRect(
+  let gloss = rect(
     extras.rect.origin.x + 2.0'f32,
     extras.rect.origin.y + 1.0'f32,
     max(extras.rect.size.width - 4.0'f32, 0.0'f32),
@@ -578,13 +578,13 @@ proc drawAquaPopupListExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
   let
-    topHighlight = initRect(
+    topHighlight = rect(
       extras.rect.origin.x + 2.0'f32,
       extras.rect.origin.y + 1.0'f32,
       max(extras.rect.size.width - 4.0'f32, 0.0'f32),
       1.0'f32,
     )
-    bottomShade = initRect(
+    bottomShade = rect(
       extras.rect.origin.x + 1.0'f32,
       extras.rect.maxY - 2.0'f32,
       max(extras.rect.size.width - 2.0'f32, 0.0'f32),
@@ -601,13 +601,13 @@ proc drawAquaSliderTrackExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
   let
-    topHighlight = initRect(
+    topHighlight = rect(
       extras.rect.origin.x + 1.0'f32,
       extras.rect.origin.y + 1.0'f32,
       max(extras.rect.size.width - 2.0'f32, 0.0'f32),
       1.0'f32,
     )
-    bottomShade = initRect(
+    bottomShade = rect(
       extras.rect.origin.x + 1.0'f32,
       extras.rect.maxY - 2.0'f32,
       max(extras.rect.size.width - 2.0'f32, 0.0'f32),
@@ -631,13 +631,13 @@ proc drawAquaSliderKnobExtras(
 ) =
   let
     inset = 1.6'f32
-    gloss = initRect(
+    gloss = rect(
       extras.rect.origin.x + inset,
       extras.rect.origin.y + inset,
       max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
       max(extras.rect.size.height * 0.38'f32, 1.0'f32),
     )
-    lowerWash = initRect(
+    lowerWash = rect(
       extras.rect.origin.x + inset,
       extras.rect.origin.y + extras.rect.size.height * 0.46'f32,
       max(extras.rect.size.width - inset * 2.0'f32, 0.0'f32),
@@ -717,13 +717,13 @@ proc drawAquaTabPanelExtras(
 ) =
   discard chrome
   let
-    topHighlight = initRect(
+    topHighlight = rect(
       extras.rect.origin.x + 1.0'f32,
       extras.rect.origin.y + 1.0'f32,
       max(extras.rect.size.width - 2.0'f32, 0.0'f32),
       1.0'f32,
     )
-    innerShade = initRect(
+    innerShade = rect(
       extras.rect.origin.x + 1.0'f32,
       extras.rect.maxY - 2.0'f32,
       max(extras.rect.size.width - 2.0'f32, 0.0'f32),

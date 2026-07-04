@@ -6,7 +6,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Todo Basic", frame = initRect(120, 120, 420, 420))
+  window = newWindow("Nimkit Todo Basic", frame = rect(120, 120, 420, 420))
   root = newView()
   layout = newStackView(laVertical)
   inputRow = newStackView(laHorizontal)

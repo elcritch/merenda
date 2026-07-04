@@ -338,7 +338,7 @@ proc caretRect*(
     for candidate in carets:
       if candidate.lineIndex > caret.lineIndex:
         caret = candidate
-    return initRect(
+    return rect(
       textRect.origin.x + caret.rect.x,
       textRect.origin.y + caret.rect.y,
       1.0,
@@ -356,13 +356,13 @@ proc caretRect*(
         rect.x
       else:
         min(rect.x + rect.w, textRect.size.width - 1.0'f32)
-    return initRect(textRect.origin.x + x, textRect.origin.y + rect.y, 1.0, rect.h)
+    return rect(textRect.origin.x + x, textRect.origin.y + rect.y, 1.0, rect.h)
 
   let
     fontSize = defaultFontSize()
     font = defaultFont(fontSize)
     lineHeight = max(fontSize, getLineHeightImpl(font))
-  initRect(
+  rect(
     textRect.origin.x,
     textRect.origin.y + max((textRect.size.height - lineHeight) / 2.0'f32, 0.0),
     1.0,
@@ -402,7 +402,7 @@ proc appearance*(context: DrawContext): Appearance =
   context.xAppearance
 
 proc renderRectFor*(context: DrawContext, rect: nimkitTypes.Rect): nimkitTypes.Rect =
-  nimkitTypes.initRect(
+  nimkitTypes.rect(
     context.xRenderOrigin.x + rect.origin.x,
     context.xRenderOrigin.y + rect.origin.y,
     rect.size.width,
@@ -727,16 +727,16 @@ proc addComboBoxArrow*(
     centerY = rect.origin.y + rect.size.height * 0.5'f32
     topY = centerY - 1.0'f32
   discard context.addRenderRectangle(
-    parent, initRect(centerX - width * 0.50'f32, topY, width, 1.0'f32), color
+    parent, rect(centerX - width * 0.50'f32, topY, width, 1.0'f32), color
   )
   discard context.addRenderRectangle(
     parent,
-    initRect(centerX - width * 0.35'f32, topY + 1.0'f32, width * 0.70'f32, 1.0'f32),
+    rect(centerX - width * 0.35'f32, topY + 1.0'f32, width * 0.70'f32, 1.0'f32),
     color,
   )
   discard context.addRenderRectangle(
     parent,
-    initRect(centerX - width * 0.20'f32, topY + 2.0'f32, width * 0.40'f32, 1.0'f32),
+    rect(centerX - width * 0.20'f32, topY + 2.0'f32, width * 0.40'f32, 1.0'f32),
     color,
   )
 
@@ -760,26 +760,26 @@ proc addComboBoxDoubleArrow*(
     upY = centerY - 5.0'f32
     downY = centerY + 2.0'f32
   discard context.addRenderRectangle(
-    parent, initRect(centerX - width * 0.20'f32, upY, width * 0.40'f32, 1.0'f32), color
+    parent, rect(centerX - width * 0.20'f32, upY, width * 0.40'f32, 1.0'f32), color
   )
   discard context.addRenderRectangle(
     parent,
-    initRect(centerX - width * 0.35'f32, upY + 1.0'f32, width * 0.70'f32, 1.0'f32),
+    rect(centerX - width * 0.35'f32, upY + 1.0'f32, width * 0.70'f32, 1.0'f32),
     color,
   )
   discard context.addRenderRectangle(
-    parent, initRect(centerX - width * 0.50'f32, upY + 2.0'f32, width, 1.0'f32), color
+    parent, rect(centerX - width * 0.50'f32, upY + 2.0'f32, width, 1.0'f32), color
   )
   discard context.addRenderRectangle(
-    parent, initRect(centerX - width * 0.50'f32, downY, width, 1.0'f32), color
+    parent, rect(centerX - width * 0.50'f32, downY, width, 1.0'f32), color
   )
   discard context.addRenderRectangle(
     parent,
-    initRect(centerX - width * 0.35'f32, downY + 1.0'f32, width * 0.70'f32, 1.0'f32),
+    rect(centerX - width * 0.35'f32, downY + 1.0'f32, width * 0.70'f32, 1.0'f32),
     color,
   )
   discard context.addRenderRectangle(
     parent,
-    initRect(centerX - width * 0.20'f32, downY + 2.0'f32, width * 0.40'f32, 1.0'f32),
+    rect(centerX - width * 0.20'f32, downY + 2.0'f32, width * 0.40'f32, 1.0'f32),
     color,
   )

@@ -449,11 +449,11 @@ func controlStyle*(
   initStyleContext(role, states, id, classes)
 
 func inset*(rect: Rect, insets: EdgeInsets): Rect =
-  initRect(
-    rect.origin.x + insets.left,
-    rect.origin.y + insets.top,
-    rect.size.width - insets.left - insets.right,
-    rect.size.height - insets.top - insets.bottom,
+  rect(
+    rect.x + insets.left,
+    rect.y + insets.top,
+    max(rect.w - insets.left - insets.right, 0.0'f32),
+    max(rect.h - insets.top - insets.bottom, 0.0'f32),
   )
 
 proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
@@ -1949,11 +1949,11 @@ func choiceIndicatorRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
     size = max(style.indicatorSize, 0.0'f32)
     x = bounds.origin.x + style.text.insets.left
     y = bounds.origin.y + max((bounds.size.height - size) / 2.0'f32, 0.0'f32)
-  initRect(x, y, size, size)
+  rect(x, y, size, size)
 
 func choiceTextRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
   let indicator = style.choiceIndicatorRect(bounds)
-  initRect(
+  rect(
     indicator.maxX + style.indicatorSpacing,
     bounds.origin.y + style.text.insets.top,
     bounds.size.width - style.text.insets.left - style.text.insets.right -
@@ -1966,13 +1966,13 @@ func textFieldTextRect*(style: TextFieldStyle, bounds: Rect): Rect =
 
 func comboBoxArrowRect*(style: ComboBoxStyle, bounds: Rect): Rect =
   let arrowWidth = min(max(style.arrowWidth, 0.0'f32), bounds.size.width)
-  initRect(bounds.maxX - arrowWidth, bounds.origin.y, arrowWidth, bounds.size.height)
+  rect(bounds.maxX - arrowWidth, bounds.origin.y, arrowWidth, bounds.size.height)
 
 func comboBoxTextRect*(style: ComboBoxStyle, bounds: Rect): Rect =
   let
     arrow = style.comboBoxArrowRect(bounds)
     insets = style.text.insets
-  initRect(
+  rect(
     bounds.origin.x + insets.left,
     bounds.origin.y + insets.top,
     max(bounds.size.width - insets.left - insets.right - arrow.size.width, 0.0'f32),
@@ -1998,12 +1998,11 @@ func boxContentRect*(
 ): Rect =
   let chromeEdge = style.box.borderWidth + style.box.controlChromeOutset()
   result = bounds.inset(style.contentInsets)
-  result.origin.x += chromeEdge
-  result.size.width = max(result.size.width - chromeEdge * 2.0'f32, 0.0'f32)
+  result.x += chromeEdge
+  result.w = max(result.w - chromeEdge * 2.0'f32, 0.0'f32)
   let titleBand = style.boxTitleBandHeight(hasTitle, titleHeight)
-  result.origin.y += titleBand + chromeEdge
-  result.size.height =
-    max(result.size.height - titleBand - chromeEdge * 2.0'f32, 0.0'f32)
+  result.y += titleBand + chromeEdge
+  result.h = max(result.h - titleBand - chromeEdge * 2.0'f32, 0.0'f32)
 
 func controlChromeWidth*(box: ControlBoxStyle): float32 =
   box.borderWidth * 2.0'f32 + box.controlChromeOutset() * 2.0'f32

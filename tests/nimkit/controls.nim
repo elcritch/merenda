@@ -23,7 +23,7 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
 
 suite "nimkit controls":
   test "button core methods are selector-backed and protocol visible":
-    let button = newButton("Original", frame = initRect(0, 0, 120, 36))
+    let button = newButton("Original", frame = rect(0, 0, 120, 36))
 
     check button.conformsTo(ButtonProtocol)
     let swizzledTitle: DynamicMethod = proc(
@@ -36,9 +36,9 @@ suite "nimkit controls":
 
   test "button click sends selector action to closure target":
     let
-      root = newView(frame = initRect(0, 0, 240, 180))
-      label = newTextField("Ready", frame = initRect(16, 16, 180, 32))
-      button = newButton("Click", frame = initRect(16, 64, 120, 36))
+      root = newView(frame = rect(0, 0, 240, 180))
+      label = newTextField("Ready", frame = rect(16, 16, 180, 32))
+      button = newButton("Click", frame = rect(16, 64, 120, 36))
       action = actionSelector("clickedAction")
 
     proc onClicked(sender: DynamicAgent) =
@@ -57,7 +57,7 @@ suite "nimkit controls":
     check label.stringValue == "Clicked"
 
   test "button properties are forwarded through its button cell":
-    let button = newButton("Original", frame = initRect(0, 0, 120, 36))
+    let button = newButton("Original", frame = rect(0, 0, 120, 36))
     let cell = button.buttonCell()
 
     check not cell.isNil
@@ -80,7 +80,7 @@ suite "nimkit controls":
 
   test "text fields emit explicit change signals":
     let
-      field = newTextField("Value", frame = initRect(0, 0, 120, 24))
+      field = newTextField("Value", frame = rect(0, 0, 120, 24))
       spy = TextChangeSpy()
 
     field.connect(textDidChange, spy, rememberTextDidChange)
@@ -94,9 +94,9 @@ suite "nimkit controls":
 
   test "button mouse tracking cancels click when released outside":
     let
-      window = newWindow("Button tracking", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
-      button = newButton("Click", frame = initRect(16, 64, 120, 36))
+      window = newWindow("Button tracking", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
+      button = newButton("Click", frame = rect(16, 64, 120, 36))
       action = actionSelector("trackedClick")
 
     var actionCount = 0
@@ -128,9 +128,9 @@ suite "nimkit controls":
 
   test "button hover state follows mouse movement":
     let
-      window = newWindow("Button hover", frame = initRect(0, 0, 240, 180))
-      root = newView(frame = initRect(0, 0, 240, 180))
-      button = newButton("Hover", frame = initRect(16, 64, 120, 36))
+      window = newWindow("Button hover", frame = rect(0, 0, 240, 180))
+      root = newView(frame = rect(0, 0, 240, 180))
+      button = newButton("Hover", frame = rect(16, 64, 120, 36))
 
     window.animationScheduler().clearAnimations()
     window.stopAnimationClock()
@@ -168,7 +168,7 @@ suite "nimkit controls":
       window.stopAnimationClock()
 
   test "slider clamps, steps, and sends actions while tracking":
-    let slider = newSlider(0.0, 100.0, 25.0, frame = initRect(10, 10, 200, 24))
+    let slider = newSlider(0.0, 100.0, 25.0, frame = rect(10, 10, 200, 24))
     slider.stepValue = 10.0
 
     check slider.value == 30.0
@@ -178,8 +178,8 @@ suite "nimkit controls":
     check slider.value == 0.0
 
     let
-      window = newWindow("Slider tracking", frame = initRect(0, 0, 240, 80))
-      root = newView(frame = initRect(0, 0, 240, 80))
+      window = newWindow("Slider tracking", frame = rect(0, 0, 240, 80))
+      root = newView(frame = rect(0, 0, 240, 80))
       action = actionSelector("sliderAction")
       spy = ControlActionSpy()
 
@@ -260,10 +260,10 @@ suite "nimkit controls":
 
   test "stepper mouse and keyboard tracking maintains repeat state":
     let
-      window = newWindow("Stepper tracking", frame = initRect(0, 0, 120, 80))
-      root = newView(frame = initRect(0, 0, 120, 80))
+      window = newWindow("Stepper tracking", frame = rect(0, 0, 120, 80))
+      root = newView(frame = rect(0, 0, 120, 80))
       stepper =
-        newStepper(0.0, 10.0, 4.0, increment = 2.0, frame = initRect(10, 10, 52, 23))
+        newStepper(0.0, 10.0, 4.0, increment = 2.0, frame = rect(10, 10, 52, 23))
       action = actionSelector("stepperTrackingAction")
 
     var actionCount = 0
@@ -386,7 +386,7 @@ suite "nimkit controls":
 
   test "switch button toggles state and sends action signal after target":
     let
-      switchButton = newSwitchButton(false, frame = initRect(0, 0, 54, 30))
+      switchButton = newSwitchButton(false, frame = rect(0, 0, 54, 30))
       action = actionSelector("switchAction")
       spy = ControlActionSpy()
 
@@ -417,9 +417,9 @@ suite "nimkit controls":
 
   test "switch button mouse tracking cancels click when released outside":
     let
-      window = newWindow("Switch tracking", frame = initRect(0, 0, 180, 90))
-      root = newView(frame = initRect(0, 0, 180, 90))
-      switchButton = newSwitchButton(false, frame = initRect(16, 24, 54, 30))
+      window = newWindow("Switch tracking", frame = rect(0, 0, 180, 90))
+      root = newView(frame = rect(0, 0, 180, 90))
+      switchButton = newSwitchButton(false, frame = rect(16, 24, 54, 30))
       action = actionSelector("trackedSwitch")
 
     var actionCount = 0
@@ -448,7 +448,7 @@ suite "nimkit controls":
   test "toggle button cycles state during performClick":
     var actionCount = 0
     let
-      button = newButton("Toggle", frame = initRect(0, 0, 120, 36))
+      button = newButton("Toggle", frame = rect(0, 0, 120, 36))
       action = actionSelector("toggleAction")
 
     proc onToggle(sender: DynamicAgent) =
@@ -468,7 +468,7 @@ suite "nimkit controls":
     check actionCount == 2
 
   test "toggle button supports mixed state cycling":
-    let button = newButton("Mixed", frame = initRect(0, 0, 120, 36))
+    let button = newButton("Mixed", frame = rect(0, 0, 120, 36))
     button.buttonType = btToggle
     button.allowsMixedState = true
 
@@ -482,7 +482,7 @@ suite "nimkit controls":
   test "checkbox toggles state and supports mixed state":
     var actionCount = 0
     let
-      checkbox = newCheckBox("Enabled", frame = initRect(0, 0, 140, 24))
+      checkbox = newCheckBox("Enabled", frame = rect(0, 0, 140, 24))
       action = actionSelector("checkboxAction")
 
     proc onToggle(sender: DynamicAgent) =
@@ -505,10 +505,10 @@ suite "nimkit controls":
     var actionCount = 0
     var observedSelection = ""
     let
-      root = newView(frame = initRect(0, 0, 220, 100))
-      first = newRadioButton("First", frame = initRect(10, 10, 160, 24))
-      second = newRadioButton("Second", frame = initRect(10, 42, 160, 24))
-      other = newRadioButton("Other", frame = initRect(10, 74, 160, 24))
+      root = newView(frame = rect(0, 0, 220, 100))
+      first = newRadioButton("First", frame = rect(10, 10, 160, 24))
+      second = newRadioButton("Second", frame = rect(10, 42, 160, 24))
+      other = newRadioButton("Other", frame = rect(10, 74, 160, 24))
       action = actionSelector("radioAction")
       otherAction = actionSelector("otherRadioAction")
 

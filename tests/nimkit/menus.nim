@@ -136,10 +136,10 @@ suite "nimkit menus":
 
   test "menu item activation signal reports model identifiers":
     let
-      window = newWindow("Menu model activation", frame = initRect(0, 0, 240, 140))
-      root = newView(frame = initRect(0, 0, 240, 140))
+      window = newWindow("Menu model activation", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
       menu = newMenu("Choices")
-      button = newPopupMenuButton("Choices", menu, initRect(8, 8, 96, 24))
+      button = newPopupMenuButton("Choices", menu, rect(8, 8, 96, 24))
       spy = newMenuModelSpy()
 
     menu.itemModels = [
@@ -165,9 +165,9 @@ suite "nimkit menus":
 
   test "view context menu opens on secondary click and dispatches item action":
     let
-      window = newWindow("Context menu", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      target = newContextSpyView(initRect(20, 20, 80, 40))
+      window = newWindow("Context menu", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      target = newContextSpyView(rect(20, 20, 80, 40))
       menu = newMenu("Actions")
       action = actionSelector("contextSpyAction")
       item = newMenuItem("Run", action)
@@ -205,9 +205,9 @@ suite "nimkit menus":
 
   test "view context menu waits for custom right mouse handling":
     let
-      window = newWindow("Context fallback", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      target = newContextSpyView(initRect(20, 20, 80, 40))
+      window = newWindow("Context fallback", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      target = newContextSpyView(rect(20, 20, 80, 40))
       menu = newMenu("Actions")
 
     discard menu.addItem(newMenuItem("Run"))

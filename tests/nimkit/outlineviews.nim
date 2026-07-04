@@ -189,7 +189,7 @@ suite "NimKit OutlineView":
 
   test "outline data source delegate disclosure keyboard persistence and dragging":
     let
-      outlineView = newOutlineView(frame = initRect(0, 0, 320, 180))
+      outlineView = newOutlineView(frame = rect(0, 0, 320, 180))
       source = newOutlineSourceSpy(
         [
           initOutlineItem("root", "Root", expandable = true),

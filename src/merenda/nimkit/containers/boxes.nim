@@ -57,7 +57,7 @@ proc boxHasTitle(box: Box): bool =
   not box.isNil and box.xKind == bkGroup and box.xTitle.len > 0
 
 proc boundedRect(rect: Rect): Rect =
-  initRect(
+  rect(
     rect.origin.x,
     rect.origin.y,
     max(rect.size.width, 0.0'f32),
@@ -66,7 +66,7 @@ proc boundedRect(rect: Rect): Rect =
 
 proc contentRect*(box: Box): Rect =
   if box.isNil or box.xKind == bkSeparator:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     style = box.resolvedBoxStyle()
     titleSize = box.boxTitleSize()
@@ -80,14 +80,14 @@ proc separatorRect(box: Box, style: BoxStyle): Rect =
     )
   case box.xSeparatorAxis
   of laHorizontal:
-    initRect(
+    rect(
       bounds.origin.x,
       bounds.origin.y + max((bounds.size.height - thickness) / 2.0'f32, 0.0'f32),
       bounds.size.width,
       thickness,
     )
   of laVertical:
-    initRect(
+    rect(
       bounds.origin.x + max((bounds.size.width - thickness) / 2.0'f32, 0.0'f32),
       bounds.origin.y,
       thickness,
@@ -169,7 +169,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
 
     box.xContentView =
       if contentView.isNil:
-        newView(frame = initRect(0.0, 0.0, 0.0, 0.0))
+        newView(frame = rect(0.0, 0.0, 0.0, 0.0))
       else:
         contentView
     box.xContentView.background = color(0.0, 0.0, 0.0, 0.0)
@@ -217,7 +217,7 @@ proc layoutBoxContent(box: Box) =
     return
   let frame =
     if box.xKind == bkSeparator:
-      initRect(0.0, 0.0, 0.0, 0.0)
+      rect(0.0, 0.0, 0.0, 0.0)
     else:
       box.contentRect()
   box.xContentView.applyLayoutFrame(frame, lfoContainer)
@@ -238,7 +238,7 @@ proc drawGroupBox(box: Box, context: DrawContext, style: BoxStyle) =
     titleBand = style.boxTitleBandHeight(hasTitle, titleSize.height)
     borderRect =
       if hasTitle:
-        initRect(
+        rect(
           bounds.origin.x,
           bounds.origin.y + titleBand,
           bounds.size.width,
@@ -261,7 +261,7 @@ proc drawGroupBox(box: Box, context: DrawContext, style: BoxStyle) =
   if hasTitle:
     let
       textHeight = max(style.titleHeight, titleSize.height)
-      textRect = initRect(
+      textRect = rect(
         bounds.origin.x + style.contentInsets.left + style.text.insets.left,
         bounds.origin.y,
         max(

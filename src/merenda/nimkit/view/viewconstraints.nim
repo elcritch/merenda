@@ -1389,7 +1389,7 @@ proc solvedFloat(variable: Variable): float32 =
 proc applySolvedFrames(state: LayoutSolveState) =
   for solverView in state.items:
     if not solverView.item.isNil:
-      let alignmentRect = initRect(
+      let alignmentRect = rect(
         solverView.left.solvedFloat(),
         solverView.top.solvedFloat(),
         max(solverView.width.solvedFloat(), 0.0'f32),

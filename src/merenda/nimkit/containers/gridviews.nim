@@ -173,7 +173,7 @@ proc contentRect(gridView: GridView): Rect =
   let
     bounds = gridView.bounds()
     insets = gridView.xEdgeInsets
-  initRect(
+  rect(
     insets.left,
     insets.top,
     bounds.size.width - insets.horizontal,
@@ -240,9 +240,9 @@ proc itemCell(
     col = item.startIndex(dcol)
     row = item.startIndex(drow)
   if col >= colOrigins.len or row >= rowOrigins.len:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
 
-  initRect(
+  rect(
     colOrigins[col],
     rowOrigins[row],
     colWidths.spannedLength(col, item.spanCount(dcol), gridView.xSpacing[dcol]),
@@ -272,7 +272,7 @@ proc layoutGridSubviews(gridView: GridView) =
         cell.origin.y, cell.size.height, natural.height, gridView.xAlignment[drow]
       )
     item.view.setFrameFromGridLayout(
-      initRect(colFrame.origin, rowFrame.origin, colFrame.length, rowFrame.length)
+      rect(colFrame.origin, rowFrame.origin, colFrame.length, rowFrame.length)
     )
 
 proc spacing*(gridView: GridView): GridSpacing =

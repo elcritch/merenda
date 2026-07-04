@@ -290,9 +290,9 @@ proc attachButtonRow(
 proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
   let frame =
     if window.isNil:
-      initRect(0.0, 0.0, 360.0, 180.0)
+      rect(0.0, 0.0, 360.0, 180.0)
     else:
-      initRect(0.0, 0.0, window.frame().size.width, window.frame().size.height)
+      rect(0.0, 0.0, window.frame().size.width, window.frame().size.height)
   result.root = newView(frame = frame)
   result.layout = newStackView(laVertical)
   result.layout.spacing = 12.0

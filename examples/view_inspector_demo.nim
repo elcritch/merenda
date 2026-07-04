@@ -6,7 +6,7 @@ type LabeledPanel = ref object of View
 
 protocol LabeledPanelDrawing of ViewDrawingProtocol:
   method draw(panel: LabeledPanel, context: DrawContext) =
-    let titleRect = initRect(14.0, 11.0, max(panel.bounds.size.width - 28.0, 0.0), 24.0)
+    let titleRect = rect(14.0, 11.0, max(panel.bounds.size.width - 28.0, 0.0), 24.0)
     discard context.addText(titleRect, panel.title, panel.titleColor)
 
 proc newLabeledPanel(
@@ -29,7 +29,7 @@ proc setPanelTitle(panel: LabeledPanel, value: string) =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit View Inspector Demo", frame = initRect(120, 120, 940, 640))
+  window = newWindow("Nimkit View Inspector Demo", frame = rect(120, 120, 940, 640))
 
   root = newView()
   title = newTitleLabel("View Inspector Demo")

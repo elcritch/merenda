@@ -417,7 +417,7 @@ proc configureLayout(demo: TextEditorDemo) =
   )
 
 proc newTextEditorDemo*(
-    app: Application = sharedApplication(), frame = initRect(130, 110, 720, 520)
+    app: Application = sharedApplication(), frame = rect(130, 110, 720, 520)
 ): TextEditorDemo =
   result = TextEditorDemo(
     app: app,
@@ -429,7 +429,7 @@ proc newTextEditorDemo*(
     header: newTitleLabel("Text Editor Demo"),
     summary: newStatusLabel(""),
     featureStatus: newStatusLabel(""),
-    editor: newTextEditor(frame = initRect(0, 0, 640, 280)),
+    editor: newTextEditor(frame = rect(0, 0, 640, 280)),
     controls: newStackView(laHorizontal),
     featureControls: newStackView(laHorizontal),
     wrapCheck: newCheckBox("Wrap text"),

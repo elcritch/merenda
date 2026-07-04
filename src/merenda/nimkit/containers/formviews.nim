@@ -112,7 +112,7 @@ proc contentRect(formView: FormView): Rect =
   let
     bounds = formView.bounds()
     insets = formView.xEdgeInsets
-  initRect(
+  rect(
     insets.left,
     insets.top,
     bounds.size.width - insets.horizontal,
@@ -173,14 +173,12 @@ proc layoutFormRows(formView: FormView) =
           of flaTrailing:
             content.origin.x + metrics.labelWidth - labelSize.width
       row.label.setFrameFromFormLayout(
-        initRect(labelX, frame.y, labelSize.width, frame.height)
+        rect(labelX, frame.y, labelSize.width, frame.height)
       )
 
     if not row.field.isNil:
       let frame = formView.boundedRowFrame(rowY, rowHeight, fieldSize)
-      row.field.setFrameFromFormLayout(
-        initRect(fieldX, frame.y, fieldWidth, frame.height)
-      )
+      row.field.setFrameFromFormLayout(rect(fieldX, frame.y, fieldWidth, frame.height))
 
     rowY += rowHeight + formView.xSpacing[drow]
 

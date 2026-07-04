@@ -381,7 +381,7 @@ proc newViewInspector*(root: View = nil, frame: Rect = AutoRect): ViewInspector 
 proc newViewInspectorPanel*(
     inspector: ViewInspector,
     title = "Inspector",
-    frame: Rect = initRect(1010.0, 140.0, 360.0, 580.0),
+    frame: Rect = rect(1010.0, 140.0, 360.0, 580.0),
 ): ViewInspectorPanel =
   result.inspector =
     if inspector.isNil:
@@ -395,7 +395,7 @@ proc newViewInspectorPanel*(
 proc newViewInspectorPanel*(
     root: View = nil,
     title = "Inspector",
-    frame: Rect = initRect(1010.0, 140.0, 360.0, 580.0),
+    frame: Rect = rect(1010.0, 140.0, 360.0, 580.0),
 ): ViewInspectorPanel =
   result.inspector = newViewInspector(root)
   result.window = newPanel(title, frame)
@@ -406,7 +406,7 @@ proc showViewInspector*(
     inspector: ViewInspector,
     app: Application = sharedApplication(),
     title = "Inspector",
-    frame: Rect = initRect(1010.0, 140.0, 360.0, 580.0),
+    frame: Rect = rect(1010.0, 140.0, 360.0, 580.0),
 ): ViewInspectorPanel =
   result = newViewInspectorPanel(inspector, title, frame)
   if not app.isNil:
@@ -417,7 +417,7 @@ proc showViewInspector*(
     root: View,
     app: Application = sharedApplication(),
     title = "Inspector",
-    frame: Rect = initRect(1010.0, 140.0, 360.0, 580.0),
+    frame: Rect = rect(1010.0, 140.0, 360.0, 580.0),
 ): ViewInspectorPanel =
   result = newViewInspectorPanel(root, title, frame)
   if not app.isNil:

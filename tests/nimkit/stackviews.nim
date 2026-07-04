@@ -11,7 +11,7 @@ protocol FixedIntrinsicLayout of ViewLayoutProtocol:
 
 proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result = FixedIntrinsicView()
-  initViewFields(result, initRect(0.0, 0.0, width, height))
+  initViewFields(result, rect(0.0, 0.0, width, height))
   result.naturalSize = initSize(width, height)
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
@@ -19,7 +19,7 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
 suite "nimkit stack views":
   test "horizontal stack intrinsic size sums widths and spacing with insets":
     let
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 1, 1))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 32)
       third = newFixedIntrinsicView(10, 12)
@@ -35,13 +35,13 @@ suite "nimkit stack views":
     stack.layoutSubtreeIfNeeded()
 
     check stack.frame().size == initSize(100.0, 38.0)
-    check first.frame() == initRect(3.0, 2.0, 40.0, 32.0)
-    check second.frame() == initRect(49.0, 2.0, 30.0, 32.0)
-    check third.frame() == initRect(85.0, 2.0, 10.0, 32.0)
+    check first.frame() == rect(3.0, 2.0, 40.0, 32.0)
+    check second.frame() == rect(49.0, 2.0, 30.0, 32.0)
+    check third.frame() == rect(85.0, 2.0, 10.0, 32.0)
 
   test "vertical stack intrinsic size sums heights and spacing with insets":
     let
-      stack = newStackView(laVertical, frame = initRect(0, 0, 1, 1))
+      stack = newStackView(laVertical, frame = rect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 32)
 
@@ -55,12 +55,12 @@ suite "nimkit stack views":
     stack.sizeToFit()
     stack.layoutSubtreeIfNeeded()
 
-    check first.frame() == initRect(2.0, 1.0, 40.0, 20.0)
-    check second.frame() == initRect(2.0, 26.0, 40.0, 32.0)
+    check first.frame() == rect(2.0, 1.0, 40.0, 20.0)
+    check second.frame() == rect(2.0, 26.0, 40.0, 32.0)
 
   test "cross-axis alignment can fill center and trail":
     let
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 120, 50))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 120, 50))
       fillChild = newFixedIntrinsicView(20, 10)
       centeredChild = newFixedIntrinsicView(20, 10)
       trailingChild = newFixedIntrinsicView(20, 10)
@@ -68,25 +68,25 @@ suite "nimkit stack views":
     stack.spacing = 0.0
     stack.addArrangedSubview(fillChild)
     stack.layoutSubtreeIfNeeded()
-    check fillChild.frame() == initRect(0.0, 0.0, 120.0, 50.0)
+    check fillChild.frame() == rect(0.0, 0.0, 120.0, 50.0)
 
     stack.removeArrangedSubview(fillChild)
     fillChild.removeFromSuperview()
     stack.alignment = svaCenter
     stack.addArrangedSubview(centeredChild)
     stack.layoutSubtreeIfNeeded()
-    check centeredChild.frame() == initRect(0.0, 20.0, 120.0, 10.0)
+    check centeredChild.frame() == rect(0.0, 20.0, 120.0, 10.0)
 
     stack.removeArrangedSubview(centeredChild)
     centeredChild.removeFromSuperview()
     stack.alignment = svaTrailing
     stack.addArrangedSubview(trailingChild)
     stack.layoutSubtreeIfNeeded()
-    check trailingChild.frame() == initRect(0.0, 40.0, 120.0, 10.0)
+    check trailingChild.frame() == rect(0.0, 40.0, 120.0, 10.0)
 
   test "fill equally distribution divides the main axis":
     let
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 122, 24))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 122, 24))
       first = newFixedIntrinsicView(10, 10)
       second = newFixedIntrinsicView(30, 10)
 
@@ -96,12 +96,12 @@ suite "nimkit stack views":
     stack.addArrangedSubview(second)
     stack.layoutSubtreeIfNeeded()
 
-    check first.frame() == initRect(0.0, 0.0, 60.0, 24.0)
-    check second.frame() == initRect(62.0, 0.0, 60.0, 24.0)
+    check first.frame() == rect(0.0, 0.0, 60.0, 24.0)
+    check second.frame() == rect(62.0, 0.0, 60.0, 24.0)
 
   test "natural distribution leaves surplus as trailing slack":
     let
-      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 100))
+      stack = newStackView(laVertical, frame = rect(0, 0, 80, 100))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(40, 10)
 
@@ -109,12 +109,12 @@ suite "nimkit stack views":
     stack.addArrangedSubview(first, second)
     stack.layoutSubtreeIfNeeded()
 
-    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
-    check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
+    check first.frame() == rect(0.0, 0.0, 80.0, 20.0)
+    check second.frame() == rect(0.0, 28.0, 80.0, 10.0)
 
   test "equal spacing distribution keeps natural sizes and expands gaps":
     let
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 100, 24))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 100, 24))
       first = newFixedIntrinsicView(10, 10)
       second = newFixedIntrinsicView(20, 10)
       third = newFixedIntrinsicView(30, 10)
@@ -124,13 +124,13 @@ suite "nimkit stack views":
     stack.addArrangedSubview(first, second, third)
     stack.layoutSubtreeIfNeeded()
 
-    check first.frame() == initRect(0.0, 0.0, 10.0, 24.0)
-    check second.frame() == initRect(30.0, 0.0, 20.0, 24.0)
-    check third.frame() == initRect(70.0, 0.0, 30.0, 24.0)
+    check first.frame() == rect(0.0, 0.0, 10.0, 24.0)
+    check second.frame() == rect(30.0, 0.0, 20.0, 24.0)
+    check third.frame() == rect(70.0, 0.0, 30.0, 24.0)
 
   test "fill distribution expands lower hugging priority views first":
     let
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 130, 20))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 130, 20))
       field = newFixedIntrinsicView(40, 10)
       label = newFixedIntrinsicView(40, 10)
 
@@ -141,12 +141,12 @@ suite "nimkit stack views":
     stack.addArrangedSubview(label)
     stack.layoutSubtreeIfNeeded()
 
-    check field.frame() == initRect(0.0, 0.0, 80.0, 20.0)
-    check label.frame() == initRect(90.0, 0.0, 40.0, 20.0)
+    check field.frame() == rect(0.0, 0.0, 80.0, 20.0)
+    check label.frame() == rect(90.0, 0.0, 40.0, 20.0)
 
   test "fill distribution leaves required hugging views at natural size":
     let
-      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 80))
+      stack = newStackView(laVertical, frame = rect(0, 0, 80, 80))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(40, 10)
 
@@ -155,12 +155,12 @@ suite "nimkit stack views":
     stack.addArrangedSubview(first, second)
     stack.layoutSubtreeIfNeeded()
 
-    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
-    check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
+    check first.frame() == rect(0.0, 0.0, 80.0, 20.0)
+    check second.frame() == rect(0.0, 28.0, 80.0, 10.0)
 
   test "flexible spacers absorb extra stack space":
     let
-      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 100))
+      stack = newStackView(laVertical, frame = rect(0, 0, 80, 100))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(40, 10)
 
@@ -170,13 +170,13 @@ suite "nimkit stack views":
     let spacer = stack.addFlexibleSpacer()
     stack.layoutSubtreeIfNeeded()
 
-    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
-    check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
-    check spacer.frame() == initRect(0.0, 46.0, 80.0, 54.0)
+    check first.frame() == rect(0.0, 0.0, 80.0, 20.0)
+    check second.frame() == rect(0.0, 28.0, 80.0, 10.0)
+    check spacer.frame() == rect(0.0, 46.0, 80.0, 54.0)
 
   test "flexible spacer can be added inline with arranged subviews":
     let
-      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 100))
+      stack = newStackView(laVertical, frame = rect(0, 0, 80, 100))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(40, 10)
       spacer = flexibleSpacer()
@@ -187,15 +187,15 @@ suite "nimkit stack views":
     stack.layoutSubtreeIfNeeded()
 
     check stack.arrangedSubviews == @[View(first), spacer, View(second)]
-    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
-    check spacer.frame() == initRect(0.0, 28.0, 80.0, 54.0)
-    check second.frame() == initRect(0.0, 90.0, 80.0, 10.0)
+    check first.frame() == rect(0.0, 0.0, 80.0, 20.0)
+    check spacer.frame() == rect(0.0, 28.0, 80.0, 54.0)
+    check second.frame() == rect(0.0, 90.0, 80.0, 10.0)
 
   test "arranged subview content changes invalidate stack and parent lazily":
     let
-      root = newView(frame = initRect(0, 0, 300, 120))
-      stack = newStackView(laHorizontal, frame = initRect(10, 10, 1, 1))
-      button = newButton("Go", frame = initRect(0, 0, 20, 20))
+      root = newView(frame = rect(0, 0, 300, 120))
+      stack = newStackView(laHorizontal, frame = rect(10, 10, 1, 1))
+      button = newButton("Go", frame = rect(0, 0, 20, 20))
 
     root.addSubview(stack)
     stack.addArrangedSubview(button)
@@ -219,8 +219,8 @@ suite "nimkit stack views":
 
   test "stack participates in solver constraint layout":
     let
-      root = newView(frame = initRect(0, 0, 300, 100))
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 1, 1))
+      root = newView(frame = rect(0, 0, 300, 100))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 1, 1))
       first = newFixedIntrinsicView(40, 20)
       second = newFixedIntrinsicView(30, 20)
       left = newLayoutConstraint(stack, atLeft, lrEqual, root, atLeft, constant = 20)
@@ -237,13 +237,13 @@ suite "nimkit stack views":
     activateConstraints([left, right, top, height])
     root.layoutSubtreeIfNeeded()
 
-    check stack.frame() == initRect(20.0, 10.0, 250.0, 40.0)
-    check first.frame() == initRect(0.0, 0.0, 125.0, 40.0)
-    check second.frame() == initRect(135.0, 0.0, 115.0, 40.0)
+    check stack.frame() == rect(20.0, 10.0, 250.0, 40.0)
+    check first.frame() == rect(0.0, 0.0, 125.0, 40.0)
+    check second.frame() == rect(135.0, 0.0, 115.0, 40.0)
 
   test "top pinned stack with real controls resolves intrinsic height":
     let
-      root = newView(frame = initRect(0, 0, 720, 360))
+      root = newView(frame = rect(0, 0, 720, 360))
       stack = newStackView(laVertical)
       title = newTitleLabel("Hello from KNutella/nimkit")
       subtitle = newLabel("Pure Nim responder/action dispatch with plain widget state")
@@ -268,8 +268,8 @@ suite "nimkit stack views":
 
   test "plain arranged views use their own fallback size":
     let
-      stack = newStackView(laVertical, frame = initRect(0, 0, 240, 120))
-      stage = newView(frame = initRect(0.0, 0.0, 180.0, 50.0))
+      stack = newStackView(laVertical, frame = rect(0, 0, 240, 120))
+      stage = newView(frame = rect(0.0, 0.0, 180.0, 50.0))
       buttonRow = newStackView(laHorizontal)
 
     buttonRow.distribution = svdFillEqually
@@ -288,7 +288,7 @@ suite "nimkit stack views":
 
   test "removing a subview removes it from arranged layout":
     let
-      stack = newStackView(laHorizontal, frame = initRect(0, 0, 100, 20))
+      stack = newStackView(laHorizontal, frame = rect(0, 0, 100, 20))
       first = newFixedIntrinsicView(20, 10)
       second = newFixedIntrinsicView(20, 10)
 
@@ -299,4 +299,4 @@ suite "nimkit stack views":
     check stack.arrangedSubviews == @[View(second)]
 
     stack.layoutSubtreeIfNeeded()
-    check second.frame() == initRect(0.0, 0.0, 100.0, 20.0)
+    check second.frame() == rect(0.0, 0.0, 100.0, 20.0)

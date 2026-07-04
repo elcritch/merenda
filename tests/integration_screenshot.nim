@@ -248,7 +248,7 @@ proc captureNativeWindowScreenshot(
 suite "nimkit screenshot":
   test "captures hello labels with complete text ink":
     let
-      window = newWindow("KNutella Nimkit Hello", frame = initRect(0, 0, 720, 220))
+      window = newWindow("KNutella Nimkit Hello", frame = rect(0, 0, 720, 220))
       root = newView()
       layout = newStackView(laVertical)
       title = newTitleLabel("Hello from KNutella/nimkit")
@@ -281,7 +281,7 @@ suite "nimkit screenshot":
       try:
         let img = renderAndScreenshotOnce(
           proc(w, h: float32): Renders =
-            window.frame = initRect(0.0, 0.0, w, h)
+            window.frame = rect(0.0, 0.0, w, h)
             window.buildRenders(),
           outputPath = outPath,
           windowW = 720,
@@ -295,7 +295,7 @@ suite "nimkit screenshot":
 
         let tallImg = renderAndScreenshotOnce(
           proc(w, h: float32): Renders =
-            window.frame = initRect(0.0, 0.0, w, h)
+            window.frame = rect(0.0, 0.0, w, h)
             window.buildRenders(),
           outputPath = tallOutPath,
           windowW = 720,
@@ -313,7 +313,7 @@ suite "nimkit screenshot":
   test "captures hello text after state update on one Vulkan renderer":
     when UseVulkanBackend:
       let
-        window = newWindow("KNutella Nimkit Hello", frame = initRect(0, 0, 720, 360))
+        window = newWindow("KNutella Nimkit Hello", frame = rect(0, 0, 720, 360))
         root = newView()
         layout = newStackView(laVertical)
         title = newTitleLabel("Hello from KNutella/nimkit")
@@ -347,10 +347,10 @@ suite "nimkit screenshot":
         try:
           let images = renderAndScreenshotSequence(
             proc(w, h: float32): Renders =
-              window.frame = initRect(0.0, 0.0, w, h)
+              window.frame = rect(0.0, 0.0, w, h)
               window.buildRenders(),
             proc(w, h: float32): Renders =
-              window.frame = initRect(0.0, 0.0, w, h)
+              window.frame = rect(0.0, 0.0, w, h)
               status.text = "Button state: Mixed (click to cycle)"
               button.title = "Cycle State (Mixed)"
               window.buildRenders(),
@@ -376,7 +376,7 @@ suite "nimkit screenshot":
   test "captures hello text after native Vulkan state update":
     let
       app = newApplication()
-      window = newWindow("KNutella Nimkit Hello", frame = initRect(80, 80, 720, 360))
+      window = newWindow("KNutella Nimkit Hello", frame = rect(80, 80, 720, 360))
       root = newView()
       layout = newStackView(laVertical)
       title = newTitleLabel("Hello from KNutella/nimkit")
@@ -449,9 +449,9 @@ suite "nimkit screenshot":
 
   test "captures button demo before and after click":
     let
-      root = newView(frame = initRect(0, 0, 360, 220))
-      label = newTextField("Ready", frame = initRect(24, 24, 220, 32))
-      button = newButton("Click", frame = initRect(24, 72, 140, 40))
+      root = newView(frame = rect(0, 0, 360, 220))
+      label = newTextField("Ready", frame = rect(24, 24, 220, 32))
+      button = newButton("Click", frame = rect(24, 72, 140, 40))
       action = actionSelector("buttonClicked")
 
     proc onClicked(sender: DynamicAgent) =
@@ -476,7 +476,7 @@ suite "nimkit screenshot":
       try:
         let initial = renderAndScreenshotOnce(
           proc(w, h: float32): Renders =
-            root.setFrame(initRect(0, 0, w, h))
+            root.setFrame(rect(0, 0, w, h))
             buildRenders(root),
           outputPath = initialPath,
           title = "merenda nimkit screenshot initial",
@@ -491,7 +491,7 @@ suite "nimkit screenshot":
 
         let clicked = renderAndScreenshotOnce(
           proc(w, h: float32): Renders =
-            root.setFrame(initRect(0, 0, w, h))
+            root.setFrame(rect(0, 0, w, h))
             buildRenders(root),
           outputPath = clickedPath,
           title = "merenda nimkit screenshot clicked",

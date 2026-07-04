@@ -7,7 +7,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Stepper Demo", frame = initRect(160, 150, 480, 260))
+  window = newWindow("Nimkit Stepper Demo", frame = rect(160, 150, 480, 260))
   root = newView()
   layout = newStackView(laVertical)
   form = newFormView()

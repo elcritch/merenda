@@ -95,7 +95,7 @@ proc newTodoItem(title: string): TodoItemView =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Todo Stack Drag", frame = initRect(120, 120, 420, 420))
+  window = newWindow("Nimkit Todo Stack Drag", frame = rect(120, 120, 420, 420))
   root = newView()
   layout = newStackView(laVertical)
   inputRow = newStackView(laHorizontal)

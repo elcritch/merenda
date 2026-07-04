@@ -29,8 +29,8 @@ func aquaRadioShellFill(): Fill =
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
     inc customDrawCount
-    context.addRectangle(initRect(4, 5, 20, 10), color(0.8, 0.1, 0.1))
-    context.addText(initRect(4, 5, 20, 10), "C", color(1, 1, 1))
+    context.addRectangle(rect(4, 5, 20, 10), color(0.8, 0.1, 0.1))
+    context.addText(rect(4, 5, 20, 10), "C", color(1, 1, 1))
     context.addRenderLine(
       initPoint(4.0, 22.0), initPoint(24.0, 30.0), CustomLineFill, 2.0
     )
@@ -98,7 +98,7 @@ proc renderedText(node: Fig): string =
     result.add(rune)
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
-  nimkitTypes.initRect(
+  nimkitTypes.rect(
     node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
     node.screenBox.h.float32,
   )
@@ -111,10 +111,10 @@ proc rectsClose(left, right: nimkitTypes.Rect): bool =
 
 suite "nimkit rendering":
   test "buildRenders emits root, text field, and button nodes":
-    let root = newView(frame = initRect(0, 0, 320, 200))
+    let root = newView(frame = rect(0, 0, 320, 200))
     root.setBackgroundColor(color(1, 1, 1))
-    root.addSubview(newTextField("Ready", frame = initRect(16, 16, 180, 32)))
-    root.addSubview(newButton("Click", frame = initRect(16, 64, 120, 36)))
+    root.addSubview(newTextField("Ready", frame = rect(16, 16, 180, 32)))
+    root.addSubview(newButton("Click", frame = rect(16, 64, 120, 36)))
 
     let renders = buildRenders(root)
 
@@ -139,7 +139,7 @@ suite "nimkit rendering":
 
   test "buildRenders applies view alpha and shadow to view background node":
     let
-      root = newView(frame = initRect(0, 0, 120, 80))
+      root = newView(frame = rect(0, 0, 120, 80))
       shadow = dropShadow(color(0, 0, 0, 0.4), y = 3.0, blur = 7.0)
 
     root.backgroundColor = color(0.2, 0.4, 0.6, 0.8)
@@ -161,9 +161,9 @@ suite "nimkit rendering":
 
   test "buildRenders uses theme colors and metrics for built-in controls":
     let
-      root = newView(frame = initRect(0, 0, 180, 120))
-      field = newTextField("Field", frame = initRect(10, 20, 100, 30))
-      button = newButton("Button", frame = initRect(10, 60, 80, 24))
+      root = newView(frame = rect(0, 0, 180, 120))
+      field = newTextField("Field", frame = rect(10, 20, 100, 30))
+      button = newButton("Button", frame = rect(10, 60, 80, 24))
 
     let
       buttonFill = color(0.31, 0.42, 0.53, 1.0)
@@ -242,12 +242,12 @@ suite "nimkit rendering":
 
   test "rendered control boxes agree with resolved metric styles":
     let
-      root = newView(frame = initRect(0, 0, 360, 220))
-      button = newButton("Metric", frame = initRect(12, 14, 20, 10))
-      checkbox = newCheckBox("Choice", frame = initRect(12, 62, 20, 10))
-      field = newTextField("Field", frame = initRect(12, 104, 20, 10))
+      root = newView(frame = rect(0, 0, 360, 220))
+      button = newButton("Metric", frame = rect(12, 14, 20, 10))
+      checkbox = newCheckBox("Choice", frame = rect(12, 62, 20, 10))
+      field = newTextField("Field", frame = rect(12, 104, 20, 10))
       combo =
-        newComboBox(["Short", "Longest metric item"], frame = initRect(12, 148, 20, 10))
+        newComboBox(["Short", "Longest metric item"], frame = rect(12, 148, 20, 10))
       checkFill = color(0.64, 0.22, 0.17, 1.0)
 
     var appearance = initAppearance()
@@ -335,8 +335,8 @@ suite "nimkit rendering":
 
   test "buildRenders draws Aqua push button layers":
     let
-      root = newView(frame = initRect(0, 0, 180, 90))
-      button = newButton("OK", frame = initRect(20, 24, 120, 32))
+      root = newView(frame = rect(0, 0, 180, 90))
+      button = newButton("OK", frame = rect(20, 24, 120, 32))
 
     root.addSubview(button)
 
@@ -391,8 +391,8 @@ suite "nimkit rendering":
 
   test "buildRenders omits Aqua extras for default button chrome":
     let
-      root = newView(frame = initRect(0, 0, 180, 90))
-      button = newButton("OK", frame = initRect(20, 24, 120, 32))
+      root = newView(frame = rect(0, 0, 180, 90))
+      button = newButton("OK", frame = rect(20, 24, 120, 32))
 
     var theme = initTheme()
     theme[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
@@ -429,9 +429,9 @@ suite "nimkit rendering":
 
   test "buildRenders uses installed chrome extras selected per button":
     let
-      root = newView(frame = initRect(0, 0, 260, 120))
-      normalButton = newButton("Default", frame = initRect(20, 20, 100, 32))
-      specialButton = newButton("Special", frame = initRect(140, 20, 100, 32))
+      root = newView(frame = rect(0, 0, 260, 120))
+      normalButton = newButton("Default", frame = rect(20, 20, 100, 32))
+      specialButton = newButton("Special", frame = rect(140, 20, 100, 32))
 
     specialButton.styleId = "special"
     root.addSubview(normalButton)
@@ -457,9 +457,9 @@ suite "nimkit rendering":
 
   test "buildRenders uses installed chrome extras for choices and combo popups":
     let
-      root = newView(frame = initRect(0, 0, 240, 150))
-      checkbox = newCheckBox("Choice", frame = initRect(12, 16, 120, 24))
-      combo = newComboBox(["One", "Two"], frame = initRect(12, 52, 120, 26))
+      root = newView(frame = rect(0, 0, 240, 150))
+      checkbox = newCheckBox("Choice", frame = rect(12, 16, 120, 24))
+      combo = newComboBox(["One", "Two"], frame = rect(12, 52, 120, 26))
 
     checkbox.styleId = "special-choice"
     combo.styleId = "special-combo"
@@ -511,9 +511,9 @@ suite "nimkit rendering":
 
   test "buildRenders keeps Aqua radio accent inside neutral shell":
     let
-      root = newView(frame = initRect(0, 0, 220, 110))
-      checkbox = newCheckBox("Check", frame = initRect(10, 20, 120, 24))
-      radio = newRadioButton("Radio", frame = initRect(10, 56, 120, 24))
+      root = newView(frame = rect(0, 0, 220, 110))
+      checkbox = newCheckBox("Check", frame = rect(10, 20, 120, 24))
+      radio = newRadioButton("Radio", frame = rect(10, 56, 120, 24))
 
     checkbox.setState(bsOn)
     radio.setState(bsOn)
@@ -531,7 +531,7 @@ suite "nimkit rendering":
       radioIndicator = radio.rectToWindow(radioStyle.choiceIndicatorRect(radio.bounds))
       radioInner = radioIndicator.inset(insets(1.6))
       radioGlossWidth = max(radioInner.size.width * 0.52'f32, 1.0'f32)
-      radioGloss = initRect(
+      radioGloss = rect(
         radioInner.origin.x + (radioInner.size.width - radioGlossWidth) / 2.0'f32,
         radioInner.origin.y + 1.0'f32,
         radioGlossWidth,
@@ -572,8 +572,8 @@ suite "nimkit rendering":
 
   test "buildRenders centers push button text by default":
     let
-      root = newView(frame = initRect(0, 0, 160, 80))
-      button = newButton("OK", frame = initRect(10, 20, 120, 30))
+      root = newView(frame = rect(0, 0, 160, 80))
+      button = newButton("OK", frame = rect(10, 20, 120, 30))
 
     root.addSubview(button)
 
@@ -608,8 +608,8 @@ suite "nimkit rendering":
 
   test "buildRenders draws combo box and open popup items":
     let
-      root = newView(frame = initRect(0, 0, 220, 150))
-      combo = newComboBox(["One", "Two", "Three"], frame = initRect(10, 20, 120, 26))
+      root = newView(frame = rect(0, 0, 220, 150))
+      combo = newComboBox(["One", "Two", "Three"], frame = rect(10, 20, 120, 26))
 
     combo.selectItemAtIndex(1)
     combo.openPopup()
@@ -683,9 +683,9 @@ suite "nimkit rendering":
 
   test "buildRenders draws popup menu button items":
     let
-      root = newView(frame = initRect(0, 0, 220, 150))
+      root = newView(frame = rect(0, 0, 220, 150))
       menu = newMenu("Actions")
-      button = newPopupMenuButton("Actions", menu, initRect(10, 4, 82, 24))
+      button = newPopupMenuButton("Actions", menu, rect(10, 4, 82, 24))
 
     discard menu.addItem(
       newMenuItem("Run Menu Action", keyEquivalent = "r", modifiers = {kmCommand})
@@ -736,14 +736,14 @@ suite "nimkit rendering":
 
   test "buildRenders draws a menu bar from a main menu":
     let
-      root = newView(frame = initRect(0, 0, 240, 80))
+      root = newView(frame = rect(0, 0, 240, 80))
       mainMenu = newMenu("Main")
       actionsMenu = newMenu("Actions")
       actionsItem = newMenuItem("Actions")
 
     actionsItem.submenu = actionsMenu
     discard mainMenu.addItem(actionsItem)
-    root.addSubview(newMenuBar(mainMenu, initRect(0, 0, 240, 28)))
+    root.addSubview(newMenuBar(mainMenu, rect(0, 0, 240, 28)))
 
     let renders = buildRenders(root)
     var
@@ -763,11 +763,11 @@ suite "nimkit rendering":
 
   test "buildRenders draws hovered menu bar items as highlighted":
     let
-      root = newView(frame = initRect(0, 0, 240, 80))
+      root = newView(frame = rect(0, 0, 240, 80))
       mainMenu = newMenu("Main")
       actionsMenu = newMenu("Actions")
       actionsItem = newMenuItem("Actions")
-      menuBar = newMenuBar(mainMenu, initRect(0, 0, 240, 28))
+      menuBar = newMenuBar(mainMenu, rect(0, 0, 240, 28))
 
     actionsItem.submenu = actionsMenu
     discard mainMenu.addItem(actionsItem)
@@ -792,9 +792,9 @@ suite "nimkit rendering":
 
   test "buildRenders draws standalone one-column table views with table roles":
     let
-      root = newView(frame = initRect(0, 0, 220, 140))
+      root = newView(frame = rect(0, 0, 220, 140))
       tableView = newSingleColumnRenderTable(
-        ["One", "Two", "Three", "Four"], frame = initRect(10, 20, 130, 68)
+        ["One", "Two", "Three", "Four"], frame = rect(10, 20, 130, 68)
       )
       tableFill = color(0.77, 0.79, 0.81, 1.0)
       tableBorder = color(0.24, 0.28, 0.34, 1.0)
@@ -864,8 +864,8 @@ suite "nimkit rendering":
 
   test "buildRenders keeps table focus ring below visible headers":
     let
-      root = newView(frame = initRect(0, 0, 220, 140))
-      tableView = newTableView(frame = initRect(10, 20, 130, 68))
+      root = newView(frame = rect(0, 0, 220, 140))
+      tableView = newTableView(frame = rect(10, 20, 130, 68))
       focusColor = color(0.91, 0.38, 0.18, 0.66)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
@@ -910,8 +910,8 @@ suite "nimkit rendering":
 
   test "buildRenders clamps no-header table focus ring to stroke edge":
     let
-      root = newView(frame = initRect(0, 0, 180, 120))
-      tableView = newTableView(frame = initRect(10, 20, 130, 68))
+      root = newView(frame = rect(0, 0, 180, 120))
+      tableView = newTableView(frame = rect(10, 20, 130, 68))
       focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
@@ -948,9 +948,9 @@ suite "nimkit rendering":
 
   test "buildRenders clips table focus ring to visible ancestor bounds":
     let
-      root = newView(frame = initRect(0, 0, 140, 100))
-      clipView = newView(frame = initRect(10, 20, 80, 70))
-      tableView = newTableView(frame = initRect(60, 0, 80, 60))
+      root = newView(frame = rect(0, 0, 140, 100))
+      clipView = newView(frame = rect(10, 20, 80, 70))
+      tableView = newTableView(frame = rect(60, 0, 80, 60))
       focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 70.0))
@@ -984,11 +984,10 @@ suite "nimkit rendering":
 
   test "buildRenders keeps scrolled table focus ring in scroll coordinates":
     let
-      root = newView(frame = initRect(0, 0, 220, 130))
-      document = newView(frame = initRect(0, 0, 320, 100))
-      tableView = newTableView(frame = initRect(60, 0, 90, 60))
-      scrollView =
-        newScrollView(frame = initRect(20, 20, 120, 80), documentView = document)
+      root = newView(frame = rect(0, 0, 220, 130))
+      document = newView(frame = rect(0, 0, 320, 100))
+      tableView = newTableView(frame = rect(60, 0, 90, 60))
+      scrollView = newScrollView(frame = rect(20, 20, 120, 80), documentView = document)
       focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     tableView.addColumn(newTableColumn("value", "Value", width = 80.0))
@@ -1023,8 +1022,8 @@ suite "nimkit rendering":
 
   test "buildRenders draws focused text field selection and caret":
     let
-      root = newView(frame = initRect(0, 0, 180, 80))
-      field = newTextField("Field", frame = initRect(10, 20, 120, 30))
+      root = newView(frame = rect(0, 0, 180, 80))
+      field = newTextField("Field", frame = rect(10, 20, 120, 30))
 
     root.addSubview(field)
     discard field.becomeFirstResponder()
@@ -1051,8 +1050,8 @@ suite "nimkit rendering":
 
   test "buildRenders uses active view state for control styling":
     let
-      root = newView(frame = initRect(0, 0, 140, 80))
-      button = newButton("Button", frame = initRect(10, 20, 80, 24))
+      root = newView(frame = rect(0, 0, 140, 80))
+      button = newButton("Button", frame = rect(10, 20, 80, 24))
 
     let activeFill = color(0.8, 0.2, 0.1, 1.0)
     var theme = initTheme()
@@ -1074,9 +1073,9 @@ suite "nimkit rendering":
 
   test "matrix button cells do not inherit active state from the matrix":
     let
-      root = newView(frame = initRect(0, 0, 240, 80))
+      root = newView(frame = rect(0, 0, 240, 80))
       matrix = newButtonMatrix(
-        ["Apply", "Reset", "Inspect"], columns = 3, frame = initRect(10, 20, 180, 28)
+        ["Apply", "Reset", "Inspect"], columns = 3, frame = rect(10, 20, 180, 28)
       )
       baseFill = color(0.1, 0.1, 0.1, 1.0)
       activeFill = color(0.8, 0.2, 0.1, 1.0)
@@ -1114,8 +1113,8 @@ suite "nimkit rendering":
 
   test "buildRenders draws focus visible control rings":
     let
-      root = newView(frame = initRect(0, 0, 140, 80))
-      button = newButton("Button", frame = initRect(10, 20, 80, 24))
+      root = newView(frame = rect(0, 0, 140, 80))
+      button = newButton("Button", frame = rect(10, 20, 80, 24))
       focusColor = color(0.24, 0.48, 0.92, 0.58)
 
     var theme = initTheme()
@@ -1146,9 +1145,9 @@ suite "nimkit rendering":
 
   test "buildRenders uses theme metrics for checkbox and radio buttons":
     let
-      root = newView(frame = initRect(0, 0, 220, 110))
-      checkbox = newCheckBox("Check", frame = initRect(10, 20, 120, 24))
-      radio = newRadioButton("Radio", frame = initRect(10, 56, 120, 24))
+      root = newView(frame = rect(0, 0, 220, 110))
+      checkbox = newCheckBox("Check", frame = rect(10, 20, 120, 24))
+      radio = newRadioButton("Radio", frame = rect(10, 56, 120, 24))
 
     let
       selectedFill = color(0.23, 0.45, 0.67, 1.0)
@@ -1207,8 +1206,8 @@ suite "nimkit rendering":
 
   test "buildRenders uses effective appearance from view hierarchy":
     let
-      root = newView(frame = initRect(0, 0, 140, 80))
-      button = newButton("Button", frame = initRect(10, 20, 80, 24))
+      root = newView(frame = rect(0, 0, 140, 80))
+      button = newButton("Button", frame = rect(10, 20, 80, 24))
       rootFill = color(0.2, 0.3, 0.4, 1.0)
       buttonFill = color(0.7, 0.1, 0.2, 1.0)
 
@@ -1239,13 +1238,13 @@ suite "nimkit rendering":
 
   test "buildRenders uses FigDraw hierarchy and clears invalid state":
     let
-      root = newView(frame = initRect(0, 0, 200, 160))
-      child = newView(frame = initRect(20, 30, 80, 50))
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newView(frame = rect(20, 30, 80, 50))
 
     root.addSubview(child)
     root.setNeedsDisplay(false)
     child.setNeedsDisplay(false)
-    child.setNeedsDisplayInRect(initRect(5, 6, 10, 11))
+    child.setNeedsDisplayInRect(rect(5, 6, 10, 11))
 
     let renders = buildRenders(root)
     let list = renders[DefaultDrawLevel]
@@ -1265,8 +1264,8 @@ suite "nimkit rendering":
 
   test "buildRenders reuses cached renders until display or appearance changes":
     let
-      root = newView(frame = initRect(0, 0, 120, 90))
-      custom = newCustomDrawView(initRect(10, 12, 50, 30))
+      root = newView(frame = rect(0, 0, 120, 90))
+      custom = newCustomDrawView(rect(10, 12, 50, 30))
 
     customDrawCount = 0
     root.addSubview(custom)
@@ -1290,10 +1289,10 @@ suite "nimkit rendering":
 
   test "buildRenders does not clip view subtrees by default":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(90, 90, 50, 40))
+      root = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(90, 90, 50, 40))
 
-    root.setBounds(initRect(10, 20, 100, 80))
+    root.setBounds(rect(10, 20, 100, 80))
     root.addSubview(child)
 
     let renders = buildRenders(root)
@@ -1321,10 +1320,10 @@ suite "nimkit rendering":
 
   test "buildRenders adds FigDraw clipping when views clip to bounds":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      child = newView(frame = initRect(90, 90, 50, 40))
+      root = newView(frame = rect(0, 0, 100, 80))
+      child = newView(frame = rect(90, 90, 50, 40))
 
-    root.setBounds(initRect(10, 20, 100, 80))
+    root.setBounds(rect(10, 20, 100, 80))
     root.setClipsToBounds(true)
     child.setClipsToBounds(true)
     root.addSubview(child)
@@ -1347,8 +1346,8 @@ suite "nimkit rendering":
 
   test "buildRenders calls selector-backed custom drawing":
     let
-      root = newView(frame = initRect(0, 0, 100, 80))
-      custom = newCustomDrawView(initRect(10, 20, 50, 40))
+      root = newView(frame = rect(0, 0, 100, 80))
+      custom = newCustomDrawView(rect(10, 20, 50, 40))
 
     customDrawCount = 0
     root.addSubview(custom)

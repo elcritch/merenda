@@ -191,8 +191,7 @@ let
     .resolvedIntrinsicContentSize()
     .resolveIntrinsicSize(initSize(DemoWindowWidth, 0.0)).height
   window = newWindow(
-    "NimKit Tab View Demo",
-    frame = initRect(160, 160, DemoWindowWidth, minimumWindowHeight),
+    "NimKit Tab View Demo", frame = rect(160, 160, DemoWindowWidth, minimumWindowHeight)
   )
 
 window.minSize = initSize(DemoWindowWidth, minimumWindowHeight)

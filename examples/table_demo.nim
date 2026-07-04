@@ -502,7 +502,7 @@ const
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Table Demo", frame = initRect(140, 140, 860, 380))
+  window = newWindow("Nimkit Table Demo", frame = rect(140, 140, 860, 380))
   root = newView()
   title = newTitleLabel("Table View")
   table = newTableView()

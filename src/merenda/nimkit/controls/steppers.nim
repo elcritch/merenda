@@ -261,13 +261,13 @@ proc formattedValue*(stepper: Stepper): string =
     stepper.formatValue(stepper.xValue)
 
 func decrementPartRect(bounds: Rect): Rect =
-  initRect(
+  rect(
     bounds.origin.x, bounds.origin.y, bounds.size.width * 0.5'f32, bounds.size.height
   )
 
 func incrementPartRect(bounds: Rect): Rect =
   let leftWidth = bounds.size.width * 0.5'f32
-  initRect(
+  rect(
     bounds.origin.x + leftWidth,
     bounds.origin.y,
     bounds.size.width - leftWidth,
@@ -276,7 +276,7 @@ func incrementPartRect(bounds: Rect): Rect =
 
 proc partRect*(stepper: Stepper, part: StepperPart): Rect =
   if stepper.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let bounds = stepper.bounds()
   case part
   of spIncrement:
@@ -284,7 +284,7 @@ proc partRect*(stepper: Stepper, part: StepperPart): Rect =
   of spDecrement:
     decrementPartRect(bounds)
   of spNone:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
 
 proc partAtPoint*(stepper: Stepper, point: Point): StepperPart =
   if stepper.isNil or not stepper.bounds().contains(point):
@@ -392,7 +392,7 @@ protocol DefaultStepperDrawing of ViewDrawingProtocol:
 
     let
       separatorX = bounds.origin.x + bounds.size.width * 0.5'f32 - 0.5'f32
-      separator = initRect(separatorX, bounds.origin.y, 1.0'f32, bounds.size.height)
+      separator = rect(separatorX, bounds.origin.y, 1.0'f32, bounds.size.height)
     discard context.addRenderRectangle(
       context.renderRectFor(separator),
       style.box.borderColor,

@@ -118,7 +118,7 @@ proc newTabViewDemoFixture(): TabViewDemoFixture =
 suite "nimkit tab views":
   test "tab view items select content views through lifecycle helpers":
     let
-      tabView = newTabView(frame = initRect(0, 0, 320, 180))
+      tabView = newTabView(frame = rect(0, 0, 320, 180))
       firstView = newView()
       secondView = newView()
       first = newTabViewItem("First", firstView, "first")
@@ -150,7 +150,7 @@ suite "nimkit tab views":
 
   test "tab view delegates can veto selection and observe changes":
     let
-      tabView = newTabView(frame = initRect(0, 0, 320, 180))
+      tabView = newTabView(frame = rect(0, 0, 320, 180))
       first = newTabViewItem("First", newView())
       second = newTabViewItem("Second", newView())
       spy = newTabDelegateSpy()
@@ -173,7 +173,7 @@ suite "nimkit tab views":
 
   test "tab view mouse and keyboard selection skip disabled tabs":
     let
-      tabView = newTabView(frame = initRect(0, 0, 360, 180))
+      tabView = newTabView(frame = rect(0, 0, 360, 180))
       first = newTabViewItem("First", newView())
       disabled = newTabViewItem("Disabled", newView())
       third = newTabViewItem("Third", newView())
@@ -201,9 +201,9 @@ suite "nimkit tab views":
 
   test "arrow keys in selected pane child keep focus in the pane":
     let
-      window = newWindow("Tab pane focus", frame = initRect(0, 0, 360, 180))
-      root = newView(frame = initRect(0, 0, 360, 180))
-      tabView = newTabView(frame = initRect(0, 0, 360, 180))
+      window = newWindow("Tab pane focus", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tabView = newTabView(frame = rect(0, 0, 360, 180))
       firstPane = newStackView(laVertical)
       secondPane = newStackView(laVertical)
       firstButton = newButton("First option")
@@ -239,7 +239,7 @@ suite "nimkit tab views":
     check secondButton.window == window
 
   test "tab view exposes top and bottom geometry":
-    let tabView = newTabView(frame = initRect(0, 0, 320, 180))
+    let tabView = newTabView(frame = rect(0, 0, 320, 180))
     discard tabView.addTabViewItem(newTabViewItem("Top", newView()))
 
     check tabView.contentRect.origin.y == 12.0
@@ -251,7 +251,7 @@ suite "nimkit tab views":
 
   test "tab view intrinsic height includes child pane content":
     let
-      tabView = newTabView(frame = initRect(0, 0, 320, 180))
+      tabView = newTabView(frame = rect(0, 0, 320, 180))
       pane = newStackView(laVertical)
 
     pane.edgeInsets = insets(18.0, 20.0)
@@ -275,13 +275,13 @@ suite "nimkit tab views":
         .resolveIntrinsicSize(initSize(0.0, 0.0)).height
 
     check tabHeight > 120.0'f32
-    tabView.frame = initRect(0, 0, 320, tabHeight)
+    tabView.frame = rect(0, 0, 320, tabHeight)
     tabView.layoutSubtreeIfNeeded()
     check pane.frame.size.height >= paneHeight - 0.01'f32
 
   test "tab view renders panel tab labels and selected content":
     let
-      tabView = newTabView(frame = initRect(0, 0, 320, 180))
+      tabView = newTabView(frame = rect(0, 0, 320, 180))
       content = newView()
       item = newTabViewItem("General", content)
 
@@ -330,7 +330,7 @@ suite "nimkit tab views":
     check defaultChrome == baseFill
 
   test "selected tab only rounds the edge away from the pane":
-    let tabView = newTabView(frame = initRect(0, 0, 320, 180))
+    let tabView = newTabView(frame = rect(0, 0, 320, 180))
     tabView.tabMode = tvmTraditional
     discard tabView.addTabViewItem(newTabViewItem("General", newView()))
 
@@ -358,7 +358,7 @@ suite "nimkit tab views":
   test "tab view selected pane does not redraw panel over resized content":
     let fixture = newTabViewDemoFixture()
 
-    fixture.root.frame = initRect(0, 0, 560, 500)
+    fixture.root.frame = rect(0, 0, 560, 500)
     let
       renders = buildRenders(fixture.root)
       panelRect = fixture.tabView.rectToWindow(fixture.tabView.contentRect())

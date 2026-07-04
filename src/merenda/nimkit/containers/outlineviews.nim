@@ -696,15 +696,15 @@ proc restoreExpansionPersistenceString*(outlineView: OutlineView, value: string)
 
 proc disclosureRectForRow*(outlineView: OutlineView, row: int): Rect =
   if outlineView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let item = outlineView.itemAtRow(row)
   if item.identifier.len == 0 or not outlineView.isItemExpandable(item.identifier):
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     rowRect = TableView(outlineView).rowItemRect(row)
     level = outlineView.levelForRow(row)
     size = min(rowRect.size.height, 16.0'f32)
-  initRect(
+  rect(
     rowRect.origin.x + level.float32 * 16.0'f32 + 4.0'f32,
     rowRect.origin.y + max((rowRect.size.height - size) * 0.5'f32, 0.0'f32),
     size,
@@ -991,7 +991,7 @@ proc drawDisclosureAffordance(
       let width = 7.0'f32 - index.float32 * 2.0'f32
       discard context.addRenderRectangle(
         context.renderRectFor(
-          initRect(
+          rect(
             centerX - width * 0.5'f32, centerY - 2.0'f32 + index.float32, width, 1.0'f32
           )
         ),
@@ -1002,7 +1002,7 @@ proc drawDisclosureAffordance(
       let height = 7.0'f32 - index.float32 * 2.0'f32
       discard context.addRenderRectangle(
         context.renderRectFor(
-          initRect(
+          rect(
             centerX - 1.0'f32 + index.float32,
             centerY - height * 0.5'f32,
             1.0'f32,
@@ -1024,16 +1024,16 @@ proc outlineColumnRectForRow(
     outlineView: OutlineView, column: TableColumn, rowBounds: Rect
 ): Rect =
   if outlineView.isNil or column.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   var x = rowBounds.origin.x
   for current in TableView(outlineView).columns():
     if current.hidden():
       continue
-    let rect = initRect(x, rowBounds.origin.y, current.width(), rowBounds.size.height)
+    let rect = rect(x, rowBounds.origin.y, current.width(), rowBounds.size.height)
     if current == column:
       return rect
     x += current.width()
-  initRect(0.0, 0.0, 0.0, 0.0)
+  rect(0.0, 0.0, 0.0, 0.0)
 
 proc outlineTextRectForCell(
     outlineView: OutlineView, row: int, column: TableColumn, rowBounds: Rect
@@ -1043,11 +1043,11 @@ proc outlineTextRectForCell(
     return
   if column == outlineView.outlineColumn():
     let indent = outlineView.levelForRow(row).float32 * 16.0'f32 + 24.0'f32
-    result.origin.x += indent
-    result.size.width = max(result.size.width - indent - 6.0'f32, 0.0'f32)
+    result.x += indent
+    result.w = max(result.w - indent - 6.0'f32, 0.0'f32)
   else:
-    result.origin.x += 6.0'f32
-    result.size.width = max(result.size.width - 12.0'f32, 0.0'f32)
+    result.x += 6.0'f32
+    result.w = max(result.w - 12.0'f32, 0.0'f32)
 
 proc drawOutlineRowText(
     outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect
@@ -1074,7 +1074,7 @@ proc drawOutlineDropTarget(
   let target = TableView(outlineView).currentDropTarget()
   if target.kind notin {ddtItem, ddtRow, ddtCell} or target.row != row:
     return
-  let indicatorRect = initRect(
+  let indicatorRect = rect(
     rowBounds.origin.x,
     max(rowBounds.maxY - 2.0'f32, rowBounds.minY),
     rowBounds.size.width,
@@ -1216,10 +1216,10 @@ protocol OutlineViewTableDelegate of TableViewDelegate:
     TableView(outlineView).drawTableRowItem(context, rect, emptyRow)
     if row.index < 0:
       return
-    let rowBounds = initRect(0.0, 0.0, rect.size.width, rect.size.height)
+    let rowBounds = rect(0.0, 0.0, rect.size.width, rect.size.height)
     let disclosure = outlineView.disclosureRectForRow(row.index)
     if not disclosure.isEmpty:
-      let localDisclosure = initRect(
+      let localDisclosure = rect(
         disclosure.origin.x - rect.origin.x,
         disclosure.origin.y - rect.origin.y,
         disclosure.size.width,

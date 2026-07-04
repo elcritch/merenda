@@ -82,9 +82,9 @@ func initStackFrame(
 ): Rect =
   case axis
   of laHorizontal:
-    initRect(mainOrigin, crossOrigin, mainLength, crossLength)
+    rect(mainOrigin, crossOrigin, mainLength, crossLength)
   of laVertical:
-    initRect(crossOrigin, mainOrigin, crossLength, mainLength)
+    rect(crossOrigin, mainOrigin, crossLength, mainLength)
 
 func crossAxis(axis: LayoutAxis): LayoutAxis =
   case axis
@@ -157,7 +157,7 @@ proc contentRect(stackView: StackView): Rect =
   let
     bounds = stackView.bounds()
     insets = stackView.xEdgeInsets
-  initRect(
+  rect(
     insets.left,
     insets.top,
     bounds.size.width - insets.horizontal,

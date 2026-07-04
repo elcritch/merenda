@@ -887,12 +887,12 @@ proc naturalMatrixSize(matrix: Matrix): Size =
 
 proc cellFrameAtIndex*(matrix: Matrix, index: int): Rect =
   if not matrix.validIndex(index):
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     cellSize = matrix.resolvedCellSize()
     row = matrix.rowForIndex(index)
     column = matrix.columnForIndex(index)
-  initRect(
+  rect(
     matrix.bounds().origin.x +
       column.float32 * (cellSize.width + matrix.xIntercellSpacing.width),
     matrix.bounds().origin.y +

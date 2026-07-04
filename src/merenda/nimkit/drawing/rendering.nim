@@ -30,7 +30,7 @@ proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
     frame = view.frame()
     bounds = view.bounds()
     origin = parentOrigin.offsetPoint(frame.origin)
-  initRect(origin, bounds.size)
+  rect(origin, bounds.size)
 
 proc beginDraw(
     context: DrawContext,

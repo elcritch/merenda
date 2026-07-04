@@ -261,7 +261,7 @@ suite "nimkit pasteboards and dragging":
   test "table and outline delegates can refine drop targets":
     let
       tableSource = newDragTableSource(["one", "two"])
-      tableView = newTableView(frame = initRect(0, 0, 120, 80))
+      tableView = newTableView(frame = rect(0, 0, 120, 80))
       tableDelegate = newTableDropDelegate()
       nameColumn = newTableColumn("value", "Value", width = 120.0)
 
@@ -281,7 +281,7 @@ suite "nimkit pasteboards and dragging":
     check tableTarget.column == "override"
 
     let
-      outlineView = newOutlineView(frame = initRect(0, 0, 180, 80))
+      outlineView = newOutlineView(frame = rect(0, 0, 180, 80))
       outlineDelegate = newOutlineDropDelegate()
 
     outlineView.outlineItems = [initOutlineItem("root", "Root")]

@@ -231,7 +231,7 @@ proc ensureWindowFrameStore() =
     savedWindowFramesReady = true
 
 func defaultWindowFrame*(): Rect =
-  initRect(100.0'f32, 100.0'f32, 640.0'f32, 480.0'f32)
+  rect(100.0'f32, 100.0'f32, 640.0'f32, 480.0'f32)
 
 func nativePopupWindowsSupported*(): bool =
   when defined(android) or defined(emscripten) or defined(js) or defined(wasm):
@@ -405,7 +405,7 @@ proc newAlert*(
     messageText: messageText,
     informativeText: informativeText,
     style: style,
-    window: newPanel(messageText, initRect(100, 100, 360, 160)),
+    window: newPanel(messageText, rect(100, 100, 360, 160)),
   )
   initResponder(result)
   for index, button in buttons:
@@ -419,15 +419,14 @@ proc newAlert*(
 
 proc newOpenPanel*(): OpenPanel =
   result = OpenPanel(
-    window: newPanel("Open", initRect(100, 100, 520, 360)),
+    window: newPanel("Open", rect(100, 100, 520, 360)),
     prompt: "Open",
     canChooseFiles: true,
   )
   initResponder(result)
 
 proc newSavePanel*(): SavePanel =
-  result =
-    SavePanel(window: newPanel("Save", initRect(100, 100, 520, 280)), prompt: "Save")
+  result = SavePanel(window: newPanel("Save", rect(100, 100, 520, 280)), prompt: "Save")
   initResponder(result)
 
 proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =
@@ -467,9 +466,7 @@ proc setFrame*(window: Window, frame: Rect) =
     return
   window.xFrame = frame
   if not window.xContentView.isNil:
-    window.xContentView.setFrame(
-      initRect(0.0, 0.0, frame.size.width, frame.size.height)
-    )
+    window.xContentView.setFrame(rect(0.0, 0.0, frame.size.width, frame.size.height))
   if not window.xHostWindow.isNil:
     window.requestNativeDisplayUpdate()
 
@@ -815,9 +812,7 @@ proc setContentView*(window: Window, view: View) =
   window.xContentView = view
   window.clearMouseState()
   if not view.isNil:
-    view.setFrame(
-      initRect(0.0, 0.0, window.xFrame.size.width, window.xFrame.size.height)
-    )
+    view.setFrame(rect(0.0, 0.0, window.xFrame.size.width, window.xFrame.size.height))
     view.setNeedsLayout()
     view.setNeedsDisplaySubtree()
   if window.xAutorecalculatesKeyViewLoop:
@@ -845,10 +840,10 @@ proc convertPointFromScreen*(window: Window, point: Point): Point =
   point.offset(-window.xFrame.origin.x, -window.xFrame.origin.y)
 
 proc convertRectToScreen*(window: Window, rect: Rect): Rect =
-  initRect(window.convertPointToScreen(rect.origin), rect.size)
+  rect(window.convertPointToScreen(rect.origin), rect.size)
 
 proc convertRectFromScreen*(window: Window, rect: Rect): Rect =
-  initRect(window.convertPointFromScreen(rect.origin), rect.size)
+  rect(window.convertPointFromScreen(rect.origin), rect.size)
 
 proc convertPointToContent*(window: Window, point: Point): Point =
   if window.isNil or window.xContentView.isNil:
@@ -1539,7 +1534,7 @@ proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
 proc newPopupWindow*(
     owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
 ): Window =
-  let frame = initRect(
+  let frame = rect(
     anchorFrame.origin.x,
     anchorFrame.origin.y + anchorFrame.size.height,
     max(popupSize.width, 1.0'f32),
@@ -1664,7 +1659,7 @@ proc syncNativeGeometry(window: Window): Size =
   if window.xFrame.size != result:
     window.xFrame.size = result
     if not window.xContentView.isNil:
-      window.xContentView.setFrame(initRect(0.0, 0.0, result.width, result.height))
+      window.xContentView.setFrame(rect(0.0, 0.0, result.width, result.height))
     discard window.saveFrameUsingName()
 
 proc renderNativeWindow*(window: Window) =

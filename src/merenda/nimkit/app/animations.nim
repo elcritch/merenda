@@ -136,7 +136,7 @@ func lerpSize(a, b: Size, progress: float32): Size =
   initSize(lerp(a.width, b.width, progress), lerp(a.height, b.height, progress))
 
 func lerpRect(a, b: Rect, progress: float32): Rect =
-  initRect(lerpPoint(a.origin, b.origin, progress), lerpSize(a.size, b.size, progress))
+  rect(lerpPoint(a.origin, b.origin, progress), lerpSize(a.size, b.size, progress))
 
 func lerpColor(a, b: Color, progress: float32): Color =
   color(

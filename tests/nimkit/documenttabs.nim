@@ -220,7 +220,7 @@ proc renderedText(node: Fig): string =
     result.add rune
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
-  nimkitTypes.initRect(
+  nimkitTypes.rect(
     node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
     node.screenBox.h.float32,
   )
@@ -240,7 +240,7 @@ func center(rect: nimkitTypes.Rect): nimkitTypes.Point =
 suite "nimkit document tabs":
   test "document tab models back metadata identity selection and ordering":
     let
-      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
       represented = newResponder()
       accent = color(0.80, 0.12, 0.36, 1.0)
 
@@ -295,7 +295,7 @@ suite "nimkit document tabs":
 
   test "document tab data sources reload and preserve selected identifiers":
     let
-      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
       source = newModelDataSourceSpy(
         [
           initDocumentTabModel("draft", "Draft"),
@@ -325,7 +325,7 @@ suite "nimkit document tabs":
 
   test "document tabs expose dynamic items and selectable styles":
     let
-      tabs = newDocumentTabs(frame = initRect(0, 0, 360, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       item = newDocumentTabItem(
         "A very long document title that needs clipping", "long", style = dtsRounded
       )
@@ -351,7 +351,7 @@ suite "nimkit document tabs":
 
   test "document tabs can move an item all the way to the front":
     let
-      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
       first = newDocumentTabItem("First", "first")
       second = newDocumentTabItem("Second", "second")
       third = newDocumentTabItem("Third", "third")
@@ -369,7 +369,7 @@ suite "nimkit document tabs":
 
   test "delegates can veto selection closing and moving while signals fire":
     let
-      tabs = newDocumentTabs(frame = initRect(0, 0, 420, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
       first = newDocumentTabItem("First", "first")
       second = newDocumentTabItem("Second", "second")
       third = newDocumentTabItem("Third", "third")
@@ -424,9 +424,9 @@ suite "nimkit document tabs":
 
   test "overflow tabs scroll with buttons and mouse wheel without visible scrollbar":
     let
-      window = newWindow("Document tabs overflow", frame = initRect(0, 0, 260, 80))
-      root = newView(frame = initRect(0, 0, 260, 80))
-      tabs = newDocumentTabs(frame = initRect(10, 10, 220, 34))
+      window = newWindow("Document tabs overflow", frame = rect(0, 0, 260, 80))
+      root = newView(frame = rect(0, 0, 260, 80))
+      tabs = newDocumentTabs(frame = rect(10, 10, 220, 34))
       signals = newSignalSpy()
 
     for index in 0 .. 7:
@@ -460,7 +460,7 @@ suite "nimkit document tabs":
     check tabs.scrollOffset() < maxOffset
 
   test "document tab rendering includes visible labels and clipped overflow":
-    let tabs = newDocumentTabs(frame = initRect(0, 0, 210, 34))
+    let tabs = newDocumentTabs(frame = rect(0, 0, 210, 34))
     discard
       tabs.addDocumentTabItem(newDocumentTabItem("Plan", "plan", style = dtsRounded))
     discard
@@ -498,7 +498,7 @@ suite "nimkit document tabs":
     check not closeTextFound
 
   test "document tab scroll buttons inherit tab theme fill":
-    let tabs = newDocumentTabs(frame = initRect(0, 0, 210, 34))
+    let tabs = newDocumentTabs(frame = rect(0, 0, 210, 34))
     for index in 0 .. 4:
       discard tabs.addDocumentTabItem(newDocumentTabItem("Document " & $index))
     tabs.scrollOffset = 10.0'f32
@@ -527,7 +527,7 @@ suite "nimkit document tabs":
 
   test "document tabs resolve document tab theme roles and chrome":
     let
-      tabs = newDocumentTabs(frame = initRect(0, 0, 360, 34))
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       first = newDocumentTabItem("Primary", "primary")
       special = newDocumentTabItem("Special", "special")
       defaultAppearance = initAppearance()

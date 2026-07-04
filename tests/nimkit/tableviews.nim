@@ -122,7 +122,7 @@ proc renderedRectangleCount(view: View): int =
       inc result
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
-  nimkitTypes.initRect(
+  nimkitTypes.rect(
     node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
     node.screenBox.h.float32,
   )
@@ -757,7 +757,7 @@ suite "NimKit TableView":
 
   test "table headers hit test resize reorder and sort columns":
     let
-      tableView = newTableView(frame = initRect(0, 0, 300, 160))
+      tableView = newTableView(frame = rect(0, 0, 300, 160))
       delegate = newTableDelegateSpy()
       name = newTableColumn("name", "Name", width = 120.0, minWidth = 80.0)
       age = newTableColumn("age", "Age", width = 60.0)
@@ -791,7 +791,7 @@ suite "NimKit TableView":
 
   test "table header rendering mouse tracking and persistence adapters":
     let
-      tableView = newTableView(frame = initRect(12, 24, 300, 160))
+      tableView = newTableView(frame = rect(12, 24, 300, 160))
       name = newTableColumn("name", "Name", width = 120.0)
       age = newTableColumn("age", "Age", width = 60.0)
       store = newTableViewStateStore()
@@ -889,9 +889,9 @@ suite "NimKit TableView":
   test "table state saves on window close and restores from workspace scope":
     let
       workspaceId = "tnimkit.table.workspace.lifecycle"
-      firstWindow = newWindow("Table lifecycle save", frame = initRect(0, 0, 320, 160))
-      firstRoot = newView(frame = initRect(0, 0, 320, 160))
-      firstTable = newTableView(frame = initRect(0, 0, 240, 80))
+      firstWindow = newWindow("Table lifecycle save", frame = rect(0, 0, 320, 160))
+      firstRoot = newView(frame = rect(0, 0, 320, 160))
+      firstTable = newTableView(frame = rect(0, 0, 240, 80))
       firstName = newTableColumn("name", "Name", width = 90.0)
       store = workspaceTableViewStateStore(workspaceId)
 
@@ -907,10 +907,9 @@ suite "NimKit TableView":
     check store.state("people.lifecycle").columns[0].width == 170.0'f32
 
     let
-      secondWindow =
-        newWindow("Table lifecycle restore", frame = initRect(0, 0, 320, 160))
-      secondRoot = newView(frame = initRect(0, 0, 320, 160))
-      secondTable = newTableView(frame = initRect(0, 0, 240, 80))
+      secondWindow = newWindow("Table lifecycle restore", frame = rect(0, 0, 320, 160))
+      secondRoot = newView(frame = rect(0, 0, 320, 160))
+      secondTable = newTableView(frame = rect(0, 0, 240, 80))
       secondName = newTableColumn("name", "Name", width = 72.0)
 
     secondTable.autosaveName = "people.lifecycle"
@@ -925,9 +924,9 @@ suite "NimKit TableView":
     let
       documentId = "document:file:///tmp/table-state.nim"
       provider = newTableStateProviderSpy(documentId)
-      window = newWindow("Table document state", frame = initRect(0, 0, 320, 160))
-      root = newView(frame = initRect(0, 0, 320, 160))
-      tableView = newTableView(frame = initRect(0, 0, 240, 80))
+      window = newWindow("Table document state", frame = rect(0, 0, 320, 160))
+      root = newView(frame = rect(0, 0, 320, 160))
+      tableView = newTableView(frame = rect(0, 0, 240, 80))
       column = newTableColumn("name", "Name", width = 96.0)
 
     window.setNextResponder(provider)
@@ -945,7 +944,7 @@ suite "NimKit TableView":
 
   test "table header column dragging previews insertion and drops at edge":
     let
-      tableView = newTableView(frame = initRect(0, 0, 230, 140))
+      tableView = newTableView(frame = rect(0, 0, 230, 140))
       project = newTableColumn("project", "Project", width = 90.0)
       state = newTableColumn("state", "State", width = 70.0)
       owner = newTableColumn("owner", "Owner", width = 70.0)
@@ -975,9 +974,9 @@ suite "NimKit TableView":
 
   test "table view keeps clicked selection on row identities after header sort":
     let
-      window = newWindow("Table sort keeps selection", frame = initRect(0, 0, 420, 180))
-      root = newView(frame = initRect(0, 0, 420, 180))
-      tableView = newTableView(frame = initRect(10, 10, 300, 140))
+      window = newWindow("Table sort keeps selection", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      tableView = newTableView(frame = rect(10, 10, 300, 140))
       source = newSortableTableSpy(
         [
           SortableTableRow(id: "a", project: "Alpha", rank: "3"),
@@ -1146,9 +1145,9 @@ suite "NimKit TableView":
 
   test "table view starts and commits row reordering from mouse drag":
     let
-      window = newWindow("Table row drag reorder", frame = initRect(0, 0, 360, 180))
-      root = newView(frame = initRect(0, 0, 360, 180))
-      tableView = newTableView(frame = initRect(10, 10, 260, 100))
+      window = newWindow("Table row drag reorder", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tableView = newTableView(frame = rect(10, 10, 260, 100))
       model = newTableModel(tableModelRows(), tableModelColumns())
 
     tableView.showsHeader = false
@@ -1181,13 +1180,13 @@ suite "NimKit TableView":
       targetRect = tableView.rectToWindow(tableView.rowItemRect(1))
       indicatorY = targetRect.maxY - chrome.insertionWidth
       capY = indicatorY + (chrome.insertionWidth - chrome.insertionCapWidth) * 0.5'f32
-      indicatorRect = initRect(
+      indicatorRect = rect(
         targetRect.origin.x, indicatorY, targetRect.size.width, chrome.insertionWidth
       )
-      leftCapRect = initRect(
+      leftCapRect = rect(
         targetRect.origin.x, capY, chrome.insertionCapHeight, chrome.insertionCapWidth
       )
-      rightCapRect = initRect(
+      rightCapRect = rect(
         targetRect.maxX - chrome.insertionCapHeight,
         capY,
         chrome.insertionCapHeight,
@@ -1253,7 +1252,7 @@ suite "NimKit TableView":
 
   test "table view falls back to text cells when view hook returns nil":
     let
-      tableView = newTableView(frame = initRect(0, 0, 260, 68))
+      tableView = newTableView(frame = rect(0, 0, 260, 68))
       source = newTableDataSourceSpy(2)
       delegate = newTableDelegateSpy()
       name = newTableColumn("name", "Name", width = 120.0)
@@ -1273,7 +1272,7 @@ suite "NimKit TableView":
 
   test "table view renders text cells for every visible column":
     let
-      tableView = newTableView(frame = initRect(0, 0, 260, 68))
+      tableView = newTableView(frame = rect(0, 0, 260, 68))
       source = newTableDataSourceSpy(3)
 
     tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
@@ -1289,7 +1288,7 @@ suite "NimKit TableView":
 
   test "table view hosts cell views only for visible rows":
     let
-      tableView = newTableView(frame = initRect(0, 0, 260, 46))
+      tableView = newTableView(frame = rect(0, 0, 260, 46))
       delegate = newTableDelegateSpy()
 
     tableView.rowCount = 5
@@ -1324,7 +1323,7 @@ suite "NimKit TableView":
 
   test "table view reloadData refreshes hosted cell views from updated data":
     let
-      tableView = newTableView(frame = initRect(0, 0, 320, 46))
+      tableView = newTableView(frame = rect(0, 0, 320, 46))
       source = newEditableTableSpy(
         EditableTableRow(
           project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
@@ -1423,10 +1422,9 @@ suite "NimKit TableView":
 
   test "table view selects rows through hosted label cells":
     let
-      window =
-        newWindow("Table hosted label selection", frame = initRect(0, 0, 360, 180))
-      root = newView(frame = initRect(0, 0, 360, 180))
-      tableView = newTableView(frame = initRect(10, 10, 260, 90))
+      window = newWindow("Table hosted label selection", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tableView = newTableView(frame = rect(10, 10, 260, 90))
       source = newTableDataSourceSpy(3)
       delegate = newTableDelegateSpy()
 
@@ -1447,10 +1445,9 @@ suite "NimKit TableView":
 
   test "table view lets interactive hosted cells consume clicks by default":
     let
-      window =
-        newWindow("Table hosted button default", frame = initRect(0, 0, 360, 180))
-      root = newView(frame = initRect(0, 0, 360, 180))
-      tableView = newTableView(frame = initRect(10, 10, 280, 90))
+      window = newWindow("Table hosted button default", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tableView = newTableView(frame = rect(10, 10, 280, 90))
       source = newTableDataSourceSpy(3)
       delegate = newTableDelegateSpy()
 
@@ -1473,9 +1470,9 @@ suite "NimKit TableView":
 
   test "table action buttons use row-local callbacks when selection does not change":
     let
-      window = newWindow("Table hosted button action", frame = initRect(0, 0, 360, 190))
-      root = newView(frame = initRect(0, 0, 360, 190))
-      tableView = newTableView(frame = initRect(10, 10, 280, 84))
+      window = newWindow("Table hosted button action", frame = rect(0, 0, 360, 190))
+      root = newView(frame = rect(0, 0, 360, 190))
+      tableView = newTableView(frame = rect(10, 10, 280, 84))
       source = newTableDataSourceSpy(3)
       delegate = newTableDelegateSpy()
 
@@ -1499,9 +1496,9 @@ suite "NimKit TableView":
 
   test "table view cell hit policy can select rows around hosted controls":
     let
-      window = newWindow("Table hosted button policy", frame = initRect(0, 0, 360, 180))
-      root = newView(frame = initRect(0, 0, 360, 180))
-      tableView = newTableView(frame = initRect(10, 10, 280, 90))
+      window = newWindow("Table hosted button policy", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tableView = newTableView(frame = rect(10, 10, 280, 90))
       source = newTableDataSourceSpy(3)
       delegate = newTableDelegateSpy()
 
@@ -1631,7 +1628,7 @@ suite "NimKit TableView":
 
   test "table view resolves row insertion and column drop targets":
     let
-      tableView = newTableView(frame = initRect(0, 0, 220, 120))
+      tableView = newTableView(frame = rect(0, 0, 220, 120))
       name = newTableColumn("name", "Name", width = 120.0)
       state = newTableColumn("state", "State", width = 80.0)
 
@@ -1680,9 +1677,9 @@ suite "NimKit TableView":
 
   test "table view hosts field editors for editable cells validates and navigates":
     let
-      window = newWindow("Table cell editing", frame = initRect(0, 0, 420, 180))
-      root = newView(frame = initRect(0, 0, 420, 180))
-      tableView = newTableView(frame = initRect(10, 10, 320, 100))
+      window = newWindow("Table cell editing", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      tableView = newTableView(frame = rect(10, 10, 320, 100))
       source = newTableDataSourceSpy(3)
       delegate = newTableDelegateSpy()
       name = newTableColumn("name", "Name", width = 160.0)
@@ -1753,10 +1750,9 @@ suite "NimKit TableView":
 
   test "table view user edits hosted and drawn text cells render committed values":
     let
-      window =
-        newWindow("Table hosted edit integration", frame = initRect(0, 0, 560, 140))
-      root = newView(frame = initRect(0, 0, 560, 140))
-      tableView = newTableView(frame = initRect(12, 12, 500, 44))
+      window = newWindow("Table hosted edit integration", frame = rect(0, 0, 560, 140))
+      root = newView(frame = rect(0, 0, 560, 140))
+      tableView = newTableView(frame = rect(12, 12, 500, 44))
       source = newEditableTableSpy(
         EditableTableRow(
           project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
@@ -1818,10 +1814,9 @@ suite "NimKit TableView":
 
   test "table view return commits edits and keeps row navigation active":
     let
-      window =
-        newWindow("Table return edit navigation", frame = initRect(0, 0, 560, 150))
-      root = newView(frame = initRect(0, 0, 560, 150))
-      tableView = newTableView(frame = initRect(12, 12, 500, 64))
+      window = newWindow("Table return edit navigation", frame = rect(0, 0, 560, 150))
+      root = newView(frame = rect(0, 0, 560, 150))
+      tableView = newTableView(frame = rect(12, 12, 500, 64))
       source = newEditableTableSpy(
         [
           EditableTableRow(
@@ -1876,9 +1871,9 @@ suite "NimKit TableView":
 
   test "table view tab and shift-tab commit and move across editable cells":
     let
-      window = newWindow("Table tab edit navigation", frame = initRect(0, 0, 560, 150))
-      root = newView(frame = initRect(0, 0, 560, 150))
-      tableView = newTableView(frame = initRect(12, 12, 500, 44))
+      window = newWindow("Table tab edit navigation", frame = rect(0, 0, 560, 150))
+      root = newView(frame = rect(0, 0, 560, 150))
+      tableView = newTableView(frame = rect(12, 12, 500, 44))
       source = newEditableTableSpy(
         EditableTableRow(
           project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
@@ -1961,10 +1956,9 @@ suite "NimKit TableView":
 
   test "table view escape cancels drawn and hosted cell edits":
     let
-      window =
-        newWindow("Table escape edit cancellation", frame = initRect(0, 0, 560, 140))
-      root = newView(frame = initRect(0, 0, 560, 140))
-      tableView = newTableView(frame = initRect(12, 12, 500, 44))
+      window = newWindow("Table escape edit cancellation", frame = rect(0, 0, 560, 140))
+      root = newView(frame = rect(0, 0, 560, 140))
+      tableView = newTableView(frame = rect(12, 12, 500, 44))
       source = newEditableTableSpy(
         EditableTableRow(
           project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"
@@ -2012,9 +2006,9 @@ suite "NimKit TableView":
 
   test "table view edits drawn text cells and returns focus to row selection":
     let
-      window = newWindow("Table drawn cell editing", frame = initRect(0, 0, 420, 180))
-      root = newView(frame = initRect(0, 0, 420, 180))
-      tableView = newTableView(frame = initRect(10, 10, 320, 100))
+      window = newWindow("Table drawn cell editing", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      tableView = newTableView(frame = rect(10, 10, 320, 100))
       source = newTableDataSourceSpy(2)
       delegate = newTableDelegateSpy()
       name = newTableColumn("name", "Name", width = 160.0)
@@ -2056,7 +2050,7 @@ suite "NimKit TableView":
 
   test "table view queues hosted cell views by reuse identifier":
     let
-      tableView = newTableView(frame = initRect(0, 0, 260, 46))
+      tableView = newTableView(frame = rect(0, 0, 260, 46))
       delegate = newTableDelegateSpy()
       name = newTableColumn("name", "Name", width = 120.0)
 
@@ -2072,9 +2066,9 @@ suite "NimKit TableView":
 
   test "table view row navigation preserves horizontal scroll offset":
     let
-      window = newWindow("Table row scroll x offset", frame = initRect(0, 0, 240, 160))
-      root = newView(frame = initRect(0, 0, 240, 160))
-      tableView = newTableView(frame = initRect(10, 10, 100, 72))
+      window = newWindow("Table row scroll x offset", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      tableView = newTableView(frame = rect(10, 10, 100, 72))
       scrollView = tableView.scrollView()
 
     tableView.showsHeader = false
@@ -2103,10 +2097,9 @@ suite "NimKit TableView":
 
   test "table view pages to scroll edge when trailing rows are disabled":
     let
-      window =
-        newWindow("Table disabled trailing row", frame = initRect(0, 0, 360, 260))
-      root = newView(frame = initRect(0, 0, 360, 260))
-      tableView = newTableView(frame = initRect(10, 10, 260, 224))
+      window = newWindow("Table disabled trailing row", frame = rect(0, 0, 360, 260))
+      root = newView(frame = rect(0, 0, 360, 260))
+      tableView = newTableView(frame = rect(10, 10, 260, 224))
       delegate = newTableDelegateSpy()
       scrollView = tableView.scrollView()
 

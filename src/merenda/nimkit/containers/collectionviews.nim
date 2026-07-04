@@ -543,7 +543,7 @@ func layoutItemRect(
     layout: CollectionViewLayout, itemCount, index: int, viewportWidth: float32
 ): Rect =
   if index < 0 or index >= itemCount:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let
     insets = layout.edgeInsets()
     itemSize = layout.itemSize()
@@ -558,7 +558,7 @@ func layoutItemRect(
         itemSize.width
     x = insets.left + float32(column) * (itemWidth + layout.minimumInteritemSpacing())
     y = insets.top + float32(row) * (itemSize.height + layout.minimumLineSpacing())
-  initRect(x, y, itemWidth, itemSize.height)
+  rect(x, y, itemWidth, itemSize.height)
 
 proc collectionViewportSize(collectionView: CollectionView): Size =
   let scrollView = collectionView.scrollView()
@@ -578,7 +578,7 @@ proc collectionContentOffset(collectionView: CollectionView): Point =
     scrollView.contentOffset()
 
 proc collectionVisibleContentRect(collectionView: CollectionView): Rect =
-  initRect(
+  rect(
     collectionView.collectionContentOffset(), collectionView.collectionViewportSize()
   )
 
@@ -614,7 +614,7 @@ proc resolvedContentSize(collectionView: CollectionView): Size =
 
 proc resolvedContentItemRect(collectionView: CollectionView, index: int): Rect =
   if collectionView.isNil or index < 0 or index >= collectionView.len():
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let layout = collectionView.resolvedLayout()
   if not layout.isNil:
     let custom = layout.trySendLocal(
@@ -624,7 +624,7 @@ proc resolvedContentItemRect(collectionView: CollectionView, index: int): Rect =
       return custom.get()
   let default = collectionView.defaultLayout()
   if default.isNil:
-    initRect(0.0, 0.0, 0.0, 0.0)
+    rect(0.0, 0.0, 0.0, 0.0)
   else:
     default.layoutItemRect(
       collectionView.len(), index, collectionView.collectionViewportSize().width
@@ -995,7 +995,7 @@ proc collectionView*(view: CollectionSupplementaryView): CollectionView =
   if view.isNil: nil else: view.xCollectionView
 
 proc initCollectionBaseChild(view: View, clipsToBounds: bool) =
-  initViewFields(view, initRect(0.0, 0.0, 0.0, 0.0))
+  initViewFields(view, rect(0.0, 0.0, 0.0, 0.0))
   view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
@@ -1349,7 +1349,7 @@ proc tileCollectionContent(collectionView: CollectionView) =
     return
   let
     offset = collectionView.collectionContentOffset()
-    scrollFrame = initRect(
+    scrollFrame = rect(
       0.0'f32,
       0.0'f32,
       max(collectionView.bounds().size.width, 0.0'f32),
@@ -1357,8 +1357,7 @@ proc tileCollectionContent(collectionView: CollectionView) =
     )
   collectionView.xScrollView.frame = scrollFrame
   let size = collectionView.resolvedContentSize()
-  collectionView.xContentView.frame =
-    initRect(0.0'f32, 0.0'f32, size.width, size.height)
+  collectionView.xContentView.frame = rect(0.0'f32, 0.0'f32, size.width, size.height)
   collectionView.xScrollView.tile()
   collectionView.xScrollView.contentOffset = offset
   collectionView.xContentView.syncVisibleItemViews()
@@ -1469,14 +1468,14 @@ proc visibleItemViews*(collectionView: CollectionView): seq[View] =
 
 proc collectionItemRect*(collectionView: CollectionView, index: int): Rect =
   if collectionView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   collectionView.tileCollectionContent()
   let contentView = collectionView.contentView()
   if contentView.isNil:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   let contentRect = collectionView.resolvedContentItemRect(index)
   if contentRect.isEmpty:
-    return initRect(0.0, 0.0, 0.0, 0.0)
+    return rect(0.0, 0.0, 0.0, 0.0)
   contentView.rectToView(contentRect, collectionView).intersection(
     collectionView.bounds()
   )
