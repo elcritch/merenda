@@ -174,6 +174,23 @@ suite "nimkit stack views":
     check second.frame() == initRect(0.0, 28.0, 80.0, 10.0)
     check spacer.frame() == initRect(0.0, 46.0, 80.0, 54.0)
 
+  test "flexible spacer can be added inline with arranged subviews":
+    let
+      stack = newStackView(laVertical, frame = initRect(0, 0, 80, 100))
+      first = newFixedIntrinsicView(40, 20)
+      second = newFixedIntrinsicView(40, 10)
+      spacer = flexibleSpacer()
+
+    first.huggingPriority[drow] = LayoutPriorityRequired
+    second.huggingPriority[drow] = LayoutPriorityRequired
+    stack.addArrangedSubview(first, spacer, second)
+    stack.layoutSubtreeIfNeeded()
+
+    check stack.arrangedSubviews == @[View(first), spacer, View(second)]
+    check first.frame() == initRect(0.0, 0.0, 80.0, 20.0)
+    check spacer.frame() == initRect(0.0, 28.0, 80.0, 54.0)
+    check second.frame() == initRect(0.0, 90.0, 80.0, 10.0)
+
   test "arranged subview content changes invalidate stack and parent lazily":
     let
       root = newView(frame = initRect(0, 0, 300, 120))

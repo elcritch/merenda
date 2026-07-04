@@ -106,6 +106,9 @@ proc newFlexibleSpacer*(axis = laVertical, frame: Rect = AutoRect): View =
   result.setHuggingPriority(LayoutPriorityRequired, axis.crossAxis)
   result.setCompressionPriority(LayoutPriorityRequired, axis.crossAxis)
 
+proc flexibleSpacer*(axis = laVertical, frame: Rect = AutoRect): View =
+  newFlexibleSpacer(axis, frame)
+
 proc invalidateStackLayout(stackView: StackView) =
   stackView.invalidateContainerMetrics()
   stackView.setNeedsDisplay(true)
