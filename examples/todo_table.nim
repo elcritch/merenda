@@ -16,12 +16,77 @@ type TodoTableController = ref object of Responder
   status: TextField
   nextId: int
 
-proc addTodo(controller: TodoTableController, title: string)
-proc addTodoFromInput(controller: TodoTableController)
-proc clearDone(controller: TodoTableController)
-proc focusInput(controller: TodoTableController)
-proc toggleTodo(controller: TodoTableController, identifier: string)
-proc updateStatus(controller: TodoTableController)
+proc updateStatus(controller: TodoTableController) =
+  if controller.isNil or controller.status.isNil or controller.model.isNil:
+    return
+
+  var completed = 0
+  for row in controller.model.rows():
+    if row.value(TodoDoneColumn).requireBool():
+      inc completed
+
+  let total = controller.model.sourceLen()
+  if total == 0:
+    controller.status.text = "0 items"
+  elif completed == 1:
+    controller.status.text = "1 of " & $total & " done"
+  else:
+    controller.status.text = $completed & " of " & $total & " done"
+
+proc toggleTodo(controller: TodoTableController, identifier: string) =
+  if controller.isNil or controller.model.isNil or controller.table.isNil:
+    return
+  let done = controller.model.valueForRow(identifier, TodoDoneColumn).requireBool()
+  controller.model.setValue(identifier, TodoDoneColumn, toObjectValue(not done))
+  controller.table.reloadData()
+  controller.updateStatus()
+
+proc newTodoRow(controller: TodoTableController, title: string): TableRowValue =
+  let identifier = "todo-" & $controller.nextId
+  inc controller.nextId
+  initTableRowValue(
+    identifier,
+    objectValue = toObjectValue(title),
+    cells = [
+      initTableCellValue(TodoDoneColumn, toObjectValue(false)),
+      initTableCellValue(TodoTitleColumn, toObjectValue(title)),
+    ],
+  )
+
+proc focusInput(controller: TodoTableController) =
+  if controller.isNil or controller.input.isNil:
+    return
+  let owner = controller.input.window()
+  if owner of Window:
+    discard Window(owner).makeFirstResponder(controller.input)
+
+proc addTodo(controller: TodoTableController, title: string) =
+  if controller.isNil or controller.model.isNil or controller.table.isNil:
+    return
+  let trimmed = title.strip()
+  if trimmed.len > 0:
+    controller.model.addRow(controller.newTodoRow(trimmed))
+    controller.table.reloadData()
+    controller.input.text = ""
+    controller.updateStatus()
+
+proc addTodoFromInput(controller: TodoTableController) =
+  if controller.isNil or controller.input.isNil:
+    return
+  controller.addTodo(controller.input.stringValue)
+  controller.focusInput()
+
+proc clearDone(controller: TodoTableController) =
+  if controller.isNil or controller.model.isNil or controller.table.isNil:
+    return
+
+  var remaining: seq[TableRowValue]
+  for row in controller.model.rows():
+    if not row.value(TodoDoneColumn).requireBool():
+      remaining.add row
+  controller.model.rows = remaining
+  controller.table.reloadData()
+  controller.updateStatus()
 
 protocol TodoTableDelegate of TableViewDelegate:
   method viewForCell(
@@ -63,84 +128,13 @@ protocol TodoTableDelegate of TableViewDelegate:
     if not controller.isNil and row in 0 ..< controller.model.len():
       controller.toggleTodo(controller.model.rowAt(row).identifier)
 
+
 proc newTodoTableController(
     model: TableModel, table: TableView, input, status: TextField
 ): TodoTableController =
   result = TodoTableController(model: model, table: table, input: input, status: status)
   initResponder(result)
   discard result.withProtocol(TodoTableDelegate)
-
-proc newTodoRow(controller: TodoTableController, title: string): TableRowValue =
-  let identifier = "todo-" & $controller.nextId
-  inc controller.nextId
-  initTableRowValue(
-    identifier,
-    objectValue = toObjectValue(title),
-    cells = [
-      initTableCellValue(TodoDoneColumn, toObjectValue(false)),
-      initTableCellValue(TodoTitleColumn, toObjectValue(title)),
-    ],
-  )
-
-proc updateStatus(controller: TodoTableController) =
-  if controller.isNil or controller.status.isNil or controller.model.isNil:
-    return
-
-  var completed = 0
-  for row in controller.model.rows():
-    if row.value(TodoDoneColumn).requireBool():
-      inc completed
-
-  let total = controller.model.sourceLen()
-  if total == 0:
-    controller.status.text = "0 items"
-  elif completed == 1:
-    controller.status.text = "1 of " & $total & " done"
-  else:
-    controller.status.text = $completed & " of " & $total & " done"
-
-proc focusInput(controller: TodoTableController) =
-  if controller.isNil or controller.input.isNil:
-    return
-  let owner = controller.input.window()
-  if owner of Window:
-    discard Window(owner).makeFirstResponder(controller.input)
-
-proc addTodo(controller: TodoTableController, title: string) =
-  if controller.isNil or controller.model.isNil or controller.table.isNil:
-    return
-  let trimmed = title.strip()
-  if trimmed.len > 0:
-    controller.model.addRow(controller.newTodoRow(trimmed))
-    controller.table.reloadData()
-    controller.input.text = ""
-    controller.updateStatus()
-
-proc addTodoFromInput(controller: TodoTableController) =
-  if controller.isNil or controller.input.isNil:
-    return
-  controller.addTodo(controller.input.stringValue)
-  controller.focusInput()
-
-proc clearDone(controller: TodoTableController) =
-  if controller.isNil or controller.model.isNil or controller.table.isNil:
-    return
-
-  var remaining: seq[TableRowValue]
-  for row in controller.model.rows():
-    if not row.value(TodoDoneColumn).requireBool():
-      remaining.add row
-  controller.model.rows = remaining
-  controller.table.reloadData()
-  controller.updateStatus()
-
-proc toggleTodo(controller: TodoTableController, identifier: string) =
-  if controller.isNil or controller.model.isNil or controller.table.isNil:
-    return
-  let done = controller.model.valueForRow(identifier, TodoDoneColumn).requireBool()
-  controller.model.setValue(identifier, TodoDoneColumn, toObjectValue(not done))
-  controller.table.reloadData()
-  controller.updateStatus()
 
 let
   app = sharedApplication()
