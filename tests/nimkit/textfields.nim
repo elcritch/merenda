@@ -180,6 +180,29 @@ suite "nimkit text fields":
     check not field.editable
     check not field.selectable
 
+  test "text field backing uses light rounded rect mask":
+    let
+      root = newView(frame = rect(0, 0, 180, 80))
+      field = newTextField("Ada", frame = rect(12, 18, 120, 26))
+      appearance = initAppearance()
+      style =
+        appearance.resolveTextFieldStyle(controlStyle(srTextField), field.textColor)
+      expected = field.rectToWindow(field.bounds)
+
+    root.addSubview(field)
+
+    let list = buildRenders(root, appearance)[DefaultDrawLevel]
+
+    var backingFound = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill == style.box.fill and
+          node.renderedRect().rectsClose(expected):
+        backingFound = true
+        check NfRectMaskContent in node.flags
+        check NfClipContent notin node.flags
+
+    check backingFound
+
   test "labels are styled non-editable text fields":
     let
       body = newLabel("Body")

@@ -88,6 +88,33 @@ func aquaComboBoxFill(): Fill =
     92'u8,
   )
 
+func aquaTitleLabelFill(): Fill =
+  linear(
+    rgbaColor(255, 255, 255, 198),
+    rgbaColor(225, 242, 255, 176),
+    rgbaColor(176, 212, 246, 154),
+    fgaY,
+    108'u8,
+  )
+
+func aquaHeadingLabelFill(): Fill =
+  linear(
+    rgbaColor(250, 254, 255, 186),
+    rgbaColor(214, 236, 255, 164),
+    rgbaColor(160, 201, 242, 146),
+    fgaY,
+    108'u8,
+  )
+
+func aquaStatusLabelFill(): Fill =
+  linear(
+    rgbaColor(252, 255, 252, 190),
+    rgbaColor(221, 247, 227, 168),
+    rgbaColor(175, 226, 190, 148),
+    fgaY,
+    108'u8,
+  )
+
 func aquaComboArrowFill(): Fill =
   linear(
     rgbaColor(125, 230, 255, 230),
@@ -118,6 +145,22 @@ func aquaScrollerKnobShadows(): seq[BoxShadow] =
     insetShadow(rgbaColor(255, 255, 255, 78), y = 1.0, blur = 2.2),
     insetShadow(rgbaColor(0, 44, 122, 32), y = -1.0, blur = 3.0),
     insetShadow(rgbaColor(0, 68, 160, 24), x = 1.0, blur = 3.2),
+  ]
+
+func aquaLabelShadows(): seq[BoxShadow] =
+  @[
+    dropShadow(rgbaColor(255, 255, 255, 68), y = -1.0, blur = 1.4),
+    dropShadow(rgbaColor(0, 0, 0, 18), y = 1.0, blur = 2.2),
+    insetShadow(rgbaColor(255, 255, 255, 126), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(0, 52, 132, 28), y = -1.0, blur = 2.8),
+  ]
+
+func aquaStatusLabelShadows(): seq[BoxShadow] =
+  @[
+    dropShadow(rgbaColor(255, 255, 255, 62), y = -1.0, blur = 1.4),
+    dropShadow(rgbaColor(0, 0, 0, 14), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(255, 255, 255, 120), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(35, 116, 61, 24), y = -1.0, blur = 2.8),
   ]
 
 const CustomChromeName = "custom-widget-chrome"
@@ -522,13 +565,25 @@ suite "nimkit theme":
     check bodyLabelStyle.box.focusRingWidth == 0.0
     check bodyLabelStyle.text.color == color(0.09, 0.12, 0.18, 1.0)
     check bodyLabelStyle.minSize == initSize(0.0, 18.0)
+    check bodyLabelStyle.box.shadows.len == 0
+    check titleLabelStyle.box.fill == aquaTitleLabelFill()
+    check titleLabelStyle.box.fill.centerColor().a < 1.0'f32
+    check titleLabelStyle.box.borderColor == rgbaColor(92, 135, 196, 172)
     check titleLabelStyle.box.borderWidth == 1.0
-    check titleLabelStyle.box.cornerRadius == 6.0
+    check titleLabelStyle.box.cornerRadius == 8.0
+    check titleLabelStyle.box.shadows == aquaLabelShadows()
     check titleLabelStyle.text.insets == insets(0.0, 12.0)
     check titleLabelStyle.minSize == initSize(0.0, 28.0)
-    check headingLabelStyle.box.cornerRadius == 5.0
+    check headingLabelStyle.box.fill == aquaHeadingLabelFill()
+    check headingLabelStyle.box.borderColor == rgbaColor(104, 148, 205, 158)
+    check headingLabelStyle.box.cornerRadius == 7.0
+    check headingLabelStyle.box.shadows == aquaLabelShadows()
     check headingLabelStyle.minSize == initSize(0.0, 24.0)
-    check statusLabelStyle.text.color == color(0.09, 0.27, 0.18, 1.0)
+    check statusLabelStyle.box.fill == aquaStatusLabelFill()
+    check statusLabelStyle.box.borderColor == rgbaColor(88, 168, 112, 156)
+    check statusLabelStyle.box.cornerRadius == 7.0
+    check statusLabelStyle.box.shadows == aquaStatusLabelShadows()
+    check statusLabelStyle.text.color == color(0.06, 0.25, 0.14, 1.0)
     check formLabelStyle.box.borderWidth == 0.0
     check formLabelStyle.text.color == color(0.10, 0.14, 0.22, 1.0)
 

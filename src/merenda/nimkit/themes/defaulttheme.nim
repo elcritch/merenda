@@ -40,6 +40,7 @@ proc addLabelRule(
     textColor: Color,
     textInsets: EdgeInsets,
     minSize: Size,
+    shadows: seq[BoxShadow] = @[],
 ) =
   let selector = initStyleSelector(srTextField, classes = @[className])
   theme[selector, StyleFill] = fillValue
@@ -51,7 +52,7 @@ proc addLabelRule(
   theme[selector, StyleMinimumSize] = minSize
   theme[selector, StyleFocusRingWidth] = 0.0
   theme[selector, StyleFocusRingInset] = 0.0
-  theme[selector, StyleBoxShadows] = newSeq[BoxShadow]()
+  theme[selector, StyleBoxShadows] = shadows
 
 func rgbaColor(r, g, b, a: int): Color =
   color(
@@ -145,6 +146,33 @@ func aquaComboBoxFill(): Fill =
     92'u8,
   )
 
+func aquaTitleLabelFill(): Fill =
+  linear(
+    rgbaColor(255, 255, 255, 198),
+    rgbaColor(225, 242, 255, 176),
+    rgbaColor(176, 212, 246, 154),
+    fgaY,
+    108'u8,
+  )
+
+func aquaHeadingLabelFill(): Fill =
+  linear(
+    rgbaColor(250, 254, 255, 186),
+    rgbaColor(214, 236, 255, 164),
+    rgbaColor(160, 201, 242, 146),
+    fgaY,
+    108'u8,
+  )
+
+func aquaStatusLabelFill(): Fill =
+  linear(
+    rgbaColor(252, 255, 252, 190),
+    rgbaColor(221, 247, 227, 168),
+    rgbaColor(175, 226, 190, 148),
+    fgaY,
+    108'u8,
+  )
+
 func aquaComboItemHighlightFill(): Fill =
   linear(rgbaColor(230, 245, 255, 212), rgbaColor(184, 222, 255, 212), fgaY)
 
@@ -226,6 +254,22 @@ func aquaScrollerKnobShadows(): seq[BoxShadow] =
     insetShadow(rgbaColor(255, 255, 255, 78), y = 1.0, blur = 2.2),
     insetShadow(rgbaColor(0, 44, 122, 32), y = -1.0, blur = 3.0),
     insetShadow(rgbaColor(0, 68, 160, 24), x = 1.0, blur = 3.2),
+  ]
+
+func aquaLabelShadows(): seq[BoxShadow] =
+  @[
+    dropShadow(rgbaColor(255, 255, 255, 68), y = -1.0, blur = 1.4),
+    dropShadow(rgbaColor(0, 0, 0, 18), y = 1.0, blur = 2.2),
+    insetShadow(rgbaColor(255, 255, 255, 126), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(0, 52, 132, 28), y = -1.0, blur = 2.8),
+  ]
+
+func aquaStatusLabelShadows(): seq[BoxShadow] =
+  @[
+    dropShadow(rgbaColor(255, 255, 255, 62), y = -1.0, blur = 1.4),
+    dropShadow(rgbaColor(0, 0, 0, 14), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(255, 255, 255, 120), y = 1.0, blur = 2.0),
+    insetShadow(rgbaColor(35, 116, 61, 24), y = -1.0, blur = 2.8),
   ]
 
 func aquaSwitchTrackShadows(enabled: bool): seq[BoxShadow] =
@@ -714,33 +758,36 @@ proc initTheme*(): Theme =
   )
   result.addLabelRule(
     LabelTitleStyleClass,
-    linear(color(0.94, 0.98, 1.0, 0.81), color(0.84, 0.91, 0.98, 0.81), fgaY),
-    color(0.62, 0.70, 0.84, 1.0),
+    aquaTitleLabelFill(),
+    rgbaColor(92, 135, 196, 172),
     1.0,
-    6.0,
+    8.0,
     color(0.09, 0.14, 0.26, 1.0),
     insets(0.0, 12.0),
     initSize(0.0, 28.0),
+    aquaLabelShadows(),
   )
   result.addLabelRule(
     LabelHeadingStyleClass,
-    linear(color(0.90, 0.95, 1.0, 0.81), color(0.78, 0.86, 0.96, 0.81), fgaY),
-    color(0.74, 0.82, 0.93, 1.0),
+    aquaHeadingLabelFill(),
+    rgbaColor(104, 148, 205, 158),
     1.0,
-    5.0,
+    7.0,
     color(0.10, 0.18, 0.32, 1.0),
     insets(0.0, 10.0),
     initSize(0.0, 24.0),
+    aquaLabelShadows(),
   )
   result.addLabelRule(
     LabelStatusStyleClass,
-    linear(color(0.94, 0.99, 0.95, 0.81), color(0.84, 0.94, 0.87, 0.81), fgaY),
-    color(0.68, 0.82, 0.72, 1.0),
+    aquaStatusLabelFill(),
+    rgbaColor(88, 168, 112, 156),
     1.0,
-    6.0,
-    color(0.09, 0.27, 0.18, 1.0),
+    7.0,
+    color(0.06, 0.25, 0.14, 1.0),
     insets(0.0, 10.0),
     initSize(0.0, 24.0),
+    aquaStatusLabelShadows(),
   )
   result.addLabelRule(
     LabelFormStyleClass,

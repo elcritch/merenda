@@ -912,8 +912,14 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
     )
 
     discard context.addRenderRectangle(
-      absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
-      style.box.cornerRadius, style.box.shadows,
+      absoluteFrame,
+      style.box.fill,
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      style.box.shadows,
+      lightMaskContent = true,
+      cornerRadii = style.box.cornerRadii,
     )
     if ssFocusVisible in states:
       context.addFocusRing(absoluteFrame, style.box)
