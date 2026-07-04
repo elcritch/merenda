@@ -8,40 +8,37 @@ type CollectionViewDemo* = ref object
   controller*: ArrayController
   status*: Label
 
-proc field(key: string, value: ObjectValue): ModelField =
-  initModelField(key, value)
-
 proc demoItems(): seq[ModelItem] =
   @[
     initModelItem(
       "assets",
       title = "Assets",
       objectValue = toObj("Assets"),
-      fields = [field("kind", toObj("Folder"))],
+      fields = [modelField("kind", toObj("Folder"))],
     ),
     initModelItem(
       "timeline",
       title = "Timeline",
       objectValue = toObj("Timeline"),
-      fields = [field("kind", toObj("Panel"))],
+      fields = [modelField("kind", toObj("Panel"))],
     ),
     initModelItem(
       "renderer",
       title = "Renderer",
       objectValue = toObj("Renderer"),
-      fields = [field("kind", toObj("Job"))],
+      fields = [modelField("kind", toObj("Job"))],
     ),
     initModelItem(
       "notes",
       title = "Notes",
       objectValue = toObj("Notes"),
-      fields = [field("kind", toObj("Document"))],
+      fields = [modelField("kind", toObj("Document"))],
     ),
     initModelItem(
       "exports",
       title = "Exports",
       objectValue = toObj("Exports"),
-      fields = [field("kind", toObj("Folder"))],
+      fields = [modelField("kind", toObj("Folder"))],
     ),
   ]
 

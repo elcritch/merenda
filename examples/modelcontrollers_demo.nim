@@ -20,7 +20,7 @@ type ModelControllersDemo* = ref object
   matrix*: Matrix
 
 proc field(key: string, value: ObjectValue): ModelField =
-  initModelField(key, value)
+  modelField(key, value)
 
 proc updateStatus*(demo: ModelControllersDemo, message: string) =
   if not demo.isNil and not demo.status.isNil:
@@ -88,9 +88,9 @@ proc newBuildController(): ArrayController =
       ),
     ],
     [
-      initModelColumn("project", "Project", "project", 170.0),
-      initModelColumn("state", "State", "state", 92.0),
-      initModelColumn("owner", "Owner", "owner", 82.0),
+      modelColumn("project", "Project", "project", 170.0),
+      modelColumn("state", "State", "state", 92.0),
+      modelColumn("owner", "Owner", "owner", 82.0),
     ],
   )
 

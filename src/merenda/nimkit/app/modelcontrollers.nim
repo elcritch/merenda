@@ -193,10 +193,10 @@ proc notifyTreeControllerDidChange(
     )
   )
 
-func initModelField*(key: string, value: ObjectValue): ModelField =
+func modelField*(key: string, value: ObjectValue): ModelField =
   ModelField(key: key, value: value)
 
-func initModelColumn*(
+func modelColumn*(
     identifier: string, title = "", valueKey = "", width = 120.0'f32
 ): ModelColumn =
   ModelColumn(identifier: identifier, title: title, valueKey: valueKey, width: width)
@@ -267,7 +267,7 @@ proc setValue*(item: var ModelItem, key: string, value: ObjectValue) =
   if index >= 0:
     item.fields[index].value = value
   else:
-    item.fields.add initModelField(key, value)
+    item.fields.add modelField(key, value)
 
 proc `[]=`*(item: var ModelItem, key: string, value: ObjectValue) =
   item.setValue(key, value)

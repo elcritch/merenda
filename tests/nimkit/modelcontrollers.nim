@@ -102,35 +102,35 @@ proc personItems(): seq[ModelItem] =
       "ada",
       objectValue = toObj("Ada"),
       fields = [
-        initModelField("name", toObj("Ada")),
-        initModelField("score", toObj(31)),
-        initModelField("active", toObj(true)),
+        modelField("name", toObj("Ada")),
+        modelField("score", toObj(31)),
+        modelField("active", toObj(true)),
       ],
     ),
     initModelItem(
       "grace",
       objectValue = toObj("Grace"),
       fields = [
-        initModelField("name", toObj("Grace")),
-        initModelField("score", toObj(45)),
-        initModelField("active", toObj(true)),
+        modelField("name", toObj("Grace")),
+        modelField("score", toObj(45)),
+        modelField("active", toObj(true)),
       ],
     ),
     initModelItem(
       "alan",
       objectValue = toObj("Alan"),
       fields = [
-        initModelField("name", toObj("Alan")),
-        initModelField("score", toObj(27)),
-        initModelField("active", toObj(false)),
+        modelField("name", toObj("Alan")),
+        modelField("score", toObj(27)),
+        modelField("active", toObj(false)),
       ],
     ),
   ]
 
 proc personColumns(): seq[ModelColumn] =
   @[
-    initModelColumn("person", "Person", "name", 120.0),
-    initModelColumn("rank", "Score", "score", 64.0),
+    modelColumn("person", "Person", "name", 120.0),
+    modelColumn("rank", "Score", "score", 64.0),
   ]
 
 suite "nimkit model controllers":
@@ -238,7 +238,7 @@ suite "nimkit model controllers":
         initModelItem(
           "second",
           objectValue = toObj("Second"),
-          fields = [initModelField("status", toObj("ready"))],
+          fields = [modelField("status", toObj("ready"))],
         ),
         parentIdentifier = "root",
         leaf = true,
@@ -266,10 +266,10 @@ suite "nimkit model controllers":
             objectValue = toObj("Two"),
             title = "Second",
             fields = [
-              initModelField("modified", toObj(true)),
-              initModelField("closeable", toObj(false)),
-              initModelField("tooltip", toObj("Second tab")),
-              initModelField("tabStyle", toObj("compact")),
+              modelField("modified", toObj(true)),
+              modelField("closeable", toObj(false)),
+              modelField("tooltip", toObj("Second tab")),
+              modelField("tabStyle", toObj("compact")),
             ],
             enabled = false,
           ),

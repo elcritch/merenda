@@ -171,22 +171,22 @@ let
       "ada",
       objectValue = toObj("Ada"),
       fields = [
-        initModelField("name", toObj("Ada")),
-        initModelField("score", toObj(31)),
+        modelField("name", toObj("Ada")),
+        modelField("score", toObj(31)),
       ],
     ),
     initModelItem(
       "grace",
       objectValue = toObj("Grace"),
       fields = [
-        initModelField("name", toObj("Grace")),
-        initModelField("score", toObj(45)),
+        modelField("name", toObj("Grace")),
+        modelField("score", toObj(45)),
       ],
     ),
   ]
   columns = @[
-    initModelColumn("person", "Person", "name", 120.0),
-    initModelColumn("rank", "Score", "score", 64.0),
+    modelColumn("person", "Person", "name", 120.0),
+    modelColumn("rank", "Score", "score", 64.0),
   ]
   controller = newArrayController(items, columns)
   table = newTableView()

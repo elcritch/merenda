@@ -224,15 +224,13 @@ func item(id, title: string, score: int): CollectionTestItem =
 proc modelItems(): seq[ModelItem] =
   @[
     initModelItem(
-      "ada", objectValue = toObj("Ada"), fields = [initModelField("score", toObj(31))]
+      "ada", objectValue = toObj("Ada"), fields = [modelField("score", toObj(31))]
     ),
     initModelItem(
-      "grace",
-      objectValue = toObj("Grace"),
-      fields = [initModelField("score", toObj(45))],
+      "grace", objectValue = toObj("Grace"), fields = [modelField("score", toObj(45))]
     ),
     initModelItem(
-      "alan", objectValue = toObj("Alan"), fields = [initModelField("score", toObj(27))]
+      "alan", objectValue = toObj("Alan"), fields = [modelField("score", toObj(27))]
     ),
   ]
 
