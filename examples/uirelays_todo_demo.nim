@@ -192,6 +192,9 @@ proc cellsFor(
     max(0, bounds.size.width.int), max(0, bounds.size.height.int), metrics.lineHeight
   )
 
+proc visibleRows(view: TodoRelaysView, metrics = todoFontMetrics()): int =
+  visibleRowsFor(view.cellsFor(metrics)["list"].listInnerRect(), metrics.rowHeightFor())
+
 proc clampSelection(view: TodoRelaysView, visibleRows: int) =
   if view.items.len == 0:
     view.selectedIndex = -1
@@ -565,11 +568,7 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
           view.selectedIndex = 0
         else:
           dec view.selectedIndex
-        view.clampSelection(
-          visibleRowsFor(
-            view.cellsFor()["list"].listInnerRect(), rowHeightFor(todoFontMetrics())
-          )
-        )
+        view.clampSelection(view.visibleRows())
         view.setNeedsDisplay(true)
         return true
       false
@@ -579,11 +578,7 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
           view.selectedIndex = 0
         else:
           inc view.selectedIndex
-        view.clampSelection(
-          visibleRowsFor(
-            view.cellsFor()["list"].listInnerRect(), rowHeightFor(todoFontMetrics())
-          )
-        )
+        view.clampSelection(view.visibleRows())
         view.setNeedsDisplay(true)
         return true
       false
