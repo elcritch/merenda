@@ -63,18 +63,18 @@ func aquaButtonFaceFill(fillValue: Fill, enabled: bool): Fill =
     base = fillValue.centerColor()
     topMix = 0.82'f32
     bottomMix = 0.46'f32
-    alpha = base.scaledAlpha(if enabled: 0.42'f32 else: 0.26'f32)
+    alpha = base.scaledAlpha(if enabled: 0.37'f32 else: 0.21'f32)
   linear(base.lightenColor(topMix, alpha), base.lightenColor(bottomMix, alpha), fgaY)
 
 func aquaButtonLowerWash(fillValue: Fill, enabled: bool): Fill =
   let
     base = fillValue.centerColor()
-    alpha = base.scaledAlpha(if not enabled: 0.06'f32 else: 0.14'f32)
+    alpha = base.scaledAlpha(if not enabled: 0.01'f32 else: 0.09'f32)
     tint = base.darkenColor(0.15'f32, alpha)
   linear(color(1.0, 1.0, 1.0, 0.0), tint, fgaY)
 
 func aquaButtonGlossFill(enabled: bool): Fill =
-  let alpha = if enabled: 0.30'f32 else: 0.12'f32
+  let alpha = if enabled: 0.25'f32 else: 0.07'f32
   linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
 
 func aquaButtonInnerShadows(fillValue: Fill, enabled: bool): seq[BoxShadow] =

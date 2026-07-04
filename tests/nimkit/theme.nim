@@ -31,36 +31,36 @@ proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
 
 func aquaButtonFill(): Fill =
   linear(
-    color(0.88, 0.98, 1.0, 0.60),
-    color(0.24, 0.70, 1.0, 0.60),
-    color(0.0, 0.36, 0.92, 0.60),
+    color(0.88, 0.98, 1.0, 0.55),
+    color(0.24, 0.70, 1.0, 0.55),
+    color(0.0, 0.36, 0.92, 0.55),
     fgaY,
     112'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.18, 0.58, 0.96, 0.66),
-    color(0.0, 0.34, 0.86, 0.66),
-    color(0.0, 0.17, 0.58, 0.66),
+    color(0.18, 0.58, 0.96, 0.61),
+    color(0.0, 0.34, 0.86, 0.61),
+    color(0.0, 0.17, 0.58, 0.61),
     fgaY,
     104'u8,
   )
 
 func aquaAccentButtonFill(): Fill =
   linear(
-    color(0.96, 1.0, 1.0, 0.60),
-    color(0.34, 0.77, 1.0, 0.60),
-    color(0.0, 0.42, 0.98, 0.60),
+    color(0.96, 1.0, 1.0, 0.55),
+    color(0.34, 0.77, 1.0, 0.55),
+    color(0.0, 0.42, 0.98, 0.55),
     fgaY,
     112'u8,
   )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.12, 0.52, 0.96, 0.66),
-    color(0.0, 0.28, 0.78, 0.66),
-    color(0.0, 0.11, 0.46, 0.66),
+    color(0.12, 0.52, 0.96, 0.61),
+    color(0.0, 0.28, 0.78, 0.61),
+    color(0.0, 0.11, 0.46, 0.61),
     fgaY,
     104'u8,
   )
@@ -75,16 +75,16 @@ func aquaWindowBackgroundFill(): Fill =
   )
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 0.90), color(0.0, 0.49, 0.93, 0.90), fgaDiagTLBR)
+  linear(color(0.48, 0.91, 1.0, 0.85), color(0.0, 0.49, 0.93, 0.85), fgaDiagTLBR)
 
 func aquaTextFieldFill(): Fill =
-  linear(color(1.0, 1.0, 1.0, 0.84), color(0.90, 0.96, 1.0, 0.84), fgaY)
+  linear(color(1.0, 1.0, 1.0, 0.79), color(0.90, 0.96, 1.0, 0.79), fgaY)
 
 func aquaComboItemSelectedFill(): Fill =
   linear(
-    color(0.45, 0.75, 1.0, 0.90),
-    color(0.10, 0.45, 0.95, 0.90),
-    color(0.02, 0.26, 0.76, 0.90),
+    color(0.45, 0.75, 1.0, 0.85),
+    color(0.10, 0.45, 0.95, 0.85),
+    color(0.02, 0.26, 0.76, 0.85),
     fgaY,
     104'u8,
   )
@@ -418,10 +418,10 @@ suite "nimkit theme":
     check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 0.0'f32) ==
       2.0'f32
     check appearance.resolveFill(tabStyle, fill(color(0.0, 0.0, 0.0, 1.0))) ==
-      fill(color(0.84, 0.90, 0.98, 0.86))
+      fill(color(0.84, 0.90, 0.98, 0.81))
     check appearance.resolveFill(
       tabStyle, fill(color(0.0, 0.0, 0.0, 0.0)), StyleHighlightFill
-    ) == fill(color(1.0, 1.0, 1.0, 0.52))
+    ) == fill(color(1.0, 1.0, 1.0, 0.47))
     check appearance.resolveColor(tabStyle, StyleTextColor, color(0.0, 0.0, 0.0, 1.0)) ==
       color(0.14, 0.15, 0.18, 1.0)
     check appearance.resolveColor(
