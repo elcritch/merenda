@@ -1386,7 +1386,7 @@ proc drawCloseButton(
     radius = rect.size.width / 2.0'f32
     chrome = chromeContext(
       context.appearance.resolveChromeName(styleContext),
-      crButton,
+      crDocumentTabButton,
       cpFace,
       fillValue,
       states,
@@ -1460,7 +1460,7 @@ proc drawDocumentTab(
     )
     chrome = chromeContext(
       context.appearance.resolveChromeName(styleContext),
-      crTab,
+      crDocumentTab,
       cpFace,
       fillValue,
       states,
@@ -1589,7 +1589,7 @@ proc drawScrollButton(
     markStyle = context.appearance.tabTextStyle(styleContext, markColor)
     chrome = chromeContext(
       context.appearance.resolveChromeName(styleContext),
-      crButton,
+      crDocumentTabButton,
       cpFace,
       fillValue,
       states,
@@ -1666,7 +1666,10 @@ protocol DocumentTabsDrawing of ViewDrawingProtocol:
       barCornerRadius =
         context.appearance.resolveLength(barContext, StyleCornerRadius, 6.0'f32)
       barChrome = chromeContext(
-        context.appearance.resolveChromeName(barContext), crTabPanel, cpFace, barFill
+        context.appearance.resolveChromeName(barContext),
+        crDocumentTabBar,
+        cpFace,
+        barFill,
       )
       barRenderRect = context.renderRectFor(bounds)
       barRoot = context.addRenderRectangle(

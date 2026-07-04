@@ -810,6 +810,45 @@ proc installPeachyTextReadabilityPass(theme: var Theme) =
       insetShadow(color(0.0, 0.0, 0.0, 0.26), y = -1.0, blur = 3.0),
     ]
 
+proc installPeachyDocumentTabs(theme: var Theme) =
+  theme["documentTab.bar.fill"] = styleToken("tab.panel.fill")
+  theme["documentTab.bar.border.color"] = styleToken("tab.panel.border.color")
+  theme["documentTab.fill"] = styleToken("tab.fill")
+  theme["documentTab.fill.highlighted"] = styleToken("tab.fill.highlighted")
+  theme["documentTab.fill.pressed"] = styleToken("tab.fill.highlighted")
+  theme["documentTab.fill.selected"] = styleToken("tab.fill.selected")
+  theme["documentTab.fill.disabled"] = styleToken("tab.fill.disabled")
+  theme["documentTab.highlight.fill"] = styleToken("tab.highlight.fill")
+  theme["documentTab.highlight.fill.disabled"] =
+    styleToken("tab.highlight.fill.disabled")
+  theme["documentTab.text.color"] = styleToken("tab.text.color")
+  theme["documentTab.text.color.selected"] = styleToken("tab.text.color.selected")
+  theme["documentTab.text.color.disabled"] = styleToken("tab.text.color.disabled")
+  theme["documentTab.border.color"] = styleToken("tab.border.color")
+  theme["documentTab.border.color.highlighted"] =
+    styleToken("tab.border.color.highlighted")
+  theme["documentTab.border.color.pressed"] = styleToken("tab.border.color.highlighted")
+  theme["documentTab.border.color.selected"] = styleToken("tab.border.color.selected")
+  theme["documentTab.border.color.disabled"] = styleToken("tab.border.color.disabled")
+  theme["documentTab.button.fill"] = styleToken("documentTab.fill")
+  theme["documentTab.button.fill.highlighted"] =
+    styleToken("documentTab.fill.highlighted")
+  theme["documentTab.button.fill.disabled"] = styleToken("documentTab.fill.disabled")
+  theme["documentTab.button.border.color"] = styleToken("documentTab.border.color")
+  theme["documentTab.button.border.color.highlighted"] =
+    styleToken("documentTab.border.color.highlighted")
+  theme["documentTab.button.border.color.disabled"] =
+    styleToken("documentTab.border.color.disabled")
+  theme["documentTab.button.mark.color"] = styleToken("documentTab.text.color")
+  theme["documentTab.button.mark.color.disabled"] =
+    styleToken("documentTab.text.color.disabled")
+
+  for role in [srDocumentTab, srDocumentTabBar, srDocumentTabButton]:
+    theme[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+
+  theme[srDocumentTab, StyleBorderWidth] = 1.25
+  theme[srDocumentTabBar, StyleBorderWidth] = 1.25
+
 proc initPeachyTheme*(): Theme =
   result = initTheme()
   result.installPeachyTokens()
@@ -819,6 +858,7 @@ proc initPeachyTheme*(): Theme =
   result.installPeachyRetroPalette()
   result.installPeachyReferencePass()
   result.installPeachyTextReadabilityPass()
+  result.installPeachyDocumentTabs()
   result.clearBackgroundPinstripes()
 
 registerThemeFactory("peachy", initPeachyTheme)

@@ -55,13 +55,13 @@ proc newDemoTab(title, identifier: string, style: DocumentTabStyle): DocumentTab
   result.style = style
   case style
   of dtsPill:
-    result.accentColor = color(0.10, 0.58, 0.95, 1.0)
+    result.accentColor = color(0.12, 0.42, 0.86, 1.0)
   of dtsUnderline:
-    result.accentColor = color(0.95, 0.42, 0.78, 1.0)
+    result.accentColor = color(0.16, 0.50, 0.92, 1.0)
   of dtsCompact:
-    result.accentColor = color(0.25, 0.66, 0.42, 1.0)
+    result.accentColor = color(0.20, 0.48, 0.78, 1.0)
   else:
-    result.accentColor = color(0.95, 0.56, 0.24, 1.0)
+    result.accentColor = color(0.08, 0.36, 0.78, 1.0)
 
 proc selectedStyle(demo: DocumentTabsDemo): DocumentTabStyle =
   case demo.styleChoice.indexOfSelectedItem()
@@ -129,8 +129,7 @@ let
   leftButton = newButton("Move Left")
   rightButton = newButton("Move Right")
   styleChoice = newComboBox(["Rounded", "Pill", "Underline", "Compact"])
-  content =
-    newTextField("Use the tab strip as a document switcher with app-owned content.")
+  content = newTextField("Project Plan")
 
 demo.tabs = tabs
 demo.status = status
@@ -147,13 +146,13 @@ tabs.setCompressionPriority(LayoutPriorityRequired, laVertical)
 tabs.defaultTabStyle = dtsRounded
 
 discard tabs.addDocumentTabItem(newDemoTab("Project Plan", "pinned", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Budget.xlsx", "budget", dtsPill))
-discard tabs.addDocumentTabItem(newDemoTab("Launch Copy", "copy", dtsUnderline))
-discard tabs.addDocumentTabItem(newDemoTab("Research Notes", "notes", dtsCompact))
+discard tabs.addDocumentTabItem(newDemoTab("Budget.xlsx", "budget", dtsRounded))
+discard tabs.addDocumentTabItem(newDemoTab("Launch Copy", "copy", dtsRounded))
+discard tabs.addDocumentTabItem(newDemoTab("Research Notes", "notes", dtsRounded))
 discard tabs.addDocumentTabItem(newDemoTab("Screenshots", "screens", dtsRounded))
-discard tabs.addDocumentTabItem(newDemoTab("Bug Triage", "bugs", dtsPill))
-discard tabs.addDocumentTabItem(newDemoTab("Release Notes", "release", dtsUnderline))
-discard tabs.addDocumentTabItem(newDemoTab("Archive", "archive", dtsCompact))
+discard tabs.addDocumentTabItem(newDemoTab("Bug Triage", "bugs", dtsRounded))
+discard tabs.addDocumentTabItem(newDemoTab("Release Notes", "release", dtsRounded))
+discard tabs.addDocumentTabItem(newDemoTab("Archive", "archive", dtsRounded))
 tabs[1].modified = true
 tabs[5].modified = true
 

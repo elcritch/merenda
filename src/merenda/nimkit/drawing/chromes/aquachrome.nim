@@ -415,6 +415,60 @@ func aquaTabPanelFaceFill(chrome: ChromeContext): Fill =
   let alpha = base.scaledAlpha(1.0'f32)
   linear(base.lightenColor(0.16'f32, alpha), base.darkenColor(0.05'f32, alpha), fgaY)
 
+func aquaDocumentTabFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    let alpha = base.scaledAlpha(0.62'f32)
+    return linear(
+      base.lightenColor(0.28'f32, alpha), base.darkenColor(0.08'f32, alpha), fgaY
+    )
+  if chrome.isSelected:
+    let alpha = base.scaledAlpha(1.0'f32)
+    return linear(
+      base.lightenColor(0.82'f32, alpha),
+      base.lightenColor(0.50'f32, alpha),
+      base.lightenColor(0.10'f32, alpha),
+      fgaY,
+      112'u8,
+    )
+  if chrome.isPressed:
+    let alpha = base.scaledAlpha(1.0'f32)
+    return linear(
+      base.lightenColor(0.24'f32, alpha), base.darkenColor(0.14'f32, alpha), fgaY
+    )
+  let alpha = base.scaledAlpha(1.0'f32)
+  linear(
+    base.lightenColor(0.70'f32, alpha),
+    base.lightenColor(0.32'f32, alpha),
+    base.darkenColor(0.08'f32, alpha),
+    fgaY,
+    112'u8,
+  )
+
+func aquaDocumentTabInnerFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  let alpha = base.scaledAlpha(if chrome.isEnabled: 0.96'f32 else: 0.44'f32)
+  if chrome.isSelected:
+    return linear(
+      base.lightenColor(0.92'f32, alpha),
+      base.lightenColor(0.58'f32, alpha),
+      base.lightenColor(0.16'f32, alpha),
+      fgaY,
+      112'u8,
+    )
+  linear(
+    base.lightenColor(0.86'f32, alpha),
+    base.lightenColor(0.44'f32, alpha),
+    base.darkenColor(0.04'f32, alpha),
+    fgaY,
+    112'u8,
+  )
+
+func aquaDocumentTabBarFaceFill(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  let alpha = base.scaledAlpha(0.92'f32)
+  linear(base.lightenColor(0.22'f32, alpha), base.darkenColor(0.08'f32, alpha), fgaY)
+
 func chromeEdgeHighlightRect(edge: ChromeEdge, rect: Rect): Rect =
   case edge
   of ceTop:
@@ -921,6 +975,30 @@ proc drawAquaTabPanelExtras(
     extras.layer, extras.parent, innerShade, fill(color(0.0, 0.0, 0.0, 0.05))
   )
 
+proc drawAquaDocumentTabBarExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  discard chrome
+  let
+    topHighlight = rect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.origin.y + 1.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    innerShade = rect(
+      extras.rect.origin.x + 1.0'f32,
+      extras.rect.maxY - 2.0'f32,
+      max(extras.rect.size.width - 2.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer, extras.parent, topHighlight, fill(color(1.0, 1.0, 1.0, 0.24))
+  )
+  discard context.addRenderRectangle(
+    extras.layer, extras.parent, innerShade, fill(color(0.0, 0.0, 0.0, 0.035))
+  )
+
 protocol AquaChromeProtocol of ChromeProtocol:
   method chromeFillFor(chrome: AquaChrome, context: ChromeContext): Fill =
     case context.role
@@ -1000,6 +1078,34 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaTabPanelFaceFill(context)
       else:
         context.baseFill
+    of crDocumentTab:
+      case context.part
+      of cpFace:
+        aquaDocumentTabFaceFill(context)
+      of cpInnerFace:
+        aquaDocumentTabInnerFill(context)
+      of cpHighlight:
+        context.baseFill
+      of cpSeam:
+        context.baseFill
+      else:
+        context.baseFill
+    of crDocumentTabBar:
+      case context.part
+      of cpFace:
+        aquaDocumentTabBarFaceFill(context)
+      else:
+        context.baseFill
+    of crDocumentTabButton:
+      case context.part
+      of cpInnerFace:
+        aquaButtonFaceFill(context)
+      of cpGloss:
+        aquaButtonGlossFill(context)
+      of cpLowerWash:
+        aquaButtonLowerWash(context)
+      else:
+        context.baseFill
     else:
       context.baseFill
 
@@ -1012,6 +1118,9 @@ protocol AquaChromeProtocol of ChromeProtocol:
     discard chrome
     case chromeContext.role
     of crButton:
+      if chromeContext.part == cpFace:
+        context.drawAquaButtonBacking(chromeContext, extras)
+    of crDocumentTabButton:
       if chromeContext.part == cpFace:
         context.drawAquaButtonBacking(chromeContext, extras)
     of crComboBox:
@@ -1060,6 +1169,15 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crTabPanel:
       if chromeContext.part == cpFace:
         context.drawAquaTabPanelExtras(chromeContext, extras)
+    of crDocumentTab:
+      if chromeContext.part == cpFace:
+        context.drawAquaTabExtras(chromeContext, extras)
+    of crDocumentTabBar:
+      if chromeContext.part == cpFace:
+        context.drawAquaDocumentTabBarExtras(chromeContext, extras)
+    of crDocumentTabButton:
+      if chromeContext.part == cpFace:
+        context.drawAquaButtonExtras(chromeContext, extras)
     else:
       discard
 

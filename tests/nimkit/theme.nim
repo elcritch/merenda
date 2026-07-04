@@ -31,6 +31,45 @@ proc checkRootPinstripesDisabled(theme: Theme) =
   check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 1.0'f32) ==
     0.0'f32
 
+proc checkDocumentTabsUseThemeTabStyle(theme: Theme) =
+  let
+    appearance = initAppearance(theme)
+    fallbackFill = fill(color(0.0, 0.0, 0.0, 0.0))
+    fallbackColor = color(0.0, 0.0, 0.0, 1.0)
+    tabStyle = controlStyle(srDocumentTab)
+    selectedTabStyle = controlStyle(srDocumentTab, {ssSelected})
+    tabBarStyle = controlStyle(srDocumentTabBar)
+    tabButtonStyle = controlStyle(srDocumentTabButton)
+    highlightedTabButtonStyle = controlStyle(srDocumentTabButton, {ssHighlighted})
+
+  check appearance.resolveChromeName(tabStyle) == FlatTransparentChromeName
+  check appearance.resolveChromeName(tabBarStyle) == FlatTransparentChromeName
+  check appearance.resolveChromeName(tabButtonStyle) == FlatTransparentChromeName
+  check appearance.resolveFill(tabBarStyle, fallbackFill) ==
+    appearance.fillToken("tab.panel.fill", fallbackFill)
+  check appearance.resolveColor(tabBarStyle, StyleBorderColor, fallbackColor) ==
+    appearance.colorToken("tab.panel.border.color", fallbackColor)
+  check appearance.resolveFill(tabStyle, fallbackFill) ==
+    appearance.fillToken("tab.fill", fallbackFill)
+  check appearance.resolveFill(selectedTabStyle, fallbackFill) ==
+    appearance.fillToken("tab.fill.selected", fallbackFill)
+  check appearance.resolveFill(tabStyle, fallbackFill, StyleHighlightFill) ==
+    appearance.fillToken("tab.highlight.fill", fallbackFill)
+  check appearance.resolveColor(tabStyle, StyleBorderColor, fallbackColor) ==
+    appearance.colorToken("tab.border.color", fallbackColor)
+  check appearance.resolveColor(selectedTabStyle, StyleBorderColor, fallbackColor) ==
+    appearance.colorToken("tab.border.color.selected", fallbackColor)
+  check appearance.resolveColor(tabStyle, StyleTextColor, fallbackColor) ==
+    appearance.colorToken("tab.text.color", fallbackColor)
+  check appearance.resolveColor(selectedTabStyle, StyleTextColor, fallbackColor) ==
+    appearance.colorToken("tab.text.color.selected", fallbackColor)
+  check appearance.resolveFill(tabButtonStyle, fallbackFill) ==
+    appearance.fillToken("tab.fill", fallbackFill)
+  check appearance.resolveFill(highlightedTabButtonStyle, fallbackFill) ==
+    appearance.fillToken("tab.fill.highlighted", fallbackFill)
+  check appearance.resolveColor(tabButtonStyle, StyleMarkColor, fallbackColor) ==
+    appearance.colorToken("tab.text.color", fallbackColor)
+
 func aquaButtonFill(): Fill =
   linear(
     rgbaColor(50, 82, 190, 150),
@@ -672,6 +711,10 @@ suite "nimkit theme":
   test "peachy and synthwave themes do not inherit Aqua root pinstripes":
     checkRootPinstripesDisabled(initPeachyTheme())
     checkRootPinstripesDisabled(initSynthwave83Theme())
+
+  test "peachy and synthwave document tabs use theme tab styling":
+    checkDocumentTabsUseThemeTabStyle(initPeachyTheme())
+    checkDocumentTabsUseThemeTabStyle(initSynthwave83Theme())
 
   test "banner theme exposes generated banner palette as an opt-in theme":
     let

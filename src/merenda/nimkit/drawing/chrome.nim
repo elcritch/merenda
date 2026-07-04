@@ -22,6 +22,9 @@ type
     crSliderKnob
     crTab
     crTabPanel
+    crDocumentTab
+    crDocumentTabBar
+    crDocumentTabButton
 
   ChromePart* = enum
     cpFace

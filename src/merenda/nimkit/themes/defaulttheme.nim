@@ -164,6 +164,39 @@ func aquaComboBoxFill(): Fill =
     92'u8,
   )
 
+func aquaDocumentTabBarFill(): Fill =
+  linear(color(0.88, 0.93, 1.0, 0.44), color(0.58, 0.68, 0.82, 0.34), fgaY)
+
+func aquaDocumentTabFill(): Fill =
+  linear(
+    color(0.88, 0.93, 0.99, 0.92),
+    color(0.70, 0.80, 0.92, 0.90),
+    color(0.54, 0.66, 0.82, 0.88),
+    fgaY,
+    112'u8,
+  )
+
+func aquaDocumentTabHighlightedFill(): Fill =
+  linear(
+    color(0.94, 0.97, 1.0, 0.94),
+    color(0.76, 0.86, 0.96, 0.92),
+    color(0.60, 0.72, 0.88, 0.90),
+    fgaY,
+    112'u8,
+  )
+
+func aquaSelectedDocumentTabFill(): Fill =
+  linear(
+    color(0.99, 1.0, 1.0, 0.98),
+    color(0.88, 0.94, 1.0, 0.96),
+    color(0.74, 0.84, 0.96, 0.94),
+    fgaY,
+    112'u8,
+  )
+
+func aquaPressedDocumentTabFill(): Fill =
+  linear(color(0.66, 0.76, 0.90, 0.94), color(0.46, 0.58, 0.76, 0.92), fgaY)
+
 func aquaTitleLabelFill(): Fill =
   linear(
     rgbaColor(255, 255, 255, 198),
@@ -433,6 +466,38 @@ proc initTheme*(): Theme =
   result["tab.border.color.highlighted"] = styleColor(rgbaColor(70, 116, 178, 224))
   result["tab.border.color.selected"] = styleColor(rgbaColor(34, 102, 210, 232))
   result["tab.border.color.disabled"] = styleColor(rgbaColor(150, 156, 166, 148))
+  result["documentTab.bar.fill"] = aquaDocumentTabBarFill()
+  result["documentTab.bar.border.color"] = styleColor(color(0.45, 0.54, 0.68, 0.52))
+  result["documentTab.fill"] = aquaDocumentTabFill()
+  result["documentTab.fill.highlighted"] = aquaDocumentTabHighlightedFill()
+  result["documentTab.fill.pressed"] = aquaPressedDocumentTabFill()
+  result["documentTab.fill.selected"] = aquaSelectedDocumentTabFill()
+  result["documentTab.fill.disabled"] = styleFill(color(0.70, 0.76, 0.84, 0.44))
+  result["documentTab.highlight.fill"] = styleFill(color(1.0, 1.0, 1.0, 0.34))
+  result["documentTab.highlight.fill.disabled"] = styleFill(color(1.0, 1.0, 1.0, 0.18))
+  result["documentTab.text.color"] = styleColor(color(0.10, 0.14, 0.22, 1.0))
+  result["documentTab.text.color.selected"] = styleColor(color(0.04, 0.08, 0.16, 1.0))
+  result["documentTab.text.color.disabled"] = styleColor(color(0.46, 0.50, 0.58, 1.0))
+  result["documentTab.border.color"] = styleColor(color(0.48, 0.58, 0.72, 0.88))
+  result["documentTab.border.color.highlighted"] =
+    styleColor(color(0.40, 0.56, 0.78, 0.92))
+  result["documentTab.border.color.pressed"] = styleColor(color(0.30, 0.46, 0.70, 0.94))
+  result["documentTab.border.color.selected"] =
+    styleColor(color(0.32, 0.50, 0.78, 0.95))
+  result["documentTab.border.color.disabled"] =
+    styleColor(color(0.50, 0.56, 0.66, 0.42))
+  result["documentTab.button.fill"] = styleToken("documentTab.fill")
+  result["documentTab.button.fill.highlighted"] =
+    styleToken("documentTab.fill.highlighted")
+  result["documentTab.button.fill.disabled"] = styleToken("documentTab.fill.disabled")
+  result["documentTab.button.border.color"] = styleColor(color(0.48, 0.58, 0.72, 0.76))
+  result["documentTab.button.border.color.highlighted"] =
+    styleColor(color(0.36, 0.52, 0.74, 0.84))
+  result["documentTab.button.border.color.disabled"] =
+    styleColor(color(0.48, 0.54, 0.64, 0.34))
+  result["documentTab.button.mark.color"] = styleColor(color(0.12, 0.18, 0.28, 0.92))
+  result["documentTab.button.mark.color.disabled"] =
+    styleColor(color(0.44, 0.50, 0.58, 0.72))
 
   result[srView, StyleBackgroundColor] = color(0.93, 0.93, 0.92)
   result[srView, StyleBackgroundFill] = aquaWindowBackgroundFill()
@@ -653,6 +718,93 @@ proc initTheme*(): Theme =
   result[srTabPanel, StyleBorderWidth] = 1.0
   result[srTabPanel, StyleCornerRadius] = 9.0
   result[srTabPanel, StyleChrome] = styleKeyword(AquaChromeName)
+
+  result.addRoleRule(
+    srDocumentTab,
+    {},
+    styleToken("documentTab.fill"),
+    styleToken("documentTab.border.color"),
+    styleToken("documentTab.text.color"),
+  )
+  result.addRoleRule(
+    srDocumentTab,
+    {ssHighlighted},
+    styleToken("documentTab.fill.highlighted"),
+    styleToken("documentTab.border.color.highlighted"),
+    styleToken("documentTab.text.color"),
+  )
+  result.addRoleRule(
+    srDocumentTab,
+    {ssHighlighted, ssPressed},
+    styleToken("documentTab.fill.pressed"),
+    styleToken("documentTab.border.color.pressed"),
+    styleToken("documentTab.text.color"),
+  )
+  result.addRoleRule(
+    srDocumentTab,
+    {ssSelected},
+    styleToken("documentTab.fill.selected"),
+    styleToken("documentTab.border.color.selected"),
+    styleToken("documentTab.text.color.selected"),
+  )
+  result.addRoleRule(
+    srDocumentTab,
+    {ssDisabled},
+    styleToken("documentTab.fill.disabled"),
+    styleToken("documentTab.border.color.disabled"),
+    styleToken("documentTab.text.color.disabled"),
+  )
+  result[srDocumentTab, StyleHighlightFill] = styleToken("documentTab.highlight.fill")
+  result[srDocumentTab, {ssDisabled}, StyleHighlightFill] =
+    styleToken("documentTab.highlight.fill.disabled")
+  result[srDocumentTab, StyleBorderWidth] = 1.0
+  result[srDocumentTab, StyleCornerRadius] = 10.0
+  result[srDocumentTab, StyleTextInsets] = insets(1.0, 13.0)
+  result[srDocumentTab, StylePadding] = insets(0.0, 16.0)
+  result[srDocumentTab, StyleMinimumSize] = initSize(96.0, 30.0)
+  result[srDocumentTab, StyleMaximumSize] = initSize(198.0, 0.0)
+  result[srDocumentTab, StyleItemGap] = 2.0
+  result[srDocumentTab, StyleChrome] = styleKeyword(AquaChromeName)
+  result[srDocumentTabBar, StyleFill] = styleToken("documentTab.bar.fill")
+  result[srDocumentTabBar, StyleBorderColor] =
+    styleToken("documentTab.bar.border.color")
+  result[srDocumentTabBar, StyleBorderWidth] = 1.0
+  result[srDocumentTabBar, StyleCornerRadius] = 10.0
+  result[srDocumentTabBar, StyleChrome] = styleKeyword(AquaChromeName)
+  result.addChoiceRule(
+    srDocumentTabButton,
+    {},
+    styleToken("documentTab.button.fill"),
+    styleToken("documentTab.button.border.color"),
+    styleToken("documentTab.button.mark.color"),
+    styleToken("documentTab.text.color"),
+  )
+  result.addChoiceRule(
+    srDocumentTabButton,
+    {ssHighlighted},
+    styleToken("documentTab.button.fill.highlighted"),
+    styleToken("documentTab.button.border.color.highlighted"),
+    styleToken("documentTab.button.mark.color"),
+    styleToken("documentTab.text.color"),
+  )
+  result.addChoiceRule(
+    srDocumentTabButton,
+    {ssHighlighted, ssPressed},
+    styleToken("documentTab.fill.pressed"),
+    styleToken("documentTab.border.color.pressed"),
+    styleToken("documentTab.button.mark.color"),
+    styleToken("documentTab.text.color"),
+  )
+  result.addChoiceRule(
+    srDocumentTabButton,
+    {ssDisabled},
+    styleToken("documentTab.button.fill.disabled"),
+    styleToken("documentTab.button.border.color.disabled"),
+    styleToken("documentTab.button.mark.color.disabled"),
+    styleToken("documentTab.text.color.disabled"),
+  )
+  result[srDocumentTabButton, StyleCornerRadius] = 7.0
+  result[srDocumentTabButton, StyleChrome] = styleKeyword(AquaChromeName)
 
   for role in [srCheckBox, srRadioButton]:
     let

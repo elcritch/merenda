@@ -396,7 +396,7 @@ protocol FlatTransparentChromeProtocol of ChromeProtocol:
   method chromeFillFor(chrome: FlatTransparentChrome, context: ChromeContext): Fill =
     discard chrome
     case context.role
-    of crButton:
+    of crButton, crDocumentTabButton:
       case context.part
       of cpInnerFace:
         flatButtonInnerFill(context)
@@ -447,7 +447,7 @@ protocol FlatTransparentChromeProtocol of ChromeProtocol:
         flatLowerWashFill(context)
       else:
         flatFaceFill(context)
-    of crPopupList, crTab, crTabPanel:
+    of crPopupList, crTab, crTabPanel, crDocumentTab, crDocumentTabBar:
       case context.part
       of cpGloss:
         flatGlossFill(context)
@@ -466,7 +466,7 @@ protocol FlatTransparentChromeProtocol of ChromeProtocol:
   ) =
     discard chrome
     case chromeContext.role
-    of crButton:
+    of crButton, crDocumentTabButton:
       if chromeContext.part == cpFace:
         context.drawFlatButtonExtras(chromeContext, extras)
     of crChoiceIndicator, crCheckBoxIndicator, crRadioIndicator:
@@ -480,7 +480,8 @@ protocol FlatTransparentChromeProtocol of ChromeProtocol:
         context.drawFlatComboArrowExtras(chromeContext, extras)
       else:
         discard
-    of crSliderTrack, crSliderKnob, crPopupList, crTab, crTabPanel:
+    of crSliderTrack, crSliderKnob, crPopupList, crTab, crTabPanel, crDocumentTab,
+        crDocumentTabBar:
       if chromeContext.part == cpFace:
         context.drawFlatSimpleHighlight(chromeContext, extras)
     else:

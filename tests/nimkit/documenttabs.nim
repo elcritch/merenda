@@ -184,11 +184,11 @@ protocol DocumentTabChromeSpyMethods of ChromeProtocol:
   method chromeFillFor(chrome: DocumentTabChromeSpy, context: ChromeContext): Fill =
     discard chrome
     case context.role
-    of crTab:
+    of crDocumentTab:
       if ssSelected in context.states: DocumentTabChromeFill else: context.baseFill
-    of crTabPanel:
+    of crDocumentTabBar:
       DocumentTabBarChromeFill
-    of crButton:
+    of crDocumentTabButton:
       DocumentTabButtonChromeFill
     else:
       context.baseFill
@@ -497,15 +497,15 @@ suite "nimkit document tabs":
     check closeSymbolFound
     check not closeTextFound
 
-  test "document tab scroll buttons inherit tab theme fill":
+  test "document tab scroll buttons resolve document tab button theme fill":
     let tabs = newDocumentTabs(frame = rect(0, 0, 210, 34))
     for index in 0 .. 4:
       discard tabs.addDocumentTabItem(newDocumentTabItem("Document " & $index))
     tabs.scrollOffset = 10.0'f32
 
     var theme = initTheme()
-    theme[srTab, StyleChrome] = styleKeyword(DefaultChromeName)
-    theme[srTab, StyleFill] = DocumentTabButtonThemeFill
+    theme[srDocumentTabButton, StyleChrome] = styleKeyword(DefaultChromeName)
+    theme[srDocumentTabButton, StyleFill] = DocumentTabButtonThemeFill
 
     let
       renders = buildRenders(tabs, initAppearance(theme))
@@ -536,6 +536,15 @@ suite "nimkit document tabs":
       defaultAppearance.resolveChromeName(controlStyle(srTab))
     check defaultAppearance.resolveChromeName(controlStyle(srDocumentTabBar)) ==
       defaultAppearance.resolveChromeName(controlStyle(srTabPanel))
+    check defaultAppearance.resolveLength(
+      controlStyle(srDocumentTab), StyleCornerRadius, 0.0
+    ) == 10.0'f32
+    check defaultAppearance.resolveLength(
+      controlStyle(srDocumentTab), StyleItemGap, 0.0
+    ) == 2.0'f32
+    check defaultAppearance
+    .resolveFill(controlStyle(srDocumentTabBar), fill(color(1.0, 0.0, 0.0, 1.0)))
+    .centerColor().a < 0.5'f32
 
     special.styleId = "special-doc"
     discard tabs.addDocumentTabItem(first)
