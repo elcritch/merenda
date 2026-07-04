@@ -137,6 +137,24 @@ func aquaTextFieldFill(): Fill =
     116'u8,
   )
 
+func aquaSliderKnobFill(): Fill =
+  linear(
+    rgbaColor(255, 255, 255, 235),
+    rgbaColor(236, 247, 255, 227),
+    rgbaColor(197, 222, 242, 215),
+    fgaY,
+    116'u8,
+  )
+
+func aquaSliderProgressFill(): Fill =
+  linear(
+    rgbaColor(50, 82, 190, 192),
+    rgbaColor(70, 150, 230, 179),
+    rgbaColor(58, 132, 210, 175),
+    fgaY,
+    132'u8,
+  )
+
 func aquaComboBoxFill(): Fill =
   linear(
     rgbaColor(255, 255, 255, 226),
@@ -569,10 +587,10 @@ proc initTheme*(): Theme =
   result[srSlider, StyleKnobSize] = 20.0
   result[srSlider, StyleMinimumSize] = initSize(160.0, 26.0)
   result[srSlider, StyleFill] = aquaComboBoxFill()
-  result[srSlider, StyleHighlightFill] = aquaAccentButtonFill()
+  result[srSlider, StyleHighlightFill] = aquaSliderProgressFill()
   result[srSlider, StyleBorderColor] = rgbaColor(82, 116, 170, 190)
   result[srSlider, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
-  result[srSlider, StyleKnobFill] = aquaTextFieldFill()
+  result[srSlider, StyleKnobFill] = aquaSliderKnobFill()
   result[srSlider, StyleKnobBorderColor] = rgbaColor(82, 116, 170, 220)
   result[srSlider, StyleKnobShadows] = aquaKnobShadows()
   result[srSlider, StyleChrome] = styleKeyword(AquaChromeName)
@@ -580,10 +598,10 @@ proc initTheme*(): Theme =
   result[srProgressIndicator, StyleKnobSize] = 20.0
   result[srProgressIndicator, StyleMinimumSize] = initSize(160.0, 26.0)
   result[srProgressIndicator, StyleFill] = aquaComboBoxFill()
-  result[srProgressIndicator, StyleHighlightFill] = aquaAccentButtonFill()
+  result[srProgressIndicator, StyleHighlightFill] = aquaSliderProgressFill()
   result[srProgressIndicator, StyleBorderColor] = rgbaColor(82, 116, 170, 190)
   result[srProgressIndicator, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
-  result[srProgressIndicator, StyleKnobFill] = aquaTextFieldFill()
+  result[srProgressIndicator, StyleKnobFill] = aquaSliderKnobFill()
   result[srProgressIndicator, StyleKnobBorderColor] = rgbaColor(82, 116, 170, 220)
   result[srProgressIndicator, StyleKnobShadows] = aquaKnobShadows()
   result[srProgressIndicator, StyleChrome] = styleKeyword(AquaChromeName)
