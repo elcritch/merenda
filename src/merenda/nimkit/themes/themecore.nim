@@ -260,6 +260,11 @@ const
   StyleFill* = StyleKey[Fill]("fill")
   StyleBackgroundColor* = StyleKey[Color]("background.color")
   StyleBackgroundFill* = StyleKey[Fill]("background.fill")
+  StyleBackgroundPinstripeColor* = StyleKey[Color]("background.pinstripe.color")
+  StyleBackgroundPinstripeHighlightColor* =
+    StyleKey[Color]("background.pinstripe.highlight.color")
+  StyleBackgroundPinstripePeriod* = StyleKey[float32]("background.pinstripe.period")
+  StyleBackgroundPinstripeHeight* = StyleKey[float32]("background.pinstripe.height")
   StyleBorderColor* = StyleKey[Color]("border.color")
   StyleBorderWidth* = StyleKey[float32]("border.width")
   StyleCornerRadius* = StyleKey[float32]("corner.radius")

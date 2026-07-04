@@ -570,7 +570,10 @@ proc drawChoiceButtonCell*(
       )
   if focusVisible:
     context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
-  context.addText(style.choiceTextRect(rect), cell.title(), style.text)
+  let
+    textRect = style.choiceTextRect(rect)
+    title = cell.title().clippedText(textRect.size.width, style.text)
+  context.addText(textRect, title, style.text)
 
 proc drawPushButtonCell*(
     context: DrawContext,
@@ -592,10 +595,11 @@ proc drawPushButtonCell*(
     context.addFocusRing(absoluteFrame, style.box)
 
   let textRect = style.buttonTextRect(rect)
+  let title = cell.title().clippedText(textRect.size.width, style.text)
   if style.textHighlightColor.a > 0.0:
     context.addText(
       textRect.offsetRect(0.0, 1.0),
-      cell.title(),
+      title,
       TextStyle(
         color: style.textHighlightColor,
         insets: style.text.insets,
@@ -607,7 +611,7 @@ proc drawPushButtonCell*(
   if style.textShadowColor.a > 0.0:
     context.addText(
       textRect.offsetRect(0.0, -0.6'f32),
-      cell.title(),
+      title,
       TextStyle(
         color: style.textShadowColor,
         insets: style.text.insets,
@@ -616,7 +620,7 @@ proc drawPushButtonCell*(
       ),
       alignment = taCenter,
     )
-  context.addText(textRect, cell.title(), style.text, alignment = taCenter)
+  context.addText(textRect, title, style.text, alignment = taCenter)
 
 proc drawButtonCell*(
     context: DrawContext,
@@ -710,7 +714,10 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
           )
       if button.isFocusVisible:
         context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
-      context.addText(style.choiceTextRect(button.bounds), button.title, style.text)
+      let
+        textRect = style.choiceTextRect(button.bounds)
+        title = button.title.clippedText(textRect.size.width, style.text)
+      context.addText(textRect, title, style.text)
     else:
       let states = button.widgetStateSet()
       let style = button.pushButtonStyle(context.appearance, states)
@@ -718,10 +725,11 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       if button.isFocusVisible:
         context.addFocusRing(absoluteFrame, style.box)
       let textRect = style.buttonTextRect(button.bounds)
+      let title = button.title.clippedText(textRect.size.width, style.text)
       if style.textHighlightColor.a > 0.0:
         context.addText(
           textRect.offsetRect(0.0, 1.0),
-          button.title,
+          title,
           TextStyle(
             color: style.textHighlightColor,
             insets: style.text.insets,
@@ -733,7 +741,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       if style.textShadowColor.a > 0.0:
         context.addText(
           textRect.offsetRect(0.0, -0.6'f32),
-          button.title,
+          title,
           TextStyle(
             color: style.textShadowColor,
             insets: style.text.insets,
@@ -742,7 +750,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
           ),
           alignment = taCenter,
         )
-      context.addText(textRect, button.title, style.text, alignment = taCenter)
+      context.addText(textRect, title, style.text, alignment = taCenter)
 
 protocol DefaultButtonEvents of ResponderEventProtocol:
   method mouseEntered(button: Button, event: MouseEvent): bool =

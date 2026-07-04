@@ -30,25 +30,46 @@ proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
   check hasDarkInset
 
 func aquaButtonFill(): Fill =
-  linear(color(0.48, 0.54, 0.64, 1.0), color(0.94, 0.97, 1.0, 1.0), fgaY)
-
-func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.34, 0.52, 0.78, 1.0),
-    color(0.58, 0.74, 0.96, 1.0),
-    color(0.36, 0.56, 0.84, 1.0),
+    color(0.88, 0.98, 1.0, 1.0),
+    color(0.24, 0.70, 1.0, 1.0),
+    color(0.0, 0.36, 0.92, 1.0),
     fgaY,
     112'u8,
   )
 
+func aquaButtonPressedFill(): Fill =
+  linear(
+    color(0.18, 0.58, 0.96, 1.0),
+    color(0.0, 0.34, 0.86, 1.0),
+    color(0.0, 0.17, 0.58, 1.0),
+    fgaY,
+    104'u8,
+  )
+
 func aquaAccentButtonFill(): Fill =
-  linear(color(0.04, 0.13, 0.57, 1.0), color(0.20, 0.62, 0.98, 1.0), fgaY)
+  linear(
+    color(0.96, 1.0, 1.0, 1.0),
+    color(0.34, 0.77, 1.0, 1.0),
+    color(0.0, 0.42, 0.98, 1.0),
+    fgaY,
+    112'u8,
+  )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.10, 0.40, 0.88, 1.0),
-    color(0.02, 0.24, 0.68, 1.0),
-    color(0.01, 0.12, 0.42, 1.0),
+    color(0.12, 0.52, 0.96, 1.0),
+    color(0.0, 0.28, 0.78, 1.0),
+    color(0.0, 0.11, 0.46, 1.0),
+    fgaY,
+    104'u8,
+  )
+
+func aquaWindowBackgroundFill(): Fill =
+  linear(
+    color(0.96, 0.98, 1.0, 1.0),
+    color(0.90, 0.95, 1.0, 1.0),
+    color(0.82, 0.90, 0.98, 1.0),
     fgaY,
     104'u8,
   )
@@ -57,7 +78,7 @@ func aquaChoiceSelectedFill(): Fill =
   linear(color(0.48, 0.91, 1.0, 1.0), color(0.0, 0.49, 0.93, 1.0), fgaDiagTLBR)
 
 func aquaTextFieldFill(): Fill =
-  linear(color(1.0, 1.0, 1.0, 1.0), color(0.95, 0.98, 1.0, 1.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, 1.0), color(0.90, 0.96, 1.0, 1.0), fgaY)
 
 func aquaComboItemSelectedFill(): Fill =
   linear(
@@ -362,6 +383,7 @@ suite "nimkit theme":
         appearance.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
       comboBoxItemStyle =
         appearance.resolveTextFieldStyle(controlStyle(srComboBoxItem, {ssSelected}))
+      viewStyle = controlStyle(srView)
       tabStyle = controlStyle(srTab)
       selectedTabStyle = controlStyle(srTab, {ssSelected})
 
@@ -382,8 +404,21 @@ suite "nimkit theme":
     check comboBoxStyle.chrome == AquaChromeName
     check appearance.resolveChromeName(controlStyle(srTab)) == AquaChromeName
     check appearance.resolveChromeName(controlStyle(srTabPanel)) == AquaChromeName
+    check appearance.resolveFill(
+      viewStyle, fill(color(0.0, 0.0, 0.0, 1.0)), StyleBackgroundFill
+    ) == aquaWindowBackgroundFill()
+    check appearance.resolveColor(
+      viewStyle, StyleBackgroundPinstripeHighlightColor, color(0.0, 0.0, 0.0, 0.0)
+    ) == color(1.0, 1.0, 1.0, 0.36)
+    check appearance.resolveColor(
+      viewStyle, StyleBackgroundPinstripeColor, color(0.0, 0.0, 0.0, 0.0)
+    ) == color(0.46, 0.58, 0.76, 0.18)
+    check appearance.resolveLength(viewStyle, StyleBackgroundPinstripePeriod, 0.0'f32) ==
+      4.0'f32
+    check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 0.0'f32) ==
+      1.0'f32
     check appearance.resolveFill(tabStyle, fill(color(0.0, 0.0, 0.0, 1.0))) ==
-      fill(color(0.82, 0.83, 0.82, 1.0))
+      fill(color(0.84, 0.90, 0.98, 1.0))
     check appearance.resolveFill(
       tabStyle, fill(color(0.0, 0.0, 0.0, 0.0)), StyleHighlightFill
     ) == fill(color(1.0, 1.0, 1.0, 0.52))
@@ -391,7 +426,7 @@ suite "nimkit theme":
       color(0.14, 0.15, 0.18, 1.0)
     check appearance.resolveColor(
       selectedTabStyle, StyleBorderColor, color(0.0, 0.0, 0.0, 1.0)
-    ) == color(0.24, 0.44, 0.72, 1.0)
+    ) == color(0.14, 0.40, 0.82, 1.0)
     checkAquaButtonShadows(defaultButtonStyle.box.shadows)
     checkAquaButtonShadows(buttonStyle.box.shadows)
     check defaultButtonStyle.box.fill == aquaButtonFill()
@@ -400,11 +435,11 @@ suite "nimkit theme":
     check accentButtonStyle.box.fill == aquaAccentButtonFill()
     check accentHoveredButtonStyle.box.fill == aquaAccentButtonPressedFill()
     check accentHighlightedButtonStyle.box.fill == aquaAccentButtonPressedFill()
-    check hoveredButtonStyle.box.borderColor == color(0.18, 0.34, 0.62, 0.94)
-    check buttonStyle.box.borderColor == color(0.18, 0.34, 0.62, 0.94)
-    check accentButtonStyle.box.borderColor == color(0.01, 0.11, 0.49, 1.0)
-    check accentHoveredButtonStyle.box.borderColor == color(0.0, 0.07, 0.32, 1.0)
-    check accentHighlightedButtonStyle.box.borderColor == color(0.0, 0.07, 0.32, 1.0)
+    check hoveredButtonStyle.box.borderColor == color(0.0, 0.12, 0.52, 0.96)
+    check buttonStyle.box.borderColor == color(0.0, 0.12, 0.52, 0.96)
+    check accentButtonStyle.box.borderColor == color(0.0, 0.14, 0.72, 1.0)
+    check accentHoveredButtonStyle.box.borderColor == color(0.0, 0.08, 0.42, 1.0)
+    check accentHighlightedButtonStyle.box.borderColor == color(0.0, 0.08, 0.42, 1.0)
     check buttonStyle.box.cornerRadius == 14.0
     check buttonStyle.text.color == color(0.08, 0.08, 0.07, 0.95)
     check defaultButtonStyle.textHighlightColor == color(1.0, 1.0, 1.0, 0.42)
@@ -427,10 +462,10 @@ suite "nimkit theme":
     check checkBoxStyle.indicator.fill == aquaChoiceSelectedFill()
     check checkBoxStyle.indicator.borderColor == color(0.0, 0.32, 0.75, 0.96)
     check checkBoxStyle.indicator.cornerRadius == 3.0
-    check checkBoxStyle.indicator.focusRingColor == color(0.34, 0.66, 1.0, 0.72)
+    check checkBoxStyle.indicator.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
     check radioStyle.indicator.borderColor == color(0.42, 0.50, 0.62, 1.0)
     check radioStyle.indicator.cornerRadius == 8.0
-    check radioStyle.indicator.focusRingColor == color(0.34, 0.66, 1.0, 0.72)
+    check radioStyle.indicator.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
     check checkBoxStyle.choiceIndicatorRect(rect(0, 0, 100, 24)) == rect(2, 3, 18, 18)
     check checkBoxStyle.choiceTextRect(rect(0, 0, 100, 24)) == rect(27, 0, 71, 24)
 
@@ -438,8 +473,8 @@ suite "nimkit theme":
     check textFieldStyle.box.cornerRadius == 6.0
     check textFieldStyle.box.focusRingWidth > 0.0
     check textFieldStyle.box.fill == aquaTextFieldFill()
-    check textFieldStyle.box.borderColor == color(0.56, 0.64, 0.76, 1.0)
-    check textFieldStyle.box.focusRingColor == color(0.34, 0.66, 1.0, 0.72)
+    check textFieldStyle.box.borderColor == color(0.48, 0.63, 0.84, 1.0)
+    check textFieldStyle.box.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
     check textFieldStyle.text.color == color(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.selectionColor == color(0.24, 0.56, 1.0, 0.34)
     check textFieldStyle.minSize == initSize(80.0, 24.0)
@@ -461,11 +496,12 @@ suite "nimkit theme":
     check formLabelStyle.text.color == color(0.10, 0.14, 0.22, 1.0)
 
     check comboBoxStyle.box.fill == aquaTextFieldFill()
-    check comboBoxStyle.box.borderColor == color(0.12, 0.42, 0.86, 1.0)
+    check comboBoxStyle.box.borderColor == color(0.0, 0.34, 0.86, 1.0)
     check comboBoxStyle.box.cornerRadius == 6.0
     check comboBoxStyle.minSize == initSize(90.0, 24.0)
     check comboBoxStyle.arrowWidth == 24.0
-    check comboBoxStyle.arrowColor == color(0.10, 0.16, 0.26, 1.0)
+    check comboBoxStyle.arrowFill == aquaAccentButtonFill()
+    check comboBoxStyle.arrowColor == color(0.0, 0.12, 0.34, 1.0)
     check comboBoxStyle.comboBoxArrowRect(rect(0, 0, 100, 28)) == rect(76, 0, 24, 28)
     check comboBoxStyle.comboBoxTextRect(rect(0, 0, 100, 28)) == rect(8, 0, 60, 28)
     check comboBoxItemStyle.box.fill == aquaComboItemSelectedFill()

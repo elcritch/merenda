@@ -159,6 +159,67 @@ suite "nimkit rendering":
     check node.shadows[0].y == 3.0
     check node.shadows[0].blur == 7.0
 
+  test "buildRenders draws themed root background pinstripes":
+    let
+      root = newView(frame = rect(0, 0, 24, 10))
+      child = newView(frame = rect(2, 3, 4, 4))
+      baseFill = linear(color(0.9, 0.95, 1.0, 1.0), color(0.7, 0.8, 0.9, 1.0), fgaY)
+      highlightColor = color(1.0, 1.0, 1.0, 0.4)
+      stripeColor = color(0.2, 0.3, 0.4, 0.2)
+
+    var theme = initTheme()
+    theme[srView, StyleBackgroundFill] = baseFill
+    theme[srView, StyleBackgroundPinstripeHighlightColor] = highlightColor
+    theme[srView, StyleBackgroundPinstripeColor] = stripeColor
+    theme[srView, StyleBackgroundPinstripePeriod] = 4.0
+    theme[srView, StyleBackgroundPinstripeHeight] = 1.0
+
+    root.addSubview(child)
+
+    let
+      list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+      rootIdx = list.rootIds[0]
+
+    check list.nodes[int(rootIdx)].fill == baseFill
+
+    var
+      highlightFound = false
+      stripeFound = false
+      childFound = false
+
+    for idx in childIndex(list.nodes, rootIdx):
+      let node = list.nodes[int(idx)]
+      if node.kind == nkRectangle:
+        let nodeRect = node.renderedRect()
+        if node.fill.kind == flColor and node.fill.color == highlightColor.rgba:
+          highlightFound = highlightFound or nodeRect.rectsClose(rect(0, 0, 24, 1))
+        if node.fill.kind == flColor and node.fill.color == stripeColor.rgba:
+          stripeFound = stripeFound or nodeRect.rectsClose(rect(0, 1, 24, 1))
+        if nodeRect.rectsClose(rect(2, 3, 4, 4)):
+          childFound = true
+
+    check highlightFound
+    check stripeFound
+    check childFound
+
+    let explicitRoot = newView(frame = rect(0, 0, 24, 10))
+    explicitRoot.setBackgroundColor(color(0.2, 0.3, 0.4, 1.0))
+
+    let
+      explicitList = buildRenders(explicitRoot, initAppearance(theme))[DefaultDrawLevel]
+      explicitRootIdx = explicitList.rootIds[0]
+
+    var explicitPinstripeFound = false
+    for idx in childIndex(explicitList.nodes, explicitRootIdx):
+      let node = explicitList.nodes[int(idx)]
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color in [highlightColor.rgba, stripeColor.rgba]:
+        explicitPinstripeFound = true
+
+    check explicitList.nodes[int(explicitRootIdx)].fill.color ==
+      color(0.2, 0.3, 0.4, 1.0).rgba
+    check not explicitPinstripeFound
+
   test "buildRenders uses theme colors and metrics for built-in controls":
     let
       root = newView(frame = rect(0, 0, 180, 120))
@@ -427,6 +488,30 @@ suite "nimkit rendering":
     check buttonChildCount == 0
     check okTextLayerCount == 1
 
+  test "button rendering clips labels to the text rect":
+    let
+      root = newView(frame = rect(0, 0, 140, 80))
+      button = newButton("Expand All", frame = rect(10, 20, 44, 28))
+      appearance = initAppearance()
+      style = appearance.resolveButtonStyle(controlStyle(srButton))
+
+    root.addSubview(button)
+
+    let
+      textRect = style.buttonTextRect(button.bounds())
+      expectedTitle = clippedText(button.title(), textRect.size.width, style.text)
+      list = buildRenders(root, appearance)[DefaultDrawLevel]
+
+    check expectedTitle.len > 0
+    check expectedTitle != button.title()
+
+    var clippedTitleFound = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == expectedTitle:
+        clippedTitleFound = true
+
+    check clippedTitleFound
+
   test "buildRenders uses installed chrome extras selected per button":
     let
       root = newView(frame = rect(0, 0, 260, 120))
@@ -646,8 +731,7 @@ suite "nimkit rendering":
         popupInBaseLayer = true
 
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == color(0.10, 0.16, 0.26, 1.0).rgba and
-          node.screenBox.h == 1.0:
+          node.fill.color == color(0.0, 0.12, 0.34, 1.0).rgba and node.screenBox.h == 1.0:
         if node.screenBox.y == 32.0:
           arrowTopWidth = node.screenBox.w
         elif node.screenBox.y == 34.0:

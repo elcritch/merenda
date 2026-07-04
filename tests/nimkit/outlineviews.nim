@@ -190,6 +190,57 @@ suite "NimKit OutlineView":
 
     check surfaceFound
 
+  test "outline disclosure arrows render in the same row band as indented text":
+    let
+      root = newView(frame = rect(0, 0, 280, 140))
+      outlineView = newOutlineView(frame = rect(10, 20, 220, 100))
+
+    outlineView.showsHeader = false
+    outlineView.rowHeight = 28.0
+    outlineView.outlineColumn().width = 160.0
+    outlineView.outlineItems = [
+      initOutlineItem("root", "Root", expandable = true),
+      initOutlineItem("child", "Child", parentIdentifier = "root", expandable = true),
+      initOutlineItem("leaf", "Leaf", parentIdentifier = "child"),
+    ]
+    outlineView.expandItem("root")
+    root.addSubview(outlineView)
+
+    let
+      list = buildRenders(root)[DefaultDrawLevel]
+      rowRect = TableView(outlineView).rowItemRect(1)
+      disclosure = outlineView.disclosureRectForRow(1)
+      frameOrigin = outlineView.frame().origin
+      expectedShell = rect(
+        frameOrigin.x + disclosure.origin.x + 2.0'f32,
+        frameOrigin.y + disclosure.origin.y + 2.0'f32,
+        disclosure.size.width - 4.0'f32,
+        disclosure.size.height - 4.0'f32,
+      )
+      expectedTextX =
+        frameOrigin.x + rowRect.origin.x + outlineView.levelForRow(1).float32 * 16.0'f32 +
+        24.0'f32
+      expectedTextY = frameOrigin.y + rowRect.origin.y
+
+    var
+      disclosureShellFound = false
+      childTextFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.weight > 0.0'f32 and
+          node.stroke.fill.kind == flColor and
+          node.stroke.fill.color == color(0.48, 0.54, 0.64, 0.42).rgba and
+          node.renderedRect().rectsClose(expectedShell):
+        disclosureShellFound = true
+      if node.kind == nkText and node.renderedText() == "Child":
+        childTextFound = true
+        check node.screenBox.x == expectedTextX
+        check node.screenBox.y == expectedTextY
+        check node.screenBox.h == rowRect.size.height
+
+    check disclosureShellFound
+    check childTextFound
+
   test "outline column can be replaced and remains a table column":
     let
       outlineView = newOutlineView()

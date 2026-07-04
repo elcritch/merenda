@@ -25,6 +25,14 @@ proc offsetPoint(point, offset: types.Point): types.Point =
 proc boundsTranslation(bounds: types.Rect): types.Point =
   initPoint(-bounds.origin.x, -bounds.origin.y)
 
+proc viewBackgroundStyleContext(view: View): StyleContext =
+  controlStyle(
+    srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
+  )
+
+proc usesThemedRootBackground(view: View, isRoot: bool): bool =
+  isRoot and view.backgroundColor.a <= 0.0'f32
+
 proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
   let
     frame = view.frame()
@@ -46,15 +54,69 @@ proc beginDraw(
 
 proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
   var color = view.backgroundColor
-  if isRoot and color.a <= 0.0'f32:
-    let context = controlStyle(
-      srView, view.widgetStateSet(), id = view.styleId, classes = view.styleClasses
-    )
+  if view.usesThemedRootBackground(isRoot):
+    let context = view.viewBackgroundStyleContext()
     let fallbackColor = appearance.resolveColor(
       context, StyleBackgroundColor, color(0.94, 0.95, 0.97, 1.0)
     )
     return appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
   fill(color(color.r, color.g, color.b, color.a * view.alphaValue))
+
+proc addRootBackgroundPinstripes(
+    context: DrawContext,
+    view: View,
+    level: ZLevel,
+    parent: FigIdx,
+    frame: types.Rect,
+    appearance: Appearance,
+) =
+  let
+    style = view.viewBackgroundStyleContext()
+    rawPeriod = appearance.resolveLength(style, StyleBackgroundPinstripePeriod, 0.0'f32)
+    stripeHeight =
+      appearance.resolveLength(style, StyleBackgroundPinstripeHeight, 1.0'f32)
+
+  if rawPeriod <= 0.0'f32 or stripeHeight <= 0.0'f32 or frame.size.width <= 0.0'f32 or
+      frame.size.height <= 0.0'f32:
+    return
+
+  let
+    highlightColor = appearance.resolveColor(
+      style, StyleBackgroundPinstripeHighlightColor, color(0.0, 0.0, 0.0, 0.0)
+    )
+    stripeColor = appearance.resolveColor(
+      style, StyleBackgroundPinstripeColor, color(0.0, 0.0, 0.0, 0.0)
+    )
+
+  if highlightColor.a <= 0.0'f32 and stripeColor.a <= 0.0'f32:
+    return
+
+  let
+    period = max(rawPeriod, stripeHeight * 2.0'f32)
+    bottom = frame.origin.y + frame.size.height
+
+  var y = frame.origin.y
+  while y < bottom:
+    let highlightHeight = min(stripeHeight, bottom - y)
+    if highlightColor.a > 0.0'f32 and highlightHeight > 0.0'f32:
+      discard context.addRenderRectangle(
+        level,
+        parent,
+        rect(frame.origin.x, y, frame.size.width, highlightHeight),
+        fill(highlightColor),
+      )
+
+    let stripeY = y + stripeHeight
+    let darkHeight = min(stripeHeight, bottom - stripeY)
+    if stripeColor.a > 0.0'f32 and darkHeight > 0.0'f32:
+      discard context.addRenderRectangle(
+        level,
+        parent,
+        rect(frame.origin.x, stripeY, frame.size.width, darkHeight),
+        fill(stripeColor),
+      )
+
+    y += period
 
 proc renderViewInto(
     context: DrawContext,
@@ -86,6 +148,10 @@ proc renderViewInto(
       shadows = view.shadow,
       clips = view.clipsToBounds,
     )
+
+  if view.usesThemedRootBackground(isRoot):
+    context.addRootBackgroundPinstripes(view, level, rootIdx, absoluteFrame, appearance)
+
   var placement = RenderPlacement(
     rootRect: absoluteFrame,
     contentOrigin: absoluteFrame.origin.addPoints(view.bounds().boundsTranslation()),

@@ -77,6 +77,8 @@ type
     xTypes: seq[string]
     xItems: Table[string, PasteboardItem]
     xChangeCount: int
+    xObservedProviderChangeCount: int
+    xHasObservedProviderChangeCount: bool
     xProvider: DynamicAgent
     xOwner: DynamicAgent
 
@@ -295,6 +297,7 @@ proc `provider=`*(pasteboard: Pasteboard, provider: DynamicAgent) =
   if pasteboard.isNil:
     return
   pasteboard.xProvider = provider
+  pasteboard.xHasObservedProviderChangeCount = false
 
 proc owner*(pasteboard: Pasteboard): DynamicAgent =
   if pasteboard.isNil: nil else: pasteboard.xOwner
@@ -383,6 +386,38 @@ proc addType(pasteboard: Pasteboard, kind: string) =
   if not pasteboard.isNil and kind.len > 0 and kind notin pasteboard.xTypes:
     pasteboard.xTypes.add kind
 
+proc clearLocalContents(pasteboard: Pasteboard) =
+  if pasteboard.isNil:
+    return
+  pasteboard.xTypes.setLen(0)
+  pasteboard.xItems.clear()
+
+proc observeProviderChangeCount(pasteboard: Pasteboard) =
+  if pasteboard.isNil:
+    return
+  let providerCount = pasteboard.providerChangeCount()
+  if providerCount.isSome:
+    pasteboard.xObservedProviderChangeCount = providerCount.get()
+    pasteboard.xHasObservedProviderChangeCount = true
+  else:
+    pasteboard.xHasObservedProviderChangeCount = false
+
+proc refreshProviderCache(pasteboard: Pasteboard) =
+  if pasteboard.isNil:
+    return
+  let providerCount = pasteboard.providerChangeCount()
+  if providerCount.isNone:
+    pasteboard.xHasObservedProviderChangeCount = false
+    return
+  let count = providerCount.get()
+  if not pasteboard.xHasObservedProviderChangeCount:
+    pasteboard.xObservedProviderChangeCount = count
+    pasteboard.xHasObservedProviderChangeCount = true
+  elif count != pasteboard.xObservedProviderChangeCount:
+    pasteboard.xObservedProviderChangeCount = count
+    pasteboard.clearLocalContents()
+    pasteboard.xOwner = nil
+
 proc syncProviderTypes(pasteboard: Pasteboard) =
   if pasteboard.isNil:
     return
@@ -401,6 +436,7 @@ proc storeMaterializedItem(
 proc materializeItem(pasteboard: Pasteboard, kind: string): bool =
   if pasteboard.isNil or kind.len == 0:
     return false
+  pasteboard.refreshProviderCache()
   if kind in pasteboard.xItems:
     return true
 
@@ -426,12 +462,9 @@ proc types*(pasteboard: Pasteboard): seq[string] =
   if pasteboard.isNil:
     @[]
   else:
+    pasteboard.refreshProviderCache()
     pasteboard.syncProviderTypes()
     pasteboard.xTypes
-
-proc clearLocalContents(pasteboard: Pasteboard) =
-  pasteboard.xTypes.setLen(0)
-  pasteboard.xItems.clear()
 
 proc clearContents*(pasteboard: Pasteboard) =
   if pasteboard.isNil:
@@ -440,6 +473,7 @@ proc clearContents*(pasteboard: Pasteboard) =
   pasteboard.xOwner = nil
   inc pasteboard.xChangeCount
   discard pasteboard.clearProviderContents()
+  pasteboard.observeProviderChangeCount()
 
 proc declareTypes*(
     pasteboard: Pasteboard, types: openArray[string], owner: DynamicAgent = nil
@@ -452,6 +486,7 @@ proc declareTypes*(
     pasteboard.addType(kind)
   inc pasteboard.xChangeCount
   discard pasteboard.clearProviderContents()
+  pasteboard.observeProviderChangeCount()
 
 proc setItem*(pasteboard: Pasteboard, kind: string, item: PasteboardItem): bool =
   if pasteboard.isNil or kind.len == 0 or item.kind == pikNone:
@@ -460,6 +495,7 @@ proc setItem*(pasteboard: Pasteboard, kind: string, item: PasteboardItem): bool 
   pasteboard.xItems[kind] = item.copyPasteboardItem()
   inc pasteboard.xChangeCount
   discard pasteboard.setProviderItem(kind, item)
+  pasteboard.observeProviderChangeCount()
   true
 
 proc itemForType*(pasteboard: Pasteboard, kind: string): PasteboardItem =
@@ -586,6 +622,7 @@ proc availableTypeFromArray*(
 ): string =
   if pasteboard.isNil:
     return ""
+  pasteboard.refreshProviderCache()
   pasteboard.syncProviderTypes()
   for kind in preferredTypes:
     if kind in pasteboard.xTypes:
@@ -604,6 +641,7 @@ proc releaseGlobally*(pasteboard: Pasteboard): bool =
       false
     else:
       pasteboard.clearProviderContents()
+  pasteboard.observeProviderChangeCount()
 
   ensureNamedPasteboards()
   var removed = false

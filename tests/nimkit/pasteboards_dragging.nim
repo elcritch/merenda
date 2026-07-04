@@ -136,6 +136,15 @@ proc newTypedPasteboardProvider(): TypedPasteboardProvider =
   result.items = initTable[string, PasteboardItem]()
   discard result.withProtocol(TypedPasteboardProviderProtocol)
 
+proc replaceProviderItem(
+    provider: TypedPasteboardProvider, kind: string, item: PasteboardItem
+) =
+  provider.types.setLen(0)
+  provider.items.clear()
+  provider.addType(kind)
+  provider.items[kind] = item.copyPasteboardItem()
+  inc provider.changeCount
+
 proc newPromisedFileSource(): PromisedFileSource =
   result = PromisedFileSource()
   discard result.withProtocol(PromisedFileSourceProtocol)
@@ -190,6 +199,30 @@ suite "nimkit pasteboards and dragging":
     check writer.releaseGlobally()
     check provider.releaseCount == 1
     check provider.clearCount == 0
+
+  test "pasteboard reads invalidate provider cache after change counts move":
+    let
+      provider = newTypedPasteboardProvider()
+      pasteboard = newPasteboard("provider-cache")
+
+    pasteboard.provider = provider
+    provider.replaceProviderItem(
+      PasteboardTypeString, initPasteboardStringItem("first")
+    )
+
+    check pasteboard.types() == @[PasteboardTypeString]
+    check pasteboard.stringForType(PasteboardTypeString) == "first"
+
+    provider.replaceProviderItem(
+      PasteboardTypeString, initPasteboardStringItem("second")
+    )
+    check pasteboard.stringForType(PasteboardTypeString) == "second"
+
+    provider.replaceProviderItem(PasteboardTypeData, initPasteboardDataItem("blob"))
+    check pasteboard.availableTypeFromArray([PasteboardTypeString, PasteboardTypeData]) ==
+      PasteboardTypeData
+    check PasteboardTypeString notin pasteboard.types()
+    check pasteboard.dataForType(PasteboardTypeData) == "blob"
 
   test "text transfer contracts map to pasteboard payloads":
     let contracts = pasteboardTextContracts()

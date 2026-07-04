@@ -9,7 +9,7 @@ import siwin/clipboards as siwinClipboards
 import sigils/selectors
 
 when defined(macosx):
-  import darwin/app_kit/[nscolor, nswindow]
+  import darwin/app_kit/[nscolor, nspasteboard, nswindow]
   import darwin/objc/runtime
 
 import ../drawing/images
@@ -59,6 +59,11 @@ type
     xItems: Table[string, PasteboardItem]
     xItemsReady: bool
     xChangeCount: int
+    xHostChangeCount: int
+    xObservedHostChangeCount: int
+    xHasObservedHostChangeCount: bool
+    xHostFingerprint: string
+    xHasHostFingerprint: bool
 
   NativePasteboardPayload = ref object of RootObj
     items: Table[string, PasteboardItem]
@@ -234,6 +239,82 @@ proc addType(types: var seq[string], kind: string) =
   if kind.len > 0 and kind notin types:
     types.add kind
 
+proc hostReportedChangeCount(provider: NativePasteboardProvider): Option[int] =
+  discard provider
+  when defined(macosx):
+    let pasteboard = NSPasteboard.generalPasteboard()
+    if pasteboard != nil:
+      return some(pasteboard.changeCount().int)
+  none(int)
+
+proc hostClipboardFingerprint(provider: NativePasteboardProvider): Option[string] =
+  let host = provider.readyHost()
+  if not host.hostReady:
+    return none(string)
+  let clipboard = host.xNativeWindow.clipboard
+  var parts: seq[string]
+
+  let text = clipboard.clipboardText
+  if text.len > 0:
+    parts.add "text=" & text
+
+  for filePath in clipboard.clipboardFiles:
+    parts.add "file=" & filePath
+
+  for mimeType in clipboard.availableMimeTypes:
+    parts.add "mime=" & mimeType & "=" & clipboard.clipboardData(mimeType)
+
+  some(parts.join("\x1F"))
+
+proc syntheticHostChangeCount(provider: NativePasteboardProvider): Option[int] =
+  let fingerprint = provider.hostClipboardFingerprint()
+  if fingerprint.isNone:
+    return none(int)
+  let value = fingerprint.get()
+  if not provider.xHasHostFingerprint:
+    provider.xHostFingerprint = value
+    provider.xHasHostFingerprint = true
+  elif value != provider.xHostFingerprint:
+    provider.xHostFingerprint = value
+    inc provider.xHostChangeCount
+  some(provider.xHostChangeCount)
+
+proc currentHostChangeCount(provider: NativePasteboardProvider): Option[int] =
+  let reported = provider.hostReportedChangeCount()
+  if reported.isSome:
+    return reported
+  provider.syntheticHostChangeCount()
+
+proc clearHostBackedCache(provider: NativePasteboardProvider) =
+  if provider.isNil:
+    return
+  provider.ensureItems()
+  provider.xTypes.setLen(0)
+  provider.xItems.clear()
+
+proc syncExternalHostChanges(provider: NativePasteboardProvider): Option[int] =
+  if provider.isNil:
+    return none(int)
+  let count = provider.currentHostChangeCount()
+  if count.isNone:
+    return none(int)
+  let value = count.get()
+  if not provider.xHasObservedHostChangeCount:
+    provider.xObservedHostChangeCount = value
+    provider.xHasObservedHostChangeCount = true
+  elif value != provider.xObservedHostChangeCount:
+    provider.xObservedHostChangeCount = value
+    provider.clearHostBackedCache()
+  some(value)
+
+proc observeHostChangeCount(provider: NativePasteboardProvider) =
+  if provider.isNil:
+    return
+  let count = provider.currentHostChangeCount()
+  if count.isSome:
+    provider.xObservedHostChangeCount = count.get()
+    provider.xHasObservedHostChangeCount = true
+
 proc hostTypes(provider: NativePasteboardProvider): seq[string] =
   let host = provider.readyHost()
   if not host.hostReady:
@@ -393,6 +474,7 @@ proc storeItem(
   provider.xItems[kind] = item.copyPasteboardItem()
   inc provider.xChangeCount
   provider.publishHostClipboard()
+  provider.observeHostChangeCount()
   true
 
 proc nativeItemForType(
@@ -445,11 +527,13 @@ proc clearStoredItems(provider: NativePasteboardProvider) =
   provider.xItems.clear()
   inc provider.xChangeCount
   provider.publishHostClipboard()
+  provider.observeHostChangeCount()
 
 protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
   method pasteboardTypes(
       provider: NativePasteboardProvider, pasteboard: Pasteboard
   ): seq[string] =
+    discard provider.syncExternalHostChanges()
     provider.ensureItems()
     for kind in provider.xTypes:
       result.addType(kind)
@@ -459,11 +543,16 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
   method pasteboardChangeCount(
       provider: NativePasteboardProvider, pasteboard: Pasteboard
   ): int =
-    provider.xChangeCount
+    let hostCount = provider.syncExternalHostChanges()
+    if hostCount.isSome:
+      max(provider.xChangeCount, hostCount.get())
+    else:
+      provider.xChangeCount
 
   method pasteboardItemForType(
       provider: NativePasteboardProvider, request: PasteboardTypeRequest
   ): PasteboardItem =
+    discard provider.syncExternalHostChanges()
     let nativeItem = provider.nativeItemForType(request.kind)
     if nativeItem.kind != pikNone:
       return nativeItem
@@ -474,6 +563,7 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
   method stringForPasteboardType(
       provider: NativePasteboardProvider, request: PasteboardTypeRequest
   ): string =
+    discard provider.syncExternalHostChanges()
     let host = provider.readyHost()
     if host.hostReady and request.kind == PasteboardTypeString:
       return host.xNativeWindow.clipboard.clipboardText

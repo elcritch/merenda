@@ -254,7 +254,6 @@ proc configureOutline(outline: OutlineView) =
 
 const
   TitleHeight = 32.0
-  ToolbarHeight = 30.0
   SidebarWidth = 236.0
 
 let
@@ -321,16 +320,16 @@ activateConstraints:
   title[atHeight] == TitleHeight
   expandButton[atTop] == title[atBottom] + 14.0
   expandButton[atLeft] == title[atLeft]
-  expandButton[atWidth] == 110.0
-  expandButton[atHeight] == ToolbarHeight
+  expandButton[atWidth] >= 8.5'em
+  expandButton[atHeight] == 2.4'em
   collapseButton[atTop] == expandButton[atTop]
   collapseButton[atLeft] == expandButton[atRight] + 8.0
-  collapseButton[atWidth] == 112.0
-  collapseButton[atHeight] == ToolbarHeight
+  collapseButton[atWidth] >= 9.0'em
+  collapseButton[atHeight] == expandButton[atHeight]
   focusButton[atTop] == expandButton[atTop]
   focusButton[atLeft] == collapseButton[atRight] + 8.0
-  focusButton[atWidth] == 128.0
-  focusButton[atHeight] == ToolbarHeight
+  focusButton[atWidth] >= 10.5'em
+  focusButton[atHeight] == expandButton[atHeight]
   outline[atTop] == expandButton[atBottom] + 14.0
   outline[atLeft] == title[atLeft]
   outline[atRight] == selectionTitle[atLeft] - 22.0

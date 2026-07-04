@@ -66,25 +66,46 @@ func highlightedButtonShadows(): seq[BoxShadow] =
   ]
 
 func aquaButtonFill(): Fill =
-  linear(color(0.48, 0.54, 0.64, 1.0), color(0.94, 0.97, 1.0, 1.0), fgaY)
-
-func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.34, 0.52, 0.78, 1.0),
-    color(0.58, 0.74, 0.96, 1.0),
-    color(0.36, 0.56, 0.84, 1.0),
+    color(0.88, 0.98, 1.0, 1.0),
+    color(0.24, 0.70, 1.0, 1.0),
+    color(0.0, 0.36, 0.92, 1.0),
     fgaY,
     112'u8,
   )
 
+func aquaButtonPressedFill(): Fill =
+  linear(
+    color(0.18, 0.58, 0.96, 1.0),
+    color(0.0, 0.34, 0.86, 1.0),
+    color(0.0, 0.17, 0.58, 1.0),
+    fgaY,
+    104'u8,
+  )
+
 func aquaAccentButtonFill(): Fill =
-  linear(color(0.04, 0.13, 0.57, 1.0), color(0.20, 0.62, 0.98, 1.0), fgaY)
+  linear(
+    color(0.96, 1.0, 1.0, 1.0),
+    color(0.34, 0.77, 1.0, 1.0),
+    color(0.0, 0.42, 0.98, 1.0),
+    fgaY,
+    112'u8,
+  )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.10, 0.40, 0.88, 1.0),
-    color(0.02, 0.24, 0.68, 1.0),
-    color(0.01, 0.12, 0.42, 1.0),
+    color(0.12, 0.52, 0.96, 1.0),
+    color(0.0, 0.28, 0.78, 1.0),
+    color(0.0, 0.11, 0.46, 1.0),
+    fgaY,
+    104'u8,
+  )
+
+func aquaWindowBackgroundFill(): Fill =
+  linear(
+    color(0.96, 0.98, 1.0, 1.0),
+    color(0.90, 0.95, 1.0, 1.0),
+    color(0.82, 0.90, 0.98, 1.0),
     fgaY,
     104'u8,
   )
@@ -111,7 +132,7 @@ func aquaChoiceSelectedHighlightedFill(): Fill =
   )
 
 func aquaTextFieldFill(): Fill =
-  linear(color(1.0, 1.0, 1.0, 1.0), color(0.95, 0.98, 1.0, 1.0), fgaY)
+  linear(color(1.0, 1.0, 1.0, 1.0), color(0.90, 0.96, 1.0, 1.0), fgaY)
 
 func aquaComboItemHighlightFill(): Fill =
   linear(color(0.90, 0.96, 1.0, 1.0), color(0.72, 0.87, 1.0, 1.0), fgaY)
@@ -136,17 +157,17 @@ func aquaComboItemSelectedHighlightedFill(): Fill =
 
 func aquaButtonShadows(): seq[BoxShadow] =
   @[
-    dropShadow(color(0.0, 0.0, 0.0, 0.17), y = 2.0, blur = 4.0),
-    insetShadow(color(1.0, 1.0, 1.0, 0.72), y = 1.0, blur = 2.0),
-    insetShadow(color(0.55, 0.86, 1.0, 0.17), y = 2.0, blur = 4.0),
-    insetShadow(color(0.0, 0.05, 0.18, 0.15), y = -2.0, blur = 5.0),
+    dropShadow(color(0.0, 0.14, 0.42, 0.32), y = 2.0, blur = 5.0),
+    insetShadow(color(1.0, 1.0, 1.0, 0.86), y = 1.0, blur = 2.0),
+    insetShadow(color(0.78, 0.96, 1.0, 0.34), y = 3.0, blur = 5.0),
+    insetShadow(color(0.0, 0.05, 0.26, 0.24), y = -2.0, blur = 6.0),
   ]
 
 func aquaPressedButtonShadows(): seq[BoxShadow] =
   @[
-    dropShadow(color(0.0, 0.0, 0.0, 0.13), y = 1.0, blur = 3.0),
-    insetShadow(color(0.0, 0.05, 0.20, 0.23), y = 2.0, blur = 5.0),
-    insetShadow(color(1.0, 1.0, 1.0, 0.20), y = -1.0, blur = 3.0),
+    dropShadow(color(0.0, 0.08, 0.24, 0.22), y = 1.0, blur = 3.0),
+    insetShadow(color(0.0, 0.04, 0.24, 0.36), y = 2.0, blur = 6.0),
+    insetShadow(color(1.0, 1.0, 1.0, 0.24), y = -1.0, blur = 3.0),
   ]
 
 func aquaInsetControlShadows(): seq[BoxShadow] =
@@ -183,11 +204,11 @@ proc initTheme*(): Theme =
   for role in TextStyleRoles:
     result[role, StyleFontName] = styleKeyword(defaultFontName())
     result[role, StyleFontSize] = defaultFontSize()
-  result["accent"] = styleColor(color(0.10, 0.48, 0.96, 1.0))
-  result["accent.pressed"] = styleColor(color(0.02, 0.25, 0.70, 1.0))
-  result["disabled.fill"] = styleColor(color(0.64, 0.68, 0.74, 1.0))
-  result["disabled.text.color"] = styleColor(color(0.90, 0.92, 0.95, 1.0))
-  result["focus.ring.color"] = styleColor(color(0.34, 0.66, 1.0, 0.72))
+  result["accent"] = styleColor(color(0.0, 0.46, 0.98, 1.0))
+  result["accent.pressed"] = styleColor(color(0.0, 0.22, 0.70, 1.0))
+  result["disabled.fill"] = styleColor(color(0.70, 0.76, 0.84, 1.0))
+  result["disabled.text.color"] = styleColor(color(0.88, 0.92, 0.97, 1.0))
+  result["focus.ring.color"] = styleColor(color(0.28, 0.64, 1.0, 0.82))
   result["indicator.size"] = 18.0
 
   result["button.fill"] = aquaButtonFill()
@@ -197,12 +218,12 @@ proc initTheme*(): Theme =
   result["button.fill.accent.highlighted"] = aquaAccentButtonPressedFill()
   result["button.text.color"] = styleColor(color(0.08, 0.08, 0.07, 0.95))
   result["button.text.color.disabled"] = styleToken("disabled.text.color")
-  result["button.border.color"] = styleColor(color(0.30, 0.40, 0.55, 0.84))
-  result["button.border.color.highlighted"] = styleColor(color(0.18, 0.34, 0.62, 0.94))
+  result["button.border.color"] = styleColor(color(0.0, 0.18, 0.68, 0.92))
+  result["button.border.color.highlighted"] = styleColor(color(0.0, 0.12, 0.52, 0.96))
   result["button.border.color.disabled"] = styleColor(color(0.52, 0.57, 0.64, 1.0))
-  result["button.border.color.accent"] = styleColor(color(0.01, 0.11, 0.49, 1.0))
+  result["button.border.color.accent"] = styleColor(color(0.0, 0.14, 0.72, 1.0))
   result["button.border.color.accent.highlighted"] =
-    styleColor(color(0.0, 0.07, 0.32, 1.0))
+    styleColor(color(0.0, 0.08, 0.42, 1.0))
   result["button.focus.ring.color"] = styleColor(color(1.0, 1.0, 1.0, 0.90))
   result["button.shadows"] = aquaButtonShadows()
   result["button.shadows.highlighted"] = aquaPressedButtonShadows()
@@ -228,7 +249,7 @@ proc initTheme*(): Theme =
   result["choice.text.color.disabled"] = styleColor(color(0.48, 0.52, 0.58, 1.0))
 
   result["textField.fill"] = aquaTextFieldFill()
-  result["textField.border.color"] = styleColor(color(0.56, 0.64, 0.76, 1.0))
+  result["textField.border.color"] = styleColor(color(0.48, 0.63, 0.84, 1.0))
   result["textField.text.color"] = styleColor(color(0.08, 0.09, 0.11, 1.0))
   result["textField.selection.color"] = styleColor(color(0.24, 0.56, 1.0, 0.34))
   result["monoText.fill"] = styleToken("textField.fill")
@@ -237,9 +258,10 @@ proc initTheme*(): Theme =
   result["monoText.cursor.color"] = styleColor(color(0.08, 0.45, 0.95, 0.45))
   result["comboBox.fill"] = styleToken("textField.fill")
   result["comboBox.border.color"] = styleToken("textField.border.color")
-  result["comboBox.border.color.open"] = styleColor(color(0.12, 0.42, 0.86, 1.0))
+  result["comboBox.border.color.open"] = styleColor(color(0.0, 0.34, 0.86, 1.0))
   result["comboBox.text.color"] = styleToken("textField.text.color")
-  result["comboBox.arrow.color"] = styleColor(color(0.10, 0.16, 0.26, 1.0))
+  result["comboBox.arrow.color"] = styleColor(color(0.0, 0.12, 0.34, 1.0))
+  result["comboBox.arrow.fill"] = aquaAccentButtonFill()
   result["comboBox.item.fill"] = fill(color(1.0, 1.0, 1.0, 1.0))
   result["comboBox.item.fill.highlighted"] = aquaComboItemHighlightFill()
   result["comboBox.item.fill.selected"] = aquaComboItemSelectedFill()
@@ -254,12 +276,12 @@ proc initTheme*(): Theme =
   result["box.fill"] = styleColor(color(0.0, 0.0, 0.0, 0.0))
   result["box.border.color"] = styleColor(color(0.61, 0.65, 0.72, 1.0))
   result["box.text.color"] = styleColor(color(0.12, 0.15, 0.20, 1.0))
-  result["scroller.track.fill"] = styleFill(color(0.88, 0.90, 0.94, 0.70))
-  result["scroller.track.border.color"] = styleColor(color(0.67, 0.71, 0.78, 0.80))
-  result["scroller.knob.fill"] = styleFill(color(0.36, 0.42, 0.50, 0.65))
-  result["scroller.knob.border.color"] = styleColor(color(0.24, 0.29, 0.36, 0.50))
-  result["splitView.divider.fill"] = styleFill(color(0.84, 0.86, 0.90, 1.0))
-  result["splitView.divider.border.color"] = styleColor(color(0.58, 0.62, 0.68, 1.0))
+  result["scroller.track.fill"] = styleFill(color(0.84, 0.89, 0.96, 0.78))
+  result["scroller.track.border.color"] = styleColor(color(0.57, 0.68, 0.84, 0.86))
+  result["scroller.knob.fill"] = styleFill(color(0.34, 0.58, 0.86, 0.72))
+  result["scroller.knob.border.color"] = styleColor(color(0.10, 0.28, 0.58, 0.58))
+  result["splitView.divider.fill"] = styleFill(color(0.83, 0.89, 0.97, 1.0))
+  result["splitView.divider.border.color"] = styleColor(color(0.52, 0.64, 0.82, 1.0))
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
   result["rowItem.fill.highlighted"] = styleToken("comboBox.item.fill.highlighted")
   result["rowItem.fill.selected"] = styleToken("comboBox.item.fill.selected")
@@ -271,11 +293,11 @@ proc initTheme*(): Theme =
     styleToken("comboBox.item.text.color.selected")
   result["rowItem.text.color.disabled"] = styleColor(color(0.32, 0.35, 0.41, 1.0))
   result["rowItem.separator.color"] = styleColor(color(0.86, 0.88, 0.91, 1.0))
-  result["tab.panel.fill"] = styleColor(color(0.82, 0.82, 0.80, 1.0))
-  result["tab.panel.border.color"] = styleColor(color(0.66, 0.67, 0.66, 1.0))
-  result["tab.fill"] = styleColor(color(0.82, 0.83, 0.82, 1.0))
+  result["tab.panel.fill"] = styleColor(color(0.88, 0.94, 1.0, 1.0))
+  result["tab.panel.border.color"] = styleColor(color(0.56, 0.70, 0.88, 1.0))
+  result["tab.fill"] = styleColor(color(0.84, 0.90, 0.98, 1.0))
   result["tab.fill.highlighted"] = styleColor(color(0.72, 0.80, 0.90, 1.0))
-  result["tab.fill.selected"] = styleColor(color(0.68, 0.80, 0.94, 1.0))
+  result["tab.fill.selected"] = styleColor(color(0.72, 0.86, 1.0, 1.0))
   result["tab.fill.disabled"] = styleColor(color(0.78, 0.80, 0.84, 1.0))
   result["tab.highlight.fill"] = styleFill(color(1.0, 1.0, 1.0, 0.52))
   result["tab.highlight.fill.disabled"] = styleFill(color(1.0, 1.0, 1.0, 0.30))
@@ -284,10 +306,15 @@ proc initTheme*(): Theme =
   result["tab.text.color.disabled"] = styleColor(color(0.48, 0.50, 0.54, 1.0))
   result["tab.border.color"] = styleColor(color(0.48, 0.52, 0.56, 1.0))
   result["tab.border.color.highlighted"] = styleColor(color(0.34, 0.48, 0.66, 1.0))
-  result["tab.border.color.selected"] = styleColor(color(0.24, 0.44, 0.72, 1.0))
+  result["tab.border.color.selected"] = styleColor(color(0.14, 0.40, 0.82, 1.0))
   result["tab.border.color.disabled"] = styleColor(color(0.65, 0.67, 0.70, 1.0))
 
-  result[srView, StyleBackgroundColor] = color(0.95, 0.96, 0.98)
+  result[srView, StyleBackgroundColor] = color(0.90, 0.95, 1.0)
+  result[srView, StyleBackgroundFill] = aquaWindowBackgroundFill()
+  result[srView, StyleBackgroundPinstripeHighlightColor] = color(1.0, 1.0, 1.0, 0.36)
+  result[srView, StyleBackgroundPinstripeColor] = color(0.46, 0.58, 0.76, 0.18)
+  result[srView, StyleBackgroundPinstripePeriod] = 4.0
+  result[srView, StyleBackgroundPinstripeHeight] = 1.0
 
   result.addRoleRule(
     srBox,
@@ -434,10 +461,22 @@ proc initTheme*(): Theme =
   result[srSlider, StyleIndicatorSize] = 6.0
   result[srSlider, StyleKnobSize] = 18.0
   result[srSlider, StyleMinimumSize] = initSize(160.0, 24.0)
+  result[srSlider, StyleFill] = fill(color(0.76, 0.84, 0.94, 1.0))
+  result[srSlider, StyleHighlightFill] = aquaAccentButtonFill()
+  result[srSlider, StyleBorderColor] = color(0.38, 0.52, 0.70, 0.78)
+  result[srSlider, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
+  result[srSlider, StyleKnobFill] = aquaTextFieldFill()
+  result[srSlider, StyleKnobBorderColor] = color(0.46, 0.58, 0.74, 0.94)
   result[srSlider, StyleChrome] = styleKeyword(AquaChromeName)
   result[srProgressIndicator, StyleIndicatorSize] = 6.0
   result[srProgressIndicator, StyleKnobSize] = 18.0
   result[srProgressIndicator, StyleMinimumSize] = initSize(160.0, 24.0)
+  result[srProgressIndicator, StyleFill] = fill(color(0.76, 0.84, 0.94, 1.0))
+  result[srProgressIndicator, StyleHighlightFill] = aquaAccentButtonFill()
+  result[srProgressIndicator, StyleBorderColor] = color(0.38, 0.52, 0.70, 0.78)
+  result[srProgressIndicator, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
+  result[srProgressIndicator, StyleKnobFill] = aquaTextFieldFill()
+  result[srProgressIndicator, StyleKnobBorderColor] = color(0.46, 0.58, 0.74, 0.94)
   result[srProgressIndicator, StyleChrome] = styleKeyword(AquaChromeName)
 
   result.addRoleRule(
@@ -678,6 +717,7 @@ proc initTheme*(): Theme =
   result[srComboBox, StyleFocusRingColor] = styleToken("focus.ring.color")
   result[srComboBox, StyleIndicatorSize] = 24.0
   result[srComboBox, StyleMinimumSize] = initSize(90.0, 24.0)
+  result[srComboBox, StyleIndicatorFill] = styleToken("comboBox.arrow.fill")
   result[srComboBox, StyleMarkColor] = styleToken("comboBox.arrow.color")
   result[srComboBox, StyleBoxShadows] = aquaInsetControlShadows()
   result[srComboBox, StyleChrome] = styleKeyword(AquaChromeName)
