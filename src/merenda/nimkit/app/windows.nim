@@ -13,6 +13,9 @@ import ../drawing/rendering as nimkitRendering
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
+from ../text/textviews import
+  TextView, editable, insertionPointBlinkPeriod, insertionPointVisible,
+  `insertionPointVisible=`
 import ../foundation/selectors
 import ../themes
 import ../foundation/types
@@ -126,6 +129,8 @@ type
     xHostWindow: HostWindow
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
+    xInsertionPointBlinkAnimation: Animation
+    xInsertionPointBlinkTarget: TextView
     xOwnerWindow: Window
     xAuxiliaryWindows: seq[Window]
     xSheet: Window
@@ -165,6 +170,9 @@ type
 type EventDispatchResult = object
   handled: bool
   responder: Responder
+
+type CaretBlinkAnimation = ref object of Animation
+  textView: TextView
 
 var
   savedWindowFrames {.threadvar.}: Table[string, Rect]
@@ -304,6 +312,7 @@ proc stopAnimation*(
 ): bool {.discardable.}
 
 proc drainAnimations*(window: Window): int {.discardable.}
+proc updateInsertionPointBlink(window: Window)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc dispatchKeyEventInChain(
@@ -352,6 +361,15 @@ protocol DefaultWindowValidations of UserInterfaceValidations:
     if validation.isSome:
       return validation.get()
     args.action.name.len > 0 and window.respondsTo(args.action.name)
+
+protocol CaretBlinkAnimationProtocol of AnimationProtocol:
+  method updateCurrentTime(animation: CaretBlinkAnimation, currentTime: Duration) =
+    discard currentTime
+    if animation.isNil or animation.textView.isNil:
+      return
+    let visible = animation.progress{} < 0.5'f32
+    if animation.textView.insertionPointVisible() != visible:
+      animation.textView.insertionPointVisible = visible
 
 proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): Window =
   let resolvedFrame = frame.resolveAutoRect(defaultWindowFrame())
@@ -871,6 +889,52 @@ proc fieldEditorClient*(window: Window): Responder =
   if not window.xFieldEditor.isNil:
     return window.xFieldEditor.client()
 
+proc insertionPointBlinkTarget(window: Window): TextView =
+  if not window.isNil and window.xFirstResponder of TextView:
+    result = TextView(window.xFirstResponder)
+
+proc shouldBlinkInsertionPoint(textView: TextView): bool =
+  not textView.isNil and textView.editable() and textView.isFocused() and
+    textView.insertionPointBlinkPeriod() > 0.0'f32
+
+proc insertionPointBlinkDuration(textView: TextView): Duration =
+  let milliseconds =
+    int64(max(1.0'f32, textView.insertionPointBlinkPeriod() * 2000.0'f32))
+  initDuration(milliseconds = milliseconds)
+
+proc newCaretBlinkAnimation(textView: TextView): CaretBlinkAnimation =
+  result = CaretBlinkAnimation(textView: textView)
+  initAnimationFields(result, textView.insertionPointBlinkDuration(), loopCount = -1)
+  discard result.withProtocol(CaretBlinkAnimationProtocol)
+
+proc stopInsertionPointBlink(window: Window) =
+  if window.isNil:
+    return
+  let
+    animation = window.xInsertionPointBlinkAnimation
+    target = window.xInsertionPointBlinkTarget
+  window.xInsertionPointBlinkAnimation = nil
+  window.xInsertionPointBlinkTarget = nil
+  if not animation.isNil:
+    discard window.stopAnimation(animation)
+  if not target.isNil and not target.insertionPointVisible():
+    target.insertionPointVisible = true
+
+proc updateInsertionPointBlink(window: Window) =
+  if window.isNil:
+    return
+  let target = window.insertionPointBlinkTarget()
+  if target.isNil or not target.shouldBlinkInsertionPoint():
+    window.stopInsertionPointBlink()
+    return
+
+  window.stopInsertionPointBlink()
+  target.insertionPointVisible = true
+  let animation = newCaretBlinkAnimation(target)
+  window.xInsertionPointBlinkTarget = target
+  window.xInsertionPointBlinkAnimation = animation
+  discard window.startAnimation(animation)
+
 proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
   if window.isNil or responder.isNil:
     return responder
@@ -892,6 +956,7 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
     if not changingFieldEditorClient:
       if not nextResponder.isNil:
         nextResponder.setFirstResponderFocusState(true, focusVisible)
+      window.updateInsertionPointBlink()
       return true
 
   if not responder.isNil:
@@ -925,6 +990,7 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if responder of View:
     View(responder).postAccessibilityNotification(anFocusedUIElementChanged)
   emit window.didChangeFirstResponder(previousResponder)
+  window.updateInsertionPointBlink()
   true
 
 proc makeFirstResponder*(window: Window, responder: Responder): bool =
@@ -1438,6 +1504,7 @@ proc close*(window: Window) =
   window.postWindowNotification(nkWindowWillClose)
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
+  window.stopInsertionPointBlink()
   discard window.saveFrameUsingName()
   window.xClosed = true
   window.xVisibleRequested = false
@@ -2219,6 +2286,7 @@ proc dispatchHostFocusChanged(window: Window, focused: bool) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc markHostClosed(window: Window) =
+  window.stopInsertionPointBlink()
   window.stopAnimationClock()
   window.xClosed = true
   window.xVisibleRequested = false

@@ -507,7 +507,7 @@ proc cascadingItemObjectValue*(view: CascadingView, identifier: string): ObjectV
   if not item.objectValue.isNilOrEmpty():
     item.objectValue
   elif item.title.len > 0:
-    toObjectValue(item.title)
+    toObj(item.title)
   else:
     emptyObjectValue()
 

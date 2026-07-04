@@ -248,7 +248,7 @@ suite "nimkit document tabs":
       initDocumentTabModel(
         "doc-a",
         "Alpha",
-        objectValue = toObjectValue("alpha"),
+        objectValue = toObj("alpha"),
         modified = true,
         style = dtsUnderline,
         accentColor = accent,

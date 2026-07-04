@@ -64,7 +64,7 @@ suite "nimkit matrix":
       initMatrixItemModel(
         "one",
         "One",
-        objectValue = toObjectValue(1),
+        objectValue = toObj(1),
         state = bsOn,
         tag = 7,
         tooltip = "First choice",

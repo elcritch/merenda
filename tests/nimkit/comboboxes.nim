@@ -117,16 +117,14 @@ suite "nimkit comboboxes":
   test "combo box stores rich options and preserves selected identity":
     let combo = newComboBox(frame = initRect(0, 0, 140, 26))
 
-    combo.addOption(initComboBoxOption("low", "Low", toObjectValue(1)))
-    combo.addOption(
-      initComboBoxOption("hidden", "Hidden", toObjectValue(2), hidden = true)
-    )
+    combo.addOption(initComboBoxOption("low", "Low", toObj(1)))
+    combo.addOption(initComboBoxOption("hidden", "Hidden", toObj(2), hidden = true))
     combo.addOption(initComboBoxOption("separator", separator = true))
     combo.addOption(
       initComboBoxOption(
         "high",
         "High",
-        toObjectValue(3),
+        toObj(3),
         enabled = false,
         tooltip = "Unavailable",
         searchText = "maximum",
@@ -147,7 +145,7 @@ suite "nimkit comboboxes":
     check combo.stringValue == "Low"
     check combo.objectValue.requireInt() == 1
 
-    combo.insertOption(initComboBoxOption("tiny", "Tiny", toObjectValue(0)), 0)
+    combo.insertOption(initComboBoxOption("tiny", "Tiny", toObj(0)), 0)
     check combo.selectedOptionIdentifier() == "low"
     check combo.indexOfSelectedItem() == 1
     check combo.objectValue.requireInt() == 1

@@ -101,12 +101,12 @@ protocol TextFieldProtocol from TextField:
 
   method setStringValue(textField: TextField, value: string) =
     if textField.xStringValue == value:
-      Control(textField).setObjectValue(toObjectValue(value))
+      Control(textField).setObjectValue(toObj(value))
       return
     let cursor = min(textField.xInsertionPoint, value.runeLen)
     let anchor = min(textField.xSelectionAnchor, value.runeLen)
     textField.setEditedString(value, cursor, anchor)
-    Control(textField).setObjectValue(toObjectValue(value))
+    Control(textField).setObjectValue(toObj(value))
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       textviews.setStringValue(TextView(editor), value)
@@ -943,6 +943,9 @@ protocol DefaultTextFieldEvents of ResponderEventProtocol:
     if event.button == mbPrimary and (
       textField.isEditable() or textField.isSelectable()
     ):
+      let owner = textField.window()
+      if owner of Window:
+        discard Window(owner).makeFirstResponder(textField, focusVisible = false)
       let editor = textField.activeFieldEditor()
       if not editor.isNil:
         var editorEvent = event
@@ -1130,7 +1133,7 @@ proc initTextFieldFields*(textField: TextField, value = "", frame: Rect = AutoRe
   textField.xSelectionAnchor = textField.xInsertionPoint
   textField.xLayoutStorage = newTextStorage(value)
   textField.xLayoutManager = newTextLayoutManager(textField.xLayoutStorage)
-  Control(textField).setObjectValue(toObjectValue(value))
+  Control(textField).setObjectValue(toObj(value))
   textField.setAcceptsFirstResponder(true)
   discard textField.withProto()
   discard textField.withProtocol(DefaultTextFieldInput)

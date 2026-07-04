@@ -348,6 +348,12 @@ proc postSelectionChanged(textView: TextView, before: TextRange) =
   if not textView.isNil:
     textView.dispatchSelectionChanged(@[before])
 
+proc showInsertionPoint(textView: TextView) =
+  if textView.isNil or textView.xInsertionPointVisible:
+    return
+  textView.xInsertionPointVisible = true
+  textView.setNeedsDisplay(true)
+
 proc isControlInput(rune: Rune): bool =
   let code = rune.int
   code < 32 or (code >= 127 and code <= 159)
@@ -530,6 +536,7 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   textView.xInsertionPoint = total
   textView.xSelectionAnchor = total
   textView.xSelectedRanges = @[initTextRange(total, 0)]
+  textView.showInsertionPoint()
   textView.clearMarkedText()
   textView.finishTextMutation(initTextRange(0, total))
   textView.dispatchSelectionChanged(previousRanges)
@@ -731,7 +738,7 @@ proc `insertionPointVisible=`*(textView: TextView, visible: bool) =
   textView.setNeedsDisplay(true)
 
 proc insertionPointBlinkPeriod*(textView: TextView): float32 =
-  if textView.isNil: 0.5'f32 else: textView.xInsertionPointBlinkPeriod
+  if textView.isNil: 1.0'f32 else: textView.xInsertionPointBlinkPeriod
 
 proc `insertionPointBlinkPeriod=`*(textView: TextView, period: float32) =
   if textView.isNil:
@@ -949,6 +956,7 @@ proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
   textView.xInsertionPoint = start + length
   textView.xSelectedRanges = @[clamped]
   textView.updateTypingAttributesForSelection()
+  textView.showInsertionPoint()
   textView.setNeedsDisplay(true)
   textView.dispatchSelectionChanged(previousRanges)
 
@@ -989,6 +997,7 @@ proc setSelectedRanges*(textView: TextView, ranges: openArray[TextRange]) =
   textView.xSelectionAnchor = int(nextRanges[0].location)
   textView.xInsertionPoint = nextRanges[0].maxIndex
   textView.updateTypingAttributesForSelection()
+  textView.showInsertionPoint()
   textView.setNeedsDisplay(true)
   textView.dispatchSelectionChanged(previousRanges)
 
@@ -1056,6 +1065,7 @@ proc setSelection(textView: TextView, range: TextRange) =
   textView.xInsertionPoint = clamped.maxIndex
   textView.xSelectedRanges = @[clamped]
   textView.updateTypingAttributesForSelection()
+  textView.showInsertionPoint()
   textView.dispatchSelectionChanged(previousRanges)
 
 proc clearMarkedText(textView: TextView) =
@@ -2098,6 +2108,7 @@ proc setCursor*(textView: TextView, index: int, extending = false) =
     stop = max(textView.xSelectionAnchor, textView.xInsertionPoint)
   textView.xSelectedRanges = @[initTextRange(start, stop - start)]
   textView.updateTypingAttributesForSelection()
+  textView.showInsertionPoint()
   textView.setNeedsDisplay(true)
   textView.dispatchSelectionChanged(previousRanges)
 
@@ -2109,6 +2120,7 @@ proc selectAllText*(textView: TextView) =
   textView.xInsertionPoint = textView.xTextStorage.len
   textView.xSelectedRanges = @[initTextRange(0, textView.xTextStorage.len)]
   textView.updateTypingAttributesForSelection()
+  textView.showInsertionPoint()
   textView.setNeedsDisplay(true)
   textView.dispatchSelectionChanged(previousRanges)
 
@@ -3334,7 +3346,7 @@ proc initTextViewFields*(
   textView.xSelectedTextAttributes =
     defaultTextAttributes(initColor(1.0, 1.0, 1.0, 1.0))
   textView.xInsertionPointVisible = true
-  textView.xInsertionPointBlinkPeriod = 0.5'f32
+  textView.xInsertionPointBlinkPeriod = 1.0'f32
   textView.xMarkedTextAttributes = defaultTextAttributes()
   textView.xMarkedTextAttributes.underline = true
   textView.xMarkedTextAttributes.underlineStyle = tldsSingle

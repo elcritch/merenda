@@ -1,4 +1,4 @@
-import std/[unicode, unittest]
+import std/[times, unicode, unittest]
 
 import figdraw/fignodes
 
@@ -85,6 +85,12 @@ proc checkRectClose(actual, expected: nimkitTypes.Rect) =
   checkClose(actual.size.width, expected.size.width)
   checkClose(actual.size.height, expected.size.height)
 
+proc rectsClose(actual, expected: nimkitTypes.Rect): bool =
+  abs(actual.origin.x - expected.origin.x) <= TextFieldGeometryEpsilon and
+    abs(actual.origin.y - expected.origin.y) <= TextFieldGeometryEpsilon and
+    abs(actual.size.width - expected.size.width) <= TextFieldGeometryEpsilon and
+    abs(actual.size.height - expected.size.height) <= TextFieldGeometryEpsilon
+
 proc nodeRenderedInView(node: Fig, view: View): bool =
   view.rectToWindow(view.bounds).containsRect(node.renderedRect())
 
@@ -126,6 +132,17 @@ proc renderedFocusRingOutsetsView(nodes: openArray[Fig], view: View): bool =
     let ringRect = node.renderedRect()
     if ringRect.minX < viewRect.minX and ringRect.minY < viewRect.minY and
         ringRect.maxX > viewRect.maxX and ringRect.maxY > viewRect.maxY:
+      return true
+
+proc renderedSelectionRingInView(
+    nodes: openArray[Fig], view: View, style: SelectionRingStyle
+): bool =
+  let expected = view.rectToWindow(view.bounds.inset(style.insets))
+  for node in nodes:
+    if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
+        node.stroke.fill.color == style.strokeColor.rgba and
+        abs(node.stroke.weight - style.lineWidth) <= TextFieldGeometryEpsilon and
+        node.renderedRect().rectsClose(expected):
       return true
 
 proc renderedOpaqueBackgroundForView(nodes: openArray[Fig], view: View): bool =
@@ -703,6 +720,103 @@ suite "nimkit text fields":
     check not field.isFocusVisible
     check not window.fieldEditor().isFocusVisible
     check field.isEditing
+
+  test "first click selects text field shows selection ring and starts cursor blink":
+    let
+      window = newWindow("Text click selection", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+      inspector = newViewInspector(root)
+      ringStyle = initSelectionRingStyle(
+        strokeColor = initColor(0.95, 0.12, 0.35, 1.0),
+        lineWidth = 5.0'f32,
+        cornerRadius = 6.0'f32,
+        insets = insets(2.0'f32),
+      )
+
+    inspector.selectionRingStyle = ringStyle
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(20, 20), timestamp = 10.0)
+    let editor = window.fieldEditor()
+    check inspector.selectedView == field
+    check window.firstResponder == editor
+    check window.fieldEditorClient() == field
+    check field.currentEditor == editor
+    check field.isFocused
+    check not field.isFocusVisible
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+
+    let nodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check nodes.renderedSelectionRingInView(field, ringStyle)
+
+    check window.animationScheduler().tick(initDuration(milliseconds = 999)) == 1
+    check editor.insertionPointVisible
+    check window.animationScheduler().tick(initDuration(milliseconds = 1)) == 1
+    check not editor.insertionPointVisible
+
+  test "tab focus starts text field cursor blink":
+    let
+      window = newWindow("Text tab blink", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      button = newButton("Before", frame = initRect(10, 10, 80, 28))
+      field = newTextField("abcdef", frame = initRect(100, 10, 120, 24))
+
+    root.addSubview(button)
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(button)
+    check window.animationScheduler().animationCount == 0
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    let editor = window.fieldEditor()
+    check window.firstResponder == editor
+    check window.fieldEditorClient() == field
+    check field.currentEditor == editor
+    check field.isFocused
+    check field.isFocusVisible
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+
+    check window.animationScheduler().tick(initDuration(milliseconds = 999)) == 1
+    check editor.insertionPointVisible
+    check window.animationScheduler().tick(initDuration(milliseconds = 1)) == 1
+    check not editor.insertionPointVisible
+
+  test "direct text field mouse down focuses and blinks field editor caret":
+    let
+      window = newWindow("Direct text mouse", frame = initRect(0, 0, 240, 120))
+      root = newView(frame = initRect(0, 0, 240, 120))
+      field = newTextField("abcdef", frame = initRect(10, 10, 140, 24))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check field.handleMouse(
+      mouseDown(), MouseEvent(location: initPoint(10, 12), button: mbPrimary)
+    )
+    let editor = window.fieldEditor()
+    check window.firstResponder == editor
+    check window.fieldEditorClient() == field
+    check field.currentEditor == editor
+    check editor.superview == field
+    check field.isFocused
+    check not field.isFocusVisible
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+
+    check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
+    check not editor.insertionPointVisible
+
+    editor.setCursor(2)
+    check editor.insertionPointVisible
+
+    check window.makeFirstResponder(nil)
+    check window.animationScheduler().animationCount == 0
+    check editor.insertionPointVisible
 
   test "return ends field editor editing and sends text field action":
     let

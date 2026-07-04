@@ -314,13 +314,10 @@ suite "NimKit CascadingView":
     center.connect(notificationPosted, notificationSpy, rememberCascadingNotification)
     try:
       view.cascadingItems = [
-        initCascadingItem("root", objectValue = toObjectValue("Root")),
+        initCascadingItem("root", objectValue = toObj("Root")),
         initCascadingItem("hidden", "Hidden", hidden = true),
         initCascadingItem(
-          "child",
-          parentIdentifier = "root",
-          objectValue = toObjectValue(42),
-          leaf = true,
+          "child", parentIdentifier = "root", objectValue = toObj(42), leaf = true
         ),
       ]
 
@@ -343,11 +340,7 @@ suite "NimKit CascadingView":
       view.insertCascadingItems(
         "root",
         1,
-        [
-          initCascadingItem(
-            "second", objectValue = toObjectValue("Second"), leaf = true
-          )
-        ],
+        [initCascadingItem("second", objectValue = toObj("Second"), leaf = true)],
       )
       check view.tableViewForColumn(1).rowCount == 2
       check signals.updates.len == 1
@@ -375,9 +368,9 @@ suite "NimKit CascadingView":
     let
       controller = newTreeController(
         [
-          initModelTreeItem(initModelItem("root", objectValue = toObjectValue("Root"))),
+          initModelTreeItem(initModelItem("root", objectValue = toObj("Root"))),
           initModelTreeItem(
-            initModelItem("child", objectValue = toObjectValue("Child")),
+            initModelItem("child", objectValue = toObj("Child")),
             parentIdentifier = "root",
             leaf = true,
           ),
@@ -393,7 +386,7 @@ suite "NimKit CascadingView":
 
     controller.addItem(
       initModelTreeItem(
-        initModelItem("second", objectValue = toObjectValue("Second")),
+        initModelItem("second", objectValue = toObj("Second")),
         parentIdentifier = "root",
         leaf = true,
       )

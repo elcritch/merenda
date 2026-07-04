@@ -661,7 +661,7 @@ proc tableColumnTitle(column: ModelColumn): string =
 proc tableCellValuesForModelFields(fields: openArray[ModelField]): seq[TableCellValue] =
   for field in fields:
     if field.key.len > 0:
-      result.add initTableCellValue(field.key, field.value)
+      result.add tableCell(field.key, field.value)
 
 proc columnKey(controller: ArrayController, column: TableColumn): string =
   if column.isNil:

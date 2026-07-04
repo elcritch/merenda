@@ -187,12 +187,12 @@ suite "nimkit notifications":
       [
         initModelItem(
           "one",
-          objectValue = toObjectValue("One"),
-          fields = [initModelField("name", toObjectValue("One"))],
+          objectValue = toObj("One"),
+          fields = [initModelField("name", toObj("One"))],
         )
       ]
     )
-    array.setValue("one", "name", toObjectValue("Uno"))
+    array.setValue("one", "name", toObj("Uno"))
 
     check token.unregister()
 

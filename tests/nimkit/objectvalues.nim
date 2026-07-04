@@ -16,7 +16,7 @@ protocol ObjectTableSpyDataSource of TableViewDataSource:
       spy: ObjectTableSpy, tableView: TableView, row: int, column: TableColumn
   ): ObjectValue =
     if row in 0 ..< spy.values.len:
-      toObjectValue(spy.values[row])
+      toObj(spy.values[row])
     else:
       nilObjectValue()
 
@@ -52,17 +52,33 @@ proc newObjectTableSpy(values: openArray[int]): ObjectTableSpy =
 
 suite "nimkit object values":
   test "object values require typed access explicitly":
-    let text = toObjectValue("abc")
+    let text = toObj("abc")
 
     check text.kind == ovString
     check text.requireString() == "abc"
     check text.getString().get() == "abc"
     check text.getInt().isNone
-    check toObjectValue(ImageResource(nil)).kind == ovNil
-    check toObjectValue(TextStorage(nil)).kind == ovNil
+    check toObj(ImageResource(nil)).kind == ovNil
+    check toObj(TextStorage(nil)).kind == ovNil
 
     expect ObjectValueError:
       discard text.requireInt()
+
+  test "object value converters coerce native values":
+    let
+      text: ObjectValue = "abc"
+      number: ObjectValue = 42
+      ratio: ObjectValue = 2.5
+      enabled: ObjectValue = true
+      cell = tableCell("score", 31)
+      parsed = initObjectParseResult(7)
+
+    check text.requireString() == "abc"
+    check number.requireInt() == 42
+    check ratio.requireFloat() == 2.5
+    check enabled.requireBool()
+    check cell.value.requireInt() == 31
+    check parsed.value.requireInt() == 7
 
   test "default parser returns typed values and structured errors":
     let parsedInt = parseObjectValue("42", initObjectParseContext(expectedKind = ovInt))
@@ -89,7 +105,7 @@ suite "nimkit object values":
 
     field.objectParseContext =
       initObjectParseContext(expectedKind = ovInt, emptyPolicy = oepInvalid)
-    field.objectValue = toObjectValue(12)
+    field.objectValue = toObj(12)
     root.addSubview(field)
     window.setContentView(root)
 
@@ -113,13 +129,12 @@ suite "nimkit object values":
 
   test "combo boxes and menu items format object values":
     let comboBox = newComboBox()
-    comboBox.addItem(toObjectValue(42))
+    comboBox.addItem(toObj(42))
     check comboBox.itemAtIndex(0) == "42"
     comboBox.selectedIndex = 0
     check comboBox.objectValue.requireInt() == 42
 
-    let item =
-      newMenuItem(toObjectValue(initObjectLinkValue("https://example.test", "Docs")))
+    let item = newMenuItem(toObj(initObjectLinkValue("https://example.test", "Docs")))
     check item.title == "Docs"
     check item.objectValue.requireLink().url == "https://example.test"
 

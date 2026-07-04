@@ -191,7 +191,7 @@ proc optionDisplayText(option: ComboBoxOption): string =
 
 proc resolvedObjectValue(option: ComboBoxOption): ObjectValue =
   if option.objectValue.isNilOrEmpty() and option.displayText.len > 0:
-    toObjectValue(option.displayText)
+    toObj(option.displayText)
   else:
     option.objectValue
 
@@ -555,9 +555,8 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       let item =
         source.trySendLocal(objectValueAtIndex(), (comboBox: comboBox, index: index))
       if item.isSome:
-        return initComboBoxOption(
-          displayText = item.get(), objectValue = toObjectValue(item.get())
-        )
+        return
+          initComboBoxOption(displayText = item.get(), objectValue = toObj(item.get()))
     comboBox.comboBoxCell().cellOptionAtIndex(index)
 
   method itemAtIndex*(comboBox: ComboBox, index: int): string =
@@ -685,11 +684,11 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
 
   method addItem*(comboBox: ComboBox, value: string) =
     comboBox.addOption(
-      initComboBoxOption(displayText = value, objectValue = toObjectValue(value))
+      initComboBoxOption(displayText = value, objectValue = toObj(value))
     )
 
   method insertItem*(comboBox: ComboBox, value: string, index: int) =
-    comboBox.insertStoredItem(value, toObjectValue(value), index)
+    comboBox.insertStoredItem(value, toObj(value), index)
 
   method removeItemAtIndex*(comboBox: ComboBox, index: int) =
     if index >= 0 and index < comboBox.comboBoxCell().cellNumberOfItems():
@@ -1160,7 +1159,7 @@ proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
   cell.xStringValue = value
   cell.xSelectedIndex = index
   cell.xSelectedIdentifier = ""
-  Control(comboBox).setObjectValue(toObjectValue(value))
+  Control(comboBox).setObjectValue(toObj(value))
   cell.invalidateControlMetrics()
 
 proc comboBoxStringValueMethod(self: DynamicAgent, invocation: var Invocation) =

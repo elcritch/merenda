@@ -296,67 +296,67 @@ func emptyObjectValue*(): ObjectValue =
 func validationFailureValue*(error: ObjectValidationError): ObjectValue =
   ObjectValue(kind: ovValidationFailure, validationError: error)
 
-func toObjectValue*(value: string): ObjectValue =
+converter toObj*(value: string): ObjectValue =
   ObjectValue(kind: ovString, text: value)
 
-func toObjectValue*(value: int): ObjectValue =
+converter toObj*(value: int): ObjectValue =
   ObjectValue(kind: ovInt, intValue: value)
 
-func toObjectValue*(value: float): ObjectValue =
+converter toObj*(value: float): ObjectValue =
   ObjectValue(kind: ovFloat, floatValue: value)
 
-func toObjectValue*(value: float32): ObjectValue =
+converter toObj*(value: float32): ObjectValue =
   ObjectValue(kind: ovFloat, floatValue: value.float)
 
-func toObjectValue*(value: bool): ObjectValue =
+converter toObj*(value: bool): ObjectValue =
   ObjectValue(kind: ovBool, boolValue: value)
 
-func toObjectValue*(value: ObjectTemporalValue): ObjectValue =
+converter toObj*(value: ObjectTemporalValue): ObjectValue =
   ObjectValue(kind: ovTemporal, temporalValue: value)
 
-func toObjectValue*(value: ObjectDateValue): ObjectValue =
-  toObjectValue(initObjectTemporalValue(value))
+converter toObj*(value: ObjectDateValue): ObjectValue =
+  toObj(initObjectTemporalValue(value))
 
-func toObjectValue*(value: ObjectTimeValue): ObjectValue =
-  toObjectValue(initObjectTemporalValue(value))
+converter toObj*(value: ObjectTimeValue): ObjectValue =
+  toObj(initObjectTemporalValue(value))
 
-func toObjectValue*(value: DateTime): ObjectValue =
-  toObjectValue(initObjectTemporalValue(value))
+converter toObj*(value: DateTime): ObjectValue =
+  toObj(initObjectTemporalValue(value))
 
-func toObjectValue*(value: Time): ObjectValue =
-  toObjectValue(initObjectTemporalValue(value))
+converter toObj*(value: Time): ObjectValue =
+  toObj(initObjectTemporalValue(value))
 
-func toObjectValue*(value: Color): ObjectValue =
+converter toObj*(value: Color): ObjectValue =
   ObjectValue(kind: ovColor, colorValue: value)
 
-proc toObjectValue*(value: ImageResource): ObjectValue =
+converter toObj*(value: ImageResource): ObjectValue =
   if value.isNil:
     return nilObjectValue()
   ObjectValue(kind: ovImage, imageValue: initObjectImageValue(value))
 
-func toObjectValue*(value: ObjectImageValue): ObjectValue =
+converter toObj*(value: ObjectImageValue): ObjectValue =
   ObjectValue(kind: ovImage, imageValue: value)
 
-func toObjectValue*(value: ObjectAttributedTextValue): ObjectValue =
+converter toObj*(value: ObjectAttributedTextValue): ObjectValue =
   ObjectValue(kind: ovAttributedText, attributedTextValue: value)
 
-proc toObjectValue*(value: TextStorage): ObjectValue =
+converter toObj*(value: TextStorage): ObjectValue =
   if value.isNil:
     return nilObjectValue()
   ObjectValue(
     kind: ovAttributedText, attributedTextValue: initObjectAttributedTextValue(value)
   )
 
-func toObjectValue*(value: ObjectLinkValue): ObjectValue =
+converter toObj*(value: ObjectLinkValue): ObjectValue =
   ObjectValue(kind: ovLink, linkValue: value)
 
-func toObjectValue*(value: DynamicAgent): ObjectValue =
+converter toObj*(value: DynamicAgent): ObjectValue =
   if value.isNil:
     nilObjectValue()
   else:
     ObjectValue(kind: ovAgent, agentValue: value)
 
-func toObjectValue*(error: ObjectValidationError): ObjectValue =
+converter toObj*(error: ObjectValidationError): ObjectValue =
   validationFailureValue(error)
 
 func `==`*(a, b: ObjectDateValue): bool =
@@ -881,43 +881,43 @@ proc defaultParseObjectValue*(
       validationError(oveTypeMismatch, context, input, "Expected an empty value")
     )
   of ovString:
-    initObjectParseResult(toObjectValue(input))
+    initObjectParseResult(toObj(input))
   of ovInt:
     var value: int
     let parsed = parseutils.parseInt(input, value)
     if parsed == input.len:
-      initObjectParseResult(toObjectValue(value))
+      initObjectParseResult(toObj(value))
     else:
       parseFailed(context, input, "Expected an integer")
   of ovFloat:
     var value: float
     let parsed = parseutils.parseFloat(input, value)
     if parsed == input.len and value.classify notin {fcNan, fcInf, fcNegInf}:
-      initObjectParseResult(toObjectValue(value))
+      initObjectParseResult(toObj(value))
     else:
       parseFailed(context, input, "Expected a finite number")
   of ovBool:
     case input.normalize()
     of "true", "yes", "on", "1":
-      initObjectParseResult(toObjectValue(true))
+      initObjectParseResult(toObj(true))
     of "false", "no", "off", "0":
-      initObjectParseResult(toObjectValue(false))
+      initObjectParseResult(toObj(false))
     else:
       parseFailed(context, input, "Expected true or false")
   of ovTemporal:
     var value: ObjectTemporalValue
     if parseTemporalValue(input, context.temporalKind, value):
-      initObjectParseResult(toObjectValue(value))
+      initObjectParseResult(toObj(value))
     else:
       parseFailed(context, input, "Expected a date or time value")
   of ovColor:
     var color: Color
     if parseColorValue(input, color):
-      initObjectParseResult(toObjectValue(color))
+      initObjectParseResult(toObj(color))
     else:
       parseFailed(context, input, "Expected a color like #RRGGBB")
   of ovLink:
-    initObjectParseResult(toObjectValue(initObjectLinkValue(input)))
+    initObjectParseResult(toObj(initObjectLinkValue(input)))
   of ovImage, ovAttributedText, ovAgent, ovValidationFailure:
     unsupportedParser(context, input)
 

@@ -456,10 +456,10 @@ proc raiseTableModelError(message: string) {.noinline, noreturn.} =
 
 proc installTableModelProtocols(model: TableModel)
 
-func initTableCellValue*(columnIdentifier: string, value: ObjectValue): TableCellValue =
+func tableCell*(columnIdentifier: string, value: ObjectValue): TableCellValue =
   TableCellValue(columnIdentifier: columnIdentifier, value: value)
 
-proc initTableRowValue*(
+proc tableRow*(
     identifier = "",
     objectValue = emptyObjectValue(),
     cells: openArray[TableCellValue] = [],
@@ -566,7 +566,7 @@ proc setValue*(row: var TableRowValue, columnIdentifier: string, value: ObjectVa
   if index >= 0:
     row.cells[index].value = value
   else:
-    row.cells.add initTableCellValue(columnIdentifier, value)
+    row.cells.add tableCell(columnIdentifier, value)
 
 proc `[]=`*(row: var TableRowValue, columnIdentifier: string, value: ObjectValue) =
   row.setValue(columnIdentifier, value)
@@ -925,7 +925,7 @@ proc rowAt*(model: TableModel, index: int): TableRowValue =
   let found = model.getRowAt(index)
   if found.isSome:
     return found.get()
-  initTableRowValue()
+  tableRow()
 
 proc getRowWithIdentifier*(
     model: TableModel, identifier: string
@@ -1717,7 +1717,7 @@ proc tableCellObjectValue*(
   let text =
     source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
   if text.isSome:
-    toObjectValue(text.get())
+    toObj(text.get())
   else:
     emptyObjectValue()
 
@@ -3068,6 +3068,9 @@ func tableDropPositionForAxis(
 func tableDropPositionForRow(location: Point, rect: Rect): DraggingDropPosition =
   tableDropPositionForAxis(location.y, rect.minY, rect.maxY)
 
+func tableInsertionPositionForRow(location: Point, rect: Rect): DraggingDropPosition =
+  if location.y < rect.origin.y + rect.size.height * 0.5'f32: ddpBefore else: ddpAfter
+
 func tableDropPositionForColumn(location: Point, rect: Rect): DraggingDropPosition =
   tableDropPositionForAxis(location.x, rect.minX, rect.maxX)
 
@@ -3094,7 +3097,8 @@ proc defaultDropTargetForDraggingLocation(
       rowRect = tableView.rowItemRect(row)
       cellRect = tableView.columnRect(rowRect, column)
     if tableView.draggingTableRows():
-      return initRowDropTarget(row, rowRect, tableDropPositionForRow(location, rowRect))
+      let position = tableInsertionPositionForRow(location, rowRect)
+      return initRowDropTarget(row, rowRect, position)
     return initCellDropTarget(row, column.identifier(), cellRect)
   if row >= 0:
     let rowRect = tableView.rowItemRect(row)
@@ -3139,7 +3143,7 @@ proc updateTableDropTarget(tableView: TableView, target: DraggingDropTarget) =
   if tableView.isNil or tableView.xTableDropTarget == target:
     return
   tableView.xTableDropTarget = target
-  tableView.setNeedsDisplay(true)
+  tableView.invalidateTableRows()
 
 proc joinRowIndexes(rows: openArray[int]): string =
   for index, row in rows:
@@ -3508,7 +3512,7 @@ proc setEditingValidation(tableView: TableView, error: ObjectValidationError) =
 
 proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseResult =
   if tableView.isNil or not tableView.xEditing.active:
-    return initObjectParseResult(toObjectValue(value))
+    return initObjectParseResult(toObj(value))
   let delegate = tableView.delegate()
   if not delegate.isNil:
     let parsed = delegate.trySendLocal(
@@ -3745,6 +3749,41 @@ proc drawTableRow(
       tableView.drawTableCellText(context, row.index, column, cellRect, style)
   tableView.drawTableDropTarget(context, rect, row)
 
+proc drawHorizontalTableDropIndicator(
+    tableView: TableView,
+    context: DrawContext,
+    rect: Rect,
+    position: DraggingDropPosition,
+) =
+  if tableView.isNil or context.isNil or rect.isEmpty:
+    return
+  let
+    chrome = tableView.tableHeaderChrome(context)
+    indicatorFill = tableView.tableDropIndicatorFill(context)
+    thickness = max(chrome.insertionWidth, 2.0'f32)
+    capWidth = max(chrome.insertionCapHeight, thickness)
+    capHeight = max(chrome.insertionCapWidth, thickness)
+    lineY =
+      case position
+      of ddpBefore:
+        rect.minY
+      of ddpOn, ddpAfter:
+        max(rect.maxY - thickness, rect.minY)
+    lineRect = initRect(rect.origin.x, lineY, rect.size.width, thickness)
+    capY = lineY + (thickness - capHeight) * 0.5'f32
+    leftCap = initRect(rect.origin.x, capY, capWidth, capHeight)
+    rightCap = initRect(rect.maxX - capWidth, capY, capWidth, capHeight)
+
+  discard context.addRenderRectangle(
+    context.renderRectFor(lineRect), indicatorFill, cornerRadius = chrome.cornerRadius
+  )
+  discard context.addRenderRectangle(
+    context.renderRectFor(leftCap), indicatorFill, cornerRadius = chrome.cornerRadius
+  )
+  discard context.addRenderRectangle(
+    context.renderRectFor(rightCap), indicatorFill, cornerRadius = chrome.cornerRadius
+  )
+
 proc drawTableDropTarget(
     tableView: TableView, context: DrawContext, rect: Rect, row: RowState
 ) =
@@ -3758,18 +3797,7 @@ proc drawTableDropTarget(
     let column = tableView.columnWithIdentifier(target.column)
     if not column.isNil:
       indicatorBounds = tableView.columnRect(rect, column)
-  let indicatorY =
-    case target.position
-    of ddpBefore:
-      indicatorBounds.minY
-    of ddpOn:
-      max(indicatorBounds.maxY - 2.0'f32, indicatorBounds.minY)
-    of ddpAfter:
-      max(indicatorBounds.maxY - 2.0'f32, indicatorBounds.minY)
-  let indicatorRect =
-    initRect(indicatorBounds.origin.x, indicatorY, indicatorBounds.size.width, 2.0)
-  discard
-    context.addRenderRectangle(indicatorRect, tableView.tableDropIndicatorFill(context))
+  tableView.drawHorizontalTableDropIndicator(context, indicatorBounds, target.position)
 
 proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle =
   result = box

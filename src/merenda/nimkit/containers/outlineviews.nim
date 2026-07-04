@@ -148,7 +148,7 @@ proc setValue*(item: var OutlineItem, columnIdentifier: string, value: ObjectVal
   if index >= 0:
     item.cells[index].value = value
   else:
-    item.cells.add initTableCellValue(columnIdentifier, value)
+    item.cells.add tableCell(columnIdentifier, value)
 
 proc `[]=`*(item: var OutlineItem, columnIdentifier: string, value: ObjectValue) =
   item.setValue(columnIdentifier, value)
@@ -843,10 +843,10 @@ proc outlineCellObjectValue(
     return nilObjectValue()
   if column == outlineView.outlineColumn():
     if item.title.len > 0:
-      return toObjectValue(item.title)
+      return toObj(item.title)
     if item.objectValue.kind notin {ovNil, ovEmpty}:
       return item.objectValue
-    return toObjectValue(item.identifier)
+    return toObj(item.identifier)
   item.getValue(column.identifier()).get(emptyObjectValue())
 
 proc setOutlineCellObjectValue(

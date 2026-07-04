@@ -37,20 +37,17 @@ proc toggleTodo(controller: TodoTableController, identifier: string) =
   if controller.isNil or controller.model.isNil or controller.table.isNil:
     return
   let done = controller.model.valueForRow(identifier, TodoDoneColumn).requireBool()
-  controller.model.setValue(identifier, TodoDoneColumn, toObjectValue(not done))
+  controller.model.setValue(identifier, TodoDoneColumn, toObj(not done))
   controller.table.reloadData()
   controller.updateStatus()
 
 proc newTodoRow(controller: TodoTableController, title: string): TableRowValue =
   let identifier = "todo-" & $controller.nextId
   inc controller.nextId
-  initTableRowValue(
+  tableRow(
     identifier,
-    objectValue = toObjectValue(title),
-    cells = [
-      initTableCellValue(TodoDoneColumn, toObjectValue(false)),
-      initTableCellValue(TodoTitleColumn, toObjectValue(title)),
-    ],
+    objectValue = toObj(title),
+    cells = [tableCell(TodoDoneColumn, false), tableCell(TodoTitleColumn, title)],
   )
 
 proc focusInput(controller: TodoTableController) =
@@ -127,7 +124,6 @@ protocol TodoTableDelegate of TableViewDelegate:
     discard tableView
     if not controller.isNil and row in 0 ..< controller.model.len():
       controller.toggleTodo(controller.model.rowAt(row).identifier)
-
 
 proc newTodoTableController(
     model: TableModel, table: TableView, input, status: TextField

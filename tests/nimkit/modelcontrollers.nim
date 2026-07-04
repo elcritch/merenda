@@ -100,29 +100,29 @@ proc personItems(): seq[ModelItem] =
   @[
     initModelItem(
       "ada",
-      objectValue = toObjectValue("Ada"),
+      objectValue = toObj("Ada"),
       fields = [
-        initModelField("name", toObjectValue("Ada")),
-        initModelField("score", toObjectValue(31)),
-        initModelField("active", toObjectValue(true)),
+        initModelField("name", toObj("Ada")),
+        initModelField("score", toObj(31)),
+        initModelField("active", toObj(true)),
       ],
     ),
     initModelItem(
       "grace",
-      objectValue = toObjectValue("Grace"),
+      objectValue = toObj("Grace"),
       fields = [
-        initModelField("name", toObjectValue("Grace")),
-        initModelField("score", toObjectValue(45)),
-        initModelField("active", toObjectValue(true)),
+        initModelField("name", toObj("Grace")),
+        initModelField("score", toObj(45)),
+        initModelField("active", toObj(true)),
       ],
     ),
     initModelItem(
       "alan",
-      objectValue = toObjectValue("Alan"),
+      objectValue = toObj("Alan"),
       fields = [
-        initModelField("name", toObjectValue("Alan")),
-        initModelField("score", toObjectValue(27)),
-        initModelField("active", toObjectValue(false)),
+        initModelField("name", toObj("Alan")),
+        initModelField("score", toObj(27)),
+        initModelField("active", toObj(false)),
       ],
     ),
   ]
@@ -172,7 +172,7 @@ suite "nimkit model controllers":
     check controller.indexOfIdentifier("grace") == 0
     check controller.indexOfIdentifier("alan") == -1
 
-    controller.setValue("ada", "score", toObjectValue(32))
+    controller.setValue("ada", "score", toObj(32))
     check controller.valueForItem("ada", "score").requireInt() == 32
 
   test "array controller binds table object values and typed editing":
@@ -202,9 +202,9 @@ suite "nimkit model controllers":
     let
       controller = newTreeController(
         [
-          initModelTreeItem(initModelItem("root", objectValue = toObjectValue("Root"))),
+          initModelTreeItem(initModelItem("root", objectValue = toObj("Root"))),
           initModelTreeItem(
-            initModelItem("child", objectValue = toObjectValue("Child")),
+            initModelItem("child", objectValue = toObj("Child")),
             parentIdentifier = "root",
             leaf = true,
           ),
@@ -237,8 +237,8 @@ suite "nimkit model controllers":
       initModelTreeItem(
         initModelItem(
           "second",
-          objectValue = toObjectValue("Second"),
-          fields = [initModelField("status", toObjectValue("ready"))],
+          objectValue = toObj("Second"),
+          fields = [initModelField("status", toObj("ready"))],
         ),
         parentIdentifier = "root",
         leaf = true,
@@ -260,16 +260,16 @@ suite "nimkit model controllers":
     let
       controller = newArrayController(
         [
-          initModelItem("one", objectValue = toObjectValue("One")),
+          initModelItem("one", objectValue = toObj("One")),
           initModelItem(
             "two",
-            objectValue = toObjectValue("Two"),
+            objectValue = toObj("Two"),
             title = "Second",
             fields = [
-              initModelField("modified", toObjectValue(true)),
-              initModelField("closeable", toObjectValue(false)),
-              initModelField("tooltip", toObjectValue("Second tab")),
-              initModelField("tabStyle", toObjectValue("compact")),
+              initModelField("modified", toObj(true)),
+              initModelField("closeable", toObj(false)),
+              initModelField("tooltip", toObj("Second tab")),
+              initModelField("tabStyle", toObj("compact")),
             ],
             enabled = false,
           ),
@@ -315,7 +315,7 @@ suite "nimkit model controllers":
     bindMenu(boundMenu, controller)
     check boundMenu.len == 3
     check boundMenu[0.Natural].identifier == "one"
-    controller.addItem(initModelItem("three", objectValue = toObjectValue("Three")))
+    controller.addItem(initModelItem("three", objectValue = toObj("Three")))
     boundMenu.reloadData()
     check boundMenu.len == 4
     check boundMenu[3.Natural].identifier == "three"

@@ -227,7 +227,7 @@ proc documentTabModelForDocument(document: Document): DocumentTabModel =
   initDocumentTabModel(
     identifier = document.documentIdentifier(),
     title = document.displayName(),
-    objectValue = toObjectValue(DynamicAgent(document)),
+    objectValue = toObj(DynamicAgent(document)),
     modified = document.isDocumentEdited(),
     closeable = true,
     tooltip = document.fileUrl(),

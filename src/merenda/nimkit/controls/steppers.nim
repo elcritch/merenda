@@ -80,7 +80,7 @@ proc setStepperValue(stepper: Stepper, value: float32, notify = false): bool =
   if stepper.xValue == nextValue:
     return false
   stepper.xValue = nextValue
-  Control(stepper).setObjectValue(toObjectValue(nextValue))
+  Control(stepper).setObjectValue(toObj(nextValue))
   stepper.setNeedsDisplay(true)
   stepper.postAccessibilityNotification(anValueChanged)
   if notify:
@@ -251,7 +251,7 @@ proc formatValue*(stepper: Stepper, value: float32): string =
   if not stepper.isNil and not stepper.xValueFormatter.isNil:
     return stepper.xValueFormatter(value)
   if not stepper.isNil:
-    return Control(stepper).formatObjectValue(toObjectValue(value), ovrStepper)
+    return Control(stepper).formatObjectValue(toObj(value), ovrStepper)
   defaultStepperValueFormat(value)
 
 proc formattedValue*(stepper: Stepper): string =
@@ -503,7 +503,7 @@ proc initStepperFields*(
   stepper.xValue = stepper.clampedValue(value)
   Control(stepper).objectParseContext =
     initObjectParseContext(expectedKind = ovFloat, role = ovrStepper)
-  Control(stepper).setObjectValue(toObjectValue(stepper.xValue))
+  Control(stepper).setObjectValue(toObj(stepper.xValue))
   stepper.setAcceptsFirstResponder(true)
   stepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
   stepper.setCompressionPriority(LayoutPriorityHigh, laHorizontal)

@@ -94,7 +94,7 @@ protocol CollectionSpyDataSource of CollectionViewDataSource:
   ): ObjectValue =
     discard collectionView
     if index in 0 ..< spy.items.len:
-      toObjectValue(spy.items[index].title)
+      toObj(spy.items[index].title)
     else:
       emptyObjectValue()
 
@@ -224,19 +224,15 @@ func item(id, title: string, score: int): CollectionTestItem =
 proc modelItems(): seq[ModelItem] =
   @[
     initModelItem(
-      "ada",
-      objectValue = toObjectValue("Ada"),
-      fields = [initModelField("score", toObjectValue(31))],
+      "ada", objectValue = toObj("Ada"), fields = [initModelField("score", toObj(31))]
     ),
     initModelItem(
       "grace",
-      objectValue = toObjectValue("Grace"),
-      fields = [initModelField("score", toObjectValue(45))],
+      objectValue = toObj("Grace"),
+      fields = [initModelField("score", toObj(45))],
     ),
     initModelItem(
-      "alan",
-      objectValue = toObjectValue("Alan"),
-      fields = [initModelField("score", toObjectValue(27))],
+      "alan", objectValue = toObj("Alan"), fields = [initModelField("score", toObj(27))]
     ),
   ]
 

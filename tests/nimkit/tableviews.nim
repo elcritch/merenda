@@ -4,6 +4,7 @@ import figdraw/fignodes
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/foundation/types as nimkitTypes
 
 type TableDataSourceSpy = ref object of Responder
   rows: int
@@ -119,6 +120,29 @@ proc renderedRectangleCount(view: View): int =
   for node in renders[DefaultDrawLevel].nodes:
     if node.kind == nkRectangle:
       inc result
+
+proc renderedRect(node: Fig): nimkitTypes.Rect =
+  nimkitTypes.initRect(
+    node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
+    node.screenBox.h.float32,
+  )
+
+func rectsClose(left, right: nimkitTypes.Rect): bool =
+  abs(left.origin.x - right.origin.x) <= 0.01'f32 and
+    abs(left.origin.y - right.origin.y) <= 0.01'f32 and
+    abs(left.size.width - right.size.width) <= 0.01'f32 and
+    abs(left.size.height - right.size.height) <= 0.01'f32
+
+proc renderedRectangleWithFill(
+    view: View, rect: nimkitTypes.Rect, fillValue: Fill
+): bool =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return false
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkRectangle and node.fill == fillValue and
+        node.renderedRect().rectsClose(rect):
+      return true
 
 proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
   let
@@ -259,31 +283,31 @@ func fieldText(row: SortableTableRow, identifier: string): string =
 
 proc tableModelRows(): seq[TableRowValue] =
   @[
-    initTableRowValue(
+    tableRow(
       "ada",
-      objectValue = toObjectValue("Ada"),
+      objectValue = toObj("Ada"),
       cells = [
-        initTableCellValue("name", toObjectValue("Ada")),
-        initTableCellValue("score", toObjectValue(31)),
-        initTableCellValue("active", toObjectValue(true)),
+        tableCell("name", toObj("Ada")),
+        tableCell("score", toObj(31)),
+        tableCell("active", toObj(true)),
       ],
     ),
-    initTableRowValue(
+    tableRow(
       "grace",
-      objectValue = toObjectValue("Grace"),
+      objectValue = toObj("Grace"),
       cells = [
-        initTableCellValue("name", toObjectValue("Grace")),
-        initTableCellValue("score", toObjectValue(45)),
-        initTableCellValue("active", toObjectValue(true)),
+        tableCell("name", toObj("Grace")),
+        tableCell("score", toObj(45)),
+        tableCell("active", toObj(true)),
       ],
     ),
-    initTableRowValue(
+    tableRow(
       "alan",
-      objectValue = toObjectValue("Alan"),
+      objectValue = toObj("Alan"),
       cells = [
-        initTableCellValue("name", toObjectValue("Alan")),
-        initTableCellValue("score", toObjectValue(27)),
-        initTableCellValue("active", toObjectValue(false)),
+        tableCell("name", toObj("Alan")),
+        tableCell("score", toObj(27)),
+        tableCell("active", toObj(false)),
       ],
     ),
   ]
@@ -1059,13 +1083,10 @@ suite "NimKit TableView":
 
     tableView.connect(tableRowsDidUpdate, signals, rememberTableRowsDidUpdate)
     model.addRow(
-      initTableRowValue(
+      tableRow(
         "edith",
-        objectValue = toObjectValue("Edith"),
-        cells = [
-          initTableCellValue("name", toObjectValue("Edith")),
-          initTableCellValue("score", toObjectValue(38)),
-        ],
+        objectValue = toObj("Edith"),
+        cells = [tableCell("name", toObj("Edith")), tableCell("score", toObj(38))],
       )
     )
 
@@ -1152,6 +1173,31 @@ suite "NimKit TableView":
     check window.mouseDraggedAt(drop)
     check not tableView.draggingSession().isNil
     check tableView.currentDropTarget().kind == ddtRow
+    check tableView.currentDropTarget().position == ddpAfter
+
+    let
+      chrome = defaultTableHeaderChrome()
+      indicatorFill = fill(initColor(0.18, 0.42, 0.88, 0.95))
+      targetRect = tableView.rectToWindow(tableView.rowItemRect(1))
+      indicatorY = targetRect.maxY - chrome.insertionWidth
+      capY = indicatorY + (chrome.insertionWidth - chrome.insertionCapWidth) * 0.5'f32
+      indicatorRect = initRect(
+        targetRect.origin.x, indicatorY, targetRect.size.width, chrome.insertionWidth
+      )
+      leftCapRect = initRect(
+        targetRect.origin.x, capY, chrome.insertionCapHeight, chrome.insertionCapWidth
+      )
+      rightCapRect = initRect(
+        targetRect.maxX - chrome.insertionCapHeight,
+        capY,
+        chrome.insertionCapHeight,
+        chrome.insertionCapWidth,
+      )
+
+    check root.renderedRectangleWithFill(indicatorRect, indicatorFill)
+    check root.renderedRectangleWithFill(leftCapRect, indicatorFill)
+    check root.renderedRectangleWithFill(rightCapRect, indicatorFill)
+
     check window.mouseUpAt(drop)
     check tableView.draggingSession().isNil
     check model.arrangedRows().mapIt(it.identifier) == @["grace", "ada", "alan"]
@@ -1583,7 +1629,7 @@ suite "NimKit TableView":
     check columnTargeted.tableDropColumn() == "state"
     check columnTargeted.tableDropPosition() == ddpAfter
 
-  test "table view resolves before on and after drop targets for rows and columns":
+  test "table view resolves row insertion and column drop targets":
     let
       tableView = newTableView(frame = initRect(0, 0, 220, 120))
       name = newTableColumn("name", "Name", width = 120.0)
@@ -1599,7 +1645,7 @@ suite "NimKit TableView":
     let rowBefore = tableView.dropTargetForDraggingLocation(
       initPoint(rowX, rowRect.origin.y + 1.0'f32)
     )
-    let rowOn = tableView.dropTargetForDraggingLocation(
+    let rowMiddle = tableView.dropTargetForDraggingLocation(
       initPoint(rowX, rowRect.origin.y + rowRect.size.height * 0.5'f32)
     )
     let rowAfter =
@@ -1607,8 +1653,8 @@ suite "NimKit TableView":
     check rowBefore.kind == ddtRow
     check rowBefore.row == 1
     check rowBefore.position == ddpBefore
-    check rowOn.kind == ddtRow
-    check rowOn.position == ddpOn
+    check rowMiddle.kind == ddtRow
+    check rowMiddle.position == ddpAfter
     check rowAfter.kind == ddtRow
     check rowAfter.position == ddpAfter
 

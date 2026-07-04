@@ -61,29 +61,29 @@ proc newBuildController(): ArrayController =
     [
       initModelItem(
         "renderer",
-        objectValue = toObjectValue("Renderer"),
+        objectValue = toObj("Renderer"),
         fields = [
-          field("project", toObjectValue("Renderer")),
-          field("state", toObjectValue("Running")),
-          field("owner", toObjectValue("Mara")),
+          field("project", toObj("Renderer")),
+          field("state", toObj("Running")),
+          field("owner", toObj("Mara")),
         ],
       ),
       initModelItem(
         "sync",
-        objectValue = toObjectValue("Sync Engine"),
+        objectValue = toObj("Sync Engine"),
         fields = [
-          field("project", toObjectValue("Sync Engine")),
-          field("state", toObjectValue("Queued")),
-          field("owner", toObjectValue("Ren")),
+          field("project", toObj("Sync Engine")),
+          field("state", toObj("Queued")),
+          field("owner", toObj("Ren")),
         ],
       ),
       initModelItem(
         "docs",
-        objectValue = toObjectValue("Documentation"),
+        objectValue = toObj("Documentation"),
         fields = [
-          field("project", toObjectValue("Documentation")),
-          field("state", toObjectValue("Done")),
-          field("owner", toObjectValue("Iris")),
+          field("project", toObj("Documentation")),
+          field("state", toObj("Done")),
+          field("owner", toObj("Iris")),
         ],
       ),
     ],
@@ -97,27 +97,25 @@ proc newBuildController(): ArrayController =
 proc newTreeControllerForDemo(): TreeController =
   newTreeController(
     [
-      initModelTreeItem(initModelItem("apps", objectValue = toObjectValue("Apps"))),
+      initModelTreeItem(initModelItem("apps", objectValue = toObj("Apps"))),
+      initModelTreeItem(initModelItem("framework", objectValue = toObj("Framework"))),
       initModelTreeItem(
-        initModelItem("framework", objectValue = toObjectValue("Framework"))
-      ),
-      initModelTreeItem(
-        initModelItem("workspace", objectValue = toObjectValue("Workspace")),
+        initModelItem("workspace", objectValue = toObj("Workspace")),
         parentIdentifier = "apps",
         leaf = true,
       ),
       initModelTreeItem(
-        initModelItem("preferences", objectValue = toObjectValue("Preferences")),
+        initModelItem("preferences", objectValue = toObj("Preferences")),
         parentIdentifier = "apps",
         leaf = true,
       ),
       initModelTreeItem(
-        initModelItem("tables", objectValue = toObjectValue("Tables")),
+        initModelItem("tables", objectValue = toObj("Tables")),
         parentIdentifier = "framework",
         leaf = true,
       ),
       initModelTreeItem(
-        initModelItem("text", objectValue = toObjectValue("Text")),
+        initModelItem("text", objectValue = toObj("Text")),
         parentIdentifier = "framework",
         leaf = true,
       ),
@@ -127,26 +125,20 @@ proc newTreeControllerForDemo(): TreeController =
 proc newTabController(): ArrayController =
   newArrayController(
     [
-      initModelItem("plan", title = "Project Plan", objectValue = toObjectValue("Plan")),
-      initModelItem(
-        "budget", title = "Budget.xlsx", objectValue = toObjectValue("Budget")
-      ),
-      initModelItem(
-        "notes", title = "Research Notes", objectValue = toObjectValue("Notes")
-      ),
+      initModelItem("plan", title = "Project Plan", objectValue = toObj("Plan")),
+      initModelItem("budget", title = "Budget.xlsx", objectValue = toObj("Budget")),
+      initModelItem("notes", title = "Research Notes", objectValue = toObj("Notes")),
     ]
   )
 
 proc newChoiceController(): ArrayController =
   newArrayController(
     [
-      initModelItem("low", objectValue = toObjectValue("Low")),
-      initModelItem("medium", objectValue = toObjectValue("Medium")),
-      initModelItem("high", objectValue = toObjectValue("High")),
+      initModelItem("low", objectValue = toObj("Low")),
+      initModelItem("medium", objectValue = toObj("Medium")),
+      initModelItem("high", objectValue = toObj("High")),
       initModelItem("separator", separator = true),
-      initModelItem(
-        "custom", title = "Custom...", objectValue = toObjectValue("Custom")
-      ),
+      initModelItem("custom", title = "Custom...", objectValue = toObj("Custom")),
     ]
   )
 

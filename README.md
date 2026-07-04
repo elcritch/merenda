@@ -169,18 +169,18 @@ let
   items = @[
     initModelItem(
       "ada",
-      objectValue = toObjectValue("Ada"),
+      objectValue = toObj("Ada"),
       fields = [
-        initModelField("name", toObjectValue("Ada")),
-        initModelField("score", toObjectValue(31)),
+        initModelField("name", toObj("Ada")),
+        initModelField("score", toObj(31)),
       ],
     ),
     initModelItem(
       "grace",
-      objectValue = toObjectValue("Grace"),
+      objectValue = toObj("Grace"),
       fields = [
-        initModelField("name", toObjectValue("Grace")),
-        initModelField("score", toObjectValue(45)),
+        initModelField("name", toObj("Grace")),
+        initModelField("score", toObj(45)),
       ],
     ),
   ]

@@ -845,7 +845,7 @@ proc collectionItemObjectValue*(
       textForCollectionItem(), (collectionView: collectionView, index: index)
     )
     if text.isSome:
-      return toObjectValue(text.get())
+      return toObj(text.get())
   emptyObjectValue()
 
 proc collectionItemText*(collectionView: CollectionView, index: int): string =

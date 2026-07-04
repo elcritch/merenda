@@ -333,7 +333,7 @@ proc newMenuItem*(
     modifiers: set[KeyModifier] = {},
 ): MenuItem =
   result = MenuItem(xTitle: title, xAction: action, xEnabled: true, xValidates: true)
-  result.xObjectValue = toObjectValue(title)
+  result.xObjectValue = toObj(title)
   initResponder(result)
   if keyEquivalent.len > 0:
     result.xKeyEquivalent = initKeyStroke(keyEquivalent, modifiers)
@@ -377,7 +377,7 @@ proc newMenuItem*(model: MenuItemModel): MenuItem =
   result.xTag = model.tag
   result.xValidates = model.validates
   if model.objectValue.isNilOrEmpty() and result.xTitle.len > 0:
-    result.xObjectValue = toObjectValue(result.xTitle)
+    result.xObjectValue = toObj(result.xTitle)
   else:
     result.xObjectValue = model.objectValue
   if model.hasKeyEquivalent:
@@ -402,7 +402,7 @@ proc title*(item: MenuItem): string =
 proc `title=`*(item: MenuItem, title: string) =
   if not item.isNil:
     item.xTitle = title
-    item.xObjectValue = toObjectValue(title)
+    item.xObjectValue = toObj(title)
 
 proc subtitle*(item: MenuItem): string =
   if item.isNil: "" else: item.xSubtitle
@@ -553,7 +553,7 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
     return initMenuItemModel(enabled = false, hidden = true)
   let objectValue =
     if item.xObjectValue.isNilOrEmpty() and item.xTitle.len > 0:
-      toObjectValue(item.xTitle)
+      toObj(item.xTitle)
     else:
       item.xObjectValue
   var children: seq[MenuItemModel]

@@ -131,8 +131,8 @@ suite "NimKit OutlineView":
         "root",
         "Root",
         expandable = true,
-        objectValue = toObjectValue("root-value"),
-        cells = [initTableCellValue("status", toObjectValue("open"))],
+        objectValue = toObj("root-value"),
+        cells = [tableCell("status", toObj("open"))],
         representedObject = DynamicAgent(represented),
       ),
       initOutlineItem("hidden", "Hidden", parentIdentifier = "root", hidden = true),
@@ -143,7 +143,7 @@ suite "NimKit OutlineView":
         "child",
         "Child",
         parentIdentifier = "root",
-        cells = [initTableCellValue("status", toObjectValue(2))],
+        cells = [tableCell("status", toObj(2))],
       ),
     ]
 
@@ -174,7 +174,7 @@ suite "NimKit OutlineView":
     check outlineView.selectedItemIdentifier == "child"
     check outlineView.rowForItem("child") == 3
 
-    check outlineView.writeTableCellObjectValue(3, statusColumn, toObjectValue(3))
+    check outlineView.writeTableCellObjectValue(3, statusColumn, toObj(3))
     check outlineView.valueForItem("child", "status").requireInt() == 3
 
     outlineView.selectedItemIdentifier = ""

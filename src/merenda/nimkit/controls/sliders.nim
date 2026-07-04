@@ -42,7 +42,7 @@ proc setSliderValue(slider: Slider, value: float32, notify = false) =
   if slider.xValue == nextValue:
     return
   slider.xValue = nextValue
-  Control(slider).setObjectValue(toObjectValue(nextValue))
+  Control(slider).setObjectValue(toObj(nextValue))
   slider.setNeedsDisplay(true)
   slider.postAccessibilityNotification(anValueChanged)
   if notify:
@@ -347,7 +347,7 @@ proc initSliderFields*(
   slider.xValue = slider.normalizedValue(value)
   Control(slider).objectParseContext =
     initObjectParseContext(expectedKind = ovFloat, role = ovrSlider)
-  Control(slider).setObjectValue(toObjectValue(slider.xValue))
+  Control(slider).setObjectValue(toObj(slider.xValue))
   slider.setAcceptsFirstResponder(true)
   slider.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   slider.setCompressionPriority(LayoutPriorityHigh, laHorizontal)

@@ -16,32 +16,32 @@ proc demoItems(): seq[ModelItem] =
     initModelItem(
       "assets",
       title = "Assets",
-      objectValue = toObjectValue("Assets"),
-      fields = [field("kind", toObjectValue("Folder"))],
+      objectValue = toObj("Assets"),
+      fields = [field("kind", toObj("Folder"))],
     ),
     initModelItem(
       "timeline",
       title = "Timeline",
-      objectValue = toObjectValue("Timeline"),
-      fields = [field("kind", toObjectValue("Panel"))],
+      objectValue = toObj("Timeline"),
+      fields = [field("kind", toObj("Panel"))],
     ),
     initModelItem(
       "renderer",
       title = "Renderer",
-      objectValue = toObjectValue("Renderer"),
-      fields = [field("kind", toObjectValue("Job"))],
+      objectValue = toObj("Renderer"),
+      fields = [field("kind", toObj("Job"))],
     ),
     initModelItem(
       "notes",
       title = "Notes",
-      objectValue = toObjectValue("Notes"),
-      fields = [field("kind", toObjectValue("Document"))],
+      objectValue = toObj("Notes"),
+      fields = [field("kind", toObj("Document"))],
     ),
     initModelItem(
       "exports",
       title = "Exports",
-      objectValue = toObjectValue("Exports"),
-      fields = [field("kind", toObjectValue("Folder"))],
+      objectValue = toObj("Exports"),
+      fields = [field("kind", toObj("Folder"))],
     ),
   ]
 
