@@ -1,6 +1,7 @@
 import std/[strutils, unittest]
 
 import merenda/nimkit
+import merenda/nimkit/text/syneditviews
 
 proc tokenAt(source, needle: string, language = langNim): SynEditTokenClass =
   let

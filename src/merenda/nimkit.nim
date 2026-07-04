@@ -42,7 +42,6 @@ import merenda/nimkit/containers/scrollergeometry
 import merenda/nimkit/controls/sliders
 import merenda/nimkit/controls/steppers
 import merenda/nimkit/containers/splitviews
-import merenda/nimkit/text/syneditviews
 import merenda/nimkit/controls/switchbuttons
 import merenda/nimkit/foundation/selectors
 import merenda/nimkit/containers/stackviews
@@ -110,7 +109,6 @@ export scrollergeometry
 export sliders
 export steppers
 export splitviews
-export syneditviews
 export switchbuttons
 export selectors
 export stackviews

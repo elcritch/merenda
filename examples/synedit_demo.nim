@@ -1,6 +1,7 @@
 import std/strutils
 
 import merenda/nimkit
+import merenda/nimkit/text/syneditviews
 
 import sigils/selectors
 
