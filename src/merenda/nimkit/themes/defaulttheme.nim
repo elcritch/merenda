@@ -245,6 +245,24 @@ func aquaComboItemSelectedHighlightedFill(): Fill =
     104'u8,
   )
 
+func aquaRowItemSelectedFill(): Fill =
+  linear(
+    rgbaColor(98, 160, 236, 217),
+    rgbaColor(64, 117, 202, 217),
+    rgbaColor(64, 87, 152, 217),
+    fgaY,
+    104'u8,
+  )
+
+func aquaRowItemSelectedHighlightedFill(): Fill =
+  linear(
+    rgbaColor(87, 140, 228, 222),
+    rgbaColor(64, 106, 190, 222),
+    rgbaColor(64, 79, 137, 222),
+    fgaY,
+    104'u8,
+  )
+
 func aquaComboArrowFill(): Fill =
   linear(
     rgbaColor(125, 230, 255, 230),
@@ -442,9 +460,8 @@ proc initTheme*(): Theme =
   result["splitView.divider.border.color"] = styleColor(color(0.52, 0.64, 0.82, 1.0))
   result["rowItem.fill"] = styleToken("comboBox.item.fill")
   result["rowItem.fill.highlighted"] = styleToken("comboBox.item.fill.highlighted")
-  result["rowItem.fill.selected"] = styleToken("comboBox.item.fill.selected")
-  result["rowItem.fill.selected.highlighted"] =
-    styleToken("comboBox.item.fill.selected.highlighted")
+  result["rowItem.fill.selected"] = aquaRowItemSelectedFill()
+  result["rowItem.fill.selected.highlighted"] = aquaRowItemSelectedHighlightedFill()
   result["rowItem.fill.disabled"] = styleColor(color(0.80, 0.82, 0.86, 0.51))
   result["rowItem.text.color"] = styleToken("comboBox.item.text.color")
   result["rowItem.text.color.selected"] =

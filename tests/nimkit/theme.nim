@@ -136,6 +136,24 @@ func aquaComboItemSelectedFill(): Fill =
     104'u8,
   )
 
+func aquaRowItemSelectedFill(): Fill =
+  linear(
+    rgbaColor(98, 160, 236, 217),
+    rgbaColor(64, 117, 202, 217),
+    rgbaColor(64, 87, 152, 217),
+    fgaY,
+    104'u8,
+  )
+
+func aquaRowItemSelectedHighlightedFill(): Fill =
+  linear(
+    rgbaColor(87, 140, 228, 222),
+    rgbaColor(64, 106, 190, 222),
+    rgbaColor(64, 79, 137, 222),
+    fgaY,
+    104'u8,
+  )
+
 func aquaComboBoxFill(): Fill =
   linear(
     rgbaColor(255, 255, 255, 226),
@@ -517,6 +535,8 @@ suite "nimkit theme":
       sliderStyle = appearance.resolveSliderStyle(controlStyle(srSlider))
       progressStyle =
         appearance.resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
+      selectedRowStyle = controlStyle(srRowItem, {ssSelected})
+      selectedHighlightedRowStyle = controlStyle(srRowItem, {ssSelected, ssHighlighted})
       scrollViewStyle = appearance.resolveScrollViewStyle(controlStyle(srScroller))
       cascadingScrollViewStyle =
         appearance.resolveScrollViewStyle(controlStyle(srCascadingScroller))
@@ -659,6 +679,11 @@ suite "nimkit theme":
     check comboBoxItemStyle.box.fill == aquaComboItemSelectedFill()
     check comboBoxItemStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
     check comboBoxItemStyle.minSize == initSize(0.0, 22.0)
+    check appearance.resolveFill(selectedRowStyle, fill(color(0.0, 0.0, 0.0, 0.0))) ==
+      aquaRowItemSelectedFill()
+    check appearance.resolveFill(
+      selectedHighlightedRowStyle, fill(color(0.0, 0.0, 0.0, 0.0))
+    ) == aquaRowItemSelectedHighlightedFill()
     check sliderStyle.knob.fill == aquaSliderKnobFill()
     check sliderStyle.knob.fill.centerColor().a > aquaTextFieldFill().centerColor().a
     check sliderStyle.activeTrack.fill == aquaSliderProgressFill()
