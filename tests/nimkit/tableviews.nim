@@ -851,6 +851,49 @@ suite "NimKit TableView":
     tableView.restoreState(store)
     check name.width > 120.0'f32
 
+  test "table header rounds only exposed top corners":
+    let
+      tableView = newTableView(frame = rect(12, 24, 300, 160))
+      name = newTableColumn("name", "Name", width = 149.0)
+      age = newTableColumn("age", "Age", width = 149.0)
+
+    tableView.addColumn(name)
+    tableView.addColumn(age)
+
+    let renders = buildRenders(tableView)
+    check DefaultDrawLevel in renders
+
+    var
+      headerFound = false
+      firstCellFound = false
+      lastCellFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle:
+        let rendered = node.renderedRect()
+        if rendered.rectsClose(rect(13.0, 25.0, 298.0, 24.0)):
+          headerFound = true
+          check node.corners[dcTopLeft] == 5'u16
+          check node.corners[dcTopRight] == 5'u16
+          check node.corners[dcBottomLeft] == 0'u16
+          check node.corners[dcBottomRight] == 0'u16
+        elif rendered.rectsClose(rect(13.0, 25.0, 149.0, 24.0)):
+          firstCellFound = true
+          check node.corners[dcTopLeft] == 5'u16
+          check node.corners[dcTopRight] == 0'u16
+          check node.corners[dcBottomLeft] == 0'u16
+          check node.corners[dcBottomRight] == 0'u16
+        elif rendered.rectsClose(rect(162.0, 25.0, 149.0, 24.0)):
+          lastCellFound = true
+          check node.corners[dcTopLeft] == 0'u16
+          check node.corners[dcTopRight] == 5'u16
+          check node.corners[dcBottomLeft] == 0'u16
+          check node.corners[dcBottomRight] == 0'u16
+
+    check headerFound
+    check firstCellFound
+    check lastCellFound
+
   test "table state storage restores renamed columns and selected column aliases":
     let
       store = newTableViewStateStore()

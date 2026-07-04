@@ -418,6 +418,8 @@ proc drawTableHeaderCellChrome*(
   column: TableColumn,
   rect: Rect,
   chrome: TableHeaderChrome,
+  firstVisible = false,
+  lastVisible = false,
 )
 
 proc drawTableHeaderCellTitle*(
@@ -1442,26 +1444,47 @@ proc visibleColumnWidth(tableView: TableView): float32 =
   for column in tableView.visibleColumns():
     result += column.width()
 
+proc visibleTableColumns(tableView: TableView): seq[TableColumn] =
+  if not tableView.isNil:
+    for column in tableView.visibleColumns():
+      result.add column
+
+func tableHeaderCornerRadii(chrome: TableHeaderChrome): CornerRadii =
+  initCornerRadii(chrome.cornerRadius, chrome.cornerRadius, 0.0'f32, 0.0'f32)
+
+func tableHeaderCellCornerRadii(
+    chrome: TableHeaderChrome, firstVisible, lastVisible: bool
+): CornerRadii =
+  initCornerRadii(
+    if firstVisible: chrome.cornerRadius else: 0.0'f32,
+    if lastVisible: chrome.cornerRadius else: 0.0'f32,
+    0.0'f32,
+    0.0'f32,
+  )
+
 proc tableHeaderHeight*(tableView: TableView): float32 =
   if not tableView.xShowsHeader: 0.0'f32 else: tableView.xHeaderHeight
 
 proc defaultTableHeaderChrome*(): TableHeaderChrome =
   TableHeaderChrome(
-    headerFill: fill(color(0.88, 0.90, 0.94, 1.0)),
-    headerBorderColor: color(0.60, 0.64, 0.70, 1.0),
-    cellFill: fill(color(0.90, 0.92, 0.96, 1.0)),
-    hoveredCellFill: fill(color(0.84, 0.88, 0.95, 1.0)),
-    pressedCellFill: fill(color(0.76, 0.82, 0.91, 1.0)),
-    cellBorderColor: color(0.62, 0.66, 0.72, 1.0),
-    textColor: color(0.14, 0.18, 0.25, 1.0),
-    sortIndicatorColor: color(0.12, 0.20, 0.34, 0.95),
+    headerFill:
+      linear(color(0.97, 0.98, 0.99, 0.78), color(0.78, 0.81, 0.86, 0.78), fgaY),
+    headerBorderColor: color(0.52, 0.56, 0.62, 0.92),
+    cellFill: linear(color(1.0, 1.0, 1.0, 0.64), color(0.82, 0.84, 0.88, 0.64), fgaY),
+    hoveredCellFill:
+      linear(color(1.0, 1.0, 1.0, 0.72), color(0.74, 0.78, 0.84, 0.72), fgaY),
+    pressedCellFill:
+      linear(color(0.72, 0.75, 0.80, 0.78), color(0.58, 0.62, 0.68, 0.78), fgaY),
+    cellBorderColor: color(0.54, 0.58, 0.64, 0.76),
+    textColor: color(0.12, 0.14, 0.18, 1.0),
+    sortIndicatorColor: color(0.10, 0.13, 0.18, 0.95),
     insertionIndicatorFill: fill(color(0.16, 0.36, 0.84, 0.95)),
     borderWidth: 1.0'f32,
     sortIndicatorWidth: 24.0'f32,
     insertionWidth: 3.0'f32,
     insertionCapWidth: 9.0'f32,
     insertionCapHeight: 3.0'f32,
-    cornerRadius: 1.5'f32,
+    cornerRadius: 5.0'f32,
   )
 
 proc tableHeaderChrome(tableView: TableView, context: DrawContext): TableHeaderChrome =
@@ -1472,6 +1495,9 @@ proc tableHeaderChrome(tableView: TableView, context: DrawContext): TableHeaderC
     tableStates = tableView.widgetStateSet()
     tableId = tableView.styleId()
     tableClasses = tableView.styleClasses()
+    tableContext = controlStyle(
+      tableView.xTableRole, tableStates, id = tableId, classes = tableClasses
+    )
     headerContext =
       controlStyle(srTableHeader, tableStates, id = tableId, classes = tableClasses)
     cellContext =
@@ -1502,6 +1528,12 @@ proc tableHeaderChrome(tableView: TableView, context: DrawContext): TableHeaderC
     context.appearance.resolveColor(cellContext, StyleTextColor, result.textColor)
   result.sortIndicatorColor = context.appearance.resolveColor(
     cellContext, StyleMarkColor, result.sortIndicatorColor
+  )
+  let tableCornerRadius = context.appearance.resolveLength(
+    tableContext, StyleCornerRadius, result.cornerRadius
+  )
+  result.cornerRadius = context.appearance.resolveLength(
+    headerContext, StyleCornerRadius, max(tableCornerRadius - 1.0'f32, 0.0'f32)
   )
 
 proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
@@ -4725,6 +4757,8 @@ proc drawTableHeaderBackground*(
     chrome.headerFill,
     chrome.headerBorderColor,
     chrome.borderWidth,
+    cornerRadius = chrome.cornerRadius,
+    cornerRadii = chrome.tableHeaderCornerRadii(),
   )
 
 proc drawTableHeaderCellChrome*(
@@ -4733,6 +4767,8 @@ proc drawTableHeaderCellChrome*(
     column: TableColumn,
     rect: Rect,
     chrome: TableHeaderChrome,
+    firstVisible = false,
+    lastVisible = false,
 ) =
   if tableView.isNil or context.isNil or column.isNil or rect.isEmpty:
     return
@@ -4742,7 +4778,12 @@ proc drawTableHeaderCellChrome*(
   elif column == tableView.xHoveredColumn:
     background = chrome.hoveredCellFill
   discard context.addRenderRectangle(
-    context.renderRectFor(rect), background, chrome.cellBorderColor, chrome.borderWidth
+    context.renderRectFor(rect),
+    background,
+    chrome.cellBorderColor,
+    chrome.borderWidth,
+    cornerRadius = chrome.cornerRadius,
+    cornerRadii = chrome.tableHeaderCellCornerRadii(firstVisible, lastVisible),
   )
 
 proc drawTableHeaderCellTitle*(
@@ -4786,11 +4827,14 @@ proc drawTableHeader*(
   if headerRect.isEmpty:
     return
   tableView.drawTableHeaderBackground(context, headerRect, chrome)
-  for column in tableView.visibleColumns():
+  let visibleColumns = tableView.visibleTableColumns()
+  for index, column in visibleColumns:
     let rect = tableView.tableHeaderColumnRect(column)
     if rect.isEmpty:
       continue
-    tableView.drawTableHeaderCellChrome(context, column, rect, chrome)
+    tableView.drawTableHeaderCellChrome(
+      context, column, rect, chrome, index == 0, index == visibleColumns.high
+    )
     tableView.drawTableHeaderCellTitle(context, column, rect, chrome)
     tableView.drawTableHeaderSortIndicator(
       context, rect, column.sortDirection(), chrome

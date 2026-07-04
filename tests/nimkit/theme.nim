@@ -31,36 +31,36 @@ proc checkAquaButtonShadows(shadows: seq[BoxShadow]) =
 
 func aquaButtonFill(): Fill =
   linear(
-    color(0.88, 0.98, 1.0, 0.55),
-    color(0.24, 0.70, 1.0, 0.55),
-    color(0.0, 0.36, 0.92, 0.55),
+    color(0.0, 0.25, 0.72, 0.55),
+    color(0.18, 0.45, 0.78, 0.55),
+    color(0.13, 0.63, 0.77, 0.55),
     fgaY,
     112'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.18, 0.58, 0.96, 0.61),
-    color(0.0, 0.34, 0.86, 0.61),
-    color(0.0, 0.17, 0.58, 0.61),
+    color(0.0, 0.28, 0.78, 0.61),
+    color(0.0, 0.18, 0.58, 0.61),
+    color(0.0, 0.07, 0.34, 0.61),
     fgaY,
     104'u8,
   )
 
 func aquaAccentButtonFill(): Fill =
   linear(
-    color(0.96, 1.0, 1.0, 0.55),
-    color(0.34, 0.77, 1.0, 0.55),
-    color(0.0, 0.42, 0.98, 0.55),
+    color(0.03, 0.30, 0.78, 0.55),
+    color(0.12, 0.50, 0.88, 0.55),
+    color(0.02, 0.58, 0.84, 0.55),
     fgaY,
     112'u8,
   )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.12, 0.52, 0.96, 0.61),
-    color(0.0, 0.28, 0.78, 0.61),
-    color(0.0, 0.11, 0.46, 0.61),
+    color(0.0, 0.22, 0.68, 0.61),
+    color(0.0, 0.14, 0.50, 0.61),
+    color(0.0, 0.05, 0.30, 0.61),
     fgaY,
     104'u8,
   )
@@ -75,16 +75,16 @@ func aquaWindowBackgroundFill(): Fill =
   )
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 0.85), color(0.0, 0.49, 0.93, 0.85), fgaDiagTLBR)
+  linear(color(0.18, 0.58, 0.92, 0.85), color(0.0, 0.28, 0.76, 0.85), fgaDiagTLBR)
 
 func aquaTextFieldFill(): Fill =
   linear(color(1.0, 1.0, 1.0, 0.79), color(0.90, 0.96, 1.0, 0.79), fgaY)
 
 func aquaComboItemSelectedFill(): Fill =
   linear(
-    color(0.45, 0.75, 1.0, 0.85),
-    color(0.10, 0.45, 0.95, 0.85),
-    color(0.02, 0.26, 0.76, 0.85),
+    color(0.18, 0.50, 0.90, 0.85),
+    color(0.0, 0.28, 0.72, 0.85),
+    color(0.0, 0.12, 0.46, 0.85),
     fgaY,
     104'u8,
   )

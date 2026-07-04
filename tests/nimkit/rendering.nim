@@ -21,7 +21,7 @@ let
 type ExtraChrome = ref object of Chrome
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 0.85), color(0.0, 0.49, 0.93, 0.85), fgaDiagTLBR)
+  linear(color(0.18, 0.58, 0.92, 0.85), color(0.0, 0.28, 0.76, 0.85), fgaDiagTLBR)
 
 func aquaRadioShellFill(): Fill =
   linear(color(0.99, 0.99, 0.98, 0.85), color(0.65, 0.66, 0.64, 0.85), fgaY)
@@ -752,9 +752,9 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and
           node.fill ==
           linear(
-            color(0.20, 0.57, 0.98, 0.87),
-            color(0.03, 0.33, 0.82, 0.87),
-            color(0.01, 0.18, 0.58, 0.87),
+            color(0.12, 0.40, 0.86, 0.87),
+            color(0.0, 0.22, 0.66, 0.87),
+            color(0.0, 0.08, 0.38, 0.87),
             fgaY,
             104'u8,
           ) and node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and

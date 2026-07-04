@@ -67,36 +67,36 @@ func highlightedButtonShadows(): seq[BoxShadow] =
 
 func aquaButtonFill(): Fill =
   linear(
-    color(0.88, 0.98, 1.0, 0.55),
-    color(0.24, 0.70, 1.0, 0.55),
-    color(0.0, 0.36, 0.92, 0.55),
+    color(0.0, 0.25, 0.72, 0.55),
+    color(0.18, 0.45, 0.78, 0.55),
+    color(0.13, 0.63, 0.77, 0.55),
     fgaY,
     112'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    color(0.18, 0.58, 0.96, 0.61),
-    color(0.0, 0.34, 0.86, 0.61),
-    color(0.0, 0.17, 0.58, 0.61),
+    color(0.0, 0.28, 0.78, 0.61),
+    color(0.0, 0.18, 0.58, 0.61),
+    color(0.0, 0.07, 0.34, 0.61),
     fgaY,
     104'u8,
   )
 
 func aquaAccentButtonFill(): Fill =
   linear(
-    color(0.96, 1.0, 1.0, 0.55),
-    color(0.34, 0.77, 1.0, 0.55),
-    color(0.0, 0.42, 0.98, 0.55),
+    color(0.03, 0.30, 0.78, 0.55),
+    color(0.12, 0.50, 0.88, 0.55),
+    color(0.02, 0.58, 0.84, 0.55),
     fgaY,
     112'u8,
   )
 
 func aquaAccentButtonPressedFill(): Fill =
   linear(
-    color(0.12, 0.52, 0.96, 0.61),
-    color(0.0, 0.28, 0.78, 0.61),
-    color(0.0, 0.11, 0.46, 0.61),
+    color(0.0, 0.22, 0.68, 0.61),
+    color(0.0, 0.14, 0.50, 0.61),
+    color(0.0, 0.05, 0.30, 0.61),
     fgaY,
     104'u8,
   )
@@ -120,13 +120,13 @@ func aquaChoiceHighlightedFill(): Fill =
   linear(color(1.0, 1.0, 1.0, 0.85), color(0.78, 0.90, 1.0, 0.85), fgaY)
 
 func aquaChoiceSelectedFill(): Fill =
-  linear(color(0.48, 0.91, 1.0, 0.85), color(0.0, 0.49, 0.93, 0.85), fgaDiagTLBR)
+  linear(color(0.18, 0.58, 0.92, 0.85), color(0.0, 0.28, 0.76, 0.85), fgaDiagTLBR)
 
 func aquaChoiceSelectedHighlightedFill(): Fill =
   linear(
-    color(0.45, 0.80, 1.0, 0.87),
-    color(0.0, 0.32, 0.86, 0.87),
-    color(0.0, 0.18, 0.58, 0.87),
+    color(0.16, 0.50, 0.92, 0.87),
+    color(0.0, 0.24, 0.72, 0.87),
+    color(0.0, 0.10, 0.44, 0.87),
     fgaY,
     104'u8,
   )
@@ -139,18 +139,18 @@ func aquaComboItemHighlightFill(): Fill =
 
 func aquaComboItemSelectedFill(): Fill =
   linear(
-    color(0.45, 0.75, 1.0, 0.85),
-    color(0.10, 0.45, 0.95, 0.85),
-    color(0.02, 0.26, 0.76, 0.85),
+    color(0.18, 0.50, 0.90, 0.85),
+    color(0.0, 0.28, 0.72, 0.85),
+    color(0.0, 0.12, 0.46, 0.85),
     fgaY,
     104'u8,
   )
 
 func aquaComboItemSelectedHighlightedFill(): Fill =
   linear(
-    color(0.20, 0.57, 0.98, 0.87),
-    color(0.03, 0.33, 0.82, 0.87),
-    color(0.01, 0.18, 0.58, 0.87),
+    color(0.12, 0.40, 0.86, 0.87),
+    color(0.0, 0.22, 0.66, 0.87),
+    color(0.0, 0.08, 0.38, 0.87),
     fgaY,
     104'u8,
   )
@@ -828,18 +828,20 @@ proc initTheme*(): Theme =
   result[srSplitView, StyleFocusRingInset] = 0.0
   result[srSplitView, StyleBoxShadows] = newSeq[BoxShadow]()
 
-  result[srTableHeader, StyleFill] = fill(color(0.88, 0.90, 0.94, 0.79))
-  result[srTableHeader, StyleBorderColor] = color(0.60, 0.64, 0.70, 1.0)
+  result[srTableHeader, StyleFill] =
+    linear(color(0.97, 0.98, 0.99, 0.78), color(0.78, 0.81, 0.86, 0.78), fgaY)
+  result[srTableHeader, StyleBorderColor] = color(0.52, 0.56, 0.62, 0.92)
   result[srTableHeader, StyleInsertionIndicatorFill] =
     fill(color(0.16, 0.36, 0.84, 0.95))
-  result[srTableHeaderCell, StyleFill] = fill(color(0.90, 0.92, 0.96, 0.81))
+  result[srTableHeaderCell, StyleFill] =
+    linear(color(1.0, 1.0, 1.0, 0.64), color(0.82, 0.84, 0.88, 0.64), fgaY)
   result[srTableHeaderCell, {ssHovered}, StyleFill] =
-    fill(color(0.84, 0.88, 0.95, 0.83))
+    linear(color(1.0, 1.0, 1.0, 0.72), color(0.74, 0.78, 0.84, 0.72), fgaY)
   result[srTableHeaderCell, {ssPressed}, StyleFill] =
-    fill(color(0.76, 0.82, 0.91, 0.85))
-  result[srTableHeaderCell, StyleBorderColor] = color(0.62, 0.66, 0.72, 1.0)
-  result[srTableHeaderCell, StyleTextColor] = color(0.14, 0.18, 0.25, 1.0)
-  result[srTableHeaderCell, StyleMarkColor] = color(0.12, 0.20, 0.34, 0.95)
+    linear(color(0.72, 0.75, 0.80, 0.78), color(0.58, 0.62, 0.68, 0.78), fgaY)
+  result[srTableHeaderCell, StyleBorderColor] = color(0.54, 0.58, 0.64, 0.76)
+  result[srTableHeaderCell, StyleTextColor] = color(0.12, 0.14, 0.18, 1.0)
+  result[srTableHeaderCell, StyleMarkColor] = color(0.10, 0.13, 0.18, 0.95)
 
   result.addRoleRule(
     srRowItem,
