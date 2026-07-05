@@ -86,6 +86,15 @@ func aquaButtonFill(): Fill =
     132'u8,
   )
 
+func aquaButtonHoverFill(): Fill =
+  linear(
+    rgbaColor(128, 224, 255, 210),
+    rgbaColor(82, 198, 252, 188),
+    rgbaColor(92, 196, 246, 178),
+    fgaY,
+    132'u8,
+  )
+
 func aquaButtonPressedFill(): Fill =
   linear(
     rgbaColor(68, 146, 211, 163),
@@ -97,6 +106,9 @@ func aquaButtonPressedFill(): Fill =
 
 func aquaAccentButtonFill(): Fill =
   aquaButtonFill()
+
+func aquaAccentButtonHoverFill(): Fill =
+  aquaButtonHoverFill()
 
 func aquaAccentButtonPressedFill(): Fill =
   aquaButtonPressedFill()
@@ -397,16 +409,21 @@ proc initTheme*(): Theme =
   result["indicator.size"] = 18.0
 
   result["button.fill"] = aquaButtonFill()
+  result["button.fill.hovered"] = aquaButtonHoverFill()
   result["button.fill.highlighted"] = aquaButtonPressedFill()
   result["button.fill.disabled"] = aquaButtonDisabledFill()
   result["button.fill.accent"] = aquaAccentButtonFill()
+  result["button.fill.accent.hovered"] = aquaAccentButtonHoverFill()
   result["button.fill.accent.highlighted"] = aquaAccentButtonPressedFill()
   result["button.text.color"] = styleColor(rgbaColor(5, 16, 27, 248))
   result["button.text.color.disabled"] = styleToken("disabled.text.color")
   result["button.border.color"] = styleColor(rgbaColor(31, 112, 204, 145))
+  result["button.border.color.hovered"] = styleColor(rgbaColor(38, 156, 232, 196))
   result["button.border.color.highlighted"] = styleColor(rgbaColor(19, 93, 180, 161))
   result["button.border.color.disabled"] = styleColor(color(0.52, 0.57, 0.64, 1.0))
   result["button.border.color.accent"] = styleToken("button.border.color")
+  result["button.border.color.accent.hovered"] =
+    styleToken("button.border.color.hovered")
   result["button.border.color.accent.highlighted"] =
     styleToken("button.border.color.highlighted")
   result["button.focus.ring.color"] = styleToken("focus.ring.color")
@@ -563,8 +580,8 @@ proc initTheme*(): Theme =
   result.addRoleRule(
     srButton,
     {ssHovered},
-    styleToken("button.fill.highlighted"),
-    styleToken("button.border.color.highlighted"),
+    styleToken("button.fill.hovered"),
+    styleToken("button.border.color.hovered"),
     styleToken("button.text.color"),
   )
   result.addRoleRule(
@@ -598,8 +615,8 @@ proc initTheme*(): Theme =
   result.addRoleRule(
     srButton,
     {ssAccent, ssHovered},
-    styleToken("button.fill.accent.highlighted"),
-    styleToken("button.border.color.accent.highlighted"),
+    styleToken("button.fill.accent.hovered"),
+    styleToken("button.border.color.accent.hovered"),
     styleToken("button.text.color"),
   )
   result.addRoleRule(
