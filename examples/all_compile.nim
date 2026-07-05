@@ -28,7 +28,6 @@ import radio_demo
 import scrollview_demo
 import splitview_demo
 import stepper_demo
-import synedit_demo
 import table_demo
 import tabview_demo
 import texteditor_demo

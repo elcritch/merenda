@@ -109,6 +109,16 @@ proc handleTerminalAction(view: TerminalRelaysView, action: uiTerminal.TermActio
       uiTerminal.openFile, uiTerminal.saveFile:
     discard
 
+proc isCommandSubmit(event: ui.Event): bool =
+  event.kind == ui.KeyDownEvent and event.key == ui.KeyEnter
+
+proc drawTerminalEvent(
+    view: TerminalRelaysView, event: ui.Event, area: ui.Rect, focused: bool
+) =
+  if focused and event.isCommandSubmit():
+    view.commandLog.recordCommand(view.currentCommand())
+  view.handleTerminalAction(view.terminal.draw(event, area, focused))
+
 proc drawTerminal(view: TerminalRelaysView) =
   if not view.ensureTerminal():
     return
@@ -125,7 +135,7 @@ proc drawTerminal(view: TerminalRelaysView) =
     )
   else:
     for event in events:
-      view.handleTerminalAction(view.terminal.draw(event, area, focused))
+      view.drawTerminalEvent(event, area, focused)
 
   if focused or view.terminal.processRunning:
     view.setNeedsDisplay(true)
@@ -163,8 +173,6 @@ protocol TerminalRelaysEvents of ResponderEventProtocol:
 
   method keyDown(view: TerminalRelaysView, event: KeyEvent): bool =
     view.suppressNextTextInput = false
-    if event.key == nkEvents.keyEnter:
-      view.commandLog.recordCommand(view.currentCommand())
     view.enqueue(event.toUIRelaysEvent(ui.KeyDownEvent))
     if event.text.isUIRelaysTextInput() and nkEvents.kmControl notin event.modifiers and
         nkEvents.kmCommand notin event.modifiers:
