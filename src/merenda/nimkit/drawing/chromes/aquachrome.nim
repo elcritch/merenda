@@ -352,12 +352,12 @@ func aquaSliderKnobFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.42'f32, base.scaledAlpha(0.68'f32)),
-      base.darkenColor(0.06'f32, base.scaledAlpha(0.68'f32)),
+      base.lightenColor(0.42'f32, base.scaledAlpha(0.76'f32)),
+      base.darkenColor(0.06'f32, base.scaledAlpha(0.76'f32)),
       fgaY,
     )
   if chrome.isPressed:
-    let alpha = base.scaledAlpha(1.0'f32)
+    let alpha = base.scaledAlpha(1.08'f32)
     return linear(
       base.lightenColor(0.58'f32, alpha),
       base.lightenColor(0.18'f32, alpha),
@@ -365,7 +365,7 @@ func aquaSliderKnobFill(chrome: ChromeContext): Fill =
       fgaY,
       104'u8,
     )
-  let alpha = base.scaledAlpha(1.0'f32)
+  let alpha = base.scaledAlpha(1.08'f32)
   linear(
     base.lightenColor(0.98'f32, alpha),
     base.lightenColor(0.48'f32, alpha),

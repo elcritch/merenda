@@ -142,9 +142,9 @@ func aquaTextFieldFill(): Fill =
 
 func aquaSliderKnobFill(): Fill =
   linear(
-    rgbaColor(255, 255, 255, 235),
-    rgbaColor(236, 247, 255, 227),
-    rgbaColor(197, 222, 242, 215),
+    rgbaColor(255, 255, 255, 250),
+    rgbaColor(238, 248, 255, 246),
+    rgbaColor(204, 226, 244, 240),
     fgaY,
     116'u8,
   )
