@@ -563,7 +563,7 @@ proc drawAquaButtonBacking(
     return
   let shadowRect = rect(
     extras.rect.origin.x,
-    extras.rect.origin.y + 1.5'f32,
+    extras.rect.origin.y + 1.1'f32,
     extras.rect.size.width,
     extras.rect.size.height,
   )
@@ -571,11 +571,11 @@ proc drawAquaButtonBacking(
     extras.layer,
     extras.parent,
     shadowRect,
-    fill(rgbaColor(0, 0, 0, 54)),
+    fill(rgbaColor(0, 0, 0, 40)),
     color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
     extras.cornerRadius,
-    [dropShadow(rgbaColor(0, 0, 0, 58), y = 1.8, blur = 5.8)],
+    [dropShadow(rgbaColor(0, 0, 0, 46), y = 1.2, blur = 4.4)],
   )
 
 proc drawAquaRoundedControlBacking(
