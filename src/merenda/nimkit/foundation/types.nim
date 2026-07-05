@@ -4,13 +4,13 @@ import pkg/bumpy
 import pkg/chroma
 export bumpy
 export chroma
+import sigils/features
 
-when not defined(sigilsSigilNameString) and not defined(nimdoc):
-  {.
-    error:
-      "NimKit requires -d:sigilsSigilNameString " &
-      "(or --define:sigilsSigilNameString)."
-  .}
+when not defined(nimdoc):
+  when not sigilsSigilNameStringEnabled:
+    {.error: "NimKit requires -d:sigils.sigNameAsString ".}
+  when not sigilsClosuresEnabled:
+    {.error: "NimKit requires -d:sigils.closures ".}
 
 when not defined(gcArc) and not defined(gcOrc) and not defined(gcAtomicArc) and
     not defined(nimdoc):

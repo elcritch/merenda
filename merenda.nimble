@@ -1,4 +1,4 @@
-version       = "0.6.4"
+version       = "0.6.5"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -12,7 +12,7 @@ requires "chronicles"
 requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.26.3"
 requires "gh:elcritch/kiwiberry"
 requires "siwin#063fc0f"
-requires "sigils >= 0.24.3"
+requires "sigils[sigNameAsString, closures] >= 0.24.4"
 
 feature "libbacktrace":
   requires "libbacktrace"
