@@ -58,6 +58,7 @@ proc activeFieldEditor(textField: TextField): FieldEditor
 proc layoutFieldEditor(textField: TextField)
 proc textFieldStyleContext(textField: TextField): StyleContext
 proc textFieldStyle(textField: TextField): TextFieldStyle
+proc textFieldChromeRole(textField: TextField): ChromeRole
 proc syncLayout(textField: TextField)
 proc syncLayout(textField: TextField, style: TextFieldStyle)
 proc validateEditedObjectText(textField: TextField, value: string): bool
@@ -428,6 +429,9 @@ proc textFieldStyle(textField: TextField): TextFieldStyle =
   textField.effectiveAppearance().resolveTextFieldStyle(
     textField.textFieldStyleContext(), textField.textColor()
   )
+
+proc textFieldChromeRole(textField: TextField): ChromeRole =
+  if textField of Label: crTextLabel else: crTextField
 
 func textFieldTextContainer(bounds, textRect: Rect): TextContainer =
   let textInsets = insets(
@@ -911,7 +915,7 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
         context.appearance.resolveTextFieldStyle(styleContext, textField.textColor)
       chrome = chromeContext(
         context.appearance.resolveChromeName(styleContext),
-        crTextField,
+        textField.textFieldChromeRole(),
         cpFace,
         style.box.fill,
         states,

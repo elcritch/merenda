@@ -622,6 +622,29 @@ proc drawAquaTextFieldBacking(
     cornerRadii = extras.cornerRadii,
   )
 
+proc drawAquaTextLabelBacking(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  if not chrome.isEnabled:
+    return
+  let shadowRect = rect(
+    extras.rect.origin.x,
+    extras.rect.origin.y + 0.45'f32,
+    extras.rect.size.width,
+    extras.rect.size.height,
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    shadowRect,
+    transparentFill(),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    extras.cornerRadius,
+    [dropShadow(rgbaColor(0, 0, 0, 14), y = 0.55, blur = 2.1)],
+    cornerRadii = extras.cornerRadii,
+  )
+
 proc drawAquaRoundedControlBacking(
     context: DrawContext,
     chrome: ChromeContext,
@@ -1251,7 +1274,7 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaComboLowerWash(context)
       else:
         context.baseFill
-    of crTextField:
+    of crTextField, crTextLabel:
       case context.part
       of cpInnerFace:
         aquaTextFieldFaceFill(context)
@@ -1352,6 +1375,9 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crTextField:
       if chromeContext.part == cpFace:
         context.drawAquaTextFieldBacking(chromeContext, extras)
+    of crTextLabel:
+      if chromeContext.part == cpFace:
+        context.drawAquaTextLabelBacking(chromeContext, extras)
     of crSliderKnob:
       if chromeContext.part == cpFace:
         context.drawAquaKnobBacking(chromeContext, extras)
@@ -1380,7 +1406,7 @@ protocol AquaChromeProtocol of ChromeProtocol:
         context.drawAquaComboArrowExtras(chromeContext, extras)
       else:
         discard
-    of crTextField:
+    of crTextField, crTextLabel:
       if chromeContext.part == cpFace:
         context.drawAquaTextFieldExtras(chromeContext, extras)
     of crPopupList:

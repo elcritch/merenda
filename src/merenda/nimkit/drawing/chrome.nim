@@ -19,6 +19,7 @@ type
     crComboBox
     crPopupList
     crTextField
+    crTextLabel
     crSliderTrack
     crSliderKnob
     crTab
