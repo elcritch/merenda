@@ -681,9 +681,9 @@ proc drawAquaButtonExtras(
       upperSheen,
       transparentFill(),
       shadows = [
-        dropShadow(rgbaColor(255, 255, 255, 36), y = 1.0, blur = 8.0),
+        dropShadow(rgbaColor(255, 255, 255, 36), y = 1.0, blur = 9.2),
         dropShadow(
-          chrome.aquaButtonPalette.innerTop.withAlphaByte(38), y = 2.0, blur = 5.0
+          chrome.aquaButtonPalette.innerTop.withAlphaByte(38), y = 2.0, blur = 5.75
         ),
       ],
     )
@@ -695,9 +695,9 @@ proc drawAquaButtonExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          chrome.aquaButtonPalette.waistShade.withAlphaByte(30), y = 1.2, blur = 6.0
+          chrome.aquaButtonPalette.waistShade.withAlphaByte(30), y = 1.2, blur = 6.9
         ),
-        dropShadow(rgbaColor(255, 255, 255, 14), y = -1.2, blur = 4.0),
+        dropShadow(rgbaColor(255, 255, 255, 14), y = -1.2, blur = 4.6),
       ],
     )
   discard context.addRenderRectangle(
@@ -717,9 +717,9 @@ proc drawAquaButtonExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          chrome.aquaButtonPalette.bottomGlow.withAlphaByte(36), y = 1.2, blur = 8.0
+          chrome.aquaButtonPalette.bottomGlow.withAlphaByte(36), y = 1.2, blur = 9.2
         ),
-        dropShadow(rgbaColor(255, 255, 255, 14), y = -0.6, blur = 5.0),
+        dropShadow(rgbaColor(255, 255, 255, 14), y = -0.6, blur = 5.75),
       ],
     )
   if not bottomGlow.isEmpty:
