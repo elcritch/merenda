@@ -238,24 +238,24 @@ func aquaChoiceGlossFill(chrome: ChromeContext): Fill =
 func aquaComboFaceFill(chrome: ChromeContext): Fill =
   if not chrome.isEnabled:
     return linear(
-      rgbaColor(226, 239, 249, 146),
-      rgbaColor(184, 211, 230, 138),
-      rgbaColor(150, 184, 210, 132),
+      rgbaColor(230, 236, 248, 146),
+      rgbaColor(194, 206, 230, 138),
+      rgbaColor(164, 178, 208, 132),
       fgaY,
       104'u8,
     )
   if chrome.isPressed or chrome.isOpen:
     return linear(
-      rgbaColor(220, 244, 255, 232),
-      rgbaColor(112, 195, 250, 220),
-      rgbaColor(76, 151, 226, 212),
+      rgbaColor(231, 239, 255, 232),
+      rgbaColor(146, 184, 246, 220),
+      rgbaColor(112, 138, 221, 212),
       fgaY,
       112'u8,
     )
   linear(
-    rgbaColor(246, 253, 255, 232),
-    rgbaColor(177, 222, 252, 218),
-    rgbaColor(122, 190, 238, 204),
+    rgbaColor(248, 251, 255, 232),
+    rgbaColor(190, 216, 248, 218),
+    rgbaColor(150, 178, 232, 204),
     fgaY,
     112'u8,
   )
@@ -276,8 +276,8 @@ func aquaComboLowerWash(chrome: ChromeContext): Fill =
   let bottomAlpha = if chrome.isPressed or chrome.isOpen: 76 else: 62
   linear(
     rgbaColor(255, 255, 255, 0),
-    rgbaColor(132, 217, 255, 30),
-    rgbaColor(228, 252, 255, bottomAlpha),
+    rgbaColor(164, 202, 255, 30),
+    rgbaColor(238, 244, 255, bottomAlpha),
     fgaY,
     176'u8,
   )
@@ -360,16 +360,16 @@ func aquaComboArrowFill(chrome: ChromeContext): Fill =
     return linear(rgbaColor(210, 214, 219, 168), rgbaColor(158, 166, 173, 164), fgaY)
   if chrome.isPressed or chrome.isOpen:
     return linear(
-      rgbaColor(98, 204, 252, 230),
-      rgbaColor(18, 132, 231, 224),
-      rgbaColor(0, 70, 178, 226),
+      rgbaColor(136, 200, 254, 230),
+      rgbaColor(74, 134, 232, 224),
+      rgbaColor(44, 70, 184, 226),
       fgaY,
       104'u8,
     )
   linear(
-    rgbaColor(125, 230, 255, 230),
-    rgbaColor(38, 171, 251, 224),
-    rgbaColor(0, 112, 224, 226),
+    rgbaColor(154, 218, 255, 230),
+    rgbaColor(92, 158, 242, 224),
+    rgbaColor(56, 98, 220, 226),
     fgaY,
     104'u8,
   )
@@ -1080,9 +1080,9 @@ proc drawAquaComboFaceExtras(
   let
     base =
       if chrome.isPressed or chrome.isOpen:
-        rgbaColor(70, 165, 236, 220)
+        rgbaColor(112, 151, 229, 220)
       else:
-        rgbaColor(92, 180, 238, 210)
+        rgbaColor(134, 176, 236, 210)
     inner = extras.rect.inset(insets(1.5'f32))
     innerRadius = max(extras.cornerRadius - 1.5'f32, 1.0'f32)
     gloss = rect(
@@ -1148,7 +1148,7 @@ proc drawAquaComboFaceExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          rgbaColor(226, 252, 255, if chrome.isPressed or chrome.isOpen: 76 else: 62),
+          rgbaColor(238, 244, 255, if chrome.isPressed or chrome.isOpen: 76 else: 62),
           y = -1.0,
           blur = 5.0,
         )
