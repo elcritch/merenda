@@ -202,27 +202,27 @@ func aquaPressedDocumentTabFill(): Fill =
 
 func aquaTitleLabelFill(): Fill =
   linear(
-    rgbaColor(255, 255, 255, 244),
-    rgbaColor(244, 252, 255, 206),
-    rgbaColor(82, 183, 248, 190),
+    rgbaColor(255, 255, 255, 218),
+    rgbaColor(232, 248, 255, 166),
+    rgbaColor(62, 180, 250, 142),
     fgaY,
     78'u8,
   )
 
 func aquaHeadingLabelFill(): Fill =
   linear(
-    rgbaColor(255, 255, 255, 232),
-    rgbaColor(235, 249, 255, 194),
-    rgbaColor(76, 171, 238, 178),
+    rgbaColor(255, 255, 255, 206),
+    rgbaColor(222, 244, 255, 154),
+    rgbaColor(58, 168, 240, 132),
     fgaY,
     82'u8,
   )
 
 func aquaStatusLabelFill(): Fill =
   linear(
-    rgbaColor(255, 255, 255, 238),
-    rgbaColor(238, 255, 243, 202),
-    rgbaColor(72, 212, 136, 184),
+    rgbaColor(255, 255, 255, 212),
+    rgbaColor(224, 255, 238, 162),
+    rgbaColor(58, 214, 128, 138),
     fgaY,
     78'u8,
   )
@@ -330,26 +330,26 @@ func aquaScrollerKnobShadows(): seq[BoxShadow] =
 
 func aquaLabelShadows(): seq[BoxShadow] =
   @[
-    dropShadow(rgbaColor(255, 255, 255, 88), y = -1.0, blur = 1.4),
-    dropShadow(rgbaColor(0, 0, 0, 28), y = 1.2, blur = 2.8),
-    insetShadow(rgbaColor(0, 36, 112, 34), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 184), y = 2.0, blur = 2.4),
-    insetShadow(rgbaColor(255, 255, 255, 96), y = -1.0, blur = 2.0),
-    insetShadow(rgbaColor(0, 82, 190, 34), x = 2.0, blur = 7.0),
-    insetShadow(rgbaColor(0, 82, 190, 34), x = -2.0, blur = 7.0),
-    insetShadow(rgbaColor(78, 210, 255, 76), y = -3.0, blur = 7.2),
+    dropShadow(rgbaColor(255, 255, 255, 102), y = -1.0, blur = 1.5),
+    dropShadow(rgbaColor(0, 0, 0, 22), y = 1.2, blur = 2.8),
+    insetShadow(rgbaColor(0, 36, 112, 26), y = 1.2, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 212), y = 2.0, blur = 2.6),
+    insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.1),
+    insetShadow(rgbaColor(0, 82, 190, 24), x = 2.0, blur = 7.0),
+    insetShadow(rgbaColor(0, 82, 190, 24), x = -2.0, blur = 7.0),
+    insetShadow(rgbaColor(98, 224, 255, 92), y = -3.0, blur = 7.4),
   ]
 
 func aquaStatusLabelShadows(): seq[BoxShadow] =
   @[
-    dropShadow(rgbaColor(255, 255, 255, 82), y = -1.0, blur = 1.4),
-    dropShadow(rgbaColor(0, 0, 0, 22), y = 1.2, blur = 2.6),
-    insetShadow(rgbaColor(10, 88, 38, 30), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 176), y = 2.0, blur = 2.4),
-    insetShadow(rgbaColor(255, 255, 255, 86), y = -1.0, blur = 2.0),
-    insetShadow(rgbaColor(30, 136, 68, 30), x = 2.0, blur = 7.0),
-    insetShadow(rgbaColor(30, 136, 68, 30), x = -2.0, blur = 7.0),
-    insetShadow(rgbaColor(92, 240, 152, 72), y = -3.0, blur = 7.0),
+    dropShadow(rgbaColor(255, 255, 255, 98), y = -1.0, blur = 1.5),
+    dropShadow(rgbaColor(0, 0, 0, 18), y = 1.2, blur = 2.6),
+    insetShadow(rgbaColor(10, 88, 38, 24), y = 1.2, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 206), y = 2.0, blur = 2.6),
+    insetShadow(rgbaColor(255, 255, 255, 108), y = -1.0, blur = 2.1),
+    insetShadow(rgbaColor(30, 136, 68, 22), x = 2.0, blur = 7.0),
+    insetShadow(rgbaColor(30, 136, 68, 22), x = -2.0, blur = 7.0),
+    insetShadow(rgbaColor(112, 248, 168, 90), y = -3.0, blur = 7.2),
   ]
 
 func aquaSwitchTrackShadows(enabled: bool): seq[BoxShadow] =
@@ -957,7 +957,7 @@ proc initTheme*(): Theme =
   result.addLabelRule(
     LabelTitleStyleClass,
     aquaTitleLabelFill(),
-    rgbaColor(92, 135, 196, 172),
+    rgbaColor(92, 135, 196, 138),
     1.0,
     8.0,
     color(0.09, 0.14, 0.26, 1.0),
@@ -969,7 +969,7 @@ proc initTheme*(): Theme =
   result.addLabelRule(
     LabelHeadingStyleClass,
     aquaHeadingLabelFill(),
-    rgbaColor(104, 148, 205, 158),
+    rgbaColor(104, 148, 205, 126),
     1.0,
     7.0,
     color(0.10, 0.18, 0.32, 1.0),
@@ -981,7 +981,7 @@ proc initTheme*(): Theme =
   result.addLabelRule(
     LabelStatusStyleClass,
     aquaStatusLabelFill(),
-    rgbaColor(88, 168, 112, 156),
+    rgbaColor(88, 168, 112, 124),
     1.0,
     7.0,
     color(0.06, 0.25, 0.14, 1.0),

@@ -250,17 +250,13 @@ func aquaComboLowerWash(chrome: ChromeContext): Fill =
 func aquaTextFieldFaceFill(chrome: ChromeContext): Fill =
   let
     base = chrome.baseFill.centerColor()
-    alpha =
-      if chrome.isEnabled:
-        base.scaledAlpha(1.18'f32)
-      else:
-        base.scaledAlpha(0.48'f32)
+    scale = if chrome.isEnabled: 1.0'f32 else: 0.42'f32
   linear(
-    base.lightenColor(0.96'f32, alpha),
-    base.lightenColor(0.34'f32, alpha),
-    base.darkenColor(0.08'f32, alpha),
+    base.lightenColor(0.98'f32, base.scaledAlpha(0.72'f32 * scale)),
+    base.lightenColor(0.48'f32, base.scaledAlpha(0.56'f32 * scale)),
+    base.lightenColor(0.05'f32, base.scaledAlpha(0.64'f32 * scale)),
     fgaY,
-    82'u8,
+    88'u8,
   )
 
 func aquaTextFieldGlossFill(chrome: ChromeContext): Fill =
@@ -268,17 +264,23 @@ func aquaTextFieldGlossFill(chrome: ChromeContext): Fill =
     base = chrome.baseFill.centerColor()
     alpha =
       if chrome.isEnabled:
-        base.scaledAlpha(0.86'f32)
+        base.scaledAlpha(1.04'f32)
       else:
-        base.scaledAlpha(0.28'f32)
-  linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
+        base.scaledAlpha(0.32'f32)
+  linear(
+    color(1.0, 1.0, 1.0, alpha),
+    color(1.0, 1.0, 1.0, alpha * 0.18'f32),
+    color(1.0, 1.0, 1.0, 0.0),
+    fgaY,
+    96'u8,
+  )
 
 func aquaTextFieldLowerWash(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   linear(
     color(1.0, 1.0, 1.0, 0.0),
-    base.lightenColor(0.20'f32, base.scaledAlpha(0.24'f32)),
-    base.lightenColor(0.46'f32, base.scaledAlpha(0.34'f32)),
+    base.lightenColor(0.28'f32, base.scaledAlpha(0.16'f32)),
+    base.lightenColor(0.68'f32, base.scaledAlpha(0.32'f32)),
     fgaY,
     164'u8,
   )
@@ -286,10 +288,10 @@ func aquaTextFieldLowerWash(chrome: ChromeContext): Fill =
 func aquaTextFieldInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
   let
     base = chrome.baseFill.centerColor()
-    sideShade = base.darkenColor(0.28'f32, base.scaledAlpha(0.18'f32))
+    sideShade = base.darkenColor(0.28'f32, base.scaledAlpha(0.13'f32))
   @[
-    insetShadow(rgbaColor(0, 0, 0, 24), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 86), y = -1.0, blur = 2.0),
+    insetShadow(rgbaColor(0, 0, 0, 18), y = 1.2, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.0),
     insetShadow(sideShade, x = 2.0, blur = 7.0),
     insetShadow(sideShade, x = -2.0, blur = 7.0),
   ]
@@ -762,37 +764,37 @@ proc drawAquaTextFieldExtras(
       inner.origin.x - 2.0'f32,
       inner.origin.y,
       inner.size.width + 4.0'f32,
-      inner.size.height * 0.42'f32,
+      inner.size.height * 0.50'f32,
     )
     upperSheen = rect(
-      inner.origin.x + 10.0'f32,
-      inner.origin.y + 2.6'f32,
-      max(inner.size.width - 20.0'f32, 0.0'f32),
-      1.0'f32,
+      inner.origin.x + 8.0'f32,
+      inner.origin.y + 2.4'f32,
+      max(inner.size.width - 16.0'f32, 0.0'f32),
+      1.2'f32,
     )
     waistShade = rect(
       inner.origin.x + 8.0'f32,
-      inner.origin.y + inner.size.height * 0.38'f32,
+      inner.origin.y + inner.size.height * 0.42'f32,
       max(inner.size.width - 16.0'f32, 0.0'f32),
       1.0'f32,
     )
     lowerGloss = rect(
       inner.origin.x - 2.0'f32,
-      inner.origin.y + inner.size.height * 0.46'f32,
+      inner.origin.y + inner.size.height * 0.50'f32,
       inner.size.width + 4.0'f32,
-      inner.size.height * 0.54'f32,
+      inner.size.height * 0.50'f32,
     )
     lowerBloom = rect(
-      inner.origin.x + 12.0'f32,
+      inner.origin.x + 10.0'f32,
       inner.origin.y + inner.size.height * 0.68'f32,
-      max(inner.size.width - 24.0'f32, 0.0'f32),
-      1.0'f32,
+      max(inner.size.width - 20.0'f32, 0.0'f32),
+      1.2'f32,
     )
     bottomGlow = rect(
       inner.origin.x + 8.0'f32,
-      inner.origin.y + inner.size.height - 2.4'f32,
+      inner.origin.y + inner.size.height - 2.2'f32,
       max(inner.size.width - 16.0'f32, 0.0'f32),
-      1.0'f32,
+      1.2'f32,
     )
   discard context.addRenderRectangle(
     extras.layer,
@@ -810,9 +812,9 @@ proc drawAquaTextFieldExtras(
       upperSheen,
       transparentFill(),
       shadows = [
-        dropShadow(rgbaColor(255, 255, 255, 54), y = 1.0, blur = 8.0),
+        dropShadow(rgbaColor(255, 255, 255, 82), y = 1.0, blur = 8.5),
         dropShadow(
-          base.lightenColor(0.62'f32, base.scaledAlpha(0.22'f32)), y = 2.0, blur = 5.0
+          base.lightenColor(0.78'f32, base.scaledAlpha(0.28'f32)), y = 2.0, blur = 5.5
         ),
       ],
     )
@@ -824,9 +826,9 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.darkenColor(0.20'f32, base.scaledAlpha(0.16'f32)), y = 1.2, blur = 6.0
+          base.darkenColor(0.18'f32, base.scaledAlpha(0.10'f32)), y = 1.2, blur = 6.0
         ),
-        dropShadow(rgbaColor(255, 255, 255, 16), y = -1.2, blur = 4.0),
+        dropShadow(rgbaColor(255, 255, 255, 24), y = -1.2, blur = 4.0),
       ],
     )
   discard context.addRenderRectangle(
@@ -846,9 +848,9 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.lightenColor(0.48'f32, base.scaledAlpha(0.30'f32)), y = 1.2, blur = 8.0
+          base.lightenColor(0.70'f32, base.scaledAlpha(0.42'f32)), y = 1.2, blur = 8.5
         ),
-        dropShadow(rgbaColor(255, 255, 255, 16), y = -0.6, blur = 5.0),
+        dropShadow(rgbaColor(255, 255, 255, 24), y = -0.6, blur = 5.0),
       ],
     )
   if not bottomGlow.isEmpty:
@@ -859,7 +861,7 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.lightenColor(0.58'f32, base.scaledAlpha(0.34'f32)), y = -1.2, blur = 5.5
+          base.lightenColor(0.82'f32, base.scaledAlpha(0.48'f32)), y = -1.2, blur = 5.8
         )
       ],
     )
