@@ -272,6 +272,14 @@ func aquaTextFieldFaceFill(chrome: ChromeContext): Fill =
   let
     base = chrome.baseFill.centerColor()
     scale = if chrome.isEnabled: 1.0'f32 else: 0.42'f32
+  if chrome.role == crTextLabel:
+    return linear(
+      base.lightenColor(0.90'f32, base.scaledAlpha(0.86'f32 * scale)),
+      base.lightenColor(0.20'f32, base.scaledAlpha(0.76'f32 * scale)),
+      base.lightenColor(0.0'f32, base.scaledAlpha(0.84'f32 * scale)),
+      fgaY,
+      116'u8,
+    )
   linear(
     base.lightenColor(0.98'f32, base.scaledAlpha(0.72'f32 * scale)),
     base.lightenColor(0.48'f32, base.scaledAlpha(0.56'f32 * scale)),
@@ -285,12 +293,13 @@ func aquaTextFieldGlossFill(chrome: ChromeContext): Fill =
     base = chrome.baseFill.centerColor()
     alpha =
       if chrome.isEnabled:
-        base.scaledAlpha(1.04'f32)
+        base.scaledAlpha(if chrome.role == crTextLabel: 1.14'f32 else: 1.04'f32)
       else:
         base.scaledAlpha(0.32'f32)
+    midAlpha = if chrome.role == crTextLabel: 0.12'f32 else: 0.18'f32
   linear(
     color(1.0, 1.0, 1.0, alpha),
-    color(1.0, 1.0, 1.0, alpha * 0.18'f32),
+    color(1.0, 1.0, 1.0, alpha * midAlpha),
     color(1.0, 1.0, 1.0, 0.0),
     fgaY,
     96'u8,
@@ -298,6 +307,14 @@ func aquaTextFieldGlossFill(chrome: ChromeContext): Fill =
 
 func aquaTextFieldLowerWash(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
+  if chrome.role == crTextLabel:
+    return linear(
+      color(1.0, 1.0, 1.0, 0.0),
+      base.lightenColor(0.10'f32, base.scaledAlpha(0.26'f32)),
+      base.lightenColor(0.42'f32, base.scaledAlpha(0.48'f32)),
+      fgaY,
+      176'u8,
+    )
   linear(
     color(1.0, 1.0, 1.0, 0.0),
     base.lightenColor(0.28'f32, base.scaledAlpha(0.16'f32)),
@@ -309,12 +326,19 @@ func aquaTextFieldLowerWash(chrome: ChromeContext): Fill =
 func aquaTextFieldInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
   let
     base = chrome.baseFill.centerColor()
-    sideShade = base.darkenColor(0.28'f32, base.scaledAlpha(0.13'f32))
+    isLabel = chrome.role == crTextLabel
+    sideShade =
+      if isLabel:
+        base.darkenColor(0.30'f32, base.scaledAlpha(0.20'f32))
+      else:
+        base.darkenColor(0.28'f32, base.scaledAlpha(0.13'f32))
   @[
-    insetShadow(rgbaColor(0, 0, 0, 18), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.0),
-    insetShadow(sideShade, x = 2.0, blur = 7.0),
-    insetShadow(sideShade, x = -2.0, blur = 7.0),
+    insetShadow(rgbaColor(0, 0, 0, if isLabel: 22 else: 18), y = 1.2, blur = 3.0),
+    insetShadow(
+      rgbaColor(255, 255, 255, if isLabel: 150 else: 118), y = -1.0, blur = 2.0
+    ),
+    insetShadow(sideShade, x = 2.0, blur = if isLabel: 5.8 else: 7.0),
+    insetShadow(sideShade, x = -2.0, blur = if isLabel: 5.8 else: 7.0),
   ]
 
 func aquaComboArrowFill(chrome: ChromeContext): Fill =
@@ -807,6 +831,7 @@ proc drawAquaTextFieldExtras(
 ) =
   let
     base = chrome.baseFill.centerColor()
+    isLabel = chrome.role == crTextLabel
     radius = extras.cornerRadius
     innerInset = 1.6'f32
     inner = extras.rect.inset(insets(innerInset))
@@ -870,9 +895,16 @@ proc drawAquaTextFieldExtras(
       upperSheen,
       transparentFill(),
       shadows = [
-        dropShadow(rgbaColor(255, 255, 255, 82), y = 1.0, blur = 8.5),
         dropShadow(
-          base.lightenColor(0.78'f32, base.scaledAlpha(0.28'f32)), y = 2.0, blur = 5.5
+          rgbaColor(255, 255, 255, if isLabel: 106 else: 82), y = 1.0, blur = 8.5
+        ),
+        dropShadow(
+          base.lightenColor(
+            if isLabel: 0.58'f32 else: 0.78'f32,
+            base.scaledAlpha(if isLabel: 0.42'f32 else: 0.28'f32),
+          ),
+          y = 2.0,
+          blur = 5.5,
         ),
       ],
     )
@@ -884,9 +916,16 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.darkenColor(0.18'f32, base.scaledAlpha(0.10'f32)), y = 1.2, blur = 6.0
+          base.darkenColor(
+            if isLabel: 0.24'f32 else: 0.18'f32,
+            base.scaledAlpha(if isLabel: 0.18'f32 else: 0.10'f32),
+          ),
+          y = 1.2,
+          blur = 6.0,
         ),
-        dropShadow(rgbaColor(255, 255, 255, 24), y = -1.2, blur = 4.0),
+        dropShadow(
+          rgbaColor(255, 255, 255, if isLabel: 32 else: 24), y = -1.2, blur = 4.0
+        ),
       ],
     )
   discard context.addRenderRectangle(
@@ -906,9 +945,16 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.lightenColor(0.70'f32, base.scaledAlpha(0.36'f32)), y = 1.0, blur = 6.8
+          base.lightenColor(
+            if isLabel: 0.48'f32 else: 0.70'f32,
+            base.scaledAlpha(if isLabel: 0.50'f32 else: 0.36'f32),
+          ),
+          y = 1.0,
+          blur = 6.8,
         ),
-        dropShadow(rgbaColor(255, 255, 255, 24), y = -0.6, blur = 5.0),
+        dropShadow(
+          rgbaColor(255, 255, 255, if isLabel: 34 else: 24), y = -0.6, blur = 5.0
+        ),
       ],
     )
   if not bottomGlow.isEmpty:
@@ -919,7 +965,12 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.lightenColor(0.82'f32, base.scaledAlpha(0.38'f32)), y = -1.0, blur = 4.8
+          base.lightenColor(
+            if isLabel: 0.62'f32 else: 0.82'f32,
+            base.scaledAlpha(if isLabel: 0.56'f32 else: 0.38'f32),
+          ),
+          y = -1.0,
+          blur = 4.8,
         )
       ],
     )
