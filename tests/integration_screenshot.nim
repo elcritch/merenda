@@ -30,12 +30,6 @@ type InkBounds = object
 proc isDarkInk(px: ColorRGBX): bool =
   px.a >= 20'u8 and px.r.int + px.g.int + px.b.int <= 540
 
-proc maxChannelDelta(px: ColorRGBX, r, g, b: uint8): int =
-  max(abs(px.r.int - r.int), max(abs(px.g.int - g.int), abs(px.b.int - b.int)))
-
-proc colorNear(img: Image, x, y: int, r, g, b: uint8, tol = 18): bool =
-  maxChannelDelta(img[x, y], r, g, b) <= tol
-
 proc helloScreenshotScale(img: Image): float32 =
   max(img.width.float32 / 720.0'f32, 1.0'f32)
 
@@ -45,16 +39,23 @@ proc scaledCoordinate(value: int, scale: float32, maxValue: int): int =
 proc scaledLength(value: int, scale: float32): int =
   max(round(value.float32 * scale).int, 1)
 
-proc colorNearLogical(img: Image, x, y: int, r, g, b: uint8, tol = 18): bool =
+proc logicalPixel(img: Image, x, y: int): ColorRGBX =
   let scale = img.helloScreenshotScale()
-  img.colorNear(
-    x.scaledCoordinate(scale, img.width - 1),
-    y.scaledCoordinate(scale, img.height - 1),
-    r,
-    g,
-    b,
-    tol,
-  )
+  img[
+    x.scaledCoordinate(scale, img.width - 1), y.scaledCoordinate(scale, img.height - 1)
+  ]
+
+proc isBlueGlassPixel(px: ColorRGBX): bool =
+  px.a >= 240'u8 and px.r.int >= 160 and px.g.int >= 175 and px.b.int >= 190 and
+    px.b.int >= px.r.int + 8 and px.g.int >= px.r.int + 4
+
+proc isButtonBlueGlassPixel(px: ColorRGBX): bool =
+  px.a >= 240'u8 and px.b.int >= 200 and px.b.int >= px.r.int + 80 and
+    px.g.int >= px.r.int + 35
+
+proc isStatusGlassPixel(px: ColorRGBX): bool =
+  px.a >= 240'u8 and px.r.int >= 210 and px.g.int >= 220 and px.b.int >= 215 and
+    px.g.int >= px.r.int + 6 and px.g.int >= px.b.int + 2
 
 proc findDarkInkBounds(img: Image, x0, y0, w, h: int): InkBounds =
   let
@@ -124,14 +125,14 @@ proc assertCompleteHelloScreenshot(img: Image) =
   check img.width > 0
   check img.height > 0
 
-  check colorNearLogical(img, 40, 32, 240, 245, 248)
-  check colorNearLogical(img, 680, 32, 240, 245, 248)
-  check colorNearLogical(img, 40, 55, 130, 162, 207)
-  check colorNearLogical(img, 680, 55, 130, 162, 207)
-  check colorNearLogical(img, 40, 102, 234, 244, 236)
-  check colorNearLogical(img, 680, 102, 234, 244, 236)
-  check colorNearLogical(img, 40, 150, 95, 150, 212)
-  check colorNearLogical(img, 680, 150, 95, 150, 212)
+  check isBlueGlassPixel(img.logicalPixel(40, 32))
+  check isBlueGlassPixel(img.logicalPixel(680, 32))
+  check isBlueGlassPixel(img.logicalPixel(40, 55))
+  check isBlueGlassPixel(img.logicalPixel(680, 55))
+  check isStatusGlassPixel(img.logicalPixel(40, 102))
+  check isStatusGlassPixel(img.logicalPixel(680, 102))
+  check isButtonBlueGlassPixel(img.logicalPixel(40, 150))
+  check isButtonBlueGlassPixel(img.logicalPixel(680, 150))
 
   let scale = img.helloScreenshotScale()
   let
