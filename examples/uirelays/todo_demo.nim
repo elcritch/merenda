@@ -618,9 +618,44 @@ proc newTodoRelaysView(frame: nimkitTypes.Rect = nimkitTypes.AutoRect): TodoRela
   discard result.withProtocol(TodoRelaysEvents)
   discard result.withProtocol(TodoRelaysTextInput)
 
+proc newIntegrationPanel(): View =
+  let
+    content = newStackView(laVertical)
+    title = newHeadingLabel("UIRelays Integration")
+    description = newStatusLabel(
+      "The left pane is a custom UIRelaysView rendered by uirelays. NimKit hosts " &
+        "it as a normal responder, forwards mouse and keyboard input, and keeps " &
+        "the surrounding window, split view, focus, and accessibility behavior in " &
+        "the regular view tree."
+    )
+    panel = newGroupBox("About")
+
+  content.spacing = 10.0
+  content.alignment = svaFill
+  content.distribution = svdNatural
+  content.addArrangedSubview(title)
+  content.addArrangedSubview(description)
+  panel.contentView = content
+  View(panel)
+
 let
   app = sharedApplication()
-  window = newWindow("UIRelays Todo", frame = nimkitTypes.rect(160, 120, 760, 560))
+  window = newWindow("UIRelays Todo", frame = nimkitTypes.rect(160, 120, 960, 560))
+  root = newView()
+  split = newHorizontalSplitView()
   todo = newTodoRelaysView()
+  integrationPanel = newIntegrationPanel()
 
-app.runWindow(window, todo, todo)
+split.addPane(todo, minSize = 360.0)
+split.addPane(integrationPanel, minSize = 240.0, maxSize = 360.0)
+split.setPositionOfDivider(0, 620.0)
+
+root.addSubview(split)
+split.pinEdges(
+  toGuide = root.contentLayoutGuide(insets(18.0)),
+  edges = {leLeft, leTop, leRight, leBottom},
+)
+
+window.minSize = nimkitTypes.initSize(700.0, 360.0)
+
+app.runWindow(window, root, todo)
