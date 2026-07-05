@@ -84,18 +84,18 @@ func darkenKeepingAlpha(color: Color, amount: float32): Color =
 
 func aquaButtonBasePalette(): AquaButtonPalette =
   AquaButtonPalette(
-    rimTop: rgbaColor(100, 208, 255, 168),
-    rimMid: rgbaColor(66, 178, 246, 146),
-    rimBottom: rgbaColor(73, 176, 236, 140),
-    rimStroke: rgbaColor(28, 128, 214, 142),
-    innerTop: rgbaColor(202, 241, 255, 150),
-    innerMid: rgbaColor(107, 196, 252, 142),
-    innerBottom: rgbaColor(160, 235, 255, 148),
-    topShade: rgbaColor(0, 96, 190, 28),
-    waistShade: rgbaColor(0, 116, 206, 22),
-    lowerWash: rgbaColor(255, 255, 255, 32),
-    sideShade: rgbaColor(0, 110, 190, 14),
-    bottomGlow: rgbaColor(226, 252, 255, 86),
+    rimTop: rgbaColor(83, 166, 233, 162),
+    rimMid: rgbaColor(67, 169, 241, 140),
+    rimBottom: rgbaColor(68, 161, 227, 134),
+    rimStroke: rgbaColor(29, 112, 203, 145),
+    innerTop: rgbaColor(192, 229, 253, 142),
+    innerMid: rgbaColor(101, 184, 250, 135),
+    innerBottom: rgbaColor(152, 230, 255, 140),
+    topShade: rgbaColor(0, 80, 177, 31),
+    waistShade: rgbaColor(0, 102, 197, 24),
+    lowerWash: rgbaColor(255, 255, 255, 29),
+    sideShade: rgbaColor(0, 96, 180, 15),
+    bottomGlow: rgbaColor(221, 251, 255, 82),
   )
 
 func scaleAlpha(palette: AquaButtonPalette, scale: float32): AquaButtonPalette =
@@ -133,7 +133,7 @@ func darken(palette: AquaButtonPalette, amount: float32): AquaButtonPalette =
 func aquaButtonPalette(chrome: ChromeContext): AquaButtonPalette =
   let
     alphaScale = if chrome.isEnabled: 1.0'f32 else: 0.42'f32
-    pressedDarken = if chrome.isPressed: 0.12'f32 else: 0.0'f32
+    pressedDarken = if chrome.isPressed: 0.14'f32 else: 0.0'f32
   aquaButtonBasePalette().scaleAlpha(alphaScale).darken(pressedDarken)
 
 func aquaButtonFaceFill(chrome: ChromeContext): Fill =

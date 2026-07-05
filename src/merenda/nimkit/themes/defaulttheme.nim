@@ -79,18 +79,18 @@ func highlightedButtonShadows(): seq[BoxShadow] =
 
 func aquaButtonFill(): Fill =
   linear(
-    rgbaColor(104, 210, 255, 170),
-    rgbaColor(54, 174, 245, 148),
-    rgbaColor(64, 174, 238, 140),
+    rgbaColor(86, 167, 233, 163),
+    rgbaColor(59, 166, 240, 141),
+    rgbaColor(62, 160, 229, 134),
     fgaY,
     132'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    rgbaColor(82, 185, 238, 170),
-    rgbaColor(35, 148, 225, 148),
-    rgbaColor(32, 132, 210, 140),
+    rgbaColor(68, 146, 211, 163),
+    rgbaColor(42, 140, 213, 141),
+    rgbaColor(37, 124, 197, 134),
     fgaY,
     132'u8,
   )
@@ -106,9 +106,9 @@ func aquaWindowBackgroundFill(): Fill =
 
 func aquaButtonDisabledFill(): Fill =
   linear(
-    rgbaColor(104, 210, 255, 71),
-    rgbaColor(54, 174, 245, 62),
-    rgbaColor(64, 174, 238, 59),
+    rgbaColor(86, 167, 233, 68),
+    rgbaColor(59, 166, 240, 59),
+    rgbaColor(62, 160, 229, 56),
     fgaY,
     132'u8,
   )
@@ -151,9 +151,9 @@ func aquaSliderKnobFill(): Fill =
 
 func aquaSliderProgressFill(): Fill =
   linear(
-    rgbaColor(104, 210, 255, 226),
-    rgbaColor(54, 174, 245, 214),
-    rgbaColor(64, 174, 238, 210),
+    rgbaColor(86, 167, 233, 215),
+    rgbaColor(59, 166, 240, 202),
+    rgbaColor(62, 160, 229, 198),
     fgaY,
     132'u8,
   )
@@ -403,8 +403,8 @@ proc initTheme*(): Theme =
   result["button.fill.accent.highlighted"] = aquaAccentButtonPressedFill()
   result["button.text.color"] = styleColor(rgbaColor(5, 16, 27, 248))
   result["button.text.color.disabled"] = styleToken("disabled.text.color")
-  result["button.border.color"] = styleColor(rgbaColor(32, 128, 216, 142))
-  result["button.border.color.highlighted"] = styleColor(rgbaColor(16, 108, 196, 158))
+  result["button.border.color"] = styleColor(rgbaColor(31, 112, 204, 145))
+  result["button.border.color.highlighted"] = styleColor(rgbaColor(19, 93, 180, 161))
   result["button.border.color.disabled"] = styleColor(color(0.52, 0.57, 0.64, 1.0))
   result["button.border.color.accent"] = styleToken("button.border.color")
   result["button.border.color.accent.highlighted"] =
@@ -661,7 +661,7 @@ proc initTheme*(): Theme =
   result[srSwitch, StyleMinimumSize] = initSize(0.0, 0.0)
   result[srSwitch, StyleChrome] = styleKeyword(AquaChromeName)
   result[srSwitch, {ssSelected}, StyleFill] = aquaButtonFill()
-  result[srSwitch, {ssSelected}, StyleBorderColor] = rgbaColor(32, 128, 216, 142)
+  result[srSwitch, {ssSelected}, StyleBorderColor] = rgbaColor(31, 112, 204, 145)
   result[srSwitch, {ssHighlighted}, StyleKnobFill] = aquaComboBoxFill()
   result[srSwitch, {ssDisabled}, StyleFill] = fill(color(0.72, 0.78, 0.84, 0.37))
   result[srSwitch, {ssDisabled}, StyleBorderColor] = color(0.38, 0.45, 0.53, 0.32)
