@@ -6,6 +6,9 @@ export bumpy
 export chroma
 import sigils/features
 
+when defined(macosx):
+  {.passc: "-Wno-incompatible-function-pointer-types".}
+
 when not defined(nimdoc):
   when not sigilsSigilNameStringEnabled:
     {.error: "NimKit requires -d:sigils.sigNameAsString ".}

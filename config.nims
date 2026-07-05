@@ -1,7 +1,5 @@
 --nimcache:
   ".nimcache/"
---passc:
-  "-Wno-incompatible-function-pointer-types"
 --define:
   useMalloc
 --mm:
