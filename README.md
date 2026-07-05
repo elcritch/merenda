@@ -35,11 +35,13 @@ Add Merenda to your package:
 requires "https://github.com/elcritch/merenda"
 ```
 
-Then resolve dependencies with Atlas:
+Then install dependencies with Atlas:
 
 ```sh
-atlas install
+atlas install --update
 ```
+
+Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang/atlas#installation), where curl install is the easiest. Nimble should also work but it's not tested currently.
 
 ## Quick Start
 
