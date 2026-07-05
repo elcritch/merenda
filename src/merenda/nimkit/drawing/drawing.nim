@@ -398,6 +398,9 @@ proc renderList*(context: DrawContext): RenderList =
 proc renderParent*(context: DrawContext): FigIdx =
   context.xParent
 
+proc renderViewParent*(context: DrawContext): FigIdx =
+  context.xViewParent
+
 proc renders*(context: DrawContext): Renders =
   context.xRenders
 

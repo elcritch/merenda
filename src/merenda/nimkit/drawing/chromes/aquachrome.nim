@@ -599,6 +599,29 @@ proc drawAquaButtonBacking(
     [dropShadow(rgbaColor(0, 0, 0, 46), y = 1.2, blur = 4.4)],
   )
 
+proc drawAquaTextFieldBacking(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  if not chrome.isEnabled:
+    return
+  let shadowRect = rect(
+    extras.rect.origin.x,
+    extras.rect.origin.y + 0.8'f32,
+    extras.rect.size.width,
+    extras.rect.size.height,
+  )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    shadowRect,
+    transparentFill(),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    extras.cornerRadius,
+    [dropShadow(rgbaColor(0, 0, 0, 26), y = 1.0, blur = 3.4)],
+    cornerRadii = extras.cornerRadii,
+  )
+
 proc drawAquaRoundedControlBacking(
     context: DrawContext,
     chrome: ChromeContext,
@@ -1327,7 +1350,8 @@ protocol AquaChromeProtocol of ChromeProtocol:
       if chromeContext.part == cpFace:
         context.drawAquaComboBacking(chromeContext, extras)
     of crTextField:
-      discard
+      if chromeContext.part == cpFace:
+        context.drawAquaTextFieldBacking(chromeContext, extras)
     of crSliderKnob:
       if chromeContext.part == cpFace:
         context.drawAquaKnobBacking(chromeContext, extras)

@@ -920,7 +920,7 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
     context.drawChromeBacking(
       chrome,
       initChromeExtras(
-        context.renderParent(),
+        context.renderViewParent(),
         absoluteFrame,
         cornerRadius = style.box.cornerRadius,
         cornerRadii = style.box.cornerRadii,
