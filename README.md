@@ -49,7 +49,7 @@ import sigils/selectors
 
 let
   app = sharedApplication()
-  window = newWindow("Counter", frame = initRect(100, 100, 320, 220))
+  window = newWindow("Counter", frame = rect(100, 100, 320, 220))
   root = newView()
   layout = newStackView(laVertical)
   label = newStatusLabel("Clicked 0 times")
@@ -227,8 +227,8 @@ style classes, giving the theme system stable targets without requiring CSS.
 let titleStyle = initStyleSelector(srTextField, classes = @["title"])
 var appearance = initAppearance()
 
-appearance.setStyle(titleStyle, StyleFill, initColor(0.88, 0.92, 0.98))
-appearance.setStyle(titleStyle, StyleTextColor, initColor(0.09, 0.14, 0.26))
+appearance.setStyle(titleStyle, StyleFill, fill(color(0.88, 0.92, 0.98)))
+appearance.setStyle(titleStyle, StyleTextColor, color(0.09, 0.14, 0.26))
 appearance.setStyle(titleStyle, StyleCornerRadius, 6.0)
 
 title.styleClasses = ["title"]
@@ -249,13 +249,13 @@ type BadgeView = ref object of View
 protocol BadgeDrawing of ViewDrawingProtocol:
   method draw(view: BadgeView, context: DrawContext) =
     context.addRectangle(
-      initRect(0, 0, 120, 32),
-      initColor(0.18, 0.32, 0.55),
+      rect(0, 0, 120, 32),
+      fill(color(0.18, 0.32, 0.55)),
     )
     context.addText(
-      initRect(12, 0, 96, 32),
+      rect(12, 0, 96, 32),
       "Ready",
-      initColor(1, 1, 1),
+      color(1, 1, 1),
       taCenter,
     )
 
@@ -278,9 +278,9 @@ Current examples are mirrored by `examples/all_compile.nim`:
 - Basics: `quick_start`, `hello`, `button_counter`, `button_demo`, `todo_basic`, `todo_stack_drag`, `todo_table`, `controls_showcase`
 - Controls: `textfield_demo`, `checkbox_demo`, `radio_demo`, `combobox_demo`, `combo_scroll_demo`, `stepper_demo`, `progress_indicator_demo`
 - Layout and containers: `box_demo`, `splitview_demo`, `scrollview_demo`, `tabview_demo`, `layout_showcase`, `constraint_playground_demo`, `grid_preferences`
-- Data and models: `table_demo`, `cascading_demo`, `collectionview_demo`, `documenttabs_demo`, `matrix_demo`, `menu_demo`, `modelcontrollers_demo`
+- Data and models: `table_demo`, `outline_demo`, `cascading_demo`, `collectionview_demo`, `documenttabs_demo`, `matrix_demo`, `menu_demo`, `modelcontrollers_demo`
 - Application workflows: `panel_demo`, `document_workspace_demo`, `preferences_demo`, `viewcontroller_demo`, `view_inspector_demo`, `image_resources_demo`
-- Text and animation: `texteditor_demo`, `monotext_demo`, `animation_demo`
+- Text and animation: `texteditor_demo`, `synedit_demo`, `monotext_demo`, `animation_demo`
 
 Run any focused example with:
 
