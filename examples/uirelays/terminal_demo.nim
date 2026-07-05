@@ -1,3 +1,5 @@
+import std/strutils
+
 import merenda/nimkit except
   Rect, Point, Size, color, point, rect, Event, Key, KeyModifier, MouseButton
 import merenda/nimkit/foundation/events as nkEvents
@@ -8,11 +10,61 @@ import widgets/terminal as uiTerminal
 
 const TerminalFontSize = 16
 
-type TerminalRelaysView = ref object of UIRelaysView
-  terminal: uiTerminal.Terminal
-  hasTerminal: bool
-  pendingEvents: seq[ui.Event]
-  suppressNextTextInput: bool
+type
+  CommandLogController = ref object of Responder
+    commands: seq[string]
+    table: TableView
+
+  TerminalRelaysView = ref object of UIRelaysView
+    terminal: uiTerminal.Terminal
+    commandLog: CommandLogController
+    hasTerminal: bool
+    pendingEvents: seq[ui.Event]
+    suppressNextTextInput: bool
+
+protocol CommandLogDataSource of TableViewDataSource:
+  method numberOfRows(source: CommandLogController, tableView: TableView): int =
+    source.commands.len
+
+  method textForCell(
+      source: CommandLogController, tableView: TableView, row: int, column: TableColumn
+  ): string =
+    discard tableView
+    discard column
+    if row in 0 ..< source.commands.len:
+      source.commands[row]
+    else:
+      ""
+
+proc recordCommand(source: CommandLogController, command: string) =
+  if source.isNil:
+    return
+  let normalized = command.strip()
+  if normalized.len == 0:
+    return
+
+  source.commands.add normalized
+  if not source.table.isNil:
+    source.table.reloadData()
+    source.table.selectedIndex = source.commands.high
+
+proc newCommandLogController(): CommandLogController =
+  CommandLogController()
+
+proc newCommandLogTable(source: CommandLogController): TableView =
+  result = newTableView()
+  result.addColumn(
+    newTableColumn("command", "Commands Run", width = 260.0, minWidth = 180.0)
+  )
+  result.showsHeader = true
+  result.tableHeaderHeight = 26.0
+  result.rowHeight = 28.0
+  result.selectionMode = tsmSingle
+  result.usesAlternatingRowBackgrounds = true
+  result.showsRowSeparators = true
+  result.dataSource = source
+  result.accessibilityLabel = "Commands run"
+  source.table = result
 
 proc focused(view: TerminalRelaysView): bool =
   let owner = view.window()
@@ -42,6 +94,13 @@ proc enqueue(view: TerminalRelaysView, event: ui.Event) =
 proc enqueueText(view: TerminalRelaysView, text: string) =
   for event in text.toUIRelaysTextInputEvents():
     view.enqueue(event)
+
+proc currentCommand(view: TerminalRelaysView): string =
+  if not view.hasTerminal:
+    return ""
+  let editor = view.terminal.ed
+  for index in editor.readOnly + 1 ..< editor.len:
+    result.add editor[index]
 
 proc handleTerminalAction(view: TerminalRelaysView, action: uiTerminal.TermAction) =
   discard view
@@ -104,6 +163,8 @@ protocol TerminalRelaysEvents of ResponderEventProtocol:
 
   method keyDown(view: TerminalRelaysView, event: KeyEvent): bool =
     view.suppressNextTextInput = false
+    if event.key == nkEvents.keyEnter:
+      view.commandLog.recordCommand(view.currentCommand())
     view.enqueue(event.toUIRelaysEvent(ui.KeyDownEvent))
     if event.text.isUIRelaysTextInput() and nkEvents.kmControl notin event.modifiers and
         nkEvents.kmCommand notin event.modifiers:
@@ -123,18 +184,32 @@ protocol TerminalRelaysTextInput of TextInputProtocol:
     view.enqueueText(text)
 
 proc newTerminalRelaysView(
-    frame: nimkitTypes.Rect = nimkitTypes.AutoRect
+    commandLog: CommandLogController = nil,
+    frame: nimkitTypes.Rect = nimkitTypes.AutoRect,
 ): TerminalRelaysView =
   result = TerminalRelaysView()
   result.initUIRelaysViewFields(frame = frame)
+  result.commandLog = commandLog
   result.setAcceptsFirstResponder(true)
   discard result.withProtocol(TerminalRelaysDrawing)
   discard result.withProtocol(TerminalRelaysEvents)
   discard result.withProtocol(TerminalRelaysTextInput)
 
+proc newTerminalDemoView(): tuple[root: SplitView, terminal: TerminalRelaysView] =
+  let
+    commandLog = newCommandLogController()
+    commandTable = newCommandLogTable(commandLog)
+  result.root = newHorizontalSplitView()
+  result.terminal = newTerminalRelaysView(commandLog)
+  result.root.addPane(result.terminal, minSize = 360.0)
+  result.root.addPane(commandTable, minSize = 220.0)
+  result.root.restoreState(
+    SplitViewState(fractions: @[0.72'f32, 0.28'f32], collapsed: @[false, false])
+  )
+
 let
   app = sharedApplication()
-  window = newWindow("UIRelays Terminal", frame = nimkitTypes.rect(160, 120, 820, 520))
-  terminal = newTerminalRelaysView()
+  window = newWindow("UIRelays Terminal", frame = nimkitTypes.rect(160, 120, 1040, 560))
+  demo = newTerminalDemoView()
 
-app.runWindow(window, terminal, terminal)
+app.runWindow(window, demo.root, demo.terminal)
