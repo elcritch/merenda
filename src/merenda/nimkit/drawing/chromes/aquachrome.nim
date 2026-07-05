@@ -84,18 +84,18 @@ func darkenKeepingAlpha(color: Color, amount: float32): Color =
 
 func aquaButtonBasePalette(): AquaButtonPalette =
   AquaButtonPalette(
-    rimTop: rgbaColor(50, 82, 190, 150),
-    rimMid: rgbaColor(70, 150, 230, 128),
-    rimBottom: rgbaColor(58, 132, 210, 122),
-    rimStroke: rgbaColor(30, 80, 180, 150),
-    innerTop: rgbaColor(172, 205, 250, 125),
-    innerMid: rgbaColor(88, 160, 245, 120),
-    innerBottom: rgbaColor(135, 220, 255, 125),
-    topShade: rgbaColor(0, 48, 150, 36),
-    waistShade: rgbaColor(0, 74, 180, 28),
-    lowerWash: rgbaColor(255, 255, 255, 22),
-    sideShade: rgbaColor(0, 68, 160, 18),
-    bottomGlow: rgbaColor(210, 248, 255, 74),
+    rimTop: rgbaColor(100, 208, 255, 168),
+    rimMid: rgbaColor(66, 178, 246, 146),
+    rimBottom: rgbaColor(73, 176, 236, 140),
+    rimStroke: rgbaColor(28, 128, 214, 142),
+    innerTop: rgbaColor(202, 241, 255, 150),
+    innerMid: rgbaColor(107, 196, 252, 142),
+    innerBottom: rgbaColor(160, 235, 255, 148),
+    topShade: rgbaColor(0, 96, 190, 28),
+    waistShade: rgbaColor(0, 116, 206, 22),
+    lowerWash: rgbaColor(255, 255, 255, 32),
+    sideShade: rgbaColor(0, 110, 190, 14),
+    bottomGlow: rgbaColor(226, 252, 255, 86),
   )
 
 func scaleAlpha(palette: AquaButtonPalette, scale: float32): AquaButtonPalette =
@@ -133,7 +133,7 @@ func darken(palette: AquaButtonPalette, amount: float32): AquaButtonPalette =
 func aquaButtonPalette(chrome: ChromeContext): AquaButtonPalette =
   let
     alphaScale = if chrome.isEnabled: 1.0'f32 else: 0.42'f32
-    pressedDarken = if chrome.isPressed: 0.18'f32 else: 0.0'f32
+    pressedDarken = if chrome.isPressed: 0.12'f32 else: 0.0'f32
   aquaButtonBasePalette().scaleAlpha(alphaScale).darken(pressedDarken)
 
 func aquaButtonFaceFill(chrome: ChromeContext): Fill =
@@ -324,22 +324,22 @@ func aquaSliderTrackFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.32'f32, base.scaledAlpha(0.50'f32)),
-      base.lightenColor(0.64'f32, base.scaledAlpha(0.50'f32)),
+      base.lightenColor(0.32'f32, base.scaledAlpha(0.68'f32)),
+      base.lightenColor(0.64'f32, base.scaledAlpha(0.68'f32)),
       fgaY,
     )
-  let alpha = base.scaledAlpha(0.92'f32)
+  let alpha = base.scaledAlpha(1.12'f32)
   linear(base.darkenColor(0.18'f32, alpha), base.lightenColor(0.36'f32, alpha), fgaY)
 
 func aquaSliderTrackHighlightFill(chrome: ChromeContext): Fill =
   let base = chrome.baseFill.centerColor()
   if not chrome.isEnabled:
     return linear(
-      base.lightenColor(0.52'f32, base.scaledAlpha(0.34'f32)),
-      base.lightenColor(0.76'f32, base.scaledAlpha(0.34'f32)),
+      base.lightenColor(0.52'f32, base.scaledAlpha(0.52'f32)),
+      base.lightenColor(0.76'f32, base.scaledAlpha(0.52'f32)),
       fgaY,
     )
-  let alpha = base.scaledAlpha(1.0'f32)
+  let alpha = base.scaledAlpha(1.14'f32)
   linear(
     base.lightenColor(0.54'f32, alpha),
     base.lightenColor(0.18'f32, alpha),
