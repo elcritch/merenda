@@ -555,18 +555,50 @@ func aquaDocumentTabInnerFill(chrome: ChromeContext): Fill =
   let alpha = base.scaledAlpha(if chrome.isEnabled: 0.96'f32 else: 0.44'f32)
   if chrome.isSelected:
     return linear(
-      base.lightenColor(0.92'f32, alpha),
-      base.lightenColor(0.58'f32, alpha),
-      base.lightenColor(0.16'f32, alpha),
+      base.lightenColor(0.96'f32, alpha),
+      base.lightenColor(0.70'f32, alpha),
+      base.lightenColor(0.34'f32, alpha),
       fgaY,
       112'u8,
     )
   linear(
-    base.lightenColor(0.86'f32, alpha),
-    base.lightenColor(0.44'f32, alpha),
-    base.darkenColor(0.04'f32, alpha),
+    base.lightenColor(0.92'f32, alpha),
+    base.lightenColor(0.58'f32, alpha),
+    base.lightenColor(0.18'f32, alpha),
     fgaY,
     112'u8,
+  )
+
+func aquaDocumentTabGlossFill(chrome: ChromeContext): Fill =
+  let
+    base = chrome.baseFill.centerColor()
+    alpha =
+      if not chrome.isEnabled:
+        base.scaledAlpha(0.30'f32)
+      elif chrome.isSelected:
+        base.scaledAlpha(1.06'f32)
+      else:
+        base.scaledAlpha(0.92'f32)
+  linear(
+    color(1.0, 1.0, 1.0, alpha),
+    color(1.0, 1.0, 1.0, alpha * 0.12'f32),
+    color(1.0, 1.0, 1.0, 0.0),
+    fgaY,
+    96'u8,
+  )
+
+func aquaDocumentTabLowerWash(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  if not chrome.isEnabled:
+    return fill(color(1.0, 1.0, 1.0, 0.0))
+  linear(
+    color(1.0, 1.0, 1.0, 0.0),
+    base.lightenColor(0.20'f32, base.scaledAlpha(0.24'f32)),
+    base.lightenColor(
+      0.54'f32, base.scaledAlpha(if chrome.isSelected: 0.46'f32 else: 0.36'f32)
+    ),
+    fgaY,
+    176'u8,
   )
 
 func aquaDocumentTabBarFaceFill(chrome: ChromeContext): Fill =
@@ -1299,6 +1331,109 @@ proc drawAquaTabExtras(
   )
   discard innerRoot
 
+  if chrome.role == crDocumentTab:
+    let
+      base = chrome.baseFill.centerColor()
+      glowInset = max(innerRadius + 8.0'f32, 14.0'f32)
+      gloss = rect(inner.origin.x, inner.origin.y, inner.size.width, inner.size.height)
+      upperSheen = rect(
+        inner.origin.x + 8.0'f32,
+        inner.origin.y + 2.0'f32,
+        max(inner.size.width - 16.0'f32, 0.0'f32),
+        1.1'f32,
+      )
+      waistShade = rect(
+        inner.origin.x + 8.0'f32,
+        inner.origin.y + inner.size.height * 0.42'f32,
+        max(inner.size.width - 16.0'f32, 0.0'f32),
+        1.0'f32,
+      )
+      lowerWash = rect(
+        inner.origin.x,
+        inner.origin.y + inner.size.height * 0.48'f32,
+        inner.size.width,
+        inner.size.height * 0.52'f32,
+      )
+      lowerBloom = rect(
+        inner.origin.x + glowInset,
+        inner.origin.y + inner.size.height * 0.68'f32,
+        max(inner.size.width - glowInset * 2.0'f32, 0.0'f32),
+        1.1'f32,
+      )
+    discard context.addRenderRectangle(
+      extras.layer,
+      innerRoot,
+      gloss,
+      context.appearance.chromeFill(chrome.withPart(cpGloss)),
+      color(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
+      innerRadius,
+    )
+    if not upperSheen.isEmpty:
+      discard context.addRenderRectangle(
+        extras.layer,
+        innerRoot,
+        upperSheen,
+        transparentFill(),
+        shadows = [
+          dropShadow(
+            rgbaColor(255, 255, 255, if chrome.isSelected: 112 else: 92),
+            y = 1.0,
+            blur = 8.0,
+          ),
+          dropShadow(
+            base.lightenColor(
+              0.60'f32, base.scaledAlpha(if chrome.isSelected: 0.40'f32 else: 0.30'f32)
+            ),
+            y = 2.0,
+            blur = 5.4,
+          ),
+        ],
+      )
+    if not waistShade.isEmpty:
+      discard context.addRenderRectangle(
+        extras.layer,
+        innerRoot,
+        waistShade,
+        transparentFill(),
+        shadows = [
+          dropShadow(
+            base.darkenColor(
+              0.22'f32, base.scaledAlpha(if chrome.isSelected: 0.18'f32 else: 0.12'f32)
+            ),
+            y = 1.0,
+            blur = 5.4,
+          ),
+          dropShadow(rgbaColor(255, 255, 255, 26), y = -1.0, blur = 3.8),
+        ],
+      )
+    discard context.addRenderRectangle(
+      extras.layer,
+      innerRoot,
+      lowerWash,
+      context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
+      color(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
+      innerRadius,
+    )
+    if not lowerBloom.isEmpty:
+      discard context.addRenderRectangle(
+        extras.layer,
+        innerRoot,
+        lowerBloom,
+        transparentFill(),
+        shadows = [
+          dropShadow(
+            base.lightenColor(
+              0.66'f32, base.scaledAlpha(if chrome.isSelected: 0.44'f32 else: 0.34'f32)
+            ),
+            y = 1.0,
+            blur = 6.2,
+          ),
+          dropShadow(rgbaColor(255, 255, 255, 28), y = -0.6, blur = 4.4),
+        ],
+      )
+
   if extras.edge == ceNone:
     return
 
@@ -1459,6 +1594,10 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaDocumentTabFaceFill(context)
       of cpInnerFace:
         aquaDocumentTabInnerFill(context)
+      of cpGloss:
+        aquaDocumentTabGlossFill(context)
+      of cpLowerWash:
+        aquaDocumentTabLowerWash(context)
       of cpHighlight:
         context.baseFill
       of cpSeam:
