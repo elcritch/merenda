@@ -49,7 +49,9 @@ proc recordCommand(source: CommandLogController, command: string) =
     source.table.selectedIndex = source.commands.high
 
 proc newCommandLogController(): CommandLogController =
-  CommandLogController()
+  result = CommandLogController()
+  initResponder(result)
+  discard result.withProtocol(CommandLogDataSource)
 
 proc newCommandLogTable(source: CommandLogController): TableView =
   result = newTableView()
