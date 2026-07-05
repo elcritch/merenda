@@ -447,7 +447,7 @@ suite "nimkit rendering":
       expectedButtonRect = button.rectToWindow(button.bounds)
       expectedShadowRect = rect(
         expectedButtonRect.origin.x,
-        expectedButtonRect.origin.y + 1.5'f32,
+        expectedButtonRect.origin.y + 1.1'f32,
         expectedButtonRect.size.width,
         expectedButtonRect.size.height,
       )
@@ -459,15 +459,15 @@ suite "nimkit rendering":
       buttonRoot = (-1).FigIdx
     for idx, node in list.nodes:
       if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == rgbaColor(0, 0, 0, 54).rgba and
+          node.fill.color == rgbaColor(0, 0, 0, 40).rgba and
           node.renderedRect().rectsClose(expectedShadowRect):
         buttonBackingFound = true
         check node.corners[dcTopLeft] == 16'u16
         check node.shadows[0].style == DropShadow
         check node.shadows[0].fill.kind == flColor
-        check node.shadows[0].fill.color == rgbaColor(0, 0, 0, 58).rgba
-        check node.shadows[0].y == 1.8'f32
-        check node.shadows[0].blur == 5.8'f32
+        check node.shadows[0].fill.color == rgbaColor(0, 0, 0, 46).rgba
+        check node.shadows[0].y == 1.2'f32
+        check node.shadows[0].blur == 4.4'f32
       if node.kind == nkRectangle and node.fill == style.box.fill and
           node.renderedRect().rectsClose(expectedButtonRect):
         buttonRoot = idx.FigIdx
@@ -488,7 +488,7 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and NfRectMaskContent in node.flags and
           node.fill.kind == flLinear3:
         innerRoot = idx
-        check node.fill.centerColor().a <= 0.48'f32
+        check node.fill.centerColor().a <= 0.55'f32
 
     check innerRoot != (-1).FigIdx
 

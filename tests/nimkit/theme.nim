@@ -72,24 +72,36 @@ proc checkDocumentTabsUseThemeTabStyle(theme: Theme) =
 
 func aquaButtonFill(): Fill =
   linear(
-    rgbaColor(50, 82, 190, 150),
-    rgbaColor(70, 150, 230, 128),
-    rgbaColor(58, 132, 210, 122),
+    rgbaColor(86, 167, 233, 163),
+    rgbaColor(59, 166, 240, 141),
+    rgbaColor(62, 160, 229, 134),
+    fgaY,
+    132'u8,
+  )
+
+func aquaButtonHoverFill(): Fill =
+  linear(
+    rgbaColor(128, 224, 255, 210),
+    rgbaColor(82, 198, 252, 188),
+    rgbaColor(92, 196, 246, 178),
     fgaY,
     132'u8,
   )
 
 func aquaButtonPressedFill(): Fill =
   linear(
-    rgbaColor(41, 67, 156, 150),
-    rgbaColor(57, 123, 189, 128),
-    rgbaColor(48, 108, 172, 122),
+    rgbaColor(68, 146, 211, 163),
+    rgbaColor(42, 140, 213, 141),
+    rgbaColor(37, 124, 197, 134),
     fgaY,
     132'u8,
   )
 
 func aquaAccentButtonFill(): Fill =
   aquaButtonFill()
+
+func aquaAccentButtonHoverFill(): Fill =
+  aquaButtonHoverFill()
 
 func aquaAccentButtonPressedFill(): Fill =
   aquaButtonPressedFill()
@@ -111,18 +123,18 @@ func aquaTextFieldFill(): Fill =
 
 func aquaSliderKnobFill(): Fill =
   linear(
-    rgbaColor(255, 255, 255, 235),
-    rgbaColor(236, 247, 255, 227),
-    rgbaColor(197, 222, 242, 215),
+    rgbaColor(255, 255, 255, 250),
+    rgbaColor(238, 248, 255, 246),
+    rgbaColor(204, 226, 244, 240),
     fgaY,
     116'u8,
   )
 
 func aquaSliderProgressFill(): Fill =
   linear(
-    rgbaColor(50, 82, 190, 192),
-    rgbaColor(70, 150, 230, 179),
-    rgbaColor(58, 132, 210, 175),
+    rgbaColor(86, 167, 233, 215),
+    rgbaColor(59, 166, 240, 202),
+    rgbaColor(62, 160, 229, 198),
     fgaY,
     132'u8,
   )
@@ -165,29 +177,29 @@ func aquaComboBoxFill(): Fill =
 
 func aquaTitleLabelFill(): Fill =
   linear(
-    rgbaColor(255, 255, 255, 198),
-    rgbaColor(225, 242, 255, 176),
-    rgbaColor(176, 212, 246, 154),
+    rgbaColor(255, 255, 255, 218),
+    rgbaColor(232, 248, 255, 166),
+    rgbaColor(62, 180, 250, 142),
     fgaY,
-    108'u8,
+    78'u8,
   )
 
 func aquaHeadingLabelFill(): Fill =
   linear(
-    rgbaColor(250, 254, 255, 186),
-    rgbaColor(214, 236, 255, 164),
-    rgbaColor(160, 201, 242, 146),
+    rgbaColor(255, 255, 255, 206),
+    rgbaColor(222, 244, 255, 154),
+    rgbaColor(58, 168, 240, 132),
     fgaY,
-    108'u8,
+    82'u8,
   )
 
 func aquaStatusLabelFill(): Fill =
   linear(
-    rgbaColor(252, 255, 252, 190),
-    rgbaColor(221, 247, 227, 168),
-    rgbaColor(175, 226, 190, 148),
+    rgbaColor(255, 255, 255, 212),
+    rgbaColor(224, 255, 238, 162),
+    rgbaColor(58, 214, 128, 138),
     fgaY,
-    108'u8,
+    78'u8,
   )
 
 func aquaComboArrowFill(): Fill =
@@ -224,18 +236,24 @@ func aquaScrollerKnobShadows(): seq[BoxShadow] =
 
 func aquaLabelShadows(): seq[BoxShadow] =
   @[
-    dropShadow(rgbaColor(255, 255, 255, 68), y = -1.0, blur = 1.4),
-    dropShadow(rgbaColor(0, 0, 0, 18), y = 1.0, blur = 2.2),
-    insetShadow(rgbaColor(255, 255, 255, 126), y = 1.0, blur = 2.0),
-    insetShadow(rgbaColor(0, 52, 132, 28), y = -1.0, blur = 2.8),
+    dropShadow(rgbaColor(255, 255, 255, 102), y = -1.0, blur = 1.5),
+    insetShadow(rgbaColor(0, 36, 112, 26), y = 1.2, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 212), y = 2.0, blur = 2.6),
+    insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.1),
+    insetShadow(rgbaColor(0, 82, 190, 24), x = 2.0, blur = 7.0),
+    insetShadow(rgbaColor(0, 82, 190, 24), x = -2.0, blur = 7.0),
+    insetShadow(rgbaColor(98, 224, 255, 92), y = -3.0, blur = 7.4),
   ]
 
 func aquaStatusLabelShadows(): seq[BoxShadow] =
   @[
-    dropShadow(rgbaColor(255, 255, 255, 62), y = -1.0, blur = 1.4),
-    dropShadow(rgbaColor(0, 0, 0, 14), y = 1.0, blur = 2.0),
-    insetShadow(rgbaColor(255, 255, 255, 120), y = 1.0, blur = 2.0),
-    insetShadow(rgbaColor(35, 116, 61, 24), y = -1.0, blur = 2.8),
+    dropShadow(rgbaColor(255, 255, 255, 98), y = -1.0, blur = 1.5),
+    insetShadow(rgbaColor(10, 88, 38, 24), y = 1.2, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 206), y = 2.0, blur = 2.6),
+    insetShadow(rgbaColor(255, 255, 255, 108), y = -1.0, blur = 2.1),
+    insetShadow(rgbaColor(30, 136, 68, 22), x = 2.0, blur = 7.0),
+    insetShadow(rgbaColor(30, 136, 68, 22), x = -2.0, blur = 7.0),
+    insetShadow(rgbaColor(112, 248, 168, 90), y = -3.0, blur = 7.2),
   ]
 
 const CustomChromeName = "custom-widget-chrome"
@@ -588,16 +606,16 @@ suite "nimkit theme":
     check buttonStyle.box.shadows.len == 0
     check defaultButtonStyle.box.fill == aquaButtonFill()
     check defaultButtonStyle.box.fill.centerColor().a < 1.0'f32
-    check hoveredButtonStyle.box.fill == aquaButtonPressedFill()
+    check hoveredButtonStyle.box.fill == aquaButtonHoverFill()
     check buttonStyle.box.fill == aquaButtonPressedFill()
     check accentButtonStyle.box.fill == aquaAccentButtonFill()
-    check accentHoveredButtonStyle.box.fill == aquaAccentButtonPressedFill()
+    check accentHoveredButtonStyle.box.fill == aquaAccentButtonHoverFill()
     check accentHighlightedButtonStyle.box.fill == aquaAccentButtonPressedFill()
-    check hoveredButtonStyle.box.borderColor == rgbaColor(24, 64, 148, 166)
-    check buttonStyle.box.borderColor == rgbaColor(24, 64, 148, 166)
-    check accentButtonStyle.box.borderColor == rgbaColor(30, 80, 180, 150)
-    check accentHoveredButtonStyle.box.borderColor == rgbaColor(24, 64, 148, 166)
-    check accentHighlightedButtonStyle.box.borderColor == rgbaColor(24, 64, 148, 166)
+    check hoveredButtonStyle.box.borderColor == rgbaColor(38, 156, 232, 196)
+    check buttonStyle.box.borderColor == rgbaColor(19, 93, 180, 161)
+    check accentButtonStyle.box.borderColor == rgbaColor(31, 112, 204, 145)
+    check accentHoveredButtonStyle.box.borderColor == rgbaColor(38, 156, 232, 196)
+    check accentHighlightedButtonStyle.box.borderColor == rgbaColor(19, 93, 180, 161)
     check buttonStyle.box.borderWidth == 0.55'f32
     check buttonStyle.box.cornerRadius == 14.0
     check buttonStyle.text.color == rgbaColor(5, 16, 27, 248)
@@ -629,11 +647,12 @@ suite "nimkit theme":
     check checkBoxStyle.choiceTextRect(rect(0, 0, 100, 24)) == rect(27, 0, 71, 24)
 
     check textFieldStyle.box.borderWidth > 0.0
-    check textFieldStyle.box.cornerRadius == 10.0
+    check textFieldStyle.box.cornerRadius == 6.0
     check textFieldStyle.box.focusRingWidth > 0.0
     check textFieldStyle.box.fill == aquaTextFieldFill()
     check textFieldStyle.box.fill.centerColor().a < 1.0'f32
     check textFieldStyle.box.borderColor == rgbaColor(88, 116, 158, 220)
+    check textFieldStyle.box.shadows.len == 0
     check textFieldStyle.box.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
     check textFieldStyle.text.color == color(0.2, 0.3, 0.4, 1.0)
     check textFieldStyle.selectionColor == color(0.24, 0.56, 1.0, 0.34)
@@ -648,19 +667,19 @@ suite "nimkit theme":
     check bodyLabelStyle.box.shadows.len == 0
     check titleLabelStyle.box.fill == aquaTitleLabelFill()
     check titleLabelStyle.box.fill.centerColor().a < 1.0'f32
-    check titleLabelStyle.box.borderColor == rgbaColor(92, 135, 196, 172)
+    check titleLabelStyle.box.borderColor == rgbaColor(92, 135, 196, 138)
     check titleLabelStyle.box.borderWidth == 1.0
     check titleLabelStyle.box.cornerRadius == 8.0
     check titleLabelStyle.box.shadows == aquaLabelShadows()
     check titleLabelStyle.text.insets == insets(0.0, 12.0)
     check titleLabelStyle.minSize == initSize(0.0, 28.0)
     check headingLabelStyle.box.fill == aquaHeadingLabelFill()
-    check headingLabelStyle.box.borderColor == rgbaColor(104, 148, 205, 158)
+    check headingLabelStyle.box.borderColor == rgbaColor(104, 148, 205, 126)
     check headingLabelStyle.box.cornerRadius == 7.0
     check headingLabelStyle.box.shadows == aquaLabelShadows()
     check headingLabelStyle.minSize == initSize(0.0, 24.0)
     check statusLabelStyle.box.fill == aquaStatusLabelFill()
-    check statusLabelStyle.box.borderColor == rgbaColor(88, 168, 112, 156)
+    check statusLabelStyle.box.borderColor == rgbaColor(88, 168, 112, 124)
     check statusLabelStyle.box.cornerRadius == 7.0
     check statusLabelStyle.box.shadows == aquaStatusLabelShadows()
     check statusLabelStyle.text.color == color(0.06, 0.25, 0.14, 1.0)
@@ -668,7 +687,7 @@ suite "nimkit theme":
     check formLabelStyle.text.color == color(0.10, 0.14, 0.22, 1.0)
 
     check comboBoxStyle.box.fill == aquaComboBoxFill()
-    check comboBoxStyle.box.borderColor == rgbaColor(72, 74, 72, 224)
+    check comboBoxStyle.box.borderColor == rgbaColor(70, 88, 205, 228)
     check comboBoxStyle.box.cornerRadius == 12.0
     check comboBoxStyle.minSize == initSize(90.0, 26.0)
     check comboBoxStyle.arrowWidth == 28.0
