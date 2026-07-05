@@ -903,23 +903,47 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
   method draw(textField: TextField, context: DrawContext) =
     let absoluteFrame = context.renderRectFor(textField.bounds)
     let states: set[WidgetState] = textField.widgetStateSet()
-
-    let style = context.appearance.resolveTextFieldStyle(
-      controlStyle(
+    let
+      styleContext = controlStyle(
         srTextField, states, id = textField.styleId, classes = textField.styleClasses
-      ),
-      textField.textColor,
-    )
+      )
+      style =
+        context.appearance.resolveTextFieldStyle(styleContext, textField.textColor)
+      chrome = chromeContext(
+        context.appearance.resolveChromeName(styleContext),
+        crTextField,
+        cpFace,
+        style.box.fill,
+        states,
+      )
 
-    discard context.addRenderRectangle(
+    context.drawChromeBacking(
+      chrome,
+      initChromeExtras(
+        context.renderParent(),
+        absoluteFrame,
+        cornerRadius = style.box.cornerRadius,
+        cornerRadii = style.box.cornerRadii,
+      ),
+    )
+    let textFieldRoot = context.addRenderRectangle(
       absoluteFrame,
-      style.box.fill,
+      context.appearance.chromeFill(chrome),
       style.box.borderColor,
       style.box.borderWidth,
       style.box.cornerRadius,
       style.box.shadows,
       lightMaskContent = true,
       cornerRadii = style.box.cornerRadii,
+    )
+    context.drawChromeExtras(
+      chrome,
+      initChromeExtras(
+        textFieldRoot,
+        absoluteFrame,
+        cornerRadius = style.box.cornerRadius,
+        cornerRadii = style.box.cornerRadii,
+      ),
     )
     if ssFocusVisible in states:
       context.addFocusRing(absoluteFrame, style.box)

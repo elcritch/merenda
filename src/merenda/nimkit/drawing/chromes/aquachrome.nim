@@ -247,6 +247,53 @@ func aquaComboLowerWash(chrome: ChromeContext): Fill =
   discard chrome
   fill(color(0.0, 0.0, 0.0, 0.0))
 
+func aquaTextFieldFaceFill(chrome: ChromeContext): Fill =
+  let
+    base = chrome.baseFill.centerColor()
+    alpha =
+      if chrome.isEnabled:
+        base.scaledAlpha(1.18'f32)
+      else:
+        base.scaledAlpha(0.48'f32)
+  linear(
+    base.lightenColor(0.96'f32, alpha),
+    base.lightenColor(0.34'f32, alpha),
+    base.darkenColor(0.08'f32, alpha),
+    fgaY,
+    82'u8,
+  )
+
+func aquaTextFieldGlossFill(chrome: ChromeContext): Fill =
+  let
+    base = chrome.baseFill.centerColor()
+    alpha =
+      if chrome.isEnabled:
+        base.scaledAlpha(0.86'f32)
+      else:
+        base.scaledAlpha(0.28'f32)
+  linear(color(1.0, 1.0, 1.0, alpha), color(1.0, 1.0, 1.0, 0.0), fgaY)
+
+func aquaTextFieldLowerWash(chrome: ChromeContext): Fill =
+  let base = chrome.baseFill.centerColor()
+  linear(
+    color(1.0, 1.0, 1.0, 0.0),
+    base.lightenColor(0.20'f32, base.scaledAlpha(0.24'f32)),
+    base.lightenColor(0.46'f32, base.scaledAlpha(0.34'f32)),
+    fgaY,
+    164'u8,
+  )
+
+func aquaTextFieldInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
+  let
+    base = chrome.baseFill.centerColor()
+    sideShade = base.darkenColor(0.28'f32, base.scaledAlpha(0.18'f32))
+  @[
+    insetShadow(rgbaColor(0, 0, 0, 24), y = 1.2, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 86), y = -1.0, blur = 2.0),
+    insetShadow(sideShade, x = 2.0, blur = 7.0),
+    insetShadow(sideShade, x = -2.0, blur = 7.0),
+  ]
+
 func aquaComboArrowFill(chrome: ChromeContext): Fill =
   if not chrome.isEnabled:
     return linear(rgbaColor(210, 214, 219, 168), rgbaColor(158, 166, 173, 164), fgaY)
@@ -686,6 +733,137 @@ proc drawAquaButtonExtras(
       ],
     )
 
+proc drawAquaTextFieldExtras(
+    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+) =
+  let
+    base = chrome.baseFill.centerColor()
+    radius = extras.cornerRadius
+    innerInset = 1.6'f32
+    inner = extras.rect.inset(insets(innerInset))
+  if inner.isEmpty:
+    return
+
+  let
+    innerChrome = chrome.withPart(cpInnerFace)
+    innerRadius = max(radius - innerInset, 1.0'f32)
+    innerRoot = context.addRenderRectangle(
+      extras.layer,
+      extras.parent,
+      inner,
+      context.appearance.chromeFill(innerChrome),
+      color(0.0, 0.0, 0.0, 0.0),
+      0.0'f32,
+      innerRadius,
+      aquaTextFieldInnerShadows(chrome),
+      lightMaskContent = true,
+    )
+    topShade = rect(
+      inner.origin.x - 2.0'f32,
+      inner.origin.y,
+      inner.size.width + 4.0'f32,
+      inner.size.height * 0.42'f32,
+    )
+    upperSheen = rect(
+      inner.origin.x + 10.0'f32,
+      inner.origin.y + 2.6'f32,
+      max(inner.size.width - 20.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    waistShade = rect(
+      inner.origin.x + 8.0'f32,
+      inner.origin.y + inner.size.height * 0.38'f32,
+      max(inner.size.width - 16.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    lowerGloss = rect(
+      inner.origin.x - 2.0'f32,
+      inner.origin.y + inner.size.height * 0.46'f32,
+      inner.size.width + 4.0'f32,
+      inner.size.height * 0.54'f32,
+    )
+    lowerBloom = rect(
+      inner.origin.x + 12.0'f32,
+      inner.origin.y + inner.size.height * 0.68'f32,
+      max(inner.size.width - 24.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    bottomGlow = rect(
+      inner.origin.x + 8.0'f32,
+      inner.origin.y + inner.size.height - 2.4'f32,
+      max(inner.size.width - 16.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    innerRoot,
+    topShade,
+    context.appearance.chromeFill(chrome.withPart(cpGloss)),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    innerRadius,
+  )
+  if not upperSheen.isEmpty:
+    discard context.addRenderRectangle(
+      extras.layer,
+      innerRoot,
+      upperSheen,
+      transparentFill(),
+      shadows = [
+        dropShadow(rgbaColor(255, 255, 255, 54), y = 1.0, blur = 8.0),
+        dropShadow(
+          base.lightenColor(0.62'f32, base.scaledAlpha(0.22'f32)), y = 2.0, blur = 5.0
+        ),
+      ],
+    )
+  if not waistShade.isEmpty:
+    discard context.addRenderRectangle(
+      extras.layer,
+      innerRoot,
+      waistShade,
+      transparentFill(),
+      shadows = [
+        dropShadow(
+          base.darkenColor(0.20'f32, base.scaledAlpha(0.16'f32)), y = 1.2, blur = 6.0
+        ),
+        dropShadow(rgbaColor(255, 255, 255, 16), y = -1.2, blur = 4.0),
+      ],
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    innerRoot,
+    lowerGloss,
+    context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    innerRadius,
+  )
+  if not lowerBloom.isEmpty:
+    discard context.addRenderRectangle(
+      extras.layer,
+      innerRoot,
+      lowerBloom,
+      transparentFill(),
+      shadows = [
+        dropShadow(
+          base.lightenColor(0.48'f32, base.scaledAlpha(0.30'f32)), y = 1.2, blur = 8.0
+        ),
+        dropShadow(rgbaColor(255, 255, 255, 16), y = -0.6, blur = 5.0),
+      ],
+    )
+  if not bottomGlow.isEmpty:
+    discard context.addRenderRectangle(
+      extras.layer,
+      innerRoot,
+      bottomGlow,
+      transparentFill(),
+      shadows = [
+        dropShadow(
+          base.lightenColor(0.58'f32, base.scaledAlpha(0.34'f32)), y = -1.2, blur = 5.5
+        )
+      ],
+    )
+
 proc drawAquaComboBacking(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
@@ -1036,6 +1214,16 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaComboLowerWash(context)
       else:
         context.baseFill
+    of crTextField:
+      case context.part
+      of cpInnerFace:
+        aquaTextFieldFaceFill(context)
+      of cpGloss:
+        aquaTextFieldGlossFill(context)
+      of cpLowerWash:
+        aquaTextFieldLowerWash(context)
+      else:
+        context.baseFill
     of crSliderTrack:
       case context.part
       of cpFace:
@@ -1106,8 +1294,6 @@ protocol AquaChromeProtocol of ChromeProtocol:
         aquaButtonLowerWash(context)
       else:
         context.baseFill
-    else:
-      context.baseFill
 
   method drawChromeBackingFor(
       chrome: AquaChrome,
@@ -1126,6 +1312,8 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crComboBox:
       if chromeContext.part == cpFace:
         context.drawAquaComboBacking(chromeContext, extras)
+    of crTextField:
+      discard
     of crSliderKnob:
       if chromeContext.part == cpFace:
         context.drawAquaKnobBacking(chromeContext, extras)
@@ -1154,6 +1342,9 @@ protocol AquaChromeProtocol of ChromeProtocol:
         context.drawAquaComboArrowExtras(chromeContext, extras)
       else:
         discard
+    of crTextField:
+      if chromeContext.part == cpFace:
+        context.drawAquaTextFieldExtras(chromeContext, extras)
     of crPopupList:
       if chromeContext.part == cpFace:
         context.drawAquaPopupListExtras(chromeContext, extras)
@@ -1178,8 +1369,6 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crDocumentTabButton:
       if chromeContext.part == cpFace:
         context.drawAquaButtonExtras(chromeContext, extras)
-    else:
-      discard
 
 proc newAquaChrome*(): Chrome =
   let aqua = AquaChrome()
