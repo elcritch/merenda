@@ -300,7 +300,6 @@ func aquaInsetControlShadows(): seq[BoxShadow] =
   @[
     insetShadow(rgbaColor(0, 42, 112, 38), y = 1.0, blur = 3.0),
     insetShadow(rgbaColor(255, 255, 255, 132), y = -1.0, blur = 2.4),
-    insetShadow(rgbaColor(255, 255, 255, 42), x = -1.0, blur = 2.0),
   ]
 
 func aquaChoiceIndicatorShadows(): seq[BoxShadow] =
@@ -935,14 +934,15 @@ proc initTheme*(): Theme =
   result[srTextField, StyleFill] = styleToken("textField.fill")
   result[srTextField, StyleBorderColor] = styleToken("textField.border.color")
   result[srTextField, StyleBorderWidth] = 1.0
-  result[srTextField, StyleCornerRadius] = 10.0
+  result[srTextField, StyleCornerRadius] = 6.0
   result[srTextField, StyleTextInsets] = insets(0.0, 10.0)
   result[srTextField, StyleMinimumSize] = initSize(80.0, 26.0)
   result[srTextField, StyleSelectionColor] = styleToken("textField.selection.color")
   result[srTextField, StyleFocusRingWidth] = 3.0
   result[srTextField, StyleFocusRingInset] = -2.0
   result[srTextField, StyleFocusRingColor] = styleToken("focus.ring.color")
-  result[srTextField, StyleBoxShadows] = aquaInsetControlShadows()
+  result[srTextField, StyleBoxShadows] = newSeq[BoxShadow]()
+  result[srTextField, StyleChrome] = styleKeyword(AquaChromeName)
 
   result[srMonoTextView, StyleFill] = styleToken("monoText.fill")
   result[srMonoTextView, StyleBorderColor] = styleToken("monoText.border.color")
