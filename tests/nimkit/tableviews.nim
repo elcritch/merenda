@@ -2138,6 +2138,26 @@ suite "NimKit TableView":
     check window.pressKey(keyPageDown)
     check scrollView.contentOffset().x == 12.0'f32
 
+  test "table view vertical overflow does not force horizontal scroller when columns fit":
+    let
+      tableView = newTableView(frame = rect(0, 0, 300, 350))
+      scrollView = tableView.scrollView()
+
+    tableView.rowCount = 12
+    tableView.rowHeight = 28.0
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("state", "State", width = 100.0))
+    discard buildRenders(tableView)
+
+    check not scrollView.verticalScrollerRect().isEmpty
+    check scrollView.horizontalScrollerRect().isEmpty
+
+    tableView.frame = rect(0, 0, 420, 350)
+    discard buildRenders(tableView)
+
+    check not scrollView.verticalScrollerRect().isEmpty
+    check scrollView.horizontalScrollerRect().isEmpty
+
   test "table view pages to scroll edge when trailing rows are disabled":
     let
       window = newWindow("Table disabled trailing row", frame = rect(0, 0, 360, 260))

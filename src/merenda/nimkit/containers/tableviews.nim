@@ -2141,19 +2141,11 @@ proc tileTableContent(tableView: TableView) =
   let
     contentHeight = tableView.contentHeight()
     columnWidth = tableView.visibleColumnWidth()
-    horizontalVisible = columnWidth > scrollFrame.size.width
-    verticalHeight =
-      scrollFrame.size.height -
-      (if horizontalVisible: tableView.xScrollView.scrollerThickness()
-      else: 0.0'f32)
-    verticalVisible = contentHeight > max(verticalHeight, 0.0'f32)
-    viewportWidth =
-      scrollFrame.size.width -
-      (if verticalVisible: tableView.xScrollView.scrollerThickness()
-      else: 0.0'f32)
-    documentWidth = max(columnWidth, max(viewportWidth, 0.0'f32))
-    size = initSize(documentWidth, contentHeight)
-  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, size.width, size.height)
+    naturalWidth = max(columnWidth, 0.0'f32)
+  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, naturalWidth, contentHeight)
+  tableView.xScrollView.tile()
+  let documentWidth = max(naturalWidth, tableView.xScrollView.viewportSize().width)
+  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, documentWidth, contentHeight)
   tableView.xScrollView.tile()
   tableView.setTableContentOffset(offset, false)
 
