@@ -770,6 +770,7 @@ proc drawAquaTextFieldExtras(
   let
     innerChrome = chrome.withPart(cpInnerFace)
     innerRadius = max(radius - innerInset, 1.0'f32)
+    lowerGlowInset = max(innerRadius + 8.0'f32, 16.0'f32)
     innerRoot = context.addRenderRectangle(
       extras.layer,
       extras.parent,
@@ -779,14 +780,8 @@ proc drawAquaTextFieldExtras(
       0.0'f32,
       innerRadius,
       aquaTextFieldInnerShadows(chrome),
-      lightMaskContent = true,
     )
-    topShade = rect(
-      inner.origin.x - 2.0'f32,
-      inner.origin.y,
-      inner.size.width + 4.0'f32,
-      inner.size.height * 0.50'f32,
-    )
+    topShade = rect(inner.origin.x, inner.origin.y, inner.size.width, inner.size.height)
     upperSheen = rect(
       inner.origin.x + 8.0'f32,
       inner.origin.y + 2.4'f32,
@@ -799,22 +794,18 @@ proc drawAquaTextFieldExtras(
       max(inner.size.width - 16.0'f32, 0.0'f32),
       1.0'f32,
     )
-    lowerGloss = rect(
-      inner.origin.x - 2.0'f32,
-      inner.origin.y + inner.size.height * 0.50'f32,
-      inner.size.width + 4.0'f32,
-      inner.size.height * 0.50'f32,
-    )
+    lowerGloss =
+      rect(inner.origin.x, inner.origin.y, inner.size.width, inner.size.height)
     lowerBloom = rect(
-      inner.origin.x + 10.0'f32,
+      inner.origin.x + lowerGlowInset,
       inner.origin.y + inner.size.height * 0.68'f32,
-      max(inner.size.width - 20.0'f32, 0.0'f32),
+      max(inner.size.width - lowerGlowInset * 2.0'f32, 0.0'f32),
       1.2'f32,
     )
     bottomGlow = rect(
-      inner.origin.x + 8.0'f32,
-      inner.origin.y + inner.size.height - 2.2'f32,
-      max(inner.size.width - 16.0'f32, 0.0'f32),
+      inner.origin.x + lowerGlowInset,
+      inner.origin.y + inner.size.height - 3.0'f32,
+      max(inner.size.width - lowerGlowInset * 2.0'f32, 0.0'f32),
       1.2'f32,
     )
   discard context.addRenderRectangle(
@@ -869,7 +860,7 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.lightenColor(0.70'f32, base.scaledAlpha(0.42'f32)), y = 1.2, blur = 8.5
+          base.lightenColor(0.70'f32, base.scaledAlpha(0.36'f32)), y = 1.0, blur = 6.8
         ),
         dropShadow(rgbaColor(255, 255, 255, 24), y = -0.6, blur = 5.0),
       ],
@@ -882,7 +873,7 @@ proc drawAquaTextFieldExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          base.lightenColor(0.82'f32, base.scaledAlpha(0.48'f32)), y = -1.2, blur = 5.8
+          base.lightenColor(0.82'f32, base.scaledAlpha(0.38'f32)), y = -1.0, blur = 4.8
         )
       ],
     )

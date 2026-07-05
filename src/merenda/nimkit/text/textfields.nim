@@ -933,7 +933,6 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
       style.box.borderWidth,
       style.box.cornerRadius,
       style.box.shadows,
-      lightMaskContent = true,
       cornerRadii = style.box.cornerRadii,
     )
     context.drawChromeExtras(

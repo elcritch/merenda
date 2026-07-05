@@ -298,7 +298,6 @@ func aquaScrollerTrackFill(): Fill =
 
 func aquaInsetControlShadows(): seq[BoxShadow] =
   @[
-    dropShadow(rgbaColor(0, 0, 0, 24), y = 1.2, blur = 3.2),
     insetShadow(rgbaColor(0, 42, 112, 38), y = 1.0, blur = 3.0),
     insetShadow(rgbaColor(255, 255, 255, 132), y = -1.0, blur = 2.4),
     insetShadow(rgbaColor(255, 255, 255, 42), x = -1.0, blur = 2.0),
@@ -343,7 +342,6 @@ func aquaScrollerKnobShadows(): seq[BoxShadow] =
 func aquaLabelShadows(): seq[BoxShadow] =
   @[
     dropShadow(rgbaColor(255, 255, 255, 102), y = -1.0, blur = 1.5),
-    dropShadow(rgbaColor(0, 0, 0, 22), y = 1.2, blur = 2.8),
     insetShadow(rgbaColor(0, 36, 112, 26), y = 1.2, blur = 3.0),
     insetShadow(rgbaColor(255, 255, 255, 212), y = 2.0, blur = 2.6),
     insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.1),
@@ -355,7 +353,6 @@ func aquaLabelShadows(): seq[BoxShadow] =
 func aquaStatusLabelShadows(): seq[BoxShadow] =
   @[
     dropShadow(rgbaColor(255, 255, 255, 98), y = -1.0, blur = 1.5),
-    dropShadow(rgbaColor(0, 0, 0, 18), y = 1.2, blur = 2.6),
     insetShadow(rgbaColor(10, 88, 38, 24), y = 1.2, blur = 3.0),
     insetShadow(rgbaColor(255, 255, 255, 206), y = 2.0, blur = 2.6),
     insetShadow(rgbaColor(255, 255, 255, 108), y = -1.0, blur = 2.1),
