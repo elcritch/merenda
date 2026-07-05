@@ -204,8 +204,17 @@ proc textStyleFor(fontInfo: UIRelaysFontInfo, color: ui.Color): TextStyle =
 proc textWidthFor(style: TextStyle, text: string): int =
   if text.len == 0:
     return 0
-  let size = text.textNaturalSize(style)
-  max(ceil(size.width).int, 0)
+  let
+    lineHeight = max(ceil("Mg".textNaturalSize(style).height), style.fontSize)
+    layout = textLayout(nimkitTypes.rect(0.0, 0.0, 10000.0, lineHeight), text, style)
+    carets = layout.caretPositionsFor(text.runeLen())
+  if carets.len > 0:
+    var width = 0.0'f32
+    for caret in carets:
+      width = max(width, caret.pos.x)
+    return max(ceil(width).int, 0)
+
+  max(ceil(layout.bounding.w).int, 0)
 
 proc textExtentFor(font: ui.Font, text: string): ui.TextExtent =
   let index = font.fontIndex()
