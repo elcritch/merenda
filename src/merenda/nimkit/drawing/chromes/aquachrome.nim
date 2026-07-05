@@ -237,21 +237,27 @@ func aquaChoiceGlossFill(chrome: ChromeContext): Fill =
 
 func aquaComboFaceFill(chrome: ChromeContext): Fill =
   if not chrome.isEnabled:
-    return linear(rgbaColor(236, 238, 238, 150), rgbaColor(204, 208, 210, 142), fgaY)
+    return linear(
+      rgbaColor(226, 239, 249, 146),
+      rgbaColor(184, 211, 230, 138),
+      rgbaColor(150, 184, 210, 132),
+      fgaY,
+      104'u8,
+    )
   if chrome.isPressed or chrome.isOpen:
     return linear(
-      rgbaColor(238, 241, 241, 224),
-      rgbaColor(220, 224, 224, 214),
-      rgbaColor(178, 183, 181, 196),
+      rgbaColor(220, 244, 255, 232),
+      rgbaColor(112, 195, 250, 220),
+      rgbaColor(76, 151, 226, 212),
       fgaY,
-      92'u8,
+      112'u8,
     )
   linear(
-    rgbaColor(255, 255, 255, 226),
-    rgbaColor(238, 242, 244, 214),
-    rgbaColor(196, 207, 212, 196),
+    rgbaColor(246, 253, 255, 232),
+    rgbaColor(177, 222, 252, 218),
+    rgbaColor(122, 190, 238, 204),
     fgaY,
-    92'u8,
+    112'u8,
   )
 
 func aquaComboGlossFill(chrome: ChromeContext): Fill =
@@ -265,8 +271,16 @@ func aquaComboGlossFill(chrome: ChromeContext): Fill =
   linear(rgbaColor(255, 255, 255, alpha), rgbaColor(255, 255, 255, 0), fgaY)
 
 func aquaComboLowerWash(chrome: ChromeContext): Fill =
-  discard chrome
-  fill(color(0.0, 0.0, 0.0, 0.0))
+  if not chrome.isEnabled:
+    return fill(color(0.0, 0.0, 0.0, 0.0))
+  let bottomAlpha = if chrome.isPressed or chrome.isOpen: 76 else: 62
+  linear(
+    rgbaColor(255, 255, 255, 0),
+    rgbaColor(132, 217, 255, 30),
+    rgbaColor(228, 252, 255, bottomAlpha),
+    fgaY,
+    176'u8,
+  )
 
 func aquaTextFieldFaceFill(chrome: ChromeContext): Fill =
   let
@@ -1063,12 +1077,38 @@ proc drawAquaChoiceExtras(
 proc drawAquaComboFaceExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
-  let gloss = rect(
-    extras.rect.origin.x + 2.4'f32,
-    extras.rect.origin.y + 1.2'f32,
-    max(extras.rect.size.width - 4.8'f32, 0.0'f32),
-    min(4.0'f32, max(extras.rect.size.height - 2.4'f32, 0.0'f32)),
-  )
+  let
+    base =
+      if chrome.isPressed or chrome.isOpen:
+        rgbaColor(70, 165, 236, 220)
+      else:
+        rgbaColor(92, 180, 238, 210)
+    inner = extras.rect.inset(insets(1.5'f32))
+    innerRadius = max(extras.cornerRadius - 1.5'f32, 1.0'f32)
+    gloss = rect(
+      inner.origin.x + 1.0'f32,
+      inner.origin.y + 0.4'f32,
+      max(inner.size.width - 2.0'f32, 0.0'f32),
+      min(4.8'f32, max(inner.size.height * 0.42'f32, 0.0'f32)),
+    )
+    waistShade = rect(
+      inner.origin.x + 10.0'f32,
+      inner.origin.y + inner.size.height * 0.45'f32,
+      max(inner.size.width - 20.0'f32, 0.0'f32),
+      1.0'f32,
+    )
+    lowerWash = rect(
+      inner.origin.x,
+      inner.origin.y + inner.size.height * 0.48'f32,
+      inner.size.width,
+      inner.size.height * 0.52'f32,
+    )
+    bottomGlow = rect(
+      inner.origin.x + 12.0'f32,
+      inner.origin.y + inner.size.height - 3.0'f32,
+      max(inner.size.width - 24.0'f32, 0.0'f32),
+      1.2'f32,
+    )
   discard context.addRenderRectangle(
     extras.layer,
     extras.parent,
@@ -1076,8 +1116,44 @@ proc drawAquaComboFaceExtras(
     context.appearance.chromeFill(chrome.withPart(cpGloss)),
     color(0.0, 0.0, 0.0, 0.0),
     0.0'f32,
-    max(extras.cornerRadius - 1.0'f32, 1.0'f32),
+    innerRadius,
   )
+  if not waistShade.isEmpty:
+    discard context.addRenderRectangle(
+      extras.layer,
+      extras.parent,
+      waistShade,
+      transparentFill(),
+      shadows = [
+        dropShadow(
+          base.darkenColor(0.28'f32, base.scaledAlpha(0.16'f32)), y = 1.0, blur = 5.6
+        ),
+        dropShadow(rgbaColor(255, 255, 255, 28), y = -1.0, blur = 4.0),
+      ],
+    )
+  discard context.addRenderRectangle(
+    extras.layer,
+    extras.parent,
+    lowerWash,
+    context.appearance.chromeFill(chrome.withPart(cpLowerWash)),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0'f32,
+    innerRadius,
+  )
+  if not bottomGlow.isEmpty:
+    discard context.addRenderRectangle(
+      extras.layer,
+      extras.parent,
+      bottomGlow,
+      transparentFill(),
+      shadows = [
+        dropShadow(
+          rgbaColor(226, 252, 255, if chrome.isPressed or chrome.isOpen: 76 else: 62),
+          y = -1.0,
+          blur = 5.0,
+        )
+      ],
+    )
 
 proc drawAquaComboArrowExtras(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras

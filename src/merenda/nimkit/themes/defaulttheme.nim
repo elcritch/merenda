@@ -312,10 +312,10 @@ func aquaChoiceIndicatorShadows(): seq[BoxShadow] =
 
 func aquaComboBoxShadows(): seq[BoxShadow] =
   @[
-    insetShadow(rgbaColor(0, 0, 0, 46), y = 1.0, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.4),
-    insetShadow(rgbaColor(0, 0, 0, 24), x = 1.0, blur = 2.2),
-    insetShadow(rgbaColor(255, 255, 255, 48), x = -1.0, blur = 1.4),
+    insetShadow(rgbaColor(0, 64, 150, 46), y = 1.0, blur = 3.0),
+    insetShadow(rgbaColor(255, 255, 255, 138), y = -1.0, blur = 2.4),
+    insetShadow(rgbaColor(0, 58, 132, 30), x = 1.0, blur = 2.2),
+    insetShadow(rgbaColor(255, 255, 255, 58), x = -1.0, blur = 1.4),
   ]
 
 func aquaKnobShadows(): seq[BoxShadow] =
@@ -456,8 +456,8 @@ proc initTheme*(): Theme =
   result["monoText.text.color"] = styleToken("textField.text.color")
   result["monoText.cursor.color"] = styleColor(color(0.08, 0.45, 0.95, 0.45))
   result["comboBox.fill"] = aquaComboBoxFill()
-  result["comboBox.border.color"] = styleColor(rgbaColor(82, 88, 96, 210))
-  result["comboBox.border.color.open"] = styleColor(rgbaColor(72, 74, 72, 224))
+  result["comboBox.border.color"] = styleColor(rgbaColor(57, 126, 197, 205))
+  result["comboBox.border.color.open"] = styleColor(rgbaColor(30, 109, 207, 228))
   result["comboBox.text.color"] = styleToken("textField.text.color")
   result["comboBox.arrow.color"] = styleColor(color(0.0, 0.12, 0.34, 1.0))
   result["comboBox.arrow.fill"] = aquaComboArrowFill()
