@@ -299,10 +299,10 @@ build on that vocabulary instead of adding parallel storage models.
   text input dispatch, and an interactive `examples/monotext_demo.nim`.
 - Added the first gap-buffer-backed text storage path while preserving NimKit
   editor interactions: `GapTextBuffer` now provides rune-indexed replace,
-  substring, line-count, and line-range operations; `TextStorage` can opt into
-  that backing through `newGapTextStorage`; edit dispatch, attributes, undo
-  snapshots, layout invalidation, accessibility observers, and `TextEditor`
-  storage assignment keep using the existing NimKit contracts.
+  substring, line-count, and line-range operations; `TextGapStorage` subclasses
+  `TextStorage` for that backing through `newTextGapStorage`; edit dispatch,
+  attributes, undo snapshots, layout invalidation, accessibility observers, and
+  `TextEditor` storage assignment keep using the existing NimKit contracts.
 
 ## Current Verification
 
@@ -375,7 +375,7 @@ images, key bindings, and themes.
 
 ### Gap-Buffer Text Follow-Ups
 
-Build on the first `GapTextBuffer`/`newGapTextStorage` implementation without
+Build on the first `GapTextBuffer`/`TextGapStorage` implementation without
 changing the `TextEditor`/`TextView` interaction model.
 
 - Keep syntax highlighting as a cache layered beside the buffer: edits should

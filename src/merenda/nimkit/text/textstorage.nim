@@ -24,8 +24,6 @@ type
 
   TextStorage* = ref object of DynamicAgent
     xStringValue: string
-    xGapBuffer: GapTextBuffer
-    xUsesGapBuffer: bool
     xRuns: seq[TextAttributeRun]
     xDelegate: DynamicAgent
     xLazyProvider: DynamicAgent
@@ -37,6 +35,9 @@ type
     xHasPendingEdit: bool
     xLastProcessedEdit: TextStorageEdit
     xHasLastProcessedEdit: bool
+
+  TextGapStorage* = ref object of TextStorage
+    xGapBuffer: GapTextBuffer
 
   AttributedString* = TextStorage
   MutableAttributedString* = TextStorage
@@ -180,55 +181,57 @@ proc isMaterialized*(storage: TextStorage): bool =
   storage.isNil or storage.xMaterialized
 
 proc usesGapTextBuffer*(storage: TextStorage): bool =
-  (not storage.isNil) and storage.xUsesGapBuffer
+  (not storage.isNil) and storage of TextGapStorage
 
-proc backingLength(storage: TextStorage): int =
-  if storage.xUsesGapBuffer: storage.xGapBuffer.len else: storage.xStringValue.runeLen
+method backingLength(storage: TextStorage): int {.base.} =
+  storage.xStringValue.runeLen
 
-proc backingStringValue(storage: TextStorage): string =
-  if storage.xUsesGapBuffer:
-    storage.xGapBuffer.stringValue()
-  else:
-    storage.xStringValue
+method backingLength(storage: TextGapStorage): int =
+  storage.xGapBuffer.len
 
-proc setBackingStringValue(storage: TextStorage, value: string) =
-  if storage.xUsesGapBuffer:
-    storage.xGapBuffer.setText(value)
-    storage.xStringValue.setLen(0)
-  else:
-    storage.xStringValue = value
+method backingStringValue(storage: TextStorage): string {.base.} =
+  storage.xStringValue
 
-proc backingSubstring(storage: TextStorage, range: TextRange): string =
-  if storage.xUsesGapBuffer:
-    storage.xGapBuffer.substring(range)
-  else:
-    storage.xStringValue.runeSubStr(int(range.location), int(range.length))
+method backingStringValue(storage: TextGapStorage): string =
+  storage.xGapBuffer.stringValue()
 
-proc replaceBackingText(storage: TextStorage, range: TextRange, text: string) =
-  if storage.xUsesGapBuffer:
-    storage.xGapBuffer.replace(range, text)
-    storage.xStringValue.setLen(0)
-  else:
-    let
-      replaceStart = int(range.location)
-      replaceStop = range.maxIndex
-      current = storage.xStringValue
-    storage.xStringValue =
-      current.runeSubStr(0, replaceStart) & text & current.runeSubStr(replaceStop)
+method setBackingStringValue(storage: TextStorage, value: string) {.base.} =
+  storage.xStringValue = value
 
-proc backingLineCount(storage: TextStorage): int =
-  if storage.xUsesGapBuffer:
-    result = storage.xGapBuffer.lineCount()
-  else:
-    result = 1
-    for item in storage.xStringValue.runes:
-      if item == Rune('\n'):
-        inc result
+method setBackingStringValue(storage: TextGapStorage, value: string) =
+  storage.xGapBuffer.setText(value)
+  storage.xStringValue.setLen(0)
 
-proc backingLineRange(storage: TextStorage, line: int): TextRange =
-  if storage.xUsesGapBuffer:
-    return storage.xGapBuffer.lineRange(line)
+method backingSubstring(storage: TextStorage, range: TextRange): string {.base.} =
+  storage.xStringValue.runeSubStr(int(range.location), int(range.length))
 
+method backingSubstring(storage: TextGapStorage, range: TextRange): string =
+  storage.xGapBuffer.substring(range)
+
+method replaceBackingText(
+    storage: TextStorage, range: TextRange, text: string
+) {.base.} =
+  let
+    replaceStart = int(range.location)
+    replaceStop = range.maxIndex
+    current = storage.xStringValue
+  storage.xStringValue =
+    current.runeSubStr(0, replaceStart) & text & current.runeSubStr(replaceStop)
+
+method replaceBackingText(storage: TextGapStorage, range: TextRange, text: string) =
+  storage.xGapBuffer.replace(range, text)
+  storage.xStringValue.setLen(0)
+
+method backingLineCount(storage: TextStorage): int {.base.} =
+  result = 1
+  for item in storage.xStringValue.runes:
+    if item == Rune('\n'):
+      inc result
+
+method backingLineCount(storage: TextGapStorage): int =
+  storage.xGapBuffer.lineCount()
+
+method backingLineRange(storage: TextStorage, line: int): TextRange {.base.} =
   let
     runes = storage.xStringValue.toRunes()
     targetLine = max(line, 0)
@@ -252,28 +255,33 @@ proc backingLineRange(storage: TextStorage, line: int): TextRange =
     inc stop
   initTextRange(start, stop - start)
 
-proc backingParagraphRange(storage: TextStorage, range: TextRange): TextRange =
-  if storage.xUsesGapBuffer:
-    storage.xGapBuffer.paragraphRange(range)
-  else:
-    let
-      runes = storage.xStringValue.toRunes()
-      clamped = clampTextRange(runes.len, range)
-    if runes.len == 0:
-      return initTextRange(0, 0)
+method backingLineRange(storage: TextGapStorage, line: int): TextRange =
+  storage.xGapBuffer.lineRange(line)
 
-    var start = min(int(clamped.location), runes.len)
-    while start > 0 and runes[start - 1] != Rune('\n'):
-      dec start
+method backingParagraphRange(
+    storage: TextStorage, range: TextRange
+): TextRange {.base.} =
+  let
+    runes = storage.xStringValue.toRunes()
+    clamped = clampTextRange(runes.len, range)
+  if runes.len == 0:
+    return initTextRange(0, 0)
 
-    var stop = min(max(clamped.maxIndex, start), runes.len)
-    if stop < runes.len and clamped.length == 0 and stop == start:
-      discard
-    while stop < runes.len and runes[stop] != Rune('\n'):
-      inc stop
-    if stop < runes.len and runes[stop] == Rune('\n'):
-      inc stop
-    initTextRange(start, stop - start)
+  var start = min(int(clamped.location), runes.len)
+  while start > 0 and runes[start - 1] != Rune('\n'):
+    dec start
+
+  var stop = min(max(clamped.maxIndex, start), runes.len)
+  if stop < runes.len and clamped.length == 0 and stop == start:
+    discard
+  while stop < runes.len and runes[stop] != Rune('\n'):
+    inc stop
+  if stop < runes.len and runes[stop] == Rune('\n'):
+    inc stop
+  initTextRange(start, stop - start)
+
+method backingParagraphRange(storage: TextGapStorage, range: TextRange): TextRange =
+  storage.xGapBuffer.paragraphRange(range)
 
 proc notifyCommittedEdit(storage: TextStorage, edit: TextStorageEdit) =
   if storage.isNil:
@@ -464,9 +472,7 @@ proc initTextStorageFields*(
     storage: TextStorage, value = "", attributes = defaultTextAttributes()
 ) =
   discard storage.withProto()
-  storage.xUsesGapBuffer = false
   storage.xStringValue = value
-  storage.xGapBuffer = GapTextBuffer()
   storage.xMaterialized = true
   storage.xRuns.setLen(0)
   if value.runeLen > 0:
@@ -478,13 +484,12 @@ proc newTextStorage*(value = "", attributes = defaultTextAttributes()): TextStor
   result = TextStorage()
   initTextStorageFields(result, value, attributes)
 
-proc initGapTextStorageFields*(
-    storage: TextStorage, value = "", attributes = defaultTextAttributes()
+proc initTextGapStorageFields*(
+    storage: TextGapStorage, value = "", attributes = defaultTextAttributes()
 ) =
   discard storage.withProto()
   storage.xStringValue.setLen(0)
   storage.xGapBuffer = initGapTextBuffer(value)
-  storage.xUsesGapBuffer = true
   storage.xMaterialized = true
   storage.xRuns.setLen(0)
   if value.runeLen > 0:
@@ -492,9 +497,21 @@ proc initGapTextStorageFields*(
       range: initTextRange(0, value.runeLen), attributes: attributes
     )
 
-proc newGapTextStorage*(value = "", attributes = defaultTextAttributes()): TextStorage =
-  result = TextStorage()
-  initGapTextStorageFields(result, value, attributes)
+proc newTextGapStorage*(
+    value = "", attributes = defaultTextAttributes()
+): TextGapStorage =
+  result = TextGapStorage()
+  initTextGapStorageFields(result, value, attributes)
+
+proc initGapTextStorageFields*(
+    storage: TextGapStorage, value = "", attributes = defaultTextAttributes()
+) =
+  storage.initTextGapStorageFields(value, attributes)
+
+proc newGapTextStorage*(
+    value = "", attributes = defaultTextAttributes()
+): TextGapStorage =
+  newTextGapStorage(value, attributes)
 
 proc newLazyTextStorage*(provider: DynamicAgent): TextStorage =
   result = TextStorage(xLazyProvider: provider)
@@ -506,17 +523,27 @@ proc newAttributedString*(
 ): MutableAttributedString =
   newTextStorage(value, attributes)
 
+method newEmptyCopyStorage(storage: TextStorage): TextStorage {.base.} =
+  newTextStorage()
+
+method newEmptyCopyStorage(storage: TextGapStorage): TextStorage =
+  newTextGapStorage()
+
+method copyBackingTextTo(storage: TextStorage, copy: TextStorage) {.base.} =
+  copy.xStringValue = storage.xStringValue
+
+method copyBackingTextTo(storage: TextGapStorage, copy: TextStorage) =
+  let gapCopy = TextGapStorage(copy)
+  gapCopy.xGapBuffer = storage.xGapBuffer.copyGapTextBuffer()
+  gapCopy.xStringValue.setLen(0)
+
 proc copyTextStorage*(storage: TextStorage): TextStorage =
   result = newTextStorage()
   if storage.isNil:
     return
   storage.materialize()
-  if storage.xUsesGapBuffer:
-    result.xUsesGapBuffer = true
-    result.xGapBuffer = storage.xGapBuffer.copyGapTextBuffer()
-    result.xStringValue.setLen(0)
-  else:
-    result.xStringValue = storage.xStringValue
+  result = storage.newEmptyCopyStorage()
+  storage.copyBackingTextTo(result)
   result.xRuns = storage.xRuns
   result.xMaterialized = true
 

@@ -26,8 +26,9 @@ suite "nimkit gap text buffers":
     check buffer.substring(buffer.paragraphRange(initTextRange(5, 0))) == "two\n"
 
   test "gap backed text storage preserves text storage behavior":
-    let storage = newGapTextStorage("alpha\nβeta")
+    let storage: TextStorage = newTextGapStorage("alpha\nβeta")
 
+    check storage of TextGapStorage
     check storage.usesGapTextBuffer()
     check storage.len == "alpha\nβeta".runeLen
     check storage.substring(initTextRange(6, 4)) == "βeta"
@@ -40,6 +41,7 @@ suite "nimkit gap text buffers":
     check storage.attributesAt(6).foregroundColor == attributes.foregroundColor
 
     let copy = storage.copyTextStorage()
+    check copy of TextGapStorage
     check copy.usesGapTextBuffer()
     check copy.stringValue() == storage.stringValue()
     storage.replace(initTextRange(0, 5), "ALPHA")
@@ -52,7 +54,7 @@ suite "nimkit gap text buffers":
 
   test "text editor can use gap backed text storage":
     let
-      storage = newGapTextStorage("hello")
+      storage = newTextGapStorage("hello")
       editor = newTextEditor(frame = rect(0, 0, 240, 80))
 
     editor.textStorage = storage
