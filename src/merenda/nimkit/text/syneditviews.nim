@@ -129,6 +129,49 @@ const
     "with", "without", "xor", "yield",
   ]
 
+  CKeywords = [
+    "_Bool", "_Complex", "_Imaginary", "auto", "break", "case", "char", "const",
+    "continue", "default", "do", "double", "else", "enum", "extern", "float", "for",
+    "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short",
+    "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned",
+    "void", "volatile", "while",
+  ]
+
+  CppKeywords = [
+    "asm", "auto", "break", "case", "catch", "char", "class", "const", "continue",
+    "default", "delete", "do", "double", "else", "enum", "extern", "false", "float",
+    "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace",
+    "new", "operator", "private", "protected", "public", "register", "return", "short",
+    "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw",
+    "true", "try", "typedef", "typename", "union", "unsigned", "using", "virtual",
+    "void", "volatile", "while",
+  ]
+
+  JsKeywords = [
+    "abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char",
+    "class", "const", "continue", "debugger", "default", "delete", "do", "double",
+    "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float",
+    "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int",
+    "interface", "let", "long", "native", "new", "null", "package", "private",
+    "protected", "public", "return", "short", "static", "super", "switch",
+    "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof",
+    "var", "void", "volatile", "while", "with", "yield",
+  ]
+
+  PythonKeywords = [
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class",
+    "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
+    "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass",
+    "raise", "return", "try", "while", "with", "yield",
+  ]
+
+  RustKeywords = [
+    "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false",
+    "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut",
+    "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait",
+    "true", "type", "unsafe", "use", "where", "while",
+  ]
+
 func rgb(r, g, b: int): Color =
   color(r.float32 / 255.0'f32, g.float32 / 255.0'f32, b.float32 / 255.0'f32, 1.0)
 
@@ -172,9 +215,9 @@ func synEditTheme*(): SynEditTheme =
 func fileExtToLanguage*(ext: string): SourceLanguage =
   case ext.toLowerAscii()
   of ".nim", ".nims", ".nimble": langNim
-  of ".cpp", ".hpp", ".cxx", ".h": langCpp
+  of ".cpp", ".hpp", ".cxx", ".cc", ".hh", ".hxx", ".h": langCpp
   of ".c": langC
-  of ".js": langJs
+  of ".js", ".jsx": langJs
   of ".java": langJava
   of ".cs": langCsharp
   of ".xml": langXml
@@ -184,16 +227,20 @@ func fileExtToLanguage*(ext: string): SourceLanguage =
   of ".md", ".markdown": langMarkdown
   else: langNone
 
-func asciiAt(runes: openArray[Rune], index: int): char =
-  if index < 0 or index >= runes.len:
-    '\0'
-  elif runes[index].int >= 0 and runes[index].int <= 255:
-    char(runes[index].int)
-  else:
-    '\x80'
-
-func isIdentChar(ch: char): bool =
-  ch in {'a' .. 'z', 'A' .. 'Z', '0' .. '9', '_', '\x80' .. '\xFF'}
+func strToLanguage*(language: string): SourceLanguage =
+  case language.toLowerAscii()
+  of "nim", "nims", "nimble": langNim
+  of "c": langC
+  of "cpp", "cxx", "c++", "cc", "hpp", "hxx": langCpp
+  of "cs", "csharp", "c#": langCsharp
+  of "java": langJava
+  of "js", "javascript", "jsx": langJs
+  of "py", "python": langPython
+  of "rs", "rust": langRust
+  of "xml": langXml
+  of "html", "htm": langHtml
+  of "md", "markdown": langMarkdown
+  else: langNone
 
 func isOperatorChar(ch: char): bool =
   ch in {
@@ -219,206 +266,861 @@ func isOperatorChar(ch: char): bool =
     '\x80' .. '\xFF',
   }
 
-func isNimKeyword(word: string): bool =
-  for keyword in NimKeywords:
+func isHighlightWhitespace(ch: char): bool =
+  ch in {' ', '\t', '\n', '\v', '\f', '\r'}
+
+func isKeyword(word: string, keywords: openArray[string]): bool =
+  for keyword in keywords:
     if word == keyword:
       return true
 
 func span(start, stop: int, token: SynEditTokenClass): SynEditTokenSpan =
   SynEditTokenSpan(range: initTextRange(start, max(stop - start, 0)), token: token)
 
-proc scanNimNumber(
-    runes: openArray[Rune], start: int
-): tuple[stop: int, token: SynEditTokenClass] =
-  var index = start
-  result.token = SynEditTokenClass.DecNumber
-  if asciiAt(runes, index) == '0':
-    let next = asciiAt(runes, index + 1)
-    if next in {'x', 'X'}:
-      index += 2
-      while asciiAt(runes, index) in {'0' .. '9', 'a' .. 'f', 'A' .. 'F', '_'}:
-        inc index
-      result.stop = index
-      result.token = SynEditTokenClass.HexNumber
-      return
-    if next in {'b', 'B'}:
-      index += 2
-      while asciiAt(runes, index) in {'0', '1', '_'}:
-        inc index
-      result.stop = index
-      result.token = SynEditTokenClass.BinNumber
-      return
-    if next in {'o', 'O'}:
-      index += 2
-      while asciiAt(runes, index) in {'0' .. '7', '_'}:
-        inc index
-      result.stop = index
-      result.token = SynEditTokenClass.OctNumber
-      return
+type
+  SynEditHighlightCell = object
+    c: char
+    token: SynEditTokenClass
 
-  while asciiAt(runes, index) in {'0' .. '9', '_'}:
-    inc index
-  if asciiAt(runes, index) == '.' and asciiAt(runes, index + 1) != '.':
-    result.token = SynEditTokenClass.FloatNumber
-    inc index
-    while asciiAt(runes, index) in {'0' .. '9', '_'}:
-      inc index
-  if asciiAt(runes, index) in {'e', 'E'}:
-    result.token = SynEditTokenClass.FloatNumber
-    inc index
-    if asciiAt(runes, index) in {'+', '-'}:
-      inc index
-    while asciiAt(runes, index) in {'0' .. '9', '_'}:
-      inc index
-  result.stop = index
+  SynEditHighlightBuffer = object
+    cells: seq[SynEditHighlightCell]
 
-proc scanQuoted(
-    runes: openArray[Rune], start: int, quote: char, token: SynEditTokenClass
-): SynEditTokenSpan =
-  var index = start + 1
-  while index < runes.len:
-    let ch = asciiAt(runes, index)
-    if ch == '\n' or ch == '\r':
-      break
-    if ch == '\\':
-      index += 2
-    elif ch == quote:
-      inc index
-      break
-    else:
-      inc index
-  span(start, index, token)
+  GeneralTokenizer = object
+    kind: SynEditTokenClass
+    start, length: int
+    buf: ptr SynEditHighlightBuffer
+    pos: int
+    state: SynEditTokenClass
 
-proc scanTripleString(runes: openArray[Rune], start: int): SynEditTokenSpan =
-  var index = start + 3
-  while index < runes.len:
-    if asciiAt(runes, index) == '"' and asciiAt(runes, index + 1) == '"' and
-        asciiAt(runes, index + 2) == '"':
-      index += 3
-      break
-    inc index
-  span(start, index, SynEditTokenClass.LongStringLit)
+proc len(buffer: ptr SynEditHighlightBuffer): int {.inline.} =
+  buffer[].cells.len
 
-proc scanNimMultilineComment(runes: openArray[Rune], start: int): SynEditTokenSpan =
-  var index = start + 2
-  while index < runes.len:
-    if asciiAt(runes, index) == ']' and asciiAt(runes, index + 1) == '#':
-      index += 2
-      break
-    inc index
-  span(start, index, SynEditTokenClass.LongComment)
+proc `[]`(buffer: ptr SynEditHighlightBuffer, index: int): char {.inline.} =
+  if index < 0 or index >= buffer.len:
+    '\L'
+  else:
+    buffer[].cells[index].c
 
-proc scanNimTokens(text: string): seq[SynEditTokenSpan] =
-  let runes = text.toRunes()
-  var index = 0
-  while index < runes.len:
-    let start = index
-    case asciiAt(runes, index)
-    of ' ', '\t', '\r', '\n':
-      while asciiAt(runes, index) in {' ', '\t', '\r', '\n'}:
-        inc index
-      result.add span(start, index, SynEditTokenClass.Whitespace)
+proc setCellStyle(
+    buffer: var SynEditHighlightBuffer, index: int, token: SynEditTokenClass
+) =
+  if index >= 0 and index < buffer.cells.len:
+    buffer.cells[index].token = token
+
+proc initHighlightBuffer(text: string): SynEditHighlightBuffer =
+  result.cells = newSeqOfCap[SynEditHighlightCell](text.len)
+  for ch in text:
+    if ch != '\C':
+      result.cells.add SynEditHighlightCell(c: ch, token: SynEditTokenClass.None)
+
+proc nimKeywordToken(identifier: string): SynEditTokenClass =
+  if identifier.isKeyword(NimKeywords):
+    SynEditTokenClass.Keyword
+  else:
+    SynEditTokenClass.Identifier
+
+proc nimMultilineComment(
+    tokenizer: var GeneralTokenizer, position: int, isDoc: bool
+): int =
+  var
+    pos = position
+    nesting = 0
+  while pos < tokenizer.buf.len:
+    case tokenizer.buf[pos]
     of '#':
-      if asciiAt(runes, index + 1) == '[':
-        let token = scanNimMultilineComment(runes, index)
-        index = token.range.maxIndex
-        result.add token
-      else:
-        while index < runes.len and asciiAt(runes, index) notin {'\n', '\r'}:
-          inc index
-        result.add span(start, index, SynEditTokenClass.Comment)
-    of '"':
-      let token =
-        if asciiAt(runes, index + 1) == '"' and asciiAt(runes, index + 2) == '"':
-          scanTripleString(runes, index)
+      if isDoc:
+        if tokenizer.buf[pos + 1] == '#' and tokenizer.buf[pos + 2] == '[':
+          inc nesting
+      elif tokenizer.buf[pos + 1] == '[':
+        inc nesting
+      inc pos
+    of ']':
+      if isDoc:
+        if tokenizer.buf[pos + 1] == '#' and tokenizer.buf[pos + 2] == '#':
+          if nesting == 0:
+            pos += 3
+            break
+          dec nesting
+      elif tokenizer.buf[pos + 1] == '#':
+        if nesting == 0:
+          pos += 2
+          break
+        dec nesting
+      inc pos
+    else:
+      inc pos
+  pos
+
+proc nimNumberPostfix(tokenizer: var GeneralTokenizer, position: int): int =
+  var pos = position
+  if tokenizer.buf[pos] == '\'':
+    inc pos
+  case tokenizer.buf[pos]
+  of 'd', 'D':
+    tokenizer.kind = SynEditTokenClass.FloatNumber
+    inc pos
+  of 'f', 'F':
+    tokenizer.kind = SynEditTokenClass.FloatNumber
+    inc pos
+    if tokenizer.buf[pos] in {'0' .. '9'}:
+      inc pos
+    if tokenizer.buf[pos] in {'0' .. '9'}:
+      inc pos
+  of 'i', 'I', 'u', 'U':
+    inc pos
+    if tokenizer.buf[pos] in {'0' .. '9'}:
+      inc pos
+    if tokenizer.buf[pos] in {'0' .. '9'}:
+      inc pos
+  else:
+    discard
+  pos
+
+proc nimNumber(tokenizer: var GeneralTokenizer, position: int): int =
+  const DecChars = {'0' .. '9', '_'}
+  var pos = position
+  tokenizer.kind = SynEditTokenClass.DecNumber
+  while tokenizer.buf[pos] in DecChars:
+    inc pos
+  if tokenizer.buf[pos] == '.':
+    if tokenizer.buf[pos + 1] == '.':
+      return pos
+    tokenizer.kind = SynEditTokenClass.FloatNumber
+    inc pos
+    while tokenizer.buf[pos] in DecChars:
+      inc pos
+  if tokenizer.buf[pos] in {'e', 'E'}:
+    tokenizer.kind = SynEditTokenClass.FloatNumber
+    inc pos
+    if tokenizer.buf[pos] in {'+', '-'}:
+      inc pos
+    while tokenizer.buf[pos] in DecChars:
+      inc pos
+  tokenizer.nimNumberPostfix(pos)
+
+proc nextNimToken(tokenizer: var GeneralTokenizer) =
+  const
+    HexChars = {'0' .. '9', 'A' .. 'F', 'a' .. 'f', '_'}
+    OctChars = {'0' .. '7', '_'}
+    BinChars = {'0', '1', '_'}
+    SymChars = {'a' .. 'z', 'A' .. 'Z', '0' .. '9', '\x80' .. '\xFF'}
+  var pos = tokenizer.pos
+  tokenizer.start = tokenizer.pos
+  if tokenizer.state == SynEditTokenClass.StringLit:
+    tokenizer.kind = SynEditTokenClass.StringLit
+    while pos < tokenizer.buf.len:
+      case tokenizer.buf[pos]
+      of '\\':
+        tokenizer.kind = SynEditTokenClass.EscapeSequence
+        inc pos
+        case tokenizer.buf[pos]
+        of 'x', 'X':
+          inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+        of '0' .. '9':
+          while tokenizer.buf[pos] in {'0' .. '9'}:
+            inc pos
         else:
-          scanQuoted(runes, index, '"', SynEditTokenClass.StringLit)
-      index = token.range.maxIndex
-      result.add token
-    of '\'':
-      let token = scanQuoted(runes, index, '\'', SynEditTokenClass.CharLit)
-      index = token.range.maxIndex
-      result.add token
-    of '0' .. '9':
-      let number = scanNimNumber(runes, index)
-      index = number.stop
-      result.add span(start, index, number.token)
+          inc pos
+        break
+      of '\L', '\C':
+        tokenizer.state = SynEditTokenClass.None
+        break
+      of '"':
+        inc pos
+        tokenizer.state = SynEditTokenClass.None
+        break
+      else:
+        inc pos
+  elif tokenizer.state == SynEditTokenClass.LongStringLit:
+    tokenizer.kind = SynEditTokenClass.LongStringLit
+    while pos < tokenizer.buf.len:
+      if tokenizer.buf[pos] == '"':
+        inc pos
+        if tokenizer.buf[pos] == '"' and tokenizer.buf[pos + 1] == '"' and
+            tokenizer.buf[pos + 2] != '"':
+          pos += 2
+          break
+      else:
+        inc pos
+    tokenizer.state = SynEditTokenClass.None
+  elif tokenizer.state in {SynEditTokenClass.LongComment, SynEditTokenClass.Comment}:
+    tokenizer.kind = tokenizer.state
+    pos = tokenizer.nimMultilineComment(
+      pos, tokenizer.kind == SynEditTokenClass.LongComment
+    )
+    tokenizer.state = SynEditTokenClass.None
+  else:
+    case tokenizer.buf[pos]
+    of ' ', '\t', '\n', '\v', '\f', '\r':
+      tokenizer.kind = SynEditTokenClass.Whitespace
+      while pos < tokenizer.buf.len and tokenizer.buf[pos].isHighlightWhitespace():
+        inc pos
+    of '#':
+      if tokenizer.buf[pos + 1] == '#':
+        tokenizer.kind = SynEditTokenClass.LongComment
+        inc pos
+      else:
+        tokenizer.kind = SynEditTokenClass.Comment
+      if tokenizer.buf[pos + 1] == '[':
+        tokenizer.state = tokenizer.kind
+        pos = tokenizer.nimMultilineComment(
+          pos + 2, tokenizer.kind == SynEditTokenClass.LongComment
+        )
+        tokenizer.state = SynEditTokenClass.None
+      else:
+        while tokenizer.buf[pos] != '\L':
+          inc pos
     of 'a' .. 'z', 'A' .. 'Z', '_', '\x80' .. '\xFF':
-      var word = ""
-      while asciiAt(runes, index).isIdentChar():
-        word.add runes[index].toUTF8()
-        inc index
-      let token =
-        if word.isNimKeyword():
+      var identifier = ""
+      while tokenizer.buf[pos] in SymChars + {'_'}:
+        identifier.add tokenizer.buf[pos]
+        inc pos
+      if tokenizer.buf[pos] == '"':
+        if tokenizer.buf[pos + 1] == '"' and tokenizer.buf[pos + 2] == '"':
+          pos += 3
+          tokenizer.kind = SynEditTokenClass.LongStringLit
+          while pos < tokenizer.buf.len:
+            if tokenizer.buf[pos] == '"':
+              inc pos
+              if tokenizer.buf[pos] == '"' and tokenizer.buf[pos + 1] == '"' and
+                  tokenizer.buf[pos + 2] != '"':
+                pos += 2
+                break
+            else:
+              inc pos
+        else:
+          tokenizer.kind = SynEditTokenClass.RawData
+          inc pos
+          while tokenizer.buf[pos] != '\L':
+            if tokenizer.buf[pos] == '"' and tokenizer.buf[pos + 1] != '"':
+              break
+            inc pos
+          if tokenizer.buf[pos] == '"':
+            inc pos
+      else:
+        tokenizer.kind = nimKeywordToken(identifier)
+    of '0':
+      inc pos
+      case tokenizer.buf[pos]
+      of 'b', 'B':
+        tokenizer.kind = SynEditTokenClass.BinNumber
+        inc pos
+        while tokenizer.buf[pos] in BinChars:
+          inc pos
+        pos = tokenizer.nimNumberPostfix(pos)
+      of 'x', 'X':
+        tokenizer.kind = SynEditTokenClass.HexNumber
+        inc pos
+        while tokenizer.buf[pos] in HexChars:
+          inc pos
+        pos = tokenizer.nimNumberPostfix(pos)
+      of 'o', 'O':
+        tokenizer.kind = SynEditTokenClass.OctNumber
+        inc pos
+        while tokenizer.buf[pos] in OctChars:
+          inc pos
+        pos = tokenizer.nimNumberPostfix(pos)
+      else:
+        pos = tokenizer.nimNumber(pos)
+    of '1' .. '9':
+      pos = tokenizer.nimNumber(pos)
+    of '\'':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.CharLit
+      while true:
+        case tokenizer.buf[pos]
+        of '\L':
+          break
+        of '\'':
+          inc pos
+          break
+        of '\\':
+          pos += 2
+        else:
+          inc pos
+    of '"':
+      inc pos
+      if tokenizer.buf[pos] == '"' and tokenizer.buf[pos + 1] == '"':
+        pos += 2
+        tokenizer.kind = SynEditTokenClass.LongStringLit
+        while pos < tokenizer.buf.len:
+          if tokenizer.buf[pos] == '"':
+            inc pos
+            if tokenizer.buf[pos] == '"' and tokenizer.buf[pos + 1] == '"' and
+                tokenizer.buf[pos + 2] != '"':
+              pos += 2
+              break
+          else:
+            inc pos
+      else:
+        tokenizer.kind = SynEditTokenClass.StringLit
+        while true:
+          case tokenizer.buf[pos]
+          of '\L':
+            break
+          of '"':
+            inc pos
+            break
+          of '\\':
+            tokenizer.state = tokenizer.kind
+            break
+          else:
+            inc pos
+    of '(', '[', '{':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.Punctuation
+      if tokenizer.buf[pos] == '.' and tokenizer.buf[pos + 1] != '.':
+        inc pos
+    of ')', ']', '}', '`', ':', ',', ';':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.Punctuation
+    of '.':
+      if tokenizer.buf[pos + 1] in {')', ']', '}'}:
+        pos += 2
+        tokenizer.kind = SynEditTokenClass.Punctuation
+      else:
+        tokenizer.kind = SynEditTokenClass.Operator
+        inc pos
+    else:
+      if tokenizer.buf[pos].isOperatorChar():
+        tokenizer.kind = SynEditTokenClass.Operator
+        while tokenizer.buf[pos].isOperatorChar():
+          inc pos
+      else:
+        if pos < tokenizer.buf.len:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.None
+  tokenizer.length = pos - tokenizer.pos
+  tokenizer.pos = pos
+
+proc nextCLikeToken(tokenizer: var GeneralTokenizer, keywords: openArray[string]) =
+  const
+    HexChars = {'0' .. '9', 'A' .. 'F', 'a' .. 'f'}
+    OctChars = {'0' .. '7'}
+    BinChars = {'0', '1'}
+    SymChars = {'A' .. 'Z', 'a' .. 'z', '0' .. '9', '_', '\x80' .. '\xFF'}
+  var pos = tokenizer.pos
+  tokenizer.start = tokenizer.pos
+  if tokenizer.state == SynEditTokenClass.StringLit:
+    tokenizer.kind = SynEditTokenClass.StringLit
+    while true:
+      case tokenizer.buf[pos]
+      of '\\':
+        tokenizer.kind = SynEditTokenClass.EscapeSequence
+        inc pos
+        case tokenizer.buf[pos]
+        of 'x', 'X':
+          inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+        of '0' .. '9':
+          while tokenizer.buf[pos] in {'0' .. '9'}:
+            inc pos
+        else:
+          inc pos
+        break
+      of '\L':
+        tokenizer.state = SynEditTokenClass.None
+        break
+      of '"':
+        inc pos
+        tokenizer.state = SynEditTokenClass.None
+        break
+      else:
+        inc pos
+  elif tokenizer.state == SynEditTokenClass.LongComment:
+    tokenizer.kind = SynEditTokenClass.LongComment
+    while pos < tokenizer.buf.len:
+      case tokenizer.buf[pos]
+      of '*':
+        inc pos
+        if tokenizer.buf[pos] == '/':
+          inc pos
+          break
+      of '/':
+        inc pos
+      else:
+        inc pos
+    tokenizer.state = SynEditTokenClass.None
+  else:
+    case tokenizer.buf[pos]
+    of ' ', '\t', '\n', '\v', '\f', '\r':
+      tokenizer.kind = SynEditTokenClass.Whitespace
+      while pos < tokenizer.buf.len and tokenizer.buf[pos].isHighlightWhitespace():
+        inc pos
+    of '/':
+      inc pos
+      if tokenizer.buf[pos] == '/':
+        tokenizer.kind = SynEditTokenClass.Comment
+        while tokenizer.buf[pos] != '\L':
+          inc pos
+      elif tokenizer.buf[pos] == '*':
+        tokenizer.kind = SynEditTokenClass.LongComment
+        inc pos
+        while pos < tokenizer.buf.len:
+          case tokenizer.buf[pos]
+          of '*':
+            inc pos
+            if tokenizer.buf[pos] == '/':
+              inc pos
+              break
+          else:
+            inc pos
+      else:
+        tokenizer.kind = SynEditTokenClass.Operator
+    of '#':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.Preprocessor
+      while tokenizer.buf[pos] in {' ', '\t'}:
+        inc pos
+      while tokenizer.buf[pos] in SymChars:
+        inc pos
+    of 'a' .. 'z', 'A' .. 'Z', '_', '\x80' .. '\xFF':
+      var identifier = ""
+      while tokenizer.buf[pos] in SymChars:
+        identifier.add tokenizer.buf[pos]
+        inc pos
+      tokenizer.kind =
+        if identifier.isKeyword(keywords):
           SynEditTokenClass.Keyword
         else:
           SynEditTokenClass.Identifier
-      result.add span(start, index, token)
-    of '(', '[', '{', ')', ']', '}', '`', ':', ',', ';':
-      inc index
-      result.add span(start, index, SynEditTokenClass.Punctuation)
-    of '.':
-      if asciiAt(runes, index + 1) in {')', ']', '}'}:
-        index += 2
-        result.add span(start, index, SynEditTokenClass.Punctuation)
+    of '0':
+      inc pos
+      case tokenizer.buf[pos]
+      of 'b', 'B':
+        inc pos
+        while tokenizer.buf[pos] in BinChars:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.BinNumber
+      of 'x', 'X':
+        inc pos
+        while tokenizer.buf[pos] in HexChars:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.HexNumber
+      of '0' .. '7':
+        inc pos
+        while tokenizer.buf[pos] in OctChars:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.OctNumber
       else:
-        inc index
-        result.add span(start, index, SynEditTokenClass.Operator)
-    else:
-      if asciiAt(runes, index).isOperatorChar():
-        while asciiAt(runes, index).isOperatorChar():
-          inc index
-        result.add span(start, index, SynEditTokenClass.Operator)
-      else:
-        inc index
-        result.add span(start, index, SynEditTokenClass.None)
-
-proc scanMarkdownTokens(text: string): seq[SynEditTokenSpan] =
-  let runes = text.toRunes()
-  var
-    lineStart = 0
-    index = 0
-    inFence = false
-  while lineStart < runes.len:
-    index = lineStart
-    while index < runes.len and asciiAt(runes, index) notin {'\n', '\r'}:
-      inc index
-    let
-      lineStop = index
-      line = text.runeSubStr(lineStart, lineStop - lineStart)
-      stripped = line.strip()
-      token =
-        if stripped.startsWith("```"):
-          inFence = not inFence
-          SynEditTokenClass.MarkdownFence
-        elif inFence:
-          SynEditTokenClass.RawData
-        elif stripped.startsWith("#"):
-          SynEditTokenClass.Keyword
-        elif stripped.startsWith("-") or stripped.startsWith("*"):
-          SynEditTokenClass.Punctuation
+        tokenizer.kind = SynEditTokenClass.DecNumber
+        while tokenizer.buf[pos] in {'0' .. '9'}:
+          inc pos
+    of '1' .. '9':
+      tokenizer.kind = SynEditTokenClass.DecNumber
+      while tokenizer.buf[pos] in {'0' .. '9'}:
+        inc pos
+    of '\'':
+      tokenizer.kind = SynEditTokenClass.CharLit
+      inc pos
+      while tokenizer.buf[pos] notin {'\L', '\''}:
+        inc pos
+      if tokenizer.buf[pos] == '\'':
+        inc pos
+    of '"':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.StringLit
+      while pos < tokenizer.buf.len:
+        case tokenizer.buf[pos]
+        of '"':
+          inc pos
+          break
+        of '\\':
+          tokenizer.state = tokenizer.kind
+          break
         else:
-          SynEditTokenClass.Text
-    if lineStop > lineStart:
-      result.add span(lineStart, lineStop, token)
-    if index < runes.len:
-      let newlineStart = index
-      while index < runes.len and asciiAt(runes, index) in {'\n', '\r'}:
-        inc index
-      result.add span(newlineStart, index, SynEditTokenClass.Whitespace)
-    lineStart = index
+          inc pos
+    of '(', ')', '[', ']', '{', '}', ':', ',', ';', '.':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.Punctuation
+    else:
+      if tokenizer.buf[pos].isOperatorChar():
+        tokenizer.kind = SynEditTokenClass.Operator
+        while tokenizer.buf[pos].isOperatorChar():
+          inc pos
+      else:
+        if pos < tokenizer.buf.len:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.None
+  tokenizer.length = pos - tokenizer.pos
+  tokenizer.pos = pos
+
+proc nextPythonToken(tokenizer: var GeneralTokenizer) =
+  const
+    HexChars = {'0' .. '9', 'A' .. 'F', 'a' .. 'f'}
+    SymChars = {'A' .. 'Z', 'a' .. 'z', '0' .. '9', '_', '\x80' .. '\xFF'}
+  var pos = tokenizer.pos
+  tokenizer.start = tokenizer.pos
+  if tokenizer.state == SynEditTokenClass.StringLit:
+    tokenizer.kind = SynEditTokenClass.StringLit
+    while true:
+      case tokenizer.buf[pos]
+      of '\\':
+        tokenizer.kind = SynEditTokenClass.EscapeSequence
+        inc pos
+        case tokenizer.buf[pos]
+        of 'x', 'X':
+          inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+        of '0' .. '9':
+          while tokenizer.buf[pos] in {'0' .. '9'}:
+            inc pos
+        else:
+          inc pos
+        break
+      of '\L':
+        tokenizer.state = SynEditTokenClass.None
+        break
+      of '"', '\'':
+        inc pos
+        tokenizer.state = SynEditTokenClass.None
+        break
+      else:
+        inc pos
+  else:
+    case tokenizer.buf[pos]
+    of ' ', '\t', '\n', '\v', '\f', '\r':
+      tokenizer.kind = SynEditTokenClass.Whitespace
+      while pos < tokenizer.buf.len and tokenizer.buf[pos].isHighlightWhitespace():
+        inc pos
+    of '#':
+      tokenizer.kind = SynEditTokenClass.Comment
+      while tokenizer.buf[pos] != '\L':
+        inc pos
+    of 'a' .. 'z', 'A' .. 'Z', '_', '\x80' .. '\xFF':
+      var identifier = ""
+      while tokenizer.buf[pos] in SymChars:
+        identifier.add tokenizer.buf[pos]
+        inc pos
+      tokenizer.kind =
+        if identifier.isKeyword(PythonKeywords):
+          SynEditTokenClass.Keyword
+        else:
+          SynEditTokenClass.Identifier
+    of '0':
+      inc pos
+      case tokenizer.buf[pos]
+      of 'x', 'X':
+        inc pos
+        while tokenizer.buf[pos] in HexChars:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.HexNumber
+      else:
+        tokenizer.kind = SynEditTokenClass.DecNumber
+        while tokenizer.buf[pos] in {'0' .. '9'}:
+          inc pos
+    of '1' .. '9':
+      tokenizer.kind = SynEditTokenClass.DecNumber
+      while tokenizer.buf[pos] in {'0' .. '9'}:
+        inc pos
+    of '"', '\'':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.StringLit
+      while pos < tokenizer.buf.len:
+        case tokenizer.buf[pos]
+        of '"', '\'':
+          inc pos
+          break
+        of '\\':
+          tokenizer.state = tokenizer.kind
+          break
+        else:
+          inc pos
+    of '(', ')', '[', ']', '{', '}', ':', ',', ';', '.':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.Punctuation
+    else:
+      if tokenizer.buf[pos].isOperatorChar():
+        tokenizer.kind = SynEditTokenClass.Operator
+        while tokenizer.buf[pos].isOperatorChar():
+          inc pos
+      else:
+        if pos < tokenizer.buf.len:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.None
+  tokenizer.length = pos - tokenizer.pos
+  tokenizer.pos = pos
+
+proc nextRustToken(tokenizer: var GeneralTokenizer) =
+  const
+    HexChars = {'0' .. '9', 'A' .. 'F', 'a' .. 'f'}
+    SymChars = {'A' .. 'Z', 'a' .. 'z', '0' .. '9', '_', '\x80' .. '\xFF'}
+  var pos = tokenizer.pos
+  tokenizer.start = tokenizer.pos
+  if tokenizer.state == SynEditTokenClass.StringLit:
+    tokenizer.kind = SynEditTokenClass.StringLit
+    while true:
+      case tokenizer.buf[pos]
+      of '\\':
+        tokenizer.kind = SynEditTokenClass.EscapeSequence
+        inc pos
+        case tokenizer.buf[pos]
+        of 'x', 'X':
+          inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+          if tokenizer.buf[pos] in HexChars:
+            inc pos
+        of '0' .. '9':
+          while tokenizer.buf[pos] in {'0' .. '9'}:
+            inc pos
+        else:
+          inc pos
+        break
+      of '\L':
+        tokenizer.state = SynEditTokenClass.None
+        break
+      of '"':
+        inc pos
+        tokenizer.state = SynEditTokenClass.None
+        break
+      else:
+        inc pos
+  else:
+    case tokenizer.buf[pos]
+    of ' ', '\t', '\n', '\v', '\f', '\r':
+      tokenizer.kind = SynEditTokenClass.Whitespace
+      while pos < tokenizer.buf.len and tokenizer.buf[pos].isHighlightWhitespace():
+        inc pos
+    of '/':
+      inc pos
+      if tokenizer.buf[pos] == '/':
+        tokenizer.kind = SynEditTokenClass.Comment
+        while tokenizer.buf[pos] != '\L':
+          inc pos
+      elif tokenizer.buf[pos] == '*':
+        tokenizer.kind = SynEditTokenClass.LongComment
+        inc pos
+        while pos < tokenizer.buf.len:
+          case tokenizer.buf[pos]
+          of '*':
+            inc pos
+            if tokenizer.buf[pos] == '/':
+              inc pos
+              break
+          else:
+            inc pos
+      else:
+        tokenizer.kind = SynEditTokenClass.Operator
+    of 'a' .. 'z', 'A' .. 'Z', '_', '\x80' .. '\xFF':
+      var identifier = ""
+      while tokenizer.buf[pos] in SymChars:
+        identifier.add tokenizer.buf[pos]
+        inc pos
+      tokenizer.kind =
+        if identifier.isKeyword(RustKeywords):
+          SynEditTokenClass.Keyword
+        else:
+          SynEditTokenClass.Identifier
+    of '0':
+      inc pos
+      case tokenizer.buf[pos]
+      of 'x', 'X':
+        tokenizer.kind = SynEditTokenClass.HexNumber
+        inc pos
+        while tokenizer.buf[pos] in HexChars:
+          inc pos
+      else:
+        tokenizer.kind = SynEditTokenClass.DecNumber
+        while tokenizer.buf[pos] in {'0' .. '9'}:
+          inc pos
+    of '1' .. '9':
+      tokenizer.kind = SynEditTokenClass.DecNumber
+      while tokenizer.buf[pos] in {'0' .. '9'}:
+        inc pos
+    of '\'':
+      tokenizer.kind = SynEditTokenClass.CharLit
+      inc pos
+      while tokenizer.buf[pos] notin {'\L', '\''}:
+        inc pos
+      if tokenizer.buf[pos] == '\'':
+        inc pos
+    of '"':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.StringLit
+      while pos < tokenizer.buf.len:
+        case tokenizer.buf[pos]
+        of '"':
+          inc pos
+          break
+        of '\\':
+          tokenizer.state = tokenizer.kind
+          break
+        else:
+          inc pos
+    of '(', ')', '[', ']', '{', '}', ':', ',', ';', '.':
+      inc pos
+      tokenizer.kind = SynEditTokenClass.Punctuation
+    else:
+      if tokenizer.buf[pos].isOperatorChar():
+        tokenizer.kind = SynEditTokenClass.Operator
+        while tokenizer.buf[pos].isOperatorChar():
+          inc pos
+      else:
+        if pos < tokenizer.buf.len:
+          inc pos
+        tokenizer.kind = SynEditTokenClass.None
+  tokenizer.length = pos - tokenizer.pos
+  tokenizer.pos = pos
+
+proc nextToken(tokenizer: var GeneralTokenizer, language: SourceLanguage) =
+  case language
+  of langNone, langConsole:
+    tokenizer.start = tokenizer.pos
+    if tokenizer.pos < tokenizer.buf.len:
+      inc tokenizer.pos
+    tokenizer.kind = SynEditTokenClass.None
+    tokenizer.length = tokenizer.pos - tokenizer.start
+  of langNim:
+    tokenizer.nextNimToken()
+  of langCpp:
+    tokenizer.nextCLikeToken(CppKeywords)
+  of langC:
+    tokenizer.nextCLikeToken(CKeywords)
+  of langJs, langJava:
+    tokenizer.nextCLikeToken(JsKeywords)
+  of langCsharp:
+    tokenizer.nextCLikeToken(CppKeywords)
+  of langPython:
+    tokenizer.nextPythonToken()
+  of langRust:
+    tokenizer.nextRustToken()
+  of langXml, langHtml:
+    tokenizer.start = tokenizer.pos
+    if tokenizer.pos < tokenizer.buf.len:
+      inc tokenizer.pos
+    tokenizer.kind = SynEditTokenClass.None
+    tokenizer.length = tokenizer.pos - tokenizer.start
+  of langMarkdown:
+    tokenizer.start = tokenizer.pos
+    if tokenizer.pos < tokenizer.buf.len:
+      inc tokenizer.pos
+    tokenizer.kind = SynEditTokenClass.Text
+    tokenizer.length = tokenizer.pos - tokenizer.start
+
+proc highlightRange(
+    buffer: var SynEditHighlightBuffer,
+    first, last: int,
+    language: SourceLanguage,
+    initialState = SynEditTokenClass.None,
+) =
+  var tokenizer = GeneralTokenizer(
+    buf: addr buffer,
+    kind: SynEditTokenClass.None,
+    start: first,
+    state: initialState,
+    pos: first,
+  )
+  while tokenizer.pos <= last:
+    tokenizer.nextToken(language)
+    if tokenizer.length == 0:
+      break
+    for index in 0 ..< tokenizer.length:
+      buffer.setCellStyle(tokenizer.start + index, tokenizer.kind)
+
+proc highlightMarkdown(buffer: var SynEditHighlightBuffer, first, last: int) =
+  var
+    insideFence = false
+    fenceLanguage = langNone
+    pos = first
+  while pos > 0 and buffer.cells[pos - 1].c != '\L':
+    dec pos
+  while pos <= last:
+    let lineStart = pos
+    var lineEnd = pos
+    while lineEnd <= last and buffer.cells[lineEnd].c != '\L':
+      inc lineEnd
+
+    var lineText = ""
+    for index in lineStart ..< lineEnd:
+      lineText.add buffer.cells[index].c
+
+    let stripped = lineText.strip(leading = true, trailing = false)
+    if stripped.startsWith("```") or stripped.startsWith("~~~"):
+      for index in lineStart ..< min(lineEnd, last + 1):
+        buffer.setCellStyle(index, SynEditTokenClass.MarkdownFence)
+      let rest = stripped[3 .. ^1].strip()
+      if rest.len > 0 and not insideFence:
+        fenceLanguage = strToLanguage(rest)
+        insideFence = true
+      elif insideFence:
+        insideFence = false
+        fenceLanguage = langNone
+    elif insideFence and fenceLanguage != langNone:
+      buffer.highlightRange(lineStart, lineEnd - 1, fenceLanguage)
+      if lineEnd <= last:
+        buffer.setCellStyle(lineEnd, SynEditTokenClass.None)
+    else:
+      let token = if insideFence: SynEditTokenClass.RawData else: SynEditTokenClass.Text
+      for index in lineStart ..< min(lineEnd, last + 1):
+        buffer.setCellStyle(index, token)
+      if lineEnd <= last:
+        buffer.setCellStyle(lineEnd, SynEditTokenClass.None)
+
+    pos = lineEnd + 1
+
+proc byteRuneMap(text: string): seq[int] =
+  result = newSeq[int](text.len + 1)
+  var
+    byteIndex = 0
+    runeIndex = 0
+  while byteIndex < text.len:
+    let nextByte = min(byteIndex + max(runeLenAt(text, byteIndex), 1), text.len)
+    for index in byteIndex ..< nextByte:
+      result[index] = runeIndex
+    byteIndex = nextByte
+    inc runeIndex
+  result[text.len] = runeIndex
+
+proc addByteSpan(
+    spans: var seq[SynEditTokenSpan],
+    byteToRune: openArray[int],
+    startByte, stopByte: int,
+    token: SynEditTokenClass,
+) =
+  if stopByte <= startByte or byteToRune.len == 0:
+    return
+  let
+    start = max(0, min(startByte, byteToRune.high))
+    stop = max(start, min(stopByte, byteToRune.high))
+    startRune = byteToRune[start]
+    stopRune = byteToRune[stop]
+  if stopRune > startRune:
+    spans.add span(startRune, stopRune, token)
+
+proc tokenSpans(buffer: SynEditHighlightBuffer, text: string): seq[SynEditTokenSpan] =
+  if buffer.cells.len == 0:
+    return
+  let byteToRune = byteRuneMap(text)
+  var
+    start = 0
+    token = buffer.cells[0].token
+  for index in 1 .. buffer.cells.len:
+    if index == buffer.cells.len or buffer.cells[index].token != token:
+      result.addByteSpan(byteToRune, start, index, token)
+      if index < buffer.cells.len:
+        start = index
+        token = buffer.cells[index].token
 
 proc synEditTokenSpans*(text: string, language: SourceLanguage): seq[SynEditTokenSpan] =
-  case language
-  of langNim:
-    scanNimTokens(text)
-  of langMarkdown:
-    scanMarkdownTokens(text)
-  else:
-    if text.runeLen > 0:
-      @[span(0, text.runeLen, SynEditTokenClass.Text)]
-    else:
-      @[]
+  if text.len == 0:
+    return
+  var buffer = initHighlightBuffer(text)
+  if language == langMarkdown:
+    buffer.highlightMarkdown(0, buffer.cells.high)
+  elif language != langNone:
+    buffer.highlightRange(0, buffer.cells.high, language)
+  buffer.tokenSpans(text)
 
 proc synEditTokenAt*(
     spans: openArray[SynEditTokenSpan], index: int

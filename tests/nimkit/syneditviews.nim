@@ -25,6 +25,23 @@ proc answer*(): int =
     check source.tokenAt("+") == SynEditTokenClass.Operator
     check source.tokenAt("3.5") == SynEditTokenClass.FloatNumber
 
+  test "gap buffer highlighter classifies additional source languages":
+    check "int main() { return 0; }".tokenAt("int", langC) == SynEditTokenClass.Keyword
+    check "def main():\n  return 1".tokenAt("def", langPython) ==
+      SynEditTokenClass.Keyword
+    check "fn main() { let value = true; }".tokenAt("fn", langRust) ==
+      SynEditTokenClass.Keyword
+
+  test "markdown fences highlight embedded source language":
+    let source = """
+```nim
+proc answer(): int = 42
+```
+""".strip()
+
+    check source.tokenAt("```", langMarkdown) == SynEditTokenClass.MarkdownFence
+    check source.tokenAt("proc", langMarkdown) == SynEditTokenClass.Keyword
+
   test "widget installs embedded editor and line number gutter":
     let editor = newSynEditView("proc answer = 42\n", frame = rect(0, 0, 420, 220))
 
@@ -64,7 +81,7 @@ proc answer*(): int =
     editor.language = langMarkdown
     editor.text = "# SynEdit"
     check editor.textEditor().textStorage().attributesAt(0).foregroundColor ==
-      editor.theme().foreground[SynEditTokenClass.Keyword]
+      editor.theme().foreground[SynEditTokenClass.Text]
 
   test "line number visibility updates scroll view header":
     let editor = newSynEditView("one\ntwo\nthree")
