@@ -367,6 +367,30 @@ images, key bindings, and themes.
 - Leave room for future native nib/storyboard or GNUstep resource bridge layers
   without exposing platform resource types in core NimKit APIs.
 
+### Gap-Buffer-Backed Text Storage
+
+Add a native large-file text storage path that preserves the existing
+`TextEditor`/`TextView` interaction model instead of replacing it with the
+low-level uirelays SynEdit widget. The goal is to use NimKit's existing text
+input, selection, IME, responder, pasteboard, undo, scrolling, accessibility,
+and layout contracts while allowing large documents to avoid whole-string
+mutation costs.
+
+- Extract the reusable gap-buffer model into a Merenda/NimKit module with
+  rune-indexed `len`, `substring`, `replace`, line-count, and line-range
+  operations matching the existing `TextStorage`/`TextRange` vocabulary.
+- Add a `TextStorage` backing-buffer/facade path so `TextEditor` can continue
+  talking to `TextStorage` while character edits delegate to the gap buffer.
+- Route `TextStorageEdit` dispatch through the same will/did edit, undo,
+  layout invalidation, and accessibility notification path used by normal
+  `TextStorage`.
+- Keep syntax highlighting as a cache layered beside the buffer: edits should
+  invalidate affected line/token ranges, then apply attributes back through
+  the normal `TextStorage` APIs for visible or changed ranges.
+- Defer true virtual/visible-range text layout until profiling shows the
+  existing layout manager remains the bottleneck after storage mutation is
+  gap-buffer-backed.
+
 
 ## Medium-Term Architecture
 
