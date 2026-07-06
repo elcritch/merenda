@@ -300,9 +300,10 @@ build on that vocabulary instead of adding parallel storage models.
 - Added the first gap-buffer-backed text storage path while preserving NimKit
   editor interactions: `GapTextBuffer` now provides rune-indexed replace,
   substring, line-count, and line-range operations; `TextGapStorage` subclasses
-  `TextStorage` for that backing through `newTextGapStorage`; edit dispatch,
-  attributes, undo snapshots, layout invalidation, accessibility observers, and
-  `TextEditor` storage assignment keep using the existing NimKit contracts.
+  `TextStorage` for that backing through `newTextGapStorage` and public storage
+  primitive methods; edit dispatch, attributes, undo snapshots, layout
+  invalidation, accessibility observers, and `TextEditor` storage assignment
+  keep using the existing NimKit contracts.
 
 ## Current Verification
 
@@ -381,6 +382,11 @@ changing the `TextEditor`/`TextView` interaction model.
 - Keep syntax highlighting as a cache layered beside the buffer: edits should
   invalidate affected line/token ranges, then apply attributes back through
   the normal `TextStorage` APIs for visible or changed ranges.
+- Add a UTF-8-backed gap storage path for large files while keeping public
+  `TextRange` semantics rune-indexed. Use explicit internal `RuneIndex` and
+  `ByteOffset` helpers, plus sparse line/byte index caches, so edits can move
+  ARC-owned byte buffers cheaply without exposing byte offsets through the text
+  API.
 - Defer true virtual/visible-range text layout until profiling shows the
   existing layout manager remains the bottleneck after storage mutation is
   gap-buffer-backed.

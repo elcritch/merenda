@@ -30,6 +30,9 @@ suite "nimkit gap text buffers":
 
     check storage of TextGapStorage
     check storage.usesGapTextBuffer()
+    check storage.storageLength() == "alpha\nβeta".runeLen
+    check storage.storageString() == "alpha\nβeta"
+    check storage.storageSubstring(initTextRange(6, 4)) == "βeta"
     check storage.len == "alpha\nβeta".runeLen
     check storage.substring(initTextRange(6, 4)) == "βeta"
 
@@ -37,8 +40,14 @@ suite "nimkit gap text buffers":
     storage.replace(initTextRange(6, 4), "delta", attributes)
 
     check storage.stringValue() == "alpha\ndelta"
+    check storage.storageLineCount() == 2
+    check storage.storageSubstring(storage.storageLineRange(1)) == "delta"
     check storage.len == "alpha\ndelta".runeLen
     check storage.attributesAt(6).foregroundColor == attributes.foregroundColor
+
+    let primitiveStorage: TextStorage = newTextGapStorage("abc")
+    primitiveStorage.replaceStorageText(initTextRange(1, 1), "X")
+    check primitiveStorage.storageString() == "aXc"
 
     let copy = storage.copyTextStorage()
     check copy of TextGapStorage
