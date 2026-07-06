@@ -304,6 +304,10 @@ build on that vocabulary instead of adding parallel storage models.
   primitive methods; edit dispatch, attributes, undo snapshots, layout
   invalidation, accessibility observers, and `TextEditor` storage assignment
   keep using the existing NimKit contracts.
+- Fixed pasteboard provider cache invalidation so provider change counts clear
+  materialized local items/types before reads, provider swaps discard stale
+  local cache and owner state, and the native clipboard provider reports host
+  clipboard changes through platform change counts or a synthetic fingerprint.
 
 ## Current Verification
 
@@ -324,35 +328,6 @@ build on that vocabulary instead of adding parallel storage models.
   `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
 
 ## Near-Term Work
-
-### Fix clipboard 
-
-Yes, probably worth fixing in Merenda too.
-
-  The core issue is that Pasteboard.itemForType()/plainText() can
-  return an already-materialized local xItems[kind] before asking the
-  provider again. For a native pasteboard provider, that means
-  external clipboard changes can be hidden by stale local cache.
-  changeCount() exists, but the pasteboard cache does not appear to
-  invalidate local items when the provider’s backing clipboard
-  changes.
-
-  A good Merenda-level fix would be:
-
-  - Track the last observed provider change count on Pasteboard.
-  - Before types(), availableTypeFromArray(), itemForType(), and
-    string/data helpers, compare current provider change count with
-    the cached one.
-
-  - If it changed, clear xItems, xTypes, and probably xOwner, then
-    sync provider types again.
-
-  - Make the native provider’s pasteboardChangeCount actually reflect
-    external clipboard changes. On macOS that can map to
-    NSPasteboard.changeCount; on other backends it may need a best-
-    effort counter updated from clipboard change events or type
-    changes.
-
 
 ### Resource-Backed UI Construction
 

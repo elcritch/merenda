@@ -296,7 +296,12 @@ proc provider*(pasteboard: Pasteboard): DynamicAgent =
 proc `provider=`*(pasteboard: Pasteboard, provider: DynamicAgent) =
   if pasteboard.isNil:
     return
+  if pasteboard.xProvider == provider:
+    return
   pasteboard.xProvider = provider
+  pasteboard.xTypes.setLen(0)
+  pasteboard.xItems.clear()
+  pasteboard.xOwner = nil
   pasteboard.xHasObservedProviderChangeCount = false
 
 proc owner*(pasteboard: Pasteboard): DynamicAgent =

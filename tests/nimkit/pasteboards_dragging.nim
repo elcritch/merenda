@@ -224,6 +224,22 @@ suite "nimkit pasteboards and dragging":
     check PasteboardTypeString notin pasteboard.types()
     check pasteboard.dataForType(PasteboardTypeData) == "blob"
 
+  test "provider assignment discards stale local pasteboard cache":
+    let
+      provider = newTypedPasteboardProvider()
+      pasteboard = newPasteboard("provider-assignment-cache")
+
+    check pasteboard.setString(PasteboardTypeString, "local")
+    provider.replaceProviderItem(PasteboardTypeData, initPasteboardDataItem("provider"))
+
+    pasteboard.provider = provider
+
+    check pasteboard.stringForType(PasteboardTypeString) == ""
+    check pasteboard.availableTypeFromArray([PasteboardTypeString, PasteboardTypeData]) ==
+      PasteboardTypeData
+    check pasteboard.dataForType(PasteboardTypeData) == "provider"
+    check PasteboardTypeString notin pasteboard.types()
+
   test "text transfer contracts map to pasteboard payloads":
     let contracts = pasteboardTextContracts()
 
