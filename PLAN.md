@@ -325,11 +325,7 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Near-Term Work
 
-### Tweaks
-
-- Make the default theme use macos x acqua blue for buttons instead of grey
-
-- Fix clipboard: 
+### Fix clipboard 
 
 Yes, probably worth fixing in Merenda too.
 
