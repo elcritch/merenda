@@ -297,6 +297,12 @@ build on that vocabulary instead of adding parallel storage models.
   monospace rendering, visible-row culling, grid/cell APIs, editable cursor
   behavior, raw key/mouse/scroll forwarding and capture policies, host-style
   text input dispatch, and an interactive `examples/monotext_demo.nim`.
+- Added the first gap-buffer-backed text storage path while preserving NimKit
+  editor interactions: `GapTextBuffer` now provides rune-indexed replace,
+  substring, line-count, and line-range operations; `TextStorage` can opt into
+  that backing through `newGapTextStorage`; edit dispatch, attributes, undo
+  snapshots, layout invalidation, accessibility observers, and `TextEditor`
+  storage assignment keep using the existing NimKit contracts.
 
 ## Current Verification
 
@@ -367,23 +373,11 @@ images, key bindings, and themes.
 - Leave room for future native nib/storyboard or GNUstep resource bridge layers
   without exposing platform resource types in core NimKit APIs.
 
-### Gap-Buffer-Backed Text Storage
+### Gap-Buffer Text Follow-Ups
 
-Add a native large-file text storage path that preserves the existing
-`TextEditor`/`TextView` interaction model instead of replacing it with the
-low-level uirelays SynEdit widget. The goal is to use NimKit's existing text
-input, selection, IME, responder, pasteboard, undo, scrolling, accessibility,
-and layout contracts while allowing large documents to avoid whole-string
-mutation costs.
+Build on the first `GapTextBuffer`/`newGapTextStorage` implementation without
+changing the `TextEditor`/`TextView` interaction model.
 
-- Extract the reusable gap-buffer model into a Merenda/NimKit module with
-  rune-indexed `len`, `substring`, `replace`, line-count, and line-range
-  operations matching the existing `TextStorage`/`TextRange` vocabulary.
-- Add a `TextStorage` backing-buffer/facade path so `TextEditor` can continue
-  talking to `TextStorage` while character edits delegate to the gap buffer.
-- Route `TextStorageEdit` dispatch through the same will/did edit, undo,
-  layout invalidation, and accessibility notification path used by normal
-  `TextStorage`.
 - Keep syntax highlighting as a cache layered beside the buffer: edits should
   invalidate affected line/token ranges, then apply attributes back through
   the normal `TextStorage` APIs for visible or changed ranges.

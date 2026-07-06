@@ -11,6 +11,7 @@ import nimkit/documents
 import nimkit/documenttabs
 import nimkit/font_layout
 import nimkit/formviews
+import nimkit/gaptextbuffers
 import nimkit/gridviews
 import nimkit/images
 import nimkit/keybindings
