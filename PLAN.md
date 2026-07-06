@@ -370,6 +370,9 @@ images, key bindings, and themes.
 - Leave room for future native nib/storyboard or GNUstep resource bridge layers
   without exposing platform resource types in core NimKit APIs.
 
+
+## Medium-Term Architecture
+
 ### Gap-Buffer Text Follow-Ups
 
 Build on the first `GapTextBuffer`/`TextGapStorage` implementation without
@@ -386,9 +389,6 @@ changing the `TextEditor`/`TextView` interaction model.
 - Defer true virtual/visible-range text layout until profiling shows the
   existing layout manager remains the bottleneck after storage mutation is
   gap-buffer-backed.
-
-
-## Medium-Term Architecture
 
 ### Workspace and Services Layer
 
