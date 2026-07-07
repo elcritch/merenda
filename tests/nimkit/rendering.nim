@@ -1037,10 +1037,10 @@ suite "nimkit rendering":
         let clipNode = list.nodes[int(node.parent)]
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 10.0
-        check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 130.0
-        check clipNode.screenBox.h == 68.0
+        check clipNode.screenBox.x == 7.5
+        check clipNode.screenBox.y == 41.5
+        check clipNode.screenBox.w == 135.0
+        check clipNode.screenBox.h == 49.0
         if node.screenBox.h >= tableView.frame.size.height:
           fullTableFocusRingFound = true
         if node.screenBox.h <=
@@ -1054,6 +1054,44 @@ suite "nimkit rendering":
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         fail()
+
+  test "buildRenders draws no-header table focus ring outside with gap":
+    let
+      root = newView(frame = rect(0, 0, 180, 120))
+      tableView = newTableView(frame = rect(10, 20, 130, 68))
+      focusColor = color(0.24, 0.48, 0.92, 0.58)
+
+    tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
+    tableView.showsHeader = false
+    tableView.focusVisible = true
+
+    var theme = initTheme()
+    theme[srTableView, StyleFocusRingWidth] = 3.0
+    theme[srTableView, StyleFocusRingInset] = -5.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
+    root.addSubview(tableView)
+
+    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    var focusRingFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 3.0 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        focusRingFound = true
+        check node.parent != (-1).FigIdx
+        check node.screenBox.x == 5.0
+        check node.screenBox.y == 15.0
+        check node.screenBox.w == 140.0
+        check node.screenBox.h == 78.0
+        let clipNode = list.nodes[int(node.parent)]
+        check clipNode.kind == nkRectangle
+        check NfClipContent in clipNode.flags
+        check clipNode.screenBox.x == 3.5
+        check clipNode.screenBox.y == 13.5
+        check clipNode.screenBox.w == 143.0
+        check clipNode.screenBox.h == 81.0
+
+    check focusRingFound
 
   test "buildRenders clamps no-header table focus ring to stroke edge":
     let
@@ -1122,10 +1160,10 @@ suite "nimkit rendering":
         let clipNode = list.nodes[int(node.parent)]
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 70.0
+        check clipNode.screenBox.x == 63.5
         check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 20.0
-        check clipNode.screenBox.h == 60.0
+        check clipNode.screenBox.w == 26.5
+        check clipNode.screenBox.h == 66.5
 
     check focusRingFound
 
@@ -1160,10 +1198,10 @@ suite "nimkit rendering":
         let clipNode = list.nodes[int(node.parent)]
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 40.0
+        check clipNode.screenBox.x == 33.5
         check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 90.0
-        check clipNode.screenBox.h == 60.0
+        check clipNode.screenBox.w == 103.0
+        check clipNode.screenBox.h == 66.5
 
     check focusRingFound
 

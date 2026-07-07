@@ -3871,6 +3871,21 @@ proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle =
   if result.focusRingInset > 0.0'f32:
     result.focusRingInset = min(result.focusRingInset, result.focusRingWidth * 0.5'f32)
 
+proc tableFocusRingClipRect(
+    tableView: TableView, focusRect: Rect, box: ControlBoxStyle
+): Rect =
+  if tableView.isNil:
+    return
+  let visualOutset = max(-box.focusRingInset + box.focusRingWidth * 0.5'f32, 0.0'f32)
+  result = focusRect.inset(insets(-visualOutset))
+  var ancestor = tableView.superview()
+  while not ancestor.isNil:
+    if ancestor.clipsToBounds:
+      result = result.intersection(tableView.rectFromView(ancestor.bounds, ancestor))
+      if result.isEmpty:
+        return
+    ancestor = ancestor.superview()
+
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
     return
@@ -5675,18 +5690,19 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       focusRect.y += headerHeight
       focusRect.h = max(focusRect.h - headerHeight, 0.0'f32)
       if not focusRect.intersection(visibleBounds).isEmpty:
+        let focusBox = tableFocusRingBox(listStyle.box)
+        let focusClipRect = tableView.tableFocusRingClipRect(focusRect, focusBox)
+        if focusClipRect.isEmpty:
+          return
         let focusClip = context.addRenderRectangle(
           FocusRingDrawLevel,
           (-1).FigIdx,
-          tableView.rectToWindow(visibleBounds),
+          tableView.rectToWindow(focusClipRect),
           fill(color(0.0, 0.0, 0.0, 0.0)),
           clips = true,
         )
         context.addFocusRing(
-          FocusRingDrawLevel,
-          focusClip,
-          tableView.rectToWindow(focusRect),
-          tableFocusRingBox(listStyle.box),
+          FocusRingDrawLevel, focusClip, tableView.rectToWindow(focusRect), focusBox
         )
 
 protocol DefaultTableViewAccessibility of AccessibilityProtocol:
