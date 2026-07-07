@@ -29,8 +29,6 @@ protocol TimerControllerAnimation from TimerController:
       return
     controller.xElapsed = min(max(value, 0.0'f32), controller.duration)
     controller.updateTimerViews()
-    if controller.xElapsed >= controller.duration:
-      controller.stopTimer()
 
 func secondsText(value: float32): string =
   $(round(value * 10.0'f32) / 10.0'f32) & "s"
