@@ -1,4 +1,11 @@
 import animation_demo
+import "7gui/cells"
+import "7gui/circle_drawer"
+import "7gui/counter"
+import "7gui/crud"
+import "7gui/flight_booker"
+import "7gui/temperature_converter"
+import "7gui/timer"
 import box_demo
 import button_counter
 import button_demo
