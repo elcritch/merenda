@@ -3871,6 +3871,35 @@ proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle =
   if result.focusRingInset > 0.0'f32:
     result.focusRingInset = min(result.focusRingInset, result.focusRingWidth * 0.5'f32)
 
+func tableBodyRowTouchesEdge(rowEdge, viewportEdge: float32): bool =
+  abs(rowEdge - viewportEdge) <= 0.5'f32
+
+proc tableBodyRowCornerRadii(tableView: TableView, row: RowState): CornerRadii =
+  if tableView.isNil or row.index < 0:
+    return
+  let
+    tableStyle = tableView.tableStyle()
+    radius = max(tableStyle.box.cornerRadius - tableStyle.box.borderWidth, 0.0'f32)
+  if radius <= 0.0'f32:
+    return
+  let
+    offset = tableView.listContentOffset()
+    visibleTop = offset.y
+    visibleBottom = visibleTop + tableView.viewportSize().height
+    rowTop = tableView.rowOffset(row.index)
+    rowBottom = rowTop + tableView.rowHeightForRow(row.index)
+    touchesTop =
+      not tableView.showsHeader() and tableBodyRowTouchesEdge(rowTop, visibleTop)
+    touchesBottom = tableBodyRowTouchesEdge(rowBottom, visibleBottom)
+  if not touchesTop and not touchesBottom:
+    return
+  initCornerRadii(
+    if touchesTop: radius else: 0.0'f32,
+    if touchesTop: radius else: 0.0'f32,
+    if touchesBottom: radius else: 0.0'f32,
+    if touchesBottom: radius else: 0.0'f32,
+  )
+
 proc tableFocusRingClipRect(
     tableView: TableView, focusRect: Rect, box: ControlBoxStyle
 ): Rect =
@@ -4263,6 +4292,9 @@ proc drawTableRowItem*(
         StyleAlternatingFill,
       )
     )
+  let cornerRadii = tableView.tableBodyRowCornerRadii(row)
+  if not cornerRadii.isZero:
+    style.cornerRadii = some(cornerRadii)
   context.drawRowItem(
     rect, row, style, tableView.xItemRole, tableView.styleId(), tableView.styleClasses()
   )

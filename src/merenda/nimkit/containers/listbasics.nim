@@ -19,6 +19,7 @@ type
   RowStyle* = object
     fill*: Option[Fill]
     textColor*: Option[Color]
+    cornerRadii*: Option[CornerRadii]
 
 func normalizedRowHeight*(rowHeight: float32): float32 =
   max(rowHeight, 1.0'f32)
@@ -164,8 +165,10 @@ func rowItemIndexAtPoint*(
 func initRowState*(index: int, text: string, states: set[WidgetState] = {}): RowState =
   RowState(index: index, text: text, states: states)
 
-func initRowStyle*(fill = none(Fill), textColor = none(Color)): RowStyle =
-  RowStyle(fill: fill, textColor: textColor)
+func initRowStyle*(
+    fill = none(Fill), textColor = none(Color), cornerRadii = none(CornerRadii)
+): RowStyle =
+  RowStyle(fill: fill, textColor: textColor, cornerRadii: cornerRadii)
 
 proc drawRowItem*(
     context: DrawContext,
@@ -188,6 +191,8 @@ proc drawRowItem*(
     itemStyle.box.fill = style.fill.get()
   if style.textColor.isSome:
     itemStyle.text.color = style.textColor.get()
+  if style.cornerRadii.isSome:
+    itemStyle.box.cornerRadii = style.cornerRadii.get()
 
   if currentParent:
     discard context.addRenderRectangle(
@@ -197,6 +202,7 @@ proc drawRowItem*(
       itemStyle.box.borderWidth,
       itemStyle.box.cornerRadius,
       itemStyle.box.shadows,
+      cornerRadii = itemStyle.box.cornerRadii,
     )
     context.addText(itemStyle.rowItemTextRect(rect), row.text, itemStyle.text)
   else:
@@ -209,6 +215,7 @@ proc drawRowItem*(
       itemStyle.box.borderWidth,
       itemStyle.box.cornerRadius,
       itemStyle.box.shadows,
+      cornerRadii = itemStyle.box.cornerRadii,
     )
     context.addText(
       layer, parent, itemStyle.rowItemTextRect(rect), row.text, itemStyle.text

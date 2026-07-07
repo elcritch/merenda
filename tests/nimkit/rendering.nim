@@ -1009,6 +1009,56 @@ suite "nimkit rendering":
     check highlightedRowFound
     check selectedTextFound
 
+  test "buildRenders rounds no-header table row backgrounds at table corners":
+    let
+      root = newView(frame = rect(0, 0, 180, 130))
+      tableView = newSingleColumnRenderTable(
+        ["One", "Two", "Three"], frame = rect(10, 20, 130, 86)
+      )
+      rowFill = color(0.98, 0.99, 1.0, 1.0)
+
+    tableView.rowHeight = 28.0
+    tableView.visibleRows = 3
+    root.addSubview(tableView)
+
+    var theme = initTheme()
+    theme[srTableView, StyleBorderWidth] = 1.0
+    theme[srTableView, StyleCornerRadius] = 6.0
+    theme[srRowItem, StyleFill] = rowFill
+
+    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    var
+      firstRowFound = false
+      middleRowFound = false
+      lastRowFound = false
+
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == rowFill.rgba and node.screenBox.x == 11.0 and
+          node.screenBox.w == 128.0 and node.screenBox.h == 28.0:
+        if node.screenBox.y == 21.0:
+          firstRowFound = true
+          check node.corners[dcTopLeft] == 5'u16
+          check node.corners[dcTopRight] == 5'u16
+          check node.corners[dcBottomLeft] == 0'u16
+          check node.corners[dcBottomRight] == 0'u16
+        elif node.screenBox.y == 49.0:
+          middleRowFound = true
+          check node.corners[dcTopLeft] == 0'u16
+          check node.corners[dcTopRight] == 0'u16
+          check node.corners[dcBottomLeft] == 0'u16
+          check node.corners[dcBottomRight] == 0'u16
+        elif node.screenBox.y == 77.0:
+          lastRowFound = true
+          check node.corners[dcTopLeft] == 0'u16
+          check node.corners[dcTopRight] == 0'u16
+          check node.corners[dcBottomLeft] == 5'u16
+          check node.corners[dcBottomRight] == 5'u16
+
+    check firstRowFound
+    check middleRowFound
+    check lastRowFound
+
   test "buildRenders keeps table focus ring below visible headers":
     let
       root = newView(frame = rect(0, 0, 220, 140))
@@ -1160,10 +1210,10 @@ suite "nimkit rendering":
         let clipNode = list.nodes[int(node.parent)]
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 63.5
+        check clipNode.screenBox.x == 66.5
         check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 26.5
-        check clipNode.screenBox.h == 66.5
+        check clipNode.screenBox.w == 23.5
+        check clipNode.screenBox.h == 63.5
 
     check focusRingFound
 
@@ -1198,10 +1248,10 @@ suite "nimkit rendering":
         let clipNode = list.nodes[int(node.parent)]
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 33.5
+        check clipNode.screenBox.x == 36.5
         check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 103.0
-        check clipNode.screenBox.h == 66.5
+        check clipNode.screenBox.w == 97.0
+        check clipNode.screenBox.h == 63.5
 
     check focusRingFound
 
