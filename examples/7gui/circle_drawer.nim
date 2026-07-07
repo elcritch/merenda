@@ -45,7 +45,11 @@ protocol CircleCanvasDrawing of ViewDrawingProtocol:
   method draw(canvas: CircleCanvas, context: DrawContext) =
     let bounds = canvas.bounds()
     discard context.addRenderRectangle(
-      bounds, fill(color(0.98, 0.99, 1.0, 1.0)), color(0.64, 0.72, 0.82, 1.0), 1.0, 6.0
+      context.renderRectFor(bounds),
+      fill(color(0.98, 0.99, 1.0, 1.0)),
+      color(0.64, 0.72, 0.82, 1.0),
+      1.0,
+      6.0,
     )
 
     for index, circle in canvas.circles:
