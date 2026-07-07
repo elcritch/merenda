@@ -11,6 +11,13 @@
 --debugger:
   native
 
+import std/strutils
+import std/os
+
+const
+  referenceDir = "docs/reference"
+  openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"
+
 when defined(feature.merenda.libbacktrace):
   --stacktrace:
     off
@@ -21,12 +28,11 @@ when defined(feature.merenda.libbacktrace):
     --define:
       libbacktraceUseSystemLibs
 
-import std/strutils
-import std/os
-
-const
-  referenceDir = "docs/reference"
-  openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"
+when defined(macosx) and defined(figdraw.moltenvkBrew):
+  let moltenVkPrefix = gorgeEx("brew --prefix molten-vk").output.strip()
+  if moltenVkPrefix.len == 0:
+    quit "figdraw.moltenvkBrew requires Homebrew molten-vk"
+  switch("passL", "-Wl,-rpath," & moltenVkPrefix & "/lib")
 
 proc nimExec(subcmd, file: string, extraFlags = "", platform = "") =
   let nimFlags = getEnv("NIMFLAGS").strip()
