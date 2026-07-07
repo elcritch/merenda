@@ -55,6 +55,7 @@ type TableDelegateSpy = ref object of Responder
   hostedColumns: seq[string]
   textFieldColumns: seq[string]
   buttonColumns: seq[string]
+  checkBoxColumns: seq[string]
   policyColumn: string
   policy: CellHitPolicy
   hasPolicy: bool
@@ -384,6 +385,17 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
       )
       button.action = action
       return button
+    if delegate.checkBoxColumns.containsValue(column.identifier):
+      let action = actionSelector("tableCheckAction")
+      let checkBox = newCheckBox(text)
+      checkBox.target = newActionTarget(
+        action,
+        proc(sender: DynamicAgent) =
+          delegate.buttonActionRows.add row
+        ,
+      )
+      checkBox.action = action
+      return checkBox
     if delegate.textFieldColumns.containsValue(column.identifier):
       return newTextField(text)
     newLabel(text)
@@ -1790,6 +1802,55 @@ suite "NimKit TableView":
     check not tableView.editingState.active
     check delegate.cancelledEdits == @["name:0", "state:0"]
     check window.firstResponder() == tableView
+
+  test "table checkbox field editor aligns with hosted checkbox title":
+    let
+      window = newWindow("Table checkbox edit alignment", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      tableView = newTableView(frame = rect(10, 10, 320, 100))
+      source = newTableDataSourceSpy(2)
+      delegate = newTableDelegateSpy()
+      task = newTableColumn("task", "Task", width = 250.0)
+
+    tableView.showsHeader = false
+    tableView.rowHeight = 28.0
+    tableView.addColumn(task)
+    tableView.dataSource = source
+    delegate.hostedColumns = @["task"]
+    delegate.checkBoxColumns = @["task"]
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.beginEditingCell(1, task)
+    check window.firstResponder == window.fieldEditor()
+    check window.fieldEditor().superview() of Button
+    let
+      checkBox = Button(window.fieldEditor().superview())
+      states = checkBox.widgetStateSet() - {ssFocused, ssFocusVisible}
+      style = checkBox.effectiveAppearance().resolveChoiceButtonStyle(
+          controlStyle(
+            srCheckBox, states, id = checkBox.styleId, classes = checkBox.styleClasses
+          )
+        )
+      expectedFrame = style.choiceTextRect(checkBox.bounds)
+    check window.fieldEditor().frame().rectsClose(expectedFrame)
+    check TextView(window.fieldEditor()).stringValue == "task:1"
+    TextView(window.fieldEditor()).stringValue = "renamed"
+    let editingTexts = checkBox.renderedTexts()
+    check editingTexts.containsValue("renamed")
+    check not editingTexts.containsValue("task:1")
+
+    TextView(window.fieldEditor()).stringValue = "task:1"
+    TextView(window.fieldEditor()).selectedRange = initTextRange(6, 0)
+    check checkBox.state == bsOff
+    check window.dispatchKeyDown(
+      KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
+    )
+    check TextView(window.fieldEditor()).stringValue == "task:1 "
+    check checkBox.state == bsOff
+    check delegate.buttonActionRows.len == 0
 
   test "table view user edits hosted and drawn text cells render committed values":
     let

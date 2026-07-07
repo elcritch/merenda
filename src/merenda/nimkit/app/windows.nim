@@ -15,7 +15,7 @@ import ../foundation/notifications
 import ../text/fieldeditors
 from ../text/textviews import
   TextView, editable, insertionPointBlinkPeriod, insertionPointVisible,
-  `insertionPointVisible=`
+  isInsertableText, `insertionPointVisible=`
 import ../foundation/selectors
 import ../themes
 import ../foundation/types
@@ -1619,6 +1619,9 @@ proc dispatchKeyCommand(
     return
   dispatchCommandInChain(target, command.get(), DynamicAgent(target))
 
+func shouldDispatchTextKeyDownFirst(event: events.KeyEvent): bool =
+  event.modifiers - {kmShift} == {} and event.text.isInsertableText()
+
 proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
   if window.isNil:
     return false
@@ -1631,6 +1634,10 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   let target = window.keyDispatchTarget()
+  let dispatchTextFirst = event.shouldDispatchTextKeyDownFirst()
+  if not target.isNil and dispatchTextFirst:
+    if window.dispatchKeyEventInChain(target, event, keyDown()).handled:
+      return true
   if not target.isNil and window.performKeyEquivalent(event):
     return true
   if event.key == keyEscape:
@@ -1639,6 +1646,8 @@ proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
     if window.hasActiveTransientSession():
       return window.dismissTransientSession(tdrEscape)
   if target.isNil:
+    return false
+  if dispatchTextFirst:
     return false
   window.dispatchKeyEventInChain(target, event, keyDown()).handled
 

@@ -5,6 +5,8 @@ import ../app/windows
 import ../foundation/selectors
 import ../drawing
 import ../themes
+import ../text/fieldeditors
+import ../text/textviews
 import ../foundation/events
 import ../foundation/types
 import ../accessibility/accessibility
@@ -75,6 +77,8 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
   if cell.state in {bsOn, bsMixed}:
     states.incl ssSelected
   controlStyle(role, states = states)
+
+proc choiceRole(cell: ButtonCell): StyleRole
 
 protocol ButtonProtocol {.selectorScope: protocol.}:
   property title -> string
@@ -176,12 +180,85 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
   method cellSizeForBounds(cell: ButtonCell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
 
+proc buttonEditingFrame(cell: ButtonCell, frame: Rect, controlView: View): Rect =
+  if cell.isNil:
+    return frame
+  let
+    appearance =
+      if controlView.isNil:
+        initAppearance()
+      else:
+        controlView.effectiveAppearance()
+    states = cell.buttonCellStates(controlView, includeFocus = false)
+  if cell.buttonType() in {btCheckBox, btRadio}:
+    let style = appearance.resolveChoiceButtonStyle(
+      cell.buttonStyleContext(cell.choiceRole(), controlView, states)
+    )
+    return style.choiceTextRect(frame)
+  let style = appearance.resolveButtonStyle(
+    cell.buttonStyleContext(srButton, controlView, states)
+  )
+  style.buttonTextRect(frame)
+
+proc buttonEditingTextStyle(cell: ButtonCell, controlView: View): TextStyle =
+  if cell.isNil:
+    return initAppearance().resolveButtonStyle(controlStyle(srButton)).text
+  let
+    appearance =
+      if controlView.isNil:
+        initAppearance()
+      else:
+        controlView.effectiveAppearance()
+    states = cell.buttonCellStates(controlView, includeFocus = false)
+  if cell.buttonType() in {btCheckBox, btRadio}:
+    let style = appearance.resolveChoiceButtonStyle(
+      cell.buttonStyleContext(cell.choiceRole(), controlView, states)
+    )
+    return style.text
+  appearance.resolveButtonStyle(cell.buttonStyleContext(srButton, controlView, states)).text
+
+protocol DefaultButtonCellEditing of CellEditingProtocol:
+  method setUpFieldEditorAttributes(
+      cell: ButtonCell, editor: FieldEditor, controlView: View
+  ) =
+    if editor.isNil:
+      return
+    let textView = TextView(editor)
+    textView.setTextStyleOverride(cell.buttonEditingTextStyle(controlView))
+    textView.alignment =
+      if cell.buttonType() in {btCheckBox, btRadio}: taLeft else: taCenter
+    textView.allowsUndo = true
+
+  method editWithFrame(
+      cell: ButtonCell, frame: Rect, controlView: View, editor: FieldEditor
+  ) =
+    if editor.isNil:
+      return
+    cell.setUpFieldEditorAttributes(editor, controlView)
+    let editFrame = cell.buttonEditingFrame(frame, controlView)
+    editor.frame = editFrame
+    editor.bounds = rect(0.0, 0.0, editFrame.size.width, editFrame.size.height)
+    if not controlView.isNil and editor.superview() != controlView:
+      controlView.addSubview(editor)
+
+  method selectWithFrame(
+      cell: ButtonCell,
+      frame: Rect,
+      controlView: View,
+      editor: FieldEditor,
+      start, length: int,
+  ) =
+    cell.editWithFrame(frame, controlView, editor)
+    if not editor.isNil:
+      TextView(editor).selectedRange = initTextRange(start, length)
+
 proc initButtonCellFields*(cell: ButtonCell, title: string) =
   initActionCellFields(cell)
   cell.xTitle = title
   cell.xButtonType = btMomentary
   discard cell.withProtocol(DefaultButtonCell)
   discard cell.withProtocol(DefaultButtonCellMeasurement)
+  discard cell.withProtocol(DefaultButtonCellEditing)
 
 proc newButtonCell*(title = "Button"): ButtonCell =
   result = ButtonCell()
@@ -353,6 +430,12 @@ proc choiceChromeRole(button: Button): ChromeRole =
 
 proc choiceChromeRole(cell: ButtonCell): ChromeRole =
   cell.buttonType().choiceChromeRole()
+
+proc hasActiveEditor(cell: ButtonCell, owner: View): bool =
+  if cell.isNil or not (owner of Control):
+    return false
+  let control = Control(owner)
+  control.cell() == Cell(cell) and not control.currentEditor().isNil
 
 proc selectedMarkRect(rect: Rect): Rect =
   let inset = max(rect.size.width * 0.33'f32, 3.0'f32)
@@ -605,6 +688,8 @@ proc drawChoiceButtonCell*(
       )
   if focusVisible:
     context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
+  if cell.hasActiveEditor(owner):
+    return
   let
     textRect = style.choiceTextRect(rect)
     title = cell.title().clippedText(textRect.size.width, style.text)
@@ -628,6 +713,8 @@ proc drawPushButtonCell*(
   context.drawPushButtonFace(absoluteFrame, style, states)
   if focusVisible:
     context.addFocusRing(absoluteFrame, style.buttonFaceBox(absoluteFrame))
+  if cell.hasActiveEditor(owner):
+    return
 
   let textRect = style.buttonTextRect(rect)
   let title = cell.title().clippedText(textRect.size.width, style.text)
@@ -749,6 +836,8 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
           )
       if button.isFocusVisible:
         context.addFocusRing(context.renderRectFor(indicatorRect), style.indicator)
+      if not button.currentEditor().isNil:
+        return
       let
         textRect = style.choiceTextRect(button.bounds)
         title = button.title.clippedText(textRect.size.width, style.text)
@@ -759,6 +848,8 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       context.drawPushButtonFace(absoluteFrame, style, states)
       if button.isFocusVisible:
         context.addFocusRing(absoluteFrame, style.buttonFaceBox(absoluteFrame))
+      if not button.currentEditor().isNil:
+        return
       let textRect = style.buttonTextRect(button.bounds)
       let title = button.title.clippedText(textRect.size.width, style.text)
       if style.textHighlightColor.a > 0.0:
