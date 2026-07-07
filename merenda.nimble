@@ -13,6 +13,7 @@ requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.27.0"
 requires "gh:elcritch/kiwiberry"
 requires "siwin#063fc0f"
 requires "sigils[sigNameAsString, closures] >= 0.24.4"
+requires "cborious"
 
 feature "libbacktrace":
   requires "libbacktrace"
