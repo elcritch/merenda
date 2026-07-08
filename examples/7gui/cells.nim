@@ -5,6 +5,7 @@ import merenda/nimkit
 const
   RowCount = 100
   ColumnCount = 26
+  CellsTableClass = "cells-grid"
 
 type
   SpreadsheetFormulaError = object of ValueError
@@ -331,6 +332,27 @@ proc newCellsController(table: TableView): CellsController =
   discard result.withProtocol(CellsDataSource)
   discard result.withProtocol(CellsDelegate)
 
+proc installCellsSelectionAppearance(table: TableView) =
+  let
+    selectionFill = fill(color(0.24, 0.56, 1.0, 0.14))
+    selectedTextColor = color(0.08, 0.09, 0.11, 1.0)
+    tableStyle = initStyleSelector(srTableView, classes = @[CellsTableClass])
+
+  var appearance = initAppearance()
+  for states in [
+    {ssSelected},
+    {ssSelected, ssHovered},
+    {ssSelected, ssHighlighted},
+    {ssSelected, ssPressed},
+  ]:
+    let rowStyle = initStyleSelector(srRowItem, states, classes = @[CellsTableClass])
+    appearance[rowStyle, StyleFill] = selectionFill
+    appearance[rowStyle, StyleTextColor] = selectedTextColor
+
+  appearance[tableStyle, StyleColumnSelectionFill] = selectionFill
+  table.styleClasses = [CellsTableClass]
+  table.appearance = appearance
+
 let
   app = sharedApplication()
   window = newWindow("7GUIs Cells", frame = rect(120, 120, 900, 540))
@@ -356,8 +378,10 @@ table.tableHeaderHeight = 24.0
 table.rowHeight = 24.0
 table.visibleRows = 18
 table.selectionMode = tsmSingle
+table.allowsColumnSelection = true
 table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true
+table.installCellsSelectionAppearance()
 table.selectCell(0, table.columnWithIdentifier("A"))
 
 controller.setCellFormula(CellAddress(row: 0, column: 0), "1", reload = false)

@@ -2568,6 +2568,23 @@ proc beginEditingFocusedCell(tableView: TableView): bool =
     return tableView.beginEditingCell(row, column)
   false
 
+func isTableTypeToEditEvent(event: KeyEvent): bool =
+  event.modifiers - {kmShift} == {} and event.text.isInsertableText()
+
+proc beginEditingFocusedCellWithText(tableView: TableView, event: KeyEvent): bool =
+  if tableView.isNil or not event.isTableTypeToEditEvent():
+    return false
+  if not tableView.beginEditingFocusedCell():
+    return false
+  let owner = tableView.window()
+  if owner of Window:
+    discard Window(owner).dispatchKeyDown(event)
+  else:
+    let editor = Control(tableView).currentEditor()
+    if not editor.isNil:
+      discard editor.keyDown(event)
+  true
+
 proc moveSelectionTo(tableView: TableView, index: int, extend = false, direction = 1) =
   if tableView.len() == 0 or tableView.selectionMode() == tsmNone:
     return
@@ -3902,6 +3919,48 @@ proc focusedCellRingBox(
   result.focusRingInset = 0.0
   result.cornerRadius = min(max(tableBox.cornerRadius - 1.0'f32, 2.0'f32), 4.0'f32)
 
+func isTransparent(fillValue: Fill): bool =
+  fillValue.kind == flColor and fillValue.color.a == 0'u8
+
+proc selectedTableColumnFill(tableView: TableView, context: DrawContext): Fill =
+  if tableView.isNil or context.isNil:
+    return fill(color(0.0, 0.0, 0.0, 0.0))
+  context.appearance.resolveFill(
+    controlStyle(
+      tableView.xTableRole,
+      tableView.widgetStateSet(),
+      id = tableView.styleId(),
+      classes = tableView.styleClasses(),
+    ),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    StyleColumnSelectionFill,
+  )
+
+proc drawSelectedTableColumn(
+    tableView: TableView,
+    context: DrawContext,
+    row: int,
+    column: TableColumn,
+    rect: Rect,
+) =
+  if tableView.isNil or context.isNil or column.isNil or
+      column notin tableView.xSelectedColumns:
+    return
+  let fillValue = tableView.selectedTableColumnFill(context)
+  if fillValue.isTransparent():
+    return
+  var fillRect = rect
+  if tableView.showsRowSeparators() and row >= 0 and row < tableView.len() - 1:
+    fillRect = rect(
+      fillRect.origin.x,
+      fillRect.origin.y,
+      fillRect.size.width,
+      max(fillRect.size.height - 1.0'f32, 0.0'f32),
+    )
+  if fillRect.isEmpty:
+    return
+  discard context.addRenderRectangle(context.renderRectFor(fillRect), fillValue)
+
 proc drawFocusedTableCell(
     tableView: TableView,
     context: DrawContext,
@@ -3972,6 +4031,7 @@ proc drawTableRow(
     if column.hidden():
       continue
     let cellRect = tableView.columnRect(rowBounds, column)
+    tableView.drawSelectedTableColumn(context, row.index, column, cellRect)
     if not tableView.hasHostedCell(row.index, column):
       tableView.drawTableCellText(context, row.index, column, cellRect, style)
     tableView.drawFocusedTableCell(context, row.index, column, cellRect, style)
@@ -4769,7 +4829,9 @@ proc defaultTableViewKeyDown*(tableView: TableView, event: KeyEvent): bool =
     if activeIndex >= 0:
       tableView.sendTableActivation(activeIndex)
   else:
-    result = tableView.handleTypeSelect(event) or event.text.len > 0
+    result =
+      tableView.beginEditingFocusedCellWithText(event) or
+      tableView.handleTypeSelect(event) or event.text.len > 0
 
 protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
   method mouseHitPolicy(tableView: TableView, args: MouseHitPolicyArgs): CellHitPolicy =

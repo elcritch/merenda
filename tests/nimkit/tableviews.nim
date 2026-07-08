@@ -153,6 +153,23 @@ proc renderedRectangleWithFill(
         node.renderedRect().rectsClose(rect):
       return true
 
+proc renderedRectangleFillIn(
+    view: View,
+    appearance: Appearance,
+    fillValue: Fill,
+    xRange, yRange: Slice[float32],
+    widthRange, heightRange: Slice[float32],
+): bool =
+  let renders = buildRenders(view, appearance)
+  if DefaultDrawLevel notin renders:
+    return false
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkRectangle and node.fill == fillValue:
+      let rect = node.renderedRect()
+      if rect.origin.x in xRange and rect.origin.y in yRange and
+          rect.size.width in widthRange and rect.size.height in heightRange:
+        return true
+
 proc renderedFocusedCellStroke(
     view: View,
     appearance: Appearance,
@@ -1899,10 +1916,12 @@ suite "NimKit TableView":
       state = newTableColumn("state", "State", width = 90.0)
       owner = newTableColumn("owner", "Owner", width = 80.0)
       selectedFill = color(0.22, 0.44, 0.82, 1.0)
+      selectedColumnFill = fill(color(0.22, 0.58, 1.0, 0.18))
       cellFocusColor = color(0.96, 0.32, 0.18, 0.90)
 
     var theme = initTheme()
     theme[srRowItem, {ssSelected}, StyleFill] = selectedFill
+    theme[srTableView, StyleColumnSelectionFill] = selectedColumnFill
     theme[srRowItem, StyleFocusRingColor] = cellFocusColor
     theme[srRowItem, StyleFocusRingWidth] = 2.0
 
@@ -1912,6 +1931,7 @@ suite "NimKit TableView":
     tableView.addColumn(project)
     tableView.addColumn(state)
     tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
     tableView.selectCell(0, state)
     tableView.focused = true
     root.addSubview(tableView)
@@ -1920,6 +1940,15 @@ suite "NimKit TableView":
     check rows.len >= 1
     check ssSelected in rows[0].states
     check tableView.focusedColumn == state
+    check tableView.selectedColumns == @[state]
+    check root.renderedRectangleFillIn(
+      initAppearance(theme),
+      selectedColumnFill,
+      68.0'f32 .. 72.0'f32,
+      0.0'f32 .. 2.0'f32,
+      88.0'f32 .. 92.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
     check root.renderedFocusedCellStroke(
       initAppearance(theme),
       cellFocusColor,
@@ -2059,6 +2088,53 @@ suite "NimKit TableView":
     check fixture.tableView.editingState.row == 0
     check fixture.tableView.editingState.column == fixture.owner
     check TextView(fixture.window.fieldEditor()).stringValue == "June"
+
+  test "table view printable text starts editing the focused cell":
+    var fixture = newEditableTableFixture("Table type edits focused cell")
+
+    fixture.tableView.selectCell(0, fixture.state)
+    check fixture.window.makeFirstResponder(fixture.tableView)
+
+    check fixture.window.typeText("D")
+    check fixture.tableView.editingState.active
+    check fixture.tableView.editingState.row == 0
+    check fixture.tableView.editingState.column == fixture.state
+    check TextView(fixture.window.fieldEditor()).stringValue == "D"
+
+    check fixture.window.typeText("one")
+    check TextView(fixture.window.fieldEditor()).stringValue == "Done"
+    check fixture.window.pressKey(keyEnter)
+    check not fixture.tableView.editingState.active
+    check fixture.source.rows[0].state == "Done"
+    check fixture.source.rows[0].project == "Alpha"
+
+  test "table view printable text falls back to type select without editable focus":
+    let
+      window = newWindow("Table type select fallback", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      tableView = newTableView(frame = rect(10, 10, 260, 82))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+      project = newTableColumn("project", "Project", width = 130.0)
+      state = newTableColumn("state", "State", width = 90.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    tableView.selectedIndex = 0
+    check tableView.focusedColumn.isNil
+    check window.makeFirstResponder(tableView)
+
+    check window.typeText("p")
+    check not tableView.editingState.active
+    check delegate.beganEdits.len == 0
+    check tableView.selectedIndex == 1
 
   test "table view enter activates row after focused column is hidden":
     let

@@ -276,6 +276,7 @@ const
   StyleFocusRingInset* = StyleKey[float32]("focus.ring.inset")
   StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
   StyleBoxShadows* = StyleKey[seq[BoxShadow]]("box.shadows")
+  StyleColumnSelectionFill* = StyleKey[Fill]("column.selection.fill")
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleFontName* = StyleKey[string]("font.name")
   StyleFontSize* = StyleKey[float32]("font.size")
