@@ -145,6 +145,28 @@ proc renderedRectangleWithFill(
         node.renderedRect().rectsClose(rect):
       return true
 
+proc renderedFocusedCellStroke(
+    view: View,
+    appearance: Appearance,
+    strokeColor: Color,
+    strokeWidth: float32,
+    xRange, yRange: Slice[float32],
+    widthRange, heightRange: Slice[float32],
+): bool =
+  let renders = buildRenders(view, appearance)
+  if DefaultDrawLevel notin renders:
+    return false
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind != nkRectangle:
+      continue
+    if node.stroke.weight != strokeWidth or node.stroke.fill.kind != flColor or
+        node.stroke.fill.color != strokeColor.rgba:
+      continue
+    let rect = node.renderedRect()
+    if rect.origin.x in xRange and rect.origin.y in yRange and
+        rect.size.width in widthRange and rect.size.height in heightRange:
+      return true
+
 proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
   let
     renders = buildRenders(view)
@@ -1680,6 +1702,198 @@ suite "NimKit TableView":
     let columnTargeted = columnInfo.withDropTarget(column = state, position = ddpAfter)
     check columnTargeted.tableDropColumn() == "state"
     check columnTargeted.tableDropPosition() == ddpAfter
+
+  test "table view left and right arrows move focused cell within selected row":
+    let
+      window = newWindow("Table cell keyboard focus", frame = rect(0, 0, 480, 180))
+      root = newView(frame = rect(0, 0, 480, 180))
+      tableView = newTableView(frame = rect(12, 12, 360, 112))
+      project = newTableColumn("project", "Project", width = 110.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      hidden = newTableColumn("hidden", "Hidden", width = 80.0)
+      owner = newTableColumn("owner", "Owner", width = 100.0)
+
+    tableView.showsHeader = false
+    tableView.rowCount = 4
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(hidden)
+    tableView.addColumn(owner)
+    hidden.hidden = true
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    tableView.selectCell(1, project)
+    check tableView.focusedColumn == project
+    check tableView.clickedColumn == project
+    check window.makeFirstResponder(tableView)
+
+    check window.pressKey(keyArrowRight)
+    check tableView.selectedIndex == 1
+    check tableView.focusedColumn == state
+    check tableView.clickedColumn == project
+    check tableView.selectedColumns.len == 0
+
+    check window.pressKey(keyArrowRight)
+    check tableView.selectedIndex == 1
+    check tableView.focusedColumn == owner
+
+    check window.pressKey(keyArrowRight)
+    check tableView.focusedColumn == owner
+
+    check window.pressKey(keyArrowDown)
+    check tableView.selectedIndex == 2
+    check tableView.focusedColumn == owner
+
+    check window.pressKey(keyArrowLeft)
+    check tableView.selectedIndex == 2
+    check tableView.focusedColumn == state
+
+    check window.pressKey(keyArrowLeft)
+    check tableView.focusedColumn == project
+
+    check window.pressKey(keyArrowLeft)
+    check tableView.focusedColumn == project
+
+  test "table view cell focus initializes and handles empty edge cases":
+    let
+      window = newWindow("Table cell keyboard edge cases", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      tableView = newTableView(frame = rect(10, 10, 260, 82))
+      first = newTableColumn("first", "First", width = 80.0)
+      second = newTableColumn("second", "Second", width = 100.0)
+      oneColumnTable = newTableView(frame = rect(10, 100, 180, 48))
+      only = newTableColumn("only", "Only", width = 120.0)
+      emptyTable = newTableView(frame = rect(210, 100, 120, 48))
+
+    tableView.showsHeader = false
+    tableView.rowCount = 2
+    tableView.addColumn(first)
+    tableView.addColumn(second)
+    root.addSubview(tableView)
+
+    oneColumnTable.showsHeader = false
+    oneColumnTable.rowCount = 1
+    oneColumnTable.addColumn(only)
+    root.addSubview(oneColumnTable)
+
+    emptyTable.showsHeader = false
+    root.addSubview(emptyTable)
+
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    tableView.selectedIndex = 0
+    check tableView.focusedColumn.isNil
+    check window.makeFirstResponder(tableView)
+
+    check window.pressKey(keyArrowRight)
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == first
+
+    check window.pressKey(keyArrowRight)
+    check tableView.focusedColumn == second
+
+    tableView.selectedIndex = -1
+    check tableView.focusedColumn.isNil
+    check not window.pressKey(keyArrowRight)
+    check tableView.selectedIndex == -1
+    check tableView.focusedColumn.isNil
+
+    check window.makeFirstResponder(oneColumnTable)
+    oneColumnTable.selectedIndex = 0
+    check not window.pressKey(keyArrowLeft)
+    check oneColumnTable.selectedIndex == 0
+    check oneColumnTable.focusedColumn.isNil
+    check not window.pressKey(keyArrowRight)
+    check oneColumnTable.focusedColumn.isNil
+
+    check window.makeFirstResponder(emptyTable)
+    check not window.pressKey(keyArrowRight)
+    check emptyTable.selectedIndex == -1
+    check emptyTable.focusedColumn.isNil
+
+  test "table view column selection follows focused cell when enabled":
+    let
+      window =
+        newWindow("Table selected column keyboard focus", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      tableView = newTableView(frame = rect(10, 10, 280, 82))
+      project = newTableColumn("project", "Project", width = 100.0)
+      state = newTableColumn("state", "State", width = 80.0)
+      owner = newTableColumn("owner", "Owner", width = 90.0)
+
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    tableView.selectedIndex = 0
+    tableView.selectedColumns = [state]
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.focusedColumn == state
+    check tableView.selectedColumns == @[state]
+    check window.makeFirstResponder(tableView)
+
+    check window.pressKey(keyArrowRight)
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == owner
+    check tableView.selectedColumns == @[owner]
+
+    check window.pressKey(keyArrowDown)
+    check tableView.selectedIndex == 1
+    check tableView.focusedColumn == owner
+    check tableView.selectedColumns == @[owner]
+
+    check window.pressKey(keyArrowLeft)
+    check tableView.selectedIndex == 1
+    check tableView.focusedColumn == state
+    check tableView.selectedColumns == @[state]
+
+  test "table view renders focused cell ring while keeping row selected":
+    let
+      root = newView(frame = rect(0, 0, 260, 100))
+      tableView = newTableView(frame = rect(0, 0, 240, 72))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+      selectedFill = color(0.22, 0.44, 0.82, 1.0)
+      cellFocusColor = color(0.96, 0.32, 0.18, 0.90)
+
+    var theme = initTheme()
+    theme[srRowItem, {ssSelected}, StyleFill] = selectedFill
+    theme[srRowItem, StyleFocusRingColor] = cellFocusColor
+    theme[srRowItem, StyleFocusRingWidth] = 2.0
+
+    tableView.showsHeader = false
+    tableView.rowCount = 2
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.selectCell(0, state)
+    tableView.focused = true
+    root.addSubview(tableView)
+
+    let rows = tableView.visibleRowSummaries()
+    check rows.len >= 1
+    check ssSelected in rows[0].states
+    check tableView.focusedColumn == state
+    check root.renderedFocusedCellStroke(
+      initAppearance(theme),
+      cellFocusColor,
+      2.0,
+      66.0'f32 .. 78.0'f32,
+      0.0'f32 .. 8.0'f32,
+      84.0'f32 .. 90.0'f32,
+      18.0'f32 .. 24.0'f32,
+    )
 
   test "table view resolves row insertion and column drop targets":
     let

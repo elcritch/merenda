@@ -205,6 +205,7 @@ type
     xPressedColumn: TableColumn
     xClickedRow: int
     xClickedColumn: TableColumn
+    xFocusedColumn: TableColumn
     xSelectedColumns: seq[TableColumn]
     xAllowsColumnSelection: bool
     xEditing: TableEditingState
@@ -316,6 +317,7 @@ proc tileTableContent(tableView: TableView)
 proc listContentOffset(tableView: TableView): Point
 proc setTableContentOffset(tableView: TableView, offset: Point, invalidate: bool)
 proc scrollItemToVisible(tableView: TableView, itemIndex: int)
+proc scrollCellToVisible(tableView: TableView, row: int, column: TableColumn)
 proc selectedIndex*(tableView: TableView): int
 proc len*(tableView: TableView): int
 proc allowsRowReordering*(tableView: TableView): bool
@@ -326,6 +328,8 @@ proc reorderRows*(
 proc visibleItemCount*(tableView: TableView): int
 proc firstVisibleIndex*(tableView: TableView): int
 proc scrollRows*(tableView: TableView, delta: int)
+proc clearFocusedColumn(tableView: TableView)
+proc moveFocusedCell(tableView: TableView, delta: int): bool
 proc selectionLeadIndex(tableView: TableView): int
 proc normalizeSelection(tableView: TableView, indexes: openArray[int]): seq[int]
 proc firstSelectedIndex(tableView: TableView, indexes: openArray[int]): int
@@ -2168,6 +2172,16 @@ proc scrollItemToVisible(tableView: TableView, itemIndex: int) =
   rect.w = tableView.viewportSize().width
   tableView.scrollContentRectToVisible(rect)
 
+proc scrollCellToVisible(tableView: TableView, row: int, column: TableColumn) =
+  if tableView.isNil or row < 0 or row >= tableView.len() or column.isNil:
+    return
+  let
+    width = max(tableView.visibleColumnWidth(), tableView.viewportSize().width)
+    rowRect =
+      rect(0.0'f32, tableView.rowOffset(row), width, tableView.rowHeightForRow(row))
+    columnRect = tableView.columnRect(rowRect, column)
+  tableView.scrollContentRectToVisible(columnRect)
+
 proc selectionContains(tableView: TableView, index: int): bool =
   for selectedIndex in tableView.xSelectedIndexes:
     if selectedIndex == index:
@@ -2292,6 +2306,8 @@ proc applySelectedIndexes(
   if not selectionChanged:
     tableView.xSelectionAnchor = nextAnchor
     tableView.xSelectionLead = nextLead
+    if nextIndexes.len == 0:
+      tableView.clearFocusedColumn()
     if nextLead >= 0:
       tableView.scrollItemToVisible(nextLead)
     return
@@ -2307,6 +2323,8 @@ proc applySelectedIndexes(
   tableView.syncSelectedIndex()
   tableView.xSelectionAnchor = nextAnchor
   tableView.xSelectionLead = nextLead
+  if nextIndexes.len == 0:
+    tableView.clearFocusedColumn()
   if nextLead >= 0:
     tableView.scrollItemToVisible(nextLead)
   tableView.invalidateTableRows()
@@ -2463,6 +2481,82 @@ proc handleTypeSelect(tableView: TableView, event: KeyEvent): bool =
     return tableView.selectItemMatchingText(tableView.xTypeSelectBuffer)
   false
 
+proc clearFocusedColumn(tableView: TableView) =
+  if tableView.isNil or tableView.xFocusedColumn.isNil:
+    return
+  tableView.xFocusedColumn = nil
+  tableView.setNeedsDisplay(true)
+
+proc selectableCellColumns(tableView: TableView, row: int): seq[TableColumn] =
+  if tableView.isNil or row notin 0 ..< tableView.len():
+    return @[]
+  for column in tableView.visibleColumns():
+    if tableView.shouldSelectCell(row, column):
+      result.add column
+
+proc visibleCellColumnPosition(
+    tableView: TableView,
+    row: int,
+    column: TableColumn,
+    columns: openArray[TableColumn],
+    direction: int,
+): int =
+  if column.isNil:
+    return (if direction >= 0: -1 else: columns.len)
+  for index, current in columns:
+    if current == column:
+      return index
+  if column.tableView() != tableView:
+    return (if direction >= 0: -1 else: columns.len)
+
+  var before = 0
+  for current in tableView.xColumns:
+    if current == column:
+      break
+    if not current.hidden() and tableView.shouldSelectCell(row, current):
+      inc before
+  if direction >= 0:
+    before - 1
+  else:
+    before
+
+proc setFocusedCellColumn(
+    tableView: TableView, row: int, column: TableColumn, notifySelection = true
+): bool =
+  if tableView.isNil or row notin 0 ..< tableView.len() or column.isNil or
+      column.hidden() or not tableView.shouldSelectCell(row, column):
+    return false
+  let
+    previousColumn = tableView.xFocusedColumn
+    previousSelectedColumns = tableView.xSelectedColumns
+  tableView.xFocusedColumn = column
+  if tableView.xAllowsColumnSelection:
+    tableView.xSelectedColumns = @[column]
+  if previousColumn != tableView.xFocusedColumn or
+      previousSelectedColumns != tableView.xSelectedColumns:
+    tableView.scrollCellToVisible(row, column)
+    tableView.setNeedsDisplay(true)
+    if notifySelection and previousSelectedColumns != tableView.xSelectedColumns:
+      emit tableView.selectionDidChange(DynamicAgent(tableView))
+      tableView.postAccessibilityNotification(anSelectionChanged)
+  true
+
+proc moveFocusedCell(tableView: TableView, delta: int): bool =
+  if tableView.isNil or delta == 0 or tableView.selectionMode() == tsmNone:
+    return false
+  let row = tableView.selectionLeadIndex()
+  if row < 0:
+    return false
+  let columns = tableView.selectableCellColumns(row)
+  if columns.len < 2:
+    return false
+  let
+    step = if delta < 0: -1 else: 1
+    position =
+      tableView.visibleCellColumnPosition(row, tableView.xFocusedColumn, columns, step)
+    nextIndex = max(0, min(position + step, columns.len - 1))
+  tableView.setFocusedCellColumn(row, columns[nextIndex])
+
 proc moveSelectionTo(tableView: TableView, index: int, extend = false, direction = 1) =
   if tableView.len() == 0 or tableView.selectionMode() == tsmNone:
     return
@@ -2561,6 +2655,15 @@ proc clickedColumnIndex*(tableView: TableView): int =
     -1
   else:
     tableView.columnIndex(tableView.xClickedColumn.identifier())
+
+proc focusedColumn*(tableView: TableView): TableColumn =
+  if tableView.isNil: nil else: tableView.xFocusedColumn
+
+proc focusedColumnIndex*(tableView: TableView): int =
+  if tableView.isNil or tableView.xFocusedColumn.isNil:
+    -1
+  else:
+    tableView.columnIndex(tableView.xFocusedColumn.identifier())
 
 proc rowHeight*(tableView: TableView): float32 =
   tableView.xRowHeight.normalizedRowHeight()
@@ -2786,6 +2889,7 @@ proc `selectionMode=`*(tableView: TableView, mode: TableSelectionMode) =
     tableView.xSelectedIndexes.setLen(0)
     tableView.xSelectionAnchor = -1
     tableView.xSelectionLead = -1
+    tableView.clearFocusedColumn()
   elif mode == tsmSingle and tableView.xSelectedIndexes.len > 1:
     tableView.xSelectedIndexes.setLen(1)
     tableView.xSelectedIndex = tableView.xSelectedIndexes[0]
@@ -3768,6 +3872,51 @@ proc rowItemStyle(
     )
   )
 
+proc focusedCellRingBox(
+    tableView: TableView, context: DrawContext, style: RowItemStyle
+): ControlBoxStyle =
+  result = style.box
+  let tableBox = context.appearance.resolveTableViewStyle(
+    controlStyle(
+      tableView.xTableRole,
+      tableView.widgetStateSet(),
+      id = tableView.styleId(),
+      classes = tableView.styleClasses(),
+    )
+  ).box
+  if result.focusRingWidth <= 0.0'f32:
+    result.focusRingWidth = min(max(tableBox.focusRingWidth, 1.5'f32), 2.0'f32)
+  if result.focusRingColor.a <= 0.0'f32:
+    result.focusRingColor = tableBox.focusRingColor
+  result.focusRingInset = 0.0
+  result.cornerRadius = min(max(tableBox.cornerRadius - 1.0'f32, 2.0'f32), 4.0'f32)
+
+proc drawFocusedTableCell(
+    tableView: TableView,
+    context: DrawContext,
+    row: int,
+    column: TableColumn,
+    rect: Rect,
+    style: RowItemStyle,
+) =
+  if tableView.isNil or context.isNil or column.isNil or
+      tableView.xFocusedColumn != column or row != tableView.selectionLeadIndex() or
+      not tableView.focused():
+    return
+  var box = tableView.focusedCellRingBox(context, style)
+  if box.focusRingWidth <= 0.0'f32 or box.focusRingColor.a <= 0.0'f32:
+    return
+  let ringRect = rect.inset(insets(max(box.focusRingWidth, 1.0'f32)))
+  if ringRect.isEmpty:
+    return
+  discard context.addRenderRectangle(
+    context.renderRectFor(ringRect),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    box.focusRingColor,
+    box.focusRingWidth,
+    box.cornerRadius,
+  )
+
 proc drawTableCellText(
     tableView: TableView,
     context: DrawContext,
@@ -3811,9 +3960,10 @@ proc drawTableRow(
   for column in tableView.columns:
     if column.hidden():
       continue
+    let cellRect = tableView.columnRect(rowBounds, column)
     if not tableView.hasHostedCell(row.index, column):
-      let cellRect = tableView.columnRect(rowBounds, column)
       tableView.drawTableCellText(context, row.index, column, cellRect, style)
+    tableView.drawFocusedTableCell(context, row.index, column, cellRect, style)
   tableView.drawTableDropTarget(context, rect, row)
 
 proc drawHorizontalTableDropIndicator(
@@ -3918,6 +4068,11 @@ proc tableFocusRingClipRect(
 proc noteColumnsChanged(tableView: TableView) =
   if tableView.isNil:
     return
+  if not tableView.xFocusedColumn.isNil and (
+    tableView.xFocusedColumn.tableView() != tableView or
+    tableView.xFocusedColumn.hidden()
+  ):
+    tableView.clearFocusedColumn()
   tableView.syncTableScrollChrome()
   tableView.syncHeaderTrackingAreas()
   tableView.clearTableCellSlots()
@@ -4586,6 +4741,10 @@ proc defaultTableViewKeyDown*(tableView: TableView, event: KeyEvent): bool =
     tableView.moveSelection(1, extendSelection)
   of keyArrowUp:
     tableView.moveSelection(-1, extendSelection)
+  of keyArrowRight:
+    result = tableView.moveFocusedCell(1)
+  of keyArrowLeft:
+    result = tableView.moveFocusedCell(-1)
   of keyPageDown:
     tableView.pageSelection(1, extendSelection)
   of keyPageUp:
@@ -5084,9 +5243,8 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
       return
     let previousSelectedIndexes = tableView.xSelectedIndexes
     let previousSelectedColumns = tableView.xSelectedColumns
-    if tableView.xAllowsColumnSelection:
-      tableView.xSelectedColumns = @[column]
     tableView.selectedIndex = row
+    discard tableView.setFocusedCellColumn(row, column, notifySelection = false)
     tableView.xClickedRow = row
     tableView.xClickedColumn = column
     tableView.setNeedsDisplay(true)
@@ -5112,6 +5270,12 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
     if tableView.xSelectedColumns == next:
       return
     tableView.xSelectedColumns = next
+    let row = tableView.selectionLeadIndex()
+    if next.len > 0 and row >= 0 and not next[0].hidden() and
+        tableView.shouldSelectCell(row, next[0]):
+      tableView.xFocusedColumn = next[0]
+    else:
+      tableView.clearFocusedColumn()
     tableView.setNeedsDisplay(true)
     emit tableView.selectionDidChange(DynamicAgent(tableView))
     tableView.postAccessibilityNotification(anSelectionChanged)

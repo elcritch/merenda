@@ -569,8 +569,7 @@ table.selectionMode = tsmExtended
 table.allowsColumnSelection = true
 table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true
-table.selectedIndex = 0
-table.selectedColumns = [projectColumn]
+table.selectCell(0, projectColumn)
 table.requestSort(projectColumn, tsdAscending)
 table.saveState(controller.stateStore)
 stateColumn.hidden = true

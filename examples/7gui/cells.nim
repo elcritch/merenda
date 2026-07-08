@@ -358,6 +358,7 @@ table.visibleRows = 18
 table.selectionMode = tsmSingle
 table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true
+table.selectCell(0, table.columnWithIdentifier("A"))
 
 controller.setCellFormula(CellAddress(row: 0, column: 0), "1", reload = false)
 controller.setCellFormula(CellAddress(row: 0, column: 1), "2", reload = false)
