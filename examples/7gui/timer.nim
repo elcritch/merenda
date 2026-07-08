@@ -1,4 +1,4 @@
-import std/math
+import std/[math, times]
 
 import merenda/nimkit
 
@@ -10,64 +10,68 @@ type TimerController = ref object of Responder
   elapsedLabel: Label
   durationLabel: Label
   durationSlider: Slider
-  timerAnimation: Animation
+  heartbeat: Animation
   xElapsed: float32
   duration: float32
 
 proc updateTimerViews(controller: TimerController)
 proc stopTimer(controller: TimerController)
-proc restartTimer(controller: TimerController)
+proc startTimer(controller: TimerController)
+proc syncTimerState(controller: TimerController)
 
-protocol TimerControllerAnimation from TimerController:
-  property elapsed -> float32
-
-  method elapsed(controller: TimerController): float32 =
-    if controller.isNil: 0.0'f32 else: controller.xElapsed
-
-  method setElapsed(controller: TimerController, value: float32) =
-    if controller.isNil:
-      return
-    controller.xElapsed = min(max(value, 0.0'f32), controller.duration)
-    controller.updateTimerViews()
+proc setElapsed(controller: TimerController, value: float32) =
+  if controller.isNil:
+    return
+  controller.xElapsed = max(value, 0.0'f32)
+  controller.updateTimerViews()
 
 func secondsText(value: float32): string =
   $(round(value * 10.0'f32) / 10.0'f32) & "s"
+
+func seconds(delta: Duration): float32 =
+  delta.inNanoseconds.float32 / 1_000_000_000.0'f32
 
 proc updateTimerViews(controller: TimerController) =
   if controller.isNil:
     return
   controller.elapsedGauge.maxValue = max(controller.duration, 0.1'f32)
-  controller.elapsedGauge.value = controller.xElapsed
+  controller.elapsedGauge.value = min(controller.xElapsed, controller.duration)
   controller.elapsedLabel.text = "Elapsed: " & controller.xElapsed.secondsText()
   controller.durationLabel.text = "Duration: " & controller.duration.secondsText()
 
 proc stopTimer(controller: TimerController) =
-  if controller.isNil or controller.timerAnimation.isNil:
+  if controller.isNil or controller.heartbeat.isNil:
     return
-  discard controller.app.stopAnimation(controller.timerAnimation)
-  controller.timerAnimation = nil
+  discard controller.app.stopAnimation(controller.heartbeat)
+  controller.heartbeat = nil
 
-proc restartTimer(controller: TimerController) =
+proc startTimer(controller: TimerController) =
   if controller.isNil:
     return
-  controller.stopTimer()
-  if controller.xElapsed >= controller.duration:
+  if not controller.heartbeat.isNil or controller.xElapsed >= controller.duration:
     controller.updateTimerViews()
     return
 
-  let
-    remaining = max(controller.duration - controller.xElapsed, 0.05'f32)
-    durationMs = max(50, int(round(remaining * 1000.0'f32)))
-    animation = newPropertyAnimation[float32](
-      DynamicAgent(controller),
-      setElapsed(),
-      controller.xElapsed,
-      controller.duration,
-      duration = durationMs.ms,
-    )
-  controller.timerAnimation = Animation(animation)
-  discard controller.app.startAnimation(controller.timerAnimation)
+  controller.heartbeat = newAnimation(duration = 1000.ms)
+  controller.heartbeat.loopCount = -1
+  discard controller.app.startAnimation(controller.heartbeat)
   controller.updateTimerViews()
+
+proc syncTimerState(controller: TimerController) =
+  if controller.isNil:
+    return
+  if controller.xElapsed < controller.duration:
+    controller.startTimer()
+  else:
+    controller.stopTimer()
+    controller.updateTimerViews()
+
+proc timerTicked(controller: TimerController, delta: Duration) {.slot.} =
+  if controller.isNil or controller.heartbeat.isNil:
+    return
+  controller.setElapsed(min(controller.xElapsed + delta.seconds(), controller.duration))
+  if controller.xElapsed >= controller.duration:
+    controller.stopTimer()
 
 proc newTimerController(
     app: Application,
@@ -84,7 +88,7 @@ proc newTimerController(
     duration: durationSlider.value,
   )
   initResponder(result)
-  discard result.withProto()
+  result.app.animationScheduler().connect(schedulerTicked, result, timerTicked)
 
 let
   app = sharedApplication()
@@ -106,16 +110,12 @@ let
 proc durationChanged(sender: DynamicAgent) =
   discard sender
   controller.duration = durationSlider.value
-  controller.updateTimerViews()
-  if controller.duration > controller.elapsed:
-    controller.restartTimer()
-  else:
-    controller.stopTimer()
+  controller.syncTimerState()
 
 proc resetTimer(sender: DynamicAgent) =
   discard sender
   controller.setElapsed(0.0'f32)
-  controller.restartTimer()
+  controller.syncTimerState()
 
 durationSlider.target = newActionTarget(durationAction, durationChanged)
 durationSlider.action = durationAction
@@ -139,5 +139,5 @@ layout.pinEdges(
   edges = {leLeft, leTop, leRight},
 )
 
-controller.restartTimer()
+controller.startTimer()
 app.runWindow(window, root)
