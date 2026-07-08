@@ -2557,6 +2557,17 @@ proc moveFocusedCell(tableView: TableView, delta: int): bool =
     nextIndex = max(0, min(position + step, columns.len - 1))
   tableView.setFocusedCellColumn(row, columns[nextIndex])
 
+proc beginEditingFocusedCell(tableView: TableView): bool =
+  if tableView.isNil or tableView.xFocusedColumn.isNil:
+    return false
+  let row = tableView.selectionLeadIndex()
+  if row < 0:
+    return false
+  let column = tableView.xFocusedColumn
+  if tableView.shouldBeginEditingCell(row, column):
+    return tableView.beginEditingCell(row, column)
+  false
+
 proc moveSelectionTo(tableView: TableView, index: int, extend = false, direction = 1) =
   if tableView.len() == 0 or tableView.selectionMode() == tsmNone:
     return
@@ -5708,21 +5719,8 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     false
 
   method keyDown(tableView: TableView, event: KeyEvent): bool =
-    if event.key == keyEnter:
-      let row =
-        if tableView.selectedIndex() >= 0:
-          tableView.selectedIndex()
-        elif tableView.clickedRow() >= 0:
-          tableView.clickedRow()
-        else:
-          -1
-      let column =
-        if not tableView.clickedColumn().isNil:
-          tableView.clickedColumn()
-        else:
-          tableView.columnAt(0)
-      if tableView.shouldBeginEditingCell(row, column):
-        return tableView.beginEditingCell(row, column)
+    if event.key == keyEnter and tableView.beginEditingFocusedCell():
+      return true
     tableView.defaultTableViewKeyDown(event)
 
 protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:

@@ -25,6 +25,13 @@ type EditableTableSpy = ref object of Responder
   rows: seq[EditableTableRow]
   commits: seq[string]
 
+type EditableTableFixture = object
+  window: Window
+  root: View
+  tableView: TableView
+  source: EditableTableSpy
+  project, state, owner, elapsed: TableColumn
+
 type SortableTableSpy = ref object of Responder
   rows: seq[SortableTableRow]
   sortChanges: seq[string]
@@ -69,6 +76,7 @@ type TableDelegateSpy = ref object of Responder
   sortChanges: seq[string]
   deniedEditRows: seq[int]
   rejectedEditValues: seq[string]
+  deniedEditColumns: seq[string]
   editValidationError: string
   beganEdits: seq[string]
   committedEdits: seq[string]
@@ -469,7 +477,8 @@ protocol TableDelegateSpyMethods of TableViewDelegate:
   method shouldEditCell(
       delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
   ): bool =
-    not delegate.deniedEditRows.containsIndex(row)
+    not delegate.deniedEditRows.containsIndex(row) and
+      not delegate.deniedEditColumns.containsValue(column.identifier)
 
   method didBeginEditingCell(
       delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
@@ -679,6 +688,32 @@ proc newEditableTableSpy(rows: openArray[EditableTableRow]): EditableTableSpy =
 
 proc newEditableTableSpy(row: EditableTableRow): EditableTableSpy =
   newEditableTableSpy([row])
+
+proc newEditableTableFixture(title = "Editable table fixture"): EditableTableFixture =
+  result.window = newWindow(title, frame = rect(0, 0, 560, 180))
+  result.root = newView(frame = rect(0, 0, 560, 180))
+  result.tableView = newTableView(frame = rect(12, 12, 500, 88))
+  result.source = newEditableTableSpy(
+    [
+      EditableTableRow(project: "Alpha", state: "Queued", owner: "June", elapsed: "18m"),
+      EditableTableRow(project: "Gamma", state: "Running", owner: "Mira", elapsed: "7m"),
+      EditableTableRow(project: "Omega", state: "Done", owner: "Sol", elapsed: "1h"),
+    ]
+  )
+  result.project = newTableColumn("project", "Project", width = 140.0)
+  result.state = newTableColumn("state", "State", width = 150.0, alignment = taCenter)
+  result.owner = newTableColumn("owner", "Owner", width = 90.0)
+  result.elapsed = newTableColumn("elapsed", "Elapsed", width = 70.0)
+  result.tableView.showsHeader = false
+  result.tableView.addColumn(result.project)
+  result.tableView.addColumn(result.state)
+  result.tableView.addColumn(result.owner)
+  result.tableView.addColumn(result.elapsed)
+  result.tableView.dataSource = result.source
+  result.tableView.delegate = result.source
+  result.root.addSubview(result.tableView)
+  result.window.setContentView(result.root)
+  discard buildRenders(result.root)
 
 proc newSortableTableSpy(rows: openArray[SortableTableRow]): SortableTableSpy =
   result = SortableTableSpy(rows: @rows)
@@ -1894,6 +1929,167 @@ suite "NimKit TableView":
       84.0'f32 .. 90.0'f32,
       18.0'f32 .. 24.0'f32,
     )
+
+  test "table view enter edits the keyboard focused cell after a row click":
+    var fixture = newEditableTableFixture("Table enter edits clicked cell")
+
+    check fixture.window.clickTableCell(fixture.tableView, 0, fixture.owner)
+    check fixture.tableView.selectedIndex == 0
+    check fixture.window.firstResponder() == fixture.tableView
+
+    check fixture.window.pressKey(keyArrowRight)
+    check fixture.tableView.focusedColumn == fixture.project
+    check fixture.window.pressKey(keyArrowRight)
+    check fixture.tableView.focusedColumn == fixture.state
+    check fixture.window.pressKey(keyArrowRight)
+    check fixture.tableView.focusedColumn == fixture.owner
+
+    check fixture.window.pressKey(keyEnter)
+    check fixture.tableView.editingState.active
+    check fixture.tableView.editingState.row == 0
+    check fixture.tableView.editingState.column == fixture.owner
+    check TextView(fixture.window.fieldEditor()).stringValue == "June"
+
+    check fixture.window.typeText("Done")
+    check fixture.window.pressKey(keyEnter)
+    check not fixture.tableView.editingState.active
+    check fixture.source.rows[0].owner == "Done"
+    check fixture.source.rows[0].project == "Alpha"
+    check fixture.source.rows[0].state == "Queued"
+
+  test "table view enter edits the keyboard focused cell on the lead row":
+    var fixture = newEditableTableFixture("Table enter edits focused cell")
+
+    fixture.tableView.selectionMode = tsmExtended
+    fixture.tableView.selectCell(0, fixture.project)
+    check fixture.window.makeFirstResponder(fixture.tableView)
+    check fixture.window.pressKey(keyArrowRight)
+    check fixture.tableView.focusedColumn == fixture.state
+    check fixture.window.pressKey(keyArrowDown, {kmShift})
+    check fixture.tableView.selectedIndexes == @[0, 1]
+    check fixture.tableView.focusedColumn == fixture.state
+
+    check fixture.window.pressKey(keyEnter)
+    check fixture.tableView.editingState.active
+    check fixture.tableView.editingState.row == 1
+    check fixture.tableView.editingState.column == fixture.state
+    check TextView(fixture.window.fieldEditor()).stringValue == "Running"
+
+  test "table view enter without focused cell and space activate the selected row":
+    let
+      window = newWindow("Table row activation keys", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      tableView = newTableView(frame = rect(10, 10, 260, 82))
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+      project = newTableColumn("project", "Project", width = 130.0)
+      state = newTableColumn("state", "State", width = 90.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    tableView.selectedIndex = 1
+    check tableView.focusedColumn.isNil
+    check window.makeFirstResponder(tableView)
+
+    check window.pressKey(keyEnter)
+    check not tableView.editingState.active
+    check delegate.beganEdits.len == 0
+    check delegate.activatedRows == @[1]
+
+    tableView.selectCell(2, state)
+    check tableView.focusedColumn == state
+    check window.pressKey(keySpace)
+    check not tableView.editingState.active
+    check delegate.beganEdits.len == 0
+    check delegate.activatedRows == @[1, 2]
+
+  test "table view enter on noneditable focused cell activates without fallback edit":
+    let
+      window = newWindow("Table noneditable focused cell", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      tableView = newTableView(frame = rect(10, 10, 260, 82))
+      source = newTableDataSourceSpy(2)
+      delegate = newTableDelegateSpy()
+      project = newTableColumn("project", "Project", width = 130.0)
+      state = newTableColumn("state", "State", width = 90.0)
+
+    delegate.deniedEditColumns = @["state"]
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    tableView.selectCell(0, project)
+    check window.makeFirstResponder(tableView)
+    check window.pressKey(keyArrowRight)
+    check tableView.focusedColumn == state
+    check tableView.clickedColumn == project
+
+    check window.pressKey(keyEnter)
+    check not tableView.editingState.active
+    check delegate.beganEdits.len == 0
+    check delegate.activatedRows == @[0]
+
+  test "table view enter edits the selected column when column selection is enabled":
+    var fixture = newEditableTableFixture("Table enter edits selected column")
+
+    fixture.tableView.allowsColumnSelection = true
+    fixture.tableView.selectedIndex = 0
+    fixture.tableView.selectedColumns = [fixture.state]
+    check fixture.tableView.focusedColumn == fixture.state
+    check fixture.window.makeFirstResponder(fixture.tableView)
+
+    check fixture.window.pressKey(keyArrowRight)
+    check fixture.tableView.focusedColumn == fixture.owner
+    check fixture.tableView.selectedColumns == @[fixture.owner]
+
+    check fixture.window.pressKey(keyEnter)
+    check fixture.tableView.editingState.active
+    check fixture.tableView.editingState.row == 0
+    check fixture.tableView.editingState.column == fixture.owner
+    check TextView(fixture.window.fieldEditor()).stringValue == "June"
+
+  test "table view enter activates row after focused column is hidden":
+    let
+      window = newWindow("Table hidden focused column", frame = rect(0, 0, 360, 160))
+      root = newView(frame = rect(0, 0, 360, 160))
+      tableView = newTableView(frame = rect(10, 10, 260, 82))
+      source = newTableDataSourceSpy(2)
+      delegate = newTableDelegateSpy()
+      project = newTableColumn("project", "Project", width = 130.0)
+      state = newTableColumn("state", "State", width = 90.0)
+
+    tableView.showsHeader = false
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    tableView.selectCell(0, project)
+    check window.makeFirstResponder(tableView)
+    check window.pressKey(keyArrowRight)
+    check tableView.focusedColumn == state
+
+    state.hidden = true
+    check tableView.focusedColumn.isNil
+    check window.pressKey(keyEnter)
+    check not tableView.editingState.active
+    check delegate.beganEdits.len == 0
+    check delegate.activatedRows == @[0]
 
   test "table view resolves row insertion and column drop targets":
     let
