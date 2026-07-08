@@ -13,6 +13,7 @@ type TimerController = ref object of Responder
   heartbeat: Animation
   xElapsed: float32
   duration: float32
+  timerDone: bool
 
 proc updateTimerViews(controller: TimerController)
 proc stopTimer(controller: TimerController)
@@ -48,7 +49,8 @@ proc stopTimer(controller: TimerController) =
 proc startTimer(controller: TimerController) =
   if controller.isNil:
     return
-  if not controller.heartbeat.isNil or controller.xElapsed >= controller.duration:
+  if controller.timerDone or not controller.heartbeat.isNil or
+      controller.xElapsed >= controller.duration:
     controller.updateTimerViews()
     return
 
@@ -60,9 +62,13 @@ proc startTimer(controller: TimerController) =
 proc syncTimerState(controller: TimerController) =
   if controller.isNil:
     return
-  if controller.xElapsed < controller.duration:
+  if controller.timerDone:
+    controller.stopTimer()
+    controller.updateTimerViews()
+  elif controller.xElapsed < controller.duration:
     controller.startTimer()
   else:
+    controller.timerDone = true
     controller.stopTimer()
     controller.updateTimerViews()
 
@@ -71,6 +77,7 @@ proc timerTicked(controller: TimerController, delta: Duration) {.slot.} =
     return
   controller.setElapsed(min(controller.xElapsed + delta.seconds(), controller.duration))
   if controller.xElapsed >= controller.duration:
+    controller.timerDone = true
     controller.stopTimer()
 
 proc newTimerController(
@@ -114,6 +121,7 @@ proc durationChanged(sender: DynamicAgent) =
 
 proc resetTimer(sender: DynamicAgent) =
   discard sender
+  controller.timerDone = false
   controller.setElapsed(0.0'f32)
   controller.syncTimerState()
 
