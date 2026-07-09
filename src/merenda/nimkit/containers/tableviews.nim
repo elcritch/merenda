@@ -29,19 +29,11 @@ const
   TableSelectionIdentityPrefix = "ids:"
 
 type
-  TableModelError* = object of KeyError
-
-  TableSelectionMode* = enum
-    lsmNone
-    lsmSingle
-    lsmMultiple
-    lsmExtended
-
-  TableRowView = ref object of View
+  TableRowViewImpl = ref object of TableRowView 
     xTableView: TableView
     xRow: RowState
 
-  TableContentView = ref object of View
+  TableContentViewImpl = ref object of TableContentView 
     xTableView: TableView
     xRowViews: seq[TableRowView]
 
@@ -51,129 +43,16 @@ type
     rect*: Rect
     states*: set[WidgetState]
 
-  TableColumnResizePolicy* = enum
-    tcrFixed
-    tcrResizable
-
-  TableSortDirection* = enum
-    tsdNone
-    tsdAscending
-    tsdDescending
-
-  TableRowUpdateKind* = enum
-    trukInsert
-    trukRemove
-    trukMove
-    trukReload
-
-  TableRowUpdate* = object
-    kind*: TableRowUpdateKind
-    indexes*: seq[int]
-    fromIndex*: int
-    toIndex*: int
-    identifiers*: seq[string]
-
-  TableCellValue* = object
-    columnIdentifier*: string
-    value*: ObjectValue
-
-  TableRowValue* = object
-    identifier*: string
-    objectValue*: ObjectValue
-    cells*: seq[TableCellValue]
-    enabled*: bool
-    hidden*: bool
-    representedObject*: DynamicAgent
-
-  TableModelColumn* = object
-    identifier*: string
-    title*: string
-    valueKey*: string
-    width*: float32
-    hidden*: bool
-
-  TableModelSortDescriptor* = object
-    columnIdentifier*: string
-    direction*: TableSortDirection
-
-  TableModelFilter* = proc(row: TableRowValue): bool {.closure.}
-
-  TableRowIdentifierResolver* = proc(identifier: string): string {.closure.}
-
-  TableModel* = ref object of DynamicAgent
+  TableModelImpl = ref object of TableModel
     xRows: seq[TableRowValue]
     xColumns: seq[TableModelColumn]
     xSortDescriptors: seq[TableModelSortDescriptor]
     xFilter: TableModelFilter
 
-  TableViewStateScope* = enum
-    tvssAutomatic
-    tvssApplication
-    tvssDocument
-    tvssWorkspace
-
-  TableHeaderHitPart* = enum
-    thpNone
-    thpRowHeader
-    thpRowHeaderResizeHandle
-    thpRowHeaderRowResizeHandle
-    thpColumn
-    thpResizeHandle
-
-  TableHeaderDragIndicator* = object
-    index*: int
-    rect*: Rect
-    visible*: bool
-
-  TableHeaderChrome* = object
-    headerFill*: Fill
-    headerBorderColor*: Color
-    cellFill*: Fill
-    hoveredCellFill*: Fill
-    pressedCellFill*: Fill
-    cellBorderColor*: Color
-    textColor*: Color
-    sortIndicatorColor*: Color
-    insertionIndicatorFill*: Fill
-    borderWidth*: float32
-    sortIndicatorWidth*: float32
-    insertionWidth*: float32
-    insertionCapWidth*: float32
-    insertionCapHeight*: float32
-    cornerRadius*: float32
-
-  TableHeaderHit* = object
-    column*: TableColumn
-    columnIndex*: int
-    row*: int
-    part*: TableHeaderHitPart
-    rect*: Rect
-
-  TableEditingState* = object
-    row*: int
-    column*: TableColumn
-    active*: bool
-    validationError*: string
-    validation*: ObjectValidationError
-    objectValue*: ObjectValue
-
-  TableColumnAutosaveRecord* = object
-    identifier*: string
-    width*: float32
-    hidden*: bool
-    sortDirection*: TableSortDirection
-
-  TableViewState* = object
-    columns*: seq[TableColumnAutosaveRecord]
-    selectedRows*: seq[int]
-    selectedRowIdentifiers*: seq[string]
-    selectedColumns*: seq[string]
-    expandedItems*: seq[string]
-
-  TableViewStateStore* = ref object of DynamicAgent
+  TableViewStateStoreImpl = ref object of TableViewStateStore
     xStates: Table[string, TableViewState]
 
-  TableView* = ref object of Control
+  TableViewImpl = ref object of TableView 
     xColumns: seq[TableColumn]
     xSelectedIndex: int
     xSelectedIndexes: seq[int]
@@ -260,7 +139,7 @@ type
     column: TableColumn
     view: View
 
-  TableColumn* = ref object
+  TableColumnImpl = ref object of TableColumn
     xTableView: TableView
     xIdentifier: string
     xTitle: string
