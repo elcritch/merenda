@@ -22,11 +22,10 @@ import ../foundation/types
 import ../foundation/undomanagers
 import ../view/views
 
+import ./tabletypes
+
 const
   TableTypeSelectTimeout = 1.0
-  TablePasteboardTypeRows* = "nimkit.table.rows"
-  TablePasteboardTypeRowIdentifiers* = "nimkit.table.row-identifiers"
-  TablePasteboardTypeColumns* = "nimkit.table.columns"
   TableSelectionIdentityPrefix = "ids:"
 
 type
