@@ -1515,6 +1515,45 @@ suite "NimKit TableView":
     check model.arrangedRows().mapIt(it.identifier) == @["grace", "ada", "alan"]
     check tableView.selectedTableRowIdentifiers() == @["ada"]
 
+  test "table row header lower edge resizes row instead of reordering":
+    let
+      window = newWindow("Table row header resize", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tableView = newTableView(frame = rect(10, 10, 260, 120))
+
+    tableView.rowCount = 5
+    tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableView.allowsRowReordering = true
+    tableView.rowHeight = 24.0
+    tableView.showsRowHeader = true
+    tableView.rowHeaderWidth = 42.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let
+      firstHeader = tableView.tableRowHeaderCellRect(0)
+      secondHeader = tableView.tableRowHeaderCellRect(1)
+      start = tableView.pointToWindow(
+        initPoint(firstHeader.origin.x + 12.0'f32, firstHeader.maxY - 1.0'f32)
+      )
+      drag = tableView.pointToWindow(
+        initPoint(firstHeader.origin.x + 12.0'f32, firstHeader.maxY + 11.0'f32)
+      )
+
+    check tableView.tableHeaderHitTest(
+      initPoint(firstHeader.origin.x + 12.0'f32, firstHeader.maxY - 1.0'f32)
+    ).part == thpRowHeaderRowResizeHandle
+    check tableView.cursorRects().anyIt(it.cursor == "resize-up-down")
+
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(drag)
+    check tableView.draggingSession().isNil
+    check tableView.rowHeightForRow(0) == 36.0'f32
+    check tableView.tableRowHeaderCellRect(1).origin.y ==
+      secondHeader.origin.y + 12.0'f32
+    check window.mouseUpAt(drag)
+
   test "table row header drags start row reordering":
     let
       window = newWindow("Table row header drag reorder", frame = rect(0, 0, 360, 180))

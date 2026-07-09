@@ -117,6 +117,7 @@ type
     thpNone
     thpRowHeader
     thpRowHeaderResizeHandle
+    thpRowHeaderRowResizeHandle
     thpColumn
     thpResizeHandle
 
@@ -145,6 +146,7 @@ type
   TableHeaderHit* = object
     column*: TableColumn
     columnIndex*: int
+    row*: int
     part*: TableHeaderHitPart
     rect*: Rect
 
@@ -185,6 +187,7 @@ type
     xVisibleRows: int
     xRowHeights: seq[float32]
     xRowOffsets: seq[float32]
+    xRowHeightOverrides: Table[int, float32]
     xRowHeightCacheValid: bool
     xComputingRowHeights: bool
     xSelectionMode: TableSelectionMode
@@ -242,6 +245,7 @@ type
     xHeaderTrackingPart: TableHeaderHitPart
     xTrackingColumn: TableColumn
     xTrackingColumnIndex: int
+    xTrackingRowIndex: int
     xHeaderDragInsertionIndex: int
     xHeaderDragInsertionRect: Rect
     xHeaderDraggingColumn: bool
@@ -250,6 +254,7 @@ type
     xRowDragStartPoint: Point
     xDragStartPoint: Point
     xDragStartWidth: float32
+    xDragStartHeight: float32
 
   TableCellSlot = object
     row: int
@@ -371,6 +376,7 @@ proc tableHeaderHeight*(tableView: TableView): float32
 proc defaultTableHeaderChrome*(): TableHeaderChrome
 proc headerDragIndicator*(tableView: TableView): TableHeaderDragIndicator
 proc resolvedRowHeight(tableView: TableView, row: int): float32
+proc applyRowHeightResize(tableView: TableView, row: int, height: float32)
 proc tableRowDidActivate(tableView: TableView, row: int)
 proc tableColumnAtPoint(tableView: TableView, point: Point): TableColumn
 proc headerInsertionIndexAtPoint(tableView: TableView, point: Point): int
@@ -755,7 +761,9 @@ protocol TableViewColumnProtocol:
 
 const
   TableHeaderTrackingTag = 0x74001
+  TableRowHeaderTrackingTag = 0x74002
   TableHeaderResizeCursorName = "resizeLeftRight"
+  TableRowHeaderResizeCursorName = "resize-up-down"
 
 protocol TableViewSelectionProtocol:
   method shouldSelectCell*(row: int, column: TableColumn): bool
@@ -1684,6 +1692,22 @@ proc tableRowHeaderCellFrame(tableView: TableView, row: int): Rect =
 proc tableRowHeaderCellRect*(tableView: TableView, row: int): Rect =
   tableView.tableRowHeaderCellFrame(row).intersection(tableView.tableRowHeaderRect())
 
+proc tableRowHeaderResizeHandleRect*(tableView: TableView, row: int): Rect =
+  if tableView.isNil or not tableView.showsRowHeader() or row notin 0 ..< tableView.len():
+    return rect(0.0, 0.0, 0.0, 0.0)
+  let
+    rowRect = tableView.tableRowHeaderCellFrame(row)
+    rowHeaderRect = tableView.tableRowHeaderRect()
+    handleHeight = tableView.tableStyle().headerResizeHandleWidth
+
+  rect(
+    rowHeaderRect.origin.x,
+    rowRect.maxY - handleHeight,
+    rowHeaderRect.size.width,
+    handleHeight,
+  )
+  .intersection(rowHeaderRect)
+
 proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
   let
     headerRect = tableView.tableHeaderRect()
@@ -1800,6 +1824,13 @@ proc resetHeaderCursorRects(tableView: TableView) =
       ),
       TableHeaderResizeCursorName,
     )
+  let rowHeaderBodyRect = tableView.tableRowHeaderRect()
+  if not rowHeaderBodyRect.isEmpty and not tableView.contentView().isNil:
+    let rows = tableView.contentView().visibleContentRows()
+    for row in rows.first ..< rows.last:
+      let handleRect = tableView.tableRowHeaderResizeHandleRect(row)
+      if not handleRect.isEmpty:
+        tableView.addCursorRect(handleRect, TableRowHeaderResizeCursorName)
   for column in tableView.visibleColumns():
     if column.resizePolicy() != tcrResizable:
       continue
@@ -1820,6 +1851,7 @@ proc syncHeaderTrackingAreas(tableView: TableView) =
   if tableView.isNil:
     return
   discard tableView.removeTrackingArea(TableHeaderTrackingTag)
+  discard tableView.removeTrackingArea(TableRowHeaderTrackingTag)
   if tableView.showsHeader():
     tableView.addTrackingArea(
       ViewTrackingArea(
@@ -1829,6 +1861,17 @@ proc syncHeaderTrackingAreas(tableView: TableView) =
         owner: Responder(tableView),
       )
     )
+  if tableView.showsRowHeader():
+    let rowHeaderRect = tableView.tableRowHeaderRect()
+    if not rowHeaderRect.isEmpty:
+      tableView.addTrackingArea(
+        ViewTrackingArea(
+          rect: rowHeaderRect,
+          options: {vtoMouseEnteredAndExited, vtoMouseMoved, vtoCursorUpdate},
+          tag: TableRowHeaderTrackingTag,
+          owner: Responder(tableView),
+        )
+      )
   tableView.resetHeaderCursorRects()
 
 proc validCell(tableView: TableView, row: int, column: TableColumn): bool =
@@ -2188,6 +2231,20 @@ proc ensureRowHeightCache(tableView: TableView) =
 proc invalidateRowHeightCache(tableView: TableView) =
   if not tableView.isNil:
     tableView.xRowHeightCacheValid = false
+
+proc applyRowHeightResize(tableView: TableView, row: int, height: float32) =
+  if tableView.isNil or row notin 0 ..< tableView.len():
+    return
+  let normalized = height.normalizedRowHeight()
+  if tableView.xRowHeightOverrides.getOrDefault(row, 0.0'f32) == normalized:
+    return
+  tableView.xRowHeightOverrides[row] = normalized
+  tableView.invalidateRowHeightCache()
+  tableView.clearTableCellSlots()
+  tableView.invalidateIntrinsicContentSize()
+  tableView.setNeedsLayout()
+  tableView.invalidateTableRows()
+  tableView.syncHeaderTrackingAreas()
 
 proc rowOffset(tableView: TableView, index: int): float32 =
   if tableView.isNil or index <= 0:
@@ -2826,6 +2883,8 @@ proc resolvedRowHeight(tableView: TableView, row: int): float32 =
     return 0.0'f32
   if row notin 0 ..< tableView.rowCount():
     return tableView.rowHeight()
+  if row in tableView.xRowHeightOverrides:
+    return tableView.xRowHeightOverrides[row]
   let delegate = tableView.delegate()
   if not delegate.isNil:
     let height =
@@ -5573,7 +5632,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
       x = nextX
 
   method headerHitTest(tableView: TableView, point: Point): TableHeaderHit =
-    result = TableHeaderHit(columnIndex: -1, part: thpNone)
+    result = TableHeaderHit(columnIndex: -1, row: -1, part: thpNone)
     if tableView.isNil:
       return
     let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
@@ -5584,6 +5643,20 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         result.part = thpRowHeaderResizeHandle
       else:
         result.part = thpRowHeader
+      return
+    let rowHeaderBodyRect = tableView.tableRowHeaderRect()
+    if rowHeaderBodyRect.contains(point):
+      let contentView = tableView.contentView()
+      if contentView.isNil:
+        return
+      let rows = contentView.visibleContentRows()
+      for row in rows.first ..< rows.last:
+        let handleRect = tableView.tableRowHeaderResizeHandleRect(row)
+        if handleRect.contains(point):
+          result.row = row
+          result.rect = tableView.tableRowHeaderCellRect(row)
+          result.part = thpRowHeaderRowResizeHandle
+          return
       return
     if not tableView.tableHeaderRect().contains(point):
       return
@@ -5677,6 +5750,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     tableView.xHeaderTrackingPart = hit.part
     tableView.xTrackingColumn = hit.column
     tableView.xTrackingColumnIndex = hit.columnIndex
+    tableView.xTrackingRowIndex = hit.row
     tableView.xPressedColumn = hit.column
     tableView.xHeaderDraggingColumn = false
     tableView.clearHeaderDragInsertion()
@@ -5684,10 +5758,17 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     tableView.xDragStartWidth =
       if hit.part == thpRowHeaderResizeHandle:
         tableView.rowHeaderWidth()
+      elif hit.part == thpRowHeaderRowResizeHandle:
+        0.0'f32
       elif hit.column.isNil:
         0.0'f32
       else:
         hit.column.width()
+    tableView.xDragStartHeight =
+      if hit.part == thpRowHeaderRowResizeHandle:
+        tableView.rowHeightForRow(hit.row)
+      else:
+        0.0'f32
     tableView.setNeedsDisplay(true)
     true
 
@@ -5698,6 +5779,11 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     of thpRowHeaderResizeHandle:
       tableView.rowHeaderWidth =
         tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x
+    of thpRowHeaderRowResizeHandle:
+      tableView.applyRowHeightResize(
+        tableView.xTrackingRowIndex,
+        tableView.xDragStartHeight + event.location.y - tableView.xDragStartPoint.y,
+      )
     of thpRowHeader:
       discard
     of thpResizeHandle:
@@ -5732,13 +5818,16 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
       clickedPart = tableView.xHeaderTrackingPart
       fromIndex = tableView.xTrackingColumnIndex
       moved =
-        tableView.xHeaderDraggingColumn or
-        abs(event.location.x - tableView.xDragStartPoint.x) >
-        tableView.tableStyle().headerDragThreshold
+        tableView.xHeaderDraggingColumn or (
+          clickedPart == thpColumn and
+          abs(event.location.x - tableView.xDragStartPoint.x) >
+          tableView.tableStyle().headerDragThreshold
+        )
       insertionIndex = tableView.xHeaderDragInsertionIndex
     tableView.xHeaderTrackingPart = thpNone
     tableView.xTrackingColumn = nil
     tableView.xTrackingColumnIndex = -1
+    tableView.xTrackingRowIndex = -1
     tableView.xHeaderDraggingColumn = false
     tableView.xPressedColumn = nil
     tableView.clearHeaderDragInsertion()
@@ -6213,7 +6302,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     if tableView.isNil:
       return false
     tableView.tableHeaderHitTest(event.location).part in
-      {thpResizeHandle, thpRowHeaderResizeHandle}
+      {thpResizeHandle, thpRowHeaderResizeHandle, thpRowHeaderRowResizeHandle}
 
   method mouseDown(tableView: TableView, event: MouseEvent): bool =
     if tableView.headerMouseDown(event):
@@ -6486,9 +6575,11 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xEndedEditingRow = -1
   tableView.xTableDropTarget = initDraggingDropTarget()
   tableView.xStateScope = tvssAutomatic
+  tableView.xRowHeightOverrides = initTable[int, float32]()
   tableView.xColumnAutosaveAliases = initTable[string, string]()
   tableView.xRowIdentifierAliases = initTable[string, string]()
   tableView.xTrackingColumnIndex = -1
+  tableView.xTrackingRowIndex = -1
   tableView.xHeaderDragInsertionIndex = -1
   tableView.xReusableCellViews = initTable[string, seq[View]]()
   tableView.xScrollView = initTableScrollView(tableView)
