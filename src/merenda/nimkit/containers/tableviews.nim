@@ -23,10 +23,12 @@ import ../foundation/undomanagers
 import ../view/views
 
 const
-  TableTypeSelectTimeout = 1.0
   TablePasteboardTypeRows* = "nimkit.table.rows"
   TablePasteboardTypeRowIdentifiers* = "nimkit.table.row-identifiers"
   TablePasteboardTypeColumns* = "nimkit.table.columns"
+
+const
+  TableTypeSelectTimeout = 1.0
   TableSelectionIdentityPrefix = "ids:"
 
 type
@@ -37,20 +39,6 @@ type
     lsmSingle
     lsmMultiple
     lsmExtended
-
-  TableRowView = ref object of View
-    xTableView: TableView
-    xRow: RowState
-
-  TableContentView = ref object of View
-    xTableView: TableView
-    xRowViews: seq[TableRowView]
-
-  TableVisibleRowSummary* = object
-    index*: int
-    text*: string
-    rect*: Rect
-    states*: set[WidgetState]
 
   TableColumnResizePolicy* = enum
     tcrFixed
@@ -66,6 +54,41 @@ type
     trukRemove
     trukMove
     trukReload
+
+  TableViewStateScope* = enum
+    tvssAutomatic
+    tvssApplication
+    tvssDocument
+    tvssWorkspace
+
+  TableHeaderHitPart* = enum
+    thpNone
+    thpRowHeader
+    thpRowHeaderResizeHandle
+    thpRowHeaderRowResizeHandle
+    thpColumn
+    thpResizeHandle
+
+const
+  tsmNone* = TableSelectionMode.lsmNone
+  tsmSingle* = TableSelectionMode.lsmSingle
+  tsmMultiple* = TableSelectionMode.lsmMultiple
+  tsmExtended* = TableSelectionMode.lsmExtended
+
+type
+  TableRowView = ref object of View
+    xTableView: TableView
+    xRow: RowState
+
+  TableContentView = ref object of View
+    xTableView: TableView
+    xRowViews: seq[TableRowView]
+
+  TableVisibleRowSummary* = object
+    index*: int
+    text*: string
+    rect*: Rect
+    states*: set[WidgetState]
 
   TableRowUpdate* = object
     kind*: TableRowUpdateKind
@@ -106,20 +129,6 @@ type
     xColumns: seq[TableModelColumn]
     xSortDescriptors: seq[TableModelSortDescriptor]
     xFilter: TableModelFilter
-
-  TableViewStateScope* = enum
-    tvssAutomatic
-    tvssApplication
-    tvssDocument
-    tvssWorkspace
-
-  TableHeaderHitPart* = enum
-    thpNone
-    thpRowHeader
-    thpRowHeaderResizeHandle
-    thpRowHeaderRowResizeHandle
-    thpColumn
-    thpResizeHandle
 
   TableHeaderDragIndicator* = object
     index*: int
@@ -276,12 +285,6 @@ type
     xStyleId: string
     xStyleClasses: seq[string]
     xUserInfo: DynamicAgent
-
-const
-  tsmNone* = TableSelectionMode.lsmNone
-  tsmSingle* = TableSelectionMode.lsmSingle
-  tsmMultiple* = TableSelectionMode.lsmMultiple
-  tsmExtended* = TableSelectionMode.lsmExtended
 
 const TableViewStateDefaultsPrefix = "nimkit.table.state."
 
