@@ -1,6 +1,7 @@
 import std/[math, parseutils, sets, strutils, tables]
 
 import merenda/nimkit
+import sigils/selectors
 
 const
   RowCount = 100
@@ -281,13 +282,18 @@ protocol CellsDataSource of TableViewDataSource:
       controller: CellsController, tableView: TableView, row: int, column: TableColumn
   ): string =
     discard tableView
-    if column.identifier == "row":
-      return $row
     let col = ord(column.identifier[0]) - ord('A')
     if row in 0 ..< RowCount and col in 0 ..< ColumnCount:
       controller.cells[row][col].display
     else:
       ""
+
+  method textForRowHeader(
+      controller: CellsController, tableView: TableView, row: int
+  ): string =
+    discard controller
+    discard tableView
+    $row
 
   method identifierForRow(
       controller: CellsController, tableView: TableView, row: int
@@ -303,7 +309,7 @@ protocol CellsDelegate of TableViewDelegate:
     discard controller
     discard tableView
     discard row
-    column.identifier != "row"
+    not column.isNil
 
   method didCommitEditingCell(
       controller: CellsController,
@@ -313,7 +319,7 @@ protocol CellsDelegate of TableViewDelegate:
       value: string,
   ) =
     discard tableView
-    if column.identifier == "row":
+    if column.isNil:
       return
     let address = CellAddress(row: row, column: ord(column.identifier[0]) - ord('A'))
     controller.setCellFormula(address, value)
@@ -336,7 +342,7 @@ proc installCellsSelectionAppearance(table: TableView) =
   let
     selectionFill = fill(color(0.24, 0.56, 1.0, 0.065))
     hoverFill = fill(color(0.24, 0.56, 1.0, 0.14))
-    rowHighlightFill = fill(color(0.973, 0.985, 1.0, 1.0))
+    rowHighlightFill = fill(color(0.894, 0.938, 1.0, 1.0))
     selectedTextColor = color(0.08, 0.09, 0.11, 1.0)
     tableStyle = initStyleSelector(srTableView, classes = @[CellsTableClass])
 
@@ -372,13 +378,17 @@ let
   status =
     newStatusLabel("Double-click a cell and enter values or formulas like =A0+B0*2.")
   table = newTableView()
+  pointerControls = newStackView(laHorizontal)
+  rowPointerHighlight = newCheckBox("Pointer row highlight")
+  columnPointerHighlight = newCheckBox("Pointer column highlight")
+  arrowRowHighlight = newCheckBox("Arrow row highlight")
+  arrowColumnHighlight = newCheckBox("Arrow column highlight")
   controller = newCellsController(table)
+  rowPointerHighlightAction = actionSelector("cellsTogglePointerRowHighlight")
+  columnPointerHighlightAction = actionSelector("cellsTogglePointerColumnHighlight")
+  arrowRowHighlightAction = actionSelector("cellsToggleArrowRowHighlight")
+  arrowColumnHighlightAction = actionSelector("cellsToggleArrowColumnHighlight")
 
-table.addColumn(
-  newTableColumn(
-    "row", "Row", width = 58.0, resizePolicy = tcrFixed, alignment = taRight
-  )
-)
 for column in 0 ..< ColumnCount:
   table.addColumn(
     newTableColumn(column.columnTitle(), column.columnTitle(), width = 72.0)
@@ -387,6 +397,9 @@ for column in 0 ..< ColumnCount:
 table.dataSource = controller
 table.delegate = controller
 table.tableHeaderHeight = 24.0
+table.showsRowHeader = true
+table.rowHeaderTitle = "Row"
+table.rowHeaderWidth = 58.0
 table.rowHeight = 24.0
 table.visibleRows = 18
 table.selectionMode = tsmSingle
@@ -396,6 +409,38 @@ table.showsRowSeparators = true
 table.installCellsSelectionAppearance()
 table.selectCell(0, table.columnWithIdentifier("A"))
 
+rowPointerHighlight.state = bsOn
+rowPointerHighlight.target = newActionTarget(rowPointerHighlightAction) do(
+  sender: DynamicAgent
+):
+  discard sender
+  table.tracksPointerRowHighlights = rowPointerHighlight.state == bsOn
+rowPointerHighlight.action = rowPointerHighlightAction
+
+columnPointerHighlight.state = bsOn
+columnPointerHighlight.target = newActionTarget(columnPointerHighlightAction) do(
+  sender: DynamicAgent
+):
+  discard sender
+  table.tracksPointerColumnHighlights = columnPointerHighlight.state == bsOn
+columnPointerHighlight.action = columnPointerHighlightAction
+
+arrowRowHighlight.state = bsOn
+arrowRowHighlight.target = newActionTarget(arrowRowHighlightAction) do(
+  sender: DynamicAgent
+):
+  discard sender
+  table.showsFocusedRowHighlight = arrowRowHighlight.state == bsOn
+arrowRowHighlight.action = arrowRowHighlightAction
+
+arrowColumnHighlight.state = bsOn
+arrowColumnHighlight.target = newActionTarget(arrowColumnHighlightAction) do(
+  sender: DynamicAgent
+):
+  discard sender
+  table.showsFocusedColumnHighlight = arrowColumnHighlight.state == bsOn
+arrowColumnHighlight.action = arrowColumnHighlightAction
+
 controller.setCellFormula(CellAddress(row: 0, column: 0), "1", reload = false)
 controller.setCellFormula(CellAddress(row: 0, column: 1), "2", reload = false)
 controller.setCellFormula(CellAddress(row: 0, column: 2), "=A0+B0", reload = false)
@@ -403,13 +448,20 @@ controller.setCellFormula(CellAddress(row: 1, column: 0), "=C0*10", reload = fal
 
 layout.spacing = 14.0
 layout.alignment = svaFill
+pointerControls.spacing = 16.0
+pointerControls.alignment = svaLeading
 title.setHuggingPriority(LayoutPriorityRequired, laVertical)
 title.setCompressionPriority(LayoutPriorityRequired, laVertical)
 status.setHuggingPriority(LayoutPriorityRequired, laVertical)
 status.setCompressionPriority(LayoutPriorityRequired, laVertical)
 table.setHuggingPriority(LayoutPriorityLow, laVertical)
 table.setCompressionPriority(LayoutPriorityLow, laVertical)
-layout.addArrangedSubview(title, status, table)
+pointerControls.setHuggingPriority(LayoutPriorityRequired, laVertical)
+pointerControls.setCompressionPriority(LayoutPriorityRequired, laVertical)
+pointerControls.addArrangedSubview(
+  rowPointerHighlight, columnPointerHighlight, arrowRowHighlight, arrowColumnHighlight
+)
+layout.addArrangedSubview(title, status, table, pointerControls)
 
 root.addSubview(layout)
 layout.pinEdges(

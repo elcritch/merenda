@@ -115,6 +115,8 @@ type
 
   TableHeaderHitPart* = enum
     thpNone
+    thpRowHeader
+    thpRowHeaderResizeHandle
     thpColumn
     thpResizeHandle
 
@@ -209,6 +211,13 @@ type
     xHighlightedColumn: TableColumn
     xSelectedColumns: seq[TableColumn]
     xAllowsColumnSelection: bool
+    xShowsRowHeader: bool
+    xRowHeaderWidth: float32
+    xRowHeaderTitle: string
+    xTracksPointerRowHighlights: bool
+    xTracksPointerColumnHighlights: bool
+    xShowsFocusedRowHighlight: bool
+    xShowsFocusedColumnHighlight: bool
     xEditing: TableEditingState
     xAutosaveName: string
     xStateStorage: DynamicAgent
@@ -321,6 +330,7 @@ proc scrollItemToVisible(tableView: TableView, itemIndex: int)
 proc scrollCellToVisible(tableView: TableView, row: int, column: TableColumn)
 proc selectedIndex*(tableView: TableView): int
 proc len*(tableView: TableView): int
+proc rowItemRect*(tableView: TableView, itemIndex: int): Rect
 proc allowsRowReordering*(tableView: TableView): bool
 proc reorderRows*(
   tableView: TableView, rows: openArray[int], target: DraggingDropTarget
@@ -583,6 +593,8 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
   method textForCell*(
     tableView: TableView, row: int, column: TableColumn
   ): string {.optional.}
+
+  method textForRowHeader*(tableView: TableView, row: int): string {.optional.}
 
   method objectValueForCell*(
     tableView: TableView, row: int, column: TableColumn
@@ -1470,6 +1482,39 @@ func tableHeaderCellCornerRadii(
 proc tableHeaderHeight*(tableView: TableView): float32 =
   if not tableView.xShowsHeader: 0.0'f32 else: tableView.xHeaderHeight
 
+proc showsRowHeader*(tableView: TableView): bool =
+  (not tableView.isNil) and tableView.xShowsRowHeader
+
+proc visibleRowHeaderWidth(tableView: TableView): float32 =
+  if tableView.showsRowHeader(): tableView.xRowHeaderWidth else: 0.0'f32
+
+proc rowHeaderWidth*(tableView: TableView): float32 =
+  if tableView.isNil: 0.0'f32 else: tableView.xRowHeaderWidth
+
+proc `rowHeaderWidth=`*(tableView: TableView, width: float32) =
+  if tableView.isNil:
+    return
+  let nextWidth = max(width, 0.0'f32)
+  if tableView.xRowHeaderWidth == nextWidth:
+    return
+  tableView.xRowHeaderWidth = nextWidth
+  tableView.noteColumnsChanged()
+
+proc rowHeaderTitle*(tableView: TableView): string =
+  if tableView.isNil: "" else: tableView.xRowHeaderTitle
+
+proc `rowHeaderTitle=`*(tableView: TableView, title: string) =
+  if tableView.isNil or tableView.xRowHeaderTitle == title:
+    return
+  tableView.xRowHeaderTitle = title
+  tableView.setNeedsDisplay(true)
+
+proc `showsRowHeader=`*(tableView: TableView, value: bool) =
+  if tableView.isNil or tableView.xShowsRowHeader == value:
+    return
+  tableView.xShowsRowHeader = value
+  tableView.noteColumnsChanged()
+
 proc defaultTableHeaderChrome*(): TableHeaderChrome =
   TableHeaderChrome(
     headerFill:
@@ -1574,15 +1619,55 @@ proc `showsHeader=`*(tableView: TableView, value: bool) =
 proc tableHeaderRect*(tableView: TableView): Rect =
   if not tableView.showsHeader():
     return rect(0.0, 0.0, 0.0, 0.0)
+  let rowHeaderWidth = tableView.visibleRowHeaderWidth()
   rect(
+    1.0'f32 + rowHeaderWidth,
     1.0'f32,
-    1.0'f32,
-    max(tableView.bounds().size.width - 2.0'f32, 0.0'f32),
+    max(tableView.bounds().size.width - 2.0'f32 - rowHeaderWidth, 0.0'f32),
     tableView.tableHeaderHeight(),
   )
 
 proc tableColumnRect*(tableView: TableView, column: TableColumn): Rect =
-  tableView.columnRect(tableView.bounds(), column)
+  if tableView.isNil or column.isNil:
+    return rect(0.0, 0.0, 0.0, 0.0)
+  tableView.tileTableContent()
+  let contentView = tableView.contentView()
+  if contentView.isNil:
+    return rect(0.0, 0.0, 0.0, 0.0)
+  let contentRect = tableView.columnRect(
+    rect(0.0, 0.0, contentView.bounds().size.width, tableView.bounds().h), column
+  )
+  if contentRect.isEmpty:
+    return rect(0.0, 0.0, 0.0, 0.0)
+  contentView.rectToView(contentRect, tableView).intersection(tableView.bounds())
+
+proc tableRowHeaderCornerRect*(tableView: TableView): Rect =
+  if tableView.isNil or not tableView.showsRowHeader() or not tableView.showsHeader():
+    return rect(0.0, 0.0, 0.0, 0.0)
+  rect(
+    1.0'f32, 1.0'f32, tableView.visibleRowHeaderWidth(), tableView.tableHeaderHeight()
+  )
+
+proc tableRowHeaderRect*(tableView: TableView): Rect =
+  if tableView.isNil or not tableView.showsRowHeader():
+    return rect(0.0, 0.0, 0.0, 0.0)
+  let headerHeight = tableView.tableHeaderHeight()
+  rect(
+    1.0'f32,
+    1.0'f32 + headerHeight,
+    tableView.visibleRowHeaderWidth(),
+    max(tableView.bounds().h - 2.0'f32 - headerHeight, 0.0'f32),
+  )
+
+proc tableRowHeaderCellRect*(tableView: TableView, row: int): Rect =
+  if tableView.isNil or not tableView.showsRowHeader():
+    return rect(0.0, 0.0, 0.0, 0.0)
+  let rowRect = tableView.rowItemRect(row)
+  if rowRect.isEmpty:
+    return rect(0.0, 0.0, 0.0, 0.0)
+  rect(
+    1.0'f32, rowRect.origin.y, tableView.visibleRowHeaderWidth(), rowRect.size.height
+  )
 
 proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
   let
@@ -1689,6 +1774,17 @@ proc resetHeaderCursorRects(tableView: TableView) =
   if not tableView.showsHeader():
     return
   let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
+  let rowHeaderRect = tableView.tableRowHeaderCornerRect()
+  if not rowHeaderRect.isEmpty:
+    tableView.addCursorRect(
+      rect(
+        rowHeaderRect.maxX - resizeHandleWidth,
+        rowHeaderRect.origin.y,
+        resizeHandleWidth * 2.0'f32,
+        rowHeaderRect.size.height,
+      ),
+      TableHeaderResizeCursorName,
+    )
   for column in tableView.visibleColumns():
     if column.resizePolicy() != tcrResizable:
       continue
@@ -1741,6 +1837,16 @@ proc tableCellText*(tableView: TableView, row: int, column: TableColumn): string
     text.get()
   else:
     ""
+
+proc rowHeaderText*(tableView: TableView, row: int): string =
+  if tableView.isNil or row notin 0 ..< tableView.rowCount():
+    return ""
+  let source = tableView.dataSource()
+  if not source.isNil:
+    let text = source.trySendLocal(textForRowHeader(), (tableView: tableView, row: row))
+    if text.isSome:
+      return text.get()
+  $row
 
 proc tableCellObjectValue*(
     tableView: TableView, row: int, column: TableColumn
@@ -1992,7 +2098,9 @@ proc tableRowSelectable(tableView: TableView, row: int): bool =
     true
 
 proc tableColumnAtPoint(tableView: TableView, point: Point): TableColumn =
-  tableView.columnAtPoint(point)
+  if tableView.isNil or tableView.contentView().isNil:
+    return nil
+  tableView.columnAtPoint(tableView.contentView().pointFromView(point, tableView))
 
 proc tableCellHitPolicy(
     tableView: TableView, row: int, column: TableColumn, target: View, event: MouseEvent
@@ -2136,10 +2244,11 @@ proc tileTableContent(tableView: TableView) =
     return
   let
     offset = tableView.listContentOffset()
+    rowHeaderWidth = tableView.visibleRowHeaderWidth()
     scrollFrame = rect(
+      1.0'f32 + rowHeaderWidth,
       1.0'f32,
-      1.0'f32,
-      max(tableView.bounds().size.width - 2.0'f32, 0.0'f32),
+      max(tableView.bounds().size.width - 2.0'f32 - rowHeaderWidth, 0.0'f32),
       max(tableView.bounds().size.height - 2.0'f32, 0.0'f32),
     )
   tableView.xScrollView.frame = scrollFrame
@@ -2207,6 +2316,14 @@ proc tableRowState(tableView: TableView, index: int): RowState =
     if ssFocused in tableView.widgetStateSet():
       rowStates.incl(ssFocused)
     initRowState(index, tableView.rowTextForSummary(index), states = rowStates)
+
+proc drawingTableRowState(tableView: TableView, row: RowState): RowState =
+  result = row
+  if tableView.isNil:
+    return
+  if not tableView.xShowsFocusedRowHighlight and
+      row.index == tableView.selectionLeadIndex():
+    result.states.excl(ssSelected)
 
 proc indexesInRange(selectionRange: Slice[int]): seq[int] =
   if selectionRange.b < selectionRange.a:
@@ -2776,6 +2893,23 @@ proc setHighlightedColumn(tableView: TableView, column: TableColumn) =
   tableView.xHighlightedColumn = next
   tableView.invalidateTableRows()
 
+proc clearPointerRowHighlight(tableView: TableView) =
+  if tableView.isNil or tableView.xHighlightedIndex < 0:
+    return
+  tableView.xHighlightedIndex = -1
+  tableView.invalidateTableRows()
+
+proc clearPointerColumnHighlight(tableView: TableView) =
+  if tableView.isNil:
+    return
+  tableView.setHighlightedColumn(nil)
+
+proc clearPointerHighlights*(tableView: TableView) =
+  if tableView.isNil:
+    return
+  tableView.clearPointerRowHighlight()
+  tableView.clearPointerColumnHighlight()
+
 proc reloadData*(tableView: TableView) =
   let oldFirst = tableView.firstVisibleIndex()
   let
@@ -3040,6 +3174,15 @@ proc rowItemRect*(tableView: TableView, itemIndex: int): Rect =
 
 proc rowItemIndexAtPoint*(tableView: TableView, point: Point): int =
   tableView.tileTableContent()
+  if tableView.showsRowHeader() and tableView.tableRowHeaderRect().contains(point):
+    let contentView = tableView.contentView()
+    if contentView.isNil:
+      return -1
+    let index =
+      tableView.rowIndexAtContentY(contentView.pointFromView(point, tableView).y)
+    if index in 0 ..< tableView.len():
+      return index
+    return -1
   let contentView = tableView.contentView()
   if contentView.isNil:
     return -1
@@ -3126,8 +3269,46 @@ proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
   tableView.xAllowsColumnSelection = value
   if not value:
     tableView.xSelectedColumns.setLen(0)
-    tableView.xHighlightedColumn = nil
+    tableView.clearPointerColumnHighlight()
   tableView.setNeedsDisplay(true)
+
+proc tracksPointerRowHighlights*(tableView: TableView): bool =
+  (not tableView.isNil) and tableView.xTracksPointerRowHighlights
+
+proc `tracksPointerRowHighlights=`*(tableView: TableView, value: bool) =
+  if tableView.isNil or tableView.xTracksPointerRowHighlights == value:
+    return
+  tableView.xTracksPointerRowHighlights = value
+  if not value:
+    tableView.clearPointerRowHighlight()
+
+proc tracksPointerColumnHighlights*(tableView: TableView): bool =
+  (not tableView.isNil) and tableView.xTracksPointerColumnHighlights
+
+proc `tracksPointerColumnHighlights=`*(tableView: TableView, value: bool) =
+  if tableView.isNil or tableView.xTracksPointerColumnHighlights == value:
+    return
+  tableView.xTracksPointerColumnHighlights = value
+  if not value:
+    tableView.clearPointerColumnHighlight()
+
+proc showsFocusedRowHighlight*(tableView: TableView): bool =
+  (not tableView.isNil) and tableView.xShowsFocusedRowHighlight
+
+proc `showsFocusedRowHighlight=`*(tableView: TableView, value: bool) =
+  if tableView.isNil or tableView.xShowsFocusedRowHighlight == value:
+    return
+  tableView.xShowsFocusedRowHighlight = value
+  tableView.invalidateTableRows()
+
+proc showsFocusedColumnHighlight*(tableView: TableView): bool =
+  (not tableView.isNil) and tableView.xShowsFocusedColumnHighlight
+
+proc `showsFocusedColumnHighlight=`*(tableView: TableView, value: bool) =
+  if tableView.isNil or tableView.xShowsFocusedColumnHighlight == value:
+    return
+  tableView.xShowsFocusedColumnHighlight = value
+  tableView.invalidateTableRows()
 
 proc selectedColumns*(tableView: TableView): seq[TableColumn] =
   tableView.xSelectedColumns
@@ -4006,7 +4187,7 @@ proc shouldDrawSelectedTableColumn(tableView: TableView, column: TableColumn): b
   if not tableView.xHighlightedColumn.isNil:
     column == tableView.xHighlightedColumn
   else:
-    column in tableView.xSelectedColumns
+    tableView.xShowsFocusedColumnHighlight and column in tableView.xSelectedColumns
 
 proc drawSelectedTableColumn(
     tableView: TableView,
@@ -4045,9 +4226,17 @@ proc drawFocusedTableCell(
     rect: Rect,
     style: RowItemStyle,
 ) =
-  if tableView.isNil or context.isNil or column.isNil or
-      tableView.xFocusedColumn != column or row != tableView.selectionLeadIndex() or
-      not tableView.focused():
+  if tableView.isNil or context.isNil or column.isNil:
+    return
+  let
+    isKeyboardFocusedCell =
+      tableView.xFocusedColumn == column and row == tableView.selectionLeadIndex()
+    isEditingCell =
+      tableView.xEditing.active and tableView.xEditing.row == row and
+      tableView.xEditing.column == column
+  if not (isKeyboardFocusedCell or isEditingCell):
+    return
+  if not tableView.focused() and not isEditingCell:
     return
   var box = tableView.focusedCellRingBox(context, style)
   if box.focusRingWidth <= 0.0'f32 or box.focusRingColor.a <= 0.0'f32:
@@ -4055,7 +4244,19 @@ proc drawFocusedTableCell(
   let ringRect = rect.inset(insets(max(box.focusRingWidth, 1.0'f32)))
   if ringRect.isEmpty:
     return
+  let clipRect = context.visibleRect().intersection(ringRect)
+  if clipRect.isEmpty:
+    return
+  let focusClip = context.addRenderRectangle(
+    FocusRingDrawLevel,
+    (-1).FigIdx,
+    context.renderRectFor(clipRect),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    clips = true,
+  )
   discard context.addRenderRectangle(
+    FocusRingDrawLevel,
+    focusClip,
     context.renderRectFor(ringRect),
     fill(color(0.0, 0.0, 0.0, 0.0)),
     box.focusRingColor,
@@ -4096,13 +4297,15 @@ proc drawTableRow(
 ) =
   if tableView.isNil or context.isNil:
     return
-  let emptyRow = initRowState(row.index, "", states = row.states)
+  let
+    drawingRow = tableView.drawingTableRowState(row)
+    emptyRow = initRowState(drawingRow.index, "", states = drawingRow.states)
   tableView.drawTableRowItem(context, rect, emptyRow)
   if row.index < 0:
     return
   let
     rowBounds = rect(0.0, 0.0, rect.size.width, rect.size.height)
-    style = tableView.rowItemStyle(context, row.states)
+    style = tableView.rowItemStyle(context, drawingRow.states)
   for column in tableView.columns:
     if column.hidden():
       continue
@@ -4678,7 +4881,8 @@ proc naturalSize(tableView: TableView): Size =
       listStyle.minSize.width,
       max(
         itemStyle.minSize.width,
-        max(tableView.visibleColumnWidth(), maxTextWidth) +
+        tableView.visibleRowHeaderWidth() +
+          max(tableView.visibleColumnWidth(), maxTextWidth) +
           itemStyle.text.insets.horizontal + 2.0'f32,
       ),
     ),
@@ -4846,8 +5050,11 @@ proc updateHighlightedCellAtPoint(tableView: TableView, point: Point): int =
   if tableView.isNil:
     return -1
   result = tableView.rowItemIndexAtPoint(point)
-  tableView.highlightedIndex = result
-  if result >= 0:
+  if tableView.xTracksPointerRowHighlights:
+    tableView.highlightedIndex = result
+  else:
+    tableView.clearPointerRowHighlight()
+  if tableView.xTracksPointerColumnHighlights and result >= 0:
     tableView.setHighlightedColumn(tableView.tableColumnAtPoint(point))
   else:
     tableView.setHighlightedColumn(nil)
@@ -4955,8 +5162,14 @@ protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
     if owner of Window:
       discard Window(owner).makeFirstResponder(tableView, focusVisible = false)
     tableView.selectCell(row, column)
-    tableView.highlightedIndex = row
-    tableView.setHighlightedColumn(column)
+    if tableView.xTracksPointerRowHighlights:
+      tableView.highlightedIndex = row
+    else:
+      tableView.clearPointerRowHighlight()
+    if tableView.xTracksPointerColumnHighlights:
+      tableView.setHighlightedColumn(column)
+    else:
+      tableView.clearPointerColumnHighlight()
     tableView.xPressedIndex = row
     tableView.invalidateTableRows()
     true
@@ -5184,6 +5397,76 @@ proc drawTableHeaderCellTitle*(
     column.alignment(),
   )
 
+proc drawTableRowHeaderCellTitle(
+    tableView: TableView,
+    context: DrawContext,
+    text: string,
+    rect: Rect,
+    chrome: TableHeaderChrome,
+    alignment = taRight,
+) =
+  if tableView.isNil or context.isNil or rect.isEmpty or text.len == 0:
+    return
+  let
+    titleRect = rect(
+      rect.origin.x + 6.0'f32,
+      rect.origin.y,
+      max(rect.size.width - 12.0'f32, 0.0'f32),
+      rect.size.height,
+    )
+    textStyle = context.appearance.resolveTextStyle(
+      controlStyle(srTableHeaderCell), chrome.textColor, insets(0.0)
+    )
+  context.addText(
+    titleRect, clippedText(text, titleRect.size.width, textStyle), textStyle, alignment
+  )
+
+proc drawTableRowHeaderCorner*(
+    tableView: TableView, context: DrawContext, chrome: TableHeaderChrome
+) =
+  if tableView.isNil or context.isNil:
+    return
+  let rect = tableView.tableRowHeaderCornerRect()
+  if rect.isEmpty:
+    return
+  discard context.addRenderRectangle(
+    context.renderRectFor(rect),
+    chrome.cellFill,
+    chrome.cellBorderColor,
+    chrome.borderWidth,
+    cornerRadius = chrome.cornerRadius,
+    cornerRadii = initCornerRadii(chrome.cornerRadius, 0.0, 0.0, 0.0),
+  )
+  tableView.drawTableRowHeaderCellTitle(
+    context, tableView.rowHeaderTitle(), rect, chrome, taCenter
+  )
+  discard context.addRenderRectangle(
+    context.renderRectFor(
+      rect(rect.maxX - chrome.borderWidth, rect.origin.y, chrome.borderWidth, rect.h)
+    ),
+    fill(chrome.cellBorderColor),
+  )
+
+proc drawTableRowHeaders*(
+    tableView: TableView, context: DrawContext, chrome: TableHeaderChrome
+) =
+  if tableView.isNil or context.isNil or not tableView.showsRowHeader():
+    return
+  let rows = tableView.contentView().visibleContentRows()
+  for row in rows.first ..< rows.last:
+    let rect = tableView.tableRowHeaderCellRect(row)
+    if rect.isEmpty:
+      continue
+    discard context.addRenderRectangle(
+      context.renderRectFor(rect),
+      chrome.cellFill,
+      chrome.cellBorderColor,
+      chrome.borderWidth,
+    )
+    tableView.drawTableRowHeaderCellTitle(
+      context, tableView.rowHeaderText(row), rect, chrome
+    )
+
 proc drawTableHeader*(
     tableView: TableView, context: DrawContext, chrome: TableHeaderChrome
 ) =
@@ -5192,6 +5475,7 @@ proc drawTableHeader*(
   let headerRect = tableView.tableHeaderRect()
   if headerRect.isEmpty:
     return
+  tableView.drawTableRowHeaderCorner(context, chrome)
   tableView.drawTableHeaderBackground(context, headerRect, chrome)
   let visibleColumns = tableView.visibleTableColumns()
   for index, column in visibleColumns:
@@ -5226,9 +5510,19 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
 
   method headerHitTest(tableView: TableView, point: Point): TableHeaderHit =
     result = TableHeaderHit(columnIndex: -1, part: thpNone)
-    if tableView.isNil or not tableView.tableHeaderRect().contains(point):
+    if tableView.isNil:
       return
     let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
+    let rowHeaderRect = tableView.tableRowHeaderCornerRect()
+    if rowHeaderRect.contains(point):
+      result.rect = rowHeaderRect
+      if point.x >= rowHeaderRect.maxX - resizeHandleWidth:
+        result.part = thpRowHeaderResizeHandle
+      else:
+        result.part = thpRowHeader
+      return
+    if not tableView.tableHeaderRect().contains(point):
+      return
     for index, column in tableView.xColumns:
       let rect = tableView.tableHeaderColumnRect(column)
       if rect.isEmpty or column.resizePolicy() != tcrResizable:
@@ -5314,7 +5608,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     if tableView.isNil or event.button != mbPrimary:
       return false
     let hit = tableView.tableHeaderHitTest(event.location)
-    if hit.part == thpNone or hit.column.isNil:
+    if hit.part == thpNone:
       return false
     tableView.xHeaderTrackingPart = hit.part
     tableView.xTrackingColumn = hit.column
@@ -5323,20 +5617,35 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     tableView.xHeaderDraggingColumn = false
     tableView.clearHeaderDragInsertion()
     tableView.xDragStartPoint = event.location
-    tableView.xDragStartWidth = hit.column.width()
+    tableView.xDragStartWidth =
+      if hit.part == thpRowHeaderResizeHandle:
+        tableView.rowHeaderWidth()
+      elif hit.column.isNil:
+        0.0'f32
+      else:
+        hit.column.width()
     tableView.setNeedsDisplay(true)
     true
 
   method headerMouseDragged(tableView: TableView, event: MouseEvent): bool =
-    if tableView.isNil or tableView.xTrackingColumn.isNil:
+    if tableView.isNil or tableView.xHeaderTrackingPart == thpNone:
       return false
     case tableView.xHeaderTrackingPart
+    of thpRowHeaderResizeHandle:
+      tableView.rowHeaderWidth =
+        tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x
+    of thpRowHeader:
+      discard
     of thpResizeHandle:
+      if tableView.xTrackingColumn.isNil:
+        return false
       tableView.resizeColumn(
         tableView.xTrackingColumn,
         tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x,
       )
     of thpColumn:
+      if tableView.xTrackingColumn.isNil:
+        return false
       if abs(event.location.x - tableView.xDragStartPoint.x) >
           tableView.tableStyle().headerDragThreshold:
         tableView.xHeaderDraggingColumn = true
@@ -5351,7 +5660,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     true
 
   method headerMouseUp(tableView: TableView, event: MouseEvent): bool =
-    if tableView.isNil or tableView.xTrackingColumn.isNil:
+    if tableView.isNil or tableView.xHeaderTrackingPart == thpNone:
       return false
     let
       hit = tableView.tableHeaderHitTest(event.location)
@@ -5369,7 +5678,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     tableView.xHeaderDraggingColumn = false
     tableView.xPressedColumn = nil
     tableView.clearHeaderDragInsertion()
-    if clickedPart == thpColumn:
+    if clickedPart == thpColumn and not clickedColumn.isNil:
       if moved:
         let targetIndex =
           if insertionIndex < 0:
@@ -5839,7 +6148,8 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
   method cursorUpdate(tableView: TableView, event: MouseEvent): bool =
     if tableView.isNil:
       return false
-    tableView.tableHeaderHitTest(event.location).part == thpResizeHandle
+    tableView.tableHeaderHitTest(event.location).part in
+      {thpResizeHandle, thpRowHeaderResizeHandle}
 
   method mouseDown(tableView: TableView, event: MouseEvent): bool =
     if tableView.headerMouseDown(event):
@@ -5847,14 +6157,14 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     tableView.defaultTableViewMouseDown(event)
 
   method mouseDragged(tableView: TableView, event: MouseEvent): bool =
-    if tableView.xTrackingColumn != nil:
+    if tableView.xHeaderTrackingPart != thpNone:
       return tableView.headerMouseDragged(event)
     if tableView.updateActiveTableDrag(event):
       return true
     tableView.defaultTableViewMouseDragged(event)
 
   method mouseUp(tableView: TableView, event: MouseEvent): bool =
-    if tableView.xTrackingColumn != nil:
+    if tableView.xHeaderTrackingPart != thpNone:
       return tableView.headerMouseUp(event)
     if tableView.performActiveTableDrag(event):
       return true
@@ -5869,6 +6179,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
 
   method mouseMoved(tableView: TableView, event: MouseEvent): bool =
     if tableView.headerMouseMoved(event):
+      tableView.clearPointerRowHighlight()
       tableView.setHighlightedColumn(nil)
       return true
     if tableView.isEnabled():
@@ -5877,6 +6188,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     false
 
   method keyDown(tableView: TableView, event: KeyEvent): bool =
+    tableView.clearPointerHighlights()
     if event.key == keyEnter and tableView.beginEditingFocusedCell():
       return true
     tableView.defaultTableViewKeyDown(event)
@@ -6034,7 +6346,9 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       listStyle.box.shadows,
       clips = true,
     )
-    tableView.drawTableHeader(context)
+    let headerChrome = tableView.tableHeaderChrome(context)
+    tableView.drawTableHeader(context, headerChrome)
+    tableView.drawTableRowHeaders(context, headerChrome)
     if ssFocusVisible in focusedState:
       let headerHeight = tableView.tableHeaderHeight()
       let visibleBounds = tableView.visibleRect()
@@ -6093,6 +6407,12 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xHeaderHeight = style.headerHeight
   tableView.xClickedRow = -1
   tableView.xAllowsColumnSelection = false
+  tableView.xShowsRowHeader = false
+  tableView.xRowHeaderWidth = 48.0'f32
+  tableView.xTracksPointerRowHighlights = true
+  tableView.xTracksPointerColumnHighlights = true
+  tableView.xShowsFocusedRowHighlight = true
+  tableView.xShowsFocusedColumnHighlight = true
   tableView.xEditing = TableEditingState(row: -1)
   tableView.xEndedEditingRow = -1
   tableView.xTableDropTarget = initDraggingDropTarget()

@@ -179,18 +179,38 @@ proc renderedFocusedCellStroke(
     widthRange, heightRange: Slice[float32],
 ): bool =
   let renders = buildRenders(view, appearance)
-  if DefaultDrawLevel notin renders:
-    return false
-  for node in renders[DefaultDrawLevel].nodes:
-    if node.kind != nkRectangle:
+  for layer in [DefaultDrawLevel, FocusRingDrawLevel]:
+    if layer notin renders:
       continue
-    if node.stroke.weight != strokeWidth or node.stroke.fill.kind != flColor or
-        node.stroke.fill.color != strokeColor.rgba:
+    for node in renders[layer].nodes:
+      if node.kind != nkRectangle:
+        continue
+      if node.stroke.weight != strokeWidth or node.stroke.fill.kind != flColor or
+          node.stroke.fill.color != strokeColor.rgba:
+        continue
+      let rect = node.renderedRect()
+      if rect.origin.x in xRange and rect.origin.y in yRange and
+          rect.size.width in widthRange and rect.size.height in heightRange:
+        return true
+
+proc renderedFocusedCellStroke(
+    view: View,
+    appearance: Appearance,
+    strokeWidth: float32,
+    xRange, yRange: Slice[float32],
+    widthRange, heightRange: Slice[float32],
+): bool =
+  let renders = buildRenders(view, appearance)
+  for layer in [DefaultDrawLevel, FocusRingDrawLevel]:
+    if layer notin renders:
       continue
-    let rect = node.renderedRect()
-    if rect.origin.x in xRange and rect.origin.y in yRange and
-        rect.size.width in widthRange and rect.size.height in heightRange:
-      return true
+    for node in renders[layer].nodes:
+      if node.kind != nkRectangle or node.stroke.weight != strokeWidth:
+        continue
+      let rect = node.renderedRect()
+      if rect.origin.x in xRange and rect.origin.y in yRange and
+          rect.size.width in widthRange and rect.size.height in heightRange:
+        return true
 
 proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
   let
@@ -875,6 +895,52 @@ suite "NimKit TableView":
       visible.add column.identifier
     check visible == @["name"]
 
+  test "table row headers pin outside horizontal scrolling and resize from corner":
+    let
+      window = newWindow("Table row headers", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      tableView = newTableView(frame = rect(0, 0, 220, 120))
+      first = newTableColumn("a", "A", width = 100.0)
+      second = newTableColumn("b", "B", width = 100.0)
+
+    tableView.addColumn(first)
+    tableView.addColumn(second)
+    tableView.rowCount = 5
+    tableView.rowHeight = 24.0
+    tableView.showsRowHeader = true
+    tableView.rowHeaderTitle = "Row"
+    tableView.rowHeaderWidth = 44.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.tableHeaderRect().rectsClose(rect(45.0, 1.0, 174.0, 24.0))
+    check tableView.tableRowHeaderCornerRect().rectsClose(rect(1.0, 1.0, 44.0, 24.0))
+    check tableView.tableRowHeaderCellRect(0).rectsClose(rect(1.0, 25.0, 44.0, 24.0))
+    check tableView.tableColumnRect(first).origin.x == 45.0'f32
+    check tableView.rowHeaderText(2) == "2"
+    check tableView.tableHeaderHitTest(initPoint(44.0, 12.0)).part ==
+      thpRowHeaderResizeHandle
+
+    tableView.scrollView().contentOffset = initPoint(20.0, 0.0)
+    discard buildRenders(root)
+    check tableView.tableRowHeaderCellRect(0).origin.x == 1.0'f32
+    check tableView.tableColumnRect(first).origin.x < 45.0'f32
+
+    let rowHeaderPoint = tableView.pointToWindow(initPoint(20.0, 85.0))
+    check window.mouseDownAt(rowHeaderPoint)
+    check window.mouseUpAt(rowHeaderPoint)
+    check tableView.selectedIndex == 2
+    check tableView.focusedColumn.isNil
+
+    let
+      start = tableView.pointToWindow(initPoint(44.0, 12.0))
+      drag = tableView.pointToWindow(initPoint(54.0, 12.0))
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(drag)
+    check tableView.rowHeaderWidth == 54.0'f32
+    check window.mouseUpAt(drag)
+
   test "table header rendering mouse tracking and persistence adapters":
     let
       tableView = newTableView(frame = rect(12, 24, 300, 160))
@@ -1330,6 +1396,42 @@ suite "NimKit TableView":
     check tableView.draggingSession().isNil
     check model.arrangedRows().mapIt(it.identifier) == @["grace", "ada", "alan"]
     check tableView.selectedTableRowIdentifiers() == @["ada"]
+
+  test "table row header drags start row reordering":
+    let
+      window = newWindow("Table row header drag reorder", frame = rect(0, 0, 360, 180))
+      root = newView(frame = rect(0, 0, 360, 180))
+      tableView = newTableView(frame = rect(10, 10, 260, 120))
+      model = newTableModel(tableModelRows(), tableModelColumns())
+
+    tableView.bindTableModel(model)
+    tableView.allowsRowReordering = true
+    tableView.rowHeight = 24.0
+    tableView.showsRowHeader = true
+    tableView.rowHeaderWidth = 42.0
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    let
+      firstHeader = tableView.tableRowHeaderCellRect(0)
+      secondHeader = tableView.tableRowHeaderCellRect(1)
+      start = tableView.pointToWindow(
+        initPoint(firstHeader.origin.x + 12.0'f32, firstHeader.origin.y + 12.0'f32)
+      )
+      drop = tableView.pointToWindow(
+        initPoint(secondHeader.origin.x + 12.0'f32, secondHeader.maxY - 1.0'f32)
+      )
+
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(drop)
+    check not tableView.draggingSession().isNil
+    check tableView.currentDropTarget().kind == ddtRow
+    check tableView.currentDropTarget().position == ddpAfter
+
+    check window.mouseUpAt(drop)
+    check tableView.draggingSession().isNil
+    check model.arrangedRows().mapIt(it.identifier) == @["grace", "ada", "alan"]
 
   test "table columns move cleanly between table views":
     let
@@ -1959,6 +2061,144 @@ suite "NimKit TableView":
       18.0'f32 .. 24.0'f32,
     )
 
+  test "table view keeps focused cell ring visible while editing":
+    let
+      window = newWindow("Table editing cell ring", frame = rect(0, 0, 280, 120))
+      root = newView(frame = rect(0, 0, 280, 120))
+      tableView = newTableView(frame = rect(0, 0, 240, 72))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+      cellFocusColor = color(0.96, 0.32, 0.18, 0.90)
+
+    var theme = initTheme()
+    theme[srRowItem, StyleFocusRingColor] = cellFocusColor
+    theme[srRowItem, StyleFocusRingWidth] = 2.0
+    theme[srTableView, StyleFocusRingColor] = cellFocusColor
+    theme[srTableView, StyleFocusRingWidth] = 2.0
+
+    tableView.showsHeader = false
+    tableView.rowCount = 2
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.beginEditingCell(0, state)
+    check tableView.editingState.active
+    check tableView.focusedColumn == state
+    check root.renderedFocusedCellStroke(
+      initAppearance(theme),
+      2.0,
+      66.0'f32 .. 78.0'f32,
+      0.0'f32 .. 8.0'f32,
+      84.0'f32 .. 90.0'f32,
+      18.0'f32 .. 24.0'f32,
+    )
+
+  test "table view focused row and column highlights can be toggled independently":
+    let
+      window =
+        newWindow("Table focused highlight toggles", frame = rect(0, 0, 280, 120))
+      root = newView(frame = rect(0, 0, 280, 120))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+      selectedRowFill = initAppearance()
+        .resolveRowItemStyle(controlStyle(srRowItem, {ssSelected, ssFocused})).box.fill
+      selectedColumnFill = fill(color(0.24, 0.56, 1.0, 0.12))
+      hoverColumnFill = fill(color(0.24, 0.56, 1.0, 0.06))
+
+    var appearance = initAppearance()
+    appearance[srTableView, StyleColumnSelectionFill] = selectedColumnFill
+    appearance[srTableView, StyleColumnHoverFill] = hoverColumnFill
+
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    tableView.selectCell(0, state)
+    tableView.focused = true
+    tableView.appearance = appearance
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.showsFocusedRowHighlight
+    check tableView.showsFocusedColumnHighlight
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedRowFill,
+      0.0'f32 .. 2.0'f32,
+      0.0'f32 .. 2.0'f32,
+      238.0'f32 .. 242.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedColumnFill,
+      68.0'f32 .. 72.0'f32,
+      0.0'f32 .. 2.0'f32,
+      88.0'f32 .. 92.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+    tableView.showsFocusedRowHighlight = false
+    check ssSelected in tableView.visibleRowSummaries()[0].states
+    check not root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedRowFill,
+      0.0'f32 .. 2.0'f32,
+      0.0'f32 .. 2.0'f32,
+      238.0'f32 .. 242.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedColumnFill,
+      68.0'f32 .. 72.0'f32,
+      0.0'f32 .. 2.0'f32,
+      88.0'f32 .. 92.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+    tableView.showsFocusedRowHighlight = true
+    tableView.showsFocusedColumnHighlight = false
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedRowFill,
+      0.0'f32 .. 2.0'f32,
+      0.0'f32 .. 2.0'f32,
+      238.0'f32 .. 242.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+    check not root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedColumnFill,
+      68.0'f32 .. 72.0'f32,
+      0.0'f32 .. 2.0'f32,
+      88.0'f32 .. 92.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+    check window.mouseMovedAt(tableView.tableCellPoint(1, owner))
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      hoverColumnFill,
+      159.0'f32 .. 163.0'f32,
+      24.0'f32 .. 26.0'f32,
+      78.0'f32 .. 82.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
   test "table view selected column accent follows mouse hover":
     let
       window = newWindow("Table selected column hover", frame = rect(0, 0, 280, 120))
@@ -2003,6 +2243,126 @@ suite "NimKit TableView":
       68.0'f32 .. 72.0'f32,
       24.0'f32 .. 26.0'f32,
       88.0'f32 .. 92.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+  test "table view keyboard clears pointer row and column highlights":
+    let
+      window =
+        newWindow("Table pointer highlights keyboard", frame = rect(0, 0, 280, 120))
+      root = newView(frame = rect(0, 0, 280, 120))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+      hoverColumnFill = fill(color(0.24, 0.56, 1.0, 0.06))
+
+    var appearance = initAppearance()
+    appearance[srTableView, StyleColumnHoverFill] = hoverColumnFill
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    tableView.selectCell(0, state)
+    tableView.appearance = appearance
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check window.mouseMovedAt(tableView.tableCellPoint(1, owner))
+    check tableView.highlightedIndex == 1
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      hoverColumnFill,
+      159.0'f32 .. 163.0'f32,
+      24.0'f32 .. 26.0'f32,
+      78.0'f32 .. 82.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+    check window.makeFirstResponder(tableView)
+    check window.pressKey(keyArrowDown)
+    check tableView.highlightedIndex == -1
+    check tableView.selectedIndex == 1
+    check not root.renderedRectangleFillIn(
+      initAppearance(),
+      hoverColumnFill,
+      159.0'f32 .. 163.0'f32,
+      24.0'f32 .. 26.0'f32,
+      78.0'f32 .. 82.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+  test "table view enter editing clears pointer highlights":
+    var fixture = newEditableTableFixture("Table pointer highlights edit")
+    fixture.tableView.allowsColumnSelection = true
+    fixture.tableView.selectCell(0, fixture.state)
+    discard buildRenders(fixture.root)
+
+    check fixture.window.mouseMovedAt(
+      fixture.tableView.tableCellPoint(1, fixture.owner)
+    )
+    check fixture.tableView.highlightedIndex == 1
+
+    check fixture.window.makeFirstResponder(fixture.tableView)
+    check fixture.window.pressKey(keyEnter)
+    check fixture.tableView.editingState.active
+    check fixture.tableView.highlightedIndex == -1
+
+  test "table view pointer row and column highlights can be toggled independently":
+    let
+      window =
+        newWindow("Table pointer highlight toggles", frame = rect(0, 0, 280, 120))
+      root = newView(frame = rect(0, 0, 280, 120))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+      hoverColumnFill = fill(color(0.24, 0.56, 1.0, 0.06))
+
+    var appearance = initAppearance()
+    appearance[srTableView, StyleColumnHoverFill] = hoverColumnFill
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    tableView.selectCell(0, state)
+    tableView.appearance = appearance
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.tracksPointerRowHighlights
+    check tableView.tracksPointerColumnHighlights
+
+    tableView.tracksPointerRowHighlights = false
+    check window.mouseMovedAt(tableView.tableCellPoint(1, owner))
+    check tableView.highlightedIndex == -1
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      hoverColumnFill,
+      159.0'f32 .. 163.0'f32,
+      24.0'f32 .. 26.0'f32,
+      78.0'f32 .. 82.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+    tableView.tracksPointerRowHighlights = true
+    tableView.tracksPointerColumnHighlights = false
+    check window.mouseMovedAt(tableView.tableCellPoint(2, project))
+    check tableView.highlightedIndex == 2
+    check not root.renderedRectangleFillIn(
+      initAppearance(),
+      hoverColumnFill,
+      0.0'f32 .. 2.0'f32,
+      48.0'f32 .. 50.0'f32,
+      68.0'f32 .. 72.0'f32,
       22.0'f32 .. 26.0'f32,
     )
 
