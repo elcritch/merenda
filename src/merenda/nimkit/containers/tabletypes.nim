@@ -34,13 +34,13 @@ type
 
   TableModel* = ref object of DynamicAgent
 
-  TableRowView = ref object of View
+  # TableRowView = ref object of View
 
-  TableContentView = ref object of View
+  # TableContentView = ref object of View
 
   TableViewStateStore* = ref object of DynamicAgent
 
-  TableColumn* = ref object
+  TableColumn* = ref object of RootObj
 
 
 type

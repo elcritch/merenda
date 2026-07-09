@@ -29,11 +29,11 @@ const
   TableSelectionIdentityPrefix = "ids:"
 
 type
-  TableRowViewImpl = ref object of TableRowView 
+  TableRowView = ref object of View 
     xTableView: TableView
     xRow: RowState
 
-  TableContentViewImpl = ref object of TableContentView 
+  TableContentView = ref object of View 
     xTableView: TableView
     xRowViews: seq[TableRowView]
 
@@ -154,12 +154,6 @@ type
     xStyleId: string
     xStyleClasses: seq[string]
     xUserInfo: DynamicAgent
-
-const
-  tsmNone* = TableSelectionMode.lsmNone
-  tsmSingle* = TableSelectionMode.lsmSingle
-  tsmMultiple* = TableSelectionMode.lsmMultiple
-  tsmExtended* = TableSelectionMode.lsmExtended
 
 const TableViewStateDefaultsPrefix = "nimkit.table.state."
 
@@ -687,7 +681,7 @@ func tableModelColumnTitle(column: TableModelColumn): string =
   else:
     column.valueKey
 
-proc tableModelColumnKey(model: TableModel, column: TableColumn): string =
+proc tableModelColumnKey(model: TableModelImpl, column: TableColumnImpl): string =
   if column.isNil:
     return ""
   let identifier = column.xIdentifier
@@ -736,7 +730,7 @@ proc compareTableRows(
         result = -result
       return
 
-proc sourceIndexOfIdentifier(model: TableModel, identifier: string): int =
+proc sourceIndexOfIdentifier(model: TableModelImpl, identifier: string): int =
   if model.isNil or identifier.len == 0:
     return -1
   for index, row in model.xRows:
@@ -744,7 +738,7 @@ proc sourceIndexOfIdentifier(model: TableModel, identifier: string): int =
       return index
   -1
 
-proc arrangedSourceIndexes(model: TableModel): seq[int] =
+proc arrangedSourceIndexes(model: TableModelImpl): seq[int] =
   if model.isNil:
     return
   for index, row in model.xRows:
@@ -759,7 +753,7 @@ proc arrangedSourceIndexes(model: TableModel): seq[int] =
         compareTableRows(model.xRows[a], model.xRows[b], model.xSortDescriptors)
     )
 
-proc arrangedSourceIndex(model: TableModel, index: int): int =
+proc arrangedSourceIndex(model: TableModelImpl, index: int): int =
   let indexes = model.arrangedSourceIndexes()
   if index in 0 ..< indexes.len:
     indexes[index]
@@ -771,6 +765,7 @@ proc initTableModelFields*(
     rows: openArray[TableRowValue] = [],
     columns: openArray[TableModelColumn] = [],
 ) =
+  let model = TableModelImpl(model)
   model.xRows = @rows
   model.xColumns = @columns
   model.installTableModelProtocols()
@@ -782,7 +777,7 @@ proc newTableModel*(
   result.initTableModelFields(rows, columns)
 
 proc len*(model: TableModel): int =
-  model.arrangedSourceIndexes().len
+  TableModelImpl(model).arrangedSourceIndexes().len
 
 proc sourceLen*(model: TableModel): int =
   if model.isNil: 0 else: model.xRows.len
