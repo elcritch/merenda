@@ -334,15 +334,16 @@ proc newCellsController(table: TableView): CellsController =
 
 proc installCellsSelectionAppearance(table: TableView) =
   let
-    selectionFill = fill(color(0.24, 0.56, 1.0, 0.14))
-    hoverFill = fill(color(0.24, 0.56, 1.0, 0.07))
+    selectionFill = fill(color(0.24, 0.56, 1.0, 0.065))
+    hoverFill = fill(color(0.24, 0.56, 1.0, 0.14))
+    rowHighlightFill = fill(color(0.973, 0.985, 1.0, 1.0))
     selectedTextColor = color(0.08, 0.09, 0.11, 1.0)
     tableStyle = initStyleSelector(srTableView, classes = @[CellsTableClass])
 
   var appearance = initAppearance()
   for states in [{ssSelected}]:
     let rowStyle = initStyleSelector(srRowItem, states, classes = @[CellsTableClass])
-    appearance[rowStyle, StyleFill] = selectionFill
+    appearance[rowStyle, StyleFill] = rowHighlightFill
     appearance[rowStyle, StyleTextColor] = selectedTextColor
 
   for states in [
@@ -354,7 +355,7 @@ proc installCellsSelectionAppearance(table: TableView) =
     {ssSelected, ssPressed},
   ]:
     let rowStyle = initStyleSelector(srRowItem, states, classes = @[CellsTableClass])
-    appearance[rowStyle, StyleFill] = hoverFill
+    appearance[rowStyle, StyleFill] = rowHighlightFill
     appearance[rowStyle, StyleTextColor] = selectedTextColor
 
   appearance[tableStyle, StyleColumnSelectionFill] = selectionFill
