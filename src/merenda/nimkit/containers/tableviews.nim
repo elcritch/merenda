@@ -435,6 +435,7 @@ proc drawTableHeaderCellChrome*(
   chrome: TableHeaderChrome,
   firstVisible = false,
   lastVisible = false,
+  parent = (-1).FigIdx,
 )
 
 proc drawTableHeaderCellTitle*(
@@ -443,10 +444,14 @@ proc drawTableHeaderCellTitle*(
   column: TableColumn,
   rect: Rect,
   chrome: TableHeaderChrome,
+  parent = (-1).FigIdx,
 )
 
 proc drawTableHeaderInsertionIndicator*(
-  tableView: TableView, context: DrawContext, chrome: TableHeaderChrome
+  tableView: TableView,
+  context: DrawContext,
+  chrome: TableHeaderChrome,
+  parent = (-1).FigIdx,
 )
 
 proc drawTableHeaderSortIndicator*(
@@ -455,6 +460,7 @@ proc drawTableHeaderSortIndicator*(
   rect: Rect,
   direction: TableSortDirection,
   chrome: TableHeaderChrome,
+  parent = (-1).FigIdx,
 )
 
 proc drawTableHeaderResizeHandle*(
@@ -463,6 +469,7 @@ proc drawTableHeaderResizeHandle*(
   column: TableColumn,
   rect: Rect,
   chrome: TableHeaderChrome,
+  parent = (-1).FigIdx,
 )
 
 proc syncTableScrollChrome(tableView: TableView)
@@ -5211,6 +5218,7 @@ proc drawTableHeaderSortIndicator*(
     rect: Rect,
     direction: TableSortDirection,
     chrome: TableHeaderChrome,
+    parent = (-1).FigIdx,
 ) =
   if direction == tsdNone or context.isNil:
     return
@@ -5239,8 +5247,8 @@ proc drawTableHeaderSortIndicator*(
     rightBase = initPoint(centerX + halfWidth, baseY)
     indicatorFill = fill(chrome.sortIndicatorColor)
 
-  discard context.addRenderLine(leftBase, apex, indicatorFill, lineWeight)
-  discard context.addRenderLine(apex, rightBase, indicatorFill, lineWeight)
+  discard context.addRenderLine(parent, leftBase, apex, indicatorFill, lineWeight)
+  discard context.addRenderLine(parent, apex, rightBase, indicatorFill, lineWeight)
 
 proc drawTableHeaderResizeHandle*(
     tableView: TableView,
@@ -5248,6 +5256,7 @@ proc drawTableHeaderResizeHandle*(
     column: TableColumn,
     rect: Rect,
     chrome: TableHeaderChrome,
+    parent = (-1).FigIdx,
 ) =
   if tableView.isNil or context.isNil or column.isNil or rect.isEmpty:
     return
@@ -5271,10 +5280,12 @@ proc drawTableHeaderResizeHandle*(
   if handleHeight <= 0.0'f32:
     return
   discard context.addRenderRectangle(
+    parent,
     context.renderRectFor(rect(rect.maxX - 1.0'f32, handleY, 1.0, handleHeight)),
     fill(handleColor),
   )
   discard context.addRenderRectangle(
+    parent,
     context.renderRectFor(
       rect(
         rect.maxX - 3.0'f32,
@@ -5287,7 +5298,10 @@ proc drawTableHeaderResizeHandle*(
   )
 
 proc drawTableHeaderInsertionIndicator*(
-    tableView: TableView, context: DrawContext, chrome: TableHeaderChrome
+    tableView: TableView,
+    context: DrawContext,
+    chrome: TableHeaderChrome,
+    parent = (-1).FigIdx,
 ) =
   if tableView.isNil or context.isNil:
     return
@@ -5299,11 +5313,13 @@ proc drawTableHeaderInsertionIndicator*(
     insertionRect =
       rect(rect.origin.x, rect.origin.y, chrome.insertionWidth, rect.size.height)
   discard context.addRenderRectangle(
+    parent,
     context.renderRectFor(insertionRect),
     chrome.insertionIndicatorFill,
     cornerRadius = chrome.cornerRadius,
   )
   discard context.addRenderRectangle(
+    parent,
     context.renderRectFor(
       rect(
         rect.origin.x - (chrome.insertionCapWidth - chrome.insertionWidth) * 0.5'f32,
@@ -5316,6 +5332,7 @@ proc drawTableHeaderInsertionIndicator*(
     cornerRadius = chrome.cornerRadius,
   )
   discard context.addRenderRectangle(
+    parent,
     context.renderRectFor(
       rect(
         rect.origin.x - (chrome.insertionCapWidth - chrome.insertionWidth) * 0.5'f32,
@@ -5350,6 +5367,7 @@ proc drawTableHeaderCellChrome*(
     chrome: TableHeaderChrome,
     firstVisible = false,
     lastVisible = false,
+    parent = (-1).FigIdx,
 ) =
   if tableView.isNil or context.isNil or column.isNil or rect.isEmpty:
     return
@@ -5359,6 +5377,7 @@ proc drawTableHeaderCellChrome*(
   elif column == tableView.xHoveredColumn:
     background = chrome.hoveredCellFill
   discard context.addRenderRectangle(
+    parent,
     context.renderRectFor(rect),
     background,
     chrome.cellBorderColor,
@@ -5373,6 +5392,7 @@ proc drawTableHeaderCellTitle*(
     column: TableColumn,
     rect: Rect,
     chrome: TableHeaderChrome,
+    parent = (-1).FigIdx,
 ) =
   if tableView.isNil or context.isNil or column.isNil or rect.isEmpty:
     return
@@ -5384,7 +5404,9 @@ proc drawTableHeaderCellTitle*(
     max(rect.size.width - 16.0'f32 - indicatorWidth, 0.0'f32),
     rect.size.height,
   )
-  context.addText(
+  discard context.addText(
+    DefaultDrawLevel,
+    parent,
     titleRect,
     clippedText(
       column.title(),
@@ -5498,20 +5520,33 @@ proc drawTableHeader*(
     return
   tableView.drawTableRowHeaderCorner(context, chrome)
   tableView.drawTableHeaderBackground(context, headerRect, chrome)
+  let headerClip = context.addRenderRectangle(
+    DefaultDrawLevel,
+    (-1).FigIdx,
+    context.renderRectFor(headerRect),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    clips = true,
+  )
   let visibleColumns = tableView.visibleTableColumns()
   for index, column in visibleColumns:
     let rect = tableView.tableHeaderColumnRect(column)
     if rect.isEmpty:
       continue
     tableView.drawTableHeaderCellChrome(
-      context, column, rect, chrome, index == 0, index == visibleColumns.high
+      context,
+      column,
+      rect,
+      chrome,
+      index == 0,
+      index == visibleColumns.high,
+      headerClip,
     )
-    tableView.drawTableHeaderCellTitle(context, column, rect, chrome)
+    tableView.drawTableHeaderCellTitle(context, column, rect, chrome, headerClip)
     tableView.drawTableHeaderSortIndicator(
-      context, rect, column.sortDirection(), chrome
+      context, rect, column.sortDirection(), chrome, headerClip
     )
-    tableView.drawTableHeaderResizeHandle(context, column, rect, chrome)
-  tableView.drawTableHeaderInsertionIndicator(context, chrome)
+    tableView.drawTableHeaderResizeHandle(context, column, rect, chrome, headerClip)
+  tableView.drawTableHeaderInsertionIndicator(context, chrome, headerClip)
 
 proc drawTableHeader*(tableView: TableView, context: DrawContext) =
   tableView.drawTableHeader(context, tableView.tableHeaderChrome(context))

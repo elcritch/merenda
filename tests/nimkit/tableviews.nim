@@ -142,6 +142,28 @@ func rectsClose(left, right: nimkitTypes.Rect): bool =
     abs(left.size.width - right.size.width) <= 0.01'f32 and
     abs(left.size.height - right.size.height) <= 0.01'f32
 
+proc clippedRectangleIndex(view: View, rect: nimkitTypes.Rect): int =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return -1
+  for index, node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkRectangle and NfClipContent in node.flags and
+        node.renderedRect().rectsClose(rect):
+      return index
+  -1
+
+proc hasChildRectangleWithOriginBefore(
+    view: View, parentIndex: int, beforeX: float32
+): bool =
+  let renders = buildRenders(view)
+  if parentIndex < 0 or DefaultDrawLevel notin renders:
+    return false
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.parent == parentIndex.FigIdx and node.kind == nkRectangle and
+        node.renderedRect().origin.x < beforeX:
+      return true
+  false
+
 proc renderedRectangleWithFill(
     view: View, rect: nimkitTypes.Rect, fillValue: Fill
 ): bool =
@@ -927,6 +949,11 @@ suite "NimKit TableView":
     discard buildRenders(root)
     check tableView.tableRowHeaderCellRect(0).origin.x == 1.0'f32
     check tableView.tableColumnRect(first).origin.x < 45.0'f32
+    let headerClip = root.clippedRectangleIndex(tableView.tableHeaderRect())
+    check headerClip >= 0
+    check root.hasChildRectangleWithOriginBefore(
+      headerClip, tableView.tableHeaderRect().origin.x
+    )
 
     tableView.scrollView().contentOffset = initPoint(20.0, 48.0)
     discard buildRenders(root)
@@ -1043,7 +1070,7 @@ suite "NimKit TableView":
       lastCellFound = false
 
     for node in renders[DefaultDrawLevel].nodes:
-      if node.kind == nkRectangle:
+      if node.kind == nkRectangle and NfClipContent notin node.flags:
         let rendered = node.renderedRect()
         if rendered.rectsClose(rect(13.0, 25.0, 298.0, 24.0)):
           headerFound = true
