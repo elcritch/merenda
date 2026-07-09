@@ -580,7 +580,16 @@ proc localLayoutPoint(manager: TextLayoutManager, point: Point): Point =
   )
 
 proc virtualCaretRect(manager: TextLayoutManager, insertionPoint: int): Rect =
-  caretRect(manager.xLayoutRect, manager.xLayout, insertionPoint)
+  result = caretRect(manager.xLayoutRect, manager.xLayout, insertionPoint)
+  if result.size.height <= 1.0'f32:
+    let
+      lineHeight = textNaturalSize("", manager.xTextStyle).height
+      height =
+        if manager.xLayoutRect.size.height > 0.0'f32:
+          min(lineHeight, manager.xLayoutRect.size.height)
+        else:
+          lineHeight
+    result = rect(result.origin, initSize(result.size.width, max(height, 1.0'f32)))
 
 func anyContainerWraps(containers: openArray[TextContainer]): bool =
   for container in containers:

@@ -493,7 +493,8 @@ proc fieldEditorFrame(textField: TextField): Rect =
   if textField.isNil:
     rect(0, 0, 0, 0)
   else:
-    textField.layoutManager().layoutBounds()
+    let style = textField.textFieldStyle()
+    style.textFieldTextRect(textField.bounds)
 
 proc layoutFieldEditor(textField: TextField) =
   let editor = textField.activeFieldEditor()

@@ -119,7 +119,7 @@ proc renderedCaretInView(
   for node in nodes:
     if node.kind == nkRectangle and node.fill.kind == flColor and
         node.fill.color == color.rgba and abs(node.screenBox.w - 1.0) <= 0.01 and
-        node.nodeRenderedInView(view):
+        node.screenBox.h > 4.0 and node.nodeRenderedInView(view):
       return true
 
 proc renderedFocusRingInView(nodes: openArray[Fig], view: View): bool =
@@ -849,6 +849,70 @@ suite "nimkit text fields":
     check window.makeFirstResponder(nil)
     check window.animationScheduler().animationCount == 0
     check editor.insertionPointVisible
+
+  test "empty text field edit mode blinks and renders caret":
+    let
+      window = newWindow("Empty text blink", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("", frame = rect(10, 10, 140, 24))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.mouseDownAt(initPoint(20, 20), timestamp = 10.0)
+    let editor = window.fieldEditor()
+    check window.firstResponder == editor
+    check window.fieldEditorClient() == field
+    check field.currentEditor == editor
+    check editor.superview == field
+    check field.isEditing
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+    check editor.frame().size.width > 1.0'f32
+    check editor.frame().size.height > 0.0'f32
+
+    let visibleNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check visibleNodes.renderedCaretInView(field, field.textColor())
+
+    check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
+    check not editor.insertionPointVisible
+    let hiddenNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check not hiddenNodes.renderedCaretInView(field, field.textColor())
+
+  test "field editor keeps blinking after deleting last character":
+    let
+      window = newWindow("Delete to empty blink", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("a", frame = rect(10, 10, 140, 24))
+
+    root.addSubview(field)
+    window.setContentView(root)
+
+    check window.makeFirstResponder(field)
+    let editor = window.fieldEditor()
+    check editor.stringValue == "a"
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+
+    check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
+    check editor.stringValue == ""
+    check field.stringValue == ""
+    check editor.insertionPointVisible
+    check window.animationScheduler().animationCount == 1
+    check editor.frame().size.width > 1.0'f32
+    check editor.frame().size.height > 0.0'f32
+
+    let visibleNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check visibleNodes.renderedCaretInView(field, field.textColor())
+
+    check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
+    check not editor.insertionPointVisible
+    let hiddenNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check not hiddenNodes.renderedCaretInView(field, field.textColor())
+    check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
+    check editor.insertionPointVisible
+    let visibleAgainNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    check visibleAgainNodes.renderedCaretInView(field, field.textColor())
 
   test "return ends field editor editing and sends text field action":
     let
