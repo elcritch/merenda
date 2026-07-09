@@ -990,6 +990,75 @@ suite "NimKit TableView":
     check tableView.rowHeaderWidth == 54.0'f32
     check window.mouseUpAt(drag)
 
+  test "table row headers stay visible and selectable while partially clipped":
+    let
+      window = newWindow("Partial row headers", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      tableView = newTableView(frame = rect(0, 0, 220, 120))
+      first = newTableColumn("a", "A", width = 60.0)
+      second = newTableColumn("b", "B", width = 60.0)
+
+    tableView.addColumn(first)
+    tableView.addColumn(second)
+    tableView.rowCount = 12
+    tableView.rowHeight = 24.0
+    tableView.showsRowHeader = true
+    tableView.rowHeaderTitle = "Row"
+    tableView.rowHeaderWidth = 44.0
+    tableView.selectionMode = tsmSingle
+    root.addSubview(tableView)
+    window.setContentView(root)
+
+    tableView.scrollView().contentOffset = initPoint(0.0, 11.0)
+    discard buildRenders(root)
+
+    check tableView.tableRowHeaderCellRect(0).rectsClose(rect(1.0, 25.0, 44.0, 13.0))
+    check tableView.tableRowHeaderCellRect(4).rectsClose(rect(1.0, 110.0, 44.0, 9.0))
+    check root.renderedTexts().contains("4")
+
+    let partialHeaderPoint = tableView.pointToWindow(initPoint(20.0, 114.0))
+    check window.mouseDownAt(partialHeaderPoint)
+    check window.mouseUpAt(partialHeaderPoint)
+    check tableView.selectedIndex == 4
+
+  test "table cell selection before layout starts columns after row header":
+    let
+      window = newWindow("Pre-layout cell selection", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      tableView = newTableView()
+      first = newTableColumn("a", "A", width = 72.0)
+      second = newTableColumn("b", "B", width = 72.0)
+
+    tableView.addColumn(first)
+    tableView.addColumn(second)
+    tableView.rowCount = 10
+    tableView.rowHeight = 24.0
+    tableView.tableHeaderHeight = 24.0
+    tableView.showsRowHeader = true
+    tableView.rowHeaderTitle = "Row"
+    tableView.rowHeaderWidth = 58.0
+    tableView.selectionMode = tsmSingle
+    tableView.allowsColumnSelection = true
+
+    tableView.selectCell(0, first)
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == first
+    check tableView.scrollView().contentOffset().x == 0.0'f32
+
+    tableView.frame = rect(0, 0, 220, 120)
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.scrollView().contentOffset().x == 0.0'f32
+    check tableView.tableHeaderRect().origin.x == 59.0'f32
+    check tableView.tableHeaderColumnRect(first).origin.x == 59.0'f32
+    check tableView.tableColumnRect(first).origin.x == 59.0'f32
+    check window.mouseDownAt(tableView.pointToWindow(initPoint(64.0, 30.0)))
+    check window.mouseUpAt(tableView.pointToWindow(initPoint(64.0, 30.0)))
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == first
+
   test "table header rendering mouse tracking and persistence adapters":
     let
       tableView = newTableView(frame = rect(12, 24, 300, 160))

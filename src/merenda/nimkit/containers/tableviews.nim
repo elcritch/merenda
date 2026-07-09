@@ -1666,17 +1666,23 @@ proc tableRowHeaderRect*(tableView: TableView): Rect =
     max(tableView.bounds().h - 2.0'f32 - headerHeight, 0.0'f32),
   )
 
-proc tableRowHeaderCellRect*(tableView: TableView, row: int): Rect =
+proc tableRowHeaderCellFrame(tableView: TableView, row: int): Rect =
   if tableView.isNil or not tableView.showsRowHeader():
     return rect(0.0, 0.0, 0.0, 0.0)
-  let rowRect = tableView.rowItemRect(row)
+  tableView.tileTableContent()
+  let contentView = tableView.contentView()
+  if contentView.isNil:
+    return rect(0.0, 0.0, 0.0, 0.0)
+  let rowRect = contentView.rectToView(contentView.tableContentItemRect(row), tableView)
   if rowRect.isEmpty:
     return rect(0.0, 0.0, 0.0, 0.0)
 
   rect(
     1.0'f32, rowRect.origin.y, tableView.visibleRowHeaderWidth(), rowRect.size.height
   )
-  .intersection(tableView.tableRowHeaderRect())
+
+proc tableRowHeaderCellRect*(tableView: TableView, row: int): Rect =
+  tableView.tableRowHeaderCellFrame(row).intersection(tableView.tableRowHeaderRect())
 
 proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
   let
@@ -5495,8 +5501,10 @@ proc drawTableRowHeaders*(
     clips = true,
   )
   for row in rows.first ..< rows.last:
-    let rect = tableView.tableRowHeaderCellRect(row)
-    if rect.isEmpty:
+    let
+      rect = tableView.tableRowHeaderCellFrame(row)
+      visibleRect = rect.intersection(clipRect)
+    if visibleRect.isEmpty:
       continue
     discard context.addRenderRectangle(
       DefaultDrawLevel,

@@ -428,6 +428,17 @@ suite "nimkit scroll views":
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
 
+  test "scroll rect ignores axes with empty viewport":
+    let
+      document = newView(frame = rect(0, 0, 300, 260))
+      scrollView = newScrollView(frame = rect(0, 0, 0, 100), documentView = document)
+
+    check scrollView.viewportSize().width == 0.0'f32
+    check scrollView.viewportSize().height > 0.0'f32
+    check scrollView.scrollRectToVisible(rect(160, 150, 40, 40))
+    check scrollView.contentOffset().x == 0.0'f32
+    check scrollView.contentOffset().y > 0.0'f32
+
   test "shift scroll wheel maps vertical wheel movement to horizontal scroll":
     let
       window = newWindow("Shift ScrollView", frame = rect(0, 0, 220, 160))
