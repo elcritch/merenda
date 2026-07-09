@@ -1665,9 +1665,11 @@ proc tableRowHeaderCellRect*(tableView: TableView, row: int): Rect =
   let rowRect = tableView.rowItemRect(row)
   if rowRect.isEmpty:
     return rect(0.0, 0.0, 0.0, 0.0)
+
   rect(
     1.0'f32, rowRect.origin.y, tableView.visibleRowHeaderWidth(), rowRect.size.height
   )
+  .intersection(tableView.tableRowHeaderRect())
 
 proc tableHeaderColumnRect*(tableView: TableView, column: TableColumn): Rect =
   let
@@ -5404,6 +5406,7 @@ proc drawTableRowHeaderCellTitle(
     rect: Rect,
     chrome: TableHeaderChrome,
     alignment = taRight,
+    parent = (-1).FigIdx,
 ) =
   if tableView.isNil or context.isNil or rect.isEmpty or text.len == 0:
     return
@@ -5417,8 +5420,13 @@ proc drawTableRowHeaderCellTitle(
     textStyle = context.appearance.resolveTextStyle(
       controlStyle(srTableHeaderCell), chrome.textColor, insets(0.0)
     )
-  context.addText(
-    titleRect, clippedText(text, titleRect.size.width, textStyle), textStyle, alignment
+  discard context.addText(
+    DefaultDrawLevel,
+    parent,
+    titleRect,
+    clippedText(text, titleRect.size.width, textStyle),
+    textStyle,
+    alignment,
   )
 
 proc drawTableRowHeaderCorner*(
@@ -5452,19 +5460,32 @@ proc drawTableRowHeaders*(
 ) =
   if tableView.isNil or context.isNil or not tableView.showsRowHeader():
     return
-  let rows = tableView.contentView().visibleContentRows()
+  let
+    clipRect = tableView.tableRowHeaderRect().intersection(tableView.visibleRect())
+    rows = tableView.contentView().visibleContentRows()
+  if clipRect.isEmpty:
+    return
+  let clip = context.addRenderRectangle(
+    DefaultDrawLevel,
+    (-1).FigIdx,
+    context.renderRectFor(clipRect),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    clips = true,
+  )
   for row in rows.first ..< rows.last:
     let rect = tableView.tableRowHeaderCellRect(row)
     if rect.isEmpty:
       continue
     discard context.addRenderRectangle(
+      DefaultDrawLevel,
+      clip,
       context.renderRectFor(rect),
       chrome.cellFill,
       chrome.cellBorderColor,
       chrome.borderWidth,
     )
     tableView.drawTableRowHeaderCellTitle(
-      context, tableView.rowHeaderText(row), rect, chrome
+      context, tableView.rowHeaderText(row), rect, chrome, parent = clip
     )
 
 proc drawTableHeader*(
@@ -6353,6 +6374,11 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
       let headerHeight = tableView.tableHeaderHeight()
       let visibleBounds = tableView.visibleRect()
       var focusRect = tableView.bounds()
+      let rowHeaderRect = tableView.tableRowHeaderRect()
+      if not rowHeaderRect.isEmpty:
+        let bodyMinX = rowHeaderRect.maxX
+        focusRect.w = max(focusRect.maxX - bodyMinX, 0.0'f32)
+        focusRect.x = bodyMinX
       focusRect.y += headerHeight
       focusRect.h = max(focusRect.h - headerHeight, 0.0'f32)
       if not focusRect.intersection(visibleBounds).isEmpty:

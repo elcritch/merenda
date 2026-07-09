@@ -902,10 +902,11 @@ suite "NimKit TableView":
       tableView = newTableView(frame = rect(0, 0, 220, 120))
       first = newTableColumn("a", "A", width = 100.0)
       second = newTableColumn("b", "B", width = 100.0)
+      focusColor = color(0.91, 0.38, 0.18, 0.66)
 
     tableView.addColumn(first)
     tableView.addColumn(second)
-    tableView.rowCount = 5
+    tableView.rowCount = 12
     tableView.rowHeight = 24.0
     tableView.showsRowHeader = true
     tableView.rowHeaderTitle = "Row"
@@ -926,6 +927,27 @@ suite "NimKit TableView":
     discard buildRenders(root)
     check tableView.tableRowHeaderCellRect(0).origin.x == 1.0'f32
     check tableView.tableColumnRect(first).origin.x < 45.0'f32
+
+    tableView.scrollView().contentOffset = initPoint(20.0, 48.0)
+    discard buildRenders(root)
+    check tableView.tableRowHeaderCellRect(2).rectsClose(rect(1.0, 25.0, 44.0, 24.0))
+    check tableView.tableRowHeaderCellRect(3).rectsClose(rect(1.0, 49.0, 44.0, 24.0))
+
+    tableView.scrollView().contentOffset = initPoint(20.0, 0.0)
+    tableView.focusVisible = true
+    var theme = initTheme()
+    theme[srTableView, StyleFocusRingWidth] = 3.0
+    theme[srTableView, StyleFocusRingInset] = -1.0
+    theme[srTableView, StyleFocusRingColor] = focusColor
+    check root.renderedFocusedCellStroke(
+      initAppearance(theme),
+      3.0,
+      42.0'f32 .. 46.0'f32,
+      22.0'f32 .. 26.0'f32,
+      176.0'f32 .. 180.0'f32,
+      96.0'f32 .. 100.0'f32,
+    )
+    tableView.focusVisible = false
 
     let rowHeaderPoint = tableView.pointToWindow(initPoint(20.0, 85.0))
     check window.mouseDownAt(rowHeaderPoint)
