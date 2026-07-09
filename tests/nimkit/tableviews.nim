@@ -1959,19 +1959,91 @@ suite "NimKit TableView":
       18.0'f32 .. 24.0'f32,
     )
 
+  test "table view selected column accent follows mouse hover":
+    let
+      window = newWindow("Table selected column hover", frame = rect(0, 0, 280, 120))
+      root = newView(frame = rect(0, 0, 280, 120))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+      selectedColumnFill = fill(color(0.24, 0.56, 1.0, 0.12))
+      hoverColumnFill = fill(color(0.24, 0.56, 1.0, 0.06))
+
+    var appearance = initAppearance()
+    appearance[srTableView, StyleColumnHoverFill] = hoverColumnFill
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    tableView.selectCell(0, state)
+    tableView.appearance = appearance
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.selectedColumns == @[state]
+    check window.mouseMovedAt(tableView.tableCellPoint(1, owner))
+    check tableView.highlightedIndex == 1
+    check tableView.selectedColumns == @[state]
+    check root.renderedRectangleFillIn(
+      initAppearance(),
+      hoverColumnFill,
+      159.0'f32 .. 163.0'f32,
+      24.0'f32 .. 26.0'f32,
+      78.0'f32 .. 82.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+    check not root.renderedRectangleFillIn(
+      initAppearance(),
+      selectedColumnFill,
+      68.0'f32 .. 72.0'f32,
+      24.0'f32 .. 26.0'f32,
+      88.0'f32 .. 92.0'f32,
+      22.0'f32 .. 26.0'f32,
+    )
+
+  test "table view click selects focused cell column under pointer":
+    let
+      window = newWindow("Table click selects cell", frame = rect(0, 0, 280, 120))
+      root = newView(frame = rect(0, 0, 280, 120))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      project = newTableColumn("project", "Project", width = 70.0)
+      state = newTableColumn("state", "State", width = 90.0)
+      owner = newTableColumn("owner", "Owner", width = 80.0)
+
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(project)
+    tableView.addColumn(state)
+    tableView.addColumn(owner)
+    tableView.allowsColumnSelection = true
+    tableView.selectCell(0, state)
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == state
+    check tableView.selectedColumns == @[state]
+
+    check window.clickTableCell(tableView, 2, owner)
+    check tableView.selectedIndex == 2
+    check tableView.focusedColumn == owner
+    check tableView.clickedColumn == owner
+    check tableView.selectedColumns == @[owner]
+
   test "table view enter edits the keyboard focused cell after a row click":
     var fixture = newEditableTableFixture("Table enter edits clicked cell")
 
     check fixture.window.clickTableCell(fixture.tableView, 0, fixture.owner)
     check fixture.tableView.selectedIndex == 0
-    check fixture.window.firstResponder() == fixture.tableView
-
-    check fixture.window.pressKey(keyArrowRight)
-    check fixture.tableView.focusedColumn == fixture.project
-    check fixture.window.pressKey(keyArrowRight)
-    check fixture.tableView.focusedColumn == fixture.state
-    check fixture.window.pressKey(keyArrowRight)
     check fixture.tableView.focusedColumn == fixture.owner
+    check fixture.window.firstResponder() == fixture.tableView
 
     check fixture.window.pressKey(keyEnter)
     check fixture.tableView.editingState.active

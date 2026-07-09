@@ -206,6 +206,7 @@ type
     xClickedRow: int
     xClickedColumn: TableColumn
     xFocusedColumn: TableColumn
+    xHighlightedColumn: TableColumn
     xSelectedColumns: seq[TableColumn]
     xAllowsColumnSelection: bool
     xEditing: TableEditingState
@@ -2541,6 +2542,42 @@ proc setFocusedCellColumn(
       tableView.postAccessibilityNotification(anSelectionChanged)
   true
 
+proc selectCellAtIndex(
+    tableView: TableView, index: int, column: TableColumn, modifiers: set[KeyModifier]
+) =
+  if tableView.isNil or tableView.xSelectionMode == tsmNone:
+    return
+  if index notin 0 ..< tableView.len() or not tableView.rowSelectable(index):
+    return
+
+  let
+    previousSelectedIndexes = tableView.xSelectedIndexes
+    previousSelectedColumns = tableView.xSelectedColumns
+  tableView.selectItemAtIndex(index, modifiers)
+  if column.isNil or not tableView.shouldSelectCell(index, column):
+    return
+
+  discard tableView.setFocusedCellColumn(index, column, notifySelection = false)
+  tableView.xClickedRow = index
+  tableView.xClickedColumn = column
+  tableView.setNeedsDisplay(true)
+  if tableView.xAllowsColumnSelection and
+      previousSelectedColumns != tableView.xSelectedColumns and
+      previousSelectedIndexes == tableView.xSelectedIndexes:
+    emit tableView.selectionDidChange(DynamicAgent(tableView))
+    tableView.postAccessibilityNotification(anSelectionChanged)
+
+proc activateCellAtIndex(
+    tableView: TableView, index: int, column: TableColumn, modifiers: set[KeyModifier]
+) =
+  if tableView.isNil or not tableView.rowEnabled(index):
+    return
+  if tableView.selectionMode() != tsmNone:
+    if not tableView.rowSelectable(index):
+      return
+    tableView.selectCellAtIndex(index, column, modifiers)
+  tableView.sendTableActivation(index)
+
 proc moveFocusedCell(tableView: TableView, delta: int): bool =
   if tableView.isNil or delta == 0 or tableView.selectionMode() == tsmNone:
     return false
@@ -2725,6 +2762,18 @@ proc `highlightedIndex=`*(tableView: TableView, index: int) =
   if tableView.xHighlightedIndex == boundedIndex:
     return
   tableView.xHighlightedIndex = boundedIndex
+  tableView.invalidateTableRows()
+
+proc setHighlightedColumn(tableView: TableView, column: TableColumn) =
+  if tableView.isNil:
+    return
+  var next = column
+  if not tableView.xAllowsColumnSelection or next.isNil or next.tableView() != tableView or
+      next.hidden():
+    next = nil
+  if tableView.xHighlightedColumn == next:
+    return
+  tableView.xHighlightedColumn = next
   tableView.invalidateTableRows()
 
 proc reloadData*(tableView: TableView) =
@@ -3077,6 +3126,7 @@ proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
   tableView.xAllowsColumnSelection = value
   if not value:
     tableView.xSelectedColumns.setLen(0)
+    tableView.xHighlightedColumn = nil
   tableView.setNeedsDisplay(true)
 
 proc selectedColumns*(tableView: TableView): seq[TableColumn] =
@@ -3936,6 +3986,28 @@ proc selectedTableColumnFill(tableView: TableView, context: DrawContext): Fill =
     StyleColumnSelectionFill,
   )
 
+proc hoveredTableColumnFill(tableView: TableView, context: DrawContext): Fill =
+  if tableView.isNil or context.isNil:
+    return fill(color(0.0, 0.0, 0.0, 0.0))
+  context.appearance.resolveFill(
+    controlStyle(
+      tableView.xTableRole,
+      tableView.widgetStateSet(),
+      id = tableView.styleId(),
+      classes = tableView.styleClasses(),
+    ),
+    tableView.selectedTableColumnFill(context),
+    StyleColumnHoverFill,
+  )
+
+proc shouldDrawSelectedTableColumn(tableView: TableView, column: TableColumn): bool =
+  if tableView.isNil or column.isNil:
+    return false
+  if not tableView.xHighlightedColumn.isNil:
+    column == tableView.xHighlightedColumn
+  else:
+    column in tableView.xSelectedColumns
+
 proc drawSelectedTableColumn(
     tableView: TableView,
     context: DrawContext,
@@ -3944,9 +4016,13 @@ proc drawSelectedTableColumn(
     rect: Rect,
 ) =
   if tableView.isNil or context.isNil or column.isNil or
-      column notin tableView.xSelectedColumns:
+      not tableView.shouldDrawSelectedTableColumn(column):
     return
-  let fillValue = tableView.selectedTableColumnFill(context)
+  let fillValue =
+    if column == tableView.xHighlightedColumn:
+      tableView.hoveredTableColumnFill(context)
+    else:
+      tableView.selectedTableColumnFill(context)
   if fillValue.isTransparent():
     return
   var fillRect = rect
@@ -4144,6 +4220,11 @@ proc noteColumnsChanged(tableView: TableView) =
     tableView.xFocusedColumn.hidden()
   ):
     tableView.clearFocusedColumn()
+  if not tableView.xHighlightedColumn.isNil and (
+    tableView.xHighlightedColumn.tableView() != tableView or
+    tableView.xHighlightedColumn.hidden()
+  ):
+    tableView.xHighlightedColumn = nil
   tableView.syncTableScrollChrome()
   tableView.syncHeaderTrackingAreas()
   tableView.clearTableCellSlots()
@@ -4205,6 +4286,8 @@ proc removeColumnAtIndex(tableView: TableView, index: int) =
   tableView.xColumns.delete(index)
   if not column.isNil:
     column.xTableView = nil
+  if tableView.xHighlightedColumn == column:
+    tableView.xHighlightedColumn = nil
   tableView.noteColumnsChanged()
 
 proc removeColumnAt*(tableView: TableView, index: int) =
@@ -4714,6 +4797,7 @@ proc tryBeginRowReorderDrag(tableView: TableView, event: MouseEvent): bool =
   let target = tableView.dropTargetForDraggingLocation(event.location)
   tableView.xTrackingItem = false
   tableView.highlightedIndex = -1
+  tableView.setHighlightedColumn(nil)
   tableView.xPressedIndex = -1
   tableView.updateTableDropTarget(target)
   discard
@@ -4758,6 +4842,16 @@ proc performActiveTableDrag(tableView: TableView, event: MouseEvent): bool =
   tableView.clearRowDragState()
   true
 
+proc updateHighlightedCellAtPoint(tableView: TableView, point: Point): int =
+  if tableView.isNil:
+    return -1
+  result = tableView.rowItemIndexAtPoint(point)
+  tableView.highlightedIndex = result
+  if result >= 0:
+    tableView.setHighlightedColumn(tableView.tableColumnAtPoint(point))
+  else:
+    tableView.setHighlightedColumn(nil)
+
 proc defaultTableViewMouseDown*(tableView: TableView, event: MouseEvent): bool =
   if tableView.isNil or not tableView.isEnabled() or event.button != mbPrimary:
     return false
@@ -4765,8 +4859,7 @@ proc defaultTableViewMouseDown*(tableView: TableView, event: MouseEvent): bool =
   if owner of Window:
     discard Window(owner).makeFirstResponder(tableView)
   tableView.xTrackingItem = true
-  let index = tableView.rowItemIndexAtPoint(event.location)
-  tableView.highlightedIndex = index
+  let index = tableView.updateHighlightedCellAtPoint(event.location)
   tableView.xPressedIndex = tableView.highlightedIndex()
   tableView.xRowDragStartIndex = index
   tableView.xRowDragStartPoint = event.location
@@ -4779,8 +4872,7 @@ proc defaultTableViewMouseDragged*(tableView: TableView, event: MouseEvent): boo
   if tableView.tryBeginRowReorderDrag(event):
     return true
   if tableView.isEnabled() and tableView.xTrackingItem:
-    let index = tableView.rowItemIndexAtPoint(event.location)
-    tableView.highlightedIndex = index
+    discard tableView.updateHighlightedCellAtPoint(event.location)
     tableView.xPressedIndex = tableView.highlightedIndex()
     tableView.invalidateTableRows()
     return true
@@ -4798,7 +4890,9 @@ proc defaultTableViewMouseUp*(tableView: TableView, event: MouseEvent): bool =
   tableView.xPressedIndex = -1
   tableView.clearRowDragState()
   if index >= 0:
-    tableView.activateItemAtIndex(index, event.modifiers)
+    tableView.activateCellAtIndex(
+      index, tableView.tableColumnAtPoint(event.location), event.modifiers
+    )
   tableView.setNeedsDisplay(true)
   true
 
@@ -4862,6 +4956,7 @@ protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
       discard Window(owner).makeFirstResponder(tableView, focusVisible = false)
     tableView.selectCell(row, column)
     tableView.highlightedIndex = row
+    tableView.setHighlightedColumn(column)
     tableView.xPressedIndex = row
     tableView.invalidateTableRows()
     true
@@ -5774,9 +5869,10 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
 
   method mouseMoved(tableView: TableView, event: MouseEvent): bool =
     if tableView.headerMouseMoved(event):
+      tableView.setHighlightedColumn(nil)
       return true
     if tableView.isEnabled():
-      tableView.highlightedIndex = tableView.rowItemIndexAtPoint(event.location)
+      discard tableView.updateHighlightedCellAtPoint(event.location)
       return true
     false
 

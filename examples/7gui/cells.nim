@@ -335,21 +335,30 @@ proc newCellsController(table: TableView): CellsController =
 proc installCellsSelectionAppearance(table: TableView) =
   let
     selectionFill = fill(color(0.24, 0.56, 1.0, 0.14))
+    hoverFill = fill(color(0.24, 0.56, 1.0, 0.07))
     selectedTextColor = color(0.08, 0.09, 0.11, 1.0)
     tableStyle = initStyleSelector(srTableView, classes = @[CellsTableClass])
 
   var appearance = initAppearance()
+  for states in [{ssSelected}]:
+    let rowStyle = initStyleSelector(srRowItem, states, classes = @[CellsTableClass])
+    appearance[rowStyle, StyleFill] = selectionFill
+    appearance[rowStyle, StyleTextColor] = selectedTextColor
+
   for states in [
-    {ssSelected},
+    {ssHovered},
+    {ssHighlighted},
+    {ssPressed},
     {ssSelected, ssHovered},
     {ssSelected, ssHighlighted},
     {ssSelected, ssPressed},
   ]:
     let rowStyle = initStyleSelector(srRowItem, states, classes = @[CellsTableClass])
-    appearance[rowStyle, StyleFill] = selectionFill
+    appearance[rowStyle, StyleFill] = hoverFill
     appearance[rowStyle, StyleTextColor] = selectedTextColor
 
   appearance[tableStyle, StyleColumnSelectionFill] = selectionFill
+  appearance[tableStyle, StyleColumnHoverFill] = hoverFill
   table.styleClasses = [CellsTableClass]
   table.appearance = appearance
 
@@ -365,7 +374,9 @@ let
   controller = newCellsController(table)
 
 table.addColumn(
-  newTableColumn("row", "", width = 42.0, resizePolicy = tcrFixed, alignment = taRight)
+  newTableColumn(
+    "row", "Row", width = 58.0, resizePolicy = tcrFixed, alignment = taRight
+  )
 )
 for column in 0 ..< ColumnCount:
   table.addColumn(
@@ -391,6 +402,12 @@ controller.setCellFormula(CellAddress(row: 1, column: 0), "=C0*10", reload = fal
 
 layout.spacing = 14.0
 layout.alignment = svaFill
+title.setHuggingPriority(LayoutPriorityRequired, laVertical)
+title.setCompressionPriority(LayoutPriorityRequired, laVertical)
+status.setHuggingPriority(LayoutPriorityRequired, laVertical)
+status.setCompressionPriority(LayoutPriorityRequired, laVertical)
+table.setHuggingPriority(LayoutPriorityLow, laVertical)
+table.setCompressionPriority(LayoutPriorityLow, laVertical)
 layout.addArrangedSubview(title, status, table)
 
 root.addSubview(layout)

@@ -470,6 +470,7 @@ proc initTheme*(): Theme =
   result["tableView.fill"] = styleToken("textField.fill")
   result["tableView.border.color"] = styleToken("textField.border.color")
   result["tableView.column.selection.fill"] = styleFill(color(0.24, 0.56, 1.0, 0.12))
+  result["tableView.column.hover.fill"] = styleToken("tableView.column.selection.fill")
   result["scrollView.fill"] = styleToken("tableView.fill")
   result["scrollView.border.color"] = styleToken("tableView.border.color")
   result["box.fill"] = styleColor(color(0.0, 0.0, 0.0, 0.0))
@@ -1103,6 +1104,7 @@ proc initTheme*(): Theme =
   result[srTableView, StyleDropIndicatorFill] = fill(color(0.18, 0.42, 0.88, 0.95))
   result[srTableView, StyleColumnSelectionFill] =
     styleToken("tableView.column.selection.fill")
+  result[srTableView, StyleColumnHoverFill] = styleToken("tableView.column.hover.fill")
   for role in [srCascadingView, srCascadingColumn]:
     result[role, StyleFill] = styleToken("tableView.fill")
     result[role, StyleBorderColor] = styleToken("tableView.border.color")
