@@ -171,16 +171,10 @@ protocol DefaultPopupListAccessibility of AccessibilityProtocol:
     true
 
 proc data(popupList: PopupListView): PopupListData =
-  if popupList.isNil:
-    PopupListData()
-  else:
-    popupList.xData
+  popupList.xData
 
 proc actions(popupList: PopupListView): PopupListActions =
-  if popupList.isNil:
-    PopupListActions()
-  else:
-    popupList.xActions
+  popupList.xActions
 
 template valueOr(callback, fallback: untyped): untyped =
   if callback.isNil:
@@ -288,7 +282,7 @@ proc drawPopupList*(
     layer: ZLevel = DefaultDrawLevel,
     parent: FigIdx = (-1).FigIdx,
 ) =
-  if popupList.isNil or popupBounds.isEmpty:
+  if popupBounds.isEmpty:
     return
   var states: set[WidgetState] = {}
   if not popupList.isEnabled():
@@ -487,8 +481,7 @@ proc finishPopupListTracking*(
     popupList.close()
 
 proc resetPopupListTracking*(popupList: PopupListView) =
-  if not popupList.isNil:
-    popupList.xTrackingItem = false
+  popupList.xTrackingItem = false
 
 proc activateItem(popupList: PopupListView, index: int) =
   let activate = popupList.actions().activate

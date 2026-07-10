@@ -183,7 +183,7 @@ protocol DefaultViewControllerLoading of ViewControllerLoading:
 
 protocol ViewControllerUndoManagerProvider of UndoManagerProvider:
   method undoManager(controller: ViewController): Option[UndoManager] =
-    if controller.isNil or controller.xUndoManager.isNil:
+    if controller.xUndoManager.isNil:
       none(UndoManager)
     else:
       some(controller.xUndoManager)
@@ -223,7 +223,7 @@ proc installViewControllerForwarding(controller: ViewController) =
 proc sendControllerDelegate(
     controller: ViewController, selector: Selector[ViewController, EmptyArgs]
 ) =
-  if not controller.isNil and not controller.xDelegate.isNil:
+  if not controller.xDelegate.isNil:
     discard controller.xDelegate.sendLocalIfHandled(selector, controller)
 
 proc sendControllerDelegate(
@@ -231,7 +231,7 @@ proc sendControllerDelegate(
     selector: Selector[tuple[controller, child: ViewController], EmptyArgs],
     child: ViewController,
 ) =
-  if not controller.isNil and not controller.xDelegate.isNil:
+  if not controller.xDelegate.isNil:
     discard controller.xDelegate.sendLocalIfHandled(
       selector, (controller: controller, child: child)
     )
@@ -245,7 +245,7 @@ proc notifyDidRemoveChild(controller, child: ViewController) =
   emit controller.didRemoveChildViewController(child)
 
 proc installOwnedViewResponder(controller: ViewController) =
-  if controller.isNil or controller.xView.isNil:
+  if controller.xView.isNil:
     return
   let next =
     if not controller.xParentViewController.isNil:
@@ -263,12 +263,12 @@ proc installOwnedViewResponder(controller: ViewController) =
     controller.setNextResponder(next)
 
 proc unobserveOwnedView(controller: ViewController, view: View) =
-  if controller.isNil or view.isNil:
+  if view.isNil:
     return
   controller.unobserveProtocol(view, ViewControllerOwnedViewLifecycleSlots)
 
 proc observeOwnedView(controller: ViewController, view: View) =
-  if controller.isNil or view.isNil:
+  if view.isNil:
     return
   controller.observeProtocol(view, ViewControllerOwnedViewLifecycleSlots)
 
@@ -278,8 +278,6 @@ proc initViewController*(controller: ViewController, view: View = nil) =
   ## Subclasses should call this during construction. The initializer installs
   ## default view loading, undo lookup, command validation, and delegate
   ## forwarding behavior.
-  if controller.isNil:
-    return
   initResponder(controller)
   discard controller.withProtocol(DefaultViewControllerLoading)
   discard controller.withProtocol(ViewControllerUndoManagerProvider)
@@ -301,12 +299,11 @@ proc delegate*(controller: ViewController): DynamicAgent =
   ##
   ## Delegates receive optional lifecycle and containment callbacks and can also
   ## act as selector forwarding targets.
-  if controller.isNil: nil else: controller.xDelegate
+  controller.xDelegate
 
 proc `delegate=`*(controller: ViewController, delegate: DynamicAgent) =
   ## Sets the controller delegate.
-  if not controller.isNil:
-    controller.xDelegate = delegate
+  controller.xDelegate = delegate
 
 proc `delegate=`*(controller: ViewController, delegate: Responder) =
   ## Sets a responder delegate by wrapping it as a dynamic agent.
@@ -317,7 +314,7 @@ proc representedObject*(controller: ViewController): DynamicAgent =
   ##
   ## Window and document controller integration use this to route document-backed
   ## content without forcing a specific model type.
-  if controller.isNil: nil else: controller.xRepresentedObject
+  controller.xRepresentedObject
 
 proc setRepresentedObject*(
     controller: ViewController, representedObject: DynamicAgent
@@ -326,7 +323,7 @@ proc setRepresentedObject*(
   ##
   ## A changed object notifies the delegate and emits `didChangeRepresentedObject`.
   ## Reassigning the same object is ignored.
-  if controller.isNil or controller.xRepresentedObject == representedObject:
+  if controller.xRepresentedObject == representedObject:
     return
   controller.xRepresentedObject = representedObject
   controller.sendControllerDelegate(viewControllerDidChangeRepresentedObject())
@@ -342,16 +339,13 @@ proc undoManagerFor*(controller: ViewController): UndoManager =
   ## Returns the controller-local undo manager, creating one on first use.
   ##
   ## The controller also implements undo-manager lookup for responder-chain users.
-  if controller.isNil:
-    return nil
   if controller.xUndoManager.isNil:
     controller.xUndoManager = newUndoManager()
   controller.xUndoManager
 
 proc setUndoManager*(controller: ViewController, undoManager: UndoManager) =
   ## Replaces the controller-local undo manager.
-  if not controller.isNil:
-    controller.xUndoManager = undoManager
+  controller.xUndoManager = undoManager
 
 proc `undoManager=`*(controller: ViewController, undoManager: UndoManager) =
   ## Assignment form of `setUndoManager`.
@@ -359,17 +353,17 @@ proc `undoManager=`*(controller: ViewController, undoManager: UndoManager) =
 
 proc isViewLoaded*(controller: ViewController): bool =
   ## Returns true when the controller currently has an installed view.
-  (not controller.isNil) and not controller.xView.isNil
+  not controller.xView.isNil
 
 proc isViewVisible*(controller: ViewController): bool =
   ## Returns true while the controller is in the appeared lifecycle state.
-  (not controller.isNil) and controller.xViewVisible
+  controller.xViewVisible
 
 proc viewOrNil*(controller: ViewController): View =
-  if controller.isNil: nil else: controller.xView
+  controller.xView
 
 proc setView*(controller: ViewController, view: View) =
-  if controller.isNil or controller.xView == view:
+  if controller.xView == view:
     return
   let oldView = controller.xView
   if not oldView.isNil:
@@ -391,8 +385,6 @@ proc loadView*(controller: ViewController): View =
   ## Loading notifies the delegate and signals before and after construction. If a
   ## `makeView` implementation is present it is used; otherwise a plain `newView`
   ## is installed.
-  if controller.isNil:
-    return nil
   if not controller.xView.isNil:
     return controller.xView
   controller.sendControllerDelegate(viewControllerWillLoadView())
@@ -405,14 +397,12 @@ proc loadView*(controller: ViewController): View =
   emit controller.didLoadView(result)
 
 proc view*(controller: ViewController): View =
-  if controller.isNil:
-    return nil
   if controller.xView.isNil:
     discard controller.loadView()
   controller.xView
 
 proc parentViewController*(controller: ViewController): ViewController =
-  if controller.isNil: nil else: controller.xParentViewController
+  controller.xParentViewController
 
 proc childViewControllers*(controller: ViewController): lent seq[ViewController] =
   ## Returns the controller's child-controller list.
@@ -424,11 +414,11 @@ proc childViewControllers*(controller: ViewController): lent seq[ViewController]
 
 proc childViewControllerCount*(controller: ViewController): int =
   ## Returns the number of child view controllers.
-  if controller.isNil: 0 else: controller.xChildViewControllers.len
+  controller.xChildViewControllers.len
 
 proc contains*(controller: ViewController, child: ViewController): bool =
   ## Returns true when `child` is directly contained by `controller`.
-  not controller.isNil and child in controller.xChildViewControllers
+  child in controller.xChildViewControllers
 
 proc addChildViewController*(controller, child: ViewController) =
   ## Adds `child` as the last child controller.
@@ -436,7 +426,7 @@ proc addChildViewController*(controller, child: ViewController) =
   ## A child is removed from any previous parent first. If the parent is currently
   ## visible, the child receives matching appear callbacks around the containment
   ## change.
-  if controller.isNil or child.isNil or child == controller:
+  if controller.isNil or child == controller:
     return
   if child.xParentViewController == controller:
     return
@@ -456,7 +446,7 @@ proc insertChildViewController*(controller, child: ViewController, index: Natura
   ##
   ## Re-inserting an existing child of the same parent reorders it without sending
   ## containment notifications.
-  if controller.isNil or child.isNil or child == controller:
+  if controller.isNil or child == controller:
     return
   if child.xParentViewController == controller:
     let current = controller.xChildViewControllers.find(child)
@@ -486,7 +476,7 @@ proc embedChildViewController*(
   ##
   ## When `container` is nil, the parent controller's own view is used as the host.
   ## The child view is loaded as needed and returned.
-  if controller.isNil or child.isNil:
+  if controller.isNil:
     return nil
   controller.addChildViewController(child)
   let host =
@@ -502,7 +492,7 @@ proc embedChildViewController*(
 proc removeChildViewController*(
     controller: ViewController, child: ViewController
 ): bool {.discardable.} =
-  if controller.isNil or child.isNil:
+  if child.isNil:
     return false
   let index = controller.xChildViewControllers.find(child)
   if index < 0:
@@ -522,12 +512,12 @@ proc removeChildViewController*(
 
 proc removeFromParentViewController*(controller: ViewController): bool {.discardable.} =
   ## Removes this controller from its parent, if it has one.
-  if controller.isNil or controller.xParentViewController.isNil:
+  if controller.xParentViewController.isNil:
     return false
   controller.xParentViewController.removeChildViewController(controller)
 
 proc viewWillAppear*(controller: ViewController) =
-  if controller.isNil or controller.xViewVisible or controller.xAppearing:
+  if controller.xViewVisible or controller.xAppearing:
     return
   controller.xAppearing = true
   controller.sendControllerDelegate(viewControllerWillAppear())
@@ -536,7 +526,7 @@ proc viewWillAppear*(controller: ViewController) =
     child.viewWillAppear()
 
 proc viewDidAppear*(controller: ViewController) =
-  if controller.isNil or controller.xViewVisible:
+  if controller.xViewVisible:
     return
   if not controller.xAppearing:
     controller.viewWillAppear()
@@ -548,7 +538,7 @@ proc viewDidAppear*(controller: ViewController) =
   emit controller.didAppear()
 
 proc viewWillDisappear*(controller: ViewController) =
-  if controller.isNil or (not controller.xViewVisible) or controller.xDisappearing:
+  if (not controller.xViewVisible) or controller.xDisappearing:
     return
   controller.xDisappearing = true
   controller.sendControllerDelegate(viewControllerWillDisappear())
@@ -557,9 +547,7 @@ proc viewWillDisappear*(controller: ViewController) =
     controller.xChildViewControllers[index].viewWillDisappear()
 
 proc viewDidDisappear*(controller: ViewController) =
-  if controller.isNil or (
-    (not controller.xViewVisible) and not controller.xDisappearing
-  ):
+  if ((not controller.xViewVisible) and not controller.xDisappearing):
     return
   for index in countdown(controller.xChildViewControllers.high, 0):
     controller.xChildViewControllers[index].viewDidDisappear()
@@ -569,7 +557,7 @@ proc viewDidDisappear*(controller: ViewController) =
   emit controller.didDisappear()
 
 proc teardown*(controller: ViewController) =
-  if controller.isNil or controller.xTearingDown:
+  if controller.xTearingDown:
     return
   controller.xTearingDown = true
   if controller.xViewVisible:

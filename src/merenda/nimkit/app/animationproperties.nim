@@ -72,68 +72,40 @@ proc applyTiming[T](animation: PropertyAnimation[T], timing: AnimationTiming) =
     animation.timing = timing
 
 proc currentFrame(view: View): Rect =
-  if view.isNil:
-    rect(0.0, 0.0, 0.0, 0.0)
-  else:
-    view.frame()
+  view.frame()
 
 proc currentBounds(view: View): Rect =
-  if view.isNil:
-    rect(0.0, 0.0, 0.0, 0.0)
-  else:
-    view.bounds()
+  view.bounds()
 
 proc currentAlphaValue(view: View): float32 =
-  if view.isNil:
-    1.0'f32
-  else:
-    view.alphaValue()
+  view.alphaValue()
 
 proc currentContentOffset(scrollView: ScrollView): Point =
-  if scrollView.isNil:
-    initPoint(0.0, 0.0)
-  else:
-    scrollView.contentOffset()
+  scrollView.contentOffset()
 
 proc currentProgressValue(indicator: ProgressIndicator): float32 =
-  if indicator.isNil:
-    0.0'f32
-  else:
-    indicator.value()
+  indicator.value()
 
 proc currentColumnWidth(view: CascadingView): float32 =
-  if view.isNil:
-    0.0'f32
-  else:
-    view.columnWidth()
+  view.columnWidth()
 
 proc currentMinColumnWidth(view: CascadingView): float32 =
-  if view.isNil:
-    0.0'f32
-  else:
-    view.minColumnWidth()
+  view.minColumnWidth()
 
 proc currentColumnSpacing(view: CascadingView): float32 =
-  if view.isNil:
-    0.0'f32
-  else:
-    view.columnSpacing()
+  view.columnSpacing()
 
 proc ensureViewAnimationProtocol(view: View) =
-  if not view.isNil:
-    discard view.withProtocol(ViewAnim)
+  discard view.withProtocol(ViewAnim)
 
 proc ensureScrollViewAnimationProtocol(scrollView: ScrollView) =
-  if not scrollView.isNil:
-    discard scrollView.withProtocol(ScrollAnim)
+  discard scrollView.withProtocol(ScrollAnim)
 
 proc ensureProgressIndicatorAnimationProtocol(indicator: ProgressIndicator) =
-  if not indicator.isNil:
-    discard indicator.withProtocol(ProgressAnim)
+  discard indicator.withProtocol(ProgressAnim)
 
 proc ensureCascadingViewAnimationProtocol(view: CascadingView) =
-  if not view.isNil:
-    discard view.withProtocol(CascadeAnim)
+  discard view.withProtocol(CascadeAnim)
 
 proc newFrameAnimation*(
     view: View,
@@ -261,11 +233,7 @@ proc newSplitDividerPositionAnimation*(
     duration = initDuration(milliseconds = 250),
     timing = linearTiming(),
 ): PropertyAnimation[float32] =
-  let fromPosition =
-    if splitView.isNil:
-      0.0'f32
-    else:
-      splitView.positionOfDivider(dividerIndex)
+  let fromPosition = splitView.positionOfDivider(dividerIndex)
   newSplitDividerPositionAnimation(
     splitView, dividerIndex, fromPosition, toPosition, duration, timing
   )

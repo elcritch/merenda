@@ -179,35 +179,27 @@ proc sharedApplication*(): Application =
   sharedApplicationInstance
 
 proc userDefaults*(app: Application): UserDefaults =
-  if app.isNil:
-    return sharedUserDefaults()
   if app.xUserDefaults.isNil:
     app.xUserDefaults = sharedUserDefaults()
   app.xUserDefaults
 
 proc animationScheduler*(app: Application): AnimationScheduler =
-  if app.isNil:
-    return nil
   if app.xAnimationScheduler.isNil:
     app.xAnimationScheduler = newAnimationScheduler()
   app.xAnimationScheduler
 
 proc animationClock*(app: Application): AnimationSchedulerClock =
-  if app.isNil:
-    return nil
   if app.xAnimationClock.isNil:
     app.xAnimationClock = newAnimationSchedulerClock()
   app.xAnimationClock
 
 proc startAnimationClock*(app: Application) =
-  if app.isNil:
-    return
   let clock = app.animationClock()
   if not clock.isNil and not clock.isRunning:
     clock.start()
 
 proc stopAnimationClock*(app: Application) =
-  if app.isNil or app.xAnimationClock.isNil:
+  if app.xAnimationClock.isNil:
     return
   app.xAnimationClock.stop()
 
@@ -222,57 +214,53 @@ proc startAnimation*(app: Application, animation: Animation): bool {.discardable
 proc stopAnimation*(
     app: Application, animation: Animation, finished = false
 ): bool {.discardable.} =
-  if app.isNil or app.xAnimationScheduler.isNil:
+  if app.xAnimationScheduler.isNil:
     return false
   result = app.xAnimationScheduler.stopAnimation(animation, finished)
   if app.xAnimationScheduler.animationCount == 0:
     app.stopAnimationClock()
 
 proc drainAnimations*(app: Application): int {.discardable.} =
-  if app.isNil or app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
+  if app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
     return 0
   result = app.xAnimationScheduler.drain(app.xAnimationClock)
   if app.xAnimationScheduler.animationCount == 0:
     app.stopAnimationClock()
 
 proc hasAppearance*(app: Application): bool =
-  (not app.isNil) and app.xHasAppearance
+  app.xHasAppearance
 
 proc appearance*(app: Application): Appearance =
-  if app.isNil or not app.xHasAppearance:
+  if not app.xHasAppearance:
     return initAppearance()
   app.xAppearance
 
 proc effectiveAppearance*(app: Application): Appearance =
-  if app.isNil or not app.xHasAppearance:
+  if not app.xHasAppearance:
     return initAppearance()
   app.xAppearance
 
 proc delegate*(app: Application): DynamicAgent =
-  if app.isNil: nil else: app.xDelegate
+  app.xDelegate
 
 proc `delegate=`*(app: Application, delegate: DynamicAgent) =
-  if app.isNil:
-    return
   app.xDelegate = delegate
 
 proc `delegate=`*(app: Application, delegate: Responder) =
   app.delegate = DynamicAgent(delegate)
 
 proc currentEvent*(app: Application): Option[KeyEvent] =
-  if app.isNil or not app.xHasCurrentEvent:
+  if not app.xHasCurrentEvent:
     return none(KeyEvent)
   some(app.xCurrentEvent)
 
 proc setCurrentEvent*(app: Application, event: KeyEvent) =
-  if not app.isNil:
-    app.xCurrentEvent = event
-    app.xHasCurrentEvent = true
+  app.xCurrentEvent = event
+  app.xHasCurrentEvent = true
 
 proc clearCurrentEvent*(app: Application) =
-  if not app.isNil:
-    app.xCurrentEvent = KeyEvent()
-    app.xHasCurrentEvent = false
+  app.xCurrentEvent = KeyEvent()
+  app.xHasCurrentEvent = false
 
 proc removeWindow(windows: var seq[Window], window: Window): bool =
   let idx = windows.find(window)
@@ -281,31 +269,29 @@ proc removeWindow(windows: var seq[Window], window: Window): bool =
     return true
 
 proc includeOrderedWindow(app: Application, window: Window) =
-  if app.isNil or window.isNil or window in app.xOrderedWindows:
+  if window.isNil or window in app.xOrderedWindows:
     return
   app.xOrderedWindows.add window
 
 proc moveWindowToFront(app: Application, window: Window) =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return
   discard app.xOrderedWindows.removeWindow(window)
   app.xOrderedWindows.insert(window, 0)
 
 proc moveWindowToBack(app: Application, window: Window) =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return
   discard app.xOrderedWindows.removeWindow(window)
   app.xOrderedWindows.add window
 
 proc frontVisibleWindow(app: Application, excluding: Window = nil): Window =
-  if app.isNil:
-    return nil
   for window in app.xOrderedWindows:
     if window != excluding and not window.isNil and window.isVisible:
       return window
 
 proc restoreFocusAfterWindowHidden(app: Application, window: Window) =
-  if app.isNil or app.xHidden:
+  if app.xHidden:
     return
   let replacement = app.frontVisibleWindow(excluding = window)
   if app.xKeyWindow == window:
@@ -314,8 +300,6 @@ proc restoreFocusAfterWindowHidden(app: Application, window: Window) =
     app.setMainWindow(replacement)
 
 proc restoreFocusAfterWindowClosed(app: Application, window: Window) =
-  if app.isNil:
-    return
   let replacement = app.frontVisibleWindow(excluding = window)
   if app.xKeyWindow == window:
     app.setKeyWindow(replacement)
@@ -323,7 +307,7 @@ proc restoreFocusAfterWindowClosed(app: Application, window: Window) =
     app.setMainWindow(replacement)
 
 proc noteWindowOrderedFront(app: Application, window: Window) =
-  if app.isNil or window.isNil or window.isClosed:
+  if window.isNil or window.isClosed:
     return
   if window notin app.xWindows:
     app.addWindow(window)
@@ -335,7 +319,7 @@ proc noteWindowOrderedFront(app: Application, window: Window) =
   app.updateWindowsMenu()
 
 proc noteWindowOrderedBack(app: Application, window: Window) =
-  if app.isNil or window.isNil or window.isClosed:
+  if window.isNil or window.isClosed:
     return
   if window notin app.xWindows:
     app.addWindow(window)
@@ -343,26 +327,26 @@ proc noteWindowOrderedBack(app: Application, window: Window) =
   app.updateWindowsMenu()
 
 proc noteWindowOrderedOut(app: Application, window: Window) =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return
   app.restoreFocusAfterWindowHidden(window)
   app.updateWindowsMenu()
 
 proc noteWindowClosed(app: Application, window: Window) =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return
   discard app.xOrderedWindows.removeWindow(window)
   app.restoreFocusAfterWindowClosed(window)
   app.updateWindowsMenu()
 
 proc keyWindow*(app: Application): Window =
-  if app.isNil: nil else: app.xKeyWindow
+  app.xKeyWindow
 
 proc mainWindow*(app: Application): Window =
-  if app.isNil: nil else: app.xMainWindow
+  app.xMainWindow
 
 proc setKeyWindow*(app: Application, window: Window) =
-  if app.isNil or app.xKeyWindow == window:
+  if app.xKeyWindow == window:
     return
   if not app.xKeyWindow.isNil:
     app.xKeyWindow.setKeyWindow(false)
@@ -372,7 +356,7 @@ proc setKeyWindow*(app: Application, window: Window) =
   app.updateWindowsMenu()
 
 proc setMainWindow*(app: Application, window: Window) =
-  if app.isNil or app.xMainWindow == window:
+  if app.xMainWindow == window:
     return
   if not app.xMainWindow.isNil:
     app.xMainWindow.setMainWindow(false)
@@ -382,42 +366,36 @@ proc setMainWindow*(app: Application, window: Window) =
   app.updateWindowsMenu()
 
 proc mainMenu*(app: Application): Menu =
-  if app.isNil: nil else: app.xMainMenu
+  app.xMainMenu
 
 proc `mainMenu=`*(app: Application, menu: Menu) =
-  if app.isNil:
-    return
   app.xMainMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
 
 proc windowsMenu*(app: Application): Menu =
-  if app.isNil: nil else: app.xWindowsMenu
+  app.xWindowsMenu
 
 proc `windowsMenu=`*(app: Application, menu: Menu) =
-  if app.isNil:
-    return
   app.xWindowsMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
   app.updateWindowsMenu()
 
 proc isActive*(app: Application): bool =
-  (not app.isNil) and app.xActive
+  app.xActive
 
 proc isHidden*(app: Application): bool =
-  (not app.isNil) and app.xHidden
+  app.xHidden
 
 proc isTerminating*(app: Application): bool =
-  (not app.isNil) and app.xTerminating
+  app.xTerminating
 
 proc sendDelegate(app: Application, selector: Selector[DynamicAgent, EmptyArgs]) =
-  if not app.isNil and not app.xDelegate.isNil:
+  if not app.xDelegate.isNil:
     discard app.xDelegate.sendLocalIfHandled(selector, DynamicAgent(app))
 
 proc postApplicationNotification(app: Application, kind: NotificationKind) =
-  if app.isNil:
-    return
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       kind,
@@ -429,8 +407,6 @@ proc postApplicationNotification(app: Application, kind: NotificationKind) =
   )
 
 proc postApplicationAppearanceNotification(app: Application) =
-  if app.isNil:
-    return
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       nkApplicationAppearanceDidChange,
@@ -446,7 +422,7 @@ proc willFinishLaunching*(app: Application) =
   app.postApplicationNotification(nkApplicationWillFinishLaunching)
 
 proc finishLaunching*(app: Application) =
-  if app.isNil or app.xLaunched:
+  if app.xLaunched:
     return
   app.willFinishLaunching()
   app.xLaunched = true
@@ -454,21 +430,21 @@ proc finishLaunching*(app: Application) =
   app.postApplicationNotification(nkApplicationDidFinishLaunching)
 
 proc activate*(app: Application) =
-  if app.isNil or app.xActive:
+  if app.xActive:
     return
   app.xActive = true
   app.sendDelegate(appDidBecomeActive())
   app.postApplicationNotification(nkApplicationDidBecomeActive)
 
 proc deactivate*(app: Application) =
-  if app.isNil or not app.xActive:
+  if not app.xActive:
     return
   app.xActive = false
   app.sendDelegate(appDidResignActive())
   app.postApplicationNotification(nkApplicationDidResignActive)
 
 proc hide*(app: Application) =
-  if app.isNil or app.xHidden:
+  if app.xHidden:
     return
   app.sendDelegate(appWillHide())
   app.postApplicationNotification(nkApplicationWillHide)
@@ -483,7 +459,7 @@ proc hide*(app: Application) =
   app.postApplicationNotification(nkApplicationDidHide)
 
 proc unhide*(app: Application) =
-  if app.isNil or not app.xHidden:
+  if not app.xHidden:
     return
   app.sendDelegate(appWillUnhide())
   app.postApplicationNotification(nkApplicationWillUnhide)
@@ -498,8 +474,6 @@ proc unhide*(app: Application) =
   app.postApplicationNotification(nkApplicationDidUnhide)
 
 proc replyToApplicationShouldTerminate*(app: Application, shouldTerminate: bool) =
-  if app.isNil:
-    return
   if shouldTerminate:
     app.xTerminating = true
     app.sendDelegate(appWillTerminate())
@@ -509,8 +483,6 @@ proc replyToApplicationShouldTerminate*(app: Application, shouldTerminate: bool)
     app.xTerminating = false
 
 proc terminate*(app: Application): TerminationReply {.discardable.} =
-  if app.isNil:
-    return trCancel
   if not app.modalSession().isNil:
     app.xTerminating = true
     return trLater
@@ -538,7 +510,7 @@ proc setAppearance*(app: Application, appearance: Appearance) =
   app.postApplicationAppearanceNotification()
 
 proc clearAppearance*(app: Application) =
-  if app.isNil or not app.xHasAppearance:
+  if not app.xHasAppearance:
     return
   app.xAppearance = Appearance()
   app.xHasAppearance = false
@@ -546,13 +518,11 @@ proc clearAppearance*(app: Application) =
   app.postApplicationAppearanceNotification()
 
 proc clearMenuItems(menu: Menu) =
-  if menu.isNil:
-    return
   while menu.len > 0:
     discard menu.removeItem(menu[0])
 
 proc updateWindowsMenu*(app: Application) =
-  if app.isNil or app.xWindowsMenu.isNil:
+  if app.xWindowsMenu.isNil:
     return
   let menu = app.xWindowsMenu
   menu.clearMenuItems()
@@ -566,7 +536,7 @@ proc updateWindowsMenu*(app: Application) =
       discard menu.addItem(item)
 
 proc activateWindow*(app: Application, window: Window) =
-  if app.isNil or window.isNil or window.isClosed:
+  if window.isNil or window.isClosed:
     return
   if window notin app.xWindows:
     app.addWindow(window)
@@ -581,7 +551,7 @@ proc activateWindow*(app: Application, window: Window) =
 proc showWindow*(
     app: Application, window: Window, contentView: View, firstResponder: Responder = nil
 ): Window {.discardable.} =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return nil
   window.setContentView(contentView)
   if firstResponder.isNil:
@@ -594,13 +564,11 @@ proc showWindow*(
 proc runWindow*(
     app: Application, window: Window, contentView: View, firstResponder: Responder = nil
 ) =
-  if app.isNil:
-    return
   discard app.showWindow(window, contentView, firstResponder)
   app.run()
 
 proc addWindow*(app: Application, window: Window) =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return
   if window notin app.xWindows:
     app.xWindows.add window
@@ -623,8 +591,6 @@ proc isRunning*(app: Application): bool =
   app.xRunning
 
 proc keyEquivalentDispatchStart(app: Application): Responder =
-  if app.isNil:
-    return nil
   if not app.xKeyWindow.isNil:
     let firstResponder = app.xKeyWindow.firstResponder()
     if not firstResponder.isNil:
@@ -633,7 +599,7 @@ proc keyEquivalentDispatchStart(app: Application): Responder =
   Responder(app)
 
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool =
-  if app.isNil or app.xMainMenu.isNil:
+  if app.xMainMenu.isNil:
     return false
   app.setCurrentEvent(event)
   app.updateWindowsMenu()
@@ -645,7 +611,7 @@ proc beginModalSession*(
     mode = msmApplicationModal,
     parentWindow: Window = nil,
 ): ModalSession =
-  if app.isNil or window.isNil:
+  if window.isNil:
     return nil
   result = ModalSession(
     window: window,
@@ -671,7 +637,7 @@ proc beginModalSheet*(
   app.beginModalSession(sheet, msmWindowModal, parentWindow)
 
 proc modalSession*(app: Application): ModalSession =
-  if app.isNil or app.xModalSessions.len == 0:
+  if app.xModalSessions.len == 0:
     return nil
   app.xModalSessions[^1]
 
@@ -687,7 +653,7 @@ proc abortModal*(app: Application) =
     session.state = mssAborted
 
 proc endModalSession*(app: Application, session: ModalSession) =
-  if app.isNil or session.isNil:
+  if session.isNil:
     return
   let idx = app.xModalSessions.find(session)
   if idx >= 0:
@@ -703,7 +669,7 @@ proc endModalSession*(app: Application, session: ModalSession) =
   app.updateWindowsMenu()
 
 proc runModalSession*(app: Application, session: ModalSession): int =
-  if app.isNil or session.isNil:
+  if session.isNil:
     return 0
   while session.state == mssRunning:
     if app.runForFrames(1) == 0:

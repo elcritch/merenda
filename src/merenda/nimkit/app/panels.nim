@@ -70,7 +70,7 @@ proc acceptsFileType*(allowedFileTypes: openArray[string], fileType: string): bo
       return true
 
 proc acceptsFileUrl*(panel: OpenPanel, fileUrl: string): bool =
-  if panel.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return false
   let looksLikeDirectory = fileUrl.endsWith("/")
   if looksLikeDirectory:
@@ -79,81 +79,73 @@ proc acceptsFileUrl*(panel: OpenPanel, fileUrl: string): bool =
     panel.allowedFileTypes.acceptsFileType(fileUrl.fileTypeForUrl())
 
 proc acceptsFileUrl*(panel: SavePanel, fileUrl: string): bool =
-  if panel.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return false
   panel.allowedFileTypes.acceptsFileType(fileUrl.fileTypeForUrl())
 
 proc modalResponse*(alert: Alert): int =
-  if alert.isNil: PanelResponseCancel else: alert.response
+  alert.response
 
 proc modalResponse*(panel: OpenPanel): int =
-  if panel.isNil: PanelResponseCancel else: panel.response
+  panel.response
 
 proc modalResponse*(panel: SavePanel): int =
-  if panel.isNil: PanelResponseCancel else: panel.response
+  panel.response
 
 proc setAccessoryView*(alert: Alert, view: View) =
-  if alert.isNil or alert.accessoryView == view:
+  if alert.accessoryView == view:
     return
   alert.accessoryView = view
   discard alert.rebuildAlertView()
 
 proc setAccessoryView*(panel: OpenPanel, view: View) =
-  if panel.isNil or panel.accessoryView == view:
+  if panel.accessoryView == view:
     return
   panel.accessoryView = view
   discard panel.rebuildOpenPanelView()
 
 proc setAccessoryView*(panel: SavePanel, view: View) =
-  if panel.isNil or panel.accessoryView == view:
+  if panel.accessoryView == view:
     return
   panel.accessoryView = view
   discard panel.rebuildSavePanelView()
 
 proc addButton*(alert: Alert, title: string, response: int): int {.discardable.} =
-  if alert.isNil:
-    return -1
   alert.buttons.add title
   alert.buttonResponses.add response
   discard alert.rebuildAlertView()
   alert.buttons.high
 
 proc setButtonResponse*(alert: Alert, index, response: int): bool {.discardable.} =
-  if alert.isNil or index < 0 or index >= alert.buttonResponses.len:
+  if index < 0 or index >= alert.buttonResponses.len:
     return false
   alert.buttonResponses[index] = response
   discard alert.rebuildAlertView()
   true
 
 proc buttonResponse*(alert: Alert, index: int): int =
-  if alert.isNil or index < 0 or index >= alert.buttonResponses.len:
+  if index < 0 or index >= alert.buttonResponses.len:
     PanelResponseCancel
   else:
     alert.buttonResponses[index]
 
 proc dismiss*(alert: Alert, response: int) =
-  if alert.isNil:
-    return
   alert.response = response
   if not alert.responseHandler.isNil:
     alert.responseHandler(response)
 
 proc dismiss*(panel: OpenPanel, response: int) =
-  if panel.isNil:
-    return
   panel.response = response
   if not panel.responseHandler.isNil:
     panel.responseHandler(response)
 
 proc dismiss*(panel: SavePanel, response: int) =
-  if panel.isNil:
-    return
   panel.response = response
   if not panel.responseHandler.isNil:
     panel.responseHandler(response)
 
 proc syncOpenPanelFromField(panel: OpenPanel) =
-  if panel.isNil or panel.urlField.isNil or not (panel.urlField of TextField):
+  if panel.urlField.isNil or not (panel.urlField of TextField):
     return
   panel.selectedUrls.setLen(0)
   for line in TextField(panel.urlField).text.splitLines():
@@ -162,25 +154,20 @@ proc syncOpenPanelFromField(panel: OpenPanel) =
       panel.selectedUrls.add value
 
 proc syncSavePanelFromField(panel: SavePanel) =
-  if panel.isNil or panel.nameField.isNil or not (panel.nameField of TextField):
+  if panel.nameField.isNil or not (panel.nameField of TextField):
     return
   panel.nameFieldStringValue = TextField(panel.nameField).text.strip()
 
 proc selectedUrl*(panel: OpenPanel): string =
-  if panel.isNil or panel.selectedUrls.len == 0:
+  if panel.selectedUrls.len == 0:
     ""
   else:
     panel.selectedUrls[0]
 
 proc selectedUrls*(panel: OpenPanel): seq[string] =
-  if panel.isNil:
-    @[]
-  else:
-    panel.selectedUrls
+  panel.selectedUrls
 
 proc setSelectedUrls*(panel: OpenPanel, urls: openArray[string]) =
-  if panel.isNil:
-    return
   panel.selectedUrls = @urls
   if not panel.urlField.isNil and panel.urlField of TextField:
     TextField(panel.urlField).text = panel.selectedUrls.join("\n")
@@ -192,16 +179,12 @@ proc `selectedUrls=`*(panel: OpenPanel, urls: openArray[string]) =
   panel.setSelectedUrls(urls)
 
 proc selectUrl*(panel: OpenPanel, url: string) =
-  if panel.isNil:
-    return
   if url.len == 0:
     panel.setSelectedUrls([])
   else:
     panel.setSelectedUrls([url])
 
 proc validateSelection*(panel: OpenPanel): bool =
-  if panel.isNil:
-    return false
   panel.syncOpenPanelFromField()
   result =
     panel.selectedUrls.len > 0 and
@@ -224,8 +207,6 @@ proc urlFromDirectory(directoryUrl, name: string): string =
     directoryUrl & "/" & name
 
 proc selectedFileType*(panel: SavePanel): string =
-  if panel.isNil:
-    return ""
   let explicitType = panel.nameFieldStringValue.fileTypeForUrl()
   if explicitType.len > 0:
     return explicitType
@@ -234,8 +215,6 @@ proc selectedFileType*(panel: SavePanel): string =
   ""
 
 proc selectedUrl*(panel: SavePanel): string =
-  if panel.isNil:
-    return ""
   panel.syncSavePanelFromField()
   var name = panel.nameFieldStringValue
   if name.len == 0:
@@ -246,8 +225,6 @@ proc selectedUrl*(panel: SavePanel): string =
   panel.directoryUrl.urlFromDirectory(name)
 
 proc validateSelection*(panel: SavePanel): bool =
-  if panel.isNil:
-    return false
   let url = panel.selectedUrl()
   result = url.len > 0 and panel.acceptsFileUrl(url)
   panel.buttonViews.updatePrimaryButton(result)
@@ -288,11 +265,7 @@ proc attachButtonRow(
   layout.addArrangedSubview(View(row))
 
 proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
-  let frame =
-    if window.isNil:
-      rect(0.0, 0.0, 360.0, 180.0)
-    else:
-      rect(0.0, 0.0, window.frame().size.width, window.frame().size.height)
+  let frame = rect(0.0, 0.0, window.frame().size.width, window.frame().size.height)
   result.root = newView(frame = frame)
   result.layout = newStackView(laVertical)
   result.layout.spacing = 12.0
@@ -302,12 +275,9 @@ proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
     result.layout.pinEdges(toGuide = result.root.contentLayoutGuide(PanelContentInsets))
 
 proc setPanelContent(window: Window, content: View) =
-  if not window.isNil:
-    window.setContentView(content)
+  window.setContentView(content)
 
 proc rebuildAlertView*(alert: Alert): View =
-  if alert.isNil:
-    return nil
   let prepared = prepareRoot(alert.window)
   let layout = prepared.layout
   layout.addArrangedSubview(View(newTitleLabel(alert.messageText)))
@@ -324,8 +294,6 @@ proc rebuildAlertView*(alert: Alert): View =
   result = alert.contentView
 
 proc rebuildOpenPanelView*(panel: OpenPanel): View =
-  if panel.isNil:
-    return nil
   let prepared = prepareRoot(panel.window)
   let layout = prepared.layout
   layout.addArrangedSubview(View(newTitleLabel(panel.window.title())))
@@ -353,8 +321,6 @@ proc rebuildOpenPanelView*(panel: OpenPanel): View =
   result = panel.contentView
 
 proc rebuildSavePanelView*(panel: SavePanel): View =
-  if panel.isNil:
-    return nil
   let prepared = prepareRoot(panel.window)
   let layout = prepared.layout
   layout.addArrangedSubview(View(newTitleLabel(panel.window.title())))
@@ -382,40 +348,30 @@ proc rebuildSavePanelView*(panel: SavePanel): View =
   result = panel.contentView
 
 proc contentView*(alert: Alert): View =
-  if alert.isNil:
-    nil
-  elif alert.contentView.isNil:
+  if alert.contentView.isNil:
     alert.rebuildAlertView()
   else:
     alert.contentView
 
 proc contentView*(panel: OpenPanel): View =
-  if panel.isNil:
-    nil
-  elif panel.contentView.isNil:
+  if panel.contentView.isNil:
     panel.rebuildOpenPanelView()
   else:
     panel.contentView
 
 proc contentView*(panel: SavePanel): View =
-  if panel.isNil:
-    nil
-  elif panel.contentView.isNil:
+  if panel.contentView.isNil:
     panel.rebuildSavePanelView()
   else:
     panel.contentView
 
 proc prepareForModal*(alert: Alert, responseHandler: proc(response: int) {.closure.}) =
-  if alert.isNil:
-    return
   alert.responseHandler = responseHandler
   discard alert.contentView()
 
 proc prepareForModal*(
     panel: OpenPanel, responseHandler: proc(response: int) {.closure.}
 ) =
-  if panel.isNil:
-    return
   panel.responseHandler = responseHandler
   discard panel.contentView()
   discard panel.validateSelection()
@@ -423,8 +379,6 @@ proc prepareForModal*(
 proc prepareForModal*(
     panel: SavePanel, responseHandler: proc(response: int) {.closure.}
 ) =
-  if panel.isNil:
-    return
   panel.responseHandler = responseHandler
   discard panel.contentView()
   discard panel.validateSelection()

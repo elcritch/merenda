@@ -97,11 +97,9 @@ func clampUnit(value: float32): float32 =
 
 protocol DefaultButtonHover of ButtonHoverProtocol:
   method hoverProgress(button: Button): float32 =
-    if button.isNil: 0.0'f32 else: button.xHoverProgress
+    button.xHoverProgress
 
   method setHoverProgress(button: Button, progress: float32) =
-    if button.isNil:
-      return
     let normalized = progress.clampUnit()
     if abs(button.xHoverProgress - normalized) <= 0.0001'f32:
       return
@@ -181,8 +179,6 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
     cell.cellSize().resolveIntrinsicSize(bounds.size)
 
 proc buttonEditingFrame(cell: ButtonCell, frame: Rect, controlView: View): Rect =
-  if cell.isNil:
-    return frame
   let
     appearance =
       if controlView.isNil:
@@ -201,8 +197,6 @@ proc buttonEditingFrame(cell: ButtonCell, frame: Rect, controlView: View): Rect 
   style.buttonTextRect(frame)
 
 proc buttonEditingTextStyle(cell: ButtonCell, controlView: View): TextStyle =
-  if cell.isNil:
-    return initAppearance().resolveButtonStyle(controlStyle(srButton)).text
   let
     appearance =
       if controlView.isNil:
@@ -265,8 +259,6 @@ proc newButtonCell*(title = "Button"): ButtonCell =
   initButtonCellFields(result, title)
 
 proc copyButtonCell*(cell: ButtonCell): ButtonCell =
-  if cell.isNil:
-    return newButtonCell()
   result = newButtonCell(cell.title())
   result.setButtonType(cell.buttonType())
   result.setAllowsMixedState(cell.allowsMixedState())
@@ -310,14 +302,13 @@ proc `allowsMixedState=`*(button: Button, value: bool) =
   button.setAllowsMixedState(value)
 
 proc highlighted*(button: Button): bool =
-  (not button.isNil) and button.isHighlighted()
+  button.isHighlighted()
 
 proc `highlighted=`*(button: Button, highlighted: bool) =
-  if not button.isNil:
-    button.setHighlighted(highlighted)
+  button.setHighlighted(highlighted)
 
 proc stopHoverAnimation(button: Button) =
-  if button.isNil or button.xHoverAnimation.isNil:
+  if button.xHoverAnimation.isNil:
     return
   let owner = button.window()
   if owner of Window:
@@ -327,8 +318,6 @@ proc stopHoverAnimation(button: Button) =
   button.xHoverAnimation = nil
 
 proc animateHoverProgress(button: Button, progress: float32) =
-  if button.isNil:
-    return
   let target = progress.clampUnit()
   button.stopHoverAnimation()
   if abs(button.hoverProgress() - target) <= 0.0001'f32:
@@ -432,7 +421,7 @@ proc choiceChromeRole(cell: ButtonCell): ChromeRole =
   cell.buttonType().choiceChromeRole()
 
 proc hasActiveEditor(cell: ButtonCell, owner: View): bool =
-  if cell.isNil or not (owner of Control):
+  if not (owner of Control):
     return false
   let control = Control(owner)
   control.cell() == Cell(cell) and not control.currentEditor().isNil

@@ -72,7 +72,7 @@ proc installWindowControllerForwarding(controller: WindowController) =
 proc sendControllerDelegate(
     controller: WindowController, selector: Selector[WindowController, EmptyArgs]
 ) =
-  if not controller.isNil and not controller.xDelegate.isNil:
+  if not controller.xDelegate.isNil:
     discard controller.xDelegate.sendLocalIfHandled(selector, controller)
 
 proc notifyWillLoadWindow(controller: WindowController) =
@@ -104,7 +104,7 @@ proc notifyDidSynchronizeWindowTitle(controller: WindowController, title: string
   emit controller.didSyncWindowTitle(title)
 
 proc setViewControllerVisible(controller: WindowController, visible: bool) =
-  if controller.isNil or controller.xViewController.isNil:
+  if controller.xViewController.isNil:
     return
   if visible:
     if not controller.xViewController.isViewVisible():
@@ -115,7 +115,7 @@ proc setViewControllerVisible(controller: WindowController, visible: bool) =
     controller.xViewController.viewDidDisappear()
 
 proc installViewControllerContent(controller: WindowController) =
-  if controller.isNil or controller.xWindow.isNil or controller.xViewController.isNil:
+  if controller.xWindow.isNil or controller.xViewController.isNil:
     return
   let view = controller.xViewController.view()
   if controller.xWindow.contentView() != view:
@@ -125,12 +125,12 @@ proc installViewControllerContent(controller: WindowController) =
   controller.xViewController.setNextResponder(controller.xWindow)
 
 proc controllerShouldCloseWindow(controller: WindowController): bool =
-  if controller.isNil or controller.xDelegate.isNil:
+  if controller.xDelegate.isNil:
     return true
   controller.xDelegate.trySendLocal(controllerShouldClose(), controller).get(true)
 
 proc forwardedWindowShouldClose(controller: WindowController, window: Window): bool =
-  if controller.isNil or controller.xForwardedWindowDelegate.isNil:
+  if controller.xForwardedWindowDelegate.isNil:
     return true
   controller.xForwardedWindowDelegate.trySendLocal(windowShouldClose(), window).get(
     true
@@ -139,7 +139,7 @@ proc forwardedWindowShouldClose(controller: WindowController, window: Window): b
 proc forwardWindowDelegate(
     controller: WindowController, selector: Selector[Window, EmptyArgs], window: Window
 ) =
-  if not controller.isNil and not controller.xForwardedWindowDelegate.isNil:
+  if not controller.xForwardedWindowDelegate.isNil:
     discard controller.xForwardedWindowDelegate.sendLocalIfHandled(selector, window)
 
 protocol WindowControllerWindowDelegateBridge of WindowDelegateProtocol:
@@ -192,7 +192,7 @@ proc detachWindow(controller: WindowController) =
   controller.xForwardedNextResponder = nil
 
 proc attachWindow(controller: WindowController, window: Window) =
-  if controller.isNil or window.isNil:
+  if window.isNil:
     return
   let existingDelegate = window.delegate()
   if existingDelegate != DynamicAgent(controller):
@@ -206,8 +206,6 @@ proc attachWindow(controller: WindowController, window: Window) =
   window.setNextResponder(controller)
 
 proc computedWindowTitle(controller: WindowController): string =
-  if controller.isNil:
-    return ""
   if controller.xHasWindowTitle:
     return controller.xWindowTitle
   if controller.xDocumentDisplayName.len > 0:
@@ -219,8 +217,6 @@ proc computedWindowTitle(controller: WindowController): string =
   "Window"
 
 proc initWindowController*(controller: WindowController, window: Window = nil) =
-  if controller.isNil:
-    return
   initResponder(controller)
   discard controller.withProtocol(DefaultWindowControllerLoading)
   discard controller.withProtocol(WindowControllerWindowDelegateBridge)
@@ -233,29 +229,28 @@ proc newWindowController*(window: Window = nil): WindowController =
   result.initWindowController(window)
 
 proc delegate*(controller: WindowController): DynamicAgent =
-  if controller.isNil: nil else: controller.xDelegate
+  controller.xDelegate
 
 proc `delegate=`*(controller: WindowController, delegate: DynamicAgent) =
-  if not controller.isNil:
-    controller.xDelegate = delegate
+  controller.xDelegate = delegate
 
 proc `delegate=`*(controller: WindowController, delegate: Responder) =
   controller.delegate = DynamicAgent(delegate)
 
 proc isWindowLoaded*(controller: WindowController): bool =
-  (not controller.isNil) and not controller.xWindow.isNil
+  not controller.xWindow.isNil
 
 proc windowOrNil*(controller: WindowController): Window =
-  if controller.isNil: nil else: controller.xWindow
+  controller.xWindow
 
 proc viewController*(controller: WindowController): ViewController =
-  if controller.isNil: nil else: controller.xViewController
+  controller.xViewController
 
 proc contentViewController*(controller: WindowController): ViewController =
   controller.viewController()
 
 proc setWindow*(controller: WindowController, window: Window) =
-  if controller.isNil or controller.xWindow == window:
+  if controller.xWindow == window:
     return
   let oldWindow = controller.xWindow
   if not oldWindow.isNil and not controller.xViewController.isNil:
@@ -278,7 +273,7 @@ proc `window=`*(controller: WindowController, window: Window) =
   controller.setWindow(window)
 
 proc setViewController*(controller: WindowController, viewController: ViewController) =
-  if controller.isNil or controller.xViewController == viewController:
+  if controller.xViewController == viewController:
     return
   let oldController = controller.xViewController
   if not oldController.isNil:
@@ -310,10 +305,10 @@ proc `contentViewController=`*(
   controller.setViewController(viewController)
 
 proc documentDisplayName*(controller: WindowController): string =
-  if controller.isNil: "" else: controller.xDocumentDisplayName
+  controller.xDocumentDisplayName
 
 proc setDocumentDisplayName*(controller: WindowController, displayName: string) =
-  if controller.isNil or controller.xDocumentDisplayName == displayName:
+  if controller.xDocumentDisplayName == displayName:
     return
   controller.xDocumentDisplayName = displayName
   if not controller.xHasWindowTitle:
@@ -326,8 +321,6 @@ proc windowTitle*(controller: WindowController): string =
   controller.computedWindowTitle()
 
 proc setWindowTitle*(controller: WindowController, title: string) =
-  if controller.isNil:
-    return
   if controller.xHasWindowTitle and controller.xWindowTitle == title:
     return
   controller.xHasWindowTitle = true
@@ -338,14 +331,14 @@ proc `windowTitle=`*(controller: WindowController, title: string) =
   controller.setWindowTitle(title)
 
 proc clearWindowTitle*(controller: WindowController) =
-  if controller.isNil or not controller.xHasWindowTitle:
+  if not controller.xHasWindowTitle:
     return
   controller.xHasWindowTitle = false
   controller.xWindowTitle = ""
   controller.synchronizeWindowTitle()
 
 proc synchronizeWindowTitle*(controller: WindowController) =
-  if controller.isNil or controller.xWindow.isNil:
+  if controller.xWindow.isNil:
     return
   let title = controller.computedWindowTitle()
   if controller.xWindow.title() == title:
@@ -354,8 +347,6 @@ proc synchronizeWindowTitle*(controller: WindowController) =
   controller.notifyDidSynchronizeWindowTitle(title)
 
 proc loadWindow*(controller: WindowController): Window =
-  if controller.isNil:
-    return nil
   if not controller.xWindow.isNil:
     return controller.xWindow
   controller.notifyWillLoadWindow()
@@ -366,8 +357,6 @@ proc loadWindow*(controller: WindowController): Window =
   controller.notifyDidLoadWindow(result)
 
 proc controlledWindow*(controller: WindowController): Window =
-  if controller.isNil:
-    return nil
   if controller.xWindow.isNil:
     discard controller.loadWindow()
   controller.xWindow
@@ -419,7 +408,7 @@ proc showWindow*(
   controller.notifyDidShowWindow(result)
 
 proc close*(controller: WindowController): bool {.discardable.} =
-  if controller.isNil or controller.xWindow.isNil:
+  if controller.xWindow.isNil:
     return true
   controller.xWindow.close()
   controller.xWindow.isClosed()

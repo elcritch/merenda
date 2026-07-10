@@ -29,15 +29,15 @@ proc sharedUserDefaults*(): UserDefaults =
   sharedUserDefaultsInstance
 
 proc hasObject*(defaults: UserDefaults, key: string): bool =
-  not defaults.isNil and key in defaults.xObjects
+  key in defaults.xObjects
 
 proc objectForKey*(defaults: UserDefaults, key: string): Option[DynamicAgent] =
-  if defaults.isNil or key.len == 0 or key notin defaults.xObjects:
+  if key.len == 0 or key notin defaults.xObjects:
     return none(DynamicAgent)
   some(defaults.xObjects[key])
 
 proc setObjectForKey*(defaults: UserDefaults, key: string, value: DynamicAgent) =
-  if defaults.isNil or key.len == 0:
+  if key.len == 0:
     return
   if value.isNil:
     defaults.xObjects.del(key)
@@ -60,7 +60,7 @@ proc setObjectForKey*(defaults: UserDefaults, key: string, value: DynamicAgent) 
     )
 
 proc removeObjectForKey*(defaults: UserDefaults, key: string) =
-  if not defaults.isNil and key in defaults.xObjects:
+  if key in defaults.xObjects:
     defaults.xObjects.del(key)
     emit sharedNotificationCenter().notificationReceived(
       initNotification(
@@ -71,7 +71,7 @@ proc removeObjectForKey*(defaults: UserDefaults, key: string) =
     )
 
 proc clear*(defaults: UserDefaults) =
-  if not defaults.isNil and defaults.xObjects.len > 0:
+  if defaults.xObjects.len > 0:
     defaults.xObjects.clear()
     emit sharedNotificationCenter().notificationReceived(
       initNotification(

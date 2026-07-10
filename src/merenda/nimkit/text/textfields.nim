@@ -71,8 +71,6 @@ func toTextRange(range: AccessibilityTextRange): TextRange =
   initTextRange(int(range.location), int(range.length))
 
 proc currentAccessibilitySelection(textField: TextField): TextRange =
-  if textField.isNil:
-    return initTextRange(0, 0)
   let editor = textField.activeFieldEditor()
   if not editor.isNil:
     return textviews.selectedRange(TextView(editor))
@@ -82,7 +80,7 @@ proc currentAccessibilitySelection(textField: TextField): TextRange =
   initTextRange(start, stop - start)
 
 proc postSelectionChanged(textField: TextField, before: TextRange) =
-  if not textField.isNil and textField.currentAccessibilitySelection() != before:
+  if textField.currentAccessibilitySelection() != before:
     textField.postAccessibilityNotification(anSelectionChanged)
 
 protocol TextFieldEvents:
@@ -385,24 +383,18 @@ proc currentSelection(textField: TextField): tuple[start, stop: int] =
   )
 
 proc activeFieldEditor(textField: TextField): FieldEditor =
-  if textField.isNil:
-    return nil
   activeEditor(Control(textField))
 
 proc currentEditor*(textField: TextField): FieldEditor =
   currentEditor(Control(textField))
 
 proc validateEditedObjectText(textField: TextField, value: string): bool =
-  if textField.isNil:
-    return true
   let parsed = Control(textField).parseEditedObjectValue(value, ovrTextField)
   if parsed.failed():
     return Control(textField).rejectObjectValueEdit(parsed.error)
   Control(textField).validateObjectValueForWriteback(parsed.value)
 
 proc commitEditedObjectText(textField: TextField, value: string, cursor, anchor: int) =
-  if textField.isNil:
-    return
   let committed = Control(textField).commitEditedObjectText(value, ovrTextField)
   let displayValue =
     if committed:
@@ -412,8 +404,6 @@ proc commitEditedObjectText(textField: TextField, value: string, cursor, anchor:
   textField.setEditedString(displayValue, cursor, anchor)
 
 proc setObjectValue*(textField: TextField, value: ObjectValue, notify = false) =
-  if textField.isNil:
-    return
   Control(textField).setObjectValue(value, notify)
   let displayValue = Control(textField).formattedObjectValue(ovrTextField)
   let cursor = min(textField.xInsertionPoint, displayValue.runeLen)
@@ -424,8 +414,6 @@ proc `objectValue=`*(textField: TextField, value: ObjectValue) =
   textField.setObjectValue(value)
 
 proc textFieldStyle(textField: TextField): TextFieldStyle =
-  if textField.isNil:
-    return initAppearance().resolveTextFieldStyle(controlStyle(srTextField))
   textField.effectiveAppearance().resolveTextFieldStyle(
     textField.textFieldStyleContext(), textField.textColor()
   )
@@ -443,8 +431,6 @@ func textFieldTextContainer(bounds, textRect: Rect): TextContainer =
   initTextContainer(bounds.size, textInsets)
 
 proc hasUniformAttributes(storage: TextStorage, attributes: TextAttributes): bool =
-  if storage.isNil:
-    return false
   if storage.len == 0:
     return true
   var covered = 0
@@ -455,8 +441,6 @@ proc hasUniformAttributes(storage: TextStorage, attributes: TextAttributes): boo
   covered == storage.len
 
 proc syncLayout(textField: TextField, style: TextFieldStyle) =
-  if textField.isNil:
-    return
   let
     textRect = style.textFieldTextRect(textField.bounds)
     attributes = defaultTextAttributes(style.text.color, style.text.fontSize)
@@ -479,22 +463,15 @@ proc syncLayout(textField: TextField, style: TextFieldStyle) =
   textField.xLayoutManager.alignment = textField.xAlignment
 
 proc syncLayout(textField: TextField) =
-  if textField.isNil:
-    return
   textField.syncLayout(textField.textFieldStyle())
 
 proc layoutManager*(textField: TextField): TextLayoutManager =
-  if textField.isNil:
-    return nil
   textField.syncLayout()
   textField.xLayoutManager
 
 proc fieldEditorFrame(textField: TextField): Rect =
-  if textField.isNil:
-    rect(0, 0, 0, 0)
-  else:
-    let style = textField.textFieldStyle()
-    style.textFieldTextRect(textField.bounds)
+  let style = textField.textFieldStyle()
+  style.textFieldTextRect(textField.bounds)
 
 proc layoutFieldEditor(textField: TextField) =
   let editor = textField.activeFieldEditor()
@@ -525,8 +502,6 @@ proc nextWordBoundary(text: string, index: int): int =
     inc result
 
 proc setCursor(textField: TextField, index: int, extending = false) =
-  if textField.isNil:
-    return
   let previousSelection = textField.selectedRange()
   let cursor = clampIndex(textField.runeCount, index)
   textField.xInsertionPoint = cursor
@@ -555,8 +530,6 @@ proc setEditedString(
   textField.postSelectionChanged(previousSelection)
 
 proc selectAllText(textField: TextField) =
-  if textField.isNil:
-    return
   let previousSelection = textField.selectedRange()
   textField.xSelectionAnchor = 0
   textField.xInsertionPoint = textField.runeCount
@@ -564,7 +537,7 @@ proc selectAllText(textField: TextField) =
   textField.postSelectionChanged(previousSelection)
 
 proc replaceSelectedText(textField: TextField, insertion: string) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -576,7 +549,7 @@ proc replaceSelectedText(textField: TextField, insertion: string) =
   textField.setEditedString(value, cursor, cursor)
 
 proc deleteBackwardText(textField: TextField) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -592,7 +565,7 @@ proc deleteBackwardText(textField: TextField) =
   textField.setEditedString(value, cursor, cursor)
 
 proc deleteForwardText(textField: TextField) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -608,7 +581,7 @@ proc deleteForwardText(textField: TextField) =
   textField.setEditedString(value, selected.start, selected.start)
 
 proc deleteWordBackwardText(textField: TextField) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -623,7 +596,7 @@ proc deleteWordBackwardText(textField: TextField) =
   textField.setEditedString(value, cursor, cursor)
 
 proc deleteWordForwardText(textField: TextField) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let
     current = textField.xStringValue
@@ -638,7 +611,7 @@ proc deleteWordForwardText(textField: TextField) =
   textField.setEditedString(value, selected.start, selected.start)
 
 proc deleteToBeginningOfLineText(textField: TextField) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let selected = textField.currentSelection()
   if selected.stop > selected.start:
@@ -648,7 +621,7 @@ proc deleteToBeginningOfLineText(textField: TextField) =
     textField.setEditedString(textField.xStringValue.runeSubStr(selected.start), 0, 0)
 
 proc deleteToEndOfLineText(textField: TextField) =
-  if textField.isNil or not textField.isEditable():
+  if not textField.isEditable():
     return
   let selected = textField.currentSelection()
   if selected.stop > selected.start:
@@ -674,21 +647,19 @@ proc `textColor=`*(textField: TextField, color: Color) =
   textField.setTextColor(color)
 
 proc editable*(textField: TextField): bool =
-  (not textField.isNil) and textField.isEditable()
+  textField.isEditable()
 
 proc `editable=`*(textField: TextField, editable: bool) =
-  if not textField.isNil:
-    textField.setEditable(editable)
+  textField.setEditable(editable)
 
 proc selectable*(textField: TextField): bool =
-  (not textField.isNil) and textField.isSelectable()
+  textField.isSelectable()
 
 proc `selectable=`*(textField: TextField, selectable: bool) =
-  if not textField.isNil:
-    textField.setSelectable(selectable)
+  textField.setSelectable(selectable)
 
 proc editing*(textField: TextField): bool =
-  (not textField.isNil) and textField.isEditing()
+  textField.isEditing()
 
 proc `selectedRange=`*(textField: TextField, value: TextRange) =
   textField.setSelectedRange(value)
@@ -702,8 +673,6 @@ method textFieldInputMarkedRange(textField: TextField): TextRange {.selector.} =
   initTextRange(0, 0)
 
 method textFieldInputSelectedRange(textField: TextField): TextRange {.selector.} =
-  if textField.isNil:
-    return initTextRange(0, 0)
   let editor = textField.activeFieldEditor()
   if not editor.isNil:
     return textviews.selectedRange(TextView(editor))
@@ -715,8 +684,6 @@ method textFieldInputSelectedRange(textField: TextField): TextRange {.selector.}
 method textFieldInputAttributedSubstringForRange(
     textField: TextField, range: TextRange
 ): AttributedString {.selector.} =
-  if textField.isNil:
-    return newTextStorage()
   discard textField.layoutManager()
   textField.xLayoutStorage.sliceTextStorage(range)
 
@@ -729,8 +696,6 @@ method textFieldInputValidAttributesForMarkedText(
 method textFieldInputFirstRectForCharacterRange(
     textField: TextField, range: TextRange
 ): Rect {.selector.} =
-  if textField.isNil:
-    return rect(0, 0, 0, 0)
   let clamped = initTextRange(
     min(int(range.location), textField.runeCount),
     min(int(range.length), max(textField.runeCount - int(range.location), 0)),
@@ -744,13 +709,9 @@ method textFieldInputFirstRectForCharacterRange(
 method textFieldInputCharacterIndexForPoint(
     textField: TextField, point: Point
 ): int {.selector.} =
-  if textField.isNil:
-    return -1
   textField.layoutManager().textIndexAtPoint(textField.pointFromWindow(point))
 
 proc installTextFieldInputClientMethods(textField: TextField) =
-  if textField.isNil:
-    return
   discard
     textField.addMethod(selectors.textInputHasMarkedText, textFieldInputHasMarkedText)
   discard textField.addMethod(selectors.textInputMarkedRange, textFieldInputMarkedRange)
@@ -1042,8 +1003,6 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
     true
 
   method accessibilityTextLength(textField: TextField): int =
-    if textField.isNil:
-      return 0
     if textField of Label:
       textField.stringValue().runeLen
     else:
@@ -1057,7 +1016,7 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
   method setAccessibilitySelectedTextRange(
       textField: TextField, range: AccessibilityTextRange
   ): bool =
-    if textField.isNil or (not textField.isEditable() and not textField.isSelectable()):
+    if (not textField.isEditable() and not textField.isSelectable()):
       return false
     textField.setSelectedRange(range.toTextRange())
     true
@@ -1069,7 +1028,7 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
       textField.insertionPoint()
 
   method setAccessibilityInsertionPoint(textField: TextField, index: int): bool =
-    if textField.isNil or (not textField.isEditable() and not textField.isSelectable()):
+    if (not textField.isEditable() and not textField.isSelectable()):
       return false
     textField.setCursor(index)
     true
@@ -1077,8 +1036,6 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
   method accessibilityBoundsForTextRange(
       textField: TextField, range: AccessibilityTextRange
   ): seq[Rect] =
-    if textField.isNil:
-      return
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityBoundsForTextRange(range)
@@ -1086,16 +1043,12 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
       result.add textField.rectToWindow(rect)
 
   method accessibilityBoundsForCharacter(textField: TextField, index: int): Rect =
-    if textField.isNil:
-      return rect(0, 0, 0, 0)
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityBoundsForCharacter(index)
     textField.rectToWindow(textField.layoutManager().characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(textField: TextField, point: Point): int =
-    if textField.isNil:
-      return -1
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityCharacterIndexAtPoint(point)
@@ -1104,18 +1057,12 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
   method accessibilityLineRange(
       textField: TextField, line: int
   ): AccessibilityTextRange =
-    if textField.isNil:
-      return initAccessibilityTextRange(0, 0)
     textField.layoutManager().lineRange(line).toAccessibilityTextRange()
 
   method accessibilityLineForCharacter(textField: TextField, index: int): int =
-    if textField.isNil:
-      return -1
     textField.layoutManager().lineForIndex(index)
 
   method accessibilityBoundsForLine(textField: TextField, line: int): Rect =
-    if textField.isNil:
-      return rect(0, 0, 0, 0)
     textField.rectToWindow(textField.layoutManager().lineBounds(line))
 
 protocol DefaultTextFieldCellMeasurement of CellMeasurementProtocol:
@@ -1206,7 +1153,7 @@ func defaultAlignment(style: LabelStyle): TextAlignment =
   else: taLeft
 
 proc labelStyle*(label: Label): LabelStyle =
-  if label.isNil: lsBody else: label.xLabelStyle
+  label.xLabelStyle
 
 proc `labelStyle=`*(label: Label, style: LabelStyle) =
   label.xLabelStyle = style

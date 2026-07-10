@@ -92,9 +92,6 @@ proc addSpacer(buttonBox: DialogButtonBox, target: var View) =
   target = buttonBox.addFlexibleSpacer()
 
 proc rebuildButtons(buttonBox: DialogButtonBox) =
-  if buttonBox.isNil:
-    return
-
   buttonBox.clearArrangedContent()
   if buttonBox.orientation == laHorizontal and
       buttonBox.xButtonAlignment in {dbaCenter, dbaTrailing}:
@@ -117,23 +114,18 @@ proc initDialogButtonSpec*(title: string, role: DialogButtonRole): DialogButtonS
   initDialogButtonSpec(newButton(title), role)
 
 proc buttonAlignment*(buttonBox: DialogButtonBox): DialogButtonAlignment =
-  if buttonBox.isNil: dbaTrailing else: buttonBox.xButtonAlignment
+  buttonBox.xButtonAlignment
 
 proc `buttonAlignment=`*(buttonBox: DialogButtonBox, alignment: DialogButtonAlignment) =
-  if buttonBox.isNil or buttonBox.xButtonAlignment == alignment:
+  if buttonBox.xButtonAlignment == alignment:
     return
   buttonBox.xButtonAlignment = alignment
   buttonBox.rebuildButtons()
 
 proc dialogButtons*(buttonBox: DialogButtonBox): seq[DialogButtonSpec] =
-  if buttonBox.isNil:
-    @[]
-  else:
-    buttonBox.xButtonSpecs
+  buttonBox.xButtonSpecs
 
 proc buttonForRole*(buttonBox: DialogButtonBox, role: DialogButtonRole): Button =
-  if buttonBox.isNil:
-    return nil
   for spec in buttonBox.xButtonSpecs:
     if spec.role == role:
       return spec.button
@@ -141,7 +133,7 @@ proc buttonForRole*(buttonBox: DialogButtonBox, role: DialogButtonRole): Button 
 proc addButton*(
     buttonBox: DialogButtonBox, button: Button, role: DialogButtonRole
 ): Button {.discardable.} =
-  if buttonBox.isNil or button.isNil:
+  if button.isNil:
     return nil
   result = button
   buttonBox.xButtonSpecs.add initDialogButtonSpec(button, role)

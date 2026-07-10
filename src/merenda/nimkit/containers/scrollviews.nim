@@ -498,13 +498,21 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
     if rect.minX < viewport.minX:
       nextOffset.x = rect.minX
     elif rect.maxX > viewport.maxX:
-      nextOffset.x = rect.maxX - viewport.size.width
+      nextOffset.x =
+        if rect.size.width > viewportSize.width:
+          rect.minX
+        else:
+          rect.maxX - viewportSize.width
 
   if viewportSize.height > 0.0'f32:
     if rect.minY < viewport.minY:
       nextOffset.y = rect.minY
     elif rect.maxY > viewport.maxY:
-      nextOffset.y = rect.maxY - viewport.size.height
+      nextOffset.y =
+        if rect.size.height > viewportSize.height:
+          rect.minY
+        else:
+          rect.maxY - viewportSize.height
 
   nextOffset = scrollView.clampContentOffset(nextOffset)
   result = nextOffset != currentOffset

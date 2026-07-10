@@ -44,8 +44,6 @@ proc progressFraction(indicator: ProgressIndicator): float32 =
   (indicator.xValue - range.minValue) / (range.maxValue - range.minValue)
 
 proc setProgressValue(indicator: ProgressIndicator, value: float32) =
-  if indicator.isNil:
-    return
   let nextValue = indicator.normalizedValue(value)
   if indicator.xValue == nextValue:
     return
@@ -54,8 +52,6 @@ proc setProgressValue(indicator: ProgressIndicator, value: float32) =
   indicator.postAccessibilityNotification(anValueChanged)
 
 proc progressStyleContext(indicator: ProgressIndicator): StyleContext =
-  if indicator.isNil:
-    return controlStyle(srProgressIndicator)
   controlStyle(
     srProgressIndicator,
     indicator.widgetStateSet(),
@@ -128,11 +124,9 @@ protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
   property animationPhase -> float32
 
   method value(indicator: ProgressIndicator): float32 =
-    if indicator.isNil: 0.0'f32 else: indicator.xValue
+    indicator.xValue
 
   method setValue(indicator: ProgressIndicator, value: float32) =
-    if indicator.isNil:
-      return
     let nextValue = indicator.normalizedValue(value)
     if indicator.xValue == nextValue:
       return
@@ -142,65 +136,63 @@ protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
     indicator.setProgressValue(nextValue)
 
   method minValue(indicator: ProgressIndicator): float32 =
-    if indicator.isNil: 0.0'f32 else: indicator.xMinValue
+    indicator.xMinValue
 
   method setMinValue(indicator: ProgressIndicator, value: float32) =
-    if indicator.isNil or indicator.xMinValue == value:
+    if indicator.xMinValue == value:
       return
     indicator.xMinValue = value
     indicator.setProgressValue(indicator.xValue)
     indicator.setNeedsDisplay(true)
 
   method maxValue(indicator: ProgressIndicator): float32 =
-    if indicator.isNil: 0.0'f32 else: indicator.xMaxValue
+    indicator.xMaxValue
 
   method setMaxValue(indicator: ProgressIndicator, value: float32) =
-    if indicator.isNil or indicator.xMaxValue == value:
+    if indicator.xMaxValue == value:
       return
     indicator.xMaxValue = value
     indicator.setProgressValue(indicator.xValue)
     indicator.setNeedsDisplay(true)
 
   method indeterminate(indicator: ProgressIndicator): bool =
-    (not indicator.isNil) and indicator.xIndeterminate
+    indicator.xIndeterminate
 
   method setIndeterminate(indicator: ProgressIndicator, value: bool) =
-    if indicator.isNil or indicator.xIndeterminate == value:
+    if indicator.xIndeterminate == value:
       return
     indicator.xIndeterminate = value
     indicator.setNeedsDisplay(true)
     indicator.postAccessibilityNotification(anValueChanged)
 
   method animating*(indicator: ProgressIndicator): bool =
-    (not indicator.isNil) and indicator.xAnimating
+    indicator.xAnimating
 
   method displayedWhenStopped(indicator: ProgressIndicator): bool =
-    indicator.isNil or indicator.xDisplayedWhenStopped
+    indicator.xDisplayedWhenStopped
 
   method setDisplayedWhenStopped(indicator: ProgressIndicator, value: bool) =
-    if indicator.isNil or indicator.xDisplayedWhenStopped == value:
+    if indicator.xDisplayedWhenStopped == value:
       return
     indicator.xDisplayedWhenStopped = value
     indicator.setNeedsDisplay(true)
 
   method progressIndicatorStyle(indicator: ProgressIndicator): ProgressIndicatorStyle =
-    if indicator.isNil: pisBar else: indicator.xStyle
+    indicator.xStyle
 
   method setProgressIndicatorStyle(
       indicator: ProgressIndicator, style: ProgressIndicatorStyle
   ) =
-    if indicator.isNil or indicator.xStyle == style:
+    if indicator.xStyle == style:
       return
     indicator.xStyle = style
     indicator.invalidateIntrinsicContentSize()
     indicator.setNeedsDisplay(true)
 
   method animationPhase(indicator: ProgressIndicator): float32 =
-    if indicator.isNil: 0.0'f32 else: indicator.xAnimationPhase
+    indicator.xAnimationPhase
 
   method setAnimationPhase(indicator: ProgressIndicator, phase: float32) =
-    if indicator.isNil:
-      return
     let nextPhase = phase - floor(phase)
     if indicator.xAnimationPhase == nextPhase:
       return
@@ -208,30 +200,27 @@ protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
     indicator.setNeedsDisplay(true)
 
   method startAnimation*(indicator: ProgressIndicator) =
-    if indicator.isNil or indicator.xAnimating:
+    if indicator.xAnimating:
       return
     indicator.xAnimating = true
     indicator.setWidgetState(ssActive, true)
     indicator.setNeedsDisplay(true)
 
   method stopAnimation*(indicator: ProgressIndicator) =
-    if indicator.isNil or not indicator.xAnimating:
+    if not indicator.xAnimating:
       return
     indicator.xAnimating = false
     indicator.setWidgetState(ssActive, false)
     indicator.setNeedsDisplay(true)
 
   method stepAnimation*(indicator: ProgressIndicator) =
-    if not indicator.isNil:
-      indicator.setAnimationPhase(indicator.animationPhase + 1.0'f32 / 12.0'f32)
+    indicator.setAnimationPhase(indicator.animationPhase + 1.0'f32 / 12.0'f32)
 
   method incrementBy*(indicator: ProgressIndicator, amount: float32) =
-    if not indicator.isNil:
-      indicator.setValue(indicator.value + amount)
+    indicator.setValue(indicator.value + amount)
 
 proc stepAnimation*(indicator: ProgressIndicator, delta: float32) =
-  if not indicator.isNil:
-    indicator.setAnimationPhase(indicator.animationPhase + delta)
+  indicator.setAnimationPhase(indicator.animationPhase + delta)
 
 proc `value=`*(indicator: ProgressIndicator, value: float32) =
   indicator.setValue(value)

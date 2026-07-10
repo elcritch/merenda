@@ -347,11 +347,10 @@ proc dispatchSelectionChanged(textView: TextView, before: seq[TextRange]) =
   textView.postAccessibilityNotification(anSelectionChanged)
 
 proc postSelectionChanged(textView: TextView, before: TextRange) =
-  if not textView.isNil:
-    textView.dispatchSelectionChanged(@[before])
+  textView.dispatchSelectionChanged(@[before])
 
 proc showInsertionPoint(textView: TextView) =
-  if textView.isNil or textView.xInsertionPointVisible:
+  if textView.xInsertionPointVisible:
     return
   textView.xInsertionPointVisible = true
   textView.setNeedsDisplay(true)
@@ -441,21 +440,15 @@ proc wordRangeAt(text: string, index: int): TextRange =
   initTextRange(start, stop - start)
 
 proc lineRangeAtIndex(textView: TextView, index: int): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   let line = textView.lineForIndex(index)
   textView.lineRange(line)
 
 proc paragraphRangeAtIndex(textView: TextView, index: int): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   textView.xTextStorage.paragraphRangeForRange(initTextRange(index, 0))
 
 proc selectionRangeForGranularity(
     textView: TextView, index: int, granularity: TextSelectionGranularity
 ): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   case granularity
   of tsgCharacter:
     initTextRange(index, 0)
@@ -469,11 +462,9 @@ proc selectionRangeForGranularity(
     initTextRange(0, textView.xTextStorage.len)
 
 proc textStorage*(textView: TextView): TextStorage =
-  if textView.isNil: nil else: textView.xTextStorage
+  textView.xTextStorage
 
 proc `textStorage=`*(textView: TextView, storage: TextStorage) =
-  if textView.isNil:
-    return
   let
     previousValue = textView.textViewStringValue()
     previousSelection = textView.textViewSelectedRange()
@@ -499,30 +490,20 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   textView.postSelectionChanged(previousSelection)
 
 proc layoutManager*(textView: TextView): TextLayoutManager =
-  if textView.isNil: nil else: textView.xLayoutManager
+  textView.xLayoutManager
 
 proc textContainer*(textView: TextView): TextContainer =
-  if textView.isNil:
-    initTextContainer()
-  else:
-    textView.xTextContainer
+  textView.xTextContainer
 
 proc `textContainer=`*(textView: TextView, container: TextContainer) =
-  if textView.isNil:
-    return
   textView.xTextContainer = container
   textView.syncLayout()
   textView.setNeedsDisplay(true)
 
 proc textViewStringValue(textView: TextView): string =
-  if textView.isNil:
-    ""
-  else:
-    textView.xTextStorage.stringValue()
+  textView.xTextStorage.stringValue()
 
 proc setTextViewStringValue(textView: TextView, value: string) =
-  if textView.isNil:
-    return
   let previousValue = textView.textViewStringValue()
   if previousValue == value:
     return
@@ -544,10 +525,10 @@ proc setTextViewStringValue(textView: TextView, value: string) =
   textView.dispatchSelectionChanged(previousRanges)
 
 proc editable*(textView: TextView): bool =
-  (not textView.isNil) and tvEditable in textView.xFlags
+  tvEditable in textView.xFlags
 
 proc `editable=`*(textView: TextView, editable: bool) =
-  if textView.isNil or editable == textView.editable:
+  if editable == textView.editable:
     return
   if editable:
     textView.xFlags.incl tvEditable
@@ -558,10 +539,10 @@ proc `editable=`*(textView: TextView, editable: bool) =
   )
 
 proc selectable*(textView: TextView): bool =
-  (not textView.isNil) and tvSelectable in textView.xFlags
+  tvSelectable in textView.xFlags
 
 proc `selectable=`*(textView: TextView, selectable: bool) =
-  if textView.isNil or selectable == textView.selectable:
+  if selectable == textView.selectable:
     return
   if selectable:
     textView.xFlags.incl tvSelectable
@@ -572,10 +553,10 @@ proc `selectable=`*(textView: TextView, selectable: bool) =
   )
 
 proc richText*(textView: TextView): bool =
-  (not textView.isNil) and tvRichText in textView.xFlags
+  tvRichText in textView.xFlags
 
 proc `richText=`*(textView: TextView, richText: bool) =
-  if textView.isNil or richText == textView.richText:
+  if richText == textView.richText:
     return
   if richText:
     textView.xFlags.incl tvRichText
@@ -583,10 +564,10 @@ proc `richText=`*(textView: TextView, richText: bool) =
     textView.xFlags.excl tvRichText
 
 proc isFieldEditor*(textView: TextView): bool =
-  (not textView.isNil) and tvFieldEditor in textView.xFlags
+  tvFieldEditor in textView.xFlags
 
 proc `fieldEditor=`*(textView: TextView, fieldEditor: bool) =
-  if textView.isNil or fieldEditor == textView.isFieldEditor:
+  if fieldEditor == textView.isFieldEditor:
     return
   if fieldEditor:
     textView.xFlags.incl tvFieldEditor
@@ -594,10 +575,10 @@ proc `fieldEditor=`*(textView: TextView, fieldEditor: bool) =
     textView.xFlags.excl tvFieldEditor
 
 proc allowsUndo*(textView: TextView): bool =
-  (not textView.isNil) and tvAllowsUndo in textView.xFlags
+  tvAllowsUndo in textView.xFlags
 
 proc `allowsUndo=`*(textView: TextView, allowsUndo: bool) =
-  if textView.isNil or allowsUndo == textView.allowsUndo:
+  if allowsUndo == textView.allowsUndo:
     return
   if allowsUndo:
     textView.xFlags.incl tvAllowsUndo
@@ -607,33 +588,29 @@ proc `allowsUndo=`*(textView: TextView, allowsUndo: bool) =
     textView.xRedoStack.setLen(0)
 
 proc delegate*(textView: TextView): DynamicAgent =
-  if textView.isNil: nil else: textView.xDelegate
+  textView.xDelegate
 
 proc `delegate=`*(textView: TextView, delegate: DynamicAgent) =
-  if not textView.isNil:
-    textView.xDelegate = delegate
+  textView.xDelegate = delegate
 
 proc textChecker*(textView: TextView): DynamicAgent =
-  if textView.isNil: nil else: textView.xTextChecker
+  textView.xTextChecker
 
 proc `textChecker=`*(textView: TextView, checker: DynamicAgent) =
-  if not textView.isNil:
-    textView.xTextChecker = checker
+  textView.xTextChecker = checker
 
 proc alignment*(textView: TextView): TextAlignment =
-  if textView.isNil: taLeft else: textView.xAlignment
+  textView.xAlignment
 
 proc `alignment=`*(textView: TextView, alignment: TextAlignment) =
-  if textView.isNil or textView.xAlignment == alignment:
+  if textView.xAlignment == alignment:
     return
   textView.xAlignment = alignment
   textView.syncLayout()
   textView.setNeedsDisplay(true)
 
 proc textColor*(textView: TextView): Color =
-  if textView.isNil:
-    color(0.08, 0.09, 0.11)
-  elif textView.xTextColor.a > 0.0:
+  if textView.xTextColor.a > 0.0:
     textView.xTextColor
   else:
     textView
@@ -672,8 +649,6 @@ proc textStyle(textView: TextView): TextStyle =
     result.color = textView.xTextColor
 
 proc setTextStyleOverride*(textView: TextView, style: TextStyle) =
-  if textView.isNil:
-    return
   textView.xTextStyleOverride = style
   textView.xHasTextStyleOverride = true
   textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
@@ -681,7 +656,7 @@ proc setTextStyleOverride*(textView: TextView, style: TextStyle) =
   textView.setNeedsDisplay(true)
 
 proc clearTextStyleOverride*(textView: TextView) =
-  if textView.isNil or not textView.xHasTextStyleOverride:
+  if not textView.xHasTextStyleOverride:
     return
   textView.xHasTextStyleOverride = false
   let style = textView.textStyle()
@@ -690,7 +665,7 @@ proc clearTextStyleOverride*(textView: TextView) =
   textView.setNeedsDisplay(true)
 
 proc `textColor=`*(textView: TextView, color: Color) =
-  if textView.isNil or textView.xTextColor == color:
+  if textView.xTextColor == color:
     return
   textView.xTextColor = color
   let style = textView.textStyle()
@@ -698,200 +673,154 @@ proc `textColor=`*(textView: TextView, color: Color) =
   textView.setNeedsDisplay(true)
 
 proc selectionColor*(textView: TextView): Color =
-  if textView.isNil:
-    color(0.24, 0.56, 1.0, 0.34)
-  else:
-    textView.xSelectionColor
+  textView.xSelectionColor
 
 proc `selectionColor=`*(textView: TextView, color: Color) =
-  if textView.isNil or textView.xSelectionColor == color:
+  if textView.xSelectionColor == color:
     return
   textView.xSelectionColor = color
   textView.setNeedsDisplay(true)
 
 proc selectedTextAttributes*(textView: TextView): TextAttributes =
-  if textView.isNil or not textView.xHasSelectedTextAttributes:
+  if not textView.xHasSelectedTextAttributes:
     defaultTextAttributes(color(1.0, 1.0, 1.0, 1.0))
   else:
     textView.xSelectedTextAttributes
 
 proc `selectedTextAttributes=`*(textView: TextView, attributes: TextAttributes) =
-  if textView.isNil:
-    return
   textView.xSelectedTextAttributes = attributes
   textView.xHasSelectedTextAttributes = true
   textView.setNeedsDisplay(true)
 
 proc clearSelectedTextAttributes*(textView: TextView) =
-  if textView.isNil:
-    return
   textView.xHasSelectedTextAttributes = false
   textView.setNeedsDisplay(true)
 
 proc typingAttributes*(textView: TextView): TextAttributes =
-  if textView.isNil:
-    defaultTextAttributes()
-  else:
-    textView.xTypingAttributes
+  textView.xTypingAttributes
 
 proc `typingAttributes=`*(textView: TextView, attributes: TextAttributes) =
-  if textView.isNil or textView.xTypingAttributes == attributes:
+  if textView.xTypingAttributes == attributes:
     return
   textView.xTypingAttributes = attributes
 
 proc insertionPointColor*(textView: TextView): Color =
-  if textView.isNil:
-    color(0.08, 0.09, 0.11, 1.0)
-  elif textView.xInsertionPointColor.a > 0.0:
+  if textView.xInsertionPointColor.a > 0.0:
     textView.xInsertionPointColor
   else:
     textView.textColor()
 
 proc `insertionPointColor=`*(textView: TextView, color: Color) =
-  if textView.isNil or textView.xInsertionPointColor == color:
+  if textView.xInsertionPointColor == color:
     return
   textView.xInsertionPointColor = color
   textView.setNeedsDisplay(true)
 
 proc insertionPointVisible*(textView: TextView): bool =
-  (not textView.isNil) and textView.xInsertionPointVisible
+  textView.xInsertionPointVisible
 
 proc `insertionPointVisible=`*(textView: TextView, visible: bool) =
-  if textView.isNil or textView.xInsertionPointVisible == visible:
+  if textView.xInsertionPointVisible == visible:
     return
   textView.xInsertionPointVisible = visible
   textView.setNeedsDisplay(true)
 
 proc insertionPointBlinkPeriod*(textView: TextView): float32 =
-  if textView.isNil: 1.0'f32 else: textView.xInsertionPointBlinkPeriod
+  textView.xInsertionPointBlinkPeriod
 
 proc `insertionPointBlinkPeriod=`*(textView: TextView, period: float32) =
-  if textView.isNil:
-    return
   textView.xInsertionPointBlinkPeriod = max(period, 0.0'f32)
 
 proc markedTextAttributes*(textView: TextView): TextAttributes =
-  if textView.isNil:
-    defaultTextAttributes()
-  else:
-    textView.xMarkedTextAttributes
+  textView.xMarkedTextAttributes
 
 proc `markedTextAttributes=`*(textView: TextView, attributes: TextAttributes) =
-  if textView.isNil or textView.xMarkedTextAttributes == attributes:
+  if textView.xMarkedTextAttributes == attributes:
     return
   textView.xMarkedTextAttributes = attributes
   textView.setNeedsDisplay(true)
 
 proc selectionAffinity*(textView: TextView): TextAffinity =
-  if textView.isNil: taDownstream else: textView.xSelectionAffinity
+  textView.xSelectionAffinity
 
 proc `selectionAffinity=`*(textView: TextView, affinity: TextAffinity) =
-  if not textView.isNil:
-    textView.xSelectionAffinity = affinity
+  textView.xSelectionAffinity = affinity
 
 proc selectionGranularity*(textView: TextView): TextSelectionGranularity =
-  if textView.isNil: tsgCharacter else: textView.xSelectionGranularity
+  textView.xSelectionGranularity
 
 proc `selectionGranularity=`*(
     textView: TextView, granularity: TextSelectionGranularity
 ) =
-  if textView.isNil or textView.xSelectionGranularity == granularity:
+  if textView.xSelectionGranularity == granularity:
     return
   textView.xSelectionGranularity = granularity
 
 proc allowsMultipleSelectedRanges*(textView: TextView): bool =
-  (not textView.isNil) and textView.xAllowsMultipleSelectedRanges
+  textView.xAllowsMultipleSelectedRanges
 
 proc `allowsMultipleSelectedRanges=`*(textView: TextView, value: bool) =
-  if textView.isNil or textView.xAllowsMultipleSelectedRanges == value:
+  if textView.xAllowsMultipleSelectedRanges == value:
     return
   textView.xAllowsMultipleSelectedRanges = value
   if not value and textView.xSelectedRanges.len > 1:
     textView.setTextViewSelectedRange(textView.xSelectedRanges[0])
 
 proc allowsRectangularSelection*(textView: TextView): bool =
-  (not textView.isNil) and textView.xAllowsRectangularSelection
+  textView.xAllowsRectangularSelection
 
 proc `allowsRectangularSelection=`*(textView: TextView, value: bool) =
-  if textView.isNil:
-    return
   textView.xAllowsRectangularSelection = value
   if not value:
     textView.xRectangularSelection = TextRectSelection()
 
 proc rectangularSelection*(textView: TextView): TextRectSelection =
-  if textView.isNil:
-    TextRectSelection()
-  else:
-    textView.xRectangularSelection
+  textView.xRectangularSelection
 
 proc findIndicators*(textView: TextView): seq[TextFindIndicator] =
-  if textView.isNil:
-    @[]
-  else:
-    textView.xFindIndicators
+  textView.xFindIndicators
 
 proc checkingResults*(textView: TextView): seq[TextCheckingResult] =
-  if textView.isNil:
-    @[]
-  else:
-    textView.xCheckingResults
+  textView.xCheckingResults
 
 proc completionPanel*(textView: TextView): TextCompletionPanel =
-  if textView.isNil:
-    TextCompletionPanel(selectedIndex: -1)
-  else:
-    textView.xCompletionPanel
+  textView.xCompletionPanel
 
 proc substitutionOptions*(textView: TextView): TextSubstitutionOptions =
-  if textView.isNil:
-    {}
-  else:
-    textView.xSubstitutionOptions
+  textView.xSubstitutionOptions
 
 proc `substitutionOptions=`*(textView: TextView, options: TextSubstitutionOptions) =
-  if not textView.isNil:
-    textView.xSubstitutionOptions = options
+  textView.xSubstitutionOptions = options
 
 proc smartInsertDeleteEnabled*(textView: TextView): bool =
-  (not textView.isNil) and textView.xSmartInsertDelete
+  textView.xSmartInsertDelete
 
 proc `smartInsertDeleteEnabled=`*(textView: TextView, enabled: bool) =
-  if not textView.isNil:
-    textView.xSmartInsertDelete = enabled
+  textView.xSmartInsertDelete = enabled
 
 proc defaultParagraphStyle*(textView: TextView): TextParagraphStyle =
-  if textView.isNil:
-    initTextParagraphStyle()
-  else:
-    textView.xDefaultParagraphStyle
+  textView.xDefaultParagraphStyle
 
 proc `defaultParagraphStyle=`*(textView: TextView, style: TextParagraphStyle) =
-  if textView.isNil:
-    return
   textView.xDefaultParagraphStyle = style
   textView.xTypingAttributes.paragraphStyle = style
 
 proc usesRuler*(textView: TextView): bool =
-  (not textView.isNil) and textView.xUsesRuler
+  textView.xUsesRuler
 
 proc `usesRuler=`*(textView: TextView, value: bool) =
-  if textView.isNil:
-    return
   textView.xUsesRuler = value
   if not value:
     textView.xRulerVisible = false
 
 proc rulerVisible*(textView: TextView): bool =
-  (not textView.isNil) and textView.xUsesRuler and textView.xRulerVisible
+  textView.xUsesRuler and textView.xRulerVisible
 
 proc `rulerVisible=`*(textView: TextView, value: bool) =
-  if textView.isNil:
-    return
   textView.xRulerVisible = value and textView.xUsesRuler
 
 proc hasMarkedText*(textView: TextView): bool =
-  (not textView.isNil) and textView.xHasMarkedText
+  textView.xHasMarkedText
 
 proc markedRange*(textView: TextView): TextRange =
   if textView.hasMarkedText:
@@ -902,7 +831,7 @@ proc markedRange*(textView: TextView): TextRange =
 proc attributedSubstringForRange*(
     textView: TextView, range: TextRange
 ): AttributedString =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return newTextStorage()
   textView.xTextStorage.sliceTextStorage(textView.clampedRange(range))
 
@@ -911,8 +840,6 @@ proc validAttributesForMarkedText*(textView: TextView): seq[string] =
   @ValidMarkedTextAttributes
 
 proc firstRectForCharacterRange*(textView: TextView, range: TextRange): Rect =
-  if textView.isNil:
-    return rect(0, 0, 0, 0)
   let clamped = textView.clampedRange(range)
   if clamped.length > 0:
     let rects = textView.selectionRects(clamped)
@@ -921,18 +848,16 @@ proc firstRectForCharacterRange*(textView: TextView, range: TextRange): Rect =
   textView.rectToWindow(textView.characterRect(int(clamped.location)))
 
 proc characterIndexForPoint*(textView: TextView, point: Point): int =
-  if textView.isNil:
-    return -1
   textView.textIndexAtPoint(textView.pointFromWindow(point))
 
 proc textViewInsertionPoint(textView: TextView): int =
-  if textView.isNil: 0 else: textView.xInsertionPoint
+  textView.xInsertionPoint
 
 proc textViewSelectionAnchor(textView: TextView): int =
-  if textView.isNil: 0 else: textView.xSelectionAnchor
+  textView.xSelectionAnchor
 
 proc updateTypingAttributesForSelection(textView: TextView) =
-  if textView.isNil or textView.xTextStorage.len == 0:
+  if textView.xTextStorage.len == 0:
     return
   let
     total = textView.xTextStorage.len
@@ -947,8 +872,6 @@ proc updateTypingAttributesForSelection(textView: TextView) =
   textView.xTypingAttributes = textView.xTextStorage.attributesAt(index)
 
 proc textViewSelectedRange(textView: TextView): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   if textView.xSelectedRanges.len > 0:
     return textView.xSelectedRanges[0]
   let
@@ -959,8 +882,6 @@ proc textViewSelectedRange(textView: TextView): TextRange =
 proc normalizedSelectedRanges(
     textView: TextView, ranges: openArray[TextRange]
 ): seq[TextRange] =
-  if textView.isNil:
-    return
   for range in ranges:
     result.add textView.clampedRange(range)
     if not textView.xAllowsMultipleSelectedRanges:
@@ -969,8 +890,6 @@ proc normalizedSelectedRanges(
     result.add initTextRange(textView.xInsertionPoint, 0)
 
 proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
-  if textView.isNil:
-    return
   let previousRanges = textView.selectedRanges()
   let
     total = textView.xTextStorage.len
@@ -1004,16 +923,12 @@ proc setSelectedRange*(textView: TextView, value: TextRange) =
   textView.setTextViewSelectedRange(value)
 
 proc selectedRanges*(textView: TextView): seq[TextRange] =
-  if textView.isNil:
-    return @[]
   if textView.xSelectedRanges.len == 0:
     @[textView.textViewSelectedRange()]
   else:
     textView.xSelectedRanges
 
 proc setSelectedRanges*(textView: TextView, ranges: openArray[TextRange]) =
-  if textView.isNil:
-    return
   let nextRanges = textView.normalizedSelectedRanges(ranges)
   if nextRanges.len == 0:
     return
@@ -1030,8 +945,6 @@ proc `selectedRanges=`*(textView: TextView, ranges: seq[TextRange]) =
   textView.setSelectedRanges(ranges)
 
 proc selectRange*(textView: TextView, index: int, granularity = tsgCharacter) =
-  if textView.isNil:
-    return
   textView.setTextViewSelectedRange(
     textView.selectionRangeForGranularity(index, granularity)
   )
@@ -1039,7 +952,7 @@ proc selectRange*(textView: TextView, index: int, granularity = tsgCharacter) =
 proc setRectangularSelection*(
     textView: TextView, anchor, focus: Point
 ): TextRectSelection =
-  if textView.isNil or not textView.xAllowsRectangularSelection:
+  if not textView.xAllowsRectangularSelection:
     return TextRectSelection()
   let
     x0 = min(anchor.x, focus.x)
@@ -1075,8 +988,6 @@ proc currentSelection(textView: TextView): tuple[start, stop: int] =
   result.stop = max(anchor, cursor)
 
 proc clampedRange(textView: TextView, range: TextRange): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   let
     total = textView.xTextStorage.len
     start = clampIndex(total, int(range.location))
@@ -1094,8 +1005,6 @@ proc setSelection(textView: TextView, range: TextRange) =
   textView.dispatchSelectionChanged(previousRanges)
 
 proc clearMarkedText(textView: TextView) =
-  if textView.isNil:
-    return
   textView.xHasMarkedText = false
   textView.xMarkedRange = initTextRange(0, 0)
   textView.xMarkedUndoStorage = nil
@@ -1107,7 +1016,7 @@ proc recordUndo(
     beforeSelection: TextRange,
     afterSelection: TextRange,
 ) =
-  if textView.isNil or textView.xApplyingUndo or not textView.allowsUndo:
+  if textView.xApplyingUndo or not textView.allowsUndo:
     return
   if textView.xUndoGroupingDepth > 0:
     if not textView.xHasGroupedUndo:
@@ -1127,12 +1036,10 @@ proc recordUndo(
   textView.xRedoStack.setLen(0)
 
 proc beginUndoGrouping*(textView: TextView) =
-  if textView.isNil:
-    return
   inc textView.xUndoGroupingDepth
 
 proc endUndoGrouping*(textView: TextView) =
-  if textView.isNil or textView.xUndoGroupingDepth == 0:
+  if textView.xUndoGroupingDepth == 0:
     return
   dec textView.xUndoGroupingDepth
   if textView.xUndoGroupingDepth > 0 or not textView.xHasGroupedUndo:
@@ -1146,8 +1053,6 @@ proc endUndoGrouping*(textView: TextView) =
   textView.recordUndo(before, beforeSelection, afterSelection)
 
 proc beginEditing*(textView: TextView): bool =
-  if textView.isNil:
-    return false
   if textView.xEditing:
     return true
   if not textView.xDelegate.isNil:
@@ -1162,7 +1067,7 @@ proc beginEditing*(textView: TextView): bool =
   true
 
 proc endEditing*(textView: TextView) =
-  if textView.isNil or not textView.xEditing:
+  if not textView.xEditing:
     return
   textView.xEditing = false
   emit textView.textEditingDidEnd()
@@ -1172,8 +1077,6 @@ proc endEditing*(textView: TextView) =
 proc shouldChangeText(
     textView: TextView, range: TextRange, replacement: TextStorage
 ): bool =
-  if textView.isNil:
-    return false
   if not textView.beginEditing():
     return false
   if textView.xDelegate.isNil:
@@ -1206,7 +1109,7 @@ proc replaceRange(
     record = true,
     clearMark = true,
 ) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let
     before = textView.xTextStorage.copyTextStorage()
@@ -1271,8 +1174,6 @@ proc textStartsWithAt(runes: openArray[Rune], index: int, prefix: string): bool 
 
 proc applyTextSubstitutions(textView: TextView, insertion: string): string =
   result = insertion
-  if textView.isNil:
-    return
   if tsoSmartDashes in textView.xSubstitutionOptions:
     result = result.replace("--", "\226\128\148")
   if tsoSmartQuotes in textView.xSubstitutionOptions:
@@ -1297,7 +1198,7 @@ proc applySmartInsert(
     textView: TextView, selected: TextRange, insertion: string
 ): string =
   result = insertion
-  if textView.isNil or not textView.xSmartInsertDelete or insertion.len == 0:
+  if not textView.xSmartInsertDelete or insertion.len == 0:
     return
   let insertedRunes = insertion.runesOf()
   if insertedRunes.len == 0:
@@ -1326,8 +1227,6 @@ proc setFindIndicators*(
     ranges: openArray[TextRange],
     color = color(1.0, 0.82, 0.24, 0.45),
 ) =
-  if textView.isNil:
-    return
   textView.xFindIndicators.setLen(0)
   for range in ranges:
     let clamped = textView.clampedRange(range)
@@ -1341,7 +1240,7 @@ proc setFindIndicators*(
   textView.setNeedsDisplay(true)
 
 proc clearFindIndicators*(textView: TextView) =
-  if textView.isNil or textView.xFindIndicators.len == 0:
+  if textView.xFindIndicators.len == 0:
     return
   textView.xFindIndicators.setLen(0)
   textView.setNeedsDisplay(true)
@@ -1349,7 +1248,7 @@ proc clearFindIndicators*(textView: TextView) =
 proc findTextRanges*(
     textView: TextView, needle: string, caseSensitive = true
 ): seq[TextRange] =
-  if textView.isNil or needle.len == 0:
+  if needle.len == 0:
     return
   let
     haystack = textView.textViewStringValue().runesOf()
@@ -1373,7 +1272,7 @@ proc showFindIndicators*(
 proc replaceFirstText*(
     textView: TextView, needle, replacement: string, caseSensitive = true
 ): bool =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return false
   let ranges = textView.findTextRanges(needle, caseSensitive)
   if ranges.len == 0:
@@ -1384,7 +1283,7 @@ proc replaceFirstText*(
 proc replaceAllText*(
     textView: TextView, needle, replacement: string, caseSensitive = true
 ): int =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return 0
   let ranges = textView.findTextRanges(needle, caseSensitive)
   if ranges.len == 0:
@@ -1398,8 +1297,6 @@ proc replaceAllText*(
   textView.endUndoGrouping()
 
 proc detectUrlRanges(textView: TextView, range: TextRange): seq[TextCheckingResult] =
-  if textView.isNil:
-    return
   let
     clamped = textView.clampedRange(range)
     source = textView.xTextStorage.substring(clamped)
@@ -1421,8 +1318,6 @@ proc detectUrlRanges(textView: TextView, range: TextRange): seq[TextCheckingResu
       inc index
 
 proc checkText*(textView: TextView, range: TextRange): seq[TextCheckingResult] =
-  if textView.isNil:
-    return
   let clamped = textView.clampedRange(range)
   if not textView.xTextChecker.isNil:
     result.add textView.xTextChecker
@@ -1437,12 +1332,10 @@ proc checkText*(textView: TextView, range: TextRange): seq[TextCheckingResult] =
   textView.xCheckingResults = result
 
 proc checkText*(textView: TextView): seq[TextCheckingResult] =
-  if textView.isNil:
-    return
   textView.checkText(initTextRange(0, textView.xTextStorage.len))
 
 proc clearTextCheckingResults*(textView: TextView) =
-  if textView.isNil or textView.xCheckingResults.len == 0:
+  if textView.xCheckingResults.len == 0:
     return
   textView.xCheckingResults.setLen(0)
   textView.setNeedsDisplay(true)
@@ -1450,7 +1343,7 @@ proc clearTextCheckingResults*(textView: TextView) =
 proc applyTextCheckingResults*(
     textView: TextView, results: openArray[TextCheckingResult]
 ) =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return
   textView.xTextStorage.beginEditing()
   for checking in results:
@@ -1485,16 +1378,12 @@ proc checkSpellingAndGrammar*(textView: TextView): seq[TextCheckingResult] =
   textView.applyTextCheckingResults(result)
 
 proc completionPrefixRange*(textView: TextView): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   let selected = textView.textViewSelectedRange()
   if selected.length > 0:
     return selected
   textView.textViewStringValue().wordRangeAt(textView.xInsertionPoint)
 
 proc completeText*(textView: TextView): TextCompletionPanel =
-  if textView.isNil:
-    return TextCompletionPanel(selectedIndex: -1)
   let
     range = textView.completionPrefixRange()
     prefix = textView.xTextStorage.substring(range)
@@ -1518,13 +1407,11 @@ proc completeText*(textView: TextView): TextCompletionPanel =
   textView.xCompletionPanel
 
 proc dismissCompletionPanel*(textView: TextView) =
-  if textView.isNil:
-    return
   textView.xCompletionPanel.visible = false
   textView.setNeedsDisplay(true)
 
 proc acceptCompletion*(textView: TextView, index = -1): bool =
-  if textView.isNil or not textView.editable or not textView.xCompletionPanel.visible:
+  if not textView.editable or not textView.xCompletionPanel.visible:
     return false
   let selectedIndex = if index >= 0: index else: textView.xCompletionPanel.selectedIndex
   if selectedIndex < 0 or selectedIndex >= textView.xCompletionPanel.completions.len:
@@ -1622,8 +1509,6 @@ proc unionRects(rects: openArray[Rect]): Rect =
       result = result.union(rect)
 
 proc selectedTextRangesForTransfer(textView: TextView): seq[TextRange] =
-  if textView.isNil:
-    return
   result = textView.selectedRanges().nonEmptyRanges()
   if result.len == 0:
     let selected = textView.textViewSelectedRange()
@@ -1632,7 +1517,7 @@ proc selectedTextRangesForTransfer(textView: TextView): seq[TextRange] =
 
 proc selectedTextStorage*(textView: TextView): TextStorage =
   result = newTextStorage()
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return
   for range in textView.selectedTextRangesForTransfer():
     result.replace(
@@ -1640,14 +1525,12 @@ proc selectedTextStorage*(textView: TextView): TextStorage =
     )
 
 proc selectedText*(textView: TextView): string =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return ""
   for range in textView.selectedTextRangesForTransfer():
     result.add textView.xTextStorage.substring(range)
 
 proc selectedTextServiceRequest*(textView: TextView): TextServiceRequest =
-  if textView.isNil:
-    return
   let selected = textView.textViewSelectedRange()
   TextServiceRequest(
     range: selected,
@@ -1657,7 +1540,7 @@ proc selectedTextServiceRequest*(textView: TextView): TextServiceRequest =
   )
 
 proc performSelectedTextService*(textView: TextView): TextServiceResponse =
-  if textView.isNil or textView.xDelegate.isNil:
+  if textView.xDelegate.isNil:
     return
   let request = textView.selectedTextServiceRequest()
   result = textView.xDelegate
@@ -1673,7 +1556,7 @@ proc performSelectedTextService*(textView: TextView): TextServiceResponse =
       textView.replaceRange(replacementRange, result.replacement)
 
 proc firstSelectedLink(textView: TextView): tuple[link: string, range: TextRange] =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return
   for selected in textView.selectedTextRangesForTransfer():
     for run in textView.xTextStorage.runs:
@@ -1684,7 +1567,7 @@ proc firstSelectedLink(textView: TextView): tuple[link: string, range: TextRange
 proc selectedAttachmentPresentations*(
     textView: TextView
 ): seq[TextAttachmentPresentation] =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return
   for selected in textView.selectedTextRangesForTransfer():
     for run in textView.xTextStorage.runs:
@@ -1746,7 +1629,7 @@ proc selectedAttachmentPresentations*(
       )
 
 proc attachmentPresentations*(textView: TextView): seq[TextAttachmentPresentation] =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return
   for run in textView.xTextStorage.runs:
     if not run.attributes.hasAttachment:
@@ -1847,7 +1730,7 @@ proc writeSelectionToPasteboard*(
   true
 
 proc insertTextFromPasteboard*(textView: TextView, pasteboard: Pasteboard): bool =
-  if textView.isNil or pasteboard.isNil or not textView.editable:
+  if pasteboard.isNil or not textView.editable:
     return false
   let selected =
     if textView.xHasMarkedText:
@@ -1870,7 +1753,7 @@ proc insertTextFromPasteboard*(textView: TextView, pasteboard: Pasteboard): bool
     false
 
 proc selectedTextDraggingItems*(textView: TextView): seq[DraggingItem] =
-  if textView.isNil or textView.selectedTextRangesForTransfer().len == 0:
+  if textView.selectedTextRangesForTransfer().len == 0:
     return
   let
     storage = textView.selectedTextStorage()
@@ -1906,7 +1789,7 @@ proc beginDraggingSelectedText*(
     allowedOperations: DragOperations = {dgoCopy, dgoMove},
     pasteboardName = DragPasteboardName,
 ): DraggingSession =
-  if textView.isNil or not textView.selectable:
+  if not textView.selectable:
     return nil
   let items = textView.selectedTextDraggingItems()
   if items.len == 0:
@@ -1917,7 +1800,7 @@ proc beginDraggingSelectedText*(
   textView.xDraggingSession = result
 
 proc acceptsTextDrop*(textView: TextView, info: DraggingInfo): DragOperations =
-  if textView.isNil or not textView.editable or info.pasteboard.isNil:
+  if not textView.editable or info.pasteboard.isNil:
     return NoDragOperations
   let accepted = info.pasteboard.availableTypeFromArray(
     [PasteboardTypeTextStorage, PasteboardTypeString]
@@ -1935,7 +1818,7 @@ proc performTextDrop*(textView: TextView, info: DraggingInfo): bool =
   textView.insertTextFromPasteboard(info.pasteboard)
 
 proc linkRangeAtIndex(textView: TextView, index: int, link: string): TextRange =
-  if textView.isNil or link.len == 0:
+  if link.len == 0:
     return initTextRange(index, 0)
   let total = textView.xTextStorage.len
   var
@@ -1950,8 +1833,6 @@ proc linkRangeAtIndex(textView: TextView, index: int, link: string): TextRange =
 proc attachmentRangeAtIndex(
     textView: TextView, index: int, attachment: TextAttachment
 ): TextRange =
-  if textView.isNil:
-    return initTextRange(index, 0)
   let total = textView.xTextStorage.len
   var
     start = clampIndex(total, index)
@@ -1967,7 +1848,7 @@ proc attachmentRangeAtIndex(
 proc linkAtIndex*(
     textView: TextView, index: int
 ): tuple[link: string, range: TextRange] =
-  if textView.isNil or index < 0 or index >= textView.xTextStorage.len:
+  if index < 0 or index >= textView.xTextStorage.len:
     return
   let attributes = textView.xTextStorage.attributesAt(index)
   if attributes.hasLink:
@@ -1976,14 +1857,12 @@ proc linkAtIndex*(
 proc linkAtPoint*(
     textView: TextView, point: Point
 ): tuple[link: string, range: TextRange] =
-  if textView.isNil:
-    return
   textView.linkAtIndex(textView.textIndexAtPoint(point))
 
 proc attachmentAtIndex*(
     textView: TextView, index: int
 ): tuple[attachment: TextAttachment, range: TextRange] =
-  if textView.isNil or index < 0 or index >= textView.xTextStorage.len:
+  if index < 0 or index >= textView.xTextStorage.len:
     return
   let attributes = textView.xTextStorage.attributesAt(index)
   if attributes.hasAttachment:
@@ -1995,13 +1874,9 @@ proc attachmentAtIndex*(
 proc attachmentAtPoint*(
     textView: TextView, point: Point
 ): tuple[attachment: TextAttachment, range: TextRange] =
-  if textView.isNil:
-    return
   textView.attachmentAtIndex(textView.textIndexAtPoint(point))
 
 proc openLinkAtIndex*(textView: TextView, index: int): bool =
-  if textView.isNil:
-    return false
   let link = textView.linkAtIndex(index)
   if link.link.len == 0:
     return false
@@ -2015,13 +1890,9 @@ proc openLinkAtIndex*(textView: TextView, index: int): bool =
   .get(true)
 
 proc openLinkAtPoint*(textView: TextView, point: Point): bool =
-  if textView.isNil:
-    return false
   textView.openLinkAtIndex(textView.textIndexAtPoint(point))
 
 proc activeLinkForCommand(textView: TextView): tuple[link: string, range: TextRange] =
-  if textView.isNil:
-    return
   let selected = textView.textViewSelectedRange()
   if selected.length > 0:
     result = textView.linkAtIndex(int(selected.location))
@@ -2033,8 +1904,6 @@ proc activeLinkForCommand(textView: TextView): tuple[link: string, range: TextRa
     result = textView.linkAtIndex(insertionPoint - 1)
 
 proc clickTextAtPoint*(textView: TextView, point: Point): bool =
-  if textView.isNil:
-    return false
   let index = textView.textIndexAtPoint(point)
   if index < 0 or index >= textView.xTextStorage.len:
     return false
@@ -2053,14 +1922,14 @@ proc clickTextAtPoint*(textView: TextView, point: Point): bool =
       .get(true)
 
 proc paragraphStyleAt*(textView: TextView, index: int): TextParagraphStyle =
-  if textView.isNil or textView.xTextStorage.len == 0:
+  if textView.xTextStorage.len == 0:
     return textView.defaultParagraphStyle()
   textView.xTextStorage.attributesAt(index).paragraphStyle
 
 proc setParagraphStyle*(
     textView: TextView, range: TextRange, style: TextParagraphStyle
 ) =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return
   let paragraphRange = textView.xTextStorage.paragraphRangeForRange(range)
   if paragraphRange.length == 0:
@@ -2079,15 +1948,11 @@ proc setParagraphStyle*(
 proc setTabStops*(
     textView: TextView, range: TextRange, tabStops: openArray[TextTabStop]
 ) =
-  if textView.isNil:
-    return
   var style = textView.paragraphStyleAt(int(range.location))
   style.tabStops = @tabStops
   textView.setParagraphStyle(range, style)
 
 proc displayTextStorage(textView: TextView): TextStorage =
-  if textView.isNil:
-    return newTextStorage()
   let shouldApplyPlainTextColor = (not textView.richText) or textView.isFieldEditor
   let hasMarkedOverlay = textView.xHasMarkedText and textView.xMarkedRange.length > 0
   var hasSelectedOverlay = false
@@ -2113,7 +1978,7 @@ proc displayTextStorage(textView: TextView): TextStorage =
         result.setAttributes(range, textView.xSelectedTextAttributes)
 
 proc syncLayout(textView: TextView) =
-  if textView.isNil or textView.xLayoutManager.isNil:
+  if textView.xLayoutManager.isNil:
     return
   textView.xLayoutManager.textStorage = textView.xTextStorage
   textView.xLayoutManager.textContainer = textView.xTextContainer
@@ -2121,8 +1986,6 @@ proc syncLayout(textView: TextView) =
   textView.xLayoutManager.alignment = textView.xAlignment
 
 proc setCursor*(textView: TextView, index: int, extending = false) =
-  if textView.isNil:
-    return
   let previousRanges = textView.selectedRanges()
   let cursor = clampIndex(textView.xTextStorage.len, index)
   textView.xInsertionPoint = cursor
@@ -2138,8 +2001,6 @@ proc setCursor*(textView: TextView, index: int, extending = false) =
   textView.dispatchSelectionChanged(previousRanges)
 
 proc selectAllText*(textView: TextView) =
-  if textView.isNil:
-    return
   let previousRanges = textView.selectedRanges()
   textView.xSelectionAnchor = 0
   textView.xInsertionPoint = textView.xTextStorage.len
@@ -2150,7 +2011,7 @@ proc selectAllText*(textView: TextView) =
   textView.dispatchSelectionChanged(previousRanges)
 
 proc replaceSelectedText*(textView: TextView, insertion: string) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let selected =
     if textView.xHasMarkedText:
@@ -2164,7 +2025,7 @@ proc replaceSelectedText*(textView: TextView, insertion: string) =
   )
 
 proc insertTextValue*(textView: TextView, insertion: string) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   if textView.xHasMarkedText:
     let
@@ -2181,7 +2042,7 @@ proc insertTextValue*(textView: TextView, insertion: string) =
 proc setMarkedTextValue*(
     textView: TextView, text: string, selectedRange, replacementRange: TextRange
 ) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let target =
     if textView.xHasMarkedText:
@@ -2208,13 +2069,11 @@ proc setMarkedTextValue*(
   textView.setNeedsDisplay(true)
 
 proc unmarkMarkedText*(textView: TextView) =
-  if textView.isNil:
-    return
   textView.clearMarkedText()
   textView.setNeedsDisplay(true)
 
 proc copyText*(textView: TextView): bool =
-  if textView.isNil or not textView.selectable:
+  if not textView.selectable:
     return false
   textView.writeSelectionToPasteboard(
     generalPasteboard(),
@@ -2222,13 +2081,13 @@ proc copyText*(textView: TextView): bool =
   )
 
 proc cutText*(textView: TextView): bool =
-  if textView.isNil or not textView.editable or not textView.copyText():
+  if not textView.editable or not textView.copyText():
     return false
   textView.replaceSelectedText("")
   true
 
 proc pasteText*(textView: TextView): bool =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return false
   textView.insertTextFromPasteboard(generalPasteboard())
 
@@ -2242,7 +2101,7 @@ proc applyUndoRecord(textView: TextView, storage: TextStorage, selection: TextRa
   textView.xApplyingUndo = false
 
 proc undoText*(textView: TextView): bool =
-  if textView.isNil or textView.xUndoStack.len == 0:
+  if textView.xUndoStack.len == 0:
     return false
   let record = textView.xUndoStack.pop()
   textView.applyUndoRecord(record.storageBefore, record.selectionBefore)
@@ -2250,7 +2109,7 @@ proc undoText*(textView: TextView): bool =
   true
 
 proc redoText*(textView: TextView): bool =
-  if textView.isNil or textView.xRedoStack.len == 0:
+  if textView.xRedoStack.len == 0:
     return false
   let record = textView.xRedoStack.pop()
   textView.applyUndoRecord(record.storageAfter, record.selectionAfter)
@@ -2258,7 +2117,7 @@ proc redoText*(textView: TextView): bool =
   true
 
 proc deleteBackwardText*(textView: TextView) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start:
@@ -2269,7 +2128,7 @@ proc deleteBackwardText*(textView: TextView) =
     )
 
 proc deleteForwardText*(textView: TextView) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let
     selected = textView.currentSelection()
@@ -2282,7 +2141,7 @@ proc deleteForwardText*(textView: TextView) =
     )
 
 proc deleteWordBackwardText*(textView: TextView) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start:
@@ -2295,7 +2154,7 @@ proc deleteWordBackwardText*(textView: TextView) =
       )
 
 proc deleteWordForwardText*(textView: TextView) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start:
@@ -2310,7 +2169,7 @@ proc deleteWordForwardText*(textView: TextView) =
       )
 
 proc deleteToBeginningOfLineText*(textView: TextView) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start:
@@ -2323,7 +2182,7 @@ proc deleteToBeginningOfLineText*(textView: TextView) =
     )
 
 proc deleteToEndOfLineText*(textView: TextView) =
-  if textView.isNil or not textView.editable:
+  if not textView.editable:
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start:
@@ -2338,15 +2197,13 @@ proc deleteToEndOfLineText*(textView: TextView) =
     )
 
 proc insertLineBreakText*(textView: TextView) =
-  if not textView.isNil:
-    textView.insertTextValue("\n")
+  textView.insertTextValue("\n")
 
 proc insertParagraphSeparatorText*(textView: TextView) =
-  if not textView.isNil:
-    textView.insertTextValue("\n")
+  textView.insertTextValue("\n")
 
 proc moveLeftText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start and not extending:
@@ -2355,7 +2212,7 @@ proc moveLeftText*(textView: TextView, extending = false) =
     textView.setCursor(textView.xInsertionPoint - 1, extending)
 
 proc moveRightText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   let selected = textView.currentSelection()
   if selected.stop > selected.start and not extending:
@@ -2364,7 +2221,7 @@ proc moveRightText*(textView: TextView, extending = false) =
     textView.setCursor(textView.xInsertionPoint + 1, extending)
 
 proc moveVerticalText(textView: TextView, direction: int, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
 
   let selected = textView.currentSelection()
@@ -2390,7 +2247,7 @@ proc moveDownText*(textView: TextView, extending = false) =
   textView.moveVerticalText(1, extending)
 
 proc moveWordLeftText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   textView.setCursor(
     textView.textViewStringValue().previousWordBoundary(textView.xInsertionPoint),
@@ -2398,7 +2255,7 @@ proc moveWordLeftText*(textView: TextView, extending = false) =
   )
 
 proc moveWordRightText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   textView.setCursor(
     textView.textViewStringValue().nextWordBoundary(textView.xInsertionPoint), extending
@@ -2423,27 +2280,27 @@ proc currentVisualLineBounds(textView: TextView): tuple[first, last: int] =
   result.last = max(result.first, result.last)
 
 proc moveToBeginningOfLineText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   textView.setCursor(textView.currentVisualLineBounds().first, extending)
 
 proc moveToEndOfLineText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   textView.setCursor(textView.currentVisualLineBounds().last, extending)
 
 proc moveToBeginningOfDocumentText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   textView.setCursor(0, extending)
 
 proc moveToEndOfDocumentText*(textView: TextView, extending = false) =
-  if textView.isNil or (not textView.editable and not textView.selectable):
+  if (not textView.editable and not textView.selectable):
     return
   textView.setCursor(textView.xTextStorage.len, extending)
 
 proc updateFieldEditorInsets(textView: TextView) =
-  if textView.isNil or not textView.isFieldEditor:
+  if not textView.isFieldEditor:
     return
   let
     lineHeight = textNaturalSize("", textView.textStyle()).height
@@ -2453,8 +2310,6 @@ proc updateFieldEditorInsets(textView: TextView) =
   textView.xTextContainer.insets.bottom = extraHeight - topInset
 
 proc updateTextContainer(textView: TextView) =
-  if textView.isNil:
-    return
   if textView.xTextContainer.widthTracksTextView:
     textView.xTextContainer.size.width = textView.bounds.size.width
   if textView.xTextContainer.heightTracksTextView:
@@ -2463,38 +2318,26 @@ proc updateTextContainer(textView: TextView) =
   textView.syncLayout()
 
 proc textIndexAtPoint*(textView: TextView, point: Point): int =
-  if textView.isNil:
-    return 0
   textView.updateTextContainer()
   textView.xLayoutManager.textIndexAtPoint(point)
 
 proc selectionRects*(textView: TextView, range: TextRange): seq[Rect] =
-  if textView.isNil:
-    return
   textView.updateTextContainer()
   textView.xLayoutManager.selectionRects(range)
 
 proc characterRect*(textView: TextView, index: int): Rect =
-  if textView.isNil:
-    return rect(0, 0, 0, 0)
   textView.updateTextContainer()
   textView.xLayoutManager.characterRect(index)
 
 proc lineRange*(textView: TextView, line: int): TextRange =
-  if textView.isNil:
-    return initTextRange(0, 0)
   textView.updateTextContainer()
   textView.xLayoutManager.lineRange(line)
 
 proc lineForIndex*(textView: TextView, index: int): int =
-  if textView.isNil:
-    return -1
   textView.updateTextContainer()
   textView.xLayoutManager.lineForIndex(index)
 
 proc lineBounds*(textView: TextView, line: int): Rect =
-  if textView.isNil:
-    return rect(0, 0, 0, 0)
   textView.updateTextContainer()
   textView.xLayoutManager.lineBounds(line)
 
@@ -2516,17 +2359,9 @@ proc normalizedPageOptions(
 ): TextPageLayoutOptions =
   result = options
   if result.pageSize.width <= 0.0'f32 or result.pageSize.width.isAutoMetric:
-    result.pageSize.width =
-      if textView.isNil:
-        612.0'f32
-      else:
-        max(textView.bounds.size.width, 1.0'f32)
+    result.pageSize.width = max(textView.bounds.size.width, 1.0'f32)
   if result.pageSize.height <= 0.0'f32 or result.pageSize.height.isAutoMetric:
-    result.pageSize.height =
-      if textView.isNil:
-        792.0'f32
-      else:
-        max(textView.bounds.size.height, 1.0'f32)
+    result.pageSize.height = max(textView.bounds.size.height, 1.0'f32)
   if result.firstPageNumber == 0:
     result.firstPageNumber = 1
   if result.displayScale <= 0.0'f32:
@@ -2590,8 +2425,6 @@ proc paginateLineFragments(
 proc paginateTextView*(
     textView: TextView, options = initTextPageLayoutOptions()
 ): seq[TextPageFragment] =
-  if textView.isNil:
-    return
   textView.updateTextContainer()
   let
     resolved = textView.normalizedPageOptions(options)
@@ -2604,8 +2437,6 @@ proc paginateTextView*(
     result.addLineToPage(0, resolved, emptyFragment)
 
 proc rulerMetrics*(textView: TextView, range: TextRange): TextRulerMetrics =
-  if textView.isNil:
-    return
   let
     clamped = textView.clampedRange(range)
     style = textView.paragraphStyleAt(int(clamped.location))
@@ -2624,7 +2455,7 @@ proc rulerMetrics*(textView: TextView, range: TextRange): TextRulerMetrics =
   )
 
 proc visibleCharacterRange*(textView: TextView): TextRange =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return initTextRange(0, 0)
   textView.updateTextContainer()
   let visible = textView.bounds
@@ -2641,11 +2472,7 @@ proc visibleCharacterRange*(textView: TextView): TextRange =
     result = initTextRange(0, textView.xTextStorage.len)
 
 proc copyStorageForSnapshot(storage: TextStorage, fontSize: float32): TextStorage =
-  result =
-    if storage.isNil:
-      newTextStorage()
-    else:
-      storage.copyTextStorage()
+  result = storage.copyTextStorage()
   if fontSize <= 0.0'f32:
     return
   let runs = result.attributeRuns()
@@ -2659,8 +2486,6 @@ proc copyStorageForSnapshot(storage: TextStorage, fontSize: float32): TextStorag
 proc layoutStabilitySnapshot*(
     textView: TextView, options: TextLayoutStabilityOptions
 ): TextLayoutStabilitySnapshot =
-  if textView.isNil:
-    return
   textView.updateTextContainer()
   let
     scale =
@@ -2740,15 +2565,13 @@ proc drawTextViewContents*(textView: TextView, context: DrawContext) =
     )
 
 proc hasSelectedText(textView: TextView): bool =
-  if textView.isNil:
-    return false
   for range in textView.selectedRanges():
     if range.length > 0:
       return true
 
 proc validateTextCommand*(textView: TextView, action: ActionSelector): bool =
   let actionName = $action.name
-  if textView.isNil or actionName.len == 0:
+  if actionName.len == 0:
     return false
   if not textView.xDelegate.isNil:
     let validation = textView.xDelegate.trySendLocal(
@@ -2796,8 +2619,6 @@ proc validateTextCommand*(textView: TextView, action: ActionSelector): bool =
 proc performTextInputCommand*(
     textView: TextView, selector: CommandSelector, sender: DynamicAgent = nil
 ): bool =
-  if textView.isNil:
-    return false
   let effectiveSender =
     if sender.isNil:
       DynamicAgent(textView)
@@ -2852,13 +2673,10 @@ protocol DefaultTextViewDraggingSource of DraggingSourceProtocol:
   method draggingSourceOperationMask(
       textView: TextView, info: DraggingInfo
   ): DragOperations =
-    if textView.isNil:
-      NoDragOperations
-    else:
-      info.allowedOperations * {dgoCopy, dgoMove}
+    info.allowedOperations * {dgoCopy, dgoMove}
 
   method draggingSessionEnded(textView: TextView, info: DraggingInfo) =
-    if not textView.isNil and textView.xDraggingSession == info.session:
+    if textView.xDraggingSession == info.session:
       textView.xDraggingSession = nil
 
   method writePromisedFile(
@@ -2885,10 +2703,10 @@ protocol DefaultTextViewDraggingDestination of DraggingDestinationProtocol:
     textView.performTextDrop(info)
 
 method textViewInputHasMarkedText(textView: TextView): bool {.selector.} =
-  (not textView.isNil) and textView.xHasMarkedText
+  textView.xHasMarkedText
 
 method textViewInputMarkedRange(textView: TextView): TextRange {.selector.} =
-  if not textView.isNil and textView.xHasMarkedText:
+  if textView.xHasMarkedText:
     textView.xMarkedRange
   else:
     initTextRange(0, 0)
@@ -2899,7 +2717,7 @@ method textViewInputSelectedRange(textView: TextView): TextRange {.selector.} =
 method textViewInputAttributedSubstringForRange(
     textView: TextView, range: TextRange
 ): AttributedString {.selector.} =
-  if textView.isNil or textView.xTextStorage.isNil:
+  if textView.xTextStorage.isNil:
     return newTextStorage()
   textView.xTextStorage.sliceTextStorage(textView.clampedRange(range))
 
@@ -2912,8 +2730,6 @@ method textViewInputValidAttributesForMarkedText(
 method textViewInputFirstRectForCharacterRange(
     textView: TextView, range: TextRange
 ): Rect {.selector.} =
-  if textView.isNil:
-    return rect(0, 0, 0, 0)
   let clamped = textView.clampedRange(range)
   if clamped.length > 0:
     let rects = textView.selectionRects(clamped)
@@ -2924,8 +2740,6 @@ method textViewInputFirstRectForCharacterRange(
 method textViewInputCharacterIndexForPoint(
     textView: TextView, point: Point
 ): int {.selector.} =
-  if textView.isNil:
-    return -1
   textView.textIndexAtPoint(textView.pointFromWindow(point))
 
 method textViewOpenLinkCommand(textView: TextView, args: ActionArgs) {.selector.} =
@@ -2935,8 +2749,6 @@ method textViewOpenLinkCommand(textView: TextView, args: ActionArgs) {.selector.
     discard textView.openLinkAtIndex(int(link.range.location))
 
 proc installTextInputClientMethods(textView: TextView) =
-  if textView.isNil:
-    return
   discard
     textView.addMethod(selectors.textInputHasMarkedText, textViewInputHasMarkedText)
   discard textView.addMethod(selectors.textInputMarkedRange, textViewInputMarkedRange)
@@ -3126,16 +2938,13 @@ protocol DefaultTextViewLayoutClient of TextLayoutClientProtocol:
       textView: TextView, manager: TextLayoutManager
   ): TextStorage =
     discard manager
-    if textView.isNil: nil else: textView.xTextStorage
+    textView.xTextStorage
 
   method textLayoutContainer(
       textView: TextView, manager: TextLayoutManager
   ): TextContainer =
     discard manager
-    if textView.isNil:
-      initTextContainer()
-    else:
-      textView.xTextContainer
+    textView.xTextContainer
 
   method textLayoutStyle(textView: TextView, manager: TextLayoutManager): TextStyle =
     discard manager
@@ -3145,30 +2954,27 @@ protocol DefaultTextViewLayoutClient of TextLayoutClientProtocol:
       textView: TextView, manager: TextLayoutManager
   ): TextAlignment =
     discard manager
-    if textView.isNil: taLeft else: textView.xAlignment
+    textView.xAlignment
 
 protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
   proc layoutDidInvalidate(textView: TextView, ranges: seq[TextRange]) {.slot.} =
     discard ranges
-    if not textView.isNil:
-      textView.setNeedsDisplay(true)
+    textView.setNeedsDisplay(true)
 
   proc containersDidChange(
       textView: TextView, containers: seq[TextContainer]
   ) {.slot.} =
     discard containers
-    if not textView.isNil:
-      textView.invalidateIntrinsicContentSize()
-      textView.setNeedsDisplay(true)
+    textView.invalidateIntrinsicContentSize()
+    textView.setNeedsDisplay(true)
 
   proc containerDidInvalidate(
       textView: TextView, index: TextContainerIndex, container: TextContainer
   ) {.slot.} =
     discard index
     discard container
-    if not textView.isNil:
-      textView.invalidateIntrinsicContentSize()
-      textView.setNeedsDisplay(true)
+    textView.invalidateIntrinsicContentSize()
+    textView.setNeedsDisplay(true)
 
   proc layoutGeometryDidChange(
       textView: TextView,
@@ -3179,9 +2985,8 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
     discard oldUsedRect
     discard oldContentSize
     discard snapshot
-    if not textView.isNil:
-      textView.invalidateIntrinsicContentSize()
-      textView.setNeedsDisplay(true)
+    textView.invalidateIntrinsicContentSize()
+    textView.setNeedsDisplay(true)
 
 func accessibilityColorValue(color: Color): string =
   $color.r & "," & $color.g & "," & $color.b & "," & $color.a
@@ -3222,8 +3027,6 @@ func accessibilityAttributesFor(
 proc accessibilityAttributedText(
     storage: TextStorage, range: TextRange
 ): AccessibilityAttributedString =
-  if storage.isNil:
-    return initAccessibilityAttributedString()
   let
     start = max(0, min(int(range.location), storage.len))
     clamped = initTextRange(start, max(0, min(int(range.length), storage.len - start)))
@@ -3261,7 +3064,7 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
     true
 
   method accessibilityTextLength(textView: TextView): int =
-    if textView.isNil or textView.xTextStorage.isNil: 0 else: textView.xTextStorage.len
+    if textView.xTextStorage.isNil: 0 else: textView.xTextStorage.len
 
   method accessibilitySelectedTextRange(textView: TextView): AccessibilityTextRange =
     textView.textViewSelectedRange().toAccessibilityTextRange()
@@ -3269,23 +3072,18 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilitySelectedTextRanges(
       textView: TextView
   ): seq[AccessibilityTextRange] =
-    if textView.isNil:
-      return @[]
     for range in textView.selectedRanges():
       result.add range.toAccessibilityTextRange()
 
   method accessibilityVisibleCharacterRange(
       textView: TextView
   ): AccessibilityTextRange =
-    if textView.isNil:
-      initAccessibilityTextRange(0, 0)
-    else:
-      textView.visibleCharacterRange().toAccessibilityTextRange()
+    textView.visibleCharacterRange().toAccessibilityTextRange()
 
   method setAccessibilitySelectedTextRange(
       textView: TextView, range: AccessibilityTextRange
   ): bool =
-    if textView.isNil or (not textView.editable() and not textView.selectable()):
+    if (not textView.editable() and not textView.selectable()):
       return false
     textView.setTextViewSelectedRange(range.toTextRange())
     true
@@ -3294,13 +3092,10 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
     textView.textViewInsertionPoint()
 
   method accessibilityInsertionPointLine(textView: TextView): int =
-    if textView.isNil:
-      -1
-    else:
-      textView.lineForIndex(textView.textViewInsertionPoint())
+    textView.lineForIndex(textView.textViewInsertionPoint())
 
   method setAccessibilityInsertionPoint(textView: TextView, index: int): bool =
-    if textView.isNil or (not textView.editable() and not textView.selectable()):
+    if (not textView.editable() and not textView.selectable()):
       return false
     textView.setCursor(index)
     true
@@ -3308,42 +3103,27 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilityAttributedStringForRange(
       textView: TextView, range: AccessibilityTextRange
   ): AccessibilityAttributedString =
-    if textView.isNil:
-      return initAccessibilityAttributedString()
     textView.xTextStorage.accessibilityAttributedText(range.toTextRange())
 
   method accessibilityBoundsForTextRange(
       textView: TextView, range: AccessibilityTextRange
   ): seq[Rect] =
-    if textView.isNil:
-      return
     for rect in textView.selectionRects(range.toTextRange()):
       result.add textView.rectToWindow(rect)
 
   method accessibilityBoundsForCharacter(textView: TextView, index: int): Rect =
-    if textView.isNil:
-      return rect(0, 0, 0, 0)
     textView.rectToWindow(textView.characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(textView: TextView, point: Point): int =
-    if textView.isNil:
-      return -1
     textView.textIndexAtPoint(textView.pointFromWindow(point))
 
   method accessibilityLineRange(textView: TextView, line: int): AccessibilityTextRange =
-    if textView.isNil:
-      return initAccessibilityTextRange(0, 0)
     textView.lineRange(line).toAccessibilityTextRange()
 
   method accessibilityLineForCharacter(textView: TextView, index: int): int =
-    if textView.isNil:
-      -1
-    else:
-      textView.lineForIndex(index)
+    textView.lineForIndex(index)
 
   method accessibilityBoundsForLine(textView: TextView, line: int): Rect =
-    if textView.isNil:
-      return rect(0, 0, 0, 0)
     textView.rectToWindow(textView.lineBounds(line))
 
 proc initTextViewFields*(

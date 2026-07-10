@@ -351,8 +351,6 @@ protocol DefaultWindowCommands of MenuCommandProtocol:
 
 protocol DefaultWindowUndoManagerProvider of UndoManagerProvider:
   method undoManager(window: Window): Option[UndoManager] =
-    if window.isNil:
-      return none(UndoManager)
     some(window.undoManagerFor())
 
 protocol DefaultWindowValidations of UserInterfaceValidations:
@@ -365,7 +363,7 @@ protocol DefaultWindowValidations of UserInterfaceValidations:
 protocol CaretBlinkAnimationProtocol of AnimationProtocol:
   method updateCurrentTime(animation: CaretBlinkAnimation, currentTime: Duration) =
     discard currentTime
-    if animation.isNil or animation.textView.isNil:
+    if animation.textView.isNil:
       return
     let visible = animation.progress{} < 0.5'f32
     if animation.textView.insertionPointVisible() != visible:
@@ -462,7 +460,7 @@ proc frame*(window: Window): Rect =
   window.xFrame
 
 proc setFrame*(window: Window, frame: Rect) =
-  if window.isNil or window.xFrame == frame:
+  if window.xFrame == frame:
     return
   window.xFrame = frame
   if not window.xContentView.isNil:
@@ -477,42 +475,33 @@ proc title*(window: Window): string =
   window.xTitle
 
 proc styleMask*(window: Window): set[WindowStyleMask] =
-  if window.isNil:
-    {}
-  else:
-    window.xStyleMask
+  window.xStyleMask
 
 proc `styleMask=`*(window: Window, mask: set[WindowStyleMask]) =
-  if not window.isNil:
-    window.xStyleMask = mask
+  window.xStyleMask = mask
 
 proc level*(window: Window): WindowLevel =
-  if window.isNil: wlNormal else: window.xLevel
+  window.xLevel
 
 proc `level=`*(window: Window, level: WindowLevel) =
-  if not window.isNil:
-    window.xLevel = level
+  window.xLevel = level
 
 proc delegate*(window: Window): DynamicAgent =
-  if window.isNil: nil else: window.xDelegate
+  window.xDelegate
 
 proc `delegate=`*(window: Window, delegate: DynamicAgent) =
-  if not window.isNil:
-    window.xDelegate = delegate
+  window.xDelegate = delegate
 
 proc `delegate=`*(window: Window, delegate: Responder) =
   window.delegate = DynamicAgent(delegate)
 
 proc undoManagerFor*(window: Window): UndoManager =
-  if window.isNil:
-    return nil
   if window.xUndoManager.isNil:
     window.xUndoManager = newUndoManager()
   window.xUndoManager
 
 proc setUndoManager*(window: Window, undoManager: UndoManager) =
-  if not window.isNil:
-    window.xUndoManager = undoManager
+  window.xUndoManager = undoManager
 
 proc `undoManager=`*(window: Window, undoManager: UndoManager) =
   window.setUndoManager(undoManager)
@@ -521,49 +510,37 @@ proc contentView*(window: Window): View =
   window.xContentView
 
 proc isKeyWindow*(window: Window): bool =
-  (not window.isNil) and window.xIsKeyWindow
+  window.xIsKeyWindow
 
 proc isMainWindow*(window: Window): bool =
-  (not window.isNil) and window.xIsMainWindow
+  window.xIsMainWindow
 
 proc isMiniaturized*(window: Window): bool =
-  (not window.isNil) and window.xMiniaturized
+  window.xMiniaturized
 
 proc isZoomed*(window: Window): bool =
-  (not window.isNil) and window.xZoomed
+  window.xZoomed
 
 proc minSize*(window: Window): Size =
-  if window.isNil:
-    initSize()
-  else:
-    window.xMinSize
+  window.xMinSize
 
 proc `minSize=`*(window: Window, size: Size) =
-  if not window.isNil:
-    window.xMinSize = size
+  window.xMinSize = size
 
 proc maxSize*(window: Window): Size =
-  if window.isNil:
-    initSize()
-  else:
-    window.xMaxSize
+  window.xMaxSize
 
 proc `maxSize=`*(window: Window, size: Size) =
-  if not window.isNil:
-    window.xMaxSize = size
+  window.xMaxSize = size
 
 proc resizeIncrements*(window: Window): Size =
-  if window.isNil:
-    initSize()
-  else:
-    window.xResizeIncrements
+  window.xResizeIncrements
 
 proc `resizeIncrements=`*(window: Window, size: Size) =
-  if not window.isNil:
-    window.xResizeIncrements = size
+  window.xResizeIncrements = size
 
 proc frameAutosaveName*(window: Window): string =
-  if window.isNil: "" else: window.xFrameAutosaveName
+  window.xFrameAutosaveName
 
 proc savedFrameForName*(name: string): Option[Rect] =
   if name.len == 0:
@@ -574,19 +551,17 @@ proc savedFrameForName*(name: string): Option[Rect] =
   none(Rect)
 
 proc saveFrameUsingName*(window: Window, name: string): bool {.discardable.} =
-  if window.isNil or name.len == 0:
+  if name.len == 0:
     return false
   ensureWindowFrameStore()
   savedWindowFrames[name] = window.frame()
   true
 
 proc saveFrameUsingName*(window: Window): bool {.discardable.} =
-  if window.isNil:
-    return false
   window.saveFrameUsingName(window.xFrameAutosaveName)
 
 proc setFrameUsingName*(window: Window, name: string): bool {.discardable.} =
-  if window.isNil or name.len == 0:
+  if name.len == 0:
     return false
   window.xFrameAutosaveName = name
   let saved = savedFrameForName(name)
@@ -605,8 +580,7 @@ proc removeSavedFrameForName*(name: string): bool {.discardable.} =
   true
 
 proc `frameAutosaveName=`*(window: Window, name: string) =
-  if not window.isNil:
-    discard window.setFrameUsingName(name)
+  discard window.setFrameUsingName(name)
 
 proc keyBindings*(window: Window): KeyBindingTable =
   window.xKeyBindings
@@ -677,7 +651,7 @@ proc bindShortcuts*(
   window.bindShortcut(key, modifiers, selector)
 
 proc propagateAppearance(window: Window) =
-  if window.isNil or window.xContentView.isNil:
+  if window.xContentView.isNil:
     return
   window.xContentView.setInheritedAppearance(window.effectiveAppearance())
 
@@ -691,10 +665,10 @@ proc shouldDismissTransientSession(window: Window, reason: DismissReason): bool 
   window.trySendLocal(shouldDismiss(), reason).get(true)
 
 proc hasAppearance*(window: Window): bool =
-  (not window.isNil) and window.xHasAppearance
+  window.xHasAppearance
 
 proc appearance*(window: Window): Appearance =
-  if window.isNil or not window.xHasAppearance:
+  if not window.xHasAppearance:
     return initAppearance()
   window.xAppearance
 
@@ -714,7 +688,7 @@ proc effectivePopupPresentation*(window: Window): PopupPresentation =
   window.xPopupPresentation
 
 proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
-  if window.isNil or window.xPopupPresentation == presentation:
+  if window.xPopupPresentation == presentation:
     return
   window.xPopupPresentation = presentation
   emit window.didChangePopupPresentation(window.xPopupPresentation)
@@ -733,7 +707,7 @@ proc setAppearance*(window: Window, appearance: Appearance) =
   window.postWindowAppearanceNotification()
 
 proc clearAppearance*(window: Window) =
-  if window.isNil or not window.xHasAppearance:
+  if not window.xHasAppearance:
     return
   window.xAppearance = Appearance()
   window.xHasAppearance = false
@@ -782,7 +756,7 @@ proc setMouseActiveView(window: Window, view: View) =
     view.active = true
 
 proc setContentView*(window: Window, view: View) =
-  if window.isNil or not window.shouldSetContentView(view):
+  if not window.shouldSetContentView(view):
     return
   if window.xContentView == view:
     window.clearMouseState()
@@ -830,13 +804,9 @@ proc `title=`*(window: Window, title: string) =
   window.setTitle(title)
 
 proc convertPointToScreen*(window: Window, point: Point): Point =
-  if window.isNil:
-    return point
   point.offset(window.xFrame.origin.x, window.xFrame.origin.y)
 
 proc convertPointFromScreen*(window: Window, point: Point): Point =
-  if window.isNil:
-    return point
   point.offset(-window.xFrame.origin.x, -window.xFrame.origin.y)
 
 proc convertRectToScreen*(window: Window, rect: Rect): Rect =
@@ -846,22 +816,22 @@ proc convertRectFromScreen*(window: Window, rect: Rect): Rect =
   rect(window.convertPointFromScreen(rect.origin), rect.size)
 
 proc convertPointToContent*(window: Window, point: Point): Point =
-  if window.isNil or window.xContentView.isNil:
+  if window.xContentView.isNil:
     return point
   window.xContentView.pointFromWindow(point)
 
 proc convertPointFromContent*(window: Window, point: Point): Point =
-  if window.isNil or window.xContentView.isNil:
+  if window.xContentView.isNil:
     return point
   window.xContentView.pointToWindow(point)
 
 proc convertRectToContent*(window: Window, rect: Rect): Rect =
-  if window.isNil or window.xContentView.isNil:
+  if window.xContentView.isNil:
     return rect
   window.xContentView.rectFromWindow(rect)
 
 proc convertRectFromContent*(window: Window, rect: Rect): Rect =
-  if window.isNil or window.xContentView.isNil:
+  if window.xContentView.isNil:
     return rect
   window.xContentView.rectToWindow(rect)
 
@@ -869,27 +839,23 @@ proc firstResponder*(window: Window): Responder =
   window.xFirstResponder
 
 proc fieldEditor*(window: Window): FieldEditor =
-  if window.isNil:
-    return nil
   if window.xFieldEditor.isNil:
     window.xFieldEditor = newFieldEditor()
     window.xFieldEditor.setNextResponder(window)
   window.xFieldEditor
 
 proc fieldEditorClient*(window: Window): Responder =
-  if window.isNil:
-    return nil
   if window.xFirstResponder of FieldEditor:
     return FieldEditor(window.xFirstResponder).client()
   if not window.xFieldEditor.isNil:
     return window.xFieldEditor.client()
 
 proc insertionPointBlinkTarget(window: Window): TextView =
-  if not window.isNil and window.xFirstResponder of TextView:
+  if window.xFirstResponder of TextView:
     result = TextView(window.xFirstResponder)
 
 proc shouldBlinkInsertionPoint(textView: TextView): bool =
-  not textView.isNil and textView.editable() and textView.isFocused() and
+  textView.editable() and textView.isFocused() and
     textView.insertionPointBlinkPeriod() > 0.0'f32
 
 proc insertionPointBlinkDuration(textView: TextView): Duration =
@@ -903,8 +869,6 @@ proc newCaretBlinkAnimation(textView: TextView): CaretBlinkAnimation =
   discard result.withProtocol(CaretBlinkAnimationProtocol)
 
 proc stopInsertionPointBlink(window: Window) =
-  if window.isNil:
-    return
   let
     animation = window.xInsertionPointBlinkAnimation
     target = window.xInsertionPointBlinkTarget
@@ -916,8 +880,6 @@ proc stopInsertionPointBlink(window: Window) =
     target.insertionPointVisible = true
 
 proc updateInsertionPointBlink(window: Window) =
-  if window.isNil:
-    return
   let target = window.insertionPointBlinkTarget()
   if target.isNil or not target.shouldBlinkInsertionPoint():
     window.stopInsertionPointBlink()
@@ -931,7 +893,7 @@ proc updateInsertionPointBlink(window: Window) =
   discard window.startAnimation(animation)
 
 proc resolvedFirstResponder(window: Window, responder: Responder): Responder =
-  if window.isNil or responder.isNil:
+  if responder.isNil:
     return responder
   let defaultEditor = window.fieldEditor()
   if responder.wantsFieldEditor(defaultEditor):
@@ -1003,14 +965,13 @@ proc setInitialFirstResponder*(window: Window, view: View) =
   window.xInitialFirstResponder = view
 
 proc futureFirstResponder*(window: Window): Responder =
-  if window.isNil: nil else: window.xFutureFirstResponder
+  window.xFutureFirstResponder
 
 proc setFutureFirstResponder*(window: Window, responder: Responder) =
-  if not window.isNil:
-    window.xFutureFirstResponder = responder
+  window.xFutureFirstResponder = responder
 
 proc autorecalculatesKeyViewLoop*(window: Window): bool =
-  (not window.isNil) and window.xAutorecalculatesKeyViewLoop
+  window.xAutorecalculatesKeyViewLoop
 
 proc setAutorecalculatesKeyViewLoop*(window: Window, value: bool) =
   window.xAutorecalculatesKeyViewLoop = value
@@ -1021,9 +982,8 @@ proc collectKeyViews(view: View, views: var seq[View]) =
     child.collectKeyViews(views)
 
 proc recalculateKeyViewLoop*(window: Window) =
-  if window.isNil or window.xContentView.isNil:
-    if not window.isNil:
-      window.xInitialFirstResponder = nil
+  if window.xContentView.isNil:
+    window.xInitialFirstResponder = nil
     return
 
   var views: seq[View]
@@ -1057,7 +1017,7 @@ proc firstKeyViewCandidate(window: Window, forward: bool): View =
     window.xContentView.previousValidKeyView()
 
 proc selectKeyView(window: Window, view: View): bool =
-  if window.isNil or view.isNil:
+  if view.isNil:
     return false
   if not window.makeFirstResponder(view):
     return false
@@ -1068,12 +1028,11 @@ proc selectKeyView(window: Window, view: View): bool =
 proc keyViewCommandStartView(window: Window, sender: DynamicAgent): View =
   if not sender.isNil and sender of View:
     return View(sender)
-  if not window.isNil and not window.xFirstResponder.isNil and
-      window.xFirstResponder of View:
+  if not window.xFirstResponder.isNil and window.xFirstResponder of View:
     return View(window.xFirstResponder)
 
 proc prepareKeyViewLoop(window: Window) =
-  if not window.isNil and window.xAutorecalculatesKeyViewLoop:
+  if window.xAutorecalculatesKeyViewLoop:
     window.recalculateKeyViewLoop()
 
 proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable.} =
@@ -1110,34 +1069,38 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   nimkitRendering.buildRenders(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
+  if window.xHostWindow.isNil:
+    return nil
   window.xHostWindow.nativeWindowOrNil()
 
 proc rendererOrNil*(
     window: Window
 ): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
+  if window.xHostWindow.isNil:
+    return nil
   window.xHostWindow.rendererOrNil()
 
 proc nativeReady*(window: Window): bool =
-  (not window.isNil) and window.xHostWindow.isReady
+  not window.xHostWindow.isNil and window.xHostWindow.isReady
 
 proc nativeContentScale*(window: Window): float32 =
+  if window.xHostWindow.isNil:
+    return 1.0'f32
   window.xHostWindow.contentScale()
 
 proc nativeRenderCount*(window: Window): Natural =
-  if window.isNil or window.xHostWindow.isNil:
+  if window.xHostWindow.isNil:
     return 0
   window.xHostWindow.renderCount()
 
 proc nativeRenderRequested*(window: Window): bool =
-  (not window.isNil) and (not window.xHostWindow.isNil) and
-    window.xHostWindow.renderRequested()
+  (not window.xHostWindow.isNil) and window.xHostWindow.renderRequested()
 
 proc needsDisplayUpdate*(window: Window): bool =
-  (not window.isNil) and (not window.xContentView.isNil) and
-    window.xContentView.needsDisplayUpdateInSubtree()
+  (not window.xContentView.isNil) and window.xContentView.needsDisplayUpdateInSubtree()
 
 proc requestNativeDisplayUpdate*(window: Window) =
-  if window.isNil or window.xHostWindow.isNil:
+  if window.xHostWindow.isNil:
     return
   window.xHostWindow.requestRender()
 
@@ -1148,28 +1111,22 @@ proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.} =
   false
 
 proc animationScheduler*(window: Window): AnimationScheduler =
-  if window.isNil:
-    return nil
   if window.xAnimationScheduler.isNil:
     window.xAnimationScheduler = newAnimationScheduler()
   window.xAnimationScheduler
 
 proc animationClock*(window: Window): AnimationSchedulerClock =
-  if window.isNil:
-    return nil
   if window.xAnimationClock.isNil:
     window.xAnimationClock = newAnimationSchedulerClock()
   window.xAnimationClock
 
 proc startAnimationClock*(window: Window) =
-  if window.isNil:
-    return
   let clock = window.animationClock()
   if not clock.isNil and not clock.isRunning:
     clock.start()
 
 proc stopAnimationClock*(window: Window) =
-  if window.isNil or window.xAnimationClock.isNil:
+  if window.xAnimationClock.isNil:
     return
   window.xAnimationClock.stop()
 
@@ -1184,35 +1141,32 @@ proc startAnimation*(window: Window, animation: Animation): bool {.discardable.}
 proc stopAnimation*(
     window: Window, animation: Animation, finished = false
 ): bool {.discardable.} =
-  if window.isNil or window.xAnimationScheduler.isNil:
+  if window.xAnimationScheduler.isNil:
     return false
   result = window.xAnimationScheduler.stopAnimation(animation, finished)
   if window.xAnimationScheduler.animationCount == 0:
     window.stopAnimationClock()
 
 proc drainAnimations*(window: Window): int {.discardable.} =
-  if window.isNil or window.xAnimationScheduler.isNil or window.xAnimationClock.isNil:
+  if window.xAnimationScheduler.isNil or window.xAnimationClock.isNil:
     return 0
   result = window.xAnimationScheduler.drain(window.xAnimationClock)
   if window.xAnimationScheduler.animationCount == 0:
     window.stopAnimationClock()
 
 proc isClosed*(window: Window): bool =
-  window.isNil or window.xClosed
+  window.xClosed
 
 proc isVisible*(window: Window): bool =
-  (not window.isNil) and window.xVisibleRequested and not window.xClosed and
-    not window.xMiniaturized
+  window.xVisibleRequested and not window.xClosed and not window.xMiniaturized
 
 proc sendWindowDelegate[A](
     window: Window, selector: Selector[A, EmptyArgs], args: sink A
 ) =
-  if not window.isNil and not window.xDelegate.isNil:
+  if not window.xDelegate.isNil:
     discard window.xDelegate.sendLocalIfHandled(selector, ensureMove args)
 
 proc windowNotificationPayload(window: Window): NotificationPayload =
-  if window.isNil:
-    return initWindowNotificationPayload()
   initWindowNotificationPayload(
     keyWindow = window.xIsKeyWindow,
     mainWindow = window.xIsMainWindow,
@@ -1221,8 +1175,6 @@ proc windowNotificationPayload(window: Window): NotificationPayload =
   )
 
 proc postWindowNotification(window: Window, kind: NotificationKind) =
-  if window.isNil:
-    return
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       kind, sender = DynamicAgent(window), payload = window.windowNotificationPayload()
@@ -1230,8 +1182,6 @@ proc postWindowNotification(window: Window, kind: NotificationKind) =
   )
 
 proc postWindowAppearanceNotification(window: Window) =
-  if window.isNil:
-    return
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       nkWindowAppearanceDidChange,
@@ -1243,8 +1193,6 @@ proc postWindowAppearanceNotification(window: Window) =
   )
 
 proc notifyApplication(window: Window, selectorName: string) =
-  if window.isNil:
-    return
   let owner = window.nextResponder()
   if owner.isNil:
     return
@@ -1253,7 +1201,7 @@ proc notifyApplication(window: Window, selectorName: string) =
   )
 
 proc setKeyWindow*(window: Window, value: bool) =
-  if window.isNil or window.xIsKeyWindow == value:
+  if window.xIsKeyWindow == value:
     return
   window.xIsKeyWindow = value
   if value:
@@ -1266,7 +1214,7 @@ proc setKeyWindow*(window: Window, value: bool) =
     window.postWindowNotification(nkWindowDidResignKey)
 
 proc setMainWindow*(window: Window, value: bool) =
-  if window.isNil or window.xIsMainWindow == value:
+  if window.xIsMainWindow == value:
     return
   window.xIsMainWindow = value
   if value:
@@ -1279,14 +1227,14 @@ proc setMainWindow*(window: Window, value: bool) =
     window.postWindowNotification(nkWindowDidResignMain)
 
 proc canClose*(window: Window): bool =
-  (not window.isNil) and not window.xClosed and wsmClosable in window.xStyleMask
+  not window.xClosed and wsmClosable in window.xStyleMask
 
 proc canMiniaturize*(window: Window): bool =
-  (not window.isNil) and not window.xClosed and wsmMiniaturizable in window.xStyleMask and
+  not window.xClosed and wsmMiniaturizable in window.xStyleMask and
     not window.xMiniaturized
 
 proc canZoom*(window: Window): bool =
-  (not window.isNil) and not window.xClosed and wsmResizable in window.xStyleMask
+  not window.xClosed and wsmResizable in window.xStyleMask
 
 proc validateWindowCommand*(window: Window, selector: ActionSelector): Option[bool] =
   if selector.name == "performClose":
@@ -1299,8 +1247,6 @@ proc validateWindowCommand*(window: Window, selector: ActionSelector): Option[bo
     none(bool)
 
 proc orderFrontImpl(window: Window, makeKeyMain: bool) =
-  if window.isNil:
-    return
   window.xClosed = false
   window.xMiniaturized = false
   window.xVisibleRequested = true
@@ -1318,7 +1264,7 @@ proc orderFront*(window: Window) =
   window.orderFrontImpl(makeKeyMain = false)
 
 proc orderBack*(window: Window) =
-  if window.isNil or window.xClosed:
+  if window.xClosed:
     return
   window.xMiniaturized = false
   window.xVisibleRequested = true
@@ -1327,8 +1273,6 @@ proc orderBack*(window: Window) =
   window.notifyApplication(WindowDidOrderBackSelector)
 
 proc orderOut*(window: Window) =
-  if window.isNil:
-    return
   window.xVisibleRequested = false
   if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(false)
@@ -1344,7 +1288,7 @@ proc miniaturize*(window: Window) =
   window.notifyApplication(WindowDidOrderOutSelector)
 
 proc deminiaturize*(window: Window) =
-  if window.isNil or window.xClosed or not window.xMiniaturized:
+  if window.xClosed or not window.xMiniaturized:
     return
   window.orderFront()
 
@@ -1356,21 +1300,21 @@ proc zoom*(window: Window) =
     window.xContentView.setNeedsDisplay(true)
 
 proc detachAuxiliaryWindow(owner, auxiliary: Window) =
-  if owner.isNil or auxiliary.isNil:
+  if owner.isNil:
     return
   let idx = owner.xAuxiliaryWindows.find(auxiliary)
   if idx >= 0:
     owner.xAuxiliaryWindows.delete(idx)
 
 proc attachAuxiliaryWindow(owner, auxiliary: Window) =
-  if owner.isNil or auxiliary.isNil:
+  if owner.isNil:
     return
   auxiliary.xOwnerWindow = owner
   if auxiliary notin owner.xAuxiliaryWindows:
     owner.xAuxiliaryWindows.add auxiliary
 
 proc beginSheet*(window: Window, sheet: Window) =
-  if window.isNil or sheet.isNil:
+  if sheet.isNil:
     return
   if not window.xSheet.isNil and window.xSheet != sheet:
     window.endSheet(window.xSheet)
@@ -1381,8 +1325,6 @@ proc beginSheet*(window: Window, sheet: Window) =
   sheet.makeKeyAndOrderFront()
 
 proc endSheet*(window: Window, sheet: Window = nil) =
-  if window.isNil:
-    return
   let activeSheet = if sheet.isNil: window.xSheet else: sheet
   if activeSheet.isNil:
     return
@@ -1394,10 +1336,10 @@ proc endSheet*(window: Window, sheet: Window = nil) =
   window.sendWindowDelegate(windowDidEndSheet(), activeSheet)
 
 proc attachedSheet*(window: Window): Window =
-  if window.isNil: nil else: window.xSheet
+  window.xSheet
 
 proc sheetParent*(window: Window): Window =
-  if window.isNil: nil else: window.xSheetParent
+  window.xSheetParent
 
 proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
   let auxiliaries = window.xAuxiliaryWindows
@@ -1410,7 +1352,7 @@ proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
       auxiliary.close()
 
 proc hasActiveTransientSession*(window: Window): bool =
-  not window.isNil and window.xTransientSession.active
+  window.xTransientSession.active
 
 proc transientDismissReason*(window: Window): DismissReason =
   window.xLastTransientDismissReason
@@ -1426,7 +1368,7 @@ proc restoreTransientFocus(window: Window, session: TransientSession) =
 proc finishTransientSession(
     window: Window, reason: DismissReason, notifyDismiss: bool
 ): bool =
-  if window.isNil or not window.xTransientSession.active:
+  if not window.xTransientSession.active:
     return false
   if reason != tdrOwnerClosed and not window.shouldDismissTransientSession(reason):
     return false
@@ -1485,8 +1427,6 @@ proc endTransientSession*(
   window.finishTransientSession(reason, notifyDismiss = false)
 
 proc close*(window: Window) =
-  if window.isNil:
-    return
   let shouldClose =
     if window.xDelegate.isNil:
       true
@@ -1544,10 +1484,9 @@ proc newPopupWindow*(
   result.xIsPopup = true
   result.xPopupPlacement =
     popupPlacement(anchorFrame, popupSize, owner.nativeContentScale())
-  if not owner.isNil:
-    owner.attachAuxiliaryWindow(result)
-    result.xPopupPresentation = owner.popupPresentation()
-    result.setInheritedAppearance(owner.effectiveAppearance())
+  owner.attachAuxiliaryWindow(result)
+  result.xPopupPresentation = owner.popupPresentation()
+  result.setInheritedAppearance(owner.effectiveAppearance())
 
 proc mouseDownAt*(
   window: Window,
@@ -1605,8 +1544,6 @@ proc sendAction*(
     sender: DynamicAgent = nil,
     target: DynamicAgent = nil,
 ): bool =
-  if window.isNil:
-    return false
   if not target.isNil:
     return target.sendLocalIfHandled(selector, ActionArgs(sender: sender))
   window.dispatchActionInChain(selector, sender).handled
@@ -1623,8 +1560,6 @@ func shouldDispatchTextKeyDownFirst(event: events.KeyEvent): bool =
   event.modifiers - {kmShift} == {} and event.text.isInsertableText()
 
 proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
-  if window.isNil:
-    return false
   let target = window.keyDispatchTarget()
   if target.isNil:
     return false
@@ -1672,7 +1607,7 @@ proc syncNativeGeometry(window: Window): Size =
     discard window.saveFrameUsingName()
 
 proc renderNativeWindow*(window: Window) =
-  if window.isNil or not window.nativeReady:
+  if not window.nativeReady:
     return
 
   window.xHostWindow.refreshContentScale()
@@ -1870,7 +1805,7 @@ proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchRes
     responder = responder.nextResponder()
 
 proc dispatchTextInput*(window: Window, text: string): bool =
-  if window.isNil or text.len == 0:
+  if text.len == 0:
     return false
   let target = window.keyDispatchTarget()
   if target.isNil:
@@ -1896,7 +1831,7 @@ proc updateHoverView(
     result = target.handleMouse(mouseEntered(), localEvent) or result
 
 proc responderChainContains(responder, owner: Responder): bool =
-  if responder.isNil or owner.isNil:
+  if responder.isNil:
     return false
   var current = responder
   while not current.isNil:
@@ -1906,7 +1841,7 @@ proc responderChainContains(responder, owner: Responder): bool =
   false
 
 proc shouldDismissTransientForMouse(window: Window, target: View): bool =
-  if window.isNil or not window.xTransientSession.active:
+  if not window.xTransientSession.active:
     return false
   let session = window.xTransientSession
   if not session.transientWindow.isNil:
@@ -2216,7 +2151,7 @@ proc mouseDraggedAt*(
   )
 
 proc dispatchMouseTrackingTick(window: Window, timestamp = 0.0): bool =
-  if window.isNil or window.xContentView.isNil or window.xMouseCaptureView.isNil or
+  if window.xContentView.isNil or window.xMouseCaptureView.isNil or
       window.xMouseActiveView.isNil or not window.xHasMouseTrackingEvent:
     return false
   var event = window.xMouseTrackingEvent
@@ -2238,7 +2173,7 @@ proc mouseTrackingTickAt*(
     modifiers: set[KeyModifier] = {},
     timestamp = 0.0,
 ): bool =
-  if window.isNil or window.xMouseCaptureView.isNil:
+  if window.xMouseCaptureView.isNil:
     return false
   window.xMouseTrackingEvent = MouseEvent(
     location: point,
@@ -2305,7 +2240,7 @@ proc markHostClosed(window: Window) =
   window.notifyApplication(WindowDidCloseSelector)
 
 proc ensureNativeWindow*(window: Window) =
-  if window.xHostWindow.isReady:
+  if window.nativeReady:
     return
 
   let callbacks = HostWindowCallbacks(
@@ -2351,13 +2286,13 @@ proc ensureNativeWindow*(window: Window) =
     window.xHostWindow.setVisible(true)
 
 proc pumpNativeWindowFrame*(window: Window) =
-  if window.isNil or not window.xVisibleRequested or window.xClosed:
+  if not window.xVisibleRequested or window.xClosed:
     return
   window.ensureNativeWindow()
   if window.drainAnimations() > 0:
     discard window.requestNativeDisplayUpdateIfNeeded()
   discard window.requestNativeDisplayUpdateIfNeeded()
-  if window.xHostWindow.isReady:
+  if window.nativeReady:
     window.xHostWindow.pump()
   if window.dispatchMouseTrackingTick():
     discard window.requestNativeDisplayUpdateIfNeeded()
