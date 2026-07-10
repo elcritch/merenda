@@ -207,6 +207,14 @@ proc newFocusSpyView(name: string, frame: Rect): FocusSpyView =
   discard result.withProtocol(FocusSpyResponderLifecycle)
 
 suite "nimkit responder":
+  test "accepts first responder is a field-backed protocol property":
+    let responder = newResponder()
+
+    check responder.conformsTo(ResponderProtocol)
+    check not responder.acceptsFirstResponder()
+    responder.setAcceptsFirstResponder(true)
+    check responder.acceptsFirstResponder()
+
   test "next responder is observable and forwards selector dispatch":
     let
       action = actionSelector("forwardedAction")

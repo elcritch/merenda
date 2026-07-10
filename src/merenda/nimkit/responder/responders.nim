@@ -10,13 +10,7 @@ type Responder* = ref object of DynamicAgent
   xAcceptsFirstResponder: bool
 
 protocol ResponderProtocol from Responder:
-  property acceptsFirstResponder -> bool
-
-  method acceptsFirstResponder(self: Responder): bool =
-    self.xAcceptsFirstResponder
-
-  method setAcceptsFirstResponder(self: Responder, value: bool) =
-    self.xAcceptsFirstResponder = value
+  property acceptsFirstResponder -> bool {.field: xAcceptsFirstResponder.}
 
   method shouldBecomeFirstResponder*(self: Responder): bool =
     self.acceptsFirstResponder()
