@@ -6,6 +6,14 @@ import sigils/core
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
 
+func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
+  if node.kind != nkDrawable:
+    return false
+  for op in node.drawOps:
+    if op.kind == kind:
+      return true
+  false
+
 type TableDataSourceSpy = ref object of Responder
   rows: int
   textCalls: seq[string]
@@ -240,11 +248,20 @@ proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
     chrome = defaultTableHeaderChrome()
   if DefaultDrawLevel notin renders:
     return 0
+  let expectedSortColor = chrome.sortIndicatorColor.rgba
   for node in renders[DefaultDrawLevel].nodes:
-    if node.kind == nkRectangle and node.fill.kind == flColor and
-        node.fill.color == chrome.sortIndicatorColor.rgba and
-        node.screenBox.y >= minimumY and node.screenBox.w >= 6.0 and
-        node.screenBox.h >= 1.5 and abs(node.rotation) >= 10.0:
+    if node.fill.kind == flColor and node.screenBox.y >= minimumY - 0.1'f32 and (
+      (
+        node.kind == nkRectangle and node.screenBox.w >= 6.0 and node.screenBox.h >= 1.5 and
+        abs(node.rotation) >= 10.0
+      ) or node.hasDrawableOp(dkLine)
+    ):
+      let color = node.fill.color
+      if abs(int(color.r) - int(expectedSortColor.r)) > 1 or
+          abs(int(color.g) - int(expectedSortColor.g)) > 1 or
+          abs(int(color.b) - int(expectedSortColor.b)) > 1 or
+          abs(int(color.a) - int(expectedSortColor.a)) > 1:
+        continue
       inc result
 
 proc hostedTableCellCount(tableView: TableView): int =

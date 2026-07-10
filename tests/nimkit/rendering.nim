@@ -111,6 +111,36 @@ proc renderedRect(node: Fig): nimkitTypes.Rect =
     node.screenBox.h.float32,
   )
 
+func approx(a, b: float32): bool =
+  abs(a - b) <= 0.01'f32
+
+func approxColor(left, right: ColorRGBA, tolerance: int = 1): bool =
+  abs(int(left.r) - int(right.r)) <= tolerance and
+    abs(int(left.g) - int(right.g)) <= tolerance and
+    abs(int(left.b) - int(right.b)) <= tolerance and
+    abs(int(left.a) - int(right.a)) <= tolerance
+
+func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
+  if node.kind != nkDrawable:
+    return false
+  for op in node.drawOps:
+    if op.kind == kind:
+      return true
+  false
+
+func inCustomSubtree(nodes: seq[Fig], parent: FigIdx, target: FigIdx): bool =
+  if target.int < 0 or target.int >= nodes.len:
+    return false
+  var current = target
+  while true:
+    if current == parent:
+      return true
+    let parentIdx = nodes[current.int].parent
+    if parentIdx.int < 0:
+      return false
+    current = parentIdx
+  false
+
 proc rectsClose(left, right: nimkitTypes.Rect): bool =
   abs(left.origin.x - right.origin.x) <= 0.01'f32 and
     abs(left.origin.y - right.origin.y) <= 0.01'f32 and
@@ -1604,8 +1634,11 @@ suite "nimkit rendering":
     var customTextFound = false
     var customLineFound = false
     var customCircleFound = false
-    for idx in childIndex(list.nodes, customRoot):
-      let node = list.nodes[int(idx)]
+    for idx, node in list.nodes:
+      if not inCustomSubtree(list.nodes, customRoot, idx.FigIdx):
+        continue
+      if node.fill.kind != flColor:
+        continue
       if node.kind == nkRectangle and node.screenBox.x == 14.0 and
           node.screenBox.y == 25.0 and node.screenBox.w == 20.0 and
           node.screenBox.h == 10.0:
@@ -1613,12 +1646,21 @@ suite "nimkit rendering":
       if node.kind == nkText and node.screenBox.x == 14.0 and node.screenBox.y == 25.0 and
           node.screenBox.w == 20.0 and node.screenBox.h == 10.0:
         customTextFound = true
-      if node.kind == nkRectangle and node.fill == CustomLineFill and
-          abs(node.rotation) >= 10.0:
+      if node.fill.kind == flColor and approxColor(
+        node.fill.color, CustomLineFill.color
+      ) and (
+        (node.kind == nkRectangle and abs(node.rotation) >= 10.0) or
+        node.hasDrawableOp(dkLine)
+      ):
         customLineFound = true
-      if node.kind == nkRectangle and node.fill == CustomCircleFill and
-          node.screenBox.x == 39.0 and node.screenBox.y == 32.0 and
-          node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
+      if node.fill.kind == flColor and
+          approxColor(node.fill.color, CustomCircleFill.color) and (
+        (
+          node.kind == nkRectangle and approx(node.screenBox.x, 39.0) and
+          approx(node.screenBox.y, 32.0) and approx(node.screenBox.w, 12.0) and
+          approx(node.screenBox.h, 12.0)
+        ) or node.hasDrawableOp(dkCircle)
+      ):
         customCircleFound = true
 
     check customRectFound

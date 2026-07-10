@@ -29,6 +29,7 @@ jobs:
             display: none
         include:
           - os: ubuntu-24.04
+            nimversion: '2.2.10'
             display: x11
           # - os: ubuntu-24.04
           #   display: wayland
@@ -41,18 +42,17 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
+    - name: Install Choosenim
       if: runner.os != 'Windows'
       run: |
-        curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
-        echo "$HOME/.local/share/grabnim/current/bin" >> $GITHUB_PATH
+        curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
         echo "$HOME/.nimble/bin" >> $GITHUB_PATH
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Install Nim
       if: runner.os != 'Windows'
       run: |
-        grabnim ${{ matrix.nimversion }}
+        choosenim ${{ matrix.nimversion }}
         nim -v
 
     - name: Install Nim (Windows)
@@ -141,18 +141,17 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
+    - name: Install Choosenim
       if: runner.os != 'Windows'
       run: |
-        curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
-        echo "$HOME/.local/share/grabnim/current/bin" >> $GITHUB_PATH
+        curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
         echo "$HOME/.nimble/bin" >> $GITHUB_PATH
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Install Nim
       if: runner.os != 'Windows'
       run: |
-        grabnim ${{ matrix.nimversion }}
+        choosenim ${{ matrix.nimversion }}
         nim -v
 
     - name: Install Nim (Windows)
@@ -187,4 +186,3 @@ jobs:
     - name: Compile Examples
       run: |
         atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
-
