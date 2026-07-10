@@ -1648,6 +1648,25 @@ suite "nimkit rendering":
           approx(node.screenBox.w, 12.0) and approx(node.screenBox.h, 12.0):
         customCircleFound = true
 
+    if not customRectFound:
+      echo "custom rect not found"
+    if not customTextFound:
+      echo "custom text not found"
+    if not customLineFound:
+      echo "custom line not found"
+    if not customCircleFound:
+      echo "custom circle not found"
+    if not (customRectFound and customTextFound and customLineFound and customCircleFound):
+      echo "custom draw subtree nodes:"
+      for idx, node in list.nodes:
+        if not inCustomSubtree(list.nodes, customRoot, idx.FigIdx):
+          continue
+        let color = node.fill.color
+        echo "  idx=", idx, " kind=", $node.kind, " fill=", $node.fill.kind,
+          " fillRGBA=", color.r, ",", color.g, ",", color.b, ",", color.a, " rect=",
+          node.screenBox.x, ",", node.screenBox.y, ",", node.screenBox.w, ",",
+          node.screenBox.h, " rot=", node.rotation
+
     check customRectFound
     check customTextFound
     check customLineFound

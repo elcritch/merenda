@@ -253,6 +253,35 @@ proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
         continue
       inc result
 
+proc logSortIndicatorCandidates(view: View, minimumY = -1.0'f32) =
+  let
+    renders = buildRenders(view)
+    expectedSortColor = defaultTableHeaderChrome().sortIndicatorColor.rgba
+  if DefaultDrawLevel notin renders:
+    echo "No DefaultDrawLevel renders"
+    return
+
+  echo "sortIndicatorCandidates minimumY=", minimumY
+  for index, node in renders[DefaultDrawLevel].nodes:
+    if node.kind != nkRectangle:
+      continue
+    if node.screenBox.y < minimumY - 0.1'f32:
+      continue
+    if node.fill.kind == flColor:
+      let color = node.fill.color
+      let matches = abs(int(color.r) - int(expectedSortColor.r)) <= 1 and
+        abs(int(color.g) - int(expectedSortColor.g)) <= 1 and
+        abs(int(color.b) - int(expectedSortColor.b)) <= 1 and
+        abs(int(color.a) - int(expectedSortColor.a)) <= 1
+      echo "  idx=", index, " kind=", $node.kind, " fill=", $node.fill.kind,
+        " fillRGBA=", color.r, ",", color.g, ",", color.b, ",", color.a,
+        " rect=", node.screenBox.x, ",", node.screenBox.y, ",", node.screenBox.w, ",", node.screenBox.h,
+        " rot=", node.rotation, " matchesExpected=", matches
+    else:
+      echo "  idx=", index, " kind=", $node.kind, " fill=", $node.fill.kind,
+        " rect=", node.screenBox.x, ",", node.screenBox.y, ",", node.screenBox.w, ",", node.screenBox.h,
+        " rot=", node.rotation
+
 proc hostedTableCellCount(tableView: TableView): int =
   let content = tableView.contentView()
   if content.isNil:
@@ -1100,7 +1129,10 @@ suite "NimKit TableView":
     check not texts.contains("Name ^")
     check not texts.contains("Name v")
     check tableView.renderedRectangleCount() >= 6
-    check tableView.renderedVisibleSortIndicatorCount(tableView.frame.origin.y) >= 2
+    let ascIndicatorCount = tableView.renderedVisibleSortIndicatorCount(tableView.frame.origin.y)
+    if ascIndicatorCount < 2:
+      tableView.logSortIndicatorCandidates(tableView.frame.origin.y)
+    check ascIndicatorCount >= 2
 
     check tableView.headerMouseDown(
       MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
@@ -1109,7 +1141,10 @@ suite "NimKit TableView":
       MouseEvent(location: initPoint(20.0, 10.0), button: mbPrimary)
     )
     check name.sortDirection == tsdDescending
-    check tableView.renderedVisibleSortIndicatorCount(tableView.frame.origin.y) >= 2
+    let descIndicatorCount = tableView.renderedVisibleSortIndicatorCount(tableView.frame.origin.y)
+    if descIndicatorCount < 2:
+      tableView.logSortIndicatorCandidates(tableView.frame.origin.y)
+    check descIndicatorCount >= 2
 
     check tableView.headerMouseDown(
       MouseEvent(location: initPoint(118.0, 10.0), button: mbPrimary)
