@@ -50,8 +50,7 @@ protocol CellEditingProtocol:
   ) {.optional.}
 
   method endEditing*(editor: FieldEditor, controlView: View) {.optional.}
-  method sendsActionOnEndEditing*(): bool
-  method setSendsActionOnEndEditing*(value: bool)
+  property sendsActionOnEndEditing -> bool
 
 protocol DefaultCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: Cell): IntrinsicSize =
@@ -60,7 +59,7 @@ protocol DefaultCellMeasurement of CellMeasurementProtocol:
   method cellSizeForBounds(cell: Cell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
 
-protocol DefaultCellEditing of CellEditingProtocol:
+protocol DefaultCellEditing of CellEditingProtocol from Cell:
   method fieldEditorForView(cell: Cell, controlView: View): FieldEditor =
     nil
 
@@ -94,11 +93,7 @@ protocol DefaultCellEditing of CellEditingProtocol:
     if not editor.isNil and editor.superview() == controlView:
       editor.removeFromSuperview()
 
-  method sendsActionOnEndEditing(cell: Cell): bool =
-    cell.xSendsActionOnEndEditing
-
-  method setSendsActionOnEndEditing(cell: Cell, value: bool) =
-    cell.xSendsActionOnEndEditing = value
+  property sendsActionOnEndEditing -> bool {.field: xSendsActionOnEndEditing.}
 
 proc invalidateViewCellMetrics(view: View) =
   if not view.isNil:
