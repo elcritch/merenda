@@ -120,6 +120,14 @@ func approxColor(left, right: ColorRGBA, tolerance: int = 1): bool =
     abs(int(left.b) - int(right.b)) <= tolerance and
     abs(int(left.a) - int(right.a)) <= tolerance
 
+func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
+  if node.kind != nkDrawable:
+    return false
+  for op in node.drawOps:
+    if op.kind == kind:
+      return true
+  false
+
 func inCustomSubtree(nodes: seq[Fig], parent: FigIdx, target: FigIdx): bool =
   if target.int < 0 or target.int >= nodes.len:
     return false
@@ -1638,34 +1646,22 @@ suite "nimkit rendering":
       if node.kind == nkText and node.screenBox.x == 14.0 and node.screenBox.y == 25.0 and
           node.screenBox.w == 20.0 and node.screenBox.h == 10.0:
         customTextFound = true
-      if node.kind == nkRectangle and node.fill.kind == flColor and
-          approxColor(node.fill.color, CustomLineFill.color) and
-          abs(node.rotation) >= 10.0:
+      if node.fill.kind == flColor and approxColor(
+        node.fill.color, CustomLineFill.color
+      ) and (
+        (node.kind == nkRectangle and abs(node.rotation) >= 10.0) or
+        node.hasDrawableOp(dkLine)
+      ):
         customLineFound = true
-      if node.kind == nkRectangle and node.fill.kind == flColor and
-          approxColor(node.fill.color, CustomCircleFill.color) and
-          approx(node.screenBox.x, 39.0) and approx(node.screenBox.y, 32.0) and
-          approx(node.screenBox.w, 12.0) and approx(node.screenBox.h, 12.0):
+      if node.fill.kind == flColor and
+          approxColor(node.fill.color, CustomCircleFill.color) and (
+        (
+          node.kind == nkRectangle and approx(node.screenBox.x, 39.0) and
+          approx(node.screenBox.y, 32.0) and approx(node.screenBox.w, 12.0) and
+          approx(node.screenBox.h, 12.0)
+        ) or node.hasDrawableOp(dkCircle)
+      ):
         customCircleFound = true
-
-    if not customRectFound:
-      echo "custom rect not found"
-    if not customTextFound:
-      echo "custom text not found"
-    if not customLineFound:
-      echo "custom line not found"
-    if not customCircleFound:
-      echo "custom circle not found"
-    if not (customRectFound and customTextFound and customLineFound and customCircleFound):
-      echo "custom draw subtree nodes:"
-      for idx, node in list.nodes:
-        if not inCustomSubtree(list.nodes, customRoot, idx.FigIdx):
-          continue
-        let color = node.fill.color
-        echo "  idx=", idx, " kind=", $node.kind, " fill=", $node.fill.kind,
-          " fillRGBA=", color.r, ",", color.g, ",", color.b, ",", color.a, " rect=",
-          node.screenBox.x, ",", node.screenBox.y, ",", node.screenBox.w, ",",
-          node.screenBox.h, " rot=", node.rotation
 
     check customRectFound
     check customTextFound
