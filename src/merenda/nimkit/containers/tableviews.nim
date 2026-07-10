@@ -2635,7 +2635,8 @@ proc setFocusedCellColumn(
     tableView.xSelectedColumns = @[column]
   if previousColumn != tableView.xFocusedColumn or
       previousSelectedColumns != tableView.xSelectedColumns:
-    tableView.scrollCellToVisible(row, column)
+    if not tableView.window().isNil:
+      tableView.scrollCellToVisible(row, column)
     tableView.setNeedsDisplay(true)
     if notifySelection and previousSelectedColumns != tableView.xSelectedColumns:
       emit tableView.selectionDidChange(DynamicAgent(tableView))
