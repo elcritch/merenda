@@ -108,17 +108,15 @@ proc inferredFileType(fileUrl: string): string =
 proc resolvedFileType(document: Document, fileUrl, fileType: string): string =
   if fileType.len > 0:
     return fileType
-  if not document.isNil and document.xFileType.len > 0:
+  if document.xFileType.len > 0:
     return document.xFileType
   inferredFileType(fileUrl)
 
 proc sendDocumentDelegate(document: Document, selector: Selector[Document, EmptyArgs]) =
-  if not document.isNil and not document.xDelegate.isNil:
+  if not document.xDelegate.isNil:
     discard document.xDelegate.sendLocalIfHandled(selector, document)
 
 proc postNotification(document: Document, kind: NotificationKind, fileUrl = "") =
-  if document.isNil:
-    return
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       kind,
@@ -145,8 +143,6 @@ proc notifyDocumentEditedChanged(document: Document) =
   document.postNotification(nkDocumentDidChangeEdited)
 
 proc documentShouldCloseNow(document: Document): bool =
-  if document.isNil:
-    return true
   if not document.xDelegate.isNil:
     let allowed = document.xDelegate.trySendLocal(documentShouldClose(), document)
     if allowed.isSome:
@@ -155,8 +151,6 @@ proc documentShouldCloseNow(document: Document): bool =
 
 protocol DocumentUndoManagerProvider of UndoManagerProvider:
   method undoManager(document: Document): Option[UndoManager] =
-    if document.isNil:
-      return none(UndoManager)
     some(document.undoManagerFor())
 
 protocol DocumentDefaultsProvider of UserDefaultsProvider:
@@ -164,8 +158,6 @@ protocol DocumentDefaultsProvider of UserDefaultsProvider:
     DynamicAgent(document.userDefaults())
 
   method defaultsScopeId(document: Document): string =
-    if document.isNil:
-      return ""
     if document.xFileUrl.len > 0:
       return "document:file:" & document.xFileUrl
     if document.xHasDisplayName:
@@ -198,8 +190,6 @@ protocol DefaultDocumentWindows of DocumentWindowProtocol:
     @[newWindowController()]
 
 proc initDocument*(document: Document, fileUrl = "", fileType = "", fileName = "") =
-  if document.isNil:
-    return
   initResponder(document)
   document.xDocumentIdentifier = nextDocumentIdentifier()
   document.xFileUrl = fileUrl
@@ -221,28 +211,25 @@ proc newDocument*(fileUrl = "", fileType = "", fileName = ""): Document =
   result.initDocument(fileUrl, fileType, fileName)
 
 proc delegate*(document: Document): DynamicAgent =
-  if document.isNil: nil else: document.xDelegate
+  document.xDelegate
 
 proc `delegate=`*(document: Document, delegate: DynamicAgent) =
-  if not document.isNil:
-    document.xDelegate = delegate
+  document.xDelegate = delegate
 
 proc `delegate=`*(document: Document, delegate: Responder) =
   document.delegate = DynamicAgent(delegate)
 
 proc fileUrl*(document: Document): string =
-  if document.isNil: "" else: document.xFileUrl
+  document.xFileUrl
 
 proc documentIdentifier*(document: Document): string =
-  if document.isNil:
-    return ""
   if document.xFileUrl.len > 0:
     "file:" & document.xFileUrl
   else:
     document.xDocumentIdentifier
 
 proc setFileUrl*(document: Document, fileUrl: string) =
-  if document.isNil or document.xFileUrl == fileUrl:
+  if document.xFileUrl == fileUrl:
     return
   let oldDisplayName = document.displayName()
   document.xFileUrl = fileUrl
@@ -255,14 +242,12 @@ proc `fileUrl=`*(document: Document, fileUrl: string) =
   document.setFileUrl(fileUrl)
 
 proc fileName*(document: Document): string =
-  if document.isNil:
-    return ""
   if document.xHasFileName:
     return document.xFileName
   defaultFileName(document.xFileUrl)
 
 proc setFileName*(document: Document, fileName: string) =
-  if document.isNil or (document.xHasFileName and document.xFileName == fileName):
+  if (document.xHasFileName and document.xFileName == fileName):
     return
   let oldDisplayName = document.displayName()
   document.xFileName = fileName
@@ -274,7 +259,7 @@ proc `fileName=`*(document: Document, fileName: string) =
   document.setFileName(fileName)
 
 proc clearFileName*(document: Document) =
-  if document.isNil or not document.xHasFileName:
+  if not document.xHasFileName:
     return
   let oldDisplayName = document.displayName()
   document.xFileName = ""
@@ -283,18 +268,15 @@ proc clearFileName*(document: Document) =
     document.notifyDisplayNameChanged()
 
 proc fileType*(document: Document): string =
-  if document.isNil: "" else: document.xFileType
+  document.xFileType
 
 proc setFileType*(document: Document, fileType: string) =
-  if not document.isNil:
-    document.xFileType = fileType
+  document.xFileType = fileType
 
 proc `fileType=`*(document: Document, fileType: string) =
   document.setFileType(fileType)
 
 proc displayName*(document: Document): string =
-  if document.isNil:
-    return ""
   if document.xHasDisplayName:
     return document.xDisplayName
   let name = document.fileName()
@@ -303,8 +285,7 @@ proc displayName*(document: Document): string =
   "Untitled"
 
 proc setDisplayName*(document: Document, displayName: string) =
-  if document.isNil or
-      (document.xHasDisplayName and document.xDisplayName == displayName):
+  if (document.xHasDisplayName and document.xDisplayName == displayName):
     return
   document.xDisplayName = displayName
   document.xHasDisplayName = true
@@ -314,7 +295,7 @@ proc `displayName=`*(document: Document, displayName: string) =
   document.setDisplayName(displayName)
 
 proc clearDisplayName*(document: Document) =
-  if document.isNil or not document.xHasDisplayName:
+  if not document.xHasDisplayName:
     return
   let oldDisplayName = document.displayName()
   document.xDisplayName = ""
@@ -323,14 +304,12 @@ proc clearDisplayName*(document: Document) =
     document.notifyDisplayNameChanged()
 
 proc isDocumentEdited*(document: Document): bool =
-  (not document.isNil) and document.xDocumentEdited
+  document.xDocumentEdited
 
 proc documentEdited*(document: Document): bool =
   document.isDocumentEdited()
 
 proc setDocumentEdited*(document: Document, edited: bool) =
-  if document.isNil:
-    return
   if edited:
     if not document.xUndoManager.isNil and document.xUndoManager.isAtCleanState():
       document.xUndoManager.clearCleanState()
@@ -342,7 +321,7 @@ proc setDocumentEdited*(document: Document, edited: bool) =
   document.notifyDocumentEditedChanged()
 
 proc setDocumentEditedFromUndoManager(document: Document, edited: bool) =
-  if document.isNil or document.xDocumentEdited == edited:
+  if document.xDocumentEdited == edited:
     return
   document.xDocumentEdited = edited
   document.notifyDocumentEditedChanged()
@@ -351,29 +330,25 @@ proc `documentEdited=`*(document: Document, edited: bool) =
   document.setDocumentEdited(edited)
 
 proc isClosed*(document: Document): bool =
-  (not document.isNil) and document.xClosed
+  document.xClosed
 
 proc undoManagerFor*(document: Document): UndoManager =
-  if document.isNil:
-    return nil
   if document.xUndoManager.isNil:
     document.setUndoManager(newUndoManager())
   document.xUndoManager
 
 proc userDefaults*(document: Document): UserDefaults =
-  if document.isNil:
-    return sharedUserDefaults()
   if document.xUserDefaults.isNil:
     document.xUserDefaults = newUserDefaults()
   document.xUserDefaults
 
 proc undoManagerStateDidChange(document: Document, manager: UndoManager) {.slot.} =
-  if document.isNil or document.xUndoManager != manager:
+  if document.xUndoManager != manager:
     return
   document.setDocumentEditedFromUndoManager(not manager.isAtCleanState())
 
 proc setUndoManager*(document: Document, undoManager: UndoManager) =
-  if document.isNil or document.xUndoManager == undoManager:
+  if document.xUndoManager == undoManager:
     return
   if not document.xUndoManager.isNil:
     document.xUndoManager.disconnect(
@@ -394,17 +369,15 @@ proc windowControllers*(document: Document): lent seq[WindowController] =
   document.xWindowControllers
 
 proc windowControllerCount*(document: Document): int =
-  if document.isNil: 0 else: document.xWindowControllers.len
+  document.xWindowControllers.len
 
 proc syncWindowControllerTitles(document: Document) =
-  if document.isNil:
-    return
   let name = document.displayName()
   for controller in document.xWindowControllers:
     controller.documentDisplayName = name
 
 proc addWindowController*(document: Document, controller: WindowController) =
-  if document.isNil or controller.isNil or controller in document.xWindowControllers:
+  if controller.isNil or controller in document.xWindowControllers:
     return
   document.xWindowControllers.add controller
   controller.documentDisplayName = document.displayName()
@@ -421,7 +394,7 @@ proc addWindowController*(document: Document, controller: WindowController) =
 proc removeWindowController*(
     document: Document, controller: WindowController
 ): bool {.discardable.} =
-  if document.isNil or controller.isNil:
+  if controller.isNil:
     return false
   let idx = document.xWindowControllers.find(controller)
   if idx < 0:
@@ -437,19 +410,15 @@ proc removeWindowController*(
   true
 
 proc canReadFileType*(document: Document, fileType: string): bool =
-  if document.isNil:
-    return false
   document.trySendLocal(canReadType(), fileType).get(true)
 
 proc canWriteFileType*(document: Document, fileType: string): bool =
-  if document.isNil:
-    return false
   document.trySendLocal(canWriteType(), fileType).get(true)
 
 proc readFromFileUrl*(
     document: Document, fileUrl: string, fileType = ""
 ): bool {.discardable.} =
-  if document.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return false
   let resolvedType = document.resolvedFileType(fileUrl, fileType)
   if not document.canReadFileType(resolvedType):
@@ -469,7 +438,7 @@ proc readFromFileUrl*(
 proc writeToFileUrl*(
     document: Document, fileUrl: string, fileType = ""
 ): bool {.discardable.} =
-  if document.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return false
   let resolvedType = document.resolvedFileType(fileUrl, fileType)
   if not document.canWriteFileType(resolvedType):
@@ -487,7 +456,7 @@ proc writeToFileUrl*(
   true
 
 proc save*(document: Document): bool {.discardable.} =
-  if document.isNil or document.xFileUrl.len == 0:
+  if document.xFileUrl.len == 0:
     return false
   document.sendDocumentDelegate(documentWillSave())
   emit document.willSaveDocument(document.xFileUrl)
@@ -499,7 +468,7 @@ proc save*(document: Document): bool {.discardable.} =
     document.postNotification(nkDocumentDidSave)
 
 proc saveAs*(document: Document, fileUrl: string, fileType = ""): bool {.discardable.} =
-  if document.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return false
   document.sendDocumentDelegate(documentWillSave())
   emit document.willSaveDocument(fileUrl)
@@ -511,7 +480,7 @@ proc saveAs*(document: Document, fileUrl: string, fileType = ""): bool {.discard
     document.postNotification(nkDocumentDidSave)
 
 proc revert*(document: Document): bool {.discardable.} =
-  if document.isNil or document.xFileUrl.len == 0:
+  if document.xFileUrl.len == 0:
     return false
   let fileUrl = document.xFileUrl
   document.sendDocumentDelegate(documentWillRevert())
@@ -524,15 +493,13 @@ proc revert*(document: Document): bool {.discardable.} =
     document.postNotification(nkDocumentDidRevert)
 
 proc ensureWindowControllers(document: Document) =
-  if document.isNil or document.xWindowControllers.len > 0:
+  if document.xWindowControllers.len > 0:
     return
   let controllers = document.trySendLocal(makeWindowControllers(), ()).get(@[])
   for controller in controllers:
     document.addWindowController(controller)
 
 proc removeClosedWindowControllers(document: Document) =
-  if document.isNil:
-    return
   var index = document.xWindowControllers.high
   while index >= 0:
     let
@@ -549,8 +516,6 @@ proc removeClosedWindowControllers(document: Document) =
 proc showWindows*(
     document: Document, app: Application = nil
 ): seq[Window] {.discardable.} =
-  if document.isNil:
-    return @[]
   document.removeClosedWindowControllers()
   document.ensureWindowControllers()
   if not app.isNil:
@@ -568,7 +533,7 @@ proc showWindows*(
         result.add window
 
 proc close*(document: Document): bool {.discardable.} =
-  if document.isNil or document.xClosed:
+  if document.xClosed:
     return true
   if not document.documentShouldCloseNow():
     return false

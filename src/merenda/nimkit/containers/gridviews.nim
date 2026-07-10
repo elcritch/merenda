@@ -76,7 +76,7 @@ proc visibleGridItems(gridView: GridView): seq[GridItem] =
       result.add item
 
 proc gridItemIndex(gridView: GridView, child: View): int =
-  if gridView.isNil or child.isNil:
+  if child.isNil:
     return -1
   for index, item in gridView.xItems:
     if item.view == child:
@@ -280,29 +280,23 @@ proc spacing*(gridView: GridView): GridSpacing =
 
 proc setSpacing*(gridView: GridView, direction: Direction, spacing: float32) =
   let normalized = spacing.normalizedSpacing()
-  if gridView.isNil or gridView.xSpacing[direction] == normalized:
+  if gridView.xSpacing[direction] == normalized:
     return
   gridView.xSpacing[direction] = normalized
   gridView.invalidateGridLayout()
 
 proc `[]`*(spacing: GridSpacing, direction: Direction): float32 =
-  let gridView = spacing.xGridView
-  if gridView.isNil:
-    return 0.0'f32
-  gridView.xSpacing[direction]
+  spacing.xGridView.xSpacing[direction]
 
 proc `[]=`*(spacing: GridSpacing, direction: Direction, value: float32) =
   spacing.xGridView.setSpacing(direction, value)
 
 proc edgeInsets*(gridView: GridView): EdgeInsets =
-  if gridView.isNil:
-    insets(0.0)
-  else:
-    gridView.xEdgeInsets
+  gridView.xEdgeInsets
 
 proc `edgeInsets=`*(gridView: GridView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
-  if gridView.isNil or gridView.xEdgeInsets == normalized:
+  if gridView.xEdgeInsets == normalized:
     return
   gridView.xEdgeInsets = normalized
   gridView.invalidateGridLayout()
@@ -311,16 +305,13 @@ proc alignment*(gridView: GridView): GridAlignmentValues =
   GridAlignmentValues(xGridView: gridView)
 
 proc setAlignment*(gridView: GridView, direction: Direction, alignment: GridAlignment) =
-  if gridView.isNil or gridView.xAlignment[direction] == alignment:
+  if gridView.xAlignment[direction] == alignment:
     return
   gridView.xAlignment[direction] = alignment
   gridView.invalidateGridLayout()
 
 proc `[]`*(alignment: GridAlignmentValues, direction: Direction): GridAlignment =
-  let gridView = alignment.xGridView
-  if gridView.isNil:
-    return gaFill
-  gridView.xAlignment[direction]
+  alignment.xGridView.xAlignment[direction]
 
 proc `[]=`*(
     alignment: GridAlignmentValues, direction: Direction, value: GridAlignment
@@ -328,16 +319,10 @@ proc `[]=`*(
   alignment.xGridView.setAlignment(direction, value)
 
 proc intrinsicContentSize*(gridView: GridView): IntrinsicSize =
-  if gridView.isNil:
-    NoIntrinsicContentSize
-  else:
-    initIntrinsicSize(gridView.naturalSize())
+  initIntrinsicSize(gridView.naturalSize())
 
 proc gridItems*(gridView: GridView): seq[GridItem] =
-  if gridView.isNil:
-    @[]
-  else:
-    gridView.xItems
+  gridView.xItems
 
 proc setGridSubview*(
     gridView: GridView,
@@ -346,7 +331,7 @@ proc setGridSubview*(
     rowSpan: Positive = 1,
     colSpan: Positive = 1,
 ) =
-  if gridView.isNil or child.isNil:
+  if child.isNil:
     return
 
   if child.superview != gridView:

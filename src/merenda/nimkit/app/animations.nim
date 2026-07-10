@@ -300,7 +300,7 @@ template withoutAnimationTransactionCapture(body: untyped): untyped =
     dec animationTransactionApplyDepth
 
 proc removeTransactionEntry(transaction: AnimationTransaction, index: int) =
-  if transaction.isNil or index < 0 or index >= transaction.xEntries.len:
+  if index < 0 or index >= transaction.xEntries.len:
     return
   let animation = transaction.xEntries[index].animation
   transaction.xEntries.delete(index)
@@ -316,7 +316,7 @@ proc registerTransactionAnimation(
     selector: SigilName,
     animation: Animation,
 ) =
-  if transaction.isNil or animation.isNil:
+  if animation.isNil:
     return
   for index, entry in transaction.xEntries:
     if entry.target == target and entry.selector == selector:
@@ -346,37 +346,26 @@ proc newAnimationTransaction*(
   newAnimationTransaction(duration, initAnimationTiming(curve))
 
 proc duration*(transaction: AnimationTransaction): Duration =
-  if transaction.isNil:
-    initDuration()
-  else:
-    transaction.xDuration
+  transaction.xDuration
 
 proc timing*(transaction: AnimationTransaction): AnimationTiming =
-  if transaction.isNil:
-    linearTiming()
-  else:
-    transaction.xTiming
+  transaction.xTiming
 
 proc animationGroup*(transaction: AnimationTransaction): ParallelAnimationGroup =
-  if transaction.isNil: nil else: transaction.xGroup
+  transaction.xGroup
 
 proc animationCount*(transaction: AnimationTransaction): int =
-  if transaction.isNil or transaction.xGroup.isNil:
-    0
-  else:
-    transaction.xGroup.children.len
+  if transaction.xGroup.isNil: 0 else: transaction.xGroup.children.len
 
 proc addTransactionAnimation*(
     transaction: AnimationTransaction, animation: Animation
 ): bool {.discardable.} =
-  if transaction.isNil or animation.isNil:
+  if animation.isNil:
     return false
   transaction.xGroup.children.add(animation)
   true
 
 proc beginAnimationTransaction*(transaction: AnimationTransaction) =
-  if transaction.isNil:
-    return
   animationTransactionStack.add(transaction)
 
 proc beginAnimationTransaction*(
@@ -452,31 +441,27 @@ template animationGroup*(
       raise
 
 proc rawState(animation: Animation): AnimationState =
-  if animation.isNil or animation.state.isNil:
+  if animation.state.isNil:
     asStopped
   else:
     animation.state{}
 
 proc rawCurrentTime(animation: Animation): Duration =
-  if animation.isNil or animation.currentTime.isNil:
+  if animation.currentTime.isNil:
     initDuration()
   else:
     animation.currentTime{}
 
 proc rawProgress(animation: Animation): float32 =
-  if animation.isNil or animation.progress.isNil:
+  if animation.progress.isNil:
     0.0'f32
   else:
     animation.progress{}
 
 proc emitClockTick(ticker: AnimationClockTicker) {.slot.} =
-  if ticker.isNil:
-    return
   emit ticker.clockTicked(ticker.xFrameInterval)
 
 proc queueClockTick(clock: AnimationSchedulerClock, delta: Duration) {.slot.} =
-  if clock.isNil:
-    return
   clock.xPendingDeltas.add(delta)
   emit clock.clockTickQueued(delta)
 
@@ -496,8 +481,6 @@ proc sortAndDedupeMarks(marks: var seq[float32]) =
   marks.setLen(writeIndex)
 
 proc setAnimationState(animation: Animation, nextState: AnimationState) =
-  if animation.isNil:
-    return
   let previous = animation.rawState()
   if previous == nextState:
     return
@@ -508,10 +491,7 @@ method applyValue*(animation: Animation) {.base.} =
   discard
 
 method adjustedProgress*(animation: Animation, progress: float32): float32 {.base.} =
-  if animation.isNil:
-    progress.clampProgress()
-  else:
-    animation.xTiming.easedProgress(progress)
+  animation.xTiming.easedProgress(progress)
 
 func steppedValue[T](animation: ValueAnimation[T], progress: float32): T =
   if progress >= 1.0'f32: animation.endValue else: animation.startValue
@@ -621,15 +601,10 @@ protocol AnimationProtocol {.selectorScope: protocol.} from Animation:
     discard oldState
 
   method naturalDuration*(animation: Animation): Duration =
-    if animation.isNil:
-      initDuration()
-    else:
-      animation.xDuration
+    animation.xDuration
 
   method totalDuration*(animation: Animation): Duration =
-    if animation.isNil:
-      initDuration()
-    elif animation.xLoopCount < 0:
+    if animation.xLoopCount < 0:
       initDuration(nanoseconds = -1)
     else:
       initDuration(
@@ -693,21 +668,17 @@ protocol ColorPropertyAnimationProtocol of AnimationProtocol:
     animation.applyValue()
 
 proc boundedChildTime(child: Animation, currentTime: Duration): Duration =
-  if child.isNil or currentTime.inNanoseconds <= 0:
+  if currentTime.inNanoseconds <= 0:
     return initDuration()
   let total = child.totalDuration()
   if total.inNanoseconds >= 0 and currentTime > total: total else: currentTime
 
 protocol ParallelAnimationGroupProtocol of AnimationProtocol:
   method updateCurrentTime*(animation: ParallelAnimationGroup, currentTime: Duration) =
-    if animation.isNil:
-      return
     for child in animation.children:
       child.setCurrentTime(child.boundedChildTime(currentTime))
 
   method naturalDuration*(animation: ParallelAnimationGroup): Duration =
-    if animation.isNil:
-      return initDuration()
     result = Animation(animation).xDuration
     for child in animation.children:
       let childDuration = child.totalDuration()
@@ -720,8 +691,6 @@ protocol SequentialAnimationGroupProtocol of AnimationProtocol:
   method updateCurrentTime*(
       animation: SequentialAnimationGroup, currentTime: Duration
   ) =
-    if animation.isNil:
-      return
     var remaining = currentTime
     for child in animation.children:
       if child.isNil:
@@ -733,8 +702,6 @@ protocol SequentialAnimationGroupProtocol of AnimationProtocol:
       remaining = remaining - childDuration
 
   method naturalDuration*(animation: SequentialAnimationGroup): Duration =
-    if animation.isNil:
-      return initDuration()
     result = Animation(animation).xDuration
     for child in animation.children:
       let childDuration = child.totalDuration()
@@ -748,8 +715,6 @@ proc initAnimationFields*(
     loopCount = 1,
     direction = adForward,
 ) =
-  if animation.isNil:
-    return
   animation.xDuration = duration
   animation.xLoopCount = loopCount
   animation.xDirection = direction
@@ -831,8 +796,6 @@ proc initAnimationGroupFields*(
     children: openArray[Animation] = [],
     duration = initDuration(),
 ) =
-  if group.isNil:
-    return
   initAnimationFields(group, duration)
   group.children = @children
 
@@ -858,20 +821,15 @@ proc duration*(animation: Animation): Duration =
   animation.naturalDuration()
 
 proc `duration=`*(animation: Animation, duration: Duration) =
-  if animation.isNil:
-    return
   animation.xDuration = duration
 
 proc loopCount*(animation: Animation): int =
-  if animation.isNil: 0 else: animation.xLoopCount
+  animation.xLoopCount
 
 proc `loopCount=`*(animation: Animation, loopCount: int) =
-  if not animation.isNil:
-    animation.xLoopCount = loopCount
+  animation.xLoopCount = loopCount
 
 proc progressAtTime(animation: Animation, currentTime: Duration): float32 =
-  if animation.isNil:
-    return 0.0'f32
   let durationNs = animation.duration().inNanoseconds
   if durationNs <= 0:
     return if animation.xDirection == adBackward: 0.0'f32 else: 1.0'f32
@@ -890,45 +848,36 @@ proc progressAtTime(animation: Animation, currentTime: Duration): float32 =
     forwardProgress
 
 proc direction*(animation: Animation): AnimationDirection =
-  if animation.isNil: adForward else: animation.xDirection
+  animation.xDirection
 
 proc `direction=`*(animation: Animation, direction: AnimationDirection) =
-  if not animation.isNil:
-    animation.xDirection = direction
+  animation.xDirection = direction
 
 proc deletionPolicy*(animation: Animation): AnimationDeletionPolicy =
-  if animation.isNil: adpKeepWhenStopped else: animation.xDeletionPolicy
+  animation.xDeletionPolicy
 
 proc `deletionPolicy=`*(animation: Animation, deletionPolicy: AnimationDeletionPolicy) =
-  if not animation.isNil:
-    animation.xDeletionPolicy = deletionPolicy
+  animation.xDeletionPolicy = deletionPolicy
 
 proc timing*(animation: Animation): AnimationTiming =
-  if animation.isNil:
-    linearTiming()
-  else:
-    animation.xTiming
+  animation.xTiming
 
 proc `timing=`*(animation: Animation, timing: AnimationTiming) =
-  if not animation.isNil:
-    animation.xTiming = timing
+  animation.xTiming = timing
 
 proc curve*(animation: Animation): AnimationCurve =
   animation.timing.curve
 
 proc `curve=`*(animation: Animation, curve: AnimationCurve) =
-  if not animation.isNil:
-    animation.xTiming.curve = curve
+  animation.xTiming.curve = curve
 
 proc setCubicBezierTiming*(animation: Animation, controlPoint1, controlPoint2: Point) =
-  if not animation.isNil:
-    animation.xTiming = cubicBezierTiming(controlPoint1, controlPoint2)
+  animation.xTiming = cubicBezierTiming(controlPoint1, controlPoint2)
 
 proc setSpringTiming*(
     animation: Animation, response = 0.45'f32, dampingRatio = 0.75'f32
 ) =
-  if not animation.isNil:
-    animation.xTiming = springTiming(response, dampingRatio)
+  animation.xTiming = springTiming(response, dampingRatio)
 
 proc isRunning*(animation: Animation): bool =
   animation.rawState() == asRunning
@@ -940,14 +889,12 @@ proc isStopped*(animation: Animation): bool =
   animation.rawState() == asStopped
 
 proc currentLoop*(animation: Animation): int =
-  if animation.isNil or animation.xDuration.inNanoseconds <= 0:
+  if animation.xDuration.inNanoseconds <= 0:
     return 0
   let elapsed = animation.rawCurrentTime().inNanoseconds
   int(elapsed div animation.xDuration.inNanoseconds)
 
 proc currentLoopTime*(animation: Animation): Duration =
-  if animation.isNil:
-    return initDuration()
   let durationNs = animation.xDuration.inNanoseconds
   if durationNs <= 0:
     return initDuration()
@@ -955,28 +902,19 @@ proc currentLoopTime*(animation: Animation): Duration =
   initDuration(nanoseconds = elapsed mod durationNs)
 
 proc progressMarks*(animation: Animation): seq[float32] =
-  if animation.isNil:
-    @[]
-  else:
-    animation.xProgressMarks
+  animation.xProgressMarks
 
 proc `progressMarks=`*(animation: Animation, marks: openArray[float32]) =
-  if animation.isNil:
-    return
   animation.xProgressMarks = @marks
   animation.xProgressMarks.sortAndDedupeMarks()
   animation.resetDeliveredMarks()
 
 proc addProgressMark*(animation: Animation, mark: float32) =
-  if animation.isNil:
-    return
   animation.xProgressMarks.add mark.clampProgress()
   animation.xProgressMarks.sortAndDedupeMarks()
   animation.resetDeliveredMarks()
 
 proc removeProgressMark*(animation: Animation, mark: float32) =
-  if animation.isNil:
-    return
   let normalized = mark.clampProgress()
   for index in countdown(animation.xProgressMarks.len - 1, 0):
     if abs(animation.xProgressMarks[index] - normalized) <= 0.00001'f32:
@@ -984,13 +922,10 @@ proc removeProgressMark*(animation: Animation, mark: float32) =
   animation.resetDeliveredMarks()
 
 proc clearProgressMarks*(animation: Animation) =
-  if not animation.isNil:
-    animation.xProgressMarks.setLen(0)
-    animation.xDeliveredMarks.setLen(0)
+  animation.xProgressMarks.setLen(0)
+  animation.xDeliveredMarks.setLen(0)
 
 proc emitProgressMarks(animation: Animation, previous, next: float32) =
-  if animation.isNil:
-    return
   if animation.xDeliveredMarks.len != animation.xProgressMarks.len:
     animation.resetDeliveredMarks()
   let movingBackward = next < previous
@@ -1011,8 +946,6 @@ proc emitProgressMarks(animation: Animation, previous, next: float32) =
       emit animation.progressMarkReached(mark)
 
 proc setProgress*(animation: Animation, progress: float32) =
-  if animation.isNil:
-    return
   let
     previous = animation.rawProgress()
     next = progress.clampProgress()
@@ -1025,8 +958,6 @@ proc setProgress*(animation: Animation, progress: float32) =
   emit animation.progressChanged(next)
 
 proc setCurrentTime*(animation: Animation, currentTime: Duration) =
-  if animation.isNil:
-    return
   let previousProgress = animation.rawProgress()
   let totalDuration = animation.totalDuration()
   let nextTime =
@@ -1044,7 +975,7 @@ proc setCurrentTime*(animation: Animation, currentTime: Duration) =
   emit animation.progressChanged(nextProgress)
 
 proc start*(animation: Animation) =
-  if animation.isNil or animation.isRunning:
+  if animation.isRunning:
     return
   let oldState = animation.rawState()
   animation.currentTime <- initDuration()
@@ -1056,7 +987,7 @@ proc start*(animation: Animation) =
   emit animation.started()
 
 proc pause*(animation: Animation) =
-  if animation.isNil or animation.rawState() != asRunning:
+  if animation.rawState() != asRunning:
     return
   let oldState = animation.rawState()
   animation.setAnimationState(asPaused)
@@ -1064,7 +995,7 @@ proc pause*(animation: Animation) =
   emit animation.paused()
 
 proc resume*(animation: Animation) =
-  if animation.isNil or animation.rawState() != asPaused:
+  if animation.rawState() != asPaused:
     return
   let oldState = animation.rawState()
   animation.setAnimationState(asRunning)
@@ -1072,7 +1003,7 @@ proc resume*(animation: Animation) =
   emit animation.resumed()
 
 proc stop*(animation: Animation, finished = false) =
-  if animation.isNil or animation.rawState() == asStopped:
+  if animation.rawState() == asStopped:
     return
   let oldState = animation.rawState()
   if finished:
@@ -1086,8 +1017,6 @@ proc stop*(animation: Animation, finished = false) =
 proc initAnimationSchedulerFields*(
     scheduler: AnimationScheduler, frameInterval = initDuration(milliseconds = 16)
 ) =
-  if scheduler.isNil:
-    return
   scheduler.xFrameInterval =
     if frameInterval.inNanoseconds <= 0:
       initDuration(milliseconds = 16)
@@ -1102,14 +1031,9 @@ proc newAnimationScheduler*(
   initAnimationSchedulerFields(result, frameInterval)
 
 proc frameInterval*(scheduler: AnimationScheduler): Duration =
-  if scheduler.isNil:
-    initDuration(milliseconds = 16)
-  else:
-    scheduler.xFrameInterval
+  scheduler.xFrameInterval
 
 proc `frameInterval=`*(scheduler: AnimationScheduler, interval: Duration) =
-  if scheduler.isNil:
-    return
   scheduler.xFrameInterval =
     if interval.inNanoseconds <= 0:
       initDuration(milliseconds = 16)
@@ -1117,35 +1041,29 @@ proc `frameInterval=`*(scheduler: AnimationScheduler, interval: Duration) =
       interval
 
 proc elapsed*(scheduler: AnimationScheduler): Duration =
-  if scheduler.isNil:
-    initDuration()
-  else:
-    scheduler.xElapsed
+  scheduler.xElapsed
 
 proc scheduledAnimations*(scheduler: AnimationScheduler): seq[Animation] =
-  if scheduler.isNil:
-    @[]
-  else:
-    scheduler.xAnimations
+  scheduler.xAnimations
 
 proc animationCount*(scheduler: AnimationScheduler): int =
-  if scheduler.isNil: 0 else: scheduler.xAnimations.len
+  scheduler.xAnimations.len
 
 proc containsAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
-  if scheduler.isNil or animation.isNil:
+  if animation.isNil:
     return false
   for scheduled in scheduler.xAnimations:
     if scheduled == animation:
       return true
 
 proc addAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
-  if scheduler.isNil or animation.isNil or scheduler.containsAnimation(animation):
+  if animation.isNil or scheduler.containsAnimation(animation):
     return false
   scheduler.xAnimations.add(animation)
   true
 
 proc removeAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
-  if scheduler.isNil or animation.isNil:
+  if animation.isNil:
     return false
   for index, scheduled in scheduler.xAnimations:
     if scheduled == animation:
@@ -1153,11 +1071,10 @@ proc removeAnimation*(scheduler: AnimationScheduler, animation: Animation): bool
       return true
 
 proc clearAnimations*(scheduler: AnimationScheduler) =
-  if not scheduler.isNil:
-    scheduler.xAnimations.setLen(0)
+  scheduler.xAnimations.setLen(0)
 
 proc startAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
-  if scheduler.isNil or animation.isNil:
+  if animation.isNil:
     return false
   discard scheduler.addAnimation(animation)
   animation.start()
@@ -1166,13 +1083,13 @@ proc startAnimation*(scheduler: AnimationScheduler, animation: Animation): bool 
 proc stopAnimation*(
     scheduler: AnimationScheduler, animation: Animation, finished = false
 ): bool =
-  if scheduler.isNil or animation.isNil:
+  if animation.isNil:
     return false
   animation.stop(finished)
   scheduler.removeAnimation(animation)
 
 proc tick*(scheduler: AnimationScheduler, delta: Duration): int {.discardable.} =
-  if scheduler.isNil or delta.inNanoseconds <= 0:
+  if delta.inNanoseconds <= 0:
     return 0
 
   scheduler.xElapsed = scheduler.xElapsed + delta
@@ -1209,8 +1126,6 @@ proc tick*(scheduler: AnimationScheduler): int {.discardable.} =
 proc initAnimationSchedulerClockFields*(
     clock: AnimationSchedulerClock, frameInterval = initDuration(milliseconds = 16)
 ) =
-  if clock.isNil:
-    return
   clock.xFrameInterval =
     if frameInterval.inNanoseconds <= 0:
       initDuration(milliseconds = 16)
@@ -1224,14 +1139,9 @@ proc newAnimationSchedulerClock*(
   initAnimationSchedulerClockFields(result, frameInterval)
 
 proc frameInterval*(clock: AnimationSchedulerClock): Duration =
-  if clock.isNil:
-    initDuration(milliseconds = 16)
-  else:
-    clock.xFrameInterval
+  clock.xFrameInterval
 
 proc `frameInterval=`*(clock: AnimationSchedulerClock, interval: Duration) =
-  if clock.isNil:
-    return
   clock.xFrameInterval =
     if interval.inNanoseconds <= 0:
       initDuration(milliseconds = 16)
@@ -1239,14 +1149,12 @@ proc `frameInterval=`*(clock: AnimationSchedulerClock, interval: Duration) =
       interval
 
 proc isRunning*(clock: AnimationSchedulerClock): bool =
-  not clock.isNil and not clock.xTimer.isNil
+  not clock.xTimer.isNil
 
 proc pendingTickCount*(clock: AnimationSchedulerClock): int =
-  if clock.isNil: 0 else: clock.xPendingDeltas.len
+  clock.xPendingDeltas.len
 
 proc takePendingDeltas*(clock: AnimationSchedulerClock): seq[Duration] =
-  if clock.isNil:
-    return @[]
   result = clock.xPendingDeltas
   clock.xPendingDeltas.setLen(0)
 
@@ -1277,13 +1185,11 @@ proc releaseSharedAnimationThread(thread: SigilSelectorThreadPtr) =
     toStop.closeSelectorThread()
 
 proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
-  if clock.isNil:
-    return 0
   ensureLocalAnimationDispatchThread()
   getCurrentSigilThread().pollAll(NonBlocking)
 
 proc start*(clock: AnimationSchedulerClock, thread: SigilSelectorThreadPtr = nil) =
-  if clock.isNil or clock.isRunning:
+  if clock.isRunning:
     return
   ensureLocalAnimationDispatchThread()
 
@@ -1308,7 +1214,7 @@ proc start*(clock: AnimationSchedulerClock, thread: SigilSelectorThreadPtr = nil
   clock.xTimer.start(clock.xThread)
 
 proc stop*(clock: AnimationSchedulerClock) =
-  if clock.isNil or clock.xTimer.isNil:
+  if clock.xTimer.isNil:
     return
   if not clock.xThread.isNil:
     clock.xTimer.cancel(clock.xThread)
@@ -1327,7 +1233,7 @@ proc stop*(clock: AnimationSchedulerClock) =
 proc drain*(
     scheduler: AnimationScheduler, clock: AnimationSchedulerClock
 ): int {.discardable.} =
-  if scheduler.isNil or clock.isNil:
+  if clock.isNil:
     return 0
   discard clock.pollQueuedTicks()
   for delta in clock.takePendingDeltas():
@@ -1335,17 +1241,17 @@ proc drain*(
     inc result
 
 proc addAnimation*(group: AnimationGroup, animation: Animation) =
-  if group.isNil or animation.isNil:
+  if animation.isNil:
     return
   group.children.add(animation)
 
 proc insertAnimation*(group: AnimationGroup, index: int, animation: Animation) =
-  if group.isNil or animation.isNil:
+  if animation.isNil:
     return
   group.children.insert(animation, min(max(index, 0), group.children.len))
 
 proc removeAnimation*(group: AnimationGroup, animation: Animation): bool =
-  if group.isNil or animation.isNil:
+  if animation.isNil:
     return false
   for index, child in group.children:
     if child == animation:
@@ -1353,5 +1259,4 @@ proc removeAnimation*(group: AnimationGroup, animation: Animation): bool =
       return true
 
 proc clearAnimations*(group: AnimationGroup) =
-  if not group.isNil:
-    group.children.setLen(0)
+  group.children.setLen(0)

@@ -56,57 +56,46 @@ func normalizedDocumentSize(size: Size): Size =
   initSize(max(size.width, 0.0'f32), max(size.height, 0.0'f32))
 
 proc textView*(editor: TextEditor): TextView =
-  if editor.isNil: nil else: editor.xTextView
+  editor.xTextView
 
 proc scrollView*(editor: TextEditor): ScrollView =
-  if editor.isNil: nil else: editor.xScrollView
+  editor.xScrollView
 
 proc textInsets*(editor: TextEditor): EdgeInsets =
-  if editor.isNil:
-    insets(0.0)
-  else:
-    editor.xTextInsets
+  editor.xTextInsets
 
 proc `textInsets=`*(editor: TextEditor, insets: EdgeInsets) =
   let normalized = insets.normalizedTextInsets()
-  if editor.isNil or editor.xTextInsets == normalized:
+  if editor.xTextInsets == normalized:
     return
   editor.xTextInsets = normalized
   editor.updateTextEditorLayout()
   editor.setNeedsDisplay(true)
 
 proc wraps*(editor: TextEditor): bool =
-  (not editor.isNil) and editor.xWraps
+  editor.xWraps
 
 proc `wraps=`*(editor: TextEditor, wraps: bool) =
-  if editor.isNil or editor.xWraps == wraps:
+  if editor.xWraps == wraps:
     return
   editor.xWraps = wraps
   editor.xScrollView.hasHorizontalScroller = not wraps
   editor.updateTextEditorLayout()
 
 proc minimumDocumentSize*(editor: TextEditor): Size =
-  if editor.isNil:
-    initSize(0.0, 0.0)
-  else:
-    editor.xMinimumDocumentSize
+  editor.xMinimumDocumentSize
 
 proc `minimumDocumentSize=`*(editor: TextEditor, size: Size) =
   let normalized = size.normalizedDocumentSize()
-  if editor.isNil or editor.xMinimumDocumentSize == normalized:
+  if editor.xMinimumDocumentSize == normalized:
     return
   editor.xMinimumDocumentSize = normalized
   editor.updateTextEditorLayout()
 
 proc textStorage*(editor: TextEditor): TextStorage =
-  if editor.isNil:
-    nil
-  else:
-    editor.xTextView.textStorage()
+  editor.xTextView.textStorage()
 
 proc `textStorage=`*(editor: TextEditor, storage: TextStorage) =
-  if editor.isNil:
-    return
   editor.xTextView.textStorage = storage
   editor.updateTextEditorLayout()
 
@@ -117,14 +106,9 @@ proc `attributedText=`*(editor: TextEditor, storage: TextStorage) =
   editor.textStorage = storage
 
 proc stringValue*(editor: TextEditor): string =
-  if editor.isNil:
-    ""
-  else:
-    editor.xTextView.stringValue()
+  editor.xTextView.stringValue()
 
 proc `stringValue=`*(editor: TextEditor, value: string) =
-  if editor.isNil:
-    return
   editor.xTextView.stringValue = value
   editor.updateTextEditorLayout()
 
@@ -135,85 +119,61 @@ proc `text=`*(editor: TextEditor, value: string) =
   editor.stringValue = value
 
 proc selectedRange*(editor: TextEditor): TextRange =
-  if editor.isNil:
-    initTextRange(0, 0)
-  else:
-    editor.xTextView.selectedRange()
+  editor.xTextView.selectedRange()
 
 proc `selectedRange=`*(editor: TextEditor, range: TextRange) =
-  if not editor.isNil:
-    editor.xTextView.selectedRange = range
+  editor.xTextView.selectedRange = range
 
 proc editable*(editor: TextEditor): bool =
-  (not editor.isNil) and editor.xTextView.editable()
+  editor.xTextView.editable()
 
 proc `editable=`*(editor: TextEditor, editable: bool) =
-  if not editor.isNil:
-    editor.xTextView.editable = editable
+  editor.xTextView.editable = editable
 
 proc selectable*(editor: TextEditor): bool =
-  (not editor.isNil) and editor.xTextView.selectable()
+  editor.xTextView.selectable()
 
 proc `selectable=`*(editor: TextEditor, selectable: bool) =
-  if not editor.isNil:
-    editor.xTextView.selectable = selectable
+  editor.xTextView.selectable = selectable
 
 proc richText*(editor: TextEditor): bool =
-  (not editor.isNil) and editor.xTextView.richText()
+  editor.xTextView.richText()
 
 proc `richText=`*(editor: TextEditor, richText: bool) =
-  if not editor.isNil:
-    editor.xTextView.richText = richText
+  editor.xTextView.richText = richText
 
 proc allowsUndo*(editor: TextEditor): bool =
-  (not editor.isNil) and editor.xTextView.allowsUndo()
+  editor.xTextView.allowsUndo()
 
 proc `allowsUndo=`*(editor: TextEditor, allowsUndo: bool) =
-  if not editor.isNil:
-    editor.xTextView.allowsUndo = allowsUndo
+  editor.xTextView.allowsUndo = allowsUndo
 
 proc alignment*(editor: TextEditor): TextAlignment =
-  if editor.isNil:
-    taLeft
-  else:
-    editor.xTextView.alignment()
+  editor.xTextView.alignment()
 
 proc `alignment=`*(editor: TextEditor, alignment: TextAlignment) =
-  if not editor.isNil:
-    editor.xTextView.alignment = alignment
+  editor.xTextView.alignment = alignment
 
 proc textColor*(editor: TextEditor): Color =
-  if editor.isNil:
-    color(0.08, 0.09, 0.11, 1.0)
-  else:
-    editor.xTextView.textColor()
+  editor.xTextView.textColor()
 
 proc `textColor=`*(editor: TextEditor, color: Color) =
-  if not editor.isNil:
-    editor.xTextView.textColor = color
+  editor.xTextView.textColor = color
 
 proc selectionColor*(editor: TextEditor): Color =
-  if editor.isNil:
-    color(0.24, 0.56, 1.0, 0.34)
-  else:
-    editor.xTextView.selectionColor()
+  editor.xTextView.selectionColor()
 
 proc `selectionColor=`*(editor: TextEditor, color: Color) =
-  if not editor.isNil:
-    editor.xTextView.selectionColor = color
+  editor.xTextView.selectionColor = color
 
 proc typingAttributes*(editor: TextEditor): TextAttributes =
-  if editor.isNil:
-    defaultTextAttributes()
-  else:
-    editor.xTextView.typingAttributes()
+  editor.xTextView.typingAttributes()
 
 proc `typingAttributes=`*(editor: TextEditor, attributes: TextAttributes) =
-  if not editor.isNil:
-    editor.xTextView.typingAttributes = attributes
+  editor.xTextView.typingAttributes = attributes
 
 proc setAttributes*(editor: TextEditor, range: TextRange, attributes: TextAttributes) =
-  if editor.isNil or editor.xTextView.textStorage().isNil:
+  if editor.xTextView.textStorage().isNil:
     return
   editor.xTextView.textStorage().setAttributes(range, attributes)
   editor.xTextView.layoutManager().invalidateLayout()
@@ -221,8 +181,7 @@ proc setAttributes*(editor: TextEditor, range: TextRange, attributes: TextAttrib
   editor.xTextView.setNeedsDisplay(true)
 
 proc selectAllText*(editor: TextEditor) =
-  if not editor.isNil:
-    editor.xTextView.selectAllText()
+  editor.xTextView.selectAllText()
 
 proc measuredTextLayout(editor: TextEditor, width: float32): auto =
   let
@@ -240,7 +199,7 @@ proc measuredTextLayout(editor: TextEditor, width: float32): auto =
 proc textDocumentSize(
     editor: TextEditor, viewportWidth, viewportHeight: float32
 ): Size =
-  if editor.isNil or editor.xTextView.isNil:
+  if editor.xTextView.isNil:
     return initSize(viewportWidth, viewportHeight)
 
   let
@@ -281,7 +240,7 @@ proc applyTextDocumentSize(editor: TextEditor, documentSize: Size) =
   editor.xScrollView.tile()
 
 proc updateTextEditorLayout(editor: TextEditor) =
-  if editor.isNil or editor.xScrollView.isNil or editor.xTextView.isNil:
+  if editor.xScrollView.isNil or editor.xTextView.isNil:
     return
 
   let
@@ -373,8 +332,6 @@ method textEditorInputCharacterIndexForPoint(
   textviews.characterIndexForPoint(editor.xTextView, point)
 
 proc installTextEditorInputClientMethods(editor: TextEditor) =
-  if editor.isNil:
-    return
   discard
     editor.addMethod(selectors.textInputHasMarkedText, textEditorInputHasMarkedText)
   discard editor.addMethod(selectors.textInputMarkedRange, textEditorInputMarkedRange)

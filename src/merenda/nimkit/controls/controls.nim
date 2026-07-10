@@ -85,7 +85,7 @@ proc invalidateCellMetrics(control: Control) =
   control.setNeedsDisplay(true)
 
 proc syncActionCell(control: Control, cell: Cell) =
-  if control.isNil or cell.isNil or not (cell of ActionCell):
+  if cell.isNil or not (cell of ActionCell):
     return
   let actionCell = ActionCell(cell)
   actionCell.setTarget(control.xTarget)
@@ -99,8 +99,6 @@ protocol ControlProtocol from Control:
     self.cell().isEnabled()
 
   method setEnabled*(self: Control, enabled: bool) =
-    if self.isNil:
-      return
     self.cell().setEnabled(enabled)
 
   method canBecomeKeyView*(self: Control): bool =
@@ -140,7 +138,7 @@ protocol ControlProtocol from Control:
         discard Window(owner).makeFirstResponder(nil)
 
 proc acceptsDraggingInfo(control: Control, info: DraggingInfo): bool =
-  if control.isNil or info.pasteboard.isNil:
+  if info.pasteboard.isNil:
     return false
   let acceptedTypes = control.registeredDraggedTypes()
   acceptedTypes.len > 0 and info.pasteboard.availableTypeFromArray(acceptedTypes).len > 0
@@ -149,10 +147,10 @@ protocol DefaultControlDraggingSource of DraggingSourceProtocol:
   method draggingSourceOperationMask(
       control: Control, info: DraggingInfo
   ): DragOperations =
-    if control.isNil: NoDragOperations else: info.allowedOperations
+    info.allowedOperations
 
   method draggingSessionEnded(control: Control, info: DraggingInfo) =
-    if not control.isNil and control.xDraggingSession == info.session:
+    if control.xDraggingSession == info.session:
       control.xDraggingSession = nil
 
 protocol DefaultControlDraggingDestination of DraggingDestinationProtocol:
@@ -169,11 +167,10 @@ protocol DefaultControlDraggingDestination of DraggingDestinationProtocol:
     control.acceptsDraggingInfo(info)
 
 proc enabled*(control: Control): bool =
-  (not control.isNil) and control.isEnabled()
+  control.isEnabled()
 
 proc `enabled=`*(control: Control, enabled: bool) =
-  if not control.isNil:
-    control.setEnabled(enabled)
+  control.setEnabled(enabled)
 
 proc cellForwardingTarget*(control: Control, selector: SigilName): DynamicAgent =
   let controlCell = control.xCell
@@ -256,7 +253,7 @@ proc selectedCell*(control: Control): Cell =
   control.cell()
 
 proc currentEditor*(control: Control): FieldEditor =
-  if control.isNil or control.xCurrentEditor.isNil:
+  if control.xCurrentEditor.isNil:
     return nil
   let owner = control.window()
   if owner of Window and Window(owner).firstResponder() == control.xCurrentEditor:
@@ -265,11 +262,10 @@ proc currentEditor*(control: Control): FieldEditor =
     nil
 
 proc activeEditor*(control: Control): FieldEditor =
-  if control.isNil: nil else: control.xCurrentEditor
+  control.xCurrentEditor
 
 proc setCurrentEditor*(control: Control, editor: FieldEditor) =
-  if not control.isNil:
-    control.xCurrentEditor = editor
+  control.xCurrentEditor = editor
 
 proc target*(control: Control): DynamicAgent =
   let selected = control.selectedCell()
@@ -299,77 +295,54 @@ proc `action=`*(control: Control, action: ActionSelector) =
     ActionCell(selected).setAction(action)
 
 proc draggingSession*(control: Control): DraggingSession =
-  if control.isNil: nil else: control.xDraggingSession
+  control.xDraggingSession
 
 proc objectValue*(control: Control): ObjectValue =
-  if control.isNil:
-    nilObjectValue()
-  else:
-    control.xObjectValue
+  control.xObjectValue
 
 proc objectValueFormatter*(control: Control): DynamicAgent =
-  if control.isNil: nil else: control.xObjectValueFormatter
+  control.xObjectValueFormatter
 
 proc `objectValueFormatter=`*(control: Control, formatter: DynamicAgent) =
-  if not control.isNil:
-    control.xObjectValueFormatter = formatter
+  control.xObjectValueFormatter = formatter
 
 proc `objectValueFormatter=`*(control: Control, formatter: Responder) =
   control.objectValueFormatter = DynamicAgent(formatter)
 
 proc objectFormatContext*(control: Control): ObjectFormatContext =
-  if control.isNil:
-    initObjectFormatContext()
-  else:
-    control.xObjectFormatContext
+  control.xObjectFormatContext
 
 proc `objectFormatContext=`*(control: Control, context: ObjectFormatContext) =
-  if not control.isNil:
-    control.xObjectFormatContext = context
+  control.xObjectFormatContext = context
 
 proc objectParseContext*(control: Control): ObjectParseContext =
-  if control.isNil:
-    initObjectParseContext()
-  else:
-    control.xObjectParseContext
+  control.xObjectParseContext
 
 proc `objectParseContext=`*(control: Control, context: ObjectParseContext) =
-  if not control.isNil:
-    control.xObjectParseContext = context
+  control.xObjectParseContext = context
 
 proc formatObjectValue*(
     control: Control, value: ObjectValue, role = ovrDefault
 ): string =
-  if control.isNil:
-    return value.formatObjectValue(initObjectFormatContext(role = role))
   let context = control.xObjectFormatContext.withRole(role)
   control.xObjectValueFormatter.formatObjectValue(value, context)
 
 proc formattedObjectValue*(control: Control, role = ovrDefault): string =
-  if control.isNil:
-    return ""
   control.formatObjectValue(control.xObjectValue, role)
 
 proc parseEditedObjectValue*(
     control: Control, text: string, role = ovrTextField
 ): ObjectParseResult =
-  if control.isNil:
-    return parseObjectValue(text, initObjectParseContext(role = role))
   let context = control.xObjectParseContext.withRole(role)
   control.xObjectValueFormatter.parseObjectValue(text, context)
 
 proc validationError*(control: Control): ObjectValidationError =
-  if control.isNil:
-    initObjectValidationError()
-  else:
-    control.xValidationError
+  control.xValidationError
 
 proc hasValidationError*(control: Control): bool =
   not control.validationError().valid()
 
 proc setValidationError*(control: Control, error: ObjectValidationError) =
-  if control.isNil:
-    return
   let wasInvalid = control.hasValidationError()
   control.xValidationError = error
   let message =
@@ -404,8 +377,6 @@ proc sendValueCommit(control: Control, value: ObjectValue) =
     )
 
 proc rejectObjectValueEdit*(control: Control, error: ObjectValidationError): bool =
-  if control.isNil:
-    return false
   control.setValidationError(error)
   control.sendValueFailure(error)
   emit control.invalidObjectValueEdit(DynamicAgent(control), error)
@@ -429,8 +400,6 @@ proc shouldCommitWithTarget(
   target.trySendLocal(shouldCommitValue(), (control: control, value: value))
 
 proc validateObjectValueForWriteback*(control: Control, value: ObjectValue): bool =
-  if control.isNil:
-    return false
   if value.kind == ovValidationFailure:
     return control.rejectObjectValueEdit(value.validationError)
 
@@ -469,8 +438,6 @@ proc validateObjectValueForWriteback*(control: Control, value: ObjectValue): boo
   true
 
 proc setObjectValue*(control: Control, value: ObjectValue, notify = false) =
-  if control.isNil:
-    return
   let changed = control.xObjectValue != value
   control.xObjectValue = value
   control.clearValidationError()
@@ -486,8 +453,6 @@ proc `objectValue=`*(control: Control, value: ObjectValue) =
 proc commitEditedObjectText*(
     control: Control, text: string, role = ovrTextField, notify = false
 ): bool =
-  if control.isNil:
-    return false
   let parsed = control.parseEditedObjectValue(text, role)
   if parsed.failed():
     return control.rejectObjectValueEdit(parsed.error)
@@ -502,8 +467,6 @@ proc beginDraggingItems*(
     allowedOperations = EveryDragOperation,
     pasteboardName = DragPasteboardName,
 ): DraggingSession =
-  if control.isNil:
-    return nil
   result = beginDraggingSession(
     DynamicAgent(control), items, allowedOperations, pasteboardName
   )
@@ -515,7 +478,7 @@ proc updateDragging*(
     destination: DynamicAgent = nil,
     dropTarget = initDraggingDropTarget(),
 ): DragOperations =
-  if control.isNil or control.xDraggingSession.isNil:
+  if control.xDraggingSession.isNil:
     return NoDragOperations
   updateDraggingSession(
     control.xDraggingSession,
@@ -533,7 +496,7 @@ proc autoscrollDragging*(
     destination: DynamicAgent = nil,
     dropTarget = initDraggingDropTarget(),
 ): bool =
-  if control.isNil or control.xDraggingSession.isNil:
+  if control.xDraggingSession.isNil:
     return false
   autoscrollDraggingSession(
     control.xDraggingSession,
@@ -546,11 +509,11 @@ proc autoscrollDragging*(
   )
 
 proc finishDragging*(control: Control, operations = NoDragOperations) =
-  if not control.isNil and not control.xDraggingSession.isNil:
+  if not control.xDraggingSession.isNil:
     control.xDraggingSession.endDraggingSession(operations)
 
 proc cancelDragging*(control: Control) =
-  if not control.isNil and not control.xDraggingSession.isNil:
+  if not control.xDraggingSession.isNil:
     control.xDraggingSession.cancelDraggingSession()
 
 proc newActionTarget*(action: ActionSelector, callback: ActionProc): ClosureTarget =

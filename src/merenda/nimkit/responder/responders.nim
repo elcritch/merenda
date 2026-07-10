@@ -87,8 +87,6 @@ proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
 proc tryToPerform*(
     responder: Responder, selector: CommandSelector, sender: DynamicAgent = nil
 ): bool =
-  if responder.isNil:
-    return false
   responder.tryToPerform(TryToPerformArgs(selector: selector, sender: sender))
 
 proc doCommandBySelector*(

@@ -64,9 +64,7 @@ proc colorSummary(color: Color): string =
     "%)"
 
 proc inspectedKind(view: View): string =
-  if view.isNil:
-    "None"
-  elif view of Button:
+  if view of Button:
     "Button"
   elif view of Slider:
     "Slider"
@@ -86,8 +84,6 @@ proc inspectedKind(view: View): string =
     "View"
 
 proc inspectedDisplayName(view: View): string =
-  if view.isNil:
-    return "none"
   if view.identifier.len > 0:
     return view.identifier
   view.inspectedKind
@@ -147,11 +143,9 @@ proc updateSelectionRing(inspector: ViewInspector, view: View) =
     inspector.xSelectionRing = installSelectionRing(view, inspector.xSelectionRingStyle)
 
 proc inspectedRoot*(inspector: ViewInspector): View =
-  if inspector.isNil: nil else: inspector.xRoot
+  inspector.xRoot
 
 proc `inspectedRoot=`*(inspector: ViewInspector, root: View) =
-  if inspector.isNil:
-    return
   inspector.xRoot = root
   inspector.updateViewSelection()
   if not inspector.xSelected.isNil and
@@ -160,17 +154,13 @@ proc `inspectedRoot=`*(inspector: ViewInspector, root: View) =
   inspector.refresh()
 
 proc selectedView*(inspector: ViewInspector): View =
-  if inspector.isNil: nil else: inspector.xSelected
+  inspector.xSelected
 
 proc selectView*(inspector: ViewInspector, view: View) =
-  if inspector.isNil:
-    return
   inspector.updateSelectionRing(view)
   inspector.refresh()
 
 proc detach*(inspector: ViewInspector) =
-  if inspector.isNil:
-    return
   discard inspector.xViewSelection.uninstall()
   discard inspector.xSelectionRing.uninstall()
   inspector.xRoot = nil
@@ -178,39 +168,31 @@ proc detach*(inspector: ViewInspector) =
   inspector.refresh()
 
 proc selectionRingStyle*(inspector: ViewInspector): SelectionRingStyle =
-  if inspector.isNil:
-    initSelectionRingStyle()
-  else:
-    inspector.xSelectionRingStyle
+  inspector.xSelectionRingStyle
 
 proc `selectionRingStyle=`*(inspector: ViewInspector, style: SelectionRingStyle) =
-  if inspector.isNil:
-    return
   inspector.xSelectionRingStyle = style
   inspector.updateSelectionRing(inspector.xSelected)
 
 proc showsSelectionRing*(inspector: ViewInspector): bool =
-  not inspector.isNil and inspector.xShowsSelectionRing
+  inspector.xShowsSelectionRing
 
 proc `showsSelectionRing=`*(inspector: ViewInspector, value: bool) =
-  if inspector.isNil or inspector.xShowsSelectionRing == value:
+  if inspector.xShowsSelectionRing == value:
     return
   inspector.xShowsSelectionRing = value
   inspector.updateSelectionRing(inspector.xSelected)
 
 proc selectsViewsOnMouseDown*(inspector: ViewInspector): bool =
-  not inspector.isNil and inspector.xSelectsViewsOnMouseDown
+  inspector.xSelectsViewsOnMouseDown
 
 proc `selectsViewsOnMouseDown=`*(inspector: ViewInspector, value: bool) =
-  if inspector.isNil or inspector.xSelectsViewsOnMouseDown == value:
+  if inspector.xSelectsViewsOnMouseDown == value:
     return
   inspector.xSelectsViewsOnMouseDown = value
   inspector.updateViewSelection()
 
 proc refresh*(inspector: ViewInspector) =
-  if inspector.isNil:
-    return
-
   let view = inspector.xSelected
   if view.isNil:
     inspector.xSelection.text = "No selection"

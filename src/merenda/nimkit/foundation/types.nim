@@ -232,12 +232,10 @@ func envOverrideAllowed*(envName: string): bool =
 
 proc fontOverrideFromEnv*(): Option[FontOverride] =
   for envName in FontEnvVars:
-    if not envOverrideAllowed(envName):
-      continue
-    let value = getEnv(envName).strip()
-    if value.len == 0:
-      continue
-    return some(FontOverride(envName: envName, name: value))
+    if envOverrideAllowed(envName):
+      let value = getEnv(envName).strip()
+      if value.len > 0:
+        return some(FontOverride(envName: envName, name: value))
   none(FontOverride)
 
 proc defaultFontName*(): string =
@@ -249,16 +247,14 @@ proc defaultFontName*(): string =
 
 proc fontSizeOverrideFromEnv*(): Option[FontSizeOverride] =
   for envName in FontSizeEnvVars:
-    if not envOverrideAllowed(envName):
-      continue
-    let value = getEnv(envName).strip()
-    if value.len == 0:
-      continue
-    let size = value.parseFloat().float32
-    if size <= 0.0'f32 or size != size or size > float32.high:
-      let message = envName & " must be a finite number greater than zero"
-      raise newException(ValueError, message)
-    return some(FontSizeOverride(envName: envName, size: size))
+    if envOverrideAllowed(envName):
+      let value = getEnv(envName).strip()
+      if value.len > 0:
+        let size = value.parseFloat().float32
+        if size <= 0.0'f32 or size != size or size > float32.high:
+          let message = envName & " must be a finite number greater than zero"
+          raise newException(ValueError, message)
+        return some(FontSizeOverride(envName: envName, size: size))
   none(FontSizeOverride)
 
 proc defaultFontSize*(): float32 =

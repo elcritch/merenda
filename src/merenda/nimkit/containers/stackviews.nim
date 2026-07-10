@@ -114,7 +114,7 @@ proc invalidateStackLayout(stackView: StackView) =
   stackView.setNeedsDisplay(true)
 
 proc arrangedIndex(stackView: StackView, child: View): int =
-  if stackView.isNil or child.isNil:
+  if child.isNil:
     return -1
   for index, arranged in stackView.xArrangedSubviews:
     if arranged == child:
@@ -330,69 +330,60 @@ proc layoutStackSubviews(stackView: StackView) =
     mainCursor += mainSizes[index] + spacing
 
 proc orientation*(stackView: StackView): LayoutAxis =
-  if stackView.isNil: laVertical else: stackView.xOrientation
+  stackView.xOrientation
 
 proc `orientation=`*(stackView: StackView, orientation: LayoutAxis) =
-  if stackView.isNil or stackView.xOrientation == orientation:
+  if stackView.xOrientation == orientation:
     return
   stackView.xOrientation = orientation
   stackView.invalidateStackLayout()
 
 proc spacing*(stackView: StackView): float32 =
-  if stackView.isNil: 0.0'f32 else: stackView.xSpacing
+  stackView.xSpacing
 
 proc `spacing=`*(stackView: StackView, spacing: float32) =
   let normalized = spacing.normalizedSpacing()
-  if stackView.isNil or stackView.xSpacing == normalized:
+  if stackView.xSpacing == normalized:
     return
   stackView.xSpacing = normalized
   stackView.invalidateStackLayout()
 
 proc edgeInsets*(stackView: StackView): EdgeInsets =
-  if stackView.isNil:
-    insets(0.0)
-  else:
-    stackView.xEdgeInsets
+  stackView.xEdgeInsets
 
 proc `edgeInsets=`*(stackView: StackView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
-  if stackView.isNil or stackView.xEdgeInsets == normalized:
+  if stackView.xEdgeInsets == normalized:
     return
   stackView.xEdgeInsets = normalized
   stackView.invalidateStackLayout()
 
 proc alignment*(stackView: StackView): StackViewAlignment =
-  if stackView.isNil: svaFill else: stackView.xAlignment
+  stackView.xAlignment
 
 proc `alignment=`*(stackView: StackView, alignment: StackViewAlignment) =
-  if stackView.isNil or stackView.xAlignment == alignment:
+  if stackView.xAlignment == alignment:
     return
   stackView.xAlignment = alignment
   stackView.invalidateStackLayout()
 
 proc distribution*(stackView: StackView): StackViewDistribution =
-  if stackView.isNil: svdFill else: stackView.xDistribution
+  stackView.xDistribution
 
 proc `distribution=`*(stackView: StackView, distribution: StackViewDistribution) =
-  if stackView.isNil or stackView.xDistribution == distribution:
+  if stackView.xDistribution == distribution:
     return
   stackView.xDistribution = distribution
   stackView.invalidateStackLayout()
 
 proc intrinsicContentSize*(stackView: StackView): IntrinsicSize =
-  if stackView.isNil:
-    NoIntrinsicContentSize
-  else:
-    initIntrinsicSize(stackView.stackNaturalSize())
+  initIntrinsicSize(stackView.stackNaturalSize())
 
 proc arrangedSubviews*(stackView: StackView): seq[View] =
-  if stackView.isNil:
-    @[]
-  else:
-    stackView.xArrangedSubviews
+  stackView.xArrangedSubviews
 
 proc insertArrangedSubview*(stackView: StackView, child: View, index: int) =
-  if stackView.isNil or child.isNil:
+  if child.isNil:
     return
 
   if child.superview != stackView:
@@ -407,7 +398,7 @@ proc insertArrangedSubview*(stackView: StackView, child: View, index: int) =
   stackView.invalidateStackLayout()
 
 proc addArrangedSubview*(stackView: StackView, child: View) =
-  if stackView.isNil or child.isNil:
+  if child.isNil:
     return
   stackView.insertArrangedSubview(child, stackView.xArrangedSubviews.len)
 

@@ -429,12 +429,10 @@ func initNotification*(
 proc deliverObservedNotification(
     agent: NotificationObserverAgent, notification: Notification
 ) {.slot.} =
-  if not agent.isNil and not agent.observer.isNil:
+  if not agent.observer.isNil:
     agent.observer(notification)
 
 proc disconnectRoute(route: NotificationRoute) =
-  if route.isNil:
-    return
   var index = route.subcriptions.high
   while index >= 0:
     let entry = route.subcriptions[index]
@@ -443,7 +441,7 @@ proc disconnectRoute(route: NotificationRoute) =
   route.xObserverAgent = nil
 
 proc compactInactive(center: NotificationCenter) =
-  if center.isNil or center.xPostingDepth > 0:
+  if center.xPostingDepth > 0:
     return
   var index = center.xRoutes.high
   while index >= 0:
@@ -455,7 +453,7 @@ proc compactInactive(center: NotificationCenter) =
   center.xNeedsCompaction = false
 
 proc matches(route: NotificationRoute, notification: Notification): bool =
-  if route.isNil or not route.xActive:
+  if not route.xActive:
     return false
   if route.xKind.isSome and route.xKind.get() != notification.kind:
     return false
@@ -469,8 +467,6 @@ proc matches(route: NotificationRoute, notification: Notification): bool =
   true
 
 proc forwardNotification(center: NotificationCenter, notification: Notification) =
-  if center.isNil:
-    return
   var delivered = notification
   if delivered.name.len == 0:
     delivered.name = notificationName(delivered.kind)
@@ -511,8 +507,6 @@ proc addRoute*(
     sender: DynamicAgent = nil,
     representedObject: DynamicAgent = nil,
 ): NotificationObserverToken =
-  if center.isNil:
-    return
   inc center.xNextObserverId
   let route = NotificationRoute(
     xId: center.xNextObserverId,
@@ -533,7 +527,7 @@ proc addObserver*(
     sender: DynamicAgent = nil,
     representedObject: DynamicAgent = nil,
 ): NotificationObserverToken =
-  if center.isNil or observer.isNil:
+  if observer.isNil:
     return
   result = center.addRoute(kind, name, sender, representedObject)
   if result.route.isNil:
@@ -627,7 +621,7 @@ template connectNotificationName*(
 proc removeObserver*(
     center: NotificationCenter, token: NotificationObserverToken
 ): bool {.discardable.} =
-  if center.isNil or token.center != center or token.id == 0:
+  if token.center != center or token.id == 0:
     return false
   for route in center.xRoutes:
     if not route.isNil and route.xActive and route.xId == token.id and
@@ -647,7 +641,7 @@ proc unregister*(token: NotificationObserverToken): bool {.discardable.} =
   token.center.removeObserver(token)
 
 proc isRegistered*(center: NotificationCenter, token: NotificationObserverToken): bool =
-  if center.isNil or token.center != center or token.id == 0:
+  if token.center != center or token.id == 0:
     return false
   for route in center.xRoutes:
     if not route.isNil and route.xActive and route.xId == token.id and
@@ -658,15 +652,11 @@ proc isRegistered*(token: NotificationObserverToken): bool =
   not token.center.isNil and token.center.isRegistered(token)
 
 proc observerCount*(center: NotificationCenter): Natural =
-  if center.isNil:
-    return 0
   for route in center.xRoutes:
     if not route.isNil and route.xActive:
       inc result
 
 proc post*(center: NotificationCenter, notification: Notification) =
-  if center.isNil:
-    return
   emit center.notificationReceived(notification)
 
 proc postNotification*(

@@ -99,15 +99,12 @@ proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
   )
 
 proc scrollerStyleContext(scroller: Scroller): StyleContext =
-  if scroller.isNil or scroller.xScrollView.isNil:
-    controlStyle(srScroller)
-  else:
-    controlStyle(
-      scroller.xScrollView.scrollerRole(),
-      scroller.widgetStateSet(),
-      id = scroller.xScrollView.styleId(),
-      classes = scroller.xScrollView.styleClasses(),
-    )
+  controlStyle(
+    scroller.xScrollView.scrollerRole(),
+    scroller.widgetStateSet(),
+    id = scroller.xScrollView.styleId(),
+    classes = scroller.xScrollView.styleClasses(),
+  )
 
 protocol ScrollTransactionAnimProtocol:
   method animContentOffset*(offset: Point)
@@ -177,8 +174,6 @@ proc contentSize*(scrollView: ScrollView): Size =
   scrollView.documentSize()
 
 proc headerChromeThickness(scrollView: ScrollView, axis: LayoutAxis): float32 =
-  if scrollView.isNil:
-    return 0.0'f32
   let header = scrollView.xHeaderView[axis]
   if not header.isNil:
     case axis
@@ -190,8 +185,6 @@ proc headerChromeThickness(scrollView: ScrollView, axis: LayoutAxis): float32 =
     result = max(result, scrollView.xRuler[axis].thickness)
 
 proc chromeContentSize(scrollView: ScrollView): Size =
-  if scrollView.isNil:
-    return initSize(0.0, 0.0)
   initSize(
     max(
       scrollView.bounds().size.width - scrollView.xScrollerInsets.left -
@@ -292,7 +285,7 @@ proc documentCursor*(clipView: ClipView): string =
   clipView.xDocumentCursor
 
 proc `documentCursor=`*(clipView: ClipView, cursor: string) =
-  if clipView.isNil or clipView.xDocumentCursor == cursor:
+  if clipView.xDocumentCursor == cursor:
     return
   clipView.xDocumentCursor = cursor
 
@@ -300,31 +293,24 @@ proc drawsBackground*(clipView: ClipView): bool =
   clipView.xDrawsBackground
 
 proc `drawsBackground=`*(clipView: ClipView, value: bool) =
-  if clipView.isNil or clipView.xDrawsBackground == value:
+  if clipView.xDrawsBackground == value:
     return
   clipView.xDrawsBackground = value
   clipView.setNeedsDisplay(true)
 
 proc constrainScrollPoint*(clipView: ClipView, point: Point): Point =
-  if clipView.isNil or clipView.xScrollView.isNil:
-    return point
   clipView.xScrollView.clampContentOffset(point)
 
 proc scrollToPoint*(clipView: ClipView, point: Point) =
-  if clipView.isNil:
-    return
   let
     nextPoint = clipView.constrainScrollPoint(point)
     nextBounds = rect(nextPoint, clipView.bounds().size)
   if clipView.bounds() == nextBounds:
     return
   clipView.bounds = nextBounds
-  if not clipView.xScrollView.isNil:
-    clipView.xScrollView.reflectScrolledClipView(clipView)
+  clipView.xScrollView.reflectScrolledClipView(clipView)
 
 proc autoscroll*(clipView: ClipView, event: MouseEvent): bool =
-  if clipView.isNil or clipView.xScrollView.isNil:
-    return false
   let
     bounds = clipView.bounds()
     edge = min(24.0'f32, min(bounds.size.width, bounds.size.height) / 4.0'f32)
@@ -364,16 +350,13 @@ protocol DefaultClipViewGeometry of ViewProtocol:
     emit clipView.layoutInputChanged(lirBounds)
     emit clipView.geometryDidChange()
     clipView.setNeedsDisplay(true)
-    if not clipView.xScrollView.isNil:
-      clipView.xScrollView.reflectScrolledClipView(clipView)
+    clipView.xScrollView.reflectScrolledClipView(clipView)
 
 proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
-  if scrollView.isNil or scrollView.xClipView.isNil:
-    return
   scrollView.xClipView.scrollToPoint(offset)
 
 proc horizontalHeaderRect(scrollView: ScrollView): Rect =
-  if scrollView.isNil or scrollView.xHeaderView[laHorizontal].isNil:
+  if scrollView.xHeaderView[laHorizontal].isNil:
     return rect(0.0, 0.0, 0.0, 0.0)
   let
     viewport = scrollView.viewportRect()
@@ -383,7 +366,7 @@ proc horizontalHeaderRect(scrollView: ScrollView): Rect =
   rect(viewport.origin.x, scrollView.xScrollerInsets.top, viewport.size.width, height)
 
 proc verticalHeaderRect(scrollView: ScrollView): Rect =
-  if scrollView.isNil or scrollView.xHeaderView[laVertical].isNil:
+  if scrollView.xHeaderView[laVertical].isNil:
     return rect(0.0, 0.0, 0.0, 0.0)
   let
     viewport = scrollView.viewportRect()
@@ -393,7 +376,7 @@ proc verticalHeaderRect(scrollView: ScrollView): Rect =
   rect(scrollView.xScrollerInsets.left, viewport.origin.y, width, viewport.size.height)
 
 proc cornerViewRect(scrollView: ScrollView): Rect =
-  if scrollView.isNil or scrollView.xCornerView.isNil:
+  if scrollView.xCornerView.isNil:
     return rect(0.0, 0.0, 0.0, 0.0)
   let
     visibleAxes = scrollView.visibleScrollerAxes()
@@ -435,8 +418,6 @@ proc applyChromeFrame(view: View, frame: Rect) =
   view.hidden = frame.size.width <= 0.0'f32 or frame.size.height <= 0.0'f32
 
 proc tile*(scrollView: ScrollView) =
-  if scrollView.isNil or scrollView.xClipView.isNil:
-    return
   let visibleAxes = scrollView.visibleScrollerAxes()
   scrollView.xClipView.frame = scrollView.viewportRect()
   scrollView.setClipViewBoundsOrigin(scrollView.contentOffset())
@@ -445,12 +426,10 @@ proc tile*(scrollView: ScrollView) =
   )
   applyChromeFrame(scrollView.xHeaderView[laVertical], scrollView.verticalHeaderRect())
   applyChromeFrame(scrollView.xCornerView, scrollView.cornerViewRect())
-  if not scrollView.xScroller[laHorizontal].isNil:
-    scrollView.xScroller[laHorizontal].frame = scrollView.horizontalScrollerRect()
-    scrollView.xScroller[laHorizontal].hidden = laHorizontal notin visibleAxes
-  if not scrollView.xScroller[laVertical].isNil:
-    scrollView.xScroller[laVertical].frame = scrollView.verticalScrollerRect()
-    scrollView.xScroller[laVertical].hidden = laVertical notin visibleAxes
+  scrollView.xScroller[laHorizontal].frame = scrollView.horizontalScrollerRect()
+  scrollView.xScroller[laHorizontal].hidden = laHorizontal notin visibleAxes
+  scrollView.xScroller[laVertical].frame = scrollView.verticalScrollerRect()
+  scrollView.xScroller[laVertical].hidden = laVertical notin visibleAxes
 
 proc clipView*(scrollView: ScrollView): ClipView =
   scrollView.xClipView
@@ -468,7 +447,7 @@ proc documentView*(scrollView: ScrollView): View =
   scrollView.xDocumentView
 
 proc `documentView=`*(scrollView: ScrollView, documentView: View) =
-  if scrollView.isNil or scrollView.xDocumentView == documentView:
+  if scrollView.xDocumentView == documentView:
     return
   if not scrollView.xDocumentView.isNil:
     scrollView.xDocumentView.removeFromSuperview()
@@ -519,13 +498,21 @@ proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
     if rect.minX < viewport.minX:
       nextOffset.x = rect.minX
     elif rect.maxX > viewport.maxX:
-      nextOffset.x = rect.maxX - viewport.size.width
+      nextOffset.x =
+        if rect.size.width > viewportSize.width:
+          rect.minX
+        else:
+          rect.maxX - viewportSize.width
 
   if viewportSize.height > 0.0'f32:
     if rect.minY < viewport.minY:
       nextOffset.y = rect.minY
     elif rect.maxY > viewport.maxY:
-      nextOffset.y = rect.maxY - viewport.size.height
+      nextOffset.y =
+        if rect.size.height > viewportSize.height:
+          rect.minY
+        else:
+          rect.maxY - viewportSize.height
 
   nextOffset = scrollView.clampContentOffset(nextOffset)
   result = nextOffset != currentOffset
@@ -559,7 +546,7 @@ proc scrollerMetricsChanged(scrollView: ScrollView) =
   scrollView.setNeedsDisplay(true)
 
 proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView) =
-  if scrollView.isNil or clipView.isNil or clipView != scrollView.xClipView:
+  if clipView.isNil or clipView != scrollView.xClipView:
     return
   scrollView.tile()
   scrollView.setNeedsDisplay(true)
@@ -568,7 +555,7 @@ proc hasScroller*(scrollView: ScrollView, axis: LayoutAxis): bool =
   scrollView.xHasScroller[axis]
 
 proc setHasScroller*(scrollView: ScrollView, axis: LayoutAxis, value: bool) =
-  if scrollView.isNil or scrollView.xHasScroller[axis] == value:
+  if scrollView.xHasScroller[axis] == value:
     return
   scrollView.xHasScroller[axis] = value
   scrollView.scrollerMetricsChanged()
@@ -589,8 +576,6 @@ proc autohidesScrollers*(scrollView: ScrollView): bool =
   scrollView.xAutohidePolicy == sapWhenNeeded
 
 proc `autohidesScrollers=`*(scrollView: ScrollView, value: bool) =
-  if scrollView.isNil:
-    return
   let policy = if value: sapWhenNeeded else: sapNever
   if scrollView.xAutohidePolicy == policy:
     return
@@ -601,7 +586,7 @@ proc autohidePolicy*(scrollView: ScrollView): ScrollerAutohidePolicy =
   scrollView.xAutohidePolicy
 
 proc `autohidePolicy=`*(scrollView: ScrollView, policy: ScrollerAutohidePolicy) =
-  if scrollView.isNil or scrollView.xAutohidePolicy == policy:
+  if scrollView.xAutohidePolicy == policy:
     return
   scrollView.xAutohidePolicy = policy
   scrollView.scrollerMetricsChanged()
@@ -623,15 +608,11 @@ proc lineScroll*(scrollView: ScrollView, axis: LayoutAxis): float32 =
   scrollView.xLineScroll[axis]
 
 proc `lineScroll=`*(scrollView: ScrollView, value: float32) =
-  if scrollView.isNil:
-    return
   let normalized = value.normalizedLineScroll()
   scrollView.xLineScroll[laHorizontal] = normalized
   scrollView.xLineScroll[laVertical] = normalized
 
 proc setLineScroll*(scrollView: ScrollView, axis: LayoutAxis, value: float32) =
-  if scrollView.isNil:
-    return
   scrollView.xLineScroll[axis] = value.normalizedLineScroll()
 
 proc horizontalLineScroll*(scrollView: ScrollView): float32 =
@@ -647,8 +628,6 @@ proc `verticalLineScroll=`*(scrollView: ScrollView, value: float32) =
   scrollView.setLineScroll(laVertical, value)
 
 proc pageScroll*(scrollView: ScrollView, axis: LayoutAxis): float32 =
-  if scrollView.isNil:
-    return 0.0'f32
   if scrollView.xPageScroll[axis] <= 0.0'f32:
     return scrollView.viewportSize().axisSize(axis)
   scrollView.xPageScroll[axis]
@@ -657,15 +636,11 @@ proc pageScroll*(scrollView: ScrollView): float32 =
   scrollView.pageScroll(laVertical)
 
 proc `pageScroll=`*(scrollView: ScrollView, value: float32) =
-  if scrollView.isNil:
-    return
   let normalized = value.normalizedPageScroll()
   scrollView.xPageScroll[laHorizontal] = normalized
   scrollView.xPageScroll[laVertical] = normalized
 
 proc setPageScroll*(scrollView: ScrollView, axis: LayoutAxis, value: float32) =
-  if scrollView.isNil:
-    return
   scrollView.xPageScroll[axis] = value.normalizedPageScroll()
 
 proc horizontalPageScroll*(scrollView: ScrollView): float32 =
@@ -684,7 +659,7 @@ proc borderType*(scrollView: ScrollView): ScrollViewBorderType =
   scrollView.xBorderType
 
 proc `borderType=`*(scrollView: ScrollView, borderType: ScrollViewBorderType) =
-  if scrollView.isNil or scrollView.xBorderType == borderType:
+  if scrollView.xBorderType == borderType:
     return
   scrollView.xBorderType = borderType
   scrollView.setNeedsDisplay(true)
@@ -693,38 +668,35 @@ proc drawsBackground*(scrollView: ScrollView): bool =
   scrollView.xDrawsBackground
 
 proc `drawsBackground=`*(scrollView: ScrollView, value: bool) =
-  if scrollView.isNil or scrollView.xDrawsBackground == value:
+  if scrollView.xDrawsBackground == value:
     return
   scrollView.xDrawsBackground = value
   scrollView.setNeedsDisplay(true)
 
 proc scrollViewRole*(scrollView: ScrollView): StyleRole =
-  if scrollView.isNil: srScrollView else: scrollView.xScrollViewRole
+  scrollView.xScrollViewRole
 
 proc `scrollViewRole=`*(scrollView: ScrollView, role: StyleRole) =
-  if scrollView.isNil or scrollView.xScrollViewRole == role:
+  if scrollView.xScrollViewRole == role:
     return
   scrollView.xScrollViewRole = role
   scrollView.setNeedsDisplay(true)
 
 proc scrollerRole*(scrollView: ScrollView): StyleRole =
-  if scrollView.isNil: srScroller else: scrollView.xScrollerRole
+  scrollView.xScrollerRole
 
 proc `scrollerRole=`*(scrollView: ScrollView, role: StyleRole) =
-  if scrollView.isNil or scrollView.xScrollerRole == role:
+  if scrollView.xScrollerRole == role:
     return
   scrollView.xScrollerRole = role
   scrollView.setNeedsDisplay(true)
   for scroller in scrollView.xScroller:
-    if not scroller.isNil:
-      scroller.setNeedsDisplay(true)
+    scroller.setNeedsDisplay(true)
 
 proc scrollerInsets*(scrollView: ScrollView): EdgeInsets =
   scrollView.xScrollerInsets
 
 proc `scrollerInsets=`*(scrollView: ScrollView, insets: EdgeInsets) =
-  if scrollView.isNil:
-    return
   let normalized = insets.normalizedInsets()
   if scrollView.xScrollerInsets == normalized:
     return
@@ -735,7 +707,7 @@ proc headerView*(scrollView: ScrollView, axis: LayoutAxis): View =
   scrollView.xHeaderView[axis]
 
 proc setHeaderView*(scrollView: ScrollView, axis: LayoutAxis, view: View) =
-  if scrollView.isNil or scrollView.xHeaderView[axis] == view:
+  if scrollView.xHeaderView[axis] == view:
     return
   if not scrollView.xHeaderView[axis].isNil:
     scrollView.xHeaderView[axis].removeFromSuperview()
@@ -760,7 +732,7 @@ proc cornerView*(scrollView: ScrollView): View =
   scrollView.xCornerView
 
 proc `cornerView=`*(scrollView: ScrollView, view: View) =
-  if scrollView.isNil or scrollView.xCornerView == view:
+  if scrollView.xCornerView == view:
     return
   if not scrollView.xCornerView.isNil:
     scrollView.xCornerView.removeFromSuperview()
@@ -775,8 +747,6 @@ proc rulerPlaceholder*(scrollView: ScrollView, axis: LayoutAxis): RulerPlacehold
 proc setRulerPlaceholder*(
     scrollView: ScrollView, axis: LayoutAxis, ruler: RulerPlaceholder
 ) =
-  if scrollView.isNil:
-    return
   let normalized = initRulerPlaceholder(ruler.visible, ruler.thickness)
   if scrollView.xRuler[axis] == normalized:
     return
@@ -787,12 +757,12 @@ proc dynamicScrolling*(scrollView: ScrollView): bool =
   scrollView.xDynamicScrolling
 
 proc `dynamicScrolling=`*(scrollView: ScrollView, value: bool) =
-  if scrollView.isNil or scrollView.xDynamicScrolling == value:
+  if scrollView.xDynamicScrolling == value:
     return
   scrollView.xDynamicScrolling = value
 
 proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
-  if scrollView.isNil or laHorizontal notin scrollView.visibleScrollerAxes():
+  if laHorizontal notin scrollView.visibleScrollerAxes():
     return rect(0.0, 0.0, 0.0, 0.0)
   let viewport = scrollView.viewportRect()
   rect(
@@ -803,7 +773,7 @@ proc horizontalScrollerRect*(scrollView: ScrollView): Rect =
   )
 
 proc verticalScrollerRect*(scrollView: ScrollView): Rect =
-  if scrollView.isNil or laVertical notin scrollView.visibleScrollerAxes():
+  if laVertical notin scrollView.visibleScrollerAxes():
     return rect(0.0, 0.0, 0.0, 0.0)
   let viewport = scrollView.viewportRect()
   rect(
@@ -817,8 +787,6 @@ proc scrollerTrackRect*(scroller: Scroller): Rect =
   scroller.bounds()
 
 proc scrollerKnobRect*(scroller: Scroller): Rect =
-  if scroller.isNil or scroller.xScrollView.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   let
     track = scroller.scrollerTrackRect()
     scrollView = scroller.xScrollView
@@ -871,8 +839,6 @@ proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32)
   scrollView.contentOffset = nextOffset
 
 proc scrollKnobTo(scroller: Scroller, point: Point) =
-  if scroller.isNil or scroller.xScrollView.isNil:
-    return
   let
     knobOrigin = scroller.xTracking.knobOriginForPoint(scroller.xAxis, point)
     track = scroller.scrollerTrackRect()
@@ -886,8 +852,6 @@ proc scrollKnobTo(scroller: Scroller, point: Point) =
   )
 
 proc scrollPageToward(scroller: Scroller, point: Point) =
-  if scroller.isNil or scroller.xScrollView.isNil:
-    return
   let
     knob = scroller.scrollerKnobRect()
     pointOnAxis = point.axisOffset(scroller.xAxis)
@@ -952,7 +916,7 @@ protocol DefaultScrollerDrawing of ViewDrawingProtocol:
 
 protocol DefaultScrollerEvents of ResponderEventProtocol:
   method mouseDown(scroller: Scroller, event: MouseEvent): bool =
-    if event.button != mbPrimary or scroller.isNil or scroller.xScrollView.isNil:
+    if event.button != mbPrimary:
       return false
     let
       track = scroller.scrollerTrackRect()
@@ -967,8 +931,7 @@ protocol DefaultScrollerEvents of ResponderEventProtocol:
     false
 
   method mouseDragged(scroller: Scroller, event: MouseEvent): bool =
-    if event.button == mbPrimary and not scroller.isNil and
-        scroller.xTracking.isDraggingKnob():
+    if event.button == mbPrimary and scroller.xTracking.isDraggingKnob():
       scroller.scrollKnobTo(event.location)
       return true
     false

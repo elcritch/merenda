@@ -37,8 +37,6 @@ proc normalizedValue(slider: Slider, value: float32): float32 =
     )
 
 proc setSliderValue(slider: Slider, value: float32, notify = false) =
-  if slider.isNil:
-    return
   let nextValue = slider.normalizedValue(value)
   if slider.xValue == nextValue:
     return
@@ -50,8 +48,6 @@ proc setSliderValue(slider: Slider, value: float32, notify = false) =
     discard slider.sendAction()
 
 proc sliderStyleContext(slider: Slider): StyleContext =
-  if slider.isNil:
-    return controlStyle(srSlider)
   controlStyle(
     srSlider,
     slider.widgetStateSet(),
@@ -116,14 +112,12 @@ proc updateValueFromPoint(slider: Slider, point: Point, notify = true) =
   )
 
 proc value*(slider: Slider): float32 =
-  if slider.isNil: 0.0'f32 else: slider.xValue
+  slider.xValue
 
 proc `value=`*(slider: Slider, value: float32) =
   slider.setSliderValue(value)
 
 proc setObjectValue*(slider: Slider, value: ObjectValue, notify = false) =
-  if slider.isNil:
-    return
   try:
     slider.setSliderValue(value.requireNumber().float32, notify)
   except ObjectValueError:
@@ -140,31 +134,29 @@ proc `objectValue=`*(slider: Slider, value: ObjectValue) =
   slider.setObjectValue(value)
 
 proc minValue*(slider: Slider): float32 =
-  if slider.isNil: 0.0'f32 else: slider.xMinValue
+  slider.xMinValue
 
 proc `minValue=`*(slider: Slider, value: float32) =
-  if slider.isNil or slider.xMinValue == value:
+  if slider.xMinValue == value:
     return
   slider.xMinValue = value
   slider.setSliderValue(slider.xValue)
   slider.setNeedsDisplay(true)
 
 proc maxValue*(slider: Slider): float32 =
-  if slider.isNil: 0.0'f32 else: slider.xMaxValue
+  slider.xMaxValue
 
 proc `maxValue=`*(slider: Slider, value: float32) =
-  if slider.isNil or slider.xMaxValue == value:
+  if slider.xMaxValue == value:
     return
   slider.xMaxValue = value
   slider.setSliderValue(slider.xValue)
   slider.setNeedsDisplay(true)
 
 proc stepValue*(slider: Slider): float32 =
-  if slider.isNil: 0.0'f32 else: slider.xStepValue
+  slider.xStepValue
 
 proc `stepValue=`*(slider: Slider, value: float32) =
-  if slider.isNil:
-    return
   let nextValue = max(value, 0.0'f32)
   if slider.xStepValue == nextValue:
     return

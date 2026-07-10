@@ -130,8 +130,6 @@ proc configureHostUiScale(host: HostWindow, override: Option[UiScaleOverride]) =
     host.xAutoScale = host.xNativeWindow.configureUiScale()
 
 proc configuredUiScale(host: HostWindow): float32 =
-  if host.isNil:
-    return 1.0'f32
   if host.xHasUiScaleOverride:
     return host.xUiScaleOverride
   if host.xNativeWindow.isNil:
@@ -139,7 +137,7 @@ proc configuredUiScale(host: HostWindow): float32 =
   max(host.xNativeWindow.contentScale(), 1.0'f32)
 
 proc usesScaledBackingSize(host: HostWindow, window: siwinshim.Window): bool =
-  if host.isNil or window.isNil:
+  if window.isNil:
     return false
   if host.xHasUiScaleOverride:
     return true
@@ -156,21 +154,21 @@ proc nativeWindowKey(nativeWindow: siwinshim.Window): pointer =
   cast[pointer](nativeWindow)
 
 proc registerHost(host: HostWindow) =
-  if host.isNil or host.xNativeWindow.isNil:
+  if host.xNativeWindow.isNil:
     return
   ensureHostRegistry()
   host.xOwnerKey = host.xNativeWindow.nativeWindowKey
   hostWindows[host.xOwnerKey] = host
 
 proc unregisterHost(host: HostWindow) =
-  if host.isNil or host.xOwnerKey.isNil:
+  if host.xOwnerKey.isNil:
     return
   ensureHostRegistry()
   hostWindows.del(host.xOwnerKey)
   host.xOwnerKey = nil
 
 proc hostReady(host: HostWindow): bool =
-  (not host.isNil) and host.xReady and not host.xNativeWindow.isNil
+  host.xReady and not host.xNativeWindow.isNil
 
 proc firstReadyHost(): HostWindow =
   ensureHostRegistry()
@@ -217,20 +215,18 @@ proc `clipboardText=`(clipboard: siwinClipboards.Clipboard, value: string) =
   clipboard.content = content
 
 proc readyHost(provider: NativePasteboardProvider): HostWindow =
-  if provider.isNil:
-    return nil
   if not provider.xHost.hostReady:
     provider.xHost = firstReadyHost()
   provider.xHost
 
 proc ensureItems(provider: NativePasteboardProvider) =
-  if provider.isNil or provider.xItemsReady:
+  if provider.xItemsReady:
     return
   provider.xItems = initTable[string, PasteboardItem]()
   provider.xItemsReady = true
 
 proc addType(provider: NativePasteboardProvider, kind: string) =
-  if provider.isNil or kind.len == 0:
+  if kind.len == 0:
     return
   if kind notin provider.xTypes:
     provider.xTypes.add kind
@@ -286,15 +282,11 @@ proc currentHostChangeCount(provider: NativePasteboardProvider): Option[int] =
   provider.syntheticHostChangeCount()
 
 proc clearHostBackedCache(provider: NativePasteboardProvider) =
-  if provider.isNil:
-    return
   provider.ensureItems()
   provider.xTypes.setLen(0)
   provider.xItems.clear()
 
 proc syncExternalHostChanges(provider: NativePasteboardProvider): Option[int] =
-  if provider.isNil:
-    return none(int)
   let count = provider.currentHostChangeCount()
   if count.isNone:
     return none(int)
@@ -308,8 +300,6 @@ proc syncExternalHostChanges(provider: NativePasteboardProvider): Option[int] =
   some(value)
 
 proc observeHostChangeCount(provider: NativePasteboardProvider) =
-  if provider.isNil:
-    return
   let count = provider.currentHostChangeCount()
   if count.isSome:
     provider.xObservedHostChangeCount = count.get()
@@ -467,7 +457,7 @@ proc publishHostClipboard(provider: NativePasteboardProvider) =
 proc storeItem(
     provider: NativePasteboardProvider, kind: string, item: PasteboardItem
 ): bool =
-  if provider.isNil or kind.len == 0 or item.kind == pikNone:
+  if kind.len == 0 or item.kind == pikNone:
     return false
   provider.ensureItems()
   provider.addType(kind)
@@ -520,8 +510,6 @@ proc nativeItemForType(
   PasteboardItem(kind: pikNone)
 
 proc clearStoredItems(provider: NativePasteboardProvider) =
-  if provider.isNil:
-    return
   provider.ensureItems()
   provider.xTypes.setLen(0)
   provider.xItems.clear()
@@ -591,8 +579,6 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
     true
 
 proc installNativeClipboardBridge(host: HostWindow) =
-  if host.isNil:
-    return
   if nativePasteboardProvider.isNil:
     nativePasteboardProvider = NativePasteboardProvider()
     nativePasteboardProvider.ensureItems()
@@ -695,16 +681,12 @@ proc rendererOrNil*(
   host.xRenderer
 
 proc renderRequested*(host: HostWindow): bool =
-  not host.isNil and host.xRenderRequested
+  host.xRenderRequested
 
 proc renderCount*(host: HostWindow): Natural =
-  if host.isNil:
-    return 0
   host.xRenderCount
 
 proc requestRender*(host: HostWindow) =
-  if host.isNil:
-    return
   if host.xRenderRequested:
     return
   host.xRenderRequested = true
@@ -712,8 +694,6 @@ proc requestRender*(host: HostWindow) =
     host.xNativeWindow.redraw()
 
 proc contentScale*(host: HostWindow): float32 =
-  if host.isNil:
-    return 1.0'f32
   if host.xHasUiScaleOverride:
     return host.xUiScaleOverride
   if not host.isReady:
@@ -721,8 +701,6 @@ proc contentScale*(host: HostWindow): float32 =
   max(host.xNativeWindow.contentScale(), 1.0'f32)
 
 proc refreshContentScale*(host: HostWindow) =
-  if host.isNil:
-    return
   if host.xHasUiScaleOverride:
     setFigUiScale(host.xUiScaleOverride)
   elif host.isReady:
@@ -777,7 +755,7 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   inc host.xRenderCount
 
 proc configureTransparentPresentation(host: HostWindow) =
-  if host.isNil or not host.xTransparent or host.xRenderer.isNil:
+  if not host.xTransparent or host.xRenderer.isNil:
     return
   when defined(macosx):
     if host.xNativeWindow of siwinshim.WindowCocoa:
@@ -871,7 +849,7 @@ proc dispatchTextInput(host: HostWindow, event: siwinshim.TextInputEvent) =
     host.xCallbacks.onTextInput(event.text)
 
 proc installEventHandlers(host: HostWindow) =
-  if host.isNil or host.xNativeWindow.isNil:
+  if host.xNativeWindow.isNil:
     return
   let ownerKey = host.xOwnerKey
   host.xNativeWindow.eventsHandler = siwinshim.WindowEventsHandler(

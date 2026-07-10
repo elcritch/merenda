@@ -238,12 +238,10 @@ proc sameAppearance(a, b: Appearance): bool =
   a.theme.sameTheme(b.theme)
 
 proc cacheCanReuse(root: View, appearance: Appearance): bool =
-  (not root.isNil) and root.xHasCachedRenders and not root.needsDisplayInSubtree() and
+  root.xHasCachedRenders and not root.needsDisplayInSubtree() and
     root.xCachedAppearance.sameAppearance(appearance)
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
-  if root.isNil:
-    return emptyRenders()
   discard root.prepareDisplaySubtree()
   if root.cacheCanReuse(appearance):
     return root.xCachedRenders
@@ -260,7 +258,4 @@ proc buildRenders*(root: View, theme: Theme): Renders =
   buildRenders(root, initAppearance(theme))
 
 proc buildRenders*(root: View): Renders =
-  if root.isNil:
-    buildRenders(root, initAppearance())
-  else:
-    buildRenders(root, root.effectiveAppearance())
+  buildRenders(root, root.effectiveAppearance())

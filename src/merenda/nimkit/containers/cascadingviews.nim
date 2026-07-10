@@ -259,10 +259,10 @@ func initCascadingTreeMoveUpdate*(
   )
 
 proc dataSource*(view: CascadingView): DynamicAgent =
-  if view.isNil: nil else: view.xDataSource
+  view.xDataSource
 
 proc `dataSource=`*(view: CascadingView, dataSource: DynamicAgent) =
-  if view.isNil or view.xDataSource == dataSource:
+  if view.xDataSource == dataSource:
     return
   if not dataSource.isNil:
     discard dataSource.adopt(CascadingDataSource)
@@ -273,10 +273,10 @@ proc `dataSource=`*(view: CascadingView, dataSource: Responder) =
   view.dataSource = DynamicAgent(dataSource)
 
 proc delegate*(view: CascadingView): DynamicAgent =
-  if view.isNil: nil else: view.xDelegate
+  view.xDelegate
 
 proc `delegate=`*(view: CascadingView, delegate: DynamicAgent) =
-  if view.isNil or view.xDelegate == delegate:
+  if view.xDelegate == delegate:
     return
   if not delegate.isNil:
     discard delegate.adopt(CascadingDelegate)
@@ -287,23 +287,16 @@ proc `delegate=`*(view: CascadingView, delegate: Responder) =
   view.delegate = DynamicAgent(delegate)
 
 proc cascadingItems*(view: CascadingView): seq[CascadingItem] =
-  if view.isNil:
-    @[]
-  else:
-    view.xItems
+  view.xItems
 
 proc `cascadingItems=`*(view: CascadingView, items: openArray[CascadingItem]) =
-  if view.isNil:
-    return
   view.xItems = @items
   view.reloadData()
 
 proc columnWidth*(view: CascadingView): float32 =
-  if view.isNil: 0.0'f32 else: view.xColumnWidth
+  view.xColumnWidth
 
 proc `columnWidth=`*(view: CascadingView, width: float32) =
-  if view.isNil:
-    return
   let nextWidth = max(width, view.xMinColumnWidth)
   if view.xColumnWidth == nextWidth:
     return
@@ -316,11 +309,9 @@ proc `columnWidth=`*(view: CascadingView, width: float32) =
   view.setNeedsDisplay(true)
 
 proc minColumnWidth*(view: CascadingView): float32 =
-  if view.isNil: 0.0'f32 else: view.xMinColumnWidth
+  view.xMinColumnWidth
 
 proc `minColumnWidth=`*(view: CascadingView, width: float32) =
-  if view.isNil:
-    return
   let nextWidth = max(width, 1.0'f32)
   if view.xMinColumnWidth == nextWidth:
     return
@@ -334,11 +325,9 @@ proc `minColumnWidth=`*(view: CascadingView, width: float32) =
   view.setNeedsDisplay(true)
 
 proc columnSpacing*(view: CascadingView): float32 =
-  if view.isNil: 0.0'f32 else: view.xColumnSpacing
+  view.xColumnSpacing
 
 proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
-  if view.isNil:
-    return
   let nextSpacing = max(spacing, 0.0'f32)
   if view.xColumnSpacing == nextSpacing:
     return
@@ -351,10 +340,10 @@ proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
   view.setNeedsDisplay(true)
 
 proc showsColumnHeaders*(view: CascadingView): bool =
-  (not view.isNil) and view.xShowsColumnHeaders
+  view.xShowsColumnHeaders
 
 proc `showsColumnHeaders=`*(view: CascadingView, shows: bool) =
-  if view.isNil or view.xShowsColumnHeaders == shows:
+  if view.xShowsColumnHeaders == shows:
     return
   view.xShowsColumnHeaders = shows
   for column in view.xColumns:
@@ -363,13 +352,13 @@ proc `showsColumnHeaders=`*(view: CascadingView, shows: bool) =
   view.setNeedsDisplay(true)
 
 proc columnCount*(view: CascadingView): int =
-  if view.isNil: 0 else: view.xColumns.len
+  view.xColumns.len
 
 proc scrollView*(view: CascadingView): ScrollView =
-  if view.isNil: nil else: view.xScrollView
+  view.xScrollView
 
 proc tableViewForColumn*(view: CascadingView, column: int): TableView =
-  if view.isNil or column notin 0 ..< view.xColumns.len:
+  if column notin 0 ..< view.xColumns.len:
     nil
   else:
     view.xColumns[column]
@@ -382,53 +371,48 @@ protocol CascadingViewProtocol {.selectorScope: protocol.} from CascadingView:
   property cascadingShowsHeaders -> bool
 
   method cascadingSelectionPath(view: CascadingView): seq[string] =
-    if view.isNil:
-      @[]
-    else:
-      view.xSelectedPath
+    view.xSelectedPath
 
   method setCascadingSelectionPath(view: CascadingView, path: seq[string]) =
     view.applySelectedPath(path)
 
   method cascadingColumnWidth(view: CascadingView): float32 =
-    if view.isNil: 0.0'f32 else: view.xColumnWidth
+    view.xColumnWidth
 
   method setCascadingColumnWidth(view: CascadingView, width: float32) =
     view.columnWidth = width
 
   method cascadingMinColumnWidth(view: CascadingView): float32 =
-    if view.isNil: 0.0'f32 else: view.xMinColumnWidth
+    view.xMinColumnWidth
 
   method setCascadingMinColumnWidth(view: CascadingView, width: float32) =
     view.minColumnWidth = width
 
   method cascadingColumnSpacing(view: CascadingView): float32 =
-    if view.isNil: 0.0'f32 else: view.xColumnSpacing
+    view.xColumnSpacing
 
   method setCascadingColumnSpacing(view: CascadingView, spacing: float32) =
     view.columnSpacing = spacing
 
   method cascadingShowsHeaders(view: CascadingView): bool =
-    (not view.isNil) and view.xShowsColumnHeaders
+    view.xShowsColumnHeaders
 
   method setCascadingShowsHeaders(view: CascadingView, shows: bool) =
     view.showsColumnHeaders = shows
 
   method cascadeScrollView*(view: CascadingView): ScrollView =
-    if view.isNil: nil else: view.xScrollView
+    view.xScrollView
 
   method cascadeColumnCount*(view: CascadingView): int =
-    if view.isNil: 0 else: view.xColumns.len
+    view.xColumns.len
 
   method cascadeTableForColumn*(view: CascadingView, column: int): TableView =
-    if view.isNil or column notin 0 ..< view.xColumns.len:
+    if column notin 0 ..< view.xColumns.len:
       nil
     else:
       view.xColumns[column]
 
 proc columnForTableView(view: CascadingView, tableView: TableView): int =
-  if view.isNil:
-    return -1
   for index, column in view.xColumns:
     if column == tableView:
       return index
@@ -437,8 +421,6 @@ proc columnForTableView(view: CascadingView, tableView: TableView): int =
 proc localItemWithIdentifier(
     view: CascadingView, identifier: string
 ): tuple[found: bool, item: CascadingItem] =
-  if view.isNil:
-    return
   for item in view.xItems:
     if item.identifier == identifier:
       return (true, item)
@@ -455,7 +437,7 @@ proc dataSourceObjectValueForIdentifier(
     )
 
 proc applyDataSourceItemMetadata(view: CascadingView, item: var CascadingItem) =
-  if view.isNil or item.identifier.len == 0:
+  if item.identifier.len == 0:
     return
   let objectValue = view.dataSourceObjectValueForIdentifier(item.identifier)
   if objectValue.isSome and item.objectValue.isNilOrEmpty():
@@ -466,7 +448,7 @@ proc applyDataSourceItemMetadata(view: CascadingView, item: var CascadingItem) =
 proc cascadingItemWithIdentifier*(
     view: CascadingView, identifier: string
 ): CascadingItem =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return
   let source = view.dataSource()
   if not source.isNil:
@@ -501,7 +483,7 @@ proc cascadingItemWithIdentifier*(
     view.applyDataSourceItemMetadata(result)
 
 proc cascadingItemObjectValue*(view: CascadingView, identifier: string): ObjectValue =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return nilObjectValue()
   let item = view.cascadingItemWithIdentifier(identifier)
   if not item.objectValue.isNilOrEmpty():
@@ -512,19 +494,19 @@ proc cascadingItemObjectValue*(view: CascadingView, identifier: string): ObjectV
     emptyObjectValue()
 
 proc cascadingItemImage*(view: CascadingView, identifier: string): ImageResource =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return nil
   view.cascadingItemWithIdentifier(identifier).image
 
 proc cascadingItemRepresentedObject*(
     view: CascadingView, identifier: string
 ): DynamicAgent =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return nil
   view.cascadingItemWithIdentifier(identifier).representedObject
 
 proc parentIdentifierForColumn(view: CascadingView, column: int): string =
-  if view.isNil or column <= 0:
+  if column <= 0:
     return ""
   if column - 1 in 0 ..< view.xSelectedPath.len:
     view.xSelectedPath[column - 1]
@@ -534,8 +516,6 @@ proc parentIdentifierForColumn(view: CascadingView, column: int): string =
 proc childrenForParent*(
     view: CascadingView, parentIdentifier: string
 ): seq[CascadingItem] =
-  if view.isNil:
-    return @[]
   let source = view.dataSource()
   if not source.isNil:
     let count = source.trySendLocal(
@@ -547,21 +527,19 @@ proc childrenForParent*(
           cascadingChildIdentifier(),
           (view: view, parentIdentifier: parentIdentifier, index: index),
         )
-        if identifier.isNone or identifier.get().len == 0:
-          continue
-        var item = view.cascadingItemWithIdentifier(identifier.get())
-        if item.hidden:
-          continue
-        if item.parentIdentifier.len == 0 and parentIdentifier.len > 0:
-          item.parentIdentifier = parentIdentifier
-        result.add item
+        if identifier.isSome and identifier.get().len > 0:
+          var item = view.cascadingItemWithIdentifier(identifier.get())
+          if not item.hidden:
+            if item.parentIdentifier.len == 0 and parentIdentifier.len > 0:
+              item.parentIdentifier = parentIdentifier
+            result.add item
       return
   for item in view.xItems:
     if item.parentIdentifier == parentIdentifier and not item.hidden:
       result.add item
 
 proc itemHasChildren*(view: CascadingView, identifier: string): bool =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return false
   let source = view.dataSource()
   if not source.isNil:
@@ -596,7 +574,7 @@ proc cascadingItemIsLeaf(view: CascadingView, item: CascadingItem): bool =
 proc cascadingRowForIdentifier(
     view: CascadingView, parentIdentifier, identifier: string
 ): int =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   let source = view.dataSource()
   if not source.isNil:
@@ -617,7 +595,7 @@ proc indexOfChildIdentifier*(
   view.cascadingRowForIdentifier(parentIdentifier, identifier)
 
 proc itemForColumnRow(view: CascadingView, column, row: int): CascadingItem =
-  if view.isNil or row < 0:
+  if row < 0:
     return
   let children = view.childrenForParent(view.parentIdentifierForColumn(column))
   if row in 0 ..< children.len:
@@ -632,8 +610,6 @@ proc titleForItem(view: CascadingView, item: CascadingItem): string =
     item.identifier
 
 proc syncCascadingColumnStyle(view: CascadingView, tableView: TableView) =
-  if view.isNil or tableView.isNil:
-    return
   let transparent = color(0.0, 0.0, 0.0, 0.0)
   let
     styleId = view.styleId()
@@ -642,32 +618,27 @@ proc syncCascadingColumnStyle(view: CascadingView, tableView: TableView) =
   tableView.rowItemRole = srCascadingRowItem
   tableView.styleId = styleId
   tableView.styleClasses = styleClasses
-  if not tableView.scrollView().isNil:
-    let scrollView = tableView.scrollView()
-    scrollView.scrollViewRole = srCascadingScrollView
-    scrollView.scrollerRole = srCascadingScroller
-    scrollView.styleId = styleId
-    scrollView.styleClasses = styleClasses
-    scrollView.background = transparent
+  let scrollView = tableView.scrollView()
+  scrollView.scrollViewRole = srCascadingScrollView
+  scrollView.scrollerRole = srCascadingScroller
+  scrollView.styleId = styleId
+  scrollView.styleClasses = styleClasses
+  scrollView.background = transparent
 
 proc syncCascadingStyle(view: CascadingView) =
-  if view.isNil:
-    return
   let transparent = color(0.0, 0.0, 0.0, 0.0)
   let
     styleId = view.styleId()
     styleClasses = view.styleClasses()
-  if not view.xScrollView.isNil:
-    view.xScrollView.scrollViewRole = srCascadingScrollView
-    view.xScrollView.scrollerRole = srCascadingScroller
-    view.xScrollView.styleId = styleId
-    view.xScrollView.styleClasses = styleClasses
-    view.xScrollView.drawsBackground = false
-    view.xScrollView.background = transparent
-  if not view.xColumnContainer.isNil:
-    view.xColumnContainer.styleId = styleId
-    view.xColumnContainer.styleClasses = styleClasses
-    view.xColumnContainer.background = transparent
+  view.xScrollView.scrollViewRole = srCascadingScrollView
+  view.xScrollView.scrollerRole = srCascadingScroller
+  view.xScrollView.styleId = styleId
+  view.xScrollView.styleClasses = styleClasses
+  view.xScrollView.drawsBackground = false
+  view.xScrollView.background = transparent
+  view.xColumnContainer.styleId = styleId
+  view.xColumnContainer.styleClasses = styleClasses
+  view.xColumnContainer.background = transparent
   for tableView in view.xColumns:
     view.syncCascadingColumnStyle(tableView)
 
@@ -689,14 +660,9 @@ proc selectionFor(
   )
 
 proc selectedPath*(view: CascadingView): seq[string] =
-  if view.isNil:
-    @[]
-  else:
-    view.xSelectedPath
+  view.xSelectedPath
 
 proc postCascadingSelectionNotification(view: CascadingView) =
-  if view.isNil:
-    return
   var selectedIndexes: seq[int]
   var parent = ""
   for identifier in view.xSelectedPath:
@@ -732,19 +698,15 @@ proc postCascadingSelectionNotification(view: CascadingView) =
   )
 
 proc notifyCascadingSelectionDidChange(view: CascadingView) =
-  if view.isNil:
-    return
   emit view.selectionDidChange(DynamicAgent(view))
   view.postAccessibilityNotification(anSelectionChanged)
   view.postCascadingSelectionNotification()
 
 proc `selectedPath=`*(view: CascadingView, path: openArray[string]) =
-  if view.isNil:
-    return
   view.applySelectedPath(path)
 
 proc selectedItem*(view: CascadingView): CascadingSelection =
-  if view.isNil or view.xSelectedPath.len == 0:
+  if view.xSelectedPath.len == 0:
     return CascadingSelection(column: -1, row: -1)
   let
     column = view.xSelectedPath.high
@@ -755,10 +717,10 @@ proc selectedItem*(view: CascadingView): CascadingSelection =
   view.selectionFor(column, row, item)
 
 proc activatedIdentifier*(view: CascadingView): string =
-  if view.isNil: "" else: view.xActivatedIdentifier
+  view.xActivatedIdentifier
 
 proc desiredColumnCount(view: CascadingView): int =
-  if view.isNil or view.xSelectedPath.len == 0:
+  if view.xSelectedPath.len == 0:
     return 1
   let selected = view.xSelectedPath[^1]
   if view.itemHasChildren(selected):
@@ -767,7 +729,7 @@ proc desiredColumnCount(view: CascadingView): int =
     view.xSelectedPath.len
 
 proc columnsContentWidth(view: CascadingView): float32 =
-  if view.isNil or view.xColumns.len == 0:
+  if view.xColumns.len == 0:
     return 0.0'f32
   let
     count = view.xColumns.len
@@ -776,12 +738,8 @@ proc columnsContentWidth(view: CascadingView): float32 =
   columnWidth * count.float32 + spacing
 
 proc syncCascadingLayout(view: CascadingView) =
-  if view.isNil:
-    return
   view.syncCascadingStyle()
   let bounds = view.bounds()
-  if view.xScrollView.isNil or view.xColumnContainer.isNil:
-    return
   let
     contentWidth = view.columnsContentWidth()
     documentWidth = max(contentWidth, bounds.size.width)
@@ -813,16 +771,14 @@ proc syncCascadingLayout(view: CascadingView) =
   view.xScrollView.contentOffset = oldOffset
 
 proc scrollColumnToVisible(view: CascadingView, column: int) =
-  if view.isNil or view.xScrollView.isNil or column notin 0 ..< view.xColumns.len:
+  if column notin 0 ..< view.xColumns.len:
     return
   let tableView = view.xColumns[column]
-  if tableView.isNil or tableView.frame().isEmpty:
+  if tableView.frame().isEmpty:
     return
   discard view.xScrollView.scrollRectToVisible(tableView.frame())
 
 proc updateColumnSelections(view: CascadingView) =
-  if view.isNil:
-    return
   view.xSyncingColumnSelection = true
   try:
     for columnIndex, tableView in view.xColumns:
@@ -853,8 +809,6 @@ proc initCascadingTableView(view: CascadingView): TableView =
   result.setAcceptsFirstResponder(true)
 
 proc focusedColumnTable(view: CascadingView): TableView =
-  if view.isNil:
-    return nil
   let owner = view.window()
   if not (owner of Window):
     return nil
@@ -866,11 +820,9 @@ proc focusedColumnTable(view: CascadingView): TableView =
   nil
 
 proc focusColumn(view: CascadingView, column: int): bool =
-  if view.isNil or column notin 0 ..< view.xColumns.len:
+  if column notin 0 ..< view.xColumns.len:
     return false
   let tableView = view.xColumns[column]
-  if tableView.isNil:
-    return false
   let owner = tableView.window()
   result =
     if owner of Window:
@@ -880,14 +832,14 @@ proc focusColumn(view: CascadingView, column: int): bool =
   view.scrollColumnToVisible(column)
 
 proc clearSelectionFromColumn(view: CascadingView, column: int) =
-  if view.isNil or column < 0 or view.xSelectedPath.len <= column:
+  if column < 0 or view.xSelectedPath.len <= column:
     return
   var nextPath = view.xSelectedPath
   nextPath.setLen(column)
   view.applySelectedPath(nextPath)
 
 proc focusColumnRelative(view: CascadingView, delta: int): bool =
-  if view.isNil or delta == 0:
+  if delta == 0:
     return false
   let tableView = view.focusedColumnTable()
   if tableView.isNil:
@@ -898,34 +850,27 @@ proc focusColumnRelative(view: CascadingView, delta: int): bool =
     return false
   if delta > 0:
     let nextTableView = view.tableViewForColumn(nextColumn)
-    if not nextTableView.isNil and nextTableView.selectedIndex() < 0 and
-        nextTableView.rowCount() > 0:
+    if nextTableView.selectedIndex() < 0 and nextTableView.rowCount() > 0:
       view.selectItem(nextColumn, 0)
   elif delta < 0:
     view.clearSelectionFromColumn(column)
   view.focusColumn(nextColumn)
 
 proc syncCascadingColumns(view: CascadingView) =
-  if view.isNil:
-    return
   let needed = view.desiredColumnCount()
   while view.xColumns.len > needed:
     let tableView = view.xColumns[^1]
     view.xColumns.setLen(view.xColumns.len - 1)
-    if not tableView.isNil:
-      tableView.removeFromSuperview()
+    tableView.removeFromSuperview()
   while view.xColumns.len < needed:
     let tableView = view.initCascadingTableView()
     view.xColumns.add tableView
-    if not view.xColumnContainer.isNil:
-      view.xColumnContainer.addSubview(tableView)
+    view.xColumnContainer.addSubview(tableView)
   view.syncCascadingStyle()
   view.syncCascadingLayout()
   view.updateColumnSelections()
 
 proc pruneSelectedPath(view: CascadingView) =
-  if view.isNil:
-    return
   var parent = ""
   var nextPath: seq[string]
   for identifier in view.xSelectedPath:
@@ -939,8 +884,6 @@ proc pruneSelectedPath(view: CascadingView) =
   view.xSelectedPath = nextPath
 
 proc normalizedSelectedPath(view: CascadingView, path: openArray[string]): seq[string] =
-  if view.isNil:
-    return @[]
   let oldPath = view.xSelectedPath
   view.xSelectedPath = @path
   view.pruneSelectedPath()
@@ -948,8 +891,6 @@ proc normalizedSelectedPath(view: CascadingView, path: openArray[string]): seq[s
   view.xSelectedPath = oldPath
 
 proc preserveSelectedPathAfterDataChange(view: CascadingView): bool =
-  if view.isNil:
-    return false
   let
     oldPath = view.xSelectedPath
     nextPath = view.normalizedSelectedPath(oldPath)
@@ -961,8 +902,6 @@ proc preserveSelectedPathAfterDataChange(view: CascadingView): bool =
   true
 
 proc applySelectedPath(view: CascadingView, path: openArray[string]) =
-  if view.isNil:
-    return
   let nextPath = view.normalizedSelectedPath(path)
   if view.xSelectedPath == nextPath:
     view.updateColumnSelections()
@@ -974,8 +913,6 @@ proc applySelectedPath(view: CascadingView, path: openArray[string]) =
   view.notifyCascadingSelectionDidChange()
 
 proc reloadData*(view: CascadingView) =
-  if view.isNil:
-    return
   let selectionChanged = view.preserveSelectedPathAfterDataChange()
   view.syncCascadingColumns()
   view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
@@ -985,15 +922,13 @@ proc reloadData*(view: CascadingView) =
     view.notifyCascadingSelectionDidChange()
 
 proc reloadColumn*(view: CascadingView, column: int) =
-  if view.isNil or column < 0:
+  if column < 0:
     return
   if column < view.xSelectedPath.len:
     view.xSelectedPath.setLen(column)
   view.reloadData()
 
 proc columnForParentIdentifier(view: CascadingView, parentIdentifier: string): int =
-  if view.isNil:
-    return -1
   if parentIdentifier.len == 0:
     return 0
   for index, identifier in view.xSelectedPath:
@@ -1015,7 +950,7 @@ proc tableRowUpdate(update: CascadingTreeUpdate): TableRowUpdate =
 proc postCascadingModelNotification(
     view: CascadingView, updates: openArray[CascadingTreeUpdate]
 ) =
-  if view.isNil or updates.len == 0:
+  if updates.len == 0:
     return
   var identifiers: seq[string]
   var firstIndex = -1
@@ -1045,7 +980,7 @@ proc postCascadingModelNotification(
   )
 
 proc restoreFocusedColumn(view: CascadingView, column: int) =
-  if view.isNil or column < 0:
+  if column < 0:
     return
   if column in 0 ..< view.xColumns.len:
     discard view.focusColumn(column)
@@ -1053,7 +988,7 @@ proc restoreFocusedColumn(view: CascadingView, column: int) =
 proc flushCascadingTreeUpdates(
     view: CascadingView, updates: openArray[CascadingTreeUpdate]
 ) =
-  if view.isNil or updates.len == 0:
+  if updates.len == 0:
     return
   let
     focusedColumn = view.columnForTableView(view.focusedColumnTable())
@@ -1074,11 +1009,10 @@ proc flushCascadingTreeUpdates(
     view.notifyCascadingSelectionDidChange()
 
 proc beginCascadingUpdates*(view: CascadingView) =
-  if not view.isNil:
-    inc view.xBatchUpdateDepth
+  inc view.xBatchUpdateDepth
 
 proc endCascadingUpdates*(view: CascadingView) =
-  if view.isNil or view.xBatchUpdateDepth <= 0:
+  if view.xBatchUpdateDepth <= 0:
     return
   dec view.xBatchUpdateDepth
   if view.xBatchUpdateDepth == 0 and view.xPendingTreeUpdates.len > 0:
@@ -1089,7 +1023,7 @@ proc endCascadingUpdates*(view: CascadingView) =
 proc applyCascadingTreeUpdates*(
     view: CascadingView, updates: openArray[CascadingTreeUpdate]
 ) =
-  if view.isNil or updates.len == 0:
+  if updates.len == 0:
     return
   if view.xBatchUpdateDepth > 0:
     for update in updates:
@@ -1098,8 +1032,6 @@ proc applyCascadingTreeUpdates*(
   view.flushCascadingTreeUpdates(updates)
 
 proc reloadChildrenForParent*(view: CascadingView, parentIdentifier: string) =
-  if view.isNil:
-    return
   let children = view.childrenForParent(parentIdentifier)
   var
     indexes: seq[int]
@@ -1144,8 +1076,6 @@ proc moveChildForParent*(
 proc localStorageIndexForChildIndex(
     view: CascadingView, parentIdentifier: string, childIndex: int
 ): int =
-  if view.isNil:
-    return -1
   let target = max(childIndex, 0)
   var
     sibling = 0
@@ -1162,7 +1092,7 @@ proc localStorageIndexForChildIndex(
     view.xItems.len
 
 proc localDescendantIdentifiers(view: CascadingView, identifier: string): seq[string] =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return
   for item in view.xItems:
     if item.parentIdentifier == identifier:
@@ -1171,7 +1101,7 @@ proc localDescendantIdentifiers(view: CascadingView, identifier: string): seq[st
         result.add child
 
 proc deleteLocalIdentifiers(view: CascadingView, identifiers: openArray[string]) =
-  if view.isNil or identifiers.len == 0:
+  if identifiers.len == 0:
     return
   var index = view.xItems.high
   while index >= 0:
@@ -1185,7 +1115,7 @@ proc insertCascadingItems*(
     index: int,
     items: openArray[CascadingItem],
 ) =
-  if view.isNil or items.len == 0:
+  if items.len == 0:
     return
   var
     indexes: seq[int]
@@ -1204,7 +1134,7 @@ proc insertCascadingItems*(
 proc removeCascadingItem*(
     view: CascadingView, identifier: string
 ): bool {.discardable.} =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return false
   let found = view.localItemWithIdentifier(identifier)
   if not found.found:
@@ -1222,7 +1152,7 @@ proc removeCascadingItem*(
 proc moveCascadingItem*(
     view: CascadingView, identifier, parentIdentifier: string, index: int
 ): bool {.discardable.} =
-  if view.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return false
   let sourceIndex = view.localItemWithIdentifier(identifier)
   if not sourceIndex.found:
@@ -1255,7 +1185,7 @@ proc moveCascadingItem*(
   true
 
 proc selectItem*(view: CascadingView, column, row: int) =
-  if view.isNil or column < 0:
+  if column < 0:
     return
   let item = view.itemForColumnRow(column, row)
   if item.identifier.len == 0:
@@ -1297,7 +1227,7 @@ proc selectItem*(view: CascadingView, column, row: int) =
   view.notifyCascadingSelectionDidChange()
 
 proc activateCascadingItem(view: CascadingView, column, row: int) =
-  if view.isNil or column < 0 or row < 0:
+  if column < 0 or row < 0:
     return
   let item = view.itemForColumnRow(column, row)
   if item.identifier.len == 0:
@@ -1320,16 +1250,8 @@ proc cascadingRowItemStyle(
     states: set[WidgetState],
 ): RowItemStyle =
   let
-    styleId =
-      if view.isNil:
-        tableView.styleId()
-      else:
-        view.styleId()
-    styleClasses =
-      if view.isNil:
-        tableView.styleClasses()
-      else:
-        view.styleClasses()
+    styleId = view.styleId()
+    styleClasses = view.styleClasses()
   context.appearance.resolveRowItemStyle(
     controlStyle(srCascadingRowItem, states, id = styleId, classes = styleClasses)
   )
@@ -1547,10 +1469,7 @@ protocol CascadingViewLayout of ViewLayoutProtocol:
 
 protocol CascadingSelectionBehavior of CascadingSelectionProtocol:
   method selectionPath(view: CascadingView): seq[string] =
-    if view.isNil:
-      @[]
-    else:
-      view.xSelectedPath
+    view.xSelectedPath
 
   method setSelectionPath(view: CascadingView, path: seq[string]) =
     view.applySelectedPath(path)
@@ -1574,7 +1493,7 @@ proc cascadingModelDidChange*(view: CascadingView, sender: DynamicAgent) {.slot.
 
 protocol CascadingDrawing of ViewDrawingProtocol:
   method draw(view: CascadingView, context: DrawContext) =
-    if view.isNil or context.isNil or view.bounds().isEmpty:
+    if context.isNil or view.bounds().isEmpty:
       return
     view.syncCascadingStyle()
     let style = context.appearance.resolveTableViewStyle(

@@ -138,11 +138,9 @@ proc fixAttributesInRange*(storage: TextStorage, range: TextRange)
 proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: string)
 
 proc hasPendingEdit*(storage: TextStorage): bool =
-  not storage.isNil and storage.xHasPendingEdit
+  storage.xHasPendingEdit
 
 proc currentEdit*(storage: TextStorage): TextStorageEdit =
-  if storage.isNil:
-    return
   if storage.xHasPendingEdit: storage.xPendingEdit else: storage.xLastProcessedEdit
 
 proc editedMask*(storage: TextStorage): TextStorageEditKinds =
@@ -155,33 +153,29 @@ proc changeInLength*(storage: TextStorage): int =
   storage.currentEdit().textDelta
 
 proc delegate*(storage: TextStorage): DynamicAgent =
-  if storage.isNil: nil else: storage.xDelegate
+  storage.xDelegate
 
 proc `delegate=`*(storage: TextStorage, delegate: DynamicAgent) =
-  if not storage.isNil:
-    storage.xDelegate = delegate
+  storage.xDelegate = delegate
 
 proc undoManager*(storage: TextStorage): UndoManager =
-  if storage.isNil: nil else: storage.xUndoManager
+  storage.xUndoManager
 
 proc `undoManager=`*(storage: TextStorage, undoManager: UndoManager) =
-  if not storage.isNil:
-    storage.xUndoManager = undoManager
+  storage.xUndoManager = undoManager
 
 proc lazyProvider*(storage: TextStorage): DynamicAgent =
-  if storage.isNil: nil else: storage.xLazyProvider
+  storage.xLazyProvider
 
 proc `lazyProvider=`*(storage: TextStorage, provider: DynamicAgent) =
-  if storage.isNil:
-    return
   storage.xLazyProvider = provider
   storage.xMaterialized = provider.isNil
 
 proc isMaterialized*(storage: TextStorage): bool =
-  storage.isNil or storage.xMaterialized
+  storage.xMaterialized
 
 proc usesGapTextBuffer*(storage: TextStorage): bool =
-  (not storage.isNil) and storage of TextGapStorage
+  storage of TextGapStorage
 
 method storageLength*(storage: TextStorage): int {.base.} =
   storage.xStringValue.runeLen
@@ -284,8 +278,6 @@ method storageParagraphRange*(storage: TextGapStorage, range: TextRange): TextRa
   storage.xGapBuffer.paragraphRange(range)
 
 proc notifyCommittedEdit(storage: TextStorage, edit: TextStorageEdit) =
-  if storage.isNil:
-    return
   storage.dispatchDidEdit(edit)
   if storage.xHasPendingEdit:
     storage.xPendingEdit = coalesceEdits(storage.xPendingEdit, edit)
@@ -301,8 +293,6 @@ proc edited*(
     range: TextRange,
     changeInLength: int,
 ) =
-  if storage.isNil:
-    return
   storage.materialize()
   let
     clamped = clampTextRange(storage.storageLength(), range)
@@ -312,19 +302,16 @@ proc edited*(
   )
 
 proc beginEditing*(storage: TextStorage) =
-  if not storage.isNil:
-    inc storage.xEditingDepth
+  inc storage.xEditingDepth
 
 proc endEditing*(storage: TextStorage) =
-  if storage.isNil or storage.xEditingDepth == 0:
+  if storage.xEditingDepth == 0:
     return
   dec storage.xEditingDepth
   if storage.xEditingDepth == 0:
     storage.processEditing()
 
 proc normalizeRuns(storage: TextStorage) =
-  if storage.isNil:
-    return
   let total = storage.storageLength()
   if total == 0:
     storage.xRuns.setLen(0)
@@ -354,7 +341,7 @@ proc normalizeRuns(storage: TextStorage) =
   storage.xRuns = normalized
 
 proc materialize*(storage: TextStorage) =
-  if storage.isNil or storage.xMaterialized:
+  if storage.xMaterialized:
     return
   var value = ""
   var runs: seq[TextAttributeRun]
@@ -372,8 +359,6 @@ proc materialize*(storage: TextStorage) =
   storage.normalizeRuns()
 
 proc paragraphRangeForRange*(storage: TextStorage, range: TextRange): TextRange =
-  if storage.isNil:
-    return
   storage.materialize()
   storage.storageParagraphRange(range)
 
@@ -386,7 +371,7 @@ proc resolvedFontFallbackAttributes(
   if result.paragraphStyle.maximumLineHeight > 0.0'f32 and
       result.paragraphStyle.minimumLineHeight > result.paragraphStyle.maximumLineHeight:
     result.paragraphStyle.maximumLineHeight = result.paragraphStyle.minimumLineHeight
-  if not storage.isNil and not storage.xDelegate.isNil:
+  if not storage.xDelegate.isNil:
     let resolved = storage.xDelegate.trySendLocal(
       textStorageResolveFontFallback(),
       (storage: storage, range: range, attributes: result),
@@ -395,8 +380,6 @@ proc resolvedFontFallbackAttributes(
       result = resolved.get()
 
 proc fixFontFallbackInRange*(storage: TextStorage, range: TextRange) =
-  if storage.isNil:
-    return
   storage.materialize()
   let clamped = clampTextRange(storage.storageLength(), range)
   if clamped.length == 0:
@@ -414,7 +397,7 @@ proc fixFontFallbackInRange*(storage: TextStorage, range: TextRange) =
     storage.normalizeRuns()
 
 proc delegateHandledAttributeFixing(storage: TextStorage, range: TextRange): bool =
-  if storage.isNil or storage.xDelegate.isNil:
+  if storage.xDelegate.isNil:
     return false
 
   storage.xDelegate
@@ -422,7 +405,7 @@ proc delegateHandledAttributeFixing(storage: TextStorage, range: TextRange): boo
   .get(false)
 
 proc shouldFixAttributes(storage: TextStorage, range: TextRange): bool =
-  if storage.isNil or storage.xDelegate.isNil:
+  if storage.xDelegate.isNil:
     return true
 
   storage.xDelegate
@@ -430,8 +413,6 @@ proc shouldFixAttributes(storage: TextStorage, range: TextRange): bool =
   .get(true)
 
 proc fixAttributesInRange*(storage: TextStorage, range: TextRange) =
-  if storage.isNil:
-    return
   storage.materialize()
   let paragraphRange = storage.paragraphRangeForRange(range)
   if paragraphRange.length == 0:
@@ -444,7 +425,7 @@ proc fixAttributesInRange*(storage: TextStorage, range: TextRange) =
     storage.fixFontFallbackInRange(paragraphRange)
 
 proc processEditing*(storage: TextStorage) =
-  if storage.isNil or storage.xProcessingEditing or storage.xEditingDepth > 0 or
+  if storage.xProcessingEditing or storage.xEditingDepth > 0 or
       not storage.xHasPendingEdit:
     return
 
@@ -539,8 +520,6 @@ method copyStorageTextTo*(storage: TextGapStorage, copy: TextStorage) =
 
 proc copyTextStorage*(storage: TextStorage): TextStorage =
   result = newTextStorage()
-  if storage.isNil:
-    return
   storage.materialize()
   result = storage.newEmptyStorageCopy()
   storage.copyStorageTextTo(result)
@@ -561,7 +540,7 @@ proc registerSnapshotUndo(
   )
 
 proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: string) =
-  if storage.isNil or snapshot.isNil:
+  if snapshot.isNil:
     return
   storage.materialize()
   snapshot.materialize()
@@ -588,8 +567,6 @@ proc mutableCopy*(storage: AttributedString): MutableAttributedString =
 
 proc sliceTextStorage*(storage: TextStorage, range: TextRange): TextStorage =
   result = newTextStorage()
-  if storage.isNil:
-    return
   storage.materialize()
   let
     clamped = clampTextRange(storage.storageLength(), range)
@@ -615,14 +592,10 @@ proc attributedSubstring*(
   storage.sliceTextStorage(range)
 
 proc stringValue*(storage: TextStorage): string =
-  if storage.isNil:
-    return ""
   storage.materialize()
   storage.storageString()
 
 proc `stringValue=`*(storage: TextStorage, value: string) =
-  if storage.isNil:
-    return
   storage.materialize()
   let before = storage.copyTextStorage()
   let oldLength = storage.storageLength()
@@ -643,33 +616,23 @@ proc `stringValue=`*(storage: TextStorage, value: string) =
   storage.notifyCommittedEdit(edit)
 
 proc len*(storage: TextStorage): int =
-  if storage.isNil:
-    return 0
   storage.materialize()
   storage.storageLength()
 
 proc substring*(storage: TextStorage, range: TextRange): string =
-  if storage.isNil:
-    return ""
   storage.materialize()
   let clamped = clampTextRange(storage.len, range)
   storage.storageSubstring(clamped)
 
 proc lineCount*(storage: TextStorage): int =
-  if storage.isNil:
-    return 0
   storage.materialize()
   storage.storageLineCount()
 
 proc lineRange*(storage: TextStorage, line: int): TextRange =
-  if storage.isNil:
-    return initTextRange(0, 0)
   storage.materialize()
   storage.storageLineRange(line)
 
 proc attributesAt*(storage: TextStorage, index: int): TextAttributes =
-  if storage.isNil:
-    return defaultTextAttributes()
   storage.materialize()
   let total = storage.len
   if total == 0:
@@ -696,8 +659,6 @@ proc replace*(
     text: string,
     attributes = defaultTextAttributes(),
 ) =
-  if storage.isNil:
-    return
   storage.materialize()
   let
     total = storage.len
@@ -756,8 +717,6 @@ proc replaceCharacters*(
 proc setAttributes*(
     storage: TextStorage, range: TextRange, attributes: TextAttributes
 ) =
-  if storage.isNil:
-    return
   storage.materialize()
   let
     total = storage.len
@@ -821,8 +780,6 @@ proc setParagraphStyle*(
   storage.setAttributes(range, attributes)
 
 proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
-  if storage.isNil:
-    return
   if inserted.isNil:
     storage.replace(range, "")
     return

@@ -77,9 +77,8 @@ let
   controlAbortEditingSelector = selector[tuple[], bool]("abortEditing")
 
 proc invalidateMatrix(matrix: Matrix) =
-  if not matrix.isNil:
-    matrix.invalidateIntrinsicContentSize()
-    matrix.setNeedsDisplay(true)
+  matrix.invalidateIntrinsicContentSize()
+  matrix.setNeedsDisplay(true)
 
 func normalizedCount(value: int): int =
   max(value, 0)
@@ -94,23 +93,22 @@ func gridRows(itemCount, columns: int): int =
     (itemCount + columns.normalizedColumns() - 1) div columns.normalizedColumns()
 
 func validIndex(matrix: Matrix, index: int): bool =
-  not matrix.isNil and index in 0 ..< matrix.xCells.len
+  index in 0 ..< matrix.xCells.len
 
 func cellIndex(matrix: Matrix, row, column: int): int =
-  if matrix.isNil or row < 0 or column < 0 or row >= matrix.xRows or
-      column >= matrix.xColumns:
+  if row < 0 or column < 0 or row >= matrix.xRows or column >= matrix.xColumns:
     -1
   else:
     row * matrix.xColumns + column
 
 func rowForIndex(matrix: Matrix, index: int): int =
-  if matrix.isNil or matrix.xColumns <= 0 or index < 0:
+  if matrix.xColumns <= 0 or index < 0:
     -1
   else:
     index div matrix.xColumns
 
 func columnForIndex(matrix: Matrix, index: int): int =
-  if matrix.isNil or matrix.xColumns <= 0 or index < 0:
+  if matrix.xColumns <= 0 or index < 0:
     -1
   else:
     index mod matrix.xColumns
@@ -161,8 +159,6 @@ proc initMatrixItemModel*(
   )
 
 proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
-  if cell.isNil:
-    return initMatrixItemModel()
   initMatrixItemModel(
     title = cell.title(),
     state = cell.state(),
@@ -172,7 +168,7 @@ proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
   )
 
 proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
-  if matrix.isNil or visibleIndex < 0:
+  if visibleIndex < 0:
     return -1
   var current = 0
   for index, model in matrix.xItemModels:
@@ -183,7 +179,7 @@ proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
   -1
 
 proc visibleIndexForModelIndex(matrix: Matrix, modelIndex: int): int =
-  if matrix.isNil or modelIndex < 0:
+  if modelIndex < 0:
     return -1
   var current = 0
   for index, model in matrix.xItemModels:
@@ -194,14 +190,12 @@ proc visibleIndexForModelIndex(matrix: Matrix, modelIndex: int): int =
   -1
 
 proc visibleItemCount(matrix: Matrix): int =
-  if matrix.isNil:
-    return 0
   for model in matrix.xItemModels:
     if not model.hidden:
       inc result
 
 proc backingIndexOfMatrixItemIdentifier(matrix: Matrix, identifier: string): int =
-  if matrix.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   for index, model in matrix.xItemModels:
     if model.identifier == identifier:
@@ -236,8 +230,6 @@ proc applyMatrixItemModelToCell(
   cell.setAction(model.action)
 
 proc clearMatrixItemCell(cell: ButtonCell) =
-  if cell.isNil:
-    return
   cell.setTitle("")
   cell.setState(bsOff)
   cells.setEnabled(cell, false)
@@ -245,8 +237,6 @@ proc clearMatrixItemCell(cell: ButtonCell) =
   cell.setAction(ActionSelector())
 
 proc normalizeModelBackedCellSelection(matrix: Matrix) =
-  if matrix.isNil:
-    return
   if matrix.xSelectionMode in {msmRadio, msmSingle}:
     let selected = matrix.firstSelectedIndex()
     for index, cell in matrix.xCells:
@@ -258,7 +248,7 @@ proc normalizeModelBackedCellSelection(matrix: Matrix) =
   matrix.normalizeLeadAndSelection()
 
 proc syncMatrixModelSelectionStates(matrix: Matrix) =
-  if matrix.isNil or not matrix.xUsesItemModels:
+  if not matrix.xUsesItemModels:
     return
   for visibleIndex in 0 ..< matrix.xCells.len:
     let modelIndex = matrix.modelIndexForVisibleIndex(visibleIndex)
@@ -273,8 +263,6 @@ proc syncMatrixModelSelectionStates(matrix: Matrix) =
 proc rebuildMatrixCellsFromModels(
     matrix: Matrix, selectedIdentifiers: openArray[string] = []
 ) =
-  if matrix.isNil:
-    return
   let
     selected = selectedIdentifiers.identifiersToSet()
     count = matrix.visibleItemCount()
@@ -293,15 +281,11 @@ proc rebuildMatrixCellsFromModels(
   matrix.invalidateMatrix()
 
 proc selectedIndexes*(matrix: Matrix): seq[int] =
-  if matrix.isNil:
-    return
   for index, cell in matrix.xCells:
     if not cell.isNil and cell.state() in {bsOn, bsMixed}:
       result.add index
 
 proc `selectedIndexes=`*(matrix: Matrix, indexes: openArray[int]) =
-  if matrix.isNil:
-    return
   var nextIndexes: seq[int]
   for index in indexes:
     if matrix.validIndex(index) and not matrix.xCells[index].isNil and
@@ -337,24 +321,18 @@ proc `selectedIndexes=`*(matrix: Matrix, indexes: openArray[int]) =
 proc sendMatrixAction(matrix: Matrix): bool
 
 proc firstEnabledIndex(matrix: Matrix): int =
-  if matrix.isNil:
-    return -1
   for index, cell in matrix.xCells:
     if not cell.isNil and cells.isEnabled(cell):
       return index
   -1
 
 proc firstSelectedIndex(matrix: Matrix): int =
-  if matrix.isNil:
-    return -1
   for index, cell in matrix.xCells:
     if not cell.isNil and cell.state() in {bsOn, bsMixed}:
       return index
   -1
 
 proc normalizeLeadAndSelection(matrix: Matrix) =
-  if matrix.isNil:
-    return
   if not matrix.validIndex(matrix.xLeadIndex) or matrix.xCells[matrix.xLeadIndex].isNil or
       not cells.isEnabled(matrix.xCells[matrix.xLeadIndex]):
     matrix.xLeadIndex = matrix.firstSelectedIndex()
@@ -377,15 +355,13 @@ proc detachCell(matrix: Matrix, cell: ButtonCell) =
 
 proc clonedPrototype(matrix: Matrix): ButtonCell =
   let prototype =
-    if matrix.isNil or matrix.xPrototype.isNil:
+    if matrix.xPrototype.isNil:
       newButtonCell()
     else:
       matrix.xPrototype
   prototype.copyButtonCell()
 
 proc configureCells(matrix: Matrix, rows, columns: int, prototype: ButtonCell) =
-  if matrix.isNil:
-    return
   let
     nextRows = rows.normalizedCount()
     nextColumns = columns.normalizedColumns()
@@ -415,25 +391,25 @@ proc configureCells(matrix: Matrix, rows, columns: int, prototype: ButtonCell) =
   matrix.invalidateMatrix()
 
 proc rows*(matrix: Matrix): int =
-  if matrix.isNil: 0 else: matrix.xRows
+  matrix.xRows
 
 proc rowCount*(matrix: Matrix): int =
   matrix.rows()
 
 proc columns*(matrix: Matrix): int =
-  if matrix.isNil: 0 else: matrix.xColumns
+  matrix.xColumns
 
 proc columnCount*(matrix: Matrix): int =
   matrix.columns()
 
 proc len*(matrix: Matrix): int =
-  if matrix.isNil: 0 else: matrix.xCells.len
+  matrix.xCells.len
 
 proc selectionMode*(matrix: Matrix): MatrixSelectionMode =
-  if matrix.isNil: msmNone else: matrix.xSelectionMode
+  matrix.xSelectionMode
 
 proc `selectionMode=`*(matrix: Matrix, mode: MatrixSelectionMode) =
-  if matrix.isNil or matrix.xSelectionMode == mode:
+  if matrix.xSelectionMode == mode:
     return
   matrix.xSelectionMode = mode
   if mode in {msmRadio, msmSingle}:
@@ -447,11 +423,9 @@ proc `selectionMode=`*(matrix: Matrix, mode: MatrixSelectionMode) =
   matrix.invalidateMatrix()
 
 proc cellSize*(matrix: Matrix): Size =
-  if matrix.isNil: AutoSize else: matrix.xCellSize
+  matrix.xCellSize
 
 proc `cellSize=`*(matrix: Matrix, size: Size) =
-  if matrix.isNil:
-    return
   let normalized = initSize(size.width, size.height)
   if matrix.xCellSize == normalized:
     return
@@ -459,14 +433,9 @@ proc `cellSize=`*(matrix: Matrix, size: Size) =
   matrix.invalidateMatrix()
 
 proc intercellSpacing*(matrix: Matrix): Size =
-  if matrix.isNil:
-    initSize(0.0, 0.0)
-  else:
-    matrix.xIntercellSpacing
+  matrix.xIntercellSpacing
 
 proc `intercellSpacing=`*(matrix: Matrix, size: Size) =
-  if matrix.isNil:
-    return
   let normalized = initSize(size.width, size.height)
   if matrix.xIntercellSpacing == normalized:
     return
@@ -486,8 +455,6 @@ proc `[]`*(matrix: Matrix, row, column: int): ButtonCell =
   matrix.cellAt(row, column)
 
 proc setCellAt*(matrix: Matrix, row, column: int, cell: ButtonCell) =
-  if matrix.isNil:
-    return
   let index = matrix.cellIndex(row, column)
   if not matrix.validIndex(index):
     return
@@ -510,13 +477,11 @@ proc `[]=`*(matrix: Matrix, row, column: int, cell: ButtonCell) =
   matrix.setCellAt(row, column, cell)
 
 proc prototypeCell*(matrix: Matrix): ButtonCell =
-  if matrix.isNil: nil else: matrix.xPrototype
+  matrix.xPrototype
 
 proc renewRowsColumns*(
     matrix: Matrix, rows, columns: int, prototype: ButtonCell = nil
 ) =
-  if matrix.isNil:
-    return
   if matrix.xUsesItemModels:
     let selected = matrix.selectedItemIdentifiers()
     if not prototype.isNil:
@@ -530,10 +495,10 @@ proc renewRowsColumns*(
     matrix.configureCells(rows, columns, prototype)
 
 proc dataSource*(matrix: Matrix): DynamicAgent =
-  if matrix.isNil: nil else: matrix.xDataSource
+  matrix.xDataSource
 
 proc `dataSource=`*(matrix: Matrix, dataSource: DynamicAgent) =
-  if matrix.isNil or matrix.xDataSource == dataSource:
+  if matrix.xDataSource == dataSource:
     return
   if not dataSource.isNil:
     discard dataSource.adopt(MatrixDataSource)
@@ -544,16 +509,12 @@ proc `dataSource=`*(matrix: Matrix, dataSource: Responder) =
   matrix.dataSource = DynamicAgent(dataSource)
 
 proc matrixItemIdentifiers*(matrix: Matrix): seq[string] =
-  if matrix.isNil:
-    return
   if matrix.xUsesItemModels:
     for model in matrix.xItemModels:
       if not model.hidden and model.identifier.len > 0:
         result.add model.identifier
 
 proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
-  if matrix.isNil:
-    return initMatrixItemModel()
   if matrix.xUsesItemModels:
     let modelIndex = matrix.modelIndexForVisibleIndex(index)
     if modelIndex >= 0:
@@ -569,8 +530,6 @@ proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
   matrix.cellAtIndex(index).matrixItemModel()
 
 proc matrixItemModels*(matrix: Matrix): seq[MatrixItemModel] =
-  if matrix.isNil:
-    return
   if matrix.xUsesItemModels:
     matrix.syncMatrixModelSelectionStates()
     return matrix.xItemModels
@@ -578,8 +537,6 @@ proc matrixItemModels*(matrix: Matrix): seq[MatrixItemModel] =
     result.add cell.matrixItemModel()
 
 proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel]) =
-  if matrix.isNil:
-    return
   let selected = matrix.selectedItemIdentifiers()
   matrix.xDataSource = nil
   matrix.xItemModels = @models
@@ -587,8 +544,6 @@ proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel]) =
   matrix.rebuildMatrixCellsFromModels(selected)
 
 proc reloadData*(matrix: Matrix) =
-  if matrix.isNil:
-    return
   if matrix.xDataSource.isNil:
     if matrix.xUsesItemModels:
       matrix.rebuildMatrixCellsFromModels(matrix.selectedItemIdentifiers())
@@ -610,7 +565,7 @@ proc reloadData*(matrix: Matrix) =
   matrix.rebuildMatrixCellsFromModels(selected)
 
 proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int =
-  if matrix.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   if not matrix.xDataSource.isNil:
     let found = matrix.xDataSource.trySendLocal(
@@ -628,8 +583,6 @@ proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int =
   -1
 
 proc selectedItemIdentifiers*(matrix: Matrix): seq[string] =
-  if matrix.isNil:
-    return
   for index in matrix.selectedIndexes():
     let model = matrix.matrixItemAtIndex(index)
     if model.identifier.len > 0 and model.identifier notin result:
@@ -643,8 +596,6 @@ proc selectedItemIdentifier*(matrix: Matrix): string =
     ""
 
 proc `selectedItemIdentifiers=`*(matrix: Matrix, identifiers: openArray[string]) =
-  if matrix.isNil:
-    return
   var indexes: seq[int]
   for identifier in identifiers:
     let index = matrix.indexOfMatrixItemIdentifier(identifier)
@@ -661,8 +612,6 @@ proc `selectedItemIdentifier=`*(matrix: Matrix, identifier: string) =
 proc addMatrixItem*(
     matrix: Matrix, model: MatrixItemModel
 ): ButtonCell {.discardable.} =
-  if matrix.isNil:
-    return nil
   let selected = matrix.selectedItemIdentifiers()
   matrix.xUsesItemModels = true
   matrix.xItemModels.add model
@@ -675,8 +624,6 @@ proc addMatrixItem*(
 proc insertMatrixItem*(
     matrix: Matrix, model: MatrixItemModel, index: Natural
 ): ButtonCell {.discardable.} =
-  if matrix.isNil:
-    return nil
   let
     selected = matrix.selectedItemIdentifiers()
     modelIndex = max(0, min(index.int, matrix.xItemModels.len))
@@ -704,14 +651,12 @@ proc removeMatrixItemWithIdentifier*(
   true
 
 proc removeAllMatrixItems*(matrix: Matrix) =
-  if matrix.isNil:
-    return
   matrix.xItemModels.setLen(0)
   matrix.xUsesItemModels = true
   matrix.rebuildMatrixCellsFromModels()
 
 proc moveMatrixItem*(matrix: Matrix, fromIndex, toIndex: int): bool {.discardable.} =
-  if matrix.isNil or fromIndex < 0 or fromIndex >= matrix.xItemModels.len:
+  if fromIndex < 0 or fromIndex >= matrix.xItemModels.len:
     return false
   let
     selected = matrix.selectedItemIdentifiers()
@@ -729,11 +674,8 @@ proc moveMatrixItemWithIdentifier*(
   matrix.moveMatrixItem(matrix.backingIndexOfMatrixItemIdentifier(identifier), toIndex)
 
 proc selectedIndex*(matrix: Matrix): int =
-  if matrix.isNil:
-    -1
-  else:
-    matrix.normalizeLeadAndSelection()
-    matrix.xSelectedIndex
+  matrix.normalizeLeadAndSelection()
+  matrix.xSelectedIndex
 
 proc selectedRow*(matrix: Matrix): int =
   matrix.rowForIndex(matrix.selectedIndex())
@@ -745,18 +687,13 @@ proc selectedCell*(matrix: Matrix): ButtonCell =
   matrix.cellAtIndex(matrix.selectedIndex())
 
 proc selectedCells*(matrix: Matrix): seq[ButtonCell] =
-  if matrix.isNil:
-    return
   for cell in matrix.xCells:
     if not cell.isNil and cell.state() in {bsOn, bsMixed}:
       result.add cell
 
 proc leadIndex*(matrix: Matrix): int =
-  if matrix.isNil:
-    -1
-  else:
-    matrix.normalizeLeadAndSelection()
-    matrix.xLeadIndex
+  matrix.normalizeLeadAndSelection()
+  matrix.xLeadIndex
 
 proc leadRow*(matrix: Matrix): int =
   matrix.rowForIndex(matrix.leadIndex())
@@ -770,7 +707,7 @@ proc clearHighlightedCell(matrix: Matrix) =
   matrix.xHighlightedIndex = -1
 
 proc setHighlightedIndex(matrix: Matrix, index: int) =
-  if matrix.isNil or matrix.xHighlightedIndex == index:
+  if matrix.xHighlightedIndex == index:
     return
   matrix.clearHighlightedCell()
   if matrix.validIndex(index):
@@ -779,22 +716,18 @@ proc setHighlightedIndex(matrix: Matrix, index: int) =
   matrix.setNeedsDisplay(true)
 
 proc clearSelectionStates(matrix: Matrix, exceptIndex = -1) =
-  if matrix.isNil:
-    return
   for index, cell in matrix.xCells:
     if not cell.isNil and index != exceptIndex and cell.state() != bsOff:
       cell.setState(bsOff)
 
 proc emitSelectionChangedIfNeeded(matrix: Matrix, before: seq[int]) =
-  if matrix.isNil:
-    return
   let after = matrix.selectedIndexes()
   if before != after:
     emit matrix.selectionDidChange(DynamicAgent(matrix))
     matrix.postAccessibilityNotification(anSelectionChanged)
 
 proc selectIndex(matrix: Matrix, index: int, notify = false): bool =
-  if matrix.isNil or not controlbase.isEnabled(matrix) or not matrix.validIndex(index):
+  if not controlbase.isEnabled(matrix) or not matrix.validIndex(index):
     return false
   let cell = matrix.xCells[index]
   if cell.isNil or not cells.isEnabled(cell):
@@ -853,8 +786,6 @@ proc selectMatrixItemWithIdentifier*(
     false
 
 proc deselectAll*(matrix: Matrix) =
-  if matrix.isNil:
-    return
   matrix.selectedIndexes = @[]
 
 proc cellNaturalSize(matrix: Matrix, cell: ButtonCell): Size =
@@ -863,8 +794,6 @@ proc cellNaturalSize(matrix: Matrix, cell: ButtonCell): Size =
   cell.cellSize().resolveIntrinsicSize(matrix.bounds().size)
 
 proc resolvedCellSize(matrix: Matrix): Size =
-  if matrix.isNil:
-    return initSize(0.0, 0.0)
   if matrix.xCellSize.hasWidth and matrix.xCellSize.hasHeight:
     return matrix.xCellSize
   var natural = initSize(0.0, 0.0)
@@ -875,7 +804,7 @@ proc resolvedCellSize(matrix: Matrix): Size =
   matrix.xCellSize.resolveAutoSize(natural)
 
 proc naturalMatrixSize(matrix: Matrix): Size =
-  if matrix.isNil or matrix.xRows <= 0 or matrix.xColumns <= 0:
+  if matrix.xRows <= 0 or matrix.xColumns <= 0:
     return initSize(0.0, 0.0)
   let cellSize = matrix.resolvedCellSize()
   initSize(
@@ -905,7 +834,7 @@ proc cellFrameAt*(matrix: Matrix, row, column: int): Rect =
   matrix.cellFrameAtIndex(matrix.cellIndex(row, column))
 
 proc cellIndexAtPoint*(matrix: Matrix, point: Point): int =
-  if matrix.isNil or not matrix.bounds().contains(point):
+  if not matrix.bounds().contains(point):
     return -1
   for index in 0 ..< matrix.xCells.len:
     if matrix.cellFrameAtIndex(index).contains(point):
@@ -913,7 +842,7 @@ proc cellIndexAtPoint*(matrix: Matrix, point: Point): int =
   -1
 
 proc moveLead(matrix: Matrix, rowDelta, columnDelta: int, notify = true): bool =
-  if matrix.isNil or matrix.xRows <= 0 or matrix.xColumns <= 0:
+  if matrix.xRows <= 0 or matrix.xColumns <= 0:
     return false
   let
     current = max(matrix.leadIndex(), matrix.firstEnabledIndex())
@@ -1062,8 +991,6 @@ proc installMatrixControlProtocol(matrix: Matrix) =
 
 protocol DefaultMatrixDrawing of ViewDrawingProtocol:
   method draw(matrix: Matrix, context: DrawContext) =
-    if matrix.isNil:
-      return
     matrix.normalizeLeadAndSelection()
     for index, cell in matrix.xCells:
       let focusVisible = matrix.isFocusVisible() and index == matrix.xLeadIndex

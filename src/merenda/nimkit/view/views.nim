@@ -35,19 +35,15 @@ protocol ViewAlphaTransactionAnim of ViewAlphaTransactionAnimProtocol:
     view.alphaValue = alphaValue
 
 proc tag*(view: View): int =
-  if view.isNil: 0 else: view.xTag
+  view.xTag
 
 proc `tag=`*(view: View, tag: int) =
-  if view.isNil:
-    return
   view.xTag = tag
 
 proc identifier*(view: View): string =
-  if view.isNil: "" else: view.xIdentifier
+  view.xIdentifier
 
 proc `identifier=`*(view: View, identifier: string) =
-  if view.isNil:
-    return
   view.xIdentifier = identifier
 
 proc name*(view: View): string =
@@ -57,8 +53,6 @@ proc `name=`*(view: View, name: string) =
   view.identifier = name
 
 proc viewWithTag*(view: View, tag: int): View =
-  if view.isNil:
-    return nil
   if view.xTag == tag:
     return view
   for child in view.xSubviews:
@@ -67,8 +61,6 @@ proc viewWithTag*(view: View, tag: int): View =
       return match
 
 proc viewWithIdentifier*(view: View, identifier: string): View =
-  if view.isNil:
-    return nil
   if view.xIdentifier == identifier:
     return view
   for child in view.xSubviews:
@@ -80,33 +72,31 @@ proc viewNamed*(view: View, name: string): View =
   view.viewWithIdentifier(name)
 
 proc flipped*(view: View): bool =
-  view.isNil or view.xFlipped
+  view.xFlipped
 
 proc isFlipped*(view: View): bool =
   view.flipped()
 
 proc `flipped=`*(view: View, flipped: bool) =
-  if view.isNil or view.xFlipped == flipped:
+  if view.xFlipped == flipped:
     return
   view.xFlipped = flipped
   view.invalidateLayoutItemGeometry(lirBounds)
   view.setNeedsDisplaySubtree()
 
 proc focusRingType*(view: View): FocusRingType =
-  if view.isNil: frtDefault else: view.xFocusRingType
+  view.xFocusRingType
 
 proc `focusRingType=`*(view: View, focusRingType: FocusRingType) =
-  if view.isNil or view.xFocusRingType == focusRingType:
+  if view.xFocusRingType == focusRingType:
     return
   view.xFocusRingType = focusRingType
   view.setNeedsDisplay(true)
 
 proc alphaValue*(view: View): float32 =
-  if view.isNil: 1.0'f32 else: view.xAlphaValue
+  view.xAlphaValue
 
 proc `alphaValue=`*(view: View, alphaValue: float32) =
-  if view.isNil:
-    return
   let normalized = min(max(alphaValue, 0.0'f32), 1.0'f32)
   if view.xAlphaValue == normalized:
     return
@@ -118,14 +108,9 @@ proc `alphaValue=`*(view: View, alphaValue: float32) =
   view.setNeedsDisplaySubtree()
 
 proc shadow*(view: View): seq[BoxShadow] =
-  if view.isNil:
-    @[]
-  else:
-    view.xShadow
+  view.xShadow
 
 proc `shadow=`*(view: View, shadows: openArray[BoxShadow]) =
-  if view.isNil:
-    return
   let nextShadows = @shadows
   if view.xShadow == nextShadows:
     return
@@ -133,67 +118,42 @@ proc `shadow=`*(view: View, shadows: openArray[BoxShadow]) =
   view.setNeedsDisplay(true)
 
 proc toolTip*(view: View): string =
-  if view.isNil: "" else: view.xToolTip
+  view.xToolTip
 
 proc `toolTip=`*(view: View, toolTip: string) =
-  if view.isNil:
-    return
   view.xToolTip = toolTip
 
 proc cursorRects*(view: View): seq[ViewCursorRect] =
-  if view.isNil:
-    @[]
-  else:
-    view.xCursorRects
+  view.xCursorRects
 
 proc addCursorRect*(view: View, rect: Rect, cursor: string) =
-  if view.isNil:
-    return
   view.xCursorRects.add ViewCursorRect(rect: rect, cursor: cursor)
 
 proc discardCursorRects*(view: View) =
-  if view.isNil:
-    return
   view.xCursorRects.setLen(0)
 
 proc trackingAreas*(view: View): seq[ViewTrackingArea] =
-  if view.isNil:
-    @[]
-  else:
-    view.xTrackingAreas
+  view.xTrackingAreas
 
 proc addTrackingArea*(view: View, area: ViewTrackingArea) =
-  if view.isNil:
-    return
   view.xTrackingAreas.add area
 
 proc removeTrackingArea*(view: View, tag: int): bool =
-  if view.isNil:
-    return
   for idx, area in view.xTrackingAreas:
     if area.tag == tag:
       view.xTrackingAreas.delete(idx)
       return true
 
 proc discardTrackingAreas*(view: View) =
-  if view.isNil:
-    return
   view.xTrackingAreas.setLen(0)
 
 proc registeredDraggedTypes*(view: View): seq[string] =
-  if view.isNil:
-    @[]
-  else:
-    view.xRegisteredDraggedTypes
+  view.xRegisteredDraggedTypes
 
 proc registerForDraggedTypes*(view: View, types: openArray[string]) =
-  if view.isNil:
-    return
   view.xRegisteredDraggedTypes = @types
 
 proc unregisterDraggedTypes*(view: View) =
-  if view.isNil:
-    return
   view.xRegisteredDraggedTypes.setLen(0)
 
 proc autoscroll*(view: View, event: MouseEvent): bool =
@@ -201,20 +161,17 @@ proc autoscroll*(view: View, event: MouseEvent): bool =
   discard event
 
 proc styleId*(view: View): string =
-  if view.isNil: "" else: view.xStyleId
+  view.xStyleId
 
 proc `styleId=`*(view: View, id: string) =
-  if view.isNil or view.xStyleId == id:
+  if view.xStyleId == id:
     return
   view.xStyleId = id
   view.invalidateIntrinsicContentSize()
   view.setNeedsDisplay(true)
 
 proc styleClasses*(view: View): seq[string] =
-  if view.isNil:
-    @[]
-  else:
-    view.xStyleClasses
+  view.xStyleClasses
 
 proc `styleClasses=`*(view: View, classes: openArray[string]) =
   let nextClasses = @classes
@@ -225,10 +182,10 @@ proc `styleClasses=`*(view: View, classes: openArray[string]) =
   view.setNeedsDisplay(true)
 
 proc hasStyleClass*(view: View, className: string): bool =
-  (not view.isNil) and view.xStyleClasses.find(className) >= 0
+  view.xStyleClasses.find(className) >= 0
 
 proc addStyleClass*(view: View, className: string) =
-  if view.isNil or view.hasStyleClass(className):
+  if view.hasStyleClass(className):
     return
   view.xStyleClasses.add className
   view.invalidateIntrinsicContentSize()
@@ -246,7 +203,7 @@ proc widgetStateSet*(view: View): set[WidgetState] =
   view.xWidgetStates
 
 proc setWidgetState*(view: View, state: WidgetState, value: bool) =
-  if view.isNil or value == (state in view.xWidgetStates):
+  if value == (state in view.xWidgetStates):
     return
   if value:
     view.xWidgetStates.incl state
@@ -255,16 +212,16 @@ proc setWidgetState*(view: View, state: WidgetState, value: bool) =
   view.setNeedsDisplay(true)
 
 proc validationMessage*(view: View): string =
-  if view.isNil: "" else: view.xValidationMessage
+  view.xValidationMessage
 
 proc `validationMessage=`*(view: View, message: string) =
-  if view.isNil or view.xValidationMessage == message:
+  if view.xValidationMessage == message:
     return
   view.xValidationMessage = message
   view.setWidgetState(ssInvalid, message.len > 0)
 
 proc hasValidationError*(view: View): bool =
-  (not view.isNil) and ssInvalid in view.xWidgetStates
+  ssInvalid in view.xWidgetStates
 
 proc isHovered*(view: View): bool =
   ssHovered in view.xWidgetStates
@@ -276,7 +233,7 @@ proc `hovered=`*(view: View, hovered: bool) =
   view.setWidgetState(ssHovered, hovered)
 
 proc isActive*(view: View): bool =
-  (not view.isNil) and ssActive in view.xWidgetStates
+  ssActive in view.xWidgetStates
 
 proc active*(view: View): bool =
   view.isActive()
@@ -285,7 +242,7 @@ proc `active=`*(view: View, active: bool) =
   view.setWidgetState(ssActive, active)
 
 proc isFocused*(view: View): bool =
-  (not view.isNil) and ssFocused in view.xWidgetStates
+  ssFocused in view.xWidgetStates
 
 proc focused*(view: View): bool =
   view.isFocused()
@@ -294,7 +251,7 @@ proc `focused=`*(view: View, focused: bool) =
   view.setWidgetState(ssFocused, focused)
 
 proc isFocusVisible*(view: View): bool =
-  (not view.isNil) and ssFocusVisible in view.xWidgetStates
+  ssFocusVisible in view.xWidgetStates
 
 proc focusVisible*(view: View): bool =
   view.isFocusVisible()
@@ -304,8 +261,6 @@ proc `focusVisible=`*(view: View, focusVisible: bool) =
 
 protocol DefaultViewResponder of ResponderProtocol:
   method setFirstResponderFocusState(view: View, focused, focusVisible: bool) =
-    if view.isNil:
-      return
     var states = view.xWidgetStates
     if focused:
       states.incl ssFocused
@@ -321,10 +276,10 @@ protocol DefaultViewResponder of ResponderProtocol:
     view.setNeedsDisplay(true)
 
 proc needsUpdateConstraints*(view: View): bool =
-  (not view.isNil) and view.xNeedsUpdateConstraints
+  view.xNeedsUpdateConstraints
 
 proc setNeedsUpdateConstraints*(view: View, value: bool) =
-  if view.isNil or not value:
+  if not value:
     return
   view.xNeedsUpdateConstraints = true
 
@@ -342,7 +297,7 @@ proc updateConstraintsForSubtreeIfNeeded*(view: View) =
     view.runUpdateConstraints()
 
 proc needsLayout*(view: View): bool =
-  (not view.isNil) and view.xNeedsLayout
+  view.xNeedsLayout
 
 proc `needsLayout=`*(view: View, value: bool) =
   view.xNeedsLayout = value
@@ -364,14 +319,9 @@ proc layoutSubtreeIfNeeded*(view: View) =
   view.layoutSubtree()
 
 proc dirtyRects*(view: View): seq[Rect] =
-  if view.isNil:
-    @[]
-  else:
-    view.invalidRects()
+  view.invalidRects()
 
 proc needsDisplayInSubtree*(view: View): bool =
-  if view.isNil:
-    return false
   if view.needsDisplay:
     return true
   for child in view.xSubviews:
@@ -380,8 +330,6 @@ proc needsDisplayInSubtree*(view: View): bool =
   false
 
 proc needsDisplayUpdateInSubtree*(view: View): bool =
-  if view.isNil:
-    return false
   if view.xNeedsDisplay or view.xNeedsLayout or view.xNeedsUpdateConstraints:
     return true
   for child in view.xSubviews:
@@ -390,20 +338,16 @@ proc needsDisplayUpdateInSubtree*(view: View): bool =
   false
 
 proc prepareDisplaySubtree*(view: View): bool =
-  if view.isNil:
-    return false
   view.layoutSubtreeIfNeeded()
   view.needsDisplayInSubtree()
 
 proc finishDisplaySubtree*(view: View) =
-  if view.isNil:
-    return
   view.setNeedsDisplay(false)
   for child in view.xSubviews:
     child.finishDisplaySubtree()
 
 proc moveToWindowOwner*(view: View, window: Responder) =
-  if view.isNil or view.xWindow == window:
+  if view.xWindow == window:
     return
   view.propagateWillMoveToWindow(window)
   view.setWindowOwner(window)

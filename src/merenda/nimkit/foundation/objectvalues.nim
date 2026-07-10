@@ -226,8 +226,6 @@ func initObjectTemporalValue*(timestamp: Time): ObjectTemporalValue =
   ObjectTemporalValue(kind: otTimestamp, timestampValue: timestamp)
 
 proc initObjectImageValue*(image: ImageResource): ObjectImageValue =
-  if image.isNil:
-    return
   ObjectImageValue(
     name: image.name(), filePath: image.filePath(), size: image.size(), resource: image
   )
@@ -243,8 +241,6 @@ proc initObjectAttributedTextValue*(
   ObjectAttributedTextValue(stringValue: stringValue, runs: @runs)
 
 proc initObjectAttributedTextValue*(storage: TextStorage): ObjectAttributedTextValue =
-  if storage.isNil:
-    return
   initObjectAttributedTextValue(storage.stringValue(), storage.attributeRuns())
 
 func initObjectLinkValue*(url: string, title = ""): ObjectLinkValue =

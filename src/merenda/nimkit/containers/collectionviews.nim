@@ -395,13 +395,13 @@ func initCollectionMoveUpdate*(
   )
 
 proc collectionView*(contentView: CollectionContentView): CollectionView =
-  if contentView.isNil: nil else: contentView.xCollectionView
+  contentView.xCollectionView
 
 proc scrollView*(collectionView: CollectionView): ScrollView =
-  if collectionView.isNil: nil else: collectionView.xScrollView
+  collectionView.xScrollView
 
 proc contentView*(collectionView: CollectionView): CollectionContentView =
-  if collectionView.isNil: nil else: collectionView.xContentView
+  collectionView.xContentView
 
 proc initCollectionViewLayoutFields*(
     layout: CollectionViewLayout,
@@ -434,52 +434,40 @@ proc newCollectionViewLayout*(
   result.installDefaultCollectionLayoutProtocols()
 
 proc kind*(layout: CollectionViewLayout): CollectionLayoutKind =
-  if layout.isNil: clkWrapped else: layout.xKind
+  layout.xKind
 
 proc `kind=`*(layout: CollectionViewLayout, kind: CollectionLayoutKind) =
-  if not layout.isNil:
-    layout.xKind = kind
+  layout.xKind = kind
 
 proc itemSize*(layout: CollectionViewLayout): Size =
-  if layout.isNil:
-    initSize(96.0, 64.0)
-  else:
-    layout.xItemSize
+  layout.xItemSize
 
 proc `itemSize=`*(layout: CollectionViewLayout, itemSize: Size) =
-  if not layout.isNil:
-    layout.xItemSize = itemSize.normalizedItemSize()
+  layout.xItemSize = itemSize.normalizedItemSize()
 
 proc minimumInteritemSpacing*(layout: CollectionViewLayout): float32 =
-  if layout.isNil: 0.0'f32 else: layout.xMinimumInteritemSpacing
+  layout.xMinimumInteritemSpacing
 
 proc `minimumInteritemSpacing=`*(layout: CollectionViewLayout, value: float32) =
-  if not layout.isNil:
-    layout.xMinimumInteritemSpacing = value.normalizedSpacing()
+  layout.xMinimumInteritemSpacing = value.normalizedSpacing()
 
 proc minimumLineSpacing*(layout: CollectionViewLayout): float32 =
-  if layout.isNil: 0.0'f32 else: layout.xMinimumLineSpacing
+  layout.xMinimumLineSpacing
 
 proc `minimumLineSpacing=`*(layout: CollectionViewLayout, value: float32) =
-  if not layout.isNil:
-    layout.xMinimumLineSpacing = value.normalizedSpacing()
+  layout.xMinimumLineSpacing = value.normalizedSpacing()
 
 proc edgeInsets*(layout: CollectionViewLayout): EdgeInsets =
-  if layout.isNil:
-    insets(0.0)
-  else:
-    layout.xEdgeInsets
+  layout.xEdgeInsets
 
 proc `edgeInsets=`*(layout: CollectionViewLayout, edgeInsets: EdgeInsets) =
-  if not layout.isNil:
-    layout.xEdgeInsets = edgeInsets.normalizedInsets()
+  layout.xEdgeInsets = edgeInsets.normalizedInsets()
 
 proc columnCount*(layout: CollectionViewLayout): Natural =
-  if layout.isNil: 0.Natural else: layout.xColumnCount
+  layout.xColumnCount
 
 proc `columnCount=`*(layout: CollectionViewLayout, count: Natural) =
-  if not layout.isNil:
-    layout.xColumnCount = count
+  layout.xColumnCount = count
 
 func layoutAvailableWidth(
     layout: CollectionViewLayout, viewportWidth: float32
@@ -563,10 +551,7 @@ func layoutItemRect(
 proc collectionViewportSize(collectionView: CollectionView): Size =
   let scrollView = collectionView.scrollView()
   if scrollView.isNil:
-    if collectionView.isNil:
-      initSize(0.0, 0.0)
-    else:
-      collectionView.bounds().size
+    collectionView.bounds().size
   else:
     scrollView.viewportSize()
 
@@ -583,9 +568,7 @@ proc collectionVisibleContentRect(collectionView: CollectionView): Rect =
   )
 
 proc resolvedLayout(collectionView: CollectionView): DynamicAgent =
-  if collectionView.isNil:
-    return nil
-  elif collectionView.xLayout.isNil:
+  if collectionView.xLayout.isNil:
     collectionView.xLayout = DynamicAgent(newCollectionViewLayout())
   collectionView.xLayout
 
@@ -613,7 +596,7 @@ proc resolvedContentSize(collectionView: CollectionView): Size =
     default.layoutContentSize(count, collectionView.collectionViewportSize().width)
 
 proc resolvedContentItemRect(collectionView: CollectionView, index: int): Rect =
-  if collectionView.isNil or index < 0 or index >= collectionView.len():
+  if index < 0 or index >= collectionView.len():
     return rect(0.0, 0.0, 0.0, 0.0)
   let layout = collectionView.resolvedLayout()
   if not layout.isNil:
@@ -631,8 +614,6 @@ proc resolvedContentItemRect(collectionView: CollectionView, index: int): Rect =
     )
 
 proc resolvedIndexAtContentPoint(collectionView: CollectionView, point: Point): int =
-  if collectionView.isNil:
-    return -1
   let layout = collectionView.resolvedLayout()
   if not layout.isNil:
     let custom = layout.trySendLocal(
@@ -646,8 +627,6 @@ proc resolvedIndexAtContentPoint(collectionView: CollectionView, point: Point): 
   -1
 
 proc resolvedVisibleIndexes(collectionView: CollectionView): seq[int] =
-  if collectionView.isNil:
-    return
   let
     layout = collectionView.resolvedLayout()
     visibleRect = collectionView.collectionVisibleContentRect()
@@ -704,14 +683,13 @@ protocol DefaultCollectionLayout of CollectionLayoutProtocol:
         result.add index
 
 proc installDefaultCollectionLayoutProtocols(layout: CollectionViewLayout) =
-  if not layout.isNil:
-    discard layout.withProtocol(DefaultCollectionLayout)
+  discard layout.withProtocol(DefaultCollectionLayout)
 
 proc collectionLayout*(collectionView: CollectionView): DynamicAgent =
   collectionView.resolvedLayout()
 
 proc `collectionLayout=`*(collectionView: CollectionView, layout: DynamicAgent) =
-  if collectionView.isNil or collectionView.xLayout == layout:
+  if collectionView.xLayout == layout:
     return
   if not layout.isNil:
     discard layout.adopt(CollectionLayoutProtocol)
@@ -724,10 +702,10 @@ proc `collectionLayout=`*(
   collectionView.collectionLayout = DynamicAgent(layout)
 
 proc dataSource*(collectionView: CollectionView): DynamicAgent =
-  if collectionView.isNil: nil else: collectionView.xDataSource
+  collectionView.xDataSource
 
 proc `dataSource=`*(collectionView: CollectionView, dataSource: DynamicAgent) =
-  if collectionView.isNil or collectionView.xDataSource == dataSource:
+  if collectionView.xDataSource == dataSource:
     return
   if not dataSource.isNil:
     discard dataSource.adopt(CollectionViewDataSource)
@@ -738,10 +716,10 @@ proc `dataSource=`*(collectionView: CollectionView, dataSource: Responder) =
   collectionView.dataSource = DynamicAgent(dataSource)
 
 proc delegate*(collectionView: CollectionView): DynamicAgent =
-  if collectionView.isNil: nil else: collectionView.xDelegate
+  collectionView.xDelegate
 
 proc `delegate=`*(collectionView: CollectionView, delegate: DynamicAgent) =
-  if collectionView.isNil or collectionView.xDelegate == delegate:
+  if collectionView.xDelegate == delegate:
     return
   if not delegate.isNil:
     discard delegate.adopt(CollectionViewDelegate)
@@ -752,8 +730,6 @@ proc `delegate=`*(collectionView: CollectionView, delegate: Responder) =
   collectionView.delegate = DynamicAgent(delegate)
 
 proc len*(collectionView: CollectionView): int =
-  if collectionView.isNil:
-    return 0
   let source = collectionView.dataSource()
   if not source.isNil:
     let count = source.trySendLocal(numberOfCollectionItems(), collectionView)
@@ -765,8 +741,6 @@ proc collectionItemCount*(collectionView: CollectionView): int =
   collectionView.len()
 
 proc `itemCount=`*(collectionView: CollectionView, count: int) =
-  if collectionView.isNil:
-    return
   let nextCount = max(count, 0)
   if collectionView.xItemCount == nextCount:
     return
@@ -774,33 +748,33 @@ proc `itemCount=`*(collectionView: CollectionView, count: int) =
   collectionView.reloadData()
 
 proc defaultReuseIdentifier*(collectionView: CollectionView): string =
-  if collectionView.isNil: "" else: collectionView.xDefaultReuseIdentifier
+  collectionView.xDefaultReuseIdentifier
 
 proc `defaultReuseIdentifier=`*(collectionView: CollectionView, identifier: string) =
-  if collectionView.isNil or collectionView.xDefaultReuseIdentifier == identifier:
+  if collectionView.xDefaultReuseIdentifier == identifier:
     return
   collectionView.xDefaultReuseIdentifier = identifier
 
 proc collectionRole*(collectionView: CollectionView): StyleRole =
-  if collectionView.isNil: srTableView else: collectionView.xCollectionRole
+  collectionView.xCollectionRole
 
 proc `collectionRole=`*(collectionView: CollectionView, role: StyleRole) =
-  if collectionView.isNil or collectionView.xCollectionRole == role:
+  if collectionView.xCollectionRole == role:
     return
   collectionView.xCollectionRole = role
   collectionView.setNeedsDisplay(true)
 
 proc collectionItemRole*(collectionView: CollectionView): StyleRole =
-  if collectionView.isNil: srRowItem else: collectionView.xItemRole
+  collectionView.xItemRole
 
 proc `collectionItemRole=`*(collectionView: CollectionView, role: StyleRole) =
-  if collectionView.isNil or collectionView.xItemRole == role:
+  if collectionView.xItemRole == role:
     return
   collectionView.xItemRole = role
   collectionView.setNeedsDisplay(true)
 
 proc collectionItemIdentifier*(collectionView: CollectionView, index: int): string =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return ""
   let source = collectionView.dataSource()
   if not source.isNil:
@@ -814,7 +788,7 @@ proc collectionItemIdentifier*(collectionView: CollectionView, index: int): stri
 proc collectionItemIndexForIdentifier*(
     collectionView: CollectionView, identifier: string
 ): int =
-  if collectionView.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   let source = collectionView.dataSource()
   if not source.isNil:
@@ -832,7 +806,7 @@ proc collectionItemIndexForIdentifier*(
 proc collectionItemObjectValue*(
     collectionView: CollectionView, index: int
 ): ObjectValue =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return nilObjectValue()
   let source = collectionView.dataSource()
   if not source.isNil:
@@ -849,7 +823,7 @@ proc collectionItemObjectValue*(
   emptyObjectValue()
 
 proc collectionItemText*(collectionView: CollectionView, index: int): string =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return ""
   let source = collectionView.dataSource()
   if not source.isNil:
@@ -866,7 +840,7 @@ proc collectionItemEnabled(collectionView: CollectionView, index: int): bool =
   collectionView.collectionItemObjectValue(index).kind != ovValidationFailure
 
 proc collectionItemSelectable(collectionView: CollectionView, index: int): bool =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return false
   if not collectionView.collectionItemEnabled(index):
     return false
@@ -888,7 +862,7 @@ proc selectionContains(collectionView: CollectionView, identifier: string): bool
 proc collectionItemState*(
     collectionView: CollectionView, index: int
 ): CollectionItemState =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return CollectionItemState(index: -1, objectValue: nilObjectValue())
   let
     identifier = collectionView.collectionItemIdentifier(index)
@@ -930,31 +904,25 @@ proc newCollectionItemView*(reuseIdentifier: string, frame: Rect): CollectionIte
   result.initCollectionItemViewFields(reuseIdentifier, frame)
 
 proc reuseIdentifier*(itemView: CollectionItemView): string =
-  if itemView.isNil: "" else: itemView.xReuseIdentifier
+  itemView.xReuseIdentifier
 
 proc collectionView*(itemView: CollectionItemView): CollectionView =
-  if itemView.isNil: nil else: itemView.xCollectionView
+  itemView.xCollectionView
 
 proc itemIdentifier*(itemView: CollectionItemView): string =
-  if itemView.isNil: "" else: itemView.xItemIdentifier
+  itemView.xItemIdentifier
 
 proc itemIndex*(itemView: CollectionItemView): int =
-  if itemView.isNil: -1 else: itemView.xItemIndex
+  itemView.xItemIndex
 
 proc objectValue*(itemView: CollectionItemView): ObjectValue =
-  if itemView.isNil:
-    nilObjectValue()
-  else:
-    itemView.xObjectValue
+  itemView.xObjectValue
 
 proc text*(itemView: CollectionItemView): string =
-  if itemView.isNil: "" else: itemView.xText
+  itemView.xText
 
 proc itemStates*(itemView: CollectionItemView): set[WidgetState] =
-  if itemView.isNil:
-    {}
-  else:
-    itemView.xItemStates
+  itemView.xItemStates
 
 proc initCollectionSupplementaryViewFields*(
     view: CollectionSupplementaryView,
@@ -983,16 +951,16 @@ proc newCollectionSupplementaryView*(
   )
 
 proc kind*(view: CollectionSupplementaryView): CollectionSupplementaryKind =
-  if view.isNil: cskCustom else: view.xKind
+  view.xKind
 
 proc reuseIdentifier*(view: CollectionSupplementaryView): string =
-  if view.isNil: "" else: view.xReuseIdentifier
+  view.xReuseIdentifier
 
 proc elementIdentifier*(view: CollectionSupplementaryView): string =
-  if view.isNil: "" else: view.xElementIdentifier
+  view.xElementIdentifier
 
 proc collectionView*(view: CollectionSupplementaryView): CollectionView =
-  if view.isNil: nil else: view.xCollectionView
+  view.xCollectionView
 
 proc initCollectionBaseChild(view: View, clipsToBounds: bool) =
   initViewFields(view, rect(0.0, 0.0, 0.0, 0.0))
@@ -1032,7 +1000,7 @@ proc applyCollectionItemAccessibility(
     view.accessibilityLabel = state.text
   view.accessibilityIdentifier = state.identifier
   view.xAccessibilityTraits.incl atSelectable
-  if not collectionView.isNil and collectionView.xSelectionMode == csmNone:
+  if collectionView.xSelectionMode == csmNone:
     view.xAccessibilityTraits.excl atSelectable
 
 proc applyCollectionViewStates(view: View, states: set[WidgetState]) =
@@ -1074,7 +1042,7 @@ proc defaultReuseIdentifierForItem(collectionView: CollectionView, index: int): 
 proc dequeueReusableItemView*(
     collectionView: CollectionView, identifier: string
 ): View =
-  if collectionView.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return nil
   if identifier notin collectionView.xReusableItemViews:
     return nil
@@ -1093,7 +1061,7 @@ proc dequeueReusableItemView*(
 proc enqueueReusableItemView(
     collectionView: CollectionView, identifier: string, view: View
 ) =
-  if collectionView.isNil or view.isNil or identifier.len == 0:
+  if view.isNil or identifier.len == 0:
     return
   view.hidden = true
   view.applyCollectionViewStates({})
@@ -1102,7 +1070,7 @@ proc enqueueReusableItemView(
   collectionView.xReusableItemViews.mgetOrPut(identifier, @[]).add view
 
 proc recycleItemSlot(collectionView: CollectionView, slot: CollectionItemSlot) =
-  if collectionView.isNil or slot.view.isNil:
+  if slot.view.isNil:
     return
   if slot.reuseIdentifier.len > 0:
     collectionView.enqueueReusableItemView(slot.reuseIdentifier, slot.view)
@@ -1112,8 +1080,6 @@ proc recycleItemSlot(collectionView: CollectionView, slot: CollectionItemSlot) =
       slot.view.removeFromSuperview()
 
 proc clearCollectionItemSlots(collectionView: CollectionView) =
-  if collectionView.isNil:
-    return
   for slot in collectionView.xItemSlots:
     collectionView.recycleItemSlot(slot)
   collectionView.xItemSlots.setLen(0)
@@ -1141,8 +1107,6 @@ proc dequeueReusableSupplementaryView*(
     kind: CollectionSupplementaryKind,
     reuseIdentifier: string,
 ): View =
-  if collectionView.isNil:
-    return nil
   let
     resolvedReuseIdentifier =
       resolvedSupplementaryReuseIdentifier(kind, reuseIdentifier)
@@ -1168,7 +1132,7 @@ proc enqueueReusableSupplementaryView(
     reuseIdentifier: string,
     view: View,
 ) =
-  if collectionView.isNil or view.isNil or reuseIdentifier.len == 0:
+  if view.isNil or reuseIdentifier.len == 0:
     return
   view.hidden = true
   view.applyCollectionViewStates({})
@@ -1180,7 +1144,7 @@ proc enqueueReusableSupplementaryView(
   ).add view
 
 proc recycleSupplementaryView(collectionView: CollectionView, view: View) =
-  if collectionView.isNil or view.isNil:
+  if view.isNil:
     return
   if view of CollectionSupplementaryView:
     let supplementary = CollectionSupplementaryView(view)
@@ -1194,8 +1158,6 @@ proc recycleSupplementaryView(collectionView: CollectionView, view: View) =
     view.removeFromSuperview()
 
 proc clearCollectionSupplementaryViews(collectionView: CollectionView) =
-  if collectionView.isNil:
-    return
   for view in collectionView.xSupplementaryViews.values:
     collectionView.recycleSupplementaryView(view)
   collectionView.xSupplementaryViews.clear()
@@ -1225,8 +1187,6 @@ proc supplementaryView*(
     identifier: string,
     reuseIdentifier = "",
 ): View =
-  if collectionView.isNil:
-    return nil
   let key = supplementaryElementKey(kind, identifier)
   if key in collectionView.xSupplementaryViews:
     return collectionView.xSupplementaryViews[key]
@@ -1257,14 +1217,11 @@ proc supplementaryView*(
     kind, identifier, resolvedReuseIdentifier, result
   )
   result.hidden = false
-  if not collectionView.xContentView.isNil and
-      result.superview() != collectionView.xContentView:
+  if result.superview() != collectionView.xContentView:
     collectionView.xContentView.addSubview(result)
   collectionView.xSupplementaryViews[key] = result
 
 proc slotIndexForItem(collectionView: CollectionView, index: int): int =
-  if collectionView.isNil:
-    return -1
   for slotIndex, slot in collectionView.xItemSlots:
     if slot.index == index:
       return slotIndex
@@ -1298,7 +1255,7 @@ proc makeCollectionItemView(
 proc configureCollectionItemSlot(
     collectionView: CollectionView, slot: CollectionItemSlot
 ) =
-  if collectionView.isNil or slot.view.isNil:
+  if slot.view.isNil:
     return
   let state = collectionView.collectionItemState(slot.index)
   slot.view.frame = state.rect
@@ -1318,9 +1275,6 @@ proc configureCollectionItemSlot(
 
 proc syncVisibleItemViews(contentView: CollectionContentView) =
   let collectionView = contentView.collectionView()
-  if collectionView.isNil:
-    return
-
   let visible = collectionView.visibleItemIndexes()
   var visibleLookup = initTable[int, bool]()
   for index in visible:
@@ -1344,9 +1298,6 @@ proc syncVisibleItemViews(contentView: CollectionContentView) =
     collectionView.configureCollectionItemSlot(collectionView.xItemSlots[slotPos])
 
 proc tileCollectionContent(collectionView: CollectionView) =
-  if collectionView.isNil or collectionView.xScrollView.isNil or
-      collectionView.xContentView.isNil:
-    return
   let
     offset = collectionView.collectionContentOffset()
     scrollFrame = rect(
@@ -1363,24 +1314,14 @@ proc tileCollectionContent(collectionView: CollectionView) =
   collectionView.xContentView.syncVisibleItemViews()
 
 proc invalidateCollectionItems(collectionView: CollectionView) =
-  if collectionView.isNil:
-    return
-  if not collectionView.xContentView.isNil:
-    collectionView.xContentView.syncVisibleItemViews()
-    collectionView.xContentView.setNeedsDisplay(true)
-  if not collectionView.xScrollView.isNil:
-    collectionView.xScrollView.setNeedsDisplay(true)
-    let vertical = collectionView.xScrollView.verticalScroller()
-    if not vertical.isNil:
-      vertical.setNeedsDisplay(true)
-    let horizontal = collectionView.xScrollView.horizontalScroller()
-    if not horizontal.isNil:
-      horizontal.setNeedsDisplay(true)
+  collectionView.xContentView.syncVisibleItemViews()
+  collectionView.xContentView.setNeedsDisplay(true)
+  collectionView.xScrollView.setNeedsDisplay(true)
+  collectionView.xScrollView.verticalScroller().setNeedsDisplay(true)
+  collectionView.xScrollView.horizontalScroller().setNeedsDisplay(true)
   collectionView.setNeedsDisplay(true)
 
 proc reloadData*(collectionView: CollectionView) =
-  if collectionView.isNil:
-    return
   let selected = collectionView.xSelectedIdentifiers
   collectionView.clearCollectionItemSlots()
   collectionView.clearCollectionSupplementaryViews()
@@ -1392,8 +1333,6 @@ proc reloadData*(collectionView: CollectionView) =
 proc applyCollectionUpdates*(
     collectionView: CollectionView, updates: openArray[CollectionUpdate]
 ) =
-  if collectionView.isNil:
-    return
   let selected = collectionView.xSelectedIdentifiers
   for update in updates:
     case update.kind
@@ -1440,8 +1379,6 @@ proc visibleItemIndexes*(collectionView: CollectionView): seq[int] =
 proc visibleItemSummaries*(
     collectionView: CollectionView
 ): seq[CollectionVisibleItemSummary] =
-  if collectionView.isNil:
-    return
   for index in collectionView.visibleItemIndexes():
     let state = collectionView.collectionItemState(index)
     result.add CollectionVisibleItemSummary(
@@ -1460,19 +1397,13 @@ proc itemViewAtIndex*(collectionView: CollectionView, index: int): View =
     collectionView.xItemSlots[slotIndex].view
 
 proc visibleItemViews*(collectionView: CollectionView): seq[View] =
-  if collectionView.isNil:
-    return
   for slot in collectionView.xItemSlots:
     if not slot.view.isNil:
       result.add slot.view
 
 proc collectionItemRect*(collectionView: CollectionView, index: int): Rect =
-  if collectionView.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   collectionView.tileCollectionContent()
   let contentView = collectionView.contentView()
-  if contentView.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   let contentRect = collectionView.resolvedContentItemRect(index)
   if contentRect.isEmpty:
     return rect(0.0, 0.0, 0.0, 0.0)
@@ -1481,31 +1412,24 @@ proc collectionItemRect*(collectionView: CollectionView, index: int): Rect =
   )
 
 proc collectionItemIndexAtPoint*(collectionView: CollectionView, point: Point): int =
-  if collectionView.isNil:
-    return -1
   collectionView.tileCollectionContent()
   let contentView = collectionView.contentView()
-  if contentView.isNil:
-    return -1
   collectionView.resolvedIndexAtContentPoint(
     contentView.pointFromView(point, collectionView)
   )
 
 proc scrollItemToVisible*(collectionView: CollectionView, index: int) =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return
   collectionView.tileCollectionContent()
   let scrollView = collectionView.scrollView()
-  if scrollView.isNil:
-    return
   discard scrollView.scrollRectToVisible(collectionView.resolvedContentItemRect(index))
-  if not collectionView.xContentView.isNil:
-    collectionView.xContentView.syncVisibleItemViews()
+  collectionView.xContentView.syncVisibleItemViews()
 
 proc normalizeSelectedIdentifiers(
     collectionView: CollectionView, identifiers: openArray[string]
 ): seq[string] =
-  if collectionView.isNil or collectionView.xSelectionMode == csmNone:
+  if collectionView.xSelectionMode == csmNone:
     return
   for identifier in identifiers:
     let index = collectionView.collectionItemIndexForIdentifier(identifier)
@@ -1541,8 +1465,6 @@ proc applySelectedIdentifiers(
     identifiers: openArray[string],
     anchorIdentifier, leadIdentifier: string,
 ) =
-  if collectionView.isNil:
-    return
   let nextIdentifiers = collectionView.normalizeSelectedIdentifiers(identifiers)
   let
     nextSelected = nextIdentifiers.firstSelectedIdentifier()
@@ -1592,30 +1514,20 @@ proc applySelectedIdentifiers(
       )
 
 proc selectedIdentifiers*(collectionView: CollectionView): seq[string] =
-  if collectionView.isNil:
-    @[]
-  else:
-    collectionView.xSelectedIdentifiers
+  collectionView.xSelectedIdentifiers
 
 proc `selectedIdentifiers=`*(
     collectionView: CollectionView, identifiers: openArray[string]
 ) =
-  if collectionView.isNil:
-    return
   let next = collectionView.normalizeSelectedIdentifiers(identifiers)
   collectionView.applySelectedIdentifiers(
     next, next.firstSelectedIdentifier(), next.firstSelectedIdentifier()
   )
 
 proc selectedIdentifier*(collectionView: CollectionView): string =
-  if collectionView.isNil:
-    ""
-  else:
-    collectionView.xSelectedIdentifiers.firstSelectedIdentifier()
+  collectionView.xSelectedIdentifiers.firstSelectedIdentifier()
 
 proc selectedIndexes*(collectionView: CollectionView): seq[int] =
-  if collectionView.isNil:
-    return
   for identifier in collectionView.xSelectedIdentifiers:
     let index = collectionView.collectionItemIndexForIdentifier(identifier)
     if index >= 0:
@@ -1623,8 +1535,6 @@ proc selectedIndexes*(collectionView: CollectionView): seq[int] =
   result.sort()
 
 proc `selectedIndexes=`*(collectionView: CollectionView, indexes: openArray[int]) =
-  if collectionView.isNil:
-    return
   var identifiers: seq[string]
   for index in indexes:
     let identifier = collectionView.collectionItemIdentifier(index)
@@ -1633,24 +1543,19 @@ proc `selectedIndexes=`*(collectionView: CollectionView, indexes: openArray[int]
   collectionView.selectedIdentifiers = identifiers
 
 proc selectedIndex*(collectionView: CollectionView): int =
-  if collectionView.isNil:
-    -1
-  else:
-    collectionView.collectionItemIndexForIdentifier(collectionView.selectedIdentifier())
+  collectionView.collectionItemIndexForIdentifier(collectionView.selectedIdentifier())
 
 proc `selectedIndex=`*(collectionView: CollectionView, index: int) =
-  if collectionView.isNil:
-    return
   if index < 0:
     collectionView.selectedIdentifiers = []
   else:
     collectionView.selectItemAtIndex(index)
 
 proc selectionMode*(collectionView: CollectionView): CollectionSelectionMode =
-  if collectionView.isNil: csmNone else: collectionView.xSelectionMode
+  collectionView.xSelectionMode
 
 proc `selectionMode=`*(collectionView: CollectionView, mode: CollectionSelectionMode) =
-  if collectionView.isNil or collectionView.xSelectionMode == mode:
+  if collectionView.xSelectionMode == mode:
     return
   collectionView.xSelectionMode = mode
   if mode == csmNone:
@@ -1664,7 +1569,7 @@ proc `selectionMode=`*(collectionView: CollectionView, mode: CollectionSelection
   collectionView.reloadData()
 
 proc selectItemAtIndex*(collectionView: CollectionView, index: int) =
-  if collectionView.isNil or collectionView.xSelectionMode == csmNone:
+  if collectionView.xSelectionMode == csmNone:
     return
   let boundedIndex = if index in 0 ..< collectionView.len(): index else: -1
   if boundedIndex < 0:
@@ -1731,7 +1636,7 @@ proc usesDiscontiguousSelection(modifiers: set[KeyModifier]): bool =
 proc selectItemAtIndex*(
     collectionView: CollectionView, index: int, modifiers: set[KeyModifier]
 ) =
-  if collectionView.isNil or collectionView.xSelectionMode == csmNone:
+  if collectionView.xSelectionMode == csmNone:
     return
   if kmShift in modifiers and collectionView.xSelectionMode == csmExtended:
     collectionView.extendSelectionToIndex(index)
@@ -1744,7 +1649,7 @@ proc selectItemAtIndex*(
 proc activateItemAtIndex*(
     collectionView: CollectionView, index: int, modifiers: set[KeyModifier] = {}
 ) =
-  if collectionView.isNil or index notin 0 ..< collectionView.len():
+  if index notin 0 ..< collectionView.len():
     return
   if not collectionView.collectionItemEnabled(index):
     return
@@ -1763,19 +1668,12 @@ proc activateItemAtIndex*(
   discard collectionView.sendAction()
 
 proc highlightedIndex*(collectionView: CollectionView): int =
-  if collectionView.isNil:
-    -1
-  else:
-    collectionView.collectionItemIndexForIdentifier(
-      collectionView.xHighlightedIdentifier
-    )
+  collectionView.collectionItemIndexForIdentifier(collectionView.xHighlightedIdentifier)
 
 proc highlightedIdentifier*(collectionView: CollectionView): string =
-  if collectionView.isNil: "" else: collectionView.xHighlightedIdentifier
+  collectionView.xHighlightedIdentifier
 
 proc `highlightedIndex=`*(collectionView: CollectionView, index: int) =
-  if collectionView.isNil:
-    return
   let identifier =
     if index in 0 ..< collectionView.len() and
         collectionView.collectionItemEnabled(index):
@@ -1788,7 +1686,7 @@ proc `highlightedIndex=`*(collectionView: CollectionView, index: int) =
   collectionView.invalidateCollectionItems()
 
 proc `highlightedIdentifier=`*(collectionView: CollectionView, identifier: string) =
-  if collectionView.isNil or collectionView.xHighlightedIdentifier == identifier:
+  if collectionView.xHighlightedIdentifier == identifier:
     return
   collectionView.xHighlightedIdentifier = identifier
   collectionView.invalidateCollectionItems()
@@ -1816,7 +1714,7 @@ proc lastSelectableIndex(collectionView: CollectionView): int =
   -1
 
 proc nextSelectableIndex(collectionView: CollectionView, index, delta: int): int =
-  if collectionView.isNil or delta == 0:
+  if delta == 0:
     return -1
   let step = if delta < 0: -1 else: 1
   var current = index
@@ -1837,8 +1735,7 @@ proc itemsPerRow(collectionView: CollectionView): int =
 proc moveSelectionTo(
     collectionView: CollectionView, index: int, extend = false, delta = 1
 ) =
-  if collectionView.isNil or collectionView.len() == 0 or
-      collectionView.xSelectionMode == csmNone:
+  if collectionView.len() == 0 or collectionView.xSelectionMode == csmNone:
     return
   let boundedTarget = max(0, min(index, collectionView.len() - 1))
   var boundedIndex = collectionView.nextSelectableIndex(boundedTarget, delta)
@@ -1866,7 +1763,7 @@ proc moveSelection(collectionView: CollectionView, delta: int, extend = false) =
 proc defaultCollectionViewMouseDown(
     collectionView: CollectionView, event: MouseEvent
 ): bool =
-  if collectionView.isNil or not collectionView.isEnabled() or event.button != mbPrimary:
+  if not collectionView.isEnabled() or event.button != mbPrimary:
     return false
   let owner = collectionView.window()
   if owner of Window:
@@ -1881,8 +1778,6 @@ proc defaultCollectionViewMouseDown(
 proc defaultCollectionViewMouseDragged(
     collectionView: CollectionView, event: MouseEvent
 ): bool =
-  if collectionView.isNil:
-    return false
   if collectionView.isEnabled() and collectionView.xTrackingItem:
     let index = collectionView.collectionItemIndexAtPoint(event.location)
     collectionView.highlightedIndex = index
@@ -1894,7 +1789,7 @@ proc defaultCollectionViewMouseDragged(
 proc defaultCollectionViewMouseUp(
     collectionView: CollectionView, event: MouseEvent
 ): bool =
-  if collectionView.isNil or not collectionView.isEnabled() or event.button != mbPrimary:
+  if not collectionView.isEnabled() or event.button != mbPrimary:
     return false
   let index =
     if collectionView.xTrackingItem:
@@ -1911,7 +1806,7 @@ proc defaultCollectionViewMouseUp(
 proc defaultCollectionViewKeyDown(
     collectionView: CollectionView, event: KeyEvent
 ): bool =
-  if collectionView.isNil or not collectionView.isEnabled():
+  if not collectionView.isEnabled():
     return false
   result = true
   let
@@ -1964,8 +1859,6 @@ proc beginDraggingItems*(
     operations: DragOperations = {dgoMove},
     pasteboardName: string = DragPasteboardName,
 ): DraggingSession =
-  if collectionView.isNil:
-    return nil
   let delegate = collectionView.delegate()
   var items: seq[DraggingItem]
   if not delegate.isNil:
@@ -1993,17 +1886,15 @@ proc beginDraggingSelection*(
     operations: DragOperations = {dgoMove},
     pasteboardName: string = DragPasteboardName,
 ): DraggingSession =
-  if collectionView.isNil:
-    return nil
   collectionView.beginDraggingItems(
     collectionView.selectedDragIdentifiers(), operations, pasteboardName
   )
 
 proc draggingSession*(collectionView: CollectionView): DraggingSession =
-  if collectionView.isNil: nil else: collectionView.xCollectionDraggingSession
+  collectionView.xCollectionDraggingSession
 
 proc draggingInfo*(collectionView: CollectionView): DraggingInfo =
-  if collectionView.isNil or collectionView.xCollectionDraggingSession.isNil:
+  if collectionView.xCollectionDraggingSession.isNil:
     DraggingInfo()
   else:
     collectionView.xCollectionDraggingSession.draggingInfo()
@@ -2020,8 +1911,6 @@ func collectionDropPositionForItem(location: Point, rect: Rect): DraggingDropPos
 proc defaultDropTargetForLocation(
     collectionView: CollectionView, location: Point
 ): DraggingDropTarget =
-  if collectionView.isNil:
-    return initDraggingDropTarget()
   let index = collectionView.collectionItemIndexAtPoint(location)
   if index >= 0:
     let
@@ -2035,8 +1924,6 @@ proc defaultDropTargetForLocation(
 proc dropTargetForDraggingLocation*(
     collectionView: CollectionView, location: Point
 ): DraggingDropTarget =
-  if collectionView.isNil:
-    return initDraggingDropTarget()
   let proposed = collectionView.defaultDropTargetForLocation(location)
   let delegate = collectionView.delegate()
   if not delegate.isNil:
@@ -2051,21 +1938,19 @@ proc dropTargetForDraggingLocation*(
 proc updateCollectionDropTarget(
     collectionView: CollectionView, target: DraggingDropTarget
 ) =
-  if collectionView.isNil or collectionView.xDropTarget == target:
+  if collectionView.xDropTarget == target:
     return
   collectionView.xDropTarget = target
   collectionView.setNeedsDisplay(true)
 
 proc currentDropTarget*(collectionView: CollectionView): DraggingDropTarget =
-  if collectionView.isNil:
-    return initDraggingDropTarget()
   if not collectionView.xCollectionDraggingSession.isNil and
       collectionView.xCollectionDraggingSession.state() == dssActive:
     return collectionView.xCollectionDraggingSession.dropTarget()
   collectionView.xDropTarget
 
 proc acceptsDraggingInfo(collectionView: CollectionView, info: DraggingInfo): bool =
-  if collectionView.isNil or info.pasteboard.isNil:
+  if info.pasteboard.isNil:
     return false
   let types = collectionView.registeredDraggedTypes()
   types.len > 0 and info.pasteboard.availableTypeFromArray(types).len > 0
@@ -2073,8 +1958,6 @@ proc acceptsDraggingInfo(collectionView: CollectionView, info: DraggingInfo): bo
 proc validateDragging*(
     collectionView: CollectionView, info: DraggingInfo
 ): DragOperations =
-  if collectionView.isNil:
-    return NoDragOperations
   let proposed =
     if collectionView.acceptsDraggingInfo(info):
       info.selectedOperations
@@ -2097,8 +1980,6 @@ proc validateDragging*(
   proposed
 
 proc acceptDragging*(collectionView: CollectionView, info: DraggingInfo): bool =
-  if collectionView.isNil:
-    return false
   let operation = collectionView.validateDragging(info)
   if operation == NoDragOperations:
     return false
@@ -2119,7 +2000,7 @@ proc acceptDragging*(collectionView: CollectionView, info: DraggingInfo): bool =
   true
 
 proc autoscrollDraggingInfo(collectionView: CollectionView, info: DraggingInfo): bool =
-  if collectionView.isNil or collectionView.scrollView().isNil:
+  if collectionView.scrollView().isNil:
     return false
   let bounds = collectionView.bounds()
   if bounds.isEmpty:
@@ -2169,7 +2050,7 @@ protocol DefaultCollectionItemViewLifecycle of CollectionReusableViewProtocol:
 
 protocol DefaultCollectionItemViewDrawing of ViewDrawingProtocol:
   method draw(itemView: CollectionItemView, context: DrawContext) =
-    if itemView.isNil or context.isNil or itemView.bounds().isEmpty:
+    if context.isNil or itemView.bounds().isEmpty:
       return
     let owner = itemView.collectionView()
     let role =
@@ -2190,19 +2071,12 @@ protocol DefaultCollectionItemViewAccessibility of AccessibilityProtocol:
     arListItem
 
   method accessibilityLabel(itemView: CollectionItemView): string =
-    if itemView.isNil:
-      ""
-    elif itemView.xText.len > 0:
-      itemView.xText
-    else:
-      itemView.xAccessibilityLabel
+    if itemView.xText.len > 0: itemView.xText else: itemView.xAccessibilityLabel
 
   method accessibilityValue(itemView: CollectionItemView): string =
-    if itemView.isNil: "" else: itemView.xItemIdentifier
+    itemView.xItemIdentifier
 
   method accessibilityTraits(itemView: CollectionItemView): AccessibilityTraits =
-    if itemView.isNil:
-      return
     result = itemView.xAccessibilityTraits + {atSelectable}
     if ssDisabled in itemView.xItemStates:
       result.incl atDisabled
@@ -2212,11 +2086,9 @@ protocol DefaultCollectionItemViewAccessibility of AccessibilityProtocol:
       result.incl atSelected
 
   method isAccessibilityElement(itemView: CollectionItemView): bool =
-    not itemView.isNil and itemView.xItemIndex >= 0
+    itemView.xItemIndex >= 0
 
 proc installDefaultCollectionItemProtocols(itemView: CollectionItemView) =
-  if itemView.isNil:
-    return
   discard itemView.withProtocol(DefaultCollectionItemViewLifecycle)
   discard itemView.withProtocol(DefaultCollectionItemViewDrawing)
   discard itemView.withProtocol(DefaultCollectionItemViewAccessibility)
@@ -2242,22 +2114,18 @@ protocol DefaultCollectionSupplementaryViewAccessibility of AccessibilityProtoco
     arGroup
 
   method accessibilityLabel(view: CollectionSupplementaryView): string =
-    if view.isNil:
-      ""
-    elif view.xAccessibilityLabel.len > 0:
+    if view.xAccessibilityLabel.len > 0:
       view.xAccessibilityLabel
     else:
       view.xElementIdentifier
 
   method accessibilityValue(view: CollectionSupplementaryView): string =
-    if view.isNil: "" else: view.xReuseIdentifier
+    view.xReuseIdentifier
 
   method isAccessibilityElement(view: CollectionSupplementaryView): bool =
-    not view.isNil and view.xAccessibilityLabel.len > 0
+    view.xAccessibilityLabel.len > 0
 
 proc installDefaultCollectionSupplementaryProtocols(view: CollectionSupplementaryView) =
-  if view.isNil:
-    return
   discard view.withProtocol(DefaultCollectionSupplementaryViewLifecycle)
   discard view.withProtocol(DefaultCollectionSupplementaryViewAccessibility)
 
@@ -2271,8 +2139,6 @@ protocol DefaultCollectionContentViewHitTesting of ViewProtocol:
     contentView.bounds().contains(point)
 
 proc installDefaultCollectionContentProtocols(contentView: CollectionContentView) =
-  if contentView.isNil:
-    return
   discard contentView.withProtocol(DefaultCollectionContentViewDrawing)
   discard contentView.withProtocol(DefaultCollectionContentViewHitTesting)
 
@@ -2322,8 +2188,7 @@ protocol DefaultCollectionViewDraggingSource of DraggingSourceProtocol:
     info.allowedOperations
 
   method draggingSessionEnded(collectionView: CollectionView, info: DraggingInfo) =
-    if not collectionView.isNil and
-        collectionView.xCollectionDraggingSession == info.session:
+    if collectionView.xCollectionDraggingSession == info.session:
       collectionView.xCollectionDraggingSession = nil
       collectionView.updateCollectionDropTarget(initDraggingDropTarget())
 
@@ -2365,7 +2230,7 @@ protocol DefaultCollectionViewDraggingDestination of DraggingDestinationProtocol
 
 protocol DefaultCollectionViewDrawing of ViewDrawingProtocol:
   method draw(collectionView: CollectionView, context: DrawContext) =
-    if collectionView.isNil or context.isNil or collectionView.bounds().isEmpty:
+    if context.isNil or collectionView.bounds().isEmpty:
       return
     collectionView.tileCollectionContent()
     let style = context.appearance.resolveTableViewStyle(

@@ -23,15 +23,11 @@ func normalizedSwitchState(state: ButtonState): ButtonState =
   if state == bsOn: bsOn else: bsOff
 
 proc syncSwitchWidgetState(cell: SwitchButtonCell) =
-  if cell.isNil:
-    return
   let view = cell.controlView()
   if not view.isNil and view of SwitchButton:
     SwitchButton(view).setWidgetState(ssSelected, Cell(cell).state() == bsOn)
 
 proc setSwitchCellState(cell: SwitchButtonCell, state: ButtonState) =
-  if cell.isNil:
-    return
   let nextState = state.normalizedSwitchState()
   if Cell(cell).state() != nextState:
     Cell(cell).setState(nextState)
@@ -45,8 +41,6 @@ proc switchChromeStates(switchButton: SwitchButton): set[WidgetState] =
     result.incl ssHighlighted
 
 proc switchStyleContext(switchButton: SwitchButton): StyleContext =
-  if switchButton.isNil:
-    return controlStyle(srSwitch)
   controlStyle(
     srSwitch,
     switchButton.switchChromeStates(),
@@ -95,16 +89,12 @@ proc switchButtonCell*(switchButton: SwitchButton): SwitchButtonCell =
     return SwitchButtonCell(controlCell)
 
 proc state*(cell: SwitchButtonCell): ButtonState =
-  if cell.isNil:
-    return bsOff
   Cell(cell).state()
 
 proc `state=`*(cell: SwitchButtonCell, state: ButtonState) =
   cell.setSwitchCellState(state)
 
 proc state*(switchButton: SwitchButton): ButtonState =
-  if switchButton.isNil:
-    return bsOff
   let cell = switchButton.switchButtonCell()
   if cell.isNil: bsOff else: cell.state
 
@@ -117,16 +107,13 @@ proc `on=`*(switchButton: SwitchButton, on: bool) =
   switchButton.setOn(on)
 
 proc highlighted*(switchButton: SwitchButton): bool =
-  if switchButton.isNil:
-    return false
   let cell = switchButton.switchButtonCell()
   (not cell.isNil) and cell.isHighlighted()
 
 proc `highlighted=`*(switchButton: SwitchButton, highlighted: bool) =
-  if not switchButton.isNil:
-    let cell = switchButton.switchButtonCell()
-    if not cell.isNil:
-      cell.setHighlighted(highlighted)
+  let cell = switchButton.switchButtonCell()
+  if not cell.isNil:
+    cell.setHighlighted(highlighted)
 
 protocol DefaultSwitchButtonControl of SwitchButtonProtocol:
   method on(switchButton: SwitchButton): bool =
@@ -224,7 +211,7 @@ proc drawSwitchKnob(
   )
 
 proc switchButtonPerformClick(switchButton: SwitchButton, args: ActionArgs) =
-  if switchButton.isNil or not switchButton.isEnabled() or args.sender.isNil:
+  if not switchButton.isEnabled() or args.sender.isNil:
     return
   switchButton.on = not switchButton.on
   discard switchButton.sendAction()

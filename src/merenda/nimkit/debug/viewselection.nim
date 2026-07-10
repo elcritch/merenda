@@ -115,7 +115,7 @@ proc installOnSubtree(state: ViewSelectionState, view: View, includeSelf: bool) 
     state.installOnSubtree(child, includeSelf = true)
 
 proc uninstallFromSubtree(state: ViewSelectionState, view: View) =
-  if state.isNil or view.isNil:
+  if view.isNil:
     return
 
   for idx in countdown(state.observedViews.high, 0):
