@@ -189,7 +189,7 @@ proc rowIndex(formView: FormView, label, field: View): int =
   -1
 
 proc rowIndexContaining(formView: FormView, view: View): int =
-  if formView.isNil or view.isNil:
+  if view.isNil:
     return -1
   for index, row in formView.xRows:
     if row.label == view or row.field == view:
@@ -197,10 +197,7 @@ proc rowIndexContaining(formView: FormView, view: View): int =
   -1
 
 proc rows*(formView: FormView): seq[FormRow] =
-  if formView.isNil:
-    @[]
-  else:
-    formView.xRows
+  formView.xRows
 
 proc formRowDisplayText*(value: ObjectValue, formatter: DynamicAgent = nil): string =
   formatter.formatObjectValue(value, initObjectFormatContext(role = ovrFormRow))
@@ -210,69 +207,60 @@ proc spacing*(formView: FormView): FormSpacing =
 
 proc setSpacing*(formView: FormView, direction: Direction, spacing: float32) =
   let normalized = spacing.normalizedSpacing()
-  if formView.isNil or formView.xSpacing[direction] == normalized:
+  if formView.xSpacing[direction] == normalized:
     return
   formView.xSpacing[direction] = normalized
   formView.invalidateFormLayout()
 
 proc `[]`*(spacing: FormSpacing, direction: Direction): float32 =
-  let formView = spacing.xFormView
-  if formView.isNil:
-    return 0.0'f32
-  formView.xSpacing[direction]
+  spacing.xFormView.xSpacing[direction]
 
 proc `[]=`*(spacing: FormSpacing, direction: Direction, value: float32) =
   spacing.xFormView.setSpacing(direction, value)
 
 proc edgeInsets*(formView: FormView): EdgeInsets =
-  if formView.isNil:
-    insets(0.0)
-  else:
-    formView.xEdgeInsets
+  formView.xEdgeInsets
 
 proc `edgeInsets=`*(formView: FormView, insets: EdgeInsets) =
   let normalized = insets.normalizedInsets()
-  if formView.isNil or formView.xEdgeInsets == normalized:
+  if formView.xEdgeInsets == normalized:
     return
   formView.xEdgeInsets = normalized
   formView.invalidateFormLayout()
 
 proc labelAlignment*(formView: FormView): FormLabelAlignment =
-  if formView.isNil: flaTrailing else: formView.xLabelAlignment
+  formView.xLabelAlignment
 
 proc `labelAlignment=`*(formView: FormView, alignment: FormLabelAlignment) =
-  if formView.isNil or formView.xLabelAlignment == alignment:
+  if formView.xLabelAlignment == alignment:
     return
   formView.xLabelAlignment = alignment
   formView.invalidateFormLayout()
 
 proc rowAlignment*(formView: FormView): FormRowAlignment =
-  if formView.isNil: fraCenter else: formView.xRowAlignment
+  formView.xRowAlignment
 
 proc `rowAlignment=`*(formView: FormView, alignment: FormRowAlignment) =
-  if formView.isNil or formView.xRowAlignment == alignment:
+  if formView.xRowAlignment == alignment:
     return
   formView.xRowAlignment = alignment
   formView.invalidateFormLayout()
 
 proc minFieldWidth*(formView: FormView): float32 =
-  if formView.isNil: 0.0'f32 else: formView.xMinimumFieldWidth
+  formView.xMinimumFieldWidth
 
 proc `minFieldWidth=`*(formView: FormView, width: float32) =
   let normalized = max(width, 0.0'f32)
-  if formView.isNil or formView.xMinimumFieldWidth == normalized:
+  if formView.xMinimumFieldWidth == normalized:
     return
   formView.xMinimumFieldWidth = normalized
   formView.invalidateFormLayout()
 
 proc intrinsicContentSize*(formView: FormView): IntrinsicSize =
-  if formView.isNil:
-    NoIntrinsicContentSize
-  else:
-    initIntrinsicSize(formView.naturalSize())
+  initIntrinsicSize(formView.naturalSize())
 
 proc insertRow*(formView: FormView, label, field: View, index: int) =
-  if formView.isNil or (label.isNil and field.isNil):
+  if label.isNil and field.isNil:
     return
 
   if not label.isNil and label.superview != formView:
@@ -292,7 +280,7 @@ proc addRow*(formView: FormView, label, field: View) =
   formView.insertRow(label, field, formView.xRows.len)
 
 proc removeRow*(formView: FormView, index: int) =
-  if formView.isNil or index < 0 or index >= formView.xRows.len:
+  if index < 0 or index >= formView.xRows.len:
     return
   formView.xRows.delete(index)
   formView.invalidateFormLayout()
