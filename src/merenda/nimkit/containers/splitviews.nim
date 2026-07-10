@@ -82,48 +82,33 @@ func normalizedThickness(value: float32): float32 =
   max(value, 1.0'f32)
 
 proc splitViewStyleContext(splitView: SplitView): StyleContext =
-  if splitView.isNil:
-    controlStyle(srSplitView)
-  else:
-    controlStyle(
-      srSplitView,
-      splitView.widgetStateSet(),
-      id = splitView.styleId,
-      classes = splitView.styleClasses,
-    )
+  controlStyle(
+    srSplitView,
+    splitView.widgetStateSet(),
+    id = splitView.styleId,
+    classes = splitView.styleClasses,
+  )
 
 proc resolvedSplitViewStyle(splitView: SplitView): SplitViewStyle =
-  let appearance =
-    if splitView.isNil:
-      initAppearance()
-    else:
-      splitView.effectiveAppearance()
-  appearance.resolveSplitViewStyle(splitView.splitViewStyleContext())
+  splitView.effectiveAppearance().resolveSplitViewStyle(
+    splitView.splitViewStyleContext()
+  )
 
 proc effectiveDividerThickness(splitView: SplitView): float32 =
-  if splitView.isNil:
-    return SplitViewDefaultDividerThickness
   if splitView.xDividerThickness > 0.0'f32:
     splitView.xDividerThickness.normalizedThickness()
   else:
     splitView.resolvedSplitViewStyle().dividerThickness.normalizedThickness()
 
 proc visiblePaneIndexes(splitView: SplitView): seq[int] =
-  if splitView.isNil:
-    return
   for index, pane in splitView.xPanes:
-    if pane.view.isNil or pane.view.superview != splitView or pane.view.isHidden:
-      continue
-    if pane.collapsed:
-      continue
-    result.add index
+    if pane.view.superview == splitView and not pane.view.isHidden and not pane.collapsed:
+      result.add index
 
 proc splitDividerCount(splitView: SplitView): int =
   max(splitView.visiblePaneIndexes().len - 1, 0)
 
 proc availablePaneLength(splitView: SplitView): float32 =
-  if splitView.isNil:
-    return 0.0'f32
   let
     bounds = splitView.bounds()
     dividerTotal =
@@ -131,8 +116,6 @@ proc availablePaneLength(splitView: SplitView): float32 =
   max(bounds.size.mainSize(splitView.xAxis) - dividerTotal, 0.0'f32)
 
 proc invalidateSplitViewLayout(splitView: SplitView) =
-  if splitView.isNil:
-    return
   splitView.invalidateContainerMetrics()
   splitView.setNeedsLayout()
   splitView.setNeedsDisplay(true)
@@ -155,7 +138,7 @@ protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
   property autosaveName -> string
 
   method paneIndex*(splitView: SplitView, pane: View): int =
-    if splitView.isNil or pane.isNil:
+    if pane.isNil:
       return -1
     for index, current in splitView.xPanes:
       if current.view == pane:
@@ -163,37 +146,35 @@ protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
     -1
 
   method paneCount*(splitView: SplitView): int =
-    if splitView.isNil: 0 else: splitView.xPanes.len
+    splitView.xPanes.len
 
   method panes*(splitView: SplitView): seq[View] =
-    if splitView.isNil:
-      return @[]
     for pane in splitView.xPanes:
       result.add pane.view
 
   method splitAxis(splitView: SplitView): LayoutAxis =
-    if splitView.isNil: laHorizontal else: splitView.xAxis
+    splitView.xAxis
 
   method setSplitAxis(splitView: SplitView, axis: LayoutAxis) =
-    if splitView.isNil or splitView.xAxis == axis:
+    if splitView.xAxis == axis:
       return
     splitView.xAxis = axis
     splitView.invalidateSplitViewLayout()
 
   method dividerThickness(splitView: SplitView): float32 =
-    if splitView.isNil: 0.0'f32 else: splitView.xDividerThickness
+    splitView.xDividerThickness
 
   method setDividerThickness(splitView: SplitView, value: float32) =
-    if splitView.isNil or splitView.xDividerThickness == value:
+    if splitView.xDividerThickness == value:
       return
     splitView.xDividerThickness = max(value, 0.0'f32)
     splitView.invalidateSplitViewLayout()
 
   method autosaveName(splitView: SplitView): string =
-    if splitView.isNil: "" else: splitView.xAutosaveName
+    splitView.xAutosaveName
 
   method setAutosaveName(splitView: SplitView, name: string) =
-    if splitView.isNil or splitView.xAutosaveName == name:
+    if splitView.xAutosaveName == name:
       return
     splitView.xAutosaveName = name
 
@@ -207,19 +188,19 @@ proc `autosaveName=`*(splitView: SplitView, name: string) =
   splitView.setAutosaveName(name)
 
 proc paneMinSize*(splitView: SplitView, index: int): float32 =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return 0.0'f32
   splitView.xPanes[index].minSize
 
 proc paneMaxSize*(splitView: SplitView, index: int): float32 =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return 0.0'f32
   splitView.xPanes[index].maxSize
 
 proc setPaneSizeLimits*(
     splitView: SplitView, index: int, minSize = 0.0'f32, maxSize = float32.high
 ) =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return
   let
     nextMin = max(minSize, 0.0'f32)
@@ -232,24 +213,24 @@ proc setPaneSizeLimits*(
   splitView.invalidateSplitViewLayout()
 
 proc paneCollapsible*(splitView: SplitView, index: int): bool =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return false
   splitView.xPanes[index].collapsible
 
 proc `paneCollapsible=`*(splitView: SplitView, index: int, value: bool) =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return
   if splitView.xPanes[index].collapsible == value:
     return
   splitView.xPanes[index].collapsible = value
 
 proc isPaneCollapsed*(splitView: SplitView, index: int): bool =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return false
   splitView.xPanes[index].collapsed
 
 proc setPaneCollapsed*(splitView: SplitView, index: int, collapsed: bool) =
-  if splitView.isNil or index < 0 or index >= splitView.xPanes.len:
+  if index < 0 or index >= splitView.xPanes.len:
     return
   if collapsed and not splitView.xPanes[index].collapsible:
     return
@@ -269,7 +250,7 @@ proc addPane*(
     maxSize = SplitViewDefaultPaneMaxSize,
     collapsible = false,
 ) =
-  if splitView.isNil or pane.isNil:
+  if pane.isNil:
     return
   let existing = splitView.paneIndex(pane)
   if existing >= 0:
@@ -294,7 +275,7 @@ proc insertPane*(
     maxSize = SplitViewDefaultPaneMaxSize,
     collapsible = false,
 ) =
-  if splitView.isNil or pane.isNil:
+  if pane.isNil:
     return
   if splitView.paneIndex(pane) >= 0:
     return
@@ -319,7 +300,7 @@ proc removePane*(splitView: SplitView, pane: View) =
   if index < 0:
     return
   splitView.xPanes.delete(index)
-  if not pane.isNil and pane.superview == splitView:
+  if pane.superview == splitView:
     pane.removeFromSuperview()
   splitView.invalidateSplitViewLayout()
 
@@ -327,10 +308,8 @@ proc addArrangedSubview*(splitView: SplitView, pane: View) =
   splitView.addPane(pane)
 
 proc setSplitViewSubviews*(splitView: SplitView, panes: openArray[View]) =
-  if splitView.isNil:
-    return
   for pane in splitView.panes():
-    if not pane.isNil and pane.superview == splitView:
+    if pane.superview == splitView:
       pane.removeFromSuperview()
   splitView.xPanes.setLen(0)
   for pane in panes:
@@ -340,8 +319,6 @@ proc setSplitViewSubviews*(splitView: SplitView, panes: openArray[View]) =
 proc dividerRect*(splitView: SplitView, dividerIndex: int): Rect
 
 proc dividerAtPoint*(splitView: SplitView, point: Point): int =
-  if splitView.isNil:
-    return -1
   for index in 0 ..< splitView.splitDividerCount():
     if splitView.dividerRect(index).contains(point):
       return index
@@ -350,8 +327,6 @@ proc dividerAtPoint*(splitView: SplitView, point: Point): int =
 proc paneLengthFractions(
     splitView: SplitView, visible: openArray[int], storedFractions: openArray[float32]
 ): seq[float32] =
-  if splitView.isNil:
-    return
   if visible.len == 0:
     return
   var total = 0.0'f32
@@ -383,7 +358,7 @@ proc redistributeDelta(
     beforeVisibleIndex: int,
     delta: float32,
 ) =
-  if splitView.isNil or beforeVisibleIndex < 0 or beforeVisibleIndex + 1 >= visible.len:
+  if beforeVisibleIndex < 0 or beforeVisibleIndex + 1 >= visible.len:
     return
 
   var remaining = delta
@@ -492,9 +467,6 @@ proc saveFractionsFromLengths(
     splitView.xPanes[paneIndex].fraction = max(lengths[index] / total, 0.0'f32)
 
 proc layoutSplitViewPanes(splitView: SplitView) =
-  if splitView.isNil:
-    return
-
   splitView.discardCursorRects()
   let
     visible = splitView.visiblePaneIndexes()
@@ -526,14 +498,14 @@ proc layoutSplitViewPanes(splitView: SplitView) =
       cursor += dividerThickness
 
   for index, pane in splitView.xPanes:
-    if index notin visible and not pane.view.isNil and pane.view.superview == splitView:
+    if index notin visible and pane.view.superview == splitView:
       pane.view.applyLayoutFrame(
         initSplitRect(axis, bounds.mainOrigin(axis), 0.0'f32, 0.0'f32, crossLength),
         lfoContainer,
       )
 
 proc dividerRect*(splitView: SplitView, dividerIndex: int): Rect =
-  if splitView.isNil or dividerIndex < 0:
+  if dividerIndex < 0:
     return rect(0.0, 0.0, 0.0, 0.0)
   let
     visible = splitView.visiblePaneIndexes()
@@ -557,8 +529,6 @@ proc dividerRect*(splitView: SplitView, dividerIndex: int): Rect =
   )
 
 proc setPositionOfDivider*(splitView: SplitView, dividerIndex: int, position: float32) =
-  if splitView.isNil:
-    return
   let
     visible = splitView.visiblePaneIndexes()
     availableLength = splitView.availablePaneLength()
@@ -583,20 +553,16 @@ proc setPositionOfDivider*(splitView: SplitView, dividerIndex: int, position: fl
   splitView.invalidateSplitViewLayout()
 
 proc positionOfDivider*(splitView: SplitView, dividerIndex: int): float32 =
-  if splitView.isNil or dividerIndex < 0:
+  if dividerIndex < 0:
     return 0.0'f32
   splitView.dividerRect(dividerIndex).mainOrigin(splitView.xAxis)
 
 proc captureState*(splitView: SplitView): SplitViewState =
-  if splitView.isNil:
-    return
   for pane in splitView.xPanes:
     result.fractions.add pane.fraction
     result.collapsed.add pane.collapsed
 
 proc restoreState*(splitView: SplitView, state: SplitViewState) =
-  if splitView.isNil:
-    return
   let previousCollapsed = splitView.captureState().collapsed
   for index in 0 ..< splitView.xPanes.len:
     if index < state.fractions.len:
@@ -638,8 +604,6 @@ proc restoreAutosaveString*(splitView: SplitView, value: string) =
   splitView.restoreState(restoreSplitViewState(value))
 
 proc splitViewNaturalSize(splitView: SplitView): Size =
-  if splitView.isNil:
-    return initSize(0.0, 0.0)
   let
     axis = splitView.xAxis
     dividerThickness = splitView.effectiveDividerThickness()
@@ -648,12 +612,11 @@ proc splitViewNaturalSize(splitView: SplitView): Size =
     cross = 0.0'f32
     visibleCount = 0
   for pane in splitView.xPanes:
-    if pane.view.isNil or pane.view.isHidden or pane.collapsed:
-      continue
-    let size = pane.view.sizeThatFits(UnconstrainedFittingSize)
-    main += max(size.mainSize(axis), pane.minSize)
-    cross = max(cross, size.crossSize(axis))
-    inc visibleCount
+    if not pane.view.isHidden and not pane.collapsed:
+      let size = pane.view.sizeThatFits(UnconstrainedFittingSize)
+      main += max(size.mainSize(axis), pane.minSize)
+      cross = max(cross, size.crossSize(axis))
+      inc visibleCount
   main += dividerThickness * float32(max(visibleCount - 1, 0))
   case axis
   of laHorizontal:
@@ -662,55 +625,51 @@ proc splitViewNaturalSize(splitView: SplitView): Size =
     initSize(cross, main)
 
 proc intrinsicContentSize*(splitView: SplitView): IntrinsicSize =
-  if splitView.isNil:
-    NoIntrinsicContentSize
-  else:
-    initIntrinsicSize(splitView.splitViewNaturalSize())
+  initIntrinsicSize(splitView.splitViewNaturalSize())
 
 proc drawSplitViewDividers(splitView: SplitView, context: DrawContext) =
-  if splitView.isNil or context.isNil:
+  if context.isNil:
     return
   let style =
     context.appearance.resolveSplitViewStyle(splitView.splitViewStyleContext())
   for index in 0 ..< splitView.splitDividerCount():
     let rect = splitView.dividerRect(index)
-    if rect.isEmpty:
-      continue
-    discard context.addRenderRectangle(
-      context.renderRectFor(rect),
-      style.divider.fill,
-      style.divider.borderColor,
-      style.divider.borderWidth,
-      style.divider.cornerRadius,
-      style.divider.shadows,
-      cornerRadii = style.divider.cornerRadii,
-    )
-    let
-      markLength = min(max(style.dividerThickness * 0.45'f32, 2.0'f32), 4.0'f32)
-      markInset = max((style.dividerThickness - markLength) / 2.0'f32, 0.0'f32)
-      markRect =
-        if splitView.xAxis == laHorizontal:
-          rect(
-            rect.origin.x + markInset,
-            rect.origin.y + 4.0'f32,
-            markLength,
-            max(rect.size.height - 8.0'f32, 0.0'f32),
-          )
-        else:
-          rect(
-            rect.origin.x + 4.0'f32,
-            rect.origin.y + markInset,
-            max(rect.size.width - 8.0'f32, 0.0'f32),
-            markLength,
-          )
-    if not markRect.isEmpty:
+    if not rect.isEmpty:
       discard context.addRenderRectangle(
-        context.renderRectFor(markRect),
-        fill(style.divider.borderColor),
+        context.renderRectFor(rect),
+        style.divider.fill,
         style.divider.borderColor,
-        0.0'f32,
+        style.divider.borderWidth,
         style.divider.cornerRadius,
+        style.divider.shadows,
+        cornerRadii = style.divider.cornerRadii,
       )
+      let
+        markLength = min(max(style.dividerThickness * 0.45'f32, 2.0'f32), 4.0'f32)
+        markInset = max((style.dividerThickness - markLength) / 2.0'f32, 0.0'f32)
+        markRect =
+          if splitView.xAxis == laHorizontal:
+            rect(
+              rect.origin.x + markInset,
+              rect.origin.y + 4.0'f32,
+              markLength,
+              max(rect.size.height - 8.0'f32, 0.0'f32),
+            )
+          else:
+            rect(
+              rect.origin.x + 4.0'f32,
+              rect.origin.y + markInset,
+              max(rect.size.width - 8.0'f32, 0.0'f32),
+              markLength,
+            )
+      if not markRect.isEmpty:
+        discard context.addRenderRectangle(
+          context.renderRectFor(markRect),
+          fill(style.divider.borderColor),
+          style.divider.borderColor,
+          0.0'f32,
+          style.divider.cornerRadius,
+        )
 
 protocol DefaultSplitViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(splitView: SplitView): IntrinsicSize =
@@ -721,13 +680,13 @@ protocol DefaultSplitViewLayout of ViewLayoutProtocol:
 
 protocol DefaultSplitViewDrawing of ViewDrawingProtocol:
   method draw(splitView: SplitView, context: DrawContext) =
-    if splitView.isNil or context.isNil or splitView.bounds().isEmpty:
+    if context.isNil or splitView.bounds().isEmpty:
       return
     splitView.drawSplitViewDividers(context)
 
 protocol DefaultSplitViewEvents of ResponderEventProtocol:
   method mouseDown(splitView: SplitView, event: MouseEvent): bool =
-    if splitView.isNil or event.button != mbPrimary:
+    if event.button != mbPrimary:
       return false
     let divider = splitView.dividerAtPoint(event.location)
     if divider < 0:
@@ -740,7 +699,7 @@ protocol DefaultSplitViewEvents of ResponderEventProtocol:
     true
 
   method mouseDragged(splitView: SplitView, event: MouseEvent): bool =
-    if splitView.isNil or event.button != mbPrimary or splitView.xDragDivider < 0:
+    if event.button != mbPrimary or splitView.xDragDivider < 0:
       return false
     let
       visible = splitView.visiblePaneIndexes()
@@ -758,7 +717,7 @@ protocol DefaultSplitViewEvents of ResponderEventProtocol:
     true
 
   method mouseUp(splitView: SplitView, event: MouseEvent): bool =
-    if splitView.isNil or event.button != mbPrimary or splitView.xDragDivider < 0:
+    if event.button != mbPrimary or splitView.xDragDivider < 0:
       return false
     discard splitView.mouseDragged(event)
     splitView.xDragDivider = -1
@@ -779,12 +738,11 @@ protocol DefaultSplitViewAccessibility of AccessibilityProtocol:
 
   method accessibilityChildren(splitView: SplitView): seq[View] =
     for pane in splitView.xPanes:
-      if pane.view.isNil or pane.collapsed or pane.view.isAccessibilityIgnored():
-        continue
-      if pane.view.isAccessibilityElement():
-        result.add pane.view
-      else:
-        result.add pane.view.accessibilityChildren()
+      if not pane.collapsed and not pane.view.isAccessibilityIgnored():
+        if pane.view.isAccessibilityElement():
+          result.add pane.view
+        else:
+          result.add pane.view.accessibilityChildren()
 
 protocol SplitViewLifecycleSlots of ViewLifecycleProtocol:
   proc willRemoveSubview(splitView: SplitView, child: View) {.slot.} =

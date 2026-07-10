@@ -95,11 +95,10 @@ protocol DefaultCellEditing of CellEditingProtocol:
       editor.removeFromSuperview()
 
   method sendsActionOnEndEditing(cell: Cell): bool =
-    (not cell.isNil) and cell.xSendsActionOnEndEditing
+    cell.xSendsActionOnEndEditing
 
   method setSendsActionOnEndEditing(cell: Cell, value: bool) =
-    if not cell.isNil:
-      cell.xSendsActionOnEndEditing = value
+    cell.xSendsActionOnEndEditing = value
 
 proc invalidateViewCellMetrics(view: View) =
   if not view.isNil:
@@ -130,7 +129,7 @@ proc newActionCell*(): ActionCell =
   initActionCellFields(result)
 
 proc controlView*(cell: Cell): View =
-  if cell.isNil or cell.xControlView.isNil:
+  if cell.xControlView.isNil:
     return nil
   cell.xControlView[]
 
@@ -150,10 +149,10 @@ proc setControlView*(cell: Cell, view: View) =
   cell.invalidateControlMetrics()
 
 proc mirrorsControlViewState*(cell: Cell): bool =
-  (not cell.isNil) and cell.xMirrorsControlViewState
+  cell.xMirrorsControlViewState
 
 proc setMirrorsControlViewState*(cell: Cell, value: bool) =
-  if cell.isNil or cell.xMirrorsControlViewState == value:
+  if cell.xMirrorsControlViewState == value:
     return
   cell.xMirrorsControlViewState = value
   let view = cell.controlView()
@@ -162,16 +161,12 @@ proc setMirrorsControlViewState*(cell: Cell, value: bool) =
     view.setWidgetState(ssHighlighted, cell.xHighlighted)
 
 proc isEnabled*(cell: Cell): bool =
-  if cell.isNil:
-    return false
   let view = cell.controlView()
   result = cell.xEnabled
   if result and cell.xMirrorsControlViewState and not view.isNil:
     result = ssDisabled notin view.widgetStateSet()
 
 proc setEnabled*(cell: Cell, enabled: bool) =
-  if cell.isNil:
-    return
   let oldEnabled = cell.isEnabled()
   if cell.xEnabled == enabled and oldEnabled == enabled:
     return
@@ -183,11 +178,9 @@ proc setEnabled*(cell: Cell, enabled: bool) =
     cell.invalidateControlMetrics()
 
 proc isHighlighted*(cell: Cell): bool =
-  (not cell.isNil) and cell.xHighlighted
+  cell.xHighlighted
 
 proc setHighlighted*(cell: Cell, highlighted: bool) =
-  if cell.isNil:
-    return
   let oldHighlighted = cell.isHighlighted()
   if cell.xHighlighted == highlighted and oldHighlighted == highlighted:
     return
@@ -210,7 +203,7 @@ proc setState*(cell: Cell, state: ButtonState) =
   cell.controlView().postAccessibilityNotification(anValueChanged)
 
 proc allowsMixedState*(cell: Cell): bool =
-  (not cell.isNil) and cell.xAllowsMixedState
+  cell.xAllowsMixedState
 
 proc setAllowsMixedState*(cell: Cell, value: bool) =
   if cell.xAllowsMixedState == value:

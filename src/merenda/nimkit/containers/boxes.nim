@@ -24,37 +24,27 @@ type
     xContentView: View
 
 proc invalidateBoxMetrics(box: Box) =
-  if box.isNil:
-    return
   box.invalidateContainerMetrics()
   box.setNeedsLayout()
   box.setNeedsDisplay(true)
 
 proc boxStyleContext(box: Box): StyleContext =
-  if box.isNil:
-    controlStyle(srBox)
-  else:
-    controlStyle(
-      srBox, box.widgetStateSet(), id = box.styleId, classes = box.styleClasses
-    )
+  controlStyle(
+    srBox, box.widgetStateSet(), id = box.styleId, classes = box.styleClasses
+  )
 
 proc resolvedBoxStyle(box: Box): BoxStyle =
-  let appearance =
-    if box.isNil:
-      initAppearance()
-    else:
-      box.effectiveAppearance()
-  appearance.resolveBoxStyle(box.boxStyleContext())
+  box.effectiveAppearance().resolveBoxStyle(box.boxStyleContext())
 
 proc boxTitleSize(box: Box): Size =
-  if box.isNil or box.xKind == bkSeparator or box.xTitle.len == 0:
+  if box.xKind == bkSeparator or box.xTitle.len == 0:
     initSize(0.0, 0.0)
   else:
     let style = box.resolvedBoxStyle()
     textNaturalSize(box.xTitle, style.text)
 
 proc boxHasTitle(box: Box): bool =
-  not box.isNil and box.xKind == bkGroup and box.xTitle.len > 0
+  box.xKind == bkGroup and box.xTitle.len > 0
 
 proc boundedRect(rect: Rect): Rect =
   rect(
@@ -65,7 +55,7 @@ proc boundedRect(rect: Rect): Rect =
   )
 
 proc contentRect*(box: Box): Rect =
-  if box.isNil or box.xKind == bkSeparator:
+  if box.xKind == bkSeparator:
     return rect(0.0, 0.0, 0.0, 0.0)
   let
     style = box.resolvedBoxStyle()
@@ -95,7 +85,7 @@ proc separatorRect(box: Box, style: BoxStyle): Rect =
     )
 
 proc contentFittingSize(box: Box): Size =
-  if box.isNil or box.xKind == bkSeparator or box.xContentView.isNil:
+  if box.xKind == bkSeparator or box.xContentView.isNil:
     initSize(0.0, 0.0)
   else:
     let
@@ -128,38 +118,36 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
   property contentView -> View
 
   method boxTitle(box: Box): string =
-    if box.isNil: "" else: box.xTitle
+    box.xTitle
 
   method setBoxTitle(box: Box, title: string) =
-    if box.isNil or box.xTitle == title:
+    if box.xTitle == title:
       return
     box.xTitle = title
     box.invalidateBoxMetrics()
 
   method boxKind(box: Box): BoxKind =
-    if box.isNil: bkGroup else: box.xKind
+    box.xKind
 
   method setBoxKind(box: Box, kind: BoxKind) =
-    if box.isNil or box.xKind == kind:
+    if box.xKind == kind:
       return
     box.xKind = kind
     box.invalidateBoxMetrics()
 
   method separatorAxis(box: Box): LayoutAxis =
-    if box.isNil: laHorizontal else: box.xSeparatorAxis
+    box.xSeparatorAxis
 
   method setSeparatorAxis(box: Box, axis: LayoutAxis) =
-    if box.isNil or box.xSeparatorAxis == axis:
+    if box.xSeparatorAxis == axis:
       return
     box.xSeparatorAxis = axis
     box.invalidateBoxMetrics()
 
   method contentView(box: Box): View =
-    if box.isNil: nil else: box.xContentView
+    box.xContentView
 
   method setContentView(box: Box, contentView: View) =
-    if box.isNil:
-      return
     if not contentView.isNil and box.xContentView == contentView:
       return
 
@@ -179,7 +167,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
     box.invalidateBoxMetrics()
 
   method addContentSubview*(box: Box, child: View) =
-    if box.isNil or child.isNil:
+    if child.isNil:
       return
     if box.xContentView.isNil:
       box.setContentView(nil)
@@ -187,10 +175,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
     box.invalidateBoxMetrics()
 
 proc title*(box: Box): string =
-  if box.isNil:
-    ""
-  else:
-    box.boxTitle()
+  box.boxTitle()
 
 proc `title=`*(box: Box, title: string) =
   box.setBoxTitle(title)
@@ -205,15 +190,13 @@ proc `contentView=`*(box: Box, contentView: View) =
   box.setContentView(contentView)
 
 proc intrinsicContentSize*(box: Box): IntrinsicSize =
-  if box.isNil:
-    NoIntrinsicContentSize
-  elif box.xKind == bkSeparator:
+  if box.xKind == bkSeparator:
     box.naturalSeparatorSize()
   else:
     initIntrinsicSize(box.naturalGroupSize())
 
 proc layoutBoxContent(box: Box) =
-  if box.isNil or box.xContentView.isNil:
+  if box.xContentView.isNil:
     return
   let frame =
     if box.xKind == bkSeparator:
@@ -284,7 +267,7 @@ protocol DefaultBoxLayout of ViewLayoutProtocol:
 
 protocol DefaultBoxDrawing of ViewDrawingProtocol:
   method draw(box: Box, context: DrawContext) =
-    if box.isNil or context.isNil or box.bounds().isEmpty:
+    if context.isNil or box.bounds().isEmpty:
       return
     let style = context.appearance.resolveBoxStyle(box.boxStyleContext())
     case box.xKind
@@ -316,10 +299,8 @@ protocol DefaultBoxAccessibility of AccessibilityProtocol:
   method accessibilityChildren(box: Box): seq[View] =
     if box.xKind == bkSeparator:
       return @[]
-    else:
-      for child in box.subviews():
-        if child.isAccessibilityIgnored():
-          continue
+    for child in box.subviews():
+      if not child.isAccessibilityIgnored():
         if child.isAccessibilityElement():
           result.add child
         else:

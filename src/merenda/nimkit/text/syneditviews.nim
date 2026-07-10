@@ -1143,34 +1143,31 @@ proc updateGutter(view: SynEditView)
 proc applySynEditTheme(view: SynEditView)
 
 proc textEditor*(view: SynEditView): TextEditor =
-  if view.isNil: nil else: view.xEditor
+  view.xEditor
 
 proc textView*(view: SynEditView): TextView =
-  if view.isNil or view.xEditor.isNil:
+  if view.xEditor.isNil:
     nil
   else:
     view.xEditor.textView()
 
 proc scrollView*(view: SynEditView): ScrollView =
-  if view.isNil or view.xEditor.isNil:
+  if view.xEditor.isNil:
     nil
   else:
     view.xEditor.scrollView()
 
 proc gutterView*(view: SynEditView): View =
-  if view.isNil:
-    nil
-  else:
-    View(view.xGutter)
+  View(view.xGutter)
 
 proc stringValue*(view: SynEditView): string =
-  if view.isNil or view.xEditor.isNil:
+  if view.xEditor.isNil:
     ""
   else:
     view.xEditor.stringValue()
 
 proc applySyntaxHighlighting*(view: SynEditView) =
-  if view.isNil or view.xEditor.isNil or view.xApplyingHighlight:
+  if view.xEditor.isNil or view.xApplyingHighlight:
     return
   let
     storage = view.xEditor.textStorage()
@@ -1191,7 +1188,7 @@ proc applySyntaxHighlighting*(view: SynEditView) =
   view.xApplyingHighlight = false
 
 proc `stringValue=`*(view: SynEditView, value: string) =
-  if view.isNil or view.xEditor.isNil:
+  if view.xEditor.isNil:
     return
   if view.xEditor.stringValue() == value:
     return
@@ -1206,53 +1203,48 @@ proc `text=`*(view: SynEditView, value: string) =
   view.stringValue = value
 
 proc language*(view: SynEditView): SourceLanguage =
-  if view.isNil: langNone else: view.xLanguage
+  view.xLanguage
 
 proc `language=`*(view: SynEditView, language: SourceLanguage) =
-  if view.isNil or view.xLanguage == language:
+  if view.xLanguage == language:
     return
   view.xLanguage = language
   view.applySyntaxHighlighting()
 
 proc theme*(view: SynEditView): SynEditTheme =
-  if view.isNil:
-    synEditTheme()
-  else:
-    view.xTheme
+  view.xTheme
 
 proc `theme=`*(view: SynEditView, theme: SynEditTheme) =
-  if view.isNil:
-    return
   view.xTheme = theme
   view.applySynEditTheme()
   view.applySyntaxHighlighting()
   view.setNeedsDisplay(true)
 
 proc showLineNumbers*(view: SynEditView): bool =
-  (not view.isNil) and view.xShowLineNumbers
+  view.xShowLineNumbers
 
 proc `showLineNumbers=`*(view: SynEditView, showLineNumbers: bool) =
-  if view.isNil or view.xShowLineNumbers == showLineNumbers:
+  if view.xShowLineNumbers == showLineNumbers:
     return
   view.xShowLineNumbers = showLineNumbers
   view.updateGutter()
 
 proc lineNumberWidth*(view: SynEditView): float32 =
-  if view.isNil: 0.0'f32 else: view.xLineNumberWidth
+  view.xLineNumberWidth
 
 proc `lineNumberWidth=`*(view: SynEditView, width: float32) =
   let normalized = max(width, 0.0'f32)
-  if view.isNil or view.xLineNumberWidth == normalized:
+  if view.xLineNumberWidth == normalized:
     return
   view.xLineNumberWidth = normalized
   view.updateGutter()
 
 proc fontSize*(view: SynEditView): float32 =
-  if view.isNil: DefaultSynEditFontSize else: view.xFontSize
+  view.xFontSize
 
 proc `fontSize=`*(view: SynEditView, fontSize: float32) =
   let normalized = max(fontSize, 1.0'f32)
-  if view.isNil or view.xFontSize == normalized:
+  if view.xFontSize == normalized:
     return
   view.xFontSize = normalized
   view.applySynEditTheme()
@@ -1260,17 +1252,17 @@ proc `fontSize=`*(view: SynEditView, fontSize: float32) =
   view.updateGutter()
 
 proc editable*(view: SynEditView): bool =
-  (not view.isNil) and (not view.xEditor.isNil) and view.xEditor.editable()
+  (not view.xEditor.isNil) and view.xEditor.editable()
 
 proc `editable=`*(view: SynEditView, editable: bool) =
-  if not view.isNil and not view.xEditor.isNil:
+  if not view.xEditor.isNil:
     view.xEditor.editable = editable
 
 proc lineCount*(view: SynEditView): int =
   view.stringValue().lineCountOf()
 
 proc effectiveLineNumberWidth(view: SynEditView): float32 =
-  if view.isNil or not view.xShowLineNumbers:
+  if not view.xShowLineNumbers:
     return 0.0'f32
   let digits = max(($max(view.lineCount(), 1)).len, 2)
   max(view.xLineNumberWidth, digits.float32 * view.xFontSize * 0.65'f32 + 18.0'f32)
@@ -1279,7 +1271,7 @@ proc synEditLineHeight(view: SynEditView): float32 =
   max(view.xFontSize * 1.32'f32, view.xFontSize + 4.0'f32)
 
 proc updateGutter(view: SynEditView) =
-  if view.isNil or view.xEditor.isNil:
+  if view.xEditor.isNil:
     return
   let scroll = view.xEditor.scrollView()
   if scroll.isNil:
@@ -1296,7 +1288,7 @@ proc updateGutter(view: SynEditView) =
   view.xGutter.setNeedsDisplay(true)
 
 proc applySynEditTheme(view: SynEditView) =
-  if view.isNil or view.xEditor.isNil:
+  if view.xEditor.isNil:
     return
   let
     textView = view.xEditor.textView()
@@ -1322,13 +1314,13 @@ proc applySynEditTheme(view: SynEditView) =
 
 proc synEditTextDidChange(view: SynEditView, sender: DynamicAgent) {.slot.} =
   discard sender
-  if view.isNil or view.xApplyingHighlight:
+  if view.xApplyingHighlight:
     return
   view.updateGutter()
   view.applySyntaxHighlighting()
 
 proc synEditGutterNeedsDisplay(view: SynEditView) {.slot.} =
-  if not view.isNil and not view.xGutter.isNil:
+  if not view.xGutter.isNil:
     view.xGutter.setNeedsDisplay(true)
 
 protocol DefaultSynEditDrawing of ViewDrawingProtocol:

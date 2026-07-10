@@ -203,42 +203,34 @@ proc newDraggingSession*(
   )
 
 proc source*(session: DraggingSession): DynamicAgent =
-  if session.isNil: nil else: session.xSource
+  session.xSource
 
 proc destination*(session: DraggingSession): DynamicAgent =
-  if session.isNil: nil else: session.xDestination
+  session.xDestination
 
 proc pasteboard*(session: DraggingSession): Pasteboard =
-  if session.isNil: nil else: session.xPasteboard
+  session.xPasteboard
 
 proc state*(session: DraggingSession): DraggingSessionState =
-  if session.isNil: dssCancelled else: session.xState
+  session.xState
 
 proc allowedOperations*(session: DraggingSession): DragOperations =
-  if session.isNil: NoDragOperations else: session.xAllowedOperations
+  session.xAllowedOperations
 
 proc selectedOperations*(session: DraggingSession): DragOperations =
-  if session.isNil: NoDragOperations else: session.xSelectedOperations
+  session.xSelectedOperations
 
 proc dropTarget*(session: DraggingSession): DraggingDropTarget =
-  if session.isNil:
-    initDraggingDropTarget()
-  else:
-    session.xDropTarget
+  session.xDropTarget
 
 proc setDropTarget*(session: DraggingSession, target: DraggingDropTarget) =
-  if not session.isNil:
-    session.xDropTarget = target
+  session.xDropTarget = target
 
 proc items*(session: DraggingSession): seq[DraggingItem] =
-  if session.isNil:
-    return @[]
   for item in session.xItems:
     result.add item.copyDraggingItem()
 
 proc promisedFileItems*(session: DraggingSession): seq[DraggingItem] =
-  if session.isNil:
-    return @[]
   for item in session.xItems:
     if item.promisedFileName.len > 0 or item.pasteboardType == PasteboardTypePromisedFile:
       result.add item.copyDraggingItem()
@@ -246,8 +238,6 @@ proc promisedFileItems*(session: DraggingSession): seq[DraggingItem] =
 proc draggingInfo*(
     session: DraggingSession, location = AutoPoint, destination: DynamicAgent = nil
 ): DraggingInfo =
-  if session.isNil:
-    return DraggingInfo()
   DraggingInfo(
     session: session,
     pasteboard: session.xPasteboard,
@@ -267,12 +257,10 @@ proc withDropTarget*(info: DraggingInfo, target: DraggingDropTarget): DraggingIn
     result.session.setDropTarget(target)
 
 proc addDraggingItem*(session: DraggingSession, item: DraggingItem) =
-  if session.isNil:
-    return
   session.xItems.add item.copyDraggingItem()
 
 proc writeItemsToPasteboard(session: DraggingSession) =
-  if session.isNil or session.xPasteboard.isNil:
+  if session.xPasteboard.isNil:
     return
   var declaredTypes: seq[string]
   for item in session.xItems:
@@ -284,7 +272,7 @@ proc writeItemsToPasteboard(session: DraggingSession) =
       discard session.xPasteboard.setItem(item.pasteboardType, item.pasteboardItem)
 
 proc writePromisedFileFallback(session: DraggingSession, item: DraggingItem): bool =
-  if session.isNil or session.xPasteboard.isNil:
+  if session.xPasteboard.isNil:
     return false
   let promisedItem =
     if item.pasteboardItem.kind != pikNone:
@@ -302,8 +290,6 @@ proc writePromisedFileFallback(session: DraggingSession, item: DraggingItem): bo
 proc fulfillPromisedFile(
     session: DraggingSession, info: DraggingInfo, item: DraggingItem
 ): bool =
-  if session.isNil:
-    return false
   if not session.xSource.isNil:
     let written = session.xSource.trySendLocal(
       writePromisedFile(),
@@ -319,16 +305,12 @@ proc fulfillPromisedFile(
   session.writePromisedFileFallback(item)
 
 proc fulfillPromisedFiles*(session: DraggingSession, info: DraggingInfo): bool =
-  if session.isNil:
-    return false
   result = true
   for item in session.xItems:
     if item.promisedFileName.len > 0 or item.pasteboardType == PasteboardTypePromisedFile:
       result = session.fulfillPromisedFile(info, item) and result
 
 proc sourceOperationMask(session: DraggingSession, location: Point): DragOperations =
-  if session.isNil:
-    return NoDragOperations
   result = session.xAllowedOperations
   if not session.xSource.isNil:
     let requested = session.xSource.trySendLocal(
@@ -359,7 +341,7 @@ proc updateDraggingSession*(
     destination: DynamicAgent = nil,
     dropTarget = initDraggingDropTarget(),
 ): DragOperations =
-  if session.isNil or session.xState != dssActive:
+  if session.xState != dssActive:
     return NoDragOperations
 
   inc session.xSequenceNumber
@@ -400,7 +382,7 @@ proc performDraggingOperation*(
     location = AutoPoint,
     dropTarget = initDraggingDropTarget(),
 ): bool =
-  if session.isNil or session.xState != dssActive:
+  if session.xState != dssActive:
     return false
   session.xDropTarget = dropTarget
   let resolvedDestination = if destination.isNil: session.xDestination else: destination
@@ -430,7 +412,7 @@ proc autoscrollDraggingSession*(
     destination: DynamicAgent = nil,
     dropTarget = initDraggingDropTarget(),
 ): bool =
-  if session.isNil or session.xState != dssActive:
+  if session.xState != dssActive:
     return false
   session.xDropTarget = dropTarget
   let resolvedDestination = if destination.isNil: session.xDestination else: destination
@@ -444,7 +426,7 @@ proc autoscrollDraggingSession*(
 proc endDraggingSession*(
     session: DraggingSession, operation: DragOperations = NoDragOperations
 ) =
-  if session.isNil or session.xState notin {dssReady, dssActive}:
+  if session.xState notin {dssReady, dssActive}:
     return
   session.xSelectedOperations = operation
   session.xState = dssEnded
@@ -453,7 +435,7 @@ proc endDraggingSession*(
       session.xSource.sendLocalIfHandled(draggingSessionEnded(), session.draggingInfo())
 
 proc cancelDraggingSession*(session: DraggingSession) =
-  if session.isNil or session.xState notin {dssReady, dssActive}:
+  if session.xState notin {dssReady, dssActive}:
     return
   session.xSelectedOperations = NoDragOperations
   session.xState = dssCancelled

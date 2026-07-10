@@ -157,13 +157,10 @@ protocol MenuAccessibility of AccessibilityProtocol:
     arMenu
 
   method accessibilityLabel(menu: Menu): string =
-    if menu.isNil: "" else: menu.xTitle
+    menu.xTitle
 
   method accessibilityValue(menu: Menu): string =
-    if menu.isNil:
-      "0"
-    else:
-      $menu.xItems.len()
+    $menu.xItems.len()
 
   method isAccessibilityElement(menu: Menu): bool =
     true
@@ -173,29 +170,27 @@ protocol MenuItemAccessibility of AccessibilityProtocol:
     arMenuItem
 
   method accessibilityLabel(item: MenuItem): string =
-    if item.isNil: "" else: item.xTitle
+    item.xTitle
 
   method accessibilityValue(item: MenuItem): string =
-    if item.isNil:
-      return ""
     case item.xState
     of bsOff: ""
     of bsOn: "on"
     of bsMixed: "mixed"
 
   method accessibilityTraits(item: MenuItem): AccessibilityTraits =
-    if item.isNil or not item.xEnabled:
+    if not item.xEnabled:
       result.incl atDisabled
-    if not item.isNil and not item.xSubmenu.isNil:
+    if not item.xSubmenu.isNil:
       result.incl atButton
-    if not item.isNil and item.xState in {bsOn, bsMixed}:
+    if item.xState in {bsOn, bsMixed}:
       result.incl atSelected
 
   method isAccessibilityElement(item: MenuItem): bool =
-    not item.isNil and not item.xSeparator
+    not item.xSeparator
 
   method accessibilityActionNames(item: MenuItem): seq[string] =
-    if not item.isNil and item.xEnabled and not item.xSeparator:
+    if item.xEnabled and not item.xSeparator:
       @[AccessibilityActionPress]
     else:
       @[]
@@ -390,99 +385,77 @@ proc newMenuItem*(model: MenuItemModel): MenuItem =
     submenu.setNextResponder(result)
 
 proc identifier*(item: MenuItem): string =
-  if item.isNil: "" else: item.xIdentifier
+  item.xIdentifier
 
 proc `identifier=`*(item: MenuItem, identifier: string) =
-  if not item.isNil:
-    item.xIdentifier = identifier
+  item.xIdentifier = identifier
 
 proc title*(item: MenuItem): string =
-  if item.isNil: "" else: item.xTitle
+  item.xTitle
 
 proc `title=`*(item: MenuItem, title: string) =
-  if not item.isNil:
-    item.xTitle = title
-    item.xObjectValue = toObj(title)
+  item.xTitle = title
+  item.xObjectValue = toObj(title)
 
 proc subtitle*(item: MenuItem): string =
-  if item.isNil: "" else: item.xSubtitle
+  item.xSubtitle
 
 proc `subtitle=`*(item: MenuItem, subtitle: string) =
-  if not item.isNil:
-    item.xSubtitle = subtitle
+  item.xSubtitle = subtitle
 
 proc objectValue*(item: MenuItem): ObjectValue =
-  if item.isNil:
-    nilObjectValue()
-  else:
-    item.xObjectValue
+  item.xObjectValue
 
 proc `objectValue=`*(item: MenuItem, value: ObjectValue) =
-  if item.isNil:
-    return
   item.xObjectValue = value
   item.xTitle = value.formatObjectValue(initObjectFormatContext(role = ovrMenu))
 
 proc action*(item: MenuItem): ActionSelector =
-  if item.isNil:
-    ActionSelector()
-  else:
-    item.xAction
+  item.xAction
 
 proc `action=`*(item: MenuItem, action: ActionSelector) =
-  if not item.isNil:
-    item.xAction = action
+  item.xAction = action
 
 proc target*(item: MenuItem): DynamicAgent =
-  if item.isNil: nil else: item.xTarget
+  item.xTarget
 
 proc `target=`*(item: MenuItem, target: DynamicAgent) =
-  if not item.isNil:
-    item.xTarget = target
+  item.xTarget = target
 
 proc `target=`*(item: MenuItem, target: Responder) =
   item.target = DynamicAgent(target)
 
 proc state*(item: MenuItem): ButtonState =
-  if item.isNil: bsOff else: item.xState
+  item.xState
 
 proc `state=`*(item: MenuItem, state: ButtonState) =
-  if not item.isNil:
-    item.xState = state
+  item.xState = state
 
 proc enabled*(item: MenuItem): bool =
-  (not item.isNil) and item.xEnabled
+  item.xEnabled
 
 proc `enabled=`*(item: MenuItem, enabled: bool) =
-  if not item.isNil:
-    item.xEnabled = enabled
+  item.xEnabled = enabled
 
 proc hidden*(item: MenuItem): bool =
-  (not item.isNil) and item.xHidden
+  item.xHidden
 
 proc `hidden=`*(item: MenuItem, hidden: bool) =
-  if not item.isNil:
-    item.xHidden = hidden
+  item.xHidden = hidden
 
 proc validates*(item: MenuItem): bool =
-  (not item.isNil) and item.xValidates
+  item.xValidates
 
 proc `validates=`*(item: MenuItem, validates: bool) =
-  if not item.isNil:
-    item.xValidates = validates
+  item.xValidates = validates
 
 proc keyEquivalent*(item: MenuItem): KeyStroke =
-  if item.isNil:
-    KeyStroke()
-  else:
-    item.xKeyEquivalent
+  item.xKeyEquivalent
 
 proc hasKeyEquivalent*(item: MenuItem): bool =
-  (not item.isNil) and item.xHasKeyEquivalent
+  item.xHasKeyEquivalent
 
 proc setKeyEquivalent*(item: MenuItem, text: string, modifiers: set[KeyModifier] = {}) =
-  if item.isNil:
-    return
   if text.len == 0:
     item.xKeyEquivalent = KeyStroke()
     item.xHasKeyEquivalent = false
@@ -491,66 +464,52 @@ proc setKeyEquivalent*(item: MenuItem, text: string, modifiers: set[KeyModifier]
     item.xHasKeyEquivalent = true
 
 proc setKeyEquivalent*(item: MenuItem, key: Key, modifiers: set[KeyModifier] = {}) =
-  if not item.isNil:
-    item.xKeyEquivalent = initKeyStroke(key, modifiers)
-    item.xHasKeyEquivalent = true
+  item.xKeyEquivalent = initKeyStroke(key, modifiers)
+  item.xHasKeyEquivalent = true
 
 proc modifierMask*(item: MenuItem): set[KeyModifier] =
-  if item.isNil:
-    {}
-  else:
-    item.xKeyEquivalent.modifiers
+  item.xKeyEquivalent.modifiers
 
 proc `modifierMask=`*(item: MenuItem, modifiers: set[KeyModifier]) =
-  if item.isNil:
-    return
   item.xKeyEquivalent.modifiers = modifiers
   item.xHasKeyEquivalent = true
 
 proc submenu*(item: MenuItem): Menu =
-  if item.isNil: nil else: item.xSubmenu
+  item.xSubmenu
 
 proc `submenu=`*(item: MenuItem, submenu: Menu) =
-  if item.isNil:
-    return
   item.xSubmenu = submenu
   if not submenu.isNil:
     submenu.setNextResponder(item)
 
 proc isSeparatorItem*(item: MenuItem): bool =
-  (not item.isNil) and item.xSeparator
+  item.xSeparator
 
 proc image*(item: MenuItem): ImageResource =
-  if item.isNil: nil else: item.xImage
+  item.xImage
 
 proc `image=`*(item: MenuItem, image: ImageResource) =
-  if not item.isNil:
-    item.xImage = image
+  item.xImage = image
 
 proc tag*(item: MenuItem): int =
-  if item.isNil: 0 else: item.xTag
+  item.xTag
 
 proc `tag=`*(item: MenuItem, tag: int) =
-  if not item.isNil:
-    item.xTag = tag
+  item.xTag = tag
 
 proc representedObject*(item: MenuItem): DynamicAgent =
-  if item.isNil: nil else: item.xRepresentedObject
+  item.xRepresentedObject
 
 proc `representedObject=`*(item: MenuItem, value: DynamicAgent) =
-  if not item.isNil:
-    item.xRepresentedObject = value
+  item.xRepresentedObject = value
 
 proc userInfo*(item: MenuItem): DynamicAgent =
-  if item.isNil: nil else: item.xUserInfo
+  item.xUserInfo
 
 proc `userInfo=`*(item: MenuItem, value: DynamicAgent) =
-  if not item.isNil:
-    item.xUserInfo = value
+  item.xUserInfo = value
 
 proc menuItemModel*(item: MenuItem): MenuItemModel =
-  if item.isNil:
-    return initMenuItemModel(enabled = false, hidden = true)
   let objectValue =
     if item.xObjectValue.isNilOrEmpty() and item.xTitle.len > 0:
       toObj(item.xTitle)
@@ -581,12 +540,12 @@ proc menuItemModel*(item: MenuItem): MenuItemModel =
   )
 
 proc menu*(view: View): Menu =
-  if view.isNil or view.xContextMenu.isNil or not (view.xContextMenu of Menu):
+  if view.xContextMenu.isNil or not (view.xContextMenu of Menu):
     return nil
   Menu(view.xContextMenu)
 
 proc `menu=`*(view: View, menu: Menu) =
-  if view.isNil or view.xContextMenu == Responder(menu):
+  if view.xContextMenu == Responder(menu):
     return
   if not view.xContextMenu.isNil and view.xContextMenu.nextResponder() == Responder(
     view
@@ -600,27 +559,25 @@ proc `menu=`*(view: View, menu: Menu) =
       view.xContextMenuHandlerInstalled = true
 
 proc title*(menu: Menu): string =
-  if menu.isNil: "" else: menu.xTitle
+  menu.xTitle
 
 proc `title=`*(menu: Menu, title: string) =
-  if not menu.isNil:
-    menu.xTitle = title
+  menu.xTitle = title
 
 proc delegate*(menu: Menu): DynamicAgent =
-  if menu.isNil: nil else: menu.xDelegate
+  menu.xDelegate
 
 proc `delegate=`*(menu: Menu, delegate: DynamicAgent) =
-  if not menu.isNil:
-    menu.xDelegate = delegate
+  menu.xDelegate = delegate
 
 proc `delegate=`*(menu: Menu, delegate: Responder) =
   menu.delegate = DynamicAgent(delegate)
 
 proc dataSource*(menu: Menu): DynamicAgent =
-  if menu.isNil: nil else: menu.xDataSource
+  menu.xDataSource
 
 proc `dataSource=`*(menu: Menu, dataSource: DynamicAgent) =
-  if menu.isNil or menu.xDataSource == dataSource:
+  if menu.xDataSource == dataSource:
     return
   if not dataSource.isNil:
     discard dataSource.adopt(MenuDataSource)
@@ -634,24 +591,18 @@ proc items*(menu: Menu): lent seq[MenuItem] =
   menu.xItems
 
 proc itemModels*(menu: Menu): seq[MenuItemModel] =
-  if menu.isNil:
-    return
   if menu.xUsesItemModels:
     return menu.xItemModels
   for item in menu.xItems:
     result.add item.menuItemModel()
 
 proc clearMenuItems(menu: Menu) =
-  if menu.isNil:
-    return
   for item in menu.xItems:
     if not item.isNil and item.nextResponder() == Responder(menu):
       item.clearNextResponder()
   menu.xItems.setLen(0)
 
 proc rebuildMenuItemsFromModels(menu: Menu) =
-  if menu.isNil:
-    return
   menu.clearMenuItems()
   for model in menu.xItemModels:
     if not model.hidden:
@@ -660,15 +611,11 @@ proc rebuildMenuItemsFromModels(menu: Menu) =
       item.setNextResponder(menu)
 
 proc `itemModels=`*(menu: Menu, models: openArray[MenuItemModel]) =
-  if menu.isNil:
-    return
   menu.xItemModels = @models
   menu.xUsesItemModels = true
   menu.rebuildMenuItemsFromModels()
 
 proc reloadData*(menu: Menu) =
-  if menu.isNil:
-    return
   if menu.xDataSource.isNil:
     if menu.xUsesItemModels:
       menu.rebuildMenuItemsFromModels()
@@ -686,19 +633,19 @@ proc reloadData*(menu: Menu) =
   menu.itemModels = models
 
 proc len*(menu: Menu): int =
-  if menu.isNil: 0 else: menu.xItems.len
+  menu.xItems.len
 
 proc `[]`*(menu: Menu, index: Natural): MenuItem =
   menu.xItems[index]
 
 proc menuItemAtIndex*(menu: Menu, index: int): MenuItem =
-  if menu.isNil or index < 0 or index >= menu.len():
+  if index < 0 or index >= menu.len():
     nil
   else:
     menu.xItems[index]
 
 proc indexOfMenuItemIdentifier*(menu: Menu, identifier: string): int =
-  if menu.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   if not menu.xDataSource.isNil:
     let found = menu.xDataSource.trySendLocal(
@@ -719,7 +666,7 @@ proc menuItemWithIdentifier*(menu: Menu, identifier: string): MenuItem =
     nil
 
 proc visibleModelIndex(menu: Menu, visibleIndex: int): int =
-  if menu.isNil or visibleIndex < 0:
+  if visibleIndex < 0:
     return -1
   var current = 0
   for index, model in menu.xItemModels:
@@ -730,7 +677,7 @@ proc visibleModelIndex(menu: Menu, visibleIndex: int): int =
   -1
 
 proc indexOfModelIdentifier(menu: Menu, identifier: string): int =
-  if menu.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   for index, model in menu.xItemModels:
     if model.identifier == identifier:
@@ -738,7 +685,7 @@ proc indexOfModelIdentifier(menu: Menu, identifier: string): int =
   -1
 
 proc addItem*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
-  if menu.isNil or item.isNil:
+  if item.isNil:
     return nil
   if menu.xUsesItemModels:
     menu.xItemModels.add item.menuItemModel()
@@ -747,8 +694,6 @@ proc addItem*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
   item
 
 proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
-  if menu.isNil:
-    return nil
   menu.xUsesItemModels = true
   menu.xItemModels.add model
   if model.hidden:
@@ -761,8 +706,6 @@ proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
 proc insertItem*(
     menu: Menu, model: MenuItemModel, index: int
 ): MenuItem {.discardable.} =
-  if menu.isNil:
-    return nil
   menu.xUsesItemModels = true
   let modelIndex =
     if menu.xItemModels.len == 0:
@@ -795,7 +738,7 @@ proc addSeparator*(menu: Menu): MenuItem {.discardable.} =
   menu.addItem(separatorMenuItem())
 
 proc removeItem*(menu: Menu, item: MenuItem): bool {.discardable.} =
-  if menu.isNil or item.isNil:
+  if item.isNil:
     return false
   let idx = menu.xItems.find(item)
   if idx < 0:
@@ -814,7 +757,7 @@ proc removeItem*(menu: Menu, item: MenuItem): bool {.discardable.} =
   true
 
 proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardable.} =
-  if menu.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return false
   let item = menu.menuItemWithIdentifier(identifier)
   if not item.isNil:
@@ -828,19 +771,15 @@ proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardab
   false
 
 proc removeAllItems*(menu: Menu) =
-  if menu.isNil:
-    return
   menu.xItemModels.setLen(0)
   menu.xUsesItemModels = false
   menu.clearMenuItems()
 
 proc menuNeedsUpdate*(menu: Menu) =
-  if not menu.isNil and not menu.xDelegate.isNil:
+  if not menu.xDelegate.isNil:
     discard menu.xDelegate.sendLocalIfHandled(menuNeedsUpdate(), DynamicAgent(menu))
 
 proc openImpl(menu: Menu) =
-  if menu.isNil:
-    return
   menu.menuNeedsUpdate()
   if not menu.xDataSource.isNil:
     menu.reloadData()
@@ -849,17 +788,15 @@ proc openImpl(menu: Menu) =
     discard menu.xDelegate.sendLocalIfHandled(menuWillOpen(), DynamicAgent(menu))
 
 proc closeImpl(menu: Menu) =
-  if menu.isNil:
-    return
   menu.xOpen = false
   if not menu.xDelegate.isNil:
     discard menu.xDelegate.sendLocalIfHandled(menuDidClose(), DynamicAgent(menu))
 
 proc isOpen*(menu: Menu): bool =
-  (not menu.isNil) and menu.xOpen
+  menu.xOpen
 
 proc validate*(item: MenuItem, target: DynamicAgent): bool =
-  if item.isNil or item.xSeparator or item.xHidden:
+  if item.xSeparator or item.xHidden:
     return false
   if not item.xValidates:
     return item.xEnabled
@@ -885,16 +822,14 @@ proc findActionTarget*(start: Responder, selector: ActionSelector): DynamicAgent
 
 proc validate*(item: MenuItem, start: Responder): bool =
   let target =
-    if item.isNil:
-      nil
-    elif not item.xTarget.isNil:
+    if not item.xTarget.isNil:
       item.xTarget
     else:
       findActionTarget(start, item.xAction)
   item.validate(target)
 
 proc syncMenuItemModelFromItem(menu: Menu, item: MenuItem, visibleIndex: int) =
-  if menu.isNil or item.isNil or not menu.xUsesItemModels:
+  if item.isNil or not menu.xUsesItemModels:
     return
   let modelIndex =
     if item.identifier().len > 0:
@@ -905,8 +840,6 @@ proc syncMenuItemModelFromItem(menu: Menu, item: MenuItem, visibleIndex: int) =
     menu.xItemModels[modelIndex] = item.menuItemModel()
 
 proc updateImpl(menu: Menu, start: Responder) =
-  if menu.isNil:
-    return
   menu.menuNeedsUpdate()
   if not menu.xDataSource.isNil:
     menu.reloadData()
@@ -919,7 +852,7 @@ proc updateImpl(menu: Menu, start: Responder) =
       menu.syncMenuItemModelFromItem(item, index)
 
 proc notifyMenuItemDidActivate(menu: Menu, item: MenuItem, sender: DynamicAgent) =
-  if menu.isNil or item.isNil:
+  if item.isNil:
     return
   emit menu.menuItemDidActivate(
     if sender.isNil:
@@ -930,7 +863,7 @@ proc notifyMenuItemDidActivate(menu: Menu, item: MenuItem, sender: DynamicAgent)
   )
 
 proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): bool =
-  if item.isNil or item.xSeparator or item.xHidden or not item.xEnabled:
+  if item.xSeparator or item.xHidden or not item.xEnabled:
     return false
   if not item.xTarget.isNil:
     if not item.validate(item.xTarget):
@@ -960,8 +893,6 @@ proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): boo
   )
 
 proc findKeyEquivalentItem*(menu: Menu, event: KeyEvent): MenuItem =
-  if menu.isNil:
-    return nil
   for item in menu.xItems:
     if item.isNil or item.xSeparator or item.xHidden:
       discard
@@ -999,20 +930,20 @@ func menuBarItemPadding(): float32 =
   24.0'f32
 
 proc title*(button: PopupMenuButton): string =
-  if button.isNil: "" else: button.xTitle
+  button.xTitle
 
 proc `title=`*(button: PopupMenuButton, title: string) =
-  if button.isNil or button.xTitle == title:
+  if button.xTitle == title:
     return
   button.xTitle = title
   button.invalidateIntrinsicContentSize()
   button.setNeedsDisplay(true)
 
 proc menu*(button: PopupMenuButton): Menu =
-  if button.isNil: nil else: button.xMenu
+  button.xMenu
 
 proc `menu=`*(button: PopupMenuButton, menu: Menu) =
-  if button.isNil or button.xMenu == menu:
+  if button.xMenu == menu:
     return
   button.xMenu = menu
   if not menu.isNil:
@@ -1022,50 +953,43 @@ proc `menu=`*(button: PopupMenuButton, menu: Menu) =
   button.setNeedsDisplay(true)
 
 proc popupOpen*(button: PopupMenuButton): bool =
-  (not button.isNil) and button.xPopupOpen
+  button.xPopupOpen
 
 proc highlightedIndex*(button: PopupMenuButton): int =
-  if button.isNil: -1 else: button.xHighlightedIndex
+  button.xHighlightedIndex
 
 proc activeSubmenuButton*(button: PopupMenuButton): PopupMenuButton =
-  if button.isNil: nil else: button.xChildPopup
+  button.xChildPopup
 
 proc dispatchPopupKeyDown*(button: PopupMenuButton, event: KeyEvent): bool =
   button.handlePopupKeyDown(event)
 
 proc maxVisibleItems*(button: PopupMenuButton): int =
-  if button.isNil: 0 else: button.xMaxVisibleItems
+  button.xMaxVisibleItems
 
 proc `maxVisibleItems=`*(button: PopupMenuButton, value: int) =
-  if button.isNil:
-    return
   button.xMaxVisibleItems = max(value, 1)
   button.setNeedsDisplay(true)
 
 proc itemHeight*(button: PopupMenuButton): float32 =
-  if button.isNil:
-    popupMenuDefaultItemHeight()
-  else:
-    button.xItemHeight
+  button.xItemHeight
 
 proc `itemHeight=`*(button: PopupMenuButton, value: float32) =
-  if button.isNil:
-    return
   button.xItemHeight = value.normalizedRowHeight()
   button.setNeedsDisplay(true)
 
 proc popupPresentation*(button: PopupMenuButton): PopupPresentation =
-  if button.isNil: ppAutomatic else: button.xPopupPresentation
+  button.xPopupPresentation
 
 proc `popupPresentation=`*(button: PopupMenuButton, value: PopupPresentation) =
-  if button.isNil or button.xPopupPresentation == value:
+  if button.xPopupPresentation == value:
     return
   button.xPopupPresentation = value
   if button.popupOpen():
     button.closePopup()
 
 proc menuItemCount(button: PopupMenuButton): int =
-  if button.isNil or button.xMenu.isNil:
+  if button.xMenu.isNil:
     return 0
   button.xMenu.len
 
@@ -1098,8 +1022,6 @@ proc rootPopup(button: PopupMenuButton): PopupMenuButton =
     result = result.xParentPopup
 
 proc cascadeSuperview(button: PopupMenuButton): View =
-  if button.isNil:
-    return nil
   if not button.xParentPopup.isNil:
     return View(button.xParentPopup.popupList())
   button.superview()
@@ -1114,7 +1036,7 @@ proc ownerWindow(button: PopupMenuButton): Window =
     nil
 
 proc menuItem(button: PopupMenuButton, index: int): MenuItem =
-  if button.isNil or button.xMenu.isNil or index < 0 or index >= button.xMenu.len:
+  if button.xMenu.isNil or index < 0 or index >= button.xMenu.len:
     return nil
   button.xMenu[index]
 
@@ -1153,16 +1075,12 @@ proc menuItemIsSelectable(button: PopupMenuButton, index: int): bool =
   not item.isNil and not item.hidden() and not item.isSeparatorItem() and item.enabled()
 
 proc firstSelectableItemIndex(button: PopupMenuButton): int =
-  if button.isNil:
-    return -1
   for index in 0 ..< button.menuItemCount():
     if button.menuItemIsSelectable(index):
       return index
   -1
 
 proc lastSelectableItemIndex(button: PopupMenuButton): int =
-  if button.isNil:
-    return -1
   let count = button.menuItemCount()
   if count <= 0:
     return -1
@@ -1172,7 +1090,7 @@ proc lastSelectableItemIndex(button: PopupMenuButton): int =
   -1
 
 proc nextSelectableItemIndex(button: PopupMenuButton, startIndex, delta: int): int =
-  if button.isNil or delta == 0:
+  if delta == 0:
     return -1
   let count = button.menuItemCount()
   if count <= 0:
@@ -1222,7 +1140,7 @@ proc setHighlightedIndex(button: PopupMenuButton, index: int, openSubmenu = fals
   button.setPopupNeedsDisplay()
 
 proc scrollPopupRows(button: PopupMenuButton, delta: int) =
-  if button.isNil or delta == 0:
+  if delta == 0:
     return
   let oldFirst = button.popupFirstItemIndex()
   button.xViewport.scrollBy(delta, button.menuItemCount(), button.visibleItemCount())
@@ -1304,8 +1222,6 @@ proc closePopupRoot(button: PopupMenuButton) =
     root.closePopup()
 
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
-  if button.isNil:
-    return false
   case event.key
   of keyEscape:
     button.closePopupRoot()
@@ -1367,7 +1283,7 @@ proc popupPresentationPreference(button: PopupMenuButton): PopupPresentation =
   button.xPopupPresentation
 
 proc canUseWindowPopup(button: PopupMenuButton): bool =
-  if button.isNil or not button.xParentPopup.isNil or not nativePopupWindowsSupported():
+  if not button.xParentPopup.isNil or not nativePopupWindowsSupported():
     return false
   let owner = button.ownerWindow()
   not owner.isNil and owner.nativeReady
@@ -1435,7 +1351,7 @@ proc endPopupSession(button: PopupMenuButton) =
 
 proc openInlinePopup(button: PopupMenuButton) =
   let parent = button.cascadeSuperview()
-  if button.isNil or parent.isNil:
+  if parent.isNil:
     return
   let popup = button.popupList()
   popup.frame = button.popupFrameInSuperview()
@@ -1444,7 +1360,7 @@ proc openInlinePopup(button: PopupMenuButton) =
   popup.setNeedsDisplay(true)
 
 proc openPopupWindow(button: PopupMenuButton) =
-  if button.isNil or not button.shouldUseWindowPopup():
+  if not button.shouldUseWindowPopup():
     return
   let owner = button.ownerWindow()
   if owner.isNil or not owner.nativeReady:
@@ -1471,8 +1387,6 @@ proc openPopupWindow(button: PopupMenuButton) =
     popupWindow.close()
 
 proc owningMenuBar(button: PopupMenuButton): MenuBar =
-  if button.isNil:
-    return nil
   let parent = button.superview()
   if parent of MenuBar:
     MenuBar(parent)
@@ -1490,7 +1404,7 @@ proc noteMenuBarPopupClosed(button: PopupMenuButton) =
     menuBar.xOpenButton = nil
 
 proc openPopupImpl(button: PopupMenuButton) =
-  if button.isNil or button.xMenu.isNil:
+  if button.xMenu.isNil:
     return
   if button.popupOpen():
     return
@@ -1516,7 +1430,7 @@ proc openPopupImpl(button: PopupMenuButton) =
   button.setNeedsDisplay(true)
 
 proc closePopupImpl(button: PopupMenuButton) =
-  if button.isNil or not button.popupOpen():
+  if not button.popupOpen():
     return
   button.closeChildPopup()
   button.xPopupOpen = false
@@ -1732,7 +1646,7 @@ proc newPullDownButton*(
 proc popUpContextMenu*(
     menu: Menu, view: View, event: MouseEvent
 ): PopupMenuButton {.discardable.} =
-  if menu.isNil or menu.len == 0 or view.isNil:
+  if menu.len == 0 or view.isNil:
     return nil
   let ownerResponder = view.window()
   if not (ownerResponder of Window):
@@ -1827,16 +1741,14 @@ proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
   false
 
 proc menu*(menuBar: MenuBar): Menu =
-  if menuBar.isNil: nil else: menuBar.xMenu
+  menuBar.xMenu
 
 proc menuBarItemWidth(item: MenuItem): float32 =
-  if item.isNil:
-    return 0.0'f32
   max(textNaturalSize(item.title()).width + menuBarItemPadding(), 44.0'f32)
 
 proc menuBarNaturalSize(menuBar: MenuBar): Size =
   var width = menuBarHorizontalInset()
-  if not menuBar.isNil and not menuBar.xMenu.isNil:
+  if not menuBar.xMenu.isNil:
     for item in menuBar.xMenu.items:
       if not item.hidden():
         width += menuBarItemWidth(item) + menuBarItemGap()
@@ -1850,8 +1762,6 @@ proc clearMenuBarButtons(menuBar: MenuBar) =
   menuBar.xOpenButton = nil
 
 proc reloadImpl(menuBar: MenuBar) =
-  if menuBar.isNil:
-    return
   menuBar.clearMenuBarButtons()
   if menuBar.xMenu.isNil:
     menuBar.setNeedsLayout()
@@ -1868,14 +1778,12 @@ proc reloadImpl(menuBar: MenuBar) =
   menuBar.setNeedsDisplay(true)
 
 proc `menu=`*(menuBar: MenuBar, menu: Menu) =
-  if menuBar.isNil or menuBar.xMenu == menu:
+  if menuBar.xMenu == menu:
     return
   menuBar.xMenu = menu
   menuBar.reload()
 
 proc tileMenuBarItems(menuBar: MenuBar) =
-  if menuBar.isNil:
-    return
   var x = menuBarHorizontalInset()
   let
     bounds = menuBar.bounds()

@@ -159,13 +159,10 @@ proc constraintsAffectingLayout*(view: View): seq[LayoutInputSummary] =
     )
 
 proc layoutInputDirtySources*(view: View): LayoutInputSources =
-  if view.isNil:
-    {}
-  else:
-    view.xLayoutInputCache.dirtySources
+  view.xLayoutInputCache.dirtySources
 
 proc layoutInputGeneration*(view: View): Natural =
-  if view.isNil: 0 else: view.xLayoutInputCache.generation
+  view.xLayoutInputCache.generation
 
 proc item*(anchor: LayoutXAxisAnchor): View =
   anchor.xItem
@@ -793,57 +790,57 @@ proc pinEdges*(
   activate(result)
 
 proc firstItem*(constraint: LayoutConstraint): View =
-  if constraint.isNil: nil else: constraint.xFirstItem
+  constraint.xFirstItem
 
 proc firstAttribute*(constraint: LayoutConstraint): LayoutAttribute =
-  if constraint.isNil: atNotAnAttribute else: constraint.xFirstAttribute
+  constraint.xFirstAttribute
 
 proc relation*(constraint: LayoutConstraint): LayoutRelation =
-  if constraint.isNil: lrEqual else: constraint.xRelation
+  constraint.xRelation
 
 proc secondItem*(constraint: LayoutConstraint): View =
-  if constraint.isNil: nil else: constraint.xSecondItem
+  constraint.xSecondItem
 
 proc secondAttribute*(constraint: LayoutConstraint): LayoutAttribute =
-  if constraint.isNil: atNotAnAttribute else: constraint.xSecondAttribute
+  constraint.xSecondAttribute
 
 proc multiplier*(constraint: LayoutConstraint): float32 =
-  if constraint.isNil: 1.0'f32 else: constraint.xMultiplier
+  constraint.xMultiplier
 
 proc constant*(constraint: LayoutConstraint): float32 =
-  if constraint.isNil: 0.0'f32 else: constraint.xConstant
+  constraint.xConstant
 
 proc priority*(constraint: LayoutConstraint): LayoutPriority =
-  if constraint.isNil: LayoutPriorityRequired else: constraint.xPriority
+  constraint.xPriority
 
 proc isActive*(constraint: LayoutConstraint): bool =
-  (not constraint.isNil) and constraint.xActive
+  constraint.xActive
 
 proc active*(constraint: LayoutConstraint): bool =
   constraint.isActive()
 
 proc owningView*(constraint: LayoutConstraint): View =
-  if constraint.isNil: nil else: constraint.xOwningView
+  constraint.xOwningView
 
 proc invalidateActiveConstraint(constraint: LayoutConstraint) =
-  if constraint.isNil or not constraint.xActive:
+  if not constraint.xActive:
     return
   constraint.xOwningView.markConstraintStorageChanged()
 
 proc `constant=`*(constraint: LayoutConstraint, constant: float32) =
-  if constraint.isNil or constraint.xConstant == constant:
+  if constraint.xConstant == constant:
     return
   constraint.xConstant = constant
   constraint.invalidateActiveConstraint()
 
 proc `priority=`*(constraint: LayoutConstraint, priority: LayoutPriority) =
-  if constraint.isNil or constraint.xPriority == priority:
+  if constraint.xPriority == priority:
     return
   constraint.xPriority = priority
   constraint.invalidateActiveConstraint()
 
 proc indexOfConstraint(view: View, constraint: LayoutConstraint): int =
-  if view.isNil or constraint.isNil:
+  if constraint.isNil:
     return -1
   for index, stored in view.xConstraints:
     if stored == constraint:
@@ -851,7 +848,7 @@ proc indexOfConstraint(view: View, constraint: LayoutConstraint): int =
   -1
 
 proc removeStoredConstraint(view: View, constraint: LayoutConstraint) =
-  if view.isNil or constraint.isNil:
+  if constraint.isNil:
     return
   let index = view.indexOfConstraint(constraint)
   if index < 0:
@@ -863,13 +860,10 @@ proc removeStoredConstraint(view: View, constraint: LayoutConstraint) =
   view.markConstraintStorageChanged()
 
 proc constraints*(view: View): seq[LayoutConstraint] =
-  if view.isNil:
-    @[]
-  else:
-    view.xConstraints
+  view.xConstraints
 
 proc addConstraint*(view: View, constraint: LayoutConstraint) =
-  if view.isNil or constraint.isNil:
+  if constraint.isNil:
     return
   if constraint.xOwningView == view and view.indexOfConstraint(constraint) >= 0:
     if not constraint.xActive:
@@ -920,7 +914,7 @@ proc nearestCommonSuperview(first, second: View): View =
     candidate = candidate.xSuperview
 
 proc activationOwner(constraint: LayoutConstraint): View =
-  if constraint.isNil or constraint.xFirstItem.isNil:
+  if constraint.xFirstItem.isNil:
     return nil
   if constraint.xSecondItem.isNil:
     return constraint.xFirstItem
@@ -928,7 +922,7 @@ proc activationOwner(constraint: LayoutConstraint): View =
   if common.isNil: constraint.xFirstItem else: common
 
 proc `active=`*(constraint: LayoutConstraint, active: bool) =
-  if constraint.isNil or constraint.xActive == active:
+  if constraint.xActive == active:
     return
   if active:
     let owner = constraint.activationOwner()

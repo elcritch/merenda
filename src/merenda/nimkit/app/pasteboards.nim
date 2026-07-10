@@ -221,14 +221,7 @@ proc initPasteboardStringItem*(value: string): PasteboardItem =
   PasteboardItem(kind: pikString, stringValue: value)
 
 proc initPasteboardTextStorageItem*(storage: TextStorage): PasteboardItem =
-  PasteboardItem(
-    kind: pikTextStorage,
-    textStorage:
-      if storage.isNil:
-        newTextStorage()
-      else:
-        storage.copyTextStorage(),
-  )
+  PasteboardItem(kind: pikTextStorage, textStorage: storage.copyTextStorage())
 
 proc initPasteboardDataItem*(data: string): PasteboardItem =
   PasteboardItem(kind: pikData, data: data)
@@ -251,14 +244,7 @@ proc initPasteboardFontItem*(font: PasteboardFontDescriptor): PasteboardItem =
   PasteboardItem(kind: pikFont, font: font)
 
 proc initPasteboardImageItem*(image: ImageResource): PasteboardItem =
-  PasteboardItem(
-    kind: pikImage,
-    image:
-      if image.isNil:
-        nil
-      else:
-        image.copyImageResource(),
-  )
+  PasteboardItem(kind: pikImage, image: image.copyImageResource())
 
 proc copyPasteboardItem*(item: PasteboardItem): PasteboardItem =
   case item.kind
@@ -288,14 +274,12 @@ proc newPasteboard*(name = ""): Pasteboard =
   result.xItems = initTable[string, PasteboardItem]()
 
 proc pasteboardName*(pasteboard: Pasteboard): string =
-  if pasteboard.isNil: "" else: pasteboard.xName
+  pasteboard.xName
 
 proc provider*(pasteboard: Pasteboard): DynamicAgent =
-  if pasteboard.isNil: nil else: pasteboard.xProvider
+  pasteboard.xProvider
 
 proc `provider=`*(pasteboard: Pasteboard, provider: DynamicAgent) =
-  if pasteboard.isNil:
-    return
   if pasteboard.xProvider == provider:
     return
   pasteboard.xProvider = provider
@@ -305,29 +289,27 @@ proc `provider=`*(pasteboard: Pasteboard, provider: DynamicAgent) =
   pasteboard.xHasObservedProviderChangeCount = false
 
 proc owner*(pasteboard: Pasteboard): DynamicAgent =
-  if pasteboard.isNil: nil else: pasteboard.xOwner
+  pasteboard.xOwner
 
 proc `owner=`*(pasteboard: Pasteboard, owner: DynamicAgent) =
-  if pasteboard.isNil:
-    return
   pasteboard.xOwner = owner
 
 proc providerTypes(pasteboard: Pasteboard): seq[string] =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return @[]
   let types = pasteboard.xProvider.trySendLocal(pasteboardTypes(), pasteboard)
   if types.isSome:
     return types.get()
 
 proc providerChangeCount(pasteboard: Pasteboard): Option[int] =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return none(int)
   let count = pasteboard.xProvider.trySendLocal(pasteboardChangeCount(), pasteboard)
   if count.isSome:
     return some(count.get())
 
 proc providerItem(pasteboard: Pasteboard, kind: string): PasteboardItem =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return PasteboardItem(kind: pikNone)
   let item = pasteboard.xProvider.trySendLocal(
     pasteboardItemForType(), PasteboardTypeRequest(pasteboard: pasteboard, kind: kind)
@@ -336,7 +318,7 @@ proc providerItem(pasteboard: Pasteboard, kind: string): PasteboardItem =
     return item.get().copyPasteboardItem()
 
 proc providerString(pasteboard: Pasteboard, kind: string): string =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return ""
   let value = pasteboard.xProvider.trySendLocal(
     stringForPasteboardType(), PasteboardTypeRequest(pasteboard: pasteboard, kind: kind)
@@ -345,7 +327,7 @@ proc providerString(pasteboard: Pasteboard, kind: string): string =
     return value.get()
 
 proc ownerItem(pasteboard: Pasteboard, kind: string): PasteboardItem =
-  if pasteboard.isNil or pasteboard.xOwner.isNil:
+  if pasteboard.xOwner.isNil:
     return PasteboardItem(kind: pikNone)
   let item = pasteboard.xOwner.trySendLocal(
     providePasteboardItemForType(),
@@ -355,19 +337,19 @@ proc ownerItem(pasteboard: Pasteboard, kind: string): PasteboardItem =
     return item.get().copyPasteboardItem()
 
 proc clearProviderContents(pasteboard: Pasteboard): bool =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return false
   let cleared = pasteboard.xProvider.trySendLocal(clearPasteboardContents(), pasteboard)
   cleared.isSome and cleared.get()
 
 proc releaseProviderPasteboard(pasteboard: Pasteboard): bool =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return false
   let released = pasteboard.xProvider.trySendLocal(releasePasteboard(), pasteboard)
   released.isSome and released.get()
 
 proc setProviderString(pasteboard: Pasteboard, kind, value: string): bool =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return false
   let written = pasteboard.xProvider.trySendLocal(
     setStringForPasteboardType(),
@@ -376,7 +358,7 @@ proc setProviderString(pasteboard: Pasteboard, kind, value: string): bool =
   written.isSome and written.get()
 
 proc setProviderItem(pasteboard: Pasteboard, kind: string, item: PasteboardItem): bool =
-  if pasteboard.isNil or pasteboard.xProvider.isNil:
+  if pasteboard.xProvider.isNil:
     return false
   let written = pasteboard.xProvider.trySendLocal(
     setPasteboardItemForType(),
@@ -388,18 +370,14 @@ proc setProviderItem(pasteboard: Pasteboard, kind: string, item: PasteboardItem)
     return pasteboard.setProviderString(kind, item.stringValue)
 
 proc addType(pasteboard: Pasteboard, kind: string) =
-  if not pasteboard.isNil and kind.len > 0 and kind notin pasteboard.xTypes:
+  if kind.len > 0 and kind notin pasteboard.xTypes:
     pasteboard.xTypes.add kind
 
 proc clearLocalContents(pasteboard: Pasteboard) =
-  if pasteboard.isNil:
-    return
   pasteboard.xTypes.setLen(0)
   pasteboard.xItems.clear()
 
 proc observeProviderChangeCount(pasteboard: Pasteboard) =
-  if pasteboard.isNil:
-    return
   let providerCount = pasteboard.providerChangeCount()
   if providerCount.isSome:
     pasteboard.xObservedProviderChangeCount = providerCount.get()
@@ -408,8 +386,6 @@ proc observeProviderChangeCount(pasteboard: Pasteboard) =
     pasteboard.xHasObservedProviderChangeCount = false
 
 proc refreshProviderCache(pasteboard: Pasteboard) =
-  if pasteboard.isNil:
-    return
   let providerCount = pasteboard.providerChangeCount()
   if providerCount.isNone:
     pasteboard.xHasObservedProviderChangeCount = false
@@ -424,22 +400,20 @@ proc refreshProviderCache(pasteboard: Pasteboard) =
     pasteboard.xOwner = nil
 
 proc syncProviderTypes(pasteboard: Pasteboard) =
-  if pasteboard.isNil:
-    return
   for kind in pasteboard.providerTypes():
     pasteboard.addType(kind)
 
 proc storeMaterializedItem(
     pasteboard: Pasteboard, kind: string, item: PasteboardItem
 ): bool =
-  if pasteboard.isNil or kind.len == 0 or item.kind == pikNone:
+  if kind.len == 0 or item.kind == pikNone:
     return false
   pasteboard.addType(kind)
   pasteboard.xItems[kind] = item.copyPasteboardItem()
   true
 
 proc materializeItem(pasteboard: Pasteboard, kind: string): bool =
-  if pasteboard.isNil or kind.len == 0:
+  if kind.len == 0:
     return false
   pasteboard.refreshProviderCache()
   if kind in pasteboard.xItems:
@@ -455,8 +429,6 @@ proc materializeItem(pasteboard: Pasteboard, kind: string): bool =
   pasteboard.storeMaterializedItem(kind, item)
 
 proc changeCount*(pasteboard: Pasteboard): int =
-  if pasteboard.isNil:
-    return 0
   let providerCount = pasteboard.providerChangeCount()
   if providerCount.isSome:
     max(pasteboard.xChangeCount, providerCount.get())
@@ -464,16 +436,11 @@ proc changeCount*(pasteboard: Pasteboard): int =
     pasteboard.xChangeCount
 
 proc types*(pasteboard: Pasteboard): seq[string] =
-  if pasteboard.isNil:
-    @[]
-  else:
-    pasteboard.refreshProviderCache()
-    pasteboard.syncProviderTypes()
-    pasteboard.xTypes
+  pasteboard.refreshProviderCache()
+  pasteboard.syncProviderTypes()
+  pasteboard.xTypes
 
 proc clearContents*(pasteboard: Pasteboard) =
-  if pasteboard.isNil:
-    return
   pasteboard.clearLocalContents()
   pasteboard.xOwner = nil
   inc pasteboard.xChangeCount
@@ -483,8 +450,6 @@ proc clearContents*(pasteboard: Pasteboard) =
 proc declareTypes*(
     pasteboard: Pasteboard, types: openArray[string], owner: DynamicAgent = nil
 ) =
-  if pasteboard.isNil:
-    return
   pasteboard.clearLocalContents()
   pasteboard.xOwner = owner
   for kind in types:
@@ -494,7 +459,7 @@ proc declareTypes*(
   pasteboard.observeProviderChangeCount()
 
 proc setItem*(pasteboard: Pasteboard, kind: string, item: PasteboardItem): bool =
-  if pasteboard.isNil or kind.len == 0 or item.kind == pikNone:
+  if kind.len == 0 or item.kind == pikNone:
     return false
   pasteboard.addType(kind)
   pasteboard.xItems[kind] = item.copyPasteboardItem()
@@ -504,7 +469,7 @@ proc setItem*(pasteboard: Pasteboard, kind: string, item: PasteboardItem): bool 
   true
 
 proc itemForType*(pasteboard: Pasteboard, kind: string): PasteboardItem =
-  if pasteboard.isNil or kind.len == 0:
+  if kind.len == 0:
     return PasteboardItem(kind: pikNone)
   discard pasteboard.materializeItem(kind)
   if kind in pasteboard.xItems:
@@ -625,8 +590,6 @@ proc imageForType*(pasteboard: Pasteboard, kind: string): ImageResource =
 proc availableTypeFromArray*(
     pasteboard: Pasteboard, preferredTypes: openArray[string]
 ): string =
-  if pasteboard.isNil:
-    return ""
   pasteboard.refreshProviderCache()
   pasteboard.syncProviderTypes()
   for kind in preferredTypes:
@@ -634,8 +597,6 @@ proc availableTypeFromArray*(
       return kind
 
 proc releaseGlobally*(pasteboard: Pasteboard): bool =
-  if pasteboard.isNil:
-    return false
   let name = pasteboard.xName
   pasteboard.clearLocalContents()
   pasteboard.xOwner = nil

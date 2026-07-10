@@ -318,11 +318,10 @@ protocol TextLayoutStorageEditingSlots of TextStorageEditingEvents:
   proc storageDidProcessEditing(
       manager: TextLayoutManager, edit: TextStorageEdit
   ) {.slot.} =
-    if not manager.isNil:
-      if tseCharacters in edit.kinds:
-        manager.defaultInvalidateCharacters(edit.range)
-      else:
-        manager.defaultInvalidateLayout(edit.range)
+    if tseCharacters in edit.kinds:
+      manager.defaultInvalidateCharacters(edit.range)
+    else:
+      manager.defaultInvalidateLayout(edit.range)
 
 func initGlyphIndex*(value: int): GlyphIndex =
   GlyphIndex(max(value, 0).Natural)
@@ -435,10 +434,7 @@ func effectiveContainers(
     @containers
 
 proc effectiveContainers(manager: TextLayoutManager): seq[TextContainer] =
-  if manager.isNil:
-    @[initTextContainer()]
-  else:
-    effectiveContainers(manager.xTextContainer, manager.xTextContainers)
+  effectiveContainers(manager.xTextContainer, manager.xTextContainers)
 
 func effectiveContainers(request: TextLayoutRequest): seq[TextContainer] =
   effectiveContainers(request.container, request.containers)
@@ -615,16 +611,14 @@ proc newFigDrawTextTypesetter*(): FigDrawTextTypesetter =
   discard result.withProtocol(FigDrawTextTypesetterProtocol)
 
 proc fullTextRange(manager: TextLayoutManager): TextRange =
-  initTextRange(
-    0, if manager.isNil or manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
-  )
+  initTextRange(0, if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len)
 
 proc observeTextStorage(manager: TextLayoutManager, storage: TextStorage) =
-  if not manager.isNil and not storage.isNil:
+  if not storage.isNil:
     manager.observeProtocol(storage, TextLayoutStorageEditingSlots)
 
 proc unobserveTextStorage(manager: TextLayoutManager, storage: TextStorage) =
-  if not manager.isNil and not storage.isNil:
+  if not storage.isNil:
     manager.unobserveProtocol(storage, TextLayoutStorageEditingSlots)
 
 proc initTextLayoutManagerFields*(
@@ -657,22 +651,18 @@ proc newTextLayoutManager*(
   initTextLayoutManagerFields(result, storage, container, alignment, style)
 
 proc invalidateLayout*(manager: TextLayoutManager) =
-  if not manager.isNil:
-    manager.lmInvalidate(manager.fullTextRange())
+  manager.lmInvalidate(manager.fullTextRange())
 
 proc invalidateLayout*(manager: TextLayoutManager, range: TextRange) =
-  if not manager.isNil:
-    manager.lmInvalidate(range)
+  manager.lmInvalidate(range)
 
 proc hasValidLayout*(manager: TextLayoutManager): bool =
-  not manager.isNil and manager.lmHasLayout()
+  manager.lmHasLayout()
 
 proc textStorage*(manager: TextLayoutManager): TextStorage =
-  if manager.isNil: nil else: manager.xTextStorage
+  manager.xTextStorage
 
 proc `textStorage=`*(manager: TextLayoutManager, storage: TextStorage) =
-  if manager.isNil:
-    return
   if manager.xTextStorage == storage:
     return
   manager.unobserveTextStorage(manager.xTextStorage)
@@ -681,14 +671,9 @@ proc `textStorage=`*(manager: TextLayoutManager, storage: TextStorage) =
   manager.invalidateLayout()
 
 proc textContainer*(manager: TextLayoutManager): TextContainer =
-  if manager.isNil:
-    initTextContainer()
-  else:
-    manager.xTextContainer
+  manager.xTextContainer
 
 proc `textContainer=`*(manager: TextLayoutManager, container: TextContainer) =
-  if manager.isNil:
-    return
   if manager.xTextContainers.len == 0 and manager.xTextContainer == container:
     return
   manager.xTextContainer = container
@@ -697,14 +682,9 @@ proc `textContainer=`*(manager: TextLayoutManager, container: TextContainer) =
   manager.invalidateLayout()
 
 proc textContainers*(manager: TextLayoutManager): seq[TextContainer] =
-  if manager.isNil:
-    @[]
-  else:
-    manager.effectiveContainers()
+  manager.effectiveContainers()
 
 proc `textContainers=`*(manager: TextLayoutManager, containers: seq[TextContainer]) =
-  if manager.isNil:
-    return
   let normalized =
     if containers.len == 0:
       @[initTextContainer()]
@@ -718,8 +698,6 @@ proc `textContainers=`*(manager: TextLayoutManager, containers: seq[TextContaine
   manager.invalidateLayout()
 
 proc addTextContainer*(manager: TextLayoutManager, container: TextContainer) =
-  if manager.isNil:
-    return
   var containers = manager.effectiveContainers()
   containers.add container
   manager.textContainers = containers
@@ -727,8 +705,6 @@ proc addTextContainer*(manager: TextLayoutManager, container: TextContainer) =
 proc insertTextContainer*(
     manager: TextLayoutManager, index: int, container: TextContainer
 ) =
-  if manager.isNil:
-    return
   var containers = manager.effectiveContainers()
   containers.insert(container, max(0, min(index, containers.len)))
   manager.textContainers = containers
@@ -736,8 +712,6 @@ proc insertTextContainer*(
 proc replaceTextContainer*(
     manager: TextLayoutManager, index: TextContainerIndex, container: TextContainer
 ) =
-  if manager.isNil:
-    return
   var containers = manager.effectiveContainers()
   let position = index.toInt
   if position < 0 or position >= containers.len:
@@ -749,8 +723,6 @@ proc replaceTextContainer*(
   manager.lmInvalidateContainer(index)
 
 proc removeTextContainer*(manager: TextLayoutManager, index: TextContainerIndex) =
-  if manager.isNil:
-    return
   var containers = manager.effectiveContainers()
   let position = index.toInt
   if position < 0 or position >= containers.len:
@@ -759,118 +731,98 @@ proc removeTextContainer*(manager: TextLayoutManager, index: TextContainerIndex)
   manager.textContainers = containers
 
 proc invalidateTextContainer*(manager: TextLayoutManager, index: TextContainerIndex) =
-  if not manager.isNil:
-    manager.lmInvalidateContainer(index)
+  manager.lmInvalidateContainer(index)
 
 proc textStyle*(manager: TextLayoutManager): TextStyle =
-  if manager.isNil:
-    initAppearance().resolveTextStyle(
-      controlStyle(srTextView), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
-    )
-  else:
-    manager.xTextStyle
+  manager.xTextStyle
 
 proc `textStyle=`*(manager: TextLayoutManager, style: TextStyle) =
-  if manager.isNil or manager.xTextStyle == style:
+  if manager.xTextStyle == style:
     return
   manager.xTextStyle = style
   manager.invalidateLayout()
 
 proc alignment*(manager: TextLayoutManager): TextAlignment =
-  if manager.isNil: taLeft else: manager.xAlignment
+  manager.xAlignment
 
 proc `alignment=`*(manager: TextLayoutManager, alignment: TextAlignment) =
-  if manager.isNil or manager.xAlignment == alignment:
+  if manager.xAlignment == alignment:
     return
   manager.xAlignment = alignment
   manager.invalidateLayout()
 
 proc textLayoutBackend*(manager: TextLayoutManager): TextLayoutBackend =
-  if manager.isNil: nil else: manager.xBackend
+  manager.xBackend
 
 proc `textLayoutBackend=`*(manager: TextLayoutManager, backend: TextLayoutBackend) =
-  if manager.isNil:
-    return
   manager.xBackend = backend
   manager.invalidateLayout()
 
 proc layoutClient*(manager: TextLayoutManager): DynamicAgent =
-  if manager.isNil: nil else: manager.xClient
+  manager.xClient
 
 proc `layoutClient=`*(manager: TextLayoutManager, client: DynamicAgent) =
-  if manager.isNil or manager.xClient == client:
+  if manager.xClient == client:
     return
   manager.xClient = client
   manager.invalidateLayout()
 
 proc delegate*(manager: TextLayoutManager): DynamicAgent =
-  if manager.isNil: nil else: manager.xDelegate
+  manager.xDelegate
 
 proc `delegate=`*(manager: TextLayoutManager, delegate: DynamicAgent) =
-  if not manager.isNil:
-    manager.xDelegate = delegate
+  manager.xDelegate = delegate
 
 proc usesBackgroundLayout*(manager: TextLayoutManager): bool =
-  not manager.isNil and manager.xUsesBackgroundLayout
+  manager.xUsesBackgroundLayout
 
 proc `usesBackgroundLayout=`*(manager: TextLayoutManager, value: bool) =
-  if not manager.isNil:
-    manager.xUsesBackgroundLayout = value
+  manager.xUsesBackgroundLayout = value
 
 proc allowsNonContiguousLayout*(manager: TextLayoutManager): bool =
-  not manager.isNil and manager.xAllowsNonContiguousLayout
+  manager.xAllowsNonContiguousLayout
 
 proc `allowsNonContiguousLayout=`*(manager: TextLayoutManager, value: bool) =
-  if manager.isNil or manager.xAllowsNonContiguousLayout == value:
+  if manager.xAllowsNonContiguousLayout == value:
     return
   manager.xAllowsNonContiguousLayout = value
   manager.xHasNonContiguousLayout = false
 
 proc hasNonContiguousLayout*(manager: TextLayoutManager): bool =
-  not manager.isNil and manager.xHasNonContiguousLayout
+  manager.xHasNonContiguousLayout
 
 proc recordInvalidation(
     manager: TextLayoutManager, invalidation: TextLayoutInvalidation
 ) =
-  if manager.isNil:
-    return
   manager.xInvalidations.add invalidation
   emit manager.textLayoutDidInvalidate(manager.xInvalidations)
 
 proc invalidateCharacters*(manager: TextLayoutManager, range: TextRange) =
-  if not manager.isNil:
-    manager.lmInvalidateChars(range)
+  manager.lmInvalidateChars(range)
 
 proc invalidateGlyphs*(manager: TextLayoutManager, range: GlyphRange) =
-  if not manager.isNil:
-    manager.lmInvalidateGlyphs(range)
+  manager.lmInvalidateGlyphs(range)
 
 proc invalidateDisplay*(manager: TextLayoutManager, range: TextRange) =
-  if not manager.isNil:
-    manager.lmInvalidateDisplay(range)
+  manager.lmInvalidateDisplay(range)
 
 proc invalidateDisplayForGlyphRange*(manager: TextLayoutManager, range: GlyphRange) =
-  if manager.isNil:
-    return
   manager.invalidateDisplay(manager.textRangeForGlyphRange(range))
 
 proc updateLayoutForTextRange*(manager: TextLayoutManager, range: TextRange) =
   discard range
-  if not manager.isNil:
-    manager.updateLayout()
+  manager.updateLayout()
 
 proc updateLayoutForGlyphRange*(manager: TextLayoutManager, range: GlyphRange) =
   discard range
-  if not manager.isNil:
-    manager.updateLayout()
+  manager.updateLayout()
 
 proc updateLayoutForContainer*(manager: TextLayoutManager, index: TextContainerIndex) =
   discard index
-  if not manager.isNil:
-    manager.updateLayout()
+  manager.updateLayout()
 
 proc requestBackgroundLayout*(manager: TextLayoutManager) =
-  if manager.isNil or not manager.xUsesBackgroundLayout:
+  if not manager.xUsesBackgroundLayout:
     return
   manager.updateLayout()
 
@@ -985,7 +937,7 @@ func toTextCaretPositionKind(affinity: TextCaretAffinity): TextCaretPositionKind
   of CaretTrailing: tcpTrailing
 
 proc applyClientInputs(manager: TextLayoutManager) =
-  if manager.isNil or manager.xClient.isNil:
+  if manager.xClient.isNil:
     return
   let storage = manager.xClient.trySendLocal(textLayoutStorage(), manager)
   if storage.isSome and storage.get() != manager.xTextStorage:
@@ -1034,24 +986,18 @@ proc layoutRequest(manager: TextLayoutManager): TextLayoutRequest =
   )
 
 proc defaultInvalidateLayout(manager: TextLayoutManager, range: TextRange) =
-  if manager.isNil:
-    return
   manager.xInvalidatedRanges.add range
   manager.recordInvalidation(invalidationForText(tlikLayout, range))
   manager.xHasLayout = false
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateCharacters(manager: TextLayoutManager, range: TextRange) =
-  if manager.isNil:
-    return
   manager.xInvalidatedRanges.add range
   manager.recordInvalidation(invalidationForText(tlikCharacters, range))
   manager.xHasLayout = false
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateGlyphs(manager: TextLayoutManager, range: GlyphRange) =
-  if manager.isNil:
-    return
   manager.updateLayout()
   let clamped = clampedGlyphRange(manager.currentGlyphCount(), range)
   manager.xInvalidatedGlyphRanges.add clamped
@@ -1062,13 +1008,9 @@ proc defaultInvalidateGlyphs(manager: TextLayoutManager, range: GlyphRange) =
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateDisplay(manager: TextLayoutManager, range: TextRange) =
-  if manager.isNil:
-    return
   manager.recordInvalidation(invalidationForText(tlikDisplay, range))
 
 proc defaultInvalidateContainer(manager: TextLayoutManager, index: TextContainerIndex) =
-  if manager.isNil:
-    return
   let containers = manager.effectiveContainers()
   if containers.len == 0:
     return
@@ -1080,15 +1022,13 @@ proc defaultInvalidateContainer(manager: TextLayoutManager, index: TextContainer
   emit manager.containerDidInvalidate(clamped, containers[position])
 
 proc defaultHasValidLayout(manager: TextLayoutManager): bool =
-  not manager.isNil and manager.xHasLayout
+  manager.xHasLayout
 
 proc currentGlyphCount(manager: TextLayoutManager): int =
-  if manager.isNil:
-    return 0
   max(manager.xLayout.glyphCount(), int(manager.xSnapshot.glyphCount))
 
 proc delegateAllowsGlyphGeneration(manager: TextLayoutManager, range: TextRange): bool =
-  if manager.isNil or manager.xDelegate.isNil:
+  if manager.xDelegate.isNil:
     return true
 
   manager.xDelegate
@@ -1096,7 +1036,7 @@ proc delegateAllowsGlyphGeneration(manager: TextLayoutManager, range: TextRange)
   .get(true)
 
 proc delegateLineSpacing(manager: TextLayoutManager, glyphIndex: GlyphIndex): float32 =
-  if manager.isNil or manager.xDelegate.isNil:
+  if manager.xDelegate.isNil:
     return 0.0'f32
   max(
     manager.xDelegate
@@ -1108,7 +1048,7 @@ proc delegateLineSpacing(manager: TextLayoutManager, glyphIndex: GlyphIndex): fl
 proc delegateParagraphSpacingBefore(
     manager: TextLayoutManager, glyphIndex: GlyphIndex
 ): float32 =
-  if manager.isNil or manager.xDelegate.isNil:
+  if manager.xDelegate.isNil:
     return 0.0'f32
   max(
     manager.xDelegate
@@ -1122,7 +1062,7 @@ proc delegateParagraphSpacingBefore(
 proc delegateParagraphSpacingAfter(
     manager: TextLayoutManager, glyphIndex: GlyphIndex
 ): float32 =
-  if manager.isNil or manager.xDelegate.isNil:
+  if manager.xDelegate.isNil:
     return 0.0'f32
   max(
     manager.xDelegate
@@ -1134,13 +1074,13 @@ proc delegateParagraphSpacingAfter(
   )
 
 proc dispatchLayoutDidFinish(manager: TextLayoutManager, snapshot: TextLayoutSnapshot) =
-  if not manager.isNil and not manager.xDelegate.isNil:
+  if not manager.xDelegate.isNil:
     discard manager.xDelegate.trySendLocal(
       layoutDidFinish(), (manager: manager, snapshot: snapshot)
     )
 
 proc shouldHyphenate*(manager: TextLayoutManager, range: TextRange, word = ""): bool =
-  if manager.isNil or manager.xDelegate.isNil:
+  if manager.xDelegate.isNil:
     return false
 
   manager.xDelegate
@@ -1148,8 +1088,6 @@ proc shouldHyphenate*(manager: TextLayoutManager, range: TextRange, word = ""): 
   .get(false)
 
 proc defaultUpdateLayout(manager: TextLayoutManager) =
-  if manager.isNil:
-    return
   manager.applyClientInputs()
   if manager.xHasLayout:
     return
@@ -1179,8 +1117,7 @@ proc defaultUpdateLayout(manager: TextLayoutManager) =
     emit manager.layoutGeometryDidChange(oldUsedRect, oldContentSize, manager.xSnapshot)
 
 proc updateLayout*(manager: TextLayoutManager) =
-  if not manager.isNil:
-    manager.lmUpdate()
+  manager.lmUpdate()
 
 proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
   let
@@ -1202,20 +1139,14 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
   result.snapshot = manager.snapshotFromCurrentLayout()
 
 proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
-  if manager.isNil:
-    return GlyphArrangement()
   manager.updateLayout()
   manager.xLayout
 
 proc layoutBounds*(manager: TextLayoutManager): Rect =
-  if manager.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   manager.updateLayout()
   manager.xSnapshot.containerRect
 
 proc glyphCount*(manager: TextLayoutManager): Natural =
-  if manager.isNil:
-    return 0.Natural
   manager.updateLayout()
   manager.currentGlyphCount().Natural
 
@@ -1350,8 +1281,6 @@ proc reindexLineFragments(fragments: var seq[TextLineFragment]) =
     fragments[index].lineIndex = initTextLineIndex(index)
 
 proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment] =
-  if manager.isNil:
-    return
   if not manager.xHasLayout:
     manager.updateLayout()
 
@@ -1379,10 +1308,7 @@ proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment] =
   result.reindexLineFragments()
 
 proc lineFragments*(manager: TextLayoutManager): seq[TextLineFragment] =
-  if manager.isNil:
-    @[]
-  else:
-    manager.lmLineFragments()
+  manager.lmLineFragments()
 
 iterator lineFragmentItems*(manager: TextLayoutManager): TextLineFragment =
   for fragment in manager.lineFragments():
@@ -1392,8 +1318,6 @@ proc lineCount*(manager: TextLayoutManager): Natural =
   manager.lineFragments().len.Natural
 
 proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
-  if manager.isNil:
-    return
   result.textHash =
     if manager.xTextStorage.isNil:
       hash("")
@@ -1435,14 +1359,10 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
   result.contentSize = initSize(max(contentWidth, 0.0'f32), max(contentHeight, 0.0'f32))
 
 proc defaultLayoutSnapshot(manager: TextLayoutManager): TextLayoutSnapshot =
-  if manager.isNil:
-    return
   manager.updateLayout()
   manager.xSnapshot
 
 proc layoutSnapshot*(manager: TextLayoutManager): TextLayoutSnapshot =
-  if manager.isNil:
-    return
   manager.lmSnapshot()
 
 proc usedRect*(manager: TextLayoutManager): Rect =
@@ -1466,8 +1386,6 @@ proc emptyGlyphRangeForTextIndex(
   initGlyphRange(count, 0)
 
 proc glyphRangeForTextRange*(manager: TextLayoutManager, range: TextRange): GlyphRange =
-  if manager.isNil:
-    return initGlyphRange(0, 0)
   manager.updateLayout()
   let
     count = manager.xLayout.glyphCount()
@@ -1481,8 +1399,6 @@ proc glyphRangeForTextRange*(manager: TextLayoutManager, range: TextRange): Glyp
   initGlyphRange(glyphRange.a, glyphRange.b - glyphRange.a + 1)
 
 proc textRangeForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): TextRange =
-  if manager.isNil:
-    return initTextRange(0, 0)
   manager.updateLayout()
   let
     count = manager.xLayout.glyphCount()
@@ -1509,8 +1425,6 @@ proc textRangeForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Tex
     initTextRange(0, 0)
 
 proc glyphIndexAtPoint*(manager: TextLayoutManager, point: Point): Option[GlyphIndex] =
-  if manager.isNil:
-    return none(GlyphIndex)
   manager.updateLayout()
   let localPoint = manager.localLayoutPoint(point)
   let glyphIndex = manager.xLayout.glyphIndexAt(vec2(localPoint.x, localPoint.y))
@@ -1522,8 +1436,6 @@ proc glyphIndexAtPoint*(manager: TextLayoutManager, point: Point): Option[GlyphI
 proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int
 
 proc textRangeAtPoint*(manager: TextLayoutManager, point: Point): TextRange =
-  if manager.isNil:
-    return initTextRange(0, 0)
   manager.updateLayout()
   let localPoint = manager.localLayoutPoint(point)
   let sourceRange = manager.xLayout.sourceRuneRangeAt(vec2(localPoint.x, localPoint.y))
@@ -1560,8 +1472,6 @@ func textIndexInFragment(fragment: TextLineFragment, index, textLength: int): bo
 proc lineFragmentForTextIndex*(
     manager: TextLayoutManager, index: TextIndex
 ): Option[TextLineFragment] =
-  if manager.isNil:
-    return none(TextLineFragment)
   let
     textLength = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
     textIndex = max(0, min(index.toInt, textLength))
@@ -1585,8 +1495,6 @@ proc lineFragmentForTextIndex*(
 proc lineFragmentForGlyphIndex*(
     manager: TextLayoutManager, index: GlyphIndex
 ): Option[TextLineFragment] =
-  if manager.isNil:
-    return none(TextLineFragment)
   let
     glyphIndex = index.toInt
     fragments = manager.lineFragments()
@@ -1611,7 +1519,7 @@ proc lineFragmentForGlyphIndex*(
 proc defaultGlyphProperties(
     manager: TextLayoutManager, textRange: TextRange
 ): GlyphProperties =
-  if manager.isNil or textRange.length == 0:
+  if textRange.length == 0:
     return {gpNull}
   if manager.xTextStorage.isNil:
     return
@@ -1633,8 +1541,6 @@ proc defaultGlyphProperties(
     result.incl gpAttachment
 
 proc glyphProperties*(manager: TextLayoutManager, index: GlyphIndex): GlyphProperties =
-  if manager.isNil:
-    return {gpNull}
   let range = initGlyphRange(index.toInt, 1)
   for run in manager.xGlyphProperties:
     if run.range.glyphRangeIntersects(range):
@@ -1644,8 +1550,6 @@ proc glyphProperties*(manager: TextLayoutManager, index: GlyphIndex): GlyphPrope
 proc setGlyphProperties*(
     manager: TextLayoutManager, range: GlyphRange, properties: GlyphProperties
 ) =
-  if manager.isNil:
-    return
   let clamped = clampedGlyphRange(int(manager.glyphCount()), range)
   if clamped.length == 0:
     return
@@ -1673,8 +1577,6 @@ proc setGlyphProperties*(
   manager.invalidateGlyphs(clamped)
 
 proc removeGlyphProperties*(manager: TextLayoutManager, range: GlyphRange) =
-  if manager.isNil:
-    return
   let clamped = clampedGlyphRange(int(manager.glyphCount()), range)
   if clamped.length == 0:
     return
@@ -1701,16 +1603,11 @@ proc removeGlyphProperties*(manager: TextLayoutManager, range: GlyphRange) =
   manager.invalidateGlyphs(clamped)
 
 proc glyphPropertyRuns*(manager: TextLayoutManager): seq[TextGlyphPropertyRun] =
-  if manager.isNil:
-    @[]
-  else:
-    manager.xGlyphProperties
+  manager.xGlyphProperties
 
 proc glyphIndexForTextIndex*(
     manager: TextLayoutManager, index: TextIndex
 ): Option[GlyphIndex] =
-  if manager.isNil:
-    return none(GlyphIndex)
   let range = manager.glyphRangeForTextRange(initTextRange(index.toInt, 1))
   if range.length == 0:
     none(GlyphIndex)
@@ -1734,8 +1631,6 @@ proc textIndexForGlyphIndex*(manager: TextLayoutManager, index: int): TextIndex 
   manager.textIndexForGlyphIndex(initGlyphIndex(index))
 
 proc glyphInfo*(manager: TextLayoutManager, index: GlyphIndex): Option[TextGlyph] =
-  if manager.isNil:
-    return none(TextGlyph)
   manager.updateLayout()
   let
     glyphIndex = index.toInt
@@ -1775,8 +1670,6 @@ proc glyphInfo*(manager: TextLayoutManager, index: int): Option[TextGlyph] =
 proc generatedGlyphsForTextRange*(
     manager: TextLayoutManager, range: TextRange
 ): seq[TextGlyph] =
-  if manager.isNil:
-    return
   manager.updateLayout()
   let
     clamped = clampTextRange(manager.xLayout.sourceRuneCount(), range)
@@ -1794,8 +1687,6 @@ proc glyphsForTextRange*(manager: TextLayoutManager, range: TextRange): seq[Text
 proc lineFragmentsForTextRange*(
     manager: TextLayoutManager, range: TextRange
 ): seq[TextLineFragment] =
-  if manager.isNil:
-    return
   let
     textLength = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
     clamped = clampTextRange(textLength, range)
@@ -1825,22 +1716,15 @@ proc lineRangeForTextRange*(
   initTextLineRange(first, last - first + 1)
 
 proc defaultCaretRect(manager: TextLayoutManager, insertionPoint: int): Rect =
-  if manager.isNil:
-    return rect(0.0, 0.0, 1.0, defaultFontSize())
   manager.updateLayout()
   manager.actualRectForVirtualRect(manager.virtualCaretRect(insertionPoint))
 
 proc caretRect*(manager: TextLayoutManager, insertionPoint: int): Rect =
-  if manager.isNil:
-    rect(0.0, 0.0, 1.0, defaultFontSize())
-  else:
-    manager.lmCaretRect(insertionPoint)
+  manager.lmCaretRect(insertionPoint)
 
 proc caretPositions*(
     manager: TextLayoutManager, insertionPoint: int
 ): seq[TextCaretPosition] =
-  if manager.isNil:
-    return
   manager.updateLayout()
   let
     sourceCount = manager.xLayout.sourceRuneCount()
@@ -1880,7 +1764,7 @@ proc caretPositions*(
     )
 
 proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Rect] =
-  if manager.isNil or range.length == 0:
+  if range.length == 0:
     return @[]
   manager.updateLayout()
   let clamped = clampTextRange(manager.xLayout.sourceRuneCount(), range)
@@ -1890,14 +1774,9 @@ proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Re
     )
 
 proc selectionRects*(manager: TextLayoutManager, range: TextRange): seq[Rect] =
-  if manager.isNil:
-    @[]
-  else:
-    manager.lmSelectionRects(range)
+  manager.lmSelectionRects(range)
 
 proc firstRectForTextRange*(manager: TextLayoutManager, range: TextRange): Rect =
-  if manager.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   if range.length == 0:
     return manager.caretRect(int(range.location))
   let rects = manager.selectionRects(range)
@@ -1916,8 +1795,6 @@ proc textRangeBounds*(manager: TextLayoutManager, range: TextRange): Rect =
 proc temporaryAttributeRuns*(
     manager: TextLayoutManager, range: TextRange
 ): seq[TextAttributeRun] =
-  if manager.isNil:
-    return
   let
     total = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
     clamped = clampTextRange(total, range)
@@ -1935,8 +1812,6 @@ proc temporaryAttributeRuns*(
   result = result.sortedTemporaryRuns()
 
 proc temporaryAttributesAt*(manager: TextLayoutManager, index: int): TextAttributes =
-  if manager.isNil:
-    return defaultTextAttributes()
   let runs = manager.temporaryAttributeRuns(initTextRange(index, 1))
   if runs.len > 0:
     runs[^1].attributes
@@ -1953,8 +1828,6 @@ proc temporaryAttributesAt*(
 proc setTemporaryAttributes*(
     manager: TextLayoutManager, range: TextRange, attributes: TextAttributes
 ) =
-  if manager.isNil:
-    return
   let
     total = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
     clamped = clampTextRange(total, range)
@@ -1989,8 +1862,6 @@ proc addTemporaryAttributes*(
   manager.setTemporaryAttributes(range, attributes)
 
 proc removeTemporaryAttributes*(manager: TextLayoutManager, range: TextRange) =
-  if manager.isNil:
-    return
   let
     total = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
     clamped = clampTextRange(total, range)
@@ -2019,7 +1890,7 @@ proc removeTemporaryAttributes*(manager: TextLayoutManager, range: TextRange) =
   manager.invalidateDisplay(clamped)
 
 proc characterRect*(manager: TextLayoutManager, index: int): Rect =
-  if manager.isNil or manager.xTextStorage.isNil:
+  if manager.xTextStorage.isNil:
     return rect(0.0, 0.0, 0.0, 0.0)
   let total = manager.xTextStorage.len
   if index < 0 or index >= total:
@@ -2029,7 +1900,7 @@ proc characterRect*(manager: TextLayoutManager, index: int): Rect =
     result = manager.caretRect(index)
 
 proc boundsForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Rect =
-  if manager.isNil or range.length == 0:
+  if range.length == 0:
     return rect(0.0, 0.0, 0.0, 0.0)
   manager.updateLayout()
   let
@@ -2046,7 +1917,7 @@ proc boundsForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): Rect =
       result = result.union(rect)
 
 proc glyphRangeForBoundingRect*(manager: TextLayoutManager, rect: Rect): GlyphRange =
-  if manager.isNil or rect.isEmpty:
+  if rect.isEmpty:
     return initGlyphRange(0, 0)
   manager.updateLayout()
 
@@ -2068,8 +1939,6 @@ proc glyphRangeForBoundingRect*(manager: TextLayoutManager, rect: Rect): GlyphRa
 proc glyphRangeForBoundingRect*(
     manager: TextLayoutManager, rect: Rect, containerIndex: TextContainerIndex
 ): GlyphRange =
-  if manager.isNil:
-    return initGlyphRange(0, 0)
   let containers = manager.effectiveContainers()
   if containerIndex.toInt < 0 or containerIndex.toInt >= containers.len:
     return initGlyphRange(0, 0)
@@ -2120,8 +1989,7 @@ proc lineFragmentMetrics*(
     lineSpacing = manager.delegateLineSpacing(glyphIndex)
     before = manager.delegateParagraphSpacingBefore(glyphIndex)
     after = manager.delegateParagraphSpacingAfter(glyphIndex)
-    textLength =
-      if manager.isNil or manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
+    textLength = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
     isExtra =
       fragment.get().textRange.isEmpty and
       int(fragment.get().textRange.location) == textLength
@@ -2153,8 +2021,6 @@ proc lineFragmentMetricsForGlyphIndex*(
     manager.lineFragmentMetrics(fragment.get().lineIndex)
 
 proc extraLineFragment*(manager: TextLayoutManager): TextLineFragment =
-  if manager.isNil:
-    return TextLineFragment()
   manager.updateLayout()
   let
     textLength = if manager.xTextStorage.isNil: 0 else: manager.xTextStorage.len
@@ -2206,8 +2072,6 @@ proc usedRectForLineFragmentAtIndex*(manager: TextLayoutManager, index: int): Re
 proc usedRectForTextContainer*(
     manager: TextLayoutManager, index: TextContainerIndex
 ): Rect =
-  if manager.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   for fragment in manager.lineFragments():
     if fragment.containerIndex == index:
       if result.isEmpty:
@@ -2219,14 +2083,13 @@ proc invalidateLayoutForCharacterRange*(manager: TextLayoutManager, range: TextR
   manager.invalidateLayout(range)
 
 proc invalidateGlyphsForCharacterRange*(manager: TextLayoutManager, range: TextRange) =
-  if not manager.isNil:
-    manager.invalidateGlyphs(manager.glyphRangeForTextRange(range))
+  manager.invalidateGlyphs(manager.glyphRangeForTextRange(range))
 
 proc invalidateDisplayForCharacterRange*(manager: TextLayoutManager, range: TextRange) =
   manager.invalidateDisplay(range)
 
 proc lineRange*(manager: TextLayoutManager, line: int): TextRange =
-  if manager.isNil or manager.xTextStorage.isNil or line < 0:
+  if manager.xTextStorage.isNil or line < 0:
     return initTextRange(0, 0)
   let text = manager.xTextStorage.stringValue()
   var
@@ -2245,7 +2108,7 @@ proc lineRange*(manager: TextLayoutManager, line: int): TextRange =
   initTextRange(0, 0)
 
 proc lineForIndex*(manager: TextLayoutManager, index: int): int =
-  if manager.isNil or manager.xTextStorage.isNil:
+  if manager.xTextStorage.isNil:
     return -1
   let
     total = manager.xTextStorage.len
@@ -2260,7 +2123,7 @@ proc lineForIndex*(manager: TextLayoutManager, index: int): int =
     inc current
 
 proc lineBounds*(manager: TextLayoutManager, line: int): Rect =
-  if manager.isNil or manager.xTextStorage.isNil or line < 0:
+  if manager.xTextStorage.isNil or line < 0:
     return rect(0.0, 0.0, 0.0, 0.0)
   let range = manager.lineRange(line)
   if range.length > 0:
@@ -2270,7 +2133,7 @@ proc lineBounds*(manager: TextLayoutManager, line: int): Rect =
   rect(0.0, 0.0, 0.0, 0.0)
 
 proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
-  if manager.isNil or manager.xTextStorage.isNil:
+  if manager.xTextStorage.isNil:
     return -1
 
   let runes = manager.xTextStorage.stringValue().toRunes()
@@ -2291,7 +2154,7 @@ proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   -1
 
 proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
-  if manager.isNil or manager.xTextStorage.isNil:
+  if manager.xTextStorage.isNil:
     return -1
 
   let total = manager.xTextStorage.stringValue().runeLen
@@ -2333,8 +2196,6 @@ proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   closestIndex
 
 proc defaultTextIndexAtPoint(manager: TextLayoutManager, point: Point): int =
-  if manager.isNil:
-    return 0
   manager.updateLayout()
   let localPoint = manager.localLayoutPoint(point)
   let emptyLineIndex = manager.emptyLineIndexAtPoint(localPoint)
@@ -2348,16 +2209,11 @@ proc defaultTextIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   max(0, min(nearest, manager.xTextStorage.len))
 
 proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
-  if manager.isNil:
-    0
-  else:
-    manager.lmTextIndexAtPoint(point)
+  manager.lmTextIndexAtPoint(point)
 
 proc containerIndexAtPoint*(
     manager: TextLayoutManager, point: Point
 ): Option[TextContainerIndex] =
-  if manager.isNil:
-    return none(TextContainerIndex)
   let containers = manager.effectiveContainers()
   for index, container in containers:
     if container.layoutRect().contains(point):

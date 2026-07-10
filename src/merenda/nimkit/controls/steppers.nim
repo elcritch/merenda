@@ -74,8 +74,6 @@ func defaultStepperValueFormat(value: float32): string =
   formatFloat(value, ffDefault, -1)
 
 proc setStepperValue(stepper: Stepper, value: float32, notify = false): bool =
-  if stepper.isNil:
-    return false
   let nextValue = stepper.clampedValue(value)
   if stepper.xValue == nextValue:
     return false
@@ -88,18 +86,18 @@ proc setStepperValue(stepper: Stepper, value: float32, notify = false): bool =
   true
 
 proc stepBy*(stepper: Stepper, delta: float32, notify = true): bool =
-  if stepper.isNil or delta == 0.0'f32:
+  if delta == 0.0'f32:
     return false
   let nextValue = stepper.normalizedStepValue(stepper.xValue + delta)
   stepper.setStepperValue(nextValue, notify)
 
 proc incrementValue*(stepper: Stepper, notify = true): bool =
-  if stepper.isNil or stepper.xIncrement <= 0.0'f32:
+  if stepper.xIncrement <= 0.0'f32:
     return false
   stepper.stepBy(stepper.xIncrement, notify)
 
 proc decrementValue*(stepper: Stepper, notify = true): bool =
-  if stepper.isNil or stepper.xIncrement <= 0.0'f32:
+  if stepper.xIncrement <= 0.0'f32:
     return false
   stepper.stepBy(-stepper.xIncrement, notify)
 
@@ -115,7 +113,7 @@ proc performPart(stepper: Stepper, part: StepperPart, notify = true): bool =
 proc beginRepeat*(
     stepper: Stepper, part: StepperPart, timestamp = 0.0, notify = true
 ): bool =
-  if stepper.isNil or part == spNone:
+  if part == spNone:
     return false
   let now = repeatTimestamp(timestamp)
   stepper.xPressedPart = part
@@ -127,8 +125,7 @@ proc beginRepeat*(
   stepper.performPart(part, notify)
 
 proc continueRepeat*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
-  if stepper.isNil or stepper.xRepeatPart == spNone or
-      stepper.xPressedPart != stepper.xRepeatPart:
+  if stepper.xRepeatPart == spNone or stepper.xPressedPart != stepper.xRepeatPart:
     return false
   let now = repeatTimestamp(timestamp)
   inc stepper.xRepeatCount
@@ -136,8 +133,7 @@ proc continueRepeat*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
   stepper.performPart(stepper.xRepeatPart, notify)
 
 proc repeatTick*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
-  if stepper.isNil or stepper.xRepeatPart == spNone or
-      stepper.xPressedPart != stepper.xRepeatPart:
+  if stepper.xRepeatPart == spNone or stepper.xPressedPart != stepper.xRepeatPart:
     return false
   let
     now = repeatTimestamp(timestamp)
@@ -151,8 +147,6 @@ proc repeatTick*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
   stepper.continueRepeat(now, notify)
 
 proc endRepeat*(stepper: Stepper) =
-  if stepper.isNil:
-    return
   if stepper.xPressedPart == spNone and stepper.xRepeatPart == spNone:
     return
   stepper.xPressedPart = spNone
@@ -160,14 +154,12 @@ proc endRepeat*(stepper: Stepper) =
   stepper.setNeedsDisplay(true)
 
 proc value*(stepper: Stepper): float32 =
-  if stepper.isNil: 0.0'f32 else: stepper.xValue
+  stepper.xValue
 
 proc `value=`*(stepper: Stepper, value: float32) =
   discard stepper.setStepperValue(value)
 
 proc setObjectValue*(stepper: Stepper, value: ObjectValue, notify = false) =
-  if stepper.isNil:
-    return
   try:
     discard stepper.setStepperValue(value.requireNumber().float32, notify)
   except ObjectValueError:
@@ -184,81 +176,74 @@ proc `objectValue=`*(stepper: Stepper, value: ObjectValue) =
   stepper.setObjectValue(value)
 
 proc minValue*(stepper: Stepper): float32 =
-  if stepper.isNil: 0.0'f32 else: stepper.xMinValue
+  stepper.xMinValue
 
 proc `minValue=`*(stepper: Stepper, value: float32) =
-  if stepper.isNil or stepper.xMinValue == value:
+  if stepper.xMinValue == value:
     return
   stepper.xMinValue = value
   discard stepper.setStepperValue(stepper.xValue)
   stepper.setNeedsDisplay(true)
 
 proc maxValue*(stepper: Stepper): float32 =
-  if stepper.isNil: 0.0'f32 else: stepper.xMaxValue
+  stepper.xMaxValue
 
 proc `maxValue=`*(stepper: Stepper, value: float32) =
-  if stepper.isNil or stepper.xMaxValue == value:
+  if stepper.xMaxValue == value:
     return
   stepper.xMaxValue = value
   discard stepper.setStepperValue(stepper.xValue)
   stepper.setNeedsDisplay(true)
 
 proc increment*(stepper: Stepper): float32 =
-  if stepper.isNil: 0.0'f32 else: stepper.xIncrement
+  stepper.xIncrement
 
 proc `increment=`*(stepper: Stepper, value: float32) =
-  if stepper.isNil:
-    return
   let nextValue = max(value, 0.0'f32)
   if stepper.xIncrement == nextValue:
     return
   stepper.xIncrement = nextValue
 
 proc wraps*(stepper: Stepper): bool =
-  (not stepper.isNil) and stepper.xWraps
+  stepper.xWraps
 
 proc `wraps=`*(stepper: Stepper, value: bool) =
-  if stepper.isNil or stepper.xWraps == value:
+  if stepper.xWraps == value:
     return
   stepper.xWraps = value
 
 proc pressedPart*(stepper: Stepper): StepperPart =
-  if stepper.isNil: spNone else: stepper.xPressedPart
+  stepper.xPressedPart
 
 proc repeatPart*(stepper: Stepper): StepperPart =
-  if stepper.isNil: spNone else: stepper.xRepeatPart
+  stepper.xRepeatPart
 
 proc repeatActive*(stepper: Stepper): bool =
-  (not stepper.isNil) and stepper.xRepeatPart != spNone
+  stepper.xRepeatPart != spNone
 
 proc repeatCount*(stepper: Stepper): Natural =
-  if stepper.isNil: 0 else: stepper.xRepeatCount
+  stepper.xRepeatCount
 
 proc repeatStartedAt*(stepper: Stepper): float =
-  if stepper.isNil: 0.0 else: stepper.xRepeatStartedAt
+  stepper.xRepeatStartedAt
 
 proc lastRepeatAt*(stepper: Stepper): float =
-  if stepper.isNil: 0.0 else: stepper.xLastRepeatAt
+  stepper.xLastRepeatAt
 
 proc valueFormatter*(stepper: Stepper): StepperValueFormatter =
-  if stepper.isNil: nil else: stepper.xValueFormatter
+  stepper.xValueFormatter
 
 proc `valueFormatter=`*(stepper: Stepper, formatter: StepperValueFormatter) =
-  if not stepper.isNil:
-    stepper.xValueFormatter = formatter
+  stepper.xValueFormatter = formatter
 
 proc formatValue*(stepper: Stepper, value: float32): string =
-  if not stepper.isNil and not stepper.xValueFormatter.isNil:
+  if not stepper.xValueFormatter.isNil:
     return stepper.xValueFormatter(value)
-  if not stepper.isNil:
-    return Control(stepper).formatObjectValue(toObj(value), ovrStepper)
+  return Control(stepper).formatObjectValue(toObj(value), ovrStepper)
   defaultStepperValueFormat(value)
 
 proc formattedValue*(stepper: Stepper): string =
-  if stepper.isNil:
-    ""
-  else:
-    stepper.formatValue(stepper.xValue)
+  stepper.formatValue(stepper.xValue)
 
 func decrementPartRect(bounds: Rect): Rect =
   rect(
@@ -275,8 +260,6 @@ func incrementPartRect(bounds: Rect): Rect =
   )
 
 proc partRect*(stepper: Stepper, part: StepperPart): Rect =
-  if stepper.isNil:
-    return rect(0.0, 0.0, 0.0, 0.0)
   let bounds = stepper.bounds()
   case part
   of spIncrement:
@@ -287,7 +270,7 @@ proc partRect*(stepper: Stepper, part: StepperPart): Rect =
     rect(0.0, 0.0, 0.0, 0.0)
 
 proc partAtPoint*(stepper: Stepper, point: Point): StepperPart =
-  if stepper.isNil or not stepper.bounds().contains(point):
+  if not stepper.bounds().contains(point):
     return spNone
   if stepper.partRect(spIncrement).contains(point):
     spIncrement

@@ -439,6 +439,17 @@ suite "nimkit scroll views":
     check scrollView.contentOffset().x == 0.0'f32
     check scrollView.contentOffset().y > 0.0'f32
 
+  test "scroll rect aligns the leading edge when larger than the viewport":
+    let
+      document = newView(frame = rect(0, 0, 300, 260))
+      scrollView = newScrollView(frame = rect(0, 0, 100, 80), documentView = document)
+
+    check not scrollView.scrollRectToVisible(rect(0, 0, 150, 20))
+    check scrollView.contentOffset().x == 0.0'f32
+
+    check scrollView.scrollRectToVisible(rect(120, 0, 150, 20))
+    check scrollView.contentOffset().x == 120.0'f32
+
   test "shift scroll wheel maps vertical wheel movement to horizontal scroll":
     let
       window = newWindow("Shift ScrollView", frame = rect(0, 0, 220, 160))

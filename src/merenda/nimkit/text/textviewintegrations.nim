@@ -28,8 +28,6 @@ type TextContextMenuRequest* = object
 proc textContextMenuRequest*(
     textView: TextView, point = AutoPoint
 ): TextContextMenuRequest =
-  if textView.isNil:
-    return
   let index =
     if point.hasAutoMetric:
       int(textView.selectedRange().location)
@@ -48,8 +46,6 @@ proc textContextMenuRequest*(
 
 proc contextualMenuForText*(textView: TextView, point = AutoPoint): Menu =
   result = newMenu("Text")
-  if textView.isNil:
-    return
   let request = textView.textContextMenuRequest(point)
   if request.link.len > 0:
     let link = textView.linkAtIndex(request.characterIndex)
@@ -67,15 +63,13 @@ proc contextualMenuForText*(textView: TextView, point = AutoPoint): Menu =
 proc popUpTextContextMenu*(
     textView: TextView, event: MouseEvent
 ): PopupMenuButton {.discardable.} =
-  if textView.isNil:
-    return nil
   let menu = textView.contextualMenuForText(event.location)
   popUpContextMenu(menu, View(textView), event)
 
 proc openAttachmentDocument*(
     controller: DocumentController, attachment: TextAttachment, app: Application = nil
 ): Document {.discardable.} =
-  if controller.isNil or attachment.fileUrl.len == 0:
+  if attachment.fileUrl.len == 0:
     return nil
   controller.openDocument(attachment.fileUrl, app = app)
 
@@ -85,8 +79,6 @@ proc openAttachmentDocument*(
     controller: DocumentController = sharedDocumentController(),
     app: Application = nil,
 ): Document {.discardable.} =
-  if textView.isNil:
-    return nil
   controller.openAttachmentDocument(attachment, app)
 
 proc openAttachmentDocumentAtIndex*(
@@ -95,8 +87,6 @@ proc openAttachmentDocumentAtIndex*(
     controller: DocumentController = sharedDocumentController(),
     app: Application = nil,
 ): Document {.discardable.} =
-  if textView.isNil:
-    return nil
   let attachment = textView.attachmentAtIndex(index)
   controller.openAttachmentDocument(attachment.attachment, app)
 
@@ -107,13 +97,13 @@ proc saveSelectedTextDocument*(
     panel: SavePanel = nil,
     app: Application = nil,
 ): bool {.discardable.} =
-  if textView.isNil or document.isNil or controller.isNil:
+  if document.isNil or controller.isNil:
     return false
   document.documentEdited = true
   controller.saveDocumentWithPanel(document, panel, app)
 
 proc selectedTextDraggingItems*(editor: TextEditor): seq[DraggingItem] =
-  if editor.isNil or editor.textView().isNil:
+  if editor.textView().isNil:
     @[]
   else:
     editor.textView().selectedTextDraggingItems()
@@ -123,13 +113,13 @@ proc beginDraggingSelectedText*(
     allowedOperations: DragOperations = {dgoCopy, dgoMove},
     pasteboardName = DragPasteboardName,
 ): DraggingSession =
-  if editor.isNil or editor.textView().isNil:
+  if editor.textView().isNil:
     nil
   else:
     editor.textView().beginDraggingSelectedText(allowedOperations, pasteboardName)
 
 proc contextualMenuForText*(editor: TextEditor, point = AutoPoint): Menu =
-  if editor.isNil or editor.textView().isNil:
+  if editor.textView().isNil:
     newMenu("Text")
   else:
     editor.textView().contextualMenuForText(point)

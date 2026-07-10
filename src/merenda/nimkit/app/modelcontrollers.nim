@@ -110,7 +110,6 @@ proc installArrayControllerProtocols(controller: ArrayController)
 proc installTreeControllerProtocols(controller: TreeController)
 
 proc postSelectionNotification(controller: SelectionController) =
-  doAssert not controller.isNil
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       nkSelectionDidChange,
@@ -126,7 +125,6 @@ proc postSelectionNotification(controller: SelectionController) =
   )
 
 proc notifySelectionControllerDidChange(controller: SelectionController) =
-  doAssert not controller.isNil
   emit controller.selectionControllerDidChange(DynamicAgent(controller))
   controller.postSelectionNotification()
 
@@ -135,7 +133,6 @@ proc notifyObjectControllerDidChange(
     mutation = mmkItemChanged,
     keys: openArray[string] = [],
 ) =
-  doAssert not controller.isNil
   emit controller.objectControllerDidChange(DynamicAgent(controller))
   var identifiers: seq[string]
   if controller.xItem.identifier.len > 0:
@@ -158,7 +155,6 @@ proc notifyArrayControllerDidChange(
     keys: openArray[string] = [],
     index = -1,
 ) =
-  doAssert not controller.isNil
   emit controller.arrayControllerDidChange(DynamicAgent(controller))
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
@@ -177,8 +173,6 @@ proc notifyArrayControllerDidChange(
 proc notifyTreeControllerDidChange(
     controller: TreeController, identifiers: openArray[string] = [], index = -1
 ) =
-  if controller.isNil:
-    return
   emit controller.treeControllerDidChange(DynamicAgent(controller))
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
@@ -318,10 +312,10 @@ proc newSelectionController*(mode = mselSingle): SelectionController =
   result.initSelectionControllerFields(mode)
 
 proc mode*(controller: SelectionController): ModelSelectionMode =
-  if controller.isNil: mselNone else: controller.xMode
+  controller.xMode
 
 proc `mode=`*(controller: SelectionController, mode: ModelSelectionMode) =
-  if controller.isNil or controller.xMode == mode:
+  if controller.xMode == mode:
     return
   controller.xMode = mode
   if mode in {mselNone, mselSingle} and controller.xSelectedIdentifiers.len > 1:
@@ -329,31 +323,26 @@ proc `mode=`*(controller: SelectionController, mode: ModelSelectionMode) =
   controller.notifySelectionControllerDidChange()
 
 proc selectedIdentifiers*(controller: SelectionController): seq[string] =
-  if controller.isNil:
-    @[]
-  else:
-    controller.xSelectedIdentifiers
+  controller.xSelectedIdentifiers
 
 proc selectedIdentifier*(controller: SelectionController): string =
-  if controller.isNil or controller.xSelectedIdentifiers.len == 0:
+  if controller.xSelectedIdentifiers.len == 0:
     ""
   else:
     controller.xSelectedIdentifiers[0]
 
 proc anchorIdentifier*(controller: SelectionController): string =
-  if controller.isNil: "" else: controller.xAnchorIdentifier
+  controller.xAnchorIdentifier
 
 proc leadIdentifier*(controller: SelectionController): string =
-  if controller.isNil: "" else: controller.xLeadIdentifier
+  controller.xLeadIdentifier
 
 proc isSelected*(controller: SelectionController, identifier: string): bool =
-  not controller.isNil and identifier in controller.xSelectedIdentifiers
+  identifier in controller.xSelectedIdentifiers
 
 proc setSelectedIdentifiers*(
     controller: SelectionController, identifiers: openArray[string]
 ) =
-  if controller.isNil:
-    return
   var next: seq[string]
   case controller.xMode
   of mselNone:
@@ -386,8 +375,6 @@ proc clearSelection*(controller: SelectionController) =
   controller.setSelectedIdentifiers([])
 
 proc selectIdentifier*(controller: SelectionController, identifier: string) =
-  if controller.isNil:
-    return
   case controller.xMode
   of mselNone:
     controller.clearSelection()
@@ -400,7 +387,7 @@ proc selectIdentifier*(controller: SelectionController, identifier: string) =
     controller.setSelectedIdentifiers(next)
 
 proc deselectIdentifier*(controller: SelectionController, identifier: string) =
-  if controller.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return
   var next: seq[string]
   for selected in controller.xSelectedIdentifiers:
@@ -423,26 +410,16 @@ proc newObjectController*(item = initModelItem()): ObjectController =
   result.initObjectControllerFields(item)
 
 proc item*(controller: ObjectController): ModelItem =
-  if controller.isNil:
-    initModelItem()
-  else:
-    controller.xItem
+  controller.xItem
 
 proc `item=`*(controller: ObjectController, item: ModelItem) =
-  if controller.isNil:
-    return
   controller.xItem = item
   controller.notifyObjectControllerDidChange(mmkItemChanged)
 
 proc objectValue*(controller: ObjectController): ObjectValue =
-  if controller.isNil:
-    nilObjectValue()
-  else:
-    controller.xItem.objectValue
+  controller.xItem.objectValue
 
 proc `objectValue=`*(controller: ObjectController, value: ObjectValue) =
-  if controller.isNil:
-    return
   controller.xItem.objectValue = value
   controller.notifyObjectControllerDidChange(mmkObjectValueChanged)
 
@@ -452,22 +429,16 @@ proc value*(controller: ObjectController, key: string): ObjectValue =
   controller.xItem.value(key)
 
 proc setValue*(controller: ObjectController, key: string, value: ObjectValue) =
-  if controller.isNil:
-    return
   controller.xItem.setValue(key, value)
   controller.notifyObjectControllerDidChange(mmkValueChanged, keys = [key])
 
 proc sourceIndexOfIdentifier(controller: ArrayController, identifier: string): int =
-  if controller.isNil:
-    return -1
   for index, item in controller.xItems:
     if item.identifier == identifier:
       return index
   -1
 
 proc sortedVisibleIndexes(controller: ArrayController): seq[int] =
-  if controller.isNil:
-    return
   for index, item in controller.xItems:
     if not item.hidden and (controller.xFilter.isNil or controller.xFilter(item)):
       result.add index
@@ -507,43 +478,31 @@ proc len*(controller: ArrayController): int =
   controller.sortedVisibleIndexes().len
 
 proc sourceLen*(controller: ArrayController): int =
-  if controller.isNil: 0 else: controller.xItems.len
+  controller.xItems.len
 
 proc selectionController*(controller: ArrayController): SelectionController =
-  if controller.isNil: nil else: controller.xSelection
+  controller.xSelection
 
 proc columns*(controller: ArrayController): seq[ModelColumn] =
-  if controller.isNil:
-    @[]
-  else:
-    controller.xColumns
+  controller.xColumns
 
 proc `columns=`*(controller: ArrayController, columns: openArray[ModelColumn]) =
-  if controller.isNil:
-    return
   controller.xColumns = @columns
   controller.notifyArrayControllerDidChange(mmkColumnsChanged)
 
 proc sortDescriptors*(controller: ArrayController): seq[ModelSortDescriptor] =
-  if controller.isNil:
-    @[]
-  else:
-    controller.xSortDescriptors
+  controller.xSortDescriptors
 
 proc `sortDescriptors=`*(
     controller: ArrayController, descriptors: openArray[ModelSortDescriptor]
 ) =
-  if controller.isNil:
-    return
   controller.xSortDescriptors = @descriptors
   controller.notifyArrayControllerDidChange(mmkSortChanged)
 
 proc filter*(controller: ArrayController): ModelFilter =
-  if controller.isNil: nil else: controller.xFilter
+  controller.xFilter
 
 proc `filter=`*(controller: ArrayController, filter: ModelFilter) =
-  if controller.isNil:
-    return
   controller.xFilter = filter
   controller.notifyArrayControllerDidChange(mmkFilterChanged)
 
@@ -579,8 +538,6 @@ proc indexOfIdentifier*(controller: ArrayController, identifier: string): int =
   -1
 
 proc addItem*(controller: ArrayController, item: ModelItem) =
-  if controller.isNil:
-    return
   if item.identifier.len > 0 and controller.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
   controller.xItems.add item
@@ -592,8 +549,6 @@ proc addItem*(controller: ArrayController, item: ModelItem) =
   )
 
 proc insertItem*(controller: ArrayController, item: ModelItem, index: int) =
-  if controller.isNil:
-    return
   if item.identifier.len > 0 and controller.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
   let insertIndex = max(0, min(index, controller.xItems.len))
@@ -667,12 +622,11 @@ proc columnKey(controller: ArrayController, column: TableColumn): string =
   if column.isNil:
     return ""
   let identifier = column.identifier()
-  if not controller.isNil:
-    for modelColumn in controller.xColumns:
-      if modelColumn.tableColumnIdentifier() == identifier:
-        if modelColumn.valueKey.len > 0:
-          return modelColumn.valueKey
-        return modelColumn.tableColumnIdentifier()
+  for modelColumn in controller.xColumns:
+    if modelColumn.tableColumnIdentifier() == identifier:
+      if modelColumn.valueKey.len > 0:
+        return modelColumn.valueKey
+      return modelColumn.tableColumnIdentifier()
   identifier
 
 proc objectValueForArrayCell(
@@ -966,7 +920,7 @@ proc documentTabModelForArrayItem(item: ModelItem): DocumentTabModel =
 proc indexOfArrayDocumentTabIdentifier(
     controller: ArrayController, identifier: string
 ): int =
-  if controller.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   var visibleIndex = 0
   for index in 0 ..< controller.len():
@@ -1058,8 +1012,6 @@ proc installArrayControllerProtocols(controller: ArrayController) =
   discard controller.withProtocol(ArrayControllerCollectionDelegate)
 
 proc bindTableView*(tableView: TableView, controller: ArrayController) =
-  if tableView.isNil:
-    return
   if not controller.isNil:
     for column in controller.xColumns:
       let identifier = column.tableColumnIdentifier()
@@ -1075,8 +1027,6 @@ proc bindTableView*(tableView: TableView, controller: ArrayController) =
   tableviews.reloadData(tableView)
 
 proc bindComboBox*(comboBox: ComboBox, controller: ArrayController) =
-  if comboBox.isNil:
-    return
   comboBox.dataSource = controller
   if not controller.isNil:
     comboBox.selectedOptionIdentifier = controller.xSelection.selectedIdentifier()
@@ -1084,16 +1034,12 @@ proc bindComboBox*(comboBox: ComboBox, controller: ArrayController) =
   comboboxes.reloadData(comboBox)
 
 proc bindMenu*(menu: Menu, controller: ArrayController) =
-  if menu.isNil:
-    return
   menu.dataSource = controller
   if not controller.isNil:
     controller.observeProtocol(menu, MenuEvents)
   menus.reloadData(menu)
 
 proc bindDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
-  if tabs.isNil:
-    return
   tabs.dataSource = controller
   if not controller.isNil:
     tabs.selectedDocumentTabIdentifier = controller.xSelection.selectedIdentifier()
@@ -1101,8 +1047,6 @@ proc bindDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   documenttabs.reloadData(tabs)
 
 proc bindMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
-  if matrix.isNil:
-    return
   if not controller.isNil:
     matrix.selectionMode =
       case controller.xSelection.mode()
@@ -1117,15 +1061,11 @@ proc bindMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
   matrices.reloadData(matrix)
 
 proc bindPopupMenuButton*(button: PopupMenuButton, controller: ArrayController) =
-  if button.isNil:
-    return
   if button.menu().isNil:
     button.menu = newMenu(button.title())
   bindMenu(button.menu(), controller)
 
 proc bindCollectionView*(collectionView: CollectionView, controller: ArrayController) =
-  if collectionView.isNil:
-    return
   collectionView.dataSource = DynamicAgent(controller)
   collectionView.delegate = DynamicAgent(controller)
   if not controller.isNil:
@@ -1150,14 +1090,12 @@ proc newTreeController*(items: openArray[ModelTreeItem] = []): TreeController =
   result.initTreeControllerFields(items)
 
 proc selectionController*(controller: TreeController): SelectionController =
-  if controller.isNil: nil else: controller.xSelection
+  controller.xSelection
 
 proc sourceLen*(controller: TreeController): int =
-  if controller.isNil: 0 else: controller.xItems.len
+  controller.xItems.len
 
 proc treeIndexOfIdentifier(controller: TreeController, identifier: string): int =
-  if controller.isNil:
-    return -1
   for index, item in controller.xItems:
     if item.item.identifier == identifier:
       return index
@@ -1181,8 +1119,6 @@ proc getTreeItemWithIdentifier*(
     none(ModelTreeItem)
 
 proc childIdentifiers*(controller: TreeController, parentIdentifier = ""): seq[string] =
-  if controller.isNil:
-    return
   for item in controller.xItems:
     if item.parentIdentifier == parentIdentifier and not item.item.hidden:
       result.add item.item.identifier
@@ -1200,8 +1136,6 @@ proc childIdentifierAt*(
     ""
 
 proc addItem*(controller: TreeController, item: ModelTreeItem) =
-  if controller.isNil:
-    return
   if item.item.identifier.len > 0 and
       controller.treeIndexOfIdentifier(item.item.identifier) >= 0:
     raiseModelControllerError("duplicate tree item identifier: " & item.item.identifier)
@@ -1379,8 +1313,6 @@ proc installTreeControllerProtocols(controller: TreeController) =
   discard controller.withProtocol(TreeControllerCascadingDataSource)
 
 proc bindOutlineView*(outlineView: OutlineView, controller: TreeController) =
-  if outlineView.isNil:
-    return
   let oldController = outlineView.outlineDataSource()
   if oldController of TreeController:
     TreeController(oldController).disconnect(
@@ -1403,8 +1335,6 @@ proc bindOutlineView*(outlineView: OutlineView, controller: TreeController) =
   tableviews.reloadData(TableView(outlineView))
 
 proc bindCascadingView*(view: CascadingView, controller: TreeController) =
-  if view.isNil:
-    return
   let oldController = view.dataSource()
   if oldController of TreeController:
     TreeController(oldController).disconnect(
@@ -1418,8 +1348,6 @@ proc bindCascadingView*(view: CascadingView, controller: TreeController) =
   cascadingviews.reloadData(view)
 
 proc syncMenu*(menu: Menu, controller: ArrayController) =
-  if menu.isNil:
-    return
   menu.dataSource = DynamicAgent(nil)
   if controller.isNil:
     menu.itemModels = []
@@ -1430,8 +1358,6 @@ proc syncMenu*(menu: Menu, controller: ArrayController) =
   menu.itemModels = models
 
 proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
-  if tabs.isNil:
-    return
   tabs.dataSource = DynamicAgent(nil)
   tabs.removeAllDocumentTabs()
   if controller.isNil:
@@ -1442,8 +1368,6 @@ proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   tabs.documentTabModels = models
 
 proc syncMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
-  if matrix.isNil:
-    return
   let columnCount = max(columns, 1)
   matrix.dataSource = DynamicAgent(nil)
   matrix.renewRowsColumns(0, columnCount)

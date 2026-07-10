@@ -42,7 +42,7 @@ proc client*(editor: FieldEditor): Responder =
   if editor.isNil: nil else: editor.xClient
 
 proc validationError*(editor: FieldEditor): ObjectValidationError =
-  if editor.isNil or editor.client().isNil:
+  if editor.client().isNil:
     return initObjectValidationError()
   let error = editor.client().trySendLocal(validationErrorForEditor(), editor)
   if error.isSome:
@@ -54,16 +54,12 @@ proc hasValidationError*(editor: FieldEditor): bool =
   editor.validationError().failed()
 
 proc wantsFieldEditor*(client: Responder, editor: FieldEditor): bool =
-  if client.isNil:
-    return false
   let wants = client.trySendLocal(usesFieldEditor(), editor)
   wants.isSome and wants.get()
 
 proc fieldEditorForResponder*(
     client: Responder, defaultEditor: FieldEditor
 ): FieldEditor =
-  if client.isNil:
-    return defaultEditor
   let editor = client.trySendLocal(fieldEditorForClient(), defaultEditor)
   if editor.isSome and not editor.get().isNil:
     editor.get()
@@ -79,8 +75,7 @@ proc clientShouldEndEditing(client: Responder, editor: FieldEditor): bool =
   shouldEnd.isNone or shouldEnd.get()
 
 proc canEdit*(editor: FieldEditor, client: Responder): bool =
-  (not editor.isNil) and client.wantsFieldEditor(editor) and
-    client.clientShouldBeginEditing(editor)
+  client.wantsFieldEditor(editor) and client.clientShouldBeginEditing(editor)
 
 proc loadClientText(editor: FieldEditor, client: Responder) =
   let storage = client.trySendLocal(attributedTextForEditor(), editor)
@@ -108,7 +103,7 @@ proc notifyClientChanged(editor: FieldEditor) =
   discard client.sendLocalIfHandled(didChangeTextInEditor(), editor)
 
 proc validateEditing*(editor: FieldEditor): bool =
-  if editor.isNil or editor.client().isNil:
+  if editor.client().isNil:
     return true
   if not editor.client().clientShouldEndEditing(editor):
     return false
@@ -124,7 +119,7 @@ proc notifyClientFocusChanged(editor: FieldEditor) =
 proc finishEditing(
     editor: FieldEditor, reason: TextEditReason, movement = temNone
 ): bool =
-  if editor.isNil or editor.xClient.isNil:
+  if editor.xClient.isNil:
     return true
   let client = editor.xClient
   if reason != terCancel and not client.clientShouldEndEditing(editor):
@@ -143,7 +138,7 @@ proc finishEditing(
   result = true
 
 proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true): bool =
-  if editor.isNil or client.isNil:
+  if client.isNil:
     return false
   if editor.xClient == client:
     return true
@@ -178,8 +173,6 @@ protocol DefaultFieldEditorResponder of ResponderProtocol:
     editor.endEditing()
 
   method setFirstResponderFocusState(editor: FieldEditor, focused, focusVisible: bool) =
-    if editor.isNil:
-      return
     let changed =
       editor.isFocused() != focused or editor.isFocusVisible() != focusVisible
     if not changed:

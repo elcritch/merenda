@@ -514,7 +514,7 @@ proc drawProc*(view: UIRelaysView): UIRelaysDrawProc =
   if view.isNil: nil else: view.xDrawProc
 
 proc `drawProc=`*(view: UIRelaysView, drawProc: UIRelaysDrawProc) =
-  if view.isNil or view.xDrawProc == drawProc:
+  if view.xDrawProc == drawProc:
     return
   view.xDrawProc = drawProc
   view.setNeedsDisplay(true)

@@ -105,8 +105,6 @@ proc effectiveApplication(
 proc postNotification(
     controller: DocumentController, kind: NotificationKind, document: Document = nil
 ) =
-  if controller.isNil:
-    return
   emit sharedNotificationCenter().notificationReceived(
     initNotification(
       kind,
@@ -129,12 +127,10 @@ proc postNotification(
 proc defaultType(controller: DocumentController, fileType: string): string =
   if fileType.len > 0:
     return fileType
-  if controller.isNil:
-    return ""
   controller.trySendLocal(defaultDocumentType(), ()).get("")
 
 proc includeDocument(controller: DocumentController, document: Document) =
-  if controller.isNil or document.isNil or document in controller.xDocuments:
+  if document.isNil or document in controller.xDocuments:
     return
   controller.xDocuments.add document
   let forwardedNext = document.nextResponder()
@@ -161,8 +157,6 @@ proc removeDocumentAt(controller: DocumentController, index: int): Document =
   controller.postNotification(nkDocControllerDidRemoveDocument, result)
 
 proc trimRecentDocuments(controller: DocumentController) =
-  if controller.isNil:
-    return
   if controller.xMaximumRecentDocumentCount == 0:
     if controller.xRecentDocumentUrls.len > 0:
       controller.xRecentDocumentUrls.setLen(0)
@@ -175,7 +169,7 @@ proc trimRecentDocuments(controller: DocumentController) =
     controller.postNotification(nkDocControllerDidChangeRecentDocuments)
 
 proc reviewDocumentForClose(controller: DocumentController, document: Document): bool =
-  if controller.isNil or document.isNil or not document.isDocumentEdited():
+  if document.isNil or not document.isDocumentEdited():
     return true
   let action =
     controller.trySendLocal(reviewUnsavedDocument(), document).get(dcraCancel)
@@ -214,7 +208,7 @@ protocol DefaultDocumentControllerReview of DocumentControllerReview:
 proc documentIndexOfIdentifier(
     controller: DocumentController, identifier: string
 ): int =
-  if controller.isNil or identifier.len == 0:
+  if identifier.len == 0:
     return -1
   for index, document in controller.xDocuments:
     if not document.isNil and document.documentIdentifier() == identifier:
@@ -222,8 +216,6 @@ proc documentIndexOfIdentifier(
   -1
 
 proc documentTabModelForDocument(document: Document): DocumentTabModel =
-  if document.isNil:
-    return initDocumentTabModel()
   initDocumentTabModel(
     identifier = document.documentIdentifier(),
     title = document.displayName(),
@@ -237,13 +229,13 @@ proc documentTabModelForDocument(document: Document): DocumentTabModel =
 protocol DocumentControllerDocumentTabsDataSource of DocumentTabsDataSource:
   method documentTabCount(controller: DocumentController, tabs: DocumentTabs): int =
     discard tabs
-    if controller.isNil: 0 else: controller.xDocuments.len
+    controller.xDocuments.len
 
   method documentTabModelAtIndex(
       controller: DocumentController, tabs: DocumentTabs, index: int
   ): DocumentTabModel =
     discard tabs
-    if not controller.isNil and index in 0 ..< controller.xDocuments.len:
+    if index in 0 ..< controller.xDocuments.len:
       controller.xDocuments[index].documentTabModelForDocument()
     else:
       initDocumentTabModel()
@@ -272,7 +264,7 @@ protocol DocumentControllerDocumentTabsDelegate of DocumentTabsDelegate:
     let represented = item.representedObject()
     if represented of Document:
       let document = Document(represented)
-      if not controller.isNil and document in controller.xDocuments:
+      if document in controller.xDocuments:
         if controller.closeDocumentImpl(document, reviewUnsaved = true):
           tabs.reloadData()
         return false
@@ -324,12 +316,10 @@ protocol DocumentControllerMenuValidation of UserInterfaceValidations:
     if args.action.name == "newDocument":
       return true
     if args.action.name == "openDocument":
-      return
-        not controller.isNil and (
-          controller.xRecentDocumentUrls.len > 0 or (
-            not controller.xOpenPanel.isNil and controller.xOpenPanel.validateSelection()
-          )
-        )
+      return (
+        controller.xRecentDocumentUrls.len > 0 or
+        (not controller.xOpenPanel.isNil and controller.xOpenPanel.validateSelection())
+      )
     if args.action.name == "saveDocument":
       return
         not document.isNil and (
@@ -353,8 +343,6 @@ protocol DocumentControllerMenuValidation of UserInterfaceValidations:
       args.action.name.len > 0 and controller.respondsTo(args.action.name)
 
 proc initDocumentController*(controller: DocumentController, app: Application = nil) =
-  if controller.isNil:
-    return
   initResponder(controller)
   controller.xApplication = app
   controller.xMaximumRecentDocumentCount = DefaultMaximumRecentDocumentCount
@@ -380,11 +368,9 @@ proc setSharedDocumentController*(controller: DocumentController) =
   sharedDocumentControllerInstance = controller
 
 proc application*(controller: DocumentController): Application =
-  if controller.isNil: nil else: controller.xApplication
+  controller.xApplication
 
 proc `application=`*(controller: DocumentController, app: Application) =
-  if controller.isNil:
-    return
   controller.xApplication = app
   if not app.isNil and controller.nextResponder().isNil:
     controller.setNextResponder(app)
@@ -393,14 +379,12 @@ proc documents*(controller: DocumentController): lent seq[Document] =
   controller.xDocuments
 
 proc documentCount*(controller: DocumentController): int =
-  if controller.isNil: 0 else: controller.xDocuments.len
+  controller.xDocuments.len
 
 proc contains*(controller: DocumentController, document: Document): bool =
-  not controller.isNil and document in controller.xDocuments
+  document in controller.xDocuments
 
 proc bindDocumentTabs*(tabs: DocumentTabs, controller: DocumentController) =
-  if tabs.isNil:
-    return
   tabs.dataSource = controller
   tabs.delegate = controller
   let current = controller.currentDocument()
@@ -416,7 +400,7 @@ proc addDocument*(controller: DocumentController, document: Document) =
 proc removeDocument*(
     controller: DocumentController, document: Document
 ): bool {.discardable.} =
-  if controller.isNil or document.isNil:
+  if document.isNil:
     return false
   let index = controller.xDocuments.find(document)
   if index < 0:
@@ -425,14 +409,14 @@ proc removeDocument*(
   true
 
 proc documentForFileUrl*(controller: DocumentController, fileUrl: string): Document =
-  if controller.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return nil
   for document in controller.xDocuments:
     if not document.isNil and document.fileUrl == fileUrl:
       return document
 
 proc documentForWindow*(controller: DocumentController, window: Window): Document =
-  if controller.isNil or window.isNil:
+  if window.isNil:
     return nil
   for document in controller.xDocuments:
     if not document.isNil:
@@ -441,8 +425,6 @@ proc documentForWindow*(controller: DocumentController, window: Window): Documen
           return document
 
 proc currentDocument*(controller: DocumentController): Document =
-  if controller.isNil:
-    return nil
   let app = controller.xApplication
   if not app.isNil:
     result = controller.documentForWindow(app.keyWindow())
@@ -454,39 +436,31 @@ proc currentDocument*(controller: DocumentController): Document =
     result = controller.xDocuments[^1]
 
 proc openPanel*(controller: DocumentController): OpenPanel =
-  if controller.isNil:
-    return nil
   if controller.xOpenPanel.isNil:
     controller.xOpenPanel = newOpenPanel()
   controller.xOpenPanel
 
 proc `openPanel=`*(controller: DocumentController, panel: OpenPanel) =
-  if not controller.isNil:
-    controller.xOpenPanel = panel
+  controller.xOpenPanel = panel
 
 proc savePanel*(controller: DocumentController): SavePanel =
-  if controller.isNil:
-    return nil
   if controller.xSavePanel.isNil:
     controller.xSavePanel = newSavePanel()
   controller.xSavePanel
 
 proc `savePanel=`*(controller: DocumentController, panel: SavePanel) =
-  if not controller.isNil:
-    controller.xSavePanel = panel
+  controller.xSavePanel = panel
 
 proc recentDocumentUrls*(controller: DocumentController): lent seq[string] =
   controller.xRecentDocumentUrls
 
 proc recentDocumentCount*(controller: DocumentController): int =
-  if controller.isNil: 0 else: controller.xRecentDocumentUrls.len
+  controller.xRecentDocumentUrls.len
 
 proc maximumRecentDocumentCount*(controller: DocumentController): Natural =
-  if controller.isNil: 0 else: controller.xMaximumRecentDocumentCount
+  controller.xMaximumRecentDocumentCount
 
 proc setMaximumRecentDocumentCount*(controller: DocumentController, count: Natural) =
-  if controller.isNil:
-    return
   controller.xMaximumRecentDocumentCount = count
   controller.trimRecentDocuments()
 
@@ -494,7 +468,7 @@ proc `maximumRecentDocumentCount=`*(controller: DocumentController, count: Natur
   controller.setMaximumRecentDocumentCount(count)
 
 proc noteRecentDocumentUrl*(controller: DocumentController, fileUrl: string) =
-  if controller.isNil or fileUrl.len == 0 or controller.xMaximumRecentDocumentCount == 0:
+  if fileUrl.len == 0 or controller.xMaximumRecentDocumentCount == 0:
     return
   let existing = controller.xRecentDocumentUrls.find(fileUrl)
   if existing >= 0:
@@ -507,7 +481,7 @@ proc noteRecentDocumentUrl*(controller: DocumentController, fileUrl: string) =
 proc removeRecentDocumentUrl*(
     controller: DocumentController, fileUrl: string
 ): bool {.discardable.} =
-  if controller.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return false
   let existing = controller.xRecentDocumentUrls.find(fileUrl)
   if existing < 0:
@@ -518,7 +492,7 @@ proc removeRecentDocumentUrl*(
   true
 
 proc clearRecentDocuments*(controller: DocumentController) =
-  if controller.isNil or controller.xRecentDocumentUrls.len == 0:
+  if controller.xRecentDocumentUrls.len == 0:
     return
   controller.xRecentDocumentUrls.setLen(0)
   emit controller.didChangeRecentDocuments()
@@ -527,8 +501,6 @@ proc clearRecentDocuments*(controller: DocumentController) =
 proc createDocumentImpl(
     controller: DocumentController, fileType: string, app: Application
 ): Document {.discardable.} =
-  if controller.isNil:
-    return nil
   let resolvedType = controller.defaultType(fileType)
   result = controller.trySendLocal(makeUntitledDocument(), resolvedType).get(nil)
   if result.isNil:
@@ -544,7 +516,7 @@ proc createDocumentImpl(
 proc openDocumentImpl(
     controller: DocumentController, fileUrl: string, fileType: string, app: Application
 ): Document {.discardable.} =
-  if controller.isNil or fileUrl.len == 0:
+  if fileUrl.len == 0:
     return nil
   result = controller.documentForFileUrl(fileUrl)
   if not result.isNil:
@@ -570,8 +542,6 @@ proc openDocumentImpl(
 proc reopenDocumentImpl(
     controller: DocumentController, fileUrl: string, app: Application
 ): Document {.discardable.} =
-  if controller.isNil:
-    return nil
   let resolvedUrl =
     if fileUrl.len > 0:
       fileUrl
@@ -586,8 +556,6 @@ proc reopenDocumentImpl(
 proc openDocumentWithPanel*(
     controller: DocumentController, panel: OpenPanel, app: Application
 ): Document {.discardable.} =
-  if controller.isNil:
-    return nil
   let resolvedPanel =
     if panel.isNil:
       controller.openPanel()
@@ -608,8 +576,6 @@ proc saveDocumentWithPanel*(
     app: Application,
 ): bool {.discardable.} =
   discard app
-  if controller.isNil:
-    return false
   let target =
     if document.isNil:
       controller.currentDocument()
@@ -650,8 +616,6 @@ proc reopenDocument*(
   controller.reopenDocumentImpl(fileUrl, app)
 
 proc reviewUnsavedDocuments*(controller: DocumentController): bool =
-  if controller.isNil:
-    return true
   let snapshot = controller.xDocuments
   for document in snapshot:
     if not controller.reviewDocumentForClose(document):
@@ -661,7 +625,7 @@ proc reviewUnsavedDocuments*(controller: DocumentController): bool =
 proc closeDocumentImpl(
     controller: DocumentController, document: Document, reviewUnsaved: bool
 ): bool {.discardable.} =
-  if controller.isNil or document.isNil:
+  if document.isNil:
     return true
   if reviewUnsaved and not controller.reviewDocumentForClose(document):
     return false
@@ -677,8 +641,6 @@ proc closeDocument*(
 proc closeAllDocuments*(
     controller: DocumentController, reviewUnsaved = true
 ): bool {.discardable.} =
-  if controller.isNil:
-    return true
   if reviewUnsaved and not controller.reviewUnsavedDocuments():
     return false
   let snapshot = controller.xDocuments
