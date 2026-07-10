@@ -38,8 +38,6 @@ func operationName(operation: LayoutResolutionOperation): string =
   of lroFrameResolution: "frameResolution"
 
 proc layoutDebugName(view: View): string =
-  if view.isNil:
-    return "nil"
   result = "View"
   if view.xIdentifier.len > 0:
     result.add "(" & view.xIdentifier & ")"
@@ -58,8 +56,6 @@ proc layoutResolutionStackMessage(
   result.add nextOperation.operationName() & "(" & nextView.layoutDebugName() & ")"
 
 proc enterLayoutResolution(view: View, operation: LayoutResolutionOperation) =
-  if view.isNil:
-    return
   for frame in layoutResolutionStack:
     if frame.view == view and frame.operation == operation:
       raise newException(
@@ -77,8 +73,6 @@ proc enterLayoutResolution(view: View, operation: LayoutResolutionOperation) =
   layoutResolutionStack.add LayoutResolutionFrame(view: view, operation: operation)
 
 proc leaveLayoutResolution(view: View, operation: LayoutResolutionOperation) =
-  if view.isNil:
-    return
   if layoutResolutionStack.len == 0:
     return
   let frame = layoutResolutionStack[^1]
@@ -170,7 +164,7 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
 
 protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:
   proc markSuperviewGeometryDirty(view: View) {.slotFor: geometryDidChange.} =
-    if not view.isNil and view.xAutoresizingMaskConstraints:
+    if view.xAutoresizingMaskConstraints:
       emit view.layoutInputChanged(lirSuperviewGeometry)
 
 proc initLayoutSignalBus*(view: View) =
@@ -203,7 +197,7 @@ proc autoresizingMask*(view: View): AutoresizingMask =
   view.xAutoresizingMask
 
 proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
-  if view.isNil or view.xAutoresizingMask == mask:
+  if view.xAutoresizingMask == mask:
     return
   view.xAutoresizingMask = mask
   view.invalidateLayoutItemGeometry(lirAutoresizingMask)
@@ -213,10 +207,10 @@ proc `autoresizingMask=`*(view: View, mask: AutoresizingMask) =
     view.resetAutoresizingState()
 
 proc autoresizingMaskConstraints*(view: View): bool =
-  (not view.isNil) and view.xAutoresizingMaskConstraints
+  view.xAutoresizingMaskConstraints
 
 proc `autoresizingMaskConstraints=`*(view: View, value: bool) =
-  if view.isNil or view.xAutoresizingMaskConstraints == value:
+  if view.xAutoresizingMaskConstraints == value:
     return
   view.xAutoresizingMaskConstraints = value
   if value:
@@ -236,7 +230,7 @@ proc alignmentInsets*(view: View): EdgeInsets =
   view.xAlignmentInsets
 
 proc `alignmentInsets=`*(view: View, insets: EdgeInsets) =
-  if view.isNil or view.xAlignmentInsets == insets:
+  if view.xAlignmentInsets == insets:
     return
   view.xAlignmentInsets = insets
   view.invalidateLayoutItemGeometry(lirFrame)
@@ -260,7 +254,7 @@ proc resetAutoresizingState*(view: View) =
   view.xAutoresizingState = AutoresizingState()
 
 proc refreshAutoresizingReference*(view: View) =
-  if view.isNil or view.xSuperview.isNil or not view.xAutoresizingMaskConstraints:
+  if view.xSuperview.isNil or not view.xAutoresizingMaskConstraints:
     view.resetAutoresizingState()
     return
   view.xAutoresizingState = AutoresizingState(
@@ -276,7 +270,7 @@ proc refreshAutoresizingReferenceIfNeeded*(view: View) =
     view.refreshAutoresizingReference()
 
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
-  if view.isNil or view.xFrame == frame:
+  if view.xFrame == frame:
     return
   view.xFrame = frame
   view.xBounds = rect(view.xBounds.origin, frame.size)
@@ -305,11 +299,11 @@ proc `alignmentRect=`*(view: View, alignmentRect: Rect) =
   view.setFrameFromAlignmentRect(alignmentRect)
 
 proc lastBaselineOffset*(view: View): float32 =
-  if view.isNil: 0.0'f32 else: view.xLastBaselineOffset
+  view.xLastBaselineOffset
 
 proc `lastBaselineOffset=`*(view: View, offset: float32) =
   let normalized = max(offset, 0.0'f32)
-  if view.isNil or view.xLastBaselineOffset == normalized:
+  if view.xLastBaselineOffset == normalized:
     return
   view.xLastBaselineOffset = normalized
   view.invalidateLayoutItemGeometry(
@@ -317,11 +311,11 @@ proc `lastBaselineOffset=`*(view: View, offset: float32) =
   )
 
 proc firstBaselineOffset*(view: View): float32 =
-  if view.isNil: 0.0'f32 else: view.xFirstBaselineOffset
+  view.xFirstBaselineOffset
 
 proc `firstBaselineOffset=`*(view: View, offset: float32) =
   let normalized = max(offset, 0.0'f32)
-  if view.isNil or view.xFirstBaselineOffset == normalized:
+  if view.xFirstBaselineOffset == normalized:
     return
   view.xFirstBaselineOffset = normalized
   view.invalidateLayoutItemGeometry(
@@ -392,7 +386,7 @@ proc resolvedFrame*(view: View, frame: Rect): Rect =
     frame.resolveAutoRect(fallback)
 
 proc applyInitialFrame*(view: View, frame: Rect) =
-  if view.isNil or not frame.hasAutoMetric:
+  if not frame.hasAutoMetric:
     return
 
   let nextFrame = view.resolvedFrame(frame)

@@ -249,22 +249,18 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       view.xAccessibilityLabel.len > 0 or view.xAccessibilityValue.len > 0
 
   method setAccessibilityElement(view: View, value: bool) =
-    if not view.isNil:
-      view.xAccessibilityElement = value
+    view.xAccessibilityElement = value
 
   method accessibilityIgnored(view: View): bool =
-    view.isNil or view.xAccessibilityIgnored or view.hasHiddenAncestor()
+    view.xAccessibilityIgnored or view.hasHiddenAncestor()
 
   method setAccessibilityIgnored(view: View, value: bool) =
-    if not view.isNil:
-      view.xAccessibilityIgnored = value
+    view.xAccessibilityIgnored = value
 
   method accessibilityRole(view: View): AccessibilityRole =
     if view.xHasAccessibilityRole: view.xAccessibilityRole else: arGroup
 
   method setAccessibilityRole(view: View, role: AccessibilityRole) =
-    if view.isNil:
-      return
     view.xAccessibilityRole = role
     view.xHasAccessibilityRole = true
     view.xAccessibilityElement = role != arGroup
@@ -273,15 +269,14 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     if view.xAccessibilityLabel.len > 0: view.xAccessibilityLabel else: view.xIdentifier
 
   method setAccessibilityLabel(view: View, label: string) =
-    if not view.isNil:
-      view.xAccessibilityLabel = label
-      view.xAccessibilityElement = true
+    view.xAccessibilityLabel = label
+    view.xAccessibilityElement = true
 
   method accessibilityValue(view: View): string =
     view.xAccessibilityValue
 
   method setAccessibilityValue(view: View, value: string) =
-    if view.isNil or view.xAccessibilityValue == value:
+    if view.xAccessibilityValue == value:
       return
     view.xAccessibilityValue = value
     view.xAccessibilityElement = true
@@ -291,8 +286,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     if view.xAccessibilityHelp.len > 0: view.xAccessibilityHelp else: view.xToolTip
 
   method setAccessibilityHelp(view: View, value: string) =
-    if not view.isNil:
-      view.xAccessibilityHelp = value
+    view.xAccessibilityHelp = value
 
   method accessibilityIdentifier(view: View): string =
     if view.xAccessibilityIdentifier.len > 0:
@@ -301,8 +295,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       view.xIdentifier
 
   method setAccessibilityIdentifier(view: View, value: string) =
-    if not view.isNil:
-      view.xAccessibilityIdentifier = value
+    view.xAccessibilityIdentifier = value
 
   method accessibilityTraits(view: View): AccessibilityTraits =
     result = view.xAccessibilityTraits
@@ -316,8 +309,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
       result.incl atInvalid
 
   method setAccessibilityTraits(view: View, traits: AccessibilityTraits) =
-    if not view.isNil:
-      view.xAccessibilityTraits = traits
+    view.xAccessibilityTraits = traits
 
   method isAccessibilityElement*(view: View): bool =
     view.accessibilityElement()
@@ -326,13 +318,10 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     view.accessibilityIgnored()
 
   method accessibilityFrame*(view: View): Rect =
-    if view.isNil:
-      rect(0, 0, 0, 0)
-    else:
-      view.rectToWindow(view.xBounds)
+    view.rectToWindow(view.xBounds)
 
   method accessibilityParent*(view: View): View =
-    if view.isNil: nil else: view.xSuperview
+    view.xSuperview
 
   method accessibilityChildren*(view: View): seq[View] =
     view.accessibilityChildrenForView()
@@ -518,15 +507,12 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     false
 
 proc accessibilityChildrenForView(view: View): seq[View] =
-  if view.isNil:
-    return
   for child in view.xSubviews:
-    if child.isAccessibilityIgnored():
-      continue
-    if child.isAccessibilityElement():
-      result.add child
-    else:
-      result.add child.accessibilityChildren()
+    if not child.isAccessibilityIgnored():
+      if child.isAccessibilityElement():
+        result.add child
+      else:
+        result.add child.accessibilityChildren()
 
 proc addValidationError(
     validation: var AccessibilityValidationResult, view: View, message: string
@@ -544,18 +530,16 @@ func passed*(validation: AccessibilityValidationResult): bool =
   validation.errors.len == 0
 
 proc accessibilityHasRole*(view: View, role: AccessibilityRole): bool =
-  not view.isNil and view.accessibilityRole() == role
+  view.accessibilityRole() == role
 
 proc accessibilityHasRole*(view: View, roles: openArray[AccessibilityRole]): bool =
-  if view.isNil:
-    return false
   let role = view.accessibilityRole()
   for expected in roles:
     if role == expected:
       return true
 
 proc accessibilitySupportsAction*(view: View, action: string): bool =
-  if view.isNil or action.len == 0:
+  if action.len == 0:
     return false
   for available in view.accessibilityActionNames():
     if available == action:
@@ -576,11 +560,11 @@ proc validateAccessibilityElement*(view: View): AccessibilityValidationResult =
   for action in view.accessibilityActionNames():
     if action.len == 0:
       result.addValidationError(view, "accessibility action is empty")
-      continue
-    for seen in seenActions:
-      if seen == action:
-        result.addValidationError(view, "duplicate accessibility action: " & action)
-    seenActions.add action
+    else:
+      for seen in seenActions:
+        if seen == action:
+          result.addValidationError(view, "duplicate accessibility action: " & action)
+      seenActions.add action
 
 proc validateAccessibilityRole*(
     view: View, expected: AccessibilityRole
@@ -646,7 +630,7 @@ proc validateAccessibilityTree*(view: View): AccessibilityValidationResult =
     result.errors.add validation.errors
 
 proc accessibilityElementAtPoint*(view: View, point: Point): View =
-  if view.isNil or view.isAccessibilityIgnored():
+  if view.isAccessibilityIgnored():
     return nil
   let children = view.accessibilityChildren()
   for index in countdown(children.high, 0):

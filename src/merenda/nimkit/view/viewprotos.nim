@@ -118,7 +118,7 @@ protocol ViewProtocol from View:
     self.xNextKeyView
 
   method setNextKeyView(self: View, next: View) =
-    if self.isNil or self.xNextKeyView == next:
+    if self.xNextKeyView == next:
       return
 
     let oldNext = self.xNextKeyView
@@ -137,7 +137,7 @@ protocol ViewProtocol from View:
     self.xPreviousKeyView
 
   method setPreviousKeyView(self: View, previous: View) =
-    if self.isNil or self.xPreviousKeyView == previous:
+    if self.xPreviousKeyView == previous:
       return
     if previous.isNil:
       let oldPrevious = self.xPreviousKeyView
@@ -198,7 +198,7 @@ protocol ViewProtocol from View:
     false
 
   method visibleRect*(self: View): Rect =
-    if self.isNil or self.isHiddenOrHasHiddenAncestor():
+    if self.isHiddenOrHasHiddenAncestor():
       return
     result = self.xBounds
     var ancestor = self.xSuperview
@@ -335,10 +335,10 @@ proc `backgroundColor=`*(view: View, color: Color) =
   view.setBackgroundColor(color)
 
 proc usesThemedRootBackground*(view: View): bool =
-  (not view.isNil) and view.xUsesThemedRootBackground
+  view.xUsesThemedRootBackground
 
 proc `usesThemedRootBackground=`*(view: View, enabled: bool) =
-  if view.isNil or view.xUsesThemedRootBackground == enabled:
+  if view.xUsesThemedRootBackground == enabled:
     return
   view.xUsesThemedRootBackground = enabled
   view.setNeedsDisplay(true)
@@ -364,20 +364,17 @@ proc setNeedsDisplaySubtree*(view: View) =
     child.setNeedsDisplaySubtree()
 
 proc viewCanBecomeKeyView*(view: View): bool =
-  (not view.isNil) and view.acceptsFirstResponder() and
-    not view.isHiddenOrHasHiddenAncestor()
+  view.acceptsFirstResponder() and not view.isHiddenOrHasHiddenAncestor()
 
 proc hasAppearance*(view: View): bool =
-  (not view.isNil) and view.xHasAppearance
+  view.xHasAppearance
 
 proc appearance*(view: View): Appearance =
-  if view.isNil or not view.xHasAppearance:
+  if not view.xHasAppearance:
     return initAppearance()
   view.xAppearance
 
 proc effectiveAppearance*(view: View): Appearance =
-  if view.isNil:
-    return initAppearance()
   if view.xHasAppearance:
     return view.xAppearance
   if not view.xSuperview.isNil:
@@ -400,7 +397,7 @@ proc `appearance=`*(view: View, appearance: Appearance) =
   view.setNeedsDisplaySubtree()
 
 proc clearAppearance*(view: View) =
-  if view.isNil or not view.xHasAppearance:
+  if not view.xHasAppearance:
     return
   view.xAppearance = Appearance()
   view.xHasAppearance = false
@@ -497,7 +494,7 @@ proc replaceSubview*(view, oldChild, newChild: View): bool =
   true
 
 proc sortSubviews*(view: View, compare: proc(a, b: View): int) =
-  if view.isNil or compare.isNil:
+  if compare.isNil:
     return
   view.xSubviews.sort(compare)
   emit view.layoutInputChanged(lirHierarchy)

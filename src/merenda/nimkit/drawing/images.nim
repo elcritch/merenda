@@ -45,7 +45,7 @@ proc imageIdForData(name: string, data: string): ImageId =
   imgId(key)
 
 proc uploadImage(image: ImageResource) =
-  if image.isNil or image.xPixels.isNil or image.xCachePolicy == icpNever:
+  if image.xPixels.isNil or image.xCachePolicy == icpNever:
     return
   loadImage(image.xImageId, image.xPixels)
 
@@ -104,8 +104,6 @@ proc newImageResourceFromFile*(
   result.uploadImage()
 
 proc copyImageResource*(image: ImageResource): ImageResource =
-  if image.isNil:
-    return nil
   result = ImageResource(
     xName: image.xName,
     xFilePath: image.xFilePath,
@@ -121,34 +119,28 @@ proc copyImageResource*(image: ImageResource): ImageResource =
   result.uploadImage()
 
 proc name*(image: ImageResource): string =
-  if image.isNil: "" else: image.xName
+  image.xName
 
 proc filePath*(image: ImageResource): string =
-  if image.isNil: "" else: image.xFilePath
+  image.xFilePath
 
 proc size*(image: ImageResource): Size =
-  if image.isNil:
-    initSize(0.0, 0.0)
-  else:
-    image.xSize
+  image.xSize
 
 proc imageId*(image: ImageResource): ImageId =
-  if image.isNil:
-    ImageId(0)
-  else:
-    image.xImageId
+  image.xImageId
 
 proc cachePolicy*(image: ImageResource): ImageCachePolicy =
-  if image.isNil: icpDefault else: image.xCachePolicy
+  image.xCachePolicy
 
 proc `cachePolicy=`*(image: ImageResource, policy: ImageCachePolicy) =
-  if image.isNil or image.xCachePolicy == policy:
+  if image.xCachePolicy == policy:
     return
   image.xCachePolicy = policy
   image.uploadImage()
 
 proc pixels*(image: ImageResource): Image =
-  if image.isNil or image.xPixels.isNil:
+  if image.xPixels.isNil:
     return nil
   image.xPixels.copy()
 

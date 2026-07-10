@@ -58,35 +58,34 @@ func undoStackEntry(group: UndoGroup): UndoStackEntry =
   UndoStackEntry(actionName: group.actionName, commandCount: group.commands.len.Natural)
 
 proc notifyStateChanged(manager: UndoManager) =
-  if not manager.isNil:
-    emit manager.stateDidChange(manager)
-    emit sharedNotificationCenter().notificationReceived(
-      initNotification(
-        nkUndoStateDidChange,
-        sender = DynamicAgent(manager),
-        payload = initUndoNotificationPayload(
-          undoCount = manager.xUndoStack.len.Natural,
-          redoCount = manager.xRedoStack.len.Natural,
-          groupingDepth = manager.xGroupStack.len.Natural,
-          disabledDepth = manager.xDisabledDepth,
-          undoing = manager.xIsUndoing,
-          redoing = manager.xIsRedoing,
-          clean =
-            manager.xHasCleanState and manager.xChangeIndex == manager.xCleanIndex and
-            manager.xBranchSerial == manager.xCleanBranchSerial,
-          nextUndoActionName =
-            if manager.xUndoStack.len > 0:
-              manager.xUndoStack[^1].actionName
-            else:
-              "",
-          nextRedoActionName =
-            if manager.xRedoStack.len > 0:
-              manager.xRedoStack[^1].actionName
-            else:
-              "",
-        ),
-      )
+  emit manager.stateDidChange(manager)
+  emit sharedNotificationCenter().notificationReceived(
+    initNotification(
+      nkUndoStateDidChange,
+      sender = DynamicAgent(manager),
+      payload = initUndoNotificationPayload(
+        undoCount = manager.xUndoStack.len.Natural,
+        redoCount = manager.xRedoStack.len.Natural,
+        groupingDepth = manager.xGroupStack.len.Natural,
+        disabledDepth = manager.xDisabledDepth,
+        undoing = manager.xIsUndoing,
+        redoing = manager.xIsRedoing,
+        clean =
+          manager.xHasCleanState and manager.xChangeIndex == manager.xCleanIndex and
+          manager.xBranchSerial == manager.xCleanBranchSerial,
+        nextUndoActionName =
+          if manager.xUndoStack.len > 0:
+            manager.xUndoStack[^1].actionName
+          else:
+            "",
+        nextRedoActionName =
+          if manager.xRedoStack.len > 0:
+            manager.xRedoStack[^1].actionName
+          else:
+            "",
+      ),
     )
+  )
 
 proc addCommand(group: var UndoGroup, command: sink UndoCommand) =
   if command.actionName.len > 0 and group.actionName.len == 0:
@@ -102,7 +101,7 @@ proc mergeGroup(target: var UndoGroup, source: sink UndoGroup) =
     target.commands.add command
 
 proc commitNormalGroup(manager: UndoManager, group: sink UndoGroup) =
-  if manager.isNil or group.commands.len == 0:
+  if group.commands.len == 0:
     return
   if group.actionName.len == 0 and manager.xNextActionName.len > 0:
     group.actionName = manager.xNextActionName
@@ -115,7 +114,7 @@ proc commitNormalGroup(manager: UndoManager, group: sink UndoGroup) =
   manager.notifyStateChanged()
 
 proc commitEndedGroup(manager: UndoManager, group: sink UndoGroup) =
-  if manager.isNil or group.commands.len == 0:
+  if group.commands.len == 0:
     return
   if manager.xGroupStack.len > 0:
     manager.xGroupStack[^1].mergeGroup(group)
@@ -130,67 +129,58 @@ proc newUndoManager*(): UndoManager =
   result = UndoManager(xHasCleanState: true)
 
 proc isUndoing*(manager: UndoManager): bool =
-  not manager.isNil and manager.xIsUndoing
+  manager.xIsUndoing
 
 proc isRedoing*(manager: UndoManager): bool =
-  not manager.isNil and manager.xIsRedoing
+  manager.xIsRedoing
 
 proc isUndoRegistrationEnabled*(manager: UndoManager): bool =
-  not manager.isNil and manager.xDisabledDepth == 0
+  manager.xDisabledDepth == 0
 
 proc groupingDepth*(manager: UndoManager): Natural =
-  if manager.isNil:
-    return 0
   manager.xGroupStack.len.Natural
 
 proc undoCount*(manager: UndoManager): Natural =
-  if manager.isNil:
-    return 0
   manager.xUndoStack.len.Natural
 
 proc redoCount*(manager: UndoManager): Natural =
-  if manager.isNil:
-    return 0
   manager.xRedoStack.len.Natural
 
 proc canUndo*(manager: UndoManager): bool =
-  not manager.isNil and manager.xUndoStack.len > 0
+  manager.xUndoStack.len > 0
 
 proc canRedo*(manager: UndoManager): bool =
-  not manager.isNil and manager.xRedoStack.len > 0
+  manager.xRedoStack.len > 0
 
 proc undoActionName*(manager: UndoManager): string =
-  if manager.isNil or manager.xUndoStack.len == 0:
+  if manager.xUndoStack.len == 0:
     ""
   else:
     manager.xUndoStack[^1].actionName
 
 proc redoActionName*(manager: UndoManager): string =
-  if manager.isNil or manager.xRedoStack.len == 0:
+  if manager.xRedoStack.len == 0:
     ""
   else:
     manager.xRedoStack[^1].actionName
 
 proc beginUndoGrouping*(manager: UndoManager) =
-  if not manager.isNil:
-    manager.xGroupStack.add UndoGroup()
+  manager.xGroupStack.add UndoGroup()
 
 proc endUndoGrouping*(manager: UndoManager): bool {.discardable.} =
-  if manager.isNil or manager.xGroupStack.len == 0:
+  if manager.xGroupStack.len == 0:
     return false
   let group = manager.xGroupStack.pop()
   manager.commitEndedGroup(group)
   true
 
 proc discardUndoGrouping*(manager: UndoManager): bool {.discardable.} =
-  if manager.isNil or manager.xGroupStack.len == 0:
+  if manager.xGroupStack.len == 0:
     return false
   discard manager.xGroupStack.pop()
   true
 
 proc setActionName*(manager: UndoManager, actionName: string) =
-  if manager.isNil:
-    return
   if manager.xGroupStack.len > 0:
     manager.xGroupStack[^1].actionName = actionName
   elif manager.xIsUndoing:
@@ -201,11 +191,10 @@ proc setActionName*(manager: UndoManager, actionName: string) =
     manager.xNextActionName = actionName
 
 proc disableUndoRegistration*(manager: UndoManager) =
-  if not manager.isNil:
-    inc manager.xDisabledDepth
+  inc manager.xDisabledDepth
 
 proc enableUndoRegistration*(manager: UndoManager) =
-  if manager.isNil or manager.xDisabledDepth == 0:
+  if manager.xDisabledDepth == 0:
     return
   dec manager.xDisabledDepth
 
@@ -293,8 +282,7 @@ proc registerCollectionMove*(
   )
 
 proc performUndo*(manager: UndoManager): bool {.discardable.} =
-  if manager.isNil or manager.xUndoStack.len == 0 or manager.xIsUndoing or
-      manager.xIsRedoing:
+  if manager.xUndoStack.len == 0 or manager.xIsUndoing or manager.xIsRedoing:
     return false
   let group = manager.xUndoStack.pop()
   manager.xRedoReplayGroup = UndoGroup(actionName: group.actionName)
@@ -315,8 +303,7 @@ proc performUndo*(manager: UndoManager): bool {.discardable.} =
   true
 
 proc performRedo*(manager: UndoManager): bool {.discardable.} =
-  if manager.isNil or manager.xRedoStack.len == 0 or manager.xIsUndoing or
-      manager.xIsRedoing:
+  if manager.xRedoStack.len == 0 or manager.xIsUndoing or manager.xIsRedoing:
     return false
   let group = manager.xRedoStack.pop()
   manager.xUndoReplayGroup = UndoGroup(actionName: group.actionName)
@@ -337,22 +324,16 @@ proc performRedo*(manager: UndoManager): bool {.discardable.} =
   true
 
 proc clearUndo*(manager: UndoManager) =
-  if manager.isNil:
-    return
   if manager.xUndoStack.len > 0:
     manager.xUndoStack.setLen(0)
     manager.notifyStateChanged()
 
 proc clearRedo*(manager: UndoManager) =
-  if manager.isNil:
-    return
   if manager.xRedoStack.len > 0:
     manager.xRedoStack.setLen(0)
     manager.notifyStateChanged()
 
 proc clearAll*(manager: UndoManager) =
-  if manager.isNil:
-    return
   if manager.xUndoStack.len > 0 or manager.xRedoStack.len > 0 or
       manager.xGroupStack.len > 0:
     manager.xUndoStack.setLen(0)
@@ -361,27 +342,20 @@ proc clearAll*(manager: UndoManager) =
     manager.notifyStateChanged()
 
 proc markCleanState*(manager: UndoManager) =
-  if manager.isNil:
-    return
   manager.xCleanIndex = manager.xChangeIndex
   manager.xCleanBranchSerial = manager.xBranchSerial
   manager.xHasCleanState = true
   manager.notifyStateChanged()
 
 proc clearCleanState*(manager: UndoManager) =
-  if manager.isNil:
-    return
   manager.xHasCleanState = false
   manager.notifyStateChanged()
 
 proc isAtCleanState*(manager: UndoManager): bool =
-  not manager.isNil and manager.xHasCleanState and
-    manager.xChangeIndex == manager.xCleanIndex and
+  manager.xHasCleanState and manager.xChangeIndex == manager.xCleanIndex and
     manager.xBranchSerial == manager.xCleanBranchSerial
 
 proc debugSummary*(manager: UndoManager): UndoDebugSummary =
-  if manager.isNil:
-    return
   result.undoGroupCount = manager.xUndoStack.len.Natural
   result.redoGroupCount = manager.xRedoStack.len.Natural
   result.groupingDepth = manager.xGroupStack.len.Natural
