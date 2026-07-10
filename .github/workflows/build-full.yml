@@ -29,6 +29,7 @@ jobs:
             display: none
         include:
           - os: ubuntu-24.04
+            nimversion: '2.2.10'
             display: x11
           # - os: ubuntu-24.04
           #   display: wayland
