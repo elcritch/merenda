@@ -36,6 +36,11 @@ let
   toggleButton = newButton("Toggle Off")
   actionCountLabel = newStatusLabel("Push count: 0")
 
+  iconTitle = newHeadingLabel("Icon Labels")
+  recentsIcon = newIconLabel("◷", "Recents")
+  cloudIcon = newIconLabel("☁", "iCloud Drive", color(0.0, 0.62, 0.78))
+  projectsIcon = newIconLabel("▣", "Projects", color(0.42, 0.42, 0.44))
+
   choiceTitle = newHeadingLabel("Choices")
   downloads = newCheckBox("Enable downloads")
   notifications = newCheckBox("Show notifications")
@@ -284,7 +289,8 @@ buttonRow.setHuggingPriority(LayoutPriorityHigh, laVertical)
 buttonRow.addArrangedSubview(pushButton, toggleButton)
 countRow.addArrangedSubview(countField, countStepper)
 inputColumn.addArrangedSubview(
-  inputTitle, nameField, noteField, actionTitle, buttonRow, actionCountLabel
+  inputTitle, nameField, noteField, actionTitle, buttonRow, actionCountLabel, iconTitle,
+  recentsIcon, cloudIcon, projectsIcon,
 )
 inputColumn.addFlexibleSpacer()
 choiceColumn.addArrangedSubview(

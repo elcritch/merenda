@@ -14,6 +14,7 @@ import nimkit/formviews
 import nimkit/gaptextbuffers
 import nimkit/gridviews
 import nimkit/images
+import nimkit/iconlabels
 import nimkit/keybindings
 import nimkit/matrix
 import nimkit/menus
