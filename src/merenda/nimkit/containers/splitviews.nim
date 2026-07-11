@@ -135,7 +135,7 @@ protocol SplitDividerTransactionAnim of SplitDividerTransactionAnimProtocol:
 protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
   property splitAxis -> LayoutAxis
   property dividerThickness -> float32
-  property autosaveName -> string
+  property autosaveName -> string {.field: xAutosaveName.}
 
   method paneIndex*(splitView: SplitView, pane: View): int =
     if pane.isNil:
@@ -169,14 +169,6 @@ protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
       return
     splitView.xDividerThickness = max(value, 0.0'f32)
     splitView.invalidateSplitViewLayout()
-
-  method autosaveName(splitView: SplitView): string =
-    splitView.xAutosaveName
-
-  method setAutosaveName(splitView: SplitView, name: string) =
-    if splitView.xAutosaveName == name:
-      return
-    splitView.xAutosaveName = name
 
 proc `splitAxis=`*(splitView: SplitView, axis: LayoutAxis) =
   splitView.setSplitAxis(axis)

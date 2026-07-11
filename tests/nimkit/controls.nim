@@ -22,6 +22,14 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
   spy.lastSender = sender
 
 suite "nimkit controls":
+  test "cell editing action flag is a field-backed protocol property":
+    let cell = newCell()
+
+    check cell.conformsTo(CellEditingProtocol)
+    check not cell.sendsActionOnEndEditing()
+    cell.setSendsActionOnEndEditing(true)
+    check cell.sendsActionOnEndEditing()
+
   test "button core methods are selector-backed and protocol visible":
     let button = newButton("Original", frame = rect(0, 0, 120, 36))
 

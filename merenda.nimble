@@ -9,10 +9,10 @@ srcDir        = "src"
 requires "nim >= 2.2.6"
 requires "msgpack4nim"
 requires "chronicles"
-requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.27.2"
+requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.28.0"
 requires "gh:elcritch/kiwiberry"
 requires "siwin#063fc0f"
-requires "sigils[sigNameAsString, closures] >= 0.24.4"
+requires "sigils[sigNameAsString, closures] >= 0.25.1"
 requires "cborious"
 
 feature "libbacktrace":

@@ -22,6 +22,14 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   discard result.withProtocol(FixedIntrinsicLayout)
 
 suite "nimkit split views":
+  test "autosave name is a field-backed protocol property":
+    let splitView = newSplitView()
+
+    check splitView.conformsTo(SplitViewProtocol)
+    check splitView.autosaveName() == ""
+    splitView.setAutosaveName("workspace")
+    check splitView.autosaveName() == "workspace"
+
   test "split view protocol exposes selector-backed properties":
     let splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 200.0, 100.0))
 
