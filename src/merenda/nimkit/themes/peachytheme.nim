@@ -52,6 +52,7 @@ proc addLabelRule(
   theme[selector, StyleFocusRingWidth] = 0.0
   theme[selector, StyleFocusRingInset] = 0.0
   theme[selector, StyleBoxShadows] = newSeq[BoxShadow]()
+  theme[selector, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
 func peachyPanelFill(): Fill =
   linear(
@@ -860,6 +861,13 @@ proc initPeachyTheme*(): Theme =
   result.installPeachyTextReadabilityPass()
   result.installPeachyDocumentTabs()
   result.clearBackgroundPinstripes()
+
+  for role in [
+    srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator, srTab,
+    srTabPanel, srDocumentTab, srDocumentTabBar, srDocumentTabButton, srTextField,
+    srMonoTextView, srComboBox,
+  ]:
+    result[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
 registerThemeFactory("peachy", initPeachyTheme)
 registerThemeFactory("peach", initPeachyTheme)

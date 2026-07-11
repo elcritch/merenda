@@ -118,6 +118,21 @@ NIMKIT_FONT=HackNerdFont-Regular.ttf NIMKIT_FONT_SIZE=15 nim r examples/quick_st
 to its bundled default font list. Per-role or per-class theme rules can override
 the same values with `StyleFontName` and `StyleFontSize`.
 
+For a flatter, modern macOS-style appearance, select the built-in `macos` theme
+at startup or construct it directly:
+
+```sh
+NIMKIT_THEME=macos nim r examples/controls_showcase.nim
+```
+
+```nim
+root.appearance = initAppearance(initMacOSTheme())
+```
+
+The `mac` and `modern-macos` names are aliases. The theme is platform-neutral,
+so Linux applications can use the same look while macOS continues to use its
+native application menu bar.
+
 ## Controls
 
 NimKit ships the core controls needed for desktop-style interfaces:

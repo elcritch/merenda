@@ -793,3 +793,59 @@ suite "nimkit theme":
       fill(color(0.86, 0.82, 0.75, 1.0))
     check theme.resolveColor(tabStyle, StyleTextColor, color(0.0, 0.0, 0.0, 1.0)) ==
       color(0.11, 0.10, 0.10, 1.0)
+
+  test "macOS theme provides a modern flat control appearance":
+    let
+      theme = initMacOSTheme()
+      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
+      accentStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
+      checkBoxStyle =
+        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
+      switchStyle = theme.resolveSwitchButtonStyle(controlStyle(srSwitch, {ssSelected}))
+
+    check buttonStyle.chrome == DefaultChromeName
+    check buttonStyle.box.cornerRadius == 7.0'f32
+    check buttonStyle.textHighlightColor.a == 0.0'f32
+    check buttonStyle.textShadowColor.a == 0.0'f32
+    check accentStyle.box.fill == color(0.04, 0.52, 1.0, 1.0)
+    check accentStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
+    check checkBoxStyle.chrome == DefaultChromeName
+    check checkBoxStyle.indicator.cornerRadius == 4.0'f32
+    check checkBoxStyle.indicator.fill == color(0.04, 0.52, 1.0, 1.0)
+    check theme.resolveChromeName(controlStyle(srTextField)) == DefaultChromeName
+    check textFieldStyle.box.cornerRadius == 6.0'f32
+    check switchStyle.chrome == DefaultChromeName
+    check switchStyle.track.fill == color(0.20, 0.78, 0.35, 1.0)
+    checkRootPinstripesDisabled(theme)
+
+    for labelClass in [
+      LabelStyleClass, LabelTitleStyleClass, LabelHeadingStyleClass,
+      LabelStatusStyleClass, LabelFormStyleClass,
+    ]:
+      let context = controlStyle(srTextField, classes = @[labelClass])
+      check theme.resolveChromeName(context) == DefaultChromeName
+      check theme.resolveTextFieldStyle(context).box.shadows.len == 0
+
+  test "non-Aqua themes do not inherit Aqua chrome":
+    const ChromeRoles = [
+      srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator,
+      srTab, srTabPanel, srDocumentTab, srDocumentTabBar, srDocumentTabButton,
+      srTextField, srMonoTextView, srComboBox,
+    ]
+    for theme in [initPeachyTheme(), initSynthwave83Theme()]:
+      for role in ChromeRoles:
+        check theme.resolveChromeName(controlStyle(role)) == FlatTransparentChromeName
+      for labelClass in [
+        LabelStyleClass, LabelTitleStyleClass, LabelHeadingStyleClass,
+        LabelStatusStyleClass, LabelFormStyleClass,
+      ]:
+        let context = controlStyle(srTextField, classes = @[labelClass])
+        check theme.resolveChromeName(context) == FlatTransparentChromeName
+        check theme.resolveTextFieldStyle(context).box.shadows.len == 0
+
+  test "macOS theme is available through runtime theme names":
+    for name in ["macos", "mac", "modern-macos"]:
+      let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
+      check style.chrome == DefaultChromeName
+      check style.box.cornerRadius == 7.0'f32
