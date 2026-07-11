@@ -9,6 +9,7 @@ import ../drawing
 import ../foundation/events
 import ../responder/keybindings
 import ../containers/listbasics
+import ../containers/stackviews
 import ./popuplists
 import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
@@ -93,6 +94,10 @@ type
     xMenu: Menu
     xButtons: seq[PopupMenuButton]
     xOpenButton: PopupMenuButton
+
+  MenuRootView* = ref object of StackView
+    xMenuBar: MenuBar
+    xContentView: View
 
   MenuActionStart* = proc(): Responder {.closure.}
 
@@ -1994,3 +1999,44 @@ proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRe
 proc newMenuBar*(menu: Menu = nil, frame: Rect = AutoRect): MenuBar =
   result = MenuBar()
   initMenuBarFields(result, menu, frame)
+
+proc menuBar*(root: MenuRootView): MenuBar =
+  root.xMenuBar
+
+proc mainMenu*(root: MenuRootView): Menu =
+  root.xMenuBar.menu()
+
+proc `mainMenu=`*(root: MenuRootView, menu: Menu) =
+  root.xMenuBar.menu = menu
+
+proc contentView*(root: MenuRootView): View =
+  root.xContentView
+
+proc `contentView=`*(root: MenuRootView, contentView: View) =
+  if root.xContentView == contentView:
+    return
+  if not root.xContentView.isNil:
+    root.xContentView.removeFromSuperview()
+  root.xContentView = contentView
+  if not contentView.isNil:
+    root.addArrangedSubview(contentView)
+
+proc initMenuRootViewFields*(
+    root: MenuRootView,
+    menu: Menu = nil,
+    contentView: View = nil,
+    frame: Rect = AutoRect,
+) =
+  initStackViewFields(root, laVertical, frame)
+  root.spacing = 0.0'f32
+  root.xMenuBar = newMenuBar(menu)
+  root.xMenuBar.setHuggingPriority(LayoutPriorityRequired, laVertical)
+  root.xMenuBar.setCompressionPriority(LayoutPriorityRequired, laVertical)
+  root.addArrangedSubview(root.xMenuBar)
+  root.contentView = contentView
+
+proc newMenuRootView*(
+    menu: Menu = nil, contentView: View = nil, frame: Rect = AutoRect
+): MenuRootView =
+  result = MenuRootView()
+  initMenuRootViewFields(result, menu, contentView, frame)

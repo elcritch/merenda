@@ -7,7 +7,6 @@ import sigils/selectors
 let
   app = sharedApplication()
   window = newWindow("Nimkit Menu Demo", frame = rect(120, 120, 520, 300))
-  root = newView(frame = rect(0, 0, 520, 300))
   content = newStackView(laVertical)
   title = newTitleLabel("Menu Demo")
   status = newStatusLabel("Menu action count: 0")
@@ -57,22 +56,15 @@ discard contextMenu.addSeparator()
 discard contextMenu.addItem(contextResetItem)
 app.mainMenu = mainMenu
 
-let
-  menuBar = newMenuBar(mainMenu)
-  page = newStackView(laVertical)
-
 button.target = runTarget
 button.action = runAction
 
-page.spacing = 0.0
 content.spacing = 12.0
 content.alignment = svaFill
 content.edgeInsets = insets(28.0, 28.0, 0.0, 28.0)
 content.addArrangedSubview(title, status, button)
-page.addArrangedSubview(menuBar, content)
-root.addSubview(page)
-root.menu = contextMenu
+content.menu = contextMenu
 
-page.pinEdges(toGuide = root.contentLayoutGuide())
+let root = newMenuRootView(mainMenu, content, rect(0, 0, 520, 300))
 
 app.runWindow(window, root)

@@ -148,10 +148,11 @@ bar, including submenus, separators, validation, state, and key equivalents.
 The default `mmpAutomatic` presentation uses that native menu when available.
 Applications can switch `app.mainMenuPresentation` at runtime between
 `mmpNative` and `mmpInWindow`; `app.usesNativeMainMenu()` reports the effective
-choice. Add `newMenuBar(app.mainMenu())` to the window hierarchy in either
-mode. The application hides that presenter while the native menu is active and
-shows it for in-window presentation; layout containers such as `StackView`
-automatically omit the hidden menu bar.
+choice. For a standard window, wrap its content with
+`newMenuRootView(app.mainMenu(), content)`. The root owns a `MenuBar` and hides
+or shows it as the presentation changes. Standalone `newMenuBar` presenters
+follow the same policy, and layout containers such as `StackView` automatically
+omit the hidden menu bar.
 
 Buttons can behave as push, toggle, checkbox, or radio controls:
 

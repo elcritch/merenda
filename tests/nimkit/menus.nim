@@ -125,12 +125,11 @@ suite "nimkit menus":
       check app.usesNativeMainMenu()
 
       let
-        menuBar = newMenuBar(mainMenu)
+        menuRoot = newMenuRootView(mainMenu, newView())
+        menuBar = menuRoot.menuBar()
         window = newWindow("Menu bar presentation", frame = rect(0, 0, 200, 120))
-        root = newView(frame = rect(0, 0, 200, 120))
       check menuBar.hidden()
-      root.addSubview(menuBar)
-      window.setContentView(root)
+      window.setContentView(menuRoot)
       app.addWindow(window)
       app.mainMenuPresentation = mmpInWindow
       check not menuBar.hidden()
@@ -185,6 +184,27 @@ suite "nimkit menus":
 
       app.mainMenu = nil
       window.close()
+
+  test "menu root view owns a menu bar and replaceable content":
+    let
+      menu = newMenu("Main")
+      content = newView()
+      root = newMenuRootView(menu, content)
+
+    check root.mainMenu() == menu
+    check root.menuBar().menu() == menu
+    check root.contentView() == content
+    check root.arrangedSubviews() == @[View(root.menuBar()), content]
+
+    let replacement = newView()
+    root.contentView = replacement
+    check content.superview().isNil
+    check root.contentView() == replacement
+    check root.arrangedSubviews() == @[View(root.menuBar()), replacement]
+
+    let replacementMenu = newMenu("Replacement")
+    root.mainMenu = replacementMenu
+    check root.menuBar().menu() == replacementMenu
 
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))
