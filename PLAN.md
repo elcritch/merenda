@@ -329,9 +329,13 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Near-Term Work
 
-### Trigger Button / Widget animations when activated from keyboard
+### General Fixes
+
+- Trigger Button / Widget animations when activated from keyboard
 
 If you tab-select a button and use enter or space to activate it the button doesn't show the normal activation render / animations / etc.
+
+- `addComboBoxDoubleArrow` in drawing.nim should be removed or made into a L&F helper. 
 
 ### Resource-Backed UI Construction
 
