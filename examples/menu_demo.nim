@@ -57,31 +57,22 @@ discard contextMenu.addSeparator()
 discard contextMenu.addItem(contextResetItem)
 app.mainMenu = mainMenu
 
+let
+  menuBar = newMenuBar(mainMenu)
+  page = newStackView(laVertical)
+
 button.target = runTarget
 button.action = runAction
 
+page.spacing = 0.0
 content.spacing = 12.0
 content.alignment = svaFill
+content.edgeInsets = insets(28.0, 28.0, 0.0, 28.0)
 content.addArrangedSubview(title, status, button)
-root.addSubview(content)
+page.addArrangedSubview(menuBar, content)
+root.addSubview(page)
 root.menu = contextMenu
 
-if app.usesNativeMainMenu():
-  content.pinEdges(
-    toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
-    edges = {leLeft, leTop, leRight},
-  )
-else:
-  let menuBar = newMenuBar(mainMenu, rect(0, 0, 520, 28))
-  menuBar.reload()
-  root.addSubview(menuBar)
-  menuBar.pinEdges(
-    toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight}
-  )
-  menuBar[atHeight].equalTo(28).active = true
-  content.pinEdges(
-    toGuide = root.contentLayoutGuide(insets(72.0, 28.0, 0.0, 28.0)),
-    edges = {leLeft, leTop, leRight},
-  )
+page.pinEdges(toGuide = root.contentLayoutGuide())
 
 app.runWindow(window, root)

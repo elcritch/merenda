@@ -66,6 +66,7 @@ type
     xDataSource: DynamicAgent
     xDelegate: DynamicAgent
     xOpen: bool
+    xPresentedNatively: bool
 
   PopupMenuButton* = ref object of Control
     xTitle: string
@@ -112,6 +113,7 @@ proc closeChildPopup(button: PopupMenuButton)
 proc openSubmenuPopup(button: PopupMenuButton, index: int)
 proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool
+proc syncMenuBarPresentation(menuBar: MenuBar)
 proc menu*(view: View): Menu
 proc `menu=`*(view: View, menu: Menu)
 proc popUpContextMenu*(
@@ -243,6 +245,10 @@ protocol MenuBarAccessibility of AccessibilityProtocol:
 
   method isAccessibilityElement(menuBar: MenuBar): bool =
     true
+
+protocol MenuBarPresentationLifecycle of ViewLifecycleProtocol:
+  proc menuBarDidMoveToWindow(menuBar: MenuBar) {.slotFor: viewDidMoveToWindow.} =
+    menuBar.syncMenuBarPresentation()
 
 protocol ViewContextMenuEvents of ResponderEventProtocol:
   method rightMouseDown(view: View, event: MouseEvent): bool =
@@ -582,6 +588,13 @@ proc title*(menu: Menu): string =
 proc `title=`*(menu: Menu, title: string) =
   menu.xTitle = title
   syncNativeMainMenu()
+
+proc presentedNatively*(menu: Menu): bool =
+  not menu.isNil and menu.xPresentedNatively
+
+proc `presentedNatively=`*(menu: Menu, presentedNatively: bool) =
+  if not menu.isNil:
+    menu.xPresentedNatively = presentedNatively
 
 proc delegate*(menu: Menu): DynamicAgent =
   menu.xDelegate
@@ -1884,6 +1897,9 @@ proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
 proc menu*(menuBar: MenuBar): Menu =
   menuBar.xMenu
 
+proc syncMenuBarPresentation(menuBar: MenuBar) =
+  menuBar.hidden = menuBar.xMenu.presentedNatively()
+
 proc menuBarItemWidth(item: MenuItem): float32 =
   max(textNaturalSize(item.title()).width + menuBarItemPadding(), 44.0'f32)
 
@@ -1922,6 +1938,7 @@ proc `menu=`*(menuBar: MenuBar, menu: Menu) =
   if menuBar.xMenu == menu:
     return
   menuBar.xMenu = menu
+  menuBar.syncMenuBarPresentation()
   menuBar.reload()
 
 proc tileMenuBarItems(menuBar: MenuBar) =
@@ -1969,6 +1986,8 @@ proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRe
   discard menuBar.withProtocol(MenuBarDrawing)
   discard menuBar.withProtocol(MenuBarLayout)
   discard menuBar.withProtocol(MenuBarAccessibility)
+  discard menuBar.withProtocol(MenuBarPresentationLifecycle)
+  menuBar.observeProtocol(menuBar, MenuBarPresentationLifecycle)
   menuBar.menu = menu
   menuBar.applyInitialFrame(frame)
 

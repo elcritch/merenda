@@ -124,6 +124,19 @@ suite "nimkit menus":
       app.mainMenuPresentation = mmpNative
       check app.usesNativeMainMenu()
 
+      let
+        menuBar = newMenuBar(mainMenu)
+        window = newWindow("Menu bar presentation", frame = rect(0, 0, 200, 120))
+        root = newView(frame = rect(0, 0, 200, 120))
+      check menuBar.hidden()
+      root.addSubview(menuBar)
+      window.setContentView(root)
+      app.addWindow(window)
+      app.mainMenuPresentation = mmpInWindow
+      check not menuBar.hidden()
+      app.mainMenuPresentation = mmpNative
+      check menuBar.hidden()
+
       var nativeMainMenu = application.mainMenu()
       check not nativeMainMenu.isNil
       check nativeMainMenu.numberOfItems() == 1
@@ -171,6 +184,7 @@ suite "nimkit menus":
       check resetCount == 1
 
       app.mainMenu = nil
+      window.close()
 
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))

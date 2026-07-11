@@ -89,6 +89,7 @@ proc noteWindowOrderedOut(app: Application, window: Window)
 proc noteWindowClosed(app: Application, window: Window)
 proc keyEquivalentDispatchStart(app: Application): Responder
 proc syncMainMenuPresentation(app: Application)
+proc syncMenuBarPresenters(app: Application)
 
 proc orderFrontWindowAction*(): ActionSelector =
   actionSelector("orderFrontWindow")
@@ -387,7 +388,21 @@ func usesNativeMainMenu*(app: Application): bool =
     return false
   app.xMainMenuPresentation != mmpInWindow
 
+proc syncMenuBarPresenters(view: View, menu: Menu, presentedNatively: bool) =
+  if view of MenuBar:
+    let menuBar = MenuBar(view)
+    menuBar.hidden = presentedNatively and menuBar.menu() == menu
+  for child in view.subviews():
+    child.syncMenuBarPresenters(menu, presentedNatively)
+
+proc syncMenuBarPresenters(app: Application) =
+  let presentedNatively = app.usesNativeMainMenu()
+  for window in app.xWindows:
+    if not window.isNil and not window.contentView().isNil:
+      window.contentView().syncMenuBarPresenters(app.xMainMenu, presentedNatively)
+
 proc syncMainMenuPresentation(app: Application) =
+  app.xMainMenu.presentedNatively = app.usesNativeMainMenu()
   if app.usesNativeMainMenu():
     app.xMainMenu.installNativeMainMenu(
       proc(): Responder =
@@ -396,6 +411,7 @@ proc syncMainMenuPresentation(app: Application) =
     app.xWindowsMenu.installNativeWindowsMenu()
   else:
     Menu(nil).installNativeMainMenu()
+  app.syncMenuBarPresenters()
 
 proc `mainMenuPresentation=`*(app: Application, presentation: MainMenuPresentation) =
   if app.xMainMenuPresentation == presentation:
@@ -404,6 +420,8 @@ proc `mainMenuPresentation=`*(app: Application, presentation: MainMenuPresentati
   app.syncMainMenuPresentation()
 
 proc `mainMenu=`*(app: Application, menu: Menu) =
+  if app.xMainMenu != menu:
+    app.xMainMenu.presentedNatively = false
   app.xMainMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
@@ -617,6 +635,7 @@ proc addWindow*(app: Application, window: Window) =
   if app.xKeyWindow.isNil:
     app.setKeyWindow(window)
   app.updateWindowsMenu()
+  app.syncMenuBarPresenters()
 
 proc windows*(app: Application): lent seq[Window] =
   app.xWindows
