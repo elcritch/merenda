@@ -256,10 +256,7 @@ func decrementPartRect(bounds: Rect): Rect =
 
 func incrementPartRect(bounds: Rect): Rect =
   rect(
-    bounds.origin.x,
-    bounds.origin.y,
-    bounds.size.width * 0.5'f32,
-    bounds.size.height,
+    bounds.origin.x, bounds.origin.y, bounds.size.width * 0.5'f32, bounds.size.height
   )
 
 proc partRect*(stepper: Stepper, part: StepperPart): Rect =

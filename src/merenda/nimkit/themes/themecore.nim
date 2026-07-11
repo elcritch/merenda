@@ -329,6 +329,7 @@ const
   LabelHeadingStyleClass* = "label-heading"
   LabelStatusStyleClass* = "label-status"
   LabelFormStyleClass* = "label-form"
+  IconLabelStyleClass* = "icon-label"
 
 var themeInstallers {.threadvar.}: seq[ThemeInstaller]
 

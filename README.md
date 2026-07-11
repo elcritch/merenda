@@ -133,6 +133,17 @@ The `mac` and `modern-macos` names are aliases. The theme is platform-neutral,
 so Linux applications can use the same look while macOS continues to use its
 native application menu bar.
 
+Compose Finder-style icon rows with `IconLabel`. The icon is a Unicode glyph,
+rendered through the same FigDraw glyph atlas as other text, and can have an
+independent semantic tint:
+
+```nim
+let downloads = newIconLabel("↓", "Downloads", color(0.04, 0.52, 1.0))
+let shared = newIconLabel("⌘", "Shared", color(0.0, 0.62, 0.78))
+```
+
+Omit the color to use the active theme's icon accent.
+
 ## Controls
 
 NimKit ships the core controls needed for desktop-style interfaces:

@@ -27,6 +27,7 @@ import merenda/nimkit/text/texteditors
 import merenda/nimkit/containers/formviews
 import merenda/nimkit/containers/gridviews
 import merenda/nimkit/view/imageviews
+import merenda/nimkit/text/iconlabels
 import merenda/nimkit/responder/keybindings
 import merenda/nimkit/containers/listbasics
 import merenda/nimkit/controls/matrices
@@ -95,6 +96,7 @@ export texteditors
 export formviews
 export gridviews
 export imageviews
+export iconlabels
 export keybindings
 export listbasics
 export matrices

@@ -256,6 +256,14 @@ proc installMacOSLabels(theme: var Theme) =
     initSize(0.0, 18.0),
     bodySize,
   )
+
+  let iconLabel =
+    initStyleSelector(srTextField, classes = @[LabelStyleClass, IconLabelStyleClass])
+  theme[iconLabel, StyleTextColor] = color(0.16, 0.16, 0.17, 1.0)
+  theme[iconLabel, StyleMarkColor] = styleToken("accent")
+  theme[iconLabel, StyleIndicatorSize] = 18.0
+  theme[iconLabel, StyleIndicatorSpacing] = 8.0
+  theme[iconLabel, StyleFontSize] = bodySize
   theme.addMacOSLabelRule(
     LabelTitleStyleClass,
     fill(color(0.0, 0.0, 0.0, 0.0)),
