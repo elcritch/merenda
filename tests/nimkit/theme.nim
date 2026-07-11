@@ -827,6 +827,34 @@ suite "nimkit theme":
       check theme.resolveChromeName(context) == DefaultChromeName
       check theme.resolveTextFieldStyle(context).box.shadows.len == 0
 
+  test "macOS labels use typographic hierarchy instead of bordered bands":
+    let theme = initMacOSTheme()
+    let transparent = fill(color(0.0, 0.0, 0.0, 0.0))
+    let
+      title = theme.resolveTextFieldStyle(
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass])
+      )
+      heading = theme.resolveTextFieldStyle(
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelHeadingStyleClass])
+      )
+      status = theme.resolveTextFieldStyle(
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass])
+      )
+      form = theme.resolveTextFieldStyle(
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelFormStyleClass])
+      )
+
+    for style in [title, heading, status, form]:
+      check style.box.fill == transparent
+      check style.box.borderWidth == 0.0'f32
+      check style.box.borderColor.a == 0.0'f32
+    check title.text.fontSize == defaultFontSize() + 4.0'f32
+    check heading.text.fontSize == defaultFontSize()
+    check status.text.fontSize == max(defaultFontSize() - 1.0'f32, 10.0'f32)
+    check heading.text.color == color(0.24, 0.24, 0.26, 1.0)
+    check status.text.color == color(0.40, 0.40, 0.42, 1.0)
+    check form.text.color == status.text.color
+
   test "non-Aqua themes do not inherit Aqua chrome":
     const ChromeRoles = [
       srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator,

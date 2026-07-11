@@ -18,6 +18,7 @@ proc addMacOSLabelRule(
     textColor: Color,
     textInsets: EdgeInsets,
     minSize: Size,
+    fontSize: float32,
 ) =
   let selector = initStyleSelector(srTextField, classes = @[className])
   theme[selector, StyleFill] = fillValue
@@ -27,6 +28,7 @@ proc addMacOSLabelRule(
   theme[selector, StyleTextColor] = textColor
   theme[selector, StyleTextInsets] = textInsets
   theme[selector, StyleMinimumSize] = minSize
+  theme[selector, StyleFontSize] = fontSize
   theme[selector, StyleFocusRingWidth] = 0.0
   theme[selector, StyleFocusRingInset] = 0.0
   theme[selector, StyleBoxShadows] = newSeq[BoxShadow]()
@@ -225,6 +227,10 @@ proc installMacOSControlStyles(theme: var Theme) =
   theme[srRowItem, StyleAlternatingFill] = fill(color(0.0, 0.0, 0.0, 0.025))
 
 proc installMacOSLabels(theme: var Theme) =
+  let
+    bodySize = defaultFontSize()
+    titleSize = bodySize + 4.0'f32
+    secondarySize = max(bodySize - 1.0'f32, 10.0'f32)
   theme.addMacOSLabelRule(
     LabelStyleClass,
     fill(color(0.0, 0.0, 0.0, 0.0)),
@@ -234,6 +240,7 @@ proc installMacOSLabels(theme: var Theme) =
     color(0.12, 0.12, 0.13, 1.0),
     insets(0.0),
     initSize(0.0, 18.0),
+    bodySize,
   )
   theme.addMacOSLabelRule(
     LabelTitleStyleClass,
@@ -242,28 +249,31 @@ proc installMacOSLabels(theme: var Theme) =
     0.0,
     0.0,
     color(0.10, 0.10, 0.11, 1.0),
-    insets(0.0, 2.0),
-    initSize(0.0, 28.0),
+    insets(0.0),
+    initSize(0.0, 24.0),
+    titleSize,
   )
   theme.addMacOSLabelRule(
     LabelHeadingStyleClass,
-    fill(color(0.0, 0.0, 0.0, 0.045)),
-    color(0.0, 0.0, 0.0, 0.08),
-    1.0,
-    6.0,
-    color(0.18, 0.18, 0.20, 1.0),
-    insets(0.0, 10.0),
-    initSize(0.0, 24.0),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0,
+    0.0,
+    color(0.24, 0.24, 0.26, 1.0),
+    insets(0.0),
+    initSize(0.0, 18.0),
+    bodySize,
   )
   theme.addMacOSLabelRule(
     LabelStatusStyleClass,
-    fill(color(0.20, 0.78, 0.35, 0.12)),
-    color(0.12, 0.64, 0.26, 0.24),
-    1.0,
-    6.0,
-    color(0.08, 0.32, 0.14, 1.0),
-    insets(0.0, 10.0),
-    initSize(0.0, 24.0),
+    fill(color(0.0, 0.0, 0.0, 0.0)),
+    color(0.0, 0.0, 0.0, 0.0),
+    0.0,
+    0.0,
+    color(0.40, 0.40, 0.42, 1.0),
+    insets(0.0),
+    initSize(0.0, 18.0),
+    secondarySize,
   )
   theme.addMacOSLabelRule(
     LabelFormStyleClass,
@@ -271,9 +281,10 @@ proc installMacOSLabels(theme: var Theme) =
     color(0.0, 0.0, 0.0, 0.0),
     0.0,
     0.0,
-    color(0.32, 0.32, 0.34, 1.0),
+    color(0.40, 0.40, 0.42, 1.0),
     insets(0.0, 2.0),
     initSize(0.0, 18.0),
+    bodySize,
   )
 
 proc initMacOSTheme*(): Theme =
