@@ -16,6 +16,11 @@ import ./panels
 import ../app/windows
 
 type
+  MainMenuPresentation* = enum
+    mmpAutomatic
+    mmpNative
+    mmpInWindow
+
   ModalSessionState* = enum
     mssRunning
     mssStopped
@@ -46,6 +51,7 @@ type
     xMainWindow: Window
     xMainMenu: Menu
     xWindowsMenu: Menu
+    xMainMenuPresentation: MainMenuPresentation
     xRunning: bool
     xActive: bool
     xHidden: bool
@@ -81,6 +87,8 @@ proc noteWindowOrderedFront(app: Application, window: Window)
 proc noteWindowOrderedBack(app: Application, window: Window)
 proc noteWindowOrderedOut(app: Application, window: Window)
 proc noteWindowClosed(app: Application, window: Window)
+proc keyEquivalentDispatchStart(app: Application): Responder
+proc syncMainMenuPresentation(app: Application)
 
 proc orderFrontWindowAction*(): ActionSelector =
   actionSelector("orderFrontWindow")
@@ -368,10 +376,38 @@ proc setMainWindow*(app: Application, window: Window) =
 proc mainMenu*(app: Application): Menu =
   app.xMainMenu
 
+func nativeMainMenuAvailable*(): bool =
+  when defined(macosx): true else: false
+
+func mainMenuPresentation*(app: Application): MainMenuPresentation =
+  app.xMainMenuPresentation
+
+func usesNativeMainMenu*(app: Application): bool =
+  if not nativeMainMenuAvailable():
+    return false
+  app.xMainMenuPresentation != mmpInWindow
+
+proc syncMainMenuPresentation(app: Application) =
+  if app.usesNativeMainMenu():
+    app.xMainMenu.installNativeMainMenu(
+      proc(): Responder =
+        app.keyEquivalentDispatchStart()
+    )
+    app.xWindowsMenu.installNativeWindowsMenu()
+  else:
+    Menu(nil).installNativeMainMenu()
+
+proc `mainMenuPresentation=`*(app: Application, presentation: MainMenuPresentation) =
+  if app.xMainMenuPresentation == presentation:
+    return
+  app.xMainMenuPresentation = presentation
+  app.syncMainMenuPresentation()
+
 proc `mainMenu=`*(app: Application, menu: Menu) =
   app.xMainMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
+  app.syncMainMenuPresentation()
 
 proc windowsMenu*(app: Application): Menu =
   app.xWindowsMenu
@@ -380,6 +416,7 @@ proc `windowsMenu=`*(app: Application, menu: Menu) =
   app.xWindowsMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
+  app.syncMainMenuPresentation()
   app.updateWindowsMenu()
 
 proc isActive*(app: Application): bool =
@@ -783,6 +820,7 @@ proc runForFrames*(app: Application, frames: Natural): int =
     discard app.drainAnimations()
     var activeWindows = 0
     var removedWindow = false
+    var hostWindowCreated = false
     var idx = 0
     while idx < app.xWindows.len:
       let window = app.xWindows[idx]
@@ -796,12 +834,17 @@ proc runForFrames*(app: Application, frames: Natural): int =
         removedWindow = true
       else:
         if window.isVisible:
+          let wasNativeReady = window.nativeReady
           window.pumpNativeWindowFrame()
+          if not wasNativeReady and window.nativeReady:
+            hostWindowCreated = true
           if not window.isClosed:
             inc activeWindows
         inc idx
     if removedWindow:
       app.updateWindowsMenu()
+    if hostWindowCreated:
+      app.syncMainMenuPresentation()
 
     inc result
     if result >= frames.int:
@@ -819,6 +862,7 @@ proc run*(app: Application) =
     discard app.drainAnimations()
     var activeWindows = 0
     var removedWindow = false
+    var hostWindowCreated = false
     var idx = 0
     while idx < app.xWindows.len:
       let window = app.xWindows[idx]
@@ -832,12 +876,17 @@ proc run*(app: Application) =
         removedWindow = true
       else:
         if window.isVisible:
+          let wasNativeReady = window.nativeReady
           window.pumpNativeWindowFrame()
+          if not wasNativeReady and window.nativeReady:
+            hostWindowCreated = true
           if not window.isClosed:
             inc activeWindows
         inc idx
     if removedWindow:
       app.updateWindowsMenu()
+    if hostWindowCreated:
+      app.syncMainMenuPresentation()
 
     if activeWindows == 0:
       break

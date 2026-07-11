@@ -1,3 +1,5 @@
+import std/os
+
 import merenda/nimkit
 
 import sigils/selectors
@@ -13,7 +15,6 @@ let
   runAction = actionSelector("runMenuDemoAction")
   resetAction = actionSelector("resetMenuDemoAction")
   mainMenu = newMenu("Main")
-  menuBar = newMenuBar(mainMenu, rect(0, 0, 520, 28))
   actionsMenu = newMenu("Actions")
   actionsItem = newMenuItem("Actions")
   runItem = newMenuItem("Run Menu Action", runAction, "r", {kmCommand})
@@ -21,6 +22,9 @@ let
   contextMenu = newMenu("Menu Demo Context")
   contextRunItem = newMenuItem("Run Menu Action", runAction)
   contextResetItem = newMenuItem("Reset Count", resetAction)
+
+if "--in-window-menu" in commandLineParams():
+  app.mainMenuPresentation = mmpInWindow
 
 var actionCount = 0
 
@@ -52,7 +56,6 @@ discard contextMenu.addItem(contextRunItem)
 discard contextMenu.addSeparator()
 discard contextMenu.addItem(contextResetItem)
 app.mainMenu = mainMenu
-menuBar.reload()
 
 button.target = runTarget
 button.action = runAction
@@ -60,14 +63,25 @@ button.action = runAction
 content.spacing = 12.0
 content.alignment = svaFill
 content.addArrangedSubview(title, status, button)
-root.addSubviews(autoNames(menuBar, content))
+root.addSubview(content)
 root.menu = contextMenu
 
-menuBar.pinEdges(toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight})
-menuBar[atHeight].equalTo(28).active = true
-content.pinEdges(
-  toGuide = root.contentLayoutGuide(insets(72.0, 28.0, 0.0, 28.0)),
-  edges = {leLeft, leTop, leRight},
-)
+if app.usesNativeMainMenu():
+  content.pinEdges(
+    toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
+    edges = {leLeft, leTop, leRight},
+  )
+else:
+  let menuBar = newMenuBar(mainMenu, rect(0, 0, 520, 28))
+  menuBar.reload()
+  root.addSubview(menuBar)
+  menuBar.pinEdges(
+    toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight}
+  )
+  menuBar[atHeight].equalTo(28).active = true
+  content.pinEdges(
+    toGuide = root.contentLayoutGuide(insets(72.0, 28.0, 0.0, 28.0)),
+    edges = {leLeft, leTop, leRight},
+  )
 
 app.runWindow(window, root)

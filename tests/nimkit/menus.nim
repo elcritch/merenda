@@ -1,9 +1,26 @@
 import std/unittest
 
+when defined(macosx):
+  import darwin/app_kit/[nsapplication, nsevent, nsmenu]
+  import darwin/foundation/nsstring
+  import darwin/objc/runtime
+
 import figdraw/fignodes
 import sigils/selectors
 
 import merenda/nimkit
+
+when defined(macosx):
+  proc submenu(item: NSMenuItem): NSMenu {.objc: "submenu".}
+  proc delegate(menu: NSMenu): NSObject {.objc: "delegate".}
+  proc menuWillOpen(delegate: NSObject, menu: NSMenu) {.objc: "menuWillOpen:".}
+  proc action(item: NSMenuItem): SEL {.objc: "action".}
+  proc target(item: NSMenuItem): ID {.objc: "target".}
+  proc state(item: NSMenuItem): NSInteger {.objc: "state".}
+  proc isEnabled(item: NSMenuItem): BOOL {.objc: "isEnabled".}
+  proc keyEquivalentModifierMask(
+    item: NSMenuItem
+  ): NSEventModifierFlags {.objc: "keyEquivalentModifierMask".}
 
 func center(rect: Rect): Point =
   initPoint(
@@ -73,6 +90,88 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyValidation)
 
 suite "nimkit menus":
+  when defined(macosx):
+    test "application main menus use the native macOS menu bar":
+      let
+        app = newApplication()
+        mainMenu = newMenu("Main")
+        fileMenu = newMenu("File")
+        fileItem = newMenuItem("File")
+        target = newMenuModelSpy()
+        runAction = actionSelector("menuModelSpyAction")
+        runItem = newMenuItem("Run", runAction, "r", {kmCommand, kmShift})
+        resetAction = actionSelector("nativeMenuReset")
+        resetItem = newMenuItem("Reset", resetAction)
+
+      var resetCount = 0
+      runItem.target = target
+      resetItem.target = newActionTarget(resetAction) do(sender: DynamicAgent):
+        discard sender
+        inc resetCount
+      fileItem.submenu = fileMenu
+      discard fileMenu.addItem(runItem)
+      discard fileMenu.addItem(resetItem)
+      discard fileMenu.addSeparator()
+      discard mainMenu.addItem(fileItem)
+      app.mainMenu = mainMenu
+
+      let application = NSApplication.sharedApplication()
+      check app.mainMenuPresentation == mmpAutomatic
+      check app.usesNativeMainMenu()
+      app.mainMenuPresentation = mmpInWindow
+      check not app.usesNativeMainMenu()
+      check application.mainMenu().isNil
+      app.mainMenuPresentation = mmpNative
+      check app.usesNativeMainMenu()
+
+      var nativeMainMenu = application.mainMenu()
+      check not nativeMainMenu.isNil
+      check nativeMainMenu.numberOfItems() == 1
+      var nativeFileItem = nativeMainMenu.itemAtIndex(0)
+      check $nativeFileItem.title() == "File"
+      var nativeFileMenu = nativeFileItem.submenu()
+      check not nativeFileMenu.isNil
+      check nativeFileMenu.numberOfItems() == 3
+      var nativeRunItem = nativeFileMenu.itemAtIndex(0)
+      check $nativeRunItem.title() == "Run"
+      check $nativeRunItem.keyEquivalent() == "r"
+      check uint(nativeRunItem.keyEquivalentModifierMask()) ==
+        (uint(NSEventModifierFlagCommand) or uint(NSEventModifierFlagShift))
+      check nativeRunItem.state() == 0
+      check nativeFileMenu.itemAtIndex(2).isSeparatorItem()
+
+      nativeFileMenu.delegate().menuWillOpen(nativeFileMenu)
+      nativeRunItem = nativeFileMenu.itemAtIndex(0)
+      check target.events == @["validate:"]
+      check nativeRunItem.state() == 1
+
+      runItem.title = "Run Again"
+      runItem.enabled = false
+      nativeMainMenu = application.mainMenu()
+      nativeFileItem = nativeMainMenu.itemAtIndex(0)
+      nativeFileMenu = nativeFileItem.submenu()
+      nativeRunItem = nativeFileMenu.itemAtIndex(0)
+      check $nativeRunItem.title() == "Run Again"
+      check not nativeRunItem.isEnabled()
+
+      runItem.enabled = true
+      nativeMainMenu = application.mainMenu()
+      nativeFileMenu = nativeMainMenu.itemAtIndex(0).submenu()
+      nativeRunItem = nativeFileMenu.itemAtIndex(0)
+      check application.sendAction(
+        nativeRunItem.action(), nativeRunItem.target(), cast[ID](nativeRunItem)
+      )
+      check target.events == @["validate:", "validate:", "action"]
+      nativeMainMenu = application.mainMenu()
+      nativeFileMenu = nativeMainMenu.itemAtIndex(0).submenu()
+      let nativeResetItem = nativeFileMenu.itemAtIndex(1)
+      check application.sendAction(
+        nativeResetItem.action(), nativeResetItem.target(), cast[ID](nativeResetItem)
+      )
+      check resetCount == 1
+
+      app.mainMenu = nil
+
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))
     check popup.background() == color(0.0, 0.0, 0.0, 0.0)

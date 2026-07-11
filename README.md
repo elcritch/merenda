@@ -142,6 +142,15 @@ button.target = newActionTarget(action, save)
 button.action = action
 ```
 
+Application menus use the same `Menu` and `MenuItem` tree on every platform.
+Assigning the tree to `app.mainMenu` publishes a native menu in the macOS menu
+bar, including submenus, separators, validation, state, and key equivalents.
+The default `mmpAutomatic` presentation uses that native menu when available.
+Applications can switch `app.mainMenuPresentation` at runtime between
+`mmpNative` and `mmpInWindow`; `app.usesNativeMainMenu()` reports the effective
+choice. For in-window presentation, add `newMenuBar(app.mainMenu())` to the
+window hierarchy.
+
 Buttons can behave as push, toggle, checkbox, or radio controls:
 
 ```nim

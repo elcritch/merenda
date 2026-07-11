@@ -15,6 +15,7 @@ import ../foundation/selectors as nimkitSelectors
 import ../themes
 import ../foundation/types
 import ../app/windows
+import ./nativemenus as nativeMenus
 
 type
   MenuItemModel* = object
@@ -92,6 +93,8 @@ type
     xButtons: seq[PopupMenuButton]
     xOpenButton: PopupMenuButton
 
+  MenuActionStart* = proc(): Responder {.closure.}
+
 proc openImpl(menu: Menu)
 proc closeImpl(menu: Menu)
 proc updateImpl(menu: Menu, start: Responder)
@@ -100,6 +103,7 @@ proc openPopupImpl(button: PopupMenuButton)
 proc closePopupImpl(button: PopupMenuButton)
 proc reloadImpl(menuBar: MenuBar)
 proc rebuildMenuItemsFromModels(menu: Menu)
+proc syncNativeMainMenu()
 proc reloadData*(menu: Menu)
 proc itemModels*(menu: Menu): seq[MenuItemModel]
 proc `itemModels=`*(menu: Menu, models: openArray[MenuItemModel])
@@ -113,6 +117,9 @@ proc `menu=`*(view: View, menu: Menu)
 proc popUpContextMenu*(
   menu: Menu, view: View, event: MouseEvent
 ): PopupMenuButton {.discardable.}
+
+proc installNativeMainMenu*(menu: Menu, actionStart: MenuActionStart = nil)
+proc installNativeWindowsMenu*(menu: Menu)
 
 protocol MenuProtocol {.selectorScope: protocol.} from Menu:
   method openMenu*(menu: Menu) =
@@ -396,6 +403,7 @@ proc title*(item: MenuItem): string =
 proc `title=`*(item: MenuItem, title: string) =
   item.xTitle = title
   item.xObjectValue = toObj(title)
+  syncNativeMainMenu()
 
 proc subtitle*(item: MenuItem): string =
   item.xSubtitle
@@ -409,12 +417,14 @@ proc objectValue*(item: MenuItem): ObjectValue =
 proc `objectValue=`*(item: MenuItem, value: ObjectValue) =
   item.xObjectValue = value
   item.xTitle = value.formatObjectValue(initObjectFormatContext(role = ovrMenu))
+  syncNativeMainMenu()
 
 proc action*(item: MenuItem): ActionSelector =
   item.xAction
 
 proc `action=`*(item: MenuItem, action: ActionSelector) =
   item.xAction = action
+  syncNativeMainMenu()
 
 proc target*(item: MenuItem): DynamicAgent =
   item.xTarget
@@ -430,18 +440,21 @@ proc state*(item: MenuItem): ButtonState =
 
 proc `state=`*(item: MenuItem, state: ButtonState) =
   item.xState = state
+  syncNativeMainMenu()
 
 proc enabled*(item: MenuItem): bool =
   item.xEnabled
 
 proc `enabled=`*(item: MenuItem, enabled: bool) =
   item.xEnabled = enabled
+  syncNativeMainMenu()
 
 proc hidden*(item: MenuItem): bool =
   item.xHidden
 
 proc `hidden=`*(item: MenuItem, hidden: bool) =
   item.xHidden = hidden
+  syncNativeMainMenu()
 
 proc validates*(item: MenuItem): bool =
   item.xValidates
@@ -462,10 +475,12 @@ proc setKeyEquivalent*(item: MenuItem, text: string, modifiers: set[KeyModifier]
   else:
     item.xKeyEquivalent = initKeyStroke(text, modifiers)
     item.xHasKeyEquivalent = true
+  syncNativeMainMenu()
 
 proc setKeyEquivalent*(item: MenuItem, key: Key, modifiers: set[KeyModifier] = {}) =
   item.xKeyEquivalent = initKeyStroke(key, modifiers)
   item.xHasKeyEquivalent = true
+  syncNativeMainMenu()
 
 proc modifierMask*(item: MenuItem): set[KeyModifier] =
   item.xKeyEquivalent.modifiers
@@ -473,6 +488,7 @@ proc modifierMask*(item: MenuItem): set[KeyModifier] =
 proc `modifierMask=`*(item: MenuItem, modifiers: set[KeyModifier]) =
   item.xKeyEquivalent.modifiers = modifiers
   item.xHasKeyEquivalent = true
+  syncNativeMainMenu()
 
 proc submenu*(item: MenuItem): Menu =
   item.xSubmenu
@@ -481,6 +497,7 @@ proc `submenu=`*(item: MenuItem, submenu: Menu) =
   item.xSubmenu = submenu
   if not submenu.isNil:
     submenu.setNextResponder(item)
+  syncNativeMainMenu()
 
 proc isSeparatorItem*(item: MenuItem): bool =
   item.xSeparator
@@ -496,6 +513,7 @@ proc tag*(item: MenuItem): int =
 
 proc `tag=`*(item: MenuItem, tag: int) =
   item.xTag = tag
+  syncNativeMainMenu()
 
 proc representedObject*(item: MenuItem): DynamicAgent =
   item.xRepresentedObject
@@ -563,6 +581,7 @@ proc title*(menu: Menu): string =
 
 proc `title=`*(menu: Menu, title: string) =
   menu.xTitle = title
+  syncNativeMainMenu()
 
 proc delegate*(menu: Menu): DynamicAgent =
   menu.xDelegate
@@ -614,11 +633,13 @@ proc `itemModels=`*(menu: Menu, models: openArray[MenuItemModel]) =
   menu.xItemModels = @models
   menu.xUsesItemModels = true
   menu.rebuildMenuItemsFromModels()
+  syncNativeMainMenu()
 
 proc reloadData*(menu: Menu) =
   if menu.xDataSource.isNil:
     if menu.xUsesItemModels:
       menu.rebuildMenuItemsFromModels()
+      syncNativeMainMenu()
     return
 
   let count = menu.xDataSource.trySendLocal(menuItemCount(), menu)
@@ -691,16 +712,19 @@ proc addItem*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
     menu.xItemModels.add item.menuItemModel()
   menu.xItems.add item
   item.setNextResponder(menu)
+  syncNativeMainMenu()
   item
 
 proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
   menu.xUsesItemModels = true
   menu.xItemModels.add model
   if model.hidden:
+    syncNativeMainMenu()
     return nil
   let item = newMenuItem(model)
   menu.xItems.add item
   item.setNextResponder(menu)
+  syncNativeMainMenu()
   item
 
 proc insertItem*(
@@ -714,6 +738,7 @@ proc insertItem*(
       max(0, min(index, menu.xItemModels.len))
   menu.xItemModels.insert(model, modelIndex)
   menu.rebuildMenuItemsFromModels()
+  syncNativeMainMenu()
   if model.identifier.len > 0:
     return menu.menuItemWithIdentifier(model.identifier)
   if model.hidden:
@@ -754,6 +779,7 @@ proc removeItem*(menu: Menu, item: MenuItem): bool {.discardable.} =
   if item.nextResponder() == Responder(menu):
     item.clearNextResponder()
   menu.xItems.delete(idx)
+  syncNativeMainMenu()
   true
 
 proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardable.} =
@@ -767,6 +793,7 @@ proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardab
     if modelIndex >= 0:
       menu.xItemModels.delete(modelIndex)
       menu.rebuildMenuItemsFromModels()
+      syncNativeMainMenu()
       return true
   false
 
@@ -774,6 +801,7 @@ proc removeAllItems*(menu: Menu) =
   menu.xItemModels.setLen(0)
   menu.xUsesItemModels = false
   menu.clearMenuItems()
+  syncNativeMainMenu()
 
 proc menuNeedsUpdate*(menu: Menu) =
   if not menu.xDelegate.isNil:
@@ -850,6 +878,7 @@ proc updateImpl(menu: Menu, start: Responder) =
       else:
         item.xSubmenu.update(start)
       menu.syncMenuItemModelFromItem(item, index)
+  syncNativeMainMenu()
 
 proc notifyMenuItemDidActivate(menu: Menu, item: MenuItem, sender: DynamicAgent) =
   if item.isNil:
@@ -910,6 +939,118 @@ proc performKeyEquivalentImpl(menu: Menu, event: KeyEvent, start: Responder): bo
   result = item.perform(start)
   if result:
     menu.notifyMenuItemDidActivate(item, DynamicAgent(item))
+
+when defined(macosx):
+  var
+    nativeMainMenu: Menu
+    nativeWindowsMenu: Menu
+    nativeActionStart: MenuActionStart
+    nativeMainMenuInstalled: bool
+    nativeSyncSuspended: bool
+
+  proc currentNativeActionStart(): Responder =
+    if nativeActionStart.isNil:
+      return Responder(nativeMainMenu)
+    nativeActionStart()
+
+  proc nativeMenuIdentity(menu: Menu): pointer =
+    cast[pointer](menu)
+
+  proc nativeMenuTitle(menu: Menu): string =
+    menu.xTitle
+
+  proc nativeMenuItems(menu: Menu): seq[MenuItem] =
+    menu.xItems
+
+  proc describeNativeMenuItem(item: MenuItem): nativeMenus.NativeMenuItemDescription =
+    result = nativeMenus.NativeMenuItemDescription(
+      title: item.xTitle,
+      separator: item.xSeparator,
+      enabled: item.xEnabled,
+      hidden: item.xHidden,
+      state: nativeMenus.toNativeState(item.xState),
+      tag: item.xTag,
+      modifiers: nativeMenus.toNativeModifiers(item.xKeyEquivalent.modifiers),
+    )
+    if item.xHasKeyEquivalent:
+      result.keyEquivalent = nativeMenus.toNativeKeyEquivalent(item.xKeyEquivalent)
+
+  proc nativeSubmenu(item: MenuItem): Menu =
+    item.xSubmenu
+
+  proc canActivateNativeMenuItem(item: MenuItem): bool =
+    item.xAction.name.len > 0
+
+  proc refreshNativeMenu(menu: Menu) =
+    nativeSyncSuspended = true
+    try:
+      menu.open()
+      menu.update(currentNativeActionStart())
+    finally:
+      nativeSyncSuspended = false
+
+  proc closeNativeMenu(menu: Menu) =
+    nativeSyncSuspended = true
+    try:
+      menu.close()
+    finally:
+      nativeSyncSuspended = false
+
+  proc activateNativeMenuItem(menu: Menu, item: MenuItem) =
+    nativeSyncSuspended = true
+    try:
+      if item.perform(currentNativeActionStart(), DynamicAgent(item)):
+        menu.notifyMenuItemDidActivate(item, DynamicAgent(item))
+    finally:
+      nativeSyncSuspended = false
+    syncNativeMainMenu()
+
+  proc nativeMenuAdapter(): nativeMenus.NativeMenuAdapter[Menu, MenuItem] =
+    nativeMenus.NativeMenuAdapter[Menu, MenuItem](
+      identity: nativeMenuIdentity,
+      title: nativeMenuTitle,
+      items: nativeMenuItems,
+      describeItem: describeNativeMenuItem,
+      submenu: nativeSubmenu,
+      canActivate: canActivateNativeMenuItem,
+      refresh: refreshNativeMenu,
+      close: closeNativeMenu,
+      activate: activateNativeMenuItem,
+    )
+
+  proc syncNativeMainMenu() =
+    if nativeSyncSuspended or not nativeMainMenuInstalled:
+      return
+    let description =
+      nativeMenus.toNativeMenuDescription(nativeMainMenu, nativeMenuAdapter())
+
+    nativeSyncSuspended = true
+    try:
+      nativeMenus.installNativeMenus(description, cast[pointer](nativeWindowsMenu))
+    finally:
+      nativeSyncSuspended = false
+
+  proc installNativeMainMenu*(menu: Menu, actionStart: MenuActionStart = nil) =
+    nativeMainMenuInstalled = true
+    nativeMainMenu = menu
+    nativeWindowsMenu = nil
+    nativeActionStart = actionStart
+    syncNativeMainMenu()
+
+  proc installNativeWindowsMenu*(menu: Menu) =
+    nativeWindowsMenu = menu
+    syncNativeMainMenu()
+
+else:
+  proc syncNativeMainMenu() =
+    discard
+
+  proc installNativeMainMenu*(menu: Menu, actionStart: MenuActionStart = nil) =
+    discard menu
+    discard actionStart.isNil
+
+  proc installNativeWindowsMenu*(menu: Menu) =
+    discard menu
 
 func popupMenuDefaultItemHeight*(): float32 =
   24.0'f32
