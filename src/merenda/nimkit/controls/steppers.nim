@@ -246,16 +246,19 @@ proc formattedValue*(stepper: Stepper): string =
   stepper.formatValue(stepper.xValue)
 
 func decrementPartRect(bounds: Rect): Rect =
-  rect(
-    bounds.origin.x, bounds.origin.y, bounds.size.width * 0.5'f32, bounds.size.height
-  )
-
-func incrementPartRect(bounds: Rect): Rect =
   let leftWidth = bounds.size.width * 0.5'f32
   rect(
     bounds.origin.x + leftWidth,
     bounds.origin.y,
     bounds.size.width - leftWidth,
+    bounds.size.height,
+  )
+
+func incrementPartRect(bounds: Rect): Rect =
+  rect(
+    bounds.origin.x,
+    bounds.origin.y,
+    bounds.size.width * 0.5'f32,
     bounds.size.height,
   )
 
@@ -281,6 +284,22 @@ proc partAtPoint*(stepper: Stepper, point: Point): StepperPart =
 
 proc stepperStyleContext(stepper: Stepper, states: set[WidgetState]): StyleContext =
   controlStyle(srStepper, states, id = stepper.styleId, classes = stepper.styleClasses)
+
+proc partEnabled(stepper: Stepper, part: StepperPart): bool =
+  if not stepper.isEnabled() or stepper.xIncrement <= 0.0'f32 or part == spNone:
+    return false
+  let valueRange = stepper.stepperRange()
+  if valueRange.maxValue <= valueRange.minValue:
+    return false
+  if stepper.xWraps:
+    return true
+  case part
+  of spIncrement:
+    stepper.xValue < valueRange.maxValue
+  of spDecrement:
+    stepper.xValue > valueRange.minValue
+  of spNone:
+    false
 
 proc stepperCellSize(cell: StepperCell): Size =
   let view = cell.controlView()
@@ -314,7 +333,9 @@ proc newStepperCell*(): StepperCell =
 
 proc stepperSegmentStates(stepper: Stepper, part: StepperPart): set[WidgetState] =
   result = stepper.widgetStateSet()
-  if stepper.xPressedPart == part:
+  if not stepper.partEnabled(part):
+    result.incl ssDisabled
+  elif stepper.xPressedPart == part:
     result.incl ssHighlighted
     result.incl ssPressed
 
@@ -374,8 +395,23 @@ protocol DefaultStepperDrawing of ViewDrawingProtocol:
       )
 
     let
-      separatorX = bounds.origin.x + bounds.size.width * 0.5'f32 - 0.5'f32
-      separator = rect(separatorX, bounds.origin.y, 1.0'f32, bounds.size.height)
+      separatorThickness = max(
+        context.appearance.resolveLength(
+          stepper.stepperStyleContext(stepper.widgetStateSet()),
+          StyleSeparatorThickness,
+          1.0'f32,
+        ),
+        0.0'f32,
+      )
+      separatorX =
+        bounds.origin.x + bounds.size.width * 0.5'f32 - separatorThickness * 0.5'f32
+      separatorInset = min(5.0'f32, bounds.size.height * 0.24'f32)
+      separator = rect(
+        separatorX,
+        bounds.origin.y + separatorInset,
+        separatorThickness,
+        max(bounds.size.height - separatorInset * 2.0'f32, 0.0'f32),
+      )
     discard context.addRenderRectangle(
       context.renderRectFor(separator),
       style.box.borderColor,
@@ -394,7 +430,7 @@ protocol DefaultStepperEvents of ResponderEventProtocol:
   method mouseDown(stepper: Stepper, event: MouseEvent): bool =
     if stepper.isEnabled() and event.button == mbPrimary:
       let part = stepper.partAtPoint(event.location)
-      if part == spNone:
+      if not stepper.partEnabled(part):
         return false
       discard stepper.beginRepeat(part, event.timestamp)
       return true

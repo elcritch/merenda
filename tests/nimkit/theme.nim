@@ -817,6 +817,18 @@ suite "nimkit theme":
     check textFieldStyle.box.cornerRadius == 6.0'f32
     check switchStyle.chrome == DefaultChromeName
     check switchStyle.track.fill == color(0.20, 0.78, 0.35, 1.0)
+    let
+      stepperStyle = theme.resolveButtonStyle(controlStyle(srStepper))
+      pressedStepperStyle =
+        theme.resolveButtonStyle(controlStyle(srStepper, {ssHighlighted}))
+      disabledStepperStyle =
+        theme.resolveButtonStyle(controlStyle(srStepper, {ssDisabled}))
+    check stepperStyle.chrome == DefaultChromeName
+    check stepperStyle.box.fill == color(0.89, 0.89, 0.90, 1.0)
+    check stepperStyle.box.cornerRadius == 8.0'f32
+    check stepperStyle.minSize == initSize(72.0, 28.0)
+    check pressedStepperStyle.box.fill == color(0.80, 0.80, 0.82, 1.0)
+    check disabledStepperStyle.text.color == color(0.58, 0.58, 0.60, 1.0)
     checkRootPinstripesDisabled(theme)
 
     for labelClass in [
@@ -849,9 +861,9 @@ suite "nimkit theme":
       check style.box.borderWidth == 0.0'f32
       check style.box.borderColor.a == 0.0'f32
     check title.text.fontSize == defaultFontSize() + 4.0'f32
-    check heading.text.fontSize == defaultFontSize()
+    check heading.text.fontSize == max(defaultFontSize() - 1.0'f32, 10.0'f32)
     check status.text.fontSize == max(defaultFontSize() - 1.0'f32, 10.0'f32)
-    check heading.text.color == color(0.24, 0.24, 0.26, 1.0)
+    check heading.text.color == color(0.52, 0.52, 0.54, 1.0)
     check status.text.color == color(0.40, 0.40, 0.42, 1.0)
     check form.text.color == status.text.color
 

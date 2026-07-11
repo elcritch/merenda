@@ -147,9 +147,9 @@ proc installMacOSControlStyles(theme: var Theme) =
   theme[srView, StyleBackgroundFill] = fill(color(0.93, 0.93, 0.94, 1.0))
 
   let flatRoles = [
-    srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator, srTab,
-    srTabPanel, srDocumentTab, srDocumentTabBar, srDocumentTabButton, srTextField,
-    srMonoTextView, srComboBox,
+    srButton, srStepper, srCheckBox, srRadioButton, srSwitch, srSlider,
+    srProgressIndicator, srTab, srTabPanel, srDocumentTab, srDocumentTabBar,
+    srDocumentTabButton, srTextField, srMonoTextView, srComboBox,
   ]
   for role in flatRoles:
     theme[role, StyleChrome] = styleKeyword(DefaultChromeName)
@@ -164,6 +164,20 @@ proc installMacOSControlStyles(theme: var Theme) =
     {ssAccent}, {ssAccent, ssHovered}, {ssAccent, ssHighlighted}, {ssAccent, ssActive}
   ]:
     theme[srButton, states, StyleTextColor] = color(1.0, 1.0, 1.0, 1.0)
+
+  theme[srStepper, StyleFill] = fill(color(0.89, 0.89, 0.90, 1.0))
+  theme[srStepper, StyleBorderColor] = color(0.0, 0.0, 0.0, 0.12)
+  theme[srStepper, StyleBorderWidth] = 1.0
+  theme[srStepper, StyleCornerRadius] = 8.0
+  theme[srStepper, StyleMinimumSize] = initSize(72.0, 28.0)
+  theme[srStepper, StyleTextColor] = color(0.16, 0.16, 0.17, 1.0)
+  theme[srStepper, StyleTextInsets] = insets(0.0)
+  theme[srStepper, StyleBoxShadows] =
+    @[dropShadow(color(0.0, 0.0, 0.0, 0.08), y = 1.0, blur = 2.0)]
+  theme[srStepper, StyleSeparatorThickness] = 1.0
+  theme[srStepper, {ssHighlighted}, StyleFill] = fill(color(0.80, 0.80, 0.82, 1.0))
+  theme[srStepper, {ssHighlighted}, StyleBoxShadows] = newSeq[BoxShadow]()
+  theme[srStepper, {ssDisabled}, StyleTextColor] = color(0.58, 0.58, 0.60, 1.0)
 
   for role in [srCheckBox, srRadioButton]:
     theme[role, StyleIndicatorSize] = 16.0
@@ -259,10 +273,10 @@ proc installMacOSLabels(theme: var Theme) =
     color(0.0, 0.0, 0.0, 0.0),
     0.0,
     0.0,
-    color(0.24, 0.24, 0.26, 1.0),
+    color(0.52, 0.52, 0.54, 1.0),
     insets(0.0),
     initSize(0.0, 18.0),
-    bodySize,
+    secondarySize,
   )
   theme.addMacOSLabelRule(
     LabelStatusStyleClass,
