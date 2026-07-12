@@ -127,6 +127,7 @@ proc popUpContextMenu*(
 
 proc installNativeMainMenu*(menu: Menu, actionStart: MenuActionStart = nil)
 proc installNativeWindowsMenu*(menu: Menu)
+proc installNativeServicesMenu*(menu: Menu)
 
 protocol MenuProtocol {.selectorScope: protocol.} from Menu:
   method openMenu*(menu: Menu) =
@@ -962,6 +963,7 @@ when defined(macosx):
   var
     nativeMainMenu: Menu
     nativeWindowsMenu: Menu
+    nativeServicesMenu: Menu
     nativeActionStart: MenuActionStart
     nativeMainMenuInstalled: bool
     nativeSyncSuspended: bool
@@ -1044,7 +1046,9 @@ when defined(macosx):
 
     nativeSyncSuspended = true
     try:
-      nativeMenus.installNativeMenus(description, cast[pointer](nativeWindowsMenu))
+      nativeMenus.installNativeMenus(
+        description, cast[pointer](nativeWindowsMenu), cast[pointer](nativeServicesMenu)
+      )
     finally:
       nativeSyncSuspended = false
 
@@ -1052,11 +1056,16 @@ when defined(macosx):
     nativeMainMenuInstalled = true
     nativeMainMenu = menu
     nativeWindowsMenu = nil
+    nativeServicesMenu = nil
     nativeActionStart = actionStart
     syncNativeMainMenu()
 
   proc installNativeWindowsMenu*(menu: Menu) =
     nativeWindowsMenu = menu
+    syncNativeMainMenu()
+
+  proc installNativeServicesMenu*(menu: Menu) =
+    nativeServicesMenu = menu
     syncNativeMainMenu()
 
 else:
@@ -1068,6 +1077,9 @@ else:
     discard actionStart.isNil
 
   proc installNativeWindowsMenu*(menu: Menu) =
+    discard menu
+
+  proc installNativeServicesMenu*(menu: Menu) =
     discard menu
 
 func popupMenuDefaultItemHeight*(): float32 =

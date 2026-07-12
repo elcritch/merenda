@@ -5,6 +5,8 @@ import sigils/selectors
 import ../foundation/events
 import ../foundation/notifications
 import ../controls/menus
+import ../controls/nativemenus as nativeMenus
+import ../responder/keybindings
 import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
 import ../themes
@@ -40,6 +42,7 @@ type
     response*: int
 
   Application* = ref object of Responder
+    xApplicationName: string
     xWindows: seq[Window]
     xOrderedWindows: seq[Window]
     xDelegate: DynamicAgent
@@ -51,6 +54,8 @@ type
     xMainWindow: Window
     xMainMenu: Menu
     xWindowsMenu: Menu
+    xServicesMenu: Menu
+    xDynamicWindowsMenuItems: seq[MenuItem]
     xMainMenuPresentation: MainMenuPresentation
     xRunning: bool
     xActive: bool
@@ -76,6 +81,7 @@ proc stop*(app: Application)
 proc addWindow*(app: Application, window: Window)
 proc activateWindow*(app: Application, window: Window)
 proc updateWindowsMenu*(app: Application)
+proc installStandardMainMenu*(app: Application)
 proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
@@ -91,14 +97,46 @@ proc keyEquivalentDispatchStart(app: Application): Responder
 proc syncMainMenuPresentation(app: Application)
 proc syncMenuBarPresenters(app: Application)
 
+proc resolvedApplicationName(name: string): string =
+  if name.len > 0:
+    return name
+  let executableName = getAppFilename().splitFile.name
+  if executableName.len > 0:
+    return executableName
+  "Application"
+
 proc orderFrontWindowAction*(): ActionSelector =
   actionSelector("orderFrontWindow")
 
 proc installApplicationCommandMethods(app: Application) =
+  let aboutMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    discard self
+    nativeMenus.showStandardAboutPanel()
+    invocation.setResult(())
+  discard app.replaceMethod(actionSelector("orderFrontStandardAboutPanel"), aboutMethod)
+
   let hideMethod: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
     Application(self).hide()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("hide"), hideMethod)
+
+  let hideOthersMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    discard self
+    nativeMenus.hideOtherNativeApplications()
+    invocation.setResult(())
+  discard app.replaceMethod(actionSelector("hideOtherApplications"), hideOthersMethod)
+
+  let unhideAllMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    discard self
+    nativeMenus.unhideAllNativeApplications()
+    invocation.setResult(())
+  discard app.replaceMethod(actionSelector("unhideAllApplications"), unhideAllMethod)
 
   let terminateMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -176,16 +214,21 @@ proc installApplicationForwarding(app: Application) =
       applicationForwardingTarget(Application(self), selector)
   )
 
-proc newApplication*(): Application =
-  result = Application()
+proc newApplication*(applicationName = ""): Application =
+  result = Application(xApplicationName: resolvedApplicationName(applicationName))
   initResponder(result)
   result.installApplicationForwarding()
   result.installApplicationCommandMethods()
+  when defined(macosx):
+    result.installStandardMainMenu()
 
 proc sharedApplication*(): Application =
   if sharedApplicationInstance.isNil:
     sharedApplicationInstance = newApplication()
   sharedApplicationInstance
+
+func applicationName*(app: Application): string =
+  app.xApplicationName
 
 proc userDefaults*(app: Application): UserDefaults =
   if app.xUserDefaults.isNil:
@@ -409,6 +452,7 @@ proc syncMainMenuPresentation(app: Application) =
         app.keyEquivalentDispatchStart()
     )
     app.xWindowsMenu.installNativeWindowsMenu()
+    app.xServicesMenu.installNativeServicesMenu()
   else:
     Menu(nil).installNativeMainMenu()
   app.syncMenuBarPresenters()
@@ -431,11 +475,113 @@ proc windowsMenu*(app: Application): Menu =
   app.xWindowsMenu
 
 proc `windowsMenu=`*(app: Application, menu: Menu) =
+  if app.xWindowsMenu == menu:
+    return
+  if not app.xWindowsMenu.isNil:
+    for item in app.xDynamicWindowsMenuItems:
+      discard app.xWindowsMenu.removeItem(item)
+  app.xDynamicWindowsMenuItems.setLen(0)
   app.xWindowsMenu = menu
   if not menu.isNil:
     menu.setNextResponder(app)
   app.syncMainMenuPresentation()
   app.updateWindowsMenu()
+
+proc servicesMenu*(app: Application): Menu =
+  app.xServicesMenu
+
+proc `servicesMenu=`*(app: Application, menu: Menu) =
+  app.xServicesMenu = menu
+  if not menu.isNil:
+    menu.setNextResponder(app)
+  app.syncMainMenuPresentation()
+
+proc addStandardMenu(
+    mainMenu: Menu, title: string, submenu: Menu
+): MenuItem {.discardable.} =
+  result = newMenuItem(title)
+  result.submenu = submenu
+  discard mainMenu.addItem(result)
+
+proc addStandardApplicationItem(
+    menu: Menu,
+    app: Application,
+    title: string,
+    action: ActionSelector,
+    keyEquivalent = "",
+    modifiers: set[KeyModifier] = {},
+): MenuItem {.discardable.} =
+  result = menu.addItem(title, action, keyEquivalent, modifiers)
+  result.target = app
+
+proc installStandardMainMenu*(app: Application) =
+  let
+    shortcut = shortcutModifiers()
+    appName = app.applicationName()
+    mainMenu = newMenu("Main")
+    applicationMenu = newMenu(appName)
+    fileMenu = newMenu("File")
+    editMenu = newMenu("Edit")
+    windowMenu = newMenu("Window")
+    helpMenu = newMenu("Help")
+    servicesMenu = newMenu("Services")
+
+  applicationMenu.addStandardApplicationItem(
+    app, "About " & appName, actionSelector("orderFrontStandardAboutPanel")
+  )
+  applicationMenu.addSeparator()
+  discard applicationMenu.addItem(
+    "Settings…", actionSelector("showPreferences"), ",", shortcut
+  )
+  applicationMenu.addSeparator()
+  applicationMenu.addStandardMenu("Services", servicesMenu)
+  applicationMenu.addSeparator()
+  applicationMenu.addStandardApplicationItem(
+    app, "Hide " & appName, actionSelector("hide"), "h", shortcut
+  )
+  applicationMenu.addStandardApplicationItem(
+    app,
+    "Hide Others",
+    actionSelector("hideOtherApplications"),
+    "h",
+    shortcut + {kmOption},
+  )
+  applicationMenu.addStandardApplicationItem(
+    app, "Show All", actionSelector("unhideAllApplications")
+  )
+  applicationMenu.addSeparator()
+  applicationMenu.addStandardApplicationItem(
+    app, "Quit " & appName, actionSelector("terminate"), "q", shortcut
+  )
+
+  discard
+    fileMenu.addItem("Close Window", actionSelector("performClose"), "w", shortcut)
+
+  discard editMenu.addItem("Undo", actionSelector("undo"), "z", shortcut)
+  discard editMenu.addItem("Redo", actionSelector("redo"), "z", shortcut + {kmShift})
+  editMenu.addSeparator()
+  discard editMenu.addItem("Cut", actionSelector("cut"), "x", shortcut)
+  discard editMenu.addItem("Copy", actionSelector("copy"), "c", shortcut)
+  discard editMenu.addItem("Paste", actionSelector("paste"), "v", shortcut)
+  editMenu.addSeparator()
+  discard editMenu.addItem("Select All", actionSelector("selectAll"), "a", shortcut)
+
+  discard
+    windowMenu.addItem("Minimize", actionSelector("performMiniaturize"), "m", shortcut)
+  discard windowMenu.addItem("Zoom", actionSelector("performZoom"))
+  windowMenu.addSeparator()
+
+  discard helpMenu.addItem(appName & " Help", actionSelector("showHelp"))
+
+  mainMenu.addStandardMenu(appName, applicationMenu)
+  mainMenu.addStandardMenu("File", fileMenu)
+  mainMenu.addStandardMenu("Edit", editMenu)
+  mainMenu.addStandardMenu("Window", windowMenu)
+  mainMenu.addStandardMenu("Help", helpMenu)
+
+  app.windowsMenu = windowMenu
+  app.servicesMenu = servicesMenu
+  app.mainMenu = mainMenu
 
 proc isActive*(app: Application): bool =
   app.xActive
@@ -572,15 +718,13 @@ proc clearAppearance*(app: Application) =
   app.propagateAppearance()
   app.postApplicationAppearanceNotification()
 
-proc clearMenuItems(menu: Menu) =
-  while menu.len > 0:
-    discard menu.removeItem(menu[0])
-
 proc updateWindowsMenu*(app: Application) =
   if app.xWindowsMenu.isNil:
     return
   let menu = app.xWindowsMenu
-  menu.clearMenuItems()
+  for item in app.xDynamicWindowsMenuItems:
+    discard menu.removeItem(item)
+  app.xDynamicWindowsMenuItems.setLen(0)
   for window in app.xWindows:
     if not window.isNil and not window.isClosed:
       let item = newMenuItem(window.title(), orderFrontWindowAction())
@@ -589,6 +733,7 @@ proc updateWindowsMenu*(app: Application) =
       if window == app.xMainWindow:
         item.state = bsOn
       discard menu.addItem(item)
+      app.xDynamicWindowsMenuItems.add item
 
 proc activateWindow*(app: Application, window: Window) =
   if window.isNil or window.isClosed:

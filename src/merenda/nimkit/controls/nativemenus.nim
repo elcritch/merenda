@@ -190,6 +190,17 @@ when defined(macosx):
   proc setState(item: NSMenuItem, state: NSInteger) {.objc: "setState:".}
   proc setHidden(item: NSMenuItem, hidden: BOOL) {.objc: "setHidden:".}
   proc setTag(item: NSMenuItem, tag: NSInteger) {.objc: "setTag:".}
+  proc orderFrontStandardAboutPanel(
+    application: NSApplication, sender: ID
+  ) {.objc: "orderFrontStandardAboutPanel:".}
+
+  proc hideOtherApplications(
+    application: NSApplication, sender: ID
+  ) {.objc: "hideOtherApplications:".}
+
+  proc unhideAllApplications(
+    application: NSApplication, sender: ID
+  ) {.objc: "unhideAllApplications:".}
 
   var
     nativeMenuTarget: NSObject
@@ -350,13 +361,25 @@ when defined(macosx):
       targetClass.registerClassPair()
     nativeMenuTarget = cast[NSObject](targetClass.new())
 
-  proc installNativeMenus*(menu: NativeMenuDescription, windowsMenu: pointer) =
+  proc showStandardAboutPanel*() =
+    NSApplication.sharedApplication().orderFrontStandardAboutPanel(cast[ID](nil))
+
+  proc hideOtherNativeApplications*() =
+    NSApplication.sharedApplication().hideOtherApplications(cast[ID](nil))
+
+  proc unhideAllNativeApplications*() =
+    NSApplication.sharedApplication().unhideAllApplications(cast[ID](nil))
+
+  proc installNativeMenus*(
+      menu: NativeMenuDescription, windowsMenu: pointer, servicesMenu: pointer
+  ) =
     ensureNativeMenuTables()
     ensureNativeMenuTarget()
     let application = NSApplication.sharedApplication()
     if menu.isNil:
       application.setMainMenu(nil)
       application.setWindowsMenu(nil)
+      application.setServicesMenu(nil)
       nativeMenuItemBindings.clear()
       nativeMenuBindings.clear()
       nativeMenuHandles.clear()
@@ -381,10 +404,26 @@ when defined(macosx):
         application.setWindowsMenu(nativeMenuHandles[windowsMenu])
       else:
         application.setWindowsMenu(nil)
+      if not servicesMenu.isNil and servicesMenu in nativeMenuHandles:
+        application.setServicesMenu(nativeMenuHandles[servicesMenu])
+      else:
+        application.setServicesMenu(nil)
     finally:
       nativeRoot.release()
 
 else:
-  proc installNativeMenus*(menu: NativeMenuDescription, windowsMenu: pointer) =
+  proc showStandardAboutPanel*() =
+    discard
+
+  proc hideOtherNativeApplications*() =
+    discard
+
+  proc unhideAllNativeApplications*() =
+    discard
+
+  proc installNativeMenus*(
+      menu: NativeMenuDescription, windowsMenu: pointer, servicesMenu: pointer
+  ) =
     discard menu
     discard windowsMenu
+    discard servicesMenu
