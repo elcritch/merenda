@@ -17,7 +17,10 @@ import ../text/texttypes
 import ../foundation/types as nimkitTypes
 
 when defined(useNativeDynlib):
-  export dynlib
+  export
+    dynlib.FillGradientAxis, dynlib.FillKind, dynlib.Linear2, dynlib.Linear3,
+    dynlib.Fill, dynlib.ColorRGBA, dynlib.toFill, themeCore.sampleColor,
+    themeCore.centerColorRgba, themeCore.centerColor
 else:
   export
     figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
@@ -86,6 +89,49 @@ proc fontLineHeight(font: FigFont): float32 =
     max(font.size, font.lineHeight)
   else:
     getLineHeightImpl(font)
+
+when defined(useNativeDynlib):
+  proc figLine(a, b: Vec2, fillValue: Fill, weight: float32, zlevel = 0.ZLevel): Fig =
+    let
+      delta = b - a
+      halfWeight = max(0.0'f32, weight) / 2.0'f32
+      bounds = bumpy.rect(
+        min(a.x, b.x) - halfWeight,
+        min(a.y, b.y) - halfWeight,
+        abs(delta.x) + halfWeight * 2.0'f32,
+        abs(delta.y) + halfWeight * 2.0'f32,
+      )
+
+    result = Fig(kind: nkDrawable)
+    result.zlevel = zlevel
+    result.screenBox = bounds
+    result.fill = fillValue
+    result.drawStroke = RenderStroke(weight: weight, fill: fillValue)
+    result.drawOps.add drawableLine(a - bounds.xy, b - bounds.xy)
+
+  proc figLine(
+      x1, y1, x2, y2: float32, fillValue: Fill, weight: float32, zlevel = 0.ZLevel
+  ): Fig =
+    figLine(vec2(x1, y1), vec2(x2, y2), fillValue, weight, zlevel)
+
+  proc figCircle(
+      center: Vec2, fillValue: Fill, radius: float32, zlevel = 0.ZLevel
+  ): Fig =
+    let
+      clampedRadius = max(0.0'f32, radius)
+      diameter = clampedRadius * 2.0'f32
+
+    result = Fig(kind: nkDrawable)
+    result.zlevel = zlevel
+    result.fill = fillValue
+    result.screenBox =
+      bumpy.rect(center.x - clampedRadius, center.y - clampedRadius, diameter, diameter)
+    result.drawOps.add drawableCircle(vec2(clampedRadius), clampedRadius)
+
+  proc figCircle(
+      x, y: float32, fillValue: Fill, radius: float32, zlevel = 0.ZLevel
+  ): Fig =
+    figCircle(vec2(x, y), fillValue, radius, zlevel)
 
 const AllCorners = {dcTopLeft, dcTopRight, dcBottomLeft, dcBottomRight}
 

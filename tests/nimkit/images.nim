@@ -3,7 +3,10 @@ import std/[os, unittest]
 import pkg/pixie
 import pkg/pixie/fileformats/png
 
-import figdraw
+when defined(useNativeDynlib):
+  import figdraw/dynlib except Image, fill, newImage, writeFile
+else:
+  import figdraw
 
 import merenda/nimkit
 
@@ -31,6 +34,9 @@ suite "nimkit image resources":
     check fromFile.name == "nimkit-image-resource"
     check fromFile.filePath == filePath
     check fromFile.size == initSize(4, 3)
+
+    when defined(useNativeDynlib):
+      check direct.pixels().encodePng().len > 8
 
     registerImage("registered", direct)
     check imageNamed("registered") == direct

@@ -13,7 +13,9 @@ from sigils/selectors import DynamicAgent
 import ../foundation/types
 
 when defined(useNativeDynlib):
-  export dynlib except CornerRadii
+  export
+    dynlib.FillGradientAxis, dynlib.FillKind, dynlib.Linear2, dynlib.Linear3,
+    dynlib.Fill, dynlib.ColorRGBA, dynlib.toFill
 else:
   export
     figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
@@ -385,6 +387,17 @@ func vertical*(insets: EdgeInsets): float32 =
   insets.top + insets.bottom
 
 when defined(useNativeDynlib):
+  func `==`*(a, b: Fill): bool =
+    if a.kind != b.kind:
+      return false
+    case a.kind
+    of flColor:
+      a.color == b.color
+    of flLinear2:
+      a.lin2 == b.lin2
+    of flLinear3:
+      a.lin3 == b.lin3
+
   func fill*(color: Color): Fill =
     Fill(kind: flColor, color: cast[dynlib.ColorRGBA](color.rgba))
 

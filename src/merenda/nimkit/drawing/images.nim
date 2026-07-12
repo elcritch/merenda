@@ -8,9 +8,6 @@ else:
 
 import ../foundation/types
 
-when defined(useNativeDynlib):
-  export dynlib except loadImage
-
 type
   ImageCachePolicy* = enum
     icpDefault
@@ -72,6 +69,12 @@ proc newImageResource*(
     inc anonymousImageIndex
     result.xImageId = imageIdForName("anonymous:" & $anonymousImageIndex)
   result.uploadImage()
+
+when defined(useNativeDynlib):
+  proc newImageResource*[T](
+      image: T, name = "", cachePolicy = icpDefault
+  ): ImageResource =
+    newImageResource(image.toImage(), name, cachePolicy)
 
 proc newImageResourceFromData*(
     data: string, name = "", cachePolicy = icpDefault
