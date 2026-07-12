@@ -147,10 +147,7 @@ proc usesScaledBackingSize(host: HostWindow, window: siwinshim.Window): bool =
   if host.xHasUiScaleOverride:
     return true
   let scale = host.configuredUiScale()
-  when defined(useNativeDynlib):
-    scale != 1.0'f32
-  else:
-    scale != 1.0'f32 and not window.inputUsesBackingPixels()
+  scale != 1.0'f32 and not window.inputUsesBackingPixels()
 
 proc logicalSizeForBacking(host: HostWindow, window: siwinshim.Window): Vec2 =
   let
@@ -868,6 +865,7 @@ proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
         key: key,
         keyCode: event.key.ord,
         modifiers: event.modifiers.toNimkitModifiers,
+        repeated: event.repeated,
       ),
       pressed: event.pressed,
       isEscape: event.key == siwinshim.Key.escape,
